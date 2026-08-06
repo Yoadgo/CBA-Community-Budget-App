@@ -1,0 +1,236 @@
+/* ==========================================================================
+   CBA — שכבת "זכוכית נוזלית" ותנועה (Liquid Glass + Motion)
+   פאצ' עיצוב בהשראת iOS 26: זכוכית מטושטשת עמוקה יותר, מיקרו-אינטראקציות,
+   אנימציות מבוססות-גלילה, ואפקט "נוזלי" עדין באלמנטים דקורטיביים בלבד.
+   מונוכרומטי לחלוטין — לא מוסיף שום גוון חדש, רק מעצים זכוכית/צל/תנועה.
+   נטענת אחרונה מבין קבצי ה-CSS כדי שתוכל לעדן כל מסך קיים בלי לשנות אותו.
+   ========================================================================== */
+
+/* ---------- 1. זכוכית עמוקה יותר באלמנטים הצפים הקיימים ---------- */
+
+/* הכותרת העליונה — טשטוש וריווי חזקים יותר (דסקטופ; למובייל יש טיפול דינמי בהמשך) */
+.app-header {
+  backdrop-filter: saturate(190%) blur(20px);
+  -webkit-backdrop-filter: saturate(190%) blur(20px);
+}
+
+/* מגש המשתמש — זכוכית עמוקה + קו-אור עדין בקצה העליון (השתקפות) */
+.user-panel {
+  backdrop-filter: saturate(190%) blur(28px);
+  -webkit-backdrop-filter: saturate(190%) blur(28px);
+  box-shadow: 0 12px 44px rgba(16,24,40,.18), inset 0 1px 0 rgba(255,255,255,.6);
+}
+
+/* בר הניווט הדסקטופי — כפתור-כמוסה זכוכית, ריווי + השתקפות עליונה חזקים יותר */
+@media (min-width: 721px) {
+  .app-nav {
+    backdrop-filter: saturate(190%) blur(18px);
+    -webkit-backdrop-filter: saturate(190%) blur(18px);
+    box-shadow: 0 1px 2px rgba(16,24,40,.05), inset 0 1px 0 rgba(255,255,255,.75);
+  }
+}
+
+/* חלונית מרכזית (Modal) — הופכת לזכוכית חלבית במקום לבן אטום */
+.modal {
+  /* 2026-08-06: הועלתה האטימות (.86→.97) — יועד: "הבוקס שקופץ לאישור מעט שקוף
+     מדי והטקסט לא מספיק בולט". כמעט אטום עכשיו, נשאר קצת "זכוכית" רק בקצה. */
+  background: rgba(255,255,255,.97);
+  backdrop-filter: saturate(190%) blur(24px);
+  -webkit-backdrop-filter: saturate(190%) blur(24px);
+  border: 1px solid rgba(255,255,255,.8);
+}
+
+/* השורה התחתונה הקבועה (תקציב/בניית תקציב) — זכוכית בדסקטופ בלבד (במובייל היא כהה ואטומה בכוונה) */
+@media (min-width: 721px) {
+  .bottomline-bar {
+    background: rgba(255,255,255,.72);
+    backdrop-filter: saturate(190%) blur(20px);
+    -webkit-backdrop-filter: saturate(190%) blur(20px);
+    border: 1px solid rgba(255,255,255,.6);
+  }
+}
+
+/* לשוניות תצוגה שמורה (tx-view) — הופכות לכמוסות זכוכית קלות */
+.tx-view {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255,255,255,.6);
+  backdrop-filter: saturate(180%) blur(10px);
+  -webkit-backdrop-filter: saturate(180%) blur(10px);
+}
+.tx-view.is-active { background: var(--action); }
+
+/* ---------- 2. כותרת דינמית במובייל — שקופה למעלה, זכוכית מלאה בגלילה ---------- */
+@media (max-width: 720px) {
+  .app-header {
+    background: rgba(255,255,255,.5);
+    backdrop-filter: saturate(170%) blur(10px);
+    -webkit-backdrop-filter: saturate(170%) blur(10px);
+    transition: background .28s ease, backdrop-filter .28s ease, box-shadow .28s ease,
+                transform .28s cubic-bezier(.2,.6,.2,1);
+  }
+  .app-header--scrolled {
+    background: rgba(255,255,255,.88);
+    backdrop-filter: saturate(190%) blur(22px);
+    -webkit-backdrop-filter: saturate(190%) blur(22px);
+    box-shadow: 0 1px 12px rgba(16,24,40,.07);
+  }
+}
+
+/* ---------- 3. מחוון ניווט "נוזלי" (דסקטופ) — כמוסה שגולשת בין הטאבים ---------- */
+@media (min-width: 721px) {
+  .app-nav { position: relative; }
+  .nav-indicator {
+    position: absolute; left: 0; top: 5px; bottom: 5px; width: 0;
+    border-radius: 999px; background: var(--action);
+    box-shadow: 0 1px 2px rgba(16,24,40,.15);
+    transition: transform .32s cubic-bezier(.34,1.3,.4,1), width .32s cubic-bezier(.34,1.3,.4,1), opacity .2s ease;
+    pointer-events: none; z-index: 0; opacity: 0;
+  }
+  .app-nav__tab { position: relative; z-index: 1; }
+  /* כשהמחוון קיים — הוא זה שנותן את הרקע הכהה לטאב הפעיל (המחוון גולש חלק, לא קופץ) */
+  .app-nav:has(.nav-indicator) .app-nav__tab.is-active { background: none; }
+}
+
+/* ---------- 4. מיקרו-אינטראקציות: משוב לחיצה רך בכל הבקרות ---------- */
+.btn-primary, .btn-ghost, .btn-approve, .btn-reject, .add-btn, .up-item,
+.ctl-btn, .user-btn, .tx-view, .seg__opt, .app-nav__tab, .year-switch__add,
+.rs-slot, .rs-club__arrow, .rs-mine-compact, .rs-month__cell, .club-rules__pay,
+.club-rules__toggle, .club-rules__inline-pay {
+  transition: transform .16s cubic-bezier(.34,1.4,.56,1),
+              background var(--t), color var(--t), border-color var(--t), box-shadow var(--t);
+}
+.btn-primary:active, .btn-approve:active, .add-btn:active, .tx-view:active,
+.seg__opt:active, .app-nav__tab:active, .user-btn:active, .ctl-btn:active,
+.up-item:active, .year-switch__add:active,
+.rs-slot:active:not(:disabled), .rs-club__arrow:active:not(:disabled),
+.rs-mine-compact:active, .rs-month__cell:active:not(:disabled), .club-rules__pay:active {
+  transform: scale(.94);
+}
+
+/* "מורפינג" עדין לאייקוני X — סגירה/מחיקה מרגישות כמו כפתור שמגיב, לא רק צבע */
+.mini-x, .drawer__close {
+  transition: transform .18s cubic-bezier(.34,1.4,.56,1), background var(--t), color var(--t);
+}
+.mini-x:hover, .drawer__close:hover { transform: rotate(90deg); }
+
+/* אישור בקשה — "פעימה" ירוקה קצרה בלחיצה (מוסיפה JS מחלקה .is-firing לרגע) */
+.btn-approve.is-firing { animation: approvePulse .42s cubic-bezier(.34,1.4,.4,1); }
+@keyframes approvePulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(5,150,105,.35); }
+  45%  { transform: scale(1.12); box-shadow: 0 0 0 8px rgba(5,150,105,.16); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(5,150,105,0); }
+}
+
+/* ---------- 5. זוהר זכוכית עוקב-סמן (Specular Highlight) על אלמנטים אינטראקטיביים ---------- */
+.bcard, .btn-primary { position: relative; overflow: hidden; }
+.bcard::after, .btn-primary::after, .tx-view::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  transition: opacity .25s ease;
+}
+.bcard::after {
+  background: radial-gradient(160px circle at var(--mx, 50%) var(--my, 50%), rgba(17,24,39,.05), transparent 60%);
+}
+.btn-primary::after {
+  background: radial-gradient(120px circle at var(--mx, 50%) var(--my, 50%), rgba(255,255,255,.35), transparent 60%);
+}
+.tx-view::after {
+  background: radial-gradient(120px circle at var(--mx, 50%) var(--my, 50%), rgba(17,24,39,.06), transparent 60%);
+}
+.tx-view.is-active::after {
+  background: radial-gradient(120px circle at var(--mx, 50%) var(--my, 50%), rgba(255,255,255,.3), transparent 60%);
+}
+.bcard:hover::after, .btn-primary:hover::after, .tx-view:hover::after { opacity: 1; }
+
+/* ---------- 6. אפקט "נוזלי" (Liquid Blob) — רק בלוגו הדקורטיבי, לא בתוכן פיננסי ---------- */
+.app-brand__logo, .login-logo {
+  transition: border-radius .4s ease;
+}
+.app-brand__logo:hover, .login-logo:hover {
+  animation: liquidMorph 2.6s ease-in-out infinite;
+}
+@keyframes liquidMorph {
+  0%   { border-radius: 30% 70% 65% 35% / 45% 40% 60% 55%; }
+  50%  { border-radius: 65% 35% 30% 70% / 55% 65% 35% 45%; }
+  100% { border-radius: 30% 70% 65% 35% / 45% 40% 60% 55%; }
+}
+
+/* ---------- 7. אנימציות מבוססות-גלילה (Scroll-driven) — התקדמות מודעת בגלילה ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    @media (max-width: 720px) {
+      .bcard, .tx-mrow, .plan-item, .stat {
+        animation: scrollReveal linear both;
+        animation-timeline: view();
+        animation-range: entry 0% cover 25%;
+      }
+    }
+    .tx-list .tx-row {
+      animation: scrollReveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 30%;
+    }
+  }
+  @keyframes scrollReveal {
+    from { opacity: 0; transform: translateY(14px) scale(.98); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* פרלקסה עדינה — לוגו הכותרת נע לאט יותר מהתוכן שמתחתיו (מובייל בלבד, כי רק שם יש גלילת עמוד) */
+  @supports (animation-timeline: scroll()) {
+    @media (max-width: 720px) {
+      .app-brand__logo {
+        animation: logoParallax linear both;
+        animation-timeline: scroll(root block);
+        animation-range: 0 500px;
+      }
+    }
+  }
+  @keyframes logoParallax {
+    from { transform: translateY(0); }
+    to   { transform: translateY(14px); }
+  }
+}
+
+/* ---------- 8. זכוכית חלבית — כרטיסי "שריון מועדון" (2026-08-05, לבקשת יועד) ---------- */
+@media (min-width: 1024px) {
+  .club-rules, .rs-club, .rs-club-month, .rs-club-form, .rs-mine-sec {
+    background: rgba(255,255,255,.7);
+    backdrop-filter: saturate(180%) blur(16px);
+    -webkit-backdrop-filter: saturate(180%) blur(16px);
+    border: 1px solid rgba(255,255,255,.6);
+    box-shadow: 0 10px 32px rgba(16,24,40,.08), inset 0 1px 0 rgba(255,255,255,.7);
+  }
+}
+.rs-slot, .rs-month__cell { position: relative; }
+.rs-slot.is-sel, .rs-month__cell.is-sel {
+  box-shadow: 0 3px 10px rgba(17,24,39,.22);
+}
+
+/* ---------- 9. נגישות: כיבוד מלא של "הפחתת תנועה" ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .app-brand__logo, .login-logo,
+  .bcard, .tx-mrow, .plan-item, .stat, .tx-row,
+  .nav-indicator {
+    animation: none !important;
+  }
+  .nav-indicator { transition: none !important; }
+  .btn-primary, .btn-ghost, .btn-approve, .btn-reject, .add-btn, .up-item,
+  .ctl-btn, .user-btn, .tx-view, .seg__opt, .app-nav__tab, .year-switch__add,
+  .mini-x, .drawer__close,
+  .rs-slot, .rs-club__arrow, .rs-mine-compact, .rs-month__cell, .club-rules__pay,
+  .club-rules__toggle, .club-rules__inline-pay {
+    transition: background var(--t), color var(--t), border-color var(--t), box-shadow var(--t) !important;
+  }
+  .btn-primary:active, .btn-approve:active, .add-btn:active, .tx-view:active,
+  .seg__opt:active, .app-nav__tab:active, .user-btn:active, .ctl-btn:active,
+  .up-item:active, .year-switch__add:active,
+  .mini-x:hover, .drawer__close:hover,
+  .rs-slot:active, .rs-club__arrow:active, .rs-mine-compact:active,
+  .rs-month__cell:active, .club-rules__pay:active {
+    transform: none !important;
+  }
+  .btn-approve.is-firing { animation: none !important; }
+  .bcard::after, .btn-primary::after, .tx-view::after { display: none !important; }
+  .app-header { transition: none !important; }
+}

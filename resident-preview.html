@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>אזור תושב · תצוגה מקדימה</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- ה-CSS האמיתי של האפליקציה — כך שהאזור נגזר מאותו עיצוב בדיוק -->
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/mobile.css" />
+
+  <!-- תוספת קטנה ורק לרכיבים הייחודיים לאזור התושב -->
+  <style>
+    /* אריחי סיכום — נגזרים מ-.stat של האפליקציה, רק עם צבע ערך סמנטי */
+    .stat--warn .stat__value { color: var(--warn); }
+    .stat--blue .stat__value { color: #2563EB; }
+    .stat--ok   .stat__value { color: var(--ok); }
+    .res-summary { grid-template-columns: repeat(3, 1fr); }
+
+    /* כרטיס בקשה — משתמש ב-.card של האפליקציה, עם פריסה פנימית */
+    .rq { padding: 18px; }
+    .rq + .rq { margin-top: 14px; }
+    .rq__top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .rq__amt { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .rq__sup { font-size: 15px; font-weight: 700; }
+    .rq__desc { font-size: 13px; color: var(--text-soft); margin-top: 2px; }
+    .rq__foot { display: flex; justify-content: space-between; align-items: center;
+      margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+    .rq__date { font-size: 12px; color: var(--text-muted); }
+
+    /* תג סטטוס — אותה שפת תגיות של האפליקציה (רקע פסטל + טקסט כהה מאותה משפחה) */
+    .rs-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
+      padding: 5px 12px; border-radius: 999px; }
+    .rs-pill svg { width: 14px; height: 14px; }
+    .rs-pill--warn { background: var(--warn-soft); color: var(--badge-warn); }
+    .rs-pill--blue { background: #EFF4FF; color: #1D4ED8; }
+    .rs-pill--ok   { background: var(--ok-soft); color: var(--badge-ok); }
+    .rs-pill--gray { background: var(--hover); color: var(--text-soft); }
+
+    /* כפתור "הצג קבלה" — משני, נקי */
+    .rs-ghost { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+      padding: 7px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text-soft); cursor: pointer; transition: border-color var(--t), color var(--t); }
+    .rs-ghost:hover { border-color: var(--action); color: var(--text); }
+    .rs-ghost svg { width: 14px; height: 14px; }
+
+    /* CTA ראשי בצורת גלולה — מרוכז, אייקון + טקסט */
+    .rs-cta { display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; max-width: 360px; height: 50px; border-radius: 999px;
+      font-size: 15px; margin: 0 auto 22px; }
+    .rs-cta svg { width: 19px; height: 19px; }
+
+    /* ==== טופס הגשה ==== */
+    .rs-form { max-width: 680px; }
+    /* מתג סוג הבקשה — סגמנטד */
+    .rs-seg { display: flex; gap: 6px; background: var(--hover); border: 1px solid var(--border);
+      border-radius: 12px; padding: 4px; max-width: 340px; margin-bottom: 14px; }
+    .rs-seg button { flex: 1; height: 38px; border: none; background: none; font-family: inherit;
+      font-size: 13px; font-weight: 600; color: var(--text-soft); border-radius: 8px; cursor: pointer;
+      transition: background var(--t), color var(--t); }
+    .rs-seg button.on { background: var(--action); color: #fff; }
+    .rs-hint { font-size: 12.5px; color: var(--text-soft); line-height: 1.6; margin-bottom: 16px; }
+    /* אזור העלאת קבלה — נגזר מ-.tx-preview__empty */
+    .rs-upload { display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8px; text-align: center; padding: 30px 16px; margin-bottom: 16px;
+      background: var(--bg); border: 1.5px dashed var(--border); border-radius: 14px; cursor: pointer;
+      transition: border-color var(--t), background var(--t); }
+    .rs-upload:hover { border-color: var(--action); }
+    .rs-upload svg { width: 30px; height: 30px; color: var(--text-soft); }
+    .rs-upload b { font-size: 14px; font-weight: 700; color: var(--text); }
+    .rs-upload small { font-size: 12px; color: var(--text-muted); }
+    .rs-submit { display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; height: 48px; border-radius: 12px; font-size: 15px; margin-top: 8px; }
+    .rs-submit svg { width: 18px; height: 18px; }
+
+    /* placeholder לטאבים העתידיים */
+    .rs-ph { text-align: center; color: var(--text-muted); padding: 64px 20px; }
+    .rs-ph .em { font-size: 34px; margin-bottom: 10px; }
+    .rs-ph b { display: block; color: var(--text-soft); font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+
+    /* אייקוני בר-הניווט התחתון (מובייל) לשלושת טאבי התושב */
+    @media (max-width: 720px) {
+      .app-nav--bottom .app-nav__tab[data-screen="requests"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 6h9M11 12h9M11 18h9'/%3E%3Cpath d='M4 6l1.4 1.4L7.5 4.5M4 12l1.4 1.4L7.5 10.5M4 18l1.4 1.4L7.5 16.5'/%3E%3C/svg%3E"); }
+      .app-nav--bottom .app-nav__tab[data-screen="submit"]   { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 4h6l1 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3z'/%3E%3Ccircle cx='12' cy='13' r='3'/%3E%3C/svg%3E"); }
+      .app-nav--bottom .app-nav__tab[data-screen="reserve"]  { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M3 9h18M8 3v4M16 3v4'/%3E%3C/svg%3E"); }
+    }
+  </style>
+</head>
+<body>
+  <!-- אותה כותרת עליונה בדיוק כמו באפליקציה -->
+  <header class="app-header">
+    <div class="app-header__inner">
+      <div class="app-brand">
+        <div class="app-brand__logo">₪</div>
+        <div class="app-brand__text">
+          <h1 class="app-brand__title">ועד קהילה</h1>
+          <div class="app-brand__subtitle">אזור תושב</div>
+        </div>
+      </div>
+
+      <nav class="app-nav" id="app-nav">
+        <button class="app-nav__tab is-active" data-screen="requests">הבקשות שלי</button>
+        <button class="app-nav__tab" data-screen="submit">הגשת קבלה</button>
+        <button class="app-nav__tab" data-screen="reserve">שריון מועדון</button>
+      </nav>
+
+      <div class="app-controls" id="app-controls">
+        <button class="user-btn" id="user-btn" title="תפריט משתמש">מכ</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main" id="app-main"></main>
+
+  <script>
+  (function(){
+    "use strict";
+
+    /* ==== נתוני דמה (בהמשך יגיעו מהגיליון לפי האימייל של התושב) ==== */
+    var USER = { family:"משפחת כהן", house:"14" };
+    var REQUESTS = [
+      { supplier:"סופרמרקט השדה", desc:"כיבוד לאירוע קהילה",        amount:340, status:"submitted", when:"הוגש היום" },
+      { supplier:"חנות הצעצועים",  desc:"משחקים לפעילות ילדים",      amount:180, status:"ready",     when:"לפני יומיים" },
+      { supplier:"משתלת הגן",      desc:"שתילים לגינה הקהילתית",    amount:95,  status:"paid",      when:"שולם ב-1.8" },
+      { supplier:"בית קפה מרכז",   desc:"ישיבת ועד — לא מוכר להחזר", amount:60,  status:"rejected", when:"נדחה ב-28.7" }
+    ];
+
+    /* סטטוס פנימי → תווית + סגנון שהתושב רואה */
+    var STATUS = {
+      submitted:{ label:"ממתין", cls:"warn", icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>' },
+      ready:    { label:"אושר",  cls:"blue", icon:'<path d="M5 12l4 4 10-10"/>' },
+      paid:     { label:"שולם",  cls:"ok",   icon:'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5"/>' },
+      rejected: { label:"נדחה",  cls:"gray", icon:'<path d="M6 6l12 12M18 6L6 18"/>' }
+    };
+    function svg(inner){ return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+inner+'</svg>'; }
+    var photoIcon = svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M3 17l5-4 4 3 3-2 6 5"/>');
+    var plusIcon  = svg('<path d="M12 5v14M5 12h14"/>');
+    function fmt(n){ return "₪ " + Number(n).toLocaleString("he-IL"); }
+
+    /* ==== מסך "הבקשות שלי" ==== */
+    function screenRequests(){
+      var pend = REQUESTS.filter(function(r){return r.status==="submitted";}).length;
+      var appr = REQUESTS.filter(function(r){return r.status==="ready";}).length;
+      var paid = REQUESTS.filter(function(r){return r.status==="paid";}).reduce(function(s,r){return s+r.amount;},0);
+
+      var cards = REQUESTS.map(function(r){
+        var st = STATUS[r.status] || STATUS.submitted;
+        return ''+
+        '<div class="card rq">'+
+          '<div class="rq__top">'+
+            '<span class="rs-pill rs-pill--'+st.cls+'">'+svg(st.icon)+st.label+'</span>'+
+            '<span class="rq__amt">'+fmt(r.amount)+'</span>'+
+          '</div>'+
+          '<div class="rq__sup">'+r.supplier+'</div>'+
+          '<div class="rq__desc">'+r.desc+'</div>'+
+          '<div class="rq__foot">'+
+            '<span class="rq__date">'+r.when+'</span>'+
+            '<button class="rs-ghost">'+photoIcon+'הצג קבלה</button>'+
+          '</div>'+
+        '</div>';
+      }).join("");
+
+      return ''+
+        '<div class="screen-head"><div class="screen-head__title">שלום, '+USER.family+'</div>'+
+          '<div class="screen-head__sub">בית '+USER.house+' · אזור תושב</div></div>'+
+        '<div class="summary res-summary">'+
+          '<div class="stat stat--warn"><div class="stat__label">ממתינות</div><div class="stat__value">'+pend+'</div></div>'+
+          '<div class="stat stat--blue"><div class="stat__label">אושרו</div><div class="stat__value">'+appr+'</div></div>'+
+          '<div class="stat stat--ok"><div class="stat__label">שולמו</div><div class="stat__value">'+fmt(paid)+'</div></div>'+
+        '</div>'+
+        '<button class="btn-primary rs-cta" data-goto="submit">'+plusIcon+' הגשת בקשה חדשה</button>'+
+        '<div class="screen-controls" style="margin-bottom:8px;"><b style="font-size:14px;">הבקשות שלי</b></div>'+
+        cards;
+    }
+
+    /* ==== מסך "הגשת קבלה" — טופס ==== */
+    var cameraIcon = svg('<path d="M9 4h6l1 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3z"/><circle cx="12" cy="13" r="3.2"/>');
+    var sendIcon   = svg('<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>');
+
+    function screenSubmit(){
+      return ''+
+      '<div class="screen-head"><div class="screen-head__title">הגשת בקשה</div>'+
+        '<div class="screen-head__sub">'+USER.family+' · בית '+USER.house+'</div></div>'+
+      '<div class="rs-form">'+
+
+        /* מתג סוג הבקשה */
+        '<div class="rs-seg" id="type-seg">'+
+          '<button data-type="refund" class="on">החזר לדייר</button>'+
+          '<button data-type="supplier">תשלום לספק</button>'+
+        '</div>'+
+        '<div class="rs-hint" id="type-hint">שילמת מכיסך ומבקש החזר. השם שלך מזוהה אוטומטית — אין צורך בפרטי בנק.</div>'+
+
+        /* אזור העלאת קבלה */
+        '<div class="rs-upload">'+cameraIcon+'<b>צילום או העלאת קבלה</b><small>JPG, PNG או PDF</small></div>'+
+
+        /* שדות */
+        '<div class="form-grid">'+
+          '<div class="form-field"><label>סכום (₪)</label>'+
+            '<input class="field-input num-input" type="number" inputmode="decimal" placeholder="0.00"></div>'+
+          '<div class="form-field"><label>פרטי ספק</label>'+
+            '<input class="field-input" type="text" placeholder="שם בית העסק"></div>'+
+          '<div class="form-field form-field--wide"><label>תיאור ההוצאה — לטובת מה</label>'+
+            '<input class="field-input" type="text" placeholder="למשל: כיבוד לאירוע קהילה"></div>'+
+          '<div class="form-field form-field--wide" id="bank-field" style="display:none;">'+
+            '<label>חשבון בנק של הספק</label>'+
+            '<div class="bank-row">'+
+              '<input class="field-input" type="text" placeholder="בנק">'+
+              '<input class="field-input" type="text" placeholder="סניף">'+
+              '<input class="field-input" type="text" placeholder="מספר חשבון">'+
+            '</div></div>'+
+        '</div>'+
+
+        '<button class="btn-primary rs-submit">'+sendIcon+' שלח בקשה</button>'+
+      '</div>';
+    }
+    function screenReserve(){
+      return '<div class="rs-ph"><div class="em">📅</div><b>שריון מועדון</b>'+
+             '<div>מערכת השריון תיבנה בהמשך (שלב 5).</div></div>';
+    }
+
+    var SCREENS = { requests:screenRequests, submit:screenSubmit, reserve:screenReserve };
+    var main = document.getElementById("app-main");
+    var nav  = document.getElementById("app-nav");
+
+    function show(tab){
+      if(!SCREENS[tab]) return;
+      main.innerHTML = SCREENS[tab]();
+      document.body.dataset.screen = tab;
+      nav.querySelectorAll(".app-nav__tab").forEach(function(b){
+        b.classList.toggle("is-active", b.dataset.screen===tab);
+      });
+      window.scrollTo(0,0);
+    }
+
+    var HINTS = {
+      refund:   "שילמת מכיסך ומבקש החזר. השם שלך מזוהה אוטומטית — אין צורך בפרטי בנק.",
+      supplier: "הוועד ישלם ישירות לספק. יש לצרף את פרטי חשבון הבנק של הספק (מופיעים בדרך כלל בקבלה)."
+    };
+
+    /* ניווט (הטאבים למעלה/למטה) + כפתור "הגשת בקשה חדשה" + מתג סוג הבקשה */
+    document.addEventListener("click", function(e){
+      var t = e.target.closest(".app-nav__tab");
+      if(t){ show(t.dataset.screen); return; }
+      var g = e.target.closest("[data-goto]");
+      if(g){ show(g.dataset.goto); return; }
+      var seg = e.target.closest(".rs-seg [data-type]");
+      if(seg){
+        var isSupplier = seg.dataset.type === "supplier";
+        document.querySelectorAll(".rs-seg [data-type]").forEach(function(b){
+          b.classList.toggle("on", b === seg);
+        });
+        var bank = document.getElementById("bank-field");
+        var hint = document.getElementById("type-hint");
+        if(bank) bank.style.display = isSupplier ? "block" : "none";
+        if(hint) hint.textContent = isSupplier ? HINTS.supplier : HINTS.refund;
+      }
+    });
+
+    show("requests");
+  })();
+  </script>
+
+  <!-- אותה התנהגות מובייל בדיוק (בר תחתון, כותרת נעלמת בגלילה) -->
+  <script src="js/ui/mobile.js"></script>
+</body>
+</html>

@@ -1,0 +1,386 @@
+/* ==========================================================================
+   CBA — אזור התושב (Resident Portal)
+   נגזר מעיצוב האפליקציה (אותם טוקנים, אותו הדר וניווט). רק פונקציות מצומצמות.
+   נטען אחרי style.css / mobile.css / loading.css.
+   ========================================================================== */
+
+/* אריחי סיכום — נגזרים מ-.stat, עם ערך בצבע סמנטי */
+.res-summary { grid-template-columns: repeat(3, 1fr); }
+.stat--warn .stat__value { color: var(--warn); }
+.stat--blue .stat__value { color: #2563EB; }
+.stat--ok   .stat__value { color: var(--ok); }
+
+/* בשנת תקציב אין משמעות לתושב — מוסתר באזור התושב */
+body[data-area="resident"] #year-switch { display: none; }
+
+/* תיקון מרכוז (2026-08-05): אזור המנהל מיועד לרוחב-מלא (דשבורד), אבל אזור התושב
+   בנוי מכרטיסים ברוחב מוגבל (max-width) בלי margin ממרכז — במסך רחב זה נדבק
+   לתחילת השורה (בעברית: לימין) במקום להיות ממורכז. ממרכזים את כל עמודת
+   התוכן של אזור התושב פעם אחת כאן, כדי שכל המסכים (כולל עתידיים) ייהנו מזה
+   בלי לגעת בכל רכיב בנפרד. */
+body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
+
+/* ---------- מסך "הבקשות שלי" ---------- */
+.rq-list { max-width: 680px; }
+.rq { padding: 18px; }
+.rq + .rq { margin-top: 14px; }
+.rq__top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.rq__amt { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* מועד החזר צפוי (סעיף 7, 2026-08-06) — רק כשהבקשה עדיין ממתינה */
+.rq__refund { font-size: 12.5px; font-weight: 600; color: var(--ok, #059669); margin-top: 4px; }
+.rq__sup { font-size: 15px; font-weight: 700; }
+.rq__desc { font-size: 13px; color: var(--text-soft); margin-top: 2px; }
+.rq__foot { display: flex; justify-content: space-between; align-items: center;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.rq__date { font-size: 12px; color: var(--text-muted); }
+
+/* תג סטטוס — שפת התגיות של האפליקציה */
+.rs-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
+  padding: 5px 12px; border-radius: 999px; }
+.rs-pill svg { width: 14px; height: 14px; }
+.rs-pill--warn { background: var(--warn-soft); color: var(--badge-warn); }
+.rs-pill--blue { background: #EFF4FF; color: #1D4ED8; }
+.rs-pill--ok   { background: var(--ok-soft); color: var(--badge-ok); }
+.rs-pill--gray { background: var(--hover); color: var(--text-soft); }
+
+/* כפתור "הצג קבלה" — משני */
+.rs-ghost { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+  padding: 7px 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border);
+  color: var(--text-soft); cursor: pointer; transition: border-color var(--t), color var(--t); }
+.rs-ghost:hover { border-color: var(--action); color: var(--text); }
+.rs-ghost svg { width: 14px; height: 14px; }
+
+/* CTA ראשי בצורת גלולה */
+.rs-cta { display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; max-width: 360px; height: 50px; border-radius: 999px; font-size: 15px; margin: 0 auto 22px; }
+.rs-cta svg { width: 19px; height: 19px; }
+
+/* מצב ריק — עדיין אין בקשות */
+.rs-empty { text-align: center; color: var(--text-soft); padding: 44px 20px;
+  background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); }
+.rs-empty svg { width: 40px; height: 40px; color: var(--text-muted); margin-bottom: 12px; }
+.rs-empty b { display: block; color: var(--text); font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.rs-empty p { font-size: 13px; margin: 0; }
+
+/* גרסה מצומצמת של המצב הריק — לשימוש בתוך "הבקשות שלי" כשקבוצה אחת (למשל
+   ההחזרים) ריקה אבל מוצגת ליד קבוצה אחרת שיש בה תוכן, ולא צריך תיבה גדולה. */
+.rs-empty--compact { padding: 16px 20px; text-align: right; }
+.rs-empty--compact p { font-size: 13px; margin: 0; }
+
+/* כותרת קבוצה בתוך "הבקשות שלי" (2026-08-06) — מפרידה בין החזרים בפועל לבין
+   בקשות אחרות שהמשפחה רק טיפלה בהן, כדי שלא ייראה כאילו הכל כסף שמגיע להם. */
+.rq-section-title { font-size: 15px; font-weight: 700; color: var(--text); margin: 22px 0 10px; }
+.rq-section-title:first-of-type { margin-top: 4px; }
+
+/* ---------- טופס הגשה ---------- */
+.rs-form { max-width: 680px; }
+.rs-seg { display: flex; gap: 6px; background: var(--hover); border: 1px solid var(--border);
+  border-radius: 12px; padding: 4px; max-width: 340px; margin-bottom: 14px; }
+.rs-seg button { flex: 1; height: 38px; border: none; background: none; font-family: inherit;
+  font-size: 13px; font-weight: 600; color: var(--text-soft); border-radius: 8px; cursor: pointer;
+  transition: background var(--t), color var(--t); }
+.rs-seg button.on { background: var(--action); color: #fff; }
+.rs-hint { font-size: 12.5px; color: var(--text-soft); line-height: 1.6; margin-bottom: 16px; }
+.rs-upload { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; text-align: center; padding: 30px 16px; margin-bottom: 16px;
+  background: var(--bg); border: 1.5px dashed var(--border); border-radius: 14px; cursor: pointer;
+  transition: border-color var(--t), background var(--t); }
+.rs-upload:hover { border-color: var(--action); }
+.rs-upload svg { width: 30px; height: 30px; color: var(--text-soft); }
+.rs-upload b { font-size: 14px; font-weight: 700; color: var(--text); }
+.rs-upload small { font-size: 12px; color: var(--text-muted); }
+.rs-submit { display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; height: 48px; border-radius: 12px; font-size: 15px; margin-top: 8px; }
+.rs-submit svg { width: 18px; height: 18px; }
+.rs-notice { margin-top: 14px; font-size: 13px; color: var(--warn); background: var(--warn-soft);
+  border-radius: 10px; padding: 10px 12px; text-align: center; }
+.rs-notice[hidden] { display: none; }
+
+/* מצב "נבחר קובץ" — תמונה ממוזערת/אייקון + שם קובץ + כפתור הסרה */
+.rs-upload.is-filled { flex-direction: row; justify-content: flex-start; text-align: right;
+  padding: 12px 14px; cursor: default; border-style: solid; border-color: var(--ok); background: var(--ok-soft); }
+.rs-upload__thumb { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; flex: none;
+  background: var(--surface); border: 1px solid var(--border); }
+.rs-upload__thumb--doc { display: flex; align-items: center; justify-content: center; color: var(--text-soft); }
+.rs-upload__thumb--doc svg { width: 24px; height: 24px; }
+.rs-upload__info { flex: 1; min-width: 0; }
+.rs-upload__name { font-size: 13px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs-upload__meta { font-size: 11.5px; color: var(--text-soft); margin-top: 2px; }
+.rs-upload__remove { flex: none; width: 30px; height: 30px; border-radius: 50%; border: none;
+  background: var(--surface); color: var(--text-soft); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background var(--t), color var(--t); }
+.rs-upload__remove svg { width: 15px; height: 15px; }
+.rs-upload__remove:hover { background: var(--danger-soft); color: var(--danger); }
+.rs-upload.is-busy { cursor: default; }
+.rs-upload.is-busy b { color: var(--text-soft); font-weight: 600; }
+
+/* ספינר קטן — לבן על כפתור כהה, אפור בתוך אזור ההעלאה הבהיר */
+.rs-spin { width: 16px; height: 16px; border-radius: 50%; flex: none;
+  border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; animation: rsspin .7s linear infinite; }
+.rs-upload .rs-spin { border-color: rgba(17,24,39,.12); border-top-color: var(--text-soft); }
+@keyframes rsspin { to { transform: rotate(360deg); } }
+
+/* הודעת שגיאת ולידציה/שליחה בטופס */
+.rs-err { font-size: 12.5px; color: var(--danger); background: var(--danger-soft); border-radius: 10px;
+  padding: 10px 12px; margin-top: 12px; line-height: 1.6; }
+.rs-err[hidden] { display: none; }
+
+/* מסך אישור שליחה */
+.rs-sent { text-align: center; padding: 56px 20px 20px; }
+.rs-sent__icon { width: 64px; height: 64px; border-radius: 50%; background: var(--ok-soft); color: var(--ok);
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; }
+.rs-sent__icon svg { width: 30px; height: 30px; }
+.rs-sent b { display: block; font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+.rs-sent p { font-size: 13.5px; color: var(--text-soft); max-width: 320px; margin: 0 auto 24px; line-height: 1.65; }
+
+/* placeholder לטאבים עתידיים (עדיין בשימוש אם מסך חדש נפתח לפני שנבנה) */
+.rs-ph { text-align: center; color: var(--text-muted); padding: 64px 20px; }
+.rs-ph .em { font-size: 34px; margin-bottom: 10px; }
+.rs-ph b { display: block; color: var(--text-soft); font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+
+/* ---------- "שריון מועדון" (שלב 8) ---------- */
+.rs-club { max-width: 680px; margin-bottom: 16px; }
+
+/* כותרת המסך (הועברה לתוך כרטיס הלוח, 2026-08-06 — הוסרה הכותרת ברמת העמוד) —
+   ממחזרת את גופני .screen-head__title/__sub הקיימים כדי לא להמציא טיפוגרפיה חדשה */
+.rs-club__headwrap { margin-bottom: 18px; }
+
+/* ניווט תאריך — חץ / date-input / חץ, ממורכז */
+.rs-club__nav { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 14px; }
+.rs-club__arrow { width: 36px; height: 36px; flex: none; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-soft); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background var(--t), color var(--t), border-color var(--t); }
+.rs-club__arrow svg { width: 17px; height: 17px; }
+.rs-club__arrow:hover:not(:disabled) { border-color: var(--action); color: var(--text); }
+.rs-club__arrow:disabled { opacity: .35; cursor: default; }
+.rs-club__date input[type="date"] { font-family: inherit; font-size: 14px; font-weight: 700; color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 8px 12px; text-align: center; }
+.rs-club__date input[type="date"]:focus { outline: none; border-color: var(--action); box-shadow: 0 0 0 3px rgba(17,24,39,.08); }
+
+/* מקרא צבעים קטן מעל רשת המשבצות */
+.rs-club__legend { display: flex; justify-content: center; gap: 16px; font-size: 12px; color: var(--text-soft);
+  margin-bottom: 12px; flex-wrap: wrap; }
+.rs-club__legend span { display: inline-flex; align-items: center; gap: 6px; }
+.rs-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.rs-dot--free { background: var(--surface); border: 1.5px solid var(--border); }
+.rs-dot--busy { background: var(--hover); border: 1.5px solid var(--border); }
+.rs-dot--sel  { background: var(--action); }
+
+/* באנר הודעת הצלחה/שגיאה מעל הרשת */
+.rs-club__msg { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+  border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.rs-club__msg svg { width: 15px; height: 15px; flex: none; }
+.rs-club__msg.is-ok { background: var(--ok-soft); color: var(--ok); }
+.rs-club__msg[hidden] { display: none; }
+
+/* רשת משבצות חצי-שעה — chips קומפקטיים בגלילה פנימית (לא כל העמוד גולל).
+   קטנים יותר מקודם (2026-08-05, לבקשת יועד) כדי שנכנסות יותר משבצות בשורה
+   ורוב המקרים לא ידרשו גלילה בכלל, וגם התופסת פחות שטח כשכן גוללים. */
+.rs-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 6px;
+  max-height: 400px; overflow-y: auto; padding: 2px 4px 2px 2px; }
+.rs-slot { height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+  font-family: inherit; font-size: 11.5px; font-weight: 600; color: var(--text); cursor: pointer;
+  font-variant-numeric: tabular-nums; transition: background var(--t), color var(--t), border-color var(--t), transform var(--t); }
+.rs-slot:hover:not(:disabled) { border-color: var(--action); background: var(--hover); }
+.rs-slot:active:not(:disabled) { transform: scale(.96); }
+.rs-slot.is-disabled { cursor: default; color: var(--text-muted); background: var(--hover); border-color: var(--hover); }
+.rs-slot.is-busy { background: repeating-linear-gradient(135deg, var(--hover), var(--hover) 5px, var(--border) 5px, var(--border) 6px); }
+.rs-slot.is-sel { background: var(--action); color: #fff; border-color: var(--action); }
+
+/* מובייל: עוד יותר קומפקטי — גם ברוחב (עמודות צפופות יותר) וגם בעובי (משבצת נמוכה יותר) */
+@media (max-width: 720px) {
+  .rs-slots { grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 4px; max-height: 340px; }
+  .rs-slot { height: 26px; font-size: 10px; border-radius: 6px; }
+}
+.rs-slots__msg { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 30px 10px; color: var(--text-soft); font-size: 13px; }
+.rs-slots__msg--err { color: var(--danger); }
+.rs-slots .rs-spin { border-color: rgba(17,24,39,.12); border-top-color: var(--text-soft); }
+
+/* טופס אישור השריון — מופיע כרגע שנבחר טווח */
+.rs-club-form { max-width: 680px; }
+.rs-club-form__sum { text-align: center; margin-bottom: 16px; }
+.rs-club-form__range { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rs-club-form__dur { font-size: 13px; color: var(--text-soft); margin-top: 3px; }
+.rs-club-form__who { font-size: 12.5px; color: var(--text-soft); text-align: center; margin: 12px 0 14px; }
+
+/* טאבים "לוח ושריון" / "השריונים שלי" — גרסה רחבה וממורכזת של .rs-seg הקיים */
+.rs-seg--wide { max-width: 420px; margin: 0 auto 20px; }
+
+/* כפתור מעבר לתצוגה חודשית + רמז שימוש קצר מתחת לרשת */
+.rs-club__month-toggle { width: 100%; justify-content: center; margin: 4px 0 14px; }
+.rs-club__hint { font-size: 11.5px; color: var(--text-muted); text-align: center; margin-top: 10px; }
+
+/* ---------- תצוגה חודשית (heatmap פשוט של ימי שריון) ---------- */
+.rs-club-month { max-width: 680px; }
+.rs-month__head { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 14px; }
+.rs-month__label { font-size: 15px; font-weight: 800; min-width: 120px; text-align: center; }
+.rs-month__wd { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 6px; }
+.rs-month__wd span { text-align: center; font-size: 11px; color: var(--text-muted); font-weight: 700; }
+.rs-month__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; transition: opacity var(--t); }
+.rs-month__grid.is-loading { opacity: .5; pointer-events: none; }
+.rs-month__cell { aspect-ratio: 1; border-radius: 10px; border: 1px solid transparent; background: var(--surface);
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; position: relative;
+  transition: background var(--t), color var(--t), border-color var(--t); }
+.rs-month__cell:hover:not(:disabled) { background: var(--hover); }
+.rs-month__cell--empty { visibility: hidden; cursor: default; }
+.rs-month__cell.is-past { color: var(--text-muted); cursor: default; }
+.rs-month__cell.is-busy::after { content: ""; position: absolute; bottom: 5px; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--warn); }
+.rs-month__cell.is-today { border-color: var(--border); font-weight: 800; }
+.rs-month__cell.is-sel { background: var(--action); color: #fff; }
+.rs-month__cell.is-sel.is-busy::after { background: #fff; }
+
+/* גרסת "מסוכן" של כפתור הגלולה המשני — לביטול שריון */
+.rs-ghost--danger:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+
+/* ---------- הוראות ותקנון שימוש במועדון (כרטיס מתקפל - Accordion) ----------
+   2026-08-06 (לבקשת יועד): סגור כברירת מחדל תמיד (גם בדסקטופ), עם כותרת מזמינה
+   ו-5 דגשים בולטים כשמכווץ; מתרחב לתוכן המלא בלחיצה. נושא התשלום כבר לא כאן
+   בכלל — יש לו קובייה נפרדת משלו (.club-pay, למטה). */
+.club-rules { max-width: 680px; }
+.club-rules__toggle { width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; background: none; border: none; font-family: inherit; cursor: pointer; padding: 2px 0; }
+.club-rules__toggle:focus-visible { outline: 2px solid var(--action); outline-offset: 3px; border-radius: 6px; }
+.club-rules__toggle-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+  align-items: flex-start; gap: 2px; text-align: start; }
+.club-rules__toggle-txt b { font-size: 14.5px; font-weight: 700; color: var(--text); }
+.club-rules__toggle-txt small { font-size: 11.5px; font-weight: 500; color: var(--text-soft); }
+.club-rules__toggle svg { width: 16px; height: 16px; color: var(--text-soft); flex: none; transition: transform var(--t); }
+.club-rules__toggle.is-open svg { transform: rotate(-90deg); }
+
+/* תג PayBox קטן בתוך כותרת התקנון (מובייל בלבד — בדסקטופ יש כבר קובית תשלום
+   מלאה, ר' @media(min-width:1024px) למטה שמסתיר את התג שם). ממוקם בין הכותרת
+   לחץ ההרחבה (בעברית: RTL — נראה "בין הטקסט לחץ שפונה שמאלה", בדיוק כמו שיועד
+   ביקש), עם min-width:0 בטקסט לצידו כדי שלא יגלוש בשום רוחב מסך. */
+.club-rules__pay-chip { flex: none; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: 999px; box-sizing: border-box;
+  background: linear-gradient(135deg, #7C3AED, #5B21B6); color: #fff;
+  font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.club-rules__pay-chip svg { width: 12px; height: 12px; flex: none; }
+
+/* 5 הדגשים — מוצגים רק כשהכרטיס מכווץ */
+.club-rules__top5 { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.club-rules.is-open .club-rules__top5 { display: none; }
+.club-rules__top5-list { margin: 0; padding-inline-start: 20px; font-size: 12.5px; line-height: 1.7; color: var(--text); }
+.club-rules__top5-list li { margin-bottom: 6px; }
+.club-rules__top5-list li:last-child { margin-bottom: 0; }
+
+.club-rules__body { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline);
+  font-size: 13px; line-height: 1.7; color: var(--text-soft); }
+.club-rules__body p { margin: 0 0 10px; }
+.club-rules__body p:last-child { margin-bottom: 0; }
+.club-rules__body b { color: var(--text); font-weight: 700; }
+.club-rules__body ul { margin: 0 0 12px; padding-inline-start: 20px; }
+.club-rules__body li { margin-bottom: 4px; }
+
+/* תקציר ההנחיות + תיבת אישור בתוך חלון "לפני שמאשרים שריון" (.modal הכללי).
+   2026-08-06: הטקסט הוכהה (היה var(--text-soft) — יועד: "לא מספיק בולט" כשה-
+   מודאל גם קיבל רקע פחות שקוף, ר' motion.css) לניגודיות טובה יותר. */
+.club-rules__summary { margin: 0 0 14px; padding-inline-start: 20px; font-size: 13px; line-height: 1.7;
+  color: var(--text); font-weight: 500; }
+.club-rules__summary li { margin-bottom: 6px; }
+.club-rules__more { font-size: 12px; color: var(--text-muted); margin: 0 0 16px; }
+.club-rules__agree { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text);
+  cursor: pointer; padding: 12px; background: var(--hover); border-radius: 10px; margin-bottom: 18px; }
+.club-rules__agree input { margin-top: 2px; flex: none; width: 16px; height: 16px; accent-color: var(--action); cursor: pointer; }
+.club-rules__modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.club-rules__modal-actions .btn-primary:disabled { opacity: .4; cursor: default; }
+
+/* מקטע "השריונים שלי" — עכשיו על אותו עמוד כמו הלוח (לא טאב נפרד).
+   ברוחב רגיל/מובייל: תג קומפקטי (.rs-mine-compact) שפותח מודאל. בדסקטופ רחב
+   (ר' @media 1024px למטה) הופך לטור מלא צמוד (.rs-mine-full) — ר' res-reserve-layout. */
+.rs-mine-sec { max-width: 680px; }
+.rs-mine-full, .rs-mine-full-heading { display: none; }
+
+/* "אובייקט" קומפקטי ל"השריונים שלי" (מובייל/צר) — תג עם ספירה, לחיצה פותחת מודאל */
+.rs-mine-compact { display: flex; align-items: center; gap: 12px; width: 100%; text-align: start;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 14px 16px; font-family: inherit; cursor: pointer;
+  transition: box-shadow var(--t), transform var(--t); }
+.rs-mine-compact:hover { box-shadow: var(--shadow-hover); }
+.rs-mine-compact:active { transform: scale(.98); }
+.rs-mine-compact__ico { flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--hover);
+  color: var(--text-soft); display: flex; align-items: center; justify-content: center; }
+.rs-mine-compact__ico svg { width: 17px; height: 17px; }
+.rs-mine-compact__text { flex: 1; min-width: 0; }
+.rs-mine-compact__text b { display: block; font-size: 14px; font-weight: 700; color: var(--text); }
+.rs-mine-compact__text small { font-size: 12px; color: var(--text-soft); }
+.rs-mine-compact__badge { flex: none; min-width: 26px; height: 26px; padding: 0 8px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;
+  background: var(--hover); color: var(--text-muted); }
+.rs-mine-compact__badge.is-ok { background: var(--ok-soft); color: var(--ok); }
+.rs-mine-compact__badge.is-pending { background: var(--warn-soft); color: var(--warn); }
+.rs-mine-compact > svg { flex: none; width: 16px; height: 16px; color: var(--text-muted); }
+
+/* ---------- קובית תשלום ייעודית (.club-pay) — 2026-08-06, לבקשת יועד ----------
+   הוצא מתוך התקנון לגמרי ("הבלטת אזור התשלום") ומקבל כרטיס משלו: רקע סגול-בהיר
+   עדין שמתכתב עם צבע כפתור ה-PayBox, כדי שיבלוט מיד לעין בלי לקרוא את התקנון.
+   2026-08-06 (סבב שני): במובייל הקובייה הזו מוסתרת לגמרי — הצומצמה לתג קטן
+   בתוך כותרת התקנון (.club-rules__pay-chip, למעלה) כדי לחסוך מקום. חוזרת
+   כקובייה מלאה רק בדסקטופ (@media min-width:1024px למטה). */
+.club-pay { display: none; max-width: 680px; text-align: center; background: #F5F0FF; border-color: #E4D4FB; }
+.club-pay__head { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+.club-pay__badge { font-size: 10.5px; font-weight: 800; letter-spacing: .02em; color: #fff;
+  background: #7C3AED; padding: 3px 9px; border-radius: 999px; }
+.club-pay__title { font-size: 14px; font-weight: 700; color: #4C1D95; }
+.club-pay__amount { font-size: 34px; font-weight: 800; color: #4C1D95; margin-bottom: 14px; font-variant-numeric: tabular-nums; }
+.club-pay__amount span { font-size: 17px; font-weight: 700; margin-inline-start: 3px; }
+.club-pay__btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; max-width: 280px; height: 46px; border-radius: 999px; box-sizing: border-box;
+  background: linear-gradient(135deg, #7C3AED, #5B21B6); color: #fff; font-size: 14px; font-weight: 700;
+  text-decoration: none; box-shadow: 0 6px 18px rgba(91,33,182,.28); }
+.club-pay__btn svg { width: 17px; height: 17px; flex: none; }
+.club-pay__note { font-size: 11.5px; color: #6B46A8; margin-top: 12px; line-height: 1.5; }
+
+/* ---------- פריסת "שריון מועדון" (2026-08-06, לבקשת יועד): 2 טורים בדסקטופ ----------
+   מובייל: עמודה אחת, מוערמת בדיוק בסדר ה-DOM (ר' resident.js): לוח+שעות -> טופס
+   (בתוך #rv-booking) -> תשלום -> תקנון -> השריונים שלי. אין צורך ב-order כאן כי
+   סדר ה-DOM כבר תואם את סדר הגלילה הרצוי במובייל. */
+.res-reserve-layout { display: flex; flex-direction: column; gap: 20px; }
+
+@media (min-width: 1024px) {
+  /* עמוד רחב יותר רק במסך הזה — שאר אזור התושב נשאר על המרכוז הרגיל (760px).
+     min(1800px, 97vw) מתרחב עם מסכים גדולים מאוד, בלי להיתקע בתקרה קבועה. */
+  body[data-area="resident"][data-screen="resReserve"] .app-main { max-width: min(1800px, 97vw); }
+  body[data-area="resident"][data-screen="resReserve"] .app-main { padding-bottom: 32px; }
+
+  /* 2 טורים: ימין (~65%) = לוח/שריון; שמאל (~35%) = תשלום + תקנון + השריונים שלי,
+     נערמים זה מתחת לזה לפי grid-template-areas (סדר זהה לסדר ה-DOM במובייל). */
+  .res-reserve-layout { display: grid; grid-template-columns: 1.85fr 1fr; gap: 26px;
+    grid-template-areas: "main pay" "main rules" "main mine"; align-items: start; }
+  #rv-booking  { grid-area: main; }
+  .club-pay    { grid-area: pay; }
+  .club-rules  { grid-area: rules; }
+  .rs-mine-sec { grid-area: mine; }
+
+  /* חשוב: גם רכיבי הפנים (.rs-club/.rs-club-form/.rs-club-month), לא רק
+     המעטפת #rv-booking — אחרת הם נשארים תחומים ל-680px הישנים בתוך טור רחב
+     בהרבה, ונוצר "רווח" ריק גדול מתחת/לצד הכרטיס בתוך הטור (הבאג שיועד דיווח
+     עליו — "רווח באמצע" — כי הטור עצמו רחב אבל תוכנו לא התרחב יחד איתו). */
+  .club-rules, .rs-mine-sec, .club-pay, #rv-booking,
+  .rs-club, .rs-club-form, .rs-club-month { max-width: none; }
+
+  .rs-mine-compact { display: none; }
+  .rs-mine-full, .rs-mine-full-heading { display: block; }
+  .rs-mine-sec { background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 22px; }
+
+  /* בדסקטופ יש כבר קובית תשלום מלאה (.club-pay) — מסתירים את התג הקטן שבכותרת
+     התקנון כדי לא לכפול; היא מוצגת רק כשהקובייה המלאה במקום אחר לגמרי (מובייל). */
+  .club-pay { display: block; }
+  .club-rules__pay-chip { display: none; }
+
+  /* לוח השעות מקבל קצת יותר ריווח בדסקטופ, כי יש לו עכשיו טור רחב יותר (65%) */
+  .rs-slots { grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); gap: 9px; }
+  .rs-slot { height: 36px; font-size: 12.5px; }
+}
+
+/* ---------- אייקוני בר-הניווט התחתון (מובייל) לשלושת טאבי התושב ---------- */
+@media (max-width: 720px) {
+  .app-nav--bottom .app-nav__tab[data-screen="resRequests"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 6h9M11 12h9M11 18h9'/%3E%3Cpath d='M4 6l1.4 1.4L7.5 4.5M4 12l1.4 1.4L7.5 10.5M4 18l1.4 1.4L7.5 16.5'/%3E%3C/svg%3E"); }
+  .app-nav--bottom .app-nav__tab[data-screen="resSubmit"]   { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 4h6l1 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3z'/%3E%3Ccircle cx='12' cy='13' r='3'/%3E%3C/svg%3E"); }
+  .app-nav--bottom .app-nav__tab[data-screen="resReserve"]  { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M3 9h18M8 3v4M16 3v4'/%3E%3C/svg%3E"); }
+}

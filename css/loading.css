@@ -1,0 +1,110 @@
+/* ==========================================================================
+   CBA — שכבת טעינה (Loading / Skeleton / Micro-transitions)
+   מערכת אחת לכל אפקטי הטעינה באפליקציה: שלדי shimmer, כניסת מסך רכה,
+   וטוסט "מעודכן". נטענת אחרי style.css ו-mobile.css.
+   ========================================================================== */
+
+/* ---------- בסיס שלד + אנימציית shimmer ---------- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #EEF0F3;
+  border-radius: 10px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .7), transparent);
+  animation: sk-shimmer 1.25s ease-in-out infinite;
+}
+/* ב-RTL הבוהק סוחף מימין לשמאל */
+@keyframes sk-shimmer { 100% { transform: translateX(-100%); } }
+
+/* ---------- אבני בניין של שלד ---------- */
+.sk-line  { height: 12px; border-radius: 7px; }
+.sk-line.sk-sm { height: 10px; }
+.sk-h1    { height: 26px; width: 240px; border-radius: 9px; margin-bottom: 8px; }
+.sk-h2    { height: 14px; width: 150px; border-radius: 7px; margin-bottom: 24px; }
+
+/* שורת אריחי סיכום — תואמת ל-.summary האמיתי */
+.sk-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.sk-stat { height: 92px; border-radius: 16px; }
+
+/* כרטיסי שלד */
+.sk-cards { display: grid; gap: 14px; }
+.sk-card  { height: 118px; border-radius: 16px; }
+.sk-card.sk-tall { height: 168px; }
+
+/* ---------- כניסת מסך רכה (בכל החלפת מסך) ---------- */
+.screen-enter { animation: cba-fade-in 220ms cubic-bezier(.2, .6, .2, 1); }
+@keyframes cba-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- טוסט "מעודכן" (רענון רקע הושלם) ---------- */
+.refresh-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%) translateY(10px);
+  z-index: 120;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ok);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 26px rgba(16, 24, 40, .14);
+  padding: 8px 16px;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  animation: toast-life 1800ms ease forwards;
+}
+.refresh-toast .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+@keyframes toast-life {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  14%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  82%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(6px); }
+}
+
+/* ---------- "פולס" על מספר שהשתנה בעדכון רקע ----------
+   טבעת קלה שמתרחבת ונעלמת + "קפיצה" זעירה — תחושת "דופק" על הערך הספציפי
+   שהתעדכן, בלי לגעת בשאר המסך ובלי לקבוע צבע (כדי לא להתנגש עם ירוק/אדום
+   שכבר יש למספרים שליליים/חיוביים). */
+.value-pulse {
+  display: inline-block;
+  border-radius: 6px;
+  animation: value-pulse 550ms ease-out;
+}
+@keyframes value-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(17, 24, 39, .16); transform: scale(1.05); }
+  100% { box-shadow: 0 0 0 9px rgba(17, 24, 39, 0); transform: scale(1); }
+}
+
+/* ---------- מסך "לא הצלחנו לטעון" (אין מטמון ואין תשובה מהרשת) ---------- */
+.load-error {
+  padding: 72px 20px;
+  text-align: center;
+}
+.load-error__title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.load-error__sub { font-size: 13.5px; color: var(--text-soft); margin-bottom: 20px; }
+
+/* ---------- נגישות: כיבוד "הפחתת תנועה" ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+  .screen-enter { animation: none; }
+  .refresh-toast { animation: toast-life 1800ms step-end forwards; }
+  .value-pulse { animation: none !important; }
+}

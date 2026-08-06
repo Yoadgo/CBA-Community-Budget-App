@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ועד קהילה · ניהול תקציב</title>
+
+  <!-- גופן עברי נקי (Heebo) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- העיצוב שלנו -->
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- שכבת מובייל — נטענת אחרי הבסיס כדי לעדכן היכן שצריך -->
+  <link rel="stylesheet" href="css/mobile.css" />
+  <!-- שכבת טעינה — שלדי shimmer, כניסת מסך רכה, טוסט "מעודכן" -->
+  <link rel="stylesheet" href="css/loading.css" />
+  <!-- אזור התושב — נגזר מהעיצוב, פונקציות מצומצמות -->
+  <link rel="stylesheet" href="css/resident.css" />
+  <!-- זכוכית נוזלית + תנועה (iOS 26) — שכבת עיצוב תוספתית, לא נוגעת במסכים -->
+  <link rel="stylesheet" href="css/motion.css" />
+
+  <!-- כניסת Google (Google Identity Services) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <!-- כותרת עליונה -->
+  <header class="app-header">
+    <div class="app-header__inner">
+      <div class="app-brand">
+        <div class="app-brand__logo">
+          <svg width="22" height="22" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block" aria-hidden="true">
+            <rect x="9"    y="21" width="7" height="13" rx="3.5" fill="currentColor"/>
+            <rect x="20.5" y="12" width="7" height="22" rx="3.5" fill="currentColor"/>
+            <rect x="32"   y="17" width="7" height="17" rx="3.5" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="app-brand__text">
+          <h1 class="app-brand__title">ניהול תקציב ועד קהילה</h1>
+        </div>
+      </div>
+
+      <!-- תפריט ניווט — באותה שורה של הכותרת -->
+      <nav class="app-nav" id="app-nav">
+        <button class="app-nav__tab is-active" data-screen="budget">תכנון מול ביצוע</button>
+        <button class="app-nav__tab" data-screen="expenses">ניהול הוצאות</button>
+        <button class="app-nav__tab" data-screen="planning">בניית תקציב</button>
+      </nav>
+
+      <!-- מתג השנה — בין הניווט לכפתור המשתמש; מתמלא דינמית ב-app.js -->
+      <div class="year-switch" id="year-switch"></div>
+
+      <!-- אזור בקרה ושמישות (פינה שמאלית עליונה) — נורות מצב, מתמלא ב-app.js -->
+      <div class="app-controls" id="app-controls"></div>
+    </div>
+  </header>
+
+  <!-- אזור התוכן — כאן כל מסך מצייר את עצמו -->
+  <main class="app-main" id="app-main"></main>
+
+  <!-- סדר הטעינה חשוב: קודם הנתונים, אחר כך המסכים, ולבסוף המנוע -->
+  <!-- לוגו — פונקציה עצמאית קטנה, נטענת מוקדם כי מסך הכניסה משתמש בה -->
+  <script src="js/ui/logo.js"></script>
+  <script src="js/data/mock.js"></script>
+  <script src="js/data/dataService.js"></script>
+  <!-- חיבור ל-Google Sheets (קריאה). אם נכשל — נשארים על נתוני mock -->
+  <script src="js/data/sheets.js"></script>
+  <script src="js/screens/budget.js"></script>
+  <script src="js/screens/expenses.js"></script>
+  <script src="js/screens/planning.js"></script>
+  <script src="js/screens/settings.js"></script>
+  <script src="js/screens/clubAdmin.js"></script>
+  <!-- אזור התושב (מסכי הפורטל) — לפני המנוע -->
+  <script src="js/screens/resident.js"></script>
+  <script src="js/app.js"></script>
+  <!-- התנהגויות מובייל (בר תחתון, כותרת נעלמת) — אחרי המנוע -->
+  <script src="js/ui/mobile.js"></script>
+  <!-- זכוכית נוזלית + תנועה (iOS 26) — אפקטים בלבד, לא נוגע בנתונים/לוגיקה -->
+  <script src="js/ui/motion.js"></script>
+</body>
+</html>

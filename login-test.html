@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>בדיקת התחברות — CBA</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root { --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --ok:#16a34a; --bad:#dc2626; --bg:#f8fafc; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .card {
+      background: #fff; width: 100%; max-width: 380px; border-radius: 20px;
+      padding: 32px 28px; box-shadow: 0 10px 40px rgba(15,23,42,.08);
+      border: 1px solid var(--line); text-align: center;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+    #gbtn { display: flex; justify-content: center; min-height: 44px; }
+    #status { margin-top: 22px; font-size: 15px; }
+    .result {
+      margin-top: 20px; text-align: right; border-top: 1px solid var(--line);
+      padding-top: 18px; display: none;
+    }
+    .result.show { display: block; }
+    .badge {
+      display: inline-block; padding: 6px 14px; border-radius: 999px;
+      font-weight: 600; font-size: 14px; margin-bottom: 14px;
+    }
+    .badge.ok  { background: #dcfce7; color: var(--ok); }
+    .badge.bad { background: #fee2e2; color: var(--bad); }
+    .row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 14px; border-bottom: 1px dashed var(--line); }
+    .row span:first-child { color: var(--muted); }
+    .row span:last-child { font-weight: 600; }
+    details { margin-top: 16px; font-size: 12px; color: var(--muted); }
+    pre { background: var(--bg); padding: 12px; border-radius: 10px; overflow:auto; direction: ltr; text-align: left; }
+    .retry { margin-top: 18px; background: none; border: 1px solid var(--line); color: var(--muted);
+             padding: 8px 16px; border-radius: 10px; font-size: 13px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>בדיקת התחברות</h1>
+    <p class="sub">התחבר עם Google כדי לבדוק את מערכת הזיהוי</p>
+    <div id="gbtn"></div>
+    <div id="status"></div>
+    <div id="result" class="result"></div>
+  </div>
+
+  <script>
+    var CLIENT_ID = "312365638466-l1tug16dd953t08khr9f8qrh76iro46i.apps.googleusercontent.com";
+    var API_URL   = "https://script.google.com/macros/s/AKfycbw_LLAk8s6u1wK-7zY3P3emjXaDeTCla-KqgvfD-Rgt5RTfWw6ldNkb7DbrhSUknS4o/exec";
+
+    window.onload = function () {
+      google.accounts.id.initialize({
+        client_id: CLIENT_ID,
+        callback: onLogin,
+        locale: "he"
+      });
+      google.accounts.id.renderButton(
+        document.getElementById("gbtn"),
+        { theme: "outline", size: "large", text: "signin_with", shape: "pill", width: 280 }
+      );
+    };
+
+    function onLogin(response) {
+      var status = document.getElementById("status");
+      status.textContent = "בודק מול השרת…";
+      fetch(API_URL + "?action=login&token=" + encodeURIComponent(response.credential))
+        .then(function (r) { return r.json(); })
+        .then(showResult)
+        .catch(function (err) {
+          status.textContent = "";
+          showError("שגיאת תקשורת מול השרת: " + err);
+        });
+    }
+
+    function showResult(data) {
+      document.getElementById("status").textContent = "";
+      var box = document.getElementById("result");
+      box.classList.add("show");
+
+      if (!data.ok) { showError(data.error || "שגיאה לא ידועה"); return; }
+
+      var html = "";
+      if (data.authorized) {
+        html += '<div class="badge ok">✓ מורשה — ' + esc(data.role) + '</div>';
+        html += row("שם", data.name);
+        html += row("אימייל", data.email);
+        html += row("משפחה", data.family);
+        html += row("מספר בית", data.house);
+        html += row("תפקיד", data.role);
+        html += row("סטטוס", data.status);
+      } else {
+        var why = data.reason === "inactive" ? "הסטטוס אינו פעיל" : "האימייל לא נמצא ברשימת התושבים";
+        html += '<div class="badge bad">✕ לא מורשה</div>';
+        html += row("שם", data.name);
+        html += row("אימייל", data.email);
+        html += row("סיבה", why);
+      }
+      html += '<details><summary>נתונים גולמיים (לבדיקה)</summary><pre>' +
+              esc(JSON.stringify(data, null, 2)) + '</pre></details>';
+      html += '<button class="retry" onclick="location.reload()">התחבר מחדש</button>';
+      box.innerHTML = html;
+    }
+
+    function showError(msg) {
+      var box = document.getElementById("result");
+      box.classList.add("show");
+      box.innerHTML = '<div class="badge bad">✕ שגיאה</div><div class="row"><span>פרטים</span><span>' +
+                      esc(msg) + '</span></div>' +
+                      '<button class="retry" onclick="location.reload()">נסה שוב</button>';
+    }
+
+    function row(label, val) {
+      return '<div class="row"><span>' + esc(label) + '</span><span>' + esc(val || "—") + '</span></div>';
+    }
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+      });
+    }
+  </script>
+</body>
+</html>
