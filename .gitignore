@@ -1,0 +1,7 @@
+# קבצי מערכת של macOS
+.DS_Store
+**/.DS_Store
+
+# קבצי עבודה שאינם חלק מהאתר
+*.xlsx
+*.bundle

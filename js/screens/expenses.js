@@ -17,9 +17,14 @@ var txCustomViews = [];  // תצוגות שמורות מותאמות אישית 
 var txViewSeq = 0;
 var txPresetCategory = null;  // סעיף שנבחר מראש (כשמגיעים מהחלקה על כרטיס תקציב)
 var txFiltersOpen = false;    // האם גיליון הסינון התחתון (מובייל) פתוח
+var txScrollTop = 0;          // מיקום גלילה בתוך רשימת הטבלה, נשמר בין רינדורים
+var txWinScrollY = 0;         // מיקום גלילת העמוד (מובייל — הרשימה לא גוללת בנפרד)
 
 // אייקון "יש הערה" קטן — מוצג ליד תגית הסטטוס כשיש הערת בדיקה (tooltip מציג את הטקסט)
 var TX_NOTE_ICO = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H8l-4 4V4z"/><path d="M8 8h8M8 11h5"/></svg>';
+
+// אייקון "תצוגה מקדימה" (עין) — מוצג בשורה רק כשיש קבלה מצורפת (2026-08-06)
+var TX_PEEK_ICO = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5 5.5 12 5.5 22.5 12 22.5 12 19 18.5 12 18.5 1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 // עמודות תקניות "הניתנות להסתרה/שינוי שם" דרך "ניהול עמודות" (סעיף 6, 2026-08-06).
 // width תואם בדיוק לרוחב הקבוע בעבר ב-css (.tx-head, .tx-row) — עכשיו הרוחב
@@ -28,9 +33,13 @@ var TX_NOTE_ICO = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" s
 var TX_STD_COLS = [
   { key: "month",    label: "חודש הגשה",   width: "72px",  get: function (t) { return t.month || ""; } },
   { key: "date",     label: "תאריך רכישה", width: "90px",  get: function (t) { return t.date || ""; } },
-  { key: "buyer",    label: "רוכש",        width: "1fr",   get: function (t) { return t.buyer || ""; } },
-  { key: "supplier", label: "ספק / נמען",  width: "1.2fr", get: function (t) { return t.supplier || ""; } },
-  { key: "category", label: "סעיף",        width: "1fr",   get: function (t) { return CBA.data.categoryName(t.categoryId); } },
+  // רוחבי רוכש/סעיף צומצמו (2026-08-06) כדי לפנות מקום לכפתורי הפעולות משמאל
+  { key: "buyer",    label: "רוכש",        width: "0.8fr", get: function (t) { return t.buyer || ""; } },
+  { key: "supplier", label: "ספק / נמען",  width: "1.1fr", get: function (t) { return t.supplier || ""; } },
+  // תיאור ההוצאה — בין הספק לסעיף התקציבי (לבקשת יועד, 2026-08-06). הערך כבר
+  // נקרא מעמודת "תיאור" בגיליון (ר' toTx ב-sheets.js), פשוט לא הוצג עד עכשיו.
+  { key: "description", label: "תיאור",    width: "1.3fr", get: function (t) { return t.description || ""; } },
+  { key: "category", label: "סעיף",        width: "0.8fr", get: function (t) { return CBA.data.categoryName(t.categoryId); } },
   { key: "amount",   label: "סכום",        width: "100px", get: function (t) { return t.amount || 0; } }
 ];
 // כל העמודות (כולל סטטוס) — משמש רק לחיפוש עמודת המיון הנוכחית (txSortRows),
@@ -49,18 +58,23 @@ function txVisibleCustomCols() {
   var hidden = txHiddenStdCols();
   return txCustomCols().filter(function (c) { return hidden.indexOf(c.key) === -1; });
 }
-// --tx-cols דינמי: 32px (צ'קבוקס) + עמודות תקניות גלויות + עמודות מותאמות
-// (כולן 1fr) + 168px (סטטוס, קבוע) + 250px (פעולות, קבוע).
+// --tx-cols דינמי: 32px (צ'קבוקס) + 30px (תצוגה מקדימה של קבלה) + עמודות תקניות
+// גלויות + עמודות מותאמות (כולן 1fr) + 168px (סטטוס, קבוע) + 250px (פעולות, קבוע).
 function txGridColsCss() {
   var mid = txVisibleStdCols().map(function (c) { return c.width; })
     .concat(txVisibleCustomCols().map(function () { return "1fr"; }));
-  return "32px " + mid.join(" ") + (mid.length ? " " : "") + "168px 250px";
+  return "32px 30px " + mid.join(" ") + (mid.length ? " " : "") + "142px 196px";
 }
 
 CBA.screens.expenses = {
   title: "ניהול הוצאות",
 
   render(container) {
+    // נשמר לפני שה-innerHTML נדרס, ומוחזר בסוף (ר' ההערה למטה)
+    const prevList = container.querySelector(".tx-list");
+    if (prevList) txScrollTop = prevList.scrollTop;
+    txWinScrollY = window.scrollY || 0;
+
     const all = CBA.data.getTransactions();
     const rows = txSortRows(txApplyFilters(all));
     const total = rows.reduce(function (s, t) { return s + (t.amount || 0); }, 0);
@@ -103,6 +117,7 @@ CBA.screens.expenses = {
       <div class="card tx-card" style="--tx-cols: ${txGridColsCss()}">
         <div class="tx-head">
           <div class="tx-check"><input type="checkbox" data-check-all ${allChecked ? "checked" : ""}></div>
+          <div></div>
           ${txVisibleStdCols().map(function (c) { return txHeadCell({ key: c.key, label: txColLabel(c) }); }).join("")}
           ${txVisibleCustomCols().map(function (c) { return '<div class="tx-sort tx-sort--static" data-custom-col="' + CBA.esc(c.key) + '">' + CBA.esc(c.label) + '</div>'; }).join("")}
           ${txHeadCell({ key: "status", label: "סטטוס" })}
@@ -116,6 +131,14 @@ CBA.screens.expenses = {
       ${txMobileList(rows, all.length)}
       <button class="tx-fab" data-add-fab aria-label="הוספת הוצאה">+</button>
     `;
+
+    // שחזור מיקום הגלילה (2026-08-06 — תיקון באג): כל פעולה בשורה מפעילה
+    // render() מחדש, וה-innerHTML החדש איפס את הגלילה לראש הרשימה. מי שאישר
+    // הוצאה בתחתית הטבלה "נזרק" חזרה למעלה. עכשיו המיקום נשמר ומוחזר.
+    const listEl = container.querySelector(".tx-list");
+    if (listEl && txScrollTop) listEl.scrollTop = txScrollTop;
+    if (txWinScrollY) window.scrollTo(0, txWinScrollY);
+    txScrollTop = 0; txWinScrollY = 0;
 
     txBind(container);
     // מעדכן מיד את פעמון ההתרעות + תגית הטאב (ולא מחכה למחזור הרענון התקופתי) —
@@ -303,6 +326,7 @@ function txStdCellHTML(key, t) {
     case "date": return CBA.esc(CBA.data.hebrewDateShort(t.date || ""));
     case "buyer": return CBA.esc(t.buyer || "");
     case "supplier": return CBA.esc(t.supplier || "");
+    case "description": return CBA.esc(t.description || "");
     case "category": return CBA.esc(CBA.data.categoryName(t.categoryId));
     case "amount": return CBA.formatILS(t.amount || 0);
     default: return "";
@@ -314,10 +338,15 @@ function txRowHTML(t) {
   const src = t.source === "resident" ? "תושב" : "מנהל";
   const typ = CBA.data.expenseTypeShort(CBA.data.expenseTypeOf(t));
   const next = CBA.data.statusNext(t.status);
+  // מי מוצג מתי (2026-08-06): "בדיקה" רלוונטי רק כשעוד לא בבדיקה ולא נסגר;
+  // "דחה" זמין בכל שלב שלפני "שולם" — כולל אחרי ההעברה להנה"ח, לבקשת יועד.
   const canReview = t.status === "submitted" || t.status === "ready";
-  const canReject = t.status === "submitted" || t.status === "review";
+  const canReject = t.status === "submitted" || t.status === "review" || t.status === "ready";
   const stdCells = txVisibleStdCols().map(function (c) {
-    return '<div class="tx-c' + (c.key === "amount" ? " tx-c--amount" : "") + '">' + txStdCellHTML(c.key, t) + '</div>';
+    // התיאור והספק נחתכים בשורה אחת — title מציג את הטקסט המלא בריחוף
+    const raw = (c.key === "description" ? (t.description || "") : c.key === "supplier" ? (t.supplier || "") : "");
+    const ttl = raw ? ' title="' + CBA.esc(raw) + '"' : "";
+    return '<div class="tx-c' + (c.key === "amount" ? " tx-c--amount" : c.key === "description" ? " tx-c--desc" : "") + '"' + ttl + '>' + txStdCellHTML(c.key, t) + '</div>';
   }).join("");
   const customCells = txVisibleCustomCols().map(function (c) {
     return '<div class="tx-c">' + CBA.esc((t.customFields && t.customFields[c.key]) || "") + '</div>';
@@ -325,6 +354,7 @@ function txRowHTML(t) {
   return `
     <div class="tx-row${pending ? " is-pending" : ""}${txSelected[t.id] ? " is-selected" : ""}" data-tx="${t.id}">
       <div class="tx-check"><input type="checkbox" data-check="${t.id}" ${txSelected[t.id] ? "checked" : ""}></div>
+      <div class="tx-c tx-c--peek">${t.receiptUrl ? `<button class="tx-peek" data-peek="${t.id}" title="תצוגה מקדימה של הקבלה" aria-label="תצוגה מקדימה של הקבלה">${TX_PEEK_ICO}</button>` : ""}</div>
       ${stdCells}
       ${customCells}
       <div class="tx-c tx-c--status">
@@ -332,11 +362,13 @@ function txRowHTML(t) {
         ${t.reviewNote ? `<span class="tx-note-ico" title="${CBA.esc(t.reviewNote)}">${TX_NOTE_ICO}</span>` : ""}
         <span class="badge-src">${typ}</span>
       </div>
+      <!-- כפתורים מפורשים, בלי תפריט (2026-08-06, לבקשת יועד): פעולה ראשית
+           בטקסט מלא ללא שבירת שורה, ולידה "?" לסימון בדיקה ו-"✕" למחיקה. -->
       <div class="tx-c--actions">
         ${next ? `<button class="btn-approve" data-advance="${t.id}">${s.next}</button>` : ""}
-        ${canReview ? `<button class="btn-ghost btn-sm" data-review="${t.id}" title="סמן לבדיקה עם הערה">לבדיקה</button>` : ""}
         ${canReject ? `<button class="btn-reject" data-reject="${t.id}">דחה</button>` : ""}
-        <button class="mini-x" data-del-tx="${t.id}" title="מחק">×</button>
+        ${canReview ? `<button class="tx-ico-btn tx-ico-btn--review" data-review="${t.id}" title="העבר לבדיקה" aria-label="העבר לבדיקה">?</button>` : ""}
+        <button class="tx-ico-btn tx-ico-btn--del" data-del-tx="${t.id}" title="מחק" aria-label="מחק">✕</button>
       </div>
     </div>`;
 }
@@ -352,8 +384,10 @@ function txMRowHTML(t) {
   const src = t.source === "resident" ? "תושב" : "מנהל";
   const typ = CBA.data.expenseTypeShort(CBA.data.expenseTypeOf(t));
   const next = CBA.data.statusNext(t.status);
+  // מי מוצג מתי (2026-08-06): "בדיקה" רלוונטי רק כשעוד לא בבדיקה ולא נסגר;
+  // "דחה" זמין בכל שלב שלפני "שולם" — כולל אחרי ההעברה להנה"ח, לבקשת יועד.
   const canReview = t.status === "submitted" || t.status === "ready";
-  const canReject = t.status === "submitted" || t.status === "review";
+  const canReject = t.status === "submitted" || t.status === "review" || t.status === "ready";
   const title = t.supplier || t.buyer || "(ללא ספק)";
   const meta = CBA.data.hebrewDate(t.date || "") + " · " + CBA.data.categoryName(t.categoryId);
   return `
@@ -381,7 +415,7 @@ function txMRowHTML(t) {
             return v ? `<div><span class="tx-md__k">${CBA.esc(c.label)}</span><span class="tx-md__v">${CBA.esc(v)}</span></div>` : "";
           }).join("")}
           ${t.reviewNote ? `<div class="tx-md--wide"><span class="tx-md__k">הערת בדיקה</span><span class="tx-md__v">${CBA.esc(t.reviewNote)}</span></div>` : ""}
-          ${t.receiptUrl ? `<div class="tx-md--wide"><span class="tx-md__k">קבלה</span><a class="tx-receipt" href="${CBA.esc(t.receiptUrl)}" target="_blank" rel="noopener">צפייה בקובץ</a></div>` : ""}
+          ${t.receiptUrl ? `<div class="tx-md--wide"><span class="tx-md__k">קבלה</span><button type="button" class="tx-receipt tx-receipt--btn" data-peek="${t.id}">${TX_PEEK_ICO} תצוגה מקדימה</button></div>` : ""}
         </div>
         <div class="tx-md__actions">
           ${next ? `<button class="btn-approve" data-advance="${t.id}">${s.next}</button>` : ""}
@@ -541,8 +575,15 @@ function txBindRows(container) {
           return;
         }
       }
-      CBA.data.updateTransaction(t.id, { status: n });
+      // יציאה מ"בבדיקה" מוחקת את הערת הבדיקה — היא שייכת לסטטוס הזה בלבד
+      CBA.data.updateTransaction(t.id, n === "review" ? { status: n } : { status: n, reviewNote: "" });
       CBA.screens.expenses.render(container);
+    });
+  });
+  container.querySelectorAll("[data-peek]").forEach(function (btn) {
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();   // לא לפתוח את חלון העריכה בלחיצה על העין
+      txOpenPeek(CBA.data.getTransactions().find(function (x) { return x.id === parseInt(btn.dataset.peek, 10); }));
     });
   });
   container.querySelectorAll("[data-review]").forEach(function (btn) {
@@ -559,7 +600,7 @@ function txBindRows(container) {
   container.querySelectorAll("[data-reject]").forEach(function (btn) {
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
-      CBA.data.updateTransaction(parseInt(btn.dataset.reject, 10), { status: "rejected" });
+      CBA.data.updateTransaction(parseInt(btn.dataset.reject, 10), { status: "rejected", reviewNote: "" });
       CBA.screens.expenses.render(container);
     });
   });
@@ -648,10 +689,16 @@ function txWireAutocomplete(form, state, residentOptions, fieldKey, onPick) {
   function render(q) {
     const query = (q || "").trim();
     if (!query) { list.hidden = true; list.innerHTML = ""; return; }
-    const matches = residentOptions.filter(function (o) { return o.label.indexOf(query) !== -1; }).slice(0, 8);
+    /* מזהים כל אפשרות לפי המיקום שלה ברשימה ולא לפי rid (תיקון באג 2026-08-06):
+       שני בני זוג באותו בית חולקים את אותו "מזהה קבוע", ולכן חיפוש לפי rid החזיר
+       תמיד את הראשון אלפביתית — בחירה ב"אורטל כהן" הפכה ל"אבירם כהן". */
+    const matches = residentOptions
+      .map(function (o, i) { return { o: o, i: i }; })
+      .filter(function (x) { return x.o.label.indexOf(query) !== -1; })
+      .slice(0, 8);
     if (!matches.length) { list.hidden = true; list.innerHTML = ""; return; }
-    list.innerHTML = matches.map(function (o) {
-      return '<div class="ac-item" data-ac-pick="' + CBA.esc(String(o.rid)) + '">' + CBA.esc(o.label) + '</div>';
+    list.innerHTML = matches.map(function (x) {
+      return '<div class="ac-item" data-ac-idx="' + x.i + '">' + CBA.esc(x.o.label) + '</div>';
     }).join("");
     list.hidden = false;
   }
@@ -662,11 +709,10 @@ function txWireAutocomplete(form, state, residentOptions, fieldKey, onPick) {
   input.addEventListener("focus", function () { if (input.value) render(input.value); });
   input.addEventListener("blur", function () { setTimeout(function () { list.hidden = true; }, 150); });
   list.addEventListener("mousedown", function (e) {
-    const item = e.target.closest("[data-ac-pick]");
+    const item = e.target.closest("[data-ac-idx]");
     if (!item) return;
     e.preventDefault();
-    const rid = item.dataset.acPick;
-    const opt = residentOptions.filter(function (o) { return String(o.rid) === rid; })[0];
+    const opt = residentOptions[parseInt(item.dataset.acIdx, 10)];
     if (opt) {
       input.value = opt.label;
       state.familyId = opt.rid;
@@ -684,6 +730,61 @@ function driveFileId(url) {
   const m = /\/file\/d\/([a-zA-Z0-9_-]+)/.exec(url) || /[?&]id=([a-zA-Z0-9_-]+)/.exec(url);
   return m ? m[1] : null;
 }
+
+/* תצוגה מקדימה מהירה של קבלה מתוך שורה בטבלה (2026-08-06, לבקשת יועד) —
+   חלונית קופצת קלה, בלי לפתוח את חלון העריכה המלא. משתמשת באותה לוגיקה
+   כמו התצוגה שבתוך החלון: Drive מוצג ב-iframe, תמונה רגילה כ-<img>. */
+function txClosePeek() {
+  const el = document.getElementById("tx-peek-overlay");
+  if (el) el.remove();
+  document.removeEventListener("keydown", txPeekEsc);
+}
+function txPeekEsc(e) { if (e.key === "Escape") txClosePeek(); }
+function txOpenPeek(t) {
+  if (!t || !t.receiptUrl) return;
+  txOpenPeekUrl(t.receiptUrl, t.supplier || t.buyer || "קבלה");
+}
+/* פתיחת תצוגה מקדימה מכתובת בלבד — כדי שכל מקום באפליקציה שמציג קבלה
+   (כולל אזור התושב) יוכל להשתמש באותה חלונית במקום לפתוח טאב חדש. */
+function txOpenPeekUrl(url, title) {
+  const t = { receiptUrl: url, supplier: title };
+  if (!t.receiptUrl) return;
+  txClosePeek();
+  const id = driveFileId(t.receiptUrl);
+  const isImg = !id && /\.(png|jpe?g|gif|webp)$/i.test(t.receiptUrl);
+  const body = id
+    ? '<iframe class="peek__frame" src="https://drive.google.com/file/d/' + CBA.esc(id) + '/preview" title="תצוגת קבלה" allow="autoplay"></iframe>'
+    : isImg
+      ? '<img class="peek__img" src="' + CBA.esc(t.receiptUrl) + '" alt="קבלה">'
+      : '<div class="peek__empty">לא ניתן להציג תצוגה מקדימה לקישור הזה</div>';
+  const wrap = document.createElement("div");
+  wrap.id = "tx-peek-overlay";
+  wrap.className = "peek-backdrop";
+  wrap.innerHTML =
+    '<div class="peek" role="dialog" aria-label="תצוגה מקדימה של הקבלה">' +
+      '<div class="peek__head">' +
+        '<span class="peek__title">' + CBA.esc(t.supplier || t.buyer || "קבלה") + '</span>' +
+        '<a class="peek__open" href="' + CBA.esc(t.receiptUrl) + '" target="_blank" rel="noopener">פתח בחלון חדש</a>' +
+        '<button class="peek__x" aria-label="סגור">×</button>' +
+      '</div>' + body +
+    '</div>';
+  document.body.appendChild(wrap);
+  wrap.addEventListener("click", function (e) { if (e.target === wrap) txClosePeek(); });
+  wrap.querySelector(".peek__x").addEventListener("click", txClosePeek);
+  document.addEventListener("keydown", txPeekEsc);
+}
+
+/* חשיפה גלובלית + מאזין אחד לכל האפליקציה: כל אלמנט עם data-peek-url ייפתח
+   כתצוגה מקדימה במקום לנווט לטאב חדש (2026-08-06, לבקשת יועד). */
+window.CBA = window.CBA || {};
+CBA.openReceiptPreview = txOpenPeekUrl;
+document.addEventListener("click", function (e) {
+  const el = e.target.closest && e.target.closest("[data-peek-url]");
+  if (!el) return;
+  e.preventDefault();
+  e.stopPropagation();
+  txOpenPeekUrl(el.dataset.peekUrl, el.dataset.peekTitle || "קבלה");
+});
 
 /* --- "ניהול עמודות" (סעיף 6, 2026-08-06): הצג/הסתר עמודות תקניות, שנה את שם
    התצוגה שלהן, והוסף/הסר עמודות מותאמות אישית. נשמר בגיליון (לא רק במכשיר הזה)
@@ -773,7 +874,7 @@ function txOpenColumnManager(container) {
 }
 
 function txOpenDrawer(container, id) {
-  txCloseDrawer();
+  txForceCloseDrawer();   // פתיחה חדשה — אין מה להזהיר עליו
   const editing = id !== null;
   const t = editing ? CBA.data.getTransactions().find(function (x) { return x.id === id; }) : {
     date: new Date().toISOString().slice(0, 10), month: txDefaultSubmissionMonth(),
@@ -864,7 +965,6 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
     </div>
 
     <div class="form-block form-block--first">
-      <div class="form-block__title">פרטי ההוצאה</div>
       <div class="form-grid">
         <div class="form-field"><label>תאריך רכישה</label><input class="field-input" type="date" data-field="date" value="${CBA.esc(state.date || "")}"></div>
         <div class="form-field"><label>חודש הגשה</label><input class="field-input" type="month" data-field="month" value="${CBA.esc(state.month || "")}"></div>
@@ -874,11 +974,9 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
         <div class="form-field form-field--wide"><label>תיאור</label><input class="field-input" type="text" data-field="description" value="${CBA.esc(state.description || "")}"></div>
         ${customFieldsHtml}
       </div>
-      <div class="form-hint form-hint--refund" id="tx-refund-hint" hidden></div>
     </div>
 
     <div class="form-block form-block--approval" id="tx-approval-block">
-      <div class="form-block__title">אישור וסיווג (למילוי המנהל)</div>
       <div class="form-block__warn" id="tx-approval-warn" hidden></div>
       <div class="form-grid">
         <div class="form-field form-field--wide"><label>סעיף תקציבי</label><select class="field-input" data-field="categoryId">${catOpts}</select>
@@ -886,12 +984,19 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
         </div>
         <div class="form-field"><label>מקור</label><select class="field-input" data-field="source">${srcOpts}</select></div>
         <div class="form-field"><label>סטטוס</label><select class="field-input" data-field="status">${stOpts}</select></div>
-        <div class="form-field form-field--wide"><label>הערת בדיקה (רשות)</label><input class="field-input" type="text" data-field="reviewNote" value="${CBA.esc(state.reviewNote || "")}" placeholder="למה ההוצאה הזו בבדיקה"></div>
+        <!-- הערת בדיקה — מוצגת רק כשהסטטוס "בבדיקה", או כשכבר יש בה תוכן כדי
+             שהערה קיימת לא תיעלם מהעין (2026-08-06). ר' refreshReviewField. -->
+        <div class="form-field form-field--wide" id="tx-review-field"${(state.status === "review" || state.reviewNote) ? "" : " hidden"}>
+          <label>הערת בדיקה</label>
+          <input class="field-input" type="text" data-field="reviewNote" value="${CBA.esc(state.reviewNote || "")}" placeholder="למה ההוצאה הזו בבדיקה">
+        </div>
       </div>
+      <!-- מועד ההחזר הצפוי — נגזר מהסטטוס ומחודש ההגשה, ולכן מקומו כאן ולא
+           בבלוק פרטי ההוצאה שבו ישב קודם (2026-08-06). -->
+      <div class="form-hint form-hint--refund" id="tx-refund-hint" hidden></div>
     </div>
 
     <div class="form-block">
-      <div class="form-block__title">תשלום וקבלה</div>
       <div class="form-grid">
         ${showBank ? `<div class="form-field form-field--wide"><label>פרטי חשבון בנק (רשות)</label>
           <div class="bank-row">
@@ -899,12 +1004,6 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
             <input class="field-input" type="text" data-field="bankBranch" placeholder="סניף" value="${CBA.esc(state.bankBranch || "")}">
             <input class="field-input" type="text" data-field="bankAccount" placeholder="חשבון" value="${CBA.esc(state.bankAccount || "")}">
           </div></div>` : ``}
-        <div class="form-field form-field--wide"><label>קישור לקבלה</label><input class="field-input" type="url" data-field="receiptUrl" value="${CBA.esc(state.receiptUrl || "")}"></div>
-      </div>
-
-      <div class="tx-filename">
-        <button class="btn-ghost btn-sm" data-copy-name>העתק שם קובץ</button>
-        <span class="tx-filename__val" id="tx-fname" title="${CBA.esc(fileName)}">${CBA.esc(fileName)}</span>
       </div>
 
       ${editing ? `
@@ -916,20 +1015,42 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
       </div>` : `
       <div class="tx-receipt-actions"><span class="tx-receipt-status">אפשר לצרף/להחליף/למחוק קובץ קבלה אחרי השמירה הראשונה</span></div>`}
 
-      <div class="tx-preview">
-        <div class="tx-preview__label">תצוגה מקדימה של הקבלה</div>
-        ${driveId
-          ? `<iframe class="tx-preview__frame" src="https://drive.google.com/file/d/${CBA.esc(driveId)}/preview" title="תצוגת קבלה" allow="autoplay"></iframe>`
-          : hasImg
-            ? `<img class="tx-preview__img" src="${CBA.esc(state.receiptUrl)}" alt="קבלה">`
-            : `<div class="tx-preview__empty">${state.receiptUrl ? "לא ניתן להציג תצוגה מקדימה לקישור הזה" : "לא צורפה קבלה"}</div>`}
-      </div>
+      <!-- תצוגה מקדימה מקופלת כברירת מחדל (2026-08-06) — הטופס היה ארוך פי שניים
+           בגללה, ובלאו הכי יש כפתור עין בטבלה לצפייה מהירה. -->
+      ${state.receiptUrl ? `
+      <details class="tx-preview-fold">
+        <summary class="tx-preview-fold__sum">הצג את הקבלה</summary>
+        <div class="tx-preview">
+          ${driveId
+            ? `<iframe class="tx-preview__frame" src="https://drive.google.com/file/d/${CBA.esc(driveId)}/preview" title="תצוגת קבלה" allow="autoplay" loading="lazy"></iframe>`
+            : hasImg
+              ? `<img class="tx-preview__img" src="${CBA.esc(state.receiptUrl)}" alt="קבלה" loading="lazy">`
+              : `<div class="tx-preview__empty">לא ניתן להציג תצוגה מקדימה לקישור הזה</div>`}
+        </div>
+      </details>` : ""}
+
+      <!-- שדות טכניים שנדרשים רק לעיתים רחוקות — מקופלים כדי לא להעמיס (2026-08-06) -->
+      <details class="tx-adv">
+        <summary class="tx-adv__sum">אפשרויות מתקדמות</summary>
+        <div class="form-grid tx-adv__body">
+          <div class="form-field form-field--wide"><label>קישור לקבלה</label><input class="field-input" type="url" data-field="receiptUrl" value="${CBA.esc(state.receiptUrl || "")}"></div>
+        </div>
+        <div class="tx-filename">
+          <button type="button" class="btn-ghost btn-sm" data-copy-name>העתק שם קובץ</button>
+          <span class="tx-filename__val" id="tx-fname" title="${CBA.esc(fileName)}">${CBA.esc(fileName)}</span>
+        </div>
+      </details>
     </div>
 
-    <div class="drawer__actions">
-      <button class="btn-primary" data-save>שמור</button>
+    <!-- פס פעולות דביק (2026-08-06): קודם הוא ישב בתחתית הטופס, אחרי תצוגת
+         הקבלה בגובה 460px — כדי לשמור היה צריך לגלול את כל הטופס. עכשיו הוא
+         נשאר גלוי תמיד. "מחק" מופרד לצד השני כדי שלא ילחצו עליו בטעות. -->
+    <div class="drawer__actions drawer__actions--sticky">
+      <div class="drawer__actions-main">
+        <button class="btn-primary" data-save>שמור</button>
+        <button class="btn-ghost" data-close>ביטול</button>
+      </div>
       ${editing ? '<button class="btn-ghost btn-danger" data-delete>מחק</button>' : ""}
-      <button class="btn-ghost" data-close>ביטול</button>
     </div>
   `;
 
@@ -966,12 +1087,26 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
       if (warn) { warn.hidden = true; warn.textContent = ""; }
     }
   }
+  /* הערת הבדיקה שייכת לסטטוס "בבדיקה" בלבד: מוצגת רק בו, וברגע שמשנים סטטוס
+     לאחר — ההערה נמחקת והשדה נעלם (2026-08-06, לבקשת יועד). המחיקה מתבצעת רק
+     בשינוי סטטוס יזום בטופס, ולא בעצם פתיחת הוצאה ישנה לצפייה. */
+  function refreshReviewField() {
+    const f = form.querySelector("#tx-review-field");
+    if (!f) return;
+    f.hidden = state.status !== "review";
+  }
+  function clearReviewNote() {
+    state.reviewNote = "";
+    const inp = form.querySelector('[data-field="reviewNote"]');
+    if (inp) inp.value = "";
+  }
   function refreshName() {
     collect();
     const el = form.querySelector("#tx-fname");
     if (el) el.textContent = CBA.data.receiptFileName(state);
     refreshApproval();
     refreshRefundHint();
+    refreshReviewField();
   }
   function updateSuggest() {
     const box = form.querySelector("#tx-suggest");
@@ -998,6 +1133,20 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
   updateSuggest();
   refreshApproval();
   refreshRefundHint();
+  refreshReviewField();
+
+  // שינוי סטטוס יזום: יציאה מ"בבדיקה" מוחקת את ההערה ומעלימה את השדה
+  const statusSel = form.querySelector('[data-field="status"]');
+  if (statusSel) statusSel.addEventListener("change", function () {
+    if (statusSel.value !== "review") clearReviewNote();
+    refreshName();
+  });
+
+  /* שמירת "טביעת אצבע" של הטופס בפתיחה, כדי לדעת ביציאה אם באמת השתנה משהו
+     ולהזהיר רק אז — ולא בכל סגירה (2026-08-06). ר' txCloseDrawer. */
+  collect();
+  txDirtyBaseline = JSON.stringify(state);
+  txDirtyCheck = function () { collect(); return JSON.stringify(state) !== txDirtyBaseline; };
 
   // autocomplete תושבים בשדה "רוכש/מטפל" — לכל סוגי ההוצאה
   txWireAutocomplete(form, state, residentOptions, "buyer", function () { refreshName(); updateSuggest(); });
@@ -1088,14 +1237,14 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
     };
     if (editing) CBA.data.updateTransaction(id, fields);
     else CBA.data.addTransaction(fields);
-    txCloseDrawer();
+    txForceCloseDrawer();   // נשמר — בלי אזהרה
     CBA.screens.expenses.render(container);
   });
   const delBtn = form.querySelector("[data-delete]");
   if (delBtn) delBtn.addEventListener("click", function () {
     if (window.confirm("למחוק את התנועה?")) {
       CBA.data.deleteTransaction(id);
-      txCloseDrawer();
+      txForceCloseDrawer();   // נמחק — בלי אזהרה
       CBA.screens.expenses.render(container);
     }
   });
@@ -1111,9 +1260,23 @@ function txCopy(text) {
     ta.remove();
   }
 }
-function txCloseDrawer() {
+/* מעקב שינויים שלא נשמרו (2026-08-06) — קודם כל סגירה מחקה הכול בשקט.
+   txDirtyCheck נקבע בעת בניית הטופס; מתאפס בכל סגירה כדי שלא ידלוף לחלון הבא. */
+var txDirtyBaseline = null;
+var txDirtyCheck = null;
+function txForceCloseDrawer() {
   const el = document.getElementById("cba-drawer");
   if (el) el.remove();
   document.removeEventListener("keydown", txEscDrawer);
+  txDirtyBaseline = null;
+  txDirtyCheck = null;
+}
+function txCloseDrawer() {
+  if (txDirtyCheck) {
+    var dirty = false;
+    try { dirty = txDirtyCheck(); } catch (e) { dirty = false; }
+    if (dirty && !window.confirm("יש שינויים שלא נשמרו. לצאת בלי לשמור?")) return;
+  }
+  txForceCloseDrawer();
 }
 function txEscDrawer(e) { if (e.key === "Escape") txCloseDrawer(); }

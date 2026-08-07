@@ -13,6 +13,23 @@ CBA.sheets = (function () {
 
   // מיפוי ערכי הגיליון (עברית) -> מפתחות פנימיים
   var STATUS_MAP = { "הוגשה קבלה": "submitted", "בבדיקה": "review", 'הועבר להנה"ח': "ready", "שולם": "paid", "נדחה": "rejected" };
+
+  /* פענוח הסטטוס מהגיליון (2026-08-06 — תיקון באג).
+     בשלב שיוך המשפחות נכתבו לעמודת "סטטוס" ערכים ארוכים ומפורטים שמתחילים ב-
+     "בדיקה - ..." (למשל: 'בדיקה - שיוך משפחה: השם "..." לא זוהה בוודאות').
+     STATUS_MAP מכיר רק את הערך המדויק "בבדיקה", ולכן כל השורות האלה נפלו
+     לברירת המחדל "שולם" — 75 מתוך 135 שורות הוצגו כמשולמות במקום כדורשות
+     בדיקה. עכשיו כל סטטוס שמתחיל ב-"בדיקה" מזוהה כ-review, וכל הטקסט המפורט
+     נשמר כהערת בדיקה כדי שלא יאבד המידע למה השורה סומנה. */
+  function parseStatus(raw, existingNote) {
+    var s = String(raw || "").trim();
+    if (STATUS_MAP[s]) return { status: STATUS_MAP[s], note: existingNote };
+    if (s.indexOf("בדיקה") === 0) {
+      var detail = s.replace(/^בדיקה\s*[-–—:]\s*/, "").trim() || s;
+      return { status: "review", note: existingNote ? (existingNote + " | " + detail) : detail };
+    }
+    return { status: STATUS_MAP[s] || "paid", note: existingNote };
+  }
   var TYPE_MAP   = { "החזר לדייר": "refund", "תשלום לספק": "supplier", "הוצאה כללית": "general" };
   var SOURCE_MAP = { "מנהל": "admin", "תושב": "resident" };
   var DIST_MAP   = { "שווה": "equal", "מותאם": "custom", "שנתי": "unplanned" };
@@ -74,6 +91,7 @@ CBA.sheets = (function () {
     Object.keys(row).forEach(function (k) {
       if (KNOWN_TX_HEADERS.indexOf(k) === -1 && row[k] !== "" && row[k] != null) customFields[k] = row[k];
     });
+    var st = parseStatus(row["סטטוס"], String(row["הערת בדיקה"] || ""));
     return {
       id: num(row["מזהה"]) || row["מזהה"],
       month: m, date: d,
@@ -84,8 +102,8 @@ CBA.sheets = (function () {
       categoryId: String(row["סעיף"] || "").trim(),
       expenseType: TYPE_MAP[String(row["סוג הוצאה"] || "").trim()] || "supplier",
       source: SOURCE_MAP[String(row["מקור"] || "").trim()] || "admin",
-      status: STATUS_MAP[String(row["סטטוס"] || "").trim()] || "paid",
-      reviewNote: String(row["הערת בדיקה"] || ""),
+      status: st.status,
+      reviewNote: st.note,
       description: String(row["תיאור"] || ""),
       receiptUrl: String(row["קישור קבלה"] || ""),
       payType: (TYPE_MAP[String(row["סוג הוצאה"] || "").trim()] === "refund") ? "refund" : "supplier",

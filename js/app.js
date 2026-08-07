@@ -144,8 +144,88 @@
   }
   // ניתוב לפי תפקיד: מנהל → אזור ניהול (עם מעבר לתושב); תושב → אזור תושב בלבד.
   // משתמש ב-initialRoute (לא setArea) כדי לשחזר את המסך האחרון אם רענון עמוד הביא אותנו לכאן.
+  /* ---------- מצב הדמיית תושב (כלי פיתוח, 2026-08-06) ----------
+     מאפשר למנהל להיכנס לאזור התושב "בתור" תושב מסוים ולראות בדיוק מה הוא רואה.
+     זהות ההדמיה חיה בזיכרון בלבד — רענון דף מחזיר לזהות האמיתית, וכל הכתיבות
+     לגיליון ממשיכות להתבצע תחת המשתמש האמיתי. כלי זמני לשלב הפיתוח. */
+  let simUser = null;
+  function applyUser() { window.CBA.user = simUser || currentUser; }
+  window.CBA.isSimulating = function () { return !!simUser; };
+
+  function startSim(opt) {
+    simUser = { name: opt.label, email: "(הדמיה)", role: "תושב", familyId: opt.rid, house: opt.rid };
+    applyUser();
+    renderSimBanner();
+    setArea("resident");
+  }
+  function stopSim() {
+    simUser = null;
+    applyUser();
+    renderSimBanner();
+    setArea(currentUser && currentUser.role === "מנהל" ? "admin" : "resident");
+  }
+  function renderSimBanner() {
+    let bar = document.getElementById("sim-banner");
+    if (!simUser) { if (bar) bar.remove(); document.body.classList.remove("has-sim"); return; }
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "sim-banner";
+      bar.className = "sim-banner";
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML =
+      '<span class="sim-banner__txt">מצב הדמיה — רואה בתור <b>' + CBA.esc(simUser.name) + '</b></span>' +
+      '<button type="button" class="sim-banner__x" id="sim-exit">צא מהדמיה</button>';
+    document.body.classList.add("has-sim");
+    bar.querySelector("#sim-exit").addEventListener("click", stopSim);
+  }
+
+  /* בורר התושב להדמיה — משתמש באותה רשימת תושבים של השלמת השמות בטופס ההוצאות */
+  function openSimPicker() {
+    const wrap = document.createElement("div");
+    wrap.className = "peek-backdrop";
+    wrap.id = "sim-picker";
+    wrap.innerHTML =
+      '<div class="peek sim-pick" role="dialog" aria-label="בחירת תושב להדמיה">' +
+        '<div class="peek__head"><span class="peek__title">הדמיית תושב</span>' +
+          '<button class="peek__x" aria-label="סגור">×</button></div>' +
+        '<div class="sim-pick__body">' +
+          '<input class="field-input" id="sim-q" type="text" placeholder="הקלד/י שם תושב…" autocomplete="off">' +
+          '<div class="sim-pick__list" id="sim-list"><div class="sim-pick__empty">טוען רשימת תושבים…</div></div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(wrap);
+    const close = function () { wrap.remove(); };
+    wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
+    wrap.querySelector(".peek__x").addEventListener("click", close);
+
+    const listEl = wrap.querySelector("#sim-list");
+    const qEl = wrap.querySelector("#sim-q");
+    CBA.data.residentPickerOptions(function (opts) {
+      const all = opts || [];
+      if (!all.length) { listEl.innerHTML = '<div class="sim-pick__empty">לא הצלחנו לטעון את רשימת התושבים</div>'; return; }
+      function draw() {
+        const q = (qEl.value || "").trim();
+        const idx = all.map(function (o, i) { return i; })
+          .filter(function (i) { return !q || all[i].label.indexOf(q) !== -1; })
+          .slice(0, 60);
+        listEl.innerHTML = idx.length
+          ? idx.map(function (i) { return '<button type="button" class="sim-pick__item" data-i="' + i + '">' + CBA.esc(all[i].label) + '</button>'; }).join("")
+          : '<div class="sim-pick__empty">לא נמצא תושב בשם הזה</div>';
+      }
+      draw();
+      qEl.addEventListener("input", draw);
+      listEl.addEventListener("click", function (e) {
+        const b = e.target.closest("[data-i]"); if (!b) return;
+        const opt = all[parseInt(b.dataset.i, 10)];
+        if (opt) { close(); startSim(opt); }
+      });
+      qEl.focus();
+    });
+  }
+
   function routeByRole() {
-    window.CBA.user = currentUser;
+    applyUser();
     initialRoute(currentUser && currentUser.role === "מנהל" ? "admin" : "resident");
   }
 
@@ -307,6 +387,14 @@
         else showScreen(target);
       });
     });
+    const simBtn = panel.querySelector("[data-panel-sim]");
+    if (simBtn) simBtn.addEventListener("click", function () {
+      panel.hidden = true; btn.classList.remove("is-open"); openSimPicker();
+    });
+    const simStopBtn = panel.querySelector("[data-panel-simstop]");
+    if (simStopBtn) simStopBtn.addEventListener("click", function () {
+      panel.hidden = true; btn.classList.remove("is-open"); stopSim();
+    });
     const outBtn = panel.querySelector("[data-panel-logout]");
     if (outBtn) outBtn.addEventListener("click", logout);
 
@@ -366,6 +454,12 @@
     var settingsItem = (currentArea === "admin")
       ? '<button class="up-item" data-panel-settings><span class="up-row__ico">' + ICON.gear + '</span>הגדרות</button>'
       : "";
+    // הדמיית תושב — כלי פיתוח, גלוי למנהל בלבד (2026-08-06)
+    var simItem = isAdmin
+      ? (window.CBA.isSimulating && window.CBA.isSimulating()
+          ? '<button class="up-item up-item--sim" data-panel-simstop><span class="up-row__ico">' + ICON.swap + '</span>צא ממצב הדמיה</button>'
+          : '<button class="up-item up-item--sim" data-panel-sim><span class="up-row__ico">' + ICON.swap + '</span>הדמיית תושב</button>')
+      : "";
 
     return (
       head +
@@ -373,6 +467,7 @@
       notifItemsHTML() +
       '<div class="up-sep"></div>' +
       switchItem +
+      simItem +
       settingsItem +
       action
     );
@@ -441,7 +536,7 @@
     gate.innerHTML =
       '<div class="login-card">' +
         '<div class="login-logo">' + CBA.logoSVG(28) + '</div>' +
-        '<h1 class="login-title">ניהול תקציב ועד קהילה</h1>' +
+        '<h1 class="login-title">ניהול קהילה</h1>' +
         '<p class="login-sub">התחברות לחברי הקהילה</p>' +
         (loginError ? '<div class="up-err">' + CBA.esc(loginError) + '</div>' : '') +
         '<div class="login-btn" id="gate-signin"></div>' +
@@ -552,7 +647,7 @@
   function ensureHeaderShell() {
     if (headerReady) return;
     headerReady = true;
-    window.CBA.user = currentUser;
+    applyUser();
     renderControls();
     renderYearSwitch();
     initGoogle();

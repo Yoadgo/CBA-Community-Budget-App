@@ -411,7 +411,7 @@ body[data-screen="planning"] .year-switch__add {
 }
 .drawer {
   position: fixed; inset-block: 0; left: 0; z-index: 51;
-  width: min(460px, 92vw);
+  width: min(540px, 94vw);   /* הורחב (2026-08-06) — יותר מקום לשדות בשורה */
   background: var(--surface);
   box-shadow: 0 0 40px rgba(16,24,40,.18);
   display: flex; flex-direction: column;
@@ -788,8 +788,8 @@ body[data-screen="planning"] .app-main { padding-bottom: 108px; }
   display: grid;
   /* דינמי לפי "ניהול עמודות" (סעיף 6, 2026-08-06) — נקבע ב-JS כמשתנה CSS על
      .tx-card (יורש לכאן); ברירת המחדל כאן זהה בדיוק למבנה הקבוע המקורי. */
-  grid-template-columns: var(--tx-cols, 32px 72px 90px 1fr 1.2fr 1fr 100px 168px 250px);
-  gap: 12px; align-items: center;
+  grid-template-columns: var(--tx-cols, 32px 30px 72px 90px 0.8fr 1.1fr 1.3fr 0.8fr 100px 142px 196px);
+  gap: 10px; align-items: center;
 }
 .tx-check { display: flex; align-items: center; justify-content: center; }
 .tx-check input { width: 16px; height: 16px; cursor: pointer; }
@@ -834,21 +834,21 @@ body[data-screen="planning"] .app-main { padding-bottom: 108px; }
   font-family: inherit; font-size: 12px; color: var(--text); padding: 4px 10px; border-radius: 8px; cursor: pointer;
 }
 .tx-suggest__apply:hover { border-color: var(--action); }
-.tx-head { padding: 0 14px 8px; font-size: 12px; color: var(--text-soft); border-bottom: 1px solid var(--border); }
+.tx-head { padding: 0 14px 8px; font-size: 12px; color: var(--text-soft); border-bottom: 1px solid var(--border); text-align: center; }
 .tx-sort { cursor: pointer; user-select: none; white-space: nowrap; transition: color var(--t); }
 .tx-sort:hover { color: var(--text); }
 .tx-sort.is-active { color: var(--action); font-weight: 600; }
 .tx-sort--static { cursor: default; }
 .tx-sort--static:hover { color: inherit; }
 .tx-list { max-height: calc(100vh - 300px); overflow-y: auto; scrollbar-gutter: stable; }
-.tx-row { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background var(--t); }
+.tx-row { padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background var(--t); }
 .tx-row:hover { background: var(--hover); }
 .tx-row.is-pending { background: var(--warn-soft); }
 .tx-row.is-pending:hover { background: #FDF3D8; }
-.tx-c { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-c { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
 .tx-c--date { color: var(--text-soft); font-size: 13px; }
-.tx-c--amount { font-weight: 800; text-align: start; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.tx-c--actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; row-gap: 4px; }
+.tx-c--amount { font-weight: 800; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tx-c--actions { display: flex; align-items: center; justify-content: center; gap: 5px; flex-wrap: nowrap; }
 .tx-row .mini-x { opacity: 0; transition: opacity var(--t); }
 .tx-row:hover .mini-x { opacity: 1; }
 .btn-approve {
@@ -884,12 +884,14 @@ body[data-screen="planning"] .app-main { padding-bottom: 108px; }
 .club-loading .rs-spin { border-color: rgba(17,24,39,.12); border-top-color: var(--text-soft); }
 
 /* טופס הוספה/עריכה ב-drawer */
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+/* קומפקטי בכ-15% (2026-08-06, לבקשת יועד): מרווחים, גובה שדות וגודל תוויות
+   הוקטנו יחד כדי שיותר שדות ייכנסו למסך בלי גלילה, בלי לפגוע בקריאות. */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
 .form-field--wide { grid-column: 1 / -1; }
-.form-field label { display: block; font-size: 12px; color: var(--text-soft); margin-bottom: 5px; }
+.form-field label { display: block; font-size: 11.5px; color: var(--text-soft); margin-bottom: 3px; }
 .field-input {
-  width: 100%; font-family: inherit; font-size: 14px; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); box-sizing: border-box;
+  width: 100%; font-family: inherit; font-size: 13.5px; padding: 6px 9px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); box-sizing: border-box;
   transition: border-color var(--t), box-shadow var(--t);
 }
 .field-input:focus { outline: none; border-color: var(--action); box-shadow: 0 0 0 3px rgba(17,24,39,.08); }
@@ -897,9 +899,11 @@ body[data-screen="planning"] .app-main { padding-bottom: 108px; }
 /* טופס הוספה/עריכה — 3 בלוקים מופרדים בקווים דקים (2026-08-06): פרטי הוצאה /
    אישור וסיווג (מילוי מנהל) / תשלום וקבלה. בלוק האישור מקבל הבלטת צבע (--warn)
    כל עוד חסרים בו פרטים לפני העברה להנה"ח — ר' CBA.data.missingApprovalFields. */
-.form-block { padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--border); }
+.form-block { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }
 .form-block--first { padding-top: 0; border-top: none; }
-.form-block__title { font-size: 12.5px; font-weight: 700; color: var(--text-soft); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .02em; }
+/* הכותרות הוסרו מה-HTML (2026-08-06) — הקווים הדקים בין הבלוקים מספיקים
+   כהפרדה, כמו שיועד ביקש. הכלל נשאר לתאימות אם תוחזר כותרת בעתיד. */
+.form-block__title { font-size: 12.5px; font-weight: 700; color: var(--text-soft); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .02em; }
 .form-block--approval {
   margin-inline: -14px; padding: 14px; border-radius: 12px; border-top: none;
   transition: background var(--t), box-shadow var(--t);
@@ -1046,3 +1050,154 @@ body[data-screen="planning"] .app-main { padding-bottom: 108px; }
   opacity: 1;
   transform: translate(-50%, 0);
 }
+
+/* ---------- תצוגה מקדימה של קבלה מתוך שורה בטבלה (2026-08-06) ----------
+   כפתור עין קטן שמופיע בשורה רק כשיש קבלה מצורפת, ופותח חלונית קלה. */
+.tx-c--peek { display: flex; align-items: center; justify-content: center; padding: 0; }
+.tx-peek {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0;
+  border: none; background: none; cursor: pointer; border-radius: 6px;
+  color: var(--text-soft); transition: color var(--t), background var(--t);
+}
+.tx-peek:hover { color: var(--action); background: var(--surface-2, rgba(17,24,39,.06)); }
+
+.peek-backdrop {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(16,24,40,.55);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  animation: peekIn 140ms ease-out;
+}
+@keyframes peekIn { from { opacity: 0; } to { opacity: 1; } }
+.peek {
+  background: var(--surface); border-radius: 14px; overflow: hidden;
+  width: min(720px, 96vw); max-height: 90vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(16,24,40,.3);
+}
+.peek__head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+}
+.peek__title { font-weight: 700; font-size: 14px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.peek__open { font-size: 12.5px; color: var(--action); text-decoration: none; flex: none; }
+.peek__open:hover { text-decoration: underline; }
+.peek__x {
+  flex: none; width: 26px; height: 26px; border: none; background: none;
+  font-size: 20px; line-height: 1; cursor: pointer; color: var(--text-soft); border-radius: 6px;
+}
+.peek__x:hover { color: var(--text); background: rgba(17,24,39,.06); }
+.peek__frame { width: 100%; height: 70vh; border: none; display: block; }
+.peek__img { width: 100%; max-height: 78vh; object-fit: contain; display: block; background: #f3f4f6; }
+.peek__empty { padding: 48px 20px; text-align: center; color: var(--text-soft); font-size: 13.5px; }
+
+@media (prefers-reduced-motion: reduce) { .peek-backdrop { animation: none; } }
+
+/* התיאור עלול להיחתך — הטקסט המלא זמין בריחוף (title נקבע ב-JS) */
+.tx-c--desc { color: var(--text); }
+
+/* קבלה כתצוגה מקדימה במקום קישור לטאב חדש */
+.tx-receipt--btn {
+  border: none; background: none; padding: 0; font-family: inherit; font-size: 13px;
+  color: var(--action); cursor: pointer; text-decoration: underline;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+
+/* ---------- פס פעולות דביק בתחתית חלון העריכה (2026-08-06) ---------- */
+.drawer__actions--sticky {
+  position: sticky; bottom: 0; z-index: 5;
+  margin: 16px -22px 0; padding: 12px 22px;
+  background: var(--surface); border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.drawer__actions-main { display: flex; gap: 8px; }
+
+/* ---------- אזורים מקופלים בחלון העריכה ---------- */
+.tx-preview-fold, .tx-adv { margin-top: 14px; }
+.tx-preview-fold__sum, .tx-adv__sum {
+  cursor: pointer; font-size: 12.5px; color: var(--text-soft); font-weight: 600;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px;
+  list-style: none; user-select: none; transition: border-color var(--t), color var(--t);
+}
+.tx-preview-fold__sum::-webkit-details-marker, .tx-adv__sum::-webkit-details-marker { display: none; }
+.tx-preview-fold__sum::before, .tx-adv__sum::before { content: "▸ "; }
+.tx-preview-fold[open] .tx-preview-fold__sum::before, .tx-adv[open] .tx-adv__sum::before { content: "▾ "; }
+.tx-preview-fold__sum:hover, .tx-adv__sum:hover { border-color: var(--action); color: var(--text); }
+.tx-adv__body { margin-top: 12px; }
+
+/* ---------- מצב הדמיית תושב (כלי פיתוח, 2026-08-06) ----------
+   פס עליון בולט שלא מאפשר לשכוח שאתה מסתכל דרך העיניים של מישהו אחר. */
+.sim-banner {
+  position: fixed; inset-inline: 0; top: 0; z-index: 90;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 7px 16px;
+  background: #7C3AED; color: #fff;
+  font-size: 13px; font-weight: 600;
+  box-shadow: 0 2px 10px rgba(124,58,237,.35);
+}
+.sim-banner__txt b { font-weight: 800; }
+.sim-banner__x {
+  border: 1px solid rgba(255,255,255,.55); background: rgba(255,255,255,.12);
+  color: #fff; font-family: inherit; font-size: 12px; font-weight: 600;
+  padding: 3px 12px; border-radius: 999px; cursor: pointer;
+  transition: background var(--t);
+}
+.sim-banner__x:hover { background: rgba(255,255,255,.25); }
+body.has-sim { padding-top: 34px; }
+
+.up-item--sim { color: #7C3AED; }
+
+/* בורר התושב להדמיה */
+.sim-pick { width: min(420px, 94vw); }
+.sim-pick__body { padding: 14px; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.sim-pick__list { overflow-y: auto; max-height: 46vh; display: flex; flex-direction: column; gap: 2px; }
+.sim-pick__item {
+  border: none; background: none; font-family: inherit; font-size: 14px; color: var(--text);
+  text-align: start; padding: 9px 10px; border-radius: 8px; cursor: pointer;
+  transition: background var(--t);
+}
+.sim-pick__item:hover { background: var(--hover); }
+.sim-pick__empty { padding: 20px 10px; text-align: center; color: var(--text-soft); font-size: 13px; }
+
+@media (max-width: 720px) {
+  .sim-banner { font-size: 12px; gap: 10px; padding: 6px 12px; }
+  body.has-sim { padding-top: 32px; }
+}
+
+/* ---------- כפתורי פעולה בשורת הטבלה (2026-08-06, לבקשת יועד) ----------
+   כפתורים מפורשים במקום תפריט: פעולה ראשית בטקסט מלא (נקבעת לפי אורך המילים,
+   בלי שבירת שורה), "?" להעברה לבדיקה ו-"✕" למחיקה. */
+.tx-c--actions .btn-approve,
+.tx-c--actions .btn-reject { white-space: nowrap; flex: none; }
+
+.tx-ico-btn {
+  flex: none; width: 26px; height: 26px; padding: 0;   /* זהה לגובה כפתורי הטקסט — שומר על שורות באותו גובה */
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; background: none; border-radius: 7px;
+  font-family: inherit; font-size: 13px; font-weight: 700; line-height: 1;
+  color: var(--text-soft); cursor: pointer;
+  transition: color var(--t), background var(--t), border-color var(--t);
+}
+.tx-ico-btn--review:hover { color: #7C3AED; background: #F3EEFF; border-color: #DDD0FF; }
+.tx-ico-btn--del { font-weight: 400; font-size: 14px; }
+.tx-ico-btn--del:hover { color: var(--danger); background: var(--danger-soft); border-color: var(--danger); }
+
+/* המחיקה מתגלה בריחוף על השורה, כדי שלא תמשוך את העין בכל שורה */
+.tx-row .tx-ico-btn--del { opacity: 0; transition: opacity var(--t), color var(--t), background var(--t); }
+.tx-row:hover .tx-ico-btn--del,
+.tx-row .tx-ico-btn--del:focus-visible { opacity: 1; }
+
+/* תא הסטטוס — שורה אחת שלא נשברת (2026-08-06 תיקון: התגית, אייקון ההערה ותווית
+   הסוג נשברו לשלוש שורות ועשו לשורה גובה 81px במקום 45px). */
+.tx-c--status {
+  display: flex; align-items: center; justify-content: center;
+  gap: 5px; flex-wrap: nowrap; overflow: hidden;
+}
+.tx-c--status > * { flex: none; }
+.tx-c--status .badge { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tx-c--status .badge-src,
+.tx-c--status .tx-note-ico { margin-inline-start: 0; }
+.tx-c--status .tx-note-ico { display: inline-flex; align-items: center; }
+
+/* גובה אחיד לכל שורה, בלי קשר לאילו כפתורים מוצגים בה */
+.tx-c--actions { min-height: 26px; }

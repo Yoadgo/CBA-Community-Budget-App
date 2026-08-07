@@ -144,7 +144,7 @@ CBA.screens = CBA.screens || {};
           '<span class="rq__date">' + CBA.esc(CBA.data.hebrewDate(t.date || "")) +
             (t.month ? ' · הוגש בחודש ' + CBA.esc(CBA.data.hebrewMonth(t.month)) : '') + '</span>' +
           (t.receiptUrl
-            ? '<a class="rs-ghost" href="' + CBA.esc(t.receiptUrl) + '" target="_blank" rel="noopener">' + docIcon + ' הצג קבלה</a>'
+            ? '<button type="button" class="rs-ghost" data-peek-url="' + CBA.esc(t.receiptUrl) + '" data-peek-title="' + CBA.esc(t.supplier || "קבלה") + '">' + docIcon + ' הצג קבלה</button>'
             : '') +
         '</div>' +
       '</div>'
