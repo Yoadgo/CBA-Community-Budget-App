@@ -1338,6 +1338,7 @@ body.has-sim { padding-top: 34px; }
   border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline;
 }
 .res-add__hint b { font-weight: 700; color: var(--text); }
+.res-add__mob { display: none; }
 .res-add__scroll { overflow: auto; max-height: 62vh; padding: 10px 16px; }
 
 .res-grid { min-width: 720px; }

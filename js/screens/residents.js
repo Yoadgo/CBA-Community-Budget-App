@@ -379,7 +379,8 @@ CBA.screens.residents = {
               return resRowHTML(r, c, st.rows.indexOf(r));
             }).join("") + '</div>'
           : '<div class="res-msg">לא נמצאו תושבים בסינון הזה</div>') +
-      '</div>';
+      '</div>' +
+      resMobileHTML(visible, c);
 
     resBind(container, c);
   }
@@ -416,6 +417,37 @@ function resRowHTML(r, c, idx) {
     '<div class="tx-c res-c-perm">' + resPermBadges(r, c) + '</div>' +
     '<div class="tx-c">' + (active ? '<span class="badge badge--paid">פעיל</span>' : '<span class="badge">עזב</span>') + '</div>' +
   '</div>';
+}
+
+/* ---------- רשימת כרטיסים למובייל (2026-08-07) ----------
+   טבלת 7 עמודות לא קריאה ב-390px, ובנוסף mobile.css מסתיר את .tx-card לגמרי
+   (הוא נכתב עבור מסך ההוצאות, שמחליף את הטבלה ברשימה). לכן מסך התושבים מצייר
+   גם רשימת כרטיסים משלו — אותה שפה של .tx-mrow בהוצאות — וה-CSS בוחר מי מהם
+   מוצג. שתי התצוגות נשענות על אותו מערך מסונן וממוין, כך שאין הבדל בתוכן. */
+function resMobileHTML(list, c) {
+  if (!list.length) return '<div class="card res-msg">לא נמצאו תושבים בסינון הזה</div>';
+  return '<div class="res-mlist">' + list.map(function (r) {
+    var idx = resState.rows.indexOf(r);
+    var names = c.firstName.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" · ");
+    var active = resIsActive(r, c);
+    var n = resTxCount(r, c);
+    var perms = resRowPerms(r, c);
+    return '<button type="button" class="res-mcard' + (active ? "" : " is-left") + '" ' +
+        'data-res-row="' + (idx + 2) + '" data-res-idx="' + idx + '">' +
+      '<span class="res-mcard__house">' + CBA.esc(resVal(r, c.house) || "—") + '</span>' +
+      '<span class="res-mcard__main">' +
+        '<span class="res-mcard__fam">' + CBA.esc(resVal(r, c.family) || "ללא שם") + '</span>' +
+        '<span class="res-mcard__ppl">' + CBA.esc(names || "אין דיירים רשומים") + '</span>' +
+      '</span>' +
+      '<span class="res-mcard__side">' +
+        (active ? "" : '<span class="badge">עזב</span>') +
+        (perms.length
+          ? '<span class="badge badge--ready">' + CBA.esc(perms.indexOf("על") !== -1 ? "מנהל על" : perms.join(" · ")) + '</span>'
+          : "") +
+        (n ? '<span class="res-n res-n--tx">' + n + '</span>' : "") +
+      '</span>' +
+    '</button>';
+  }).join("") + '</div>';
 }
 
 function resSignupsHTML(list, rows, c) {
@@ -652,10 +684,12 @@ function resOpenAdd(container, c) {
         '<button class="peek__x" aria-label="סגור">×</button></div>' +
 
       '<div class="res-add__hint">' +
-        'אפשר למלא ידנית, או להעתיק טווח מאקסל וללחוץ <b>Ctrl+V</b> על התא שממנו מתחילים — ' +
-        'השורות והעמודות ייפרסו לבד. ' +
+        // הסבר ההדבקה רלוונטי רק במחשב — במובייל אין Ctrl+V ואין אקסל פתוח לצידך
+        '<span class="res-add__paste">אפשר למלא ידנית, או להעתיק טווח מאקסל וללחוץ <b>Ctrl+V</b> ' +
+          'על התא שממנו מתחילים — השורות והעמודות ייפרסו לבד.</span>' +
+        '<span class="res-add__mob">מוסיפים משפחה אחת בכל שורה. להדבקה של רשימה שלמה מאקסל — עדיף ממחשב.</span>' +
         '<button type="button" class="btn-link" data-ra-expand>' +
-          (resAddState.expanded ? "פחות עמודות" : "עוד עמודות (מייל, מקצוע, הערות)") + '</button>' +
+          (resAddState.expanded ? "פחות עמודות" : "עוד עמודות") + '</button>' +
       '</div>' +
 
       '<div class="res-add__scroll">' +
