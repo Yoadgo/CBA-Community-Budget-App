@@ -284,13 +284,54 @@ function resSuggest(signup, rows, c) {
   return out.slice(0, 5);
 }
 
+/* עמודות שהמסך הזה צריך כדי לעבוד במלואו. אם הן חסרות בגיליון — השדות פשוט
+   לא מצוירים, כי כל שדה מותנה בקיום העמודה שלו. זה מה שקרה עם "מקצוע" ו"שמות
+   ילדים": הפונקציה שיוצרת אותן קיימת בשרת מאז ההתחלה, אבל אף אחד לא קרא לה,
+   ולכן הן לא נוצרו והשדות לא הופיעו. עכשיו המסך מוודא אותן בטעינה הראשונה. */
+var RES_NEEDED_COLS = ["מקצוע 1", "מקצוע 2", "שמות ילדים", "הערות"];
+var resColsChecked = false;
+
+function resMissingCols(headers) {
+  var have = headers.map(function (h) { return String(h).trim(); });
+  return RES_NEEDED_COLS.filter(function (c) { return have.indexOf(c) === -1; });
+}
+
+/* יצירה חד-פעמית ואידמפוטנטית. רצה רק אם באמת חסר משהו, ורק פעם אחת בכל
+   טעינת דף, כדי שלא ייווצר לולאה של יצירה-רענון-יצירה. */
+function resEnsureCols(container, cb) {
+  if (resColsChecked) { cb(); return; }
+  resColsChecked = true;
+  var missing = resMissingCols(resState.headers);
+  var needPerm = resState.headers.every(function (h) { return String(h).indexOf("הרשאות") === -1; });
+  if (!missing.length && !(needPerm && resIAmSuper())) { cb(); return; }
+
+  var jobs = 0, fin = function () { if (--jobs === 0) cb(true); };
+  if (missing.length) jobs++;
+  if (needPerm && resIAmSuper()) jobs++;
+  if (!jobs) { cb(); return; }
+  if (missing.length) CBA.data.ensureResidentCols(fin);
+  if (needPerm && resIAmSuper()) CBA.data.ensurePermissionCols(fin);
+}
+
 function resLoad(container) {
   if (resState.loading) return;
   resState.loading = true;
   resState.error = null;
   var pending = 2;
   var done = function () {
-    if (--pending === 0) { resState.loading = false; resState.loaded = true; CBA.screens.residents.render(container); }
+    if (--pending === 0) {
+      resState.loading = false; resState.loaded = true;
+      // אם היו עמודות חסרות — יוצרים אותן ואז טוענים שוב, כדי שהשדות החדשים
+      // (מקצוע, שמות ילדים, הערות) יופיעו מיד ולא רק ברענון הבא
+      resEnsureCols(container, function (created) {
+        if (created) {
+          resState.loaded = false;
+          CBA.data.refreshResidents(function () { resLoad(container); });
+          return;
+        }
+        CBA.screens.residents.render(container);
+      });
+    }
   };
   CBA.data.getResidents(function (res) {
     if (res && res.ok) {
@@ -368,10 +409,11 @@ CBA.screens.residents = {
           '<button class="btn-ghost btn-sm" data-res-reload>רענן</button>' +
         '</div>' +
       '</div>' +
-      '<div class="card tx-card" style="--tx-cols: 70px 1fr 1.2fr 1.4fr 84px 150px 84px">' +
+      '<div class="card tx-card" style="--tx-cols: 62px .95fr 1.05fr .95fr 1.05fr 1.15fr 68px 118px 72px">' +
         '<div class="tx-head">' +
           resHeadCell("house", "בית") + resHeadCell("family", "משפחה") +
-          resHeadCell("people", "דיירים") + '<div>אימייל</div>' +
+          resHeadCell("people", "דיירים") + '<div>מקצוע</div>' + '<div>ילדים</div>' +
+          '<div>אימייל</div>' +
           resHeadCell("tx", "תנועות") + '<div>הרשאות</div>' + resHeadCell("status", "סטטוס") +
         '</div>' +
         (visible.length
@@ -407,10 +449,16 @@ function resRowHTML(r, c, idx) {
   var active = resIsActive(r, c);
   var n = resTxCount(r, c);
   // rowIndex בגיליון: שורת כותרת = 1, ולכן פריט i במערך = שורה i+2
+  // מקצועות ושמות ילדים (2026-08-07) — שתי עמודות משלהן, כי זו בדיוק הסיבה
+  // שממלאים אותן: לדעת מי גר איפה, במה הוא עוסק ומי הילדים.
+  var prof = c.profession.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" · ");
+  var kids = resVal(r, c.kids);
   return '<div class="tx-row res-row' + (active ? "" : " is-left") + '" data-res-row="' + (idx + 2) + '" data-res-idx="' + idx + '">' +
     '<div class="tx-c">' + CBA.esc(resVal(r, c.house) || "—") + '</div>' +
     '<div class="tx-c res-fam">' + CBA.esc(resVal(r, c.family) || "—") + '</div>' +
-    '<div class="tx-c">' + CBA.esc(names || "—") + '</div>' +
+    '<div class="tx-c" title="' + CBA.esc(names) + '">' + CBA.esc(names || "—") + '</div>' +
+    '<div class="tx-c res-soft" title="' + CBA.esc(prof) + '">' + (prof ? CBA.esc(prof) : '<span class="res-dim">—</span>') + '</div>' +
+    '<div class="tx-c res-soft" title="' + CBA.esc(kids) + '">' + (kids ? CBA.esc(kids) : '<span class="res-dim">—</span>') + '</div>' +
     '<div class="tx-c res-mail" title="' + CBA.esc(emails.join(", ")) + '">' +
       (emails.length ? CBA.esc(emails.join(", ")) : '<span class="res-dim">אין מייל</span>') + '</div>' +
     '<div class="tx-c">' + (n ? '<span class="res-n res-n--tx" title="תנועות המשויכות למשק הבית">' + n + '</span>' : '<span class="res-dim">—</span>') + '</div>' +
@@ -432,12 +480,17 @@ function resMobileHTML(list, c) {
     var active = resIsActive(r, c);
     var n = resTxCount(r, c);
     var perms = resRowPerms(r, c);
+    // מקצוע וילדים בשורה שלישית — במובייל אין עמודות, אבל המידע לא צריך להיעלם
+    var prof = c.profession.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" · ");
+    var kids = resVal(r, c.kids);
+    var extra = [prof, kids ? "ילדים: " + kids : ""].filter(Boolean).join("  ·  ");
     return '<button type="button" class="res-mcard' + (active ? "" : " is-left") + '" ' +
         'data-res-row="' + (idx + 2) + '" data-res-idx="' + idx + '">' +
       '<span class="res-mcard__house">' + CBA.esc(resVal(r, c.house) || "—") + '</span>' +
       '<span class="res-mcard__main">' +
         '<span class="res-mcard__fam">' + CBA.esc(resVal(r, c.family) || "ללא שם") + '</span>' +
         '<span class="res-mcard__ppl">' + CBA.esc(names || "אין דיירים רשומים") + '</span>' +
+        (extra ? '<span class="res-mcard__extra">' + CBA.esc(extra) + '</span>' : "") +
       '</span>' +
       '<span class="res-mcard__side">' +
         (active ? "" : '<span class="badge">עזב</span>') +

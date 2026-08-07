@@ -1255,6 +1255,8 @@ body.has-sim { padding-top: 34px; }
 .res-fam { font-weight: 600; }
 .res-mail { font-size: 12.5px; color: var(--text-soft); }
 .res-dim { color: var(--text-muted); font-size: 12.5px; }
+/* מקצוע וילדים — מידע משני, לא צריך למשוך את העין כמו שם המשפחה */
+.res-soft { color: var(--text-soft); font-size: 12.5px; }
 .res-warn { color: var(--danger); font-size: 12.5px; }
 .res-msg { padding: 40px 20px; text-align: center; color: var(--text-soft); font-size: 14px; }
 .res-msg div { margin-top: 12px; }
