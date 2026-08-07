@@ -277,7 +277,7 @@ function doGet(e) {
       if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
     });
     var out = {
-      ok: true, version: 'v26-permissions', years: years,
+      ok: true, version: 'v28-residents-grid', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       groups: readColumn_(ss, 'קבוצות'),
       updates: readTable_(ss, 'עדכוני תקציב'),   // יומן עדכוני תקציב (אם הטאב קיים)

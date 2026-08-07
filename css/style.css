@@ -100,21 +100,34 @@ body {
   background: var(--danger); border: 2px solid var(--bg);
 }
 /* מצב תמונת פרופיל: העיגול עומד לבדו — בלי מסגרת ריבוע מיותרת */
-.user-btn--avatar { border: none; background: none; padding: 0; width: 38px; height: 38px; }
+.user-btn--avatar {
+  border: none; background: none; padding: 0; width: 38px; height: 38px;
+  border-radius: 50%; overflow: hidden;
+}
+/* בלי טבעת ובלי רקע בשום מצב — התמונה העגולה עומדת בפני עצמה (2026-08-07) */
 .user-btn--avatar:hover,
-.user-btn--avatar.is-open { background: none; box-shadow: 0 0 0 2px var(--border); }
+.user-btn--avatar.is-open,
+.user-btn--avatar:focus-visible { background: none; box-shadow: none; border: none; }
+.user-btn--avatar:active { transform: scale(.94); }
 .user-btn--avatar .up-avatar-img { width: 38px; height: 38px; }
+/* מגש המשתמש — זכוכית בסגנון iOS. הוא מועבר ב-JS אל ה-body בזמן הפתיחה, כי
+   ל-.app-header יש backdrop-filter משלו והוא היה חוסם את הטשטוש (ר' app.js).
+   הרוויה הגבוהה היא מה שנותן ל"חלב" להיראות כמו זכוכית ולא כמו נייר שקוף. */
 .user-panel {
-  position: absolute; top: calc(100% + 10px); inset-inline-end: 0; z-index: 60;
-  width: 272px;
-  background: rgba(255,255,255,.72);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border: 1px solid rgba(255,255,255,.55);
+  position: absolute; top: calc(100% + 10px); inset-inline-end: 0; z-index: 70;
+  width: 272px; overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(250,250,252,.62);
+  backdrop-filter: saturate(200%) blur(30px);
+  -webkit-backdrop-filter: saturate(200%) blur(30px);
+  border: 1px solid rgba(255,255,255,.7);
   border-radius: 20px;
-  box-shadow: 0 12px 44px rgba(16,24,40,.18);
+  box-shadow: 0 18px 50px rgba(16,24,40,.22), 0 2px 8px rgba(16,24,40,.08);
   padding: 10px;
   animation: modalIn 150ms cubic-bezier(.2,.7,.2,1);
+}
+/* דפדפן בלי תמיכה ב-backdrop-filter: רקע אטום, אחרת התוכן מאחור נקרא דרך המגש */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .user-panel { background: #FFF; }
 }
 .user-panel[hidden] { display: none; }
 .up-head { display: flex; align-items: center; gap: 10px; padding: 8px; }
@@ -123,7 +136,7 @@ body {
 .up-initials { font-size: 14px; font-weight: 700; color: var(--text-soft); }
 .up-name { font-weight: 700; font-size: 14px; }
 .up-sub { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
-.up-row { display: flex; align-items: center; gap: 8px; padding: 8px; font-size: 13px; color: var(--text-soft); }
+.up-row { display: flex; align-items: center; gap: 8px; padding: 8px; font-size: 13px; color: var(--text-soft); flex-wrap: wrap; }
 /* אייקוני שורות — קו מונוכרום עדין (currentColor), אף פעם לא צבעוני */
 .up-row__ico { width: 18px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); flex: none; }
 .up-row__ico svg { display: block; }
@@ -135,6 +148,11 @@ body {
 /* גרסת השרת ומצב המושב — אבחון מהיר של תקלות "אין הרשאה" (2026-08-07) */
 .up-ver { font-size: 11px; color: var(--text-muted); font-weight: 500; }
 .up-ver--warn { color: var(--danger); font-weight: 700; }
+.up-stale {
+  flex: 1 0 100%; margin-top: 6px; font-size: 11.5px; line-height: 1.5;
+  color: var(--danger); background: rgba(220,38,38,.07);
+  padding: 6px 8px; border-radius: 8px;
+}
 .up-sep { height: 1px; background: var(--hairline); margin: 8px 4px; }
 .up-item {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: start;
@@ -160,9 +178,13 @@ body {
 
 /* תג התפקיד (מנהל/תושב) — עדין, מונוכרום */
 .up-role {
-  display: inline-block; font-size: 11px; font-weight: 700; color: var(--text-soft);
-  background: rgba(16,24,40,.06); padding: 2px 9px; border-radius: 999px; margin-inline-start: auto;
+  align-self: flex-start; margin-top: 6px; max-width: 100%;
+  font-size: 11px; font-weight: 700; color: var(--text-soft);
+  background: rgba(16,24,40,.06); padding: 2px 9px; border-radius: 999px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.up-head__txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.up-name, .up-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* אזור כפתור הכניסה של גוגל בתוך המגש */
 .up-signin { display: flex; justify-content: center; padding: 8px 4px 4px; }

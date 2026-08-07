@@ -175,14 +175,23 @@ CBA.sheets = (function () {
      משתיים: אין מושב חתום (צריך להתחבר מחדש), או שה-Apps Script עוד לא פורסם
      בגרסה החדשה. מוסיפים את ההסבר להודעת השגיאה במקום להשאיר "אין הרשאה" יבש
      שאי אפשר לעשות איתו כלום. */
+  // הגרסה המינימלית של ה-Apps Script שהאפליקציה הזו יודעת לעבוד מולה
+  var MIN_SERVER = 28;
+  function serverVer() {
+    var m = String((CBA.mock && CBA.mock._serverVersion) || "").match(/v(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
   function authNote() {
-    var v = (CBA.mock && CBA.mock._serverVersion) || "";
-    if (v && v.indexOf("v26") === -1) {
-      return ' — נראה שה-Apps Script עדיין בגרסה "' + v + '". צריך לפרסם ממנו New version.';
+    var raw = (CBA.mock && CBA.mock._serverVersion) || "";
+    var n = serverVer();
+    if (n && n < MIN_SERVER) {
+      return ' — ה-Apps Script עדיין בגרסה "' + raw + '". צריך להדביק את Code.gs העדכני ולפרסם New version.';
     }
     if (!authSession()) return " — אין מושב פעיל. צא והתחבר מחדש.";
     return "";
   }
+  // חשוף כדי שהאפליקציה תוכל להציג התראה גם בלי שנכשלה פעולה
+  CBA.serverOutdated = function () { var n = serverVer(); return n > 0 && n < MIN_SERVER; };
   function withAuthNote(data) {
     if (data && data.ok === false && typeof data.error === "string" &&
         data.error.indexOf("הרשאה") !== -1) {

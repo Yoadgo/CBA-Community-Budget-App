@@ -429,8 +429,52 @@
     return (parts[0][0] + (parts[1] ? parts[1][0] : "")).toUpperCase();
   }
 
+  /* ---------- מגש המשתמש: מוצא מתוך הכותרת (2026-08-07) ----------
+     ל-.app-header יש backdrop-filter, וזה הופך אותו ל"שורש הרקע" של כל צאצאיו.
+     כתוצאה מכך ה-backdrop-filter של המגש דגם רק את מה שצויר בתוך הכותרת — כלומר
+     כלום — והמגש נראה כמו מלבן לבן שקוף בלי טשטוש, שהתוכן מאחוריו נקרא דרכו.
+     הפתרון הוא להוציא את המגש אל ה-body ברגע הפתיחה ולמקם אותו ידנית מול
+     הכפתור; שם אין מעליו שורש רקע, והזכוכית עובדת כמו ב-iOS. */
+  function positionUserPanel(panel, btn) {
+    var r = btn.getBoundingClientRect();
+    var w = panel.offsetWidth || 272;
+    var rtl = getComputedStyle(document.documentElement).direction === "rtl";
+    var x = rtl ? r.left : (r.right - w);
+    x = Math.max(8, Math.min(x, window.innerWidth - w - 8));
+    panel.style.position = "fixed";
+    panel.style.insetInlineEnd = "auto";
+    panel.style.left = x + "px";
+    panel.style.top = (r.bottom + 10) + "px";
+    panel.style.maxHeight = Math.max(200, window.innerHeight - r.bottom - 24) + "px";
+  }
+  function openUserPanel(panel, btn) {
+    if (panel.parentNode !== document.body) document.body.appendChild(panel);
+    panel.hidden = false;
+    btn.classList.add("is-open");
+    positionUserPanel(panel, btn);
+  }
+  function closeUserPanel(panel, btn) {
+    if (panel) panel.hidden = true;
+    if (btn) btn.classList.remove("is-open");
+  }
+  // מיקום מחדש כשגוללים או משנים גודל — המגש מרחף ב-body ולא זז עם הכפתור לבד
+  window.addEventListener("resize", function () {
+    var p = document.getElementById("user-panel"), b = document.getElementById("user-btn");
+    if (p && !p.hidden && b) positionUserPanel(p, b);
+  });
+  window.addEventListener("scroll", function () {
+    var p = document.getElementById("user-panel"), b = document.getElementById("user-btn");
+    if (p && !p.hidden && b) positionUserPanel(p, b);
+  }, true);
+
   function renderControls() {
     if (!controls) return;
+    // מגש יתום מציור קודם שהועבר ל-body — מסירים לפני שמציירים חדש.
+    // שומרים אם הוא היה פתוח: renderControls נקרא גם מרענון ההתרעות שרץ ברקע,
+    // וקודם כל רענון כזה סגר את המגש בפרצוף המשתמש באמצע השימוש.
+    var stray = document.getElementById("user-panel");
+    var wasOpen = !!(stray && !stray.hidden);
+    if (stray && stray.parentNode === document.body) stray.remove();
     const avatarMode = !!(currentUser && currentUser.picture);
     // הנקודה האדומה מוצגת רק למנהל (כולל כשהוא באזור התושב דרך המתג) — לתושב
     // רגיל אין גישה להתרעות ניהוליות, אז גם לא מציגים לו רמז עליהן.
@@ -444,21 +488,24 @@
     const btn = controls.querySelector("#user-btn");
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
-      panel.hidden = !panel.hidden;
-      btn.classList.toggle("is-open", !panel.hidden);
-      if (!panel.hidden) { renderGoogleButton(); refreshAlertsClub(); }   // ציור כפתור גוגל + בדיקת התרעות טריות רק כשהמגש גלוי
+      if (panel.hidden) {
+        openUserPanel(panel, btn);
+        renderGoogleButton(); refreshAlertsClub();   // ציור כפתור גוגל + בדיקת התרעות טריות רק כשהמגש גלוי
+      } else {
+        closeUserPanel(panel, btn);
+      }
     });
     const setBtn = panel.querySelector("[data-panel-settings]");
     if (setBtn) setBtn.addEventListener("click", function () {
-      panel.hidden = true; btn.classList.remove("is-open"); showScreen("settings");
+      closeUserPanel(panel, btn); showScreen("settings");
     });
     const swBtn = panel.querySelector("[data-panel-switch]");
     if (swBtn) swBtn.addEventListener("click", function () {
-      panel.hidden = true; btn.classList.remove("is-open"); setArea(swBtn.dataset.panelSwitch);
+      closeUserPanel(panel, btn); setArea(swBtn.dataset.panelSwitch);
     });
     panel.querySelectorAll("[data-panel-goto]").forEach(function (gBtn) {
       gBtn.addEventListener("click", function () {
-        panel.hidden = true; btn.classList.remove("is-open");
+        closeUserPanel(panel, btn);
         const target = gBtn.dataset.panelGoto;
         if (currentArea !== "admin" && hasAnyAdmin()) setArea("admin");
         if (target === "expenses-pending" && CBA.screens.expenses && CBA.screens.expenses.showPending) CBA.screens.expenses.showPending();
@@ -467,23 +514,24 @@
     });
     const simBtn = panel.querySelector("[data-panel-sim]");
     if (simBtn) simBtn.addEventListener("click", function () {
-      panel.hidden = true; btn.classList.remove("is-open"); openSimPicker();
+      closeUserPanel(panel, btn); openSimPicker();
     });
     const simStopBtn = panel.querySelector("[data-panel-simstop]");
     if (simStopBtn) simStopBtn.addEventListener("click", function () {
-      panel.hidden = true; btn.classList.remove("is-open"); stopSim();
+      closeUserPanel(panel, btn); stopSim();
     });
     const outBtn = panel.querySelector("[data-panel-logout]");
     if (outBtn) outBtn.addEventListener("click", logout);
+
+    if (wasOpen) openUserPanel(panel, btn);   // היה פתוח לפני הציור — נשאר פתוח
 
     if (!panelOutsideBound) {   // סגירה בלחיצה מחוץ למגש — נרשם פעם אחת בלבד
       panelOutsideBound = true;
       document.addEventListener("click", function (e) {
         const p = document.getElementById("user-panel");
-        if (p && !p.hidden && !controls.contains(e.target)) {
-          p.hidden = true;
-          const b = document.getElementById("user-btn");
-          if (b) b.classList.remove("is-open");
+        // המגש כבר לא יושב בתוך controls (הועבר ל-body), ולכן צריך לבדוק גם אותו
+        if (p && !p.hidden && !controls.contains(e.target) && !p.contains(e.target)) {
+          closeUserPanel(p, document.getElementById("user-btn"));
         }
       });
     }
@@ -500,10 +548,13 @@
     // "אין הרשאה": שרת ישן שעוד לא עודכן, או מושב שפג/לא הונפק.
     var srvVer = (CBA.mock && CBA.mock._serverVersion) || "";
     var hasSess = !!window.CBA.authSession;
+    var stale = !!(CBA.serverOutdated && CBA.serverOutdated());
     const conn = window.CBA.connected === true
       ? '<span class="up-status up-status--on"><span class="up-dot"></span>מחובר לגיליון' +
-        (srvVer ? ' <span class="up-ver">· ' + CBA.esc(srvVer) + '</span>' : '') +
-        (currentUser && !hasSess ? ' <span class="up-ver up-ver--warn">· ללא מושב</span>' : '') + '</span>'
+        (srvVer ? ' <span class="up-ver' + (stale ? ' up-ver--warn' : '') + '">· ' + CBA.esc(srvVer) +
+          (stale ? ' (ישן)' : '') + '</span>' : '') +
+        (currentUser && !hasSess ? ' <span class="up-ver up-ver--warn">· ללא מושב</span>' : '') + '</span>' +
+        (stale ? '<span class="up-stale">ה-Apps Script לא מעודכן — חלק מהפעולות ייכשלו. להדביק את Code.gs ולפרסם New version.</span>' : '')
       : (window.CBA.connected === false ? '<span class="up-status up-status--off"><span class="up-dot"></span>לא מחובר · נתוני דמו</span>' : '');
 
     let head, action;
@@ -511,13 +562,15 @@
       const avatar = currentUser.picture
         ? '<img class="up-avatar-img" src="' + CBA.esc(currentUser.picture) + '" alt="">'
         : '<span class="up-avatar">' + CBA.esc(initials(currentUser.name || currentUser.email)) + '</span>';
+      // תגית ההרשאה ירדה לשורה משלה מתחת לאימייל (2026-08-07): כשהיא ישבה בקצה
+      // השורה היא נדחסה מול שם ואימייל ארוכים, נשברה לשתי שורות וגלשה מהמגש.
       head =
         '<div class="up-head">' + avatar +
           '<div class="up-head__txt">' +
             '<div class="up-name">' + CBA.esc(currentUser.name || currentUser.email) + '</div>' +
             '<div class="up-sub">' + CBA.esc(currentUser.email) + '</div>' +
+            '<span class="up-role" title="' + CBA.esc(myRoleLabel()) + '">' + CBA.esc(myRoleLabel()) + '</span>' +
           '</div>' +
-          '<span class="up-role">' + CBA.esc(myRoleLabel()) + '</span>' +
         '</div>';
       action = '<button class="up-item up-item--logout" data-panel-logout><span class="up-row__ico">' + ICON.logout + '</span>יציאה</button>';
     } else {
