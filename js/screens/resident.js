@@ -24,6 +24,8 @@ CBA.screens = CBA.screens || {};
   var chevRightIcon = svg('<path d="M9 6l6 6-6 6"/>');
   var calCheckIcon  = svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><path d="M8.5 14.5l2 2 4.5-4.5"/>');
   var calGridIcon   = svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="8" cy="15" r="1"/><circle cx="12" cy="15" r="1"/><circle cx="16" cy="15" r="1"/>');
+  var kidsIcon   = svg('<circle cx="12" cy="7" r="3"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/>');
+  var phoneIcon  = svg('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13 1 .36 1.98.68 2.92a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.16-1.16a2 2 0 0 1 2.11-.45c.94.32 1.92.55 2.92.68A2 2 0 0 1 22 16.92z"/>');
 
   /* ==== המרת קובץ קבלה ל-Base64 לפני שליחה לשרת ====
      תמונה: מכווצים/מקטינים בצד הלקוח (canvas) כדי שההעלאה תהיה מהירה גם ברשת סלולרית חלשה.
@@ -1080,4 +1082,100 @@ CBA.screens = CBA.screens || {};
       '</div>'
     );
   }
+
+  /* ==== "שכנים" — ספריית קהילה ציבורית (2026-08-07) ====
+     מדריך תושבים מוגבל: מספר בית, משפחה, שמות פרטיים, טלפון/ים, שמות ילדים.
+     גלוי לכל תושב מחובר. הנתונים מגיעים מ-CBA.data.getCommunityDirectory
+     (שרת: handleCommunityDirectory_ ב-Code.gs) — פונקציה נפרדת מזו שמשמשת
+     בוררי-תושב במסכי הניהול (residentDirectory: שם+בית בלבד, מנהלים בלבד).
+     זיהוי עמודות לפי הכלה בכותרת (לא שם קבוע), כדי לשרוד שינויים קלים בגיליון. */
+  function dirCols(rows) {
+    var keys = {};
+    rows.forEach(function (r) { Object.keys(r).forEach(function (k) { keys[k] = true; }); });
+    var c = { house: null, family: null, firstName: [], phone: [], kids: null, status: null };
+    Object.keys(keys).forEach(function (k) {
+      var t = k.trim();
+      if (t.indexOf("שם פרטי") !== -1) c.firstName.push(k);
+      else if (t.indexOf("משפחה") !== -1) c.family = k;
+      else if (t.indexOf("בית") !== -1) c.house = k;
+      else if (t.indexOf("טלפון") !== -1) c.phone.push(k);
+      else if (t.indexOf("ילדים") !== -1) c.kids = k;
+      else if (t.indexOf("סטטוס") !== -1) c.status = k;
+    });
+    c.firstName.sort(); c.phone.sort();
+    return c;
+  }
+  function dirVal(row, key) { return key ? String(row[key] == null ? "" : row[key]).trim() : ""; }
+  function dirIsActive(row, c) { var s = dirVal(row, c.status); return !s || s.indexOf("פעיל") !== -1; }
+
+  function dirHouseHTML(row, c) {
+    var house = dirVal(row, c.house) || "—";
+    var fam = dirVal(row, c.family) || "משק בית";
+    var names = c.firstName.map(function (k) { return dirVal(row, k); }).filter(Boolean).join(" ו");
+    var phones = c.phone.map(function (k) { return dirVal(row, k); }).filter(Boolean);
+    var kids = dirVal(row, c.kids);
+    return (
+      '<div class="card dir-card">' +
+        '<div class="dir-card__house">בית ' + CBA.esc(house) + '</div>' +
+        '<div class="dir-card__fam">משפחת ' + CBA.esc(fam) +
+          (names ? ' <span class="dir-card__names">(' + CBA.esc(names) + ')</span>' : '') + '</div>' +
+        (kids ? '<div class="dir-card__kids">' + kidsIcon + CBA.esc(kids) + '</div>' : '') +
+        (phones.length
+          ? '<div class="dir-card__phones">' + phones.map(function (p) {
+              return '<a class="dir-phone" href="tel:' + CBA.esc(p.replace(/[^\d+]/g, "")) + '">' + phoneIcon + CBA.esc(p) + '</a>';
+            }).join('') + '</div>'
+          : '') +
+      '</div>'
+    );
+  }
+
+  CBA.screens.resDirectory = {
+    render: function (container) {
+      container.innerHTML =
+        '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
+          '<div class="screen-head__sub">מדריך התושבים בשיכון</div></div>' +
+        '<input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון">' +
+        '<div id="dir-list"><div class="rs-empty"><p>טוען…</p></div></div>';
+
+      var listEl = container.querySelector("#dir-list");
+      var qEl = container.querySelector("#dir-q");
+      var allRows = [], c = null;
+
+      function renderList() {
+        if (!c) return;
+        var q = (qEl.value || "").trim();
+        var rows = allRows.filter(function (r) { return dirIsActive(r, c); });
+        if (q) {
+          rows = rows.filter(function (r) {
+            var hay = [dirVal(r, c.house), dirVal(r, c.family), dirVal(r, c.kids)]
+              .concat(c.firstName.map(function (k) { return dirVal(r, k); }))
+              .concat(c.phone.map(function (k) { return dirVal(r, k); }))
+              .join(" ");
+            return hay.indexOf(q) !== -1;
+          });
+        }
+        rows.sort(function (a, b) {
+          var ha = parseFloat(dirVal(a, c.house)), hb = parseFloat(dirVal(b, c.house));
+          if (isNaN(ha)) ha = Infinity;
+          if (isNaN(hb)) hb = Infinity;
+          return ha - hb;
+        });
+        listEl.innerHTML = rows.length
+          ? '<div class="dir-grid">' + rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>'
+          : '<div class="rs-empty"><p>לא נמצאו תוצאות.</p></div>';
+      }
+
+      qEl.addEventListener("input", renderList);
+
+      CBA.data.getCommunityDirectory(function (res) {
+        if (!res || !res.ok) {
+          listEl.innerHTML = '<div class="rs-empty"><p>' + CBA.esc((res && res.error) || "שגיאה בטעינת הרשימה. נסו שוב מאוחר יותר.") + '</p></div>';
+          return;
+        }
+        allRows = res.rows || [];
+        c = dirCols(allRows);
+        renderList();
+      });
+    }
+  };
 })();

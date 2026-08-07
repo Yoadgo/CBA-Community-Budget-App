@@ -98,8 +98,8 @@
     },
     resident: {
       def: "resRequests",
-      screens: ["resRequests", "resSubmit", "resReserve"],
-      tabs: [["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"], ["resReserve", "שריון מועדון"]]
+      screens: ["resRequests", "resSubmit", "resReserve", "resDirectory"],
+      tabs: [["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"], ["resReserve", "שריון מועדון"], ["resDirectory", "שכנים"]]
     }
   };
   // AREAS הוא תצוגה מסוננת של AREAS_ALL לפי ההרשאות של המשתמש הנוכחי. הוא נבנה
@@ -123,7 +123,8 @@
     residents:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M17.5 14.4a5 5 0 0 1 3 4.6"/></svg>',
     resRequests: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6h9M11 12h9M11 18h9"/><path d="M4 6l1.3 1.3L7 4.7M4 12l1.3 1.3L7 10.7M4 18l1.3 1.3L7 16.7"/></svg>',
     resSubmit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
-    resReserve:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>'
+    resReserve:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
+    resDirectory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M17.5 14.4a5 5 0 0 1 3 4.6"/></svg>'
   };
   function renderNav(area) {
     if (!nav) return;

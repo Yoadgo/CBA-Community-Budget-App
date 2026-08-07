@@ -262,6 +262,13 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'residentDirectory') {
       return handleResidentDirectory_(e.parameter);
     }
+    // ספריית קהילה ציבורית (2026-08-07): בית/משפחה/שם פרטי/טלפון/שמות ילדים —
+    // בלי אימייל/הרשאות/מקצוע/הערות. בניגוד ל-residentDirectory (שם+בית בלבד,
+    // מנהלים בלבד, לבורר בטפסי ניהול) — זו פתוחה לכל תושב מחובר ופעיל, לשימוש
+    // טאב "שכנים" באזור התושב ומפת השיכון האינטראקטיבית.
+    if (e && e.parameter && e.parameter.action === 'communityDirectory') {
+      return handleCommunityDirectory_(e.parameter);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var years = [];
     ss.getSheets().forEach(function (sh) {
@@ -277,7 +284,7 @@ function doGet(e) {
       if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
     });
     var out = {
-      ok: true, version: 'v28-residents-grid', years: years,
+      ok: true, version: 'v29-community-directory', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       groups: readColumn_(ss, 'קבוצות'),
       updates: readTable_(ss, 'עדכוני תקציב'),   // יומן עדכוני תקציב (אם הטאב קיים)
@@ -2185,6 +2192,38 @@ function handleResidentDirectory_(p) {
     function keep_(h) {
       return h === RESIDENT_ID_HEADER || h.indexOf('משפחה') !== -1 ||
              h.indexOf('שם פרטי') !== -1 || h.indexOf('בית') !== -1 || h.indexOf('סטטוס') !== -1;
+    }
+    var rows = [];
+    for (var r = 1; r < values.length; r++) {
+      var obj = {};
+      headers.forEach(function (h, i) { if (keep_(h)) obj[h] = values[r][i]; });
+      rows.push(obj);
+    }
+    return json_({ ok: true, rows: rows });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** ספריית קהילה ציבורית לתושב: בית, משפחה, שמות פרטיים, טלפון/ים, שמות ילדים —
+ * בלי אימייל/הרשאות/מקצוע/הערות. authorize_ עם need=null: מספיק מושב תקין +
+ * "פעיל" בטאב תושבים, בלי צורך בהרשאת ניהול כלשהי (כל תושב מחובר). סטטוס נשלח
+ * גם הוא כדי שהלקוח יוכל לסנן משקי-בית שעזבו — לא מוצג בפועל. */
+function handleCommunityDirectory_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var sh = ss.getSheetByName('תושבים');
+    if (!sh) return json_({ ok: false, error: 'אין טאב "תושבים"' });
+    var values = sh.getDataRange().getValues();
+    if (values.length < 2) return json_({ ok: true, rows: [] });
+    var headers = values[0].map(function (h) { return String(h).trim(); });
+    function keep_(h) {
+      return h === RESIDENT_ID_HEADER || h.indexOf('משפחה') !== -1 ||
+             h.indexOf('שם פרטי') !== -1 || h.indexOf('בית') !== -1 ||
+             h.indexOf('טלפון') !== -1 || h.indexOf('ילדים') !== -1 ||
+             h.indexOf('סטטוס') !== -1;
     }
     var rows = [];
     for (var r = 1; r < values.length; r++) {

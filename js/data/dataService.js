@@ -372,6 +372,20 @@ CBA.data = (function () {
     });
   }
 
+  // ספריית קהילה ציבורית (2026-08-07): בית/משפחה/שם פרטי/טלפון/שמות ילדים —
+  // פתוחה לכל תושב מחובר ופעיל (לא רק מנהל). בשימוש טאב "שכנים" באזור התושב
+  // ומפת השיכון האינטראקטיבית. שונה מ-getResidentDirectory (שם+בית בלבד,
+  // מנהלים בלבד, לבורר בטפסי ניהול) — לא לערבב בין השניים.
+  var communityCache = null;
+  function getCommunityDirectory(cb) {
+    if (communityCache) { if (cb) cb({ ok: true, rows: communityCache }); return; }
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "communityDirectory" }, function (res) {
+      if (res && res.ok) communityCache = res.rows || [];
+      if (cb) cb(res);
+    });
+  }
+
   function residentPickerOptions(cb) {
     getResidentDirectory(function (res) {
       var rows = (res && res.ok && res.rows) || [];
@@ -807,8 +821,9 @@ CBA.data = (function () {
     approveClubReservation: approveClubReservation,
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,
-    refreshResidents: function (cb) { residentsCache = null; directoryCache = null; getResidents(cb); },
+    refreshResidents: function (cb) { residentsCache = null; directoryCache = null; communityCache = null; getResidents(cb); },
     residentPickerOptions: residentPickerOptions,
+    getCommunityDirectory: getCommunityDirectory,
     // בקשות הרשמה וניהול תושבים (2026-08-07)
     listSignups: function (cb) { CBA.sheets.get({ action: "listSignups" }, cb); },
     approveSignup: function (payload, cb) { CBA.sheets.postRead("approveSignup", payload, cb); },
