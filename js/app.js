@@ -40,9 +40,57 @@
     saveRoute();   // זוכרים איפה היינו — כדי שרענון עמוד (F5) יחזיר לכאן
   }
 
-  /* --- אזורים: ניהול מול תושב. לכל אזור טאבים ומסכים משלו --- */
+  /* ==========================================================================
+     הרשאות ומידור (2026-08-07)
+     --------------------------------------------------------------------------
+     כל מי שרשום ופעיל הוא **תושב** — זו רמת הבסיס, וכולם מקבלים אותה.
+     מעליה יש **מידורים**, כל אחד פותח קבוצת מסכים אחת:
+        תקציב  → תכנון מול ביצוע, ניהול הוצאות, בניית תקציב
+        מועדון → שריון מועדון (ניהול)
+        תושבים → מסך התושבים ובקשות ההרשמה
+     **מנהל על** ('על') רואה הכול והוא היחיד שרשאי לשנות הרשאות.
+
+     כאן מסתירים תוכן. האכיפה האמיתית היא בשרת (authorize_ ב-Code.gs) — הסתרה
+     לבדה היא נוחות, לא אבטחה.
+     ========================================================================== */
+  const PERM = { SUPER: "על", BUDGET: "תקציב", CLUB: "מועדון", RESIDENTS: "תושבים" };
+  const PERM_LABEL = {
+    "על": "מנהל על", "תקציב": "ניהול תקציב ותשלומים",
+    "מועדון": "ניהול מועדון", "תושבים": "ניהול תושבים"
+  };
+  // איזו הרשאה נדרשת לכל מסך ניהול
+  const SCREEN_PERM = {
+    budget: PERM.BUDGET, expenses: PERM.BUDGET, planning: PERM.BUDGET,
+    clubAdmin: PERM.CLUB, residents: PERM.RESIDENTS, settings: PERM.SUPER
+  };
+
+  function myPerms() {
+    var u = simUser || currentUser;
+    if (!u) return [];
+    if (Array.isArray(u.perms)) return u.perms;
+    // תאימות לאחור: מושב ישן/הדמיה שנשמרו לפני שהיו הרשאות
+    return (u.role && u.role.indexOf("מנהל") !== -1) ? [PERM.SUPER] : [];
+  }
+  function isSuper() { return myPerms().indexOf(PERM.SUPER) !== -1; }
+  function can(perm) { return !perm || isSuper() || myPerms().indexOf(perm) !== -1; }
+  function canScreen(name) { return !SCREEN_PERM[name] || can(SCREEN_PERM[name]); }
+  // האם יש למשתמש בכלל דריסת רגל באזור הניהול
+  function hasAnyAdmin() {
+    return isSuper() || [PERM.BUDGET, PERM.CLUB, PERM.RESIDENTS].some(function (p) {
+      return myPerms().indexOf(p) !== -1;
+    });
+  }
+  // תיאור ההרשאה להצגה בתפריט המשתמש
+  function myRoleLabel() {
+    if (isSuper()) return "מנהל על";
+    var ps = myPerms().filter(function (p) { return p !== PERM.SUPER; });
+    return ps.length ? ps.map(function (p) { return PERM_LABEL[p] || p; }).join(" · ") : "תושב";
+  }
+
+  /* --- אזורים: ניהול מול תושב. לכל אזור טאבים ומסכים משלו.
+     האזור הניהולי מסונן לפי ההרשאות — מי שיש לו רק "מועדון" יראה טאב אחד. --- */
   let currentArea = "admin";
-  const AREAS = {
+  const AREAS_ALL = {
     admin: {
       def: "budget",
       screens: ["budget", "expenses", "planning", "clubAdmin", "residents", "settings"],
@@ -54,6 +102,18 @@
       tabs: [["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"], ["resReserve", "שריון מועדון"]]
     }
   };
+  // AREAS הוא תצוגה מסוננת של AREAS_ALL לפי ההרשאות של המשתמש הנוכחי. הוא נבנה
+  // מחדש בכל התחברות/החלפת משתמש/כניסה ויציאה ממצב הדמיה (ר' applyUser).
+  let AREAS = JSON.parse(JSON.stringify(AREAS_ALL));
+  function rebuildAreas() {
+    var a = AREAS_ALL.admin;
+    var screens = a.screens.filter(canScreen);
+    var tabs = a.tabs.filter(function (t) { return canScreen(t[0]); });
+    AREAS = {
+      admin: { def: (tabs[0] && tabs[0][0]) || "budget", screens: screens, tabs: tabs },
+      resident: AREAS_ALL.resident
+    };
+  }
   // אייקוני קו מונוכרומיים לטאבים (דסקטופ). במובייל האייקון מגיע מ-CSS mask (::before)
   var NAV_ICONS = {
     budget:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21v-8M12 21V4M19 21v-6"/></svg>',
@@ -94,11 +154,15 @@
   var clubAlertsInFlight = false;
 
   function navBadgeCount(screenKey) {
-    if (screenKey === "expenses") return notif.pendingExpenses + notif.reviewExpenses;
-    if (screenKey === "clubAdmin") return notif.pendingClub;
+    if (screenKey === "expenses") return can(PERM.BUDGET) ? notif.pendingExpenses + notif.reviewExpenses : 0;
+    if (screenKey === "clubAdmin") return can(PERM.CLUB) ? notif.pendingClub : 0;
     return 0;
   }
-  function alertsTotal() { return notif.pendingExpenses + notif.reviewExpenses + notif.overBudget + notif.pendingClub; }
+  // ההתראות מסוננות לפי הרשאה — מי שמנהל רק את המועדון לא צריך לראות חריגות תקציב
+  function alertsTotal() {
+    return (can(PERM.BUDGET) ? notif.pendingExpenses + notif.reviewExpenses + notif.overBudget : 0) +
+           (can(PERM.CLUB) ? notif.pendingClub : 0);
+  }
 
   function refreshAlertsLocal() {
     if (!(window.CBA.data && CBA.data.getAlertCounts)) return;
@@ -113,7 +177,7 @@
   }
   function refreshAlertsClub() {
     if (clubAlertsInFlight) return;
-    if (!(currentUser && currentUser.role === "מנהל" && window.CBA.connected && CBA.data && CBA.data.getClubList)) return;
+    if (!(can(PERM.CLUB) && window.CBA.connected && CBA.data && CBA.data.getClubList)) return;
     clubAlertsInFlight = true;
     CBA.data.getClubList(function (res) {
       clubAlertsInFlight = false;
@@ -135,7 +199,8 @@
   };
 
   function setArea(area) {
-    if (!AREAS[area]) area = "admin";
+    if (area === "admin" && !hasAnyAdmin()) area = "resident";   // אין הרשאת ניהול — אין אזור ניהול
+    if (!AREAS[area]) area = "resident";
     currentArea = area;
     document.body.dataset.area = area;
     renderNav(area);
@@ -149,11 +214,16 @@
      זהות ההדמיה חיה בזיכרון בלבד — רענון דף מחזיר לזהות האמיתית, וכל הכתיבות
      לגיליון ממשיכות להתבצע תחת המשתמש האמיתי. כלי זמני לשלב הפיתוח. */
   let simUser = null;
-  function applyUser() { window.CBA.user = simUser || currentUser; }
+  function applyUser() {
+    window.CBA.user = simUser || currentUser;
+    window.CBA.perms = myPerms();
+    window.CBA.isSuper = isSuper();
+    rebuildAreas();
+  }
   window.CBA.isSimulating = function () { return !!simUser; };
 
   function startSim(opt) {
-    simUser = { name: opt.label, email: "(הדמיה)", role: "תושב", familyId: opt.rid, house: opt.rid };
+    simUser = { name: opt.label, email: "(הדמיה)", role: "תושב", perms: [], familyId: opt.rid, house: opt.rid };
     applyUser();
     renderSimBanner();
     setArea("resident");
@@ -162,7 +232,7 @@
     simUser = null;
     applyUser();
     renderSimBanner();
-    setArea(currentUser && currentUser.role === "מנהל" ? "admin" : "resident");
+    setArea(hasAnyAdmin() ? "admin" : "resident");
   }
   function renderSimBanner() {
     let bar = document.getElementById("sim-banner");
@@ -226,7 +296,7 @@
 
   function routeByRole() {
     applyUser();
-    initialRoute(currentUser && currentUser.role === "מנהל" ? "admin" : "resident");
+    initialRoute(hasAnyAdmin() ? "admin" : "resident");
   }
 
   /* שלד טעינה — מבנה shimmer שדומה למסך התקציב, כדי שהמעבר לא ירגיש קופצני */
@@ -300,7 +370,10 @@
 
   /* --- מושב מתמשך: זוכר משתמש מאומת ~12ש', כדי לא להבזיק מסך כניסה בכל רענון.
      הערה: זו נוחות תצוגה בלבד — לא אבטחה. אבטחת אמת = אימות טוקן ב-GAS בכל כתיבה. --- */
-  var SESSION_KEY = "cba_session_v1";
+  // v2 (2026-08-07): המבנה השתנה — המושב מחזיק עכשיו גם טוקן חתום מהשרת וגם את
+  // רשימת ההרשאות. שינוי המפתח מאלץ התחברות אחת מחדש לכל המשתמשים, וזה מכוון:
+  // מושב ישן לא מכיל טוקן, ובלעדיו השרת ידחה כל כתיבה.
+  var SESSION_KEY = "cba_session_v2";
   var SESSION_TTL = 12 * 3600 * 1000;   // 12 שעות
   function saveSession(user) {
     try { localStorage.setItem(SESSION_KEY, JSON.stringify({ exp: Date.now() + SESSION_TTL, user: user })); } catch (e) {}
@@ -309,10 +382,13 @@
     try {
       var s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
       if (!s || !s.user || !s.exp || s.exp < Date.now()) { localStorage.removeItem(SESSION_KEY); return null; }
+      // בלי טוקן חתום אין טעם להמשיך — כל כתיבה תידחה בשרת. עדיף מסך התחברות.
+      if (!s.user.session) { localStorage.removeItem(SESSION_KEY); return null; }
+      window.CBA.authSession = s.user.session;
       return s.user;
     } catch (e) { return null; }
   }
-  function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
+  function clearSession() { window.CBA.authSession = ""; try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
 
   /* --- מיקום אחרון: זוכר איזה אזור/מסך היו פתוחים, כדי שרענון עמוד (F5) יחזיר
      למקום שהיינו בו במקום לקפוץ תמיד למסך ברירת המחדל. --- */
@@ -326,7 +402,8 @@
   function clearRoute() { try { localStorage.removeItem(ROUTE_KEY); } catch (e) {} }
   // כניסה ראשונית לאזור: משחזר את המסך השמור אם הוא שייך לאזור הזה, אחרת ברירת המחדל
   function initialRoute(area) {
-    if (!AREAS[area]) area = "admin";
+    if (area === "admin" && !hasAnyAdmin() && currentUser) area = "resident";
+    if (!AREAS[area]) area = "resident";
     currentArea = area;
     document.body.dataset.area = area;
     renderNav(area);
@@ -356,7 +433,7 @@
     const avatarMode = !!(currentUser && currentUser.picture);
     // הנקודה האדומה מוצגת רק למנהל (כולל כשהוא באזור התושב דרך המתג) — לתושב
     // רגיל אין גישה להתרעות ניהוליות, אז גם לא מציגים לו רמז עליהן.
-    const hasAlerts = alertsTotal() > 0 && !!(currentUser && currentUser.role === "מנהל");
+    const hasAlerts = alertsTotal() > 0 && hasAnyAdmin();
     controls.innerHTML =
       '<button class="user-btn' + (avatarMode ? ' user-btn--avatar' : '') + '" id="user-btn" title="תפריט משתמש" aria-label="תפריט משתמש">' + userBtnFace() +
         (hasAlerts ? '<span class="user-btn__dot" aria-hidden="true"></span>' : '') + '</button>' +
@@ -382,7 +459,7 @@
       gBtn.addEventListener("click", function () {
         panel.hidden = true; btn.classList.remove("is-open");
         const target = gBtn.dataset.panelGoto;
-        if (currentArea !== "admin") setArea("admin");
+        if (currentArea !== "admin" && hasAnyAdmin()) setArea("admin");
         if (target === "expenses-pending" && CBA.screens.expenses && CBA.screens.expenses.showPending) CBA.screens.expenses.showPending();
         else showScreen(target);
       });
@@ -418,8 +495,14 @@
   }
 
   function userPanelHTML() {
+    // גרסת השרת + האם יש מושב חתום. שתי העובדות האלה מסבירות כמעט כל תקלת
+    // "אין הרשאה": שרת ישן שעוד לא עודכן, או מושב שפג/לא הונפק.
+    var srvVer = (CBA.mock && CBA.mock._serverVersion) || "";
+    var hasSess = !!window.CBA.authSession;
     const conn = window.CBA.connected === true
-      ? '<span class="up-status up-status--on"><span class="up-dot"></span>מחובר לגיליון</span>'
+      ? '<span class="up-status up-status--on"><span class="up-dot"></span>מחובר לגיליון' +
+        (srvVer ? ' <span class="up-ver">· ' + CBA.esc(srvVer) + '</span>' : '') +
+        (currentUser && !hasSess ? ' <span class="up-ver up-ver--warn">· ללא מושב</span>' : '') + '</span>'
       : (window.CBA.connected === false ? '<span class="up-status up-status--off"><span class="up-dot"></span>לא מחובר · נתוני דמו</span>' : '');
 
     let head, action;
@@ -433,7 +516,7 @@
             '<div class="up-name">' + CBA.esc(currentUser.name || currentUser.email) + '</div>' +
             '<div class="up-sub">' + CBA.esc(currentUser.email) + '</div>' +
           '</div>' +
-          '<span class="up-role">' + CBA.esc(currentUser.role || "תושב") + '</span>' +
+          '<span class="up-role">' + CBA.esc(myRoleLabel()) + '</span>' +
         '</div>';
       action = '<button class="up-item up-item--logout" data-panel-logout><span class="up-row__ico">' + ICON.logout + '</span>יציאה</button>';
     } else {
@@ -445,17 +528,18 @@
       action = "";
     }
 
-    var isAdmin = !!(currentUser && currentUser.role === "מנהל");
-    var switchItem = isAdmin
+    // מתג המעבר בין האזורים מוצג רק למי שיש לו בכלל הרשאת ניהול כלשהי
+    var switchItem = hasAnyAdmin()
       ? (currentArea === "admin"
           ? '<button class="up-item" data-panel-switch="resident"><span class="up-row__ico">' + ICON.swap + '</span>עבור לאזור תושב</button>'
           : '<button class="up-item" data-panel-switch="admin"><span class="up-row__ico">' + ICON.swap + '</span>חזרה לאזור ניהול</button>')
       : "";
-    var settingsItem = (currentArea === "admin")
+    // הגדרות — מנהל על בלבד
+    var settingsItem = (currentArea === "admin" && isSuper())
       ? '<button class="up-item" data-panel-settings><span class="up-row__ico">' + ICON.gear + '</span>הגדרות</button>'
       : "";
-    // הדמיית תושב — כלי פיתוח, גלוי למנהל בלבד (2026-08-06)
-    var simItem = isAdmin
+    // הדמיית תושב — כלי רב-עוצמה (רואים דרכו נתונים של אחרים), מנהל על בלבד
+    var simItem = isSuper()
       ? (window.CBA.isSimulating && window.CBA.isSimulating()
           ? '<button class="up-item up-item--sim" data-panel-simstop><span class="up-row__ico">' + ICON.swap + '</span>צא ממצב הדמיה</button>'
           : '<button class="up-item up-item--sim" data-panel-sim><span class="up-row__ico">' + ICON.swap + '</span>הדמיית תושב</button>')
@@ -477,14 +561,16 @@
      שריונים/הוצאות שממתינים; עכשיו שורה אמיתית לכל סוג התרעה עם ספירה ולחיצה
      שקופצת ישר למסך הרלוונטי. תושבים לא רואים התרעות ניהוליות (בשלב זה). */
   function notifItemsHTML() {
-    if (!(currentUser && currentUser.role === "מנהל")) {
+    if (!hasAnyAdmin()) {
       return '<div class="up-row"><span class="up-row__ico">' + ICON.bell + '</span><span>אין התראות חדשות</span></div>';
     }
     var items = [];
-    if (notif.pendingExpenses) items.push({ n: notif.pendingExpenses, label: "הוצאות ממתינות לאישור", target: "expenses-pending" });
-    if (notif.reviewExpenses) items.push({ n: notif.reviewExpenses, label: "הוצאות בבדיקה", target: "expenses-pending" });
-    if (notif.overBudget) items.push({ n: notif.overBudget, label: notif.overBudget === 1 ? "סעיף אחד בחריגת תקציב" : notif.overBudget + " סעיפים בחריגת תקציב", target: "budget" });
-    if (notif.pendingClub) items.push({ n: notif.pendingClub, label: "שריוני מועדון ממתינים לאישור", target: "clubAdmin" });
+    if (can(PERM.BUDGET)) {
+      if (notif.pendingExpenses) items.push({ n: notif.pendingExpenses, label: "הוצאות ממתינות לאישור", target: "expenses-pending" });
+      if (notif.reviewExpenses) items.push({ n: notif.reviewExpenses, label: "הוצאות בבדיקה", target: "expenses-pending" });
+      if (notif.overBudget) items.push({ n: notif.overBudget, label: notif.overBudget === 1 ? "סעיף אחד בחריגת תקציב" : notif.overBudget + " סעיפים בחריגת תקציב", target: "budget" });
+    }
+    if (can(PERM.CLUB) && notif.pendingClub) items.push({ n: notif.pendingClub, label: "שריוני מועדון ממתינים לאישור", target: "clubAdmin" });
     if (!items.length) {
       var msg = notif.clubChecked ? "אין התראות חדשות" : "בודק התראות…";
       return '<div class="up-row"><span class="up-row__ico">' + ICON.bell + '</span><span>' + msg + '</span></div>';
@@ -648,6 +734,8 @@
       .then(function (data) {
         if (data && data.ok && data.authorized) {
           currentUser = data;
+          // הטוקן החתום שהשרת הנפיק — נשלח מעכשיו בכל פעולת כתיבה במקום הסיסמה
+          window.CBA.authSession = data.session || "";
           saveSession(currentUser);
           hideLoginGate();
           renderControls();
@@ -781,7 +869,8 @@
       // אחרי שהרשת נכשלה — "cache-kept" למעלה כבר החיל אותם על CBA.mock)
       inited = true;
       ensureHeaderShell();
-      if (currentUser) routeByRole(); else initialRoute("admin");   // ניתוב לפי תפקיד; אורח → אזור ניהול מאחורי הגייט
+      if (currentUser) { routeByRole(); }
+      else { applyUser(); AREAS = JSON.parse(JSON.stringify(AREAS_ALL)); initialRoute("admin"); }   // אורח מאחורי הגייט — שלד מלא, לא נגיש בפועל
       window.CBA.refreshAlerts();
       lastDataFingerprint = dataFingerprint();
     } else {

@@ -146,6 +146,7 @@ CBA.sheets = (function () {
       yearList: (payload.years || []).slice(),
       currentYear: payload.currentYear || (payload.years || [])[0],
       settings: payload.settings || {},
+      version: payload.version || "",
       budgetUpdates: updates
     };
   }
@@ -158,12 +159,40 @@ CBA.sheets = (function () {
     CBA.mock.currentYear = store.currentYear;
     CBA.mock._source = "sheets";
     CBA.mock._settings = store.settings || {};
-    CBA.mock._password = (store.settings && store.settings["סיסמת מנהל"]) || "";
+    // גרסת השרת שעונה בפועל — כדי שאפשר יהיה לראות מיד אם ה-Apps Script עודכן
+    CBA.mock._serverVersion = store.version || "";
     CBA.mock.budgetUpdates = store.budgetUpdates || [];
   }
 
+  /* --- מושב חתום (2026-08-07) ---
+     עד היום כל פעולת כתיבה נשלחה עם סיסמת המנהל, שהגיעה ללקוח בתוך ההגדרות —
+     כלומר כל מי שהיה מחובר החזיק אותה. מעכשיו השרת מנפיק בהתחברות מושב חתום
+     אישי (HMAC), והוא זה שנשלח בכל כתיבה. השרת קורא ממנו את האימייל, ומצליב
+     את ההרשאות מול הגיליון בכל בקשה מחדש. app.js מגדיר את CBA.authSession. */
+  function authSession() { return (window.CBA && CBA.authSession) || ""; }
+
+  /* כשהשרת עונה "אין הרשאה", ברוב המקרים הסיבה אינה שבאמת חסרה הרשאה אלא אחת
+     משתיים: אין מושב חתום (צריך להתחבר מחדש), או שה-Apps Script עוד לא פורסם
+     בגרסה החדשה. מוסיפים את ההסבר להודעת השגיאה במקום להשאיר "אין הרשאה" יבש
+     שאי אפשר לעשות איתו כלום. */
+  function authNote() {
+    var v = (CBA.mock && CBA.mock._serverVersion) || "";
+    if (v && v.indexOf("v26") === -1) {
+      return ' — נראה שה-Apps Script עדיין בגרסה "' + v + '". צריך לפרסם ממנו New version.';
+    }
+    if (!authSession()) return " — אין מושב פעיל. צא והתחבר מחדש.";
+    return "";
+  }
+  function withAuthNote(data) {
+    if (data && data.ok === false && typeof data.error === "string" &&
+        data.error.indexOf("הרשאה") !== -1) {
+      data.error += authNote();
+    }
+    return data;
+  }
+
   // מפתח המטמון המקומי. שינוי הגרסה מבטל מטמון ישן (למשל אם מבנה הנתונים משתנה).
-  var CACHE_KEY = "cba_data_v1";
+  var CACHE_KEY = "cba_data_v2";   // v2 (2026-08-07): מטמון ישן הכיל את סיסמת המנהל — נזרק
 
   // שולפת מהגיליון, מחילה על CBA.mock ומעדכנת מטמון. משותף בין load() (רענון הרקע
   // הראשוני) ובין refresh() (רענון תקופתי מאוחר יותר, ר' למטה) — קוד אחד, לא כפול.
@@ -220,7 +249,7 @@ CBA.sheets = (function () {
   // אבל הדפדפן לא יכול לקרוא את התשובה — לכן מניחים הצלחה (עדכון אופטימי במסך).
   // הסיסמה נלקחת אוטומטית מההגדרות שנטענו מהגיליון.
   function push(action, payload, cb) {
-    var body = Object.assign({ action: action, password: (CBA.mock && CBA.mock._password) || "" }, payload || {});
+    var body = Object.assign({ action: action, session: authSession() }, payload || {});
     fetch(API_URL, {
       method: "POST", mode: "no-cors",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -238,13 +267,13 @@ CBA.sheets = (function () {
   // מצרפת סיסמה אוטומטית (כמו push) — פעולות ניהול (clubList/approve/reject) בודקות
   // אותה בשרת; לשאר הפעולות זה פרמטר עודף ולא-נבדק, לא מזיק.
   function get(params, cb) {
-    var body = Object.assign({ password: (CBA.mock && CBA.mock._password) || "" }, params || {});
+    var body = Object.assign({ session: authSession() }, params || {});
     var qs = Object.keys(body).map(function (k) {
       return encodeURIComponent(k) + "=" + encodeURIComponent(body[k] == null ? "" : body[k]);
     }).join("&");
     fetch(API_URL + "?" + qs)
       .then(function (r) { return r.json(); })
-      .then(function (data) { cb(data); })
+      .then(function (data) { cb(withAuthNote(data)); })
       .catch(function (err) { cb({ ok: false, error: String(err) }); });
   }
 
@@ -255,16 +284,19 @@ CBA.sheets = (function () {
   // (github.io) כן מחזיר תשובה קריאה כשה-Content-Type הוא "simple" (text/plain,
   // כמו כאן) שלא מפעיל preflight. body יכול להיות גדול (קובץ Base64) — POST, לא GET.
   function postRead(action, payload, cb) {
-    var body = Object.assign({ action: action, password: (CBA.mock && CBA.mock._password) || "" }, payload || {});
+    var body = Object.assign({ action: action, session: authSession() }, payload || {});
     fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(body)
     })
       .then(function (r) { return r.json(); })
-      .then(function (data) { if (cb) cb(data); })
+      .then(function (data) { if (cb) cb(withAuthNote(data)); })
       .catch(function (err) { if (cb) cb({ ok: false, error: String(err) }); });
   }
 
-  return { url: API_URL, load: load, push: push, get: get, postRead: postRead, isConnected: isConnected, clearCache: clearCache };
+  // refresh נשכח מהייצוא (התגלה 2026-08-07 בבדיקת הרשאות): app.js קורא ל-
+  // CBA.sheets.refresh במחזור הרענון התקופתי, וזה נכשל בשקט — כלומר הנתונים
+  // לא התרעננו מעצמם כלל, רק ברענון עמוד.
+  return { url: API_URL, load: load, refresh: refresh, push: push, get: get, postRead: postRead, isConnected: isConnected, clearCache: clearCache };
 })();

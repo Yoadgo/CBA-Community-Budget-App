@@ -359,8 +359,21 @@ CBA.data = (function () {
   // מופיע כרשומה עצמאית, כדי ששניהם יהיו ניתנים לבחירה בנפרד. משמש בטופס ניהול
   // הוצאות (2026-08-06) — בחירה מהרשימה קובעת גם את t.familyId ישירות, כדי
   // שהקישור למשפחה ייווצר מיד ברגע ההזנה ולא יזדקק לשיוך רטרואקטיבי בעתיד.
+  // ספריית שמות מצומצמת (2026-08-07): רק שמות/משפחה/מזהה — בלי אימייל וטלפון.
+  // בשימוש ההשלמה האוטומטית, שנחוצה גם למי שמנהל תקציב ואין לו הרשאת "תושבים";
+  // getResidents המלאה נשארת למסך התושבים בלבד.
+  var directoryCache = null;
+  function getResidentDirectory(cb) {
+    if (directoryCache) { if (cb) cb({ ok: true, rows: directoryCache }); return; }
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "residentDirectory" }, function (res) {
+      if (res && res.ok) directoryCache = res.rows || [];
+      if (cb) cb(res);
+    });
+  }
+
   function residentPickerOptions(cb) {
-    getResidents(function (res) {
+    getResidentDirectory(function (res) {
       var rows = (res && res.ok && res.rows) || [];
       var out = [];
       rows.forEach(function (r) {
@@ -794,7 +807,7 @@ CBA.data = (function () {
     approveClubReservation: approveClubReservation,
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,
-    refreshResidents: function (cb) { residentsCache = null; getResidents(cb); },
+    refreshResidents: function (cb) { residentsCache = null; directoryCache = null; getResidents(cb); },
     residentPickerOptions: residentPickerOptions,
     // בקשות הרשמה וניהול תושבים (2026-08-07)
     listSignups: function (cb) { CBA.sheets.get({ action: "listSignups" }, cb); },
@@ -805,6 +818,14 @@ CBA.data = (function () {
     },
     ensureResidentCols: function (cb) { CBA.sheets.postRead("ensureResidentCols", {}, cb); },
     replaceFamily: function (payload, cb) { CBA.sheets.postRead("replaceFamily", payload, cb); },
+    // הרשאות (2026-08-07) — slot הוא מספר משבצת האימייל (1/2) בתוך השורה,
+    // כי לכל בן/בת זוג יש הרשאות משלו ולא ברמת משק הבית
+    savePermissions: function (rowIndex, slot, perms, cb) {
+      CBA.sheets.postRead("savePermissions", { rowIndex: rowIndex, slot: slot, perms: perms }, cb);
+    },
+    ensurePermissionCols: function (cb) { CBA.sheets.postRead("ensurePermissionCols", {}, cb); },
+    // ייצוא לגיליון חדש (2026-08-07). payload: { columns, rowIndexes, name, subtitle }
+    exportResidents: function (payload, cb) { CBA.sheets.postRead("exportResidents", payload, cb); },
     hebrewDate: hebrewDate,
     hebrewMonth: hebrewMonth,
     hebrewDateShort: hebrewDateShort,

@@ -23,13 +23,14 @@ var resState = {
 /* איתור עמודות לפי כותרת — עמיד לשינוי סדר, בדיוק כמו בשרת.
    "שם פרטי"/"מקצוע" נבדקים לפני "משפחה"/"בית" כדי שלא ייתפסו בטעות. */
 function resCols(headers) {
-  var c = { email: [], firstName: [], phone: [], profession: [],
+  var c = { email: [], firstName: [], phone: [], profession: [], perm: [],
             role: null, status: null, family: null, house: null,
             kids: null, notes: null, id: null };
   headers.forEach(function (h) {
     var t = String(h).trim();
     if (!t) return;
-    if (t.indexOf("שם פרטי") !== -1) c.firstName.push(t);
+    if (t.indexOf("הרשאות") !== -1) c.perm.push(t);
+    else if (t.indexOf("שם פרטי") !== -1) c.firstName.push(t);
     else if (t.indexOf("מקצוע") !== -1) c.profession.push(t);
     else if (t.indexOf("אימייל") !== -1) c.email.push(t);
     else if (t.indexOf("טלפון") !== -1) c.phone.push(t);
@@ -45,6 +46,46 @@ function resCols(headers) {
 }
 
 function resVal(row, col) { return col ? String(row[col] == null ? "" : row[col]).trim() : ""; }
+
+/* ---------- הרשאות (2026-08-07) ----------
+   ההרשאות הן **פר אדם**: עמודת "הרשאות 1" שייכת ל"אימייל 1", וכן הלאה — בדיוק
+   כמו "שם פרטי N". כך אפשר שאחד מבני הזוג ינהל את המועדון והשני יהיה תושב רגיל.
+   אותה לוגיקה בדיוק רצה גם בשרת (permissionsFor_ ב-Code.gs); כאן זה רק לתצוגה. */
+var RES_PERMS = [
+  { code: "על",     label: "מנהל על",              hint: "גישה לכל התכנים, והיחיד שמנהל הרשאות" },
+  { code: "תקציב",  label: "ניהול תקציב ותשלומים", hint: "תכנון מול ביצוע, ניהול הוצאות, בניית תקציב" },
+  { code: "מועדון", label: "ניהול מועדון",          hint: "אישור ודחייה של שריוני מועדון" },
+  { code: "תושבים", label: "ניהול תושבים",          hint: "מסך התושבים ובקשות ההרשמה" }
+];
+var RES_PERM_CODES = RES_PERMS.map(function (p) { return p.code; });
+
+function resParsePerms(raw) {
+  return String(raw || "").split(/[,;|\/]/).map(function (x) { return x.trim(); })
+    .filter(function (x) { return RES_PERM_CODES.indexOf(x) !== -1; })
+    .filter(function (x, i, a) { return a.indexOf(x) === i; });
+}
+/* ההרשאות בפועל של אדם בשורה. תאימות לאחור: אם עמודת ההרשאות ריקה אבל עמודת
+   "תפקיד" הישנה אומרת "מנהל" — הוא נחשב מנהל על, בדיוק כמו בשרת. */
+function resPermsOf(row, c, i) {
+  var p = resParsePerms(resVal(row, c.perm[i]));
+  if (!p.length && (resVal(row, c.role) || "").indexOf("מנהל") !== -1) return ["על"];
+  return p;
+}
+/* כל ההרשאות בשורה, לתצוגה מרוכזת בטבלה */
+function resRowPerms(row, c) {
+  var out = [];
+  var n = Math.max(c.email.length, c.perm.length, 1);
+  for (var i = 0; i < n; i++) {
+    resPermsOf(row, c, i).forEach(function (p) { if (out.indexOf(p) === -1) out.push(p); });
+  }
+  return out;
+}
+function resPermLabel(code) {
+  for (var i = 0; i < RES_PERMS.length; i++) if (RES_PERMS[i].code === code) return RES_PERMS[i].label;
+  return code;
+}
+/* האם המשתמש המחובר הוא מנהל על — רק הוא רואה ומשנה הרשאות */
+function resIAmSuper() { return !!(window.CBA && CBA.isSuper); }
 function resIsActive(row, c) {
   var s = resVal(row, c.status);
   return !s || s.indexOf("פעיל") !== -1;
@@ -140,6 +181,8 @@ CBA.screens.residents = {
     });
 
     var activeCount = st.rows.filter(function (r) { return resIsActive(r, c); }).length;
+    // מספרי השורות בגיליון של מה שמוצג כרגע — הייצוא מציע לכבד את הסינון והחיפוש
+    resState.visibleRowIndexes = visible.map(function (r) { return st.rows.indexOf(r) + 2; });
 
     container.innerHTML =
       (pending.length ? resSignupsHTML(pending, st.rows, c) : "") +
@@ -154,13 +197,14 @@ CBA.screens.residents = {
         '</div>' +
         '<div class="tx-actions">' +
           '<div class="tx-summary"><span>מוצגים</span> <b>' + visible.length + '</b> <span class="tx-summary__count">· מתוך ' + st.rows.length + ' משקי בית</span></div>' +
+          '<button class="btn-ghost btn-sm" data-res-export>ייצוא לגיליון</button>' +
           '<button class="btn-ghost btn-sm" data-res-reload>רענן</button>' +
         '</div>' +
       '</div>' +
-      '<div class="card tx-card" style="--tx-cols: 70px 1fr 1.2fr 1.5fr 92px 96px 88px">' +
+      '<div class="card tx-card" style="--tx-cols: 70px 1fr 1.2fr 1.4fr 84px 150px 84px">' +
         '<div class="tx-head">' +
           '<div>בית</div><div>משפחה</div><div>דיירים</div><div>אימייל</div>' +
-          '<div>תנועות</div><div>תפקיד</div><div>סטטוס</div>' +
+          '<div>תנועות</div><div>הרשאות</div><div>סטטוס</div>' +
         '</div>' +
         (visible.length
           ? '<div class="tx-list">' + visible.map(function (r) {
@@ -173,6 +217,16 @@ CBA.screens.residents = {
   }
 };
 
+/* תגיות ההרשאה בשורת הטבלה. "תושב" מוצג עמום כי הוא ברירת המחדל של כולם. */
+function resPermBadges(row, c) {
+  var ps = resRowPerms(row, c);
+  if (!ps.length) return '<span class="res-dim">תושב</span>';
+  if (ps.indexOf("על") !== -1) return '<span class="badge badge--ready">מנהל על</span>';
+  return ps.map(function (p) {
+    return '<span class="badge res-perm-badge" title="' + CBA.esc(resPermLabel(p)) + '">' + CBA.esc(p) + '</span>';
+  }).join("");
+}
+
 function resTab(key, label, n) {
   return '<button type="button" class="seg__opt' + (resState.filter === key ? " is-active" : "") +
     '" data-res-filter="' + key + '">' + label + ' <span class="res-n">' + n + '</span></button>';
@@ -182,7 +236,6 @@ function resRowHTML(r, c, idx) {
   var names = c.firstName.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" · ");
   var emails = c.email.map(function (k) { return resVal(r, k); }).filter(Boolean);
   var active = resIsActive(r, c);
-  var role = resVal(r, c.role) || "תושב";
   var n = resTxCount(r, c);
   // rowIndex בגיליון: שורת כותרת = 1, ולכן פריט i במערך = שורה i+2
   return '<div class="tx-row res-row' + (active ? "" : " is-left") + '" data-res-row="' + (idx + 2) + '" data-res-idx="' + idx + '">' +
@@ -192,7 +245,7 @@ function resRowHTML(r, c, idx) {
     '<div class="tx-c res-mail" title="' + CBA.esc(emails.join(", ")) + '">' +
       (emails.length ? CBA.esc(emails.join(", ")) : '<span class="res-dim">אין מייל</span>') + '</div>' +
     '<div class="tx-c">' + (n ? '<span class="res-n res-n--tx" title="תנועות המשויכות למשק הבית">' + n + '</span>' : '<span class="res-dim">—</span>') + '</div>' +
-    '<div class="tx-c">' + (role === "מנהל" ? '<span class="badge badge--ready">מנהל</span>' : '<span class="res-dim">תושב</span>') + '</div>' +
+    '<div class="tx-c res-c-perm">' + resPermBadges(r, c) + '</div>' +
     '<div class="tx-c">' + (active ? '<span class="badge badge--paid">פעיל</span>' : '<span class="badge">עזב</span>') + '</div>' +
   '</div>';
 }
@@ -249,6 +302,8 @@ function resBind(container, c) {
     resState.loaded = false;
     CBA.data.refreshResidents(function () { resLoad(container); });
   });
+  var ex = container.querySelector("[data-res-export]");
+  if (ex) ex.addEventListener("click", function () { resOpenExport(c); });
 
   container.querySelectorAll("[data-res-row]").forEach(function (row) {
     row.addEventListener("click", function () {
@@ -288,6 +343,176 @@ function resBind(container, c) {
   });
 }
 
+/* ==========================================================================
+   ייצוא לגיליון (2026-08-07)
+   --------------------------------------------------------------------------
+   בוחרים עמודות בצ'קבוקסים, בוחרים אילו שורות, והשרת יוצר גיליון Google חדש
+   מעוצב ומחזיר קישור. הפריסט הוא מה שבאמת שימושי ברוב הפעמים: משפחה, בית,
+   שני התושבים, טלפונים ושמות ילדים.
+   ========================================================================== */
+
+/* ברירת המחדל של הסימון. מוחזר כמערך שמות עמודות בסדר הנכון לייצוא. */
+function resExportPreset(c) {
+  var out = [];
+  if (c.family) out.push(c.family);
+  if (c.house) out.push(c.house);
+  c.firstName.forEach(function (k) { out.push(k); });
+  c.phone.forEach(function (k) { out.push(k); });
+  if (c.kids) out.push(c.kids);
+  return out;
+}
+
+/* קיבוץ העמודות בחלון, כדי שלא תהיה רשימה שטוחה של 17 תיבות סימון */
+function resExportGroups(c, headers) {
+  var used = {};
+  function take(list) { (list || []).forEach(function (k) { if (k) used[k] = true; }); return (list || []).filter(Boolean); }
+  var groups = [
+    { t: "משק הבית", cols: take([c.family, c.house, c.id]) },
+    { t: "דיירים",   cols: take(c.firstName) },
+    { t: "יצירת קשר", cols: take(c.phone.concat(c.email)) },
+    { t: "פרטים נוספים", cols: take(c.profession.concat([c.kids, c.notes])) },
+    { t: "ניהול",    cols: take(c.perm.concat([c.role, c.status])) }
+  ].filter(function (g) { return g.cols.length; });
+  // כל מה שלא נכנס לאף קבוצה — שלא ייעלם מהבחירה
+  var rest = headers.filter(function (h) { return h && !used[h]; });
+  if (rest.length) groups.push({ t: "שאר העמודות", cols: rest });
+  return groups;
+}
+
+function resOpenExport(c) {
+  var old = document.getElementById("res-export");
+  if (old) old.remove();
+
+  var st = resState;
+  var headers = st.headers.map(function (h) { return String(h).trim(); }).filter(Boolean);
+  var preset = resExportPreset(c);
+  var groups = resExportGroups(c, headers);
+  var shownN = (st.visibleRowIndexes || []).length;
+  var filterLabel = st.filter === "active" ? "פעילים" : (st.filter === "left" ? "עזבו" : "הכל");
+  var today = new Date();
+  var stamp = ("0" + today.getDate()).slice(-2) + "." + ("0" + (today.getMonth() + 1)).slice(-2) + "." + today.getFullYear();
+
+  var wrap = document.createElement("div");
+  wrap.id = "res-export";
+  wrap.className = "peek-backdrop";
+  wrap.innerHTML =
+    '<div class="peek res-exp" role="dialog" aria-label="ייצוא לגיליון">' +
+      '<div class="peek__head"><span class="peek__title">ייצוא לגיליון</span>' +
+        '<button class="peek__x" aria-label="סגור">×</button></div>' +
+
+      '<div class="res-exp__body">' +
+        '<div class="form-field"><label>שם הגיליון</label>' +
+          '<input class="field-input" id="rx-name" value="' + CBA.esc("תושבים — ייצוא " + stamp) + '"></div>' +
+
+        '<div class="res-exp__scope">' +
+          '<label class="res-exp__radio"><input type="radio" name="rx-scope" value="visible" checked>' +
+            '<span>רק המוצגים כרגע <b>(' + shownN + ')</b> <span class="res-dim">— סינון "' + CBA.esc(filterLabel) + '"' +
+              (st.q.trim() ? ' וחיפוש "' + CBA.esc(st.q.trim()) + '"' : "") + '</span></span></label>' +
+          '<label class="res-exp__radio"><input type="radio" name="rx-scope" value="all">' +
+            '<span>כל משקי הבית <b>(' + st.rows.length + ')</b></span></label>' +
+        '</div>' +
+
+        '<div class="res-exp__cols-h">' +
+          '<span>עמודות לייצוא</span>' +
+          '<span class="res-exp__quick">' +
+            '<button type="button" class="btn-link" data-rx-preset>ברירת מחדל</button>' +
+            '<button type="button" class="btn-link" data-rx-all>הכל</button>' +
+            '<button type="button" class="btn-link" data-rx-none>נקה</button>' +
+          '</span>' +
+        '</div>' +
+
+        '<div class="res-exp__cols">' +
+          groups.map(function (g) {
+            return '<div class="res-exp__grp">' +
+              '<div class="res-exp__grp-t">' + CBA.esc(g.t) + '</div>' +
+              g.cols.map(function (col) {
+                return '<label class="res-exp__opt">' +
+                  '<input type="checkbox" data-rx-col="' + CBA.esc(col) + '"' +
+                    (preset.indexOf(col) !== -1 ? " checked" : "") + '>' +
+                  '<span>' + CBA.esc(col) + '</span></label>';
+              }).join("") +
+            '</div>';
+          }).join("") +
+        '</div>' +
+
+        '<div class="res-exp__msg" id="rx-msg" hidden></div>' +
+      '</div>' +
+
+      '<div class="res-exp__foot">' +
+        '<span class="res-dim" id="rx-count"></span>' +
+        '<div class="res-exp__acts">' +
+          '<button type="button" class="btn-ghost" data-rx-close>ביטול</button>' +
+          '<button type="button" class="btn-primary" id="rx-go">צור גיליון</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(wrap);
+  var close = function () { wrap.remove(); document.removeEventListener("keydown", esc); };
+  var esc = function (e) { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", esc);
+  wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
+  wrap.querySelector(".peek__x").addEventListener("click", close);
+  wrap.querySelector("[data-rx-close]").addEventListener("click", close);
+
+  var boxes = function () { return [].slice.call(wrap.querySelectorAll("[data-rx-col]")); };
+  var chosen = function () {
+    // הסדר נקבע לפי סדר העמודות במסך, לא לפי סדר הלחיצות — כדי שהתוצאה צפויה
+    return boxes().filter(function (b) { return b.checked; }).map(function (b) { return b.dataset.rxCol; });
+  };
+  var count = wrap.querySelector("#rx-count");
+  var go = wrap.querySelector("#rx-go");
+  function sync() {
+    var n = chosen().length;
+    count.textContent = n ? (n + " עמודות נבחרו") : "לא נבחרה אף עמודה";
+    go.disabled = !n;
+  }
+  wrap.addEventListener("change", sync);
+  wrap.querySelector("[data-rx-preset]").addEventListener("click", function () {
+    boxes().forEach(function (b) { b.checked = preset.indexOf(b.dataset.rxCol) !== -1; }); sync();
+  });
+  wrap.querySelector("[data-rx-all]").addEventListener("click", function () {
+    boxes().forEach(function (b) { b.checked = true; }); sync();
+  });
+  wrap.querySelector("[data-rx-none]").addEventListener("click", function () {
+    boxes().forEach(function (b) { b.checked = false; }); sync();
+  });
+  sync();
+
+  var msg = wrap.querySelector("#rx-msg");
+  go.addEventListener("click", function () {
+    var cols = chosen();
+    if (!cols.length) return;
+    var scope = wrap.querySelector('[name="rx-scope"]:checked').value;
+    var rowIndexes = scope === "visible" ? (st.visibleRowIndexes || []) : [];
+    if (scope === "visible" && !rowIndexes.length) {
+      msg.hidden = false; msg.className = "res-exp__msg res-exp__msg--err";
+      msg.textContent = "אין שורות מוצגות לייצוא."; return;
+    }
+    go.disabled = true; go.textContent = "יוצר…";
+    msg.hidden = false; msg.className = "res-exp__msg";
+    msg.textContent = "בונה את הגיליון — זה לוקח כמה שניות.";
+
+    CBA.data.exportResidents({
+      columns: cols,
+      rowIndexes: rowIndexes,
+      name: (wrap.querySelector("#rx-name").value || "").trim(),
+      subtitle: (scope === "visible" ? filterLabel : "כל משקי הבית") + " · " + stamp
+    }, function (res) {
+      go.disabled = false; go.textContent = "צור גיליון";
+      if (!res || !res.ok || !res.url) {
+        msg.className = "res-exp__msg res-exp__msg--err";
+        msg.textContent = "הייצוא נכשל: " + ((res && res.error) || "שגיאה");
+        return;
+      }
+      msg.className = "res-exp__msg res-exp__msg--ok";
+      msg.innerHTML = 'הגיליון מוכן — ' + res.rows + ' שורות, ' + res.columns + ' עמודות. ' +
+        '<a href="' + CBA.esc(res.url) + '" target="_blank" rel="noopener">פתח את הגיליון</a>';
+      window.open(res.url, "_blank", "noopener");
+    });
+  });
+}
+
 /* ---------- חלון עריכת משק בית — אותו drawer כמו במסך ההוצאות ---------- */
 function resCloseDrawer() {
   var el = document.getElementById("res-drawer");
@@ -314,7 +539,46 @@ function resOpenDrawer(container, idx, rowIndex, c) {
     if (c.email[i]) parts.push(field("אימייל", c.email[i], "email"));
     if (c.phone[i]) parts.push(field("טלפון", c.phone[i], "tel"));
     if (c.profession[i]) parts.push(field("מקצוע", c.profession[i]));
-    return parts.length ? '<div class="form-grid">' + parts.join("") + '</div>' : "";
+    if (!parts.length) return "";
+    return '<div class="form-grid">' + parts.join("") + '</div>' + permBlock(i);
+  }
+
+  /* בלוק ההרשאות של אדם אחד. גלוי למנהל על בלבד — לשאר המנהלים (למשל מי שמנהל
+     תושבים) הוא פשוט לא קיים, כי ניהול הרשאות הוא סמכות של מנהל על. */
+  function permBlock(i) {
+    var mine = resPermsOf(r, c, i);
+    var email = resVal(r, c.email[i]);
+    if (!resIAmSuper()) {
+      if (!mine.length) return "";
+      return '<div class="res-perm-read">הרשאות: ' +
+        mine.map(function (p) { return CBA.esc(resPermLabel(p)); }).join(" · ") + '</div>';
+    }
+    if (!email) {
+      return '<div class="res-perm-none">אין אימייל למשבצת הזו — אי אפשר לתת הרשאות עד שיוזן אימייל.</div>';
+    }
+    // מקופל, בדיוק כמו בלוק "אפשרויות נוספות" בטופס ההוצאה — כדי שהחלון יישאר
+    // קומפקטי. הכותרת מספרת את המצב הנוכחי בלי צורך לפתוח.
+    var summary = mine.length
+      ? (mine.indexOf("על") !== -1 ? "מנהל על" : mine.map(resPermLabel).join(" · "))
+      : "תושב רגיל";
+    return '<details class="tx-adv res-perm" data-perm-slot="' + (i + 1) + '">' +
+      '<summary class="tx-adv__sum">הרשאות של ' +
+        CBA.esc(resVal(r, c.firstName[i]) || email) + ' — ' + CBA.esc(summary) + '</summary>' +
+      '<div class="tx-adv__body">' +
+        RES_PERMS.map(function (pp) {
+          return '<label class="res-perm__opt' + (pp.code === "על" ? " res-perm__opt--super" : "") + '">' +
+            '<input type="checkbox" data-perm="' + CBA.esc(pp.code) + '"' +
+              (mine.indexOf(pp.code) !== -1 ? " checked" : "") + '>' +
+            '<span class="res-perm__lbl">' + CBA.esc(pp.label) + '</span>' +
+            '<span class="res-perm__hint">' + CBA.esc(pp.hint) + '</span>' +
+          '</label>';
+        }).join("") +
+        '<div class="res-perm__foot">' +
+          '<span class="res-dim">בלי סימון כלל — תושב רגיל, רואה רק את סביבת התושב.</span>' +
+          '<button type="button" class="btn-ghost btn-sm" data-perm-save="' + (i + 1) + '">שמור הרשאות</button>' +
+        '</div>' +
+      '</div>' +
+    '</details>';
   }
 
   var overlay = document.createElement("div");
@@ -356,11 +620,6 @@ function resOpenDrawer(container, idx, rowIndex, c) {
 
         '<div class="form-block">' +
           '<div class="form-grid">' +
-            (c.role ? '<div class="form-field"><label>תפקיד</label>' +
-              '<select class="field-input" data-rf="' + CBA.esc(c.role) + '">' +
-                ["תושב", "מנהל"].map(function (o) {
-                  return '<option value="' + o + '"' + ((resVal(r, c.role) || "תושב") === o ? " selected" : "") + '>' + o + '</option>';
-                }).join("") + '</select></div>' : "") +
             (c.status ? '<div class="form-field"><label>סטטוס</label>' +
               '<select class="field-input" data-rf="' + CBA.esc(c.status) + '">' +
                 ["פעיל", "עזב"].map(function (o) {
@@ -384,6 +643,41 @@ function resOpenDrawer(container, idx, rowIndex, c) {
   document.body.appendChild(overlay);
   overlay.querySelectorAll("[data-rclose]").forEach(function (el) { el.addEventListener("click", resCloseDrawer); });
   document.addEventListener("keydown", resEsc);
+
+  /* שמירת הרשאות היא פעולה נפרדת מ"שמור" של פרטי משק הבית — בכוונה. שינוי הרשאה
+     הוא מעשה בעל משמעות (הוא פותח למישהו גישה לכסף או לפרטי כל התושבים), ולא נכון
+     שייבלע בתוך שמירה של תיקון טלפון. */
+  overlay.querySelectorAll("[data-perm-save]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var box = btn.closest("[data-perm-slot]");
+      var slot = parseInt(box.dataset.permSlot, 10);
+      var perms = [];
+      box.querySelectorAll("[data-perm]").forEach(function (cbx) {
+        if (cbx.checked) perms.push(cbx.dataset.perm);
+      });
+      var who = resVal(r, c.firstName[slot - 1]) || resVal(r, c.email[slot - 1]);
+      var txt = perms.length
+        ? 'לתת ל' + who + ' את ההרשאות: ' + perms.map(resPermLabel).join(", ") + '?'
+        : 'להסיר מ' + who + ' את כל ההרשאות המיוחדות? הוא יישאר תושב רגיל.';
+      if (perms.indexOf("על") !== -1) {
+        txt += '\n\nשים לב: מנהל על רואה את כל התכנים ויכול לשנות הרשאות של כל אחד, כולל שלך.';
+      }
+      if (!window.confirm(txt)) return;
+      btn.disabled = true; btn.textContent = "שומר…";
+      CBA.data.savePermissions(rowIndex, slot, perms, function (res) {
+        btn.disabled = false; btn.textContent = "שמור הרשאות";
+        if (!res || !res.ok) {
+          window.alert("שמירת ההרשאות נכשלה: " + ((res && res.error) || "שגיאה"));
+          return;
+        }
+        resState.loaded = false;
+        CBA.data.refreshResidents(function () {
+          resLoad(container);
+          resCloseDrawer();
+        });
+      });
+    });
+  });
 
   overlay.querySelector("[data-rsave]").addEventListener("click", function () {
     var fields = {};

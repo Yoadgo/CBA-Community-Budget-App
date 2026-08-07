@@ -28,6 +28,179 @@ var CLUB_CALENDAR_ID = 'c_8878c4353341b9211ce8db109c74c713ed8ffcf4813fe8a1aa4e60
 // לא-ייחודי/להשתנות). נוצר ומתמלא פעם אחת ע"י assignResidentIds_ ולא משתנה לעולם.
 var RESIDENT_ID_HEADER = 'מזהה קבוע';
 
+/* ============================================================================
+ *  הרשאות ומידור (2026-08-07)
+ * ----------------------------------------------------------------------------
+ *  המודל:
+ *    • כל מי שרשום בטאב "תושבים" ומסומן פעיל הוא **תושב** — הבסיס, ללא הרשאה מיוחדת.
+ *    • מעל זה יש **מידורים**: תקציב / מועדון / תושבים. כל אחד נותן גישה לקבוצת
+ *      מסכים אחת בלבד.
+ *    • **מנהל על** ('על') רואה הכול, והוא היחיד שרשאי לשנות הרשאות של אחרים.
+ *
+ *  איפה זה נשמר: עמודות "הרשאות 1", "הרשאות 2" בטאב "תושבים", אחת לכל משבצת
+ *  אימייל, בדיוק כמו "שם פרטי 1"/"שם פרטי 2" — ההתאמה היא **לפי סדר**. כך שני בני
+ *  זוג באותו משק בית יכולים לקבל הרשאות שונות. הערך הוא רשימה מופרדת בפסיקים.
+ *
+ *  תאימות לאחור: שורה שעמודת ההרשאות שלה ריקה אבל עמודת "תפקיד" הישנה שלה היא
+ *  "מנהל" — נחשבת מנהל על. כך שום דבר לא נשבר עד שממלאים את העמודות החדשות.
+ * ========================================================================== */
+var PERM_SUPER     = 'על';
+var PERM_BUDGET    = 'תקציב';
+var PERM_CLUB      = 'מועדון';
+var PERM_RESIDENTS = 'תושבים';
+var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS];
+var PERM_HEADER = 'הרשאות';
+// דרישה מיוחדת: "כל הרשאת ניהול שהיא" — לפעולות שמשרתות כמה מידורים,
+// כמו ספריית השמות להשלמה אוטומטית בטופס ההוצאה
+var PERM_ANY_ADMIN = '*';
+
+/* איזו הרשאה נדרשת לכל פעולה. פעולה שאינה מופיעה כאן מותרת לכל תושב מחובר ופעיל
+ * (למשל הגשת קבלה או שריון מועדון — פעולות של סביבת התושב). */
+var ACTION_PERMS = {
+  // ניהול תקציב ותשלומים
+  saveTransaction: PERM_BUDGET, deleteTransaction: PERM_BUDGET, saveBudget: PERM_BUDGET,
+  setBudgetMeta: PERM_BUDGET, renameCategory: PERM_BUDGET, logBudgetUpdate: PERM_BUDGET,
+  addYear: PERM_BUDGET, saveColumnValues: PERM_BUDGET, ensureColumns: PERM_BUDGET,
+  saveColumnConfig: PERM_BUDGET, deleteReceiptFile: PERM_BUDGET,
+  // ניהול מועדון
+  clubList: PERM_CLUB, approveClubReservation: PERM_CLUB, rejectClubReservation: PERM_CLUB,
+  // ניהול תושבים
+  getResidents: PERM_RESIDENTS, assignResidentIds: PERM_RESIDENTS, listSignups: PERM_RESIDENTS,
+  // ספריית שמות בלבד (בלי מייל/טלפון) — צריכה גם למי שמנהל תקציב, בשביל
+  // השלמת שם הרוכש בטופס ההוצאה. לכן: כל הרשאת ניהול, ולא "תושבים" דווקא.
+  residentDirectory: PERM_ANY_ADMIN,
+  approveSignup: PERM_RESIDENTS, rejectSignup: PERM_RESIDENTS, saveResidentRow: PERM_RESIDENTS,
+  ensureResidentCols: PERM_RESIDENTS, replaceFamily: PERM_RESIDENTS, exportResidents: PERM_RESIDENTS,
+  saveResidentNames: PERM_RESIDENTS, formatResidents: PERM_RESIDENTS, saveFamilyIds: PERM_RESIDENTS,
+  // מנהל על בלבד
+  savePermissions: PERM_SUPER, ensurePermissionCols: PERM_SUPER
+};
+
+/** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
+function sessionSecret_() {
+  var props = PropertiesService.getScriptProperties();
+  var s = props.getProperty('CBA_SESSION_SECRET');
+  if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); props.setProperty('CBA_SESSION_SECRET', s); }
+  return s;
+}
+
+/* מושב חתום (2026-08-07). למה לא להשתמש בטוקן של גוגל לכל כתיבה? כי הוא פג אחרי
+ * כשעה, והמשתמש היה נזרק באמצע העבודה. במקום זה: מאמתים את טוקן גוגל **פעם אחת**
+ * בהתחברות, ומנפיקים מושב חתום ב-HMAC שתקף 30 יום. ההרשאות עצמן נקראות מהגיליון
+ * בכל בקשה מחדש — כך ששלילת הרשאה נכנסת לתוקף מיד, בלי להמתין לפקיעת המושב. */
+function makeSession_(email) {
+  var payload = Utilities.base64EncodeWebSafe(JSON.stringify({
+    e: String(email || '').toLowerCase(), x: Date.now() + 30 * 24 * 3600 * 1000
+  }));
+  var sig = Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(payload, sessionSecret_()));
+  return payload + '.' + sig;
+}
+
+function verifySession_(token) {
+  try {
+    var t = String(token || '');
+    var i = t.indexOf('.');
+    if (i < 1) return null;
+    var payload = t.substring(0, i), sig = t.substring(i + 1);
+    var expect = Utilities.base64EncodeWebSafe(
+      Utilities.computeHmacSha256Signature(payload, sessionSecret_()));
+    if (sig !== expect) return null;
+    var obj = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(payload)).getDataAsString());
+    if (!obj || !obj.e || !obj.x || obj.x < Date.now()) return null;
+    return { email: String(obj.e) };
+  } catch (err) { return null; }
+}
+
+/** ממיר ערך תא לרשימת קודי הרשאה תקינים. סובלני לפסיק/נקודה-פסיק/קו נטוי. */
+function parsePerms_(raw) {
+  return String(raw || '').split(/[,;|\/]/).map(function (s) { return s.trim(); })
+    .filter(function (s) { return s && ALL_PERMS.indexOf(s) !== -1; })
+    .filter(function (s, i, a) { return a.indexOf(s) === i; });
+}
+
+/** ההרשאות בפועל של אימייל נתון, נקראות מהגיליון בזמן אמת. */
+function permissionsFor_(email) {
+  var r = lookupResident_(email);
+  if (!r.found) return { found: false, active: false, perms: [], isSuper: false };
+  var active = !(r.status && r.status.indexOf('פעיל') === -1);
+  var perms = parsePerms_(r.permissions);
+  // תאימות לאחור לעמודת "תפקיד" הישנה
+  if (!perms.length && r.role && r.role.indexOf('מנהל') !== -1) perms = [PERM_SUPER];
+  return {
+    found: true, active: active, perms: perms,
+    isSuper: perms.indexOf(PERM_SUPER) !== -1,
+    familyId: r.familyId, family: r.family, house: r.house, firstName: r.firstName
+  };
+}
+
+/**
+ * שער ההרשאות המרכזי. מקבל את פרמטרי הבקשה ואת ההרשאה הנדרשת, ומחזיר
+ * { ok:true, email, perm } או { ok:false, error }.
+ * שני מסלולים: (1) מושב חתום — המסלול הרגיל של האפליקציה;
+ * (2) סיסמת מנהל — מסלול חירום/ידני, לשימוש ישיר מול ה-API בלי דפדפן.
+ */
+function authorize_(ss, p, need) {
+  var sess = verifySession_(p && p.session);
+  if (sess) {
+    var perm = permissionsFor_(sess.email);
+    if (!perm.found)  return { ok: false, error: 'המשתמש אינו ברשימת התושבים' };
+    if (!perm.active) return { ok: false, error: 'המשתמש מסומן כלא פעיל' };
+    if (!need || perm.isSuper ||
+        (need === PERM_ANY_ADMIN ? perm.perms.length > 0 : perm.perms.indexOf(need) !== -1)) {
+      return { ok: true, email: sess.email, perm: perm };
+    }
+    return { ok: false, error: 'אין לך הרשאה לפעולה הזו' };
+  }
+  if (isAdminPassword_(ss, p && p.password)) {
+    return { ok: true, email: '', perm: { found: true, active: true, perms: ALL_PERMS.slice(), isSuper: true } };
+  }
+  return { ok: false, error: 'אין הרשאה' };
+}
+
+/* ============================================================================
+ *  רשת ביטחון — להרצה ידנית מתוך עורך ה-Apps Script (כפתור Run)
+ * ----------------------------------------------------------------------------
+ *  שתי הפונקציות האלה לא עוברות דרך האינטרנט ולא דרך שום בדיקת הרשאה: הן רצות
+ *  כאן, בעורך, תחת החשבון שלך. לכן אי אפשר "להינעל בחוץ" — גם אם משהו בהרשאות
+ *  השתבש לגמרי, תמיד אפשר לפתוח את העורך ולהריץ אותן.
+ *
+ *  grantMeSuperAdmin   — נותן לחשבון שממנו אתה מריץ הרשאת מנהל על.
+ *  diagnosePermissions — מדפיס מה השרת רואה עליך: אם נמצאת, אם אתה פעיל,
+ *                        ואילו הרשאות יש לך בפועל. הפלט מופיע ב-Execution log.
+ * ========================================================================== */
+function grantMeSuperAdmin() {
+  var email = Session.getEffectiveUser().getEmail();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensurePermissionCols_(ss, {});
+  var r = lookupResident_(email);
+  if (!r.found) {
+    throw new Error('האימייל ' + email + ' לא נמצא בטאב "תושבים" — צריך קודם להוסיף אותו לשורה.');
+  }
+  var res = savePermissions_(ss, { rowIndex: r.rowIndex, slot: r.slot, perms: [PERM_SUPER] });
+  if (!res.ok) throw new Error(res.error);
+  Logger.log('✓ ' + email + ' הוגדר כמנהל על (שורה ' + r.rowIndex + ', משבצת אימייל ' + r.slot + ')');
+  return res;
+}
+
+function diagnosePermissions() {
+  var email = Session.getEffectiveUser().getEmail();
+  var r = lookupResident_(email);
+  var p = permissionsFor_(email);
+  var lines = [
+    'אימייל: ' + email,
+    'נמצא בטאב תושבים: ' + (r.found ? 'כן (שורה ' + r.rowIndex + ', משבצת אימייל ' + r.slot + ')' : 'לא'),
+    'סטטוס: ' + (r.status || '(ריק)'),
+    'עמודת תפקיד (ישנה): ' + (r.role || '(ריק)'),
+    'עמודת הרשאות: ' + (r.permissions || '(ריקה)'),
+    'פעיל: ' + p.active,
+    'הרשאות בפועל: ' + (p.perms.length ? p.perms.join(', ') : 'תושב רגיל'),
+    'מנהל על: ' + p.isSuper
+  ];
+  Logger.log(lines.join('\n'));
+  return lines.join('\n');
+}
+
 /* ===================== קריאה ===================== */
 function doGet(e) {
   try {
@@ -82,6 +255,12 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'assignResidentIds') {
       return handleAssignResidentIds_(e.parameter);
     }
+    // ספריית שמות מצומצמת (2026-08-07): רק מזהה/משפחה/שמות פרטיים/בית — בלי
+    // אימייל, טלפון או הרשאות. משמשת את השלמת שם הרוכש בטופס ההוצאה, ולכן
+    // פתוחה לכל מי שיש לו הרשאת ניהול כלשהי ולא רק למנהל התושבים.
+    if (e && e.parameter && e.parameter.action === 'residentDirectory') {
+      return handleResidentDirectory_(e.parameter);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var years = [];
     ss.getSheets().forEach(function (sh) {
@@ -89,12 +268,19 @@ function doGet(e) {
       if (n.indexOf('תנועות ') === 0) years.push(n.substring('תנועות '.length));
     });
     var settings = readSettings_(ss);
+    // סיסמת המנהל לא נשלחת יותר ללקוח (2026-08-07). עד היום כל מי שהיה מחובר קיבל
+    // אותה בתוך ההגדרות, ולכן יכול היה לשלוח כל פקודת כתיבה. מעכשיו האפליקציה
+    // עובדת עם מושב חתום אישי, והסיסמה נשארת סוד שנמצא רק בגיליון.
+    var publicSettings = {};
+    Object.keys(settings).forEach(function (k) {
+      if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
+    });
     var out = {
-      ok: true, version: 'v25-signup-residents', years: years,
+      ok: true, version: 'v26-permissions', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       groups: readColumn_(ss, 'קבוצות'),
       updates: readTable_(ss, 'עדכוני תקציב'),   // יומן עדכוני תקציב (אם הטאב קיים)
-      settings: settings, data: {}
+      settings: publicSettings, data: {}
     };
     years.forEach(function (y) {
       out.data[y] = {
@@ -114,12 +300,16 @@ function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var pw = readSettings_(ss)['סיסמת מנהל'];
-    if (String(body.password || '') !== String(pw)) {
-      return json_({ ok: false, error: 'סיסמה שגויה' });
-    }
+    // שער ההרשאות (2026-08-07): מושב חתום -> הרשאות מהגיליון -> בדיקה מול הפעולה.
+    // סיסמת מנהל נשארת כמסלול חירום. ר' authorize_ בראש הקובץ.
+    var gate = authorize_(ss, body, ACTION_PERMS[body.action]);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    body._email = gate.email;
+    body._perm = gate.perm;
     switch (body.action) {
       case 'auth':              return json_({ ok: true });
+      case 'savePermissions':   return json_(savePermissions_(ss, body));
+      case 'ensurePermissionCols': return json_(ensurePermissionCols_(ss, body));
       case 'saveTransaction':   return json_(saveTransaction_(ss, body));
       case 'deleteTransaction': return json_(deleteTransaction_(ss, body));
       case 'saveBudget':        return json_(saveBudget_(ss, body));
@@ -141,6 +331,7 @@ function doPost(e) {
       case 'saveResidentRow':   return json_(saveResidentRow_(ss, body));
       case 'ensureResidentCols':return json_(ensureResidentCols_(ss, body));
       case 'replaceFamily':     return json_(replaceFamily_(ss, body));
+      case 'exportResidents':   return json_(exportResidents_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -488,8 +679,14 @@ function handleCancelClubReservation_(p) {
 // בודקת סיסמת מנהל לפעולות ניהול שמגיעות דרך GET (clubList/approve/reject) —
 // אותה בדיקה שנעשית בתחילת doPost לכל שאר הכתיבות, רק שכאן מבצעים אותה ידנית
 // כי לפעולות האלה יש צורך בתשובה קריאה (לא no-cors) אז הן לא עוברות דרך doPost.
+/* התגלה 2026-08-07: אם משום מה אין ערך ב"סיסמת מנהל" בהגדרות, ההשוואה הישנה
+ * הייתה '' === '' — כלומר בקשה בלי סיסמה כלל הייתה עוברת. עכשיו נדרשת סיסמה
+ * מוגדרת בפועל, וגם סיסמה שנשלחה בפועל. */
 function isAdminPassword_(ss, pw) {
-  return String(pw || '') === String(readSettings_(ss)['סיסמת מנהל'] || '');
+  var real = String(readSettings_(ss)['סיסמת מנהל'] || '').trim();
+  var given = String(pw || '').trim();
+  if (!real || !given) return false;
+  return given === real;
 }
 
 /* רשימת כל השריונים הקרובים (ממתינים + מאושרים) — למסך הניהול אצל המנהל.
@@ -497,7 +694,8 @@ function isAdminPassword_(ss, pw) {
 function handleClubList_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!isAdminPassword_(ss, p.password)) return json_({ ok: false, error: 'אין הרשאה' });
+    var gate = authorize_(ss, p, PERM_CLUB);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
     var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
     if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
     var from = new Date(Date.now() - 7 * 24 * 3600 * 1000);
@@ -525,7 +723,8 @@ function handleApproveClubReservation_(p) {
   try { lock.waitLock(20000); } catch (e) { return json_({ ok: false, error: 'תפוס — נסה שוב' }); }
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!isAdminPassword_(ss, p.password)) return json_({ ok: false, error: 'אין הרשאה' });
+    var gate = authorize_(ss, p, PERM_CLUB);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
     var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
     if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
     var ev = cal.getEventById(p.id);
@@ -547,7 +746,8 @@ function handleRejectClubReservation_(p) {
   try { lock.waitLock(20000); } catch (e) { return json_({ ok: false, error: 'תפוס — נסה שוב' }); }
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!isAdminPassword_(ss, p.password)) return json_({ ok: false, error: 'אין הרשאה' });
+    var gate = authorize_(ss, p, PERM_CLUB);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
     var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
     if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
     var ev = cal.getEventById(p.id);
@@ -1251,8 +1451,14 @@ function handleLogin_(token) {
     if (resident.status && resident.status.indexOf('פעיל') === -1) {
       return json_(Object.assign(base, { authorized: false, reason: 'inactive' }));
     }
+    // הרשאות (2026-08-07): נשלחות ללקוח כדי שידע מה להציג, ומונפק מושב חתום
+    // שילווה כל פעולת כתיבה. הלקוח לא מקבל יותר את סיסמת המנהל.
+    var perm = permissionsFor_(info.email);
     return json_(Object.assign(base, {
       authorized: true,
+      session: makeSession_(info.email),
+      perms: perm.perms,
+      isSuper: perm.isSuper,
       role: resident.role,
       status: resident.status,
       family: resident.family,
@@ -1292,9 +1498,11 @@ function lookupResident_(email) {
 
   // איתור עמודות לפי שם הכותרת (גמיש — עמיד גם אם משנים את סדר העמודות).
   // "שם פרטי" נבדק לפני "משפחה" כדי שלא יתבלבל עם עמודת שם-המשפחה.
-  var emailCols = [], firstNameCols = [], roleCol = -1, statusCol = -1, familyCol = -1, houseCol = -1, residentIdCol = -1;
+  var emailCols = [], firstNameCols = [], permCols = [], roleCol = -1, statusCol = -1, familyCol = -1, houseCol = -1, residentIdCol = -1;
   headers.forEach(function (h, i) {
-    if (h.indexOf('שם פרטי') !== -1) firstNameCols.push(i);
+    // "הרשאות N" (2026-08-07) — עמודה לכל משבצת אימייל, מותאמת לפי סדר כמו "שם פרטי N"
+    if (h.indexOf(PERM_HEADER) !== -1) permCols.push(i);
+    else if (h.indexOf('שם פרטי') !== -1) firstNameCols.push(i);
     else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
     else if (h.indexOf('תפקיד') !== -1) roleCol = i;
     else if (h.indexOf('סטטוס') !== -1) statusCol = i;
@@ -1323,7 +1531,10 @@ function lookupResident_(email) {
           family: familyCol > -1 ? String(row[familyCol]).trim() : '',
           house:  houseVal,
           familyId: residentIdVal || houseVal,
-          firstName: (fnCol !== undefined && fnCol > -1) ? String(row[fnCol]).trim() : ''
+          firstName: (fnCol !== undefined && fnCol > -1) ? String(row[fnCol]).trim() : '',
+          slot: c + 1,          // באיזו משבצת אימייל נמצא — לשמירת הרשאות פרטניות
+          rowIndex: r + 1,      // מספר השורה בגיליון (1-based, כולל כותרת)
+          permissions: (permCols[c] !== undefined) ? String(row[permCols[c]]).trim() : ''
         };
       }
     }
@@ -1353,7 +1564,8 @@ function normalizeEmail_(email) {
 function handleGetResidents_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!isAdminPassword_(ss, p.password)) return json_({ ok: false, error: 'אין הרשאה' });
+    var gate = authorize_(ss, p, PERM_RESIDENTS);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
     var sh = ss.getSheetByName('תושבים');
     if (!sh) return json_({ ok: false, error: 'אין טאב "תושבים"' });
     var values = sh.getDataRange().getValues();
@@ -1437,7 +1649,8 @@ function assignResidentIds_(ss) {
 function handleAssignResidentIds_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!isAdminPassword_(ss, p.password)) return json_({ ok: false, error: 'אין הרשאה' });
+    var gate = authorize_(ss, p, PERM_RESIDENTS);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
     return json_(assignResidentIds_(ss));
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -1704,7 +1917,8 @@ function handleSubmitSignup_(p) {
 function handleListSignups_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!isAdminPassword_(ss, p.password)) return json_({ ok: false, error: 'אין הרשאה' });
+    var gate = authorize_(ss, p, PERM_RESIDENTS);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
     var sh = getSignupsSheet_(ss);
     var values = sh.getDataRange().getValues();
     var rows = [];
@@ -1840,6 +2054,215 @@ function ensureResidentCols_(ss, body) {
   sh.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]);
   sh.getRange(1, lastCol + 1, 1, missing.length).setFontWeight('bold');
   return { ok: true, added: missing };
+}
+
+/* ============ ייצוא טבלת התושבים לגיליון חדש (2026-08-07) ============
+ * הלקוח שולח אילו עמודות לייצא ואילו שורות (לפי מספר השורה בגיליון המקור, כדי
+ * שהייצוא יכבד את הסינון/חיפוש שעל המסך). השרת קורא את הערכים מהמקור ולא סומך
+ * על מה שנשלח — כך אי אפשר "לייצא" עמודה שאין למייצא הרשאה אליה.
+ *
+ * הגיליון שנוצר משותף אוטומטית עם מי שביקש את הייצוא, כי הסקריפט רץ תחת חשבון
+ * הבעלים — בלי זה מנהל תושבים אחר היה מקבל קישור שאין לו גישה אליו.
+ */
+var EXPORT_HEAD_BG   = '#111827';
+var EXPORT_TITLE_BG  = '#F3F4F6';
+var EXPORT_BORDER    = '#D1D5DB';
+
+function exportResidents_(ss, body) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+
+  var values = sh.getDataRange().getValues();
+  if (values.length < 2) return { ok: false, error: 'הטאב "תושבים" ריק' };
+  var headers = values[0].map(function (h) { return String(h).trim(); });
+
+  // רק עמודות שקיימות באמת, בסדר שנשלח מהמסך
+  var cols = (body.columns || []).map(function (c) { return String(c).trim(); })
+    .filter(function (c) { return headers.indexOf(c) !== -1; })
+    .filter(function (c, i, a) { return a.indexOf(c) === i; });
+  if (!cols.length) return { ok: false, error: 'לא נבחרה אף עמודה לייצוא' };
+  var idxs = cols.map(function (c) { return headers.indexOf(c); });
+
+  // אילו שורות: מספרי שורה בגיליון המקור (2 ומעלה). ריק/חסר = הכול.
+  var wanted = {};
+  var hasFilter = Array.isArray(body.rowIndexes) && body.rowIndexes.length > 0;
+  if (hasFilter) body.rowIndexes.forEach(function (n) { wanted[parseInt(n, 10)] = true; });
+
+  var rows = [];
+  for (var r = 1; r < values.length; r++) {
+    if (hasFilter && !wanted[r + 1]) continue;
+    rows.push(idxs.map(function (i) {
+      var v = values[r][i];
+      return (v === null || v === undefined) ? '' : v;
+    }));
+  }
+  if (!rows.length) return { ok: false, error: 'אין שורות לייצוא' };
+
+  var tz = Session.getScriptTimeZone();
+  var stamp = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy');
+  var name = String(body.name || '').trim() || ('תושבים — ייצוא ' + stamp);
+  var subtitle = String(body.subtitle || '').trim();
+
+  var out = SpreadsheetApp.create(name);
+  var s = out.getSheets()[0];
+  s.setName('תושבים');
+  s.setRightToLeft(true);   // הגיליון עצמו מימין לשמאל, כמו האפליקציה
+
+  var nCols = cols.length, nRows = rows.length;
+
+  // שורה 1 — כותרת, שורה 2 — כותרות עמודות, שורה 3 ואילך — נתונים
+  s.getRange(1, 1, 1, nCols).merge()
+    .setValue(name + (subtitle ? '   ·   ' + subtitle : ''))
+    .setFontSize(14).setFontWeight('bold').setFontFamily('Arial')
+    .setBackground(EXPORT_TITLE_BG).setFontColor(EXPORT_HEAD_BG)
+    .setHorizontalAlignment('right').setVerticalAlignment('middle');
+  s.setRowHeight(1, 40);
+
+  var head = s.getRange(2, 1, 1, nCols);
+  head.setValues([cols])
+    .setFontWeight('bold').setFontSize(11).setFontFamily('Arial')
+    .setBackground(EXPORT_HEAD_BG).setFontColor('#FFFFFF')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle');
+  s.setRowHeight(2, 32);
+
+  var data = s.getRange(3, 1, nRows, nCols);
+  data.setValues(rows).setFontSize(11).setFontFamily('Arial')
+    .setVerticalAlignment('middle').setWrap(false);
+
+  // טלפון/בית/מזהה — כטקסט, אחרת אפס מוביל נעלם ומספרי בית הופכים למספרים
+  cols.forEach(function (c, i) {
+    if (c.indexOf('טלפון') !== -1 || c.indexOf('בית') !== -1 || c === RESIDENT_ID_HEADER) {
+      s.getRange(3, i + 1, nRows, 1).setNumberFormat('@').setHorizontalAlignment('center');
+    }
+  });
+
+  // פסים מתחלפים + מסגרות עדינות + הקפאה + מסנן — כמו טבלה מוכנה לעבודה
+  try { data.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, false, false); } catch (e) {}
+  s.getRange(2, 1, nRows + 1, nCols)
+    .setBorder(true, true, true, true, true, true, EXPORT_BORDER, SpreadsheetApp.BorderStyle.SOLID);
+  s.setFrozenRows(2);
+  try { s.getRange(2, 1, nRows + 1, nCols).createFilter(); } catch (e) {}
+
+  // רוחב עמודות: אוטומטי, ואז תיקון לגבולות סבירים כדי שלא יהיו עמודות צרות מדי
+  for (var ci = 1; ci <= nCols; ci++) {
+    s.autoResizeColumn(ci);
+    var w = s.getColumnWidth(ci);
+    if (w < 90) s.setColumnWidth(ci, 90);
+    if (w > 260) s.setColumnWidth(ci, 260);
+  }
+  // מוחקים עמודות/שורות ריקות שנשארו מברירת המחדל של גיליון חדש
+  if (s.getMaxColumns() > nCols) s.deleteColumns(nCols + 1, s.getMaxColumns() - nCols);
+  if (s.getMaxRows() > nRows + 2) s.deleteRows(nRows + 3, s.getMaxRows() - (nRows + 2));
+
+  // הקובץ נוצר ב-Drive של בעל הסקריפט. מעבירים אותו לתיקייה של גיליון המקור
+  // ומשתפים עם מי שביקש, כדי שהקישור שיחזור אליו באמת ייפתח אצלו.
+  try {
+    var file = DriveApp.getFileById(out.getId());
+    var parents = DriveApp.getFileById(ss.getId()).getParents();
+    if (parents.hasNext()) parents.next().addFile(file);
+    if (body._email) file.addEditor(body._email);
+  } catch (e) { /* שיתוף/העברה נכשלו — הקובץ עדיין נוצר, לא מפילים את הפעולה */ }
+
+  return { ok: true, url: out.getUrl(), name: name, rows: nRows, columns: nCols };
+}
+
+/** ספריית שמות בלבד — בלי אימייל/טלפון/הרשאות. ר' ההערה ב-doGet. */
+function handleResidentDirectory_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_ANY_ADMIN);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var sh = ss.getSheetByName('תושבים');
+    if (!sh) return json_({ ok: false, error: 'אין טאב "תושבים"' });
+    var values = sh.getDataRange().getValues();
+    if (values.length < 2) return json_({ ok: true, rows: [] });
+    var headers = values[0].map(function (h) { return String(h).trim(); });
+    // התאמה לפי הכלה (ולא שוויון מדויק) כדי שזה יעבוד גם אם הכותרת היא
+    // "שם משפחה" וגם "משפחה". מה שלא ברשימה — ובראשו אימייל, טלפון והרשאות —
+    // פשוט לא יוצא מהשרת.
+    function keep_(h) {
+      return h === RESIDENT_ID_HEADER || h.indexOf('משפחה') !== -1 ||
+             h.indexOf('שם פרטי') !== -1 || h.indexOf('בית') !== -1 || h.indexOf('סטטוס') !== -1;
+    }
+    var rows = [];
+    for (var r = 1; r < values.length; r++) {
+      var obj = {};
+      headers.forEach(function (h, i) { if (keep_(h)) obj[h] = values[r][i]; });
+      rows.push(obj);
+    }
+    return json_({ ok: true, rows: rows });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ---------- הרשאות: יצירת העמודות ושמירת ערכים (2026-08-07) ----------
+ * ensurePermissionCols_ יוצר עמודת "הרשאות N" אחת לכל משבצת אימייל קיימת.
+ * אידמפוטנטי — הרצה חוזרת לא מוסיפה כפילויות. */
+function ensurePermissionCols_(ss, body) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var emails = 0, perms = 0;
+  headers.forEach(function (h) {
+    if (h.indexOf(PERM_HEADER) !== -1) perms++;
+    else if (h.indexOf('אימייל') !== -1) emails++;
+  });
+  var need = Math.max(0, emails - perms);
+  if (!need) return { ok: true, added: [] };
+  var add = [];
+  for (var i = 0; i < need; i++) add.push(PERM_HEADER + ' ' + (perms + i + 1));
+  sh.getRange(1, lastCol + 1, 1, add.length).setValues([add]);
+  sh.getRange(1, lastCol + 1, 1, add.length).setFontWeight('bold');
+  return { ok: true, added: add };
+}
+
+/**
+ * שמירת ההרשאות של אדם אחד: שורה + מספר משבצת האימייל (1-based).
+ * מנהל על בלבד (נאכף ב-ACTION_PERMS). שתי הגנות נוספות כאן:
+ *   • קודי הרשאה לא מוכרים נזרקים — אי אפשר להזריק ערך שרירותי לגיליון.
+ *   • מנהל על אינו יכול להסיר את הרשאת-העל מעצמו, כדי שלא ייווצר מצב שאין
+ *     בקהילה אף אחד שיכול לנהל הרשאות.
+ */
+function savePermissions_(ss, body) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var rowIndex = parseInt(body.rowIndex, 10);
+  var slot = parseInt(body.slot, 10) || 1;
+  if (!rowIndex || rowIndex < 2) return { ok: false, error: 'שורה לא תקינה' };
+
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var permCols = [], emailCols = [];
+  headers.forEach(function (h, i) {
+    if (h.indexOf(PERM_HEADER) !== -1) permCols.push(i);
+    else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
+  });
+  if (permCols.length < slot) {
+    var created = ensurePermissionCols_(ss, {});
+    if (!created.ok) return created;
+    lastCol = sh.getLastColumn();
+    headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    permCols = []; emailCols = [];
+    headers.forEach(function (h, i) {
+      if (h.indexOf(PERM_HEADER) !== -1) permCols.push(i);
+      else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
+    });
+  }
+  if (permCols.length < slot) return { ok: false, error: 'אין עמודת הרשאות למשבצת ' + slot };
+
+  var perms = parsePerms_(Array.isArray(body.perms) ? body.perms.join(',') : body.perms);
+
+  // הגנה מפני נעילה עצמית: אי אפשר להוריד לעצמך את הרשאת מנהל-על
+  var targetEmail = normalizeEmail_(sh.getRange(rowIndex, emailCols[slot - 1] + 1).getValue());
+  if (body._email && targetEmail && targetEmail === normalizeEmail_(body._email) &&
+      perms.indexOf(PERM_SUPER) === -1) {
+    return { ok: false, error: 'אי אפשר להסיר לעצמך הרשאת מנהל על. בקש ממנהל על אחר.' };
+  }
+
+  sh.getRange(rowIndex, permCols[slot - 1] + 1).setValue(perms.join(', '));
+  return { ok: true, perms: perms };
 }
 
 /* ---------- "משפחה עזבה, נכנסה משפחה חדשה" (2026-08-07) ----------
