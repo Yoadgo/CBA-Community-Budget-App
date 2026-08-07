@@ -826,6 +826,8 @@ CBA.data = (function () {
     ensurePermissionCols: function (cb) { CBA.sheets.postRead("ensurePermissionCols", {}, cb); },
     // ייצוא לגיליון חדש (2026-08-07). payload: { columns, rowIndexes, name, subtitle }
     exportResidents: function (payload, cb) { CBA.sheets.postRead("exportResidents", payload, cb); },
+    // יצירת משקי בית חדשים (2026-08-07). rows: [{ values:{כותרת:ערך}, markLeftRowIndex }]
+    createResidents: function (rows, cb) { CBA.sheets.postRead("createResidents", { rows: rows }, cb); },
     hebrewDate: hebrewDate,
     hebrewMonth: hebrewMonth,
     hebrewDateShort: hebrewDateShort,

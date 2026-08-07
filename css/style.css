@@ -1293,6 +1293,78 @@ body.has-sim { padding-top: 34px; }
 .res-perm-read { margin-top: 10px; font-size: 12.5px; color: var(--text-soft); }
 .res-perm-none { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
 
+/* ---------- מיון בלחיצה על כותרת (2026-08-07) ---------- */
+.res-th { cursor: pointer; user-select: none; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.res-th:hover { color: var(--text); }
+.res-sort { font-size: 9px; opacity: .75; }
+
+/* ---------- גריד הוספת משקי בית (2026-08-07) ----------
+   נראה ומתנהג כמו גיליון: תאים צמודים, גבול דק ביניהם, שורה מודגשת בפוקוס.
+   בכוונה בלי padding נדיב — כאן רוצים לראות הרבה שורות בבת אחת. */
+.res-add { width: min(1180px, 97vw); }
+.res-add__hint {
+  padding: 10px 16px; font-size: 12.5px; line-height: 1.6; color: var(--text-soft);
+  border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline;
+}
+.res-add__hint b { font-weight: 700; color: var(--text); }
+.res-add__scroll { overflow: auto; max-height: 62vh; padding: 10px 16px; }
+
+.res-grid { min-width: 720px; }
+.res-grid__head, .res-grid__row {
+  display: grid; grid-template-columns: var(--ra-cols); align-items: stretch;
+}
+.res-grid__head {
+  position: sticky; top: 0; z-index: 2; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.res-grid__h {
+  font-size: 11.5px; font-weight: 700; color: var(--text-muted);
+  padding: 6px 8px; text-align: center; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.res-grid__h.is-req::after { content: " *"; color: var(--danger); }
+.res-grid__n {
+  font-size: 11px; color: var(--text-muted); display: flex;
+  align-items: center; justify-content: center; user-select: none;
+}
+.res-grid__row { border-bottom: 1px solid var(--hairline); }
+.res-grid__row.is-err  { background: rgba(220,38,38,.05); }
+.res-grid__row.is-warn { background: var(--warn-soft); }
+.res-grid__c {
+  border: none; border-inline-start: 1px solid var(--hairline);
+  background: transparent; padding: 6px 8px; font: inherit; font-size: 13px;
+  min-width: 0; width: 100%; outline: none; border-radius: 0;
+}
+.res-grid__c:focus {
+  background: var(--surface); box-shadow: inset 0 0 0 2px var(--action); border-radius: 4px;
+}
+.res-grid__del {
+  border: none; background: none; cursor: pointer; color: var(--text-muted);
+  font-size: 15px; line-height: 1; padding: 0;
+}
+.res-grid__del:hover { color: var(--danger); }
+.res-grid__note {
+  grid-column: 1 / -1; font-size: 11.5px; padding: 5px 10px 7px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.res-grid__note--err  { color: var(--danger); background: rgba(220,38,38,.05); }
+.res-grid__note--warn { color: #92400E; background: var(--warn-soft); }
+.res-grid__dec { font-size: 11.5px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+
+.res-add__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; border-top: 1px solid var(--border);
+}
+.res-add__stats { font-size: 12.5px; color: var(--text-soft); }
+.res-add__acts { display: flex; gap: 8px; }
+.res-warnx { color: #92400E; font-weight: 600; }
+.res-errx { color: var(--danger); font-weight: 700; }
+
+@media (max-width: 900px) {
+  .res-add__foot { flex-direction: column; align-items: stretch; }
+  .res-add__acts button { flex: 1; }
+}
+
 /* ---------- ייצוא לגיליון (2026-08-07) ----------
    יושב על אותו .peek של תצוגת הקבלה — אותו רקע, פינות, ראש וכפתור סגירה. */
 .res-exp { width: min(620px, 96vw); }

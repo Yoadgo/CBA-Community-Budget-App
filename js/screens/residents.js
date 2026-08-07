@@ -17,8 +17,39 @@ CBA.screens = CBA.screens || {};
 var resState = {
   loaded: false, loading: false, error: null,
   headers: [], rows: [], signups: [],
-  q: "", filter: "active"   // active | left | all
+  q: "", filter: "active",  // active | left | all
+  sort: "family", dir: 1    // ברירת מחדל: שם משפחה א-ב
 };
+
+/* מיון: שם משפחה ודיירים לפי א-ב עברי (localeCompare), בית ותנועות כמספרים.
+   ברירת המחדל היא שם משפחה עולה — זה הסדר שבו מחפשים אדם ברשימה. */
+function resSortRows(rows, c) {
+  var key = resState.sort, dir = resState.dir;
+  var txt = function (r) {
+    if (key === "family") return resVal(r, c.family);
+    if (key === "people") return c.firstName.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" ");
+    if (key === "status") return resIsActive(r, c) ? "0" : "1";
+    return "";
+  };
+  var numOf = function (r) {
+    if (key === "house") { var n = parseFloat(String(resVal(r, c.house)).replace(/[^\d.]/g, "")); return isNaN(n) ? Infinity : n; }
+    if (key === "tx") return resTxCount(r, c);
+    return 0;
+  };
+  var isNum = (key === "house" || key === "tx");
+  return rows.slice().sort(function (a, b) {
+    var d = isNum ? (numOf(a) - numOf(b)) : txt(a).localeCompare(txt(b), "he");
+    if (d === 0 && key !== "family") d = resVal(a, c.family).localeCompare(resVal(b, c.family), "he");
+    return d * dir;
+  });
+}
+function resSortArrow(key) {
+  if (resState.sort !== key) return "";
+  return '<span class="res-sort">' + (resState.dir === 1 ? "▲" : "▼") + "</span>";
+}
+function resHeadCell(key, label) {
+  return '<div class="res-th" data-res-sort="' + key + '">' + CBA.esc(label) + resSortArrow(key) + '</div>';
+}
 
 /* איתור עמודות לפי כותרת — עמיד לשינוי סדר, בדיוק כמו בשרת.
    "שם פרטי"/"מקצוע" נבדקים לפני "משפחה"/"בית" כדי שלא ייתפסו בטעות. */
@@ -180,6 +211,7 @@ CBA.screens.residents = {
       return hay.indexOf(q) !== -1;
     });
 
+    visible = resSortRows(visible, c);
     var activeCount = st.rows.filter(function (r) { return resIsActive(r, c); }).length;
     // מספרי השורות בגיליון של מה שמוצג כרגע — הייצוא מציע לכבד את הסינון והחיפוש
     resState.visibleRowIndexes = visible.map(function (r) { return st.rows.indexOf(r) + 2; });
@@ -197,14 +229,16 @@ CBA.screens.residents = {
         '</div>' +
         '<div class="tx-actions">' +
           '<div class="tx-summary"><span>מוצגים</span> <b>' + visible.length + '</b> <span class="tx-summary__count">· מתוך ' + st.rows.length + ' משקי בית</span></div>' +
+          '<button class="btn-primary btn-sm" data-res-add>הוספת משפחות</button>' +
           '<button class="btn-ghost btn-sm" data-res-export>ייצוא לגיליון</button>' +
           '<button class="btn-ghost btn-sm" data-res-reload>רענן</button>' +
         '</div>' +
       '</div>' +
       '<div class="card tx-card" style="--tx-cols: 70px 1fr 1.2fr 1.4fr 84px 150px 84px">' +
         '<div class="tx-head">' +
-          '<div>בית</div><div>משפחה</div><div>דיירים</div><div>אימייל</div>' +
-          '<div>תנועות</div><div>הרשאות</div><div>סטטוס</div>' +
+          resHeadCell("house", "בית") + resHeadCell("family", "משפחה") +
+          resHeadCell("people", "דיירים") + '<div>אימייל</div>' +
+          resHeadCell("tx", "תנועות") + '<div>הרשאות</div>' + resHeadCell("status", "סטטוס") +
         '</div>' +
         (visible.length
           ? '<div class="tx-list">' + visible.map(function (r) {
@@ -304,6 +338,18 @@ function resBind(container, c) {
   });
   var ex = container.querySelector("[data-res-export]");
   if (ex) ex.addEventListener("click", function () { resOpenExport(c); });
+  var ad = container.querySelector("[data-res-add]");
+  if (ad) ad.addEventListener("click", function () { resOpenAdd(container, c); });
+
+  container.querySelectorAll("[data-res-sort]").forEach(function (h) {
+    h.addEventListener("click", function () {
+      var k = h.dataset.resSort;
+      // לחיצה חוזרת על אותה עמודה הופכת את הכיוון; עמודה חדשה מתחילה מעולה
+      if (resState.sort === k) resState.dir = -resState.dir;
+      else { resState.sort = k; resState.dir = 1; }
+      CBA.screens.residents.render(container);
+    });
+  });
 
   container.querySelectorAll("[data-res-row]").forEach(function (row) {
     row.addEventListener("click", function () {
@@ -341,6 +387,354 @@ function resBind(container, c) {
       });
     });
   });
+}
+
+/* ==========================================================================
+   הוספת משקי בית — גריד בסגנון אקסל (2026-08-07)
+   --------------------------------------------------------------------------
+   כפתור אחד לשתי המשימות: משפחה אחת ממולאת בשורה הריקה שנפתחת מאליה, וחמישים
+   מודבקות מאקסל ב-Ctrl+V. אין "צור משפחה" נפרד — זה אותו דבר בגודל אחר.
+
+   הכל כאן הוא **יצירה בלבד**. שורה קיימת אף פעם לא נכתבת מחדש, חוץ ממקרה אחד
+   מוצהר: כשמספר הבית כבר תפוס ואתה מאשר שהדיירים הקודמים עזבו — אז הם מסומנים
+   "עזב" והמשפחה החדשה מקבלת שורה ומזהה קבוע משלה, וההיסטוריה הכספית נשארת
+   אצל מי שבאמת הוציא אותה.
+   ========================================================================== */
+
+/* העמודות הקבועות של הגריד — בדיוק הפריסט של הייצוא. resKey הוא איך למצוא את
+   שם העמודה האמיתי בגיליון, שעשוי להשתנות בין "משפחה" ל"שם משפחה" וכו'. */
+function resAddColumns(c) {
+  var base = [
+    { col: c.family,       label: "שם משפחה", w: "1.2fr", required: true },
+    { col: c.house,        label: "בית",      w: "70px" },
+    { col: c.firstName[0], label: "שם פרטי 1", w: "1fr" },
+    { col: c.phone[0],     label: "טלפון 1",   w: "1fr" },
+    { col: c.firstName[1], label: "שם פרטי 2", w: "1fr" },
+    { col: c.phone[1],     label: "טלפון 2",   w: "1fr" },
+    { col: c.kids,         label: "שמות ילדים", w: "1.2fr" }
+  ].filter(function (x) { return x.col; });
+  var extra = [
+    { col: c.email[0],      label: "אימייל 1", w: "1.3fr", email: true },
+    { col: c.email[1],      label: "אימייל 2", w: "1.3fr", email: true },
+    { col: c.profession[0], label: "מקצוע 1",  w: "1fr" },
+    { col: c.profession[1], label: "מקצוע 2",  w: "1fr" },
+    { col: c.notes,         label: "הערות",    w: "1.2fr" }
+  ].filter(function (x) { return x.col; });
+  return { base: base, extra: extra };
+}
+
+var resAddState = null;   // { cells: [[...]], expanded: bool, cols: [...] }
+
+/* בדיקה חיה של שורה אחת. מחזיר { level, text, houseRowIndex } —
+   level: "" תקין · "warn" אזהרה שאפשר להמשיך איתה · "err" חוסם. */
+function resAddCheck(rowVals, cols, rowIdx, c) {
+  var get = function (label) {
+    for (var i = 0; i < cols.length; i++) if (cols[i].label === label) return String(rowVals[i] || "").trim();
+    return "";
+  };
+  var empty = rowVals.every(function (v) { return !String(v || "").trim(); });
+  if (empty) return { level: "empty", text: "" };
+
+  if (!get("שם משפחה")) return { level: "err", text: "חסר שם משפחה" };
+
+  // מייל תפוס אצל תושב אחר — חוסם, כי המייל הוא מפתח ההתחברות
+  var mails = ["אימייל 1", "אימייל 2"].map(get).filter(Boolean);
+  for (var m = 0; m < mails.length; m++) {
+    var mail = mails[m].toLowerCase();
+    if (mail.indexOf("@") === -1) return { level: "err", text: "כתובת מייל לא תקינה: " + mails[m] };
+    var clash = null;
+    resState.rows.forEach(function (r) {
+      c.email.forEach(function (k) { if (String(resVal(r, k)).toLowerCase() === mail) clash = resVal(r, c.family); });
+    });
+    if (clash) return { level: "err", text: "המייל " + mails[m] + " כבר משויך למשפחת " + clash };
+  }
+
+  // מייל שחוזר פעמיים בתוך ההדבקה עצמה
+  var seen = {};
+  for (var i2 = 0; i2 < resAddState.cells.length; i2++) {
+    if (i2 === rowIdx) continue;
+    cols.forEach(function (cc, ci) {
+      if (!cc.email) return;
+      var v = String(resAddState.cells[i2][ci] || "").trim().toLowerCase();
+      if (v) seen[v] = i2 + 1;
+    });
+  }
+  for (var m2 = 0; m2 < mails.length; m2++) {
+    if (seen[mails[m2].toLowerCase()]) {
+      return { level: "err", text: "המייל " + mails[m2] + " מופיע גם בשורה " + seen[mails[m2].toLowerCase()] };
+    }
+  }
+
+  // מספר בית תפוס — אזהרה עם החלטה: האם הדיירים הקודמים עזבו
+  var house = get("בית");
+  if (house) {
+    var occ = null, occIdx = -1;
+    resState.rows.forEach(function (r, i) {
+      if (occ) return;
+      if (resIsActive(r, c) && String(resVal(r, c.house)) === house) { occ = r; occIdx = i; }
+    });
+    if (occ) {
+      return {
+        level: "warn", houseRowIndex: occIdx + 2,
+        text: "בבית " + house + " רשומה כרגע משפחת " + (resVal(occ, c.family) || "—") +
+              " (" + resTxCount(occ, c) + " תנועות)"
+      };
+    }
+  }
+  return { level: "ok", text: "" };
+}
+
+function resOpenAdd(container, c) {
+  var old = document.getElementById("res-add");
+  if (old) old.remove();
+
+  var sets = resAddColumns(c);
+  resAddState = { expanded: false, cells: [], cols: sets.base.slice(), decisions: {} };
+  var BLANK_ROWS = 1;
+
+  function activeCols() { return resAddState.expanded ? sets.base.concat(sets.extra) : sets.base; }
+  function blankRow() { return activeCols().map(function () { return ""; }); }
+  function ensureTrailingBlank() {
+    var cells = resAddState.cells;
+    var last = cells[cells.length - 1];
+    if (!last || last.some(function (v) { return String(v || "").trim(); })) cells.push(blankRow());
+  }
+  for (var i = 0; i < BLANK_ROWS; i++) resAddState.cells.push(blankRow());
+
+  var wrap = document.createElement("div");
+  wrap.id = "res-add";
+  wrap.className = "peek-backdrop";
+  document.body.appendChild(wrap);
+
+  function gridHTML() {
+    var cols = activeCols();
+    var tmpl = "44px " + cols.map(function (x) { return x.w; }).join(" ") + " 22px";
+    return '<div class="peek res-add" role="dialog" aria-label="הוספת משקי בית">' +
+      '<div class="peek__head"><span class="peek__title">הוספת משקי בית</span>' +
+        '<button class="peek__x" aria-label="סגור">×</button></div>' +
+
+      '<div class="res-add__hint">' +
+        'אפשר למלא ידנית, או להעתיק טווח מאקסל וללחוץ <b>Ctrl+V</b> על התא שממנו מתחילים — ' +
+        'השורות והעמודות ייפרסו לבד. ' +
+        '<button type="button" class="btn-link" data-ra-expand>' +
+          (resAddState.expanded ? "פחות עמודות" : "עוד עמודות (מייל, מקצוע, הערות)") + '</button>' +
+      '</div>' +
+
+      '<div class="res-add__scroll">' +
+        '<div class="res-grid" style="--ra-cols: ' + tmpl + '">' +
+          '<div class="res-grid__head">' +
+            '<div class="res-grid__n">#</div>' +
+            cols.map(function (x) {
+              return '<div class="res-grid__h' + (x.required ? " is-req" : "") + '">' + CBA.esc(x.label) + '</div>';
+            }).join("") +
+            '<div></div>' +
+          '</div>' +
+          '<div class="res-grid__body" id="ra-body"></div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="res-add__foot">' +
+        '<div class="res-add__stats" id="ra-stats"></div>' +
+        '<div class="res-add__acts">' +
+          '<button type="button" class="btn-ghost" data-ra-close>ביטול</button>' +
+          '<button type="button" class="btn-primary" id="ra-go">צור</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function rowsHTML() {
+    var cols = activeCols();
+    return resAddState.cells.map(function (row, ri) {
+      var chk = resAddCheck(row, cols, ri, c);
+      var cls = chk.level === "err" ? " is-err" : (chk.level === "warn" ? " is-warn" : "");
+      var note = "";
+      if (chk.level === "err") {
+        note = '<div class="res-grid__note res-grid__note--err">' + CBA.esc(chk.text) + '</div>';
+      } else if (chk.level === "warn") {
+        var dec = resAddState.decisions[ri] || "left";
+        note = '<div class="res-grid__note res-grid__note--warn">' + CBA.esc(chk.text) +
+          '<select class="res-grid__dec" data-ra-dec="' + ri + '">' +
+            '<option value="left"' + (dec === "left" ? " selected" : "") + '>הקודמים עזבו — סמן אותם "עזב"</option>' +
+            '<option value="keep"' + (dec === "keep" ? " selected" : "") + '>להשאיר את שניהם פעילים</option>' +
+          '</select></div>';
+      }
+      return '<div class="res-grid__row' + cls + '" data-ra-row="' + ri + '">' +
+          '<div class="res-grid__n">' + (ri + 1) + '</div>' +
+          cols.map(function (x, ci) {
+            return '<input class="res-grid__c" data-ra-r="' + ri + '" data-ra-c="' + ci + '" ' +
+              'value="' + CBA.esc(row[ci] || "") + '" autocomplete="off">';
+          }).join("") +
+          '<button type="button" class="res-grid__del" data-ra-del="' + ri + '" aria-label="מחק שורה">×</button>' +
+        '</div>' + note;
+    }).join("");
+  }
+
+  function stats() {
+    var cols = activeCols(), ok = 0, warn = 0, err = 0;
+    resAddState.cells.forEach(function (row, ri) {
+      var l = resAddCheck(row, cols, ri, c).level;
+      if (l === "ok") ok++; else if (l === "warn") { ok++; warn++; } else if (l === "err") err++;
+    });
+    return { ok: ok, warn: warn, err: err };
+  }
+
+  function paint(focus) {
+    ensureTrailingBlank();
+    wrap.querySelector("#ra-body").innerHTML = rowsHTML();
+    var s = stats();
+    var st = wrap.querySelector("#ra-stats");
+    st.innerHTML =
+      '<b>' + s.ok + '</b> שורות מוכנות' +
+      (s.warn ? ' <span class="res-warnx">· ' + s.warn + ' עם בית תפוס</span>' : "") +
+      (s.err ? ' <span class="res-errx">· ' + s.err + ' עם שגיאה</span>' : "");
+    wrap.querySelector("#ra-go").disabled = !s.ok;
+    wrap.querySelector("#ra-go").textContent = s.ok > 1 ? ("צור " + s.ok + " משקי בית") : "צור";
+    if (focus) {
+      var el = wrap.querySelector('[data-ra-r="' + focus[0] + '"][data-ra-c="' + focus[1] + '"]');
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }
+  }
+
+  function draw(focus) {
+    wrap.innerHTML = gridHTML();
+    bind();
+    paint(focus);
+  }
+
+  function close() { wrap.remove(); document.removeEventListener("keydown", esc); resAddState = null; }
+  function esc(e) { if (e.key === "Escape" && document.getElementById("res-add")) close(); }
+  document.addEventListener("keydown", esc);
+  wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
+
+  function bind() {
+    wrap.querySelector(".peek__x").addEventListener("click", close);
+    wrap.querySelector("[data-ra-close]").addEventListener("click", close);
+    wrap.querySelector("[data-ra-expand]").addEventListener("click", function () {
+      // שומרים את מה שכבר הוקלד ומרחיבים/מצמצמים את מספר העמודות
+      var oldCols = activeCols();
+      var keep = resAddState.cells.map(function (row) {
+        var o = {}; oldCols.forEach(function (x, i) { o[x.label] = row[i]; }); return o;
+      });
+      resAddState.expanded = !resAddState.expanded;
+      var newCols = activeCols();
+      resAddState.cells = keep.map(function (o) {
+        return newCols.map(function (x) { return o[x.label] || ""; });
+      });
+      draw();
+    });
+
+    var body = wrap.querySelector("#ra-body");
+
+    body.addEventListener("input", function (e) {
+      var el = e.target.closest("[data-ra-r]"); if (!el) return;
+      resAddState.cells[+el.dataset.raR][+el.dataset.raC] = el.value;
+      paint([+el.dataset.raR, +el.dataset.raC]);
+    });
+
+    body.addEventListener("change", function (e) {
+      var d = e.target.closest("[data-ra-dec]"); if (!d) return;
+      resAddState.decisions[+d.dataset.raDec] = d.value;
+    });
+
+    body.addEventListener("click", function (e) {
+      var del = e.target.closest("[data-ra-del]"); if (!del) return;
+      var i = +del.dataset.raDel;
+      resAddState.cells.splice(i, 1);
+      delete resAddState.decisions[i];
+      if (!resAddState.cells.length) resAddState.cells.push(blankRow());
+      paint();
+    });
+
+    /* הדבקה מאקסל — הלב של המסך. הלוח מגיע כ-TSV: טאב בין עמודות, שורה חדשה
+       בין שורות. פורסים אותו החל מהתא שבו עומדים, ומרחיבים את מספר השורות
+       לפי הצורך. ההדבקה גם מנקה מרכאות עוטפות שאקסל מוסיף לתאים עם פסיקים. */
+    body.addEventListener("paste", function (e) {
+      var el = e.target.closest("[data-ra-r]"); if (!el) return;
+      var text = (e.clipboardData || window.clipboardData).getData("text");
+      if (!text) return;
+      if (text.indexOf("\t") === -1 && text.indexOf("\n") === -1) return;   // ערך בודד — התנהגות רגילה
+      e.preventDefault();
+      var r0 = +el.dataset.raR, c0 = +el.dataset.raC;
+      var cols = activeCols();
+      var lines = text.replace(/\r/g, "").replace(/\n+$/, "").split("\n");
+      lines.forEach(function (line, li) {
+        var parts = line.split("\t");
+        var ri = r0 + li;
+        while (resAddState.cells.length <= ri) resAddState.cells.push(blankRow());
+        parts.forEach(function (v, pi) {
+          var ci = c0 + pi;
+          if (ci >= cols.length) return;   // גלישה מעבר לעמודה האחרונה — מתעלמים
+          resAddState.cells[ri][ci] = String(v).trim().replace(/^"(.*)"$/, "$1");
+        });
+      });
+      paint([r0, c0]);
+    });
+
+    /* ניווט מקלדת כמו בגיליון: Enter יורד שורה, חצים למעלה/למטה מדלגים בין
+       שורות באותה עמודה. Tab עובד לבד. */
+    body.addEventListener("keydown", function (e) {
+      var el = e.target.closest("[data-ra-r]"); if (!el) return;
+      var r = +el.dataset.raR, ci = +el.dataset.raC, nr = null;
+      if (e.key === "Enter" || e.key === "ArrowDown") nr = r + 1;
+      else if (e.key === "ArrowUp") nr = r - 1;
+      else return;
+      e.preventDefault();
+      if (nr < 0) return;
+      while (resAddState.cells.length <= nr) resAddState.cells.push(blankRow());
+      paint([nr, ci]);
+    });
+
+    wrap.querySelector("#ra-go").addEventListener("click", submit);
+  }
+
+  function submit() {
+    var cols = activeCols();
+    var payload = [], willMark = [];
+    resAddState.cells.forEach(function (row, ri) {
+      var chk = resAddCheck(row, cols, ri, c);
+      if (chk.level !== "ok" && chk.level !== "warn") return;
+      var values = {};
+      cols.forEach(function (x, ci) {
+        var v = String(row[ci] || "").trim();
+        if (v) values[x.col] = v;
+      });
+      var mark = null;
+      if (chk.level === "warn" && (resAddState.decisions[ri] || "left") === "left") {
+        mark = chk.houseRowIndex;
+        willMark.push(chk.text);
+      }
+      payload.push({ values: values, markLeftRowIndex: mark });
+    });
+    if (!payload.length) return;
+
+    var msg = payload.length + " משקי בית חדשים ייווצרו, כל אחד עם מזהה קבוע משלו.";
+    if (willMark.length) {
+      msg += "\n\nבנוסף, " + willMark.length + ' משקי בית קיימים יסומנו כ"עזבו" ' +
+        "(ההיסטוריה הכספית שלהם נשארת אצלם):\n· " + willMark.join("\n· ");
+    }
+    if (!window.confirm(msg + "\n\nלהמשיך?")) return;
+
+    var go = wrap.querySelector("#ra-go");
+    go.disabled = true; go.textContent = "יוצר…";
+    CBA.data.createResidents(payload, function (res) {
+      if (!res || !res.ok) {
+        go.disabled = false; go.textContent = "צור";
+        window.alert("היצירה נכשלה: " + ((res && res.error) || "שגיאה"));
+        return;
+      }
+      var extra = (res.rejected && res.rejected.length)
+        ? "\n\n" + res.rejected.length + " שורות נדחו בשרת:\n· " +
+          res.rejected.map(function (x) { return "שורה " + (x.i + 1) + ": " + x.error; }).join("\n· ")
+        : "";
+      close();
+      resState.loaded = false;
+      CBA.data.refreshResidents(function () { resLoad(container); });
+      if (extra) window.alert("נוצרו " + res.created + " משקי בית." + extra);
+    });
+  }
+
+  draw([0, 0]);
 }
 
 /* ==========================================================================

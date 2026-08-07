@@ -71,6 +71,7 @@ var ACTION_PERMS = {
   residentDirectory: PERM_ANY_ADMIN,
   approveSignup: PERM_RESIDENTS, rejectSignup: PERM_RESIDENTS, saveResidentRow: PERM_RESIDENTS,
   ensureResidentCols: PERM_RESIDENTS, replaceFamily: PERM_RESIDENTS, exportResidents: PERM_RESIDENTS,
+  createResidents: PERM_RESIDENTS,
   saveResidentNames: PERM_RESIDENTS, formatResidents: PERM_RESIDENTS, saveFamilyIds: PERM_RESIDENTS,
   // מנהל על בלבד
   savePermissions: PERM_SUPER, ensurePermissionCols: PERM_SUPER
@@ -332,6 +333,7 @@ function doPost(e) {
       case 'ensureResidentCols':return json_(ensureResidentCols_(ss, body));
       case 'replaceFamily':     return json_(replaceFamily_(ss, body));
       case 'exportResidents':   return json_(exportResidents_(ss, body));
+      case 'createResidents':   return json_(createResidents_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -2274,6 +2276,110 @@ function savePermissions_(ss, body) {
  * לעומת זאת מעבר בתוך השיכון (אותה משפחה, בית אחר) הוא **כן** עדכון של השורה
  * הקיימת — אותה ישות, רק מספר בית שונה — ולכן הוא נעשה דרך saveResidentRow_.
  */
+/* ---------- יצירת משקי בית חדשים, אחד או חמישים (2026-08-07) ----------
+ * משרת את גריד ההזנה במסך התושבים. עקרונות:
+ *   • **יצירה בלבד.** הפעולה הזו אף פעם לא כותבת לתוך שורה קיימת חוץ ממקרה אחד
+ *     מוצהר: סימון "עזב" לדיירים שהיו במספר הבית הזה, וגם זה רק אם הלקוח ביקש
+ *     זאת במפורש עבור השורה הספציפית. כך אי אפשר לשכתב היסטוריה של משק בית קיים.
+ *   • **מזהה קבוע** נוצר תמיד בשרת (assignResidentIds_), אף פעם לא מגיע מהלקוח.
+ *   • **מייל ייחודי** — המייל הוא מפתח ההתחברות, ולכן שורה שמנסה להכניס מייל
+ *     שכבר קיים אצל מישהו אחר נדחית ולא נוצרת.
+ *   • הפעולה מדווחת בדיוק מה נוצר ומה נדחה, במקום להיכשל בשקט על 40 שורות.
+ */
+function createResidents_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ss.getSheetByName('תושבים');
+    if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+    var rowsIn = body.rows;
+    if (!Array.isArray(rowsIn) || !rowsIn.length) return { ok: false, error: 'לא נשלחו שורות' };
+    if (rowsIn.length > 300) return { ok: false, error: 'יותר מדי שורות בבת אחת (מקסימום 300)' };
+
+    var values = sh.getDataRange().getValues();
+    var headers = values[0].map(function (h) { return String(h).trim(); });
+    var idxOf = {};
+    headers.forEach(function (h, i) { if (h) idxOf[h] = i; });
+
+    var statusCol = -1, familyCol = -1, houseCol = -1, idCol = -1, emailCols = [];
+    headers.forEach(function (h, i) {
+      if (h.indexOf('הרשאות') !== -1) return;              // לעולם לא נכתב מכאן
+      if (h.indexOf('אימייל') !== -1) emailCols.push(i);
+      else if (h.indexOf('סטטוס') !== -1) statusCol = i;
+      else if (h.indexOf(RESIDENT_ID_HEADER) !== -1) idCol = i;
+      else if (h.indexOf('משפחה') !== -1) familyCol = i;
+      else if (h.indexOf('בית') !== -1) houseCol = i;
+    });
+
+    // כל המיילים התפוסים כרגע, לבדיקת ייחודיות
+    var takenEmail = {};
+    for (var r = 1; r < values.length; r++) {
+      emailCols.forEach(function (ci) {
+        var e = normalizeEmail_(values[r][ci]);
+        if (e) takenEmail[e] = r + 1;
+      });
+    }
+
+    var created = [], rejected = [], markLeft = {};
+    var toAppend = [];
+
+    rowsIn.forEach(function (item, n) {
+      var f = (item && item.values) || {};
+      var family = String(f[headers[familyCol]] || '').trim();
+      if (familyCol > -1 && !family) {
+        rejected.push({ i: n, error: 'שם משפחה חסר' }); return;
+      }
+      // מיילים: ייחודיות מול הגיליון ומול השורות האחרות באותה הדבקה
+      var bad = null;
+      emailCols.forEach(function (ci) {
+        var e = normalizeEmail_(f[headers[ci]]);
+        if (!e) return;
+        if (takenEmail[e]) bad = 'המייל ' + e + ' כבר משויך לשורה ' + takenEmail[e];
+        else takenEmail[e] = 'חדש';
+      });
+      if (bad) { rejected.push({ i: n, error: bad }); return; }
+
+      var mark = parseInt(item && item.markLeftRowIndex, 10);
+      if (mark && mark >= 2 && mark <= values.length) markLeft[mark] = true;
+
+      var row = [];
+      for (var c = 0; c < headers.length; c++) row.push('');
+      headers.forEach(function (h, c) {
+        if (!h || h.indexOf('הרשאות') !== -1 || c === idCol) return;   // מזהה והרשאות — לא מהלקוח
+        if (f[h] !== undefined && f[h] !== null) row[c] = String(f[h]).trim();
+      });
+      if (statusCol > -1 && !row[statusCol]) row[statusCol] = 'פעיל';
+      toAppend.push(row);
+      created.push({ i: n, family: family });
+    });
+
+    if (!toAppend.length) return { ok: false, error: 'אף שורה לא עברה בדיקה', rejected: rejected };
+
+    // 1. סימון היוצאים — רק שורות שהתבקשו במפורש
+    var marked = [];
+    if (statusCol > -1) {
+      Object.keys(markLeft).forEach(function (k) {
+        var rn = parseInt(k, 10);
+        sh.getRange(rn, statusCol + 1).setValue('עזב');
+        marked.push(rn);
+      });
+    }
+
+    // 2. הוספת השורות החדשות בכתיבה אחת
+    var first = sh.getLastRow() + 1;
+    sh.getRange(first, 1, toAppend.length, headers.length).setValues(toAppend);
+
+    // 3. מזהה קבוע חדש לכל שורה חדשה
+    assignResidentIds_(ss);
+
+    return { ok: true, created: created.length, rejected: rejected, marked: marked, firstRow: first };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
 function replaceFamily_(ss, body) {
   var sh = ss.getSheetByName('תושבים');
   if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
