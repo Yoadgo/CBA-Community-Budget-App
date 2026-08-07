@@ -45,8 +45,8 @@
   const AREAS = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "settings"],
-      tabs: [["budget", "תכנון מול ביצוע"], ["expenses", "ניהול הוצאות"], ["planning", "בניית תקציב"], ["clubAdmin", "שריון מועדון"]]
+      screens: ["budget", "expenses", "planning", "clubAdmin", "residents", "settings"],
+      tabs: [["budget", "תכנון מול ביצוע"], ["expenses", "ניהול הוצאות"], ["planning", "בניית תקציב"], ["clubAdmin", "שריון מועדון"], ["residents", "תושבים"]]
     },
     resident: {
       def: "resRequests",
@@ -540,8 +540,87 @@
         '<p class="login-sub">התחברות לחברי הקהילה</p>' +
         (loginError ? '<div class="up-err">' + CBA.esc(loginError) + '</div>' : '') +
         '<div class="login-btn" id="gate-signin"></div>' +
+        // מוצג רק אחרי התחברות מוצלחת לגוגל שהמייל שלה אינו ברשימת התושבים
+        (signupToken
+          ? '<button type="button" class="login-signup" id="gate-signup">בקשת הרשמה לקהילה</button>'
+          : '') +
       '</div>';
     renderGateButton();
+    const su = document.getElementById("gate-signup");
+    if (su) su.addEventListener("click", openSignupForm);
+  }
+
+  /* ---------- טופס בקשת הרשמה (2026-08-07) ----------
+     נשלח יחד עם טוקן גוגל שהשרת מאמת, כך שהמייל בבקשה תמיד אמיתי. */
+  let signupToken = null;
+  let signupPrefill = null;
+
+  function openSignupForm() {
+    const guess = (signupPrefill && signupPrefill.name || "").trim().split(/\s+/);
+    const old = document.getElementById("signup-modal");
+    if (old) old.remove();
+    const wrap = document.createElement("div");
+    wrap.id = "signup-modal";
+    wrap.className = "peek-backdrop";
+    wrap.innerHTML =
+      '<div class="peek signup-card" role="dialog" aria-label="בקשת הרשמה">' +
+        '<div class="peek__head"><span class="peek__title">בקשת הרשמה לקהילה</span>' +
+          '<button class="peek__x" aria-label="סגור">×</button></div>' +
+        '<div class="signup-body">' +
+          '<p class="signup-note">הבקשה תישלח לוועד לאישור. נשלח אליך גישה לאחר האישור.</p>' +
+          '<div class="form-field"><label>אימייל</label>' +
+            '<input class="field-input" value="' + CBA.esc(signupPrefill ? signupPrefill.email : "") + '" disabled></div>' +
+          '<div class="form-field"><label>שם פרטי</label>' +
+            '<input class="field-input" id="su-first" value="' + CBA.esc(guess[0] || "") + '"></div>' +
+          '<div class="form-field"><label>שם משפחה</label>' +
+            '<input class="field-input" id="su-last" value="' + CBA.esc(guess.slice(1).join(" ")) + '"></div>' +
+          '<div class="form-field"><label>מספר בית</label>' +
+            '<input class="field-input" id="su-house" inputmode="numeric"></div>' +
+          '<div class="signup-msg" id="su-msg" hidden></div>' +
+          '<button type="button" class="btn-primary signup-send" id="su-send">שלח בקשה</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(wrap);
+    const close = function () { wrap.remove(); };
+    wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
+    wrap.querySelector(".peek__x").addEventListener("click", close);
+
+    const msg = wrap.querySelector("#su-msg");
+    const send = wrap.querySelector("#su-send");
+    send.addEventListener("click", function () {
+      const first = wrap.querySelector("#su-first").value.trim();
+      const last = wrap.querySelector("#su-last").value.trim();
+      const house = wrap.querySelector("#su-house").value.trim();
+      if (!first || !last || !house) {
+        msg.hidden = false; msg.className = "signup-msg signup-msg--err";
+        msg.textContent = "צריך למלא שם פרטי, שם משפחה ומספר בית.";
+        return;
+      }
+      send.disabled = true; send.textContent = "שולח…";
+      const q = "?action=submitSignup&token=" + encodeURIComponent(signupToken) +
+        "&firstName=" + encodeURIComponent(first) +
+        "&lastName=" + encodeURIComponent(last) +
+        "&house=" + encodeURIComponent(house);
+      fetch(CBA.sheets.url + q)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          msg.hidden = false;
+          if (d && d.ok) {
+            msg.className = "signup-msg signup-msg--ok";
+            msg.textContent = d.duplicate ? "בקשה שלך כבר ממתינה לאישור." : "הבקשה נשלחה. נעדכן אותך לאחר האישור.";
+            send.style.display = "none";
+          } else {
+            msg.className = "signup-msg signup-msg--err";
+            msg.textContent = (d && d.error) || "שליחת הבקשה נכשלה.";
+            send.disabled = false; send.textContent = "שלח בקשה";
+          }
+        })
+        .catch(function () {
+          msg.hidden = false; msg.className = "signup-msg signup-msg--err";
+          msg.textContent = "שגיאת תקשורת. נסה שוב.";
+          send.disabled = false; send.textContent = "שלח בקשה";
+        });
+    });
   }
 
   function renderGateButton() {
@@ -574,6 +653,11 @@
           renderControls();
           routeByRole();   // מנהל → אזור ניהול; תושב → אזור תושב
         } else {
+          // מייל מאומת שאינו ברשימת התושבים — מציעים לו לבקש הרשמה (2026-08-07).
+          // שומרים את הטוקן כדי שהבקשה תישלח מאומתת, בלי סיסמת מנהל.
+          const notListed = data && data.ok && data.authorized === false && data.reason !== "inactive";
+          signupToken = notListed ? resp.credential : null;
+          signupPrefill = notListed ? { email: data.email || "", name: data.name || "" } : null;
           loginError = (data && data.ok && data.authorized === false)
             ? (data.reason === "inactive"
                 ? "המשתמש מסומן כ'עזב' — הגישה חסומה."

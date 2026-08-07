@@ -1201,3 +1201,70 @@ body.has-sim { padding-top: 34px; }
 
 /* גובה אחיד לכל שורה, בלי קשר לאילו כפתורים מוצגים בה */
 .tx-c--actions { min-height: 26px; }
+
+/* ---------- טופס בקשת הרשמה במסך הכניסה (2026-08-07) ---------- */
+.login-signup {
+  margin-top: 14px; width: 100%;
+  border: 1px solid var(--border); background: var(--surface);
+  font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--text);
+  padding: 9px 14px; border-radius: 10px; cursor: pointer;
+  transition: border-color var(--t), background var(--t);
+}
+.login-signup:hover { border-color: var(--action); background: var(--hover); }
+
+.signup-card { width: min(400px, 94vw); }
+.signup-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.signup-note { font-size: 12.5px; color: var(--text-soft); margin: 0; line-height: 1.5; }
+.signup-send { width: 100%; }
+.signup-msg { font-size: 13px; padding: 9px 11px; border-radius: 9px; }
+.signup-msg--ok { background: var(--ok-soft, #E8F5EC); color: var(--ok, #1B7F3B); }
+.signup-msg--err { background: var(--danger-soft); color: var(--danger); }
+.signup-msg[hidden] { display: none; }
+
+
+/* ---------- מסך תושבים (2026-08-07) ----------
+   נשען על שפת העיצוב של מסך ההוצאות (.tx-card / .tx-head / .tx-row / .tx-c /
+   .tx-bar / .seg / .badge / .drawer) — כאן רק ההשלמות הייחודיות למסך. */
+.res-row { cursor: pointer; }
+.res-row.is-left { opacity: .55; }
+.res-fam { font-weight: 600; }
+.res-mail { font-size: 12.5px; color: var(--text-soft); }
+.res-dim { color: var(--text-muted); font-size: 12.5px; }
+.res-warn { color: var(--danger); font-size: 12.5px; }
+.res-msg { padding: 40px 20px; text-align: center; color: var(--text-soft); font-size: 14px; }
+.res-msg div { margin-top: 12px; }
+
+/* מונה קטן — נשען על אותה שפה של תגיות ההתראות */
+.res-n {
+  display: inline-block; min-width: 18px; padding: 0 5px;
+  font-size: 11px; font-weight: 700; line-height: 17px; text-align: center;
+  border-radius: 999px; background: rgba(17,24,39,.10); color: var(--text-soft);
+}
+.seg__opt .res-n { margin-inline-start: 5px; }
+.res-n--warn { background: var(--warn-soft); color: #92400E; }
+.res-n--tx { background: rgba(17,24,39,.08); }
+
+/* בקשות הרשמה ממתינות */
+.res-signups { padding: 16px; margin-bottom: 14px; border-color: var(--warn); background: var(--warn-soft); }
+.res-signups__t { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+.res-su {
+  display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 12px; align-items: center;
+  padding: 11px; margin-bottom: 8px; border-radius: 10px; background: var(--surface);
+}
+.res-su:last-child { margin-bottom: 0; }
+.res-su__who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.res-su__match { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.res-su__sel { font-size: 13px; padding: 5px 8px; }
+.res-su__acts { display: flex; gap: 6px; flex: none; }
+
+/* אזהרת זהות בחלון העריכה */
+.res-hint { line-height: 1.6; }
+.res-replace {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+}
+
+@media (max-width: 900px) {
+  .res-su { grid-template-columns: 1fr; }
+  .res-su__acts { justify-content: flex-start; }
+}

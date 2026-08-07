@@ -37,6 +37,15 @@ function doGet(e) {
     }
     // שריון מועדון (שלב 8) — שתי פעולות שדורשות תשובה קריאה (GET, לא no-cors),
     // בדיוק כמו login: קריאת תפוסה ליום, ויצירת שריון עם בדיקת חפיפה חיה.
+    // בקשת הרשמה (2026-08-07) — נשלחת ממשתמש שעדיין אינו רשום, ולכן ללא סיסמת
+    // מנהל. האימות נעשה דרך טוקן גוגל: השרת מאמת אותו מול גוגל ומוציא ממנו את
+    // האימייל, כך שאי אפשר להירשם בשם מייל של מישהו אחר.
+    if (e && e.parameter && e.parameter.action === 'submitSignup') {
+      return handleSubmitSignup_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'listSignups') {
+      return handleListSignups_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'clubBusy') {
       return handleClubBusy_(e.parameter.date);
     }
@@ -81,7 +90,7 @@ function doGet(e) {
     });
     var settings = readSettings_(ss);
     var out = {
-      ok: true, version: 'v24-receipt-lifecycle', years: years,
+      ok: true, version: 'v25-signup-residents', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       groups: readColumn_(ss, 'קבוצות'),
       updates: readTable_(ss, 'עדכוני תקציב'),   // יומן עדכוני תקציב (אם הטאב קיים)
@@ -127,6 +136,11 @@ function doPost(e) {
       case 'uploadReceiptFile': return json_(uploadReceiptFile_(ss, body));
       case 'ensureColumns':     return json_(ensureColumns_(ss, body));
       case 'saveColumnConfig':  return json_(saveColumnConfig_(ss, body));
+      case 'approveSignup':     return json_(approveSignup_(ss, body));
+      case 'rejectSignup':      return json_(rejectSignup_(ss, body));
+      case 'saveResidentRow':   return json_(saveResidentRow_(ss, body));
+      case 'ensureResidentCols':return json_(ensureResidentCols_(ss, body));
+      case 'replaceFamily':     return json_(replaceFamily_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -1619,4 +1633,254 @@ function testSubmitReceipt() {
     buyer: 'בדיקה', fileName: 'test.png', mimeType: 'image/png', dataBase64: tinyPng
   });
   Logger.log(JSON.stringify(result, null, 2));
+}
+
+/* ============ בקשות הרשמה וניהול תושבים (2026-08-07) ============
+ * זרימה: מבקר מתחבר עם גוגל, המייל לא נמצא בטאב "תושבים" → הוא ממלא טופס קצר
+ * (שם פרטי, שם משפחה, מספר בית) → נרשמת שורה בטאב "בקשות הרשמה" → המנהל רואה
+ * אותה במסך "תושבים", מקבל המלצה לאיזו משפחה לשייך, ומאשר או דוחה.
+ *
+ * אבטחה: הבקשה נשלחת בלי סיסמת מנהל (המבקש עוד לא רשום), אבל היא **חייבת**
+ * לכלול טוקן גוגל תקין. השרת מאמת אותו מול גוגל ומוציא ממנו את האימייל — כך
+ * שהמייל בבקשה תמיד אמיתי ומאומת, ואי אפשר להירשם בשם של מישהו אחר.
+ */
+var SIGNUPS_SHEET = 'בקשות הרשמה';
+var SIGNUP_HEADERS = ['מזהה', 'תאריך בקשה', 'אימייל', 'שם פרטי', 'שם משפחה', 'מספר בית', 'סטטוס', 'שויך למשפחה', 'טופל בתאריך'];
+
+function getSignupsSheet_(ss) {
+  var sh = ss.getSheetByName(SIGNUPS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(SIGNUPS_SHEET);
+    sh.getRange(1, 1, 1, SIGNUP_HEADERS.length).setValues([SIGNUP_HEADERS]);
+    sh.getRange(1, 1, 1, SIGNUP_HEADERS.length).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+/** מאמת טוקן גוגל ומחזיר את האימייל המאומת, או null. */
+function verifiedEmailFromToken_(token) {
+  if (!token) return null;
+  try {
+    var resp = UrlFetchApp.fetch(
+      'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token),
+      { muteHttpExceptions: true });
+    var info = JSON.parse(resp.getContentText());
+    if (!info.email || info.error) return null;
+    if (info.aud !== '312365638466-l1tug16dd953t08khr9f8qrh76iro46i.apps.googleusercontent.com') return null;
+    if (String(info.email_verified) !== 'true') return null;
+    return normalizeEmail_(info.email);
+  } catch (e) { return null; }
+}
+
+function handleSubmitSignup_(p) {
+  try {
+    var email = verifiedEmailFromToken_(p.token);
+    if (!email) return json_({ ok: false, error: 'אימות גוגל נכשל' });
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    // כבר רשום? אין טעם בבקשה
+    if (lookupResident_(email).found) {
+      return json_({ ok: false, error: 'המייל הזה כבר רשום במערכת' });
+    }
+    var sh = getSignupsSheet_(ss);
+    var values = sh.getDataRange().getValues();
+    // בקשה ממתינה קיימת לאותו מייל? לא מכפילים
+    for (var r = 1; r < values.length; r++) {
+      if (normalizeEmail_(values[r][2]) === email && String(values[r][6]).trim() === 'ממתין') {
+        return json_({ ok: true, duplicate: true, message: 'בקשה קודמת שלך כבר ממתינה לאישור' });
+      }
+    }
+    var id = 'S' + new Date().getTime();
+    sh.appendRow([id, new Date(), email,
+      String(p.firstName || '').trim(), String(p.lastName || '').trim(),
+      String(p.house || '').trim(), 'ממתין', '', '']);
+    return json_({ ok: true, id: id });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+function handleListSignups_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!isAdminPassword_(ss, p.password)) return json_({ ok: false, error: 'אין הרשאה' });
+    var sh = getSignupsSheet_(ss);
+    var values = sh.getDataRange().getValues();
+    var rows = [];
+    for (var r = 1; r < values.length; r++) {
+      var v = values[r];
+      if (!String(v[0]).trim()) continue;
+      rows.push({
+        id: String(v[0]), date: v[1], email: String(v[2] || ''),
+        firstName: String(v[3] || ''), lastName: String(v[4] || ''),
+        house: String(v[5] || ''), status: String(v[6] || ''),
+        linkedFamily: String(v[7] || '')
+      });
+    }
+    return json_({ ok: true, rows: rows });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** מאתר את מספר השורה של בקשה לפי מזהה. מחזיר -1 אם לא נמצאה. */
+function signupRowById_(sh, id) {
+  var values = sh.getDataRange().getValues();
+  for (var r = 1; r < values.length; r++) if (String(values[r][0]) === String(id)) return r + 1;
+  return -1;
+}
+
+/**
+ * אישור בקשה: כותב את האימייל ואת השם הפרטי לשורת המשפחה שנבחרה בטאב "תושבים".
+ * body.residentRowIndex = אינדקס השורה (1-based, כפי שהוחזר ב-getResidents) —
+ * או body.newFamily=true ליצירת משק בית חדש בסוף הטאב.
+ */
+function approveSignup_(ss, body) {
+  var sh = getSignupsSheet_(ss);
+  var row = signupRowById_(sh, body.id);
+  if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
+  var req = sh.getRange(row, 1, 1, SIGNUP_HEADERS.length).getValues()[0];
+  var email = String(req[2] || ''), firstName = String(req[3] || ''),
+      lastName = String(req[4] || ''), house = String(req[5] || '');
+
+  var rsh = ss.getSheetByName('תושבים');
+  if (!rsh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var values = rsh.getDataRange().getValues();
+  var headers = values[0].map(function (h) { return String(h).trim(); });
+
+  var emailCols = [], firstNameCols = [], familyCol = -1, houseCol = -1, statusCol = -1;
+  headers.forEach(function (h, i) {
+    if (h.indexOf('שם פרטי') !== -1) firstNameCols.push(i);
+    else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
+    else if (h.indexOf('סטטוס') !== -1) statusCol = i;
+    else if (h.indexOf(RESIDENT_ID_HEADER) !== -1) { /* מזהה קבוע — לא נוגעים */ }
+    else if (h.indexOf('משפחה') !== -1) familyCol = i;
+    else if (h.indexOf('בית') !== -1) houseCol = i;
+  });
+  if (!emailCols.length) return { ok: false, error: 'אין עמודת אימייל בטאב תושבים' };
+
+  var targetRow;   // 1-based בגיליון
+  if (body.newFamily) {
+    var blank = new Array(headers.length).fill('');
+    if (familyCol > -1) blank[familyCol] = lastName;
+    if (houseCol > -1) blank[houseCol] = house;
+    if (statusCol > -1) blank[statusCol] = 'פעיל';
+    rsh.appendRow(blank);
+    targetRow = rsh.getLastRow();
+  } else {
+    targetRow = parseInt(body.residentRowIndex, 10);
+    if (!targetRow || targetRow < 2) return { ok: false, error: 'לא נבחרה שורת משפחה' };
+  }
+
+  // בוחר את משבצת האימייל הפנויה הראשונה; אם כולן תפוסות — כותב לאחרונה
+  var cur = rsh.getRange(targetRow, 1, 1, headers.length).getValues()[0];
+  var slot = -1;
+  for (var i = 0; i < emailCols.length; i++) {
+    if (!String(cur[emailCols[i]] || '').trim()) { slot = i; break; }
+  }
+  if (slot === -1) slot = emailCols.length - 1;
+
+  rsh.getRange(targetRow, emailCols[slot] + 1).setValue(email);
+  if (firstNameCols[slot] !== undefined && firstName) {
+    rsh.getRange(targetRow, firstNameCols[slot] + 1).setValue(firstName);
+  }
+  if (statusCol > -1 && !String(cur[statusCol] || '').trim()) {
+    rsh.getRange(targetRow, statusCol + 1).setValue('פעיל');
+  }
+
+  var famName = familyCol > -1 ? String(cur[familyCol] || lastName) : lastName;
+  sh.getRange(row, 7).setValue('אושר');
+  sh.getRange(row, 8).setValue(famName);
+  sh.getRange(row, 9).setValue(new Date());
+  return { ok: true, family: famName, row: targetRow };
+}
+
+function rejectSignup_(ss, body) {
+  var sh = getSignupsSheet_(ss);
+  var row = signupRowById_(sh, body.id);
+  if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
+  sh.getRange(row, 7).setValue('נדחה');
+  sh.getRange(row, 9).setValue(new Date());
+  return { ok: true };
+}
+
+/** עדכון שדות בשורת תושב קיימת (תפקיד/סטטוס/אימייל/שם) — למסך ניהול התושבים. */
+function saveResidentRow_(ss, body) {
+  var rsh = ss.getSheetByName('תושבים');
+  if (!rsh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var rowIdx = parseInt(body.rowIndex, 10);
+  if (!rowIdx || rowIdx < 2) return { ok: false, error: 'שורה לא תקינה' };
+  var headers = rsh.getRange(1, 1, 1, rsh.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+  var fields = body.fields || {};
+  var written = [];
+  Object.keys(fields).forEach(function (k) {
+    var c = headers.indexOf(k);
+    if (c === -1) return;
+    rsh.getRange(rowIdx, c + 1).setValue(fields[k]);
+    written.push(k);
+  });
+  if (!written.length) return { ok: false, error: 'לא נמצאו עמודות תואמות' };
+  return { ok: true, written: written };
+}
+
+/* ---------- עמודות נוספות בטאב "תושבים" (2026-08-07) ----------
+ * מקצוע ושמות ילדים. נוצרות פעם אחת בסוף הטאב אם אינן קיימות, בלי לגעת
+ * בעמודות קיימות ובלי לשנות את סדרן — אידמפוטנטי, אפשר לקרוא שוב בלי נזק. */
+var EXTRA_RESIDENT_COLS = ['מקצוע 1', 'מקצוע 2', 'שמות ילדים', 'הערות'];
+
+function ensureResidentCols_(ss, body) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var missing = EXTRA_RESIDENT_COLS.filter(function (c) { return headers.indexOf(c) === -1; });
+  if (!missing.length) return { ok: true, added: [] };
+  sh.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]);
+  sh.getRange(1, lastCol + 1, 1, missing.length).setFontWeight('bold');
+  return { ok: true, added: missing };
+}
+
+/* ---------- "משפחה עזבה, נכנסה משפחה חדשה" (2026-08-07) ----------
+ * זו הפעולה הנכונה כשמשק בית מתחלף — ולא עריכה של השורה הקיימת. עריכה בפועל
+ * הייתה מעבירה את כל ההיסטוריה הפיננסית של הדיירים הקודמים לחדשים, כי התנועות
+ * מצביעות ל"מזהה קבוע" ולא לשם. כאן: השורה הישנה מסומנת "עזב" ושומרת את
+ * ההיסטוריה שלה, ונפתחת שורה חדשה שתקבל מזהה חדש משלה.
+ *
+ * לעומת זאת מעבר בתוך השיכון (אותה משפחה, בית אחר) הוא **כן** עדכון של השורה
+ * הקיימת — אותה ישות, רק מספר בית שונה — ולכן הוא נעשה דרך saveResidentRow_.
+ */
+function replaceFamily_(ss, body) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var oldRow = parseInt(body.rowIndex, 10);
+  if (!oldRow || oldRow < 2) return { ok: false, error: 'שורה לא תקינה' };
+
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+  var statusCol = -1, familyCol = -1, houseCol = -1, idCol = -1;
+  headers.forEach(function (h, i) {
+    if (h.indexOf('סטטוס') !== -1) statusCol = i;
+    else if (h.indexOf(RESIDENT_ID_HEADER) !== -1) idCol = i;
+    else if (h.indexOf('משפחה') !== -1) familyCol = i;
+    else if (h.indexOf('בית') !== -1) houseCol = i;
+  });
+
+  // 1. סימון השורה הישנה כ"עזב" — ההיסטוריה שלה נשארת שלה
+  if (statusCol > -1) sh.getRange(oldRow, statusCol + 1).setValue('עזב');
+
+  // 2. שורה חדשה למשפחה הנכנסת
+  var blank = [];
+  for (var i = 0; i < headers.length; i++) blank.push('');
+  if (familyCol > -1) blank[familyCol] = String(body.family || '').trim();
+  if (houseCol > -1) blank[houseCol] = String(body.house || '').trim();
+  if (statusCol > -1) blank[statusCol] = 'פעיל';
+  sh.appendRow(blank);
+  var newRow = sh.getLastRow();
+
+  // 3. מזהה קבוע חדש — לעולם לא ממחזרים מזהה קיים
+  assignResidentIds_(ss);
+  var newId = idCol > -1 ? sh.getRange(newRow, idCol + 1).getValue() : '';
+  return { ok: true, newRow: newRow, newId: newId, oldRow: oldRow };
 }

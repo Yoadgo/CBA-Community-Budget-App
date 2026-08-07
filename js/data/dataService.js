@@ -794,7 +794,17 @@ CBA.data = (function () {
     approveClubReservation: approveClubReservation,
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,
+    refreshResidents: function (cb) { residentsCache = null; getResidents(cb); },
     residentPickerOptions: residentPickerOptions,
+    // בקשות הרשמה וניהול תושבים (2026-08-07)
+    listSignups: function (cb) { CBA.sheets.get({ action: "listSignups" }, cb); },
+    approveSignup: function (payload, cb) { CBA.sheets.postRead("approveSignup", payload, cb); },
+    rejectSignup: function (id, cb) { CBA.sheets.postRead("rejectSignup", { id: id }, cb); },
+    saveResidentRow: function (rowIndex, fields, cb) {
+      CBA.sheets.postRead("saveResidentRow", { rowIndex: rowIndex, fields: fields }, cb);
+    },
+    ensureResidentCols: function (cb) { CBA.sheets.postRead("ensureResidentCols", {}, cb); },
+    replaceFamily: function (payload, cb) { CBA.sheets.postRead("replaceFamily", payload, cb); },
     hebrewDate: hebrewDate,
     hebrewMonth: hebrewMonth,
     hebrewDateShort: hebrewDateShort,
