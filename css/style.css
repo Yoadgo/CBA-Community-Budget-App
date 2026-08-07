@@ -1298,6 +1298,37 @@ body.has-sim { padding-top: 34px; }
 .res-th:hover { color: var(--text); }
 .res-sort { font-size: 9px; opacity: .75; }
 
+/* ---------- צ'יפ ההתנגשויות בפס הבקרות (2026-08-07) ----------
+   צהוב כשיש חפיפות שאפשר לחיות איתן, אדום כשיש משהו ששובר התחברות או שיוך. */
+.res-conf-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 999px; cursor: pointer;
+  font-size: 12.5px; font-weight: 700; white-space: nowrap;
+  background: var(--warn-soft); color: #92400E; border: 1px solid var(--warn);
+  transition: filter var(--t);
+}
+.res-conf-chip:hover { filter: brightness(.96); }
+.res-conf-chip__ico { font-size: 12px; line-height: 1; }
+.res-conf-chip__err {
+  background: rgba(220,38,38,.1); color: var(--danger);
+  font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+}
+
+.res-conf { width: min(640px, 96vw); }
+.res-conf__body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.res-conf__lead { font-size: 12.5px; color: var(--text-soft); line-height: 1.6; margin: 0 0 4px; }
+.res-conf__item {
+  display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  width: 100%; text-align: start; cursor: pointer;
+  padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface);
+  transition: border-color var(--t), background var(--t);
+}
+.res-conf__item:hover { border-color: var(--action); background: rgba(17,24,39,.02); }
+.res-conf__item--warn { border-inline-start: 3px solid var(--warn); }
+.res-conf__item--err { border-inline-start: 3px solid var(--danger); }
+.res-conf__t { font-size: 13px; font-weight: 700; }
+.res-conf__d { font-size: 12px; color: var(--text-soft); line-height: 1.5; }
+
 /* ---------- גריד הוספת משקי בית (2026-08-07) ----------
    נראה ומתנהג כמו גיליון: תאים צמודים, גבול דק ביניהם, שורה מודגשת בפוקוס.
    בכוונה בלי padding נדיב — כאן רוצים לראות הרבה שורות בבת אחת. */

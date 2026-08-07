@@ -18,7 +18,8 @@ var resState = {
   loaded: false, loading: false, error: null,
   headers: [], rows: [], signups: [],
   q: "", filter: "active",  // active | left | all
-  sort: "family", dir: 1    // ברירת מחדל: שם משפחה א-ב
+  sort: "family", dir: 1,   // ברירת מחדל: שם משפחה א-ב
+  conflicts: []
 };
 
 /* מיון: שם משפחה ודיירים לפי א-ב עברי (localeCompare), בית ותנועות כמספרים.
@@ -131,6 +132,136 @@ function resTxCount(row, c) {
   }).length;
 }
 
+/* ==========================================================================
+   התנגשויות בטבלה (2026-08-07)
+   --------------------------------------------------------------------------
+   דברים שהגיליון מרשה אבל האפליקציה לא באמת יכולה לחיות איתם. נבדקים על **כל**
+   השורות ולא רק על המסוננות, כי התנגשות שמסתתרת מאחורי סינון היא בדיוק זו
+   שתפתיע אותך. אם אין התנגשויות — לא מוצג כלום, בלי "הכל תקין" מיותר.
+   ========================================================================== */
+function resConflicts(rows, c) {
+  var out = [];
+  var actives = [];
+  rows.forEach(function (r, i) { if (resIsActive(r, c)) actives.push({ r: r, i: i }); });
+
+  // 1. שני משקי בית פעילים באותו מספר בית
+  if (c.house) {
+    var byHouse = {};
+    actives.forEach(function (x) {
+      var h = resVal(x.r, c.house);
+      if (!h) return;
+      (byHouse[h] = byHouse[h] || []).push(x);
+    });
+    Object.keys(byHouse).forEach(function (h) {
+      if (byHouse[h].length < 2) return;
+      out.push({
+        kind: "house", severity: "warn",
+        title: "בית " + h + " — " + byHouse[h].length + " משפחות פעילות",
+        detail: byHouse[h].map(function (x) { return resVal(x.r, c.family) || "ללא שם"; }).join(" · "),
+        targets: byHouse[h].map(function (x) { return x.i; })
+      });
+    });
+  }
+
+  // 2. אותו מייל בשתי שורות — חמור, כי המייל הוא מפתח ההתחברות
+  var byMail = {};
+  rows.forEach(function (r, i) {
+    c.email.forEach(function (k) {
+      var m = resVal(r, k).toLowerCase();
+      if (!m) return;
+      (byMail[m] = byMail[m] || []).push(i);
+    });
+  });
+  Object.keys(byMail).forEach(function (m) {
+    var idxs = byMail[m].filter(function (v, i, a) { return a.indexOf(v) === i; });
+    if (byMail[m].length < 2) return;
+    out.push({
+      kind: "email", severity: "err",
+      title: "המייל " + m + " מופיע פעמיים",
+      detail: idxs.map(function (i) {
+        return (resVal(rows[i], c.family) || "ללא שם") + (resIsActive(rows[i], c) ? "" : " (עזב)");
+      }).join(" · ") + " — ההתחברות תיפול על השורה הראשונה",
+      targets: idxs
+    });
+  });
+
+  // 3. שורה פעילה בלי מזהה קבוע — תנועות לא יוכלו להשתייך אליה
+  if (c.id) {
+    actives.forEach(function (x) {
+      if (resVal(x.r, c.id)) return;
+      out.push({
+        kind: "noid", severity: "err",
+        title: "אין מזהה קבוע ל" + (resVal(x.r, c.family) || "שורה " + (x.i + 2)),
+        detail: "בלי מזהה קבוע אי אפשר לשייך לה תנועות. שמירה של השורה תיצור מזהה.",
+        targets: [x.i]
+      });
+    });
+  }
+
+  // 4. שורה פעילה בלי שם משפחה
+  if (c.family) {
+    actives.forEach(function (x) {
+      if (resVal(x.r, c.family)) return;
+      out.push({
+        kind: "noname", severity: "warn",
+        title: "שורה " + (x.i + 2) + " בלי שם משפחה",
+        detail: "בית " + (resVal(x.r, c.house) || "—"),
+        targets: [x.i]
+      });
+    });
+  }
+
+  return out;
+}
+
+/* הצ'יפ תמיד צהוב — הוא סימן "יש כאן משהו לבדוק", לא אזעקה. כשיש בתוכו פריטים
+   חוסמים (מייל כפול, שורה בלי מזהה) מצורף מונה אדום קטן, כך שדרגת החומרה לא
+   הולכת לאיבוד בלי שהפס כולו יתחיל לצרוח. */
+function resConflictChip(list) {
+  if (!list.length) return "";
+  var errs = list.filter(function (x) { return x.severity === "err"; }).length;
+  return '<button type="button" class="res-conf-chip" data-res-conf>' +
+    '<span class="res-conf-chip__ico">⚠</span>' +
+    (list.length === 1 ? "התנגשות אחת" : list.length + " התנגשויות") +
+    (errs ? '<span class="res-conf-chip__err">' + errs + ' חוסמות</span>' : "") +
+  '</button>';
+}
+
+function resOpenConflicts(container, list, c) {
+  var old = document.getElementById("res-conf");
+  if (old) old.remove();
+  var wrap = document.createElement("div");
+  wrap.id = "res-conf";
+  wrap.className = "peek-backdrop";
+  wrap.innerHTML =
+    '<div class="peek res-conf" role="dialog" aria-label="התנגשויות בטבלה">' +
+      '<div class="peek__head"><span class="peek__title">התנגשויות בטבלת התושבים</span>' +
+        '<button class="peek__x" aria-label="סגור">×</button></div>' +
+      '<div class="res-conf__body">' +
+        '<p class="res-conf__lead">נבדק על כל השורות, גם אלה שמוסתרות כרגע בסינון. ' +
+          'לחיצה על שורה פותחת את משק הבית לעריכה.</p>' +
+        list.map(function (x, i) {
+          return '<button type="button" class="res-conf__item res-conf__item--' + x.severity + '" data-conf="' + i + '">' +
+            '<span class="res-conf__t">' + CBA.esc(x.title) + '</span>' +
+            '<span class="res-conf__d">' + CBA.esc(x.detail) + '</span>' +
+          '</button>';
+        }).join("") +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(wrap);
+  var close = function () { wrap.remove(); };
+  wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
+  wrap.querySelector(".peek__x").addEventListener("click", close);
+  wrap.querySelectorAll("[data-conf]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var x = list[+b.dataset.conf];
+      var idx = x.targets[0];
+      close();
+      resOpenDrawer(container, idx, idx + 2, c);
+    });
+  });
+}
+
 /* המלצת שיוך לבקשת הרשמה: מספר בית זהה הוא האות החזק ביותר, אחריו שם משפחה. */
 function resSuggest(signup, rows, c) {
   var house = String(signup.house || "").trim();
@@ -212,6 +343,8 @@ CBA.screens.residents = {
     });
 
     visible = resSortRows(visible, c);
+    var conflicts = resConflicts(st.rows, c);
+    resState.conflicts = conflicts;
     var activeCount = st.rows.filter(function (r) { return resIsActive(r, c); }).length;
     // מספרי השורות בגיליון של מה שמוצג כרגע — הייצוא מציע לכבד את הסינון והחיפוש
     resState.visibleRowIndexes = visible.map(function (r) { return st.rows.indexOf(r) + 2; });
@@ -229,6 +362,7 @@ CBA.screens.residents = {
         '</div>' +
         '<div class="tx-actions">' +
           '<div class="tx-summary"><span>מוצגים</span> <b>' + visible.length + '</b> <span class="tx-summary__count">· מתוך ' + st.rows.length + ' משקי בית</span></div>' +
+          resConflictChip(conflicts) +
           '<button class="btn-primary btn-sm" data-res-add>הוספת משפחות</button>' +
           '<button class="btn-ghost btn-sm" data-res-export>ייצוא לגיליון</button>' +
           '<button class="btn-ghost btn-sm" data-res-reload>רענן</button>' +
@@ -340,6 +474,10 @@ function resBind(container, c) {
   if (ex) ex.addEventListener("click", function () { resOpenExport(c); });
   var ad = container.querySelector("[data-res-add]");
   if (ad) ad.addEventListener("click", function () { resOpenAdd(container, c); });
+  var cf = container.querySelector("[data-res-conf]");
+  if (cf) cf.addEventListener("click", function () {
+    resOpenConflicts(container, resState.conflicts || [], c);
+  });
 
   container.querySelectorAll("[data-res-sort]").forEach(function (h) {
     h.addEventListener("click", function () {
