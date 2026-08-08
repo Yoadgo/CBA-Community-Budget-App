@@ -276,16 +276,25 @@ CBA.data = (function () {
 
   // --- הגשת בקשה מתושב (שלב 3): תמונה + פרטים -> Drive + שורה בגיליון ---
   // פעולה אטומית אחת בשרת (submitReceipt): מעלה את הקבלה ל-Drive ומוסיפה את
-  // השורה בו-זמנית, כדי שלא נצטרך לקרוא בחזרה קישור מ-Drive לפני כתיבת השורה
-  // (כתיבות ל-Sheets הן "שגר ושכח" — ראו sheets.js push). המזהה מחושב בשרת.
-  // cb(res) מקבל {ok:true} אם הבקשה נשלחה בהצלחה לרשת, או {ok:false} אם לא.
+  // השורה בו-זמנית, כדי שלא נצטרך לקרוא בחזרה קישור מ-Drive לפני כתיבת השורה.
+  // המזהה מחושב בשרת.
+  // תוקן 2026-08-08 (באג: "מסך ההצלחה קופץ לפני שההעלאה באמת הסתיימת"):
+  // עבר מ-CBA.sheets.push (POST no-cors "שגר ושכח" — התשובה לא נקראת, מניחים
+  // הצלחה ברגע שה-fetch מתפענח, בלי שום מדד התקדמות אמיתי במהלך שליחת קובץ
+  // Base64 גדול) ל-CBA.sheets.postReadProgress: אותה בקשה "פשוטה" בדיוק
+  // (text/plain, בלי preflight) שכבר מוכחת כעובדת עם תשובה קריאה דרך
+  // postRead (למשל uploadReceiptFile) — רק שהפעם דרך XMLHttpRequest כדי
+  // לחשוף אחוז התקדמות אמיתי (onProgress) ולוודא ש-cb(res) נקרא אך ורק אחרי
+  // שהתשובה האמיתית מהשרת התקבלה ונפענחה (לא לפני, ולא רק "הנחה" של הצלחה).
+  // onProgress הוא פרמטר רביעי אופציונלי (לא שובר קריאות קיימות ל-cb כפרמטר שני).
+  // cb(res) מקבל {ok:true} רק אם השרת אכן אישר הצלחה, או {ok:false, error}.
   // בהצלחה: מוסיפים גם עותק מקומי אופטימי לזיכרון, כדי שהבקשה תופיע מיד
   // ב"הבקשות שלי" בלי לחכות לרענון מהגיליון (מזהה זמני — יוחלף באמיתי ברענון הבא).
-  function submitReceipt(fields, cb) {
+  function submitReceipt(fields, cb, onProgress) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     const year = getCurrentYear();
     const payload = Object.assign({ year: year }, fields);
-    CBA.sheets.push("submitReceipt", payload, function (res) {
+    CBA.sheets.postReadProgress("submitReceipt", payload, onProgress, function (res) {
       if (res && res.ok) {
         const today = new Date().toISOString().slice(0, 10);
         CBA.mock.transactions.push({

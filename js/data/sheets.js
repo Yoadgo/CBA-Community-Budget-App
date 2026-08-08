@@ -304,8 +304,43 @@ CBA.sheets = (function () {
       .catch(function (err) { if (cb) cb({ ok: false, error: String(err) }); });
   }
 
+  // כמו postRead, אבל דרך XMLHttpRequest כדי לחשוף אחוז התקדמות אמיתי של
+  // ההעלאה (fetch לא חושף התקדמות של גוף הבקשה בדפדפנים הנפוצים). מיועד
+  // לבקשות עם קובץ Base64 גדול (למשל submitReceipt) שבהן ההעלאה בפועל יכולה
+  // לקחת כמה שניות ברשת סלולרית, והמשתמש צריך לראות שזה באמת מתקדם.
+  // 2026-08-08: אותה בקשה "פשוטה" (text/plain, בלי preflight) שכבר הוכחה
+  // כעובדת עם postRead (תשובה קריאה, בלי no-cors) — אז אין סיבה ש-XHR
+  // יתנהג אחרת; ה-CORS נבדק על הדפדפן לפי כותרות התשובה, לא לפי מנגנון
+  // הבקשה (fetch מול XHR). onProgress(percent) נקרא במהלך השליחה;
+  // cb(res) נקרא רק אחרי שהתשובה האמיתית מהשרת התקבלה ונפענחה — לא לפני.
+  function postReadProgress(action, payload, onProgress, cb) {
+    var body = Object.assign({ action: action, session: authSession() }, payload || {});
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", API_URL, true);
+    xhr.setRequestHeader("Content-Type", "text/plain;charset=utf-8");
+    if (xhr.upload && typeof onProgress === "function") {
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+    }
+    xhr.onload = function () {
+      if (typeof onProgress === "function") onProgress(100);
+      var data;
+      try { data = JSON.parse(xhr.responseText); }
+      catch (e) { if (cb) cb({ ok: false, error: "תשובה לא תקינה מהשרת" }); return; }
+      if (cb) cb(withAuthNote(data));
+    };
+    xhr.onerror = function () {
+      if (cb) cb({ ok: false, error: "שגיאת רשת" });
+    };
+    xhr.ontimeout = function () {
+      if (cb) cb({ ok: false, error: "תם הזמן הקצוב — נסו שוב" });
+    };
+    xhr.send(JSON.stringify(body));
+  }
+
   // refresh נשכח מהייצוא (התגלה 2026-08-07 בבדיקת הרשאות): app.js קורא ל-
   // CBA.sheets.refresh במחזור הרענון התקופתי, וזה נכשל בשקט — כלומר הנתונים
   // לא התרעננו מעצמם כלל, רק ברענון עמוד.
-  return { url: API_URL, load: load, refresh: refresh, push: push, get: get, postRead: postRead, isConnected: isConnected, clearCache: clearCache };
+  return { url: API_URL, load: load, refresh: refresh, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache };
 })();

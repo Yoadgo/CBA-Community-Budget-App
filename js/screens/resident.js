@@ -270,6 +270,9 @@ CBA.screens = CBA.screens || {};
               '</div></div>' +
           '</div>' +
           '<button class="btn-primary rs-submit" id="rs-submit-btn">' + sendIcon + ' <span>שלח בקשה</span></button>' +
+          '<div class="rs-progress" id="rs-progress" hidden>' +
+            '<div class="rs-progress__track"><div class="rs-progress__bar" id="rs-progress-bar"></div></div>' +
+            '<div class="rs-progress__label" id="rs-progress-label">מעלה… 0%</div></div>' +
           '<div class="rs-err" id="rs-err" hidden></div>' +
         '</div>';
 
@@ -277,6 +280,19 @@ CBA.screens = CBA.screens || {};
       var fileInput = container.querySelector("#rs-file");
       var errEl     = container.querySelector("#rs-err");
       var submitBtn = container.querySelector("#rs-submit-btn");
+      var progEl    = container.querySelector("#rs-progress");
+      var progBar   = container.querySelector("#rs-progress-bar");
+      var progLabel = container.querySelector("#rs-progress-label");
+
+      function showProgress(pct) {
+        progEl.hidden = false;
+        progBar.style.width = pct + "%";
+        progLabel.textContent = (pct >= 100 ? "כמעט מוכן…" : "מעלה… " + pct + "%");
+      }
+      function hideProgress() {
+        progEl.hidden = true;
+        progBar.style.width = "0%";
+      }
 
       function showError(msg) { errEl.textContent = msg; errEl.hidden = false; }
       function hideError() { errEl.hidden = true; }
@@ -391,6 +407,7 @@ CBA.screens = CBA.screens || {};
 
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<div class="rs-spin"></div><span>שולח…</span>';
+        showProgress(0);
 
         var fields = {
           expenseType: expenseType,
@@ -409,15 +426,19 @@ CBA.screens = CBA.screens || {};
           fields.bankAccount = val("#rs-bank-account");
         }
 
+        // onProgress (פרמטר שלישי) משקף את התקדמות ההעלאה בפועל (XHR upload.onprogress).
+        // renderSent() נקרא אך ורק בתוך cb, כלומר אחרי שהתשובה האמיתית מהשרת התקבלה —
+        // לעולם לא לפני שההעלאה במלואה הסתיימה (זה בדיוק הבאג שתוקן כאן).
         CBA.data.submitReceipt(fields, function (res) {
+          hideProgress();
           if (res && res.ok) {
             renderSent();
           } else {
             submitBtn.disabled = false;
             submitBtn.innerHTML = sendIcon + ' <span>שלח בקשה</span>';
-            showError("השליחה נכשלה — בדקו את החיבור לאינטרנט ונסו שוב.");
+            showError((res && res.error) ? res.error : "השליחה נכשלה — בדקו את החיבור לאינטרנט ונסו שוב.");
           }
-        });
+        }, showProgress);
       });
     }
   };

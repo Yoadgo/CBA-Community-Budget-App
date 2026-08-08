@@ -121,6 +121,18 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .rs-upload .rs-spin { border-color: rgba(17,24,39,.12); border-top-color: var(--text-soft); }
 @keyframes rsspin { to { transform: rotate(360deg); } }
 
+/* בר התקדמות אמיתי של העלאת הקבלה (2026-08-08) — מציג את אחוז ההעלאה
+   בפועל (XHR upload.onprogress), כדי שמסך ההצלחה לא ייראה כאילו קופץ לפני
+   שההעלאה באמת הסתיימה. */
+.rs-progress { margin-top: 10px; }
+.rs-progress[hidden] { display: none; }
+.rs-progress__track { height: 6px; border-radius: 999px; background: var(--surface);
+  border: 1px solid var(--border); overflow: hidden; }
+.rs-progress__bar { height: 100%; border-radius: 999px; background: var(--action);
+  width: 0%; transition: width .2s ease; }
+.rs-progress__label { font-size: 11.5px; color: var(--text-soft); text-align: center;
+  margin-top: 4px; }
+
 /* הודעת שגיאת ולידציה/שליחה בטופס */
 .rs-err { font-size: 12.5px; color: var(--danger); background: var(--danger-soft); border-radius: 10px;
   padding: 10px 12px; margin-top: 12px; line-height: 1.6; }
