@@ -1857,6 +1857,109 @@ function testSubmitReceipt() {
   Logger.log(JSON.stringify(result, null, 2));
 }
 
+/* ============ סריקה חכמה של קבלות עם Gemini (שלב 4, תוכנית שסוכמה 2026-08-07) ============
+ * שלב זה בלבד: שכבת קריאה ל-Gemini + פונקציית בדיקה ידנית בעורך (שלב ב' בתוכנית).
+ * עדיין לא מחוברת ל-doPost/ללקוח (זה שלב ג'-ד', בהמשך) — לפי הסיכום לעבוד צעד-צעד.
+ *
+ * המפתח: נשמר אך ורק ב-Project Settings → Script Properties → GEMINI_API_KEY.
+ * לעולם לא בקוד הזה — הקובץ מחויב (git) לריפו הציבורי הנדרש ל-GitHub Pages החינמי,
+ * ומפתח בטקסט גלוי כאן היה נחשף לכל מי שגולש בריפו (סוכם עם יועד 2026-08-07). */
+function geminiApiKey_() {
+  return PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+}
+
+// מודל Gemini לסריקת קבלות: עדיפות למהירות/עלות, לא לאיכות מרבית — יועד ביקש
+// לתעדף מהירות (2026-08-07). המודל שתוכנן במקור (gemini-2.0-flash) הופסק לגמרי
+// ("Deprecated" ואז "Shut down" ביוני 2026) — הוחלף כאן ב-gemini-3.1-flash-lite,
+// המקביל המהיר/הזול הנוכחי (נבדק מול תיעוד גוגל, אוגוסט 2026). אם התשובות איטיות
+// מדי או לא מדויקות מספיק בפועל, אפשר להחליף כאן בלבד (לא נוגע בשאר הקוד).
+var GEMINI_MODEL = 'gemini-3.1-flash-lite';
+
+/** קריאה בפועל ל-Gemini עם תמונת קבלה (base64) — מבקשת פלט JSON קשיח (לא טקסט
+ * חופשי) עם סכום/ספק/תיאור/תאריך, כדי לא להזדקק לפענוח טקסט חופשי ולשמור על
+ * מהירות. לא נוגעת בגיליון/Drive בכלל — שכבת התאמה טהורה סביב ה-API החיצוני,
+ * כך שגם handleScanReceipt_ (הפעולה האמיתית מול הלקוח, שלב ג' בהמשך) וגם
+ * testGeminiScan (בדיקה ידנית כאן) יזמנו את אותה קריאה בדיוק. */
+function scanReceiptWithGemini_(dataBase64, mimeType) {
+  var key = geminiApiKey_();
+  if (!key) {
+    return { ok: false, error: 'GEMINI_API_KEY חסר. יש להוסיף אותו תחת Project Settings → Script Properties בעורך Apps Script.' };
+  }
+  var prompt = 'זוהי תמונה של קבלה או חשבונית מישראל. חלץ ממנה בדיוק את השדות הבאים והחזר ' +
+    'אך ורק JSON תקין (בלי טקסט נוסף, בלי מרקדאון, בלי הסברים): ' +
+    '{"amount": מספר (הסכום הכולל לתשלום, בלי סימן מטבע), ' +
+    '"supplier": מחרוזת (שם בית העסק/הספק כפי שמופיע על הקבלה), ' +
+    '"description": מחרוזת (תיאור קצר של מה שנרכש, 2-5 מילים), ' +
+    '"date": מחרוזת בפורמט YYYY-MM-DD אם מופיע תאריך ברור בקבלה, אחרת מחרוזת ריקה}. ' +
+    'אם שדה כלשהו לא ברור/לא מופיע בתמונה — יש להחזיר ערך ריק (0 למספר, "" למחרוזת), ' +
+    'ולעולם לא להמציא ערך.';
+
+  var payload = {
+    contents: [{
+      parts: [
+        { text: prompt },
+        { inline_data: { mime_type: mimeType || 'image/jpeg', data: dataBase64 } }
+      ]
+    }],
+    generationConfig: {
+      response_mime_type: 'application/json',
+      response_schema: {
+        type: 'OBJECT',
+        properties: {
+          amount: { type: 'NUMBER' },
+          supplier: { type: 'STRING' },
+          description: { type: 'STRING' },
+          date: { type: 'STRING' }
+        },
+        required: ['amount', 'supplier', 'description', 'date']
+      }
+    }
+  };
+
+  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
+    ':generateContent?key=' + encodeURIComponent(key);
+  var resp;
+  try {
+    resp = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+  } catch (e) {
+    return { ok: false, error: 'שגיאת רשת בקריאה ל-Gemini: ' + String(e) };
+  }
+  var code = resp.getResponseCode();
+  var raw = resp.getContentText();
+  if (code !== 200) {
+    return { ok: false, error: 'Gemini החזיר קוד ' + code, raw: raw };
+  }
+  try {
+    var data = JSON.parse(raw);
+    var text = data.candidates && data.candidates[0] && data.candidates[0].content &&
+      data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+      data.candidates[0].content.parts[0].text;
+    if (!text) return { ok: false, error: 'תשובה לא צפויה מ-Gemini (בלי טקסט בפלט)', raw: raw };
+    var fields = JSON.parse(text);
+    return { ok: true, fields: fields };
+  } catch (e) {
+    return { ok: false, error: 'שגיאה בפענוח תשובת Gemini: ' + String(e), raw: raw };
+  }
+}
+
+/** בדיקה ידנית של הקריאה ל-Gemini (שלב ב' בתוכנית שסוכמה 2026-08-07) — מריצים
+ * בעורך (▶) ואז View → Logs. אם GEMINI_API_KEY עוד לא נשמר ב-Script Properties,
+ * הפונקציה תדפיס שגיאה ברורה על כך במקום להיכשל בלי הסבר. שולחת תמונה זעירה
+ * לדוגמה (אותו פיקסל PNG שקוף כמו testSubmitReceipt) — זו בדיקת חיווט בלבד
+ * (שהמפתח תקין, הבקשה מגיעה, הפלט חוזר כ-JSON תקין), לא בדיקת דיוק חילוץ אמיתי;
+ * לבדיקה עם קבלה אמיתית יש להחליף כאן את tinyPng בבסיס64 של תמונת קבלה אמיתית
+ * (ואת mimeType בהתאם, למשל 'image/jpeg'). */
+function testGeminiScan() {
+  var tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+  var result = scanReceiptWithGemini_(tinyPng, 'image/png');
+  Logger.log(JSON.stringify(result, null, 2));
+}
+
 /* ============ בקשות הרשמה וניהול תושבים (2026-08-07) ============
  * זרימה: מבקר מתחבר עם גוגל, המייל לא נמצא בטאב "תושבים" → הוא ממלא טופס קצר
  * (שם פרטי, שם משפחה, מספר בית) → נרשמת שורה בטאב "בקשות הרשמה" → המנהל רואה
