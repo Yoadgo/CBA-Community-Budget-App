@@ -305,6 +305,11 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .club-rules__modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .club-rules__modal-actions .btn-primary:disabled { opacity: .4; cursor: default; }
 
+/* פופ-אפ "לאיזה שימוש" בהגשת קבלה (2026-08-08) */
+.rp-choice { display: flex; gap: 10px; }
+.rp-choice .rs-ghost { flex: 1; justify-content: center; }
+.rp-add[hidden] { display: none; }
+
 /* מקטע "השריונים שלי" — עכשיו על אותו עמוד כמו הלוח (לא טאב נפרד).
    ברוחב רגיל/מובייל: תג קומפקטי (.rs-mine-compact) שפותח מודאל. בדסקטופ רחב
    (ר' @media 1024px למטה) הופך לטור מלא צמוד (.rs-mine-full) — ר' res-reserve-layout. */

@@ -178,113 +178,60 @@
     openGroup = (openGroup === g) ? null : g;
     applyNavGroupState();
   }
-  // מוצא את .app-nav__group-items של קבוצה נתונה — בין אם היא עדיין מקוננת
-  // בתוך ה-wrap שלה, ובין אם היא כרגע "מועברת" (portaled) אל document.body
-  // (ר' portalGroupItems למטה). אחרי העברה, querySelector על wrap כבר לא
-  // ימצא אותה (היא לא צאצא שלו יותר) — לכן שומרים רפרנס ישיר על wrap._portaledItems.
-  function groupItemsEl(wrap) {
-    return wrap._portaledItems || wrap.querySelector(".app-nav__group-items");
-  }
-  // ---------- "פורטל" של תפריט הקבוצה הנפתח אל document.body ----------
-  // 2026-08-08, תיקון קריטי (הפאנל היה בלתי-נראה לגמרי במובייל): לפס הניווט
-  // התחתון יש overflow-x:auto לצורך גלילת טאבים אופקית, ומפרט ה-CSS מכריח
-  // גם overflow-y:auto ברגע שoverflow-x אינו visible — אי-אפשר "לגלול אופקית
-  // בלי לחתוך אנכית" על אותו אלמנט. כל תוכן שנפתח מתחת לקופסה של הפס נחתך
-  // ונעלם. הפתרון: להוציא פיזית את .app-nav__group-items אל ה-body ברגע
-  // הפתיחה (position:fixed + מיקום מחושב), בדיוק כמו התבנית הקיימת כבר בקוד
-  // למגש המשתמש (.user-panel, ר' positionUserPanel/openUserPanel למטה בקובץ).
-  function positionGroupItems(wrap, itemsEl) {
-    var r = wrap.getBoundingClientRect();
-    // 2026-08-08: הפס התחתון במובייל מקובע לתחתית המסך (ר' mobile.css
-    // .app-nav--bottom, position:fixed; bottom:…) — "נפתח למטה" מהכפתור שם
-    // כמעט תמיד יוצא מחוץ לגבול התחתון של המסך (נבדק ונצפה ב-Playwright).
-    // לכן במובייל פותחים כלפי מעלה מהכפתור, ובדסקטופ (כותרת עליונה) כלפי מטה
-    // כרגיל — ר' .app-nav__group-items--up ב-style.css לשינוי כיוון האנימציה.
-    var up = !!(nav && nav.classList.contains("app-nav--bottom"));
-    itemsEl.classList.toggle("app-nav__group-items--up", up);
-    itemsEl.style.position = "fixed";
-    var w = itemsEl.offsetWidth || 180;
-    var h = itemsEl.offsetHeight || 0;
-    itemsEl.style.top = (up ? (r.top - h - 8) : (r.bottom + 8)) + "px";
-    var x = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
-    itemsEl.style.left = x + "px";
-  }
-  function portalGroupItems(wrap) {
-    var itemsEl = groupItemsEl(wrap);
-    if (!itemsEl) return;
-    if (itemsEl.parentNode !== document.body) {
-      document.body.appendChild(itemsEl);
-      wrap._portaledItems = itemsEl;
-    }
-    positionGroupItems(wrap, itemsEl);
-  }
-  function unportalGroupItems(wrap) {
-    var itemsEl = wrap._portaledItems;
-    if (!itemsEl) return;
-    wrap.appendChild(itemsEl);
-    itemsEl.style.position = "";
-    itemsEl.style.top = "";
-    itemsEl.style.left = "";
-    wrap._portaledItems = null;
-  }
-  // מיקום מחדש כשגוללים/משנים גודל בזמן שקבוצה כלשהי פתוחה — הפאנל מרחף
-  // ב-body ולא זז עם הכפתור לבד (זהה לתבנית של מגש המשתמש)
-  window.addEventListener("resize", function () {
-    if (!nav) return;
-    nav.querySelectorAll(".app-nav__group.is-open").forEach(function (wrap) {
-      var itemsEl = wrap._portaledItems;
-      if (itemsEl) positionGroupItems(wrap, itemsEl);
-    });
-  });
-  window.addEventListener("scroll", function () {
-    if (!nav) return;
-    nav.querySelectorAll(".app-nav__group.is-open").forEach(function (wrap) {
-      var itemsEl = wrap._portaledItems;
-      if (itemsEl) positionGroupItems(wrap, itemsEl);
-    });
-  }, true);
+  // 2026-08-08, גרסה שישית — חזרה לתפריט "מתרחב" בתוך שורת הטאבים עצמה (לא
+  // dropdown צף) לבקשת יועד המפורשת, אחרי שה-dropdown האנכי (גרסה 5) התברר
+  // כלא אינטואיטיבי ("לא הבנתי שזה השינוי שיקרה"). ההבדל המהותי מהניסיונות
+  // ההיסטוריים (1-3, שגם הם היו in-flow וגם נכשלו): אז ה-nav (בדסקטופ) היה
+  // shrink-to-fit ללא תקרה, אז כשהקבוצה גדלה — כל הקופסה של ה-nav גדלה איתה
+  // וזזה (ר' ההסבר המפורט ב-style.css ליד .app-nav ולמעלה ב-updateNavMaxWidth).
+  // עכשיו יש תקרת-רוחב יציבה (--nav-max-w, לא תלויה בתוכן הקבוצה) ו-nav הוא
+  // overflow-x:auto בשני המצבים — בדיוק כמו שהבר התחתון במובייל כבר עובד —
+  // כך שגדילת התוכן הפנימי לעולם לא מזיזה את הקופסה של ה-nav עצמה, רק ממלאת
+  // או גולשת מעבר לתקרה (ואז גוללים אליה, ר' applyNavGroupState).
   // מיישם את מצב הפתיחה/סגירה של קבוצות-הניווט על ה-DOM הקיים (בלי renderNav).
   function applyNavGroupState() {
     if (!nav) return;
     nav.querySelectorAll("[data-group-wrap]").forEach(function (wrap) {
       var isOpen = openGroup === wrap.dataset.groupWrap;
-      var wasOpen = wrap.classList.contains("is-open");
-      var itemsEl = groupItemsEl(wrap);
-      var btn = wrap.querySelector(".app-nav__tab--group");
-      if (isOpen) {
-        // גלילת-הכפתור-לתצוגה רק במעבר סגור→פתוח בפועל (לא בכל קריאה חוזרת,
-        // למשל renderNav שרץ ברקע כל כמה שניות בגלל רענון תגיות ההתרעות —
-        // אחרת המסך "קופץ" מחדש כל פעם שהקבוצה כבר פתוחה ורק מתרעננת).
-        if (!wasOpen) wrap.scrollIntoView({ inline: "nearest", block: "nearest" });
-        // portalGroupItems בטוח לקריאה חוזרת (idempotent) — ממקם מחדש בכל מקרה,
-        // גם אם כבר "מפורטל", כדי לשקף מיקום עדכני אחרי רענון/שינוי תוכן.
-        portalGroupItems(wrap);
-      }
       wrap.classList.toggle("is-open", isOpen);
+      var btn = wrap.querySelector(".app-nav__tab--group");
       if (btn) btn.setAttribute("aria-expanded", isOpen ? "true" : "false");
-      // הקלאס is-open מוצב גם ישירות על עצמו (לא רק על ה-wrap שמכיל אותו) —
-      // כי אחרי portalGroupItems הוא כבר לא צאצא של ה-wrap, וסלקטור CSS שתלוי
-      // בשרשרת ".app-nav__group.is-open .app-nav__group-items" לא היה עובד יותר.
-      if (itemsEl) itemsEl.classList.toggle("is-open", isOpen);
       // מדרג מחדש את זמן-ההשהיה של כל תת-כפתור בכל פתיחה (לא רק בציור הראשוני)
       var STAGGER_MS = 45;
-      (itemsEl || wrap).querySelectorAll(".app-nav__tab--sub").forEach(function (sub, i) {
+      wrap.querySelectorAll(".app-nav__tab--sub").forEach(function (sub, i) {
         sub.style.transitionDelay = (i * STAGGER_MS) + "ms";
       });
-      // אחרי שדהיית-הסגירה (opacity/transform) מסתיימת בפועל — רק אז מחזירים
-      // את הפאנל מ-body בחזרה אל ה-wrap. אם היינו מסירים אותו מיד עם הסרת
-      // is-open, הוא היה נעלם בבת-אחת במקום להיעלם בהחלקה.
-      if (itemsEl) {
-        var onEnd = function (e) {
-          if (e.target !== itemsEl) return;
-          if (e.propertyName !== "opacity" && e.propertyName !== "transform") return;
-          itemsEl.removeEventListener("transitionend", onEnd);
-          if (!wrap.classList.contains("is-open")) unportalGroupItems(wrap);
-        };
-        itemsEl.addEventListener("transitionend", onEnd);
+      // אחרי שהתוכן הפנימי (עכשיו in-flow, ר' style.css) באמת סיים להתרחב —
+      // גוללים את הקבוצה כולה (כולל התת-כפתורים שנחשפו) לתוך התצוגה, כדי
+      // שברוחב צר (או הרבה טאבים) היא לא תישאר גלולה-מחוץ-לתצוגה בלי שהמשתמש
+      // ידע שיש שם עוד תוכן. transitionend-גייטד (לא setTimeout קבוע) כי
+      // משך ההרחבה תלוי במספר תת-הכפתורים ולא ידוע מראש.
+      if (isOpen) {
+        var itemsEl = wrap.querySelector(".app-nav__group-items");
+        if (itemsEl) {
+          var onEnd = function (e) {
+            if (e.target !== itemsEl) return;
+            if (e.propertyName !== "grid-template-columns") return;
+            itemsEl.removeEventListener("transitionend", onEnd);
+            if (wrap.classList.contains("is-open")) {
+              wrap.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+            }
+          };
+          itemsEl.addEventListener("transitionend", onEnd);
+        }
       }
     });
   }
+  // הערה חשובה (2026-08-08, נבדק אמפירית ב-Playwright): נוסה כאן קודם תקרת
+  // max-width נמדדת-JS על nav שנשאר shrink-to-fit (מתכווץ לפי תוכן) — זה
+  // התברר לא-יציב: גם עם תקרה, ה-nav עדיין *גדל בפועל* לאורך כל שלב ההרחבה
+  // (עד שמגיע לתקרה), ואיתו זז כל טאב שבתוכו כולל הפעיל — אותו באג בדיוק,
+  // רק מוסתר בקצה. הפתרון היציב באמת (ר' style.css — .app-nav ב-
+  // @media(min-width:721px)): flex:1 קבוע, לא shrink-to-fit בכלל — קופסת
+  // ה-nav תמיד באותו רוחב (נגזר משכניו בשורת flex, לא מהתוכן הפנימי שלה),
+  // בדיוק כמו הבר התחתון במובייל שכבר תמיד ברוחב calc(100%-24px) קבוע בלי
+  // תלות במספר הטאבים. אין יותר צורך במדידת JS בכלל — ה-flex algorithm עושה
+  // את זה נכון וישירות.
   // מרענן את "has-active" (טקסט מודגש) על כותרות הקבוצות לפי המסך הנוכחי —
   // בלי renderNav מלא, כדי לא להפריע לטרנזיציית הפתיחה/סגירה שאולי רצה עכשיו.
   function updateGroupHasActive() {
@@ -306,16 +253,6 @@
     // מתחת לטאב הפעיל "לרוץ" מחדש מאפס בכל רענון תגיות, במקום פשוט להישאר במקום.
     var keepIndicator = nav.querySelector(".nav-indicator");
     if (keepIndicator && keepIndicator.parentNode) keepIndicator.parentNode.removeChild(keepIndicator);
-    // אם קבוצת-ניווט הייתה פתוחה עם פאנל "מועבר" (portaled) אל document.body
-    // (ר' portalGroupItems) — הוא לא צאצא של nav, אז nav.innerHTML למטה לא
-    // ימחק אותו לבד. בלי הניקוי הזה הוא היה נשאר יתום ומרחף ב-body לצמיתות
-    // (רענון תגיות ההתרעות קורא ל-renderNav כל כמה שניות ברקע).
-    nav.querySelectorAll("[data-group-wrap]").forEach(function (wrap) {
-      if (wrap._portaledItems && wrap._portaledItems.parentNode === document.body) {
-        wrap._portaledItems.parentNode.removeChild(wrap._portaledItems);
-      }
-      wrap._portaledItems = null;
-    });
     var html = "";
     AREAS[area].tabs.forEach(function (t) {
       // כפתור-קבוצה מתקפל ("השיכון") — פותח תת-תפריט של שני כפתורים במקום לנווט.
@@ -365,11 +302,6 @@
     });
     nav.innerHTML = html;
     if (keepIndicator) nav.insertBefore(keepIndicator, nav.firstChild);
-    // הקלאסים is-open/aria-expanded כבר משוכפלים נכון בתוך ה-html שנבנה למעלה,
-    // אבל אם קבוצה אמורה להיות פתוחה כרגע — צריך גם "לפרטל" מחדש את הפאנל
-    // שלה אל body (ר' portalGroupItems), אחרת הוא ייראה שוב חתוך במובייל עד
-    // הסגירה/פתיחה הבאה. הקריאה הזו בטוחה גם כשכלום לא פתוח (openGroup===null).
-    applyNavGroupState();
   }
   /* --- התרעות (2026-08): שני מקורות —
      (א) מקומי, מיידי, מהזיכרון: הוצאות ממתינות/בבדיקה + סעיפים בחריגת תקציב
@@ -1086,13 +1018,7 @@
   window.CBA = window.CBA || {};
   window.CBA.navigate = showScreen;
 
-  // 2026-08-08: מקשיב על document ולא על nav בכוונה. תת-הכפתורים של קבוצת-
-  // ניווט פתוחה "מפורטלים" (מועברים) אל document.body כדי לחמוק מ-overflow
-  // חתוך (ר' portalGroupItems/applyNavGroupState למעלה) — כשהם שם, לחיצה
-  // עליהם כבר לא מבעבעת דרך nav (הוא כבר לא אב שלהם ב-DOM), אז מאזין שרשום
-  // על nav עצמו פשוט לא היה נורה בשבילם. מאזין על document תופס את זה תמיד,
-  // בלי תלות במיקום הנוכחי של הכפתור ב-DOM.
-  document.addEventListener("click", (e) => {
+  nav.addEventListener("click", (e) => {
     const groupBtn = e.target.closest("[data-group]");
     if (groupBtn) { toggleGroup(groupBtn.dataset.group); return; }
     const tab = e.target.closest(".app-nav__tab[data-screen]");

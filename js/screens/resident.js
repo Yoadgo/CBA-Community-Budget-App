@@ -250,7 +250,7 @@ CBA.screens = CBA.screens || {};
           '<div class="rs-upload" id="rs-upload">' + cameraIcon + '<b>צילום או העלאת קבלה</b><small>JPG, PNG או PDF</small></div>' +
           '<button type="button" class="rs-ghost rs-scan-btn" id="rs-scan-btn" hidden>' + scanIcon + ' <span>סריקה חכמה</span></button>' +
           '<div class="rs-scan-msg" id="rs-scan-msg" hidden></div>' +
-          '<input type="file" id="rs-file" accept="image/*,application/pdf" capture="environment" hidden>' +
+          '<input type="file" id="rs-file" accept="image/*,application/pdf" hidden>' +
           '<div class="form-grid">' +
             '<div class="form-field"><label>סכום (₪)</label>' +
               '<input class="field-input num-input" id="rs-amount" type="number" inputmode="decimal" placeholder="0.00" min="0" step="0.01"></div>' +
@@ -440,34 +440,39 @@ CBA.screens = CBA.screens || {};
         var errs = validate();
         if (errs.length) { showError(errs.join(" ")); return; }
 
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<div class="rs-spin"></div><span>שולח…</span>';
+        openReceiptPurposeModal(function (purposeText) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<div class="rs-spin"></div><span>שולח…</span>';
 
-        var fields = {
-          expenseType: expenseType,
-          amount: parseFloat(val("#rs-amount")),
-          supplier: val("#rs-supplier"),
-          description: val("#rs-desc"),
-          buyer: fullName(u),
-          email: u.email || "",
-          fileName: picked.fileName,
-          mimeType: picked.mimeType,
-          dataBase64: picked.dataBase64
-        };
-        if (expenseType === "supplier") {
-          fields.bankName = val("#rs-bank-name");
-          fields.bankBranch = val("#rs-bank-branch");
-          fields.bankAccount = val("#rs-bank-account");
-        }
+          var desc = val("#rs-desc");
+          if (purposeText) desc = desc ? (desc + " לטובת " + purposeText) : ("לטובת " + purposeText);
 
-        CBA.data.submitReceipt(fields, function (res) {
-          if (res && res.ok) {
-            renderSent();
-          } else {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = sendIcon + ' <span>שלח בקשה</span>';
-            showError("השליחה נכשלה — בדקו את החיבור לאינטרנט ונסו שוב.");
+          var fields = {
+            expenseType: expenseType,
+            amount: parseFloat(val("#rs-amount")),
+            supplier: val("#rs-supplier"),
+            description: desc,
+            buyer: fullName(u),
+            email: u.email || "",
+            fileName: picked.fileName,
+            mimeType: picked.mimeType,
+            dataBase64: picked.dataBase64
+          };
+          if (expenseType === "supplier") {
+            fields.bankName = val("#rs-bank-name");
+            fields.bankBranch = val("#rs-bank-branch");
+            fields.bankAccount = val("#rs-bank-account");
           }
+
+          CBA.data.submitReceipt(fields, function (res) {
+            if (res && res.ok) {
+              renderSent();
+            } else {
+              submitBtn.disabled = false;
+              submitBtn.innerHTML = sendIcon + ' <span>שלח בקשה</span>';
+              showError("השליחה נכשלה — בדקו את החיבור לאינטרנט ונסו שוב.");
+            }
+          });
         });
       });
     }
@@ -647,6 +652,63 @@ CBA.screens = CBA.screens || {};
       onProceed();
     });
   }
+  /* חלון קופץ בלחיצת "שלח בקשה" בהגשת קבלה (2026-08-08) — שואל אם צוין בתיאור
+     לאיזה שימוש הרכישה. "כן, צוין" ממשיך לשליחה כרגיל. "לא, להוסיף" חושף שדה טקסט;
+     מה שמוזן שם מתווסף לתיאור בפורמט "<תיאור> לטובת <טקסט>" (למשל קבלה על "ציוד
+     למסיבות" + הוספת "אירוע מבוגרים" -> "ציוד למסיבות לטובת אירוע מבוגרים").
+     onProceed(purposeText) נקרא רק אחרי בחירה — purposeText הוא null אם "כן" נבחר
+     או שדה הטקסט נשאר ריק. */
+  function openReceiptPurposeModal(onProceed) {
+    closeAnyModal();
+    var overlay = document.createElement("div");
+    overlay.id = "cba-modal";
+    overlay.innerHTML =
+      '<div class="modal-backdrop" data-modal-close>' +
+        '<div class="modal" role="dialog">' +
+          '<div class="modal__head">' +
+            '<div><div class="modal__title">לפני שליחה</div>' +
+              '<div class="modal__sub">האם ציינת בתיאור לאיזה שימוש הרכישה?</div></div>' +
+            '<button class="drawer__close" data-modal-close aria-label="סגור">×</button>' +
+          '</div>' +
+          '<div class="modal__body">' +
+            '<div class="rp-choice" id="rp-choice">' +
+              '<button type="button" class="rs-ghost" id="rp-yes">כן, צוין</button>' +
+              '<button type="button" class="rs-ghost" id="rp-no">לא, להוסיף</button>' +
+            '</div>' +
+            '<div class="rp-add" id="rp-add" hidden>' +
+              '<div class="form-field"><label>לאיזה שימוש?</label>' +
+                '<input type="text" id="rp-purpose-input" class="field-input" placeholder="לדוגמה: אירוע מבוגרים"></div>' +
+              '<div class="club-rules__modal-actions">' +
+                '<button type="button" class="btn-primary" id="rp-add-submit">הוסף ושלח</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector(".modal").addEventListener("click", function (e) { e.stopPropagation(); });
+    overlay.querySelectorAll("[data-modal-close]").forEach(function (el) { el.addEventListener("click", closeAnyModal); });
+    document.addEventListener("keydown", escAnyModal);
+
+    var choiceEl = overlay.querySelector("#rp-choice");
+    var addEl = overlay.querySelector("#rp-add");
+    var input = overlay.querySelector("#rp-purpose-input");
+    overlay.querySelector("#rp-yes").addEventListener("click", function () {
+      closeAnyModal();
+      onProceed(null);
+    });
+    overlay.querySelector("#rp-no").addEventListener("click", function () {
+      choiceEl.hidden = true;
+      addEl.hidden = false;
+      input.focus();
+    });
+    overlay.querySelector("#rp-add-submit").addEventListener("click", function () {
+      var text = input.value.trim();
+      closeAnyModal();
+      onProceed(text || null);
+    });
+  }
+
   function closeAnyModal() {
     var el = document.getElementById("cba-modal");
     if (el) el.remove();

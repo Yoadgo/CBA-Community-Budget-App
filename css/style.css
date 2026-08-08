@@ -269,8 +269,24 @@ body[data-screen="planning"] .year-switch__add {
 .year-switch__add:hover { border-color: var(--action); color: var(--text); background: var(--hover); }
 
 /* ---------- תפריט ניווט ---------- */
-.app-nav { display: flex; gap: 2px; flex-wrap: wrap; }
+/* 2026-08-08: nav הוא עכשיו overflow-x:auto + flex-wrap:nowrap בשני המצבים
+   (דסקטופ וגם מובייל, לא רק מובייל כמו קודם) — "הכפתורים רצים בתוך המסגרת
+   הגדולה, ואם אין להם מקום הגלילה צריכה לתמוך בזה, בדומה למובייל" (לבקשת
+   יועד). ר' ההערה המפורטת יותר למטה ליד .app-nav__group על איך זה פותר את
+   באג ה"מסגרת זזה" בלי לוותר על התרחבות אמיתית בתוך שורת הטאבים. */
+.app-nav {
+  display: flex; align-items: stretch; gap: 2px;
+  flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.app-nav::-webkit-scrollbar { display: none; }
 .app-nav__tab {
+  /* flex:none חיוני — nav הוא overflow-x:auto + nowrap (למעלה) בשני המצבים;
+     בלי זה, כשהתוכן הכולל חורג מרוחב הקופסה, ברירת המחדל flex-shrink:1 דוחסת
+     את הכפתורים עצמם (טקסט/ריפוד נלחצים) במקום לתת לגלישה האופקית לקרות —
+     בדיוק לקח #13 בזיכרון הפרויקט, שהיה מיושם קודם רק על .app-nav--bottom
+     .app-nav__tab (מובייל) ולא על הכפתורים הרגילים כשגם הדסקטופ הפך ל-nowrap. */
+  flex: none;
   appearance: none; border: none; background: none;
   display: inline-flex; align-items: center; gap: 5px;
   font-family: inherit; font-size: 13px; font-weight: 500;
@@ -302,109 +318,69 @@ body[data-screen="planning"] .year-switch__add {
 .app-nav__ico svg { width: 14px; height: 14px; display: block; }
 
 /* ---------- קבוצת-ניווט מתקפלת בניווט ("השיכון") ----------
-   2026-08-08, חידוד חמישי — שינוי כיוון מהותי. שלוש הגרסאות הקודמות ניסו
-   "להחליק לצדדים" בתוך שורת הטאבים עצמה (in-flow, אח"כ position:absolute
-   צף אופקית) — ונתקלנו בבעיה מבנית: אין מספיק מקום פנוי מימין לכפתור
-   המשתמש כדי שתפריט אופקי ייפתח בלי להתנגש בו או להזיז טאבים אחרים (מדידה
-   עם Playwright אישרה: פתיחה in-flow באמת הזיזה את כל שאר הטאבים כולל הפעיל
-   — יועד: "המסגרת צבע עוברת למפה למרות שבפועל אני עדיין על תפריט אחר";
-   וגרסת ה-position:absolute האופקית פשוט התנגשה חזותית בכפתור המשתמש).
-   זו בעיית-מקום מובנית שתחזור בכל קבוצת-ניווט עתידית שתתווסף, לא רק תקלה
-   נקודתית ב"השיכון" — לכן המעבר לתפריט נפתח אנכי (dropdown) מתחת לכפתור,
-   בדיוק כמו תפריט תוצאה סטנדרטי: תמיד יש מקום פנוי מתחת לכותרת, בלי תלות
-   ברוחב הפנוי משני הצדדים — פתרון שמתקנן נכון לכל קבוצה עתידית, לא רק
-   פאץ' לזו הנוכחית. */
-.app-nav__group { position: relative; display: inline-flex; align-items: stretch; gap: 2px; border-radius: 999px; flex: none; transition: background .4s ease; }
+   2026-08-08, גרסה שישית — "מתרחב" בתוך שורת הטאבים עצמה (חזרה למודל in-flow,
+   לא dropdown צף — יועד: "לא הבנתי שזה השינוי שיקרה", וביקש מפורשות תפריט
+   שמתרחב בתוך המסגרת). הגרסאות 1-3 (גם הן in-flow) נכשלו כי ה-nav עצמו היה
+   shrink-to-fit בלי תקרה — כשהקבוצה גדלה, כל הקופסה של ה-nav גדלה/זזה איתה
+   (יועד: "המסגרת צבע עוברת למפה למרות שבפועל אני עדיין על תפריט אחר").
+   הפתרון הפעם: ל-nav יש עכשיו תקרת-רוחב יציבה שלא תלויה בתוכן שלו כלל
+   (--nav-max-w, ר' updateNavMaxWidth ב-app.js) + overflow-x:auto בשני
+   המצבים (ר' .app-nav למעלה) — בדיוק כמו שהבר התחתון במובייל כבר עובד.
+   כלומר: כל עוד יש מקום, הקבוצה מתרחבת בתוך הפס באמת (רוחב אמיתי מונפש,
+   לא רק opacity) בלי לזוז ובלי לדחוף כלום; אם התוכן חורג מהתקרה — גולל
+   פנימה כמו כל טאב אחר שלא נכנס, לא נחתך ולא נעלם. פותר גם עתידית: כל קבוצה
+   נוספת שתתווסף מקבלת את אותה התנהגות אוטומטית, בלי לוגיקה נפרדת. */
+.app-nav__group { display: inline-flex; align-items: stretch; gap: 2px; border-radius: 999px; flex: none; transition: background .4s ease; }
 .app-nav__group.is-open { background: rgba(17,24,39,.055); }
 /* פתוח — טקסט/רקע עדין על הכותרת עצמה, קצת יותר בולט מ"כרית" הקבוצה מסביבה
    (שכבה נוספת של עומק — לא הקפסולה הכהה של "פעיל", זו שמורה לתת-הכפתור המדויק) */
 .app-nav__group.is-open .app-nav__tab--group { background: var(--hover); }
 /* המסך הנוכחי נמצא בתוך הקבוצה הזו — רמז עדין (טקסט כהה ומודגש), בלי קפסולה */
 .app-nav__tab--group.has-active { color: var(--text); font-weight: 700; }
-/* השברון — במצב סגור מצביע למטה ("יש עוד, אפשר לפתוח"), ומתהפך למעלה כשפתוח
-   ("לחיצה תסגור") — כיוון הסטנדרטי לתפריט שנפתח כלפי מטה. */
+/* השברון — מתהפך כשפתוח, אפיון סטנדרטי ל"זה כרגע מורחב, לחיצה תכווץ" */
 .app-nav__chev { display: inline-flex; align-items: center; margin-inline-start: 1px; transition: transform .4s cubic-bezier(.3,.7,.2,1); }
 .app-nav__chev svg { display: block; }
 .app-nav__group.is-open .app-nav__chev { transform: rotate(180deg); }
 
-/* ---------- תפריט נפתח אנכי (dropdown) מתחת לכפתור הקבוצה ----------
-   .app-nav__group-items הוא רק עוגן-מיקום — .app-nav__group-items-inner הוא
-   הפאנל הגלוי בפועל (עמודה אנכית, זכוכית, צל). ה"פתיחה" היא opacity+transform
-   בלבד (לא רוחב/גובה מונפשים) — התוכן תמיד בגודלו הטבעי. left:0 (לא right:0!)
-   בכוונה: "השיכון" בדרך כלל יושב קרוב לקצה השמאלי של הפס (הוא הטאב האחרון
-   ב-RTL), אז עיגון הפאנל משמאלו-שלו ופתיחה ימינה (אל תוך המסך) בטוחה יותר
-   מאשר עיגון מימין ופתיחה שמאלה (עלולה לגלוש מחוץ למסך).
-
-   2026-08-08, תיקון קריטי — הפאנל בלתי-נראה במובייל: לפס הניווט התחתון יש
-   overflow-x:auto (כדי לגלול טאבים אופקית), ולפי מפרט ה-CSS, ברגע ש-overflow-x
-   הוא לא visible, הדפדפן *מחשב מחדש* גם overflow-y ל-auto — אי אפשר "לגלול
-   אופקית בלי לחתוך אנכית" על אותו אלמנט. כל תוכן שנפתח *מתחת* לקופסה של הפס
-   (top:calc(100%+8px)) נחתך ונעלם לגמרי. הפתרון (ר' app.js — portalGroupItems)
-   זהה לתבנית שכבר קיימת בקוד למגש המשתמש (.user-panel): כשהקבוצה נפתחת, ה-JS
-   מעביר את .app-nav__group-items פיזית אל document.body עם position:fixed
-   ומיקום מחושב (getBoundingClientRect), כך שהוא כבר לא צאצא של הפס החתוך.
-   בגלל שהעברה כזו "שוברת" את שרשרת ההורים ל-.app-nav__group.is-open, הקלאס
-   is-open מוצב גם ישירות על .app-nav__group-items עצמו (לא רק על ה-wrap) —
-   הסלקטורים למטה תומכים בשני המצבים (מקונן / מועבר). */
+/* ---------- התרחבות התת-כפתורים בתוך שורת הטאבים (in-flow) ----------
+   .app-nav__group-items הוא display:grid עם grid-template-columns שעובר
+   טרנזיציה אמיתית בין 0fr (סגור) ל-1fr (פתוח) — טריק שמאפשר להנפיש "רוחב
+   עד לגודל הטבעי של התוכן" בלי לדעת את הפיקסלים מראש. ה-inner שבפנים הוא
+   overflow:hidden כדי שהתוכן ייחתך בהדרגה בזמן שהעמודה מתכווצת/מתרחבת, לא
+   יופיע/ייעלם בבת אחת. min-width:0 חיוני כאן (ר' לקח #13 בזיכרון הפרויקט) —
+   בלעדיו 0fr לא מגיע לאפס אמיתי. */
 .app-nav__group-items {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 70;
-  opacity: 0;
-  transform: translateY(-6px) scale(.97);
-  transform-origin: top left;
-  pointer-events: none;
+  display: grid;
+  grid-template-columns: 0fr;
+  min-width: 0;
   /* עקומה סימטרית (לא ease-out) — ר' ההסבר ההיסטורי למטה בקובץ ליד
      .nav-indicator: ease-out ריכז את רוב התנועה ב-15% הראשונים של הזמן,
      מה שהרגיש "מהיר ואז נתקע" גם במשך זמן ארוך. */
-  transition: opacity .34s cubic-bezier(.65,0,.35,1), transform .34s cubic-bezier(.65,0,.35,1);
+  transition: grid-template-columns .34s cubic-bezier(.65,0,.35,1);
 }
-/* 2026-08-08: הפס התחתון במובייל מקובע לתחתית המסך (position:fixed; bottom:…,
-   ר' mobile.css .app-nav--bottom) — "נפתח למטה" משם פירושו לרוב מחוץ למסך
-   לגמרי (נבדק ב-Playwright: הפאנל התחיל כמעט מחוץ לגבול התחתון של המסך).
-   ה-JS (app.js — positionGroupItems) מזהה מובייל לפי app-nav--bottom ומוסיף
-   את המחלקה הזו כדי שהפאנל ייפתח כלפי *מעלה* מהכפתור במקום מטה; בדסקטופ
-   (כותרת עליונה) נשארת ברירת המחדל למעלה — נפתח כלפי מטה כרגיל. */
-.app-nav__group-items--up {
-  transform: translateY(6px) scale(.97);
-  transform-origin: bottom left;
-}
-.app-nav__group.is-open .app-nav__group-items,
-.app-nav__group-items.is-open {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
+.app-nav__group.is-open .app-nav__group-items { grid-template-columns: 1fr; }
 .app-nav__group-items-inner {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: max-content;
-  padding: 6px;
-  background: rgba(255, 255, 255, .88);
-  -webkit-backdrop-filter: saturate(190%) blur(22px);
-  backdrop-filter: saturate(190%) blur(22px);
-  border: 1px solid rgba(255, 255, 255, .7);
-  border-radius: 16px;
-  box-shadow: 0 14px 34px rgba(16, 24, 40, .16), 0 2px 8px rgba(16, 24, 40, .06),
-              inset 0 1px 0 rgba(255, 255, 255, .8);
+  display: flex; align-items: stretch; gap: 2px;
+  /* min-width:max-content קובע את הרוחב ה"טבעי" שאליו ה-1fr שואף לגדול —
+     אבל בלעדי min-width:0 על *הפריט* (לא רק על מכל ה-grid מסביבו, ר' למעלה)
+     גריד מטיל רצפה סמויה של min-width:auto (= min-content) על הפריט שלו,
+     ואז 0fr אף פעם לא מגיע לאפס אמיתי — בדיוק לקח #13 בזיכרון הפרויקט, הפעם
+     על ילד ה-grid ולא על ילד ה-flex. נתפס אמפירית: overflow:hidden בלבד לא
+     היה מספיק — ה-inner עדיין תפס את מלוא רוחבו הטבעי גם "סגור". */
+  min-width: 0;
+  overflow: hidden;
 }
-/* כל תת-כפתור הוא עכשיו שורת-תפריט מלאה (לא כמוסה קטנה) — קריא, אייקון+טקסט
-   מיושרים לימין (התחלה ב-RTL), עם דהייה+הזחה עדינה מדורגת (transition-delay
-   נקבע ב-app.js לפי אינדקס) כדי שהעין תספיק לעקוב אחרי כל שורה בנפרד. */
+/* תת-כפתור — כמוסה קטנה כמו טאב רגיל אבל קצת יותר צנועה (נקראת כ"ילד" של
+   הקבוצה, לא טאב שווה-ערך), נכנסת בדהייה+הקטנה מדורגת (transition-delay
+   נקבע ב-app.js לפי אינדקס) כדי שהעין תספיק לעקוב אחרי כל אחת בנפרד. */
 .app-nav__tab--sub {
-  width: 100%; justify-content: flex-start;
-  padding: 9px 12px; font-size: 13.5px; border-radius: 10px; white-space: nowrap;
-  opacity: 0; transform: translateX(6px);
+  flex: none;
+  font-size: 11.5px;
+  opacity: 0; transform: scale(.85);
   transition: opacity .3s ease, transform .3s cubic-bezier(.3,.8,.4,1);
 }
-.app-nav__tab--sub .app-nav__ico svg { width: 15px; height: 15px; }
-/* מסלול ל-.app-nav__group-items.is-open (לא ל-.app-nav__group.is-open) בכוונה —
-   התת-כפתורים הם צאצאים של .app-nav__group-items, וזה עשוי לחיות מחוץ ל-wrap
-   (מועבר ל-document.body בזמן פתיחה, ר' ההערה למעלה) — סלקטור שתלוי בשרשרת
-   ההורים המקורית (.app-nav__group.is-open ...) לא היה עובד אחרי ההעברה. */
-.app-nav__group-items.is-open .app-nav__tab--sub { opacity: 1; transform: translateX(0); }
+.app-nav__tab--sub .app-nav__ico svg { width: 13px; height: 13px; }
+.app-nav__group.is-open .app-nav__tab--sub { opacity: 1; transform: scale(1); }
 @media (prefers-reduced-motion: reduce) {
   .app-nav__tab--sub { transition: none; opacity: 1; transform: none; }
   .app-nav__group, .app-nav__chev, .app-nav__group-items { transition: none; }
@@ -426,6 +402,21 @@ body[data-screen="planning"] .year-switch__add {
     border: 1px solid rgba(255, 255, 255, .65);
     border-radius: 999px;
     box-shadow: 0 1px 2px rgba(16, 24, 40, .05), inset 0 1px 0 rgba(255, 255, 255, .7);
+    /* 2026-08-08, נוסה קודם ותועד כלא-מספיק (ר' ההערה המפורטת ליד
+       .app-nav__group למעלה): נשאר shrink-to-fit + תקרת max-width נמדדת-JS —
+       זה עדיין הזיז את הפעיל בפועל לאורך כל שלב ההרחבה (עד הגעה לתקרה),
+       כי nav המשיך "לגדול לפי תוכן" באמת. הפתרון היציב: flex:1 קבוע — קופסת
+       ה-nav נגזרת אך ורק משכניה (.app-brand, .app-controls) בשורת ה-flex,
+       ואף פעם לא מהתוכן הפנימי שלה. משמעות ויזואלית: ה"כמוסה" תמיד תופסת את
+       כל הרוחב הפנוי בין הלוגו לכפתור המשתמש (עד לתקרת max-width קבועה
+       למטה, כדי לא להיראות ענקית/ריקה במסכים רחבים מאוד) — בדיוק כמו שהבר
+       התחתון במובייל כבר תמיד ברוחב calc(100%-24px) קבוע, לא תלוי בתוכן.
+       min-width:0 הכרחי כדי שהאלגוריתם יוכל לכווץ מתחת לרוחב-התוכן המינימלי
+       כשבאמת אין מקום (ואז overflow-x:auto גולל, לא שובר את הכותרת). */
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 760px;
+    justify-content: flex-start;
   }
   .app-nav__tab { border-radius: 999px; }
 }
