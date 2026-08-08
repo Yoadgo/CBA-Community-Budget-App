@@ -8,6 +8,9 @@
   var header      = document.querySelector(".app-header");
   var headerInner = document.querySelector(".app-header__inner");
   var nav         = document.getElementById("app-nav");
+  // 2026-08-08: בדסקטופ nav חוזר לתוך .app-nav__viewport (לא ישירות לתוך
+  // headerInner) — ה"מכל" הבלתי-נראה שסופג את לחץ הפריסה, ר' index.html + style.css.
+  var navViewport = document.getElementById("app-nav-viewport");
 
   // מעדכן משתנה CSS עם הגובה האמיתי של הכותרת (כדי שהתוכן יתחיל בדיוק מתחתיה)
   function setHeaderVar() {
@@ -16,15 +19,16 @@
     }
   }
 
-  // ממקם את הניווט: במובייל כילד ישיר של body (בר תחתון), בדסקטופ בחזרה בכותרת.
-  // חשוב: מזיזים את אותו אלמנט, כך שה-listener שב-app.js ממשיך לעבוד.
+  // ממקם את הניווט: במובייל כילד ישיר של body (בר תחתון), בדסקטופ בחזרה
+  // לתוך app-nav__viewport בכותרת. חשוב: מזיזים את אותו אלמנט, כך שה-
+  // listener שב-app.js ממשיך לעבוד.
   function placeNav() {
     if (!nav || !headerInner) return;
     if (mq.matches) {
       if (nav.parentElement !== document.body) document.body.appendChild(nav);
       nav.classList.add("app-nav--bottom");
     } else {
-      if (nav.parentElement !== headerInner) headerInner.appendChild(nav);
+      if (navViewport && nav.parentElement !== navViewport) navViewport.appendChild(nav);
       nav.classList.remove("app-nav--bottom");
       header.classList.remove("app-header--hidden");
     }

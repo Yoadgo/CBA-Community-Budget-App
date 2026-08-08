@@ -41,12 +41,20 @@
         </div>
       </div>
 
-      <!-- תפריט ניווט — באותה שורה של הכותרת -->
-      <nav class="app-nav" id="app-nav">
-        <button class="app-nav__tab is-active" data-screen="budget">תכנון מול ביצוע</button>
-        <button class="app-nav__tab" data-screen="expenses">ניהול הוצאות</button>
-        <button class="app-nav__tab" data-screen="planning">בניית תקציב</button>
-      </nav>
+      <!-- תפריט ניווט — באותה שורה של הכותרת.
+           app-nav__viewport: 2026-08-08, "מכל" בלתי-נראה (בלי רקע/עיצוב משלו)
+           שמתפקד כמסגרת-גלילה יציבה בדסקטופ בלבד — ר' ההערה המפורטת ב-
+           style.css ליד .app-nav__viewport ואת placeNav ב-mobile.js. הכמוסה
+           הוויזואלית עצמה (nav) ממשיכה "להתכווץ לפי תוכן" בדיוק כמו תמיד;
+           רק המכל סביבה סופג את לחץ הפריסה, כדי שגדילת תוכן פנימי (למשל
+           קבוצת-ניווט שנפתחת) לעולם לא תזיז את הכמוסה או תיצור מכל ריק גדול. -->
+      <div class="app-nav__viewport" id="app-nav-viewport">
+        <nav class="app-nav" id="app-nav">
+          <button class="app-nav__tab is-active" data-screen="budget">תכנון מול ביצוע</button>
+          <button class="app-nav__tab" data-screen="expenses">ניהול הוצאות</button>
+          <button class="app-nav__tab" data-screen="planning">בניית תקציב</button>
+        </nav>
+      </div>
 
       <!-- מתג השנה — בין הניווט לכפתור המשתמש; מתמלא דינמית ב-app.js -->
       <div class="year-switch" id="year-switch"></div>
