@@ -29,12 +29,14 @@
 @media (max-width: 720px) {
 
   :root {
-    /* גובה הכותרת מחושב ב-JS; ברירת מחדל אם עוד לא חושב */
-    --header-h: 64px;
-    /* בר הניווט התחתון — מרחק מתחתית המסך עד לראש הכמוסה הצפה (45px גובה +
-       10px מרווח מהתחתית, ר' .app-nav--bottom); עודכן מ-66px כשהבר היה שטוח
-       ומלא-קיר-לקיר בלי מרווח (2026-08-08) */
-    --botnav-h: 55px;
+    /* גובה הכותרת מחושב ב-JS מהגובה בפועל (ר' setHeaderVar ב-mobile.js), אז
+       זה רק ברירת מחדל לרגע שלפני החישוב הראשון. הוקטן ב-~15% (2026-08-08,
+       לבקשת יועד) בהתאמה לכותרת שהצטמצמה בפועל — למנוע "קפיצה" רגעית. */
+    --header-h: 54px;
+    /* בר הניווט התחתון — מרחק מתחתית המסך עד לראש הכמוסה הצפה. נמדד מחדש
+       (Playwright) אחרי הקטנת המידות ב-15%: הגובה בפועל ירד מ-45px ל-39px
+       (ריפוד 4px + ריפוד טאב 8px + תוכן ~27px), אז 39+10=49px (היה 55px). */
+    --botnav-h: 49px;
     /* השורה התחתונה הקבועה (תקציב / בניית תקציב) */
     --bottomline-h: 60px;
   }
@@ -52,7 +54,8 @@
   .app-header--hidden { transform: translateY(-100%); }
 
   .app-header__inner {
-    padding: 12px 16px;
+    /* 2026-08-08: הוקטן ב-~15% (לבקשת יועד), עקבי עם הקטנת ה-padding בדסקטופ */
+    padding: 10px 14px;
     gap: 0;
     flex-wrap: nowrap;
   }
@@ -76,7 +79,7 @@
     position: fixed; inset-inline: 12px; bottom: calc(10px + env(safe-area-inset-bottom));
     z-index: 40; width: auto; max-width: calc(100% - 24px);
     display: flex; flex-wrap: nowrap; gap: 2px; justify-content: center;
-    padding: 5px;
+    padding: 4px;
     background: rgba(255,255,255,.55);
     backdrop-filter: saturate(190%) blur(18px);
     -webkit-backdrop-filter: saturate(190%) blur(18px);
@@ -87,19 +90,20 @@
   }
   .app-nav--bottom::-webkit-scrollbar { display: none; }
 
-  /* טאב אופקי (אייקון + טקסט), בדיוק כמו בדסקטופ — לא עמודה של אייקון מעל טקסט */
+  /* טאב אופקי (אייקון + טקסט), בדיוק כמו בדסקטופ — לא עמודה של אייקון מעל טקסט.
+     2026-08-08: כל המידות הוקטנו ב-~15% (לבקשת יועד), עקבי עם כותרת הדסקטופ. */
   .app-nav--bottom .app-nav__tab {
     flex: none;
-    display: inline-flex; align-items: center; gap: 5px;
+    display: inline-flex; align-items: center; gap: 4px;
     color: var(--text-soft);
-    font-size: 12.5px; font-weight: 500;
-    padding: 9px 13px; border-radius: 999px;
+    font-size: 11px; font-weight: 500;
+    padding: 8px 11px; border-radius: 999px;
     white-space: nowrap;
   }
   .app-nav--bottom .app-nav__tab.is-active { color: #fff; background: var(--action); font-weight: 600; }
-  .app-nav--bottom .app-nav__ico svg { width: 15px; height: 15px; }
-  .app-nav--bottom .app-nav__tab--sub { font-size: 11.5px; padding-block: 6px; }
-  .app-nav--bottom .app-nav__tab--sub .app-nav__ico svg { width: 13px; height: 13px; }
+  .app-nav--bottom .app-nav__ico svg { width: 13px; height: 13px; }
+  .app-nav--bottom .app-nav__tab--sub { font-size: 10px; padding-block: 5px; }
+  .app-nav--bottom .app-nav__tab--sub .app-nav__ico svg { width: 11px; height: 11px; }
 
   /* ---------- שלב 2: מסך "תכנון מול ביצוע" — פריסה אנכית מרווחת ---------- */
   .budget-cols { gap: 26px; }

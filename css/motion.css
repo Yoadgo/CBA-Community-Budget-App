@@ -85,16 +85,34 @@
    2026-08-08: הורחב גם למובייל (היה דסקטופ בלבד), כדי שבר הניווט התחתון
    ייראה ויתנהג בדיוק כמו בדסקטופ, כולל המחוון הנוזלי (ר' motion.js). */
 .app-nav { position: relative; }
+/* 2026-08-08, חידוד רביעי (לבקשת יועד — "הרקע השחור שמחליק לתפריט הבא צריך
+   להיות גם ליקוויד גלאס, מעט יותר בהיר, שיראו את הכיתוב שהוא נוסע עליו ממש
+   בטשטוש כמו שהאפקט אמור להיות, ושההחלקה תהיה איטית יותר, גם במובייל גם
+   במחשב"): המחוון עצמו הופך לכמוסת זכוכית מטושטשת במקום רקע כהה אטום — עם
+   backdrop-filter, כך שהטקסט של הטאבים שהוא "עובר מעליהם" בדרך נראה מטושטש
+   מבעדו, בדיוק כמו אפקט "זכוכית נוזלית" אמיתי. כדי שזה יעבוד צריך את סדר
+   השכבות (z-index) הבא: הטאבים הלא-פעילים למטה (1), המחוון מעליהם (2) —
+   כך הוא מטשטש אותם תוך כדי מעבר — והטאב הפעיל מעל כולם (3), כדי שהתווית
+   שלו תיקרא בבירור מעל הזכוכית ברגע שהמחוון "נחת" עליו. גם הקצב הואט
+   משמעותית (0.32s→0.62s, ועוד יותר איטי במובייל בהמשך הקובץ). */
 .nav-indicator {
   position: absolute; left: 0; top: 5px; bottom: 5px; width: 0;
-  border-radius: 999px; background: var(--action);
-  box-shadow: 0 1px 2px rgba(16,24,40,.15);
-  transition: transform .32s cubic-bezier(.34,1.3,.4,1), width .32s cubic-bezier(.34,1.3,.4,1), opacity .2s ease;
-  pointer-events: none; z-index: 0; opacity: 0;
+  border-radius: 999px;
+  background: rgba(17,24,39,.6);
+  backdrop-filter: saturate(180%) blur(8px);
+  -webkit-backdrop-filter: saturate(180%) blur(8px);
+  box-shadow: 0 1px 2px rgba(16,24,40,.15), inset 0 1px 0 rgba(255,255,255,.14);
+  transition: transform .62s cubic-bezier(.65,0,.35,1), width .62s cubic-bezier(.65,0,.35,1), opacity .25s ease;
+  pointer-events: none; z-index: 2; opacity: 0;
 }
 .app-nav__tab { position: relative; z-index: 1; }
+.app-nav__tab.is-active { z-index: 3; }
 /* כשהמחוון קיים — הוא זה שנותן את הרקע הכהה לטאב הפעיל (המחוון גולש חלק, לא קופץ) */
 .app-nav:has(.nav-indicator) .app-nav__tab.is-active { background: none; }
+@media (max-width: 720px) {
+  /* יועד: "הקצב עדיין מהיר במובייל" — עוד יותר איטי כאן מהדסקטופ */
+  .nav-indicator { transition-duration: .78s; }
+}
 
 /* ---------- 4. מיקרו-אינטראקציות: משוב לחיצה רך בכל הבקרות ---------- */
 .btn-primary, .btn-ghost, .btn-approve, .btn-reject, .add-btn, .up-item,

@@ -341,6 +341,7 @@ function doPost(e) {
       case 'replaceFamily':     return json_(replaceFamily_(ss, body));
       case 'exportResidents':   return json_(exportResidents_(ss, body));
       case 'createResidents':   return json_(createResidents_(ss, body));
+      case 'scanReceipt':       return json_(handleScanReceipt_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -1958,6 +1959,16 @@ function testGeminiScan() {
   var tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
   var result = scanReceiptWithGemini_(tinyPng, 'image/png');
   Logger.log(JSON.stringify(result, null, 2));
+}
+
+/** שלב ג' (2026-08-08): הפעולה האמיתית מול הלקוח — נקראת מ-doPost (case 'scanReceipt').
+ * במתכוון לא נוספה ל-ACTION_PERMS (כמו submitReceipt) — כל תושב מחובר עם מושב חתום תקין
+ * רשאי לקרוא לה, בלי צורך בהרשאה מיוחדת (authorize_ מתיר גישה כש-need אינו מוגדר, ר'
+ * doPost למעלה). לא נוגעת בגיליון/Drive בכלל — רק עוטפת את scanReceiptWithGemini_ עם
+ * בדיקת קלט בסיסית, כדי ש-doPost תמיד יחזיר תשובת JSON קריאה (גם בכשל). */
+function handleScanReceipt_(ss, body) {
+  if (!body.dataBase64) return { ok: false, error: 'לא צורפה תמונה לסריקה' };
+  return scanReceiptWithGemini_(body.dataBase64, body.mimeType);
 }
 
 /* ============ בקשות הרשמה וניהול תושבים (2026-08-07) ============

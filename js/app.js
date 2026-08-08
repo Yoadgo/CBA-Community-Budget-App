@@ -33,17 +33,17 @@
       void main.offsetWidth;
       main.classList.add("screen-enter");
     }
-    // אם היעד שייך לקבוצת-ניווט מתקפלת ("השיכון") שונה מזו שכרגע פתוחה — צריך
-    // לבנות את הניווט מחדש כדי שהקבוצה הנכונה תיפתח/תיסגר. אחרת (אותה קבוצה,
-    // או שאין קבוצה בכלל) מספיק לסמן "פעיל" בלי לבנות הכול מחדש — מונע ריצוד.
+    // מסמנים "פעיל" ומעדכנים אילו קבוצות-ניווט מתקפלות פתוחות/סגורות — תמיד
+    // בהחלפת מחלקות במקום (לא renderNav מלא), כדי שסגירת קבוצה שהייתה פתוחה
+    // (למשל בעקבות מעבר לטאב אחר לגמרי) תחליק בטרנזיציית CSS ולא תיעלם בבת-אחת.
     var g = groupForScreen(name);
-    if (g !== openGroup) {
-      openGroup = g;
-      renderNav(currentArea);
-    } else {
-      nav.querySelectorAll(".app-nav__tab").forEach((tab) => {
+    openGroup = g;
+    if (nav) {
+      nav.querySelectorAll(".app-nav__tab[data-screen]").forEach((tab) => {
         tab.classList.toggle("is-active", tab.dataset.screen === name);
       });
+      applyNavGroupState();
+      updateGroupHasActive();
     }
     // הצגת כפתור "צור שנה" רק בבניית תקציב נשלטת ב-CSS לפי body[data-screen]
     saveRoute();   // זוכרים איפה היינו — כדי שרענון עמוד (F5) יחזיר לכאן
@@ -165,9 +165,64 @@
   // לחיצה על כפתור-הקבוצה עצמו ("השיכון") — פותחת/סוגרת בלי לנווט לשום מסך.
   // אם המסך הנוכחי כבר שייך לקבוצה — היא תמיד תיפתח מחדש בציור הבא (ר' showScreen),
   // כלומר אי-אפשר "לסגור" אותה בזמן שממש נמצאים באחד המסכים שבתוכה — וזה מכוון.
+  //
+  // 2026-08-08, חידוד שלישי (לבקשת יועד — "אין תנועת החלקה שחושפת את הכפתורים,
+  // הם פשוט נפתחים לצד השני ומסתתרים בסוף החלונית", וגם "כשלוחצים כפתור אחר
+  // התפריט הנפתח נסגר מיד"): renderNav() עכשיו מצייר את התת-כפתורים תמיד (לא
+  // רק כשפתוח), עטופים בכמוסת CSS Grid שרוחבה מונפש בין 0fr ל-1fr — כך שהם
+  // תמיד קיימים ב-DOM ופתיחה/סגירה היא טרנזיציית CSS אמיתית שמחליקה, לא בנייה
+  // מחדש שקופצת. toggleGroup ו-showScreen לכן רק מחליפים מחלקות במקום, בלי
+  // renderNav מלא — כדי שהטרנזיציה תרוץ בכל פעם (animation לא היה חוזר על עצמו
+  // באלמנט שנהרס ונוצר מחדש; transition כן, אבל רק אם האלמנט נשאר באותו DOM node).
   function toggleGroup(g) {
     openGroup = (openGroup === g) ? null : g;
-    renderNav(currentArea);
+    applyNavGroupState();
+  }
+  // מיישם את מצב הפתיחה/סגירה של קבוצות-הניווט על ה-DOM הקיים (בלי renderNav).
+  function applyNavGroupState() {
+    if (!nav) return;
+    nav.querySelectorAll("[data-group-wrap]").forEach(function (wrap) {
+      var isOpen = openGroup === wrap.dataset.groupWrap;
+      wrap.classList.toggle("is-open", isOpen);
+      var btn = wrap.querySelector(".app-nav__tab--group");
+      if (btn) btn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      // מדרג מחדש את זמן-ההשהיה של כל תת-כפתור בכל פתיחה (לא רק בציור הראשוני)
+      var STAGGER_MS = 45;
+      wrap.querySelectorAll(".app-nav__tab--sub").forEach(function (sub, i) {
+        sub.style.transitionDelay = (i * STAGGER_MS) + "ms";
+      });
+      // במובייל (ובכל פס-ניווט צר) הפס עצמו גולל אופקית (overflow-x:auto) —
+      // אם יש כבר כמה טאבים, התת-כפתורים החדשים עלולים להיפתח מחוץ לשטח הנראה
+      // ולהישאר בלתי-נראים לגמרי (לא רק "מהר" אלא ממש לא רואים אותם בכלל).
+      // אחרי שהחלקת הרוחב (grid-template-columns) מסתיימת בפועל — גוללים אותם
+      // בעדינות לתוך התצוגה, כדי שה"החלקה שחושפת" תהיה אמיתית גם כשיש צפיפות.
+      if (isOpen) {
+        var itemsEl = wrap.querySelector(".app-nav__group-items");
+        if (itemsEl) {
+          var onEnd = function (e) {
+            if (e.target !== itemsEl || e.propertyName !== "grid-template-columns") return;
+            itemsEl.removeEventListener("transitionend", onEnd);
+            if (wrap.classList.contains("is-open")) {
+              wrap.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+            }
+          };
+          itemsEl.addEventListener("transitionend", onEnd);
+        }
+      }
+    });
+  }
+  // מרענן את "has-active" (טקסט מודגש) על כותרות הקבוצות לפי המסך הנוכחי —
+  // בלי renderNav מלא, כדי לא להפריע לטרנזיציית הפתיחה/סגירה שאולי רצה עכשיו.
+  function updateGroupHasActive() {
+    if (!nav) return;
+    var a = AREAS[currentArea];
+    if (!a) return;
+    a.tabs.forEach(function (t) {
+      if (!(t && t.group)) return;
+      var groupActive = t.items.some(function (it) { return it[0] === currentScreen; });
+      var btn = nav.querySelector('.app-nav__tab--group[data-group="' + t.group + '"]');
+      if (btn) btn.classList.toggle("has-active", groupActive);
+    });
   }
 
   function renderNav(area) {
@@ -202,16 +257,19 @@
           (groupActive ? " has-active" : "") +
           '" data-group="' + t.group + '" aria-expanded="' + (isOpen ? "true" : "false") + '">' +
           gico + CBA.esc(t.label) + '<span class="app-nav__chev">' + CHEV_ICON + '</span></button>';
-        if (isOpen) {
-          var STAGGER_MS = 70;
-          groupHtml += t.items.map(function (it, i) {
-            var sico = NAV_ICONS[it[0]] ? '<span class="app-nav__ico">' + NAV_ICONS[it[0]] + '</span>' : '';
-            return '<button type="button" class="app-nav__tab app-nav__tab--sub' +
-              (it[0] === currentScreen ? " is-active" : "") + '" data-screen="' + it[0] +
-              '" style="animation-delay:' + (i * STAGGER_MS) + 'ms">' + sico + CBA.esc(it[1]) + '</button>';
-          }).join("");
-        }
-        html += '<div class="app-nav__group' + (isOpen ? " is-open" : "") + '">' + groupHtml + '</div>';
+        // התת-כפתורים תמיד מצוירים ל-DOM (לא רק כשפתוח) — עטופים בכמוסת
+        // .app-nav__group-items שרוחבה (grid-template-columns) עובר טרנזיציה
+        // אמיתית בין 0fr ל-1fr כשמוסיפים/מסירים is-open. זו התנועה ש"חושפת"
+        // אותם בהחלקה אמיתית, בניגוד לפתיחה הקודמת שהייתה בנייה מחדש של ה-DOM.
+        var STAGGER_MS = 45;
+        var itemsHtml = t.items.map(function (it, i) {
+          var sico = NAV_ICONS[it[0]] ? '<span class="app-nav__ico">' + NAV_ICONS[it[0]] + '</span>' : '';
+          return '<button type="button" class="app-nav__tab app-nav__tab--sub' +
+            (it[0] === currentScreen ? " is-active" : "") + '" data-screen="' + it[0] +
+            '" style="transition-delay:' + (i * STAGGER_MS) + 'ms">' + sico + CBA.esc(it[1]) + '</button>';
+        }).join("");
+        groupHtml += '<div class="app-nav__group-items"><div class="app-nav__group-items-inner">' + itemsHtml + '</div></div>';
+        html += '<div class="app-nav__group' + (isOpen ? " is-open" : "") + '" data-group-wrap="' + t.group + '">' + groupHtml + '</div>';
         return;
       }
       var ico = NAV_ICONS[t[0]] ? '<span class="app-nav__ico">' + NAV_ICONS[t[0]] + '</span>' : '';

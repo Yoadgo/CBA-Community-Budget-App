@@ -59,20 +59,25 @@ body {
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 10;
 }
+/* 2026-08-08 (לבקשת יועד — "אני רוצה להקטין אותו ב-15% שיהיה צר יותר, גם
+   למובייל גם לשולחן עבודה"): כל המידות בכותרת (ריפוד, לוגו, כותרת, כפתור
+   משתמש, טאבי הניווט, מתג השנה) הוקטנו ב-~15% פה ובהמשך הקובץ. --header-h
+   במובייל (mobile.css) מחושב דינמית ב-JS מהגובה בפועל (ר' setHeaderVar
+   ב-mobile.js), אז הוא מתעדכן ממילא — לא צריך לגעת בו חוץ מברירת המחדל. */
 .app-header__inner {
-  padding: 12px var(--page-pad); display: flex; align-items: center;
-  justify-content: space-between; gap: 18px; flex-wrap: wrap;
+  padding: 10px var(--page-pad); display: flex; align-items: center;
+  justify-content: space-between; gap: 16px; flex-wrap: wrap;
 }
 /* המותג נדחף לימין; הטאבים וכפתור המשתמש מתקבצים יחד בצד שמאל */
-.app-brand { display: flex; align-items: center; gap: 13px; margin-inline-end: auto; }
+.app-brand { display: flex; align-items: center; gap: 11px; margin-inline-end: auto; }
 .app-brand__logo {
-  width: 42px; height: 42px; border-radius: 11px;
+  width: 36px; height: 36px; border-radius: 9px;
   background: linear-gradient(140deg, #374151, #111827); color: #fff;
   box-shadow: 0 4px 12px rgba(16,24,40,.18);
-  font-size: 21px; font-weight: 700; display: grid; place-items: center; flex: none;
+  font-size: 18px; font-weight: 700; display: grid; place-items: center; flex: none;
 }
-.app-brand__title { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
-.app-brand__subtitle { font-size: 13px; color: var(--text-soft); margin-top: 2px; }
+.app-brand__title { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.app-brand__subtitle { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
 
 /* מצב טעינה + חיווי חיבור לגיליון */
 .app-loading { padding: 64px 20px; text-align: center; color: var(--text-soft); font-size: 15px; }
@@ -85,9 +90,9 @@ body {
 
 /* כפתור משתמש — ריבוע מעוגל באופי הטאבים; חלונית בסגנון "מגש" iOS */
 .user-btn {
-  width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border);
+  width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border);
   background: var(--surface); cursor: pointer; display: grid; place-items: center;
-  font-size: 17px; line-height: 1; flex: none;
+  font-size: 14px; line-height: 1; flex: none;
   transition: border-color var(--t), background var(--t), box-shadow var(--t);
 }
 .user-btn:hover { border-color: var(--action); background: var(--hover); }
@@ -101,7 +106,7 @@ body {
 }
 /* מצב תמונת פרופיל: העיגול עומד לבדו — בלי מסגרת ריבוע מיותרת */
 .user-btn--avatar {
-  border: none; background: none; padding: 0; width: 38px; height: 38px;
+  border: none; background: none; padding: 0; width: 32px; height: 32px;
   border-radius: 50%; overflow: hidden;
 }
 /* בלי טבעת ובלי רקע בשום מצב — התמונה העגולה עומדת בפני עצמה (2026-08-07) */
@@ -109,7 +114,7 @@ body {
 .user-btn--avatar.is-open,
 .user-btn--avatar:focus-visible { background: none; box-shadow: none; border: none; }
 .user-btn--avatar:active { transform: scale(.94); }
-.user-btn--avatar .up-avatar-img { width: 38px; height: 38px; }
+.user-btn--avatar .up-avatar-img { width: 32px; height: 32px; }
 /* מגש המשתמש — זכוכית בסגנון iOS. הוא מועבר ב-JS אל ה-body בזמן הפתיחה, כי
    ל-.app-header יש backdrop-filter משלו והוא היה חוסם את הטשטוש (ר' app.js).
    הרוויה הגבוהה היא מה שנותן ל"חלב" להיראות כמו זכוכית ולא כמו נייר שקוף. */
@@ -240,7 +245,7 @@ body.is-gated { overflow: hidden; }
 .year-switch__label { font-size: 12px; color: var(--text-soft); }
 .year-switch__select {
   border: 1px solid var(--border); background: var(--surface); font-family: inherit;
-  font-size: 13px; font-weight: 700; color: var(--text); padding: 3px 9px; border-radius: 8px; cursor: pointer;
+  font-size: 11px; font-weight: 700; color: var(--text); padding: 3px 8px; border-radius: 7px; cursor: pointer;
   margin-inline-start: 6px;
   transition: border-color var(--t), box-shadow var(--t);
 }
@@ -248,7 +253,7 @@ body.is-gated { overflow: hidden; }
 .year-switch__select:focus { outline: none; border-color: var(--action); box-shadow: 0 0 0 3px rgba(17,24,39,.08); }
 .year-switch__add {
   border: 1px solid var(--border); background: none; color: var(--text-soft);
-  height: 24px; border-radius: 8px; cursor: pointer; font-size: 17px; line-height: 1;
+  height: 20px; border-radius: 7px; cursor: pointer; font-size: 14px; line-height: 1;
   display: grid; place-items: center; flex: none;
   /* מצב מכווץ — נחשף בגלישה אלגנטית בבניית תקציב (width+opacity+scale) */
   width: 0; margin-inline-start: 0; opacity: 0; transform: scale(.7);
@@ -259,7 +264,7 @@ body.is-gated { overflow: hidden; }
 }
 /* כפתור "צור שנה חדשה" — נחשף בגלישה רק במסך בניית תקציב */
 body[data-screen="planning"] .year-switch__add {
-  width: 24px; margin-inline-start: 6px; opacity: 1; transform: scale(1); pointer-events: auto;
+  width: 20px; margin-inline-start: 6px; opacity: 1; transform: scale(1); pointer-events: auto;
 }
 .year-switch__add:hover { border-color: var(--action); color: var(--text); background: var(--hover); }
 
@@ -267,13 +272,19 @@ body[data-screen="planning"] .year-switch__add {
 .app-nav { display: flex; gap: 2px; flex-wrap: wrap; }
 .app-nav__tab {
   appearance: none; border: none; background: none;
-  display: inline-flex; align-items: center; gap: 6px;
-  font-family: inherit; font-size: 15px; font-weight: 500;
-  color: var(--text-soft); padding: 8px 13px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  color: var(--text-soft); padding: 7px 11px; cursor: pointer;
   border-radius: 9px;
   transition: color var(--t), background var(--t);
 }
-.app-nav__tab:hover { color: var(--text); background: var(--hover); }
+/* @media(hover:hover) — במגע (מובייל) אין "עכבר שעוזב", אז מצב ה-:hover נשאר
+   "תקוע" עם רקע בהיר אחרי כל הקשה, גם על כפתורים שכבר לא באמת "מרחפים" עליהם
+   (2026-08-08, לבקשת יועד — "הכפתורים נשארים ברקע בהיר" אחרי לחיצה במובייל).
+   מגבילים את הכלל למכשירים שבאמת יכולים לרחף (עכבר) — במגע הוא פשוט לא חל. */
+@media (hover: hover) {
+  .app-nav__tab:hover { color: var(--text); background: var(--hover); }
+}
 .app-nav__tab.is-active { color: #fff; background: var(--action); font-weight: 600; }
 .app-nav__tab { position: relative; }
 
@@ -288,7 +299,7 @@ body[data-screen="planning"] .year-switch__add {
 
 /* סמליל הטאב — מונוכרומטי, יורש את צבע הטקסט */
 .app-nav__ico { display: inline-flex; align-items: center; flex: none; }
-.app-nav__ico svg { width: 17px; height: 17px; display: block; }
+.app-nav__ico svg { width: 14px; height: 14px; display: block; }
 
 /* ---------- קבוצת-ניווט מתקפלת בניווט ("השיכון") ----------
    2026-08-08, חידוד שני (לבקשת יועד — התפריט נפתח מהר מדי ולא היה ברור
@@ -296,7 +307,15 @@ body[data-screen="planning"] .year-switch__add {
    יחד ב-.app-nav__group, שמקבלת "כרית" רקע כשפתוחה — כך שהעין קולטת אותם
    כמכל אחד, לא כשלושה כפתורים נפרדים ושווי-מעמד. זה גם התבנית לכל קבוצת-
    ניווט עתידית (ר' cba-ui-standards.md), לא רק ל"השיכון". */
-.app-nav__group { display: inline-flex; align-items: stretch; gap: 2px; border-radius: 999px; transition: background .28s ease; }
+/* flex:none — קריטי: בלי זה, כשבר הניווט צר (מובייל, overflow-x:auto,
+   flex-wrap:nowrap) הפלקסבוקס "פותר" חוסר מקום ע"י כיווץ הקבוצה הזו במקום
+   לגלוש לגלילה אופקית — ואז ה-min-width:0 שב-.app-nav__group-items (הכרחי
+   לטריק ה-0fr/1fr) גורם לתת-הכפתורים להישאר ברוחב 0 גם כשפתוחים, כי
+   הפלקסבוקס דורס את ה-grid-template-columns. עם flex:none הקבוצה תמיד
+   תופסת את רוחבה הטבעי, וגלישה אמיתית (עם הגלילה שמתווספת ב-app.js) קורית
+   במקום זה (התגלה 2026-08-08 בבדיקת מובייל — בדסקטופ, שם יש flex-wrap:wrap,
+   זה לא קרה כלל, ולכן לא נתפס קודם). */
+.app-nav__group { display: inline-flex; align-items: stretch; gap: 2px; border-radius: 999px; flex: none; transition: background .4s ease; }
 .app-nav__group.is-open { background: rgba(17,24,39,.055); }
 /* פתוח — טקסט/רקע עדין על הכותרת עצמה, קצת יותר בולט מ"כרית" הקבוצה מסביבה
    (שכבה נוספת של עומק — לא הקפסולה הכהה של "פעיל", זו שמורה לתת-הכפתור המדויק) */
@@ -305,26 +324,61 @@ body[data-screen="planning"] .year-switch__add {
 .app-nav__tab--group.has-active { color: var(--text); font-weight: 700; }
 /* השברון הקטן שליד התווית — מתהפך כשהקבוצה פתוחה, קצת יותר איטי מהמעברים
    הרגילים (var(--t)=160ms) כדי שהעין תספיק לעקוב אחריו */
-.app-nav__chev { display: inline-flex; align-items: center; margin-inline-start: 1px; transition: transform .3s cubic-bezier(.3,.7,.2,1); }
+.app-nav__chev { display: inline-flex; align-items: center; margin-inline-start: 1px; transition: transform .4s cubic-bezier(.3,.7,.2,1); }
 .app-nav__chev svg { display: block; }
 .app-nav__group.is-open .app-nav__chev { transform: rotate(180deg); }
+
+/* ---------- תת-כפתורי קבוצה: החלקה אמיתית ולא בנייה-מחדש (2026-08-08, חידוד שלישי) ----------
+   יועד: "אין תנועת החלקה הצידה שחושפת את הכפתורים, הם פשוט נפתחים לצד השני
+   ומסתתרים בסוף החלונית" + "כשלוחצים כפתור אחר התפריט הנפתח נסגר מיד". שני
+   התסמינים נבעו מאותה סיבה: app.js בנה מחדש (innerHTML) את כל הניווט בכל
+   פתיחה/סגירה, כך שהתת-כפתורים תמיד "נולדו" כבר בגודלם המלא — אין למה
+   להחליק מ/אל, ואין שום דבר שיכול "להיסגר בעדינות" כי האלמנטים פשוט נמחקים.
+   התיקון: התת-כפתורים מצוירים תמיד ל-DOM (ר' app.js renderNav), עטופים
+   בכמוסת-גריד שרוחבה (grid-template-columns) עובר טרנזיציה אמיתית בין 0fr
+   (סגור, ברוחב אפס, חבוי מאחורי overflow:hidden) ל-1fr (פתוח, ברוחב המלא של
+   התוכן) — זו ההחלקה שחושפת/מסתירה אותם, והיא רצה בשני הכיוונים כי ה-DOM לא
+   נהרס יותר (ר' toggleGroup/showScreen ב-app.js, שעכשיו רק מחליפים מחלקה). */
+.app-nav__group-items {
+  display: grid;
+  grid-template-columns: 0fr;
+  min-width: 0;
+  /* cubic-bezier סימטרי (האטה-תאוצה-האטה) ולא ease-out — עם ease-out (ניסיון
+     ראשון) רוב התנועה קרתה כבר ב-15% הראשונים של משך הזמן וה"זחילה" האיטית
+     בסוף לא נראתה כמו החלקה כלל, אלא כמו קפיצה ואז עצירה — בדיוק התחושה
+     ש"מכנית" שיועד תיאר. עקומה סימטרית פורשת את התנועה בצורה אחידה יותר לאורך
+     כל משך הזמן, כך שגם משך ארוך יותר (.62s) *מרגיש* איטי ולא רק "נמדד" איטי. */
+  transition: grid-template-columns .62s cubic-bezier(.65,0,.35,1);
+}
+.app-nav__group.is-open .app-nav__group-items { grid-template-columns: 1fr; }
+.app-nav__group-items-inner {
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+}
 /* תת-הכפתורים: קצת יותר קטנים/עדינים מטאב רגיל בכוונה — מסמן חזותית שהם
    "ילדים" בתוך הקבוצה, לא כפתורים עצמאיים שווי-מעמד לכותרת שמעליהם.
-   נכנסים בהופעה מדורגת (animation-delay נקבע ב-app.js לפי אינדקס) ואיטית
-   יותר משהיו (0.22s→0.36s) עם קפיצה עדינה בסוף — קל יותר להבחין שמשהו נפתח. */
-.app-nav__tab--sub { font-size: 13.5px; padding-block: 7px; }
-.app-nav__tab--sub .app-nav__ico svg { width: 15px; height: 15px; }
+   הם דוהים/מתקפלים פנימה (opacity+scale) בנוסף לגלישת הרוחב של העוטף שלהם,
+   עם transition-delay מדורג (נקבע ב-app.js לפי אינדקס) כדי שהעין תספיק לעקוב
+   אחרי כל אחד בנפרד ולא תתפוס "הבהוב" אחד גדול. */
 .app-nav__tab--sub {
-  animation: navSubIn .36s cubic-bezier(.22,1.4,.36,1) both;
+  font-size: 11.5px; padding-block: 6px; white-space: nowrap;
+  opacity: 0; transform: scale(.85);
+  transition: opacity .4s ease, transform .4s cubic-bezier(.22,1.4,.36,1);
 }
-@keyframes navSubIn {
-  from { opacity: 0; transform: scale(.8) translateY(2px); }
-  60%  { opacity: 1; }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
-}
+.app-nav__tab--sub .app-nav__ico svg { width: 13px; height: 13px; }
+.app-nav__group.is-open .app-nav__tab--sub { opacity: 1; transform: scale(1); }
 @media (prefers-reduced-motion: reduce) {
-  .app-nav__tab--sub { animation: none; }
-  .app-nav__group, .app-nav__chev { transition: none; }
+  .app-nav__tab--sub { transition: none; opacity: 1; transform: none; }
+  .app-nav__group, .app-nav__chev, .app-nav__group-items { transition: none; }
+}
+/* מובייל: הקצב עוד יותר איטי מהדסקטופ (יועד: "הקצב עדיין מהיר במובייל") —
+   על מסך צר יש פחות "רעש" ויזואלי סביב, אז תנועה זהה מרגישה מהירה יותר. */
+@media (max-width: 720px) {
+  .app-nav__group-items { transition-duration: .72s; }
+  .app-nav__tab--sub { transition-duration: .46s; }
 }
 
 /* בר הניווט כ"זכוכית חלבית" (glassmorphic) — רק בדסקטופ */
