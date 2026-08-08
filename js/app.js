@@ -188,21 +188,30 @@
         // מקבל את קפסולת ה"פעיל" הכהה/המחוון הנוזלי — זה שמור לתת-הכפתור
         // המדויק שבאמת מוצג. has-active הוא רק רמז עדין (טקסט מודגש) לכך
         // שהמסך הנוכחי נמצא בתוך הקבוצה הזו.
+        //
+        // עדכון 2026-08-08 (לבקשת יועד — התפריט "השיכון" נפתח מהר מדי ולא היה
+        // ברור שהוא כותרת-על לשני התת-כפתורים): כל הקבוצה (הכותרת + התת-
+        // כפתורים, כשפתוחה) עטופה ב-.app-nav__group, שמקבלת "כרית" רקע עדינה
+        // משלה כשפתוחה — כך שהיא נראית פיזית כמו מכל אחד שמכיל את שניהם,
+        // ולא כשלושה כפתורים שווים זה ליד זה. התת-כפתורים גם נכנסים אחד-אחרי-
+        // השני (מדורג, ר' STAGGER_MS) ולא בבת אחת, כדי שהעין תספיק לעקוב.
         var groupActive = t.items.some(function (it) { return it[0] === currentScreen; });
         var isOpen = openGroup === t.group;
         var gico = NAV_ICONS[t.group] ? '<span class="app-nav__ico">' + NAV_ICONS[t.group] + '</span>' : '';
-        html += '<button type="button" class="app-nav__tab app-nav__tab--group' +
-          (groupActive ? " has-active" : "") + (isOpen ? " is-open" : "") +
+        var groupHtml = '<button type="button" class="app-nav__tab app-nav__tab--group' +
+          (groupActive ? " has-active" : "") +
           '" data-group="' + t.group + '" aria-expanded="' + (isOpen ? "true" : "false") + '">' +
           gico + CBA.esc(t.label) + '<span class="app-nav__chev">' + CHEV_ICON + '</span></button>';
         if (isOpen) {
-          t.items.forEach(function (it) {
+          var STAGGER_MS = 70;
+          groupHtml += t.items.map(function (it, i) {
             var sico = NAV_ICONS[it[0]] ? '<span class="app-nav__ico">' + NAV_ICONS[it[0]] + '</span>' : '';
-            html += '<button type="button" class="app-nav__tab app-nav__tab--sub' +
-              (it[0] === currentScreen ? " is-active" : "") + '" data-screen="' + it[0] + '">' +
-              sico + CBA.esc(it[1]) + '</button>';
-          });
+            return '<button type="button" class="app-nav__tab app-nav__tab--sub' +
+              (it[0] === currentScreen ? " is-active" : "") + '" data-screen="' + it[0] +
+              '" style="animation-delay:' + (i * STAGGER_MS) + 'ms">' + sico + CBA.esc(it[1]) + '</button>';
+          }).join("");
         }
+        html += '<div class="app-nav__group' + (isOpen ? " is-open" : "") + '">' + groupHtml + '</div>';
         return;
       }
       var ico = NAV_ICONS[t[0]] ? '<span class="app-nav__ico">' + NAV_ICONS[t[0]] + '</span>' : '';

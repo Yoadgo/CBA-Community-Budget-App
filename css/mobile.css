@@ -31,8 +31,10 @@
   :root {
     /* גובה הכותרת מחושב ב-JS; ברירת מחדל אם עוד לא חושב */
     --header-h: 64px;
-    /* בר הניווט התחתון */
-    --botnav-h: 66px;
+    /* בר הניווט התחתון — מרחק מתחתית המסך עד לראש הכמוסה הצפה (45px גובה +
+       10px מרווח מהתחתית, ר' .app-nav--bottom); עודכן מ-66px כשהבר היה שטוח
+       ומלא-קיר-לקיר בלי מרווח (2026-08-08) */
+    --botnav-h: 55px;
     /* השורה התחתונה הקבועה (תקציב / בניית תקציב) */
     --bottomline-h: 60px;
   }
@@ -96,6 +98,8 @@
   }
   .app-nav--bottom .app-nav__tab.is-active { color: #fff; background: var(--action); font-weight: 600; }
   .app-nav--bottom .app-nav__ico svg { width: 15px; height: 15px; }
+  .app-nav--bottom .app-nav__tab--sub { font-size: 11.5px; padding-block: 6px; }
+  .app-nav--bottom .app-nav__tab--sub .app-nav__ico svg { width: 13px; height: 13px; }
 
   /* ---------- שלב 2: מסך "תכנון מול ביצוע" — פריסה אנכית מרווחת ---------- */
   .budget-cols { gap: 26px; }
@@ -275,26 +279,31 @@
   }
 
   /* ==========================================================================
-     תיקון השורה התחתונה: פס קבוע מעל בר הניווט, תמיד גלוי, ובעיצוב כהה נבדל
+     השורה התחתונה: פס קבוע מעל בר הניווט.
+     2026-08-08 (לבקשת יועד): עברה מפס כהה ואטום מקיר-לקיר לאותה "כמוסת זכוכית"
+     צפה כמו בר הניווט — עקבי עם שאר הממשק במובייל עכשיו. (בדסקטופ היא כבר
+     הייתה זכוכית — ר' motion.css — רק המובייל היה שונה בכוונה; עכשיו אחיד.)
      ========================================================================== */
   .bottomline-bar {
-    position: fixed; inset-inline: 0;
-    bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom));
-    z-index: 39; border-radius: 0;
+    position: fixed; inset-inline: 12px;
+    bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 8px);
+    z-index: 39; border-radius: 20px;
     grid-template-columns: repeat(3, 1fr);
-    padding: 9px 8px;
-    background: var(--action); color: #fff;
-    box-shadow: 0 -6px 24px rgba(16,24,40,.22);
+    padding: 10px 6px;
+    background: rgba(255,255,255,.72);
+    backdrop-filter: saturate(190%) blur(20px);
+    -webkit-backdrop-filter: saturate(190%) blur(20px);
+    border: 1px solid rgba(255,255,255,.6);
+    box-shadow: 0 10px 30px rgba(16,24,40,.16), inset 0 1px 0 rgba(255,255,255,.7);
+    color: var(--text);
   }
   /* פריט 7: כותרת מעל המספר בכל תא — שורה תחתונה סימטרית גם עם טקסטים ארוכים */
   .bottomline-bar .bl-cell { flex-direction: column; align-items: center; gap: 1px; padding: 3px 4px; text-align: center; }
-  .bottomline-bar .bl-cell + .bl-cell { border-inline-start: 1px solid rgba(255,255,255,.16); border-top: none; }
-  .bottomline-bar .bl-cell__label { font-size: 9px; line-height: 1.15; color: rgba(255,255,255,.72); }
-  .bottomline-bar .bl-cell__val { font-size: 14px; color: #fff; }
-  .bottomline-bar .bl-cell--result { background: none; border-radius: 0; }
+  .bottomline-bar .bl-cell + .bl-cell { border-inline-start: 1px solid var(--hairline); border-top: none; }
+  .bottomline-bar .bl-cell__label { font-size: 9px; line-height: 1.15; color: var(--text-soft); }
+  .bottomline-bar .bl-cell__val { font-size: 14px; color: var(--text); }
+  .bottomline-bar .bl-cell--result { border-radius: 10px; }
   .bottomline-bar .bl-cell--result .bl-cell__val { font-size: 15px; }
-  .bottomline-bar .pos, .bottomline-bar .ico-under { color: #34D399; }
-  .bottomline-bar .neg, .bottomline-bar .ico-over { color: #FB7185; }
 
   /* שמירת מקום בתחתית התוכן — רק במסכים שיש בהם שורה תחתונה */
   body[data-screen="budget"] .app-main,
