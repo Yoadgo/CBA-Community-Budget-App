@@ -26,6 +26,30 @@ CBA.screens = CBA.screens || {};
   var calGridIcon   = svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="8" cy="15" r="1"/><circle cx="12" cy="15" r="1"/><circle cx="16" cy="15" r="1"/>');
   var kidsIcon   = svg('<circle cx="12" cy="7" r="3"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/>');
   var phoneIcon  = svg('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13 1 .36 1.98.68 2.92a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.16-1.16a2 2 0 0 1 2.11-.45c.94.32 1.92.55 2.92.68A2 2 0 0 1 22 16.92z"/>');
+  var minusIcon  = svg('<path d="M5 12h14"/>');
+  var searchIcon = svg('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>');
+  var fitIcon    = svg('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>');
+  var parkIcon   = svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 16V8h4a3 3 0 0 1 0 6H9"/>');
+  var pinIcon    = svg('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>');
+  var amenIcons = {
+    kids:  '<path d="M12 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>',
+    park:  '<path d="M12 2 7 10h3l-4 7h5v5h2v-5h5l-4-7h3L12 2Z"/>',
+    shop:  '<path d="M4 8 5.5 4h13L20 8"/><rect x="4" y="8" width="16" height="12" rx="1.5"/><path d="M9 12v4M15 12v4"/>',
+    food:  '<path d="M6 3v7a2 2 0 0 0 2 2v9M6 3v18M10 3v9M18 3c-2 0-3 2-3 5s1 4 3 4v9"/>',
+    club:  '<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14c2.5.3 4.5 2.4 4.5 5"/>',
+    train: '<rect x="5" y="4" width="14" height="13" rx="3"/><path d="M5 12h14M8 20l-2 2M16 20l2 2"/><circle cx="8.5" cy="14.5" r="0.5" fill="currentColor"/><circle cx="15.5" cy="14.5" r="0.5" fill="currentColor"/>',
+    mail:  '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'
+  };
+  function amenityIconFor(label) {
+    if (label.indexOf('גני ילדים') !== -1 || label.indexOf('מועדון ילדים') !== -1) return amenIcons.kids;
+    if (label.indexOf('שעשועים') !== -1 || label.indexOf('פארק') !== -1) return amenIcons.park;
+    if (label.indexOf('שק"ם') !== -1) return amenIcons.shop;
+    if (label.indexOf('חומוסיה') !== -1) return amenIcons.food;
+    if (label.indexOf('מועדון משפחות') !== -1) return amenIcons.club;
+    if (label.indexOf('פאמטרק') !== -1) return amenIcons.train;
+    if (label.indexOf('דואר') !== -1) return amenIcons.mail;
+    return amenIcons.club;
+  }
 
   /* ==== המרת קובץ קבלה ל-Base64 לפני שליחה לשרת ====
      תמונה: מכווצים/מקטינים בצד הלקוח (canvas) כדי שההעלאה תהיה מהירה גם ברשת סלולרית חלשה.
@@ -1176,6 +1200,463 @@ CBA.screens = CBA.screens || {};
         c = dirCols(allRows);
         renderList();
       });
+    }
+  };
+
+  /* ==== "מפת השיכון" — מפה סכמטית אינטראקטיבית (2026-08-08) ====
+     נתוני המבנה (מיקומי בתים/כבישים/רחובות/חניונים) נמדדו פעם אחת מתשריט השיכון
+     ונשמרים כאן כקבועים סטטיים — הם לא משתנים. מה שכן דינמי (שם משפחה/טלפון/ילדים
+     לכל בית) נשלף בכל טעינה מ-CBA.data.getCommunityDirectory ומוצג דרך אותן
+     dirCols/dirVal/dirHouseHTML שמזינות את טאב "שכנים" — כך שכרטיס הבית בפופאפ של
+     המפה זהה בול לכרטיס ברשימה, ואותו כלל פרטיות חל: רק תושבים פעילים מוצגים. */
+  var MAP_WORLD_W = 1100, MAP_WORLD_H = 1354;
+  var MAP_TILES = [
+    {n:"101",x:39.98,y:9.13,w:6.54,h:3.24},
+    {n:"103",x:46.53,y:9.13,w:6.54,h:3.24},
+    {n:"105",x:54.19,y:9.13,w:6.50,h:3.24},
+    {n:"107",x:60.69,y:9.13,w:6.50,h:3.24},
+    {n:"201",x:54.19,y:14.18,w:6.50,h:3.37},
+    {n:"203",x:60.69,y:14.18,w:6.50,h:3.37},
+    {n:"205",x:78.45,y:14.18,w:6.62,h:3.37},
+    {n:"207",x:85.08,y:14.18,w:6.62,h:3.37},
+    {n:"301",x:39.98,y:19.88,w:6.54,h:3.30},
+    {n:"303",x:46.53,y:19.88,w:6.54,h:3.30},
+    {n:"305",x:54.19,y:19.88,w:6.50,h:3.30},
+    {n:"307",x:60.69,y:19.88,w:6.50,h:3.30},
+    {n:"309",x:78.45,y:19.82,w:6.62,h:3.30},
+    {n:"311",x:85.08,y:19.82,w:6.62,h:3.30},
+    {n:"302",x:44.85,y:29.47,w:6.70,h:3.43},
+    {n:"304",x:52.91,y:29.60,w:6.70,h:3.30},
+    {n:"306",x:60.81,y:29.53,w:6.70,h:3.37},
+    {n:"308",x:77.97,y:29.47,w:6.70,h:3.37},
+    {n:"310",x:85.63,y:29.53,w:6.70,h:3.30},
+    {n:"401",x:44.85,y:33.42,w:6.70,h:3.24},
+    {n:"403",x:52.91,y:33.42,w:6.70,h:3.30},
+    {n:"405",x:60.89,y:33.35,w:6.62,h:3.30},
+    {n:"407",x:77.97,y:33.68,w:6.70,h:3.24},
+    {n:"409",x:85.63,y:33.68,w:6.70,h:3.30},
+    {n:"402",x:44.85,y:38.41,w:6.70,h:3.24},
+    {n:"404",x:52.91,y:38.41,w:6.70,h:3.37},
+    {n:"406",x:60.73,y:38.34,w:6.70,h:3.30},
+    {n:"505",x:77.97,y:38.67,w:6.86,h:3.37},
+    {n:"507",x:85.63,y:38.67,w:6.70,h:3.37},
+    {n:"501",x:58.58,y:42.29,w:6.70,h:3.37},
+    {n:"503",x:66.48,y:42.16,w:6.70,h:3.37},
+    {n:"502",x:58.58,y:46.24,w:6.70,h:3.37},
+    {n:"504",x:66.40,y:46.31,w:6.70,h:3.24},
+    {n:"601",x:27.37,y:50.45,w:6.70,h:3.30},
+    {n:"603",x:44.85,y:50.58,w:6.70,h:3.24},
+    {n:"605",x:52.91,y:50.58,w:6.70,h:3.37},
+    {n:"607",x:60.89,y:50.52,w:6.62,h:3.30},
+    {n:"506",x:77.97,y:50.71,w:6.70,h:3.30},
+    {n:"508",x:85.63,y:50.71,w:6.70,h:3.30},
+    {n:"602",x:44.85,y:55.96,w:6.70,h:3.24},
+    {n:"604",x:52.91,y:55.96,w:6.78,h:3.24},
+    {n:"606",x:60.81,y:55.89,w:6.78,h:3.30},
+    {n:"608",x:77.97,y:55.96,w:6.70,h:3.30},
+    {n:"610",x:85.63,y:55.96,w:6.70,h:3.30},
+    {n:"701",x:52.91,y:59.91,w:6.70,h:3.37},
+    {n:"703",x:60.73,y:59.84,w:6.70,h:3.30},
+    {n:"705",x:77.97,y:60.04,w:6.70,h:3.37},
+    {n:"707",x:85.63,y:60.04,w:6.70,h:3.37},
+    {n:"702",x:44.93,y:68.13,w:6.70,h:3.37},
+    {n:"704",x:52.99,y:68.20,w:6.70,h:3.30},
+    {n:"706",x:60.89,y:68.13,w:6.70,h:3.37},
+    {n:"708",x:77.97,y:68.13,w:6.78,h:3.37},
+    {n:"710",x:85.63,y:69.82,w:6.70,h:3.30},
+    {n:"801",x:44.93,y:72.47,w:6.70,h:3.37},
+    {n:"803",x:52.99,y:72.47,w:6.70,h:3.37},
+    {n:"805",x:60.89,y:72.47,w:6.70,h:3.24},
+    {n:"807",x:77.97,y:72.34,w:6.70,h:3.30},
+    {n:"809",x:85.63,y:74.55,w:6.70,h:3.24},
+    {n:"802",x:44.93,y:78.69,w:6.70,h:3.30},
+    {n:"804",x:52.99,y:78.76,w:6.70,h:3.30},
+    {n:"806",x:60.89,y:78.69,w:6.62,h:3.30},
+    {n:"808",x:78.13,y:77.91,w:6.70,h:3.24},
+    {n:"810",x:85.71,y:79.40,w:6.78,h:3.37},
+    {n:"901",x:40.38,y:86.33,w:6.58,h:3.37},
+    {n:"903",x:46.97,y:86.33,w:6.58,h:3.37},
+    {n:"905",x:54.35,y:86.33,w:6.70,h:3.37},
+    {n:"907",x:61.05,y:86.33,w:6.70,h:3.37},
+    {n:"909",x:72.55,y:86.33,w:6.70,h:3.37},
+    {n:"902",x:54.35,y:92.03,w:6.70,h:3.30},
+    {n:"904",x:61.05,y:92.03,w:6.70,h:3.30},
+    {n:"906",x:72.55,y:92.03,w:6.70,h:3.30}
+  ];
+  var MAP_AMENITIES = [
+    {x:27.69,y:13.92,w:11.01,h:6.09,label:'גני ילדים'},
+    {x:39.27,y:42.49,w:12.29,h:7.45,label:'גן שעשועים · פארק ניגונה'},
+    {x:13.09,y:43.59,w:6.07,h:6.87,label:'שק"ם משפחות'},
+    {x:12.85,y:50.71,w:6.15,h:4.53,label:'חומוסיה'},
+    {x:12.77,y:55.63,w:6.07,h:6.93,label:'מועדון משפחות'},
+    {x:27.53,y:37.24,w:6.86,h:9.13,label:'מועדון ילדים'},
+    {x:27.21,y:54.40,w:7.34,h:3.89,label:'פאמטרק'},
+    {x:28.97,y:59.00,w:2.71,h:2.85,label:'דואר'}
+  ];
+  var MAP_ROADS = [
+    {type:'v', x:23.94, y1:0,     y2:98.45, thick:4.79},
+    {type:'v', x:94.17, y1:0,     y2:98.45, thick:4.79},
+    {type:'h', y:26.33, x1:23.94, x2:94.17, thick:2.78},
+    {type:'h', y:64.70, x1:23.94, x2:94.17, thick:2.72},
+    {type:'h', y:98.45, x1:23.94, x2:94.17, thick:2.85}
+  ];
+  var MAP_STREETS = [
+    {name:'נחל דן',      type:'h', y:13.5,  x1:38.5, x2:68.7},
+    {name:'נחל משושים',  type:'v', x:72.6,  y1:14.25, y2:26.33},
+    {name:'נחל אלכסנדר', type:'h', y:37.6,  x1:43.4, x2:93.8},
+    {name:'נחל אילון',   type:'v', x:87.6,  y1:44.04, y2:48.90},
+    {name:'נחל שורק',    type:'h', y:54.1,  x1:25.9, x2:93.8},
+    {name:'נחל צאלים',   type:'h', y:77.1,  x1:43.4, x2:93.8},
+    {name:'נחל פארן',    type:'h', y:91.0,  x1:38.9, x2:80.7}
+  ];
+  var MAP_PARKING = [
+    {x:24.74, y:2.72,  w:14.37, h:7.97},
+    {x:68.24, y:14.25, w:8.78,  h:11.66},
+    {x:35.91, y:29.47, w:7.98,  h:5.18},
+    {x:68.24, y:29.47, w:8.78,  h:5.18},
+    {x:81.01, y:44.04, w:13.17, h:4.86},
+    {x:34.32, y:49.87, w:9.18,  h:11.01},
+    {x:66.64, y:49.87, w:9.58,  h:11.01},
+    {x:35.91, y:68.33, w:7.98,  h:9.39},
+    {x:68.24, y:68.33, w:8.78,  h:9.39},
+    {x:26.34, y:87.76, w:13.17, h:6.15},
+    {x:79.81, y:84.20, w:12.77, h:5.83}
+  ];
+  // מספר בית מנורמל להשוואה בטוחה (בלי לסמוך על עיצוב מדויק בגיליון)
+  function normHouse(s) { return String(s == null ? "" : s).replace(/\D/g, ""); }
+
+  CBA.screens.resMap = {
+    render: function (container) {
+      container.innerHTML =
+        '<div class="screen-head"><div class="screen-head__title">מפת השיכון</div>' +
+          '<div class="screen-head__sub">שיכון פלמחים · לחצו על בית לפרטי הדיירים</div></div>' +
+        '<div class="map-shell">' +
+          '<div class="map-topbar">' +
+            '<div class="map-search-wrap">' +
+              '<span class="map-search-ic">' + searchIcon + '</span>' +
+              '<input id="map-q" class="map-search" placeholder="חיפוש לפי מספר בית, שם משפחה או ילד…" autocomplete="off">' +
+              '<div class="map-search-results" id="map-results"></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="map-viewport" id="map-viewport"><div class="map-world" id="map-world"></div></div>' +
+          '<div class="map-toolbar">' +
+            '<button type="button" class="map-btn" id="map-zoom-in" aria-label="הגדלה">' + plusIcon + '</button>' +
+            '<button type="button" class="map-btn" id="map-zoom-out" aria-label="הקטנה">' + minusIcon + '</button>' +
+            '<hr>' +
+            '<button type="button" class="map-btn" id="map-fit" aria-label="התאמה למסך">' + fitIcon + '</button>' +
+          '</div>' +
+          '<div class="map-hint">גררו כדי לנוע · גלגלת/צביטה כדי לזום · לחצו על בית לפרטים</div>' +
+        '</div>';
+
+      var viewport = container.querySelector("#map-viewport");
+      var worldEl = container.querySelector("#map-world");
+      var qEl = container.querySelector("#map-q");
+      var resultsEl = container.querySelector("#map-results");
+
+      worldEl.style.width = MAP_WORLD_W + "px";
+      worldEl.style.height = MAP_WORLD_H + "px";
+      function px(p) { return p / 100 * MAP_WORLD_W; }
+      function py(p) { return p / 100 * MAP_WORLD_H; }
+
+      // כבישים
+      MAP_ROADS.forEach(function (r) {
+        var el = document.createElement("div");
+        el.className = "map-road";
+        if (r.type === "v") {
+          var tpx = r.thick / 100 * MAP_WORLD_W, x1 = px(r.x), y1 = py(r.y1), y2 = py(r.y2);
+          el.style.left = (x1 - tpx / 2) + "px"; el.style.top = y1 + "px";
+          el.style.width = tpx + "px"; el.style.height = (y2 - y1) + "px";
+        } else {
+          var tpy = r.thick / 100 * MAP_WORLD_H, ry1 = py(r.y), rx1 = px(r.x1), rx2 = px(r.x2);
+          el.style.top = (ry1 - tpy / 2) + "px"; el.style.left = rx1 + "px";
+          el.style.height = tpy + "px"; el.style.width = (rx2 - rx1) + "px";
+        }
+        worldEl.appendChild(el);
+      });
+
+      // חניונים
+      MAP_PARKING.forEach(function (p) {
+        var el = document.createElement("div");
+        el.className = "map-parking";
+        el.style.left = px(p.x) + "px"; el.style.top = py(p.y) + "px";
+        el.style.width = px(p.w) + "px"; el.style.height = py(p.h) + "px";
+        el.innerHTML = parkIcon;
+        worldEl.appendChild(el);
+      });
+
+      // רחובות
+      MAP_STREETS.forEach(function (s) {
+        var el = document.createElement("div");
+        var lbl = document.createElement("span");
+        lbl.className = "map-street__label";
+        lbl.textContent = s.name;
+        if (s.type === "h") {
+          el.className = "map-street map-street--h";
+          var y = py(s.y), x1 = px(s.x1), x2 = px(s.x2);
+          el.style.top = y + "px"; el.style.left = x1 + "px"; el.style.width = (x2 - x1) + "px";
+          lbl.style.left = (x1 + (x2 - x1) / 2) + "px"; lbl.style.top = (y - 9) + "px"; lbl.style.transform = "translateX(-50%)";
+        } else {
+          el.className = "map-street map-street--v";
+          var xx = px(s.x), yy1 = py(s.y1), yy2 = py(s.y2);
+          el.style.left = xx + "px"; el.style.top = yy1 + "px"; el.style.height = (yy2 - yy1) + "px";
+          lbl.style.left = (xx + 8) + "px"; lbl.style.top = (yy1 + (yy2 - yy1) / 2) + "px"; lbl.style.transform = "translateY(-50%)";
+        }
+        worldEl.appendChild(el);
+        worldEl.appendChild(lbl);
+      });
+
+      // מתקנים ציבוריים
+      MAP_AMENITIES.forEach(function (a) {
+        var el = document.createElement("div");
+        el.className = "map-amenity";
+        el.style.left = px(a.x) + "px"; el.style.top = py(a.y) + "px";
+        el.style.width = px(a.w) + "px"; el.style.height = py(a.h) + "px";
+        el.innerHTML = svg(amenityIconFor(a.label)) + '<span class="map-amenity__label">' + CBA.esc(a.label) + '</span>';
+        worldEl.appendChild(el);
+      });
+
+      // בתים
+      var houseEls = {};
+      MAP_TILES.forEach(function (t) {
+        var el = document.createElement("div");
+        el.className = "map-house";
+        el.dataset.num = t.n;
+        el.style.left = px(t.x) + "px"; el.style.top = py(t.y) + "px";
+        el.style.width = px(t.w) + "px"; el.style.height = py(t.h) + "px";
+        el.innerHTML =
+          '<span class="map-house__num-only">' + t.n + '</span>' +
+          '<div class="map-house__row"><span class="map-house__badge">' + t.n + '</span></div>' +
+          '<div class="map-house__fam"></div>';
+        worldEl.appendChild(el);
+        houseEls[t.n] = el;
+      });
+
+      // ---- נתוני דיירים אמיתיים (זהה למקור הנתונים של טאב "שכנים") ----
+      var dirRows = [], dirC = null, byHouse = {};
+      CBA.data.getCommunityDirectory(function (res) {
+        if (!res || !res.ok) return;
+        dirC = dirCols(res.rows || []);
+        dirRows = (res.rows || []).filter(function (r) { return dirIsActive(r, dirC); });
+        dirRows.forEach(function (r) {
+          var h = normHouse(dirVal(r, dirC.house));
+          if (h) byHouse[h] = r;
+        });
+        MAP_TILES.forEach(function (t) {
+          var row = byHouse[normHouse(t.n)];
+          if (row) houseEls[t.n].querySelector(".map-house__fam").textContent = dirVal(row, dirC.family) || "";
+        });
+      });
+
+      // ---- מנוע תנועה: pan / zoom / pinch ----
+      var scale = 1, tx = 0, ty = 0, fitScaleVal = 1;
+      var FULL_DETAIL_MULT = 1.85, MIN_MULT = 1, MAX_MULT = 4.5;
+      function minScale() { return fitScaleVal * MIN_MULT; }
+      function maxScale() { return fitScaleVal * MAX_MULT; }
+      function computeFit() {
+        var vw = viewport.clientWidth, vh = viewport.clientHeight;
+        fitScaleVal = Math.min(vw / MAP_WORLD_W, vh / MAP_WORLD_H) * 0.94;
+      }
+      function clampPan() {
+        var vw = viewport.clientWidth, vh = viewport.clientHeight;
+        var worldW = MAP_WORLD_W * scale, worldH = MAP_WORLD_H * scale, margin = 140;
+        var minTx = Math.min(vw - worldW - margin, (vw - worldW) / 2);
+        var maxTx = Math.max(margin, (vw - worldW) / 2);
+        var minTy = Math.min(vh - worldH - margin, (vh - worldH) / 2);
+        var maxTy = Math.max(margin, (vh - worldH) / 2);
+        tx = Math.max(minTx, Math.min(maxTx, tx));
+        ty = Math.max(minTy, Math.min(maxTy, ty));
+      }
+      var openTile = null;
+      function apply() {
+        clampPan();
+        worldEl.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
+        var full = scale > fitScaleVal * FULL_DETAIL_MULT;
+        Object.keys(houseEls).forEach(function (n) { houseEls[n].classList.toggle("full", full); });
+        if (openTile) positionPopup(openTile);
+      }
+      function fitToScreen(animated) {
+        computeFit();
+        scale = fitScaleVal;
+        tx = (viewport.clientWidth - MAP_WORLD_W * scale) / 2;
+        ty = (viewport.clientHeight - MAP_WORLD_H * scale) / 2;
+        if (animated) { worldEl.style.transition = "transform .38s cubic-bezier(.2,.6,.2,1)"; setTimeout(function () { worldEl.style.transition = ""; }, 400); }
+        apply();
+      }
+      function setScaleAnchored(newScale, ax, ay, animated) {
+        newScale = Math.max(minScale(), Math.min(maxScale(), newScale));
+        var wx = (ax - tx) / scale, wy = (ay - ty) / scale;
+        scale = newScale;
+        tx = ax - wx * scale; ty = ay - wy * scale;
+        if (animated) { worldEl.style.transition = "transform .28s cubic-bezier(.2,.6,.2,1)"; setTimeout(function () { worldEl.style.transition = ""; }, 300); }
+        apply();
+      }
+
+      var dragging = false, dragStartX = 0, dragStartY = 0, txStart = 0, tyStart = 0;
+      var pointers = {}, pointerCount = 0, pinchDist = null, pinchScale = 1;
+
+      viewport.addEventListener("pointerdown", function (e) {
+        if (e.target.closest(".map-popup") || e.target.closest(".map-toolbar")) return;
+        viewport.setPointerCapture(e.pointerId);
+        pointers[e.pointerId] = {x: e.clientX, y: e.clientY}; pointerCount++;
+        if (pointerCount === 1) {
+          dragging = true; viewport.classList.add("grabbing");
+          dragStartX = e.clientX; dragStartY = e.clientY; txStart = tx; tyStart = ty;
+        }
+      });
+      viewport.addEventListener("pointermove", function (e) {
+        if (!pointers[e.pointerId]) return;
+        pointers[e.pointerId] = {x: e.clientX, y: e.clientY};
+        var ids = Object.keys(pointers);
+        if (ids.length === 2) {
+          var p0 = pointers[ids[0]], p1 = pointers[ids[1]];
+          var dist = Math.hypot(p0.x - p1.x, p0.y - p1.y);
+          if (!pinchDist) { pinchDist = dist; pinchScale = scale; }
+          else {
+            var ratio = dist / pinchDist, midX = (p0.x + p1.x) / 2, midY = (p0.y + p1.y) / 2;
+            var rect = viewport.getBoundingClientRect();
+            setScaleAnchored(pinchScale * ratio, midX - rect.left, midY - rect.top, false);
+          }
+        } else if (dragging && ids.length === 1) {
+          tx = txStart + (e.clientX - dragStartX); ty = tyStart + (e.clientY - dragStartY);
+          apply();
+        }
+      });
+      function endPointer(e) {
+        var wasSingleTap = e.type === "pointerup" && Object.keys(pointers).length === 1 &&
+          Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY) < 6;
+        delete pointers[e.pointerId]; pointerCount = Math.max(0, pointerCount - 1);
+        if (Object.keys(pointers).length < 2) pinchDist = null;
+        if (Object.keys(pointers).length === 0) { dragging = false; viewport.classList.remove("grabbing"); }
+        if (wasSingleTap) {
+          var target = document.elementFromPoint(e.clientX, e.clientY);
+          var houseEl = target && target.closest(".map-house");
+          if (houseEl) openPopup(houseEl.dataset.num);
+          else if (!target || (!target.closest(".map-toolbar") && !target.closest(".map-popup"))) closePopup();
+        }
+      }
+      viewport.addEventListener("pointerup", endPointer);
+      viewport.addEventListener("pointercancel", function (e) {
+        delete pointers[e.pointerId];
+        if (Object.keys(pointers).length < 2) pinchDist = null;
+        if (Object.keys(pointers).length === 0) { dragging = false; viewport.classList.remove("grabbing"); }
+      });
+      viewport.addEventListener("wheel", function (e) {
+        e.preventDefault();
+        var rect = viewport.getBoundingClientRect();
+        var factor = Math.pow(1.0016, -e.deltaY);
+        setScaleAnchored(scale * factor, e.clientX - rect.left, e.clientY - rect.top, false);
+      }, {passive: false});
+
+      container.querySelector("#map-zoom-in").addEventListener("click", function () {
+        setScaleAnchored(scale * 1.4, viewport.clientWidth / 2, viewport.clientHeight / 2, true);
+      });
+      container.querySelector("#map-zoom-out").addEventListener("click", function () {
+        setScaleAnchored(scale / 1.4, viewport.clientWidth / 2, viewport.clientHeight / 2, true);
+      });
+      container.querySelector("#map-fit").addEventListener("click", function () { closePopup(); fitToScreen(true); });
+
+      // עוצרים את עצמנו ברגע שהמסך יצא מה-DOM (המשתמש עבר לטאב אחר) — כדי לא
+      // לצבור צופי-שינוי-גודל שמצביעים לרכיבים שכבר לא קיימים.
+      var ro = new ResizeObserver(function () {
+        if (!document.body.contains(viewport)) { ro.disconnect(); return; }
+        fitToScreen(false);
+      });
+      ro.observe(viewport);
+
+      // ---- פופאפ בית — משתמש ב-dirHouseHTML כדי להיות זהה לכרטיס בטאב "שכנים" ----
+      var popupEl = null;
+      function closePopup() {
+        if (popupEl) popupEl.classList.remove("show");
+        openTile = null;
+        Object.keys(houseEls).forEach(function (n) { houseEls[n].classList.remove("active-tile"); });
+      }
+      function positionPopup(num) {
+        var el = houseEls[num];
+        if (!el || !popupEl) return;
+        var left = parseFloat(el.style.left) + parseFloat(el.style.width) / 2;
+        var top = parseFloat(el.style.top);
+        var pxAbs = tx + left * scale, pyAbs = ty + top * scale;
+        var popX = pxAbs - 125, popY = pyAbs - 14;
+        var vw = viewport.clientWidth;
+        if (popX < 10) popX = 10;
+        if (popX + 250 > vw - 10) popX = vw - 260;
+        if (pyAbs < 220) popY = pyAbs + parseFloat(el.style.height) * scale + 14;
+        else popY = pyAbs - popupEl.offsetHeight - 14;
+        popupEl.style.left = popX + "px";
+        popupEl.style.top = Math.max(10, popY) + "px";
+      }
+      function openPopup(num) {
+        var el = houseEls[num];
+        if (!el) return;
+        closePopup();
+        el.classList.add("active-tile");
+        if (!popupEl) { popupEl = document.createElement("div"); popupEl.className = "map-popup"; viewport.appendChild(popupEl); }
+        var row = byHouse[normHouse(num)];
+        popupEl.innerHTML = '<button type="button" class="map-popup__close" aria-label="סגור">' + xIcon + '</button>' +
+          (row && dirC ? dirHouseHTML(row, dirC) : '<div class="card dir-card"><div class="dir-card__house">בית ' + CBA.esc(num) + '</div><div class="dir-card__names">אין נתונים זמינים לבית זה.</div></div>');
+        popupEl.querySelector(".map-popup__close").addEventListener("click", function (ev) { ev.stopPropagation(); closePopup(); });
+        openTile = num;
+        positionPopup(num);
+        requestAnimationFrame(function () { popupEl.classList.add("show"); });
+        var ring = document.createElement("div");
+        ring.className = "map-pulse";
+        ring.style.left = el.style.left; ring.style.top = el.style.top;
+        ring.style.width = el.style.width; ring.style.height = el.style.height;
+        worldEl.appendChild(ring);
+        setTimeout(function () { ring.remove(); }, 2300);
+      }
+
+      // ---- חיפוש ----
+      function runSearch(q) {
+        q = q.trim();
+        if (!q) { resultsEl.classList.remove("show"); return; }
+        var matches = MAP_TILES.filter(function (t) {
+          if (t.n.indexOf(q) !== -1) return true;
+          var row = byHouse[normHouse(t.n)];
+          if (!row || !dirC) return false;
+          var hay = [dirVal(row, dirC.family), dirVal(row, dirC.kids)]
+            .concat(dirC.firstName.map(function (k) { return dirVal(row, k); })).join(" ");
+          return hay.indexOf(q) !== -1;
+        }).slice(0, 8);
+        if (!matches.length) {
+          resultsEl.innerHTML = '<div class="map-search-empty">לא נמצאו תוצאות</div>';
+        } else {
+          resultsEl.innerHTML = matches.map(function (t) {
+            var row = byHouse[normHouse(t.n)];
+            var fam = row && dirC ? (dirVal(row, dirC.family) || "") : "";
+            return '<div class="map-search-item" data-num="' + t.n + '">' +
+              '<span class="map-search-item__house">' + t.n + '</span>' +
+              '<span class="map-search-item__name">' + (fam ? "משפחת " + CBA.esc(fam) : "") + '</span>' +
+            '</div>';
+          }).join("");
+          Array.prototype.forEach.call(resultsEl.querySelectorAll(".map-search-item"), function (it) {
+            it.addEventListener("click", function () { goToHouse(it.dataset.num); });
+          });
+        }
+        resultsEl.classList.add("show");
+      }
+      qEl.addEventListener("input", function () { runSearch(qEl.value); });
+      qEl.addEventListener("focus", function () { if (qEl.value.trim()) resultsEl.classList.add("show"); });
+      document.addEventListener("click", function (e) {
+        if (!document.body.contains(qEl)) return;
+        if (!e.target.closest(".map-search-wrap")) resultsEl.classList.remove("show");
+      });
+
+      function goToHouse(num) {
+        var t = MAP_TILES.filter(function (r) { return r.n === num; })[0];
+        if (!t) return;
+        resultsEl.classList.remove("show"); qEl.blur();
+        var targetScale = fitScaleVal * FULL_DETAIL_MULT * 1.2;
+        var cx = px(t.x + t.w / 2), cy = py(t.y + t.h / 2);
+        scale = Math.max(minScale(), Math.min(maxScale(), targetScale));
+        tx = viewport.clientWidth / 2 - cx * scale; ty = viewport.clientHeight / 2 - cy * scale;
+        worldEl.style.transition = "transform .45s cubic-bezier(.2,.6,.2,1)";
+        setTimeout(function () { worldEl.style.transition = ""; }, 460);
+        apply();
+        setTimeout(function () { openPopup(num); }, 220);
+      }
+
+      fitToScreen(false);
     }
   };
 })();
