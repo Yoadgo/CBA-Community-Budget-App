@@ -280,7 +280,7 @@ CBA.screens = CBA.screens || {};
       function showError(msg) { errEl.textContent = msg; errEl.hidden = false; }
       function hideError() { errEl.hidden = true; }
 
-      function resetScanBtn() { scanBtn.disabled = false; scanBtn.innerHTML = scanIcon + ' <span>סריקה חכמה</span>'; }
+      function resetScanBtn() { scanBtn.disabled = false; scanBtn.innerHTML = scanIcon + ' <span>נסה שוב</span>'; }
       function hideScanMsg() { scanMsg.hidden = true; }
       function showScanMsg(text, isError) {
         scanMsg.textContent = text;
@@ -292,7 +292,6 @@ CBA.screens = CBA.screens || {};
         uploadEl.classList.remove("is-filled", "is-busy");
         uploadEl.innerHTML = cameraIcon + '<b>צילום או העלאת קבלה</b><small>JPG, PNG או PDF</small>';
         scanBtn.hidden = true;
-        resetScanBtn();
         hideScanMsg();
       }
       function renderUploadBusy() {
@@ -318,9 +317,9 @@ CBA.screens = CBA.screens || {};
           fileInput.value = "";
           renderUploadEmpty();
         });
-        /* קובץ חדש נבחר -> אפשר לסרוק אותו; מבטלים תוצאת/הודעת סריקה קודמת (שייכת לקובץ הקודם) */
-        scanBtn.hidden = false;
-        resetScanBtn();
+        /* קובץ חדש נבחר -> מסתירים כפתור/הודעת סריקה קודמים (שייכים לקובץ הקודם); הסריקה
+           מופעלת אוטומטית מיד אחרי (ר' runScan למטה), הכפתור מוצג רק אם הסריקה נכשלת */
+        scanBtn.hidden = true;
         hideScanMsg();
       }
 
@@ -352,22 +351,29 @@ CBA.screens = CBA.screens || {};
           result.size = isImage ? Math.round((result.dataBase64.length * 3) / 4) : file.size;
           picked = result;
           renderUploadFilled();
+          runScan();
         });
       });
 
-      /* סריקה חכמה (שלב 4, 2026-08-08): שולחת את הקובץ שכבר נבחר/נדחס ל-Gemini דרך
-         Code.gs (action scanReceipt, אומת חי — ר' STEP C בזיכרון הפרויקט) וממלאת את
-         שדות הטופס מהתשובה. תמיד רק הצעת-מילוי — התושב רואה ועורך הכל לפני "שלח בקשה";
-         אין שליחה אוטומטית, ואין שינוי בזרימת השליחה הרגילה (submitReceipt) בכלל. */
-      scanBtn.addEventListener("click", function () {
-        if (!picked || scanBtn.disabled) return;
-        scanBtn.disabled = true;
-        scanBtn.innerHTML = '<div class="rs-spin"></div><span>סורק…</span>';
-        hideScanMsg();
+      /* סריקה חכמה (שלב 4, 2026-08-08; עודכן ל-אוטומטית ב-2026-08-08): ברגע שקובץ
+         נבחר ועובד (נדחס/נקרא) בהצלחה, הסריקה מופעלת לבד — אין צורך בלחיצה. שולחת
+         את הקובץ ל-Gemini דרך Code.gs (action scanReceipt, אומת חי — ר' STEP C
+         בזיכרון הפרויקט) וממלאת את שדות הטופס מהתשובה. תמיד רק הצעת-מילוי — התושב
+         רואה ועורך הכל לפני "שלח בקשה"; אין שליחה אוטומטית של הבקשה עצמה. אם הסריקה
+         נכשלת מופיע כפתור "נסה שוב" קטן שמריץ runScan שוב (סבב עיצוב 2026-08-08). */
+      var scanning = false;
+      function runScan() {
+        if (!picked || scanning) return;
+        scanning = true;
+        scanBtn.hidden = true;
+        showScanMsg("סורק את הקבלה אוטומטית…");
         CBA.data.scanReceipt(picked.dataBase64, picked.mimeType, function (res) {
+          scanning = false;
+          if (!picked) return; // הקובץ הוסר בזמן שהסריקה רצה — אין מה לעדכן
           resetScanBtn();
           if (!res || !res.ok || !res.fields) {
-            showScanMsg("הסריקה נכשלה — אפשר למלא את הפרטים ידנית.", true);
+            showScanMsg("הסריקה נכשלה — אפשר למלא ידנית או לנסות שוב.", true);
+            scanBtn.hidden = false;
             return;
           }
           var f = res.fields;
@@ -390,6 +396,11 @@ CBA.screens = CBA.screens || {};
             showScanMsg("לא זוהו פרטים ברורים בתמונה — אפשר למלא ידנית.");
           }
         });
+      }
+
+      scanBtn.addEventListener("click", function () {
+        if (scanBtn.disabled) return;
+        runScan();
       });
 
       /* מתג סוג הבקשה — חושף/מסתיר את שדה הבנק */
@@ -652,12 +663,13 @@ CBA.screens = CBA.screens || {};
       onProceed();
     });
   }
-  /* חלון קופץ בלחיצת "שלח בקשה" בהגשת קבלה (2026-08-08) — שואל אם צוין בתיאור
-     לאיזה שימוש הרכישה. "כן, צוין" ממשיך לשליחה כרגיל. "לא, להוסיף" חושף שדה טקסט;
-     מה שמוזן שם מתווסף לתיאור בפורמט "<תיאור> לטובת <טקסט>" (למשל קבלה על "ציוד
-     למסיבות" + הוספת "אירוע מבוגרים" -> "ציוד למסיבות לטובת אירוע מבוגרים").
-     onProceed(purposeText) נקרא רק אחרי בחירה — purposeText הוא null אם "כן" נבחר
-     או שדה הטקסט נשאר ריק. */
+  /* חלון קופץ בלחיצת "שלח בקשה" בהגשת קבלה (2026-08-08, עודכן לעיצוב חד-שלבי
+     באותו יום לפי בקשת יועד) — שואל אם צוין בתיאור לאיזה שימוש הרכישה, ומציג מיד
+     שדה טקסט אחד (לא חובה) למי שרוצה להוסיף. מה שמוזן שם מתווסף לתיאור בפורמט
+     "<תיאור> לטובת <טקסט>" (למשל קבלה על "ציוד למסיבות" + הוספת "אירוע מבוגרים"
+     -> "ציוד למסיבות לטובת אירוע מבוגרים"). כפתור אחד ("כן, שלח") תמיד מסיים —
+     אם השדה ריק לא מתווסף כלום. onProceed(purposeText) נקרא רק בלחיצה על הכפתור;
+     purposeText הוא null אם השדה נשאר ריק. */
   function openReceiptPurposeModal(onProceed) {
     closeAnyModal();
     var overlay = document.createElement("div");
@@ -671,16 +683,10 @@ CBA.screens = CBA.screens || {};
             '<button class="drawer__close" data-modal-close aria-label="סגור">×</button>' +
           '</div>' +
           '<div class="modal__body">' +
-            '<div class="rp-choice" id="rp-choice">' +
-              '<button type="button" class="rs-ghost" id="rp-yes">כן, צוין</button>' +
-              '<button type="button" class="rs-ghost" id="rp-no">לא, להוסיף</button>' +
-            '</div>' +
-            '<div class="rp-add" id="rp-add" hidden>' +
-              '<div class="form-field"><label>לאיזה שימוש?</label>' +
-                '<input type="text" id="rp-purpose-input" class="field-input" placeholder="לדוגמה: אירוע מבוגרים"></div>' +
-              '<div class="club-rules__modal-actions">' +
-                '<button type="button" class="btn-primary" id="rp-add-submit">הוסף ושלח</button>' +
-              '</div>' +
+            '<div class="form-field"><label>לאיזה שימוש? (לא חובה — למלא רק אם עוד לא צוין למעלה)</label>' +
+              '<input type="text" id="rp-purpose-input" class="field-input" placeholder="לדוגמה: אירוע מבוגרים"></div>' +
+            '<div class="club-rules__modal-actions">' +
+              '<button type="button" class="btn-primary" id="rp-yes">כן, שלח</button>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -690,19 +696,9 @@ CBA.screens = CBA.screens || {};
     overlay.querySelectorAll("[data-modal-close]").forEach(function (el) { el.addEventListener("click", closeAnyModal); });
     document.addEventListener("keydown", escAnyModal);
 
-    var choiceEl = overlay.querySelector("#rp-choice");
-    var addEl = overlay.querySelector("#rp-add");
     var input = overlay.querySelector("#rp-purpose-input");
+    input.focus();
     overlay.querySelector("#rp-yes").addEventListener("click", function () {
-      closeAnyModal();
-      onProceed(null);
-    });
-    overlay.querySelector("#rp-no").addEventListener("click", function () {
-      choiceEl.hidden = true;
-      addEl.hidden = false;
-      input.focus();
-    });
-    overlay.querySelector("#rp-add-submit").addEventListener("click", function () {
       var text = input.value.trim();
       closeAnyModal();
       onProceed(text || null);

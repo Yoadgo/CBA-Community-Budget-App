@@ -56,7 +56,13 @@ body {
   background: rgba(255,255,255,.82);
   backdrop-filter: saturate(180%) blur(12px);
   -webkit-backdrop-filter: saturate(180%) blur(12px);
-  border-bottom: 1px solid var(--border);
+  /* 2026-08-08, לבקשת יועד — "קו דק עיצובי שמפריד בין הכותרת לתוכן": קו
+     ה-border-bottom הקודם (var(--border), #E5E7EB) היה כמעט בלתי-נראה על רקע
+     הזכוכית הבהירה של הכותרת עצמה (ניגודיות נמוכה מדי מול --bg הבהיר מתחתיו) —
+     הוכהה מעט (rgba כהה־שקוף במקום גוון אפור בהיר קבוע) ונוסף צל עדין מתחתיו
+     כדי שהכותרת תיקרא כשכבה נפרדת מהתוכן, בלי להיות כבד/בולט מדי. */
+  border-bottom: 1px solid rgba(16,24,40,.13);
+  box-shadow: 0 1px 3px rgba(16,24,40,.05);
   position: sticky; top: 0; z-index: 10;
 }
 /* 2026-08-08 (לבקשת יועד — "אני רוצה להקטין אותו ב-15% שיהיה צר יותר, גם
