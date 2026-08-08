@@ -38,18 +38,12 @@ CBA.screens = CBA.screens || {};
     food:  '<path d="M6 3v7a2 2 0 0 0 2 2v9M6 3v18M10 3v9M18 3c-2 0-3 2-3 5s1 4 3 4v9"/>',
     club:  '<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14c2.5.3 4.5 2.4 4.5 5"/>',
     train: '<rect x="5" y="4" width="14" height="13" rx="3"/><path d="M5 12h14M8 20l-2 2M16 20l2 2"/><circle cx="8.5" cy="14.5" r="0.5" fill="currentColor"/><circle cx="15.5" cy="14.5" r="0.5" fill="currentColor"/>',
-    mail:  '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'
+    mail:  '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+    sport: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5c2.6 2.4 2.6 14.6 0 17M3.5 12h17M5.3 6.8c2 1.7 11.4 1.7 13.4 0M5.3 17.2c2-1.7 11.4-1.7 13.4 0"/>',
+    house: '<path d="M3.5 11.5 12 4l8.5 7.5"/><path d="M5.5 10v8.5a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V10"/><path d="M9.5 19.5v-5.2h5v5.2"/>'
   };
-  function amenityIconFor(label) {
-    if (label.indexOf('גני ילדים') !== -1 || label.indexOf('מועדון ילדים') !== -1) return amenIcons.kids;
-    if (label.indexOf('שעשועים') !== -1 || label.indexOf('פארק') !== -1) return amenIcons.park;
-    if (label.indexOf('שק"ם') !== -1) return amenIcons.shop;
-    if (label.indexOf('חומוסיה') !== -1) return amenIcons.food;
-    if (label.indexOf('מועדון משפחות') !== -1) return amenIcons.club;
-    if (label.indexOf('פאמטרק') !== -1) return amenIcons.train;
-    if (label.indexOf('דואר') !== -1) return amenIcons.mail;
-    return amenIcons.club;
-  }
+  // סמל בית קטן שמוצג מעל מספר הבית בתגית המפה (טאב "מפת השיכון"), במקום רק ספרות יבשות
+  var houseIcon = svg(amenIcons.house);
 
   /* ==== המרת קובץ קבלה ל-Base64 לפני שליחה לשרת ====
      תמונה: מכווצים/מקטינים בצד הלקוח (canvas) כדי שההעלאה תהיה מהירה גם ברשת סלולרית חלשה.
@@ -270,9 +264,6 @@ CBA.screens = CBA.screens || {};
               '</div></div>' +
           '</div>' +
           '<button class="btn-primary rs-submit" id="rs-submit-btn">' + sendIcon + ' <span>שלח בקשה</span></button>' +
-          '<div class="rs-progress" id="rs-progress" hidden>' +
-            '<div class="rs-progress__track"><div class="rs-progress__bar" id="rs-progress-bar"></div></div>' +
-            '<div class="rs-progress__label" id="rs-progress-label">מעלה… 0%</div></div>' +
           '<div class="rs-err" id="rs-err" hidden></div>' +
         '</div>';
 
@@ -280,19 +271,6 @@ CBA.screens = CBA.screens || {};
       var fileInput = container.querySelector("#rs-file");
       var errEl     = container.querySelector("#rs-err");
       var submitBtn = container.querySelector("#rs-submit-btn");
-      var progEl    = container.querySelector("#rs-progress");
-      var progBar   = container.querySelector("#rs-progress-bar");
-      var progLabel = container.querySelector("#rs-progress-label");
-
-      function showProgress(pct) {
-        progEl.hidden = false;
-        progBar.style.width = pct + "%";
-        progLabel.textContent = (pct >= 100 ? "כמעט מוכן…" : "מעלה… " + pct + "%");
-      }
-      function hideProgress() {
-        progEl.hidden = true;
-        progBar.style.width = "0%";
-      }
 
       function showError(msg) { errEl.textContent = msg; errEl.hidden = false; }
       function hideError() { errEl.hidden = true; }
@@ -407,7 +385,6 @@ CBA.screens = CBA.screens || {};
 
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<div class="rs-spin"></div><span>שולח…</span>';
-        showProgress(0);
 
         var fields = {
           expenseType: expenseType,
@@ -426,19 +403,15 @@ CBA.screens = CBA.screens || {};
           fields.bankAccount = val("#rs-bank-account");
         }
 
-        // onProgress (פרמטר שלישי) משקף את התקדמות ההעלאה בפועל (XHR upload.onprogress).
-        // renderSent() נקרא אך ורק בתוך cb, כלומר אחרי שהתשובה האמיתית מהשרת התקבלה —
-        // לעולם לא לפני שההעלאה במלואה הסתיימה (זה בדיוק הבאג שתוקן כאן).
         CBA.data.submitReceipt(fields, function (res) {
-          hideProgress();
           if (res && res.ok) {
             renderSent();
           } else {
             submitBtn.disabled = false;
             submitBtn.innerHTML = sendIcon + ' <span>שלח בקשה</span>';
-            showError((res && res.error) ? res.error : "השליחה נכשלה — בדקו את החיבור לאינטרנט ונסו שוב.");
+            showError("השליחה נכשלה — בדקו את החיבור לאינטרנט ונסו שוב.");
           }
-        }, showProgress);
+        });
       });
     }
   };
@@ -1177,12 +1150,9 @@ CBA.screens = CBA.screens || {};
   CBA.screens.resDirectory = {
     render: function (container) {
       container.innerHTML =
-        // הכותרת מוסתרת בדסקטופ (ר' .dir-head ב-resident.css) — נשארת רק במובייל,
-        // שם עדיין אין כותרת-מסך אחרת שמסבירה איפה נמצאים.
-        '<div class="screen-head dir-head"><div class="screen-head__title">תושבי השיכון</div>' +
+        '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
           '<div class="screen-head__sub">מדריך התושבים בשיכון</div></div>' +
-        // עטיפת "סרגל כלים" — בדסקטופ דוחפת את החיפוש לצד שמאל (ר' .dir-toolbar)
-        '<div class="dir-toolbar"><input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון"></div>' +
+        '<input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון">' +
         '<div id="dir-list"><div class="rs-empty"><p>טוען…</p></div></div>';
 
       var listEl = container.querySelector("#dir-list");
@@ -1202,12 +1172,7 @@ CBA.screens = CBA.screens || {};
             return hay.indexOf(q) !== -1;
           });
         }
-        // מיון לפי שם משפחה, א'-ב' (עברית) — היה קודם לפי מספר בית (2026-08-08)
         rows.sort(function (a, b) {
-          var fa = dirVal(a, c.family), fb = dirVal(b, c.family);
-          var cmp = fa.localeCompare(fb, "he");
-          if (cmp) return cmp;
-          // שם משפחה זהה — שובר שוויון יציב לפי מספר בית
           var ha = parseFloat(dirVal(a, c.house)), hb = parseFloat(dirVal(b, c.house));
           if (isNaN(ha)) ha = Infinity;
           if (isNaN(hb)) hb = Infinity;
@@ -1232,13 +1197,21 @@ CBA.screens = CBA.screens || {};
     }
   };
 
-  /* ==== "מפת השיכון" — מפה סכמטית אינטראקטיבית (2026-08-08) ====
-     נתוני המבנה (מיקומי בתים/כבישים/רחובות/חניונים) נמדדו פעם אחת מתשריט השיכון
-     ונשמרים כאן כקבועים סטטיים — הם לא משתנים. מה שכן דינמי (שם משפחה/טלפון/ילדים
-     לכל בית) נשלף בכל טעינה מ-CBA.data.getCommunityDirectory ומוצג דרך אותן
-     dirCols/dirVal/dirHouseHTML שמזינות את טאב "שכנים" — כך שכרטיס הבית בפופאפ של
-     המפה זהה בול לכרטיס ברשימה, ואותו כלל פרטיות חל: רק תושבים פעילים מוצגים. */
+  /* ==== "מפת השיכון" — מפה אינטראקטיבית עם שכבת "שטח" מצוירת (2026-08-08, גרסה 6) ====
+     נתוני המבנה (מיקומי בתים/כבישים/רחובות/חניונים/מבני ציבור/עצים) נמדדו/כוילו מול
+     תצלומי אוויר של השיכון ונשמרים כאן כקבועים סטטיים — הם לא משתנים. מה שכן דינמי
+     (שם משפחה/טלפון/ילדים לכל בית) נשלף בכל טעינה מ-CBA.data.getCommunityDirectory
+     ומוצג דרך אותן dirCols/dirVal/dirHouseHTML שמזינות את טאב "שכנים" — כך שכרטיס
+     הבית בפופאפ של המפה זהה בול לכרטיס ברשימה, ואותו כלל פרטיות חל: רק תושבים
+     פעילים מוצגים. */
   var MAP_WORLD_W = 1100, MAP_WORLD_H = 1354;
+  function mapX(p) { return p / 100 * MAP_WORLD_W; }
+  function mapY(p) { return p / 100 * MAP_WORLD_H; }
+
+  var MAP_LOOP_L = 23.94, MAP_LOOP_R = 94.17, MAP_LOOP_B = 98.45;
+  var MAP_TAVOR = 26.33, MAP_BASHOR = 65.50;
+  var MAP_LOOP_W = 48, MAP_CROSS_W = 37, MAP_DRIVE_W = 18; /* עובי בפיקסלים של "עולם" */
+
   var MAP_TILES = [
     {n:"101",x:39.98,y:9.13,w:6.54,h:3.24},
     {n:"103",x:46.53,y:9.13,w:6.54,h:3.24},
@@ -1313,46 +1286,172 @@ CBA.screens = CBA.screens || {};
     {n:"906",x:72.55,y:92.03,w:6.70,h:3.30}
   ];
   var MAP_AMENITIES = [
-    {x:27.69,y:13.92,w:11.01,h:6.09,label:'גני ילדים'},
-    {x:39.27,y:42.49,w:12.29,h:7.45,label:'גן שעשועים · פארק ניגונה'},
-    {x:13.09,y:43.59,w:6.07,h:6.87,label:'שק"ם משפחות'},
-    {x:12.85,y:50.71,w:6.15,h:4.53,label:'חומוסיה'},
-    {x:12.77,y:55.63,w:6.07,h:6.93,label:'מועדון משפחות'},
-    {x:27.53,y:37.24,w:6.86,h:9.13,label:'מועדון ילדים'},
-    {x:27.21,y:54.40,w:7.34,h:3.89,label:'פאמטרק'},
-    {x:28.97,y:59.00,w:2.71,h:2.85,label:'דואר'}
+    {x:39.27,y:42.49,w:12.29,h:7.45,label:'גן שעשועים · פארק נינג׳ה',ico:'park',park:1},
+    {x:12.90,y:43.59,w:8.80,h:6.87,label:'שק"ם משפחות',ico:'shop'},
+    {x:12.90,y:50.71,w:8.80,h:4.53,label:'חומוסיה',ico:'food'},
+    {x:12.90,y:55.63,w:8.80,h:6.93,label:'מועדון משפחות',ico:'club',shape:'club'},
+    {x:27.53,y:37.24,w:6.86,h:9.13,label:'מועדון ילדים',ico:'kids'},
+    {x:27.21,y:54.40,w:7.34,h:3.89,label:'פאמטרק',ico:'train'},
+    {x:28.97,y:59.00,w:2.71,h:2.85,label:'דואר',ico:'mail'}
   ];
-  var MAP_ROADS = [
-    {type:'v', x:23.94, y1:0,     y2:98.45, thick:4.79},
-    {type:'v', x:94.17, y1:0,     y2:98.45, thick:4.79},
-    {type:'h', y:26.33, x1:23.94, x2:94.17, thick:2.78},
-    {type:'h', y:64.70, x1:23.94, x2:94.17, thick:2.72},
-    {type:'h', y:98.45, x1:23.94, x2:94.17, thick:2.85}
-  ];
-  var MAP_STREETS = [
-    {name:'נחל דן',      type:'h', y:13.5,  x1:38.5, x2:68.7},
-    {name:'נחל משושים',  type:'v', x:72.6,  y1:14.25, y2:26.33},
-    {name:'נחל אלכסנדר', type:'h', y:37.6,  x1:43.4, x2:93.8},
-    {name:'נחל אילון',   type:'v', x:87.6,  y1:44.04, y2:48.90},
-    {name:'נחל שורק',    type:'h', y:54.1,  x1:25.9, x2:93.8},
-    {name:'נחל צאלים',   type:'h', y:77.1,  x1:43.4, x2:93.8},
-    {name:'נחל פארן',    type:'h', y:91.0,  x1:38.9, x2:80.7}
-  ];
+
+  /* גני ילדים — המבנה עם הגג המפואר (4 גזוזטראות סביב מרכז) שנראה בכל תצלומי האוויר
+     ליד הכיכר, ולא במיקום התשריט המקורי. ממוקם ממש מתחת לכיכר. */
+  var MAP_LANDMARK = {x:9.5, y:9.0, w:11.5, h:8.3, label:'גני ילדים', ico:'kids'};
+
+  /* עגול־תנועה בכניסה הצפונית — נראה בבירור בתצלומי האוויר, לא מופיע בתשריט המקורי */
+  var MAP_ROUNDABOUT = {cx:15.5, cy:2.6, r:5.6};
+
+  /* מגרשי טניס/כדורסל, אולם ספורט ומגרש דשא סינתטי שני — קיימים במציאות (תצלומי אוויר),
+     לא מופיעים בתשריט הרשמי. יחס הרוחב/גובה מכוון ליחס אמיתי של מגרש טניס/כדורסל. */
+  var MAP_TENNIS = {x:0.3, y:34.1, w:7.0, h:2.75};
+  var MAP_BASKETBALL = {x:7.6, y:33.7, w:5.3, h:3.15};
+  var MAP_SPORTS_HALL = {x:0.2, y:39.2, w:6.2, h:8.8};
+  var MAP_TURF2 = {x:0.2, y:57.8, w:6.0, h:4.2};
+  /* חניון הבריכה — ממש ליד הבריכה (מזרח) */
+  var MAP_POOL_PARKING = {x:11.9, y:23.8, w:6.8, h:7.2};
+  /* חניון שק"ם/חומוסיה/מועדון משפחות — רצועה אחת שמשרתת את שלושת המבנים */
+  var MAP_SHEKEM_PARKING = {x:21.7, y:43.5, w:5.5, h:19.0};
+
   var MAP_PARKING = [
-    {x:24.74, y:2.72,  w:14.37, h:7.97},
-    {x:68.24, y:14.25, w:8.78,  h:11.66},
-    {x:35.91, y:29.47, w:7.98,  h:5.18},
-    {x:68.24, y:29.47, w:8.78,  h:5.18},
-    {x:81.01, y:44.04, w:13.17, h:4.86},
-    {x:34.32, y:49.87, w:9.18,  h:11.01},
-    {x:66.64, y:49.87, w:9.58,  h:11.01},
-    {x:35.91, y:68.33, w:7.98,  h:9.39},
-    {x:68.24, y:68.33, w:8.78,  h:9.39},
-    {x:26.34, y:87.76, w:13.17, h:6.15},
-    {x:79.81, y:84.20, w:12.77, h:5.83}
+    {x:26.25,y:3.30, w:12.95,h:7.90 },
+    {x:68.23,y:14.00,w:8.80, h:10.55},
+    {x:35.48,y:29.70,w:8.90, h:11.35},
+    {x:68.23,y:29.70,w:8.95, h:11.30},
+    {x:79.40,y:43.10,w:13.50,h:7.20},
+    {x:35.80,y:51.90,w:8.30, h:10.55},
+    {x:68.60,y:51.90,w:9.00, h:10.55},
+    {x:35.55,y:67.60,w:8.50, h:11.20},
+    {x:68.55,y:67.60,w:9.10, h:11.20},
+    {x:26.20,y:87.70,w:13.30,h:8.35 },
+    {x:79.90,y:83.80,w:12.90,h:7.45 },
+    /* חניית גני ילדים — ממוקמת ממש מתחת למבנה גני הילדים */
+    {x:5.0, y:17.8, w:12.0, h:3.2 },
+    /* חניון הבריכה */
+    {x:MAP_POOL_PARKING.x, y:MAP_POOL_PARKING.y, w:MAP_POOL_PARKING.w, h:MAP_POOL_PARKING.h},
+    /* חניון שק"ם/חומוסיה/מועדון משפחות */
+    {x:MAP_SHEKEM_PARKING.x, y:MAP_SHEKEM_PARKING.y, w:MAP_SHEKEM_PARKING.w, h:MAP_SHEKEM_PARKING.h}
   ];
+
+  /* שבילי גישה מהכביש הראשי אל החניונים/הכיכר */
+  var MAP_DRIVES = [
+    [39.90,MAP_TAVOR, 39.90,30.6],
+    [72.63,MAP_TAVOR, 72.63,30.6],
+    [72.63,MAP_TAVOR, 72.63,23.5],
+    [38.91,MAP_BASHOR,38.91,59.8],
+    [71.43,MAP_BASHOR,71.43,59.8],
+    [39.90,MAP_BASHOR,39.90,69.5],
+    [72.63,MAP_BASHOR,72.63,69.5],
+    [MAP_LOOP_L,6.71,  27.4,6.71 ],
+    [MAP_LOOP_L,90.84, 27.4,90.84],
+    [MAP_LOOP_R,46.47, 90.9,46.47],
+    [MAP_LOOP_R,87.12, 90.9,87.12],
+    /* כיכר → חניית גני הילדים, ממש מתחתיה */
+    [MAP_ROUNDABOUT.cx,MAP_ROUNDABOUT.cy+MAP_ROUNDABOUT.r, MAP_ROUNDABOUT.cx,19.0],
+    /* כיכר → הכביש הראשי — כך שהכיכר מחוברת חזותית לרשת הכבישים ולא "צפה" לבד */
+    [MAP_ROUNDABOUT.cx+MAP_ROUNDABOUT.r,MAP_ROUNDABOUT.cy, MAP_LOOP_L,MAP_ROUNDABOUT.cy]
+  ];
+
+  /* רחובות פנימיים — 9 השמות מהתשריט. type:'road' = תווית יושבת ישירות על אחד משני
+     הכבישים הראשיים (תבור/הבשור), עם קו מקווקו על הכביש עצמו; type:'h'/'v' = שביל בין
+     שורות בתים. */
+  var MAP_STREETS = [
+    {name:'נחל דן',      type:'h',    y:13.3,  x1:38.5, x2:68.7},
+    {name:'נחל משושים',  type:'h',    y:18.7,  x1:76.0, x2:93.0},
+    {name:'נחל תבור',    type:'road', y:MAP_TAVOR, x1:MAP_LOOP_L,x2:MAP_LOOP_R},
+    {name:'נחל אלכסנדר', type:'h',    y:33.1,  x1:43.0, x2:93.5},
+    /* נחל אילון — שביל אנכי קצר בין שני צמדי הבתים המזרחיים (505/507 מעל, 506/508 מתחת) */
+    {name:'נחל אילון',   type:'v',    x:77.6,  y1:42.2, y2:50.6},
+    {name:'נחל שורק',    type:'h',    y:50.0,  x1:30.5, x2:93.5},
+    {name:'נחל הבשור',   type:'road', y:MAP_BASHOR,x1:MAP_LOOP_L,x2:MAP_LOOP_R},
+    /* נחל צאלים — מוזז דרומה כדי לא להיצמד לנחל הבשור */
+    {name:'נחל צאלים',   type:'h',    y:68.0,  x1:43.4, x2:93.8},
+    {name:'נחל פארן',    type:'h',    y:91.0,  x1:38.9, x2:80.7}
+  ];
+
+  /* גושי עצים — אליפסות רכות עם מילוי דהוי */
+  var MAP_TREES = [
+    [13,12,5,4],[8,21,4,4],[17,31,4,4],[10,47,4,4],[16,58,4,4],[9,70,5,4],[16,82,4,4],[11,92,4,4],
+    [33,10,4,3],[34,34,3,3],[32,57,4,3],[34,80,3,3],[36,95,4,3],
+    [55,24,4,3],[74,10,4,3],[57,63,4,3],[79,63,4,3],[58,83,4,3],
+    [97,20,4,5],[98,50,4,5],[97,80,4,5]
+  ];
+
+  var MAP_POOL  = {x:0.3, y:21.5, w:11.3, h:10.5};
+  var MAP_FIELD = {x:0.2, y:48.8, w:8.6, h:8.6};
+
   // מספר בית מנורמל להשוואה בטוחה (בלי לסמוך על עיצוב מדויק בגיליון)
   function normHouse(s) { return String(s == null ? "" : s).replace(/\D/g, ""); }
+
+  /* ===================== שכבת ה"שטח" (SVG אחד, מחושב פעם אחת) =====================
+     כל רשת הכבישים מצוירת כמסלולים בשכבה אחת: תחילה כל ה"מסגרות" הכהות, ואז כל פני
+     הכביש הבהירים מעליהן — כך צומת נוצר מעצמו, בלי תפר בין שני מלבנים שנדבקים. */
+  function mapPt(x, y) { return mapX(x).toFixed(1) + ',' + mapY(y).toFixed(1); }
+  function mapRoad(d, w, stroke, extra) {
+    return '<path d="' + d + '" fill="none" stroke="' + stroke + '" stroke-width="' + w +
+      '" stroke-linecap="round" stroke-linejoin="round"' + (extra || '') + '/>';
+  }
+  var MAP_LOOP_PATH = 'M' + mapPt(MAP_LOOP_L, -2) + ' L' + mapPt(MAP_LOOP_L, MAP_LOOP_B) +
+    ' L' + mapPt(MAP_LOOP_R, MAP_LOOP_B) + ' L' + mapPt(MAP_LOOP_R, -2);
+  var MAP_CROSS_PATH = 'M' + mapPt(MAP_LOOP_L, MAP_TAVOR) + ' L' + mapPt(MAP_LOOP_R, MAP_TAVOR) +
+    ' M' + mapPt(MAP_LOOP_L, MAP_BASHOR) + ' L' + mapPt(MAP_LOOP_R, MAP_BASHOR);
+  var MAP_DRIVE_PATH = MAP_DRIVES.map(function (d) { return 'M' + mapPt(d[0], d[1]) + ' L' + mapPt(d[2], d[3]); }).join(' ');
+
+  var MAP_TERRAIN_SVG = (function () {
+    var t = '';
+    t += '<defs>' +
+      '<radialGradient id="mapTreeG"><stop offset="0%" stop-color="var(--map-tree)" stop-opacity=".34"/>' +
+      '<stop offset="55%" stop-color="var(--map-tree)" stop-opacity=".18"/>' +
+      '<stop offset="100%" stop-color="var(--map-tree)" stop-opacity="0"/></radialGradient>' +
+      '<linearGradient id="mapPoolG" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="#DDEFF9"/><stop offset="100%" stop-color="#BFE0F1"/></linearGradient>' +
+      '<linearGradient id="mapLandG" x1="0" y1="0" x2="1" y2="1">' +
+      '<stop offset="0%" stop-color="#EDF2E6"/><stop offset="45%" stop-color="#E7EEDF"/><stop offset="100%" stop-color="#DCE3D6"/></linearGradient>' +
+      '<radialGradient id="mapGlowWarm"><stop offset="0%" stop-color="#FFF7E8" stop-opacity=".55"/><stop offset="100%" stop-color="#FFF7E8" stop-opacity="0"/></radialGradient>' +
+      '<radialGradient id="mapGlowCool"><stop offset="0%" stop-color="#E4EEF6" stop-opacity=".5"/><stop offset="100%" stop-color="#E4EEF6" stop-opacity="0"/></radialGradient>' +
+      '<filter id="mapSoften" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3.2"/></filter>' +
+    '</defs>';
+    /* 1. קרקע בסיס — גרדיאנט נזיל + כתמי אור רכים */
+    t += '<rect x="0" y="0" width="' + MAP_WORLD_W + '" height="' + MAP_WORLD_H + '" fill="url(#mapLandG)"/>';
+    t += '<ellipse cx="' + (MAP_WORLD_W * 0.18) + '" cy="' + (MAP_WORLD_H * 0.14) + '" rx="' + (MAP_WORLD_W * 0.24) + '" ry="' + (MAP_WORLD_H * 0.14) + '" fill="url(#mapGlowWarm)"/>';
+    t += '<ellipse cx="' + (MAP_WORLD_W * 0.82) + '" cy="' + (MAP_WORLD_H * 0.42) + '" rx="' + (MAP_WORLD_W * 0.22) + '" ry="' + (MAP_WORLD_H * 0.16) + '" fill="url(#mapGlowCool)"/>';
+    t += '<ellipse cx="' + (MAP_WORLD_W * 0.28) + '" cy="' + (MAP_WORLD_H * 0.82) + '" rx="' + (MAP_WORLD_W * 0.26) + '" ry="' + (MAP_WORLD_H * 0.15) + '" fill="url(#mapGlowWarm)"/>';
+    /* 2. מדשאת פנים השיכון */
+    t += '<rect x="' + mapX(MAP_LOOP_L) + '" y="' + mapY(-2) + '" width="' + (mapX(MAP_LOOP_R) - mapX(MAP_LOOP_L)) + '" height="' + (mapY(MAP_LOOP_B) - mapY(-2)) + '" rx="34" fill="var(--map-lawn)" stroke="var(--map-lawn-edge)" stroke-width="1.5"/>';
+    /* 3. גושי עצים */
+    MAP_TREES.forEach(function (tr) {
+      t += '<ellipse cx="' + mapX(tr[0]).toFixed(1) + '" cy="' + mapY(tr[1]).toFixed(1) + '" rx="' + mapX(tr[2]).toFixed(1) + '" ry="' + mapY(tr[3]).toFixed(1) + '" fill="url(#mapTreeG)"/>';
+    });
+    /* 4. בריכה + מגרש כדורגל + דשא סינתטי שני */
+    t += '<rect x="' + mapX(MAP_POOL.x) + '" y="' + mapY(MAP_POOL.y) + '" width="' + mapX(MAP_POOL.w) + '" height="' + mapY(MAP_POOL.h) + '" rx="16" fill="url(#mapPoolG)" stroke="var(--map-water-edge)" stroke-width="1.5"/>';
+    t += '<rect x="' + (mapX(MAP_POOL.x) + 9) + '" y="' + (mapY(MAP_POOL.y) + 9) + '" width="' + (mapX(MAP_POOL.w) - 18) + '" height="' + (mapY(MAP_POOL.h) - 18) + '" rx="10" fill="none" stroke="#FFFFFF" stroke-opacity=".55" stroke-width="1.5"/>';
+    t += '<rect x="' + mapX(MAP_FIELD.x) + '" y="' + mapY(MAP_FIELD.y) + '" width="' + mapX(MAP_FIELD.w) + '" height="' + mapY(MAP_FIELD.h) + '" rx="8" fill="#DCEBD1" stroke="#C2DCB4" stroke-width="1.5"/>';
+    t += '<g stroke="#FFFFFF" stroke-opacity=".75" stroke-width="1.4" fill="none">' +
+      '<rect x="' + (mapX(MAP_FIELD.x) + 7) + '" y="' + (mapY(MAP_FIELD.y) + 7) + '" width="' + (mapX(MAP_FIELD.w) - 14) + '" height="' + (mapY(MAP_FIELD.h) - 14) + '" rx="3"/>' +
+      '<line x1="' + mapX(MAP_FIELD.x) + '" y1="' + (mapY(MAP_FIELD.y) + mapY(MAP_FIELD.h) / 2) + '" x2="' + (mapX(MAP_FIELD.x) + mapX(MAP_FIELD.w)) + '" y2="' + (mapY(MAP_FIELD.y) + mapY(MAP_FIELD.h) / 2) + '"/>' +
+      '<circle cx="' + (mapX(MAP_FIELD.x) + mapX(MAP_FIELD.w) / 2) + '" cy="' + (mapY(MAP_FIELD.y) + mapY(MAP_FIELD.h) / 2) + '" r="14"/></g>';
+    t += '<rect x="' + mapX(MAP_TURF2.x) + '" y="' + mapY(MAP_TURF2.y) + '" width="' + mapX(MAP_TURF2.w) + '" height="' + mapY(MAP_TURF2.h) + '" rx="7" fill="#DCEBD1" stroke="#C2DCB4" stroke-width="1.5"/>';
+    /* 5. מסגרות הכבישים — מטושטשות קלות, כך שהכביש "זורם" על הקרקע במקום קו שרטוט קשיח */
+    t += mapRoad(MAP_LOOP_PATH,  MAP_LOOP_W + 9,  'var(--map-asphalt-edge)', ' opacity=".55" filter="url(#mapSoften)"');
+    t += mapRoad(MAP_CROSS_PATH, MAP_CROSS_W + 9, 'var(--map-asphalt-edge)', ' opacity=".55" filter="url(#mapSoften)"');
+    t += mapRoad(MAP_DRIVE_PATH, MAP_DRIVE_W + 9, 'var(--map-asphalt-edge)', ' opacity=".55" filter="url(#mapSoften)"');
+    /* 6. פני הכביש */
+    t += mapRoad(MAP_LOOP_PATH,  MAP_LOOP_W,  'var(--map-asphalt)', ' opacity=".92"');
+    t += mapRoad(MAP_CROSS_PATH, MAP_CROSS_W, 'var(--map-asphalt)', ' opacity=".92"');
+    t += mapRoad(MAP_DRIVE_PATH, MAP_DRIVE_W, 'var(--map-asphalt)', ' opacity=".92"');
+    /* 7. קו הפרדה מקווקו */
+    t += mapRoad(MAP_LOOP_PATH,  2.2, 'var(--map-lane)', ' stroke-dasharray="16 14" stroke-opacity=".85"');
+    t += mapRoad(MAP_CROSS_PATH, 2.2, 'var(--map-lane)', ' stroke-dasharray="16 14" stroke-opacity=".85"');
+    /* 8. עגול־תנועה בכניסה — מאותם חומרי כביש בדיוק, כך שירגיש חלק מאותה מערכת כבישים */
+    (function () {
+      var cx = mapX(MAP_ROUNDABOUT.cx), cy = mapY(MAP_ROUNDABOUT.cy), r = mapX(MAP_ROUNDABOUT.r);
+      t += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (r + 4.5).toFixed(1) + '" fill="var(--map-asphalt-edge)" opacity=".55" filter="url(#mapSoften)"/>';
+      t += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="var(--map-asphalt)" opacity=".92"/>';
+      t += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (r - 3).toFixed(1) + '" fill="none" stroke="var(--map-lane)" stroke-width="2.2" stroke-dasharray="7 8" stroke-opacity=".85"/>';
+      t += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (r * 0.52).toFixed(1) + '" fill="var(--map-lawn)" stroke="var(--map-lawn-edge)" stroke-width="1.5"/>';
+    })();
+    return t;
+  })();
 
   CBA.screens.resMap = {
     render: function (container) {
@@ -1365,6 +1464,12 @@ CBA.screens = CBA.screens || {};
               '<span class="map-search-ic">' + searchIcon + '</span>' +
               '<input id="map-q" class="map-search" placeholder="חיפוש לפי מספר בית, שם משפחה או ילד…" autocomplete="off">' +
               '<div class="map-search-results" id="map-results"></div>' +
+            '</div>' +
+            '<div class="map-legend">' +
+              '<i><b class="lg-house"></b>בית</i>' +
+              '<i><b class="lg-amen"></b>מבנה ציבור</i>' +
+              '<i><b class="lg-park"></b>חניון</i>' +
+              '<i><b class="lg-road"></b>כביש</i>' +
             '</div>' +
           '</div>' +
           '<div class="map-viewport" id="map-viewport"><div class="map-world" id="map-world"></div></div>' +
@@ -1384,65 +1489,122 @@ CBA.screens = CBA.screens || {};
 
       worldEl.style.width = MAP_WORLD_W + "px";
       worldEl.style.height = MAP_WORLD_H + "px";
-      function px(p) { return p / 100 * MAP_WORLD_W; }
-      function py(p) { return p / 100 * MAP_WORLD_H; }
+      worldEl.insertAdjacentHTML("afterbegin",
+        '<svg class="map-terrain" width="' + MAP_WORLD_W + '" height="' + MAP_WORLD_H + '" viewBox="0 0 ' + MAP_WORLD_W + ' ' + MAP_WORLD_H + '">' + MAP_TERRAIN_SVG + '</svg>' +
+        '<div class="map-grain"></div>');
 
-      // כבישים
-      MAP_ROADS.forEach(function (r) {
-        var el = document.createElement("div");
-        el.className = "map-road";
-        if (r.type === "v") {
-          var tpx = r.thick / 100 * MAP_WORLD_W, x1 = px(r.x), y1 = py(r.y1), y2 = py(r.y2);
-          el.style.left = (x1 - tpx / 2) + "px"; el.style.top = y1 + "px";
-          el.style.width = tpx + "px"; el.style.height = (y2 - y1) + "px";
-        } else {
-          var tpy = r.thick / 100 * MAP_WORLD_H, ry1 = py(r.y), rx1 = px(r.x1), rx2 = px(r.x2);
-          el.style.top = (ry1 - tpy / 2) + "px"; el.style.left = rx1 + "px";
-          el.style.height = tpy + "px"; el.style.width = (rx2 - rx1) + "px";
-        }
-        worldEl.appendChild(el);
-      });
+      function px(p) { return mapX(p); }
+      function py(p) { return mapY(p); }
 
       // חניונים
       MAP_PARKING.forEach(function (p) {
         var el = document.createElement("div");
         el.className = "map-parking";
-        el.style.left = px(p.x) + "px"; el.style.top = py(p.y) + "px";
-        el.style.width = px(p.w) + "px"; el.style.height = py(p.h) + "px";
-        el.innerHTML = parkIcon;
+        el.style.cssText = "left:" + px(p.x) + "px;top:" + py(p.y) + "px;width:" + px(p.w) + "px;height:" + py(p.h) + "px";
+        el.innerHTML = '<span class="map-parking__chip">P</span>';
         worldEl.appendChild(el);
       });
 
-      // רחובות
+      // רחובות — 9 שמות מהתשריט. type:'road' יושב ישירות על אחד משני הכבישים הראשיים
+      // (תבור/הבשור) ומקבל גם קו מקווקו משלו על הכביש; type:'h'/'v' הם שבילי מדרחוב.
       MAP_STREETS.forEach(function (s) {
-        var el = document.createElement("div");
         var lbl = document.createElement("span");
-        lbl.className = "map-street__label";
         lbl.textContent = s.name;
+        if (s.type === "road") {
+          lbl.className = "map-street__label map-street__label--road";
+          var ry = py(s.y), rx1 = px(s.x1), rx2 = px(s.x2);
+          lbl.style.cssText = "left:" + (rx1 + (rx2 - rx1) / 2) + "px;top:" + ry + "px;transform:translate(-50%,-50%)";
+          var rel = document.createElement("div");
+          rel.className = "map-street map-street--h map-street--onroad";
+          rel.style.cssText = "top:" + ry + "px;left:" + rx1 + "px;width:" + (rx2 - rx1) + "px";
+          worldEl.appendChild(rel);
+          worldEl.appendChild(lbl);
+          return;
+        }
+        var el = document.createElement("div");
+        lbl.className = "map-street__label";
         if (s.type === "h") {
           el.className = "map-street map-street--h";
           var y = py(s.y), x1 = px(s.x1), x2 = px(s.x2);
-          el.style.top = y + "px"; el.style.left = x1 + "px"; el.style.width = (x2 - x1) + "px";
-          lbl.style.left = (x1 + (x2 - x1) / 2) + "px"; lbl.style.top = (y - 9) + "px"; lbl.style.transform = "translateX(-50%)";
+          el.style.cssText = "top:" + y + "px;left:" + x1 + "px;width:" + (x2 - x1) + "px";
+          lbl.style.cssText = "left:" + (x1 + (x2 - x1) / 2) + "px;top:" + (y - 10) + "px;transform:translateX(-50%)";
         } else {
           el.className = "map-street map-street--v";
           var xx = px(s.x), yy1 = py(s.y1), yy2 = py(s.y2);
-          el.style.left = xx + "px"; el.style.top = yy1 + "px"; el.style.height = (yy2 - yy1) + "px";
-          lbl.style.left = (xx + 8) + "px"; lbl.style.top = (yy1 + (yy2 - yy1) / 2) + "px"; lbl.style.transform = "translateY(-50%)";
+          el.style.cssText = "left:" + xx + "px;top:" + yy1 + "px;height:" + (yy2 - yy1) + "px";
+          lbl.style.cssText = "left:" + (xx + 9) + "px;top:" + (yy1 + (yy2 - yy1) / 2) + "px;transform:translateY(-50%)";
         }
         worldEl.appendChild(el);
         worldEl.appendChild(lbl);
       });
 
-      // מתקנים ציבוריים
+      // מבני ציבור
       MAP_AMENITIES.forEach(function (a) {
+        var bw = px(a.w), bh = py(a.h);
         var el = document.createElement("div");
-        el.className = "map-amenity";
-        el.style.left = px(a.x) + "px"; el.style.top = py(a.y) + "px";
-        el.style.width = px(a.w) + "px"; el.style.height = py(a.h) + "px";
-        el.innerHTML = svg(amenityIconFor(a.label)) + '<span class="map-amenity__label">' + CBA.esc(a.label) + '</span>';
+        el.className = "map-amenity" + (a.park ? " is-park" : "") + (a.shape ? " map-amenity--" + a.shape : "");
+        el.style.cssText = "left:" + px(a.x) + "px;top:" + py(a.y) + "px;width:" + bw + "px;height:" + bh + "px";
+        var roomInside = bw >= 68 && bh >= 50;
+        el.innerHTML = '<span class="map-amenity__chip">' + svg(amenIcons[a.ico]) + '</span>' +
+          (roomInside ? '<span class="map-amenity__in">' + CBA.esc(a.label) + '</span>' : "");
         worldEl.appendChild(el);
+        if (!roomInside) {
+          var lbl = document.createElement("span");
+          lbl.className = "map-amenity__label";
+          lbl.textContent = a.label;
+          lbl.style.cssText = "left:" + (px(a.x) + bw / 2) + "px;top:" + (py(a.y) + bh + 5) + "px";
+          worldEl.appendChild(lbl);
+        }
       });
+
+      // תווית זכוכית צפה מתחת לאלמנט — אותה שפה כמו תוויות מבני הציבור
+      function floatLabel(x, y, w, h, text, extraClass) {
+        var lbl = document.createElement("span");
+        lbl.className = "map-amenity__label" + (extraClass ? " " + extraClass : "");
+        lbl.textContent = text;
+        lbl.style.cssText = "left:" + (px(x) + px(w) / 2) + "px;top:" + (py(y) + py(h) + 5) + "px";
+        worldEl.appendChild(lbl);
+      }
+
+      // אולם ספורט
+      (function () {
+        var el = document.createElement("div");
+        el.className = "map-hall";
+        el.style.cssText = "left:" + px(MAP_SPORTS_HALL.x) + "px;top:" + py(MAP_SPORTS_HALL.y) + "px;width:" + px(MAP_SPORTS_HALL.w) + "px;height:" + py(MAP_SPORTS_HALL.h) + "px";
+        el.innerHTML = '<span class="map-amenity__chip">' + svg(amenIcons.sport) + '</span>';
+        worldEl.appendChild(el);
+        floatLabel(MAP_SPORTS_HALL.x, MAP_SPORTS_HALL.y, MAP_SPORTS_HALL.w, MAP_SPORTS_HALL.h, "אולם ספורט");
+      })();
+
+      // מגרש דשא סינתטי שני
+      floatLabel(MAP_TURF2.x, MAP_TURF2.y, MAP_TURF2.w, MAP_TURF2.h, "מגרש סינתטי");
+
+      // מגרשי טניס וכדורסל
+      [["tennis", MAP_TENNIS, "מגרש טניס"], ["basketball", MAP_BASKETBALL, "מגרש כדורסל"]].forEach(function (pair) {
+        var el = document.createElement("div");
+        el.className = "map-court " + pair[0];
+        var c = pair[1];
+        el.style.cssText = "left:" + px(c.x) + "px;top:" + py(c.y) + "px;width:" + px(c.w) + "px;height:" + py(c.h) + "px";
+        el.innerHTML = '<span class="map-court__lines"></span>' +
+          (pair[0] === "tennis" ? '<span class="map-court__net"></span>' : '<span class="map-court__hoop"></span>');
+        worldEl.appendChild(el);
+        floatLabel(c.x, c.y, c.w, c.h, pair[2], "map-amenity__label--court");
+      });
+
+      // מבנה ציון־דרך ליד הכניסה (גג פינוויל) — גני ילדים
+      (function () {
+        var bw = px(MAP_LANDMARK.w), bh = py(MAP_LANDMARK.h);
+        var el = document.createElement("div");
+        el.className = "map-landmark";
+        el.style.cssText = "left:" + px(MAP_LANDMARK.x) + "px;top:" + py(MAP_LANDMARK.y) + "px;width:" + bw + "px;height:" + bh + "px";
+        el.innerHTML = '<span class="map-landmark__chip">' + svg(amenIcons[MAP_LANDMARK.ico]) + '</span>';
+        worldEl.appendChild(el);
+        var lbl = document.createElement("span");
+        lbl.className = "map-landmark__label";
+        lbl.textContent = MAP_LANDMARK.label;
+        lbl.style.cssText = "left:" + (px(MAP_LANDMARK.x) + bw + 8) + "px;top:" + (py(MAP_LANDMARK.y) + bh / 2) + "px";
+        worldEl.appendChild(lbl);
+      })();
 
       // בתים
       var houseEls = {};
@@ -1450,12 +1612,12 @@ CBA.screens = CBA.screens || {};
         var el = document.createElement("div");
         el.className = "map-house";
         el.dataset.num = t.n;
-        el.style.left = px(t.x) + "px"; el.style.top = py(t.y) + "px";
-        el.style.width = px(t.w) + "px"; el.style.height = py(t.h) + "px";
+        el.style.cssText = "left:" + px(t.x) + "px;top:" + py(t.y) + "px;width:" + px(t.w) + "px;height:" + py(t.h) + "px";
         el.innerHTML =
-          '<span class="map-house__num-only">' + t.n + '</span>' +
-          '<div class="map-house__row"><span class="map-house__badge">' + t.n + '</span></div>' +
-          '<div class="map-house__fam"></div>';
+          '<span class="mh-num"><span class="mh-num__ico">' + houseIcon + '</span>' + t.n + '</span>' +
+          '<div class="mh-body"><span class="mh-corner">' + t.n + '</span>' +
+          '<span class="mh-fam"></span>' +
+          '<span class="mh-kids">' + kidsIcon + '</span></div>';
         worldEl.appendChild(el);
         houseEls[t.n] = el;
       });
@@ -1472,15 +1634,18 @@ CBA.screens = CBA.screens || {};
         });
         MAP_TILES.forEach(function (t) {
           var row = byHouse[normHouse(t.n)];
-          if (row) houseEls[t.n].querySelector(".map-house__fam").textContent = dirVal(row, dirC.family) || "";
+          var el = houseEls[t.n];
+          if (!row) { el.classList.add("no-data"); return; }
+          el.querySelector(".mh-fam").textContent = dirVal(row, dirC.family) || "";
+          if (dirVal(row, dirC.kids)) el.querySelector(".mh-kids").classList.add("has");
         });
       });
 
-      // ---- מנוע תנועה: pan / zoom / pinch ----
+      // ---- מנוע תנועה: pan / zoom / pinch, עם שתי דרגות פירוט (שם משפחה -> +ילדים) ----
       var scale = 1, tx = 0, ty = 0, fitScaleVal = 1;
-      var FULL_DETAIL_MULT = 1.85, MIN_MULT = 1, MAX_MULT = 4.5;
-      function minScale() { return fitScaleVal * MIN_MULT; }
-      function maxScale() { return fitScaleVal * MAX_MULT; }
+      var MAP_T1 = 1.5, MAP_T2 = 2.6;
+      function minScale() { return fitScaleVal; }
+      function maxScale() { return fitScaleVal * 4.5; }
       function computeFit() {
         var vw = viewport.clientWidth, vh = viewport.clientHeight;
         fitScaleVal = Math.min(vw / MAP_WORLD_W, vh / MAP_WORLD_H) * 0.94;
@@ -1495,12 +1660,17 @@ CBA.screens = CBA.screens || {};
         tx = Math.max(minTx, Math.min(maxTx, tx));
         ty = Math.max(minTy, Math.min(maxTy, ty));
       }
-      var openTile = null;
+      var openTile = null, curTier = -1;
       function apply() {
         clampPan();
         worldEl.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
-        var full = scale > fitScaleVal * FULL_DETAIL_MULT;
-        Object.keys(houseEls).forEach(function (n) { houseEls[n].classList.toggle("full", full); });
+        var r = scale / fitScaleVal;
+        var tier = r > MAP_T2 ? 2 : (r > MAP_T1 ? 1 : 0);
+        if (tier !== curTier) {
+          curTier = tier;
+          worldEl.classList.toggle("tier1", tier === 1);
+          worldEl.classList.toggle("tier2", tier === 2);
+        }
         if (openTile) positionPopup(openTile);
       }
       function fitToScreen(animated) {
@@ -1671,11 +1841,27 @@ CBA.screens = CBA.screens || {};
         if (!e.target.closest(".map-search-wrap")) resultsEl.classList.remove("show");
       });
 
+      // במובייל: גלולת החיפוש נפתחת רק כשצריך, כדי לפנות כמה שיותר שטח למפה עצמה
+      var searchWrap = container.querySelector(".map-search-wrap");
+      if (window.matchMedia("(max-width: 720px)").matches) {
+        searchWrap.classList.add("collapsed");
+        searchWrap.addEventListener("click", function () {
+          if (!searchWrap.classList.contains("collapsed")) return;
+          searchWrap.classList.remove("collapsed");
+          qEl.focus();
+        });
+        qEl.addEventListener("blur", function () {
+          setTimeout(function () {
+            if (!qEl.value.trim()) searchWrap.classList.add("collapsed");
+          }, 120);
+        });
+      }
+
       function goToHouse(num) {
         var t = MAP_TILES.filter(function (r) { return r.n === num; })[0];
         if (!t) return;
         resultsEl.classList.remove("show"); qEl.blur();
-        var targetScale = fitScaleVal * FULL_DETAIL_MULT * 1.2;
+        var targetScale = fitScaleVal * MAP_T2 * 1.2;
         var cx = px(t.x + t.w / 2), cy = py(t.y + t.h / 2);
         scale = Math.max(minScale(), Math.min(maxScale(), targetScale));
         tx = viewport.clientWidth / 2 - cx * scale; ty = viewport.clientHeight / 2 - cy * scale;

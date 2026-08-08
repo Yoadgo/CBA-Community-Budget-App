@@ -29,14 +29,10 @@
 @media (max-width: 720px) {
 
   :root {
-    /* גובה הכותרת מחושב ב-JS מהגובה בפועל (ר' setHeaderVar ב-mobile.js), אז
-       זה רק ברירת מחדל לרגע שלפני החישוב הראשון. הוקטן ב-~15% (2026-08-08,
-       לבקשת יועד) בהתאמה לכותרת שהצטמצמה בפועל — למנוע "קפיצה" רגעית. */
-    --header-h: 54px;
-    /* בר הניווט התחתון — מרחק מתחתית המסך עד לראש הכמוסה הצפה. נמדד מחדש
-       (Playwright) אחרי הקטנת המידות ב-15%: הגובה בפועל ירד מ-45px ל-39px
-       (ריפוד 4px + ריפוד טאב 8px + תוכן ~27px), אז 39+10=49px (היה 55px). */
-    --botnav-h: 49px;
+    /* גובה הכותרת מחושב ב-JS; ברירת מחדל אם עוד לא חושב */
+    --header-h: 64px;
+    /* בר הניווט התחתון */
+    --botnav-h: 66px;
     /* השורה התחתונה הקבועה (תקציב / בניית תקציב) */
     --bottomline-h: 60px;
   }
@@ -54,8 +50,7 @@
   .app-header--hidden { transform: translateY(-100%); }
 
   .app-header__inner {
-    /* 2026-08-08: הוקטן ב-~15% (לבקשת יועד), עקבי עם הקטנת ה-padding בדסקטופ */
-    padding: 10px 14px;
+    padding: 12px 16px;
     gap: 0;
     flex-wrap: nowrap;
   }
@@ -66,44 +61,64 @@
              calc(var(--botnav-h) + env(safe-area-inset-bottom) + 20px);
   }
 
-  /* ---------- בר ניווט תחתון (Bottom Navigation) ----------
-     2026-08-08 (לבקשת יועד): באותו סגנון "זכוכית נוזלית" בדיוק כמו בדסקטופ —
-     כמוסה צפה ומעוגלת עם טשטוש עמוק, במקום פס אטום מקיר לקיר. משתמש באותם
-     כפתורי-טאב אופקיים (אייקון+טקסט) ואותם אייקוני SVG מוטבעים כמו בדסקטופ,
-     כולל תמיכה בכפתור-הקבוצה המתקפל ("השיכון", ר' .app-nav__tab--group). */
-  /* הסלקטור כתוב עם שני המחלקות (.app-nav.app-nav--bottom) כדי להבטיח שה-
-     position:fixed כאן ינצח את .app-nav{position:relative} של motion.css
-     (אותה ספציפיות בדיוק, אבל motion.css נטען אחרון) — בלי זה הבר התחתון
-     הצף היה "נופל" בחזרה לזרימה הרגילה של הדף במובייל. */
-  .app-nav.app-nav--bottom {
-    position: fixed; inset-inline: 12px; bottom: calc(10px + env(safe-area-inset-bottom));
-    z-index: 40; width: auto; max-width: calc(100% - 24px);
-    display: flex; flex-wrap: nowrap; gap: 2px; justify-content: center;
-    padding: 4px;
-    background: rgba(255,255,255,.55);
-    backdrop-filter: saturate(190%) blur(18px);
-    -webkit-backdrop-filter: saturate(190%) blur(18px);
-    border: 1px solid rgba(255,255,255,.65);
-    border-radius: 999px;
-    box-shadow: 0 8px 28px rgba(16,24,40,.16), inset 0 1px 0 rgba(255,255,255,.75);
-    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  /* ---------- בר ניווט תחתון (Bottom Navigation) ---------- */
+  .app-nav--bottom {
+    position: fixed; inset-inline: 0; bottom: 0; z-index: 40;
+    display: flex; gap: 0;
+    background: rgba(255,255,255,.9);
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+    border-top: 1px solid var(--border);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
   }
-  .app-nav--bottom::-webkit-scrollbar { display: none; }
 
-  /* טאב אופקי (אייקון + טקסט), בדיוק כמו בדסקטופ — לא עמודה של אייקון מעל טקסט.
-     2026-08-08: כל המידות הוקטנו ב-~15% (לבקשת יועד), עקבי עם כותרת הדסקטופ. */
+  /* כל לשונית: אייקון למעלה, טקסט קטן מתחת. אין רקע כהה — צבע בלבד מבדיל */
   .app-nav--bottom .app-nav__tab {
-    flex: none;
-    display: inline-flex; align-items: center; gap: 4px;
-    color: var(--text-soft);
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: none !important;
+    color: var(--text-muted);
     font-size: 11px; font-weight: 500;
-    padding: 8px 11px; border-radius: 999px;
+    padding: 6px 2px; border-radius: 12px;
     white-space: nowrap;
   }
-  .app-nav--bottom .app-nav__tab.is-active { color: #fff; background: var(--action); font-weight: 600; }
-  .app-nav--bottom .app-nav__ico svg { width: 13px; height: 13px; }
-  .app-nav--bottom .app-nav__tab--sub { font-size: 10px; padding-block: 5px; }
-  .app-nav--bottom .app-nav__tab--sub .app-nav__ico svg { width: 11px; height: 11px; }
+  .app-nav--bottom .app-nav__tab.is-active {
+    background: none !important;
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  /* בבר התחתון האייקון מגיע מ-::before (mask) — מסתירים את סמליל ה-SVG של הדסקטופ */
+  .app-nav--bottom .app-nav__ico { display: none; }
+
+  /* אייקון מינימליסטי לכל לשונית — נצבע אוטומטית לפי צבע הטקסט (mask) */
+  .app-nav--bottom .app-nav__tab::before {
+    content: ""; width: 24px; height: 24px; flex: none;
+    background-color: currentColor;
+    -webkit-mask: var(--ico) center / 22px 22px no-repeat;
+            mask: var(--ico) center / 22px 22px no-repeat;
+  }
+  /* אם ייווסף בעתיד טאב בלי --ico, המסכה לא תחול וה-::before ייראה כריבוע שחור
+     מלא (זה בדיוק מה שקרה ל"תושבים"). ברירת מחדל ניטרלית מונעת את זה. */
+  .app-nav--bottom .app-nav__tab { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='8'/%3E%3C/svg%3E"); }
+  .app-nav--bottom .app-nav__tab[data-screen="budget"]   { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='5' y1='21' x2='5' y2='13'/%3E%3Cline x1='12' y1='21' x2='12' y2='7'/%3E%3Cline x1='19' y1='21' x2='19' y2='11'/%3E%3C/svg%3E"); }
+  .app-nav--bottom .app-nav__tab[data-screen="expenses"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='9' y1='7' x2='20' y2='7'/%3E%3Cline x1='9' y1='12' x2='20' y2='12'/%3E%3Cline x1='9' y1='17' x2='20' y2='17'/%3E%3Ccircle cx='4.5' cy='7' r='1.3'/%3E%3Ccircle cx='4.5' cy='12' r='1.3'/%3E%3Ccircle cx='4.5' cy='17' r='1.3'/%3E%3C/svg%3E"); }
+  .app-nav--bottom .app-nav__tab[data-screen="planning"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='3' width='14' height='18' rx='2'/%3E%3Cline x1='9' y1='7' x2='15' y2='7'/%3E%3Cline x1='9' y1='12' x2='9.01' y2='12'/%3E%3Cline x1='12' y1='12' x2='12.01' y2='12'/%3E%3Cline x1='15' y1='12' x2='15.01' y2='12'/%3E%3Cline x1='9' y1='16' x2='9.01' y2='16'/%3E%3Cline x1='12' y1='16' x2='12.01' y2='16'/%3E%3C/svg%3E"); }
+  .app-nav--bottom .app-nav__tab[data-screen="settings"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='4' y1='8' x2='20' y2='8'/%3E%3Ccircle cx='9' cy='8' r='2.4'/%3E%3Cline x1='4' y1='16' x2='20' y2='16'/%3E%3Ccircle cx='15' cy='16' r='2.4'/%3E%3C/svg%3E"); }
+  .app-nav--bottom .app-nav__tab[data-screen="residents"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.2'/%3E%3Cpath d='M3.5 19.5a5.5 5.5 0 0 1 11 0'/%3E%3Cpath d='M16.5 6.2a3 3 0 0 1 0 5.6'/%3E%3Cpath d='M17.5 14.4a5 5 0 0 1 3 4.6'/%3E%3C/svg%3E"); }
+  .app-nav--bottom .app-nav__tab[data-screen="clubAdmin"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M3 10h18M8 3v4M16 3v4'/%3E%3Cpath d='M8.5 15l2 2 4-4'/%3E%3C/svg%3E"); }
+
+  /* ביטול כללי הניווט הישנים של המובייל (נגלל לרוחב) — כבר לא רלוונטי */
+  .app-nav--bottom { width: auto; overflow: visible; flex-wrap: nowrap; }
+
+  /* תגית ההתרעות בבר התחתון: יושבת על פינת האייקון במקום זורמת בטקסט —
+     בעמודה הצרה של כל טאב אין מקום לתגית לצד המילה עצמה. */
+  .app-nav--bottom .nav-badge {
+    position: absolute; top: 2px; inset-inline-end: calc(50% - 20px);
+    min-width: 15px; height: 15px; font-size: 9.5px; margin: 0;
+    border: 2px solid var(--surface);
+  }
+  .app-nav--bottom .app-nav__tab.is-active .nav-badge { background: var(--danger); color: #fff; }
 
   /* ---------- שלב 2: מסך "תכנון מול ביצוע" — פריסה אנכית מרווחת ---------- */
   .budget-cols { gap: 26px; }
@@ -283,31 +298,26 @@
   }
 
   /* ==========================================================================
-     השורה התחתונה: פס קבוע מעל בר הניווט.
-     2026-08-08 (לבקשת יועד): עברה מפס כהה ואטום מקיר-לקיר לאותה "כמוסת זכוכית"
-     צפה כמו בר הניווט — עקבי עם שאר הממשק במובייל עכשיו. (בדסקטופ היא כבר
-     הייתה זכוכית — ר' motion.css — רק המובייל היה שונה בכוונה; עכשיו אחיד.)
+     תיקון השורה התחתונה: פס קבוע מעל בר הניווט, תמיד גלוי, ובעיצוב כהה נבדל
      ========================================================================== */
   .bottomline-bar {
-    position: fixed; inset-inline: 12px;
-    bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 8px);
-    z-index: 39; border-radius: 20px;
+    position: fixed; inset-inline: 0;
+    bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom));
+    z-index: 39; border-radius: 0;
     grid-template-columns: repeat(3, 1fr);
-    padding: 10px 6px;
-    background: rgba(255,255,255,.72);
-    backdrop-filter: saturate(190%) blur(20px);
-    -webkit-backdrop-filter: saturate(190%) blur(20px);
-    border: 1px solid rgba(255,255,255,.6);
-    box-shadow: 0 10px 30px rgba(16,24,40,.16), inset 0 1px 0 rgba(255,255,255,.7);
-    color: var(--text);
+    padding: 9px 8px;
+    background: var(--action); color: #fff;
+    box-shadow: 0 -6px 24px rgba(16,24,40,.22);
   }
   /* פריט 7: כותרת מעל המספר בכל תא — שורה תחתונה סימטרית גם עם טקסטים ארוכים */
   .bottomline-bar .bl-cell { flex-direction: column; align-items: center; gap: 1px; padding: 3px 4px; text-align: center; }
-  .bottomline-bar .bl-cell + .bl-cell { border-inline-start: 1px solid var(--hairline); border-top: none; }
-  .bottomline-bar .bl-cell__label { font-size: 9px; line-height: 1.15; color: var(--text-soft); }
-  .bottomline-bar .bl-cell__val { font-size: 14px; color: var(--text); }
-  .bottomline-bar .bl-cell--result { border-radius: 10px; }
+  .bottomline-bar .bl-cell + .bl-cell { border-inline-start: 1px solid rgba(255,255,255,.16); border-top: none; }
+  .bottomline-bar .bl-cell__label { font-size: 9px; line-height: 1.15; color: rgba(255,255,255,.72); }
+  .bottomline-bar .bl-cell__val { font-size: 14px; color: #fff; }
+  .bottomline-bar .bl-cell--result { background: none; border-radius: 0; }
   .bottomline-bar .bl-cell--result .bl-cell__val { font-size: 15px; }
+  .bottomline-bar .pos, .bottomline-bar .ico-under { color: #34D399; }
+  .bottomline-bar .neg, .bottomline-bar .ico-over { color: #FB7185; }
 
   /* שמירת מקום בתחתית התוכן — רק במסכים שיש בהם שורה תחתונה */
   body[data-screen="budget"] .app-main,
@@ -322,6 +332,17 @@
   .bcard:active, .tx-mcard:active, .tx-mrow:active,
   .app-nav__tab:active, .tx-fab:active, .add-btn:active { transform: scale(.985); }
   .tx-fab { transition: transform var(--t), box-shadow var(--t); }
+
+  /* "מפת השיכון" במובייל (2026-08-08, לבקשת יועד: "למקסם שטח במובייל") —
+     אין כותרת מסך ואין ריפוד צדדי; ה-map-shell תפור בדיוק לגובה הפנוי בין
+     הכותרת המקובעת לבר הניווט התחתון, כך שהמפה עצמה תופסת את כל המסך. */
+  body[data-screen="resMap"] .screen-head { display: none; }
+  body[data-screen="resMap"] .app-main {
+    padding: var(--header-h) 0 calc(var(--botnav-h) + env(safe-area-inset-bottom));
+  }
+  body[data-screen="resMap"] .map-shell {
+    height: calc(100vh - var(--header-h) - var(--botnav-h) - env(safe-area-inset-bottom));
+  }
 }
 
 /* הצעת סיבוב מסך — רק בטלפון במצב אנכי, ליד הגרף המצטבר */
