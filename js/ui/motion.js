@@ -29,10 +29,44 @@
       return ind;
     }
 
+    // 2026-08-08, תיקון דחוף (לבקשת יועד — "המסגרת צבע עוברת למפה למרות
+    // שבפועל אני עדיין על תפריט אחר", "התנועה מהירה מדי ולא אחידה",
+    // "הפתיחה תקולה"): הבאג היה ב-2 מקומות משולבים.
+    //
+    // (1) כשהטאב הפעיל (is-active) נמצא בתוך קבוצת-ניווט מתקפלת שסגורה כרגע —
+    // הוא קיים ב-DOM אבל ברוחב 0 (מוסתר מאחורי overflow:hidden, ר' style.css
+    // .app-nav__group-items). position() היה קורא offsetWidth/offsetLeft של
+    // האלמנט הזה כמו שהוא — כלומר רוחב 0, מיקום כלשהו בתוך הקבוצה הסגורה —
+    // והמחוון "נעלם" לנקודה כמעט בלתי-נראית. ברגע שהקבוצה נפתחת (המשתמש לוחץ
+    // על "השיכון" בלי לנווט לשום מקום), האלמנט הזה מתחיל לתפוס רוחב אמיתי,
+    // אבל שום דבר לא יזם reposition נכון — targetEl() למטה פותר את זה: אם
+    // הטאב הפעיל נמצא בתוך קבוצה סגורה, מצביעים במקום זאת על כותרת הקבוצה
+    // עצמה (שתמיד גלויה), עד שהקבוצה נפתחת בפועל.
+    //
+    // (2) גם כשהיעד היה נכון, ה-timing של המדידה היה שגוי: nav.click הפעיל
+    // position() מיד (rAF) ועוד פעם אחרי 60ms קבועים — אבל הרוחב האמיתי של
+    // תת-כפתור שנחשף מגיע רק בסוף טרנזיציית ה-grid-template-columns של
+    // .app-nav__group-items (620-780ms!). המדידה ב-60ms תפסה גודל-ביניים
+    // קטן/שגוי באמצע ההחלקה, והמחוון "רץ" חלק (בטרנזיציית ה-CSS שלו עצמו)
+    // אל היעד השגוי הזה ונשאר שם — בדיוק התחושה של "מהיר מדי ולא אחיד" ו"תקול"
+    // שיועד תיאר. התיקון: להאזין ל-transitionend האמיתי על הפס (מבעבע מכל
+    // צאצא — כולל .app-nav__group-items, .app-nav__tab--sub, .app-nav__chev)
+    // ולמדוד מחדש רק אחרי שהתנועה שגרמה לשינוי הגודל/מיקום באמת נגמרה.
+    function targetEl() {
+      var active = nav.querySelector(".app-nav__tab.is-active");
+      if (!active) return null;
+      var closedGroup = active.closest(".app-nav__group:not(.is-open)");
+      if (closedGroup) {
+        var groupBtn = closedGroup.querySelector(".app-nav__tab--group");
+        if (groupBtn) return groupBtn;
+      }
+      return active;
+    }
+
     function position() {
       var el = ensureIndicator();
       if (!el) return;
-      var active = nav.querySelector(".app-nav__tab.is-active");
+      var active = targetEl();
       if (!active) { el.style.opacity = "0"; return; }
       el.style.opacity = "1";
       el.style.width = active.offsetWidth + "px";
@@ -45,7 +79,14 @@
     window.addEventListener("resize", position);
     nav.addEventListener("click", function () {
       requestAnimationFrame(position);
-      setTimeout(position, 60); // ליתר ביטחון, אחרי שהמסך סיים לצייר מחדש
+    });
+    // המדידה הסופית והאמינה: אחרי שכל טרנזיציה רלוונטית בתוך הפס נגמרה בפועל
+    // (פתיחת/סגירת קבוצה, דהייה של תת-כפתור) — לא נקודת-זמן קבועה שמנחשת.
+    nav.addEventListener("transitionend", function (e) {
+      if (e.propertyName === "grid-template-columns" || e.propertyName === "opacity" ||
+          e.propertyName === "transform" || e.propertyName === "width") {
+        requestAnimationFrame(position);
+      }
     });
     window.addEventListener("load", position);
     requestAnimationFrame(position);

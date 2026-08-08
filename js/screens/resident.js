@@ -19,6 +19,7 @@ CBA.screens = CBA.screens || {};
   var checkIcon  = svg('<path d="M20 6L9 17l-5-5"/>');
   var docIcon    = svg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>');
   var xIcon      = svg('<path d="M18 6L6 18M6 6l12 12"/>');
+  var scanIcon   = svg('<path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="2.5"/>');
   var clockIcon  = svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>');
   var chevLeftIcon  = svg('<path d="M15 6l-6 6 6 6"/>');
   var chevRightIcon = svg('<path d="M9 6l6 6-6 6"/>');
@@ -247,6 +248,8 @@ CBA.screens = CBA.screens || {};
           '</div>' +
           '<div class="rs-hint" id="type-hint">' + HINTS.refund + '</div>' +
           '<div class="rs-upload" id="rs-upload">' + cameraIcon + '<b>צילום או העלאת קבלה</b><small>JPG, PNG או PDF</small></div>' +
+          '<button type="button" class="rs-ghost rs-scan-btn" id="rs-scan-btn" hidden>' + scanIcon + ' <span>סריקה חכמה</span></button>' +
+          '<div class="rs-scan-msg" id="rs-scan-msg" hidden></div>' +
           '<input type="file" id="rs-file" accept="image/*,application/pdf" capture="environment" hidden>' +
           '<div class="form-grid">' +
             '<div class="form-field"><label>סכום (₪)</label>' +
@@ -271,13 +274,26 @@ CBA.screens = CBA.screens || {};
       var fileInput = container.querySelector("#rs-file");
       var errEl     = container.querySelector("#rs-err");
       var submitBtn = container.querySelector("#rs-submit-btn");
+      var scanBtn   = container.querySelector("#rs-scan-btn");
+      var scanMsg   = container.querySelector("#rs-scan-msg");
 
       function showError(msg) { errEl.textContent = msg; errEl.hidden = false; }
       function hideError() { errEl.hidden = true; }
 
+      function resetScanBtn() { scanBtn.disabled = false; scanBtn.innerHTML = scanIcon + ' <span>סריקה חכמה</span>'; }
+      function hideScanMsg() { scanMsg.hidden = true; }
+      function showScanMsg(text, isError) {
+        scanMsg.textContent = text;
+        scanMsg.hidden = false;
+        scanMsg.classList.toggle("rs-scan-msg--err", !!isError);
+      }
+
       function renderUploadEmpty() {
         uploadEl.classList.remove("is-filled", "is-busy");
         uploadEl.innerHTML = cameraIcon + '<b>צילום או העלאת קבלה</b><small>JPG, PNG או PDF</small>';
+        scanBtn.hidden = true;
+        resetScanBtn();
+        hideScanMsg();
       }
       function renderUploadBusy() {
         uploadEl.classList.remove("is-filled");
@@ -302,6 +318,10 @@ CBA.screens = CBA.screens || {};
           fileInput.value = "";
           renderUploadEmpty();
         });
+        /* קובץ חדש נבחר -> אפשר לסרוק אותו; מבטלים תוצאת/הודעת סריקה קודמת (שייכת לקובץ הקודם) */
+        scanBtn.hidden = false;
+        resetScanBtn();
+        hideScanMsg();
       }
 
       uploadEl.addEventListener("click", function () {
@@ -332,6 +352,43 @@ CBA.screens = CBA.screens || {};
           result.size = isImage ? Math.round((result.dataBase64.length * 3) / 4) : file.size;
           picked = result;
           renderUploadFilled();
+        });
+      });
+
+      /* סריקה חכמה (שלב 4, 2026-08-08): שולחת את הקובץ שכבר נבחר/נדחס ל-Gemini דרך
+         Code.gs (action scanReceipt, אומת חי — ר' STEP C בזיכרון הפרויקט) וממלאת את
+         שדות הטופס מהתשובה. תמיד רק הצעת-מילוי — התושב רואה ועורך הכל לפני "שלח בקשה";
+         אין שליחה אוטומטית, ואין שינוי בזרימת השליחה הרגילה (submitReceipt) בכלל. */
+      scanBtn.addEventListener("click", function () {
+        if (!picked || scanBtn.disabled) return;
+        scanBtn.disabled = true;
+        scanBtn.innerHTML = '<div class="rs-spin"></div><span>סורק…</span>';
+        hideScanMsg();
+        CBA.data.scanReceipt(picked.dataBase64, picked.mimeType, function (res) {
+          resetScanBtn();
+          if (!res || !res.ok || !res.fields) {
+            showScanMsg("הסריקה נכשלה — אפשר למלא את הפרטים ידנית.", true);
+            return;
+          }
+          var f = res.fields;
+          var filledLabels = [];
+          if (f.amount) {
+            container.querySelector("#rs-amount").value = f.amount;
+            filledLabels.push("סכום");
+          }
+          if (f.supplier) {
+            container.querySelector("#rs-supplier").value = f.supplier;
+            filledLabels.push("ספק");
+          }
+          if (f.description) {
+            container.querySelector("#rs-desc").value = f.description;
+            filledLabels.push("תיאור");
+          }
+          if (filledLabels.length) {
+            showScanMsg("מולא אוטומטית: " + filledLabels.join(", ") + " — כדאי לבדוק ולערוך לפני השליחה.");
+          } else {
+            showScanMsg("לא זוהו פרטים ברורים בתמונה — אפשר למלא ידנית.");
+          }
         });
       });
 

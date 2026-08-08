@@ -89,6 +89,22 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .rs-upload svg { width: 30px; height: 30px; color: var(--text-soft); }
 .rs-upload b { font-size: 14px; font-weight: 700; color: var(--text); }
 .rs-upload small { font-size: 12px; color: var(--text-muted); }
+
+/* כפתור "סריקה חכמה" (שלב 4, 2026-08-08) — מופיע רק אחרי בחירת קובץ, ליד אזור
+   ההעלאה. סגנון rs-ghost קיים + רוחב מלא כדי לבלוט כפעולה זמינה בלי להתחרות
+   חזותית ב-CTA הראשי (rs-submit, כהה/מלא). */
+.rs-scan-btn { width: 100%; justify-content: center; height: 42px; margin-bottom: 12px; }
+.rs-scan-btn svg { width: 16px; height: 16px; }
+.rs-scan-btn[hidden] { display: none; }
+.rs-scan-btn:disabled { opacity: .7; cursor: default; pointer-events: none; }
+.rs-scan-btn .rs-spin { border-color: rgba(17,24,39,.15); border-top-color: var(--text-soft); }
+
+/* הודעת תוצאת הסריקה — ניטרלית (הצלחה/מידע) כברירת מחדל, אדומה בכשל */
+.rs-scan-msg { font-size: 12.5px; color: var(--text-soft); background: var(--hover); border-radius: 10px;
+  padding: 9px 12px; margin-bottom: 14px; line-height: 1.6; text-align: center; }
+.rs-scan-msg[hidden] { display: none; }
+.rs-scan-msg--err { color: var(--danger); background: var(--danger-soft); }
+
 .rs-submit { display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; height: 48px; border-radius: 12px; font-size: 15px; margin-top: 8px; }
 .rs-submit svg { width: 18px; height: 18px; }

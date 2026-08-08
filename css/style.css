@@ -302,83 +302,118 @@ body[data-screen="planning"] .year-switch__add {
 .app-nav__ico svg { width: 14px; height: 14px; display: block; }
 
 /* ---------- קבוצת-ניווט מתקפלת בניווט ("השיכון") ----------
-   2026-08-08, חידוד שני (לבקשת יועד — התפריט נפתח מהר מדי ולא היה ברור
-   שהכותרת שייכת לשני התת-כפתורים): הכותרת + התת-כפתורים (כשפתוחים) עטופים
-   יחד ב-.app-nav__group, שמקבלת "כרית" רקע כשפתוחה — כך שהעין קולטת אותם
-   כמכל אחד, לא כשלושה כפתורים נפרדים ושווי-מעמד. זה גם התבנית לכל קבוצת-
-   ניווט עתידית (ר' cba-ui-standards.md), לא רק ל"השיכון". */
-/* flex:none — קריטי: בלי זה, כשבר הניווט צר (מובייל, overflow-x:auto,
-   flex-wrap:nowrap) הפלקסבוקס "פותר" חוסר מקום ע"י כיווץ הקבוצה הזו במקום
-   לגלוש לגלילה אופקית — ואז ה-min-width:0 שב-.app-nav__group-items (הכרחי
-   לטריק ה-0fr/1fr) גורם לתת-הכפתורים להישאר ברוחב 0 גם כשפתוחים, כי
-   הפלקסבוקס דורס את ה-grid-template-columns. עם flex:none הקבוצה תמיד
-   תופסת את רוחבה הטבעי, וגלישה אמיתית (עם הגלילה שמתווספת ב-app.js) קורית
-   במקום זה (התגלה 2026-08-08 בבדיקת מובייל — בדסקטופ, שם יש flex-wrap:wrap,
-   זה לא קרה כלל, ולכן לא נתפס קודם). */
-.app-nav__group { display: inline-flex; align-items: stretch; gap: 2px; border-radius: 999px; flex: none; transition: background .4s ease; }
+   2026-08-08, חידוד חמישי — שינוי כיוון מהותי. שלוש הגרסאות הקודמות ניסו
+   "להחליק לצדדים" בתוך שורת הטאבים עצמה (in-flow, אח"כ position:absolute
+   צף אופקית) — ונתקלנו בבעיה מבנית: אין מספיק מקום פנוי מימין לכפתור
+   המשתמש כדי שתפריט אופקי ייפתח בלי להתנגש בו או להזיז טאבים אחרים (מדידה
+   עם Playwright אישרה: פתיחה in-flow באמת הזיזה את כל שאר הטאבים כולל הפעיל
+   — יועד: "המסגרת צבע עוברת למפה למרות שבפועל אני עדיין על תפריט אחר";
+   וגרסת ה-position:absolute האופקית פשוט התנגשה חזותית בכפתור המשתמש).
+   זו בעיית-מקום מובנית שתחזור בכל קבוצת-ניווט עתידית שתתווסף, לא רק תקלה
+   נקודתית ב"השיכון" — לכן המעבר לתפריט נפתח אנכי (dropdown) מתחת לכפתור,
+   בדיוק כמו תפריט תוצאה סטנדרטי: תמיד יש מקום פנוי מתחת לכותרת, בלי תלות
+   ברוחב הפנוי משני הצדדים — פתרון שמתקנן נכון לכל קבוצה עתידית, לא רק
+   פאץ' לזו הנוכחית. */
+.app-nav__group { position: relative; display: inline-flex; align-items: stretch; gap: 2px; border-radius: 999px; flex: none; transition: background .4s ease; }
 .app-nav__group.is-open { background: rgba(17,24,39,.055); }
 /* פתוח — טקסט/רקע עדין על הכותרת עצמה, קצת יותר בולט מ"כרית" הקבוצה מסביבה
    (שכבה נוספת של עומק — לא הקפסולה הכהה של "פעיל", זו שמורה לתת-הכפתור המדויק) */
 .app-nav__group.is-open .app-nav__tab--group { background: var(--hover); }
 /* המסך הנוכחי נמצא בתוך הקבוצה הזו — רמז עדין (טקסט כהה ומודגש), בלי קפסולה */
 .app-nav__tab--group.has-active { color: var(--text); font-weight: 700; }
-/* השברון הקטן שליד התווית — מתהפך כשהקבוצה פתוחה, קצת יותר איטי מהמעברים
-   הרגילים (var(--t)=160ms) כדי שהעין תספיק לעקוב אחריו */
+/* השברון — במצב סגור מצביע למטה ("יש עוד, אפשר לפתוח"), ומתהפך למעלה כשפתוח
+   ("לחיצה תסגור") — כיוון הסטנדרטי לתפריט שנפתח כלפי מטה. */
 .app-nav__chev { display: inline-flex; align-items: center; margin-inline-start: 1px; transition: transform .4s cubic-bezier(.3,.7,.2,1); }
 .app-nav__chev svg { display: block; }
 .app-nav__group.is-open .app-nav__chev { transform: rotate(180deg); }
 
-/* ---------- תת-כפתורי קבוצה: החלקה אמיתית ולא בנייה-מחדש (2026-08-08, חידוד שלישי) ----------
-   יועד: "אין תנועת החלקה הצידה שחושפת את הכפתורים, הם פשוט נפתחים לצד השני
-   ומסתתרים בסוף החלונית" + "כשלוחצים כפתור אחר התפריט הנפתח נסגר מיד". שני
-   התסמינים נבעו מאותה סיבה: app.js בנה מחדש (innerHTML) את כל הניווט בכל
-   פתיחה/סגירה, כך שהתת-כפתורים תמיד "נולדו" כבר בגודלם המלא — אין למה
-   להחליק מ/אל, ואין שום דבר שיכול "להיסגר בעדינות" כי האלמנטים פשוט נמחקים.
-   התיקון: התת-כפתורים מצוירים תמיד ל-DOM (ר' app.js renderNav), עטופים
-   בכמוסת-גריד שרוחבה (grid-template-columns) עובר טרנזיציה אמיתית בין 0fr
-   (סגור, ברוחב אפס, חבוי מאחורי overflow:hidden) ל-1fr (פתוח, ברוחב המלא של
-   התוכן) — זו ההחלקה שחושפת/מסתירה אותם, והיא רצה בשני הכיוונים כי ה-DOM לא
-   נהרס יותר (ר' toggleGroup/showScreen ב-app.js, שעכשיו רק מחליפים מחלקה). */
+/* ---------- תפריט נפתח אנכי (dropdown) מתחת לכפתור הקבוצה ----------
+   .app-nav__group-items הוא רק עוגן-מיקום — .app-nav__group-items-inner הוא
+   הפאנל הגלוי בפועל (עמודה אנכית, זכוכית, צל). ה"פתיחה" היא opacity+transform
+   בלבד (לא רוחב/גובה מונפשים) — התוכן תמיד בגודלו הטבעי. left:0 (לא right:0!)
+   בכוונה: "השיכון" בדרך כלל יושב קרוב לקצה השמאלי של הפס (הוא הטאב האחרון
+   ב-RTL), אז עיגון הפאנל משמאלו-שלו ופתיחה ימינה (אל תוך המסך) בטוחה יותר
+   מאשר עיגון מימין ופתיחה שמאלה (עלולה לגלוש מחוץ למסך).
+
+   2026-08-08, תיקון קריטי — הפאנל בלתי-נראה במובייל: לפס הניווט התחתון יש
+   overflow-x:auto (כדי לגלול טאבים אופקית), ולפי מפרט ה-CSS, ברגע ש-overflow-x
+   הוא לא visible, הדפדפן *מחשב מחדש* גם overflow-y ל-auto — אי אפשר "לגלול
+   אופקית בלי לחתוך אנכית" על אותו אלמנט. כל תוכן שנפתח *מתחת* לקופסה של הפס
+   (top:calc(100%+8px)) נחתך ונעלם לגמרי. הפתרון (ר' app.js — portalGroupItems)
+   זהה לתבנית שכבר קיימת בקוד למגש המשתמש (.user-panel): כשהקבוצה נפתחת, ה-JS
+   מעביר את .app-nav__group-items פיזית אל document.body עם position:fixed
+   ומיקום מחושב (getBoundingClientRect), כך שהוא כבר לא צאצא של הפס החתוך.
+   בגלל שהעברה כזו "שוברת" את שרשרת ההורים ל-.app-nav__group.is-open, הקלאס
+   is-open מוצב גם ישירות על .app-nav__group-items עצמו (לא רק על ה-wrap) —
+   הסלקטורים למטה תומכים בשני המצבים (מקונן / מועבר). */
 .app-nav__group-items {
-  display: grid;
-  grid-template-columns: 0fr;
-  min-width: 0;
-  /* cubic-bezier סימטרי (האטה-תאוצה-האטה) ולא ease-out — עם ease-out (ניסיון
-     ראשון) רוב התנועה קרתה כבר ב-15% הראשונים של משך הזמן וה"זחילה" האיטית
-     בסוף לא נראתה כמו החלקה כלל, אלא כמו קפיצה ואז עצירה — בדיוק התחושה
-     ש"מכנית" שיועד תיאר. עקומה סימטרית פורשת את התנועה בצורה אחידה יותר לאורך
-     כל משך הזמן, כך שגם משך ארוך יותר (.62s) *מרגיש* איטי ולא רק "נמדד" איטי. */
-  transition: grid-template-columns .62s cubic-bezier(.65,0,.35,1);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 70;
+  opacity: 0;
+  transform: translateY(-6px) scale(.97);
+  transform-origin: top left;
+  pointer-events: none;
+  /* עקומה סימטרית (לא ease-out) — ר' ההסבר ההיסטורי למטה בקובץ ליד
+     .nav-indicator: ease-out ריכז את רוב התנועה ב-15% הראשונים של הזמן,
+     מה שהרגיש "מהיר ואז נתקע" גם במשך זמן ארוך. */
+  transition: opacity .34s cubic-bezier(.65,0,.35,1), transform .34s cubic-bezier(.65,0,.35,1);
 }
-.app-nav__group.is-open .app-nav__group-items { grid-template-columns: 1fr; }
+/* 2026-08-08: הפס התחתון במובייל מקובע לתחתית המסך (position:fixed; bottom:…,
+   ר' mobile.css .app-nav--bottom) — "נפתח למטה" משם פירושו לרוב מחוץ למסך
+   לגמרי (נבדק ב-Playwright: הפאנל התחיל כמעט מחוץ לגבול התחתון של המסך).
+   ה-JS (app.js — positionGroupItems) מזהה מובייל לפי app-nav--bottom ומוסיף
+   את המחלקה הזו כדי שהפאנל ייפתח כלפי *מעלה* מהכפתור במקום מטה; בדסקטופ
+   (כותרת עליונה) נשארת ברירת המחדל למעלה — נפתח כלפי מטה כרגיל. */
+.app-nav__group-items--up {
+  transform: translateY(6px) scale(.97);
+  transform-origin: bottom left;
+}
+.app-nav__group.is-open .app-nav__group-items,
+.app-nav__group-items.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
 .app-nav__group-items-inner {
-  overflow: hidden;
   display: flex;
-  align-items: stretch;
+  flex-direction: column;
   gap: 2px;
-  min-width: 0;
+  min-width: max-content;
+  padding: 6px;
+  background: rgba(255, 255, 255, .88);
+  -webkit-backdrop-filter: saturate(190%) blur(22px);
+  backdrop-filter: saturate(190%) blur(22px);
+  border: 1px solid rgba(255, 255, 255, .7);
+  border-radius: 16px;
+  box-shadow: 0 14px 34px rgba(16, 24, 40, .16), 0 2px 8px rgba(16, 24, 40, .06),
+              inset 0 1px 0 rgba(255, 255, 255, .8);
 }
-/* תת-הכפתורים: קצת יותר קטנים/עדינים מטאב רגיל בכוונה — מסמן חזותית שהם
-   "ילדים" בתוך הקבוצה, לא כפתורים עצמאיים שווי-מעמד לכותרת שמעליהם.
-   הם דוהים/מתקפלים פנימה (opacity+scale) בנוסף לגלישת הרוחב של העוטף שלהם,
-   עם transition-delay מדורג (נקבע ב-app.js לפי אינדקס) כדי שהעין תספיק לעקוב
-   אחרי כל אחד בנפרד ולא תתפוס "הבהוב" אחד גדול. */
+/* כל תת-כפתור הוא עכשיו שורת-תפריט מלאה (לא כמוסה קטנה) — קריא, אייקון+טקסט
+   מיושרים לימין (התחלה ב-RTL), עם דהייה+הזחה עדינה מדורגת (transition-delay
+   נקבע ב-app.js לפי אינדקס) כדי שהעין תספיק לעקוב אחרי כל שורה בנפרד. */
 .app-nav__tab--sub {
-  font-size: 11.5px; padding-block: 6px; white-space: nowrap;
-  opacity: 0; transform: scale(.85);
-  transition: opacity .4s ease, transform .4s cubic-bezier(.22,1.4,.36,1);
+  width: 100%; justify-content: flex-start;
+  padding: 9px 12px; font-size: 13.5px; border-radius: 10px; white-space: nowrap;
+  opacity: 0; transform: translateX(6px);
+  transition: opacity .3s ease, transform .3s cubic-bezier(.3,.8,.4,1);
 }
-.app-nav__tab--sub .app-nav__ico svg { width: 13px; height: 13px; }
-.app-nav__group.is-open .app-nav__tab--sub { opacity: 1; transform: scale(1); }
+.app-nav__tab--sub .app-nav__ico svg { width: 15px; height: 15px; }
+/* מסלול ל-.app-nav__group-items.is-open (לא ל-.app-nav__group.is-open) בכוונה —
+   התת-כפתורים הם צאצאים של .app-nav__group-items, וזה עשוי לחיות מחוץ ל-wrap
+   (מועבר ל-document.body בזמן פתיחה, ר' ההערה למעלה) — סלקטור שתלוי בשרשרת
+   ההורים המקורית (.app-nav__group.is-open ...) לא היה עובד אחרי ההעברה. */
+.app-nav__group-items.is-open .app-nav__tab--sub { opacity: 1; transform: translateX(0); }
 @media (prefers-reduced-motion: reduce) {
   .app-nav__tab--sub { transition: none; opacity: 1; transform: none; }
   .app-nav__group, .app-nav__chev, .app-nav__group-items { transition: none; }
 }
-/* מובייל: הקצב עוד יותר איטי מהדסקטופ (יועד: "הקצב עדיין מהיר במובייל") —
-   על מסך צר יש פחות "רעש" ויזואלי סביב, אז תנועה זהה מרגישה מהירה יותר. */
+/* מובייל: קצת יותר איטי מהדסקטופ (יועד: "הקצב עדיין מהיר במובייל") — על מסך
+   צר יש פחות "רעש" ויזואלי סביב, אז תנועה זהה מרגישה מהירה יותר. */
 @media (max-width: 720px) {
-  .app-nav__group-items { transition-duration: .72s; }
-  .app-nav__tab--sub { transition-duration: .46s; }
+  .app-nav__group-items { transition-duration: .42s; }
+  .app-nav__tab--sub { transition-duration: .36s; }
 }
 
 /* בר הניווט כ"זכוכית חלבית" (glassmorphic) — רק בדסקטופ */

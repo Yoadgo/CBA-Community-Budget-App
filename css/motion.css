@@ -98,7 +98,9 @@
 .nav-indicator {
   position: absolute; left: 0; top: 5px; bottom: 5px; width: 0;
   border-radius: 999px;
-  background: rgba(17,24,39,.6);
+  /* 2026-08-08: יועד — "הצבע מעט בהיר מדי" — הועם מ-.6 ל-.74 (עדיין שקוף
+     ולא שחור אטום כמו לפני הגרסה הקודמת, אבל הרבה יותר קריא) */
+  background: rgba(17,24,39,.74);
   backdrop-filter: saturate(180%) blur(8px);
   -webkit-backdrop-filter: saturate(180%) blur(8px);
   box-shadow: 0 1px 2px rgba(16,24,40,.15), inset 0 1px 0 rgba(255,255,255,.14);

@@ -311,6 +311,19 @@ CBA.data = (function () {
     });
   }
 
+  // --- סריקה חכמה של קבלה (שלב 4, 2026-08-08): שולחת את התמונה ל-Gemini דרך
+  // Code.gs (doPost action 'scanReceipt', ר' STEP C באימות שבזיכרון הפרויקט) ומקבלת
+  // בחזרה {ok, fields:{amount,supplier,description,date}} למילוי אוטומטי של הטופס.
+  // דרך CBA.sheets.postRead (תשובה קריאה, בלי no-cors) — לא postReadProgress, כי
+  // אין כאן צורך אמיתי בפס-התקדמות (הסריקה עצמה, לא ההעלאה, היא ה"המתנה" העיקרית
+  // כאן — כ-2-3 שניות סבב מול Gemini; מסופק spinner בכפתור במקום זאת, ר' resident.js).
+  // התוצאה היא תמיד הצעת-מילוי בלבד — התושב תמיד רואה ועורך את השדות לפני שליחה
+  // בפועל (submitReceipt נשאר נפרד ולא מושפע), אף פעם לא שליחה אוטומטית.
+  function scanReceipt(dataBase64, mimeType, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("scanReceipt", { dataBase64: dataBase64, mimeType: mimeType }, cb);
+  }
+
   // --- שריון מועדון (שלב 8): תפוסה מיומן Google Calendar ייעודי + יצירת שריון ---
   // שתי הפעולות עוברות דרך CBA.sheets.get (GET קריא, לא no-cors) כי חייבים לדעת
   // מיד אם השריון הצליח או שהזמן נתפס (בדיוק כמו login). לא נוגעות בגיליון/ב-mock.
@@ -821,6 +834,7 @@ CBA.data = (function () {
     expectedRefundDateLabel: expectedRefundDateLabel,
     saveBudgetToSheet: saveBudgetToSheet,
     submitReceipt: submitReceipt,
+    scanReceipt: scanReceipt,
     getClubBusy: getClubBusy,
     reserveClub: reserveClub,
     getClubMonth: getClubMonth,
