@@ -392,23 +392,26 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
   .rs-slot { height: 36px; font-size: 12.5px; }
 }
 
-/* ---------- אייקוני בר-הניווט התחתון (מובייל) לשלושת טאבי התושב ---------- */
-@media (max-width: 720px) {
-  .app-nav--bottom .app-nav__tab[data-screen="resRequests"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 6h9M11 12h9M11 18h9'/%3E%3Cpath d='M4 6l1.4 1.4L7.5 4.5M4 12l1.4 1.4L7.5 10.5M4 18l1.4 1.4L7.5 16.5'/%3E%3C/svg%3E"); }
-  .app-nav--bottom .app-nav__tab[data-screen="resSubmit"]   { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 4h6l1 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3z'/%3E%3Ccircle cx='12' cy='13' r='3'/%3E%3C/svg%3E"); }
-  .app-nav--bottom .app-nav__tab[data-screen="resReserve"]  { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M3 9h18M8 3v4M16 3v4'/%3E%3C/svg%3E"); }
-  .app-nav--bottom .app-nav__tab[data-screen="resDirectory"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3'/%3E%3Cpath d='M3.5 19.5a5.5 5.5 0 0 1 11 0'/%3E%3Cpath d='M16.5 6.3a3 3 0 0 1 0 5.4'/%3E%3Cpath d='M17.5 14.4a5 5 0 0 1 3 4.6'/%3E%3C/svg%3E"); }
-  .app-nav--bottom .app-nav__tab[data-screen="resMap"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 3 3.5 5v16L9 19l6 2 5.5-2V3L15 5 9 3Z'/%3E%3Cpath d='M9 3v16M15 5v16'/%3E%3C/svg%3E"); }
-}
+/* אייקוני בר-הניווט התחתון (מובייל) לטאבי התושב — הוסרו (2026-08-08): הבר התחתון
+   עבר להשתמש באותם אייקוני SVG מוטבעים כמו בדסקטופ (ר' NAV_ICONS ב-app.js ו-
+   mobile.css), כדי שהוא ייראה בדיוק כמו הניווט בדסקטופ. */
 
-/* ---------- טאב "שכנים" — ספריית קהילה ציבורית (2026-08-07) ---------- */
+/* ---------- טאב "תושבי השיכון" — ספריית קהילה ציבורית (2026-08-07) ---------- */
+/* עטיפת סרגל הכלים: בדסקטופ הכותרת מוסתרת (.dir-head) והחיפוש דחוף לצד שמאל */
+.dir-toolbar { display: flex; margin-bottom: 18px; }
+@media (min-width: 721px) {
+  .dir-head { display: none; }
+  .dir-toolbar { justify-content: flex-end; }
+}
 .dir-search {
   width: 100%; max-width: 420px; height: 46px; border-radius: 999px; border: 1px solid var(--border);
   background: var(--surface); padding: 0 18px; font-size: 14px; font-family: inherit; color: var(--text);
-  margin-bottom: 18px; box-sizing: border-box;
+  box-sizing: border-box;
 }
 .dir-search:focus { outline: none; border-color: var(--action); box-shadow: 0 0 0 3px rgba(17,24,39,.08); }
-.dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; max-width: 900px; }
+/* בלי מגבלת רוחב — הכרטיסים נפרסים על פני כל רוחב התוכן בדסקטופ, לא רק בשני
+   טורים באמצע (2026-08-08, לבקשת יועד) */
+.dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
 .dir-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
 .dir-card__house {
   align-self: flex-start; font-size: 11.5px; font-weight: 700; color: var(--text-soft);

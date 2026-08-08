@@ -33,9 +33,18 @@
       void main.offsetWidth;
       main.classList.add("screen-enter");
     }
-    nav.querySelectorAll(".app-nav__tab").forEach((tab) => {
-      tab.classList.toggle("is-active", tab.dataset.screen === name);
-    });
+    // אם היעד שייך לקבוצת-ניווט מתקפלת ("השיכון") שונה מזו שכרגע פתוחה — צריך
+    // לבנות את הניווט מחדש כדי שהקבוצה הנכונה תיפתח/תיסגר. אחרת (אותה קבוצה,
+    // או שאין קבוצה בכלל) מספיק לסמן "פעיל" בלי לבנות הכול מחדש — מונע ריצוד.
+    var g = groupForScreen(name);
+    if (g !== openGroup) {
+      openGroup = g;
+      renderNav(currentArea);
+    } else {
+      nav.querySelectorAll(".app-nav__tab").forEach((tab) => {
+        tab.classList.toggle("is-active", tab.dataset.screen === name);
+      });
+    }
     // הצגת כפתור "צור שנה" רק בבניית תקציב נשלטת ב-CSS לפי body[data-screen]
     saveRoute();   // זוכרים איפה היינו — כדי שרענון עמוד (F5) יחזיר לכאן
   }
@@ -99,7 +108,12 @@
     resident: {
       def: "resRequests",
       screens: ["resRequests", "resSubmit", "resReserve", "resDirectory", "resMap"],
-      tabs: [["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"], ["resReserve", "שריון מועדון"], ["resDirectory", "שכנים"], ["resMap", "מפת השיכון"]]
+      // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
+      // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
+      tabs: [
+        ["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"], ["resReserve", "שריון מועדון"],
+        { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"]] }
+      ]
     }
   };
   // AREAS הוא תצוגה מסוננת של AREAS_ALL לפי ההרשאות של המשתמש הנוכחי. הוא נבנה
@@ -125,8 +139,37 @@
     resSubmit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
     resReserve:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
     resDirectory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M17.5 14.4a5 5 0 0 1 3 4.6"/></svg>',
-    resMap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3.5 5v16L9 19l6 2 5.5-2V3L15 5 9 3Z"/><path d="M9 3v16M15 5v16"/></svg>'
+    resMap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3.5 5v16L9 19l6 2 5.5-2V3L15 5 9 3Z"/><path d="M9 3v16M15 5v16"/></svg>',
+    // כפתור-הקבוצה "השיכון" — מייצג את השכונה כמכלול (לא מסך ספציפי)
+    shikun:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l4-3v14"/><path d="M13 21V6l6-3v18"/><path d="M9 13h.01M9 17h.01M17 9h.01M17 13h.01M17 17h.01"/></svg>'
   };
+  // שברון קטן שמתהפך כשהקבוצה פתוחה
+  var CHEV_ICON = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  // איזו קבוצת-ניווט מקופלת (אם יש) פתוחה כרגע. null = הכול סגור.
+  // "השיכון" הוא כרגע הקבוצה היחידה שקיימת (ר' AREAS_ALL.resident.tabs).
+  var openGroup = null;
+  // האם screenKey שייך לאיזושהי קבוצת-ניווט באזור הנוכחי — ואם כן, לאיזו
+  function groupForScreen(screenKey) {
+    var a = AREAS[currentArea];
+    if (!a) return null;
+    for (var i = 0; i < a.tabs.length; i++) {
+      var t = a.tabs[i];
+      if (t && t.group) {
+        for (var j = 0; j < t.items.length; j++) {
+          if (t.items[j][0] === screenKey) return t.group;
+        }
+      }
+    }
+    return null;
+  }
+  // לחיצה על כפתור-הקבוצה עצמו ("השיכון") — פותחת/סוגרת בלי לנווט לשום מסך.
+  // אם המסך הנוכחי כבר שייך לקבוצה — היא תמיד תיפתח מחדש בציור הבא (ר' showScreen),
+  // כלומר אי-אפשר "לסגור" אותה בזמן שממש נמצאים באחד המסכים שבתוכה — וזה מכוון.
+  function toggleGroup(g) {
+    openGroup = (openGroup === g) ? null : g;
+    renderNav(currentArea);
+  }
+
   function renderNav(area) {
     if (!nav) return;
     // שומרים את "המחוון הנוזלי" (nav-indicator, מתווסף ע"י motion.js) לפני שמוחקים
@@ -134,14 +177,42 @@
     // מתחת לטאב הפעיל "לרוץ" מחדש מאפס בכל רענון תגיות, במקום פשוט להישאר במקום.
     var keepIndicator = nav.querySelector(".nav-indicator");
     if (keepIndicator && keepIndicator.parentNode) keepIndicator.parentNode.removeChild(keepIndicator);
-    nav.innerHTML = AREAS[area].tabs.map(function (t) {
+    var html = "";
+    AREAS[area].tabs.forEach(function (t) {
+      // כפתור-קבוצה מתקפל ("השיכון") — פותח תת-תפריט של שני כפתורים במקום לנווט.
+      // התת-כפתורים מצוירים מיד אחריו ב-DOM, כך שב-RTL הם נפתחים משמאלו,
+      // ופס הכפתורים כולו "זז ימינה" בטבעיות (הרוחב הנוסף בולע את המרווח הגמיש
+      // שאחרי הלוגו — ר' .app-brand { margin-inline-end:auto } ב-style.css).
+      if (t && t.group) {
+        // "has-active" (לא "is-active"!) בכוונה: כפתור-הקבוצה עצמו אף פעם לא
+        // מקבל את קפסולת ה"פעיל" הכהה/המחוון הנוזלי — זה שמור לתת-הכפתור
+        // המדויק שבאמת מוצג. has-active הוא רק רמז עדין (טקסט מודגש) לכך
+        // שהמסך הנוכחי נמצא בתוך הקבוצה הזו.
+        var groupActive = t.items.some(function (it) { return it[0] === currentScreen; });
+        var isOpen = openGroup === t.group;
+        var gico = NAV_ICONS[t.group] ? '<span class="app-nav__ico">' + NAV_ICONS[t.group] + '</span>' : '';
+        html += '<button type="button" class="app-nav__tab app-nav__tab--group' +
+          (groupActive ? " has-active" : "") + (isOpen ? " is-open" : "") +
+          '" data-group="' + t.group + '" aria-expanded="' + (isOpen ? "true" : "false") + '">' +
+          gico + CBA.esc(t.label) + '<span class="app-nav__chev">' + CHEV_ICON + '</span></button>';
+        if (isOpen) {
+          t.items.forEach(function (it) {
+            var sico = NAV_ICONS[it[0]] ? '<span class="app-nav__ico">' + NAV_ICONS[it[0]] + '</span>' : '';
+            html += '<button type="button" class="app-nav__tab app-nav__tab--sub' +
+              (it[0] === currentScreen ? " is-active" : "") + '" data-screen="' + it[0] + '">' +
+              sico + CBA.esc(it[1]) + '</button>';
+          });
+        }
+        return;
+      }
       var ico = NAV_ICONS[t[0]] ? '<span class="app-nav__ico">' + NAV_ICONS[t[0]] + '</span>' : '';
       var n = navBadgeCount(t[0]);
       var badge = n ? '<span class="nav-badge">' + (n > 9 ? "9+" : n) + '</span>' : '';
       // מסמנים "פעיל" לפי המסך הנוכחי (לא תמיד הראשון ברשימה) — כדי שרענון תגיות
       // ההתרעות (שקורה כל כמה שניות, ראה refreshAlerts) לא "יקפיץ" את הטאב הפעיל.
-      return '<button class="app-nav__tab' + (t[0] === currentScreen ? " is-active" : "") + '" data-screen="' + t[0] + '">' + ico + CBA.esc(t[1]) + badge + '</button>';
-    }).join("");
+      html += '<button type="button" class="app-nav__tab' + (t[0] === currentScreen ? " is-active" : "") + '" data-screen="' + t[0] + '">' + ico + CBA.esc(t[1]) + badge + '</button>';
+    });
+    nav.innerHTML = html;
     if (keepIndicator) nav.insertBefore(keepIndicator, nav.firstChild);
   }
   /* --- התרעות (2026-08): שני מקורות —
@@ -206,6 +277,7 @@
     if (!AREAS[area]) area = "resident";
     currentArea = area;
     document.body.dataset.area = area;
+    openGroup = null;   // מעבר אזור — כל קבוצת-ניווט מתקפלת שהייתה פתוחה נסגרת
     renderNav(area);
     renderControls();   // מרענן את תפריט המשתמש כדי שמתג המעבר ישקף את האזור הנוכחי
     showScreen(AREAS[area].def);
@@ -409,6 +481,7 @@
     if (!AREAS[area]) area = "resident";
     currentArea = area;
     document.body.dataset.area = area;
+    openGroup = null;   // ר' הערה זהה ב-setArea — נקבע מחדש אוטומטית ב-showScreen אם צריך
     renderNav(area);
     renderControls();
     var saved = loadRoute();
@@ -858,7 +931,9 @@
   window.CBA.navigate = showScreen;
 
   nav.addEventListener("click", (e) => {
-    const tab = e.target.closest(".app-nav__tab");
+    const groupBtn = e.target.closest("[data-group]");
+    if (groupBtn) { toggleGroup(groupBtn.dataset.group); return; }
+    const tab = e.target.closest(".app-nav__tab[data-screen]");
     if (tab) showScreen(tab.dataset.screen);
   });
 

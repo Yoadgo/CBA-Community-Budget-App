@@ -1177,9 +1177,12 @@ CBA.screens = CBA.screens || {};
   CBA.screens.resDirectory = {
     render: function (container) {
       container.innerHTML =
-        '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
+        // הכותרת מוסתרת בדסקטופ (ר' .dir-head ב-resident.css) — נשארת רק במובייל,
+        // שם עדיין אין כותרת-מסך אחרת שמסבירה איפה נמצאים.
+        '<div class="screen-head dir-head"><div class="screen-head__title">תושבי השיכון</div>' +
           '<div class="screen-head__sub">מדריך התושבים בשיכון</div></div>' +
-        '<input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון">' +
+        // עטיפת "סרגל כלים" — בדסקטופ דוחפת את החיפוש לצד שמאל (ר' .dir-toolbar)
+        '<div class="dir-toolbar"><input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון"></div>' +
         '<div id="dir-list"><div class="rs-empty"><p>טוען…</p></div></div>';
 
       var listEl = container.querySelector("#dir-list");
@@ -1199,7 +1202,12 @@ CBA.screens = CBA.screens || {};
             return hay.indexOf(q) !== -1;
           });
         }
+        // מיון לפי שם משפחה, א'-ב' (עברית) — היה קודם לפי מספר בית (2026-08-08)
         rows.sort(function (a, b) {
+          var fa = dirVal(a, c.family), fb = dirVal(b, c.family);
+          var cmp = fa.localeCompare(fb, "he");
+          if (cmp) return cmp;
+          // שם משפחה זהה — שובר שוויון יציב לפי מספר בית
           var ha = parseFloat(dirVal(a, c.house)), hb = parseFloat(dirVal(b, c.house));
           if (isNaN(ha)) ha = Infinity;
           if (isNaN(hb)) hb = Infinity;

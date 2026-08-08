@@ -290,6 +290,21 @@ body[data-screen="planning"] .year-switch__add {
 .app-nav__ico { display: inline-flex; align-items: center; flex: none; }
 .app-nav__ico svg { width: 17px; height: 17px; display: block; }
 
+/* ---------- כפתור-קבוצה מתקפל בניווט ("השיכון") ---------- */
+/* השברון הקטן שליד התווית — מתהפך כשהקבוצה פתוחה */
+.app-nav__chev { display: inline-flex; align-items: center; margin-inline-start: 1px; transition: transform var(--t); }
+.app-nav__chev svg { display: block; }
+.app-nav__tab--group.is-open .app-nav__chev { transform: rotate(180deg); }
+/* פתוח — רקע עדין (לא הקפסולה הכהה של "פעיל"; זו שמורה לתת-הכפתור המדויק) */
+.app-nav__tab--group.is-open { background: var(--hover); }
+/* המסך הנוכחי נמצא בתוך הקבוצה הזו — רמז עדין (טקסט כהה ומודגש), בלי קפסולה */
+.app-nav__tab--group.has-active { color: var(--text); font-weight: 700; }
+/* תת-הכפתורים שנחשפים — נכנסים בהופעה רכה. הם מצוירים ב-DOM מיד אחרי כפתור
+   הקבוצה, כך שב-RTL הם נפתחים משמאלו, ופס הכפתורים כולו "זורם ימינה" באופן
+   טבעי (הרוחב הנוסף בולע חלק מהמרווח הגמיש שאחרי המותג — ר' .app-brand). */
+.app-nav__tab--sub { animation: navSubIn .22s cubic-bezier(.2,.7,.2,1); }
+@keyframes navSubIn { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
+
 /* בר הניווט כ"זכוכית חלבית" (glassmorphic) — רק בדסקטופ */
 @media (min-width: 721px) {
   .app-nav {
@@ -1016,8 +1031,8 @@ body[data-screen="planning"] .app-main { padding-bottom: 108px; }
    ========================================================================== */
 @media (max-width: 720px) {
   .app-header__inner { padding: 16px 16px 10px; }
-  .app-nav { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
-  .app-nav__tab { padding: 8px 12px; white-space: nowrap; }
+  /* עיצוב בר הניווט התחתון במובייל (זכוכית נוזלית, בדיוק כמו בדסקטופ) הוא
+     כולו באחריות mobile.css (.app-nav--bottom), שנטען אחרי הקובץ הזה. */
   .app-main { padding: 20px 16px 48px; }
   .app-brand__title { font-size: 17px; }
 

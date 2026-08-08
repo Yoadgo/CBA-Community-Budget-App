@@ -8,19 +8,16 @@
 
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* ---------- 1. מחוון ניווט נוזלי (דסקטופ) ---------- */
+  /* ---------- 1. מחוון ניווט נוזלי ----------
+     2026-08-08: פעיל גם במובייל (היה דסקטופ בלבד) — אותו #app-nav עובר בין
+     הכותרת (דסקטופ) לבר תחתון צף (מובייל, ר' mobile.js placeNav), והוא עכשיו
+     מעוצב זהה בשני המצבים, אז המחוון עוקב אחריו בלי תלות ברוחב המסך. */
   (function setupNavIndicator() {
     var nav = document.getElementById("app-nav");
     if (!nav) return;
-    var mqDesktop = window.matchMedia("(min-width: 721px)");
     var ind = null;
 
     function ensureIndicator() {
-      if (!mqDesktop.matches) {
-        if (ind && ind.parentElement) ind.remove();
-        ind = null;
-        return null;
-      }
       if (!ind || ind.parentElement !== nav) {
         ind = nav.querySelector(".nav-indicator");
         if (!ind) {
@@ -46,7 +43,6 @@
     mo.observe(nav, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 
     window.addEventListener("resize", position);
-    if (mqDesktop.addEventListener) mqDesktop.addEventListener("change", position);
     nav.addEventListener("click", function () {
       requestAnimationFrame(position);
       setTimeout(position, 60); // ליתר ביטחון, אחרי שהמסך סיים לצייר מחדש
