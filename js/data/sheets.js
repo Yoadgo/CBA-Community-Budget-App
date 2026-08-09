@@ -151,39 +151,76 @@ CBA.sheets = (function () {
     };
   }
 
-  /* --- שמירה מקומית "בעיצומה" (2026-08-09, תיקון באג) ---
-     בעיה שדווחה: עדכון תקציב / העברת סעיף לקבוצה אחרת "לא נשמר באמת", וגם
-     שהרענון התקופתי (כל 3 שניות) "קופץ" בחזרה לשנה שנמצאת כברירת מחדל.
-     שני התופעות נובעות מאותו מקום: apply() למטה, שנקראת גם בטעינה הראשונה
-     וגם בכל רענון תקופתי, ופשוט מחליפה את כל CBA.mock.years/currentYear
-     בנתונים טריים מהגיליון — גם אם יש עריכה מקומית שעוד לא הספיקה להישלח
-     ולהיקלט בשרת. אם רענון קורה בדיוק בין הרגע שהמשתמש ערך משהו במסך
-     התכנון (למשל גרר סעיף לקבוצה אחרת) לבין הרגע שהשמירה המושהית (700ms)
-     בפועל נשלחה ואושרה — הרענון דורס את העריכה בזיכרון *לפני* שהיא נשלחה,
-     וכשהשמירה המושהית סוף-סוף רצה, היא קוראת נתונים ישנים (בלי העריכה)
-     ושולחת אותם בחזרה כאילו שום דבר לא השתנה.
-     markDirty/clearDirty מסמנים "יש עריכה מקומית שטרם אושרה" — וכל עוד כך,
-     רענון ברקע לא נוגע בנתונים בכלל (ר' apply למטה). מסך התכנון
-     (planning.js) קורא ל-markDirty ברגע העריכה ול-clearDirty אחרי שהשמירה
-     חזרה מהשרת (הצלחה או כישלון — כדי שלא יישאר "תקוע" לתמיד). */
+  /* --- הבטחת "לא לרדת בגרסה" (2026-08-09, הורחב לאחר דוגמאות נוספות) ---
+     דווחו כמה תסמינים: עדכון תקציב/העברת סעיף לקבוצה אחרת "לא נשמר באמת";
+     הרענון התקופתי (כל 3 שניות) "קופץ" בחזרה לשנה שנמצאת כברירת מחדל; הסרת
+     סעיף - הוא נעלם, אחרי כמה שניות חוזר, ואז שוב נעלם; עדכון תעריף מיסי
+     שיכון כמה פעמים - כל פעם חוזר לסכום הישן. כולם אותה משפחת באג: יש כאן
+     שני "מרוצים" (races) שונים בין קריאה (GET, רענון) לכתיבה (POST, שמירה):
+
+     מרוץ 1 - עריכה שנדרסת *לפני* שנשלחה: אם רענון קורה בדיוק בין הרגע
+     שנערך שינוי במסך (למשל גרר סעיף לקבוצה אחרת) לבין הרגע שהשמירה המושהית
+     (700ms ב-planning.js) בפועל נשלחה - הרענון דורס את העריכה בזיכרון לפני
+     שהיא נשלחה בכלל. פתרון: isDirty()/markDirty()/clearDirty() למטה - כל
+     עוד "יש עריכה שטרם אושרה", אין שום רענון רקע (ר' apply()).
+
+     מרוץ 2 (החדש, שמסביר "חוזר אחרי כמה שניות ונעלם שוב" ו"תמיד חוזר לישן"):
+     גם בלי חפיפה בזמן העריכה - יכולה להיות בקשת GET שכבר נשלחה לשרת *לפני*
+     שהשמירה החלה, ומחזירה תשובה (עם הנתונים הישנים, מלפני השמירה) רק *אחרי*
+     שהשמירה כבר הסתיימה בהצלחה. מכיוון שתשובות רשת לא בהכרח חוזרות לפי סדר
+     השליחה, "התשובה האחרונה שהגיעה" לא באמת אומרת "הנתונים העדכניים ביותר".
+     פתרון: לכל בקשת GET יש מספר סידורי (seq) שנתפס ברגע השליחה. תשובה
+     מתקבלת ומיושמת רק אם ה-seq שלה גבוה מ-writeFloor (הרף שמתעדכן בכל פעם
+     ששמירה מסתיימת - "כל דבר שנשלח לפני הרגע הזה עלול להיות ישן, תתעלמו
+     ממנו") וגם גבוה מ-lastAppliedSeq (כדי לא ליישם תשובה שהגיעה באיחור אחרי
+     תשובה חדשה יותר שכבר יושמה). וגם - inFlightWrites הופך את isDirty()
+     לאוטומטי לגמרי: ברגע ש-push() נשלח, האפליקציה "יודעת" שיש כתיבה
+     בעיצומה בלי שאף מסך צריך לקרוא ל-markDirty בעצמו. כך גם מסכים שעוד לא
+     חוברו למנגנון (הוצאות, תושבים, מועדון...) מוגנים אוטומטית - לא רק
+     planning.js. markDirty/clearDirty נשארים בנוסף לכך, לכיסוי הפער בין
+     עריכה לבין רגע השליחה בפועל (שמירה מושהית). */
   var isDirtyFlag = false;
-  function markDirty() { isDirtyFlag = true; }
-  function clearDirty() { isDirtyFlag = false; }
-  function isDirty() { return isDirtyFlag; }
+  var seqCounter = 0;      // מספר סידורי עולה, אחד לכל בקשת GET (טעינה/רענון)
+  var lastAppliedSeq = 0;  // ה-seq הגבוה ביותר שבאמת יושם על CBA.mock עד כה
+  var writeFloor = 0;      // תשובת GET עם seq <= זה נחשבת "עלולה להיות מלפני שמירה" - נדחית
+  var inFlightWrites = 0;  // כתיבות (push) שכרגע ברשת ועוד לא אושרו
+  function isDirty() { return isDirtyFlag || inFlightWrites > 0; }
+
+  /* --- חיווי "שומר…/נשמר ✓" גלובלי (2026-08-09) ---
+     יועד ביקש שתמיד יהיה ברור אם משהו עדיין נשמר או שהשמירה הסתיימה — לכל
+     מסך, לא רק לתכנון תקציב. במקום שכל מסך יצייר בועת "נשמר" משלו, המקום
+     הזה (שכבר עוקב מרכזית אחרי כל כתיבה, ר' מעלה) פשוט משדר אירוע בדפדפן
+     בכל פעם שהמצב הכולל (isDirty) משתנה — ו-app.js מאזין לו ומצייר בועה
+     אחת גלובלית. אם דפדפן ישן לא תומך ב-CustomEvent, זה נכשל בשקט (רק
+     החיווי הוויזואלי לא יופיע — שום פונקציונליות לא נשברת). */
+  var lastDirtyState = false;
+  var lastWriteHadError = false;
+  function notifyDirtyChange() {
+    var d = isDirty();
+    if (d === lastDirtyState) return;
+    lastDirtyState = d;
+    try {
+      window.dispatchEvent(new CustomEvent("cba:dirty-change", { detail: { dirty: d, error: d ? null : lastWriteHadError } }));
+    } catch (e) { /* לא קריטי */ }
+    if (!d) lastWriteHadError = false;
+  }
+  function markDirty() { isDirtyFlag = true; notifyDirtyChange(); }
+  function clearDirty() { isDirtyFlag = false; notifyDirtyChange(); }
 
   /* מחליף את תוכן CBA.mock בנתונים מהגיליון (תכונות הגישה נשארות תקפות).
-     isBackgroundRefresh=true means the app is already running and this call
-     comes from the periodic 3s poll (refresh()), not from the first load:
-     - אם יש עריכה מקומית שטרם אושרה (isDirty) — מדלגים על כל ההחלפה, כדי לא
-       לדרוס אותה (ר' ההסבר מעלה). המחזור הבא (3 שניות אחר כך) יתפוס את
-       הנתונים העדכניים כרגיל.
-     - את currentYear לא דורסים בחזרה לברירת המחדל של השרת ברענון רקע — כדי
+     מחזירה true אם באמת יושם (fetchAndApply משתמש בזה כדי לעדכן lastAppliedSeq
+     רק כשבאמת קרה שינוי, לא כשהוחלט לדלג). isBackgroundRefresh=true means the
+     app is already running and this call comes from the periodic 3s poll
+     (refresh()), not from the first load:
+     - אם יש עריכה מקומית שטרם אושרה (isDirty) - מדלגים על כל ההחלפה, כדי לא
+       לדרוס אותה. המחזור הבא (3 שניות אחר כך) יתפוס את הנתונים העדכניים.
+     - את currentYear לא דורסים בחזרה לברירת המחדל של השרת ברענון רקע - כדי
        שרענון תקופתי לא "יקפיץ" את המשתמש חזרה לשנה שמוגדרת כברירת מחדל
        בהגדרות בזמן שהוא צופה/עורך שנה אחרת שבחר. אם השנה הנוכחית כבר לא
-       קיימת ברשימת השנים העדכנית (מקרה קצה) — נופלים בחזרה לברירת המחדל
+       קיימת ברשימת השנים העדכנית (מקרה קצה) - נופלים בחזרה לברירת המחדל
        מהשרת, כדי לא להישאר על שנה שלא קיימת. */
   function apply(store, isBackgroundRefresh) {
-    if (isBackgroundRefresh && isDirty()) return;
+    if (isBackgroundRefresh && isDirty()) return false;
     CBA.mock.groups = store.groups;
     CBA.mock.years = store.years;
     CBA.mock.yearList = store.yearList;
@@ -195,6 +232,7 @@ CBA.sheets = (function () {
     // גרסת השרת שעונה בפועל — כדי שאפשר יהיה לראות מיד אם ה-Apps Script עודכן
     CBA.mock._serverVersion = store.version || "";
     CBA.mock.budgetUpdates = store.budgetUpdates || [];
+    return true;
   }
 
   /* --- מושב חתום (2026-08-07) ---
@@ -239,13 +277,21 @@ CBA.sheets = (function () {
   // שולפת מהגיליון, מחילה על CBA.mock ומעדכנת מטמון. משותף בין load() (רענון הרקע
   // הראשוני) ובין refresh() (רענון תקופתי מאוחר יותר, ר' למטה) — קוד אחד, לא כפול.
   function fetchAndApply(hadCache, cb, isBackgroundRefresh) {
+    var mySeq = ++seqCounter;   // נתפס כאן, ברגע השליחה — לא ברגע שהתשובה חוזרת
     fetch(API_URL, { method: "GET" })
       .then(function (r) { return r.json(); })
       .then(function (payload) {
         if (!payload || !payload.ok) throw new Error((payload && payload.error) || "bad payload");
+        // תשובה "ישנה" שהגיעה באיחור (ר' ההסבר המלא ליד isDirty/writeFloor למעלה) — מתעלמים
+        if (mySeq <= writeFloor || mySeq <= lastAppliedSeq) {
+          cb(true, { source: "stale-ignored", hadCache: hadCache });
+          return;
+        }
         var store = transform(payload);
-        apply(store, isBackgroundRefresh);
-        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), store: store })); } catch (e) { /* מכסת אחסון מלאה — לא קריטי */ }
+        if (apply(store, isBackgroundRefresh)) {
+          lastAppliedSeq = mySeq;
+          try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), store: store })); } catch (e) { /* מכסת אחסון מלאה — לא קריטי */ }
+        }
         cb(true, { source: "fresh", hadCache: hadCache });
       })
       .catch(function (err) {
@@ -291,14 +337,34 @@ CBA.sheets = (function () {
   // אבל הדפדפן לא יכול לקרוא את התשובה — לכן מניחים הצלחה (עדכון אופטימי במסך).
   // הסיסמה נלקחת אוטומטית מההגדרות שנטענו מהגיליון.
   function push(action, payload, cb) {
+    // inFlightWrites++ עכשיו (לא רק בקריאות המפורשות ל-markDirty) — כדי שכל
+    // כתיבה, מכל מסך, תחסום רענון רקע אוטומטית עד שהיא תיגמר (ר' isDirty למעלה),
+    // ותפעיל את חיווי "שומר…" הגלובלי מיד (notifyDirtyChange).
+    inFlightWrites++;
+    notifyDirtyChange();
     var body = Object.assign({ action: action, session: authSession() }, payload || {});
     fetch(API_URL, {
       method: "POST", mode: "no-cors",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(body)
     })
-      .then(function () { if (cb) cb({ ok: true }); })
-      .catch(function (err) { console.error("[CBA] כתיבה נכשלה:", err); if (cb) cb({ ok: false, error: String(err) }); });
+      .then(function () {
+        inFlightWrites = Math.max(0, inFlightWrites - 1);
+        // ברגע שכתיבה הסתיימה — כל בקשת GET שנשלחה *לפני* הרגע הזה עלולה
+        // לשקף מצב ישן מלפני השמירה, גם אם התשובה שלה עוד לא חזרה. מסמנים
+        // את הרף הזה כדי שתשובה כזו, כשתחזור, תידחה כ"ישנה" (ר' fetchAndApply).
+        if (seqCounter > writeFloor) writeFloor = seqCounter;
+        notifyDirtyChange();
+        if (cb) cb({ ok: true });
+      })
+      .catch(function (err) {
+        inFlightWrites = Math.max(0, inFlightWrites - 1);
+        if (seqCounter > writeFloor) writeFloor = seqCounter;
+        lastWriteHadError = true;
+        notifyDirtyChange();
+        console.error("[CBA] כתיבה נכשלה:", err);
+        if (cb) cb({ ok: false, error: String(err) });
+      });
   }
 
   // האם מחוברים לגיליון (ולא נתוני דמו)

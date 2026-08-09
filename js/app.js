@@ -15,6 +15,17 @@
   // יגרום למסך "לקפוץ"/לרצד. הדרך היחידה שבה עדכון רקע נראה לעין היא ה"פולס"
   // על המספרים הבודדים שבאמת השתנו (ר' pulseChangedValues / applyPulse).
   function showScreen(name, opts) {
+    // (2026-08-09, תיקון באג "קפיצה חזרה למסך הראשי"): הניווט העליון בראש
+    // index.html מגיע עם 3 כפתורים קבועים שכבר יש להם data-screen, ולכן
+    // כבר לחיצים באמת עוד לפני שהאפליקציה סיימה להיטען (inited עדיין false —
+    // ר' ההסבר המלא למטה ליד ההגדרה שלו). אם המשתמש הספיק ללחוץ בחלון הזה
+    // (למשל על "ניהול הוצאות", כדי להיכנס לעריכת קבלה) — ה-showScreen הזה היה
+    // מבוצע, אבל שניות אחר כך, כשהטעינה האמיתית מסתיימת, הניתוב הראשוני
+    // (initialRoute) היה קורא ל-showScreen שוב עם המסך השמור מהפעם הקודמת —
+    // ודורס את זה שהמשתמש בחר, מה שנראה כמו "קפיצה חזרה" לא מוסברת. עכשיו
+    // לחיצה לפני שהאפליקציה מוכנה פשוט לא עושה כלום (וה-CSS ב-loading.css
+    // מציג את הניווט כלא-פעיל/מעומעם באותו חלון, כדי שלא ייראה תקוע).
+    if (!inited) return;
     const screen = CBA.screens[name];
     if (!screen) return;
     // חסימת גישה: לא מציגים מסך שאינו שייך לאזור הנוכחי (תושב לא ניגש למסכי ניהול)
@@ -28,6 +39,10 @@
     if (silent) {
       applyPulse(main, before);
     } else {
+      // ניווט אמיתי (לא רענון רקע) תמיד מצייר את הנתונים העדכניים ביותר —
+      // אז אין יותר "רענון ממתין" מיושן להשלים, וטביעת האצבע כבר עדכנית.
+      pendingSilentRefresh = false;
+      lastDataFingerprint = dataFingerprint();
       // אנימציית כניסה עדינה בכל החלפת מסך יזומה ע"י המשתמש (re-trigger ע"י reflow)
       main.classList.remove("screen-enter");
       void main.offsetWidth;
@@ -522,6 +537,42 @@
     document.body.appendChild(t);
     setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 1900);
   }
+
+  /* --- חיווי "שומר…/נשמר ✓" גלובלי (2026-08-09, לבקשת יועד) ---
+     יועד ביקש שבכל מסך יהיה ברור אם עדיין שומרים או שהשמירה הסתיימה, לא רק
+     במסך תכנון תקציב. sheets.js כבר עוקב מרכזית אחרי כל כתיבה (ר' isDirty/
+     markDirty/clearDirty שם) ומשדר אירוע "cba:dirty-change" בכל שינוי מצב —
+     כך שמסך חדש שכותב לגיליון מקבל את החיווי הזה "בחינם", בלי לכתוב אותו בעצמו. */
+  var saveIndicatorHideTimer = null;
+  function saveIndicatorEl() {
+    var el = document.getElementById("cba-save-indicator");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "cba-save-indicator";
+      el.className = "save-indicator";
+      el.innerHTML = '<span class="save-indicator__dot"></span><span class="save-indicator__text"></span>';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  window.addEventListener("cba:dirty-change", function (e) {
+    var d = e && e.detail;
+    var el = saveIndicatorEl();
+    var textEl = el.querySelector(".save-indicator__text");
+    clearTimeout(saveIndicatorHideTimer);
+    if (d && d.dirty) {
+      el.className = "save-indicator is-show";
+      if (textEl) textEl.textContent = "שומר…";
+    } else if (d && d.error) {
+      el.className = "save-indicator is-show is-error";
+      if (textEl) textEl.textContent = "בעיית רשת בשמירה — ננסה שוב ברענון הבא";
+      saveIndicatorHideTimer = setTimeout(function () { el.classList.remove("is-show"); }, 4000);
+    } else {
+      el.className = "save-indicator is-show is-saved";
+      if (textEl) textEl.textContent = "נשמר ✓";
+      saveIndicatorHideTimer = setTimeout(function () { el.classList.remove("is-show"); }, 1400);
+    }
+  });
 
   /* טביעת אצבע קלה של הנתונים הנוכחיים — כדי לדעת אם רענון (מחזורי או ראשוני)
      באמת הביא נתונים שונים, לפני שמטריחים את המסך לצייר את עצמו מחדש. בלי זה,
@@ -1089,6 +1140,11 @@
   // אתחול: מושב מתמשך + מטמון מקומי → תצוגה מיידית, ורענון ברקע (stale-while-revalidate)
   let inited = false;
   let headerReady = false;
+  // (2026-08-09) הניווט העליון קבוע ב-index.html וכבר "נראה" לחיץ מהרגע
+  // הראשון, הרבה לפני ש-inited הופך ל-true (ר' ההערה ב-showScreen). הקלאס
+  // הזה (מוגדר ב-loading.css) מעמעם אותו ומכבה לחיצות עד שהאפליקציה באמת
+  // מוכנה — כדי שלחיצה מוקדמת לא "תיעלם" בלי הסבר, אלא פשוט תיראה לא-פעילה.
+  document.body.classList.add("app-booting");
   currentUser = loadSession();          // מושב שמור ותקף? נחשוף את האפליקציה מיד — בלי מסך כניסה
   main.innerHTML = skeletonScreen();    // שלד shimmer במקום "טוען נתונים…"
   if (!currentUser) showLoginGate();    // אין מושב תקף — חוסמים עד התחברות מאומתת
@@ -1148,6 +1204,7 @@
       // ציור ראשון — יש לנו נתונים אמיתיים (מהרשת עכשיו, או מהמטמון כגיבוי
       // אחרי שהרשת נכשלה — "cache-kept" למעלה כבר החיל אותם על CBA.mock)
       inited = true;
+      document.body.classList.remove("app-booting");   // הניווט הופך לפעיל בדיוק עכשיו, לא לפני
       ensureHeaderShell();
       if (currentUser) { routeByRole(); }
       else { applyUser(); AREAS = JSON.parse(JSON.stringify(AREAS_ALL)); initialRoute("admin"); }   // אורח מאחורי הגייט — שלד מלא, לא נגיש בפועל
@@ -1155,14 +1212,18 @@
       lastDataFingerprint = dataFingerprint();
     } else {
       // הגיע עדכון נוסף — מציגים רק אם הנתונים בפועל שונים, ובעדינות (פולס
-      // על המספרים, לא ריצוד של המסך)
+      // על המספרים, לא ריצוד של המסך). אותו שיקול "לא לגנוב הקלדה" כמו ב-doPoll.
       var fp = dataFingerprint();
       var changed = fp === null || fp !== lastDataFingerprint;
-      lastDataFingerprint = fp;
       if (changed) {
-        renderYearSwitch();
-        showScreen(currentScreen, { silent: true });
-        if (info && info.source === "fresh" && info.hadCache) toastRefreshed();
+        if (userIsEditingMain()) {
+          pendingSilentRefresh = true;
+        } else {
+          lastDataFingerprint = fp;
+          renderYearSwitch();
+          showScreen(currentScreen, { silent: true });
+          if (info && info.source === "fresh" && info.hadCache) toastRefreshed();
+        }
       }
       window.CBA.refreshAlerts();
     }
@@ -1185,6 +1246,22 @@
   var lastActivity = Date.now();
   var wasIdle = false;
 
+  /* (2026-08-09, לבקשת יועד — "עדכון מהיר לצד יציבות, לעולם לא לאבד נתונים")
+     גם בלי שום שמירה בעיצומה (isDirty), אם המשתמש כרגע ממש מקליד/עורך שדה
+     במסך (input/select/textarea בתוך #app-main) — רענון רקע לא אמור "לגנוב"
+     לו את זה. markDirty/isDirty מכסים את הפער בין עריכה לשמירה בפועל, אבל
+     יש מסכים (למשל טופס הגשת קבלה של תושב) שבהם המשתמש ממלא טופס ארוך
+     *לפני* שיש בכלל מה לשמור — אין עדיין isDirty, אבל יש עדיין משהו יקר
+     לאבד. userIsEditingMain בודק את זה ישירות, בלי שכל מסך יצטרך לדווח על
+     עצמו: אם הפוקוס כרגע בתוך שדה קלט במסך הראשי, מדלגים על ציור-מחדש הפעם
+     (אבל עדיין קולטים את הנתונים ל-CBA.mock ברקע — רק לא מציירים) וממתינים
+     למחזור הבא, או עד שהמשתמש עוזב את השדה (ר' listener ה-blur למטה). */
+  function userIsEditingMain() {
+    var el = document.activeElement;
+    return !!(el && main && main.contains(el) && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
+  }
+  var pendingSilentRefresh = false;
+
   function doPoll() {
     if (document.hidden || !inited || !currentUser || pollInFlight) return;
     // יש עריכה מקומית שטרם אושרה בשרת (למשל במסך התכנון) — מדלגים על המחזור
@@ -1200,15 +1277,32 @@
       // קודם זה קרה בכל מחזור (כל 3 שניות) גם בלי שינוי, וזה מה שגרם ל"תזוזת עמוד".
       var fp = dataFingerprint();
       var changed = fp === null || fp !== lastDataFingerprint;
-      lastDataFingerprint = fp;
       if (changed) {
-        renderYearSwitch();
-        showScreen(currentScreen, { silent: true });   // עדכון רקע — פולס על מה שהשתנה, לא רענון מסך מלא
-        if (info && info.source === "fresh") toastRefreshed();
+        if (userIsEditingMain()) {
+          // המשתמש באמצע הקלדה — לא מציירים עכשיו. lastDataFingerprint נשאר
+          // בכוונה ישן, כדי שהמחזור הבא (או ה-blur listener) עדיין "יראה"
+          // שינוי וישלים את הציור בפועל ברגע שבטוח.
+          pendingSilentRefresh = true;
+        } else {
+          lastDataFingerprint = fp;
+          renderYearSwitch();
+          showScreen(currentScreen, { silent: true });   // עדכון רקע — פולס על מה שהשתנה, לא רענון מסך מלא
+          if (info && info.source === "fresh") toastRefreshed();
+        }
       }
       refreshAlertsLocal();   // מקומי בלבד (זול) — שריוני מועדון מתעדכנים בקצב נמוך יותר, ראה מעלה
     });
   }
+  // ברגע שעוזבים שדה (blur) ואין יותר עריכה פעילה במסך — אם היה רענון ממתין
+  // שדילגנו עליו, מריצים אותו מיד, כדי שהנתונים לא יישארו מיושנים מיותר מדי
+  // זמן (עקרון: עדכון מהיר ברגע שבטוח, לא רק יציבות). capture:true כי blur
+  // לא מבעבע (bubble) כמו רוב האירועים.
+  main.addEventListener("blur", function () {
+    if (pendingSilentRefresh && !userIsEditingMain()) {
+      pendingSilentRefresh = false;
+      doPoll();
+    }
+  }, true);
   function markActive() {
     lastActivity = Date.now();
     if (wasIdle) { wasIdle = false; doPoll(); }   // חוזרים אחרי הפסקה — רענון מיידי, לא מחכים למחזור

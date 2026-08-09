@@ -741,7 +741,7 @@ function planNum(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 function planKey(id) { return String(id == null ? "" : id).replace(/[^a-zA-Z0-9_-]/g, function (ch) { return "_" + ch.charCodeAt(0) + "_"; }); }
 function setText(container, sel, text) { const el = container.querySelector(sel); if (el) el.textContent = text; }
 
-/* --- שמירה אוטומטית לגיליון + חיווי "נשמר" --- */
+/* --- שמירה אוטומטית לגיליון --- */
 // דחיית שמירה (debounce): רצף עריכות מהיר מתלכד לשמירה אחת עם המצב הסופי,
 // כדי לא להעמיס עשרות כתיבות על השרת ולמנוע התנגשות נעילה. השנה נתפסת בזמן
 // התזמון — כך שגם אם מחליפים שנה תוך כדי, השמירה תלך לשנה הנכונה.
@@ -750,6 +750,9 @@ function setText(container, sel, text) { const el = container.querySelector(sel)
 // עכשיו" — אחרת רענון שקורה תוך כדי (כל 3 שניות) עלול לדרוס את העריכה
 // בזיכרון לפני שהיא נשלחת, וכשהשמירה בפועל רצה היא כבר שולחת נתונים ישנים
 // (בלי השינוי) בחזרה לגיליון. ר' ההסבר המלא ב-sheets.js.
+// חיווי "שומר…/נשמר ✓" (2026-08-09, הורחב): עבר לבועה גלובלית אחת ב-app.js
+// שמאזינה ל-markDirty/clearDirty מכל מסך (לא רק כאן) — ר' notifyDirtyChange
+// ב-sheets.js. אין יותר בועה נפרדת רק למסך הזה.
 var planSaveTimer = null;
 function planSave() {
   if (!CBA.sheets || !CBA.sheets.isConnected || !CBA.sheets.isConnected()) return;
@@ -760,21 +763,5 @@ function planSave() {
     CBA.data.saveBudgetToSheet(year, function () {
       if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
     });
-    planShowSaved();
   }, 700);
-}
-// חיווי "נשמר ✓" — בועה קטנה בתחתית המסך, נעלמת מעצמה. שורדת ציור-מחדש (יושבת על body).
-var planSavedTimer = null;
-function planShowSaved() {
-  var el = document.getElementById("plan-saved-toast");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "plan-saved-toast";
-    el.className = "plan-saved-toast";
-    document.body.appendChild(el);
-  }
-  el.textContent = "נשמר ✓";
-  el.classList.add("is-show");
-  clearTimeout(planSavedTimer);
-  planSavedTimer = setTimeout(function () { el.classList.remove("is-show"); }, 1400);
 }
