@@ -2944,6 +2944,19 @@ function notifyAdmins_(ss, permKey, key, vars) {
  *  עורך ה-Apps Script (בוחרים אותה בתפריט הפונקציות למעלה ולוחצים Run). בלי זה
  *  dailyEmailJobs_ לא ירוץ מעצמו בכלל.
  * ========================================================================== */
+/** בדיקת אבחון ידנית (2026-08-09): שולחת מייל בדיקה פשוט אליך עצמך, בלי שום
+ * try/catch שמבליע שגיאות — בניגוד לכל שאר הפונקציות במודול הזה, שמתעלמות
+ * בכוונה משגיאת מייל כדי לא להפיל פעולה אחרת. מריצים ידנית מהעורך (בוחרים
+ * testSendMail מהתפריט למעלה ולוחצים Run) כדי לוודא שהרשאת השליחה בכלל תקינה —
+ * אם משהו לא בסדר (למשל הרשאה שלא אושרה), השגיאה האמיתית תופיע כאן במקום
+ * להישרף בשקט ב-Logger. הרצה ראשונה עשויה לבקש ממך לאשר הרשאות — מאשרים.
+ */
+function testSendMail() {
+  var to = Session.getEffectiveUser().getEmail();
+  MailApp.sendEmail({ to: to, subject: 'בדיקת מייל מאפליקציית הוועד', body: 'אם זה הגיע — שליחת המיילים עובדת תקין.' });
+  Logger.log('✓ מייל בדיקה נשלח אל ' + to);
+}
+
 function installDailyEmailTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'dailyEmailJobs_') ScriptApp.deleteTrigger(t);
