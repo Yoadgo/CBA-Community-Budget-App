@@ -390,6 +390,21 @@ CBA.screens = CBA.screens || {};
             container.querySelector("#rs-desc").value = f.description;
             filledLabels.push("תיאור");
           }
+          /* פרטי בנק (2026-08-09): רק כשמופיעים בקבלה/חשבונית (ר' bankName/bankBranch/
+             bankAccount ב-scanReceiptWithGemini_ ב-Code.gs) וגם רק אם מדובר בתשלום לספק —
+             השדות עצמם קיימים ב-DOM תמיד, רק מוסתרים בהחזר לדייר, אז אין נזק במילוי גם אז. */
+          if (f.bankName) {
+            container.querySelector("#rs-bank-name").value = f.bankName;
+            filledLabels.push("בנק");
+          }
+          if (f.bankBranch) {
+            container.querySelector("#rs-bank-branch").value = f.bankBranch;
+            filledLabels.push("סניף");
+          }
+          if (f.bankAccount) {
+            container.querySelector("#rs-bank-account").value = f.bankAccount;
+            filledLabels.push("מס' חשבון");
+          }
           if (filledLabels.length) {
             showScanMsg("מולא אוטומטית: " + filledLabels.join(", ") + " — כדאי לבדוק ולערוך לפני השליחה.");
           } else {

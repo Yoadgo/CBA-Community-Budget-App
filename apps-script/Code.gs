@@ -1894,6 +1894,10 @@ function scanReceiptWithGemini_(dataBase64, mimeType) {
     'של הרבה פריטים שונים — אסור לפרט את כולם אחד-אחד; יש לזהות את המכנה המשותף/הקטגוריה ' +
     'הכללית של הפריטים ולתאר אותה בקצרה בלבד, לדוגמה "ציוד משרדי", "מוצרי ניקיון" או "ציוד ' +
     'למסיבות" — ולא רשימה מלאה של הפריטים עצמם), ' +
+    '"bankName": מחרוזת (שם הבנק של הספק, רק אם מופיעים על הקבלה/חשבונית פרטי בנק לתשלום ' +
+    'או להעברה בנקאית — למשל "בנק הפועלים" או "בנק לאומי"; אם אין פרטי בנק בתמונה — ריק), ' +
+    '"bankBranch": מחרוזת (מספר סניף הבנק אם מופיע ליד פרטי הבנק; אחרת ריק), ' +
+    '"bankAccount": מחרוזת (מספר חשבון הבנק (או IBAN) אם מופיע ליד פרטי הבנק; אחרת ריק), ' +
     '"date": מחרוזת בפורמט YYYY-MM-DD אם מופיע תאריך ברור בקבלה, אחרת מחרוזת ריקה}. ' +
     'אם שדה כלשהו לא ברור/לא מופיע בתמונה — יש להחזיר ערך ריק (0 למספר, "" למחרוזת), ' +
     'ולעולם לא להמציא ערך.';
@@ -1913,9 +1917,12 @@ function scanReceiptWithGemini_(dataBase64, mimeType) {
           amount: { type: 'NUMBER' },
           supplier: { type: 'STRING' },
           description: { type: 'STRING' },
+          bankName: { type: 'STRING' },
+          bankBranch: { type: 'STRING' },
+          bankAccount: { type: 'STRING' },
           date: { type: 'STRING' }
         },
-        required: ['amount', 'supplier', 'description', 'date']
+        required: ['amount', 'supplier', 'description', 'bankName', 'bankBranch', 'bankAccount', 'date']
       }
     }
   };
