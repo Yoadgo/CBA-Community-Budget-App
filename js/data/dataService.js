@@ -245,11 +245,13 @@ CBA.data = (function () {
   // נשלח כמקשה אחת: הגיליון מסונכרן למצב שבאפליקציה (עדכון/הוספה/מחיקה).
   // מקבל שנה מפורשת (ברירת מחדל: הנוכחית) — כדי ששמירה מושהית לא תיכתב לשנה הלא-נכונה.
   // החלוקה החודשית מחושבת כאן (categoryMonthly) כדי שהגיליון יישאר עקבי.
-  function saveBudgetToSheet(year) {
-    if (!pushConnected()) return;
+  // cb אופציונלי (נוסף 2026-08-09) — נקרא אחרי שהבקשה לשרת חזרה (הצלחה/כישלון),
+  // כדי ש-planning.js יוכל לדעת מתי לבטל את סימון "יש עריכה שטרם אושרה" (ר' sheets.js).
+  function saveBudgetToSheet(year, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     year = year || getCurrentYear();
     const Y = CBA.mock.years[year];
-    if (!Y) return;
+    if (!Y) { if (cb) cb({ ok: false, error: "שנה לא קיימת" }); return; }
     // בגיליון המפתח של קבוצה/מקור-הכנסה הוא השם. פותרים כאן id -> שם, כדי שגם
     // אחרי שינוי-שם השיוך יישאר עקבי בין הסעיף לרשימת הקבוצות/ההכנסות.
     const groupName = function (id) { const g = CBA.mock.groups.find(function (x) { return x.id === id; }); return g ? g.name : (id || ""); };
@@ -271,7 +273,7 @@ CBA.data = (function () {
       };
     });
     const groups = getGroups().map(function (g) { return g.name; });
-    CBA.sheets.push("saveBudget", { year: year, categories: cats, income: income, groups: groups });
+    CBA.sheets.push("saveBudget", { year: year, categories: cats, income: income, groups: groups }, cb);
   }
 
   // --- הגשת בקשה מתושב (שלב 3): תמונה + פרטים -> Drive + שורה בגיליון ---

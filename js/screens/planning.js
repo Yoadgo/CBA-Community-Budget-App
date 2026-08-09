@@ -745,13 +745,21 @@ function setText(container, sel, text) { const el = container.querySelector(sel)
 // דחיית שמירה (debounce): רצף עריכות מהיר מתלכד לשמירה אחת עם המצב הסופי,
 // כדי לא להעמיס עשרות כתיבות על השרת ולמנוע התנגשות נעילה. השנה נתפסת בזמן
 // התזמון — כך שגם אם מחליפים שנה תוך כדי, השמירה תלך לשנה הנכונה.
+// markDirty/clearDirty (2026-08-09, תיקון באג "שינויים לא נשמרים"): מהרגע
+// שמתחילים לערוך ועד שהשמירה חוזרת מהשרת, מסמנים ל-sheets.js "אל תרענן ברקע
+// עכשיו" — אחרת רענון שקורה תוך כדי (כל 3 שניות) עלול לדרוס את העריכה
+// בזיכרון לפני שהיא נשלחת, וכשהשמירה בפועל רצה היא כבר שולחת נתונים ישנים
+// (בלי השינוי) בחזרה לגיליון. ר' ההסבר המלא ב-sheets.js.
 var planSaveTimer = null;
 function planSave() {
   if (!CBA.sheets || !CBA.sheets.isConnected || !CBA.sheets.isConnected()) return;
   var year = CBA.data.getCurrentYear();
+  if (CBA.sheets.markDirty) CBA.sheets.markDirty();
   clearTimeout(planSaveTimer);
   planSaveTimer = setTimeout(function () {
-    CBA.data.saveBudgetToSheet(year);
+    CBA.data.saveBudgetToSheet(year, function () {
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
+    });
     planShowSaved();
   }, 700);
 }

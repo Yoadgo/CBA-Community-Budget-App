@@ -1187,6 +1187,9 @@
 
   function doPoll() {
     if (document.hidden || !inited || !currentUser || pollInFlight) return;
+    // יש עריכה מקומית שטרם אושרה בשרת (למשל במסך התכנון) — מדלגים על המחזור
+    // הזה כדי לא לדרוס אותה; ר' ההסבר המלא ב-sheets.js (markDirty/apply).
+    if (CBA.sheets.isDirty && CBA.sheets.isDirty()) return;
     if (Date.now() - lastActivity > IDLE_MS) { wasIdle = true; return; }   // לא פעילים — משהים רענון
     pollInFlight = true;
     CBA.sheets.refresh(function (ok, info) {

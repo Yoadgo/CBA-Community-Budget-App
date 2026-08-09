@@ -151,12 +151,45 @@ CBA.sheets = (function () {
     };
   }
 
-  // מחליף את תוכן CBA.mock בנתונים מהגיליון (תכונות הגישה נשארות תקפות)
-  function apply(store) {
+  /* --- שמירה מקומית "בעיצומה" (2026-08-09, תיקון באג) ---
+     בעיה שדווחה: עדכון תקציב / העברת סעיף לקבוצה אחרת "לא נשמר באמת", וגם
+     שהרענון התקופתי (כל 3 שניות) "קופץ" בחזרה לשנה שנמצאת כברירת מחדל.
+     שני התופעות נובעות מאותו מקום: apply() למטה, שנקראת גם בטעינה הראשונה
+     וגם בכל רענון תקופתי, ופשוט מחליפה את כל CBA.mock.years/currentYear
+     בנתונים טריים מהגיליון — גם אם יש עריכה מקומית שעוד לא הספיקה להישלח
+     ולהיקלט בשרת. אם רענון קורה בדיוק בין הרגע שהמשתמש ערך משהו במסך
+     התכנון (למשל גרר סעיף לקבוצה אחרת) לבין הרגע שהשמירה המושהית (700ms)
+     בפועל נשלחה ואושרה — הרענון דורס את העריכה בזיכרון *לפני* שהיא נשלחה,
+     וכשהשמירה המושהית סוף-סוף רצה, היא קוראת נתונים ישנים (בלי העריכה)
+     ושולחת אותם בחזרה כאילו שום דבר לא השתנה.
+     markDirty/clearDirty מסמנים "יש עריכה מקומית שטרם אושרה" — וכל עוד כך,
+     רענון ברקע לא נוגע בנתונים בכלל (ר' apply למטה). מסך התכנון
+     (planning.js) קורא ל-markDirty ברגע העריכה ול-clearDirty אחרי שהשמירה
+     חזרה מהשרת (הצלחה או כישלון — כדי שלא יישאר "תקוע" לתמיד). */
+  var isDirtyFlag = false;
+  function markDirty() { isDirtyFlag = true; }
+  function clearDirty() { isDirtyFlag = false; }
+  function isDirty() { return isDirtyFlag; }
+
+  /* מחליף את תוכן CBA.mock בנתונים מהגיליון (תכונות הגישה נשארות תקפות).
+     isBackgroundRefresh=true means the app is already running and this call
+     comes from the periodic 3s poll (refresh()), not from the first load:
+     - אם יש עריכה מקומית שטרם אושרה (isDirty) — מדלגים על כל ההחלפה, כדי לא
+       לדרוס אותה (ר' ההסבר מעלה). המחזור הבא (3 שניות אחר כך) יתפוס את
+       הנתונים העדכניים כרגיל.
+     - את currentYear לא דורסים בחזרה לברירת המחדל של השרת ברענון רקע — כדי
+       שרענון תקופתי לא "יקפיץ" את המשתמש חזרה לשנה שמוגדרת כברירת מחדל
+       בהגדרות בזמן שהוא צופה/עורך שנה אחרת שבחר. אם השנה הנוכחית כבר לא
+       קיימת ברשימת השנים העדכנית (מקרה קצה) — נופלים בחזרה לברירת המחדל
+       מהשרת, כדי לא להישאר על שנה שלא קיימת. */
+  function apply(store, isBackgroundRefresh) {
+    if (isBackgroundRefresh && isDirty()) return;
     CBA.mock.groups = store.groups;
     CBA.mock.years = store.years;
     CBA.mock.yearList = store.yearList;
-    CBA.mock.currentYear = store.currentYear;
+    if (!isBackgroundRefresh || !CBA.mock.years[CBA.mock.currentYear]) {
+      CBA.mock.currentYear = store.currentYear;
+    }
     CBA.mock._source = "sheets";
     CBA.mock._settings = store.settings || {};
     // גרסת השרת שעונה בפועל — כדי שאפשר יהיה לראות מיד אם ה-Apps Script עודכן
@@ -205,13 +238,13 @@ CBA.sheets = (function () {
 
   // שולפת מהגיליון, מחילה על CBA.mock ומעדכנת מטמון. משותף בין load() (רענון הרקע
   // הראשוני) ובין refresh() (רענון תקופתי מאוחר יותר, ר' למטה) — קוד אחד, לא כפול.
-  function fetchAndApply(hadCache, cb) {
+  function fetchAndApply(hadCache, cb, isBackgroundRefresh) {
     fetch(API_URL, { method: "GET" })
       .then(function (r) { return r.json(); })
       .then(function (payload) {
         if (!payload || !payload.ok) throw new Error((payload && payload.error) || "bad payload");
         var store = transform(payload);
-        apply(store);
+        apply(store, isBackgroundRefresh);
         try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), store: store })); } catch (e) { /* מכסת אחסון מלאה — לא קריטי */ }
         cb(true, { source: "fresh", hadCache: hadCache });
       })
@@ -249,7 +282,7 @@ CBA.sheets = (function () {
   // רענון תקופתי (2026-08-05, לבקשת יועד — "קצב רענון קצת יותר מהיר"): אותה קריאת
   // רשת בדיוק כמו שלב 2 של load(), בלי לשחזר קודם את המטמון (כבר מוצג על המסך).
   // נקרא כל כמה שניות מ-app.js כשהטאב גלוי, ובכל חזרה לטאב אחרי שהיה ברקע.
-  function refresh(cb) { fetchAndApply(true, cb); }
+  function refresh(cb) { fetchAndApply(true, cb, true); }
 
   // ניקוי המטמון (למשל בעת יציאה/החלפת משתמש)
   function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch (e) {} }
@@ -342,5 +375,5 @@ CBA.sheets = (function () {
   // refresh נשכח מהייצוא (התגלה 2026-08-07 בבדיקת הרשאות): app.js קורא ל-
   // CBA.sheets.refresh במחזור הרענון התקופתי, וזה נכשל בשקט — כלומר הנתונים
   // לא התרעננו מעצמם כלל, רק ברענון עמוד.
-  return { url: API_URL, load: load, refresh: refresh, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache };
+  return { url: API_URL, load: load, refresh: refresh, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty };
 })();
