@@ -651,10 +651,36 @@ body[data-screen="planning"] .year-switch__add {
 .phase-pill--locked .dot { background: var(--ok); }
 .btn-sm { font-size: 12px; padding: 5px 10px; }
 
-/* לשונית "פנקס הערות" (סעיף 1, 2026-08-09) — כפתור btn-ghost רגיל + סמליל */
-.notes-tab-btn { display: inline-flex; align-items: center; gap: 6px; }
-.notes-tab-btn__ico { display: inline-flex; color: var(--text-soft); }
-.notes-tab-btn:hover .notes-tab-btn__ico { color: var(--text); }
+/* לשונית "פנקס הערות" (סעיף 1, 2026-08-09 — עודכן לפי בקשת יועד: לשונית אמיתית
+   דבוקה לצד שמאל של המסך, לא כפתור בתוך שורת הכלים). קבועה (fixed) לקצה
+   השמאלי, ממורכזת אנכית, "יוצאת" מהתוכן בדיוק כמו ה-drawer עצמו שנפתח מאותו
+   קצה (left:0, ר' .drawer). בשפת העיצוב הקיימת: כרטיס גיאומטרי (רקע לבן,
+   גבול, פינות מעוגלות) + הצללה כי זה אלמנט צף (ר' כלל העיצוב), בלי זכוכית
+   נוזלית — זו שמורה רק לכותרת/ניווט/מודלים, לא לרכיב הזה. */
+.notes-side-tab {
+  position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+  z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 8px; border: 1px solid var(--border); border-left: none;
+  border-radius: 0 14px 14px 0; background: var(--surface); color: var(--text-soft);
+  box-shadow: 0 4px 16px rgba(16,24,40,.10); cursor: pointer; font-family: inherit;
+  transition: background var(--t), color var(--t), box-shadow var(--t), padding var(--t);
+}
+.notes-side-tab:hover {
+  color: var(--text); background: var(--hover);
+  box-shadow: 0 6px 20px rgba(16,24,40,.14); padding-inline-end: 12px;
+}
+.notes-side-tab__ico { display: flex; }
+.notes-side-tab__label {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-size: 12px; font-weight: 700; letter-spacing: .2px;
+}
+/* מוסתרת כל עוד הפנקס עצמו פתוח (ר' notes.js) — אין טעם בלשונית מעל ה-drawer */
+.notes-side-tab.is-hidden { opacity: 0; pointer-events: none; transform: translateY(-50%) translateX(-8px); }
+/* מובייל — קומפקטית יותר, בלי הטקסט האנכי (ר' גם ה-nav שמצטמצם ~15% במובייל) */
+@media (max-width: 720px) {
+  .notes-side-tab { padding: 10px 6px; gap: 0; }
+  .notes-side-tab__label { display: none; }
+}
 
 /* פנקס הערות — ה-drawer עצמו (רוחב רגיל, לא --narrow, כדי לתת מקום לעורך) */
 .notes-drawer__body { display: flex; flex-direction: column; gap: 10px; height: 100%; }
@@ -859,9 +885,20 @@ body[data-screen="planning"] .year-switch__add {
 .plan-item:hover .mini-x, .plan-item:focus-within .mini-x,
 .plan-item:hover .grip, .plan-item:focus-within .grip { opacity: 1; }
 
-/* ה-× של הקבוצה תופס מקום רק כשמוצג — הסכום זז בהתאם */
-.plan-group__head .mini-x { display: none; }
-.plan-group:hover .plan-group__head .mini-x { display: inline-block; }
+/* ה-× (וחצי סדר הקבוצות, סעיף 2) תופסים מקום רק כשמוצגים — הסכום זז בהתאם */
+.plan-group__head .mini-x, .plan-group__head .mini-move { display: none; }
+.plan-group:hover .plan-group__head .mini-x,
+.plan-group:hover .plan-group__head .mini-move { display: inline-block; }
+
+/* חצי סדר קבוצות (סעיף 2, 2026-08-09) — כמו mini-x אבל בלי הדגשת אדום בריחוף */
+.mini-move {
+  border: none; background: none; cursor: pointer; color: var(--text-muted);
+  font-size: 10px; line-height: 1; padding: 3px 5px; border-radius: 7px; flex: none;
+  transition: color var(--t), background var(--t);
+}
+.mini-move:hover { color: var(--text); background: var(--hover); }
+.mini-move:disabled { opacity: .25; cursor: default; }
+.mini-move:disabled:hover { background: none; }
 
 /* כפתורי ההוספה מתקפלים לגמרי כשלא מרחפים — בלי להשאיר חלל לבן (במקום opacity בלבד) */
 .plan-group .add-btn,
@@ -1194,7 +1231,7 @@ body[data-screen="planning"] .app-main { padding-bottom: 108px; }
   /* מקורות הכנסה — במובייל העורך פתוח תמיד (אין ריחוף במגע) */
   .income-item__more { display: block; }
   .income-item__hint { display: none; }
-  .plan-group__head .mini-x { display: inline-block; }
+  .plan-group__head .mini-x, .plan-group__head .mini-move { display: inline-block; }
   .bottomline-bar { grid-template-columns: 1fr; }
   .bl-cell { padding: 12px 0; }
   .bl-cell + .bl-cell { border-inline-start: none; border-top: 1px solid var(--border); }

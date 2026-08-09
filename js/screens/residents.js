@@ -22,6 +22,10 @@ var resState = {
   conflicts: []
 };
 
+// שימור מיקום גלילה בין ציורים מחדש (אותה בעיה ואותו פתרון כמו ב-expenses.js:
+// כל פעולה/רענון קורא ל-render() מחדש, וה-innerHTML החדש היה מאפס את הגלילה).
+var resScrollTop = 0, resWinScrollY = 0;
+
 /* מיון: שם משפחה ודיירים לפי א-ב עברי (localeCompare), בית ותנועות כמספרים.
    ברירת המחדל היא שם משפחה עולה — זה הסדר שבו מחפשים אדם ברשימה. */
 function resSortRows(rows, c) {
@@ -353,6 +357,18 @@ CBA.screens.residents = {
 
   render: function (container) {
     var st = resState;
+    // נשמר לפני שה-innerHTML נדרס (ר' ההערה ליד resScrollTop), ומוחזר בסוף הפונקציה
+    var prevList = container.querySelector(".tx-list");
+    if (prevList) resScrollTop = prevList.scrollTop;
+    resWinScrollY = window.scrollY || 0;
+    // ערכי ה-<select> שנבחרו ידנית בכרטיסי "בקשות הרשמה ממתינות", לפי מזהה הבקשה —
+    // בלי זה, כל render() (כולל רענון רקע שקט) היה מאפס בחירה שהמשתמש כבר עשה.
+    var prevSignupSel = {};
+    container.querySelectorAll("[data-signup]").forEach(function (box) {
+      var sel = box.querySelector(".res-su__sel");
+      if (sel) prevSignupSel[box.dataset.signup] = sel.value;
+    });
+
     if (!st.loaded && !st.loading) resLoad(container);
 
     if (st.loading && !st.loaded) {
@@ -423,6 +439,18 @@ CBA.screens.residents = {
           : '<div class="res-msg">לא נמצאו תושבים בסינון הזה</div>') +
       '</div>' +
       resMobileHTML(visible, c);
+
+    // שחזור מיקום הגלילה + הבחירות בבקשות ההרשמה הממתינות (ר' ההערות למעלה)
+    var listEl = container.querySelector(".tx-list");
+    if (listEl && resScrollTop) listEl.scrollTop = resScrollTop;
+    if (resWinScrollY) window.scrollTo(0, resWinScrollY);
+    resScrollTop = 0; resWinScrollY = 0;
+    container.querySelectorAll("[data-signup]").forEach(function (box) {
+      var prevVal = prevSignupSel[box.dataset.signup];
+      if (prevVal == null) return;
+      var sel = box.querySelector(".res-su__sel");
+      if (sel && sel.querySelector('option[value="' + CSS.escape(prevVal) + '"]')) sel.value = prevVal;
+    });
 
     resBind(container, c);
   }
@@ -1147,6 +1175,20 @@ function resOpenDrawer(container, idx, rowIndex, c) {
   if (!r) return;
   var txN = resTxCount(r, c);
   var origHouse = resVal(r, c.house);
+  var rowStableId = c.id ? resVal(r, c.id) : null;
+  // איתור מחדש של השורה החיה לפי מזהה קבוע (מדיניות רענון נתונים — ר' תיעוד
+  // בזיכרון הפרויקט): אם רענון רקע מחליף את resState.rows בזמן שהמגירה פתוחה
+  // (מקרה קצה נדיר), הודעות/ברירות-מחדל בטופס ישתמשו בשורה המעודכנת ולא
+  // ברפרנס "יתום" מרגע הפתיחה. rowIndex עצמו יציב (מספר שורה בגיליון) ולא
+  // תלוי ברפרנס האובייקט, כך שהשמירה עצמה תמיד תקינה גם בלי זה.
+  function freshRow() {
+    if (rowStableId) {
+      for (var i = 0; i < resState.rows.length; i++) {
+        if (resVal(resState.rows[i], c.id) === rowStableId) return resState.rows[i];
+      }
+    }
+    return resState.rows[idx] || r;
+  }
 
   function field(label, col, type) {
     if (!col) return "";
@@ -1275,7 +1317,8 @@ function resOpenDrawer(container, idx, rowIndex, c) {
       box.querySelectorAll("[data-perm]").forEach(function (cbx) {
         if (cbx.checked) perms.push(cbx.dataset.perm);
       });
-      var who = resVal(r, c.firstName[slot - 1]) || resVal(r, c.email[slot - 1]);
+      var rNow = freshRow();
+      var who = resVal(rNow, c.firstName[slot - 1]) || resVal(rNow, c.email[slot - 1]);
       var txt = perms.length
         ? 'לתת ל' + who + ' את ההרשאות: ' + perms.map(resPermLabel).join(", ") + '?'
         : 'להסיר מ' + who + ' את כל ההרשאות המיוחדות? הוא יישאר תושב רגיל.';
@@ -1328,7 +1371,7 @@ function resOpenDrawer(container, idx, rowIndex, c) {
     if (fam === null) return;
     fam = fam.trim();
     if (!fam) { window.alert("צריך שם משפחה"); return; }
-    var house = window.prompt("מספר בית:", resVal(r, c.house) || "");
+    var house = window.prompt("מספר בית:", resVal(freshRow(), c.house) || "");
     if (house === null) return;
     if (!window.confirm('הדיירים הנוכחיים יסומנו כ"עזבו" ו-' + txN + ' התנועות יישארו משויכות אליהם.\n' +
       'תיפתח שורה חדשה למשפחת ' + fam + ' עם מזהה קבוע משלה. להמשיך?')) return;

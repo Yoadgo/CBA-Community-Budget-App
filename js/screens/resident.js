@@ -315,6 +315,8 @@ CBA.screens = CBA.screens || {};
           e.stopPropagation();
           picked = null;
           fileInput.value = "";
+          // בוטל הקובץ שנבחר — כבר אין מה לאבד ברענון רקע (ר' markDirty למטה)
+          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
           renderUploadEmpty();
         });
         /* קובץ חדש נבחר -> מסתירים כפתור/הודעת סריקה קודמים (שייכים לקובץ הקודם); הסריקה
@@ -337,6 +339,10 @@ CBA.screens = CBA.screens || {};
           fileInput.value = "";
           return;
         }
+        // (2026-08-09) יש עכשיו קובץ בעיבוד/נבחר שעדיין לא נשלח — עד שהבקשה
+        // תישלח בהצלחה (או תבוטל) לא רוצים שרענון רקע "יאפס" את המסך הזה
+        // וימחק את מה שהמשתמש בחר, ר' ההסבר המלא ב-sheets.js (markDirty/isDirty).
+        if (CBA.sheets.markDirty) CBA.sheets.markDirty();
         processing = true;
         renderUploadBusy();
         var isImage = file.type.indexOf("image/") === 0;
@@ -345,6 +351,7 @@ CBA.screens = CBA.screens || {};
           processing = false;
           if (err) {
             showError(err.message || "שגיאה בעיבוד הקובץ");
+            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();   // העיבוד נכשל — אין יותר קובץ ממתין
             renderUploadEmpty();
             return;
           }
@@ -496,6 +503,7 @@ CBA.screens = CBA.screens || {};
 
           CBA.data.submitReceipt(fields, function (res) {
             if (res && res.ok) {
+              if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();   // נשלח בהצלחה — אין יותר מה להגן עליו
               renderSent();
             } else {
               submitBtn.disabled = false;
@@ -879,12 +887,15 @@ CBA.screens = CBA.screens || {};
       slotsEl.innerHTML = rows;
     }
 
-    function hideForm() { state.selStart = state.selEnd = null; formEl.hidden = true; formEl.innerHTML = ""; }
+    // (2026-08-09) בחירת משבצת קיימת רק בזיכרון המקומי (state) עד שנשלחת בפועל —
+    // markDirty/clearDirty (ר' sheets.js) מגנים עליה מרענון רקע שהיה "שוכח" אותה.
+    function hideForm() { state.selStart = state.selEnd = null; formEl.hidden = true; formEl.innerHTML = ""; if (CBA.sheets.clearDirty) CBA.sheets.clearDirty(); }
     function showMsg(cls, html) { msgEl.className = "rs-club__msg " + cls; msgEl.innerHTML = html; msgEl.hidden = false; }
     function clearMsg() { msgEl.hidden = true; msgEl.innerHTML = ""; }
 
     function renderForm() {
       if (state.selStart == null) { formEl.hidden = true; formEl.innerHTML = ""; return; }
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty();   // יש בחירת משבצת ממתינה לאישור
       var lo = Math.min(state.selStart, state.selEnd), hi = Math.max(state.selStart, state.selEnd);
       var startLbl = slotLabel(lo), endLbl = slotEndLabel(hi);
       var mins = (hi - lo + 1) * 30;

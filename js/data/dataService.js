@@ -806,6 +806,18 @@ CBA.data = (function () {
     CBA.mock.groups = CBA.mock.groups.filter(function (g) { return g.id !== id; });
     CBA.mock.categories = CBA.mock.categories.filter(function (c) { return c.group !== id; });
   }
+  // סדר קבוצות (סעיף 2 בסדר העבודה, 2026-08-09) — מזיז קבוצה מקום אחד למעלה/
+  // למטה במערך (מחליף עם השכנה). הסדר במערך הוא גם הסדר שנשמר לגיליון
+  // (saveGroups_ ב-Code.gs כותב לפי סדר המערך, ו-readColumn_ קורא באותו סדר) —
+  // אז אין צורך בשדה "סדר" נפרד, מספיק לשמור אחרי ההזזה (ר' planSave ב-planning.js).
+  function moveGroup(id, dir) {
+    const arr = CBA.mock.groups;
+    const i = arr.findIndex(function (g) { return g.id === id; });
+    if (i === -1) return;
+    const j = dir === "up" ? i - 1 : i + 1;
+    if (j < 0 || j >= arr.length) return;
+    const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+  }
 
   // --- CRUD מקורות הכנסה ---
   function addIncomeSource(fields) {
@@ -953,6 +965,7 @@ CBA.data = (function () {
     addGroup: addGroup,
     updateGroup: updateGroup,
     removeGroup: removeGroup,
+    moveGroup: moveGroup,
     addIncomeSource: addIncomeSource,
     updateIncomeSource: updateIncomeSource,
     removeIncomeSource: removeIncomeSource,

@@ -10,7 +10,7 @@ var planShowCompare = false; // האם מוצגת השוואה לשנה קודמ
 var planCompareYear = null;  // איזו שנה מושווית
 
 // סמליל "פנקס הערות" (סעיף 1) — דף+קווים, באותו סגנון SVG כמו NAV_ICONS ב-app.js
-var PLAN_NOTES_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/><path d="M9.5 12h6M9.5 16h4"/></svg>';
+var PLAN_NOTES_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/><path d="M9.5 12h6M9.5 16h4"/></svg>';
 
 CBA.screens.planning = {
   title: "בניית תקציב",
@@ -24,13 +24,15 @@ CBA.screens.planning = {
     const cats = CBA.data.getCategories();
     const income = CBA.data.getIncomeSources();
 
-    const groupsHTML = groups.map(function (g) {
+    const groupsHTML = groups.map(function (g, gi) {
       const rows = cats.filter(function (c) { return c.group === g.id; });
       return `
         <div class="plan-group" data-group-drop="${CBA.esc(g.id)}">
           <div class="plan-group__head">
             <input class="txt-input txt-input--group" data-group-name="${CBA.esc(g.id)}" value="${CBA.esc(g.name)}">
             <span class="plan-group__sub" id="pg-${planKey(g.id)}"></span>
+            <button class="mini-move" data-move-group="up" data-group="${CBA.esc(g.id)}" title="הזז קבוצה למעלה"${gi === 0 ? " disabled" : ""}>▲</button>
+            <button class="mini-move" data-move-group="down" data-group="${CBA.esc(g.id)}" title="הזז קבוצה למטה"${gi === groups.length - 1 ? " disabled" : ""}>▼</button>
             <button class="mini-x" data-remove-group="${CBA.esc(g.id)}" title="הסר קבוצה">×</button>
           </div>
           ${rows.map(function (c) {
@@ -63,11 +65,13 @@ CBA.screens.planning = {
     const incomeHTML = income.map(planIncomeRow).join("");
 
     container.innerHTML = `
+      <button class="notes-side-tab" type="button" id="notes-side-tab" data-open-notes title="פנקס הערות כלליות לשנה זו">
+        <span class="notes-side-tab__ico">${PLAN_NOTES_ICON}</span>
+        <span class="notes-side-tab__label">הערות</span>
+      </button>
+
       <div class="screen-controls">
         <div class="phase-ctrl">${planPhaseControl()}</div>
-        <button class="btn-ghost btn-sm notes-tab-btn" type="button" data-open-notes title="פנקס הערות כלליות לשנה זו">
-          <span class="notes-tab-btn__ico">${PLAN_NOTES_ICON}</span> הערות
-        </button>
       </div>
 
       <div class="plan-cols">
@@ -308,6 +312,14 @@ function planBind(container) {
   container.querySelectorAll("[data-remove-group]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       CBA.data.removeGroup(btn.dataset.removeGroup);
+      planSave();
+      rerender();
+    });
+  });
+  // סדר קבוצות (סעיף 2) — חצים פשוטים ליד ה-X, מזיזים מקום אחד ושומרים
+  container.querySelectorAll("[data-move-group]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      CBA.data.moveGroup(btn.dataset.group, btn.dataset.moveGroup);
       planSave();
       rerender();
     });
@@ -684,6 +696,10 @@ function planOpenCustomModal(container, catId) {
     return `<div class="month-field"><label>${lab}</label>
       <input class="num-input" type="number" data-month="${i}" value="${c.dist.monthly[i] || 0}"></div>`;
   }).join("");
+  // (2026-08-09) שדות הטופס משתמשים ב-catId (מזהה יציב) כדי לאתר את הסעיף
+  // מחדש בכל שינוי, במקום להסתמך על ה-c שנתפס פה למעלה — כדי שגם אם רענון
+  // רקע מחליף את מערך הסעיפים בזמן שהמודל פתוח (מקרה קצה נדיר), העריכה
+  // תמצא ותעדכן את האובייקט הנכון והעדכני, לא רפרנס "יתום" מהעבר.
 
   const overlay = document.createElement("div");
   overlay.id = "cba-modal";
@@ -710,8 +726,12 @@ function planOpenCustomModal(container, catId) {
   overlay.querySelectorAll("[data-modal-close]").forEach(function (el) { el.addEventListener("click", planCloseModal); });
   overlay.querySelectorAll("[data-month]").forEach(function (inp) {
     inp.addEventListener("input", function () {
-      c.dist.monthly[parseInt(inp.dataset.month, 10)] = planNum(inp.value);
-      planUpdateSum(c);
+      // איתור מחדש לפי catId (ר' הערה למעלה) — לא סומכים על ה-c שנתפס בפתיחת המודל
+      const cNow = findCat(catId);
+      if (!cNow) return;
+      if (!cNow.dist.monthly) cNow.dist.monthly = planEqualArray(cNow);
+      cNow.dist.monthly[parseInt(inp.dataset.month, 10)] = planNum(inp.value);
+      planUpdateSum(cNow);
     });
     // שמירה לגיליון בסיום עריכת חודש (יציאה מהשדה)
     inp.addEventListener("change", function () { planSave(); });

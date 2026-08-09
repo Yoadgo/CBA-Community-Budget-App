@@ -29,6 +29,8 @@ CBA.notesPanel = (function () {
     var el = document.getElementById("cba-notes-drawer");
     if (el) el.remove();
     document.removeEventListener("keydown", onEsc);
+    var tab = document.getElementById("notes-side-tab");
+    if (tab) tab.classList.remove("is-hidden");
   }
 
   function metaLabel(n) {
@@ -104,6 +106,8 @@ CBA.notesPanel = (function () {
 
   function open() {
     close();
+    var tab = document.getElementById("notes-side-tab");
+    if (tab) tab.classList.add("is-hidden");
     var n = CBA.data.getNotes();
     var year = CBA.data.getCurrentYear();
 

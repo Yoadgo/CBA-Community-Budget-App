@@ -5,6 +5,10 @@
 window.CBA = window.CBA || {};
 CBA.screens = CBA.screens || {};
 
+// שימור מיקום גלילה בין ציורים מחדש (אותו פתרון כמו ב-expenses.js/residents.js:
+// render() נקרא מחדש גם ברענון רקע שקט, וה-innerHTML החדש היה מאפס גלילה).
+var caScrollP = 0, caScrollA = 0, caWinScrollY = 0;
+
 var CLUB_WD_HE = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 function clubPad2(n) { return (n < 10 ? "0" : "") + n; }
 function clubDateLabel(iso) {
@@ -20,6 +24,13 @@ CBA.screens.clubAdmin = {
   title: "שריון מועדון",
 
   render(container) {
+    // נשמר לפני שה-innerHTML נדרס, ומוחזר אחרי ש-load() מסיים למלא את הרשימות
+    var prevPending = container.querySelector("#ca-pending-list");
+    if (prevPending) caScrollP = prevPending.scrollTop;
+    var prevAll = container.querySelector("#ca-all-list");
+    if (prevAll) caScrollA = prevAll.scrollTop;
+    caWinScrollY = window.scrollY || 0;
+
     container.innerHTML = `
       <div class="screen-head"><div class="screen-head__title">שריון מועדון — ניהול</div>
         <div class="screen-head__sub">אישור בקשות שריון מתושבים, וצפייה בכל השריונים הקרובים</div></div>
@@ -58,6 +69,12 @@ CBA.screens.clubAdmin = {
         allList.innerHTML = all.length
           ? all.map(allRowHTML).join("")
           : '<div class="club-empty">אין שריונים קרובים.</div>';
+
+        // שחזור מיקום הגלילה (ר' ההערה למעלה ליד caScrollP)
+        if (caScrollP) pendingList.scrollTop = caScrollP;
+        if (caScrollA) allList.scrollTop = caScrollA;
+        if (caWinScrollY) window.scrollTo(0, caWinScrollY);
+        caScrollP = 0; caScrollA = 0; caWinScrollY = 0;
 
         bindActions();
       });
@@ -100,7 +117,12 @@ CBA.screens.clubAdmin = {
       container.querySelectorAll("[data-approve]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           btn.disabled = true; btn.textContent = "מאשר…";
+          // approveClubReservation עובר דרך CBA.sheets.get (לא push), ולכן לא
+          // נספר אוטומטית ב-inFlightWrites — מסמנים dirty ידנית כדי שרענון רקע
+          // לא "יעקוף" את הבקשה הזו באמצע (ר' מדיניות רענון נתונים בזיכרון הפרויקט).
+          if (CBA.sheets.markDirty) CBA.sheets.markDirty();
           CBA.data.approveClubReservation(btn.dataset.approve, function (res) {
+            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
             if (res && res.ok) load();
             else { btn.disabled = false; btn.textContent = "אשר"; window.alert((res && res.error) || "האישור נכשל, נסו שוב."); }
           });
@@ -110,7 +132,9 @@ CBA.screens.clubAdmin = {
         btn.addEventListener("click", function () {
           if (!window.confirm("לדחות ולמחוק את בקשת השריון? הפעולה תשחרר את המשבצת בחזרה לפנויה.")) return;
           btn.disabled = true; btn.textContent = "דוחה…";
+          if (CBA.sheets.markDirty) CBA.sheets.markDirty();
           CBA.data.rejectClubReservation(btn.dataset.reject, function (res) {
+            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
             if (res && res.ok) load();
             else { btn.disabled = false; btn.textContent = "דחה"; window.alert((res && res.error) || "הדחייה נכשלה, נסו שוב."); }
           });
