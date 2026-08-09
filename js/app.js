@@ -853,6 +853,27 @@
     if (su) su.addEventListener("click", openSignupForm);
   }
 
+  /* מסך "מתחברים…" — מוצג מרגע שגוגל מחזיר תשובה ועד שהשרת שלנו מסיים לבדוק
+     אותה (יכול לקחת כמה שניות). בלי זה המשתמש רואה שוב את כפתור הכניסה
+     הרגיל ולא יודע שהלחיצה שלו בכלל התקבלה — נראה כאילו לא קרה כלום, אז
+     חלקם ניסו ללחוץ שוב. (2026-08-09) */
+  function showLoginConnecting() {
+    let gate = document.getElementById("login-gate");
+    if (!gate) {
+      gate = document.createElement("div");
+      gate.id = "login-gate"; gate.className = "login-gate";
+      document.body.appendChild(gate);
+    }
+    gate.hidden = false;
+    document.body.classList.add("is-gated");
+    gate.innerHTML =
+      '<div class="login-card">' +
+        '<div class="login-logo">' + CBA.logoSVG(28) + '</div>' +
+        '<h1 class="login-title">ניהול קהילה</h1>' +
+        '<div class="login-connecting"><span class="spinner" aria-hidden="true"></span><span>מתחברים…</span></div>' +
+      '</div>';
+  }
+
   /* ---------- טופס בקשת הרשמה (2026-08-07) ----------
      נשלח יחד עם טוקן גוגל שהשרת מאמת, כך שהמייל בבקשה תמיד אמיתי. */
   let signupToken = null;
@@ -879,6 +900,8 @@
             '<input class="field-input" id="su-last" value="' + CBA.esc(guess.slice(1).join(" ")) + '"></div>' +
           '<div class="form-field"><label>מספר בית</label>' +
             '<input class="field-input" id="su-house" inputmode="numeric"></div>' +
+          '<div class="form-field"><label>טלפון</label>' +
+            '<input class="field-input" id="su-phone" type="tel" inputmode="tel" placeholder="050-1234567"></div>' +
           '<div class="signup-msg" id="su-msg" hidden></div>' +
           '<button type="button" class="btn-primary signup-send" id="su-send">שלח בקשה</button>' +
         '</div>' +
@@ -894,16 +917,18 @@
       const first = wrap.querySelector("#su-first").value.trim();
       const last = wrap.querySelector("#su-last").value.trim();
       const house = wrap.querySelector("#su-house").value.trim();
-      if (!first || !last || !house) {
+      const phone = wrap.querySelector("#su-phone").value.trim();
+      if (!first || !last || !house || !phone) {
         msg.hidden = false; msg.className = "signup-msg signup-msg--err";
-        msg.textContent = "צריך למלא שם פרטי, שם משפחה ומספר בית.";
+        msg.textContent = "צריך למלא שם פרטי, שם משפחה, מספר בית וטלפון.";
         return;
       }
       send.disabled = true; send.textContent = "שולח…";
       const q = "?action=submitSignup&token=" + encodeURIComponent(signupToken) +
         "&firstName=" + encodeURIComponent(first) +
         "&lastName=" + encodeURIComponent(last) +
-        "&house=" + encodeURIComponent(house);
+        "&house=" + encodeURIComponent(house) +
+        "&phone=" + encodeURIComponent(phone);
       fetch(CBA.sheets.url + q)
         .then(function (r) { return r.json(); })
         .then(function (d) {
@@ -946,6 +971,7 @@
 
   function onGoogleLogin(resp) {
     loginError = null;
+    showLoginConnecting();   // גוגל כבר סיימה; עכשיו מחכים לשרת שלנו — תראו את זה, לא מסך ריק
     fetch(CBA.sheets.url + "?action=login&token=" + encodeURIComponent(resp.credential))
       .then(function (r) { return r.json(); })
       .then(function (data) {

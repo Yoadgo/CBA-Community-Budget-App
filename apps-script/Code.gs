@@ -1984,7 +1984,9 @@ function handleScanReceipt_(ss, body) {
  * שהמייל בבקשה תמיד אמיתי ומאומת, ואי אפשר להירשם בשם של מישהו אחר.
  */
 var SIGNUPS_SHEET = 'בקשות הרשמה';
-var SIGNUP_HEADERS = ['מזהה', 'תאריך בקשה', 'אימייל', 'שם פרטי', 'שם משפחה', 'מספר בית', 'סטטוס', 'שויך למשפחה', 'טופל בתאריך'];
+// "טלפון" נוסף בסוף (2026-08-09) ולא באמצע — כך שכל האינדקסים הקיימים
+// (אימייל=2, סטטוס=עמודה 7 וכו') ממשיכים לעבוד בלי שינוי בשום מקום אחר בקוד.
+var SIGNUP_HEADERS = ['מזהה', 'תאריך בקשה', 'אימייל', 'שם פרטי', 'שם משפחה', 'מספר בית', 'סטטוס', 'שויך למשפחה', 'טופל בתאריך', 'טלפון'];
 
 function getSignupsSheet_(ss) {
   var sh = ss.getSheetByName(SIGNUPS_SHEET);
@@ -1993,6 +1995,15 @@ function getSignupsSheet_(ss) {
     sh.getRange(1, 1, 1, SIGNUP_HEADERS.length).setValues([SIGNUP_HEADERS]);
     sh.getRange(1, 1, 1, SIGNUP_HEADERS.length).setFontWeight('bold');
     sh.setFrozenRows(1);
+  } else {
+    // מיגרציה אידמפוטנטית: גיליון "בקשות הרשמה" שכבר נוצר לפני שנוסף טור
+    // "טלפון" — משלים רק את הכותרת החסרה בסוף, בלי לגעת בעמודות הקיימות.
+    var lastCol = sh.getLastColumn();
+    if (lastCol < SIGNUP_HEADERS.length) {
+      var missing = SIGNUP_HEADERS.slice(lastCol);
+      sh.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]);
+      sh.getRange(1, lastCol + 1, 1, missing.length).setFontWeight('bold');
+    }
   }
   return sh;
 }
@@ -2033,7 +2044,7 @@ function handleSubmitSignup_(p) {
     var id = 'S' + new Date().getTime();
     sh.appendRow([id, new Date(), email,
       String(p.firstName || '').trim(), String(p.lastName || '').trim(),
-      String(p.house || '').trim(), 'ממתין', '', '']);
+      String(p.house || '').trim(), 'ממתין', '', '', String(p.phone || '').trim()]);
     return json_({ ok: true, id: id });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -2055,7 +2066,7 @@ function handleListSignups_(p) {
         id: String(v[0]), date: v[1], email: String(v[2] || ''),
         firstName: String(v[3] || ''), lastName: String(v[4] || ''),
         house: String(v[5] || ''), status: String(v[6] || ''),
-        linkedFamily: String(v[7] || '')
+        linkedFamily: String(v[7] || ''), phone: String(v[9] || '')
       });
     }
     return json_({ ok: true, rows: rows });
@@ -2082,17 +2093,19 @@ function approveSignup_(ss, body) {
   if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
   var req = sh.getRange(row, 1, 1, SIGNUP_HEADERS.length).getValues()[0];
   var email = String(req[2] || ''), firstName = String(req[3] || ''),
-      lastName = String(req[4] || ''), house = String(req[5] || '');
+      lastName = String(req[4] || ''), house = String(req[5] || ''),
+      phone = String(req[9] || '');
 
   var rsh = ss.getSheetByName('תושבים');
   if (!rsh) return { ok: false, error: 'אין טאב "תושבים"' };
   var values = rsh.getDataRange().getValues();
   var headers = values[0].map(function (h) { return String(h).trim(); });
 
-  var emailCols = [], firstNameCols = [], familyCol = -1, houseCol = -1, statusCol = -1;
+  var emailCols = [], firstNameCols = [], phoneCols = [], familyCol = -1, houseCol = -1, statusCol = -1;
   headers.forEach(function (h, i) {
     if (h.indexOf('שם פרטי') !== -1) firstNameCols.push(i);
     else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
+    else if (h.indexOf('מספר טלפון') !== -1) phoneCols.push(i);
     else if (h.indexOf('סטטוס') !== -1) statusCol = i;
     else if (h.indexOf(RESIDENT_ID_HEADER) !== -1) { /* מזהה קבוע — לא נוגעים */ }
     else if (h.indexOf('משפחה') !== -1) familyCol = i;
@@ -2124,6 +2137,9 @@ function approveSignup_(ss, body) {
   rsh.getRange(targetRow, emailCols[slot] + 1).setValue(email);
   if (firstNameCols[slot] !== undefined && firstName) {
     rsh.getRange(targetRow, firstNameCols[slot] + 1).setValue(firstName);
+  }
+  if (phoneCols[slot] !== undefined && phone) {
+    rsh.getRange(targetRow, phoneCols[slot] + 1).setValue(phone);
   }
   if (statusCol > -1 && !String(cur[statusCol] || '').trim()) {
     rsh.getRange(targetRow, statusCol + 1).setValue('פעיל');

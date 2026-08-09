@@ -1253,6 +1253,11 @@ body[data-screen="planning"] .app-main { padding-bottom: 108px; }
 
 @media (prefers-reduced-motion: reduce) { .peek-backdrop { animation: none; } }
 
+/* טופס בקשת ההרשמה (#signup-modal) יכול להיפתח בזמן שמסך הכניסה החוסם
+   (.login-gate, z-index 200) עדיין על המסך — בלי דריסה כאן הוא היה נפתח
+   *מתחת* למסך הכניסה ונראה כאילו שום דבר לא קרה בלחיצה. (2026-08-09) */
+#signup-modal.peek-backdrop { z-index: 210; }
+
 /* התיאור עלול להיחתך — הטקסט המלא זמין בריחוף (title נקבע ב-JS) */
 .tx-c--desc { color: var(--text); }
 

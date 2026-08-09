@@ -517,7 +517,8 @@ function resSignupsHTML(list, rows, c) {
       return '<div class="res-su" data-signup="' + CBA.esc(s.id) + '">' +
         '<div class="res-su__who">' +
           '<b>' + CBA.esc(s.firstName + " " + s.lastName) + '</b>' +
-          '<span class="res-dim">' + CBA.esc(s.email) + ' · בית ' + CBA.esc(s.house || "—") + '</span>' +
+          '<span class="res-dim">' + CBA.esc(s.email) + ' · בית ' + CBA.esc(s.house || "—") +
+            (s.phone ? ' · ' + CBA.esc(s.phone) : "") + '</span>' +
         '</div>' +
         '<div class="res-su__match">' +
           (best

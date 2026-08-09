@@ -93,6 +93,21 @@
   100% { box-shadow: 0 0 0 9px rgba(17, 24, 39, 0); transform: scale(1); }
 }
 
+/* ---------- מסך "מתחברים…" (2026-08-09) ----------
+   מוצג במסך הכניסה מרגע שגוגל מחזירה תשובה ועד שהשרת שלנו מסיים לאמת אותה,
+   כדי שלא ייראה כאילו לחיצת ה"כניסה עם גוגל" לא עשתה כלום. ר' showLoginConnecting ב-app.js. */
+.login-connecting {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin-top: 22px; font-size: 14px; font-weight: 600; color: var(--text-soft);
+}
+.spinner {
+  width: 18px; height: 18px; border-radius: 50%; flex: none;
+  border: 2.5px solid rgba(17, 24, 39, .14);
+  border-top-color: var(--action, #111827);
+  animation: cba-spin .7s linear infinite;
+}
+@keyframes cba-spin { to { transform: rotate(360deg); } }
+
 /* ---------- מסך "לא הצלחנו לטעון" (אין מטמון ואין תשובה מהרשת) ---------- */
 .load-error {
   padding: 72px 20px;
@@ -107,4 +122,5 @@
   .screen-enter { animation: none; }
   .refresh-toast { animation: toast-life 1800ms step-end forwards; }
   .value-pulse { animation: none !important; }
+  .spinner { animation: none; opacity: .6; }
 }
