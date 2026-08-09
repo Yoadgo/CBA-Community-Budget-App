@@ -407,6 +407,26 @@ function saveTransaction_(ss, body) {
     var existing = sh.getRange(foundRow, 1, 1, headers.length).getValues()[0];
     var merged = headers.map(function (h, i) { return rowObj.hasOwnProperty(h) ? rowObj[h] : existing[i]; });
     sh.getRange(foundRow, 1, 1, merged.length).setValues([merged]);
+
+    // מייל עדכון סטטוס לתושב (2026-08-09) — רק אם הסטטוס באמת השתנה, רק לבקשות
+    // שמקורן בתושב (לא הוצאות שהמנהל מזין ידנית), ורק לשלושת הסטטוסים שיש טעם
+    // לעדכן עליהם ("בבדיקה" זמני ולא רלוונטי לתושב).
+    try {
+      var statusColIdx = headers.indexOf('סטטוס');
+      var oldStatus = statusColIdx > -1 ? String(existing[statusColIdx] || '') : '';
+      var newStatus = String(rowObj['סטטוס'] || '');
+      var STATUS_EMAIL_KEY_ = {};
+      STATUS_EMAIL_KEY_[STATUS_HE.ready] = 'REIMBURSEMENT_READY';
+      STATUS_EMAIL_KEY_[STATUS_HE.paid] = 'REIMBURSEMENT_PAID';
+      STATUS_EMAIL_KEY_[STATUS_HE.rejected] = 'REIMBURSEMENT_REJECTED';
+      if (oldStatus !== newStatus && rowObj['מקור'] === SOURCE_HE.resident && STATUS_EMAIL_KEY_[newStatus]) {
+        var famEmails2 = emailsForFamilyId_(ss, rowObj['מזהה משפחה']);
+        sendResidentTemplate_(ss, STATUS_EMAIL_KEY_[newStatus], famEmails2, {
+          'שם': rowObj['רוכש'] || '', 'סכום': Math.round(Number(rowObj['סכום']) || 0),
+          'מזהה': rowObj['מזהה'], 'הערה': rowObj['הערת בדיקה'] ? ('\nהערה: ' + rowObj['הערת בדיקה']) : ''
+        });
+      }
+    } catch (mailErr) { Logger.log('מייל עדכון סטטוס נכשל: ' + mailErr); }
   } else {
     var newRow = headers.map(function (h) { return rowObj.hasOwnProperty(h) ? rowObj[h] : ''; });
     sh.appendRow(newRow);
@@ -590,6 +610,15 @@ function handleReserveClub_(p) {
     ev.setTag('email', String(p.email || '').trim().toLowerCase());
     ev.setTag('note', p.note || '');
     ev.setTag('status', 'pending');
+    // חותמת זמן הבקשה (2026-08-09) — משמשת לתזכורת "ממתין כבר X ימים" למנהל המועדון.
+    ev.setTag('requestedAt', String(Date.now()));
+    try {
+      notifyAdmins_(ss, PERM_CLUB, 'ADMIN_NEW_CLUB', {
+        'שם': p.family || p.email || 'תושב',
+        'תאריך': Utilities.formatDate(startDt, Session.getScriptTimeZone(), 'dd/MM/yyyy'),
+        'שעה': p.start + '–' + p.end, 'קישור': CBA_APP_URL
+      });
+    } catch (mailErr) { Logger.log('מייל שריון חדש נכשל: ' + mailErr); }
     return json_({ ok: true, id: ev.getId(), start: startDt.toISOString(), end: endDt.toISOString(), status: 'pending' });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -741,6 +770,15 @@ function handleApproveClubReservation_(p) {
     if (!ev) return json_({ ok: false, error: 'השריון לא נמצא — ייתכן שכבר בוטל' });
     ev.setTag('status', 'approved');
     ev.setTitle('שריון מועדון — ' + (ev.getTag('family') || 'תושב'));
+    try {
+      var tz1 = Session.getScriptTimeZone();
+      var evEmail = ev.getTag('email');
+      sendResidentTemplate_(ss, 'CLUB_APPROVED', evEmail ? [evEmail] : [], {
+        'שם': ev.getTag('family') || 'תושב',
+        'תאריך': Utilities.formatDate(ev.getStartTime(), tz1, 'dd/MM/yyyy'),
+        'שעה': Utilities.formatDate(ev.getStartTime(), tz1, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz1, 'HH:mm')
+      });
+    } catch (mailErr) { Logger.log('מייל אישור שריון נכשל: ' + mailErr); }
     return json_({ ok: true });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -762,7 +800,17 @@ function handleRejectClubReservation_(p) {
     if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
     var ev = cal.getEventById(p.id);
     if (!ev) return json_({ ok: false, error: 'השריון לא נמצא — ייתכן שכבר טופל' });
+    // תופסים את פרטי השריון *לפני* המחיקה, כדי שיהיה מה לשים במייל הדחייה אחריה.
+    var tz2 = Session.getScriptTimeZone();
+    var rejFamily = ev.getTag('family') || 'תושב', rejEmail = ev.getTag('email') || '';
+    var rejStartStr = Utilities.formatDate(ev.getStartTime(), tz2, 'dd/MM/yyyy');
+    var rejTimeStr = Utilities.formatDate(ev.getStartTime(), tz2, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz2, 'HH:mm');
     ev.deleteEvent();
+    try {
+      sendResidentTemplate_(ss, 'CLUB_REJECTED', rejEmail ? [rejEmail] : [], {
+        'שם': rejFamily, 'תאריך': rejStartStr, 'שעה': rejTimeStr
+      });
+    } catch (mailErr) { Logger.log('מייל דחיית שריון נכשל: ' + mailErr); }
     return json_({ ok: true });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -799,6 +847,13 @@ function submitReceipt_(ss, body) {
 
     // 2) מזהה חדש — מבוסס על המקסימום הקיים בטאב, מחושב בשרת (לא סומכים על הלקוח)
     var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+    // עמודת "הוגש בתאריך" (2026-08-09) — תאריך+שעה מדויקים של ההגשה, בנפרד מ"תאריך
+    // רכישה" (שהתושב מזין ידנית). נחוצה כדי לחשב "ממתין כבר X ימים" לתזכורת המנהל
+    // היומית. נוצרת פעם אחת בסוף הטאב אם אינה קיימת עדיין — אידמפוטנטי.
+    if (headers.indexOf(SUBMIT_DATE_HEADER) === -1) {
+      sh.getRange(1, headers.length + 1).setValue(SUBMIT_DATE_HEADER).setFontWeight('bold');
+      headers.push(SUBMIT_DATE_HEADER);
+    }
     var n = Math.max(sh.getLastRow() - 1, 0);
     var ids = n ? sh.getRange(2, 1, n, 1).getValues() : [];
     var maxId = 0;
@@ -857,10 +912,24 @@ function submitReceipt_(ss, body) {
       'תיאור': body.description || '',
       'שם קובץ קבלה': displayName,
       'קישור קבלה': file.getUrl(),
-      'מזהה משפחה': famId
+      'מזהה משפחה': famId,
+      SUBMIT_DATE_HEADER: new Date()
     };
     var newRow = headers.map(function (h) { return rowObj.hasOwnProperty(h) ? rowObj[h] : ''; });
     sh.appendRow(newRow);
+
+    // מיילים אוטומטיים (2026-08-09): אישור קבלה לתושב + התראה למנהלי-תקציב
+    try {
+      var buyerName = body.buyer || (residentInfo && residentInfo.firstName) || '';
+      var famEmails = emailsForFamilyId_(ss, famId);
+      var toEmails = famEmails.length ? famEmails : (body.email ? [body.email] : []);
+      var amountRounded = Math.round(Number(body.amount) || 0);
+      sendResidentTemplate_(ss, 'REIMBURSEMENT_RECEIVED', toEmails, { 'שם': buyerName, 'סכום': amountRounded, 'מזהה': newId });
+      notifyAdmins_(ss, PERM_BUDGET, 'ADMIN_NEW_REIMBURSEMENT', {
+        'שם': buyerName, 'סכום': amountRounded, 'מזהה': newId, 'קישור': CBA_APP_URL
+      });
+    } catch (mailErr) { Logger.log('מייל בקשת החזר חדשה נכשל: ' + mailErr); }
+
     return { ok: true, id: newId, url: file.getUrl() };
   } finally {
     lock.releaseLock();
@@ -1894,10 +1963,13 @@ function scanReceiptWithGemini_(dataBase64, mimeType) {
     'של הרבה פריטים שונים — אסור לפרט את כולם אחד-אחד; יש לזהות את המכנה המשותף/הקטגוריה ' +
     'הכללית של הפריטים ולתאר אותה בקצרה בלבד, לדוגמה "ציוד משרדי", "מוצרי ניקיון" או "ציוד ' +
     'למסיבות" — ולא רשימה מלאה של הפריטים עצמם), ' +
-    '"bankName": מחרוזת (שם הבנק של הספק, רק אם מופיעים על הקבלה/חשבונית פרטי בנק לתשלום ' +
-    'או להעברה בנקאית — למשל "בנק הפועלים" או "בנק לאומי"; אם אין פרטי בנק בתמונה — ריק), ' +
-    '"bankBranch": מחרוזת (מספר סניף הבנק אם מופיע ליד פרטי הבנק; אחרת ריק), ' +
-    '"bankAccount": מחרוזת (מספר חשבון הבנק (או IBAN) אם מופיע ליד פרטי הבנק; אחרת ריק), ' +
+    '"bankName": מחרוזת (פרטי הבנק של הספק לתשלום/העברה בנקאית, בדיוק כפי שכתובים בקבלה/חשבונית — ' +
+    'לרוב ליד מילים כמו "בנק", "העברה בנקאית", "העברה לבנק" או "לתשלום". שימו לב: בהרבה מסמכים ' +
+    'בישראל הבנק מצוין רק כמספר/קוד בנק (לדוגמה "בנק 20", "20", "בנק 12") ולא כשם מילולי כמו ' +
+    '"בנק הפועלים" — במקרה כזה יש להחזיר בדיוק את המספר/קוד כפי שהוא כתוב, לא להמציא שם. ' +
+    'רק אם אין שום אזכור של בנק בתמונה — ריק), ' +
+    '"bankBranch": מחרוזת (מספר סניף הבנק, לרוב ליד המילה "סניף"; אחרת ריק), ' +
+    '"bankAccount": מחרוזת (מספר חשבון הבנק/IBAN, לרוב ליד המילים "חשבון", "מס\' חשבון" או "ח-ן"; אחרת ריק), ' +
     '"date": מחרוזת בפורמט YYYY-MM-DD אם מופיע תאריך ברור בקבלה, אחרת מחרוזת ריקה}. ' +
     'אם שדה כלשהו לא ברור/לא מופיע בתמונה — יש להחזיר ערך ריק (0 למספר, "" למחרוזת), ' +
     'ולעולם לא להמציא ערך.';
@@ -1952,6 +2024,9 @@ function scanReceiptWithGemini_(dataBase64, mimeType) {
       data.candidates[0].content.parts[0].text;
     if (!text) return { ok: false, error: 'תשובה לא צפויה מ-Gemini (בלי טקסט בפלט)', raw: raw };
     var fields = JSON.parse(text);
+    /* לוג אבחון זמני (2026-08-09) — כדי לראות בדיוק מה ג'מיני החזיר לכל שדה (כולל
+       שדות בנק) דרך Executions בעורך Apps Script, בלי לנחש. אפשר להסיר בהמשך. */
+    Logger.log('scanReceiptWithGemini_ fields: ' + JSON.stringify(fields));
     return { ok: true, fields: fields };
   } catch (e) {
     return { ok: false, error: 'שגיאה בפענוח תשובת Gemini: ' + String(e), raw: raw };
@@ -2049,9 +2124,17 @@ function handleSubmitSignup_(p) {
       }
     }
     var id = 'S' + new Date().getTime();
+    var firstNm = String(p.firstName || '').trim(), lastNm = String(p.lastName || '').trim();
     sh.appendRow([id, new Date(), email,
-      String(p.firstName || '').trim(), String(p.lastName || '').trim(),
+      firstNm, lastNm,
       String(p.house || '').trim(), 'ממתין', '', '', String(p.phone || '').trim()]);
+    // מיילים אוטומטיים (2026-08-09): אישור קבלה לתושב + התראה למנהלי-תושבים
+    try {
+      sendResidentTemplate_(ss, 'SIGNUP_RECEIVED', [email], { 'שם': firstNm || email });
+      notifyAdmins_(ss, PERM_RESIDENTS, 'ADMIN_NEW_SIGNUP', {
+        'שם': (firstNm + ' ' + lastNm).trim() || email, 'אימייל': email, 'קישור': CBA_APP_URL
+      });
+    } catch (mailErr) { Logger.log('מייל הרשמה חדשה נכשל: ' + mailErr); }
     return json_({ ok: true, id: id });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -2156,6 +2239,11 @@ function approveSignup_(ss, body) {
   sh.getRange(row, 7).setValue('אושר');
   sh.getRange(row, 8).setValue(famName);
   sh.getRange(row, 9).setValue(new Date());
+  // מייל אישור+ברוכים-הבאים לתושב (2026-08-09) — זה בדיוק הרגע שבו האימייל שלו
+  // עובר מריק למלא בטאב "תושבים", אז אין צורך במייל "ברוכים הבאים" נפרד.
+  try {
+    sendResidentTemplate_(ss, 'SIGNUP_APPROVED', [email], { 'שם': firstName || email, 'קישור': CBA_APP_URL });
+  } catch (mailErr) { Logger.log('מייל אישור הרשמה נכשל: ' + mailErr); }
   return { ok: true, family: famName, row: targetRow };
 }
 
@@ -2163,8 +2251,13 @@ function rejectSignup_(ss, body) {
   var sh = getSignupsSheet_(ss);
   var row = signupRowById_(sh, body.id);
   if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
+  var req = sh.getRange(row, 1, 1, SIGNUP_HEADERS.length).getValues()[0];
+  var rejEmail = String(req[2] || ''), rejFirstName = String(req[3] || '');
   sh.getRange(row, 7).setValue('נדחה');
   sh.getRange(row, 9).setValue(new Date());
+  try {
+    sendResidentTemplate_(ss, 'SIGNUP_REJECTED', [rejEmail], { 'שם': rejFirstName || rejEmail });
+  } catch (mailErr) { Logger.log('מייל דחיית הרשמה נכשל: ' + mailErr); }
   return { ok: true };
 }
 
@@ -2177,6 +2270,12 @@ function saveResidentRow_(ss, body) {
   var headers = rsh.getRange(1, 1, 1, rsh.getLastColumn()).getValues()[0]
     .map(function (h) { return String(h).trim(); });
   var fields = body.fields || {};
+
+  // תפיסת ערכי "אימייל" הקיימים *לפני* הכתיבה (2026-08-09) — כדי לזהות מעבר
+  // ריק->מלא ולשלוח מייל "ברוכים הבאים" בדיוק פעם אחת, רק כשמנהל ממלא אימייל
+  // שהיה ריק (לא בכל עריכה של שורה קיימת).
+  var before = rsh.getRange(rowIdx, 1, 1, headers.length).getValues()[0];
+
   var written = [];
   Object.keys(fields).forEach(function (k) {
     var c = headers.indexOf(k);
@@ -2185,6 +2284,16 @@ function saveResidentRow_(ss, body) {
     written.push(k);
   });
   if (!written.length) return { ok: false, error: 'לא נמצאו עמודות תואמות' };
+
+  try {
+    headers.forEach(function (h, c) {
+      if (h.indexOf('אימייל') === -1) return;
+      var wasEmpty = !String(before[c] || '').trim();
+      var newVal = String(fields[h] || '').trim();
+      if (wasEmpty && newVal) sendResidentTemplate_(ss, 'WELCOME_MANUAL', [newVal], { 'קישור': CBA_APP_URL });
+    });
+  } catch (mailErr) { Logger.log('מייל ברוכים הבאים נכשל: ' + mailErr); }
+
   return { ok: true, written: written };
 }
 
@@ -2548,6 +2657,18 @@ function createResidents_(ss, body) {
     var first = sh.getLastRow() + 1;
     sh.getRange(first, 1, toAppend.length, headers.length).setValues(toAppend);
 
+    // מיילי "ברוכים הבאים" (2026-08-09) — לשורות חדשות שכבר הגיעו עם אימייל מלא
+    // (למשל הדבקת גריד עם אימייל). לא שולח אם השורה נוצרה בלי אימייל עדיין —
+    // המייל יישלח אז מאוחר יותר, כשהמנהל ימלא את השדה דרך saveResidentRow_.
+    try {
+      toAppend.forEach(function (row) {
+        emailCols.forEach(function (ci) {
+          var e = String(row[ci] || '').trim();
+          if (e) sendResidentTemplate_(ss, 'WELCOME_MANUAL', [e], { 'קישור': CBA_APP_URL });
+        });
+      });
+    } catch (mailErr) { Logger.log('מייל ברוכים הבאים (יצירה מרוכזת) נכשל: ' + mailErr); }
+
     // 3. מזהה קבוע חדש לכל שורה חדשה
     assignResidentIds_(ss);
 
@@ -2591,4 +2712,441 @@ function replaceFamily_(ss, body) {
   assignResidentIds_(ss);
   var newId = idCol > -1 ? sh.getRange(newRow, idCol + 1).getValue() : '';
   return { ok: true, newRow: newRow, newId: newId, oldRow: oldRow };
+}
+
+/* ============================================================================
+ *  מיילים אוטומטיים (2026-08-09) — מפה מלאה שסוכמה עם יועד
+ * ----------------------------------------------------------------------------
+ *  שלוש קבוצות:
+ *   1. מיילים לתושב על פעולה שלו (הרשמה/החזר/שריון) — נקראים ישירות מתוך
+ *      הפונקציות הקיימות למעלה (approveSignup_, submitReceipt_, saveTransaction_,
+ *      handleApproveClubReservation_ וכו') ברגע שהפעולה עצמה הצליחה.
+ *   2. מיילים למנהל — התראה מיידית על בקשה חדשה (מאותן פונקציות), ותזכורות/סיכומים
+ *      שרצים פעם ביום מתוך dailyEmailJobs_ (למטה) — ממתין הרבה זמן, סיכום שבועי,
+ *      סיכום 17 לחודש.
+ *   3. תשתית הגדרות: כל נוסח מייל וכל זמן/סף (כמה ימים = "ממתין הרבה זמן", איזה
+ *      יום שבועי, איזה יום בחודש) יושבים בטאב "הגדרות מיילים" ולא בקוד — כדי
+ *      שיועד יוכל לערוך אותם היום ישירות בגיליון, ובעתיד גם ממסך ניהול באפליקציה
+ *      בלי לגעת בקוד בכלל (התשתית כבר בנויה לכך מהיום הראשון).
+ *
+ *  עיקרון מרכזי: שליחת מייל אף פעם לא אמורה להפיל פעולה אחרת (שמירת קבלה/שריון/
+ *  הרשמה) — כל קריאה עטופה ב-try/catch נפרד, ושגיאת מייל נרשמת ל-Logger בלבד.
+ * ========================================================================== */
+
+var EMAIL_SETTINGS_SHEET = 'הגדרות מיילים';
+var SUBMIT_DATE_HEADER = 'הוגש בתאריך';
+var CBA_APP_URL = 'https://yoadgo.github.io/CBA-Community-Budget-App/';
+
+/** ברירות מחדל — נכתבות לגיליון "הגדרות מיילים" רק בפעם הראשונה (או אם נוסף
+ * מפתח חדש בעדכון קוד עתידי) — לעולם לא דורסות ערך שיועד כבר ערך ידנית בגיליון.
+ * כל שורה: [מפתח, נושא, תוכן, הערה]. מפתחות RULE_* הם ערכי הגדרה (זמן/סף), לא
+ * תבניות מייל — הערך שלהם יושב בעמודת "תוכן", ועמודת "נושא" נשארת ריקה.
+ * placeholders בתבניות (למשל {{שם}}) מוחלפים בפועל בערכים אמיתיים ע"י renderTemplate_. */
+var DEFAULT_EMAIL_SETTINGS = [
+  ['RULE_STALE_DAYS', '', '3', 'כמה ימים בקשה (הרשמה/החזר/שריון) ממתינה בלי טיפול לפני שנשלחת תזכורת למנהל'],
+  ['RULE_WEEKLY_DAY', '', '0', 'יום השבוע לסיכום המנהל השבועי: 0=ראשון, 1=שני ... 6=שבת'],
+  ['RULE_MONTHLY_DAY', '', '17', 'יום בחודש לסיכום בקשות ההחזר הפתוחות (לפני סגירת החלון ב-19)'],
+  ['RULE_CLUB_REMINDER_DAYS_BEFORE', '', '2', 'כמה ימים לפני מועד השריון נשלחת תזכורת חוקים+תשלום לתושב'],
+
+  ['SIGNUP_RECEIVED', 'קיבלנו את בקשת ההרשמה שלך',
+    'שלום {{שם}},\n\nבקשת ההרשמה שלך לוועד הקהילה התקבלה ונמצאת בבדיקה. נעדכן אותך ברגע שתטופל.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב מיד עם הגשת טופס ההרשמה'],
+  ['SIGNUP_APPROVED', 'ברוכים הבאים! ההרשמה שלך אושרה',
+    'שלום {{שם}},\n\nבקשת ההרשמה שלך אושרה ואפשר להיכנס עכשיו לאפליקציה עם חשבון הגוגל שלך:\n{{קישור}}\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל מאשר הרשמה — משמש גם כמייל ברוכים הבאים'],
+  ['SIGNUP_REJECTED', 'עדכון לגבי בקשת ההרשמה שלך',
+    'שלום {{שם}},\n\nלצערנו בקשת ההרשמה שלך לא אושרה. לשאלות אפשר לפנות לוועד.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל דוחה הרשמה'],
+  ['WELCOME_MANUAL', 'ברוכים הבאים לאפליקציית הוועד',
+    'שלום,\n\nנפתחה עבורך גישה לאפליקציית ניהול התקציב של הוועד. אפשר להיכנס עם חשבון הגוגל שלך בכתובת:\n{{קישור}}\n\nבברכה,\nועד הקהילה', 'נשלח כשמנהל מוסיף תושב/מייל ידנית (לא דרך טופס הרשמה)'],
+
+  ['REIMBURSEMENT_RECEIVED', "קיבלנו את בקשת ההחזר שלך (מס' {{מזהה}})",
+    "שלום {{שם}},\n\nקיבלנו את בקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}). הבקשה ממתינה לטיפול ונעדכן אותך בכל שינוי סטטוס.\n\nבברכה,\nועד הקהילה", 'נשלח לתושב מיד עם הגשת בקשת החזר'],
+  ['REIMBURSEMENT_READY', 'בקשת ההחזר שלך אושרה ועברה להנהלת חשבונות',
+    "שלום {{שם}},\n\nבקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}) אושרה והועברה להנהלת חשבונות לתשלום.\n\nבברכה,\nועד הקהילה", 'נשלח כשסטטוס הבקשה עובר ל"הועבר להנה"ח"'],
+  ['REIMBURSEMENT_PAID', 'בקשת ההחזר שלך שולמה',
+    "שלום {{שם}},\n\nבקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}) שולמה. תודה!\n\nבברכה,\nועד הקהילה", 'נשלח כשסטטוס הבקשה עובר ל"שולם"'],
+  ['REIMBURSEMENT_REJECTED', 'עדכון לגבי בקשת ההחזר שלך',
+    "שלום {{שם}},\n\nלצערנו בקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}) לא אושרה.{{הערה}}\n\nלשאלות אפשר לפנות לוועד.\n\nבברכה,\nועד הקהילה", 'נשלח כשסטטוס הבקשה עובר ל"נדחה" — {{הערה}} כולל את הערת הבדיקה אם יש'],
+
+  ['CLUB_APPROVED', 'השריון שלך במועדון אושר',
+    'שלום {{שם}},\n\nהשריון שלך במועדון בתאריך {{תאריך}} בשעות {{שעה}} אושר.\n\nתזכורת: יש להסדיר את תשלום דמי השימוש במועדון מול הוועד.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל מאשר שריון מועדון'],
+  ['CLUB_REJECTED', 'עדכון לגבי השריון שלך במועדון',
+    'שלום {{שם}},\n\nלצערנו השריון שלך במועדון בתאריך {{תאריך}} בשעות {{שעה}} לא אושר.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל דוחה שריון מועדון'],
+  ['CLUB_REMINDER', 'תזכורת: השריון שלך במועדון בעוד יומיים',
+    'שלום {{שם}},\n\nתזכורת — השריון שלך במועדון מתקרב: {{תאריך}} בשעות {{שעה}}.\n\nנא לוודא שקראת/ן את חוקי המועדון, ושתשלום דמי השימוש הוסדר מול הוועד.\n\nבברכה,\nועד הקהילה', 'נשלח אוטומטית X ימים לפני מועד שריון מאושר (ר\' RULE_CLUB_REMINDER_DAYS_BEFORE)'],
+
+  ['ADMIN_NEW_SIGNUP', 'בקשת הרשמה חדשה ממתינה',
+    'התקבלה בקשת הרשמה חדשה מ-{{שם}} ({{אימייל}}).\nלטיפול: {{קישור}}', 'למנהלי תושבים + מנהל-על'],
+  ['ADMIN_NEW_REIMBURSEMENT', 'בקשת החזר חדשה ממתינה',
+    "התקבלה בקשת החזר חדשה מ-{{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}).\nלטיפול: {{קישור}}", 'למנהלי תקציב + מנהל-על'],
+  ['ADMIN_NEW_CLUB', 'בקשת שריון מועדון חדשה ממתינה',
+    'התקבלה בקשת שריון מועדון חדשה מ-{{שם}} בתאריך {{תאריך}} בשעות {{שעה}}.\nלטיפול: {{קישור}}', 'למנהלי מועדון + מנהל-על'],
+
+  ['ADMIN_STALE_SIGNUP', 'בקשת הרשמה ממתינה כבר {{ימים}} ימים',
+    'בקשת ההרשמה של {{שם}} ({{אימייל}}) ממתינה לטיפול כבר {{ימים}} ימים.\nלטיפול: {{קישור}}', 'תזכורת חד-פעמית כשבקשה חוצה את הסף (ר\' RULE_STALE_DAYS)'],
+  ['ADMIN_STALE_REIMBURSEMENT', 'בקשת החזר ממתינה כבר {{ימים}} ימים',
+    "בקשת ההחזר של {{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}) ממתינה לטיפול כבר {{ימים}} ימים.\nלטיפול: {{קישור}}", 'תזכורת חד-פעמית כשבקשה חוצה את הסף'],
+  ['ADMIN_STALE_CLUB', 'בקשת שריון מועדון ממתינה כבר {{ימים}} ימים',
+    'בקשת השריון של {{שם}} בתאריך {{תאריך}} ממתינה לטיפול כבר {{ימים}} ימים.\nלטיפול: {{קישור}}', 'תזכורת חד-פעמית כשבקשה חוצה את הסף'],
+
+  ['ADMIN_WEEKLY_DIGEST', 'סיכום שבועי — מה פתוח באפליקציית הוועד',
+    'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו'],
+  ['ADMIN_MONTHLY_DIGEST', 'תזכורת: בקשות החזר פתוחות לפני סגירת החלון ב-19 לחודש',
+    'תזכורת — עוד מעט נסגר חלון ההחזרים החודשי (ה-19 לחודש). הנה כל בקשות ההחזר שעדיין פתוחות:', 'נשלח ביום RULE_MONTHLY_DAY, למנהלי תקציב + מנהל-על בלבד']
+];
+
+/** יוצר את גיליון ההגדרות אם אינו קיים, וממלא רק מפתחות חסרים — לא נוגע בערך
+ * שכבר קיים. זו התשתית ל"עריכה ממסך מנהל" שיועד ביקש: כרגע העריכה היא ישירות
+ * בגיליון הזה; מסך ניהול עתידי באפליקציה יכתוב לאותו גיליון בדיוק, בלי שינוי מבנה. */
+function ensureEmailSettingsSheet_(ss) {
+  var sh = ss.getSheetByName(EMAIL_SETTINGS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(EMAIL_SETTINGS_SHEET);
+    sh.getRange(1, 1, 1, 4).setValues([['מפתח', 'נושא', 'תוכן', 'הערה']]);
+    sh.getRange(1, 1, 1, 4).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.setColumnWidth(1, 220); sh.setColumnWidth(2, 260); sh.setColumnWidth(3, 420); sh.setColumnWidth(4, 300);
+  }
+  var values = sh.getDataRange().getValues();
+  var existing = {};
+  for (var r = 1; r < values.length; r++) { var k = String(values[r][0]).trim(); if (k) existing[k] = true; }
+  var toAdd = DEFAULT_EMAIL_SETTINGS.filter(function (row) { return !existing[row[0]]; });
+  if (toAdd.length) sh.getRange(sh.getLastRow() + 1, 1, toAdd.length, 4).setValues(toAdd);
+  return sh;
+}
+
+/** קורא את גיליון ההגדרות למפה {מפתח: {subject, body}}. נקרא מחדש מהגיליון בכל
+ * הרצה (בלי קאש) כדי שעריכה ידנית של יועד תיכנס לתוקף מיד, בלי לחכות לפריסה. */
+function getEmailSettings_(ss) {
+  var sh = ensureEmailSettingsSheet_(ss);
+  var values = sh.getDataRange().getValues();
+  var map = {};
+  for (var r = 1; r < values.length; r++) {
+    var k = String(values[r][0]).trim();
+    if (!k) continue;
+    map[k] = { subject: String(values[r][1] || ''), body: String(values[r][2] || '') };
+  }
+  return map;
+}
+
+/** ערך חוק בודד (RULE_...) כמספר, עם נפילה לברירת מחדל אם חסר/לא מספרי. */
+function emailRule_(settings, key, fallback) {
+  var n = Number(settings[key] && settings[key].body);
+  return isNaN(n) ? fallback : n;
+}
+
+/** מחליף {{placeholder}} בטקסט התבנית בערך בפועל מתוך vars. */
+function renderTemplate_(str, vars) {
+  return String(str || '').replace(/\{\{(.+?)\}\}/g, function (_, key) {
+    var v = vars[key.trim()];
+    return (v === undefined || v === null) ? '' : String(v);
+  });
+}
+
+/** שולח מייל בודד — לעולם לא זורק שגיאה החוצה, כדי ששליחת מייל כושלת לא תפיל
+ * שום פעולה אחרת (שמירת קבלה/שריון/הרשמה). שגיאות נרשמות ל-Logger בלבד. */
+function sendMail_(toList, subject, body) {
+  var to = (toList || []).filter(Boolean);
+  if (!to.length || !subject) return;
+  try {
+    MailApp.sendEmail({ to: to.join(','), subject: subject, body: body });
+  } catch (err) {
+    Logger.log('שליחת מייל נכשלה אל ' + to.join(',') + ': ' + err);
+  }
+}
+
+/** שולח לתושב לפי מפתח תבנית מהגדרות + placeholders, לרשימת כתובות (בד"כ שני
+ * המיילים של משק הבית ביחד — ר' emailsForResidentRow_/emailsForFamilyId_). */
+function sendResidentTemplate_(ss, key, emails, vars) {
+  var t = getEmailSettings_(ss)[key];
+  if (!t) return;
+  sendMail_(emails, renderTemplate_(t.subject, vars), renderTemplate_(t.body, vars) + '\n\n' + CBA_APP_URL);
+}
+
+/** שני האימיילים (אם קיימים) של שורת תושב נתונה בטאב "תושבים". */
+function emailsForResidentRow_(rsh, rowIndex) {
+  var headers = rsh.getRange(1, 1, 1, rsh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var emailCols = [];
+  headers.forEach(function (h, i) { if (h.indexOf('אימייל') !== -1) emailCols.push(i); });
+  if (!emailCols.length || rowIndex < 2) return [];
+  var row = rsh.getRange(rowIndex, 1, 1, headers.length).getValues()[0];
+  return emailCols.map(function (c) { return String(row[c] || '').trim(); }).filter(Boolean);
+}
+
+/** מאתר שורת משק בית לפי "מזהה קבוע" (עם נפילה למספר בית אם עדיין אין מזהה קבוע
+ * — אותה לוגיקה בדיוק כמו lookupResident_/saveTransaction_), ומחזיר את מיילי השורה. */
+function emailsForFamilyId_(ss, familyId) {
+  if (!familyId) return [];
+  var rsh = ss.getSheetByName('תושבים');
+  if (!rsh) return [];
+  var values = rsh.getDataRange().getValues();
+  var headers = values[0].map(function (h) { return String(h).trim(); });
+  var idCol = -1, houseCol = -1;
+  headers.forEach(function (h, i) {
+    if (h.indexOf(RESIDENT_ID_HEADER) !== -1) idCol = i;
+    else if (h.indexOf('בית') !== -1 && houseCol === -1) houseCol = i;
+  });
+  for (var r = 1; r < values.length; r++) {
+    var idVal = idCol > -1 ? String(values[r][idCol]).trim() : '';
+    var houseVal = houseCol > -1 ? String(values[r][houseCol]).trim() : '';
+    if ((idVal && idVal === String(familyId)) || (!idVal && houseVal === String(familyId))) {
+      return emailsForResidentRow_(rsh, r + 1);
+    }
+  }
+  return [];
+}
+
+/** כל כתובות המייל של תושבים פעילים בעלי הרשאה נתונה (או מנהל-על) — אותה לוגיקת
+ * "משבצת אימייל + הרשאות N לפי סדר, עם נפילה לעמודת 'תפקיד' הישנה" כמו ב-
+ * permissionsFor_/lookupResident_, רק שסורקת את כל הטאב במקום אימייל בודד. */
+function adminEmailsByPerm_(ss, permKey) {
+  var rsh = ss.getSheetByName('תושבים');
+  if (!rsh) return [];
+  var values = rsh.getDataRange().getValues();
+  if (values.length < 2) return [];
+  var headers = values[0].map(function (h) { return String(h).trim(); });
+  var emailCols = [], permCols = [], roleCol = -1, statusCol = -1;
+  headers.forEach(function (h, i) {
+    if (h.indexOf(PERM_HEADER) !== -1) permCols.push(i);
+    else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
+    else if (h.indexOf('תפקיד') !== -1) roleCol = i;
+    else if (h.indexOf('סטטוס') !== -1) statusCol = i;
+  });
+  var out = [];
+  for (var r = 1; r < values.length; r++) {
+    var row = values[r];
+    var active = !(statusCol > -1 && String(row[statusCol]).indexOf('פעיל') === -1);
+    if (!active) continue;
+    var role = roleCol > -1 ? String(row[roleCol]).trim() : '';
+    for (var c = 0; c < emailCols.length; c++) {
+      var email = String(row[emailCols[c]] || '').trim();
+      if (!email) continue;
+      var perms = parsePerms_(permCols[c] !== undefined ? row[permCols[c]] : '');
+      if (!perms.length && role.indexOf('מנהל') !== -1) perms = [PERM_SUPER];
+      if (perms.indexOf(PERM_SUPER) !== -1 || perms.indexOf(permKey) !== -1) out.push(email);
+    }
+  }
+  return out.filter(function (e, i, a) { return a.indexOf(e) === i; }); // ייחוד
+}
+
+/** שולח מייל למנהלים לפי תבנית + מידור הרשאה, ללא כפילויות. */
+function notifyAdmins_(ss, permKey, key, vars) {
+  var emails = adminEmailsByPerm_(ss, permKey);
+  if (!emails.length) return;
+  var t = getEmailSettings_(ss)[key];
+  if (!t) return;
+  sendMail_(emails, renderTemplate_(t.subject, vars), renderTemplate_(t.body, vars) + '\n\n' + CBA_APP_URL);
+}
+
+/* ============================================================================
+ *  משימה יומית מתוזמנת — תזכורת מועדון, תזכורת "ממתין הרבה זמן", סיכום שבועי,
+ *  סיכום חודשי (17 לחודש)
+ * ----------------------------------------------------------------------------
+ *  installDailyEmailTrigger() צריך להיות מורץ **פעם אחת בלבד**, ידנית, מתוך
+ *  עורך ה-Apps Script (בוחרים אותה בתפריט הפונקציות למעלה ולוחצים Run). בלי זה
+ *  dailyEmailJobs_ לא ירוץ מעצמו בכלל.
+ * ========================================================================== */
+function installDailyEmailTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'dailyEmailJobs_') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('dailyEmailJobs_').timeBased().everyDays(1).atHour(8).create();
+  Logger.log('✓ טריגר יומי הותקן — ירוץ כל בוקר סביב השעה 08:00');
+}
+
+function dailyEmailJobs_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  try { clubReminderJob_(ss); } catch (e) { Logger.log('clubReminderJob_ נכשל: ' + e); }
+  try { staleNudgeJob_(ss); } catch (e) { Logger.log('staleNudgeJob_ נכשל: ' + e); }
+  try { weeklyDigestJob_(ss); } catch (e) { Logger.log('weeklyDigestJob_ נכשל: ' + e); }
+  try { monthlyDigestJob_(ss); } catch (e) { Logger.log('monthlyDigestJob_ נכשל: ' + e); }
+}
+
+/** תזכורת חוקים+תשלום לתושב, לשריונים מאושרים שחלים בעוד בדיוק N ימים (ר'
+ * RULE_CLUB_REMINDER_DAYS_BEFORE). בדיקת "בדיוק N ימים" (ולא "N ימים ומעלה")
+ * מבטיחה שליחה חד-פעמית בלי צורך לסמן על האירוע "כבר נשלחה תזכורת". */
+function clubReminderJob_(ss) {
+  var settings = getEmailSettings_(ss);
+  var daysBefore = emailRule_(settings, 'RULE_CLUB_REMINDER_DAYS_BEFORE', 2);
+  var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
+  if (!cal) return;
+  var tz = Session.getScriptTimeZone();
+  var target = new Date(); target.setDate(target.getDate() + daysBefore);
+  var dayStart = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 0, 0, 0);
+  var dayEnd = new Date(target.getFullYear(), target.getMonth(), target.getDate(), 23, 59, 59);
+  cal.getEvents(dayStart, dayEnd).forEach(function (ev) {
+    if (ev.getTag('status') !== 'approved') return;
+    var email = ev.getTag('email');
+    if (!email) return;
+    sendResidentTemplate_(ss, 'CLUB_REMINDER', [email], {
+      'שם': ev.getTag('family') || 'תושב',
+      'תאריך': Utilities.formatDate(ev.getStartTime(), tz, 'dd/MM/yyyy'),
+      'שעה': Utilities.formatDate(ev.getStartTime(), tz, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz, 'HH:mm')
+    });
+  });
+}
+
+/** תזכורת למנהל על בקשות (הרשמה/החזר/מועדון) שממתינות בדיוק N ימים (RULE_STALE_DAYS)
+ * — אותו עיקרון של "בדיוק N", לא "N ומעלה", כדי שהתזכורת תישלח פעם אחת בלבד. */
+function staleNudgeJob_(ss) {
+  var settings = getEmailSettings_(ss);
+  var staleDays = emailRule_(settings, 'RULE_STALE_DAYS', 3);
+  var tz = Session.getScriptTimeZone();
+
+  function daysAgoStr_(n) {
+    var d = new Date(); d.setDate(d.getDate() - n);
+    return Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+  }
+  var thresholdStr = daysAgoStr_(staleDays);
+
+  // הרשמות ממתינות
+  var ssh = getSignupsSheet_(ss);
+  var svalues = ssh.getDataRange().getValues();
+  for (var r = 1; r < svalues.length; r++) {
+    var v = svalues[r];
+    if (String(v[6]).trim() !== 'ממתין') continue;
+    var reqDate = v[1] instanceof Date ? Utilities.formatDate(v[1], tz, 'yyyy-MM-dd') : String(v[1] || '').slice(0, 10);
+    if (reqDate !== thresholdStr) continue;
+    notifyAdmins_(ss, PERM_RESIDENTS, 'ADMIN_STALE_SIGNUP', {
+      'שם': (String(v[3] || '') + ' ' + String(v[4] || '')).trim(), 'אימייל': String(v[2] || ''),
+      'ימים': staleDays, 'קישור': CBA_APP_URL
+    });
+  }
+
+  // בקשות החזר ממתינות — שנת התקציב הנוכחית בלבד (ר' readSettings_)
+  var curYear = readSettings_(ss)['שנה נוכחית'];
+  var tsh = curYear ? ss.getSheetByName('תנועות ' + curYear) : null;
+  if (tsh) {
+    var tvalues = tsh.getDataRange().getValues();
+    var theaders = tvalues[0].map(function (h) { return String(h).trim(); });
+    var idxOf = {}; theaders.forEach(function (h, i) { idxOf[h] = i; });
+    var subDateIdx = idxOf[SUBMIT_DATE_HEADER];
+    for (var i = 1; i < tvalues.length; i++) {
+      var row = tvalues[i];
+      var status = String(row[idxOf['סטטוס']] || '');
+      var source = String(row[idxOf['מקור']] || '');
+      if (source !== SOURCE_HE.resident) continue;
+      if (status !== STATUS_HE.submitted && status !== STATUS_HE.review) continue;
+      if (subDateIdx === undefined) continue; // שורות ישנות בלי התאריך המדויק — אין איך לחשב, מדלגים
+      var subVal = row[subDateIdx];
+      var subDate = subVal instanceof Date ? Utilities.formatDate(subVal, tz, 'yyyy-MM-dd') : String(subVal || '').slice(0, 10);
+      if (subDate !== thresholdStr) continue;
+      notifyAdmins_(ss, PERM_BUDGET, 'ADMIN_STALE_REIMBURSEMENT', {
+        'שם': row[idxOf['רוכש']] || '', 'סכום': Math.round(Number(row[idxOf['סכום']]) || 0),
+        'מזהה': row[idxOf['מזהה']], 'ימים': staleDays, 'קישור': CBA_APP_URL
+      });
+    }
+  }
+
+  // שריוני מועדון ממתינים
+  var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
+  if (cal) {
+    var from = new Date(Date.now() - 40 * 24 * 3600 * 1000), to = new Date(Date.now() + 180 * 24 * 3600 * 1000);
+    cal.getEvents(from, to).forEach(function (ev) {
+      if (ev.getTag('status') !== 'pending') return;
+      var reqAt = Number(ev.getTag('requestedAt'));
+      if (!reqAt) return;
+      var reqStr = Utilities.formatDate(new Date(reqAt), tz, 'yyyy-MM-dd');
+      if (reqStr !== thresholdStr) return;
+      notifyAdmins_(ss, PERM_CLUB, 'ADMIN_STALE_CLUB', {
+        'שם': ev.getTag('family') || 'תושב',
+        'תאריך': Utilities.formatDate(ev.getStartTime(), tz, 'dd/MM/yyyy'),
+        'ימים': staleDays, 'קישור': CBA_APP_URL
+      });
+    });
+  }
+}
+
+/** אוסף את כל הפריטים הפתוחים כרגע, לפי מידור — משמש גם לסיכום השבועי וגם לחודשי. */
+function collectOpenItems_(ss) {
+  var tz = Session.getScriptTimeZone();
+  var out = { residents: [], budget: [], club: [] };
+
+  var ssh = getSignupsSheet_(ss);
+  var svalues = ssh.getDataRange().getValues();
+  for (var r = 1; r < svalues.length; r++) {
+    var v = svalues[r];
+    if (String(v[6]).trim() === 'ממתין') {
+      out.residents.push('• ' + String(v[3] || '') + ' ' + String(v[4] || '') + ' (' + String(v[2] || '') + ')');
+    }
+  }
+
+  var curYear = readSettings_(ss)['שנה נוכחית'];
+  var tsh = curYear ? ss.getSheetByName('תנועות ' + curYear) : null;
+  if (tsh) {
+    var tvalues = tsh.getDataRange().getValues();
+    var theaders = tvalues[0].map(function (h) { return String(h).trim(); });
+    var idxOf = {}; theaders.forEach(function (h, i) { idxOf[h] = i; });
+    for (var i = 1; i < tvalues.length; i++) {
+      var row = tvalues[i];
+      var status = String(row[idxOf['סטטוס']] || '');
+      var source = String(row[idxOf['מקור']] || '');
+      if (source !== SOURCE_HE.resident) continue;
+      if (status === STATUS_HE.paid || status === STATUS_HE.rejected) continue;
+      out.budget.push('• ' + (row[idxOf['רוכש']] || '') + ' — ' + Math.round(Number(row[idxOf['סכום']]) || 0) +
+        " ₪ (מס' " + row[idxOf['מזהה']] + ', סטטוס: ' + status + ')');
+    }
+  }
+
+  var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
+  if (cal) {
+    var from = new Date(Date.now() - 3 * 24 * 3600 * 1000), to = new Date(Date.now() + 90 * 24 * 3600 * 1000);
+    cal.getEvents(from, to).forEach(function (ev) {
+      if (ev.getTag('status') !== 'pending') return;
+      out.club.push('• ' + (ev.getTag('family') || 'תושב') + ' — ' + Utilities.formatDate(ev.getStartTime(), tz, 'dd/MM/yyyy HH:mm'));
+    });
+  }
+  return out;
+}
+
+/** שולח דוח מרוכז (שבועי/חודשי) — כל מנהל מקבל רק את הסעיפים שבהרשאתו, מנהל-על
+ * מקבל את כל הסעיפים שבדוח הזה, ואף אחד לא מקבל שני מיילים גם אם הוא בכמה מידורים. */
+function sendDigestBySection_(ss, subjectKey, sections, includeKeys) {
+  var t = getEmailSettings_(ss)[subjectKey];
+  if (!t) return;
+  var recipients = {}; // email -> { residents:bool, budget:bool, club:bool }
+  function addAll_(permKey, flagKey) {
+    if (includeKeys.indexOf(flagKey) === -1) return;
+    adminEmailsByPerm_(ss, permKey).forEach(function (e) {
+      recipients[e] = recipients[e] || {};
+      recipients[e][flagKey] = true;
+    });
+  }
+  addAll_(PERM_RESIDENTS, 'residents');
+  addAll_(PERM_BUDGET, 'budget');
+  addAll_(PERM_CLUB, 'club');
+  adminEmailsByPerm_(ss, PERM_SUPER).forEach(function (e) {
+    recipients[e] = recipients[e] || {};
+    includeKeys.forEach(function (k) { recipients[e][k] = true; });
+  });
+
+  var LABELS = { residents: 'הרשמות ממתינות', budget: 'בקשות החזר פתוחות', club: 'שריוני מועדון ממתינים' };
+  Object.keys(recipients).forEach(function (email) {
+    var flags = recipients[email];
+    var parts = [t.body];
+    includeKeys.forEach(function (k) {
+      if (!flags[k]) return;
+      var list = sections[k];
+      parts.push('\n' + LABELS[k] + ':\n' + (list.length ? list.join('\n') : '(אין)'));
+    });
+    if (parts.length === 1) return; // אין לו אף סעיף רלוונטי בדוח הזה — לא שולחים מייל ריק
+    sendMail_([email], t.subject, parts.join('\n') + '\n\n' + CBA_APP_URL);
+  });
+}
+
+/** סיכום שבועי — ביום RULE_WEEKLY_DAY (0=ראשון), שלושת המידורים יחד. */
+function weeklyDigestJob_(ss) {
+  var settings = getEmailSettings_(ss);
+  var weeklyDay = emailRule_(settings, 'RULE_WEEKLY_DAY', 0);
+  if (new Date().getDay() !== weeklyDay) return;
+  var sections = collectOpenItems_(ss);
+  sendDigestBySection_(ss, 'ADMIN_WEEKLY_DIGEST', sections, ['residents', 'budget', 'club']);
+}
+
+/** סיכום חודשי — ביום RULE_MONTHLY_DAY (17), רק בקשות החזר פתוחות (לפני סגירת
+ * החלון ב-19), למנהלי תקציב + מנהל-על בלבד. */
+function monthlyDigestJob_(ss) {
+  var settings = getEmailSettings_(ss);
+  var monthlyDay = emailRule_(settings, 'RULE_MONTHLY_DAY', 17);
+  if (new Date().getDate() !== monthlyDay) return;
+  var sections = collectOpenItems_(ss);
+  sendDigestBySection_(ss, 'ADMIN_MONTHLY_DIGEST', sections, ['budget']);
 }
