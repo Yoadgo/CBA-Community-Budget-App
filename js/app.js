@@ -103,7 +103,14 @@
     admin: {
       def: "budget",
       screens: ["budget", "expenses", "planning", "clubAdmin", "residents", "settings"],
-      tabs: [["budget", "תכנון מול ביצוע"], ["expenses", "ניהול הוצאות"], ["planning", "בניית תקציב"], ["clubAdmin", "שריון מועדון"], ["residents", "תושבים"]]
+      // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
+      // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
+      // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
+      // ר' SCREEN_PERM), כך שמי שיש לו רק הרשאת מועדון/תושבים לא יראה את הקבוצה כלל.
+      tabs: [
+        { group: "taktziv", label: "תקציב", items: [["budget", "תכנון מול ביצוע"], ["expenses", "ניהול הוצאות"], ["planning", "בניית תקציב"]] },
+        ["clubAdmin", "שריון מועדון"], ["residents", "תושבים"]
+      ]
     },
     resident: {
       def: "resRequests",
@@ -116,15 +123,33 @@
       ]
     }
   };
+  // מוצא את מפתח-המסך הראשון בתוך רשימת טאבים — בין אם הוא טאב רגיל [key,label]
+  // או "קבור" בתוך פריט-קבוצה {group,label,items:[[key,label],...]} (ר' תקציב/השיכון).
+  function firstScreenKey(tabs) {
+    for (var i = 0; i < tabs.length; i++) {
+      var t = tabs[i];
+      if (t && t.group) { if (t.items.length) return t.items[0][0]; }
+      else if (t) return t[0];
+    }
+    return null;
+  }
   // AREAS הוא תצוגה מסוננת של AREAS_ALL לפי ההרשאות של המשתמש הנוכחי. הוא נבנה
   // מחדש בכל התחברות/החלפת משתמש/כניסה ויציאה ממצב הדמיה (ר' applyUser).
   let AREAS = JSON.parse(JSON.stringify(AREAS_ALL));
   function rebuildAreas() {
     var a = AREAS_ALL.admin;
     var screens = a.screens.filter(canScreen);
-    var tabs = a.tabs.filter(function (t) { return canScreen(t[0]); });
+    // טאב-קבוצה (כמו "תקציב") מסונן לפי הפריטים שבתוכו — אם ההרשאה חוסמת חלק
+    // מהם, רק הם נעלמים; אם היא חוסמת את כולם, הקבוצה כולה נעלמת (בלי כותרת ריקה).
+    var tabs = a.tabs.map(function (t) {
+      if (t && t.group) {
+        var items = t.items.filter(function (it) { return canScreen(it[0]); });
+        return items.length ? { group: t.group, label: t.label, items: items } : null;
+      }
+      return canScreen(t[0]) ? t : null;
+    }).filter(Boolean);
     AREAS = {
-      admin: { def: (tabs[0] && tabs[0][0]) || "budget", screens: screens, tabs: tabs },
+      admin: { def: firstScreenKey(tabs) || "budget", screens: screens, tabs: tabs },
       resident: AREAS_ALL.resident
     };
   }
@@ -141,12 +166,15 @@
     resDirectory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M17.5 14.4a5 5 0 0 1 3 4.6"/></svg>',
     resMap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3.5 5v16L9 19l6 2 5.5-2V3L15 5 9 3Z"/><path d="M9 3v16M15 5v16"/></svg>',
     // כפתור-הקבוצה "השיכון" — מייצג את השכונה כמכלול (לא מסך ספציפי)
-    shikun:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l4-3v14"/><path d="M13 21V6l6-3v18"/><path d="M9 13h.01M9 17h.01M17 9h.01M17 13h.01M17 17h.01"/></svg>'
+    shikun:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l4-3v14"/><path d="M13 21V6l6-3v18"/><path d="M9 13h.01M9 17h.01M17 9h.01M17 13h.01M17 17h.01"/></svg>',
+    // כפתור-הקבוצה "תקציב" — מייצג את מודול התקציב כמכלול (לא מסך ספציפי), ר' AREAS_ALL.admin.tabs
+    taktziv:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v3"/><path d="M3 7v10a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-4"/><rect x="14" y="11" width="7" height="5" rx="1"/><circle cx="17.3" cy="13.5" r=".55" fill="currentColor" stroke="none"/></svg>'
   };
   // שברון קטן שמתהפך כשהקבוצה פתוחה
   var CHEV_ICON = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
   // איזו קבוצת-ניווט מקופלת (אם יש) פתוחה כרגע. null = הכול סגור.
-  // "השיכון" הוא כרגע הקבוצה היחידה שקיימת (ר' AREAS_ALL.resident.tabs).
+  // שתי קבוצות קיימות היום: "תקציב" (אזור ניהול, ר' AREAS_ALL.admin.tabs)
+  // ו"השיכון" (אזור תושב, ר' AREAS_ALL.resident.tabs) — אותה תבנית בדיוק לשתיהן.
   var openGroup = null;
   // האם screenKey שייך לאיזושהי קבוצת-ניווט באזור הנוכחי — ואם כן, לאיזו
   function groupForScreen(screenKey) {
@@ -274,10 +302,15 @@
         var groupActive = t.items.some(function (it) { return it[0] === currentScreen; });
         var isOpen = openGroup === t.group;
         var gico = NAV_ICONS[t.group] ? '<span class="app-nav__ico">' + NAV_ICONS[t.group] + '</span>' : '';
+        // תגית-מספר על כותרת הקבוצה עצמה = סכום ההתרעות של כל הפריטים שבתוכה
+        // (למשל "ניהול הוצאות" שיושב היום בתוך קבוצת "תקציב") — כדי שהתרעה לא
+        // "תיעלם" מהעין רק כי הטאב שלה מקופל בתוך קבוצה סגורה.
+        var gn = t.items.reduce(function (sum, it) { return sum + navBadgeCount(it[0]); }, 0);
+        var gbadge = gn ? '<span class="nav-badge">' + (gn > 9 ? "9+" : gn) + '</span>' : '';
         var groupHtml = '<button type="button" class="app-nav__tab app-nav__tab--group' +
           (groupActive ? " has-active" : "") +
           '" data-group="' + t.group + '" aria-expanded="' + (isOpen ? "true" : "false") + '">' +
-          gico + CBA.esc(t.label) + '<span class="app-nav__chev">' + CHEV_ICON + '</span></button>';
+          gico + CBA.esc(t.label) + gbadge + '<span class="app-nav__chev">' + CHEV_ICON + '</span></button>';
         // התת-כפתורים תמיד מצוירים ל-DOM (לא רק כשפתוח) — עטופים בכמוסת
         // .app-nav__group-items שרוחבה (grid-template-columns) עובר טרנזיציה
         // אמיתית בין 0fr ל-1fr כשמוסיפים/מסירים is-open. זו התנועה ש"חושפת"
@@ -285,9 +318,11 @@
         var STAGGER_MS = 45;
         var itemsHtml = t.items.map(function (it, i) {
           var sico = NAV_ICONS[it[0]] ? '<span class="app-nav__ico">' + NAV_ICONS[it[0]] + '</span>' : '';
+          var sn = navBadgeCount(it[0]);
+          var sbadge = sn ? '<span class="nav-badge">' + (sn > 9 ? "9+" : sn) + '</span>' : '';
           return '<button type="button" class="app-nav__tab app-nav__tab--sub' +
             (it[0] === currentScreen ? " is-active" : "") + '" data-screen="' + it[0] +
-            '" style="transition-delay:' + (i * STAGGER_MS) + 'ms">' + sico + CBA.esc(it[1]) + '</button>';
+            '" style="transition-delay:' + (i * STAGGER_MS) + 'ms">' + sico + CBA.esc(it[1]) + sbadge + '</button>';
         }).join("");
         groupHtml += '<div class="app-nav__group-items"><div class="app-nav__group-items-inner">' + itemsHtml + '</div></div>';
         html += '<div class="app-nav__group' + (isOpen ? " is-open" : "") + '" data-group-wrap="' + t.group + '">' + groupHtml + '</div>';
