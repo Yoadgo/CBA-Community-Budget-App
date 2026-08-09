@@ -369,6 +369,10 @@ CBA.screens = CBA.screens || {};
         showScanMsg("סורק את הקבלה אוטומטית…");
         CBA.data.scanReceipt(picked.dataBase64, picked.mimeType, function (res) {
           scanning = false;
+          /* לוג אבחון זמני (2026-08-09) — כדי לראות מיד בקונסול הדפדפן בדיוק מה חזר
+             מהשרת לכל שדה (כולל בנק/סניף/חשבון), בלי להמתין ליומני Apps Script.
+             אפשר להסיר בהמשך. */
+          console.log("CBA scanReceipt result:", res);
           if (!picked) return; // הקובץ הוסר בזמן שהסריקה רצה — אין מה לעדכן
           resetScanBtn();
           if (!res || !res.ok || !res.fields) {
