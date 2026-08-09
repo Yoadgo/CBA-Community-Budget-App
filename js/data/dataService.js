@@ -118,6 +118,23 @@ CBA.data = (function () {
     if (!y || !m || !d || !monthName) return iso;
     return d + " ב" + monthName + " " + y;
   }
+  // תאריך+שעה בעברית לפנקס ההערות (סעיף 1): מקבל "YYYY-MM-DD HH:mm" (כך גם
+  // Code.gs שומר וגם השמירה האופטימית המקומית מפרמטת — ר' fmtNowStamp למטה)
+  // ומחזיר "6 באוגוסט 2026, 14:32".
+  function hebrewDateTime(v) {
+    if (!v) return "";
+    var p = String(v).split(" ");
+    var d = hebrewDate(p[0]);
+    return p[1] ? (d + ", " + p[1]) : d;
+  }
+  // חותמת "עכשיו" בפורמט "YYYY-MM-DD HH:mm" — תואם למה שהשרת שומר (Code.gs
+  // saveNotes_), כדי שהעדכון האופטימי המקומי והתצוגה אחרי רענון מהגיליון
+  // ייראו זהים.
+  function fmtNowStamp() {
+    var d = new Date();
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
 
   // שם קובץ הקבלה לפי סוג ההוצאה. לתשלום לספק מוסיף פרטי חשבון בנק.
   // תווית סוג ההוצאה בתחילת השם: "החזר לדייר <שם>" או "תשלום לספק <שם>" — כך שגם
@@ -274,6 +291,34 @@ CBA.data = (function () {
     });
     const groups = getGroups().map(function (g) { return g.name; });
     CBA.sheets.push("saveBudget", { year: year, categories: cats, income: income, groups: groups }, cb);
+  }
+
+  // --- פנקס הערות כלליות (סעיף 1, 2026-08-09) — פר שנת תקציב ---
+  // נפתח מלשונית "הערות" במסך "בניית תקציב" (ר' notes.js). תוכן = HTML של
+  // עורך contenteditable (בולד/כותרת/רשימות). "מי ערך אחרון" מוצג תמיד למעלה;
+  // אין עריכה בו-זמנית אמיתית (אין תשתית real-time בסטאק הזה) — מי ששומר
+  // אחרון מנצח, בדיוק כמו כל שמירה אחרת באפליקציה. יומן עריכות נפרד (getNotesLog)
+  // מראה מי שינה ומתי, בדומה ל"עדכוני תקציב".
+  function getNotes() {
+    const y = CBA.mock.years[CBA.mock.currentYear];
+    if (!y.notes) y.notes = { content: "", editedBy: "", editedAt: "" };
+    return y.notes;
+  }
+  // שמירה: מעדכן מקומית באופן אופטימי (כדי שהתצוגה תגיב מיד) ושולח לגיליון.
+  // cb אופציונלי — נקרא אחרי שהבקשה חזרה, כדי ש-notes.js יוכל לבטל markDirty.
+  function saveNotesToSheet(year, content, editedBy, cb) {
+    const n = getNotes();
+    n.content = content;
+    n.editedBy = editedBy || "";
+    n.editedAt = fmtNowStamp();
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    year = year || getCurrentYear();
+    CBA.sheets.push("saveNotes", { year: year, content: content, editedBy: editedBy || "" }, cb);
+  }
+  // יומן העריכות של הפנקס לשנה הנוכחית — כרונולוגי, החדש למעלה
+  function getNotesLog() {
+    const y = getCurrentYear();
+    return (CBA.mock.notesLog || []).filter(function (u) { return u.year === y; }).slice().reverse();
   }
 
   // --- הגשת בקשה מתושב (שלב 3): תמונה + פרטים -> Drive + שורה בגיליון ---
@@ -685,7 +730,9 @@ CBA.data = (function () {
     const inc = (srcY ? srcY.income : []).map(function (s) { return Object.assign({}, s); });
     CBA.mock.years[newYear] = {
       income: inc, categories: cats, transactions: [],
-      budget: { phase: "draft", lockedAt: null, baseline: null }
+      budget: { phase: "draft", lockedAt: null, baseline: null },
+      // פנקס הערות מתחיל ריק בשנה חדשה — לא משוכפל מהשנה שממנה יוצרים (סעיף 1)
+      notes: { content: "", editedBy: "", editedAt: "" }
     };
     CBA.mock.yearList.push(newYear);
     if (pushConnected()) CBA.sheets.push("addYear", { year: newYear, fromYear: fromYear || CBA.mock.currentYear });
@@ -871,6 +918,10 @@ CBA.data = (function () {
     hebrewDate: hebrewDate,
     hebrewMonth: hebrewMonth,
     hebrewDateShort: hebrewDateShort,
+    hebrewDateTime: hebrewDateTime,
+    getNotes: getNotes,
+    saveNotesToSheet: saveNotesToSheet,
+    getNotesLog: getNotesLog,
     statusMeta: statusMeta,
     statusNext: statusNext,
     statusList: statusList,

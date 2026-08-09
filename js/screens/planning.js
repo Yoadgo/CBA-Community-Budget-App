@@ -9,6 +9,9 @@ CBA.screens = CBA.screens || {};
 var planShowCompare = false; // האם מוצגת השוואה לשנה קודמת
 var planCompareYear = null;  // איזו שנה מושווית
 
+// סמליל "פנקס הערות" (סעיף 1) — דף+קווים, באותו סגנון SVG כמו NAV_ICONS ב-app.js
+var PLAN_NOTES_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/><path d="M9.5 12h6M9.5 16h4"/></svg>';
+
 CBA.screens.planning = {
   title: "בניית תקציב",
 
@@ -62,6 +65,9 @@ CBA.screens.planning = {
     container.innerHTML = `
       <div class="screen-controls">
         <div class="phase-ctrl">${planPhaseControl()}</div>
+        <button class="btn-ghost btn-sm notes-tab-btn" type="button" data-open-notes title="פנקס הערות כלליות לשנה זו">
+          <span class="notes-tab-btn__ico">${PLAN_NOTES_ICON}</span> הערות
+        </button>
       </div>
 
       <div class="plan-cols">
@@ -330,6 +336,10 @@ function planBind(container) {
   });
   const showUpd = container.querySelector("[data-show-updates]");
   if (showUpd) showUpd.addEventListener("click", function () { planOpenUpdatesModal(container); });
+
+  // פנקס הערות (סעיף 1) — לשונית עם סמליל, פותחת drawer נפרד (notes.js)
+  const notesBtn = container.querySelector("[data-open-notes]");
+  if (notesBtn) notesBtn.addEventListener("click", function () { CBA.notesPanel.open(); });
 
   // השוואה לשנה קודמת
   const toggleCmp = container.querySelector("[data-toggle-compare]");

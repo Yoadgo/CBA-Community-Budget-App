@@ -129,7 +129,10 @@ CBA.sheets = (function () {
         income: (d.income || []).map(toIncome),
         categories: (d.budget || []).map(toCategory),
         transactions: (d.transactions || []).map(function (r) { return toTx(r, y); }),
-        budget: { phase: closed ? "locked" : "draft", lockedAt: null, baseline: baseline }
+        budget: { phase: closed ? "locked" : "draft", lockedAt: null, baseline: baseline },
+        // פנקס הערות (סעיף 1) — payload.notes הוא מפה {שנה: {content, editedBy, editedAt}}
+        // שנקראת ב-Code.gs מטאב "הערות" (שורה אחת לכל שנה, לא טאב פר-שנה)
+        notes: (payload.notes && payload.notes[y]) || { content: "", editedBy: "", editedAt: "" }
       };
     });
     var updates = (payload.updates || []).map(function (r) {
@@ -141,13 +144,23 @@ CBA.sheets = (function () {
         reason: String(r["סיבה"] || "")
       };
     });
+    // יומן עריכות פנקס ההערות (סעיף 1) — כרונולוגי, אותו רעיון כמו "updates" למעלה
+    var notesLog = (payload.notesLog || []).map(function (r) {
+      return {
+        date: normDate(r["תאריך"]),
+        time: String(r["שעה"] || "").trim(),
+        year: String(r["שנה"] || "").trim(),
+        editedBy: String(r['נערך ע"י'] || "").trim()
+      };
+    });
     return {
       groups: groups, years: years,
       yearList: (payload.years || []).slice(),
       currentYear: payload.currentYear || (payload.years || [])[0],
       settings: payload.settings || {},
       version: payload.version || "",
-      budgetUpdates: updates
+      budgetUpdates: updates,
+      notesLog: notesLog
     };
   }
 
@@ -232,6 +245,7 @@ CBA.sheets = (function () {
     // גרסת השרת שעונה בפועל — כדי שאפשר יהיה לראות מיד אם ה-Apps Script עודכן
     CBA.mock._serverVersion = store.version || "";
     CBA.mock.budgetUpdates = store.budgetUpdates || [];
+    CBA.mock.notesLog = store.notesLog || [];
     return true;
   }
 

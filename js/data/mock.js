@@ -106,13 +106,15 @@ CBA.mock = (function () {
       income: income(690, 90000, 10000),
       categories: catsFor(plans_86),
       transactions: tx,
-      budget: { phase: "locked", lockedAt: "2025-09-01", baseline: null }
+      budget: { phase: "locked", lockedAt: "2025-09-01", baseline: null },
+      notes: { content: "", editedBy: "", editedAt: "" }
     },
     'תשפ"ז': {
       income: income(790, 100000, 5000),
       categories: catsFor(plans_87),
       transactions: [],
-      budget: { phase: "draft", lockedAt: null, baseline: null }
+      budget: { phase: "draft", lockedAt: null, baseline: null },
+      notes: { content: "", editedBy: "", editedAt: "" }
     }
   };
 
@@ -121,13 +123,16 @@ CBA.mock = (function () {
     years: years,
     yearList: ['תשפ"ו', 'תשפ"ז'],
     currentYear: 'תשפ"ו',
-    budgetUpdates: []
+    budgetUpdates: [],
+    // יומן עריכות פנקס ההערות (סעיף 1, 2026-08-09) — כרונולוגי, כל השנים
+    // ביחד (מסוננן לפי שנה בתצוגה, בדיוק כמו budgetUpdates).
+    notesLog: []
   };
 })();
 
-/* תכונות גישה (accessor) — categories/income/transactions/budget של השנה הנוכחית.
-   בזכותן שכבת הנתונים והמסכים לא צריכים לדעת בכלל שיש כמה שנים. */
-["categories", "income", "transactions", "budget"].forEach(function (k) {
+/* תכונות גישה (accessor) — categories/income/transactions/budget/notes של השנה
+   הנוכחית. בזכותן שכבת הנתונים והמסכים לא צריכים לדעת בכלל שיש כמה שנים. */
+["categories", "income", "transactions", "budget", "notes"].forEach(function (k) {
   Object.defineProperty(CBA.mock, k, {
     get: function () { return CBA.mock.years[CBA.mock.currentYear][k]; },
     set: function (v) { CBA.mock.years[CBA.mock.currentYear][k] = v; },

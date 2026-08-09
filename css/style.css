@@ -651,6 +651,31 @@ body[data-screen="planning"] .year-switch__add {
 .phase-pill--locked .dot { background: var(--ok); }
 .btn-sm { font-size: 12px; padding: 5px 10px; }
 
+/* לשונית "פנקס הערות" (סעיף 1, 2026-08-09) — כפתור btn-ghost רגיל + סמליל */
+.notes-tab-btn { display: inline-flex; align-items: center; gap: 6px; }
+.notes-tab-btn__ico { display: inline-flex; color: var(--text-soft); }
+.notes-tab-btn:hover .notes-tab-btn__ico { color: var(--text); }
+
+/* פנקס הערות — ה-drawer עצמו (רוחב רגיל, לא --narrow, כדי לתת מקום לעורך) */
+.notes-drawer__body { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+.notes-toolbar { display: flex; gap: 6px; flex: none; }
+.notes-tool {
+  border: 1px solid var(--border); background: var(--surface); font-family: inherit;
+  font-size: 13px; color: var(--text-soft); width: 32px; height: 32px; border-radius: 8px;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: border-color var(--t), color var(--t), background var(--t);
+}
+.notes-tool:hover { border-color: var(--action); color: var(--text); background: var(--hover); }
+.notes-editor {
+  flex: 1; min-height: 320px; border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 16px; font-size: 14px; line-height: 1.7; color: var(--text);
+  overflow-y: auto; outline: none;
+}
+.notes-editor:focus { border-color: var(--action); }
+.notes-editor h3 { font-size: 16px; font-weight: 700; margin: 4px 0; color: var(--text); }
+.notes-editor ol, .notes-editor ul { padding-inline-start: 22px; margin: 6px 0; }
+.notes-editor p { margin: 4px 0; }
+
 /* סימון סעיף שעודכן לאחר סגירת התקציב */
 .upd-badge {
   display: inline-block; font-size: 10px; font-weight: 700; color: var(--warn);

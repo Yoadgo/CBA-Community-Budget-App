@@ -62,6 +62,9 @@ var ACTION_PERMS = {
   setBudgetMeta: PERM_BUDGET, renameCategory: PERM_BUDGET, logBudgetUpdate: PERM_BUDGET,
   addYear: PERM_BUDGET, saveColumnValues: PERM_BUDGET, ensureColumns: PERM_BUDGET,
   saveColumnConfig: PERM_BUDGET, deleteReceiptFile: PERM_BUDGET,
+  // פנקס הערות (סעיף 1) — נגיש רק מלשונית "הערות" במסך "בניית תקציב", לכן
+  // אותה הרשאה כמו שאר פעולות התקציב
+  saveNotes: PERM_BUDGET,
   // ניהול מועדון
   clubList: PERM_CLUB, approveClubReservation: PERM_CLUB, rejectClubReservation: PERM_CLUB,
   // ניהול תושבים
@@ -284,10 +287,15 @@ function doGet(e) {
       if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
     });
     var out = {
-      ok: true, version: 'v29-community-directory', years: years,
+      ok: true, version: 'v30-notes-panel', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       groups: readColumn_(ss, 'קבוצות'),
       updates: readTable_(ss, 'עדכוני תקציב'),   // יומן עדכוני תקציב (אם הטאב קיים)
+      // פנקס הערות כלליות (סעיף 1, 2026-08-09) — טאב "הערות" (שורה אחת לכל
+      // שנה) + טאב "יומן הערות" (כרונולוגי, מי ערך ומתי). שני הטאבים נוצרים
+      // אוטומטית ע"י saveNotes_ בשמירה הראשונה, כמו "עדכוני תקציב".
+      notes: readNotesMap_(ss),
+      notesLog: readTable_(ss, 'יומן הערות'),
       settings: publicSettings, data: {}
     };
     years.forEach(function (y) {
@@ -324,6 +332,7 @@ function doPost(e) {
       case 'setBudgetMeta':     return json_(setBudgetMeta_(ss, body));
       case 'renameCategory':    return json_(renameCategory_(ss, body));
       case 'logBudgetUpdate':   return json_(logBudgetUpdate_(ss, body));
+      case 'saveNotes':         return json_(saveNotes_(ss, body));
       case 'addYear':           return json_(addYear_(ss, body));
       case 'submitReceipt':     return json_(submitReceipt_(ss, body));
       case 'saveResidentNames': return json_(saveResidentNames_(ss, body));
@@ -1238,6 +1247,57 @@ function logBudgetUpdate_(ss, body) {
   }
 }
 
+/* פנקס הערות כלליות (סעיף 1, 2026-08-09) — טאב "הערות": שורה אחת לכל שנה
+ * (שנה | תוכן HTML | נערך ע"י | בתאריך), מתעדכנת במקום (upsert) בכל שמירה —
+ * לא נספח כמו יומן. + טאב "יומן הערות" נפרד (תאריך | שעה | שנה | נערך ע"י),
+ * כן נספח בכל שמירה, לתצוגת "מי ערך ומתי" (כמו "עדכוני תקציב"). שני הטאבים
+ * נוצרים אוטומטית בפעם הראשונה, אותו דפוס בדיוק כמו logBudgetUpdate_ למעלה.
+ * אין בדיקת התנגשות בין שני עורכים בו-זמנית — מי ששומר אחרון מנצח, בדיוק
+ * כמו כל שמירה אחרת באפליקציה (ר' ההסבר ב-planning.js/notes.js). */
+function saveNotes_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var year = String(body.year || '').trim();
+    if (!year) return { ok: false, error: 'שנה חסרה' };
+    var editedBy = body.editedBy || '';
+    var now = new Date();
+    var stamp = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+
+    var sh = ss.getSheetByName('הערות');
+    if (!sh) {
+      sh = ss.insertSheet('הערות');
+      sh.appendRow(['שנה', 'תוכן', 'נערך ע"י', 'בתאריך']);
+      sh.setFrozenRows(1);
+    }
+    var v = sh.getDataRange().getValues();
+    var row = -1;
+    for (var r = 1; r < v.length; r++) {
+      if (String(v[r][0]).trim() === year) { row = r + 1; break; }
+    }
+    if (row === -1) {
+      sh.appendRow([year, body.content || '', editedBy, stamp]);
+    } else {
+      sh.getRange(row, 2, 1, 3).setValues([[body.content || '', editedBy, stamp]]);
+    }
+
+    var logSh = ss.getSheetByName('יומן הערות');
+    if (!logSh) {
+      logSh = ss.insertSheet('יומן הערות');
+      logSh.appendRow(['תאריך', 'שעה', 'שנה', 'נערך ע"י']);
+      logSh.setFrozenRows(1);
+    }
+    logSh.appendRow([
+      Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+      Utilities.formatDate(now, Session.getScriptTimeZone(), 'HH:mm'),
+      year, editedBy
+    ]);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // כותב את רשימת הקבוצות לטאב "קבוצות" (עמודה A, מתחת לכותרת). משותף לכל השנים.
 function saveGroups_(ss, groups) {
   var sh = ss.getSheetByName('קבוצות');
@@ -1488,6 +1548,30 @@ function readColumn_(ss, name) {
   var v = sh.getDataRange().getValues();
   for (var r = 1; r < v.length; r++) { var s = String(v[r][0]).trim(); if (s) out.push(s); }
   return out;
+}
+
+// קורא את טאב "הערות" (סעיף 1) למפה {שנה: {content, editedBy, editedAt}}.
+// שונה מ-readTable_ (שמחזיר מערך שורות) כי כאן צריך גישה ישירה לפי שנה.
+function readNotesMap_(ss) {
+  var sh = ss.getSheetByName('הערות');
+  var map = {};
+  if (!sh) return map;
+  var v = sh.getDataRange().getValues();
+  if (v.length < 2) return map;
+  var headers = v[0].map(function (h) { return String(h).trim(); });
+  var iYear = headers.indexOf('שנה'), iContent = headers.indexOf('תוכן'),
+      iBy = headers.indexOf('נערך ע"י'), iAt = headers.indexOf('בתאריך');
+  if (iYear === -1) return map;
+  for (var r = 1; r < v.length; r++) {
+    var year = String(v[r][iYear] || '').trim();
+    if (!year) continue;
+    map[year] = {
+      content: iContent === -1 ? '' : String(v[r][iContent] || ''),
+      editedBy: iBy === -1 ? '' : String(v[r][iBy] || ''),
+      editedAt: iAt === -1 ? '' : String(v[r][iAt] || '')
+    };
+  }
+  return map;
 }
 
 function json_(obj) {
