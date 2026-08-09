@@ -2751,11 +2751,11 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['SIGNUP_RECEIVED', 'קיבלנו את בקשת ההרשמה שלך',
     'שלום {{שם}},\n\nבקשת ההרשמה שלך לוועד הקהילה התקבלה ונמצאת בבדיקה. נעדכן אותך ברגע שתטופל.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב מיד עם הגשת טופס ההרשמה'],
   ['SIGNUP_APPROVED', 'ברוכים הבאים! ההרשמה שלך אושרה',
-    'שלום {{שם}},\n\nבקשת ההרשמה שלך אושרה ואפשר להיכנס עכשיו לאפליקציה עם חשבון הגוגל שלך:\n{{קישור}}\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל מאשר הרשמה — משמש גם כמייל ברוכים הבאים'],
+    'שלום {{שם}},\n\nבקשת ההרשמה שלך אושרה ואפשר להיכנס עכשיו לאפליקציה עם חשבון הגוגל שלך — לחצו על הכפתור למטה.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל מאשר הרשמה — משמש גם כמייל ברוכים הבאים. הכפתור לאפליקציה מתווסף אוטומטית בעיצוב, אין צורך לכתוב קישור בטקסט'],
   ['SIGNUP_REJECTED', 'עדכון לגבי בקשת ההרשמה שלך',
     'שלום {{שם}},\n\nלצערנו בקשת ההרשמה שלך לא אושרה. לשאלות אפשר לפנות לוועד.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל דוחה הרשמה'],
   ['WELCOME_MANUAL', 'ברוכים הבאים לאפליקציית הוועד',
-    'שלום,\n\nנפתחה עבורך גישה לאפליקציית ניהול התקציב של הוועד. אפשר להיכנס עם חשבון הגוגל שלך בכתובת:\n{{קישור}}\n\nבברכה,\nועד הקהילה', 'נשלח כשמנהל מוסיף תושב/מייל ידנית (לא דרך טופס הרשמה)'],
+    'שלום,\n\nנפתחה עבורך גישה לאפליקציית ניהול התקציב של הוועד. אפשר להיכנס עם חשבון הגוגל שלך — לחצו על הכפתור למטה.\n\nבברכה,\nועד הקהילה', 'נשלח כשמנהל מוסיף תושב/מייל ידנית (לא דרך טופס הרשמה). הכפתור לאפליקציה מתווסף אוטומטית'],
 
   ['REIMBURSEMENT_RECEIVED', "קיבלנו את בקשת ההחזר שלך (מס' {{מזהה}})",
     "שלום {{שם}},\n\nקיבלנו את בקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}). הבקשה ממתינה לטיפול ונעדכן אותך בכל שינוי סטטוס.\n\nבברכה,\nועד הקהילה", 'נשלח לתושב מיד עם הגשת בקשת החזר'],
@@ -2774,18 +2774,18 @@ var DEFAULT_EMAIL_SETTINGS = [
     'שלום {{שם}},\n\nתזכורת — השריון שלך במועדון מתקרב: {{תאריך}} בשעות {{שעה}}.\n\nנא לוודא שקראת/ן את חוקי המועדון, ושתשלום דמי השימוש הוסדר מול הוועד.\n\nבברכה,\nועד הקהילה', 'נשלח אוטומטית X ימים לפני מועד שריון מאושר (ר\' RULE_CLUB_REMINDER_DAYS_BEFORE)'],
 
   ['ADMIN_NEW_SIGNUP', 'בקשת הרשמה חדשה ממתינה',
-    'התקבלה בקשת הרשמה חדשה מ-{{שם}} ({{אימייל}}).\nלטיפול: {{קישור}}', 'למנהלי תושבים + מנהל-על'],
+    'התקבלה בקשת הרשמה חדשה מ-{{שם}} ({{אימייל}}).', 'למנהלי תושבים + מנהל-על. הכפתור לטיפול באפליקציה מתווסף אוטומטית'],
   ['ADMIN_NEW_REIMBURSEMENT', 'בקשת החזר חדשה ממתינה',
-    "התקבלה בקשת החזר חדשה מ-{{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}).\nלטיפול: {{קישור}}", 'למנהלי תקציב + מנהל-על'],
+    "התקבלה בקשת החזר חדשה מ-{{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}).", 'למנהלי תקציב + מנהל-על'],
   ['ADMIN_NEW_CLUB', 'בקשת שריון מועדון חדשה ממתינה',
-    'התקבלה בקשת שריון מועדון חדשה מ-{{שם}} בתאריך {{תאריך}} בשעות {{שעה}}.\nלטיפול: {{קישור}}', 'למנהלי מועדון + מנהל-על'],
+    'התקבלה בקשת שריון מועדון חדשה מ-{{שם}} בתאריך {{תאריך}} בשעות {{שעה}}.', 'למנהלי מועדון + מנהל-על'],
 
   ['ADMIN_STALE_SIGNUP', 'בקשת הרשמה ממתינה כבר {{ימים}} ימים',
-    'בקשת ההרשמה של {{שם}} ({{אימייל}}) ממתינה לטיפול כבר {{ימים}} ימים.\nלטיפול: {{קישור}}', 'תזכורת חד-פעמית כשבקשה חוצה את הסף (ר\' RULE_STALE_DAYS)'],
+    'בקשת ההרשמה של {{שם}} ({{אימייל}}) ממתינה לטיפול כבר {{ימים}} ימים.', 'תזכורת חד-פעמית כשבקשה חוצה את הסף (ר\' RULE_STALE_DAYS)'],
   ['ADMIN_STALE_REIMBURSEMENT', 'בקשת החזר ממתינה כבר {{ימים}} ימים',
-    "בקשת ההחזר של {{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}) ממתינה לטיפול כבר {{ימים}} ימים.\nלטיפול: {{קישור}}", 'תזכורת חד-פעמית כשבקשה חוצה את הסף'],
+    "בקשת ההחזר של {{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}) ממתינה לטיפול כבר {{ימים}} ימים.", 'תזכורת חד-פעמית כשבקשה חוצה את הסף'],
   ['ADMIN_STALE_CLUB', 'בקשת שריון מועדון ממתינה כבר {{ימים}} ימים',
-    'בקשת השריון של {{שם}} בתאריך {{תאריך}} ממתינה לטיפול כבר {{ימים}} ימים.\nלטיפול: {{קישור}}', 'תזכורת חד-פעמית כשבקשה חוצה את הסף'],
+    'בקשת השריון של {{שם}} בתאריך {{תאריך}} ממתינה לטיפול כבר {{ימים}} ימים.', 'תזכורת חד-פעמית כשבקשה חוצה את הסף'],
 
   ['ADMIN_WEEKLY_DIGEST', 'סיכום שבועי — מה פתוח באפליקציית הוועד',
     'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו'],
@@ -2841,24 +2841,78 @@ function renderTemplate_(str, vars) {
   });
 }
 
+/** בורח מתווי HTML מיוחדים — כדי שערך חופשי (שם תושב, הערת בדיקה וכו') שהוזן
+ * במקום כלשהו ומוזרק לתוך תבנית המייל לא ישבור את מבנה ה-HTML של המייל. */
+function escapeHtml_(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** עוטף טקסט מייל פשוט (כפי שנשמר בטאב "הגדרות מיילים", עם \n כירידת שורה) בעיצוב
+ * HTML נקי ומודרני, מותאם עברית (dir="rtl", גופן עברי סטנדרטי בתוכנות מייל),
+ * ותואם את שפת העיצוב של האפליקציה עצמה (ר' [[cba-design-system]]): הרבה שטח
+ * לבן, כרטיסייה עם הצללה עדינה, כפתור שחור מלא ל-CTA במקום קישור כחול גולמי.
+ * הטקסט במקור נשאר טקסט-פשוט בגיליון בכוונה — כל העיצוב קורה כאן בקוד, כדי
+ * שיועד ימשיך לערוך נוסח בלי לגעת ב-HTML בכלל.
+ * accent: 'emerald' (ברירת מחדל — עדכון חיובי/ניטרלי) | 'rose' (דחייה) |
+ * 'neutral' (התראות מנהל — מידע, לא סטטוס). פס צבע דק בראש הכרטיסייה בלבד —
+ * שימוש מדוד בצבע, כמו בשאר האפליקציה. */
+function buildEmailHtml_(bodyText, ctaUrl, ctaLabel, accent) {
+  var ACCENTS = { emerald: '#059669', rose: '#e11d48', neutral: '#111827' };
+  var accentColor = ACCENTS[accent] || ACCENTS.emerald;
+  var paragraphs = String(bodyText || '').split(/\n{2,}/).map(function (p) {
+    return '<p style="margin:0 0 14px;">' + escapeHtml_(p).replace(/\n/g, '<br>') + '</p>';
+  }).join('');
+  var button = ctaUrl ? (
+    '<div style="text-align:center;margin-top:24px;">' +
+      '<a href="' + ctaUrl + '" style="display:inline-block;background:#111827;color:#ffffff;' +
+      'text-decoration:none;font-weight:600;font-size:14px;padding:12px 30px;border-radius:10px;">' +
+      escapeHtml_(ctaLabel || 'פתיחת האפליקציה') + '</a></div>'
+  ) : '';
+  return '' +
+    '<div dir="rtl" style="background:#f8fafc;padding:32px 12px;' +
+    "font-family:'Segoe UI',Tahoma,Arial,sans-serif;" + '">' +
+      '<div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;' +
+      'box-shadow:0 4px 24px rgba(17,24,39,.08);overflow:hidden;">' +
+        '<div style="height:4px;background:' + accentColor + ';"></div>' +
+        '<div style="padding:30px 32px;">' +
+          '<div style="font-size:12px;letter-spacing:.03em;color:#9ca3af;margin-bottom:18px;">ועד הקהילה</div>' +
+          '<div style="font-size:15px;color:#111827;line-height:1.75;">' + paragraphs + '</div>' +
+          button +
+        '</div>' +
+      '</div>' +
+      '<div style="max-width:480px;margin:14px auto 0;text-align:center;font-size:11px;color:#9ca3af;">' +
+        'מייל אוטומטי מאפליקציית ניהול התקציב של הוועד' +
+      '</div>' +
+    '</div>';
+}
+
 /** שולח מייל בודד — לעולם לא זורק שגיאה החוצה, כדי ששליחת מייל כושלת לא תפיל
- * שום פעולה אחרת (שמירת קבלה/שריון/הרשמה). שגיאות נרשמות ל-Logger בלבד. */
-function sendMail_(toList, subject, body) {
+ * שום פעולה אחרת (שמירת קבלה/שריון/הרשמה). שגיאות נרשמות ל-Logger בלבד.
+ * plainBody הוא הגיבוי לתוכנות מייל שלא מציגות HTML; htmlBody הוא מה שרוב
+ * הנמענים בפועל יראו. */
+function sendMail_(toList, subject, plainBody, htmlBody) {
   var to = (toList || []).filter(Boolean);
   if (!to.length || !subject) return;
   try {
-    MailApp.sendEmail({ to: to.join(','), subject: subject, body: body });
+    var opts = { to: to.join(','), subject: subject, body: plainBody };
+    if (htmlBody) opts.htmlBody = htmlBody;
+    MailApp.sendEmail(opts);
   } catch (err) {
     Logger.log('שליחת מייל נכשלה אל ' + to.join(',') + ': ' + err);
   }
 }
 
 /** שולח לתושב לפי מפתח תבנית מהגדרות + placeholders, לרשימת כתובות (בד"כ שני
- * המיילים של משק הבית ביחד — ר' emailsForResidentRow_/emailsForFamilyId_). */
+ * המיילים של משק הבית ביחד — ר' emailsForResidentRow_/emailsForFamilyId_).
+ * אדום (rose) אוטומטית לכל תבנית שהמפתח שלה מסתיים ב-REJECTED, ירוק (emerald)
+ * לכל השאר — בלי צורך לסמן את זה ידנית בכל קריאה. */
 function sendResidentTemplate_(ss, key, emails, vars) {
   var t = getEmailSettings_(ss)[key];
   if (!t) return;
-  sendMail_(emails, renderTemplate_(t.subject, vars), renderTemplate_(t.body, vars) + '\n\n' + CBA_APP_URL);
+  var plain = renderTemplate_(t.body, vars);
+  var accent = key.indexOf('REJECTED') !== -1 ? 'rose' : 'emerald';
+  var html = buildEmailHtml_(plain, CBA_APP_URL, 'פתיחת האפליקציה', accent);
+  sendMail_(emails, renderTemplate_(t.subject, vars), plain + '\n\n' + CBA_APP_URL, html);
 }
 
 /** שני האימיילים (אם קיימים) של שורת תושב נתונה בטאב "תושבים". */
@@ -2933,7 +2987,10 @@ function notifyAdmins_(ss, permKey, key, vars) {
   if (!emails.length) return;
   var t = getEmailSettings_(ss)[key];
   if (!t) return;
-  sendMail_(emails, renderTemplate_(t.subject, vars), renderTemplate_(t.body, vars) + '\n\n' + CBA_APP_URL);
+  var plain = renderTemplate_(t.body, vars);
+  var linkUrl = (vars && vars['קישור']) || CBA_APP_URL;
+  var html = buildEmailHtml_(plain, linkUrl, 'לטיפול באפליקציה', 'neutral');
+  sendMail_(emails, renderTemplate_(t.subject, vars), plain + '\n\n' + CBA_APP_URL, html);
 }
 
 /* ============================================================================
@@ -3141,7 +3198,9 @@ function sendDigestBySection_(ss, subjectKey, sections, includeKeys) {
       parts.push('\n' + LABELS[k] + ':\n' + (list.length ? list.join('\n') : '(אין)'));
     });
     if (parts.length === 1) return; // אין לו אף סעיף רלוונטי בדוח הזה — לא שולחים מייל ריק
-    sendMail_([email], t.subject, parts.join('\n') + '\n\n' + CBA_APP_URL);
+    var plainDigest = parts.join('\n');
+    var html = buildEmailHtml_(plainDigest, CBA_APP_URL, 'פתיחת האפליקציה', 'neutral');
+    sendMail_([email], t.subject, plainDigest + '\n\n' + CBA_APP_URL, html);
   });
 }
 
