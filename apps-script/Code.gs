@@ -297,7 +297,7 @@ function doGet(e) {
       if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
     });
     var out = {
-      ok: true, version: 'v33-category-source-split', years: years,
+      ok: true, version: 'v34-category-items', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -320,7 +320,10 @@ function doGet(e) {
         groups: readGroupsForYear_(ss, y),
         // פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — שורות שטוחות
         // מטאב "פיצול מימון <שנה>" (אם קיים); הלקוח מקבץ לפי שם סעיף בעצמו.
-        splits: readTable_(ss, 'פיצול מימון ' + y)
+        splits: readTable_(ss, 'פיצול מימון ' + y),
+        // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10) — שורות שטוחות מטאב
+        // "פירוט סעיפים <שנה>" (אם קיים); הלקוח מקבץ לפי שם סעיף בעצמו.
+        items: readTable_(ss, 'פירוט סעיפים ' + y)
       };
     });
     return json_(out);
@@ -382,6 +385,12 @@ function saveTransaction_(ss, body) {
   if (!sh) return { ok: false, error: 'אין טאב תנועות לשנה ' + body.year };
   var t = body.tx;
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  // תת-סעיף (סעיף 5, 2026-08-10) — נוצר אוטומטית בפעם הראשונה שתנועה משויכת
+  // לתת-סעיף, בדיוק כמו "מזהה משפחה" למטה (saveFamilyIds_).
+  if (headers.indexOf('תת-סעיף') === -1) {
+    sh.getRange(1, headers.length + 1).setValue('תת-סעיף');
+    headers.push('תת-סעיף');
+  }
   var rowObj = {
     'מזהה': t.id,
     'חודש הגשה': t.month || '',
@@ -391,6 +400,9 @@ function saveTransaction_(ss, body) {
     'בנק': t.bankName || '',
     'סכום': Number(t.amount) || 0,
     'סעיף': t.categoryId || '',
+    // תת-סעיף (סעיף 5, 2026-08-10) — קישור אופציונלי לפריט ספציפי בתוך הסעיף
+    // (ר' 'פירוט סעיפים <שנה>'); ריק = לא שויך לתת-סעיף.
+    'תת-סעיף': t.subItemId || '',
     'סוג הוצאה': TYPE_HE[t.expenseType] || t.expenseType || '',
     'מקור': SOURCE_HE[t.source] || t.source || '',
     'סטטוס': STATUS_HE[t.status] || t.status || '',
@@ -1161,6 +1173,9 @@ function saveBudget_(ss, body) {
     // פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — נכתב תמיד (גם
     // רשימה ריקה) כדי שסעיפים שבוטל הפיצול שלהם יימחקו מהטאב.
     out.splits = saveBudgetSplits_(ss, year, body.categories || []);
+    // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10) — נכתב תמיד (גם רשימה ריקה)
+    // כדי שסעיפים שבוטל הפירוט שלהם יימחקו מהטאב.
+    out.items = saveBudgetItems_(ss, year, body.categories || []);
     return out;
   } finally {
     lock.releaseLock();
@@ -1385,6 +1400,37 @@ function saveBudgetSplits_(ss, year, cats) {
   return 'ok';
 }
 
+/* פירוט סעיף תקציבי לתת-סעיפים בעלי שם וסכום (סעיף 5, 2026-08-10) — למשל
+ * "ועדת תרבות" ₪20,000 מפורט ל"אירוע עצמאות" ₪10,000 + "אירוע פורים" ₪10,000.
+ * טאב פר-שנה "פירוט סעיפים <שנה>", שורה אחת לכל (סעיף, פריט). בשונה מפיצול
+ * מימון (סעיף 4) — כאן גם סעיף עם פריט יחיד תקף (אין "ברירת מחדל" חלופית
+ * שאליה חוזרים כמו incomeSourceId; פריט אחד כבר אומר "יש כאן פירוט"), אז
+ * כותבים כל סעיף עם 1+ פריטים, לא רק 2+. תת-סעיפים אלה משמשים גם את מסך
+ * ניהול ההוצאות לשיוך תנועה בפועל לתת-סעיף ספציפי (ר' 'תת-סעיף' ב-saveTransaction_).
+ * נכתב מחדש במלואו בכל שמירה, כמו saveBudgetSplits_ למעלה. */
+function saveBudgetItems_(ss, year, cats) {
+  var name = 'פירוט סעיפים ' + year;
+  var rows = [];
+  (cats || []).forEach(function (c) {
+    if (c.items && c.items.length) {
+      c.items.forEach(function (it) {
+        rows.push([c.name || c.key || '', it.name || '', Number(it.plan) || 0]);
+      });
+    }
+  });
+  var sh = ss.getSheetByName(name);
+  if (!sh) {
+    if (!rows.length) return 'ok';   // אין מה לכתוב — לא יוצרים טאב ריק בלי צורך
+    sh = ss.insertSheet(name);
+    sh.appendRow(['סעיף', 'פריט', 'תכנון']);
+    sh.setFrozenRows(1);
+  }
+  var last = sh.getLastRow();
+  if (last >= 2) sh.getRange(2, 1, last - 1, 3).clearContent();
+  if (rows.length) sh.getRange(2, 1, rows.length, 3).setValues(rows);
+  return 'ok';
+}
+
 // מחזיר מפה: שם-כותרת -> אינדקס עמודה (מבוסס-1). 0 = לא נמצא.
 function headerMap_(sh) {
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
@@ -1550,7 +1596,9 @@ function addYear_(ss, body) {
   // כאן, ושתי השנים ימשיכו ליפול בחזרה לטאב "קבוצות" המשותף הישן (ר' readGroupsForYear_)
   // 'פיצול מימון ' נוספה בסעיף 4 (2026-08-10) — אם לשנת המקור אין טאב פיצול
   // (אין סעיפים מפוצלים בה), פשוט אין מה להעתיק, וזה תקין לגמרי.
-  ['תקציב ', 'הכנסות ', 'תנועות ', 'קבוצות ', 'פיצול מימון '].forEach(function (prefix) {
+  // 'פירוט סעיפים ' נוספה בסעיף 5 (2026-08-10) — אותו היגיון: אם אין פירוט
+  // בשנת המקור, אין מה להעתיק.
+  ['תקציב ', 'הכנסות ', 'תנועות ', 'קבוצות ', 'פיצול מימון ', 'פירוט סעיפים '].forEach(function (prefix) {
     var src = ss.getSheetByName(prefix + fromYear);
     if (src) src.copyTo(ss).setName(prefix + newYear);
   });

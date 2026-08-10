@@ -819,11 +819,14 @@ body[data-screen="planning"] .year-switch__add {
 .src-select:focus { outline: none; color: var(--text); }
 
 /* פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — אותה שפה עדינה
-   כמו .src-line, שורה לכל מקור עם בורר + סכום + הסרה. */
+   כמו .src-line, שורה לכל מקור עם בורר + סכום + הסרה. אותם כללים משמשים גם
+   את פירוט הסעיף לתת-סעיפים (סעיף 5, 2026-08-10) — שם, במקום בורר מקור, יש
+   שדה טקסט חופשי לשם הפריט (ר' .src-split__row .txt-input למטה). */
 .src-split { margin-top: 7px; }
 .src-split__label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
 .src-split__row { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
 .src-split__row .src-select { flex: 1; min-width: 0; }
+.src-split__row .txt-input { flex: 1; width: auto; min-width: 0; font-size: 11px; padding: 4px 6px; }
 .src-split__row .num-input--sm { width: 84px; }
 .src-split__actions { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .src-split__warn {

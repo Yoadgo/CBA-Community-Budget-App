@@ -54,9 +54,11 @@ CBA.sheets = (function () {
   }
 
   // splitsByName: { שם סעיף: [ {"מקור הכנסה":..., "סכום":...}, ... ] } — מגיע
-  // מטאב "פיצול מימון <שנה>" (סעיף 4, 2026-08-10). אופציונלי — נבנה ע"י הקורא
-  // (transform) ומועבר פנימה, כדי ש-toCategory יישאר פונקציה טהורה על פני שורה.
-  function toCategory(row, splitsByName) {
+  // מטאב "פיצול מימון <שנה>" (סעיף 4, 2026-08-10). itemsByName: { שם סעיף:
+  // [ {"פריט":..., "תכנון":...}, ... ] } — מגיע מטאב "פירוט סעיפים <שנה>"
+  // (סעיף 5, 2026-08-10). שניהם אופציונליים — נבנים ע"י הקורא (transform)
+  // ומועברים פנימה, כדי ש-toCategory יישאר פונקציה טהורה על פני שורה.
+  function toCategory(row, splitsByName, itemsByName) {
     var monthly = MONTH_KEYS.map(function (k) { return num(row[k]); });
     var mode = DIST_MAP[String(row["מצב חלוקה"] || "").trim()] || "equal";
     var months = monthly.filter(function (x) { return x > 0; }).length || 12;
@@ -78,6 +80,14 @@ CBA.sheets = (function () {
       });
       cat.incomeSourceId = cat.sources[0].incomeSourceId;
     }
+    // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10) — בשונה מ-sources למעלה, גם
+    // פריט יחיד תקף (ר' normalizeCategory ב-dataService.js).
+    var itemRows = itemsByName && itemsByName[name];
+    if (itemRows && itemRows.length) {
+      cat.items = itemRows.map(function (r) {
+        return { id: String(r["פריט"] || "").trim(), name: String(r["פריט"] || "").trim(), plan: num(r["תכנון"]) };
+      });
+    }
     return cat;
   }
 
@@ -95,7 +105,7 @@ CBA.sheets = (function () {
   // "ניהול עמודות", סעיף 6, 2026-08-06) נאספת אוטומטית ל-customFields, כדי שגם
   // עמודות מותאמות אישית עתידיות ייקלטו בלי לגעת כאן שוב.
   var KNOWN_TX_HEADERS = ["מזהה", "חודש הגשה", "תאריך רכישה", "רוכש", "ספק/נמען", "בנק", "סכום",
-    "סעיף", "סוג הוצאה", "מקור", "סטטוס", "הערת בדיקה", "תיאור", "שם קובץ קבלה", "קישור קבלה", "מזהה משפחה"];
+    "סעיף", "תת-סעיף", "סוג הוצאה", "מקור", "סטטוס", "הערת בדיקה", "תיאור", "שם קובץ קבלה", "קישור קבלה", "מזהה משפחה"];
 
   function toTx(row, year) {
     var bank = String(row["בנק"] || "").trim();
@@ -114,6 +124,8 @@ CBA.sheets = (function () {
       bankName: bank, bankBranch: "", bankAccount: "",
       amount: num(row["סכום"]),
       categoryId: String(row["סעיף"] || "").trim(),
+      // תת-סעיף (סעיף 5, 2026-08-10) — קישור אופציונלי לפריט ספציפי בתוך הסעיף
+      subItemId: String(row["תת-סעיף"] || "").trim(),
       expenseType: TYPE_MAP[String(row["סוג הוצאה"] || "").trim()] || "supplier",
       source: SOURCE_MAP[String(row["מקור"] || "").trim()] || "admin",
       status: st.status,
@@ -152,9 +164,17 @@ CBA.sheets = (function () {
         if (!name) return;
         (splitsByName[name] = splitsByName[name] || []).push(r);
       });
+      // פירוט סעיפים פר-שנה (סעיף 5, 2026-08-10) — d.items הוא רשימת שורות
+      // שטוחה מטאב "פירוט סעיפים <שנה>"; מקבצים לפי שם סעיף לפני toCategory.
+      var itemsByName = {};
+      (d.items || []).forEach(function (r) {
+        var name = String(r["סעיף"] || "").trim();
+        if (!name) return;
+        (itemsByName[name] = itemsByName[name] || []).push(r);
+      });
       years[y] = {
         income: (d.income || []).map(toIncome),
-        categories: (d.budget || []).map(function (row) { return toCategory(row, splitsByName); }),
+        categories: (d.budget || []).map(function (row) { return toCategory(row, splitsByName, itemsByName); }),
         transactions: (d.transactions || []).map(function (r) { return toTx(r, y); }),
         budget: { phase: closed ? "locked" : "draft", lockedAt: null, baseline: baseline },
         // פנקס הערות (סעיף 1) — payload.notes הוא מפה {שנה: {content, editedBy, editedAt}}

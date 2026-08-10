@@ -52,6 +52,7 @@ CBA.screens.planning = {
                 <div class="dist-chip" data-chip="${CBA.esc(c.id)}">${planDistLabel(c)} · ${CBA.esc(planSourceName(c))}</div>
                 <div class="plan-item__more">
                   ${planSourceSplitHTML(c)}
+                  ${planItemsHTML(c)}
                   ${planDistControl(c)}
                 </div>
               </div>`;
@@ -293,6 +294,73 @@ function planBind(container) {
       planRecompute(container);
       const warnEl = container.querySelector("#split-warn-" + planKey(c.id));
       if (warnEl) warnEl.innerHTML = planSplitWarnHTML(c);
+    });
+  });
+
+  // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10)
+  container.querySelectorAll("[data-itemize-cat]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const c = findCat(btn.dataset.itemizeCat);
+      if (!c) return;
+      c.items = [CBA.data.newCategoryItem("פריט חדש", c.plan || 0)];
+      planSave();
+      rerender();
+    });
+  });
+  container.querySelectorAll("[data-item-add]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const c = findCat(btn.dataset.itemAdd);
+      if (!c || !c.items) return;
+      c.items.push(CBA.data.newCategoryItem("פריט חדש", 0));
+      planSave();
+      rerender();
+    });
+  });
+  container.querySelectorAll("[data-item-remove]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const c = findCat(btn.dataset.itemRemove);
+      if (!c || !c.items) return;
+      const idx = parseInt(btn.dataset.itemIdx, 10);
+      c.items.splice(idx, 1);
+      if (!c.items.length) c.items = null;   // בלי פריטים = לא מפורט (סעיף 5)
+      planSave();
+      rerender();
+    });
+  });
+  container.querySelectorAll("[data-item-cancel]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const c = findCat(btn.dataset.itemCancel);
+      if (!c) return;
+      c.items = null;
+      planSave();
+      rerender();
+    });
+  });
+  // שינוי שם פריט — תוך כדי הקלדה מעדכן שם; בסיום (blur) מבצע "מיגרציה" (כמו
+  // שמות קבוצה/סעיף): מזהה הפריט מתעדכן ותנועות ששויכו אליו עוברות איתו.
+  container.querySelectorAll("[data-item-name]").forEach(function (inp) {
+    inp.addEventListener("input", function () {
+      const c = findCat(inp.dataset.itemName);
+      if (!c || !c.items) return;
+      const idx = parseInt(inp.dataset.itemIdx, 10);
+      if (c.items[idx]) c.items[idx].name = inp.value;
+    });
+    inp.addEventListener("change", function () {
+      const c = findCat(inp.dataset.itemName);
+      if (!c || !c.items) return;
+      const idx = parseInt(inp.dataset.itemIdx, 10);
+      const it = c.items[idx];
+      if (it && inp.value && inp.value.trim()) CBA.data.renameCategoryItem(c.id, it.id, inp.value.trim());
+    });
+  });
+  container.querySelectorAll("[data-item-plan]").forEach(function (inp) {
+    inp.addEventListener("input", function () {
+      const c = findCat(inp.dataset.itemPlan);
+      if (!c || !c.items) return;
+      const idx = parseInt(inp.dataset.itemIdx, 10);
+      if (c.items[idx]) c.items[idx].plan = planNum(inp.value);
+      const warnEl = container.querySelector("#item-warn-" + planKey(c.id));
+      if (warnEl) warnEl.innerHTML = planItemWarnHTML(c);
     });
   });
 
@@ -606,6 +674,48 @@ function planSplitWarnHTML(c) {
   const sum = c.sources.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
   if (Math.round(sum) === Math.round(c.plan || 0)) return "";
   return `<div class="src-split__warn">⚠ סכום הפיצול (${CBA.formatILS(sum)}) לא תואם לתכנון הסעיף (${CBA.formatILS(c.plan || 0)})</div>`;
+}
+
+/* פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10). במצב לא-מפורט — כפתור "פרט
+   סעיף" בלבד. במצב מפורט — שורה לכל פריט (שם + סכום + הסרה), כפתור "הוסף
+   פריט", כפתור "בטל פירוט", והתראה עדינה (לא חוסמת) אם סכום הפריטים לא תואם
+   לתכנון הכולל. בשונה מפיצול מקור (סעיף 4) — כאן גם פריט יחיד תקף, כי פירוט
+   לפריט אחד כבר שימושי (למשל שיוך תנועות ספציפיות אליו במסך ניהול ההוצאות),
+   ולכן אין סף מינימום של 2. תת-הסעיפים האלה זמינים גם בבחירת תת-סעיף בעת
+   אישור תנועה במסך ניהול ההוצאות (ר' expenses.js). */
+function planItemsHTML(c) {
+  if (!c.items || !c.items.length) {
+    return `
+      <div class="src-line">
+        <button type="button" class="btn-ghost btn-sm" data-itemize-cat="${CBA.esc(c.id)}">פרט סעיף</button>
+      </div>`;
+  }
+  const rows = c.items.map(function (it, i) {
+    return `
+      <div class="src-split__row">
+        <input class="txt-input" data-item-name="${CBA.esc(c.id)}" data-item-idx="${i}" value="${CBA.esc(it.name)}">
+        <input class="num-input num-input--sm" type="number" inputmode="numeric" data-item-plan="${CBA.esc(c.id)}" data-item-idx="${i}" value="${it.plan}">
+        <button class="mini-x" data-item-remove="${CBA.esc(c.id)}" data-item-idx="${i}" title="הסר פריט">×</button>
+      </div>`;
+  }).join("");
+  return `
+    <div class="src-split">
+      <div class="src-split__label">פירוט הסעיף (${c.items.length} פריטים)</div>
+      ${rows}
+      <div class="src-split__actions">
+        <button type="button" class="btn-ghost btn-sm" data-item-add="${CBA.esc(c.id)}">+ הוסף פריט</button>
+        <button type="button" class="btn-ghost btn-sm" data-item-cancel="${CBA.esc(c.id)}">בטל פירוט</button>
+      </div>
+      <div id="item-warn-${planKey(c.id)}">${planItemWarnHTML(c)}</div>
+    </div>`;
+}
+
+/* התראת אי-התאמה בין סכום הפריטים לתכנון הכולל — לא חוסמת, רק מציגה */
+function planItemWarnHTML(c) {
+  if (!c.items || !c.items.length) return "";
+  const sum = c.items.reduce(function (s, it) { return s + (Number(it.plan) || 0); }, 0);
+  if (Math.round(sum) === Math.round(c.plan || 0)) return "";
+  return `<div class="src-split__warn">⚠ סכום הפירוט (${CBA.formatILS(sum)}) לא תואם לתכנון הסעיף (${CBA.formatILS(c.plan || 0)})</div>`;
 }
 
 /* פקד מצב קומפקטי (משמאל לכותרת): כתום=תכנון, ירוק=סגור */

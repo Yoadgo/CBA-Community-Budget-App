@@ -283,6 +283,11 @@ CBA.data = (function () {
         // שורות (זו ההגדרה של "מפוצל"); אחרת null, ואין מה לכתוב לטאב הפיצול.
         sources: (c.sources && c.sources.length > 1)
           ? c.sources.map(function (s) { return { name: incName(s.incomeSourceId), amount: Number(s.amount) || 0 }; })
+          : null,
+        // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10) — נשלח כשיש 1+ פריטים
+        // (בשונה מ-sources, גם פריט יחיד תקף — ר' normalizeCategory).
+        items: (c.items && c.items.length)
+          ? c.items.map(function (it) { return { name: it.name, plan: Number(it.plan) || 0 }; })
           : null
       };
     });
@@ -821,9 +826,66 @@ CBA.data = (function () {
     } else {
       c.sources = null;
     }
+    // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10) — בשונה מ-sources למעלה, כאן
+    // גם 1 פריט תקף (פריט יחיד כבר אומר "יש כאן פירוט" — אין "ברירת מחדל"
+    // חלופית שאליה חוזרים כמו incomeSourceId). 0 פריטים = לא מפורט (null).
+    if (c.items && c.items.length) {
+      c.items = c.items.map(function (it) {
+        return { id: it.id || newId("item"), name: it.name || "", plan: Number(it.plan) || 0 };
+      });
+    } else {
+      c.items = null;
+    }
     if (!c.dist) c.dist = { mode: "equal", months: 12, monthly: null };
     if (typeof c.plan !== "number") c.plan = parseFloat(c.plan) || 0;
     return c;
+  }
+
+  // תת-סעיפים של סעיף תקציבי (סעיף 5, 2026-08-10) — [] אם הסעיף לא מפורט
+  function getCategoryItems(categoryId) {
+    const c = findCategory(categoryId);
+    return (c && c.items) ? c.items.slice() : [];
+  }
+
+  // בונה אובייקט תת-סעיף חדש (עם מזהה ייחודי) בלי לגעת ב-store — פעולה טהורה,
+  // בדיוק כמו newId עצמו. משמש גם את כפתור "פרט סעיף" ב-planning.js (מוסיף
+  // ישירות ל-c.items ואז קורא ל-planSave() משלו, באותו דפוס בדיוק כמו
+  // addGroup/addCategory) וגם את addCategoryItem למטה.
+  function newCategoryItem(name, plan) {
+    return { id: newId("item"), name: String(name == null ? "" : name).trim() || "פריט חדש", plan: Number(plan) || 0 };
+  }
+
+  // יצירת תת-סעיף "בזמן אמת" — משמש את מסך ניהול ההוצאות כשמנהל מאשר תנועה
+  // ורוצה לשייך אותה לתת-סעיף שעדיין לא קיים ברשימה המתוכננת (סעיף 5,
+  // 2026-08-10; לא רק ממסך בניית התקציב). בשונה מ-planning.js — כאן אין מנגנון
+  // debounce/planSave מקומי למסך, אז שומר מיד לגיליון עם היווצרות הפריט.
+  function addCategoryItem(categoryId, name, cb) {
+    const c = findCategory(categoryId);
+    if (!c) { if (cb) cb(null); return null; }
+    if (!c.items) c.items = [];
+    const it = newCategoryItem(name, 0);
+    c.items.push(it);
+    saveBudgetToSheet(getCurrentYear(), function () { if (cb) cb(it); });
+    return it;
+  }
+
+  // שינוי שם תת-סעיף עם "מיגרציה" — כמו renameGroup/renameIncomeSource למעלה:
+  // תנועות ששויכו לתת-סעיף (t.subItemId, אותו סעיף בלבד) עוברות איתו למזהה
+  // החדש, כדי ששמירות עוקבות עדיין יזהו את אותה שורה בגיליון.
+  function renameCategoryItem(categoryId, itemId, newName) {
+    const c = findCategory(categoryId);
+    if (!c || !c.items) return null;
+    const it = c.items.find(function (x) { return x.id === itemId; });
+    if (!it) return null;
+    newName = String(newName == null ? "" : newName);
+    if (newName && newName !== it.id && CBA.mock._source === "sheets") {
+      getTransactions().forEach(function (t) {
+        if (t.categoryId === categoryId && t.subItemId === it.id) t.subItemId = newName;
+      });
+      it.id = newName;
+    }
+    it.name = newName;
+    return it;
   }
 
   // --- CRUD סעיפי תקציב ---
@@ -1029,6 +1091,10 @@ CBA.data = (function () {
     addCategory: addCategory,
     updateCategory: updateCategory,
     removeCategory: removeCategory,
+    getCategoryItems: getCategoryItems,
+    newCategoryItem: newCategoryItem,
+    addCategoryItem: addCategoryItem,
+    renameCategoryItem: renameCategoryItem,
     addGroup: addGroup,
     updateGroup: updateGroup,
     removeGroup: removeGroup,

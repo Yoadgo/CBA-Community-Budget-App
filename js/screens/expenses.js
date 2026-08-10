@@ -873,6 +873,22 @@ function txOpenColumnManager(container) {
   });
 }
 
+/* אפשרויות בורר "תת-סעיף" (סעיף 5, 2026-08-10) — תלוי בסעיף התקציבי הנבחר:
+   תת-הסעיפים המתוכננים שלו (אם יש) + "— ללא —" + "+ צור תת-סעיף חדש" ליצירה
+   בזמן אמת. אם selectedId לא נמצא ברשימה הנוכחית (למשל תת-סעיף שנמחק/שונה
+   שם אחרי שהתנועה כבר שויכה אליו) — לא נבחרת אף אופציה, כלומר "— ללא —"
+   בפועל (בדיוק הכוונה: תנועה כזו מוצגת כ"לא משויך", בלי לאבד את הערך הישן
+   בפועל ב-state עד שהמנהל ישמור בפירוש). */
+function txSubItemOptions(categoryId, selectedId) {
+  const items = CBA.data.getCategoryItems(categoryId);
+  const known = items.some(function (it) { return it.id === selectedId; });
+  const opts = items.map(function (it) {
+    return `<option value="${CBA.esc(it.id)}"${it.id === selectedId ? " selected" : ""}>${CBA.esc(it.name)}</option>`;
+  }).join("");
+  return `<option value=""${(!selectedId || !known) ? " selected" : ""}>— ללא —</option>` + opts +
+    `<option value="__new__">+ צור תת-סעיף חדש</option>`;
+}
+
 function txOpenDrawer(container, id) {
   txForceCloseDrawer();   // פתיחה חדשה — אין מה להזהיר עליו
   const editing = id !== null;
@@ -880,7 +896,9 @@ function txOpenDrawer(container, id) {
     date: new Date().toISOString().slice(0, 10), month: txDefaultSubmissionMonth(),
     year: CBA.data.getCurrentYear(), buyer: "", supplier: "", amount: "", bankName: "", bankBranch: "", bankAccount: "",
     categoryId: txPresetCategory || (CBA.data.getCategories()[0] || {}).id, source: "admin", expenseType: "supplier", payType: "supplier",
-    status: "ready", description: "", receiptUrl: "", reviewNote: ""
+    status: "ready", description: "", receiptUrl: "", reviewNote: "",
+    // תת-סעיף (רשות) — קישור ספציפי בתוך הסעיף התקציבי (סעיף 5, 2026-08-10)
+    subItemId: ""
   };
   if (!t) return;
   const state = Object.assign({}, t); // עותק עבודה
@@ -927,6 +945,9 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
   const catOpts = CBA.data.getCategories().map(function (c) {
     return `<option value="${CBA.esc(c.id)}"${c.id === state.categoryId ? " selected" : ""}>${CBA.esc(c.name)}</option>`;
   }).join("");
+  // תת-סעיף (סעיף 5, 2026-08-10) — אפשרויות הבורר תלויות בסעיף התקציבי הנבחר
+  // (ר' txSubItemOptions), כולל שיוך "+ צור תת-סעיף חדש" ליצירה בזמן אמת.
+  const subItemOpts = txSubItemOptions(state.categoryId, state.subItemId);
   const srcOpts = [["admin", "מנהל"], ["resident", "תושב"]].map(function (o) {
     return `<option value="${o[0]}"${o[0] === state.source ? " selected" : ""}>${o[1]}</option>`;
   }).join("");
@@ -981,6 +1002,9 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
       <div class="form-grid">
         <div class="form-field form-field--wide"><label>סעיף תקציבי</label><select class="field-input" data-field="categoryId">${catOpts}</select>
           <div class="tx-suggest" id="tx-suggest" hidden></div>
+        </div>
+        <div class="form-field form-field--wide"><label>תת-סעיף (רשות)</label>
+          <select class="field-input" data-field="subItemId" id="tx-subitem-select">${subItemOpts}</select>
         </div>
         <div class="form-field"><label>מקור</label><select class="field-input" data-field="source">${srcOpts}</select></div>
         <div class="form-field"><label>סטטוס</label><select class="field-input" data-field="status">${stOpts}</select></div>
@@ -1117,6 +1141,13 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
       box.hidden = false;
     } else { box.innerHTML = ""; box.hidden = true; }
   }
+  // תת-סעיף (סעיף 5, 2026-08-10) — אפשרויות הבורר תלויות בסעיף הנבחר, אז
+  // נבנות מחדש בכל שינוי סעיף (בלי ריענון מלא של הטופס כדי לא לאבד פוקוס).
+  function refreshSubItemOptions() {
+    const sel = form.querySelector("#tx-subitem-select");
+    if (!sel) return;
+    sel.innerHTML = txSubItemOptions(state.categoryId, state.subItemId);
+  }
   form.querySelectorAll("[data-field]").forEach(function (inp) {
     inp.addEventListener("input", function () { refreshName(); updateSuggest(); });
   });
@@ -1128,7 +1159,29 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
     const b = e.target.closest("[data-apply]"); if (!b) return;
     state.categoryId = b.dataset.apply;
     const catSel = form.querySelector('[data-field="categoryId"]'); if (catSel) catSel.value = state.categoryId;
+    state.subItemId = "";   // סעיף אחר = תת-הסעיפים הקודמים כבר לא רלוונטיים
+    refreshSubItemOptions();
     updateSuggest(); refreshName();
+  });
+  // מעבר בין סעיפים תקציביים — מרענן את רשימת תת-הסעיפים הזמינים (בורר תלוי-בורר)
+  const catSel = form.querySelector('[data-field="categoryId"]');
+  if (catSel) catSel.addEventListener("change", function () {
+    state.categoryId = catSel.value;
+    state.subItemId = "";
+    refreshSubItemOptions();
+  });
+  // בחירת "+ צור תת-סעיף חדש" — מבקש שם, יוצר תת-סעיף אמיתי בסעיף הנבחר
+  // (נשמר מיד לגיליון, ר' CBA.data.addCategoryItem) ובוחר אותו מיד בבורר.
+  // ביטול/שם ריק — חוזר לבחירה הקודמת ("— ללא —").
+  const subItemSel = form.querySelector("#tx-subitem-select");
+  if (subItemSel) subItemSel.addEventListener("change", function () {
+    if (subItemSel.value !== "__new__") { state.subItemId = subItemSel.value; return; }
+    const name = window.prompt("שם תת-הסעיף החדש:");
+    if (!name || !name.trim()) { refreshSubItemOptions(); return; }
+    CBA.data.addCategoryItem(state.categoryId, name.trim(), function (it) {
+      state.subItemId = it ? it.id : "";
+      refreshSubItemOptions();
+    });
   });
   updateSuggest();
   refreshApproval();
@@ -1239,6 +1292,8 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
       bankName: state.bankName, bankBranch: state.bankBranch, bankAccount: state.bankAccount, amount: state.amount, categoryId: state.categoryId, source: state.source,
       expenseType: state.expenseType, payType: state.payType, status: state.status, reviewNote: state.reviewNote, description: state.description, receiptUrl: state.receiptUrl,
       familyId: (state.familyId != null ? state.familyId : ""),
+      // תת-סעיף (רשות, סעיף 5, 2026-08-10) — "" אם לא שויך תת-סעיף ספציפי
+      subItemId: (state.subItemId && state.subItemId !== "__new__") ? state.subItemId : "",
       customFields: state.customFields || {}
     };
     if (editing) CBA.data.updateTransaction(id, fields);
