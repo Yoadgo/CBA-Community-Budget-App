@@ -2195,7 +2195,7 @@ CBA.screens = CBA.screens || {};
       // לוגיקת ה-DOM/ציור של עץ הוועד כאן כבר כפולה כך בין שני המסכים
       // (orgListHTML, defaultExpanded וכו') — הרחבה עקבית לדפוס הקיים.
       function layoutOrgTree(canvas, svg, nodesFlat, byParent) {
-        var NODE_W = 156, GAP_X = 22, ROW_GAP = 46, PAD_X = 20, PAD_TOP = 6, PAD_BOTTOM = 10;
+        var NODE_W = 140, GAP_X = 20, ROW_GAP = 40, PAD_X = 20, PAD_TOP = 6, PAD_BOTTOM = 10;
 
         var heightOf = {}, elOf = {};
         nodesFlat.forEach(function (n) {
@@ -2224,23 +2224,32 @@ CBA.screens = CBA.screens || {};
           return totalWidth - NODE_W - abstractLeft;
         }
 
-        var maxDepth = 0;
-        nodesFlat.forEach(function (n) { if (n.depth > maxDepth) maxDepth = n.depth; });
-        var rowMaxH = [];
-        for (var d = 0; d <= maxDepth; d++) {
-          var h = 0;
-          nodesFlat.forEach(function (n) { if (n.depth === d) h = Math.max(h, heightOf[n.box.id]); });
-          rowMaxH.push(h || 70);
-        }
-        var rowTop = [PAD_TOP];
-        for (var d2 = 1; d2 <= maxDepth; d2++) rowTop.push(rowTop[d2 - 1] + rowMaxH[d2 - 1] + ROW_GAP);
-        var totalHeight = rowTop[maxDepth] + rowMaxH[maxDepth] + PAD_BOTTOM;
+        // Y — מיקום מקומי לפי-הורה, לא לפי "שורת-דור" גלובלית (סבב 2, 2026-08-10,
+        // לבקשת יועד: "המרחקים בין הקוביות בציר הגובה... יש מקומות שפתאום ההפרש
+        // בגובה גדול ופתאום קטן"). ר' ההסבר המלא באותה פונקציה ב-residents.js —
+        // הילדים של כל קוביה מתחילים תמיד מיד אחרי התחתית *של אותה קוביה עצמה*
+        // + ROW_GAP קבוע, בלי תלות בגובה קוביות אחרות בעץ. מעבר יחיד מלמעלה-
+        // למטה מספיק כי nodesFlat הוא preorder (ר' collectNode למטה).
+        var topOf = {};
+        roots.forEach(function (r) { topOf[r.id] = PAD_TOP; });
+        nodesFlat.forEach(function (n) {
+          var kids = byParent[n.box.id] || [];
+          if (!kids.length) return;
+          var childTop = topOf[n.box.id] + heightOf[n.box.id] + ROW_GAP;
+          kids.forEach(function (k) { topOf[k.id] = childTop; });
+        });
+        var totalHeight = PAD_TOP;
+        nodesFlat.forEach(function (n) {
+          var bottom = topOf[n.box.id] + heightOf[n.box.id];
+          if (bottom > totalHeight) totalHeight = bottom;
+        });
+        totalHeight += PAD_BOTTOM;
 
         nodesFlat.forEach(function (n) {
           var el = elOf[n.box.id];
           if (!el) return;
           el.style.left = leftOf(n.box.id) + "px";
-          el.style.top = rowTop[n.depth] + "px";
+          el.style.top = topOf[n.box.id] + "px";
         });
         canvas.style.width = totalWidth + "px";
         canvas.style.height = totalHeight + "px";
@@ -2253,8 +2262,9 @@ CBA.screens = CBA.screens || {};
         nodesFlat.forEach(function (n) {
           var kids = byParent[n.box.id] || [];
           if (!kids.length) return;
-          var parentBottom = rowTop[n.depth] + heightOf[n.box.id];
+          var parentBottom = topOf[n.box.id] + heightOf[n.box.id];
           var midY = parentBottom + ROW_GAP / 2;
+          var childTop = topOf[kids[0].id];
           var childXs = kids.map(function (k) { return centerX(k.id); });
           var minX = Math.min.apply(null, childXs), maxX = Math.max.apply(null, childXs);
           var px = centerX(n.box.id);
@@ -2264,7 +2274,6 @@ CBA.screens = CBA.screens || {};
           }
           kids.forEach(function (k) {
             var cx = centerX(k.id);
-            var childTop = rowTop[n.depth + 1];
             lines.push('<line x1="' + cx + '" y1="' + midY + '" x2="' + cx + '" y2="' + childTop + '"></line>');
           });
         });

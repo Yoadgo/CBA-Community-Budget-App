@@ -978,14 +978,15 @@ body[data-screen="planning"] .year-switch__add {
 .present-card__amount { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* פירוט ומימון — שורה נפרדת לכל פריט/מקור. הפירוט (אם קיים) מוצג ראשון
-   ובולט יותר מהמימון: גופן גדול יותר, כהה יותר, מודגש יותר (משוב יועד). */
+   ובולט יותר מהמימון (גופן גדול יותר וכהה יותר), אבל לא מודגש (בולד) —
+   כדי לא להתבלבל עם כותרת הסעיף עצמה, שנשארת המודגשת ביותר בכרטיס. */
 .present-card__section { margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 3px; }
 .present-card__item-row,
 .present-card__fund-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .present-card__item-name,
-.present-card__item-amount { font-size: 18px; color: var(--text); }
-.present-card__item-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.present-card__item-amount { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.present-card__item-amount { font-size: 18px; font-weight: 400; color: var(--text); }
+.present-card__item-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.present-card__item-amount { font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
 .present-card__fund-name,
 .present-card__fund-amount { font-size: 16.5px; color: var(--text-soft); }
 .present-card__fund-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1545,6 +1546,11 @@ body.has-sim { padding-top: 34px; }
 .res-dim { color: var(--text-muted); font-size: 12.5px; }
 /* מקצוע וילדים — מידע משני, לא צריך למשוך את העין כמו שם המשפחה */
 .res-soft { color: var(--text-soft); font-size: 12.5px; }
+/* חיווי "תפקיד בוועד" (2026-08-10, לבקשת יועד — סעיף 8) — מואפר ולקריאה
+   בלבד, אותו רעיון בדיוק כמו .dir-card__role בצד התושב (resident.css) —
+   עריכה רק דרך עץ הוועד (committeeAdmin), לא כאן. */
+.res-role-hint { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.res-mcard .res-role-hint { display: block; }
 .res-warn { color: var(--danger); font-size: 12.5px; }
 .res-msg { padding: 40px 20px; text-align: center; color: var(--text-soft); font-size: 14px; }
 .res-msg div { margin-top: 12px; }
