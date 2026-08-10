@@ -105,7 +105,7 @@ CBA.screens.planning = {
         <button class="btn-ghost" type="button" data-toggle-present>${planViewMode ? "חזרה לעריכה" : "תצוגה להצגה"}</button>
       </div>
 
-      ${planViewMode ? planPresentHTML(groups, cats) : editModeHTML}
+      ${planViewMode ? planPresentHTML(groups, cats, income) : editModeHTML}
 
       <div class="card bottomline-bar">
         <div class="bl-cell">
@@ -660,7 +660,7 @@ function planSourceName(c) {
    שם, סכום, מאיזה מקור/מקורות הכנסה הוא ממומן, ואם הוא מפורט (סעיף 5) —
    גם פירוט הפריטים הפנימיים. משתמשת באותם c.sources/c.items שכבר קיימים —
    לא צריך נתונים חדשים, רק תצוגה אחרת שלהם. =================================================================== */
-function planPresentHTML(groups, cats) {
+function planPresentHTML(groups, cats, income) {
   const blocks = groups.map(function (g) {
     const rows = cats.filter(function (c) { return c.group === g.id; });
     if (!rows.length) return "";
@@ -676,44 +676,86 @@ function planPresentHTML(groups, cats) {
         </div>
       </div>`;
   }).join("");
-  return `<div class="card plan-present-card"><div class="present-wrap">${blocks}</div></div>`;
+  return `
+    <div class="plan-cols">
+      ${planPresentIncomeHTML(income)}
+      <div class="card plan-present-card"><div class="present-wrap">${blocks}</div></div>
+    </div>`;
 }
 
-/* כרטיס סעיף בתצוגה להצגה — שם+סכום תמיד, מימון תמיד, פירוט פריטים רק אם קיים */
+/* עמודת מקורות ההכנסה בתצוגה להצגה — שם + סכום מחושב לכל מקור, סטטי (חוזר
+   ומתעדכן ע"פ עדכון המשתמש: הוחזר לבקשת יועד, היה חסר בגרסה הראשונה) */
+function planPresentIncomeHTML(income) {
+  const total = income.reduce(function (s, x) { return s + (x.computed || 0); }, 0);
+  const rows = income.map(function (s) {
+    return `
+      <div class="present-income-row">
+        <span class="present-income-row__name">${CBA.esc(s.name)}</span>
+        <span class="present-income-row__amount">${CBA.formatILS(s.computed || 0)}</span>
+      </div>`;
+  }).join("");
+  return `
+    <div class="card plan-present-card present-income-card">
+      <div class="present-group__head">
+        <span class="present-group__name">מקורות הכנסה</span>
+        <span class="present-group__total">${CBA.formatILS(total)}</span>
+      </div>
+      <div class="present-income-list">${rows}</div>
+    </div>`;
+}
+
+/* כרטיס סעיף בתצוגה להצגה — שם+סכום תמיד, פירוט פריטים (אם קיים, בולט יותר
+   ולפני המימון), ואחריו מימון. סדר ובולטות עודכנו לפי משוב יועד (2026-08-10) */
 function planPresentCardHTML(c) {
-  const funding = planPresentFundingText(c);
-  const items = planPresentItemsText(c);
+  const items = planPresentItemRows(c);
+  const funding = planPresentFundingRows(c);
   return `
     <div class="present-card">
       <div class="present-card__top">
         <span class="present-card__name">${CBA.esc(c.name)}</span>
         <span class="present-card__amount">${CBA.formatILS(c.plan || 0)}</span>
       </div>
-      <div class="present-card__funding">${funding}</div>
-      ${items ? `<div class="present-card__items">${items}</div>` : ""}
+      ${items}
+      ${funding}
     </div>`;
 }
 
-/* "ממומן מ: X" (מקור יחיד) או "ממומן מ: X (₪..) + Y (₪..)" (סעיף 4, מפוצל) */
-function planPresentFundingText(c) {
+/* פירוט: שורה נפרדת ובולטת לכל פריט פנימי (סעיף 5) — ריק אם הסעיף לא מפורט */
+function planPresentItemRows(c) {
+  if (!c.items || !c.items.length) return "";
+  const rows = c.items.map(function (it) {
+    return `
+      <div class="present-card__item-row">
+        <span class="present-card__item-name">${CBA.esc(it.name)}</span>
+        <span class="present-card__item-amount">${CBA.formatILS(it.plan || 0)}</span>
+      </div>`;
+  }).join("");
+  return `<div class="present-card__section present-card__section--items">${rows}</div>`;
+}
+
+/* מימון: שורה נפרדת לכל מקור הכנסה — מקור יחיד (בלי סכום, זהה לסכום הסעיף)
+   או כמה מקורות (סעיף 4, מפוצל — כל אחד עם סכומו) */
+function planPresentFundingRows(c) {
   function incName(id) {
     const s = CBA.data.getIncomeSources().find(function (x) { return x.id === id; });
     return s ? s.name : "—";
   }
+  let rows;
   if (c.sources && c.sources.length > 1) {
-    return "ממומן: " + c.sources.map(function (s) {
-      return CBA.esc(incName(s.incomeSourceId)) + " (" + CBA.formatILS(s.amount) + ")";
-    }).join(" + ");
+    rows = c.sources.map(function (s) {
+      return `
+        <div class="present-card__fund-row">
+          <span class="present-card__fund-name">${CBA.esc(incName(s.incomeSourceId))}</span>
+          <span class="present-card__fund-amount">${CBA.formatILS(s.amount)}</span>
+        </div>`;
+    }).join("");
+  } else {
+    rows = `
+      <div class="present-card__fund-row">
+        <span class="present-card__fund-name">${CBA.esc(incName(c.incomeSourceId))}</span>
+      </div>`;
   }
-  return "ממומן: " + CBA.esc(incName(c.incomeSourceId));
-}
-
-/* "פירוט: פריט א ₪.. · פריט ב ₪.." (סעיף 5) — ריק אם הסעיף לא מפורט */
-function planPresentItemsText(c) {
-  if (!c.items || !c.items.length) return "";
-  return "פירוט: " + c.items.map(function (it) {
-    return CBA.esc(it.name) + " " + CBA.formatILS(it.plan || 0);
-  }).join(" · ");
+  return `<div class="present-card__section present-card__section--funding">${rows}</div>`;
 }
 
 /* פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10). במצב רגיל (לא מפוצל) —

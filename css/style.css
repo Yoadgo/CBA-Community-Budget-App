@@ -963,20 +963,45 @@ body[data-screen="planning"] .year-switch__add {
    קבוצות+כרטיסים, בלי עריכה, לשימוש בהצגות לוועד השיכון. כרטיס תופס
    פחות מקום מ-.plan-item (בלי שדות/כפתורים), אז נכנס יותר "בתמונה אחת". */
 .plan-present-card { padding: 18px; }
-.present-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px 22px; align-items: start; }
+.present-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px 22px; align-items: start; }
 .present-group__head {
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid var(--border);
 }
-.present-group__name { font-size: 13px; font-weight: 700; color: var(--text-soft); }
-.present-group__total { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.present-grid { display: flex; flex-direction: column; gap: 6px; }
-.present-card { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 7px 10px; }
+/* גופן כותרת קבוצה גדול במפורש מכותרת סעיף (משוב יועד, 2026-08-10) */
+.present-group__name { font-size: 24px; font-weight: 700; color: var(--text-soft); }
+.present-group__total { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.present-grid { display: flex; flex-direction: column; gap: 8px; }
+.present-card { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 10px 14px; }
 .present-card__top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.present-card__name { font-size: 13px; font-weight: 600; }
-.present-card__amount { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.present-card__funding,
-.present-card__items { margin-top: 3px; font-size: 10.5px; color: var(--text-muted); line-height: 1.4; }
+.present-card__name { font-size: 20px; font-weight: 600; }
+.present-card__amount { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* פירוט ומימון — שורה נפרדת לכל פריט/מקור. הפירוט (אם קיים) מוצג ראשון
+   ובולט יותר מהמימון: גופן גדול יותר, כהה יותר, מודגש יותר (משוב יועד). */
+.present-card__section { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+.present-card__section + .present-card__section { padding-top: 5px; border-top: 1px dashed var(--border); }
+.present-card__item-row,
+.present-card__fund-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.present-card__item-name,
+.present-card__item-amount { font-size: 18px; color: var(--text); }
+.present-card__item-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.present-card__item-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.present-card__fund-name,
+.present-card__fund-amount { font-size: 16.5px; color: var(--text-soft); }
+.present-card__fund-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.present-card__fund-amount { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+
+/* עמודת מקורות הכנסה בתצוגה להצגה (הוחזרה לפי משוב יועד, 2026-08-10) */
+.present-income-card { align-self: start; }
+.present-income-list { display: flex; flex-direction: column; gap: 4px; }
+.present-income-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.present-income-row:last-child { border-bottom: none; }
+.present-income-row__name { font-size: 17px; font-weight: 600; }
+.present-income-row__amount { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .mini-x {
   border: none; background: none; cursor: pointer; color: var(--text-muted);
