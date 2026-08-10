@@ -489,6 +489,26 @@ CBA.data = (function () {
     });
   }
 
+  // קטגוריות עץ הוועד (2026-08-10) — טאב נפרד "קטגוריות ועד השיכון" (שם+צבע),
+  // אותו דפוס בדיוק כמו עץ הוועד עצמו: קריאה פתוחה לכולם, שמירה (הוספת/שינוי
+  // קטגוריה) מוגבלת למנהל-על בשרת. CBA.committee (למטה) עוטף את זה בשכבת
+  // מטמון/API נוחה יותר למסכים — המסכים לא קוראים לפונקציות האלה ישירות.
+  var committeeCatsCache = null;
+  function getCommitteeCategories(cb) {
+    if (committeeCatsCache) { if (cb) cb({ ok: true, rows: committeeCatsCache }); return; }
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "committeeCategories" }, function (res) {
+      if (res && res.ok) committeeCatsCache = res.rows || [];
+      if (cb) cb(res);
+    });
+  }
+  function saveCommitteeCategories(rows, cb) {
+    CBA.sheets.postRead("saveCommitteeCategories", { rows: rows }, function (res) {
+      if (res && res.ok) committeeCatsCache = null;
+      if (cb) cb(res);
+    });
+  }
+
   function residentPickerOptions(cb) {
     getResidentDirectory(function (res) {
       var rows = (res && res.ok && res.rows) || [];
@@ -1037,6 +1057,8 @@ CBA.data = (function () {
     getCommunityDirectory: getCommunityDirectory,
     getCommitteeTree: getCommitteeTree,
     saveCommitteeTree: saveCommitteeTree,
+    getCommitteeCategories: getCommitteeCategories,
+    saveCommitteeCategories: saveCommitteeCategories,
     // בקשות הרשמה וניהול תושבים (2026-08-07)
     listSignups: function (cb) { CBA.sheets.get({ action: "listSignups" }, cb); },
     approveSignup: function (payload, cb) { CBA.sheets.postRead("approveSignup", payload, cb); },
@@ -1135,15 +1157,50 @@ CBA.data = (function () {
    ולא ייסחפו זה מזה עם הזמן. פונקציות טהורות — לא נוגעות ב-DOM. */
 CBA.committee = (function () {
   "use strict";
-  var CATS = [
-    { key: "הנהלה" },
-    { key: "ילדים וקהילה", cls: "kids" },
-    { key: "תפעול ושירות", cls: "ops" },
-    { key: "ועדת מתנדבים", cls: "vol" }
-  ];
-  function catInfo(key) {
-    for (var i = 0; i < CATS.length; i++) if (CATS[i].key === key) return CATS[i];
-    return CATS[0];
+  // קטגוריות (2026-08-10): הפכו מרשימה קבועה בקוד לרשימה ניתנת-לעריכה
+  // שנטענת מהשרת (טאב "קטגוריות ועד השיכון" — ר' CBA.data.getCommitteeCategories),
+  // כדי שמנהל-על יוכל להוסיף קטגוריה חדשה עם צבע משלה ישירות מטופס עריכת
+  // התפקיד, לא רק לבחור מתוך רשימה קבועה מראש. יש לקרוא ל-loadCategories
+  // (עם callback) לפני שמשתמשים ב-catInfo/catsList בתוך render — אותו דפוס
+  // בדיוק כמו טעינת rowsCache לפני buildBoxes.
+  var DEFAULT_COLOR = "#111827";
+  var catsCache = null; // מערך {name,color} אחרי טעינה מוצלחת; null=עוד לא נטען
+
+  function normalizeCat(r) {
+    return { name: String(r["שם"] || "").trim(), color: String(r["צבע"] || "").trim() || DEFAULT_COLOR };
+  }
+  function loadCategories(cb) {
+    if (catsCache) { if (cb) cb(catsCache); return; }
+    CBA.data.getCommitteeCategories(function (res) {
+      catsCache = (res && res.ok && res.rows) ? res.rows.map(normalizeCat) : [];
+      if (cb) cb(catsCache);
+    });
+  }
+  function catsList() { return catsCache || []; }
+  // פרטי קטגוריה בודדת לפי שם — נופל חזרה לקטגוריה הראשונה הטעונה (אם יש)
+  // או לצבע ברירת מחדל אם עוד לא נטען כלום (למשל אם loadCategories לא נקרא).
+  function catInfo(name) {
+    var list = catsCache || [];
+    for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
+    return list[0] || { name: name || "", color: DEFAULT_COLOR };
+  }
+  // הוספת קטגוריה חדשה (מנהל-על בלבד בפועל — נאכף בשרת, ר' ACTION_PERMS).
+  // שומרת את כל הרשימה כולל החדשה (כמו saveCommitteeCategories_ ב-Code.gs)
+  // ומעדכנת את המטמון המקומי מיד עם הצלחה, כדי שהתפריט יתעדכן בלי טעינה נוספת.
+  function addCategory(name, color, cb) {
+    name = String(name || "").trim();
+    if (!name) { if (cb) cb({ ok: false, error: "צריך שם קטגוריה" }); return; }
+    var list = (catsCache || []).slice();
+    if (list.some(function (c) { return c.name === name; })) {
+      if (cb) cb({ ok: false, error: 'קטגוריה בשם "' + name + '" כבר קיימת' });
+      return;
+    }
+    list.push({ name: name, color: color || DEFAULT_COLOR });
+    var rows = list.map(function (c) { return { "שם": c.name, "צבע": c.color }; });
+    CBA.data.saveCommitteeCategories(rows, function (res) {
+      if (res && res.ok) catsCache = list;
+      if (cb) cb(res);
+    });
   }
   // הופך שורות שטוחות מהשרת (שורה = אדם אחד) למבנה תאים: מקבץ לפי "מזהה תא"
   // (כמה שורות עם אותו מזהה = כמה אנשים באותו תפקיד), ושומר את אינדקס
@@ -1184,7 +1241,10 @@ CBA.committee = (function () {
     }
     return out;
   }
-  return { CATS: CATS, catInfo: catInfo, buildBoxes: buildBoxes, descendantIds: descendantIds };
+  return {
+    loadCategories: loadCategories, catsList: catsList, catInfo: catInfo, addCategory: addCategory,
+    buildBoxes: buildBoxes, descendantIds: descendantIds
+  };
 })();
 
 /* עוזר עיצוב מספרים: 36000 -> "₪36,000". גלובלי לכל המסכים. */

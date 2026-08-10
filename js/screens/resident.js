@@ -26,6 +26,7 @@ CBA.screens = CBA.screens || {};
   var calCheckIcon  = svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><path d="M8.5 14.5l2 2 4.5-4.5"/>');
   var calGridIcon   = svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="8" cy="15" r="1"/><circle cx="12" cy="15" r="1"/><circle cx="16" cy="15" r="1"/>');
   var kidsIcon   = svg('<circle cx="12" cy="7" r="3"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/>');
+  var roleIcon   = svg('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>'); // חיווי "תפקיד בוועד" — סעיף 5
   var phoneIcon  = svg('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13 1 .36 1.98.68 2.92a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.16-1.16a2 2 0 0 1 2.11-.45c.94.32 1.92.55 2.92.68A2 2 0 0 1 22 16.92z"/>');
   var minusIcon  = svg('<path d="M5 12h14"/>');
   var searchIcon = svg('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>');
@@ -1284,7 +1285,7 @@ CBA.screens = CBA.screens || {};
   function dirCols(rows) {
     var keys = {};
     rows.forEach(function (r) { Object.keys(r).forEach(function (k) { keys[k] = true; }); });
-    var c = { house: null, family: null, firstName: [], phone: [], kids: null, status: null };
+    var c = { house: null, family: null, firstName: [], phone: [], kids: null, status: null, rid: null };
     Object.keys(keys).forEach(function (k) {
       var t = k.trim();
       if (t.indexOf("שם פרטי") !== -1) c.firstName.push(k);
@@ -1293,6 +1294,7 @@ CBA.screens = CBA.screens || {};
       else if (t.indexOf("טלפון") !== -1) c.phone.push(k);
       else if (t.indexOf("ילדים") !== -1) c.kids = k;
       else if (t.indexOf("סטטוס") !== -1) c.status = k;
+      else if (t.indexOf("מזהה קבוע") !== -1) c.rid = k; // לצורך התאמת "תפקיד בוועד" (ר' dirRoleFor)
     });
     c.firstName.sort(); c.phone.sort();
     return c;
@@ -1303,14 +1305,25 @@ CBA.screens = CBA.screens || {};
   function dirHouseHTML(row, c) {
     var house = dirVal(row, c.house) || "—";
     var fam = dirVal(row, c.family) || "משק בית";
-    var names = c.firstName.map(function (k) { return dirVal(row, k); }).filter(Boolean).join(" ו");
+    var rid = dirVal(row, c.rid);
+    var nameParts = c.firstName.map(function (k) { return dirVal(row, k); }).filter(Boolean);
+    var names = nameParts.join(" ו");
     var phones = c.phone.map(function (k) { return dirVal(row, k); }).filter(Boolean);
     var kids = dirVal(row, c.kids);
+    // חיווי "תפקיד בוועד" (סעיף 5) — מואפר, לקריאה בלבד; אם יש כמה שמות בבית
+    // מציינים לאיזה מהם שייך התפקיד ("שם — תפקיד"), אם שם אחד בלבד מספיק
+    // להציג את התפקיד לבד.
+    var roleLines = nameParts.map(function (fn) {
+      var role = dirRoleFor(fn, fam, rid);
+      if (!role) return "";
+      return CBA.esc(nameParts.length > 1 ? (fn + " — " + role) : role);
+    }).filter(Boolean);
     return (
       '<div class="card dir-card">' +
         '<div class="dir-card__house">בית ' + CBA.esc(house) + '</div>' +
         '<div class="dir-card__fam">משפחת ' + CBA.esc(fam) +
           (names ? ' <span class="dir-card__names">(' + CBA.esc(names) + ')</span>' : '') + '</div>' +
+        (roleLines.length ? '<div class="dir-card__role" title="תפקיד בוועד השיכון — עריכה רק דרך עץ הוועד">' + roleIcon + roleLines.join(" · ") + '</div>' : '') +
         (kids ? '<div class="dir-card__kids">' + kidsIcon + CBA.esc(kids) + '</div>' : '') +
         (phones.length
           ? '<div class="dir-card__phones">' + phones.map(function (p) {
@@ -1329,6 +1342,48 @@ CBA.screens = CBA.screens || {};
   var dirState = { loaded: false, loading: false, rows: [], cols: null, q: "" };
   var dirScrollY = 0;
   var dirContainer = null;   // ה-container החי האחרון — לא סומכים על רפרנס-DOM שנתפס
+
+  // חיווי "תפקיד בוועד" בכרטיס הבית ברשימת "תושבי השיכון" (2026-08-10, לבקשת
+  // יועד — סעיף 5). מטמון נפרד מ-dirState (נטען פעם אחת, לא תלוי בחיפוש/
+  // רענון של המדריך), נבנה מ-CBA.data.getCommitteeTree ישירות (לא דרך
+  // CBA.committee.buildBoxes — כאן צריך שורה-לפי-אדם, לא תא מאוחד). התאמה בין
+  // תושב לתפקיד היא "best effort": קודם שם מלא מדויק ("פרטי משפחה", כמו
+  // שה-autocomplete בעץ מזין), אחר-כך שם פרטי בלבד, ולבסוף מזהה תושב (rid)
+  // רק אם יש אדם יחיד עם אותו rid בבית (כדי לא לייחס תפקיד לבן/בת הזוג הלא
+  // נכון/ה). זה חיווי בלבד — לא ניתן לעריכה כאן, עריכה רק דרך עץ הוועד.
+  var dirRoleIndex = null;
+  var dirRoleLoading = false;
+  function buildDirRoleIndex(rows) {
+    var byLabel = {}, byFirst = {}, byRid = {};
+    (rows || []).forEach(function (r) {
+      var role = String(r["תפקיד"] || "").trim();
+      var name = String(r["שם"] || "").trim();
+      var rid = String(r["מזהה תושב"] || "").trim();
+      if (!role || !name) return;
+      (byLabel[name] = byLabel[name] || []).push(role);
+      var first = name.split(" ")[0];
+      if (first) (byFirst[first] = byFirst[first] || []).push(role);
+      if (rid) (byRid[rid] = byRid[rid] || []).push({ name: name, role: role });
+    });
+    return { byLabel: byLabel, byFirst: byFirst, byRid: byRid };
+  }
+  function dirRoleFor(fn, fam, rid) {
+    if (!dirRoleIndex || !fn) return "";
+    var label = fn + " " + fam;
+    if (dirRoleIndex.byLabel[label]) return dirRoleIndex.byLabel[label][0];
+    if (dirRoleIndex.byFirst[fn]) return dirRoleIndex.byFirst[fn][0];
+    if (rid && dirRoleIndex.byRid[rid] && dirRoleIndex.byRid[rid].length === 1) return dirRoleIndex.byRid[rid][0].role;
+    return "";
+  }
+  function ensureDirRoleIndex() {
+    if (dirRoleIndex || dirRoleLoading) return;
+    dirRoleLoading = true;
+    CBA.data.getCommitteeTree(function (res) {
+      dirRoleLoading = false;
+      dirRoleIndex = buildDirRoleIndex(res && res.ok ? res.rows : []);
+      dirRenderList();
+    });
+  }
                               // ברגע קריאה ל-render() אחת, כי קריאה חדשה (רענון רקע
                               // נוסף שמגיע לפני שהראשונה סיימה לטעון) בונה DOM חדש,
                               // וה-callback של הבקשה הישנה חייב לכתוב לתוך ה-DOM
@@ -1369,6 +1424,7 @@ CBA.screens = CBA.screens || {};
       // (ר' ההערה למעלה). ניווט אמיתי למסך (לא שקט) תמיד מרענן מהשרת, כדי
       // שהמדריך לא יישאר תקוע ב"טעינה ראשונה" למשך כל הסשן.
       if (!(opts && opts.silent)) dirState.loaded = false;
+      ensureDirRoleIndex(); // חיווי "תפקיד בוועד" (סעיף 5) — נטען פעם אחת, מטמון נפרד מ-dirState
 
       container.innerHTML =
         '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
@@ -2092,29 +2148,69 @@ CBA.screens = CBA.screens || {};
      לוגיקת בניית העץ מהשורות השטוחות (buildBoxes/catInfo) משותפת עם מסך
      הניהול — חיה ב-CBA.committee (dataService.js) כדי ששני הצדדים תמיד
      יסכימו על אותו מבנה נתונים. בלי כותרת מסך (screen-head) בכוונה —
-     שם הטאב בניווט כבר אומר "ועד השיכון", וכל השטח הפנוי הולך לעץ עצמו,
-     שנוטה להיות רחב (הרבה תפקידים באותה שורה) ורוצה כמה שיותר רוחב.
-     גלילה אופקית כשהעץ רחב מהמסך (ר' .org-tree-wrap ב-resident.css). */
+     שם הטאב בניווט כבר אומר "ועד השיכון", וכל השטח הפנוי הולך לעץ עצמו.
+     שתי תצוגות ממש שונות בקוד, לפי רוחב המסך (נבדק פעם אחת ב-render, כמו
+     שכבר נעשה במפה — ר' matchMedia ב-resMap למעלה): בדסקטופ עץ CSS אופקי
+     עם גלילה (ר' .org-tree-wrap), ובמסך צר רשימה היררכית מתקפלת בלי שום
+     גלילה אופקית (2026-08-10, לבקשת יועד: "רשימה היררכית מתקפלת"). */
+  var chevIcon = svg('<polyline points="6 9 12 15 18 9"/>');
+
   CBA.screens.resCommittee = {
     render: function (container) {
+      var isMobile = window.matchMedia("(max-width: 720px)").matches;
       container.innerHTML =
-        '<div class="org-hint">העץ רחב — גררו/גללו אופקית כדי לראות את כולו.</div>' +
+        '<div class="org-hint">' + (isMobile ? "לחצו על תפקיד כדי לפתוח את מי שכפוף לו." : "העץ רחב — גררו/גללו אופקית כדי לראות את כולו.") + '</div>' +
         '<div id="org-body"><div class="rs-empty"><p>טוען…</p></div></div>';
       var bodyEl = container.querySelector("#org-body");
       var rowsCache = [];
+      var expanded = null; // {boxId:true/false} — נבנה פעם אחת (ברירת מחדל), נשמר בין ציורים חוזרים
 
       function orgNodeHTML(box, byParent) {
         var cat = CBA.committee.catInfo(box.category);
         var kids = byParent[box.id] || [];
         var peopleHTML = box.people.length
           ? box.people.map(function (p) { return '<div class="org-box__person">' + CBA.esc(p.name) + '</div>'; }).join("")
-          : '<div class="org-box__person org-box__person--empty">תא פנוי</div>';
+          : "";
         return '<li>' +
-          '<div class="org-box org-box--' + (cat.cls || "") + '" title="' + CBA.esc(cat.key) + '">' +
+          '<div class="org-box" style="border-top-color:' + CBA.esc(cat.color) + '" title="' + CBA.esc(cat.name) + '">' +
             '<div class="org-box__role">' + CBA.esc(box.role || "(ללא שם תפקיד)") + '</div>' +
-            '<div class="org-box__people">' + peopleHTML + '</div>' +
+            (peopleHTML ? '<div class="org-box__people">' + peopleHTML + '</div>' : "") +
           '</div>' +
           (kids.length ? '<ul>' + kids.map(function (k) { return orgNodeHTML(k, byParent); }).join("") + '</ul>' : "") +
+        '</li>';
+      }
+
+      // ברירת מחדל לפתיחה/סגירה ברשימה המתקפלת: "שרשרת" (תא עם ילד יחיד)
+      // נפתחת אוטומטית לגמרי — אין טעם להסתיר "מב"ס 30 → סמב"ס 30 → יו"ר
+      // שיכון" מאחורי 3 לחיצות. ענף עם כמה ילדים (כמו 13 הקטגוריות תחת
+      // יו"ר שיכון) מתחיל סגור — המשתמש פותח מה שמעניין אותו.
+      function defaultExpanded(boxes, byParent) {
+        var out = {};
+        boxes.forEach(function (b) { out[b.id] = (byParent[b.id] || []).length === 1; });
+        return out;
+      }
+
+      function orgListHTML(box, byParent) {
+        var cat = CBA.committee.catInfo(box.category);
+        var kids = byParent[box.id] || [];
+        var isOpen = !!expanded[box.id];
+        var peopleText = box.people.length ? box.people.map(function (p) { return CBA.esc(p.name); }).join(", ") : "";
+        return '<li class="org-list__item">' +
+          '<div class="org-list__row"' + (kids.length ? ' data-org-toggle="' + CBA.esc(box.id) + '"' : "") + '>' +
+            (kids.length
+              ? '<span class="org-list__chev' + (isOpen ? " is-open" : "") + '">' + chevIcon + '</span>'
+              : '<span class="org-list__chev org-list__chev--spacer"></span>') +
+            '<span class="org-list__dot" style="background:' + CBA.esc(cat.color) + '" title="' + CBA.esc(cat.name) + '"></span>' +
+            '<div class="org-list__text">' +
+              '<div class="org-list__role">' + CBA.esc(box.role || "(ללא שם תפקיד)") + '</div>' +
+              (peopleText ? '<div class="org-list__people">' + peopleText + '</div>' : "") +
+            '</div>' +
+          '</div>' +
+          (kids.length
+            ? '<ul class="org-list__children"' + (isOpen ? "" : " hidden") + '>' +
+                kids.map(function (k) { return orgListHTML(k, byParent); }).join("") +
+              '</ul>'
+            : "") +
         '</li>';
       }
 
@@ -2131,6 +2227,22 @@ CBA.screens = CBA.screens || {};
           (byParent[p] = byParent[p] || []).push(b);
         });
         var roots = byParent[""] || [];
+
+        if (isMobile) {
+          if (!expanded) expanded = defaultExpanded(boxes, byParent);
+          bodyEl.innerHTML = '<ul class="org-list">' +
+            roots.map(function (b) { return orgListHTML(b, byParent); }).join("") +
+            '</ul>';
+          bodyEl.querySelectorAll("[data-org-toggle]").forEach(function (row) {
+            row.addEventListener("click", function () {
+              var id = row.dataset.orgToggle;
+              expanded[id] = !expanded[id];
+              draw();
+            });
+          });
+          return;
+        }
+
         bodyEl.innerHTML = '<div class="org-tree-wrap"><ul class="org-tree">' +
           roots.map(function (b) { return orgNodeHTML(b, byParent); }).join("") +
           '</ul></div>';
@@ -2156,7 +2268,7 @@ CBA.screens = CBA.screens || {};
         });
       }
 
-      load();
+      CBA.committee.loadCategories(function () { load(); });
     }
   };
 

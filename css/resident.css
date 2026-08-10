@@ -425,6 +425,10 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 }
 .dir-card__fam { font-size: 15px; font-weight: 700; color: var(--text); }
 .dir-card__names { font-weight: 400; color: var(--text-soft); font-size: 13px; }
+/* חיווי "תפקיד בוועד" (2026-08-10, סעיף 5) — מואפר בכוונה: זה מידע משני
+   בכרטיס, ולא ניתן לעריכה כאן (עריכה רק דרך עץ הוועד). */
+.dir-card__role { font-size: 12.5px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+.dir-card__role svg { width: 13px; height: 13px; flex: none; color: var(--text-muted); }
 .dir-card__kids { font-size: 12.5px; color: var(--text-soft); display: flex; align-items: center; gap: 6px; }
 .dir-card__kids svg { width: 14px; height: 14px; flex: none; color: var(--text-muted); }
 .dir-card__phones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
@@ -781,14 +785,25 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .org-tree { display: flex; justify-content: flex-start; justify-content: safe center; }
 .org-tree ul { display: flex; position: relative; padding-top: 26px; }
 
-.org-tree li { flex: none; text-align: center; position: relative; padding: 26px 10px 0; }
+/* padding אופקי צומצם (10px→7px, 2026-08-10) — פחות "בזבוז" רוחב בין
+   קוביות, כדי לצמצם את גלישת העץ לצדדים (יועד: "יש עדיין בריחה של העץ
+   לצדדים"). לא 0 לגמרי — עדיין צריך מרווח מינימלי לקווי החיבור. */
+.org-tree li { flex: none; text-align: center; position: relative; padding: 26px 7px 0; }
 .org-tree > li { padding-top: 0; }
 
 .org-tree li::before, .org-tree li::after {
   content: ""; position: absolute; top: 0; right: 50%; width: 50%; height: 26px;
   border-top: 1.5px solid var(--border);
 }
-.org-tree li::after { right: auto; left: 50%; border-right: 1.5px solid var(--border); }
+/* באג שתוקן (2026-08-10, לבקשת יועד — "פערים בהצגת הקווים"): ל-::after
+   (המחצית הימנית של כל li) היה border-right, כלומר הקו האנכי שלו נחת על
+   הקצה החיצוני של ה-li ולא במרכזו — לא מתחת לקוביה בכלל. התוצאה: "שן"
+   אנכית זזה/חסרה מתחת לכל קוביה שנייה, בהתאם למספר האחים בכל ענף (לכן
+   נראה "קבוע ולא לפי הצורך"). התיקון: border-left על ::after — הקצה
+   *השמאלי* של המחצית הימנית הוא בדיוק מרכז ה-li, כמו ה-border-right של
+   ::before (הקצה הימני של המחצית השמאלית) — שני החצאים נפגשים במרכז
+   בדיוק מתחת לקוביה, תמיד, לא משנה כמה אחים יש. */
+.org-tree li::after { right: auto; left: 50%; border-left: 1.5px solid var(--border); }
 .org-tree li::before { border-right: 1.5px solid var(--border); }
 .org-tree > li::before, .org-tree > li::after { display: none; }
 .org-tree li:only-child::before, .org-tree li:only-child::after { display: none; }
@@ -802,9 +817,9 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .org-box {
   /* inline-block ולא block: כדי ש-text-align:center של ה-li (מעלה) ימרכז
      אותו בפועל — li אינו flex, אז ילד block רגיל לא היה מגיב למרכוז הזה */
-  display: inline-block; width: 182px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 12px 13px 13px; text-align: center;
-  position: relative; border-top: 3px solid var(--text);
+  display: inline-block; width: 156px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 9px 10px 10px; text-align: center;
+  position: relative; border-top: 4px solid var(--text);
 }
 .org-box--kids { border-top-color: var(--org-kids); }
 .org-box--ops  { border-top-color: var(--org-ops); }
@@ -812,10 +827,13 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 
 /* הקטגוריה (הנהלה/ילדים וקהילה/תפעול ושירות/ועדת מתנדבים) לא מוצגת יותר
    ככותרת טקסט על הכרטיס עצמו (יועד: "לא רלוונטיות") — נשארת רק כפס הצבע
-   העליון + tooltip בריחוף (title על .org-box, ר' resident.js) */
-.org-box__role { font-size: 15px; font-weight: 800; color: var(--text); line-height: 1.35; }
-.org-box__people { margin-top: 6px; }
-.org-box__person { font-size: 14px; color: var(--text-soft); line-height: 1.5; }
+   העליון + tooltip בריחוף (title על .org-box, ר' resident.js). קוביות
+   קטנות ומהודקות יותר (2026-08-10, לבקשת יועד: "קוביות קטנות יותר ששטחן
+   מנוצל") — רוחב/ריפוד קטנו, אבל הגופנים דווקא גדלו קצת (ולא הצטמצמו),
+   כדי לשמור על יחס קריאות טוב בתוך קוביה מהודקת יותר. */
+.org-box__role { font-size: 16px; font-weight: 800; color: var(--text); line-height: 1.3; }
+.org-box__people { margin-top: 5px; }
+.org-box__person { font-size: 15px; color: var(--text-soft); line-height: 1.4; }
 .org-box__person--empty { color: var(--text-muted); font-style: italic; }
 
 .org-box__actions {
@@ -851,9 +869,48 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .org-person-row__x svg { width: 13px; height: 13px; }
 #og-add-person { margin-top: 2px; }
 
-@media (max-width: 720px) {
-  .org-box { width: 150px; padding: 10px 10px 11px; }
-  .org-box__role { font-size: 13.5px; }
-  .org-box__person { font-size: 12.5px; }
-  .org-tree-wrap { padding: 4px 4px 32px; }
+/* רשימה היררכית מתקפלת — תצוגת מובייל (2026-08-10, לבקשת יועד: "רשימה
+   היררכית מתקפלת", בלי שום גלילה אופקית). מוצגת רק כשcomponent.render בודק
+   matchMedia(max-width:720px) ובוחר לצייר .org-list במקום .org-tree —
+   ר' resident.js/residents.js. הקינון עצמו (ul בתוך li) מספק את ההזחה
+   וההיררכיה בלי שום מתמטיקה של רוחב/גלילה. */
+.org-list, .org-list__children { list-style: none; margin: 0; padding: 0; }
+.org-list__children { padding-inline-start: 26px; border-inline-start: 1.5px solid var(--border); margin-inline-start: 13px; }
+.org-list__item { margin: 2px 0; }
+.org-list__row {
+  display: flex; align-items: center; gap: 8px; padding: 9px 6px; border-radius: var(--radius-sm);
+  cursor: default;
 }
+.org-list__row[data-org-toggle] { cursor: pointer; }
+.org-list__row[data-org-toggle]:hover, .org-list__row[data-org-toggle]:active { background: var(--hover); }
+.org-list__chev {
+  flex: none; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
+  color: var(--text-soft); transition: transform var(--t);
+}
+.org-list__chev svg { width: 14px; height: 14px; }
+.org-list__chev.is-open { transform: rotate(180deg); }
+.org-list__chev--spacer { visibility: hidden; }
+.org-list__dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+.org-list__text { min-width: 0; flex: 1; }
+.org-list__role { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.35; }
+.org-list__people { font-size: 13px; color: var(--text-soft); margin-top: 2px; line-height: 1.4; }
+.org-list__actions { flex: none; display: flex; align-items: center; gap: 2px; }
+.org-list__act {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-soft); display: flex; align-items: center;
+  justify-content: center; cursor: pointer; padding: 0;
+}
+.org-list__act svg { width: 13px; height: 13px; }
+.org-list__act:hover { background: var(--hover); color: var(--text); }
+
+/* מיני-טופס "קטגוריה חדשה" בתוך מודל עריכת תפקיד (2026-08-10, לבקשת יועד —
+   "רשימה שמשודכת לצבע וניתן לבחור צבע אבל גם להוסיף קטגוריה חדשה"). נפתח מתחת
+   לבחירת הקטגוריה כשבוחרים "+ קטגוריה חדשה…"; input[type=color] הוא ה-color
+   picker הטבעי של הדפדפן, בלי ווידג'ט מותאם אישית. */
+.org-newcat { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.org-newcat #og-newcat-name { flex: 1; min-width: 0; }
+.org-newcat__color {
+  flex: none; width: 38px; height: 38px; padding: 2px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface); cursor: pointer;
+}
+.org-newcat__add { flex: none; white-space: nowrap; }

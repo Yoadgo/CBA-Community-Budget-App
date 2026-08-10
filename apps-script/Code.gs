@@ -81,7 +81,10 @@ var ACTION_PERMS = {
   // עץ ועד השיכון (2026-08-09) — קריאה פתוחה לכל תושב (לא ברשימה כאן בכלל,
   // ר' handleCommitteeTree_), אבל עריכה/שמירה של העץ עצמו מוגבלת למנהל-על
   // בלבד, בדיוק כמו הרשאות — זה שינוי מבני שמשפיע על כל התושבים שרואים אותו.
-  saveCommitteeTree: PERM_SUPER
+  saveCommitteeTree: PERM_SUPER,
+  // קטגוריות עץ הוועד (2026-08-10) — אותו היגיון בדיוק: קריאה פתוחה לכולם,
+  // הוספת/שינוי קטגוריה וצבע מוגבלים למנהל-על.
+  saveCommitteeCategories: PERM_SUPER
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -282,6 +285,10 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'committeeTree') {
       return handleCommitteeTree_(e.parameter);
     }
+    // קטגוריות עץ הוועד (2026-08-10) — ר' handleCommitteeCategories_ למטה.
+    if (e && e.parameter && e.parameter.action === 'committeeCategories') {
+      return handleCommitteeCategories_(e.parameter);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var years = [];
     ss.getSheets().forEach(function (sh) {
@@ -297,7 +304,7 @@ function doGet(e) {
       if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
     });
     var out = {
-      ok: true, version: 'v34-category-items', years: years,
+      ok: true, version: 'v35-committee-categories', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -365,6 +372,7 @@ function doPost(e) {
       case 'ensureColumns':     return json_(ensureColumns_(ss, body));
       case 'saveColumnConfig':  return json_(saveColumnConfig_(ss, body));
       case 'saveCommitteeTree': return json_(saveCommitteeTree_(ss, body));
+      case 'saveCommitteeCategories': return json_(saveCommitteeCategories_(ss, body));
       case 'approveSignup':     return json_(approveSignup_(ss, body));
       case 'rejectSignup':      return json_(rejectSignup_(ss, body));
       case 'saveResidentRow':   return json_(saveResidentRow_(ss, body));
@@ -2801,6 +2809,81 @@ function saveCommitteeTree_(ss, body) {
         return COMMITTEE_HEADERS.map(function (h) { return (r[h] == null) ? '' : r[h]; });
       });
       sh.getRange(2, 1, grid.length, COMMITTEE_HEADERS.length).setValues(grid);
+    }
+    return { ok: true, count: rows.length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================================
+ *  קטגוריות "עץ ועד השיכון" (2026-08-10)
+ * ----------------------------------------------------------------------------
+ *  לבקשת יועד: הקטגוריות הקבועות (הנהלה/ילדים וקהילה/תפעול ושירות/ועדת
+ *  מתנדבים) הפכו לרשימה ניתנת-לעריכה — מנהל-על יכול להוסיף קטגוריה חדשה
+ *  עם צבע משלה ישירות מטופס עריכת התפקיד, לא רק לבחור מהרשימה הקבועה.
+ *  טאב נפרד "קטגוריות ועד השיכון": כל שורה = קטגוריה אחת. עמודות: "שם",
+ *  "צבע" (hex, למשל "#7C3AED"). אין "מזהה" נפרד — השם עצמו הוא המפתח
+ *  (כמו "קטגוריה" בטבלת העץ שמצביעה לכאן לפי שם).
+ * ========================================================================== */
+var COMMITTEE_CATS_SHEET = 'קטגוריות ועד השיכון';
+var COMMITTEE_CATS_HEADERS = ['שם', 'צבע'];
+
+/** ברירת מחדל בפתיחה ראשונה — אותם 4 צבעים שכבר היו קבועים ב-CSS
+ * (org-kids/org-ops/org-vol), פלוס "הנהלה" שקיבלה עכשיו צבע מפורש משלה
+ * (קודם השתמשה ב---text הכללי, בלי טוקן נפרד). */
+function committeeCatsSeed_() {
+  return [
+    ['הנהלה', '#111827'],
+    ['ילדים וקהילה', '#7C3AED'],
+    ['תפעול ושירות', '#0891B2'],
+    ['ועדת מתנדבים', '#6B7280']
+  ];
+}
+
+function ensureCommitteeCatsSheet_(ss) {
+  var sh = ss.getSheetByName(COMMITTEE_CATS_SHEET);
+  if (sh) return sh;
+  sh = ss.insertSheet(COMMITTEE_CATS_SHEET);
+  sh.getRange(1, 1, 1, COMMITTEE_CATS_HEADERS.length).setValues([COMMITTEE_CATS_HEADERS]);
+  sh.getRange(1, 1, 1, COMMITTEE_CATS_HEADERS.length).setFontWeight('bold');
+  var seed = committeeCatsSeed_();
+  sh.getRange(2, 1, seed.length, COMMITTEE_CATS_HEADERS.length).setValues(seed);
+  sh.setFrozenRows(1);
+  return sh;
+}
+
+/** קריאה — פתוחה לכל תושב מחובר (need=null), בדיוק כמו handleCommitteeTree_
+ * למעלה: התצוגה (צבע הפס העליון על כל קוביה) גלויה לכולם, רק העריכה
+ * (הוספת קטגוריה/צבע חדשים) מוגבלת למנהל-על. */
+function handleCommitteeCategories_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    ensureCommitteeCatsSheet_(ss);
+    return json_({ ok: true, rows: readTable_(ss, COMMITTEE_CATS_SHEET) });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** שמירה — מנהל-על בלבד (ACTION_PERMS). כמו saveCommitteeTree_: מחליפה את
+ * כל הרשימה במקום לערוך שורה בודדת — הרשימה קטנה (כמה קטגוריות), אין טעם
+ * במיזוג חלקי, וזה גם מונע כפילויות אם שני מנהלים ערכו במקביל. */
+function saveCommitteeCategories_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ensureCommitteeCatsSheet_(ss);
+    var rows = Array.isArray(body.rows) ? body.rows : [];
+    var last = sh.getLastRow();
+    if (last > 1) sh.getRange(2, 1, last - 1, COMMITTEE_CATS_HEADERS.length).clearContent();
+    if (rows.length) {
+      var grid = rows.map(function (r) {
+        return COMMITTEE_CATS_HEADERS.map(function (h) { return (r[h] == null) ? '' : r[h]; });
+      });
+      sh.getRange(2, 1, grid.length, COMMITTEE_CATS_HEADERS.length).setValues(grid);
     }
     return { ok: true, count: rows.length };
   } finally {
