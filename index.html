@@ -59,6 +59,14 @@
       <!-- מתג השנה — בין הניווט לכפתור המשתמש; מתמלא דינמית ב-app.js -->
       <div class="year-switch" id="year-switch"></div>
 
+      <!-- חיווי "שומר…/נשמר ✓" — עוגן קבוע בכותרת (2026-08-09, לבקשת יועד: הועבר
+           מבועה צפה בתחתית המסך, כי שם היה לא מספיק בולט). האלמנט עצמו
+           (#cba-save-indicator) נוצר/מתעדכן ב-app.js (ר' saveIndicatorEl) ומוכנס
+           לתוך העוגן הזה — לא לתוך app-controls, כדי שלא יתנגש עם renderControls()
+           שכותב מחדש את כל ה-innerHTML של app-controls שוב ושוב (כפתור משתמש,
+           התרעות). נשאר ריק/בלתי-נראה כשאין שמירה בעיצומה. -->
+      <div class="save-indicator-slot" id="save-indicator-slot"></div>
+
       <!-- אזור בקרה ושמישות (פינה שמאלית עליונה) — נורות מצב, מתמלא ב-app.js -->
       <div class="app-controls" id="app-controls"></div>
     </div>

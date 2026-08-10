@@ -1188,11 +1188,15 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
     const reader = new FileReader();
     reader.onload = function () {
       const base64 = String(reader.result).split(",")[1];
+      // uploadReceiptFile עובר ב-postRead (לא push) — לא נספר אוטומטית
+      // ב-inFlightWrites, אז מסמנים ידנית (ר' מדיניות רענון נתונים).
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("expenseReceiptFile");
       CBA.data.uploadReceiptFile(state, {
         dataBase64: base64,
         mimeType: file.type || "application/octet-stream",
         fileName: CBA.data.receiptFileName(state)
       }, function (res) {
+        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("expenseReceiptFile");
         if (res && res.ok) {
           state.receiptUrl = res.url;
           txRenderForm(container, overlay, state, editing, id, residentOptions);
@@ -1213,7 +1217,9 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
     if (!window.confirm("למחוק את קובץ הקבלה? הפעולה מוחקת את הקובץ בפועל מ-Drive, לא רק מנתקת את הקישור.")) return;
     collect();
     delReceiptBtn.disabled = true;
+    if (CBA.sheets.markDirty) CBA.sheets.markDirty("expenseReceiptFile");
     CBA.data.deleteReceiptFile(state, function (res) {
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("expenseReceiptFile");
       delReceiptBtn.disabled = false;
       if (res && res.ok) {
         state.receiptUrl = "";

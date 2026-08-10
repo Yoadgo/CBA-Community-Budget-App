@@ -128,41 +128,49 @@ body.app-booting .app-nav__tab {
   cursor: default;
 }
 
-/* ---------- חיווי "שומר…/נשמר ✓" גלובלי (2026-08-09) ----------
-   בועה אחת בתחתית המסך, לכל האפליקציה — כדי שבכל מסך (לא רק תכנון תקציב)
-   יהיה תמיד ברור אם יש שמירה בעיצומה. מוזנת ע"י אירוע cba:dirty-change
-   מ-sheets.js (ר' notifyDirtyChange), מטופלת ב-app.js. שלושה מצבים:
-   is-saving (עדיין בעיצומה — לא נעלמת מעצמה), is-saved (הצליחה — נעלמת
-   אחרי כמה שניות), is-error (כשל רשת אמיתי בכתיבה — נשארת קצת יותר זמן). */
+/* ---------- חיווי "שומר…/נשמר ✓" גלובלי (2026-08-09, הועבר לכותרת) ----------
+   במקור בועה צפה בתחתית המסך; יועד ציין שזה לא מספיק בולט, אז עבר לעוגן קבוע
+   בכותרת (#save-indicator-slot ב-index.html, בין מתג השנה לאזור הבקרה) —
+   תג קטן שיושב בזרימת הכותרת הרגילה, לא צף מעל התוכן. מוזן ע"י אירוע
+   cba:dirty-change מ-sheets.js (ר' notifyDirtyChange), מטופל ב-app.js.
+   שלושה מצבים: is-saving (עדיין בעיצומה — לא נעלם מעצמו), is-saved (הצליח —
+   נעלם אחרי כמה שניות), is-error (כשל רשת אמיתי בכתיבה — נשאר קצת יותר זמן).
+   max-width (ולא display) הוא מה שמאפשר לו "להיפתח"/"להיסגר" חלק בלי לדחוף
+   פתאום את שאר פריטי הכותרת. */
 .save-indicator {
-  position: fixed;
-  inset-inline-start: 50%;
-  inset-block-end: 24px;
-  transform: translate(-50%, 12px);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 16px;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 10px;
+  height: 28px;
   border-radius: 999px;
-  box-shadow: var(--shadow-hover);
+  background: var(--hover);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .2s ease, transform .2s ease, background-color .2s ease;
-  z-index: 60;
-  background: var(--action, #111827);
+  transition: max-width .25s cubic-bezier(.2,.6,.2,1), opacity .2s ease,
+              background-color .2s ease, border-color .2s ease, color .2s ease;
 }
-.save-indicator.is-show { opacity: 1; transform: translate(-50%, 0); }
-.save-indicator.is-saved { background: var(--ok); }
-.save-indicator.is-error { background: var(--danger); }
+.save-indicator.is-show { opacity: 1; max-width: 200px; pointer-events: auto; }
+.save-indicator.is-saved { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.save-indicator.is-error { background: var(--danger-soft); border-color: transparent; color: var(--danger); }
 .save-indicator__dot {
   width: 7px; height: 7px; border-radius: 50%; flex: none;
   background: currentColor; opacity: .85;
   animation: si-pulse 1s ease-in-out infinite;
 }
 @keyframes si-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+/* מצב "שומר…" (לא is-saved/is-error) משתמש בצבע הפעולה הרגיל — לא אפור סתם,
+   כדי שיהיה ברור שזה מצב פעיל ולא תג סטטי */
+.save-indicator.is-show:not(.is-saved):not(.is-error) {
+  background: var(--hover); border-color: var(--action); color: var(--action);
+}
 
 /* ---------- נגישות: כיבוד "הפחתת תנועה" ---------- */
 @media (prefers-reduced-motion: reduce) {

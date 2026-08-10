@@ -248,6 +248,10 @@ body.is-gated { overflow: hidden; }
 
 /* מתג השנה — יושב מתחת לכותרת המותג */
 .year-switch { display: flex; align-items: center; }
+
+/* עוגן חיווי "שומר…/נשמר ✓" בכותרת — ר' .save-indicator ב-loading.css.
+   רק מסגרת יישור; התג עצמו קובע את הרוחב/מראה שלו (max-width transition). */
+.save-indicator-slot { display: flex; align-items: center; }
 .year-switch__label { font-size: 12px; color: var(--text-soft); }
 .year-switch__select {
   border: 1px solid var(--border); background: var(--surface); font-family: inherit;

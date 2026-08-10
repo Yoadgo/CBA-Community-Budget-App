@@ -40,14 +40,14 @@ CBA.notesPanel = (function () {
   }
 
   function scheduleSave(editorEl, metaEl) {
-    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty();
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("notesSave");
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
       var year = CBA.data.getCurrentYear();
       var content = editorEl.innerHTML;
       var by = currentUserLabel();
       CBA.data.saveNotesToSheet(year, content, by, function () {
-        if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty();
+        if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("notesSave");
       });
       if (metaEl) metaEl.textContent = metaLabel(CBA.data.getNotes());
     }, 700);

@@ -309,10 +309,12 @@ function resEnsureCols(container, cb) {
   var needPerm = resState.headers.every(function (h) { return String(h).indexOf("הרשאות") === -1; });
   if (!missing.length && !(needPerm && resIAmSuper())) { cb(); return; }
 
-  var jobs = 0, fin = function () { if (--jobs === 0) cb(true); };
+  var jobs = 0;
+  var fin = function () { if (--jobs === 0) { if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsEnsureCols"); cb(true); } };
   if (missing.length) jobs++;
   if (needPerm && resIAmSuper()) jobs++;
   if (!jobs) { cb(); return; }
+  if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsEnsureCols");
   if (missing.length) CBA.data.ensureResidentCols(fin);
   if (needPerm && resIAmSuper()) CBA.data.ensurePermissionCols(fin);
 }
@@ -618,7 +620,11 @@ function resBind(container, c) {
       var payload = val === "new" ? { id: b.dataset.suOk, newFamily: true }
                                   : { id: b.dataset.suOk, residentRowIndex: parseInt(val, 10) };
       b.disabled = true; b.textContent = "מאשר…";
+      // approveSignup/rejectSignup עוברים ב-postRead (לא push) — לא נספרים
+      // אוטומטית ב-inFlightWrites, אז מסמנים ידנית (ר' מדיניות רענון נתונים).
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSignup");
       CBA.data.approveSignup(payload, function (res) {
+        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSignup");
         if (!res || !res.ok) {
           b.disabled = false; b.textContent = "אשר";
           window.alert("האישור נכשל: " + ((res && res.error) || "שגיאה"));
@@ -633,7 +639,9 @@ function resBind(container, c) {
     b.addEventListener("click", function () {
       if (!window.confirm("לדחות את בקשת ההרשמה?")) return;
       b.disabled = true;
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSignup");
       CBA.data.rejectSignup(b.dataset.suNo, function (res) {
+        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSignup");
         if (!res || !res.ok) { b.disabled = false; window.alert("הדחייה נכשלה"); return; }
         resState.loaded = false; resLoad(container);
       });
@@ -971,7 +979,9 @@ function resOpenAdd(container, c) {
 
     var go = wrap.querySelector("#ra-go");
     go.disabled = true; go.textContent = "יוצר…";
+    if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsCreate");
     CBA.data.createResidents(payload, function (res) {
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsCreate");
       if (!res || !res.ok) {
         go.disabled = false; go.textContent = "צור";
         window.alert("היצירה נכשלה: " + ((res && res.error) || "שגיאה"));
@@ -1327,7 +1337,9 @@ function resOpenDrawer(container, idx, rowIndex, c) {
       }
       if (!window.confirm(txt)) return;
       btn.disabled = true; btn.textContent = "שומר…";
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
       CBA.data.savePermissions(rowIndex, slot, perms, function (res) {
+        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
         btn.disabled = false; btn.textContent = "שמור הרשאות";
         if (!res || !res.ok) {
           window.alert("שמירת ההרשאות נכשלה: " + ((res && res.error) || "שגיאה"));
@@ -1354,7 +1366,9 @@ function resOpenDrawer(container, idx, rowIndex, c) {
     }
     var btn = overlay.querySelector("[data-rsave]");
     btn.disabled = true; btn.textContent = "שומר…";
+    if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
     CBA.data.saveResidentRow(rowIndex, fields, function (res) {
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
       if (!res || !res.ok) {
         btn.disabled = false; btn.textContent = "שמור";
         window.alert("השמירה נכשלה: " + ((res && res.error) || "שגיאה"));
@@ -1375,7 +1389,9 @@ function resOpenDrawer(container, idx, rowIndex, c) {
     if (house === null) return;
     if (!window.confirm('הדיירים הנוכחיים יסומנו כ"עזבו" ו-' + txN + ' התנועות יישארו משויכות אליהם.\n' +
       'תיפתח שורה חדשה למשפחת ' + fam + ' עם מזהה קבוע משלה. להמשיך?')) return;
+    if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
     CBA.data.replaceFamily({ rowIndex: rowIndex, family: fam, house: String(house).trim() }, function (res) {
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
       if (!res || !res.ok) { window.alert("הפעולה נכשלה: " + ((res && res.error) || "שגיאה")); return; }
       resCloseDrawer();
       resState.loaded = false;

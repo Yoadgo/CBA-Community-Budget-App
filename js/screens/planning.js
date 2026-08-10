@@ -717,13 +717,24 @@ function planOpenCustomModal(container, catId) {
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  // (2026-08-09) חוסם רענון רקע כל עוד החלון הזה פתוח — לא רק מרגע ה-blur
+  // הראשון (כמו planSave() לבד). יש לזה מפתח-סיבה נפרד ("planMonthModal") מזה
+  // של planSave() ("planSave"), כך שהם לא "דורסים" זה את הגנת זה גם אם שניהם
+  // פעילים בו-זמנית (ר' ההסבר המלא ב-sheets.js ליד dirtyReasons). נוסף על
+  // כך, ה-handler למטה תמיד מאתר מחדש את הסעיף לפי catId (לא סומך על c
+  // שנתפס כאן) — הגנה כפולה, למקרה שהחלון נשאר פתוח ארוך יותר ממחזור רענון.
+  if (CBA.sheets.markDirty) CBA.sheets.markDirty("planMonthModal");
 
   overlay.querySelector(".modal").addEventListener("click", function (e) { e.stopPropagation(); });
   overlay.querySelectorAll("[data-modal-close]").forEach(function (el) { el.addEventListener("click", planCloseModal); });
   overlay.querySelectorAll("[data-month]").forEach(function (inp) {
     inp.addEventListener("input", function () {
-      c.dist.monthly[parseInt(inp.dataset.month, 10)] = planNum(inp.value);
-      planUpdateSum(c);
+      // איתור מחדש לפי catId — לא סומכים על ה-c שנתפס בפתיחת המודל
+      const cNow = findCat(catId);
+      if (!cNow) return;
+      if (!cNow.dist.monthly) cNow.dist.monthly = planEqualArray(cNow);
+      cNow.dist.monthly[parseInt(inp.dataset.month, 10)] = planNum(inp.value);
+      planUpdateSum(cNow);
     });
     // שמירה לגיליון בסיום עריכת חודש (יציאה מהשדה)
     inp.addEventListener("change", function () { planSave(); });
@@ -750,6 +761,9 @@ function planUpdateSum(c) {
 function planCloseModal() {
   const el = document.getElementById("cba-modal");
   if (el) el.remove();
+  // מנקה תמיד — no-op בטוח אם המודל שנסגר לא היה "חלוקה חודשית" מלכתחילה
+  // (למשל חלון "היסטוריית עדכונים" המשתף את אותו planCloseModal)
+  if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("planMonthModal");
   document.removeEventListener("keydown", planEscModal);
 }
 function planEscModal(e) { if (e.key === "Escape") planCloseModal(); }
@@ -779,11 +793,11 @@ var planSaveTimer = null;
 function planSave() {
   if (!CBA.sheets || !CBA.sheets.isConnected || !CBA.sheets.isConnected()) return;
   var year = CBA.data.getCurrentYear();
-  if (CBA.sheets.markDirty) CBA.sheets.markDirty();
+  if (CBA.sheets.markDirty) CBA.sheets.markDirty("planSave");
   clearTimeout(planSaveTimer);
   planSaveTimer = setTimeout(function () {
     CBA.data.saveBudgetToSheet(year, function () {
-      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("planSave");
     });
   }, 700);
 }

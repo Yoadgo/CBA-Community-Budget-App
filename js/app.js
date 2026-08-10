@@ -541,11 +541,14 @@
     setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 1900);
   }
 
-  /* --- חיווי "שומר…/נשמר ✓" גלובלי (2026-08-09, לבקשת יועד) ---
+  /* --- חיווי "שומר…/נשמר ✓" גלובלי (2026-08-09, לבקשת יועד; הועבר לכותרת ב-2026-08-09) ---
      יועד ביקש שבכל מסך יהיה ברור אם עדיין שומרים או שהשמירה הסתיימה, לא רק
      במסך תכנון תקציב. sheets.js כבר עוקב מרכזית אחרי כל כתיבה (ר' isDirty/
      markDirty/clearDirty שם) ומשדר אירוע "cba:dirty-change" בכל שינוי מצב —
-     כך שמסך חדש שכותב לגיליון מקבל את החיווי הזה "בחינם", בלי לכתוב אותו בעצמו. */
+     כך שמסך חדש שכותב לגיליון מקבל את החיווי הזה "בחינם", בלי לכתוב אותו בעצמו.
+     בהמשך יועד ציין שבועה צפה בתחתית המסך היא לא מספיק בולטת — האלמנט עבר
+     לעוגן קבוע בכותרת (#save-indicator-slot ב-index.html), עם fallback ל-body
+     אם משום מה העוגן לא קיים (למשל דף ישן שלא רוענן עדיין). */
   var saveIndicatorHideTimer = null;
   function saveIndicatorEl() {
     var el = document.getElementById("cba-save-indicator");
@@ -554,7 +557,8 @@
       el.id = "cba-save-indicator";
       el.className = "save-indicator";
       el.innerHTML = '<span class="save-indicator__dot"></span><span class="save-indicator__text"></span>';
-      document.body.appendChild(el);
+      var slot = document.getElementById("save-indicator-slot");
+      (slot || document.body).appendChild(el);
     }
     return el;
   }
@@ -566,13 +570,16 @@
     if (d && d.dirty) {
       el.className = "save-indicator is-show";
       if (textEl) textEl.textContent = "שומר…";
+      el.removeAttribute("title");
     } else if (d && d.error) {
       el.className = "save-indicator is-show is-error";
-      if (textEl) textEl.textContent = "בעיית רשת בשמירה — ננסה שוב ברענון הבא";
+      if (textEl) textEl.textContent = "בעיית שמירה";
+      el.title = "בעיית רשת בשמירה — ננסה שוב ברענון הבא";
       saveIndicatorHideTimer = setTimeout(function () { el.classList.remove("is-show"); }, 4000);
     } else {
       el.className = "save-indicator is-show is-saved";
       if (textEl) textEl.textContent = "נשמר ✓";
+      el.removeAttribute("title");
       saveIndicatorHideTimer = setTimeout(function () { el.classList.remove("is-show"); }, 1400);
     }
   });

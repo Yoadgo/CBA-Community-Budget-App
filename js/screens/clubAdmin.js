@@ -120,9 +120,9 @@ CBA.screens.clubAdmin = {
           // approveClubReservation עובר דרך CBA.sheets.get (לא push), ולכן לא
           // נספר אוטומטית ב-inFlightWrites — מסמנים dirty ידנית כדי שרענון רקע
           // לא "יעקוף" את הבקשה הזו באמצע (ר' מדיניות רענון נתונים בזיכרון הפרויקט).
-          if (CBA.sheets.markDirty) CBA.sheets.markDirty();
+          if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubAdminAction");
           CBA.data.approveClubReservation(btn.dataset.approve, function (res) {
-            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
+            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubAdminAction");
             if (res && res.ok) load();
             else { btn.disabled = false; btn.textContent = "אשר"; window.alert((res && res.error) || "האישור נכשל, נסו שוב."); }
           });
@@ -132,9 +132,9 @@ CBA.screens.clubAdmin = {
         btn.addEventListener("click", function () {
           if (!window.confirm("לדחות ולמחוק את בקשת השריון? הפעולה תשחרר את המשבצת בחזרה לפנויה.")) return;
           btn.disabled = true; btn.textContent = "דוחה…";
-          if (CBA.sheets.markDirty) CBA.sheets.markDirty();
+          if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubAdminAction");
           CBA.data.rejectClubReservation(btn.dataset.reject, function (res) {
-            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
+            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubAdminAction");
             if (res && res.ok) load();
             else { btn.disabled = false; btn.textContent = "דחה"; window.alert((res && res.error) || "הדחייה נכשלה, נסו שוב."); }
           });

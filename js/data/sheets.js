@@ -198,12 +198,23 @@ CBA.sheets = (function () {
      חוברו למנגנון (הוצאות, תושבים, מועדון...) מוגנים אוטומטית - לא רק
      planning.js. markDirty/clearDirty נשארים בנוסף לכך, לכיסוי הפער בין
      עריכה לבין רגע השליחה בפועל (שמירה מושהית). */
-  var isDirtyFlag = false;
+  /* (2026-08-09, סבב הרחבה נוסף) עבר ממשתנה בוליאני יחיד לסט של "סיבות"
+     עצמאיות. הבעיה בבוליאן יחיד: markDirty()/clearDirty() בלי פרמטר משתפים
+     דגל גלובלי אחד — אם שני דברים בלתי-תלויים "מלוכלכים" בו-זמנית (למשל
+     debounce של planSave() באמצע וגם drawer/מודל פתוח במסך אחר), clearDirty()
+     של אחד היה מנקה גם את ההגנה שהשני עדיין נשען עליה. עכשיו לכל "סיבה" יש
+     מפתח משלה (מחרוזת) בתוך אובייקט-כמו-Set: markDirty("planSave") אידמפוטנטי
+     (קריאה חוזרת תוך כדי הקלדה לא "מצטברת"), וקריאה אחת ל-clearDirty("planSave")
+     תמיד מנקה את זה במלואו בלי קשר לכמה markDirty קדמו לה — וסיבות שונות
+     (planSave מול notesSave מול receiptUpload) לא נוגעות זו בזו כלל. קריאה
+     בלי פרמטר (קוד ישן שלא עודכן) משתמשת במפתח משותף "_default" — תואם לאחור,
+     אבל עדיין כדאי שכל קריאה חדשה תעביר מחרוזת-סיבה ייחודית משלה. */
+  var dirtyReasons = Object.create(null);
   var seqCounter = 0;      // מספר סידורי עולה, אחד לכל בקשת GET (טעינה/רענון)
   var lastAppliedSeq = 0;  // ה-seq הגבוה ביותר שבאמת יושם על CBA.mock עד כה
   var writeFloor = 0;      // תשובת GET עם seq <= זה נחשבת "עלולה להיות מלפני שמירה" - נדחית
   var inFlightWrites = 0;  // כתיבות (push) שכרגע ברשת ועוד לא אושרו
-  function isDirty() { return isDirtyFlag || inFlightWrites > 0; }
+  function isDirty() { return Object.keys(dirtyReasons).length > 0 || inFlightWrites > 0; }
 
   /* --- חיווי "שומר…/נשמר ✓" גלובלי (2026-08-09) ---
      יועד ביקש שתמיד יהיה ברור אם משהו עדיין נשמר או שהשמירה הסתיימה — לכל
@@ -223,8 +234,8 @@ CBA.sheets = (function () {
     } catch (e) { /* לא קריטי */ }
     if (!d) lastWriteHadError = false;
   }
-  function markDirty() { isDirtyFlag = true; notifyDirtyChange(); }
-  function clearDirty() { isDirtyFlag = false; notifyDirtyChange(); }
+  function markDirty(reason) { dirtyReasons[reason || "_default"] = true; notifyDirtyChange(); }
+  function clearDirty(reason) { delete dirtyReasons[reason || "_default"]; notifyDirtyChange(); }
 
   /* מחליף את תוכן CBA.mock בנתונים מהגיליון (תכונות הגישה נשארות תקפות).
      מחזירה true אם באמת יושם (fetchAndApply משתמש בזה כדי לעדכן lastAppliedSeq

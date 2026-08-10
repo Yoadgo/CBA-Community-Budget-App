@@ -174,6 +174,9 @@ CBA.screens = CBA.screens || {};
 
   CBA.screens.resRequests = {
     render: function (container) {
+      // שימור מיקום גלילה (אותו פתרון כמו expenses.js/residents.js/clubAdmin.js) —
+      // render() כאן נקרא מחדש גם ברענון רקע שקט, וה-innerHTML החדש היה מאפס גלילה.
+      var rqWinScrollY = window.scrollY || 0;
       var u = user();
       var fam = u.family || u.name || "תושב";
       var house = u.house ? ("בית " + u.house) : "אזור תושב";
@@ -219,6 +222,7 @@ CBA.screens = CBA.screens || {};
 
       var cta = container.querySelector("[data-goto]");
       if (cta) cta.addEventListener("click", function () { CBA.navigate("resSubmit"); });
+      if (rqWinScrollY) window.scrollTo(0, rqWinScrollY);
     }
   };
 
@@ -316,7 +320,7 @@ CBA.screens = CBA.screens || {};
           picked = null;
           fileInput.value = "";
           // בוטל הקובץ שנבחר — כבר אין מה לאבד ברענון רקע (ר' markDirty למטה)
-          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
+          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("receiptUpload");
           renderUploadEmpty();
         });
         /* קובץ חדש נבחר -> מסתירים כפתור/הודעת סריקה קודמים (שייכים לקובץ הקודם); הסריקה
@@ -342,7 +346,7 @@ CBA.screens = CBA.screens || {};
         // (2026-08-09) יש עכשיו קובץ בעיבוד/נבחר שעדיין לא נשלח — עד שהבקשה
         // תישלח בהצלחה (או תבוטל) לא רוצים שרענון רקע "יאפס" את המסך הזה
         // וימחק את מה שהמשתמש בחר, ר' ההסבר המלא ב-sheets.js (markDirty/isDirty).
-        if (CBA.sheets.markDirty) CBA.sheets.markDirty();
+        if (CBA.sheets.markDirty) CBA.sheets.markDirty("receiptUpload");
         processing = true;
         renderUploadBusy();
         var isImage = file.type.indexOf("image/") === 0;
@@ -351,7 +355,7 @@ CBA.screens = CBA.screens || {};
           processing = false;
           if (err) {
             showError(err.message || "שגיאה בעיבוד הקובץ");
-            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();   // העיבוד נכשל — אין יותר קובץ ממתין
+            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("receiptUpload");   // העיבוד נכשל — אין יותר קובץ ממתין
             renderUploadEmpty();
             return;
           }
@@ -501,14 +505,28 @@ CBA.screens = CBA.screens || {};
             fields.bankAccount = val("#rs-bank-account");
           }
 
+          // submitReceipt עובר ב-postReadProgress (לא push) — לא נספר אוטומטית
+          // ב-inFlightWrites. מסמנים כאן במפורש כדי שגם הבקשה עצמה (לא רק
+          // "יש קובץ נבחר") תהיה מוגנת — כולל בניסיון חוזר אחרי כישלון,
+          // כשה"receiptUpload" הקודם כבר נוקה (ר' ההערה בענף הכישלון למטה).
+          if (CBA.sheets.markDirty) CBA.sheets.markDirty("receiptUpload");
           CBA.data.submitReceipt(fields, function (res) {
             if (res && res.ok) {
-              if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();   // נשלח בהצלחה — אין יותר מה להגן עליו
+              if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("receiptUpload");   // נשלח בהצלחה — אין יותר מה להגן עליו
               renderSent();
             } else {
               submitBtn.disabled = false;
               submitBtn.innerHTML = sendIcon + ' <span>שלח בקשה</span>';
               showError("השליחה נכשלה — בדקו את החיבור לאינטרנט ונסו שוב.");
+              // (2026-08-09, תיקון באג): בעבר לא ניקינו כאן בכוונה, כדי "להגן" על
+              // הקובץ הנבחר עד ניסיון חוזר. אבל isDirty הוא דגל *גלובלי* — נשאר
+              // תקוע "dirty" עד שהמשתמש יסיר/יבחר קובץ מחדש היה חוסם רענון רקע
+              // בכל האפליקציה (לא רק במסך הזה) אם המשתמש פשוט עוזב את המסך אחרי
+              // כישלון בלי לפעול. מנקים כאן — אם המשתמש ינסה שוב, בחירת קובץ
+              // חדשה תסמן dirty מחדש; קובץ שנשאר מהניסיון הקודם עדיין מוצג במסך
+              // (picked לא התאפס), רק לא מוגן מרענון רקע במקרה הקצה שהמשתמש
+              // משאיר את מסך השגיאה פתוח בלי לפעול.
+              if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("receiptUpload");
             }
           });
         });
@@ -741,6 +759,11 @@ CBA.screens = CBA.screens || {};
 
   CBA.screens.resReserve = {
     render: function (container) {
+      // שימור מיקום גלילה (ר' אותה תבנית ב-resRequests/resDirectory למעלה) —
+      // ידוע שהמסך הזה עדיין לא שומר מצב פנימי נוסף (תקנון פתוח/סגור, רשימת
+      // "השריונים שלי") מעבר לזה בין render() חוזרים; זה תיעוד ל-backlog,
+      // לא נפתר כאן במלואו — ר' cba-data-refresh-policy.
+      var rvWinScrollY = window.scrollY || 0;
       var u = user();
       var fam = u.family || u.name || "תושב";
       var house = u.house ? ("בית " + u.house) : "";
@@ -816,6 +839,7 @@ CBA.screens = CBA.screens || {};
 
       var mineHandle = renderMine(mineEl, u, fam, function () { refreshBooking(); });
       refreshMine = mineHandle.refresh;
+      if (rvWinScrollY) window.scrollTo(0, rvWinScrollY);
     }
   };
 
@@ -889,13 +913,13 @@ CBA.screens = CBA.screens || {};
 
     // (2026-08-09) בחירת משבצת קיימת רק בזיכרון המקומי (state) עד שנשלחת בפועל —
     // markDirty/clearDirty (ר' sheets.js) מגנים עליה מרענון רקע שהיה "שוכח" אותה.
-    function hideForm() { state.selStart = state.selEnd = null; formEl.hidden = true; formEl.innerHTML = ""; if (CBA.sheets.clearDirty) CBA.sheets.clearDirty(); }
+    function hideForm() { state.selStart = state.selEnd = null; formEl.hidden = true; formEl.innerHTML = ""; if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubReserveSelect"); }
     function showMsg(cls, html) { msgEl.className = "rs-club__msg " + cls; msgEl.innerHTML = html; msgEl.hidden = false; }
     function clearMsg() { msgEl.hidden = true; msgEl.innerHTML = ""; }
 
     function renderForm() {
       if (state.selStart == null) { formEl.hidden = true; formEl.innerHTML = ""; return; }
-      if (CBA.sheets.markDirty) CBA.sheets.markDirty();   // יש בחירת משבצת ממתינה לאישור
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubReserveSelect");   // יש בחירת משבצת ממתינה לאישור (מוגן גם בזמן שליחת reserveClub עצמה, ר' doSubmit — לא מנוקה עד hideForm בהצלחה)
       var lo = Math.min(state.selStart, state.selEnd), hi = Math.max(state.selStart, state.selEnd);
       var startLbl = slotLabel(lo), endLbl = slotEndLabel(hi);
       var mins = (hi - lo + 1) * 30;
@@ -1171,7 +1195,12 @@ CBA.screens = CBA.screens || {};
       btn.disabled = true;
       btn.innerHTML = '<div class="rs-spin"></div>מבטל…';
       var id = btn.dataset.cancel;
+      // cancelClubReservation עובר ב-CBA.sheets.get (לא push) — לא נספר
+      // אוטומטית ב-inFlightWrites, אז מסמנים ידנית כדי שרענון רקע לא יתערב
+      // באמצע (ר' מדיניות רענון נתונים בזיכרון הפרויקט).
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubReserveCancel");
       CBA.data.cancelClubReservation({ id: id, family: fam, email: u.email || "" }, function (r) {
+        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubReserveCancel");
         if (r && r.ok) {
           list = list.filter(function (x) { return String(x.id) !== String(id); });
           updateCompact();
@@ -1292,52 +1321,86 @@ CBA.screens = CBA.screens || {};
     );
   }
 
+  // (2026-08-09) מצב מתמשך במקום משתנים מקומיים שנוצרים מחדש בכל render() —
+  // בלי זה, כל רענון רקע (גם כזה שלא קשור בכלל למדריך התושבים — טביעת
+  // האצבע שמפעילה רענון היא גלובלית, ר' מדיניות רענון נתונים) היה שולף
+  // שוב את כל המדריך מהרשת, מהבהב "טוען…", ומאפס את החיפוש שהתושב הקליד.
+  // אותה תבנית בדיוק כמו resState ב-residents.js.
+  var dirState = { loaded: false, loading: false, rows: [], cols: null, q: "" };
+  var dirScrollY = 0;
+  var dirContainer = null;   // ה-container החי האחרון — לא סומכים על רפרנס-DOM שנתפס
+                              // ברגע קריאה ל-render() אחת, כי קריאה חדשה (רענון רקע
+                              // נוסף שמגיע לפני שהראשונה סיימה לטעון) בונה DOM חדש,
+                              // וה-callback של הבקשה הישנה חייב לכתוב לתוך ה-DOM
+                              // *הנוכחי*, לא לתוך אלמנט "יתום" מרענון קודם.
+
+  function dirRenderList() {
+    var listEl = dirContainer && dirContainer.querySelector("#dir-list");
+    if (!listEl || !dirState.cols) return;
+    var c = dirState.cols;
+    var q = dirState.q.trim();
+    var rows = dirState.rows.filter(function (r) { return dirIsActive(r, c); });
+    if (q) {
+      rows = rows.filter(function (r) {
+        var hay = [dirVal(r, c.house), dirVal(r, c.family), dirVal(r, c.kids)]
+          .concat(c.firstName.map(function (k) { return dirVal(r, k); }))
+          .concat(c.phone.map(function (k) { return dirVal(r, k); }))
+          .join(" ");
+        return hay.indexOf(q) !== -1;
+      });
+    }
+    rows.sort(function (a, b) {
+      var ha = parseFloat(dirVal(a, c.house)), hb = parseFloat(dirVal(b, c.house));
+      if (isNaN(ha)) ha = Infinity;
+      if (isNaN(hb)) hb = Infinity;
+      return ha - hb;
+    });
+    listEl.innerHTML = rows.length
+      ? '<div class="dir-grid">' + rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>'
+      : '<div class="rs-empty"><p>לא נמצאו תוצאות.</p></div>';
+    if (dirScrollY) { window.scrollTo(0, dirScrollY); dirScrollY = 0; }
+  }
+
   CBA.screens.resDirectory = {
-    render: function (container) {
+    render: function (container, opts) {
+      dirScrollY = window.scrollY || 0;
+      dirContainer = container;
+      // רענון רקע שקט: אם כבר טענו פעם, מציירים מהמטמון בלי לפנות לרשת שוב
+      // (ר' ההערה למעלה). ניווט אמיתי למסך (לא שקט) תמיד מרענן מהשרת, כדי
+      // שהמדריך לא יישאר תקוע ב"טעינה ראשונה" למשך כל הסשן.
+      if (!(opts && opts.silent)) dirState.loaded = false;
+
       container.innerHTML =
         '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
           '<div class="screen-head__sub">מדריך התושבים בשיכון</div></div>' +
-        '<input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון">' +
+        '<input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון" value="' + CBA.esc(dirState.q) + '">' +
         '<div id="dir-list"><div class="rs-empty"><p>טוען…</p></div></div>';
 
-      var listEl = container.querySelector("#dir-list");
       var qEl = container.querySelector("#dir-q");
-      var allRows = [], c = null;
+      qEl.addEventListener("input", function () {
+        dirState.q = qEl.value;
+        dirRenderList();
+      });
 
-      function renderList() {
-        if (!c) return;
-        var q = (qEl.value || "").trim();
-        var rows = allRows.filter(function (r) { return dirIsActive(r, c); });
-        if (q) {
-          rows = rows.filter(function (r) {
-            var hay = [dirVal(r, c.house), dirVal(r, c.family), dirVal(r, c.kids)]
-              .concat(c.firstName.map(function (k) { return dirVal(r, k); }))
-              .concat(c.phone.map(function (k) { return dirVal(r, k); }))
-              .join(" ");
-            return hay.indexOf(q) !== -1;
-          });
-        }
-        rows.sort(function (a, b) {
-          var ha = parseFloat(dirVal(a, c.house)), hb = parseFloat(dirVal(b, c.house));
-          if (isNaN(ha)) ha = Infinity;
-          if (isNaN(hb)) hb = Infinity;
-          return ha - hb;
-        });
-        listEl.innerHTML = rows.length
-          ? '<div class="dir-grid">' + rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>'
-          : '<div class="rs-empty"><p>לא נמצאו תוצאות.</p></div>';
-      }
-
-      qEl.addEventListener("input", renderList);
-
+      // כבר נטען פעם קודמת (למשל רענון רקע שקט) — מציירים מיד מהמטמון,
+      // בלי לפנות שוב לרשת ובלי הבהוב "טוען…". אם יש כבר בקשה בדרך (loading),
+      // לא פותחים בקשה כפולה — ה-callback שלה יכתוב לתוך ה-DOM הנוכחי דרך
+      // dirContainer/dirRenderList (לא לתוך רפרנס ישן), כך שהכיסוי תקין גם אם
+      // כמה render() רצו בזמן שהבקשה הראשונה עוד לא חזרה.
+      if (dirState.loaded) { dirRenderList(); return; }
+      if (dirState.loading) return;
+      dirState.loading = true;
       CBA.data.getCommunityDirectory(function (res) {
+        dirState.loading = false;
         if (!res || !res.ok) {
-          listEl.innerHTML = '<div class="rs-empty"><p>' + CBA.esc((res && res.error) || "שגיאה בטעינת הרשימה. נסו שוב מאוחר יותר.") + '</p></div>';
+          var listEl = dirContainer && dirContainer.querySelector("#dir-list");
+          if (listEl) listEl.innerHTML = '<div class="rs-empty"><p>' + CBA.esc((res && res.error) || "שגיאה בטעינת הרשימה. נסו שוב מאוחר יותר.") + '</p></div>';
           return;
         }
-        allRows = res.rows || [];
-        c = dirCols(allRows);
-        renderList();
+        dirState.rows = res.rows || [];
+        dirState.cols = dirCols(dirState.rows);
+        dirState.loaded = true;
+        dirRenderList();
       });
     }
   };
