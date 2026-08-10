@@ -570,6 +570,13 @@ body[data-screen="planning"] .year-switch__add {
 .bcard__remain b.is-over { color: var(--danger); }
 /* אייקוני נגישות לצבע ליד יתרה/חריגה */
 .ico-under, .ico-over { font-size: 10px; margin-inline-end: 3px; }
+
+/* ניצול תת-סעיפים (סעיף 6, 2026-08-10) — מלל מוקטן ובהיר יותר מתחת לכרטיסייה,
+   שורה לכל פריט (שם + בוצע/מתוכנן). מוצג רק לסעיף מפורט, ר' itemsListHTML. */
+.bcard__items { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 2px; }
+.bcard__items-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--text-muted); }
+.bcard__items-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bcard__items-val { flex: none; font-variant-numeric: tabular-nums; }
 .ico-under { color: var(--ok); }
 .ico-over { color: var(--danger); }
 
@@ -951,6 +958,25 @@ body[data-screen="planning"] .year-switch__add {
 .plan-item:focus-within .plan-item__more { display: block; }
 .plan-item__row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .plan-item__row .num-input { flex: 1; width: auto; }
+
+/* תצוגה להצגה (סעיף 6, 2026-08-10) — גרסה סטטית וקומפקטית של אותה פריסת
+   קבוצות+כרטיסים, בלי עריכה, לשימוש בהצגות לוועד השיכון. כרטיס תופס
+   פחות מקום מ-.plan-item (בלי שדות/כפתורים), אז נכנס יותר "בתמונה אחת". */
+.plan-present-card { padding: 18px; }
+.present-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px 22px; align-items: start; }
+.present-group__head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.present-group__name { font-size: 13px; font-weight: 700; color: var(--text-soft); }
+.present-group__total { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.present-grid { display: flex; flex-direction: column; gap: 6px; }
+.present-card { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 7px 10px; }
+.present-card__top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.present-card__name { font-size: 13px; font-weight: 600; }
+.present-card__amount { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.present-card__funding,
+.present-card__items { margin-top: 3px; font-size: 10.5px; color: var(--text-muted); line-height: 1.4; }
 
 .mini-x {
   border: none; background: none; cursor: pointer; color: var(--text-muted);

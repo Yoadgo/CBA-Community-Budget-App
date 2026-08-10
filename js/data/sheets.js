@@ -491,12 +491,34 @@ CBA.sheets = (function () {
     var xhr = new XMLHttpRequest();
     xhr.open("POST", API_URL, true);
     xhr.setRequestHeader("Content-Type", "text/plain;charset=utf-8");
+
+    // הגנה מפני עזיבת הדף באמצע שליחה (נמצא בסימולציה חיה, 2026-08-10 — באג
+    // אמיתי: submitReceipt "נעלם" בלי כתיבה לגיליון ובלי שום הודעת שגיאה אם
+    // המשתמש עוזב את הדף ~3 שניות אחרי הלחיצה על שליחה, לפני שהתשובה מהשרת
+    // חוזרת). לבקשות מהסוג הזה יש קובץ Base64 גדול + כתיבה בשרת שיכולה לקחת
+    // 7-10 שניות; אם המשתמש סוגר/מרענן/חוזר-אחורה מהדף באמצע, הדפדפן מבטל את
+    // הבקשה שבדרך — היא פשוט "נעלמת" בלי שהשרת כתב אותה ובלי שהמשתמש ידע.
+    // beforeunload הוא המנגנון הסטנדרטי בדפדפנים למניעת אובדן מידע כזה: הוא
+    // מציג את דיאלוג "לעזוב את האתר? השינויים שביצעת עלולים לא להישמר" המובנה
+    // של הדפדפן (אי אפשר להתאים אישית את הטקסט — זו מגבלת אבטחה של כל
+    // הדפדפנים, לא משהו לתקן אצלנו). לא נוגע בניווט הפנימי בין מסכי ה-SPA
+    // (showScreen/CBA.navigate) — שם זו לא עזיבת דף אמיתית, הבקשה ממשיכה
+    // לרוץ ברקע כרגיל ומגיעה ל-cb בהצלחה גם אם המסך הנראה כבר השתנה.
+    function onBeforeUnload(e) {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    function clearUnloadGuard() { window.removeEventListener("beforeunload", onBeforeUnload); }
+
     if (xhr.upload && typeof onProgress === "function") {
       xhr.upload.onprogress = function (e) {
         if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
       };
     }
     xhr.onload = function () {
+      clearUnloadGuard();
       if (typeof onProgress === "function") onProgress(100);
       var data;
       try { data = JSON.parse(xhr.responseText); }
@@ -504,9 +526,11 @@ CBA.sheets = (function () {
       if (cb) cb(withAuthNote(data));
     };
     xhr.onerror = function () {
+      clearUnloadGuard();
       if (cb) cb({ ok: false, error: "שגיאת רשת" });
     };
     xhr.ontimeout = function () {
+      clearUnloadGuard();
       if (cb) cb({ ok: false, error: "תם הזמן הקצוב — נסו שוב" });
     };
     xhr.send(JSON.stringify(body));

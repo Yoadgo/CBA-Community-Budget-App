@@ -9,6 +9,12 @@ CBA.screens = CBA.screens || {};
 var planShowCompare = false; // האם מוצגת השוואה לשנה קודמת
 var planCompareYear = null;  // איזו שנה מושווית
 
+// תצוגה להצגה (סעיף 6, 2026-08-10) — מתג בין מצב "עריכה" (המסך הרגיל, מלא
+// שדות ופקדים) למצב "תצוגה": אותה פריסת קבוצות+כרטיסים, אבל סטטית וקומפקטית
+// (בלי שדות/כפתורי עריכה, בלי צורך לרחף כדי לראות פירוט) — לשימוש בהצגות
+// לוועד השיכון, כדי שהתקציב כולו ייראה בתמונה אחת. ר' planPresentHTML למטה.
+var planViewMode = false;
+
 // סמליל "פנקס הערות" (סעיף 1) — דף+קווים, באותו סגנון SVG כמו NAV_ICONS ב-app.js
 var PLAN_NOTES_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/><path d="M9.5 12h6M9.5 16h4"/></svg>';
 
@@ -63,16 +69,7 @@ CBA.screens.planning = {
 
     const incomeHTML = income.map(planIncomeRow).join("");
 
-    container.innerHTML = `
-      <button class="notes-side-tab" type="button" id="notes-side-tab" data-open-notes title="פנקס הערות כלליות לשנה זו">
-        <span class="notes-side-tab__ico">${PLAN_NOTES_ICON}</span>
-        <span class="notes-side-tab__label">הערות</span>
-      </button>
-
-      <div class="screen-controls">
-        <div class="phase-ctrl">${planPhaseControl()}</div>
-      </div>
-
+    const editModeHTML = `
       <div class="plan-cols">
         <div class="card plan-income-card">
           <div class="plan-section-title">מקורות הכנסה</div>
@@ -95,7 +92,20 @@ CBA.screens.planning = {
           ${planShowCompare ? planExtrasHTML() : ""}
           <button class="add-btn add-btn--wide" data-add-group>+ הוסף קבוצה</button>
         </div>
+      </div>`;
+
+    container.innerHTML = `
+      <button class="notes-side-tab" type="button" id="notes-side-tab" data-open-notes title="פנקס הערות כלליות לשנה זו">
+        <span class="notes-side-tab__ico">${PLAN_NOTES_ICON}</span>
+        <span class="notes-side-tab__label">הערות</span>
+      </button>
+
+      <div class="screen-controls">
+        <div class="phase-ctrl">${planPhaseControl()}</div>
+        <button class="btn-ghost" type="button" data-toggle-present>${planViewMode ? "חזרה לעריכה" : "תצוגה להצגה"}</button>
       </div>
+
+      ${planViewMode ? planPresentHTML(groups, cats) : editModeHTML}
 
       <div class="card bottomline-bar">
         <div class="bl-cell">
@@ -167,6 +177,14 @@ function planIncomeRow(s) {
 /* חיבור אירועים */
 function planBind(container) {
   const rerender = function () { CBA.screens.planning.render(container); };
+
+  // מתג תצוגה להצגה (סעיף 6, 2026-08-10)
+  const presentBtn = container.querySelector("[data-toggle-present]");
+  if (presentBtn) presentBtn.addEventListener("click", function () {
+    planViewMode = !planViewMode;
+    rerender();
+  });
+  if (planViewMode) return;  // מצב תצוגה סטטי לגמרי — אין מה לחבר מעבר לכפתור המתג
 
   // שמירה אוטומטית לגיליון בכל סיום עריכת שדה (blur/change).
   // נרשם פעם אחת בלבד — ה-dataset שורד ציור-מחדש (innerHTML לא מוחק את container עצמו).
@@ -634,6 +652,68 @@ function planSourceName(c) {
   if (c.sources && c.sources.length > 1) return "מפוצל בין " + c.sources.length + " מקורות";
   const s = CBA.data.getIncomeSources().find(function (x) { return x.id === c.incomeSourceId; });
   return s ? s.name : "—";
+}
+
+/* ===================================================================
+   תצוגה להצגה (סעיף 6, 2026-08-10) — גרסה סטטית וקומפקטית לאותה פריסת
+   קבוצות+כרטיסים, בלי שדות/כפתורי עריכה. לכל סעיף מוצגים תמיד (בלי ריחוף):
+   שם, סכום, מאיזה מקור/מקורות הכנסה הוא ממומן, ואם הוא מפורט (סעיף 5) —
+   גם פירוט הפריטים הפנימיים. משתמשת באותם c.sources/c.items שכבר קיימים —
+   לא צריך נתונים חדשים, רק תצוגה אחרת שלהם. =================================================================== */
+function planPresentHTML(groups, cats) {
+  const blocks = groups.map(function (g) {
+    const rows = cats.filter(function (c) { return c.group === g.id; });
+    if (!rows.length) return "";
+    const total = rows.reduce(function (s, c) { return s + (c.plan || 0); }, 0);
+    return `
+      <div class="present-group">
+        <div class="present-group__head">
+          <span class="present-group__name">${CBA.esc(g.name)}</span>
+          <span class="present-group__total">${CBA.formatILS(total)}</span>
+        </div>
+        <div class="present-grid">
+          ${rows.map(planPresentCardHTML).join("")}
+        </div>
+      </div>`;
+  }).join("");
+  return `<div class="card plan-present-card"><div class="present-wrap">${blocks}</div></div>`;
+}
+
+/* כרטיס סעיף בתצוגה להצגה — שם+סכום תמיד, מימון תמיד, פירוט פריטים רק אם קיים */
+function planPresentCardHTML(c) {
+  const funding = planPresentFundingText(c);
+  const items = planPresentItemsText(c);
+  return `
+    <div class="present-card">
+      <div class="present-card__top">
+        <span class="present-card__name">${CBA.esc(c.name)}</span>
+        <span class="present-card__amount">${CBA.formatILS(c.plan || 0)}</span>
+      </div>
+      <div class="present-card__funding">${funding}</div>
+      ${items ? `<div class="present-card__items">${items}</div>` : ""}
+    </div>`;
+}
+
+/* "ממומן מ: X" (מקור יחיד) או "ממומן מ: X (₪..) + Y (₪..)" (סעיף 4, מפוצל) */
+function planPresentFundingText(c) {
+  function incName(id) {
+    const s = CBA.data.getIncomeSources().find(function (x) { return x.id === id; });
+    return s ? s.name : "—";
+  }
+  if (c.sources && c.sources.length > 1) {
+    return "ממומן: " + c.sources.map(function (s) {
+      return CBA.esc(incName(s.incomeSourceId)) + " (" + CBA.formatILS(s.amount) + ")";
+    }).join(" + ");
+  }
+  return "ממומן: " + CBA.esc(incName(c.incomeSourceId));
+}
+
+/* "פירוט: פריט א ₪.. · פריט ב ₪.." (סעיף 5) — ריק אם הסעיף לא מפורט */
+function planPresentItemsText(c) {
+  if (!c.items || !c.items.length) return "";
+  return "פירוט: " + c.items.map(function (it) {
+    return CBA.esc(it.name) + " " + CBA.formatILS(it.plan || 0);
+  }).join(" · ");
 }
 
 /* פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10). במצב רגיל (לא מפוצל) —

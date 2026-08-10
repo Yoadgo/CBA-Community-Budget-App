@@ -292,7 +292,19 @@ function cardHTML(r, silent) {
       </div>
       <div class="bar"><div class="bar__fill bar__fill--${r.band}" style="${barStyle}" data-fill="${barWidth}"></div></div>
       <div class="bcard__remain">${remainHTML}</div>
+      ${itemsListHTML(r.items)}
     </div>`;
+}
+
+/* רשימת ניצול תת-סעיפים (סעיף 6, 2026-08-10) — מלל מוקטן ובהיר מתחת לכרטיסייה,
+   שורה לכל פריט: שם + בוצע/מתוכנן. מוצג רק לסעיף מפורט (r.items לא null/ריק,
+   ר' itemsActualForCategory ב-dataService.js) — סעיף רגיל לא מקבל שורה נוספת. */
+function itemsListHTML(items) {
+  if (!items || !items.length) return "";
+  return '<div class="bcard__items">' + items.map(function (it) {
+    return '<div class="bcard__items-row"><span class="bcard__items-name">' + CBA.esc(it.name) + '</span>' +
+      '<span class="bcard__items-val">' + CBA.formatILS(it.actual) + ' / ' + CBA.formatILS(it.plan) + '</span></div>';
+  }).join("") + '</div>';
 }
 
 /* עיכוב הכניסה של הכרטיסייה הבאה בתור — גדל בהדרגה כדי לתת תחושה של "מילוי"
@@ -326,6 +338,7 @@ function paceCardHTML(r, silent) {
       </div>
       <div class="bar"><div class="bar__fill bar__fill--${r.band}" style="${barStyle}" data-fill="${barWidth}"></div></div>
       <div class="bcard__remain">${remainHTML}</div>
+      ${itemsListHTML(r.items)}
     </div>`;
 }
 

@@ -759,14 +759,24 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 }
 
 /* ==========================================================================
-   "ועד השיכון" — עץ ארגוני (2026-08-09)
-   עץ CSS טהור (ul/li מקוננים + קווי חיבור ב-::before/::after), בשפת העיצוב
-   של האפליקציה: כרטיסים לבנים גיאומטריים במקום מלבנים צבעוניים מלאים —
-   קטגוריה מסומנת בפס עליון דק + תגית טקסט קטנה בלבד (צבע פונקציונלי מדוד,
-   ר' cba-design-system). גלילה אופקית כשהעץ רחב מהמסך, כמו שורת הניווט כבר
-   עובדת (ר' cba-ui-standards). קווי החיבור הם מיקום פיזי (right/left על כל
-   li ביחס לעצמו) ולכן לא תלויים בכיוון RTL של הדף — רק סדר הכרטיסים בשורה
-   מתהפך אוטומטית (flex בתוך dir="rtl"), הקווים עצמם תמיד יושבים נכון.
+   "ועד השיכון" — עץ ארגוני
+   מנוע ציור מדויק (2026-08-10, גרסה שנייה — ר' cba-ui-standards): לא עוד עץ
+   CSS טהור (ul/li מקוננים + קווי חיבור ב-::before/::after). הגרסה ההיא סבלה
+   מבעיה מבנית: כל ענף "תפס" רוחב-עמודה לפי מה שיש מתחתיו (ענף עמוק/מסועף
+   מקבל עמודה רחבה, עלה בלי ילדים מקבל עמודה צרה) — זה יצר פערים ענקיים
+   ולא-אחידים בשורה העליונה תחת "יו"ר שיכון" (יועד, 2026-08-10: "הקווים...
+   נחתכים וקופלים לכיוונים לא רלוונטיים... מלא תוכן נחתך בצדדים").
+   עכשיו JS (ר' layoutOrgTree ב-resident.js וב-residents.js — שני מסכים,
+   אותו אלגוריתם) מחשב לכל תא מיקום X/Y מדויק בפיקסלים לפני הציור: כל
+   האחים תופסים בדיוק אותה משבצת-רוחב (לא תלוי מה יש להם מתחת — "עלה"
+   ו"ענף מסועף" תופסים אותו שטח בסיס), וכל הקוביות באותו "דור" (מרחק
+   מהשורש) יושבות בדיוק על אותה שורת-Y, גם אם ענף שכן עמוק בהרבה. קווי
+   החיבור עצמם מצוירים ב-SVG (org-tree-svg) לפי אותם מיקומים מדויקים —
+   לא עוד טריק גבולות CSS, ולכן לא יכולים "לפול" למקום לא נכון. כרטיסים
+   לבנים גיאומטריים, קטגוריה מסומנת בפס עליון דק + tooltip בריחוף (כמו
+   קודם, ר' cba-design-system). גלילה אופקית כשהעץ רחב מהמסך (העץ עדיין
+   בפועל רחב מרוב מסכי מחשב — הרבה תפקידים, זה תקין; הפריסה החדשה רק
+   מוודאת שהגלילה הזו מרגישה מסודרת ולא כאוטית).
    ========================================================================== */
 .org-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 /* רמז גלילה אופקית — העץ בפועל כמעט תמיד רחב מהמסך (הרבה תפקידים באותה
@@ -774,45 +784,19 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
    שיש עוד תוכן בצדדים; שורת טקסט קטנה קבועה, כמו .map-hint אבל לא צפה. */
 .org-hint { font-size: 12px; color: var(--text-soft); margin-bottom: 10px; }
 
-.org-tree-wrap { overflow-x: auto; padding: 4px 8px 40px; }
-.org-tree, .org-tree ul { list-style: none; margin: 0; padding: 0; }
-/* justify-content:center לבד, כשהעץ רחב מהעטיפה, גורם לבאג ידוע בדפדפנים:
-   הצד ה"קודם" של התוכן הממורכז נחתך ולא ניתן לגלול אליו בכלל (רק הצד השני
-   נגיש בגלילה) — זה בדיוק ה"פיזור מוזר, הכל נחתך" שיועד דיווח עליו. safe
-   center (עם flex-start כ-fallback להדפדפנים הבודדים שלא מכירים את safe)
-   פותר את זה: ממרכז כשהעץ נכנס בשלמות, ועובר ליישור-התחלה (הכול נגיש
-   בגלילה) ברגע שהוא גולש. */
-.org-tree { display: flex; justify-content: flex-start; justify-content: safe center; }
-.org-tree ul { display: flex; position: relative; padding-top: 26px; }
-
-/* padding אופקי צומצם (10px→7px, 2026-08-10) — פחות "בזבוז" רוחב בין
-   קוביות, כדי לצמצם את גלישת העץ לצדדים (יועד: "יש עדיין בריחה של העץ
-   לצדדים"). לא 0 לגמרי — עדיין צריך מרווח מינימלי לקווי החיבור. */
-.org-tree li { flex: none; text-align: center; position: relative; padding: 26px 7px 0; }
-.org-tree > li { padding-top: 0; }
-
-.org-tree li::before, .org-tree li::after {
-  content: ""; position: absolute; top: 0; right: 50%; width: 50%; height: 26px;
-  border-top: 1.5px solid var(--border);
-}
-/* באג שתוקן (2026-08-10, לבקשת יועד — "פערים בהצגת הקווים"): ל-::after
-   (המחצית הימנית של כל li) היה border-right, כלומר הקו האנכי שלו נחת על
-   הקצה החיצוני של ה-li ולא במרכזו — לא מתחת לקוביה בכלל. התוצאה: "שן"
-   אנכית זזה/חסרה מתחת לכל קוביה שנייה, בהתאם למספר האחים בכל ענף (לכן
-   נראה "קבוע ולא לפי הצורך"). התיקון: border-left על ::after — הקצה
-   *השמאלי* של המחצית הימנית הוא בדיוק מרכז ה-li, כמו ה-border-right של
-   ::before (הקצה הימני של המחצית השמאלית) — שני החצאים נפגשים במרכז
-   בדיוק מתחת לקוביה, תמיד, לא משנה כמה אחים יש. */
-.org-tree li::after { right: auto; left: 50%; border-left: 1.5px solid var(--border); }
-.org-tree li::before { border-right: 1.5px solid var(--border); }
-.org-tree > li::before, .org-tree > li::after { display: none; }
-.org-tree li:only-child::before, .org-tree li:only-child::after { display: none; }
-.org-tree li:only-child { padding-top: 0; }
-.org-tree li:first-child::before, .org-tree li:last-child::after { border-top: none; }
-.org-tree ul::before {
-  content: ""; position: absolute; top: 0; right: 50%; width: 0; height: 26px;
-  border-right: 1.5px solid var(--border);
-}
+.org-tree-wrap { overflow-x: auto; overflow-y: hidden; padding: 4px 8px 40px; }
+/* הקנבס עצמו: JS קובע width/height מדויקים בפיקסלים (inline style) לפי
+   הפריסה המחושבת — מה שגם גורם לגלילה האופקית של org-tree-wrap לעבוד נכון
+   (יש בדיוק כמה לגלול, לא יותר ולא פחות). */
+.org-tree-canvas { position: relative; }
+.org-tree-svg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+/* קווי חיבור מעובים מעט (1.5px→2px, לבקשת יועד 2026-08-10: "צריך לעבות
+   מעט את הקווים") — קל יותר לעקוב אחריהם על פני עץ רחב. */
+.org-tree-svg line { stroke: var(--border); stroke-width: 2px; }
+/* כל קוביה ממוקמת באופן מוחלט לפי left/top שה-JS קובע (inline style) —
+   הרוחב הקבוע כאן (זהה לרוחב org-box) הוא מה שמבטיח שכל תא, עם או בלי
+   ילדים, תופס בדיוק את אותה משבצת בחישוב הפריסה. */
+.org-tree-node { position: absolute; width: 156px; }
 
 .org-box {
   /* inline-block ולא block: כדי ש-text-align:center של ה-li (מעלה) ימרכז

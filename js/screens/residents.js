@@ -1538,9 +1538,11 @@ function resOpenDrawer(container, idx, rowIndex, c) {
         });
       }
 
-      function orgNodeHTML(box, byParent, siblingPos, siblingCount) {
+      // כרטיס בודד (2026-08-10, מנוע ציור מדויק) — כבר לא <li> מקונן; div שטוח
+      // עם data-node-id, ש-layoutOrgTree ממקם אחר כך ב-left/top מוחלטים.
+      // התוכן הפנימי (org-box + כפתורי פעולה) זהה לגמרי לגרסה הקודמת.
+      function orgNodeBoxHTML(box, siblingPos, siblingCount) {
         var cat = CBA.committee.catInfo(box.category);
-        var kids = byParent[box.id] || [];
         var peopleHTML = box.people.length
           ? box.people.map(function (p) { return '<div class="org-box__person">' + CBA.esc(p.name) + '</div>'; }).join("")
           : "";
@@ -1550,14 +1552,103 @@ function resOpenDrawer(container, idx, rowIndex, c) {
               '<button type="button" class="org-box__act" data-org-edit="' + CBA.esc(box.id) + '" title="עריכה" aria-label="עריכה">' + editIcon + '</button>' +
               '<button type="button" class="org-box__act" data-org-add-child="' + CBA.esc(box.id) + '" title="הוספת תפקיד־בן" aria-label="הוספת תפקיד־בן">' + plusIcon + '</button>' +
             '</div>';
-        return '<li>' +
+        return '<div class="org-tree-node" data-node-id="' + CBA.esc(box.id) + '">' +
           '<div class="org-box" style="border-top-color:' + CBA.esc(cat.color) + '" title="' + CBA.esc(cat.name) + '">' +
             '<div class="org-box__role">' + CBA.esc(box.role || "(ללא שם תפקיד)") + '</div>' +
             (peopleHTML ? '<div class="org-box__people">' + peopleHTML + '</div>' : "") +
             actionsHTML +
           '</div>' +
-          (kids.length ? '<ul>' + kids.map(function (k, i) { return orgNodeHTML(k, byParent, i, kids.length); }).join("") + '</ul>' : "") +
-        '</li>';
+        '</div>';
+      }
+
+      // מנוע הפריסה (2026-08-10) — ר' ההסבר המלא בהערת ה-CSS מעל .org-tree-wrap
+      // ב-resident.css. אותו אלגוריתם בדיוק קיים גם ב-resCommittee (resident.js,
+      // התצוגה הציבורית לתושב) — לא מרוכז בקובץ משותף כי כל שאר לוגיקת ה-DOM/
+      // ציור של עץ הוועד כאן כבר כפולה כך בין שני המסכים (orgListHTML,
+      // defaultExpanded וכו'), אז זו הרחבה עקבית לדפוס הקיים ולא סטייה ממנו.
+      // שני שלבים: (1) מדידה — כל הקוביות כבר בדף (ב-innerHTML), מודדים גובה
+      // טבעי של כל אחת (תלוי תוכן: אורך שם התפקיד, כמה אנשים). (2) מיקום —
+      // X לפי "משבצת" קבועה-רוחב לכל עלה (הורה ממורכז בדיוק מעל טווח הילדים
+      // שלו, לא לפי כמה יש להם מתחת), Y לפי "דור" (כל הקוביות באותו מרחק
+      // מהשורש מיושרות לאותה שורה). קווי חיבור מצוירים ב-SVG לפי המיקומים
+      // המדויקים שהתקבלו — לא תלויים בטריק CSS כלשהו.
+      function layoutOrgTree(canvas, svg, nodesFlat, byParent) {
+        var NODE_W = 156, GAP_X = 22, ROW_GAP = 46, PAD_X = 20, PAD_TOP = 6, PAD_BOTTOM = 10;
+
+        var heightOf = {}, elOf = {};
+        nodesFlat.forEach(function (n) {
+          var el = canvas.querySelector('.org-tree-node[data-node-id="' + CBA.esc(n.box.id) + '"]');
+          elOf[n.box.id] = el;
+          heightOf[n.box.id] = el ? el.offsetHeight : 70;
+        });
+
+        var slotOf = {}, leafCounter = 0;
+        function assignSlot(id) {
+          var kids = byParent[id] || [];
+          if (!kids.length) { var s = leafCounter++; slotOf[id] = s; return s; }
+          var centers = kids.map(function (k) { return assignSlot(k.id); });
+          var c = (centers[0] + centers[centers.length - 1]) / 2;
+          slotOf[id] = c;
+          return c;
+        }
+        var roots = nodesFlat.filter(function (n) { return n.depth === 0; }).map(function (n) { return n.box; });
+        roots.forEach(function (r) { assignSlot(r.id); });
+        var totalSlots = Math.max(leafCounter, 1);
+        var SLOT_W = NODE_W + GAP_X;
+        var totalWidth = PAD_X * 2 + totalSlots * NODE_W + (totalSlots - 1) * GAP_X;
+
+        // הופכים (mirror) את סדר המשבצות: אח 0 תמיד יושב הכי ימני, בדיוק כמו
+        // בעץ ה-flex/RTL הקודם — כדי לא לשבש את המשמעות של "הזז ימינה/שמאלה".
+        function leftOf(id) {
+          var abstractLeft = PAD_X + slotOf[id] * SLOT_W;
+          return totalWidth - NODE_W - abstractLeft;
+        }
+
+        var maxDepth = 0;
+        nodesFlat.forEach(function (n) { if (n.depth > maxDepth) maxDepth = n.depth; });
+        var rowMaxH = [];
+        for (var d = 0; d <= maxDepth; d++) {
+          var h = 0;
+          nodesFlat.forEach(function (n) { if (n.depth === d) h = Math.max(h, heightOf[n.box.id]); });
+          rowMaxH.push(h || 70);
+        }
+        var rowTop = [PAD_TOP];
+        for (var d2 = 1; d2 <= maxDepth; d2++) rowTop.push(rowTop[d2 - 1] + rowMaxH[d2 - 1] + ROW_GAP);
+        var totalHeight = rowTop[maxDepth] + rowMaxH[maxDepth] + PAD_BOTTOM;
+
+        nodesFlat.forEach(function (n) {
+          var el = elOf[n.box.id];
+          if (!el) return;
+          el.style.left = leftOf(n.box.id) + "px";
+          el.style.top = rowTop[n.depth] + "px";
+        });
+        canvas.style.width = totalWidth + "px";
+        canvas.style.height = totalHeight + "px";
+        svg.setAttribute("width", totalWidth);
+        svg.setAttribute("height", totalHeight);
+        svg.setAttribute("viewBox", "0 0 " + totalWidth + " " + totalHeight);
+
+        function centerX(id) { return leftOf(id) + NODE_W / 2; }
+        var lines = [];
+        nodesFlat.forEach(function (n) {
+          var kids = byParent[n.box.id] || [];
+          if (!kids.length) return;
+          var parentBottom = rowTop[n.depth] + heightOf[n.box.id];
+          var midY = parentBottom + ROW_GAP / 2;
+          var childXs = kids.map(function (k) { return centerX(k.id); });
+          var minX = Math.min.apply(null, childXs), maxX = Math.max.apply(null, childXs);
+          var px = centerX(n.box.id);
+          lines.push('<line x1="' + px + '" y1="' + parentBottom + '" x2="' + px + '" y2="' + midY + '"></line>');
+          if (kids.length > 1) {
+            lines.push('<line x1="' + minX + '" y1="' + midY + '" x2="' + maxX + '" y2="' + midY + '"></line>');
+          }
+          kids.forEach(function (k) {
+            var cx = centerX(k.id);
+            var childTop = rowTop[n.depth + 1];
+            lines.push('<line x1="' + cx + '" y1="' + midY + '" x2="' + cx + '" y2="' + childTop + '"></line>');
+          });
+        });
+        svg.innerHTML = lines.join("");
       }
 
       function defaultExpanded(boxes, byParent) {
@@ -1630,13 +1721,23 @@ function resOpenDrawer(container, idx, rowIndex, c) {
           return;
         }
 
-        bodyEl.innerHTML = '<div class="org-tree-wrap"><ul class="org-tree">' +
-          roots.map(function (b, i) { return orgNodeHTML(b, byParent, i, roots.length); }).join("") +
-          '</ul></div>';
+        var nodesFlat = [];
+        function collectNode(node, depth, siblingPos, siblingCount) {
+          nodesFlat.push({ box: node, depth: depth, siblingPos: siblingPos, siblingCount: siblingCount });
+          var kids = byParent[node.id] || [];
+          kids.forEach(function (k, i) { collectNode(k, depth + 1, i, kids.length); });
+        }
+        roots.forEach(function (r, i) { collectNode(r, 0, i, roots.length); });
+
+        bodyEl.innerHTML = '<div class="org-tree-wrap"><div class="org-tree-canvas" id="org-tree-canvas">' +
+          '<svg class="org-tree-svg" id="org-tree-svg"></svg>' +
+          nodesFlat.map(function (n) { return orgNodeBoxHTML(n.box, n.siblingPos, n.siblingCount); }).join("") +
+          '</div></div>';
+        layoutOrgTree(bodyEl.querySelector("#org-tree-canvas"), bodyEl.querySelector("#org-tree-svg"), nodesFlat, byParent);
         // עוגן גלילה התחלתי (2026-08-10) — ר' אותה הערה ב-resCommittee/resident.js.
         // חשוב באותה מידה כאן: אחרי כל שמירה draw() רץ מחדש, וגם אחרי עריכה
         // רוצים שהמנהל ימשיך לראות את ראש העץ, לא ייזרק לתוך "האמצע" שלו.
-        var firstBox = bodyEl.querySelector(".org-tree > li > .org-box");
+        var firstBox = roots[0] && bodyEl.querySelector('.org-tree-node[data-node-id="' + CBA.esc(roots[0].id) + '"]');
         if (firstBox && firstBox.scrollIntoView) {
           firstBox.scrollIntoView({ inline: "center", block: "nearest" });
         }

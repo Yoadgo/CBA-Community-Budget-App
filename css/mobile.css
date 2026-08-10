@@ -323,6 +323,8 @@
 
   /* בניית תקציב: קבוצות ההוצאה בעמודה אחת — קריאוּת ועריכה נוחה בטלפון */
   .plan-groups { grid-template-columns: 1fr; }
+  /* תצוגה להצגה (סעיף 6, 2026-08-10) — אותו היגיון בטלפון: עמודה אחת */
+  .present-wrap { grid-template-columns: 1fr; }
 
   /* מיקרו-אינטראקציות: משוב נגיעה עדין */
   .bcard:active, .tx-mcard:active, .tx-mrow:active,

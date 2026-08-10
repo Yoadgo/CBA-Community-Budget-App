@@ -361,7 +361,12 @@ CBA.data = (function () {
           amount: Number(fields.amount) || 0, categoryId: "", description: fields.description || "",
           source: "resident", status: "submitted",
           expenseType: fields.expenseType, payType: fields.expenseType === "refund" ? "refund" : "supplier",
-          receiptUrl: "", year: year
+          receiptUrl: "", year: year,
+          // תוקן 2026-08-10 (באג שנמצא בסימולציה חיה): בלי השדה הזה העותק
+          // האופטימי הזה לא היה תואם את הסינון ב-myRequests() (resident.js),
+          // אז "הבקשות שלי" המשיך להראות "אין בקשות" עד רענון מלא של העמוד —
+          // resident.js שולח כעת fields.familyId מפורשות בשביל השורה הזו בדיוק.
+          familyId: fields.familyId || ""
         });
       }
       if (cb) cb(res);
@@ -539,6 +544,26 @@ CBA.data = (function () {
     return sums;
   }
 
+  // ניצול תת-סעיפים (סעיף 6, 2026-08-10) — עבור סעיף מפורט (c.items, ר' סעיף 5),
+  // מחזיר לכל פריט את הביצוע בפועל (סכום תנועות נספרות ששויכו אליו דרך
+  // subItemId), לתצוגה קלה (מלל מוקטן) במסך "תכנון מול ביצוע". null אם הסעיף
+  // לא מפורט בכלל — כדי שהתצוגה תדע לדלג בלי בדיקת אורך בכל מקום.
+  // txFilter אופציונלי (למשל סינון לפי חודש ב-getBudgetRowsAsOf) — אותו סינון
+  // בדיוק צריך לחול גם כאן כדי שהסכומים יהיו עקביים עם r.actual של הסעיף עצמו.
+  function itemsActualForCategory(c, txFilter) {
+    if (!c.items || !c.items.length) return null;
+    const sums = {};
+    c.items.forEach(function (it) { sums[it.id] = 0; });
+    getTransactions().forEach(function (t) {
+      if (t.categoryId !== c.id) return;
+      if (SPENT_STATUSES.indexOf(t.status) === -1) return;
+      if (!sums.hasOwnProperty(t.subItemId)) return;
+      if (txFilter && !txFilter(t)) return;
+      sums[t.subItemId] += t.amount || 0;
+    });
+    return c.items.map(function (it) { return { name: it.name, plan: it.plan || 0, actual: sums[it.id] || 0 }; });
+  }
+
   // שורת תקציב מוכנה לתצוגה: תכנון, ביצוע, יתרה, אחוז ניצול, ורמת מצב
   function getBudgetRows() {
     const actual = actualByCategory();
@@ -551,7 +576,8 @@ CBA.data = (function () {
       else if (pct >= 85) band = "warn"; // קרוב לחריגה = כתום
       return {
         id: c.id, name: c.name, plan: c.plan, group: c.group,
-        actual: spent, remaining: remaining, pct: pct, band: band
+        actual: spent, remaining: remaining, pct: pct, band: band,
+        items: itemsActualForCategory(c)
       };
     });
   }
@@ -605,13 +631,17 @@ CBA.data = (function () {
   }
   // שורות תקציב "נכון לחודש X" — צפי מול ביצוע עד אותו חודש
   function getBudgetRowsAsOf(asOf) {
+    const monthKeys = FISCAL_KEYS.slice(0, asOf + 1);
     return getCategories().map(function (c) {
       const expected = expectedToDate(c, asOf);
       const actual = actualToDate(c, asOf);
       const pct = expected > 0 ? (actual / expected * 100) : (actual > 0 ? 999 : 0);
       let band = "ok";
       if (pct > 110) band = "danger"; else if (pct > 100) band = "warn";
-      return { id: c.id, name: c.name, group: c.group, plan: c.plan, expected: expected, actual: actual, diff: actual - expected, pct: pct, band: band };
+      return {
+        id: c.id, name: c.name, group: c.group, plan: c.plan, expected: expected, actual: actual, diff: actual - expected, pct: pct, band: band,
+        items: itemsActualForCategory(c, function (t) { return monthKeys.indexOf(t.month) !== -1; })
+      };
     });
   }
   // סדרות מצטברות לגרף: תכנון מצטבר מול ביצוע מצטבר לאורך החודשים

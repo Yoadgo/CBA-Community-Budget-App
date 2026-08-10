@@ -496,6 +496,13 @@ CBA.screens = CBA.screens || {};
             description: desc,
             buyer: fullName(u),
             email: u.email || "",
+            // מזהה משפחה (נמצא בסימולציה חיה, 2026-08-10): רק כדי שהעותק המקומי
+            // האופטימי (ר' ההערה ב-dataService.js/submitReceipt) יכלול familyId —
+            // בלעדיו myRequests() כאן למעלה (שמסננת לפי familyId) לא מציגה את
+            // הבקשה החדשה עד רענון מלא של העמוד. השרת ממשיך לחשב את מזהה
+            // המשפחה האמיתי בעצמו לפי האימייל המאומת (submitReceipt_ ב-Code.gs)
+            // ולא סומך על השדה הזה — הוא משמש רק לתצוגה המיידית בצד הלקוח.
+            familyId: String(u.familyId || u.house || ""),
             fileName: picked.fileName,
             mimeType: picked.mimeType,
             dataBase64: picked.dataBase64
@@ -2165,19 +2172,103 @@ CBA.screens = CBA.screens || {};
       var rowsCache = [];
       var expanded = null; // {boxId:true/false} — נבנה פעם אחת (ברירת מחדל), נשמר בין ציורים חוזרים
 
-      function orgNodeHTML(box, byParent) {
+      // כרטיס בודד (2026-08-10, מנוע ציור מדויק) — כבר לא <li> מקונן; div שטוח
+      // עם data-node-id, ש-layoutOrgTree ממקם אחר כך ב-left/top מוחלטים. אין
+      // כפתורי פעולה כאן בכלל (תצוגת קריאה בלבד) — זה ההבדל היחיד מול הגרסה
+      // המקבילה במסך הניהול (residents.js).
+      function orgNodeBoxHTML(box) {
         var cat = CBA.committee.catInfo(box.category);
-        var kids = byParent[box.id] || [];
         var peopleHTML = box.people.length
           ? box.people.map(function (p) { return '<div class="org-box__person">' + CBA.esc(p.name) + '</div>'; }).join("")
           : "";
-        return '<li>' +
+        return '<div class="org-tree-node" data-node-id="' + CBA.esc(box.id) + '">' +
           '<div class="org-box" style="border-top-color:' + CBA.esc(cat.color) + '" title="' + CBA.esc(cat.name) + '">' +
             '<div class="org-box__role">' + CBA.esc(box.role || "(ללא שם תפקיד)") + '</div>' +
             (peopleHTML ? '<div class="org-box__people">' + peopleHTML + '</div>' : "") +
           '</div>' +
-          (kids.length ? '<ul>' + kids.map(function (k) { return orgNodeHTML(k, byParent); }).join("") + '</ul>' : "") +
-        '</li>';
+        '</div>';
+      }
+
+      // מנוע הפריסה (2026-08-10) — זהה לחלוטין לזה שב-residents.js
+      // (CBA.screens.committeeAdmin). ר' ההסבר המלא בהערת ה-CSS מעל
+      // .org-tree-wrap ב-resident.css. לא מרוכז בקובץ משותף כי כל שאר
+      // לוגיקת ה-DOM/ציור של עץ הוועד כאן כבר כפולה כך בין שני המסכים
+      // (orgListHTML, defaultExpanded וכו') — הרחבה עקבית לדפוס הקיים.
+      function layoutOrgTree(canvas, svg, nodesFlat, byParent) {
+        var NODE_W = 156, GAP_X = 22, ROW_GAP = 46, PAD_X = 20, PAD_TOP = 6, PAD_BOTTOM = 10;
+
+        var heightOf = {}, elOf = {};
+        nodesFlat.forEach(function (n) {
+          var el = canvas.querySelector('.org-tree-node[data-node-id="' + CBA.esc(n.box.id) + '"]');
+          elOf[n.box.id] = el;
+          heightOf[n.box.id] = el ? el.offsetHeight : 70;
+        });
+
+        var slotOf = {}, leafCounter = 0;
+        function assignSlot(id) {
+          var kids = byParent[id] || [];
+          if (!kids.length) { var s = leafCounter++; slotOf[id] = s; return s; }
+          var centers = kids.map(function (k) { return assignSlot(k.id); });
+          var c = (centers[0] + centers[centers.length - 1]) / 2;
+          slotOf[id] = c;
+          return c;
+        }
+        var roots = nodesFlat.filter(function (n) { return n.depth === 0; }).map(function (n) { return n.box; });
+        roots.forEach(function (r) { assignSlot(r.id); });
+        var totalSlots = Math.max(leafCounter, 1);
+        var SLOT_W = NODE_W + GAP_X;
+        var totalWidth = PAD_X * 2 + totalSlots * NODE_W + (totalSlots - 1) * GAP_X;
+
+        function leftOf(id) {
+          var abstractLeft = PAD_X + slotOf[id] * SLOT_W;
+          return totalWidth - NODE_W - abstractLeft;
+        }
+
+        var maxDepth = 0;
+        nodesFlat.forEach(function (n) { if (n.depth > maxDepth) maxDepth = n.depth; });
+        var rowMaxH = [];
+        for (var d = 0; d <= maxDepth; d++) {
+          var h = 0;
+          nodesFlat.forEach(function (n) { if (n.depth === d) h = Math.max(h, heightOf[n.box.id]); });
+          rowMaxH.push(h || 70);
+        }
+        var rowTop = [PAD_TOP];
+        for (var d2 = 1; d2 <= maxDepth; d2++) rowTop.push(rowTop[d2 - 1] + rowMaxH[d2 - 1] + ROW_GAP);
+        var totalHeight = rowTop[maxDepth] + rowMaxH[maxDepth] + PAD_BOTTOM;
+
+        nodesFlat.forEach(function (n) {
+          var el = elOf[n.box.id];
+          if (!el) return;
+          el.style.left = leftOf(n.box.id) + "px";
+          el.style.top = rowTop[n.depth] + "px";
+        });
+        canvas.style.width = totalWidth + "px";
+        canvas.style.height = totalHeight + "px";
+        svg.setAttribute("width", totalWidth);
+        svg.setAttribute("height", totalHeight);
+        svg.setAttribute("viewBox", "0 0 " + totalWidth + " " + totalHeight);
+
+        function centerX(id) { return leftOf(id) + NODE_W / 2; }
+        var lines = [];
+        nodesFlat.forEach(function (n) {
+          var kids = byParent[n.box.id] || [];
+          if (!kids.length) return;
+          var parentBottom = rowTop[n.depth] + heightOf[n.box.id];
+          var midY = parentBottom + ROW_GAP / 2;
+          var childXs = kids.map(function (k) { return centerX(k.id); });
+          var minX = Math.min.apply(null, childXs), maxX = Math.max.apply(null, childXs);
+          var px = centerX(n.box.id);
+          lines.push('<line x1="' + px + '" y1="' + parentBottom + '" x2="' + px + '" y2="' + midY + '"></line>');
+          if (kids.length > 1) {
+            lines.push('<line x1="' + minX + '" y1="' + midY + '" x2="' + maxX + '" y2="' + midY + '"></line>');
+          }
+          kids.forEach(function (k) {
+            var cx = centerX(k.id);
+            var childTop = rowTop[n.depth + 1];
+            lines.push('<line x1="' + cx + '" y1="' + midY + '" x2="' + cx + '" y2="' + childTop + '"></line>');
+          });
+        });
+        svg.innerHTML = lines.join("");
       }
 
       // ברירת מחדל לפתיחה/סגירה ברשימה המתקפלת: "שרשרת" (תא עם ילד יחיד)
@@ -2243,15 +2334,23 @@ CBA.screens = CBA.screens || {};
           return;
         }
 
-        bodyEl.innerHTML = '<div class="org-tree-wrap"><ul class="org-tree">' +
-          roots.map(function (b) { return orgNodeHTML(b, byParent); }).join("") +
-          '</ul></div>';
-        // עוגן גלילה התחלתי (2026-08-10): הטכניקה של עץ CSS טהור (li שרוחבו =
-        // רוחב כל תת-העץ שלו, ההורה ממורכז מעליו) גוררת תופעת-לוואי: כשענף
-        // אחד רחב מאוד (הרבה אחים באותה שורה, כמו כאן), התא הראשי בראש העץ
-        // ממורכז מעל *כל* רוחב הענף הזה — ויכול לצאת מחוץ לתצוגה הראשונית
-        // לגמרי, למרות שהוא הדבר הכי חשוב לראות קודם. גוללים במפורש אליו.
-        var firstBox = bodyEl.querySelector(".org-tree > li > .org-box");
+        var nodesFlat = [];
+        function collectNode(node, depth) {
+          nodesFlat.push({ box: node, depth: depth });
+          var kids = byParent[node.id] || [];
+          kids.forEach(function (k) { collectNode(k, depth + 1); });
+        }
+        roots.forEach(function (r) { collectNode(r, 0); });
+
+        bodyEl.innerHTML = '<div class="org-tree-wrap"><div class="org-tree-canvas" id="org-tree-canvas">' +
+          '<svg class="org-tree-svg" id="org-tree-svg"></svg>' +
+          nodesFlat.map(function (n) { return orgNodeBoxHTML(n.box); }).join("") +
+          '</div></div>';
+        layoutOrgTree(bodyEl.querySelector("#org-tree-canvas"), bodyEl.querySelector("#org-tree-svg"), nodesFlat, byParent);
+        // עוגן גלילה התחלתי (2026-08-10): גם בפריסה המדויקת החדשה העץ בפועל
+        // רחב מרוב מסכי מחשב — בלי גלילה מפורשת לראש העץ, אפשר "להיזרק"
+        // לתוך האמצע שלו בטעינה ראשונה. גוללים במפורש אליו.
+        var firstBox = roots[0] && bodyEl.querySelector('.org-tree-node[data-node-id="' + CBA.esc(roots[0].id) + '"]');
         if (firstBox && firstBox.scrollIntoView) {
           firstBox.scrollIntoView({ inline: "center", block: "nearest" });
         }
