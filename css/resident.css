@@ -804,13 +804,13 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 /* כל קוביה ממוקמת באופן מוחלט לפי left/top שה-JS קובע (inline style) —
    הרוחב הקבוע כאן (זהה לרוחב org-box) הוא מה שמבטיח שכל תא, עם או בלי
    ילדים, תופס בדיוק את אותה משבצת בחישוב הפריסה. */
-.org-tree-node { position: absolute; width: 140px; }
+.org-tree-node { position: absolute; width: 119px; }
 
 .org-box {
   /* inline-block ולא block: כדי ש-text-align:center של ה-li (מעלה) ימרכז
      אותו בפועל — li אינו flex, אז ילד block רגיל לא היה מגיב למרכוז הזה */
-  display: inline-block; width: 140px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 7px 9px 8px; text-align: center;
+  display: inline-block; width: 119px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 7px 9px; text-align: center;
   position: relative; border-top: 4px solid var(--text);
 }
 .org-box--kids { border-top-color: var(--org-kids); }
@@ -826,10 +826,16 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
    סבב נוסף (2026-08-10, לבקשת יועד: "להקטין את הרוחב של עמודה בעוד 10%"
    + "להקטין את הגובה של העמודות, לצמצם שטחים שלא מנוצלים") — רוחב 156→140,
    וריפוד/רווחים פנימיים הודקו עוד (line-height/margin-top), בלי לגעת שוב
-   בגודל הגופן עצמו כדי לא לפגוע בקריאות. */
-.org-box__role { font-size: 16px; font-weight: 800; color: var(--text); line-height: 1.2; }
-.org-box__people { margin-top: 4px; }
-.org-box__person { font-size: 15px; color: var(--text-soft); line-height: 1.28; }
+   בגודל הגופן עצמו כדי לא לפגוע בקריאות.
+   סבב 4 (2026-08-10, לבקשת יועד: "תקטין את רוחב הקוביות בעוד 15%, תגדיל
+   את הגופנים תוך שמירה על היחס בין הגופנים") — רוחב 140→119 (עוד 15%
+   פחות). הגופנים גדלו פי 1.125 (אותו יחס בין role ל-person כמו קודם,
+   16:15 ≈ 18:16.9), והריפוד האנכי (top/bottom) גדל קצת (7/8→8/9) כדי לתת
+   לגופנים הגדולים יותר מקום לנשום — הריפוד האופקי דווקא קטן (9→7) כדי
+   לפצות על הרוחב הצר יותר של הקוביה. */
+.org-box__role { font-size: 18px; font-weight: 800; color: var(--text); line-height: 1.2; }
+.org-box__people { margin-top: 5px; }
+.org-box__person { font-size: 16.9px; color: var(--text-soft); line-height: 1.28; }
 .org-box__person--empty { color: var(--text-muted); font-style: italic; }
 
 /* כפתורי הפעולה תפסו מקום קבוע בגובה הקוביה גם כשהם בלתי-נראים (opacity:0

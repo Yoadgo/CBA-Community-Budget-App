@@ -18,6 +18,10 @@ var planViewMode = false;
 // סמליל "פנקס הערות" (סעיף 1) — דף+קווים, באותו סגנון SVG כמו NAV_ICONS ב-app.js
 var PLAN_NOTES_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/><path d="M9.5 12h6M9.5 16h4"/></svg>';
 
+// סמליל "חלוקה חודשית לתת-סעיף" (סעיף 7ג, 2026-08-10) — לוח שנה, פותח את
+// חלון עריכת החלוקה של תת-הסעיף. ר' planItemsHTML/planOpenItemDistModal למטה.
+var PLAN_DIST_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+
 CBA.screens.planning = {
   title: "בניית תקציב",
 
@@ -55,11 +59,11 @@ CBA.screens.planning = {
                 <input class="num-input num-input--full" type="number" inputmode="numeric" data-cat="${CBA.esc(c.id)}" value="${c.plan}">
                 ${planBaselineLine(c)}
                 ${planShowCompare ? planCompareLine(c) : ""}
-                <div class="dist-chip" data-chip="${CBA.esc(c.id)}">${planDistLabel(c)} · ${CBA.esc(planSourceName(c))}</div>
+                ${c.items && c.items.length ? "" : `<div class="dist-chip" data-chip="${CBA.esc(c.id)}">${planDistLabel(c)} · ${CBA.esc(planSourceName(c))}</div>`}
                 <div class="plan-item__more">
                   ${planSourceSplitHTML(c)}
                   ${planItemsHTML(c)}
-                  ${planDistControl(c)}
+                  ${c.items && c.items.length ? "" : planDistControl(c)}
                 </div>
               </div>`;
           }).join("")}
@@ -379,6 +383,14 @@ function planBind(container) {
       if (c.items[idx]) c.items[idx].plan = planNum(inp.value);
       const warnEl = container.querySelector("#item-warn-" + planKey(c.id));
       if (warnEl) warnEl.innerHTML = planItemWarnHTML(c);
+    });
+  });
+  // חלוקה חודשית לתת-סעיף בודד (סעיף 7ג, 2026-08-10) — כפתור קטן ליד כל
+  // תת-סעיף פותח חלון עריכה ייעודי (שווה/מותאם/שנתי, כולל עורך 12 החודשים
+  // במצב "מותאם") — ר' planOpenItemDistModal.
+  container.querySelectorAll("[data-item-dist]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      planOpenItemDistModal(container, btn.dataset.itemDist, parseInt(btn.dataset.itemIdx, 10));
     });
   });
 
@@ -823,6 +835,7 @@ function planItemsHTML(c) {
       <div class="src-split__row">
         <input class="txt-input" data-item-name="${CBA.esc(c.id)}" data-item-idx="${i}" value="${CBA.esc(it.name)}">
         <input class="num-input num-input--sm" type="number" inputmode="numeric" data-item-plan="${CBA.esc(c.id)}" data-item-idx="${i}" value="${it.plan}">
+        <button type="button" class="mini-icon-btn" data-item-dist="${CBA.esc(c.id)}" data-item-idx="${i}" title="חלוקה חודשית: ${CBA.esc(planDistLabel(it))}">${PLAN_DIST_ICON}</button>
         <button class="mini-x" data-item-remove="${CBA.esc(c.id)}" data-item-idx="${i}" title="הסר פריט">×</button>
       </div>`;
   }).join("");
@@ -1105,6 +1118,103 @@ function planUpdateSum(c) {
     note.className = "months-note " + (over ? "neg" : "pos");
   }
 }
+
+/* חלון עריכת חלוקה חודשית לתת-סעיף בודד (סעיף 7ג, 2026-08-10) — נפתח מהכפתור
+   הקטן ליד כל תת-סעיף (סוכם עם יועד: "כפתור קטן שפותח חלון עריכה"). בשונה
+   מהבקרה המפולגת ברמת הסעיף (שמוצגת רק כשהסעיף *לא* מפורט — ר' planDistControl
+   וה-template שמעל, שמסתיר אותה ואת ה-dist-chip כשיש c.items) — כאן, מכיוון
+   שאין בקרה חיצונית לכל תת-סעיף, כל שלושת מצבי החלוקה (שווה/מותאם/שנתי)
+   נבחרים מתוך החלון עצמו. משתמש ב-planEqualArray/planUpdateSum הקיימים —
+   שניהם כבר גנריים (קוראים רק target.plan/target.dist), עובדים גם על תת-סעיף. */
+function planOpenItemDistModal(container, catId, itemIdx) {
+  planCloseModal();
+  const c = findCat(catId);
+  if (!c || !c.items || !c.items[itemIdx]) return;
+  const it = c.items[itemIdx];
+  if (!it.dist) it.dist = { mode: "equal", months: 12, monthly: null };
+
+  const overlay = document.createElement("div");
+  overlay.id = "cba-modal";
+  overlay.innerHTML = `
+    <div class="modal-backdrop" data-modal-close>
+      <div class="modal" role="dialog">
+        <div class="modal__head">
+          <div>
+            <div class="modal__title">חלוקה חודשית — ${CBA.esc(it.name)}</div>
+            <div class="modal__sub">תת-סעיף בתוך "${CBA.esc(c.name)}"</div>
+          </div>
+          <button class="drawer__close" data-modal-close aria-label="סגור">×</button>
+        </div>
+        <div class="modal__body" id="item-dist-body"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  function refreshRowIcon() {
+    const btn = container.querySelector('[data-item-dist="' + CSS.escape(catId) + '"][data-item-idx="' + itemIdx + '"]');
+    if (btn) btn.title = "חלוקה חודשית: " + planDistLabel(it);
+  }
+
+  overlay.querySelector(".modal").addEventListener("click", function (e) { e.stopPropagation(); });
+  overlay.querySelectorAll("[data-modal-close]").forEach(function (el) {
+    el.addEventListener("click", function () { planCloseModal(); refreshRowIcon(); });
+  });
+  document.addEventListener("keydown", planEscModal);
+
+  const body = document.getElementById("item-dist-body");
+  function renderBody() {
+    let html = `
+      <div class="seg-wrap">
+        <div class="seg" title="חלוקה חודשית">
+          <button type="button" class="seg__opt${it.dist.mode === "equal" ? " is-active" : ""}" data-item-modal-mode="equal">שווה</button>
+          <button type="button" class="seg__opt${it.dist.mode === "custom" ? " is-active" : ""}" data-item-modal-mode="custom">מותאם</button>
+          <button type="button" class="seg__opt${it.dist.mode === "unplanned" ? " is-active" : ""}" data-item-modal-mode="unplanned" title="סכום שנתי, לא מחולק לחודשים">שנתי</button>
+        </div>`;
+    if (it.dist.mode === "equal") {
+      html += `<div class="seg-months">חודשים
+        <input class="num-input num-input--sm" type="number" min="1" max="12" id="item-modal-months" value="${it.dist.months || 12}"></div>`;
+    }
+    html += `</div>`;
+    if (it.dist.mode === "custom") {
+      if (!it.dist.monthly) it.dist.monthly = planEqualArray(it);
+      const fields = CBA.data.getMonthLabels().map(function (lab, i) {
+        return `<div class="month-field"><label>${lab}</label>
+          <input class="num-input" type="number" data-month="${i}" value="${it.dist.monthly[i] || 0}"></div>`;
+      }).join("");
+      html += `
+        <div class="months-grid">${fields}</div>
+        <div class="months-sum"><span>מנוצל מהתכנון</span><span class="months-sum__val" id="msum"></span></div>
+        <div class="months-note" id="mnote"></div>`;
+    }
+    body.innerHTML = html;
+
+    body.querySelectorAll("[data-item-modal-mode]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        it.dist.mode = btn.dataset.itemModalMode;
+        if (it.dist.mode === "custom" && !it.dist.monthly) it.dist.monthly = planEqualArray(it);
+        planSave();
+        renderBody();
+        refreshRowIcon();
+      });
+    });
+    const monthsInp = document.getElementById("item-modal-months");
+    if (monthsInp) monthsInp.addEventListener("input", function () {
+      it.dist.months = Math.max(1, Math.min(12, planNum(monthsInp.value) || 1));
+      refreshRowIcon();
+    });
+    if (monthsInp) monthsInp.addEventListener("change", function () { planSave(); });
+    body.querySelectorAll("[data-month]").forEach(function (inp) {
+      inp.addEventListener("input", function () {
+        it.dist.monthly[parseInt(inp.dataset.month, 10)] = planNum(inp.value);
+        planUpdateSum(it);
+      });
+      inp.addEventListener("change", function () { planSave(); });
+    });
+    if (it.dist.mode === "custom") planUpdateSum(it);
+  }
+  renderBody();
+}
+
 function planCloseModal() {
   const el = document.getElementById("cba-modal");
   if (el) el.remove();

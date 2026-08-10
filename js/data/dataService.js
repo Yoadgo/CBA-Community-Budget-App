@@ -608,15 +608,30 @@ CBA.data = (function () {
     const i = FISCAL_KEYS.indexOf(today);
     return i < 0 ? FISCAL_KEYS.length - 1 : i;
   }
-  // חלוקה חודשית מחושבת לפי מצב הסעיף (12 ערכים)
-  function categoryMonthly(c) {
-    const d = c.dist || { mode: "equal", months: 12, monthly: null };
+  // חלוקה חודשית מחושבת לפי מצב נתון (12 ערכים) — לוגיקה משותפת לסעיף
+  // שלם ולתת-סעיף בודד (סעיף 7ג, 2026-08-10).
+  function distMonthly(dist, plan) {
+    const d = dist || { mode: "equal", months: 12, monthly: null };
     if (d.mode === "custom" && d.monthly) { const a = d.monthly.slice(); while (a.length < 12) a.push(0); return a; }
     const arr = new Array(12).fill(0);
-    if (d.mode === "unplanned") { arr[11] = c.plan || 0; return arr; }  // שנתי -> סוף שנה
-    const m = d.months || 12, per = m > 0 ? (c.plan || 0) / m : 0;
+    if (d.mode === "unplanned") { arr[11] = plan || 0; return arr; }  // שנתי -> סוף שנה
+    const m = d.months || 12, per = m > 0 ? (plan || 0) / m : 0;
     for (let i = 0; i < 12; i++) arr[i] = i < m ? per : 0;
     return arr;
+  }
+  // חלוקה חודשית מחושבת לפי מצב הסעיף (12 ערכים). אם הסעיף מפורט לתת-סעיפים
+  // (סעיף 7ג) — כל תת-סעיף מחזיק חלוקה משלו, וחלוקת הסעיף היא סכום כל
+  // תת-הסעיפים; בקרת החלוקה של הסעיף עצמו לא מוצגת/משמשת יותר במקרה הזה.
+  function categoryMonthly(c) {
+    if (c.items && c.items.length) {
+      const sum = new Array(12).fill(0);
+      c.items.forEach(function (it) {
+        const a = distMonthly(it.dist, it.plan);
+        for (let i = 0; i < 12; i++) sum[i] += a[i];
+      });
+      return sum;
+    }
+    return distMonthly(c.dist, c.plan);
   }
   function expectedToDate(c, asOf) {
     const arr = categoryMonthly(c); let s = 0;
@@ -879,9 +894,18 @@ CBA.data = (function () {
     // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10) — בשונה מ-sources למעלה, כאן
     // גם 1 פריט תקף (פריט יחיד כבר אומר "יש כאן פירוט" — אין "ברירת מחדל"
     // חלופית שאליה חוזרים כמו incomeSourceId). 0 פריטים = לא מפורט (null).
+    // כל תת-סעיף מחזיק גם בקרת חלוקה חודשית משלו (dist, סעיף 7ג, 2026-08-10) —
+    // ברגע שהסעיף מפורט, בקרת החלוקה של הסעיף עצמו כבר לא מוצגת/משמשת
+    // (ר' categoryMonthly למעלה); כל תת-סעיף חדש מתחיל בברירת המחדל הרגילה
+    // ("שווה" על פני 12 חודשים), בלי תלות במה שהיה מוגדר קודם ברמת הסעיף.
     if (c.items && c.items.length) {
       c.items = c.items.map(function (it) {
-        return { id: it.id || newId("item"), name: it.name || "", plan: Number(it.plan) || 0 };
+        return {
+          id: it.id || newId("item"),
+          name: it.name || "",
+          plan: Number(it.plan) || 0,
+          dist: it.dist || { mode: "equal", months: 12, monthly: null }
+        };
       });
     } else {
       c.items = null;
@@ -901,8 +925,13 @@ CBA.data = (function () {
   // בדיוק כמו newId עצמו. משמש גם את כפתור "פרט סעיף" ב-planning.js (מוסיף
   // ישירות ל-c.items ואז קורא ל-planSave() משלו, באותו דפוס בדיוק כמו
   // addGroup/addCategory) וגם את addCategoryItem למטה.
-  function newCategoryItem(name, plan) {
-    return { id: newId("item"), name: String(name == null ? "" : name).trim() || "פריט חדש", plan: Number(plan) || 0 };
+  function newCategoryItem(name, plan, dist) {
+    return {
+      id: newId("item"),
+      name: String(name == null ? "" : name).trim() || "פריט חדש",
+      plan: Number(plan) || 0,
+      dist: dist || { mode: "equal", months: 12, monthly: null }
+    };
   }
 
   // יצירת תת-סעיף "בזמן אמת" — משמש את מסך ניהול ההוצאות כשמנהל מאשר תנועה
@@ -1146,6 +1175,7 @@ CBA.data = (function () {
     getCategoryItems: getCategoryItems,
     newCategoryItem: newCategoryItem,
     addCategoryItem: addCategoryItem,
+    distMonthly: distMonthly,
     renameCategoryItem: renameCategoryItem,
     addGroup: addGroup,
     updateGroup: updateGroup,

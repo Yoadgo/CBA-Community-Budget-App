@@ -1032,6 +1032,17 @@ body[data-screen="planning"] .year-switch__add {
 }
 .mini-x:hover { color: var(--danger); background: var(--danger-soft); }
 
+/* כפתור סמליל קטן בשורת תת-סעיף — פותח את חלון עריכת החלוקה החודשית שלו
+   (סעיף 7ג, 2026-08-10). אותו מידות/ריפוד כמו mini-x, אבל צובע בכחול-פעולה
+   בהובר (לא אדום) כי זו לא פעולת מחיקה. */
+.mini-icon-btn {
+  border: none; background: none; cursor: pointer; color: var(--text-muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 5px 7px; border-radius: 7px; flex: none;
+  transition: color var(--t), background var(--t);
+}
+.mini-icon-btn:hover { color: var(--action); background: var(--hover); }
+
 .add-btn {
   margin-top: 8px; width: 100%;
   border: 1px dashed var(--border); background: none; cursor: pointer;
