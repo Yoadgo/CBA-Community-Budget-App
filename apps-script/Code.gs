@@ -439,7 +439,7 @@ function saveTransaction_(ss, body) {
   // מגיע ל"הועבר להנה"ח"/"שולם". אידמפוטנטי: קריאה חוזרת על קובץ שכבר במקום הנכון
   // לא משנה כלום (סעיף 4, 2026-08-06).
   if ((rowObj['סטטוס'] === STATUS_HE.ready || rowObj['סטטוס'] === STATUS_HE.paid) && rowObj['קישור קבלה']) {
-    moveReceiptToPermanentIfNeeded_(rowObj['קישור קבלה']);
+    moveReceiptToPermanentIfNeeded_(rowObj['קישור קבלה'], rowObj['חודש הגשה']);
   }
 
   var n = Math.max(sh.getLastRow() - 1, 0);
@@ -992,11 +992,36 @@ function submitReceipt_(ss, body) {
  * שנה/חודש שלא קיימים עדיין נוצרים אוטומטית. */
 var ROOT_RECEIPTS_FOLDER_ID = '1-NmXShMhy9wbIqMLAkIcelXvE6OlvLYi'; // תיקיית "שיכון"
 
-function getReceiptsFolder_() {
+function normalizeMonthKey_(value) {
+  // "חודש הגשה" עלול להישמר בגליון כמחרוזת yyyy-MM וגם (אם Sheets זיהתה אותו כתאריך
+  // בעריכה ידנית) כאובייקט Date אמיתי — מטפלים בשני המקרים ומחזירים תמיד yyyy-MM או ''.
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM');
+  }
+  var s = value ? String(value) : '';
+  return (s.length === 7 && s.charAt(4) === '-') ? s : '';
+}
+
+function getReceiptsFolder_(monthKey) {
   var root = DriveApp.getFolderById(ROOT_RECEIPTS_FOLDER_ID); // "שיכון"
-  var now = new Date(), tz = Session.getScriptTimeZone();
-  var yearName = Utilities.formatDate(now, tz, 'yyyy');
-  var monthName = Utilities.formatDate(now, tz, 'M'); // בלי אפס מוביל — כמו התיקיות הקיימות
+  var yearName, monthName;
+  // monthKey הוא "חודש הגשה" של השורה (ר' submissionMonthForToday_) — הוא הקובע לאיזו
+  // תיקיית שנה/חודש הקבלה שייכת, ולא תאריך היום שבו נשמרה/אושרה השורה.
+  // (באג שתוקן ב-2026-08-10: קודם השתמשנו תמיד בתאריך היום, מה שהעביר קבלות ישנות
+  // לתיקיית החודש הנוכחי בכל פעם שהתנועה שלהן נשמרה מחדש — למשל תוך כדי בדיקה/אישור
+  // של המנהל. ר' תיקון ותחקור מלא ב-2026-08-10.)
+  var mk = normalizeMonthKey_(monthKey);
+  if (mk) {
+    var parts = mk.split('-');
+    yearName = parts[0];
+    monthName = String(Number(parts[1])); // בלי אפס מוביל — כמו התיקיות הקיימות
+  } else {
+    // רשת ביטחון בלבד — לא אמור לקרות בפועל בזרימה תקינה, כי כל קריאה מעבירה monthKey.
+    var now = new Date(), tz = Session.getScriptTimeZone();
+    yearName = Utilities.formatDate(now, tz, 'yyyy');
+    monthName = Utilities.formatDate(now, tz, 'M');
+    Logger.log('getReceiptsFolder_: monthKey חסר/לא תקין ("' + monthKey + '") — נופל חזרה לתאריך היום');
+  }
   var yearFolder = findOrCreateSubfolder_(root, yearName);
   return findOrCreateSubfolder_(yearFolder, monthName);
 }
@@ -1040,12 +1065,12 @@ function renameReceiptFileIfNeeded_(url, newName) {
  * (סעיף 4, 2026-08-06). לא-קריטי בכוונה (עטוף try/catch): קובץ שנמחק/קישור חיצוני
  * שאינו בבעלות האפליקציה לא מפילים את שמירת התנועה. אידמפוטנטי — moveTo על קובץ
  * שכבר נמצא ביעד לא עושה כלום. */
-function moveReceiptToPermanentIfNeeded_(url) {
+function moveReceiptToPermanentIfNeeded_(url, monthKey) {
   var id = extractDriveFileId_(url);
   if (!id) return;
   try {
     var file = DriveApp.getFileById(id);
-    file.moveTo(getReceiptsFolder_());
+    file.moveTo(getReceiptsFolder_(monthKey));
   } catch (e) { /* לא קריטי */ }
 }
 
@@ -1089,6 +1114,7 @@ function uploadReceiptFile_(ss, body) {
     var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
     var idCol = headers.indexOf('מזהה');
     var statusCol = headers.indexOf('סטטוס');
+    var monthCol = headers.indexOf('חודש הגשה');
     var urlCol = headers.indexOf('קישור קבלה');
     var nameCol = headers.indexOf('שם קובץ קבלה');
     if (idCol === -1 || urlCol === -1 || nameCol === -1) return { ok: false, error: 'מבנה טאב לא תקין' };
@@ -1100,8 +1126,9 @@ function uploadReceiptFile_(ss, body) {
     if (row === -1) return { ok: false, error: 'התנועה לא נמצאה — שמור אותה קודם' };
 
     var status = statusCol !== -1 ? String(sh.getRange(row, statusCol + 1).getValue()) : '';
+    var monthKey = monthCol !== -1 ? sh.getRange(row, monthCol + 1).getValue() : '';
     var approved = (status === STATUS_HE.ready || status === STATUS_HE.paid);
-    var folder = approved ? getReceiptsFolder_() : getPendingReceiptsFolder_();
+    var folder = approved ? getReceiptsFolder_(monthKey) : getPendingReceiptsFolder_();
 
     var blob = Utilities.newBlob(
       Utilities.base64Decode(body.dataBase64),
@@ -3627,3 +3654,100 @@ function monthlyDigestJob_(ss) {
   var sections = collectOpenItems_(ss);
   sendDigestBySection_(ss, 'ADMIN_MONTHLY_DIGEST', sections, ['budget']);
 }
+
+/* ==== תיקון חד-פעמי (2026-08-10): קבלות שהוזזו בטעות לתיקיית חודש שגוי ==== */
+/* פונקציה חד-פעמית לאבחון/תיקון קבלות שהועברו בטעות לתיקיית "החודש הנוכחי" בדרייב
+ * (הבאג שתוקן למעלה ב-getReceiptsFolder_) במקום לתיקיית "חודש הגשה" האמיתי שלהן.
+ * dryRun=true (ברירת מחדל): רק מדווחת ל-Logger מה היה זז, לא נוגעת בקבצים.
+ * dryRun=false: מזיזה בפועל. יש להריץ קודם עם dryRun=true ולבדוק את הלוג!
+ * מיועדת להסרה אחרי שהתיקון בוצע ואומת. */
+function repairMisplacedReceipts_(dryRun) {
+  dryRun = (dryRun !== false);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  var report = [];
+  var moved = 0, alreadyOk = 0, skipped = 0, errors = 0;
+
+  sheets.forEach(function (sh) {
+    var name = sh.getName();
+    if (name.indexOf('תנועות ') !== 0) return;
+
+    var lastCol = sh.getLastColumn();
+    var lastRow = sh.getLastRow();
+    if (lastRow < 2) return;
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    var idCol = headers.indexOf('מזהה');
+    var monthCol = headers.indexOf('חודש הגשה');
+    var statusCol = headers.indexOf('סטטוס');
+    var urlCol = headers.indexOf('קישור קבלה');
+    if (idCol === -1 || monthCol === -1 || statusCol === -1 || urlCol === -1) return;
+
+    var data = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    data.forEach(function (row) {
+      var status = String(row[statusCol]);
+      var url = String(row[urlCol]);
+      var rawMonth = row[monthCol];
+      var id = row[idCol];
+      if (!url) return;
+      if (status !== STATUS_HE.ready && status !== STATUS_HE.paid) return;
+
+      var fileId = extractDriveFileId_(url);
+      if (!fileId) { errors++; report.push({ sheet: name, id: id, issue: 'לא ניתן לחלץ מזהה קובץ מהקישור' }); return; }
+
+      try {
+        var file = DriveApp.getFileById(fileId);
+        var parentsIter = file.getParents();
+        var monthFolder = parentsIter.hasNext() ? parentsIter.next() : null;
+        var currentMonthName = monthFolder ? monthFolder.getName() : '(אין הורה)';
+        var currentYearName = '(?)';
+        if (monthFolder) {
+          var yearParentsIter = monthFolder.getParents();
+          if (yearParentsIter.hasNext()) currentYearName = yearParentsIter.next().getName();
+        }
+
+        var mk = normalizeMonthKey_(rawMonth);
+        if (!mk) { skipped++; report.push({ sheet: name, id: id, issue: 'אין חודש הגשה תקין', month: String(rawMonth) }); return; }
+        var targetYearName = mk.split('-')[0];
+        var targetMonthName = String(Number(mk.split('-')[1]));
+
+        if (currentYearName === targetYearName && currentMonthName === targetMonthName) {
+          alreadyOk++;
+          return;
+        }
+
+        report.push({
+          sheet: name, id: id, month: mk, fileName: file.getName(),
+          from: currentYearName + '/' + currentMonthName, to: targetYearName + '/' + targetMonthName
+        });
+
+        if (!dryRun) {
+          file.moveTo(getReceiptsFolder_(mk));
+        }
+        moved++;
+      } catch (e) {
+        errors++;
+        report.push({ sheet: name, id: id, issue: 'שגיאה: ' + e.message });
+      }
+    });
+  });
+
+  var summary = { dryRun: dryRun, moved: moved, alreadyOk: alreadyOk, skipped: skipped, errors: errors };
+  Logger.log(JSON.stringify(summary));
+
+  // כותבים את הדוח המלא לטאב ייעודי (הלוג הרגיל נחתך כשהוא ארוך מדי) — כדי שאפשר
+  // יהיה לבדוק את כל 68+ השורות לפני/אחרי ההרצה בפועל.
+  var logSheetName = 'לוג תיקון קבלות 2026-08-10';
+  var logSheet = ss.getSheetByName(logSheetName);
+  if (!logSheet) logSheet = ss.insertSheet(logSheetName);
+  logSheet.clear();
+  logSheet.appendRow(['dryRun', dryRun, 'moved', moved, 'alreadyOk', alreadyOk, 'skipped', skipped, 'errors', errors, 'timestamp', new Date()]);
+  logSheet.appendRow(['sheet', 'id', 'month', 'fileName', 'from', 'to', 'issue']);
+  report.forEach(function (r) {
+    logSheet.appendRow([r.sheet || '', r.id || '', r.month || '', r.fileName || '', r.from || '', r.to || '', r.issue || '']);
+  });
+
+  return summary;
+}
+
+function repairMisplacedReceiptsDryRun() { return repairMisplacedReceipts_(true); }
+function repairMisplacedReceiptsExecute() { return repairMisplacedReceipts_(false); }
