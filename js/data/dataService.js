@@ -278,7 +278,12 @@ CBA.data = (function () {
         key: c.id, name: c.name, plan: Number(c.plan) || 0,
         group: groupName(c.group), incomeSourceId: incName(c.incomeSourceId),
         distMode: (c.dist && c.dist.mode) || "equal",
-        monthly: categoryMonthly(c)
+        monthly: categoryMonthly(c),
+        // פיצול בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — נשלח רק כשיש 2+
+        // שורות (זו ההגדרה של "מפוצל"); אחרת null, ואין מה לכתוב לטאב הפיצול.
+        sources: (c.sources && c.sources.length > 1)
+          ? c.sources.map(function (s) { return { name: incName(s.incomeSourceId), amount: Number(s.amount) || 0 }; })
+          : null
       };
     });
     const income = (Y.income || []).map(function (s) {
@@ -451,6 +456,30 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "communityDirectory" }, function (res) {
       if (res && res.ok) communityCache = res.rows || [];
+      if (cb) cb(res);
+    });
+  }
+
+  // עץ ועד השיכון (2026-08-09): טאב "עץ ועד השיכון" בגיליון — כל שורה היא אדם
+  // אחד בתפקיד אחד; "מזהה תא" משותף בין כמה שורות מרכיב תא (תפקיד) אחד עם
+  // כמה אנשים. פתוח לקריאה לכל תושב מחובר (כמו getCommunityDirectory) —
+  // מסך "ועד השיכון" באזור התושב בונה מזה את עץ הוועד. עריכה (saveCommitteeTree
+  // למטה) מוגבלת למנהל-על בשרת (ACTION_PERMS), בלי קשר למטמון הקריאה כאן.
+  var committeeCache = null;
+  function getCommitteeTree(cb) {
+    if (committeeCache) { if (cb) cb({ ok: true, rows: committeeCache }); return; }
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "committeeTree" }, function (res) {
+      if (res && res.ok) committeeCache = res.rows || [];
+      if (cb) cb(res);
+    });
+  }
+  // שמירה מוחקת ומחליפה את כל הטבלה בשרת (ר' saveCommitteeTree_ ב-Code.gs) —
+  // כי העריכה במסך היא על העץ כמקשה אחת (הוספה/הסרה/שינוי הורה), לא שורה
+  // בודדת. מנקה את המטמון המקומי כדי שהקריאה הבאה תביא את הגרסה הטרייה.
+  function saveCommitteeTree(rows, cb) {
+    CBA.sheets.postRead("saveCommitteeTree", { rows: rows }, function (res) {
+      if (res && res.ok) committeeCache = null;
       if (cb) cb(res);
     });
   }
@@ -756,10 +785,15 @@ CBA.data = (function () {
     return ((CBA.mock.history || {})[year] || []).filter(function (e) { return ids.indexOf(e.id) === -1; });
   }
 
-  // סעיפים שמשויכים למקור הכנסה שכבר לא קיים
+  // סעיפים שמשויכים למקור הכנסה שכבר לא קיים (כולל שורות בפיצול, סעיף 4)
   function getUnassignedCategories() {
     const ids = getIncomeSources().map(function (s) { return s.id; });
-    return getCategories().filter(function (c) { return ids.indexOf(c.incomeSourceId) === -1; });
+    return getCategories().filter(function (c) {
+      if (c.sources && c.sources.length > 1) {
+        return c.sources.some(function (s) { return ids.indexOf(s.incomeSourceId) === -1; });
+      }
+      return ids.indexOf(c.incomeSourceId) === -1;
+    });
   }
 
   // --- עוזרי חיפוש (מחזירים את האובייקט החי מה-store) ---
@@ -774,6 +808,19 @@ CBA.data = (function () {
   // נרמול סעיף: מבטיח שלכל סעיף יש שיוך למקור הכנסה + מצב חלוקה חודשית + סכום מספרי
   function normalizeCategory(c) {
     if (!c.incomeSourceId) c.incomeSourceId = "dues";
+    // פיצול בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — c.sources תקף רק כשיש
+    // בו 2+ שורות (זו ההגדרה של "סעיף מפוצל"); מערך עם 0/1 שורות מתקפל בחזרה
+    // למקור יחיד (incomeSourceId), כדי שלא יישאר "פיצול" שקוף עם שורה אחת בלבד.
+    // incomeSourceId תמיד נשאר מסונכרן עם השורה הראשונה בפיצול — משמש כברירת
+    // מחדל/תאימות לאחור לכל קוד שעדיין לא יודע להסתכל על sources (למשל שרת ישן).
+    if (c.sources && c.sources.length > 1) {
+      c.sources = c.sources.map(function (s) {
+        return { incomeSourceId: s.incomeSourceId || "dues", amount: Number(s.amount) || 0 };
+      });
+      c.incomeSourceId = c.sources[0].incomeSourceId;
+    } else {
+      c.sources = null;
+    }
     if (!c.dist) c.dist = { mode: "equal", months: 12, monthly: null };
     if (typeof c.plan !== "number") c.plan = parseFloat(c.plan) || 0;
     return c;
@@ -858,7 +905,12 @@ CBA.data = (function () {
     if (!s) return null;
     newName = String(newName == null ? "" : newName);
     if (newName && newName !== s.id && CBA.mock._source === "sheets") {
-      getCategories().forEach(function (c) { if (c.incomeSourceId === s.id) c.incomeSourceId = newName; });
+      getCategories().forEach(function (c) {
+        if (c.incomeSourceId === s.id) c.incomeSourceId = newName;
+        // מיגרציה גם בתוך שורות פיצול (סעיף 4) — אחרת שורה בפיצול תישאר תקועה
+        // על המזהה הישן אחרי שינוי שם מקור ההכנסה.
+        if (c.sources) c.sources.forEach(function (row) { if (row.incomeSourceId === s.id) row.incomeSourceId = newName; });
+      });
       s.id = newName;
     }
     s.name = newName;
@@ -869,6 +921,15 @@ CBA.data = (function () {
   function getIncomeAllocation() {
     const alloc = {};
     getCategories().forEach(function (c) {
+      // סעיף מפוצל (סעיף 4, 2026-08-10) — כל שורת פיצול מקצה לפי הסכום שלה,
+      // לא לפי כל התכנון של הסעיף כמו שהיה נכון למקור יחיד.
+      if (c.sources && c.sources.length > 1) {
+        c.sources.forEach(function (s) {
+          const sid = s.incomeSourceId || "dues";
+          alloc[sid] = (alloc[sid] || 0) + (Number(s.amount) || 0);
+        });
+        return;
+      }
       const sid = c.incomeSourceId || "dues";
       alloc[sid] = (alloc[sid] || 0) + (c.plan || 0);
     });
@@ -912,6 +973,8 @@ CBA.data = (function () {
     refreshResidents: function (cb) { residentsCache = null; directoryCache = null; communityCache = null; getResidents(cb); },
     residentPickerOptions: residentPickerOptions,
     getCommunityDirectory: getCommunityDirectory,
+    getCommitteeTree: getCommitteeTree,
+    saveCommitteeTree: saveCommitteeTree,
     // בקשות הרשמה וניהול תושבים (2026-08-07)
     listSignups: function (cb) { CBA.sheets.get({ action: "listSignups" }, cb); },
     approveSignup: function (payload, cb) { CBA.sheets.postRead("approveSignup", payload, cb); },

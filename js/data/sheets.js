@@ -53,18 +53,32 @@ CBA.sheets = (function () {
     return v.slice(0, 10);
   }
 
-  function toCategory(row) {
+  // splitsByName: { שם סעיף: [ {"מקור הכנסה":..., "סכום":...}, ... ] } — מגיע
+  // מטאב "פיצול מימון <שנה>" (סעיף 4, 2026-08-10). אופציונלי — נבנה ע"י הקורא
+  // (transform) ומועבר פנימה, כדי ש-toCategory יישאר פונקציה טהורה על פני שורה.
+  function toCategory(row, splitsByName) {
     var monthly = MONTH_KEYS.map(function (k) { return num(row[k]); });
     var mode = DIST_MAP[String(row["מצב חלוקה"] || "").trim()] || "equal";
     var months = monthly.filter(function (x) { return x > 0; }).length || 12;
-    return {
-      id: String(row["סעיף"]).trim(),
-      name: String(row["סעיף"]).trim(),
+    var name = String(row["סעיף"]).trim();
+    var cat = {
+      id: name,
+      name: name,
       plan: num(row["תכנון שנתי"]),
       group: String(row["קבוצה"] || "").trim(),
       incomeSourceId: String(row["מקור מימון"] || "").trim(),
       dist: { mode: mode, months: months, monthly: mode === "custom" ? monthly : null }
     };
+    // פיצול בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — רק אם יש 2+ שורות
+    // פיצול לסעיף הזה; אחרת הוא לא "מפוצל", וממשיך עם incomeSourceId הרגיל.
+    var splitRows = splitsByName && splitsByName[name];
+    if (splitRows && splitRows.length > 1) {
+      cat.sources = splitRows.map(function (r) {
+        return { incomeSourceId: String(r["מקור הכנסה"] || "").trim(), amount: num(r["סכום"]) };
+      });
+      cat.incomeSourceId = cat.sources[0].incomeSourceId;
+    }
+    return cat;
   }
 
   function toIncome(row) {
@@ -130,9 +144,17 @@ CBA.sheets = (function () {
       // (עדיין נשלח לתאימות לאחור, ר' doGet ב-Code.gs), כדי לא לאבד את
       // הקבוצות בזמן המעבר בין שמירה בקוד ללחיצת Deploy בפועל.
       var yearGroupsRaw = (d.groups !== undefined) ? d.groups : (payload.groups || []);
+      // פיצול מימון פר-שנה (סעיף 4, 2026-08-10) — d.splits הוא רשימת שורות
+      // שטוחה מטאב "פיצול מימון <שנה>"; מקבצים לפי שם סעיף לפני שמעבירים ל-toCategory.
+      var splitsByName = {};
+      (d.splits || []).forEach(function (r) {
+        var name = String(r["סעיף"] || "").trim();
+        if (!name) return;
+        (splitsByName[name] = splitsByName[name] || []).push(r);
+      });
       years[y] = {
         income: (d.income || []).map(toIncome),
-        categories: (d.budget || []).map(toCategory),
+        categories: (d.budget || []).map(function (row) { return toCategory(row, splitsByName); }),
         transactions: (d.transactions || []).map(function (r) { return toTx(r, y); }),
         budget: { phase: closed ? "locked" : "draft", lockedAt: null, baseline: baseline },
         // פנקס הערות (סעיף 1) — payload.notes הוא מפה {שנה: {content, editedBy, editedAt}}

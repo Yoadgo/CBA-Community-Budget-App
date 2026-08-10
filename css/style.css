@@ -33,6 +33,13 @@
   --badge-warn:    #B45309;
   --badge-danger:  #BE123C;
 
+  /* קטגוריות "עץ ועד השיכון" בלבד (2026-08-09) — לא סטטוס, לא לערבב עם
+     ok/warn/danger למעלה. "הנהלה" משתמשת ב-text/action הרגילים, בלי טוקן
+     נפרד — ר' css/resident.css ליד .org-box. */
+  --org-kids:      #7C3AED;
+  --org-ops:       #0891B2;
+  --org-vol:       #6B7280;
+
   --page-pad:      40px;      /* שוליים צדדיים — התוכן ממלא את כל רוחב המסך */
   --t:             160ms cubic-bezier(.2,.6,.2,1);
 }
@@ -810,6 +817,19 @@ body[data-screen="planning"] .year-switch__add {
 }
 .src-select:hover { background: var(--hover); color: var(--text); }
 .src-select:focus { outline: none; color: var(--text); }
+
+/* פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — אותה שפה עדינה
+   כמו .src-line, שורה לכל מקור עם בורר + סכום + הסרה. */
+.src-split { margin-top: 7px; }
+.src-split__label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.src-split__row { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
+.src-split__row .src-select { flex: 1; min-width: 0; }
+.src-split__row .num-input--sm { width: 84px; }
+.src-split__actions { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.src-split__warn {
+  margin-top: 6px; font-size: 11px; font-weight: 600; color: #92400E;
+  background: var(--warn-soft); border-radius: 8px; padding: 5px 8px;
+}
 
 /* בקרת חלוקה חודשית — כפתור מחולק לשלושה (segmented) */
 .seg-wrap { margin-top: 8px; }

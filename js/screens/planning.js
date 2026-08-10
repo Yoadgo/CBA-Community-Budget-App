@@ -51,9 +51,7 @@ CBA.screens.planning = {
                 ${planShowCompare ? planCompareLine(c) : ""}
                 <div class="dist-chip" data-chip="${CBA.esc(c.id)}">${planDistLabel(c)} · ${CBA.esc(planSourceName(c))}</div>
                 <div class="plan-item__more">
-                  <div class="src-line">מתוקצב מ־
-                    <select class="src-select" data-cat-src="${CBA.esc(c.id)}">${planIncomeOptions(c.incomeSourceId)}</select>
-                  </div>
+                  ${planSourceSplitHTML(c)}
                   ${planDistControl(c)}
                 </div>
               </div>`;
@@ -219,6 +217,82 @@ function planBind(container) {
       const c = findCat(sel.dataset.catSrc);
       if (c) c.incomeSourceId = sel.value;
       CBA.screens.planning.render(container);
+    });
+  });
+
+  // פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10)
+  container.querySelectorAll("[data-split-source]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const c = findCat(btn.dataset.splitSource);
+      if (!c) return;
+      const sources = CBA.data.getIncomeSources();
+      const other = sources.find(function (s) { return s.id !== c.incomeSourceId; }) || sources[0];
+      // שורה ראשונה = המקור/סכום הנוכחיים, שורה שנייה ריקה — כדי שהמסך יראה
+      // מיד את שתי השורות המוכנות לעריכה, ולא רק כפתור "הוסף" ריק.
+      c.sources = [
+        { incomeSourceId: c.incomeSourceId, amount: c.plan || 0 },
+        { incomeSourceId: other ? other.id : c.incomeSourceId, amount: 0 }
+      ];
+      planSave();
+      rerender();
+    });
+  });
+  container.querySelectorAll("[data-split-add]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const c = findCat(btn.dataset.splitAdd);
+      if (!c || !c.sources) return;
+      const used = c.sources.map(function (s) { return s.incomeSourceId; });
+      const sources = CBA.data.getIncomeSources();
+      const unused = sources.find(function (s) { return used.indexOf(s.id) === -1; });
+      c.sources.push({ incomeSourceId: unused ? unused.id : (sources[0] ? sources[0].id : ""), amount: 0 });
+      planSave();
+      rerender();
+    });
+  });
+  container.querySelectorAll("[data-split-remove]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const c = findCat(btn.dataset.splitRemove);
+      if (!c || !c.sources) return;
+      const idx = parseInt(btn.dataset.splitIdx, 10);
+      c.sources.splice(idx, 1);
+      // פחות משתי שורות = כבר לא "מפוצל" — חוזרים למקור יחיד (השורה שנשארה, אם יש)
+      if (c.sources.length < 2) {
+        if (c.sources.length === 1) c.incomeSourceId = c.sources[0].incomeSourceId;
+        c.sources = null;
+      }
+      planSave();
+      rerender();
+    });
+  });
+  container.querySelectorAll("[data-split-cancel]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const c = findCat(btn.dataset.splitCancel);
+      if (!c) return;
+      if (c.sources && c.sources[0]) c.incomeSourceId = c.sources[0].incomeSourceId;
+      c.sources = null;
+      planSave();
+      rerender();
+    });
+  });
+  container.querySelectorAll("[data-split-src]").forEach(function (sel) {
+    sel.addEventListener("change", function () {
+      const c = findCat(sel.dataset.splitSrc);
+      if (!c || !c.sources) return;
+      const idx = parseInt(sel.dataset.splitIdx, 10);
+      if (c.sources[idx]) c.sources[idx].incomeSourceId = sel.value;
+      if (idx === 0) c.incomeSourceId = sel.value;
+      CBA.screens.planning.render(container);
+    });
+  });
+  container.querySelectorAll("[data-split-amt]").forEach(function (inp) {
+    inp.addEventListener("input", function () {
+      const c = findCat(inp.dataset.splitAmt);
+      if (!c || !c.sources) return;
+      const idx = parseInt(inp.dataset.splitIdx, 10);
+      if (c.sources[idx]) c.sources[idx].amount = planNum(inp.value);
+      planRecompute(container);
+      const warnEl = container.querySelector("#split-warn-" + planKey(c.id));
+      if (warnEl) warnEl.innerHTML = planSplitWarnHTML(c);
     });
   });
 
@@ -487,10 +561,51 @@ function planDistLabel(c) {
   return "שווה · " + d.months + " ח׳";
 }
 
-/* שם מקור ההכנסה שהסעיף משויך אליו */
+/* שם מקור ההכנסה שהסעיף משויך אליו (או "מפוצל בין N מקורות" — סעיף 4) */
 function planSourceName(c) {
+  if (c.sources && c.sources.length > 1) return "מפוצל בין " + c.sources.length + " מקורות";
   const s = CBA.data.getIncomeSources().find(function (x) { return x.id === c.incomeSourceId; });
   return s ? s.name : "—";
+}
+
+/* פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10). במצב רגיל (לא מפוצל) —
+   בדיוק כמו קודם: בורר יחיד + כפתור "פצל מקור". במצב מפוצל — שורה לכל מקור
+   (בורר + סכום + הסרה), כפתור "הוסף מקור", כפתור "בטל פיצול", והתראה עדינה
+   (לא חוסמת — כך סוכם עם יועד) אם סכום השורות לא תואם לתכנון הכולל של הסעיף. */
+function planSourceSplitHTML(c) {
+  if (!c.sources || c.sources.length < 2) {
+    return `
+      <div class="src-line">מתוקצב מ־
+        <select class="src-select" data-cat-src="${CBA.esc(c.id)}">${planIncomeOptions(c.incomeSourceId)}</select>
+        <button type="button" class="btn-ghost btn-sm" data-split-source="${CBA.esc(c.id)}">פצל מקור</button>
+      </div>`;
+  }
+  const rows = c.sources.map(function (s, i) {
+    return `
+      <div class="src-split__row">
+        <select class="src-select" data-split-src="${CBA.esc(c.id)}" data-split-idx="${i}">${planIncomeOptions(s.incomeSourceId)}</select>
+        <input class="num-input num-input--sm" type="number" inputmode="numeric" data-split-amt="${CBA.esc(c.id)}" data-split-idx="${i}" value="${s.amount}">
+        <button class="mini-x" data-split-remove="${CBA.esc(c.id)}" data-split-idx="${i}" title="הסר מקור">×</button>
+      </div>`;
+  }).join("");
+  return `
+    <div class="src-split">
+      <div class="src-split__label">מתוקצב מ־ (מפוצל בין ${c.sources.length} מקורות)</div>
+      ${rows}
+      <div class="src-split__actions">
+        <button type="button" class="btn-ghost btn-sm" data-split-add="${CBA.esc(c.id)}">+ הוסף מקור</button>
+        <button type="button" class="btn-ghost btn-sm" data-split-cancel="${CBA.esc(c.id)}">בטל פיצול</button>
+      </div>
+      <div id="split-warn-${planKey(c.id)}">${planSplitWarnHTML(c)}</div>
+    </div>`;
+}
+
+/* התראת אי-התאמה בין סכום שורות הפיצול לתכנון הכולל — לא חוסמת, רק מציגה */
+function planSplitWarnHTML(c) {
+  if (!c.sources || c.sources.length < 2) return "";
+  const sum = c.sources.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
+  if (Math.round(sum) === Math.round(c.plan || 0)) return "";
+  return `<div class="src-split__warn">⚠ סכום הפיצול (${CBA.formatILS(sum)}) לא תואם לתכנון הסעיף (${CBA.formatILS(c.plan || 0)})</div>`;
 }
 
 /* פקד מצב קומפקטי (משמאל לכותרת): כתום=תכנון, ירוק=סגור */
@@ -662,7 +777,12 @@ function planSetupDrag(container) {
       const c = findCat(dragId);
       if (c) {
         if (target.dataset.groupDrop && c.group !== target.dataset.groupDrop) c.group = target.dataset.groupDrop;
-        else if (target.dataset.incomeDrop) c.incomeSourceId = target.dataset.incomeDrop;
+        else if (target.dataset.incomeDrop) {
+          c.incomeSourceId = target.dataset.incomeDrop;
+          // גרירה על מקור הכנסה מאפסת פיצול קיים לשיוך יחיד (סעיף 4, 2026-08-10;
+          // כך סוכם עם יועד — גרירה היא פעולה מכוונת ומפורשת של "שייך הכל למקור הזה").
+          c.sources = null;
+        }
         planSave();
         CBA.screens.planning.render(container);
       }
@@ -717,24 +837,13 @@ function planOpenCustomModal(container, catId) {
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  // (2026-08-09) חוסם רענון רקע כל עוד החלון הזה פתוח — לא רק מרגע ה-blur
-  // הראשון (כמו planSave() לבד). יש לזה מפתח-סיבה נפרד ("planMonthModal") מזה
-  // של planSave() ("planSave"), כך שהם לא "דורסים" זה את הגנת זה גם אם שניהם
-  // פעילים בו-זמנית (ר' ההסבר המלא ב-sheets.js ליד dirtyReasons). נוסף על
-  // כך, ה-handler למטה תמיד מאתר מחדש את הסעיף לפי catId (לא סומך על c
-  // שנתפס כאן) — הגנה כפולה, למקרה שהחלון נשאר פתוח ארוך יותר ממחזור רענון.
-  if (CBA.sheets.markDirty) CBA.sheets.markDirty("planMonthModal");
 
   overlay.querySelector(".modal").addEventListener("click", function (e) { e.stopPropagation(); });
   overlay.querySelectorAll("[data-modal-close]").forEach(function (el) { el.addEventListener("click", planCloseModal); });
   overlay.querySelectorAll("[data-month]").forEach(function (inp) {
     inp.addEventListener("input", function () {
-      // איתור מחדש לפי catId — לא סומכים על ה-c שנתפס בפתיחת המודל
-      const cNow = findCat(catId);
-      if (!cNow) return;
-      if (!cNow.dist.monthly) cNow.dist.monthly = planEqualArray(cNow);
-      cNow.dist.monthly[parseInt(inp.dataset.month, 10)] = planNum(inp.value);
-      planUpdateSum(cNow);
+      c.dist.monthly[parseInt(inp.dataset.month, 10)] = planNum(inp.value);
+      planUpdateSum(c);
     });
     // שמירה לגיליון בסיום עריכת חודש (יציאה מהשדה)
     inp.addEventListener("change", function () { planSave(); });
@@ -761,9 +870,6 @@ function planUpdateSum(c) {
 function planCloseModal() {
   const el = document.getElementById("cba-modal");
   if (el) el.remove();
-  // מנקה תמיד — no-op בטוח אם המודל שנסגר לא היה "חלוקה חודשית" מלכתחילה
-  // (למשל חלון "היסטוריית עדכונים" המשתף את אותו planCloseModal)
-  if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("planMonthModal");
   document.removeEventListener("keydown", planEscModal);
 }
 function planEscModal(e) { if (e.key === "Escape") planCloseModal(); }
@@ -793,11 +899,11 @@ var planSaveTimer = null;
 function planSave() {
   if (!CBA.sheets || !CBA.sheets.isConnected || !CBA.sheets.isConnected()) return;
   var year = CBA.data.getCurrentYear();
-  if (CBA.sheets.markDirty) CBA.sheets.markDirty("planSave");
+  if (CBA.sheets.markDirty) CBA.sheets.markDirty();
   clearTimeout(planSaveTimer);
   planSaveTimer = setTimeout(function () {
     CBA.data.saveBudgetToSheet(year, function () {
-      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("planSave");
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
     });
   }, 700);
 }

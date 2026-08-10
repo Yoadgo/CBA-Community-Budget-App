@@ -297,7 +297,7 @@ function doGet(e) {
       if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
     });
     var out = {
-      ok: true, version: 'v32-groups-per-year', years: years,
+      ok: true, version: 'v33-category-source-split', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -317,7 +317,10 @@ function doGet(e) {
         income: readTable_(ss, 'הכנסות ' + y),
         transactions: readTable_(ss, 'תנועות ' + y),
         // קבוצות פר-שנה (סעיף 3, 2026-08-09) — ר' readGroupsForYear_
-        groups: readGroupsForYear_(ss, y)
+        groups: readGroupsForYear_(ss, y),
+        // פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — שורות שטוחות
+        // מטאב "פיצול מימון <שנה>" (אם קיים); הלקוח מקבץ לפי שם סעיף בעצמו.
+        splits: readTable_(ss, 'פיצול מימון ' + y)
       };
     });
     return json_(out);
@@ -1155,6 +1158,9 @@ function saveBudget_(ss, body) {
       income: saveBudgetIncome_(ss, year, body.income || [])
     };
     if (body.groups) out.groups = saveGroups_(ss, year, body.groups);  // קבוצות פר-שנה (סעיף 3)
+    // פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — נכתב תמיד (גם
+    // רשימה ריקה) כדי שסעיפים שבוטל הפיצול שלהם יימחקו מהטאב.
+    out.splits = saveBudgetSplits_(ss, year, body.categories || []);
     return out;
   } finally {
     lock.releaseLock();
@@ -1350,6 +1356,35 @@ function saveGroups_(ss, year, groups) {
   return 'ok';
 }
 
+/* פיצול סעיף תקציבי בין כמה מקורות הכנסה בסכומים שונים (סעיף 4, 2026-08-10).
+ * טאב פר-שנה "פיצול מימון <שנה>", שורה אחת לכל (סעיף, מקור הכנסה) — רק
+ * לסעיפים שבאמת מפוצלים (2+ מקורות); סעיף עם מקור יחיד ממשיך להסתמך על
+ * עמודת "מקור מימון" הרגילה בטאב התקציב, בלי שורה כאן בכלל. נכתב מחדש
+ * במלואו בכל שמירה (כמו saveCommitteeTree_ למעלה) — טבלה קטנה, אין צורך
+ * ב-reconcile לפי שורות קיימות. */
+function saveBudgetSplits_(ss, year, cats) {
+  var name = 'פיצול מימון ' + year;
+  var rows = [];
+  (cats || []).forEach(function (c) {
+    if (c.sources && c.sources.length > 1) {
+      c.sources.forEach(function (s) {
+        rows.push([c.name || c.key || '', s.name || '', Number(s.amount) || 0]);
+      });
+    }
+  });
+  var sh = ss.getSheetByName(name);
+  if (!sh) {
+    if (!rows.length) return 'ok';   // אין מה לכתוב — לא יוצרים טאב ריק בלי צורך
+    sh = ss.insertSheet(name);
+    sh.appendRow(['סעיף', 'מקור הכנסה', 'סכום']);
+    sh.setFrozenRows(1);
+  }
+  var last = sh.getLastRow();
+  if (last >= 2) sh.getRange(2, 1, last - 1, 3).clearContent();
+  if (rows.length) sh.getRange(2, 1, rows.length, 3).setValues(rows);
+  return 'ok';
+}
+
 // מחזיר מפה: שם-כותרת -> אינדקס עמודה (מבוסס-1). 0 = לא נמצא.
 function headerMap_(sh) {
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
@@ -1513,7 +1548,9 @@ function addYear_(ss, body) {
   // 'קבוצות ' נוספה בסעיף 3 (2026-08-09, קבוצות פר-שנה) — אם לשנת המקור עדיין
   // אין טאב קבוצות עצמאי משלה (עוד לא נשמרה מאז המעבר), פשוט לא מעתיקים כלום
   // כאן, ושתי השנים ימשיכו ליפול בחזרה לטאב "קבוצות" המשותף הישן (ר' readGroupsForYear_)
-  ['תקציב ', 'הכנסות ', 'תנועות ', 'קבוצות '].forEach(function (prefix) {
+  // 'פיצול מימון ' נוספה בסעיף 4 (2026-08-10) — אם לשנת המקור אין טאב פיצול
+  // (אין סעיפים מפוצלים בה), פשוט אין מה להעתיק, וזה תקין לגמרי.
+  ['תקציב ', 'הכנסות ', 'תנועות ', 'קבוצות ', 'פיצול מימון '].forEach(function (prefix) {
     var src = ss.getSheetByName(prefix + fromYear);
     if (src) src.copyTo(ss).setName(prefix + newYear);
   });

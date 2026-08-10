@@ -792,22 +792,20 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .org-box {
   /* inline-block ולא block: כדי ש-text-align:center של ה-li (מעלה) ימרכז
      אותו בפועל — li אינו flex, אז ילד block רגיל לא היה מגיב למרכוז הזה */
-  display: inline-block; width: 168px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 10px 12px 12px; text-align: center;
+  display: inline-block; width: 182px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 13px 13px; text-align: center;
   position: relative; border-top: 3px solid var(--text);
 }
 .org-box--kids { border-top-color: var(--org-kids); }
 .org-box--ops  { border-top-color: var(--org-ops); }
 .org-box--vol  { border-top-color: var(--org-vol); }
 
-.org-box__cat { font-size: 10px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
-.org-box--kids .org-box__cat { color: var(--org-kids); }
-.org-box--ops  .org-box__cat { color: var(--org-ops); }
-.org-box--vol  .org-box__cat { color: var(--org-vol); }
-
-.org-box__role { font-size: 13px; font-weight: 800; color: var(--text); line-height: 1.35; }
-.org-box__people { margin-top: 5px; }
-.org-box__person { font-size: 12.5px; color: var(--text-soft); line-height: 1.5; }
+/* הקטגוריה (הנהלה/ילדים וקהילה/תפעול ושירות/ועדת מתנדבים) לא מוצגת יותר
+   ככותרת טקסט על הכרטיס עצמו (יועד: "לא רלוונטיות") — נשארת רק כפס הצבע
+   העליון + tooltip בריחוף (title על .org-box, ר' resident.js) */
+.org-box__role { font-size: 15px; font-weight: 800; color: var(--text); line-height: 1.35; }
+.org-box__people { margin-top: 6px; }
+.org-box__person { font-size: 14px; color: var(--text-soft); line-height: 1.5; }
 .org-box__person--empty { color: var(--text-muted); font-style: italic; }
 
 .org-box__actions {
@@ -844,8 +842,8 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 #og-add-person { margin-top: 2px; }
 
 @media (max-width: 720px) {
-  .org-box { width: 138px; padding: 9px 9px 10px; }
-  .org-box__role { font-size: 12px; }
-  .org-box__person { font-size: 11.5px; }
+  .org-box { width: 150px; padding: 10px 10px 11px; }
+  .org-box__role { font-size: 13.5px; }
+  .org-box__person { font-size: 12.5px; }
   .org-tree-wrap { padding: 4px 4px 32px; }
 }
