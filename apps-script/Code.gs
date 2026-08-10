@@ -1443,13 +1443,23 @@ function saveBudgetSplits_(ss, year, cats) {
  * כותבים כל סעיף עם 1+ פריטים, לא רק 2+. תת-סעיפים אלה משמשים גם את מסך
  * ניהול ההוצאות לשיוך תנועה בפועל לתת-סעיף ספציפי (ר' 'תת-סעיף' ב-saveTransaction_).
  * נכתב מחדש במלואו בכל שמירה, כמו saveBudgetSplits_ למעלה. */
+// עמודות "מצב חלוקה" + 12 חודשי MONTH_KEYS לכל תת-סעיף (סעיף 7ג, 2026-08-10) —
+// נוספות אחרי 3 העמודות המקוריות (סעיף/פריט/תכנון), כדי שהחלוקה החודשית
+// הפר-פריטית תשרוד רענון מהגיליון (בלי זה, כל פריט היה מתאפס ל"שווה·12" בכל
+// טעינה, גם אם הסכום הכולל של הסעיף היה נשמר נכון בזכות הסכימה ב-saveBudgetToSheet).
+var ITEM_DIST_HEADERS_ = ['מצב חלוקה'].concat(MONTH_KEYS);
 function saveBudgetItems_(ss, year, cats) {
   var name = 'פירוט סעיפים ' + year;
+  var headers = ['סעיף', 'פריט', 'תכנון'].concat(ITEM_DIST_HEADERS_);
+  var totalCols = headers.length;
   var rows = [];
   (cats || []).forEach(function (c) {
     if (c.items && c.items.length) {
       c.items.forEach(function (it) {
-        rows.push([c.name || c.key || '', it.name || '', Number(it.plan) || 0]);
+        var row = [c.name || c.key || '', it.name || '', Number(it.plan) || 0,
+                    DIST_HE[it.distMode] || it.distMode || 'שווה'];
+        for (var m = 0; m < MONTH_KEYS.length; m++) row.push(Number((it.monthly || [])[m]) || 0);
+        rows.push(row);
       });
     }
   });
@@ -1457,12 +1467,18 @@ function saveBudgetItems_(ss, year, cats) {
   if (!sh) {
     if (!rows.length) return 'ok';   // אין מה לכתוב — לא יוצרים טאב ריק בלי צורך
     sh = ss.insertSheet(name);
-    sh.appendRow(['סעיף', 'פריט', 'תכנון']);
+    sh.appendRow(headers);
     sh.setFrozenRows(1);
+  } else {
+    // ריפוי-עצמי: טאבים שנוצרו לפני סעיף 7ג יש להם רק 3 עמודות (סעיף/פריט/
+    // תכנון) — מוסיפים את עמודות החלוקה החודשית אם עוד אינן קיימות, בלי
+    // לגעת בעמודות 1-3 הקיימות (בדיקה לפי הכותרת בעמודה 4 בלבד).
+    var col4 = sh.getLastColumn() >= 4 ? String(sh.getRange(1, 4).getValue()).trim() : '';
+    if (col4 !== 'מצב חלוקה') sh.getRange(1, 4, 1, ITEM_DIST_HEADERS_.length).setValues([ITEM_DIST_HEADERS_]);
   }
   var last = sh.getLastRow();
-  if (last >= 2) sh.getRange(2, 1, last - 1, 3).clearContent();
-  if (rows.length) sh.getRange(2, 1, rows.length, 3).setValues(rows);
+  if (last >= 2) sh.getRange(2, 1, last - 1, totalCols).clearContent();
+  if (rows.length) sh.getRange(2, 1, rows.length, totalCols).setValues(rows);
   return 'ok';
 }
 

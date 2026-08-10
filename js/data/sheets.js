@@ -81,11 +81,22 @@ CBA.sheets = (function () {
       cat.incomeSourceId = cat.sources[0].incomeSourceId;
     }
     // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10) — בשונה מ-sources למעלה, גם
-    // פריט יחיד תקף (ר' normalizeCategory ב-dataService.js).
+    // פריט יחיד תקף (ר' normalizeCategory ב-dataService.js). כל פריט קורא גם
+    // את מצב החלוקה החודשית שלו (dist, סעיף 7ג, 2026-08-10) מאותן עמודות
+    // "מצב חלוקה"/MONTH_KEYS כמו הסעיף עצמו למעלה — רק מטאב הפירוט. שורות
+    // ישנות (לפני 7ג, בלי העמודות האלה) נופלות בבטחה לברירת המחדל "שווה·12".
     var itemRows = itemsByName && itemsByName[name];
     if (itemRows && itemRows.length) {
       cat.items = itemRows.map(function (r) {
-        return { id: String(r["פריט"] || "").trim(), name: String(r["פריט"] || "").trim(), plan: num(r["תכנון"]) };
+        var itMonthly = MONTH_KEYS.map(function (k) { return num(r[k]); });
+        var itMode = DIST_MAP[String(r["מצב חלוקה"] || "").trim()] || "equal";
+        var itMonths = itMonthly.filter(function (x) { return x > 0; }).length || 12;
+        return {
+          id: String(r["פריט"] || "").trim(),
+          name: String(r["פריט"] || "").trim(),
+          plan: num(r["תכנון"]),
+          dist: { mode: itMode, months: itMonths, monthly: itMode === "custom" ? itMonthly : null }
+        };
       });
     }
     return cat;

@@ -285,9 +285,18 @@ CBA.data = (function () {
           ? c.sources.map(function (s) { return { name: incName(s.incomeSourceId), amount: Number(s.amount) || 0 }; })
           : null,
         // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10) — נשלח כשיש 1+ פריטים
-        // (בשונה מ-sources, גם פריט יחיד תקף — ר' normalizeCategory).
+        // (בשונה מ-sources, גם פריט יחיד תקף — ר' normalizeCategory). כל פריט
+        // שולח גם את מצב החלוקה החודשית שלו (distMode/monthly, סעיף 7ג,
+        // 2026-08-10) — באותו פורמט בדיוק כמו הסעיף עצמו למעלה — כדי שהחלוקה
+        // הפר-פריטית תשרוד רענון מהגיליון (ר' saveBudgetItems_ ב-Code.gs).
         items: (c.items && c.items.length)
-          ? c.items.map(function (it) { return { name: it.name, plan: Number(it.plan) || 0 }; })
+          ? c.items.map(function (it) {
+              return {
+                name: it.name, plan: Number(it.plan) || 0,
+                distMode: (it.dist && it.dist.mode) || "equal",
+                monthly: distMonthly(it.dist, it.plan)
+              };
+            })
           : null
       };
     });
