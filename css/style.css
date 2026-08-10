@@ -638,6 +638,10 @@ body[data-screen="planning"] .year-switch__add {
 /* ---------- מסך בניית תקציב (פריסה לרוחב) ---------- */
 /* עמודת ההכנסות דינמית: רחבה כשיש מקום, מצטמצמת עד מינימום; הוצאות ממלאות את השאר */
 .plan-cols { display: grid; grid-template-columns: minmax(300px, 480px) 1fr; gap: 18px; align-items: start; }
+/* בתצוגה להצגה בלבד מצמצמים את עמודת ההכנסה בכ-25% כדי לפנות יותר מקום
+   לסעיפי ההוצאה (משוב יועד, 2026-08-10) — מצב העריכה (עם מחשבון המיסים
+   וכל שאר השדות) נשאר ברוחב המקורי, הרחב יותר. */
+.plan-cols:has(.present-income-card) { grid-template-columns: minmax(225px, 360px) 1fr; }
 .plan-section-title { font-size: 17px; font-weight: 800; letter-spacing: -.02em; margin-bottom: 12px; }
 .plan-note { font-size: 12px; color: var(--text-soft); margin: -4px 0 14px; }
 .plan-note b { color: var(--text); font-weight: 600; }
@@ -989,12 +993,24 @@ body[data-screen="planning"] .year-switch__add {
 .present-card__fund-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .present-card__item-name,
 .present-card__item-amount { font-size: 18px; font-weight: 400; color: var(--text); }
-.present-card__item-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.present-card__item-name { min-width: 0; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
 .present-card__item-amount { font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
 .present-card__fund-name,
 .present-card__fund-amount { font-size: 16.5px; color: var(--text-soft); }
-.present-card__fund-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.present-card__fund-name { font-weight: 500; min-width: 0; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
 .present-card__fund-amount { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+/* שמות שלא נכנסים במלואם (סעיף/מקור/פריט) גוללים הצידה במקום להיחתך
+   ב"..." — כך תמיד אפשר לראות את הטקסט המלא (משוב יועד, 2026-08-10).
+   פס הגלילה נשאר דק ועדין כדי לא להפריע לתצוגה הנקייה. */
+.present-card__item-name::-webkit-scrollbar,
+.present-card__fund-name::-webkit-scrollbar,
+.present-income-row__name::-webkit-scrollbar { height: 3px; }
+.present-card__item-name::-webkit-scrollbar-thumb,
+.present-card__fund-name::-webkit-scrollbar-thumb,
+.present-income-row__name::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.present-card__item-name,
+.present-card__fund-name,
+.present-income-row__name { scrollbar-width: thin; }
 
 /* עמודת מקורות הכנסה בתצוגה להצגה (הוחזרה לפי משוב יועד, 2026-08-10) */
 .present-income-card { align-self: start; }
@@ -1004,8 +1020,8 @@ body[data-screen="planning"] .year-switch__add {
   padding: 8px 0; border-bottom: 1px solid var(--border);
 }
 .present-income-row:last-child { border-bottom: none; }
-.present-income-row__name { font-size: 17px; font-weight: 600; }
-.present-income-row__amount { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.present-income-row__name { font-size: 17px; font-weight: 600; min-width: 0; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
+.present-income-row__amount { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
 
 .mini-x {
   border: none; background: none; cursor: pointer; color: var(--text-muted);
