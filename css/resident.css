@@ -764,11 +764,21 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
    li ביחס לעצמו) ולכן לא תלויים בכיוון RTL של הדף — רק סדר הכרטיסים בשורה
    מתהפך אוטומטית (flex בתוך dir="rtl"), הקווים עצמם תמיד יושבים נכון.
    ========================================================================== */
-.org-toolbar { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+.org-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+/* רמז גלילה אופקית — העץ בפועל כמעט תמיד רחב מהמסך (הרבה תפקידים באותה
+   שורה), אז בלי הכותרת שהוסרה (יועד: "להוריד את הכותרת") אין שום רמז
+   שיש עוד תוכן בצדדים; שורת טקסט קטנה קבועה, כמו .map-hint אבל לא צפה. */
+.org-hint { font-size: 12px; color: var(--text-soft); margin-bottom: 10px; }
 
 .org-tree-wrap { overflow-x: auto; padding: 4px 8px 40px; }
 .org-tree, .org-tree ul { list-style: none; margin: 0; padding: 0; }
-.org-tree { display: flex; justify-content: center; }
+/* justify-content:center לבד, כשהעץ רחב מהעטיפה, גורם לבאג ידוע בדפדפנים:
+   הצד ה"קודם" של התוכן הממורכז נחתך ולא ניתן לגלול אליו בכלל (רק הצד השני
+   נגיש בגלילה) — זה בדיוק ה"פיזור מוזר, הכל נחתך" שיועד דיווח עליו. safe
+   center (עם flex-start כ-fallback להדפדפנים הבודדים שלא מכירים את safe)
+   פותר את זה: ממרכז כשהעץ נכנס בשלמות, ועובר ליישור-התחלה (הכול נגיש
+   בגלילה) ברגע שהוא גולש. */
+.org-tree { display: flex; justify-content: flex-start; justify-content: safe center; }
 .org-tree ul { display: flex; position: relative; padding-top: 26px; }
 
 .org-tree li { flex: none; text-align: center; position: relative; padding: 26px 10px 0; }

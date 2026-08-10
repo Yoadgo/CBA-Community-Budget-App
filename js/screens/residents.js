@@ -1399,3 +1399,302 @@ function resOpenDrawer(container, idx, rowIndex, c) {
     });
   });
 }
+
+/* ==========================================================================
+   "ועד השיכון" — ניהול/עריכת העץ הארגוני (2026-08-10)
+   מסך ניהול נפרד, מוצג רק למנהל-על (ר' SCREEN_PERM.committeeAdmin ב-app.js) —
+   לבקשת יועד: "הניהול עץ צריך להיות רק באזור ניהול למי שיש הרשאות מנהל על".
+   התצוגה-לקריאה-בלבד המקבילה, לכל תושב, יושבת ב-resident.js
+   (CBA.screens.resCommittee) — בלי שום כפתור עריכה, גם אם הצופה הוא מנהל-על.
+   שני הצדדים משתמשים באותה לוגיקת בניית-עץ מהשורות השטוחות — ר' CBA.committee
+   ב-dataService.js — כדי שלא ייסחפו זה מזה עם הזמן.
+   עטוף ב-IIFE משלו (בניגוד לשאר הקובץ, שהוא סקריפט גלובלי, ר' הערת הקובץ
+   למעלה) כדי לא להתנגש בשמות עם שאר הקוד כאן — אותה תבנית בדיוק כמו ה-IIFE
+   שהיה משמש קודם לעריכה הזו כשהיא ישבה ב-resident.js.
+   ========================================================================== */
+(function () {
+  "use strict";
+
+  function svg(inner) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  }
+  var plusIcon = svg('<path d="M12 5v14M5 12h14"/>');
+  var xIcon    = svg('<path d="M18 6L6 18M6 6l12 12"/>');
+  var editIcon = svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>');
+
+  function closeOrgModal() {
+    var el = document.getElementById("cba-modal");
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    document.removeEventListener("keydown", escOrgModal);
+  }
+  function escOrgModal(e) { if (e.key === "Escape") closeOrgModal(); }
+
+  // autocomplete לשדה "שם" בתוך שורת-אדם אחת במודל העריכה — אותה תבנית בדיוק
+  // כמו txWireAutocomplete בטופס ההוצאה (expenses.js), מותאם לרשימה חוזרת
+  // (כמה שורות-אנשים באותו מודל, כל אחת עם data-ac="opN" משלה).
+  function orgWireAutocomplete(peopleEl, i, residentOptions, state) {
+    var input = peopleEl.querySelector('[data-ac="op' + i + '"]');
+    var list = peopleEl.querySelector('[data-ac-list="op' + i + '"]');
+    if (!input || !list) return;
+    function render(q) {
+      var query = (q || "").trim();
+      if (!query) { list.hidden = true; list.innerHTML = ""; return; }
+      var matches = residentOptions
+        .map(function (o, idx) { return { o: o, idx: idx }; })
+        .filter(function (x) { return x.o.label.indexOf(query) !== -1; })
+        .slice(0, 8);
+      if (!matches.length) { list.hidden = true; list.innerHTML = ""; return; }
+      list.innerHTML = matches.map(function (x) {
+        return '<div class="ac-item" data-ac-idx="' + x.idx + '">' + CBA.esc(x.o.label) + '</div>';
+      }).join("");
+      list.hidden = false;
+    }
+    input.addEventListener("input", function () { render(input.value); });
+    input.addEventListener("focus", function () { if (input.value) render(input.value); });
+    input.addEventListener("blur", function () { setTimeout(function () { list.hidden = true; }, 150); });
+    list.addEventListener("mousedown", function (e) {
+      var item = e.target.closest("[data-ac-idx]");
+      if (!item) return;
+      e.preventDefault();
+      var opt = residentOptions[parseInt(item.dataset.acIdx, 10)];
+      if (opt && state.people[i]) {
+        input.value = opt.label;
+        state.people[i].name = opt.label;
+        state.people[i].rid = opt.rid;
+      }
+      list.hidden = true;
+    });
+  }
+
+  CBA.screens.committeeAdmin = {
+    title: "ועד השיכון",
+
+    render: function (container) {
+      container.innerHTML =
+        '<div class="org-toolbar">' +
+          '<div class="org-hint">העץ רחב — גררו/גללו אופקית כדי לראות את כולו. לחצו על העיפרון על גבי תפקיד לעריכה, או על "+" להוספת תפקיד־בן.</div>' +
+          '<button type="button" class="rs-ghost" id="org-add-root">' + plusIcon + 'הוספת תפקיד חדש</button>' +
+        '</div>' +
+        '<div id="org-body"><div class="rs-empty"><p>טוען…</p></div></div>';
+
+      var bodyEl = container.querySelector("#org-body");
+      var rowsCache = [];
+
+      function orgNodeHTML(box, byParent) {
+        var cat = CBA.committee.catInfo(box.category);
+        var kids = byParent[box.id] || [];
+        var peopleHTML = box.people.length
+          ? box.people.map(function (p) { return '<div class="org-box__person">' + CBA.esc(p.name) + '</div>'; }).join("")
+          : '<div class="org-box__person org-box__person--empty">תא פנוי</div>';
+        var actionsHTML = '<div class="org-box__actions">' +
+              '<button type="button" class="org-box__act" data-org-edit="' + CBA.esc(box.id) + '" title="עריכה" aria-label="עריכה">' + editIcon + '</button>' +
+              '<button type="button" class="org-box__act" data-org-add-child="' + CBA.esc(box.id) + '" title="הוספת תפקיד־בן" aria-label="הוספת תפקיד־בן">' + plusIcon + '</button>' +
+            '</div>';
+        return '<li>' +
+          '<div class="org-box org-box--' + (cat.cls || "") + '" title="' + CBA.esc(cat.key) + '">' +
+            '<div class="org-box__role">' + CBA.esc(box.role || "(ללא שם תפקיד)") + '</div>' +
+            '<div class="org-box__people">' + peopleHTML + '</div>' +
+            actionsHTML +
+          '</div>' +
+          (kids.length ? '<ul>' + kids.map(function (k) { return orgNodeHTML(k, byParent); }).join("") + '</ul>' : "") +
+        '</li>';
+      }
+
+      function draw() {
+        var boxes = CBA.committee.buildBoxes(rowsCache);
+        if (!boxes.length) {
+          bodyEl.innerHTML = '<div class="rs-empty"><p>עדיין לא הוגדר עץ ועד. לחצו למעלה על "הוספת תפקיד חדש" כדי להתחיל.</p></div>';
+          return;
+        }
+        var ids = {}; boxes.forEach(function (b) { ids[b.id] = true; });
+        var byParent = {};
+        boxes.forEach(function (b) {
+          var p = ids[b.parent] ? b.parent : "";
+          (byParent[p] = byParent[p] || []).push(b);
+        });
+        var roots = byParent[""] || [];
+        bodyEl.innerHTML = '<div class="org-tree-wrap"><ul class="org-tree">' +
+          roots.map(function (b) { return orgNodeHTML(b, byParent); }).join("") +
+          '</ul></div>';
+        // עוגן גלילה התחלתי (2026-08-10) — ר' אותה הערה ב-resCommittee/resident.js.
+        // חשוב באותה מידה כאן: אחרי כל שמירה draw() רץ מחדש, וגם אחרי עריכה
+        // רוצים שהמנהל ימשיך לראות את ראש העץ, לא ייזרק לתוך "האמצע" שלו.
+        var firstBox = bodyEl.querySelector(".org-tree > li > .org-box");
+        if (firstBox && firstBox.scrollIntoView) {
+          firstBox.scrollIntoView({ inline: "center", block: "nearest" });
+        }
+      }
+
+      function load() {
+        CBA.data.getCommitteeTree(function (res) {
+          if (!res || !res.ok) {
+            bodyEl.innerHTML = '<div class="rs-empty"><p>' + CBA.esc((res && res.error) || "שגיאה בטעינת עץ הוועד. נסו שוב מאוחר יותר.") + '</p></div>';
+            return;
+          }
+          rowsCache = res.rows || [];
+          draw();
+        });
+      }
+
+      // boxId=מזהה תא קיים לעריכה, defaultParent=ה"הורה" בעת הוספת תא חדש
+      // (מהכפתור "+" על תא ספציפי — ריק=שורש, מהכפתור הכללי למעלה).
+      function openOrgEdit(boxId, defaultParent) {
+        var boxes = CBA.committee.buildBoxes(rowsCache);
+        var editing = boxId ? boxes.filter(function (b) { return b.id === boxId; })[0] : null;
+        var blocked = editing ? CBA.committee.descendantIds(boxes, editing.id) : {};
+        var parentOptions = boxes.filter(function (b) { return (!editing || b.id !== editing.id) && !blocked[b.id]; });
+
+        var state = {
+          people: editing ? editing.people.map(function (p) { return { name: p.name, rid: p.rid }; }) : []
+        };
+
+        closeOrgModal();
+        var overlay = document.createElement("div");
+        overlay.id = "cba-modal";
+
+        function peopleRowsHTML() {
+          return state.people.map(function (p, i) {
+            return '<div class="org-person-row" data-i="' + i + '">' +
+              '<div class="ac-wrap">' +
+                '<input class="field-input" type="text" data-op-name="' + i + '" data-ac="op' + i + '" autocomplete="off" ' +
+                  'value="' + CBA.esc(p.name) + '" placeholder="שם — הקלידו או בחרו מרשימת תושבים">' +
+                '<div class="ac-list" data-ac-list="op' + i + '" hidden></div>' +
+              '</div>' +
+              '<button type="button" class="org-person-row__x" data-op-remove="' + i + '" aria-label="הסרת אדם">' + xIcon + '</button>' +
+            '</div>';
+          }).join("");
+        }
+
+        overlay.innerHTML =
+          '<div class="modal-backdrop" data-modal-close>' +
+            '<div class="modal" role="dialog">' +
+              '<div class="modal__head">' +
+                '<div><div class="modal__title">' + (editing ? "עריכת תפקיד" : "תפקיד חדש") + '</div>' +
+                  '<div class="modal__sub">גלוי לכל תושבי השיכון — עריכה למנהל-על בלבד</div></div>' +
+                '<button class="drawer__close" data-modal-close aria-label="סגור">×</button>' +
+              '</div>' +
+              '<div class="modal__body">' +
+                '<div class="form-grid">' +
+                  '<div class="form-field form-field--wide"><label>שם התפקיד</label>' +
+                    '<input class="field-input" id="og-role" type="text" value="' + CBA.esc(editing ? editing.role : "") + '" placeholder="לדוגמה: גזבר, ועדת תרבות"></div>' +
+                  '<div class="form-field"><label>קטגוריה</label>' +
+                    '<select class="field-input" id="og-cat">' +
+                      CBA.committee.CATS.map(function (c) { return '<option value="' + CBA.esc(c.key) + '"' + (editing && c.key === editing.category ? " selected" : "") + '>' + CBA.esc(c.key) + '</option>'; }).join("") +
+                    '</select></div>' +
+                  '<div class="form-field"><label>כפוף ל־</label>' +
+                    '<select class="field-input" id="og-parent">' +
+                      '<option value=""' + (!editing && !defaultParent ? " selected" : (editing && !editing.parent ? " selected" : "")) + '>— בראש העץ —</option>' +
+                      parentOptions.map(function (b) {
+                        var sel = editing ? (b.id === editing.parent) : (b.id === defaultParent);
+                        return '<option value="' + CBA.esc(b.id) + '"' + (sel ? " selected" : "") + '>' + CBA.esc(b.role || b.id) + '</option>';
+                      }).join("") +
+                    '</select></div>' +
+                '</div>' +
+                '<div class="form-block">' +
+                  '<div class="org-people-head"><label>אנשים בתפקיד הזה</label>' +
+                    '<span class="res-dim">אפשר להשאיר ריק — יוצג כ"תא פנוי"</span></div>' +
+                  '<div id="og-people">' + peopleRowsHTML() + '</div>' +
+                  '<button type="button" class="rs-ghost" id="og-add-person">' + plusIcon + 'הוספת אדם</button>' +
+                '</div>' +
+              '</div>' +
+              '<div class="drawer__actions drawer__actions--sticky">' +
+                '<div class="drawer__actions-main">' +
+                  '<button class="btn-primary" id="og-save">שמירה</button>' +
+                  '<button class="rs-ghost" data-modal-close>ביטול</button>' +
+                '</div>' +
+                (editing ? '<button type="button" class="btn-reject" id="og-delete">מחיקת תפקיד</button>' : "") +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(overlay);
+        overlay.querySelector(".modal").addEventListener("click", function (e) { e.stopPropagation(); });
+        overlay.querySelectorAll("[data-modal-close]").forEach(function (el) { el.addEventListener("click", closeOrgModal); });
+        document.addEventListener("keydown", escOrgModal);
+
+        var peopleEl = overlay.querySelector("#og-people");
+        var residentOptions = [];
+        function wirePeopleAutocomplete() {
+          state.people.forEach(function (p, i) { orgWireAutocomplete(peopleEl, i, residentOptions, state); });
+        }
+        CBA.data.residentPickerOptions(function (opts) { residentOptions = opts || []; wirePeopleAutocomplete(); });
+
+        function redrawPeople() {
+          peopleEl.innerHTML = peopleRowsHTML();
+          wirePeopleAutocomplete();
+        }
+
+        overlay.querySelector("#og-add-person").addEventListener("click", function () {
+          state.people.push({ name: "", rid: "" });
+          redrawPeople();
+        });
+        peopleEl.addEventListener("click", function (e) {
+          var rm = e.target.closest("[data-op-remove]");
+          if (!rm) return;
+          state.people.splice(parseInt(rm.dataset.opRemove, 10), 1);
+          redrawPeople();
+        });
+        peopleEl.addEventListener("input", function (e) {
+          var inp = e.target.closest("[data-op-name]");
+          if (!inp) return;
+          var i = parseInt(inp.dataset.opName, 10);
+          if (state.people[i]) { state.people[i].name = inp.value; state.people[i].rid = ""; }
+        });
+
+        function orgSave(newRows) {
+          var saveBtn = overlay.querySelector("#og-save");
+          if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "שומר…"; }
+          CBA.data.saveCommitteeTree(newRows, function (res) {
+            if (!res || !res.ok) {
+              window.alert("השמירה נכשלה: " + ((res && res.error) || "שגיאה"));
+              if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "שמירה"; }
+              return;
+            }
+            closeOrgModal();
+            rowsCache = newRows;
+            draw();
+          });
+        }
+
+        if (editing) {
+          overlay.querySelector("#og-delete").addEventListener("click", function () {
+            var hasKids = boxes.some(function (b) { return b.parent === editing.id; });
+            if (hasKids) {
+              window.alert('אי אפשר למחוק את "' + editing.role + '" — יש לו תפקידי־בן בעץ. קודם צריך למחוק אותם או להעביר אותם להורה אחר.');
+              return;
+            }
+            if (!window.confirm('למחוק את התפקיד "' + editing.role + '"?')) return;
+            orgSave(rowsCache.filter(function (r) { return String(r["מזהה תא"] || "").trim() !== editing.id; }));
+          });
+        }
+
+        overlay.querySelector("#og-save").addEventListener("click", function () {
+          var role = overlay.querySelector("#og-role").value.trim();
+          if (!role) { window.alert("צריך להזין שם תפקיד."); return; }
+          var category = overlay.querySelector("#og-cat").value;
+          var parent = overlay.querySelector("#og-parent").value;
+          var people = state.people.filter(function (p) { return p.name.trim(); });
+
+          var id = editing ? editing.id : ("c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+          var newBoxRows = (people.length ? people : [{ name: "", rid: "" }]).map(function (p) {
+            var o = {};
+            o["מזהה תא"] = id; o["הורה"] = parent; o["תפקיד"] = role; o["קטגוריה"] = category;
+            o["שם"] = p.name.trim(); o["מזהה תושב"] = p.rid || "";
+            return o;
+          });
+          var rest = rowsCache.filter(function (r) { return String(r["מזהה תא"] || "").trim() !== id; });
+          orgSave(rest.concat(newBoxRows));
+        });
+      }
+
+      container.querySelector("#org-add-root").addEventListener("click", function () { openOrgEdit(null, ""); });
+      bodyEl.addEventListener("click", function (e) {
+        var editBtn = e.target.closest("[data-org-edit]");
+        if (editBtn) { openOrgEdit(editBtn.dataset.orgEdit, null); return; }
+        var addBtn = e.target.closest("[data-org-add-child]");
+        if (addBtn) { openOrgEdit(null, addBtn.dataset.orgAddChild); return; }
+      });
+
+      load();
+    }
+  };
+})();

@@ -1062,6 +1062,65 @@ CBA.data = (function () {
   };
 })();
 
+/* עוזרי "עץ ועד השיכון" (2026-08-10) — לוגיקת מבנה-הנתונים המשותפת בין
+   תצוגת הקריאה (resCommittee, אזור תושב, כל תושב) לתצוגת הניהול/עריכה
+   (committeeAdmin, אזור ניהול, מנהל-על בלבד — ר' residents.js). חיה כאן
+   ולא בתוך אחד ממסכי המסך, כדי ששני הצדדים ישתמשו באותה לוגיקה בדיוק
+   ולא ייסחפו זה מזה עם הזמן. פונקציות טהורות — לא נוגעות ב-DOM. */
+CBA.committee = (function () {
+  "use strict";
+  var CATS = [
+    { key: "הנהלה" },
+    { key: "ילדים וקהילה", cls: "kids" },
+    { key: "תפעול ושירות", cls: "ops" },
+    { key: "ועדת מתנדבים", cls: "vol" }
+  ];
+  function catInfo(key) {
+    for (var i = 0; i < CATS.length; i++) if (CATS[i].key === key) return CATS[i];
+    return CATS[0];
+  }
+  // הופך שורות שטוחות מהשרת (שורה = אדם אחד) למבנה תאים: מקבץ לפי "מזהה תא"
+  // (כמה שורות עם אותו מזהה = כמה אנשים באותו תפקיד), ושומר את אינדקס
+  // ההופעה הראשון של כל תא כדי לשמר את סדר הגיליון בתצוגה (אין עמודת "סדר").
+  function buildBoxes(rows) {
+    var byId = {}, order = [];
+    (rows || []).forEach(function (r, i) {
+      var id = String(r["מזהה תא"] || "").trim();
+      if (!id) return;
+      if (!byId[id]) {
+        byId[id] = {
+          id: id,
+          parent: String(r["הורה"] || "").trim(),
+          role: String(r["תפקיד"] || "").trim(),
+          category: String(r["קטגוריה"] || "").trim(),
+          people: [],
+          idx: i
+        };
+        order.push(byId[id]);
+      }
+      var name = String(r["שם"] || "").trim();
+      if (name) {
+        var rid = r["מזהה תושב"];
+        byId[id].people.push({ name: name, rid: (rid == null ? "" : String(rid)) });
+      }
+    });
+    return order;
+  }
+  // כל צאצאי תא נתון (בכל עומק) — כדי לחסום בחירת "הורה" חדש שהוא בעצם
+  // צאצא של התא הנערך (היה יוצר מעגל בעץ). רלוונטי רק לצד העריכה.
+  function descendantIds(boxes, id) {
+    var out = {}, stack = [id];
+    while (stack.length) {
+      var cur = stack.pop();
+      boxes.forEach(function (b) {
+        if (b.parent === cur && !out[b.id]) { out[b.id] = true; stack.push(b.id); }
+      });
+    }
+    return out;
+  }
+  return { CATS: CATS, catInfo: catInfo, buildBoxes: buildBoxes, descendantIds: descendantIds };
+})();
+
 /* עוזר עיצוב מספרים: 36000 -> "₪36,000". גלובלי לכל המסכים. */
 CBA.formatILS = function (n) {
   const rounded = Math.round(n);

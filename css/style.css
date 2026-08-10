@@ -999,6 +999,13 @@ body[data-screen="planning"] .year-switch__add {
 /* התוכן מפנה מקום לשורה התחתונה הקבועה — רק במסכים שיש בהם כזו */
 body[data-screen="budget"] .app-main,
 body[data-screen="planning"] .app-main { padding-bottom: 108px; }
+/* "ועד השיכון" (תצוגה + ניהול, 2026-08-10) — עץ ארגוני נוטה להיות רחב
+   (הרבה תפקידים באותה שורה), אז מצמצמים כאן את שולי הצדדים של האזור
+   (--page-pad הרגיל, 40px/16px) כדי שהעץ יקבל כמה שיותר רוחב לפני שהוא
+   צריך לגלול אופקית (ר' .org-tree-wrap ב-resident.css). לבקשת יועד:
+   "תצוגה שנפרסת על כל רוחב המסך". */
+body[data-screen="resCommittee"] .app-main,
+body[data-screen="committeeAdmin"] .app-main { padding-inline: 14px; }
 .bl-cell { padding: 4px 16px; display: flex; align-items: baseline; justify-content: center; gap: 8px; }
 .bl-cell + .bl-cell { border-inline-start: 1px solid var(--border); }
 .bl-cell__label { font-size: 13px; color: var(--text-soft); }
@@ -1240,6 +1247,8 @@ body[data-screen="planning"] .app-main { padding-bottom: 108px; }
   /* עיצוב בר הניווט התחתון במובייל (זכוכית נוזלית, בדיוק כמו בדסקטופ) הוא
      כולו באחריות mobile.css (.app-nav--bottom), שנטען אחרי הקובץ הזה. */
   .app-main { padding: 20px 16px 48px; }
+  body[data-screen="resCommittee"] .app-main,
+  body[data-screen="committeeAdmin"] .app-main { padding-inline: 6px; }
   .app-brand__title { font-size: 17px; }
 
   .budget-cols { grid-template-columns: 1fr; gap: 20px; }

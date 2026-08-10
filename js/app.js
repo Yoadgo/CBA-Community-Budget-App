@@ -85,7 +85,11 @@
   // איזו הרשאה נדרשת לכל מסך ניהול
   const SCREEN_PERM = {
     budget: PERM.BUDGET, expenses: PERM.BUDGET, planning: PERM.BUDGET,
-    clubAdmin: PERM.CLUB, residents: PERM.RESIDENTS, settings: PERM.SUPER
+    clubAdmin: PERM.CLUB, residents: PERM.RESIDENTS, settings: PERM.SUPER,
+    // ניהול עץ הוועד — מנהל-על בלבד (2026-08-10, לבקשת יועד: "הניהול עץ
+    // צריך להיות רק באזור ניהול למי שיש הרשאות מנהל על"). התצוגה-לקריאה
+    // המקבילה (resCommittee, אזור תושב) פתוחה לכל תושב וללא הרשאה כאן.
+    committeeAdmin: PERM.SUPER
   };
 
   function myPerms() {
@@ -117,14 +121,17 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "residents", "settings"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "residents", "committeeAdmin", "settings"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
       // ר' SCREEN_PERM), כך שמי שיש לו רק הרשאת מועדון/תושבים לא יראה את הקבוצה כלל.
+      // "ועד השיכון" (2026-08-10) — ניהול/עריכת עץ הוועד, מנהל-על בלבד
+      // (ר' SCREEN_PERM.committeeAdmin, residents.js). התצוגה-לקריאה המקבילה
+      // יושבת באזור התושב (resCommittee) ופתוחה לכולם, ר' AREAS_ALL.resident למטה.
       tabs: [
         { group: "taktziv", label: "תקציב", items: [["budget", "תכנון מול ביצוע"], ["expenses", "ניהול הוצאות"], ["planning", "בניית תקציב"]] },
-        ["clubAdmin", "שריון מועדון"], ["residents", "תושבים"]
+        ["clubAdmin", "שריון מועדון"], ["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"]
       ]
     },
     resident: {
@@ -132,8 +139,9 @@
       screens: ["resRequests", "resSubmit", "resReserve", "resDirectory", "resMap", "resCommittee"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
-      // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל
-      // תושב לצפייה; עריכה בפועל מוגבלת למנהל-על בתוך המסך עצמו (ר' resident.js).
+      // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
+      // לצפייה בלבד. עריכה (2026-08-10) עברה לגמרי למסך ניהול נפרד באזור הניהול
+      // (committeeAdmin, מנהל-על בלבד) — כאן, גם מנהל-על, רואה תצוגה בלבד.
       tabs: [
         ["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"], ["resReserve", "שריון מועדון"],
         { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"], ["resCommittee", "ועד השיכון"]] }
@@ -177,6 +185,9 @@
     planning:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>',
     clubAdmin:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8.5 15l2 2 4-4"/></svg>',
     residents:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M17.5 14.4a5 5 0 0 1 3 4.6"/></svg>',
+    // ניהול "ועד השיכון" באזור הניהול — אותו אייקון בדיוק כמו resCommittee
+    // (אזור התושב), כי זה אותו נושא/עץ, רק צד קריאה מול צד ניהול.
+    committeeAdmin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.1"/><circle cx="5.5" cy="18" r="2.1"/><circle cx="18.5" cy="18" r="2.1"/><path d="M12 7.1V11M12 11 5.5 15.9M12 11l6.5 4.9"/></svg>',
     resRequests: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6h9M11 12h9M11 18h9"/><path d="M4 6l1.3 1.3L7 4.7M4 12l1.3 1.3L7 10.7M4 18l1.3 1.3L7 16.7"/></svg>',
     resSubmit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
     resReserve:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
