@@ -451,9 +451,15 @@ function planBind(container) {
   // הוספה / הסרה (שינוי מבני -> ציור מחדש)
   container.querySelectorAll("[data-add-cat]").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      CBA.data.addCategory({ group: btn.dataset.addCat });
+      const newCat = CBA.data.addCategory({ group: btn.dataset.addCat });
       planSave();
       rerender();
+      // בעבר הסעיף החדש נולד "סגור" (הפאנל המורחב נגלה רק בריחוף/מיקוד),
+      // כך שבפועל היה נראה כאילו הוא "נסגר" מיד אחרי ההוספה וצריך לפתוח
+      // אותו שוב כדי לערוך שם/מקור מימון/חלוקה. עכשיו ממקדים מיד את שדה
+      // השם של הסעיף החדש — זה גם פותח את הפאנל (דרך :focus-within) וגם
+      // מסמן את הטקסט כדי שאפשר להתחיל להקליד שם מיד (משוב יועד, 2026-08-10).
+      planFocusNewCategory(container, newCat.id);
     });
   });
   container.querySelectorAll("[data-remove-cat]").forEach(function (btn) {
@@ -1105,6 +1111,17 @@ function planCloseModal() {
   document.removeEventListener("keydown", planEscModal);
 }
 function planEscModal(e) { if (e.key === "Escape") planCloseModal(); }
+
+/* אחרי הוספת סעיף חדש: ממקדים ובוחרים את שדה השם שלו, כדי שהפאנל המורחב
+   ייפתח מיד (דרך :focus-within) והמשתמש יוכל להקליד שם בלי שלב נוסף של
+   ריחוף/פתיחה (משוב יועד, 2026-08-10). גם גוללים אותו לתצוגה אם צריך. */
+function planFocusNewCategory(container, catId) {
+  const input = container.querySelector('[data-cat-name="' + CSS.escape(catId) + '"]');
+  if (!input) return;
+  input.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  input.focus();
+  input.select();
+}
 
 /* חיפוש סעיף/מקור הכנסה — דרך שכבת הנתונים (מחזיר את האובייקט החי לעריכה בזיכרון) */
 function findCat(id) { return CBA.data.findCategory(id); }

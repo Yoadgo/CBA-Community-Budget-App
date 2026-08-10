@@ -934,19 +934,23 @@ body[data-screen="planning"] .year-switch__add {
 .mini-move:disabled { opacity: .25; cursor: default; }
 .mini-move:disabled:hover { background: none; }
 
-/* כפתורי ההוספה מתקפלים לגמרי כשלא מרחפים — בלי להשאיר חלל לבן (במקום opacity בלבד) */
+/* כפתורי ההוספה מתקפלים לגמרי כשלא מרחפים — בלי להשאיר חלל לבן (במקום opacity בלבד).
+   ליציאה מריחוף יש דיליי לפני שהקיפול מתחיל (300ms) — כדי שתנועת עכבר חטופה
+   בדרך אל הכפתור עצמו לא "תגנוב" אותו ברגע האחרון; לכניסה לריחוף אין דיליי,
+   כך שהכפתור עדיין מופיע מיד (משוב יועד, 2026-08-10). */
 .plan-group .add-btn,
 .plan-income-card [data-add-income],
 .plan-expense-card [data-add-group] {
   opacity: 0; max-height: 0; margin-top: 0; padding-top: 0; padding-bottom: 0;
   border-width: 0; overflow: hidden; pointer-events: none;
-  transition: opacity var(--t), max-height var(--t), margin var(--t), padding var(--t);
+  transition: opacity var(--t) 300ms, max-height var(--t) 300ms, margin var(--t) 300ms, padding var(--t) 300ms, border-width var(--t) 300ms;
 }
 .plan-group:hover .add-btn, .plan-group:focus-within .add-btn,
 .plan-income-card:hover [data-add-income], .plan-income-card:focus-within [data-add-income],
 .plan-expense-card:hover [data-add-group], .plan-expense-card:focus-within [data-add-group] {
   opacity: 1; max-height: 46px; margin-top: 8px; padding-top: 8px; padding-bottom: 8px;
   border-width: 1px; pointer-events: auto;
+  transition-delay: 0s;
 }
 
 /* מצב רגיל נקי: שבב קטן (סוג חלוקה + שיוך). הבקרות המלאות נחשפות בריחוף/מיקוד */
