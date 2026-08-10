@@ -832,11 +832,21 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .org-box__person { font-size: 15px; color: var(--text-soft); line-height: 1.28; }
 .org-box__person--empty { color: var(--text-muted); font-style: italic; }
 
+/* כפתורי הפעולה תפסו מקום קבוע בגובה הקוביה גם כשהם בלתי-נראים (opacity:0
+   לבד לא מוציא אלמנט מהזרימה — הוא רק שקוף, השטח עדיין שמור) — כל קוביה
+   באזור הניהול הייתה גבוהה יותר מהצורך תמיד, לא רק ברגע הריחוף (2026-08-10,
+   לבקשת יועד: "נשמר מקום לכפתורי עריכה... להציף את הכפתורים רק כאשר עומדים
+   עם העכבר"). עכשיו גם max-height/margin-top קורסים ל-0 כברירת מחדל, וקוביה
+   בלי ריחוף פשוט לא מכילה את השורה הזו בגובה שלה בכלל — מתרחבת אליה רק
+   כשבאמת מרחפים/ממוקדים. */
 .org-box__actions {
-  display: flex; justify-content: center; gap: 4px; margin-top: 8px;
-  opacity: 0; transition: opacity var(--t);
+  display: flex; justify-content: center; gap: 4px; overflow: hidden;
+  max-height: 0; margin-top: 0; opacity: 0;
+  transition: max-height var(--t), margin-top var(--t), opacity var(--t);
 }
-.org-box:hover .org-box__actions, .org-box:focus-within .org-box__actions { opacity: 1; }
+.org-box:hover .org-box__actions, .org-box:focus-within .org-box__actions {
+  max-height: 30px; margin-top: 8px; opacity: 1;
+}
 .org-box__act {
   width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text-soft); display: flex; align-items: center;
@@ -848,7 +858,7 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 /* מסך הטעינה/עריכה תמיד גלוי במגע (לא רק hover) — כדי שגם במובייל אפשר
    ללחוץ על עריכה בלי "לרחף" קודם, שלא קיים במסך מגע */
 @media (hover: none) {
-  .org-box__actions { opacity: 1; }
+  .org-box__actions { max-height: 30px; margin-top: 8px; opacity: 1; }
 }
 
 /* מודל עריכת תפקיד — רשימת אנשים ניתנת להוספה/הסרה */

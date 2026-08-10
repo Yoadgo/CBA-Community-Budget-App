@@ -1649,7 +1649,10 @@ function resOpenDrawer(container, idx, rowIndex, c) {
       // מהשורש מיושרות לאותה שורה). קווי חיבור מצוירים ב-SVG לפי המיקומים
       // המדויקים שהתקבלו — לא תלויים בטריק CSS כלשהו.
       function layoutOrgTree(canvas, svg, nodesFlat, byParent) {
-        var NODE_W = 140, GAP_X = 20, ROW_GAP = 40, PAD_X = 20, PAD_TOP = 6, PAD_BOTTOM = 10;
+        // סבב 3 (2026-08-10, לבקשת יועד: "להקטין את המרווח בין קוביות בשליש" +
+        // "להקטין את הגובה בין קוביות בחצי") — GAP_X (מרווח אופקי בין אחים)
+        // 20→13 (כ-2/3 מהערך הקודם), ROW_GAP (מרווח אנכי בין הורה לילדים) 40→20.
+        var NODE_W = 140, GAP_X = 13, ROW_GAP = 20, PAD_X = 20, PAD_TOP = 6, PAD_BOTTOM = 10;
 
         var heightOf = {}, elOf = {};
         nodesFlat.forEach(function (n) {

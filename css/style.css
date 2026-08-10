@@ -1001,7 +1001,9 @@ body[data-screen="planning"] .year-switch__add {
 .present-card__fund-amount { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
 /* שמות שלא נכנסים במלואם (סעיף/מקור/פריט) גוללים הצידה במקום להיחתך
    ב"..." — כך תמיד אפשר לראות את הטקסט המלא (משוב יועד, 2026-08-10).
-   פס הגלילה נשאר דק ועדין כדי לא להפריע לתצוגה הנקייה. */
+   פס הגלילה נשאר דק ועדין כדי לא להפריע לתצוגה הנקייה. הגלילה עצמה
+   אוטומטית בעת ריחוף עכבר (מופעלת ב-JS ב-planning.js), ולכן מוגדרת כאן
+   "smooth" כדי שהתזוזה תיראה כהחלקה נעימה ולא כקפיצה (משוב יועד, 2026-08-10). */
 .present-card__item-name::-webkit-scrollbar,
 .present-card__fund-name::-webkit-scrollbar,
 .present-income-row__name::-webkit-scrollbar { height: 3px; }
@@ -1010,7 +1012,7 @@ body[data-screen="planning"] .year-switch__add {
 .present-income-row__name::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .present-card__item-name,
 .present-card__fund-name,
-.present-income-row__name { scrollbar-width: thin; }
+.present-income-row__name { scrollbar-width: thin; scroll-behavior: smooth; }
 
 /* עמודת מקורות הכנסה בתצוגה להצגה (הוחזרה לפי משוב יועד, 2026-08-10) */
 .present-income-card { align-self: start; }

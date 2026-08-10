@@ -184,7 +184,7 @@ function planBind(container) {
     planViewMode = !planViewMode;
     rerender();
   });
-  if (planViewMode) return;  // מצב תצוגה סטטי לגמרי — אין מה לחבר מעבר לכפתור המתג
+  if (planViewMode) { planBindPresentScroll(container); return; }  // מצב תצוגה סטטי — מחברים רק את הגלילה האוטומטית בריחוף
 
   // שמירה אוטומטית לגיליון בכל סיום עריכת שדה (blur/change).
   // נרשם פעם אחת בלבד — ה-dataset שורד ציור-מחדש (innerHTML לא מוחק את container עצמו).
@@ -1121,6 +1121,27 @@ function planFocusNewCategory(container, catId) {
   input.scrollIntoView({ block: "nearest", behavior: "smooth" });
   input.focus();
   input.select();
+}
+
+/* בתצוגה להצגה: שמות ארוכים מדי לעמודה (סעיף/מקור/פריט) גוללים אוטומטית
+   הצידה כשעומדים עליהם עם העכבר, בלי צורך לגרור את פס הגלילה ידנית —
+   וחוזרים למצב ההתחלתי כשהעכבר יוצא (משוב יועד, 2026-08-10). פועל רק על
+   שמות שבאמת חתוכים (scrollWidth > clientWidth); שם שנכנס במלואו לא זז. */
+function planBindPresentScroll(container) {
+  const names = container.querySelectorAll(
+    ".present-card__item-name, .present-card__fund-name, .present-income-row__name"
+  );
+  names.forEach(function (el) {
+    el.addEventListener("mouseenter", function () {
+      // באתר כולו dir="rtl", ולכן טווח הגלילה התקני הוא 0 (התחלה, ימין)
+      // עד -(scrollWidth-clientWidth) (סוף, שמאל) — לא ערך חיובי כמו ב-LTR.
+      const max = el.scrollWidth - el.clientWidth;
+      if (max > 0) el.scrollLeft = -max;
+    });
+    el.addEventListener("mouseleave", function () {
+      el.scrollLeft = 0;
+    });
+  });
 }
 
 /* חיפוש סעיף/מקור הכנסה — דרך שכבת הנתונים (מחזיר את האובייקט החי לעריכה בזיכרון) */
