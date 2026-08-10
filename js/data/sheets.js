@@ -117,7 +117,6 @@ CBA.sheets = (function () {
   }
 
   function transform(payload) {
-    var groups = (payload.groups || []).map(function (g) { return { id: g, name: g }; });
     var years = {};
     (payload.years || []).forEach(function (y) {
       var d = payload.data[y] || {};
@@ -125,6 +124,12 @@ CBA.sheets = (function () {
       var baseline = null;
       var braw = payload.settings && payload.settings["בסיס תקציב " + y];
       if (braw) { try { baseline = JSON.parse(braw); } catch (e) { baseline = null; } }
+      // קבוצות פר-שנה (סעיף 3, 2026-08-09) — d.groups קיים (גם אם ריק) בשרת
+      // מעודכן; d.groups === undefined רק אם השרת עדיין בגרסה הישנה (לפני
+      // שהודבק/פורסם Code.gs החדש) — אז נופלים לשדה השטוח הישן payload.groups
+      // (עדיין נשלח לתאימות לאחור, ר' doGet ב-Code.gs), כדי לא לאבד את
+      // הקבוצות בזמן המעבר בין שמירה בקוד ללחיצת Deploy בפועל.
+      var yearGroupsRaw = (d.groups !== undefined) ? d.groups : (payload.groups || []);
       years[y] = {
         income: (d.income || []).map(toIncome),
         categories: (d.budget || []).map(toCategory),
@@ -132,7 +137,8 @@ CBA.sheets = (function () {
         budget: { phase: closed ? "locked" : "draft", lockedAt: null, baseline: baseline },
         // פנקס הערות (סעיף 1) — payload.notes הוא מפה {שנה: {content, editedBy, editedAt}}
         // שנקראת ב-Code.gs מטאב "הערות" (שורה אחת לכל שנה, לא טאב פר-שנה)
-        notes: (payload.notes && payload.notes[y]) || { content: "", editedBy: "", editedAt: "" }
+        notes: (payload.notes && payload.notes[y]) || { content: "", editedBy: "", editedAt: "" },
+        groups: yearGroupsRaw.map(function (g) { return { id: g, name: g }; })
       };
     });
     var updates = (payload.updates || []).map(function (r) {
@@ -154,7 +160,7 @@ CBA.sheets = (function () {
       };
     });
     return {
-      groups: groups, years: years,
+      years: years,
       yearList: (payload.years || []).slice(),
       currentYear: payload.currentYear || (payload.years || [])[0],
       settings: payload.settings || {},
@@ -234,7 +240,8 @@ CBA.sheets = (function () {
        מהשרת, כדי לא להישאר על שנה שלא קיימת. */
   function apply(store, isBackgroundRefresh) {
     if (isBackgroundRefresh && isDirty()) return false;
-    CBA.mock.groups = store.groups;
+    // groups כבר לא שדה שטוח נפרד — הוא מקונן בתוך store.years[y].groups
+    // ומועתק אוטומטית ע"י השורה הבאה (סעיף 3, קבוצות פר-שנה).
     CBA.mock.years = store.years;
     CBA.mock.yearList = store.yearList;
     if (!isBackgroundRefresh || !CBA.mock.years[CBA.mock.currentYear]) {

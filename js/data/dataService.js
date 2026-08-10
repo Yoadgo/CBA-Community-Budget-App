@@ -728,11 +728,15 @@ CBA.data = (function () {
       };
     });
     const inc = (srcY ? srcY.income : []).map(function (s) { return Object.assign({}, s); });
+    // קבוצות התקציב מועתקות מהשנה המקורית כעותק עצמאי — משם והלאה שינוי בקבוצות
+    // של שנה אחת לא ישפיע על השנייה (סעיף 3, קבוצות פר-שנה).
+    const grp = (srcY ? srcY.groups : []).map(function (g) { return Object.assign({}, g); });
     CBA.mock.years[newYear] = {
       income: inc, categories: cats, transactions: [],
       budget: { phase: "draft", lockedAt: null, baseline: null },
       // פנקס הערות מתחיל ריק בשנה חדשה — לא משוכפל מהשנה שממנה יוצרים (סעיף 1)
-      notes: { content: "", editedBy: "", editedAt: "" }
+      notes: { content: "", editedBy: "", editedAt: "" },
+      groups: grp
     };
     CBA.mock.yearList.push(newYear);
     if (pushConnected()) CBA.sheets.push("addYear", { year: newYear, fromYear: fromYear || CBA.mock.currentYear });

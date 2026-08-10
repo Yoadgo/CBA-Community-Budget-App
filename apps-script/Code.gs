@@ -77,7 +77,11 @@ var ACTION_PERMS = {
   createResidents: PERM_RESIDENTS,
   saveResidentNames: PERM_RESIDENTS, formatResidents: PERM_RESIDENTS, saveFamilyIds: PERM_RESIDENTS,
   // מנהל על בלבד
-  savePermissions: PERM_SUPER, ensurePermissionCols: PERM_SUPER
+  savePermissions: PERM_SUPER, ensurePermissionCols: PERM_SUPER,
+  // עץ ועד השיכון (2026-08-09) — קריאה פתוחה לכל תושב (לא ברשימה כאן בכלל,
+  // ר' handleCommitteeTree_), אבל עריכה/שמירה של העץ עצמו מוגבלת למנהל-על
+  // בלבד, בדיוק כמו הרשאות — זה שינוי מבני שמשפיע על כל התושבים שרואים אותו.
+  saveCommitteeTree: PERM_SUPER
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -272,6 +276,12 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'communityDirectory') {
       return handleCommunityDirectory_(e.parameter);
     }
+    // עץ ועד השיכון (2026-08-09): "מסך "ועד השיכון" תחת קבוצת הניווט "השיכון"
+    // באזור התושב. פתוח לקריאה לכל תושב מחובר ופעיל, בדיוק כמו communityDirectory
+    // — עריכה בפועל (saveCommitteeTree) מוגבלת למנהל-על, ר' ACTION_PERMS.
+    if (e && e.parameter && e.parameter.action === 'committeeTree') {
+      return handleCommitteeTree_(e.parameter);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var years = [];
     ss.getSheets().forEach(function (sh) {
@@ -287,8 +297,11 @@ function doGet(e) {
       if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
     });
     var out = {
-      ok: true, version: 'v30-notes-panel', years: years,
+      ok: true, version: 'v32-groups-per-year', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
+      // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
+      // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
+      // הלקוח החדשה מדברת עם השרת הישן; לא בשימוש יותר ע"י לקוח מעודכן.
       groups: readColumn_(ss, 'קבוצות'),
       updates: readTable_(ss, 'עדכוני תקציב'),   // יומן עדכוני תקציב (אם הטאב קיים)
       // פנקס הערות כלליות (סעיף 1, 2026-08-09) — טאב "הערות" (שורה אחת לכל
@@ -302,7 +315,9 @@ function doGet(e) {
       out.data[y] = {
         budget: readTable_(ss, 'תקציב ' + y),
         income: readTable_(ss, 'הכנסות ' + y),
-        transactions: readTable_(ss, 'תנועות ' + y)
+        transactions: readTable_(ss, 'תנועות ' + y),
+        // קבוצות פר-שנה (סעיף 3, 2026-08-09) — ר' readGroupsForYear_
+        groups: readGroupsForYear_(ss, y)
       };
     });
     return json_(out);
@@ -343,6 +358,7 @@ function doPost(e) {
       case 'uploadReceiptFile': return json_(uploadReceiptFile_(ss, body));
       case 'ensureColumns':     return json_(ensureColumns_(ss, body));
       case 'saveColumnConfig':  return json_(saveColumnConfig_(ss, body));
+      case 'saveCommitteeTree': return json_(saveCommitteeTree_(ss, body));
       case 'approveSignup':     return json_(approveSignup_(ss, body));
       case 'rejectSignup':      return json_(rejectSignup_(ss, body));
       case 'saveResidentRow':   return json_(saveResidentRow_(ss, body));
@@ -1138,7 +1154,7 @@ function saveBudget_(ss, body) {
       cats:   saveBudgetCats_(ss, year, body.categories || []),
       income: saveBudgetIncome_(ss, year, body.income || [])
     };
-    if (body.groups) out.groups = saveGroups_(ss, body.groups);  // טאב "קבוצות" משותף לכל השנים
+    if (body.groups) out.groups = saveGroups_(ss, year, body.groups);  // קבוצות פר-שנה (סעיף 3)
     return out;
   } finally {
     lock.releaseLock();
@@ -1298,10 +1314,33 @@ function saveNotes_(ss, body) {
   }
 }
 
-// כותב את רשימת הקבוצות לטאב "קבוצות" (עמודה A, מתחת לכותרת). משותף לכל השנים.
-function saveGroups_(ss, groups) {
-  var sh = ss.getSheetByName('קבוצות');
-  if (!sh) return 'אין טאב קבוצות';
+/* קבוצות פר-שנה (סעיף 3, 2026-08-09) — עד עכשיו טאב "קבוצות" יחיד היה משותף
+ * לכל השנים, בכוונה. יועד ביקש לשנות: מכאן ואילך לכל שנה יש טאב עצמאי משלה
+ * "קבוצות <שנה>", בדיוק כמו "תקציב <שנה>"/"הכנסות <שנה>". מעבר בטוח, לא
+ * הרסני: הטאב הישן "קבוצות" נשאר בדיוק כמו שהיה — לא נכתב אליו יותר, ולא
+ * נמחק — הוא משמש רק כגיבוי/נפילה-אחורה עבור שנה שעדיין לא נשמרה מאז המעבר. */
+
+// קורא את קבוצות השנה: אם יש לה כבר טאב עצמאי "קבוצות <שנה>" — קורא ממנו
+// (גם אם הוא ריק, כי זה מצב לגיטימי אחרי שהמנהל הסיר את כל הקבוצות בכוונה).
+// אם אין עדיין טאב כזה (השנה טרם נשמרה מאז המעבר) — נופל בחזרה לטאב "קבוצות"
+// המשותף הישן, כדי ששנים קיימות ימשיכו להיראות בדיוק כמו שנראו עד היום.
+function readGroupsForYear_(ss, year) {
+  var name = 'קבוצות ' + year;
+  if (ss.getSheetByName(name)) return readColumn_(ss, name);
+  return readColumn_(ss, 'קבוצות');
+}
+
+// כותב את רשימת הקבוצות לטאב הפר-שנתי "קבוצות <שנה>" (עמודה A, מתחת לכותרת),
+// יוצר אותו אוטומטית בפעם הראשונה שהשנה הזו נשמרת (אותו דפוס בדיוק כמו
+// logBudgetUpdate_/saveNotes_ למעלה). לא נוגע בטאב "קבוצות" המשותף הישן.
+function saveGroups_(ss, year, groups) {
+  var name = 'קבוצות ' + year;
+  var sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.appendRow(['קבוצה']);
+    sh.setFrozenRows(1);
+  }
   var last = sh.getLastRow();
   if (last >= 2) sh.getRange(2, 1, last - 1, 1).clearContent();   // מנקים רק עמודה A
   if (groups.length) {
@@ -1471,7 +1510,10 @@ function writeMixedIncomeCol_(sh, firstRow, ordered, col, forType, valFn) {
 function addYear_(ss, body) {
   var newYear = body.year, fromYear = body.fromYear;
   if (ss.getSheetByName('תקציב ' + newYear)) return { ok: false, error: 'השנה כבר קיימת' };
-  ['תקציב ', 'הכנסות ', 'תנועות '].forEach(function (prefix) {
+  // 'קבוצות ' נוספה בסעיף 3 (2026-08-09, קבוצות פר-שנה) — אם לשנת המקור עדיין
+  // אין טאב קבוצות עצמאי משלה (עוד לא נשמרה מאז המעבר), פשוט לא מעתיקים כלום
+  // כאן, ושתי השנים ימשיכו ליפול בחזרה לטאב "קבוצות" המשותף הישן (ר' readGroupsForYear_)
+  ['תקציב ', 'הכנסות ', 'תנועות ', 'קבוצות '].forEach(function (prefix) {
     var src = ss.getSheetByName(prefix + fromYear);
     if (src) src.copyTo(ss).setName(prefix + newYear);
   });
@@ -2567,6 +2609,117 @@ function handleCommunityDirectory_(p) {
     return json_({ ok: true, rows: rows });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ============================================================================
+ *  עץ ועד השיכון (2026-08-09)
+ * ----------------------------------------------------------------------------
+ *  טאב "עץ ועד השיכון": כל שורה = אדם אחד בתפקיד אחד. עמודות: "מזהה תא"
+ *  (מזהה קבוע של התפקיד/תא — כמה שורות עם אותו מזהה מרכיבות תא אחד עם כמה
+ *  אנשים, למשל "הסעים" עם 3 שמות), "הורה" (מזהה התא שמעליו בעץ; ריק=שורש),
+ *  "תפקיד", "קטגוריה" (הנהלה / ילדים וקהילה / תפעול ושירות / ועדת מתנדבים —
+ *  קובעת רק את צבע התיוג בתצוגה, לא הרשאות), "שם" (יכול היה ריק — "תא פנוי"),
+ *  "מזהה תושב" (אופציונלי — "מזהה קבוע" מטאב תושבים, כשהשם נבחר מרשימת
+ *  התושבים ולא הוקלד חופשי, בדיוק כמו שדה "רוכש/מטפל" בטופס ההוצאה).
+ *  אין עמודת "סדר" נפרדת — סדר התצוגה נגזר מסדר השורות בגיליון עצמו.
+ * ========================================================================== */
+var COMMITTEE_SHEET = 'עץ ועד השיכון';
+var COMMITTEE_HEADERS = ['מזהה תא', 'הורה', 'תפקיד', 'קטגוריה', 'שם', 'מזהה תושב'];
+
+/** הרכב הוועד תשפ"ז כברירת מחדל בפתיחה ראשונה, מתומלל מהתרשים שיועד סיפק.
+ * שים לב: הרמות העמוקות (מתחת ל"יו"ר שיכון") תומללו ידנית מתמונה ועלולות
+ * להכיל טעויות קישור הורה/תא — קל לתקן ישירות במסך "ועד השיכון" (עריכה
+ * מלאה, מנהל-על). [boxId, parentId, role, category, name] */
+function committeeSeed_() {
+  return [
+    ['n1', '', 'מב"ס 30', 'הנהלה', 'יגאל דדון'],
+    ['n2', 'n1', 'סמב"ס 30', 'הנהלה', 'אורן מרקברייט'],
+    ['n3', 'n2', 'יו"ר שיכון', 'הנהלה', 'ברנע'],
+    ['n4', 'n3', 'גזבר', 'הנהלה', 'יועד גולן'],
+    ['n5', 'n3', 'יו"ר גנים', 'הנהלה', 'רז פרינץ'],
+    ['n6', 'n3', 'קהילה', 'הנהלה', 'שיינא סלוטין'],
+    ['n7', 'n3', 'מועדון ילדים, צהרון ומכולה', 'הנהלה', 'מורן ממן'],
+    ['n8', 'n3', 'בטיחות ותברואה', 'הנהלה', 'ביני ירס'],
+    ['n9', 'n3', 'פרויקטים ובינוי', 'הנהלה', 'יוסף אלון'],
+    ['n10', 'n3', 'תרבות', 'הנהלה', 'עדי קוסטרצוב'],
+    ['n11', 'n3', 'אכלוס', 'הנהלה', 'ליאת פטיטו מן'],
+    ['n12', 'n3', 'מראה שיכון', 'הנהלה', 'דין ארגיל'],
+    ['n13', 'n3', 'בתי ספר', 'הנהלה', 'זוהר פרבר'],
+    ['n14', 'n4', 'מועדון משפחות', 'ילדים וקהילה', 'משי אלקובי'],
+    ['n15', 'n5', 'מנהלת חינוך', 'תפעול ושירות', 'זהבית'],
+    ['n16', 'n5', 'מועצה', 'ילדים וקהילה', 'אבירם כהן'],
+    ['n17', 'n6', 'א. חוגים', 'הנהלה', 'עמית פרי'],
+    ['n18', 'n6', 'ועדת קהילה', 'ועדת מתנדבים', ''],
+    ['n19', 'n7', 'חד"כ', 'ילדים וקהילה', 'WEWORK'],
+    ['n20', 'n7', 'מועדון נוער', 'הנהלה', 'אבירם כהן'],
+    ['n20', 'n7', 'מועדון נוער', 'הנהלה', 'אורטל כהן'],
+    ['n21', 'n10', 'ועדת תרבות', 'ועדת מתנדבים', ''],
+    ['n22', 'n11', 'פרט וחוסן', 'תפעול ושירות', 'ניי ברוש'],
+    ['n23', 'n12', 'קבלן גינון ונקיון', 'תפעול ושירות', 'אביתר'],
+    ['n24', 'n13', 'הסעים', 'הנהלה', 'דוד טייב'],
+    ['n24', 'n13', 'הסעים', 'הנהלה', 'רוני קוטאי (גן רווה)'],
+    ['n24', 'n13', 'הסעים', 'הנהלה', 'אורטל כהן (עמיחי)'],
+    ['n25', 'n17', 'מדריכי חוגים', 'תפעול ושירות', ''],
+    ['n26', 'n19', 'מכולת היופי', 'ילדים וקהילה', ''],
+    ['n27', 'n22', 'ועדת פרט וחוסן', 'ועדת מתנדבים', ''],
+    ['n28', 'n26', 'מועדון ילדים', 'ילדים וקהילה', ''],
+    ['n29', 'n28', 'מפעיל מועדון וצהרון', 'תפעול ושירות', '']
+  ].map(function (r) { return [r[0], r[1], r[2], r[3], r[4], '']; });
+}
+
+/** יוצר את טאב עץ הוועד עם הכותרות + הרכב תשפ"ז כברירת מחדל — רק אם הטאב
+ * עוד לא קיים בכלל. אידמפוטנטי: אם הטאב כבר קיים (כולל אחרי שיועד ערך אותו
+ * במסך או ידנית בגיליון), הפונקציה לא נוגעת בתוכן, רק מחזירה אותו. */
+function ensureCommitteeSheet_(ss) {
+  var sh = ss.getSheetByName(COMMITTEE_SHEET);
+  if (sh) return sh;
+  sh = ss.insertSheet(COMMITTEE_SHEET);
+  sh.getRange(1, 1, 1, COMMITTEE_HEADERS.length).setValues([COMMITTEE_HEADERS]);
+  sh.getRange(1, 1, 1, COMMITTEE_HEADERS.length).setFontWeight('bold');
+  var seed = committeeSeed_();
+  sh.getRange(2, 1, seed.length, COMMITTEE_HEADERS.length).setValues(seed);
+  sh.setFrozenRows(1);
+  return sh;
+}
+
+/** קריאה — פתוחה לכל תושב מחובר ופעיל (need=null), בדיוק כמו communityDirectory
+ * למעלה. יוצרת את הטאב אוטומטית בפעם הראשונה (ensureCommitteeSheet_) כדי
+ * שיועד לא יצטרך להכין טאב/עמודות ידנית בגיליון. */
+function handleCommitteeTree_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    ensureCommitteeSheet_(ss);
+    return json_({ ok: true, rows: readTable_(ss, COMMITTEE_SHEET) });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** שמירה — מנהל-על בלבד (נאכף ב-ACTION_PERMS, לא כאן). מוחקת את כל שורות
+ * הנתונים הקיימות וכותבת מחדש את כל הרשימה שהתקבלה מהלקוח: העץ נערך במסך
+ * כמקשה אחת (הוספת/הסרת תא, שינוי הורה) ולא שורה-שורה, כך שהחלפה מלאה
+ * פשוטה וחסינה יותר מניסיון "לפזל" שינויים חלקיים. נעילה כדי שתי שמירות
+ * לא יתנגשו זו בזו (אותו דפוס כמו saveBudget_/renameCategory_ למעלה). */
+function saveCommitteeTree_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ensureCommitteeSheet_(ss);
+    var rows = Array.isArray(body.rows) ? body.rows : [];
+    var last = sh.getLastRow();
+    if (last > 1) sh.getRange(2, 1, last - 1, COMMITTEE_HEADERS.length).clearContent();
+    if (rows.length) {
+      var grid = rows.map(function (r) {
+        return COMMITTEE_HEADERS.map(function (h) { return (r[h] == null) ? '' : r[h]; });
+      });
+      sh.getRange(2, 1, grid.length, COMMITTEE_HEADERS.length).setValues(grid);
+    }
+    return { ok: true, count: rows.length };
+  } finally {
+    lock.releaseLock();
   }
 }
 

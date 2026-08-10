@@ -100,6 +100,13 @@ CBA.mock = (function () {
   tx.filter(function (t) { return t.status === "submitted" && t.source === "resident"; })
     .forEach(function (t) { t.receiptUrl = "#receipt-" + t.id; });
 
+  // עותק עצמאי (לא רפרנס משותף) של רשימת הקבוצות — לשימוש כברירת מחדל של כל
+  // שנת דמו. כל שנה מקבלת מערך עצמאי משלה (אובייקטים עצמם משוכפלים, לא רק
+  // המערך) כדי ששינוי בקבוצה של שנה אחת לעולם לא ישפיע על שנה אחרת (סעיף 3,
+  // 2026-08-09 — קבוצות פר-שנה. עד עכשיו groups היה משותף לכל השנים בכוונה;
+  // יועד ביקש לשנות את זה).
+  function cloneGroups() { return groups.map(function (g) { return Object.assign({}, g); }); }
+
   // --- מאגר השנים ---
   const years = {
     'תשפ"ו': {
@@ -107,19 +114,20 @@ CBA.mock = (function () {
       categories: catsFor(plans_86),
       transactions: tx,
       budget: { phase: "locked", lockedAt: "2025-09-01", baseline: null },
-      notes: { content: "", editedBy: "", editedAt: "" }
+      notes: { content: "", editedBy: "", editedAt: "" },
+      groups: cloneGroups()
     },
     'תשפ"ז': {
       income: income(790, 100000, 5000),
       categories: catsFor(plans_87),
       transactions: [],
       budget: { phase: "draft", lockedAt: null, baseline: null },
-      notes: { content: "", editedBy: "", editedAt: "" }
+      notes: { content: "", editedBy: "", editedAt: "" },
+      groups: cloneGroups()
     }
   };
 
   return {
-    groups: groups,
     years: years,
     yearList: ['תשפ"ו', 'תשפ"ז'],
     currentYear: 'תשפ"ו',
@@ -130,9 +138,11 @@ CBA.mock = (function () {
   };
 })();
 
-/* תכונות גישה (accessor) — categories/income/transactions/budget/notes של השנה
-   הנוכחית. בזכותן שכבת הנתונים והמסכים לא צריכים לדעת בכלל שיש כמה שנים. */
-["categories", "income", "transactions", "budget", "notes"].forEach(function (k) {
+/* תכונות גישה (accessor) — categories/income/transactions/budget/notes/groups
+   של השנה הנוכחית. בזכותן שכבת הנתונים והמסכים לא צריכים לדעת בכלל שיש כמה
+   שנים. groups הצטרפה לרשימה בסעיף 3 (2026-08-09) — עד אז הייתה property
+   שטוחה ומשותפת לכל השנים; ר' ההסבר ליד cloneGroups למעלה. */
+["categories", "income", "transactions", "budget", "notes", "groups"].forEach(function (k) {
   Object.defineProperty(CBA.mock, k, {
     get: function () { return CBA.mock.years[CBA.mock.currentYear][k]; },
     set: function (v) { CBA.mock.years[CBA.mock.currentYear][k] = v; },

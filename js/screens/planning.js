@@ -31,8 +31,8 @@ CBA.screens.planning = {
           <div class="plan-group__head">
             <input class="txt-input txt-input--group" data-group-name="${CBA.esc(g.id)}" value="${CBA.esc(g.name)}">
             <span class="plan-group__sub" id="pg-${planKey(g.id)}"></span>
-            <button class="mini-move" data-move-group="up" data-group="${CBA.esc(g.id)}" title="הזז קבוצה למעלה"${gi === 0 ? " disabled" : ""}>▲</button>
-            <button class="mini-move" data-move-group="down" data-group="${CBA.esc(g.id)}" title="הזז קבוצה למטה"${gi === groups.length - 1 ? " disabled" : ""}>▼</button>
+            <button class="mini-move" data-move-group="up" data-group="${CBA.esc(g.id)}" title="הזז קבוצה ימינה"${gi === 0 ? " disabled" : ""}>→</button>
+            <button class="mini-move" data-move-group="down" data-group="${CBA.esc(g.id)}" title="הזז קבוצה שמאלה"${gi === groups.length - 1 ? " disabled" : ""}>←</button>
             <button class="mini-x" data-remove-group="${CBA.esc(g.id)}" title="הסר קבוצה">×</button>
           </div>
           ${rows.map(function (c) {
@@ -696,10 +696,6 @@ function planOpenCustomModal(container, catId) {
     return `<div class="month-field"><label>${lab}</label>
       <input class="num-input" type="number" data-month="${i}" value="${c.dist.monthly[i] || 0}"></div>`;
   }).join("");
-  // (2026-08-09) שדות הטופס משתמשים ב-catId (מזהה יציב) כדי לאתר את הסעיף
-  // מחדש בכל שינוי, במקום להסתמך על ה-c שנתפס פה למעלה — כדי שגם אם רענון
-  // רקע מחליף את מערך הסעיפים בזמן שהמודל פתוח (מקרה קצה נדיר), העריכה
-  // תמצא ותעדכן את האובייקט הנכון והעדכני, לא רפרנס "יתום" מהעבר.
 
   const overlay = document.createElement("div");
   overlay.id = "cba-modal";
@@ -726,12 +722,8 @@ function planOpenCustomModal(container, catId) {
   overlay.querySelectorAll("[data-modal-close]").forEach(function (el) { el.addEventListener("click", planCloseModal); });
   overlay.querySelectorAll("[data-month]").forEach(function (inp) {
     inp.addEventListener("input", function () {
-      // איתור מחדש לפי catId (ר' הערה למעלה) — לא סומכים על ה-c שנתפס בפתיחת המודל
-      const cNow = findCat(catId);
-      if (!cNow) return;
-      if (!cNow.dist.monthly) cNow.dist.monthly = planEqualArray(cNow);
-      cNow.dist.monthly[parseInt(inp.dataset.month, 10)] = planNum(inp.value);
-      planUpdateSum(cNow);
+      c.dist.monthly[parseInt(inp.dataset.month, 10)] = planNum(inp.value);
+      planUpdateSum(c);
     });
     // שמירה לגיליון בסיום עריכת חודש (יציאה מהשדה)
     inp.addEventListener("change", function () { planSave(); });
