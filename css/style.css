@@ -979,14 +979,13 @@ body[data-screen="planning"] .year-switch__add {
 
 /* פירוט ומימון — שורה נפרדת לכל פריט/מקור. הפירוט (אם קיים) מוצג ראשון
    ובולט יותר מהמימון: גופן גדול יותר, כהה יותר, מודגש יותר (משוב יועד). */
-.present-card__section { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
-.present-card__section + .present-card__section { padding-top: 5px; border-top: 1px dashed var(--border); }
+.present-card__section { margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 3px; }
 .present-card__item-row,
 .present-card__fund-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .present-card__item-name,
 .present-card__item-amount { font-size: 18px; color: var(--text); }
-.present-card__item-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.present-card__item-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.present-card__item-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.present-card__item-amount { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
 .present-card__fund-name,
 .present-card__fund-amount { font-size: 16.5px; color: var(--text-soft); }
 .present-card__fund-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
