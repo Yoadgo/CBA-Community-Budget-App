@@ -89,7 +89,12 @@
     // ניהול עץ הוועד — מנהל-על בלבד (2026-08-10, לבקשת יועד: "הניהול עץ
     // צריך להיות רק באזור ניהול למי שיש הרשאות מנהל על"). התצוגה-לקריאה
     // המקבילה (resCommittee, אזור תושב) פתוחה לכל תושב וללא הרשאה כאן.
-    committeeAdmin: PERM.SUPER
+    committeeAdmin: PERM.SUPER,
+    // ניהול מיילים (שלב 1, 2026-08-18) — פתוח לכל מנהל (הרשאה כלשהי), לא
+    // הרשאה ספציפית אחת: המסך עצמו מסנן פנימה לפי מה שהשרת מחזיר (מנהל-על
+    // רואה הכול, מנהל תחום רואה/עורך רק את התחום שלו — ר' handleListEmailSettings_).
+    // הערך 'ANY' מטופל במיוחד ב-canScreen למטה.
+    emailSettings: "ANY"
   };
 
   function myPerms() {
@@ -101,12 +106,15 @@
   }
   function isSuper() { return myPerms().indexOf(PERM.SUPER) !== -1; }
   function can(perm) { return !perm || isSuper() || myPerms().indexOf(perm) !== -1; }
-  function canScreen(name) { return !SCREEN_PERM[name] || can(SCREEN_PERM[name]); }
   // האם יש למשתמש בכלל דריסת רגל באזור הניהול
   function hasAnyAdmin() {
     return isSuper() || [PERM.BUDGET, PERM.CLUB, PERM.RESIDENTS].some(function (p) {
       return myPerms().indexOf(p) !== -1;
     });
+  }
+  function canScreen(name) {
+    if (SCREEN_PERM[name] === "ANY") return hasAnyAdmin();
+    return !SCREEN_PERM[name] || can(SCREEN_PERM[name]);
   }
   // תיאור ההרשאה להצגה בתפריט המשתמש
   function myRoleLabel() {
@@ -121,7 +129,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "residents", "committeeAdmin", "settings"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "residents", "committeeAdmin", "emailSettings", "settings"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -131,7 +139,8 @@
       // יושבת באזור התושב (resCommittee) ופתוחה לכולם, ר' AREAS_ALL.resident למטה.
       tabs: [
         { group: "taktziv", label: "תקציב", items: [["budget", "תכנון מול ביצוע"], ["expenses", "ניהול הוצאות"], ["planning", "בניית תקציב"]] },
-        ["clubAdmin", "שריון מועדון"], ["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"]
+        ["clubAdmin", "שריון מועדון"], ["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"],
+        ["emailSettings", "ניהול מיילים"]
       ]
     },
     resident: {
@@ -188,6 +197,8 @@
     // ניהול "ועד השיכון" באזור הניהול — אותו אייקון בדיוק כמו resCommittee
     // (אזור התושב), כי זה אותו נושא/עץ, רק צד קריאה מול צד ניהול.
     committeeAdmin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.1"/><circle cx="5.5" cy="18" r="2.1"/><circle cx="18.5" cy="18" r="2.1"/><path d="M12 7.1V11M12 11 5.5 15.9M12 11l6.5 4.9"/></svg>',
+    // ניהול מיילים (שלב 1, 2026-08-18) — אייקון מעטפה
+    emailSettings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></svg>',
     resRequests: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6h9M11 12h9M11 18h9"/><path d="M4 6l1.3 1.3L7 4.7M4 12l1.3 1.3L7 10.7M4 18l1.3 1.3L7 16.7"/></svg>',
     resSubmit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
     resReserve:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',

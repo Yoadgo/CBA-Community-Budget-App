@@ -1215,7 +1215,13 @@ CBA.data = (function () {
     getBaselinePlan: getBaselinePlan,
     getBudgetUpdates: getBudgetUpdates,
     getBudgetUpdateLog: getBudgetUpdateLog,
-    logBudgetUpdate: logBudgetUpdate
+    logBudgetUpdate: logBudgetUpdate,
+    // ניהול מיילים (שלב 1, 2026-08-18) — ר' emailSettings.js. listEmailSettings
+    // כבר מגיע מסונן מהשרת לפי הרשאת המבקש (מנהל תחום רואה רק את התחום שלו).
+    listEmailSettings: function (cb) { CBA.sheets.get({ action: "listEmailSettings" }, cb); },
+    saveEmailSetting: function (key, fields, cb) {
+      CBA.sheets.postRead("saveEmailSetting", { key: key, fields: fields }, cb);
+    }
   };
 })();
 

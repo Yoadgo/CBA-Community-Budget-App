@@ -84,7 +84,10 @@ var ACTION_PERMS = {
   saveCommitteeTree: PERM_SUPER,
   // קטגוריות עץ הוועד (2026-08-10) — אותו היגיון בדיוק: קריאה פתוחה לכולם,
   // הוספת/שינוי קטגוריה וצבע מוגבלים למנהל-על.
-  saveCommitteeCategories: PERM_SUPER
+  saveCommitteeCategories: PERM_SUPER,
+  // ניהול מיילים (שלב 1, 2026-08-18) — פתוח לכל מנהל (הרשאה כלשהי), הבדיקה
+  // המדויקת של "תחום" השורה הספציפית נעשית בתוך saveEmailSetting_ עצמה.
+  saveEmailSetting: PERM_ANY_ADMIN
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -289,6 +292,11 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'committeeCategories') {
       return handleCommitteeCategories_(e.parameter);
     }
+    // מסך "ניהול מיילים" (שלב 1, 2026-08-18) — קריאה בלבד ב-doGet, כמו clubList/
+    // getResidents; הכתיבה (saveEmailSetting) עוברת ב-doPost הרגיל, ר' ACTION_PERMS.
+    if (e && e.parameter && e.parameter.action === 'listEmailSettings') {
+      return handleListEmailSettings_(e.parameter);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var years = [];
     ss.getSheets().forEach(function (sh) {
@@ -381,6 +389,7 @@ function doPost(e) {
       case 'exportResidents':   return json_(exportResidents_(ss, body));
       case 'createResidents':   return json_(createResidents_(ss, body));
       case 'scanReceipt':       return json_(handleScanReceipt_(ss, body));
+      case 'saveEmailSetting':  return json_(saveEmailSetting_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -661,7 +670,11 @@ function handleReserveClub_(p) {
     // חותמת זמן הבקשה (2026-08-09) — משמשת לתזכורת "ממתין כבר X ימים" למנהל המועדון.
     ev.setTag('requestedAt', String(Date.now()));
     try {
-      notifyAdmins_(ss, PERM_CLUB, 'ADMIN_NEW_CLUB', {
+      // תיקון (2026-08-18): ss לא היה מוגדר בפונקציה הזו בכלל — הקריאה הייתה
+      // נכשלת בשקט (ReferenceError, נבלע ע"י ה-try/catch) ואף מייל לא נשלח.
+      // זה קרוב לוודאי הגורם למה שיועד דיווח ("שריון מועדון לא שלח מייל").
+      var ssForMail = SpreadsheetApp.getActiveSpreadsheet();
+      notifyAdmins_(ssForMail, PERM_CLUB, 'ADMIN_NEW_CLUB', {
         'שם': p.family || p.email || 'תושב',
         'תאריך': Utilities.formatDate(startDt, Session.getScriptTimeZone(), 'dd/MM/yyyy'),
         'שעה': p.start + '–' + p.end, 'קישור': CBA_APP_URL
@@ -3187,82 +3200,115 @@ var CBA_APP_URL = 'https://yoadgo.github.io/CBA-Community-Budget-App/';
 
 /** ברירות מחדל — נכתבות לגיליון "הגדרות מיילים" רק בפעם הראשונה (או אם נוסף
  * מפתח חדש בעדכון קוד עתידי) — לעולם לא דורסות ערך שיועד כבר ערך ידנית בגיליון.
- * כל שורה: [מפתח, נושא, תוכן, הערה]. מפתחות RULE_* הם ערכי הגדרה (זמן/סף), לא
- * תבניות מייל — הערך שלהם יושב בעמודת "תוכן", ועמודת "נושא" נשארת ריקה.
- * placeholders בתבניות (למשל {{שם}}) מוחלפים בפועל בערכים אמיתיים ע"י renderTemplate_. */
+ * כל שורה: [מפתח, נושא, תוכן, הערה, תחום, פעיל]. מפתחות RULE_* ו-MASTER_ENABLED
+ * הם ערכי הגדרה (זמן/סף/מתג), לא תבניות מייל — הערך שלהם יושב בעמודת "תוכן"
+ * (או ב"פעיל" עבור MASTER_ENABLED), ועמודת "נושא" נשארת ריקה.
+ * placeholders בתבניות (למשל {{שם}}) מוחלפים בפועל בערכים אמיתיים ע"י renderTemplate_.
+ * "תחום" (2026-08-18, שלב 1 מסך ניהול מיילים): אחת מ-PERM_SUPER/BUDGET/CLUB/RESIDENTS
+ * — קובעת איזה מנהל רשאי לראות/לערוך את השורה במסך "ניהול מיילים" (מנהל-על
+ * רואה/עורך הכול תמיד). כללים גלובליים (RULE_*, MASTER_ENABLED) והסיכום השבועי
+ * (חוצה-מידורים) שייכים ל-PERM_SUPER בלבד. "פעיל": 'כן'/'לא' — האם התבנית הזו
+ * (או, עבור MASTER_ENABLED, כל שליחת המיילים באפליקציה) פעילה כרגע. */
 var DEFAULT_EMAIL_SETTINGS = [
-  ['RULE_STALE_DAYS', '', '3', 'כמה ימים בקשה (הרשמה/החזר/שריון) ממתינה בלי טיפול לפני שנשלחת תזכורת למנהל'],
-  ['RULE_WEEKLY_DAY', '', '0', 'יום השבוע לסיכום המנהל השבועי: 0=ראשון, 1=שני ... 6=שבת'],
-  ['RULE_MONTHLY_DAY', '', '17', 'יום בחודש לסיכום בקשות ההחזר הפתוחות (לפני סגירת החלון ב-19)'],
-  ['RULE_CLUB_REMINDER_DAYS_BEFORE', '', '2', 'כמה ימים לפני מועד השריון נשלחת תזכורת חוקים+תשלום לתושב'],
+  ['MASTER_ENABLED', '', '', 'מתג ראשי — כיבוי מכבה את כל שליחת המיילים האוטומטית באפליקציה (כולל התזכורות והסיכומים היומיים), בלי לשנות אף הגדרה אחרת. שימושי לבדיקות/חגים.', PERM_SUPER, 'כן'],
+
+  ['RULE_STALE_DAYS', '', '3', 'כמה ימים בקשה (הרשמה/החזר/שריון) ממתינה בלי טיפול לפני שנשלחת תזכורת למנהל', PERM_SUPER, 'כן'],
+  ['RULE_WEEKLY_DAY', '', '0', 'יום השבוע לסיכום המנהל השבועי: 0=ראשון, 1=שני ... 6=שבת', PERM_SUPER, 'כן'],
+  ['RULE_MONTHLY_DAY', '', '17', 'יום בחודש לסיכום בקשות ההחזר הפתוחות (לפני סגירת החלון ב-19)', PERM_SUPER, 'כן'],
+  ['RULE_CLUB_REMINDER_DAYS_BEFORE', '', '2', 'כמה ימים לפני מועד השריון נשלחת תזכורת חוקים+תשלום לתושב', PERM_SUPER, 'כן'],
 
   ['SIGNUP_RECEIVED', 'קיבלנו את בקשת ההרשמה שלך',
-    'שלום {{שם}},\n\nבקשת ההרשמה שלך לוועד הקהילה התקבלה ונמצאת בבדיקה. נעדכן אותך ברגע שתטופל.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב מיד עם הגשת טופס ההרשמה'],
+    'שלום {{שם}},\n\nבקשת ההרשמה שלך לוועד הקהילה התקבלה ונמצאת בבדיקה. נעדכן אותך ברגע שתטופל.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב מיד עם הגשת טופס ההרשמה', PERM_RESIDENTS, 'כן'],
   ['SIGNUP_APPROVED', 'ברוכים הבאים! ההרשמה שלך אושרה',
-    'שלום {{שם}},\n\nבקשת ההרשמה שלך אושרה ואפשר להיכנס עכשיו לאפליקציה עם חשבון הגוגל שלך — לחצו על הכפתור למטה.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל מאשר הרשמה — משמש גם כמייל ברוכים הבאים. הכפתור לאפליקציה מתווסף אוטומטית בעיצוב, אין צורך לכתוב קישור בטקסט'],
+    'שלום {{שם}},\n\nבקשת ההרשמה שלך אושרה ואפשר להיכנס עכשיו לאפליקציה עם חשבון הגוגל שלך — לחצו על הכפתור למטה.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל מאשר הרשמה — משמש גם כמייל ברוכים הבאים. הכפתור לאפליקציה מתווסף אוטומטית בעיצוב, אין צורך לכתוב קישור בטקסט', PERM_RESIDENTS, 'כן'],
   ['SIGNUP_REJECTED', 'עדכון לגבי בקשת ההרשמה שלך',
-    'שלום {{שם}},\n\nלצערנו בקשת ההרשמה שלך לא אושרה. לשאלות אפשר לפנות לוועד.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל דוחה הרשמה'],
+    'שלום {{שם}},\n\nלצערנו בקשת ההרשמה שלך לא אושרה. לשאלות אפשר לפנות לוועד.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל דוחה הרשמה', PERM_RESIDENTS, 'כן'],
   ['WELCOME_MANUAL', 'ברוכים הבאים לאפליקציית הוועד',
-    'שלום,\n\nנפתחה עבורך גישה לאפליקציית ניהול התקציב של הוועד. אפשר להיכנס עם חשבון הגוגל שלך — לחצו על הכפתור למטה.\n\nבברכה,\nועד הקהילה', 'נשלח כשמנהל מוסיף תושב/מייל ידנית (לא דרך טופס הרשמה). הכפתור לאפליקציה מתווסף אוטומטית'],
+    'שלום,\n\nנפתחה עבורך גישה לאפליקציית ניהול התקציב של הוועד. אפשר להיכנס עם חשבון הגוגל שלך — לחצו על הכפתור למטה.\n\nבברכה,\nועד הקהילה', 'נשלח כשמנהל מוסיף תושב/מייל ידנית (לא דרך טופס הרשמה). הכפתור לאפליקציה מתווסף אוטומטית', PERM_RESIDENTS, 'כן'],
 
   ['REIMBURSEMENT_RECEIVED', "קיבלנו את בקשת ההחזר שלך (מס' {{מזהה}})",
-    "שלום {{שם}},\n\nקיבלנו את בקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}). הבקשה ממתינה לטיפול ונעדכן אותך בכל שינוי סטטוס.\n\nבברכה,\nועד הקהילה", 'נשלח לתושב מיד עם הגשת בקשת החזר'],
+    "שלום {{שם}},\n\nקיבלנו את בקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}). הבקשה ממתינה לטיפול ונעדכן אותך בכל שינוי סטטוס.\n\nבברכה,\nועד הקהילה", 'נשלח לתושב מיד עם הגשת בקשת החזר', PERM_BUDGET, 'כן'],
   ['REIMBURSEMENT_READY', 'בקשת ההחזר שלך אושרה ועברה להנהלת חשבונות',
-    "שלום {{שם}},\n\nבקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}) אושרה והועברה להנהלת חשבונות לתשלום.\n\nבברכה,\nועד הקהילה", 'נשלח כשסטטוס הבקשה עובר ל"הועבר להנה"ח"'],
+    "שלום {{שם}},\n\nבקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}) אושרה והועברה להנהלת חשבונות לתשלום.\n\nבברכה,\nועד הקהילה", 'נשלח כשסטטוס הבקשה עובר ל"הועבר להנה"ח"', PERM_BUDGET, 'כן'],
   ['REIMBURSEMENT_PAID', 'בקשת ההחזר שלך שולמה',
-    "שלום {{שם}},\n\nבקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}) שולמה. תודה!\n\nבברכה,\nועד הקהילה", 'נשלח כשסטטוס הבקשה עובר ל"שולם"'],
+    "שלום {{שם}},\n\nבקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}) שולמה. תודה!\n\nבברכה,\nועד הקהילה", 'נשלח כשסטטוס הבקשה עובר ל"שולם"', PERM_BUDGET, 'כן'],
   ['REIMBURSEMENT_REJECTED', 'עדכון לגבי בקשת ההחזר שלך',
-    "שלום {{שם}},\n\nלצערנו בקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}) לא אושרה.{{הערה}}\n\nלשאלות אפשר לפנות לוועד.\n\nבברכה,\nועד הקהילה", 'נשלח כשסטטוס הבקשה עובר ל"נדחה" — {{הערה}} כולל את הערת הבדיקה אם יש'],
+    "שלום {{שם}},\n\nלצערנו בקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}) לא אושרה.{{הערה}}\n\nלשאלות אפשר לפנות לוועד.\n\nבברכה,\nועד הקהילה", 'נשלח כשסטטוס הבקשה עובר ל"נדחה" — {{הערה}} כולל את הערת הבדיקה אם יש', PERM_BUDGET, 'כן'],
 
   ['CLUB_APPROVED', 'השריון שלך במועדון אושר',
-    'שלום {{שם}},\n\nהשריון שלך במועדון בתאריך {{תאריך}} בשעות {{שעה}} אושר.\n\nתזכורת: יש להסדיר את תשלום דמי השימוש במועדון מול הוועד.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל מאשר שריון מועדון'],
+    'שלום {{שם}},\n\nהשריון שלך במועדון בתאריך {{תאריך}} בשעות {{שעה}} אושר.\n\nתזכורת: יש להסדיר את תשלום דמי השימוש במועדון מול הוועד.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל מאשר שריון מועדון', PERM_CLUB, 'כן'],
   ['CLUB_REJECTED', 'עדכון לגבי השריון שלך במועדון',
-    'שלום {{שם}},\n\nלצערנו השריון שלך במועדון בתאריך {{תאריך}} בשעות {{שעה}} לא אושר.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל דוחה שריון מועדון'],
+    'שלום {{שם}},\n\nלצערנו השריון שלך במועדון בתאריך {{תאריך}} בשעות {{שעה}} לא אושר.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל דוחה שריון מועדון', PERM_CLUB, 'כן'],
   ['CLUB_REMINDER', 'תזכורת: השריון שלך במועדון בעוד יומיים',
-    'שלום {{שם}},\n\nתזכורת — השריון שלך במועדון מתקרב: {{תאריך}} בשעות {{שעה}}.\n\nנא לוודא שקראת/ן את חוקי המועדון, ושתשלום דמי השימוש הוסדר מול הוועד.\n\nבברכה,\nועד הקהילה', 'נשלח אוטומטית X ימים לפני מועד שריון מאושר (ר\' RULE_CLUB_REMINDER_DAYS_BEFORE)'],
+    'שלום {{שם}},\n\nתזכורת — השריון שלך במועדון מתקרב: {{תאריך}} בשעות {{שעה}}.\n\nנא לוודא שקראת/ן את חוקי המועדון, ושתשלום דמי השימוש הוסדר מול הוועד.\n\nבברכה,\nועד הקהילה', 'נשלח אוטומטית X ימים לפני מועד שריון מאושר (ר\' RULE_CLUB_REMINDER_DAYS_BEFORE)', PERM_CLUB, 'כן'],
 
   ['ADMIN_NEW_SIGNUP', 'בקשת הרשמה חדשה ממתינה',
-    'התקבלה בקשת הרשמה חדשה מ-{{שם}} ({{אימייל}}).', 'למנהלי תושבים + מנהל-על. הכפתור לטיפול באפליקציה מתווסף אוטומטית'],
+    'התקבלה בקשת הרשמה חדשה מ-{{שם}} ({{אימייל}}).', 'למנהלי תושבים + מנהל-על. הכפתור לטיפול באפליקציה מתווסף אוטומטית', PERM_RESIDENTS, 'כן'],
   ['ADMIN_NEW_REIMBURSEMENT', 'בקשת החזר חדשה ממתינה',
-    "התקבלה בקשת החזר חדשה מ-{{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}).", 'למנהלי תקציב + מנהל-על'],
+    "התקבלה בקשת החזר חדשה מ-{{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}).", 'למנהלי תקציב + מנהל-על', PERM_BUDGET, 'כן'],
   ['ADMIN_NEW_CLUB', 'בקשת שריון מועדון חדשה ממתינה',
-    'התקבלה בקשת שריון מועדון חדשה מ-{{שם}} בתאריך {{תאריך}} בשעות {{שעה}}.', 'למנהלי מועדון + מנהל-על'],
+    'התקבלה בקשת שריון מועדון חדשה מ-{{שם}} בתאריך {{תאריך}} בשעות {{שעה}}.', 'למנהלי מועדון + מנהל-על', PERM_CLUB, 'כן'],
 
   ['ADMIN_STALE_SIGNUP', 'בקשת הרשמה ממתינה כבר {{ימים}} ימים',
-    'בקשת ההרשמה של {{שם}} ({{אימייל}}) ממתינה לטיפול כבר {{ימים}} ימים.', 'תזכורת חד-פעמית כשבקשה חוצה את הסף (ר\' RULE_STALE_DAYS)'],
+    'בקשת ההרשמה של {{שם}} ({{אימייל}}) ממתינה לטיפול כבר {{ימים}} ימים.', 'תזכורת חד-פעמית כשבקשה חוצה את הסף (ר\' RULE_STALE_DAYS)', PERM_RESIDENTS, 'כן'],
   ['ADMIN_STALE_REIMBURSEMENT', 'בקשת החזר ממתינה כבר {{ימים}} ימים',
-    "בקשת ההחזר של {{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}) ממתינה לטיפול כבר {{ימים}} ימים.", 'תזכורת חד-פעמית כשבקשה חוצה את הסף'],
+    "בקשת ההחזר של {{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}) ממתינה לטיפול כבר {{ימים}} ימים.", 'תזכורת חד-פעמית כשבקשה חוצה את הסף', PERM_BUDGET, 'כן'],
   ['ADMIN_STALE_CLUB', 'בקשת שריון מועדון ממתינה כבר {{ימים}} ימים',
-    'בקשת השריון של {{שם}} בתאריך {{תאריך}} ממתינה לטיפול כבר {{ימים}} ימים.', 'תזכורת חד-פעמית כשבקשה חוצה את הסף'],
+    'בקשת השריון של {{שם}} בתאריך {{תאריך}} ממתינה לטיפול כבר {{ימים}} ימים.', 'תזכורת חד-פעמית כשבקשה חוצה את הסף', PERM_CLUB, 'כן'],
 
   ['ADMIN_WEEKLY_DIGEST', 'סיכום שבועי — מה פתוח באפליקציית הוועד',
-    'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו'],
+    'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו — חוצה מידורים ולכן שייך למנהל-על', PERM_SUPER, 'כן'],
   ['ADMIN_MONTHLY_DIGEST', 'תזכורת: בקשות החזר פתוחות לפני סגירת החלון ב-19 לחודש',
-    'תזכורת — עוד מעט נסגר חלון ההחזרים החודשי (ה-19 לחודש). הנה כל בקשות ההחזר שעדיין פתוחות:', 'נשלח ביום RULE_MONTHLY_DAY, למנהלי תקציב + מנהל-על בלבד']
+    'תזכורת — עוד מעט נסגר חלון ההחזרים החודשי (ה-19 לחודש). הנה כל בקשות ההחזר שעדיין פתוחות:', 'נשלח ביום RULE_MONTHLY_DAY, למנהלי תקציב + מנהל-על בלבד', PERM_BUDGET, 'כן']
 ];
 
-/** יוצר את גיליון ההגדרות אם אינו קיים, וממלא רק מפתחות חסרים — לא נוגע בערך
- * שכבר קיים. זו התשתית ל"עריכה ממסך מנהל" שיועד ביקש: כרגע העריכה היא ישירות
- * בגיליון הזה; מסך ניהול עתידי באפליקציה יכתוב לאותו גיליון בדיוק, בלי שינוי מבנה. */
+/** יוצר את גיליון ההגדרות אם אינו קיים, וממלא רק מפתחות/עמודות חסרים — לא נוגע
+ * בערך שכבר קיים. זו התשתית ל"עריכה ממסך מנהל" שיועד ביקש: מסך "ניהול מיילים"
+ * באפליקציה (שלב 1, 2026-08-18) קורא/כותב לאותו גיליון בדיוק, בלי שינוי מבנה —
+ * ועדיין אפשר לערוך הכול ישירות בגיליון גם בלי המסך.
+ * מיגרציה (2026-08-18): גיליונות שנוצרו לפני שנוספו העמודות "תחום"/"פעיל"
+ * מקבלים אותן אוטומטית, ורק תאים ריקים מתמלאים בברירת המחדל — עריכה ידנית
+ * קיימת (אם מישהו כבר מילא תחום/פעיל בעצמו) לעולם לא נדרסת. */
 function ensureEmailSettingsSheet_(ss) {
   var sh = ss.getSheetByName(EMAIL_SETTINGS_SHEET);
   if (!sh) {
     sh = ss.insertSheet(EMAIL_SETTINGS_SHEET);
-    sh.getRange(1, 1, 1, 4).setValues([['מפתח', 'נושא', 'תוכן', 'הערה']]);
-    sh.getRange(1, 1, 1, 4).setFontWeight('bold');
+    sh.getRange(1, 1, 1, 6).setValues([['מפתח', 'נושא', 'תוכן', 'הערה', 'תחום', 'פעיל']]);
+    sh.getRange(1, 1, 1, 6).setFontWeight('bold');
     sh.setFrozenRows(1);
     sh.setColumnWidth(1, 220); sh.setColumnWidth(2, 260); sh.setColumnWidth(3, 420); sh.setColumnWidth(4, 300);
+    sh.setColumnWidth(5, 90); sh.setColumnWidth(6, 70);
+  } else if (sh.getLastColumn() < 6) {
+    if (sh.getLastColumn() < 5) sh.getRange(1, 5).setValue('תחום');
+    sh.getRange(1, 6).setValue('פעיל');
+    sh.getRange(1, 1, 1, 6).setFontWeight('bold');
+    sh.setColumnWidth(5, 90); sh.setColumnWidth(6, 70);
   }
+
   var values = sh.getDataRange().getValues();
   var existing = {};
   for (var r = 1; r < values.length; r++) { var k = String(values[r][0]).trim(); if (k) existing[k] = true; }
   var toAdd = DEFAULT_EMAIL_SETTINGS.filter(function (row) { return !existing[row[0]]; });
-  if (toAdd.length) sh.getRange(sh.getLastRow() + 1, 1, toAdd.length, 4).setValues(toAdd);
+  if (toAdd.length) sh.getRange(sh.getLastRow() + 1, 1, toAdd.length, 6).setValues(toAdd);
+
+  // מילוי "תחום"/"פעיל" לשורות ישנות (או לשורה חדשה שמישהו הוסיף ידנית בלי
+  // למלא את שתי העמודות האלה) — נוגע רק בתאים ריקים.
+  var domainByKey = {};
+  DEFAULT_EMAIL_SETTINGS.forEach(function (row) { domainByKey[row[0]] = row[4]; });
+  values = sh.getDataRange().getValues();
+  for (var r2 = 1; r2 < values.length; r2++) {
+    var key2 = String(values[r2][0]).trim();
+    if (!key2) continue;
+    var domainCell = values[r2][4], activeCell = values[r2][5];
+    if (domainCell === '' || domainCell === undefined) sh.getRange(r2 + 1, 5).setValue(domainByKey[key2] || PERM_SUPER);
+    if (activeCell === '' || activeCell === undefined) sh.getRange(r2 + 1, 6).setValue('כן');
+  }
   return sh;
 }
 
-/** קורא את גיליון ההגדרות למפה {מפתח: {subject, body}}. נקרא מחדש מהגיליון בכל
- * הרצה (בלי קאש) כדי שעריכה ידנית של יועד תיכנס לתוקף מיד, בלי לחכות לפריסה. */
+/** קורא את גיליון ההגדרות למפה {מפתח: {subject, body, note, domain, active}}.
+ * נקרא מחדש מהגיליון בכל הרצה (בלי קאש) כדי שעריכה ידנית של יועד — או עריכה
+ * ממסך "ניהול מיילים" — תיכנס לתוקף מיד, בלי לחכות לפריסה. */
 function getEmailSettings_(ss) {
   var sh = ensureEmailSettingsSheet_(ss);
   var values = sh.getDataRange().getValues();
@@ -3270,9 +3316,26 @@ function getEmailSettings_(ss) {
   for (var r = 1; r < values.length; r++) {
     var k = String(values[r][0]).trim();
     if (!k) continue;
-    map[k] = { subject: String(values[r][1] || ''), body: String(values[r][2] || '') };
+    map[k] = {
+      subject: String(values[r][1] || ''), body: String(values[r][2] || ''),
+      note: String(values[r][3] || ''), domain: String(values[r][4] || PERM_SUPER).trim(),
+      active: String(values[r][5] || 'כן').trim() !== 'לא'
+    };
   }
   return map;
+}
+
+/** האם מותר לשלוח מייל לפי מפתח נתון כרגע: המתג הראשי (MASTER_ENABLED) דלוק,
+ * וגם התבנית הספציפית הזו מסומנת פעילה. משמש את כל שלושת ערוצי השליחה
+ * (sendResidentTemplate_/notifyAdmins_/sendDigestBySection_) — כשמושבת, שום
+ * דבר אחר לא נכשל: הפעולה עצמה (שמירת תנועה/אישור שריון וכו') ממשיכה כרגיל,
+ * רק המייל לא נשלח. */
+function emailEnabled_(settings, key) {
+  var master = settings['MASTER_ENABLED'];
+  if (master && master.active === false) return false;
+  var t = settings[key];
+  if (t && t.active === false) return false;
+  return true;
 }
 
 /** ערך חוק בודד (RULE_...) כמספר, עם נפילה לברירת מחדל אם חסר/לא מספרי. */
@@ -3355,7 +3418,9 @@ function sendMail_(toList, subject, plainBody, htmlBody) {
  * אדום (rose) אוטומטית לכל תבנית שהמפתח שלה מסתיים ב-REJECTED, ירוק (emerald)
  * לכל השאר — בלי צורך לסמן את זה ידנית בכל קריאה. */
 function sendResidentTemplate_(ss, key, emails, vars) {
-  var t = getEmailSettings_(ss)[key];
+  var settings = getEmailSettings_(ss);
+  if (!emailEnabled_(settings, key)) return;
+  var t = settings[key];
   if (!t) return;
   var plain = renderTemplate_(t.body, vars);
   var accent = key.indexOf('REJECTED') !== -1 ? 'rose' : 'emerald';
@@ -3431,14 +3496,78 @@ function adminEmailsByPerm_(ss, permKey) {
 
 /** שולח מייל למנהלים לפי תבנית + מידור הרשאה, ללא כפילויות. */
 function notifyAdmins_(ss, permKey, key, vars) {
+  var settings = getEmailSettings_(ss);
+  if (!emailEnabled_(settings, key)) return;
   var emails = adminEmailsByPerm_(ss, permKey);
   if (!emails.length) return;
-  var t = getEmailSettings_(ss)[key];
+  var t = settings[key];
   if (!t) return;
   var plain = renderTemplate_(t.body, vars);
   var linkUrl = (vars && vars['קישור']) || CBA_APP_URL;
   var html = buildEmailHtml_(plain, linkUrl, 'לטיפול באפליקציה', 'neutral');
   sendMail_(emails, renderTemplate_(t.subject, vars), plain + '\n\n' + CBA_APP_URL, html);
+}
+
+/* ============================================================================
+ *  מסך "ניהול מיילים" — שלב 1 (2026-08-18)
+ * ----------------------------------------------------------------------------
+ *  קריאה/עריכה של אותו גיליון "הגדרות מיילים" שהמייל-אנג'ין קורא ממנו ישירות
+ *  (getEmailSettings_) — אין טבלת מקור נוספת, אין קאש, אז שינוי במסך נכנס
+ *  לתוקף באותה שנייה, בדיוק כמו עריכה ידנית בגיליון.
+ *  מידור: מנהל-על רואה/עורך הכול. מנהל תחום (תקציב/מועדון/תושבים) רואה/עורך
+ *  רק שורות ש"תחום" שלהן הוא התחום שלו — שורות "תחום"=מנהל-על (כללים גלובליים,
+ *  המתג הראשי, הסיכום השבועי) מוסתרות ממנו לגמרי, לא רק נעולות לעריכה.
+ * ========================================================================== */
+/** רשימת כל הגדרות המייל שהמבקש רשאי לראות (מסונן לפי הרשאה), למסך "ניהול מיילים". */
+function handleListEmailSettings_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_ANY_ADMIN);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var isSuper = gate.perm.isSuper;
+    var perms = gate.perm.perms || [];
+    var sh = ensureEmailSettingsSheet_(ss);
+    var values = sh.getDataRange().getValues();
+    var rows = [];
+    for (var r = 1; r < values.length; r++) {
+      var key = String(values[r][0]).trim();
+      if (!key) continue;
+      var domain = String(values[r][4] || PERM_SUPER).trim();
+      var canSee = isSuper || (domain !== PERM_SUPER && perms.indexOf(domain) !== -1);
+      if (!canSee) continue;
+      rows.push({
+        key: key, subject: String(values[r][1] || ''), body: String(values[r][2] || ''),
+        note: String(values[r][3] || ''), domain: domain,
+        active: String(values[r][5] || 'כן').trim() !== 'לא'
+      });
+    }
+    return json_({ ok: true, rows: rows, isSuper: isSuper, perms: perms });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** שמירת שדה/שדות של הגדרת מייל בודדת (נושא/תוכן/פעיל), עם בדיקת הרשאה לפי
+ * "תחום" השורה בפועל בגיליון (לא לפי מה שהלקוח טוען) — כדי שמנהל תחום לא יוכל
+ * לערוך שורה של תחום אחר גם אם ניסה לזייף בקשה ידנית. */
+function saveEmailSetting_(ss, body) {
+  var key = String(body.key || '').trim();
+  if (!key) return { ok: false, error: 'חסר מפתח' };
+  var sh = ensureEmailSettingsSheet_(ss);
+  var values = sh.getDataRange().getValues();
+  var rowIdx = -1, domain = PERM_SUPER;
+  for (var r = 1; r < values.length; r++) {
+    if (String(values[r][0]).trim() === key) { rowIdx = r + 1; domain = String(values[r][4] || PERM_SUPER).trim(); break; }
+  }
+  if (rowIdx === -1) return { ok: false, error: 'מפתח לא נמצא: ' + key };
+  var perm = body._perm || {};
+  var allowed = perm.isSuper || (domain !== PERM_SUPER && (perm.perms || []).indexOf(domain) !== -1);
+  if (!allowed) return { ok: false, error: 'אין לך הרשאה לערוך הגדרה זו' };
+  var fields = body.fields || {};
+  if (fields.subject !== undefined) sh.getRange(rowIdx, 2).setValue(String(fields.subject));
+  if (fields.body !== undefined) sh.getRange(rowIdx, 3).setValue(String(fields.body));
+  if (fields.active !== undefined) sh.getRange(rowIdx, 6).setValue(fields.active ? 'כן' : 'לא');
+  return { ok: true };
 }
 
 /* ============================================================================
@@ -3618,7 +3747,9 @@ function collectOpenItems_(ss) {
 /** שולח דוח מרוכז (שבועי/חודשי) — כל מנהל מקבל רק את הסעיפים שבהרשאתו, מנהל-על
  * מקבל את כל הסעיפים שבדוח הזה, ואף אחד לא מקבל שני מיילים גם אם הוא בכמה מידורים. */
 function sendDigestBySection_(ss, subjectKey, sections, includeKeys) {
-  var t = getEmailSettings_(ss)[subjectKey];
+  var settings = getEmailSettings_(ss);
+  if (!emailEnabled_(settings, subjectKey)) return;
+  var t = settings[subjectKey];
   if (!t) return;
   var recipients = {}; // email -> { residents:bool, budget:bool, club:bool }
   function addAll_(permKey, flagKey) {
