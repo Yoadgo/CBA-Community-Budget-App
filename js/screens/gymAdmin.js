@@ -75,11 +75,70 @@ CBA.screens = CBA.screens || {};
                  ? ""
                  : '<button type="button" class="btn-ghost" data-ga-declare="' + CBA.esc(m["מזהה"] || "") +
                    '">בקשת הצהרה</button>') +
+               (status === "פעיל" || status === "פג תוקף"
+                 ? '<button type="button" class="btn-ghost" data-ga-extend="' + CBA.esc(m["מזהה"] || "") +
+                   '" data-ga-months="' + CBA.esc(String(m["מסלול"] || "")) + '">הארכה</button>'
+                 : "") +
+               (status === "ממתין לתשלום"
+                 ? '<button type="button" class="btn-ghost" data-ga-cash="' + CBA.esc(m["מזהה"] || "") +
+                   '" data-ga-price="' + CBA.esc(String(m["מחיר מוסכם"] || "")) + '">רישום תשלום ידני</button>'
+                 : "") +
+               (m["מצב סנכרון"] && m["מצב סנכרון"] !== "מסונכרן"
+                 ? '<span class="gym-pill gym-pill--warn">' + CBA.esc(m["מצב סנכרון"]) + "</span>"
+                 : "") +
              "</div>" +
            "</div>";
   }
 
   function bindMemberActions(root, reload) {
+    // הארכה — זמינה תמיד, גם בלי תשלום חדש. אם היא יוצרת פער מול מה ששולם,
+    // מוצגת התראה **אחרי** הפעולה. אף פעם לא חוסמים, זו דרישה מפורשת.
+    root.querySelectorAll("[data-ga-extend]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.gaExtend;
+        var until = window.prompt("עד איזה חודש להאריך? (בפורמט YYYY-MM, למשל 2027-02)", defaultValidUntil(planMonthsFor(btn.dataset.gaMonths)));
+        if (!until) return;
+        if (!/^\d{4}-\d{2}$/.test(until)) { window.alert("פורמט לא תקין. צריך YYYY-MM, למשל 2027-02."); return; }
+        var reason = window.prompt("סיבת ההארכה (נרשמת ביומן):", "") || "";
+        btn.disabled = true;
+        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymAdminAction");
+        CBA.data.extendGymMembership({ id: id, validUntil: until, reason: reason }, function (res) {
+          if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymAdminAction");
+          if (!res || !res.ok) { btn.disabled = false; window.alert((res && res.error) || "ההארכה נכשלה."); return; }
+          var sync = res.sync || {};
+          if (sync.label && sync.label !== "מסונכרן") {
+            window.alert("המנוי הוארך עד " + res.validUntil + ".\n\nשים לב: " + sync.label + " מול מה ששולם.");
+          }
+          reload();
+        });
+      });
+    });
+
+    // רישום תשלום ידני — למי ששילם במזומן או מחוץ לאפליקציה. מפעיל את המנוי
+    // באותו מסלול בדיוק כמו אימות רגיל (gymActivate_ בשרת).
+    root.querySelectorAll("[data-ga-cash]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.gaCash;
+        var amount = window.prompt("איזה סכום התקבל? (₪)", btn.dataset.gaPrice || "");
+        if (!amount) return;
+        var until = window.prompt("עד איזה חודש המנוי בתוקף? (YYYY-MM)", defaultValidUntil(6));
+        if (!until) return;
+        if (!/^\d{4}-\d{2}$/.test(until)) { window.alert("פורמט לא תקין. צריך YYYY-MM."); return; }
+        var method = window.prompt("אמצעי תשלום:", "מזומן") || "מזומן";
+        btn.disabled = true;
+        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymAdminAction");
+        CBA.data.recordGymPayment({ id: id, amount: Number(amount), validUntil: until, method: method },
+          function (res) {
+            if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymAdminAction");
+            if (!res || !res.ok) { btn.disabled = false; window.alert((res && res.error) || "הרישום נכשל."); return; }
+            var sync = res.sync || {};
+            window.alert("המנוי הופעל, בתוקף עד " + res.validUntil +
+              (sync.label && sync.label !== "מסונכרן" ? "\n\nשים לב: " + sync.label + " מול מה ששולם." : ""));
+            reload();
+          });
+      });
+    });
+
     root.querySelectorAll("[data-ga-declare]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.dataset.gaDeclare;
@@ -95,6 +154,95 @@ CBA.screens = CBA.screens || {};
             window.alert((res && res.error) || "השליחה נכשלה.");
             return;
           }
+          reload();
+        });
+      });
+    });
+  }
+
+  /* ---------- ממתינים לאימות תשלום ----------
+     כאן נקבעים התאריכים. ברירת המחדל של "בתוקף עד" מחושבת לפי אורך המסלול,
+     אבל היא **הצעה בלבד** — מנהל/ת המכון קובע/ת בפועל, וזו הייתה דרישה
+     מפורשת של יועד. המערכת מודדת ומתריעה, לא חוסמת. */
+  function defaultValidUntil(months) {
+    var d = new Date();
+    d.setMonth(d.getMonth() + (Number(months) || 6) - 1);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  }
+
+  function planMonthsFor(planName) {
+    var plans = (gaLast && gaLast.plans) || [];
+    for (var i = 0; i < plans.length; i++) if (plans[i].name === planName) return plans[i].months;
+    return (plans[0] && plans[0].months) || 6;
+  }
+
+  function verifyRowHTML(m) {
+    var id = m["מזהה"] || "";
+    var name = ((m["שם פרטי"] || "") + " " + (m["שם משפחה"] || "")).trim() || m["אימייל"] || "";
+    var expected = m["מחיר מוסכם"] || "";
+    var proof = m["קישור אישור"] || "";
+    return '<div class="gym-verify" data-gv-row="' + CBA.esc(id) + '">' +
+             '<div class="gym-verify__head">' +
+               '<div class="gym-row__name">' + CBA.esc(name) + "</div>" +
+               '<div class="gym-row__meta">' +
+                 CBA.esc(m["מסלול"] || "") + " · מחיר מוסכם " + CBA.esc(expected) + " ₪" +
+                 (m["דווח בתאריך"] ? " · דווח " + CBA.esc(m["דווח בתאריך"]) : "") +
+               "</div>" +
+               '<div class="gym-row__meta">' +
+                 "אמצעי: " + CBA.esc(m["אמצעי תשלום"] || "—") +
+                 " · אסמכתא: " + CBA.esc(m["אסמכתא"] || "—") +
+                 (proof ? ' · <a href="' + CBA.esc(proof) + '" target="_blank" rel="noopener">צפייה בצילום</a>' : "") +
+               "</div>" +
+             "</div>" +
+             '<div class="gym-verify__form">' +
+               '<label>סכום שהתקבל<input type="number" data-gv="amount" value="' + CBA.esc(expected) + '"></label>' +
+               '<label>בתוקף עד חודש<input type="month" data-gv="validUntil" value="' +
+                 CBA.esc(defaultValidUntil(planMonthsFor(m["מסלול"]))) + '"></label>' +
+             "</div>" +
+             '<div class="gym-verify__actions">' +
+               '<button type="button" class="btn-primary" data-gv-confirm>אימות והפעלה</button>' +
+               '<button type="button" class="btn-ghost" data-gv-reject>לא נמצא תשלום</button>' +
+             "</div>" +
+           "</div>";
+  }
+
+  function bindVerifyActions(root, reload) {
+    root.querySelectorAll("[data-gv-row]").forEach(function (box) {
+      var id = box.dataset.gvRow;
+      function val(k) { var n = box.querySelector('[data-gv="' + k + '"]'); return n ? n.value : ""; }
+
+      box.querySelector("[data-gv-confirm]").addEventListener("click", function () {
+        var amount = Number(val("amount"));
+        var validUntil = val("validUntil");
+        if (!amount) { window.alert("צריך להזין את הסכום שהתקבל."); return; }
+        if (!validUntil) { window.alert("צריך לבחור עד איזה חודש המנוי בתוקף."); return; }
+        var btn = box.querySelector("[data-gv-confirm]");
+        btn.disabled = true; btn.textContent = "מפעיל…";
+        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymVerify");
+        CBA.data.confirmGymPayment({ id: id, amount: amount, validUntil: validUntil }, function (res) {
+          if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymVerify");
+          if (!res || !res.ok) {
+            btn.disabled = false; btn.textContent = "אימות והפעלה";
+            window.alert((res && res.error) || "האימות נכשל.");
+            return;
+          }
+          // ההתראה על פער מוצגת **אחרי** הפעולה ולא במקומה — לא חוסמים.
+          var sync = res.sync || {};
+          window.alert("המנוי הופעל, בתוקף עד " + res.validUntil +
+            (sync.label && sync.label !== "מסונכרן" ? "\n\nשים לב: " + sync.label + " מול מה ששולם." : ""));
+          reload();
+        });
+      });
+
+      box.querySelector("[data-gv-reject]").addEventListener("click", function () {
+        var note = window.prompt("מה לכתוב לתושב? (לא חובה)", "");
+        if (note === null) return;
+        var btn = box.querySelector("[data-gv-reject]");
+        btn.disabled = true;
+        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymVerify");
+        CBA.data.rejectGymPayment({ id: id, note: note }, function (res) {
+          if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymVerify");
+          if (!res || !res.ok) { btn.disabled = false; window.alert((res && res.error) || "הפעולה נכשלה."); return; }
           reload();
         });
       });
@@ -211,6 +359,10 @@ CBA.screens = CBA.screens || {};
           '<button type="button" class="btn-primary" id="ga-new">הקמת מנוי ידנית</button>' +
         '</div>' +
         '<div id="ga-kpis" class="gym-kpis"></div>' +
+        '<div class="card club-card" id="ga-verify-card">' +
+          '<div class="club-sec__title">ממתינים לאימות תשלום</div>' +
+          '<div id="ga-verify">' + gaLoadingHTML() + '</div>' +
+        '</div>' +
         '<div class="card club-card">' +
           '<div class="club-sec__title">מנויים</div>' +
           '<div id="ga-members">' + gaLoadingHTML() + '</div>' +
@@ -225,6 +377,7 @@ CBA.screens = CBA.screens || {};
 
       var kpisEl    = container.querySelector("#ga-kpis");
       var membersEl = container.querySelector("#ga-members");
+      var verifyEl  = container.querySelector("#ga-verify");
       var statusEl  = container.querySelector("#ga-status");
 
       // הצהרת פונקציה (לא ביטוי) — ולכן היא מורמת ונגישה גם לכפתור שנקשר למעלה.
@@ -257,6 +410,12 @@ CBA.screens = CBA.screens || {};
           var waitPay  = countBy(members, "ממתין לתשלום");
           var waitVer  = countBy(members, "ממתין לאימות");
           var expired  = countBy(members, "פג תוקף");
+          // "פער" = כל מנוי שמצב הסנכרון שלו אינו ריק ואינו "מסונכרן".
+          // מוצג ככרטיסון כי זה הדבר שהכי קל לשכוח ממנו.
+          var gaps = members.filter(function (x) {
+            var sv = String(x["מצב סנכרון"] || "").trim();
+            return sv && sv !== "מסונכרן";
+          }).length;
 
           kpisEl.innerHTML =
             kpi(active,  "מנויים פעילים", active ? "ok" : "muted") +
@@ -264,7 +423,15 @@ CBA.screens = CBA.screens || {};
             kpi(waitPay, "ממתינים לתשלום", waitPay ? "warn" : "muted") +
             kpi(waitVer, "ממתינים לאימות תשלום", waitVer ? "warn" : "muted") +
             kpi(expired, "פג תוקף", "muted") +
-            kpi(members.length, "סה״כ רשומות", "muted");
+            kpi(gaps, "פערי תשלום", gaps ? "warn" : "muted");
+
+          var waitingVerify = members.filter(function (x) {
+            return String(x["סטטוס"] || "").trim() === "ממתין לאימות";
+          });
+          verifyEl.innerHTML = waitingVerify.length
+            ? waitingVerify.map(verifyRowHTML).join("")
+            : '<div class="club-empty">אין תשלומים שממתינים לאימות.</div>';
+          bindVerifyActions(verifyEl, load);
 
           membersEl.innerHTML = members.length
             ? members.map(memberRowHTML).join("")

@@ -107,7 +107,14 @@ var ACTION_PERMS = {
   // שלב 2 (2026-08-19) — פעולות ניהול. יצירת מנוי ידנית ודרישת הצהרה במייל
   // הן פעולות של מנהל המכון, לא של מנהל-על: זו עבודה שוטפת ולא שינוי מבני.
   createGymMembership: PERM_GYM,
-  requestGymDeclaration: PERM_GYM
+  requestGymDeclaration: PERM_GYM,
+  // שלב 3 (2026-08-19) — כסף. אימות התשלום וקביעת התוקף הם תמיד ידניים
+  // ובידי מנהל המכון; דיווח התשלום עצמו (reportGymPayment) וסריקת הצילום
+  // (scanGymPayment) הם פעולות של התושב ולכן אינם ברשימה הזו.
+  confirmGymPayment: PERM_GYM,
+  rejectGymPayment: PERM_GYM,
+  recordGymPayment: PERM_GYM,
+  extendGymMembership: PERM_GYM
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -438,6 +445,12 @@ function doPost(e) {
       case 'submitGymApplication':  return json_(submitGymApplication_(ss, body));
       case 'createGymMembership':   return json_(createGymMembership_(ss, body));
       case 'requestGymDeclaration': return json_(requestGymDeclaration_(ss, body));
+      case 'scanGymPayment':        return json_(scanGymPayment_(ss, body));
+      case 'reportGymPayment':      return json_(reportGymPayment_(ss, body));
+      case 'confirmGymPayment':     return json_(confirmGymPayment_(ss, body));
+      case 'rejectGymPayment':      return json_(rejectGymPayment_(ss, body));
+      case 'recordGymPayment':      return json_(recordGymPayment_(ss, body));
+      case 'extendGymMembership':   return json_(extendGymMembership_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -3330,6 +3343,23 @@ var DEFAULT_EMAIL_SETTINGS = [
     'שלום {{שם}},\n\nנפתח עבורך מנוי במכון הכושר, ונשאר רק למלא הצהרת בריאות וחתימה — זה לוקח דקה. נכנסים לאפליקציה, בוחרים "מתקנים" ואז "מכון כושר".\n\nבברכה,\nועד הקהילה',
     'נשלח כשמנהל המכון מקים מנוי ידנית ומבקש מהתושב למלא הצהרה, או לוחץ "בקשת הצהרה" על מנוי קיים'],
 
+  ['GYM_PAYMENT_REPORTED', 'קיבלנו את דיווח התשלום שלך',
+    'שלום {{שם}},\n\nקיבלנו את הדיווח על תשלום {{סכום}} ₪ עבור המנוי במכון הכושר. הדיווח ממתין לאימות מול הוועד, ונעדכן אותך ברגע שהמנוי יופעל.\n\nבברכה,\nועד הקהילה',
+    'נשלח לתושב מיד עם דיווח התשלום'],
+  ['GYM_ACTIVE', 'המנוי שלך במכון הכושר פעיל',
+    'שלום {{שם}},\n\nהתשלום אומת והמנוי שלך במכון הכושר פעיל — בתוקף עד {{תוקף}}.\n\nקוד הכניסה למכון מחכה לך במסך "מכון כושר" באפליקציה. לפי התקנון אין להעביר אותו לאחרים.\n\nאימונים נעימים,\nועד הקהילה',
+    'נשלח כשמנהל/ת המכון מאמת/ת את התשלום. שים לב: הקוד עצמו לא נשלח במייל בכוונה'],
+  ['GYM_PAYMENT_NOT_FOUND', 'לא איתרנו את התשלום למכון הכושר',
+    'שלום {{שם}},\n\nבדקנו ולא הצלחנו לאתר את התשלום שדיווחת עליו.{{הערה}}\n\nאפשר לבדוק שוב ולדווח מחדש במסך "מכון כושר" באפליקציה, או לפנות לאחראית חדר הכושר.\n\nבברכה,\nועד הקהילה',
+    'נשלח כשמנהל/ת המכון לוחץ/ת "לא נמצא תשלום" — {{הערה}} מכיל את הערת המנהל אם נכתבה'],
+  ['GYM_EXTENDED', 'תוקף המנוי שלך במכון הכושר עודכן',
+    'שלום {{שם}},\n\nתוקף המנוי שלך במכון הכושר עודכן והוא בתוקף עד {{תוקף}}.\n\nבברכה,\nועד הקהילה',
+    'נשלח כשמנהל/ת המכון מאריך/ה מנוי קיים'],
+
+  ['ADMIN_GYM_PAYMENT_REPORTED', 'תושב דיווח על תשלום למכון — ממתין לאימות',
+    '{{שם}} דיווח/ה על תשלום {{סכום}} ₪ עבור המנוי במכון (מס\' {{מזהה}}).\n\nאמצעי: {{אמצעי}} · אסמכתא: {{אסמכתא}}\n\nהדיווח ממתין לאימות שלך באפליקציה.',
+    'למנהלי מכון + מנהל-על'],
+
   ['ADMIN_NEW_GYM_FLAGGED', 'בקשת הרשמה למכון עם דגל בריאות ממתינה',
     'התקבלה בקשת הרשמה למכון הכושר מ-{{שם}} ({{אימייל}}) עם דגל בריאות: {{שאלות}}.\n\nהבקשה ממתינה לאישור רופא ולאישורך.',
     'למנהלי מכון + מנהל-על. שים לב: בקשה נקייה (כל התשובות "לא") מאושרת אוטומטית ולא שולחת מייל למנהל'],
@@ -4841,7 +4871,10 @@ function handleGymMy_(p) {
       ok: true,
       membership: membership,
       plans: cfg.plans.filter(function (pl) { return pl.active; }),
-      declarationMonths: Number(cfg.settings['תוקף הצהרה בחודשים']) || 24
+      declarationMonths: Number(cfg.settings['תוקף הצהרה בחודשים']) || 24,
+      // קישור התשלום — ציבורי ממילא, ולכן מותר לשלוח אותו לכל תושב.
+      // קוד הכניסה, לעומת זאת, עדיין לא נשלח מכאן (מגיע בשלב 4).
+      payboxUrl: String(cfg.settings['קישור פייבוקס'] || '').trim()
     });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -5108,6 +5141,374 @@ function requestGymDeclaration_(ss, body) {
     } catch (mailErr) { Logger.log('מייל בקשת הצהרה נכשל: ' + mailErr); }
 
     return { ok: true, id: id, status: GYM_ST_DECLARATION };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+/* ============================================================================
+ *  מכון כושר — שלב 3: תשלום, אימות ותוקף (2026-08-19)
+ * ----------------------------------------------------------------------------
+ *  ההחלטה המרכזית של יועד כאן: **התוקף נקבע ידנית, לא בנוסחה.** מנהל/ת המכון
+ *  מזין/ה עד איזה חודש המנוי בתוקף, יכול/ה להאריך בכל רגע ומכל סיבה, והמערכת
+ *  לעולם לא חוסמת — היא רק **מודדת ומתריעה** על פער מול מה ששולם בפועל.
+ *
+ *  למה דווקא ככה: המציאות בוועד היא לא נוסחה. לפעמים מאריכים חודש כמחווה,
+ *  לפעמים מישהו שילם במזומן ולא נרשם. מערכת שחוסמת הייתה מייצרת עקיפות ידניות
+ *  מחוץ למערכת ומאבדת את האמון; מערכת שמודדת משאירה את השליטה בידיים ולא נותנת
+ *  לפער להישכח.
+ *
+ *  זרימת הכסף:
+ *    התושב משלם בפייבוקס → מדווח (עם צילום אישור, אופציונלי, שנסרק ב-Gemini)
+ *    → הסטטוס עובר ל"ממתין לאימות" → מנהל/ת מאמת/ת, קובע/ת חודש תוקף
+ *    → המנוי הופך ל"פעיל". **תמיד ידני, גם למי שהוקם ידנית.**
+ * ========================================================================== */
+
+/** מוצא מסלול לפי שמו כפי שנשמר בשורת המנוי. המחיר החודשי שלו הוא הבסיס
+ * לחישוב "כמה חודשים שולמו" — ולכן הוא שדה נפרד ולא רק מחיר כולל. */
+function gymPlanByName_(cfg, name) {
+  var target = String(name || '').trim();
+  for (var i = 0; i < cfg.plans.length; i++) {
+    if (cfg.plans[i].name === target) return cfg.plans[i];
+  }
+  return cfg.plans[0] || null;
+}
+
+/** "YYYY-MM" -> אובייקט Date של **היום האחרון** באותו חודש. ככה "בתוקף עד
+ * פברואר" באמת אומר עד סוף פברואר, ולא עד ה-1 בו. */
+function gymMonthEnd_(ym) {
+  var m = String(ym || '').match(/^(\d{4})-(\d{1,2})$/);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]), 0);   // יום 0 של החודש הבא = סוף החודש הנוכחי
+}
+
+/** מספר חודשים כולל בין שני תאריכים (כולל חודש ההתחלה וחודש הסיום). */
+function gymMonthsBetween_(from, to) {
+  if (!from || !to) return 0;
+  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1;
+}
+
+function gymToDate_(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  var d = new Date(String(v).length <= 10 ? String(v) + 'T00:00:00' : String(v));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** מוצא שורת מנוי לפי מזהה. */
+function gymRowById_(sh, cols, id) {
+  var last = sh.getLastRow();
+  if (last < 2 || !cols['מזהה']) return 0;
+  var ids = sh.getRange(2, cols['מזהה'], last - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]).trim() === String(id).trim()) return i + 2;
+  }
+  return 0;
+}
+
+/** לב מנגנון הסנכרון. מחשב שני מספרים ומשווה:
+ *    חודשים שהוקצו = מתאריך ההתחלה עד "בתוקף עד" (מה שהמנהל קבע בפועל)
+ *    חודשים ששולמו = סך התשלומים ביומן ÷ המחיר החודשי של המסלול
+ * ומחזיר תגית קריאה. גם כותב את התוצאה חזרה לשורה, כדי שהיא תהיה גלויה
+ * בגיליון עצמו ולא רק במסך.
+ *
+ * "עודף" מוצג כמידע ולא כאזהרה: הוא בדרך כלל אומר ששכחו להאריך, לא שמישהו
+ * טעה. "חוסר" הוא זה שדורש תשומת לב. */
+function gymPaymentSync_(ss, id) {
+  var sh = ss.getSheetByName(GYM_SHEET);
+  var cols = gymCols_(sh);
+  var row = gymRowById_(sh, cols, id);
+  if (!row) return { ok: false, error: 'המנוי לא נמצא' };
+
+  var cfg = readGymSettings_(ss);
+  var planName = cols['מסלול'] ? String(sh.getRange(row, cols['מסלול']).getValue()).trim() : '';
+  var plan = gymPlanByName_(cfg, planName);
+  var monthly = (plan && plan.monthlyPrice) || 0;
+
+  // סכימת התשלומים מהיומן — היומן הוא מקור האמת, לא שדה מסוכם בשורה
+  var totalPaid = 0, lastPaid = '';
+  var logSh = ss.getSheetByName(GYM_LOG_SHEET);
+  if (logSh && logSh.getLastRow() > 1) {
+    var lc = gymCols_(logSh);
+    var n = logSh.getLastRow() - 1;
+    var rows = logSh.getRange(2, 1, n, logSh.getLastColumn()).getValues();
+    for (var i = 0; i < rows.length; i++) {
+      var rid = lc['מזהה מנוי'] ? String(rows[i][lc['מזהה מנוי'] - 1]).trim() : '';
+      var typ = lc['סוג אירוע'] ? String(rows[i][lc['סוג אירוע'] - 1]).trim() : '';
+      if (rid !== String(id).trim() || typ !== 'תשלום') continue;
+      var amt = lc['סכום'] ? Number(rows[i][lc['סכום'] - 1]) : 0;
+      if (!isNaN(amt)) totalPaid += amt;
+      var dt = lc['תאריך'] ? rows[i][lc['תאריך'] - 1] : '';
+      if (dt) lastPaid = (dt instanceof Date)
+        ? Utilities.formatDate(dt, Session.getScriptTimeZone(), 'yyyy-MM-dd') : String(dt);
+    }
+  }
+
+  var start = gymToDate_(cols['תאריך התחלה'] ? sh.getRange(row, cols['תאריך התחלה']).getValue() : '');
+  var end   = gymToDate_(cols['בתוקף עד'] ? sh.getRange(row, cols['בתוקף עד']).getValue() : '');
+  var allocated = (start && end) ? gymMonthsBetween_(start, end) : 0;
+  var paidMonths = monthly ? (totalPaid / monthly) : 0;
+
+  // סובלנות של חצי חודש — כדי שעיגולים לא יסמנו פער שלא קיים באמת
+  var diff = Math.round((paidMonths - allocated) * 10) / 10;
+  var label;
+  if (!allocated && !totalPaid) label = '';
+  else if (Math.abs(diff) < 0.5) label = 'מסונכרן';
+  else if (diff < 0) label = 'חוסר ' + Math.round(Math.abs(diff)) + ' חודשים';
+  else label = 'עודף ' + Math.round(diff) + ' חודשים';
+
+  if (cols['סה"כ שולם'])       sh.getRange(row, cols['סה"כ שולם']).setValue(totalPaid || '');
+  if (cols['תשלום אחרון'])     sh.getRange(row, cols['תשלום אחרון']).setValue(lastPaid);
+  if (cols['חודשים ששולמו'])   sh.getRange(row, cols['חודשים ששולמו']).setValue(monthly ? Math.round(paidMonths * 10) / 10 : '');
+  if (cols['מצב סנכרון'])      sh.getRange(row, cols['מצב סנכרון']).setValue(label);
+
+  return {
+    ok: true, totalPaid: totalPaid, monthly: monthly,
+    allocatedMonths: allocated, paidMonths: Math.round(paidMonths * 10) / 10,
+    diff: diff, label: label
+  };
+}
+
+/** סריקת צילום אישור התשלום. אותו מנגנון בדיוק כמו סריקת קבלות שכבר עובד —
+ * רק פרומפט אחר, שמותאם לאישור העברה בפייבוקס/ביט ולא לחשבונית ספק.
+ * הפלט תמיד חוזר ללקוח לעריכה ולעולם לא נשמר אוטומטית. */
+function scanGymPayment_(ss, body) {
+  if (!body.dataBase64) return { ok: false, error: 'לא צורפה תמונה לסריקה' };
+  var key = geminiApiKey_();
+  if (!key) return { ok: false, error: 'GEMINI_API_KEY חסר בהגדרות הסקריפט.' };
+
+  var prompt = 'זהו צילום מסך של אישור תשלום מאפליקציית תשלומים ישראלית (פייבוקס, ביט, ' +
+    'העברה בנקאית וכדומה). חלץ ממנו את השדות הבאים והחזר אך ורק JSON תקין, בלי טקסט נוסף: ' +
+    '{"amount": מספר (הסכום ששולם, בלי סימן מטבע), ' +
+    '"date": מחרוזת בפורמט YYYY-MM-DD (תאריך התשלום כפי שמופיע; אם מופיע רק "היום" או ' +
+    'שעה בלבד — החזר מחרוזת ריקה), ' +
+    '"reference": מחרוזת (מספר אסמכתא/עסקה/אישור אם מופיע, אחרת ריק), ' +
+    '"payer": מחרוזת (שם המשלם אם מופיע, אחרת ריק), ' +
+    '"method": מחרוזת (שם האפליקציה/אמצעי התשלום, למשל "פייבוקס" או "ביט"; אחרת ריק)}. ' +
+    'אם שדה לא ברור או לא מופיע — החזר ערך ריק (0 למספר, "" למחרוזת). לעולם אל תמציא ערך.';
+
+  var payload = {
+    contents: [{ parts: [
+      { text: prompt },
+      { inline_data: { mime_type: body.mimeType || 'image/jpeg', data: body.dataBase64 } }
+    ] }],
+    generationConfig: {
+      response_mime_type: 'application/json',
+      response_schema: {
+        type: 'OBJECT',
+        properties: {
+          amount: { type: 'NUMBER' }, date: { type: 'STRING' },
+          reference: { type: 'STRING' }, payer: { type: 'STRING' }, method: { type: 'STRING' }
+        },
+        required: ['amount', 'date', 'reference', 'payer', 'method']
+      }
+    }
+  };
+
+  try {
+    var resp = UrlFetchApp.fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
+      ':generateContent?key=' + encodeURIComponent(key),
+      { method: 'post', contentType: 'application/json',
+        payload: JSON.stringify(payload), muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) {
+      return { ok: false, error: 'Gemini החזיר קוד ' + resp.getResponseCode() };
+    }
+    var data = JSON.parse(resp.getContentText());
+    var text = data.candidates && data.candidates[0] && data.candidates[0].content &&
+               data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+               data.candidates[0].content.parts[0].text;
+    if (!text) return { ok: false, error: 'תשובה לא צפויה מ-Gemini' };
+    return { ok: true, fields: JSON.parse(text) };
+  } catch (e) {
+    return { ok: false, error: 'שגיאה בסריקה: ' + String(e) };
+  }
+}
+
+/** דיווח תשלום ע"י התושב. לא מפעיל את המנוי — רק מסמן שדווח וממתין לאימות. */
+function reportGymPayment_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var email = normalizeEmail_(body._email);
+    var found = gymFindRow_(sh, cols, email);
+    if (!found.row) return { ok: false, error: 'לא נמצא עבורך מנוי' };
+    if (found.status !== GYM_ST_PAYMENT && found.status !== GYM_ST_VERIFY) {
+      return { ok: false, error: 'המנוי אינו בשלב תשלום (סטטוס: ' + found.status + ')' };
+    }
+    var row = found.row;
+    var id = String(sh.getRange(row, cols['מזהה']).getValue()).trim();
+
+    var proofUrl = '';
+    if (body.dataBase64) {
+      proofUrl = gymSaveSignature_('data:' + (body.mimeType || 'image/jpeg') + ';base64,' + body.dataBase64,
+        'אישור תשלום ' + id);
+    }
+
+    function put(name, val) { if (cols[name]) sh.getRange(row, cols[name]).setValue(val); }
+    put('סטטוס', GYM_ST_VERIFY);
+    put('סטטוס תשלום', 'דווח ע"י תושב');
+    put('אמצעי תשלום', body.method || 'פייבוקס');
+    put('אסמכתא', body.reference || '');
+    put('דווח בתאריך', body.date || new Date());
+    if (proofUrl && cols['קישור אישור']) sh.getRange(row, cols['קישור אישור']).setValue(proofUrl);
+
+    // לא נכתב ליומן כ"תשלום"! רק אימות של מנהל יוצר שורת תשלום אמיתית —
+    // אחרת דיווח שלא אומת היה משפיע על חישוב הסנכרון.
+    gymLog_(ss, id, 'דיווח תשלום', {
+      amount: body.amount || '', method: body.method || '', ref: body.reference || '',
+      by: email, note: proofUrl ? 'צורף צילום אישור' : ''
+    });
+
+    var name = String(sh.getRange(row, cols['שם פרטי']).getValue()).trim() || email;
+    try {
+      sendResidentTemplate_(ss, 'GYM_PAYMENT_REPORTED', [email], {
+        'שם': name, 'סכום': body.amount || ''
+      });
+      notifyAdmins_(ss, PERM_GYM, 'ADMIN_GYM_PAYMENT_REPORTED', {
+        'שם': name, 'סכום': body.amount || '', 'מזהה': id,
+        'אמצעי': body.method || '', 'אסמכתא': body.reference || '', 'קישור': CBA_APP_URL
+      });
+    } catch (mailErr) { Logger.log('מייל דיווח תשלום נכשל: ' + mailErr); }
+
+    return { ok: true, id: id, status: GYM_ST_VERIFY };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** הפעלת מנוי אחרי אימות תשלום. **כאן נקבעים התאריכים** — לא בהגשה ולא באישור.
+ * validUntil מגיע כ-"YYYY-MM" והופך ליום האחרון באותו חודש. */
+function gymActivate_(ss, body, isManual) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var id = String(body.id || '').trim();
+    var row = gymRowById_(sh, cols, id);
+    if (!row) return { ok: false, error: 'המנוי לא נמצא' };
+
+    var end = gymMonthEnd_(body.validUntil);
+    if (!end) return { ok: false, error: 'יש לבחור עד איזה חודש המנוי בתוקף' };
+    var amount = Number(body.amount || 0);
+    if (!(amount > 0)) return { ok: false, error: 'יש להזין את הסכום שהתקבל' };
+
+    var start = gymToDate_(cols['תאריך התחלה'] ? sh.getRange(row, cols['תאריך התחלה']).getValue() : '');
+    if (!start) start = new Date();
+
+    function put(name, val) { if (cols[name]) sh.getRange(row, cols[name]).setValue(val); }
+    put('תאריך התחלה', start);
+    put('בתוקף עד', end);
+    put('סטטוס', GYM_ST_ACTIVE);
+    put('סטטוס תשלום', 'אומת');
+    put('אמצעי תשלום', body.method || (isManual ? 'מזומן' : 'פייבוקס'));
+    put('אסמכתא', body.reference || '');
+    put('אומת בתאריך', new Date());
+    put('אומת ע"י', body._email || '');
+    if (body.note && cols['הערות מנהל']) sh.getRange(row, cols['הערות מנהל']).setValue(body.note);
+
+    var validLabel = Utilities.formatDate(end, Session.getScriptTimeZone(), 'MM/yyyy');
+    gymLog_(ss, id, 'תשלום', {
+      amount: amount, method: body.method || (isManual ? 'מזומן' : 'פייבוקס'),
+      ref: body.reference || '', validUntil: validLabel,
+      by: body._email || '', note: isManual ? 'נרשם ידנית ע"י מנהל' : 'אומת מול דיווח התושב'
+    });
+
+    var sync = gymPaymentSync_(ss, id);
+
+    var email = String(sh.getRange(row, cols['אימייל']).getValue()).trim();
+    var name = String(sh.getRange(row, cols['שם פרטי']).getValue()).trim() || email;
+    try {
+      sendResidentTemplate_(ss, 'GYM_ACTIVE', [email], { 'שם': name, 'תוקף': validLabel });
+    } catch (mailErr) { Logger.log('מייל הפעלת מנוי נכשל: ' + mailErr); }
+
+    return { ok: true, id: id, status: GYM_ST_ACTIVE, validUntil: validLabel, sync: sync };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function confirmGymPayment_(ss, body) { return gymActivate_(ss, body, false); }
+function recordGymPayment_(ss, body)  { return gymActivate_(ss, body, true); }
+
+/** "לא נמצא תשלום" — מחזיר את המנוי לשלב התשלום ומודיע לתושב. לא מוחק את
+ * הדיווח מהיומן: חשוב שיישאר תיעוד שדווח ולא אותר. */
+function rejectGymPayment_(ss, body) {
+  try {
+    ensureGymSheets_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var id = String(body.id || '').trim();
+    var row = gymRowById_(sh, cols, id);
+    if (!row) return { ok: false, error: 'המנוי לא נמצא' };
+
+    function put(name, val) { if (cols[name]) sh.getRange(row, cols[name]).setValue(val); }
+    put('סטטוס', GYM_ST_PAYMENT);
+    put('סטטוס תשלום', 'לא אותר');
+    if (body.note && cols['הערות מנהל']) sh.getRange(row, cols['הערות מנהל']).setValue(body.note);
+
+    gymLog_(ss, id, 'תשלום לא אותר', { by: body._email || '', note: body.note || '' });
+
+    var email = String(sh.getRange(row, cols['אימייל']).getValue()).trim();
+    var name = String(sh.getRange(row, cols['שם פרטי']).getValue()).trim() || email;
+    try {
+      sendResidentTemplate_(ss, 'GYM_PAYMENT_NOT_FOUND', [email], {
+        'שם': name, 'הערה': body.note ? (' ' + body.note) : ''
+      });
+    } catch (mailErr) { Logger.log('מייל תשלום לא אותר נכשל: ' + mailErr); }
+
+    return { ok: true, id: id, status: GYM_ST_PAYMENT };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+/** הארכת תוקף — זמינה תמיד, גם בלי תשלום חדש וגם באמצע תקופה. **לא חוסמת**:
+ * אם ההארכה יוצרת פער מול מה ששולם, המידע חוזר ללקוח כדי שיציג אזהרה, אבל
+ * הפעולה מתבצעת. זו בדיוק הדרישה של יועד. */
+function extendGymMembership_(ss, body) {
+  try {
+    ensureGymSheets_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var id = String(body.id || '').trim();
+    var row = gymRowById_(sh, cols, id);
+    if (!row) return { ok: false, error: 'המנוי לא נמצא' };
+
+    var end = gymMonthEnd_(body.validUntil);
+    if (!end) return { ok: false, error: 'יש לבחור עד איזה חודש להאריך' };
+
+    var start = gymToDate_(cols['תאריך התחלה'] ? sh.getRange(row, cols['תאריך התחלה']).getValue() : '');
+    if (!start) { start = new Date(); if (cols['תאריך התחלה']) sh.getRange(row, cols['תאריך התחלה']).setValue(start); }
+
+    sh.getRange(row, cols['בתוקף עד']).setValue(end);
+    // הארכה מחזירה לפעיל מנוי שפג — זו בדיוק המטרה השכיחה של הפעולה
+    var cur = String(sh.getRange(row, cols['סטטוס']).getValue()).trim();
+    if (cur === GYM_ST_EXPIRED) sh.getRange(row, cols['סטטוס']).setValue(GYM_ST_ACTIVE);
+
+    var validLabel = Utilities.formatDate(end, Session.getScriptTimeZone(), 'MM/yyyy');
+    gymLog_(ss, id, 'הארכת תוקף', {
+      validUntil: validLabel, by: body._email || '', note: body.reason || ''
+    });
+
+    var sync = gymPaymentSync_(ss, id);
+
+    var email = String(sh.getRange(row, cols['אימייל']).getValue()).trim();
+    var name = String(sh.getRange(row, cols['שם פרטי']).getValue()).trim() || email;
+    try {
+      sendResidentTemplate_(ss, 'GYM_EXTENDED', [email], { 'שם': name, 'תוקף': validLabel });
+    } catch (mailErr) { Logger.log('מייל הארכה נכשל: ' + mailErr); }
+
+    return { ok: true, id: id, validUntil: validLabel, sync: sync };
   } catch (err) {
     return { ok: false, error: String(err) };
   }

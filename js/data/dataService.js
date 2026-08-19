@@ -454,6 +454,31 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.postRead("requestGymDeclaration", { id: id }, cb);
   }
+  // --- מכון כושר, שלב 3 (2026-08-19) — כסף ---
+  function scanGymPayment(dataBase64, mimeType, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("scanGymPayment", { dataBase64: dataBase64, mimeType: mimeType }, cb);
+  }
+  function reportGymPayment(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("reportGymPayment", data || {}, cb);
+  }
+  function confirmGymPayment(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("confirmGymPayment", data || {}, cb);
+  }
+  function recordGymPayment(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("recordGymPayment", data || {}, cb);
+  }
+  function rejectGymPayment(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("rejectGymPayment", data || {}, cb);
+  }
+  function extendGymMembership(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("extendGymMembership", data || {}, cb);
+  }
   function approveClubReservation(id, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "approveClubReservation", id: id }, cb);
@@ -1177,6 +1202,12 @@ CBA.data = (function () {
     submitGymApplication: submitGymApplication,
     createGymMembership: createGymMembership,
     requestGymDeclaration: requestGymDeclaration,
+    scanGymPayment: scanGymPayment,
+    reportGymPayment: reportGymPayment,
+    confirmGymPayment: confirmGymPayment,
+    recordGymPayment: recordGymPayment,
+    rejectGymPayment: rejectGymPayment,
+    extendGymMembership: extendGymMembership,
     approveClubReservation: approveClubReservation,
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,

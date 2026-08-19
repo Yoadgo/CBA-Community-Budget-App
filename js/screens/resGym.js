@@ -125,7 +125,23 @@ CBA.screens = CBA.screens || {};
       html += '<button type="button" class="btn-primary gym-cta" data-gym-start>חידוש מנוי</button>';
     }
     if (status === ST_PAYMENT) {
-      html += '<div class="gym-note">פרטי התשלום והדיווח עליו יתווספו למסך בקרוב. בינתיים אפשר להסדיר מול הוועד.</div>';
+      var amount = m["מחיר מוסכם"] || "";
+      var paybox = (st.my && st.my.payboxUrl) || "";
+      html += '<div class="gym-pay">' +
+                '<div class="gym-pay__amount">' + esc(amount) + " ₪</div>" +
+                '<div class="gym-pay__sub">לתשלום עבור ' + esc(m["מסלול"] || "המנוי") + "</div>" +
+                (paybox
+                  ? '<a class="btn-primary gym-pay__btn" href="' + esc(paybox) +
+                    '" target="_blank" rel="noopener">מעבר לתשלום בפייבוקס</a>'
+                  : '<div class="gym-note">קישור התשלום עדיין לא הוגדר. אפשר להסדיר מול אחראית חדר הכושר.</div>') +
+                '<button type="button" class="btn-ghost gym-pay__report" data-gym-pay>שילמתי — לדיווח</button>' +
+              "</div>";
+    }
+    if (status === ST_VERIFY) {
+      html += '<div class="gym-kv"><span>דווח</span><span>' +
+              esc(m["אמצעי תשלום"] || "") +
+              (m["אסמכתא"] ? " · אסמכתא " + esc(m["אסמכתא"]) : "") +
+              (m["דווח בתאריך"] ? " · " + esc(m["דווח בתאריך"]) : "") + "</span></div>";
     }
     html += "</div>";
     return html;
@@ -448,6 +464,114 @@ CBA.screens = CBA.screens || {};
 
     var startBtn = container.querySelector("[data-gym-start]");
     if (startBtn) startBtn.addEventListener("click", function () { openWizard(container); });
+    var payBtn = container.querySelector("[data-gym-pay]");
+    if (payBtn) payBtn.addEventListener("click", function () { openPayReport(container); });
+  }
+
+  /* ------------------------------------------------------------------ *
+   *  דיווח תשלום
+   *  התושב כבר פתח את פייבוקס ושילם; הצילום נמצא אצלו בטלפון ממילא. לכן
+   *  ההעלאה שלו לא מוסיפה עבודה — ובתמורה Gemini ממלא ארבעה שדות במקומו,
+   *  והמנהל/ת מקבל/ת גם מספרים מסודרים וגם את התמונה עצמה לאימות.
+   *  הפלט תמיד ניתן לעריכה ולעולם לא נשמר אוטומטית.
+   * ------------------------------------------------------------------ */
+  function openPayReport(container) {
+    var m = (st.my && st.my.membership) || {};
+    var data = {
+      amount: m["מחיר מוסכם"] || "", date: "", reference: "", method: "פייבוקס",
+      dataBase64: "", mimeType: ""
+    };
+    var el = document.createElement("div");
+    el.id = "gym-pay-report";
+    el.className = "gym-wiz";
+    el.innerHTML =
+      '<div class="gym-wiz__backdrop" data-gp-close></div>' +
+      '<aside class="gym-wiz__panel" role="dialog" aria-label="דיווח תשלום">' +
+        '<div class="gym-wiz__head">' +
+          '<div class="gym-wiz__title">דיווח על תשלום</div>' +
+          '<button type="button" class="gym-wiz__x" data-gp-close aria-label="סגירה">×</button>' +
+        "</div>" +
+        '<div class="gym-wiz__body">' +
+          '<div class="gym-hint">אפשר לצרף צילום מסך של אישור התשלום — נמלא ממנו את הפרטים ' +
+            "אוטומטית, ותמיד אפשר לתקן אותם. הצילום גם עוזר לוועד לאמת מהר יותר.</div>" +
+          '<div class="gym-field"><label>צילום אישור התשלום (לא חובה)</label>' +
+            '<input type="file" accept="image/*" data-gp-file></div>' +
+          '<div id="gp-scan" class="gym-scan" style="display:none"></div>' +
+          '<div class="gym-field"><label>סכום ששולם (₪)</label>' +
+            '<input type="number" inputmode="decimal" data-gp="amount" value="' + esc(data.amount) + '"></div>' +
+          '<div class="gym-field"><label>תאריך התשלום</label>' +
+            '<input type="date" data-gp="date"></div>' +
+          '<div class="gym-field"><label>אמצעי תשלום</label>' +
+            '<input type="text" data-gp="method" value="פייבוקס"></div>' +
+          '<div class="gym-field"><label>אסמכתא / 4 ספרות אחרונות (לא חובה)</label>' +
+            '<input type="text" data-gp="reference"></div>' +
+        "</div>" +
+        '<div class="gym-wiz__foot">' +
+          '<button type="button" class="btn-ghost" data-gp-close>ביטול</button>' +
+          '<button type="button" class="btn-primary" data-gp-send>שליחת הדיווח</button>' +
+        "</div>" +
+      "</aside>";
+    document.body.appendChild(el);
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymPayReport");
+
+    function close() {
+      if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymPayReport");
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }
+    el.querySelectorAll("[data-gp-close]").forEach(function (n) { n.addEventListener("click", close); });
+    el.querySelectorAll("[data-gp]").forEach(function (n) {
+      n.addEventListener("input", function () { data[n.dataset.gp] = n.value; });
+    });
+
+    var scanBox = el.querySelector("#gp-scan");
+    el.querySelector("[data-gp-file]").addEventListener("change", function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (file.size > 8 * 1024 * 1024) { window.alert("הקובץ גדול מדי (מעל 8MB)."); return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var b64 = String(reader.result).split(",")[1] || "";
+        data.dataBase64 = b64;
+        data.mimeType = file.type || "image/jpeg";
+        scanBox.style.display = "";
+        scanBox.innerHTML = '<div class="club-loading"><div class="rs-spin"></div>קורא את הצילום…</div>';
+        CBA.data.scanGymPayment(b64, data.mimeType, function (res) {
+          if (!res || !res.ok) {
+            scanBox.innerHTML = '<div class="gym-scan__err">לא הצלחנו לקרוא את הצילום. אפשר למלא ידנית.</div>';
+            return;
+          }
+          var f = res.fields || {};
+          if (f.amount)    { data.amount = f.amount;       el.querySelector('[data-gp="amount"]').value = f.amount; }
+          if (f.date)      { data.date = f.date;           el.querySelector('[data-gp="date"]').value = f.date; }
+          if (f.reference) { data.reference = f.reference; el.querySelector('[data-gp="reference"]').value = f.reference; }
+          if (f.method)    { data.method = f.method;       el.querySelector('[data-gp="method"]').value = f.method; }
+          var expected = Number(m["מחיר מוסכם"] || 0);
+          var got = Number(f.amount || 0);
+          scanBox.innerHTML = '<div class="gym-scan__ok">מילאנו את הפרטים מהצילום — כדאי לוודא שהם נכונים.</div>' +
+            (expected && got && Math.abs(expected - got) > 0.5
+              ? '<div class="gym-scan__warn">הסכום שזוהה (' + got + " ₪) שונה מהמחיר המוסכם (" +
+                expected + " ₪) — לבדוק?</div>"
+              : "");
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+
+    el.querySelector("[data-gp-send]").addEventListener("click", function () {
+      if (!Number(data.amount)) { window.alert("צריך למלא את הסכום ששולם."); return; }
+      var btn = el.querySelector("[data-gp-send]");
+      btn.disabled = true; btn.textContent = "שולח…";
+      CBA.data.reportGymPayment(data, function (res) {
+        if (!res || !res.ok) {
+          btn.disabled = false; btn.textContent = "שליחת הדיווח";
+          window.alert((res && res.error) || "הדיווח נכשל, נסו שוב.");
+          return;
+        }
+        close();
+        window.alert("הדיווח נשלח. הוועד יאמת את התשלום ונעדכן אותך במייל כשהמנוי יופעל.");
+        load(container, function () { draw(container); });
+      });
+    });
   }
 
   CBA.screens.resGym = {

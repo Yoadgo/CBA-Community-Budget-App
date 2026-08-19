@@ -217,3 +217,47 @@
   .gym-row { flex-direction: column; gap: 8px; }
   .gym-row__side { margin-inline-start: 0; }
 }
+
+/* ============================================================================
+   שלב 3 (2026-08-19) — תשלום, אימות ותוקף
+   ========================================================================== */
+
+/* --- כרטיס התשלום של התושב --- */
+.gym-pay {
+  margin-top: 16px; padding: 18px 16px;
+  background: var(--hover); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); text-align: center;
+}
+.gym-pay__amount { font-size: 30px; font-weight: 800; color: var(--text); letter-spacing: -.02em; }
+.gym-pay__sub    { font-size: 13px; color: var(--text-soft); margin: 4px 0 16px; }
+.gym-pay__btn    { display: inline-block; text-decoration: none; }
+.gym-pay__report { display: block; margin: 10px auto 0; }
+
+/* --- תוצאת סריקת הצילום --- */
+.gym-scan { margin-bottom: 14px; font-size: 13px; line-height: 1.7; }
+.gym-scan__ok   { color: var(--badge-ok); }
+.gym-scan__warn { color: var(--badge-warn); margin-top: 4px; }
+.gym-scan__err  { color: var(--text-soft); }
+
+/* --- כרטיס אימות במסך המנהל --- */
+.gym-verify { padding: 14px 2px; border-bottom: 1px solid var(--border); }
+.gym-verify:last-child { border-bottom: 0; }
+.gym-verify__head { margin-bottom: 10px; }
+.gym-verify__form { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.gym-verify__form label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12.5px; color: var(--text-soft); font-weight: 500;
+}
+.gym-verify__form input {
+  font-family: inherit; font-size: 14px; color: var(--text);
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); min-width: 150px;
+}
+.gym-verify__form input:focus { outline: none; border-color: var(--action); }
+.gym-verify__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+@media (max-width: 720px) {
+  .gym-verify__form { flex-direction: column; gap: 10px; }
+  .gym-verify__form input { min-width: 0; width: 100%; }
+  .gym-pay__amount { font-size: 26px; }
+}
