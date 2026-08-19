@@ -466,7 +466,10 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 
   position: relative; background: var(--surface); border: 1px solid var(--hairline);
   border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
-  height: min(660px, 74vh);
+  /* (2026-08-18, ממצא 3.2) הוגבה מ-min(660px,74vh): המפה מצוירת לגובה
+     (1100×1354), ולכן כל פיקסל גובה שנוסף מתורגם ישירות ליותר שכונה גלויה
+     בתצוגת הפתיחה החדשה שממלאת את הרוחב. */
+  height: min(820px, 82vh);
 }
 .map-topbar {
   position: absolute; top: 14px; right: 14px; left: 14px; z-index: 25;
@@ -524,6 +527,16 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .lg-road { width: 15px; height: 4px; border-radius: 2px; background: var(--map-asphalt); border: 1px solid var(--map-asphalt-edge); }
 
 .map-viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab; background: var(--map-land); }
+/* רמז "החזק Ctrl כדי לזום" — מוצג רגעית כשמגלגלים בעמוד מעל המפה (ממצא 3.3) */
+.map-wheel-hint {
+  position: absolute; left: 50%; top: 14px; transform: translateX(-50%) translateY(-6px);
+  z-index: 26; pointer-events: none;
+  background: rgba(17,24,39,.86); color: #fff; font-size: 12px; font-weight: 500;
+  padding: 7px 14px; border-radius: 999px; white-space: nowrap;
+  opacity: 0; transition: opacity .25s ease, transform .25s cubic-bezier(.2,.7,.2,1);
+  box-shadow: 0 6px 20px rgba(16,24,40,.22);
+}
+.map-wheel-hint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .map-viewport.grabbing { cursor: grabbing; }
 .map-world { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
 .map-terrain { position: absolute; top: 0; left: 0; display: block; pointer-events: none; }
@@ -808,6 +821,36 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .org-hint { font-size: 12px; color: var(--text-soft); margin-bottom: 10px; }
 
 .org-tree-wrap { overflow-x: auto; overflow-y: hidden; padding: 4px 8px 40px; }
+/* "סרגל גודל" — נוצר ב-JS (CBA.committee.attachOrgZoom) ועוטף את הקנבס.
+   transform:scale לא משנה פריסה, ולכן בלעדיו הגלילה של המכל הייתה ממשיכה
+   להתייחס לרוחב המקורי גם אחרי הקטנה. */
+.org-tree-sizer { position: relative; }
+
+/* סרגל הזום — אותה שפה של הכפתורים הצפים במפה, בשורה רגילה מעל העץ */
+.org-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.org-zoom {
+  display: inline-flex; align-items: center; gap: 2px;
+  border: 1px solid var(--border); background: var(--surface);
+  border-radius: 999px; padding: 3px; box-shadow: 0 1px 2px rgba(16,24,40,.05);
+}
+.org-zoom__btn {
+  border: none; background: none; font-family: inherit; color: var(--text-soft);
+  min-width: 28px; height: 26px; border-radius: 999px; cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 0 6px;
+  transition: background var(--t), color var(--t);
+}
+.org-zoom__btn:hover { background: var(--hover); color: var(--text); }
+.org-zoom__btn--fit { font-size: 11.5px; font-weight: 600; padding: 0 10px; }
+.org-zoom__pct {
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  min-width: 34px; text-align: center; font-variant-numeric: tabular-nums;
+}
+
+/* מקרא הקטגוריות (ממצא 3.9) — עד היום שם הקטגוריה הופיע רק כ-tooltip בריחוף,
+   כלומר במובייל אף פעם. פס הצבע על ראש הקוביה פשוט לא אמר כלום. */
+.org-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 10px; }
+.org-legend__item { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-soft); }
+.org-legend__item i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 /* הקנבס עצמו: JS קובע width/height מדויקים בפיקסלים (inline style) לפי
    הפריסה המחושבת — מה שגם גורם לגלילה האופקית של org-tree-wrap לעבוד נכון
    (יש בדיוק כמה לגלול, לא יותר ולא פחות). */
@@ -848,9 +891,18 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
    16:15 ≈ 18:16.9), והריפוד האנכי (top/bottom) גדל קצת (7/8→8/9) כדי לתת
    לגופנים הגדולים יותר מקום לנשום — הריפוד האופקי דווקא קטן (9→7) כדי
    לפצות על הרוחב הצר יותר של הקוביה. */
-.org-box__role { font-size: 18px; font-weight: 800; color: var(--text); line-height: 1.2; }
-.org-box__people { margin-top: 5px; }
-.org-box__person { font-size: 16.9px; color: var(--text-soft); line-height: 1.28; }
+/* (2026-08-18, ממצא 3.8 בדו"ח) הקוביה עברה ארבעה סבבי הקטנה (156→140→119px)
+   ובמקביל הגופן דווקא הוגדל (18px/16.9px) — צירוף שלא יכול לעבוד. נמדד:
+   "מועדון ילדים, צהרון ומכולה" נשבר ל-5 שורות והקוביה יצאה כפולה בגובה
+   מאחיותיה, מה שעיקם את כל השורה. עכשיו הגופן מותאם לרוחב שנבחר (אותו יחס
+   בין תפקיד לשם), ושם תפקיד ארוך נחתך ל-3 שורות עם "…" — הטקסט המלא נשאר
+   ב-tooltip על הקוביה, ומי שרוצה לקרוא הכול בגדול פשוט מזום פנימה. */
+.org-box__role {
+  font-size: 14.5px; font-weight: 800; color: var(--text); line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.org-box__people { margin-top: 4px; }
+.org-box__person { font-size: 13px; color: var(--text-soft); line-height: 1.3; }
 .org-box__person--empty { color: var(--text-muted); font-style: italic; }
 
 /* כפתורי הפעולה תפסו מקום קבוע בגובה הקוביה גם כשהם בלתי-נראים (opacity:0

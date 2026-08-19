@@ -1952,7 +1952,30 @@ CBA.screens = CBA.screens || {};
         if (animated) { worldEl.style.transition = "transform .38s cubic-bezier(.2,.6,.2,1)"; setTimeout(function () { worldEl.style.transition = ""; }, 400); }
         apply();
       }
+      /* תצוגת פתיחה (2026-08-18, ממצא 3.2 בדו"ח) — קודם המפה נפתחה תמיד
+         ב"התאמה למסך" מלאה. במסך רחב זה יצא גרוע פעמיים: השיכון מצויר לגובה
+         (1100×1354) בעוד החלון רחב, אז ההתאמה נקבעה לפי הגובה — נמדד: קנה
+         מידה 0.457, המפה תפסה 502px מתוך 1315px רוחב (שני שליש שטח ירוק ריק),
+         ובקנה המידה הזה אי אפשר היה לקרוא כלום — לא מספרי בתים ולא שמות
+         רחובות. עכשיו הפתיחה ממלאת את הרוחב ומיושרת לראש השיכון, וגוררים
+         למטה. "התאמה למסך" (⛶) נשאר בדיוק כמו שהיה, למבט-על על כל השכונה. */
+      function initialView(animated) {
+        computeFit();
+        var widthFit = viewport.clientWidth / MAP_WORLD_W;
+        // תקרה של 1.25 ולא 1.0: כל המפה מצוירת ב-DOM/SVG (לא תמונה), אז הגדלה
+        // מעבר ל-1:1 לא מטשטשת כלום — היא רק מגדילה גם את הטקסט, וזה בדיוק מה
+        // שהיה חסר. בלי התקרה מסך רחב מאוד היה מנפח את המפה בלי סוף.
+        scale = Math.max(fitScaleVal, Math.min(1.25, widthFit));
+        tx = (viewport.clientWidth - MAP_WORLD_W * scale) / 2;
+        ty = 0;
+        if (animated) { worldEl.style.transition = "transform .38s cubic-bezier(.2,.6,.2,1)"; setTimeout(function () { worldEl.style.transition = ""; }, 400); }
+        apply();
+      }
+      // איזו תצוגה "בתוקף" כרגע — כדי שאירוע שינוי גודל (סיבוב טלפון, שינוי
+      // חלון) ישחזר את מה שהמשתמש בחר ולא יזרוק אותו חזרה לברירת מחדל.
+      var viewMode = "initial";   // initial | whole | manual
       function setScaleAnchored(newScale, ax, ay, animated) {
+        viewMode = "manual";
         newScale = Math.max(minScale(), Math.min(maxScale(), newScale));
         var wx = (ax - tx) / scale, wy = (ay - ty) / scale;
         scale = newScale;
@@ -1987,6 +2010,7 @@ CBA.screens = CBA.screens || {};
             setScaleAnchored(pinchScale * ratio, midX - rect.left, midY - rect.top, false);
           }
         } else if (dragging && ids.length === 1) {
+          viewMode = "manual";
           tx = txStart + (e.clientX - dragStartX); ty = tyStart + (e.clientY - dragStartY);
           apply();
         }
@@ -2010,7 +2034,27 @@ CBA.screens = CBA.screens || {};
         if (Object.keys(pointers).length < 2) pinchDist = null;
         if (Object.keys(pointers).length === 0) { dragging = false; viewport.classList.remove("grabbing"); }
       });
+      /* (2026-08-18, ממצא 3.3 בדו"ח) קודם כל אירוע גלגלת מעל המפה עשה
+         preventDefault — מי שגלל בעמוד והסמן עבר במקרה מעל המפה, העמוד נעצר
+         והמפה התחילה לזום. זו אחת ההתנהגויות הכי מתסכלות במפות מוטמעות.
+         עכשיו: זום רק עם Ctrl/⌘ (וגם צביטה במשטח מגע, שהדפדפן שולח עם
+         ctrlKey=true) — אחרת העמוד גולל כרגיל, ומוצג רמז קצר. */
+      var wheelHintShown = false;
+      function showWheelHint() {
+        if (wheelHintShown) return;
+        wheelHintShown = true;
+        var h = document.createElement("div");
+        h.className = "map-wheel-hint";
+        h.textContent = "להחזיק Ctrl (או ⌘) כדי לזום · או להשתמש בכפתורי + / –";
+        viewport.appendChild(h);
+        requestAnimationFrame(function () { h.classList.add("show"); });
+        setTimeout(function () {
+          h.classList.remove("show");
+          setTimeout(function () { if (h.parentNode) h.parentNode.removeChild(h); wheelHintShown = false; }, 400);
+        }, 2600);
+      }
       viewport.addEventListener("wheel", function (e) {
+        if (!(e.ctrlKey || e.metaKey)) { showWheelHint(); return; }   // בלי preventDefault — העמוד ממשיך לגלול
         e.preventDefault();
         var rect = viewport.getBoundingClientRect();
         var factor = Math.pow(1.0016, -e.deltaY);
@@ -2023,13 +2067,16 @@ CBA.screens = CBA.screens || {};
       container.querySelector("#map-zoom-out").addEventListener("click", function () {
         setScaleAnchored(scale / 1.4, viewport.clientWidth / 2, viewport.clientHeight / 2, true);
       });
-      container.querySelector("#map-fit").addEventListener("click", function () { closePopup(); fitToScreen(true); });
+      container.querySelector("#map-fit").addEventListener("click", function () { closePopup(); viewMode = "whole"; fitToScreen(true); });
 
       // עוצרים את עצמנו ברגע שהמסך יצא מה-DOM (המשתמש עבר לטאב אחר) — כדי לא
       // לצבור צופי-שינוי-גודל שמצביעים לרכיבים שכבר לא קיימים.
       var ro = new ResizeObserver(function () {
         if (!document.body.contains(viewport)) { ro.disconnect(); return; }
-        fitToScreen(false);
+        // משחזרים את התצוגה שהמשתמש נמצא בה, לא תמיד "התאמה למסך" (ר' viewMode)
+        if (viewMode === "whole") fitToScreen(false);
+        else if (viewMode === "manual") { computeFit(); apply(); }
+        else initialView(false);
       });
       ro.observe(viewport);
 
@@ -2131,6 +2178,7 @@ CBA.screens = CBA.screens || {};
       function goToHouse(num) {
         var t = MAP_TILES.filter(function (r) { return r.n === num; })[0];
         if (!t) return;
+        viewMode = "manual";
         resultsEl.classList.remove("show"); qEl.blur();
         var targetScale = fitScaleVal * MAP_T2 * 1.2;
         var cx = px(t.x + t.w / 2), cy = py(t.y + t.h / 2);
@@ -2142,7 +2190,7 @@ CBA.screens = CBA.screens || {};
         setTimeout(function () { openPopup(num); }, 220);
       }
 
-      fitToScreen(false);
+      initialView(false);
     }
   };
   /* ==== "ועד השיכון" — עץ ארגוני של הוועד, תצוגת קריאה בלבד (2026-08-10) ====
@@ -2357,11 +2405,20 @@ CBA.screens = CBA.screens || {};
         }
         roots.forEach(function (r) { collectNode(r, 0); });
 
-        bodyEl.innerHTML = '<div class="org-tree-wrap"><div class="org-tree-canvas" id="org-tree-canvas">' +
+        // (2026-08-18, ממצאים 3.6+3.9) מקרא קטגוריות + סרגל זום מעל העץ,
+        // ו"התאמה למסך" כברירת מחדל — כך שהעץ נפתח שלם ולא חתוך בשני הקצוות.
+        bodyEl.innerHTML = CBA.committee.legendHTML() +
+          '<div class="org-tools" id="org-tools"></div>' +
+          '<div class="org-tree-wrap"><div class="org-tree-canvas" id="org-tree-canvas">' +
           '<svg class="org-tree-svg" id="org-tree-svg"></svg>' +
           nodesFlat.map(function (n) { return orgNodeBoxHTML(n.box); }).join("") +
           '</div></div>';
         layoutOrgTree(bodyEl.querySelector("#org-tree-canvas"), bodyEl.querySelector("#org-tree-svg"), nodesFlat, byParent);
+        CBA.committee.attachOrgZoom(
+          bodyEl.querySelector(".org-tree-wrap"),
+          bodyEl.querySelector("#org-tree-canvas"),
+          bodyEl.querySelector("#org-tools")
+        );
         // עוגן גלילה התחלתי (2026-08-10): גם בפריסה המדויקת החדשה העץ בפועל
         // רחב מרוב מסכי מחשב — בלי גלילה מפורשת לראש העץ, אפשר "להיזרק"
         // לתוך האמצע שלו בטעינה ראשונה. גוללים במפורש אליו.

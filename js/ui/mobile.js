@@ -52,6 +52,12 @@
     });
   }
 
+  // (2026-08-18) חושפים את המדידה החוצה — app.js קורא לה בכל שינוי של חיווי
+  // השמירה, כרשת ביטחון: אם משום מה הכותרת כן משנה גובה, --header-h (שקובע
+  // מאיפה מתחיל התוכן) יתעדכן איתה במקום להישאר על הערך מרגע הטעינה.
+  window.CBA = window.CBA || {};
+  window.CBA.measureHeader = setHeaderVar;
+
   window.addEventListener("scroll", onScroll, { passive: true });
   window.addEventListener("resize", placeNav);
   window.addEventListener("load", setHeaderVar);

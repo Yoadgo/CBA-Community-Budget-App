@@ -156,10 +156,16 @@
         // שמנהל מועדון יראה כאן פריט אחד, ומי שאין לו אף אחד מהם לא יראה
         // את הקבוצה בכלל. אין צורך בשום לוגיקה מיוחדת.
         { group: "mitkanim", label: "מתקנים", items: [["clubAdmin", "שריון מועדון"], ["gymAdmin", "מכון כושר"]] },
-        ["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"],
-        // ניהול "שירותים לתושב" (2026-08-18) — הצד העורך של resServices שבאזור
-        // התושב. מנהל-על בלבד (ר' SCREEN_PERM.servicesAdmin, servicesAdmin.js).
-        ["servicesAdmin", "שירותים"], ["emailSettings", "ניהול מיילים"]
+        // (2026-08-18, גל 2 — לבקשת יועד: "אני רוצה קוהרנטיות בין אזור תושב
+        // למנהל. אם ועד ורשימת תושבים זה תחת השיכון באזור תושב אז שיהיה ככה גם
+        // אצל המנהל".) "תושבים", "ועד השיכון" ו"שירותים" עברו לקבוצת "השיכון" —
+        // אותו שם, אותו אייקון ואותו סדר כמו באזור התושב למטה, בדיוק כמו
+        // ש"מתקנים" כבר זהה בשני הצדדים. התוצאה: מי שעובר בין האזורים מוצא את
+        // אותם דברים באותם מקומות, ובר הניווט במובייל מקבל מספר קבוע של יעדים.
+        // "ניהול מיילים" ירד מהניווט הראשי לתפריט המשתמש ליד "הגדרות" (לבקשת
+        // יועד — הוא שייך להגדרות המערכת ולא ליעד ניווט יומיומי); הוא נשאר
+        // ב-screens למעלה, כך שניווט אליו עובד רגיל.
+        { group: "shikun", label: "השיכון", items: [["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"], ["servicesAdmin", "שירותים"]] }
       ]
     },
     resident: {
@@ -277,7 +283,66 @@
   // מחדש שקופצת. toggleGroup ו-showScreen לכן רק מחליפים מחלקות במקום, בלי
   // renderNav מלא — כדי שהטרנזיציה תרוץ בכל פעם (animation לא היה חוזר על עצמו
   // באלמנט שנהרס ונוצר מחדש; transition כן, אבל רק אם האלמנט נשאר באותו DOM node).
+  /* ---------- קבוצת ניווט במובייל = גיליון תחתון (2026-08-18, גל 2) ----------
+     בדסקטופ הקבוצה מתרחבת בתוך שורת הטאבים, וזה עובד יפה — יש שם רוחב.
+     במובייל זה נכשל מדידתית: פתיחת "השיכון" הגדילה את תוכן הבר מ-391px ל-657px
+     בתוך בר של 364px, ודחפה את שאר הכפתורים אל *מחוץ* למסך — התושב נשאר עם
+     קבוצה פתוחה ובלי דרך גלויה לחזור (ממצא 1.2 בדו"ח). במובייל, לכן, לחיצה על
+     כותרת קבוצה פותחת גיליון תחתון מעל התוכן: הוא לא מתחרה על רוחב, מציג שם
+     מלא לכל פריט, ונסגר בהקשה בחוץ — הדפוס שכל משתמש טלפון כבר מכיר. */
+  var navMQ = window.matchMedia("(max-width: 720px)");
+  function isMobileNav() { return navMQ.matches; }
+
+  function closeNavSheet() {
+    var el = document.getElementById("nav-sheet");
+    if (!el) return;
+    el.classList.remove("is-open");
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 260);
+  }
+
+  function openNavSheet(groupKey) {
+    closeNavSheet();
+    var a = AREAS[currentArea];
+    if (!a) return;
+    var group = null;
+    a.tabs.forEach(function (t) { if (t && t.group === groupKey) group = t; });
+    if (!group) return;
+
+    var itemsHTML = group.items.map(function (it) {
+      var ico = NAV_ICONS[it[0]] ? '<span class="nav-sheet__ico">' + NAV_ICONS[it[0]] + '</span>' : '';
+      var n = navBadgeCount(it[0]);
+      var badge = n ? '<span class="nav-badge">' + (n > 9 ? "9+" : n) + '</span>' : '';
+      return '<button type="button" class="nav-sheet__item' + (it[0] === currentScreen ? " is-active" : "") +
+        '" data-screen="' + it[0] + '">' + ico + '<span class="nav-sheet__txt">' + CBA.esc(it[1]) + '</span>' + badge + '</button>';
+    }).join("");
+
+    var wrap = document.createElement("div");
+    wrap.className = "nav-sheet";
+    wrap.id = "nav-sheet";
+    wrap.innerHTML =
+      '<div class="nav-sheet__backdrop"></div>' +
+      '<div class="nav-sheet__panel" role="dialog" aria-label="' + CBA.esc(group.label) + '">' +
+        '<div class="nav-sheet__grip" aria-hidden="true"></div>' +
+        '<div class="nav-sheet__title">' + CBA.esc(group.label) + '</div>' +
+        itemsHTML +
+      '</div>';
+    document.body.appendChild(wrap);
+    // rAF — האלמנט חייב להיות ב-DOM ומצויר פעם אחת לפני שמוסיפים is-open, אחרת אין טרנזיציה
+    requestAnimationFrame(function () { wrap.classList.add("is-open"); });
+
+    wrap.querySelector(".nav-sheet__backdrop").addEventListener("click", closeNavSheet);
+    wrap.addEventListener("click", function (e) {
+      var b = e.target.closest(".nav-sheet__item[data-screen]");
+      if (!b) return;
+      closeNavSheet();
+      showScreen(b.dataset.screen);
+    });
+  }
+  // סוגרים גיליון פתוח אם המסך התרחב לדסקטופ תוך כדי (סיבוב טלפון/שינוי חלון)
+  if (navMQ.addEventListener) navMQ.addEventListener("change", function () { if (!navMQ.matches) closeNavSheet(); });
+
   function toggleGroup(g) {
+    if (isMobileNav()) { openNavSheet(g); return; }
     openGroup = (openGroup === g) ? null : g;
     applyNavGroupState();
   }
@@ -449,7 +514,15 @@
   }
   function refreshAlertsClub() {
     if (clubAlertsInFlight) return;
-    if (!(can(PERM.CLUB) && window.CBA.connected && CBA.data && CBA.data.getClubList)) return;
+    // (2026-08-18, ממצא 2.1 בדו"ח הבדיקה) מנהל בלי הרשאת מועדון דילג כאן החוצה
+    // בלי לסמן שהבדיקה הסתיימה — ולכן notif.clubChecked נשאר false לנצח, והמגש
+    // הציג לו "בודק התראות…" בלי סוף (נמדד: גם אחרי 6 שניות וגם אחרי רענון).
+    // אין לו הרשאת מועדון = אין מה לבדוק, וזו תשובה סופית ולא "עוד לא בדקנו".
+    if (!can(PERM.CLUB)) {
+      if (!notif.clubChecked) { notif.clubChecked = true; if (inited) renderControls(); }
+      return;
+    }
+    if (!(window.CBA.connected && CBA.data && CBA.data.getClubList)) return;
     clubAlertsInFlight = true;
     CBA.data.getClubList(function (res) {
       clubAlertsInFlight = false;
@@ -622,6 +695,9 @@
   window.addEventListener("cba:dirty-change", function (e) {
     var d = e && e.detail;
     var el = saveIndicatorEl();
+    // ר' ההערה ב-mobile.css ליד .year-switch__label — מדידה מחדש של גובה
+    // הכותרת בכל הופעה/היעלמות של החיווי, כדי ש---header-h לא יישאר מיושן.
+    setTimeout(function () { if (window.CBA.measureHeader) CBA.measureHeader(); }, 0);
     var textEl = el.querySelector(".save-indicator__text");
     clearTimeout(saveIndicatorHideTimer);
     if (d && d.dirty) {
@@ -629,10 +705,15 @@
       if (textEl) textEl.textContent = "שומר…";
       el.removeAttribute("title");
     } else if (d && d.error) {
+      // (2026-08-18) הנוסח הקודם היה "בעיית רשת בשמירה — ננסה שוב ברענון הבא",
+      // ושתי המילים האחרונות פשוט לא היו נכונות: אין ניסיון חוזר. מאז שהכתיבה
+      // קוראת את תשובת השרת (ר' push ב-sheets.js) אנחנו גם *יודעים* למה היא
+      // נכשלה — אז מציגים את הסיבה האמיתית, והחיווי נשאר 12 שניות במקום 4:
+      // שגיאת שמירה היא לא משהו שכדאי שיחמוק מהעין.
       el.className = "save-indicator is-show is-error";
-      if (textEl) textEl.textContent = "בעיית שמירה";
-      el.title = "בעיית רשת בשמירה — ננסה שוב ברענון הבא";
-      saveIndicatorHideTimer = setTimeout(function () { el.classList.remove("is-show"); }, 4000);
+      if (textEl) textEl.textContent = "השמירה נכשלה";
+      el.title = (d.errorMessage ? d.errorMessage + " " : "") + "השינוי לא נשמר בגיליון — בצעו את השינוי שוב.";
+      saveIndicatorHideTimer = setTimeout(function () { el.classList.remove("is-show"); }, 12000);
     } else {
       el.className = "save-indicator is-show is-saved";
       if (textEl) textEl.textContent = "נשמר ✓";
@@ -709,8 +790,28 @@
   /* --- מיקום אחרון: זוכר איזה אזור/מסך היו פתוחים, כדי שרענון עמוד (F5) יחזיר
      למקום שהיינו בו במקום לקפוץ תמיד למסך ברירת המחדל. --- */
   var ROUTE_KEY = "cba_last_route_v1";
+  // (2026-08-18, ממצא 2.2 בדו"ח הבדיקה) נשמרת עכשיו גם שנת התקציב שנבחרה.
+  // עד היום האפליקציה זכרה באיזה מסך היית אבל לא באיזו שנה — כלומר אחרי כל
+  // רענון חזרת בשקט לשנת ברירת המחדל של הגיליון. זה מסוכן: אפשר לחזור לעמוד,
+  // להמשיך לערוך, ולעדכן בטעות את השנה הלא נכונה.
   function saveRoute() {
-    try { localStorage.setItem(ROUTE_KEY, JSON.stringify({ area: currentArea, screen: currentScreen })); } catch (e) {}
+    try {
+      var y = (window.CBA.data && CBA.data.getCurrentYear) ? CBA.data.getCurrentYear() : "";
+      localStorage.setItem(ROUTE_KEY, JSON.stringify({ area: currentArea, screen: currentScreen, year: y }));
+    } catch (e) {}
+  }
+  // משחזר את השנה השמורה — רק אם היא עדיין קיימת ברשימת השנים של הגיליון
+  // (שנה שנמחקה/שונתה לא תשאיר את המשתמש תקוע על משהו שלא קיים).
+  function restoreSavedYear() {
+    try {
+      var saved = loadRoute();
+      if (!saved || !saved.year) return false;
+      if (!(window.CBA.data && CBA.data.getYears && CBA.data.setCurrentYear)) return false;
+      if (CBA.data.getYears().indexOf(saved.year) === -1) return false;
+      if (CBA.data.getCurrentYear() === saved.year) return false;
+      CBA.data.setCurrentYear(saved.year);
+      return true;
+    } catch (e) { return false; }
   }
   function loadRoute() {
     try { return JSON.parse(localStorage.getItem(ROUTE_KEY) || "null"); } catch (e) { return null; }
@@ -723,6 +824,9 @@
     currentArea = area;
     document.body.dataset.area = area;
     openGroup = null;   // ר' הערה זהה ב-setArea — נקבע מחדש אוטומטית ב-showScreen אם צריך
+    // שחזור השנה לפני ציור המסך, כדי שהמסך ייבנה מלכתחילה עם הנתונים הנכונים
+    // ולא "יקפוץ" משנה לשנה מול העיניים (ר' restoreSavedYear/saveRoute למעלה).
+    if (restoreSavedYear()) renderYearSwitch();
     renderNav(area);
     renderControls();
     var saved = loadRoute();
@@ -736,7 +840,8 @@
     bell: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
     gear: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     logout: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
-    swap: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4l3 3-3 3"/><path d="M20 7H8a4 4 0 0 0-4 4"/><path d="M7 20l-3-3 3-3"/><path d="M4 17h12a4 4 0 0 0 4-4"/></svg>'
+    swap: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4l3 3-3 3"/><path d="M20 7H8a4 4 0 0 0-4 4"/><path d="M7 20l-3-3 3-3"/><path d="M4 17h12a4 4 0 0 0 4-4"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></svg>'
   };
 
   function initials(name) {
@@ -908,6 +1013,12 @@
     var settingsItem = (currentArea === "admin" && isSuper())
       ? '<button class="up-item" data-panel-settings><span class="up-row__ico">' + ICON.gear + '</span>הגדרות</button>'
       : "";
+    // ניהול מיילים (2026-08-18, גל 2) — ירד מהניווט הראשי לכאן, לבקשת יועד,
+    // כי זו הגדרת מערכת ולא יעד ניווט יומיומי. גלוי לכל מי שההרשאות שלו
+    // מאפשרות את המסך (ר' SCREEN_PERM.emailSettings = "ANY" ו-canScreen).
+    var emailItem = (currentArea === "admin" && canScreen("emailSettings"))
+      ? '<button class="up-item" data-panel-goto="emailSettings"><span class="up-row__ico">' + ICON.mail + '</span>ניהול מיילים</button>'
+      : "";
     // הדמיית תושב — כלי רב-עוצמה (רואים דרכו נתונים של אחרים), מנהל על בלבד
     var simItem = isSuper()
       ? (window.CBA.isSimulating && window.CBA.isSimulating()
@@ -922,6 +1033,7 @@
       '<div class="up-sep"></div>' +
       switchItem +
       simItem +
+      emailItem +
       settingsItem +
       action
     );

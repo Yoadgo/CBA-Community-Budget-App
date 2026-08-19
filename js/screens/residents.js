@@ -1829,11 +1829,21 @@ function resOpenDrawer(container, idx, rowIndex, c) {
         }
         roots.forEach(function (r, i) { collectNode(r, 0, i, roots.length); });
 
-        bodyEl.innerHTML = '<div class="org-tree-wrap"><div class="org-tree-canvas" id="org-tree-canvas">' +
+        // (2026-08-18, ממצאים 3.6+3.9) — זהה בדיוק ל-resCommittee (resident.js):
+        // מקרא קטגוריות, סרגל זום, ו"התאמה למסך" כברירת מחדל. שני המסכים
+        // קוראים לאותה CBA.committee.attachOrgZoom כדי שלא תהיה סטייה ביניהם.
+        bodyEl.innerHTML = CBA.committee.legendHTML() +
+          '<div class="org-tools" id="org-tools"></div>' +
+          '<div class="org-tree-wrap"><div class="org-tree-canvas" id="org-tree-canvas">' +
           '<svg class="org-tree-svg" id="org-tree-svg"></svg>' +
           nodesFlat.map(function (n) { return orgNodeBoxHTML(n.box, n.siblingPos, n.siblingCount); }).join("") +
           '</div></div>';
         layoutOrgTree(bodyEl.querySelector("#org-tree-canvas"), bodyEl.querySelector("#org-tree-svg"), nodesFlat, byParent);
+        CBA.committee.attachOrgZoom(
+          bodyEl.querySelector(".org-tree-wrap"),
+          bodyEl.querySelector("#org-tree-canvas"),
+          bodyEl.querySelector("#org-tools")
+        );
         // עוגן גלילה התחלתי (2026-08-10) — ר' אותה הערה ב-resCommittee/resident.js.
         // חשוב באותה מידה כאן: אחרי כל שמירה draw() רץ מחדש, וגם אחרי עריכה
         // רוצים שהמנהל ימשיך לראות את ראש העץ, לא ייזרק לתוך "האמצע" שלו.

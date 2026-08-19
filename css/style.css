@@ -364,6 +364,11 @@ body[data-screen="planning"] .year-switch__add {
 .app-nav__group.is-open .app-nav__tab--group { background: var(--hover); }
 /* המסך הנוכחי נמצא בתוך הקבוצה הזו — רמז עדין (טקסט כהה ומודגש), בלי קפסולה */
 .app-nav__tab--group.has-active { color: var(--text); font-weight: 700; }
+/* (2026-08-18, ממצא 1.5) קבוצה פתוחה — התגית שלה מיותרת, כי התגיות של הפריטים
+   עצמם כבר גלויות לידה, ושתי תגיות אדומות זו לצד זו על אותן הוצאות בדיוק
+   נקראות כמו כפול ממה שבאמת ממתין. ההסתרה ב-CSS ולא ב-JS, כי פתיחה/סגירה של
+   קבוצה מחליפה מחלקות בלבד ואינה מציירת את הניווט מחדש. */
+.app-nav__group.is-open > .app-nav__tab--group > .nav-badge { display: none; }
 /* השברון — מתהפך כשפתוח, אפיון סטנדרטי ל"זה כרגע מורחב, לחיצה תכווץ" */
 .app-nav__chev { display: inline-flex; align-items: center; margin-inline-start: 1px; transition: transform .4s cubic-bezier(.3,.7,.2,1); }
 .app-nav__chev svg { display: block; }
@@ -1054,9 +1059,14 @@ body[data-screen="planning"] .year-switch__add {
 .add-btn--wide { margin-top: 18px; }
 
 /* מחשבון המיסים — שורה 1: משפחות/תעריף/חודשים; שורה 2: חודש אחרון (מלא־רוחב) */
-.dues-calc { margin: 10px 0 4px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; }
+/* (2026-08-18, ממצא 2.4) minmax(0,1fr) ולא 1fr: המינימום האוטומטי של 1fr הוא
+   min-content, ולשדה קלט מספרי יש רוחב מינימלי מובנה משלו (~132px) — שלוש
+   העמודות "דרשו" ~400px ולא הסכימו להצטמצם, מה שהרחיב את כל מסך התכנון מעבר
+   לרוחב הטלפון. minmax(0,...) + min-width:0 מרשים להן באמת להתכווץ. */
+.dues-calc { margin: 10px 0 4px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; }
+.dues-field { min-width: 0; }
 .dues-field label { display: block; font-size: 11px; color: var(--text-soft); margin-bottom: 4px; }
-.dues-field .num-input { width: 100%; }
+.dues-field .num-input { width: 100%; min-width: 0; }
 .dues-field--wide { grid-column: 1 / -1; }
 .dues-eq { font-size: 13px; color: var(--text-soft); margin-top: 6px; }
 .dues-eq b { color: var(--text); font-weight: 700; }
@@ -1340,7 +1350,10 @@ body[data-screen="committeeAdmin"] .app-main { padding-inline: 14px; }
 
   .budget-cols { grid-template-columns: 1fr; gap: 20px; }
   .budget-grid { gap: 10px; }
-  .plan-cols { grid-template-columns: 1fr; }
+  /* (2026-08-18, ממצא 2.4) גם הווריאנט של "תצוגה להצגה" מכוסה — :has() מוסיף
+     ספציפיות, ולכן הכלל הישן לא ניצח אותו והגריד נשאר דו-עמודתי גם בטלפון. */
+  .plan-cols,
+  .plan-cols:has(.present-income-card) { grid-template-columns: minmax(0, 1fr); }
   /* במובייל אין ריחוף — הפעולות תמיד גלויות */
   .plan-item .mini-x, .plan-item .grip { opacity: 1; }
   .plan-group .add-btn,

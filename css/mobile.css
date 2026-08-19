@@ -59,6 +59,15 @@
     gap: 0;
     flex-wrap: nowrap;
   }
+  /* (2026-08-18, ממצא 1.6 בדו"ח) הכותרת במובייל גדלה מ-56px ל-71px בכל פעם
+     שחיווי "שומר…" הופיע: לא היה מספיק רוחב, אז "ניהול קהילה" ו"שנת תקציב"
+     נשברו לשתי שורות — הכותרת קפצה, והתוכן העליון נכנס מתחתיה (--header-h
+     נמדד רק בטעינה/שינוי גודל ונשאר 56px). במקום להזיז את החיווי לתחתית
+     המסך (יועד ביקש במפורש שיהיה בכותרת) — פינינו לו את הרוחב שחסר. */
+  .year-switch__label { display: none; }
+  .app-brand__title { white-space: nowrap; }
+  .save-indicator-slot { flex: none; }
+  .save-indicator { max-width: 118px; }
 
   /* התוכן מתחיל מתחת לכותרת המקובעת, ומשאיר מקום לבר התחתון */
   .app-main {
@@ -84,8 +93,13 @@
        מחדש — מה שהזיז את כל שאר הטאבים (כולל הפעיל) פיזית, לא רק את הקבוצה
        שנפתחה. flex-start מקבע את כל הטאבים לצד ההתחלה (ימין ב-RTL) ומאפשר
        רק לתוכן שגולש מעבר לרוחב הכמוסה לגלוש לגלילה אופקית, בלי להזיז דבר. */
-    display: flex; flex-wrap: nowrap; gap: 2px; justify-content: flex-start;
-    padding: 4px;
+    /* (2026-08-18, גל 2 — ממצא 1.1) הבר עבר מ"שורת גלולות שנגללת" ל"רשת יעדים
+       ברוחב שווה". קודם התוכן היה 732px בתוך בר של 364px — 4 מתוך 7 הכפתורים
+       פשוט מחוץ למסך, בלי פס גלילה, בלי חץ, בלי שום רמז שהם קיימים. עכשיו כל
+       יעד ראשי מקבל flex:1, כך שמבנית אי-אפשר לגלוש: 4 יעדים ב-364px = 91px
+       כל אחד, ומודול נוסף בעתיד רק מצמצם את כולם ולא מעלים אף אחד. */
+    display: flex; flex-wrap: nowrap; gap: 2px; justify-content: space-between;
+    padding: 5px 6px;
     background: rgba(255,255,255,.55);
     backdrop-filter: saturate(190%) blur(18px);
     -webkit-backdrop-filter: saturate(190%) blur(18px);
@@ -98,18 +112,84 @@
 
   /* טאב אופקי (אייקון + טקסט), בדיוק כמו בדסקטופ — לא עמודה של אייקון מעל טקסט.
      2026-08-08: כל המידות הוקטנו ב-~15% (לבקשת יועד), עקבי עם כותרת הדסקטופ. */
+  /* כל יעד ראשי (טאב רגיל או כותרת-קבוצה) חולק את הרוחב שווה בשווה */
+  .app-nav--bottom > .app-nav__tab,
+  .app-nav--bottom > .app-nav__group { flex: 1 1 0; min-width: 0; }
+  .app-nav--bottom > .app-nav__group { display: flex; background: none; }
+  .app-nav--bottom > .app-nav__group > .app-nav__tab--group { flex: 1 1 0; min-width: 0; }
+  /* במובייל הקבוצה נפתחת כגיליון תחתון (ר' openNavSheet ב-app.js), אז
+     ההתרחבות-בשורה של הדסקטופ מנוטרלת — היא זו שדחפה את שאר הכפתורים החוצה. */
+  .app-nav--bottom .app-nav__group-items { display: none; }
+  .app-nav--bottom .app-nav__chev { display: none; }
+
+  /* אייקון מעל טקסט (במקום זה לצד זה) — הדפוס הסטנדרטי של בר ניווט תחתון.
+     הטקסט הוא צומת-טקסט חשוף בתוך flex ולכן הופך לשורה שנייה מעצמו. */
   .app-nav--bottom .app-nav__tab {
-    flex: none;
-    display: inline-flex; align-items: center; gap: 4px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
     color: var(--text-soft);
-    font-size: 11px; font-weight: 500;
-    padding: 8px 11px; border-radius: 999px;
-    white-space: nowrap;
+    font-size: 10px; font-weight: 500; line-height: 1.25;
+    padding: 6px 3px; border-radius: 14px;
+    white-space: nowrap; overflow: hidden; text-align: center;
   }
-  .app-nav--bottom .app-nav__tab.is-active { color: #fff; background: var(--action); font-weight: 600; }
-  .app-nav--bottom .app-nav__ico svg { width: 13px; height: 13px; }
-  .app-nav--bottom .app-nav__tab--sub { font-size: 10px; padding-block: 5px; }
-  .app-nav--bottom .app-nav__tab--sub .app-nav__ico svg { width: 11px; height: 11px; }
+  .app-nav--bottom .app-nav__tab.is-active,
+  /* כשהמסך הפעיל יושב בתוך קבוצה, הכפתור הפעיל עצמו לא בבר (הוא בגיליון) —
+     אז כותרת הקבוצה היא שצריכה להיראות פעילה, אחרת שום דבר בבר לא מסומן. */
+  .app-nav--bottom .app-nav__tab--group.has-active {
+    color: #fff; background: var(--action); font-weight: 600;
+  }
+  .app-nav--bottom .app-nav__ico svg { width: 19px; height: 19px; }
+  /* התגית עוברת לפינה כדי לא לתפוס שורה שלישית בתוך הכפתור */
+  .app-nav--bottom .nav-badge { position: absolute; top: 3px; inset-inline-end: 6px; margin: 0; }
+
+  /* ---------- גיליון תחתון לקבוצת ניווט (2026-08-18, גל 2) ---------- */
+  .nav-sheet { position: fixed; inset: 0; z-index: 60; }
+  .nav-sheet__backdrop {
+    position: absolute; inset: 0; background: rgba(16,24,40,.28);
+    opacity: 0; transition: opacity .24s ease;
+  }
+  .nav-sheet.is-open .nav-sheet__backdrop { opacity: 1; }
+  .nav-sheet__panel {
+    position: absolute; inset-inline: 10px;
+    bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 18px);
+    background: rgba(255,255,255,.92);
+    backdrop-filter: saturate(190%) blur(20px);
+    -webkit-backdrop-filter: saturate(190%) blur(20px);
+    border: 1px solid rgba(255,255,255,.7); border-radius: 20px;
+    box-shadow: 0 12px 40px rgba(16,24,40,.22), inset 0 1px 0 rgba(255,255,255,.8);
+    padding: 8px 8px 10px;
+    transform: translateY(14px); opacity: 0;
+    transition: transform .26s cubic-bezier(.2,.7,.2,1), opacity .2s ease;
+  }
+  .nav-sheet.is-open .nav-sheet__panel { transform: translateY(0); opacity: 1; }
+  .nav-sheet__grip { width: 36px; height: 4px; border-radius: 999px; background: rgba(17,24,39,.14); margin: 2px auto 8px; }
+  .nav-sheet__title { font-size: 12px; font-weight: 700; color: var(--text-muted); padding: 0 10px 8px; text-align: start; }
+  .nav-sheet__item {
+    position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 12px; border: none; background: none; border-radius: 13px;
+    font: inherit; font-size: 14.5px; font-weight: 500; color: var(--text);
+    cursor: pointer; text-align: start;
+  }
+  .nav-sheet__item:active { background: var(--hover); }
+  .nav-sheet__item.is-active { background: var(--action); color: #fff; font-weight: 600; }
+  .nav-sheet__ico { display: inline-flex; flex: none; }
+  .nav-sheet__ico svg { width: 18px; height: 18px; display: block; }
+  .nav-sheet__txt { flex: 1; min-width: 0; }
+  .nav-sheet__item .nav-badge { position: static; margin: 0; }
+  .nav-sheet__item.is-active .nav-badge { background: #fff; color: var(--action); }
+
+  /* ---------- "בניית תקציב": ביטול רוחבי-מינימום מובנים (2026-08-18, ממצא 2.4) ----------
+     זה היה המסך היחיד שגרם לכל העמוד לזוז ימינה-שמאלה בטלפון (נמדד: מסמך
+     ברוחב 477px בתוך מסך 390px). הסיבה אינה כלל אחד שגוי אלא הצטברות: לכל
+     שדה קלט מספרי יש רוחב מינימלי מובנה, ופריטי grid/flex מקבלים כברירת מחדל
+     min-width:auto — כלומר מסרבים להצטמצם מתחת לתוכן ודוחפים את ההורה לגלוש. */
+  .plan-cols > *, .plan-groups, .plan-group, .plan-item, .plan-item > *,
+  .plan-item__head, .plan-item__row, .plan-item__more,
+  .income-item, .income-item > *, .income-item__more, .income-edit { min-width: 0; }
+  .plan-item__row { flex-wrap: wrap; }
+  .plan-item__row .num-input, .income-edit .num-input { min-width: 0; width: auto; flex: 1 1 90px; }
+  .bottomline-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .bottomline-bar .bl-cell { min-width: 0; }
+  .bottomline-bar .bl-cell__val { overflow-wrap: anywhere; }
 
   /* ---------- שלב 2: מסך "תכנון מול ביצוע" — פריסה אנכית מרווחת ---------- */
   .budget-cols { gap: 26px; }

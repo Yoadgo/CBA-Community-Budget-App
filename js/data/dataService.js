@@ -1396,9 +1396,83 @@ CBA.committee = (function () {
     }
     return out;
   }
+  /* ---------- זום/התאמה-למסך לעץ הוועד (2026-08-18, ממצא 3.6 בדו"ח) ----------
+     נמדד: ברוחב מסך 1440px הקנבס של העץ הוא 1743px מול 1412px גלויים, והוא
+     נפתח כשהוא גלול לאמצע — 7 מתוך 29 הקוביות חתוכות *בשני* הקצוות בו-זמנית
+     (ביניהן "גזבר"), ואפילו לא ברור לאיזה כיוון לגלול. במפה כבר קיים בדיוק
+     הפתרון (זום + "התאמה למסך"), אז אותו רעיון מובא לכאן. יושב ב-CBA.committee
+     ולא בשני המסכים בנפרד — resCommittee (תצוגה) ו-committeeAdmin (ניהול)
+     מציירים את אותו עץ, ואין סיבה שיחזיקו שני עותקים של אותה מתמטיקה.
+     transform:scale לא משנה פריסה, ולכן הקנבס נעטף ב"סרגל גודל" שרוחבו וגובהו
+     הם המידות *אחרי* ההקטנה — כך הגלילה תמיד מדויקת בדיוק כמה שצריך. */
+  function attachOrgZoom(wrap, canvas, toolbarHost) {
+    if (!wrap || !canvas) return null;
+    var baseW = parseFloat(canvas.style.width) || canvas.offsetWidth || 1;
+    var baseH = parseFloat(canvas.style.height) || canvas.offsetHeight || 1;
+
+    var sizer = document.createElement("div");
+    sizer.className = "org-tree-sizer";
+    canvas.parentNode.insertBefore(sizer, canvas);
+    sizer.appendChild(canvas);
+    canvas.style.transformOrigin = "top right";   // RTL — העוגן הוא הפינה הימנית העליונה
+
+    var MIN = 0.42, MAX = 1.6;
+    var scale = 1, pctEl = null;
+    function setScale(v, animated) {
+      scale = Math.max(MIN, Math.min(MAX, v));
+      canvas.style.transition = animated ? "transform .28s cubic-bezier(.2,.6,.2,1)" : "";
+      canvas.style.transform = "scale(" + scale + ")";
+      sizer.style.width = Math.round(baseW * scale) + "px";
+      sizer.style.height = Math.round(baseH * scale) + "px";
+      if (pctEl) pctEl.textContent = Math.round(scale * 100) + "%";
+    }
+    function fit(animated) {
+      // clientWidth כולל ריפוד — צריך את רוחב התוכן בפועל, אחרת ההתאמה יוצאת
+      // רחבה מדי בדיוק בגודל הריפוד ונשארת גלילה של כמה פיקסלים שנראית כמו באג.
+      var cs = window.getComputedStyle(wrap);
+      var pad = (parseFloat(cs.paddingInlineStart) || parseFloat(cs.paddingLeft) || 0) +
+                (parseFloat(cs.paddingInlineEnd) || parseFloat(cs.paddingRight) || 0);
+      var avail = Math.max(120, (wrap.clientWidth || baseW) - pad - 2);
+      setScale(Math.min(1, avail / baseW), animated);
+      wrap.scrollLeft = 0;
+    }
+    if (toolbarHost) {
+      var bar = document.createElement("div");
+      bar.className = "org-zoom";
+      bar.innerHTML =
+        '<button type="button" class="org-zoom__btn" data-org-zoom="out" aria-label="הקטנה" title="הקטנה">–</button>' +
+        '<span class="org-zoom__pct" aria-live="polite">100%</span>' +
+        '<button type="button" class="org-zoom__btn" data-org-zoom="in" aria-label="הגדלה" title="הגדלה">+</button>' +
+        '<button type="button" class="org-zoom__btn org-zoom__btn--fit" data-org-zoom="fit" title="התאמה למסך">התאמה למסך</button>';
+      toolbarHost.appendChild(bar);
+      pctEl = bar.querySelector(".org-zoom__pct");
+      bar.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-org-zoom]");
+        if (!b) return;
+        var a = b.dataset.orgZoom;
+        if (a === "in") setScale(scale * 1.2, true);
+        else if (a === "out") setScale(scale / 1.2, true);
+        else fit(true);
+      });
+    }
+    fit(false);
+    return { fit: fit, setScale: setScale };
+  }
+
+  /* מקרא הקטגוריות (2026-08-18, ממצא 3.9) — פס הצבע על ראש כל קוביה לא אמר
+     כלום: שם הקטגוריה הופיע רק כ-tooltip בריחוף, כלומר במובייל בכלל לא. */
+  function legendHTML() {
+    var cats = catsList();
+    if (!cats.length) return "";
+    return '<div class="org-legend">' + cats.map(function (c) {
+      return '<span class="org-legend__item"><i style="background:' + CBA.esc(c.color) + '"></i>' + CBA.esc(c.name) + '</span>';
+    }).join("") + '</div>';
+  }
+
   return {
     loadCategories: loadCategories, catsList: catsList, catInfo: catInfo, addCategory: addCategory,
-    buildBoxes: buildBoxes, descendantIds: descendantIds
+    buildBoxes: buildBoxes, descendantIds: descendantIds,
+    attachOrgZoom: attachOrgZoom, legendHTML: legendHTML
   };
 })();
 
