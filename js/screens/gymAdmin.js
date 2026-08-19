@@ -15,6 +15,8 @@ CBA.screens = CBA.screens || {};
   // שימור מיקום גלילה בין ציורים מחדש — אותו פתרון כמו clubAdmin/residents:
   // render() נקרא שוב גם ברענון רקע שקט, וה-innerHTML החדש היה מאפס גלילה.
   var gaWinScrollY = 0;
+  // התשובה האחרונה מהשרת — טופס ההקמה הידנית צריך ממנה את רשימת המסלולים
+  var gaLast = null;
 
   // אותו חיווי טעינה בדיוק כמו clubAdmin (club-loading + rs-spin) — מחלקות
   // שכבר קיימות ונבדקו, ולא מחלקת שלד חדשה שאולי לא מוגדרת ב-CSS.
@@ -46,6 +48,154 @@ CBA.screens = CBA.screens || {};
     }).length;
   }
 
+  /* ---------- שורת מנוי ברשימה ---------- */
+  var GA_TONE = {
+    "פעיל": "ok", "פג תוקף": "muted", "מוקפא": "muted",
+    "ממתין לאישור רופא": "danger", "נדחה": "danger", "בוטל": "danger"
+  };
+  function memberRowHTML(m) {
+    var status = String(m["סטטוס"] || "").trim();
+    var tone = GA_TONE[status] || "warn";
+    var name = ((m["שם פרטי"] || "") + " " + (m["שם משפחה"] || "")).trim() || m["אימייל"] || "";
+    var flags = String(m["שאלות שנענו בכן"] || "").trim();
+    return '<div class="gym-row">' +
+             '<div class="gym-row__main">' +
+               '<div class="gym-row__name">' + CBA.esc(name) +
+                 (flags ? ' <span class="gym-pill gym-pill--danger">דגל</span>' : "") + "</div>" +
+               '<div class="gym-row__meta">' +
+                 (m["מספר בית"] ? "בית " + CBA.esc(m["מספר בית"]) + " · " : "") +
+                 CBA.esc(m["מסלול"] || "") +
+                 (m["בתוקף עד"] ? " · בתוקף עד " + CBA.esc(m["בתוקף עד"]) : "") +
+               "</div>" +
+               (flags ? '<div class="gym-row__flags">סומן "כן": ' + CBA.esc(flags) + "</div>" : "") +
+             "</div>" +
+             '<div class="gym-row__side">' +
+               '<span class="gym-pill gym-pill--' + tone + '">' + CBA.esc(status) + "</span>" +
+               (status === "ממתין להצהרה"
+                 ? ""
+                 : '<button type="button" class="btn-ghost" data-ga-declare="' + CBA.esc(m["מזהה"] || "") +
+                   '">בקשת הצהרה</button>') +
+             "</div>" +
+           "</div>";
+  }
+
+  function bindMemberActions(root, reload) {
+    root.querySelectorAll("[data-ga-declare]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.gaDeclare;
+        if (!id) return;
+        if (!window.confirm("לשלוח לתושב מייל עם בקשה למלא הצהרת בריאות?\n" +
+                            "המנוי יעבור לסטטוס \"ממתין להצהרה\" עד שימלא אותה.")) return;
+        btn.disabled = true;
+        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymAdminAction");
+        CBA.data.requestGymDeclaration(id, function (res) {
+          if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymAdminAction");
+          if (!res || !res.ok) {
+            btn.disabled = false;
+            window.alert((res && res.error) || "השליחה נכשלה.");
+            return;
+          }
+          reload();
+        });
+      });
+    });
+  }
+
+  /* ---------- הקמת מנוי ידנית ----------
+     נועד למי שנרשם פיזית או שלא משתמש באפליקציה. שתי החלטות מכוונות:
+     • המנוי נולד תמיד "ממתין לתשלום" (או "ממתין להצהרה") ולעולם לא "פעיל" —
+       אימות התשלום נשאר ידני תמיד, גם כאן.
+     • להצהרת הבריאות יש שתי דרכים: לסמן שהתקבלה בנייר (עם תאריך), או לשלוח
+       לתושב מייל שיבקש ממנו למלא אותה באפליקציה. מנהל/ת המכון לא ממלא/ת את
+       השאלון בשם התושב — הצהרה רפואית צריכה להיחתם ע"י מי שמצהיר. */
+  function openCreate(container, reload) {
+    var plans = (gaLast && gaLast.plans) || [];
+    var el = document.createElement("div");
+    el.id = "gym-create";
+    el.className = "gym-wiz";
+    el.innerHTML =
+      '<div class="gym-wiz__backdrop" data-gc-close></div>' +
+      '<aside class="gym-wiz__panel" role="dialog" aria-label="הקמת מנוי ידנית">' +
+        '<div class="gym-wiz__head">' +
+          '<div class="gym-wiz__title">הקמת מנוי ידנית</div>' +
+          '<button type="button" class="gym-wiz__x" data-gc-close aria-label="סגירה">×</button>' +
+        "</div>" +
+        '<div class="gym-wiz__body">' +
+          '<div class="gym-hint">האימייל חייב להיות רשום בטאב "תושבים" — משם נמשכים שם, בית ומזהה המשפחה.</div>' +
+          '<div class="gym-field"><label>אימייל התושב</label>' +
+            '<input type="email" data-gc="email" placeholder="name@example.com"></div>' +
+          '<div class="gym-field"><label>שם פרטי (אפשר להשאיר ריק — יימשך מהתושבים)</label>' +
+            '<input type="text" data-gc="firstName"></div>' +
+          '<div class="gym-field"><label>שם משפחה</label><input type="text" data-gc="lastName"></div>' +
+          '<div class="gym-field"><label>טלפון</label><input type="tel" data-gc="phone"></div>' +
+          '<div class="gym-field"><label>תעודת זהות</label>' +
+            '<input type="text" inputmode="numeric" data-gc="idNumber"></div>' +
+          '<div class="gym-field"><label>תאריך לידה</label><input type="date" data-gc="birthDate"></div>' +
+          '<div class="gym-field"><label>מסלול</label><select data-gc="planId">' +
+            plans.map(function (p) {
+              return '<option value="' + CBA.esc(p.id) + '">' + CBA.esc(p.name) +
+                     " — " + p.total + " ₪</option>";
+            }).join("") + "</select></div>" +
+          '<div class="gym-field"><label>הצהרת בריאות</label>' +
+            '<div class="gym-seg gym-seg--wide" data-gc-mode>' +
+              '<button type="button" data-val="request" class="is-on">לשלוח בקשה במייל</button>' +
+              '<button type="button" data-val="received">התקבלה בנייר</button>' +
+            "</div></div>" +
+          '<div class="gym-field" id="gc-decl-date" style="display:none"><label>תאריך ההצהרה שהתקבלה</label>' +
+            '<input type="date" data-gc="declarationDate"></div>' +
+          '<div class="gym-field"><label>הערה (לא נשלחת לתושב)</label>' +
+            '<input type="text" data-gc="note"></div>' +
+        "</div>" +
+        '<div class="gym-wiz__foot">' +
+          '<button type="button" class="btn-ghost" data-gc-close>ביטול</button>' +
+          '<button type="button" class="btn-primary" data-gc-save>הקמת המנוי</button>' +
+        "</div>" +
+      "</aside>";
+    document.body.appendChild(el);
+
+    var data = { declarationMode: "request" };
+    el.querySelectorAll("[data-gc]").forEach(function (n) {
+      n.addEventListener("input", function () { data[n.dataset.gc] = n.value; });
+      n.addEventListener("change", function () { data[n.dataset.gc] = n.value; });
+      if (n.tagName === "SELECT") data[n.dataset.gc] = n.value;
+    });
+    el.querySelectorAll("[data-gc-mode] button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        data.declarationMode = b.dataset.val;
+        el.querySelectorAll("[data-gc-mode] button").forEach(function (x) { x.classList.remove("is-on"); });
+        b.classList.add("is-on");
+        el.querySelector("#gc-decl-date").style.display = (b.dataset.val === "received") ? "" : "none";
+      });
+    });
+    function close() {
+      if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymCreate");
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }
+    el.querySelectorAll("[data-gc-close]").forEach(function (n) { n.addEventListener("click", close); });
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymCreate");
+
+    el.querySelector("[data-gc-save]").addEventListener("click", function () {
+      if (!String(data.email || "").trim()) { window.alert("צריך למלא אימייל."); return; }
+      if (data.declarationMode === "received" && !data.declarationDate) {
+        window.alert("צריך למלא את תאריך ההצהרה שהתקבלה."); return;
+      }
+      var btn = el.querySelector("[data-gc-save]");
+      btn.disabled = true; btn.textContent = "מקים…";
+      CBA.data.createGymMembership(data, function (res) {
+        if (!res || !res.ok) {
+          btn.disabled = false; btn.textContent = "הקמת המנוי";
+          window.alert((res && res.error) || "ההקמה נכשלה.");
+          return;
+        }
+        close();
+        window.alert(res.status === "ממתין להצהרה"
+          ? "המנוי הוקם. נשלח לתושב מייל עם בקשה למלא הצהרת בריאות."
+          : "המנוי הוקם וממתין לתשלום. נשלח לתושב מייל עם הסכום.");
+        reload();
+      });
+    });
+  }
+
   CBA.screens.gymAdmin = {
     title: "מכון כושר",
 
@@ -53,9 +203,12 @@ CBA.screens = CBA.screens || {};
       gaWinScrollY = window.scrollY || 0;
 
       container.innerHTML =
-        '<div class="screen-head">' +
-          '<div class="screen-head__title">מכון כושר — ניהול</div>' +
-          '<div class="screen-head__sub">מנויים, אישורי הרשמה ומעקב תשלומים</div>' +
+        '<div class="screen-head screen-head--row">' +
+          '<div>' +
+            '<div class="screen-head__title">מכון כושר — ניהול</div>' +
+            '<div class="screen-head__sub">מנויים, אישורי הרשמה ומעקב תשלומים</div>' +
+          '</div>' +
+          '<button type="button" class="btn-primary" id="ga-new">הקמת מנוי ידנית</button>' +
         '</div>' +
         '<div id="ga-kpis" class="gym-kpis"></div>' +
         '<div class="card club-card">' +
@@ -67,10 +220,14 @@ CBA.screens = CBA.screens || {};
           '<div id="ga-status" class="gym-check">' + gaLoadingHTML() + '</div>' +
         '</div>';
 
+      var newBtn = container.querySelector("#ga-new");
+      if (newBtn) newBtn.addEventListener("click", function () { openCreate(container, load); });
+
       var kpisEl    = container.querySelector("#ga-kpis");
       var membersEl = container.querySelector("#ga-members");
       var statusEl  = container.querySelector("#ga-status");
 
+      // הצהרת פונקציה (לא ביטוי) — ולכן היא מורמת ונגישה גם לכפתור שנקשר למעלה.
       function load() {
         if (!(CBA.data && CBA.data.getGymList)) {
           membersEl.innerHTML = '<div class="club-empty">המודול עדיין לא מחובר לגיליון.</div>';
@@ -88,6 +245,7 @@ CBA.screens = CBA.screens || {};
             return;
           }
 
+          gaLast = res;
           var members   = res.members   || [];
           var plans     = res.plans     || [];
           var questions = res.questions || [];
@@ -109,9 +267,10 @@ CBA.screens = CBA.screens || {};
             kpi(members.length, "סה״כ רשומות", "muted");
 
           membersEl.innerHTML = members.length
-            ? '<div class="club-empty">' + members.length + ' רשומות בגיליון. טבלת המנויים המלאה נבנית בשלב הבא.</div>'
-            : '<div class="gym-note">עדיין אין מנויים — <strong>וזה הצפוי</strong>.<br>' +
-              'אשף ההרשמה לתושבים נבנה בשלב הבא, ואז הבקשות יתחילו להופיע כאן.</div>';
+            ? members.map(memberRowHTML).join("")
+            : '<div class="gym-note">עדיין אין מנויים.<br>' +
+              'תושבים יכולים להירשם לבד במסך "מתקנים ← מכון כושר", ואפשר גם להקים מנוי ידנית מהכפתור למעלה.</div>';
+          bindMemberActions(membersEl, load);
 
           var plan = plans[0];
           var planTxt = plan

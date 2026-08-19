@@ -103,7 +103,11 @@ var ACTION_PERMS = {
   // (הרשמה, דיווח תשלום, "המנוי שלי") לא יופיעו כאן גם בשלבים הבאים, כי הן
   // פתוחות לכל תושב מחובר ופעיל — בדיוק כמו שריון מועדון והגשת קבלה.
   // פעולות הכתיבה הניהוליות (אישור, אימות תשלום, הארכה) יצטרפו בשלבים 2-3.
-  gymList: PERM_GYM
+  gymList: PERM_GYM,
+  // שלב 2 (2026-08-19) — פעולות ניהול. יצירת מנוי ידנית ודרישת הצהרה במייל
+  // הן פעולות של מנהל המכון, לא של מנהל-על: זו עבודה שוטפת ולא שינוי מבני.
+  createGymMembership: PERM_GYM,
+  requestGymDeclaration: PERM_GYM
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -324,6 +328,16 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'gymList') {
       return handleGymList_(e.parameter);
     }
+    // שלב 2 (2026-08-19) — שתי קריאות של **התושב** ולכן פתוחות לכל תושב מחובר
+    // ופעיל (need=null בתוך ההנדלר), בדיוק כמו committeeTree/services:
+    //   gymForm — תוכן האשף: שאלון, תקנון, מסלולים וכללי גיל. בלי קוד הכניסה.
+    //   gymMy   — המנוי של המשתמש המחובר בלבד, לפי האימייל שבמושב החתום.
+    if (e && e.parameter && e.parameter.action === 'gymForm') {
+      return handleGymForm_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'gymMy') {
+      return handleGymMy_(e.parameter);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var years = [];
     ss.getSheets().forEach(function (sh) {
@@ -420,6 +434,10 @@ function doPost(e) {
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
+      // מכון כושר, שלב 2 (2026-08-19)
+      case 'submitGymApplication':  return json_(submitGymApplication_(ss, body));
+      case 'createGymMembership':   return json_(createGymMembership_(ss, body));
+      case 'requestGymDeclaration': return json_(requestGymDeclaration_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -3299,6 +3317,23 @@ var DEFAULT_EMAIL_SETTINGS = [
     'נשלח לכל תושבי השיכון רק כשמנהל-על לוחץ ידנית על "עדכון תושבים" במסך עריכת שירות — אף פעם לא אוטומטית. הכפתור לאפליקציה מתווסף אוטומטית בעיצוב',
     PERM_SUPER, 'כן'],
 
+  ['GYM_APPLICATION_RECEIVED', 'קיבלנו את בקשת ההרשמה שלך למכון הכושר',
+    'שלום {{שם}},\n\nקיבלנו את בקשת ההרשמה שלך למכון הכושר. נעדכן אותך בכל שינוי, ואפשר לעקוב אחרי הסטטוס גם במסך "מכון כושר" באפליקציה.\n\nבברכה,\nועד הקהילה',
+    'נשלח לתושב מיד עם שליחת טופס ההרשמה למכון'],
+  ['GYM_APPROVED_AWAITING_PAYMENT', 'ההרשמה למכון אושרה — נשאר להסדיר תשלום',
+    'שלום {{שם}},\n\nההרשמה שלך למכון הכושר אושרה. כדי להפעיל את המנוי יש להסדיר תשלום של {{סכום}} ₪ עבור {{מסלול}}.\n\nאת פרטי התשלום אפשר לראות במסך "מכון כושר" באפליקציה.\n\nבברכה,\nועד הקהילה',
+    'נשלח כשהבקשה מאושרת (אוטומטית כשאין דגלי בריאות, או ידנית ע"י מנהל המכון)'],
+  ['GYM_DOCTOR_NOTE_REQUIRED', 'נדרש אישור רופא להשלמת ההרשמה למכון',
+    'שלום {{שם}},\n\nבהצהרת הבריאות שמילאת סימנת "כן" באחת מהשאלות ({{שאלות}}), ולכן לפי תקנון המכון נדרשת תעודה רפואית מרופא המאשרת שאין סיכון לבריאותך באימון במכון כושר.\n\nחשוב: המכון יכול לקבל רק אישור שלא עברו 3 חודשים ממועד הנפקתו. את האישור יש להעביר לאחראית חדר הכושר בשיכון.\n\nבברכה,\nועד הקהילה',
+    'נשלח אוטומטית כשתושב עונה "כן" על שאלה המסומנת כדגל חוסם'],
+  ['GYM_DECLARATION_REQUEST', 'נדרשת הצהרת בריאות למנוי במכון הכושר',
+    'שלום {{שם}},\n\nנפתח עבורך מנוי במכון הכושר, ונשאר רק למלא הצהרת בריאות וחתימה — זה לוקח דקה. נכנסים לאפליקציה, בוחרים "מתקנים" ואז "מכון כושר".\n\nבברכה,\nועד הקהילה',
+    'נשלח כשמנהל המכון מקים מנוי ידנית ומבקש מהתושב למלא הצהרה, או לוחץ "בקשת הצהרה" על מנוי קיים'],
+
+  ['ADMIN_NEW_GYM_FLAGGED', 'בקשת הרשמה למכון עם דגל בריאות ממתינה',
+    'התקבלה בקשת הרשמה למכון הכושר מ-{{שם}} ({{אימייל}}) עם דגל בריאות: {{שאלות}}.\n\nהבקשה ממתינה לאישור רופא ולאישורך.',
+    'למנהלי מכון + מנהל-על. שים לב: בקשה נקייה (כל התשובות "לא") מאושרת אוטומטית ולא שולחת מייל למנהל'],
+
   ['ADMIN_WEEKLY_DIGEST', 'סיכום שבועי — מה פתוח באפליקציית הוועד',
     'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו — חוצה מידורים ולכן שייך למנהל-על', PERM_SUPER, 'כן'],
   ['ADMIN_MONTHLY_DIGEST', 'תזכורת: בקשות החזר פתוחות לפני סגירת החלון ב-19 לחודש',
@@ -4543,4 +4578,537 @@ function setupGymModule() {
              ', מקטעי תקנון: ' + cfg.rules.length +
              '. עמודות שנוספו לתושבים: ' + JSON.stringify(cols.added || []));
   return { ok: true };
+}
+
+/* ============================================================================
+ *  מכון כושר — שלב 2: הרשמה (2026-08-19)
+ * ----------------------------------------------------------------------------
+ *  שני מסלולי כניסה למנוי, ושניהם נוחתים על אותה שורה בטאב "מכון כושר":
+ *
+ *  א. התושב נרשם בעצמו (submitGymApplication) — ממלא פרטים, מאשר תקנון, עונה
+ *     על השאלון וחותם. אם כל התשובות "לא" והמתג "אישור אוטומטי ללא דגלים"
+ *     דלוק — הבקשה עוברת ישר ל"ממתין לתשלום" בלי שמנהל ייגע בה.
+ *
+ *  ב. מנהל המכון מקים ידנית (createGymMembership) — למי שנרשם פיזית או שלא
+ *     משתמש באפליקציה. שתי אפשרויות להצהרה: לסמן שהתקבלה (בנייר) עם תאריך,
+ *     או לשלוח לתושב מייל שיבקש ממנו למלא אותה באפליקציה. מנוי כזה נולד תמיד
+ *     כ"ממתין לתשלום" (או "ממתין להצהרה") — לעולם לא כפעיל, כי התשלום מאומת
+ *     ידנית תמיד. זו החלטה מפורשת של יועד.
+ *
+ *  כשמנהל ביקש הצהרה והתושב ממלא אותה — submitGymApplication **מעדכן את השורה
+ *  הקיימת** במקום ליצור חדשה. זו הנקודה שמחברת בין שני המסלולים.
+ * ========================================================================== */
+
+var GYM_ST_DECLARATION = 'ממתין להצהרה';
+var GYM_ST_DOCTOR      = 'ממתין לאישור רופא';
+var GYM_ST_REVIEW      = 'ממתין לאישור';
+var GYM_ST_PAYMENT     = 'ממתין לתשלום';
+var GYM_ST_VERIFY      = 'ממתין לאימות';
+var GYM_ST_ACTIVE      = 'פעיל';
+var GYM_ST_EXPIRED     = 'פג תוקף';
+var GYM_ST_FROZEN      = 'מוקפא';
+var GYM_ST_REJECTED    = 'נדחה';
+var GYM_ST_CANCELLED   = 'בוטל';
+
+/* סטטוסים שנחשבים "מנוי חי" — אי אפשר לפתוח שני כאלה לאותו אדם. */
+var GYM_OPEN_STATUSES = [GYM_ST_DECLARATION, GYM_ST_DOCTOR, GYM_ST_REVIEW,
+                         GYM_ST_PAYMENT, GYM_ST_VERIFY, GYM_ST_ACTIVE, GYM_ST_FROZEN];
+
+/** מפת כותרת -> מספר עמודה (1-based). נקראת מחדש בכל פעם, כי עמודות השאלון
+ * נוספות דינמית ולכן המפה משתנה לאורך חיי הגיליון. */
+function gymCols_(sh) {
+  var last = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, last).getValues()[0];
+  var map = {};
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i]).trim();
+    if (h) map[h] = i + 1;
+  }
+  return map;
+}
+
+/** מאתר שורת מנוי לפי אימייל. מחזיר את השורה ה"חיה" אם יש, אחרת את האחרונה
+ * שנמצאה (למשל מנוי שפג) — כדי שמסך התושב יוכל להציג "חדש/חידוש" נכון. */
+function gymFindRow_(sh, cols, email) {
+  var target = normalizeEmail_(email);
+  if (!target || !cols['אימייל']) return { row: 0, status: '' };
+  var last = sh.getLastRow();
+  if (last < 2) return { row: 0, status: '' };
+  var emails = sh.getRange(2, cols['אימייל'], last - 1, 1).getValues();
+  var statuses = cols['סטטוס'] ? sh.getRange(2, cols['סטטוס'], last - 1, 1).getValues() : [];
+  var fallback = 0, fallbackStatus = '';
+  for (var i = 0; i < emails.length; i++) {
+    if (normalizeEmail_(emails[i][0]) !== target) continue;
+    var st = statuses.length ? String(statuses[i][0]).trim() : '';
+    if (GYM_OPEN_STATUSES.indexOf(st) !== -1) return { row: i + 2, status: st };
+    fallback = i + 2; fallbackStatus = st;
+  }
+  return { row: fallback, status: fallbackStatus };
+}
+
+/** מוסיף שורה ריקה בגודל הכותרות ומחזיר את מספרה. appendRow דורש מערך באורך
+ * תואם, ולכן לא אפשר להעביר לו [] — זו הייתה שגיאה בשלב הבנייה. */
+function gymAppendBlankRow_(sh) {
+  var n = sh.getLastColumn();
+  var blank = [];
+  for (var i = 0; i < n; i++) blank.push('');
+  sh.appendRow(blank);
+  return sh.getLastRow();
+}
+
+function nextGymId_(sh, cols) {
+  var last = sh.getLastRow();
+  if (last < 2 || !cols['מזהה']) return 'GYM-0001';
+  var ids = sh.getRange(2, cols['מזהה'], last - 1, 1).getValues();
+  var max = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var m = String(ids[i][0]).match(/(\d+)\s*$/);
+    if (m) { var n = parseInt(m[1], 10); if (n > max) max = n; }
+  }
+  var next = String(max + 1);
+  while (next.length < 4) next = '0' + next;
+  return 'GYM-' + next;
+}
+
+/** גיל מלא בשנים מתאריך לידה (מחרוזת YYYY-MM-DD). מחזיר -1 אם לא ניתן לחשב. */
+function gymAge_(birth) {
+  if (!birth) return -1;
+  var d = new Date(String(birth).length <= 10 ? String(birth) + 'T00:00:00' : birth);
+  if (isNaN(d.getTime())) return -1;
+  var now = new Date();
+  var age = now.getFullYear() - d.getFullYear();
+  var m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  return age;
+}
+
+/** שומר את תמונת החתימה (dataURL מהקנבס) בדרייב ומחזיר קישור לצפייה.
+ * אותה תיקיית-שורש של הקבלות, תת-תיקייה נפרדת — כדי שהכול יישאר במקום אחד
+ * שיועד כבר מכיר, ובלי לפזר קבצים בדרייב. */
+function gymSaveSignature_(dataUrl, fileName) {
+  if (!dataUrl || String(dataUrl).indexOf('data:image/') !== 0) return '';
+  try {
+    var parts = String(dataUrl).split(',');
+    var meta = parts[0];
+    var mime = meta.substring(meta.indexOf(':') + 1, meta.indexOf(';'));
+    var bytes = Utilities.base64Decode(parts[1]);
+    var blob = Utilities.newBlob(bytes, mime, fileName + '.png');
+    var root = DriveApp.getFolderById(ROOT_RECEIPTS_FOLDER_ID);
+    var gymFolder = findOrCreateSubfolder_(root, 'מכון כושר');
+    var sigFolder = findOrCreateSubfolder_(gymFolder, 'הצהרות בריאות');
+    var file = sigFolder.createFile(blob);
+    return file.getUrl();
+  } catch (err) {
+    Logger.log('שמירת חתימה נכשלה: ' + err);
+    return '';
+  }
+}
+
+/** מחשב אילו שאלות הרימו דגל. מחזיר את **התוויות הקצרות** (לא מזהי Q) כדי
+ * שגם המייל וגם המסך יהיו קריאים לבן אדם. */
+function gymEvalFlags_(questions, answers) {
+  var flagged = [], blocking = false;
+  answers = answers || {};
+  for (var i = 0; i < questions.length; i++) {
+    var q = questions[i];
+    if (!q.active || !q.flag) continue;
+    var ans = String(answers[q.id] == null ? '' : answers[q.id]).trim();
+    if (ans !== 'כן') continue;
+    flagged.push(q.label || q.id);
+    if (q.flag === 'חוסם') blocking = true;
+  }
+  return { flagged: flagged, blocking: blocking };
+}
+
+/** שורה ביומן. כל שינוי מצב נרשם — זה מה שיאפשר בשלב 3 לחשב סנכרון תשלומים
+ * ולהסביר בדיעבד "למה המנוי הזה נראה ככה". */
+function gymLog_(ss, membershipId, type, extra) {
+  try {
+    var sh = ss.getSheetByName(GYM_LOG_SHEET);
+    if (!sh) return;
+    extra = extra || {};
+    var cols = gymCols_(sh);
+    var row = [];
+    for (var c = 0; c < sh.getLastColumn(); c++) row.push('');
+    function put(name, val) { if (cols[name]) row[cols[name] - 1] = val; }
+    put('מזהה אירוע', 'LOG-' + Date.now());
+    put('מזהה מנוי', membershipId);
+    put('תאריך', new Date());
+    put('סוג אירוע', type);
+    put('סכום', extra.amount || '');
+    put('אמצעי תשלום', extra.method || '');
+    put('אסמכתא', extra.ref || '');
+    put('בתוקף עד (אחרי)', extra.validUntil || '');
+    put('בוצע ע"י', extra.by || '');
+    put('הערה', extra.note || '');
+    sh.appendRow(row);
+  } catch (err) {
+    Logger.log('כתיבה ליומן המכון נכשלה: ' + err);
+  }
+}
+
+/** תוכן האשף. פתוח לכל תושב מחובר ופעיל — אין כאן שום דבר רגיש: נוסח השאלון
+ * והתקנון גלויים ממילא לכל מי שנרשם, וקוד הכניסה לא נכלל. */
+function handleGymForm_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    ensureGymSheets_(ss);
+    var cfg = readGymSettings_(ss);
+    var me = lookupResident_(gate.email);
+    return json_({
+      ok: true,
+      questions: cfg.questions.filter(function (q) { return q.active; }),
+      rules:     cfg.rules.filter(function (r) { return r.active; }),
+      plans:     cfg.plans.filter(function (pl) { return pl.active; }),
+      minAge:    Number(cfg.settings['גיל מינימום']) || 18,
+      // מילוי מראש — כדי שהתושב יקליד כמה שפחות. ת.ז. מגיעה מטאב "תושבים"
+      // אם כבר נאספה בעבר, ואז לא נשאל עליה שוב.
+      prefill: me.found ? {
+        firstName: me.firstName || '', lastName: me.family || '',
+        house: me.house || '', familyId: me.familyId || '',
+        idNumber: gymResidentIdNumber_(ss, me)
+      } : null
+    });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** קורא "ת.ז. N" מטאב התושבים לפי המשבצת של אותו אדם (slot), באותו היגיון
+ * בדיוק כמו "אימייל N"/"הרשאות N". מחזיר '' אם העמודה עוד לא מולאה. */
+function gymResidentIdNumber_(ss, me) {
+  try {
+    if (!me || !me.found) return '';
+    var sh = ss.getSheetByName('תושבים');
+    if (!sh) return '';
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+      .map(function (h) { return String(h).trim(); });
+    var col = headers.indexOf('ת.ז. ' + me.slot);
+    if (col === -1) return '';
+    return String(sh.getRange(me.rowIndex, col + 1).getValue()).trim();
+  } catch (err) { return ''; }
+}
+
+/** כותב את הת.ז. חזרה לטאב "תושבים" (עמודה לפי המשבצת). זה מה שגורם למאגר
+ * הת.ז. להתמלא מעצמו לאורך גל ההרשמה, בלי מבצע איסוף נפרד. לא דורס ערך קיים. */
+function gymWriteResidentId_(ss, me, idNumber) {
+  try {
+    if (!me || !me.found || !idNumber) return;
+    ensureResidentCols_(ss, {});
+    var sh = ss.getSheetByName('תושבים');
+    if (!sh) return;
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+      .map(function (h) { return String(h).trim(); });
+    var col = headers.indexOf('ת.ז. ' + me.slot);
+    if (col === -1) return;
+    var cell = sh.getRange(me.rowIndex, col + 1);
+    if (String(cell.getValue()).trim()) return;   // כבר קיים — לא נוגעים
+    cell.setValue(idNumber);
+  } catch (err) {
+    Logger.log('כתיבת ת.ז. לטאב תושבים נכשלה: ' + err);
+  }
+}
+
+/** המנוי של המשתמש המחובר. **תמיד לפי האימייל שבמושב החתום** ולעולם לא לפי
+ * פרמטר מהלקוח — אחרת כל תושב היה יכול לבקש את המנוי של שכן.
+ * קוד הכניסה עדיין לא מוחזר כאן; הוא מצטרף בשלב 4 יחד עם כרטיס המנוי. */
+function handleGymMy_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    ensureGymSheets_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var found = gymFindRow_(sh, cols, gate.email);
+    var cfg = readGymSettings_(ss);
+    var membership = null;
+    if (found.row) {
+      var values = sh.getRange(found.row, 1, 1, sh.getLastColumn()).getValues()[0];
+      var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+      membership = {};
+      for (var i = 0; i < headers.length; i++) {
+        var h = String(headers[i]).trim();
+        if (!h) continue;
+        var v = values[i];
+        membership[h] = (v instanceof Date) ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+                                            : String(v == null ? '' : v);
+      }
+    }
+    return json_({
+      ok: true,
+      membership: membership,
+      plans: cfg.plans.filter(function (pl) { return pl.active; }),
+      declarationMonths: Number(cfg.settings['תוקף הצהרה בחודשים']) || 24
+    });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** הרשמה עצמית של תושב. מטפלת בשני מצבים: בקשה חדשה לגמרי, והשלמת הצהרה
+ * למנוי שמנהל כבר הקים ("ממתין להצהרה"). */
+function submitGymApplication_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var cfg = readGymSettings_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var email = normalizeEmail_(body._email);
+    var me = lookupResident_(email);
+
+    // --- ולידציה. נכשלים לפני שנוגעים בגיליון, לא אחרי. ---
+    var minAge = Number(cfg.settings['גיל מינימום']) || 18;
+    var age = gymAge_(body.birthDate);
+    if (age < 0) return { ok: false, error: 'חסר תאריך לידה תקין' };
+    if (age < minAge) {
+      return { ok: false, error: 'ההרשמה העצמאית אפשרית מגיל ' + minAge +
+        '. מתחת לגיל זה יש לפנות לאחראית חדר הכושר.' };
+    }
+    var activeQs = cfg.questions.filter(function (q) { return q.active; });
+    var answers = body.answers || {};
+    for (var i = 0; i < activeQs.length; i++) {
+      var a = String(answers[activeQs[i].id] == null ? '' : answers[activeQs[i].id]).trim();
+      if (a !== 'כן' && a !== 'לא') {
+        return { ok: false, error: 'יש לענות על כל שאלות ההצהרה (חסר: ' + activeQs[i].label + ')' };
+      }
+    }
+    var activeRules = cfg.rules.filter(function (r) { return r.active; });
+    var acks = body.ruleAcks || {};
+    for (var j = 0; j < activeRules.length; j++) {
+      if (!acks[activeRules[j].id]) {
+        return { ok: false, error: 'יש לאשר קריאה של כל מקטעי התקנון' };
+      }
+    }
+    if (!body.signature) return { ok: false, error: 'חסרה חתימה' };
+
+    var plan = null;
+    var existing = gymFindRow_(sh, cols, email);
+    var isCompletion = existing.row && existing.status === GYM_ST_DECLARATION;
+    if (isCompletion && cols['מסלול']) {
+      // מנוי שהמנהל הקים — המסלול כבר נקבע, לא נותנים לתושב לשנות אותו
+      var existingPlanName = String(sh.getRange(existing.row, cols['מסלול']).getValue()).trim();
+      for (var k = 0; k < cfg.plans.length; k++) {
+        if (cfg.plans[k].name === existingPlanName) { plan = cfg.plans[k]; break; }
+      }
+    }
+    if (!plan) {
+      for (var m = 0; m < cfg.plans.length; m++) {
+        if (cfg.plans[m].id === body.planId && cfg.plans[m].active) { plan = cfg.plans[m]; break; }
+      }
+    }
+    if (!plan) return { ok: false, error: 'לא נבחר מסלול תקין' };
+
+    if (existing.row && !isCompletion && GYM_OPEN_STATUSES.indexOf(existing.status) !== -1) {
+      return { ok: false, error: 'כבר קיימת עבורך בקשה פעילה במכון (סטטוס: ' + existing.status + ')' };
+    }
+
+    // --- חישוב דגלים והסטטוס שנובע מהם ---
+    var flags = gymEvalFlags_(activeQs, answers);
+    var autoApprove = String(cfg.settings['אישור אוטומטי ללא דגלים'] || 'כן').trim() !== 'לא';
+    var status;
+    if (flags.blocking)      status = GYM_ST_DOCTOR;
+    else if (autoApprove)    status = GYM_ST_PAYMENT;
+    else                     status = GYM_ST_REVIEW;
+
+    var now = new Date();
+    var rowIndex = isCompletion ? existing.row : 0;
+    var id = rowIndex ? String(sh.getRange(rowIndex, cols['מזהה']).getValue()).trim()
+                      : nextGymId_(sh, cols);
+    var sigUrl = gymSaveSignature_(body.signature, 'חתימה ' + id + ' ' +
+      Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd'));
+
+    if (!rowIndex) {
+      // שורה ריקה בגודל הכותרות (appendRow לא מקבל מערך ריק), וממלאים אותה
+      // בכתיבות ממוקדות לפי שם עמודה — עמיד לשינוי סדר עמודות בגיליון.
+      rowIndex = gymAppendBlankRow_(sh);
+    }
+    cols = gymCols_(sh);           // ריענון — ensureGymQuestionCols_ אולי הוסיף עמודות
+    function put(name, val) { if (cols[name]) sh.getRange(rowIndex, cols[name]).setValue(val); }
+
+    put('מזהה', id);
+    put('מזהה קבוע', me.found ? me.familyId : '');
+    put('אימייל', email);
+    put('שם פרטי', body.firstName || (me.found ? me.firstName : ''));
+    put('שם משפחה', body.lastName || (me.found ? me.family : ''));
+    put('טלפון', body.phone || '');
+    put('מספר בית', body.house || (me.found ? me.house : ''));
+    put('ת.ז.', body.idNumber || '');
+    put('תאריך לידה', body.birthDate || '');
+    put('מסלול', plan.name);
+    put('מחיר מוסכם', plan.total);
+    put('סטטוס', status);
+    put('שאלות שנענו בכן', flags.flagged.join(', '));
+    put('דגלים', flags.blocking ? 'חוסם' : (flags.flagged.length ? 'התראה' : ''));
+    put('תאריך חתימה', now);
+    put('קישור חתימה', sigUrl);
+    put('גרסת שאלון', activeQs.length ? activeQs.length : '');
+    put('אישור תקנון', activeRules.map(function (r) { return r.id; }).join(', '));
+    if (!isCompletion) put('הוגש בתאריך', now);
+
+    // תשובות השאלון -> עמודות. הכותרת היא ה"כותרת" הקצרה של השאלה.
+    for (var q2 = 0; q2 < activeQs.length; q2++) {
+      var lbl = activeQs[q2].label;
+      if (cols[lbl]) sh.getRange(rowIndex, cols[lbl]).setValue(String(answers[activeQs[q2].id]).trim());
+    }
+
+    gymWriteResidentId_(ss, me, body.idNumber);
+    gymLog_(ss, id, isCompletion ? 'השלמת הצהרה' : 'הגשת בקשה', {
+      by: email, note: flags.flagged.length ? ('דגלים: ' + flags.flagged.join(', ')) : ''
+    });
+
+    // --- מיילים (אותה מערכת תבניות כמו כל השאר, ר' הגדרות מיילים) ---
+    var displayName = (body.firstName || (me.found ? me.firstName : '') || email);
+    try {
+      sendResidentTemplate_(ss, 'GYM_APPLICATION_RECEIVED', [email], { 'שם': displayName });
+      if (flags.blocking) {
+        sendResidentTemplate_(ss, 'GYM_DOCTOR_NOTE_REQUIRED', [email], {
+          'שם': displayName, 'שאלות': flags.flagged.join(', ')
+        });
+        notifyAdmins_(ss, PERM_GYM, 'ADMIN_NEW_GYM_FLAGGED', {
+          'שם': displayName, 'אימייל': email,
+          'שאלות': flags.flagged.join(', '), 'קישור': CBA_APP_URL
+        });
+      } else if (status === GYM_ST_PAYMENT) {
+        sendResidentTemplate_(ss, 'GYM_APPROVED_AWAITING_PAYMENT', [email], {
+          'שם': displayName, 'סכום': plan.total, 'מסלול': plan.name
+        });
+      }
+    } catch (mailErr) { Logger.log('מייל מכון נכשל: ' + mailErr); }
+
+    return { ok: true, id: id, status: status, flagged: flags.flagged };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** הקמת מנוי ידנית ע"י מנהל המכון. נולד תמיד כ"ממתין לתשלום" (או "ממתין
+ * להצהרה" אם המנהל בחר לבקש מהתושב למלא) — אף פעם לא כפעיל, כי אימות התשלום
+ * הוא תמיד ידני. ר' ההערה בראש הסעיף. */
+function createGymMembership_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var cfg = readGymSettings_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+
+    var email = normalizeEmail_(body.email);
+    if (!email) return { ok: false, error: 'חסר אימייל' };
+    var me = lookupResident_(email);
+    if (!me.found) {
+      return { ok: false, error: 'האימייל אינו רשום בטאב "תושבים". יש להוסיף את התושב קודם.' };
+    }
+
+    var existing = gymFindRow_(sh, cols, email);
+    if (existing.row && GYM_OPEN_STATUSES.indexOf(existing.status) !== -1) {
+      return { ok: false, error: 'כבר קיים מנוי פתוח לאימייל הזה (סטטוס: ' + existing.status + ')' };
+    }
+
+    var plan = null;
+    for (var i = 0; i < cfg.plans.length; i++) {
+      if (cfg.plans[i].id === body.planId) { plan = cfg.plans[i]; break; }
+    }
+    if (!plan) plan = cfg.plans[0];
+    if (!plan) return { ok: false, error: 'לא הוגדר מסלול מנוי בהגדרות המכון' };
+
+    // "התקבלה" = הצהרה על נייר, נשמר התאריך. "בקשה" = נשלח מייל לתושב.
+    var mode = String(body.declarationMode || 'request').trim();
+    var status = (mode === 'received') ? GYM_ST_PAYMENT : GYM_ST_DECLARATION;
+
+    var now = new Date();
+    var id = nextGymId_(sh, cols);
+    var rowIndex = gymAppendBlankRow_(sh);
+    cols = gymCols_(sh);
+    function put(name, val) { if (cols[name]) sh.getRange(rowIndex, cols[name]).setValue(val); }
+
+    put('מזהה', id);
+    put('מזהה קבוע', me.familyId || '');
+    put('אימייל', email);
+    put('שם פרטי', body.firstName || me.firstName || '');
+    put('שם משפחה', body.lastName || me.family || '');
+    put('טלפון', body.phone || '');
+    put('מספר בית', body.house || me.house || '');
+    put('ת.ז.', body.idNumber || '');
+    put('תאריך לידה', body.birthDate || '');
+    put('מסלול', plan.name);
+    put('מחיר מוסכם', plan.total);
+    put('סטטוס', status);
+    put('הוגש בתאריך', now);
+    put('טופל בתאריך', now);
+    put('טופל ע"י', body._email || '');
+    put('הערות מנהל', body.note || '');
+    if (mode === 'received') {
+      put('תאריך חתימה', body.declarationDate || now);
+      put('קישור חתימה', 'הצהרה נמסרה בנייר');
+    }
+
+    gymWriteResidentId_(ss, me, body.idNumber);
+    gymLog_(ss, id, 'הקמה ידנית', {
+      by: body._email || '',
+      note: (mode === 'received' ? 'הצהרה נמסרה בנייר' : 'נשלחה בקשה למילוי הצהרה') +
+            (body.note ? (' · ' + body.note) : '')
+    });
+
+    var displayName = body.firstName || me.firstName || email;
+    try {
+      if (mode === 'received') {
+        sendResidentTemplate_(ss, 'GYM_APPROVED_AWAITING_PAYMENT', [email], {
+          'שם': displayName, 'סכום': plan.total, 'מסלול': plan.name
+        });
+      } else {
+        sendResidentTemplate_(ss, 'GYM_DECLARATION_REQUEST', [email], {
+          'שם': displayName, 'קישור': CBA_APP_URL
+        });
+      }
+    } catch (mailErr) { Logger.log('מייל הקמה ידנית נכשל: ' + mailErr); }
+
+    return { ok: true, id: id, status: status };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** "בקשת הצהרה" על מנוי קיים — מחזיר אותו ל"ממתין להצהרה" ושולח מייל.
+ * שימושי גם כשמנוי הוקם עם "הצהרה בנייר" ואז מתברר שצריך הצהרה דיגיטלית. */
+function requestGymDeclaration_(ss, body) {
+  try {
+    ensureGymSheets_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var id = String(body.id || '').trim();
+    if (!id) return { ok: false, error: 'חסר מזהה מנוי' };
+
+    var last = sh.getLastRow();
+    var ids = sh.getRange(2, cols['מזהה'], last - 1, 1).getValues();
+    var rowIndex = 0;
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]).trim() === id) { rowIndex = i + 2; break; }
+    }
+    if (!rowIndex) return { ok: false, error: 'המנוי לא נמצא' };
+
+    var email = String(sh.getRange(rowIndex, cols['אימייל']).getValue()).trim();
+    var name = String(sh.getRange(rowIndex, cols['שם פרטי']).getValue()).trim() || email;
+    sh.getRange(rowIndex, cols['סטטוס']).setValue(GYM_ST_DECLARATION);
+
+    gymLog_(ss, id, 'בקשת הצהרה', { by: body._email || '' });
+    try {
+      sendResidentTemplate_(ss, 'GYM_DECLARATION_REQUEST', [email], {
+        'שם': name, 'קישור': CBA_APP_URL
+      });
+    } catch (mailErr) { Logger.log('מייל בקשת הצהרה נכשל: ' + mailErr); }
+
+    return { ok: true, id: id, status: GYM_ST_DECLARATION };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }

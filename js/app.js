@@ -164,14 +164,18 @@
     },
     resident: {
       def: "resRequests",
-      screens: ["resRequests", "resSubmit", "resReserve", "resDirectory", "resMap", "resCommittee", "resServices"],
+      screens: ["resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
       // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
       // לצפייה בלבד. עריכה (2026-08-10) עברה לגמרי למסך ניהול נפרד באזור הניהול
       // (committeeAdmin, מנהל-על בלבד) — כאן, גם מנהל-על, רואה תצוגה בלבד.
       tabs: [
-        ["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"], ["resReserve", "שריון מועדון"],
+        ["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"],
+        // "מתקנים" (2026-08-19) — שריון המועדון ומכון הכושר אוחדו לקבוצה אחת,
+        // באותה תבנית של "השיכון". נעשה רק עכשיו, בשלב שבו נולד הפריט השני:
+        // קבוצה מתקפלת עם פריט יחיד היא רעש ויזואלי בלי תועלת.
+        { group: "mitkanim", label: "מתקנים", items: [["resReserve", "שריון מועדון"], ["resGym", "מכון כושר"]] },
         // "שירותים" (2026-08-18) הצטרף כפריט רביעי לאותה קבוצה ולא ככפתור עצמאי:
         // הוא שייך תמטית ל"מה יש בשיכון", ושורת הניווט הראשית כבר עמוסה.
         { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"], ["resCommittee", "ועד השיכון"], ["resServices", "שירותים"]] }

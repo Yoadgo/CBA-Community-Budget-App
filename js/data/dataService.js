@@ -429,6 +429,31 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymList" }, cb);
   }
+  // --- מכון כושר, שלב 2 (2026-08-19) ---
+  // gymForm/gymMy הן קריאות של התושב (GET, פתוחות לכל תושב מחובר ופעיל).
+  function getGymForm(cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "gymForm" }, cb);
+  }
+  function getGymMy(cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "gymMy" }, cb);
+  }
+  // כתיבות — עוברות ב-postRead כדי שנקבל את תשובת השרת בחזרה (הצלחה/שגיאה),
+  // בדיוק כמו submitReceipt. שליחה "עיוורת" לא מתאימה כאן: התושב חייב לדעת
+  // מיד אם הבקשה נקלטה, ומה הסטטוס שיצא לו.
+  function submitGymApplication(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("submitGymApplication", data || {}, cb);
+  }
+  function createGymMembership(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("createGymMembership", data || {}, cb);
+  }
+  function requestGymDeclaration(id, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("requestGymDeclaration", { id: id }, cb);
+  }
   function approveClubReservation(id, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "approveClubReservation", id: id }, cb);
@@ -1147,6 +1172,11 @@ CBA.data = (function () {
     cancelClubReservation: cancelClubReservation,
     getClubList: getClubList,
     getGymList: getGymList,
+    getGymForm: getGymForm,
+    getGymMy: getGymMy,
+    submitGymApplication: submitGymApplication,
+    createGymMembership: createGymMembership,
+    requestGymDeclaration: requestGymDeclaration,
     approveClubReservation: approveClubReservation,
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,

@@ -88,3 +88,132 @@
   .gym-kpi { padding: 12px 13px; }
   .gym-kpi__n { font-size: 22px; }
 }
+
+/* ============================================================================
+   שלב 2 (2026-08-19) — אשף ההרשמה, מסך התושב, ורשימת המנויים במסך הניהול
+   ========================================================================== */
+
+/* --- כרטיס המסך של התושב --- */
+.gym-card + .gym-card { margin-top: 20px; }
+.gym-hero__title { font-size: 20px; font-weight: 800; color: var(--text); letter-spacing: -.01em; }
+.gym-hero__sub   { font-size: 14px; color: var(--text-soft); margin-top: 6px; line-height: 1.7; }
+.gym-plan {
+  margin: 18px 0; padding: 14px 16px;
+  background: var(--hover); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 15px; color: var(--text);
+}
+.gym-plan--sm { margin: 0 0 16px; font-size: 14px; }
+.gym-muted { color: var(--text-soft); font-size: 13px; }
+.gym-cta { margin-top: 4px; }
+
+.gym-status__head  { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.gym-status__title { font-size: 17px; font-weight: 700; color: var(--text); }
+.gym-status__msg   { font-size: 14.5px; color: var(--text-soft); line-height: 1.8; margin-bottom: 14px; }
+.gym-kv {
+  display: flex; gap: 12px; justify-content: space-between;
+  padding: 9px 2px; border-top: 1px solid var(--border); font-size: 14px;
+}
+.gym-kv span:first-child { color: var(--text-soft); }
+.gym-kv span:last-child  { color: var(--text); font-weight: 500; text-align: start; }
+
+/* --- שורת מנוי במסך הניהול --- */
+.gym-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 13px 2px; border-bottom: 1px solid var(--border);
+}
+.gym-row:last-child { border-bottom: 0; }
+.gym-row__main  { min-width: 0; flex: 1; }
+.gym-row__name  { font-size: 14.5px; font-weight: 600; color: var(--text); }
+.gym-row__meta  { font-size: 13px; color: var(--text-soft); margin-top: 3px; }
+.gym-row__flags { font-size: 12.5px; color: var(--badge-danger); margin-top: 4px; }
+.gym-row__side  { margin-inline-start: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* --- האשף / חלונית ההקמה. הצללה מותרת כאן: זה אלמנט צף. --- */
+.gym-wiz { position: fixed; inset: 0; z-index: 1200; }
+.gym-wiz__backdrop { position: absolute; inset: 0; background: rgba(16,24,40,.35); }
+.gym-wiz__panel {
+  position: absolute; inset-inline-start: 0; top: 0; bottom: 0;
+  width: min(560px, 100%); background: var(--surface);
+  display: flex; flex-direction: column;
+  box-shadow: var(--shadow-hover);
+  animation: gymSlide .22s cubic-bezier(.2,.6,.2,1);
+}
+@keyframes gymSlide { from { transform: translateX(-16px); opacity: .6; } to { transform: none; opacity: 1; } }
+.gym-wiz__head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 18px 22px 12px; border-bottom: 1px solid var(--border);
+}
+.gym-wiz__title { font-size: 17px; font-weight: 700; color: var(--text); }
+.gym-wiz__count { font-size: 12.5px; color: var(--text-muted); }
+.gym-wiz__x {
+  margin-inline-start: auto; border: 0; background: none; cursor: pointer;
+  font-size: 22px; line-height: 1; color: var(--text-muted); padding: 0 4px;
+}
+.gym-wiz__bar { display: flex; gap: 4px; padding: 10px 22px 0; }
+.gym-wiz__bar span {
+  height: 3px; flex: 1; border-radius: 2px; background: var(--border);
+  transition: background var(--t);
+}
+.gym-wiz__bar span.is-on { background: var(--action); }
+.gym-wiz__body { flex: 1; overflow-y: auto; padding: 18px 22px 24px; }
+.gym-wiz__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 22px; border-top: 1px solid var(--border); background: var(--surface);
+}
+
+/* --- שדות טופס --- */
+.gym-field { margin-bottom: 14px; }
+.gym-field label { display: block; font-size: 12.5px; color: var(--text-soft); margin-bottom: 5px; font-weight: 500; }
+.gym-field input, .gym-field select {
+  width: 100%; font-family: inherit; font-size: 14.5px; color: var(--text);
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); transition: border-color var(--t);
+}
+.gym-field input:focus, .gym-field select:focus { outline: none; border-color: var(--action); }
+.gym-hint { font-size: 13px; color: var(--text-soft); line-height: 1.7; margin-bottom: 16px; }
+
+/* --- תקנון --- */
+.gym-rule { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.gym-rule:last-child { border-bottom: 0; }
+.gym-rule__title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.gym-rule ul { margin: 0 0 10px; padding-inline-start: 20px; font-size: 13.5px; color: var(--text-soft); line-height: 1.8; }
+.gym-check-line { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); cursor: pointer; }
+.gym-check-line input { width: 17px; height: 17px; accent-color: var(--action); }
+
+/* --- שאלון: כן/לא כ-segmented control, מהיר יותר מרדיו בנייד --- */
+.gym-q { padding: 13px 0; border-bottom: 1px solid var(--border); }
+.gym-q:last-child { border-bottom: 0; }
+.gym-q__text { font-size: 14px; color: var(--text); line-height: 1.7; margin-bottom: 9px; }
+.gym-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.gym-seg--wide { display: flex; }
+.gym-seg button {
+  font-family: inherit; font-size: 13.5px; font-weight: 600;
+  padding: 7px 22px; border: 0; background: var(--surface);
+  color: var(--text-soft); cursor: pointer; transition: background var(--t), color var(--t);
+}
+.gym-seg--wide button { flex: 1; padding: 9px 12px; }
+.gym-seg button + button { border-inline-start: 1px solid var(--border); }
+.gym-seg button.is-on { background: var(--action); color: #fff; }
+
+/* --- הצהרה וחתימה --- */
+.gym-declare {
+  font-size: 13.5px; color: var(--text-soft); line-height: 1.9;
+  background: var(--hover); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 18px;
+}
+.gym-sig { margin-top: 4px; }
+.gym-sig__label { font-size: 12.5px; color: var(--text-soft); margin-bottom: 6px; font-weight: 500; }
+.gym-sig__canvas {
+  width: 100%; height: 170px; display: block;
+  border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); touch-action: none; cursor: crosshair;
+}
+.gym-sig__clear { margin-top: 8px; }
+
+@media (max-width: 720px) {
+  .gym-wiz__panel { width: 100%; }
+  .gym-wiz__body { padding: 16px 16px 22px; }
+  .gym-wiz__head, .gym-wiz__foot { padding-inline: 16px; }
+  .gym-row { flex-direction: column; gap: 8px; }
+  .gym-row__side { margin-inline-start: 0; }
+}
