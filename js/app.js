@@ -77,10 +77,14 @@
      כאן מסתירים תוכן. האכיפה האמיתית היא בשרת (authorize_ ב-Code.gs) — הסתרה
      לבדה היא נוחות, לא אבטחה.
      ========================================================================== */
-  const PERM = { SUPER: "על", BUDGET: "תקציב", CLUB: "מועדון", RESIDENTS: "תושבים" };
+  // "מכון" (2026-08-18) — מידור מכון הכושר. **נפרד ממידור המועדון בכוונה**:
+  // שני המתקנים יושבים באותה קבוצת ניווט ("מתקנים") אבל מנוהלים ע"י אנשים
+  // שונים, ולכן כל אחד דורש את ההרשאה שלו. חייב להיות זהה ל-PERM_GYM בשרת.
+  const PERM = { SUPER: "על", BUDGET: "תקציב", CLUB: "מועדון", RESIDENTS: "תושבים", GYM: "מכון" };
   const PERM_LABEL = {
     "על": "מנהל על", "תקציב": "ניהול תקציב ותשלומים",
-    "מועדון": "ניהול מועדון", "תושבים": "ניהול תושבים"
+    "מועדון": "ניהול מועדון", "תושבים": "ניהול תושבים",
+    "מכון": "ניהול מכון כושר"
   };
   // איזו הרשאה נדרשת לכל מסך ניהול
   const SCREEN_PERM = {
@@ -94,7 +98,14 @@
     // הרשאה ספציפית אחת: המסך עצמו מסנן פנימה לפי מה שהשרת מחזיר (מנהל-על
     // רואה הכול, מנהל תחום רואה/עורך רק את התחום שלו — ר' handleListEmailSettings_).
     // הערך 'ANY' מטופל במיוחד ב-canScreen למטה.
-    emailSettings: "ANY"
+    emailSettings: "ANY",
+    // ניהול "שירותים לתושב" (2026-08-18) — מנהל-על בלבד, בדיוק כמו
+    // committeeAdmin. התצוגה המקבילה לתושבים (resServices, אזור התושב)
+    // פתוחה לכל תושב ולכן אינה מופיעה כאן כלל.
+    servicesAdmin: PERM.SUPER,
+    // ניהול מכון הכושר (2026-08-18) — מידור "מכון" בלבד. מנהל-על רואה הכול
+    // כרגיל (ר' can), אבל מנהל מועדון בלי מידור מכון לא יראה את המסך.
+    gymAdmin: PERM.GYM
   };
 
   function myPerms() {
@@ -108,7 +119,7 @@
   function can(perm) { return !perm || isSuper() || myPerms().indexOf(perm) !== -1; }
   // האם יש למשתמש בכלל דריסת רגל באזור הניהול
   function hasAnyAdmin() {
-    return isSuper() || [PERM.BUDGET, PERM.CLUB, PERM.RESIDENTS].some(function (p) {
+    return isSuper() || [PERM.BUDGET, PERM.CLUB, PERM.RESIDENTS, PERM.GYM].some(function (p) {
       return myPerms().indexOf(p) !== -1;
     });
   }
@@ -129,7 +140,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "residents", "committeeAdmin", "emailSettings", "settings"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "settings"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -139,13 +150,21 @@
       // יושבת באזור התושב (resCommittee) ופתוחה לכולם, ר' AREAS_ALL.resident למטה.
       tabs: [
         { group: "taktziv", label: "תקציב", items: [["budget", "תכנון מול ביצוע"], ["expenses", "ניהול הוצאות"], ["planning", "בניית תקציב"]] },
-        ["clubAdmin", "שריון מועדון"], ["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"],
-        ["emailSettings", "ניהול מיילים"]
+        // "מתקנים" (2026-08-18) — שריון המועדון ומכון הכושר אוחדו לקבוצה אחת,
+        // באותה תבנית מתקפלת של "תקציב"/"השיכון". שים לב: לכל פריט מידור משלו
+        // (PERM.CLUB מול PERM.GYM), ו-rebuildAreas כבר מסנן פריט-פריט — כך
+        // שמנהל מועדון יראה כאן פריט אחד, ומי שאין לו אף אחד מהם לא יראה
+        // את הקבוצה בכלל. אין צורך בשום לוגיקה מיוחדת.
+        { group: "mitkanim", label: "מתקנים", items: [["clubAdmin", "שריון מועדון"], ["gymAdmin", "מכון כושר"]] },
+        ["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"],
+        // ניהול "שירותים לתושב" (2026-08-18) — הצד העורך של resServices שבאזור
+        // התושב. מנהל-על בלבד (ר' SCREEN_PERM.servicesAdmin, servicesAdmin.js).
+        ["servicesAdmin", "שירותים"], ["emailSettings", "ניהול מיילים"]
       ]
     },
     resident: {
       def: "resRequests",
-      screens: ["resRequests", "resSubmit", "resReserve", "resDirectory", "resMap", "resCommittee"],
+      screens: ["resRequests", "resSubmit", "resReserve", "resDirectory", "resMap", "resCommittee", "resServices"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
       // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
@@ -153,7 +172,9 @@
       // (committeeAdmin, מנהל-על בלבד) — כאן, גם מנהל-על, רואה תצוגה בלבד.
       tabs: [
         ["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"], ["resReserve", "שריון מועדון"],
-        { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"], ["resCommittee", "ועד השיכון"]] }
+        // "שירותים" (2026-08-18) הצטרף כפריט רביעי לאותה קבוצה ולא ככפתור עצמאי:
+        // הוא שייך תמטית ל"מה יש בשיכון", ושורת הניווט הראשית כבר עמוסה.
+        { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"], ["resCommittee", "ועד השיכון"], ["resServices", "שירותים"]] }
       ]
     }
   };
@@ -193,12 +214,22 @@
     expenses:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
     planning:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>',
     clubAdmin:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8.5 15l2 2 4-4"/></svg>',
+    // מכון כושר — משקולת. "מתקנים" (כפתור-הקבוצה) — מבנה עם גג, מייצג את
+    // המתקנים הפיזיים בשיכון כמכלול ולא מסך ספציפי.
+    gymAdmin:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/></svg>',
+    resGym:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/></svg>',
+    mitkanim:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M4 21V10l8-6 8 6v11"/><path d="M9 21v-5h6v5"/></svg>',
     residents:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M17.5 14.4a5 5 0 0 1 3 4.6"/></svg>',
     // ניהול "ועד השיכון" באזור הניהול — אותו אייקון בדיוק כמו resCommittee
     // (אזור התושב), כי זה אותו נושא/עץ, רק צד קריאה מול צד ניהול.
     committeeAdmin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.1"/><circle cx="5.5" cy="18" r="2.1"/><circle cx="18.5" cy="18" r="2.1"/><path d="M12 7.1V11M12 11 5.5 15.9M12 11l6.5 4.9"/></svg>',
     // ניהול מיילים (שלב 1, 2026-08-18) — אייקון מעטפה
     emailSettings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></svg>',
+    // "שירותים" (2026-08-18) — אותו אייקון בשני הצדדים (resServices לתושב,
+    // servicesAdmin לניהול), בדיוק כמו committeeAdmin/resCommittee: אותו נושא,
+    // רק צד קריאה מול צד עריכה.
+    servicesAdmin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h9"/><circle cx="19" cy="17" r="2.4"/></svg>',
+    resServices: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h9"/><circle cx="19" cy="17" r="2.4"/></svg>',
     resRequests: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6h9M11 12h9M11 18h9"/><path d="M4 6l1.3 1.3L7 4.7M4 12l1.3 1.3L7 10.7M4 18l1.3 1.3L7 16.7"/></svg>',
     resSubmit:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
     resReserve:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',

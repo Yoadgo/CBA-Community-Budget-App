@@ -48,7 +48,11 @@ var PERM_SUPER     = 'על';
 var PERM_BUDGET    = 'תקציב';
 var PERM_CLUB      = 'מועדון';
 var PERM_RESIDENTS = 'תושבים';
-var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS];
+// מכון כושר (2026-08-18) — מידור חמישי, **נפרד לחלוטין ממידור המועדון**. מי
+// שמנהל את המועדון לא נוגע במכון ולהפך, אלא אם ניתנו לו שניהם. אין שינוי מבנה
+// בגיליון: עמודות "הרשאות N" כבר מקבלות רשימה מופרדת בפסיקים.
+var PERM_GYM       = 'מכון';
+var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM];
 var PERM_HEADER = 'הרשאות';
 // דרישה מיוחדת: "כל הרשאת ניהול שהיא" — לפעולות שמשרתות כמה מידורים,
 // כמו ספריית השמות להשלמה אוטומטית בטופס ההוצאה
@@ -87,7 +91,19 @@ var ACTION_PERMS = {
   saveCommitteeCategories: PERM_SUPER,
   // ניהול מיילים (שלב 1, 2026-08-18) — פתוח לכל מנהל (הרשאה כלשהי), הבדיקה
   // המדויקת של "תחום" השורה הספציפית נעשית בתוך saveEmailSetting_ עצמה.
-  saveEmailSetting: PERM_ANY_ADMIN
+  saveEmailSetting: PERM_ANY_ADMIN,
+  // "שירותים לתושב" (2026-08-18) — אותו היגיון בדיוק כמו עץ הוועד: הקריאה
+  // (action=services ב-doGet) פתוחה לכל תושב ולכן אינה מופיעה כאן; כל שינוי
+  // בכרטיסי השירות, שליחת מייל העדכון לכל השיכון, וסריקת מסמך ב-Gemini —
+  // מנהל-על בלבד.
+  saveServices: PERM_SUPER,
+  notifyServiceUpdate: PERM_SUPER,
+  scanServiceDoc: PERM_SUPER,
+  // מכון כושר (שלב 1, 2026-08-18) — קריאת רשימת המנויים לניהול. פעולות התושב
+  // (הרשמה, דיווח תשלום, "המנוי שלי") לא יופיעו כאן גם בשלבים הבאים, כי הן
+  // פתוחות לכל תושב מחובר ופעיל — בדיוק כמו שריון מועדון והגשת קבלה.
+  // פעולות הכתיבה הניהוליות (אישור, אימות תשלום, הארכה) יצטרפו בשלבים 2-3.
+  gymList: PERM_GYM
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -297,6 +313,17 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'listEmailSettings') {
       return handleListEmailSettings_(e.parameter);
     }
+    // "שירותים לתושב" (2026-08-18) — קריאה פתוחה לכל תושב מחובר ופעיל, בדיוק
+    // כמו committeeTree. מחזירה את שני הטאבים (כרטיסים + סעיפים) בקריאה אחת.
+    // הכתיבה (saveServices) עוברת ב-doPost ומוגבלת למנהל-על, ר' ACTION_PERMS.
+    if (e && e.parameter && e.parameter.action === 'services') {
+      return handleServices_(e.parameter);
+    }
+    // מכון כושר (שלב 1, 2026-08-18) — קריאת מסך הניהול. מוגנת ב-PERM_GYM
+    // (ר' ACTION_PERMS) ולא פתוחה לכל תושב, כי היא מחזירה גם מידע רפואי.
+    if (e && e.parameter && e.parameter.action === 'gymList') {
+      return handleGymList_(e.parameter);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var years = [];
     ss.getSheets().forEach(function (sh) {
@@ -390,6 +417,9 @@ function doPost(e) {
       case 'createResidents':   return json_(createResidents_(ss, body));
       case 'scanReceipt':       return json_(handleScanReceipt_(ss, body));
       case 'saveEmailSetting':  return json_(saveEmailSetting_(ss, body));
+      case 'saveServices':      return json_(saveServices_(ss, body));
+      case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
+      case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -2575,7 +2605,11 @@ function saveResidentRow_(ss, body) {
 /* ---------- עמודות נוספות בטאב "תושבים" (2026-08-07) ----------
  * מקצוע ושמות ילדים. נוצרות פעם אחת בסוף הטאב אם אינן קיימות, בלי לגעת
  * בעמודות קיימות ובלי לשנות את סדרן — אידמפוטנטי, אפשר לקרוא שוב בלי נזק. */
-var EXTRA_RESIDENT_COLS = ['מקצוע 1', 'מקצוע 2', 'שמות ילדים', 'הערות'];
+/* עמודות רשות בטאב "תושבים" שהאפליקציה יוצרת לבד אם הן חסרות (ensureResidentCols_).
+ * "ת.ז. 1"/"ת.ז. 2" נוספו ב-2026-08-18 עבור מודול מכון הכושר: הן ממוספרות לפי
+ * אדם בדיוק כמו "אימייל N"/"שם פרטי N"/"הרשאות N", כי הטאב הוא שורה למשק בית.
+ * אשף ההרשמה למכון ישאל ת.ז. פעם אחת ויכתוב אותה לכאן, כך שהמאגר מתמלא מעצמו. */
+var EXTRA_RESIDENT_COLS = ['מקצוע 1', 'מקצוע 2', 'שמות ילדים', 'הערות', 'ת.ז. 1', 'ת.ז. 2'];
 
 function ensureResidentCols_(ss, body) {
   var sh = ss.getSheetByName('תושבים');
@@ -3256,6 +3290,15 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['ADMIN_STALE_CLUB', 'בקשת שריון מועדון ממתינה כבר {{ימים}} ימים',
     'בקשת השריון של {{שם}} בתאריך {{תאריך}} ממתינה לטיפול כבר {{ימים}} ימים.', 'תזכורת חד-פעמית כשבקשה חוצה את הסף', PERM_CLUB, 'כן'],
 
+  // "שירותים לתושב" (2026-08-18) — התבנית היחידה במערכת שנשלחת **ידנית בלבד**:
+  // אין שום טריגר אוטומטי שקורא לה. מנהל-על לוחץ "עדכון תושבים" במסך עריכת
+  // השירות, וזה מה שמפעיל אותה (ר' notifyServiceUpdate_). הוחלט כך במפורש —
+  // שליחה בכל שמירה הייתה גורמת לתיקון פסיק לשלוח מייל לכל השיכון.
+  ['SERVICE_UPDATED', 'עדכון בשירות {{שם השירות}}',
+    'שלום,\n\nפרטי השירות {{שם השירות}} ({{ספק}}) עודכנו באפליקציית השיכון.\n\nמה השתנה: {{מה השתנה}}\n\nאת כל הפרטים — תנאי השירות, מחירון ואנשי קשר — אפשר לראות במסך "שירותים" באפליקציה.\n\nבברכה,\nועד הקהילה',
+    'נשלח לכל תושבי השיכון רק כשמנהל-על לוחץ ידנית על "עדכון תושבים" במסך עריכת שירות — אף פעם לא אוטומטית. הכפתור לאפליקציה מתווסף אוטומטית בעיצוב',
+    PERM_SUPER, 'כן'],
+
   ['ADMIN_WEEKLY_DIGEST', 'סיכום שבועי — מה פתוח באפליקציית הוועד',
     'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו — חוצה מידורים ולכן שייך למנהל-על', PERM_SUPER, 'כן'],
   ['ADMIN_MONTHLY_DIGEST', 'תזכורת: בקשות החזר פתוחות לפני סגירת החלון ב-19 לחודש',
@@ -3898,3 +3941,606 @@ function repairMisplacedReceipts_(dryRun) {
 
 function repairMisplacedReceiptsDryRun() { return repairMisplacedReceipts_(true); }
 function repairMisplacedReceiptsExecute() { return repairMisplacedReceipts_(false); }
+
+/* ============================================================================
+ *  "שירותים לתושב" (2026-08-18)
+ * ----------------------------------------------------------------------------
+ *  מסך חדש באזור התושב שמציג כרטיסי שירות (גז, אינטרנט, תקלות בינוי…), וכל
+ *  כרטיס נפתח לפירוט מלא ומובנה בתוך האפליקציה — לא קישור ל-PDF (הוחלט עם
+ *  יועד: PDF בעברית לא קריא בנייד ואי אפשר לערוך אותו מהאפליקציה).
+ *
+ *  התבנית כאן היא **בדיוק** זו של עץ ועד השיכון למעלה, במכוון:
+ *    - קריאה (action=services ב-doGet) פתוחה לכל תושב מחובר ופעיל — need=null,
+ *      ולכן היא לא מופיעה ב-ACTION_PERMS בכלל.
+ *    - שמירה (saveServices) מוגבלת למנהל-על ב-ACTION_PERMS, כמו saveCommitteeTree.
+ *    - שמירה מחליפה את כל הטבלה, לא "מפזלת" שינויים חלקיים.
+ *
+ *  שני טאבים, לא אחד: לכל שירות יש מספר *משתנה* של סעיפים, אז דחיסה לשורה
+ *  אחת הייתה דורשת עשרות עמודות ריקות. אותה הפרדה בדיוק כמו עץ הוועד מול
+ *  קטגוריות הוועד.
+ *
+ *  התוכן נשמר בפורמט קריא-לעין ולא כ-JSON בתא, בכוונה: אם משהו יישבר
+ *  באפליקציה, אפשר עדיין לקרוא ולערוך הכול ידנית בגיליון. הפורמט לפי "סוג":
+ *    טקסט/הדגשה — טקסט חופשי (שורה ריקה = פסקה חדשה)
+ *    רשימה      — שורה = בולט
+ *    טבלה       — תאים מופרדים ב-"|", השורה הראשונה היא הכותרות
+ *    אנשי קשר   — שורה = "שם|תפקיד|טלפון"
+ * ========================================================================== */
+var SERVICES_SHEET = 'שירותים לתושב';
+var SERVICES_HEADERS = ['מזהה שירות', 'שם', 'תיאור קצר', 'אייקון', 'ספק',
+  'טלפון ראשי', 'קישור למסמך', 'סדר', 'פעיל', 'עודכן', 'עודכן ע"י'];
+
+var SERVICE_SECTIONS_SHEET = 'סעיפי שירותים';
+var SERVICE_SECTIONS_HEADERS = ['מזהה שירות', 'מזהה סעיף', 'סדר', 'סוג', 'כותרת', 'תוכן'];
+
+/** סוגי הסעיפים המותרים. שמירה עם סוג שאינו ברשימה נדחית — עדיף להיכשל
+ * בבירור מאשר לכתוב לגיליון ערך שהמסך לא ידע לצייר. */
+var SERVICE_SECTION_TYPES = ['טקסט', 'רשימה', 'טבלה', 'אנשי קשר', 'הדגשה'];
+
+function ensureServicesSheet_(ss) {
+  var sh = ss.getSheetByName(SERVICES_SHEET);
+  if (sh) return sh;
+  sh = ss.insertSheet(SERVICES_SHEET);
+  sh.getRange(1, 1, 1, SERVICES_HEADERS.length).setValues([SERVICES_HEADERS]);
+  sh.getRange(1, 1, 1, SERVICES_HEADERS.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  sh.setColumnWidth(1, 120); sh.setColumnWidth(2, 130); sh.setColumnWidth(3, 300);
+  sh.setColumnWidth(4, 70); sh.setColumnWidth(5, 130); sh.setColumnWidth(6, 120);
+  sh.setColumnWidth(7, 220);
+  return sh;
+}
+
+function ensureServiceSectionsSheet_(ss) {
+  var sh = ss.getSheetByName(SERVICE_SECTIONS_SHEET);
+  if (sh) return sh;
+  sh = ss.insertSheet(SERVICE_SECTIONS_SHEET);
+  sh.getRange(1, 1, 1, SERVICE_SECTIONS_HEADERS.length).setValues([SERVICE_SECTIONS_HEADERS]);
+  sh.getRange(1, 1, 1, SERVICE_SECTIONS_HEADERS.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  sh.setColumnWidth(1, 120); sh.setColumnWidth(2, 110); sh.setColumnWidth(3, 60);
+  sh.setColumnWidth(4, 100); sh.setColumnWidth(5, 180); sh.setColumnWidth(6, 560);
+  return sh;
+}
+
+/** קריאה — פתוחה לכל תושב מחובר ופעיל (need=null), בדיוק כמו handleCommitteeTree_.
+ * יוצרת את שני הטאבים אוטומטית בפעם הראשונה כדי שיועד לא יצטרך להכין כלום ידנית.
+ * מחזירה את שני הטאבים בקריאה אחת — המסך צריך את שניהם תמיד, ואין טעם בשתי
+ * נסיעות רשת. הסינון ל"פעיל בלבד" נעשה בלקוח ולא כאן, כי מנהל-על צריך לראות
+ * גם את המוסתרים במסך הניהול. */
+function handleServices_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    ensureServicesSheet_(ss);
+    ensureServiceSectionsSheet_(ss);
+    return json_({
+      ok: true,
+      services: readTable_(ss, SERVICES_SHEET),
+      sections: readTable_(ss, SERVICE_SECTIONS_SHEET)
+    });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** שמירה — מנהל-על בלבד (נאכף ב-ACTION_PERMS, לא כאן). מחליפה את שני הטאבים
+ * במלואם, כמו saveCommitteeTree_: הטבלאות קטנות (עשרות שורות לכל היותר),
+ * והעריכה במסך היא על הכרטיס כמקשה אחת — הוספת/הסרת סעיף, שינוי סדר —
+ * ולא על שורה בודדת. נעילה כדי ששתי שמירות לא יתנגשו.
+ *
+ * ולידציה לפני כתיבה (ולא אחריה): שירות בלי שם או בלי מזהה, מזהה כפול, או
+ * סעיף עם "סוג" לא מוכר — כולם נדחים עם הודעה ברורה, כדי שלא ניכתב לגיליון
+ * מצב שהמסך לא יידע לצייר. */
+function saveServices_(ss, body) {
+  var services = Array.isArray(body.services) ? body.services : [];
+  var sections = Array.isArray(body.sections) ? body.sections : [];
+
+  var seenIds = {};
+  for (var i = 0; i < services.length; i++) {
+    var svc = services[i] || {};
+    var id = String(svc['מזהה שירות'] || '').trim();
+    var name = String(svc['שם'] || '').trim();
+    if (!id) return { ok: false, error: 'שירות ללא מזהה (שורה ' + (i + 1) + ')' };
+    if (!name) return { ok: false, error: 'שירות ללא שם (מזהה ' + id + ')' };
+    if (seenIds[id]) return { ok: false, error: 'מזהה שירות כפול: ' + id };
+    seenIds[id] = true;
+  }
+  for (var j = 0; j < sections.length; j++) {
+    var sec = sections[j] || {};
+    var owner = String(sec['מזהה שירות'] || '').trim();
+    var type = String(sec['סוג'] || '').trim();
+    if (!seenIds[owner]) return { ok: false, error: 'סעיף משויך לשירות שאינו קיים: ' + owner };
+    if (SERVICE_SECTION_TYPES.indexOf(type) === -1) {
+      return { ok: false, error: 'סוג סעיף לא מוכר: "' + type + '"' };
+    }
+  }
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    // body._email נקבע ע"י שער ההרשאות ב-doPost (gate.email) — אין צורך
+    // לפענח את המושב שוב כאן.
+    var who = String(body._email || '').trim();
+    var stamp = Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'yyyy-MM-dd');
+
+    var svcSheet = ensureServicesSheet_(ss);
+    var lastSvc = svcSheet.getLastRow();
+    if (lastSvc > 1) svcSheet.getRange(2, 1, lastSvc - 1, SERVICES_HEADERS.length).clearContent();
+    if (services.length) {
+      var svcGrid = services.map(function (r, idx) {
+        var row = {};
+        SERVICES_HEADERS.forEach(function (h) { row[h] = (r[h] == null) ? '' : r[h]; });
+        // "סדר" נגזר תמיד ממיקום בפועל במערך שהגיע מהמסך — כך שגרירה/חצים
+        // במסך הניהול הם מקור האמת היחיד, ואי אפשר להגיע למצב של שני שירותים
+        // עם אותו מספר סדר.
+        row['סדר'] = idx + 1;
+        row['עודכן'] = stamp;
+        if (who) row['עודכן ע"י'] = who;
+        return SERVICES_HEADERS.map(function (h) { return row[h]; });
+      });
+      svcSheet.getRange(2, 1, svcGrid.length, SERVICES_HEADERS.length).setValues(svcGrid);
+    }
+
+    var secSheet = ensureServiceSectionsSheet_(ss);
+    var lastSec = secSheet.getLastRow();
+    if (lastSec > 1) secSheet.getRange(2, 1, lastSec - 1, SERVICE_SECTIONS_HEADERS.length).clearContent();
+    if (sections.length) {
+      var secGrid = sections.map(function (r) {
+        return SERVICE_SECTIONS_HEADERS.map(function (h) { return (r[h] == null) ? '' : r[h]; });
+      });
+      secSheet.getRange(2, 1, secGrid.length, SERVICE_SECTIONS_HEADERS.length).setValues(secGrid);
+    }
+
+    return { ok: true, services: services.length, sections: sections.length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** עדכון תושבים על שינוי בשירות — **ידני בלבד**, נשלח רק כשמנהל-על לוחץ על
+ * הכפתור במסך העריכה. הוחלט כך במפורש (2026-08-18): שליחה אוטומטית בכל שמירה
+ * הייתה גורמת לתיקון פסיק לשלוח מייל לכל השיכון.
+ * עובר דרך אותה מערכת מיילים כמו כל השאר (getEmailSettings_/emailEnabled_/
+ * sendMail_) — התבנית SERVICE_UPDATED יושבת בטאב "הגדרות מיילים" וניתנת
+ * לעריכה ממסך "ניהול מיילים", בלי לגעת בקוד. */
+function notifyServiceUpdate_(ss, body) {
+  var name = String(body.serviceName || '').trim();
+  if (!name) return { ok: false, error: 'חסר שם השירות' };
+
+  var settings = getEmailSettings_(ss);
+  if (!emailEnabled_(settings, 'SERVICE_UPDATED')) {
+    return { ok: false, error: 'שליחת המייל הזה כבויה כרגע במסך "ניהול מיילים"' };
+  }
+  var t = settings['SERVICE_UPDATED'];
+  if (!t) return { ok: false, error: 'תבנית SERVICE_UPDATED חסרה בגיליון "הגדרות מיילים"' };
+
+  var emails = allActiveResidentEmails_(ss);
+  if (!emails.length) return { ok: false, error: 'לא נמצאו כתובות מייל של תושבים פעילים' };
+
+  var vars = {
+    'שם השירות': name,
+    'ספק': String(body.provider || ''),
+    'מה השתנה': String(body.whatChanged || '')
+  };
+  var plain = renderTemplate_(t.body, vars);
+  var html = buildEmailHtml_(plain, CBA_APP_URL, 'לצפייה בשירות', 'emerald');
+  sendMail_(emails, renderTemplate_(t.subject, vars), plain + '\n\n' + CBA_APP_URL, html);
+  return { ok: true, sent: emails.length };
+}
+
+/** כל כתובות המייל של תושבים פעילים (בלי סינון הרשאה) — אותה לוגיקת סריקה
+ * כמו adminEmailsByPerm_, רק בלי בדיקת ההרשאות: כאן היעד הוא כל השיכון.
+ * מוגדרת בנפרד ולא כפרמטר ל-adminEmailsByPerm_ כדי לא לשנות התנהגות של
+ * פונקציה שכבר עובדת בייצור. */
+function allActiveResidentEmails_(ss) {
+  var rsh = ss.getSheetByName('תושבים');
+  if (!rsh) return [];
+  var values = rsh.getDataRange().getValues();
+  if (values.length < 2) return [];
+  var headers = values[0].map(function (h) { return String(h).trim(); });
+  var emailCols = [], statusCol = -1;
+  headers.forEach(function (h, i) {
+    if (h.indexOf(PERM_HEADER) !== -1) return;      // עמודת הרשאות, לא מייל
+    if (h.indexOf('אימייל') !== -1) emailCols.push(i);
+    else if (h.indexOf('סטטוס') !== -1) statusCol = i;
+  });
+  var out = [];
+  for (var r = 1; r < values.length; r++) {
+    var row = values[r];
+    if (statusCol > -1 && String(row[statusCol]).indexOf('פעיל') === -1) continue;
+    emailCols.forEach(function (c) {
+      var email = String(row[c] || '').trim();
+      if (email) out.push(email);
+    });
+  }
+  return out.filter(function (e, i, a) { return a.indexOf(e) === i; });
+}
+
+/** מילוי אוטומטי של כרטיס שירות ממסמך (2026-08-18) — אותו דפוס בדיוק כמו
+ * סריקת קבלות: קריאה אחת ל-Gemini עם הקובץ, פלט JSON קשיח לפי סכימה, ו**שום
+ * דבר לא נשמר** — התוצאה חוזרת ללקוח ונכנסת לעורך הפתוח לעריכה של המנהל.
+ * מנהל-על בלבד (ACTION_PERMS), בניגוד ל-scanReceipt שפתוח לכל תושב, כי רק
+ * מנהל-על עורך כרטיסי שירות בכלל. */
+function scanServiceDocWithGemini_(dataBase64, mimeType) {
+  var key = geminiApiKey_();
+  if (!key) {
+    return { ok: false, error: 'GEMINI_API_KEY חסר. יש להוסיף אותו תחת Project Settings → Script Properties בעורך Apps Script.' };
+  }
+  var prompt =
+    'זהו מסמך (חוזה/נוהל/מחירון) של שירות שניתן לתושבי שיכון בישראל — למשל גז, ' +
+    'אינטרנט או תחזוקה. המטרה: להפוך אותו לכרטיס מידע מובנה לתושב. ' +
+    'החזר אך ורק JSON תקין, בלי מרקדאון ובלי הסברים. ' +
+    'שדות ברמת הכרטיס: "name" (שם השירות בשתי מילים לכל היותר, למשל "גז"), ' +
+    '"provider" (שם החברה/הספק), "desc" (תיאור קצר של שורה אחת, עד 8 מילים), ' +
+    '"phone" (הטלפון הראשי ליצירת קשר). ' +
+    'ובנוסף "sections": מערך סעיפים לפי סדר הופעתם במסמך. לכל סעיף: ' +
+    '"type" (אחד מ: "טקסט", "רשימה", "טבלה", "אנשי קשר", "הדגשה"), ' +
+    '"title" (כותרת קצרה בעברית), ו-"content" בפורמט שתלוי ב-type: ' +
+    'עבור "טקסט" ו"הדגשה" — טקסט חופשי (שורה ריקה מפרידה בין פסקאות); ' +
+    'עבור "רשימה" — כל שורה היא פריט אחד; ' +
+    'עבור "טבלה" — תאים מופרדים בתו "|" והשורה הראשונה היא הכותרות; ' +
+    'עבור "אנשי קשר" — כל שורה בפורמט "שם|תפקיד|טלפון". ' +
+    'הנחיות: השתמש ב"טבלה" למחירונים, ב"אנשי קשר" לכל רשימת טלפונים, וב"הדגשה" ' +
+    'רק לאזהרות או לדברים שהתושב חייב לשים לב אליהם. ' +
+    'אל תמציא מידע שאינו במסמך — שדה שלא מופיע יוחזר כמחרוזת ריקה. ' +
+    'שמור על הניסוח המקורי של המסמך ככל האפשר, רק קצר וסדר אותו.';
+
+  var payload = {
+    contents: [{
+      parts: [
+        { text: prompt },
+        { inline_data: { mime_type: mimeType || 'application/pdf', data: dataBase64 } }
+      ]
+    }],
+    generationConfig: {
+      response_mime_type: 'application/json',
+      response_schema: {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+          provider: { type: 'STRING' },
+          desc: { type: 'STRING' },
+          phone: { type: 'STRING' },
+          sections: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                type: { type: 'STRING' },
+                title: { type: 'STRING' },
+                content: { type: 'STRING' }
+              },
+              required: ['type', 'title', 'content']
+            }
+          }
+        },
+        required: ['name', 'provider', 'desc', 'phone', 'sections']
+      }
+    }
+  };
+
+  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
+    ':generateContent?key=' + encodeURIComponent(key);
+  var resp;
+  try {
+    resp = UrlFetchApp.fetch(url, {
+      method: 'post', contentType: 'application/json',
+      payload: JSON.stringify(payload), muteHttpExceptions: true
+    });
+  } catch (e) {
+    return { ok: false, error: 'שגיאת רשת בקריאה ל-Gemini: ' + String(e) };
+  }
+  if (resp.getResponseCode() !== 200) {
+    return { ok: false, error: 'Gemini החזיר קוד ' + resp.getResponseCode(), raw: resp.getContentText() };
+  }
+  try {
+    var data = JSON.parse(resp.getContentText());
+    var text = data.candidates && data.candidates[0] && data.candidates[0].content &&
+      data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+      data.candidates[0].content.parts[0].text;
+    if (!text) return { ok: false, error: 'תשובה לא צפויה מ-Gemini (בלי טקסט בפלט)' };
+    var fields = JSON.parse(text);
+    // מסננים סעיפים עם סוג לא חוקי במקום להחזיר אותם ולתת ל-saveServices_
+    // להיכשל אחר כך — עדיף שהמנהל יראה סעיף אחד חסר מאשר שמירה שנתקעת.
+    if (Array.isArray(fields.sections)) {
+      fields.sections = fields.sections.filter(function (s) {
+        return s && SERVICE_SECTION_TYPES.indexOf(String(s.type || '').trim()) !== -1;
+      });
+    } else {
+      fields.sections = [];
+    }
+    return { ok: true, fields: fields };
+  } catch (e) {
+    return { ok: false, error: 'שגיאה בפענוח תשובת Gemini: ' + String(e) };
+  }
+}
+
+/** עטיפה מול הלקוח — מנהל-על בלבד (ACTION_PERMS). לא נוגעת בגיליון/Drive כלל. */
+function handleScanServiceDoc_(ss, body) {
+  if (!body.dataBase64) return { ok: false, error: 'לא צורף מסמך לסריקה' };
+  return scanServiceDocWithGemini_(body.dataBase64, body.mimeType || 'application/pdf');
+}
+
+/* ============================================================================
+ *  מכון כושר — שלב 1: תשתית נתונים והרשאות (2026-08-18)
+ * ----------------------------------------------------------------------------
+ *  שלושה טאבים, ורק אחד מהם כזה שנפתח ביום-יום:
+ *
+ *  1. "מכון כושר"         — שורה אחת לכל מנוי. זה הטאב הראשי.
+ *  2. "מכון כושר — יומן"  — שורה לכל אירוע (תשלום, הארכה, שינוי סטטוס). מתמלא לבד.
+ *  3. "הגדרות מכון"       — מסלולים, שאלון, תקנון וקוד הכניסה. נערך ממסך הניהול.
+ *
+ *  למה טאב הגדרות אחד ולא שלושה (מסלולים/שאלון/תקנון בנפרד): יועד ביקש מפורשות
+ *  כמה שפחות טאבים. הפתרון הוא עמודת "סוג" שמבדילה בין סוגי השורות, כמו שטאב
+ *  "הגדרות מיילים" מחזיק גם תבניות מייל וגם כללי זמן (RULE_*) באותה טבלה.
+ *
+ *  למה תשובות השאלון הן **עמודות** בטאב הראשי ולא טאב רביעי: כך כל מה שצריך
+ *  לדעת על אדם יושב בשורה אחת וקריא בעין. אותו מנגנון בדיוק כמו
+ *  ensureResidentCols_ בטאב "תושבים" — ר' ensureGymQuestionCols_ למטה.
+ *
+ *  שלב 1 יוצר את הטאבים, זורע את התוכן ההתחלתי וקורא אותם למסך הניהול. אין
+ *  עדיין שום כתיבה — הרשמה, תשלומים ואישורים מגיעים בשלבים 2-3.
+ * ========================================================================== */
+var GYM_SHEET          = 'מכון כושר';
+var GYM_LOG_SHEET      = 'מכון כושר — יומן';
+var GYM_SETTINGS_SHEET = 'הגדרות מכון';
+
+/* העמודות הקבועות של הטאב הראשי. עמודות השאלון נוספות **אחריהן** דינמית
+ * (ensureGymQuestionCols_), כך שהוספת שאלה בעתיד לא נוגעת ברשימה הזו. */
+var GYM_HEADERS = [
+  'מזהה', 'מזהה קבוע', 'אימייל', 'שם פרטי', 'שם משפחה', 'טלפון', 'מספר בית',
+  'ת.ז.', 'תאריך לידה',
+  'מסלול', 'מחיר מוסכם', 'תאריך התחלה', 'בתוקף עד', 'סטטוס',
+  'סה"כ שולם', 'תשלום אחרון', 'חודשים ששולמו', 'מצב סנכרון',
+  'שאלות שנענו בכן', 'דגלים', 'הערת דגל',
+  'תאריך חתימה', 'קישור חתימה', 'גרסת שאלון',
+  'אישור רופא', 'תאריך הנפקת האישור', 'קישור אישור',
+  'אישור תקנון', 'הוגש בתאריך', 'טופל בתאריך', 'טופל ע"י', 'הערות מנהל',
+  'מנוי קודם', 'דגלי תזכורת'
+];
+
+var GYM_LOG_HEADERS = [
+  'מזהה אירוע', 'מזהה מנוי', 'תאריך', 'סוג אירוע', 'סכום', 'אמצעי תשלום',
+  'אסמכתא', 'בתוקף עד (אחרי)', 'בוצע ע"י', 'הערה'
+];
+
+/* טאב ההגדרות. עמודת "סוג" קובעת מה השורה מייצגת:
+ *   הגדרה — מזהה=מפתח, תוכן=ערך            (קוד כניסה, קישור פייבוקס, כללי זמן)
+ *   מסלול — כותרת=שם המסלול, חודשים, מחיר לחודש
+ *   שאלה  — כותרת=שם קצר (זה שם העמודה בטאב הראשי!), תוכן=נוסח מלא, דגל=חוסם/התראה
+ *   תקנון — כותרת=כותרת המקטע, תוכן=הנוסח המלא */
+var GYM_SETTINGS_HEADERS = [
+  'סוג', 'מזהה', 'סדר', 'כותרת', 'תוכן', 'חודשים', 'מחיר לחודש', 'דגל', 'פעיל', 'הערה'
+];
+
+/* ערכי ההתחלה. נכתבים **רק** אם המזהה עדיין לא קיים בטאב — בדיוק כמו
+ * DEFAULT_EMAIL_SETTINGS: עריכה ידנית של יועד לעולם לא נדרסת בעדכון קוד.
+ *
+ * השאלון והתקנון הועתקו אחד לאחד מטופס "הרשמה לחדר כושר 2026-2027 - שיכון
+ * פלמחים" שהיה בשימוש עד היום. 13 שאלות הבריאות מסומנות כולן "חוסם", כי
+ * בטופס המקורי כל תשובת "כן" מחייבת תעודה רפואית. מנהל המכון יכול לשנות
+ * כל אחת מהן ל"התראה" ממסך הניהול — ר' האפיון.
+ *
+ * ⚠ קוד הכניסה יושב **רק כאן, בגיליון** ולא בקוד: הריפו ציבורי ב-GitHub. */
+var GYM_DEFAULT_SETTINGS = [
+  ['הגדרה', 'קוד כניסה', '', 'קוד הכניסה למכון', '0606', '', '', '', 'כן',
+   'מוצג באפליקציה רק למנוי פעיל, ואף פעם לא נשלח במייל. להחלפה — לשנות כאן בלבד'],
+  ['הגדרה', 'קישור פייבוקס', '', 'קישור לתשלום', '', '', '', '', 'כן',
+   'הקישור שאליו נשלח התושב לתשלום דמי המנוי'],
+  ['הגדרה', 'גיל מינימום', '', 'גיל מינימום להרשמה', '18', '', '', '', 'כן',
+   'לפי התקנון: הכניסה מגיל 18 (מתחת לכך רק בליווי מדריך)'],
+  ['הגדרה', 'תוקף הצהרה בחודשים', '', 'כמה זמן הצהרת בריאות תקפה', '24', '', '', '', 'כן',
+   'לפי נוסח ההצהרה: "לאחר שנתיים... אדרש להמציא הצהרת בריאות חדשה"'],
+  ['הגדרה', 'תוקף אישור רופא בחודשים', '', 'עד כמה אישור רופא נחשב עדכני', '3', '', '', '', 'כן',
+   'לפי התקנון: "מכון כושר יקבל מתאמן שהמציא תעודה רפואית שלא עברו 3 חודשים ממועד הנפקתה"'],
+  ['הגדרה', 'אישור אוטומטי ללא דגלים', '', 'לאשר בקשה נקייה בלי מנהל', 'כן', '', '', '', 'כן',
+   'בקשה שכל תשובותיה "לא" עוברת ישר ל"ממתין לתשלום". אימות התשלום נשאר ידני תמיד'],
+
+  ['מסלול', 'PLAN-6M', '1', 'מנוי חצי שנתי', 'רישום לחצי שנה מראש', '6', '30', '', 'כן',
+   '30 ₪ לחודש × 6 חודשים = 180 ₪. המחיר החודשי הוא הבסיס לחישוב סנכרון התשלומים'],
+
+  ['תקנון', 'R1', '1', 'תנאי כניסה ושימוש',
+   'הכניסה לחדר הכושר מותרת רק למנויים ששילמו דמי רצינות לחדר הכושר וחתמו על הצהרת בריאות.\n' +
+   'על המתאמן לאשר כי מצבו הבריאותי מאפשר פעילות גופנית, כל אחריות רפואית חלה עליו בלבד.\n' +
+   'חל איסור להכניס אנשים שלא שילמו או ילדים לחדר הכושר - הכניסה מותרת מעל גיל 18 (מתחת לגיל 18 רק בליווי מדריך).\n' +
+   'הכניסה תתאפשר באמצעות מפתח. בהמשך יהיה עם קוד שינתן רק למנויים - חל איסור להעביר את הקוד.\n' +
+   'המחיר הוא אישי ולא לשני בני הזוג.', '', '', '', 'כן', ''],
+  ['תקנון', 'R2', '2', 'התנהלות במתחם',
+   'יש להתנהג לפי התקנון של חדר הכושר.\n' +
+   'חל איסור מוחלט על הכנסת אלכוהול וכלי זכוכית למתחם.\n' +
+   'יש לשמוע מוזיקה באוזניות בלבד.\n' +
+   'יש לשמור על לבוש וציוד ספורט תקני כמו נעלי ספורט וכדומה.', '', '', '', 'כן', ''],
+  ['תקנון', 'R3', '3', 'שמירה על סדר וניקיון',
+   'חובה להשתמש במגבת אישית ולנקות את המכשירים לאחר כל שימוש, כולל מושבים וידיות.\n' +
+   'יש להחזיר משקולות, מתקנים ואביזרים לחוליה או למקום המיועד בתום האימון.\n' +
+   'יש להשליך פסולת לפחים בלבד ולהשאיר את המקום נקי.\n' +
+   'במקרה של לכלוך חריג, נזילה או תקלה - חובה לדווח לאחראית חדר הכושר בשיכון.\n' +
+   'בסיום השימוש יש לכבות את כלל המזגנים והאורות במקום.', '', '', '', 'כן', ''],
+  ['תקנון', 'R4', '4', 'שמירה על ציוד ובטיחות',
+   'חובה להשתמש בציוד לפי ההנחיות המוצגות על המתקן.\n' +
+   'חל איסור להשליך משקולות לרצפה או לבצע שימוש חריג שיכול לגרום נזק.\n' +
+   'במידה ונתקלים בתקלה במכשיר - יש לשים עליו שלט, לא להשתמש עד תיקון התקלה ולעדכן את אחראית חדר הכושר בשיכון.\n' +
+   'מומלץ לבצע חימום לפני כל אימון ולהימנע ממאמץ מעבר ליכולת.', '', '', '', 'כן', ''],
+
+  ['שאלה', 'Q1',  '1',  'מחלת לב',            'האם הרופא שלך אמר לך שאתה סובל ממחלת לב?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q2',  '2',  'כאבים בחזה במנוחה',  'האם אתה חש כאבים בחזה בזמן מנוחה?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q3',  '3',  'כאבים בחזה ביום-יום','האם אתה חש כאבים בחזה במהלך פעילות שגרה ביום-יום?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q4',  '4',  'כאבים בחזה במאמץ',   'האם אתה חש כאבים בחזה בזמן שאתה מבצע פעילות גופנית?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q5',  '5',  'סחרחורת',            'האם במהלך השנה החולפת איבדת שיווי משקל עקב סחרחורת? סמן לא אם הסחרחורת נבעה מנשימת יתר (כולל במהלך פעילות גופנית)', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q6',  '6',  'אובדן הכרה',         'האם במהלך השנה החולפת איבדת את הכרתך?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q7',  '7',  'אסתמה - תרופות',     'האם רופא אבחן שאתה סובל ממחלת האסתמה ולכן בשלושת החודשים האחרונים נזקקת לטיפול תרופתי?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q8',  '8',  'אסתמה - קוצר נשימה', 'האם רופא אבחן שאתה סובל ממחלת האסתמה ולכן בשלושת החודשים סבלת מקוצר נשימה או צפצופים?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q9',  '9',  'מחלת לב במשפחה',     'האם אחד מבני משפחתך מדרגת קרבה ראשונה נפטר ממחלת לב?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q10', '10', 'מוות פתאומי במשפחה', 'האם אחד מבני משפחתך מדרגת קרבה ראשונה נפטר ממוות פתאומי בגיל מוקדם? (לפני גיל 55 אם מדובר בגבר, ולפני גיל 65 אם מדובר באישה)', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q11', '11', 'השגחה רפואית',       'האם הרופא שלך אמר לך ב-5 השנים האחרונות לבצע פעילות גופנית רק תחת השגחה רפואית?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q12', '12', 'מחלה כרונית',        'האם הינך סובל ממחלה קבועה (כרונית), שאינה נזכרת בשאלות לעיל ועלולה למנוע או להגביל אותך בביצוע פעילות גופנית?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q13', '13', 'בעיה אורתופדית',     'האם סבלת בעבר ו/או סובל בהווה מבעיה אורתופדית כלשהי שעלולה להגבילך בפעילותך בחדר כושר?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q14', '14', 'בעיה רפואית אחרת',   'האם סבלת בעבר ו/או סובל בהווה מבעיה רפואית כלשהי שלא מופיעה בטופס זה, ואשר עלולה להגבילך בפעילותך בחדר כושר?', '', '', 'חוסם', 'כן', ''],
+  ['שאלה', 'Q15', '15', 'הריון בסיכון',       'לנשים בהריון - האם ההיריון הזה או כל הריון קודם הוגדר הריון בסיכון?', '', '', 'חוסם', 'כן', '']
+];
+
+/** יוצר את שלושת הטאבים אם הם חסרים. בטוח להרצה חוזרת — טאב קיים לא נגוע. */
+function ensureGymSheets_(ss) {
+  var main = ss.getSheetByName(GYM_SHEET);
+  if (!main) {
+    main = ss.insertSheet(GYM_SHEET);
+    main.getRange(1, 1, 1, GYM_HEADERS.length).setValues([GYM_HEADERS]);
+    main.getRange(1, 1, 1, GYM_HEADERS.length).setFontWeight('bold');
+    main.setFrozenRows(1);
+    main.setColumnWidth(1, 100); main.setColumnWidth(3, 210);
+    main.setColumnWidth(4, 100); main.setColumnWidth(5, 110);
+  }
+
+  var log = ss.getSheetByName(GYM_LOG_SHEET);
+  if (!log) {
+    log = ss.insertSheet(GYM_LOG_SHEET);
+    log.getRange(1, 1, 1, GYM_LOG_HEADERS.length).setValues([GYM_LOG_HEADERS]);
+    log.getRange(1, 1, 1, GYM_LOG_HEADERS.length).setFontWeight('bold');
+    log.setFrozenRows(1);
+    log.setColumnWidth(1, 110); log.setColumnWidth(2, 100); log.setColumnWidth(10, 300);
+  }
+
+  var cfg = ss.getSheetByName(GYM_SETTINGS_SHEET);
+  if (!cfg) {
+    cfg = ss.insertSheet(GYM_SETTINGS_SHEET);
+    cfg.getRange(1, 1, 1, GYM_SETTINGS_HEADERS.length).setValues([GYM_SETTINGS_HEADERS]);
+    cfg.getRange(1, 1, 1, GYM_SETTINGS_HEADERS.length).setFontWeight('bold');
+    cfg.setFrozenRows(1);
+    cfg.setColumnWidth(1, 70);  cfg.setColumnWidth(2, 90);  cfg.setColumnWidth(3, 55);
+    cfg.setColumnWidth(4, 180); cfg.setColumnWidth(5, 480); cfg.setColumnWidth(10, 300);
+  }
+  // זריעה: רק מזהים שעדיין לא קיימים. ערך שיועד ערך ידנית לעולם לא נדרס.
+  var values = cfg.getDataRange().getValues();
+  var existing = {};
+  for (var r = 1; r < values.length; r++) {
+    var key = String(values[r][0]).trim() + '|' + String(values[r][1]).trim();
+    if (key !== '|') existing[key] = true;
+  }
+  var toAdd = GYM_DEFAULT_SETTINGS.filter(function (row) {
+    return !existing[String(row[0]).trim() + '|' + String(row[1]).trim()];
+  });
+  if (toAdd.length) {
+    cfg.getRange(cfg.getLastRow() + 1, 1, toAdd.length, GYM_SETTINGS_HEADERS.length).setValues(toAdd);
+  }
+
+  ensureGymQuestionCols_(ss, main, cfg);
+  return main;
+}
+
+/** מוסיף לטאב הראשי עמודה לכל שאלה פעילה שעדיין אין לה עמודה, לפי "כותרת"
+ * (השם הקצר) מטאב ההגדרות. אותה תבנית בדיוק כמו ensureResidentCols_.
+ * העמודות מוסתרות כברירת מחדל — כמעט כולן יהיו "לא", והעין צריכה את
+ * "שאלות שנענו בכן" ולא 15 עמודות זהות. */
+function ensureGymQuestionCols_(ss, main, cfg) {
+  main = main || ss.getSheetByName(GYM_SHEET);
+  cfg  = cfg  || ss.getSheetByName(GYM_SETTINGS_SHEET);
+  if (!main || !cfg) return { ok: false, error: 'טאבי המכון חסרים' };
+
+  var rows = cfg.getDataRange().getValues();
+  var wanted = [];
+  for (var r = 1; r < rows.length; r++) {
+    if (String(rows[r][0]).trim() !== 'שאלה') continue;
+    if (String(rows[r][8]).trim() === 'לא') continue;      // שאלה מכובה
+    var label = String(rows[r][3]).trim();
+    if (label && wanted.indexOf(label) === -1) wanted.push(label);
+  }
+  if (!wanted.length) return { ok: true, added: [] };
+
+  var lastCol = main.getLastColumn();
+  var headers = main.getRange(1, 1, 1, lastCol).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+  var missing = wanted.filter(function (c) { return headers.indexOf(c) === -1; });
+  if (!missing.length) return { ok: true, added: [] };
+
+  main.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]);
+  main.getRange(1, lastCol + 1, 1, missing.length).setFontWeight('bold');
+  try { main.hideColumns(lastCol + 1, missing.length); } catch (e) {}
+  return { ok: true, added: missing };
+}
+
+/** קורא את טאב ההגדרות ומפרק אותו לארבעה חלקים שהמסך יודע לצייר.
+ * נקרא מחדש בכל בקשה (בלי קאש), כדי שעריכה ידנית בגיליון תיכנס לתוקף מיד. */
+function readGymSettings_(ss) {
+  var cfg = ss.getSheetByName(GYM_SETTINGS_SHEET);
+  var out = { settings: {}, plans: [], questions: [], rules: [] };
+  if (!cfg) return out;
+  var rows = cfg.getDataRange().getValues();
+  for (var r = 1; r < rows.length; r++) {
+    var kind   = String(rows[r][0]).trim();
+    var id     = String(rows[r][1]).trim();
+    var order  = rows[r][2];
+    var title  = String(rows[r][3]).trim();
+    var body   = String(rows[r][4] == null ? '' : rows[r][4]);
+    var months = rows[r][5];
+    var price  = rows[r][6];
+    var flag   = String(rows[r][7]).trim();
+    var active = String(rows[r][8]).trim() !== 'לא';
+    if (!kind) continue;
+    if (kind === 'הגדרה') {
+      out.settings[id] = body;
+    } else if (kind === 'מסלול') {
+      out.plans.push({
+        id: id, name: title, note: body, active: active,
+        months: Number(months) || 0, monthlyPrice: Number(price) || 0,
+        total: (Number(months) || 0) * (Number(price) || 0)
+      });
+    } else if (kind === 'שאלה') {
+      out.questions.push({
+        id: id, order: Number(order) || 0, label: title, text: body,
+        flag: flag, active: active
+      });
+    } else if (kind === 'תקנון') {
+      out.rules.push({ id: id, order: Number(order) || 0, title: title, text: body, active: active });
+    }
+  }
+  out.plans.sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+  out.questions.sort(function (a, b) { return a.order - b.order; });
+  out.rules.sort(function (a, b) { return a.order - b.order; });
+  return out;
+}
+
+/** קריאת מסך הניהול. מוגנת ב-PERM_GYM (ר' ACTION_PERMS) ולא פתוחה לכל תושב,
+ * כי היא מחזירה תשובות שאלון ודגלי בריאות. יוצרת את הטאבים בפעם הראשונה,
+ * כך שאין שום הכנה ידנית בגיליון.
+ *
+ * שים לב מה **לא** מוחזר: קוד הכניסה. הוא ייצא ללקוח רק בשלב 4, בתשובה
+ * ל-gymMy, ורק אחרי שהשרת אימת שהמנוי של המבקש פעיל היום. */
+function handleGymList_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_GYM);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    ensureGymSheets_(ss);
+    var cfg = readGymSettings_(ss);
+    // הקוד לא נשלח למסך הניהול — רק חיווי אם הוגדר, לצורך תצוגת מצב.
+    var hasCode = !!String(cfg.settings['קוד כניסה'] || '').trim();
+    delete cfg.settings['קוד כניסה'];
+    return json_({
+      ok: true,
+      members: readTable_(ss, GYM_SHEET),
+      log: readTable_(ss, GYM_LOG_SHEET),
+      settings: cfg.settings,
+      plans: cfg.plans,
+      questions: cfg.questions,
+      rules: cfg.rules,
+      hasEntryCode: hasCode
+    });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** להרצה ידנית פעם אחת מעורך Apps Script (Run) — יוצר את הטאבים ואת עמודות
+ * הת.ז. בטאב "תושבים" בלי לחכות לקריאה הראשונה מהאפליקציה. בטוח לחזרה. */
+function setupGymModule() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureGymSheets_(ss);
+  var cols = ensureResidentCols_(ss, {});
+  var cfg = readGymSettings_(ss);
+  Logger.log('טאבי המכון מוכנים. מסלולים: ' + cfg.plans.length +
+             ', שאלות: ' + cfg.questions.length +
+             ', מקטעי תקנון: ' + cfg.rules.length +
+             '. עמודות שנוספו לתושבים: ' + JSON.stringify(cols.added || []));
+  return { ok: true };
+}

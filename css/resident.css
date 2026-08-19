@@ -754,7 +754,22 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 }
 
 @media (max-width: 720px) {
-  .map-shell { height: 100%; border-radius: 0; border: none; box-shadow: none; }
+  /* (2026-08-18, ממצא 3.1 בדו"ח הבדיקה — באג קריטי) כאן היה height:100%.
+     אחוזי גובה עובדים רק אם *להורה* יש גובה מוגדר, ול-#app-main אין (הוא
+     נמתח לפי התוכן) — ולכן 100% התפרש כ-0. נמדד: גובה המפה 0px, מנוע הזום
+     חישב scale(0), כל 71 הבתים נבנו ב-DOM ואף אחד לא צויר. כלומר "מפת
+     השיכון" הייתה מסך ריק לחלוטין בכל טלפון.
+     עכשיו גובה אמיתי ביחס לחלון: dvh (dynamic viewport height) הוא היחידה
+     שמתחשבת בשורת הכתובת שנעלמת/מופיעה בגלילה בסאפרי ובכרום מובייל; שורת
+     ה-vh שלפניה היא נפילה-לאחור לדפדפנים ישנים שלא מכירים dvh. min-height
+     מבטיח שגם במסך נמוך במיוחד (או במצב אופקי) עדיין תישאר מפה שאפשר
+     לעבוד איתה ולא רצועה דקה. */
+  .map-shell {
+    height: 68vh;
+    height: 68dvh;
+    min-height: 340px;
+    border-radius: 0; border: none; box-shadow: none;
+  }
   .map-hint, .map-legend { display: none; }
   .map-topbar { top: 10px; right: 10px; left: 10px; }
   .map-search-wrap { flex: 1 1 auto; }
@@ -845,13 +860,23 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
    עם העכבר"). עכשיו גם max-height/margin-top קורסים ל-0 כברירת מחדל, וקוביה
    בלי ריחוף פשוט לא מכילה את השורה הזו בגובה שלה בכלל — מתרחבת אליה רק
    כשבאמת מרחפים/ממוקדים. */
+/* (2026-08-18, ממצא 3.7 בדו"ח הבדיקה) קודם שורת הכפתורים הייתה חלק מזרימת
+   הקוביה, ובריחוף היא "פתחה" את הקוביה ב-38px נוספים (30px גובה + 8px מרווח).
+   אבל המרחק האנכי בין הורה לילדים בעץ הוא 20px בלבד (ROW_GAP ב-layoutOrgTree),
+   והקוביות ממוקמות במיקום מוחלט — כלומר הקוביה של ההורה גדלה *לתוך* הקוביה של
+   הילד וכיסתה את שמו ב-18px, ולפעמים הלחיצה נחתה על הקוביה הלא נכונה.
+   עכשיו השורה צפה (position:absolute) ולא משתתפת בגובה הקוביה בכלל: היא
+   "יוצאת" 15px בלבד אל תוך המרווח של 20px, ולכן לעולם לא נוגעת בילד. חשוב:
+   היא נשארת *בתוך* .org-box ב-DOM, ולכן :hover של הקוביה ממשיך לחול גם כשהעכבר
+   עובר אליה — אחרת הכפתורים היו נעלמים בדיוק כשמנסים ללחוץ עליהם. */
 .org-box__actions {
-  display: flex; justify-content: center; gap: 4px; overflow: hidden;
-  max-height: 0; margin-top: 0; opacity: 0;
-  transition: max-height var(--t), margin-top var(--t), opacity var(--t);
+  position: absolute; top: calc(100% - 11px); left: 0; right: 0; z-index: 6;
+  display: flex; justify-content: center; gap: 4px;
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--t);
 }
 .org-box:hover .org-box__actions, .org-box:focus-within .org-box__actions {
-  max-height: 30px; margin-top: 8px; opacity: 1;
+  opacity: 1; pointer-events: auto;
 }
 .org-box__act {
   width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border);
@@ -864,7 +889,7 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 /* מסך הטעינה/עריכה תמיד גלוי במגע (לא רק hover) — כדי שגם במובייל אפשר
    ללחוץ על עריכה בלי "לרחף" קודם, שלא קיים במסך מגע */
 @media (hover: none) {
-  .org-box__actions { max-height: 30px; margin-top: 8px; opacity: 1; }
+  .org-box__actions { opacity: 1; pointer-events: auto; }
 }
 
 /* מודל עריכת תפקיד — רשימת אנשים ניתנת להוספה/הסרה */

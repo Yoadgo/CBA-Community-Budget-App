@@ -268,6 +268,14 @@ CBA.sheets = (function () {
   var writeFloor = 0;      // תשובת GET עם seq <= זה נחשבת "עלולה להיות מלפני שמירה" - נדחית
   var inFlightWrites = 0;  // כתיבות (push) שכרגע ברשת ועוד לא אושרו
   function isDirty() { return Object.keys(dirtyReasons).length > 0 || inFlightWrites > 0; }
+  /* (2026-08-18, ממצא 4.3 בדו"ח הבדיקה) עד היום writeFloor הועלה *רק* ב-push().
+     כל הכתיבות שעוברות ב-postRead/postReadProgress — עץ הוועד, קטגוריות הוועד,
+     עריכת תושב, הרשאות, אישור/דחיית הרשמה, החלפת משפחה, יצירת תושבים, קבצי
+     קבלה — לא הזיזו אותו, ולכן "מרוץ 2" (בקשת GET שיצאה *לפני* השמירה וחוזרת
+     *אחריה*) נשאר פתוח לגביהן: markDirty מגן רק בזמן השמירה עצמה, אבל ברגע
+     ש-clearDirty רץ, תשובה ישנה שכזו עדיין יכולה לנחות ולדרוס את התוצאה.
+     פונקציה אחת משותפת, נקראת מכל סוגי הכתיבה. */
+  function bumpWriteFloor() { if (seqCounter > writeFloor) writeFloor = seqCounter; }
 
   /* --- חיווי "שומר…/נשמר ✓" גלובלי (2026-08-09) ---
      יועד ביקש שתמיד יהיה ברור אם משהו עדיין נשמר או שהשמירה הסתיימה — לכל
@@ -278,17 +286,75 @@ CBA.sheets = (function () {
      החיווי הוויזואלי לא יופיע — שום פונקציונליות לא נשברת). */
   var lastDirtyState = false;
   var lastWriteHadError = false;
+  // (2026-08-18) נוסף גם נוסח השגיאה עצמו — מאז שהכתיבה קוראת את תשובת השרת
+  // (ר' push למטה) אנחנו *יודעים* למה השמירה נכשלה, ואין סיבה להסתיר את זה
+  // מאחורי הודעה גנרית. app.js מציג את זה כטקסט הסבר על חיווי השמירה.
+  var lastWriteErrorMsg = "";
   function notifyDirtyChange() {
     var d = isDirty();
     if (d === lastDirtyState) return;
     lastDirtyState = d;
     try {
-      window.dispatchEvent(new CustomEvent("cba:dirty-change", { detail: { dirty: d, error: d ? null : lastWriteHadError } }));
+      window.dispatchEvent(new CustomEvent("cba:dirty-change", {
+        detail: { dirty: d, error: d ? null : lastWriteHadError, errorMessage: d ? "" : lastWriteErrorMsg }
+      }));
     } catch (e) { /* לא קריטי */ }
-    if (!d) lastWriteHadError = false;
+    if (!d) { lastWriteHadError = false; lastWriteErrorMsg = ""; }
   }
   function markDirty(reason) { dirtyReasons[reason || "_default"] = true; notifyDirtyChange(); }
   function clearDirty(reason) { delete dirtyReasons[reason || "_default"]; notifyDirtyChange(); }
+
+  /* --- הגנה מאובדן שמירה בעזיבת הדף (2026-08-18, ממצא 4.2 בדו"ח הבדיקה) ---
+     מסכים ששומרים ב"השהיה" (debounce של 700ms — planning.js, notes.js) יוצרים
+     חלון של כ-0.7 שניות שבו העריכה כבר קיימת בזיכרון אבל *עוד לא נשלחה לשרת
+     בכלל*. נמדד בבדיקה: עריכת סכום ואז רענון עמוד אחרי 100ms = אפס בקשות
+     לשרת, השינוי נעלם, ואף אחד לא יודע. עד היום ההגנה הזו הייתה קיימת רק על
+     העלאת קבצי קבלה (beforeunload ב-postReadProgress למטה) ולא הורחבה לשאר.
+
+     שתי שכבות, בסדר הזה:
+     1. flushPending() — "תשלח עכשיו, אל תחכה לסוף ההשהיה". מסך שרושם כאן
+        פונקציה (registerFlush) מקבל את זה בחינם. רץ ב-pagehide/הסתרת טאב/
+        beforeunload — כלומר ברוב המקרים השמירה בכלל תספיק לצאת והמשתמש לא
+        יראה שום דיאלוג.
+     2. beforeunload — רק אם *אחרי* ההברחה עדיין יש כתיבה באוויר (isDirty),
+        מציגים את דיאלוג "לעזוב את האתר?" המובנה של הדפדפן. אי אפשר להתאים
+        את הטקסט שלו — זו מגבלת אבטחה של כל הדפדפנים, לא משהו לתקן אצלנו. */
+  var pendingFlushers = Object.create(null);
+  // registerFlush("planSave", fn) — רושם שמירה ממתינה; registerFlush("planSave", null) מבטל.
+  function registerFlush(key, fn) {
+    if (fn) pendingFlushers[key || "_default"] = fn;
+    else delete pendingFlushers[key || "_default"];
+  }
+  /* unloading — נדלק רק בזמן שהדף באמת נסגר/מוסתר. push() משתמש בו כדי לשלוח
+     את הבקשה עם keepalive:true, שזו הדרך היחידה בדפדפן לבקש "אל תבטל את
+     הבקשה הזו גם אם העמוד נסגר עכשיו". בלי זה ההברחה הייתה חסרת ערך: הבקשה
+     אמנם יוצאת, אבל הדפדפן מבטל אותה באמצע הניווט. keepalive מוגבל לגוף של
+     כ-64KB, ולכן הוא מופעל *רק* במסלול העזיבה ולא בשמירה רגילה — ואם בכל
+     זאת הגוף גדול מדי, הבקשה נכשלת ואז דיאלוג "לעזוב את האתר?" ממילא יעצור
+     את המשתמש (ר' beforeunload למטה). */
+  var unloading = false;
+  function flushPending() {
+    Object.keys(pendingFlushers).forEach(function (k) {
+      var fn = pendingFlushers[k];
+      delete pendingFlushers[k];
+      try { fn(); } catch (e) { /* שמירה אחת שנכשלה לא תעצור את השאר */ }
+    });
+  }
+  function flushOnLeave() {
+    unloading = true;
+    try { flushPending(); } finally { unloading = false; }
+  }
+  window.addEventListener("pagehide", flushOnLeave);
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) flushOnLeave();
+  });
+  window.addEventListener("beforeunload", function (e) {
+    flushOnLeave();
+    if (!isDirty()) return;
+    e.preventDefault();
+    e.returnValue = "";
+    return "";
+  });
 
   /* מחליף את תוכן CBA.mock בנתונים מהגיליון (תכונות הגישה נשארות תקפות).
      מחזירה true אם באמת יושם (fetchAndApply משתמש בזה כדי לעדכן lastAppliedSeq
@@ -418,9 +484,20 @@ CBA.sheets = (function () {
   // ניקוי המטמון (למשל בעת יציאה/החלפת משתמש)
   function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch (e) {} }
 
-  // כתיבה לגיליון בשיטת "שגר ושכח" (no-cors): הבקשה נשלחת ומבוצעת בשרת,
-  // אבל הדפדפן לא יכול לקרוא את התשובה — לכן מניחים הצלחה (עדכון אופטימי במסך).
-  // הסיסמה נלקחת אוטומטית מההגדרות שנטענו מהגיליון.
+  /* כתיבה לגיליון (2026-08-18 — שוכתב, ממצא 4.1 בדו"ח הבדיקה).
+     קודם זה עבד ב-mode:"no-cors" ("שגר ושכח"): הבקשה יוצאת, אבל הדפדפן לא
+     נותן לקרוא את התשובה — לא את הסטטוס ולא את גוף ההודעה — ולכן הקוד הניח
+     הצלחה תמיד. נמדד בבדיקה: השרת החזיר 500 עם {"ok":false,"error":"אין
+     הרשאה"} והאפליקציה הציגה "נשמר ✓" בירוק. המשמעות: מושב שפג, Apps Script
+     שלא פורסם, או הרשאה שהשתנתה בגיליון — כולם נראים בדיוק כמו שמירה מוצלחת,
+     והנתון פשוט לא נמצא בגיליון.
+     עכשיו זו אותה בקשה בדיוק, רק בלי no-cors — כלומר בדיוק הצורה של postRead
+     למטה, שכבר מוכחת בייצור מאז 2026-08-06 (העלאת קבלות, עץ הוועד, עריכת
+     תושבים כולם עוברים בה ומקבלים תשובה אמיתית). Content-Type הוא text/plain
+     ("בקשה פשוטה") ולכן אין preflight ואין בעיית CORS.
+     חשוב: אם הבקשה נכשלת ברמת הרשת/CORS, זה ייראה עכשיו כשגיאה גלויה במקום
+     כ"הצלחה" שקטה — וזה בכוונה. עדיף שיועד יראה "בעיית שמירה" מאשר שיאמין
+     שנשמר משהו שלא נשמר. */
   function push(action, payload, cb) {
     // inFlightWrites++ עכשיו (לא רק בקריאות המפורשות ל-markDirty) — כדי שכל
     // כתיבה, מכל מסך, תחסום רענון רקע אוטומטית עד שהיא תיגמר (ר' isDirty למעלה),
@@ -428,24 +505,37 @@ CBA.sheets = (function () {
     inFlightWrites++;
     notifyDirtyChange();
     var body = Object.assign({ action: action, session: authSession() }, payload || {});
-    fetch(API_URL, {
-      method: "POST", mode: "no-cors",
+    var opts = {
+      method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(body)
-    })
-      .then(function () {
+    };
+    // ר' ההסבר ליד unloading למעלה — רק במסלול עזיבת הדף
+    if (unloading) opts.keepalive = true;
+    fetch(API_URL, opts)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
         inFlightWrites = Math.max(0, inFlightWrites - 1);
         // ברגע שכתיבה הסתיימה — כל בקשת GET שנשלחה *לפני* הרגע הזה עלולה
         // לשקף מצב ישן מלפני השמירה, גם אם התשובה שלה עוד לא חזרה. מסמנים
         // את הרף הזה כדי שתשובה כזו, כשתחזור, תידחה כ"ישנה" (ר' fetchAndApply).
         if (seqCounter > writeFloor) writeFloor = seqCounter;
+        var res = withAuthNote(data || {});
+        // השרת ענה, אבל ענה "לא הצלחתי" — זו שמירה שנכשלה לכל דבר. מסמנים
+        // כשגיאה כדי שהחיווי בכותרת יציג "בעיית שמירה" ולא "נשמר ✓".
+        if (!res || res.ok !== true) {
+          lastWriteHadError = true;
+          lastWriteErrorMsg = (res && res.error) ? String(res.error) : "השרת דחה את השמירה";
+          console.error("[CBA] השרת דחה את השמירה:", action, res && res.error);
+        }
         notifyDirtyChange();
-        if (cb) cb({ ok: true });
+        if (cb) cb(res && typeof res === "object" ? res : { ok: false, error: "תשובה לא תקינה מהשרת" });
       })
       .catch(function (err) {
         inFlightWrites = Math.max(0, inFlightWrites - 1);
         if (seqCounter > writeFloor) writeFloor = seqCounter;
         lastWriteHadError = true;
+        lastWriteErrorMsg = "לא הצלחנו להגיע לשרת. בדקו את החיבור לאינטרנט ונסו לשמור שוב.";
         notifyDirtyChange();
         console.error("[CBA] כתיבה נכשלה:", err);
         if (cb) cb({ ok: false, error: String(err) });
@@ -484,8 +574,8 @@ CBA.sheets = (function () {
       body: JSON.stringify(body)
     })
       .then(function (r) { return r.json(); })
-      .then(function (data) { if (cb) cb(withAuthNote(data)); })
-      .catch(function (err) { if (cb) cb({ ok: false, error: String(err) }); });
+      .then(function (data) { bumpWriteFloor(); if (cb) cb(withAuthNote(data)); })
+      .catch(function (err) { bumpWriteFloor(); if (cb) cb({ ok: false, error: String(err) }); });
   }
 
   // כמו postRead, אבל דרך XMLHttpRequest כדי לחשוף אחוז התקדמות אמיתי של
@@ -530,6 +620,7 @@ CBA.sheets = (function () {
     }
     xhr.onload = function () {
       clearUnloadGuard();
+      bumpWriteFloor();
       if (typeof onProgress === "function") onProgress(100);
       var data;
       try { data = JSON.parse(xhr.responseText); }
@@ -538,10 +629,12 @@ CBA.sheets = (function () {
     };
     xhr.onerror = function () {
       clearUnloadGuard();
+      bumpWriteFloor();
       if (cb) cb({ ok: false, error: "שגיאת רשת" });
     };
     xhr.ontimeout = function () {
       clearUnloadGuard();
+      bumpWriteFloor();
       if (cb) cb({ ok: false, error: "תם הזמן הקצוב — נסו שוב" });
     };
     xhr.send(JSON.stringify(body));
@@ -550,5 +643,5 @@ CBA.sheets = (function () {
   // refresh נשכח מהייצוא (התגלה 2026-08-07 בבדיקת הרשאות): app.js קורא ל-
   // CBA.sheets.refresh במחזור הרענון התקופתי, וזה נכשל בשקט — כלומר הנתונים
   // לא התרעננו מעצמם כלל, רק ברענון עמוד.
-  return { url: API_URL, load: load, refresh: refresh, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty };
+  return { url: API_URL, load: load, refresh: refresh, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
 })();

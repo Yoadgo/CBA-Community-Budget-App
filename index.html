@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
   <!-- העיצוב שלנו -->
-  <link rel="stylesheet" href="css/style.css?v=20260818" />
+  <link rel="stylesheet" href="css/style.css?v=20260818b" />
   <!-- שכבת מובייל — נטענת אחרי הבסיס כדי לעדכן היכן שצריך -->
   <link rel="stylesheet" href="css/mobile.css?v=20260818" />
   <!-- שכבת טעינה — שלדי shimmer, כניסת מסך רכה, טוסט "מעודכן" -->
@@ -20,6 +20,8 @@
   <link rel="stylesheet" href="css/resident.css?v=20260818" />
   <!-- זכוכית נוזלית + תנועה (iOS 26) — שכבת עיצוב תוספתית, לא נוגעת במסכים -->
   <link rel="stylesheet" href="css/motion.css?v=20260818" />
+  <!-- מכון כושר (2026-08-18) — שכבה ייעודית, כל המחלקות בתחילית gym- -->
+  <link rel="stylesheet" href="css/gym.css?v=20260818c" />
 
   <!-- כניסת Google (Google Identity Services) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -86,7 +88,7 @@
   <!-- לוגו — פונקציה עצמאית קטנה, נטענת מוקדם כי מסך הכניסה משתמש בה -->
   <script src="js/ui/logo.js?v=20260818"></script>
   <script src="js/data/mock.js?v=20260818"></script>
-  <script src="js/data/dataService.js?v=20260818"></script>
+  <script src="js/data/dataService.js?v=20260818c"></script>
   <!-- חיבור ל-Google Sheets (קריאה). אם נכשל — נשארים על נתוני mock -->
   <script src="js/data/sheets.js?v=20260818"></script>
   <script src="js/screens/budget.js?v=20260818"></script>
@@ -96,12 +98,19 @@
   <script src="js/screens/planning.js?v=20260818"></script>
   <script src="js/screens/settings.js?v=20260818"></script>
   <script src="js/screens/clubAdmin.js?v=20260818"></script>
-  <script src="js/screens/residents.js?v=20260818"></script>
+  <!-- מכון כושר — ניהול (2026-08-18). יושב ליד clubAdmin כי שניהם
+       "מתקנים", אבל כל אחד עם מידור ההרשאות שלו. -->
+  <script src="js/screens/gymAdmin.js?v=20260818c"></script>
+  <script src="js/screens/residents.js?v=20260818c"></script>
   <!-- ניהול מיילים (שלב 1, 2026-08-18) — עריכת נוסח/תזמונים/הדלקה-כיבוי מהאפליקציה -->
   <script src="js/screens/emailSettings.js?v=20260818"></script>
+  <!-- "שירותים לתושב" (2026-08-18). services.js קודם — הוא מגדיר את
+       CBA.serviceUtils (פענוח הפורמט + ציור סעיף) ש-servicesAdmin.js תלוי בו. -->
+  <script src="js/screens/services.js?v=20260818b"></script>
+  <script src="js/screens/servicesAdmin.js?v=20260818b"></script>
   <!-- אזור התושב (מסכי הפורטל) — לפני המנוע -->
   <script src="js/screens/resident.js?v=20260818"></script>
-  <script src="js/app.js?v=20260818"></script>
+  <script src="js/app.js?v=20260818c"></script>
   <!-- התנהגויות מובייל (בר תחתון, כותרת נעלמת) — אחרי המנוע -->
   <script src="js/ui/mobile.js?v=20260818"></script>
   <!-- זכוכית נוזלית + תנועה (iOS 26) — אפקטים בלבד, לא נוגע בנתונים/לוגיקה -->

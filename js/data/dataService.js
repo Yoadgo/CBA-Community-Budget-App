@@ -423,6 +423,12 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "clubList" }, cb);
   }
+  // --- מכון כושר (שלב 1, 2026-08-18) — קריאת מסך הניהול. מוגנת ב-PERM_GYM
+  // בשרת, ולכן מחזירה שגיאה מסודרת למי שאין לו את המידור, ולא מסך ריק.
+  function getGymList(cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "gymList" }, cb);
+  }
   function approveClubReservation(id, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "approveClubReservation", id: id }, cb);
@@ -516,6 +522,29 @@ CBA.data = (function () {
       if (cb) cb(res);
     });
   }
+  /* --- "שירותים לתושב" (2026-08-18) ---------------------------------------
+     טאב "שירותים לתושב" (כרטיס לכל שורה) + טאב "סעיפי שירותים" (סעיף לכל
+     שורה), מוחזרים יחד בקריאה אחת (ר' handleServices_ ב-Code.gs). קריאה
+     פתוחה לכל תושב מחובר; שמירה מוגבלת למנהל-על בשרת (ACTION_PERMS), בלי
+     קשר למטמון כאן. אותו דפוס בדיוק כמו getCommitteeTree/saveCommitteeTree. */
+  var servicesCache = null;
+  function getServices(cb) {
+    if (servicesCache) { if (cb) cb({ ok: true, services: servicesCache.services, sections: servicesCache.sections }); return; }
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "services" }, function (res) {
+      if (res && res.ok) servicesCache = { services: res.services || [], sections: res.sections || [] };
+      if (cb) cb(res);
+    });
+  }
+  /* שמירה מחליפה את שני הטאבים במלואם בשרת (ר' saveServices_) — העריכה במסך
+     היא על הכרטיס כמקשה אחת (הוספת/הסרת סעיף, שינוי סדר), לא שורה בודדת. */
+  function saveServices(services, sections, cb) {
+    CBA.sheets.postRead("saveServices", { services: services, sections: sections }, function (res) {
+      if (res && res.ok) servicesCache = null;
+      if (cb) cb(res);
+    });
+  }
+
   function saveCommitteeCategories(rows, cb) {
     CBA.sheets.postRead("saveCommitteeCategories", { rows: rows }, function (res) {
       if (res && res.ok) committeeCatsCache = null;
@@ -1117,6 +1146,7 @@ CBA.data = (function () {
     getMyClubReservations: getMyClubReservations,
     cancelClubReservation: cancelClubReservation,
     getClubList: getClubList,
+    getGymList: getGymList,
     approveClubReservation: approveClubReservation,
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,
@@ -1221,6 +1251,26 @@ CBA.data = (function () {
     listEmailSettings: function (cb) { CBA.sheets.get({ action: "listEmailSettings" }, cb); },
     saveEmailSetting: function (key, fields, cb) {
       CBA.sheets.postRead("saveEmailSetting", { key: key, fields: fields }, cb);
+    },
+
+    /* "שירותים לתושב" (2026-08-18) — ר' services.js/servicesAdmin.js.
+       אותו דפוס מטמון בדיוק כמו getCommitteeTree למעלה: רשימת השירותים
+       משתנה נדיר מאוד (כמה פעמים בשנה), אז נטענת פעם אחת לכניסה ונשמרת —
+       חזרה למסך היא מיידית בלי נסיעת רשת נוספת. כל שמירה של מנהל-על
+       מנקה את המטמון כדי שהקריאה הבאה תביא גרסה טרייה.
+       השרת מחזיר את שני הטאבים יחד (services + sections), ולכן גם המטמון
+       מחזיק את שניהם — אין מצב שבו הכרטיסים טריים והסעיפים ישנים. */
+    getServices: getServices,
+    saveServices: saveServices,
+    /* עדכון תושבים במייל — ידני בלבד, נשלח רק בלחיצה מפורשת של מנהל-על
+       (ר' notifyServiceUpdate_ ב-Code.gs). לא מנקה מטמון: הוא לא משנה נתונים. */
+    notifyServiceUpdate: function (payload, cb) {
+      CBA.sheets.postRead("notifyServiceUpdate", payload || {}, cb);
+    },
+    /* מילוי אוטומטי ממסמך (Gemini) — לא שומר כלום, רק מחזיר סעיפים מוצעים
+       לעריכה בעורך הפתוח, בדיוק כמו scanReceipt. */
+    scanServiceDoc: function (dataBase64, mimeType, cb) {
+      CBA.sheets.postRead("scanServiceDoc", { dataBase64: dataBase64, mimeType: mimeType }, cb);
     }
   };
 })();

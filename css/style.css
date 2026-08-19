@@ -1869,3 +1869,234 @@ body.has-sim { padding-top: 34px; }
   .ems-row { flex-direction: column; align-items: flex-start; gap: 8px; }
   .ems-row__actions { align-self: flex-end; }
 }
+
+/* ============================================================================
+   "שירותים לתושב" (2026-08-18)
+   ----------------------------------------------------------------------------
+   שני מסכים: resServices (אזור התושב, js/screens/services.js) ו-servicesAdmin
+   (אזור הניהול, מנהל-על). משתמשים ברכיבים הקיימים ככל האפשר — .card/.drawer/
+   .badge/.ems-toggle/.field-input/.btn-* — וכאן רק ההשלמות הייחודיות.
+   ========================================================================== */
+
+/* --- drawer רחב (חדש) --- ה-drawer הרגיל (540px) צר מדי לעורך שיש בו טבלאות
+   ורשימות אנשי קשר בשלוש עמודות. תאום ל-.drawer--narrow הקיים. */
+.drawer--wide { width: min(760px, 96vw); }
+
+/* --- שורת כלים + חיפוש --- */
+.svc-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.svc-search { position: relative; flex: 1; max-width: 340px; }
+.svc-search .field-input { width: 100%; padding-inline-start: 32px; }
+.svc-search svg {
+  position: absolute; inset-inline-start: 11px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); pointer-events: none;
+}
+.svc-count { font-size: 12.5px; color: var(--text-muted); }
+
+/* --- רשת הכרטיסים --- לרוחב, לא לאורך (ר' שפת העיצוב) */
+.svc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.svc-empty { grid-column: 1 / -1; }
+
+.svc-card {
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius);
+  padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  transition: box-shadow var(--t), transform var(--t);
+}
+.svc-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+.svc-card__ico { font-size: 26px; line-height: 1; margin-bottom: 12px; }
+.svc-card__name { font-size: 16px; font-weight: 700; margin: 0; }
+.svc-card__prov { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.svc-card__desc { font-size: 13px; color: var(--text-soft); margin: 9px 0 16px; flex: 1; }
+.svc-card__acts { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* --- drawer התושב --- */
+.svc-drawer__head { display: flex; align-items: flex-start; gap: 11px; }
+.svc-drawer__ico { font-size: 25px; line-height: 1.1; }
+.svc-drawer__body { padding-top: 0; }
+
+/* אקורדיון הסעיפים — הסעיף הראשון פתוח, השאר סגורים. זה מה שהופך חוזה שלם
+   למסך שאפשר לסרוק בנייד במקום גלילה ארוכה. */
+.svc-acc { border-bottom: 1px solid var(--hairline); }
+.svc-acc:last-of-type { border-bottom: none; }
+.svc-acc__btn {
+  width: 100%; border: none; background: none; font-family: inherit; font-size: 14px;
+  font-weight: 700; color: var(--text); text-align: start; padding: 14px 2px; cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+}
+.svc-acc__chev { margin-inline-start: auto; color: var(--text-muted); transition: transform var(--t); flex: none; }
+.svc-acc.is-open .svc-acc__chev { transform: rotate(180deg); }
+.svc-acc__body { display: none; padding: 0 2px 18px; }
+.svc-acc.is-open .svc-acc__body { display: block; }
+
+.svc-p { margin: 0 0 10px; font-size: 13.5px; color: #374151; line-height: 1.75; }
+.svc-p:last-child { margin-bottom: 0; }
+.svc-ul { margin: 0; padding-inline-start: 20px; }
+.svc-ul li { font-size: 13.5px; color: #374151; margin: 6px 0; line-height: 1.65; }
+
+.svc-hilite {
+  background: var(--warn-soft); border: 1px solid #FDE68A; border-radius: var(--radius-sm);
+  padding: 12px 14px; font-size: 13.5px; color: #78350F; line-height: 1.7;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.svc-hilite__ico {
+  flex: none; width: 19px; height: 19px; border-radius: 50%; background: var(--warn);
+  color: #fff; font-weight: 800; font-size: 13px; display: grid; place-items: center; margin-top: 1px;
+}
+
+/* גלילה אופקית על העטיפה ולא על הטבלה — כדי שמחירון עם 3-4 עמודות לא ישבור
+   את רוחב ה-drawer בנייד. */
+.svc-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.svc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.svc-table th, .svc-table td { border: 1px solid var(--border); padding: 7px 10px; text-align: right; }
+.svc-table th { background: #F3F4F6; font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+
+.svc-contact { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--hairline); }
+.svc-contact:last-child { border-bottom: none; }
+.svc-contact__t { flex: 1; min-width: 0; }
+.svc-contact__n { font-size: 13.5px; font-weight: 600; }
+.svc-contact__r { font-size: 12px; color: var(--text-muted); }
+.svc-contact__p { font-size: 12.5px; color: var(--text-soft); direction: ltr; white-space: nowrap; }
+.svc-contact__acts { display: flex; gap: 6px; flex: none; }
+.svc-icb {
+  width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--surface); cursor: pointer; display: grid; place-items: center;
+  color: var(--text-soft); flex: none; transition: border-color var(--t), color var(--t), background var(--t);
+}
+.svc-icb:hover { border-color: var(--action); color: var(--text); background: var(--hover); }
+.svc-icb--wa:hover { border-color: #25D366; color: #128C3F; background: #F0FDF4; }
+
+.svc-updated {
+  font-size: 12px; color: var(--text-muted); text-align: center;
+  padding: 16px 0 4px; border-top: 1px solid var(--hairline); margin-top: 12px;
+}
+
+/* טוסט "המספר הועתק" — בדסקטופ tel: לרוב לא עושה כלום, אז הכפתור מעתיק
+   ומאשר בטוסט במקום להיראות שבור. */
+.svc-toast {
+  position: fixed; bottom: 24px; inset-inline-start: 50%; transform: translate(50%, 16px);
+  background: var(--action); color: #fff; padding: 11px 20px; border-radius: 11px;
+  font-size: 13.5px; font-weight: 500; z-index: 400; opacity: 0; pointer-events: none;
+  transition: opacity 200ms, transform 200ms; box-shadow: 0 10px 30px rgba(16,24,40,.25);
+}
+.svc-toast.is-show { opacity: 1; transform: translate(50%, 0); }
+
+/* ============================ צד הניהול ============================ */
+.sadm-list { padding: 8px; }
+.sadm-row {
+  display: flex; align-items: center; gap: 12px; padding: 11px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.sadm-row:last-child { border-bottom: none; }
+.sadm-row--off { opacity: .58; }
+.sadm-row__move { display: flex; flex-direction: column; gap: 1px; flex: none; }
+.sadm-arrow {
+  border: none; background: none; color: var(--text-muted); cursor: pointer;
+  font-size: 12px; line-height: 1; padding: 3px 6px; border-radius: 5px;
+}
+.sadm-arrow:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.sadm-arrow:disabled { opacity: .3; cursor: default; }
+.sadm-row__ico { font-size: 20px; flex: none; width: 24px; text-align: center; }
+.sadm-row__t { flex: 1; min-width: 0; }
+.sadm-row__n { font-size: 14px; font-weight: 600; }
+.sadm-row__m { font-size: 12px; color: var(--text-muted); }
+
+/* --- עורך הסעיפים --- */
+.sadm-sec-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 20px 0 12px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+.sadm-sec-count { font-size: 12px; color: var(--text-muted); }
+.sadm-sec-head .btn-ai { margin-inline-start: auto; }
+
+.sadm-sec { background: var(--hover); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 11px; }
+.sadm-sec__head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.sadm-sec__type {
+  font-size: 11px; font-weight: 700; background: #EEF2FF; color: #4338CA;
+  padding: 3px 9px; border-radius: 99px; flex: none; white-space: nowrap;
+}
+.sadm-sec__title {
+  flex: 1; min-width: 0; border: 1px solid var(--border); background: var(--surface);
+  font-family: inherit; font-size: 13px; font-weight: 600; padding: 6px 9px;
+  border-radius: 8px; outline: none; color: var(--text);
+}
+.sadm-sec__title:focus { border-color: var(--action); }
+.sadm-x {
+  border: none; background: none; color: var(--text-muted); cursor: pointer;
+  font-size: 17px; line-height: 1; padding: 2px 7px; border-radius: 6px; flex: none;
+}
+.sadm-x:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
+.sadm-x:disabled { opacity: .25; cursor: default; }
+
+.sadm-ta { width: 100%; resize: vertical; min-height: 88px; line-height: 1.75; }
+.sadm-ta--warn { background: var(--warn-soft); border-color: #FDE68A; }
+.sadm-hint { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; }
+
+.sadm-line { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.sadm-line__b { color: var(--text-muted); font-size: 13px; flex: none; }
+.sadm-line .field-input { flex: 1; min-width: 0; padding: 6px 9px; font-size: 13px; }
+
+.sadm-add {
+  border: 1px dashed var(--border); background: none; font-family: inherit; font-size: 12px;
+  font-weight: 600; color: var(--text-soft); padding: 6px 11px; border-radius: 8px; cursor: pointer;
+}
+.sadm-add:hover:not(:disabled) { border-style: solid; border-color: var(--action); color: var(--text); background: var(--surface); }
+.sadm-add:disabled { opacity: .4; cursor: default; }
+.sadm-add--sm { margin-top: 5px; }
+.sadm-addbar { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+
+.sadm-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sadm-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; }
+.sadm-table td { border: 1px solid var(--border); padding: 0; }
+.sadm-table td.sadm-table__x { border: none; width: 30px; text-align: center; }
+.sadm-table input {
+  width: 100%; border: none; background: none; font-family: inherit; font-size: 12.5px;
+  padding: 7px 9px; outline: none; color: var(--text); min-width: 90px;
+}
+.sadm-table input:focus { background: #EEF2FF; }
+.sadm-table__head input { font-weight: 700; background: #F3F4F6; }
+.sadm-table-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+
+.sadm-contact { display: grid; grid-template-columns: 1fr 1fr 130px 30px; gap: 6px; margin-bottom: 5px; align-items: center; }
+.sadm-contact input {
+  border: 1px solid var(--border); background: var(--surface); font-family: inherit;
+  font-size: 12.5px; padding: 6px 9px; border-radius: 7px; outline: none; min-width: 0; color: var(--text);
+}
+.sadm-contact input:focus { border-color: var(--action); }
+.sadm-contact--head { font-size: 11.5px; color: var(--text-muted); font-weight: 700; margin-bottom: 4px; }
+
+.sadm-foot-extra { display: flex; gap: 8px; margin-inline-start: auto; flex-wrap: wrap; }
+.sadm-ico-input { font-size: 18px; }
+
+/* --- מודלים קטנים (מייל / AI) --- */
+.sadm-modal { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 20px; }
+.sadm-modal__bg { position: absolute; inset: 0; background: rgba(16,24,40,.35); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+.sadm-modal__box {
+  position: relative; background: var(--surface); border-radius: var(--radius);
+  box-shadow: 0 20px 70px rgba(16,24,40,.28); width: min(520px, 100%);
+  max-height: 86vh; overflow: auto; padding: 24px;
+}
+.sadm-modal__box h3 { margin: 0 0 6px; font-size: 17px; }
+.sadm-modal__sub { color: var(--text-soft); font-size: 13px; margin: 0 0 16px; line-height: 1.7; }
+.sadm-modal__acts { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.sadm-ai-status { font-size: 12.5px; color: var(--text-muted); margin-top: 12px; min-height: 18px; }
+
+/* --- רספונסיביות --- */
+@media (max-width: 1000px) {
+  .svc-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .svc-grid { grid-template-columns: 1fr; }
+  .svc-search { max-width: none; }
+  /* אנשי קשר בעורך — שלוש עמודות לא נכנסות בנייד. השדות נערמים בעמודה
+     אחת וכפתור המחיקה יושב בפינה (grid-row: 1), אחרת הוא "נגרר" לשורה
+     משלו ומועך את שדה התפקיד ל-30px. שורת הכותרות מוסתרת — במקומה יש
+     placeholder על כל שדה. */
+  .sadm-contact {
+    grid-template-columns: 1fr 30px; gap: 5px;
+    padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--border);
+  }
+  .sadm-contact input { grid-column: 1; }
+  .sadm-contact .sadm-x { grid-column: 2; grid-row: 1; align-self: start; }
+  .sadm-contact--head { display: none; }
+  .sadm-row { flex-wrap: wrap; }
+  .sadm-row__t { flex-basis: 60%; }
+}

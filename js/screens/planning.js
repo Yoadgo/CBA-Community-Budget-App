@@ -1275,15 +1275,23 @@ function setText(container, sel, text) { const el = container.querySelector(sel)
 // חיווי "שומר…/נשמר ✓" (2026-08-09, הורחב): עבר לבועה גלובלית אחת ב-app.js
 // שמאזינה ל-markDirty/clearDirty מכל מסך (לא רק כאן) — ר' notifyDirtyChange
 // ב-sheets.js. אין יותר בועה נפרדת רק למסך הזה.
+// (2026-08-18, ממצא 4.2 בדו"ח הבדיקה) השמירה עצמה הוצאה לפונקציה בשם —
+// כדי שאפשר יהיה גם *להבריח* אותה (לשלוח מיד) אם המשתמש עוזב/מרענן את הדף
+// בתוך 700 המילישניות של ההשהיה, במקום שהעריכה תיעלם בלי שאף אחד ידע.
+// registerFlush רושם אותה ב-sheets.js; ר' flushPending/beforeunload שם.
 var planSaveTimer = null;
 function planSave() {
   if (!CBA.sheets || !CBA.sheets.isConnected || !CBA.sheets.isConnected()) return;
   var year = CBA.data.getCurrentYear();
   if (CBA.sheets.markDirty) CBA.sheets.markDirty();
   clearTimeout(planSaveTimer);
-  planSaveTimer = setTimeout(function () {
+  var doSave = function () {
+    clearTimeout(planSaveTimer);
+    if (CBA.sheets.registerFlush) CBA.sheets.registerFlush("planSave", null);   // כבר נשלח — אין מה להבריח
     CBA.data.saveBudgetToSheet(year, function () {
       if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
     });
-  }, 700);
+  };
+  if (CBA.sheets.registerFlush) CBA.sheets.registerFlush("planSave", doSave);
+  planSaveTimer = setTimeout(doSave, 700);
 }

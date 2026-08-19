@@ -39,10 +39,15 @@ CBA.notesPanel = (function () {
     return "נערך לאחרונה על ידי " + n.editedBy + (when ? " · " + when : "");
   }
 
+  // (2026-08-18, ממצא 4.2 בדו"ח הבדיקה) אותו דפוס בדיוק כמו planSave ב-planning.js:
+  // השמירה המושהית נרשמת כ"שמירה ממתינה" ב-sheets.js, כדי שעזיבה/רענון של הדף
+  // בתוך 700 המילישניות ישלחו אותה מיד במקום לאבד אותה בשקט.
   function scheduleSave(editorEl, metaEl) {
     if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("notesSave");
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
+    var doSave = function () {
+      clearTimeout(saveTimer);
+      if (CBA.sheets && CBA.sheets.registerFlush) CBA.sheets.registerFlush("notesSave", null);
       var year = CBA.data.getCurrentYear();
       var content = editorEl.innerHTML;
       var by = currentUserLabel();
@@ -50,7 +55,9 @@ CBA.notesPanel = (function () {
         if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("notesSave");
       });
       if (metaEl) metaEl.textContent = metaLabel(CBA.data.getNotes());
-    }, 700);
+    };
+    if (CBA.sheets && CBA.sheets.registerFlush) CBA.sheets.registerFlush("notesSave", doSave);
+    saveTimer = setTimeout(doSave, 700);
   }
 
   /* חלון "יומן עריכות" — מי ערך את הפנקס ומתי, לשנה הנוכחית (כרונולוגי,
