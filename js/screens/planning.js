@@ -511,18 +511,29 @@ function planBind(container) {
 
   // שני שלבים: סגירה / פתיחה מחדש / הצגת עדכונים
   const lockBtn = container.querySelector("[data-lock-budget]");
+  // (2026-08-19, ממצא 2.6) שתי הפעולות הכי משמעותיות במסך — סגירת התקציב
+  // ופתיחתו מחדש — נעשו דרך חלון אישור אפור של הדפדפן. עכשיו מודל של
+  // האפליקציה, ופתיחה-מחדש (שמוחקת את הבסיס המאושר) מסומנת כפעולה הרסנית.
   if (lockBtn) lockBtn.addEventListener("click", function () {
-    if (window.confirm('לסגור את התקציב? המערכת תעבור למצב ביצוע, וכל שינוי בתכנון יסומן כ"עדכון תקציב".')) {
+    CBA.ui.confirm('המערכת תעבור למצב ביצוע, וכל שינוי בתכנון מכאן והלאה יסומן כ"עדכון תקציב".',
+      { title: "לסגור את התקציב?", okText: "כן, סגור תקציב" }
+    ).then(function (ok) {
+      if (!ok) return;
       CBA.data.lockBudget();
       rerender();
-    }
+      CBA.ui.toast("התקציב נסגר");
+    });
   });
   const reopenBtn = container.querySelector("[data-reopen-budget]");
   if (reopenBtn) reopenBtn.addEventListener("click", function () {
-    if (window.confirm("לפתוח מחדש את התקציב לעריכה? הבסיס המאושר יימחק והמערכת תחזור למצב תכנון.")) {
+    CBA.ui.confirm("הבסיס המאושר יימחק והמערכת תחזור למצב תכנון. אי אפשר לשחזר את הבסיס אחר כך.",
+      { title: "לפתוח מחדש את התקציב לעריכה?", okText: "כן, פתח מחדש", danger: true }
+    ).then(function (ok) {
+      if (!ok) return;
       CBA.data.reopenBudget();
       rerender();
-    }
+      CBA.ui.toast("התקציב נפתח לעריכה");
+    });
   });
   const showUpd = container.querySelector("[data-show-updates]");
   if (showUpd) showUpd.addEventListener("click", function () { planOpenUpdatesModal(container); });

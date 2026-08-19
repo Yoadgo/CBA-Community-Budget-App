@@ -11,12 +11,25 @@ var caScrollP = 0, caScrollA = 0, caWinScrollY = 0;
 
 var CLUB_WD_HE = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 function clubPad2(n) { return (n < 10 ? "0" : "") + n; }
+/* (2026-08-18, ממצא 2.5 בדו"ח הבדיקה) קודם לא הייתה כאן שום בדיקת תקינות:
+   שריון שמגיע מהיומן בלי תאריך התחלה/סיום תקין (אירוע "כל היום", או שורה
+   שנוצרה ידנית ביומן) הציג למנהל "יום undefined NaN.NaN.NaN · NaN:NaN–NaN:NaN"
+   — וכפתור "אשר" נשאר פעיל עליו. עכשיו התאריך נבדק, מוצג טקסט מובן, והשורה
+   מסומנת כפגומה (ר' clubRowBroken למטה) כך שאי-אפשר לאשר אותה בטעות. */
+function clubValidDate(v) {
+  if (!v) return null;
+  var d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+function clubRowBroken(r) { return !clubValidDate(r && r.start) || !clubValidDate(r && r.end); }
 function clubDateLabel(iso) {
-  var d = new Date(iso);
+  var d = clubValidDate(iso);
+  if (!d) return "תאריך חסר או לא תקין";
   return "יום " + CLUB_WD_HE[d.getDay()] + " " + clubPad2(d.getDate()) + "." + clubPad2(d.getMonth() + 1) + "." + d.getFullYear();
 }
 function clubTimeRange(startIso, endIso) {
-  var s = new Date(startIso), e = new Date(endIso);
+  var s = clubValidDate(startIso), e = clubValidDate(endIso);
+  if (!s || !e) return "שעה חסרה";
   return clubPad2(s.getHours()) + ":" + clubPad2(s.getMinutes()) + "–" + clubPad2(e.getHours()) + ":" + clubPad2(e.getMinutes());
 }
 
@@ -81,8 +94,9 @@ CBA.screens.clubAdmin = {
     }
 
     function pendingRowHTML(r) {
+      var broken = clubRowBroken(r);
       return (
-        '<div class="club-row">' +
+        '<div class="club-row' + (broken ? " club-row--broken" : "") + '">' +
           '<div class="club-row__main">' +
             '<div class="club-row__title">' + CBA.esc(r.family || "תושב") +
               (r.email ? ' <span class="club-row__email">· ' + CBA.esc(r.email) + '</span>' : "") + '</div>' +
@@ -90,7 +104,9 @@ CBA.screens.clubAdmin = {
               (r.note ? " · " + CBA.esc(r.note) : "") + '</div>' +
           '</div>' +
           '<div class="club-row__actions">' +
-            '<button type="button" class="btn-approve" data-approve="' + CBA.esc(r.id) + '">אשר</button>' +
+            (broken
+              ? '<span class="club-row__warn" title="לשריון הזה אין תאריך/שעה תקינים ביומן — אי אפשר לאשר אותו מכאן. צריך לתקן את האירוע ביומן גוגל.">שריון פגום</span>'
+              : '<button type="button" class="btn-approve" data-approve="' + CBA.esc(r.id) + '">אשר</button>') +
             '<button type="button" class="btn-reject" data-reject="' + CBA.esc(r.id) + '">דחה</button>' +
           '</div>' +
         '</div>'
@@ -123,20 +139,25 @@ CBA.screens.clubAdmin = {
           if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubAdminAction");
           CBA.data.approveClubReservation(btn.dataset.approve, function (res) {
             if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubAdminAction");
-            if (res && res.ok) load();
-            else { btn.disabled = false; btn.textContent = "אשר"; window.alert((res && res.error) || "האישור נכשל, נסו שוב."); }
+            if (res && res.ok) { load(); CBA.ui.toast("השריון אושר"); }
+            else { btn.disabled = false; btn.textContent = "אשר"; CBA.ui.alert((res && res.error) || "האישור נכשל, נסו שוב."); }
           });
         });
       });
       container.querySelectorAll("[data-reject]").forEach(function (btn) {
         btn.addEventListener("click", function () {
-          if (!window.confirm("לדחות ולמחוק את בקשת השריון? הפעולה תשחרר את המשבצת בחזרה לפנויה.")) return;
-          btn.disabled = true; btn.textContent = "דוחה…";
-          if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubAdminAction");
-          CBA.data.rejectClubReservation(btn.dataset.reject, function (res) {
-            if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubAdminAction");
-            if (res && res.ok) load();
-            else { btn.disabled = false; btn.textContent = "דחה"; window.alert((res && res.error) || "הדחייה נכשלה, נסו שוב."); }
+          // (2026-08-19, ממצא 2.6) אישור דחייה — מודל של האפליקציה במקום חלון דפדפן
+          CBA.ui.confirm("הפעולה תמחק את האירוע מהיומן ותשחרר את המשבצת בחזרה לפנויה.",
+            { title: "לדחות את בקשת השריון?", okText: "דחה בקשה", danger: true }
+          ).then(function (ok) {
+            if (!ok) return;
+            btn.disabled = true; btn.textContent = "דוחה…";
+            if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubAdminAction");
+            CBA.data.rejectClubReservation(btn.dataset.reject, function (res) {
+              if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubAdminAction");
+              if (res && res.ok) { load(); CBA.ui.toast("הבקשה נדחתה"); }
+              else { btn.disabled = false; btn.textContent = "דחה"; CBA.ui.alert((res && res.error) || "הדחייה נכשלה, נסו שוב."); }
+            });
           });
         });
       });

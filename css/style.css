@@ -1228,6 +1228,15 @@ body[data-screen="committeeAdmin"] .app-main { padding-inline: 14px; }
 .club-row__title { font-size: 14px; font-weight: 700; color: var(--text); }
 .club-row__email { font-size: 12px; font-weight: 400; color: var(--text-muted); }
 .club-row__meta { font-size: 12.5px; color: var(--text-soft); margin-top: 3px; }
+/* (2026-08-18, ממצא 2.5) שריון שאין לו תאריך/שעה תקינים ביומן — מסומן ויזואלית
+   ואי-אפשר לאשר אותו, במקום להציג "undefined NaN.NaN.NaN" עם כפתור "אשר" פעיל. */
+.club-row--broken { background: var(--warn-soft, #FFFBEB); border-radius: 10px; }
+.club-row--broken .club-row__meta { color: var(--amber, #B45309); }
+.club-row__warn {
+  font-size: 11.5px; font-weight: 700; color: var(--amber, #B45309);
+  background: var(--warn-soft, #FFFBEB); border: 1px solid rgba(180,83,9,.22);
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap; cursor: help;
+}
 .club-row__actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .club-empty { padding: 24px 4px; text-align: center; color: var(--text-muted); font-size: 13px; }
 .club-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 30px 4px; color: var(--text-soft); font-size: 13px; }
@@ -2112,4 +2121,63 @@ body.has-sim { padding-top: 34px; }
   .sadm-contact--head { display: none; }
   .sadm-row { flex-wrap: wrap; }
   .sadm-row__t { flex-basis: 60%; }
+}
+
+/* ==========================================================================
+   חלונות האפליקציה (2026-08-19, ממצא 2.6) — ר' js/ui/dialog.js.
+   מחליפים את window.alert/confirm/prompt: אותה שפה של כל שאר המסכים (כרטיס
+   לבן גיאומטרי, הצללה רק על האלמנט הצף, CTA שחור מלא), ולא הודעת מערכת אפורה.
+   ========================================================================== */
+.cba-dlg-backdrop {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: rgba(16,24,40,.34);
+  opacity: 0; transition: opacity .18s ease;
+}
+.cba-dlg-backdrop.is-open { opacity: 1; }
+.cba-dlg {
+  width: 100%; max-width: 420px;
+  background: var(--surface); border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(16,24,40,.26), 0 2px 8px rgba(16,24,40,.08);
+  padding: 22px 22px 18px;
+  transform: translateY(10px) scale(.985);
+  transition: transform .2s cubic-bezier(.2,.7,.2,1);
+}
+.cba-dlg-backdrop.is-open .cba-dlg { transform: translateY(0) scale(1); }
+.cba-dlg__title { font-size: 17px; font-weight: 800; letter-spacing: -.02em; color: var(--text); margin-bottom: 8px; }
+.cba-dlg__msg { font-size: 14.5px; line-height: 1.6; color: var(--text-soft); }
+.cba-dlg__input { width: 100%; margin-top: 14px; font-size: 15px; }
+.cba-dlg__actions { display: flex; justify-content: flex-start; gap: 8px; margin-top: 20px; }
+.cba-dlg__btn {
+  font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  padding: 10px 20px; border-radius: 11px; border: 1px solid transparent;
+  transition: background var(--t), border-color var(--t), color var(--t);
+}
+.cba-dlg__btn--go { background: var(--action); color: #fff; }
+.cba-dlg__btn--go:hover { background: #000; }
+.cba-dlg__btn--go.is-danger { background: var(--danger, #E11D48); }
+.cba-dlg__btn--go.is-danger:hover { background: #BE123C; }
+.cba-dlg__btn--ghost { background: none; border-color: var(--border); color: var(--text-soft); }
+.cba-dlg__btn--ghost:hover { background: var(--hover); color: var(--text); }
+.cba-dlg__btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(17,24,39,.18); }
+body.has-cba-dlg { overflow: hidden; }
+
+/* הודעת הצלחה קצרה — מחליפה alert של "הפעולה הצליחה" */
+.cba-toast {
+  position: fixed; z-index: 210; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
+  background: rgba(17,24,39,.94); color: #fff;
+  font-size: 13.5px; font-weight: 500; padding: 11px 20px; border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(16,24,40,.26);
+  opacity: 0; transition: opacity .22s ease, transform .22s cubic-bezier(.2,.7,.2,1);
+  max-width: calc(100% - 32px); text-align: center;
+}
+.cba-toast.is-open { opacity: 1; transform: translateX(-50%) translateY(0); }
+.cba-toast--error { background: var(--danger, #E11D48); }
+
+@media (max-width: 720px) {
+  .cba-dlg { max-width: none; border-radius: 20px; }
+  .cba-dlg__actions { flex-direction: column-reverse; }
+  .cba-dlg__btn { width: 100%; padding: 13px 20px; }
+  /* מעל בר הניווט התחתון */
+  .cba-toast { bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 22px); }
 }

@@ -681,7 +681,7 @@ function resBind(container, c) {
       var box = b.closest("[data-signup]");
       var sel = box.querySelector(".res-su__sel");
       var val = sel ? sel.value : "";
-      if (!val) { window.alert("בחר משפחה לשיוך"); return; }
+      if (!val) { CBA.ui.alert("בחר משפחה לשיוך"); return; }
       var payload = val === "new" ? { id: b.dataset.suOk, newFamily: true }
                                   : { id: b.dataset.suOk, residentRowIndex: parseInt(val, 10) };
       b.disabled = true; b.textContent = "מאשר…";
@@ -692,7 +692,7 @@ function resBind(container, c) {
         if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSignup");
         if (!res || !res.ok) {
           b.disabled = false; b.textContent = "אשר";
-          window.alert("האישור נכשל: " + ((res && res.error) || "שגיאה"));
+          CBA.ui.alert("האישור נכשל: " + ((res && res.error) || "שגיאה"));
           return;
         }
         resState.loaded = false;
@@ -702,13 +702,19 @@ function resBind(container, c) {
   });
   container.querySelectorAll("[data-su-no]").forEach(function (b) {
     b.addEventListener("click", function () {
-      if (!window.confirm("לדחות את בקשת ההרשמה?")) return;
-      b.disabled = true;
-      if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSignup");
-      CBA.data.rejectSignup(b.dataset.suNo, function (res) {
-        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSignup");
-        if (!res || !res.ok) { b.disabled = false; window.alert("הדחייה נכשלה"); return; }
-        resState.loaded = false; resLoad(container);
+      // (2026-08-19, ממצא 2.6) אישור דחייה — מודל של האפליקציה
+      CBA.ui.confirm("הבקשה תוסר מרשימת ההרשמות הממתינות והתושב יקבל הודעה.",
+        { title: "לדחות את בקשת ההרשמה?", okText: "דחה בקשה", danger: true }
+      ).then(function (ok) {
+        if (!ok) return;
+        b.disabled = true;
+        if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSignup");
+        CBA.data.rejectSignup(b.dataset.suNo, function (res) {
+          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSignup");
+          if (!res || !res.ok) { b.disabled = false; CBA.ui.alert("הדחייה נכשלה"); return; }
+          resState.loaded = false; resLoad(container);
+          CBA.ui.toast("הבקשה נדחתה");
+        });
       });
     });
   });
@@ -1040,160 +1046,163 @@ function resOpenAdd(container, c) {
       msg += "\n\nבנוסף, " + willMark.length + ' משקי בית קיימים יסומנו כ"עזבו" ' +
         "(ההיסטוריה הכספית שלהם נשארת אצלם):\n· " + willMark.join("\n· ");
     }
-    if (!window.confirm(msg + "\n\nלהמשיך?")) return;
+    CBA.ui.confirm(msg, { title: "לאשר את היצירה?", okText: "צור" }).then(function (okGo) {
+      if (!okGo) return;
 
-    var go = wrap.querySelector("#ra-go");
-    go.disabled = true; go.textContent = "יוצר…";
-    if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsCreate");
-    CBA.data.createResidents(payload, function (res) {
-      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsCreate");
-      if (!res || !res.ok) {
-        go.disabled = false; go.textContent = "צור";
-        window.alert("היצירה נכשלה: " + ((res && res.error) || "שגיאה"));
-        return;
-      }
-      var extra = (res.rejected && res.rejected.length)
-        ? "\n\n" + res.rejected.length + " שורות נדחו בשרת:\n· " +
-          res.rejected.map(function (x) { return "שורה " + (x.i + 1) + ": " + x.error; }).join("\n· ")
-        : "";
-      close();
-      resState.loaded = false;
-      CBA.data.refreshResidents(function () { resLoad(container); });
-      if (extra) window.alert("נוצרו " + res.created + " משקי בית." + extra);
+      var go = wrap.querySelector("#ra-go");
+      go.disabled = true; go.textContent = "יוצר…";
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsCreate");
+      CBA.data.createResidents(payload, function (res) {
+        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsCreate");
+        if (!res || !res.ok) {
+          go.disabled = false; go.textContent = "צור";
+          CBA.ui.alert("היצירה נכשלה: " + ((res && res.error) || "שגיאה"));
+          return;
+        }
+        var extra = (res.rejected && res.rejected.length)
+          ? "\n\n" + res.rejected.length + " שורות נדחו בשרת:\n· " +
+            res.rejected.map(function (x) { return "שורה " + (x.i + 1) + ": " + x.error; }).join("\n· ")
+          : "";
+        close();
+        resState.loaded = false;
+        CBA.data.refreshResidents(function () { resLoad(container); });
+        if (extra) CBA.ui.alert("נוצרו " + res.created + " משקי בית." + extra);
+        else CBA.ui.toast("נוצרו " + res.created + " משקי בית");
+      });
     });
   }
 
-  draw([0, 0]);
-}
-
-/* ==========================================================================
-   ייצוא לגיליון (2026-08-07)
-   --------------------------------------------------------------------------
-   בוחרים עמודות בצ'קבוקסים, בוחרים אילו שורות, והשרת יוצר גיליון Google חדש
-   מעוצב ומחזיר קישור. הפריסט הוא מה שבאמת שימושי ברוב הפעמים: משפחה, בית,
-   שני התושבים, טלפונים ושמות ילדים.
-   ========================================================================== */
-
-/* ברירת המחדל של הסימון. מוחזר כמערך שמות עמודות בסדר הנכון לייצוא. */
-function resExportPreset(c) {
-  var out = [];
-  if (c.family) out.push(c.family);
-  if (c.house) out.push(c.house);
-  c.firstName.forEach(function (k) { out.push(k); });
-  c.phone.forEach(function (k) { out.push(k); });
-  if (c.kids) out.push(c.kids);
-  return out;
-}
-
-/* קיבוץ העמודות בחלון, כדי שלא תהיה רשימה שטוחה של 17 תיבות סימון */
-function resExportGroups(c, headers) {
-  var used = {};
-  function take(list) { (list || []).forEach(function (k) { if (k) used[k] = true; }); return (list || []).filter(Boolean); }
-  var groups = [
-    { t: "משק הבית", cols: take([c.family, c.house, c.id]) },
-    { t: "דיירים",   cols: take(c.firstName) },
-    { t: "יצירת קשר", cols: take(c.phone.concat(c.email)) },
-    { t: "פרטים נוספים", cols: take(c.profession.concat([c.kids, c.notes])) },
-    { t: "ניהול",    cols: take(c.perm.concat([c.role, c.status])) }
-  ].filter(function (g) { return g.cols.length; });
-  // כל מה שלא נכנס לאף קבוצה — שלא ייעלם מהבחירה
-  var rest = headers.filter(function (h) { return h && !used[h]; });
-  if (rest.length) groups.push({ t: "שאר העמודות", cols: rest });
-  return groups;
-}
-
-function resOpenExport(c) {
-  var old = document.getElementById("res-export");
-  if (old) old.remove();
-
-  var st = resState;
-  var headers = st.headers.map(function (h) { return String(h).trim(); }).filter(Boolean);
-  var preset = resExportPreset(c);
-  var groups = resExportGroups(c, headers);
-  var shownN = (st.visibleRowIndexes || []).length;
-  var filterLabel = st.filter === "active" ? "פעילים" : (st.filter === "left" ? "עזבו" : "הכל");
-  var today = new Date();
-  var stamp = ("0" + today.getDate()).slice(-2) + "." + ("0" + (today.getMonth() + 1)).slice(-2) + "." + today.getFullYear();
-
-  var wrap = document.createElement("div");
-  wrap.id = "res-export";
-  wrap.className = "peek-backdrop";
-  wrap.innerHTML =
-    '<div class="peek res-exp" role="dialog" aria-label="ייצוא לגיליון">' +
-      '<div class="peek__head"><span class="peek__title">ייצוא לגיליון</span>' +
-        '<button class="peek__x" aria-label="סגור">×</button></div>' +
-
-      '<div class="res-exp__body">' +
-        '<div class="form-field"><label>שם הגיליון</label>' +
-          '<input class="field-input" id="rx-name" value="' + CBA.esc("תושבים — ייצוא " + stamp) + '"></div>' +
-
-        '<div class="res-exp__scope">' +
-          '<label class="res-exp__radio"><input type="radio" name="rx-scope" value="visible" checked>' +
-            '<span>רק המוצגים כרגע <b>(' + shownN + ')</b> <span class="res-dim">— סינון "' + CBA.esc(filterLabel) + '"' +
-              (st.q.trim() ? ' וחיפוש "' + CBA.esc(st.q.trim()) + '"' : "") + '</span></span></label>' +
-          '<label class="res-exp__radio"><input type="radio" name="rx-scope" value="all">' +
-            '<span>כל משקי הבית <b>(' + st.rows.length + ')</b></span></label>' +
-        '</div>' +
-
-        '<div class="res-exp__cols-h">' +
-          '<span>עמודות לייצוא</span>' +
-          '<span class="res-exp__quick">' +
-            '<button type="button" class="btn-link" data-rx-preset>ברירת מחדל</button>' +
-            '<button type="button" class="btn-link" data-rx-all>הכל</button>' +
-            '<button type="button" class="btn-link" data-rx-none>נקה</button>' +
-          '</span>' +
-        '</div>' +
-
-        '<div class="res-exp__cols">' +
-          groups.map(function (g) {
-            return '<div class="res-exp__grp">' +
-              '<div class="res-exp__grp-t">' + CBA.esc(g.t) + '</div>' +
-              g.cols.map(function (col) {
-                return '<label class="res-exp__opt">' +
-                  '<input type="checkbox" data-rx-col="' + CBA.esc(col) + '"' +
-                    (preset.indexOf(col) !== -1 ? " checked" : "") + '>' +
-                  '<span>' + CBA.esc(col) + '</span></label>';
-              }).join("") +
-            '</div>';
-          }).join("") +
-        '</div>' +
-
-        '<div class="res-exp__msg" id="rx-msg" hidden></div>' +
-      '</div>' +
-
-      '<div class="res-exp__foot">' +
-        '<span class="res-dim" id="rx-count"></span>' +
-        '<div class="res-exp__acts">' +
-          '<button type="button" class="btn-ghost" data-rx-close>ביטול</button>' +
-          '<button type="button" class="btn-primary" id="rx-go">צור גיליון</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-
-  document.body.appendChild(wrap);
-  var close = function () { wrap.remove(); document.removeEventListener("keydown", esc); };
-  var esc = function (e) { if (e.key === "Escape") close(); };
-  document.addEventListener("keydown", esc);
-  wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
-  wrap.querySelector(".peek__x").addEventListener("click", close);
-  wrap.querySelector("[data-rx-close]").addEventListener("click", close);
-
-  var boxes = function () { return [].slice.call(wrap.querySelectorAll("[data-rx-col]")); };
-  var chosen = function () {
-    // הסדר נקבע לפי סדר העמודות במסך, לא לפי סדר הלחיצות — כדי שהתוצאה צפויה
-    return boxes().filter(function (b) { return b.checked; }).map(function (b) { return b.dataset.rxCol; });
-  };
-  var count = wrap.querySelector("#rx-count");
-  var go = wrap.querySelector("#rx-go");
-  function sync() {
-    var n = chosen().length;
-    count.textContent = n ? (n + " עמודות נבחרו") : "לא נבחרה אף עמודה";
-    go.disabled = !n;
+    draw([0, 0]);
   }
-  wrap.addEventListener("change", sync);
-  wrap.querySelector("[data-rx-preset]").addEventListener("click", function () {
-    boxes().forEach(function (b) { b.checked = preset.indexOf(b.dataset.rxCol) !== -1; }); sync();
-  });
+
+  /* ==========================================================================
+     ייצוא לגיליון (2026-08-07)
+     --------------------------------------------------------------------------
+     בוחרים עמודות בצ'קבוקסים, בוחרים אילו שורות, והשרת יוצר גיליון Google חדש
+     מעוצב ומחזיר קישור. הפריסט הוא מה שבאמת שימושי ברוב הפעמים: משפחה, בית,
+     שני התושבים, טלפונים ושמות ילדים.
+     ========================================================================== */
+
+  /* ברירת המחדל של הסימון. מוחזר כמערך שמות עמודות בסדר הנכון לייצוא. */
+  function resExportPreset(c) {
+    var out = [];
+    if (c.family) out.push(c.family);
+    if (c.house) out.push(c.house);
+    c.firstName.forEach(function (k) { out.push(k); });
+    c.phone.forEach(function (k) { out.push(k); });
+    if (c.kids) out.push(c.kids);
+    return out;
+  }
+
+  /* קיבוץ העמודות בחלון, כדי שלא תהיה רשימה שטוחה של 17 תיבות סימון */
+  function resExportGroups(c, headers) {
+    var used = {};
+    function take(list) { (list || []).forEach(function (k) { if (k) used[k] = true; }); return (list || []).filter(Boolean); }
+    var groups = [
+      { t: "משק הבית", cols: take([c.family, c.house, c.id]) },
+      { t: "דיירים",   cols: take(c.firstName) },
+      { t: "יצירת קשר", cols: take(c.phone.concat(c.email)) },
+      { t: "פרטים נוספים", cols: take(c.profession.concat([c.kids, c.notes])) },
+      { t: "ניהול",    cols: take(c.perm.concat([c.role, c.status])) }
+    ].filter(function (g) { return g.cols.length; });
+    // כל מה שלא נכנס לאף קבוצה — שלא ייעלם מהבחירה
+    var rest = headers.filter(function (h) { return h && !used[h]; });
+    if (rest.length) groups.push({ t: "שאר העמודות", cols: rest });
+    return groups;
+  }
+
+  function resOpenExport(c) {
+    var old = document.getElementById("res-export");
+    if (old) old.remove();
+
+    var st = resState;
+    var headers = st.headers.map(function (h) { return String(h).trim(); }).filter(Boolean);
+    var preset = resExportPreset(c);
+    var groups = resExportGroups(c, headers);
+    var shownN = (st.visibleRowIndexes || []).length;
+    var filterLabel = st.filter === "active" ? "פעילים" : (st.filter === "left" ? "עזבו" : "הכל");
+    var today = new Date();
+    var stamp = ("0" + today.getDate()).slice(-2) + "." + ("0" + (today.getMonth() + 1)).slice(-2) + "." + today.getFullYear();
+
+    var wrap = document.createElement("div");
+    wrap.id = "res-export";
+    wrap.className = "peek-backdrop";
+    wrap.innerHTML =
+      '<div class="peek res-exp" role="dialog" aria-label="ייצוא לגיליון">' +
+        '<div class="peek__head"><span class="peek__title">ייצוא לגיליון</span>' +
+          '<button class="peek__x" aria-label="סגור">×</button></div>' +
+
+        '<div class="res-exp__body">' +
+          '<div class="form-field"><label>שם הגיליון</label>' +
+            '<input class="field-input" id="rx-name" value="' + CBA.esc("תושבים — ייצוא " + stamp) + '"></div>' +
+
+          '<div class="res-exp__scope">' +
+            '<label class="res-exp__radio"><input type="radio" name="rx-scope" value="visible" checked>' +
+              '<span>רק המוצגים כרגע <b>(' + shownN + ')</b> <span class="res-dim">— סינון "' + CBA.esc(filterLabel) + '"' +
+                (st.q.trim() ? ' וחיפוש "' + CBA.esc(st.q.trim()) + '"' : "") + '</span></span></label>' +
+            '<label class="res-exp__radio"><input type="radio" name="rx-scope" value="all">' +
+              '<span>כל משקי הבית <b>(' + st.rows.length + ')</b></span></label>' +
+          '</div>' +
+
+          '<div class="res-exp__cols-h">' +
+            '<span>עמודות לייצוא</span>' +
+            '<span class="res-exp__quick">' +
+              '<button type="button" class="btn-link" data-rx-preset>ברירת מחדל</button>' +
+              '<button type="button" class="btn-link" data-rx-all>הכל</button>' +
+              '<button type="button" class="btn-link" data-rx-none>נקה</button>' +
+            '</span>' +
+          '</div>' +
+
+          '<div class="res-exp__cols">' +
+            groups.map(function (g) {
+              return '<div class="res-exp__grp">' +
+                '<div class="res-exp__grp-t">' + CBA.esc(g.t) + '</div>' +
+                g.cols.map(function (col) {
+                  return '<label class="res-exp__opt">' +
+                    '<input type="checkbox" data-rx-col="' + CBA.esc(col) + '"' +
+                      (preset.indexOf(col) !== -1 ? " checked" : "") + '>' +
+                    '<span>' + CBA.esc(col) + '</span></label>';
+                }).join("") +
+              '</div>';
+            }).join("") +
+          '</div>' +
+
+          '<div class="res-exp__msg" id="rx-msg" hidden></div>' +
+        '</div>' +
+
+        '<div class="res-exp__foot">' +
+          '<span class="res-dim" id="rx-count"></span>' +
+          '<div class="res-exp__acts">' +
+            '<button type="button" class="btn-ghost" data-rx-close>ביטול</button>' +
+            '<button type="button" class="btn-primary" id="rx-go">צור גיליון</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(wrap);
+    var close = function () { wrap.remove(); document.removeEventListener("keydown", esc); };
+    var esc = function (e) { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", esc);
+    wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
+    wrap.querySelector(".peek__x").addEventListener("click", close);
+    wrap.querySelector("[data-rx-close]").addEventListener("click", close);
+
+    var boxes = function () { return [].slice.call(wrap.querySelectorAll("[data-rx-col]")); };
+    var chosen = function () {
+      // הסדר נקבע לפי סדר העמודות במסך, לא לפי סדר הלחיצות — כדי שהתוצאה צפויה
+      return boxes().filter(function (b) { return b.checked; }).map(function (b) { return b.dataset.rxCol; });
+    };
+    var count = wrap.querySelector("#rx-count");
+    var go = wrap.querySelector("#rx-go");
+    function sync() {
+      var n = chosen().length;
+      count.textContent = n ? (n + " עמודות נבחרו") : "לא נבחרה אף עמודה";
+      go.disabled = !n;
+    }
+    wrap.addEventListener("change", sync);
+    wrap.querySelector("[data-rx-preset]").addEventListener("click", function () {
+      boxes().forEach(function (b) { b.checked = preset.indexOf(b.dataset.rxCol) !== -1; }); sync();
+    });
   wrap.querySelector("[data-rx-all]").addEventListener("click", function () {
     boxes().forEach(function (b) { b.checked = true; }); sync();
   });
@@ -1400,14 +1409,20 @@ function resOpenDrawer(container, idx, rowIndex, c) {
       if (perms.indexOf("על") !== -1) {
         txt += '\n\nשים לב: מנהל על רואה את כל התכנים ויכול לשנות הרשאות של כל אחד, כולל שלך.';
       }
-      if (!window.confirm(txt)) return;
+      // (2026-08-19, ממצא 2.6) אישור שינוי הרשאות — מודל של האפליקציה.
+      // השמירה עצמה הוצאה לפונקציה בשם, כי מודל הוא א-סינכרוני.
+      CBA.ui.confirm(txt, { title: "לשנות הרשאות?", okText: "שמור הרשאות" }).then(function (okPerm) {
+        if (okPerm) savePermsConfirmed();
+      });
+
+      function savePermsConfirmed() {
       btn.disabled = true; btn.textContent = "שומר…";
       if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
       CBA.data.savePermissions(rowIndex, slot, perms, function (res) {
         if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
         btn.disabled = false; btn.textContent = "שמור הרשאות";
         if (!res || !res.ok) {
-          window.alert("שמירת ההרשאות נכשלה: " + ((res && res.error) || "שגיאה"));
+          CBA.ui.alert("שמירת ההרשאות נכשלה: " + ((res && res.error) || "שגיאה"));
           return;
         }
         resState.loaded = false;
@@ -1416,6 +1431,7 @@ function resOpenDrawer(container, idx, rowIndex, c) {
           resCloseDrawer();
         });
       });
+      }
     });
   });
 
@@ -1424,11 +1440,20 @@ function resOpenDrawer(container, idx, rowIndex, c) {
     overlay.querySelectorAll("[data-rf]").forEach(function (el) { fields[el.dataset.rf] = el.value; });
     // מעבר בתוך השיכון — אותה ישות, רק בית אחר. מאשרים במפורש כדי שלא יקרה בהיסח דעת.
     var newHouse = c.house ? String(fields[c.house] || "").trim() : origHouse;
+    // (2026-08-19, ממצא 2.6) אישור שינוי מספר בית — מודל של האפליקציה.
+    // כשאין שינוי בית ממשיכים ישר, בלי לשאול כלום (כמו קודם).
     if (txN && c.house && newHouse !== origHouse) {
-      if (!window.confirm('מספר הבית משתנה מ-' + origHouse + ' ל-' + newHouse + '.\n' +
+      CBA.ui.confirm(
+        'מספר הבית משתנה מ-' + origHouse + ' ל-' + newHouse + '.\n' +
         'זה מתאים למעבר של אותה משפחה בתוך השיכון — ' + txN + ' התנועות הקיימות יישארו משויכות אליה.\n' +
-        'אם מדובר בדיירים חדשים, בטל והשתמש ב"החלפת משפחה".')) return;
+        'אם מדובר בדיירים חדשים, בטלו והשתמשו ב"החלפת משפחה".',
+        { title: "מספר הבית משתנה", okText: "המשך ושמור" }
+      ).then(function (okMove) { if (okMove) doSaveResident(); });
+      return;
     }
+    doSaveResident();
+
+    function doSaveResident() {
     var btn = overlay.querySelector("[data-rsave]");
     btn.disabled = true; btn.textContent = "שומר…";
     if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
@@ -1436,32 +1461,49 @@ function resOpenDrawer(container, idx, rowIndex, c) {
       if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
       if (!res || !res.ok) {
         btn.disabled = false; btn.textContent = "שמור";
-        window.alert("השמירה נכשלה: " + ((res && res.error) || "שגיאה"));
+        CBA.ui.alert("השמירה נכשלה: " + ((res && res.error) || "שגיאה"));
         return;
       }
       resCloseDrawer();
       resState.loaded = false;
       CBA.data.refreshResidents(function () { resLoad(container); });
+      CBA.ui.toast("נשמר");
     });
+    }
   });
 
+  /* (2026-08-19, ממצא 2.6) "החלפת משפחה" הייתה שרשרת של שלושה חלונות דפדפן
+     ברצף (שם → בית → אישור) — הפעולה הכי הרסנית במסך התושבים, דרך הממשק הכי
+     גנרי שיש. עכשיו אותה שרשרת במודלים של האפליקציה, עם ולידציה בכל שלב
+     ואישור אחרון אדום שמסביר בדיוק מה עומד לקרות. */
   overlay.querySelector("[data-replace]").addEventListener("click", function () {
-    var fam = window.prompt("שם המשפחה הנכנסת:", "");
-    if (fam === null) return;
-    fam = fam.trim();
-    if (!fam) { window.alert("צריך שם משפחה"); return; }
-    var house = window.prompt("מספר בית:", resVal(freshRow(), c.house) || "");
-    if (house === null) return;
-    if (!window.confirm('הדיירים הנוכחיים יסומנו כ"עזבו" ו-' + txN + ' התנועות יישארו משויכות אליהם.\n' +
-      'תיפתח שורה חדשה למשפחת ' + fam + ' עם מזהה קבוע משלה. להמשיך?')) return;
-    if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
-    CBA.data.replaceFamily({ rowIndex: rowIndex, family: fam, house: String(house).trim() }, function (res) {
-      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
-      if (!res || !res.ok) { window.alert("הפעולה נכשלה: " + ((res && res.error) || "שגיאה")); return; }
-      resCloseDrawer();
-      resState.loaded = false;
-      CBA.data.refreshResidents(function () { resLoad(container); });
-    });
+    CBA.ui.prompt("המשפחה שתיכנס לבית הזה.", { title: "החלפת משפחה", placeholder: "שם משפחה", okText: "המשך" })
+      .then(function (fam) {
+        if (fam === null) return;
+        fam = String(fam).trim();
+        if (!fam) { CBA.ui.alert("צריך שם משפחה."); return; }
+        CBA.ui.prompt("מספר הבית של המשפחה הנכנסת.",
+          { title: "מספר בית", value: resVal(freshRow(), c.house) || "", okText: "המשך" }
+        ).then(function (house) {
+          if (house === null) return;
+          CBA.ui.confirm(
+            'הדיירים הנוכחיים יסומנו כ"עזבו" ו-' + txN + ' התנועות יישארו משויכות אליהם.\n' +
+            'תיפתח שורה חדשה למשפחת ' + fam + ' עם מזהה קבוע משלה.',
+            { title: "להחליף את המשפחה בבית?", okText: "כן, החלף", danger: true }
+          ).then(function (ok) {
+            if (!ok) return;
+            if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
+            CBA.data.replaceFamily({ rowIndex: rowIndex, family: fam, house: String(house).trim() }, function (res) {
+              if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
+              if (!res || !res.ok) { CBA.ui.alert("הפעולה נכשלה: " + ((res && res.error) || "שגיאה")); return; }
+              resCloseDrawer();
+              resState.loaded = false;
+              CBA.data.refreshResidents(function () { resLoad(container); });
+              CBA.ui.toast("המשפחה הוחלפה");
+            });
+          });
+        });
+      });
   });
 }
 
@@ -1613,7 +1655,7 @@ function resOpenDrawer(container, idx, rowIndex, c) {
           newRows.push(r);
         });
         commitRows(newRows, function (res) {
-          if (!res || !res.ok) window.alert("ההזזה נכשלה: " + ((res && res.error) || "שגיאה"));
+          if (!res || !res.ok) CBA.ui.alert("ההזזה נכשלה: " + ((res && res.error) || "שגיאה"));
         });
       }
 
@@ -1991,12 +2033,12 @@ function resOpenDrawer(container, idx, rowIndex, c) {
           var nameInp = overlay.querySelector("#og-newcat-name");
           var colorInp = overlay.querySelector("#og-newcat-color");
           var name = nameInp.value.trim();
-          if (!name) { window.alert("צריך להזין שם לקטגוריה החדשה."); return; }
+          if (!name) { CBA.ui.alert("צריך להזין שם לקטגוריה החדשה."); return; }
           var addBtn = overlay.querySelector("#og-newcat-add");
           addBtn.disabled = true;
           CBA.committee.addCategory(name, colorInp.value, function (res) {
             addBtn.disabled = false;
-            if (!res || !res.ok) { window.alert("הוספת הקטגוריה נכשלה: " + ((res && res.error) || "שגיאה")); return; }
+            if (!res || !res.ok) { CBA.ui.alert("הוספת הקטגוריה נכשלה: " + ((res && res.error) || "שגיאה")); return; }
             var opt = document.createElement("option");
             opt.value = name; opt.textContent = name; opt.style.color = colorInp.value;
             catSel.insertBefore(opt, catSel.lastChild);
@@ -2042,7 +2084,7 @@ function resOpenDrawer(container, idx, rowIndex, c) {
           if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "שומר…"; }
           commitRows(newRows, function (res) {
             if (!res || !res.ok) {
-              window.alert("השמירה נכשלה: " + ((res && res.error) || "שגיאה"));
+              CBA.ui.alert("השמירה נכשלה: " + ((res && res.error) || "שגיאה"));
               if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "שמירה"; }
               return;
             }
@@ -2054,19 +2096,24 @@ function resOpenDrawer(container, idx, rowIndex, c) {
           overlay.querySelector("#og-delete").addEventListener("click", function () {
             var hasKids = boxes.some(function (b) { return b.parent === editing.id; });
             if (hasKids) {
-              window.alert('אי אפשר למחוק את "' + editing.role + '" — יש לו תפקידי־בן בעץ. קודם צריך למחוק אותם או להעביר אותם להורה אחר.');
+              CBA.ui.alert('יש לו תפקידי־בן בעץ. קודם צריך למחוק אותם או להעביר אותם להורה אחר.',
+                'אי אפשר למחוק את "' + editing.role + '"');
               return;
             }
-            if (!window.confirm('למחוק את התפקיד "' + editing.role + '"?')) return;
-            orgSave(rowsCache.filter(function (r) { return String(r["מזהה תא"] || "").trim() !== editing.id; }));
+            CBA.ui.confirm("התפקיד יוסר מעץ הוועד. אפשר להוסיף אותו מחדש בכל שלב.",
+              { title: 'למחוק את התפקיד "' + editing.role + '"?', okText: "מחק תפקיד", danger: true }
+            ).then(function (ok) {
+              if (!ok) return;
+              orgSave(rowsCache.filter(function (r) { return String(r["מזהה תא"] || "").trim() !== editing.id; }));
+            });
           });
         }
 
         overlay.querySelector("#og-save").addEventListener("click", function () {
           var role = overlay.querySelector("#og-role").value.trim();
-          if (!role) { window.alert("צריך להזין שם תפקיד."); return; }
+          if (!role) { CBA.ui.alert("צריך להזין שם תפקיד."); return; }
           var category = overlay.querySelector("#og-cat").value;
-          if (category === "__new__") { window.alert('סיימו קודם להוסיף את הקטגוריה החדשה (כפתור "הוספה"), או בחרו קטגוריה קיימת.'); return; }
+          if (category === "__new__") { CBA.ui.alert('סיימו קודם להוסיף את הקטגוריה החדשה (כפתור "הוספה"), או בחרו קטגוריה קיימת.'); return; }
           var parent = overlay.querySelector("#og-parent").value;
           var people = state.people.filter(function (p) { return p.name.trim(); });
 

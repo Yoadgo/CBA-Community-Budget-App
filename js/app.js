@@ -692,6 +692,28 @@
     }
     return el;
   }
+  /* חיווי "ממתין לשליחה" (2026-08-19, ממצא 4.6) — מצב שלישי של אותו תג בכותרת,
+     ליד "שומר…"/"נשמר ✓". נשאר על המסך כל עוד יש משהו בתור (לא נעלם אחרי
+     כמה שניות כמו הודעת שגיאה רגילה), ולחיצה עליו מנסה לשלוח מיד. */
+  window.addEventListener("cba:pending-writes", function (e) {
+    var n = (e && e.detail && e.detail.count) || 0;
+    var el = saveIndicatorEl();
+    var textEl = el.querySelector(".save-indicator__text");
+    if (!n) {
+      if (el.classList.contains("is-pending")) el.className = "save-indicator";
+      el.onclick = null;
+      return;
+    }
+    clearTimeout(saveIndicatorHideTimer);
+    el.className = "save-indicator is-show is-pending";
+    if (textEl) textEl.textContent = n === 1 ? "ממתין לשליחה" : n + " ממתינים לשליחה";
+    el.title = "לא הצלחנו להגיע לשרת. השינוי שמור אצלכם — לחצו כדי לנסות לשלוח שוב עכשיו.";
+    el.onclick = function () {
+      if (CBA.sheets && CBA.sheets.retryPending) CBA.sheets.retryPending(true);
+    };
+    setTimeout(function () { if (window.CBA.measureHeader) CBA.measureHeader(); }, 0);
+  });
+
   window.addEventListener("cba:dirty-change", function (e) {
     var d = e && e.detail;
     var el = saveIndicatorEl();
@@ -704,6 +726,11 @@
       el.className = "save-indicator is-show";
       if (textEl) textEl.textContent = "שומר…";
       el.removeAttribute("title");
+    } else if (d && d.error && CBA.sheets.pendingCount && CBA.sheets.pendingCount() > 0) {
+      // כשל רשת שנכנס לתור הניסיונות החוזרים — החיווי "ממתין לשליחה" כבר
+      // הוצג ע"י cba:pending-writes, והוא המדויק יותר מבין השניים ("נכשל"
+      // מרמז סוף פסוק, בעוד שבפועל נמשיך לנסות). לא דורסים אותו.
+      return;
     } else if (d && d.error) {
       // (2026-08-18) הנוסח הקודם היה "בעיית רשת בשמירה — ננסה שוב ברענון הבא",
       // ושתי המילים האחרונות פשוט לא היו נכונות: אין ניסיון חוזר. מאז שהכתיבה
@@ -714,6 +741,9 @@
       if (textEl) textEl.textContent = "השמירה נכשלה";
       el.title = (d.errorMessage ? d.errorMessage + " " : "") + "השינוי לא נשמר בגיליון — בצעו את השינוי שוב.";
       saveIndicatorHideTimer = setTimeout(function () { el.classList.remove("is-show"); }, 12000);
+    } else if (CBA.sheets.pendingCount && CBA.sheets.pendingCount() > 0) {
+      // יש עדיין משהו בתור — לא מציגים "נשמר ✓" שמרגיע לשווא
+      return;
     } else {
       el.className = "save-indicator is-show is-saved";
       if (textEl) textEl.textContent = "נשמר ✓";
@@ -1295,14 +1325,25 @@
       showScreen(currentScreen);
     });
     yearBox.querySelector("#year-add").addEventListener("click", function () {
-      const name = window.prompt('שם השנה החדשה (למשל תשפ"ח):');
-      if (name && name.trim()) {
-        const y = name.trim();
-        CBA.data.addYear(y, CBA.data.getCurrentYear());
+      // (2026-08-19, ממצא 2.6) היה window.prompt — פעולה משמעותית (יצירת שנת
+      // תקציב שלמה, משוכפלת מהשנה הנוכחית) דרך חלון אפור של הדפדפן בלי שום
+      // הסבר ובלי ולידציה. עכשיו מודל של האפליקציה, עם הסבר מה עומד לקרות
+      // ובדיקה ששם השנה אינו ריק ואינו קיים כבר.
+      var from = CBA.data.getCurrentYear();
+      CBA.ui.prompt(
+        'השנה החדשה תיווצר עם אותם סעיפי תקציב ומקורות הכנסה כמו ' + from + ', בלי תנועות.',
+        { title: "יצירת שנת תקציב חדשה", placeholder: 'למשל תשפ"ח', okText: "צור שנה" }
+      ).then(function (name) {
+        if (name === null) return;
+        var y = String(name).trim();
+        if (!y) { CBA.ui.alert("צריך להזין שם לשנה החדשה."); return; }
+        if (CBA.data.getYears().indexOf(y) !== -1) { CBA.ui.alert('כבר קיימת שנה בשם "' + y + '".'); return; }
+        CBA.data.addYear(y, from);
         CBA.data.setCurrentYear(y);
         renderYearSwitch();
         showScreen(currentScreen);
-      }
+        CBA.ui.toast('נוצרה שנת תקציב ' + y);
+      });
     });
   }
 
@@ -1448,9 +1489,14 @@
     if (CBA.sheets.isDirty && CBA.sheets.isDirty()) return;
     if (Date.now() - lastActivity > IDLE_MS) { wasIdle = true; return; }   // לא פעילים — משהים רענון
     pollInFlight = true;
-    CBA.sheets.refresh(function (ok, info) {
+    // (2026-08-19, ממצא 2.3) refreshIfChanged במקום refresh: קודם שאלה זולה
+    // "האם משהו השתנה?", ומשיכה מלאה של הגיליון רק כשהתשובה חיובית. נופל
+    // אוטומטית חזרה למשיכה מלאה מול שרת שעוד לא פורסם — ר' sheets.js.
+    var poll = CBA.sheets.refreshIfChanged || CBA.sheets.refresh;
+    poll(function (ok, info) {
       pollInFlight = false;
       if (!ok) return;
+      if (info && info.source === "unchanged") { refreshAlertsLocal(); return; }
       window.CBA.connected = CBA.sheets.isConnected();
       // מציירים את המסך מחדש רק אם הנתונים שהגיעו באמת שונים ממה שכבר על המסך —
       // קודם זה קרה בכל מחזור (כל 3 שניות) גם בלי שינוי, וזה מה שגרם ל"תזוזת עמוד".

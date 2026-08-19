@@ -304,6 +304,97 @@ CBA.sheets = (function () {
   function markDirty(reason) { dirtyReasons[reason || "_default"] = true; notifyDirtyChange(); }
   function clearDirty(reason) { delete dirtyReasons[reason || "_default"]; notifyDirtyChange(); }
 
+  /* ============================================================================
+     תור "שמירות שממתינות לשליחה" (2026-08-19, ממצא 4.6 בדו"ח הבדיקה)
+     ----------------------------------------------------------------------------
+     עד היום כשל רשת בזמן שמירה הציג הודעה למשך 4 שניות ונעלם — בלי תור, בלי
+     ניסיון חוזר, בלי שמירה מקומית. ההודעה אפילו הבטיחה "ננסה שוב ברענון הבא",
+     וזה פשוט לא קרה. כלומר ניתוק רגעי של הרשת = שינוי שאבד.
+
+     מה שנבנה כאן, בכוונה מצומצם ושמרני:
+     1. נכנסות לתור *רק* שמירות שנכשלו ברמת הרשת (fetch נדחה). שמירה שהשרת
+        דחה במפורש ("אין הרשאה") לא תצליח בניסיון חוזר — היא מוצגת כשגיאה
+        למשתמש ולא נדחפת שוב ושוב מאחורי הגב שלו.
+     2. *רק* פעולות שבטוח לחזור עליהן (RETRYABLE למטה) — כאלה שכותבות מצב
+        מלא או שורה מזוהה לפי מזהה. פעולה שמוסיפה שורה חדשה בכל קריאה (למשל
+        logBudgetUpdate) לא נכנסת לתור לעולם, כדי לא ליצור כפילויות.
+     3. מפתח לפי "משבצת" (queueKey): שמירה חדשה של אותו דבר *מחליפה* את
+        הישנה בתור. זה מה שמונע את התרחיש המסוכן — שמירה ישנה שנתקעה בתור
+        ומתעוררת אחרי שכבר נשמר מצב חדש יותר, ומחזירה את המשתמש אחורה.
+     4. עד 3 ניסיונות, ורק ברגעים שבהם יש סיכוי אמיתי: חזרה לרשת, חזרה לטאב,
+        או שמירה אחרת שהצליחה. אחרי זה נשאר בתור ומוצג למשתמש עד שיילחץ
+        "נסה שוב" — לא נמחק בשקט. */
+  var RETRY_KEY = "cba_pending_writes_v1";
+  var RETRYABLE = {
+    saveBudget: 1, saveNotes: 1, setBudgetMeta: 1, saveColumnConfig: 1,
+    saveTransaction: 1, deleteTransaction: 1, renameCategory: 1
+  };
+  var MAX_ATTEMPTS = 3;
+  var MAX_STORED_BYTES = 300000;   // מעל זה לא נשמר לאחסון המקומי (רק בזיכרון)
+  var pendingWrites = [];
+
+  function loadPending() {
+    try {
+      var raw = localStorage.getItem(RETRY_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      pendingWrites = Array.isArray(arr) ? arr : [];
+    } catch (e) { pendingWrites = []; }
+  }
+  function savePending() {
+    try {
+      var json = JSON.stringify(pendingWrites);
+      if (json.length > MAX_STORED_BYTES) return;   // גדול מדי — נשאר בזיכרון בלבד
+      localStorage.setItem(RETRY_KEY, json);
+    } catch (e) { /* מכסת אחסון מלאה — לא קריטי */ }
+  }
+  function notifyPending() {
+    try {
+      window.dispatchEvent(new CustomEvent("cba:pending-writes", {
+        detail: { count: pendingWrites.length }
+      }));
+    } catch (e) { /* לא קריטי */ }
+  }
+  // "משבצת" — מה בדיוק הכתיבה הזו דורסת. שתי שמירות עם אותו מפתח הן שתי
+  // גרסאות של אותו דבר, ולכן החדשה מחליפה את הישנה במקום להצטבר לידה.
+  function queueKey(action, payload) {
+    payload = payload || {};
+    if (action === "saveTransaction") return action + "|" + (payload.year || "") + "|" + ((payload.tx && payload.tx.id) || "");
+    if (action === "deleteTransaction") return action + "|" + (payload.year || "") + "|" + (payload.id || "");
+    if (action === "renameCategory") return action + "|" + (payload.year || "") + "|" + (payload.oldName || "");
+    return action + "|" + (payload.year || "");
+  }
+  function enqueueWrite(action, payload, prevAttempts) {
+    if (!RETRYABLE[action]) return;
+    var key = queueKey(action, payload);
+    var found = -1;
+    for (var i = 0; i < pendingWrites.length; i++) if (pendingWrites[i].key === key) { found = i; break; }
+    var entry = { key: key, action: action, payload: payload, attempts: prevAttempts || 0 };
+    if (found >= 0) pendingWrites[found] = entry; else pendingWrites.push(entry);
+    savePending(); notifyPending();
+  }
+  function dequeueWrite(action, payload) {
+    var key = queueKey(action, payload);
+    var before = pendingWrites.length;
+    pendingWrites = pendingWrites.filter(function (w) { return w.key !== key; });
+    if (pendingWrites.length !== before) { savePending(); notifyPending(); }
+  }
+  var retryInFlight = false;
+  function retryPending(force) {
+    if (retryInFlight || !pendingWrites.length) return;
+    if (!navigator.onLine) return;
+    retryInFlight = true;
+    var batch = pendingWrites.filter(function (w) { return force || w.attempts < MAX_ATTEMPTS; });
+    batch.forEach(function (w) { w.attempts = force ? 1 : (w.attempts + 1); });
+    savePending();
+    batch.forEach(function (w) { push(w.action, w.payload, null, w.attempts); });
+    setTimeout(function () { retryInFlight = false; }, 1200);
+  }
+  function pendingCount() { return pendingWrites.length; }
+
+  loadPending();
+  window.addEventListener("online", function () { retryPending(false); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) retryPending(false); });
+
   /* --- הגנה מאובדן שמירה בעזיבת הדף (2026-08-18, ממצא 4.2 בדו"ח הבדיקה) ---
      מסכים ששומרים ב"השהיה" (debounce של 700ms — planning.js, notes.js) יוצרים
      חלון של כ-0.7 שניות שבו העריכה כבר קיימת בזיכרון אבל *עוד לא נשלחה לשרת
@@ -441,6 +532,12 @@ CBA.sheets = (function () {
         var store = transform(payload);
         if (apply(store, isBackgroundRefresh)) {
           lastAppliedSeq = mySeq;
+          // (2026-08-19, ממצא 2.3) קולטים את מספר הגרסה שהגיע יחד עם הנתונים.
+          // רק כשבאמת יישמנו — אם דילגנו (עריכה מקומית פתוחה), הנתונים שבידינו
+          // עדיין ישנים ואסור לסמן אותנו כמעודכנים.
+          if (typeof payload.rev === "number") { lastRev = payload.rev; revSupported = true; }
+          else revSupported = false;   // שרת ישן שעוד לא פורסם — נשארים על התנהגות "משיכה מלאה תמיד"
+          lastFullFetch = Date.now();
           try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), store: store })); } catch (e) { /* מכסת אחסון מלאה — לא קריטי */ }
         }
         cb(true, { source: "fresh", hadCache: hadCache });
@@ -481,6 +578,39 @@ CBA.sheets = (function () {
   // נקרא כל כמה שניות מ-app.js כשהטאב גלוי, ובכל חזרה לטאב אחרי שהיה ברקע.
   function refresh(cb) { fetchAndApply(true, cb, true); }
 
+  /* ---------- רענון חכם: "האם בכלל השתנה משהו?" (2026-08-19, ממצא 2.3) ----------
+     נמדד קודם: 10 משיכות מלאות ב-31 שניות, כ-45KB כל אחת, ~1,160 הרצות של
+     Apps Script בכל שעת שימוש פעילה — כשברוב המוחלט של הפעמים שום דבר לא
+     השתנה. עכשיו הרענון התקופתי שואל קודם שאלה זולה אחת ("מה מספר הגרסה?",
+     ר' bumpRev_ ב-Code.gs), ומושך את המטען המלא רק כשהמספר באמת זז.
+
+     שלוש רשתות ביטחון, בכוונה:
+     1. שרת ישן שעוד לא פורסם לא מחזיר rev → revSupported נשאר false והכול
+        ממשיך לעבוד בדיוק כמו קודם. אין "מסך שבור" בזמן שבין הדחיפה ל-Deploy.
+     2. שינוי שנעשה *ישירות בגיליון* לא מעלה את המונה, ולכן בכל מקרה מתבצעת
+        משיכה מלאה אחת לדקה (FULL_EVERY_MS).
+     3. כשל ברשת בבדיקה הזולה לא נחשב "אין שינוי" — פשוט מדווח כישלון,
+        והמחזור הבא ינסה שוב. */
+  var lastRev = null;          // null = עוד לא ידוע
+  var lastFullFetch = 0;
+  var revSupported = false;    // נדלק רק אחרי שהשרת באמת החזיר rev
+  var FULL_EVERY_MS = 60000;
+
+  function refreshIfChanged(cb) {
+    if (!revSupported || lastRev === null || (Date.now() - lastFullFetch) > FULL_EVERY_MS) {
+      refresh(cb);
+      return;
+    }
+    fetch(API_URL + "?action=rev")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || typeof data.rev !== "number") { revSupported = false; refresh(cb); return; }
+        if (data.rev !== lastRev) { refresh(cb); return; }
+        cb(true, { source: "unchanged" });   // הזול מכולם — לא נגענו בגיליון בכלל
+      })
+      .catch(function () { cb(false, { source: "rev-failed" }); });
+  }
+
   // ניקוי המטמון (למשל בעת יציאה/החלפת משתמש)
   function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch (e) {} }
 
@@ -498,7 +628,7 @@ CBA.sheets = (function () {
      חשוב: אם הבקשה נכשלת ברמת הרשת/CORS, זה ייראה עכשיו כשגיאה גלויה במקום
      כ"הצלחה" שקטה — וזה בכוונה. עדיף שיועד יראה "בעיית שמירה" מאשר שיאמין
      שנשמר משהו שלא נשמר. */
-  function push(action, payload, cb) {
+  function push(action, payload, cb, _retryAttempt) {
     // inFlightWrites++ עכשיו (לא רק בקריאות המפורשות ל-markDirty) — כדי שכל
     // כתיבה, מכל מסך, תחסום רענון רקע אוטומטית עד שהיא תיגמר (ר' isDirty למעלה),
     // ותפעיל את חיווי "שומר…" הגלובלי מיד (notifyDirtyChange).
@@ -528,6 +658,11 @@ CBA.sheets = (function () {
           lastWriteErrorMsg = (res && res.error) ? String(res.error) : "השרת דחה את השמירה";
           console.error("[CBA] השרת דחה את השמירה:", action, res && res.error);
         }
+        // הצליח (או לפחות הגיע לשרת וקיבל תשובה) — אין יותר מה לנסות שוב
+        // על אותה משבצת, גם אם התשובה הייתה "לא הצלחתי": שמירה שנדחתה
+        // לוגית לא תתקבל בניסיון חוזר, ואסור שתישאר תקועה בתור לנצח.
+        dequeueWrite(action, payload);
+        if (res && res.ok === true) retryPending(false);   // הרשת חזרה — הזדמנות טובה לנסות את השאר
         notifyDirtyChange();
         if (cb) cb(res && typeof res === "object" ? res : { ok: false, error: "תשובה לא תקינה מהשרת" });
       })
@@ -535,7 +670,11 @@ CBA.sheets = (function () {
         inFlightWrites = Math.max(0, inFlightWrites - 1);
         if (seqCounter > writeFloor) writeFloor = seqCounter;
         lastWriteHadError = true;
-        lastWriteErrorMsg = "לא הצלחנו להגיע לשרת. בדקו את החיבור לאינטרנט ונסו לשמור שוב.";
+        // כשל רשת (ולא דחייה של השרת) — זה בדיוק המקרה שבו ניסיון חוזר הגיוני.
+        enqueueWrite(action, payload, _retryAttempt || 0);
+        lastWriteErrorMsg = RETRYABLE[action]
+          ? "לא הצלחנו להגיע לשרת. השינוי נשמר אצלכם וננסה לשלוח אותו שוב אוטומטית."
+          : "לא הצלחנו להגיע לשרת. בדקו את החיבור לאינטרנט ונסו לשמור שוב.";
         notifyDirtyChange();
         console.error("[CBA] כתיבה נכשלה:", err);
         if (cb) cb({ ok: false, error: String(err) });
@@ -643,5 +782,6 @@ CBA.sheets = (function () {
   // refresh נשכח מהייצוא (התגלה 2026-08-07 בבדיקת הרשאות): app.js קורא ל-
   // CBA.sheets.refresh במחזור הרענון התקופתי, וזה נכשל בשקט — כלומר הנתונים
   // לא התרעננו מעצמם כלל, רק ברענון עמוד.
-  return { url: API_URL, load: load, refresh: refresh, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
+  return { url: API_URL, load: load, refresh: refresh, refreshIfChanged: refreshIfChanged,
+    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
 })();

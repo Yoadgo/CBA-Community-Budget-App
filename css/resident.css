@@ -425,6 +425,29 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
   margin-bottom: 18px; box-sizing: border-box;
 }
 .dir-search:focus { outline: none; border-color: var(--action); box-shadow: 0 0 0 3px rgba(17,24,39,.08); }
+/* קיבוץ מדריך התושבים לפי שורות בתים (2026-08-19, ממצא 2.7) — כותרת דביקה
+   לכל קבוצה + שורת קיצור למעלה, במקום 71 כרטיסים ברצף בלי נקודת התמצאות. */
+.dir-jump { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.dir-jump__btn {
+  min-width: 34px; height: 30px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-family: inherit; font-size: 12.5px; font-weight: 700; color: var(--text-soft);
+  cursor: pointer; transition: background var(--t), color var(--t), border-color var(--t);
+}
+.dir-jump__btn:hover { background: var(--action); border-color: var(--action); color: #fff; }
+.dir-group { margin-bottom: 22px; }
+.dir-group__head {
+  position: sticky; top: calc(var(--header-h, 60px) + 4px); z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 800; color: var(--text-soft);
+  background: var(--bg); padding: 8px 2px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.dir-group__n {
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  background: var(--hover); border-radius: 999px; padding: 2px 8px;
+}
+.dir-count { font-size: 12.5px; color: var(--text-muted); margin-bottom: 10px; }
 .dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; max-width: 900px; }
 .dir-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
 .dir-card__house {
@@ -537,6 +560,30 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
   box-shadow: 0 6px 20px rgba(16,24,40,.22);
 }
 .map-wheel-hint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* "הבית שלי" (2026-08-19, ממצא 3.5) — טבעת צבע + תווית קטנה, כדי שתושב
+   שנכנס למפה ימצא את עצמו מיד במקום לחפש מספר בית ידנית. */
+.map-house.is-mine {
+  border-color: rgba(var(--map-glow-rgb), .55);
+  box-shadow: 0 0 0 2px rgba(var(--map-glow-rgb), .45),
+              0 1px 1.5px rgba(62,54,40,.11), 0 6px 14px rgba(62,54,40,.12);
+  z-index: 3;
+}
+.mh-mine {
+  position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%);
+  background: rgba(var(--map-glow-rgb), .92); color: #fff;
+  font-size: 7.5px; font-weight: 800; line-height: 1;
+  padding: 2.5px 6px; border-radius: 999px; white-space: nowrap; pointer-events: none;
+}
+/* מיקוד מקלדת — הבתים הם עכשיו כפתורים לכל דבר (role/tabindex ב-resident.js) */
+.map-house:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(17,24,39,.55), 0 4px 10px rgba(62,54,40,.16);
+  z-index: 4;
+}
+
+/* כפתור "?" שפותח את המקרא — מוצג רק במסך צר (ר' המדיה למטה) */
+.map-legend-toggle { display: none; }
 .map-viewport.grabbing { cursor: grabbing; }
 .map-world { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
 .map-terrain { position: absolute; top: 0; left: 0; display: block; pointer-events: none; }
@@ -783,7 +830,24 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
     min-height: 340px;
     border-radius: 0; border: none; box-shadow: none;
   }
-  .map-hint, .map-legend { display: none; }
+  .map-hint { display: none; }
+  /* המקרא לא נעלם יותר במובייל — הוא מתקפל מאחורי כפתור "?" (ממצא 3.5) */
+  .map-legend-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; flex: none; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.65); background: rgba(255,255,255,.82);
+    backdrop-filter: saturate(180%) blur(14px); -webkit-backdrop-filter: saturate(180%) blur(14px);
+    color: var(--text-soft); font-family: inherit; font-size: 15px; font-weight: 800;
+    cursor: pointer; box-shadow: 0 4px 14px rgba(16,24,40,.12);
+  }
+  .map-legend {
+    position: absolute; top: 40px; inset-inline-start: 0;
+    flex-direction: column; align-items: flex-start; gap: 7px;
+    padding: 10px 12px; border-radius: 14px;
+    opacity: 0; pointer-events: none; transform: translateY(-6px);
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  .map-legend.is-open { opacity: 1; pointer-events: auto; transform: translateY(0); }
   .map-topbar { top: 10px; right: 10px; left: 10px; }
   .map-search-wrap { flex: 1 1 auto; }
   /* גלולת חיפוש מתכווצת לאייקון עגול צף — משחררת את כל שאר המסך למפה */
@@ -827,7 +891,18 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .org-tree-sizer { position: relative; }
 
 /* סרגל הזום — אותה שפה של הכפתורים הצפים במפה, בשורה רגילה מעל העץ */
-.org-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.org-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+/* חיפוש בעץ (2026-08-19, ממצא 3.11) */
+.org-search { flex: 0 1 260px; min-width: 150px; }
+.org-search__input {
+  width: 100%; font-family: inherit; font-size: 13px; color: var(--text);
+  padding: 7px 12px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); transition: border-color var(--t), box-shadow var(--t);
+}
+.org-search__input:focus { outline: none; border-color: var(--action); box-shadow: 0 0 0 3px rgba(17,24,39,.08); }
+.org-tree-node { transition: opacity .2s ease; }
+.org-tree-node.is-dim { opacity: .22; }
+.org-tree-node.is-hit .org-box { box-shadow: 0 0 0 2px var(--action), 0 4px 14px rgba(16,24,40,.12); }
 .org-zoom {
   display: inline-flex; align-items: center; gap: 2px;
   border: 1px solid var(--border); background: var(--surface);

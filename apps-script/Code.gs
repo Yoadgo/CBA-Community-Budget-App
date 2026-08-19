@@ -243,8 +243,20 @@ function diagnosePermissions() {
 }
 
 /* ===================== קריאה ===================== */
+/* פעולות כתיבה שעוברות דרך doGet ולא דרך doPost (שריון מועדון, בקשת הרשמה
+   וכו') — גם הן חייבות להעלות את מונה השינויים, אחרת הלקוח לא ידע שיש חדש. */
+var GET_WRITE_ACTIONS = ['submitSignup', 'reserveClub', 'cancelClubReservation',
+  'approveClubReservation', 'rejectClubReservation', 'assignResidentIds'];
+
 function doGet(e) {
   try {
+    // "מה מספר הגרסה?" (2026-08-19) — התשובה הזולה ביותר בקובץ: קריאת ערך
+    // בודד מ-Script Properties, בלי לפתוח את הגיליון בכלל. חייבת להיות
+    // *ראשונה*, לפני כל שאר הבדיקות. אין כאן שום מידע רגיש — רק מספר.
+    if (e && e.parameter && e.parameter.action === 'rev') {
+      return json_({ ok: true, rev: currentRev_() });
+    }
+    if (e && e.parameter && GET_WRITE_ACTIONS.indexOf(e.parameter.action) !== -1) bumpRev_();
     // בקשת התחברות (שלב ב') — מזוהה לפי action=login ומטופלת בנפרד
     if (e && e.parameter && e.parameter.action === 'login') {
       return handleLogin_(e.parameter.token);
@@ -360,7 +372,10 @@ function doGet(e) {
       if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
     });
     var out = {
-      ok: true, version: 'v35-committee-categories', years: years,
+      // מספר הגרסה נשלח יחד עם המטען המלא, כדי שהלקוח יידע מול מה
+      // להשוות בבדיקות ה-rev הזולות שאחריו (ר' bumpRev_ למעלה).
+      rev: currentRev_(),
+      ok: true, version: 'v36-rev-counter', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -406,6 +421,10 @@ function doPost(e) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     body._email = gate.email;
     body._perm = gate.perm;
+    // כל כתיבה מאושרת מעלה את מונה השינויים (2026-08-19, ר' bumpRev_).
+    // אחרי השער בכוונה — בקשה שנדחתה לא שינתה כלום ואין סיבה שתגרום לכל
+    // הלקוחות למשוך את הגיליון מחדש.
+    bumpRev_();
     switch (body.action) {
       case 'auth':              return json_({ ok: true });
       case 'savePermissions':   return json_(savePermissions_(ss, body));
@@ -451,6 +470,7 @@ function doPost(e) {
       case 'rejectGymPayment':      return json_(rejectGymPayment_(ss, body));
       case 'recordGymPayment':      return json_(recordGymPayment_(ss, body));
       case 'extendGymMembership':   return json_(extendGymMembership_(ss, body));
+      case 'renewGymMembership':    return json_(renewGymMembership_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -1824,6 +1844,36 @@ function readNotesMap_(ss) {
     };
   }
   return map;
+}
+
+/* ============================================================================
+ *  מונה שינויים — "האם בכלל השתנה משהו?" (2026-08-19, ממצא 2.3 בדו"ח הבדיקה)
+ * ----------------------------------------------------------------------------
+ *  נמדד באפליקציה: 10 בקשות GET מלאות ב-31 שניות, כל אחת מושכת את *כל* הגיליון
+ *  (כל השנים, כל הסעיפים, כל התנועות) — כ-1,160 הרצות של Apps Script בכל שעת
+ *  שימוש פעילה, כשברוב המוחלט של הפעמים שום דבר לא השתנה. זה מבזבז מכסת זמן
+ *  ריצה יומית וגם כבד על חבילת גלישה בטלפון.
+ *
+ *  הפתרון: מספר סידורי אחד ב-Script Properties שעולה ב-1 בכל כתיבה. הלקוח
+ *  שואל "מה המספר?" (קריאה של ערך בודד — זולה בסדר גודל מקריאת הגיליון),
+ *  ורק אם הוא השתנה הוא מושך את המטען המלא.
+ *
+ *  מגבלה מודעת: שינוי שנעשה *ישירות בגיליון* (מישהו עורך תא ביד) לא מעלה את
+ *  המונה. לכן הלקוח מבצע בכל מקרה משיכה מלאה אחת לדקה — ר' FULL_EVERY_MS
+ *  ב-sheets.js. כלומר עריכה ידנית מופיעה תוך דקה לכל היותר, ובתמורה נחסכות
+ *  ~95% מהמשיכות המלאות.
+ * ========================================================================== */
+var REV_KEY = 'cba_data_rev';
+function bumpRev_() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var n = parseInt(props.getProperty(REV_KEY) || '0', 10) || 0;
+    props.setProperty(REV_KEY, String(n + 1));
+  } catch (err) { /* לא קריטי — במקרה הגרוע הלקוח פשוט ימשוך מלא */ }
+}
+function currentRev_() {
+  try { return parseInt(PropertiesService.getScriptProperties().getProperty(REV_KEY) || '0', 10) || 0; }
+  catch (err) { return 0; }
 }
 
 function json_(obj) {
@@ -4867,13 +4917,38 @@ function handleGymMy_(p) {
                                             : String(v == null ? '' : v);
       }
     }
+    /* --- קוד הכניסה (שלב 4, 2026-08-19) ---
+     * נשלח ללקוח **אך ורק** אם המנוי פעיל ותאריך התוקף עוד לא עבר, והבדיקה
+     * נעשית כאן בשרת ולא במסך. הסיבה: מסך אפשר לרמות, שרת לא. התקנון שלכם
+     * גם אוסר במפורש להעביר את הקוד, ולכן הוא גם לא נכנס לשום מייל. */
+    var entryCode = '';
+    var declValidUntil = '';
+    var declMonths = Number(cfg.settings['תוקף הצהרה בחודשים']) || 24;
+    if (membership) {
+      var isActive = String(membership['סטטוס'] || '').trim() === GYM_ST_ACTIVE;
+      var until = gymToDate_(membership['בתוקף עד']);
+      var stillValid = until ? (until.getTime() >= new Date().setHours(0, 0, 0, 0)) : false;
+      if (isActive && stillValid) entryCode = String(cfg.settings['קוד כניסה'] || '').trim();
+
+      // עד מתי ההצהרה שנחתמה עדיין תקפה — זה מה שקובע אם חידוש ידרוש
+      // למלא את השאלון מחדש או שיהיה שתי לחיצות בלבד.
+      var signed = gymToDate_(membership['תאריך חתימה']);
+      if (signed) {
+        var dv = new Date(signed.getTime());
+        dv.setMonth(dv.getMonth() + declMonths);
+        declValidUntil = Utilities.formatDate(dv, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      }
+    }
+
     return json_({
       ok: true,
       membership: membership,
       plans: cfg.plans.filter(function (pl) { return pl.active; }),
-      declarationMonths: Number(cfg.settings['תוקף הצהרה בחודשים']) || 24,
-      // קישור התשלום — ציבורי ממילא, ולכן מותר לשלוח אותו לכל תושב.
-      // קוד הכניסה, לעומת זאת, עדיין לא נשלח מכאן (מגיע בשלב 4).
+      declarationMonths: declMonths,
+      declarationValidUntil: declValidUntil,
+      renewDaysBefore: Number(cfg.settings['ימים לתזכורת חידוש']) || 14,
+      entryCode: entryCode,
+      hasEntryCode: !!String(cfg.settings['קוד כניסה'] || '').trim(),
       payboxUrl: String(cfg.settings['קישור פייבוקס'] || '').trim()
     });
   } catch (err) {
@@ -5511,5 +5586,109 @@ function extendGymMembership_(ss, body) {
     return { ok: true, id: id, validUntil: validLabel, sync: sync };
   } catch (err) {
     return { ok: false, error: String(err) };
+  }
+}
+
+/* ============================================================================
+ *  מכון כושר — שלב 4: חידוש מנוי (2026-08-19)
+ * ----------------------------------------------------------------------------
+ *  כאן משתלמת ההחלטה שההצהרה תקפה לשנתיים (כך כתוב בטופס שלכם): מכיוון
+ *  שנרשמים לחצי שנה, **שלושה חידושים מתוך ארבעה לא דורשים שאלון בכלל** —
+ *  רק בחירת מסלול ותשלום.
+ *
+ *  החידוש פותח **שורה חדשה** ולא דורס את הישנה, כדי שההיסטוריה תישמר: מי היה
+ *  מנוי, מתי, וכמה שילם. השורה החדשה מצביעה על הקודמת בעמודת "מנוי קודם".
+ *
+ *  מה שלא משתנה: המנוי החדש נולד "ממתין לתשלום" ולעולם לא "פעיל". אימות
+ *  התשלום ידני תמיד — גם בחידוש.
+ * ========================================================================== */
+function renewGymMembership_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var cfg = readGymSettings_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var email = normalizeEmail_(body._email);
+    var me = lookupResident_(email);
+
+    var prev = gymFindRow_(sh, cols, email);
+    if (!prev.row) return { ok: false, error: 'לא נמצא מנוי קודם לחידוש' };
+    if (GYM_OPEN_STATUSES.indexOf(prev.status) !== -1) {
+      return { ok: false, error: 'המנוי הנוכחי עדיין פעיל או בטיפול (סטטוס: ' + prev.status + ')' };
+    }
+
+    // האם ההצהרה הקודמת עדיין בתוקף? זה מה שמחליט אם אפשר לחדש בלי שאלון.
+    var declMonths = Number(cfg.settings['תוקף הצהרה בחודשים']) || 24;
+    var signed = gymToDate_(cols['תאריך חתימה'] ? sh.getRange(prev.row, cols['תאריך חתימה']).getValue() : '');
+    var declOk = false;
+    if (signed) {
+      var expiry = new Date(signed.getTime());
+      expiry.setMonth(expiry.getMonth() + declMonths);
+      declOk = expiry.getTime() >= Date.now();
+    }
+    if (!declOk) {
+      return { ok: false, error: 'הצהרת הבריאות שלך אינה בתוקף יותר — יש למלא טופס הרשמה מלא.',
+               needsDeclaration: true };
+    }
+
+    var plan = null;
+    for (var i = 0; i < cfg.plans.length; i++) {
+      if (cfg.plans[i].id === body.planId && cfg.plans[i].active) { plan = cfg.plans[i]; break; }
+    }
+    if (!plan) plan = cfg.plans[0];
+    if (!plan) return { ok: false, error: 'לא הוגדר מסלול מנוי' };
+
+    // מעתיקים את כל השורה הקודמת ומעדכנים רק את מה שמשתנה — כך שההצהרה,
+    // התשובות והחתימה עוברות איתה, ולא נוצר מנוי בלי רקע רפואי.
+    var prevValues = sh.getRange(prev.row, 1, 1, sh.getLastColumn()).getValues()[0];
+    var prevId = cols['מזהה'] ? String(prevValues[cols['מזהה'] - 1]).trim() : '';
+    var newId = nextGymId_(sh, cols);
+    sh.appendRow(prevValues);
+    var rowIndex = sh.getLastRow();
+    cols = gymCols_(sh);
+    function put(name, val) { if (cols[name]) sh.getRange(rowIndex, cols[name]).setValue(val); }
+
+    put('מזהה', newId);
+    put('מסלול', plan.name);
+    put('מחיר מוסכם', plan.total);
+    put('סטטוס', GYM_ST_PAYMENT);
+    put('סטטוס תשלום', 'לא שולם');
+    put('תאריך התחלה', '');
+    put('בתוקף עד', '');
+    put('סה"כ שולם', '');
+    put('תשלום אחרון', '');
+    put('חודשים ששולמו', '');
+    put('מצב סנכרון', '');
+    put('אמצעי תשלום', '');
+    put('אסמכתא', '');
+    put('דווח בתאריך', '');
+    put('אומת בתאריך', '');
+    put('אומת ע"י', '');
+    put('הוגש בתאריך', new Date());
+    put('טופל בתאריך', '');
+    put('טופל ע"י', '');
+    put('מנוי קודם', prevId);
+    put('דגלי תזכורת', '');
+    put('מזהה קבוע', me.found ? me.familyId : (cols['מזהה קבוע'] ? prevValues[cols['מזהה קבוע'] - 1] : ''));
+
+    gymLog_(ss, newId, 'חידוש מנוי', {
+      by: email, note: 'חידוש של ' + prevId + ' · הצהרה מ-' +
+        Utilities.formatDate(signed, Session.getScriptTimeZone(), 'yyyy-MM-dd') + ' עדיין בתוקף'
+    });
+
+    var name = String(sh.getRange(rowIndex, cols['שם פרטי']).getValue()).trim() || email;
+    try {
+      sendResidentTemplate_(ss, 'GYM_APPROVED_AWAITING_PAYMENT', [email], {
+        'שם': name, 'סכום': plan.total, 'מסלול': plan.name
+      });
+    } catch (mailErr) { Logger.log('מייל חידוש נכשל: ' + mailErr); }
+
+    return { ok: true, id: newId, status: GYM_ST_PAYMENT, previous: prevId };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
   }
 }

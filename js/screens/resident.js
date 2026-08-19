@@ -1199,7 +1199,13 @@ CBA.screens = CBA.screens || {};
       });
     }
     function doCancel(btn) {
-      if (!window.confirm("לבטל את השריון? הפעולה תמחק את האירוע מהיומן.")) return;
+      // (2026-08-19, ממצא 2.6) אישור ביטול — מודל של האפליקציה. שאר הפונקציה
+      // הוזזה פנימה אל תוך ה-then, כי מודל הוא א-סינכרוני בניגוד ל-confirm.
+      CBA.ui.confirm("הפעולה תמחק את האירוע מהיומן והמשבצת תחזור להיות פנויה.",
+        { title: "לבטל את השריון?", okText: "בטל שריון", danger: true }
+      ).then(function (ok) { if (ok) doCancelConfirmed(btn); });
+    }
+    function doCancelConfirmed(btn) {
       btn.disabled = true;
       btn.innerHTML = '<div class="rs-spin"></div>מבטל…';
       var id = btn.dataset.cancel;
@@ -1220,7 +1226,7 @@ CBA.screens = CBA.screens || {};
         } else {
           btn.disabled = false;
           btn.innerHTML = xIcon + ' ביטול';
-          window.alert((r && r.error) || "הביטול נכשל, נסו שוב.");
+          CBA.ui.alert((r && r.error) || "הביטול נכשל, נסו שוב.");
         }
       });
     }
@@ -1417,9 +1423,54 @@ CBA.screens = CBA.screens || {};
       if (isNaN(hb)) hb = Infinity;
       return ha - hb;
     });
-    listEl.innerHTML = rows.length
-      ? '<div class="dir-grid">' + rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>'
-      : '<div class="rs-empty"><p>לא נמצאו תוצאות.</p></div>';
+    /* (2026-08-19, ממצא 2.7 בדו"ח הבדיקה) קודם זו הייתה רשימה אחת רצופה —
+       נמדד: 6,000 פיקסלים בדסקטופ ו-11,250 במובייל, 71 כרטיסים ברצף, בלי
+       קיבוץ, בלי אינדקס ובלי שום נקודת התמצאות חוץ משדה חיפוש אחד. עכשיו
+       הכרטיסים מקובצים לפי "מאה" של מספר הבית — שזה בדיוק החלוקה לשורות
+       הבתים בשיכון (101-107, 201-207 וכו') — עם כותרת דביקה לכל קבוצה
+       ושורת קיצור למעלה שקופצת ישירות לכל אחת. בזמן חיפוש אין קיבוץ:
+       התוצאות ממילא מעטות, וקבוצה עם כרטיס אחד היא רעש. */
+    if (!rows.length) {
+      listEl.innerHTML = '<div class="rs-empty"><p>לא נמצאו תוצאות.</p></div>';
+      if (dirScrollY) { window.scrollTo(0, dirScrollY); dirScrollY = 0; }
+      return;
+    }
+    if (q) {
+      listEl.innerHTML = '<div class="dir-count">' + rows.length + ' תוצאות</div>' +
+        '<div class="dir-grid">' + rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>';
+      if (dirScrollY) { window.scrollTo(0, dirScrollY); dirScrollY = 0; }
+      return;
+    }
+    var groups = [], byKey = {};
+    rows.forEach(function (r) {
+      var h = parseInt(String(dirVal(r, c.house)).replace(/\D/g, ""), 10);
+      var key = isNaN(h) ? "אחר" : String(Math.floor(h / 100) * 100);
+      if (!byKey[key]) { byKey[key] = { key: key, rows: [] }; groups.push(byKey[key]); }
+      byKey[key].rows.push(r);
+    });
+    groups.sort(function (a, b) {
+      if (a.key === "אחר") return 1;
+      if (b.key === "אחר") return -1;
+      return parseInt(a.key, 10) - parseInt(b.key, 10);
+    });
+    var jump = '<div class="dir-jump">' + groups.map(function (g) {
+      return '<button type="button" class="dir-jump__btn" data-dir-jump="' + CBA.esc(g.key) + '">' +
+        (g.key === "אחר" ? "אחר" : g.key.slice(0, 1)) + '</button>';
+    }).join("") + '</div>';
+    listEl.innerHTML = jump + groups.map(function (g) {
+      var label = g.key === "אחר" ? "ללא מספר בית" : ("בתים " + g.key + "–" + (parseInt(g.key, 10) + 99));
+      return '<div class="dir-group" id="dir-g-' + CBA.esc(g.key) + '">' +
+        '<div class="dir-group__head">' + CBA.esc(label) +
+          '<span class="dir-group__n">' + g.rows.length + '</span></div>' +
+        '<div class="dir-grid">' + g.rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>' +
+      '</div>';
+    }).join("");
+    listEl.querySelectorAll("[data-dir-jump]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var t = listEl.querySelector("#dir-g-" + CSS.escape(b.dataset.dirJump));
+        if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
     if (dirScrollY) { window.scrollTo(0, dirScrollY); dirScrollY = 0; }
   }
 
@@ -1736,7 +1787,8 @@ CBA.screens = CBA.screens || {};
               '<input id="map-q" class="map-search" placeholder="חיפוש לפי מספר בית, שם משפחה או ילד…" autocomplete="off">' +
               '<div class="map-search-results" id="map-results"></div>' +
             '</div>' +
-            '<div class="map-legend">' +
+            '<button type="button" class="map-legend-toggle" id="map-legend-toggle" aria-label="מקרא">?</button>' +
+            '<div class="map-legend" id="map-legend">' +
               '<i><b class="lg-house"></b>בית</i>' +
               '<i><b class="lg-amen"></b>מבנה ציבור</i>' +
               '<i><b class="lg-park"></b>חניון</i>' +
@@ -1878,17 +1930,31 @@ CBA.screens = CBA.screens || {};
       })();
 
       // בתים
+      // (2026-08-19, ממצא 3.5 בדו"ח) שני דברים שחסרו כאן:
+      // 1. "הבית שלי" לא סומן בשום צורה — תושב שנכנס למפה נאלץ לחפש ידנית את
+      //    הבית של עצמו, למרות שהמערכת יודעת בדיוק מה מספרו.
+      // 2. הבתים היו <div> בלי תפקיד ובלי tabindex — כלומר לא נגישים למקלדת
+      //    בכלל: אי-אפשר היה להגיע אליהם ב-Tab או לפתוח ב-Enter.
+      var myHouse = normHouse(user().house || user().familyId || "");
       var houseEls = {};
       MAP_TILES.forEach(function (t) {
         var el = document.createElement("div");
-        el.className = "map-house";
+        var mine = myHouse && normHouse(t.n) === myHouse;
+        el.className = "map-house" + (mine ? " is-mine" : "");
         el.dataset.num = t.n;
+        el.setAttribute("role", "button");
+        el.setAttribute("tabindex", "0");
+        el.setAttribute("aria-label", "בית " + t.n + (mine ? " — הבית שלי" : ""));
         el.style.cssText = "left:" + px(t.x) + "px;top:" + py(t.y) + "px;width:" + px(t.w) + "px;height:" + py(t.h) + "px";
         el.innerHTML =
           '<span class="mh-num"><span class="mh-num__ico">' + houseIcon + '</span>' + t.n + '</span>' +
           '<div class="mh-body"><span class="mh-corner">' + t.n + '</span>' +
           '<span class="mh-fam"></span>' +
-          '<span class="mh-kids">' + kidsIcon + '</span></div>';
+          '<span class="mh-kids">' + kidsIcon + '</span></div>' +
+          (mine ? '<span class="mh-mine">הבית שלי</span>' : "");
+        el.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); openPopup(t.n); }
+        });
         worldEl.appendChild(el);
         houseEls[t.n] = el;
       });
@@ -2160,6 +2226,22 @@ CBA.screens = CBA.screens || {};
       });
 
       // במובייל: גלולת החיפוש נפתחת רק כשצריך, כדי לפנות כמה שיותר שטח למפה עצמה
+      // מקרא במובייל (2026-08-19, ממצא 3.5) — קודם הוא הוסתר לגמרי במסך צר,
+      // כלומר אף אחד בטלפון לא ידע מה מסמן הריבוע הכתום מול הכחול. עכשיו הוא
+      // מתקפל מאחורי כפתור "?" קטן במקום להיעלם.
+      var legendBtn = container.querySelector("#map-legend-toggle");
+      var legendEl = container.querySelector("#map-legend");
+      if (legendBtn && legendEl) {
+        legendBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          legendEl.classList.toggle("is-open");
+        });
+        document.addEventListener("click", function (e) {
+          if (!document.body.contains(legendEl)) return;
+          if (!e.target.closest("#map-legend") && !e.target.closest("#map-legend-toggle")) legendEl.classList.remove("is-open");
+        });
+      }
+
       var searchWrap = container.querySelector(".map-search-wrap");
       if (window.matchMedia("(max-width: 720px)").matches) {
         searchWrap.classList.add("collapsed");
@@ -2191,6 +2273,16 @@ CBA.screens = CBA.screens || {};
       }
 
       initialView(false);
+      // אם ידוע לנו איפה התושב גר — ממרכזים עליו את הפתיחה (בלי לזום פנימה
+      // ובלי לפתוח פופאפ; רק כדי שהעין תמצא את עצמה מיד). ר' ממצא 3.5.
+      if (myHouse) {
+        var myTile = MAP_TILES.filter(function (r) { return normHouse(r.n) === myHouse; })[0];
+        if (myTile) {
+          var cy = py(myTile.y + myTile.h / 2);
+          ty = Math.min(0, viewport.clientHeight / 2 - cy * scale);
+          apply();
+        }
+      }
     }
   };
   /* ==== "ועד השיכון" — עץ ארגוני של הוועד, תצוגת קריאה בלבד (2026-08-10) ====

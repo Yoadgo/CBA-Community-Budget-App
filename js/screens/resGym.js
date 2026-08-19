@@ -121,8 +121,16 @@ CBA.screens = CBA.screens || {};
     if (status === ST_DECLARATION) {
       html += '<button type="button" class="btn-primary gym-cta" data-gym-start>מילוי הצהרת בריאות</button>';
     }
+    if (status === ST_ACTIVE) html += activeCardHTML(m);
+
     if (status === ST_EXPIRED) {
-      html += '<button type="button" class="btn-primary gym-cta" data-gym-start>חידוש מנוי</button>';
+      // חידוש בלחיצה אחת אם ההצהרה עדיין בתוקף; אחרת — טופס מלא מחדש.
+      html += declStillValid()
+        ? '<button type="button" class="btn-primary gym-cta" data-gym-renew>חידוש מנוי</button>' +
+          '<div class="gym-hint gym-hint--tight">הצהרת הבריאות שלך בתוקף עד ' +
+            esc(fmtDate(st.my.declarationValidUntil)) + ', אז אין צורך למלא אותה מחדש.</div>'
+        : '<button type="button" class="btn-primary gym-cta" data-gym-start>חידוש מנוי</button>' +
+          '<div class="gym-hint gym-hint--tight">עברו יותר משנתיים מאז החתימה, ולכן יש למלא הצהרת בריאות חדשה.</div>';
     }
     if (status === ST_PAYMENT) {
       var amount = m["מחיר מוסכם"] || "";
@@ -145,6 +153,112 @@ CBA.screens = CBA.screens || {};
     }
     html += "</div>";
     return html;
+  }
+
+  /* ------------------------------------------------------------------ *
+   *  כרטיס המנוי הפעיל
+   *  זה המסך שהתושב יפתח הכי הרבה פעמים — בדרך למכון, כדי לראות את הקוד.
+   *  לכן הקוד גדול, ברור מרחוק, ועם כפתור העתקה. כל השאר משני לו.
+   * ------------------------------------------------------------------ */
+  function fmtDate(iso) {
+    if (!iso) return "";
+    var p = String(iso).split("-");
+    return p.length === 3 ? (p[2] + "." + p[1] + "." + p[0]) : String(iso);
+  }
+
+  function daysLeft(until) {
+    if (!until) return null;
+    var d = new Date(String(until) + "T00:00:00");
+    if (isNaN(d.getTime())) return null;
+    return Math.ceil((d - new Date().setHours(0, 0, 0, 0)) / 86400000);
+  }
+
+  function declStillValid() {
+    var dv = st.my && st.my.declarationValidUntil;
+    if (!dv) return false;
+    var d = new Date(String(dv) + "T00:00:00");
+    return !isNaN(d.getTime()) && d.getTime() >= new Date().setHours(0, 0, 0, 0);
+  }
+
+  function activeCardHTML(m) {
+    var code = (st.my && st.my.entryCode) || "";
+    var hasCode = !!(st.my && st.my.hasEntryCode);
+    var left = daysLeft(m["בתוקף עד"]);
+    var renewDays = (st.my && st.my.renewDaysBefore) || 14;
+
+    var html = "";
+
+    // מד תוקף — עדין, בלי לצעוק. הופך לכתום כשמתקרב הסוף.
+    if (left !== null) {
+      var total = 180;
+      var pct = Math.max(0, Math.min(100, Math.round((left / total) * 100)));
+      var tone = left <= 7 ? "danger" : (left <= 30 ? "warn" : "ok");
+      html += '<div class="gym-meter">' +
+                '<div class="gym-meter__bar"><span class="gym-meter__fill gym-meter__fill--' + tone +
+                  '" style="width:' + pct + '%"></span></div>' +
+                '<div class="gym-meter__label">' +
+                  (left > 0 ? "נשארו " + left + " ימים" : "המנוי מסתיים היום") + "</div>" +
+              "</div>";
+    }
+
+    // קוד הכניסה
+    if (code) {
+      html += '<div class="gym-code">' +
+                '<div class="gym-code__label">קוד הכניסה למכון</div>' +
+                '<div class="gym-code__value" id="gym-code-value">' + esc(code) + "</div>" +
+                '<button type="button" class="btn-ghost" data-gym-copy>העתקת הקוד</button>' +
+                '<div class="gym-code__note">לפי התקנון — אין להעביר את הקוד לאחרים.</div>' +
+              "</div>";
+    } else if (!hasCode) {
+      html += '<div class="gym-code gym-code--none">' +
+                "<div>הכניסה למכון עדיין באמצעות מפתח.</div>" +
+                '<div class="gym-code__note">לקבלת מפתח יש לפנות לאחראית חדר הכושר בשיכון.</div>' +
+              "</div>";
+    }
+
+    if (left !== null && left <= renewDays) {
+      html += '<button type="button" class="btn-primary gym-cta" data-gym-renew>חידוש המנוי</button>';
+    }
+    return html;
+  }
+
+  function copyCode(btn) {
+    var el = document.getElementById("gym-code-value");
+    if (!el) return;
+    var txt = el.textContent.trim();
+    function done() { btn.textContent = "הועתק ✓"; setTimeout(function () { btn.textContent = "העתקת הקוד"; }, 1800); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done, function () { window.prompt("הקוד:", txt); });
+    } else {
+      window.prompt("הקוד:", txt);
+    }
+  }
+
+  /* חידוש — כשההצהרה עדיין בתוקף זה באמת שתי לחיצות. אם השרת מחזיר
+     needsDeclaration, נופלים חזרה לאשף המלא במקום להיתקע. */
+  function doRenew(container, btn) {
+    var plans = (st.my && st.my.plans) || [];
+    var plan = plans[0];
+    if (!plan) { window.alert("לא הוגדר מסלול מנוי."); return; }
+    if (!window.confirm("לחדש את המנוי?\n\n" + plan.name + " · " + plan.total + " ₪\n" +
+                        "אחרי החידוש נעביר אותך למסך התשלום.")) return;
+    btn.disabled = true;
+    btn.textContent = "מחדש…";
+    CBA.data.renewGymMembership({ planId: plan.id }, function (res) {
+      if (!res || !res.ok) {
+        btn.disabled = false;
+        btn.textContent = "חידוש המנוי";
+        if (res && res.needsDeclaration) {
+          window.alert(res.error);
+          openWizard(container);
+          return;
+        }
+        window.alert((res && res.error) || "החידוש נכשל.");
+        return;
+      }
+      window.alert("המנוי חודש. נשאר להסדיר את התשלום — הפרטים מחכים לך במסך.");
+      load(container, function () { draw(container); });
+    });
   }
 
   /* ------------------------------------------------------------------ *
@@ -466,6 +580,10 @@ CBA.screens = CBA.screens || {};
     if (startBtn) startBtn.addEventListener("click", function () { openWizard(container); });
     var payBtn = container.querySelector("[data-gym-pay]");
     if (payBtn) payBtn.addEventListener("click", function () { openPayReport(container); });
+    var renewBtn = container.querySelector("[data-gym-renew]");
+    if (renewBtn) renewBtn.addEventListener("click", function () { doRenew(container, renewBtn); });
+    var copyBtn = container.querySelector("[data-gym-copy]");
+    if (copyBtn) copyBtn.addEventListener("click", function () { copyCode(copyBtn); });
   }
 
   /* ------------------------------------------------------------------ *

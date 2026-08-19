@@ -137,6 +137,12 @@ body.app-booting .app-nav__tab {
    נעלם אחרי כמה שניות), is-error (כשל רשת אמיתי בכתיבה — נשאר קצת יותר זמן).
    max-width (ולא display) הוא מה שמאפשר לו "להיפתח"/"להיסגר" חלק בלי לדחוף
    פתאום את שאר פריטי הכותרת. */
+/* מצב "ממתין לשליחה" (2026-08-19, ממצא 4.6) — כתיבה שנכשלה ברמת הרשת ונשמרה
+   בתור מקומי. בניגוד לשגיאה רגילה הוא *לא* נעלם מעצמו, כי כל עוד הוא מוצג
+   יש באמת שינוי שלא הגיע לגיליון. לחיץ — לחיצה מנסה לשלוח מיד. */
+.save-indicator.is-pending { cursor: pointer; }
+.save-indicator.is-pending .save-indicator__dot { background: var(--amber, #B45309); }
+.save-indicator.is-pending .save-indicator__text { color: var(--amber, #B45309); font-weight: 700; }
 .save-indicator {
   display: inline-flex;
   align-items: center;

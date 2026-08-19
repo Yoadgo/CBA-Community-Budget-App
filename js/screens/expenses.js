@@ -483,13 +483,17 @@ function txBind(container) {
     });
   });
   const saveViewBtn = container.querySelector("[data-save-view]");
+  // (2026-08-19, ממצא 2.6) כל החלונות במסך הזה עברו מ-window.* ל-CBA.ui —
+  // אותה שפה ויזואלית כמו שאר האפליקציה, ובלי לחסום את הדפדפן.
   if (saveViewBtn) saveViewBtn.addEventListener("click", function () {
-    const name = window.prompt("שם לתצוגה השמורה:");
-    if (name && name.trim()) {
-      const v = { id: "v" + (++txViewSeq), name: name.trim(), filters: Object.assign({}, txFilters) };
+    CBA.ui.prompt("התצוגה תשמור את הסינון הנוכחי כדי שתוכלו לחזור אליו בלחיצה אחת.",
+      { title: "שמירת תצוגה", placeholder: "למשל: גינון בלבד", okText: "שמור תצוגה" }
+    ).then(function (name) {
+      if (name === null || !String(name).trim()) return;
+      const v = { id: "v" + (++txViewSeq), name: String(name).trim(), filters: Object.assign({}, txFilters) };
       txCustomViews.push(v); txView = "c:" + v.id;
       CBA.screens.expenses.render(container);
-    }
+    });
   });
   container.querySelectorAll("[data-sort]").forEach(function (h) {
     h.addEventListener("click", function () {
@@ -570,7 +574,7 @@ function txBindRows(container) {
       if (t.status === "submitted" || t.status === "review") {
         const missing = CBA.data.missingApprovalFields(t);
         if (missing.length) {
-          window.alert('לא ניתן לאשר להנה"ח — חסרים פרטים: ' + missing.join(", ") + ".\nנפתח טופס עריכה להשלמה.");
+          CBA.ui.alert('לא ניתן לאשר להנה"ח — חסרים פרטים: ' + missing.join(", ") + ".\nנפתח טופס עריכה להשלמה.");
           txOpenDrawer(container, t.id);
           return;
         }
@@ -591,10 +595,13 @@ function txBindRows(container) {
       e.stopPropagation();
       const t = CBA.data.getTransactions().find(function (x) { return x.id === parseInt(btn.dataset.review, 10); });
       if (!t) return;
-      const note = window.prompt("למה ההוצאה הזו עוברת לבדיקה?", t.reviewNote || "");
-      if (note === null) return;   // בוטל
-      CBA.data.updateTransaction(t.id, { status: "review", reviewNote: note.trim() });
-      CBA.screens.expenses.render(container);
+      CBA.ui.prompt("ההערה תוצג לתושב יחד עם הסטטוס, כדי שיידע מה חסר.",
+        { title: "למה ההוצאה עוברת לבדיקה?", value: t.reviewNote || "", okText: "העבר לבדיקה" }
+      ).then(function (note) {
+        if (note === null) return;   // בוטל
+        CBA.data.updateTransaction(t.id, { status: "review", reviewNote: String(note).trim() });
+        CBA.screens.expenses.render(container);
+      });
     });
   });
   container.querySelectorAll("[data-reject]").forEach(function (btn) {
@@ -607,10 +614,14 @@ function txBindRows(container) {
   container.querySelectorAll("[data-del-tx]").forEach(function (btn) {
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
-      if (window.confirm("למחוק את התנועה?")) {
+      CBA.ui.confirm("התנועה תימחק מהגיליון. אי אפשר לשחזר אותה מכאן.",
+        { title: "למחוק את התנועה?", okText: "מחק", danger: true }
+      ).then(function (ok) {
+        if (!ok) return;
         CBA.data.deleteTransaction(parseInt(btn.dataset.delTx, 10));
         CBA.screens.expenses.render(container);
-      }
+        CBA.ui.toast("התנועה נמחקה");
+      });
     });
   });
   if (list) {
@@ -641,14 +652,26 @@ function txBulkAction(container, action) {
       const lines = blocked.map(function (b) {
         return "• " + (b.t.supplier || b.t.buyer || ("#" + b.t.id)) + " — חסר: " + b.missing.join(", ");
       });
-      window.alert((items.length - blocked.length) + " מתוך " + items.length + ' אושרו להנה"ח.\n' +
+      CBA.ui.alert((items.length - blocked.length) + " מתוך " + items.length + ' אושרו להנה"ח.\n' +
         blocked.length + " לא אושרו כי חסרים בהן פרטים:\n" + lines.join("\n"));
     }
   }
   else if (action === "delete") {
-    if (!ids.length || !window.confirm("למחוק " + ids.length + " תנועות?")) return;
-    ids.forEach(function (id) { CBA.data.deleteTransaction(id); }); txSelected = {};
-  } else if (action === "category") {
+    // (2026-08-19, ממצא 2.6) מחיקה מרובה — הפעולה ההרסנית ביותר בטבלה.
+    // הועברה למודל אדום של האפליקציה, עם ציון מספר התנועות בכותרת.
+    if (!ids.length) return;
+    CBA.ui.confirm(ids.length + " התנועות יימחקו מהגיליון. אי אפשר לשחזר אותן מכאן.",
+      { title: "למחוק " + ids.length + " תנועות?", okText: "מחק הכול", danger: true }
+    ).then(function (ok) {
+      if (!ok) return;
+      ids.forEach(function (id) { CBA.data.deleteTransaction(id); });
+      txSelected = {};
+      CBA.screens.expenses.render(container);
+      CBA.ui.toast(ids.length + " תנועות נמחקו");
+    });
+    return;
+  }
+  else if (action === "category") {
     const sel = container.querySelector("[data-bulk-cat]");
     if (sel && sel.value) { ids.forEach(function (id) { CBA.data.updateTransaction(id, { categoryId: sel.value }); }); txSelected = {}; }
   }
@@ -839,20 +862,28 @@ function txOpenColumnManager(container) {
 
   const addCustomBtn = overlay.querySelector("[data-add-custom-col]");
   if (addCustomBtn) addCustomBtn.addEventListener("click", function () {
-    const name = (window.prompt("שם העמודה החדשה:") || "").trim();
-    if (!name) return;
-    const clash = TX_STD_COLS.some(function (c) { return c.key === name || c.label === name; }) ||
-      (cfg.custom || []).some(function (c) { return c.key === name; });
-    if (clash) { window.alert('כבר קיימת עמודה בשם "' + name + '".'); return; }
-    cfg.custom = (cfg.custom || []).concat([{ key: name, label: name }]);
-    txOpenColumnManager(container); // רינדור מחדש עם העמודה החדשה — עדיין לא נשמר עד "שמור"
+    CBA.ui.prompt("העמודה תיווצר בטאב התנועות בגיליון ותהיה זמינה לכל התנועות.",
+      { title: "עמודה חדשה", placeholder: "שם העמודה", okText: "הוסף עמודה" }
+    ).then(function (raw) {
+      const name = (raw === null ? "" : String(raw)).trim();
+      if (!name) return;
+      const clash = TX_STD_COLS.some(function (c) { return c.key === name || c.label === name; }) ||
+        (cfg.custom || []).some(function (c) { return c.key === name; });
+      if (clash) { CBA.ui.alert('כבר קיימת עמודה בשם "' + name + '".'); return; }
+      cfg.custom = (cfg.custom || []).concat([{ key: name, label: name }]);
+      txOpenColumnManager(container); // רינדור מחדש — עדיין לא נשמר עד "שמור"
+    });
   });
   overlay.querySelectorAll("[data-remove-custom-col]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       const key = btn.dataset.removeCustomCol;
-      if (!window.confirm('להסיר את העמודה "' + key + '" מהתצוגה? הנתונים שכבר הוזנו נשארים בגיליון.')) return;
-      cfg.custom = (cfg.custom || []).filter(function (c) { return c.key !== key; });
+      CBA.ui.confirm("הנתונים שכבר הוזנו בעמודה הזו נשארים בגיליון — רק התצוגה משתנה.",
+        { title: 'להסיר את העמודה "' + key + '"?', okText: "הסר" }
+      ).then(function (ok) {
+        if (!ok) return;
+        cfg.custom = (cfg.custom || []).filter(function (c) { return c.key !== key; });
       txOpenColumnManager(container);
+      });
     });
   });
   const saveBtn = overlay.querySelector("[data-save-cols]");
@@ -1176,11 +1207,14 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
   const subItemSel = form.querySelector("#tx-subitem-select");
   if (subItemSel) subItemSel.addEventListener("change", function () {
     if (subItemSel.value !== "__new__") { state.subItemId = subItemSel.value; return; }
-    const name = window.prompt("שם תת-הסעיף החדש:");
-    if (!name || !name.trim()) { refreshSubItemOptions(); return; }
-    CBA.data.addCategoryItem(state.categoryId, name.trim(), function (it) {
-      state.subItemId = it ? it.id : "";
-      refreshSubItemOptions();
+    CBA.ui.prompt("תת-הסעיף ייווצר בתוך הסעיף שנבחר ויישמר לגיליון מיד.",
+      { title: "תת-סעיף חדש", placeholder: "שם תת-הסעיף", okText: "צור" }
+    ).then(function (name) {
+      if (name === null || !String(name).trim()) { refreshSubItemOptions(); return; }
+      CBA.data.addCategoryItem(state.categoryId, String(name).trim(), function (it) {
+        state.subItemId = it ? it.id : "";
+        refreshSubItemOptions();
+      });
     });
   });
   updateSuggest();
@@ -1232,7 +1266,7 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
     const file = receiptFileInput.files && receiptFileInput.files[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
-      window.alert("הקובץ גדול מדי (מקסימום 8MB).");
+      CBA.ui.alert("הקובץ גדול מדי (מקסימום 8MB).");
       receiptFileInput.value = "";
       return;
     }
@@ -1255,32 +1289,37 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
           txRenderForm(container, overlay, state, editing, id, residentOptions);
         } else {
           if (receiptStatusEl) receiptStatusEl.textContent = "";
-          window.alert("העלאה נכשלה: " + ((res && res.error) || "שגיאה לא ידועה"));
+          CBA.ui.alert("העלאה נכשלה: " + ((res && res.error) || "שגיאה לא ידועה"));
         }
       });
     };
     reader.onerror = function () {
       if (receiptStatusEl) receiptStatusEl.textContent = "";
-      window.alert("קריאת הקובץ נכשלה.");
+      CBA.ui.alert("קריאת הקובץ נכשלה.");
     };
     reader.readAsDataURL(file);
   });
   const delReceiptBtn = form.querySelector("[data-del-receipt]");
   if (delReceiptBtn) delReceiptBtn.addEventListener("click", function () {
-    if (!window.confirm("למחוק את קובץ הקבלה? הפעולה מוחקת את הקובץ בפועל מ-Drive, לא רק מנתקת את הקישור.")) return;
-    collect();
-    delReceiptBtn.disabled = true;
-    if (CBA.sheets.markDirty) CBA.sheets.markDirty("expenseReceiptFile");
-    CBA.data.deleteReceiptFile(state, function (res) {
-      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("expenseReceiptFile");
-      delReceiptBtn.disabled = false;
-      if (res && res.ok) {
-        state.receiptUrl = "";
-        state.fileName = "";
-        txRenderForm(container, overlay, state, editing, id, residentOptions);
-      } else {
-        window.alert("מחיקה נכשלה: " + ((res && res.error) || "שגיאה לא ידועה"));
-      }
+    CBA.ui.confirm("הפעולה מוחקת את הקובץ בפועל מ-Drive, לא רק מנתקת את הקישור.",
+      { title: "למחוק את קובץ הקבלה?", okText: "מחק קובץ", danger: true }
+    ).then(function (ok) {
+      if (!ok) return;
+      collect();
+      delReceiptBtn.disabled = true;
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("expenseReceiptFile");
+      CBA.data.deleteReceiptFile(state, function (res) {
+        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("expenseReceiptFile");
+        delReceiptBtn.disabled = false;
+        if (res && res.ok) {
+          state.receiptUrl = "";
+          state.fileName = "";
+          txRenderForm(container, overlay, state, editing, id, residentOptions);
+          CBA.ui.toast("הקובץ נמחק");
+        } else {
+          CBA.ui.alert("מחיקה נכשלה: " + ((res && res.error) || "שגיאה לא ידועה"));
+        }
+      });
     });
   });
 
@@ -1303,11 +1342,15 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
   });
   const delBtn = form.querySelector("[data-delete]");
   if (delBtn) delBtn.addEventListener("click", function () {
-    if (window.confirm("למחוק את התנועה?")) {
+    CBA.ui.confirm("התנועה תימחק מהגיליון. אי אפשר לשחזר אותה מכאן.",
+      { title: "למחוק את התנועה?", okText: "מחק", danger: true }
+    ).then(function (ok) {
+      if (!ok) return;
       CBA.data.deleteTransaction(id);
       txForceCloseDrawer();   // נמחק — בלי אזהרה
       CBA.screens.expenses.render(container);
-    }
+      CBA.ui.toast("התנועה נמחקה");
+    });
   });
   overlay.querySelectorAll("[data-close]").forEach(function (el) { el.addEventListener("click", txCloseDrawer); });
 }
@@ -1333,11 +1376,17 @@ function txForceCloseDrawer() {
   txDirtyCheck = null;
 }
 function txCloseDrawer() {
+  // (2026-08-19, ממצא 2.6) אישור היציאה עבר מ-window.confirm למודל של
+  // האפליקציה. מכיוון שמודל הוא א-סינכרוני, הסגירה עצמה קורית בתוך ה-then.
+  var dirty = false;
   if (txDirtyCheck) {
-    var dirty = false;
     try { dirty = txDirtyCheck(); } catch (e) { dirty = false; }
-    if (dirty && !window.confirm("יש שינויים שלא נשמרו. לצאת בלי לשמור?")) return;
   }
-  txForceCloseDrawer();
+  if (!dirty) { txForceCloseDrawer(); return; }
+  CBA.ui.confirm("מה שהוזן בטופס לא יישמר.",
+    { title: "לצאת בלי לשמור?", okText: "צא בלי לשמור", danger: true }
+  ).then(function (ok) {
+    if (ok) txForceCloseDrawer();
+  });
 }
 function txEscDrawer(e) { if (e.key === "Escape") txCloseDrawer(); }

@@ -271,7 +271,13 @@ CBA.data = (function () {
     if (!Y) { if (cb) cb({ ok: false, error: "שנה לא קיימת" }); return; }
     // בגיליון המפתח של קבוצה/מקור-הכנסה הוא השם. פותרים כאן id -> שם, כדי שגם
     // אחרי שינוי-שם השיוך יישאר עקבי בין הסעיף לרשימת הקבוצות/ההכנסות.
-    const groupName = function (id) { const g = CBA.mock.groups.find(function (x) { return x.id === id; }); return g ? g.name : (id || ""); };
+    // (2026-08-18, ממצא 4.5 בדו"ח הבדיקה) קודם שתי השורות האלה קראו את רשימת
+    // הקבוצות מ-CBA.mock.groups / getGroups(), ושתיהן נגזרות מ-*השנה הנוכחית*
+    // ולא מ-year שהתקבל כפרמטר. הסעיפים עצמם כן נקראו מהשנה הנכונה — כלומר
+    // אם המשתמש ערך סכום והחליף שנה בתוך 700 המילישניות של ההשהיה, השמירה
+    // הלכה לשנה הישנה אבל לקחה איתה את רשימת הקבוצות של השנה החדשה.
+    const yearGroups = (Y.groups && Y.groups.length) ? Y.groups : [];
+    const groupName = function (id) { const g = yearGroups.find(function (x) { return x.id === id; }); return g ? g.name : (id || ""); };
     const incName = function (id) { const s = (Y.income || []).find(function (x) { return x.id === id; }); return s ? s.name : (id || ""); };
     const cats = (Y.categories || []).map(function (c) {
       return {
@@ -308,7 +314,7 @@ CBA.data = (function () {
         tailFamilies: Number(s.tailFamilies) || 0
       };
     });
-    const groups = getGroups().map(function (g) { return g.name; });
+    const groups = yearGroups.map(function (g) { return g.name; });
     CBA.sheets.push("saveBudget", { year: year, categories: cats, income: income, groups: groups }, cb);
   }
 
@@ -478,6 +484,10 @@ CBA.data = (function () {
   function extendGymMembership(data, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.postRead("extendGymMembership", data || {}, cb);
+  }
+  function renewGymMembership(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("renewGymMembership", data || {}, cb);
   }
   function approveClubReservation(id, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
@@ -1208,6 +1218,7 @@ CBA.data = (function () {
     recordGymPayment: recordGymPayment,
     rejectGymPayment: rejectGymPayment,
     extendGymMembership: extendGymMembership,
+    renewGymMembership: renewGymMembership,
     approveClubReservation: approveClubReservation,
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,
@@ -1383,7 +1394,12 @@ CBA.committee = (function () {
     }
     list.push({ name: name, color: color || DEFAULT_COLOR });
     var rows = list.map(function (c) { return { "שם": c.name, "צבע": c.color }; });
+    // (2026-08-18, ממצא 4.4) זו הייתה הכתיבה היחידה באפליקציה בלי שום הגנה:
+    // בלי markDirty רענון רקע יכול היה לרוץ באמצע, ובלי חיווי "שומר…" הכפתור
+    // פשוט "נתקע" לרגע בלי שהמשתמש יבין מה קורה.
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("committeeCatSave");
     CBA.data.saveCommitteeCategories(rows, function (res) {
+      if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("committeeCatSave");
       if (res && res.ok) catsCache = list;
       if (cb) cb(res);
     });
@@ -1468,6 +1484,34 @@ CBA.committee = (function () {
       wrap.scrollLeft = 0;
     }
     if (toolbarHost) {
+      /* חיפוש בעץ (2026-08-19, ממצא 3.11 בדו"ח) — העץ היה "תמונה סטטית": 29
+         תפקידים היום, וזה רק יגדל, בלי שום דרך למצוא תפקיד או אדם חוץ מלסרוק
+         בעיניים. מדגיש את ההתאמות ומעמעם את השאר, וגולל לראשונה שנמצאה.
+         (הרעיון המקורי בדו"ח היה לקשר כל אדם לכרטיס התושב שלו, אבל עמודת
+         "מזהה תושב" בטאב העץ ריקה כמעט לגמרי בפועל — אז זה ייתן ערך רק אחרי
+         שהיא תמולא. חיפוש עובד כבר עכשיו, בלי תלות בנתונים.) */
+      var searchWrap = document.createElement("div");
+      searchWrap.className = "org-search";
+      searchWrap.innerHTML = '<input type="search" class="org-search__input" placeholder="חיפוש תפקיד או שם…" aria-label="חיפוש בעץ הוועד">';
+      toolbarHost.appendChild(searchWrap);
+      var searchInput = searchWrap.querySelector("input");
+      searchInput.addEventListener("input", function () {
+        var q = searchInput.value.trim();
+        var nodes = canvas.querySelectorAll(".org-tree-node");
+        if (!q) {
+          Array.prototype.forEach.call(nodes, function (n) { n.classList.remove("is-dim", "is-hit"); });
+          return;
+        }
+        var first = null;
+        Array.prototype.forEach.call(nodes, function (n) {
+          var hit = (n.textContent || "").indexOf(q) !== -1;
+          n.classList.toggle("is-hit", hit);
+          n.classList.toggle("is-dim", !hit);
+          if (hit && !first) first = n;
+        });
+        if (first && first.scrollIntoView) first.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+      });
+
       var bar = document.createElement("div");
       bar.className = "org-zoom";
       bar.innerHTML =
