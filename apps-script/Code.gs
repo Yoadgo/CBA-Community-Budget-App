@@ -4498,6 +4498,7 @@ var GYM_DEFAULT_SETTINGS = [
 /** יוצר את שלושת הטאבים אם הם חסרים. בטוח להרצה חוזרת — טאב קיים לא נגוע. */
 function ensureGymSheets_(ss) {
   var main = ss.getSheetByName(GYM_SHEET);
+  if (main) gymRepairHeaders_(main);   // ריפוי-עצמי, ר' ההערה ליד הפונקציה
   if (!main) {
     main = ss.insertSheet(GYM_SHEET);
     main.getRange(1, 1, 1, GYM_HEADERS.length).setValues([GYM_HEADERS]);
@@ -4728,12 +4729,103 @@ function gymFindRow_(sh, cols, email) {
 
 /** מוסיף שורה ריקה בגודל הכותרות ומחזיר את מספרה. appendRow דורש מערך באורך
  * תואם, ולכן לא אפשר להעביר לו [] — זו הייתה שגיאה בשלב הבנייה. */
+
+/* ---------------------------------------------------------------------------
+ *  כותב-שורה מרוכז (2026-08-19, אחרי מדידה בייצור)
+ * ---------------------------------------------------------------------------
+ *  למה זה קיים: הגרסה הראשונה כתבה כל שדה בנפרד (sh.getRange(...).setValue()).
+ *  בהגשת בקשת הרשמה זה יצא **כ-35 נסיעות רשת נפרדות** לגיליון, וההפעלה בייצור
+ *  ארכה 12.45 שניות. מבחינת התושב זה נראה כאילו כלום לא קורה, והוא עוזב את
+ *  הדף — בדיוק אותו כשל שכבר נמצא פעם אחת ב-submitReceipt.
+ *
+ *  הפתרון: אוספים את כל השינויים במערך בזיכרון וכותבים **פעם אחת** ב-setValues.
+ *  35 נסיעות הופכות לאחת. אותה סמנטיקה בדיוק, רק מהיר בסדר גודל.
+ *
+ *  שימוש:
+ *      var w = gymRowWriter_(sh, rowIndex);
+ *      w.set('סטטוס', 'פעיל');
+ *      w.flush();            // בלי זה שום דבר לא נכתב!
+ */
+function gymRowWriter_(sh, rowIndex) {
+  var lastCol = sh.getLastColumn();
+  var cols = gymCols_(sh);
+  var values = sh.getRange(rowIndex, 1, 1, lastCol).getValues()[0];
+  var dirty = false;
+  return {
+    cols: cols,
+    has: function (name) { return !!cols[name]; },
+    set: function (name, val) {
+      if (!cols[name]) return;
+      values[cols[name] - 1] = val;
+      dirty = true;
+    },
+    get: function (name) { return cols[name] ? values[cols[name] - 1] : ''; },
+    flush: function () {
+      if (dirty) sh.getRange(rowIndex, 1, 1, lastCol).setValues([values]);
+      dirty = false;
+    }
+  };
+}
+
+
+
+/* ⚠ באג אמיתי שנתפס בייצור (2026-08-19) — לקרוא לפני שנוגעים כאן.
+ *
+ *  הגרסה הקודמת עשתה sh.appendRow(['','',...]) ואז החזירה sh.getLastRow().
+ *  הבעיה: שורה של מחרוזות ריקות אינה "תוכן" מבחינת Sheets — appendRow לא
+ *  מוסיף שורה בפועל, ו-getLastRow() ממשיך להחזיר את שורת **הכותרות** (1).
+ *  התוצאה: כל הבקשה הראשונה נכתבה לשורה 1 ודרסה את הכותרות, ומאותו רגע כל
+ *  קריאה מהטאב נשברה (gymCols_ מיפה שמות שכבר לא היו שם) — התושב "לא ראה
+ *  כלום" למרות שהנתונים נשמרו.
+ *
+ *  התיקון: לא לגעת ב-appendRow בכלל. פשוט לחשב את השורה הבאה אחרי השורה
+ *  האחרונה שיש בה תוכן, ולוודא שיש מספיק שורות בגריד. הכתיבה עצמה
+ *  (gymRowWriter_.flush) יוצרת את השורה. */
 function gymAppendBlankRow_(sh) {
-  var n = sh.getLastColumn();
-  var blank = [];
-  for (var i = 0; i < n; i++) blank.push('');
-  sh.appendRow(blank);
-  return sh.getLastRow();
+  var target = Math.max(sh.getLastRow(), 1) + 1;
+  var maxRows = sh.getMaxRows();
+  if (maxRows < target) sh.insertRowsAfter(maxRows, target - maxRows);
+  return target;
+}
+
+/* ריפוי-עצמי לשורת הכותרות (2026-08-19). רץ בכל ensureGymSheets_, כלומר בכל
+ * קריאה למודול — ולכן גיליון שנפגע מהבאג למעלה מתקן את עצמו בלי התערבות.
+ *
+ * זיהוי: אם A1 אינו 'מזהה', שורת הכותרות נדרסה.
+ * תיקון: מכניסים שורת כותרות נקייה מעל, ואז מנקים משורות הנתונים תאים
+ * שהערך שבהם זהה לשם הכותרת של אותה עמודה — אלה בדיוק השאריות של הדריסה. */
+function gymRepairHeaders_(sh) {
+  if (sh.getLastRow() < 1) return false;
+  var width = Math.max(sh.getLastColumn(), GYM_HEADERS.length);
+  var first = sh.getRange(1, 1, 1, width).getValues()[0];
+  if (String(first[0]).trim() === GYM_HEADERS[0]) return false;   // תקין
+
+  sh.insertRowBefore(1);
+  sh.getRange(1, 1, 1, GYM_HEADERS.length).setValues([GYM_HEADERS]);
+  sh.getRange(1, 1, 1, GYM_HEADERS.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+
+  // ניקוי שאריות הדריסה בשורות הנתונים שמתחת
+  var lastRow = sh.getLastRow();
+  if (lastRow >= 2) {
+    var n = lastRow - 1;
+    var rng = sh.getRange(2, 1, n, GYM_HEADERS.length);
+    var vals = rng.getValues();
+    var changed = false;
+    for (var r = 0; r < vals.length; r++) {
+      for (var c = 0; c < GYM_HEADERS.length; c++) {
+        if (String(vals[r][c]).trim() === GYM_HEADERS[c]) { vals[r][c] = ''; changed = true; }
+      }
+    }
+    if (changed) rng.setValues(vals);
+    // עמודות שמעבר לכותרות הקבועות (עמודות השאלון) איבדו את הכותרת שלהן
+    // בדריסה, ולכן הערכים שם יתומים. מנקים אותן; ensureGymQuestionCols_
+    // ייצור עמודות שאלון נקיות מיד אחרי.
+    var extra = sh.getLastColumn() - GYM_HEADERS.length;
+    if (extra > 0) sh.getRange(1, GYM_HEADERS.length + 1, lastRow, extra).clearContent();
+  }
+  Logger.log('gymRepairHeaders_: שורת הכותרות שוחזרה');
+  return true;
 }
 
 function nextGymId_(sh, cols) {
@@ -5035,8 +5127,10 @@ function submitGymApplication_(ss, body) {
       // בכתיבות ממוקדות לפי שם עמודה — עמיד לשינוי סדר עמודות בגיליון.
       rowIndex = gymAppendBlankRow_(sh);
     }
-    cols = gymCols_(sh);           // ריענון — ensureGymQuestionCols_ אולי הוסיף עמודות
-    function put(name, val) { if (cols[name]) sh.getRange(rowIndex, cols[name]).setValue(val); }
+    // כתיבה מרוכזת — כל השדות נאספים בזיכרון ונכתבים בנסיעה אחת (ר' gymRowWriter_)
+    var w = gymRowWriter_(sh, rowIndex);
+    cols = w.cols;
+    function put(name, val) { w.set(name, val); }
 
     put('מזהה', id);
     put('מזהה קבוע', me.found ? me.familyId : '');
@@ -5060,9 +5154,9 @@ function submitGymApplication_(ss, body) {
 
     // תשובות השאלון -> עמודות. הכותרת היא ה"כותרת" הקצרה של השאלה.
     for (var q2 = 0; q2 < activeQs.length; q2++) {
-      var lbl = activeQs[q2].label;
-      if (cols[lbl]) sh.getRange(rowIndex, cols[lbl]).setValue(String(answers[activeQs[q2].id]).trim());
+      put(activeQs[q2].label, String(answers[activeQs[q2].id]).trim());
     }
+    w.flush();   // ← הכתיבה היחידה לגיליון בכל הפונקציה
 
     gymWriteResidentId_(ss, me, body.idNumber);
     gymLog_(ss, id, isCompletion ? 'השלמת הצהרה' : 'הגשת בקשה', {
@@ -5134,8 +5228,9 @@ function createGymMembership_(ss, body) {
     var now = new Date();
     var id = nextGymId_(sh, cols);
     var rowIndex = gymAppendBlankRow_(sh);
-    cols = gymCols_(sh);
-    function put(name, val) { if (cols[name]) sh.getRange(rowIndex, cols[name]).setValue(val); }
+    var w = gymRowWriter_(sh, rowIndex);
+    cols = w.cols;
+    function put(name, val) { w.set(name, val); }
 
     put('מזהה', id);
     put('מזהה קבוע', me.familyId || '');
@@ -5157,6 +5252,8 @@ function createGymMembership_(ss, body) {
       put('תאריך חתימה', body.declarationDate || now);
       put('קישור חתימה', 'הצהרה נמסרה בנייר');
     }
+
+    w.flush();
 
     gymWriteResidentId_(ss, me, body.idNumber);
     gymLog_(ss, id, 'הקמה ידנית', {
@@ -5332,10 +5429,12 @@ function gymPaymentSync_(ss, id) {
   else if (diff < 0) label = 'חוסר ' + Math.round(Math.abs(diff)) + ' חודשים';
   else label = 'עודף ' + Math.round(diff) + ' חודשים';
 
-  if (cols['סה"כ שולם'])       sh.getRange(row, cols['סה"כ שולם']).setValue(totalPaid || '');
-  if (cols['תשלום אחרון'])     sh.getRange(row, cols['תשלום אחרון']).setValue(lastPaid);
-  if (cols['חודשים ששולמו'])   sh.getRange(row, cols['חודשים ששולמו']).setValue(monthly ? Math.round(paidMonths * 10) / 10 : '');
-  if (cols['מצב סנכרון'])      sh.getRange(row, cols['מצב סנכרון']).setValue(label);
+  var w = gymRowWriter_(sh, row);
+  w.set('סה"כ שולם', totalPaid || '');
+  w.set('תשלום אחרון', lastPaid);
+  w.set('חודשים ששולמו', monthly ? Math.round(paidMonths * 10) / 10 : '');
+  w.set('מצב סנכרון', label);
+  w.flush();
 
   return {
     ok: true, totalPaid: totalPaid, monthly: monthly,
@@ -5423,13 +5522,15 @@ function reportGymPayment_(ss, body) {
         'אישור תשלום ' + id);
     }
 
-    function put(name, val) { if (cols[name]) sh.getRange(row, cols[name]).setValue(val); }
+    var w = gymRowWriter_(sh, row);
+    function put(name, val) { w.set(name, val); }
     put('סטטוס', GYM_ST_VERIFY);
     put('סטטוס תשלום', 'דווח ע"י תושב');
     put('אמצעי תשלום', body.method || 'פייבוקס');
     put('אסמכתא', body.reference || '');
     put('דווח בתאריך', body.date || new Date());
-    if (proofUrl && cols['קישור אישור']) sh.getRange(row, cols['קישור אישור']).setValue(proofUrl);
+    if (proofUrl) put('קישור אישור', proofUrl);
+    w.flush();
 
     // לא נכתב ליומן כ"תשלום"! רק אימות של מנהל יוצר שורת תשלום אמיתית —
     // אחרת דיווח שלא אומת היה משפיע על חישוב הסנכרון.
@@ -5478,7 +5579,8 @@ function gymActivate_(ss, body, isManual) {
     var start = gymToDate_(cols['תאריך התחלה'] ? sh.getRange(row, cols['תאריך התחלה']).getValue() : '');
     if (!start) start = new Date();
 
-    function put(name, val) { if (cols[name]) sh.getRange(row, cols[name]).setValue(val); }
+    var w = gymRowWriter_(sh, row);
+    function put(name, val) { w.set(name, val); }
     put('תאריך התחלה', start);
     put('בתוקף עד', end);
     put('סטטוס', GYM_ST_ACTIVE);
@@ -5487,7 +5589,8 @@ function gymActivate_(ss, body, isManual) {
     put('אסמכתא', body.reference || '');
     put('אומת בתאריך', new Date());
     put('אומת ע"י', body._email || '');
-    if (body.note && cols['הערות מנהל']) sh.getRange(row, cols['הערות מנהל']).setValue(body.note);
+    if (body.note) put('הערות מנהל', body.note);
+    w.flush();
 
     var validLabel = Utilities.formatDate(end, Session.getScriptTimeZone(), 'MM/yyyy');
     gymLog_(ss, id, 'תשלום', {
@@ -5526,10 +5629,12 @@ function rejectGymPayment_(ss, body) {
     var row = gymRowById_(sh, cols, id);
     if (!row) return { ok: false, error: 'המנוי לא נמצא' };
 
-    function put(name, val) { if (cols[name]) sh.getRange(row, cols[name]).setValue(val); }
+    var w = gymRowWriter_(sh, row);
+    function put(name, val) { w.set(name, val); }
     put('סטטוס', GYM_ST_PAYMENT);
     put('סטטוס תשלום', 'לא אותר');
-    if (body.note && cols['הערות מנהל']) sh.getRange(row, cols['הערות מנהל']).setValue(body.note);
+    if (body.note) put('הערות מנהל', body.note);
+    w.flush();
 
     gymLog_(ss, id, 'תשלום לא אותר', { by: body._email || '', note: body.note || '' });
 
@@ -5565,10 +5670,11 @@ function extendGymMembership_(ss, body) {
     var start = gymToDate_(cols['תאריך התחלה'] ? sh.getRange(row, cols['תאריך התחלה']).getValue() : '');
     if (!start) { start = new Date(); if (cols['תאריך התחלה']) sh.getRange(row, cols['תאריך התחלה']).setValue(start); }
 
-    sh.getRange(row, cols['בתוקף עד']).setValue(end);
+    var w = gymRowWriter_(sh, row);
+    w.set('בתוקף עד', end);
     // הארכה מחזירה לפעיל מנוי שפג — זו בדיוק המטרה השכיחה של הפעולה
-    var cur = String(sh.getRange(row, cols['סטטוס']).getValue()).trim();
-    if (cur === GYM_ST_EXPIRED) sh.getRange(row, cols['סטטוס']).setValue(GYM_ST_ACTIVE);
+    if (String(w.get('סטטוס')).trim() === GYM_ST_EXPIRED) w.set('סטטוס', GYM_ST_ACTIVE);
+    w.flush();
 
     var validLabel = Utilities.formatDate(end, Session.getScriptTimeZone(), 'MM/yyyy');
     gymLog_(ss, id, 'הארכת תוקף', {
@@ -5647,8 +5753,9 @@ function renewGymMembership_(ss, body) {
     var newId = nextGymId_(sh, cols);
     sh.appendRow(prevValues);
     var rowIndex = sh.getLastRow();
-    cols = gymCols_(sh);
-    function put(name, val) { if (cols[name]) sh.getRange(rowIndex, cols[name]).setValue(val); }
+    var w = gymRowWriter_(sh, rowIndex);
+    cols = w.cols;
+    function put(name, val) { w.set(name, val); }
 
     put('מזהה', newId);
     put('מסלול', plan.name);
@@ -5672,6 +5779,7 @@ function renewGymMembership_(ss, body) {
     put('מנוי קודם', prevId);
     put('דגלי תזכורת', '');
     put('מזהה קבוע', me.found ? me.familyId : (cols['מזהה קבוע'] ? prevValues[cols['מזהה קבוע'] - 1] : ''));
+    w.flush();
 
     gymLog_(ss, newId, 'חידוש מנוי', {
       by: email, note: 'חידוש של ' + prevId + ' · הצהרה מ-' +

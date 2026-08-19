@@ -173,6 +173,68 @@ CBA.screens = CBA.screens || {};
     );
   }
 
+  /* ==== כרטיס "מכון כושר" בתוך "הבקשות שלי" (2026-08-19) ====
+     נוסף אחרי שיועד הגיש בקשה אמיתית ואז חיפש אותה כאן — וזה הגיוני: "הבקשות
+     שלי" הוא המקום שבו תושב מצפה למצוא כל בקשה ששלח, לא רק החזרים. המסך
+     המלא של המכון נשאר במקומו; זה קיצור-דרך שמראה סטטוס ומוביל אליו.
+
+     המצב נשמר במשתנה מודול כדי שהכרטיס יופיע מיד בציור הבא (render נקרא גם
+     ברענון רקע), ומתרענן ברקע בלי להבהב. */
+  var gymSnap = null;
+
+  var GYM_TONE = {
+    "פעיל": "ok", "פג תוקף": "muted", "מוקפא": "muted",
+    "ממתין לאישור רופא": "danger", "נדחה": "danger", "בוטל": "danger"
+  };
+  var GYM_NEXT = {
+    "ממתין להצהרה": "נשאר למלא הצהרת בריאות וחתימה.",
+    "ממתין לאישור רופא": "נדרשת תעודה רפואית מרופא.",
+    "ממתין לאישור": "הבקשה ממתינה לאישור מנהל/ת המכון.",
+    "ממתין לתשלום": "נשאר להסדיר את התשלום.",
+    "ממתין לאימות": "התשלום דווח וממתין לאימות הוועד.",
+    "פעיל": "המנוי בתוקף. קוד הכניסה מחכה במסך המכון.",
+    "פג תוקף": "המנוי הסתיים — אפשר לחדש."
+  };
+
+  function gymCardHTML() {
+    if (!gymSnap || !gymSnap.membership) return "";
+    var m = gymSnap.membership;
+    var status = String(m["סטטוס"] || "").trim();
+    if (!status) return "";
+    var tone = GYM_TONE[status] || "warn";
+    return '<div class="rq-section-title">מכון כושר</div>' +
+           '<div class="rq-list"><button type="button" class="gym-mini" data-goto-gym>' +
+             '<div class="gym-mini__main">' +
+               '<div class="gym-mini__title">בקשת מנוי ' + CBA.esc(m["מזהה"] || "") + '</div>' +
+               '<div class="gym-mini__sub">' + CBA.esc(GYM_NEXT[status] || "") + '</div>' +
+               (m["בתוקף עד"] ? '<div class="gym-mini__sub">בתוקף עד ' + CBA.esc(m["בתוקף עד"]) + '</div>' : "") +
+             '</div>' +
+             '<span class="gym-pill gym-pill--' + tone + '">' + CBA.esc(status) + '</span>' +
+           '</button></div>';
+  }
+
+  /* מרענן את הכרטיס במקום, בלי לצייר מחדש את כל המסך — כך שגלילה ומיקוד
+     נשמרים, וגם אין הבהוב אם התשובה זהה למה שכבר מוצג. */
+  function refreshGymCard(container) {
+    if (!(CBA.data && CBA.data.getGymMy)) return;
+    CBA.data.getGymMy(function (res) {
+      if (!res || !res.ok) return;
+      var before = gymCardHTML();
+      gymSnap = res;
+      var after = gymCardHTML();
+      if (before === after) return;
+      var slot = container.querySelector("#rq-gym");
+      if (!slot) return;
+      slot.innerHTML = after;
+      bindGymCard(slot);
+    });
+  }
+
+  function bindGymCard(root) {
+    var btn = root.querySelector("[data-goto-gym]");
+    if (btn) btn.addEventListener("click", function () { CBA.navigate("resGym"); });
+  }
+
   CBA.screens.resRequests = {
     render: function (container) {
       // שימור מיקום גלילה (אותו פתרון כמו expenses.js/residents.js/clubAdmin.js) —
@@ -219,10 +281,14 @@ CBA.screens = CBA.screens || {};
           '<div class="stat stat--ok"><div class="stat__label">שולמו</div><div class="stat__value">' + CBA.formatILS(counts.paid) + '</div></div>' +
         '</div>' +
         '<button class="btn-primary rs-cta" data-goto="resSubmit">' + plusIcon + ' הגשת בקשה חדשה</button>' +
+        '<div id="rq-gym">' + gymCardHTML() + '</div>' +
         listHTML;
 
       var cta = container.querySelector("[data-goto]");
       if (cta) cta.addEventListener("click", function () { CBA.navigate("resSubmit"); });
+      var gymSlot = container.querySelector("#rq-gym");
+      if (gymSlot) bindGymCard(gymSlot);
+      refreshGymCard(container);
       if (rqWinScrollY) window.scrollTo(0, rqWinScrollY);
     }
   };

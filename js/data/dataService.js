@@ -448,9 +448,14 @@ CBA.data = (function () {
   // כתיבות — עוברות ב-postRead כדי שנקבל את תשובת השרת בחזרה (הצלחה/שגיאה),
   // בדיוק כמו submitReceipt. שליחה "עיוורת" לא מתאימה כאן: התושב חייב לדעת
   // מיד אם הבקשה נקלטה, ומה הסטטוס שיצא לו.
-  function submitGymApplication(data, cb) {
+  // postReadProgress ולא postRead, משתי סיבות שנמדדו בייצור (2026-08-19):
+  // (א) הבקשה נושאת תמונת חתימה ב-Base64 והכתיבה בשרת אורכת כמה שניות —
+  //     בלי אחוז התקדמות אמיתי המשתמש חושב שנתקע ועוזב את הדף;
+  // (ב) ל-postReadProgress יש כבר הגנת beforeunload, שנוספה בדיוק אחרי
+  //     שהתגלה ש-submitReceipt "נעלם" כשעוזבים את הדף באמצע שליחה.
+  function submitGymApplication(data, cb, onProgress) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
-    CBA.sheets.postRead("submitGymApplication", data || {}, cb);
+    CBA.sheets.postReadProgress("submitGymApplication", data || {}, onProgress || function () {}, cb);
   }
   function createGymMembership(data, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
@@ -465,9 +470,10 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.postRead("scanGymPayment", { dataBase64: dataBase64, mimeType: mimeType }, cb);
   }
-  function reportGymPayment(data, cb) {
+  function reportGymPayment(data, cb, onProgress) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
-    CBA.sheets.postRead("reportGymPayment", data || {}, cb);
+    // גם כאן יכולה להיות תמונה (צילום אישור התשלום) — אותו נימוק בדיוק
+    CBA.sheets.postReadProgress("reportGymPayment", data || {}, onProgress || function () {}, cb);
   }
   function confirmGymPayment(data, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }

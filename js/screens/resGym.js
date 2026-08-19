@@ -531,11 +531,22 @@ CBA.screens = CBA.screens || {};
     return a;
   }
 
+  /* השליחה לוקחת כמה שניות: יש כאן תמונת חתימה שנשמרת בדרייב, כתיבה לגיליון,
+     ושליחת מיילים. בגרסה הראשונה הכפתור פשוט אמר "שולח…" בלי לזוז, וזה נראה
+     תקוע — עד כדי כך שהמשתמש הראשון בייצור חשב שכלום לא קרה (הבקשה דווקא
+     נשמרה). לכן: אחוז התקדמות אמיתי בזמן ההעלאה, ואז "מעבד…" בזמן שהשרת עובד. */
   function submit(container, el) {
     var btn = el.querySelector("[data-gym-next]");
     btn.disabled = true;
     btn.textContent = "שולח…";
+    var note = el.querySelector(".gym-wiz__foot");
+    var prog = document.createElement("div");
+    prog.className = "gym-progress";
+    prog.textContent = "מעלה את הטופס…";
+    if (note) note.insertBefore(prog, note.firstChild);
+
     CBA.data.submitGymApplication(st.wizard.data, function (res) {
+      if (prog.parentNode) prog.parentNode.removeChild(prog);
       if (!res || !res.ok) {
         btn.disabled = false;
         btn.textContent = "שליחת הבקשה";
@@ -549,6 +560,11 @@ CBA.screens = CBA.screens || {};
         ? "הבקשה נשלחה. מכיוון שסימנת “כן” באחת השאלות, נדרשת תעודה רפואית — שלחנו לך מייל עם הפרטים."
         : "הבקשה נשלחה בהצלחה. שלחנו לך מייל אישור.");
       load(container, function () { draw(container); });
+    }, function (pct) {
+      // pct מגיע מ-XMLHttpRequest ומשקף העלאה אמיתית. כשהוא מגיע ל-100
+      // הכדור עובר לשרת, ושם עוד נשארות כמה שניות — ולכן הטקסט משתנה.
+      prog.textContent = pct < 100 ? ("מעלה את הטופס… " + pct + "%")
+                                   : "הבקשה נשלחה, מעבד בשרת…";
     });
   }
 

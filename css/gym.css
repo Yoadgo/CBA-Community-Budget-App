@@ -296,3 +296,23 @@
 @media (max-width: 720px) {
   .gym-code__value { font-size: 36px; }
 }
+
+/* חיווי התקדמות בשליחה — נוסף אחרי שהתברר בייצור ש-12 שניות של כפתור
+   שלא זז נראות כמו תקלה, גם כשהכול עובד. */
+.gym-progress {
+  font-size: 12.5px; color: var(--text-soft);
+  margin-inline-end: auto; align-self: center;
+}
+
+/* --- כרטיס מצב המנוי בתוך "הבקשות שלי" --- */
+.gym-mini {
+  width: 100%; display: flex; align-items: center; gap: 12px; text-align: start;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+  font-family: inherit; cursor: pointer;
+  transition: border-color var(--t), background var(--t);
+}
+.gym-mini:hover { border-color: var(--action); background: var(--hover); }
+.gym-mini__main  { min-width: 0; flex: 1; }
+.gym-mini__title { font-size: 14.5px; font-weight: 600; color: var(--text); }
+.gym-mini__sub   { font-size: 13px; color: var(--text-soft); margin-top: 3px; }
