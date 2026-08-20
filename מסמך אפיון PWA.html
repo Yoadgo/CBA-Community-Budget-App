@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>אפיון PWA — CBA ניהול קהילה</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111827; --ink2:#374151; --mut:#6b7280; --line:#e5e7eb;
+    --bg:#f7f8fa; --card:#ffffff; --ok:#059669; --warn:#d97706; --bad:#dc2626;
+    --accent:#111827;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink2);font-family:Heebo,system-ui,sans-serif;line-height:1.7;font-size:16px}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+  header.doc{background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px 30px;margin-bottom:26px}
+  header.doc h1{margin:0 0 6px;font-size:30px;font-weight:800;color:var(--ink)}
+  header.doc p{margin:0;color:var(--mut)}
+  .meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .chip{font-size:13px;font-weight:600;padding:5px 12px;border-radius:999px;background:#f3f4f6;color:var(--ink2)}
+  .chip.ok{background:#ecfdf5;color:var(--ok)} .chip.warn{background:#fffbeb;color:var(--warn)}
+  section{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px 28px;margin-bottom:18px}
+  h2{font-size:21px;font-weight:800;color:var(--ink);margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-flex;width:30px;height:30px;border-radius:9px;background:var(--ink);color:#fff;font-size:15px;align-items:center;justify-content:center;flex:none}
+  h3{font-size:17px;font-weight:700;color:var(--ink);margin:22px 0 6px}
+  .lead{color:var(--mut);margin:0 0 14px;padding-right:40px}
+  ul,ol{margin:8px 0;padding-inline-start:22px}
+  li{margin:5px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:15px}
+  th,td{text-align:right;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f9fafb;font-weight:700;color:var(--ink);font-size:14px}
+  code{background:#f3f4f6;padding:2px 6px;border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:13px;direction:ltr;display:inline-block}
+  pre{background:#0f172a;color:#e2e8f0;padding:16px 18px;border-radius:12px;overflow:auto;direction:ltr;text-align:left;font-size:13px;line-height:1.6}
+  pre code{background:none;color:inherit;padding:0}
+  .note{border-inline-start:4px solid var(--ink);background:#f9fafb;padding:12px 16px;border-radius:10px;margin:12px 0}
+  .note.warn{border-color:var(--warn);background:#fffbeb}
+  .note.bad{border-color:var(--bad);background:#fef2f2}
+  .note.ok{border-color:var(--ok);background:#ecfdf5}
+  .note b{color:var(--ink)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:14px 0}
+  .tile{border:1px solid var(--line);border-radius:14px;padding:16px 18px;background:#fff}
+  .tile h4{margin:0 0 6px;font-size:15px;font-weight:700;color:var(--ink)}
+  .tile p{margin:0;font-size:14px;color:var(--mut)}
+  .pill{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .pill.new{background:#eff6ff;color:#1d4ed8}
+  .pill.have{background:#ecfdf5;color:var(--ok)}
+  .pill.risk{background:#fef2f2;color:var(--bad)}
+  .q{background:#fff;border:1px dashed #d1d5db;border-radius:12px;padding:14px 18px;margin:10px 0}
+  .q b{color:var(--ink)}
+  footer{color:var(--mut);font-size:14px;text-align:center;padding-top:10px}
+  @media(max-width:640px){.wrap{padding:18px 12px 60px}section{padding:18px 16px}.lead{padding-right:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>אפיון: הפיכת CBA לאפליקציה שנשמרת על המסך (PWA)</h1>
+  <p>מסמך אפיון לדיון והחלטה — לפני כתיבת קוד. גרסה 1.0, 20 באוגוסט 2026.</p>
+  <div class="meta">
+    <span class="chip">נבדק מול הקוד החי בתיקייה המקומית</span>
+    <span class="chip ok">רמת אופליין: התקנה + צפייה במטמון</span>
+    <span class="chip ok">עדכון גרסה: רענון מיידי + טוסט</span>
+    <span class="chip warn">Push: מאופיין לעומק, טעון החלטה</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="n">0</span> מה בעצם משתנה — בשפה פשוטה</h2>
+  <p class="lead">מה תושב יראה אחרי שנעשה את זה, ומה לא ישתנה בכלל.</p>
+  <div class="grid">
+    <div class="tile"><h4>אייקון על המסך</h4><p>התושב נכנס לאתר פעם אחת, לוחץ "הוסף למסך הבית", ומאז יש לו אייקון של השיכון בין האפליקציות. לחיצה עליו פותחת ישר את CBA.</p></div>
+    <div class="tile"><h4>בלי סרגל הדפדפן</h4><p>נפתח במסך מלא — בלי שורת הכתובת, בלי כפתורי הדפדפן. נראה ומרגיש כמו אפליקציה אמיתית.</p></div>
+    <div class="tile"><h4>נפתח מיד, גם בלי רשת</h4><p>במקום מסך לבן של 2–3 שניות, האפליקציה מופיעה כמעט מיידית ומציגה את הנתונים האחרונים שנשמרו במכשיר.</p></div>
+    <div class="tile"><h4>מה לא משתנה</h4><p>אין חנות אפליקציות, אין אישור של אפל/גוגל, אין קוד חדש בשפה אחרת. אותה אפליקציה בדיוק — עם שני קבצים קטנים שנוספים לה.</p></div>
+  </div>
+  <div class="note"><b>המחיר:</b> PWA מוסיף שכבה אחת חדשה בין הדפדפן לאפליקציה (Service Worker). היא חזקה — ואם היא לא מוגדרת נכון, היא יכולה "להקפיא" גרסה ישנה אצל תושבים ולגרום לך לחשוב שדיפלוי לא עבד. רוב המסמך הזה עוסק בדיוק במניעת הבעיה הזו.</div>
+</section>
+
+<section>
+  <h2><span class="n">1</span> מה כבר קיים בקוד — ומה באמת חסר</h2>
+  <p class="lead">נבדק בפועל בתיקייה המקומית (לא מהזיכרון). ההפתעה הטובה: חצי מהעבודה כבר עשויה.</p>
+  <table>
+    <tr><th style="width:26%">רכיב</th><th style="width:16%">מצב</th><th>פירוט</th></tr>
+    <tr><td>מטמון נתונים מקומי</td><td><span class="pill have">קיים</span></td><td><code>cba_data_cache</code> ב-<code>js/data/sheets.js</code> — שיטת stale-while-revalidate: מציג מיד את המטמון, מרענן ברקע. זה בדיוק מה שנחוץ לאופליין, ולא צריך לגעת בו.</td></tr>
+    <tr><td>תור שמירות שנכשלו</td><td><span class="pill have">קיים</span></td><td><code>cba_pending_writes_v1</code> — עד 3 ניסיונות, מנסה שוב בחזרה לרשת/לטאב, לא מוחק בשקט. בסיס מצוין לכתיבה אופליין.</td></tr>
+    <tr><td>מושב מתמשך 12 שעות</td><td><span class="pill have">קיים</span></td><td><code>cba_session_v2</code> ב-<code>js/app.js</code> — מונע הבזק של מסך כניסה בכל פתיחה. חשוב במיוחד באפליקציה מותקנת.</td></tr>
+    <tr><td>זיכרון מסך + שנה אחרונים</td><td><span class="pill have">קיים</span></td><td><code>cba_last_route_v1</code> — פתיחה מהאייקון תחזיר אותך למקום שבו היית.</td></tr>
+    <tr><td>Cache-busting ידני</td><td><span class="pill have">קיים</span></td><td>כל 28 קבצי ה-JS/CSS נטענים עם <code>?v=20260820b</code>. זה יהפוך למקור האמת גם עבור ה-Service Worker (ר' סעיף 4).</td></tr>
+    <tr><td>manifest.webmanifest</td><td><span class="pill new">חסר</span></td><td>הקובץ שאומר לטלפון "אני אפליקציה": שם, אייקון, צבע, מסך מלא, כיוון RTL.</td></tr>
+    <tr><td>service-worker.js</td><td><span class="pill new">חסר</span></td><td>הקובץ שמאחסן את קבצי האפליקציה במכשיר ומגיש אותם גם בלי רשת.</td></tr>
+    <tr><td>אייקונים</td><td><span class="pill new">חסר</span></td><td>יש <code>סמל השיכון.jpg</code> בגודל 856×949. צריך לייצר ממנו סט PNG מרובע (ר' סעיף 3).</td></tr>
+    <tr><td>תגיות meta לנייד</td><td><span class="pill new">חסר</span></td><td>אין <code>theme-color</code>, אין <code>apple-touch-icon</code>. בלעדיהן ה-iPhone יראה אייקון מכוער של צילום מסך.</td></tr>
+  </table>
+  <div class="note ok"><b>מסקנה:</b> אין צורך לשנות שום מסך קיים, שום לוגיקת נתונים ושום קוד ב-Apps Script בשלב א'. מוסיפים 3 קבצים חדשים + כ-12 שורות ב-<code>index.html</code>.</div>
+</section>
+
+<section>
+  <h2><span class="n">2</span> קבצים חדשים — מה כל אחד עושה</h2>
+  <p class="lead">שלושה קבצים בלבד. אף אחד מהם לא נוגע בנתונים, בהרשאות או בעיצוב.</p>
+
+  <h3>א. <code>manifest.webmanifest</code> — תעודת הזהות של האפליקציה</h3>
+  <pre><code>{
+  "name": "ניהול קהילה",
+  "short_name": "הקהילה",
+  "description": "ניהול תקציב, מועדון, מכון כושר ושירותים לתושבי השיכון",
+  "start_url": "/CBA-Community-Budget-App/?src=pwa",
+  "scope": "/CBA-Community-Budget-App/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "he",
+  "background_color": "#f7f8fa",
+  "theme_color": "#111827",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512",
+      "type": "image/png", "purpose": "maskable" }
+  ]
+}</code></pre>
+  <div class="note warn"><b>קריטי — הנתיב:</b> האתר יושב תחת <code>yoadgo.github.io/CBA-Community-Budget-App/</code> ולא בשורש הדומיין. אם <code>scope</code> ו-<code>start_url</code> לא יכללו את שם הריפו, ההתקנה פשוט לא תעבוד — הדפדפן יסרב בשקט. זו הטעות מספר 1 ב-PWA על GitHub Pages.</div>
+  <p><code>?src=pwa</code> ב-<code>start_url</code> מאפשר לנו בעתיד למדוד כמה מהכניסות מגיעות מהאפליקציה המותקנת — בלי שום כלי מדידה חיצוני.</p>
+
+  <h3>ב. <code>service-worker.js</code> — הזיכרון של האפליקציה</h3>
+  <p>קובץ אחד, כ-90 שורות, בלי ספריות. שלוש משימות בלבד:</p>
+  <ol>
+    <li><b>התקנה:</b> מוריד ושומר את "שלד האפליקציה" — <code>index.html</code>, 6 קבצי CSS, 21 קבצי JS, האייקונים. סה"כ כ-1.2MB.</li>
+    <li><b>הגשה:</b> כשמבקשים קובץ מהאתר — מגיש אותו מהמטמון מיידית (מהיר, עובד בלי רשת).</li>
+    <li><b>ניקוי:</b> כשמגיעה גרסה חדשה — מוחק את המטמון הישן לגמרי.</li>
+  </ol>
+
+  <h3>ג. <code>js/pwa.js</code> — החיבור לאפליקציה</h3>
+  <p>הקובץ היחיד שהמשתמש "מרגיש". אחראי על: רישום ה-Service Worker, זיהוי גרסה חדשה והצגת הטוסט, כפתור "התקנה" מותאם, וחיווי "אתם במצב לא מקוון". משתמש ב-<code>CBA.ui</code> הקיים (מ-<code>js/ui/dialog.js</code>) — בלי להמציא רכיב חדש.</p>
+</section>
+
+<section>
+  <h2><span class="n">3</span> האייקון</h2>
+  <p class="lead">מ<code>סמל השיכון.jpg</code> (856×949) לסט מלא. בחרת בסמל השיכון — הנה מה שצריך לדעת עליו.</p>
+  <table>
+    <tr><th>קובץ</th><th>גודל</th><th>לְמה</th></tr>
+    <tr><td><code>icons/icon-192.png</code></td><td>192×192</td><td>אנדרואיד — אייקון רגיל</td></tr>
+    <tr><td><code>icons/icon-512.png</code></td><td>512×512</td><td>מסך פתיחה (Splash) באנדרואיד</td></tr>
+    <tr><td><code>icons/icon-maskable-512.png</code></td><td>512×512</td><td>אנדרואיד גוזר עיגול/ריבוע-מעוגל — צריך "שוליים בטוחים" של 20% מסביב</td></tr>
+    <tr><td><code>icons/apple-touch-icon.png</code></td><td>180×180</td><td>iPhone/iPad — <b>בלי שקיפות ובלי פינות מעוגלות</b>, אפל מעגלת בעצמה</td></tr>
+    <tr><td><code>icons/icon-1024.png</code></td><td>1024×1024</td><td>מסך פתיחה ב-iOS ורזרבה לעתיד</td></tr>
+  </table>
+  <div class="note warn"><b>נקודה לבדיקה ויזואלית:</b> הסמל הוא תמונה מלבנית (856×949) ועגולה-בערך בתוכן. כשגוזרים אותו לעיגול אנדרואידי חלקים ממנו עלולים להיחתך. ההצעה שלי: להניח את הסמל <b>על רקע לבן מרובע</b> עם ריווח נדיב מסביב — כך הוא נשאר שלם בכל צורת גזירה ומשתלב עם שפת "השטח הלבן הנדיב" של האפליקציה. אשלח לך תצוגה מקדימה של האייקון בכל הצורות לפני שמשלבים.</div>
+</section>
+
+<section>
+  <h2><span class="n">4</span> אסטרטגיית המטמון — הלב של האפיון</h2>
+  <p class="lead">מה נשמר במכשיר ומה לעולם לא. כאן נקבע אם המערכת תהיה אמינה או תהפוך לסיוט.</p>
+  <table>
+    <tr><th style="width:30%">סוג בקשה</th><th style="width:22%">התנהגות</th><th>למה דווקא כך</th></tr>
+    <tr><td>קבצי JS/CSS (עם <code>?v=</code>)</td><td><b>מטמון קודם</b></td><td>הכתובת כוללת את מספר הגרסה, אז קובץ במטמון הוא תמיד הגרסה הנכונה. מהיר מיידי, אפס סיכון לגרסה ישנה.</td></tr>
+    <tr><td><code>index.html</code></td><td><b>רשת קודם,<br>מטמון כגיבוי</b></td><td>זה הקובץ היחיד <u>בלי</u> <code>?v=</code> — הוא זה שמכיל את מספרי הגרסה של כל השאר. חייבים תמיד לנסות להביא אותו טרי, אחרת עדכון לעולם לא יגיע.</td></tr>
+    <tr><td>אייקונים ותמונות מקומיות</td><td><b>מטמון קודם</b></td><td>לא משתנים כמעט לעולם.</td></tr>
+    <tr><td>קריאות ל-Apps Script <code>/exec</code></td><td><span class="pill risk">לעולם לא במטמון</span></td><td><b>הכלל הקדוש.</b> נתוני תקציב, שריונים, תושבים — חייבים תמיד לצאת לרשת. נתון פיננסי ישן שמוגש כאילו הוא טרי הוא בדיוק הסוג של דבר שיגרום להחלטה שגויה. כשאין רשת — הבקשה נכשלת, והקוד הקיים כבר יודע ליפול חזרה על <code>cba_data_cache</code> ולסמן שהנתונים מהמטמון.</td></tr>
+    <tr><td>Google Fonts / GSI</td><td><b>לא נוגעים</b></td><td>הדפדפן כבר מטפל בהם היטב. כניסה לגוגל חייבת רשת בכל מקרה.</td></tr>
+    <tr><td>תמונות תצלום אוויר למפה</td><td><span class="pill risk">להחלטה</span></td><td>אלו קבצים כבדים. אם נכניס אותם לשלד — כל התקנה תוריד עשרות MB. <b>ההמלצה:</b> להשאיר מחוץ לשלד; הם ייכנסו למטמון לבד רק בפעם הראשונה שתושב פותח את המפה.</td></tr>
+  </table>
+  <div class="note bad"><b>הכלל שמונע את האסון הקלאסי:</b> מספר גרסת המטמון (<code>CACHE_NAME</code> ב-service-worker) יהיה זהה תמיד למספר ה-<code>?v=</code> שב-index.html. שינוי אחד, במקום אחד, בכל דיפלוי. אם שוכחים לעדכן אותו — התושבים נשארים על הגרסה הישנה. לכן אני ממליץ להוסיף פסקה קבועה לנוהל הדיפלוי, וגם לשקול בדיקה אוטומטית קטנה שמתריעה אם השניים לא תואמים.</div>
+</section>
+
+<section>
+  <h2><span class="n">5</span> עדכוני גרסה — "רענון מיידי + הודעה קטנה"</h2>
+  <p class="lead">מה שבחרת. הנה איך זה מרגיש למשתמש ומה קורה מתחת למכסה המנוע.</p>
+  <h3>מה התושב חווה</h3>
+  <ol>
+    <li>הוא פותח את האפליקציה. היא נטענת מיידית מהמטמון — הגרסה הישנה, לרגע.</li>
+    <li>ברקע ה-Service Worker מגלה שיש גרסה חדשה ומוריד אותה (2–4 שניות, שקוף לגמרי).</li>
+    <li>מופיע טוסט קטן למטה: <b>"עודכנה גרסה חדשה — מרעננים…"</b></li>
+    <li>אחרי שנייה וחצי המסך נטען מחדש לגרסה החדשה. סה"כ: כ-5 שניות, פעם אחת אחרי כל דיפלוי.</li>
+  </ol>
+  <h3>המנגנון</h3>
+  <pre><code>// js/pwa.js — הרעיון בקצרה
+navigator.serviceWorker.register('service-worker.js?v=20260820b')
+  .then(function (reg) {
+    reg.addEventListener('updatefound', function () {
+      var sw = reg.installing;
+      sw.addEventListener('statechange', function () {
+        // גרסה חדשה מוכנה, ויש כבר גרסה ישנה פעילה = זה עדכון, לא התקנה ראשונה
+        if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+          CBA.ui.toast('עודכנה גרסה חדשה — מרעננים…');
+          sw.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+    });
+  });
+
+// כשהגרסה החדשה תפסה שליטה — טוענים מחדש, פעם אחת בלבד
+var reloaded = false;
+navigator.serviceWorker.addEventListener('controllerchange', function () {
+  if (reloaded) return;
+  reloaded = true;
+  location.reload();
+});</code></pre>
+  <div class="note warn"><b>המגן החשוב ביותר כאן:</b> לפני הרענון האוטומטי חייבים לבדוק שאין עריכה פתוחה או שמירה בעיצומה. רענון באמצע הקלדה של סכום תקציב = איבוד עבודה של המשתמש. <b>ההצעה:</b> אם <code>cba_pending_writes</code> לא ריק, או שיש מודל פתוח, או שהמשתמש הקליד ב-30 השניות האחרונות — <u>לא</u> מרעננים אוטומטית, אלא מציגים טוסט מתמשך "יש גרסה חדשה — לחצו לרענון" ומחכים ללחיצה. שילוב של שתי ההתנהגויות, לפי המצב.</div>
+  <div class="note">בדיקת השפיות: <code>?v=</code> מטפל בדפדפן רגיל, ה-Service Worker מטפל באפליקציה המותקנת. שניהם חיים יחד בשלום — הראשון קובע מה נחשב "קובץ חדש", השני קובע מתי לוקחים אותו.</div>
+</section>
+
+<section>
+  <h2><span class="n">6</span> UX — איפה זה נוגע במסכים</h2>
+  <p class="lead">מינימום התערבות. שלוש נגיעות בלבד, כולן משתמשות ברכיבים שכבר בנויים.</p>
+  <div class="grid">
+    <div class="tile"><h4>כפתור "התקנת האפליקציה"</h4><p><b>המיקום שנקבע:</b> בתפריט המשתמש, כפריט <code>up-item</code> בין "ניהול מיילים" ל"הגדרות" — בדיוק באותה שפה של שאר הפריטים (אייקון + טקסט), לא כבאנר צף. מופיע רק אם ההתקנה אפשרית ועדיין לא בוצעה.</p></div>
+    <div class="tile"><h4>הנחיה לאייפון</h4><p>ל-Safari אין אירוע התקנה — חייבים להסביר ידנית. שכבה קטנה חד-פעמית: "לחצו על <b>שיתוף</b> ואז <b>הוספה למסך הבית</b>" עם איור. מוצגת פעם אחת בלבד, ניתנת לסגירה לצמיתות.</p></div>
+    <div class="tile"><h4>חיווי "לא מקוון"</h4><p>פס דק בראש המסך: "אתם במצב לא מקוון — מוצגים נתונים מ-14:32". מבוסס על <code>navigator.onLine</code> ועל חותמת הזמן שכבר נשמרת ב-<code>cba_data_cache</code>. תואם לכלל "הפוך את הפער לגלוי" שקבענו.</p></div>
+  </div>
+  <h3>המימוש המדויק של הכפתור</h3>
+  <p>הפריט נבנה ב-<code>js/app.js</code>, בפונקציה שמרכיבה את תפריט המשתמש, כמשתנה חדש <code>installItem</code> שנכנס לשרשור בין <code>emailItem</code> ל-<code>settingsItem</code>:</p>
+  <pre><code>switchItem + simItem + emailItem + installItem + settingsItem + action</code></pre>
+  <table>
+    <tr><th style="width:26%">תנאי</th><th>מה מוצג</th></tr>
+    <tr><td>אנדרואיד/כרום, טרם הותקן</td><td><b>"התקנת האפליקציה"</b> + אייקון הורדה. לחיצה מפעילה את חלון ההתקנה של המערכת.</td></tr>
+    <tr><td>אייפון/ספארי, טרם הותקן</td><td>אותו פריט בדיוק — אבל הלחיצה פותחת את שכבת ההסבר הידנית ("שיתוף ← הוספה למסך הבית"), כי ספארי לא נותן חלון התקנה.</td></tr>
+    <tr><td>כבר מותקן (רץ ב-standalone)</td><td>הפריט לא מוצג כלל. אין טעם להציע התקנה למי שכבר בפנים.</td></tr>
+    <tr><td>דפדפן שלא תומך</td><td>לא מוצג.</td></tr>
+  </table>
+  <div class="note warn"><b>נקודה שדורשת החלטה:</b> "ניהול מיילים" ו"הגדרות" מוצגים <u>רק באזור הניהול</u> (<code>currentArea === "admin"</code>) — לתושב רגיל התפריט לא מכיל אותם בכלל. כפתור ההתקנה, לעומת זאת, רלוונטי דווקא לתושבים — הם הקהל שירוויח הכי הרבה מאייקון על המסך. <b>ההצעה:</b> להציג אותו באותה משבצת בשני האזורים — במסך הניהול הוא ייפול בדיוק בין השניים כמו שביקשת, ובאזור התושב הוא פשוט יופיע לבדו באותו מקום ברשימה (מתחת למפריד). כך אין שני מקומות שונים לזכור, וגם התושבים מקבלים אותו.</div>
+
+  <div class="note ok"><b>הזדמנות UX שנפתחת כאן:</b> אפליקציה שנפתחת ישירות מהאייקון הופכת פעולות מהירות לכדאיות. שווה לשקול בהמשך <b>קיצורי דרך</b> ב-manifest (לחיצה ארוכה על האייקון פותחת ישר "הגשת בקשה חדשה" או "שריון המועדון"). זו תוספת של 8 שורות ל-manifest ואפס קוד — אבל היא מקצרת תהליך של תושב מ-4 לחיצות ללחיצה אחת. מציע להוסיף בשלב ג'.</div>
+</section>
+
+<section>
+  <h2><span class="n">7</span> סיכונים — מה יכול להישבר, ואיך בודקים</h2>
+  <table>
+    <tr><th style="width:26%">סיכון</th><th style="width:10%">חומרה</th><th>מניעה ובדיקה</th></tr>
+    <tr><td>כניסת Google לא עובדת באפליקציה מותקנת</td><td><span class="pill risk">גבוהה</span></td><td><b>הסיכון האמיתי היחיד בשלב א'.</b> Google Identity Services פותח חלון קופץ, ובמצב <code>standalone</code> חלונות קופצים מתנהגים אחרת — במיוחד ב-iOS. גם ה-One-Tap (<code>google.accounts.id.prompt()</code>) עלול לא לעלות. <b>חובה לבדוק ידנית באייפון אמיתי לפני כל דבר אחר.</b> אם יתגלה כשל — הפתרון הוא מעבר ל-<code>ux_mode: 'redirect'</code> באפליקציה המותקנת בלבד. אפיין את זה כבדיקה הראשונה בשלב א'.</td></tr>
+    <tr><td>גרסה ישנה "נתקעת" אצל תושב</td><td><span class="pill risk">גבוהה</span></td><td>מנוטרל ע"י סעיפים 4+5. בנוסף: כפתור חירום "אפס מטמון והתקן מחדש" במסך הניהול, שמוחק את כל המטמונים ומבטל רישום של ה-Service Worker.</td></tr>
+    <tr><td>שמירה נופלת בזמן אופליין</td><td><span class="pill">בינונית</span></td><td>מטופל כבר היום ע"י תור השמירות. צריך רק לוודא שהודעת הכישלון קריאה ולא נראית כמו תקלה.</td></tr>
+    <tr><td>מטמון תופס מקום בטלפון</td><td><span class="pill">נמוכה</span></td><td>שלד של ~1.2MB זה כלום. רק תמונות המפה עלולות לתפוח — לכן הן מחוץ לשלד.</td></tr>
+    <tr><td>בדיקה מקומית לא משקפת מציאות</td><td><span class="pill">בינונית</span></td><td>Service Worker דורש HTTPS (או localhost). בדיקה אמיתית = רק על האתר החי, במכשיר אמיתי, אחרי דיפלוי. אין קיצור דרך.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2><span class="n">8</span> התראות Push — אפיון מלא</h2>
+  <p class="lead">ביקשת לאפיין לעומק. זה החלק היקר והמורכב באמת — ולכן הוא נפרד לחלוטין משלבים א'–ב'.</p>
+
+  <h3>למה זה שווה</h3>
+  <p>היום כל תקשורת עם תושב עוברת במייל (<code>sendResidentTemplate_</code>). מייל נקרא בממוצע שעות אחרי השליחה, ולעיתים נופל לספאם. התראה על מסך הנעילה נקראת תוך דקות. עבור "הבקשה שלך אושרה — ההחזר בדרך" או "השריון שלך למועדון מחר ב-18:00" זה הבדל אמיתי.</p>
+
+  <h3>המכשול הארכיטקטוני</h3>
+  <div class="note bad">Apps Script <b>אינו יכול</b> לשלוח Web Push לבד. תקן ה-Web Push דורש חתימה קריפטוגרפית מסוג ECDSA P-256 (VAPID), ו-Apps Script פשוט לא מספק את הפונקציה הזו. אין מסביב לזה דרך יצירתית — זו מגבלה קשיחה. לכן <b>חייב</b> להצטרף רכיב אחד חדש למערכת. זו נקודת ההחלטה המרכזית.</div>
+
+  <h3>שתי דרכים אפשריות</h3>
+  <table>
+    <tr><th style="width:18%"></th><th style="width:41%">א. שרת-ביניים זעיר (Cloudflare Worker)</th><th style="width:41%">ב. Firebase Cloud Messaging</th></tr>
+    <tr><td><b>איך</b></td><td>פונקציה קטנה בענן (~60 שורות), חינם עד 100,000 קריאות ביום. Apps Script שולח לה בקשה, היא חותמת ושולחת לדפדפן.</td><td>Apps Script חותם JWT ב-<code>computeRsaSha256Signature</code> (כן, זה קיים אצלו) ופונה ישירות ל-FCM. בלי שרת ביניים.</td></tr>
+    <tr><td><b>בצד הלקוח</b></td><td><span class="pill have">אפס תוספות</span> — API מובנה בדפדפן.</td><td><span class="pill risk">ספריית Firebase מ-CDN</span> — סותר את הכלל "HTML/CSS/JS טהורים בלבד".</td></tr>
+    <tr><td><b>עלות</b></td><td>0 ₪ בהיקף שלנו.</td><td>0 ₪.</td></tr>
+    <tr><td><b>חיסרון</b></td><td>עוד שירות חיצוני להחזיק ולזכור סיסמה אליו.</td><td>עוד פרויקט Firebase, ספרייה חיצונית, ושירות שגוגל נוטה לשנות.</td></tr>
+    <tr><td><b>המלצה</b></td><td colspan="2"><b>א' — Cloudflare Worker.</b> הוא שומר על האפליקציה נקייה לגמרי מספריות, וה-Worker הוא קופסה שחורה קטנה שכותבים פעם אחת ולא נוגעים בה שוב.</td></tr>
+  </table>
+
+  <h3>מה יעבוד ומה לא — לפי מכשיר</h3>
+  <table>
+    <tr><th>מכשיר</th><th>מצב</th><th>הערה</th></tr>
+    <tr><td>אנדרואיד / כרום</td><td><span class="pill have">עובד מלא</span></td><td>גם בדפדפן וגם באפליקציה מותקנת.</td></tr>
+    <tr><td>מחשב (Chrome/Edge)</td><td><span class="pill have">עובד מלא</span></td><td>שימושי לוועד.</td></tr>
+    <tr><td>אייפון</td><td><span class="pill warn">רק אם הותקן</span></td><td>מאז iOS 16.4, אפל מאפשרת Push לאתרים — <b>אך ורק</b> אם התושב הוסיף את האפליקציה למסך הבית, ואחרי אישור מפורש. באייפון גם אין ספירה על האייקון (Badge) באופן אמין. <b>המשמעות התכנונית: PWA הוא תנאי מוקדם ל-Push, לא פיצ'ר נפרד — סדר השלבים במסמך הזה נכון.</b></td></tr>
+  </table>
+
+  <h3>איפה נשמרים המנויים</h3>
+  <p>לפי הכלל הקבוע שלנו — הגדרה חיה ליד הפיצ'ר שלה, בגיליון, לא בקוד. טאב חדש: <b>"מנויי התראות"</b></p>
+  <table>
+    <tr><th>עמודה</th><th>תוכן</th></tr>
+    <tr><td>מייל</td><td>מזהה התושב — אותו מפתח בדיוק שבו משתמשת מערכת ההרשאות.</td></tr>
+    <tr><td>מזהה מנוי</td><td>המחרוזת הארוכה שהדפדפן מייצר (endpoint + מפתחות הצפנה).</td></tr>
+    <tr><td>מכשיר</td><td>"אייפון של יועד" — כדי שאפשר יהיה לנקות ידנית.</td></tr>
+    <tr><td>תאריך רישום / שימוש אחרון</td><td>מנוי שנכשל 3 פעמים מסומן כמת ומנוקה אוטומטית.</td></tr>
+    <tr><td>סוגי התראות</td><td>אילו התראות התושב רוצה — ר' הטבלה הבאה.</td></tr>
+  </table>
+
+  <h3>אילו התראות — הצעה לרשימת פתיחה</h3>
+  <table>
+    <tr><th>אירוע</th><th>למי</th><th>נוסח מוצע</th></tr>
+    <tr><td>בקשת החזר אושרה</td><td>לתושב המגיש</td><td>"בקשת ההחזר שלך על 240 ₪ אושרה ✓"</td></tr>
+    <tr><td>בקשה נדחתה / חסר מסמך</td><td>לתושב המגיש</td><td>"חסר לנו משהו בבקשה שלך — לחצו לפרטים"</td></tr>
+    <tr><td>שריון מועדון אושר</td><td>לתושב המזמין</td><td>"המועדון שלכם מאושר ליום שלישי 18:00"</td></tr>
+    <tr><td>תזכורת יום לפני שריון</td><td>לתושב המזמין</td><td>"מחר ב-18:00 המועדון שלכם"</td></tr>
+    <tr><td>בקשה חדשה ממתינה</td><td>לגזבר / מנהלי התחום</td><td>"3 בקשות ממתינות לאישורכם"</td></tr>
+    <tr><td>בקשת הרשמה חדשה</td><td>למנהלי תושבים</td><td>"משפחה חדשה ביקשה להצטרף"</td></tr>
+  </table>
+  <div class="note"><b>עיקרון מנחה:</b> Push לא מחליף את המייל — הוא <u>מקדים</u> אותו. אותו אירוע, אותה תבנית תוכן מטאב "הגדרות מיילים", שני ערוצים. כך אין מנגנון שני להחזיק, ותושב בלי התראות לא מפספס כלום. תבנית מייל קיימת = שורת Push אפשרית, בלי קוד חדש לכל אירוע.</div>
+  <div class="note warn"><b>שליטה של המשתמש:</b> מסך "ההתראות שלי" באזור התושב, עם מתגים לכל סוג התראה, כפתור "כבה הכל" וכפתור "שלח לי התראת בדיקה". ההרשאה עצמה מתבקשת רק אחרי לחיצה יזומה של התושב — לעולם לא בפתיחת האפליקציה. בקשת הרשאה מיידית = 70% דחייה, ואי אפשר לבקש שוב.</div>
+  <div class="note"><b>הרשאות:</b> שליחת Push יזומה (למשל "הודעה לכל תושבי השיכון") היא פעולת ניהול — תיכנס ל-<code>ACTION_PERMS</code> הקיים כפעולה חדשה, ולא כבדיקה עצמאית.</div>
+
+  <h3>היקף העבודה — הערכה כנה</h3>
+  <p>שלב ג' (Push) הוא בערך פי שלושה מכל שלבים א'+ב' יחד: Worker חיצוני, טאב חדש בגיליון, 3–4 פונקציות ב-<code>Code.gs</code>, מסך העדפות חדש, טיפול בהרשאות ב-Service Worker, ומחזור בדיקות ארוך על מכשירים אמיתיים. <b>המלצה חד-משמעית: לא לגעת בו לפני ששלבים א'–ב' רצים בשקט אצל תושבים אמיתיים במשך שבועיים.</b></p>
+</section>
+
+<section>
+  <h2><span class="n">9</span> תוכנית עבודה בשלבים</h2>
+  <table>
+    <tr><th style="width:12%">שלב</th><th style="width:30%">מה נעשה</th><th style="width:30%">איך נדע שהצליח</th><th style="width:14%">הערכה</th></tr>
+    <tr><td><b>א׳ — הבסיס</b></td><td>manifest, אייקונים, תגיות meta, service-worker בסיסי, js/pwa.js. <b>קודם כל: בדיקת כניסת Google במצב מותקן.</b></td><td>אייקון על מסך הבית באייפון ובאנדרואיד; פתיחה במסך מלא; כניסה עובדת; מצב טיסה מציג את הנתונים האחרונים במקום דינוזאור.</td><td>ישיבה אחת</td></tr>
+    <tr><td><b>ב׳ — הליטוש</b></td><td>טוסט העדכון + המגן מפני רענון באמצע עבודה, חיווי "לא מקוון", כפתור התקנה, הנחיית אייפון, כפתור איפוס חירום.</td><td>דיפלוי אמיתי מגיע לטלפון מותקן תוך פחות מדקה; אף אחד לא מאבד הקלדה.</td><td>ישיבה אחת</td></tr>
+    <tr><td><b>ג׳ — התראות</b></td><td>כל סעיף 8. רק אחרי שבועיים יציבים.</td><td>תושב מקבל התראה על אישור בקשה תוך שניות, ויכול לכבות אותה במסך משלו.</td><td>3–4 ישיבות</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2><span class="n">10</span> שאלות פתוחות — לפני שמתחילים לכתוב קוד</h2>
+  <div class="q"><b>1. שם האפליקציה מתחת לאייקון.</b> "ניהול קהילה" ארוך מדי לאייקון (יקוצץ). הצעות: "הקהילה" · "השיכון" · שם השיכון עצמו. מה מדויק?</div>
+  <div class="q"><b>2. פורטרט בלבד?</b> הצעתי <code>orientation: portrait</code> — נעילת האפליקציה לאורך בנייד. אבל האפליקציה נבנתה במכוון "לרוחב". במחשב זה לא רלוונטי, אבל טבלת ההוצאות בטלפון אולי דווקא נוחה יותר מסובבת. להשאיר חופשי?</div>
+  <div class="q"><b>3. מי הקהל האמיתי?</b> אם מרבית התושבים באייפון — הנחיית ההתקנה הידנית היא הרכיב הכי חשוב בכל הפרויקט, ושווה להשקיע בה. אם רובם אנדרואיד — הכפתור האוטומטי מספיק. יש לך תחושה?</div>
+  <div class="q"><b>4. הרענון האוטומטי — כמה אגרסיבי?</b> הצעתי "רענן אוטומטית, אלא אם המשתמש באמצע משהו". מקובל, או שתעדיף שתמיד יחכה ללחיצה?</div>
+  <div class="q"><b>5. Push — לאשר את הכיוון?</b> אם כן, נרחיב את שלב ג' למסמך אפיון נפרד משלו (כולל הקוד של ה-Worker). אם לא — נסמן כ"עתידי" ונתמקד בא׳–ב׳.</div>
+</section>
+
+<footer>מסמך אפיון · CBA — ניהול קהילה · 20.08.2026 · נבדק מול הקוד בפועל, לא מהזיכרון</footer>
+</div>
+</body>
+</html>
