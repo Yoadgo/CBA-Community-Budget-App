@@ -3331,6 +3331,9 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['RULE_WEEKLY_DAY', '', '0', 'יום השבוע לסיכום המנהל השבועי: 0=ראשון, 1=שני ... 6=שבת', PERM_SUPER, 'כן'],
   ['RULE_MONTHLY_DAY', '', '17', 'יום בחודש לסיכום בקשות ההחזר הפתוחות (לפני סגירת החלון ב-19)', PERM_SUPER, 'כן'],
   ['RULE_CLUB_REMINDER_DAYS_BEFORE', '', '2', 'כמה ימים לפני מועד השריון נשלחת תזכורת חוקים+תשלום לתושב', PERM_SUPER, 'כן'],
+  ['RULE_GYM_RENEW_DAYS_BEFORE', '', '14', 'כמה ימים לפני שמנוי המכון פג נשלחת לתושב תזכורת חידוש', PERM_SUPER, 'כן'],
+  ['RULE_GYM_PAYMENT_NUDGE_DAYS', '', '5', 'אחרי כמה ימים בסטטוס "ממתין לתשלום" נשלחת לתושב תזכורת עדינה', PERM_SUPER, 'כן'],
+  ['RULE_GYM_DECL_WARN_DAYS', '', '30', 'כמה ימים לפני שהצהרת הבריאות פגה (שנתיים) נשלחת התרעה לתושב', PERM_SUPER, 'כן'],
 
   ['SIGNUP_RECEIVED', 'קיבלנו את בקשת ההרשמה שלך',
     'שלום {{שם}},\n\nבקשת ההרשמה שלך לוועד הקהילה התקבלה ונמצאת בבדיקה. נעדכן אותך ברגע שתטופל.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב מיד עם הגשת טופס ההרשמה', PERM_RESIDENTS, 'כן'],
@@ -3382,37 +3385,54 @@ var DEFAULT_EMAIL_SETTINGS = [
 
   ['GYM_APPLICATION_RECEIVED', 'קיבלנו את בקשת ההרשמה שלך למכון הכושר',
     'שלום {{שם}},\n\nקיבלנו את בקשת ההרשמה שלך למכון הכושר. נעדכן אותך בכל שינוי, ואפשר לעקוב אחרי הסטטוס גם במסך "מכון כושר" באפליקציה.\n\nבברכה,\nועד הקהילה',
-    'נשלח לתושב מיד עם שליחת טופס ההרשמה למכון'],
+    'נשלח לתושב מיד עם שליחת טופס ההרשמה למכון', PERM_GYM, 'כן'],
   ['GYM_APPROVED_AWAITING_PAYMENT', 'ההרשמה למכון אושרה — נשאר להסדיר תשלום',
     'שלום {{שם}},\n\nההרשמה שלך למכון הכושר אושרה. כדי להפעיל את המנוי יש להסדיר תשלום של {{סכום}} ₪ עבור {{מסלול}}.\n\nאת פרטי התשלום אפשר לראות במסך "מכון כושר" באפליקציה.\n\nבברכה,\nועד הקהילה',
-    'נשלח כשהבקשה מאושרת (אוטומטית כשאין דגלי בריאות, או ידנית ע"י מנהל המכון)'],
+    'נשלח כשהבקשה מאושרת (אוטומטית כשאין דגלי בריאות, או ידנית ע"י מנהל המכון)', PERM_GYM, 'כן'],
   ['GYM_DOCTOR_NOTE_REQUIRED', 'נדרש אישור רופא להשלמת ההרשמה למכון',
     'שלום {{שם}},\n\nבהצהרת הבריאות שמילאת סימנת "כן" באחת מהשאלות ({{שאלות}}), ולכן לפי תקנון המכון נדרשת תעודה רפואית מרופא המאשרת שאין סיכון לבריאותך באימון במכון כושר.\n\nחשוב: המכון יכול לקבל רק אישור שלא עברו 3 חודשים ממועד הנפקתו. את האישור יש להעביר לאחראית חדר הכושר בשיכון.\n\nבברכה,\nועד הקהילה',
-    'נשלח אוטומטית כשתושב עונה "כן" על שאלה המסומנת כדגל חוסם'],
+    'נשלח אוטומטית כשתושב עונה "כן" על שאלה המסומנת כדגל חוסם', PERM_GYM, 'כן'],
   ['GYM_DECLARATION_REQUEST', 'נדרשת הצהרת בריאות למנוי במכון הכושר',
     'שלום {{שם}},\n\nנפתח עבורך מנוי במכון הכושר, ונשאר רק למלא הצהרת בריאות וחתימה — זה לוקח דקה. נכנסים לאפליקציה, בוחרים "מתקנים" ואז "מכון כושר".\n\nבברכה,\nועד הקהילה',
-    'נשלח כשמנהל המכון מקים מנוי ידנית ומבקש מהתושב למלא הצהרה, או לוחץ "בקשת הצהרה" על מנוי קיים'],
+    'נשלח כשמנהל המכון מקים מנוי ידנית ומבקש מהתושב למלא הצהרה, או לוחץ "בקשת הצהרה" על מנוי קיים', PERM_GYM, 'כן'],
 
   ['GYM_PAYMENT_REPORTED', 'קיבלנו את דיווח התשלום שלך',
     'שלום {{שם}},\n\nקיבלנו את הדיווח על תשלום {{סכום}} ₪ עבור המנוי במכון הכושר. הדיווח ממתין לאימות מול הוועד, ונעדכן אותך ברגע שהמנוי יופעל.\n\nבברכה,\nועד הקהילה',
-    'נשלח לתושב מיד עם דיווח התשלום'],
+    'נשלח לתושב מיד עם דיווח התשלום', PERM_GYM, 'כן'],
   ['GYM_ACTIVE', 'המנוי שלך במכון הכושר פעיל',
     'שלום {{שם}},\n\nהתשלום אומת והמנוי שלך במכון הכושר פעיל — בתוקף עד {{תוקף}}.\n\nקוד הכניסה למכון מחכה לך במסך "מכון כושר" באפליקציה. לפי התקנון אין להעביר אותו לאחרים.\n\nאימונים נעימים,\nועד הקהילה',
-    'נשלח כשמנהל/ת המכון מאמת/ת את התשלום. שים לב: הקוד עצמו לא נשלח במייל בכוונה'],
+    'נשלח כשמנהל/ת המכון מאמת/ת את התשלום. שים לב: הקוד עצמו לא נשלח במייל בכוונה', PERM_GYM, 'כן'],
   ['GYM_PAYMENT_NOT_FOUND', 'לא איתרנו את התשלום למכון הכושר',
     'שלום {{שם}},\n\nבדקנו ולא הצלחנו לאתר את התשלום שדיווחת עליו.{{הערה}}\n\nאפשר לבדוק שוב ולדווח מחדש במסך "מכון כושר" באפליקציה, או לפנות לאחראית חדר הכושר.\n\nבברכה,\nועד הקהילה',
-    'נשלח כשמנהל/ת המכון לוחץ/ת "לא נמצא תשלום" — {{הערה}} מכיל את הערת המנהל אם נכתבה'],
+    'נשלח כשמנהל/ת המכון לוחץ/ת "לא נמצא תשלום" — {{הערה}} מכיל את הערת המנהל אם נכתבה', PERM_GYM, 'כן'],
   ['GYM_EXTENDED', 'תוקף המנוי שלך במכון הכושר עודכן',
     'שלום {{שם}},\n\nתוקף המנוי שלך במכון הכושר עודכן והוא בתוקף עד {{תוקף}}.\n\nבברכה,\nועד הקהילה',
-    'נשלח כשמנהל/ת המכון מאריך/ה מנוי קיים'],
+    'נשלח כשמנהל/ת המכון מאריך/ה מנוי קיים', PERM_GYM, 'כן'],
+
+  ['GYM_EXPIRY_REMINDER', 'המנוי שלך במכון הכושר עומד להסתיים',
+    'שלום {{שם}},\n\nהמנוי שלך במכון הכושר בתוקף עד {{תוקף}} — עוד {{ימים}} ימים.\n\nכדי להמשיך להתאמן ברצף אפשר לחדש כבר עכשיו במסך "מכון כושר" באפליקציה. אם הצהרת הבריאות שלך עדיין בתוקף, החידוש הוא שתי לחיצות.\n\nבברכה,\nועד הקהילה',
+    'נשלח X ימים לפני סיום המנוי (ר\' RULE_GYM_RENEW_DAYS_BEFORE)', PERM_GYM, 'כן'],
+  ['GYM_EXPIRED', 'המנוי שלך במכון הכושר הסתיים',
+    'שלום {{שם}},\n\nהמנוי שלך במכון הכושר הסתיים ב-{{תוקף}}, וקוד הכניסה כבר אינו פעיל עבורך.\n\nאפשר לחדש בכל רגע במסך "מכון כושר" באפליקציה.\n\nבברכה,\nועד הקהילה',
+    'נשלח ביום שבו המנוי פג. הסטטוס בגיליון משתנה אוטומטית ל"פג תוקף"', PERM_GYM, 'כן'],
+  ['GYM_PAYMENT_NUDGE', 'תזכורת: נשאר להסדיר את התשלום למכון הכושר',
+    'שלום {{שם}},\n\nההרשמה שלך למכון אושרה, ועדיין לא נקלט תשלום. הסכום הוא {{סכום}} ₪.\n\nאת פרטי התשלום והדיווח עליו אפשר למצוא במסך "מכון כושר" באפליקציה.\n\nבברכה,\nועד הקהילה',
+    'תזכורת חד-פעמית אחרי X ימים בסטטוס "ממתין לתשלום"', PERM_GYM, 'כן'],
+  ['GYM_DECLARATION_EXPIRING', 'הצהרת הבריאות שלך למכון עומדת לפוג',
+    'שלום {{שם}},\n\nהצהרת הבריאות שחתמת עליה תקפה עד {{תוקף}}. אחרי התאריך הזה, חידוש המנוי יחייב מילוי הצהרה חדשה — זה לוקח כמה דקות במסך "מכון כושר".\n\nבברכה,\nועד הקהילה',
+    'נשלח X ימים לפני שההצהרה חוצה את השנתיים', PERM_GYM, 'כן'],
+
+  ['ADMIN_STALE_GYM', 'בקשת מכון ממתינה כבר {{ימים}} ימים',
+    'הבקשה של {{שם}} במכון הכושר ממתינה לטיפול כבר {{ימים}} ימים (סטטוס: {{סטטוס}}).',
+    'למנהלי מכון + מנהל-על. תזכורת חד-פעמית כשבקשה חוצה את הסף', PERM_GYM, 'כן'],
 
   ['ADMIN_GYM_PAYMENT_REPORTED', 'תושב דיווח על תשלום למכון — ממתין לאימות',
     '{{שם}} דיווח/ה על תשלום {{סכום}} ₪ עבור המנוי במכון (מס\' {{מזהה}}).\n\nאמצעי: {{אמצעי}} · אסמכתא: {{אסמכתא}}\n\nהדיווח ממתין לאימות שלך באפליקציה.',
-    'למנהלי מכון + מנהל-על'],
+    'למנהלי מכון + מנהל-על', PERM_GYM, 'כן'],
 
   ['ADMIN_NEW_GYM_FLAGGED', 'בקשת הרשמה למכון עם דגל בריאות ממתינה',
     'התקבלה בקשת הרשמה למכון הכושר מ-{{שם}} ({{אימייל}}) עם דגל בריאות: {{שאלות}}.\n\nהבקשה ממתינה לאישור רופא ולאישורך.',
-    'למנהלי מכון + מנהל-על. שים לב: בקשה נקייה (כל התשובות "לא") מאושרת אוטומטית ולא שולחת מייל למנהל'],
+    'למנהלי מכון + מנהל-על. שים לב: בקשה נקייה (כל התשובות "לא") מאושרת אוטומטית ולא שולחת מייל למנהל', PERM_GYM, 'כן'],
 
   ['ADMIN_WEEKLY_DIGEST', 'סיכום שבועי — מה פתוח באפליקציית הוועד',
     'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו — חוצה מידורים ולכן שייך למנהל-על', PERM_SUPER, 'כן'],
@@ -3447,7 +3467,22 @@ function ensureEmailSettingsSheet_(ss) {
   var existing = {};
   for (var r = 1; r < values.length; r++) { var k = String(values[r][0]).trim(); if (k) existing[k] = true; }
   var toAdd = DEFAULT_EMAIL_SETTINGS.filter(function (row) { return !existing[row[0]]; });
-  if (toAdd.length) sh.getRange(sh.getLastRow() + 1, 1, toAdd.length, 6).setValues(toAdd);
+  if (toAdd.length) {
+    /* הקשחה (2026-08-20, אחרי תקלה אמיתית): setValues דורש מערך מלבני מדויק.
+     * כשנוספו תבניות המכון הן נכתבו עם 4 שדות בלבד — בלי "תחום"/"פעיל" שנוספו
+     * למערכת יום קודם — וכל קריאה ל-ensureEmailSettingsSheet_ זרקה שגיאה.
+     * מכיוון ש-getEmailSettings_ נשען עליה, **כל המיילים במערכת הפסיקו להישלח
+     * בשקט** (הקריאות עטופות ב-try/catch, אז אף אחד לא ראה שגיאה).
+     * מכאן: מיישרים כל שורה ל-6 עמודות לפני הכתיבה, כך ששורה חסרה תיכתב
+     * חלקית במקום להשבית את כל מערכת המיילים. */
+    var normalized = toAdd.map(function (row) {
+      var r = row.slice(0, 6);
+      while (r.length < 6) r.push('');
+      if (!r[5]) r[5] = 'כן';
+      return r;
+    });
+    sh.getRange(sh.getLastRow() + 1, 1, normalized.length, 6).setValues(normalized);
+  }
 
   // מילוי "תחום"/"פעיל" לשורות ישנות (או לשורה חדשה שמישהו הוסיף ידנית בלי
   // למלא את שתי העמודות האלה) — נוגע רק בתאים ריקים.
@@ -3761,8 +3796,133 @@ function dailyEmailJobs_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   try { clubReminderJob_(ss); } catch (e) { Logger.log('clubReminderJob_ נכשל: ' + e); }
   try { staleNudgeJob_(ss); } catch (e) { Logger.log('staleNudgeJob_ נכשל: ' + e); }
+  try { gymDailyJob_(ss); } catch (e) { Logger.log('gymDailyJob_ נכשל: ' + e); }
   try { weeklyDigestJob_(ss); } catch (e) { Logger.log('weeklyDigestJob_ נכשל: ' + e); }
   try { monthlyDigestJob_(ss); } catch (e) { Logger.log('monthlyDigestJob_ נכשל: ' + e); }
+}
+
+/* ============================================================================
+ *  מכון כושר — שלב 5: אוטומציות יומיות (2026-08-20)
+ * ----------------------------------------------------------------------------
+ *  רץ פעם ביום מתוך dailyEmailJobs_. חמש משימות, כולן על אותה סריקה אחת של
+ *  הטאב — לא חמש קריאות נפרדות לגיליון.
+ *
+ *  שתי החלטות תכנוניות:
+ *  • רוב הבדיקות הן "בדיוק N ימים" ולא "N ימים ומעלה" — כך הן חד-פעמיות
+ *    מעצמן ואין צורך לסמן "כבר נשלח" (אותה תבנית כמו clubReminderJob_).
+ *  • סימון מנויים שפגו כותב את עמודת הסטטוס **בכתיבה אחת מרוכזת** בסוף,
+ *    ולא תא-תא. ר' הלקח ב-gymRowWriter_.
+ * ========================================================================== */
+function gymDailyJob_(ss) {
+  var sh = ss.getSheetByName(GYM_SHEET);
+  if (!sh || sh.getLastRow() < 2) return;
+
+  var settings = getEmailSettings_(ss);
+  var renewDays = emailRule_(settings, 'RULE_GYM_RENEW_DAYS_BEFORE', 14);
+  var nudgeDays = emailRule_(settings, 'RULE_GYM_PAYMENT_NUDGE_DAYS', 5);
+  var declWarn  = emailRule_(settings, 'RULE_GYM_DECL_WARN_DAYS', 30);
+  var staleDays = emailRule_(settings, 'RULE_STALE_DAYS', 3);
+
+  var cfg = readGymSettings_(ss);
+  var declMonths = Number(cfg.settings['תוקף הצהרה בחודשים']) || 24;
+
+  var tz = Session.getScriptTimeZone();
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  function daysBetween_(from, to) { return Math.round((to - from) / 86400000); }
+
+  var cols = gymCols_(sh);
+  var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  var values = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  function cell(row, name) { return cols[name] ? row[cols[name] - 1] : ''; }
+
+  var statusCol = cols['סטטוס'];
+  var statusUpdates = [];   // {rowIndex, value} — נכתבות יחד בסוף
+
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    var id = String(cell(row, 'מזהה')).trim();
+    if (!id) continue;
+    var status = String(cell(row, 'סטטוס')).trim();
+    var email = String(cell(row, 'אימייל')).trim();
+    if (!email) continue;
+    var name = String(cell(row, 'שם פרטי')).trim() || email;
+
+    var until = gymToDate_(cell(row, 'בתוקף עד'));
+    if (until) until.setHours(0, 0, 0, 0);
+
+    /* 1. מנוי שפג — סימון סטטוס + הודעה. מרגע זה קוד הכניסה מפסיק לצאת
+       ללקוח (handleGymMy_ בודק גם סטטוס וגם תאריך). */
+    if (status === GYM_ST_ACTIVE && until && until < today) {
+      statusUpdates.push({ r: i, v: GYM_ST_EXPIRED });
+      try {
+        sendResidentTemplate_(ss, 'GYM_EXPIRED', [email], {
+          'שם': name, 'תוקף': Utilities.formatDate(until, tz, 'dd/MM/yyyy')
+        });
+      } catch (e) { Logger.log('GYM_EXPIRED נכשל: ' + e); }
+      continue;   // אין טעם גם להזכיר חידוש באותו יום
+    }
+
+    /* 2. תזכורת חידוש — בדיוק N ימים לפני הסוף */
+    if (status === GYM_ST_ACTIVE && until && daysBetween_(today, until) === renewDays) {
+      try {
+        sendResidentTemplate_(ss, 'GYM_EXPIRY_REMINDER', [email], {
+          'שם': name, 'תוקף': Utilities.formatDate(until, tz, 'dd/MM/yyyy'), 'ימים': renewDays
+        });
+      } catch (e) { Logger.log('GYM_EXPIRY_REMINDER נכשל: ' + e); }
+    }
+
+    /* 3. נודניק תשלום — בדיוק N ימים אחרי ההגשה, ורק אם עדיין לא שולם */
+    if (status === GYM_ST_PAYMENT) {
+      var submitted = gymToDate_(cell(row, 'הוגש בתאריך'));
+      if (submitted) {
+        submitted.setHours(0, 0, 0, 0);
+        if (daysBetween_(submitted, today) === nudgeDays) {
+          try {
+            sendResidentTemplate_(ss, 'GYM_PAYMENT_NUDGE', [email], {
+              'שם': name, 'סכום': cell(row, 'מחיר מוסכם')
+            });
+          } catch (e) { Logger.log('GYM_PAYMENT_NUDGE נכשל: ' + e); }
+        }
+      }
+    }
+
+    /* 4. הצהרת בריאות שעומדת לפוג — רלוונטי רק למנוי חי */
+    var signed = gymToDate_(cell(row, 'תאריך חתימה'));
+    if (signed && GYM_OPEN_STATUSES.indexOf(status) !== -1) {
+      var declEnd = new Date(signed.getTime());
+      declEnd.setMonth(declEnd.getMonth() + declMonths);
+      declEnd.setHours(0, 0, 0, 0);
+      if (daysBetween_(today, declEnd) === declWarn) {
+        try {
+          sendResidentTemplate_(ss, 'GYM_DECLARATION_EXPIRING', [email], {
+            'שם': name, 'תוקף': Utilities.formatDate(declEnd, tz, 'dd/MM/yyyy')
+          });
+        } catch (e) { Logger.log('GYM_DECLARATION_EXPIRING נכשל: ' + e); }
+      }
+    }
+
+    /* 5. בקשה שתקועה אצל המנהל — התרעה למנהלי המכון */
+    if (status === GYM_ST_DOCTOR || status === GYM_ST_REVIEW || status === GYM_ST_VERIFY) {
+      var sub2 = gymToDate_(cell(row, 'הוגש בתאריך'));
+      if (sub2) {
+        sub2.setHours(0, 0, 0, 0);
+        if (daysBetween_(sub2, today) === staleDays) {
+          try {
+            notifyAdmins_(ss, PERM_GYM, 'ADMIN_STALE_GYM', {
+              'שם': name, 'ימים': staleDays, 'סטטוס': status, 'קישור': CBA_APP_URL
+            });
+          } catch (e) { Logger.log('ADMIN_STALE_GYM נכשל: ' + e); }
+        }
+      }
+    }
+  }
+
+  // כתיבה מרוכזת של שינויי הסטטוס — טווח רציף אחד, לא תא-תא
+  if (statusUpdates.length && statusCol) {
+    var colVals = sh.getRange(2, statusCol, lastRow - 1, 1).getValues();
+    statusUpdates.forEach(function (u) { colVals[u.r][0] = u.v; });
+    sh.getRange(2, statusCol, lastRow - 1, 1).setValues(colVals);
+  }
 }
 
 /** תזכורת חוקים+תשלום לתושב, לשריונים מאושרים שחלים בעוד בדיוק N ימים (ר'
@@ -3863,7 +4023,26 @@ function staleNudgeJob_(ss) {
 /** אוסף את כל הפריטים הפתוחים כרגע, לפי מידור — משמש גם לסיכום השבועי וגם לחודשי. */
 function collectOpenItems_(ss) {
   var tz = Session.getScriptTimeZone();
-  var out = { residents: [], budget: [], club: [] };
+  var out = { residents: [], budget: [], club: [], gym: [] };
+
+  // מכון כושר — מה ממתין לטיפול, ומי לא מסונכרן מול התשלומים
+  try {
+    var gsh = ss.getSheetByName(GYM_SHEET);
+    if (gsh && gsh.getLastRow() > 1) {
+      var gcols = gymCols_(gsh);
+      var grows = gsh.getRange(2, 1, gsh.getLastRow() - 1, gsh.getLastColumn()).getValues();
+      for (var gi = 0; gi < grows.length; gi++) {
+        function gv(n) { return gcols[n] ? String(grows[gi][gcols[n] - 1]).trim() : ''; }
+        var gname = (gv('שם פרטי') + ' ' + gv('שם משפחה')).trim() || gv('אימייל');
+        var gst = gv('סטטוס');
+        if (gst === GYM_ST_DOCTOR || gst === GYM_ST_REVIEW || gst === GYM_ST_VERIFY) {
+          out.gym.push('• ' + gname + ' — ' + gst);
+        }
+        var sync = gv('מצב סנכרון');
+        if (sync && sync !== 'מסונכרן') out.gym.push('• ' + gname + ' — ' + sync);
+      }
+    }
+  } catch (gErr) { Logger.log('סעיף מכון בסיכום נכשל: ' + gErr); }
 
   var ssh = getSignupsSheet_(ss);
   var svalues = ssh.getDataRange().getValues();
@@ -3920,12 +4099,13 @@ function sendDigestBySection_(ss, subjectKey, sections, includeKeys) {
   addAll_(PERM_RESIDENTS, 'residents');
   addAll_(PERM_BUDGET, 'budget');
   addAll_(PERM_CLUB, 'club');
+  addAll_(PERM_GYM, 'gym');
   adminEmailsByPerm_(ss, PERM_SUPER).forEach(function (e) {
     recipients[e] = recipients[e] || {};
     includeKeys.forEach(function (k) { recipients[e][k] = true; });
   });
 
-  var LABELS = { residents: 'הרשמות ממתינות', budget: 'בקשות החזר פתוחות', club: 'שריוני מועדון ממתינים' };
+  var LABELS = { residents: 'הרשמות ממתינות', budget: 'בקשות החזר פתוחות', club: 'שריוני מועדון ממתינים', gym: 'מכון כושר — ממתין לטיפול' };
   Object.keys(recipients).forEach(function (email) {
     var flags = recipients[email];
     var parts = [t.body];
@@ -3947,7 +4127,7 @@ function weeklyDigestJob_(ss) {
   var weeklyDay = emailRule_(settings, 'RULE_WEEKLY_DAY', 0);
   if (new Date().getDay() !== weeklyDay) return;
   var sections = collectOpenItems_(ss);
-  sendDigestBySection_(ss, 'ADMIN_WEEKLY_DIGEST', sections, ['residents', 'budget', 'club']);
+  sendDigestBySection_(ss, 'ADMIN_WEEKLY_DIGEST', sections, ['residents', 'budget', 'club', 'gym']);
 }
 
 /** סיכום חודשי — ביום RULE_MONTHLY_DAY (17), רק בקשות החזר פתוחות (לפני סגירת

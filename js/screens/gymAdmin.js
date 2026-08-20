@@ -71,7 +71,14 @@ CBA.screens = CBA.screens || {};
              "</div>" +
              '<div class="gym-row__side">' +
                '<span class="gym-pill gym-pill--' + tone + '">' + CBA.esc(status) + "</span>" +
-               (status === "ממתין להצהרה"
+               // אם כבר יש הצהרה חתומה — הפעולה הטבעית היא לצפות בה, לא לבקש
+               // אותה שוב (יועד העיר על זה בצדק, 2026-08-20). "בקשת הצהרה"
+               // נשארת רק למי שאין לו הצהרה, או שההצהרה שלו כבר לא בתוקף.
+               (m["תאריך חתימה"]
+                 ? '<button type="button" class="btn-ghost" data-ga-view="' + CBA.esc(m["מזהה"] || "") +
+                   '">צפייה בהצהרה</button>'
+                 : "") +
+               (status === "ממתין להצהרה" || m["תאריך חתימה"]
                  ? ""
                  : '<button type="button" class="btn-ghost" data-ga-declare="' + CBA.esc(m["מזהה"] || "") +
                    '">בקשת הצהרה</button>') +
@@ -90,7 +97,91 @@ CBA.screens = CBA.screens || {};
            "</div>";
   }
 
+  /* ---------- צפייה בהצהרת הבריאות ----------
+     כל מה שצריך כבר נמצא בתשובת gymList: השאלות (עם ה"כותרת" הקצרה שהיא גם
+     שם העמודה) והשורה של המנוי. אין קריאת שרת נוספת. */
+  function openDeclaration(id) {
+    var members = (gaLast && gaLast.members) || [];
+    var questions = (gaLast && gaLast.questions) || [];
+    var m = null;
+    for (var i = 0; i < members.length; i++) {
+      if (String(members[i]["מזהה"] || "").trim() === String(id).trim()) { m = members[i]; break; }
+    }
+    if (!m) { window.alert("לא נמצאה הרשומה."); return; }
+
+    var name = ((m["שם פרטי"] || "") + " " + (m["שם משפחה"] || "")).trim();
+    var flagged = String(m["שאלות שנענו בכן"] || "").trim();
+    var sig = m["קישור חתימה"] || "";
+
+    var rows = questions.map(function (q) {
+      var ans = String(m[q.label] == null ? "" : m[q.label]).trim();
+      var isYes = ans === "כן";
+      return '<div class="gym-decl__q' + (isYes ? " is-yes" : "") + '">' +
+               '<div class="gym-decl__qtext">' + CBA.esc(q.text || q.label) + "</div>" +
+               '<div class="gym-decl__ans">' + CBA.esc(ans || "—") + "</div>" +
+             "</div>";
+    }).join("");
+
+    var el = document.createElement("div");
+    el.id = "gym-decl";
+    el.className = "gym-wiz";
+    el.innerHTML =
+      '<div class="gym-wiz__backdrop" data-gd-close></div>' +
+      '<aside class="gym-wiz__panel" role="dialog" aria-label="הצהרת בריאות">' +
+        '<div class="gym-wiz__head">' +
+          '<div class="gym-wiz__title">הצהרת בריאות — ' + CBA.esc(name) + "</div>" +
+          '<button type="button" class="gym-wiz__x" data-gd-close aria-label="סגירה">×</button>' +
+        "</div>" +
+        '<div class="gym-wiz__body">' +
+          '<div class="gym-kv"><span>נחתמה בתאריך</span><span>' +
+            CBA.esc(m["תאריך חתימה"] || "—") + "</span></div>" +
+          '<div class="gym-kv"><span>ת.ז.</span><span>' + CBA.esc(m["ת.ז."] || "—") + "</span></div>" +
+          '<div class="gym-kv"><span>תאריך לידה</span><span>' + CBA.esc(m["תאריך לידה"] || "—") + "</span></div>" +
+          '<div class="gym-kv"><span>אישור תקנון</span><span>' + CBA.esc(m["אישור תקנון"] || "—") + "</span></div>" +
+          (flagged
+            ? '<div class="gym-decl__flag">סומן "כן" ב: ' + CBA.esc(flagged) +
+              ' — נדרשת תעודה רפואית לפי התקנון.</div>'
+            : '<div class="gym-decl__ok">כל התשובות "לא" — אין דגל בריאות.</div>') +
+          '<div class="gym-decl__title">תשובות השאלון</div>' +
+          (rows || '<div class="gym-note">אין תשובות שמורות לרשומה הזו.</div>') +
+          '<div class="gym-decl__title">חתימה</div>' +
+          (sig && sig.indexOf("http") === 0
+            ? '<a class="btn-ghost" href="' + CBA.esc(sig) + '" target="_blank" rel="noopener">פתיחת החתימה</a>'
+            : '<div class="gym-note">' + CBA.esc(sig || "לא נשמרה חתימה דיגיטלית") + "</div>") +
+        "</div>" +
+        '<div class="gym-wiz__foot">' +
+          '<button type="button" class="btn-ghost" data-gd-close>סגירה</button>' +
+          '<button type="button" class="btn-ghost" data-gd-request="' + CBA.esc(id) + '">בקשת הצהרה חדשה</button>' +
+        "</div>" +
+      "</aside>";
+    document.body.appendChild(el);
+    function close() { if (el.parentNode) el.parentNode.removeChild(el); }
+    el.querySelectorAll("[data-gd-close]").forEach(function (n) { n.addEventListener("click", close); });
+    el.querySelector("[data-gd-request]").addEventListener("click", function () {
+      close();
+      requestDeclaration(id, function () { if (gaReload) gaReload(); });
+    });
+  }
+
+  // מוחזק כדי שהמציג יוכל לרענן אחרי "בקשת הצהרה חדשה"
+  var gaReload = null;
+
+  function requestDeclaration(id, done) {
+    if (!window.confirm("לשלוח לתושב מייל עם בקשה למלא הצהרת בריאות?\n" +
+                        "המנוי יעבור לסטטוס \"ממתין להצהרה\" עד שימלא אותה.")) return;
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymAdminAction");
+    CBA.data.requestGymDeclaration(id, function (res) {
+      if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymAdminAction");
+      if (!res || !res.ok) { window.alert((res && res.error) || "השליחה נכשלה."); return; }
+      if (done) done();
+    });
+  }
+
   function bindMemberActions(root, reload) {
+    gaReload = reload;
+    root.querySelectorAll("[data-ga-view]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openDeclaration(btn.dataset.gaView); });
+    });
     // הארכה — זמינה תמיד, גם בלי תשלום חדש. אם היא יוצרת פער מול מה ששולם,
     // מוצגת התראה **אחרי** הפעולה. אף פעם לא חוסמים, זו דרישה מפורשת.
     root.querySelectorAll("[data-ga-extend]").forEach(function (btn) {
@@ -142,20 +233,7 @@ CBA.screens = CBA.screens || {};
     root.querySelectorAll("[data-ga-declare]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.dataset.gaDeclare;
-        if (!id) return;
-        if (!window.confirm("לשלוח לתושב מייל עם בקשה למלא הצהרת בריאות?\n" +
-                            "המנוי יעבור לסטטוס \"ממתין להצהרה\" עד שימלא אותה.")) return;
-        btn.disabled = true;
-        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymAdminAction");
-        CBA.data.requestGymDeclaration(id, function (res) {
-          if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymAdminAction");
-          if (!res || !res.ok) {
-            btn.disabled = false;
-            window.alert((res && res.error) || "השליחה נכשלה.");
-            return;
-          }
-          reload();
-        });
+        if (id) requestDeclaration(id, reload);
       });
     });
   }
