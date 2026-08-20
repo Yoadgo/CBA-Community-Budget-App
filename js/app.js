@@ -873,7 +873,10 @@
     gear: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     logout: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
     swap: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4l3 3-3 3"/><path d="M20 7H8a4 4 0 0 0-4 4"/><path d="M7 20l-3-3 3-3"/><path d="M4 17h12a4 4 0 0 0 4-4"/></svg>',
-    mail: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></svg>'
+    mail: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></svg>',
+    // התקנת האפליקציה (2026-08-20, PWA) — טלפון עם חץ פנימה. אותו גודל/עובי
+    // קו כמו שאר אייקוני התפריט, אחרת הוא בולט כזר בשורה.
+    install: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M12 7.5v7M9 11.5l3 3 3-3"/></svg>'
   };
 
   function initials(name) {
@@ -951,6 +954,11 @@
     const setBtn = panel.querySelector("[data-panel-settings]");
     if (setBtn) setBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn); showScreen("settings");
+    });
+    const instBtn = panel.querySelector("[data-panel-install]");
+    if (instBtn) instBtn.addEventListener("click", function () {
+      closeUserPanel(panel, btn);
+      if (window.CBA.pwa) CBA.pwa.promptInstall();
     });
     const swBtn = panel.querySelector("[data-panel-switch]");
     if (swBtn) swBtn.addEventListener("click", function () {
@@ -1051,6 +1059,14 @@
     var emailItem = (currentArea === "admin" && canScreen("emailSettings"))
       ? '<button class="up-item" data-panel-goto="emailSettings"><span class="up-row__ico">' + ICON.mail + '</span>ניהול מיילים</button>'
       : "";
+    /* התקנת האפליקציה (2026-08-20, PWA) — לבקשת יועד יושב בין "ניהול מיילים"
+       ל"הגדרות". בשונה משניהם הוא מוצג *בשני האזורים*, כולל לתושב רגיל: דווקא
+       התושבים הם הקהל שירוויח הכי הרבה מאייקון על המסך, ורובם על אייפון —
+       שם ההתקנה ידנית ואף אחד לא מגלה אותה לבד. הפריט נעלם מעצמו ברגע
+       שהאפליקציה כבר מותקנת. ר' מסמך אפיון PWA, סעיפים 6 ו-7. */
+    var installItem = (window.CBA.pwa && CBA.pwa.canInstall())
+      ? '<button class="up-item" data-panel-install><span class="up-row__ico">' + ICON.install + '</span>התקנת האפליקציה</button>'
+      : "";
     // הדמיית תושב — כלי רב-עוצמה (רואים דרכו נתונים של אחרים), מנהל על בלבד
     var simItem = isSuper()
       ? (window.CBA.isSimulating && window.CBA.isSimulating()
@@ -1066,6 +1082,7 @@
       switchItem +
       simItem +
       emailItem +
+      installItem +
       settingsItem +
       action
     );
@@ -1482,6 +1499,10 @@
     var el = document.activeElement;
     return !!(el && main && main.contains(el) && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
   }
+  /* (2026-08-20, PWA) נחשפת גם החוצה. js/pwa.js משתמש בה כדי להחליט מתי
+     מותר לרענן לגרסה חדשה — במכוון אותו שער בדיוק שבו doPoll משתמש, כדי
+     שלא יהיה מגן שני עם התנהגות אחרת. ר' מסמך אפיון PWA, סעיף 5. */
+  window.CBA.userIsEditingMain = userIsEditingMain;
   var pendingSilentRefresh = false;
 
   function doPoll() {

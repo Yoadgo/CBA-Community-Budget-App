@@ -2,7 +2,19 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- PWA (2026-08-20) — "שמירה על מסך הבית". ר' מסמך אפיון PWA.
+       manifest = תעודת הזהות של האפליקציה (שם, אייקון, מסך מלא).
+       theme-color = צבע סרגל המערכת; זהה ל-CTA השחור של האפליקציה.
+       apple-* = אייפון מתעלם מחלק מה-manifest וצריך את התגיות שלו. -->
+  <link rel="manifest" href="manifest.webmanifest?v=20260820c" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="קהילה" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20260820c" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=20260820c" />
   <title>ניהול קהילה</title>
 
   <!-- גופן עברי נקי (Heebo) -->
@@ -11,17 +23,19 @@
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
   <!-- העיצוב שלנו -->
-  <link rel="stylesheet" href="css/style.css?v=20260820b" />
+  <link rel="stylesheet" href="css/style.css?v=20260820c" />
   <!-- שכבת מובייל — נטענת אחרי הבסיס כדי לעדכן היכן שצריך -->
-  <link rel="stylesheet" href="css/mobile.css?v=20260820b" />
+  <link rel="stylesheet" href="css/mobile.css?v=20260820c" />
   <!-- שכבת טעינה — שלדי shimmer, כניסת מסך רכה, טוסט "מעודכן" -->
-  <link rel="stylesheet" href="css/loading.css?v=20260820b" />
+  <link rel="stylesheet" href="css/loading.css?v=20260820c" />
   <!-- אזור התושב — נגזר מהעיצוב, פונקציות מצומצמות -->
-  <link rel="stylesheet" href="css/resident.css?v=20260820b" />
+  <link rel="stylesheet" href="css/resident.css?v=20260820c" />
   <!-- זכוכית נוזלית + תנועה (iOS 26) — שכבת עיצוב תוספתית, לא נוגעת במסכים -->
-  <link rel="stylesheet" href="css/motion.css?v=20260820b" />
+  <link rel="stylesheet" href="css/motion.css?v=20260820c" />
   <!-- מכון כושר (2026-08-18) — שכבה ייעודית, כל המחלקות בתחילית gym- -->
-  <link rel="stylesheet" href="css/gym.css?v=20260820b" />
+  <link rel="stylesheet" href="css/gym.css?v=20260820c" />
+  <!-- PWA (2026-08-20) — שכבת ההסבר "הוספה למסך הבית" בלבד. כל המחלקות בתחילית pwa- -->
+  <link rel="stylesheet" href="css/pwa.css?v=20260820c" />
 
   <!-- כניסת Google (Google Identity Services) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -86,39 +100,42 @@
        על ספריות חיצוניות כמו Google Fonts/GSI) — בכל דיפלוי עם שינוי אמיתי
        ב-JS/CSS, לעדכן את המספר הזה (לתאריך הדיפלוי) כדי לאלץ טעינה טרייה. -->
   <!-- לוגו — פונקציה עצמאית קטנה, נטענת מוקדם כי מסך הכניסה משתמש בה -->
-  <script src="js/ui/logo.js?v=20260820b"></script>
+  <script src="js/ui/logo.js?v=20260820c"></script>
   <!-- חלונות האפליקציה (2026-08-19) — מחליף את window.alert/confirm/prompt.
        נטען לפני המסכים כי הם משתמשים ב-CBA.ui. -->
-  <script src="js/ui/dialog.js?v=20260820b"></script>
-  <script src="js/data/mock.js?v=20260820b"></script>
-  <script src="js/data/dataService.js?v=20260820b"></script>
+  <script src="js/ui/dialog.js?v=20260820c"></script>
+  <script src="js/data/mock.js?v=20260820c"></script>
+  <script src="js/data/dataService.js?v=20260820c"></script>
   <!-- חיבור ל-Google Sheets (קריאה). אם נכשל — נשארים על נתוני mock -->
-  <script src="js/data/sheets.js?v=20260820b"></script>
-  <script src="js/screens/budget.js?v=20260820b"></script>
-  <script src="js/screens/expenses.js?v=20260820b"></script>
+  <script src="js/data/sheets.js?v=20260820c"></script>
+  <script src="js/screens/budget.js?v=20260820c"></script>
+  <script src="js/screens/expenses.js?v=20260820c"></script>
   <!-- פנקס הערות (סעיף 1) — נטען לפני planning.js כי הלשונית שפותחת אותו יושבת שם -->
-  <script src="js/screens/notes.js?v=20260820b"></script>
-  <script src="js/screens/planning.js?v=20260820b"></script>
-  <script src="js/screens/settings.js?v=20260820b"></script>
-  <script src="js/screens/clubAdmin.js?v=20260820b"></script>
+  <script src="js/screens/notes.js?v=20260820c"></script>
+  <script src="js/screens/planning.js?v=20260820c"></script>
+  <script src="js/screens/settings.js?v=20260820c"></script>
+  <script src="js/screens/clubAdmin.js?v=20260820c"></script>
   <!-- מכון כושר — ניהול (2026-08-18). יושב ליד clubAdmin כי שניהם
        "מתקנים", אבל כל אחד עם מידור ההרשאות שלו. -->
-  <script src="js/screens/gymAdmin.js?v=20260820b"></script>
+  <script src="js/screens/gymAdmin.js?v=20260820c"></script>
   <!-- מכון כושר — מסך התושב והאשף (2026-08-19). אחרי gymAdmin, לפני המנוע. -->
-  <script src="js/screens/resGym.js?v=20260820b"></script>
-  <script src="js/screens/residents.js?v=20260820b"></script>
+  <script src="js/screens/resGym.js?v=20260820c"></script>
+  <script src="js/screens/residents.js?v=20260820c"></script>
   <!-- ניהול מיילים (שלב 1, 2026-08-18) — עריכת נוסח/תזמונים/הדלקה-כיבוי מהאפליקציה -->
-  <script src="js/screens/emailSettings.js?v=20260820b"></script>
+  <script src="js/screens/emailSettings.js?v=20260820c"></script>
   <!-- "שירותים לתושב" (2026-08-18). services.js קודם — הוא מגדיר את
        CBA.serviceUtils (פענוח הפורמט + ציור סעיף) ש-servicesAdmin.js תלוי בו. -->
-  <script src="js/screens/services.js?v=20260820b"></script>
-  <script src="js/screens/servicesAdmin.js?v=20260820b"></script>
+  <script src="js/screens/services.js?v=20260820c"></script>
+  <script src="js/screens/servicesAdmin.js?v=20260820c"></script>
   <!-- אזור התושב (מסכי הפורטל) — לפני המנוע -->
-  <script src="js/screens/resident.js?v=20260820b"></script>
-  <script src="js/app.js?v=20260820b"></script>
+  <script src="js/screens/resident.js?v=20260820c"></script>
+  <script src="js/app.js?v=20260820c"></script>
   <!-- התנהגויות מובייל (בר תחתון, כותרת נעלמת) — אחרי המנוע -->
-  <script src="js/ui/mobile.js?v=20260820b"></script>
+  <script src="js/ui/mobile.js?v=20260820c"></script>
   <!-- זכוכית נוזלית + תנועה (iOS 26) — אפקטים בלבד, לא נוגע בנתונים/לוגיקה -->
-  <script src="js/ui/motion.js?v=20260820b"></script>
+  <script src="js/ui/motion.js?v=20260820c"></script>
+  <!-- PWA (2026-08-20) — רישום Service Worker, רענון גרסה, וכפתור ההתקנה.
+       נטען אחרון: הוא נשען על CBA.ui, CBA.sheets ו-CBA.userIsEditingMain. -->
+  <script src="js/pwa.js?v=20260820c"></script>
 </body>
 </html>
