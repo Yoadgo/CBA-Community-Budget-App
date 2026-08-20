@@ -339,3 +339,32 @@
   margin: 14px 0 4px; padding: 12px 14px; border-radius: var(--radius-sm);
   background: var(--ok-soft); color: var(--badge-ok); font-size: 13.5px;
 }
+
+
+/* --- מגירת טופס גנרית + עריכת מנוי (2026-08-20) ---
+   הודעת השגיאה יושבת *בתוך* המגירה ולא בחלון נפרד: כשמשהו חסר בטופס,
+   השדה שצריך לתקן והמלל שמסביר מה לתקן צריכים להיות על אותו מסך. */
+.gym-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+  resize: vertical;
+  min-height: 68px;
+}
+.gym-field textarea:focus { outline: none; border-color: var(--action); }
+.gym-hint--sm { font-size: 12px; margin: 5px 0 0; }
+.gym-form__err {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(225, 29, 72, .08);
+  border: 1px solid rgba(225, 29, 72, .28);
+  color: var(--danger, #E11D48);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.gym-wiz__foot .btn-primary.is-danger { background: var(--danger, #E11D48); border-color: var(--danger, #E11D48); }
+.gym-wiz__foot .btn-primary.is-danger:hover { background: #BE123C; }

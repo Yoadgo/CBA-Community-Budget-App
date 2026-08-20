@@ -495,6 +495,15 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.postRead("renewGymMembership", data || {}, cb);
   }
+  /* עריכה ידנית של מנוי (2026-08-20, בקשת יועד: "צריך אפשרות לדחות את המנוי
+     ולהרחיב את אפשרויות העריכה"). פעולה אחת שמקבלת רק את השדות שהשתנו:
+     {id, planId?, price?, startDate?, validUntil?, status?, note?, reason?}.
+     דחייה וביטול הם פשוט status="נדחה"/"בוטל" — השרת שולח את המייל המתאים
+     לתושב רק כשהסטטוס באמת *משתנה* לאחד מהם. */
+  function updateGymMembership(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("updateGymMembership", data || {}, cb);
+  }
   function approveClubReservation(id, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "approveClubReservation", id: id }, cb);
@@ -1225,6 +1234,7 @@ CBA.data = (function () {
     rejectGymPayment: rejectGymPayment,
     extendGymMembership: extendGymMembership,
     renewGymMembership: renewGymMembership,
+    updateGymMembership: updateGymMembership,
     approveClubReservation: approveClubReservation,
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,

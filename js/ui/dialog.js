@@ -139,5 +139,122 @@ CBA.ui = (function () {
     }, 2600);
   }
 
-  return { alert: alertBox, confirm: confirmBox, prompt: promptBox, toast: toast };
+  /* busy — מצב "עסוק" בולט על הכפתור עצמו (2026-08-20).
+     יועד: "הטעינה בזמן שליחת הבקשה לא מספיק ברורה. צריך שזה יהיה גם המצב
+     מערכת בצד שמאל אבל גם בולט על כפתור השמירה." החיווי בכותרת מטופל
+     מרכזית ב-sheets.js; כאן יושב החצי השני — הכפתור שנלחץ.
+
+     הדפוס שהיה נפוץ באפליקציה, btn.disabled = true בלבד, נכשל בשלוש דרכים:
+     הכפתור נראה כבוי אבל לא "עובד", הטקסט לא משתנה אז אין אישור שהלחיצה
+     נקלטה, ומי ששכח לשחזר את disabled בענף שגיאה השאיר כפתור מת לתמיד.
+     busy() מחזירה פונקציה אחת שמחזירה הכל לקדמותו — כולל הטקסט המקורי —
+     ובטוח לקרוא לה פעמיים.
+
+     שימוש:
+         var done = CBA.ui.busy(btn, "שולח…");
+         CBA.data.doThing(payload, function (res) { done(); ... });
+
+     aria-busy נוסף כדי שקוראי מסך יכריזו על השינוי. */
+  function busy(btn, text) {
+    if (!btn) return function () {};
+    if (btn.dataset.busyOn === "1") return function () {};
+    var prevHTML = btn.innerHTML;
+    var prevDisabled = !!btn.disabled;
+    btn.dataset.busyOn = "1";
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    btn.classList.add("is-busy");
+    btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>' +
+                    '<span class="btn-busy-text">' + esc(text || "רגע…") + "</span>";
+    var released = false;
+    return function release() {
+      if (released) return;
+      released = true;
+      btn.classList.remove("is-busy");
+      btn.removeAttribute("aria-busy");
+      delete btn.dataset.busyOn;
+      btn.innerHTML = prevHTML;
+      btn.disabled = prevDisabled;
+    };
+  }
+
+  /* busyText — עדכון הטקסט בזמן שהכפתור כבר עסוק (אחוזי העלאה, שלב בתהליך). */
+  function busyText(btn, text) {
+    if (!btn || btn.dataset.busyOn !== "1") return;
+    var t = btn.querySelector(".btn-busy-text");
+    if (t) t.textContent = String(text == null ? "" : text);
+  }
+
+  /* --- שדרוג אוטומטי של כפתורים ישנים (2026-08-20) ---
+     יועד ביקש לטפל גם ב"מקומות או כפתורים נוספים כאלה באפליקציה". בפועל
+     הדפוס הישן חוזר בעשרות מקומות (clubAdmin, residents, expenses, app.js):
+         btn.disabled = true; btn.textContent = "שומר…";
+     הוא נותן טקסט, אבל לא ספינר, והכפתור נראה כבוי-ומת ולא עסוק. לשכתב את
+     כל אתרי הקריאה ידנית זה שינוי רחב ומסוכן בלי צורך; במקום זה יש כאן
+     משקיף אחד שמזהה את הדפוס בעצמו: כפתור שהפך ל-disabled וכתוב עליו טקסט
+     שנגמר ב-"…" מקבל ספינר ואת המראה של is-busy.
+
+     למה זה בטוח: אנחנו רק *מוסיפים* span בתחילת הכפתור ומחלקה. קוד השחזור
+     הקיים (btn.textContent = "שמור") מוחק את ה-span מעצמו, והמשקיף מסיר את
+     המחלקה כשה-disabled יורד. שום קוד קיים לא צריך להשתנות, ואם המשקיף לא
+     נתמך בדפדפן — הכל ממשיך לעבוד בדיוק כמו קודם.
+     קוד חדש עדיף שישתמש ב-CBA.ui.busy במפורש: שם גם הטקסט המקורי משוחזר
+     אוטומטית, כולל בענפי שגיאה שקל לשכוח. */
+  function isBusyText(btn) {
+    var t = (btn.textContent || "").trim();
+    return t.length > 1 && (t.slice(-1) === "…" || t.slice(-3) === "...");
+  }
+  function syncLegacyBusy(btn) {
+    if (btn.dataset.busyOn === "1") return;             // מנוהל ע"י CBA.ui.busy
+    var should = btn.disabled && isBusyText(btn);
+    var has = btn.classList.contains("is-busy");
+    if (should === has) return;
+    if (should) {
+      btn.classList.add("is-busy");
+      btn.setAttribute("aria-busy", "true");
+      var sp = document.createElement("span");
+      sp.className = "btn-spinner";
+      sp.setAttribute("aria-hidden", "true");
+      btn.insertBefore(sp, btn.firstChild);
+    } else {
+      btn.classList.remove("is-busy");
+      btn.removeAttribute("aria-busy");
+      var old = btn.querySelector(".btn-spinner");
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+    }
+  }
+  function watchLegacyButtons() {
+    if (typeof MutationObserver !== "function") return;
+    var pending = null;
+    var queue = [];
+    function flush() {
+      pending = null;
+      var list = queue; queue = [];
+      list.forEach(function (b) { try { syncLegacyBusy(b); } catch (e) {} });
+    }
+    new MutationObserver(function (records) {
+      for (var i = 0; i < records.length; i++) {
+        var n = records[i].target;
+        if (n && n.nodeType === 3) n = n.parentNode;
+        if (!n || n.nodeType !== 1) continue;
+        var btn = n.tagName === "BUTTON" ? n : (n.closest ? n.closest("button") : null);
+        if (!btn) continue;
+        if (queue.indexOf(btn) === -1) queue.push(btn);
+      }
+      // דחייה לסוף ה-tick: הדפוס הנפוץ הוא שתי השמות ברצף (disabled ואז
+      // textContent), ואנחנו רוצים להסתכל על המצב אחרי שתיהן, לא באמצע.
+      if (queue.length && !pending) pending = setTimeout(flush, 0);
+    }).observe(document.body, {
+      subtree: true, childList: true, characterData: true,
+      attributes: true, attributeFilter: ["disabled"]
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", watchLegacyButtons);
+  } else {
+    watchLegacyButtons();
+  }
+
+  return { alert: alertBox, confirm: confirmBox, prompt: promptBox, toast: toast,
+           busy: busy, busyText: busyText };
 })();

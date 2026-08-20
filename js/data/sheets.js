@@ -284,6 +284,16 @@ CBA.sheets = (function () {
      בכל פעם שהמצב הכולל (isDirty) משתנה — ו-app.js מאזין לו ומצייר בועה
      אחת גלובלית. אם דפדפן ישן לא תומך ב-CustomEvent, זה נכשל בשקט (רק
      החיווי הוויזואלי לא יופיע — שום פונקציונליות לא נשברת). */
+  /* "עסוק גלוי" — מה שהחיווי בכותרת מציג. שונה מ-isDirty(), שגם חוסם רענון
+     רקע עבור סיבות שקטות (טופס פתוח). */
+  function isBusyVisible() {
+    if (inFlightWrites > 0) return true;
+    var keys = Object.keys(dirtyReasons);
+    for (var i = 0; i < keys.length; i++) {
+      if (dirtyReasons[keys[i]] !== "\u0000silent") return true;
+    }
+    return false;
+  }
   var lastDirtyState = false;
   var lastWriteHadError = false;
   // (2026-08-18) נוסף גם נוסח השגיאה עצמו — מאז שהכתיבה קוראת את תשובת השרת
@@ -291,18 +301,41 @@ CBA.sheets = (function () {
   // מאחורי הודעה גנרית. app.js מציג את זה כטקסט הסבר על חיווי השמירה.
   var lastWriteErrorMsg = "";
   function notifyDirtyChange() {
-    var d = isDirty();
+    var d = isBusyVisible();
     if (d === lastDirtyState) return;
     lastDirtyState = d;
     try {
       window.dispatchEvent(new CustomEvent("cba:dirty-change", {
-        detail: { dirty: d, error: d ? null : lastWriteHadError, errorMessage: d ? "" : lastWriteErrorMsg }
+        detail: { dirty: d, label: d ? currentBusyLabel() : "", error: d ? null : lastWriteHadError, errorMessage: d ? "" : lastWriteErrorMsg }
       }));
     } catch (e) { /* לא קריטי */ }
     if (!d) { lastWriteHadError = false; lastWriteErrorMsg = ""; }
   }
-  function markDirty(reason) { dirtyReasons[reason || "_default"] = true; notifyDirtyChange(); }
+  /* label:
+       מחרוזת  — התווית שתוצג בחיווי ("סורק…", "שולח בקשה…")
+       undefined — ברירת המחדל ההיסטורית: מוצג כ"שומר…"
+       false    — "שקט": חוסם רענון רקע אבל *לא* מדליק את החיווי. זה המצב
+                  הנכון ל"יש טופס פתוח עם עריכה שלא נשלחה" — עד היום מגירה
+                  פתוחה גרמה לכותרת להכריז "שומר…" בזמן שלא נשמר כלום. */
+  function markDirty(reason, label) {
+    dirtyReasons[reason || "_default"] = (label === false) ? "\u0000silent" : (label || true);
+    notifyDirtyChange();
+  }
   function clearDirty(reason) { delete dirtyReasons[reason || "_default"]; notifyDirtyChange(); }
+
+  /* (2026-08-20) תווית החיווי. עד היום app.js כתב "שומר…" קשיח, וזה היה לא
+     מדויק לפעולות שאינן שמירה — שליחת בקשת מנוי, סריקת אישור תשלום בבינה
+     מלאכותית, ייצוא. עכשיו כל "סיבה" יכולה לשאת תווית משלה, והחיווי מציג את
+     הראשונה שנמצאה (בפועל כמעט תמיד יש רק אחת בו-זמנית). */
+  function currentBusyLabel() {
+    var keys = Object.keys(dirtyReasons);
+    for (var i = 0; i < keys.length; i++) {
+      if (typeof dirtyReasons[keys[i]] === "string" && dirtyReasons[keys[i]] !== "\u0000silent") {
+        return dirtyReasons[keys[i]];
+      }
+    }
+    return "שומר…";
+  }
 
   /* ============================================================================
      תור "שמירות שממתינות לשליחה" (2026-08-19, ממצא 4.6 בדו"ח הבדיקה)
@@ -705,16 +738,58 @@ CBA.sheets = (function () {
   // אושר ידנית (2026-08-06) ש-fetch רגיל ל-Apps Script /exec מהמקור של האתר עצמו
   // (github.io) כן מחזיר תשובה קריאה כשה-Content-Type הוא "simple" (text/plain,
   // כמו כאן) שלא מפעיל preflight. body יכול להיות גדול (קובץ Base64) — POST, לא GET.
+  /* --- חיווי עסוק אוטומטי לכתיבות postRead (2026-08-20) ---
+     יועד: "הטעינה בזמן שליחת הבקשה לא מספיק ברורה. צריך שזה יהיה גם המצב
+     מערכת בצד שמאל". הסיבה שזה לא קרה: push() מעלה inFlightWrites ולכן מדליק
+     את חיווי הכותרת אוטומטית, אבל postRead/postReadProgress — שדרכם עוברות
+     *כל* הכתיבות החדשות (מכון כושר, שירותים, תושבים, קבלות) — לא עשו את זה
+     כלל. במקום להוסיף markDirty ידני בכל אחד מעשרות אתרי הקריאה (ולשכוח
+     חצי מהם), הסימון יושב כאן, במקום אחד שכולם כבר עוברים בו.
+     התוויות: פעולה שהיא לא "שמירה" קלאסית מקבלת ניסוח משלה, כדי שהחיווי
+     יגיד את האמת ("סורק…" ולא "שומר…"). */
+  var BUSY_LABELS = {
+    submitReceipt: "שולח…", uploadReceiptFile: "מעלה קובץ…", deleteReceiptFile: "מוחק קובץ…",
+    scanReceipt: "סורק…", scanServiceDoc: "סורק…", scanGymPayment: "סורק…",
+    exportResidents: "מייצא…",
+    submitGymApplication: "שולח בקשה…", reportGymPayment: "שולח דיווח…",
+    requestGymDeclaration: "שולח מייל…", notifyServiceUpdate: "שולח מיילים…",
+    createGymMembership: "מקים מנוי…", renewGymMembership: "מחדש…",
+    confirmGymPayment: "מפעיל מנוי…", recordGymPayment: "מפעיל מנוי…",
+    extendGymMembership: "מאריך…", updateGymMembership: "מעדכן…"
+  };
+  var busySeq = 0;
+  function beginBusy(action) {
+    var key = "net:" + action + ":" + (++busySeq);
+    markDirty(key, BUSY_LABELS[action] || "שומר…");
+    return function endBusy() { clearDirty(key); };
+  }
+
   function postRead(action, payload, cb) {
     var body = Object.assign({ action: action, session: authSession() }, payload || {});
+    var endBusy = beginBusy(action);
     fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(body)
     })
       .then(function (r) { return r.json(); })
-      .then(function (data) { bumpWriteFloor(); if (cb) cb(withAuthNote(data)); })
-      .catch(function (err) { bumpWriteFloor(); if (cb) cb({ ok: false, error: String(err) }); });
+      .then(function (data) {
+        bumpWriteFloor();
+        var res = withAuthNote(data);
+        if (!res || res.ok !== true) {
+          lastWriteHadError = true;
+          lastWriteErrorMsg = (res && res.error) ? String(res.error) : "השרת דחה את הפעולה";
+        }
+        endBusy();
+        if (cb) cb(res);
+      })
+      .catch(function (err) {
+        bumpWriteFloor();
+        lastWriteHadError = true;
+        lastWriteErrorMsg = "לא הצלחנו להגיע לשרת. בדקו את החיבור לאינטרנט ונסו שוב.";
+        endBusy();
+        if (cb) cb({ ok: false, error: String(err) });
+      });
   }
 
   // כמו postRead, אבל דרך XMLHttpRequest כדי לחשוף אחוז התקדמות אמיתי של
@@ -728,6 +803,7 @@ CBA.sheets = (function () {
   // cb(res) נקרא רק אחרי שהתשובה האמיתית מהשרת התקבלה ונפענחה — לא לפני.
   function postReadProgress(action, payload, onProgress, cb) {
     var body = Object.assign({ action: action, session: authSession() }, payload || {});
+    var endBusy = beginBusy(action);
     var xhr = new XMLHttpRequest();
     xhr.open("POST", API_URL, true);
     xhr.setRequestHeader("Content-Type", "text/plain;charset=utf-8");
@@ -757,23 +833,36 @@ CBA.sheets = (function () {
         if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
       };
     }
+    function failBusy(msg) {
+      lastWriteHadError = true;
+      lastWriteErrorMsg = msg;
+      endBusy();
+    }
     xhr.onload = function () {
       clearUnloadGuard();
       bumpWriteFloor();
       if (typeof onProgress === "function") onProgress(100);
       var data;
       try { data = JSON.parse(xhr.responseText); }
-      catch (e) { if (cb) cb({ ok: false, error: "תשובה לא תקינה מהשרת" }); return; }
-      if (cb) cb(withAuthNote(data));
+      catch (e) { failBusy("תשובה לא תקינה מהשרת"); if (cb) cb({ ok: false, error: "תשובה לא תקינה מהשרת" }); return; }
+      var res = withAuthNote(data);
+      if (!res || res.ok !== true) {
+        lastWriteHadError = true;
+        lastWriteErrorMsg = (res && res.error) ? String(res.error) : "השרת דחה את הפעולה";
+      }
+      endBusy();
+      if (cb) cb(res);
     };
     xhr.onerror = function () {
       clearUnloadGuard();
       bumpWriteFloor();
+      failBusy("שגיאת רשת בשליחה. בדקו את החיבור ונסו שוב.");
       if (cb) cb({ ok: false, error: "שגיאת רשת" });
     };
     xhr.ontimeout = function () {
       clearUnloadGuard();
       bumpWriteFloor();
+      failBusy("תם הזמן הקצוב — נסו שוב.");
       if (cb) cb({ ok: false, error: "תם הזמן הקצוב — נסו שוב" });
     };
     xhr.send(JSON.stringify(body));

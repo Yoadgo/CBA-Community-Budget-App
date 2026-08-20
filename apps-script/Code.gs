@@ -114,7 +114,8 @@ var ACTION_PERMS = {
   confirmGymPayment: PERM_GYM,
   rejectGymPayment: PERM_GYM,
   recordGymPayment: PERM_GYM,
-  extendGymMembership: PERM_GYM
+  extendGymMembership: PERM_GYM,
+  updateGymMembership: PERM_GYM
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -471,6 +472,7 @@ function doPost(e) {
       case 'recordGymPayment':      return json_(recordGymPayment_(ss, body));
       case 'extendGymMembership':   return json_(extendGymMembership_(ss, body));
       case 'renewGymMembership':    return json_(renewGymMembership_(ss, body));
+      case 'updateGymMembership':   return json_(updateGymMembership_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
   } catch (err) {
@@ -3422,6 +3424,13 @@ var DEFAULT_EMAIL_SETTINGS = [
     'שלום {{שם}},\n\nהצהרת הבריאות שחתמת עליה תקפה עד {{תוקף}}. אחרי התאריך הזה, חידוש המנוי יחייב מילוי הצהרה חדשה — זה לוקח כמה דקות במסך "מכון כושר".\n\nבברכה,\nועד הקהילה',
     'נשלח X ימים לפני שההצהרה חוצה את השנתיים', PERM_GYM, 'כן'],
 
+  ['GYM_CANCELLED', 'המנוי שלך במכון הכושר בוטל',
+    'שלום {{שם}},\n\nהמנוי שלך במכון הכושר בוטל.{{הערה}}\n\nלשאלות אפשר לפנות לאחראית חדר הכושר.\n\nבברכה,\nועד הקהילה',
+    'נשלח כשמנהל/ת המכון מבטל/ת מנוי — {{הערה}} מכיל את הסיבה אם נכתבה', PERM_GYM, 'כן'],
+  ['GYM_REJECTED', 'עדכון לגבי בקשתך למכון הכושר',
+    'שלום {{שם}},\n\nלצערנו הבקשה שלך למכון הכושר לא אושרה.{{הערה}}\n\nלשאלות אפשר לפנות לאחראית חדר הכושר.\n\nבברכה,\nועד הקהילה',
+    'נשלח כשמנהל/ת המכון דוחה בקשה', PERM_GYM, 'כן'],
+
   ['ADMIN_STALE_GYM', 'בקשת מכון ממתינה כבר {{ימים}} ימים',
     'הבקשה של {{שם}} במכון הכושר ממתינה לטיפול כבר {{ימים}} ימים (סטטוס: {{סטטוס}}).',
     'למנהלי מכון + מנהל-על. תזכורת חד-פעמית כשבקשה חוצה את הסף', PERM_GYM, 'כן'],
@@ -5974,6 +5983,113 @@ function renewGymMembership_(ss, body) {
     } catch (mailErr) { Logger.log('מייל חידוש נכשל: ' + mailErr); }
 
     return { ok: true, id: newId, status: GYM_ST_PAYMENT, previous: prevId };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================================
+ *  מכון כושר — עריכה, דחייה וביטול (2026-08-20)
+ * ----------------------------------------------------------------------------
+ *  עד עכשיו למנהל/ת המכון היו רק פעולות "מסלוליות" (אשר, אמת, האֲרך). בפועל
+ *  צריך גם לתקן: מסלול שנבחר לא נכון, תאריך התחלה שגוי, סטטוס שצריך לחזור
+ *  אחורה, וכמובן **דחייה וביטול** — שלא היו קיימים בכלל.
+ *
+ *  עיקרון: פעולה אחת שמקבלת רק את השדות שהשתנו, כותבת בכתיבה מרוכזת אחת,
+ *  רושמת ביומן מה שונה (כדי שתמיד יהיה אפשר להסביר בדיעבד), ושולחת מייל
+ *  לתושב רק כשהשינוי באמת נוגע לו — דחייה או ביטול.
+ * ========================================================================== */
+
+/** הסטטוסים שמותר להגיע אליהם בעריכה ידנית. רשימה סגורה בכוונה: סטטוס שאינו
+ * ברשימה היה שובר את כל הלוגיקה שנשענת על השמות האלה. */
+var GYM_EDITABLE_STATUSES = [
+  GYM_ST_DECLARATION, GYM_ST_DOCTOR, GYM_ST_REVIEW, GYM_ST_PAYMENT,
+  GYM_ST_VERIFY, GYM_ST_ACTIVE, GYM_ST_EXPIRED, GYM_ST_FROZEN,
+  GYM_ST_REJECTED, GYM_ST_CANCELLED
+];
+
+function updateGymMembership_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var id = String(body.id || '').trim();
+    var row = gymRowById_(sh, cols, id);
+    if (!row) return { ok: false, error: 'המנוי לא נמצא' };
+
+    var cfg = readGymSettings_(ss);
+    var w = gymRowWriter_(sh, row);
+    var changes = [];
+
+    var prevStatus = String(w.get('סטטוס')).trim();
+
+    if (body.planId) {
+      var plan = null;
+      for (var i = 0; i < cfg.plans.length; i++) if (cfg.plans[i].id === body.planId) plan = cfg.plans[i];
+      if (plan) {
+        if (String(w.get('מסלול')).trim() !== plan.name) changes.push('מסלול → ' + plan.name);
+        w.set('מסלול', plan.name);
+        if (body.price === undefined || body.price === '') w.set('מחיר מוסכם', plan.total);
+      }
+    }
+    if (body.price !== undefined && body.price !== '') {
+      var pr = Number(body.price);
+      if (!isNaN(pr)) { changes.push('מחיר → ' + pr); w.set('מחיר מוסכם', pr); }
+    }
+    if (body.startDate) {
+      var sd = gymToDate_(body.startDate);
+      if (sd) { changes.push('תאריך התחלה → ' + body.startDate); w.set('תאריך התחלה', sd); }
+    }
+    if (body.validUntil) {
+      var end = gymMonthEnd_(body.validUntil);
+      if (!end) return { ok: false, error: 'חודש תוקף לא תקין (נדרש YYYY-MM)' };
+      changes.push('בתוקף עד → ' + body.validUntil);
+      w.set('בתוקף עד', end);
+    }
+    if (body.status) {
+      var st = String(body.status).trim();
+      if (GYM_EDITABLE_STATUSES.indexOf(st) === -1) {
+        return { ok: false, error: 'סטטוס לא מוכר: ' + st };
+      }
+      if (st !== prevStatus) changes.push('סטטוס: ' + prevStatus + ' → ' + st);
+      w.set('סטטוס', st);
+    }
+    if (body.note !== undefined) w.set('הערות מנהל', body.note);
+
+    if (!changes.length && body.note === undefined) {
+      return { ok: false, error: 'לא נבחר שום שינוי' };
+    }
+
+    w.set('טופל בתאריך', new Date());
+    w.set('טופל ע"י', body._email || '');
+    w.flush();
+
+    gymLog_(ss, id, 'עריכה ידנית', {
+      by: body._email || '',
+      note: changes.join(' · ') + (body.reason ? (' | סיבה: ' + body.reason) : '')
+    });
+
+    var sync = null;
+    try { sync = gymPaymentSync_(ss, id); } catch (e) { Logger.log('sync אחרי עריכה נכשל: ' + e); }
+
+    // מייל לתושב רק כשהשינוי נוגע לו באמת
+    var newStatus = String(body.status || prevStatus).trim();
+    if (newStatus !== prevStatus && (newStatus === GYM_ST_REJECTED || newStatus === GYM_ST_CANCELLED)) {
+      try {
+        var email = String(sh.getRange(row, cols['אימייל']).getValue()).trim();
+        var name = String(sh.getRange(row, cols['שם פרטי']).getValue()).trim() || email;
+        var reasonTxt = body.reason ? (' ' + body.reason) : '';
+        sendResidentTemplate_(ss,
+          newStatus === GYM_ST_REJECTED ? 'GYM_REJECTED' : 'GYM_CANCELLED',
+          [email], { 'שם': name, 'הערה': reasonTxt });
+      } catch (mailErr) { Logger.log('מייל עריכה נכשל: ' + mailErr); }
+    }
+
+    return { ok: true, id: id, status: newStatus, changes: changes, sync: sync };
   } catch (err) {
     return { ok: false, error: String(err) };
   } finally {

@@ -109,13 +109,13 @@ CBA.screens = CBA.screens || {};
               (m["מחיר מוסכם"] ? " · " + esc(m["מחיר מוסכם"]) + " ₪" : "") + "</span></div>";
     }
     if (m["בתוקף עד"]) {
-      html += '<div class="gym-kv"><span>בתוקף עד</span><span>' + esc(m["בתוקף עד"]) + "</span></div>";
+      html += '<div class="gym-kv"><span>בתוקף עד</span><span>' + esc(fmtDate(m["בתוקף עד"])) + "</span></div>";
     }
     if (status === ST_DOCTOR && flagged) {
       html += '<div class="gym-kv"><span>שאלות שסומנו</span><span>' + esc(flagged) + "</span></div>";
     }
     if (m["תאריך חתימה"]) {
-      html += '<div class="gym-kv"><span>הצהרת בריאות</span><span>נחתמה ב-' + esc(m["תאריך חתימה"]) + "</span></div>";
+      html += '<div class="gym-kv"><span>הצהרת בריאות</span><span>נחתמה ב-' + esc(fmtDate(m["תאריך חתימה"])) + "</span></div>";
     }
 
     if (status === ST_DECLARATION) {
@@ -228,9 +228,9 @@ CBA.screens = CBA.screens || {};
     var txt = el.textContent.trim();
     function done() { btn.textContent = "הועתק ✓"; setTimeout(function () { btn.textContent = "העתקת הקוד"; }, 1800); }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(txt).then(done, function () { window.prompt("הקוד:", txt); });
+      navigator.clipboard.writeText(txt).then(done, function () { CBA.ui.alert("קוד הכניסה: " + txt); });
     } else {
-      window.prompt("הקוד:", txt);
+      CBA.ui.alert("קוד הכניסה: " + txt);
     }
   }
 
@@ -239,26 +239,27 @@ CBA.screens = CBA.screens || {};
   function doRenew(container, btn) {
     var plans = (st.my && st.my.plans) || [];
     var plan = plans[0];
-    if (!plan) { window.alert("לא הוגדר מסלול מנוי."); return; }
-    if (!window.confirm("לחדש את המנוי?\n\n" + plan.name + " · " + plan.total + " ₪\n" +
-                        "אחרי החידוש נעביר אותך למסך התשלום.")) return;
-    btn.disabled = true;
-    btn.textContent = "מחדש…";
-    CBA.data.renewGymMembership({ planId: plan.id }, function (res) {
-      if (!res || !res.ok) {
-        btn.disabled = false;
-        btn.textContent = "חידוש המנוי";
-        if (res && res.needsDeclaration) {
-          window.alert(res.error);
-          openWizard(container);
-          return;
-        }
-        window.alert((res && res.error) || "החידוש נכשל.");
-        return;
-      }
-      window.alert("המנוי חודש. נשאר להסדיר את התשלום — הפרטים מחכים לך במסך.");
-      load(container, function () { draw(container); });
-    });
+    if (!plan) { CBA.ui.alert("לא הוגדר מסלול מנוי."); return; }
+    CBA.ui.confirm("לחדש את המנוי?\n\n" + plan.name + " · " + plan.total + " ₪\n" +
+                   "אחרי החידוש נעביר אותך למסך התשלום.",
+                   { title: "חידוש מנוי", okText: "חידוש" })
+      .then(function (ok) {
+        if (!ok) return;
+        var release = CBA.ui.busy(btn, "מחדש…");
+        CBA.data.renewGymMembership({ planId: plan.id }, function (res) {
+          release();
+          if (!res || !res.ok) {
+            if (res && res.needsDeclaration) {
+              CBA.ui.alert(res.error).then(function () { openWizard(container); });
+              return;
+            }
+            CBA.ui.alert((res && res.error) || "החידוש נכשל.");
+            return;
+          }
+          CBA.ui.toast("המנוי חודש — נשאר להסדיר את התשלום");
+          load(container, function () { draw(container); });
+        });
+      });
   }
 
   /* ------------------------------------------------------------------ *
@@ -266,7 +267,7 @@ CBA.screens = CBA.screens || {};
    * ------------------------------------------------------------------ */
   function openWizard(container) {
     var f = st.form || {};
-    if (!f.ok) { window.alert(f.error || "לא ניתן לטעון את טופס ההרשמה כרגע."); return; }
+    if (!f.ok) { CBA.ui.alert(f.error || "לא ניתן לטעון את טופס ההרשמה כרגע."); return; }
     var m = (st.my && st.my.membership) || null;
     var isCompletion = !!(m && (m["סטטוס"] || "") === ST_DECLARATION);
     var pre = f.prefill || {};
@@ -290,7 +291,7 @@ CBA.screens = CBA.screens || {};
         signature: ""
       }
     };
-    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymWizard");
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymWizard", false);
     renderWizard(container);
   }
 
@@ -460,7 +461,9 @@ CBA.screens = CBA.screens || {};
 
     el.querySelectorAll("[data-gym-close]").forEach(function (n) {
       n.addEventListener("click", function () {
-        if (window.confirm("לסגור את הטופס? מה שמילאת לא יישמר.")) closeWizard(container);
+        CBA.ui.confirm("לסגור את הטופס? מה שמילאת לא יישמר.",
+                       { title: "סגירת הטופס", okText: "סגירה", danger: true })
+          .then(function (ok) { if (ok) closeWizard(container); });
       });
     });
     el.querySelectorAll("[data-gf]").forEach(function (n) {
@@ -497,13 +500,13 @@ CBA.screens = CBA.screens || {};
   function validateStep() {
     var w = st.wizard, d = w.data, f = st.form;
     if (w.step === 1) {
-      if (!d.firstName.trim() || !d.lastName.trim()) { window.alert("צריך למלא שם פרטי ושם משפחה."); return false; }
-      if (!d.phone.trim()) { window.alert("צריך למלא טלפון."); return false; }
-      if (!d.idNumber.trim()) { window.alert("צריך למלא תעודת זהות."); return false; }
-      if (!d.birthDate) { window.alert("צריך למלא תאריך לידה."); return false; }
+      if (!d.firstName.trim() || !d.lastName.trim()) { CBA.ui.alert("צריך למלא שם פרטי ושם משפחה."); return false; }
+      if (!d.phone.trim()) { CBA.ui.alert("צריך למלא טלפון."); return false; }
+      if (!d.idNumber.trim()) { CBA.ui.alert("צריך למלא תעודת זהות."); return false; }
+      if (!d.birthDate) { CBA.ui.alert("צריך למלא תאריך לידה."); return false; }
       var age = ageFrom(d.birthDate), minAge = f.minAge || 18;
       if (age < minAge) {
-        window.alert("ההרשמה העצמאית אפשרית מגיל " + minAge +
+        CBA.ui.alert("ההרשמה העצמאית אפשרית מגיל " + minAge +
           ". מתחת לגיל זה יש לפנות לאחראית חדר הכושר.");
         return false;
       }
@@ -511,15 +514,15 @@ CBA.screens = CBA.screens || {};
     }
     if (w.step === 2) {
       var missing = (f.rules || []).filter(function (r) { return !d.ruleAcks[r.id]; });
-      if (missing.length) { window.alert("צריך לאשר קריאה של כל מקטעי התקנון."); return false; }
+      if (missing.length) { CBA.ui.alert("צריך לאשר קריאה של כל מקטעי התקנון."); return false; }
       return true;
     }
     if (w.step === 3) {
       var un = (f.questions || []).filter(function (q) { return !d.answers[q.id]; });
-      if (un.length) { window.alert("צריך לענות על כל השאלות. נשארו " + un.length + "."); return false; }
+      if (un.length) { CBA.ui.alert("צריך לענות על כל השאלות. נשארו " + un.length + "."); return false; }
       return true;
     }
-    if (!d.signature) { window.alert("צריך לחתום לפני השליחה."); return false; }
+    if (!d.signature) { CBA.ui.alert("צריך לחתום לפני השליחה."); return false; }
     return true;
   }
 
@@ -537,8 +540,10 @@ CBA.screens = CBA.screens || {};
      נשמרה). לכן: אחוז התקדמות אמיתי בזמן ההעלאה, ואז "מעבד…" בזמן שהשרת עובד. */
   function submit(container, el) {
     var btn = el.querySelector("[data-gym-next]");
-    btn.disabled = true;
-    btn.textContent = "שולח…";
+    // (2026-08-20) קודם זה היה disabled + החלפת טקסט, ויועד דיווח שזה לא מספיק
+    // בולט. עכשיו ספינר על הכפתור עצמו + טקסט שמתעדכן לפי אחוזי ההעלאה, וגם
+    // חיווי "שולח בקשה…" בכותרת (מגיע אוטומטית מ-postReadProgress ב-sheets.js).
+    var release = CBA.ui.busy(btn, "שולח…");
     var note = el.querySelector(".gym-wiz__foot");
     var prog = document.createElement("div");
     prog.className = "gym-progress";
@@ -547,16 +552,15 @@ CBA.screens = CBA.screens || {};
 
     CBA.data.submitGymApplication(st.wizard.data, function (res) {
       if (prog.parentNode) prog.parentNode.removeChild(prog);
+      release();
       if (!res || !res.ok) {
-        btn.disabled = false;
-        btn.textContent = "שליחת הבקשה";
-        window.alert((res && res.error) || "השליחה נכשלה, נסו שוב.");
+        CBA.ui.alert((res && res.error) || "השליחה נכשלה, נסו שוב.");
         return;
       }
       if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymWizard");
       st.wizard = null;
       if (el.parentNode) el.parentNode.removeChild(el);
-      window.alert(res.flagged && res.flagged.length
+      CBA.ui.alert(res.flagged && res.flagged.length
         ? "הבקשה נשלחה. מכיוון שסימנת “כן” באחת השאלות, נדרשת תעודה רפואית — שלחנו לך מייל עם הפרטים."
         : "הבקשה נשלחה בהצלחה. שלחנו לך מייל אישור.");
       load(container, function () { draw(container); });
@@ -565,6 +569,7 @@ CBA.screens = CBA.screens || {};
       // הכדור עובר לשרת, ושם עוד נשארות כמה שניות — ולכן הטקסט משתנה.
       prog.textContent = pct < 100 ? ("מעלה את הטופס… " + pct + "%")
                                    : "הבקשה נשלחה, מעבד בשרת…";
+      CBA.ui.busyText(btn, pct < 100 ? ("שולח… " + pct + "%") : "מעבד בשרת…");
     });
   }
 
@@ -646,7 +651,7 @@ CBA.screens = CBA.screens || {};
         "</div>" +
       "</aside>";
     document.body.appendChild(el);
-    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymPayReport");
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymPayReport", false);
 
     function close() {
       if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymPayReport");
@@ -661,7 +666,7 @@ CBA.screens = CBA.screens || {};
     el.querySelector("[data-gp-file]").addEventListener("change", function (e) {
       var file = e.target.files && e.target.files[0];
       if (!file) return;
-      if (file.size > 8 * 1024 * 1024) { window.alert("הקובץ גדול מדי (מעל 8MB)."); return; }
+      if (file.size > 8 * 1024 * 1024) { CBA.ui.alert("הקובץ גדול מדי (מעל 8MB)."); return; }
       var reader = new FileReader();
       reader.onload = function () {
         var b64 = String(reader.result).split(",")[1] || "";
@@ -692,18 +697,20 @@ CBA.screens = CBA.screens || {};
     });
 
     el.querySelector("[data-gp-send]").addEventListener("click", function () {
-      if (!Number(data.amount)) { window.alert("צריך למלא את הסכום ששולם."); return; }
+      if (!Number(data.amount)) { CBA.ui.alert("צריך למלא את הסכום ששולם."); return; }
       var btn = el.querySelector("[data-gp-send]");
-      btn.disabled = true; btn.textContent = "שולח…";
+      var release = CBA.ui.busy(btn, "שולח דיווח…");
       CBA.data.reportGymPayment(data, function (res) {
+        release();
         if (!res || !res.ok) {
-          btn.disabled = false; btn.textContent = "שליחת הדיווח";
-          window.alert((res && res.error) || "הדיווח נכשל, נסו שוב.");
+          CBA.ui.alert((res && res.error) || "הדיווח נכשל, נסו שוב.");
           return;
         }
         close();
-        window.alert("הדיווח נשלח. הוועד יאמת את התשלום ונעדכן אותך במייל כשהמנוי יופעל.");
+        CBA.ui.alert("הדיווח נשלח. הוועד יאמת את התשלום ונעדכן אותך במייל כשהמנוי יופעל.", "הדיווח נשלח");
         load(container, function () { draw(container); });
+      }, function (pct) {
+        CBA.ui.busyText(btn, pct < 100 ? ("שולח… " + pct + "%") : "מעבד בשרת…");
       });
     });
   }

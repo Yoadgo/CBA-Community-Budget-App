@@ -724,7 +724,9 @@
     clearTimeout(saveIndicatorHideTimer);
     if (d && d.dirty) {
       el.className = "save-indicator is-show";
-      if (textEl) textEl.textContent = "שומר…";
+      // (2026-08-20) התווית מגיעה עכשיו מ-sheets.js ולא קשיחה כאן — כדי
+      // ש"סורק…"/"שולח בקשה…"/"מעלה קובץ…" יגידו את מה שבאמת קורה.
+      if (textEl) textEl.textContent = (d.label || "שומר…");
       el.removeAttribute("title");
     } else if (d && d.error && CBA.sheets.pendingCount && CBA.sheets.pendingCount() > 0) {
       // כשל רשת שנכנס לתור הניסיונות החוזרים — החיווי "ממתין לשליחה" כבר
@@ -738,7 +740,7 @@
       // נכשלה — אז מציגים את הסיבה האמיתית, והחיווי נשאר 12 שניות במקום 4:
       // שגיאת שמירה היא לא משהו שכדאי שיחמוק מהעין.
       el.className = "save-indicator is-show is-error";
-      if (textEl) textEl.textContent = "השמירה נכשלה";
+      if (textEl) textEl.textContent = "הפעולה נכשלה";
       el.title = (d.errorMessage ? d.errorMessage + " " : "") + "השינוי לא נשמר בגיליון — בצעו את השינוי שוב.";
       saveIndicatorHideTimer = setTimeout(function () { el.classList.remove("is-show"); }, 12000);
     } else if (CBA.sheets.pendingCount && CBA.sheets.pendingCount() > 0) {

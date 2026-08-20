@@ -196,6 +196,12 @@ CBA.screens = CBA.screens || {};
     "פג תוקף": "המנוי הסתיים — אפשר לחדש."
   };
 
+  // התאריכים מ-gymMy מגיעים כ-yyyy-MM-dd; מציגים אותם בפורמט הישראלי
+  function gymFmtDate(v) {
+    var p = String(v == null ? "" : v).trim().split("-");
+    return p.length === 3 ? (p[2] + "." + p[1] + "." + p[0]) : String(v == null ? "" : v);
+  }
+
   function gymCardHTML() {
     if (!gymSnap || !gymSnap.membership) return "";
     var m = gymSnap.membership;
@@ -207,7 +213,7 @@ CBA.screens = CBA.screens || {};
              '<div class="gym-mini__main">' +
                '<div class="gym-mini__title">בקשת מנוי ' + CBA.esc(m["מזהה"] || "") + '</div>' +
                '<div class="gym-mini__sub">' + CBA.esc(GYM_NEXT[status] || "") + '</div>' +
-               (m["בתוקף עד"] ? '<div class="gym-mini__sub">בתוקף עד ' + CBA.esc(m["בתוקף עד"]) + '</div>' : "") +
+               (m["בתוקף עד"] ? '<div class="gym-mini__sub">בתוקף עד ' + CBA.esc(gymFmtDate(m["בתוקף עד"])) + '</div>' : "") +
              '</div>' +
              '<span class="gym-pill gym-pill--' + tone + '">' + CBA.esc(status) + '</span>' +
            '</button></div>';

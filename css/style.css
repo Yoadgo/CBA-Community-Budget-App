@@ -2163,6 +2163,36 @@ body.has-sim { padding-top: 34px; }
 body.has-cba-dlg { overflow: hidden; }
 
 /* הודעת הצלחה קצרה — מחליפה alert של "הפעולה הצליחה" */
+/* --- מצב "עסוק" על כפתור (2026-08-20, בקשת יועד) ---
+   הבעיה שדווחה: לוחצים "שליחת הבקשה", השרת עובד כמה שניות, ושום דבר על
+   הכפתור לא משתנה — אז לא ברור אם הלחיצה נקלטה. המצב הזה חייב להיות בולט,
+   ולכן הוא לא רק עמעום: ספינר מסתובב + טקסט שמשתנה. ר' CBA.ui.busy.
+   הכפתור נשאר בעוצמה כמעט מלאה בכוונה (0.9 ולא 0.45 כמו :disabled רגיל) —
+   כפתור דהוי נקרא כ"לא זמין", וכאן הוא דווקא באמצע עבודה. */
+button.is-busy,
+.btn.is-busy {
+  opacity: .9 !important;
+  cursor: progress;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-spinner {
+  width: 14px; height: 14px;
+  flex: 0 0 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-inline-start-color: transparent;
+  animation: cba-btn-spin .7s linear infinite;
+}
+.btn-busy-text { font: inherit; }
+@keyframes cba-btn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .btn-spinner { animation-duration: 2s; }
+}
+
 .cba-toast {
   position: fixed; z-index: 210; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
   background: rgba(17,24,39,.94); color: #fff;

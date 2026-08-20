@@ -176,7 +176,7 @@ function emsBindActions(body, reload) {
           reload();
         } else {
           input.checked = !next;
-          window.alert((res && res.error) || "השמירה נכשלה, נסו שוב.");
+          CBA.ui.alert((res && res.error) || "השמירה נכשלה, נסו שוב.");
         }
       });
     });
@@ -189,13 +189,12 @@ function emsBindActions(body, reload) {
       var wrap = body.querySelector('[data-rule="' + key + '"]');
       var input = wrap.querySelector("[data-rule-value]");
       var val = String(input.value || "").trim();
-      if (val === "" || isNaN(Number(val))) { window.alert("יש להזין מספר."); return; }
-      btn.disabled = true; btn.textContent = "שומר…";
-      if (CBA.sheets.markDirty) CBA.sheets.markDirty("emailSettings:" + key);
+      if (val === "" || isNaN(Number(val))) { CBA.ui.alert("יש להזין מספר."); return; }
+      var release = CBA.ui.busy(btn, "שומר…");
       CBA.data.saveEmailSetting(key, { body: val }, function (res) {
-        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("emailSettings:" + key);
-        btn.disabled = false; btn.textContent = "שמור";
-        if (!res || !res.ok) window.alert((res && res.error) || "השמירה נכשלה, נסו שוב.");
+        release();
+        if (!res || !res.ok) CBA.ui.alert((res && res.error) || "השמירה נכשלה, נסו שוב.");
+        else CBA.ui.toast("נשמר");
       });
     });
   });
@@ -256,17 +255,15 @@ function emsOpenDrawer(key, reload) {
     var subject = overlay.querySelector('[data-ef="subject"]').value;
     var bodyText = overlay.querySelector('[data-ef="body"]').value;
     var btn = overlay.querySelector("[data-esave]");
-    btn.disabled = true; btn.textContent = "שומר…";
-    if (CBA.sheets.markDirty) CBA.sheets.markDirty("emailSettings:" + key);
+    var release = CBA.ui.busy(btn, "שומר…");
     CBA.data.saveEmailSetting(key, { subject: subject, body: bodyText }, function (res) {
-      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("emailSettings:" + key);
-      btn.disabled = false; btn.textContent = "שמור";
+      release();
       if (res && res.ok) {
         row.subject = subject; row.body = bodyText;
         emsCloseDrawer();
         reload();
       } else {
-        window.alert((res && res.error) || "השמירה נכשלה, נסו שוב.");
+        CBA.ui.alert((res && res.error) || "השמירה נכשלה, נסו שוב.");
       }
     });
   });

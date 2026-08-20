@@ -148,7 +148,7 @@ function sadmPersist(cb) {
   CBA.data.saveServices(flat.services, flat.sections, function (res) {
     if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("servicesAdmin");
     var ok = !!(res && res.ok);
-    if (!ok) window.alert((res && res.error) || "השמירה נכשלה, נסו שוב.");
+    if (!ok) CBA.ui.alert((res && res.error) || "השמירה נכשלה, נסו שוב.");
     if (cb) cb(ok);
   });
 }
@@ -157,8 +157,13 @@ function sadmPersist(cb) {
  *  עורך הכרטיס (drawer)
  * ========================================================================== */
 function sadmCloseEditor(force) {
+  // (2026-08-20) עבר מ-window.confirm ל-CBA.ui.confirm — אותו שינוי מבני
+  // שנעשה במסכי המכון: המודל א-סינכרוני, ולכן הסגירה עצמה נדחית לתשובה.
   if (!force && sadmState.dirty) {
-    if (!window.confirm("יש שינויים שלא נשמרו. לצאת בלי לשמור?")) return;
+    CBA.ui.confirm("יש שינויים שלא נשמרו. לצאת בלי לשמור?",
+                   { title: "יציאה מהעורך", okText: "יציאה בלי לשמור", danger: true })
+      .then(function (ok) { if (ok) sadmCloseEditor(true); });
+    return;
   }
   var el = document.getElementById("sadm-drawer");
   if (el) el.remove();
@@ -172,7 +177,7 @@ function sadmEditorKey(e) { if (e.key === "Escape") sadmCloseEditor(); }
 
 function sadmTouch() {
   sadmState.dirty = true;
-  if (CBA.sheets.markDirty) CBA.sheets.markDirty("servicesAdmin:edit");
+  if (CBA.sheets.markDirty) CBA.sheets.markDirty("servicesAdmin:edit", false);
 }
 
 function sadmOpenEditor(index) {
@@ -396,8 +401,12 @@ function sadmBindEditor(body) {
   body.querySelectorAll("[data-sec-del]").forEach(function (b) {
     b.addEventListener("click", function () {
       var k = Number(b.dataset.secDel);
-      if (!window.confirm('למחוק את הסעיף "' + (d.sections[k].title || "") + '"?')) return;
-      d.sections.splice(k, 1); sadmTouch(); sadmPaintEditor();
+      CBA.ui.confirm('למחוק את הסעיף "' + (d.sections[k].title || "") + '"?',
+                     { title: "מחיקת סעיף", okText: "מחיקה", danger: true })
+        .then(function (ok) {
+          if (!ok) return;
+          d.sections.splice(k, 1); sadmTouch(); sadmPaintEditor();
+        });
     });
   });
   body.querySelectorAll("[data-sec-up]").forEach(function (b) {
@@ -544,7 +553,7 @@ function sadmSectionIsEmpty(sec) {
 
 function sadmSaveEditor() {
   var d = sadmState.draft;
-  if (!String(d.name || "").trim()) { window.alert("צריך למלא שם לשירות."); return; }
+  if (!String(d.name || "").trim()) { CBA.ui.alert("צריך למלא שם לשירות."); return; }
 
   // ניקוי לפני שמירה: סעיף בלי כותרת ובלי תוכן אמיתי הוא סעיף שנפתח ולא מולא —
   // אין טעם לשמור אותו ולהציג לתושב כותרת ריקה (ר' sadmSectionIsEmpty).
@@ -552,14 +561,13 @@ function sadmSaveEditor() {
     return String(s.title || "").trim() !== "" || !sadmSectionIsEmpty(s);
   });
 
-  var btn = document.getElementById("sadm-save");
-  btn.disabled = true; btn.textContent = "שומר…";
+  var release = CBA.ui.busy(document.getElementById("sadm-save"), "שומר…");
 
   if (sadmState.editIndex === -1) sadmState.list.push(d);
   else sadmState.list[sadmState.editIndex] = d;
 
   sadmPersist(function (ok) {
-    btn.disabled = false; btn.textContent = "שמירה";
+    release();
     if (!ok) {
       // החזרת המצב: שירות חדש שנכשל לא צריך להישאר ברשימה המקומית
       if (sadmState.editIndex === -1) sadmState.list.pop();
@@ -578,15 +586,21 @@ function sadmSaveEditor() {
 
 function sadmDelete() {
   var d = sadmState.draft;
-  if (!window.confirm('למחוק את השירות "' + (d.name || "") + '" וכל הסעיפים שלו? הפעולה אינה הפיכה.')) return;
-  var idx = sadmState.editIndex;
-  var removed = sadmState.list.splice(idx, 1)[0];
-  sadmPersist(function (ok) {
-    if (!ok) { sadmState.list.splice(idx, 0, removed); return; }
-    sadmState.dirty = false;
-    sadmCloseEditor(true);
-    sadmPaintList();
-  });
+  CBA.ui.confirm('למחוק את השירות "' + (d.name || "") + '" וכל הסעיפים שלו? הפעולה אינה הפיכה.',
+                 { title: "מחיקת שירות", okText: "מחיקה", danger: true })
+    .then(function (ok) {
+      if (!ok) return;
+      var idx = sadmState.editIndex;
+      var removed = sadmState.list.splice(idx, 1)[0];
+      var release = CBA.ui.busy(document.getElementById("sadm-del"), "מוחק…");
+      sadmPersist(function (saved) {
+        release();
+        if (!saved) { sadmState.list.splice(idx, 0, removed); return; }
+        sadmState.dirty = false;
+        sadmCloseEditor(true);
+        sadmPaintList();
+      });
+    });
 }
 
 /* ============================================================================
@@ -598,8 +612,17 @@ function sadmDelete() {
  * ========================================================================== */
 function sadmOpenMail() {
   var d = sadmState.draft;
-  if (!String(d.name || "").trim()) { window.alert("צריך למלא שם לשירות לפני שליחת עדכון."); return; }
-  if (sadmState.dirty && !window.confirm("יש שינויים שעדיין לא נשמרו — המייל יתאר שינוי שהתושבים לא יראו עדיין. להמשיך?")) return;
+  if (!String(d.name || "").trim()) { CBA.ui.alert("צריך למלא שם לשירות לפני שליחת עדכון."); return; }
+  if (sadmState.dirty && !sadmState.mailWarned) {
+    CBA.ui.confirm("יש שינויים שעדיין לא נשמרו — המייל יתאר שינוי שהתושבים לא יראו עדיין. להמשיך?",
+                   { title: "שינויים שלא נשמרו", okText: "להמשיך בכל זאת" })
+      .then(function (ok) {
+        if (!ok) return;
+        sadmState.mailWarned = true;
+        try { sadmOpenMail(); } finally { sadmState.mailWarned = false; }
+      });
+    return;
+  }
 
   var wrap = document.createElement("div");
   wrap.id = "sadm-mail";
@@ -624,18 +647,18 @@ function sadmOpenMail() {
 
   document.getElementById("sadm-mail-send").addEventListener("click", function () {
     var what = String(document.getElementById("sadm-mail-what").value || "").trim();
-    if (!what) { window.alert('צריך לכתוב מה השתנה — זה מה שהתושבים יראו במייל.'); return; }
+    if (!what) { CBA.ui.alert('צריך לכתוב מה השתנה — זה מה שהתושבים יראו במייל.'); return; }
     var btn = this;
-    btn.disabled = true; btn.textContent = "שולח…";
+    var release = CBA.ui.busy(btn, "שולח מיילים…");
     CBA.data.notifyServiceUpdate(
       { serviceName: d.name, provider: d.provider, whatChanged: what },
       function (res) {
-        btn.disabled = false; btn.textContent = "שליחה לתושבים";
+        release();
         if (res && res.ok) {
           close();
-          window.alert("נשלח ל-" + res.sent + " כתובות מייל.");
+          CBA.ui.alert("נשלח ל-" + res.sent + " כתובות מייל.", "העדכון נשלח");
         } else {
-          window.alert((res && res.error) || "השליחה נכשלה, נסו שוב.");
+          CBA.ui.alert((res && res.error) || "השליחה נכשלה, נסו שוב.");
         }
       }
     );
@@ -673,9 +696,9 @@ function sadmOpenAI() {
   document.getElementById("sadm-ai-go").addEventListener("click", function () {
     var input = document.getElementById("sadm-ai-file");
     var file = input.files && input.files[0];
-    if (!file) { window.alert("צריך לבחור קובץ."); return; }
+    if (!file) { CBA.ui.alert("צריך לבחור קובץ."); return; }
     // Apps Script מוגבל בגודל בקשה; מסמך שירות סביר הוא כמה מאות KB.
-    if (file.size > 8 * 1024 * 1024) { window.alert("הקובץ גדול מדי (מעל 8MB)."); return; }
+    if (file.size > 8 * 1024 * 1024) { CBA.ui.alert("הקובץ גדול מדי (מעל 8MB)."); return; }
 
     var btn = this, status = document.getElementById("sadm-ai-status");
     btn.disabled = true; btn.textContent = "מנתח…";
@@ -689,7 +712,7 @@ function sadmOpenAI() {
         btn.disabled = false; btn.textContent = "ניתוח המסמך";
         if (!res || !res.ok) {
           status.textContent = "";
-          window.alert((res && res.error) || "הניתוח נכשל, נסו שוב.");
+          CBA.ui.alert((res && res.error) || "הניתוח נכשל, נסו שוב.");
           return;
         }
         sadmApplyAI(res.fields || {});
@@ -699,7 +722,7 @@ function sadmOpenAI() {
     reader.onerror = function () {
       btn.disabled = false; btn.textContent = "ניתוח המסמך";
       status.textContent = "";
-      window.alert("קריאת הקובץ נכשלה.");
+      CBA.ui.alert("קריאת הקובץ נכשלה.");
     };
     reader.readAsDataURL(file);
   });
@@ -728,7 +751,7 @@ function sadmApplyAI(f) {
   });
   sadmTouch();
   sadmPaintEditor();
-  window.alert(added
+  CBA.ui.alert(added
     ? "נוספו " + added + " סעיפים מוצעים. עברו עליהם, תקנו מה שצריך — ורק אז לחצו שמירה."
     : "לא זוהו סעיפים מתאימים במסמך.");
 }

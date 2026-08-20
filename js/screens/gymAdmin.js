@@ -65,7 +65,7 @@ CBA.screens = CBA.screens || {};
                '<div class="gym-row__meta">' +
                  (m["מספר בית"] ? "בית " + CBA.esc(m["מספר בית"]) + " · " : "") +
                  CBA.esc(m["מסלול"] || "") +
-                 (m["בתוקף עד"] ? " · בתוקף עד " + CBA.esc(m["בתוקף עד"]) : "") +
+                 (m["בתוקף עד"] ? " · בתוקף עד " + CBA.esc(fmtDate(m["בתוקף עד"])) : "") +
                "</div>" +
                (flags ? '<div class="gym-row__flags">סומן "כן": ' + CBA.esc(flags) + "</div>" : "") +
              "</div>" +
@@ -90,11 +90,251 @@ CBA.screens = CBA.screens || {};
                  ? '<button type="button" class="btn-ghost" data-ga-cash="' + CBA.esc(m["מזהה"] || "") +
                    '" data-ga-price="' + CBA.esc(String(m["מחיר מוסכם"] || "")) + '">רישום תשלום ידני</button>'
                  : "") +
+               '<button type="button" class="btn-ghost" data-ga-edit="' +
+                 CBA.esc(m["מזהה"] || "") + '">עריכה</button>' +
                (m["מצב סנכרון"] && m["מצב סנכרון"] !== "מסונכרן"
                  ? '<span class="gym-pill gym-pill--warn">' + CBA.esc(m["מצב סנכרון"]) + "</span>"
                  : "") +
              "</div>" +
            "</div>";
+  }
+
+  function memberById(id) {
+    var members = (gaLast && gaLast.members) || [];
+    for (var i = 0; i < members.length; i++) {
+      if (String(members[i]["מזהה"] || "").trim() === String(id).trim()) return members[i];
+    }
+    return null;
+  }
+  function memberName(m) {
+    if (!m) return "";
+    return ((m["שם פרטי"] || "") + " " + (m["שם משפחה"] || "")).trim() || m["אימייל"] || "";
+  }
+  /* תאריכים מהגיליון מגיעים כאובייקטי Date של Apps Script, כלומר כמחרוזת ISO
+     ב-UTC אחרי JSON ("2027-02-27T22:00:00.000Z" = 28.2.2027 בשעון ישראל).
+     חיתוך המחרוזת היה נותן יום מוקדם ביום; לכן כל המרה שיש בה "T" עוברת דרך
+     Date ומשתמשת בגטרים המקומיים. */
+  function asDate(v) {
+    var t = String(v == null ? "" : v).trim();
+    if (!t) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) t += "T00:00:00";
+    var d = new Date(t);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function toMonthInput(v) {
+    var d = asDate(v);
+    return d ? (d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")) : "";
+  }
+  function toDateInput(v) {
+    var d = asDate(v);
+    return d ? (d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+                "-" + String(d.getDate()).padStart(2, "0")) : "";
+  }
+  // לתצוגה — בפורמט הישראלי, לא ISO גולמי
+  function fmtDate(v) {
+    var d = asDate(v);
+    if (!d) return String(v == null ? "" : v).trim();
+    return String(d.getDate()).padStart(2, "0") + "." +
+           String(d.getMonth() + 1).padStart(2, "0") + "." + d.getFullYear();
+  }
+
+  /* ---------- מגירת טופס גנרית (2026-08-20) ----------
+     יועד: "השיטה של התיעוד כפופ אפ של הדפדפן - לא נוחה". הארכת מנוי ורישום
+     תשלום ידני נעשו עד עכשיו בשרשרת של שניים-שלושה window.prompt אפורים,
+     בלי ולידציה, בלי הקשר, ובלי דרך לחזור אחורה. במקום זה — מגירה אחת עם כל
+     השדות ביחד, בדיוק כמו מגירת ההקמה הידנית שכבר קיימת במסך.
+
+     שדה: {key, label, type, value, options, hint, required, min, max}
+     onSave(values, ui) — ui.busy(txt)/ui.done()/ui.error(txt)/ui.close(). */
+  var GYM_STATUSES = ["ממתין להצהרה", "ממתין לאישור רופא", "ממתין לאישור",
+    "ממתין לתשלום", "ממתין לאימות", "פעיל", "פג תוקף", "מוקפא", "נדחה", "בוטל"];
+
+  function fieldHTML(f) {
+    var val = f.value == null ? "" : String(f.value);
+    var body;
+    if (f.type === "select") {
+      body = '<select data-gf="' + CBA.esc(f.key) + '">' +
+        (f.options || []).map(function (o) {
+          var v = (o && o.value !== undefined) ? o.value : o;
+          var t = (o && o.text !== undefined) ? o.text : o;
+          return '<option value="' + CBA.esc(String(v)) + '"' +
+                 (String(v) === val ? " selected" : "") + ">" + CBA.esc(String(t)) + "</option>";
+        }).join("") + "</select>";
+    } else if (f.type === "textarea") {
+      body = '<textarea data-gf="' + CBA.esc(f.key) + '" rows="3">' + CBA.esc(val) + "</textarea>";
+    } else {
+      body = '<input type="' + CBA.esc(f.type || "text") + '" data-gf="' + CBA.esc(f.key) + '"' +
+             ' value="' + CBA.esc(val) + '"' +
+             (f.placeholder ? ' placeholder="' + CBA.esc(f.placeholder) + '"' : "") +
+             (f.min !== undefined ? ' min="' + CBA.esc(String(f.min)) + '"' : "") + ">";
+    }
+    return '<div class="gym-field"><label>' + CBA.esc(f.label) + "</label>" + body +
+           (f.hint ? '<div class="gym-hint gym-hint--sm">' + CBA.esc(f.hint) + "</div>" : "") +
+           "</div>";
+  }
+
+  function openFormDrawer(opts) {
+    var el = document.createElement("div");
+    el.className = "gym-wiz";
+    el.innerHTML =
+      '<div class="gym-wiz__backdrop" data-gf-close></div>' +
+      '<aside class="gym-wiz__panel" role="dialog" aria-label="' + CBA.esc(opts.title) + '">' +
+        '<div class="gym-wiz__head">' +
+          '<div class="gym-wiz__title">' + CBA.esc(opts.title) + "</div>" +
+          '<button type="button" class="gym-wiz__x" data-gf-close aria-label="סגירה">×</button>' +
+        "</div>" +
+        '<div class="gym-wiz__body">' +
+          (opts.subtitle ? '<div class="gym-hint">' + CBA.esc(opts.subtitle) + "</div>" : "") +
+          (opts.fields || []).map(fieldHTML).join("") +
+          (opts.extraHTML || "") +
+          '<div class="gym-form__err" data-gf-err hidden></div>' +
+        "</div>" +
+        '<div class="gym-wiz__foot">' +
+          '<button type="button" class="btn-ghost" data-gf-close>ביטול</button>' +
+          '<button type="button" class="btn-primary' + (opts.danger ? " is-danger" : "") +
+            '" data-gf-save>' + CBA.esc(opts.okText || "שמירה") + "</button>" +
+        "</div>" +
+      "</aside>";
+    document.body.appendChild(el);
+
+    var dirtyKey = "gymForm:" + Math.random().toString(36).slice(2);
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty(dirtyKey, false);
+    function close() {
+      if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty(dirtyKey);
+      document.removeEventListener("keydown", onKey, true);
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }
+    function onKey(e) { if (e.key === "Escape") { e.preventDefault(); close(); } }
+    document.addEventListener("keydown", onKey, true);
+    el.querySelectorAll("[data-gf-close]").forEach(function (n) { n.addEventListener("click", close); });
+
+    var errEl = el.querySelector("[data-gf-err]");
+    var saveBtn = el.querySelector("[data-gf-save]");
+    var release = null;
+    var ui = {
+      close: close,
+      el: el,
+      error: function (msg) {
+        errEl.textContent = msg || "";
+        errEl.hidden = !msg;
+        if (msg) errEl.scrollIntoView({ block: "nearest" });
+      },
+      busy: function (txt) { release = CBA.ui.busy(saveBtn, txt || "שומר…"); },
+      done: function () { if (release) { release(); release = null; } }
+    };
+
+    function values() {
+      var out = {};
+      el.querySelectorAll("[data-gf]").forEach(function (n) { out[n.dataset.gf] = n.value; });
+      return out;
+    }
+    saveBtn.addEventListener("click", function () {
+      ui.error("");
+      opts.onSave(values(), ui);
+    });
+    // מיקוד לשדה הראשון, כמו במודלים של CBA.ui
+    setTimeout(function () {
+      var first = el.querySelector("[data-gf]");
+      if (first) first.focus();
+    }, 60);
+    return ui;
+  }
+
+  /* התראת סנכרון אחרי פעולה — אף פעם לא *במקום* הפעולה. יועד היה מפורש:
+     המערכת מודדת ומתריעה, לא חוסמת. */
+  function afterActivate(res, verb) {
+    var sync = res.sync || {};
+    var msg = verb + ", בתוקף עד " + (res.validUntil || "");
+    if (sync.label && sync.label !== "מסונכרן") {
+      CBA.ui.alert(msg + ".\n\nשימי לב: " + sync.label + " מול מה ששולם.", "בוצע");
+    } else {
+      CBA.ui.toast(msg);
+    }
+  }
+
+  /* ---------- עריכת מנוי ----------
+     יועד: "צריך אפשרות לדחות את המנוי ולהרחיב את אפשרויות העריכה".
+     עד עכשיו היו רק שתי פעולות נקודתיות (הארכה, רישום תשלום) ושום דרך לתקן
+     טעות: מסלול שנבחר לא נכון, מחיר מוסכם חריג, תאריך התחלה שגוי, או מנוי
+     שצריך פשוט להידחות. הכל יושב עכשיו במגירה אחת מול פעולת שרת אחת
+     (updateGymMembership), שרושמת ביומן בדיוק מה השתנה ומי שינה.
+
+     דחייה וביטול הם לא כפתור נפרד אלא בחירת סטטוס — עם שדה סיבה שהופך
+     לחובה כשעוברים לאחד מהם, כי זה בדיוק מה שהתושב יקבל במייל. */
+  function openEdit(id, reload) {
+    var m = memberById(id);
+    if (!m) { CBA.ui.alert("לא נמצאה הרשומה."); return; }
+    var plans = (gaLast && gaLast.plans) || [];
+    var curStatus = String(m["סטטוס"] || "").trim();
+    var curPlanId = "";
+    for (var i = 0; i < plans.length; i++) if (plans[i].name === m["מסלול"]) curPlanId = plans[i].id;
+
+    var ui = openFormDrawer({
+      title: "עריכת מנוי — " + memberName(m),
+      subtitle: "מזהה " + (m["מזהה"] || "") + " · " + (m["אימייל"] || "") +
+                (m["מצב סנכרון"] ? " · " + m["מצב סנכרון"] : ""),
+      okText: "שמירת השינויים",
+      fields: [
+        { key: "planId", label: "מסלול", type: "select", value: curPlanId,
+          options: [{ value: "", text: "— בלי שינוי —" }].concat(plans.map(function (p) {
+            return { value: p.id, text: p.name + " — " + p.total + " ₪" };
+          })),
+          hint: "החלפת מסלול מעדכנת גם את המחיר המוסכם, אלא אם תזיני מחיר משלך" },
+        { key: "price", label: "מחיר מוסכם (₪)", type: "number", value: m["מחיר מוסכם"] || "", min: 0 },
+        { key: "startDate", label: "תאריך התחלה", type: "date", value: toDateInput(m["תאריך התחלה"]) },
+        { key: "validUntil", label: "בתוקף עד חודש", type: "month", value: toMonthInput(m["בתוקף עד"]) },
+        { key: "status", label: "סטטוס", type: "select", value: curStatus, options: GYM_STATUSES,
+          hint: 'מעבר ל"נדחה" או ל"בוטל" שולח מייל לתושב עם הסיבה שתכתבי' },
+        { key: "note", label: "הערות מנהל (פנימי)", type: "textarea", value: m["הערות מנהל"] || "" },
+        { key: "reason", label: "סיבת השינוי", type: "text",
+          placeholder: "נרשמת ביומן; בדחייה/ביטול גם נשלחת לתושב" }
+      ],
+      onSave: function (v, dlg) {
+        var newStatus = String(v.status || "").trim();
+        var isKill = (newStatus === "נדחה" || newStatus === "בוטל") && newStatus !== curStatus;
+        if (isKill && !String(v.reason || "").trim()) {
+          dlg.error("כשדוחים או מבטלים מנוי חייבים לכתוב סיבה — היא נשלחת לתושב במייל.");
+          return;
+        }
+        var payload = { id: id, reason: v.reason || "" };
+        if (v.planId && v.planId !== curPlanId) payload.planId = v.planId;
+        if (String(v.price) !== String(m["מחיר מוסכם"] || "")) payload.price = v.price;
+        if (v.startDate && v.startDate !== toDateInput(m["תאריך התחלה"])) payload.startDate = v.startDate;
+        if (v.validUntil && v.validUntil !== toMonthInput(m["בתוקף עד"])) payload.validUntil = v.validUntil;
+        if (newStatus && newStatus !== curStatus) payload.status = newStatus;
+        if (String(v.note || "") !== String(m["הערות מנהל"] || "")) payload.note = v.note || "";
+
+        var touched = Object.keys(payload).filter(function (k) { return k !== "id" && k !== "reason"; });
+        if (!touched.length) { dlg.error("לא שינית שום שדה."); return; }
+
+        function send() {
+          dlg.busy("שומר…");
+          CBA.data.updateGymMembership(payload, function (res) {
+            dlg.done();
+            if (!res || !res.ok) { dlg.error((res && res.error) || "השמירה נכשלה."); return; }
+            dlg.close();
+            var sync = res.sync || {};
+            if (sync.label && sync.label !== "מסונכרן") {
+              CBA.ui.alert("השינויים נשמרו.\n\nשימי לב: " + sync.label + " מול מה ששולם.", "נשמר");
+            } else {
+              CBA.ui.toast("השינויים נשמרו");
+            }
+            reload();
+          });
+        }
+
+        if (isKill) {
+          CBA.ui.confirm("לשנות את הסטטוס ל\"" + newStatus + "\"?\n\n" +
+                         memberName(m) + " יקבל/תקבל על כך מייל עם הסיבה שכתבת.",
+                         { title: newStatus === "נדחה" ? "דחיית מנוי" : "ביטול מנוי",
+                           okText: newStatus, danger: true })
+            .then(function (ok) { if (ok) send(); });
+        } else {
+          send();
+        }
+      }
+    });
+    return ui;
   }
 
   /* ---------- צפייה בהצהרת הבריאות ----------
@@ -107,7 +347,7 @@ CBA.screens = CBA.screens || {};
     for (var i = 0; i < members.length; i++) {
       if (String(members[i]["מזהה"] || "").trim() === String(id).trim()) { m = members[i]; break; }
     }
-    if (!m) { window.alert("לא נמצאה הרשומה."); return; }
+    if (!m) { CBA.ui.alert("לא נמצאה הרשומה."); return; }
 
     var name = ((m["שם פרטי"] || "") + " " + (m["שם משפחה"] || "")).trim();
     var flagged = String(m["שאלות שנענו בכן"] || "").trim();
@@ -134,9 +374,9 @@ CBA.screens = CBA.screens || {};
         "</div>" +
         '<div class="gym-wiz__body">' +
           '<div class="gym-kv"><span>נחתמה בתאריך</span><span>' +
-            CBA.esc(m["תאריך חתימה"] || "—") + "</span></div>" +
+            CBA.esc(fmtDate(m["תאריך חתימה"]) || "—") + "</span></div>" +
           '<div class="gym-kv"><span>ת.ז.</span><span>' + CBA.esc(m["ת.ז."] || "—") + "</span></div>" +
-          '<div class="gym-kv"><span>תאריך לידה</span><span>' + CBA.esc(m["תאריך לידה"] || "—") + "</span></div>" +
+          '<div class="gym-kv"><span>תאריך לידה</span><span>' + CBA.esc(fmtDate(m["תאריך לידה"]) || "—") + "</span></div>" +
           '<div class="gym-kv"><span>אישור תקנון</span><span>' + CBA.esc(m["אישור תקנון"] || "—") + "</span></div>" +
           (flagged
             ? '<div class="gym-decl__flag">סומן "כן" ב: ' + CBA.esc(flagged) +
@@ -166,15 +406,20 @@ CBA.screens = CBA.screens || {};
   // מוחזק כדי שהמציג יוכל לרענן אחרי "בקשת הצהרה חדשה"
   var gaReload = null;
 
-  function requestDeclaration(id, done) {
-    if (!window.confirm("לשלוח לתושב מייל עם בקשה למלא הצהרת בריאות?\n" +
-                        "המנוי יעבור לסטטוס \"ממתין להצהרה\" עד שימלא אותה.")) return;
-    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymAdminAction");
-    CBA.data.requestGymDeclaration(id, function (res) {
-      if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymAdminAction");
-      if (!res || !res.ok) { window.alert((res && res.error) || "השליחה נכשלה."); return; }
-      if (done) done();
-    });
+  function requestDeclaration(id, done, btn) {
+    CBA.ui.confirm('לשלוח לתושב מייל עם בקשה למלא הצהרת בריאות?\n' +
+                   'המנוי יעבור לסטטוס "ממתין להצהרה" עד שימלא אותה.',
+                   { title: "בקשת הצהרת בריאות", okText: "שליחה" })
+      .then(function (ok) {
+        if (!ok) return;
+        var release = CBA.ui.busy(btn, "שולח מייל…");
+        CBA.data.requestGymDeclaration(id, function (res) {
+          release();
+          if (!res || !res.ok) { CBA.ui.alert((res && res.error) || "השליחה נכשלה."); return; }
+          CBA.ui.toast("המייל נשלח לתושב");
+          if (done) done();
+        });
+      });
   }
 
   function bindMemberActions(root, reload) {
@@ -187,20 +432,30 @@ CBA.screens = CBA.screens || {};
     root.querySelectorAll("[data-ga-extend]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.dataset.gaExtend;
-        var until = window.prompt("עד איזה חודש להאריך? (בפורמט YYYY-MM, למשל 2027-02)", defaultValidUntil(planMonthsFor(btn.dataset.gaMonths)));
-        if (!until) return;
-        if (!/^\d{4}-\d{2}$/.test(until)) { window.alert("פורמט לא תקין. צריך YYYY-MM, למשל 2027-02."); return; }
-        var reason = window.prompt("סיבת ההארכה (נרשמת ביומן):", "") || "";
-        btn.disabled = true;
-        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymAdminAction");
-        CBA.data.extendGymMembership({ id: id, validUntil: until, reason: reason }, function (res) {
-          if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymAdminAction");
-          if (!res || !res.ok) { btn.disabled = false; window.alert((res && res.error) || "ההארכה נכשלה."); return; }
-          var sync = res.sync || {};
-          if (sync.label && sync.label !== "מסונכרן") {
-            window.alert("המנוי הוארך עד " + res.validUntil + ".\n\nשים לב: " + sync.label + " מול מה ששולם.");
+        var m = memberById(id) || {};
+        openFormDrawer({
+          title: "הארכת מנוי — " + memberName(m),
+          subtitle: "ההארכה תמיד אפשרית, גם בלי תשלום חדש. אם ייווצר פער מול מה ששולם — נציג התראה, לא נחסום.",
+          okText: "הארכה",
+          fields: [
+            { key: "validUntil", label: "בתוקף עד חודש", type: "month",
+              value: defaultValidUntil(planMonthsFor(btn.dataset.gaMonths)),
+              hint: "התוקף הקיים: " + (fmtDate(m["בתוקף עד"]) || "—") },
+            { key: "reason", label: "סיבת ההארכה (נרשמת ביומן)", type: "text",
+              placeholder: "למשל: פיצוי על שבוע סגירה" }
+          ],
+          onSave: function (v, ui) {
+            if (!v.validUntil) { ui.error("צריך לבחור עד איזה חודש להאריך."); return; }
+            ui.busy("מאריך…");
+            CBA.data.extendGymMembership({ id: id, validUntil: v.validUntil, reason: v.reason || "" },
+              function (res) {
+                ui.done();
+                if (!res || !res.ok) { ui.error((res && res.error) || "ההארכה נכשלה."); return; }
+                ui.close();
+                afterActivate(res, "המנוי הוארך");
+                reload();
+              });
           }
-          reload();
         });
       });
     });
@@ -210,31 +465,48 @@ CBA.screens = CBA.screens || {};
     root.querySelectorAll("[data-ga-cash]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.dataset.gaCash;
-        var amount = window.prompt("איזה סכום התקבל? (₪)", btn.dataset.gaPrice || "");
-        if (!amount) return;
-        var until = window.prompt("עד איזה חודש המנוי בתוקף? (YYYY-MM)", defaultValidUntil(6));
-        if (!until) return;
-        if (!/^\d{4}-\d{2}$/.test(until)) { window.alert("פורמט לא תקין. צריך YYYY-MM."); return; }
-        var method = window.prompt("אמצעי תשלום:", "מזומן") || "מזומן";
-        btn.disabled = true;
-        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymAdminAction");
-        CBA.data.recordGymPayment({ id: id, amount: Number(amount), validUntil: until, method: method },
-          function (res) {
-            if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymAdminAction");
-            if (!res || !res.ok) { btn.disabled = false; window.alert((res && res.error) || "הרישום נכשל."); return; }
-            var sync = res.sync || {};
-            window.alert("המנוי הופעל, בתוקף עד " + res.validUntil +
-              (sync.label && sync.label !== "מסונכרן" ? "\n\nשים לב: " + sync.label + " מול מה ששולם." : ""));
-            reload();
-          });
+        var m = memberById(id) || {};
+        openFormDrawer({
+          title: "רישום תשלום ידני — " + memberName(m),
+          subtitle: "למי ששילם במזומן או מחוץ לאפליקציה. המנוי יופעל באותו מסלול בדיוק כמו באימות רגיל.",
+          okText: "רישום והפעלה",
+          fields: [
+            { key: "amount", label: "סכום שהתקבל (₪)", type: "number",
+              value: btn.dataset.gaPrice || "", min: 0,
+              hint: "מחיר מוסכם: " + (m["מחיר מוסכם"] || "—") + " ₪" },
+            { key: "validUntil", label: "בתוקף עד חודש", type: "month",
+              value: defaultValidUntil(planMonthsFor(m["מסלול"])) },
+            { key: "method", label: "אמצעי תשלום", type: "select", value: "מזומן",
+              options: ["מזומן", "העברה בנקאית", "צ׳ק", "ביט", "פייבוקס", "אחר"] }
+          ],
+          onSave: function (v, ui) {
+            if (!Number(v.amount)) { ui.error("צריך להזין את הסכום שהתקבל."); return; }
+            if (!v.validUntil) { ui.error("צריך לבחור עד איזה חודש המנוי בתוקף."); return; }
+            ui.busy("מפעיל מנוי…");
+            CBA.data.recordGymPayment(
+              { id: id, amount: Number(v.amount), validUntil: v.validUntil, method: v.method || "מזומן" },
+              function (res) {
+                ui.done();
+                if (!res || !res.ok) { ui.error((res && res.error) || "הרישום נכשל."); return; }
+                ui.close();
+                afterActivate(res, "המנוי הופעל");
+                reload();
+              });
+          }
+        });
       });
     });
 
     root.querySelectorAll("[data-ga-declare]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.dataset.gaDeclare;
-        if (id) requestDeclaration(id, reload);
+        if (id) requestDeclaration(id, reload, btn);
       });
+    });
+
+    // עריכה מלאה — מסלול, מחיר, תאריכים, סטטוס והערה במקום אחד
+    root.querySelectorAll("[data-ga-edit]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openEdit(btn.dataset.gaEdit, reload); });
     });
   }
 
@@ -264,7 +536,7 @@ CBA.screens = CBA.screens || {};
                '<div class="gym-row__name">' + CBA.esc(name) + "</div>" +
                '<div class="gym-row__meta">' +
                  CBA.esc(m["מסלול"] || "") + " · מחיר מוסכם " + CBA.esc(expected) + " ₪" +
-                 (m["דווח בתאריך"] ? " · דווח " + CBA.esc(m["דווח בתאריך"]) : "") +
+                 (m["דווח בתאריך"] ? " · דווח " + CBA.esc(fmtDate(m["דווח בתאריך"])) : "") +
                "</div>" +
                '<div class="gym-row__meta">' +
                  "אמצעי: " + CBA.esc(m["אמצעי תשלום"] || "—") +
@@ -292,36 +564,42 @@ CBA.screens = CBA.screens || {};
       box.querySelector("[data-gv-confirm]").addEventListener("click", function () {
         var amount = Number(val("amount"));
         var validUntil = val("validUntil");
-        if (!amount) { window.alert("צריך להזין את הסכום שהתקבל."); return; }
-        if (!validUntil) { window.alert("צריך לבחור עד איזה חודש המנוי בתוקף."); return; }
         var btn = box.querySelector("[data-gv-confirm]");
-        btn.disabled = true; btn.textContent = "מפעיל…";
-        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymVerify");
+        if (!amount) { CBA.ui.alert("צריך להזין את הסכום שהתקבל."); return; }
+        if (!validUntil) { CBA.ui.alert("צריך לבחור עד איזה חודש המנוי בתוקף."); return; }
+        var release = CBA.ui.busy(btn, "מפעיל מנוי…");
         CBA.data.confirmGymPayment({ id: id, amount: amount, validUntil: validUntil }, function (res) {
-          if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymVerify");
+          release();
           if (!res || !res.ok) {
-            btn.disabled = false; btn.textContent = "אימות והפעלה";
-            window.alert((res && res.error) || "האימות נכשל.");
+            CBA.ui.alert((res && res.error) || "האימות נכשל.");
             return;
           }
           // ההתראה על פער מוצגת **אחרי** הפעולה ולא במקומה — לא חוסמים.
-          var sync = res.sync || {};
-          window.alert("המנוי הופעל, בתוקף עד " + res.validUntil +
-            (sync.label && sync.label !== "מסונכרן" ? "\n\nשים לב: " + sync.label + " מול מה ששולם." : ""));
+          afterActivate(res, "המנוי הופעל");
           reload();
         });
       });
 
       box.querySelector("[data-gv-reject]").addEventListener("click", function () {
-        var note = window.prompt("מה לכתוב לתושב? (לא חובה)", "");
-        if (note === null) return;
         var btn = box.querySelector("[data-gv-reject]");
-        btn.disabled = true;
-        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymVerify");
-        CBA.data.rejectGymPayment({ id: id, note: note }, function (res) {
-          if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gymVerify");
-          if (!res || !res.ok) { btn.disabled = false; window.alert((res && res.error) || "הפעולה נכשלה."); return; }
-          reload();
+        openFormDrawer({
+          title: "לא נמצא תשלום",
+          subtitle: "המנוי יחזור ל\"ממתין לתשלום\" והתושב יקבל מייל שיבקש ממנו לבדוק שוב. זה לא דוחה את המנוי.",
+          okText: "החזרה לממתין לתשלום",
+          fields: [
+            { key: "note", label: "מה לכתוב לתושב (לא חובה)", type: "textarea",
+              placeholder: "למשל: לא מצאנו העברה בסכום הזה בפייבוקס" }
+          ],
+          onSave: function (v, ui) {
+            ui.busy("שולח…");
+            CBA.data.rejectGymPayment({ id: id, note: v.note || "" }, function (res) {
+              ui.done();
+              if (!res || !res.ok) { ui.error((res && res.error) || "הפעולה נכשלה."); return; }
+              ui.close();
+              CBA.ui.toast("הדיווח הוחזר לתושב");
+              reload();
+            });
+          }
         });
       });
     });
@@ -371,6 +649,7 @@ CBA.screens = CBA.screens || {};
             '<input type="date" data-gc="declarationDate"></div>' +
           '<div class="gym-field"><label>הערה (לא נשלחת לתושב)</label>' +
             '<input type="text" data-gc="note"></div>' +
+          '<div class="gym-form__err" data-gc-err hidden></div>' +
         "</div>" +
         '<div class="gym-wiz__foot">' +
           '<button type="button" class="btn-ghost" data-gc-close>ביטול</button>' +
@@ -398,25 +677,28 @@ CBA.screens = CBA.screens || {};
       if (el.parentNode) el.parentNode.removeChild(el);
     }
     el.querySelectorAll("[data-gc-close]").forEach(function (n) { n.addEventListener("click", close); });
-    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymCreate");
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gymCreate", false);
 
     el.querySelector("[data-gc-save]").addEventListener("click", function () {
-      if (!String(data.email || "").trim()) { window.alert("צריך למלא אימייל."); return; }
+      var errBox = el.querySelector("[data-gc-err]");
+      function showErr(msg) { errBox.textContent = msg || ""; errBox.hidden = !msg; }
+      showErr("");
+      if (!String(data.email || "").trim()) { showErr("צריך למלא אימייל."); return; }
       if (data.declarationMode === "received" && !data.declarationDate) {
-        window.alert("צריך למלא את תאריך ההצהרה שהתקבלה."); return;
+        showErr("צריך למלא את תאריך ההצהרה שהתקבלה."); return;
       }
       var btn = el.querySelector("[data-gc-save]");
-      btn.disabled = true; btn.textContent = "מקים…";
+      var release = CBA.ui.busy(btn, "מקים מנוי…");
       CBA.data.createGymMembership(data, function (res) {
+        release();
         if (!res || !res.ok) {
-          btn.disabled = false; btn.textContent = "הקמת המנוי";
-          window.alert((res && res.error) || "ההקמה נכשלה.");
+          showErr((res && res.error) || "ההקמה נכשלה.");
           return;
         }
         close();
-        window.alert(res.status === "ממתין להצהרה"
+        CBA.ui.alert(res.status === "ממתין להצהרה"
           ? "המנוי הוקם. נשלח לתושב מייל עם בקשה למלא הצהרת בריאות."
-          : "המנוי הוקם וממתין לתשלום. נשלח לתושב מייל עם הסכום.");
+          : "המנוי הוקם וממתין לתשלום. נשלח לתושב מייל עם הסכום.", "המנוי הוקם");
         reload();
       });
     });
