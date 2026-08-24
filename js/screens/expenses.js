@@ -769,32 +769,57 @@ function txOpenPeek(t) {
 }
 /* פתיחת תצוגה מקדימה מכתובת בלבד — כדי שכל מקום באפליקציה שמציג קבלה
    (כולל אזור התושב) יוכל להשתמש באותה חלונית במקום לפתוח טאב חדש. */
+/* (2026-08-24 — תיקון אבטחה, שלב 2) קבצי הקבלות ב-Drive כבר לא משותפים
+   ל"כל מי שיש לו הקישור", ולכן הדפדפן לא יכול למשוך אותם ישירות. במקום זה
+   מבקשים את הקובץ מהשרת (CBA.data.getReceipt), שבודק הרשאה — מנהל תקציב
+   ומעלה, או המשפחה שהגישה את הקבלה — ומגיש אותו. קישור שאינו קובץ Drive
+   (למשל קישור חיצוני שהודבק ידנית בשדה "קישור לקבלה") ממשיך כמו קודם. */
+function txReceiptBodyHTML(res) {
+  if (!res || !res.ok) {
+    return '<div class="peek__empty">' + CBA.esc((res && res.error) || "לא הצלחנו לטעון את הקבלה") + '</div>';
+  }
+  if (/^image\//i.test(res.mimeType)) return '<img class="peek__img" src="' + res.url + '" alt="קבלה">';
+  if (/pdf/i.test(res.mimeType))       return '<iframe class="peek__frame" src="' + res.url + '" title="תצוגת קבלה"></iframe>';
+  return '<div class="peek__empty">הקובץ אינו תמונה או PDF — אפשר לפתוח אותו בחלון חדש.</div>';
+}
 function txOpenPeekUrl(url, title) {
-  const t = { receiptUrl: url, supplier: title };
-  if (!t.receiptUrl) return;
+  if (!url) return;
   txClosePeek();
-  const id = driveFileId(t.receiptUrl);
-  const isImg = !id && /\.(png|jpe?g|gif|webp)$/i.test(t.receiptUrl);
-  const body = id
-    ? '<iframe class="peek__frame" src="https://drive.google.com/file/d/' + CBA.esc(id) + '/preview" title="תצוגת קבלה" allow="autoplay"></iframe>'
-    : isImg
-      ? '<img class="peek__img" src="' + CBA.esc(t.receiptUrl) + '" alt="קבלה">'
-      : '<div class="peek__empty">לא ניתן להציג תצוגה מקדימה לקישור הזה</div>';
+  const id = driveFileId(url);
+  const isImg = !id && /\.(png|jpe?g|gif|webp)$/i.test(url);
   const wrap = document.createElement("div");
   wrap.id = "tx-peek-overlay";
   wrap.className = "peek-backdrop";
   wrap.innerHTML =
     '<div class="peek" role="dialog" aria-label="תצוגה מקדימה של הקבלה">' +
       '<div class="peek__head">' +
-        '<span class="peek__title">' + CBA.esc(t.supplier || t.buyer || "קבלה") + '</span>' +
-        '<a class="peek__open" href="' + CBA.esc(t.receiptUrl) + '" target="_blank" rel="noopener">פתח בחלון חדש</a>' +
+        '<span class="peek__title">' + CBA.esc(title || "קבלה") + '</span>' +
+        '<a class="peek__open" href="#" target="_blank" rel="noopener" hidden>פתח בחלון חדש</a>' +
         '<button class="peek__x" aria-label="סגור">×</button>' +
-      '</div>' + body +
+      '</div>' +
+      '<div class="peek__slot">' +
+        (id
+          ? '<div class="peek__empty">טוען את הקבלה…</div>'
+          : isImg
+            ? '<img class="peek__img" src="' + CBA.esc(url) + '" alt="קבלה">'
+            : '<div class="peek__empty">לא ניתן להציג תצוגה מקדימה לקישור הזה</div>') +
+      '</div>' +
     '</div>';
   document.body.appendChild(wrap);
   wrap.addEventListener("click", function (e) { if (e.target === wrap) txClosePeek(); });
   wrap.querySelector(".peek__x").addEventListener("click", txClosePeek);
   document.addEventListener("keydown", txPeekEsc);
+
+  const slot = wrap.querySelector(".peek__slot");
+  const openLink = wrap.querySelector(".peek__open");
+  if (!id) { openLink.href = url; openLink.hidden = false; return; }
+
+  CBA.data.getReceipt(id, function (res) {
+    // ייתכן שהחלונית נסגרה בינתיים, או שנפתחה קבלה אחרת — לא כותבים ל-DOM מת
+    if (!wrap.isConnected) return;
+    slot.innerHTML = txReceiptBodyHTML(res);
+    if (res && res.ok) { openLink.href = res.url; openLink.hidden = false; }
+  });
 }
 
 /* חשיפה גלובלית + מאזין אחד לכל האפליקציה: כל אלמנט עם data-peek-url ייפתח
@@ -1077,7 +1102,7 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
         <summary class="tx-preview-fold__sum">הצג את הקבלה</summary>
         <div class="tx-preview">
           ${driveId
-            ? `<iframe class="tx-preview__frame" src="https://drive.google.com/file/d/${CBA.esc(driveId)}/preview" title="תצוגת קבלה" allow="autoplay" loading="lazy"></iframe>`
+            ? `<div class="tx-preview__slot" data-receipt-id="${CBA.esc(driveId)}"><div class="tx-preview__empty">הקבלה תיטען כשתפתחו את התצוגה</div></div>`
             : hasImg
               ? `<img class="tx-preview__img" src="${CBA.esc(state.receiptUrl)}" alt="קבלה" loading="lazy">`
               : `<div class="tx-preview__empty">לא ניתן להציג תצוגה מקדימה לקישור הזה</div>`}
@@ -1179,6 +1204,31 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
     if (!sel) return;
     sel.innerHTML = txSubItemOptions(state.categoryId, state.subItemId);
   }
+  /* תצוגת הקבלה בחלון העריכה (2026-08-24) — נטענת רק כשבאמת פותחים את
+     המקטע, ופעם אחת. הקובץ מגיע מהשרת אחרי בדיקת הרשאה ולא מ-Drive ישירות
+     (ר' CBA.data.getReceipt). כישלון מאפס את הסימון, כדי שסגירה ופתיחה
+     מחדש ינסו שוב במקום להישאר תקועים על הודעת שגיאה. */
+  const previewFold = form.querySelector(".tx-preview-fold");
+  if (previewFold) previewFold.addEventListener("toggle", function () {
+    if (!previewFold.open) return;
+    const slot = previewFold.querySelector("[data-receipt-id]");
+    if (!slot || slot.dataset.loaded) return;
+    slot.dataset.loaded = "1";
+    slot.innerHTML = '<div class="tx-preview__empty">טוען את הקבלה…</div>';
+    CBA.data.getReceipt(slot.dataset.receiptId, function (res) {
+      if (!slot.isConnected) return;
+      if (!res || !res.ok) {
+        slot.dataset.loaded = "";
+        slot.innerHTML = '<div class="tx-preview__empty">' + CBA.esc((res && res.error) || "לא הצלחנו לטעון את הקבלה") + '</div>';
+        return;
+      }
+      slot.innerHTML = /^image\//i.test(res.mimeType)
+        ? '<img class="tx-preview__img" src="' + res.url + '" alt="קבלה">'
+        : /pdf/i.test(res.mimeType)
+          ? '<iframe class="tx-preview__frame" src="' + res.url + '" title="תצוגת קבלה"></iframe>'
+          : '<div class="tx-preview__empty">הקובץ אינו תמונה או PDF.</div>';
+    });
+  });
   form.querySelectorAll("[data-field]").forEach(function (inp) {
     inp.addEventListener("input", function () { refreshName(); updateSuggest(); });
   });

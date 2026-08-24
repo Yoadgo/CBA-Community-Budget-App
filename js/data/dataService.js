@@ -219,6 +219,65 @@ CBA.data = (function () {
     CBA.sheets.postRead("deleteReceiptFile", { year: t.year || getCurrentYear(), id: t.id, url: t.receiptUrl || "" }, cb);
   }
 
+  /* --- שליפת קובץ קבלה דרך השרת (2026-08-24 — תיקון אבטחה, שלב 2) ---
+     קודם הדפדפן משך את הקובץ ישירות מ-Drive, מה שחייב שהקובץ יהיה משותף
+     ל"כל מי שיש לו הקישור". עכשיו הקבצים פרטיים והשרת מגיש אותם אחרי בדיקת
+     הרשאה (handleReceiptFile_ ב-Code.gs), כ-Base64. כאן ממירים אותו ל-Blob
+     מקומי — כתובת blob: שאפשר להציג ב-<img>/<iframe> ולפתוח בחלון חדש.
+
+     מטמון: קבלה נפתחת ונסגרת שוב ושוב בזמן בדיקה, ואין טעם למשוך את אותו
+     קובץ פעמיים. שומרים עד RECEIPT_CACHE_MAX כתובות blob ומשחררים את הישנה
+     ביותר (revokeObjectURL) — בלי זה הזיכרון היה גדל בלי גבול בסשן ארוך. */
+  var RECEIPT_CACHE_MAX = 12;
+  var receiptCache = [];   // [{id, res}] — הישן ביותר בהתחלה
+
+  function receiptCacheGet(id) {
+    for (var i = 0; i < receiptCache.length; i++) {
+      if (receiptCache[i].id === id) {
+        var hit = receiptCache.splice(i, 1)[0];   // מקודם לסוף = "נצפה לאחרונה"
+        receiptCache.push(hit);
+        return hit.res;
+      }
+    }
+    return null;
+  }
+  function receiptCachePut(id, res) {
+    receiptCache.push({ id: id, res: res });
+    while (receiptCache.length > RECEIPT_CACHE_MAX) {
+      var old = receiptCache.shift();
+      try { if (old.res && old.res.url) URL.revokeObjectURL(old.res.url); } catch (e) {}
+    }
+  }
+
+  function base64ToBlobUrl(b64, mimeType) {
+    var bin = atob(b64);
+    var arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([arr], { type: mimeType || "application/octet-stream" }));
+  }
+
+  /** getReceipt(fileId, cb) -> cb({ok:true, url, mimeType, name}) או {ok:false, error, tooLarge} */
+  function getReceipt(fileId, cb) {
+    if (!fileId) { cb({ ok: false, error: "אין מזהה קובץ" }); return; }
+    var cached = receiptCacheGet(fileId);
+    if (cached) { cb(cached); return; }
+    CBA.sheets.get({ action: "receipt", id: fileId }, function (res) {
+      if (!res || !res.ok) {
+        cb({ ok: false, error: (res && res.error) || "שליפת הקבלה נכשלה", tooLarge: !!(res && res.tooLarge) });
+        return;   // כישלון לא נכנס למטמון — ניסיון חוזר צריך באמת לנסות שוב
+      }
+      var out;
+      try {
+        out = { ok: true, url: base64ToBlobUrl(res.dataBase64, res.mimeType), mimeType: res.mimeType || "", name: res.name || "" };
+      } catch (e) {
+        cb({ ok: false, error: "לא הצלחנו לפענח את הקובץ" });
+        return;
+      }
+      receiptCachePut(fileId, out);
+      cb(out);
+    });
+  }
+
   // --- "ניהול עמודות" בטבלת ניהול הוצאות (סעיף 6, 2026-08-06): הצג/הסתר עמודות
   // קיימות, שם תצוגה מותאם, ועמודות מותאמות אישית. נשמר בטאב "הגדרות" (מפתח
   // "עמודות מותאמות", JSON) — משותף לכל מי שנכנס לאפליקציה, לא רק למכשיר אחד.
@@ -1208,6 +1267,7 @@ CBA.data = (function () {
     deleteTransaction: deleteTransaction,
     uploadReceiptFile: uploadReceiptFile,
     deleteReceiptFile: deleteReceiptFile,
+    getReceipt: getReceipt,
     getColumnConfig: getColumnConfig,
     saveColumnConfig: saveColumnConfig,
     expectedRefundDate: expectedRefundDate,

@@ -13,7 +13,7 @@ window.CBA = window.CBA || {};
 CBA.pwa = (function () {
   "use strict";
 
-  var SW_URL   = "service-worker.js?v=20260823a";
+  var SW_URL   = "service-worker.js?v=20260824a";
   var HINT_KEY = "cba_install_hint_v1";
 
   var deferredPrompt = null;   // אנדרואיד/כרום: חלון ההתקנה שנתפס מראש

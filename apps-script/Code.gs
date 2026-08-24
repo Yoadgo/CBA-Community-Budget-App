@@ -358,6 +358,14 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'gymMy') {
       return handleGymMy_(e.parameter);
     }
+    /* קובץ קבלה דרך השרת (2026-08-24 — תיקון אבטחה, שלב 2).
+     * עד היום כל קובץ קבלה שותף כ-"כל מי שיש לו הקישור", והדפדפן של המשתמש
+     * משך אותו ישירות מ-Drive — כלומר הקישור לבדו הספיק, בלי שום בדיקה, וגם
+     * מי שאינו תושב יכול היה לפתוח אותו. מעכשיו הקובץ נשאר פרטי, והשרת הוא
+     * זה שמגיש אותו — רק אחרי בדיקת הרשאה. ר' handleReceiptFile_. */
+    if (e && e.parameter && e.parameter.action === 'receipt') {
+      return handleReceiptFile_(e.parameter);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     /* שער הרשאות למטען הראשי (2026-08-23 — תיקון אבטחה).
      * עד היום המסלול הזה — הבקשה ל-/exec בלי פרמטר action — היה היחיד בקובץ
@@ -387,7 +395,7 @@ function doGet(e) {
       // מספר הגרסה נשלח יחד עם המטען המלא, כדי שהלקוח יידע מול מה
       // להשוות בבדיקות ה-rev הזולות שאחריו (ר' bumpRev_ למעלה).
       rev: currentRev_(),
-      ok: true, version: 'v37-secure-read', years: years,
+      ok: true, version: 'v38-private-receipts', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -998,7 +1006,10 @@ function submitReceipt_(ss, body) {
       body.fileName || 'receipt'
     );
     var file = folder.createFile(blob);
-    try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* לא קריטי */ }
+    /* (2026-08-24) הקובץ נשאר פרטי בכוונה. קודם היה כאן setSharing ל-
+       ANYONE_WITH_LINK, מתוך כוונה טובה — שכמה מנהלים יוכלו לצפות. בפועל זה
+       הפך כל קבלה לציבורית לכל מי שהקישור הגיע אליו. הצפייה באפליקציה עוברת
+       מעכשיו דרך handleReceiptFile_, שבודק הרשאה ומגיש את הקובץ בעצמו. */
 
     // 2) מזהה חדש — מבוסס על המקסימום הקיים בטאב, מחושב בשרת (לא סומכים על הלקוח)
     var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
@@ -1157,6 +1168,139 @@ function extractDriveFileId_(url) {
   return m ? m[1] : null;
 }
 
+/* ============================================================================
+ *  הגשת קובץ קבלה דרך השרת (2026-08-24 — תיקון אבטחה, שלב 2)
+ * ----------------------------------------------------------------------------
+ *  למה זה קיים: עד היום הקבצים היו משותפים ל"כל מי שיש לו הקישור", והדפדפן
+ *  משך אותם ישירות מ-Drive. זה היה הכרחי כי לתושב אין גישה לתיקיית הגזבר —
+ *  אבל המחיר היה שהקישור לבדו פתח את הקבלה, לכל אחד בעולם.
+ *
+ *  מי רשאי לראות קבלה (החלטת יועד, 24.8.26):
+ *    1. מנהל תקציב ומעלה (PERM_BUDGET, ומנהל-על ממילא עובר הכול ב-authorize_).
+ *    2. מי שהגיש אותה — לפי "מזהה משפחה" שבשורת התנועה, מול המשפחה של
+ *       המשתמש המחובר. ההצלבה היא מול *הקובץ* ולא מול מספר שורה שהלקוח שולח,
+ *       כדי שאי אפשר יהיה לבקש קובץ של מישהו אחר בעזרת שורה שלי.
+ * ========================================================================== */
+
+/** מעל הגודל הזה לא מגישים את הקובץ אלא מחזירים tooLarge והלקוח מציע חלופה.
+ *  תמונות מכווצות בצד הלקוח ל-1600px/JPEG-75 (בערך 200-500KB), אז זה נוגע
+ *  בפועל רק ל-PDF גדולים שהועלו כמו שהם. */
+var RECEIPT_MAX_BYTES = 8 * 1024 * 1024;
+
+/** האם קובץ הקבלה הזה שייך לשורת תנועה של המשפחה הנתונה. */
+function receiptBelongsToFamily_(ss, fileId, familyId) {
+  var fam = String(familyId || '').trim();
+  if (!fam || !fileId) return false;
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var name = sheets[i].getName();
+    if (name.indexOf('תנועות ') !== 0) continue;
+    var sh = sheets[i];
+    var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+    if (lastRow < 2 || lastCol < 1) continue;
+    var values = sh.getRange(1, 1, lastRow, lastCol).getValues();
+    var headers = values[0].map(function (h) { return String(h).trim(); });
+    var urlCol = headers.indexOf('קישור קבלה');
+    var famCol = headers.indexOf('מזהה משפחה');
+    if (urlCol === -1 || famCol === -1) continue;
+    for (var r = 1; r < values.length; r++) {
+      if (extractDriveFileId_(values[r][urlCol]) !== fileId) continue;
+      // נמצאה השורה שאליה הקובץ מקושר — היא, ורק היא, קובעת למי הוא שייך.
+      return String(values[r][famCol] || '').trim() === fam;
+    }
+  }
+  return false;
+}
+
+function handleReceiptFile_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);   // חייב מושב תקין + תושב פעיל
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+
+    var id = String((p && p.id) || '').trim();
+    if (!/^[a-zA-Z0-9_-]{10,}$/.test(id)) return json_({ ok: false, error: 'מזהה קובץ לא תקין' });
+
+    var perm = gate.perm || {};
+    var allowed = !!perm.isSuper || (perm.perms || []).indexOf(PERM_BUDGET) !== -1;
+    if (!allowed) allowed = receiptBelongsToFamily_(ss, id, perm.familyId);
+    if (!allowed) return json_({ ok: false, error: 'אין לך הרשאה לצפות בקבלה הזו' });
+
+    var file;
+    try { file = DriveApp.getFileById(id); }
+    catch (err) { return json_({ ok: false, error: 'הקובץ לא נמצא ב-Drive' }); }
+
+    var size = 0;
+    try { size = file.getSize(); } catch (err) { size = 0; }
+    if (size > RECEIPT_MAX_BYTES) {
+      return json_({ ok: false, tooLarge: true, size: size,
+        error: 'הקובץ גדול מכדי להציג אותו כאן (' + (Math.round(size / 104857.6) / 10) + 'MB)' });
+    }
+
+    var blob = file.getBlob();
+    return json_({
+      ok: true,
+      name: file.getName(),
+      size: size,
+      mimeType: blob.getContentType() || 'application/octet-stream',
+      dataBase64: Utilities.base64Encode(blob.getBytes())
+    });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ *  תחזוקה חד-פעמית: הסרת שיתוף מקבצים שהועלו לפני התיקון.
+ *  ⚠️ רצה מעורך ה-Apps Script בלבד (כפתור Run על revokeReceiptSharing), בדיוק
+ *  כמו grantMeSuperAdmin — לא חשופה לאינטרנט ולא עוברת ב-doPost. פעולה גורפת
+ *  על Drive לא צריכה להיות זמינה כבקשת רשת בכלל.
+ *  אידמפוטנטי — אפשר להריץ שוב ושוב. עובד במנות (limit) כדי לא להיתקל
+ *  במגבלת 6 הדקות של Apps Script; מחזיר done=false כשנשאר עוד, ואז פשוט
+ *  מריצים שוב. קובץ שכבר פרטי לא נספר כ"שונה".
+ * -------------------------------------------------------------------------- */
+function revokeReceiptSharing_(limit) {
+  limit = Math.max(1, Math.min(Number(limit || 300), 400));
+  var scanned = 0, changed = 0, failed = 0, done = true;
+
+  function walk(folder) {
+    if (!done) return;
+    var files = folder.getFiles();
+    while (files.hasNext()) {
+      if (scanned >= limit) { done = false; return; }
+      var f = files.next();
+      scanned++;
+      try {
+        if (f.getSharingAccess() === DriveApp.Access.PRIVATE) continue;
+        f.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+        changed++;
+      } catch (e) { failed++; }
+    }
+    var subs = folder.getFolders();
+    while (subs.hasNext()) {
+      if (scanned >= limit) { done = false; return; }
+      walk(subs.next());
+      if (!done) return;
+    }
+  }
+
+  try {
+    walk(DriveApp.getFolderById(ROOT_RECEIPTS_FOLDER_ID));
+  } catch (err) {
+    return { ok: false, error: 'לא הצלחנו לפתוח את תיקיית הקבלות: ' + String(err) };
+  }
+  return { ok: true, scanned: scanned, changed: changed, failed: failed, done: done };
+}
+
+/** להרצה ידנית מהעורך (כפתור Run). מריצה מנה אחת ומדפיסה סיכום ל-Execution log.
+ *  אם done=false — פשוט להריץ שוב, עד ש-done=true. אידמפוטנטי לחלוטין. */
+function revokeReceiptSharing() {
+  var r = revokeReceiptSharing_(300);
+  Logger.log('נסרקו: ' + r.scanned + ' | שונו לפרטי: ' + r.changed +
+             ' | נכשלו: ' + r.failed + ' | הסתיים: ' + (r.done ? 'כן' : 'לא — להריץ שוב'));
+  return r;
+}
+
 /* כשיש קישור לקבלה קיימת ושם חדש שונה מהקיים — משנים את שם הקובץ בפועל ב-Drive.
  * כך שם הקובץ נשאר מסונכרן עם הנתונים גם אחרי שהמנהל משייך סעיף/מתקן פרטים בעריכה. */
 function renameReceiptFileIfNeeded_(url, newName) {
@@ -1243,7 +1387,10 @@ function uploadReceiptFile_(ss, body) {
       body.fileName || 'receipt'
     );
     var file = folder.createFile(blob);
-    try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* לא קריטי */ }
+    /* (2026-08-24) הקובץ נשאר פרטי בכוונה. קודם היה כאן setSharing ל-
+       ANYONE_WITH_LINK, מתוך כוונה טובה — שכמה מנהלים יוכלו לצפות. בפועל זה
+       הפך כל קבלה לציבורית לכל מי שהקישור הגיע אליו. הצפייה באפליקציה עוברת
+       מעכשיו דרך handleReceiptFile_, שבודק הרשאה ומגיש את הקובץ בעצמו. */
     try { if (body.fileName) file.setName(body.fileName); } catch (e) { /* לא קריטי */ }
 
     // מחיקה בפועל של הקובץ הישן (אם היה) — trash אמיתי, לא רק ניתוק קישור
