@@ -522,7 +522,7 @@ CBA.sheets = (function () {
      בגרסה החדשה. מוסיפים את ההסבר להודעת השגיאה במקום להשאיר "אין הרשאה" יבש
      שאי אפשר לעשות איתו כלום. */
   // הגרסה המינימלית של ה-Apps Script שהאפליקציה הזו יודעת לעבוד מולה
-  var MIN_SERVER = 38;
+  var MIN_SERVER = 39;
   function serverVer() {
     var m = String((CBA.mock && CBA.mock._serverVersion) || "").match(/v(\d+)/);
     return m ? parseInt(m[1], 10) : 0;
@@ -722,8 +722,8 @@ CBA.sheets = (function () {
 
   // קריאה עם תשובה קריאה (GET רגיל, לא no-cors) — בשביל פעולות שחייבות לדעת מיד
   // אם הצליחו (למשל login, ובשלב 8: תפוסת יומן + יצירת שריון). params -> querystring.
-  // מצרפת סיסמה אוטומטית (כמו push) — פעולות ניהול (clubList/approve/reject) בודקות
-  // אותה בשרת; לשאר הפעולות זה פרמטר עודף ולא-נבדק, לא מזיק.
+  // מצרפת את המושב החתום אוטומטית (כמו push) — פעולות שדורשות הרשאה בודקות
+  // אותו בשרת דרך authorize_. (2026-08-24: מסלול "סיסמת מנהל" בוטל לגמרי.)
   function get(params, cb) {
     var body = Object.assign({ session: authSession() }, params || {});
     var qs = Object.keys(body).map(function (k) {

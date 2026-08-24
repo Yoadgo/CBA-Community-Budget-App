@@ -664,7 +664,19 @@ CBA.screens = CBA.screens || {};
   /* ---- הוראות ותקנון שימוש במועדון (טקסט קבוע, נמסר ע"י יועד 2026-08-05) ---- */
   var PAYBOX_URL = "https://links.payboxapp.com/e5vEFrqvd5b";
   var payboxIcon = svg('<path d="M4 7h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M4 7l1.6-3.2A2 2 0 0 1 7.4 2.8h9.2a2 2 0 0 1 1.8 1.1L20 7"/><path d="M9 12h6"/>');
-  var CLUB_RULES_HTML =
+  /* (2026-08-24) היה כאן קבוע שנבנה בזמן טעינת הקובץ. הפך לפונקציה כדי
+     שקוד הרשת האלחוטית ייקרא מההגדרות בזמן ההצגה — הוא כבר לא כתוב כאן.
+     ר' clubWifiHTML למטה ו-SETTINGS_PUBLIC_ALLOW ב-Code.gs. */
+  function clubWifiHTML() {
+    var s = (window.CBA && CBA.mock && CBA.mock._settings) || {};
+    var net  = String(s['רשת אלחוטית במועדון'] || '').trim();
+    var pass = String(s['סיסמת רשת המועדון'] || '').trim();
+    if (!net && !pass) return '';   // לא הוגדר בגיליון — פשוט לא מציגים שורה ריקה
+    return '<p><b>רשת אלחוטית:</b> ' + CBA.esc(net || '—') +
+      (pass ? ('&nbsp;·&nbsp;<b>סיסמה:</b> ' + CBA.esc(pass)) : '') + '</p>';
+  }
+  function clubRulesHTML() {
+    return
     '<p>השכרתם את מועדון המשפחות של שיכון פלמחים.</p>' +
     '<p><b>שימו לב כי חל איסור:</b></p>' +
     '<ul>' +
@@ -684,10 +696,11 @@ CBA.screens = CBA.screens || {};
       '<li>נעילת כל הדלתות.</li>' +
       '<li>בסיום השימוש יש להעביר צילום של המקום.</li>' +
     '</ul>' +
-    '<p><b>רשת אלחוטית:</b> Mesh0D45 &nbsp;·&nbsp; <b>סיסמה:</b> 1-8</p>' +
+    clubWifiHTML() +
     '<p>במועדון קיימת מערכת הגברה, מיקרופון ומקרן שניתן להשתמש בהם.</p>' +
     '<p>במחסן המועדון יש מכונות מזון אותן ניתן להשכיר בנפרד ובתיאום מראש — אין להשתמש במכונות ללא רשות.</p>' +
     '<p>שמתם לב למשהו תקול/בלוי, או שחומרי ניקיון חסרים/עומדים להיגמר? נא לעדכן את הוועד בהקדם כדי שנוכל לטפל בנושא.</p>';
+  }
   // הערה: נושא התשלום (200₪ + קישור PayBox) הוצא מכאן ומקבל קובייה נפרדת ובולטת
   // משלו בעמוד (.club-pay, 2026-08-06 לבקשת יועד) — לא חוזר על עצמו בטקסט התקנון.
 
@@ -868,7 +881,7 @@ CBA.screens = CBA.screens || {};
               chevLeftIcon +
             '</div>' +
             '<div class="club-rules__top5" id="rc-rules-top5">' + CLUB_RULES_TOP5_HTML + '</div>' +
-            '<div class="club-rules__body" id="rc-rules-body" hidden>' + CLUB_RULES_HTML + '</div>' +
+            '<div class="club-rules__body" id="rc-rules-body" hidden>' + clubRulesHTML() + '</div>' +
           '</div>' +
           '<div class="card club-pay" id="rc-pay">' +
             '<div class="club-pay__head">' +

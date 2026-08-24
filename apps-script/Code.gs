@@ -128,11 +128,21 @@ function sessionSecret_() {
 
 /* מושב חתום (2026-08-07). למה לא להשתמש בטוקן של גוגל לכל כתיבה? כי הוא פג אחרי
  * כשעה, והמשתמש היה נזרק באמצע העבודה. במקום זה: מאמתים את טוקן גוגל **פעם אחת**
- * בהתחברות, ומנפיקים מושב חתום ב-HMAC שתקף 30 יום. ההרשאות עצמן נקראות מהגיליון
+ * בהתחברות, ומנפיקים מושב חתום ב-HMAC שתקף 14 יום. ההרשאות עצמן נקראות מהגיליון
  * בכל בקשה מחדש — כך ששלילת הרשאה נכנסת לתוקף מיד, בלי להמתין לפקיעת המושב. */
+/* "דור" המושבים (2026-08-24). כל מושב נחתם עם הדור הנוכחי, וכל בקשה נבדקת
+ * מולו. העלאת המספר ב-Script Properties = ניתוק מיידי של כל המושבים הקיימים,
+ * בכל המכשירים — מתג החירום שהיה חסר עד היום (מושב גנוב היה תקף עד שיפוג).
+ * מושב ישן שנחתם לפני השינוי הזה לא נושא שדה v, ולכן נחשב לדור 1 — כך
+ * ההטמעה עצמה לא מנתקת אף אחד, אבל ההעלאה הראשונה כן תנתק את כולם. */
+function sessionEpoch_() {
+  return String(PropertiesService.getScriptProperties().getProperty('CBA_SESSION_EPOCH') || '1');
+}
+
 function makeSession_(email) {
   var payload = Utilities.base64EncodeWebSafe(JSON.stringify({
-    e: String(email || '').toLowerCase(), x: Date.now() + 30 * 24 * 3600 * 1000
+    e: String(email || '').toLowerCase(), v: sessionEpoch_(),
+    x: Date.now() + 14 * 24 * 3600 * 1000
   }));
   var sig = Utilities.base64EncodeWebSafe(
     Utilities.computeHmacSha256Signature(payload, sessionSecret_()));
@@ -150,6 +160,7 @@ function verifySession_(token) {
     if (sig !== expect) return null;
     var obj = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(payload)).getDataAsString());
     if (!obj || !obj.e || !obj.x || obj.x < Date.now()) return null;
+    if (String(obj.v || '1') !== sessionEpoch_()) return null;   // ר' sessionEpoch_
     return { email: String(obj.e) };
   } catch (err) { return null; }
 }
@@ -179,8 +190,15 @@ function permissionsFor_(email) {
 /**
  * שער ההרשאות המרכזי. מקבל את פרמטרי הבקשה ואת ההרשאה הנדרשת, ומחזיר
  * { ok:true, email, perm } או { ok:false, error }.
- * שני מסלולים: (1) מושב חתום — המסלול הרגיל של האפליקציה;
- * (2) סיסמת מנהל — מסלול חירום/ידני, לשימוש ישיר מול ה-API בלי דפדפן.
+ *
+ * מסלול אחד בלבד: מושב חתום. (2026-08-24) עד היום היה כאן מסלול שני —
+ * "סיסמת מנהל" שנשמרה בטאב ההגדרות, וכל מי ששלח אותה קיבל ALL_PERMS
+ * ו-isSuper מכל מקום בעולם, בלי חשבון גוגל ובלי להיות ברשימת התושבים.
+ * הוא נועד להיות רשת חירום, אבל בפועל היה מפתח-על ששכב בגיליון: כל מי
+ * שהייתה לו אי-פעם גישת צפייה לגיליון החזיק אותו. שום דבר באפליקציה לא
+ * השתמש בו יותר (הלקוח עבר למושב חתום ב-2026-08-07), ולכן הוא הוסר.
+ * רשת החירום האמיתית היא grantMeSuperAdmin/diagnosePermissions — שרצות
+ * מעורך ה-Apps Script תחת חשבון הבעלים, ולכן אי אפשר לגנוב אותן.
  */
 function authorize_(ss, p, need) {
   var sess = verifySession_(p && p.session);
@@ -193,9 +211,6 @@ function authorize_(ss, p, need) {
       return { ok: true, email: sess.email, perm: perm };
     }
     return { ok: false, error: 'אין לך הרשאה לפעולה הזו' };
-  }
-  if (isAdminPassword_(ss, p && p.password)) {
-    return { ok: true, email: '', perm: { found: true, active: true, perms: ALL_PERMS.slice(), isSuper: true } };
   }
   return { ok: false, error: 'אין הרשאה' };
 }
@@ -223,6 +238,16 @@ function grantMeSuperAdmin() {
   if (!res.ok) throw new Error(res.error);
   Logger.log('✓ ' + email + ' הוגדר כמנהל על (שורה ' + r.rowIndex + ', משבצת אימייל ' + r.slot + ')');
   return res;
+}
+
+/** מתג חירום — להרצה ידנית מהעורך. מנתק את כל המשתמשים בכל המכשירים; כל אחד
+ *  פשוט יתבקש להתחבר שוב עם גוגל. לשימוש אם מכשיר אבד/נגנב או שמושב דלף. */
+function revokeAllSessions() {
+  var props = PropertiesService.getScriptProperties();
+  var next = String((parseInt(props.getProperty('CBA_SESSION_EPOCH') || '1', 10) || 1) + 1);
+  props.setProperty('CBA_SESSION_EPOCH', next);
+  Logger.log('✓ כל המושבים נותקו. דור המושבים החדש: ' + next);
+  return next;
 }
 
 function diagnosePermissions() {
@@ -384,18 +409,21 @@ function doGet(e) {
       if (n.indexOf('תנועות ') === 0) years.push(n.substring('תנועות '.length));
     });
     var settings = readSettings_(ss);
-    // סיסמת המנהל לא נשלחת יותר ללקוח (2026-08-07). עד היום כל מי שהיה מחובר קיבל
-    // אותה בתוך ההגדרות, ולכן יכול היה לשלוח כל פקודת כתיבה. מעכשיו האפליקציה
-    // עובדת עם מושב חתום אישי, והסיסמה נשארת סוד שנמצא רק בגיליון.
+    /* כל הגדרה ששמה מכיל "סיסמ" לא נשלחת ללקוח (2026-08-07) — רשת ביטחון
+     * גורפת, כדי שסוד שיתווסף בעתיד לטאב ההגדרות לא ידלוף בטעות.
+     * (2026-08-24) חריג מפורש אחד: קוד הרשת האלחוטית של המועדון. הוא לא סוד
+     * מהתושבים — הוא נועד בדיוק להם — הוא רק לא צריך להיות כתוב בקוד הפומבי
+     * ב-GitHub, שם הוא שכב עד היום. כל חריג עתידי חייב להיכנס לרשימה במפורש. */
+    var SETTINGS_PUBLIC_ALLOW = ['סיסמת רשת המועדון'];
     var publicSettings = {};
     Object.keys(settings).forEach(function (k) {
-      if (k.indexOf('סיסמ') === -1) publicSettings[k] = settings[k];
+      if (k.indexOf('סיסמ') === -1 || SETTINGS_PUBLIC_ALLOW.indexOf(k) !== -1) publicSettings[k] = settings[k];
     });
     var out = {
       // מספר הגרסה נשלח יחד עם המטען המלא, כדי שהלקוח יידע מול מה
       // להשוות בבדיקות ה-rev הזולות שאחריו (ר' bumpRev_ למעלה).
       rev: currentRev_(),
-      ok: true, version: 'v38-private-receipts', years: years,
+      ok: true, version: 'v39-session-epoch', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -878,21 +906,10 @@ function handleCancelClubReservation_(p) {
   }
 }
 
-// בודקת סיסמת מנהל לפעולות ניהול שמגיעות דרך GET (clubList/approve/reject) —
-// אותה בדיקה שנעשית בתחילת doPost לכל שאר הכתיבות, רק שכאן מבצעים אותה ידנית
-// כי לפעולות האלה יש צורך בתשובה קריאה (לא no-cors) אז הן לא עוברות דרך doPost.
-/* התגלה 2026-08-07: אם משום מה אין ערך ב"סיסמת מנהל" בהגדרות, ההשוואה הישנה
- * הייתה '' === '' — כלומר בקשה בלי סיסמה כלל הייתה עוברת. עכשיו נדרשת סיסמה
- * מוגדרת בפועל, וגם סיסמה שנשלחה בפועל. */
-function isAdminPassword_(ss, pw) {
-  var real = String(readSettings_(ss)['סיסמת מנהל'] || '').trim();
-  var given = String(pw || '').trim();
-  if (!real || !given) return false;
-  return given === real;
-}
 
 /* רשימת כל השריונים הקרובים (ממתינים + מאושרים) — למסך הניהול אצל המנהל.
- * לא מסננת לפי משתמש (בניגוד ל-myClubReservations) ולכן דורשת סיסמת מנהל. */
+ * לא מסננת לפי משתמש (בניגוד ל-myClubReservations) ולכן דורשת הרשאת מועדון
+ * (PERM_CLUB) דרך authorize_. (2026-08-24: מסלול "סיסמת מנהל" בוטל לגמרי.) */
 function handleClubList_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();

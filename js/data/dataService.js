@@ -483,7 +483,7 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get(Object.assign({ action: "cancelClubReservation" }, fields), cb);
   }
-  // --- ניהול אישורי שריון (מסך המנהל) — הסיסמה מצורפת אוטומטית ע"י CBA.sheets.get ---
+  // --- ניהול אישורי שריון (מסך המנהל) — המושב החתום מצורף אוטומטית ע"י CBA.sheets.get ---
   function getClubList(cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "clubList" }, cb);
@@ -572,7 +572,7 @@ CBA.data = (function () {
     CBA.sheets.get({ action: "rejectClubReservation", id: id }, cb);
   }
    
-  // --- רשימת התושבים (טאב "תושבים" המלא, כולל PII) — מוגן בסיסמת מנהל בשרת,
+  // --- רשימת התושבים (טאב "תושבים" המלא, כולל PII) — מוגן בהרשאת תושבים בשרת,
   // בדיוק כמו getClubList. בשימוש ע"י מסך ניהול הוצאות (2026-08-06) כדי לתת למנהל
   // לבחור "רוכש"/"מטפל" מתוך רשימה סגורה במקום טקסט חופשי — כך שהאיות תמיד אחיד
   // ותואם לטאב תושבים. נשמר בזיכרון-מודול (cache) כי הרשימה משתנה לעיתים רחוקות
