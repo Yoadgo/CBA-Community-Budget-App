@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>אבטחת המידע ב-CBA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Assistant:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+
+<style>
+:root{
+  --ground:#FBFAF8;
+  --surface:#FFFFFF;
+  --sunk:#F2F1ED;
+  --line:#E2E0D9;
+  --line-strong:#CBC8BE;
+  --ink:#1C1B18;
+  --ink-soft:#57544C;
+  --ink-faint:#8A867B;
+  --accent:#1F4A57;
+  --accent-soft:#E4EDEF;
+  --ok:#0F7B54;
+  --ok-soft:#E3F2EB;
+  --warn:#A8641A;
+  --warn-soft:#F8EEE1;
+  --danger:#B22A3E;
+  --danger-soft:#FAE7E9;
+  --shadow:0 1px 2px rgba(28,27,24,.05), 0 8px 24px -12px rgba(28,27,24,.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#14161A;
+    --surface:#1B1E23;
+    --sunk:#22262C;
+    --line:#2E333A;
+    --line-strong:#434A53;
+    --ink:#EDEBE6;
+    --ink-soft:#B2AEA5;
+    --ink-faint:#807C74;
+    --accent:#7FBECD;
+    --accent-soft:#1E2B31;
+    --ok:#4FC495;
+    --ok-soft:#15271F;
+    --warn:#E0A55E;
+    --warn-soft:#2A2117;
+    --danger:#F0808F;
+    --danger-soft:#2C171B;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#14161A;
+  --surface:#1B1E23;
+  --sunk:#22262C;
+  --line:#2E333A;
+  --line-strong:#434A53;
+  --ink:#EDEBE6;
+  --ink-soft:#B2AEA5;
+  --ink-faint:#807C74;
+  --accent:#7FBECD;
+  --accent-soft:#1E2B31;
+  --ok:#4FC495;
+  --ok-soft:#15271F;
+  --warn:#E0A55E;
+  --warn-soft:#2A2117;
+  --danger:#F0808F;
+  --danger-soft:#2C171B;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:"Assistant",-apple-system,"Segoe UI",Arial,sans-serif;
+  font-size:17px;
+  line-height:1.72;
+  direction:rtl;
+  text-align:right;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:820px;margin:0 auto;padding:0 24px 96px;}
+
+/* ---------- כותרת ---------- */
+.masthead{
+  padding:72px 0 40px;
+  border-bottom:1px solid var(--line);
+  display:flex;flex-direction:column;gap:18px;
+}
+.eyebrow{
+  font-size:12px;font-weight:700;letter-spacing:.14em;
+  color:var(--ink-faint);text-transform:uppercase;
+  display:flex;gap:12px;align-items:center;
+}
+.eyebrow::after{content:"";flex:1;height:1px;background:var(--line);}
+h1{
+  font-family:"Frank Ruhl Libre",Georgia,serif;
+  font-weight:900;font-size:clamp(34px,6vw,54px);
+  line-height:1.12;margin:0;text-wrap:balance;letter-spacing:-.01em;
+}
+.standfirst{
+  font-size:19px;color:var(--ink-soft);max-width:60ch;margin:0;font-weight:300;
+}
+.meta{
+  display:flex;flex-wrap:wrap;gap:8px 20px;
+  font-size:13px;color:var(--ink-faint);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+}
+
+/* ---------- ניווט תוכן ---------- */
+.toc{
+  margin:36px 0 0;padding:20px 24px;
+  background:var(--sunk);border:1px solid var(--line);border-radius:2px;
+}
+.toc h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;color:var(--ink-faint);font-family:"Assistant",sans-serif;font-weight:700;border:0;padding:0;}
+.toc ol{margin:0;padding:0 20px 0 0;display:grid;gap:4px;}
+.toc a{color:var(--ink);text-decoration:none;border-bottom:1px solid transparent;}
+.toc a:hover,.toc a:focus-visible{border-bottom-color:var(--accent);color:var(--accent);}
+
+/* ---------- מבנה ---------- */
+section{padding-top:56px;}
+h2{
+  font-family:"Frank Ruhl Libre",Georgia,serif;
+  font-weight:700;font-size:clamp(24px,3.6vw,32px);
+  margin:0 0 8px;padding-bottom:10px;border-bottom:2px solid var(--ink);
+  text-wrap:balance;
+}
+h3{
+  font-family:"Assistant",sans-serif;font-weight:700;font-size:19px;
+  margin:32px 0 6px;
+}
+p{margin:0 0 16px;max-width:66ch;}
+ul,ol{max-width:66ch;padding-inline-start:22px;}
+li{margin-bottom:8px;}
+strong{font-weight:700;}
+code{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.87em;background:var(--sunk);padding:1px 5px;border-radius:2px;
+  border:1px solid var(--line);direction:ltr;display:inline-block;
+}
+
+/* ---------- הסבר פשוט / טכני ---------- */
+.plain{
+  border-inline-start:3px solid var(--accent);
+  padding-inline-start:20px;margin:20px 0 26px;
+}
+.plain .label{
+  font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);display:block;margin-bottom:6px;
+}
+details.tech{
+  background:var(--surface);border:1px solid var(--line);border-radius:2px;
+  margin:0 0 28px;box-shadow:var(--shadow);
+}
+details.tech summary{
+  cursor:pointer;padding:12px 18px;font-size:13px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);
+  list-style:none;display:flex;align-items:center;gap:10px;
+}
+details.tech summary::-webkit-details-marker{display:none;}
+details.tech summary::before{
+  content:"+";font-family:"IBM Plex Mono",monospace;font-size:16px;
+  color:var(--accent);font-weight:600;
+}
+details.tech[open] summary::before{content:"–";}
+details.tech summary:hover{color:var(--accent);}
+details.tech summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.tech-body{padding:4px 18px 18px;border-top:1px solid var(--line);}
+.tech-body p,.tech-body ul{font-size:15.5px;color:var(--ink-soft);}
+.tech-body strong{color:var(--ink);}
+
+/* ---------- דיאגרמת שכבות ---------- */
+.layers{display:grid;gap:10px;margin:28px 0 32px;}
+.layer{
+  display:grid;grid-template-columns:44px 1fr;gap:16px;align-items:start;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:2px;padding:14px 16px;box-shadow:var(--shadow);
+}
+.layer .n{
+  font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;
+  color:var(--surface);background:var(--accent);
+  width:30px;height:30px;border-radius:50%;
+  display:grid;place-items:center;direction:ltr;
+}
+.layer .t{font-weight:700;display:block;margin-bottom:2px;}
+.layer .d{font-size:15px;color:var(--ink-soft);}
+
+/* ---------- ממצאים ---------- */
+.finding{
+  background:var(--surface);border:1px solid var(--line);
+  border-inline-start-width:4px;border-radius:2px;
+  padding:18px 20px;margin:0 0 16px;box-shadow:var(--shadow);
+}
+.finding.high{border-inline-start-color:var(--danger);}
+.finding.med{border-inline-start-color:var(--warn);}
+.finding.low{border-inline-start-color:var(--ink-faint);}
+.finding.good{border-inline-start-color:var(--ok);}
+.finding h3{margin:0 0 8px;font-size:18px;}
+.finding p{font-size:15.5px;margin-bottom:10px;}
+.finding p:last-child{margin-bottom:0;}
+.pill{
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:3px 10px;border-radius:2px;margin-bottom:10px;
+}
+.pill.high{background:var(--danger-soft);color:var(--danger);}
+.pill.med{background:var(--warn-soft);color:var(--warn);}
+.pill.low{background:var(--sunk);color:var(--ink-soft);}
+.pill.good{background:var(--ok-soft);color:var(--ok);}
+.fix{
+  background:var(--sunk);border-radius:2px;padding:10px 14px;margin-top:12px;
+  font-size:15px;
+}
+.fix b{color:var(--accent);}
+
+/* ---------- טבלה ---------- */
+.tablewrap{overflow-x:auto;margin:24px 0 28px;border:1px solid var(--line);border-radius:2px;}
+table{border-collapse:collapse;width:100%;font-size:15px;background:var(--surface);}
+th,td{padding:11px 14px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top;}
+th{background:var(--sunk);font-weight:700;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);white-space:nowrap;}
+tr:last-child td{border-bottom:0;}
+td.num{font-variant-numeric:tabular-nums;}
+
+/* ---------- הערת אימות ---------- */
+.caveat{
+  border:1px dashed var(--line-strong);border-radius:2px;
+  padding:16px 20px;margin:28px 0;background:var(--ground);
+  font-size:15px;color:var(--ink-soft);
+}
+.caveat b{color:var(--ink);}
+
+footer{
+  margin-top:72px;padding-top:24px;border-top:1px solid var(--line);
+  font-size:13.5px;color:var(--ink-faint);
+}
+a{color:var(--accent);}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">אפליקציית ניהול קהילה &nbsp;·&nbsp; מסמך אבטחת מידע</div>
+  <h1>מי יכול להגיע למידע שלנו?</h1>
+  <p class="standfirst">איפה נשמרים הנתונים של האפליקציה, מי שומר עליהם, מה באמת מגן עליהם — ואיפה נמצאים כרגע הפערים. מסמך בשתי רמות: הסבר לכל אחד, ולצידו הפירוט הטכני המלא.</p>
+  <div class="meta">
+    <span>23.08.2026</span>
+    <span>נבדק מול הקוד החי בריפו</span>
+    <span>v36-rev-counter</span>
+  </div>
+</header>
+
+<nav class="toc" aria-label="תוכן העניינים">
+  <h2>מה יש כאן</h2>
+  <ol>
+    <li><a href="#where">איפה בכלל נמצא המידע</a></li>
+    <li><a href="#who">איך המערכת יודעת מי אתה</a></li>
+    <li><a href="#perms">מי רואה מה — מערכת ההרשאות</a></li>
+    <li><a href="#answer">התשובה הישירה: האם גורם זר יכול לגשת לנתונים</a></li>
+    <li><a href="#findings">הפערים שנמצאו, לפי חומרה</a></li>
+    <li><a href="#good">מה כבר בנוי נכון</a></li>
+    <li><a href="#todo">מה הייתי מתקן, ובאיזה סדר</a></li>
+  </ol>
+</nav>
+
+<!-- ============ 1 ============ -->
+<section id="where">
+  <h2>1. איפה בכלל נמצא המידע</h2>
+
+  <div class="plain">
+    <span class="label">בשפה פשוטה</span>
+    <p>לאפליקציה אין מחשב-שרת משלה ואין "מאגר נתונים" נפרד. <strong>כל המידע יושב בתוך חשבון Google של הגזבר</strong> — בדיוק כמו קובץ אקסל שמור בדרייב:</p>
+    <ul>
+      <li>הכספים, התושבים, השריונים והמנויים — בגיליון Google Sheets אחד.</li>
+      <li>צילומי הקבלות — בתיקייה ב-Google Drive.</li>
+      <li>שריוני המועדון — ביומן Google Calendar.</li>
+    </ul>
+    <p>מה שאתם רואים כ"אפליקציה" — האתר עצמו — הוא רק חלון ראווה: קבצי עיצוב וקוד שמונחים באתר ציבורי (GitHub Pages). <strong>באתר עצמו לא שמור שום נתון</strong>. הוא שולף הכול בזמן אמת מגוגל בכל פתיחה.</p>
+    <p>המשמעות המעשית: רמת ההגנה על הנתונים היא רמת ההגנה של חשבון הגוגל של הגזבר. חשבון גוגל עם אימות דו-שלבי הוא הגנה טובה מאוד. חשבון גוגל בלי אימות דו-שלבי, עם סיסמה חוזרת — הוא החוליה החלשה של כל המערכת.</p>
+  </div>
+
+  <details class="tech">
+    <summary>הפירוט הטכני</summary>
+    <div class="tech-body">
+      <p><strong>ארכיטקטורה:</strong> frontend סטטי (HTML/CSS/JS טהורים) המתארח ב-GitHub Pages → קורא ל-Web App יחיד ב-Google Apps Script (<code>/exec</code>) → שרץ תחת חשבון הבעלים (<code>Execute as: me</code>) ומחובר לגיליון דרך <code>SpreadsheetApp.getActiveSpreadsheet()</code>.</p>
+      <p><strong>אין שכבת DB, אין שרת משלנו, אין קרדנציאלס בצד הלקוח.</strong> כל גישה לנתונים מתווכת דרך <code>Code.gs</code> (6,098 שורות) — שני שערי כניסה בלבד: <code>doGet</code> ו-<code>doPost</code>.</p>
+      <p><strong>הצפנה בתעבורה:</strong> כל התקשורת ב-HTTPS (‎<code>script.google.com</code>‎, ‎<code>yoadgo.github.io</code>‎). אין הצפנה "במנוחה" מעבר להצפנה הסטנדרטית של Google Workspace — כלומר מי שיש לו גישה לגיליון, רואה טקסט רגיל.</p>
+      <p><strong>מפתחות API:</strong> מפתח Gemini (סריקת קבלות) נשמר ב-<code>PropertiesService.getScriptProperties()</code> ולא בקוד — אומת: <code>getProperty('GEMINI_API_KEY')</code>. הריפו הציבורי לא מכיל אף מפתח סודי.</p>
+    </div>
+  </details>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="who">
+  <h2>2. איך המערכת יודעת מי אתה</h2>
+
+  <div class="plain">
+    <span class="label">בשפה פשוטה</span>
+    <p>אין באפליקציה סיסמאות של תושבים. הכניסה היא דרך "התחבר עם Google" — כלומר <strong>גוגל היא זו שמאמתת שאתה באמת אתה</strong>, והאפליקציה רק מקבלת ממנה אישור. יתרון גדול: אנחנו לא שומרים אף סיסמה, ולכן אין מה לגנוב.</p>
+    <p>אבל אימות זהות זה רק חצי. אחרי שגוגל אישרה שאתה יועד, המערכת בודקת דבר שני: <strong>האם המייל שלך מופיע ברשימת התושבים בגיליון, ומסומן "פעיל"</strong>. אם לא — נכנסת, אבל לא נכנסת לשום מקום. הרשימה בגיליון היא המנעול האמיתי.</p>
+    <p>המשמעות: כדי להוציא מישהו — מספיק לשנות את הסטטוס שלו בגיליון. זה תופס מיידית, בפעולה הבאה שלו, בלי לחכות לשום דבר.</p>
+  </div>
+
+  <details class="tech">
+    <summary>הפירוט הטכני</summary>
+    <div class="tech-body">
+      <p><strong>שלב א' — אימות מול גוגל</strong> (<code>handleLogin_</code>): הלקוח שולח <code>id_token</code> מ-Google Identity Services. השרת מאמת אותו מול <code>oauth2.googleapis.com/tokeninfo</code> ובודק שלושה תנאים: קיום <code>email</code>, התאמת <code>aud</code> ל-<code>CLIENT_ID</code> של האפליקציה, ו-<code>email_verified === 'true'</code>. בדיקת ה-<code>aud</code> היא הקריטית — בלעדיה אפשר היה להציג טוקן שהונפק לאפליקציה אחרת.</p>
+      <p><strong>שלב ב' — הצלבה מול הגיליון</strong> (<code>lookupResident_</code>): המייל מוצלב מול טאב "תושבים" (בשתי עמודות אימייל), ונבדק שהסטטוס מכיל "פעיל".</p>
+      <p><strong>שלב ג' — מושב חתום</strong> (<code>makeSession_</code>): במקום להסתמך על טוקן גוגל שפג אחרי שעה, מונפק מושב פנימי: <code>base64({e:email, x:expiry}) + "." + HMAC-SHA256(payload, secret)</code>. הסוד נוצר פעם אחת ונשמר ב-Script Properties. תוקף 30 יום.</p>
+      <p><strong>למה זה בטוח יחסית:</strong> ההרשאות עצמן <em>לא</em> נשמרות בתוך המושב — <code>authorize_</code> קורא אותן מהגיליון בכל בקשה מחדש (<code>permissionsFor_</code>), ובודק גם <code>found</code> וגם <code>active</code>. מכאן שביטול הרשאה או סימון "לא פעיל" נכנס לתוקף מיידית, ולא ממתין לפקיעת המושב.</p>
+      <p><strong>איפה המושב נשמר:</strong> ב-<code>localStorage</code> של הדפדפן (<code>js/app.js</code>). ראו ממצא 4.</p>
+    </div>
+  </details>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="perms">
+  <h2>3. מי רואה מה — מערכת ההרשאות</h2>
+
+  <div class="plain">
+    <span class="label">בשפה פשוטה</span>
+    <p>המערכת לא מחלקת אנשים ל"מנהל" ו"תושב" בלבד. יש הרשאות לפי תחום — תקציב, מועדון, תושבים, מכון כושר — ומעליהן "מנהל-על". מנהל המועדון לא רואה את הכספים; מנהל הכספים לא רואה את המידע הרפואי של מכון הכושר.</p>
+    <p>וחשוב מזה: <strong>ההגבלה נאכפת בשרת, לא במסך</strong>. זה לא שהכפתור פשוט "מוסתר" ממי שאסור לו — הבקשה עצמה נדחית בצד של גוגל. גם מי שיודע לפתוח את קוד הדף ולהחזיר כפתור נסתר, לא יקבל דבר.</p>
+  </div>
+
+  <div class="layers">
+    <div class="layer"><div class="n">1</div><div><span class="t">מידע ציבורי לגמרי</span><span class="d">מסך הכניסה, בקשת הרשמה לקהילה. לא דורש כלום.</span></div></div>
+    <div class="layer"><div class="n">2</div><div><span class="t">כל תושב מחובר ופעיל</span><span class="d">ספריית שכנים (בית, משפחה, שמות פרטיים, טלפון) · מפת השיכון · עץ ועד השיכון · שירותים · שריון מועדון · המנוי שלי. <strong>בלי</strong> כתובות מייל, הרשאות, מקצוע או הערות.</span></div></div>
+    <div class="layer"><div class="n">3</div><div><span class="t">בעל הרשאת ניהול בתחום</span><span class="d">תקציב · מועדון · תושבים · מכון כושר. כל אחד רואה רק את התחום שלו — למשל רשימת מנויי המכון (שכוללת מידע רפואי) פתוחה רק להרשאת המכון.</span></div></div>
+    <div class="layer"><div class="n">4</div><div><span class="t">מנהל-על</span><span class="d">הטאב המלא של התושבים (כולל מייל וטלפון), הגדרות מיילים, עריכת עץ הוועד, ניהול הרשאות.</span></div></div>
+  </div>
+
+  <details class="tech">
+    <summary>הפירוט הטכני</summary>
+    <div class="tech-body">
+      <p><strong>מפת ההרשאות:</strong> טבלת <code>ACTION_PERMS</code> בראש <code>Code.gs</code> ממפה כל פעולה להרשאה הנדרשת (<code>PERM_SUPER</code> / <code>PERM_BUDGET</code> / <code>PERM_CLUB</code> / <code>PERM_RESIDENTS</code> / <code>PERM_GYM</code> / <code>PERM_ANY_ADMIN</code>). ההרשאות בפועל נקראות מעמודת "הרשאות" בטאב תושבים דרך <code>parsePerms_</code>.</p>
+      <p><strong>נקודת אכיפה אחת:</strong> <code>authorize_(ss, body, ACTION_PERMS[body.action])</code> נקראת בראש <code>doPost</code> — לפני ה-<code>switch</code> — ולכן חלה על <em>כל</em> פעולות הכתיבה. פעולות קריאה רגישות ב-<code>doGet</code> (<code>getResidents</code>, <code>gymList</code>, <code>clubList</code>, <code>listEmailSettings</code>) קוראות ל-<code>authorize_</code> בעצמן בתוך ההנדלר.</p>
+      <p><strong>סינון בצד השרת, לא בצד הלקוח:</strong> ראוי לציון ש-<code>handleCommunityDirectory_</code> ו-<code>handleResidentDirectory_</code> מסננים עמודות בשרת (<code>keep_()</code>) — האימייל וההרשאות פשוט <em>לא יוצאים</em> מגוגל, ולא "מוסתרים" בתצוגה. זו הדרך הנכונה.</p>
+      <p><strong>רשת ביטחון:</strong> <code>grantMeSuperAdmin()</code> ו-<code>diagnosePermissions()</code> רצות רק מעורך ה-Apps Script תחת חשבון הבעלים, לא דרך האינטרנט — לכן אי אפשר להינעל בחוץ.</p>
+    </div>
+  </details>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="answer">
+  <h2>4. התשובה הישירה: האם גורם זר יכול לגשת לנתונים?</h2>
+
+  <div class="plain">
+    <span class="label">בשפה פשוטה</span>
+    <p><strong>למידע האישי של התושבים — לא.</strong> כתובות מייל, טלפונים, הרשאות והמידע הרפואי של מכון הכושר סגורים היטב מאחורי הזדהות. בדקתי את כל נקודות הכניסה, וכולן מבקשות מושב תקין.</p>
+    <p><strong>למידע הכספי — כן, ואת זה צריך לסגור.</strong> נקודת הכניסה הראשית של האפליקציה מחזירה את כל התקציב, ההכנסות וכל שורות ההוצאה — כולל שם הרוכש, הסכום והקישור לצילום הקבלה — <em>בלי לבקש הזדהות בכלל</em>. כתובת נקודת הכניסה הזו מופיעה בקוד הפומבי של האפליקציה ב-GitHub, כך שכל אחד יכול למצוא אותה. מי שיפתח אותה בדפדפן — יקבל את הכול.</p>
+    <p>זה לא "פרצה" במובן של באג — זו הגדרה שנשארה פתוחה מהימים שבהם עוד לא הייתה מערכת הזדהות. שאר המערכת כבר עברה למושב חתום; המסלול הזה לא עבר איתה. התיקון הוא נקודתי.</p>
+    <p>הערה חשובה לפרופורציה: כדי להגיע לזה צריך <em>לדעת את הכתובת המדויקת</em>. אף אחד לא "נופל" עליה בטעות, וגוגל לא מאנדקסת אותה. אבל היא כתובה בקוד גלוי, ולכן זו הסתרה — לא הגנה.</p>
+  </div>
+
+  <div class="caveat">
+    <b>מה בדקתי ומה לא.</b> הממצאים כאן נשענים על קריאה ישירה של הקוד החי בריפו (<code>apps-script/Code.gs</code>, <code>js/data/sheets.js</code>, <code>js/app.js</code>) והשוואה מול העותק שעל הדיסק שלך — זהים. <b>לא</b> פתחתי את הגיליון האמיתי ולא ניגשתי לנתוני התושבים; לא ביצעתי כאן שום שאילתה לנתונים חיים. הגדרת הפריסה של ה-Web App (Access: Anyone) הוסקה מכך שהלקוח קורא ל-<code>/exec</code> ב-<code>fetch</code> רגיל, ללא credentials, מדומיין אחר — מה שעובד <em>רק</em> בהגדרה הזו. שווה לך לאשש את זה בעין תוך 30 שניות: עורך Apps Script ← Deploy ← Manage deployments ← השדה "Who has access".
+  </div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="findings">
+  <h2>5. הפערים שנמצאו, לפי חומרה</h2>
+
+  <div class="finding high">
+    <span class="pill high">חמור · לתיקון ראשון</span>
+    <h3>1. המטען הראשי חשוף ללא הזדהות</h3>
+    <p>ב-<code>doGet</code>, כל הבקשות עם <code>action</code> מוכר מנותבות להנדלר שבודק הרשאה. אבל בקשה <em>ללא</em> <code>action</code> נופלת למסלול ברירת המחדל בסוף הפונקציה — והמסלול הזה לא קורא ל-<code>authorize_</code> ולו פעם אחת. הוא מחזיר: <code>years</code>, <code>settings</code> (ללא הסיסמה), <code>notes</code>, <code>notesLog</code>, ולכל שנה — <code>budget</code>, <code>income</code>, <code>transactions</code>, <code>groups</code>, <code>splits</code>, <code>items</code>.</p>
+    <p>טאב "תנועות" מכיל עמודת <code>רוכש</code> (שם התושב), סכום, תאריך, קטגוריה וקישור לקבלה. כלומר: מי הוציא כמה על מה, לכל השנים.</p>
+    <div class="fix"><b>התיקון:</b> להוסיף בראש מסלול ברירת המחדל <code>var gate = authorize_(ss, e.parameter, null); if (!gate.ok) return json_({ok:false, error:gate.error});</code> — בדיוק כמו ב-<code>handleCommunityDirectory_</code>. הלקוח כבר מחזיק מושב ושולח אותו בפעולות אחרות, אז השינוי בצד הלקוח הוא הוספת <code>?session=</code> לקריאה ב-<code>sheets.js</code>. שינוי קטן, אבל נוגע בנתיב הטעינה הראשי — צריך להיעשות בזהירות ולבדוק שהאפליקציה עולה אחריו.</div>
+  </div>
+
+  <div class="finding high">
+    <span class="pill high">חמור</span>
+    <h3>2. צילומי הקבלות משותפים לכל מי שיש לו קישור</h3>
+    <p>בשתי נקודות בקוד (העלאת קבלה חדשה והחלפת קבלה קיימת) מופעל <code>file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW)</code>. הכוונה המקורית הייתה טובה — שכמה מנהלים יוכלו לצפות. התוצאה בפועל: כל קובץ קבלה הוא ציבורי-בקישור.</p>
+    <p>בשילוב עם ממצא 1 זו שרשרת שלמה: כתובת גלויה ← כל התנועות ← הקישורים לקבלות ← צילומי הקבלות עצמם. קבלה יכולה לכלול שם, כתובת, ולעיתים ארבע ספרות אחרונות של כרטיס.</p>
+    <div class="fix"><b>התיקון:</b> להסיר את <code>setSharing</code>. המנהלים ממילא מגיעים לתיקייה דרך חשבון הגוזבר; אם צריך צפייה בתוך האפליקציה — לשרת את הקובץ דרך Apps Script עם בדיקת <code>authorize_</code>, במקום קישור פתוח. חשוב: קבצים שכבר הועלו יישארו משותפים — צריך גם מעבר חד-פעמי שמסיר את השיתוף מהקיימים.</div>
+  </div>
+
+  <div class="finding med">
+    <span class="pill med">בינוני</span>
+    <h3>3. "סיסמת מנהל" — מפתח-על שנשמר בגיליון</h3>
+    <p>ב-<code>authorize_</code> קיים מסלול שני: מי ששולח <code>password</code> תואם ל"סיסמת מנהל" שבטאב ההגדרות, מקבל <code>ALL_PERMS</code> ו-<code>isSuper:true</code> — בלי חשבון גוגל, בלי להיות ברשימת התושבים, מכל מקום בעולם.</p>
+    <p>נעשה כאן דבר נכון: הסיסמה כבר לא נשלחת ללקוח (מסוננת ב-<code>publicSettings</code> לפי המחרוזת "סיסמ"), ותוקן באג שבו סיסמה ריקה משני הצדדים הייתה עוברת. אבל היא עדיין <em>כתובה בגיליון</em> — כלומר כל מי שיש לו גישת צפייה לגיליון, עכשיו או בעבר, מחזיק מפתח-על.</p>
+    <div class="fix"><b>התיקון:</b> להעביר את הסיסמה ל-Script Properties (איפה ששמור מפתח Gemini) ולקרוא אותה משם ב-<code>isAdminPassword_</code>. לחלופין — אם אינך משתמש במסלול הזה בפועל, פשוט למחוק אותו. עדיף למחוק.</div>
+  </div>
+
+  <div class="finding low">
+    <span class="pill low">נמוך · מודע</span>
+    <h3>4. מושב של 30 יום ב-localStorage, בלי אפשרות ביטול</h3>
+    <p>המושב החתום נשמר ב-<code>localStorage</code> ותקף 30 יום. אין "רשימת מושבים שבוטלו" — מכשיר שאבד או נגנב ממשיך להחזיק מושב תקין עד לפקיעה.</p>
+    <p>מה שמרכך את זה משמעותית: ההרשאות נקראות מהגיליון בכל בקשה, ו-<code>authorize_</code> בודק גם <code>active</code>. לכן <strong>סימון התושב כ"לא פעיל" בגיליון חוסם אותו מיידית</strong>, גם עם מושב תקף ביד. יש כאן כפתור חירום עובד — פשוט צריך לדעת שהוא קיים.</p>
+    <div class="fix"><b>אם תרצה לחזק:</b> לקצר את התוקף (7 יום), או להוסיף שדה "גרסת מושב" בשורת התושב שאיפוסו מבטל מושבים קיימים. לא דחוף.</div>
+  </div>
+
+  <div class="finding low">
+    <span class="pill low">לא פגיעות — להבהרה</span>
+    <h3>5. ה-CLIENT_ID וכתובת ה-/exec גלויים בקוד</h3>
+    <p>שניהם מופיעים בריפו הציבורי, וזה עלול להיראות מדאיג. ה-<code>CLIENT_ID</code> של גוגל <em>מיועד</em> להיות פומבי — הוא מזהה, לא סוד, וההגנה עליו היא רשימת ה-Authorized JavaScript origins בקונסולת גוגל. כתובת ה-<code>/exec</code> גם היא לא סוד מטבעה — היא פשוט נקודת הכניסה, וההגנה עליה אמורה להיות בדיקת ההרשאה שבתוכה. הבעיה בממצא 1 היא לא שהכתובת גלויה, אלא שבמסלול אחד אין מאחוריה בדיקה.</p>
+    <div class="fix"><b>כן שווה לוודא פעם אחת:</b> שברשימת ה-Authorized JavaScript origins מופיע רק <code>https://yoadgo.github.io</code> — ושכתובות ישנות (למשל מתקופת Netlify) הוסרו.</div>
+  </div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="good">
+  <h2>6. מה כבר בנוי נכון</h2>
+
+  <p>כדי לשמור על פרופורציה — רוב היסודות כאן טובים, וחלקם טובים מהממוצע במערכות מהסוג הזה:</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>מה</th><th>למה זה נכון</th></tr></thead>
+      <tbody>
+        <tr><td>אין סיסמאות תושבים</td><td>אימות מלא מועבר לגוגל. אין מאגר סיסמאות שאפשר לדלוף.</td></tr>
+        <tr><td>בדיקת <code>aud</code> ו-<code>email_verified</code></td><td>שתי הבדיקות שהכי הרבה מערכות שוכחות. בלעדיהן אפשר להתחזות עם טוקן זר.</td></tr>
+        <tr><td>הרשאות נקראות בזמן אמת</td><td>שלילת הרשאה תופסת מיידית, בלי להמתין לפקיעת מושב.</td></tr>
+        <tr><td>סינון עמודות בשרת</td><td>מייל/הרשאות לא יוצאים מגוגל בספריית התושבים — לא רק מוסתרים בתצוגה.</td></tr>
+        <tr><td>שער אחד ל-<code>doPost</code></td><td>אי אפשר לשכוח בדיקה בפעולה חדשה — היא לפני ה-<code>switch</code>.</td></tr>
+        <tr><td>מפתחות ב-Script Properties</td><td>מפתח Gemini לא בריפו. הריפו הציבורי נקי מסודות.</td></tr>
+        <tr><td>מזהים מחושבים בשרת</td><td>לא סומכים על הלקוח למספור שורות — מונע התנגשות ומניפולציה.</td></tr>
+        <tr><td>הרשאות מדורגות לפי תחום</td><td>מנהל מועדון לא רואה כספים; מנהל כספים לא רואה מידע רפואי.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 7 ============ -->
+<section id="todo">
+  <h2>7. מה הייתי מתקן, ובאיזה סדר</h2>
+
+  <p>שלושת הראשונים הם עבודה של שעה-שעתיים ביחד, והם סוגרים את כל מה שחמור:</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th class="num">#</th><th>פעולה</th><th>איפה</th><th>סיכון בתיקון</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td>הוספת <code>authorize_</code> למסלול ברירת המחדל ב-<code>doGet</code> + שליחת <code>session</code> מהלקוח</td><td><code>Code.gs</code>, <code>sheets.js</code></td><td>בינוני — נתיב הטעינה הראשי, צריך בדיקה אחרי</td></tr>
+        <tr><td class="num">2</td><td>הסרת <code>setSharing(ANYONE_WITH_LINK)</code> + מעבר חד-פעמי על קבצים קיימים</td><td><code>Code.gs</code> ×2, Drive</td><td>נמוך</td></tr>
+        <tr><td class="num">3</td><td>העברת "סיסמת מנהל" ל-Script Properties, או ביטול המסלול</td><td><code>Code.gs</code>, גיליון</td><td>נמוך</td></tr>
+        <tr><td class="num">4</td><td>אימות דו-שלבי על חשבון הגזבר, וסקירת מי משותף לגיליון</td><td>הגדרות גוגל</td><td>אין — הגדרה בלבד</td></tr>
+        <tr><td class="num">5</td><td>ניקוי Authorized JavaScript origins ישנים</td><td>Google Cloud Console</td><td>נמוך</td></tr>
+        <tr><td class="num">6</td><td>קיצור תוקף מושב / מנגנון ביטול</td><td><code>Code.gs</code>, <code>app.js</code></td><td>נמוך — לא דחוף</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>סעיף 4 הוא היחיד שלא נוגע בקוד בכלל, והוא כנראה הכי משתלם ביחס למאמץ: כל ההגנה של המערכת נשענת בסופו של דבר על חשבון גוגל אחד.</p>
+</section>
+
+<footer>
+  נבדק ב-23 באוגוסט 2026 מול <code>Code.gs</code> (6,098 שורות), <code>js/data/sheets.js</code> ו-<code>js/app.js</code> בריפו הציבורי, בהצלבה לעותק המקומי. לא נקראו נתוני תושבים אמיתיים ולא בוצעו פעולות כתיבה.
+</footer>
+
+</div>
+
+</body>
+</html>

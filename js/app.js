@@ -1296,7 +1296,20 @@
           saveSession(currentUser);
           hideLoginGate();
           renderControls();
-          routeByRole();   // מנהל → אזור ניהול; תושב → אזור תושב
+          /* טעינת הנתונים מתחילה רק עכשיו (2026-08-23 — תיקון אבטחה).
+             עד היום האפליקציה משכה את כל נתוני הגיליון כבר בעליית העמוד,
+             לפני שבכלל היה ידוע מי המשתמש. מהיום המשיכה דורשת מושב חתום,
+             ולכן היא מתחילה כאן — אחרי שגוגל אימתה והשרת אישר. */
+          if (!inited) main.innerHTML = skeletonScreen();
+          var routedAfterLogin = false;
+          CBA.sheets.load(function (ok, info) {
+            var wasInited = inited;
+            sheetsLoadHandler(ok, info);
+            // ציור ראשון: sheetsLoadHandler כבר קורא ל-routeByRole בעצמו.
+            // כניסה חוזרת באותה טעינת עמוד (אחרי יציאה): המסך כבר מאותחל,
+            // ולכן צריך לנתב כאן — פעם אחת בלבד.
+            if (wasInited && !routedAfterLogin) { routedAfterLogin = true; routeByRole(); }
+          });
         } else {
           // מייל מאומת שאינו ברשימת התושבים — מציעים לו לבקש הרשמה (2026-08-07).
           // שומרים את הטוקן כדי שהבקשה תישלח מאומתת, בלי סיסמת מנהל.
@@ -1468,7 +1481,10 @@
     }
   }
 
-  CBA.sheets.load(sheetsLoadHandler);
+  /* (2026-08-23 — תיקון אבטחה) בלי מושב חתום השרת דוחה את המשיכה, ולכן אין
+     טעם לשלוח אותה. אורח שלא התחבר רואה את מסך הכניסה בלבד; הטעינה מתחילה
+     ב-onGoogleLogin ברגע שההתחברות אושרה. */
+  if (currentUser) CBA.sheets.load(sheetsLoadHandler);
 
   /* --- רענון תקופתי (2026-08-05, כמה סבבים לבקשת יועד — קצב הלך והואץ, ולבסוף
      ביקש שהקצב המהיר יפעל רק כל עוד הוא בפועל משתמש באפליקציה, כדי לא "לבזבז"

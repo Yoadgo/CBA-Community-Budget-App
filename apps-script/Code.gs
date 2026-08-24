@@ -359,6 +359,17 @@ function doGet(e) {
       return handleGymMy_(e.parameter);
     }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+    /* שער הרשאות למטען הראשי (2026-08-23 — תיקון אבטחה).
+     * עד היום המסלול הזה — הבקשה ל-/exec בלי פרמטר action — היה היחיד בקובץ
+     * שלא עבר דרך authorize_ בכלל. מי שידע את הכתובת (והיא גלויה בקוד הפומבי)
+     * קיבל את כל התקציב, ההכנסות וכל שורות התנועות, כולל שם הרוכש, הסכום
+     * והקישור לקבלה — בלי חשבון גוגל ובלי להיות ברשימת התושבים.
+     * זה שריד מהתקופה שלפני המושב החתום (2026-08-07): שאר המערכת עברה למושב,
+     * המסלול הזה לא עבר איתה.
+     * need=null — כמו handleCommunityDirectory_: מספיק מושב תקין + "פעיל"
+     * בטאב תושבים, בלי צורך בהרשאת ניהול כלשהי. */
+    var gate = authorize_(ss, e && e.parameter, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
     var years = [];
     ss.getSheets().forEach(function (sh) {
       var n = sh.getName();
@@ -376,7 +387,7 @@ function doGet(e) {
       // מספר הגרסה נשלח יחד עם המטען המלא, כדי שהלקוח יידע מול מה
       // להשוות בבדיקות ה-rev הזולות שאחריו (ר' bumpRev_ למעלה).
       rev: currentRev_(),
-      ok: true, version: 'v36-rev-counter', years: years,
+      ok: true, version: 'v37-secure-read', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת

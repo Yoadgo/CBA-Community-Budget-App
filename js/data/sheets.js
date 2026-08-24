@@ -522,7 +522,7 @@ CBA.sheets = (function () {
      בגרסה החדשה. מוסיפים את ההסבר להודעת השגיאה במקום להשאיר "אין הרשאה" יבש
      שאי אפשר לעשות איתו כלום. */
   // הגרסה המינימלית של ה-Apps Script שהאפליקציה הזו יודעת לעבוד מולה
-  var MIN_SERVER = 28;
+  var MIN_SERVER = 37;
   function serverVer() {
     var m = String((CBA.mock && CBA.mock._serverVersion) || "").match(/v(\d+)/);
     return m ? parseInt(m[1], 10) : 0;
@@ -553,7 +553,10 @@ CBA.sheets = (function () {
   // הראשוני) ובין refresh() (רענון תקופתי מאוחר יותר, ר' למטה) — קוד אחד, לא כפול.
   function fetchAndApply(hadCache, cb, isBackgroundRefresh) {
     var mySeq = ++seqCounter;   // נתפס כאן, ברגע השליחה — לא ברגע שהתשובה חוזרת
-    fetch(API_URL, { method: "GET" })
+    /* המושב החתום מצורף גם למשיכה הראשית (2026-08-23 — תיקון אבטחה).
+       עד היום זו הייתה הקריאה היחידה בקובץ שיצאה בלי session, כי בצד השרת
+       ממילא לא נבדק כלום. עכשיו doGet דורש מושב תקין גם כאן. */
+    fetch(API_URL + "?session=" + encodeURIComponent(authSession()), { method: "GET" })
       .then(function (r) { return r.json(); })
       .then(function (payload) {
         if (!payload || !payload.ok) throw new Error((payload && payload.error) || "bad payload");
