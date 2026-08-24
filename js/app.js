@@ -876,7 +876,9 @@
     mail: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></svg>',
     // התקנת האפליקציה (2026-08-20, PWA) — טלפון עם חץ פנימה. אותו גודל/עובי
     // קו כמו שאר אייקוני התפריט, אחרת הוא בולט כזר בשורה.
-    install: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M12 7.5v7M9 11.5l3 3 3-3"/></svg>'
+    install: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M12 7.5v7M9 11.5l3 3 3-3"/></svg>',
+    // מגן — "אבטחת המידע שלי" (2026-08-24). אותו גודל/עובי קו כמו השאר.
+    shield: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 4.8 5.6v5.9c0 4.3 2.9 8.3 7.2 9.7 4.3-1.4 7.2-5.4 7.2-9.7V5.6z"/><path d="m9 12 2.1 2.1L15.2 10"/></svg>'
   };
 
   function initials(name) {
@@ -981,6 +983,11 @@
     if (simStopBtn) simStopBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn); stopSim();
     });
+    const secBtn = panel.querySelector("[data-panel-security]");
+    if (secBtn) secBtn.addEventListener("click", function () {
+      closeUserPanel(panel, btn);
+      if (window.CBA.security) CBA.security.open();
+    });
     const outBtn = panel.querySelector("[data-panel-logout]");
     if (outBtn) outBtn.addEventListener("click", logout);
 
@@ -1074,6 +1081,13 @@
           : '<button class="up-item up-item--sim" data-panel-sim><span class="up-row__ico">' + ICON.swap + '</span>הדמיית תושב</button>')
       : "";
 
+    /* "אבטחת המידע שלי" (2026-08-24) — מסך שקיפות לתושב, לבקשת יועד. יושב
+       מיד מעל "יציאה" ומוצג לכל מי שמחובר, בשני האזורים: השאלה "מי יכול
+       להגיע למידע שלי" היא של כולם, לא רק של מנהלים. ר' js/ui/security.js. */
+    var securityItem = currentUser
+      ? '<button class="up-item" data-panel-security><span class="up-row__ico">' + ICON.shield + '</span>אבטחת המידע שלי</button>'
+      : "";
+
     return (
       head +
       '<div class="up-row">' + conn + '</div>' +
@@ -1084,6 +1098,7 @@
       emailItem +
       installItem +
       settingsItem +
+      securityItem +
       action
     );
   }
