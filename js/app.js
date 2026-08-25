@@ -878,7 +878,10 @@
     // קו כמו שאר אייקוני התפריט, אחרת הוא בולט כזר בשורה.
     install: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M12 7.5v7M9 11.5l3 3 3-3"/></svg>',
     // מגן — "אבטחת המידע שלי" (2026-08-24). אותו גודל/עובי קו כמו השאר.
-    shield: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 4.8 5.6v5.9c0 4.3 2.9 8.3 7.2 9.7 4.3-1.4 7.2-5.4 7.2-9.7V5.6z"/><path d="m9 12 2.1 2.1L15.2 10"/></svg>'
+    shield: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 4.8 5.6v5.9c0 4.3 2.9 8.3 7.2 9.7 4.3-1.4 7.2-5.4 7.2-9.7V5.6z"/><path d="m9 12 2.1 2.1L15.2 10"/></svg>',
+    // זכוכית מגדלת — כפתור החיפוש הגלובלי בכותרת (2026-08-25). שים לב: זו מפת
+    // האייקונים של *תפריט המשתמש*, לא NAV_ICONS של המסכים (ר' באג 20.08).
+    search: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>'
   };
 
   function initials(name) {
@@ -938,6 +941,8 @@
     // רגיל אין גישה להתרעות ניהוליות, אז גם לא מציגים לו רמז עליהן.
     const hasAlerts = alertsTotal() > 0 && hasAnyAdmin();
     controls.innerHTML =
+      // החיפוש נכתב ראשון ולכן מופיע *מימין* לכפתור המשתמש (הכותרת ב-RTL)
+      '<button type="button" class="search-btn" id="search-btn" title="חיפוש (Ctrl+K)" aria-label="חיפוש">' + ICON.search + '</button>' +
       '<button class="user-btn' + (avatarMode ? ' user-btn--avatar' : '') + '" id="user-btn" title="תפריט משתמש" aria-label="תפריט משתמש">' + userBtnFace() +
         (hasAlerts ? '<span class="user-btn__dot" aria-hidden="true"></span>' : '') + '</button>' +
       '<div class="user-panel" id="user-panel" hidden>' + userPanelHTML() + '</div>';
@@ -952,6 +957,10 @@
       } else {
         closeUserPanel(panel, btn);
       }
+    });
+    const searchBtn = controls.querySelector("#search-btn");
+    if (searchBtn) searchBtn.addEventListener("click", function () {
+      if (window.CBA.search) CBA.search.open();
     });
     const setBtn = panel.querySelector("[data-panel-settings]");
     if (setBtn) setBtn.addEventListener("click", function () {
@@ -1396,6 +1405,23 @@
 
   window.CBA = window.CBA || {};
   window.CBA.navigate = showScreen;
+
+  /* יעדי הניווט של האזור הנוכחי, כבר מסוננים לפי ההרשאות (AREAS נבנה ב-
+     rebuildAreas). החיפוש הגלובלי (js/ui/search.js) נשען על זה כדי לא לבצע
+     שום בדיקת הרשאה משלו — מה שלא מופיע בניווט, לא ניתן לחיפוש. */
+  window.CBA.navTargets = function () {
+    var a = AREAS[currentArea];
+    if (!a || !a.tabs) return [];
+    var out = [];
+    a.tabs.forEach(function (t) {
+      if (t && t.group) {
+        (t.items || []).forEach(function (it) { out.push({ key: it[0], label: it[1], group: t.label }); });
+      } else if (t) {
+        out.push({ key: t[0], label: t[1], group: "" });
+      }
+    });
+    return out;
+  };
 
   nav.addEventListener("click", (e) => {
     const groupBtn = e.target.closest("[data-group]");

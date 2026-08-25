@@ -1,0 +1,107 @@
+/* ==========================================================================
+   search.css — חיפוש אחד לכל האפליקציה (2026-08-25). ר' js/ui/search.js.
+   כל המחלקות בתחילית gs- (Global Search), חוץ מ-.search-btn שיושב בכותרת
+   ליד .user-btn ולכן חולק את המידות שלו בדיוק (32px, רדיוס 9).
+   ========================================================================== */
+
+/* --- הכפתור בכותרת --- */
+.search-btn {
+  width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--surface); cursor: pointer; display: grid; place-items: center;
+  color: var(--text-soft); flex: none;
+  transition: border-color var(--t), background var(--t), color var(--t);
+}
+.search-btn:hover { border-color: var(--action); background: var(--hover); color: var(--action); }
+.search-btn svg { display: block; }
+
+/* --- שכבת הרקע --- */
+.gs {
+  position: fixed; inset: 0; z-index: 130;
+  background: rgba(16, 24, 40, .28);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  display: flex; justify-content: center;
+  padding: 12vh 16px 16px;
+  animation: gs-fade 140ms ease;
+}
+@keyframes gs-fade { from { opacity: 0; } to { opacity: 1; } }
+body.gs-open { overflow: hidden; }
+
+/* --- הכרטיס --- */
+.gs-card {
+  width: 100%; max-width: 620px; align-self: flex-start;
+  background: rgba(250, 250, 252, .82);
+  backdrop-filter: saturate(200%) blur(30px);
+  -webkit-backdrop-filter: saturate(200%) blur(30px);
+  border: 1px solid rgba(255, 255, 255, .7);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(16, 24, 40, .26), 0 2px 8px rgba(16, 24, 40, .08);
+  overflow: hidden;
+  display: flex; flex-direction: column; max-height: 70vh;
+  animation: gs-in 170ms cubic-bezier(.2, .7, .2, 1);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .gs-card { background: #FFF; }
+}
+@keyframes gs-in { from { opacity: 0; transform: translateY(-10px) scale(.985); } to { opacity: 1; transform: none; } }
+
+/* --- שורת הקלט --- */
+.gs-top {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  color: var(--text-muted); flex: none;
+}
+.gs-input {
+  flex: 1; min-width: 0; border: none; background: none; outline: none;
+  font: inherit; font-size: 16px; font-weight: 600; color: var(--text);
+}
+.gs-input::placeholder { color: var(--text-muted); font-weight: 500; }
+.gs-input::-webkit-search-cancel-button { display: none; }
+.gs-esc {
+  border: 1px solid var(--border); background: var(--surface); cursor: pointer;
+  border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 700;
+  color: var(--text-soft); flex: none;
+}
+.gs-esc:hover { border-color: var(--action); color: var(--action); }
+
+/* --- התוצאות --- */
+.gs-list { overflow-y: auto; overscroll-behavior: contain; padding: 8px; }
+.gs-group {
+  font-size: 11px; font-weight: 800; letter-spacing: .06em;
+  color: var(--text-muted); padding: 10px 10px 6px;
+}
+.gs-item {
+  width: 100%; display: flex; align-items: center; gap: 11px;
+  padding: 9px 10px; border: none; background: none; border-radius: 12px;
+  cursor: pointer; text-align: start; font: inherit; color: var(--text);
+}
+.gs-item.is-sel { background: var(--hover); }
+.gs-item__ico {
+  width: 30px; height: 30px; border-radius: 9px; flex: none;
+  display: grid; place-items: center;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-soft);
+}
+.gs-item.is-sel .gs-item__ico { border-color: var(--action); color: var(--action); }
+.gs-item__txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.gs-item__txt b { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-item__txt small { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-item mark { background: rgba(217, 119, 6, .18); color: inherit; border-radius: 4px; padding: 0 1px; }
+
+/* --- מצב פתיחה / אין תוצאות --- */
+.gs-hint { padding: 30px 20px 34px; text-align: center; }
+.gs-hint__t { font-size: 14px; font-weight: 700; color: var(--text-soft); margin-bottom: 6px; }
+.gs-hint__l { font-size: 12.5px; color: var(--text-muted); line-height: 1.7; }
+
+/* --- מובייל: מסך מלא, בלי "כרטיס מרחף" קטן באמצע --- */
+@media (max-width: 640px) {
+  .gs { padding: 0; }
+  .gs-card {
+    max-width: none; max-height: 100%; height: 100%;
+    border-radius: 0; border: none;
+    padding-top: env(safe-area-inset-top);
+  }
+  .gs-top { padding: 12px 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gs, .gs-card { animation: none; }
+}

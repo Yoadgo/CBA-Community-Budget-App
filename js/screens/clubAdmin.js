@@ -168,5 +168,5 @@ CBA.screens.clubAdmin = {
 };
 
 function clubLoadingHTML() {
-  return '<div class="club-loading"><div class="rs-spin"></div>טוען…</div>';
+  return CBA.skel.rows(3, { actions: true });
 }

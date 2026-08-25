@@ -186,3 +186,74 @@ body.app-booting .app-nav__tab {
   .value-pulse { animation: none !important; }
   .spinner { animation: none; opacity: .6; }
 }
+
+/* ==========================================================================
+   שלדים תואמי-צורה (2026-08-25) — ר' js/ui/skeleton.js
+   כל המחלקות כאן בתחילית sk-, ונשענות על .skeleton הבסיסי שלמעלה.
+   הבסיס עודכן מאפור שטוח למדרג עדין: אפור אחיד נראה כמו "משהו נשבר",
+   מדרג קל נראה כמו משטח שממתין להתמלא.
+   ========================================================================== */
+.skeleton {
+  background: linear-gradient(180deg, #EFF1F4 0%, #E7EAEF 100%);
+}
+.skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .85), transparent);
+  animation-duration: 1.45s;
+}
+
+/* --- מכל ואבני בניין --- */
+.sk        { display: flex; flex-direction: column; gap: 12px; }
+.sk-grid   { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.sk-box    { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+.sk-flex   { display: flex; align-items: center; gap: 12px; }
+.sk-stack  { display: flex; flex-direction: column; gap: 9px; flex: 1; min-width: 0; }
+.sk-av     { width: 40px; height: 40px; border-radius: 50%; flex: none; }
+.sk-ico    { width: 42px; height: 42px; border-radius: 12px; }
+.sk-title  { height: 16px; border-radius: 8px; }
+.sk-pill   { height: 26px; border-radius: 999px; flex: none; }
+.sk-btn    { height: 32px; width: 68px; border-radius: 10px; flex: none; }
+.sk-img    { height: 240px; border-radius: 14px; }
+
+/* --- טבלה --- */
+.sk-table  { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+.sk-tr     { display: flex; align-items: center; gap: 18px; padding: 14px 16px; }
+.sk-tr > *  { flex: 1; }
+.sk-tr:first-child { background: var(--hover); }
+.sk-tr + .sk-tr { border-top: 1px solid var(--border); }
+
+/* --- שבבים (לוח זמינות) --- */
+.sk-chipwrap { display: flex; flex-wrap: wrap; gap: 8px; }
+.sk-chip     { height: 38px; width: 92px; border-radius: 10px; }
+
+/* --- טופס במגירה --- */
+.sk-formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.sk-field    { display: flex; flex-direction: column; gap: 8px; }
+.sk-input    { height: 40px; border-radius: 10px; }
+
+/* --- עץ הוועד --- */
+.sk-tree        { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 18px 0; }
+.sk-tree__row   { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.sk-tree__node  { width: 124px; height: 54px; border-radius: 12px; }
+
+/* --- כניסה מדורגת --- 
+   כל אבן בשלד עולה חצי צעד אחרי קודמתה. זה מה שגורם לשלד להיראות כמו משהו
+   שנבנה, ולא כמו מסך אפור שהופיע. מעבר לעשר — ללא השהיה, אחרת רשימה ארוכה
+   נגררת שנייה שלמה. */
+.sk-stagger > * { animation: sk-rise 360ms cubic-bezier(.2, .6, .2, 1) both; }
+.sk-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.sk-stagger > *:nth-child(2) { animation-delay: 55ms; }
+.sk-stagger > *:nth-child(3) { animation-delay: 110ms; }
+.sk-stagger > *:nth-child(4) { animation-delay: 165ms; }
+.sk-stagger > *:nth-child(5) { animation-delay: 220ms; }
+.sk-stagger > *:nth-child(6) { animation-delay: 275ms; }
+.sk-stagger > *:nth-child(7) { animation-delay: 330ms; }
+.sk-stagger > *:nth-child(8) { animation-delay: 385ms; }
+.sk-stagger > *:nth-child(n+9) { animation-delay: 420ms; }
+@keyframes sk-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-stagger > * { animation: none; }
+}

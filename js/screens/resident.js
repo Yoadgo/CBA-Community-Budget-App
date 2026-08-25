@@ -986,7 +986,7 @@ CBA.screens = CBA.screens || {};
 
     function renderSlots() {
       if (state.loading) {
-        slotsEl.innerHTML = '<div class="rs-slots__msg"><div class="rs-spin"></div>טוען זמינות…</div>';
+        slotsEl.innerHTML = CBA.skel.chips(12);
         return;
       }
       var lo = state.selStart != null ? Math.min(state.selStart, state.selEnd) : null;
@@ -1251,7 +1251,7 @@ CBA.screens = CBA.screens || {};
         '<span class="rs-mine-compact__badge" id="rc-mine-compact-badge">…</span>' +
         chevLeftIcon +
       '</button>' +
-      '<div class="rs-mine-full" id="rc-mine-full"><div class="rs-slots__msg"><div class="rs-spin"></div>טוען שריונים…</div></div>';
+      '<div class="rs-mine-full" id="rc-mine-full">' + CBA.skel.rows(2, { avatar: false }) + '</div>';
 
     var compactBtn = root.querySelector("#rc-mine-compact");
     var compactSub = root.querySelector("#rc-mine-compact-sub");
@@ -1573,7 +1573,7 @@ CBA.screens = CBA.screens || {};
         '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
           '<div class="screen-head__sub">מדריך התושבים בשיכון</div></div>' +
         '<input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון" value="' + CBA.esc(dirState.q) + '">' +
-        '<div id="dir-list"><div class="rs-empty"><p>טוען…</p></div></div>';
+        '<div id="dir-list">' + CBA.skel.rows(6) + '</div>';
 
       var qEl = container.querySelector("#dir-q");
       qEl.addEventListener("input", function () {
@@ -2392,7 +2392,7 @@ CBA.screens = CBA.screens || {};
       var isMobile = window.matchMedia("(max-width: 720px)").matches;
       container.innerHTML =
         '<div class="org-hint">' + (isMobile ? "לחצו על תפקיד כדי לפתוח את מי שכפוף לו." : "העץ רחב — גררו/גללו אופקית כדי לראות את כולו.") + '</div>' +
-        '<div id="org-body"><div class="rs-empty"><p>טוען…</p></div></div>';
+        '<div id="org-body">' + CBA.skel.tree() + '</div>';
       var bodyEl = container.querySelector("#org-body");
       var rowsCache = [];
       var expanded = null; // {boxId:true/false} — נבנה פעם אחת (ברירת מחדל), נשמר בין ציורים חוזרים

@@ -585,7 +585,7 @@ CBA.screens = CBA.screens || {};
 
     if (st.loading || !st.my) {
       container.innerHTML = head +
-        '<div class="card gym-card"><div class="club-loading"><div class="rs-spin"></div>טוען…</div></div>';
+        CBA.skel.cards(2);
       return;
     }
     if (!st.my.ok) {

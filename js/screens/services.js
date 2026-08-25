@@ -272,7 +272,7 @@ CBA.screens.resServices = {
     }
 
     // סקלטון עד שהנתונים חוזרים — עקבי עם שאר המסכים (ר' app.js)
-    body.innerHTML = '<div class="card club-card"><div class="club-loading"><div class="rs-spin"></div>טוען…</div></div>';
+    body.innerHTML = CBA.skel.tiles(6);
 
     CBA.data.getServices(function (res) {
       if (!res || !res.ok) {

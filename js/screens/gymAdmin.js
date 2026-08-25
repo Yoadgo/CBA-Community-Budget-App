@@ -18,10 +18,10 @@ CBA.screens = CBA.screens || {};
   // התשובה האחרונה מהשרת — טופס ההקמה הידנית צריך ממנה את רשימת המסלולים
   var gaLast = null;
 
-  // אותו חיווי טעינה בדיוק כמו clubAdmin (club-loading + rs-spin) — מחלקות
-  // שכבר קיימות ונבדקו, ולא מחלקת שלד חדשה שאולי לא מוגדרת ב-CSS.
+  // שלד תואם-צורה (2026-08-25) — אריחי הסיכום העליונים ואז הטבלה, בדיוק
+  // המבנה שיופיע כשהנתונים יחזרו. ר' js/ui/skeleton.js.
   function gaLoadingHTML() {
-    return '<div class="club-loading"><div class="rs-spin"></div>טוען…</div>';
+    return CBA.skel.stats(4) + CBA.skel.table(6, 5);
   }
 
   function kpi(n, label, tone) {

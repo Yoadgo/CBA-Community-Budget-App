@@ -433,7 +433,7 @@ CBA.screens.residents = {
     if (!st.loaded && !st.loading) resLoad(container);
 
     if (st.loading && !st.loaded) {
-      container.innerHTML = '<div class="card res-msg">טוען רשימת תושבים…</div>';
+      container.innerHTML = CBA.skel.table(8, 6);
       return;
     }
     if (st.error) {
@@ -1594,7 +1594,7 @@ function resOpenDrawer(container, idx, rowIndex, c) {
             : 'העץ רחב — גררו/גללו אופקית כדי לראות את כולו. לחצו על העיפרון על גבי תפקיד לעריכה, או על "+" להוספת תפקיד־בן.') + '</div>' +
           '<button type="button" class="rs-ghost" id="org-add-root">' + plusIcon + 'הוספת תפקיד חדש</button>' +
         '</div>' +
-        '<div id="org-body"><div class="rs-empty"><p>טוען…</p></div></div>';
+        '<div id="org-body">' + CBA.skel.tree() + '</div>';
 
       var bodyEl = container.querySelector("#org-body");
       var rowsCache = [];

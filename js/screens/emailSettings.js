@@ -68,7 +68,7 @@ CBA.screens.emailSettings = {
 };
 
 function emsLoadingHTML() {
-  return '<div class="card club-card"><div class="club-loading"><div class="rs-spin"></div>טוען…</div></div>';
+  return CBA.skel.sections(4);
 }
 
 function emsRenderAll() {

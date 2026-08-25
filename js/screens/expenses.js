@@ -155,6 +155,18 @@ CBA.screens.expenses.showPending = function () {
   if (CBA.navigate) CBA.navigate("expenses");
 };
 
+/* נקודת כניסה מהחיפוש הגלובלי (2026-08-25): מנקה את כל הסינון הקיים ומחיל
+   סינון אחד — סעיף או טקסט חופשי — כדי שהתוצאה שנלחצה בחיפוש תהיה בדיוק מה
+   שרואים על המסך, בלי שריד של סינון קודם שיסתיר אותה. */
+CBA.screens.expenses.focusSearch = function (opts) {
+  txView = "all";
+  txSelected = {};
+  txFilters = { year: "", month: "", category: "", status: "", source: "", type: "", search: "" };
+  if (opts && opts.category) txFilters.category = opts.category;
+  if (opts && opts.text) txFilters.search = String(opts.text);
+  if (CBA.navigate) CBA.navigate("expenses");
+};
+
 CBA.screens.expenses.openAddForCategory = function (catId) {
   var container = document.getElementById("app-main");
   if (!container) return;
@@ -799,7 +811,7 @@ function txOpenPeekUrl(url, title) {
       '</div>' +
       '<div class="peek__slot">' +
         (id
-          ? '<div class="peek__empty">טוען את הקבלה…</div>'
+          ? CBA.skel.img()
           : isImg
             ? '<img class="peek__img" src="' + CBA.esc(url) + '" alt="קבלה">'
             : '<div class="peek__empty">לא ניתן להציג תצוגה מקדימה לקישור הזה</div>') +
@@ -983,7 +995,7 @@ function txOpenDrawer(container, id) {
   // הרינדור הראשון של הטופס, כדי ששדה "רוכש/מטפל" יהיה מוכן מיד עם הפתיחה. אם
   // הטעינה נכשלת מתקבל מערך ריק — שדה הטקסט החופשי ממשיך לעבוד רגיל, רק בלי
   // הצעות autocomplete וקישור אוטומטי למשפחה.
-  overlay.querySelector("#tx-form").innerHTML = '<div class="rs-slots__msg"><div class="rs-spin"></div>טוען…</div>';
+  overlay.querySelector("#tx-form").innerHTML = CBA.skel.form(6);
   CBA.data.residentPickerOptions(function (options) {
     txRenderForm(container, overlay, state, editing, id, options || []);
   });
@@ -1214,7 +1226,7 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
     const slot = previewFold.querySelector("[data-receipt-id]");
     if (!slot || slot.dataset.loaded) return;
     slot.dataset.loaded = "1";
-    slot.innerHTML = '<div class="tx-preview__empty">טוען את הקבלה…</div>';
+    slot.innerHTML = CBA.skel.img();
     CBA.data.getReceipt(slot.dataset.receiptId, function (res) {
       if (!slot.isConnected) return;
       if (!res || !res.ok) {
