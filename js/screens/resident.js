@@ -1282,6 +1282,9 @@ CBA.screens = CBA.screens || {};
       scopeEl.querySelectorAll("[data-cancel]").forEach(function (btn) {
         btn.addEventListener("click", function () { doCancel(btn); });
       });
+      scopeEl.querySelectorAll("[data-share]").forEach(function (btn) {
+        btn.addEventListener("click", function () { shareToWhatsApp(btn.dataset.share); });
+      });
     }
     function doCancel(btn) {
       // (2026-08-19, ממצא 2.6) אישור ביטול — מודל של האפליקציה. שאר הפונקציה
@@ -1352,6 +1355,16 @@ CBA.screens = CBA.screens || {};
 
     return { refresh: function () { renderMine(root, u, fam, onChanged); } };
   }
+  /* אייקון וואטסאפ — קו מונוכרומי כמו כל שאר האייקונים באפליקציה, בלי הלוגו
+     הירוק הרשמי (שהוא סימן מסחרי ולא שייך לשפה העיצובית שלנו). */
+  var waIcon = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.6a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.6-4.3A8.5 8.5 0 1 1 20.5 11.6z"/><path d="M8.8 9.1c0 3 2.4 5.4 5.3 5.4l.9-1.4-1.8-.8-.8.8a4 4 0 0 1-1.9-1.9l.8-.8-.8-1.8z"/></svg>';
+
+  /* פותח את וואטסאפ עם טקסט מוכן. wa.me הוא הקישור הרשמי והוא עובד גם
+     בנייד (אפליקציה) וגם בדסקטופ (WhatsApp Web) — בלי SDK ובלי תלות. */
+  function shareToWhatsApp(text) {
+    window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+  }
+
   function mineCardHTML(r) {
     var s = new Date(r.start), e = new Date(r.end);
     var ds = s.getFullYear() + "-" + pad2(s.getMonth() + 1) + "-" + pad2(s.getDate());
@@ -1359,6 +1372,16 @@ CBA.screens = CBA.screens || {};
     var pill = r.status === "pending"
       ? '<span class="rs-pill rs-pill--warn">' + clockIcon + 'ממתין לאישור מנהל</span>'
       : '<span class="rs-pill rs-pill--ok">' + checkIcon + 'מאושר</span>';
+    /* שיתוף בוואטסאפ (2026-08-27) — רק על שריון *מאושר*. שיתוף של שריון
+       שעדיין ממתין לאישור הוא הבטחה שאולי לא תתקיים, וזה בדיוק סוג ההודעה
+       שגורמת לאנשים להגיע למועדון נעול. */
+    var shareBtn = "";
+    if (r.status !== "pending") {
+      var msg = "אישרו לנו את מועדון השיכון — " + dateLabel(ds) + ", בשעות " + timeRange +
+        (r.note ? " (" + r.note + ")" : "") + ".";
+      shareBtn = '<button type="button" class="rs-ghost" data-share="' + CBA.esc(msg) + '">' +
+        waIcon + ' שיתוף</button>';
+    }
     return (
       '<div class="card rq">' +
         '<div class="rq__top">' +
@@ -1368,6 +1391,7 @@ CBA.screens = CBA.screens || {};
         '</div>' +
         '<div class="rq__foot">' +
           '<span class="rq__date"></span>' +
+          shareBtn +
           '<button type="button" class="rs-ghost rs-ghost--danger" data-cancel="' + CBA.esc(r.id) + '">' + xIcon + ' ביטול</button>' +
         '</div>' +
       '</div>'
@@ -1516,7 +1540,16 @@ CBA.screens = CBA.screens || {};
        ושורת קיצור למעלה שקופצת ישירות לכל אחת. בזמן חיפוש אין קיבוץ:
        התוצאות ממילא מעטות, וקבוצה עם כרטיס אחד היא רעש. */
     if (!rows.length) {
-      listEl.innerHTML = '<div class="rs-empty"><p>לא נמצאו תוצאות.</p></div>';
+      listEl.innerHTML = CBA.ui.emptyState({ icon: "search", title: "לא נמצאו שכנים",
+        sub: "אפשר לחפש לפי שם משפחה, שם פרטי, מספר בית או טלפון.",
+        ctaLabel: "נקה חיפוש", ctaAttr: 'data-dir-clear' });
+      var clr = listEl.querySelector("[data-dir-clear]");
+      if (clr) clr.addEventListener("click", function () {
+        dirState.q = "";
+        var qEl = document.getElementById("dir-q");
+        if (qEl) { qEl.value = ""; qEl.focus(); }
+        dirRenderList();
+      });
       if (dirScrollY) { window.scrollTo(0, dirScrollY); dirScrollY = 0; }
       return;
     }
@@ -2548,7 +2581,8 @@ CBA.screens = CBA.screens || {};
       function draw() {
         var boxes = CBA.committee.buildBoxes(rowsCache);
         if (!boxes.length) {
-          bodyEl.innerHTML = '<div class="rs-empty"><p>עדיין לא הוגדר עץ ועד.</p></div>';
+          bodyEl.innerHTML = CBA.ui.emptyState({ icon: "users", title: "עץ הוועד עדיין לא הוגדר",
+            sub: "כשהרכב הוועד יוזן, הוא יופיע כאן כתרשים." });
           return;
         }
         var ids = {}; boxes.forEach(function (b) { ids[b.id] = true; });
@@ -2620,5 +2654,13 @@ CBA.screens = CBA.screens || {};
     }
   };
 
+  /* (2026-08-27) עמוד הקבלה מציג סיכום של הבקשות המשפחתיות, ולכן צריך בדיוק
+     את אותו חישוב שמסך "הבקשות שלי" עושה. חושפים את שלוש הפונקציות במקום
+     לשכפל את הלוגיקה שם — שכפול היה מבטיח שהמספר בעמוד הקבלה והמספר במסך
+     הבקשות ייפרדו זה מזה ביום שמישהו יתקן רק אחד מהם. */
+  window.CBA.residentUtils = {
+    user: user, fullName: fullName,
+    myRequests: myRequests, splitRequests: splitRequests
+  };
 
 })();

@@ -1,0 +1,127 @@
+/* ==========================================================================
+   tour.css — סיור היכרות (2026-08-28). ר' js/ui/tour.js.
+   כל המחלקות בתחילית tr-. שכבה עצמאית: היא לא מכירה אף מסך ואף רכיב אחר,
+   וזה מה שמאפשר לה לשרוד כל שינוי במבנה האפליקציה.
+   ========================================================================== */
+
+.tr {
+  position: fixed; inset: 0; z-index: 140;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  background: rgba(16, 24, 40, .42);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  animation: tr-fade 180ms ease;
+}
+@keyframes tr-fade { from { opacity: 0; } to { opacity: 1; } }
+body.tr-open { overflow: hidden; }
+
+.tr-card {
+  position: relative;
+  width: 100%; max-width: 460px;
+  background: var(--surface); border-radius: 24px;
+  box-shadow: 0 28px 70px rgba(16, 24, 40, .3), 0 2px 10px rgba(16, 24, 40, .1);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: tr-in 260ms cubic-bezier(.2, .7, .2, 1);
+}
+@keyframes tr-in { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+
+/* --- דילוג — תמיד זמין, תמיד באותו מקום --- */
+.tr-skip {
+  position: absolute; top: 14px; inset-inline-start: 14px; z-index: 2;
+  border: none; background: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--text-muted);
+  padding: 6px 10px; border-radius: 8px;
+}
+.tr-skip:hover { color: var(--text); background: var(--hover); }
+
+/* --- גוף הכרטיס --- */
+.tr-body {
+  padding: 52px 32px 28px;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 16px;
+}
+.tr-ico {
+  width: 84px; height: 84px; border-radius: 26px; flex: none;
+  display: grid; place-items: center;
+  background: var(--hover); color: var(--action);
+  animation: tr-pop 380ms cubic-bezier(.2, .8, .3, 1.2) both;
+}
+@keyframes tr-pop { from { opacity: 0; transform: scale(.8); } to { opacity: 1; transform: none; } }
+.tr-title {
+  margin: 0; font-size: 23px; font-weight: 800; color: var(--text);
+  line-height: 1.2; letter-spacing: -.01em; text-wrap: balance;
+}
+.tr-text {
+  margin: 0; font-size: 15px; line-height: 1.75; color: var(--text-soft);
+  max-width: 34ch;
+}
+.tr-jump {
+  margin-top: 4px; border: 1px solid var(--border); background: var(--surface);
+  border-radius: 12px; padding: 10px 20px; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: 700; color: var(--text);
+  transition: border-color var(--t), background var(--t);
+}
+.tr-jump:hover { border-color: var(--action); background: var(--hover); }
+
+/* --- תחתית: הקודם · נקודות · הבא --- */
+.tr-foot {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 20px; border-top: 1px solid var(--border);
+}
+.tr-back {
+  border: none; background: none; cursor: pointer; font: inherit;
+  font-size: 14px; font-weight: 700; color: var(--text-muted);
+  padding: 9px 12px; border-radius: 10px; flex: none;
+}
+.tr-back:hover { color: var(--text); background: var(--hover); }
+.tr-back[hidden] { display: none; }
+.tr-dots { flex: 1; display: flex; justify-content: center; gap: 6px; }
+.tr-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--border);
+  transition: background var(--t), width var(--t);
+}
+.tr-dot.is-on { background: var(--action); width: 18px; border-radius: 3px; }
+.tr-next {
+  border: none; background: var(--action); color: #FFF; cursor: pointer;
+  border-radius: 12px; padding: 11px 26px; font: inherit; font-size: 14px; font-weight: 700;
+  flex: none; transition: opacity var(--t), transform var(--t);
+}
+.tr-next:hover { opacity: .9; }
+.tr-next:active { transform: scale(.97); }
+
+/* --- כרטיס "יש חדש" בעמוד הקבלה --- */
+.tr-new {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 14px 16px; margin-bottom: 16px;
+  border: 1px solid var(--action); border-radius: 16px;
+  background: var(--surface); cursor: pointer; font: inherit; text-align: start;
+  color: var(--text); transition: background var(--t), transform var(--t);
+}
+.tr-new:hover { background: var(--hover); }
+.tr-new:active { transform: scale(.995); }
+.tr-new__ico {
+  width: 34px; height: 34px; border-radius: 11px; flex: none;
+  display: grid; place-items: center; background: var(--action); color: #FFF;
+}
+.tr-new__txt { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.tr-new__txt b { font-size: 14px; font-weight: 700; }
+.tr-new__txt small { font-size: 12.5px; color: var(--text-muted); }
+.tr-new__c { color: var(--text-muted); display: inline-flex; flex: none; }
+
+/* --- נייד: מסך מלא, בלי כרטיס מרחף קטן --- */
+@media (max-width: 640px) {
+  .tr { padding: 0; }
+  .tr-card {
+    max-width: none; width: 100%; height: 100%; border-radius: 0;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tr-body { flex: 1; justify-content: center; padding: 52px 26px 20px; }
+  .tr-ico { width: 96px; height: 96px; border-radius: 30px; }
+  .tr-title { font-size: 26px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tr, .tr-card, .tr-ico { animation: none; }
+  .tr-dot { transition: none; }
+}

@@ -1,0 +1,118 @@
+/* ==========================================================================
+   home.css — עמוד הקבלה (2026-08-27). ר' js/screens/home.js.
+   כל המחלקות בתחילית hm-, חוץ מ-.empty שהוא רכיב מצב-ריק כלל-מערכתי
+   (CBA.ui.emptyState ב-js/ui/dialog.js) ומוגדר בתחתית הקובץ.
+   ========================================================================== */
+
+/* --- כותרת --- */
+.hm-hero { padding: 6px 2px 22px; }
+.hm-hero__hi {
+  font-size: clamp(24px, 3.4vw, 32px); font-weight: 800; color: var(--text);
+  letter-spacing: -.01em; line-height: 1.15;
+}
+.hm-hero__sub { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
+
+/* --- כרטיס סעיף --- */
+.hm-card { padding: 20px; margin-bottom: 16px; }
+.hm-card__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.hm-card__t { font-size: 16px; font-weight: 800; margin: 0; color: var(--text); }
+.hm-card__sub { font-size: 12.5px; color: var(--text-muted); }
+.hm-link {
+  margin-inline-start: auto; border: none; background: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--action); padding: 2px 4px;
+}
+.hm-link:hover { text-decoration: underline; }
+
+/* --- שורות "מה מחכה לאישורך" --- */
+.hm-tasks { display: flex; flex-direction: column; gap: 8px; }
+.hm-task {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); cursor: pointer; font: inherit; text-align: start;
+  color: var(--text); transition: border-color var(--t), background var(--t), transform var(--t);
+}
+.hm-task:hover { border-color: var(--action); background: var(--hover); }
+.hm-task:active { transform: scale(.995); }
+.hm-task__n {
+  min-width: 34px; height: 34px; padding: 0 8px; border-radius: 10px; flex: none;
+  display: grid; place-items: center;
+  font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums;
+  background: var(--hover); color: var(--text-soft);
+}
+.hm-task--warn .hm-task__n { background: var(--warn-soft, #FEF3C7); color: var(--warn, #B45309); }
+.hm-task__l { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.hm-task__c { color: var(--text-muted); display: inline-flex; flex: none; }
+.hm-lazy { min-height: 0; }
+
+/* --- "אצלנו בבית" --- */
+.hm-mine { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.hm-stat {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  padding: 14px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); cursor: pointer; font: inherit; text-align: start;
+  transition: border-color var(--t), background var(--t);
+}
+.hm-stat:hover { border-color: var(--action); background: var(--hover); }
+.hm-stat__v { font-size: 24px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.hm-stat__v--money { font-size: 19px; color: var(--ok); }
+.hm-stat__l { font-size: 12.5px; color: var(--text-muted); font-weight: 600; }
+
+/* --- השריון הקרוב --- */
+.hm-next { margin-top: 12px; }
+.hm-next__row, .hm-next__empty {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); cursor: pointer; font: inherit; text-align: start; color: var(--text);
+  transition: border-color var(--t), background var(--t);
+}
+.hm-next__row:hover, .hm-next__empty:hover { border-color: var(--action); background: var(--hover); }
+.hm-next__ico { color: var(--text-soft); display: inline-flex; flex: none; }
+.hm-next__txt { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.hm-next__txt b { font-size: 14px; font-weight: 700; }
+.hm-next__txt small { font-size: 12.5px; color: var(--text-muted); }
+.hm-next__empty { color: var(--text-soft); font-size: 13.5px; }
+.hm-next__empty span { flex: 1; }
+
+/* --- פעולות מהירות --- */
+.hm-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 4px; }
+.hm-act {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 20px 12px; border: 1px solid var(--border); border-radius: 16px;
+  background: var(--surface); cursor: pointer; font: inherit; color: var(--text);
+  transition: border-color var(--t), background var(--t), transform var(--t);
+}
+.hm-act:hover { border-color: var(--action); background: var(--hover); }
+.hm-act:active { transform: scale(.98); }
+.hm-act__ico { color: var(--text-soft); display: inline-flex; }
+.hm-act:hover .hm-act__ico { color: var(--action); }
+.hm-act__l { font-size: 13px; font-weight: 700; text-align: center; }
+
+@media (max-width: 720px) {
+  .hm-actions { grid-template-columns: repeat(2, 1fr); }
+  .hm-mine { grid-template-columns: 1fr 1fr; }
+  .hm-mine .hm-stat:last-child { grid-column: 1 / -1; }
+  .hm-card { padding: 16px; }
+}
+
+/* ==========================================================================
+   מצב-ריק כלל-מערכתי (CBA.ui.emptyState) — לא רק בעמוד הקבלה.
+   ========================================================================== */
+.empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 8px; padding: 34px 20px;
+}
+.empty__ico { color: var(--border); }
+.empty__title { font-size: 14.5px; font-weight: 700; color: var(--text-soft); }
+.empty__sub { font-size: 13px; color: var(--text-muted); margin: 0; max-width: 42ch; line-height: 1.6; }
+.empty__cta {
+  margin-top: 8px; border: 1px solid var(--border); background: var(--surface);
+  border-radius: 10px; padding: 8px 16px; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--text);
+  transition: border-color var(--t), background var(--t);
+}
+.empty__cta:hover { border-color: var(--action); background: var(--hover); }
+
+/* --- הלוגו ככפתור חזרה הביתה (2026-08-27) --- */
+.app-brand--link { cursor: pointer; border-radius: 12px; }
+.app-brand--link:hover .app-brand__title { color: var(--action); }
+.app-brand--link:focus-visible { outline: 2px solid var(--action); outline-offset: 3px; }

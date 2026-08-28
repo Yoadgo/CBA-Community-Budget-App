@@ -790,7 +790,8 @@ CBA.screens = CBA.screens || {};
           });
           verifyEl.innerHTML = waitingVerify.length
             ? waitingVerify.map(verifyRowHTML).join("")
-            : '<div class="club-empty">אין תשלומים שממתינים לאימות.</div>';
+            : CBA.ui.emptyState({ icon: "check", title: "אין תשלומים לאימות",
+                sub: "כשתושב ידווח על תשלום, הוא יופיע כאן לאישור שלך." });
           bindVerifyActions(verifyEl, load);
 
           membersEl.innerHTML = members.length

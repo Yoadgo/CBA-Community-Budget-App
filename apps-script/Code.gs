@@ -365,6 +365,9 @@ function doGet(e) {
     // "שירותים לתושב" (2026-08-18) — קריאה פתוחה לכל תושב מחובר ופעיל, בדיוק
     // כמו committeeTree. מחזירה את שני הטאבים (כרטיסים + סעיפים) בקריאה אחת.
     // הכתיבה (saveServices) עוברת ב-doPost ומוגבלת למנהל-על, ר' ACTION_PERMS.
+    if (e && e.parameter && e.parameter.action === 'tour') {
+      return handleTour_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'services') {
       return handleServices_(e.parameter);
     }
@@ -505,6 +508,7 @@ function doPost(e) {
       case 'createResidents':   return json_(createResidents_(ss, body));
       case 'scanReceipt':       return json_(handleScanReceipt_(ss, body));
       case 'saveEmailSetting':  return json_(saveEmailSetting_(ss, body));
+      case 'markTourSeen':      return json_(markTourSeen_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -6270,4 +6274,153 @@ function updateGymMembership_(ss, body) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ============================================================================
+ *  סיור היכרות (2026-08-28)
+ * ----------------------------------------------------------------------------
+ *  חפיסת מסכים שנפתחת בכניסה הראשונה, בסגנון הפעלה של מכשיר חדש. התוכן כולו
+ *  יושב בטאב "סיור היכרות" ולא בקוד — בדיוק כמו תבניות המיילים ומסך השירותים —
+ *  כדי שאפשר יהיה לשנות נוסח, להוסיף צעד או לכבות צעד בלי דיפלוי.
+ *
+ *  העמודות:
+ *    מזהה    — מזהה קבוע לצעד. לא לשנות אחרי שפורסם.
+ *    סדר     — סדר התצוגה בתוך אותה גרסה.
+ *    גרסה    — **המנגנון המרכזי.** לכל תושב נשמר "עד איזו גרסה ראית"
+ *              (עמודה "סיור נצפה" בטאב תושבים). תושב חדש רואה הכול; תושב ותיק
+ *              רואה רק צעדים שהגרסה שלהם גבוהה ממה שכבר ראה — וגם אותם
+ *              לא כהשתלטות על המסך אלא ככרטיס קטן בעמוד הקבלה.
+ *              **כשמוסיפים פיצ'ר חדש: שורה חדשה עם גרסה +1. זהו.**
+ *    קהל     — "כולם" / "מנהלים" / "תושבים". מסונן בשרת, לא בלקוח.
+ *    פעיל    — "לא" מכבה צעד בלי למחוק אותו.
+ *    כותרת, טקסט — התוכן עצמו.
+ *    כפתור, מסך יעד — פעולה משנית אופציונלית. "מסך יעד" הוא מפתח מסך
+ *              (resSubmit/resReserve/resMap...) או אחת משתי מילות מפתח:
+ *              "security" (פותח את מסך אבטחת המידע) ו-"install" (הוספה למסך
+ *              הבית). ריק = אין כפתור.
+ *    אייקון  — שם מתוך המפה בלקוח: wave/receipt/key/map/shield/phone/star.
+ * ========================================================================== */
+var TOUR_SHEET = 'סיור היכרות';
+var TOUR_HEADERS = ['מזהה', 'סדר', 'גרסה', 'קהל', 'פעיל', 'כותרת', 'טקסט', 'כפתור', 'מסך יעד', 'אייקון'];
+var TOUR_SEEN_HEADER = 'סיור נצפה';
+
+/** תוכן ברירת המחדל בפתיחה ראשונה. מכאן והלאה — נערך בגיליון, לא בקוד. */
+function tourSeed_() {
+  return [
+    ['welcome', 1, 1, 'כולם', 'כן', 'ברוכים הבאים',
+      'זו האפליקציה של השיכון. מכאן מגישים קבלות ומקבלים החזרים, משריינים את המועדון, ורואים מי גר איפה ומי אחראי על מה. שתי דקות ונכיר את הכול.',
+      '', '', 'wave'],
+    ['receipts', 2, 1, 'כולם', 'כן', 'שילמתם מהכיס? קבלו החזר',
+      'מצלמים את הקבלה, בוחרים סעיף, שולחים. המערכת קוראת את הסכום מהקבלה לבד, ואתם עוקבים אחרי הסטטוס — הוגשה, אושרה, שולמה — בלי לרדוף אחרי אף אחד.',
+      'להגשת קבלה', 'resSubmit', 'receipt'],
+    ['facilities', 3, 1, 'כולם', 'כן', 'המועדון ומכון הכושר',
+      'בוחרים תאריך ושעות, רואים מיד מה פנוי, ושולחים בקשה. אישור מגיע במייל וגם מופיע כאן. במכון הכושר מנהלים את המנוי המשפחתי מאותו מקום.',
+      'ללוח השריונים', 'resReserve', 'key'],
+    ['neighborhood', 4, 1, 'כולם', 'כן', 'להכיר את השיכון',
+      'מפה אינטראקטיבית של כל הבתים, מדריך שכנים עם טלפונים, עץ הוועד — מי אחראי על מה — ורשימת השירותים של השיכון.',
+      'למפת השיכון', 'resMap', 'map'],
+    ['security', 5, 1, 'כולם', 'כן', 'המידע שלכם מוגן',
+      'אין לאפליקציה מאגר נתונים פרטי ואין לה סיפור סיסמאות משלה. הכול יושב בתוך חשבון Google של הוועד, וההתחברות היא דרך גוגל. יש מסך שמסביר בדיוק מה מוגן ואיך.',
+      'לקרוא בהרחבה', 'security', 'shield'],
+    ['install', 6, 1, 'כולם', 'כן', 'שימו אותנו על מסך הבית',
+      'אפשר להוסיף את האפליקציה למסך הבית של הטלפון, ואז היא נפתחת כמו כל אפליקציה אחרת — מסך מלא, בלי שורת כתובת, וגם עובדת כשאין קליטה.',
+      'להוספה למסך הבית', 'install', 'phone'],
+    ['admin', 7, 1, 'מנהלים', 'כן', 'ומה שונה אצלכם',
+      'כמנהלים אתם רואים גם את "מה מחכה לאישורך" בעמוד הבית — הוצאות, שריונים ובקשות הרשמה שממתינות לכם, כל אחת קופצת ישר למקום. המעבר בין אזור הניהול לאזור התושב הוא מתפריט המשתמש למעלה.',
+      '', '', 'star']
+  ];
+}
+
+function ensureTourSheet_(ss) {
+  var sh = ss.getSheetByName(TOUR_SHEET);
+  if (sh) return sh;
+  sh = ss.insertSheet(TOUR_SHEET);
+  sh.getRange(1, 1, 1, TOUR_HEADERS.length).setValues([TOUR_HEADERS]);
+  sh.getRange(1, 1, 1, TOUR_HEADERS.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  var seed = tourSeed_();
+  sh.getRange(2, 1, seed.length, TOUR_HEADERS.length).setValues(seed);
+  sh.setColumnWidth(1, 110); sh.setColumnWidth(2, 55); sh.setColumnWidth(3, 60);
+  sh.setColumnWidth(4, 80);  sh.setColumnWidth(5, 60); sh.setColumnWidth(6, 200);
+  sh.setColumnWidth(7, 460); sh.setColumnWidth(8, 150); sh.setColumnWidth(9, 120);
+  sh.setColumnWidth(10, 90);
+  sh.getRange(2, 7, seed.length, 1).setWrap(true);
+  return sh;
+}
+
+/** מוסיף את עמודת "סיור נצפה" לטאב תושבים אם אינה קיימת, ומחזיר את מספרה. */
+function ensureTourSeenCol_(ss) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return -1;
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var idx = headers.indexOf(TOUR_SEEN_HEADER);
+  if (idx !== -1) return idx + 1;
+  sh.getRange(1, lastCol + 1, 1, 1).setValues([[TOUR_SEEN_HEADER]]);
+  sh.getRange(1, lastCol + 1, 1, 1).setFontWeight('bold');
+  return lastCol + 1;
+}
+
+function tourSeenFor_(ss, email) {
+  var col = ensureTourSeenCol_(ss);
+  if (col === -1) return 0;
+  var r = lookupResident_(email);
+  if (!r.found) return 0;
+  var sh = ss.getSheetByName('תושבים');
+  var v = sh.getRange(r.rowIndex, col).getValue();
+  var n = parseInt(v, 10);
+  return isNaN(n) ? 0 : n;
+}
+
+/* קריאה: מחזיר את הצעדים שמתאימים לקהל של הקורא, ואת הגרסה שכבר ראה.
+   הסינון לפי קהל נעשה כאן ולא בלקוח — צעד שמיועד למנהלים לא יוצא מהשרת
+   למי שאינו מנהל, בדיוק כמו כל שאר המידע המסונן-לפי-הרשאה במערכת. */
+function handleTour_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    ensureTourSheet_(ss);
+    var isAdmin = gate.perm.isSuper || (gate.perm.perms && gate.perm.perms.length > 0);
+    var rows = readTable_(ss, TOUR_SHEET).filter(function (r) {
+      if (String(r['פעיל'] || '').trim() === 'לא') return false;
+      var aud = String(r['קהל'] || 'כולם').trim();
+      if (aud === 'מנהלים' && !isAdmin) return false;
+      if (aud === 'תושבים' && isAdmin) return false;
+      return true;
+    }).sort(function (a, b) {
+      var va = parseInt(a['גרסה'], 10) || 1, vb = parseInt(b['גרסה'], 10) || 1;
+      if (va !== vb) return va - vb;
+      return (parseInt(a['סדר'], 10) || 0) - (parseInt(b['סדר'], 10) || 0);
+    });
+    return json_({ ok: true, steps: rows, seen: tourSeenFor_(ss, gate.email) });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* כתיבה: "ראיתי עד גרסה N". לא ב-ACTION_PERMS בכוונה — זו פעולה של כל תושב
+   מחובר על השורה של עצמו בלבד, בדיוק כמו דיווח תשלום או שריון מועדון.
+   שים לב: השורה נקבעת מהאימייל שבמושב החתום (gate.email) ולעולם לא מפרמטר
+   שהגיע מהלקוח — אחרת תושב אחד היה יכול לסמן עבור אחר. */
+function markTourSeen_(ss, body) {
+  var col = ensureTourSeenCol_(ss);
+  if (col === -1) return { ok: false, error: 'אין טאב "תושבים"' };
+  var r = lookupResident_(body._email);
+  if (!r.found) return { ok: false, error: 'המשתמש אינו ברשימת התושבים' };
+  var n = parseInt(body.version, 10);
+  if (isNaN(n) || n < 0) return { ok: false, error: 'גרסה לא תקינה' };
+  var sh = ss.getSheetByName('תושבים');
+  var cur = parseInt(sh.getRange(r.rowIndex, col).getValue(), 10);
+  if (!isNaN(cur) && cur >= n) return { ok: true, seen: cur };   // לא יורדים אחורה
+  sh.getRange(r.rowIndex, col).setValue(n);
+  return { ok: true, seen: n };
+}
+
+/** התקנה ידנית מהעורך: יוצר את הטאב ואת העמודה בלי לחכות לקריאה הראשונה. */
+function setupTourModule() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureTourSheet_(ss);
+  var col = ensureTourSeenCol_(ss);
+  return 'טאב "' + TOUR_SHEET + '" מוכן; עמודת "' + TOUR_SEEN_HEADER + '" בעמודה ' + col;
 }

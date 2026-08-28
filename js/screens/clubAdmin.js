@@ -77,11 +77,13 @@ CBA.screens.clubAdmin = {
 
         pendingList.innerHTML = pending.length
           ? pending.map(pendingRowHTML).join("")
-          : '<div class="club-empty">אין בקשות ממתינות לאישור כרגע.</div>';
+          : CBA.ui.emptyState({ icon: "check", title: "אין בקשות ממתינות",
+              sub: "כל בקשות השריון טופלו. בקשה חדשה תופיע כאן ותשלח לך התראה." });
 
         allList.innerHTML = all.length
           ? all.map(allRowHTML).join("")
-          : '<div class="club-empty">אין שריונים קרובים.</div>';
+          : CBA.ui.emptyState({ icon: "calendar", title: "אין שריונים קרובים",
+              sub: "המועדון פנוי בתקופה הקרובה. שריונים מאושרים יופיעו כאן לפי תאריך." });
 
         // שחזור מיקום הגלילה (ר' ההערה למעלה ליד caScrollP)
         if (caScrollP) pendingList.scrollTop = caScrollP;

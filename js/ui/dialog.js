@@ -255,6 +255,37 @@ CBA.ui = (function () {
     watchLegacyButtons();
   }
 
+  /* ---------- מצב-ריק (2026-08-27) ----------
+     טבלה ריקה לא מסבירה כלום: היא נראית זהה ל"נכשלה הטעינה", ל"הסינון חתך
+     הכול" ול"באמת אין כלום". מצב-ריק אומר שלושה דברים בשורה: מה ריק, למה,
+     ומה הצעד הבא — וכשיש צעד ברור, גם נותן את הכפתור שעושה אותו.
+
+     opts: { icon: שם מתוך EMPTY_ICONS, title, sub, ctaLabel, ctaAttr }
+     ctaAttr הוא מאפיין HTML גולמי (למשל 'data-clear-search') שהמסך הקורא
+     מאזין לו בעצמו — כדי שהרכיב יישאר טיפש ולא יכיר אף מסך. */
+  var EMPTY_ICONS = {
+    inbox:    '<path d="M4 13h4l2 3h4l2-3h4"/><path d="M5.5 5.5h13l2.5 7.5v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/>',
+    calendar: '<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+    users:    '<circle cx="9" cy="9" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><path d="M16 6.2a3.2 3.2 0 0 1 0 5.6M17.5 19a6 6 0 0 0-2-4.5"/>',
+    mail:     '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/>',
+    check:    '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+    search:   '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>'
+  };
+  function emptyState(opts) {
+    opts = opts || {};
+    var d = EMPTY_ICONS[opts.icon] || EMPTY_ICONS.inbox;
+    var cta = opts.ctaLabel
+      ? '<button type="button" class="empty__cta" ' + (opts.ctaAttr || "") + '>' + esc(opts.ctaLabel) + '</button>'
+      : "";
+    return '<div class="empty">' +
+      '<svg class="empty__ico" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>' +
+      '<b class="empty__title">' + esc(opts.title || "") + '</b>' +
+      (opts.sub ? '<p class="empty__sub">' + esc(opts.sub) + '</p>' : "") +
+      cta +
+      '</div>';
+  }
+
   return { alert: alertBox, confirm: confirmBox, prompt: promptBox, toast: toast,
-           busy: busy, busyText: busyText };
+           busy: busy, busyText: busyText, emptyState: emptyState };
 })();

@@ -91,7 +91,9 @@ function emsRenderAll() {
   });
 
   if (!master && !rules.length && !templates.length) {
-    html = '<div class="card club-card"><div class="club-empty">אין לך גישה לאף הגדרת מייל כרגע.</div></div>';
+    html = '<div class="card club-card">' + CBA.ui.emptyState({ icon: "mail",
+      title: "אין כאן הגדרות שאפשר לערוך",
+      sub: "עריכת נוסח המיילים פתוחה לפי תחום ניהול. פנה למנהל־על אם צריך גישה." }) + '</div>';
   }
   return html;
 }

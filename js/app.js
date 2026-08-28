@@ -169,14 +169,17 @@
       ]
     },
     resident: {
-      def: "resRequests",
-      screens: ["resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices"],
+      // (2026-08-27) ברירת המחדל היא עמוד הקבלה, לא "הבקשות שלי". כל כניסה
+      // חדשה לאפליקציה — של מנהל או של תושב — נוחתת כאן. ר' routeByRole.
+      def: "resHome",
+      screens: ["resHome", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
       // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
       // לצפייה בלבד. עריכה (2026-08-10) עברה לגמרי למסך ניהול נפרד באזור הניהול
       // (committeeAdmin, מנהל-על בלבד) — כאן, גם מנהל-על, רואה תצוגה בלבד.
       tabs: [
+        ["resHome", "בית"],
         ["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"],
         // "מתקנים" (2026-08-19) — שריון המועדון ומכון הכושר אוחדו לקבוצה אחת,
         // באותה תבנית של "השיכון". נעשה רק עכשיו, בשלב שבו נולד הפריט השני:
@@ -220,6 +223,7 @@
   }
   // אייקוני קו מונוכרומיים לטאבים (דסקטופ). במובייל האייקון מגיע מ-CSS mask (::before)
   var NAV_ICONS = {
+    resHome:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 11 8.5-7 8.5 7"/><path d="M5.5 9.6V19a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9.6"/><path d="M10 20v-5.5h4V20"/></svg>',
     budget:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21v-8M12 21V4M19 21v-6"/></svg>',
     expenses:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>',
     planning:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>',
@@ -510,7 +514,7 @@
     notif.pendingExpenses = c.pendingExpenses;
     notif.reviewExpenses = c.reviewExpenses;
     notif.overBudget = c.overBudget;
-    if (inited && changed) { renderNav(currentArea); renderControls(); }
+    if (inited && changed) { renderNav(currentArea); renderControls(); refreshHomeIfOpen(); }
   }
   function refreshAlertsClub() {
     if (clubAlertsInFlight) return;
@@ -529,7 +533,7 @@
       if (res && res.ok) {
         notif.pendingClub = (res.reservations || []).filter(function (r) { return r.status === "pending"; }).length;
         notif.clubChecked = true;
-        if (inited) { renderNav(currentArea); renderControls(); }
+        if (inited) { renderNav(currentArea); renderControls(); refreshHomeIfOpen(); }
       }
     });
   }
@@ -542,6 +546,13 @@
     notif.pendingClub = n; notif.clubChecked = true;
     if (inited) { renderNav(currentArea); renderControls(); }
   };
+
+  /* (2026-08-27) עמוד הקבלה מציג את ספירות ההתראות. כשהן משתנות ברקע והוא
+     המסך הפעיל — מציירים אותו מחדש, אחרת המספר על המסך משקר. נקרא רק
+     מהמקומות שכבר זיהו שינוי אמיתי, לא בכל מחזור רענון. */
+  function refreshHomeIfOpen() {
+    if (inited && currentScreen === "resHome" && CBA.screens.resHome) showScreen("resHome");
+  }
 
   function setArea(area) {
     if (area === "admin" && !hasAnyAdmin()) area = "resident";   // אין הרשאת ניהול — אין אזור ניהול
@@ -642,7 +653,9 @@
 
   function routeByRole() {
     applyUser();
-    initialRoute(hasAnyAdmin() ? "admin" : "resident");
+    // (2026-08-27) תמיד אזור התושב כברירת מחדל, גם למנהל־על. אם יש מסלול טרי
+    // (רענון תוך חצי שעה) initialRoute יחזיר לאזור הניהול בעצמו.
+    initialRoute("resident");
   }
 
   /* שלד טעינה — מבנה shimmer שדומה למסך התקציב, כדי שהמעבר לא ירגיש קופצני */
@@ -826,10 +839,21 @@
   // עד היום האפליקציה זכרה באיזה מסך היית אבל לא באיזו שנה — כלומר אחרי כל
   // רענון חזרת בשקט לשנת ברירת המחדל של הגיליון. זה מסוכן: אפשר לחזור לעמוד,
   // להמשיך לערוך, ולעדכן בטעות את השנה הלא נכונה.
+  /* (2026-08-27) חלון "אותו רצף עבודה". יועד ביקש שהאפליקציה תמיד תיפתח על
+     עמוד הקבלה באזור התושב — אבל F5 באמצע עריכת תקציב חייב להחזיר לאותו מסך,
+     אחרת כל רענון הוא עונש. הפשרה: המסך האחרון נזכר לחצי שעה. אחריה כל טעינה
+     היא "כניסה חדשה" ונוחתת בעמוד הקבלה.
+     שים לב: התוקף חל רק על האזור/המסך. **השנה השמורה לא פגה לעולם** — שכחת
+     שנה היא מסוכנת (אפשר לחזור ולערוך בטעות את השנה הלא נכונה), ולכן
+     restoreSavedYear ממשיך לקרוא את אותה רשומה בלי בדיקת זמן. */
+  var ROUTE_TTL = 30 * 60 * 1000;
+  function routeIsFresh(saved) {
+    return !!(saved && saved.ts && (Date.now() - saved.ts) < ROUTE_TTL);
+  }
   function saveRoute() {
     try {
       var y = (window.CBA.data && CBA.data.getCurrentYear) ? CBA.data.getCurrentYear() : "";
-      localStorage.setItem(ROUTE_KEY, JSON.stringify({ area: currentArea, screen: currentScreen, year: y }));
+      localStorage.setItem(ROUTE_KEY, JSON.stringify({ area: currentArea, screen: currentScreen, year: y, ts: Date.now() }));
     } catch (e) {}
   }
   // משחזר את השנה השמורה — רק אם היא עדיין קיימת ברשימת השנים של הגיליון
@@ -851,6 +875,10 @@
   function clearRoute() { try { localStorage.removeItem(ROUTE_KEY); } catch (e) {} }
   // כניסה ראשונית לאזור: משחזר את המסך השמור אם הוא שייך לאזור הזה, אחרת ברירת המחדל
   function initialRoute(area) {
+    var saved = loadRoute();
+    var fresh = routeIsFresh(saved);
+    // רענון בתוך רצף עבודה — חוזרים בדיוק לאזור ולמסך שהיינו בהם
+    if (fresh && saved && AREAS[saved.area]) area = saved.area;
     if (area === "admin" && !hasAnyAdmin() && currentUser) area = "resident";
     if (!AREAS[area]) area = "resident";
     currentArea = area;
@@ -861,8 +889,7 @@
     if (restoreSavedYear()) renderYearSwitch();
     renderNav(area);
     renderControls();
-    var saved = loadRoute();
-    var target = (saved && saved.area === area && AREAS[area].screens.indexOf(saved.screen) !== -1)
+    var target = (fresh && saved && saved.area === area && AREAS[area].screens.indexOf(saved.screen) !== -1)
       ? saved.screen : AREAS[area].def;
     showScreen(target);
   }
@@ -881,7 +908,10 @@
     shield: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 4.8 5.6v5.9c0 4.3 2.9 8.3 7.2 9.7 4.3-1.4 7.2-5.4 7.2-9.7V5.6z"/><path d="m9 12 2.1 2.1L15.2 10"/></svg>',
     // זכוכית מגדלת — כפתור החיפוש הגלובלי בכותרת (2026-08-25). שים לב: זו מפת
     // האייקונים של *תפריט המשתמש*, לא NAV_ICONS של המסכים (ר' באג 20.08).
-    search: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>'
+    search: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>',
+    // מצפן — "סיור באפליקציה" (2026-08-28). שוב: זו מפת האייקונים של תפריט
+    // המשתמש, לא NAV_ICONS של המסכים.
+    compass: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>'
   };
 
   function initials(name) {
@@ -992,6 +1022,11 @@
     if (simStopBtn) simStopBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn); stopSim();
     });
+    const tourBtn = panel.querySelector("[data-panel-tour]");
+    if (tourBtn) tourBtn.addEventListener("click", function () {
+      closeUserPanel(panel, btn);
+      if (window.CBA.tour) CBA.tour.start();
+    });
     const secBtn = panel.querySelector("[data-panel-security]");
     if (secBtn) secBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn);
@@ -1093,6 +1128,12 @@
     /* "אבטחת המידע שלי" (2026-08-24) — מסך שקיפות לתושב, לבקשת יועד. יושב
        מיד מעל "יציאה" ומוצג לכל מי שמחובר, בשני האזורים: השאלה "מי יכול
        להגיע למידע שלי" היא של כולם, לא רק של מנהלים. ר' js/ui/security.js. */
+    /* "סיור באפליקציה" (2026-08-28) — הסיור המלא, בכל רגע. יושב מעל מסך
+       האבטחה כי שניהם מאותה משפחה: הסברים, לא פעולות. מוצג רק למי שמחובר. */
+    var tourItem = currentUser
+      ? '<button class="up-item" data-panel-tour><span class="up-row__ico">' + ICON.compass + '</span>סיור באפליקציה</button>'
+      : "";
+
     var securityItem = currentUser
       ? '<button class="up-item" data-panel-security><span class="up-row__ico">' + ICON.shield + '</span>אבטחת המידע שלי</button>'
       : "";
@@ -1107,6 +1148,7 @@
       emailItem +
       installItem +
       settingsItem +
+      tourItem +
       securityItem +
       action
     );
@@ -1406,6 +1448,31 @@
   window.CBA = window.CBA || {};
   window.CBA.navigate = showScreen;
 
+  /* קפיצה לאזור הניהול ממקום שאינו התפריט (עמוד הקבלה). בכוונה אותו מסלול
+     בדיוק של [data-panel-goto] בתפריט המשתמש — כולל המקרה המיוחד של
+     "expenses-pending" — כדי שלא ייווצרו שתי דרכים שונות להגיע לאותו מקום. */
+  window.CBA.gotoAdmin = function (target) {
+    if (currentArea !== "admin" && hasAnyAdmin()) setArea("admin");
+    if (target === "expenses-pending" && CBA.screens.expenses && CBA.screens.expenses.showPending) {
+      CBA.screens.expenses.showPending();
+    } else {
+      showScreen(target);
+    }
+  };
+  /* חזרה לעמוד הקבלה — מהלוגו בכותרת ומהטאב "בית" */
+  window.CBA.goHome = function () {
+    if (currentArea !== "resident") setArea("resident");
+    else showScreen("resHome");
+  };
+  /* ספירות ההתראות שכבר נאספו ממילא לפעמון ולתגיות הניווט. עמוד הקבלה קורא
+     אותן ולא סופר בעצמו — כדי שלא יהיו שני מקורות אמת לאותו מספר. */
+  window.CBA.alerts = function () {
+    return {
+      pendingExpenses: notif.pendingExpenses, reviewExpenses: notif.reviewExpenses,
+      overBudget: notif.overBudget, pendingClub: notif.pendingClub
+    };
+  };
+
   /* יעדי הניווט של האזור הנוכחי, כבר מסוננים לפי ההרשאות (AREAS נבנה ב-
      rebuildAreas). החיפוש הגלובלי (js/ui/search.js) נשען על זה כדי לא לבצע
      שום בדיקת הרשאה משלו — מה שלא מופיע בניווט, לא ניתן לחיפוש. */
@@ -1422,6 +1489,22 @@
     });
     return out;
   };
+
+  /* הלוגו כדרך חזרה (2026-08-27) — ההתנהגות שכל אתר מלמד: לוחצים על השם
+     בפינה וחוזרים הביתה. נשאר div ב-HTML ומקבל תפקיד/מיקוד כאן, כדי לא
+     לשנות את מבנה הכותרת שכל הפריסה נשענת עליו. */
+  var brandEl = document.querySelector(".app-brand");
+  if (brandEl) {
+    brandEl.setAttribute("role", "button");
+    brandEl.setAttribute("tabindex", "0");
+    brandEl.setAttribute("title", "לעמוד הבית");
+    brandEl.setAttribute("aria-label", "לעמוד הבית");
+    brandEl.classList.add("app-brand--link");
+    brandEl.addEventListener("click", function () { if (window.CBA.goHome) CBA.goHome(); });
+    brandEl.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (window.CBA.goHome) CBA.goHome(); }
+    });
+  }
 
   nav.addEventListener("click", (e) => {
     const groupBtn = e.target.closest("[data-group]");
@@ -1500,8 +1583,12 @@
       document.body.classList.remove("app-booting");   // הניווט הופך לפעיל בדיוק עכשיו, לא לפני
       ensureHeaderShell();
       if (currentUser) { routeByRole(); }
-      else { applyUser(); AREAS = JSON.parse(JSON.stringify(AREAS_ALL)); initialRoute("admin"); }   // אורח מאחורי הגייט — שלד מלא, לא נגיש בפועל
+      else { applyUser(); AREAS = JSON.parse(JSON.stringify(AREAS_ALL)); initialRoute("resident"); }   // אורח מאחורי הגייט — שלד מלא, לא נגיש בפועל
       window.CBA.refreshAlerts();
+      /* סיור היכרות (2026-08-28) — אחרי שהמסך הראשון כבר צויר ולא לפניו:
+         סיור שנפתח מעל מסך ריק נראה כמו תקלה. הפונקציה עצמה בודקת שזו באמת
+         כניסה ראשונה ושאין מסך כניסה פתוח. */
+      if (currentUser && window.CBA.tour) setTimeout(function () { CBA.tour.maybeAutoStart(); }, 600);
       lastDataFingerprint = dataFingerprint();
     } else {
       // הגיע עדכון נוסף — מציגים רק אם הנתונים בפועל שונים, ובעדינות (פולס
