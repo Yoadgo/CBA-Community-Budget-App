@@ -1396,6 +1396,11 @@ CBA.data = (function () {
     logBudgetUpdate: logBudgetUpdate,
     // ניהול מיילים (שלב 1, 2026-08-18) — ר' emailSettings.js. listEmailSettings
     // כבר מגיע מסונן מהשרת לפי הרשאת המבקש (מנהל תחום רואה רק את התחום שלו).
+    /* סיור היכרות (2026-08-28) — הצעדים והגרסה שכבר נראתה מגיעים בקריאה אחת.
+       הסימון "ראיתי" עובר ב-postRead ולא ב-push: זו כתיבה קטנה שאין טעם
+       להכניס לתור השמירות ולחיווי "שומר…" בכותרת. */
+    getTour: function (cb) { CBA.sheets.get({ action: "tour" }, cb); },
+    markTourSeen: function (version, cb) { CBA.sheets.postRead("markTourSeen", { version: version }, cb); },
     listEmailSettings: function (cb) { CBA.sheets.get({ action: "listEmailSettings" }, cb); },
     saveEmailSetting: function (key, fields, cb) {
       CBA.sheets.postRead("saveEmailSetting", { key: key, fields: fields }, cb);
