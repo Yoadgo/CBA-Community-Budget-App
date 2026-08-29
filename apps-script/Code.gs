@@ -103,6 +103,11 @@ var ACTION_PERMS = {
   // (הרשמה, דיווח תשלום, "המנוי שלי") לא יופיעו כאן גם בשלבים הבאים, כי הן
   // פתוחות לכל תושב מחובר ופעיל — בדיוק כמו שריון מועדון והגשת קבלה.
   // פעולות הכתיבה הניהוליות (אישור, אימות תשלום, הארכה) יצטרפו בשלבים 2-3.
+  // "הפרטים שלי" (2026-08-28) — רק פעולות המנהל. saveMyProfile/submit/cancel
+  // פתוחות לכל תושב מחובר ופעיל, כמו שריון מועדון והגשת קבלה: הן פועלות על
+  // השורה של הקורא בלבד, שנגזרת מהמושב החתום ולא מפרמטר.
+  approveProfileChange: PERM_RESIDENTS,
+  rejectProfileChange: PERM_RESIDENTS,
   gymList: PERM_GYM,
   // שלב 2 (2026-08-19) — פעולות ניהול. יצירת מנוי ידנית ודרישת הצהרה במייל
   // הן פעולות של מנהל המכון, לא של מנהל-על: זו עבודה שוטפת ולא שינוי מבני.
@@ -272,7 +277,7 @@ function diagnosePermissions() {
 /* פעולות כתיבה שעוברות דרך doGet ולא דרך doPost (שריון מועדון, בקשת הרשמה
    וכו') — גם הן חייבות להעלות את מונה השינויים, אחרת הלקוח לא ידע שיש חדש. */
 var GET_WRITE_ACTIONS = ['submitSignup', 'reserveClub', 'cancelClubReservation',
-  'approveClubReservation', 'rejectClubReservation', 'assignResidentIds'];
+  'approveClubReservation', 'approveClubReservations', 'rejectClubReservation', 'assignResidentIds'];
 
 function doGet(e) {
   try {
@@ -365,6 +370,15 @@ function doGet(e) {
     // "שירותים לתושב" (2026-08-18) — קריאה פתוחה לכל תושב מחובר ופעיל, בדיוק
     // כמו committeeTree. מחזירה את שני הטאבים (כרטיסים + סעיפים) בקריאה אחת.
     // הכתיבה (saveServices) עוברת ב-doPost ומוגבלת למנהל-על, ר' ACTION_PERMS.
+    if (e && e.parameter && e.parameter.action === 'approveClubReservations') {
+      return handleApproveClubReservations_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'myProfile') {
+      return handleMyProfile_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'profileChanges') {
+      return handleProfileChanges_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'tour') {
       return handleTour_(e.parameter);
     }
@@ -509,6 +523,11 @@ function doPost(e) {
       case 'scanReceipt':       return json_(handleScanReceipt_(ss, body));
       case 'saveEmailSetting':  return json_(saveEmailSetting_(ss, body));
       case 'markTourSeen':      return json_(markTourSeen_(ss, body));
+      case 'saveMyProfile':        return json_(saveMyProfile_(ss, body));
+      case 'submitProfileChange':  return json_(submitProfileChange_(ss, body));
+      case 'cancelProfileChange':  return json_(cancelProfileChange_(ss, body));
+      case 'approveProfileChange': return json_(approveProfileChange_(ss, body));
+      case 'rejectProfileChange':  return json_(rejectProfileChange_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -950,20 +969,7 @@ function handleApproveClubReservation_(p) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
     if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
-    var ev = cal.getEventById(p.id);
-    if (!ev) return json_({ ok: false, error: 'השריון לא נמצא — ייתכן שכבר בוטל' });
-    ev.setTag('status', 'approved');
-    ev.setTitle('שריון מועדון — ' + (ev.getTag('family') || 'תושב'));
-    try {
-      var tz1 = Session.getScriptTimeZone();
-      var evEmail = ev.getTag('email');
-      sendResidentTemplate_(ss, 'CLUB_APPROVED', evEmail ? [evEmail] : [], {
-        'שם': ev.getTag('family') || 'תושב',
-        'תאריך': Utilities.formatDate(ev.getStartTime(), tz1, 'dd/MM/yyyy'),
-        'שעה': Utilities.formatDate(ev.getStartTime(), tz1, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz1, 'HH:mm')
-      });
-    } catch (mailErr) { Logger.log('מייל אישור שריון נכשל: ' + mailErr); }
-    return json_({ ok: true });
+    return json_(approveOneClubEvent_(ss, cal, p.id));
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   } finally {
@@ -973,6 +979,56 @@ function handleApproveClubReservation_(p) {
 
 /* דחיית שריון ממתין — מוחקת את האירוע (משחררת את המשבצת בחזרה לפנויה). אין כרגע
  * יומן/ארכיון נפרד לדחיות (בדומה לביטול תושב) — אפשר להוסיף בהמשך אם ירצה יועד. */
+/* אישור שריון יחיד — הליבה המשותפת לאישור בודד ולאישור מרובה (2026-08-28).
+   חולצה מ-handleApproveClubReservation_ ולא שוכפלה: שני המסלולים חייבים
+   להתנהג זהה, כולל המייל לתושב. מחזירה אובייקט, לא json_. */
+function approveOneClubEvent_(ss, cal, id) {
+  var ev = cal.getEventById(id);
+  if (!ev) return { ok: false, error: 'השריון לא נמצא — ייתכן שכבר בוטל' };
+  ev.setTag('status', 'approved');
+  ev.setTitle('שריון מועדון — ' + (ev.getTag('family') || 'תושב'));
+  try {
+    var tz1 = Session.getScriptTimeZone();
+    var evEmail = ev.getTag('email');
+    sendResidentTemplate_(ss, 'CLUB_APPROVED', evEmail ? [evEmail] : [], {
+      'שם': ev.getTag('family') || 'תושב',
+      'תאריך': Utilities.formatDate(ev.getStartTime(), tz1, 'dd/MM/yyyy'),
+      'שעה': Utilities.formatDate(ev.getStartTime(), tz1, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz1, 'HH:mm')
+    });
+  } catch (mailErr) { Logger.log('מייל אישור שריון נכשל: ' + mailErr); }
+  return { ok: true };
+}
+
+/* אישור מרובה (2026-08-28) — מזהים מופרדים בפסיק. נעילה אחת וסבב אחד במקום
+   N קריאות רשת. כישלון של שריון אחד לא עוצר את השאר: כל אחד מדווח בנפרד,
+   והלקוח מציג בדיוק מה עבר ומה לא. */
+function handleApproveClubReservations_(p) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (e) { return json_({ ok: false, error: 'תפוס — נסה שוב' }); }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_CLUB);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var ids = String(p.ids || '').split(',').map(function (x) { return x.trim(); })
+      .filter(function (x) { return x; });
+    if (!ids.length) return json_({ ok: false, error: 'לא נבחרו שריונים' });
+    if (ids.length > 40) return json_({ ok: false, error: 'יותר מדי שריונים בבת אחת' });
+    var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
+    if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
+
+    var okCount = 0, failed = [];
+    ids.forEach(function (id) {
+      var r = approveOneClubEvent_(ss, cal, id);
+      if (r.ok) okCount++; else failed.push({ id: id, error: r.error });
+    });
+    return json_({ ok: true, approved: okCount, failed: failed });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function handleRejectClubReservation_(p) {
   var lock = LockService.getScriptLock();
   try { lock.waitLock(20000); } catch (e) { return json_({ ok: false, error: 'תפוס — נסה שוב' }); }
@@ -3524,6 +3580,19 @@ var DEFAULT_EMAIL_SETTINGS = [
     'שלום {{שם}},\n\nלצערנו בקשת ההרשמה שלך לא אושרה. לשאלות אפשר לפנות לוועד.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב כשמנהל דוחה הרשמה', PERM_RESIDENTS, 'כן'],
   ['WELCOME_MANUAL', 'ברוכים הבאים לאפליקציית הוועד',
     'שלום,\n\nנפתחה עבורך גישה לאפליקציית ניהול התקציב של הוועד. אפשר להיכנס עם חשבון הגוגל שלך — לחצו על הכפתור למטה.\n\nבברכה,\nועד הקהילה', 'נשלח כשמנהל מוסיף תושב/מייל ידנית (לא דרך טופס הרשמה). הכפתור לאפליקציה מתווסף אוטומטית', PERM_RESIDENTS, 'כן'],
+
+  ['PROFILE_CHANGE_RECEIVED', 'קיבלנו את בקשת השינוי שלך',
+    'שלום {{שם}},\n\nקיבלנו את הבקשה שלך לשנות את {{שדה}} ל-{{ערך}}. הבקשה ממתינה לאישור הוועד, ונעדכן אותך ברגע שתטופל.\n\nעד אז אפשר להמשיך להיכנס לאפליקציה כרגיל.\n\nבברכה,\nועד הקהילה',
+    'נשלח לתושב מיד עם שליחת בקשת שינוי פרטים (כרגע: שינוי אימייל)', PERM_RESIDENTS, 'כן'],
+  ['PROFILE_CHANGE_APPROVED', 'בקשת השינוי שלך אושרה',
+    'שלום {{שם}},\n\nהבקשה שלך אושרה, ו{{שדה}} עודכן ל-{{ערך}}.\n\nבברכה,\nועד הקהילה',
+    'נשלח כשמנהל מאשר בקשת שינוי. בשינוי אימייל נשלח גם לכתובת הישנה וגם לחדשה — הישנה כדי שהתושב יידע שהזהות שלו השתנתה, החדשה כדי שיוכל לוודא שהיא עובדת', PERM_RESIDENTS, 'כן'],
+  ['PROFILE_CHANGE_REJECTED', 'עדכון לגבי בקשת השינוי שלך',
+    'שלום {{שם}},\n\nהבקשה שלך לשנות את {{שדה}} לא אושרה.\n\nסיבה: {{סיבה}}\n\nלשאלות אפשר לפנות לוועד.\n\nבברכה,\nועד הקהילה',
+    'נשלח לתושב כשמנהל דוחה בקשת שינוי פרטים', PERM_RESIDENTS, 'כן'],
+  ['PROFILE_CHANGE_NEW', 'בקשת שינוי פרטים חדשה מ{{שם}}',
+    'שלום,\n\n{{שם}} ביקש/ה לשנות את {{שדה}}.\n\nמ: {{ערך נוכחי}}\nל: {{ערך מבוקש}}\n\nהבקשה ממתינה לאישור במסך "תושבים" באפליקציה.\n\nבברכה,\nהאפליקציה',
+    'נשלח למנהלי התושבים כשתושב מגיש בקשת שינוי פרטים', PERM_RESIDENTS, 'כן'],
 
   ['REIMBURSEMENT_RECEIVED', "קיבלנו את בקשת ההחזר שלך (מס' {{מזהה}})",
     "שלום {{שם}},\n\nקיבלנו את בקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}). הבקשה ממתינה לטיפול ונעדכן אותך בכל שינוי סטטוס.\n\nבברכה,\nועד הקהילה", 'נשלח לתושב מיד עם הגשת בקשת החזר', PERM_BUDGET, 'כן'],
@@ -6417,10 +6486,354 @@ function markTourSeen_(ss, body) {
   return { ok: true, seen: n };
 }
 
+/** מוסיף את צעד הסיור של "הפרטים שלי" (גרסה 2). אידמפוטנטי — הרצה חוזרת
+ *  לא תיצור כפילות. זו ההפעלה הראשונה של מנגנון הגרסאות: ותיקים לא יקבלו
+ *  מסך מלא אלא כרטיס "יש חדש" בעמוד הבית. */
+function setupTourStepV2() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ensureTourSheet_(ss);
+  var existing = readTable_(ss, TOUR_SHEET).some(function (r) {
+    return String(r['מזהה'] || '').trim() === 'myprofile';
+  });
+  if (existing) return 'הצעד כבר קיים — לא נוסף שוב';
+  sh.appendRow(['myprofile', 1, 2, 'כולם', 'כן', 'חדש: הפרטים שלכם בידיים שלכם',
+    'עכשיו אפשר לעדכן לבד את הטלפון, המקצוע ושמות הילדים — בלי לפנות לאף אחד. ' +
+    'נכנסים לתפריט למעלה ובוחרים "הפרטים שלי". שינוי כתובת המייל עדיין עובר אישור של הוועד, ' +
+    'כי זו הכתובת שאיתה נכנסים לאפליקציה.',
+    'לפרטים שלי', 'resMe', 'star']);
+  return 'נוסף צעד סיור "myprofile" בגרסה 2';
+}
+
 /** התקנה ידנית מהעורך: יוצר את הטאב ואת העמודה בלי לחכות לקריאה הראשונה. */
 function setupTourModule() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureTourSheet_(ss);
   var col = ensureTourSeenCol_(ss);
   return 'טאב "' + TOUR_SHEET + '" מוכן; עמודת "' + TOUR_SEEN_HEADER + '" בעמודה ' + col;
+}
+
+/* ============================================================================
+ *  "הפרטים שלי" (2026-08-28)
+ * ----------------------------------------------------------------------------
+ *  תושב מעדכן את הפרטים של עצמו, במקום שמישהו בוועד יקליד ידנית.
+ *
+ *  המבנה שקובע הכול: בטאב "תושבים" **שורה = משק בית, לא אדם**, ולכל שורה שתי
+ *  משבצות (אימייל 1/2, טלפון 1/2, מקצוע 1/2...). lookupResident_ מחזיר את
+ *  המשבצת של המחובר. מכאן שלוש רמות:
+ *    • שדה אישי    — נכתב לתא של המשבצת שלי. אין התנגשות עם בן/בת הזוג.
+ *    • שדה משפחתי  — תא אחד לשניהם (שמות ילדים). אחרון קובע + חיווי מי ומתי.
+ *    • שדה מבני    — בית/משפחה/סטטוס/הרשאות. **לא נחשף למסך הזה בכלל.**
+ *
+ *  ארבעה כללי אבטחה — בלעדיהם זה חור, לא פיצ'ר:
+ *   1. השורה נגזרת מ-gate.email שבמושב החתום, **לעולם לא מפרמטר של הלקוח**.
+ *   2. רשימת שדות מותרת סגורה. saveResidentRow_ הקיים כותב לכל עמודה תואמת —
+ *      הוא מסלול *מנהל*, ואסור לפתוח אותו לתושב. הפעולות כאן נפרדות ממנו.
+ *   3. שדה משבצתי נפתר לפי המשבצת של הקורא ("טלפון 2", לא "טלפון").
+ *   4. סטטוס והרשאות לא יוצאים מהשרת למסך הזה. מה שלא נשלח — אי אפשר לשנות.
+ *
+ *  האימייל הוא היוצא מן הכלל: הוא הזהות שאיתה נכנסים, ולכן **לא** נשמר מיד
+ *  אלא נכנס כבקשה לטאב "בקשות שינוי" וממתין לאישור מנהל. תושב שיקליד אותו
+ *  לא נכון ננעל בחוץ בלי דרך לתקן מבפנים.
+ * ========================================================================== */
+var PROFILE_SHEET = 'בקשות שינוי';
+var PROFILE_HEADERS = ['מזהה', 'תאריך', 'מזהה קבוע', 'אימייל מבקש', 'שדה',
+  'ערך נוכחי', 'ערך מבוקש', 'סטטוס', 'טופל ע"י', 'טופל בתאריך'];
+var PROFILE_TOUCH_BY = 'עודכן ע"י';
+var PROFILE_TOUCH_AT = 'עודכן בתאריך';
+
+/* השדות שתושב רשאי לשנות בעצמו. slot=true → נפתר למשבצת של הקורא.
+   להוסיף שדה כאן = לפתוח אותו לעריכה עצמית. לא להוסיף שדה מבני. */
+var MY_PROFILE_FIELDS = [
+  { key: 'phone', frag: 'טלפון', slot: true,  label: 'טלפון' },
+  { key: 'job',   frag: 'מקצוע', slot: true,  label: 'מקצוע' },
+  { key: 'kids',  frag: 'ילדים', slot: false, label: 'שמות וגילאי הילדים' }
+];
+/* שדות שדורשים אישור מנהל — לא נכתבים ישירות לעולם. */
+var MY_PROFILE_REQUEST_FIELDS = [
+  { key: 'email', frag: 'אימייל', slot: true, label: 'אימייל' }
+];
+
+function profileFieldDef_(key) {
+  var all = MY_PROFILE_FIELDS.concat(MY_PROFILE_REQUEST_FIELDS);
+  for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i];
+  return null;
+}
+
+/** עמודות שהכותרת שלהן מכילה frag, לפי סדר הופעתן בגיליון. */
+function profileColsByFrag_(headers, frag) {
+  var out = [];
+  headers.forEach(function (h, i) { if (String(h).indexOf(frag) !== -1) out.push(i); });
+  return out;
+}
+/** העמודה (0-based) של שדה עבור המשבצת הנתונה; -1 אם אין. */
+function profileColFor_(headers, def, slot) {
+  var cols = profileColsByFrag_(headers, def.frag);
+  if (!cols.length) return -1;
+  if (!def.slot) return cols[0];
+  var idx = (parseInt(slot, 10) || 1) - 1;
+  return (idx >= 0 && idx < cols.length) ? cols[idx] : -1;
+}
+
+function ensureProfileSheet_(ss) {
+  var sh = ss.getSheetByName(PROFILE_SHEET);
+  if (sh) return sh;
+  sh = ss.insertSheet(PROFILE_SHEET);
+  sh.getRange(1, 1, 1, PROFILE_HEADERS.length).setValues([PROFILE_HEADERS]);
+  sh.getRange(1, 1, 1, PROFILE_HEADERS.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  sh.setColumnWidth(1, 110); sh.setColumnWidth(2, 140); sh.setColumnWidth(3, 110);
+  sh.setColumnWidth(4, 210); sh.setColumnWidth(5, 90);  sh.setColumnWidth(6, 210);
+  sh.setColumnWidth(7, 210); sh.setColumnWidth(8, 90);  sh.setColumnWidth(9, 180);
+  sh.setColumnWidth(10, 140);
+  return sh;
+}
+
+/** מוסיף את שתי עמודות ה"עודכן ע"י/בתאריך" לטאב תושבים אם חסרות. */
+function ensureProfileTouchCols_(ss) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { by: -1, at: -1 };
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var missing = [PROFILE_TOUCH_BY, PROFILE_TOUCH_AT].filter(function (c) { return headers.indexOf(c) === -1; });
+  if (missing.length) {
+    sh.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]);
+    sh.getRange(1, lastCol + 1, 1, missing.length).setFontWeight('bold');
+    headers = headers.concat(missing);
+  }
+  return { by: headers.indexOf(PROFILE_TOUCH_BY), at: headers.indexOf(PROFILE_TOUCH_AT) };
+}
+
+function profileRowsFor_(ss, email) {
+  ensureProfileSheet_(ss);
+  var target = normalizeEmail_(email);
+  return readTable_(ss, PROFILE_SHEET).filter(function (r) {
+    return normalizeEmail_(String(r['אימייל מבקש'] || '')) === target;
+  });
+}
+
+/* ------------------------------------------------------------------ קריאה */
+/* מחזיר רק את מה שהמסך באמת צריך. סטטוס והרשאות לא נכללים בכוונה. */
+function handleMyProfile_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var r = lookupResident_(gate.email);
+    if (!r.found) return json_({ ok: false, error: 'המשתמש אינו ברשימת התושבים' });
+
+    ensureProfileSheet_(ss);
+    var touch = ensureProfileTouchCols_(ss);
+    var sh = ss.getSheetByName('תושבים');
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+      .map(function (h) { return String(h).trim(); });
+    var row = sh.getRange(r.rowIndex, 1, 1, headers.length).getValues()[0];
+
+    var values = {};
+    MY_PROFILE_FIELDS.concat(MY_PROFILE_REQUEST_FIELDS).forEach(function (def) {
+      var c = profileColFor_(headers, def, r.slot);
+      values[def.key] = c === -1 ? '' : String(row[c] == null ? '' : row[c]);
+    });
+
+    var pending = profileRowsFor_(ss, gate.email).filter(function (x) {
+      return String(x['סטטוס'] || '').trim() === 'ממתין';
+    });
+
+    return json_({
+      ok: true,
+      slot: r.slot,
+      values: values,
+      // לתצוגה בלבד — המסך מראה אותם אפורים עם "לשינוי, פנו לוועד"
+      readOnly: { family: r.family, house: r.house, firstName: r.firstName },
+      touchedBy: touch.by === -1 ? '' : String(row[touch.by] || ''),
+      touchedAt: touch.at === -1 ? '' : String(row[touch.at] || ''),
+      pending: pending
+    });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ------------------------------------------------------- שמירה מיידית */
+function saveMyProfile_(ss, body) {
+  var r = lookupResident_(body._email);
+  if (!r.found) return { ok: false, error: 'המשתמש אינו ברשימת התושבים' };
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var touch = ensureProfileTouchCols_(ss);
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+
+  var fields = body.fields || {};
+  var written = [], householdChanged = false;
+  Object.keys(fields).forEach(function (key) {
+    // רשימה סגורה: מפתח שאינו כאן פשוט מתעלמים ממנו, בלי שגיאה ובלי כתיבה
+    var def = null;
+    for (var i = 0; i < MY_PROFILE_FIELDS.length; i++) {
+      if (MY_PROFILE_FIELDS[i].key === key) { def = MY_PROFILE_FIELDS[i]; break; }
+    }
+    if (!def) return;
+    var c = profileColFor_(headers, def, r.slot);
+    if (c === -1) return;
+    sh.getRange(r.rowIndex, c + 1).setValue(String(fields[key] == null ? '' : fields[key]));
+    written.push(key);
+    if (!def.slot) householdChanged = true;
+  });
+  if (!written.length) return { ok: false, error: 'לא נמצאו שדות מותרים לעדכון' };
+
+  // חיווי "אחרון קובע" — נרשם רק כששדה משפחתי השתנה, כי רק שם יש מה להסביר
+  if (householdChanged && touch.by !== -1 && touch.at !== -1) {
+    var who = (r.firstName || '').trim() || body._email;
+    sh.getRange(r.rowIndex, touch.by + 1).setValue(who);
+    sh.getRange(r.rowIndex, touch.at + 1).setValue(new Date());
+  }
+  return { ok: true, written: written };
+}
+
+/* ------------------------------------------------------- בקשת שינוי */
+function submitProfileChange_(ss, body) {
+  var def = null;
+  for (var i = 0; i < MY_PROFILE_REQUEST_FIELDS.length; i++) {
+    if (MY_PROFILE_REQUEST_FIELDS[i].key === body.field) { def = MY_PROFILE_REQUEST_FIELDS[i]; break; }
+  }
+  if (!def) return { ok: false, error: 'שדה לא נתמך' };
+
+  var want = String(body.value || '').trim();
+  if (def.key === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(want)) {
+    return { ok: false, error: 'כתובת אימייל לא תקינה' };
+  }
+  var r = lookupResident_(body._email);
+  if (!r.found) return { ok: false, error: 'המשתמש אינו ברשימת התושבים' };
+
+  var sh = ss.getSheetByName('תושבים');
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+  var c = profileColFor_(headers, def, r.slot);
+  var current = c === -1 ? '' : String(sh.getRange(r.rowIndex, c + 1).getValue() || '');
+  if (normalizeEmail_(current) === normalizeEmail_(want)) {
+    return { ok: false, error: 'הערך המבוקש זהה לקיים' };
+  }
+
+  var psh = ensureProfileSheet_(ss);
+  var mine = profileRowsFor_(ss, body._email);
+  var dup = mine.some(function (x) {
+    return String(x['סטטוס'] || '').trim() === 'ממתין' && String(x['שדה'] || '').trim() === def.key;
+  });
+  if (dup) return { ok: false, error: 'כבר יש בקשה ממתינה לשדה הזה' };
+
+  var id = 'PC' + new Date().getTime();
+  psh.appendRow([id, new Date(), r.familyId, body._email, def.key, current, want, 'ממתין', '', '']);
+
+  var name = (r.firstName || '').trim() || body._email;
+  try {
+    sendResidentTemplate_(ss, 'PROFILE_CHANGE_RECEIVED', [body._email],
+      { 'שם': name, 'שדה': def.label, 'ערך': want });
+    notifyAdmins_(ss, PERM_RESIDENTS, 'PROFILE_CHANGE_NEW',
+      { 'שם': name, 'שדה': def.label, 'ערך נוכחי': current || '(ריק)', 'ערך מבוקש': want });
+  } catch (mailErr) { Logger.log('מייל בקשת שינוי נכשל: ' + mailErr); }
+
+  return { ok: true, id: id };
+}
+
+function profileRowById_(sh, id) {
+  var values = sh.getDataRange().getValues();
+  for (var r = 1; r < values.length; r++) {
+    if (String(values[r][0]).trim() === String(id).trim()) return r + 1;
+  }
+  return -1;
+}
+
+function cancelProfileChange_(ss, body) {
+  var sh = ensureProfileSheet_(ss);
+  var row = profileRowById_(sh, body.id);
+  if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
+  var rec = sh.getRange(row, 1, 1, PROFILE_HEADERS.length).getValues()[0];
+  // רק על הבקשות של עצמי, ורק כל עוד הן ממתינות
+  if (normalizeEmail_(String(rec[3] || '')) !== normalizeEmail_(body._email)) {
+    return { ok: false, error: 'אין הרשאה' };
+  }
+  if (String(rec[7] || '').trim() !== 'ממתין') return { ok: false, error: 'הבקשה כבר טופלה' };
+  sh.getRange(row, 8).setValue('בוטלה');
+  sh.getRange(row, 10).setValue(new Date());
+  return { ok: true };
+}
+
+/* ------------------------------------------------------- צד המנהל */
+function handleProfileChanges_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_RESIDENTS);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    ensureProfileSheet_(ss);
+    return json_({ ok: true, rows: readTable_(ss, PROFILE_SHEET) });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+function approveProfileChange_(ss, body) {
+  var sh = ensureProfileSheet_(ss);
+  var row = profileRowById_(sh, body.id);
+  if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
+  var rec = sh.getRange(row, 1, 1, PROFILE_HEADERS.length).getValues()[0];
+  if (String(rec[7] || '').trim() !== 'ממתין') return { ok: false, error: 'הבקשה כבר טופלה' };
+
+  var reqEmail = String(rec[3] || ''), fieldKey = String(rec[4] || '').trim(), want = String(rec[6] || '');
+  var def = profileFieldDef_(fieldKey);
+  if (!def) return { ok: false, error: 'שדה לא נתמך' };
+
+  // השורה נמצאת לפי המייל של *המבקש* כפי שנרשם בבקשה — לא לפי פרמטר מהלקוח
+  var r = lookupResident_(reqEmail);
+  if (!r.found) return { ok: false, error: 'המבקש אינו ברשימת התושבים' };
+  var rsh = ss.getSheetByName('תושבים');
+  var headers = rsh.getRange(1, 1, 1, rsh.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+  var c = profileColFor_(headers, def, r.slot);
+  if (c === -1) return { ok: false, error: 'לא נמצאה עמודה מתאימה' };
+
+  rsh.getRange(r.rowIndex, c + 1).setValue(want);
+  sh.getRange(row, 8).setValue('אושר');
+  sh.getRange(row, 9).setValue(body._email);
+  sh.getRange(row, 10).setValue(new Date());
+
+  try {
+    // המייל נשלח לכתובת החדשה *ולישנה* — הישנה כדי שהתושב יידע שהזהות שלו
+    // השתנתה גם אם החדשה שגויה, החדשה כדי שיוכל לוודא שהיא עובדת.
+    var to = def.key === 'email' ? [want, reqEmail] : [reqEmail];
+    sendResidentTemplate_(ss, 'PROFILE_CHANGE_APPROVED', to,
+      { 'שם': (r.firstName || '').trim() || reqEmail, 'שדה': def.label, 'ערך': want });
+  } catch (mailErr) { Logger.log('מייל אישור שינוי נכשל: ' + mailErr); }
+
+  return { ok: true };
+}
+
+function rejectProfileChange_(ss, body) {
+  var sh = ensureProfileSheet_(ss);
+  var row = profileRowById_(sh, body.id);
+  if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
+  var rec = sh.getRange(row, 1, 1, PROFILE_HEADERS.length).getValues()[0];
+  if (String(rec[7] || '').trim() !== 'ממתין') return { ok: false, error: 'הבקשה כבר טופלה' };
+
+  var reqEmail = String(rec[3] || '');
+  var def = profileFieldDef_(String(rec[4] || '').trim());
+  sh.getRange(row, 8).setValue('נדחתה');
+  sh.getRange(row, 9).setValue(body._email);
+  sh.getRange(row, 10).setValue(new Date());
+
+  var r = lookupResident_(reqEmail);
+  try {
+    sendResidentTemplate_(ss, 'PROFILE_CHANGE_REJECTED', [reqEmail],
+      { 'שם': (r.found && r.firstName) ? r.firstName : reqEmail,
+        'שדה': def ? def.label : '', 'סיבה': String(body.reason || '').trim() || '—' });
+  } catch (mailErr) { Logger.log('מייל דחיית שינוי נכשל: ' + mailErr); }
+
+  return { ok: true };
+}
+
+/** התקנה ידנית מהעורך — יוצר את הטאב ואת שתי העמודות מראש. */
+function setupProfileModule() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureProfileSheet_(ss);
+  var t = ensureProfileTouchCols_(ss);
+  return 'טאב "' + PROFILE_SHEET + '" מוכן; "' + PROFILE_TOUCH_BY + '" בעמודה ' + (t.by + 1) +
+    ', "' + PROFILE_TOUCH_AT + '" בעמודה ' + (t.at + 1);
 }

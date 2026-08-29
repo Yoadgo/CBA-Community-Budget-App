@@ -16,7 +16,7 @@ CBA.screens = CBA.screens || {};
 
 var resState = {
   loaded: false, loading: false, error: null,
-  headers: [], rows: [], signups: [],
+  headers: [], rows: [], signups: [], changes: [],
   q: "", filter: "active",  // active | left | all
   sort: "family", dir: 1,   // ברירת מחדל: שם משפחה א-ב
   conflicts: []
@@ -380,7 +380,7 @@ function resLoad(container) {
   if (resState.loading) return;
   resState.loading = true;
   resState.error = null;
-  var pending = 2;
+  var pending = 3;   // תושבים · בקשות הרשמה · בקשות שינוי פרטים (2026-08-28)
   var done = function () {
     if (--pending === 0) {
       resState.loading = false; resState.loaded = true;
@@ -407,6 +407,11 @@ function resLoad(container) {
   });
   CBA.data.listSignups(function (res) {
     if (res && res.ok) resState.signups = res.rows || [];
+    done();
+  });
+  // בקשות שינוי פרטים (2026-08-28) — אותה תבנית בדיוק של בקשות ההרשמה
+  CBA.data.getProfileChanges(function (res) {
+    if (res && res.ok) resState.changes = res.rows || [];
     done();
   });
 }
@@ -467,8 +472,13 @@ CBA.screens.residents = {
     // מספרי השורות בגיליון של מה שמוצג כרגע — הייצוא מציע לכבד את הסינון והחיפוש
     resState.visibleRowIndexes = visible.map(function (r) { return st.rows.indexOf(r) + 2; });
 
+    var pendingChanges = (st.changes || []).filter(function (x) {
+      return String(x["סטטוס"] || "").trim() === "ממתין";
+    });
+
     container.innerHTML =
       (pending.length ? resSignupsHTML(pending, st.rows, c) : "") +
+      (pendingChanges.length ? resChangesHTML(pendingChanges) : "") +
       '<div class="tx-bar">' +
         '<div class="tx-filters">' +
           '<div class="seg seg--view">' +
@@ -598,6 +608,35 @@ function resMobileHTML(list, c) {
   }).join("") + '</div>';
 }
 
+/* בקשות שינוי פרטים (2026-08-28). כרגע השדה היחיד שמגיע לכאן הוא אימייל —
+   הוא הזהות שאיתה נכנסים, ולכן לא נשמר מיד אצל התושב. שאר השדות שהתושב
+   רשאי לערוך נשמרים ישירות ולא עוברים כאן בכלל. */
+var PROFILE_FIELD_LABELS = { email: "אימייל", phone: "טלפון", job: "מקצוע", kids: "שמות הילדים" };
+function resChangesHTML(list) {
+  return '<div class="card res-signups">' +
+    '<div class="res-signups__t">בקשות שינוי פרטים <span class="res-n res-n--warn">' + list.length + '</span></div>' +
+    list.map(function (r) {
+      var id = CBA.esc(r["מזהה"] || "");
+      var field = PROFILE_FIELD_LABELS[String(r["שדה"] || "").trim()] || CBA.esc(r["שדה"] || "");
+      return '<div class="res-su" data-change="' + id + '">' +
+        '<div class="res-su__who">' +
+          '<b>' + CBA.esc(r["אימייל מבקש"] || "") + '</b>' +
+          '<span class="res-dim">מבקש/ת לשנות ' + CBA.esc(field) + '</span>' +
+        '</div>' +
+        '<div class="res-su__match res-chg__vals">' +
+          '<span class="res-dim">מ־<b>' + CBA.esc(r["ערך נוכחי"] || "(ריק)") + '</b></span>' +
+          '<span class="res-chg__arrow">←</span>' +
+          '<span class="res-chg__new"><b>' + CBA.esc(r["ערך מבוקש"] || "") + '</b></span>' +
+        '</div>' +
+        '<div class="res-su__acts">' +
+          '<button type="button" class="btn-approve" data-chg-ok="' + id + '">אשר</button>' +
+          '<button type="button" class="btn-reject" data-chg-no="' + id + '">דחה</button>' +
+        '</div>' +
+      '</div>';
+    }).join("") +
+  '</div>';
+}
+
 function resSignupsHTML(list, rows, c) {
   return '<div class="card res-signups">' +
     '<div class="res-signups__t">בקשות הרשמה ממתינות <span class="res-n res-n--warn">' + list.length + '</span></div>' +
@@ -673,6 +712,45 @@ function resBind(container, c) {
   container.querySelectorAll("[data-res-row]").forEach(function (row) {
     row.addEventListener("click", function () {
       resOpenDrawer(container, parseInt(row.dataset.resIdx, 10), parseInt(row.dataset.resRow, 10), c);
+    });
+  });
+
+  container.querySelectorAll("[data-chg-ok]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      b.disabled = true; b.textContent = "מאשר…";
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsProfileChange");
+      CBA.data.approveProfileChange(b.dataset.chgOk, function (res) {
+        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsProfileChange");
+        if (!res || !res.ok) {
+          b.disabled = false; b.textContent = "אשר";
+          CBA.ui.alert("האישור נכשל: " + ((res && res.error) || "שגיאה"));
+          return;
+        }
+        resState.loaded = false;
+        CBA.data.refreshResidents(function () { resLoad(container); });
+      });
+    });
+  });
+
+  container.querySelectorAll("[data-chg-no]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      CBA.ui.prompt("הסיבה תישלח לתושב במייל. אפשר להשאיר ריק.",
+        { title: "דחיית בקשת השינוי", okText: "דחה", placeholder: "למשל: הכתובת כבר רשומה למשפחה אחרת" }
+      ).then(function (reason) {
+        if (reason === null) return;
+        b.disabled = true; b.textContent = "דוחה…";
+        if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsProfileChange");
+        CBA.data.rejectProfileChange(b.dataset.chgNo, String(reason || ""), function (res) {
+          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsProfileChange");
+          if (!res || !res.ok) {
+            b.disabled = false; b.textContent = "דחה";
+            CBA.ui.alert("הדחייה נכשלה: " + ((res && res.error) || "שגיאה"));
+            return;
+          }
+          resState.loaded = false;
+          CBA.data.refreshResidents(function () { resLoad(container); });
+        });
+      });
     });
   });
 

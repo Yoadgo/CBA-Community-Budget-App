@@ -57,6 +57,17 @@ CBA.screens.clubAdmin = {
       </div>
     `;
 
+    // סרגל האישור המרובה נבנה פעם אחת ויושב מעל הרשימה; רק ה-hidden שלו משתנה
+    var pendingHost = container.querySelector("#ca-pending-list");
+    if (pendingHost && !container.querySelector("#ca-bulk")) {
+      var bar = document.createElement("div");
+      bar.className = "club-bulk"; bar.id = "ca-bulk"; bar.hidden = true;
+      bar.innerHTML = '<span class="club-bulk__count" id="ca-bulk-count">בחרו שריונים לאישור</span>' +
+        '<button type="button" class="btn-approve" id="ca-bulk-ok" disabled>אשר את הנבחרים</button>';
+      pendingHost.parentNode.insertBefore(bar, pendingHost);
+      bar.querySelector("#ca-bulk-ok").addEventListener("click", function () { caBulkApprove(); });
+    }
+    var caBulkBar = container.querySelector("#ca-bulk");
     var pendingList = container.querySelector("#ca-pending-list");
     var allList = container.querySelector("#ca-all-list");
 
@@ -74,6 +85,12 @@ CBA.screens.clubAdmin = {
         // מעדכן ישירות את הספירה הגלובלית (פעמון + תגית על הטאב) — בלי קריאת רשת
         // נוספת, כי הרשימה כבר בידינו מהקריאה הזו.
         if (window.CBA.setClubPendingCount) window.CBA.setClubPendingCount(pending.length);
+
+        // סרגל אישור מרובה — מוצג רק כשיש יותר מבקשה אחת. על בקשה בודדת
+        // הוא רעש: כפתור "אשר" של השורה עושה בדיוק את אותו דבר.
+        var okPending = pending.filter(function (r) { return !clubRowBroken(r); });
+        caBulkBar.hidden = okPending.length < 2;
+        caUpdateBulk();
 
         pendingList.innerHTML = pending.length
           ? pending.map(pendingRowHTML).join("")
@@ -99,6 +116,8 @@ CBA.screens.clubAdmin = {
       var broken = clubRowBroken(r);
       return (
         '<div class="club-row' + (broken ? " club-row--broken" : "") + '">' +
+          (broken ? '<span class="club-row__cbspace"></span>'
+                  : '<input type="checkbox" class="club-row__cb" data-ca-pick="' + CBA.esc(r.id) + '" aria-label="בחירה לאישור מרובה">') +
           '<div class="club-row__main">' +
             '<div class="club-row__title">' + CBA.esc(r.family || "תושב") +
               (r.email ? ' <span class="club-row__email">· ' + CBA.esc(r.email) + '</span>' : "") + '</div>' +
@@ -131,7 +150,50 @@ CBA.screens.clubAdmin = {
       );
     }
 
+    /* מצב הבחירה חי ב-DOM עצמו (checked) ולא במשתנה נפרד — הרשימה נבנית
+       מחדש בכל טעינה, ומשתנה מקביל היה נשאר עם מזהים שכבר לא קיימים. */
+    function caPicked() {
+      return Array.prototype.slice.call(container.querySelectorAll("[data-ca-pick]:checked"))
+        .map(function (el) { return el.dataset.caPick; });
+    }
+    function caUpdateBulk() {
+      var n = caPicked().length;
+      var lbl = container.querySelector("#ca-bulk-count");
+      var btn = container.querySelector("#ca-bulk-ok");
+      if (lbl) lbl.textContent = n ? n + " נבחרו" : "בחרו שריונים לאישור";
+      if (btn) btn.disabled = !n;
+    }
+    function caBulkApprove() {
+      var ids = caPicked();
+      if (!ids.length) return;
+      CBA.ui.confirm(ids.length + " שריונים יאושרו, וכל תושב יקבל מייל אישור.",
+        { title: "לאשר " + ids.length + " שריונים?", okText: "אשר הכול" }
+      ).then(function (ok) {
+        if (!ok) return;
+        var btn = container.querySelector("#ca-bulk-ok");
+        if (btn) { btn.disabled = true; btn.textContent = "מאשר…"; }
+        CBA.data.approveClubReservations(ids, function (res) {
+          if (btn) btn.textContent = "אשר את הנבחרים";
+          if (!res || !res.ok) {
+            if (btn) btn.disabled = false;
+            CBA.ui.alert((res && res.error) || "האישור נכשל, נסו שוב.");
+            return;
+          }
+          load();
+          if (res.failed && res.failed.length) {
+            CBA.ui.alert(res.approved + " שריונים אושרו. " + res.failed.length +
+              " לא אושרו — ייתכן שבוטלו ביומן בינתיים.");
+          } else {
+            CBA.ui.toast(res.approved + " שריונים אושרו");
+          }
+        });
+      });
+    }
+
     function bindActions() {
+      container.querySelectorAll("[data-ca-pick]").forEach(function (cb) {
+        cb.addEventListener("change", caUpdateBulk);
+      });
       container.querySelectorAll("[data-approve]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           btn.disabled = true; btn.textContent = "מאשר…";

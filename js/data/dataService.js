@@ -1296,6 +1296,15 @@ CBA.data = (function () {
     renewGymMembership: renewGymMembership,
     updateGymMembership: updateGymMembership,
     approveClubReservation: approveClubReservation,
+    /* אישור מרובה (2026-08-28) — מזהים מופרדים בפסיק בקריאה אחת, במקום N
+       קריאות רשת. השרת נועל פעם אחת ומדווח בנפרד על כל שריון שנכשל. */
+    approveClubReservations: function (ids, cb) {
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubBulkApprove");
+      CBA.sheets.get({ action: "approveClubReservations", ids: (ids || []).join(",") }, function (res) {
+        if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubBulkApprove");
+        cb(res);
+      });
+    },
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,
     refreshResidents: function (cb) { residentsCache = null; directoryCache = null; communityCache = null; getResidents(cb); },
@@ -1399,6 +1408,19 @@ CBA.data = (function () {
     /* סיור היכרות (2026-08-28) — הצעדים והגרסה שכבר נראתה מגיעים בקריאה אחת.
        הסימון "ראיתי" עובר ב-postRead ולא ב-push: זו כתיבה קטנה שאין טעם
        להכניס לתור השמירות ולחיווי "שומר…" בכותרת. */
+    /* "הפרטים שלי" (2026-08-28). שים לב: אף אחת מהפעולות לא מקבלת מזהה שורה —
+       השרת גוזר את השורה ואת המשבצת מהמושב החתום. ר' Code.gs. */
+    getMyProfile: function (cb) { CBA.sheets.get({ action: "myProfile" }, cb); },
+    saveMyProfile: function (fields, cb) { CBA.sheets.postRead("saveMyProfile", { fields: fields }, cb); },
+    submitProfileChange: function (field, value, cb) {
+      CBA.sheets.postRead("submitProfileChange", { field: field, value: value }, cb);
+    },
+    cancelProfileChange: function (id, cb) { CBA.sheets.postRead("cancelProfileChange", { id: id }, cb); },
+    getProfileChanges: function (cb) { CBA.sheets.get({ action: "profileChanges" }, cb); },
+    approveProfileChange: function (id, cb) { CBA.sheets.postRead("approveProfileChange", { id: id }, cb); },
+    rejectProfileChange: function (id, reason, cb) {
+      CBA.sheets.postRead("rejectProfileChange", { id: id, reason: reason || "" }, cb);
+    },
     getTour: function (cb) { CBA.sheets.get({ action: "tour" }, cb); },
     markTourSeen: function (version, cb) { CBA.sheets.postRead("markTourSeen", { version: version }, cb); },
     listEmailSettings: function (cb) { CBA.sheets.get({ action: "listEmailSettings" }, cb); },

@@ -172,7 +172,9 @@
       // (2026-08-27) ברירת המחדל היא עמוד הקבלה, לא "הבקשות שלי". כל כניסה
       // חדשה לאפליקציה — של מנהל או של תושב — נוחתת כאן. ר' routeByRole.
       def: "resHome",
-      screens: ["resHome", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices"],
+      // resMe ("הפרטים שלי") רשום כמסך אבל **לא כטאב** — מגיעים אליו מתפריט
+      // המשתמש ומעמוד הבית. הוא על *אותי*, לא יעד ניווט, ושורת הניווט כבר בת 5.
+      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
       // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
@@ -911,7 +913,9 @@
     search: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>',
     // מצפן — "סיור באפליקציה" (2026-08-28). שוב: זו מפת האייקונים של תפריט
     // המשתמש, לא NAV_ICONS של המסכים.
-    compass: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>'
+    compass: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>',
+    // דמות — "הפרטים שלי" (2026-08-28)
+    person: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>'
   };
 
   function initials(name) {
@@ -1022,6 +1026,12 @@
     if (simStopBtn) simStopBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn); stopSim();
     });
+    const profBtn = panel.querySelector("[data-panel-profile]");
+    if (profBtn) profBtn.addEventListener("click", function () {
+      closeUserPanel(panel, btn);
+      if (currentArea !== "resident") setArea("resident");
+      showScreen("resMe");
+    });
     const tourBtn = panel.querySelector("[data-panel-tour]");
     if (tourBtn) tourBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn);
@@ -1130,6 +1140,12 @@
        להגיע למידע שלי" היא של כולם, לא רק של מנהלים. ר' js/ui/security.js. */
     /* "סיור באפליקציה" (2026-08-28) — הסיור המלא, בכל רגע. יושב מעל מסך
        האבטחה כי שניהם מאותה משפחה: הסברים, לא פעולות. מוצג רק למי שמחובר. */
+    /* "הפרטים שלי" (2026-08-28) — ראשון בקבוצת הפריטים האישיים, מעל הסיור
+       ומעל מסך האבטחה. כולם עונים על "מה יש עליי כאן". */
+    var profileItem = currentUser
+      ? '<button class="up-item" data-panel-profile><span class="up-row__ico">' + ICON.person + '</span>הפרטים שלי</button>'
+      : "";
+
     var tourItem = currentUser
       ? '<button class="up-item" data-panel-tour><span class="up-row__ico">' + ICON.compass + '</span>סיור באפליקציה</button>'
       : "";
@@ -1148,6 +1164,7 @@
       emailItem +
       installItem +
       settingsItem +
+      profileItem +
       tourItem +
       securityItem +
       action

@@ -1,0 +1,57 @@
+/* ==========================================================================
+   profile.css — "הפרטים שלי" (2026-08-28). ר' js/screens/myProfile.js.
+   כל המחלקות בתחילית pf-, חוץ מ-.res-chg-* שמשרתות את כרטיס בקשות השינוי
+   במסך התושבים ולכן יושבות על שלד .res-su הקיים.
+   ========================================================================== */
+
+.pf-card { padding: 20px; margin-bottom: 16px; }
+.pf-card__t {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 800; color: var(--text); margin-bottom: 16px;
+}
+.pf-card__t svg { color: var(--text-muted); }
+
+.pf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+.pf-field { display: flex; flex-direction: column; gap: 6px; }
+.pf-label { font-size: 13px; font-weight: 700; color: var(--text-soft); }
+.pf-hint { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; }
+.pf-area { resize: vertical; min-height: 74px; font: inherit; line-height: 1.6; }
+
+.pf-foot { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.pf-saved { font-size: 13px; font-weight: 700; color: var(--ok); }
+.pf-saved[hidden] { display: none; }
+
+/* --- אימייל --- */
+.pf-current {
+  font-size: 15px; font-weight: 700; color: var(--text);
+  background: var(--hover); border: 1px solid var(--border); border-radius: 10px;
+  padding: 11px 14px; margin-bottom: 12px; word-break: break-all;
+}
+.pf-emailform { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.pf-emailform .field-input { flex: 1; min-width: 200px; }
+.pf-pending {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--warn-soft, #FFFBEB); border: 1px solid var(--warn, #D97706);
+  border-radius: 10px; padding: 11px 14px; margin-bottom: 12px;
+  font-size: 13.5px; color: var(--warn, #B45309);
+}
+.pf-pending span { flex: 1; min-width: 0; }
+.pf-pending svg { flex: none; }
+
+/* --- לקריאה בלבד --- */
+.pf-card--ro { background: var(--hover); }
+.pf-ro { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 12px; }
+.pf-ro > div { display: flex; flex-direction: column; gap: 3px; }
+.pf-ro span { font-size: 12.5px; color: var(--text-muted); font-weight: 600; }
+.pf-ro b { font-size: 15px; font-weight: 700; color: var(--text-soft); }
+
+/* --- כרטיס בקשות השינוי במסך התושבים --- */
+.res-chg__vals { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.res-chg__arrow { color: var(--text-muted); font-size: 15px; }
+.res-chg__new b { color: var(--action); }
+
+@media (max-width: 640px) {
+  .pf-card { padding: 16px; }
+  .pf-emailform { flex-direction: column; }
+  .pf-emailform .field-input { min-width: 0; }
+}

@@ -34,7 +34,8 @@ CBA.screens = CBA.screens || {};
     map:     '<path d="m9 4-6 2.5v13L9 17l6 3 6-2.5v-13L15 7z"/><path d="M9 4v13M15 7v13"/>',
     users:   '<circle cx="9" cy="9" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><path d="M16 6.2a3.2 3.2 0 0 1 0 5.6M17.5 19a6 6 0 0 0-2-4.5"/>',
     chev:    '<path d="m14 6-6 6 6 6"/>',
-    spark:   '<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m6.3 6.3 2.8 2.8M14.9 14.9l2.8 2.8M17.7 6.3l-2.8 2.8M9.1 14.9l-2.8 2.8"/>'
+    spark:   '<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m6.3 6.3 2.8 2.8M14.9 14.9l2.8 2.8M17.7 6.3l-2.8 2.8M9.1 14.9l-2.8 2.8"/>',
+    person:  '<circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/>'
   };
   function svg(d, size) {
     var n = size || 20;
@@ -89,6 +90,7 @@ CBA.screens = CBA.screens || {};
     // שתי השורות הבאות נטענות מהשרת ולכן מקבלות מקום שמור עם שלד
     var lazy = "";
     if (can("תושבים")) lazy += '<div id="hm-signups" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
+    if (can("תושבים")) lazy += '<div id="hm-profile" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
     if (can("מכון"))   lazy += '<div id="hm-gym" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
 
     return '<section class="card hm-card">' +
@@ -107,7 +109,7 @@ CBA.screens = CBA.screens || {};
      כל תזוזה כזו הייתה מייצרת שתי קריאות רשת נוספות. דקה היא מספיק טרי
      לעמוד נחיתה, ומספיק ארוך כדי שרצף ציורים לא יהפוך לרצף בקשות. */
   var LAZY_TTL = 60 * 1000;
-  var lazyCache = { signups: null, gym: null, ts: 0 };
+  var lazyCache = { signups: null, gym: null, profile: null, ts: 0 };
   function cacheFresh() { return lazyCache.ts && (Date.now() - lazyCache.ts) < LAZY_TTL; }
 
   /* טעינת שתי הספירות שדורשות שרת. כל אחת עצמאית: כישלון של אחת לא מוחק
@@ -115,6 +117,7 @@ CBA.screens = CBA.screens || {};
   function loadLazyCounts(container) {
     var slotS = container.querySelector("#hm-signups");
     var slotG = container.querySelector("#hm-gym");
+    var slotP = container.querySelector("#hm-profile");
 
     function done(slot, html) {
       if (!slot || !slot.isConnected) return;
@@ -124,11 +127,13 @@ CBA.screens = CBA.screens || {};
     }
 
     function signupRow(n) { return n ? taskRow("בקשות הרשמה לקהילה", n, "residents", "warn") : ""; }
+    function profileRow(n) { return n ? taskRow("בקשות שינוי פרטים", n, "residents", "warn") : ""; }
     function gymRow(n) { return n ? taskRow("תשלומי מכון כושר לאימות", n, "gymAdmin", "warn") : ""; }
 
     if (cacheFresh()) {
       if (slotS) done(slotS, signupRow(lazyCache.signups || 0));
       if (slotG) done(slotG, gymRow(lazyCache.gym || 0));
+      if (slotP) done(slotP, profileRow(lazyCache.profile || 0));
       return;
     }
     lazyCache.ts = Date.now();
@@ -158,6 +163,19 @@ CBA.screens = CBA.screens || {};
         done(slotG, gymRow(n));
       });
     } else if (slotG) { done(slotG, ""); }
+
+    if (slotP && CBA.data.getProfileChanges) {
+      CBA.data.getProfileChanges(function (res) {
+        var n = 0;
+        if (res && res.ok) {
+          n = (res.rows || []).filter(function (x) {
+            return String(x["סטטוס"] || "").trim() === "ממתין";
+          }).length;
+        }
+        lazyCache.profile = n;
+        done(slotP, profileRow(n));
+      });
+    } else if (slotP) { done(slotP, ""); }
   }
 
   /* "הכול מטופל" מוצג רק כשבאמת לא נשארה אף שורה — כולל אחרי שהטעינות
@@ -255,7 +273,8 @@ CBA.screens = CBA.screens || {};
       ["resSubmit",  ICO.receipt, "הגשת קבלה"],
       ["resReserve", ICO.key,     "שריון מועדון"],
       ["resMap",     ICO.map,     "מפת השיכון"],
-      ["resDirectory", ICO.users, "שכנים"]
+      ["resDirectory", ICO.users, "שכנים"],
+      ["resMe",        ICO.person, "הפרטים שלי"]
     ];
     return '<section class="hm-actions">' + items.map(function (it) {
       return '<button type="button" class="hm-act" data-goto="' + it[0] + '">' +
