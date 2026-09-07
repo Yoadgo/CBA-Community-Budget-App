@@ -74,6 +74,16 @@
     padding: calc(var(--header-h) + 12px) 16px
              calc(var(--botnav-h) + env(safe-area-inset-bottom) + 20px);
   }
+  /* יעד ניווט אחד באזור התושב = אין לאן לנווט (2026-09-07, אחראי הגינון
+     החיצוני). הבר נעלם, והתוכן מקבל את הגובה שלו בחזרה.
+     מכוון בכוונה ל-data-area="resident" בלבד: באזור הניהול טאב בודד הוא לרוב
+     כפתור-קבוצה (למשל מנהל מועדון שרואה רק את "מתקנים"), והוא כן אינטראקטיבי —
+     לחיצה עליו פותחת את הגיליון. הסתרה שם הייתה חוסמת אותו מהמסך היחיד שלו.
+     ר' data-nav-count ב-renderNav. */
+  body[data-area="resident"][data-nav-count="1"] .app-nav--bottom { display: none; }
+  body[data-area="resident"][data-nav-count="1"] .app-main {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
+  }
 
   /* ---------- בר ניווט תחתון (Bottom Navigation) ----------
      2026-08-08 (לבקשת יועד): באותו סגנון "זכוכית נוזלית" בדיוק כמו בדסקטופ —

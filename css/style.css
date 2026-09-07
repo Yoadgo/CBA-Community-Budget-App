@@ -1617,6 +1617,22 @@ body.has-sim { padding-top: 34px; }
 }
 .sim-pick__item:hover { background: var(--hover); }
 .sim-pick__empty { padding: 20px 10px; text-align: center; color: var(--text-soft); font-size: 13px; }
+/* הדמיית תפקיד (2026-09-07) — יושבת מעל בורר התושבים, מופרדת בקו, כי היא
+   עונה על שאלה אחרת: לא "מה תושב מסוים רואה" אלא "איך נראה תפקיד אחר". */
+/* יעד ניווט אחד באזור התושב — גם בדסקטופ אין מה להציג (ר' ההערה המקבילה
+   ב-mobile.css). הכותרת נשארת עם הלוגו ותפריט המשתמש. */
+body[data-area="resident"][data-nav-count="1"] .app-nav__viewport { display: none; }
+
+.sim-pick__roles { display: flex; flex-direction: column; gap: 6px; }
+.sim-pick__role { text-align: start; padding: 10px 12px; border: 1px solid var(--line, rgba(17,24,39,.1));
+  border-radius: 11px; background: var(--surface, #fff); font: inherit; cursor: pointer; }
+.sim-pick__role:hover { background: var(--hover); border-color: rgba(17,24,39,.2); }
+.sim-pick__role b { display: block; font-size: 13.5px; font-weight: 600; }
+.sim-pick__role span { display: block; font-size: 11.5px; color: var(--text-soft); margin-top: 1px; }
+.sim-pick__sep { display: flex; align-items: center; gap: 9px; margin: 2px 0; }
+.sim-pick__sep::before, .sim-pick__sep::after { content: ""; flex: 1; height: 1px; background: rgba(17,24,39,.09); }
+.sim-pick__sep span { font-size: 11px; color: var(--text-soft); }
+.sim-banner__txt i { font-style: normal; opacity: .8; font-weight: 400; }
 
 @media (max-width: 720px) {
   .sim-banner { font-size: 12px; gap: 10px; padding: 6px 12px; }

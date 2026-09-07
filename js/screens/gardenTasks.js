@@ -157,7 +157,12 @@
           rows = res.rows || [];
           order.area = res.areas || [];
           order.type = res.categories || [];
-          isManager = !!res.isManager;
+          /* בהדמיית תפקיד השרת עדיין עונה לפי המשתמש האמיתי (ר' startRoleSim
+             ב-app.js), אז isManager שלו יהיה "מנהל" גם כשמדמים את אחראי הגינון.
+             כאן אנחנו כופים את התצוגה למה שמדמים — אחרת ההדמיה מראה מסך שאף
+             אחד לא רואה בפועל. המידור עצמו נשאר בשרת ואינו מושפע מזה. */
+          var sim = window.CBA.user;
+          isManager = (sim && sim.isRoleSim) ? !sim.isExternal : !!res.isManager;
           if (res.week) week = res.week;
           draw();
         });
@@ -267,7 +272,11 @@
             esc(t.flag === "נגררה" && (t.drags || 0) > 1 ? "נגררה " + t.drags + " פעמים" : t.flag) +
             '</span>';
         }
-        var src = t.kind === "שגרה" ? "שגרה" : "דיווח תושב";
+        /* מקור המשימה מוצג כפי שהוא רשום בעמודה "סוג" בגיליון, ולא נגזר
+           בניחוש משם אחד מוכר: לשגרה מהחוזה, לדיווח תושב ולמשימה שהמנהל
+           יזם יש ערכים שונים, ותצוגה שמנחשת הייתה מתייגת כל מה שאינו שגרה
+           כ"דיווח תושב" — כולל משימות שהמנהל פתח בעצמו. */
+        var src = t.kind || "משימה";
         var where = t.area || "";
         return '<article class="gd-rep gt-row k-' + cat.key + (done ? " is-done" : "") +
             '" data-id="' + esc(t.id) + '">' +

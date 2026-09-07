@@ -558,6 +558,11 @@
       html += '<button type="button" class="app-nav__tab' + (t[0] === currentScreen ? " is-active" : "") + '" data-screen="' + t[0] + '">' + ico + CBA.esc(t[1]) + badge + '</button>';
     });
     nav.innerHTML = html;
+    /* מספר היעדים בשורה — כדי ש-CSS יוכל להסתיר את הבר לגמרי כשיש יעד אחד
+       בלבד (אחראי הגינון החיצוני). יעד יחיד אינו ניווט: הוא נצבע כטאב פעיל
+       על כל רוחב הבר, נראה ככפתור ענק, ולחיצה עליו לא עושה כלום. תפריט
+       המשתמש והיציאה נשארים בכותרת העליונה, שאינה מושפעת. */
+    document.body.dataset.navCount = AREAS[area].tabs.length;
     if (keepIndicator) nav.insertBefore(keepIndicator, nav.firstChild);
   }
   /* --- התרעות (2026-08): שני מקורות —
@@ -663,6 +668,28 @@
     renderSimBanner();
     setArea("resident");
   }
+
+  /* הדמיית *תפקיד* ולא תושב (2026-09-07) — כדי לראות את הצד של אחראי הגינון
+     בלי לפתוח לו משתמש אמיתי. חשוב להבין את הגבול: ההדמיה משנה רק מה שהלקוח
+     *מצייר* — שורת הניווט, המסך שנפתח, מה שהמסך מחליט להראות. כל קריאה לשרת
+     ממשיכה לרוץ תחת המושג החתום האמיתי שלך, ולכן ההרשאות עצמן אינן מודמות.
+     זו הסיבה שהבאנר אומר את זה במפורש: זו בדיקת ממשק, לא בדיקת מידור. */
+  var SIM_ROLES = [
+    { key: "garden", label: "אחראי הגינון", role: "אחראי גינון",
+      perms: [PERM.GARDEN], isExternal: true,
+      hint: "משתמש חיצוני — רואה רק את משימות השבוע. תצוגה בלבד: ההרשאות מול השרת נשארות שלך" }
+  ];
+  function startRoleSim(key) {
+    var r = null;
+    SIM_ROLES.forEach(function (o) { if (o.key === key) r = o; });
+    if (!r) return;
+    simUser = { name: r.label, email: "(הדמיה)", role: r.role,
+                perms: r.perms.slice(), isExternal: !!r.isExternal,
+                familyId: "", house: "", isRoleSim: true };
+    applyUser();
+    renderSimBanner();
+    setArea("resident");
+  }
   function stopSim() {
     simUser = null;
     applyUser();
@@ -679,7 +706,8 @@
       document.body.appendChild(bar);
     }
     bar.innerHTML =
-      '<span class="sim-banner__txt">מצב הדמיה — רואה בתור <b>' + CBA.esc(simUser.name) + '</b></span>' +
+      '<span class="sim-banner__txt">מצב הדמיה — רואה בתור <b>' + CBA.esc(simUser.name) + '</b>' +
+        (simUser.isRoleSim ? ' <i>· תצוגה בלבד</i>' : '') + '</span>' +
       '<button type="button" class="sim-banner__x" id="sim-exit">צא מהדמיה</button>';
     document.body.classList.add("has-sim");
     bar.querySelector("#sim-exit").addEventListener("click", stopSim);
@@ -691,10 +719,17 @@
     wrap.className = "peek-backdrop";
     wrap.id = "sim-picker";
     wrap.innerHTML =
-      '<div class="peek sim-pick" role="dialog" aria-label="בחירת תושב להדמיה">' +
-        '<div class="peek__head"><span class="peek__title">הדמיית תושב</span>' +
+      '<div class="peek sim-pick" role="dialog" aria-label="בחירת תפקיד או תושב להדמיה">' +
+        '<div class="peek__head"><span class="peek__title">מצב הדמיה</span>' +
           '<button class="peek__x" aria-label="סגור">×</button></div>' +
         '<div class="sim-pick__body">' +
+          '<div class="sim-pick__roles">' +
+            SIM_ROLES.map(function (r) {
+              return '<button type="button" class="sim-pick__role" data-role="' + r.key + '">' +
+                '<b>' + CBA.esc(r.label) + '</b><span>' + CBA.esc(r.hint) + '</span></button>';
+            }).join("") +
+          '</div>' +
+          '<div class="sim-pick__sep"><span>או תושב מסוים</span></div>' +
           '<input class="field-input" id="sim-q" type="text" placeholder="הקלד/י שם תושב…" autocomplete="off">' +
           '<div class="sim-pick__list" id="sim-list"><div class="sim-pick__empty">טוען רשימת תושבים…</div></div>' +
         '</div>' +
@@ -703,6 +738,10 @@
     const close = function () { wrap.remove(); };
     wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
     wrap.querySelector(".peek__x").addEventListener("click", close);
+
+    wrap.querySelectorAll("[data-role]").forEach(function (b) {
+      b.addEventListener("click", function () { close(); startRoleSim(b.dataset.role); });
+    });
 
     const listEl = wrap.querySelector("#sim-list");
     const qEl = wrap.querySelector("#sim-q");
