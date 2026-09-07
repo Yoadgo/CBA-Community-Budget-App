@@ -1619,9 +1619,9 @@ body.has-sim { padding-top: 34px; }
 .sim-pick__empty { padding: 20px 10px; text-align: center; color: var(--text-soft); font-size: 13px; }
 /* הדמיית תפקיד (2026-09-07) — יושבת מעל בורר התושבים, מופרדת בקו, כי היא
    עונה על שאלה אחרת: לא "מה תושב מסוים רואה" אלא "איך נראה תפקיד אחר". */
-/* יעד ניווט אחד באזור התושב — גם בדסקטופ אין מה להציג (ר' ההערה המקבילה
-   ב-mobile.css). הכותרת נשארת עם הלוגו ותפריט המשתמש. */
-body[data-area="resident"][data-nav-count="1"] .app-nav__viewport { display: none; }
+/* יעד ניווט יחיד — גם בדסקטופ אין מה להציג (ר' ההערה המקבילה ב-mobile.css).
+   הכותרת נשארת עם הלוגו ותפריט המשתמש. */
+body[data-nav-single="1"] .app-nav__viewport { display: none; }
 
 .sim-pick__roles { display: flex; flex-direction: column; gap: 6px; }
 .sim-pick__role { text-align: start; padding: 10px 12px; border: 1px solid var(--line, rgba(17,24,39,.1));

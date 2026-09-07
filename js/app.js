@@ -180,7 +180,12 @@
         // "ניהול מיילים" ירד מהניווט הראשי לתפריט המשתמש ליד "הגדרות" (לבקשת
         // יועד — הוא שייך להגדרות המערכת ולא ליעד ניווט יומיומי); הוא נשאר
         // ב-screens למעלה, כך שניווט אליו עובד רגיל.
-        { group: "shikun", label: "השיכון", items: [["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"], ["servicesAdmin", "שירותים"]] }
+        { group: "shikun", label: "השיכון", items: [["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"], ["servicesAdmin", "שירותים"]] },
+        // "גינון" (2026-09-07) — טאב ניהול עצמאי ולא פריט בתוך "השיכון": הוא
+        // מסונן להרשאה משלו (ר' SCREEN_PERM.gardenTasks), ולכן מי שאין לו אותה
+        // לא רואה אותו כלל — בדיוק כמו "תקציב". מכאן מנהל הגינון עובד, וכאן
+        // גם אחראי הגינון החיצוני נוחת: זה הטאב היחיד שיישאר לו אחרי הסינון.
+        ["gardenTasks", "גינון"]
       ]
     },
     resident: {
@@ -250,48 +255,26 @@
     AREAS = {
       admin: { def: firstScreenKey(tabs) || "budget", screens: screens, tabs: tabs },
       resident: {
-        // חיצוני נוחת ישר על המשימות; תושב רגיל ומנהל נוחתים על עמוד הבית.
-        def: isExternalUser() ? (firstScreenKey(rt) || "gardenTasks") : AREAS_ALL.resident.def,
-        // "משימות השבוע" יורד מרשימת המסכים למי שאין לו הרשאת גינון — אחרת
-        // ניווט ישיר אליו (למשל מסלול שמור אחרי שינוי הרשאה) היה פותח מסך
-        // שכל קריאה שלו מוחזרת בשגיאה מהשרת.
-        screens: isExternalUser()
-          ? ["resGarden", "resGardenNew", "gardenTasks"]
-          : AREAS_ALL.resident.screens.filter(function (k) {
-              return k !== "gardenTasks" || can(PERM.GARDEN);
-            }),
+        def: AREAS_ALL.resident.def,
+        // למשתמש חיצוני אין אזור תושב בפועל. משאירים את המבנה קיים (initialRoute
+        // נופל לכאן כברירת מחדל אחרונה) אבל ריק, ומונעים ממנו להגיע לכאן
+        // בכלל — ר' routeByRole ומתג המעבר ב-renderControls.
+        screens: isExternalUser() ? [] : AREAS_ALL.resident.screens,
         tabs: rt
       }
     };
   }
 
-  /* טאבי אזור התושב לפי המשתמש הנוכחי. שלושה מצבים, וכולם נגזרים מאותה
-     רשימה מוצהרת אחת (AREAS_ALL.resident.tabs) כדי שלא ייווצרו שתי רשימות
-     שצריך לזכור לעדכן יחד:
-       תושב רגיל       — בדיוק כמו שהיה: "מראה שיכון" ככפתור יחיד.
-       בעל הרשאת גינון — "מראה שיכון" הופך לקבוצה: הדיווחים שלי + משימות השבוע.
-       משתמש חיצוני    — רק המשימות. אין לו בית, אין לו בקשות, ואין לו שיכון:
-                          כל אלה נחסמים בשרת ממילא (ר' isExternalUser). */
+  /* אזור התושב זהה לכולם — "מראה שיכון" הוא כפתור יחיד שפותח את "הדיווחים
+     שלי". ניהול הגינון **אינו** יושב כאן: הוא טאב באזור הניהול, מסונן
+     להרשאת "גינון" (ר' AREAS_ALL.admin.tabs ו-SCREEN_PERM.gardenTasks).
+     ההפרדה הזאת היא העיקרון של כל המערכת — צד הצפייה של התושב מול צד הניהול —
+     ואותו דפוס בדיוק קיים כבר במועדון, במכון, בוועד ובשירותים.
+     היוצא מן הכלל היחיד: משתמש חיצוני (קבלן הגינון) אינו תושב — אין לו
+     משפחה, קבלות או בקשות — ולכן אין לו כאן מה לעשות. */
   function residentTabs() {
-    var ext = isExternalUser();
-    var garden = can(PERM.GARDEN);
-    var out = [];
-    AREAS_ALL.resident.tabs.forEach(function (t) {
-      var isGarden = t && !t.group && t[0] === "resGarden";
-      if (ext && !isGarden) return;
-      if (isGarden && garden) {
-        out.push(ext
-          ? ["gardenTasks", "משימות השבוע"]
-          : { group: "garden", label: "מראה שיכון",
-              items: [["resGarden", "הדיווחים שלי"], ["gardenTasks", "משימות השבוע"]] });
-        return;
-      }
-      out.push(t);
-    });
-    // חיצוני בלי הרשאת גינון — מצב שלא אמור לקרות, אבל שורת ניווט ריקה היא
-    // מסך לבן בלי דרך חזרה. משאירים לו את מסך הגינון, שיציג את שגיאת השרת.
-    if (!out.length) out.push(["resGarden", "מראה שיכון"]);
-    return out;
+    if (!isExternalUser()) return AREAS_ALL.resident.tabs;
+    return [];
   }
   // אייקוני קו מונוכרומיים לטאבים (דסקטופ). במובייל האייקון מגיע מ-CSS mask (::before)
   var NAV_ICONS = {
@@ -324,11 +307,10 @@
     resMap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3.5 5v16L9 19l6 2 5.5-2V3L15 5 9 3Z"/><path d="M9 3v16M15 5v16"/></svg>',
     // "מראה שיכון" — עלה. הסמליל של המודול, מופיע גם בכותרת המסך ובבר המובייל.
     resGarden:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
-    // קבוצת "מראה שיכון" (לבעלי הרשאת גינון) — אותו עלה של המודול
-    garden:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
-    // "משימות השבוע" — לוח משימות עם וי, נבדל מהעלה כדי שאפשר יהיה להבחין
-    // בין שני הפריטים בתוך הקבוצה במבט אחד.
-    gardenTasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17" rx="2.2"/><path d="M9 3h6v3H9z"/><path d="m8.5 12.5 2 2 4.5-4.5"/></svg>',
+    // "גינון" באזור הניהול — אותו עלה בדיוק כמו resGarden באזור התושב, לפי
+    // אותו כלל שכבר קיים ב-committeeAdmin/resCommittee וב-servicesAdmin/
+    // resServices: אותו נושא, אותו סמליל, רק צד ניהול מול צד צפייה.
+    gardenTasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
     resGardenNew:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
     resCommittee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.1"/><circle cx="5.5" cy="18" r="2.1"/><circle cx="18.5" cy="18" r="2.1"/><path d="M12 7.1V11M12 11 5.5 15.9M12 11l6.5 4.9"/></svg>',
     // כפתור-הקבוצה "השיכון" — מייצג את השכונה כמכלול (לא מסך ספציפי)
@@ -561,11 +543,15 @@
       html += '<button type="button" class="app-nav__tab' + (t[0] === currentScreen ? " is-active" : "") + '" data-screen="' + t[0] + '">' + ico + CBA.esc(t[1]) + badge + '</button>';
     });
     nav.innerHTML = html;
-    /* מספר היעדים בשורה — כדי ש-CSS יוכל להסתיר את הבר לגמרי כשיש יעד אחד
-       בלבד (אחראי הגינון החיצוני). יעד יחיד אינו ניווט: הוא נצבע כטאב פעיל
-       על כל רוחב הבר, נראה ככפתור ענק, ולחיצה עליו לא עושה כלום. תפריט
-       המשתמש והיציאה נשארים בכותרת העליונה, שאינה מושפעת. */
-    document.body.dataset.navCount = AREAS[area].tabs.length;
+    /* יעד יחיד שאינו כפתור-קבוצה = אין ניווט: הוא נצבע כטאב פעיל על כל רוחב
+       הבר, נראה ככפתור ענק, ולחיצה עליו לא עושה כלום. מסמנים ל-CSS שיסתיר
+       אותו. מוגבל בכוונה למשתמש חיצוני: גם למנהל תחום בודד יוצא לפעמים טאב
+       יחיד, ושם הוא לרוב כפתור-קבוצה שכן נפתח — ולא רצינו לשנות התנהגות
+       קיימת של משתמשים אחרים. תפריט המשתמש והיציאה בכותרת העליונה, שאינה
+       מושפעת. */
+    var tabsNow = AREAS[area].tabs;
+    document.body.dataset.navSingle =
+      (isExternalUser() && tabsNow.length === 1 && !tabsNow[0].group) ? "1" : "";
     if (keepIndicator) nav.insertBefore(keepIndicator, nav.firstChild);
   }
   /* --- התרעות (2026-08): שני מקורות —
@@ -691,7 +677,8 @@
                 familyId: "", house: "", isRoleSim: true };
     applyUser();
     renderSimBanner();
-    setArea("resident");
+    // אחראי הגינון חי באזור הניהול, לא באזור התושב — ר' AREAS_ALL.admin.tabs.
+    setArea(hasAnyAdmin() ? "admin" : "resident");
   }
   function stopSim() {
     simUser = null;
@@ -779,7 +766,8 @@
     applyUser();
     // (2026-08-27) תמיד אזור התושב כברירת מחדל, גם למנהל־על. אם יש מסלול טרי
     // (רענון תוך חצי שעה) initialRoute יחזיר לאזור הניהול בעצמו.
-    initialRoute("resident");
+    // היוצא מן הכלל: משתמש חיצוני אינו תושב ואין לו שם כלום (2026-09-07).
+    initialRoute(isExternalUser() ? "admin" : "resident");
   }
 
   /* שלד טעינה — מבנה shimmer שדומה למסך התקציב, כדי שהמעבר לא ירגיש קופצני */
@@ -1004,6 +992,9 @@
     // רענון בתוך רצף עבודה — חוזרים בדיוק לאזור ולמסך שהיינו בהם
     if (fresh && saved && AREAS[saved.area]) area = saved.area;
     if (area === "admin" && !hasAnyAdmin() && currentUser) area = "resident";
+    // משתמש חיצוני נעול על אזור הניהול: אין לו אזור תושב, וגם מסלול שמור
+    // מלפני שינוי הרשאה לא יכניס אותו לשם (2026-09-07).
+    if (isExternalUser()) area = "admin";
     if (!AREAS[area]) area = "resident";
     currentArea = area;
     document.body.dataset.area = area;
@@ -1226,8 +1217,9 @@
       action = "";
     }
 
-    // מתג המעבר בין האזורים מוצג רק למי שיש לו בכלל הרשאת ניהול כלשהי
-    var switchItem = hasAnyAdmin()
+    // מתג המעבר בין האזורים מוצג רק למי שיש לו בכלל הרשאת ניהול כלשהי —
+    // ולא למשתמש חיצוני, שאין לו אזור תושב לעבור אליו (2026-09-07).
+    var switchItem = (hasAnyAdmin() && !isExternalUser())
       ? (currentArea === "admin"
           ? '<button class="up-item" data-panel-switch="resident"><span class="up-row__ico">' + ICON.swap + '</span>עבור לאזור תושב</button>'
           : '<button class="up-item" data-panel-switch="admin"><span class="up-row__ico">' + ICON.swap + '</span>חזרה לאזור ניהול</button>')
