@@ -249,9 +249,14 @@
       resident: {
         // חיצוני נוחת ישר על המשימות; תושב רגיל ומנהל נוחתים על עמוד הבית.
         def: isExternalUser() ? (firstScreenKey(rt) || "gardenTasks") : AREAS_ALL.resident.def,
+        // "משימות השבוע" יורד מרשימת המסכים למי שאין לו הרשאת גינון — אחרת
+        // ניווט ישיר אליו (למשל מסלול שמור אחרי שינוי הרשאה) היה פותח מסך
+        // שכל קריאה שלו מוחזרת בשגיאה מהשרת.
         screens: isExternalUser()
           ? ["resGarden", "resGardenNew", "gardenTasks"]
-          : AREAS_ALL.resident.screens,
+          : AREAS_ALL.resident.screens.filter(function (k) {
+              return k !== "gardenTasks" || can(PERM.GARDEN);
+            }),
         tabs: rt
       }
     };

@@ -7554,10 +7554,14 @@ function handleGardenTasks_(p) {
       else if (scope === 'pending') { if (o.flag === 'ממתין לאישור') rows.push(o); }
       else if (o.week === week) rows.push(o);
     }
+    /* areas/categories מוחזרות בסדר שבו הן מוגדרות בטאב ההגדרות (עמודת "סדר"),
+       ולא לפי א"ב. זה הסדר שבו הן נכתבו — צפון לדרום — והוא הסדר שבו אחראי
+       הגינון באמת מתקדם בשטח. הלקוח מקבץ לפיו. */
+    var lists = gardenLists_(ss);
     return json_({
       ok: true, rows: rows, week: week, scope: scope,
       isManager: !perm.isExternal,
-      areas: gardenLists_(ss).areas
+      areas: lists.areas, categories: lists.categories
     });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }

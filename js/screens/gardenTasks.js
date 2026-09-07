@@ -136,6 +136,10 @@
       var filter = "open";     // open | done | dragged
       var sortBy = "area";
       var rows = [], isManager = false, busy = false;
+      // הסדר שבו האזורים והקטגוריות מוגדרים בטאב ההגדרות. הוא הסדר שבו
+      // מקבצים — לא א"ב: האזורים כתובים שם מצפון לדרום, וזה מסלול ההליכה
+      // האמיתי בשטח. אזור שאינו ברשימה (נמחק/שונה שמו) יורד לסוף.
+      var order = { area: [], type: [] };
 
       container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
       var root = container.querySelector("#gt-root");
@@ -151,6 +155,8 @@
             return;
           }
           rows = res.rows || [];
+          order.area = res.areas || [];
+          order.type = res.categories || [];
           isManager = !!res.isManager;
           if (res.week) week = res.week;
           draw();
@@ -185,7 +191,7 @@
           if (sortBy === "urgent") return urgency(b) - urgency(a);
           if (sortBy === "date") return String(a.due || a.week).localeCompare(String(b.due || b.week));
           var ga = s.group ? s.group(a) : "", gb = s.group ? s.group(b) : "";
-          if (ga !== gb) return ga.localeCompare(gb, "he");
+          if (ga !== gb) return groupRank(ga) - groupRank(gb) || ga.localeCompare(gb, "he");
           return urgency(b) - urgency(a);
         });
 
@@ -206,8 +212,9 @@
             seen[g].push(t);
           });
           body = groups.map(function (g) {
+            var n = seen[g].length;
             return '<div class="gt-grp">' + esc(g) +
-              ' <em>· ' + seen[g].length + ' משימות</em><hr></div>' +
+              ' <em>· ' + (n === 1 ? "משימה אחת" : n + " משימות") + '</em><hr></div>' +
               '<div class="gd-reps">' + seen[g].map(card).join("") + '</div>';
           }).join("");
         } else {
@@ -237,6 +244,13 @@
           '</div>' + body;
 
         wire();
+      }
+
+      /* מיקום קבוצה בסדר שהוגדר בהגדרות. לא נמצא -> לסוף הרשימה. */
+      function groupRank(name) {
+        var list = order[sortBy] || [];
+        var i = list.indexOf(name);
+        return i === -1 ? 9999 : i;
       }
 
       function seg(k, label, n) {
