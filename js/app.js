@@ -80,11 +80,15 @@
   // "מכון" (2026-08-18) — מידור מכון הכושר. **נפרד ממידור המועדון בכוונה**:
   // שני המתקנים יושבים באותה קבוצת ניווט ("מתקנים") אבל מנוהלים ע"י אנשים
   // שונים, ולכן כל אחד דורש את ההרשאה שלו. חייב להיות זהה ל-PERM_GYM בשרת.
-  const PERM = { SUPER: "על", BUDGET: "תקציב", CLUB: "מועדון", RESIDENTS: "תושבים", GYM: "מכון" };
+  const PERM = { SUPER: "על", BUDGET: "תקציב", CLUB: "מועדון", RESIDENTS: "תושבים",
+                 GYM: "מכון", GARDEN: "גינון" };
   const PERM_LABEL = {
     "על": "מנהל על", "תקציב": "ניהול תקציב ותשלומים",
     "מועדון": "ניהול מועדון", "תושבים": "ניהול תושבים",
-    "מכון": "ניהול מכון כושר"
+    "מכון": "ניהול מכון כושר",
+    // "גינון" אינה הרשאת אזור-ניהול: היא לא מופיעה ב-hasAnyAdmin ולכן לא
+    // פותחת בעצמה את אזור הניהול. היא פותחת את מסכי הגינון בתוך אזור התושב.
+    "גינון": "ניהול גינון"
   };
   // איזו הרשאה נדרשת לכל מסך ניהול
   const SCREEN_PERM = {
@@ -116,6 +120,14 @@
     return (u.role && u.role.indexOf("מנהל") !== -1) ? [PERM.SUPER] : [];
   }
   function isSuper() { return myPerms().indexOf(PERM.SUPER) !== -1; }
+  /* משתמש חיצוני (עמודת "סוג משתמש" בגיליון) — קבלן הגינון. השרת חוסם לו
+     הכול חוץ מגינון בשורה אחת ב-authorize_; כאן אנחנו רק *מסתירים* ממנו את
+     מה שממילא ייחסם, כדי שלא יראה טאבים שכל לחיצה עליהם מחזירה שגיאה.
+     ההסתרה היא נוחות, לא מידור — המידור נעשה בשרת בלבד. */
+  function isExternalUser() {
+    var u = simUser || currentUser;
+    return !!(u && u.isExternal);
+  }
   function can(perm) { return !perm || isSuper() || myPerms().indexOf(perm) !== -1; }
   // האם יש למשתמש בכלל דריסת רגל באזור הניהול
   function hasAnyAdmin() {
@@ -174,7 +186,7 @@
       def: "resHome",
       // resMe ("הפרטים שלי") רשום כמסך אבל **לא כטאב** — מגיעים אליו מתפריט
       // המשתמש ומעמוד הבית. הוא על *אותי*, לא יעד ניווט, ושורת הניווט כבר בת 5.
-      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices", "resGarden", "resGardenNew"],
+      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices", "resGarden", "resGardenNew", "gardenTasks"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
       // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
@@ -231,10 +243,47 @@
       }
       return canScreen(t[0]) ? t : null;
     }).filter(Boolean);
+    var rt = residentTabs();
     AREAS = {
       admin: { def: firstScreenKey(tabs) || "budget", screens: screens, tabs: tabs },
-      resident: AREAS_ALL.resident
+      resident: {
+        // חיצוני נוחת ישר על המשימות; תושב רגיל ומנהל נוחתים על עמוד הבית.
+        def: isExternalUser() ? (firstScreenKey(rt) || "gardenTasks") : AREAS_ALL.resident.def,
+        screens: isExternalUser()
+          ? ["resGarden", "resGardenNew", "gardenTasks"]
+          : AREAS_ALL.resident.screens,
+        tabs: rt
+      }
     };
+  }
+
+  /* טאבי אזור התושב לפי המשתמש הנוכחי. שלושה מצבים, וכולם נגזרים מאותה
+     רשימה מוצהרת אחת (AREAS_ALL.resident.tabs) כדי שלא ייווצרו שתי רשימות
+     שצריך לזכור לעדכן יחד:
+       תושב רגיל       — בדיוק כמו שהיה: "מראה שיכון" ככפתור יחיד.
+       בעל הרשאת גינון — "מראה שיכון" הופך לקבוצה: הדיווחים שלי + משימות השבוע.
+       משתמש חיצוני    — רק המשימות. אין לו בית, אין לו בקשות, ואין לו שיכון:
+                          כל אלה נחסמים בשרת ממילא (ר' isExternalUser). */
+  function residentTabs() {
+    var ext = isExternalUser();
+    var garden = can(PERM.GARDEN);
+    var out = [];
+    AREAS_ALL.resident.tabs.forEach(function (t) {
+      var isGarden = t && !t.group && t[0] === "resGarden";
+      if (ext && !isGarden) return;
+      if (isGarden && garden) {
+        out.push(ext
+          ? ["gardenTasks", "משימות השבוע"]
+          : { group: "garden", label: "מראה שיכון",
+              items: [["resGarden", "הדיווחים שלי"], ["gardenTasks", "משימות השבוע"]] });
+        return;
+      }
+      out.push(t);
+    });
+    // חיצוני בלי הרשאת גינון — מצב שלא אמור לקרות, אבל שורת ניווט ריקה היא
+    // מסך לבן בלי דרך חזרה. משאירים לו את מסך הגינון, שיציג את שגיאת השרת.
+    if (!out.length) out.push(["resGarden", "מראה שיכון"]);
+    return out;
   }
   // אייקוני קו מונוכרומיים לטאבים (דסקטופ). במובייל האייקון מגיע מ-CSS mask (::before)
   var NAV_ICONS = {
@@ -267,6 +316,11 @@
     resMap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3.5 5v16L9 19l6 2 5.5-2V3L15 5 9 3Z"/><path d="M9 3v16M15 5v16"/></svg>',
     // "מראה שיכון" — עלה. הסמליל של המודול, מופיע גם בכותרת המסך ובבר המובייל.
     resGarden:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
+    // קבוצת "מראה שיכון" (לבעלי הרשאת גינון) — אותו עלה של המודול
+    garden:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
+    // "משימות השבוע" — לוח משימות עם וי, נבדל מהעלה כדי שאפשר יהיה להבחין
+    // בין שני הפריטים בתוך הקבוצה במבט אחד.
+    gardenTasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17" rx="2.2"/><path d="M9 3h6v3H9z"/><path d="m8.5 12.5 2 2 4.5-4.5"/></svg>',
     resGardenNew:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
     resCommittee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.1"/><circle cx="5.5" cy="18" r="2.1"/><circle cx="18.5" cy="18" r="2.1"/><path d="M12 7.1V11M12 11 5.5 15.9M12 11l6.5 4.9"/></svg>',
     // כפתור-הקבוצה "השיכון" — מייצג את השכונה כמכלול (לא מסך ספציפי)

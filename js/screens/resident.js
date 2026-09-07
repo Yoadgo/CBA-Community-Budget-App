@@ -308,7 +308,7 @@ CBA.screens = CBA.screens || {};
                  '<span class="rq-sum__row-a">' + CBA.formatILS(t.amount || 0) + '</span>' +
                '</div>';
       }).join("");
-      return '<div class="card rq-sum">' +
+      return '<div class="rq-sum">' +
           '<div class="rq-sum__label">צפוי לתשלום</div>' +
           '<div class="rq-sum__amt">' + CBA.formatILS(total) + '</div>' +
           '<div class="rq-sum__when">' + list.length + (list.length === 1 ? " החזר" : " החזרים") +
@@ -414,10 +414,12 @@ CBA.screens = CBA.screens || {};
         // שהכרטיסים נשענים עליו כדי לא לחזור על אותו תאריך.
         var sumHTML = refundSummaryHTML(refunds);
         refundSummaryShown = !!sumHTML;
-        listHTML += '<div class="rq-section-title">ההחזרים שלנו</div>';
-        // מיד מתחת לכותרת ומעל הכרטיסים: קודם "כמה נכנס לי ומתי",
-        // ורק אחר כך הפירוט שורה-שורה.
+        // הסיכום יושב **מעל** כותרת המקטע ולא בתוכו, והוא לא לבוש כ-.card:
+        // הוא אינו פריט ברשימה אלא הסכום שכל הרשימה מסתכמת אליו. ההבדל
+        // מגיע מהמבנה (אין משטח כרטיס, מספר גדול, קו חותך) ולא מצבע —
+        // כך הוא לא מתנגש בכפתור ה-CTA השחור שמעליו (יועד בחר, 7.9.26).
         listHTML += sumHTML;
+        listHTML += '<div class="rq-section-title">ההחזרים שלנו</div>';
         listHTML += refunds.length
           ? '<div class="rq-list">' + refunds.map(reqCardHTML).join("") + '</div>'
           : '<div class="rs-empty rs-empty--compact"><p>אין החזרים כרגע.</p></div>';

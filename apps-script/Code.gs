@@ -75,6 +75,10 @@ var PERM_ANY_ADMIN = '*';
 /* איזו הרשאה נדרשת לכל פעולה. פעולה שאינה מופיעה כאן מותרת לכל תושב מחובר ופעיל
  * (למשל הגשת קבלה או שריון מועדון — פעולות של סביבת התושב). */
 var ACTION_PERMS = {
+  // מראה שיכון — פעולות הצוות על משימה (סימון ביצוע, הערה, גרירה, חסימה).
+  // בניגוד לפעולות התושב (submitGardenReport / gardenFeedback), שפתוחות לכל
+  // תושב פעיל ולכן אינן ברשימה הזאת כלל, אלה שייכות לבעלי הרשאת גינון בלבד.
+  gardenTask: PERM_GARDEN,
   // ניהול תקציב ותשלומים
   saveTransaction: PERM_BUDGET, deleteTransaction: PERM_BUDGET, saveBudget: PERM_BUDGET,
   setBudgetMeta: PERM_BUDGET, renameCategory: PERM_BUDGET, logBudgetUpdate: PERM_BUDGET,
@@ -398,6 +402,9 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'gardenMeta') {
       return handleGardenMeta_(e.parameter);
     }
+    if (e && e.parameter && e.parameter.action === 'gardenTasks') {
+      return handleGardenTasks_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'myGardenReports') {
       return handleMyGardenReports_(e.parameter);
     }
@@ -578,6 +585,7 @@ function doPost(e) {
       // לכל תושב מחובר ופעיל, ופועלות רק על השורות שלו לפי המושב החתום.
       case 'submitGardenReport':  return json_(submitGardenReport_(ss, body));
       case 'gardenFeedback':      return json_(gardenFeedback_(ss, body));
+      case 'gardenTask':          return json_(gardenTaskAction_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -3695,6 +3703,12 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['ADMIN_GARDEN_NEGATIVE_FEEDBACK', 'תושב סימן שהטיפול לא הושלם כראוי',
     "{{שם}} נתן משוב שלילי על דיווח מס' {{מזהה}} ({{קטגוריה}}, {{מיקום}}).\n\nהערתו: {{הערה}}\n\nהמשימה סומנה \"דורש בדיקה חוזרת\" וממתינה להחלטתך.",
     'למנהלי גינון + מנהל-על. משוב שלילי לא פותח את התקלה מחדש אוטומטית — הוא מרים דגל וההחלטה נשארת אנושית', PERM_GARDEN, 'כן'],
+  ['ADMIN_GARDEN_TASK_BLOCKED', 'צוות הגינון סימן משימה כלא ניתנת לביצוע',
+    "צוות הגינון סימן שאי אפשר לבצע את משימה מס' {{מזהה}} — {{כותרת}}.\n\n" +
+    "הסיבה שנרשמה: {{סיבה}}\n\nהמשימה סומנה \"דורש בדיקה בשטח\" ונשארה פתוחה. " +
+    "סגירה או העברה לבינוי הן החלטה שלך בלבד.",
+    'למנהלי גינון + מנהל-על. הצוות לא סוגר משימות — הוא מרים דגל, וההחלטה נשארת אנושית',
+    PERM_GARDEN, 'כן'],
   ['ADMIN_GARDEN_WEEKLY', 'סיכום שבועי — גינון',
     'הנה סיכום שבוע העבודה של הגינון:', 'למנהלי גינון + מנהל-על, ביום RULE_GARDEN_WEEKLY_DAY. מופק תמיד, גם אם נשארו משימות שממתינות לאישור — הן מופיעות בתוכו כשורה משלהן', PERM_GARDEN, 'כן'],
 
@@ -7443,4 +7457,201 @@ function handleGardenPhoto_(p) {
       .createTextOutput(Utilities.base64Encode(file.getBlob().getBytes()))
       .setMimeType(ContentService.MimeType.TEXT);
   } catch (err) { return ContentService.createTextOutput('שגיאה'); }
+}
+
+/* ==========================================================================
+   מראה שיכון — שלב 4: משימות הצוות
+   --------------------------------------------------------------------------
+   מי רואה מה: שתי אוכלוסיות חולקות את PERM_GARDEN ונבדלות בעמודה "סוג משתמש".
+   אחראי הגינון (חיצוני) מקבל רשימת ביצוע בלבד; מנהל הגינון (פנימי) מקבל את
+   אותה רשימה ובנוסף את מה ששייך לתכנון ולאישור. ההבחנה הזאת כבר קיימת במערכת
+   (perm.isExternal, ר' authorize_) ולכן לא נוצרה כאן הרשאה שלישית.
+
+   מפתח השבוע: תאריך יום ראשון של אותו שבוע בפורמט YYYY-MM-DD. נבחר על פני
+   "מספר שבוע" כי הוא חד-משמעי, לא תלוי בשנה אזרחית מול שנת תקציב, ומאפשר
+   לחשב "שבוע קודם/הבא" בחיבור פשוט של 7 ימים. התצוגה ("שבוע 2 בספטמבר")
+   נגזרת ממנו בצד הלקוח.
+   ========================================================================== */
+
+/** יום ראשון של השבוע שבו נופל התאריך, כמחרוזת YYYY-MM-DD. */
+function gardenWeekKey_(d) {
+  var t = d ? new Date(d) : new Date();
+  if (isNaN(t.getTime())) t = new Date();
+  t.setHours(12, 0, 0, 0);              // צהריים — חסין מפני מעבר שעון קיץ
+  t.setDate(t.getDate() - t.getDay());  // getDay: 0 = ראשון
+  return Utilities.formatDate(t, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+/** הזזת מפתח שבוע בכמה שבועות קדימה/אחורה. */
+function gardenWeekShift_(key, weeks) {
+  var p = String(key || '').split('-');
+  var t = new Date(+p[0], (+p[1]) - 1, +p[2], 12, 0, 0);
+  if (isNaN(t.getTime())) t = new Date();
+  t.setDate(t.getDate() + (weeks || 0) * 7);
+  return gardenWeekKey_(t);
+}
+
+/** ערך תא -> מחרוזת נקייה (תאריכים מגיעים מהגיליון כאובייקט Date). */
+function gardenCell_(v) {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v).trim();
+}
+
+/** שורת משימה -> אובייקט ללקוח. שם השדה באנגלית, הערך בעברית כפי שהוא בגיליון. */
+function gardenTaskObj_(row, c) {
+  function g(name) { return gardenCell_(row[c[name]]); }
+  var x = row[c['מיקום X']], y = row[c['מיקום Y']];
+  return {
+    id:        g('מזהה'),
+    kind:      g('סוג'),
+    title:     g('כותרת'),
+    category:  g('קטגוריה'),
+    area:      g('אזור'),
+    x:         (x === '' || x === null || x === undefined) ? null : Number(x),
+    y:         (y === '' || y === null || y === undefined) ? null : Number(y),
+    stage:     g('שלב'),
+    flag:      g('דגל'),
+    closure:   g('סגירה'),
+    week:      g('שבוע'),
+    due:       g('תאריך יעד'),
+    note:      g('הערת ביצוע'),
+    drags:     parseInt(g('מונה גרירות'), 10) || 0,
+    firstWeek: g('שבוע מקורי'),
+    updatedAt: g('עודכן בתאריך'),
+    updatedBy: g('עודכן על ידי')
+  };
+}
+
+/* ---------- רשימת המשימות (doGet) ----------
+   week   — מפתח שבוע; ברירת מחדל: השבוע הנוכחי.
+   scope  — 'week' (ברירת מחדל) | 'unplanned' (בלי שבוע משובץ) | 'pending' (ממתין לאישור).
+   'unplanned' ו-'pending' הן תצוגות של המנהל בלבד: לאחראי הגינון אין מה
+   לעשות עם משימה שטרם תוכננה, והאישור אינו בסמכותו. */
+function handleGardenTasks_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_GARDEN);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var perm = gate.perm || {};
+    var scope = String(p.scope || 'week');
+    if (perm.isExternal && scope !== 'week') scope = 'week';
+
+    var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    if (!sh || sh.getLastRow() < 2) {
+      return json_({ ok: true, rows: [], week: gardenWeekKey_(), isManager: !perm.isExternal });
+    }
+    var c = gardenCols_(sh);
+    var vals = sh.getDataRange().getValues();
+    var week = String(p.week || '').match(/^\d{4}-\d{2}-\d{2}$/) ? p.week : gardenWeekKey_();
+
+    var rows = [];
+    for (var r = 1; r < vals.length; r++) {
+      if (!gardenCell_(vals[r][c['מזהה']])) continue;
+      var o = gardenTaskObj_(vals[r], c);
+      if (o.closure) continue;                       // משימה סגורה יורדת מהרשימות
+      if (scope === 'unplanned') { if (!o.week) rows.push(o); }
+      else if (scope === 'pending') { if (o.flag === 'ממתין לאישור') rows.push(o); }
+      else if (o.week === week) rows.push(o);
+    }
+    return json_({
+      ok: true, rows: rows, week: week, scope: scope,
+      isManager: !perm.isExternal,
+      areas: gardenLists_(ss).areas
+    });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+/** איתור שורת משימה לפי מזהה. מחזיר null אם לא נמצאה. */
+function gardenFindTask_(sh, id) {
+  var c = gardenCols_(sh);
+  var n = sh.getLastRow() - 1;
+  if (n < 1) return null;
+  var ids = sh.getRange(2, c['מזהה'] + 1, n, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]).trim() === String(id).trim()) {
+      return { row: i + 2, cols: c };
+    }
+  }
+  return null;
+}
+
+/** כתיבת ערך לתא בשורת משימה + חותמת "עודכן". */
+function gardenSet_(sh, row, cols, field, value) {
+  if (cols[field] === undefined) return;
+  sh.getRange(row, cols[field] + 1).setValue(value);
+}
+
+/* ---------- פעולות על משימה (doPost) ----------
+   כל הפעולות כאן פתוחות לכל בעל PERM_GARDEN — גם לאחראי החיצוני. הן נוגעות
+   אך ורק לביצוע בשטח (סימון, הערה, דחייה, חסימה) ואף אחת מהן אינה *סוגרת*
+   משימה: הסגירה היא של המנהל בלבד (שלב 5). זאת הסיבה שסימון ביצוע מרים דגל
+   "ממתין לאישור" ולא כותב "סגירה". */
+function gardenTaskAction_(ss, body) {
+  var perm = body._perm || {};
+  var who = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email || '';
+  var id = String(body.id || '').trim();
+  var act = String(body.op || '').trim();
+  if (!id) return { ok: false, error: 'לא נבחרה משימה' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    if (!sh) return { ok: false, error: 'טאב המשימות חסר' };
+    var f = gardenFindTask_(sh, id);
+    if (!f) return { ok: false, error: 'המשימה לא נמצאה' };
+    var c = f.cols, row = f.row;
+    var cur = gardenTaskObj_(sh.getRange(row, 1, 1, sh.getLastColumn()).getValues()[0], c);
+    if (cur.closure) return { ok: false, error: 'המשימה כבר נסגרה' };
+
+    if (act === 'done') {
+      gardenSet_(sh, row, c, 'שלב', 'הושלם');
+      gardenSet_(sh, row, c, 'דגל', 'ממתין לאישור');
+      gardenLog_(ss, id, 'ביצוע', 'שלב', cur.stage, 'הושלם', who, '');
+
+    } else if (act === 'undo') {
+      if (cur.flag !== 'ממתין לאישור') return { ok: false, error: 'אי אפשר לבטל אחרי אישור' };
+      gardenSet_(sh, row, c, 'שלב', 'בטיפול');
+      gardenSet_(sh, row, c, 'דגל', '');
+      gardenLog_(ss, id, 'ביטול ביצוע', 'שלב', 'הושלם', 'בטיפול', who, '');
+
+    } else if (act === 'note') {
+      var note = String(body.note || '').trim().substring(0, 500);
+      gardenSet_(sh, row, c, 'הערת ביצוע', note);
+      gardenLog_(ss, id, 'הערה', 'הערת ביצוע', cur.note, note, who, '');
+
+    } else if (act === 'defer') {
+      // גרירה לשבוע הבא. מונה הגרירות ו"שבוע מקורי" הם מה שמאפשר למנהל לראות
+      // מה נגרר שוב ושוב — ולכן "שבוע מקורי" נכתב פעם אחת בלבד, בגרירה הראשונה.
+      if (!cur.week) return { ok: false, error: 'למשימה אין שבוע משובץ' };
+      var next = gardenWeekShift_(cur.week, 1);
+      gardenSet_(sh, row, c, 'שבוע', next);
+      gardenSet_(sh, row, c, 'דגל', 'נגררה');
+      gardenSet_(sh, row, c, 'מונה גרירות', (cur.drags || 0) + 1);
+      if (!cur.firstWeek) gardenSet_(sh, row, c, 'שבוע מקורי', cur.week);
+      gardenLog_(ss, id, 'גרירה', 'שבוע', cur.week, next, who,
+                 String(body.note || '').trim().substring(0, 300));
+
+    } else if (act === 'block') {
+      // "לא ניתן לביצוע" — לא סוגר ולא מעביר לבינוי. מרים דגל שמחזיר את
+      // המשימה לשולחן המנהל עם הסיבה, כי רק הוא מוסמך לסגור או להעביר.
+      var why = String(body.note || '').trim().substring(0, 500);
+      if (!why) return { ok: false, error: 'צריך לכתוב מה מונע את הביצוע' };
+      gardenSet_(sh, row, c, 'דגל', 'דורש בדיקה בשטח');
+      gardenSet_(sh, row, c, 'הערת ביצוע', why);
+      gardenLog_(ss, id, 'חסימה', 'דגל', cur.flag, 'דורש בדיקה בשטח', who, why);
+      try {
+        notifyAdmins_(ss, PERM_GARDEN, 'ADMIN_GARDEN_TASK_BLOCKED',
+          { 'מזהה': id, 'כותרת': cur.title, 'סיבה': why, 'שם': who });
+      } catch (e) { /* כשל מייל לא מבטל פעולה שנשמרה */ }
+
+    } else {
+      return { ok: false, error: 'פעולה לא מוכרת' };
+    }
+
+    gardenSet_(sh, row, c, 'עודכן בתאריך', new Date());
+    gardenSet_(sh, row, c, 'עודכן על ידי', who);
+    return { ok: true };
+  } finally { lock.releaseLock(); }
 }

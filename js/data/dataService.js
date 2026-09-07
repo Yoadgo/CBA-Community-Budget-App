@@ -1361,6 +1361,20 @@ CBA.data = (function () {
     gardenFeedback: function (id, positive, note, cb) {
       CBA.sheets.postRead("gardenFeedback", { id: id, positive: positive, note: note }, cb);
     },
+    /* שלב 4 — משימות הצוות. opts: { week, scope }. שתיהן אופציונליות: בלי week
+       השרת מחזיר את השבוע הנוכחי, ו-scope='week' הוא ברירת המחדל. */
+    getGardenTasks: function (opts, cb) {
+      var q = { action: "gardenTasks" };
+      if (opts && opts.week) q.week = opts.week;
+      if (opts && opts.scope) q.scope = opts.scope;
+      CBA.sheets.get(q, cb);
+    },
+    /* פעולה בודדת על משימה. op: done | undo | note | defer | block */
+    gardenTask: function (op, id, extra, cb) {
+      var payload = { op: op, id: id };
+      if (extra && extra.note !== undefined) payload.note = extra.note;
+      CBA.sheets.postRead("gardenTask", payload, cb);
+    },
     // ייצוא לגיליון חדש (2026-08-07). payload: { columns, rowIndexes, name, subtitle }
     exportResidents: function (payload, cb) { CBA.sheets.postRead("exportResidents", payload, cb); },
     // יצירת משקי בית חדשים (2026-08-07). rows: [{ values:{כותרת:ערך}, markLeftRowIndex }]

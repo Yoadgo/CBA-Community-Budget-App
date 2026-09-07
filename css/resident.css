@@ -73,32 +73,37 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .rq-section-title:first-of-type { margin-top: 4px; }
 
 /* ---------- סיכום ההעברה המרוכזת (2026-09-07) ----------
-   התושב מקבל בבנק העברה אחת ולא העברה לכל קבלה. הכרטיס הזה אומר לו כמה
-   ייכנס ומתי, והפירוט נפתח מתחתיו רק אם ביקש.
-   מודגש בקו צד ולא בהצללה: הוא תוכן בתוך הזרימה ולא אלמנט צף, וההצללה
-   באפליקציה שמורה לאלמנטים צפים בלבד. */
-.rq-sum { max-width: 680px; padding: 18px; margin-bottom: 14px;
-  border-inline-start: 3px solid var(--ok, #059669); }
-.rq-sum__label { font-size: 12.5px; font-weight: 700; color: var(--text-soft);
-  letter-spacing: .01em; }
-.rq-sum__amt { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums;
-  line-height: 1.15; margin-top: 2px; }
-.rq-sum__when { font-size: 13px; color: var(--text-soft); margin-top: 6px; }
+   התושב מקבל בבנק העברה אחת מרוכזת ולא העברה לכל קבלה, ולא אמור לחבר בעצמו.
+   הבלוק הזה אומר לו כמה ייכנס ומתי, והפירוט נפתח מתחתיו רק אם ביקש.
+
+   **בכוונה זה לא כרטיס** (יועד בחר, 7.9.26): אין משטח, אין מסגרת ואין הצללה,
+   רק מספר גדול וקו חותך לפני הרשימה. הסיכום אינו פריט ברשימה אלא הסכום שכל
+   הרשימה מסתכמת אליו — וההבדל צריך להגיע מהמבנה, לא מצבע. גרסה צבעונית
+   (ירוק רך) וגרסה כהה נשקלו ונדחו: הכהה מתנגשת בכפתור ה-CTA השחור שמעליה,
+   והצבעונית מכניסה בלוק צבוע לאזור פיננסי שכולו לבן. */
+.rq-sum { max-width: 680px; padding: 4px 0 18px; margin-bottom: 18px;
+  border-bottom: 2px solid var(--text); }
+.rq-sum__label { font-size: 12.5px; font-weight: 800; color: var(--text-soft);
+  letter-spacing: .02em; }
+.rq-sum__amt { font-size: 42px; font-weight: 800; line-height: 1.05; margin-top: 2px;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.rq-sum__when { font-size: 13.5px; color: var(--text-soft); margin-top: 6px; }
 /* בקשות שטרם אושרו — נאמר במפורש שאינן בסכום, כדי לא להבטיח כסף */
 .rq-sum__note { font-size: 12.5px; color: var(--text-muted); margin-top: 8px; }
-.rq-sum__toggle { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+.rq-sum__toggle { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px;
   padding: 0; border: none; background: none; font-family: inherit; font-size: 13px;
-  font-weight: 600; color: var(--text-soft); cursor: pointer; }
+  font-weight: 700; color: var(--text); cursor: pointer; }
 .rq-sum__toggle svg { width: 16px; height: 16px; transition: transform var(--t, .18s); }
 .rq-sum.is-open .rq-sum__toggle svg { transform: rotate(180deg); }
-.rq-sum__detail { display: none; margin-top: 12px; padding-top: 12px;
-  border-top: 1px solid var(--hairline); }
+.rq-sum__detail { display: none; margin-top: 14px; }
 .rq-sum.is-open .rq-sum__detail { display: block; }
 .rq-sum__row { display: flex; justify-content: space-between; align-items: baseline;
-  gap: 14px; padding: 7px 0; font-size: 13.5px; }
+  gap: 14px; padding: 8px 0; font-size: 13.5px; }
 .rq-sum__row + .rq-sum__row { border-top: 1px solid var(--hairline); }
-.rq-sum__row-n { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.rq-sum__row-n { color: var(--text-soft); min-width: 0; overflow-wrap: anywhere; }
 .rq-sum__row-a { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* מסך צר: 42px עדיין נכנס, אבל מורידים קצת כדי שסכום בן 6 ספרות לא ידחוף */
+@media (max-width: 420px) { .rq-sum__amt { font-size: 36px; } }
 
 /* ---------- היסטוריה משנים קודמות (2026-09-07) ----------
    מקופלת כברירת מחדל. קיימת כדי שהחלפת שנת התקציב לא תמחק לתושב את העבר. */

@@ -248,3 +248,110 @@
 @media (prefers-reduced-motion: reduce) {
   .gd-cat, .gd-meter i { transition: none; }
 }
+
+/* ==========================================================================
+   משימות הצוות (2026-09-07, צעד 4) — קידומת gt-
+   --------------------------------------------------------------------------
+   הרכיבים כאן נשענים על .gd-rep הקיים (הכרטיס, פס הצבע לפי קטגוריה, הזכוכית)
+   ומוסיפים מעליו רק את מה שייחודי למסך הביצוע. שתי הערות שכדאי לזכור:
+   1. סימון הביצוע הוא תיבת סימון ולא כפתור מלא — לבקשת יועד, כפתורים פחות
+      דומיננטיים. הוא גם מקצר כל שורה ומאפשר יותר משימות במסך אחד.
+   2. שורת הסידור נגללת אופקית ולא נשברת לשתי שורות: היא קבועה בגובהה, כך
+      שראש המסך לא "קופץ" כשמוסיפים אפשרות סידור.
+   ========================================================================== */
+.gt-week { display: flex; align-items: center; gap: 6px; padding: 9px 10px; margin-bottom: 12px;
+  background: rgba(255,255,255,.76); border: 1px solid rgba(255,255,255,.7); border-radius: 14px;
+  -webkit-backdrop-filter: saturate(180%) blur(14px); backdrop-filter: saturate(180%) blur(14px);
+  box-shadow: 0 4px 16px rgba(16,24,40,.06); }
+.gt-week > button { width: 30px; height: 30px; flex: none; border: 0; border-radius: 9px;
+  background: rgba(17,24,39,.05); color: var(--text, #374151); display: grid; place-items: center; cursor: pointer; }
+.gt-week > button svg { width: 15px; height: 15px; }
+.gt-week > button:hover { background: rgba(17,24,39,.09); }
+.gt-week__c { flex: 1; min-width: 0; text-align: center; }
+.gt-week__c b { display: block; font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+.gt-week__c span { display: block; font-size: 11.5px; color: var(--text-soft, #6B7280); margin-top: 1px; }
+.gt-bar { height: 4px; border-radius: 99px; background: rgba(17,24,39,.08); margin-top: 9px; overflow: hidden; }
+.gt-bar i { display: block; height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, #0F6B45, #3FA37A); transition: width .35s ease; }
+
+.gt-sort { display: flex; align-items: center; gap: 7px; margin: 10px 0 2px;
+  overflow-x: auto; padding-bottom: 2px; }
+.gt-sort::-webkit-scrollbar { display: none; }
+.gt-sort > b { font-size: 11.5px; font-weight: 600; color: #9CA3AF; flex: none; }
+.gt-sort button { flex: none; border: 1px solid rgba(17,24,39,.1); border-radius: 99px;
+  background: rgba(255,255,255,.7); padding: 5px 12px; font: inherit; font-size: 12px;
+  font-weight: 500; color: var(--text-soft, #6B7280); cursor: pointer; }
+.gt-sort button.on { background: var(--action, #111827); border-color: var(--action, #111827);
+  color: #fff; font-weight: 600; }
+
+.gt-grp { display: flex; align-items: center; gap: 8px; margin: 15px 2px 8px;
+  font-size: 12.5px; font-weight: 700; color: var(--text, #374151); }
+.gt-grp em { font-style: normal; font-weight: 600; color: var(--text-soft, #6B7280); font-size: 11.5px; }
+.gt-grp hr { flex: 1; border: 0; height: 1px; background: rgba(17,24,39,.08); margin: 0; }
+
+.gt-row { padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; }
+.gt-box { width: 28px; height: 28px; flex: none; margin-top: 2px; border-radius: 8px;
+  border: 1.8px solid rgba(17,24,39,.18); background: rgba(255,255,255,.75);
+  display: grid; place-items: center; color: transparent; cursor: pointer;
+  transition: background .16s ease, border-color .16s ease; }
+.gt-box svg { width: 15px; height: 15px; }
+.gt-box:hover { border-color: rgba(15,107,69,.5); }
+.gt-row.is-done .gt-box { background: #0F6B45; border-color: #0F6B45; color: #fff; }
+.gt-body { flex: 1; min-width: 0; }
+.gt-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.gt-t { font-weight: 600; font-size: 14.5px; margin-top: 4px; line-height: 1.35; }
+.gt-m { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 3px;
+  display: flex; align-items: center; gap: 5px; }
+.gt-m svg { width: 12px; height: 12px; flex: none; }
+.gt-note { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 6px;
+  border-inline-start: 2px solid rgba(17,24,39,.12); padding-inline-start: 8px; }
+.gt-more { width: 28px; height: 28px; flex: none; border: 0; border-radius: 8px; background: none;
+  color: #B0B6BF; display: grid; place-items: center; cursor: pointer; margin-top: 1px; }
+.gt-more svg { width: 16px; height: 16px; }
+.gt-more:hover { background: rgba(17,24,39,.05); color: var(--text-soft, #6B7280); }
+.gt-row.is-done { opacity: .75; }
+.gt-row.is-done .gt-t { color: var(--text-soft, #6B7280);
+  text-decoration: line-through; text-decoration-color: rgba(17,24,39,.22); }
+.gt-wait { display: flex; align-items: center; gap: 5px; margin-top: 5px;
+  font-size: 11.5px; font-weight: 600; color: var(--ok, #059669); }
+.gt-wait svg { width: 13px; height: 13px; }
+
+.gt-age { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
+  background: #FEF3C7; color: #B45309; }
+.gt-age.is-hot { background: #FEE2E2; color: #B91C1C; }
+.gt-src { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
+  background: rgba(17,24,39,.055); color: var(--text-soft, #6B7280); }
+
+/* גיליון תחתון — אותה תבנית של nav-sheet, בקנה מידה של תוכן ולא של ניווט */
+.gt-sheet-wrap { position: fixed; inset: 0; z-index: 60; }
+.gt-sheet-bd { position: absolute; inset: 0; background: rgba(16,24,40,.32);
+  opacity: 0; transition: opacity .24s ease; }
+.gt-sheet-wrap.is-open .gt-sheet-bd { opacity: 1; }
+.gt-sheet { position: absolute; inset-inline: 0; bottom: 0; max-height: 86vh; overflow-y: auto;
+  padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
+  background: rgba(255,255,255,.92); border-radius: 20px 20px 0 0;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  box-shadow: 0 -8px 34px rgba(16,24,40,.16);
+  transform: translateY(100%); transition: transform .26s cubic-bezier(.22,.9,.28,1); }
+.gt-sheet-wrap.is-open .gt-sheet { transform: translateY(0); }
+.gt-grip { width: 38px; height: 4px; border-radius: 99px; background: rgba(17,24,39,.16); margin: 0 auto 12px; }
+.gt-sheet h4 { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
+.gt-sheet p.sub { margin: 0 0 12px; font-size: 12px; color: var(--text-soft, #6B7280); line-height: 1.5; }
+.gt-opt { width: 100%; display: flex; align-items: center; gap: 11px; padding: 11px 12px;
+  border: 0; border-radius: 12px; background: rgba(17,24,39,.035); font: inherit; font-size: 13.5px;
+  font-weight: 500; color: var(--text, #374151); cursor: pointer; text-align: start; }
+.gt-opt + .gt-opt { margin-top: 7px; }
+.gt-opt:hover { background: rgba(17,24,39,.06); }
+.gt-opt u { text-decoration: none; width: 30px; height: 30px; flex: none; border-radius: 9px;
+  display: grid; place-items: center; background: #fff; color: var(--text-soft, #6B7280); }
+.gt-opt u svg { width: 15px; height: 15px; }
+.gt-opt span { display: block; font-size: 11.5px; color: #9CA3AF; font-weight: 400; margin-top: 1px; }
+.gt-sheet-wrap.is-map .gd-map { height: 62vh; margin-top: 4px; }
+
+/* בדסקטופ הגיליון הופך לכרטיס צף וממורכז. הריכוז נעשה ב-margin-inline:auto
+   ולא ב-translateX(-50%) עם inset-inline-start — שבתוך RTL היה דוחף אותו
+   לכיוון ההפוך, וגם היה מתנגש בטרנספורם של אנימציית הכניסה. */
+@media (min-width: 901px) {
+  .gt-sheet { inset-inline: 0; margin-inline: auto; width: min(460px, 92vw);
+    border-radius: 18px; bottom: 24px; max-height: 78vh; }
+}
