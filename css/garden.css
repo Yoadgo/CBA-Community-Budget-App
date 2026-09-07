@@ -142,10 +142,14 @@
   font-size: 20px; font-weight: 300; font-family: inherit; cursor: pointer; }
 
 /* ---------- מפה ---------- */
-.gd-map { height: 290px; border-radius: 12px; overflow: hidden; }
+/* המפה היא החלק הקשה בטופס — נעיצה באצבע דורשת שטח, וזום/צביטה מחזירים
+   דיוק רק אם יש מה לזום בתוכו. הוגדלה 7.9.26 אחרי בדיקה בטלפון. */
+.gd-map { height: 340px; border-radius: 12px; overflow: hidden; }
 .gd-map .map-shell { height: 100%; }
 .gd-map .map-viewport { height: 100%; border-radius: 12px; }
-@media (max-width: 720px) { .gd-map { height: 210px; } }
+/* במובייל נגזרת מגובה המסך ולא קבועה: 210px היו רבע מסך, ובהם בית בודד
+   תופס ~15px — בלתי אפשרי לנעוץ במדויק. התקרה מונעת מהטופס להיעלם מתחת. */
+@media (max-width: 720px) { .gd-map { height: min(54vh, 430px); } }
 
 /* ---------- CTA ---------- */
 .gd-cta { background: var(--action, #111827); color: #fff; border: 0; border-radius: 12px;

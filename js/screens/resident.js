@@ -34,21 +34,30 @@ CBA.screens = CBA.screens || {};
   var fitIcon    = svg('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>');
   var parkIcon   = svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 16V8h4a3 3 0 0 1 0 6H9"/>');
   var pinIcon    = svg('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>');
+  /* סמלילי המרחבים המשותפים — סט ייעודי, סמל אחד לכל מרחב אמיתי בשיכון.
+     נבדקו ב-15px (הגודל במפה) ולא רק בגודל מלא. */
   var amenIcons = {
-    water: '<path d="M4 9.5q3-3 6 0t6 0 6 0"/><path d="M4 15.5q3-3 6 0t6 0 6 0"/>',
-    gym:   '<path d="M4 9.5v5M7.5 7v10M7.5 12h9M16.5 7v10M20 9.5v5"/>',
-    pet:   '<circle cx="8.2" cy="7.7" r="1.9"/><circle cx="15.8" cy="7.7" r="1.9"/><circle cx="5" cy="12.7" r="1.7"/><circle cx="19" cy="12.7" r="1.7"/><path d="M12 11.6c2.9 0 5 2.3 5 4.6s-2.1 3.6-5 3.6-5-1.3-5-3.6 2.1-4.6 5-4.6z"/>',
-    work:  '<rect x="5.5" y="6.5" width="13" height="8.5" rx="1"/><path d="M3 18.5h18l-1.8-3.5H4.8z"/>',
-    kids:  '<path d="M12 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>',
-    park:  '<path d="M12 2 7 10h3l-4 7h5v5h2v-5h5l-4-7h3L12 2Z"/>',
-    shop:  '<path d="M4 8 5.5 4h13L20 8"/><rect x="4" y="8" width="16" height="12" rx="1.5"/><path d="M9 12v4M15 12v4"/>',
-    food:  '<path d="M6 3v7a2 2 0 0 0 2 2v9M6 3v18M10 3v9M18 3c-2 0-3 2-3 5s1 4 3 4v9"/>',
-    club:  '<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14c2.5.3 4.5 2.4 4.5 5"/>',
-    train: '<rect x="5" y="4" width="14" height="13" rx="3"/><path d="M5 12h14M8 20l-2 2M16 20l2 2"/><circle cx="8.5" cy="14.5" r="0.5" fill="currentColor"/><circle cx="15.5" cy="14.5" r="0.5" fill="currentColor"/>',
-    mail:  '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
-    sport: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5c2.6 2.4 2.6 14.6 0 17M3.5 12h17M5.3 6.8c2 1.7 11.4 1.7 13.4 0M5.3 17.2c2-1.7 11.4-1.7 13.4 0"/>',
-    house: '<path d="M3.5 11.5 12 4l8.5 7.5"/><path d="M5.5 10v8.5a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V10"/><path d="M9.5 19.5v-5.2h5v5.2"/>'
+    pool:   '<path d="M3 9.5q3-3 6 0t6 0 6 0"/><path d="M3 15.5q3-3 6 0t6 0 6 0"/>',
+    gym:    '<path d="M4 9.5v5M7.5 7v10M7.5 12h9M16.5 7v10M20 9.5v5"/>',
+    hall:   '<path d="M2.6 20.5V12.4C2.6 8 6.8 4.6 12 4.6s9.4 3.4 9.4 7.8v8.1z"/><path d="M9 20.5v-5.2h6v5.2"/>',
+    ball:   '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.4l3.8 2.8-1.5 4.5H9.7L8.2 10.2z" fill="currentColor" stroke="none"/><path d="M12 3.4v4M19.6 9.9l-3.8 2.8M16.7 20.2l-1.5-4.5M7.3 20.2l1.5-4.5M4.4 9.9l3.8 2.8"/>',
+    hoop:   '<path d="M3.5 3.5h17v9.5h-17z"/><path d="M8.8 13v2.4c0 2 1.4 3.6 3.2 3.6s3.2-1.6 3.2-3.6V13"/>',
+    tennis: '<ellipse cx="10.2" cy="9" rx="5.4" ry="6.2"/><path d="M10.2 15.2L6.8 21"/><circle cx="18.6" cy="16.8" r="2.3"/>',
+    flag:   '<path d="M6 21V3"/><path d="M6 4.6h11.5l-2.4 3.4 2.4 3.4H6z"/>',
+    slide:  '<path d="M3.5 20h4.5l7-11h5"/><path d="M15 9h5v11"/><path d="M8 20v-4.5"/>',
+    blocks: '<rect x="3.2" y="12.6" width="7.6" height="7.6" rx="1.2"/><rect x="13.2" y="12.6" width="7.6" height="7.6" rx="1.2"/><rect x="8.2" y="3.8" width="7.6" height="7.6" rx="1.2"/>',
+    kite:   '<path d="M12 2.6l5.6 6-5.6 9.6-5.6-9.6z"/><path d="M6.4 8.6h11.2"/><path d="M12 18.2c-1.3 1-.4 2.2.9 2.6"/>',
+    brush:  '<path d="M3.2 20.8c2.6.4 5-1.1 5-3.6 0-1.4-1.1-2.5-2.5-2.5s-2.5 1.1-2.5 2.5z"/><path d="M8.6 16.2L19.4 5.4a2.2 2.2 0 0 0-3.1-3.1L5.5 13.1"/>',
+    cart:   '<circle cx="9.5" cy="19.8" r="1.7"/><circle cx="17.5" cy="19.8" r="1.7"/><path d="M2.5 3.5h2.7l2.6 11.6h10.9l2-8.4H6.6"/>',
+    dine:   '<path d="M5.5 3v6.2a2.4 2.4 0 0 0 4.8 0V3M7.9 11.6V21"/><path d="M17.6 3c-1.8 0-3.2 2.4-3.2 5.4s1.4 4.4 3.2 4.4V21"/>',
+    laptop: '<rect x="5.2" y="6" width="13.6" height="9" rx="1.2"/><path d="M2.8 18.6h18.4l-2-3.6H4.8z"/>',
+    mail:   '<rect x="3" y="5.5" width="18" height="13" rx="1.6"/><path d="M3.4 6.6L12 13.4l8.6-6.8"/>',
+    people: '<circle cx="9" cy="8" r="2.8"/><circle cx="16.2" cy="8.6" r="2.3"/><path d="M3.8 19.8c0-3.1 2.3-5.6 5.2-5.6s5.2 2.5 5.2 5.6"/><path d="M16.2 14.6c2.4 0 4.2 2.2 4.2 5.2"/>',
+    grass:  '<path d="M20.2 3.8C10.6 3.8 4.4 9.4 4.4 18.6c0 .8 0 1.2.2 1.6 9.6 0 15.6-6 15.6-15.4 0-.4 0-.7 0-1z"/><path d="M4.6 20.2L13.4 11"/>',
+    paw:    '<circle cx="8.2" cy="7.4" r="2"/><circle cx="15.8" cy="7.4" r="2"/><circle cx="4.6" cy="12.6" r="1.8"/><circle cx="19.4" cy="12.6" r="1.8"/><path d="M12 11.4c3 0 5.2 2.4 5.2 4.8s-2.2 3.8-5.2 3.8-5.2-1.4-5.2-3.8 2.2-4.8 5.2-4.8z"/>',
+    house:  '<path d="M3.5 11.5 12 4l8.5 7.5"/><path d="M5.5 10v8.5a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V10"/><path d="M9.5 19.5v-5.2h5v5.2"/>'
   };
+
   // סמל בית קטן שמוצג מעל מספר הבית בתגית המפה (טאב "מפת השיכון"), במקום רק ספרות יבשות
   var houseIcon = svg(amenIcons.house);
 
@@ -1835,24 +1844,24 @@ CBA.screens = CBA.screens || {};
      שם המרחב מגיע כמות שהוא מקובץ הכיול, ולכן המיפוי הוא לפי שם. שם שלא מוכר
      מקבל אייקון ברירת מחדל ולא נופל. */
   var POI_CAT = {
-    'בריכה':                  ['water','water'],
+    'בריכה':                  ['water','pool'],
     'חדר כושר':               ['sport','gym'],
-    'אולם ספורט':             ['sport','sport'],
-    'מגרש כדורגל - סינתטי':   ['sport','park'],
-    'מגרש כדור-סל':           ['sport','park'],
-    'מגרש טניס':              ['sport','park'],
-    "פארק נינג'ה":            ['sport','park'],
-    'גן שעשועים':             ['kids','park'],
-    'גני ילדים':              ['kids','kids'],
-    'מועדון ילדים':           ['kids','kids'],
-    'חדר חוגים':              ['kids','kids'],
-    'שקמ"ם':                  ['shop','shop'],
-    'איטלקיה':                ['shop','food'],
-    'WeWork':                 ['shop','work'],
+    'אולם ספורט':             ['sport','hall'],
+    'מגרש כדורגל - סינתטי':   ['sport','ball'],
+    'מגרש כדור-סל':           ['sport','hoop'],
+    'מגרש טניס':              ['sport','tennis'],
+    "פארק נינג'ה":            ['sport','flag'],
+    'גן שעשועים':             ['kids','slide'],
+    'גני ילדים':              ['kids','blocks'],
+    'מועדון ילדים':           ['kids','kite'],
+    'חדר חוגים':              ['kids','brush'],
+    'שקמ"ם':                  ['shop','cart'],
+    'איטלקיה':                ['shop','dine'],
+    'WeWork':                 ['shop','laptop'],
     'דואר':                   ['civic','mail'],
-    'מועדון משפחות':          ['comm','club'],
-    'מדשאת מועדון משפחות':    ['comm','park'],
-    'גינת כלבים':             ['pet','pet']
+    'מועדון משפחות':          ['comm','people'],
+    'מדשאת מועדון משפחות':    ['comm','grass'],
+    'גינת כלבים':             ['pet','paw']
   };
   function poiOf(label) {
     var k = (label || '').trim();
@@ -1956,12 +1965,17 @@ CBA.screens = CBA.screens || {};
               : '') +
             '</div>'
           : '') +
+          (opts.full ? '<div class="map-chipbar" id="map-chips" role="group" aria-label="הבלטה"></div>' : '') +
           '<div class="map-viewport" id="map-viewport"><div class="map-world" id="map-world"></div></div>' +
           '<div class="map-toolbar">' +
             '<button type="button" class="map-btn" id="map-zoom-in" aria-label="הגדלה">' + plusIcon + '</button>' +
             '<button type="button" class="map-btn" id="map-zoom-out" aria-label="הקטנה">' + minusIcon + '</button>' +
             '<hr>' +
             '<button type="button" class="map-btn" id="map-fit" aria-label="התאמה למסך">' + fitIcon + '</button>' +
+            (opts.full ? '<hr>' +
+              '<button type="button" class="map-btn" id="map-clean" aria-pressed="false" ' +
+              'aria-label="מצב נקי לצילום מסך" title="מצב נקי — גיאומטריה ומספרי בתים בלבד, לצילום מסך">' +
+              cameraIcon + '</button>' : '') +
           '</div>' +
           (oHint ? '<div class="map-hint">' +
             (opts.pin ? 'גררו כדי לנוע · גלגלת/צביטה כדי לזום · <b>לחצו על המקום שבו נמצאת התקלה</b>'
@@ -2012,7 +2026,7 @@ CBA.screens = CBA.screens || {};
         }
 
         var canopy = '', green = '', caseS = '', fillS = '', isl = '', tree = '',
-            bays = '', stre = '', pub = '', mark = '';
+            bays = '', stre = '', pub = '', mkBin = '', mkShel = '', mkBus = '';
 
         /* קצה של קו שנכנס לקו אחר או לשטח מרוצף — נשאר חתוך ישר, כך שהצומת
            נסגר חלק. קצה שלא מוביל לשום מקום מקבל עיגול. אותה לוגיקה בדיוק
@@ -2081,10 +2095,13 @@ CBA.screens = CBA.screens || {};
             transform: 'translate(' + o.x + ' ' + o.y + ') rotate(' + (o.r || 0) + ')' });
         }
 
-        function markerG(o, inner, rot) {
+        function markerG(o, inner, rot, grp) {
           var mn = 13;                                   /* מינימום פיקסלי־עולם */
           var s = Math.max(1, mn / Math.max(4, Math.min(o.w, o.h)));
-          return E('g', { transform: 'translate(' + o.x + ' ' + o.y + ') rotate(' + (rot === undefined ? (o.r || 0) : rot) + ') scale(' + s.toFixed(3) + ')' }, inner);
+          var r = rot === undefined ? (o.r || 0) : rot;
+          return E('g', { 'class': 'm2-mk', 'data-x': o.x, 'data-y': o.y, 'data-r': r,
+            'data-s': s.toFixed(3), 'data-g2': grp,
+            transform: 'translate(' + o.x + ' ' + o.y + ') rotate(' + r + ') scale(' + s.toFixed(3) + ')' }, inner);
         }
 
         (GEO.objects || []).forEach(function (o) {
@@ -2153,19 +2170,19 @@ CBA.screens = CBA.screens || {};
           } else if (o.t === 'green') {
             green += rectAt(o, o.w, o.h, 'm2-green', 4);
           } else if (o.t === 'shelter') {
-            mark += markerG(o,
+            mkShel += markerG(o,
               E('rect', { x: (-o.w / 2).toFixed(1), y: (-o.h / 2).toFixed(1), width: o.w, height: o.h,
                 rx: (Math.min(o.w, o.h) * 0.12).toFixed(1), 'class': 'm2-shelter' }) +
               E('rect', { x: (-o.w * 0.28).toFixed(1), y: (-o.h * 0.28).toFixed(1),
                 width: (o.w * 0.56).toFixed(1), height: (o.h * 0.56).toFixed(1),
-                rx: (Math.min(o.w, o.h) * 0.11).toFixed(1), 'class': 'm2-shelter-in' }));
+                rx: (Math.min(o.w, o.h) * 0.11).toFixed(1), 'class': 'm2-shelter-in' }), undefined, 'shelter');
           } else if (o.t === 'bus') {
             var sq = Math.min(o.w, o.h);
-            mark += markerG(o,
+            mkBus += markerG(o,
               E('rect', { x: (-sq / 2).toFixed(1), y: (-sq / 2).toFixed(1), width: sq, height: sq,
                 rx: (sq * 0.22).toFixed(1), 'class': 'm2-bus' }) +
               E('g', { transform: 'translate(' + (-sq * 0.31).toFixed(1) + ' ' + (-sq * 0.31).toFixed(1) +
-                ') scale(' + (sq * 0.62 / 24).toFixed(4) + ')' }, BUS_GLYPH), 0);
+                ') scale(' + (sq * 0.62 / 24).toFixed(4) + ')' }, BUS_GLYPH), 0, 'traffic');
           } else if (o.t === 'bin') {
             var K = BIN_KINDS[o.k] || BIN_KINDS.trash, inner;
             if (K.shape === 'circle') inner = E('circle', { cx: 0, cy: 0, r: (Math.min(o.w, o.h) / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
@@ -2173,7 +2190,7 @@ CBA.screens = CBA.screens || {};
             else inner = E('rect', { x: (-o.w / 2).toFixed(1), y: (-o.h / 2).toFixed(1), width: o.w, height: o.h,
                 rx: (Math.min(o.w, o.h) * (K.shape === 'square' ? 0.14 : 0.22)).toFixed(1),
                 'class': 'm2-bin' + (K.dash ? ' is-dash' : ''), style: 'fill:' + K.fill });
-            mark += markerG(o, inner);
+            mkBin += markerG(o, inner, undefined, 'waste');
           } else {
             pub += rectAt(o, o.w, o.h, 'm2-pub', m2p(0.8));
           }
@@ -2183,15 +2200,17 @@ CBA.screens = CBA.screens || {};
           '<svg class="map-terrain map-base" width="' + MAP_WORLD_W + '" height="' + MAP_WORLD_H +
           '" viewBox="0 0 ' + MAP_WORLD_W + ' ' + MAP_WORLD_H + '" aria-hidden="true">' +
             E('rect', { x: 0, y: 0, width: MAP_WORLD_W, height: MAP_WORLD_H, 'class': 'm2-ground' }) +
-            E('g', { 'class': 'm2-l-canopy' }, canopy) +
-            E('g', {}, green) +
-            E('g', { 'class': 'm2-paved' }, E('g', {}, caseS) + E('g', {}, fillS)) +
-            E('g', {}, isl) +
-            E('g', { 'class': 'm2-l-tree' }, tree) +
-            E('g', {}, bays) +
-            E('g', {}, stre) +
-            E('g', {}, pub) +
-            E('g', {}, mark) +
+            E('g', { 'class': 'm2-l-canopy', 'data-g': 'green' }, canopy) +
+            E('g', { 'data-g': 'green' }, green) +
+            E('g', { 'class': 'm2-paved', 'data-g': 'traffic' }, E('g', {}, caseS) + E('g', {}, fillS)) +
+            E('g', { 'data-g': 'green' }, isl) +
+            E('g', { 'class': 'm2-l-tree', 'data-g': 'green' }, tree) +
+            E('g', { 'data-g': 'traffic' }, bays) +
+            E('g', { 'data-g': 'traffic' }, stre) +
+            E('g', { 'data-g': 'public' }, pub) +
+            E('g', { 'data-g': 'traffic' }, mkBus) +
+            E('g', { 'data-g': 'shelter' }, mkShel) +
+            E('g', { 'data-g': 'waste' }, mkBin) +
           '</svg>' +
           '<div class="map-grain"></div>');
       })();
@@ -2204,12 +2223,13 @@ CBA.screens = CBA.screens || {};
         var c = center(o);
         var el = document.createElement("div");
         el.className = "map-poi map-poi--park";
+        el.dataset.g = 'traffic';
         el.style.cssText = "left:" + c[0] + "px;top:" + c[1] + "px";
         el.dataset.a = Math.round(area(o));
         el.innerHTML = '<span class="map-parking__chip">P</span>';
         worldEl.appendChild(el);
         if (o.l) { var id = 'p' + (poiSeq++); el.dataset.lbl = id;
-          poiLabel(o.l, c[0], c[1] + 16, area(o), id); }
+          poiLabel(o.l, c[0], c[1] + 16, area(o), id, 'traffic'); }
       });
 
       /* ---- שבב + שם לכל מרחב ציבורי ---- */
@@ -2218,12 +2238,13 @@ CBA.screens = CBA.screens || {};
         var c = center(o), cat = poiOf(o.l);
         var el = document.createElement("div");
         el.className = "map-poi map-poi--" + cat[0];
+        el.dataset.g = 'public';
         el.style.cssText = "left:" + c[0] + "px;top:" + c[1] + "px";
         el.dataset.a = Math.round(area(o));
         el.innerHTML = '<span class="map-amenity__chip">' + svg(amenIcons[cat[1]] || amenIcons.house) + '</span>';
         worldEl.appendChild(el);
         if (o.l) { var id2 = 'p' + (poiSeq++); el.dataset.lbl = id2;
-          poiLabel(o.l, c[0], c[1] + 16, area(o), id2); }
+          poiLabel(o.l, c[0], c[1] + 16, area(o), id2, 'public'); }
       });
 
       /* פריסת תוויות: הגדול נכנס ראשון, השאר מנסים חמישה מיקומים ואז נופלים.
@@ -2261,7 +2282,8 @@ CBA.screens = CBA.screens || {};
         worldEl.style.setProperty('--inv', inv.toFixed(4));
         POI.forEach(function (o) {
           var vis = Math.sqrt(o.a) * scale > 30;       /* המבנה גדול מספיק על המסך */
-          var lvis = vis && tier >= 1 && !!o.l;       /* שם מרחב רק מדרגה 1, ורק אם יש שם */
+          var forced = EMPH && EMPH.length > 0 && o.l && EMPH.indexOf(o.l.dataset.g) >= 0;
+          var lvis = vis && !!o.l && (tier >= 1 || forced);
           o.c.style.display = vis ? '' : 'none';
           if (o.l) o.l.style.display = lvis ? '' : 'none';
           if (!vis) return;
@@ -2289,6 +2311,48 @@ CBA.screens = CBA.screens || {};
 
       collectPoi();
 
+      /* ---- מצב הבלטה (2026-09-07) ----
+         בחירת קבוצה לא מסתירה כלום — היא מבליטה. כל השאר נסוג ל-24% ומאבד
+         רוויה, ולכן נשאר כהקשר במקום להיעלם. הבחירות נערמות. */
+      var EMPH = [];
+      var shellEl = container.querySelector('.map-shell');
+      function layoutMarkers() {
+        var sv = svg2(); if (!sv) return;
+        [].forEach.call(sv.querySelectorAll('.m2-mk'), function (g) {
+          var base = +g.dataset.s || 1;
+          var em = (EMPH.length && EMPH.indexOf(g.dataset.g2) >= 0) ? 1.75 : 1;
+          g.setAttribute('transform', 'translate(' + g.dataset.x + ' ' + g.dataset.y +
+            ') rotate(' + g.dataset.r + ') scale(' + (base * em).toFixed(3) + ')');
+        });
+      }
+      function applyEmph() {
+        var on = EMPH.length > 0;
+        if (shellEl) shellEl.classList.toggle('foc', on);
+        [].forEach.call(worldEl.querySelectorAll('[data-g]'), function (el) {
+          el.classList.toggle('is-emph', !on || EMPH.indexOf(el.dataset.g) >= 0);
+        });
+        layoutMarkers();
+      }
+      function buildChips() {
+        var bar = container.querySelector('#map-chips'); if (!bar) return;
+        var GROUPS = [['traffic', 'תנועה וחנייה'], ['public', 'מבני ציבור'], ['homes', 'בתים'],
+                      ['green', 'ירק ועצים'], ['waste', 'פינוי אשפה'], ['shelter', 'מיגוניות']];
+        var have = {};
+        [].forEach.call(worldEl.querySelectorAll('[data-g]'), function (el) { have[el.dataset.g] = 1; });
+        bar.innerHTML = GROUPS.filter(function (g) { return have[g[0]]; }).map(function (g) {
+          return '<button type="button" class="map-chip" data-e="' + g[0] + '" aria-pressed="false">' + g[1] + '</button>';
+        }).join('') + '<button type="button" class="map-chip map-chip--all" data-e="__all">הכול</button>';
+        bar.addEventListener('click', function (e) {
+          var b = e.target.closest('.map-chip'); if (!b) return;
+          if (b.dataset.e === '__all') EMPH = [];
+          else { var i = EMPH.indexOf(b.dataset.e); if (i >= 0) EMPH.splice(i, 1); else EMPH.push(b.dataset.e); }
+          [].forEach.call(bar.querySelectorAll('.map-chip'), function (x) {
+            x.setAttribute('aria-pressed', x.dataset.e !== '__all' && EMPH.indexOf(x.dataset.e) >= 0);
+          });
+          applyEmph();
+        });
+      }
+
       function area(o) {
         if (o.p && o.p.length) {
           var xs = o.p.map(function (p) { return p[0]; }), ys = o.p.map(function (p) { return p[1]; });
@@ -2305,12 +2369,13 @@ CBA.screens = CBA.screens || {};
         }
         return [o.x, o.y];
       }
-      function poiLabel(text, x, y, a, id) {
+      function poiLabel(text, x, y, a, id, grp) {
         var lbl = document.createElement("span");
         lbl.className = "map-amenity__label";
         lbl.textContent = text;
         lbl.dataset.a = Math.round(a || 0);
         if (id) lbl.dataset.for = id;
+        if (grp) lbl.dataset.g = grp;
         lbl.style.cssText = "left:" + x + "px;top:" + y + "px";
         worldEl.appendChild(lbl);
       }
@@ -2327,6 +2392,7 @@ CBA.screens = CBA.screens || {};
         var el = document.createElement("div");
         var mine = myHouse && normHouse(t.n) === myHouse;
         el.className = "map-house" + (mine ? " is-mine" : "");
+        el.dataset.g = 'homes';
         el.dataset.num = t.n;
         el.setAttribute("role", "button");
         el.setAttribute("tabindex", "0");
@@ -2757,6 +2823,26 @@ CBA.screens = CBA.screens || {};
       }
       if (opts.pinAt) setPin(opts.pinAt);
       if (opts.markers && opts.markers.length) setMarkers(opts.markers);
+
+      /* מצב נקי לצילום מסך: גיאומטריה ומספרי בתים בלבד. מצב *תצוגה* בלבד —
+         הוא לא מנגנון פרטיות, הנתונים עדיין טעונים בדפדפן של תושב שממילא
+         רשאי לראות אותם. הוא פשוט מייצר תמונה שאפשר לשלוח החוצה. */
+      (function cleanMode() {
+        var btn = container.querySelector('#map-clean'); if (!btn || !shellEl) return;
+        btn.addEventListener('click', function () {
+          var on = !shellEl.classList.contains('clean');
+          shellEl.classList.toggle('clean', on);
+          btn.setAttribute('aria-pressed', on);
+        });
+      })();
+
+      /* נקרא רק אחרי שכל אלמנטי המפה קיימים — כולל הבתים, שנוצרים אחרי
+         המרחבים. אחרת שבב "בתים" לא היה נוצר בכלל. */
+      buildChips();
+      applyEmph();
+
+      worldEl.classList.add('map-enter');
+      setTimeout(function () { worldEl.classList.remove('map-enter'); }, 1100);
 
       initialView(false);
       // אם ידוע לנו איפה התושב גר — ממרכזים עליו את הפתיחה (בלי לזום פנימה

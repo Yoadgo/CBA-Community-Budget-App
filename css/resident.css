@@ -1135,12 +1135,21 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
    שלו בכל רמת זום — בדיוק כמו בית או מבנה ציבור. */
 
 /* סמן נעיצה — טיפה שקצה התחתון שלה יושב בדיוק על הנקודה שנבחרה */
+/* ⚠️ עוגן הסמן — תוקן 7.9.26 אחרי בדיקה בטלפון (יועד: "סטייה שמאלה למטה").
+   הבאג: `rotate` היא תכונה **נפרדת** מ-`transform`, והיא מוחלת **לפניה**.
+   כלומר `translate(-50%,-100%)` רץ במערכת הצירים המסובבת ודחף את הסמן
+   באלכסון במקום ישר למעלה. נמדד: 14.6px שמאלה ו-22.2px מתחת לנקודה שנדקרה.
+   התיקון: טרנספורם אחד ומסודר, בלי `rotate` נפרד. ההיסט האנכי הוא חצי-
+   האלכסון של הריבוע (pin × √2/2) — המרחק מהמרכז אל הקצה החד אחרי הסיבוב —
+   ועוד חצי גובה, כך שהקצה יושב בדיוק על הקואורדינטה. נמדד אחרי: 0 ו-0.
+   מחייב box-sizing:border-box (יש גלובלי ב-style.css) — אחרת המסגרת
+   מגדילה את הריבוע והנוסחה מפספסת. */
 .map-pin {
+  --pin: 26px;
   position: absolute;
-  width: 26px; height: 26px;
-  transform: translate(-50%, -100%);
+  width: var(--pin); height: var(--pin);
+  transform: translate(-50%, calc(-50% - var(--pin) * 0.7071)) rotate(-45deg);
   border-radius: 50% 50% 50% 0;
-  rotate: -45deg;
   background: var(--action, #111827);
   border: 2.5px solid #fff;
   box-shadow: 0 4px 12px rgba(17, 24, 39, .35);
@@ -1320,3 +1329,71 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 /* שלט רחוב — אותה שפה, גודל קבוע על המסך (הטרנספורם נקבע ב-resident.js) */
 .m2-stq rect { fill: rgba(251,250,247,.92); stroke: rgba(216,210,194,.9); }
 .m2-stq text { font-size: 10px; font-weight: 600; fill: #6E6A5F; }
+
+/* ==== מצב הבלטה (2026-09-07) ==============================================
+   שבב שנבחר מבליט קבוצה; כל השאר נסוג ל-24% ומאבד רוויה — נשאר כהקשר במקום
+   להיעלם. הבחירות נערמות. "הכול" מחזיר לאיזון. */
+.map-chipbar {
+  position: absolute; top: 70px; right: 14px; left: 14px; z-index: 24;
+  display: flex; gap: 5px; overflow-x: auto; padding: 4px;
+  scrollbar-width: none; -ms-overflow-style: none;
+  background: rgba(255,255,255,.68);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid rgba(255,255,255,.6); border-radius: 999px;
+  box-shadow: 0 1px 1px rgba(16,24,40,.04), 0 10px 26px rgba(16,24,40,.10), 0 1px 0 rgba(255,255,255,.8) inset;
+}
+.map-chipbar::-webkit-scrollbar { display: none; }
+.map-chip {
+  flex: none; border: none; background: transparent; cursor: pointer;
+  font: 600 12.5px/1 inherit; color: var(--text-soft); padding: 8px 13px; border-radius: 999px;
+  white-space: nowrap; transition: background var(--t), color var(--t);
+}
+.map-chip:hover { background: rgba(17,24,39,.05); }
+.map-chip[aria-pressed="true"] { background: #2B2924; color: #FBFAF7; }
+.map-chip--all { color: var(--text-muted); }
+
+.map-shell.foc [data-g] { opacity: .24; filter: saturate(.2); }
+.map-shell.foc [data-g].is-emph { opacity: 1; filter: none; }
+[data-g] { transition: opacity .22s ease, filter .22s ease; }
+.m2-mk { transition: transform .22s cubic-bezier(.22,.9,.3,1); }
+
+@media (max-width: 720px) { .map-chipbar { top: 64px; right: 10px; left: 10px; } }
+
+/* ==== כניסה מדורגת — השכבות נבנות מלמטה למעלה בחצי שנייה ==== */
+@media (prefers-reduced-motion: no-preference) {
+  .map-world.map-enter { animation: mapWorldIn .45s ease both; }
+  .map-world.map-enter .map-base > g { animation: mapLayerIn .5s cubic-bezier(.22,.9,.3,1) both; }
+  .map-world.map-enter .map-base > g:nth-of-type(2) { animation-delay: .06s; }
+  .map-world.map-enter .map-base > g:nth-of-type(3) { animation-delay: .12s; }
+  .map-world.map-enter .map-base > g:nth-of-type(4) { animation-delay: .16s; }
+  .map-world.map-enter .map-base > g:nth-of-type(5) { animation-delay: .20s; }
+  .map-world.map-enter .map-base > g:nth-of-type(n+6) { animation-delay: .26s; }
+  @keyframes mapWorldIn { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes mapLayerIn { from { opacity: 0 } to { opacity: 1 } }
+}
+
+/* ==== מצב נקי לצילום מסך (2026-09-07) =====================================
+   גיאומטריה ומספרי בתים בלבד — בלי עצים, סמלילים, שמות, שלטים או מיכלים.
+   זהו מצב *תצוגה* ולא מנגנון פרטיות: הנתונים עדיין טעונים בדפדפן של תושב
+   שממילא רשאי לראות אותם. !important נחוץ כי layoutPoi קובע display ישירות. */
+.map-shell.clean .m2-l-canopy,
+.map-shell.clean .m2-l-tree,
+.map-shell.clean .map-poi,
+.map-shell.clean .map-amenity__label,
+.map-shell.clean .m2-stq,
+.map-shell.clean .m2-stdash,
+.map-shell.clean [data-g="waste"],
+.map-shell.clean [data-g="shelter"],
+.map-shell.clean .map-chipbar,
+.map-shell.clean .map-hint,
+.map-shell.clean .map-legend,
+.map-shell.clean .map-legend-toggle,
+.map-shell.clean .map-search-wrap { display: none !important; }
+
+/* בתים: מספר בלבד, קצת יותר כהה כדי שייקרא גם אחרי צילום ושליחה בוואטסאפ.
+   סימון "הבית שלי" יורד — הצילום נשלח למישהו אחר. */
+.map-shell.clean .mh-body,
+.map-shell.clean .mh-mine { display: none !important; }
+.map-shell.clean .mh-num { opacity: 1 !important; color: #3F3D38; font-weight: 700; }
+.map-shell.clean .map-house.is-mine { box-shadow: none; border-color: var(--m2-build-edge); }
+.map-shell.clean #map-clean { background: #2B2924; color: #FBFAF7; }
