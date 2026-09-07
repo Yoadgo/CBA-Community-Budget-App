@@ -143,6 +143,10 @@
       // מקבצים — לא א"ב: האזורים כתובים שם מצפון לדרום, וזה מסלול ההליכה
       // האמיתי בשטח. אזור שאינו ברשימה (נמחק/שונה שמו) יורד לסוף.
       var order = { area: [], type: [] };
+      /* המשימות שטרם שובצו לשבוע נטענות בקריאה נפרדת (scope=unplanned),
+         כי הן לא שייכות לאף שבוע ולכן לא מגיעות עם רשימת השבוע. הן
+         מוצגות רק למנהל — לצוות אין מה לעשות עם משימה שטרם תוכננה. */
+      var unplanned = [];
 
       container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
       var root = container.querySelector("#gt-root");
@@ -168,6 +172,14 @@
           isManager = (sim && sim.isRoleSim) ? !sim.isExternal : !!res.isManager;
           if (res.week) week = res.week;
           draw();
+          if (isManager) loadUnplanned();
+        });
+      }
+
+      function loadUnplanned() {
+        CBA.data.getGardenTasks({ scope: "unplanned" }, function (res) {
+          unplanned = (res && res.ok) ? (res.rows || []) : [];
+          draw();
         });
       }
 
@@ -181,6 +193,7 @@
         return c;
       }
       function visible() {
+        if (filter === "unplanned") return unplanned.slice();
         return rows.filter(function (t) {
           if (filter === "done") return t.flag === "ממתין לאישור";
           if (filter === "dragged") return t.flag === "נגררה" || (t.drags || 0) > 0;
@@ -208,10 +221,41 @@
           body = '<div class="gd-reps">' +
             '<div class="skeleton" style="height:86px;border-radius:16px"></div>'.repeat(3) + '</div>';
         } else if (!list.length) {
-          body = CBA.ui.emptyState({
-            title: total ? "אין כאן משימות" : "אין משימות בשבוע הזה",
-            sub: total ? "נסה מסנן אחר." : "כשמנהל הגינון ישבץ משימות לשבוע — הן יופיעו כאן."
+          body = CBA.ui.emptyState(
+            filter === "unplanned"
+              ? { title: "הכול משובץ", sub: "כל דיווח שהגיע כבר קיבל שבוע." }
+              : {
+                  title: total ? "אין כאן משימות" : "אין משימות בשבוע הזה",
+                  sub: total ? "נסה מסנן אחר."
+                    : (isManager && unplanned.length
+                        ? unplanned.length + " משימות ממתינות לשיבוץ — ר' הלשונית \"לשיבוץ\"."
+                        : "כשמנהל הגינון ישבץ משימות לשבוע — הן יופיעו כאן.")
+                });
+        } else if (filter === "done" && isManager) {
+          /* תור האישורים מקובץ אחרת מכל שאר המסך, ובכוונה: כאן הקיבוץ **הוא
+             הכלל** ולא העדפת תצוגה. משימות שגרה מאותה תבנית ואותו שבוע הן
+             היחידות שמותר לאשר יחד (החלטה 3), אז הן מקובצות יחד ומקבלות
+             כפתור "אשר את כל N". כל השאר — תקלות מדיווח ומשימות יזומות —
+             נופלות לקבוצת "לאישור פרטני", ושם כל אחת מאושרת לחוד.
+             לכן שורת הסידור לא משפיעה על התצוגה הזאת. */
+          var batches = [], seenB = {};
+          list.forEach(function (t) {
+            var k = (t.kind === "שגרה" && t.templateId)
+              ? "b:" + t.templateId + "|" + t.week : "solo";
+            if (!seenB[k]) { seenB[k] = []; batches.push(k); }
+            seenB[k].push(t);
           });
+          body = batches.map(function (k) {
+            var items = seenB[k];
+            var bulk = k !== "solo" && items.length > 1;
+            var label = k === "solo" ? "לאישור פרטני"
+              : "שגרה · " + (items[0].title || items[0].category || "");
+            return '<div class="gt-grp">' + esc(label) +
+              ' <em>· ' + (items.length === 1 ? "משימה אחת" : items.length + " משימות") + '</em><hr>' +
+              (bulk ? '<button type="button" class="gt-bulk" data-act="batch" data-tpl="' +
+                 esc(k) + '">' + ico("check") + 'אשר את כל ' + items.length + '</button>' : '') +
+              '</div><div class="gd-reps">' + items.map(card).join("") + '</div>';
+          }).join("");
         } else if (s.group) {
           var groups = [], seen = {};
           list.forEach(function (t) {
@@ -242,7 +286,9 @@
             '<button type="button" data-wk="1" aria-label="שבוע הבא">' + ico("next") + '</button>' +
           '</div>' +
           '<div class="gd-seg">' +
-            seg("open", "לביצוע", c.open) + seg("done", "בוצעו", c.done) + seg("dragged", "נגררו", c.dragged) +
+            seg("open", "לביצוע", c.open) + seg("done", "בוצעו", c.done) +
+            seg("dragged", "נגררו", c.dragged) +
+            (isManager ? seg("unplanned", "לשיבוץ", unplanned.length) : "") +
           '</div>' +
           '<div class="gt-sort"><b>סידור לפי</b>' +
             SORTS.map(function (o) {
@@ -282,19 +328,38 @@
         var src = t.kind || "משימה";
         var contract = t.kind === "שגרה";
         var where = t.area || "";
-        return '<article class="gd-rep gt-row k-' + cat.key + (done ? " is-done" : "") +
+        /* בתצוגת "לשיבוץ" תיבת הסימון מוחלפת בכפתור שיבוץ: אי אפשר לסמן
+           כבוצעה משימה שעוד לא נכנסה לשום שבוע, והפעולה הנכונה שם היא אחת. */
+        var planning = filter === "unplanned";
+        /* בתצוגת "בוצעו" התיבה משנה משמעות לפי מי מסתכל: לצוות היא ביטול
+           הסימון שלו, ולמנהל היא **האישור** — הפעולה שבאמת סוגרת. שאר
+           ההחלטות של המנהל (החזרה, סגירה עם סיבה) יושבות בתפריט ה-⋯. */
+        var approving = done && isManager;
+        return '<article class="gd-rep gt-row k-' + cat.key +
+            (done ? (approving ? " is-await" : " is-done") : "") +
             '" data-id="' + esc(t.id) + '">' +
-          '<button type="button" class="gt-box" data-act="' + (done ? "undo" : "done") + '"' +
-            ' aria-label="' + (done ? "ביטול סימון" : "סימון כבוצע") + '">' + ico("check") + '</button>' +
+          (planning
+            ? '<button type="button" class="gt-plan" data-act="plan" aria-label="שיבוץ לשבוע">' +
+                ico("cal") + '</button>'
+            : '<button type="button" class="gt-box' + (approving ? " is-approve" : "") +
+                '" data-act="' + (approving ? "approve" : (done ? "undo" : "done")) + '"' +
+                ' aria-label="' + (approving ? "אישור" : (done ? "ביטול סימון" : "סימון כבוצע")) +
+                '">' + ico("check") + '</button>') +
           '<div class="gt-body">' +
             '<div class="gt-top"><span class="gd-rep__id">#' + esc(t.id) + '</span>' +
               '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
               tags + '<span class="gt-src' + (contract ? " is-contract" : "") + '">' +
                 esc(src) + '</span></div>' +
-            '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
-            (where ? '<div class="gt-m">' + ico("pin") + esc(where) + '</div>' : '') +
+            /* הכותרת והמיקום על שורה אחת (2026-09-07): המיקום הוא הקשר לכותרת
+               ולא נתון עצמאי, ושורה שלישית לכל כרטיס עלתה ~18px × מספר
+               המשימות — מה שהוריד כמעט שתי משימות מכל מסך. */
+            '<div class="gt-t">' + esc(t.title || t.category || "משימה") +
+              (where ? '<em>' + ico("pin") + esc(where) + '</em>' : '') + '</div>' +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
-            (done ? '<div class="gt-wait">' + ico("clock") + 'ממתין לאישור הוועד</div>' : '') +
+            (done
+              ? '<div class="gt-wait">' + ico("clock") +
+                (isManager ? 'ממתין לאישורך' : 'ממתין לאישור הוועד') + '</div>'
+              : '') +
           '</div>' +
           '<button type="button" class="gt-more" data-act="menu" aria-label="עוד פעולות">' +
             ico("dots") + '</button>' +
@@ -320,16 +385,22 @@
       function onCardClick(e) {
         var btn = e.target.closest("[data-act]");
         if (!btn) return;
+        /* "אשר את כל N" יושב בכותרת הקבוצה ולא בתוך כרטיס, ולכן הוא נבדק
+           **לפני** איתור ה-.gt-row — אחרת החיפוש נכשל והלחיצה נבלעת בשקט. */
+        if (btn.dataset.act === "batch") return approveBatch(btn.dataset.tpl);
         var art = btn.closest(".gt-row");
         if (!art) return;
         var id = art.dataset.id;
         var act = btn.dataset.act;
         if (act === "menu") return openMenu(id);
+        if (act === "plan") return askWeek(id);
+        if (act === "approve") return run("approve", id, {});
         if (act === "done" || act === "undo") return run(act, id, {});
       }
 
       function byId(id) {
-        for (var i = 0; i < rows.length; i++) if (String(rows[i].id) === String(id)) return rows[i];
+        var all = rows.concat(unplanned);
+        for (var i = 0; i < all.length; i++) if (String(all[i].id) === String(id)) return all[i];
         return null;
       }
 
@@ -349,7 +420,77 @@
           if (op === "defer") CBA.ui.toast("נדחה לשבוע הבא");
           if (op === "note") CBA.ui.toast("ההערה נשמרה");
           if (op === "block") CBA.ui.toast("נשלח למנהל הגינון");
+          if (op === "approve") CBA.ui.toast("אושר · נשלח עדכון למדווח");
+          if (op === "close") CBA.ui.toast("נסגר · " + extra.closure);
+          if (op === "return") CBA.ui.toast("הוחזר לצוות להשלמה");
+          if (op === "plan") {
+            CBA.ui.toast("שובץ · " + weekLabel(extra.week));
+            // אחרי שיבוץ המשימה עוברת מרשימה לרשימה, אז חוזרים ל"לביצוע"
+            filter = "open";
+          }
           load();
+        });
+      }
+
+      /* בחירת שבוע לשיבוץ. שלוש אפשרויות ולא לוח שנה: מנהל הגינון משבץ
+         לשבוע הנוכחי או לאחד הבאים, ובחירה מתוך שלוש היא הקשה אחת במקום
+         דיאלוג תאריכים. שיבוץ רחוק יותר נעשה מהשבוע ההוא. */
+      function askWeek(id) {
+        var t = byId(id);
+        if (!t) return;
+        var opts = [
+          { k: shiftKey(todayKey(), 0), label: "השבוע" },
+          { k: shiftKey(todayKey(), 1), label: "שבוע הבא" },
+          { k: shiftKey(todayKey(), 2), label: "בעוד שבועיים" }
+        ];
+        var wrap = document.createElement("div");
+        wrap.className = "gt-sheet-wrap";
+        wrap.innerHTML =
+          '<div class="gt-sheet-bd"></div>' +
+          '<div class="gt-sheet" role="dialog" aria-label="שיבוץ לשבוע">' +
+            '<div class="gt-grip" aria-hidden="true"></div>' +
+            '<h4>שיבוץ לשבוע</h4>' +
+            '<p class="sub">' + esc(t.title || t.category || "משימה") + '</p>' +
+            opts.map(function (o) {
+              return '<button type="button" class="gt-opt" data-wk="' + o.k + '"><u>' +
+                ico("cal") + '</u><div>' + esc(o.label) +
+                '<span>' + esc(weekLabel(o.k)) + '</span></div></button>';
+            }).join("") +
+          '</div>';
+        document.body.appendChild(wrap);
+        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
+        function close() {
+          wrap.classList.remove("is-open");
+          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
+        }
+        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        wrap.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-wk]");
+          if (!b) return;
+          close();
+          run("plan", id, { week: b.dataset.wk });
+        });
+      }
+
+      /* אישור מרוכז. המפתח כולל תבנית+שבוע, ולכן אי אפשר לצרף לקבוצה משימה
+         משבוע אחר גם אם המסך יצייר אותה בטעות. השרת מאמת שוב. */
+      function approveBatch(key) {
+        var items = visible().filter(function (t) {
+          return t.kind === "שגרה" && t.templateId &&
+                 ("b:" + t.templateId + "|" + t.week) === key;
+        });
+        if (items.length < 2) return;
+        CBA.ui.confirm(items.length + " משימות שגרה מאותה תבנית ואותו שבוע ייסגרו כבוצעו.", {
+          title: "אישור מרוכז", okText: "אשר את כולן"
+        }).then(function (yes) {
+          if (!yes || busy) return;
+          busy = true;
+          CBA.data.gardenApproveBatch(items.map(function (t) { return t.id; }), function (res) {
+            busy = false;
+            if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "האישור לא הצליח");
+            CBA.ui.toast(res.count + " משימות אושרו");
+            load();
+          });
         });
       }
 
@@ -373,8 +514,20 @@
               '<div>הערת ביצוע<span>מה נעשה בפועל — נשמר ביומן</span></div></button>' +
             '<button type="button" class="gt-opt" data-m="defer"><u>' + ico("cal") + '</u>' +
               '<div>דחייה לשבוע הבא<span>תסומן "נגררה" ותעלה בראש הרשימה</span></div></button>' +
-            '<button type="button" class="gt-opt" data-m="block"><u>' + ico("clock") + '</u>' +
-              '<div>לא ניתן לביצוע<span>עובר למנהל הגינון עם הסיבה</span></div></button>' +
+            (isManager
+              ? ''
+              : '<button type="button" class="gt-opt" data-m="block"><u>' + ico("clock") + '</u>' +
+                '<div>לא ניתן לביצוע<span>עובר למנהל הגינון עם הסיבה</span></div></button>') +
+            /* פעולות המנהל. "החזרה להשלמה" מוצעת רק כשיש מה להחזיר — כלומר
+               כשהצוות כבר סימן ביצוע וזה ממתין לאישור. */
+            (isManager && t.flag === "ממתין לאישור"
+              ? '<button type="button" class="gt-opt" data-m="return"><u>' + ico("undo") + '</u>' +
+                '<div>החזרה להשלמה<span>חוזרת לצוות עם מה שחסר</span></div></button>'
+              : '') +
+            (isManager
+              ? '<button type="button" class="gt-opt" data-m="close"><u>' + ico("check") + '</u>' +
+                '<div>סגירה עם סיבה<span>הועבר לבינוי · בוטל · לא רלוונטי</span></div></button>'
+              : '') +
           '</div>';
         document.body.appendChild(wrap);
         requestAnimationFrame(function () { wrap.classList.add("is-open"); });
@@ -402,6 +555,14 @@
               if (yes) run("defer", t.id, {});
             });
           }
+          if (m === "return") {
+            CBA.ui.prompt("המשימה תחזור לצוות עם הדגל \"הוחזר להשלמה\".", {
+              title: "מה חסר?",
+              placeholder: "למשל: הגיזום נעשה אבל הגזם לא פונה",
+              okText: "החזרה לצוות"
+            }).then(function (txt) { if (txt) run("return", t.id, { note: txt }); });
+          }
+          if (m === "close") return askClosure(t);
           if (m === "block") {
             CBA.ui.prompt("המשימה לא תיסגר — היא חוזרת לשולחן מנהל הגינון עם הסיבה.", {
               title: "מה מונע את הביצוע?",
@@ -409,6 +570,44 @@
               okText: "שליחה למנהל"
             }).then(function (txt) { if (txt) run("block", t.id, { note: txt }); });
           }
+        });
+      }
+
+      /* סגירה שאינה "בוצע". שלוש הסיבות מהאפיון; "בוצע" לא מופיע כאן כי הוא
+         כפתור האישור עצמו, והוא היחיד ששולח מייל לתושב. */
+      function askClosure(t) {
+        var reasons = [
+          { k: "הועבר לבינוי", sub: "לא בתחום הגינון" },
+          { k: "בוטל",         sub: "הוחלט לא לבצע" },
+          { k: "לא רלוונטי",   sub: "הבעיה כבר לא קיימת" }
+        ];
+        var wrap = document.createElement("div");
+        wrap.className = "gt-sheet-wrap";
+        wrap.innerHTML =
+          '<div class="gt-sheet-bd"></div>' +
+          '<div class="gt-sheet" role="dialog" aria-label="סגירה עם סיבה">' +
+            '<div class="gt-grip" aria-hidden="true"></div>' +
+            '<h4>סגירה עם סיבה</h4>' +
+            '<p class="sub">' + esc(t.title || t.category || "משימה") +
+              '<br>המדווח לא יקבל מייל "הושלם" — הסיבה תופיע לו במסך.</p>' +
+            reasons.map(function (o) {
+              return '<button type="button" class="gt-opt" data-cl="' + esc(o.k) + '"><u>' +
+                ico("check") + '</u><div>' + esc(o.k) +
+                '<span>' + esc(o.sub) + '</span></div></button>';
+            }).join("") +
+          '</div>';
+        document.body.appendChild(wrap);
+        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
+        function close() {
+          wrap.classList.remove("is-open");
+          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
+        }
+        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        wrap.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-cl]");
+          if (!b) return;
+          close();
+          run("close", t.id, { closure: b.dataset.cl });
         });
       }
 

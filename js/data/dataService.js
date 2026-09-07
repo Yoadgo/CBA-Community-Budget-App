@@ -1373,7 +1373,13 @@ CBA.data = (function () {
     gardenTask: function (op, id, extra, cb) {
       var payload = { op: op, id: id };
       if (extra && extra.note !== undefined) payload.note = extra.note;
+      if (extra && extra.week !== undefined) payload.week = extra.week;
+      if (extra && extra.closure !== undefined) payload.closure = extra.closure;
       CBA.sheets.postRead("gardenTask", payload, cb);
+    },
+    /* אישור מרוכז — רק שגרה מאותה תבנית ואותו שבוע. השרת אוכף (ר' החלטה 3). */
+    gardenApproveBatch: function (ids, cb) {
+      CBA.sheets.postRead("gardenApproveBatch", { ids: ids }, cb);
     },
     // ייצוא לגיליון חדש (2026-08-07). payload: { columns, rowIndexes, name, subtitle }
     exportResidents: function (payload, cb) { CBA.sheets.postRead("exportResidents", payload, cb); },

@@ -186,7 +186,7 @@
 /* ---------- רשימת הדיווחים ----------
    שתי עמודות בדסקטופ: כרטיס בודד לא צריך 1900px, וטור אחד מבזבז את הרוחב.
    "לבנות לרוחב" אינו "למתוח כל אלמנט לרוחב מלא". */
-.gd-reps { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; align-items: start; }
+.gd-reps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
 @media (max-width: 900px) { .gd-reps { grid-template-columns: 1fr; } }
 .gd-rep { padding: 14px 16px; display: flex; gap: 13px; align-items: flex-start;
   position: relative; overflow: hidden; }
@@ -284,12 +284,12 @@
 .gt-sort button.on { background: var(--action, #111827); border-color: var(--action, #111827);
   color: #fff; font-weight: 600; }
 
-.gt-grp { display: flex; align-items: center; gap: 8px; margin: 15px 2px 8px;
+.gt-grp { display: flex; align-items: center; gap: 8px; margin: 13px 2px 7px;
   font-size: 12.5px; font-weight: 700; color: var(--text, #374151); }
 .gt-grp em { font-style: normal; font-weight: 600; color: var(--text-soft, #6B7280); font-size: 11.5px; }
 .gt-grp hr { flex: 1; border: 0; height: 1px; background: rgba(17,24,39,.08); margin: 0; }
 
-.gt-row { padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start; }
+.gt-row { padding: 9px 12px; display: flex; gap: 10px; align-items: flex-start; }
 .gt-box { width: 28px; height: 28px; flex: none; margin-top: 2px; border-radius: 8px;
   border: 1.8px solid rgba(17,24,39,.18); background: rgba(255,255,255,.75);
   display: grid; place-items: center; color: transparent; cursor: pointer;
@@ -297,19 +297,46 @@
 .gt-box svg { width: 15px; height: 15px; }
 .gt-box:hover { border-color: rgba(15,107,69,.5); }
 .gt-row.is-done .gt-box { background: #0F6B45; border-color: #0F6B45; color: #fff; }
+/* כפתור השיבוץ תופס את מקומה של תיבת הסימון בתצוגת "לשיבוץ". הוא מלא ולא
+   מתאר, כי בתצוגה הזאת הוא הפעולה היחידה ולא אחת מכמה. */
+/* תיבת האישור של המנהל. ירוקה מלאה כבר במנוחה — בניגוד לתיבת הסימון של
+   הצוות שהיא ריקה: כאן הפעולה היא "לאשר את מה שכבר נעשה", לא "לסמן". */
+.gt-box.is-approve { border-color: var(--ok, #059669); color: var(--ok, #059669);
+  background: rgba(5,150,105,.08); }
+.gt-box.is-approve:hover { background: var(--ok, #059669); color: #fff; }
+
+/* "אשר את כל N" — יושב בכותרת הקבוצה ולא על כרטיס, כי הוא פועל על הקבוצה. */
+.gt-bulk { flex: none; display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid rgba(5,150,105,.35); border-radius: 99px; background: rgba(5,150,105,.07);
+  color: var(--ok, #059669); font: inherit; font-size: 11.5px; font-weight: 600;
+  padding: 4px 11px; cursor: pointer; }
+.gt-bulk svg { width: 13px; height: 13px; }
+.gt-bulk:hover { background: var(--ok, #059669); color: #fff; border-color: var(--ok, #059669); }
+
+.gt-plan { width: 28px; height: 28px; flex: none; margin-top: 2px; border: 0; border-radius: 8px;
+  background: var(--action, #111827); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.gt-plan svg { width: 15px; height: 15px; }
+.gt-plan:hover { background: #000; }
 .gt-body { flex: 1; min-width: 0; }
 .gt-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.gt-t { font-weight: 600; font-size: 14.5px; margin-top: 4px; line-height: 1.35; }
-.gt-m { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 3px;
-  display: flex; align-items: center; gap: 5px; }
-.gt-m svg { width: 12px; height: 12px; flex: none; }
-.gt-note { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 6px;
+/* כותרת + מיקום על שורה אחת. המיקום ב-<em> אפור וקטן, נשבר לשורה שנייה רק
+   כשהכותרת באמת ארוכה — ר' ההערה ב-card() ב-gardenTasks.js. */
+.gt-t { font-weight: 600; font-size: 14px; margin-top: 2px; line-height: 1.4; }
+.gt-t em { font-style: normal; font-weight: 400; font-size: 12px;
+  color: var(--text-soft, #6B7280); margin-inline-start: 7px; white-space: nowrap; }
+.gt-t em svg { width: 11px; height: 11px; vertical-align: -1px; margin-inline-end: 2px; }
+.gt-note { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 5px;
   border-inline-start: 2px solid rgba(17,24,39,.12); padding-inline-start: 8px; }
 .gt-more { width: 28px; height: 28px; flex: none; border: 0; border-radius: 8px; background: none;
   color: #B0B6BF; display: grid; place-items: center; cursor: pointer; margin-top: 1px; }
 .gt-more svg { width: 16px; height: 16px; }
 .gt-more:hover { background: rgba(17,24,39,.05); color: var(--text-soft, #6B7280); }
 .gt-row.is-done { opacity: .75; }
+/* בתור האישורים של המנהל הכרטיס **לא** מקבל קו-חוצה ולא עמעום: בעיני הצוות
+   המשימה נגמרה, אבל בעיני המנהל היא בדיוק מה שדורש פעולה — וטיפוגרפיה של
+   "בוצע וסולק" קוראת הפוך מ"ממתין לך". ר' is-await ב-card(). */
+.gt-row.is-await { opacity: 1; }
+.gt-row.is-await .gt-t { text-decoration: none; }
 .gt-row.is-done .gt-t { color: var(--text-soft, #6B7280);
   text-decoration: line-through; text-decoration-color: rgba(17,24,39,.22); }
 .gt-wait { display: flex; align-items: center; gap: 5px; margin-top: 5px;

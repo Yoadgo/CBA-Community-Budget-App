@@ -79,6 +79,7 @@ var ACTION_PERMS = {
   // בניגוד לפעולות התושב (submitGardenReport / gardenFeedback), שפתוחות לכל
   // תושב פעיל ולכן אינן ברשימה הזאת כלל, אלה שייכות לבעלי הרשאת גינון בלבד.
   gardenTask: PERM_GARDEN,
+  gardenApproveBatch: PERM_GARDEN,
   // ניהול תקציב ותשלומים
   saveTransaction: PERM_BUDGET, deleteTransaction: PERM_BUDGET, saveBudget: PERM_BUDGET,
   setBudgetMeta: PERM_BUDGET, renameCategory: PERM_BUDGET, logBudgetUpdate: PERM_BUDGET,
@@ -586,6 +587,7 @@ function doPost(e) {
       case 'submitGardenReport':  return json_(submitGardenReport_(ss, body));
       case 'gardenFeedback':      return json_(gardenFeedback_(ss, body));
       case 'gardenTask':          return json_(gardenTaskAction_(ss, body));
+      case 'gardenApproveBatch':  return json_(gardenApproveBatch_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -7004,7 +7006,10 @@ var GARDEN_REPORT_HEADERS = [
  * שנמדדו היום בעין יימחקו. ערך מנורמל הופך את המעבר להמרה חד-פעמית במקום
  * הזנה מחדש של כל הדיווחים שנצברו. */
 var GARDEN_TASK_HEADERS = [
-  'מזהה', 'סוג', 'כותרת', 'קטגוריה', 'אזור', 'מיקום X', 'מיקום Y',
+  /* "נוצר בתאריך" (2026-09-07) — מתי המשימה נולדה, להבדיל מ"עודכן בתאריך"
+   * שנדרס בכל פעולה. בלעדיה אי אפשר לחשב זמן טיפול, וזה נתון שאי אפשר
+   * להשלים רטרואקטיבית: שורה שנוצרה בלעדיו לא תדע לעולם מתי נפתחה. */
+  'מזהה', 'סוג', 'כותרת', 'קטגוריה', 'אזור', 'מיקום X', 'מיקום Y', 'נוצר בתאריך',
   'שלב', 'דגל', 'סגירה',
   'מזהה תבנית', 'שבוע', 'תאריך יעד', 'מספר עובדים',
   'תמונות ביצוע', 'הערת ביצוע', 'מונה גרירות', 'שבוע מקורי',
@@ -7050,7 +7055,13 @@ var GARDEN_DEFAULT_SETTINGS = [
  *  בטוח להרצה חוזרת — טאב קיים לא נגוע, גם לא שורת הכותרות שלו. */
 function gardenEnsureSheet_(ss, name, headers, widths) {
   var sh = ss.getSheetByName(name);
-  if (sh) return sh;
+  /* טאב קיים: משלימים עמודות שנוספו לקוד אחרי שהוא נוצר. בלי זה עמודה חדשה
+   * ב-GARDEN_*_HEADERS פשוט לא קיימת בגיליון שכבר הותקן, gardenCols_ מחזיר
+   * עבורה undefined, וכל כתיבה אליה נופלת בשקט — הפיצ'ר "עובד" ולא שומר
+   * כלום. העמודות נוספות מימין ואף עמודה קיימת לא זזה, כך שנתונים ועריכות
+   * ידניות של יועד נשמרים. (2026-09-07, אחרי שעמודת "נוצר בתאריך" נוספה
+   * לטאב שכבר היה בייצור.) */
+  if (sh) { gardenAddMissingCols_(sh, headers); return sh; }
   sh = ss.insertSheet(name);
   sh.getRange(1, 1, 1, headers.length).setValues([headers]);
   sh.getRange(1, 1, 1, headers.length).setFontWeight('bold');
@@ -7161,6 +7172,19 @@ function getGardenPhotosFolder_(monthKey) {
 }
 
 /** מפת כותרת->אינדקס, כדי שסדר העמודות בגיליון יוכל להשתנות בלי לשבור קוד. */
+/** משלים לטאב קיים עמודות שקיימות ב-headers ואינן בשורת הכותרת. */
+function gardenAddMissingCols_(sh, headers) {
+  try {
+    var last = sh.getLastColumn();
+    if (!last) { sh.getRange(1, 1, 1, headers.length).setValues([headers]); return; }
+    var have = sh.getRange(1, 1, 1, last).getValues()[0]
+      .map(function (h) { return String(h).trim(); });
+    var missing = headers.filter(function (h) { return have.indexOf(h) === -1; });
+    if (!missing.length) return;
+    sh.getRange(1, last + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
+  } catch (e) { /* השלמת עמודות לא מפילה התקנה */ }
+}
+
 function gardenCols_(sh) {
   var last = sh.getLastColumn();
   var h = sh.getRange(1, 1, 1, last).getValues()[0];
@@ -7353,6 +7377,7 @@ function submitGardenReport_(ss, body) {
     trow[tc['אזור']] = String(body.area || '');
     trow[tc['מיקום X']] = x; trow[tc['מיקום Y']] = y;
     trow[tc['שלב']] = 'התקבל';
+    trow[tc['נוצר בתאריך']] = new Date();
     trow[tc['עודכן בתאריך']] = new Date();
     trow[tc['עודכן על ידי']] = name;
     trow[tc['שנת תקציב']] = year;
@@ -7539,6 +7564,7 @@ function gardenTaskObj_(row, c) {
     note:      g('הערת ביצוע'),
     drags:     parseInt(g('מונה גרירות'), 10) || 0,
     firstWeek: g('שבוע מקורי'),
+    createdAt: g('נוצר בתאריך'),
     updatedAt: g('עודכן בתאריך'),
     updatedBy: g('עודכן על ידי')
   };
@@ -7607,6 +7633,113 @@ function gardenSet_(sh, row, cols, field, value) {
   sh.getRange(row, cols[field] + 1).setValue(value);
 }
 
+/** הדיווחים שנקשרו למשימה. משמש למייל "הושלם": דיווח אחד, או כמה אם אוחדו. */
+function gardenReportsForTask_(ss, taskId) {
+  var out = [];
+  var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+  if (!rsh || rsh.getLastRow() < 2) return out;
+  var rc = gardenCols_(rsh);
+  var v = rsh.getDataRange().getValues();
+  for (var r = 1; r < v.length; r++) {
+    if (String(v[r][rc['מזהה משימה']] || '').trim() !== String(taskId).trim()) continue;
+    out.push({
+      id:       String(v[r][rc['מזהה']] || ''),
+      familyId: String(v[r][rc['מזהה משפחה']] || ''),
+      name:     String(v[r][rc['שם מדווח']] || ''),
+      category: String(v[r][rc['קטגוריה']] || ''),
+      place:    String(v[r][rc['מיקום מילולי']] || v[r][rc['אזור']] || ''),
+      mergedInto: String(v[r][rc['אוחד לדיווח']] || '')
+    });
+  }
+  return out;
+}
+
+/** מייל "הטיפול הושלם" לכל מי שדיווח על המשימה. נשלח **רק** אחרי אישור מנהל
+ *  ורק בסגירה "בוצע" — סגירה מסוג אחר אינה "הושלם" ואין לה תבנית משלה. */
+function gardenNotifyCompleted_(ss, taskId) {
+  try {
+    var reps = gardenReportsForTask_(ss, taskId);
+    for (var i = 0; i < reps.length; i++) {
+      var rep = reps[i];
+      if (!rep.familyId) continue;
+      sendResidentTemplate_(ss, 'GARDEN_COMPLETED', emailsForFamilyId_(ss, rep.familyId), {
+        'שם': rep.name || '',
+        'מזהה': rep.id,
+        'קטגוריה': rep.category,
+        'מיקום': rep.place || 'השיכון',
+        'איחוד': rep.mergedInto
+          ? 'הדיווח שלך אוחד עם פנייה מס\' ' + rep.mergedInto + '.\n\n' : ''
+      });
+    }
+  } catch (e) { /* כשל מייל לא מבטל אישור שכבר נשמר */ }
+}
+
+/** סוגר משימה אחת בשורה נתונה. מרכז את כל מה שאישור/סגירה משנים, כדי
+ *  שאישור בודד ואישור מרוכז לעולם לא ייפרדו בהתנהגות. */
+function gardenCloseRow_(ss, sh, row, c, cur, closure, who) {
+  gardenSet_(sh, row, c, 'שלב', 'הושלם');
+  gardenSet_(sh, row, c, 'דגל', '');
+  gardenSet_(sh, row, c, 'סגירה', closure);
+  gardenSet_(sh, row, c, 'אושר על ידי', who);
+  gardenSet_(sh, row, c, 'תאריך אישור', new Date());
+  gardenSet_(sh, row, c, 'עודכן בתאריך', new Date());
+  gardenSet_(sh, row, c, 'עודכן על ידי', who);
+  gardenLog_(ss, cur.id, 'סגירה', 'סגירה', cur.closure, closure, who, '');
+  if (closure === 'בוצע') gardenNotifyCompleted_(ss, cur.id);
+}
+
+
+/* ---------- אישור מרוכז (doPost) ----------
+   החלטה 3 באפיון: **רק משימות שגרה, מאותה תבנית ובאותו שבוע.** תקלה מדיווח
+   תושב מאושרת תמיד לבד — היא נוגעת לאדם מסוים שקיבל עליה מייל, ואישור
+   בסיטונות של תקלות הוא בדיוק מה שהופך אישור לחותמת גומי.
+   האכיפה כאן, בשרת, ולא במסך: המסך רק לא *מציע* קיבוץ אסור. */
+function gardenApproveBatch_(ss, body) {
+  var perm = body._perm || {};
+  if (perm.isExternal) return { ok: false, error: 'אישור הוא בסמכות מנהל הגינון' };
+  var who = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email || '';
+  var ids = (body.ids || []).map(function (x) { return String(x).trim(); })
+    .filter(function (x) { return x; });
+  if (!ids.length) return { ok: false, error: 'לא נבחרו משימות' };
+  if (ids.length > 60) return { ok: false, error: 'יותר מדי משימות בבת אחת' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    if (!sh) return { ok: false, error: 'טאב המשימות חסר' };
+    var c = gardenCols_(sh);
+    var vals = sh.getDataRange().getValues();
+
+    // איסוף השורות, ואז אימות ההומוגניות לפני שנוגעים בגיליון
+    var picked = [];
+    for (var r = 1; r < vals.length; r++) {
+      var o = gardenTaskObj_(vals[r], c);
+      if (ids.indexOf(String(o.id)) === -1) continue;
+      picked.push({ row: r + 1, o: o });
+    }
+    if (picked.length !== ids.length) return { ok: false, error: 'חלק מהמשימות לא נמצאו' };
+
+    var tpl = picked[0].o.templateId, wk = picked[0].o.week;
+    for (var i = 0; i < picked.length; i++) {
+      var o2 = picked[i].o;
+      if (o2.closure) return { ok: false, error: 'משימה ' + o2.id + ' כבר נסגרה' };
+      if (o2.flag !== 'ממתין לאישור') return { ok: false, error: 'משימה ' + o2.id + ' אינה ממתינה לאישור' };
+      if (o2.kind !== GARDEN_KIND_ROUTINE || !o2.templateId) {
+        return { ok: false, error: 'אישור מרוכז הוא למשימות שגרה בלבד' };
+      }
+      if (o2.templateId !== tpl || o2.week !== wk) {
+        return { ok: false, error: 'אישור מרוכז דורש אותה תבנית ואותו שבוע' };
+      }
+    }
+
+    for (var j = 0; j < picked.length; j++) {
+      gardenCloseRow_(ss, sh, picked[j].row, c, picked[j].o, 'בוצע', who);
+    }
+    return { ok: true, count: picked.length };
+  } finally { lock.releaseLock(); }
+}
+
 /* ---------- פעולות על משימה (doPost) ----------
    כל הפעולות כאן פתוחות לכל בעל PERM_GARDEN — גם לאחראי החיצוני. הן נוגעות
    אך ורק לביצוע בשטח (סימון, הערה, דחייה, חסימה) ואף אחת מהן אינה *סוגרת*
@@ -7631,15 +7764,18 @@ function gardenTaskAction_(ss, body) {
     if (cur.closure) return { ok: false, error: 'המשימה כבר נסגרה' };
 
     if (act === 'done') {
-      gardenSet_(sh, row, c, 'שלב', 'הושלם');
+      /* ⚠️ הצוות מקדם עד "בטיפול" בלבד — **רק המנהל קובע "הושלם"** (עקרון
+       * מהאפיון). סימון הוא הצהרה, לא קבלה. עד 7.9 נכתב כאן 'הושלם', מה
+       * שנתן לקבלן לקבוע את השלב האחרון והציג לתושב "הושלם" לפני שהוועד
+       * ראה את העבודה. הדגל הוא מה שמסמן שהעבודה נעשתה. */
+      gardenSet_(sh, row, c, 'שלב', 'בטיפול');
       gardenSet_(sh, row, c, 'דגל', 'ממתין לאישור');
-      gardenLog_(ss, id, 'ביצוע', 'שלב', cur.stage, 'הושלם', who, '');
+      gardenLog_(ss, id, 'ביצוע', 'דגל', cur.flag, 'ממתין לאישור', who, '');
 
     } else if (act === 'undo') {
       if (cur.flag !== 'ממתין לאישור') return { ok: false, error: 'אי אפשר לבטל אחרי אישור' };
-      gardenSet_(sh, row, c, 'שלב', 'בטיפול');
       gardenSet_(sh, row, c, 'דגל', '');
-      gardenLog_(ss, id, 'ביטול ביצוע', 'שלב', 'הושלם', 'בטיפול', who, '');
+      gardenLog_(ss, id, 'ביטול ביצוע', 'דגל', 'ממתין לאישור', '', who, '');
 
     } else if (act === 'note') {
       var note = String(body.note || '').trim().substring(0, 500);
@@ -7657,6 +7793,43 @@ function gardenTaskAction_(ss, body) {
       if (!cur.firstWeek) gardenSet_(sh, row, c, 'שבוע מקורי', cur.week);
       gardenLog_(ss, id, 'גרירה', 'שבוע', cur.week, next, who,
                  String(body.note || '').trim().substring(0, 300));
+
+    } else if (act === 'approve' || act === 'close') {
+      /* אישור וסגירה — סמכות מנהל בלבד. שניהם אותה פעולה עם סיבת סגירה
+       * שונה: 'approve' הוא קיצור ל-close עם "בוצע", שהיא הסגירה היחידה
+       * ששולחת מייל לתושב. ר' gardenCloseRow_. */
+      if (perm.isExternal) return { ok: false, error: 'אישור הוא בסמכות מנהל הגינון' };
+      var reason = act === 'approve' ? 'בוצע' : String(body.closure || '').trim();
+      if (GARDEN_CLOSURES.indexOf(reason) === -1) return { ok: false, error: 'סיבת סגירה לא מוכרת' };
+      gardenCloseRow_(ss, sh, row, c, cur, reason, who);
+      return { ok: true };
+
+    } else if (act === 'return') {
+      /* החזרה להשלמה — הדגל שמחזיר את המשימה לצוות. השלב חוזר ל"בטיפול"
+       * כי היא שוב בעבודה, וההערה נשמרת כדי שהצוות ידע מה חסר. */
+      if (perm.isExternal) return { ok: false, error: 'הפעולה בסמכות מנהל הגינון' };
+      var why = String(body.note || '').trim().substring(0, 500);
+      if (!why) return { ok: false, error: 'צריך לכתוב מה חסר' };
+      gardenSet_(sh, row, c, 'שלב', 'בטיפול');
+      gardenSet_(sh, row, c, 'דגל', 'הוחזר להשלמה');
+      gardenSet_(sh, row, c, 'הערת ביצוע', why);
+      gardenLog_(ss, id, 'החזרה', 'דגל', cur.flag, 'הוחזר להשלמה', who, why);
+
+    } else if (act === 'plan') {
+      /* שיבוץ לשבוע — החוליה שהייתה חסרה. דיווח תושב נשמר עם שלב "התקבל"
+       * ובלי "שבוע", ולכן לא הופיע בשום רשימה שבועית: לא אצל הצוות ולא אצל
+       * המנהל. השיבוץ הוא מה שמכניס אותו לתוכנית העבודה, והוא מקדם את השלב
+       * ל"מתוכנן" — הערך שהאפיון ייעד בדיוק לרגע הזה. */
+      if (perm.isExternal) return { ok: false, error: 'שיבוץ הוא בסמכות מנהל הגינון' };
+      var wk = String(body.week || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) return { ok: false, error: 'שבוע לא תקין' };
+      gardenSet_(sh, row, c, 'שבוע', wk);
+      if (GARDEN_STAGES.indexOf(cur.stage) < GARDEN_STAGES.indexOf('מתוכנן')) {
+        gardenSet_(sh, row, c, 'שלב', 'מתוכנן');
+      }
+      // "נגררה" הוא דגל של גרירה אוטומטית; שיבוץ ידני מנקה אותו.
+      if (cur.flag === 'נגררה') gardenSet_(sh, row, c, 'דגל', '');
+      gardenLog_(ss, id, 'שיבוץ', 'שבוע', cur.week, wk, who, '');
 
     } else if (act === 'block') {
       // "לא ניתן לביצוע" — לא סוגר ולא מעביר לבינוי. מרים דגל שמחזיר את

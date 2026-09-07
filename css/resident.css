@@ -1292,3 +1292,8 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
       --inv נקבע ב-resident.js בכל שינוי זום ושווה ל-1/scale. */
 .map-poi { transform: translate(-50%,-50%) scale(var(--inv,1)); }
 .map-amenity__label { transform: translateX(-50%) scale(var(--inv,1)); transform-origin: top center; }
+
+/* רחבה מרוצפת — חלק מרשת הריצוף, בגוון של השבילים כדי ששביל שנכנס אליה
+   ימשיך בלי מדרגה. הקצוות מצטרפים לאותו איחוד אספלט של הכבישים. */
+.m2-casef.is-path { fill: var(--m2-path-edge); stroke: var(--m2-path-edge); }
+.m2-fillf.is-path { fill: var(--m2-path); }
