@@ -1091,3 +1091,61 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
   flex: none; width: 16px; height: 16px; border-radius: 50%;
   border: 1px solid rgba(0,0,0,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.4);
 }
+
+/* ===== שכבת נעיצה וסימונים על המפה (2026-09-07, מודול הגינון) =====
+   הרכיב עצמו ב-js/screens/resident.js (CBA.map). המיקום מגיע כקואורדינטה
+   מנורמלת 0–1 שמומרת לפיקסלים של "עולם המפה", ולכן הסימון נשאר צמוד למקום
+   שלו בכל רמת זום — בדיוק כמו בית או מבנה ציבור. */
+
+/* סמן נעיצה — טיפה שקצה התחתון שלה יושב בדיוק על הנקודה שנבחרה */
+.map-pin {
+  position: absolute;
+  width: 26px; height: 26px;
+  transform: translate(-50%, -100%);
+  border-radius: 50% 50% 50% 0;
+  rotate: -45deg;
+  background: var(--action, #111827);
+  border: 2.5px solid #fff;
+  box-shadow: 0 4px 12px rgba(17, 24, 39, .35);
+  z-index: 7;
+  animation: map-pin-drop .28s cubic-bezier(.2, .8, .3, 1.2);
+}
+.map-pin::after {
+  content: ""; position: absolute; inset: 0; margin: auto;
+  width: 8px; height: 8px; border-radius: 50%; background: #fff;
+}
+@keyframes map-pin-drop {
+  from { opacity: 0; transform: translate(-50%, -160%); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+/* במצב נעיצה הסמן משתנה, כדי שיהיה ברור שהמפה מחכה ללחיצה */
+.map-shell.is-pinning .map-viewport { cursor: crosshair; }
+.map-shell.is-pinning .map-viewport.grabbing { cursor: grabbing; }
+
+/* סימון משימה/תקלה — עיגול. הצבע מגיע ממחלקת שלב, ר' GARDEN_STAGES.
+   מכוון: הצבע מסמן **שלב**, לא דגל — כדי שאפשר יהיה לקרוא התקדמות על פני
+   כל השיכון במבט אחד. דגל מיוצג בחריץ הקטן ולא בצבע המילוי. */
+.map-marker {
+  position: absolute;
+  width: 18px; height: 18px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--muted, #6B7280);
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 7px rgba(17, 24, 39, .28);
+  cursor: pointer; z-index: 6;
+  transition: transform .14s ease;
+}
+.map-marker:hover,
+.map-marker:focus-visible { transform: translate(-50%, -50%) scale(1.28); }
+.map-marker.is-new      { background: #9CA3AF; }
+.map-marker.is-checked  { background: #6B7280; }
+.map-marker.is-planned  { background: #4B5563; }
+.map-marker.is-active   { background: var(--warn, #D97706); }
+.map-marker.is-done     { background: var(--ok, #059669); }
+/* חריץ = יש דגל. לא מחליף את צבע השלב, נוסף עליו. */
+.map-marker.has-flag::after {
+  content: ""; position: absolute; top: -4px; inset-inline-end: -4px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--danger, #F43F5E); border: 2px solid #fff;
+}

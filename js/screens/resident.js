@@ -1893,26 +1893,58 @@ CBA.screens = CBA.screens || {};
     return t;
   })();
 
-  CBA.screens.resMap = {
-    render: function (container) {
+  /* ---------------------------------------------------------------------------
+   *  המפה כרכיב לשימוש חוזר (2026-09-07, צעד 2 של מודול הגינון)
+   * ---------------------------------------------------------------------------
+   *  עד היום המפה הייתה *מסך* של אזור התושב בלבד. מודול הגינון צריך אותה בשלושה
+   *  מקומות שונים — דיווח התושב (נעיצת נקודה), מסך צוות הגינון ולוח הבקרה — ולכן
+   *  היא הופכת כאן לפונקציה שאפשר לקרוא לה עם אפשרויות. **הציור, מנוע התנועה,
+   *  החיפוש והפופאפ לא השתנו כהוא זה** — רק נעטפו.
+   *
+   *  שתי דרישות שהכתיבו את ה-API:
+   *  • למשתמש חיצוני (קבלן הגינון) אין אזור תושב, ולכן גם אין לו את המסך הזה —
+   *    הוא מקבל את אותה מפה בדיוק מתוך מסך הגינון, אבל עם popup:false כדי שלא
+   *    יראה את כרטיס המשפחה. ר' EXTERNAL_HEADER ב-Code.gs.
+   *  • נעיצה מחזירה קואורדינטות **מנורמלות 0–1** ולא פיקסלים ולא אחוזי-עולם,
+   *    כי מפת השיכון עומדת לפני בנייה מחדש (map-geo.json) וכל הגיאומטריה הנוכחית
+   *    תימחק. ערך מנורמל הופך את המעבר להמרה חד-פעמית במקום הזנה מחדש של כל
+   *    הדיווחים שנצברו. **לא לשנות ליחידות אחרות.**
+   *
+   *  אפשרויות: head/search/legend/hint (בוליאני, ברירת מחדל true) · popup
+   *  (true=כרטיס דיירים, false=בלי, פונקציה=HTML משלך) · pin (מצב נעיצה) ·
+   *  pinAt {x,y} · onPin(fn) · markers [{id,x,y,cls,title}] · onMarker(fn).
+   *  מחזירה ידית: {setMarkers, setPin, getPin, goToHouse, fit}.
+   * ------------------------------------------------------------------------- */
+  CBA.map = {
+    render: function (container, opts) {
+      opts = opts || {};
+      function optOn(v) { return v !== false; }
+      var oHead = optOn(opts.head), oSearch = optOn(opts.search),
+          oLegend = optOn(opts.legend), oHint = optOn(opts.hint);
       container.innerHTML =
-        '<div class="screen-head"><div class="screen-head__title">מפת השיכון</div>' +
-          '<div class="screen-head__sub">שיכון פלמחים · לחצו על בית לפרטי הדיירים</div></div>' +
-        '<div class="map-shell">' +
-          '<div class="map-topbar">' +
-            '<div class="map-search-wrap">' +
-              '<span class="map-search-ic">' + searchIcon + '</span>' +
-              '<input id="map-q" class="map-search" placeholder="חיפוש לפי מספר בית, שם משפחה או ילד…" autocomplete="off">' +
-              '<div class="map-search-results" id="map-results"></div>' +
-            '</div>' +
-            '<button type="button" class="map-legend-toggle" id="map-legend-toggle" aria-label="מקרא">?</button>' +
-            '<div class="map-legend" id="map-legend">' +
-              '<i><b class="lg-house"></b>בית</i>' +
-              '<i><b class="lg-amen"></b>מבנה ציבור</i>' +
-              '<i><b class="lg-park"></b>חניון</i>' +
-              '<i><b class="lg-road"></b>כביש</i>' +
-            '</div>' +
-          '</div>' +
+        (oHead ? '<div class="screen-head"><div class="screen-head__title">מפת השיכון</div>' +
+          '<div class="screen-head__sub">שיכון פלמחים · לחצו על בית לפרטי הדיירים</div></div>' : '') +
+        '<div class="map-shell' + (opts.pin ? ' is-pinning' : '') + '">' +
+          (oSearch || oLegend ?
+            '<div class="map-topbar">' +
+              (oSearch ?
+                '<div class="map-search-wrap">' +
+                  '<span class="map-search-ic">' + searchIcon + '</span>' +
+                  '<input id="map-q" class="map-search" placeholder="חיפוש לפי מספר בית, שם משפחה או ילד…" autocomplete="off">' +
+                  '<div class="map-search-results" id="map-results"></div>' +
+                '</div>'
+              : '') +
+              (oLegend ?
+                '<button type="button" class="map-legend-toggle" id="map-legend-toggle" aria-label="מקרא">?</button>' +
+                '<div class="map-legend" id="map-legend">' +
+                  '<i><b class="lg-house"></b>בית</i>' +
+                  '<i><b class="lg-amen"></b>מבנה ציבור</i>' +
+                  '<i><b class="lg-park"></b>חניון</i>' +
+                  '<i><b class="lg-road"></b>כביש</i>' +
+                '</div>'
+              : '') +
+            '</div>'
+          : '') +
           '<div class="map-viewport" id="map-viewport"><div class="map-world" id="map-world"></div></div>' +
           '<div class="map-toolbar">' +
             '<button type="button" class="map-btn" id="map-zoom-in" aria-label="הגדלה">' + plusIcon + '</button>' +
@@ -1920,7 +1952,10 @@ CBA.screens = CBA.screens || {};
             '<hr>' +
             '<button type="button" class="map-btn" id="map-fit" aria-label="התאמה למסך">' + fitIcon + '</button>' +
           '</div>' +
-          '<div class="map-hint">גררו כדי לנוע · גלגלת/צביטה כדי לזום · לחצו על בית לפרטים</div>' +
+          (oHint ? '<div class="map-hint">' +
+            (opts.pin ? 'גררו כדי לנוע · גלגלת/צביטה כדי לזום · <b>לחצו על המקום שבו נמצאת התקלה</b>'
+                      : 'גררו כדי לנוע · גלגלת/צביטה כדי לזום · לחצו על בית לפרטים') +
+          '</div>' : '') +
         '</div>';
 
       var viewport = container.querySelector("#map-viewport");
@@ -2287,6 +2322,8 @@ CBA.screens = CBA.screens || {};
         popupEl.style.top = Math.max(10, popY) + "px";
       }
       function openPopup(num) {
+        // popup:false — למשתמש חיצוני, שאסור שיראה כרטיסי משפחות. ר' ההערה למעלה.
+        if (opts.popup === false) return;
         var el = houseEls[num];
         if (!el) return;
         closePopup();
@@ -2294,7 +2331,9 @@ CBA.screens = CBA.screens || {};
         if (!popupEl) { popupEl = document.createElement("div"); popupEl.className = "map-popup"; viewport.appendChild(popupEl); }
         var row = byHouse[normHouse(num)];
         popupEl.innerHTML = '<button type="button" class="map-popup__close" aria-label="סגור">' + xIcon + '</button>' +
-          (row && dirC ? dirHouseHTML(row, dirC) : '<div class="card dir-card"><div class="dir-card__house">בית ' + CBA.esc(num) + '</div><div class="dir-card__names">אין נתונים זמינים לבית זה.</div></div>');
+          (typeof opts.popup === 'function'
+            ? opts.popup(num, row, dirC)
+            : (row && dirC ? dirHouseHTML(row, dirC) : '<div class="card dir-card"><div class="dir-card__house">בית ' + CBA.esc(num) + '</div><div class="dir-card__names">אין נתונים זמינים לבית זה.</div></div>'));
         popupEl.querySelector(".map-popup__close").addEventListener("click", function (ev) { ev.stopPropagation(); closePopup(); });
         openTile = num;
         positionPopup(num);
@@ -2336,12 +2375,15 @@ CBA.screens = CBA.screens || {};
         }
         resultsEl.classList.add("show");
       }
-      qEl.addEventListener("input", function () { runSearch(qEl.value); });
-      qEl.addEventListener("focus", function () { if (qEl.value.trim()) resultsEl.classList.add("show"); });
-      document.addEventListener("click", function (e) {
-        if (!document.body.contains(qEl)) return;
-        if (!e.target.closest(".map-search-wrap")) resultsEl.classList.remove("show");
-      });
+      // (2026-09-07) החיפוש עשוי להיות מוסתר כשהמפה משמשת כרכיב — ר' opts.search
+      if (qEl && resultsEl) {
+        qEl.addEventListener("input", function () { runSearch(qEl.value); });
+        qEl.addEventListener("focus", function () { if (qEl.value.trim()) resultsEl.classList.add("show"); });
+        document.addEventListener("click", function (e) {
+          if (!document.body.contains(qEl)) return;
+          if (!e.target.closest(".map-search-wrap")) resultsEl.classList.remove("show");
+        });
+      }
 
       // במובייל: גלולת החיפוש נפתחת רק כשצריך, כדי לפנות כמה שיותר שטח למפה עצמה
       // מקרא במובייל (2026-08-19, ממצא 3.5) — קודם הוא הוסתר לגמרי במסך צר,
@@ -2361,7 +2403,7 @@ CBA.screens = CBA.screens || {};
       }
 
       var searchWrap = container.querySelector(".map-search-wrap");
-      if (window.matchMedia("(max-width: 720px)").matches) {
+      if (searchWrap && window.matchMedia("(max-width: 720px)").matches) {
         searchWrap.classList.add("collapsed");
         searchWrap.addEventListener("click", function () {
           if (!searchWrap.classList.contains("collapsed")) return;
@@ -2379,7 +2421,8 @@ CBA.screens = CBA.screens || {};
         var t = MAP_TILES.filter(function (r) { return r.n === num; })[0];
         if (!t) return;
         viewMode = "manual";
-        resultsEl.classList.remove("show"); qEl.blur();
+        if (resultsEl) resultsEl.classList.remove("show");
+        if (qEl) qEl.blur();
         var targetScale = fitScaleVal * MAP_T2 * 1.2;
         var cx = px(t.x + t.w / 2), cy = py(t.y + t.h / 2);
         scale = Math.max(minScale(), Math.min(maxScale(), targetScale));
@@ -2389,6 +2432,70 @@ CBA.screens = CBA.screens || {};
         apply();
         setTimeout(function () { openPopup(num); }, 220);
       }
+
+      /* ---- שכבת נעיצה וסימונים (2026-09-07) ----
+         קואורדינטות **מנורמלות 0–1** בלבד. ר' ההערה בראש הרכיב. */
+      var pinEl = null, markerEls = [];
+      function setPin(n) {
+        if (!n) { if (pinEl) { pinEl.remove(); pinEl = null; } return; }
+        if (!pinEl) {
+          pinEl = document.createElement("div");
+          pinEl.className = "map-pin";
+          worldEl.appendChild(pinEl);
+        }
+        pinEl.style.left = (n.x * MAP_WORLD_W) + "px";
+        pinEl.style.top  = (n.y * MAP_WORLD_H) + "px";
+      }
+      function getPin() {
+        if (!pinEl) return null;
+        return { x: parseFloat(pinEl.style.left) / MAP_WORLD_W,
+                 y: parseFloat(pinEl.style.top) / MAP_WORLD_H };
+      }
+      function setMarkers(list) {
+        markerEls.forEach(function (e) { e.remove(); });
+        markerEls = [];
+        (list || []).forEach(function (m) {
+          var el = document.createElement("div");
+          el.className = "map-marker" + (m.cls ? " " + m.cls : "");
+          el.style.left = (m.x * MAP_WORLD_W) + "px";
+          el.style.top  = (m.y * MAP_WORLD_H) + "px";
+          el.setAttribute("role", "button");
+          el.setAttribute("tabindex", "0");
+          el.setAttribute("aria-label", m.title || "סימון");
+          el.addEventListener("click", function (ev) {
+            ev.stopPropagation();
+            if (opts.onMarker) opts.onMarker(m.id, m);
+          });
+          el.addEventListener("keydown", function (ev) {
+            if (ev.key === "Enter" || ev.key === " ") {
+              ev.preventDefault();
+              if (opts.onMarker) opts.onMarker(m.id, m);
+            }
+          });
+          worldEl.appendChild(el);
+          markerEls.push(el);
+        });
+      }
+      /* מצב נעיצה — מבדילים לחיצה מגרירה לפי מרחק, אחרת כל גרירה של המפה
+         הייתה מזיזה את הנקודה. מאזינים נפרדים משלנו, בלי לגעת במנוע התנועה. */
+      if (opts.pin) {
+        var pdX = 0, pdY = 0;
+        viewport.addEventListener("pointerdown", function (e) { pdX = e.clientX; pdY = e.clientY; });
+        viewport.addEventListener("pointerup", function (e) {
+          if (e.target.closest(".map-popup") || e.target.closest(".map-toolbar") ||
+              e.target.closest(".map-topbar")) return;
+          if (Math.hypot(e.clientX - pdX, e.clientY - pdY) > 6) return;
+          var rect = viewport.getBoundingClientRect();
+          var wx = (e.clientX - rect.left - tx) / scale;
+          var wy = (e.clientY - rect.top - ty) / scale;
+          if (wx < 0 || wy < 0 || wx > MAP_WORLD_W || wy > MAP_WORLD_H) return;
+          var n = { x: wx / MAP_WORLD_W, y: wy / MAP_WORLD_H };
+          setPin(n);
+          if (opts.onPin) opts.onPin(n);
+        });
+      }
+      if (opts.pinAt) setPin(opts.pinAt);
+      if (opts.markers && opts.markers.length) setMarkers(opts.markers);
 
       initialView(false);
       // אם ידוע לנו איפה התושב גר — ממרכזים עליו את הפתיחה (בלי לזום פנימה
@@ -2401,7 +2508,18 @@ CBA.screens = CBA.screens || {};
           apply();
         }
       }
+      // ידית לקורא — כדי שמסך הגינון יוכל לרענן סימונים בלי לצייר מפה מחדש
+      return {
+        setMarkers: setMarkers, setPin: setPin, getPin: getPin,
+        goToHouse: goToHouse, fit: function () { fitToScreen(true); }
+      };
     }
+  };
+
+  /* מסך "מפת השיכון" של אזור התושב — עוטף דק סביב הרכיב, עם כל ברירות המחדל.
+     כל ההתנהגות שהתושבים מכירים נשארת בדיוק כפי שהייתה. */
+  CBA.screens.resMap = {
+    render: function (container) { CBA.map.render(container); }
   };
   /* ==== "ועד השיכון" — עץ ארגוני של הוועד, תצוגת קריאה בלבד (2026-08-10) ====
      פתוח לכל תושב מחובר ופעיל (CBA.data.getCommitteeTree, כמו טאב
