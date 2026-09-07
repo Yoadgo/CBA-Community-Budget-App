@@ -35,6 +35,10 @@ CBA.screens = CBA.screens || {};
   var parkIcon   = svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 16V8h4a3 3 0 0 1 0 6H9"/>');
   var pinIcon    = svg('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>');
   var amenIcons = {
+    water: '<path d="M4 9.5q3-3 6 0t6 0 6 0"/><path d="M4 15.5q3-3 6 0t6 0 6 0"/>',
+    gym:   '<path d="M4 9.5v5M7.5 7v10M7.5 12h9M16.5 7v10M20 9.5v5"/>',
+    pet:   '<circle cx="8.2" cy="7.7" r="1.9"/><circle cx="15.8" cy="7.7" r="1.9"/><circle cx="5" cy="12.7" r="1.7"/><circle cx="19" cy="12.7" r="1.7"/><path d="M12 11.6c2.9 0 5 2.3 5 4.6s-2.1 3.6-5 3.6-5-1.3-5-3.6 2.1-4.6 5-4.6z"/>',
+    work:  '<rect x="5.5" y="6.5" width="13" height="8.5" rx="1"/><path d="M3 18.5h18l-1.8-3.5H4.8z"/>',
     kids:  '<path d="M12 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>',
     park:  '<path d="M12 2 7 10h3l-4 7h5v5h2v-5h5l-4-7h3L12 2Z"/>',
     shop:  '<path d="M4 8 5.5 4h13L20 8"/><rect x="4" y="8" width="16" height="12" rx="1.5"/><path d="M9 12v4M15 12v4"/>',
@@ -1807,253 +1811,97 @@ CBA.screens = CBA.screens || {};
      ומוצג דרך אותן dirCols/dirVal/dirHouseHTML שמזינות את טאב "שכנים" — כך שכרטיס
      הבית בפופאפ של המפה זהה בול לכרטיס ברשימה, ואותו כלל פרטיות חל: רק תושבים
      פעילים מוצגים. */
-  var MAP_WORLD_W = 1100, MAP_WORLD_H = 1354;
-  function mapX(p) { return p / 100 * MAP_WORLD_W; }
-  function mapY(p) { return p / 100 * MAP_WORLD_H; }
-
-  var MAP_LOOP_L = 23.94, MAP_LOOP_R = 94.17, MAP_LOOP_B = 98.45;
-  var MAP_TAVOR = 26.33, MAP_BASHOR = 65.50;
-  var MAP_LOOP_W = 48, MAP_CROSS_W = 37, MAP_DRIVE_W = 18; /* עובי בפיקסלים של "עולם" */
-
-  var MAP_TILES = [
-    {n:"101",x:39.98,y:9.13,w:6.54,h:3.24},
-    {n:"103",x:46.53,y:9.13,w:6.54,h:3.24},
-    {n:"105",x:54.19,y:9.13,w:6.50,h:3.24},
-    {n:"107",x:60.69,y:9.13,w:6.50,h:3.24},
-    {n:"201",x:54.19,y:14.18,w:6.50,h:3.37},
-    {n:"203",x:60.69,y:14.18,w:6.50,h:3.37},
-    {n:"205",x:78.45,y:14.18,w:6.62,h:3.37},
-    {n:"207",x:85.08,y:14.18,w:6.62,h:3.37},
-    {n:"301",x:39.98,y:19.88,w:6.54,h:3.30},
-    {n:"303",x:46.53,y:19.88,w:6.54,h:3.30},
-    {n:"305",x:54.19,y:19.88,w:6.50,h:3.30},
-    {n:"307",x:60.69,y:19.88,w:6.50,h:3.30},
-    {n:"309",x:78.45,y:19.82,w:6.62,h:3.30},
-    {n:"311",x:85.08,y:19.82,w:6.62,h:3.30},
-    {n:"302",x:44.85,y:29.47,w:6.70,h:3.43},
-    {n:"304",x:52.91,y:29.60,w:6.70,h:3.30},
-    {n:"306",x:60.81,y:29.53,w:6.70,h:3.37},
-    {n:"308",x:77.97,y:29.47,w:6.70,h:3.37},
-    {n:"310",x:85.63,y:29.53,w:6.70,h:3.30},
-    {n:"401",x:44.85,y:33.42,w:6.70,h:3.24},
-    {n:"403",x:52.91,y:33.42,w:6.70,h:3.30},
-    {n:"405",x:60.89,y:33.35,w:6.62,h:3.30},
-    {n:"407",x:77.97,y:33.68,w:6.70,h:3.24},
-    {n:"409",x:85.63,y:33.68,w:6.70,h:3.30},
-    {n:"402",x:44.85,y:38.41,w:6.70,h:3.24},
-    {n:"404",x:52.91,y:38.41,w:6.70,h:3.37},
-    {n:"406",x:60.73,y:38.34,w:6.70,h:3.30},
-    {n:"505",x:77.97,y:38.67,w:6.86,h:3.37},
-    {n:"507",x:85.63,y:38.67,w:6.70,h:3.37},
-    {n:"501",x:58.58,y:42.29,w:6.70,h:3.37},
-    {n:"503",x:66.48,y:42.16,w:6.70,h:3.37},
-    {n:"502",x:58.58,y:46.24,w:6.70,h:3.37},
-    {n:"504",x:66.40,y:46.31,w:6.70,h:3.24},
-    {n:"601",x:27.37,y:50.45,w:6.70,h:3.30},
-    {n:"603",x:44.85,y:50.58,w:6.70,h:3.24},
-    {n:"605",x:52.91,y:50.58,w:6.70,h:3.37},
-    {n:"607",x:60.89,y:50.52,w:6.62,h:3.30},
-    {n:"506",x:77.97,y:50.71,w:6.70,h:3.30},
-    {n:"508",x:85.63,y:50.71,w:6.70,h:3.30},
-    {n:"602",x:44.85,y:55.96,w:6.70,h:3.24},
-    {n:"604",x:52.91,y:55.96,w:6.78,h:3.24},
-    {n:"606",x:60.81,y:55.89,w:6.78,h:3.30},
-    {n:"608",x:77.97,y:55.96,w:6.70,h:3.30},
-    {n:"610",x:85.63,y:55.96,w:6.70,h:3.30},
-    {n:"701",x:52.91,y:59.91,w:6.70,h:3.37},
-    {n:"703",x:60.73,y:59.84,w:6.70,h:3.30},
-    {n:"705",x:77.97,y:60.04,w:6.70,h:3.37},
-    {n:"707",x:85.63,y:60.04,w:6.70,h:3.37},
-    {n:"702",x:44.93,y:68.13,w:6.70,h:3.37},
-    {n:"704",x:52.99,y:68.20,w:6.70,h:3.30},
-    {n:"706",x:60.89,y:68.13,w:6.70,h:3.37},
-    {n:"708",x:77.97,y:68.13,w:6.78,h:3.37},
-    {n:"710",x:85.63,y:69.82,w:6.70,h:3.30},
-    {n:"801",x:44.93,y:72.47,w:6.70,h:3.37},
-    {n:"803",x:52.99,y:72.47,w:6.70,h:3.37},
-    {n:"805",x:60.89,y:72.47,w:6.70,h:3.24},
-    {n:"807",x:77.97,y:72.34,w:6.70,h:3.30},
-    {n:"809",x:85.63,y:74.55,w:6.70,h:3.24},
-    {n:"802",x:44.93,y:78.69,w:6.70,h:3.30},
-    {n:"804",x:52.99,y:78.76,w:6.70,h:3.30},
-    {n:"806",x:60.89,y:78.69,w:6.62,h:3.30},
-    {n:"808",x:78.13,y:77.91,w:6.70,h:3.24},
-    {n:"810",x:85.71,y:79.40,w:6.78,h:3.37},
-    {n:"901",x:40.38,y:86.33,w:6.58,h:3.37},
-    {n:"903",x:46.97,y:86.33,w:6.58,h:3.37},
-    {n:"905",x:54.35,y:86.33,w:6.70,h:3.37},
-    {n:"907",x:61.05,y:86.33,w:6.70,h:3.37},
-    {n:"909",x:72.55,y:86.33,w:6.70,h:3.37},
-    {n:"902",x:54.35,y:92.03,w:6.70,h:3.30},
-    {n:"904",x:61.05,y:92.03,w:6.70,h:3.30},
-    {n:"906",x:72.55,y:92.03,w:6.70,h:3.30}
-  ];
-  var MAP_AMENITIES = [
-    {x:39.27,y:42.49,w:12.29,h:7.45,label:'גן שעשועים · פארק נינג׳ה',ico:'park',park:1},
-    {x:12.90,y:43.59,w:8.80,h:6.87,label:'שק"ם משפחות',ico:'shop'},
-    {x:12.90,y:50.71,w:8.80,h:4.53,label:'חומוסיה',ico:'food'},
-    {x:12.90,y:55.63,w:8.80,h:6.93,label:'מועדון משפחות',ico:'club',shape:'club'},
-    {x:27.53,y:37.24,w:6.86,h:9.13,label:'מועדון ילדים',ico:'kids'},
-    {x:27.21,y:54.40,w:7.34,h:3.89,label:'פאמטרק',ico:'train'},
-    {x:28.97,y:59.00,w:2.71,h:2.85,label:'דואר',ico:'mail'}
-  ];
-
-  /* גני ילדים — המבנה עם הגג המפואר (4 גזוזטראות סביב מרכז) שנראה בכל תצלומי האוויר
-     ליד הכיכר, ולא במיקום התשריט המקורי. ממוקם ממש מתחת לכיכר. */
-  var MAP_LANDMARK = {x:9.5, y:9.0, w:11.5, h:8.3, label:'גני ילדים', ico:'kids'};
-
-  /* עגול־תנועה בכניסה הצפונית — נראה בבירור בתצלומי האוויר, לא מופיע בתשריט המקורי */
-  var MAP_ROUNDABOUT = {cx:15.5, cy:2.6, r:5.6};
-
-  /* מגרשי טניס/כדורסל, אולם ספורט ומגרש דשא סינתטי שני — קיימים במציאות (תצלומי אוויר),
-     לא מופיעים בתשריט הרשמי. יחס הרוחב/גובה מכוון ליחס אמיתי של מגרש טניס/כדורסל. */
-  var MAP_TENNIS = {x:0.3, y:34.1, w:7.0, h:2.75};
-  var MAP_BASKETBALL = {x:7.6, y:33.7, w:5.3, h:3.15};
-  var MAP_SPORTS_HALL = {x:0.2, y:39.2, w:6.2, h:8.8};
-  var MAP_TURF2 = {x:0.2, y:57.8, w:6.0, h:4.2};
-  /* חניון הבריכה — ממש ליד הבריכה (מזרח) */
-  var MAP_POOL_PARKING = {x:11.9, y:23.8, w:6.8, h:7.2};
-  /* חניון שק"ם/חומוסיה/מועדון משפחות — רצועה אחת שמשרתת את שלושת המבנים */
-  var MAP_SHEKEM_PARKING = {x:21.7, y:43.5, w:5.5, h:19.0};
-
-  var MAP_PARKING = [
-    {x:26.25,y:3.30, w:12.95,h:7.90 },
-    {x:68.23,y:14.00,w:8.80, h:10.55},
-    {x:35.48,y:29.70,w:8.90, h:11.35},
-    {x:68.23,y:29.70,w:8.95, h:11.30},
-    {x:79.40,y:43.10,w:13.50,h:7.20},
-    {x:35.80,y:51.90,w:8.30, h:10.55},
-    {x:68.60,y:51.90,w:9.00, h:10.55},
-    {x:35.55,y:67.60,w:8.50, h:11.20},
-    {x:68.55,y:67.60,w:9.10, h:11.20},
-    {x:26.20,y:87.70,w:13.30,h:8.35 },
-    {x:79.90,y:83.80,w:12.90,h:7.45 },
-    /* חניית גני ילדים — ממוקמת ממש מתחת למבנה גני הילדים */
-    {x:5.0, y:17.8, w:12.0, h:3.2 },
-    /* חניון הבריכה */
-    {x:MAP_POOL_PARKING.x, y:MAP_POOL_PARKING.y, w:MAP_POOL_PARKING.w, h:MAP_POOL_PARKING.h},
-    /* חניון שק"ם/חומוסיה/מועדון משפחות */
-    {x:MAP_SHEKEM_PARKING.x, y:MAP_SHEKEM_PARKING.y, w:MAP_SHEKEM_PARKING.w, h:MAP_SHEKEM_PARKING.h}
-  ];
-
-  /* שבילי גישה מהכביש הראשי אל החניונים/הכיכר */
-  var MAP_DRIVES = [
-    [39.90,MAP_TAVOR, 39.90,30.6],
-    [72.63,MAP_TAVOR, 72.63,30.6],
-    [72.63,MAP_TAVOR, 72.63,23.5],
-    [38.91,MAP_BASHOR,38.91,59.8],
-    [71.43,MAP_BASHOR,71.43,59.8],
-    [39.90,MAP_BASHOR,39.90,69.5],
-    [72.63,MAP_BASHOR,72.63,69.5],
-    [MAP_LOOP_L,6.71,  27.4,6.71 ],
-    [MAP_LOOP_L,90.84, 27.4,90.84],
-    [MAP_LOOP_R,46.47, 90.9,46.47],
-    [MAP_LOOP_R,87.12, 90.9,87.12],
-    /* כיכר → חניית גני הילדים, ממש מתחתיה */
-    [MAP_ROUNDABOUT.cx,MAP_ROUNDABOUT.cy+MAP_ROUNDABOUT.r, MAP_ROUNDABOUT.cx,19.0],
-    /* כיכר → הכביש הראשי — כך שהכיכר מחוברת חזותית לרשת הכבישים ולא "צפה" לבד */
-    [MAP_ROUNDABOUT.cx+MAP_ROUNDABOUT.r,MAP_ROUNDABOUT.cy, MAP_LOOP_L,MAP_ROUNDABOUT.cy]
-  ];
-
-  /* רחובות פנימיים — 9 השמות מהתשריט. type:'road' = תווית יושבת ישירות על אחד משני
-     הכבישים הראשיים (תבור/הבשור), עם קו מקווקו על הכביש עצמו; type:'h'/'v' = שביל בין
-     שורות בתים. */
-  var MAP_STREETS = [
-    {name:'נחל דן',      type:'h',    y:13.3,  x1:38.5, x2:68.7},
-    {name:'נחל משושים',  type:'h',    y:18.7,  x1:76.0, x2:93.0},
-    {name:'נחל תבור',    type:'road', y:MAP_TAVOR, x1:MAP_LOOP_L,x2:MAP_LOOP_R},
-    {name:'נחל אלכסנדר', type:'h',    y:33.1,  x1:43.0, x2:93.5},
-    /* נחל אילון — שביל אנכי קצר בין שני צמדי הבתים המזרחיים (505/507 מעל, 506/508 מתחת) */
-    {name:'נחל אילון',   type:'v',    x:77.6,  y1:42.2, y2:50.6},
-    {name:'נחל שורק',    type:'h',    y:50.0,  x1:30.5, x2:93.5},
-    {name:'נחל הבשור',   type:'road', y:MAP_BASHOR,x1:MAP_LOOP_L,x2:MAP_LOOP_R},
-    /* נחל צאלים — מוזז דרומה כדי לא להיצמד לנחל הבשור */
-    {name:'נחל צאלים',   type:'h',    y:68.0,  x1:43.4, x2:93.8},
-    {name:'נחל פארן',    type:'h',    y:91.0,  x1:38.9, x2:80.7}
-  ];
-
-  /* גושי עצים — אליפסות רכות עם מילוי דהוי */
-  var MAP_TREES = [
-    [13,12,5,4],[8,21,4,4],[17,31,4,4],[10,47,4,4],[16,58,4,4],[9,70,5,4],[16,82,4,4],[11,92,4,4],
-    [33,10,4,3],[34,34,3,3],[32,57,4,3],[34,80,3,3],[36,95,4,3],
-    [55,24,4,3],[74,10,4,3],[57,63,4,3],[79,63,4,3],[58,83,4,3],
-    [97,20,4,5],[98,50,4,5],[97,80,4,5]
-  ];
-
-  var MAP_POOL  = {x:0.3, y:21.5, w:11.3, h:10.5};
-  var MAP_FIELD = {x:0.2, y:48.8, w:8.6, h:8.6};
-
-  // מספר בית מנורמל להשוואה בטוחה (בלי לסמוך על עיצוב מדויק בגיליון)
+  /* ==== "מפת השיכון" — מנוע גיאומטריה חדש (2026-09-07) ==================
+     עד היום כל מיקום כאן נמדד בעין מול תצלום אוויר ונשמר כאחוזים בקוד. זה מה
+     שגרם למפה להיראות "מצוירת": הגיאומטריה הייתה משוערת, אורתוגונלית מדי,
+     ולא תאמה לא לתשריט ולא לתצ״א.
+     מהיום כל הגיאומטריה מגיעה מ-js/data/mapGeo.js — נוצר אוטומטית מקובץ הכיול
+     (כלי "כיול מפה") מתוך תצ״א 8192×5288 בקנה מידה 0.1719 מ׳ לפיקסל, מסובב
+     ב-23.5° כך שרשת השיכון יושבת ישר. **אין לערוך את הקובץ הזה ביד.**
+     מה שדינמי (שם משפחה/ילדים) עדיין נשלף מ-CBA.data.getCommunityDirectory
+     ומוצג דרך אותן dirCols/dirVal/dirHouseHTML של טאב "שכנים". */
+  /* מספר בית לצורת השוואה — ספרות בלבד. משותף למפה, לחיפוש ולכרטיס הדייר. */
   function normHouse(s) { return String(s == null ? "" : s).replace(/\D/g, ""); }
 
-  /* ===================== שכבת ה"שטח" (SVG אחד, מחושב פעם אחת) =====================
-     כל רשת הכבישים מצוירת כמסלולים בשכבה אחת: תחילה כל ה"מסגרות" הכהות, ואז כל פני
-     הכביש הבהירים מעליהן — כך צומת נוצר מעצמו, בלי תפר בין שני מלבנים שנדבקים. */
-  function mapPt(x, y) { return mapX(x).toFixed(1) + ',' + mapY(y).toFixed(1); }
-  function mapRoad(d, w, stroke, extra) {
-    return '<path d="' + d + '" fill="none" stroke="' + stroke + '" stroke-width="' + w +
-      '" stroke-linecap="round" stroke-linejoin="round"' + (extra || '') + '/>';
-  }
-  var MAP_LOOP_PATH = 'M' + mapPt(MAP_LOOP_L, -2) + ' L' + mapPt(MAP_LOOP_L, MAP_LOOP_B) +
-    ' L' + mapPt(MAP_LOOP_R, MAP_LOOP_B) + ' L' + mapPt(MAP_LOOP_R, -2);
-  var MAP_CROSS_PATH = 'M' + mapPt(MAP_LOOP_L, MAP_TAVOR) + ' L' + mapPt(MAP_LOOP_R, MAP_TAVOR) +
-    ' M' + mapPt(MAP_LOOP_L, MAP_BASHOR) + ' L' + mapPt(MAP_LOOP_R, MAP_BASHOR);
-  var MAP_DRIVE_PATH = MAP_DRIVES.map(function (d) { return 'M' + mapPt(d[0], d[1]) + ' L' + mapPt(d[2], d[3]); }).join(' ');
+  var GEO = (window.CBA && CBA.mapGeo) ? CBA.mapGeo
+          : { w: 1100, h: 1300, ppm: 1.6, objects: [], canopy: [], trees: [] };
+  var MAP_WORLD_W = Math.round(GEO.w), MAP_WORLD_H = Math.round(GEO.h);
+  var MAP_PPM = GEO.ppm || 1.6;                 /* פיקסלי־עולם למטר */
+  function mapX(p) { return p / 100 * MAP_WORLD_W; }
+  function mapY(p) { return p / 100 * MAP_WORLD_H; }
+  function m2p(m) { return m * MAP_PPM; }
 
-  var MAP_TERRAIN_SVG = (function () {
-    var t = '';
-    t += '<defs>' +
-      '<radialGradient id="mapTreeG"><stop offset="0%" stop-color="var(--map-tree)" stop-opacity=".34"/>' +
-      '<stop offset="55%" stop-color="var(--map-tree)" stop-opacity=".18"/>' +
-      '<stop offset="100%" stop-color="var(--map-tree)" stop-opacity="0"/></radialGradient>' +
-      '<linearGradient id="mapPoolG" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0%" stop-color="#DDEFF9"/><stop offset="100%" stop-color="#BFE0F1"/></linearGradient>' +
-      '<linearGradient id="mapLandG" x1="0" y1="0" x2="1" y2="1">' +
-      '<stop offset="0%" stop-color="#EDF2E6"/><stop offset="45%" stop-color="#E7EEDF"/><stop offset="100%" stop-color="#DCE3D6"/></linearGradient>' +
-      '<radialGradient id="mapGlowWarm"><stop offset="0%" stop-color="#FFF7E8" stop-opacity=".55"/><stop offset="100%" stop-color="#FFF7E8" stop-opacity="0"/></radialGradient>' +
-      '<radialGradient id="mapGlowCool"><stop offset="0%" stop-color="#E4EEF6" stop-opacity=".5"/><stop offset="100%" stop-color="#E4EEF6" stop-opacity="0"/></radialGradient>' +
-      '<filter id="mapSoften" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3.2"/></filter>' +
-    '</defs>';
-    /* 1. קרקע בסיס — גרדיאנט נזיל + כתמי אור רכים */
-    t += '<rect x="0" y="0" width="' + MAP_WORLD_W + '" height="' + MAP_WORLD_H + '" fill="url(#mapLandG)"/>';
-    t += '<ellipse cx="' + (MAP_WORLD_W * 0.18) + '" cy="' + (MAP_WORLD_H * 0.14) + '" rx="' + (MAP_WORLD_W * 0.24) + '" ry="' + (MAP_WORLD_H * 0.14) + '" fill="url(#mapGlowWarm)"/>';
-    t += '<ellipse cx="' + (MAP_WORLD_W * 0.82) + '" cy="' + (MAP_WORLD_H * 0.42) + '" rx="' + (MAP_WORLD_W * 0.22) + '" ry="' + (MAP_WORLD_H * 0.16) + '" fill="url(#mapGlowCool)"/>';
-    t += '<ellipse cx="' + (MAP_WORLD_W * 0.28) + '" cy="' + (MAP_WORLD_H * 0.82) + '" rx="' + (MAP_WORLD_W * 0.26) + '" ry="' + (MAP_WORLD_H * 0.15) + '" fill="url(#mapGlowWarm)"/>';
-    /* 2. מדשאת פנים השיכון */
-    t += '<rect x="' + mapX(MAP_LOOP_L) + '" y="' + mapY(-2) + '" width="' + (mapX(MAP_LOOP_R) - mapX(MAP_LOOP_L)) + '" height="' + (mapY(MAP_LOOP_B) - mapY(-2)) + '" rx="34" fill="var(--map-lawn)" stroke="var(--map-lawn-edge)" stroke-width="1.5"/>';
-    /* 3. גושי עצים */
-    MAP_TREES.forEach(function (tr) {
-      t += '<ellipse cx="' + mapX(tr[0]).toFixed(1) + '" cy="' + mapY(tr[1]).toFixed(1) + '" rx="' + mapX(tr[2]).toFixed(1) + '" ry="' + mapY(tr[3]).toFixed(1) + '" fill="url(#mapTreeG)"/>';
+  /* ---- קטגוריות למרחבים המשותפים: גוון + אייקון ----
+     שם המרחב מגיע כמות שהוא מקובץ הכיול, ולכן המיפוי הוא לפי שם. שם שלא מוכר
+     מקבל אייקון ברירת מחדל ולא נופל. */
+  var POI_CAT = {
+    'בריכה':                  ['water','water'],
+    'חדר כושר':               ['sport','gym'],
+    'אולם ספורט':             ['sport','sport'],
+    'מגרש כדורגל - סינתטי':   ['sport','park'],
+    'מגרש כדור-סל':           ['sport','park'],
+    'מגרש טניס':              ['sport','park'],
+    "פארק נינג'ה":            ['sport','park'],
+    'גן שעשועים':             ['kids','park'],
+    'גני ילדים':              ['kids','kids'],
+    'מועדון ילדים':           ['kids','kids'],
+    'חדר חוגים':              ['kids','kids'],
+    'שקמ"ם':                  ['shop','shop'],
+    'איטלקיה':                ['shop','food'],
+    'WeWork':                 ['shop','work'],
+    'דואר':                   ['civic','mail'],
+    'מועדון משפחות':          ['comm','club'],
+    'מדשאת מועדון משפחות':    ['comm','park'],
+    'גינת כלבים':             ['pet','pet']
+  };
+  function poiOf(label) {
+    var k = (label || '').trim();
+    return POI_CAT[k] || (k.indexOf('חני') === 0 ? ['park2','house'] : ['comm','house']);
+  }
+
+  /* ---- טבלת המיכלים — זהה בול לזו שבכלי הכיול ---- */
+  var BIN_KINDS = {
+    trash:   { shape:'circle', fill:'#3E9B54' },
+    recycle: { shape:'circle', fill:'#E08A2B' },
+    glass:   { shape:'oval',   fill:'#7A5AA8' },
+    carton:  { shape:'square', fill:'#C9463D' },
+    ewaste:  { shape:'rect',   fill:'#E3CE63' },
+    bulky:   { shape:'rect',   fill:'#2F7D46' },
+    garden:  { shape:'rect',   fill:'#D8C24F', dash:1 }
+  };
+  var BUS_GLYPH =
+    '<rect x="5" y="3.6" width="14" height="13.4" rx="2.6" fill="#fff"/>' +
+    '<rect x="6.6" y="5.6" width="10.8" height="4.6" rx="1" fill="#3A73B8"/>' +
+    '<rect x="6.6" y="12.2" width="3.2" height="2.2" rx=".8" fill="#3A73B8"/>' +
+    '<rect x="14.2" y="12.2" width="3.2" height="2.2" rx=".8" fill="#3A73B8"/>' +
+    '<circle cx="8.4" cy="18.6" r="1.7" fill="#fff"/>' +
+    '<circle cx="15.6" cy="18.6" r="1.7" fill="#fff"/>';
+
+  /* ---- MAP_TILES: משבצת לכל מספר בית ----
+     נשמר באחוזי־עולם בדיוק כמו במפה הישנה, כדי שהחיפוש, goToHouse, "הבית שלי"
+     וטבעת הפעימה ימשיכו לעבוד בלי שינוי. בית דו־משפחתי מתפצל לשתי משבצות —
+     גוף אחד במפה, שני מספרים ללחיצה. */
+  var MAP_TILES = (function () {
+    var out = [];
+    (GEO.objects || []).forEach(function (o) {
+      if (o.t !== 'house') return;
+      var a = (o.r || 0) * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a);
+      var vert = Math.abs((((o.r || 0) % 180) + 180) % 180 - 90) < 45;
+      function put(num, cx, cy, w, h) {
+        if (!num) return;
+        var fw = vert ? h : w, fh = vert ? w : h;
+        out.push({ n: String(num).trim(),
+          x: (cx - fw / 2) / MAP_WORLD_W * 100, y: (cy - fh / 2) / MAP_WORLD_H * 100,
+          w: fw / MAP_WORLD_W * 100, h: fh / MAP_WORLD_H * 100 });
+      }
+      if (o.duo) {
+        put(o.l,  o.x - ux * o.w / 4, o.y - uy * o.w / 4, o.w / 2, o.h);
+        put(o.l2, o.x + ux * o.w / 4, o.y + uy * o.w / 4, o.w / 2, o.h);
+      } else {
+        put(o.l, o.x, o.y, o.w, o.h);
+      }
     });
-    /* 4. בריכה + מגרש כדורגל + דשא סינתטי שני */
-    t += '<rect x="' + mapX(MAP_POOL.x) + '" y="' + mapY(MAP_POOL.y) + '" width="' + mapX(MAP_POOL.w) + '" height="' + mapY(MAP_POOL.h) + '" rx="16" fill="url(#mapPoolG)" stroke="var(--map-water-edge)" stroke-width="1.5"/>';
-    t += '<rect x="' + (mapX(MAP_POOL.x) + 9) + '" y="' + (mapY(MAP_POOL.y) + 9) + '" width="' + (mapX(MAP_POOL.w) - 18) + '" height="' + (mapY(MAP_POOL.h) - 18) + '" rx="10" fill="none" stroke="#FFFFFF" stroke-opacity=".55" stroke-width="1.5"/>';
-    t += '<rect x="' + mapX(MAP_FIELD.x) + '" y="' + mapY(MAP_FIELD.y) + '" width="' + mapX(MAP_FIELD.w) + '" height="' + mapY(MAP_FIELD.h) + '" rx="8" fill="#DCEBD1" stroke="#C2DCB4" stroke-width="1.5"/>';
-    t += '<g stroke="#FFFFFF" stroke-opacity=".75" stroke-width="1.4" fill="none">' +
-      '<rect x="' + (mapX(MAP_FIELD.x) + 7) + '" y="' + (mapY(MAP_FIELD.y) + 7) + '" width="' + (mapX(MAP_FIELD.w) - 14) + '" height="' + (mapY(MAP_FIELD.h) - 14) + '" rx="3"/>' +
-      '<line x1="' + mapX(MAP_FIELD.x) + '" y1="' + (mapY(MAP_FIELD.y) + mapY(MAP_FIELD.h) / 2) + '" x2="' + (mapX(MAP_FIELD.x) + mapX(MAP_FIELD.w)) + '" y2="' + (mapY(MAP_FIELD.y) + mapY(MAP_FIELD.h) / 2) + '"/>' +
-      '<circle cx="' + (mapX(MAP_FIELD.x) + mapX(MAP_FIELD.w) / 2) + '" cy="' + (mapY(MAP_FIELD.y) + mapY(MAP_FIELD.h) / 2) + '" r="14"/></g>';
-    t += '<rect x="' + mapX(MAP_TURF2.x) + '" y="' + mapY(MAP_TURF2.y) + '" width="' + mapX(MAP_TURF2.w) + '" height="' + mapY(MAP_TURF2.h) + '" rx="7" fill="#DCEBD1" stroke="#C2DCB4" stroke-width="1.5"/>';
-    /* 5. מסגרות הכבישים — מטושטשות קלות, כך שהכביש "זורם" על הקרקע במקום קו שרטוט קשיח */
-    t += mapRoad(MAP_LOOP_PATH,  MAP_LOOP_W + 9,  'var(--map-asphalt-edge)', ' opacity=".55" filter="url(#mapSoften)"');
-    t += mapRoad(MAP_CROSS_PATH, MAP_CROSS_W + 9, 'var(--map-asphalt-edge)', ' opacity=".55" filter="url(#mapSoften)"');
-    t += mapRoad(MAP_DRIVE_PATH, MAP_DRIVE_W + 9, 'var(--map-asphalt-edge)', ' opacity=".55" filter="url(#mapSoften)"');
-    /* 6. פני הכביש */
-    t += mapRoad(MAP_LOOP_PATH,  MAP_LOOP_W,  'var(--map-asphalt)', ' opacity=".92"');
-    t += mapRoad(MAP_CROSS_PATH, MAP_CROSS_W, 'var(--map-asphalt)', ' opacity=".92"');
-    t += mapRoad(MAP_DRIVE_PATH, MAP_DRIVE_W, 'var(--map-asphalt)', ' opacity=".92"');
-    /* 7. קו הפרדה מקווקו */
-    t += mapRoad(MAP_LOOP_PATH,  2.2, 'var(--map-lane)', ' stroke-dasharray="16 14" stroke-opacity=".85"');
-    t += mapRoad(MAP_CROSS_PATH, 2.2, 'var(--map-lane)', ' stroke-dasharray="16 14" stroke-opacity=".85"');
-    /* 8. עגול־תנועה בכניסה — מאותם חומרי כביש בדיוק, כך שירגיש חלק מאותה מערכת כבישים */
-    (function () {
-      var cx = mapX(MAP_ROUNDABOUT.cx), cy = mapY(MAP_ROUNDABOUT.cy), r = mapX(MAP_ROUNDABOUT.r);
-      t += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (r + 4.5).toFixed(1) + '" fill="var(--map-asphalt-edge)" opacity=".55" filter="url(#mapSoften)"/>';
-      t += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="var(--map-asphalt)" opacity=".92"/>';
-      t += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (r - 3).toFixed(1) + '" fill="none" stroke="var(--map-lane)" stroke-width="2.2" stroke-dasharray="7 8" stroke-opacity=".85"/>';
-      t += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (r * 0.52).toFixed(1) + '" fill="var(--map-lawn)" stroke="var(--map-lawn-edge)" stroke-width="1.5"/>';
-    })();
-    return t;
+    return out;
   })();
 
   /* ---------------------------------------------------------------------------
@@ -2128,122 +1976,240 @@ CBA.screens = CBA.screens || {};
 
       worldEl.style.width = MAP_WORLD_W + "px";
       worldEl.style.height = MAP_WORLD_H + "px";
-      worldEl.insertAdjacentHTML("afterbegin",
-        '<svg class="map-terrain" width="' + MAP_WORLD_W + '" height="' + MAP_WORLD_H + '" viewBox="0 0 ' + MAP_WORLD_W + ' ' + MAP_WORLD_H + '">' + MAP_TERRAIN_SVG + '</svg>' +
-        '<div class="map-grain"></div>');
 
       function px(p) { return mapX(p); }
       function py(p) { return mapY(p); }
 
-      // חניונים
-      MAP_PARKING.forEach(function (p) {
+      /* ================= שכבת הבסיס — SVG אחד ================= */
+      (function drawBase() {
+        function E(n, a, inner) {
+          var s = '<' + n;
+          for (var k in a) if (a[k] !== null && a[k] !== undefined) s += ' ' + k + '="' + a[k] + '"';
+          return inner === undefined ? s + '/>' : s + '>' + inner + '</' + n + '>';
+        }
+        function poly(p, close) {
+          if (!p || !p.length) return '';
+          var d = 'M' + p[0][0] + ' ' + p[0][1];
+          for (var i = 1; i < p.length; i++) d += 'L' + p[i][0] + ' ' + p[i][1];
+          return close ? d + 'Z' : d;
+        }
+        /* Catmull-Rom -> בזייה, לקווים שסומנו כמעוגלים בכלי הכיול */
+        function smooth(p) {
+          if (p.length < 3) return poly(p, false);
+          var d = 'M' + p[0][0] + ' ' + p[0][1];
+          for (var i = 0; i < p.length - 1; i++) {
+            var p0 = p[i ? i - 1 : 0], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
+            d += 'C' + (p1[0] + (p2[0] - p0[0]) / 6).toFixed(1) + ' ' + (p1[1] + (p2[1] - p0[1]) / 6).toFixed(1) + ',' +
+                 (p2[0] - (p3[0] - p1[0]) / 6).toFixed(1) + ' ' + (p2[1] - (p3[1] - p1[1]) / 6).toFixed(1) + ',' +
+                 p2[0] + ' ' + p2[1];
+          }
+          return d;
+        }
+        function rectAt(o, w, h, cls, rx) {
+          return E('rect', { x: (-w / 2).toFixed(1), y: (-h / 2).toFixed(1),
+            width: w.toFixed(1), height: h.toFixed(1), rx: (rx === undefined ? m2p(0.7) : rx).toFixed(1),
+            transform: 'translate(' + o.x + ' ' + o.y + ') rotate(' + (o.r || 0) + ')', 'class': cls });
+        }
+
+        var canopy = '', green = '', caseS = '', fillS = '', isl = '', tree = '',
+            bays = '', stre = '', pub = '', mark = '';
+
+        (GEO.canopy || []).forEach(function (p) { canopy += E('path', { d: poly(p, true), 'class': 'm2-canopy' }); });
+        (GEO.trees || []).forEach(function (t) { tree += E('circle', { cx: t[0], cy: t[1], r: t[2], 'class': 'm2-tree' }); });
+
+        /* סימוני חנייה: תא 2.5×5 מ׳, שורה אחת או שתיים לפי רוחב החניון */
+        function bayLines(o, w, h) {
+          var BW = m2p(2.5), BD = m2p(5), AI = m2p(3);
+          var horiz = w >= h, L = horiz ? w : h, W = horiz ? h : w;
+          if (L < 3 * BW || W < BD) return '';
+          var rows = W >= 2 * BD + AI ? [-1, 1] : [-1];
+          var n = Math.floor(L / BW), off = (L - n * BW) / 2, d = '';
+          rows.forEach(function (s) {
+            var y0 = s * W / 2, y1 = y0 - s * BD, i, x;
+            for (i = 0; i <= n; i++) {
+              x = -L / 2 + off + i * BW;
+              d += horiz ? 'M' + x.toFixed(1) + ' ' + y0.toFixed(1) + 'V' + y1.toFixed(1)
+                         : 'M' + y0.toFixed(1) + ' ' + x.toFixed(1) + 'H' + y1.toFixed(1);
+            }
+            d += horiz ? 'M' + (-L / 2 + off).toFixed(1) + ' ' + y1.toFixed(1) + 'H' + (-L / 2 + off + n * BW).toFixed(1)
+                       : 'M' + y1.toFixed(1) + ' ' + (-L / 2 + off).toFixed(1) + 'V' + (-L / 2 + off + n * BW).toFixed(1);
+          });
+          return E('path', { d: d, 'class': 'm2-bay',
+            transform: 'translate(' + o.x + ' ' + o.y + ') rotate(' + (o.r || 0) + ')' });
+        }
+
+        function markerG(o, inner, rot) {
+          var mn = 13;                                   /* מינימום פיקסלי־עולם */
+          var s = Math.max(1, mn / Math.max(4, Math.min(o.w, o.h)));
+          return E('g', { transform: 'translate(' + o.x + ' ' + o.y + ') rotate(' + (rot === undefined ? (o.r || 0) : rot) + ') scale(' + s.toFixed(3) + ')' }, inner);
+        }
+
+        (GEO.objects || []).forEach(function (o) {
+          if (o.t === 'house') return;                   /* בתים הם DIV, ר' למטה */
+          if (o.s === 'poly') {
+            if (o.t === 'green') green += E('path', { d: poly(o.p, true), 'class': 'm2-green' });
+            else if (o.t === 'parking') {
+              caseS += E('path', { d: poly(o.p, true), 'class': 'm2-casef', 'stroke-width': m2p(1.8).toFixed(1) });
+              fillS += E('path', { d: poly(o.p, true), 'class': 'm2-fillf' });
+            } else pub += E('path', { d: poly(o.p, true), 'class': 'm2-pub' });
+            return;
+          }
+          if (o.s === 'circle') {                        /* כיכר */
+            caseS += E('circle', { cx: o.x, cy: o.y, r: (o.rad + m2p(0.9)).toFixed(1), 'class': 'm2-casef' });
+            fillS += E('circle', { cx: o.x, cy: o.y, r: o.rad, 'class': 'm2-fillf' });
+            isl   += E('circle', { cx: o.x, cy: o.y, r: (o.rad * (o.isl || 0.45)).toFixed(1), 'class': 'm2-green' });
+            return;
+          }
+          if (o.s === 'line') {
+            if (o.t === 'street') {                      /* סימון רחוב — לא אספלט */
+              stre += E('path', { d: o.c ? smooth(o.p) : poly(o.p, false), 'class': 'm2-stdash',
+                style: 'stroke-dasharray:' + m2p(3.6).toFixed(0) + ' ' + m2p(3).toFixed(0) });
+              var q = o.p, tot = 0, seg = [], i;
+              for (i = 1; i < q.length; i++) { var L = Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]); seg.push(L); tot += L; }
+              var half = tot / 2, acc = 0, mid = q[0], ang = 0;
+              for (i = 0; i < seg.length; i++) {
+                if (acc + seg[i] >= half) {
+                  var tt = (half - acc) / (seg[i] || 1), A = q[i], B = q[i + 1];
+                  mid = [A[0] + (B[0] - A[0]) * tt, A[1] + (B[1] - A[1]) * tt];
+                  ang = Math.atan2(B[1] - A[1], B[0] - A[0]) * 180 / Math.PI; break;
+                }
+                acc += seg[i];
+              }
+              if (ang > 90 || ang < -90) ang += 180;
+              var nm = o.l || '', wch = nm.length * 7.2 + 20;
+              if (nm) stre += E('g', { 'class': 'm2-stq',
+                  transform: 'translate(' + mid[0].toFixed(1) + ' ' + mid[1].toFixed(1) + ') rotate(' + ang.toFixed(1) + ')' },
+                E('rect', { x: (-wch / 2).toFixed(1), y: -9.5, width: wch.toFixed(1), height: 19, rx: 9.5 }) +
+                E('text', { x: 0, y: 1 }, CBA.esc(nm)));
+              return;
+            }
+            var isPath = o.t === 'path';
+            var d = o.c ? smooth(o.p) : poly(o.p, false);
+            var cw = o.w + 2 * m2p(isPath ? 0.35 : 0.9);
+            caseS += E('path', { d: d, 'class': 'm2-case' + (isPath ? ' is-path' : ''), 'stroke-width': cw.toFixed(1) });
+            fillS += E('path', { d: d, 'class': 'm2-fill' + (isPath ? ' is-path' : ''), 'stroke-width': o.w });
+            return;
+          }
+          /* rect */
+          if (o.t === 'parking') {
+            caseS += rectAt(o, o.w + m2p(1.8), o.h + m2p(1.8), 'm2-casef', 4);
+            fillS += rectAt(o, o.w, o.h, 'm2-fillf', 4);
+            bays  += bayLines(o, o.w, o.h);
+          } else if (o.t === 'green') {
+            green += rectAt(o, o.w, o.h, 'm2-green', 4);
+          } else if (o.t === 'shelter') {
+            mark += markerG(o,
+              E('rect', { x: (-o.w / 2).toFixed(1), y: (-o.h / 2).toFixed(1), width: o.w, height: o.h,
+                rx: (Math.min(o.w, o.h) * 0.12).toFixed(1), 'class': 'm2-shelter' }) +
+              E('rect', { x: (-o.w * 0.28).toFixed(1), y: (-o.h * 0.28).toFixed(1),
+                width: (o.w * 0.56).toFixed(1), height: (o.h * 0.56).toFixed(1),
+                rx: (Math.min(o.w, o.h) * 0.11).toFixed(1), 'class': 'm2-shelter-in' }));
+          } else if (o.t === 'bus') {
+            var sq = Math.min(o.w, o.h);
+            mark += markerG(o,
+              E('rect', { x: (-sq / 2).toFixed(1), y: (-sq / 2).toFixed(1), width: sq, height: sq,
+                rx: (sq * 0.22).toFixed(1), 'class': 'm2-bus' }) +
+              E('g', { transform: 'translate(' + (-sq * 0.31).toFixed(1) + ' ' + (-sq * 0.31).toFixed(1) +
+                ') scale(' + (sq * 0.62 / 24).toFixed(4) + ')' }, BUS_GLYPH), 0);
+          } else if (o.t === 'bin') {
+            var K = BIN_KINDS[o.k] || BIN_KINDS.trash, inner;
+            if (K.shape === 'circle') inner = E('circle', { cx: 0, cy: 0, r: (Math.min(o.w, o.h) / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
+            else if (K.shape === 'oval') inner = E('ellipse', { cx: 0, cy: 0, rx: (o.w / 2).toFixed(1), ry: (o.h / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
+            else inner = E('rect', { x: (-o.w / 2).toFixed(1), y: (-o.h / 2).toFixed(1), width: o.w, height: o.h,
+                rx: (Math.min(o.w, o.h) * (K.shape === 'square' ? 0.14 : 0.22)).toFixed(1),
+                'class': 'm2-bin' + (K.dash ? ' is-dash' : ''), style: 'fill:' + K.fill });
+            mark += markerG(o, inner);
+          } else {
+            pub += rectAt(o, o.w, o.h, 'm2-pub', m2p(0.8));
+          }
+        });
+
+        worldEl.insertAdjacentHTML('afterbegin',
+          '<svg class="map-terrain map-base" width="' + MAP_WORLD_W + '" height="' + MAP_WORLD_H +
+          '" viewBox="0 0 ' + MAP_WORLD_W + ' ' + MAP_WORLD_H + '" aria-hidden="true">' +
+            E('rect', { x: 0, y: 0, width: MAP_WORLD_W, height: MAP_WORLD_H, 'class': 'm2-ground' }) +
+            E('g', { 'class': 'm2-l-canopy' }, canopy) +
+            E('g', {}, green) +
+            E('g', { 'class': 'm2-paved' }, E('g', {}, caseS) + E('g', {}, fillS)) +
+            E('g', {}, isl) +
+            E('g', { 'class': 'm2-l-tree' }, tree) +
+            E('g', {}, bays) +
+            E('g', {}, stre) +
+            E('g', {}, pub) +
+            E('g', {}, mark) +
+          '</svg>' +
+          '<div class="map-grain"></div>');
+      })();
+
+      /* ---- שבב P לכל חניון, ותווית שם אם יש ---- */
+      (GEO.objects || []).forEach(function (o) {
+        if (o.t !== 'parking') return;
+        var c = center(o);
         var el = document.createElement("div");
-        el.className = "map-parking";
-        el.style.cssText = "left:" + px(p.x) + "px;top:" + py(p.y) + "px;width:" + px(p.w) + "px;height:" + py(p.h) + "px";
+        el.className = "map-poi map-poi--park";
+        el.style.cssText = "left:" + c[0] + "px;top:" + c[1] + "px";
         el.innerHTML = '<span class="map-parking__chip">P</span>';
         worldEl.appendChild(el);
+        if (o.l) poiLabel(o.l, c[0], c[1] + 16, area(o));
       });
 
-      // רחובות — 9 שמות מהתשריט. type:'road' יושב ישירות על אחד משני הכבישים הראשיים
-      // (תבור/הבשור) ומקבל גם קו מקווקו משלו על הכביש; type:'h'/'v' הם שבילי מדרחוב.
-      MAP_STREETS.forEach(function (s) {
-        var lbl = document.createElement("span");
-        lbl.textContent = s.name;
-        if (s.type === "road") {
-          lbl.className = "map-street__label map-street__label--road";
-          var ry = py(s.y), rx1 = px(s.x1), rx2 = px(s.x2);
-          lbl.style.cssText = "left:" + (rx1 + (rx2 - rx1) / 2) + "px;top:" + ry + "px;transform:translate(-50%,-50%)";
-          var rel = document.createElement("div");
-          rel.className = "map-street map-street--h map-street--onroad";
-          rel.style.cssText = "top:" + ry + "px;left:" + rx1 + "px;width:" + (rx2 - rx1) + "px";
-          worldEl.appendChild(rel);
-          worldEl.appendChild(lbl);
-          return;
-        }
+      /* ---- שבב + שם לכל מרחב ציבורי ---- */
+      (GEO.objects || []).forEach(function (o) {
+        if (o.t !== 'public') return;
+        var c = center(o), cat = poiOf(o.l);
         var el = document.createElement("div");
-        lbl.className = "map-street__label";
-        if (s.type === "h") {
-          el.className = "map-street map-street--h";
-          var y = py(s.y), x1 = px(s.x1), x2 = px(s.x2);
-          el.style.cssText = "top:" + y + "px;left:" + x1 + "px;width:" + (x2 - x1) + "px";
-          lbl.style.cssText = "left:" + (x1 + (x2 - x1) / 2) + "px;top:" + (y - 10) + "px;transform:translateX(-50%)";
-        } else {
-          el.className = "map-street map-street--v";
-          var xx = px(s.x), yy1 = py(s.y1), yy2 = py(s.y2);
-          el.style.cssText = "left:" + xx + "px;top:" + yy1 + "px;height:" + (yy2 - yy1) + "px";
-          lbl.style.cssText = "left:" + (xx + 9) + "px;top:" + (yy1 + (yy2 - yy1) / 2) + "px;transform:translateY(-50%)";
-        }
+        el.className = "map-poi map-poi--" + cat[0];
+        el.style.cssText = "left:" + c[0] + "px;top:" + c[1] + "px";
+        el.innerHTML = '<span class="map-amenity__chip">' + svg(amenIcons[cat[1]] || amenIcons.house) + '</span>';
         worldEl.appendChild(el);
-        worldEl.appendChild(lbl);
+        if (o.l) poiLabel(o.l, c[0], c[1] + 16, area(o));
       });
 
-      // מבני ציבור
-      MAP_AMENITIES.forEach(function (a) {
-        var bw = px(a.w), bh = py(a.h);
-        var el = document.createElement("div");
-        el.className = "map-amenity" + (a.park ? " is-park" : "") + (a.shape ? " map-amenity--" + a.shape : "");
-        el.style.cssText = "left:" + px(a.x) + "px;top:" + py(a.y) + "px;width:" + bw + "px;height:" + bh + "px";
-        var roomInside = bw >= 68 && bh >= 50;
-        el.innerHTML = '<span class="map-amenity__chip">' + svg(amenIcons[a.ico]) + '</span>' +
-          (roomInside ? '<span class="map-amenity__in">' + CBA.esc(a.label) + '</span>' : "");
-        worldEl.appendChild(el);
-        if (!roomInside) {
-          var lbl = document.createElement("span");
-          lbl.className = "map-amenity__label";
-          lbl.textContent = a.label;
-          lbl.style.cssText = "left:" + (px(a.x) + bw / 2) + "px;top:" + (py(a.y) + bh + 5) + "px";
-          worldEl.appendChild(lbl);
-        }
-      });
+      /* פריסת תוויות: הגדול נכנס ראשון, השאר מנסים חמישה מיקומים ואז נופלים.
+         תווית חתוכה או דחוסה גרועה מתווית חסרה. ר' "מערכת ההתנגשויות". */
+      (function placeLabels() {
+        var labels = [].slice.call(worldEl.querySelectorAll('.map-amenity__label'));
+        labels.sort(function (a, b) { return (+b.dataset.a || 0) - (+a.dataset.a || 0); });
+        var boxes = [];
+        labels.forEach(function (l) {
+          var w = l.offsetWidth, h = l.offsetHeight;
+          var x = parseFloat(l.style.left) - w / 2, y0 = parseFloat(l.style.top);
+          var tries = [0, -(h + 5), h + 5, -(2 * h + 10), 2 * h + 10], i, ok = false;
+          for (i = 0; i < tries.length; i++) {
+            var y = y0 + tries[i], b = { x: x, y: y, w: w, h: h };
+            var hit = boxes.some(function (p) {
+              return !(b.x + b.w < p.x - 2 || p.x + p.w < b.x - 2 || b.y + b.h < p.y - 1 || p.y + p.h < b.y - 1);
+            });
+            if (!hit) { l.style.top = y + 'px'; boxes.push(b); ok = true; break; }
+          }
+          if (!ok) l.style.display = 'none';
+        });
+      })();
 
-      // תווית זכוכית צפה מתחת לאלמנט — אותה שפה כמו תוויות מבני הציבור
-      function floatLabel(x, y, w, h, text, extraClass) {
+      function area(o) {
+        if (o.p && o.p.length) {
+          var xs = o.p.map(function (p) { return p[0]; }), ys = o.p.map(function (p) { return p[1]; });
+          return (Math.max.apply(null, xs) - Math.min.apply(null, xs)) *
+                 (Math.max.apply(null, ys) - Math.min.apply(null, ys));
+        }
+        return (o.w || 0) * (o.h || 0);
+      }
+      function center(o) {
+        if (o.p && o.p.length) {
+          var xs = o.p.map(function (p) { return p[0]; }), ys = o.p.map(function (p) { return p[1]; });
+          return [(Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2,
+                  (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2];
+        }
+        return [o.x, o.y];
+      }
+      function poiLabel(text, x, y, a) {
         var lbl = document.createElement("span");
-        lbl.className = "map-amenity__label" + (extraClass ? " " + extraClass : "");
+        lbl.className = "map-amenity__label";
         lbl.textContent = text;
-        lbl.style.cssText = "left:" + (px(x) + px(w) / 2) + "px;top:" + (py(y) + py(h) + 5) + "px";
+        lbl.dataset.a = Math.round(a || 0);
+        lbl.style.cssText = "left:" + x + "px;top:" + y + "px";
         worldEl.appendChild(lbl);
       }
-
-      // אולם ספורט
-      (function () {
-        var el = document.createElement("div");
-        el.className = "map-hall";
-        el.style.cssText = "left:" + px(MAP_SPORTS_HALL.x) + "px;top:" + py(MAP_SPORTS_HALL.y) + "px;width:" + px(MAP_SPORTS_HALL.w) + "px;height:" + py(MAP_SPORTS_HALL.h) + "px";
-        el.innerHTML = '<span class="map-amenity__chip">' + svg(amenIcons.sport) + '</span>';
-        worldEl.appendChild(el);
-        floatLabel(MAP_SPORTS_HALL.x, MAP_SPORTS_HALL.y, MAP_SPORTS_HALL.w, MAP_SPORTS_HALL.h, "אולם ספורט");
-      })();
-
-      // מגרש דשא סינתטי שני
-      floatLabel(MAP_TURF2.x, MAP_TURF2.y, MAP_TURF2.w, MAP_TURF2.h, "מגרש סינתטי");
-
-      // מגרשי טניס וכדורסל
-      [["tennis", MAP_TENNIS, "מגרש טניס"], ["basketball", MAP_BASKETBALL, "מגרש כדורסל"]].forEach(function (pair) {
-        var el = document.createElement("div");
-        el.className = "map-court " + pair[0];
-        var c = pair[1];
-        el.style.cssText = "left:" + px(c.x) + "px;top:" + py(c.y) + "px;width:" + px(c.w) + "px;height:" + py(c.h) + "px";
-        el.innerHTML = '<span class="map-court__lines"></span>' +
-          (pair[0] === "tennis" ? '<span class="map-court__net"></span>' : '<span class="map-court__hoop"></span>');
-        worldEl.appendChild(el);
-        floatLabel(c.x, c.y, c.w, c.h, pair[2], "map-amenity__label--court");
-      });
-
-      // מבנה ציון־דרך ליד הכניסה (גג פינוויל) — גני ילדים
-      (function () {
-        var bw = px(MAP_LANDMARK.w), bh = py(MAP_LANDMARK.h);
-        var el = document.createElement("div");
-        el.className = "map-landmark";
-        el.style.cssText = "left:" + px(MAP_LANDMARK.x) + "px;top:" + py(MAP_LANDMARK.y) + "px;width:" + bw + "px;height:" + bh + "px";
-        el.innerHTML = '<span class="map-landmark__chip">' + svg(amenIcons[MAP_LANDMARK.ico]) + '</span>';
-        worldEl.appendChild(el);
-        var lbl = document.createElement("span");
-        lbl.className = "map-landmark__label";
-        lbl.textContent = MAP_LANDMARK.label;
-        lbl.style.cssText = "left:" + (px(MAP_LANDMARK.x) + bw + 8) + "px;top:" + (py(MAP_LANDMARK.y) + bh / 2) + "px";
-        worldEl.appendChild(lbl);
-      })();
 
       // בתים
       // (2026-08-19, ממצא 3.5 בדו"ח) שני דברים שחסרו כאן:

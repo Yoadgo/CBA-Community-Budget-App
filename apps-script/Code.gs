@@ -6973,6 +6973,25 @@ var GARDEN_FLAGS = ['דורש בדיקה חוזרת', 'הוחזר להשלמה',
  * ואינה מוצגת בממשק בכלל: שקט = תקין. */
 var GARDEN_CLOSURES = ['בוצע', 'הועבר לבינוי', 'בוטל', 'לא רלוונטי'];
 
+/* מקור המשימה (עמודת "סוג" בטאב המשימות). שלושה ערכים, רשימה סגורה:
+ *   שגרה       — נולדה מתבנית בטאב "גינון — שגרה", ולכן יש לה "מזהה תבנית"
+ *                שמצביע על השורה שם, ובה העמודה "סעיף בחוזה". זה הקישור
+ *                שמאפשר להגיד על כל משימה בודדת אם היא חוב חוזי או תוספת.
+ *   דיווח תושב — נולדה מדיווח באפליקציה. יש לה שורה מקבילה בטאב הדיווחים.
+ *   יזום       — מנהל הגינון פתח אותה בעצמו. לא בחוזה ולא דיווח.
+ * ההפרדה הזאת היא הבסיס לדוח "מה הקבלן היה חייב מול מה שנעשה בנוסף", ולכן
+ * היא עמודה ולא ניחוש לפי נוכחות של שדה אחר. */
+var GARDEN_KIND_ROUTINE = 'שגרה';
+var GARDEN_KIND_REPORT  = 'דיווח תושב';
+var GARDEN_KIND_MANUAL  = 'יזום';
+var GARDEN_KINDS = [GARDEN_KIND_ROUTINE, GARDEN_KIND_REPORT, GARDEN_KIND_MANUAL];
+
+/* עד 7.9.2026 דיווח תושב נכתב כ'תקלה'. שום דבר לא היה בייצור, אז הערך שונה
+ * במקום להישאר לנצח — אבל שורות בדיקה שנוצרו לפני כן עדיין נושאות אותו,
+ * ולכן הקריאה מנרמלת. אין כאן כתיבה חוזרת לגיליון בכוונה: מיגרציה על נתוני
+ * בדיקה היא סיכון בלי תמורה. */
+var GARDEN_KIND_LEGACY = { 'תקלה': GARDEN_KIND_REPORT };
+
 var GARDEN_REPORT_HEADERS = [
   'מזהה', 'תאריך דיווח', 'מזהה משפחה', 'שם מדווח', 'טלפון',
   'קטגוריה', 'אזור', 'מיקום X', 'מיקום Y', 'מיקום מילולי', 'תיאור', 'תמונות',
@@ -7328,7 +7347,7 @@ function submitGardenReport_(ss, body) {
     // 1. המשימה — מה שהצוות מטפל בו
     var trow = new Array(tsh.getLastColumn()).fill('');
     trow[tc['מזהה']] = taskId;
-    trow[tc['סוג']] = 'תקלה';
+    trow[tc['סוג']] = GARDEN_KIND_REPORT;
     trow[tc['כותרת']] = desc ? desc.substring(0, 120) : title;
     trow[tc['קטגוריה']] = cat;
     trow[tc['אזור']] = String(body.area || '');
@@ -7502,9 +7521,11 @@ function gardenCell_(v) {
 function gardenTaskObj_(row, c) {
   function g(name) { return gardenCell_(row[c[name]]); }
   var x = row[c['מיקום X']], y = row[c['מיקום Y']];
+  var kind = g('סוג');
   return {
     id:        g('מזהה'),
-    kind:      g('סוג'),
+    kind:      GARDEN_KIND_LEGACY[kind] || kind,
+    templateId: g('מזהה תבנית'),
     title:     g('כותרת'),
     category:  g('קטגוריה'),
     area:      g('אזור'),

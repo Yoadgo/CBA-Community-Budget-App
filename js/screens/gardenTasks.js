@@ -123,7 +123,10 @@
     { k: "area",  label: "אזור",   group: function (t) { return t.area || "ללא אזור"; } },
     { k: "urgent", label: "דחיפות", group: null },
     { k: "date",  label: "תאריך",  group: null },
-    { k: "type",  label: "סוג",    group: function (t) { return t.category || "ללא קטגוריה"; } }
+    /* התווית היא "קטגוריה" ולא "סוג" בכוונה: מאז 7.9 העמודה "סוג" בגיליון
+       מחזיקה את *מקור* המשימה (שגרה / דיווח תושב / יזום), וכפתור סידור בשם
+       "סוג" שמקבץ לפי מדשאות-עצים-השקיה היה מתנגש בדיוק במונח הזה. */
+    { k: "type",  label: "קטגוריה", group: function (t) { return t.category || "ללא קטגוריה"; } }
   ];
   function sortDef(k) {
     for (var i = 0; i < SORTS.length; i++) if (SORTS[i].k === k) return SORTS[i];
@@ -272,11 +275,12 @@
             esc(t.flag === "נגררה" && (t.drags || 0) > 1 ? "נגררה " + t.drags + " פעמים" : t.flag) +
             '</span>';
         }
-        /* מקור המשימה מוצג כפי שהוא רשום בעמודה "סוג" בגיליון, ולא נגזר
-           בניחוש משם אחד מוכר: לשגרה מהחוזה, לדיווח תושב ולמשימה שהמנהל
-           יזם יש ערכים שונים, ותצוגה שמנחשת הייתה מתייגת כל מה שאינו שגרה
-           כ"דיווח תושב" — כולל משימות שהמנהל פתח בעצמו. */
+        /* מקור המשימה מוצג כפי שהוא רשום בעמודה "סוג" בגיליון (שגרה / דיווח
+           תושב / יזום — ר' GARDEN_KINDS ב-Code.gs), ולא נגזר בניחוש: תצוגה
+           שמנחשת הייתה מתייגת כל מה שאינו שגרה כ"דיווח תושב", כולל משימות
+           שהמנהל פתח בעצמו. משימת שגרה מקבלת גם רמז שהיא חוזית. */
         var src = t.kind || "משימה";
+        var contract = t.kind === "שגרה";
         var where = t.area || "";
         return '<article class="gd-rep gt-row k-' + cat.key + (done ? " is-done" : "") +
             '" data-id="' + esc(t.id) + '">' +
@@ -285,7 +289,8 @@
           '<div class="gt-body">' +
             '<div class="gt-top"><span class="gd-rep__id">#' + esc(t.id) + '</span>' +
               '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
-              tags + '<span class="gt-src">' + esc(src) + '</span></div>' +
+              tags + '<span class="gt-src' + (contract ? " is-contract" : "") + '">' +
+                esc(src) + '</span></div>' +
             '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
             (where ? '<div class="gt-m">' + ico("pin") + esc(where) + '</div>' : '') +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +

@@ -86,8 +86,8 @@
     "על": "מנהל על", "תקציב": "ניהול תקציב ותשלומים",
     "מועדון": "ניהול מועדון", "תושבים": "ניהול תושבים",
     "מכון": "ניהול מכון כושר",
-    // "גינון" אינה הרשאת אזור-ניהול: היא לא מופיעה ב-hasAnyAdmin ולכן לא
-    // פותחת בעצמה את אזור הניהול. היא פותחת את מסכי הגינון בתוך אזור התושב.
+    // "גינון" (2026-09-07) — הרשאת אזור-ניהול לכל דבר, בדיוק כמו "תקציב":
+    // היא פותחת טאב ניהול משלה, וניתן להעניק אותה לתושב ממסך התושבים.
     "גינון": "ניהול גינון"
   };
   // איזו הרשאה נדרשת לכל מסך ניהול
@@ -109,7 +109,11 @@
     servicesAdmin: PERM.SUPER,
     // ניהול מכון הכושר (2026-08-18) — מידור "מכון" בלבד. מנהל-על רואה הכול
     // כרגיל (ר' can), אבל מנהל מועדון בלי מידור מכון לא יראה את המסך.
-    gymAdmin: PERM.GYM
+    gymAdmin: PERM.GYM,
+    // ניהול הגינון (2026-09-07) — מידור "גינון" בלבד. אותו דפוס כמו gymAdmin:
+    // המסך שייך לאזור הניהול, והצפייה המקבילה של התושב (resGarden, "הדיווחים
+    // שלי") יושבת באזור התושב ופתוחה לכולם ולכן אינה מופיעה כאן כלל.
+    gardenTasks: PERM.GARDEN
   };
 
   function myPerms() {
@@ -131,9 +135,8 @@
   function can(perm) { return !perm || isSuper() || myPerms().indexOf(perm) !== -1; }
   // האם יש למשתמש בכלל דריסת רגל באזור הניהול
   function hasAnyAdmin() {
-    return isSuper() || [PERM.BUDGET, PERM.CLUB, PERM.RESIDENTS, PERM.GYM].some(function (p) {
-      return myPerms().indexOf(p) !== -1;
-    });
+    return isSuper() || [PERM.BUDGET, PERM.CLUB, PERM.RESIDENTS, PERM.GYM, PERM.GARDEN]
+      .some(function (p) { return myPerms().indexOf(p) !== -1; });
   }
   function canScreen(name) {
     if (SCREEN_PERM[name] === "ANY") return hasAnyAdmin();
@@ -152,7 +155,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "settings"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "settings", "gardenTasks"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -186,7 +189,7 @@
       def: "resHome",
       // resMe ("הפרטים שלי") רשום כמסך אבל **לא כטאב** — מגיעים אליו מתפריט
       // המשתמש ומעמוד הבית. הוא על *אותי*, לא יעד ניווט, ושורת הניווט כבר בת 5.
-      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices", "resGarden", "resGardenNew", "gardenTasks"],
+      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices", "resGarden", "resGardenNew"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
       // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
@@ -705,9 +708,13 @@
       bar.className = "sim-banner";
       document.body.appendChild(bar);
     }
+    // ניסוח קצר יותר להדמיית תפקיד — "רואה בתור" + הסתייגות היה נשבר לשתי
+    // שורות בטלפון, והבאנר הוא רצועה קבועה שגוזלת גובה מכל מסך מתחתיו.
     bar.innerHTML =
-      '<span class="sim-banner__txt">מצב הדמיה — רואה בתור <b>' + CBA.esc(simUser.name) + '</b>' +
-        (simUser.isRoleSim ? ' <i>· תצוגה בלבד</i>' : '') + '</span>' +
+      '<span class="sim-banner__txt">מצב הדמיה — ' +
+        (simUser.isRoleSim
+          ? '<b>' + CBA.esc(simUser.name) + '</b> <i>· תצוגה בלבד</i>'
+          : 'רואה בתור <b>' + CBA.esc(simUser.name) + '</b>') + '</span>' +
       '<button type="button" class="sim-banner__x" id="sim-exit">צא מהדמיה</button>';
     document.body.classList.add("has-sim");
     bar.querySelector("#sim-exit").addEventListener("click", stopSim);
