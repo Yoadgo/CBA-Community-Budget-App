@@ -1,0 +1,357 @@
+/* ============================================================================
+ *  CBA — שכבת ה-Liquid Glass (2026-09-07)
+ *
+ *  מה זה: מחלקה אחת, .lg, שהופכת כל אלמנט לגוף זכוכית בסגנון iOS 26.
+ *  אושר ע"י יועד מול צילומי מרכז הבקרה שלו. ר' cba-liquid-glass-controls.
+ *
+ *  ⚠️ הקובץ הזה לא עושה כלום עד שמוסיפים לו <link> ב-index.html.
+ *     זה מכוון: אפשר לבדוק אותו, ואז להדליק אותו בשורה אחת.
+ *
+ *  ⚠️ הרקע האמביינטי (body::before) הוא חלק מהמנגנון ולא קישוט.
+ *     שקיפות על רקע שטוח נראית בדיוק כמו לבן אטום. אם מורידים את
+ *     הגרדיאנטים — כל הזכוכית נעלמת. זה כבר הוכח במודול הגינון.
+ * ========================================================================== */
+
+:root {
+  /* --- החומר --- */
+  --lg-blur:   21px;   /* פחות טשטוש = רואים יותר מהרקע = דרמטי יותר */
+  --lg-sat:    240%;   /* המחוון הכי משפיע: מה שהופך "לבן שקוף" ל"חומר" */
+  --lg-con:    1.10;
+  --lg-bri:    1.00;
+  --lg-w1:     .16;    /* לובן בראש הגוף */
+  --lg-w2:     .03;    /* לובן בתחתית */
+
+  /* --- הקצה --- */
+  --lg-rim:    1.5px;  /* עובי הרים המבהיק */
+  --lg-rim-a:  1;      /* עוצמת הרים */
+  --lg-halo:   .13;    /* קו כהה מחוץ לרים. בהיר+כהה = תחושת "חתך" */
+  --lg-lens:   7px;    /* רוחב טבעת השבירה */
+  --lg-lens-b: 3px;    /* טשטוש נוסף בטבעת */
+
+  /* --- הנפח --- */
+  --lg-inner:  .15;    /* צל פנימי תחתון — נותן עובי במקום מראה שטוח */
+  --lg-drop:   .22;    /* צל מוטל */
+
+  /* --- הסביבה --- */
+  --lg-amb:    1;      /* עוצמת הרקע האמביינטי */
+  --lg-grain:  .9;     /* גרעין — לזכוכית צריך משהו עם מרקם לשבור */
+
+  /* --- רדיוסים --- */
+  --lg-r-pill: 999px;
+  --lg-r-card: 20px;
+  --lg-r-tray: 26px;
+}
+
+/* ============================================================================
+ *  1. הרקע האמביינטי + הגרעין
+ *     fixed בכוונה — כדי שהגוונים לא "יזוזו" עם הגלילה ויעשו רעש.
+ * ========================================================================== */
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  opacity: var(--lg-amb);
+  background:
+    radial-gradient(760px 430px at 86%  0%,  rgba(79,70,229,.52),  transparent 62%),
+    radial-gradient(640px 400px at  2% 10%,  rgba(13,148,136,.46), transparent 64%),
+    radial-gradient(720px 440px at 64% 96%,  rgba(217,119,6,.42),  transparent 62%),
+    radial-gradient(540px 340px at 24% 58%,  rgba(190,24,93,.30),  transparent 66%),
+    radial-gradient(500px 300px at 96% 52%,  rgba(56,189,248,.36), transparent 66%);
+}
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  opacity: calc(var(--lg-grain) * .06);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
+}
+/* התוכן חייב לשבת מעל שתי השכבות האלה */
+.app, .login-gate, .user-panel { position: relative; z-index: 1; }
+
+/* ============================================================================
+ *  2. הגוף — .lg
+ *
+ *  חמש שכבות, וכולן דרושות:
+ *    background שכבה 1 = ברק ספקולרי אלכסוני
+ *    background שכבה 2 = הגוון החלבי
+ *    backdrop-filter    = החומר עצמו (רוויה, לא לובן!)
+ *    ::before           = טבעת שבירה בקצה — backdrop-filter נפרד על רצועה חיצונית
+ *    ::after            = רים גרדיאנטי מבהיק
+ *
+ *  ⚠️ מיושם ב-::before/::after בלי אלמנטי-בן, כדי שאפשר יהיה להדביק .lg
+ *     על אלמנטים קיימים בלי לגעת ב-JS שמייצר אותם. אלמנט שכבר משתמש
+ *     בפסאודו שלו — להשתמש ב-.lg--plain (בלי טבעת) או לעטוף אותו.
+ * ========================================================================== */
+.lg {
+  position: relative;
+  background:
+    linear-gradient(158deg, rgba(255,255,255,calc(var(--lg-rim-a) * .38)) 0%,
+                            rgba(255,255,255,.05) 18%, transparent 38%),
+    linear-gradient(165deg, rgba(255,255,255,var(--lg-w1)),
+                            rgba(255,255,255,var(--lg-w2)));
+  backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat))
+                   contrast(var(--lg-con)) brightness(var(--lg-bri));
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat))
+                   contrast(var(--lg-con)) brightness(var(--lg-bri));
+  box-shadow:
+    0 0 0 .5px rgba(16,24,40,var(--lg-halo)),
+    0 1px 2px rgba(16,24,40,.05),
+    0 16px 38px -12px rgba(16,24,40,var(--lg-drop)),
+    inset 0 -12px 16px -12px rgba(16,24,40,var(--lg-inner)),
+    inset 0 1px 0 rgba(255,255,255,calc(var(--lg-rim-a) * .5));
+  border: none;
+  transition: transform .2s cubic-bezier(.2,.7,.2,1), box-shadow .2s ease, background .2s ease;
+}
+
+/* טבעת השבירה — זו ה"עדשה". רצועה חיצונית עם טשטוש משלה. */
+.lg::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; padding: var(--lg-lens);
+  backdrop-filter: blur(var(--lg-lens-b)) saturate(1.9) brightness(1.14);
+  -webkit-backdrop-filter: blur(var(--lg-lens-b)) saturate(1.9) brightness(1.14);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask-composite: exclude;
+}
+
+/* הרים — ⚠️ גרדיאנט ולא קו אחיד. בהיר בפינה אחת, נעלם באמצע, חוזר בנגדית.
+   זה מה שהעין קוראת כשבירת אור בזכוכית עבה; קו אחיד נראה כמו מסגרת. */
+.lg::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; padding: var(--lg-rim);
+  background: linear-gradient(158deg,
+    rgba(255,255,255,calc(var(--lg-rim-a) * 1))    0%,
+    rgba(255,255,255,calc(var(--lg-rim-a) * .22)) 40%,
+    rgba(255,255,255,calc(var(--lg-rim-a) * .55)) 70%,
+    rgba(255,255,255,calc(var(--lg-rim-a) * .95)) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask-composite: exclude;
+}
+
+/* התוכן מעל שתי הפסאודו */
+.lg > * { position: relative; z-index: 2; }
+
+/* וריאנט בלי טבעת — לאלמנטים שכבר תפוסים ב-::before, ולרשימות ארוכות */
+.lg--plain::before { display: none; }
+
+/* ============================================================================
+ *  3. התנהגות
+ * ========================================================================== */
+button.lg, a.lg { cursor: pointer; font-family: inherit; color: var(--text); }
+button.lg:hover, a.lg:hover {
+  background:
+    linear-gradient(158deg, rgba(255,255,255,.45) 0%, rgba(255,255,255,.07) 20%, transparent 40%),
+    linear-gradient(165deg, rgba(255,255,255,calc(var(--lg-w1) + .18)),
+                            rgba(255,255,255,calc(var(--lg-w2) + .16)));
+}
+/* ב-iOS כל פקד מגיב פיזית ללחיצה */
+button.lg:active, a.lg:active { transform: scale(.955); }
+@media (prefers-reduced-motion: reduce) { .lg { transition: none; } button.lg:active { transform: none; } }
+
+/* מצב פעיל = מילוי מלא, בדיוק כמו Wi-Fi הכחול ב-iOS. כבוי = זכוכית. */
+.lg.is-on {
+  background: linear-gradient(165deg, #3A3833, var(--lg-on, #2B2924));
+  color: #FBFAF7;
+}
+.lg.is-on::before { display: none; }
+.lg.is-on::after {
+  background: linear-gradient(158deg, rgba(255,255,255,.5),
+                                      rgba(255,255,255,.08) 45%, rgba(255,255,255,.3));
+}
+.lg.is-on--sim { background: linear-gradient(165deg, #8B5CF6, #6D28D9); }
+
+/* עיגול-אייקון בתוך פקד — כמו הירח של Focus. */
+.lg-ico {
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  background: rgba(17,24,39,.10); color: var(--text);
+}
+.lg-ico svg { width: 14px; height: 14px; display: block; }
+.lg.is-on .lg-ico { background: rgba(255,255,255,.2); color: #FBFAF7; }
+
+/* צורות מוכנות */
+.lg-pill   { border-radius: var(--lg-r-pill); }
+.lg-card   { border-radius: var(--lg-r-card); }
+.lg-circle { border-radius: 50%; aspect-ratio: 1; display: grid; place-items: center; }
+
+/* ============================================================================
+ *  4. גדרות — הוסכם מפורשות עם יועד, לא לשנות בלי אישור
+ * ========================================================================== */
+/* שדה קלט לעולם לא שקוף: שדה שקוף מפסיק להיקרא כמקום שאפשר להקליד בו. */
+.lg input, .lg textarea, .lg select,
+input.lg, textarea.lg, select.lg {
+  background: rgba(255,255,255,.90) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+/* CTA ראשי נשאר שחור מלא — העוגן היחיד שאין עליו ספק. */
+.btn-primary.lg { background: var(--action, #111827) !important; color: #fff; }
+
+/* ============================================================================
+ *  5. נסיגה חיננית + ביצועים
+ * ========================================================================== */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .lg { background: rgba(255,255,255,.93); }
+  .lg::before { display: none; }
+}
+/* ⚠️ backdrop-filter על עשרות אלמנטים מכביד, במיוחד Safari/iPhone.
+   ברשימות ארוכות (תושבים, הוצאות) — .lg על הכרטיס העוטף, לא על כל שורה.
+   במסכים צרים מוותרים על טבעת השבירה, שהיא הכי יקרה מבין החמש. */
+@media (max-width: 720px) {
+  .lg::before { display: none; }
+  :root { --lg-blur: 18px; }
+}
+
+/* ============================================================================
+ *  6. תפריט המשתמש — גרסה א2 (2026-09-07)
+ *
+ *  מבנה: כותרת עם נקודת חיבור ושני עיגולי "מטא" (עזרה, יציאה) · שורת התרעה
+ *  כגלולה · שתי גלולות אזור · הדמיה בסגול · ארבעה עיגולים עם תווית זעירה.
+ *
+ *  ⚠️ המגש הוא כבר backdrop-filter, ולכן הגופים שבתוכו לא מקבלים blur משלהם —
+ *     זכוכית על זכוכית לא דוגמת שום דבר חדש ויוצאת שטוחה. הם מקבלים רק את
+ *     המילוי, הרים והצללים. הטשטוש מגיע מהמגש שמעליהם.
+ * ========================================================================== */
+.user-panel {
+  width: 272px; padding: 10px; border-radius: var(--lg-r-tray);
+  background: linear-gradient(170deg, rgba(255,255,255,calc(var(--lg-w1) + .12)),
+                                      rgba(255,255,255,calc(var(--lg-w2) + .10)));
+  backdrop-filter: blur(calc(var(--lg-blur) + 10px)) saturate(var(--lg-sat)) contrast(var(--lg-con));
+  -webkit-backdrop-filter: blur(calc(var(--lg-blur) + 10px)) saturate(var(--lg-sat)) contrast(var(--lg-con));
+  border: 1px solid rgba(255,255,255,.9);
+  box-shadow: 0 0 0 .5px rgba(16,24,40,calc(var(--lg-halo) * .7)),
+              0 30px 70px -16px rgba(16,24,40,.34),
+              inset 0 1px 0 rgba(255,255,255,.95);
+}
+.user-panel .lg { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.user-panel .lg::before { display: none; }   /* טבעת השבירה מיותרת בלי backdrop */
+
+/* --- כותרת --- */
+.up-head { display: flex; align-items: center; gap: 9px; padding: 6px 6px 2px; }
+.up-avatar-wrap { position: relative; flex: none; display: block; }
+.up-avatar, .up-avatar-img { width: 36px; height: 36px; }
+/* נקודת החיבור — מחליפה שורה שלמה של טקסט. לחיצה פותחת את פרטי האבחון. */
+.up-live {
+  position: absolute; inset-inline-start: -1px; bottom: -1px;
+  width: 11px; height: 11px; border-radius: 50%; padding: 0;
+  background: var(--ok); border: 2px solid #FBFCFD; cursor: pointer;
+}
+.up-live--warn { background: var(--warn); }
+.up-head__txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.up-nameline { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.up-name { font-size: 13px; }
+/* התגית חזרה לשורת השם — היא נדחסה שם ב-8.8 רק כי היא הייתה גדולה יותר */
+.up-role {
+  align-self: center; margin-top: 0; flex: none;
+  font-size: 9.5px; padding: 1.5px 6px; background: rgba(16,24,40,.10);
+}
+.up-sub { font-size: 11px; margin-top: 0; }
+
+/* "מטא" — עזרה ויציאה. סמלים שעומדים בלי מילה. */
+.up-meta { display: flex; gap: 5px; flex: none; }
+.up-mbtn { width: 30px; height: 30px; color: var(--text-soft); padding: 0; }
+.up-mbtn svg { width: 14px; height: 14px; display: block; }
+.up-mbtn:hover { color: var(--text); }
+.up-mbtn--quit:hover { color: var(--danger); }
+
+/* פרטי האבחון — מוסתרים כשהכול תקין, נפתחים מעצמם כשלא */
+.up-conn { padding: 6px 8px 2px; }
+.up-conn[hidden] { display: none; }
+
+/* --- הערימה --- */
+.up-stack { display: flex; flex-direction: column; gap: 7px; padding: 8px 2px 2px; }
+
+.up-pill {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 9px; font-size: 12px; text-align: start; font-family: inherit;
+}
+.up-pill .up-row__ico, .up-pill .lg-ico {
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; background: rgba(17,24,39,.10); color: var(--text);
+}
+.up-pill .up-row__ico svg, .up-pill .lg-ico svg { width: 14px; height: 14px; }
+.up-pill__t, .up-alert__txt { flex: 1; min-width: 0; font-weight: 600; }
+.up-pill--sim .up-pill__t { color: var(--sim); }
+.up-pill--sim .lg-ico { background: rgba(124,58,237,.12); color: var(--sim); }
+.up-alert__n { min-width: 20px; height: 20px; font-size: 11px; }
+
+/* מתג האזורים — שתי גלולות נפרדות. פעיל = מילוי מלא, כבוי = זכוכית. */
+.up-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.up-tg { padding: 8px 6px; font-size: 12px; font-weight: 700; text-align: center; }
+
+/* רשת האריחים */
+.up-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 1px; }
+.up-tiles:has(.up-tile:nth-child(3):last-child) { grid-template-columns: repeat(3, 1fr); }
+.up-tiles:has(.up-tile:nth-child(2):last-child) { grid-template-columns: repeat(2, 1fr); }
+.up-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  border: none; background: none; padding: 0; cursor: pointer; font-family: inherit;
+}
+.up-tile__d { width: 100%; aspect-ratio: 1; max-width: 52px; color: var(--text); }
+.up-tile__d svg { width: 18px; height: 18px; display: block; }
+.up-tile__l { font-size: 9px; font-weight: 600; color: var(--text-soft); letter-spacing: -.1px; }
+.up-tile:hover .up-tile__l { color: var(--text); }
+.up-tile:active .up-tile__d { transform: scale(.94); }
+
+/* ============================================================================
+ *  7. החלה על שאר האפליקציה
+ *     ⚠️ הקובץ נטען אחרון, ולכן הכללים כאן גוברים על style.css בכוונה.
+ *     ⚠️ הרשימות הארוכות מקבלות .lg על הכרטיס העוטף בלבד — backdrop-filter
+ *        על כל שורה מכביד קשות ב-Safari/iPhone.
+ * ========================================================================== */
+
+/* כרטיסי תוכן ואריחי מדד — כולל כרטיסי הכספים (יועד אישר 2026-09-07 אחרי
+   שראה את הספרות ברינדור; מבטל את "אטומים עד החלטה מפורשת" מ-7.9). */
+.card, .stat {
+  /* border שקוף ולא none — הסרת הגבול הייתה מקטינה כל כרטיס ב-2px ומזיזה
+     פריסות שכבר מכוילות. */
+  position: relative; border: 1px solid transparent;
+  background:
+    linear-gradient(158deg, rgba(255,255,255,calc(var(--lg-rim-a) * .38)) 0%,
+                            rgba(255,255,255,.05) 18%, transparent 38%),
+    linear-gradient(165deg, rgba(255,255,255,calc(var(--lg-w1) + .10)),
+                            rgba(255,255,255,calc(var(--lg-w2) + .06)));
+  backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat)) contrast(var(--lg-con));
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat)) contrast(var(--lg-con));
+  box-shadow:
+    0 0 0 .5px rgba(16,24,40,var(--lg-halo)),
+    0 1px 2px rgba(16,24,40,.05),
+    0 16px 38px -12px rgba(16,24,40,var(--lg-drop)),
+    inset 0 -12px 16px -12px rgba(16,24,40,var(--lg-inner)),
+    inset 0 1px 0 rgba(255,255,255,calc(var(--lg-rim-a) * .5));
+}
+.card::after, .stat::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; padding: var(--lg-rim);
+  background: linear-gradient(158deg,
+    rgba(255,255,255,calc(var(--lg-rim-a) * 1))    0%,
+    rgba(255,255,255,calc(var(--lg-rim-a) * .22)) 40%,
+    rgba(255,255,255,calc(var(--lg-rim-a) * .55)) 70%,
+    rgba(255,255,255,calc(var(--lg-rim-a) * .95)) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask-composite: exclude;
+}
+
+/* כותרת עליונה — הייתה זכוכית ב-.82 שטוח; מקבלת את שלוש השכבות */
+.app-header {
+  background: linear-gradient(170deg, rgba(255,255,255,.60), rgba(255,255,255,.40));
+  backdrop-filter: blur(calc(var(--lg-blur) + 4px)) saturate(var(--lg-sat)) contrast(var(--lg-con));
+  -webkit-backdrop-filter: blur(calc(var(--lg-blur) + 4px)) saturate(var(--lg-sat)) contrast(var(--lg-con));
+  border-bottom: 1px solid rgba(255,255,255,.65);
+  box-shadow: 0 1px 0 rgba(16,24,40,.07), 0 6px 22px -14px rgba(16,24,40,.30);
+}
+
+/* מודלים ומגירות — צפים מעל תוכן, ולכן כאן הטשטוש באמת עובד */
+.modal, .drawer {
+  background: linear-gradient(170deg, rgba(255,255,255,.72), rgba(255,255,255,.54));
+  backdrop-filter: blur(calc(var(--lg-blur) + 12px)) saturate(var(--lg-sat)) contrast(var(--lg-con));
+  -webkit-backdrop-filter: blur(calc(var(--lg-blur) + 12px)) saturate(var(--lg-sat)) contrast(var(--lg-con));
+  border: 1px solid rgba(255,255,255,.85);
+  box-shadow: 0 30px 70px -16px rgba(16,24,40,.34), inset 0 1px 0 rgba(255,255,255,.95);
+}
+/* מודל/מגירה מלאים בטפסים ובמספרים — לובן גבוה יותר בכוונה מכרטיס תוכן. */
+
+/* גדר חוזרת: כל שדה קלט באפליקציה נשאר אטום, בכל הקשר. */
+input, textarea, select, .field-input, .num-input {
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}

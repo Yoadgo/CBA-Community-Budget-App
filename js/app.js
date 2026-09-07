@@ -28,8 +28,24 @@
     if (!inited) return;
     const screen = CBA.screens[name];
     if (!screen) return;
-    // חסימת גישה: לא מציגים מסך שאינו שייך לאזור הנוכחי (תושב לא ניגש למסכי ניהול)
-    if (AREAS[currentArea] && AREAS[currentArea].screens.indexOf(name) === -1) return;
+    /* חסימת גישה: לא מציגים מסך שאינו שייך לאזור הנוכחי (תושב לא ניגש למסכי
+       ניהול). אבל "לא באזור הנוכחי" אינו בהכרח "אסור": יעד לגיטימי יכול לשבת
+       באזור השני — כרטיס בסיור שמפנה לניהול הגינון, קישור מעמוד הבית, חיפוש.
+       עד 7.9.26 הפונקציה פשוט עשתה return, והקישורים האלה **לא עשו כלום**:
+       בלי שגיאה, בלי ניווט, בלי רמז. עכשיו מחפשים אזור אחר שהמסך שייך אליו
+       ועוברים אליו. אין כאן פרצה: AREAS כבר מסונן לפי ההרשאות (ר' rebuildAreas),
+       ולכן מסך שהמשתמש לא רשאי לראות פשוט אינו נמצא באף אזור שלו. */
+    if (AREAS[currentArea] && AREAS[currentArea].screens.indexOf(name) === -1) {
+      var host = null;
+      Object.keys(AREAS).forEach(function (k) {
+        if (!host && k !== currentArea && AREAS[k].screens.indexOf(name) !== -1) host = k;
+      });
+      if (!host) return;
+      setArea(host);   // מצייר את מסך ברירת המחדל של האזור, ומיד אחריו נצייר את המבוקש
+      // setArea עשוי להסיט חזרה לאזור התושב (ר' הבדיקה שלו על hasAnyAdmin).
+      // אם זה קרה — המסך המבוקש אינו לגיטימי כאן, ואנחנו עוצרים במקום לצייר.
+      if (currentArea !== host) return;
+    }
     const silent = !!(opts && opts.silent);
     const before = silent ? pulseSnapshot(main) : null;
     currentScreen = name;
@@ -93,7 +109,7 @@
   // איזו הרשאה נדרשת לכל מסך ניהול
   const SCREEN_PERM = {
     budget: PERM.BUDGET, expenses: PERM.BUDGET, planning: PERM.BUDGET,
-    clubAdmin: PERM.CLUB, residents: PERM.RESIDENTS, settings: PERM.SUPER,
+    clubAdmin: PERM.CLUB, residents: PERM.RESIDENTS,
     // ניהול עץ הוועד — מנהל-על בלבד (2026-08-10, לבקשת יועד: "הניהול עץ
     // צריך להיות רק באזור ניהול למי שיש הרשאות מנהל על"). התצוגה-לקריאה
     // המקבילה (resCommittee, אזור תושב) פתוחה לכל תושב וללא הרשאה כאן.
@@ -155,7 +171,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "settings", "gardenTasks"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -544,14 +560,15 @@
     });
     nav.innerHTML = html;
     /* יעד יחיד שאינו כפתור-קבוצה = אין ניווט: הוא נצבע כטאב פעיל על כל רוחב
-       הבר, נראה ככפתור ענק, ולחיצה עליו לא עושה כלום. מסמנים ל-CSS שיסתיר
-       אותו. מוגבל בכוונה למשתמש חיצוני: גם למנהל תחום בודד יוצא לפעמים טאב
-       יחיד, ושם הוא לרוב כפתור-קבוצה שכן נפתח — ולא רצינו לשנות התנהגות
-       קיימת של משתמשים אחרים. תפריט המשתמש והיציאה בכותרת העליונה, שאינה
-       מושפעת. */
+       הבר, נראה ככפתור ענק, ולחיצה עליו לא עושה כלום. מסמנים ל-CSS שיסתיר אותו.
+       התנאי "לא קבוצה" הוא מה שהופך את זה לבטוח, ולא הגבלה למשתמש חיצוני:
+       נמדד (7.9.26) שכל מנהל-תחום-בודד קיים מקבל דווקא **כפתור-קבוצה** —
+       תקציב→[תקציב], מועדון/מכון→[מתקנים], תושבים→[השיכון] — והוא אינטראקטיבי
+       ולכן נשאר. שני התפקידים היחידים שמקבלים טאב בודד ורגיל הם אחראי הגינון
+       החיצוני ומנהל הגינון, ושניהם חדשים. אפס רגרסיה. */
     var tabsNow = AREAS[area].tabs;
     document.body.dataset.navSingle =
-      (isExternalUser() && tabsNow.length === 1 && !tabsNow[0].group) ? "1" : "";
+      (tabsNow.length === 1 && !tabsNow[0].group) ? "1" : "";
     if (keepIndicator) nav.insertBefore(keepIndicator, nav.firstChild);
   }
   /* --- התרעות (2026-08): שני מקורות —
@@ -1028,7 +1045,11 @@
     // המשתמש, לא NAV_ICONS של המסכים.
     compass: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>',
     // דמות — "הפרטים שלי" (2026-08-28)
-    person: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>'
+    person: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>',
+    /* סימן שאלה בעיגול — "סיור באפליקציה" (2026-09-07). החליף את המצפן: מצפן
+       הוא מטאפורה שאיש לא מפענח, סימן שאלה הוא מוסכמה חוצת-אפליקציות ולכן
+       הוא היחיד שיכול לעמוד בלי תווית. */
+    help: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .9-1 1.6v.4"/><path d="M12 17h.01"/></svg>'
   };
 
   function initials(name) {
@@ -1109,18 +1130,25 @@
     if (searchBtn) searchBtn.addEventListener("click", function () {
       if (window.CBA.search) CBA.search.open();
     });
-    const setBtn = panel.querySelector("[data-panel-settings]");
-    if (setBtn) setBtn.addEventListener("click", function () {
-      closeUserPanel(panel, btn); showScreen("settings");
-    });
     const instBtn = panel.querySelector("[data-panel-install]");
     if (instBtn) instBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn);
       if (window.CBA.pwa) CBA.pwa.promptInstall();
     });
-    const swBtn = panel.querySelector("[data-panel-switch]");
-    if (swBtn) swBtn.addEventListener("click", function () {
-      closeUserPanel(panel, btn); setArea(swBtn.dataset.panelSwitch);
+    // שתי גלולות ולא כפתור אחד (2026-09-07) — querySelectorAll, לא querySelector.
+    panel.querySelectorAll("[data-panel-switch]").forEach(function (sw) {
+      sw.addEventListener("click", function () {
+        var target = sw.dataset.panelSwitch;
+        closeUserPanel(panel, btn);
+        if (target !== currentArea) setArea(target);
+      });
+    });
+    // לחיצה על נקודת החיבור פותחת/סוגרת את פרטי האבחון
+    const connDot = panel.querySelector("[data-panel-conn]");
+    if (connDot) connDot.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var row = panel.querySelector(".up-conn");
+      if (row) row.hidden = !row.hidden;
     });
     panel.querySelectorAll("[data-panel-goto]").forEach(function (gBtn) {
       gBtn.addEventListener("click", function () {
@@ -1193,21 +1221,36 @@
       : (window.CBA.connected === false ? '<span class="up-status up-status--off"><span class="up-dot"></span>לא מחובר · נתוני דמו</span>' : '');
 
     let head, action;
+    /* מצב החיבור ירד משורה שלמה לנקודה על האווטאר (2026-09-07). הוא עדיין
+       פאנל האבחון היחיד של האפליקציה, ולכן: לחיצה על הנקודה פותחת את הטקסט
+       המלא, וכשהשרת ישן / אין מושב / אין חיבור — הוא נפתח מעצמו. */
+    var connOpen = (window.CBA.connected !== true) || stale || (currentUser && !hasSess);
+    var connRow = conn ? '<div class="up-conn"' + (connOpen ? '' : ' hidden') + '>' + conn + '</div>' : '';
+
     if (currentUser) {
       const avatar = currentUser.picture
         ? '<img class="up-avatar-img" src="' + CBA.esc(currentUser.picture) + '" alt="">'
         : '<span class="up-avatar">' + CBA.esc(initials(currentUser.name || currentUser.email)) + '</span>';
-      // תגית ההרשאה ירדה לשורה משלה מתחת לאימייל (2026-08-07): כשהיא ישבה בקצה
-      // השורה היא נדחסה מול שם ואימייל ארוכים, נשברה לשתי שורות וגלשה מהמגש.
+      /* "מטא" — עזרה ויציאה. שניהם על האפליקציה ולא בתוכה, ושניהם סמלים
+         שעומדים בלי מילה, ולכן הם עיגולים בפינה ולא פריטים ברשימה. */
       head =
-        '<div class="up-head">' + avatar +
+        '<div class="up-head">' +
+          '<span class="up-avatar-wrap">' + avatar +
+            '<button type="button" class="up-live' + (connOpen ? ' up-live--warn' : '') + '" data-panel-conn aria-label="מצב החיבור"></button>' +
+          '</span>' +
           '<div class="up-head__txt">' +
-            '<div class="up-name">' + CBA.esc(currentUser.name || currentUser.email) + '</div>' +
+            '<div class="up-nameline">' +
+              '<div class="up-name">' + CBA.esc(currentUser.name || currentUser.email) + '</div>' +
+              '<span class="up-role" title="' + CBA.esc(myRoleLabel()) + '">' + CBA.esc(myRoleLabel()) + '</span>' +
+            '</div>' +
             '<div class="up-sub">' + CBA.esc(currentUser.email) + '</div>' +
-            '<span class="up-role" title="' + CBA.esc(myRoleLabel()) + '">' + CBA.esc(myRoleLabel()) + '</span>' +
+          '</div>' +
+          '<div class="up-meta">' +
+            '<button class="lg lg-circle up-mbtn" data-panel-tour title="סיור באפליקציה" aria-label="סיור באפליקציה">' + ICON.help + '</button>' +
+            '<button class="lg lg-circle up-mbtn up-mbtn--quit" data-panel-logout title="יציאה" aria-label="יציאה">' + ICON.logout + '</button>' +
           '</div>' +
         '</div>';
-      action = '<button class="up-item up-item--logout" data-panel-logout><span class="up-row__ico">' + ICON.logout + '</span>יציאה</button>';
+      action = "";
     } else {
       head =
         '<div class="up-head"><span class="up-avatar">•</span>' +
@@ -1217,70 +1260,58 @@
       action = "";
     }
 
-    // מתג המעבר בין האזורים מוצג רק למי שיש לו בכלל הרשאת ניהול כלשהי —
-    // ולא למשתמש חיצוני, שאין לו אזור תושב לעבור אליו (2026-09-07).
+    /* מתג האזורים — שתי גלולות נפרדות ולא בורר מחולק. ב-iOS פקד כבוי הוא
+       זכוכית ופקד דלוק הוא מילוי מלא; בורר עם קווי הפרדה נקרא כשדה טופס.
+       מוצג רק למי שיש לו הרשאת ניהול, ולא למשתמש חיצוני שאין לו אזור תושב. */
     var switchItem = (hasAnyAdmin() && !isExternalUser())
-      ? (currentArea === "admin"
-          ? '<button class="up-item" data-panel-switch="resident"><span class="up-row__ico">' + ICON.swap + '</span>עבור לאזור תושב</button>'
-          : '<button class="up-item" data-panel-switch="admin"><span class="up-row__ico">' + ICON.swap + '</span>חזרה לאזור ניהול</button>')
+      ? '<div class="up-seg">' +
+          '<button class="lg lg-pill up-tg' + (currentArea === "resident" ? " is-on" : "") + '" data-panel-switch="resident">תושב</button>' +
+          '<button class="lg lg-pill up-tg' + (currentArea === "admin" ? " is-on" : "") + '" data-panel-switch="admin">ניהול</button>' +
+        '</div>'
       : "";
-    // הגדרות — מנהל על בלבד
-    var settingsItem = (currentArea === "admin" && isSuper())
-      ? '<button class="up-item" data-panel-settings><span class="up-row__ico">' + ICON.gear + '</span>הגדרות</button>'
-      : "";
-    // ניהול מיילים (2026-08-18, גל 2) — ירד מהניווט הראשי לכאן, לבקשת יועד,
-    // כי זו הגדרת מערכת ולא יעד ניווט יומיומי. גלוי לכל מי שההרשאות שלו
-    // מאפשרות את המסך (ר' SCREEN_PERM.emailSettings = "ANY" ו-canScreen).
-    var emailItem = (currentArea === "admin" && canScreen("emailSettings"))
-      ? '<button class="up-item" data-panel-goto="emailSettings"><span class="up-row__ico">' + ICON.mail + '</span>ניהול מיילים</button>'
-      : "";
-    /* התקנת האפליקציה (2026-08-20, PWA) — לבקשת יועד יושב בין "ניהול מיילים"
-       ל"הגדרות". בשונה משניהם הוא מוצג *בשני האזורים*, כולל לתושב רגיל: דווקא
-       התושבים הם הקהל שירוויח הכי הרבה מאייקון על המסך, ורובם על אייפון —
-       שם ההתקנה ידנית ואף אחד לא מגלה אותה לבד. הפריט נעלם מעצמו ברגע
-       שהאפליקציה כבר מותקנת. ר' מסמך אפיון PWA, סעיפים 6 ו-7. */
-    var installItem = (window.CBA.pwa && CBA.pwa.canInstall())
-      ? '<button class="up-item" data-panel-install><span class="up-row__ico">' + ICON.install + '</span>התקנת האפליקציה</button>'
-      : "";
-    // הדמיית תושב — כלי רב-עוצמה (רואים דרכו נתונים של אחרים), מנהל על בלבד
+
+    // הדמיית תושב — כלי רב-עוצמה (רואים דרכו נתונים של אחרים), מנהל על בלבד.
+    // נשאר שורה שלמה עם מילים, לבקשת יועד: חצים לא אומרים "לראות כמו מישהו אחר".
     var simItem = isSuper()
       ? (window.CBA.isSimulating && window.CBA.isSimulating()
-          ? '<button class="up-item up-item--sim" data-panel-simstop><span class="up-row__ico">' + ICON.swap + '</span>צא ממצב הדמיה</button>'
-          : '<button class="up-item up-item--sim" data-panel-sim><span class="up-row__ico">' + ICON.swap + '</span>הדמיית תושב</button>')
+          ? '<button class="lg lg-pill up-pill up-pill--sim" data-panel-simstop><span class="lg-ico">' + ICON.swap + '</span><span class="up-pill__t">צא ממצב הדמיה</span></button>'
+          : '<button class="lg lg-pill up-pill up-pill--sim" data-panel-sim><span class="lg-ico">' + ICON.swap + '</span><span class="up-pill__t">הדמיית תושב</span></button>')
       : "";
 
-    /* "אבטחת המידע שלי" (2026-08-24) — מסך שקיפות לתושב, לבקשת יועד. יושב
-       מיד מעל "יציאה" ומוצג לכל מי שמחובר, בשני האזורים: השאלה "מי יכול
-       להגיע למידע שלי" היא של כולם, לא רק של מנהלים. ר' js/ui/security.js. */
-    /* "סיור באפליקציה" (2026-08-28) — הסיור המלא, בכל רגע. יושב מעל מסך
-       האבטחה כי שניהם מאותה משפחה: הסברים, לא פעולות. מוצג רק למי שמחובר. */
-    /* "הפרטים שלי" (2026-08-28) — ראשון בקבוצת הפריטים האישיים, מעל הסיור
-       ומעל מסך האבטחה. כולם עונים על "מה יש עליי כאן". */
-    var profileItem = currentUser
-      ? '<button class="up-item" data-panel-profile><span class="up-row__ico">' + ICON.person + '</span>הפרטים שלי</button>'
-      : "";
-
-    var tourItem = currentUser
-      ? '<button class="up-item" data-panel-tour><span class="up-row__ico">' + ICON.compass + '</span>סיור באפליקציה</button>'
-      : "";
-
-    var securityItem = currentUser
-      ? '<button class="up-item" data-panel-security><span class="up-row__ico">' + ICON.shield + '</span>אבטחת המידע שלי</button>'
+    /* רשת האריחים — כאן יושב כל מה שצריך תווית כדי להיות מובן.
+       ⚠️ "פרטים" חייב תווית: NAV_ICONS כבר משתמש באייקון דמות לשני פריטי
+       ניווט ("האזור שלי", "מדריך תושבים"), ודמות חשופה הייתה מתנגשת בהם.
+       ⚠️ גלגל השיניים "הגדרות" הוסר כאן (הוכרע 2026-08-18, ר' התיעוד). */
+    var tiles = [];
+    if (currentUser) {
+      tiles.push(['data-panel-profile', ICON.person, 'פרטים', 'הפרטים שלי']);
+      tiles.push(['data-panel-security', ICON.shield, 'אבטחה', 'אבטחת המידע שלי']);
+    }
+    if (currentArea === "admin" && canScreen("emailSettings")) {
+      tiles.push(['data-panel-goto="emailSettings"', ICON.mail, 'מיילים', 'ניהול מיילים']);
+    }
+    // נעלם מעצמו ברגע שהאפליקציה כבר מותקנת (ר' מסמך אפיון PWA, סעיפים 6-7)
+    if (window.CBA.pwa && CBA.pwa.canInstall()) {
+      tiles.push(['data-panel-install', ICON.install, 'התקנה', 'התקנת האפליקציה']);
+    }
+    var tilesItem = tiles.length
+      ? '<div class="up-tiles">' + tiles.map(function (t) {
+          return '<button class="up-tile" ' + t[0] + ' title="' + CBA.esc(t[3]) + '" aria-label="' + CBA.esc(t[3]) + '">' +
+                   '<span class="lg lg-circle up-tile__d">' + t[1] + '</span>' +
+                   '<span class="up-tile__l">' + CBA.esc(t[2]) + '</span>' +
+                 '</button>';
+        }).join('') + '</div>'
       : "";
 
     return (
       head +
-      '<div class="up-row">' + conn + '</div>' +
-      notifItemsHTML() +
-      '<div class="up-sep"></div>' +
-      switchItem +
-      simItem +
-      emailItem +
-      installItem +
-      settingsItem +
-      profileItem +
-      tourItem +
-      securityItem +
+      connRow +
+      '<div class="up-stack">' +
+        notifItemsHTML() +
+        switchItem +
+        simItem +
+        tilesItem +
+      '</div>' +
       action
     );
   }
@@ -1304,7 +1335,7 @@
       return '<div class="up-row"><span class="up-row__ico">' + ICON.bell + '</span><span>' + msg + '</span></div>';
     }
     return items.map(function (it) {
-      return '<button type="button" class="up-item up-item--alert" data-panel-goto="' + it.target + '">' +
+      return '<button type="button" class="lg lg-pill up-pill up-pill--alert" data-panel-goto="' + it.target + '">' +
         '<span class="up-row__ico">' + ICON.bell + '</span>' +
         '<span class="up-alert__txt">' + CBA.esc(it.label) + '</span>' +
         '<span class="up-alert__n">' + it.n + '</span>' +

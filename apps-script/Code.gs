@@ -491,29 +491,81 @@ function doGet(e) {
     Object.keys(settings).forEach(function (k) {
       if (k.indexOf('סיסמ') === -1 || SETTINGS_PUBLIC_ALLOW.indexOf(k) !== -1) publicSettings[k] = settings[k];
     });
+
+    /* ====================================================================
+     *  צמצום נתונים לפי מי שמבקש  (2026-09-07 — DATA_MIN)
+     * --------------------------------------------------------------------
+     *  עד היום כל תושב פעיל קיבל כאן את *כל* התקציב, ההכנסות, ההערות ואת כל
+     *  שורות התנועות של *כל* המשפחות — שם הרוכש, הסכום והקישור לקבלה — והלקוח
+     *  שמר את הכול ב-localStorage שלו לצמיתות, עד יציאה ידנית.
+     *
+     *  נבדק בקוד (7.9.26) ולא הוערך: AREAS_ALL.resident.screens ב-app.js אינו
+     *  כולל budget/expenses/planning, וחיפוש של categoryName/getCategories/
+     *  getIncome/getGroups בכל קובצי מסכי התושב מחזיר אפס תוצאות. resident.js
+     *  מסנן תמיד .filter(t => t.familyId === famId). כלומר: מכל המטען הזה
+     *  תושב רגיל משתמש אך ורק בתנועות של משפחתו שלו.
+     *
+     *  מעכשיו: מי שאין לו הרשאת תקציב מקבל רק אותן. זה גם תיקון פרטיות וגם
+     *  ההאצה הגדולה — 6 קריאות גיליון לכל שנה יורדות לאחת, ורוב המשתמשים הם
+     *  תושבים רגילים.
+     *
+     *  ⚠️ מבנה התשובה נשאר זהה בדיוק (מערכים ריקים, לא שדות חסרים) כדי שאף
+     *     גרסת לקוח לא תישבר, ובפרט שלא תיפול למסלול-התאימות הישן של groups
+     *     ב-transform() (שם d.groups === undefined מפעיל fallback).
+     *  ⚠️ כל השנים נשמרות עבור התנועות של המשפחה עצמה — כרטיס "צפוי לתשלום"
+     *     בנוי על היסטוריה חוצת-שנים.
+     *  ⚠️ ההרשאה נקראת מ-gate.perm, כלומר מהמושב החתום ומהגיליון — לעולם לא
+     *     מפרמטר שהלקוח שלח.
+     * ==================================================================== */
+    var perm = gate.perm || {};
+    var seesBudget = !!(perm.isSuper || (perm.perms || []).indexOf(PERM_BUDGET) !== -1);
+    var myFamilyId = String(perm.familyId || '').trim();
+    /* לתושב רגיל נשלחות רק ההגדרות שמסך באזור התושב באמת קורא. אומת: בכל
+     * הלקוח יש 4 קריאות בלבד ל-CBA.mock._settings, ומהן רק "סיסמת רשת
+     * המועדון" שייכת לאזור התושב. כך "בסיס תקציב <שנה>" — שהוא JSON של
+     * התכנון המאושר לכל סעיף — מפסיק להגיע לתושב דרך ההגדרות. */
+    var RESIDENT_SETTINGS_ALLOW = ['סיסמת רשת המועדון'];
+    if (!seesBudget) {
+      var slimSettings = {};
+      RESIDENT_SETTINGS_ALLOW.forEach(function (k) {
+        if (publicSettings[k] !== undefined) slimSettings[k] = publicSettings[k];
+      });
+      publicSettings = slimSettings;
+    }
+
     var out = {
       // מספר הגרסה נשלח יחד עם המטען המלא, כדי שהלקוח יידע מול מה
       // להשוות בבדיקות ה-rev הזולות שאחריו (ר' bumpRev_ למעלה).
       rev: currentRev_(),
-      ok: true, version: 'v39-session-epoch', years: years,
+      ok: true, version: 'v40-data-min', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
       // הלקוח החדשה מדברת עם השרת הישן; לא בשימוש יותר ע"י לקוח מעודכן.
-      groups: readColumn_(ss, 'קבוצות'),
-      updates: readTable_(ss, 'עדכוני תקציב'),   // יומן עדכוני תקציב (אם הטאב קיים)
+      groups: seesBudget ? readColumn_(ss, 'קבוצות') : [],
+      updates: seesBudget ? readTable_(ss, 'עדכוני תקציב') : [],   // יומן עדכוני תקציב (אם הטאב קיים)
       // פנקס הערות כלליות (סעיף 1, 2026-08-09) — טאב "הערות" (שורה אחת לכל
       // שנה) + טאב "יומן הערות" (כרונולוגי, מי ערך ומתי). שני הטאבים נוצרים
       // אוטומטית ע"י saveNotes_ בשמירה הראשונה, כמו "עדכוני תקציב".
-      notes: readNotesMap_(ss),
-      notesLog: readTable_(ss, 'יומן הערות'),
+      notes: seesBudget ? readNotesMap_(ss) : {},
+      notesLog: seesBudget ? readTable_(ss, 'יומן הערות') : [],
       settings: publicSettings, data: {}
     };
     years.forEach(function (y) {
+      var tx = readTable_(ss, 'תנועות ' + y);
+      if (!seesBudget) {
+        // בלי מזהה משפחה אין למי לשייך — מחזירים ריק, לא הכול. שגיאת נתונים
+        // בטאב "תושבים" לא תהפוך כאן להדלפה של כל התנועות.
+        tx = myFamilyId
+          ? tx.filter(function (r) { return String(r['מזהה משפחה'] || '').trim() === myFamilyId; })
+          : [];
+        out.data[y] = { budget: [], income: [], transactions: tx, groups: [], splits: [], items: [] };
+        return;
+      }
       out.data[y] = {
         budget: readTable_(ss, 'תקציב ' + y),
         income: readTable_(ss, 'הכנסות ' + y),
-        transactions: readTable_(ss, 'תנועות ' + y),
+        transactions: tx,
         // קבוצות פר-שנה (סעיף 3, 2026-08-09) — ר' readGroupsForYear_
         groups: readGroupsForYear_(ss, y),
         // פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — שורות שטוחות
@@ -6555,6 +6607,14 @@ function handleTour_(p) {
       var aud = String(r['קהל'] || 'כולם').trim();
       if (aud === 'מנהלים' && !isAdmin) return false;
       if (aud === 'תושבים' && isAdmin) return false;
+      /* קהל שהוא **שם הרשאה** ("גינון", "מועדון"...) — צעד שמוצג רק לבעלי
+       * אותה הרשאה. נוסף 7.9.26 עם מודול הגינון: "מנהלים" היה מציג את צעד
+       * הגינון גם למנהל תקציב שאין לו שום קשר אליו, ורעש בסיור הוא הדרך
+       * הבטוחה לגרום לאנשים לדלג עליו. מנהל-על רואה הכול, כרגיל. */
+      if (ALL_PERMS.indexOf(aud) !== -1) {
+        if (gate.perm.isSuper) return true;
+        return (gate.perm.perms || []).indexOf(aud) !== -1;
+      }
       return true;
     }).sort(function (a, b) {
       var va = parseInt(a['גרסה'], 10) || 1, vb = parseInt(b['גרסה'], 10) || 1;
@@ -6601,6 +6661,38 @@ function setupTourStepV2() {
     'כי זו הכתובת שאיתה נכנסים לאפליקציה.',
     'לפרטים שלי', 'resMe', 'star']);
   return 'נוסף צעד סיור "myprofile" בגרסה 2';
+}
+
+/** צעדי הסיור של מודול הגינון (גרסה 3). אידמפוטנטי, כמו setupTourStepV2.
+ *  שני צעדים ולא אחד: התושב והמנהל פוגשים את המודול בשני מקומות שונים
+ *  ובשתי מטרות שונות, וצעד אחד שמנסה לדבר לשניהם לא מדבר לאף אחד.
+ *  ⚠️ הצעד הניהולי מסומן בקהל "גינון" — כלומר רק בעלי הרשאת גינון (ומנהל-על)
+ *  יראו אותו. ר' הפילטר ב-handleTour_. */
+function setupTourStepV3() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ensureTourSheet_(ss);
+  var have = readTable_(ss, TOUR_SHEET).map(function (r) {
+    return String(r['מזהה'] || '').trim();
+  });
+  var added = [];
+  if (have.indexOf('garden') === -1) {
+    sh.appendRow(['garden', 1, 3, 'כולם', 'כן', 'חדש: מראה שיכון',
+      'ממטרה שבורה, ענף שנפל, מדשאה שלא כוסחה — מדווחים ישירות מהאפליקציה. ' +
+      'בוחרים קטגוריה, מסמנים על המפה איפה בדיוק, ומצרפים תמונה. ' +
+      'אחר כך עוקבים אחרי הטיפול בדיוק כמו אחרי קבלה, ובסוף אפשר גם לומר לנו אם זה נסגר כמו שצריך.',
+      'לדיווח על תקלה', 'resGarden', 'leaf']);
+    added.push('garden');
+  }
+  if (have.indexOf('gardenAdmin') === -1) {
+    sh.appendRow(['gardenAdmin', 2, 3, 'גינון', 'כן', 'ניהול הגינון',
+      'הטאב "גינון" באזור הניהול מרכז את הכול: דיווחים חדשים שממתינים לשיבוץ לשבוע, ' +
+      'משימות הצוות לשבוע הנוכחי, ומה שהצוות סימן כבוצע וממתין לאישור שלך. ' +
+      'רק אתה קובע שמשימה הושלמה — הצוות מדווח, אתה מאשר.',
+      'לניהול הגינון', 'gardenTasks', 'leaf']);
+    added.push('gardenAdmin');
+  }
+  return added.length ? 'נוספו צעדי סיור: ' + added.join(', ') + ' (גרסה 3)'
+                      : 'כל צעדי הגינון כבר קיימים — לא נוסף דבר';
 }
 
 /** התקנה ידנית מהעורך: יוצר את הטאב ואת העמודה בלי לחכות לקריאה הראשונה. */

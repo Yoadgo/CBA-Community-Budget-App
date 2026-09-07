@@ -76,7 +76,7 @@
   }
   /* יעד ניווט יחיד שאינו כפתור-קבוצה = אין לאן לנווט (2026-09-07, אחראי
      הגינון החיצוני). הבר נעלם, והתוכן מקבל את הגובה שלו בחזרה.
-     ר' data-nav-single ב-renderNav — שם גם ההסבר למה זה מוגבל לחיצוני. */
+     ר' data-nav-single ב-renderNav — שם ההסבר למה "לא קבוצה" הוא התנאי הבטוח. */
   body[data-nav-single="1"] .app-nav--bottom { display: none; }
   body[data-nav-single="1"] .app-main {
     padding-bottom: calc(env(safe-area-inset-bottom) + 20px);

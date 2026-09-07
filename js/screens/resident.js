@@ -1863,6 +1863,13 @@ CBA.screens = CBA.screens || {};
     'מדשאת מועדון משפחות':    ['comm','grass'],
     'גינת כלבים':             ['pet','paw']
   };
+  /* המפה כשכבת ניווט: מרחב שיש לו מסך באפליקציה הופך ללחיץ ומוביל אליו.
+     בכוונה טבלה נפרדת ולא שדה בתוך POI_CAT — הקטגוריה היא עיצוב, היעד הוא
+     ניווט, ושני הדברים ישתנו בקצב שונה. */
+  var POI_GOTO = {
+    'מועדון משפחות': 'resReserve',
+    'חדר כושר':      'resGym'
+  };
   function poiOf(label) {
     var k = (label || '').trim();
     return POI_CAT[k] || (k.indexOf('חני') === 0 ? ['park2','house'] : ['comm','house']);
@@ -2239,6 +2246,18 @@ CBA.screens = CBA.screens || {};
         var el = document.createElement("div");
         el.className = "map-poi map-poi--" + cat[0];
         el.dataset.g = 'public';
+        var goto1 = opts.full ? POI_GOTO[(o.l || '').trim()] : null;
+        if (goto1) {
+          el.classList.add('is-link');
+          el.dataset.goto = goto1;
+          el.setAttribute('role', 'button');
+          el.setAttribute('tabindex', '0');
+          el.setAttribute('aria-label', o.l + ' — פתיחת המסך');
+          el.title = o.l;
+          el.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); CBA.navigate(goto1); }
+          });
+        }
         el.style.cssText = "left:" + c[0] + "px;top:" + c[1] + "px";
         el.dataset.a = Math.round(area(o));
         el.innerHTML = '<span class="map-amenity__chip">' + svg(amenIcons[cat[1]] || amenIcons.house) + '</span>';
@@ -2569,6 +2588,8 @@ CBA.screens = CBA.screens || {};
         if (Object.keys(pointers).length === 0) { dragging = false; viewport.classList.remove("grabbing"); }
         if (wasSingleTap) {
           var target = document.elementFromPoint(e.clientX, e.clientY);
+          var linkEl = target && target.closest(".map-poi[data-goto]");
+          if (linkEl) { CBA.navigate(linkEl.dataset.goto); return; }
           var houseEl = target && target.closest(".map-house");
           if (houseEl) openPopup(houseEl.dataset.num);
           else if (!target || (!target.closest(".map-toolbar") && !target.closest(".map-popup"))) closePopup();
