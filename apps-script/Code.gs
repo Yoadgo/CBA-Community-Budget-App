@@ -52,8 +52,22 @@ var PERM_RESIDENTS = 'תושבים';
 // שמנהל את המועדון לא נוגע במכון ולהפך, אלא אם ניתנו לו שניהם. אין שינוי מבנה
 // בגיליון: עמודות "הרשאות N" כבר מקבלות רשימה מופרדת בפסיקים.
 var PERM_GYM       = 'מכון';
-var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM];
+// גינון (2026-09-07) — מידור שישי, לניהול מערכת הגינון ("מראה שיכון"). נפרד
+// לחלוטין משאר המידורים. מי שמחזיק בו רואה את דיווחי התושבים, את המשימות ואת
+// תוכנית העבודה — ותו לא. **הרשאת אישור אינה הרשאה נפרדת**: כל מי שיש לו
+// PERM_GARDEN רשאי גם לאשר. יועד החליט (7.9.26) לא לבנות "מאשר משני" —
+// אם המנהל אינו זמין, נותנים את ההרשאה הזו זמנית למישהו אחר.
+var PERM_GARDEN    = 'גינון';
+var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN];
 var PERM_HEADER = 'הרשאות';
+
+/* משתמש חיצוני (2026-09-07) — עמודה "סוג משתמש" בטאב תושבים, ערך "חיצוני".
+ * אביתר (קבלן הגינון) הוא שורה רגילה בטאב — כך ההתחברות עובדת — ומסומן כחיצוני.
+ * למה עמודה ולא עוד קוד ב-ALL_PERMS: הרשאה *מוסיפה* יכולות וחיצוני *מוריד*.
+ * בפרט, PERM_ANY_ADMIN שואלת "יש לו הרשאה כלשהי?" — וקוד הרשאה בשם "חיצוני"
+ * היה עונה כן, ופותח לו את מדריך התושבים. ר' השורה ב-authorize_. */
+var EXTERNAL_HEADER = 'סוג משתמש';
+var EXTERNAL_VALUE  = 'חיצוני';
 // דרישה מיוחדת: "כל הרשאת ניהול שהיא" — לפעולות שמשרתות כמה מידורים,
 // כמו ספריית השמות להשלמה אוטומטית בטופס ההוצאה
 var PERM_ANY_ADMIN = '*';
@@ -120,7 +134,21 @@ var ACTION_PERMS = {
   rejectGymPayment: PERM_GYM,
   recordGymPayment: PERM_GYM,
   extendGymMembership: PERM_GYM,
-  updateGymMembership: PERM_GYM
+  updateGymMembership: PERM_GYM,
+  /* גינון (2026-09-07, שלב א') — כל פעולות הניהול. הפעולות של התושב עצמו
+   * (submitGardenReport, myGardenReports, gardenFeedback) **אינן** ברשימה
+   * בכוונה: הן פתוחות לכל תושב מחובר ופעיל, בדיוק כמו הגשת קבלה ושריון
+   * מועדון, והן פועלות על השורה של הקורא בלבד לפי המושב החתום.
+   * אין הפרדה בין "צוות גינון" ל"מנהל גינון" ברמת ההרשאה — ההבדל היחיד
+   * הוא ש-approve/bulkApprove משנות שלב ל"הושלם", ור' ההערה ליד PERM_GARDEN. */
+  gardenList: PERM_GARDEN,
+  updateGardenTask: PERM_GARDEN,
+  approveGardenTask: PERM_GARDEN,
+  bulkApproveGardenTasks: PERM_GARDEN,
+  mergeGardenReports: PERM_GARDEN,
+  transferGardenTask: PERM_GARDEN,
+  saveGardenSetting: PERM_GARDEN,
+  saveGardenRoutine: PERM_GARDEN
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -180,7 +208,7 @@ function parsePerms_(raw) {
 /** ההרשאות בפועל של אימייל נתון, נקראות מהגיליון בזמן אמת. */
 function permissionsFor_(email) {
   var r = lookupResident_(email);
-  if (!r.found) return { found: false, active: false, perms: [], isSuper: false };
+  if (!r.found) return { found: false, active: false, perms: [], isSuper: false, isExternal: false };
   var active = !(r.status && r.status.indexOf('פעיל') === -1);
   var perms = parsePerms_(r.permissions);
   // תאימות לאחור לעמודת "תפקיד" הישנה
@@ -188,6 +216,7 @@ function permissionsFor_(email) {
   return {
     found: true, active: active, perms: perms,
     isSuper: perms.indexOf(PERM_SUPER) !== -1,
+    isExternal: !!r.isExternal,
     familyId: r.familyId, family: r.family, house: r.house, firstName: r.firstName
   };
 }
@@ -211,6 +240,11 @@ function authorize_(ss, p, need) {
     var perm = permissionsFor_(sess.email);
     if (!perm.found)  return { ok: false, error: 'המשתמש אינו ברשימת התושבים' };
     if (!perm.active) return { ok: false, error: 'המשתמש מסומן כלא פעיל' };
+    /* משתמש חיצוני: הכול חסום חוץ מגינון. שורה אחת, ולכן גם פעולה שתיווסף
+     * בעתיד חסומה לו מעצמה. רצה לפני בדיקת isSuper בכוונה. */
+    if (perm.isExternal && need !== PERM_GARDEN) {
+      return { ok: false, error: 'הפעולה אינה זמינה למשתמש חיצוני' };
+    }
     if (!need || perm.isSuper ||
         (need === PERM_ANY_ADMIN ? perm.perms.length > 0 : perm.perms.indexOf(need) !== -1)) {
       return { ok: true, email: sess.email, perm: perm };
@@ -2161,6 +2195,8 @@ function handleLogin_(token) {
       session: makeSession_(info.email),
       perms: perm.perms,
       isSuper: perm.isSuper,
+      // (2026-09-07) הלקוח מסתיר את כל אזור התושב לפי הדגל הזה. ר' EXTERNAL_HEADER.
+      isExternal: perm.isExternal,
       role: resident.role,
       status: resident.status,
       family: resident.family,
@@ -2200,7 +2236,7 @@ function lookupResident_(email) {
 
   // איתור עמודות לפי שם הכותרת (גמיש — עמיד גם אם משנים את סדר העמודות).
   // "שם פרטי" נבדק לפני "משפחה" כדי שלא יתבלבל עם עמודת שם-המשפחה.
-  var emailCols = [], firstNameCols = [], permCols = [], roleCol = -1, statusCol = -1, familyCol = -1, houseCol = -1, residentIdCol = -1;
+  var emailCols = [], firstNameCols = [], permCols = [], roleCol = -1, statusCol = -1, familyCol = -1, houseCol = -1, residentIdCol = -1, externalCol = -1;
   headers.forEach(function (h, i) {
     // "הרשאות N" (2026-08-07) — עמודה לכל משבצת אימייל, מותאמת לפי סדר כמו "שם פרטי N"
     if (h.indexOf(PERM_HEADER) !== -1) permCols.push(i);
@@ -2209,6 +2245,8 @@ function lookupResident_(email) {
     else if (h.indexOf('תפקיד') !== -1) roleCol = i;
     else if (h.indexOf('סטטוס') !== -1) statusCol = i;
     else if (h.indexOf(RESIDENT_ID_HEADER) !== -1) residentIdCol = i; // נבדק לפני "משפחה"/"בית" כדי שלא יתפוס אותם בטעות
+    // "סוג משתמש" (2026-09-07) — ריק = תושב רגיל, "חיצוני" = ספק/קבלן. ר' EXTERNAL_HEADER.
+    else if (h.indexOf(EXTERNAL_HEADER) !== -1) externalCol = i;
     else if (h.indexOf('משפחה') !== -1) familyCol = i;
     else if (h.indexOf('בית') !== -1) houseCol = i;
   });
@@ -2234,6 +2272,8 @@ function lookupResident_(email) {
           house:  houseVal,
           familyId: residentIdVal || houseVal,
           firstName: (fnCol !== undefined && fnCol > -1) ? String(row[fnCol]).trim() : '',
+          isExternal: externalCol > -1 &&
+            String(row[externalCol]).trim().indexOf(EXTERNAL_VALUE) !== -1,
           slot: c + 1,          // באיזו משבצת אימייל נמצא — לשמירת הרשאות פרטניות
           rowIndex: r + 1,      // מספר השורה בגיליון (1-based, כולל כותרת)
           permissions: (permCols[c] !== undefined) ? String(row[permCols[c]]).trim() : ''
@@ -3572,6 +3612,11 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['RULE_GYM_PAYMENT_NUDGE_DAYS', '', '5', 'אחרי כמה ימים בסטטוס "ממתין לתשלום" נשלחת לתושב תזכורת עדינה', PERM_SUPER, 'כן'],
   ['RULE_GYM_DECL_WARN_DAYS', '', '30', 'כמה ימים לפני שהצהרת הבריאות פגה (שנתיים) נשלחת התרעה לתושב', PERM_SUPER, 'כן'],
 
+  ['RULE_GARDEN_WEEKLY_DAY', '', '0', 'יום השבוע להפקת סיכום הגינון: 0=ראשון, 1=שני ... 6=שבת. הוחלט 7.9.26 על ראשון בבוקר, לפני ישיבת התכנון — הסיכום מופק תמיד, גם אם נשארו אישורים פתוחים, ומציין בתוכו כמה', PERM_SUPER, 'כן'],
+  ['RULE_GARDEN_FEEDBACK_DAYS', '', '7', 'כמה ימים אחרי סגירת דיווח התושב עדיין יכול לתת עליו משוב', PERM_SUPER, 'כן'],
+  ['RULE_GARDEN_MERGE_DAYS', '', '14', 'בתוך כמה ימים דיווח חדש נחשב כפילות אפשרית של תקלה פתוחה באותה קטגוריה ובאותו בית/אזור', PERM_SUPER, 'כן'],
+  ['RULE_GARDEN_PHOTO_MAX', '', '8', 'תקרת התמונות המצטברת לדיווח גינון אחד', PERM_SUPER, 'כן'],
+
   ['SIGNUP_RECEIVED', 'קיבלנו את בקשת ההרשמה שלך',
     'שלום {{שם}},\n\nבקשת ההרשמה שלך לוועד הקהילה התקבלה ונמצאת בבדיקה. נעדכן אותך ברגע שתטופל.\n\nבברכה,\nועד הקהילה', 'נשלח לתושב מיד עם הגשת טופס ההרשמה', PERM_RESIDENTS, 'כן'],
   ['SIGNUP_APPROVED', 'ברוכים הבאים! ההרשמה שלך אושרה',
@@ -3616,6 +3661,26 @@ var DEFAULT_EMAIL_SETTINGS = [
     "התקבלה בקשת החזר חדשה מ-{{שם}} על סך {{סכום}} ₪ (מס' {{מזהה}}).", 'למנהלי תקציב + מנהל-על', PERM_BUDGET, 'כן'],
   ['ADMIN_NEW_CLUB', 'בקשת שריון מועדון חדשה ממתינה',
     'התקבלה בקשת שריון מועדון חדשה מ-{{שם}} בתאריך {{תאריך}} בשעות {{שעה}}.', 'למנהלי מועדון + מנהל-על', PERM_CLUB, 'כן'],
+
+  ['GARDEN_REPORT_RECEIVED', "קיבלנו את דיווח הגינון שלך (מס' {{מזהה}})",
+    "שלום {{שם}},\n\nקיבלנו את הדיווח שלך על {{קטגוריה}} ב{{מיקום}} (מס' {{מזהה}}). הוא הועבר לצוות הגינון, ואפשר לעקוב אחרי הסטטוס באפליקציה.\n\nבברכה,\nועד הקהילה",
+    'נשלח לתושב מיד עם פתיחת דיווח גינון', PERM_GARDEN, 'כן'],
+  ['GARDEN_REPORT_MERGED', "הדיווח שלך צורף לפנייה קיימת (מס' {{מזהה אב}})",
+    "שלום {{שם}},\n\nהדיווח שלך על {{קטגוריה}} ב{{מיקום}} אוחד עם פנייה קיימת שכבר נפתחה על אותו נושא (מס' {{מזהה אב}}), כדי שהטיפול יהיה במקום אחד.\n\nנעדכן אותך כשהטיפול יסתיים. אם יתברר שמדובר בשני דברים שונים — אפשר לומר לנו את זה במשוב שיצורף לעדכון הסיום.\n\nבברכה,\nועד הקהילה",
+    'נשלח לתושב כשדיווחו אוחד עם תקלה פתוחה קיימת. חשוב: זה מה שמאפשר לו לדעת למה יקבל בהמשך הודעת סיום על משהו שהוא לא בטוח שטופל — ר\' ההחלטה על איחוד ללא תמונה', PERM_GARDEN, 'כן'],
+  ['GARDEN_PLANNED', 'הדיווח שלך נכנס לתוכנית העבודה',
+    "שלום {{שם}},\n\nהדיווח שלך (מס' {{מזהה}}) נבדק ונכנס לתוכנית העבודה של צוות הגינון.\n\nבברכה,\nועד הקהילה",
+    'נשלח לתושב כשהדיווח עובר לשלב "מתוכנן"', PERM_GARDEN, 'כן'],
+  ['GARDEN_COMPLETED', "הטיפול בדיווח שלך הושלם (מס' {{מזהה}})",
+    "שלום {{שם}},\n\nהטיפול בדיווח שלך על {{קטגוריה}} ב{{מיקום}} הושלם ואושר על ידי הוועד.\n\n{{איחוד}}אם משהו לא נראה לך תקין — אפשר להשיב לנו באפליקציה בתוך שבוע.\n\nתודה שדיווחת,\nועד הקהילה",
+    'נשלח לתושב רק אחרי שמנהל הגינון אישר את הסיום — לא כשצוות הגינון סימן "בוצע". {{איחוד}} מתמלא במשפט על האיחוד רק אם הדיווח אוחד', PERM_GARDEN, 'כן'],
+  ['ADMIN_NEW_GARDEN_REPORT', 'דיווח גינון חדש ממתין',
+    'התקבל דיווח גינון חדש מ-{{שם}}: {{קטגוריה}} ב{{מיקום}} (מס\' {{מזהה}}).', 'למנהלי גינון + מנהל-על', PERM_GARDEN, 'כן'],
+  ['ADMIN_GARDEN_NEGATIVE_FEEDBACK', 'תושב סימן שהטיפול לא הושלם כראוי',
+    "{{שם}} נתן משוב שלילי על דיווח מס' {{מזהה}} ({{קטגוריה}}, {{מיקום}}).\n\nהערתו: {{הערה}}\n\nהמשימה סומנה \"דורש בדיקה חוזרת\" וממתינה להחלטתך.",
+    'למנהלי גינון + מנהל-על. משוב שלילי לא פותח את התקלה מחדש אוטומטית — הוא מרים דגל וההחלטה נשארת אנושית', PERM_GARDEN, 'כן'],
+  ['ADMIN_GARDEN_WEEKLY', 'סיכום שבועי — גינון',
+    'הנה סיכום שבוע העבודה של הגינון:', 'למנהלי גינון + מנהל-על, ביום RULE_GARDEN_WEEKLY_DAY. מופק תמיד, גם אם נשארו משימות שממתינות לאישור — הן מופיעות בתוכו כשורה משלהן', PERM_GARDEN, 'כן'],
 
   ['ADMIN_STALE_SIGNUP', 'בקשת הרשמה ממתינה כבר {{ימים}} ימים',
     'בקשת ההרשמה של {{שם}} ({{אימייל}}) ממתינה לטיפול כבר {{ימים}} ימים.', 'תזכורת חד-פעמית כשבקשה חוצה את הסף (ר\' RULE_STALE_DAYS)', PERM_RESIDENTS, 'כן'],
@@ -6836,4 +6901,185 @@ function setupProfileModule() {
   var t = ensureProfileTouchCols_(ss);
   return 'טאב "' + PROFILE_SHEET + '" מוכן; "' + PROFILE_TOUCH_BY + '" בעמודה ' + (t.by + 1) +
     ', "' + PROFILE_TOUCH_AT + '" בעמודה ' + (t.at + 1);
+}
+
+
+/* ============================================================================
+ *  מודול הגינון — "מראה שיכון" · שלב א', תשתית (2026-09-07)
+ * ----------------------------------------------------------------------------
+ *  מבוסס על "אפיון פונקציונלי מלא — מערכת ניהול הגינון פלמחים" v1.0 (5.9.2026)
+ *  אחרי סבב ההכרעות של יועד. ההחלטות שמעצבות את המבנה כאן:
+ *
+ *  1. **שלושה שדות ולא סטטוס אחד.** האפיון המקורי החזיק 12 סטטוסים בשדה אחד
+ *     שערבב שלושה צירים שונים. כאן: "שלב" (5 ערכים — מה שהתושב רואה), "דגל"
+ *     (חריגה אחת לכל היותר, יכולה להתקיים במקביל לכל שלב), ו"סגירה" (קיימת רק
+ *     כששלב=הושלם ועונה על *למה* נסגר). כך "בטיפול + מומלץ להעביר לבינוי",
+ *     שהוא מצב אמיתי ונפוץ, אפשרי — ובשדה אחד הוא לא היה.
+ *  2. **צוות הגינון מקדם שלב עד "בטיפול" ומרים דגל "ממתין לאישור". רק מנהל
+ *     קובע "הושלם"** ובוחר סיבת סגירה. זה כל מנגנון האישור של האפיון, בחוק אחד.
+ *  3. **סט טאבים אחד עם עמודת "שנת תקציב"**, ולא טאב לכל שנה כמו "תנועות".
+ *     אחרת ארבעה טאבים היו מוכפלים מדי שנה, ותבניות השגרה — שהן החוזה ואינן
+ *     משתנות בין שנים — היו משוכפלות איתם.
+ *  4. **אין חובת תיעוד בתמונה.** יועד בחר להתבסס על אמון. השדות נבנים ונשארים
+ *     אופציונליים, כך שהחזרת חובה בעתיד תהיה הגדרה ולא בנייה מחדש.
+ *
+ *  שלב א' הוא תשתית בלבד: טאבים, אוצר מילים והרשאות. מנוע השגרה (שדות
+ *  ה"תבנית" בטאב השגרה) נבנה בשלב ב' — הטאב נוצר עכשיו כדי שאפשר יהיה
+ *  להתחיל להזין אליו את החוזה במקביל לפיתוח.
+ * ========================================================================== */
+
+var GARDEN_REPORTS_SHEET  = 'גינון — דיווחים';
+var GARDEN_TASKS_SHEET    = 'גינון — משימות';
+var GARDEN_ROUTINE_SHEET  = 'גינון — שגרה';
+var GARDEN_LOG_SHEET      = 'גינון — יומן';
+var GARDEN_SETTINGS_SHEET = 'גינון — הגדרות';
+
+/* אוצר המילים. שלושה מערכים = שלושת השדות. */
+var GARDEN_STAGES = ['התקבל', 'נבדק', 'מתוכנן', 'בטיפול', 'הושלם'];
+/* דגלים — **בסדר קדימות יורד**. אם יותר מאחד חל, מוצג הראשון ברשימה בלבד:
+ * שני דגלים על שורה אחת הורסים את יכולת הסריקה של המסך. */
+var GARDEN_FLAGS = ['דורש בדיקה חוזרת', 'הוחזר להשלמה', 'דורש בדיקה בשטח', 'ממתין לאישור', 'נגררה'];
+/* סיבות סגירה — רלוונטיות רק כששלב = "הושלם". "בוצע" היא ברירת המחדל
+ * ואינה מוצגת בממשק בכלל: שקט = תקין. */
+var GARDEN_CLOSURES = ['בוצע', 'הועבר לבינוי', 'בוטל', 'לא רלוונטי'];
+
+var GARDEN_REPORT_HEADERS = [
+  'מזהה', 'תאריך דיווח', 'מזהה משפחה', 'שם מדווח', 'טלפון',
+  'קטגוריה', 'אזור', 'מיקום X', 'מיקום Y', 'מיקום מילולי', 'תיאור', 'תמונות',
+  'מזהה משימה', 'אוחד לדיווח', 'שנת תקציב',
+  'משוב', 'תאריך משוב', 'הערת משוב'
+];
+
+/* מיקום X/Y נשמרים **מנורמלים 0–1** ולא בפיקסלים ולא באחוזי המפה הנוכחית.
+ * הסיבה: מפת השיכון עומדת לפני בנייה מחדש (map-geo.json), וכל הקואורדינטות
+ * שנמדדו היום בעין יימחקו. ערך מנורמל הופך את המעבר להמרה חד-פעמית במקום
+ * הזנה מחדש של כל הדיווחים שנצברו. */
+var GARDEN_TASK_HEADERS = [
+  'מזהה', 'סוג', 'כותרת', 'קטגוריה', 'אזור', 'מיקום X', 'מיקום Y',
+  'שלב', 'דגל', 'סגירה',
+  'מזהה תבנית', 'שבוע', 'תאריך יעד', 'מספר עובדים',
+  'תמונות ביצוע', 'הערת ביצוע', 'מונה גרירות', 'שבוע מקורי',
+  'עודכן בתאריך', 'עודכן על ידי', 'אושר על ידי', 'תאריך אישור', 'שנת תקציב'
+];
+
+var GARDEN_ROUTINE_HEADERS = [
+  'מזהה', 'שם משימה', 'קטגוריה', 'אזורים', 'תדירות', 'חודשים פעילים',
+  'שבוע בחודש', 'עונה', 'סעיף בחוזה', 'פעיל', 'הערות'
+];
+
+/* היסטוריה שאינה משתכתבת (עקרון מהאפיון) — כל שינוי שלב/דגל/סגירה נרשם כאן
+ * כשורה חדשה. אין עדכון ואין מחיקה בטאב הזה. */
+var GARDEN_LOG_HEADERS = [
+  'חותמת זמן', 'מזהה משימה', 'סוג רשומה', 'שדה', 'מערך', 'לערך', 'מבצע', 'הערה'
+];
+
+var GARDEN_SETTINGS_HEADERS = ['סוג', 'מזהה', 'סדר', 'ערך', 'פעיל', 'הערות'];
+
+/* רשימת האזורים והקטגוריות — מקור אמת יחיד לשני הצדדים (מסך הדיווח של התושב
+ * ותבניות השגרה), ר' הממצא על "אין בעלים לרשימת האזורים". נזרעות פעם אחת
+ * וניתנות לעריכה מתוך מסך ניהול הגינון; ערך שנערך ידנית לעולם לא נדרס.
+ * האזורים לקוחים מסעיף 15.2 באפיון, הקטגוריות מסעיף 6.1 (רשימה סגורה,
+ * ובכוונה בלי "אחר" — נושא שאינו גינון לא אמור להיפתח כאן בכלל). */
+var GARDEN_DEFAULT_SETTINGS = [
+  ['אזור', 'A1', '1', 'שכונה צפונית', 'כן', ''],
+  ['אזור', 'A2', '2', 'שכונה מרכזית צפונית', 'כן', ''],
+  ['אזור', 'A3', '3', 'שכונה מרכזית דרומית', 'כן', ''],
+  ['אזור', 'A4', '4', 'שכונה דרומית', 'כן', ''],
+  ['אזור', 'A5', '5', 'מתחמים משותפים', 'כן', ''],
+  ['אזור', 'A6', '6', 'ציר מזרחי', 'כן', ''],
+  ['אזור', 'A7', '7', 'ציר מערבי', 'כן', ''],
+  ['קטגוריה', 'C1', '1', 'מדשאות', 'כן', ''],
+  ['קטגוריה', 'C2', '2', 'השקיה / ממטרות', 'כן', ''],
+  ['קטגוריה', 'C3', '3', 'עצים', 'כן', ''],
+  ['קטגוריה', 'C4', '4', 'שיחים / גיזום', 'כן', ''],
+  ['קטגוריה', 'C5', '5', 'עשבייה / קרקע', 'כן', ''],
+  ['קטגוריה', 'C6', '6', 'ניקיון גינון / גזם', 'כן', ''],
+  ['קטגוריה', 'C7', '7', 'ערוגות / שתילות', 'כן', '']
+];
+
+/** עזר: יוצר טאב עם שורת כותרות מוקפאת אם אינו קיים. מחזיר את הטאב.
+ *  בטוח להרצה חוזרת — טאב קיים לא נגוע, גם לא שורת הכותרות שלו. */
+function gardenEnsureSheet_(ss, name, headers, widths) {
+  var sh = ss.getSheetByName(name);
+  if (sh) return sh;
+  sh = ss.insertSheet(name);
+  sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sh.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  (widths || []).forEach(function (w, i) { if (w) sh.setColumnWidth(i + 1, w); });
+  return sh;
+}
+
+/** יוצר את חמשת הטאבים של הגינון. בטוח להרצה חוזרת. */
+function ensureGardenSheets_(ss) {
+  gardenEnsureSheet_(ss, GARDEN_REPORTS_SHEET, GARDEN_REPORT_HEADERS,
+    [70, 120, 100, 140, 110, 130, 150, 80, 80, 160, 300, 220]);
+  gardenEnsureSheet_(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_HEADERS,
+    [70, 80, 260, 130, 150, 80, 80, 100, 140, 120]);
+  gardenEnsureSheet_(ss, GARDEN_ROUTINE_SHEET, GARDEN_ROUTINE_HEADERS,
+    [70, 220, 130, 220, 110, 200, 100, 90, 140, 60, 240]);
+  gardenEnsureSheet_(ss, GARDEN_LOG_SHEET, GARDEN_LOG_HEADERS,
+    [140, 90, 110, 100, 140, 140, 160, 280]);
+
+  var cfg = gardenEnsureSheet_(ss, GARDEN_SETTINGS_SHEET, GARDEN_SETTINGS_HEADERS,
+    [90, 70, 55, 220, 60, 260]);
+  // זריעה: רק מזהים שעדיין לא קיימים. אותה תבנית בדיוק כמו ensureGymSheets_ —
+  // ערך שיועד או אחראי הגינון ערכו ידנית לעולם לא נדרס.
+  var values = cfg.getDataRange().getValues();
+  var existing = {};
+  for (var r = 1; r < values.length; r++) {
+    var key = String(values[r][0]).trim() + '|' + String(values[r][1]).trim();
+    if (key !== '|') existing[key] = true;
+  }
+  var toAdd = GARDEN_DEFAULT_SETTINGS.filter(function (row) {
+    return !existing[String(row[0]).trim() + '|' + String(row[1]).trim()];
+  });
+  if (toAdd.length) {
+    cfg.getRange(cfg.getLastRow() + 1, 1, toAdd.length, GARDEN_SETTINGS_HEADERS.length)
+       .setValues(toAdd);
+  }
+  return cfg;
+}
+
+/** מוסיף לטאב "תושבים" את עמודת "סוג משתמש" אם אינה קיימת. ר' EXTERNAL_HEADER.
+ *  לא נוגע בשום ערך קיים — רק מוסיף כותרת בעמודה הפנויה הראשונה. */
+function ensureExternalCol_(ss) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+  for (var i = 0; i < headers.length; i++) {
+    if (headers[i].indexOf(EXTERNAL_HEADER) !== -1) {
+      return { ok: true, added: false, col: i + 1 };
+    }
+  }
+  var col = lastCol + 1;
+  sh.getRange(1, col).setValue(EXTERNAL_HEADER);
+  sh.getRange(1, col).setFontWeight('bold');
+  sh.setColumnWidth(col, 110);
+  return { ok: true, added: true, col: col };
+}
+
+/* ----------------------------------------------------------------------------
+ *  התקנה — להרצה ידנית פעם אחת מתוך עורך ה-Apps Script (כפתור Run).
+ *  יוצרת את חמשת הטאבים, מוסיפה את עמודת "סוג משתמש" לטאב תושבים, ומרעננת
+ *  את טאב הגדרות המיילים כדי שתבניות הגינון ייכנסו אליו.
+ *  אידמפוטנטית לחלוטין — אפשר להריץ שוב בלי נזק.
+ * -------------------------------------------------------------------------- */
+function installGardenModule() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureGardenSheets_(ss);
+  var ext = ensureExternalCol_(ss);
+  ensureEmailSettingsSheet_(ss);
+  Logger.log('✓ טאבי הגינון מוכנים: ' +
+    [GARDEN_REPORTS_SHEET, GARDEN_TASKS_SHEET, GARDEN_ROUTINE_SHEET,
+     GARDEN_LOG_SHEET, GARDEN_SETTINGS_SHEET].join(' · '));
+  Logger.log(ext.added
+    ? '✓ נוספה עמודת "' + EXTERNAL_HEADER + '" לטאב תושבים (עמודה ' + ext.col + ')'
+    : '✓ עמודת "' + EXTERNAL_HEADER + '" כבר קיימת בטאב תושבים (עמודה ' + ext.col + ')');
+  Logger.log('✓ תבניות המייל של הגינון נוספו לטאב "' + EMAIL_SETTINGS_SHEET + '"');
+  Logger.log('— כדי לתת לאביתר גישה: שורה בטאב תושבים, אימייל הגוגל שלו, ' +
+    '"' + PERM_GARDEN + '" בעמודת ההרשאות, ו-"' + EXTERNAL_VALUE + '" בעמודת "' + EXTERNAL_HEADER + '".');
+  return { ok: true };
 }
