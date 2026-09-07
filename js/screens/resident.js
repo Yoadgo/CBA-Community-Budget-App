@@ -1935,7 +1935,7 @@ CBA.screens = CBA.screens || {};
       container.innerHTML =
         (oHead ? '<div class="screen-head"><div class="screen-head__title">מפת השיכון</div>' +
           '<div class="screen-head__sub">שיכון פלמחים · לחצו על בית לפרטי הדיירים</div></div>' : '') +
-        '<div class="map-shell' + (opts.pin ? ' is-pinning' : '') + '">' +
+        '<div class="map-shell' + (opts.pin ? ' is-pinning' : '') + (opts.full ? ' map-shell--full' : '') + '">' +
           (oSearch || oLegend ?
             '<div class="map-topbar">' +
               (oSearch ?
@@ -2014,6 +2014,49 @@ CBA.screens = CBA.screens || {};
         var canopy = '', green = '', caseS = '', fillS = '', isl = '', tree = '',
             bays = '', stre = '', pub = '', mark = '';
 
+        /* קצה של קו שנכנס לקו אחר או לשטח מרוצף — נשאר חתוך ישר, כך שהצומת
+           נסגר חלק. קצה שלא מוביל לשום מקום מקבל עיגול. אותה לוגיקה בדיוק
+           כמו בכלי הכיול. */
+        var LINES = (GEO.objects || []).filter(function (o) { return o.s === 'line' && o.t !== 'street'; });
+        var PAVED = (GEO.objects || []).filter(function (o) {
+          return o.t === 'parking' || o.s === 'circle'; });
+        function dSeg(q, A, B) {
+          var vx = B[0] - A[0], vy = B[1] - A[1], L = vx * vx + vy * vy || 1;
+          var t = Math.max(0, Math.min(1, ((q[0] - A[0]) * vx + (q[1] - A[1]) * vy) / L));
+          return Math.hypot(q[0] - A[0] - vx * t, q[1] - A[1] - vy * t);
+        }
+        function rectCorners(o) {
+          var a = (o.r || 0) * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), w = o.w / 2, h = o.h / 2;
+          return [[-w, -h], [w, -h], [w, h], [-w, h]].map(function (p) {
+            return [o.x + p[0] * c - p[1] * sn, o.y + p[0] * sn + p[1] * c]; });
+        }
+        function inPoly(p, poly) {
+          var ins = false, n = poly.length;
+          for (var i = 0; i < n; i++) {
+            var A = poly[i], B = poly[(i + 1) % n];
+            if ((A[1] > p[1]) !== (B[1] > p[1])) {
+              var xi = A[0] + (p[1] - A[1]) * (B[0] - A[0]) / (B[1] - A[1]);
+              if (p[0] < xi) ins = !ins;
+            }
+          }
+          return ins;
+        }
+        function endFree(o, p) {
+          var tol = m2p(1.6), i, k;
+          for (i = 0; i < LINES.length; i++) {
+            var t = LINES[i]; if (t === o) continue;
+            for (k = 0; k < t.p.length - 1; k++) if (dSeg(p, t.p[k], t.p[k + 1]) < tol) return false;
+          }
+          for (i = 0; i < PAVED.length; i++) {
+            var q = PAVED[i];
+            if (q.s === 'circle') { if (Math.hypot(p[0] - q.x, p[1] - q.y) < q.rad + tol) return false; continue; }
+            var poly = q.p || rectCorners(q);
+            if (inPoly(p, poly)) return false;
+            for (k = 0; k < poly.length; k++) if (dSeg(p, poly[k], poly[(k + 1) % poly.length]) < tol) return false;
+          }
+          return true;
+        }
+
         (GEO.canopy || []).forEach(function (p) { canopy += E('path', { d: poly(p, true), 'class': 'm2-canopy' }); });
         (GEO.trees || []).forEach(function (t) { tree += E('circle', { cx: t[0], cy: t[1], r: t[2], 'class': 'm2-tree' }); });
 
@@ -2088,6 +2131,13 @@ CBA.screens = CBA.screens || {};
             var cw = o.w + 2 * m2p(isPath ? 0.35 : 0.9);
             caseS += E('path', { d: d, 'class': 'm2-case' + (isPath ? ' is-path' : ''), 'stroke-width': cw.toFixed(1) });
             fillS += E('path', { d: d, 'class': 'm2-fill' + (isPath ? ' is-path' : ''), 'stroke-width': o.w });
+            [o.p[0], o.p[o.p.length - 1]].forEach(function (e2) {
+              if (!endFree(o, e2)) return;
+              caseS += E('circle', { cx: e2[0], cy: e2[1], r: (cw / 2).toFixed(1),
+                'class': 'm2-casef' + (isPath ? ' is-path' : '') });
+              fillS += E('circle', { cx: e2[0], cy: e2[1], r: (o.w / 2).toFixed(1),
+                'class': 'm2-fillf' + (isPath ? ' is-path' : '') });
+            });
             return;
           }
           /* rect */
@@ -2141,6 +2191,8 @@ CBA.screens = CBA.screens || {};
           '<div class="map-grain"></div>');
       })();
 
+      var poiSeq = 0;
+
       /* ---- שבב P לכל חניון, ותווית שם אם יש ---- */
       (GEO.objects || []).forEach(function (o) {
         if (o.t !== 'parking') return;
@@ -2148,9 +2200,11 @@ CBA.screens = CBA.screens || {};
         var el = document.createElement("div");
         el.className = "map-poi map-poi--park";
         el.style.cssText = "left:" + c[0] + "px;top:" + c[1] + "px";
+        el.dataset.a = Math.round(area(o));
         el.innerHTML = '<span class="map-parking__chip">P</span>';
         worldEl.appendChild(el);
-        if (o.l) poiLabel(o.l, c[0], c[1] + 16, area(o));
+        if (o.l) { var id = 'p' + (poiSeq++); el.dataset.lbl = id;
+          poiLabel(o.l, c[0], c[1] + 16, area(o), id); }
       });
 
       /* ---- שבב + שם לכל מרחב ציבורי ---- */
@@ -2160,31 +2214,59 @@ CBA.screens = CBA.screens || {};
         var el = document.createElement("div");
         el.className = "map-poi map-poi--" + cat[0];
         el.style.cssText = "left:" + c[0] + "px;top:" + c[1] + "px";
+        el.dataset.a = Math.round(area(o));
         el.innerHTML = '<span class="map-amenity__chip">' + svg(amenIcons[cat[1]] || amenIcons.house) + '</span>';
         worldEl.appendChild(el);
-        if (o.l) poiLabel(o.l, c[0], c[1] + 16, area(o));
+        if (o.l) { var id2 = 'p' + (poiSeq++); el.dataset.lbl = id2;
+          poiLabel(o.l, c[0], c[1] + 16, area(o), id2); }
       });
 
       /* פריסת תוויות: הגדול נכנס ראשון, השאר מנסים חמישה מיקומים ואז נופלים.
          תווית חתוכה או דחוסה גרועה מתווית חסרה. ר' "מערכת ההתנגשויות". */
-      (function placeLabels() {
-        var labels = [].slice.call(worldEl.querySelectorAll('.map-amenity__label'));
-        labels.sort(function (a, b) { return (+b.dataset.a || 0) - (+a.dataset.a || 0); });
-        var boxes = [];
-        labels.forEach(function (l) {
-          var w = l.offsetWidth, h = l.offsetHeight;
-          var x = parseFloat(l.style.left) - w / 2, y0 = parseFloat(l.style.top);
-          var tries = [0, -(h + 5), h + 5, -(2 * h + 10), 2 * h + 10], i, ok = false;
-          for (i = 0; i < tries.length; i++) {
-            var y = y0 + tries[i], b = { x: x, y: y, w: w, h: h };
-            var hit = boxes.some(function (p) {
-              return !(b.x + b.w < p.x - 2 || p.x + p.w < b.x - 2 || b.y + b.h < p.y - 1 || p.y + p.h < b.y - 1);
+      /* פריסת שבבים ותוויות — רצה מחדש בכל שינוי זום.
+         שני עקרונות שנלקחו מהעבודה על שפת העיצוב:
+         1. גודל קבוע על המסך — שבב ותווית לא גדלים עם הזום (ר' --inv).
+         2. LOD לפני התנגשות — מרחב קטן מדי על המסך פשוט לא מוצג, במקום
+            להיאבק על מקום. מה שנשאר מנסה חמישה מיקומים ואז נופל. */
+      var POI = [], POI_LAID = -1;
+      function collectPoi() {
+        POI = [].slice.call(worldEl.querySelectorAll('.map-poi')).map(function (c) {
+          return { c: c, l: c.dataset.lbl ? worldEl.querySelector('[data-for="' + c.dataset.lbl + '"]') : null,
+                   a: +c.dataset.a || 0, x: parseFloat(c.style.left), y: parseFloat(c.style.top) };
+        }).sort(function (a, b) { return b.a - a.a; });
+      }
+      function layoutPoi() {
+        if (!POI.length) return;
+        var inv = 1 / scale, boxes = [];
+        worldEl.style.setProperty('--inv', inv.toFixed(4));
+        POI.forEach(function (o) {
+          var vis = Math.sqrt(o.a) * scale > 30;       /* המבנה גדול מספיק על המסך */
+          o.c.style.display = vis ? '' : 'none';
+          if (o.l) o.l.style.display = vis ? '' : 'none';
+          if (!vis) return;
+          var cw = (o.c.offsetWidth || 26) * inv, ch = (o.c.offsetHeight || 26) * inv;
+          var lw = o.l ? (o.l.offsetWidth || 0) * inv : 0, lh = o.l ? (o.l.offsetHeight || 0) * inv : 0;
+          var step = ch + 5 * inv, tries = [0, -step, step, -2 * step, 2 * step, -3 * step], i2;
+          for (i2 = 0; i2 < tries.length; i2++) {
+            var dy = tries[i2];
+            var b1 = { x: o.x - cw / 2, y: o.y + dy - ch / 2, w: cw, h: ch };
+            var b2 = o.l ? { x: o.x - lw / 2, y: o.y + dy + ch / 2 + 2 * inv, w: lw, h: lh } : null;
+            var hit = boxes.some(function (p2) {
+              function ov(b) { return b && !(b.x + b.w < p2.x || p2.x + p2.w < b.x ||
+                                             b.y + b.h < p2.y || p2.y + p2.h < b.y); }
+              return ov(b1) || ov(b2);
             });
-            if (!hit) { l.style.top = y + 'px'; boxes.push(b); ok = true; break; }
+            if (!hit || i2 === tries.length - 1) {
+              o.c.style.top = (o.y + dy) + 'px';
+              if (o.l) { o.l.style.top = (o.y + dy + ch / 2 + 2 * inv) + 'px'; boxes.push(b2); }
+              boxes.push(b1);
+              return;
+            }
           }
-          if (!ok) l.style.display = 'none';
         });
-      })();
+      }
+
+      collectPoi();
 
       function area(o) {
         if (o.p && o.p.length) {
@@ -2202,11 +2284,12 @@ CBA.screens = CBA.screens || {};
         }
         return [o.x, o.y];
       }
-      function poiLabel(text, x, y, a) {
+      function poiLabel(text, x, y, a, id) {
         var lbl = document.createElement("span");
         lbl.className = "map-amenity__label";
         lbl.textContent = text;
         lbl.dataset.a = Math.round(a || 0);
+        if (id) lbl.dataset.for = id;
         lbl.style.cssText = "left:" + x + "px;top:" + y + "px";
         worldEl.appendChild(lbl);
       }
@@ -2278,18 +2361,30 @@ CBA.screens = CBA.screens || {};
         var maxTy = Math.max(margin, (vh - worldH) / 2);
         tx = Math.max(minTx, Math.min(maxTx, tx));
         ty = Math.max(minTy, Math.min(maxTy, ty));
+        /* כשהמפה כולה קטנה מהמסגרת (קורה במובייל בפתיחה, כי ההתאמה היא לרוחב)
+           ממרכזים אותה במקום להצמיד לראש ולהשאיר רצועה ריקה למטה. */
+        if (worldH < vh) ty = (vh - worldH) / 2;
+        if (worldW < vw) tx = (vw - worldW) / 2;
       }
+      /* רוחב הבית החציוני בפיקסלי־עולם — הבסיס להחלטה מתי יש מקום לשם משפחה.
+         (עד היום הדרגה נקבעה לפי יחס הזום, וזה נשבר ברגע שהבתים קיבלו את
+         המידות האמיתיות שלהם: 21 מ׳ במקום קופסה מצוירת.) */
+      var MED_TILE = (function () {
+        var ws = MAP_TILES.map(function (t) { return mapX(t.w); }).sort(function (a, b) { return a - b; });
+        return ws.length ? ws[Math.floor(ws.length / 2)] : 34;
+      })();
       var openTile = null, curTier = -1;
       function apply() {
         clampPan();
         worldEl.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
-        var r = scale / fitScaleVal;
-        var tier = r > MAP_T2 ? 2 : (r > MAP_T1 ? 1 : 0);
+        var tw = MED_TILE * scale;                 /* רוחב בית בפיקסלים על המסך */
+        var tier = tw > 104 ? 2 : (tw > 74 ? 1 : 0);
         if (tier !== curTier) {
           curTier = tier;
           worldEl.classList.toggle("tier1", tier === 1);
           worldEl.classList.toggle("tier2", tier === 2);
         }
+        if (Math.abs(scale - POI_LAID) > 0.001) { POI_LAID = scale; layoutPoi(); }
         if (openTile) positionPopup(openTile);
       }
       function fitToScreen(animated) {
@@ -2334,6 +2429,16 @@ CBA.screens = CBA.screens || {};
 
       var dragging = false, dragStartX = 0, dragStartY = 0, txStart = 0, tyStart = 0;
       var pointers = {}, pointerCount = 0, pinchDist = null, pinchScale = 1;
+
+      /* iOS Safari מזהה צביטה כזום־דף לפני ש-Pointer Events בכלל מגיעים, וזה מה
+         שגרם ל"צביטה משנה את כל המסך". touch-action:none לבדו לא מספיק שם —
+         צריך לחסום גם את אירועי ה-gesture הקנייניים. */
+      ["gesturestart", "gesturechange", "gestureend"].forEach(function (n) {
+        viewport.addEventListener(n, function (e) { e.preventDefault(); }, { passive: false });
+      });
+      viewport.addEventListener("touchmove", function (e) {
+        if (e.touches && e.touches.length > 1) e.preventDefault();
+      }, { passive: false });
 
       viewport.addEventListener("pointerdown", function (e) {
         if (e.target.closest(".map-popup") || e.target.closest(".map-toolbar")) return;
@@ -2648,7 +2753,7 @@ CBA.screens = CBA.screens || {};
   /* מסך "מפת השיכון" של אזור התושב — עוטף דק סביב הרכיב, עם כל ברירות המחדל.
      כל ההתנהגות שהתושבים מכירים נשארת בדיוק כפי שהייתה. */
   CBA.screens.resMap = {
-    render: function (container) { CBA.map.render(container); }
+    render: function (container) { CBA.map.render(container, { full: true }); }
   };
   /* ==== "ועד השיכון" — עץ ארגוני של הוועד, תצוגת קריאה בלבד (2026-08-10) ====
      פתוח לכל תושב מחובר ופעיל (CBA.data.getCommitteeTree, כמו טאב

@@ -1258,3 +1258,47 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
   backdrop-filter: none; -webkit-backdrop-filter: none;
   box-shadow: 0 2px 8px rgba(62,54,40,.16);
 }
+
+/* ==== תיקוני מפה v2 (2026-09-07, אחרי בדיקה על מכשיר) ==================== */
+
+/* 1. צביטה — touch-action חל רק על האלמנט שהמגע התחיל בו, ולכן צביטה שהתחילה
+      על בית או על תווית "דלפה" לדפדפן וזימה את כל הדף. */
+.map-world, .map-world * { touch-action: none; }
+
+/* 2. שם משפחה: שורה אחת, בלי שבירת מילים באמצע. "ביטון" לא הופך ל"ביט/ון". */
+.mh-fam {
+  display: block; -webkit-line-clamp: none; -webkit-box-orient: unset;
+  white-space: nowrap; word-break: normal; overflow-wrap: normal;
+  overflow: hidden; text-overflow: ellipsis; width: 100%;
+  font-size: 10.5px; line-height: 1.15;
+}
+.mh-body { padding: 3px 4px 0; }
+
+/* 3. אייקון החיפוש נבלע מתחת ל-backdrop-filter של השדה ב-iOS — מרימים אותו
+      מעליו ומכהים אותו, כך שהעיגול המכווץ במובייל לא נראה ריק. */
+.map-search { position: relative; z-index: 1; }
+.map-search-ic { z-index: 3; color: #475569; }
+@media (max-width: 720px) {
+  .map-search-wrap.collapsed .map-search-ic {
+    inset-inline-start: 50%; transform: translate(50%,-50%); width: 18px; height: 18px;
+  }
+  .map-search-wrap.collapsed .map-search-ic svg { width: 18px; height: 18px; }
+}
+
+/* 4. דסקטופ: המפה נמרחת על כל רוחב המסך וגובה כמעט מלא. חל רק על מסך המפה
+      עצמו (map-shell--full) — המפה שמוטמעת במסכי הגינון נשארת בקופסה. */
+@media (min-width: 900px) {
+  .map-shell--full {
+    height: calc(100vh - 190px); min-height: 560px;
+    margin-inline: calc(var(--page-pad) * -1);
+    border-inline: none; border-radius: 0;
+  }
+}
+@media (max-width: 899px) {
+  .map-shell--full { height: min(78vh, 720px); }
+}
+
+/* 5. שבב ותווית של מרחב נשארים בגודל קבוע על המסך — לא גדלים עם הזום.
+      --inv נקבע ב-resident.js בכל שינוי זום ושווה ל-1/scale. */
+.map-poi { transform: translate(-50%,-50%) scale(var(--inv,1)); }
+.map-amenity__label { transform: translateX(-50%) scale(var(--inv,1)); transform-origin: top center; }
