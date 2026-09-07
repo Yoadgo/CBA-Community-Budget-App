@@ -22,6 +22,7 @@ CBA.screens = CBA.screens || {};
   var scanIcon   = svg('<path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/><circle cx="12" cy="12" r="2.5"/>');
   var clockIcon  = svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>');
   var chevLeftIcon  = svg('<path d="M15 6l-6 6 6 6"/>');
+  var chevDownIcon  = svg('<path d="M6 9l6 6 6-6"/>');
   var chevRightIcon = svg('<path d="M9 6l6 6-6 6"/>');
   var calCheckIcon  = svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><path d="M8.5 14.5l2 2 4.5-4.5"/>');
   var calGridIcon   = svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="8" cy="15" r="1"/><circle cx="12" cy="15" r="1"/><circle cx="16" cy="15" r="1"/>');
@@ -126,6 +127,27 @@ CBA.screens = CBA.screens || {};
       });
   }
 
+  /* כל הבקשות של המשפחה **מכל שנות התקציב** (2026-09-07).
+     למה: אזור התושב מסתיר את בורר השנים (resident.css שורה 14), ולכן תושב
+     רואה אך ורק את השנה הפעילה. ברגע שמחליפים "שנה נוכחית" בגיליון — כל
+     ההיסטוריה שלו נעלמת לו מהמסך, כולל החזרים ששולמו. הנתונים כבר קיימים
+     בזיכרון (doGet מחזיר את כל השנים), אז זו קריאה בלבד בלי פנייה לשרת.
+
+     myRequests() לעיל נשארת פר-שנה **במכוון**: היא מזינה את המונים
+     "ממתינות/אושרו/שולמו השנה" כאן ובמסך הבית, ושינוי שלה היה הופך את
+     "שולמו השנה" ל"שולמו אי פעם" בלי שאיש ישים לב. */
+  function myRequestsAllYears() {
+    var famId = String(user().familyId || user().house || "").trim();
+    if (!famId) return [];
+    if (!(window.CBA && CBA.data && CBA.data.getAllTransactions)) return [];
+    return CBA.data.getAllTransactions()
+      .filter(function (t) { return String(t.familyId || "").trim() === famId; })
+      .sort(function (a, b) {
+        if ((a.date || "") !== (b.date || "")) return (a.date || "") < (b.date || "") ? 1 : -1;
+        return (b.id || 0) - (a.id || 0);
+      });
+  }
+
   // מפצל את הבקשות של המשפחה לשתי קבוצות: החזר כספי בפועל לדייר (payType=refund)
   // מול כל השאר (תשלום לספק/הוצאה כללית) שהמשפחה רק טיפלה בהם/הייתה איש הקשר —
   // כדי שלא ייראה כאילו כל מה שמופיע כאן זה כסף שמגיע לתושב (יועד, 2026-08-06).
@@ -144,6 +166,11 @@ CBA.screens = CBA.screens || {};
     rejected:  { cls: "gray", ico: xIcon }
   };
 
+  /* נדלק כשכרטיס הסיכום מוצג במסך. אז אין טעם לחזור על אותו מועד החזר
+     בכל כרטיס בנפרד — הסיכום כבר אמר אותו פעם אחת, בגדול. נשאר מוצג
+     בבקשות שעדיין בבדיקה, כי הן *לא* נכללות בסיכום. */
+  var refundSummaryShown = false;
+
   function reqCardHTML(t) {
     var s = CBA.data.statusMeta(t.status);
     var pill = STATUS_PILL[t.status] || STATUS_PILL.submitted;
@@ -152,7 +179,8 @@ CBA.screens = CBA.screens || {};
     // מועד החזר צפוי (סעיף 7, 2026-08-06) — רק לבקשות החזר שעדיין ממתינות (לא
     // שולם/נדחה כבר, שם המועד הצפוי כבר לא רלוונטי). ר' CBA.data.expectedRefundDate.
     var pending = t.status !== "paid" && t.status !== "rejected";
-    var refundLabel = pending ? CBA.data.expectedRefundDateLabel(t) : "";
+    var coveredBySummary = refundSummaryShown && t.status === "ready";
+    var refundLabel = (pending && !coveredBySummary) ? CBA.data.expectedRefundDateLabel(t) : "";
     return (
       '<div class="card rq">' +
         '<div class="rq__top">' +
@@ -241,16 +269,135 @@ CBA.screens = CBA.screens || {};
     if (btn) btn.addEventListener("click", function () { CBA.navigate("resGym"); });
   }
 
+  /* ==== סיכום ההחזרים שבדרך (2026-09-07) ====
+     למה זה קיים: התושב מקבל בחשבון הבנק **העברה אחת מרוכזת** ולא העברה לכל
+     קבלה. בלי הכרטיס הזה הוא צריך לשבת ולחבר בעצמו את הקבלות כדי להבין מה
+     ההפקדה שראה. הכרטיס מראה את הסכום שיגיע, מתי, ומה מרכיב אותו.
+
+     נספרות **רק** בקשות בסטטוס ready ("הועבר להנה"ח") — כסף שכבר בדרך.
+     בקשות שעדיין בבדיקה מוזכרות בשורה נפרדת ובמפורש אינן נכללות בסכום,
+     כדי שלא נבטיח כסף שטרם אושר.
+
+     המועד כאן הוא עדיין **הערכה מחושבת** (ר' CBA.data.expectedRefundDate),
+     ולכן הניסוח "צפוי". כשמודול השוואת החיובים ייכנס ויגיע תאריך אמיתי
+     מהבסיס — אותו כרטיס יאמר "ייכנס ב-" בלי "צפוי", וההבדל בין הערכה
+     לעובדה יישאר גלוי לתושב במקום להיטשטש.
+
+     קיבוץ לפי מועד ולא סכום אחד גדול: אם בקשה פספסה סבב, המועד שלה שונה,
+     ואיחוד היה מציג לתושב תאריך שגוי לחלק מהכסף. */
+  function refundSummaryHTML(refunds) {
+    var groups = {}, order = [], inReview = 0;
+    refunds.forEach(function (t) {
+      if (t.status === "ready") {
+        var iso = CBA.data.expectedRefundDate(t);
+        if (!iso) return;
+        if (!groups[iso]) { groups[iso] = []; order.push(iso); }
+        groups[iso].push(t);
+      } else if (t.status === "submitted" || t.status === "review") {
+        inReview++;
+      }
+    });
+    if (!order.length) return "";
+    order.sort();
+    return order.map(function (iso, gi) {
+      var list = groups[iso];
+      var total = list.reduce(function (sum, t) { return sum + (Number(t.amount) || 0); }, 0);
+      var rows = list.map(function (t) {
+        return '<div class="rq-sum__row">' +
+                 '<span class="rq-sum__row-n">' + CBA.esc(t.supplier || t.buyer || "בקשה") + '</span>' +
+                 '<span class="rq-sum__row-a">' + CBA.formatILS(t.amount || 0) + '</span>' +
+               '</div>';
+      }).join("");
+      return '<div class="card rq-sum">' +
+          '<div class="rq-sum__label">צפוי לתשלום</div>' +
+          '<div class="rq-sum__amt">' + CBA.formatILS(total) + '</div>' +
+          '<div class="rq-sum__when">' + list.length + (list.length === 1 ? " החזר" : " החזרים") +
+            " · אמור להיכנס ב־" + CBA.esc(CBA.data.hebrewDate(iso)) + ", בהעברה אחת</div>" +
+          ((gi === 0 && inReview)
+            ? '<div class="rq-sum__note">ועוד ' + inReview +
+              (inReview === 1 ? " בקשה שעדיין בבדיקה" : " בקשות שעדיין בבדיקה") +
+              " — לא נכללות בסכום.</div>"
+            : "") +
+          '<button type="button" class="rq-sum__toggle" aria-expanded="false">' +
+            '<span class="rq-sum__toggle-t">הצג פירוט</span>' + chevDownIcon +
+          '</button>' +
+          '<div class="rq-sum__detail">' + rows + '</div>' +
+        '</div>';
+    }).join("");
+  }
+
+  /* ==== היסטוריה משנים קודמות (2026-09-07) ====
+     מקופלת כברירת מחדל. קיימת כדי שהחלפת "שנה נוכחית" בגיליון לא תמחק
+     לתושב את העבר מהמסך — ר' ההערה ב-myRequestsAllYears.
+     כשאין שנים קודמות (המצב היום) מוחזרת מחרוזת ריקה ושום דבר במסך
+     לא משתנה. */
+  function pastYearsHTML(all, curYear) {
+    var past = all.filter(function (t) { return String(t.year || "") !== String(curYear); });
+    if (!past.length) return "";
+    var byYear = {}, years = [];
+    past.forEach(function (t) {
+      var y = String(t.year || "—");
+      if (!byYear[y]) { byYear[y] = []; years.push(y); }
+      byYear[y].push(t);
+    });
+    var body = years.map(function (y) {
+      return '<div class="rq-past__y">' + CBA.esc(y) + '</div>' +
+             '<div class="rq-list">' + byYear[y].map(reqCardHTML).join("") + '</div>';
+    }).join("");
+    return '<div class="rq-past">' +
+        '<button type="button" class="rq-past__toggle" aria-expanded="false">' +
+          '<span class="rq-past__toggle-t">הצג היסטוריה משנים קודמות (' + past.length + ')</span>' +
+          chevDownIcon +
+        '</button>' +
+        '<div class="rq-past__body">' + body + '</div>' +
+      '</div>';
+  }
+
+  /* מחבר את שני הכפתורים המתקפלים שנוספו כאן. אותה מוסכמה כמו .svc-acc
+     במסך השירותים: מחלקת is-open על המכל, והחץ מסתובב ב-CSS. */
+  function bindCollapsibles(container) {
+    Array.prototype.forEach.call(container.querySelectorAll(".rq-sum__toggle"), function (btn) {
+      btn.addEventListener("click", function () {
+        var card = btn.parentNode;
+        var open = card.classList.toggle("is-open");
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        var t = btn.querySelector(".rq-sum__toggle-t");
+        if (t) t.textContent = open ? "הסתר פירוט" : "הצג פירוט";
+      });
+    });
+    var pastBtn = container.querySelector(".rq-past__toggle");
+    if (pastBtn) {
+      pastBtn.addEventListener("click", function () {
+        var box = pastBtn.parentNode;
+        var open = box.classList.toggle("is-open");
+        pastBtn.setAttribute("aria-expanded", open ? "true" : "false");
+        var t = pastBtn.querySelector(".rq-past__toggle-t");
+        // הטקסט הסגור נושא את מספר הבקשות, אז שומרים אותו כמו שהוא ולא
+        // מרכיבים אותו מחדש — אחרת הספירה נעלמת אחרי פתיחה וסגירה.
+        if (t) {
+          if (!t.dataset.closedLabel) t.dataset.closedLabel = t.textContent;
+          t.textContent = open ? "הסתר היסטוריה" : t.dataset.closedLabel;
+        }
+      });
+    }
+  }
+
   CBA.screens.resRequests = {
     render: function (container) {
       // שימור מיקום גלילה (אותו פתרון כמו expenses.js/residents.js/clubAdmin.js) —
       // render() כאן נקרא מחדש גם ברענון רקע שקט, וה-innerHTML החדש היה מאפס גלילה.
       var rqWinScrollY = window.scrollY || 0;
+      // מאפסים בכל ציור מחדש: זהו דגל ברמת המודול, ורנדר קודם שהציג סיכום
+      // היה משאיר אותו דלוק ומסתיר תאריכים בציור שאין בו סיכום כלל.
+      refundSummaryShown = false;
       var u = user();
       var fam = u.family || u.name || "תושב";
       var house = u.house ? ("בית " + u.house) : "אזור תושב";
       var groups = splitRequests(myRequests());
       var refunds = groups.refunds, handled = groups.handled;
+      // כל השנים — לחלק ההיסטוריה בלבד. הרשימה הראשית והמונים נשארים
+      // על השנה הפעילה, כדי ש"שולמו" ימשיך להיות "שולמו השנה".
+      var allYears = myRequestsAllYears();
 
       // הסטטיסטיקות למעלה (ממתינות/אושרו/שולמו) מתייחסות רק להחזרים בפועל —
       // "בקשות אחרות שטיפלנו בהן" זה לא כסף שמגיע למשפחה, אז לא נספר בתוכן.
@@ -263,7 +410,14 @@ CBA.screens = CBA.screens || {};
 
       var listHTML = "";
       if (refunds.length || handled.length) {
+        // הסיכום נבנה *לפני* הכרטיסים, כי הוא מדליק את refundSummaryShown
+        // שהכרטיסים נשענים עליו כדי לא לחזור על אותו תאריך.
+        var sumHTML = refundSummaryHTML(refunds);
+        refundSummaryShown = !!sumHTML;
         listHTML += '<div class="rq-section-title">ההחזרים שלנו</div>';
+        // מיד מתחת לכותרת ומעל הכרטיסים: קודם "כמה נכנס לי ומתי",
+        // ורק אחר כך הפירוט שורה-שורה.
+        listHTML += sumHTML;
         listHTML += refunds.length
           ? '<div class="rq-list">' + refunds.map(reqCardHTML).join("") + '</div>'
           : '<div class="rs-empty rs-empty--compact"><p>אין החזרים כרגע.</p></div>';
@@ -277,6 +431,12 @@ CBA.screens = CBA.screens || {};
               '<p>לחצו על "הגשת בקשה חדשה" כדי לשלוח קבלה ראשונה. הבקשות שלכם יופיעו כאן עם הסטטוס שלהן.</p>' +
             '</div>';
       }
+
+      // היסטוריה משנים קודמות — תמיד בסוף, גם כשהשנה הפעילה ריקה.
+      // מכבים את הדגל קודם: הסיכום מכסה רק את השנה הפעילה, ובקשה משנה
+      // קודמת שעדיין "הועבר להנה"ח" כן צריכה להציג את המועד שלה.
+      refundSummaryShown = false;
+      listHTML += pastYearsHTML(allYears, CBA.data.getCurrentYear());
 
       container.innerHTML =
         '<div class="screen-head"><div class="screen-head__title">שלום, ' + CBA.esc(fullName(u)) + '</div>' +
@@ -295,6 +455,7 @@ CBA.screens = CBA.screens || {};
       var gymSlot = container.querySelector("#rq-gym");
       if (gymSlot) bindGymCard(gymSlot);
       refreshGymCard(container);
+      bindCollapsibles(container);
       if (rqWinScrollY) window.scrollTo(0, rqWinScrollY);
     }
   };

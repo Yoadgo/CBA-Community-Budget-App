@@ -171,6 +171,26 @@ CBA.data = (function () {
     return CBA.mock.transactions.slice();
   }
 
+  /* כל התנועות מכל שנות התקציב, ולא רק מהשנה הפעילה (2026-09-07).
+     למה זה נחוץ: אזור התושב מסתיר את בורר השנים (ר' resident.css שורה 14),
+     ולכן תושב רואה אך ורק את השנה הפעילה. ברגע שמחליפים את "שנה נוכחית"
+     בגיליון, כל ההיסטוריה שלו נעלמת לו מהמסך — כולל החזרים ששולמו.
+     ה-doGet כבר מחזיר את התנועות של *כל* השנים (ר' out.data[y] ב-Code.gs),
+     אז זו קריאה מהזיכרון בלבד, בלי שום שינוי בשרת ובלי בקשה נוספת.
+     כל שורה כבר נושאת שדה year (ר' toTx ב-sheets.js), אז אפשר לקבץ לפי שנה.
+     שים לב: getTransactions() נשארת פר-שנה במכוון — המונה "שולמו השנה"
+     במסך הבית ובראש "הבקשות שלי" נשען עליה, ושינוי שלה היה הופך אותו
+     בשקט ל"שולמו אי פעם". */
+  function getAllTransactions() {
+    const out = [];
+    const years = (CBA.mock && CBA.mock.years) || {};
+    Object.keys(years).forEach(function (y) {
+      const list = (years[y] && years[y].transactions) || [];
+      for (let i = 0; i < list.length; i++) out.push(list[i]);
+    });
+    return out;
+  }
+
   // שם הסעיף לפי מזהה
   function categoryName(catId) {
     const c = CBA.mock.categories.find(function (x) { return x.id === catId; });
@@ -1261,6 +1281,7 @@ CBA.data = (function () {
     getGroups: getGroups,
     getCategories: getCategories,
     getTransactions: getTransactions,
+    getAllTransactions: getAllTransactions,
     categoryName: categoryName,
     addTransaction: addTransaction,
     updateTransaction: updateTransaction,

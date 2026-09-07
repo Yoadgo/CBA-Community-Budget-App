@@ -297,7 +297,7 @@ body[data-screen="planning"] .year-switch__add {
    flex:1/הגלילה, ו-nav עצמו (הכמוסה) חוזר להיות width:fit-content — בדיוק
    כמו שהיה מאז ומתמיד, פשוט בלי שגדילתו יכולה עוד להזיז משהו חיצוני. */
 .app-nav {
-  display: flex; align-items: stretch; gap: 2px;
+  display: flex; align-items: stretch; gap: 0;
   flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -316,8 +316,9 @@ body[data-screen="planning"] .year-switch__add {
   flex: none;
   appearance: none; border: none; background: none;
   display: inline-flex; align-items: center; gap: 5px;
-  font-family: inherit; font-size: 13px; font-weight: 500;
-  color: var(--text-soft); padding: 7px 11px; cursor: pointer;
+  /* (2026-09-07) צפוף יותר ואייקון גדול יותר — שישה יעדים בשורה אחת. */
+  font-family: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--text-soft); padding: 6px 8px; cursor: pointer;
   border-radius: 9px;
   transition: color var(--t), background var(--t);
 }
@@ -342,7 +343,7 @@ body[data-screen="planning"] .year-switch__add {
 
 /* סמליל הטאב — מונוכרומטי, יורש את צבע הטקסט */
 .app-nav__ico { display: inline-flex; align-items: center; flex: none; }
-.app-nav__ico svg { width: 14px; height: 14px; display: block; }
+.app-nav__ico svg { width: 16px; height: 16px; display: block; }
 
 /* ---------- קבוצת-ניווט מתקפלת בניווט ("השיכון") ----------
    2026-08-08, גרסה שישית — "מתרחב" בתוך שורת הטאבים עצמה (חזרה למודל in-flow,
