@@ -1196,3 +1196,65 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
   width: 9px; height: 9px; border-radius: 50%;
   background: var(--danger, #F43F5E); border: 2px solid #fff;
 }
+
+/* ==== מפת השיכון v2 — שכבת בסיס SVG (2026-09-07) ==========================
+   הגיאומטריה מגיעה מ-js/data/mapGeo.js. הפלטה שטוחה ורגועה בכוונה: המפה לא
+   אמורה להתחרות בתוכן שמעליה — ר' "שפת העיצוב של מפת השיכון". */
+:root {
+  --m2-ground:#EFEDE6; --m2-canopy:#E1EBD8; --m2-tree:#CBDFB6;
+  --m2-lawn:#DBE8CC; --m2-lawn-edge:#C7DAB4;
+  --m2-asphalt:#FCFBF8; --m2-edge:#DFDCD2;
+  --m2-path:#F3F0E8; --m2-path-edge:#E4E0D6;
+  --m2-pub:#DBE4EF; --m2-pub-edge:#BECDDF;
+  --m2-bay:#E2DDD0; --m2-street:#B4AC9B; --m2-street-ink:#4B4842;
+}
+.map-base { position: absolute; top: 0; left: 0; display: block; pointer-events: none; }
+.m2-ground { fill: var(--m2-ground); }
+.m2-canopy { fill: var(--m2-canopy); }
+.m2-tree   { fill: var(--m2-tree); opacity: .8; }
+.m2-green  { fill: var(--m2-lawn); stroke: var(--m2-lawn-edge); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.m2-case   { fill: none; stroke: var(--m2-edge); stroke-linejoin: round; stroke-linecap: butt; }
+.m2-case.is-path { stroke: var(--m2-path-edge); }
+.m2-casef  { fill: var(--m2-edge); stroke: var(--m2-edge); stroke-linejoin: round; }
+.m2-fill   { fill: none; stroke: var(--m2-asphalt); stroke-linejoin: round; stroke-linecap: butt; }
+.m2-fill.is-path { stroke: var(--m2-path); }
+.m2-fillf  { fill: var(--m2-asphalt); stroke: none; }
+.m2-bay    { fill: none; stroke: var(--m2-bay); stroke-width: .9; vector-effect: non-scaling-stroke;
+             stroke-linecap: round; opacity: .85; }
+.m2-pub    { fill: var(--m2-pub); stroke: var(--m2-pub-edge); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.m2-stdash { fill: none; stroke: var(--m2-street); stroke-width: 1.6; vector-effect: non-scaling-stroke;
+             stroke-linecap: round; }
+.m2-stq rect { fill: #FBFAF7; stroke: #D8D2C2; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.m2-stq text { fill: var(--m2-street-ink); font-size: 11px; font-weight: 700; text-anchor: middle;
+               dominant-baseline: central; direction: rtl; }
+.m2-shelter    { fill: #F6EFE0; stroke: #C7BCA4; stroke-width: 1.1; vector-effect: non-scaling-stroke; }
+.m2-shelter-in { fill: #C0564C; }
+.m2-bin  { stroke: rgba(0,0,0,.34); stroke-width: 1.1; vector-effect: non-scaling-stroke; }
+.m2-bin.is-dash { stroke-dasharray: 5 4; }
+.m2-bus  { fill: #3A73B8; stroke: #27578F; stroke-width: 1.1; vector-effect: non-scaling-stroke; }
+
+/* שבב מרחב — יושב על מרכז המבנה, גודל קבוע על המסך, בלי קופסה מסביב */
+.map-poi { position: absolute; transform: translate(-50%,-50%); pointer-events: none; z-index: 2;
+           display: flex; align-items: center; justify-content: center; }
+.map-poi--water .map-amenity__chip { color: #2E93BC; }
+.map-poi--sport .map-amenity__chip { color: #4A9660; }
+.map-poi--kids  .map-amenity__chip { color: #D8862C; }
+.map-poi--shop  .map-amenity__chip { color: #B96A42; }
+.map-poi--civic .map-amenity__chip { color: #7568BE; }
+.map-poi--comm  .map-amenity__chip { color: #B85480; }
+.map-poi--pet   .map-amenity__chip { color: #878C42; }
+
+/* בתים: שטוחים כמו שאר המפה. הזכוכית שמורה לשכבת הממשק הצף בלבד —
+   ר' כלל העיצוב "glassmorphism רק בהדר/ניווט/מודאלים". */
+:root { --m2-build:#E3DED1; --m2-build-edge:#C7C0AE; }
+.map-house {
+  background: var(--m2-build); border: 1px solid var(--m2-build-edge);
+  border-radius: 5px; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.map-house::before { display: none; }
+.map-house:hover {
+  transform: none; background: #DAD3C1; border-color: #B8B09C;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  box-shadow: 0 2px 8px rgba(62,54,40,.16);
+}
