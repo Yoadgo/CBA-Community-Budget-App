@@ -174,7 +174,7 @@
       def: "resHome",
       // resMe ("הפרטים שלי") רשום כמסך אבל **לא כטאב** — מגיעים אליו מתפריט
       // המשתמש ומעמוד הבית. הוא על *אותי*, לא יעד ניווט, ושורת הניווט כבר בת 5.
-      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices"],
+      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices", "resGarden", "resGardenNew"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
       // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
@@ -189,7 +189,12 @@
         { group: "mitkanim", label: "מתקנים", items: [["resReserve", "שריון מועדון"], ["resGym", "מכון כושר"]] },
         // "שירותים" (2026-08-18) הצטרף כפריט רביעי לאותה קבוצה ולא ככפתור עצמאי:
         // הוא שייך תמטית ל"מה יש בשיכון", ושורת הניווט הראשית כבר עמוסה.
-        { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"], ["resCommittee", "ועד השיכון"], ["resServices", "שירותים"]] }
+        { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"], ["resCommittee", "ועד השיכון"], ["resServices", "שירותים"]] },
+        // "מראה שיכון" (2026-09-07) — טאב ייעודי ולא פריט בתוך "השיכון",
+        // לבקשת יועד: למודול יש זהות משלו באפליקציה. resGardenNew (טופס
+        // הדיווח) רשום כמסך אבל **לא כטאב** — מגיעים אליו מכפתור "דיווח חדש"
+        // בתוך המסך, בדיוק כמו resMe.
+        ["resGarden", "מראה שיכון"]
       ]
     }
   };
@@ -251,6 +256,9 @@
     resReserve:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
     resDirectory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M17.5 14.4a5 5 0 0 1 3 4.6"/></svg>',
     resMap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3.5 5v16L9 19l6 2 5.5-2V3L15 5 9 3Z"/><path d="M9 3v16M15 5v16"/></svg>',
+    // "מראה שיכון" — עלה. הסמליל של המודול, מופיע גם בכותרת המסך ובבר המובייל.
+    resGarden:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
+    resGardenNew:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
     resCommittee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.1"/><circle cx="5.5" cy="18" r="2.1"/><circle cx="18.5" cy="18" r="2.1"/><path d="M12 7.1V11M12 11 5.5 15.9M12 11l6.5 4.9"/></svg>',
     // כפתור-הקבוצה "השיכון" — מייצג את השכונה כמכלול (לא מסך ספציפי)
     shikun:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V10l4-3v14"/><path d="M13 21V6l6-3v18"/><path d="M9 13h.01M9 17h.01M17 9h.01M17 13h.01M17 17h.01"/></svg>',

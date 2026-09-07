@@ -1329,6 +1329,17 @@ CBA.data = (function () {
       CBA.sheets.postRead("savePermissions", { rowIndex: rowIndex, slot: slot, perms: perms }, cb);
     },
     ensurePermissionCols: function (cb) { CBA.sheets.postRead("ensurePermissionCols", {}, cb); },
+    /* ---- מראה שיכון / גינון (2026-09-07) ----
+       שלוש הפעולות פתוחות לכל תושב מחובר ופעיל ומחזירות רק את הנתונים שלו —
+       הסינון נעשה בשרת לפי המושב החתום, לא כאן. ר' handleMyGardenReports_. */
+    getGardenMeta: function (cb) { CBA.sheets.get({ action: "gardenMeta" }, cb); },
+    getMyGardenReports: function (cb) { CBA.sheets.get({ action: "myGardenReports" }, cb); },
+    submitGardenReport: function (payload, cb) {
+      CBA.sheets.postRead("submitGardenReport", payload, cb);
+    },
+    gardenFeedback: function (id, positive, note, cb) {
+      CBA.sheets.postRead("gardenFeedback", { id: id, positive: positive, note: note }, cb);
+    },
     // ייצוא לגיליון חדש (2026-08-07). payload: { columns, rowIndexes, name, subtitle }
     exportResidents: function (payload, cb) { CBA.sheets.postRead("exportResidents", payload, cb); },
     // יצירת משקי בית חדשים (2026-08-07). rows: [{ values:{כותרת:ערך}, markLeftRowIndex }]

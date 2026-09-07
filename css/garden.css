@@ -1,0 +1,250 @@
+/* ============================================================================
+ *  "מראה שיכון" — שכבת העיצוב של מודול הגינון (2026-09-07)
+ *  כל המחלקות בתחילית gd-, בדיוק כמו gym- במכון הכושר.
+ *  מבוסס על הסקיצה שיועד אישר ב-7.9. ר' cba-glass-on-content-cards-2026-09-07.
+ * ========================================================================== */
+
+.gd-screen {
+  --g: #0F6B45;
+  --c-lawn: #16A34A;  --c-lawn-s: #E7F7EC;
+  --c-water: #0EA5E9; --c-water-s: #E4F4FD;
+  --c-tree: #15803D;  --c-tree-s: #E6F4EA;
+  --c-prune: #0D9488; --c-prune-s: #E2F5F3;
+  --c-weed: #CA8A04;  --c-weed-s: #FCF3DC;
+  --c-clean: #64748B; --c-clean-s: #EEF1F5;
+  --c-bed: #DB2777;   --c-bed-s: #FCE8F1;
+  position: relative;
+}
+/* הרקע האמביינטי — הוא מה שהזכוכית מראה. בלי הגוונים האלה שקיפות על כרטיס
+   נראית בדיוק כמו לבן אטום, ולכן זה חלק מהמנגנון ולא קישוט. fixed בכוונה,
+   כדי שהגוונים לא "יזוזו" עם הגלילה ויעשו רעש. */
+.gd-screen::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(720px 330px at 92% 4%, rgba(22,163,74,.18), transparent 68%),
+    radial-gradient(560px 300px at 4% 10%, rgba(14,165,233,.13), transparent 68%),
+    radial-gradient(680px 380px at 60% 96%, rgba(202,138,4,.10), transparent 66%),
+    radial-gradient(420px 260px at 18% 60%, rgba(13,148,136,.09), transparent 70%);
+}
+.gd-screen > * { position: relative; z-index: 1; }
+
+/* ---------- כותרת המודול ---------- */
+.gd-head { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; }
+.gd-head__em {
+  width: 44px; height: 44px; border-radius: 13px; flex: none;
+  display: grid; place-items: center; color: #fff;
+  background: linear-gradient(145deg, #1B8B58, #0C5A3A);
+  box-shadow: 0 6px 18px -8px rgba(12,90,58,.75), inset 0 1px 0 rgba(255,255,255,.28);
+}
+.gd-head__em svg { width: 23px; height: 23px; }
+.gd-head__t { min-width: 0; }
+.gd-head__t h3 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+.gd-head__t p { font-size: 12.5px; color: var(--text-soft, #6B7280); margin: 0; }
+.gd-newbtn, .gd-backbtn {
+  margin-inline-start: auto; font-family: inherit; display: inline-flex;
+  align-items: center; gap: 7px; border-radius: 11px; padding: 9px 15px;
+  font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.gd-newbtn { background: var(--action, #111827); color: #fff; border: 0;
+  box-shadow: 0 8px 20px -12px rgba(17,24,39,.9); }
+.gd-backbtn { background: rgba(255,255,255,.7); color: var(--text, #374151);
+  border: 1px solid rgba(17,24,39,.10); }
+.gd-newbtn svg, .gd-backbtn svg { width: 14px; height: 14px; }
+
+/* ---------- זכוכית עדינה על כרטיסי תוכן ----------
+   76% לובן מול 62% בכותרת העליונה, טשטוש 14 מול 20, ובלי הצללה צפה.
+   המטרה: שהרקע יורגש מבעד לכרטיס, לא שייקרא דרכו. */
+.gd-card, .gd-rep, .gd-stat {
+  background: rgba(255,255,255,.76);
+  backdrop-filter: blur(14px) saturate(1.28);
+  -webkit-backdrop-filter: blur(14px) saturate(1.28);
+  border: 1px solid rgba(255,255,255,.85);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(17,24,39,.045);
+  border-radius: 14px;
+}
+.gd-card { padding: 15px 17px; }
+.gd-card + .gd-card { margin-top: 13px; }
+
+.gd-lbl { font-size: 12.5px; font-weight: 600; color: var(--text, #374151);
+  margin: 0 0 10px; display: flex; align-items: center; gap: 7px; }
+.gd-lbl s { text-decoration: none; color: var(--danger, #F43F5E); font-weight: 700; }
+.gd-lbl em { font-style: normal; color: var(--text-soft, #6B7280); font-weight: 500;
+  margin-inline-start: auto; font-size: 11px; }
+
+.gd-cols { display: grid; grid-template-columns: 1.02fr .98fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .gd-cols { grid-template-columns: 1fr; } }
+
+/* ---------- רשת הקטגוריות ---------- */
+.gd-cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+@media (max-width: 520px) { .gd-cats { grid-template-columns: repeat(3, 1fr); } }
+.gd-cat {
+  font-family: inherit; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.8); background: rgba(255,255,255,.62);
+  backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.85), 0 0 0 1px rgba(17,24,39,.04);
+  border-radius: 12px; padding: 11px 6px 9px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  text-align: center; font-size: 11.5px; font-weight: 500;
+  color: var(--text, #374151); line-height: 1.25;
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+.gd-cat:hover { transform: translateY(-1px); }
+.gd-cat u { text-decoration: none; width: 32px; height: 32px; border-radius: 10px;
+  display: grid; place-items: center; }
+.gd-cat u svg { width: 17px; height: 17px; }
+.gd-cat.on { border-color: transparent; color: #fff; font-weight: 600;
+  box-shadow: 0 8px 20px -10px rgba(21,128,61,.8), inset 0 1px 0 rgba(255,255,255,.22); }
+.gd-cat.on u { background: rgba(255,255,255,.22) !important; color: #fff !important; }
+
+.k-lawn  u { background: var(--c-lawn-s);  color: var(--c-lawn); }
+.k-water u { background: var(--c-water-s); color: var(--c-water); }
+.k-tree  u { background: var(--c-tree-s);  color: var(--c-tree); }
+.k-prune u { background: var(--c-prune-s); color: var(--c-prune); }
+.k-weed  u { background: var(--c-weed-s);  color: var(--c-weed); }
+.k-clean u { background: var(--c-clean-s); color: var(--c-clean); }
+.k-bed   u { background: var(--c-bed-s);   color: var(--c-bed); }
+.gd-cat.k-lawn.on  { background: var(--c-lawn); }
+.gd-cat.k-water.on { background: var(--c-water); }
+.gd-cat.k-tree.on  { background: var(--c-tree); }
+.gd-cat.k-prune.on { background: var(--c-prune); }
+.gd-cat.k-weed.on  { background: var(--c-weed); }
+.gd-cat.k-clean.on { background: var(--c-clean); }
+.gd-cat.k-bed.on   { background: var(--c-bed); }
+
+/* ---------- שדות ----------
+   כמעט אטומים בכוונה: שדה שקוף מפסיק להיקרא כמקום שאפשר להקליד בו. */
+.gd-inp {
+  border: 1px solid rgba(17,24,39,.10); background: rgba(255,255,255,.94);
+  border-radius: 11px; padding: 10px 13px; font-size: 13.5px;
+  font-family: inherit; color: var(--text-strong, #111827); width: 100%;
+}
+.gd-inp:focus { outline: 2px solid rgba(15,107,69,.35); outline-offset: 1px; border-color: transparent; }
+.gd-inp.is-ro { background: rgba(255,255,255,.6); color: var(--text-soft, #6B7280); }
+.gd-ta { min-height: 68px; resize: vertical; line-height: 1.55; }
+.gd-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+@media (max-width: 520px) { .gd-row2 { grid-template-columns: 1fr; } }
+.gd-hint { font-size: 11.5px; color: var(--text-soft, #6B7280); margin: 7px 0 0; }
+.gd-hint.is-ok { color: var(--ok, #059669); font-weight: 500; }
+.gd-meter { height: 3px; border-radius: 99px; background: rgba(17,24,39,.07);
+  margin-top: 9px; overflow: hidden; }
+.gd-meter i { display: block; height: 100%; width: 0; background: var(--g);
+  border-radius: 99px; transition: width .18s ease; }
+
+/* ---------- תמונות ---------- */
+.gd-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+.gd-th { width: 60px; height: 60px; border-radius: 11px; position: relative;
+  border: 1px solid rgba(17,24,39,.08); background-size: cover; background-position: center; }
+.gd-th x { position: absolute; top: -5px; inset-inline-end: -5px; width: 18px; height: 18px;
+  border-radius: 50%; background: var(--action, #111827); color: #fff; font-size: 9px;
+  display: grid; place-items: center; font-style: normal; cursor: pointer; }
+.gd-th.add { background: rgba(255,255,255,.6); border: 1.5px dashed rgba(17,24,39,.18);
+  display: grid; place-items: center; color: var(--text-soft, #6B7280);
+  font-size: 20px; font-weight: 300; font-family: inherit; cursor: pointer; }
+
+/* ---------- מפה ---------- */
+.gd-map { height: 290px; border-radius: 12px; overflow: hidden; }
+.gd-map .map-shell { height: 100%; }
+.gd-map .map-viewport { height: 100%; border-radius: 12px; }
+@media (max-width: 720px) { .gd-map { height: 210px; } }
+
+/* ---------- CTA ---------- */
+.gd-cta { background: var(--action, #111827); color: #fff; border: 0; border-radius: 12px;
+  padding: 13px 18px; font-size: 14.5px; font-weight: 600; width: 100%;
+  font-family: inherit; display: flex; align-items: center; justify-content: center;
+  gap: 9px; margin-top: 13px; cursor: pointer;
+  box-shadow: 0 10px 24px -12px rgba(17,24,39,.85); }
+.gd-cta svg { width: 16px; height: 16px; }
+.gd-cta:disabled { opacity: .6; cursor: default; }
+
+/* ---------- אריחי מצב ----------
+   תקרת רוחב: בלעדיה, במסך רחב, "2 בטיפול" יושב בקצה אריח באורך 600px. */
+.gd-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 208px));
+  gap: 9px; margin-bottom: 15px; justify-content: start; }
+@media (max-width: 560px) { .gd-stats { grid-template-columns: repeat(3, 1fr); } }
+.gd-stat { padding: 11px 14px; display: flex; align-items: center; gap: 10px; }
+.gd-stat u { text-decoration: none; width: 30px; height: 30px; border-radius: 9px;
+  display: grid; place-items: center; flex: none; }
+.gd-stat u svg { width: 16px; height: 16px; }
+.gd-stat b { font-size: 19px; font-weight: 700; line-height: 1; display: block; }
+.gd-stat span { font-size: 11.5px; color: var(--text-soft, #6B7280); display: block; }
+.gd-stat.is-open u { background: #FDF0DF; color: var(--warn, #D97706); }
+.gd-stat.is-open b { color: var(--warn, #D97706); }
+.gd-stat.is-wait u { background: #EEF1F5; color: #64748B; }
+.gd-stat.is-wait b { color: #475569; }
+.gd-stat.is-done u { background: #E4F5EC; color: var(--ok, #059669); }
+.gd-stat.is-done b { color: var(--ok, #059669); }
+
+/* ---------- מסנן ---------- */
+.gd-seg { display: inline-flex; background: rgba(237,240,242,.8); border-radius: 11px;
+  padding: 3px; gap: 2px; margin-bottom: 13px; }
+.gd-seg button { font-family: inherit; font-size: 12.5px; font-weight: 500;
+  color: var(--text-soft, #6B7280); padding: 5px 14px; border-radius: 9px;
+  border: 0; background: transparent; cursor: pointer; }
+.gd-seg button.on { background: #fff; color: var(--text-strong, #111827);
+  font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+/* ---------- רשימת הדיווחים ----------
+   שתי עמודות בדסקטופ: כרטיס בודד לא צריך 1900px, וטור אחד מבזבז את הרוחב.
+   "לבנות לרוחב" אינו "למתוח כל אלמנט לרוחב מלא". */
+.gd-reps { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; align-items: start; }
+@media (max-width: 900px) { .gd-reps { grid-template-columns: 1fr; } }
+.gd-rep { padding: 14px 16px; display: flex; gap: 13px; align-items: flex-start;
+  position: relative; overflow: hidden; }
+.gd-rep::before { content: ""; position: absolute; inset-inline-start: 0; top: 0;
+  bottom: 0; width: 3px; }
+.gd-rep.k-lawn::before  { background: var(--c-lawn); }
+.gd-rep.k-water::before { background: var(--c-water); }
+.gd-rep.k-tree::before  { background: var(--c-tree); }
+.gd-rep.k-prune::before { background: var(--c-prune); }
+.gd-rep.k-weed::before  { background: var(--c-weed); }
+.gd-rep.k-clean::before { background: var(--c-clean); }
+.gd-rep.k-bed::before   { background: var(--c-bed); }
+.gd-rep__th { width: 56px; height: 56px; border-radius: 11px; flex: none;
+  background: linear-gradient(140deg, #CFE0C4, #94B786);
+  background-size: cover; background-position: center; }
+.gd-rep__b { flex: 1; min-width: 0; }
+.gd-rep__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gd-rep__id { font-size: 11.5px; color: var(--text-soft, #6B7280); font-weight: 600; }
+.gd-rep__t { font-weight: 600; font-size: 14.5px; margin-top: 3px;
+  overflow-wrap: anywhere; }
+.gd-rep__m { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 2px; }
+.gd-rep__merged { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 6px;
+  padding-top: 6px; border-top: 1px dashed rgba(17,24,39,.08); }
+.gd-kchip { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.gd-kchip svg { width: 11px; height: 11px; }
+.k-lawn  .gd-kchip { background: var(--c-lawn-s);  color: var(--c-lawn); }
+.k-water .gd-kchip { background: var(--c-water-s); color: var(--c-water); }
+.k-tree  .gd-kchip { background: var(--c-tree-s);  color: var(--c-tree); }
+.k-prune .gd-kchip { background: var(--c-prune-s); color: var(--c-prune); }
+.k-weed  .gd-kchip { background: var(--c-weed-s);  color: var(--c-weed); }
+.k-clean .gd-kchip { background: var(--c-clean-s); color: var(--c-clean); }
+.k-bed   .gd-kchip { background: var(--c-bed-s);   color: var(--c-bed); }
+
+/* ---------- ציר השלב ודגל ----------
+   שלב = מיקום (ניטרלי), דגל = צבע וצורה זוויתית. שני רגיסטרים שונים בכוונה,
+   כדי שאפשר יהיה להבחין ביניהם בלי לקרוא. ר' מסמך האפיון המותאם. */
+.gd-axis { display: flex; align-items: center; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
+.gd-track { display: flex; gap: 4px; }
+.gd-track i { width: 7px; height: 7px; border-radius: 50%; background: #E1E5E9; display: block; }
+.gd-track i.on { background: #9CA3AF; }
+.gd-track i.done { background: var(--ok, #059669); box-shadow: 0 0 0 3px rgba(5,150,105,.16); }
+.gd-axis b { font-size: 12.5px; font-weight: 600; color: var(--text, #374151); }
+.gd-axis.is-done b { color: var(--ok, #059669); }
+.gd-flag { font-size: 11.5px; font-weight: 600; padding: 3px 10px 3px 15px;
+  border-radius: 4px; clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%);
+  background: #FDF0DF; color: var(--warn, #D97706); }
+.gd-flag.is-crit { background: #FDE7EC; color: var(--danger, #F43F5E); }
+
+/* ---------- משוב ---------- */
+.gd-fb { display: flex; gap: 7px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+.gd-fb span { font-size: 12px; color: var(--text-soft, #6B7280); }
+.gd-fb button { font-family: inherit; border-radius: 9px; padding: 5px 13px;
+  font-size: 12.5px; font-weight: 600; border: 1px solid rgba(17,24,39,.10);
+  background: rgba(255,255,255,.9); cursor: pointer; }
+.gd-fb button.y { color: var(--ok, #059669); border-color: #BFE6D3; }
+.gd-fb button.n { color: var(--danger, #F43F5E); border-color: #F7D2DA; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gd-cat, .gd-meter i { transition: none; }
+}

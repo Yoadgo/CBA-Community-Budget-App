@@ -392,6 +392,18 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'committeeTree') {
       return handleCommitteeTree_(e.parameter);
     }
+    /* גינון — אזור התושב (2026-09-07). שלושתן פתוחות לכל תושב מחובר ופעיל
+       (authorize_ עם need=null), ומחזירות אך ורק את הנתונים של הקורא עצמו.
+       משתמש חיצוני נחסם מהן ממילא בשער שב-authorize_. */
+    if (e && e.parameter && e.parameter.action === 'gardenMeta') {
+      return handleGardenMeta_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'myGardenReports') {
+      return handleMyGardenReports_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'gardenPhoto') {
+      return handleGardenPhoto_(e.parameter);
+    }
     // קטגוריות עץ הוועד (2026-08-10) — ר' handleCommitteeCategories_ למטה.
     if (e && e.parameter && e.parameter.action === 'committeeCategories') {
       return handleCommitteeCategories_(e.parameter);
@@ -562,6 +574,10 @@ function doPost(e) {
       case 'cancelProfileChange':  return json_(cancelProfileChange_(ss, body));
       case 'approveProfileChange': return json_(approveProfileChange_(ss, body));
       case 'rejectProfileChange':  return json_(rejectProfileChange_(ss, body));
+      // גינון — אזור התושב (2026-09-07). אינן ב-ACTION_PERMS בכוונה: פתוחות
+      // לכל תושב מחובר ופעיל, ופועלות רק על השורות שלו לפי המושב החתום.
+      case 'submitGardenReport':  return json_(submitGardenReport_(ss, body));
+      case 'gardenFeedback':      return json_(gardenFeedback_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -7082,4 +7098,349 @@ function installGardenModule() {
   Logger.log('— כדי לתת לאביתר גישה: שורה בטאב תושבים, אימייל הגוגל שלו, ' +
     '"' + PERM_GARDEN + '" בעמודת ההרשאות, ו-"' + EXTERNAL_VALUE + '" בעמודת "' + EXTERNAL_HEADER + '".');
   return { ok: true };
+}
+
+
+/* ============================================================================
+ *  מודול הגינון — צד השרת של אזור התושב (2026-09-07, צעד 3)
+ * ----------------------------------------------------------------------------
+ *  שלוש פעולות: הגשת דיווח, שליפת הדיווחים של הקורא, ומשוב אחרי סגירה.
+ *  כולן **אינן** ב-ACTION_PERMS בכוונה — הן פתוחות לכל תושב מחובר ופעיל,
+ *  כמו הגשת קבלה, ופועלות אך ורק על השורות של הקורא לפי המושב החתום.
+ *
+ *  דיווח תושב יוצר **שתי שורות**: אחת בטאב הדיווחים (מה שהתושב אמר) ואחת
+ *  בטאב המשימות (מה שהצוות מטפל בו). ההפרדה היא הליבה של האפיון — שני
+ *  תושבים יכולים לדווח על אותה תקלה, וכל דיווח נשמר בפני עצמו לצורכי
+ *  היסטוריה בעוד הטיפול מתנהל במקום אחד. עמודת "מזהה משימה" היא הקישור,
+ *  ובשלב 6 (איחוד כפילויות) דיווח חדש יצביע למשימה קיימת במקום ליצור חדשה.
+ * ========================================================================== */
+
+var GARDEN_PHOTOS_FOLDER_NAME = 'גינון';
+
+/** תיקיית תמונות הגינון לחודש נתון, תחת אותה תיקיית "שיכון" של הקבלות.
+ *  הקבצים נשארים **פרטיים** — הצפייה עוברת דרך handleGardenPhoto_ שבודק
+ *  הרשאה ומגיש את הקובץ בעצמו, בדיוק כמו handleReceiptFile_ בקבלות. */
+function getGardenPhotosFolder_(monthKey) {
+  var root = DriveApp.getFolderById(ROOT_RECEIPTS_FOLDER_ID);
+  var g = findOrCreateSubfolder_(root, GARDEN_PHOTOS_FOLDER_NAME);
+  return findOrCreateSubfolder_(g, monthKey ||
+    Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'yyyy-MM'));
+}
+
+/** מפת כותרת->אינדקס, כדי שסדר העמודות בגיליון יוכל להשתנות בלי לשבור קוד. */
+function gardenCols_(sh) {
+  var last = sh.getLastColumn();
+  var h = sh.getRange(1, 1, 1, last).getValues()[0];
+  var m = {};
+  for (var i = 0; i < h.length; i++) m[String(h[i]).trim()] = i;
+  return m;
+}
+
+/** המזהה הפנוי הבא בטאב (מספר רץ, לא תלוי במספר השורות — כך שמחיקת שורה
+ *  ידנית לא תגרום לשני פריטים לקבל אותו מספר). */
+function nextGardenId_(sh, colName) {
+  var c = gardenCols_(sh)[colName || 'מזהה'];
+  var n = Math.max(sh.getLastRow() - 1, 0);
+  if (!n) return 1;
+  var vals = sh.getRange(2, c + 1, n, 1).getValues();
+  var max = 0;
+  for (var i = 0; i < vals.length; i++) {
+    var v = parseInt(String(vals[i][0]).replace(/\D/g, ''), 10);
+    if (!isNaN(v) && v > max) max = v;
+  }
+  return max + 1;
+}
+
+/** רשימות האזורים והקטגוריות מטאב ההגדרות — מקור אמת יחיד. */
+function gardenLists_(ss) {
+  var sh = ss.getSheetByName(GARDEN_SETTINGS_SHEET);
+  var out = { areas: [], categories: [] };
+  if (!sh || sh.getLastRow() < 2) return out;
+  var v = sh.getDataRange().getValues();
+  for (var r = 1; r < v.length; r++) {
+    var kind = String(v[r][0]).trim(), val = String(v[r][3]).trim(),
+        active = String(v[r][4]).trim();
+    if (!val || active === 'לא') continue;
+    if (kind === 'אזור') out.areas.push(val);
+    else if (kind === 'קטגוריה') out.categories.push(val);
+  }
+  return out;
+}
+
+/** שורה ליומן. היסטוריה שאינה משתכתבת — רק הוספה, לעולם לא עדכון. */
+function gardenLog_(ss, taskId, kind, field, from, to, who, note) {
+  try {
+    var sh = ss.getSheetByName(GARDEN_LOG_SHEET);
+    if (!sh) return;
+    sh.appendRow([new Date(), taskId, kind, field || '', from || '', to || '',
+                  who || '', note || '']);
+  } catch (e) { /* יומן לא מפיל פעולה */ }
+}
+
+/* ---------- קטגוריות ואזורים למסך הדיווח (doGet) ---------- */
+function handleGardenMeta_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var lists = gardenLists_(ss);
+    var settings = getEmailSettings_(ss);
+    return json_({
+      ok: true,
+      categories: lists.categories,
+      areas: lists.areas,
+      photoMax: parseInt(emailRule_(settings, 'RULE_GARDEN_PHOTO_MAX', 8), 10) || 8,
+      feedbackDays: parseInt(emailRule_(settings, 'RULE_GARDEN_FEEDBACK_DAYS', 7), 10) || 7
+    });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+/* ---------- הדיווחים של הקורא (doGet) ---------- */
+function handleMyGardenReports_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var famId = String(gate.perm.familyId || '');
+    var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+    var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    if (!rsh || rsh.getLastRow() < 2) return json_({ ok: true, rows: [] });
+
+    var rc = gardenCols_(rsh);
+    var rows = rsh.getDataRange().getValues();
+
+    // מפת משימות לפי מזהה — כדי לא לסרוק את הטאב מחדש לכל דיווח
+    var tasks = {};
+    if (tsh && tsh.getLastRow() > 1) {
+      var tc = gardenCols_(tsh), tv = tsh.getDataRange().getValues();
+      for (var i = 1; i < tv.length; i++) {
+        var tid = String(tv[i][tc['מזהה']]).trim();
+        if (tid) tasks[tid] = {
+          stage:   String(tv[i][tc['שלב']] || '').trim(),
+          flag:    String(tv[i][tc['דגל']] || '').trim(),
+          closure: String(tv[i][tc['סגירה']] || '').trim()
+        };
+      }
+    }
+
+    var settings = getEmailSettings_(ss);
+    var fbDays = parseInt(emailRule_(settings, 'RULE_GARDEN_FEEDBACK_DAYS', 7), 10) || 7;
+    var now = new Date().getTime();
+    var out = [];
+    for (var r = 1; r < rows.length; r++) {
+      if (String(rows[r][rc['מזהה משפחה']]).trim() !== famId) continue;
+      var taskId = String(rows[r][rc['מזהה משימה']] || '').trim();
+      var t = tasks[taskId] || { stage: 'התקבל', flag: '', closure: '' };
+      var closedAt = rows[r][rc['תאריך משוב']];
+      var d = rows[r][rc['תאריך דיווח']];
+      var already = String(rows[r][rc['משוב']] || '').trim();
+      // חלון המשוב נמדד מרגע שהמשימה הגיעה ל"הושלם". אין לנו חותמת סיום
+      // בטאב הדיווחים, ולכן נשענים על תאריך הדיווח כגבול עליון בטוח —
+      // אם המשימה לא הושלמה, ממילא אין משוב.
+      var canFb = (t.stage === 'הושלם') && !already;
+      out.push({
+        id: String(rows[r][rc['מזהה']]),
+        date: d instanceof Date ? d.toISOString() : String(d || ''),
+        category: String(rows[r][rc['קטגוריה']] || ''),
+        area: String(rows[r][rc['אזור']] || ''),
+        x: parseFloat(rows[r][rc['מיקום X']]) || null,
+        y: parseFloat(rows[r][rc['מיקום Y']]) || null,
+        place: String(rows[r][rc['מיקום מילולי']] || ''),
+        desc: String(rows[r][rc['תיאור']] || ''),
+        photos: String(rows[r][rc['תמונות']] || '').split(',')
+                  .map(function (x) { return x.trim(); }).filter(Boolean),
+        stage: t.stage, flag: t.flag, closure: t.closure,
+        mergedInto: String(rows[r][rc['אוחד לדיווח']] || ''),
+        feedback: already,
+        canFeedback: canFb
+      });
+    }
+    out.reverse();   // החדש למעלה
+    return json_({ ok: true, rows: out });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+/* ---------- הגשת דיווח (doPost) ---------- */
+function submitGardenReport_(ss, body) {
+  var perm = body._perm || {};
+  var lists = gardenLists_(ss);
+  var cat = String(body.category || '').trim();
+  // רשימה סגורה, ובכוונה: נושא שאינו גינון לא אמור להיפתח כאן בכלל.
+  if (lists.categories.length && lists.categories.indexOf(cat) === -1) {
+    return { ok: false, error: 'קטגוריה לא מוכרת' };
+  }
+  var desc = String(body.desc || '').trim();
+  if (!cat) return { ok: false, error: 'לא נבחרה קטגוריה' };
+
+  var x = (body.x === null || body.x === undefined) ? '' : Number(body.x);
+  var y = (body.y === null || body.y === undefined) ? '' : Number(body.y);
+  // קואורדינטות מנורמלות 0–1 בלבד. ר' ההערה ליד GARDEN_TASK_HEADERS.
+  if (x !== '' && (x < 0 || x > 1)) return { ok: false, error: 'מיקום לא תקין' };
+  if (y !== '' && (y < 0 || y > 1)) return { ok: false, error: 'מיקום לא תקין' };
+  if (x === '' && !String(body.place || '').trim()) {
+    return { ok: false, error: 'צריך לסמן מיקום על המפה או לכתוב אותו במילים' };
+  }
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGardenSheets_(ss);
+    var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+    var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    var rc = gardenCols_(rsh), tc = gardenCols_(tsh);
+
+    var settings = getEmailSettings_(ss);
+    var photoMax = parseInt(emailRule_(settings, 'RULE_GARDEN_PHOTO_MAX', 8), 10) || 8;
+
+    // תמונות — לתיקייה פרטית, כמו קבלות. שומרים מזהי קובץ ולא קישורים.
+    var ids = [];
+    var photos = (body.photos || []).slice(0, photoMax);
+    for (var i = 0; i < photos.length; i++) {
+      try {
+        var blob = Utilities.newBlob(
+          Utilities.base64Decode(photos[i].data),
+          photos[i].mime || 'image/jpeg',
+          photos[i].name || ('garden-' + Date.now() + '-' + i + '.jpg'));
+        ids.push(getGardenPhotosFolder_().createFile(blob).getId());
+      } catch (e) { /* תמונה שנכשלה לא מפילה את הדיווח */ }
+    }
+
+    var year = readSettings_(ss)['שנה נוכחית'] || '';
+    var taskId = nextGardenId_(tsh);
+    var repId  = nextGardenId_(rsh);
+    var name = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email;
+    var title = cat + (body.place ? ' — ' + String(body.place).trim() : '');
+
+    // 1. המשימה — מה שהצוות מטפל בו
+    var trow = new Array(tsh.getLastColumn()).fill('');
+    trow[tc['מזהה']] = taskId;
+    trow[tc['סוג']] = 'תקלה';
+    trow[tc['כותרת']] = desc ? desc.substring(0, 120) : title;
+    trow[tc['קטגוריה']] = cat;
+    trow[tc['אזור']] = String(body.area || '');
+    trow[tc['מיקום X']] = x; trow[tc['מיקום Y']] = y;
+    trow[tc['שלב']] = 'התקבל';
+    trow[tc['עודכן בתאריך']] = new Date();
+    trow[tc['עודכן על ידי']] = name;
+    trow[tc['שנת תקציב']] = year;
+    tsh.appendRow(trow);
+
+    // 2. הדיווח — מה שהתושב אמר
+    var rrow = new Array(rsh.getLastColumn()).fill('');
+    rrow[rc['מזהה']] = repId;
+    rrow[rc['תאריך דיווח']] = new Date();
+    rrow[rc['מזהה משפחה']] = perm.familyId || '';
+    rrow[rc['שם מדווח']] = name;
+    rrow[rc['טלפון']] = String(body.phone || '');
+    rrow[rc['קטגוריה']] = cat;
+    rrow[rc['אזור']] = String(body.area || '');
+    rrow[rc['מיקום X']] = x; rrow[rc['מיקום Y']] = y;
+    rrow[rc['מיקום מילולי']] = String(body.place || '');
+    rrow[rc['תיאור']] = desc;
+    rrow[rc['תמונות']] = ids.join(',');
+    rrow[rc['מזהה משימה']] = taskId;
+    rrow[rc['שנת תקציב']] = year;
+    rsh.appendRow(rrow);
+
+    gardenLog_(ss, taskId, 'נפתח', 'שלב', '', 'התקבל', name, 'דיווח תושב #' + repId);
+
+    var place = String(body.place || body.area || '').trim() || 'השיכון';
+    try {
+      sendResidentTemplate_(ss, 'GARDEN_REPORT_RECEIVED',
+        emailsForFamilyId_(ss, perm.familyId),
+        { 'שם': perm.firstName || name, 'מזהה': repId, 'קטגוריה': cat, 'מיקום': place });
+      notifyAdmins_(ss, PERM_GARDEN, 'ADMIN_NEW_GARDEN_REPORT',
+        { 'שם': name, 'מזהה': repId, 'קטגוריה': cat, 'מיקום': place });
+    } catch (e) { /* כשל מייל לא מבטל דיווח שכבר נשמר */ }
+
+    return { ok: true, id: repId, taskId: taskId, photos: ids };
+  } finally { lock.releaseLock(); }
+}
+
+/* ---------- משוב אחרי סגירה (doPost) ---------- */
+function gardenFeedback_(ss, body) {
+  var perm = body._perm || {};
+  var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+  if (!rsh) return { ok: false, error: 'אין טאב דיווחים' };
+  var rc = gardenCols_(rsh);
+  var v = rsh.getDataRange().getValues();
+  var famId = String(perm.familyId || '');
+
+  for (var r = 1; r < v.length; r++) {
+    if (String(v[r][rc['מזהה']]) !== String(body.id)) continue;
+    // רק על הדיווח שלך. בדיקה בשרת, לא בלקוח.
+    if (String(v[r][rc['מזהה משפחה']]).trim() !== famId) {
+      return { ok: false, error: 'הדיווח אינו שלך' };
+    }
+    if (String(v[r][rc['משוב']] || '').trim()) {
+      return { ok: false, error: 'כבר נתת משוב על הדיווח הזה' };
+    }
+    var positive = !!body.positive;
+    rsh.getRange(r + 1, rc['משוב'] + 1).setValue(positive ? 'חיובי' : 'שלילי');
+    rsh.getRange(r + 1, rc['תאריך משוב'] + 1).setValue(new Date());
+    rsh.getRange(r + 1, rc['הערת משוב'] + 1).setValue(String(body.note || '').substring(0, 500));
+
+    var taskId = String(v[r][rc['מזהה משימה']] || '').trim();
+    var name = ((perm.firstName || '') + ' ' + (perm.family || '')).trim();
+    gardenLog_(ss, taskId, 'משוב', 'משוב', '', positive ? 'חיובי' : 'שלילי', name,
+      String(body.note || ''));
+
+    /* משוב שלילי **לא** פותח את התקלה מחדש אוטומטית — הוא מרים דגל
+       "דורש בדיקה חוזרת" וההחלטה נשארת אנושית. ר' §18.3 באפיון. */
+    if (!positive && taskId) {
+      var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+      if (tsh) {
+        var tc = gardenCols_(tsh), tv = tsh.getDataRange().getValues();
+        for (var i = 1; i < tv.length; i++) {
+          if (String(tv[i][tc['מזהה']]) !== taskId) continue;
+          tsh.getRange(i + 1, tc['דגל'] + 1).setValue('דורש בדיקה חוזרת');
+          break;
+        }
+      }
+      try {
+        notifyAdmins_(ss, PERM_GARDEN, 'ADMIN_GARDEN_NEGATIVE_FEEDBACK', {
+          'שם': name, 'מזהה': body.id,
+          'קטגוריה': String(v[r][rc['קטגוריה']] || ''),
+          'מיקום': String(v[r][rc['מיקום מילולי']] || v[r][rc['אזור']] || ''),
+          'הערה': String(body.note || '(לא נכתבה הערה)')
+        });
+      } catch (e) { /* לא קריטי */ }
+    }
+    return { ok: true };
+  }
+  return { ok: false, error: 'הדיווח לא נמצא' };
+}
+
+/* ---------- הגשת תמונת גינון (doGet) ----------
+ *  אותה תבנית כמו handleReceiptFile_: הקובץ פרטי ב-Drive, והשרת מגיש אותו
+ *  רק אחרי בדיקת הרשאה — המדווח עצמו, או מי שיש לו הרשאת גינון. */
+function handleGardenPhoto_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return ContentService.createTextOutput('אין הרשאה');
+    var id = String(p.fileId || '').trim();
+    if (!id) return ContentService.createTextOutput('חסר מזהה');
+
+    var isGardener = !!gate.perm.isSuper ||
+      (gate.perm.perms || []).indexOf(PERM_GARDEN) !== -1;
+    if (!isGardener) {
+      // לא איש גינון — מותר לו רק תמונה ששייכת לדיווח שלו
+      var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+      var mine = false;
+      if (rsh && rsh.getLastRow() > 1) {
+        var rc = gardenCols_(rsh), v = rsh.getDataRange().getValues();
+        var famId = String(gate.perm.familyId || '');
+        for (var r = 1; r < v.length; r++) {
+          if (String(v[r][rc['מזהה משפחה']]).trim() !== famId) continue;
+          if (String(v[r][rc['תמונות']] || '').indexOf(id) !== -1) { mine = true; break; }
+        }
+      }
+      if (!mine) return ContentService.createTextOutput('אין הרשאה');
+    }
+    var file = DriveApp.getFileById(id);
+    return ContentService
+      .createTextOutput(Utilities.base64Encode(file.getBlob().getBytes()))
+      .setMimeType(ContentService.MimeType.TEXT);
+  } catch (err) { return ContentService.createTextOutput('שגיאה'); }
 }
