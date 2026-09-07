@@ -80,6 +80,7 @@ var ACTION_PERMS = {
   // תושב פעיל ולכן אינן ברשימה הזאת כלל, אלה שייכות לבעלי הרשאת גינון בלבד.
   gardenTask: PERM_GARDEN,
   gardenApproveBatch: PERM_GARDEN,
+  gardenMerge: PERM_GARDEN,
   // ניהול תקציב ותשלומים
   saveTransaction: PERM_BUDGET, deleteTransaction: PERM_BUDGET, saveBudget: PERM_BUDGET,
   setBudgetMeta: PERM_BUDGET, renameCategory: PERM_BUDGET, logBudgetUpdate: PERM_BUDGET,
@@ -588,6 +589,7 @@ function doPost(e) {
       case 'gardenFeedback':      return json_(gardenFeedback_(ss, body));
       case 'gardenTask':          return json_(gardenTaskAction_(ss, body));
       case 'gardenApproveBatch':  return json_(gardenApproveBatch_(ss, body));
+      case 'gardenMerge':         return json_(gardenMerge_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -6973,7 +6975,13 @@ var GARDEN_STAGES = ['התקבל', 'נבדק', 'מתוכנן', 'בטיפול', '
 var GARDEN_FLAGS = ['דורש בדיקה חוזרת', 'הוחזר להשלמה', 'דורש בדיקה בשטח', 'ממתין לאישור', 'נגררה'];
 /* סיבות סגירה — רלוונטיות רק כששלב = "הושלם". "בוצע" היא ברירת המחדל
  * ואינה מוצגת בממשק בכלל: שקט = תקין. */
-var GARDEN_CLOSURES = ['בוצע', 'הועבר לבינוי', 'בוטל', 'לא רלוונטי'];
+/* ⚠️ 'אוחד' נוסף מעבר לארבע הסגירות שבאפיון (2026-09-07). הנימוק: ארבעתן
+ * מתארות *תוצאה של עבודה*, ולמשימה שאוחדה אין תוצאה — היא חדלה להתקיים
+ * כמשימה נפרדת. דחיסה שלה ל'בוטל' הייתה מזהמת את הסטטיסטיקה בהמשך: "בוטל"
+ * היה סופר גם ביטולים אמיתיים וגם איחודים. היא **אינה** נבחרת ידנית — רק
+ * gardenMerge_ כותב אותה, ולכן היא לא מופיעה במסך הסגירה. */
+var GARDEN_CLOSURE_MERGED = 'אוחד';
+var GARDEN_CLOSURES = ['בוצע', 'הועבר לבינוי', 'בוטל', 'לא רלוונטי', GARDEN_CLOSURE_MERGED];
 
 /* מקור המשימה (עמודת "סוג" בטאב המשימות). שלושה ערכים, רשימה סגורה:
  *   שגרה       — נולדה מתבנית בטאב "גינון — שגרה", ולכן יש לה "מזהה תבנית"
@@ -7275,7 +7283,8 @@ function handleMyGardenReports_(p) {
         if (tid) tasks[tid] = {
           stage:   String(tv[i][tc['שלב']] || '').trim(),
           flag:    String(tv[i][tc['דגל']] || '').trim(),
-          closure: String(tv[i][tc['סגירה']] || '').trim()
+          closure: String(tv[i][tc['סגירה']] || '').trim(),
+          approvedAt: tv[i][tc['תאריך אישור']] || ''
         };
       }
     }
@@ -7287,14 +7296,18 @@ function handleMyGardenReports_(p) {
     for (var r = 1; r < rows.length; r++) {
       if (String(rows[r][rc['מזהה משפחה']]).trim() !== famId) continue;
       var taskId = String(rows[r][rc['מזהה משימה']] || '').trim();
-      var t = tasks[taskId] || { stage: 'התקבל', flag: '', closure: '' };
+      var t = tasks[taskId] || { stage: 'התקבל', flag: '', closure: '', approvedAt: '' };
       var closedAt = rows[r][rc['תאריך משוב']];
       var d = rows[r][rc['תאריך דיווח']];
       var already = String(rows[r][rc['משוב']] || '').trim();
-      // חלון המשוב נמדד מרגע שהמשימה הגיעה ל"הושלם". אין לנו חותמת סיום
-      // בטאב הדיווחים, ולכן נשענים על תאריך הדיווח כגבול עליון בטוח —
-      // אם המשימה לא הושלמה, ממילא אין משוב.
-      var canFb = (t.stage === 'הושלם') && !already;
+      /* חלון המשוב (F-11): שבוע מרגע **האישור**, לא מרגע הדיווח. עד 7.9 לא
+         הייתה חותמת אישור בטאב המשימות והחלון לא נאכף בכלל; מאז שנוספה
+         "תאריך אישור" אפשר לחשב אותו נכון. משימה שאושרה לפני יותר משבוע
+         כבר לא פתוחה למשוב — וזו בדיוק ההגבלה שהאפיון ביקש. */
+      var appr = t.approvedAt instanceof Date ? t.approvedAt.getTime() : 0;
+      var inWindow = !appr || (now - appr) <= fbDays * 86400000;
+      var canFb = (t.stage === 'הושלם') && !already && inWindow &&
+                  t.closure !== GARDEN_CLOSURE_MERGED;
       out.push({
         id: String(rows[r][rc['מזהה']]),
         date: d instanceof Date ? d.toISOString() : String(d || ''),
@@ -7593,13 +7606,24 @@ function handleGardenTasks_(p) {
     var week = String(p.week || '').match(/^\d{4}-\d{2}-\d{2}$/) ? p.week : gardenWeekKey_();
 
     var rows = [];
+    // כל המשימות הפתוחות — נחוץ רק לזיהוי כפילויות בתצוגת "לשיבוץ",
+    // כי מועמד לאיחוד יכול להיות משימה שכבר שובצה לשבוע אחר.
+    var all = [];
     for (var r = 1; r < vals.length; r++) {
       if (!gardenCell_(vals[r][c['מזהה']])) continue;
       var o = gardenTaskObj_(vals[r], c);
       if (o.closure) continue;                       // משימה סגורה יורדת מהרשימות
+      /* all נאסף תמיד ובלי תלות ב-scope: מועמד לאיחוד יכול להיות דווקא משימה
+         שכבר שובצה לשבוע — וזה המקרה השכיח, כי הכפילות מגיעה אחרי המקור. */
+      all.push(o);
       if (scope === 'unplanned') { if (!o.week) rows.push(o); }
       else if (scope === 'pending') { if (o.flag === 'ממתין לאישור') rows.push(o); }
       else if (o.week === week) rows.push(o);
+    }
+    /* מועמד לאיחוד מחושב רק לתצוגת "לשיבוץ" ורק למנהל: זה הרגע שבו הוא פוגש
+       דיווח חדש בפעם הראשונה, ולפני ששיבץ עבודה כפולה. ר' gardenDupCandidate_. */
+    if (scope === 'unplanned' && !perm.isExternal) {
+      for (var q = 0; q < rows.length; q++) rows[q].dupOf = gardenDupCandidate_(rows[q], all);
     }
     /* areas/categories מוחזרות בסדר שבו הן מוגדרות בטאב ההגדרות (עמודת "סדר"),
        ולא לפי א"ב. זה הסדר שבו הן נכתבו — צפון לדרום — והוא הסדר שבו אחראי
@@ -7688,6 +7712,125 @@ function gardenCloseRow_(ss, sh, row, c, cur, closure, who) {
   if (closure === 'בוצע') gardenNotifyCompleted_(ss, cur.id);
 }
 
+
+
+/* ---------- איחוד כפילויות (F-05) ----------
+   הסף הוא **מבני ולא סמנטי**: אותה קטגוריה, אותו אזור, בתוך 14 יום. אין כאן
+   שום ניסיון להבין טקסט — שני תושבים מתארים את אותה ממטרה בשתי מילים שונות,
+   ודמיון טקסטואלי היה מפספס אותם או מחבר דברים שונים.
+   ⚠️ **הזיהוי מציע, המנהל מחליט.** אותו עיקרון כמו בדגלים ובגרירות: המערכת
+   מרימה יד, ההכרעה אנושית. איחוד אוטומטי היה מסתיר תקלה שנייה אמיתית. */
+var GARDEN_DUP_DAYS = 14;
+
+/** מועמד לאיחוד עבור משימה נתונה, או null. מחזיר את המשימה **הוותיקה**,
+ *  כי היא זו שנשארת והשנייה מתאחדת לתוכה. */
+function gardenDupCandidate_(o, all) {
+  if (o.kind !== GARDEN_KIND_REPORT) return null;   // רק דיווחי תושבים
+  var mine = gardenDateOf_(o.createdAt);
+  if (!mine) return null;
+  var best = null;
+  for (var i = 0; i < all.length; i++) {
+    var c = all[i];
+    if (String(c.id) === String(o.id)) continue;
+    if (c.closure) continue;
+    if (c.category !== o.category || c.area !== o.area) continue;
+    var his = gardenDateOf_(c.createdAt);
+    if (!his) continue;
+    if (Math.abs(mine - his) > GARDEN_DUP_DAYS * 86400000) continue;
+    if (his > mine) continue;                        // רק ותיקה ממני
+    if (!best || his < gardenDateOf_(best.createdAt)) best = c;
+  }
+  return best ? { id: best.id, title: best.title, week: best.week } : null;
+}
+
+function gardenDateOf_(v) {
+  if (!v) return 0;
+  var d = (v instanceof Date) ? v : new Date(v);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+/* ---------- ביצוע האיחוד (doPost) ----------
+   מה קורה בפועל: הדיווחים שהצביעו על המשימה הנבלעת **מופנים למשימה הבולעת**,
+   ומסומנים ב"אוחד לדיווח". זה מה שגורם למייל "הושלם" להישלח בבוא היום גם
+   להם — בלי שורת קוד נוספת, כי gardenReportsForTask_ פשוט ימצא אותם שם.
+   המשימה הנבלעת נסגרת ב'אוחד' ויורדת מרשימות העבודה. */
+function gardenMerge_(ss, body) {
+  var perm = body._perm || {};
+  if (perm.isExternal) return { ok: false, error: 'איחוד הוא בסמכות מנהל הגינון' };
+  var who = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email || '';
+  var childId = String(body.id || '').trim();
+  var parentId = String(body.into || '').trim();
+  if (!childId || !parentId) return { ok: false, error: 'חסרה משימה לאיחוד' };
+  if (childId === parentId) return { ok: false, error: 'אי אפשר לאחד משימה עם עצמה' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    if (!sh) return { ok: false, error: 'טאב המשימות חסר' };
+    var fc = gardenFindTask_(sh, childId), fp = gardenFindTask_(sh, parentId);
+    if (!fc || !fp) return { ok: false, error: 'אחת המשימות לא נמצאה' };
+    var c = fc.cols;
+    var wide = sh.getLastColumn();
+    var child = gardenTaskObj_(sh.getRange(fc.row, 1, 1, wide).getValues()[0], c);
+    var parent = gardenTaskObj_(sh.getRange(fp.row, 1, 1, wide).getValues()[0], c);
+    if (child.closure) return { ok: false, error: 'המשימה כבר סגורה' };
+    if (parent.closure) return { ok: false, error: 'אי אפשר לאחד לתוך משימה סגורה' };
+
+    // 1. הפניית הדיווחים של הנבלעת אל הבולעת
+    var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+    var moved = [];
+    if (rsh && rsh.getLastRow() > 1) {
+      var rc = gardenCols_(rsh), rv = rsh.getDataRange().getValues();
+      // מזהה הדיווח הראשי — מה שהתושב יראה כ"אוחד עם פנייה מס' X"
+      var parentRepId = '';
+      for (var k = 1; k < rv.length; k++) {
+        if (String(rv[k][rc['מזהה משימה']] || '').trim() === parentId) {
+          parentRepId = String(rv[k][rc['מזהה']] || ''); break;
+        }
+      }
+      for (var r = 1; r < rv.length; r++) {
+        if (String(rv[r][rc['מזהה משימה']] || '').trim() !== childId) continue;
+        rsh.getRange(r + 1, rc['מזהה משימה'] + 1).setValue(parentId);
+        rsh.getRange(r + 1, rc['אוחד לדיווח'] + 1).setValue(parentRepId || parentId);
+        moved.push({
+          id: String(rv[r][rc['מזהה']] || ''),
+          familyId: String(rv[r][rc['מזהה משפחה']] || ''),
+          name: String(rv[r][rc['שם מדווח']] || ''),
+          category: String(rv[r][rc['קטגוריה']] || ''),
+          place: String(rv[r][rc['מיקום מילולי']] || rv[r][rc['אזור']] || ''),
+          parentRep: parentRepId || parentId
+        });
+      }
+    }
+
+    // 2. סגירת המשימה הנבלעת
+    gardenSet_(sh, fc.row, c, 'שלב', 'הושלם');
+    gardenSet_(sh, fc.row, c, 'דגל', '');
+    gardenSet_(sh, fc.row, c, 'סגירה', GARDEN_CLOSURE_MERGED);
+    gardenSet_(sh, fc.row, c, 'עודכן בתאריך', new Date());
+    gardenSet_(sh, fc.row, c, 'עודכן על ידי', who);
+    gardenLog_(ss, childId, 'איחוד', 'סגירה', '', GARDEN_CLOSURE_MERGED, who,
+               'אוחדה לתוך משימה #' + parentId);
+    gardenLog_(ss, parentId, 'איחוד', 'דיווחים', '', String(moved.length), who,
+               'קלטה את משימה #' + childId);
+
+    // 3. מייל לתושבים שדיווחו — זה מה שיאפשר להם להבין מייל סיום עתידי
+    for (var m = 0; m < moved.length; m++) {
+      try {
+        if (!moved[m].familyId) continue;
+        sendResidentTemplate_(ss, 'GARDEN_REPORT_MERGED',
+          emailsForFamilyId_(ss, moved[m].familyId), {
+            'שם': moved[m].name || '',
+            'מזהה אב': moved[m].parentRep,
+            'קטגוריה': moved[m].category,
+            'מיקום': moved[m].place || 'השיכון'
+          });
+      } catch (e) { /* כשל מייל לא מבטל איחוד שנשמר */ }
+    }
+    return { ok: true, moved: moved.length };
+  } finally { lock.releaseLock(); }
+}
 
 /* ---------- אישור מרוכז (doPost) ----------
    החלטה 3 באפיון: **רק משימות שגרה, מאותה תבנית ובאותו שבוע.** תקלה מדיווח

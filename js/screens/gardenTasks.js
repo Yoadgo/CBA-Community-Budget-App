@@ -39,7 +39,8 @@
     undo:  '<path d="M3 8h11a5 5 0 0 1 0 10H8"/><path d="m6.5 4.5-3 3.5 3 3.5"/>',
     pin:   '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/>',
     cal:   '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
-    note:  '<path d="M4 5h16v11l-4 4H4z"/><path d="M20 16h-4v4"/><path d="M8 9h8M8 13h5"/>'
+    note:  '<path d="M4 5h16v11l-4 4H4z"/><path d="M20 16h-4v4"/><path d="M8 9h8M8 13h5"/>',
+    merge: '<path d="M7 4v5a4 4 0 0 0 4 4h6"/><path d="M7 20v-5a4 4 0 0 1 4-4h6"/><path d="m14 9 3 2.5-3 2.5"/>'
   };
   function ico(n, cls) {
     return '<svg class="' + (cls || "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
@@ -356,6 +357,15 @@
             '<div class="gt-t">' + esc(t.title || t.category || "משימה") +
               (where ? '<em>' + ico("pin") + esc(where) + '</em>' : '') + '</div>' +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
+            /* רמז הכפילות מופיע רק ב"לשיבוץ" — הרגע שבו המנהל פוגש דיווח
+               חדש, ולפני ששיבץ עליו עבודה. הוא **הצעה**: הכפתור מאחד,
+               והתעלמות ממנו משאירה את המשימה עצמאית. */
+            (planning && t.dupOf
+              ? '<div class="gt-dup">' + ico("merge") +
+                'נראה כמו כפילות של <b>#' + esc(t.dupOf.id) + '</b> · ' +
+                esc(t.dupOf.title || "") +
+                '<button type="button" data-act="merge">איחוד</button></div>'
+              : '') +
             (done
               ? '<div class="gt-wait">' + ico("clock") +
                 (isManager ? 'ממתין לאישורך' : 'ממתין לאישור הוועד') + '</div>'
@@ -388,6 +398,11 @@
         /* "אשר את כל N" יושב בכותרת הקבוצה ולא בתוך כרטיס, ולכן הוא נבדק
            **לפני** איתור ה-.gt-row — אחרת החיפוש נכשל והלחיצה נבלעת בשקט. */
         if (btn.dataset.act === "batch") return approveBatch(btn.dataset.tpl);
+        if (btn.dataset.act === "merge") {
+          var mArt = btn.closest(".gt-row");
+          if (mArt) askMerge(mArt.dataset.id);
+          return;
+        }
         var art = btn.closest(".gt-row");
         if (!art) return;
         var id = art.dataset.id;
@@ -492,6 +507,28 @@
             load();
           });
         });
+      }
+
+      /* איחוד. הניסוח מדגיש מה קורה לתושב, כי זו התוצאה שקשה לבטל: הוא
+         יקבל בהמשך הודעת סיום על פנייה שאינה שלו, והמייל שנשלח עכשיו הוא
+         מה שיאפשר לו להבין אותה. */
+      function askMerge(id) {
+        var t = byId(id);
+        if (!t || !t.dupOf) return;
+        CBA.ui.confirm(
+          "משימה #" + id + " תיסגר, והדיווח שלה יצורף לפנייה #" + t.dupOf.id + ".\n\n" +
+          "המדווח יקבל מייל שמסביר את האיחוד, ובהמשך גם את הודעת הסיום.", {
+            title: "איחוד עם פנייה #" + t.dupOf.id, okText: "אחד"
+          }).then(function (yes) {
+            if (!yes || busy) return;
+            busy = true;
+            CBA.data.gardenMerge(id, t.dupOf.id, function (res) {
+              busy = false;
+              if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "האיחוד לא הצליח");
+              CBA.ui.toast("אוחד עם #" + t.dupOf.id);
+              load();
+            });
+          });
       }
 
       function openMenu(id) {

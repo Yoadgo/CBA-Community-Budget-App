@@ -1297,3 +1297,26 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
    ימשיך בלי מדרגה. הקצוות מצטרפים לאותו איחוד אספלט של הכבישים. */
 .m2-casef.is-path { fill: var(--m2-path-edge); stroke: var(--m2-path-edge); }
 .m2-fillf.is-path { fill: var(--m2-path); }
+
+/* ==== שלוש דרגות פירוט (2026-09-07) =======================================
+   0 — רחוק: סמלילים ומספרי בתים בלבד. 1 — נוספים שמות מרחבים ושלטי רחוב.
+   2 — נוסף שם משפחה. הכלל: טקסט במפה הוא רמז, לא כותרת. */
+
+/* אייקון הבית ירד — בבית של 12 פיקסלים על מסך טלפון הוא גזל בדיוק את המקום
+   שהמספר היה צריך. בלעדיו המספר גדול פי שניים בפועל. */
+.mh-num__ico { display: none; }
+.mh-num { font-size: 13px; font-weight: 600; color: #5F5C55; letter-spacing: -.01em; }
+
+/* דרגה 1+ — המספר עובר לפינה בעדינות, השם במרכז */
+.mh-corner { font-size: 8.5px; font-weight: 600; color: #8C8880; }
+.mh-fam { font-size: 10px; font-weight: 600; color: #414B57; }
+
+/* שם מרחב — קטן, שקט, זכוכית פחות אטומה */
+.map-amenity__label {
+  font-size: 10px; font-weight: 600; color: #6E6A5F; padding: 2px 7px;
+  background: rgba(255,255,255,.62); border-color: rgba(255,255,255,.5);
+  box-shadow: 0 1px 3px rgba(90,70,45,.07);
+}
+/* שלט רחוב — אותה שפה, גודל קבוע על המסך (הטרנספורם נקבע ב-resident.js) */
+.m2-stq rect { fill: rgba(251,250,247,.92); stroke: rgba(216,210,194,.9); }
+.m2-stq text { font-size: 10px; font-weight: 600; fill: #6E6A5F; }

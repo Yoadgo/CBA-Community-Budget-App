@@ -2122,6 +2122,7 @@ CBA.screens = CBA.screens || {};
               if (ang > 90 || ang < -90) ang += 180;
               var nm = o.l || '', wch = nm.length * 7.2 + 20;
               if (nm) stre += E('g', { 'class': 'm2-stq',
+                  'data-x': mid[0].toFixed(1), 'data-y': mid[1].toFixed(1), 'data-a': ang.toFixed(1),
                   transform: 'translate(' + mid[0].toFixed(1) + ' ' + mid[1].toFixed(1) + ') rotate(' + ang.toFixed(1) + ')' },
                 E('rect', { x: (-wch / 2).toFixed(1), y: -9.5, width: wch.toFixed(1), height: 19, rx: 9.5 }) +
                 E('text', { x: 0, y: 1 }, CBA.esc(nm)));
@@ -2239,22 +2240,38 @@ CBA.screens = CBA.screens || {};
                    a: +c.dataset.a || 0, x: parseFloat(c.style.left), y: parseFloat(c.style.top) };
         }).sort(function (a, b) { return b.a - a.a; });
       }
-      function layoutPoi() {
+      /* דרגות הפירוט (2026-09-07, אחרי בדיקה על מכשיר):
+         0 — רחוק: סמלילים ומספרי בתים עדינים בלבד.
+         1 — בינוני: נוספים שמות מרחבים ושלטי רחוב.
+         2 — קרוב: נוסף שם משפחה וחיווי ילדים.
+         טקסט במפה הוא רמז, לא כותרת — ולכן הכל קטן ושקט יותר מקודם. */
+      function layoutStreets(tier) {
+        var inv = 1 / scale;
+        [].forEach.call(svg2().querySelectorAll('.m2-stq'), function (g) {
+          g.style.display = tier >= 1 ? '' : 'none';
+          g.setAttribute('transform', 'translate(' + g.dataset.x + ' ' + g.dataset.y +
+            ') rotate(' + g.dataset.a + ') scale(' + inv.toFixed(4) + ')');
+        });
+      }
+      var _svg = null;
+      function svg2() { return _svg || (_svg = worldEl.querySelector('.map-base')); }
+      function layoutPoi(tier) {
         if (!POI.length) return;
         var inv = 1 / scale, boxes = [];
         worldEl.style.setProperty('--inv', inv.toFixed(4));
         POI.forEach(function (o) {
           var vis = Math.sqrt(o.a) * scale > 30;       /* המבנה גדול מספיק על המסך */
+          var lvis = vis && tier >= 1 && !!o.l;       /* שם מרחב רק מדרגה 1, ורק אם יש שם */
           o.c.style.display = vis ? '' : 'none';
-          if (o.l) o.l.style.display = vis ? '' : 'none';
+          if (o.l) o.l.style.display = lvis ? '' : 'none';
           if (!vis) return;
           var cw = (o.c.offsetWidth || 26) * inv, ch = (o.c.offsetHeight || 26) * inv;
-          var lw = o.l ? (o.l.offsetWidth || 0) * inv : 0, lh = o.l ? (o.l.offsetHeight || 0) * inv : 0;
+          var lw = lvis ? (o.l.offsetWidth || 0) * inv : 0, lh = lvis ? (o.l.offsetHeight || 0) * inv : 0;
           var step = ch + 5 * inv, tries = [0, -step, step, -2 * step, 2 * step, -3 * step], i2;
           for (i2 = 0; i2 < tries.length; i2++) {
             var dy = tries[i2];
             var b1 = { x: o.x - cw / 2, y: o.y + dy - ch / 2, w: cw, h: ch };
-            var b2 = o.l ? { x: o.x - lw / 2, y: o.y + dy + ch / 2 + 2 * inv, w: lw, h: lh } : null;
+            var b2 = lvis ? { x: o.x - lw / 2, y: o.y + dy + ch / 2 + 2 * inv, w: lw, h: lh } : null;
             var hit = boxes.some(function (p2) {
               function ov(b) { return b && !(b.x + b.w < p2.x || p2.x + p2.w < b.x ||
                                              b.y + b.h < p2.y || p2.y + p2.h < b.y); }
@@ -2262,7 +2279,7 @@ CBA.screens = CBA.screens || {};
             });
             if (!hit || i2 === tries.length - 1) {
               o.c.style.top = (o.y + dy) + 'px';
-              if (o.l) { o.l.style.top = (o.y + dy + ch / 2 + 2 * inv) + 'px'; boxes.push(b2); }
+              if (lvis) { o.l.style.top = (o.y + dy + ch / 2 + 2 * inv) + 'px'; boxes.push(b2); }
               boxes.push(b1);
               return;
             }
@@ -2351,7 +2368,10 @@ CBA.screens = CBA.screens || {};
       var scale = 1, tx = 0, ty = 0, fitScaleVal = 1;
       var MAP_T1 = 1.5, MAP_T2 = 2.6;
       function minScale() { return fitScaleVal; }
-      function maxScale() { return fitScaleVal * 4.5; }
+      /* רצפה מוחלטת לזום המרבי: במסך צר fitScale קטן, ו-4.5 ממנו הגיע לבית של
+         51 פיקסלים בלבד — כלומר במובייל אי-אפשר היה בכלל להגיע לדרגת הפירוט
+         שמראה שם משפחה. */
+      function maxScale() { return Math.max(fitScaleVal * 4.5, 2.6); }
       function computeFit() {
         var vw = viewport.clientWidth, vh = viewport.clientHeight;
         fitScaleVal = Math.min(vw / MAP_WORLD_W, vh / MAP_WORLD_H) * 0.94;
@@ -2381,14 +2401,17 @@ CBA.screens = CBA.screens || {};
       function apply() {
         clampPan();
         worldEl.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
-        var tw = MED_TILE * scale;                 /* רוחב בית בפיקסלים על המסך */
-        var tier = tw > 104 ? 2 : (tw > 74 ? 1 : 0);
+        /* הספים נמדדים ברוחב הבית בפיקסלים על המסך: 46 = יש מקום לשם משפחה
+           קצר, 64 = יש מקום גם לחיווי הילדים. (לא יחס זום — יחס נשבר ברגע
+           שהבתים קיבלו מידות אמיתיות.) */
+        var tw = MED_TILE * scale;
+        var tier = tw > 64 ? 2 : (tw > 46 ? 1 : 0);
         if (tier !== curTier) {
           curTier = tier;
           worldEl.classList.toggle("tier1", tier === 1);
           worldEl.classList.toggle("tier2", tier === 2);
         }
-        if (Math.abs(scale - POI_LAID) > 0.001) { POI_LAID = scale; layoutPoi(); }
+        if (Math.abs(scale - POI_LAID) > 0.001) { POI_LAID = scale; layoutPoi(tier); layoutStreets(tier); }
         if (openTile) positionPopup(openTile);
       }
       function fitToScreen(animated) {

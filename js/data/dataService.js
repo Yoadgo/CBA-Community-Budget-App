@@ -1377,6 +1377,10 @@ CBA.data = (function () {
       if (extra && extra.closure !== undefined) payload.closure = extra.closure;
       CBA.sheets.postRead("gardenTask", payload, cb);
     },
+    /* איחוד כפילות: משימה id נבלעת לתוך משימה into. */
+    gardenMerge: function (id, into, cb) {
+      CBA.sheets.postRead("gardenMerge", { id: id, into: into }, cb);
+    },
     /* אישור מרוכז — רק שגרה מאותה תבנית ואותו שבוע. השרת אוכף (ר' החלטה 3). */
     gardenApproveBatch: function (ids, cb) {
       CBA.sheets.postRead("gardenApproveBatch", { ids: ids }, cb);
