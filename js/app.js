@@ -182,10 +182,15 @@
       // (committeeAdmin, מנהל-על בלבד) — כאן, גם מנהל-על, רואה תצוגה בלבד.
       tabs: [
         ["resHome", "בית"],
-        // (2026-09-07) תוויות קצרות: עם שישה יעדים, אורך הטקסט הוא מה שקובע
-        // את המרווח הנראה בין האייקונים — לא הריפוד. "הבקשות שלי" היה הארוך
-        // ביותר וגרם לקצב לא אחיד.
-        ["resRequests", "בקשות"], ["resSubmit", "הגשת קבלה"],
+        // "האזור שלי" (2026-09-07) — "הבקשות שלי" ו"הגשת קבלה" אוחדו לקבוצה אחת,
+        // באותה תבנית של "מתקנים"/"השיכון". הרקע: כשנולד "מראה שיכון" השורה
+        // התנפחה לשישה יעדים, ואז אורך התווית — לא הריפוד — הוא שקבע את המרווח
+        // הנראה בין האייקונים (13px ל"בית" מול 49px ל"מראה שיכון"), כך שהקצב
+        // נראה קופצני ושום כוונון ריפוד לא יכול היה לתקן זאת. שתי התוויות
+        // האלה גם עוסקות באותו דבר — הבקשות שלי מול הוועד — ולכן האיחוד מחזיר
+        // את השורה לחמישה יעדים ומקצר את הפער בין התוויות. הגשת קבלה נשארת
+        // בהישג יד ישיר גם מכרטיס הפעולות המהיר בעמוד הבית (ר' home.js).
+        { group: "myarea", label: "האזור שלי", items: [["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"]] },
         // "מתקנים" (2026-08-19) — שריון המועדון ומכון הכושר אוחדו לקבוצה אחת,
         // באותה תבנית של "השיכון". נעשה רק עכשיו, בשלב שבו נולד הפריט השני:
         // קבוצה מתקפלת עם פריט יחיד היא רעש ויזואלי בלי תועלת.
@@ -242,6 +247,7 @@
     // המתקנים הפיזיים בשיכון כמכלול ולא מסך ספציפי.
     gymAdmin:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/></svg>',
     resGym:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/></svg>',
+    myarea:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/></svg>',
     mitkanim:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M4 21V10l8-6 8 6v11"/><path d="M9 21v-5h6v5"/></svg>',
     residents:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16.5 6.2a3 3 0 0 1 0 5.6"/><path d="M17.5 14.4a5 5 0 0 1 3 4.6"/></svg>',
     // ניהול "ועד השיכון" באזור הניהול — אותו אייקון בדיוק כמו resCommittee

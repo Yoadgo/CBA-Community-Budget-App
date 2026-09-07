@@ -23,7 +23,7 @@
    ⚠️ בכל דיפלוי שמשנה JS/CSS: לעדכן את VERSION כאן *ואת* כל ה-?v=
       ב-index.html לאותו ערך בדיוק. שני המספרים חייבים להיות זהים.  */
 
-var VERSION = "20260907c";
+var VERSION = "20260907e";
 var CACHE   = "cba-app";
 
 /* הערה על השיטה: בכוונה *אין* כאן רשימת קבצים לשמירה מראש (precache).
@@ -81,7 +81,14 @@ self.addEventListener("fetch", function (e) {
   if (isAppShellDoc(req, url)) {
     e.respondWith((async function () {
       try {
-        var fresh = await fetch(req);
+        /* (2026-09-07) cache:"reload" — בלעדיו fetch(req) עובר קודם דרך מטמון
+           ה-HTTP של הדפדפן, ש-GitHub Pages מורה לו להחזיק את index.html
+           למשך 10 דקות. התוצאה: גם "רשת קודם" החזיר מסמך ישן, ומספרי ה-?v=
+           החדשים לא הגיעו — כלומר עדכון שכבר עלה לאוויר לא נראה עד שהמטמון
+           פג. עכשיו הבקשה מדלגת על מטמון הדפדפן וניגשת לשרת בפועל. */
+        var fresh = await fetch(new Request(req.url, {
+          cache: "reload", credentials: "same-origin"
+        }));
         var cache = await caches.open(CACHE);
         cache.put(req, fresh.clone());
         return fresh;

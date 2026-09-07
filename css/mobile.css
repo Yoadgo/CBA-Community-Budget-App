@@ -117,6 +117,14 @@
   .app-nav--bottom > .app-nav__group { flex: 1 1 0; min-width: 0; }
   .app-nav--bottom > .app-nav__group { display: flex; background: none; }
   .app-nav--bottom > .app-nav__group > .app-nav__tab--group { flex: 1 1 0; min-width: 0; }
+  /* (2026-09-07) רוחב שווה *באמת* לכל חמשת היעדים. flex-basis:0 יחד עם
+     box-sizing:border-box נותן לכפתור בסיס בגודל הריפוד שלו (2px+2px), בעוד
+     שלעטיפת-קבוצה אין ריפוד ולכן הבסיס שלה 0 — כך יצא שטאב רגיל רחב ב-4px
+     מכותרת-קבוצה (73.2 מול 69.2), ומרווח האייקונים "קפץ" בין 71.2 ל-69.2.
+     מעבירים את שני ה-px האופקיים מכפתור-הקבוצה אל העטיפה: אותו ריפוד פנימי
+     בדיוק, אבל עכשיו לכל החמישה אותו בסיס — 70.8px לכל יעד, מרווח אחיד. */
+  .app-nav--bottom > .app-nav__group { padding-inline: 2px; }
+  .app-nav--bottom > .app-nav__group > .app-nav__tab--group { padding-inline: 0; }
   /* במובייל הקבוצה נפתחת כגיליון תחתון (ר' openNavSheet ב-app.js), אז
      ההתרחבות-בשורה של הדסקטופ מנוטרלת — היא זו שדחפה את שאר הכפתורים החוצה. */
   .app-nav--bottom .app-nav__group-items { display: none; }
@@ -139,7 +147,7 @@
   .app-nav--bottom .app-nav__tab--group.has-active {
     color: #fff; background: var(--action); font-weight: 600;
   }
-  .app-nav--bottom .app-nav__ico svg { width: 22px; height: 22px; }
+  .app-nav--bottom .app-nav__ico svg { width: 25px; height: 25px; }
   /* התגית עוברת לפינה כדי לא לתפוס שורה שלישית בתוך הכפתור */
   .app-nav--bottom .nav-badge { position: absolute; top: 3px; inset-inline-end: 6px; margin: 0; }
 
