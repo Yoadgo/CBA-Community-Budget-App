@@ -183,7 +183,7 @@ CBA.screens = CBA.screens || {};
     // מועד החזר צפוי (סעיף 7, 2026-08-06) — רק לבקשות החזר שעדיין ממתינות (לא
     // שולם/נדחה כבר, שם המועד הצפוי כבר לא רלוונטי). ר' CBA.data.expectedRefundDate.
     var pending = t.status !== "paid" && t.status !== "rejected";
-    var coveredBySummary = refundSummaryShown && t.status === "ready";
+    var coveredBySummary = refundSummaryShown;
     var refundLabel = (pending && !coveredBySummary) ? CBA.data.expectedRefundDateLabel(t) : "";
     return (
       '<div class="card rq">' +
@@ -273,61 +273,80 @@ CBA.screens = CBA.screens || {};
     if (btn) btn.addEventListener("click", function () { CBA.navigate("resGym"); });
   }
 
-  /* ==== סיכום ההחזרים שבדרך (2026-09-07) ====
-     למה זה קיים: התושב מקבל בחשבון הבנק **העברה אחת מרוכזת** ולא העברה לכל
-     קבלה. בלי הכרטיס הזה הוא צריך לשבת ולחבר בעצמו את הקבלות כדי להבין מה
-     ההפקדה שראה. הכרטיס מראה את הסכום שיגיע, מתי, ומה מרכיב אותו.
+  /* ==== חוצץ חודשי (2026-09-07) ====
+     ההנחיה של יועד: **חוצץ שחוזר לכל חודש** ואומר כמה היה אמור להיכנס באותו
+     חודש. התושב מקבל בבנק **העברה אחת מרוכזת לחודש**, אז החודש הוא בדיוק
+     היחידה שהוא מצליב מולה — גם לחודש הקרוב וגם אחורה, מול דפי הבנק.
 
-     נספרות **רק** בקשות בסטטוס ready ("הועבר להנה"ח") — כסף שכבר בדרך.
-     בקשות שעדיין בבדיקה מוזכרות בשורה נפרדת ובמפורש אינן נכללות בסכום,
-     כדי שלא נבטיח כסף שטרם אושר.
+     הכרטיסים שמתחת לכל חוצץ **הם** הפירוט, ולכן אין כאן כפתור "הצג פירוט":
+     גרסה קודמת הייתה בלוק סיכום יחיד בראש הרשימה עם אקורדיון — זו הייתה
+     סטייה מההנחיה והוחלפה.
 
-     המועד כאן הוא עדיין **הערכה מחושבת** (ר' CBA.data.expectedRefundDate),
-     ולכן הניסוח "צפוי". כשמודול השוואת החיובים ייכנס ויגיע תאריך אמיתי
-     מהבסיס — אותו כרטיס יאמר "ייכנס ב-" בלי "צפוי", וההבדל בין הערכה
-     לעובדה יישאר גלוי לתושב במקום להיטשטש.
+     בסכום החוצץ נספרות רק בקשות שאושרו או שולמו. בקשות שעדיין בבדיקה
+     מוצגות בשורה נפרדת ובמפורש **אינן** בסכום, כדי לא להבטיח כסף שטרם אושר. */
+  function creditMonthOf(t) {
+    var iso = CBA.data.expectedRefundDate(t);
+    return iso ? iso.slice(0, 7) : "";
+  }
 
-     קיבוץ לפי מועד ולא סכום אחד גדול: אם בקשה פספסה סבב, המועד שלה שונה,
-     ואיחוד היה מציג לתושב תאריך שגוי לחלק מהכסף. */
-  function refundSummaryHTML(refunds) {
-    var groups = {}, order = [], inReview = 0;
+  function groupByCreditMonth(refunds) {
+    var groups = {}, order = [], undated = [];
     refunds.forEach(function (t) {
-      if (t.status === "ready") {
-        var iso = CBA.data.expectedRefundDate(t);
-        if (!iso) return;
-        if (!groups[iso]) { groups[iso] = []; order.push(iso); }
-        groups[iso].push(t);
-      } else if (t.status === "submitted" || t.status === "review") {
-        inReview++;
-      }
+      var m = (t.status === "rejected") ? "" : creditMonthOf(t);
+      if (!m) { undated.push(t); return; }
+      if (!groups[m]) { groups[m] = []; order.push(m); }
+      groups[m].push(t);
     });
-    if (!order.length) return "";
-    order.sort();
-    return order.map(function (iso, gi) {
-      var list = groups[iso];
-      var total = list.reduce(function (sum, t) { return sum + (Number(t.amount) || 0); }, 0);
-      var rows = list.map(function (t) {
-        return '<div class="rq-sum__row">' +
-                 '<span class="rq-sum__row-n">' + CBA.esc(t.supplier || t.buyer || "בקשה") + '</span>' +
-                 '<span class="rq-sum__row-a">' + CBA.formatILS(t.amount || 0) + '</span>' +
-               '</div>';
-      }).join("");
-      return '<div class="rq-sum">' +
-          '<div class="rq-sum__label">צפוי לתשלום</div>' +
-          '<div class="rq-sum__amt">' + CBA.formatILS(total) + '</div>' +
-          '<div class="rq-sum__when">' + list.length + (list.length === 1 ? " החזר" : " החזרים") +
-            " · אמור להיכנס ב־" + CBA.esc(CBA.data.hebrewDate(iso)) + ", בהעברה אחת</div>" +
-          ((gi === 0 && inReview)
-            ? '<div class="rq-sum__note">ועוד ' + inReview +
-              (inReview === 1 ? " בקשה שעדיין בבדיקה" : " בקשות שעדיין בבדיקה") +
-              " — לא נכללות בסכום.</div>"
-            : "") +
-          '<button type="button" class="rq-sum__toggle" aria-expanded="false">' +
-            '<span class="rq-sum__toggle-t">הצג פירוט</span>' + chevDownIcon +
-          '</button>' +
-          '<div class="rq-sum__detail">' + rows + '</div>' +
-        '</div>';
+    order.sort().reverse();   // החודש הקרוב ראשון, ואחורה בזמן
+    return { order: order, groups: groups, undated: undated };
+  }
+
+  function monthDividerHTML(monthIso, items) {
+    var settled = 0, pending = 0, nSettled = 0, nPending = 0, allPaid = true;
+    items.forEach(function (t) {
+      var a = Number(t.amount) || 0;
+      if (t.status === "ready" || t.status === "paid") {
+        settled += a; nSettled++;
+        if (t.status !== "paid") allPaid = false;
+      } else { pending += a; nPending++; }
+    });
+    // אין מה להבטיח כשאין ולו בקשה אחת מאושרת — מציגים את הממתין, מסומן.
+    var headAmount = nSettled ? settled : pending;
+    var muted = !nSettled;
+    // הכותרת כבר נוקבת בחודש, אז השורה הזו לא חוזרת עליו
+    var when = nSettled
+      ? ((allPaid ? "נכנס ב־1 בחודש" : "אמור להיכנס ב־1 בחודש") +
+         ", בהעברה אחת · " + nSettled + (nSettled === 1 ? " החזר" : " החזרים"))
+      : (nPending + (nPending === 1 ? " בקשה עדיין בבדיקה" : " בקשות עדיין בבדיקה"));
+    return '<div class="rq-mo' + (muted ? " rq-mo--muted" : "") + '">' +
+        '<div class="rq-mo__top">' +
+          '<span class="rq-mo__m">' + CBA.esc(CBA.data.hebrewMonth(monthIso)) + '</span>' +
+          '<span class="rq-mo__a">' + CBA.formatILS(headAmount) + '</span>' +
+        '</div>' +
+        '<div class="rq-mo__sub">' + when + '</div>' +
+        ((nSettled && nPending)
+          ? '<div class="rq-mo__note">ועוד ' + CBA.formatILS(pending) +
+            (nPending === 1 ? " בבקשה שעדיין בבדיקה" : " בבקשות שעדיין בבדיקה") +
+            " — לא נכלל בסכום.</div>"
+          : "") +
+      '</div>';
+  }
+
+  /* בונה את כל מקטע ההחזרים: חוצץ חודשי + הכרטיסים שלו, חודש אחרי חודש. */
+  function refundsByMonthHTML(refunds) {
+    if (!refunds.length) return "";
+    var g = groupByCreditMonth(refunds);
+    var html = g.order.map(function (m) {
+      return monthDividerHTML(m, g.groups[m]) +
+             '<div class="rq-list">' + g.groups[m].map(reqCardHTML).join("") + '</div>';
     }).join("");
+    if (g.undated.length) {
+      html += '<div class="rq-mo rq-mo--muted"><div class="rq-mo__top">' +
+                '<span class="rq-mo__m">ללא מועד</span></div>' +
+                '<div class="rq-mo__sub">בקשות שנדחו או שאין להן מועד החזר</div></div>' +
+              '<div class="rq-list">' + g.undated.map(reqCardHTML).join("") + '</div>';
+    }
+    return html;
   }
 
   /* ==== היסטוריה משנים קודמות (2026-09-07) ====
@@ -360,15 +379,6 @@ CBA.screens = CBA.screens || {};
   /* מחבר את שני הכפתורים המתקפלים שנוספו כאן. אותה מוסכמה כמו .svc-acc
      במסך השירותים: מחלקת is-open על המכל, והחץ מסתובב ב-CSS. */
   function bindCollapsibles(container) {
-    Array.prototype.forEach.call(container.querySelectorAll(".rq-sum__toggle"), function (btn) {
-      btn.addEventListener("click", function () {
-        var card = btn.parentNode;
-        var open = card.classList.toggle("is-open");
-        btn.setAttribute("aria-expanded", open ? "true" : "false");
-        var t = btn.querySelector(".rq-sum__toggle-t");
-        if (t) t.textContent = open ? "הסתר פירוט" : "הצג פירוט";
-      });
-    });
     var pastBtn = container.querySelector(".rq-past__toggle");
     if (pastBtn) {
       pastBtn.addEventListener("click", function () {
@@ -414,18 +424,12 @@ CBA.screens = CBA.screens || {};
 
       var listHTML = "";
       if (refunds.length || handled.length) {
-        // הסיכום נבנה *לפני* הכרטיסים, כי הוא מדליק את refundSummaryShown
-        // שהכרטיסים נשענים עליו כדי לא לחזור על אותו תאריך.
-        var sumHTML = refundSummaryHTML(refunds);
-        refundSummaryShown = !!sumHTML;
-        // הסיכום יושב **מעל** כותרת המקטע ולא בתוכו, והוא לא לבוש כ-.card:
-        // הוא אינו פריט ברשימה אלא הסכום שכל הרשימה מסתכמת אליו. ההבדל
-        // מגיע מהמבנה (אין משטח כרטיס, מספר גדול, קו חותך) ולא מצבע —
-        // כך הוא לא מתנגש בכפתור ה-CTA השחור שמעליו (יועד בחר, 7.9.26).
-        listHTML += sumHTML;
+        // החוצץ החודשי מדליק את refundSummaryShown, שהכרטיסים נשענים עליו
+        // כדי לא לחזור על אותו מועד החזר שהחוצץ כבר אמר.
+        refundSummaryShown = refunds.length > 0;
         listHTML += '<div class="rq-section-title">ההחזרים שלנו</div>';
         listHTML += refunds.length
-          ? '<div class="rq-list">' + refunds.map(reqCardHTML).join("") + '</div>'
+          ? refundsByMonthHTML(refunds)
           : '<div class="rs-empty rs-empty--compact"><p>אין החזרים כרגע.</p></div>';
         if (handled.length) {
           listHTML += '<div class="rq-section-title">בקשות אחרות שטיפלנו בהן</div>';

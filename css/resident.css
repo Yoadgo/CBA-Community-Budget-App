@@ -72,38 +72,28 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .rq-section-title { font-size: 15px; font-weight: 700; color: var(--text); margin: 22px 0 10px; }
 .rq-section-title:first-of-type { margin-top: 4px; }
 
-/* ---------- סיכום ההעברה המרוכזת (2026-09-07) ----------
-   התושב מקבל בבנק העברה אחת מרוכזת ולא העברה לכל קבלה, ולא אמור לחבר בעצמו.
-   הבלוק הזה אומר לו כמה ייכנס ומתי, והפירוט נפתח מתחתיו רק אם ביקש.
+/* ---------- חוצץ חודשי (2026-09-07) ----------
+   התושב מקבל בבנק העברה אחת מרוכזת לחודש, אז החודש הוא היחידה שהוא מצליב
+   מולה. חוצץ אחד לכל חודש, והכרטיסים שמתחתיו הם הפירוט.
 
    **בכוונה זה לא כרטיס** (יועד בחר, 7.9.26): אין משטח, אין מסגרת ואין הצללה,
-   רק מספר גדול וקו חותך לפני הרשימה. הסיכום אינו פריט ברשימה אלא הסכום שכל
-   הרשימה מסתכמת אליו — וההבדל צריך להגיע מהמבנה, לא מצבע. גרסה צבעונית
-   (ירוק רך) וגרסה כהה נשקלו ונדחו: הכהה מתנגשת בכפתור ה-CTA השחור שמעליה,
-   והצבעונית מכניסה בלוק צבוע לאזור פיננסי שכולו לבן. */
-.rq-sum { max-width: 680px; padding: 4px 0 18px; margin-bottom: 18px;
+   רק שם החודש, הסכום וקו חותך. חוצץ צריך להיראות כמו חוצץ ולא כמו עוד פריט
+   ברשימה — וההבדל מגיע מהמבנה, לא מצבע. */
+.rq-mo { max-width: 680px; margin: 30px 0 12px; padding-bottom: 10px;
   border-bottom: 2px solid var(--text); }
-.rq-sum__label { font-size: 12.5px; font-weight: 800; color: var(--text-soft);
-  letter-spacing: .02em; }
-.rq-sum__amt { font-size: 42px; font-weight: 800; line-height: 1.05; margin-top: 2px;
-  letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.rq-sum__when { font-size: 13.5px; color: var(--text-soft); margin-top: 6px; }
+.rq-mo:first-of-type { margin-top: 6px; }
+.rq-mo__top { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.rq-mo__m { font-size: 15px; font-weight: 800; letter-spacing: .01em; }
+.rq-mo__a { font-size: 26px; font-weight: 800; line-height: 1.1;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rq-mo__sub { font-size: 13px; color: var(--text-soft); margin-top: 4px; }
 /* בקשות שטרם אושרו — נאמר במפורש שאינן בסכום, כדי לא להבטיח כסף */
-.rq-sum__note { font-size: 12.5px; color: var(--text-muted); margin-top: 8px; }
-.rq-sum__toggle { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px;
-  padding: 0; border: none; background: none; font-family: inherit; font-size: 13px;
-  font-weight: 700; color: var(--text); cursor: pointer; }
-.rq-sum__toggle svg { width: 16px; height: 16px; transition: transform var(--t, .18s); }
-.rq-sum.is-open .rq-sum__toggle svg { transform: rotate(180deg); }
-.rq-sum__detail { display: none; margin-top: 14px; }
-.rq-sum.is-open .rq-sum__detail { display: block; }
-.rq-sum__row { display: flex; justify-content: space-between; align-items: baseline;
-  gap: 14px; padding: 8px 0; font-size: 13.5px; }
-.rq-sum__row + .rq-sum__row { border-top: 1px solid var(--hairline); }
-.rq-sum__row-n { color: var(--text-soft); min-width: 0; overflow-wrap: anywhere; }
-.rq-sum__row-a { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* מסך צר: 42px עדיין נכנס, אבל מורידים קצת כדי שסכום בן 6 ספרות לא ידחוף */
-@media (max-width: 420px) { .rq-sum__amt { font-size: 36px; } }
+.rq-mo__note { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; }
+/* חודש שאין בו ולו בקשה מאושרת אחת, ו"ללא מועד" — עמומים, וקו דק במקום חותך */
+.rq-mo--muted { border-bottom-width: 1px; border-bottom-color: var(--border); }
+.rq-mo--muted .rq-mo__a, .rq-mo--muted .rq-mo__m { color: var(--text-soft); }
+.rq-mo--muted .rq-mo__a { font-size: 20px; }
+@media (max-width: 420px) { .rq-mo__a { font-size: 22px; } }
 
 /* ---------- היסטוריה משנים קודמות (2026-09-07) ----------
    מקופלת כברירת מחדל. קיימת כדי שהחלפת שנת התקציב לא תמחק לתושב את העבר. */
