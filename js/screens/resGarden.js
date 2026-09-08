@@ -304,7 +304,7 @@
   CBA.screens.resGardenNew = {
     render: function (container) {
       var WORD_MAX = 75;
-      var state = { cat: "", x: null, y: null, photos: [] };
+      var state = { cat: "", x: null, y: null, area: "", photos: [] };
       var user = (window.CBA && CBA.user) || {};
 
       withMeta(function (meta) {
@@ -452,9 +452,14 @@
         var locEl = container.querySelector("#gd-loc");
         CBA.map.render(container.querySelector("#gd-map"), {
           head: false, search: false, legend: false, popup: false, pin: true,
-          onPin: function (n) {
-            state.x = n.x; state.y = n.y;
-            locEl.textContent = "המיקום סומן. אפשר ללחוץ שוב כדי להזיז.";
+          /* הפרמטר השני הוא אזור הגינון שהנעיצה נפלה בו. הוא נשלח עם הדיווח
+             כדי שהתקלה תיפתח עם אזור במקום שמישהו יבחר אותו אחר כך — ואם אין
+             מצולעים או שהנעיצה נפלה מחוץ לכולם הוא "" והכל ממשיך כרגיל. */
+          onPin: function (n, area) {
+            state.x = n.x; state.y = n.y; state.area = area || "";
+            locEl.textContent = state.area
+              ? ("המיקום סומן · " + state.area + ". אפשר ללחוץ שוב כדי להזיז.")
+              : "המיקום סומן. אפשר ללחוץ שוב כדי להזיז.";
             locEl.classList.add("is-ok");
           }
         });
@@ -474,7 +479,7 @@
             desc: descEl.value.trim(),
             place: place,
             phone: container.querySelector("#gd-phone").value.trim(),
-            x: state.x, y: state.y,
+            x: state.x, y: state.y, area: state.area || "",
             photos: state.photos
           }, function (res) {
             if (!res || !res.ok) {

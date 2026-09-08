@@ -33,6 +33,51 @@ function sadmNewId() {
   return "svc_" + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
 }
 
+/* ============================================================================
+ *  פריסטים (2026-09-08, לבקשת יועד: "כל מיני פריסטים וכלי עריכה")
+ *  כרטיס שירות ריק הוא עשר החלטות קטנות שחוזרות כל פעם מחדש: סוג, אייקון,
+ *  אילו סעיפים, ובאיזה סדר. פריסט הוא נקודת פתיחה שאפשר לשנות — לא תבנית
+ *  נעולה. שם המרחב במפה נכתב מראש בדיוק כפי שהוא מופיע שם, כדי שחיווי
+ *  הפתיחה על המפה יתפוס בלי שאף אחד יצטרך לזכור שהשמות חייבים להיות זהים.
+ * ========================================================================== */
+var SADM_HOURS_POOL = "עונה | 01/06-25/09\n" +
+  "ראשון | (08:00-15:00 ניקיון בריכה), 16:00-20:00\n" +
+  "שני | 06:00-08:00 שחיית בוקר, 09:00-13:00, 15:00-19:00\n" +
+  "שלישי | 08:00-10:00 שחיית גברים, 10:00-12:00 שחיית נשים, 15:00-19:00\n" +
+  "רביעי | 06:00-08:00 שחיית בוקר, 10:00-13:00, 16:00-20:00\n" +
+  "חמישי | 09:00-13:00, 15:00-19:00\n" +
+  "שישי | 10:00-14:00, 15:00-19:00\n" +
+  "שבת | 10:00-14:00, 15:30-19:30";
+
+var SADM_PRESETS = [
+  { key: "pool", btn: "🏊 בריכה", name: "בריכה", icon: "🏊", infra: true,
+    desc: "בריכת השיכון",
+    secs: [["שעות", "שעות פתיחה", SADM_HOURS_POOL],
+           ["רשימה", "כללי הבריכה", "חובה מקלחת לפני הכניסה\nילדים עד גיל 12 בליווי מבוגר\nאין להכניס מזון לשטח הבריכה"]] },
+  { key: "gym", btn: "🏋️ מכון כושר", name: "חדר כושר", icon: "🏋️", infra: true,
+    desc: "מכון הכושר של השיכון",
+    secs: [["שעות", "שעות פתיחה", "כל יום | 05:00-23:00"],
+           ["טקסט", "כניסה", "הכניסה למנויים בלבד, דרך מסך \"מכון כושר\" באזור התושב."]] },
+  { key: "court", btn: "🏀 מגרש", name: "", icon: "🏀", infra: true,
+    desc: "",
+    secs: [["שעות", "שעות פתיחה", "כל יום | 08:00-22:00"]] },
+  { key: "club", btn: "🎉 מועדון", name: "מועדון משפחות", icon: "🎉", infra: true,
+    desc: "מועדון לאירועים ולפעילויות",
+    secs: [["שעות", "שעות פתיחה", "כל יום | 08:00-23:00"],
+           ["טקסט", "שריון", "שריון נעשה דרך מסך \"שריון מועדון\" באזור התושב."]] },
+  { key: "vendor", btn: "🔧 ספק חיצוני", name: "", icon: "🔧", infra: false,
+    desc: "",
+    secs: [["טקסט", "תנאי השירות", ""],
+           ["טבלה", "מחירון", "פריט|מחיר"],
+           ["אנשי קשר", "אנשי קשר", "||"]] },
+  { key: "blank", btn: "ריק", name: "", icon: "", infra: false, desc: "", secs: [] }
+];
+
+/* אמוג׳י נפוצים — מקלדת אמוג׳י על מק היא cmd+ctrl+space וזה בדיוק סוג הדבר
+   שאף אחד לא זוכר. שורה אחת של לחיצה מכסה 95% מהמקרים. */
+var SADM_ICONS = ["🏊","🏋️","🏀","⚽","🎾","🎉","🧒","📚","🍽️","🛒","📮","🐕","🌳","🅿️",
+                  "🔧","🔥","💧","💡","🌐","🚧","🧹","🚌","🩺","🎨"];
+
 CBA.screens.servicesAdmin = {
   title: "ניהול שירותים",
 
@@ -180,12 +225,26 @@ function sadmTouch() {
   if (CBA.sheets.markDirty) CBA.sheets.markDirty("servicesAdmin:edit", false);
 }
 
+function sadmApplyPreset(key) {
+  var d = sadmState.draft, p = null;
+  for (var i = 0; i < SADM_PRESETS.length; i++) if (SADM_PRESETS[i].key === key) p = SADM_PRESETS[i];
+  if (!p || !d) return;
+  /* פריסט לא דורס שם שכבר הוקלד — מי שכתב משהו התכוון אליו. */
+  if (!String(d.name || "").trim()) d.name = p.name;
+  d.icon = p.icon; d.desc = d.desc || p.desc;
+  d.kind = p.infra ? CBA.serviceUtils.KIND_INFRA : CBA.serviceUtils.KIND_VENDOR;
+  d.sections = p.secs.map(function (sec, j) {
+    return { secId: d.id + "_s" + (j + 1), order: j + 1, type: sec[0], title: sec[1], content: sec[2] };
+  });
+  sadmTouch(); sadmPaintEditor();
+}
+
 function sadmOpenEditor(index) {
   sadmCloseEditor(true);
   sadmState.editIndex = index;
   sadmState.draft = index === -1
     ? { id: sadmNewId(), name: "", desc: "", icon: "", provider: "", phone: "", doc: "",
-        kind: CBA.serviceUtils.KIND_VENDOR,
+        kind: CBA.serviceUtils.KIND_VENDOR, isNew: true,
         active: true, updated: "", updatedBy: "", sections: [] }
     : sadmClone(sadmState.list[index]);
 
@@ -239,6 +298,14 @@ function sadmPaintEditor() {
   var scroll = body.scrollTop;
 
   body.innerHTML =
+    /* הפריסטים מוצגים רק בכרטיס חדש ורק כל עוד לא נבנו סעיפים — אחרי שיש
+       תוכן, לחיצה על פריסט הייתה מוחקת אותו, וזה לא מה שמישהו מצפה. */
+    (d.isNew && !d.sections.length
+      ? '<div class="sadm-preset"><span class="sadm-preset__t">התחלה מהירה</span>' +
+        SADM_PRESETS.map(function (p) {
+          return '<button type="button" class="sadm-add" data-preset="' + p.key + '">' + sadmEsc(p.btn) + '</button>';
+        }).join("") + '</div>'
+      : '') +
     '<div class="form-block form-block--first">' +
       '<div class="form-grid">' +
         '<div class="form-field"><label>שם השירות</label>' +
@@ -261,7 +328,11 @@ function sadmPaintEditor() {
         '<input class="field-input" data-f="desc" value="' + sadmEsc(d.desc) + '"></div>' +
       '<div class="form-grid">' +
         '<div class="form-field"><label>אייקון (אמוג׳י בודד)</label>' +
-          '<input class="field-input sadm-ico-input" data-f="icon" maxlength="4" value="' + sadmEsc(d.icon) + '"></div>' +
+          '<input class="field-input sadm-ico-input" data-f="icon" maxlength="4" value="' + sadmEsc(d.icon) + '">' +
+          '<div class="sadm-icons">' + SADM_ICONS.map(function (e) {
+            return '<button type="button" class="sadm-ico' + (d.icon === e ? ' is-on' : '') +
+              '" data-ico="' + sadmEsc(e) + '">' + e + '</button>';
+          }).join("") + '</div></div>' +
         '<div class="form-field"><label>טלפון ראשי</label>' +
           '<input class="field-input" data-f="phone" dir="ltr" value="' + sadmEsc(d.phone) + '"></div>' +
       "</div>" +
@@ -374,12 +445,31 @@ function sadmSectionEditorHTML(sec, k) {
      המקדימה מראה בדיוק מה המנוע *הבין*, כולל שורות שלא נקראו. הפער בין מה
      שהוקלד למה שנקרא חייב לצעוק, לא להיעלם. */
   if (t === "שעות") {
-    return '<textarea class="field-input sadm-ta" data-sec-content="' + k + '" rows="6">' +
+    /* כלי עזר במקום עורך מובנה: הפורמט הטקסטואלי הוא החלטה של המודול
+       ("אם משהו יישבר באפליקציה אפשר עדיין לקרוא ולערוך הכול בגיליון"),
+       ולכן הכפתורים כאן *מוסיפים שורה תקינה* במקום להחליף את הטקסט במסך
+       טפסים. מי שרוצה — עורך ידנית, והתצוגה המקדימה למטה אומרת לו מייד
+       אם המנוע הבין. */
+    var HR_ADD = [
+      ["יום",        "ראשון | 09:00-13:00, 16:00-20:00"],
+      ["כל יום",     "כל יום | 08:00-20:00"],
+      ["יום סגור",   "שבת | סגור"],
+      ["שעה לא פתוחה", "ראשון | (08:00-15:00 ניקיון)"],
+      ["עונה",       "עונה | 01/06-25/09"],
+      ["חריג",       "חריג | 02/10 | סגור"]
+    ];
+    return '<div class="sadm-hrs-tools">' +
+        HR_ADD.map(function (a) {
+          return '<button type="button" class="sadm-add sadm-add--sm" data-hrs="' + k +
+            '" data-line="' + sadmEsc(a[1]) + '">+ ' + sadmEsc(a[0]) + '</button>';
+        }).join("") +
+      '</div>' +
+      '<textarea class="field-input sadm-ta" data-sec-content="' + k + '" rows="6">' +
         sadmEsc(sec.content) + "</textarea>" +
       '<div class="sadm-hint">שורה = <code>ימים | שעות</code>. אחרי כל טווח אפשר תווית: ' +
         '<code>08:00-10:00 שחיית גברים</code>. <b>שעה שאינה פתוחה לקהל — בסוגריים:</b> ' +
         '<code>(08:00-15:00 ניקיון)</code>; היא תוצג בטבלה ולא תיספר כשעת פתיחה. ' +
-        'מה שלא נרשם — סגור. גם: <code>עונה | 15/05-30/09</code>, <code>חריג | 02/10 | סגור</code>.</div>' +
+        'מה שלא נרשם — סגור. גם: <code>עונה | 01/06-25/09</code>, <code>חריג | 02/10 | סגור</code>.</div>' +
       '<div class="sadm-hrs-prev" data-hrs-prev="' + k + '">' + CBA.serviceUtils.renderHours(sec.content) + "</div>";
   }
 
@@ -577,6 +667,34 @@ function sadmBindEditor(body) {
       // נראית כאילו לא עשתה כלום.
       var boxes = body.querySelectorAll(".sadm-sec");
       if (boxes.length) boxes[boxes.length - 1].scrollIntoView({ block: "center" });
+    });
+  });
+
+  body.querySelectorAll("[data-preset]").forEach(function (b) {
+    b.addEventListener("click", function () { sadmApplyPreset(b.dataset.preset); });
+  });
+  body.querySelectorAll("[data-ico]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      d.icon = b.dataset.ico; sadmTouch();
+      var inp = body.querySelector('[data-f="icon"]'); if (inp) inp.value = d.icon;
+      body.querySelectorAll("[data-ico]").forEach(function (x) {
+        x.classList.toggle("is-on", x.dataset.ico === d.icon);
+      });
+    });
+  });
+  /* כפתורי השעות מוסיפים שורה לסוף הסעיף ומעדכנים גם את התיבה וגם את
+     התצוגה המקדימה, בלי לצייר מחדש את כל העורך (זה היה גונב את המיקוד). */
+  body.querySelectorAll("[data-hrs]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var k = Number(b.dataset.hrs);
+      var cur = String(d.sections[k].content || "").replace(/\s+$/, "");
+      d.sections[k].content = (cur ? cur + "\n" : "") + b.dataset.line;
+      sadmTouch();
+      var ta = body.querySelector('[data-sec-content="' + k + '"]');
+      if (ta) { ta.value = d.sections[k].content; ta.focus();
+                ta.setSelectionRange(ta.value.length, ta.value.length); ta.scrollTop = ta.scrollHeight; }
+      var prev = body.querySelector('[data-hrs-prev="' + k + '"]');
+      if (prev) prev.innerHTML = CBA.serviceUtils.renderHours(d.sections[k].content);
     });
   });
 

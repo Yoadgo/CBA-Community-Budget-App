@@ -1955,7 +1955,37 @@ CBA.screens = CBA.screens || {};
    *  pinAt {x,y} · onPin(fn) · markers [{id,x,y,cls,title}] · onMarker(fn).
    *  מחזירה ידית: {setMarkers, setPin, getPin, goToHouse, fit}.
    * ------------------------------------------------------------------------- */
+  /* ==== אזורי גינון =========================================================
+     12 אזורי האחריות, כמצולעים בשבר 0–1 של עולם המפה — אותן יחידות בדיוק
+     שבהן נשמרת נעיצה. נוצרים בכלי "כיול מפה" ונטענים מ-js/data/gardenAreas.js.
+     ⚠️ שקופים לחלוטין לתושב במפה הרגילה. הם מצוירים **רק** במצב נעיצה
+     (opts.pin), כדי לענות על שאלה אחת: באיזה אזור נפלה התקלה שאני פותח. */
+  var GZONES = (window.CBA && CBA.gardenAreas && CBA.gardenAreas.areas) || [];
+
+  /* ray casting. נקודה על גבול משותף נופלת לאזור אחד בלבד — לא לשניהם. */
+  function ptInZone(x, y, pts) {
+    var inside = false, i, j;
+    for (i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var xi = pts[i][0], yi = pts[i][1], xj = pts[j][0], yj = pts[j][1];
+      if (((yi > y) !== (yj > y)) &&
+          (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+  /* שם האזור שבו נמצאת נעיצה, או "" אם אין. מחזיר "" גם כשהקובץ ריק —
+     ואז הכל ממשיך לעבוד, פשוט בלי מילוי אוטומטי. */
+  function areaAt(x, y) {
+    if (x === null || x === undefined || y === null || y === undefined) return "";
+    for (var i = 0; i < GZONES.length; i++) {
+      if (GZONES[i].p && GZONES[i].p.length > 2 && ptInZone(x, y, GZONES[i].p)) {
+        return GZONES[i].n || "";
+      }
+    }
+    return "";
+  }
+
   CBA.map = {
+    areaAt: areaAt,
     render: function (container, opts) {
       opts = opts || {};
       function optOn(v) { return v !== false; }
@@ -2319,6 +2349,7 @@ CBA.screens = CBA.screens || {};
             האם קיים מרחב במפה בשם הזה (ר' sadmMapNote ב-servicesAdmin.js).
          נכשל בשקט לגמרי: מפה בלי רשת או בלי כרטיסי שירות היא בדיוק המפה
          שהייתה קודם. */
+      var INFRA = {};        /* שם מרחב -> כרטיס השירות, לשימוש הפופאפ */
       function linkInfra() {
         if (!opts.full || !CBA.data || !CBA.data.getServices || !CBA.serviceUtils) return;
         CBA.data.getServices(function (res) {
@@ -2330,19 +2361,20 @@ CBA.screens = CBA.screens || {};
             var el = worldEl.querySelector('.map-poi[data-name="' + (svc.name || '').replace(/"/g, '') + '"]');
             if (!el) return;
             var st = CBA.serviceUtils.serviceStatus(svc);
-            if (st && st.state !== 'unknown') {
-              el.classList.add('has-st', 'st-' + st.state);
-              el.title = svc.name + ' — ' + st.label + (st.detail ? ' · ' + st.detail : '');
-            }
-            if (el.dataset.goto) return;      // יעד ייעודי (מועדון, חדר כושר) גובר
+            if (st && st.state !== 'unknown') el.classList.add('has-st', 'st-' + st.state);
+            /* מ-2026-09-08 לחיצה על תשתית פותחת פופאפ ולא קופצת ישר למסך:
+               "עיקרי הדברים וקישור לכרטיס בלחיצת כפתור". גם מרחב שיש לו מסך
+               ייעודי (מועדון, חדר כושר) מקבל פופאפ — שם היעד של הכפתור פשוט
+               שונה, וזה נקבע מ-POI_GOTO בזמן הפתיחה. */
+            INFRA[svc.name] = svc;
+            el.dataset.infra = svc.name;
             el.classList.add('is-link');
-            el.dataset.goto = 'resServices';
             el.setAttribute('role', 'button');
             el.setAttribute('tabindex', '0');
-            el.setAttribute('aria-label', svc.name + (st && st.state !== 'unknown' ? ' — ' + st.label : '') + ' — פתיחת הכרטיס');
-            if (!el.title) el.title = svc.name;
+            el.setAttribute('aria-label', svc.name + (st && st.state !== 'unknown' ? ' — ' + st.label : ''));
+            el.title = svc.name + (st && st.state !== 'unknown' ? ' — ' + st.label + (st.detail ? ' · ' + st.detail : '') : '');
             el.addEventListener('keydown', function (ev) {
-              if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); CBA.navigate('resServices'); }
+              if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openInfra(el); }
             });
           });
         });
@@ -2640,7 +2672,7 @@ CBA.screens = CBA.screens || {};
           worldEl.classList.toggle("tier2", tier === 2);
         }
         if (Math.abs(scale - POI_LAID) > 0.001) { POI_LAID = scale; layoutPoi(tier); layoutStreets(tier); }
-        if (openTile) positionPopup(openTile);
+        if (popupAt) positionPopup();
       }
       function fitToScreen(animated) {
         computeFit();
@@ -2741,6 +2773,8 @@ CBA.screens = CBA.screens || {};
         if (Object.keys(pointers).length === 0) { dragging = false; viewport.classList.remove("grabbing"); }
         if (wasSingleTap) {
           var target = document.elementFromPoint(e.clientX, e.clientY);
+          var infraEl = target && target.closest(".map-poi[data-infra]");
+          if (infraEl) { openInfra(infraEl); return; }
           var linkEl = target && target.closest(".map-poi[data-goto]");
           if (linkEl) { CBA.navigate(linkEl.dataset.goto); return; }
           var houseEl = target && target.closest(".map-house");
@@ -2804,20 +2838,21 @@ CBA.screens = CBA.screens || {};
       var popupEl = null;
       function closePopup() {
         if (popupEl) popupEl.classList.remove("show");
-        openTile = null;
+        openTile = null; popupAt = null;
         Object.keys(houseEls).forEach(function (n) { houseEls[n].classList.remove("active-tile"); });
       }
-      function positionPopup(num) {
-        var el = houseEls[num];
-        if (!el || !popupEl) return;
-        var left = parseFloat(el.style.left) + parseFloat(el.style.width) / 2;
-        var top = parseFloat(el.style.top);
-        var pxAbs = tx + left * scale, pyAbs = ty + top * scale;
+      /* עוגן הפופאפ הוא {x,y,h} בפיקסלי־עולם ולא מספר בית, כי מאז 2026-09-08
+         גם שבב של תשתית ציבורית פותח פופאפ. בית מתעגן למרכז־למעלה שלו,
+         שבב מתעגן לנקודה שלו עצמה (הוא כבר ממורכז עליה). */
+      var popupAt = null;
+      function positionPopup() {
+        if (!popupAt || !popupEl) return;
+        var pxAbs = tx + popupAt.x * scale, pyAbs = ty + popupAt.y * scale;
         var popX = pxAbs - 125, popY = pyAbs - 14;
         var vw = viewport.clientWidth;
         if (popX < 10) popX = 10;
         if (popX + 250 > vw - 10) popX = vw - 260;
-        if (pyAbs < 220) popY = pyAbs + parseFloat(el.style.height) * scale + 14;
+        if (pyAbs < 220) popY = pyAbs + (popupAt.h || 0) * scale + 14;
         else popY = pyAbs - popupEl.offsetHeight - 14;
         popupEl.style.left = popX + "px";
         popupEl.style.top = Math.max(10, popY) + "px";
@@ -2837,7 +2872,9 @@ CBA.screens = CBA.screens || {};
             : (row && dirC ? dirHouseHTML(row, dirC) : '<div class="card dir-card"><div class="dir-card__house">בית ' + CBA.esc(num) + '</div><div class="dir-card__names">אין נתונים זמינים לבית זה.</div></div>'));
         popupEl.querySelector(".map-popup__close").addEventListener("click", function (ev) { ev.stopPropagation(); closePopup(); });
         openTile = num;
-        positionPopup(num);
+        popupAt = { x: parseFloat(el.style.left) + parseFloat(el.style.width) / 2,
+                    y: parseFloat(el.style.top), h: parseFloat(el.style.height) };
+        positionPopup();
         requestAnimationFrame(function () { popupEl.classList.add("show"); });
         var ring = document.createElement("div");
         ring.className = "map-pulse";
@@ -2845,6 +2882,47 @@ CBA.screens = CBA.screens || {};
         ring.style.width = el.style.width; ring.style.height = el.style.height;
         worldEl.appendChild(ring);
         setTimeout(function () { ring.remove(); }, 2300);
+      }
+
+      /* ---- פופאפ תשתית ציבורית ----
+         מה נכנס: השם, מה קורה *עכשיו*, מה השעות היום, ומתי העונה. ולא יותר —
+         זה חלון על מפה, לא הכרטיס. הכרטיס נמצא במרחק כפתור אחד. */
+      function openInfra(el) {
+        var svc = INFRA[el.dataset.infra]; if (!svc) return;
+        closePopup();
+        if (!popupEl) { popupEl = document.createElement("div"); popupEl.className = "map-popup"; viewport.appendChild(popupEl); }
+        var U = CBA.serviceUtils;
+        var parsed = U.serviceHours(svc), st = parsed ? U.hoursStatus(parsed) : null;
+        var today = parsed ? U.hoursToday(parsed) : "";
+        var dest = POI_GOTO[svc.name] || 'resServices';
+        popupEl.innerHTML =
+          '<button type="button" class="map-popup__close" aria-label="סגור">' + xIcon + '</button>' +
+          '<div class="card mp-inf">' +
+            '<div class="mp-inf__head">' +
+              (svc.icon ? '<span class="mp-inf__ico">' + CBA.esc(svc.icon) + '</span>' : '') +
+              '<div class="mp-inf__t">' +
+                '<div class="mp-inf__name">' + CBA.esc(svc.name) + '</div>' +
+                (st && st.state !== 'unknown'
+                  ? '<span class="svc-st svc-st--' + st.state + '"><i></i>' + CBA.esc(st.label) +
+                    (st.detail ? ' <em>' + CBA.esc(st.detail) + '</em>' : '') + '</span>'
+                  : (svc.desc ? '<div class="mp-inf__desc">' + CBA.esc(svc.desc) + '</div>' : '')) +
+              '</div>' +
+            '</div>' +
+            (today ? '<div class="mp-inf__row"><b>היום</b><span>' + CBA.esc(today) + '</span></div>' : '') +
+            (parsed && parsed.season
+              ? '<div class="mp-inf__row"><b>עונה</b><span><bdi dir="ltr">' +
+                parsed.season.from.d + '/' + parsed.season.from.m + ' – ' +
+                parsed.season.to.d + '/' + parsed.season.to.m + '</bdi></span></div>'
+              : '') +
+            '<button type="button" class="btn-primary btn-sm mp-inf__go" data-go="' + dest + '">לכרטיס המלא</button>' +
+          '</div>';
+        popupEl.querySelector(".map-popup__close").addEventListener("click", function (ev) { ev.stopPropagation(); closePopup(); });
+        popupEl.querySelector(".mp-inf__go").addEventListener("click", function (ev) {
+          ev.stopPropagation(); closePopup(); CBA.navigate(dest);
+        });
+        popupAt = { x: parseFloat(el.style.left), y: parseFloat(el.style.top) - 12, h: 24 };
+        positionPopup();
+        requestAnimationFrame(function () { popupEl.classList.add("show"); });
       }
 
       // ---- חיפוש ----
@@ -2992,10 +3070,58 @@ CBA.screens = CBA.screens || {};
           if (wx < 0 || wy < 0 || wx > MAP_WORLD_W || wy > MAP_WORLD_H) return;
           var n = { x: wx / MAP_WORLD_W, y: wy / MAP_WORLD_H };
           setPin(n);
-          if (opts.onPin) opts.onPin(n);
+          markZone(n);
+          /* הפרמטר השני הוא שם האזור — "" כשאין מצולעים או כשהנעיצה נפלה
+             מחוץ לכולם. הקורא מחליט מה לעשות איתו. */
+          if (opts.onPin) opts.onPin(n, areaAt(n.x, n.y));
         });
       }
-      if (opts.pinAt) setPin(opts.pinAt);
+      /* ---- שכבת האזורים. רק במצב נעיצה, ורק אם צוירו אזורים. ----
+         פסים אלכסוניים דקים מאוד וכותרת קטנה: היא צריכה להיות מורגשת מספיק
+         כדי לענות "באיזה אזור אני", ולא יותר. האזור שהסיכה נמצאת בו הוא
+         היחיד שמתחזק — כך התשובה נקראת בלי לקרוא אף תווית. */
+      var zoneSvg = null;
+      if (opts.pin && GZONES.length) {
+        var zid = "gz" + (Math.random().toString(36).slice(2, 7));
+        var zh = '<svg class="map-gzones" width="' + MAP_WORLD_W + '" height="' + MAP_WORLD_H +
+          '" viewBox="0 0 ' + MAP_WORLD_W + ' ' + MAP_WORLD_H + '" aria-hidden="true">' +
+          '<defs><pattern id="' + zid + '" width="14" height="14" ' +
+            'patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+            '<line x1="0" y1="0" x2="0" y2="14" class="m2-gzs"/></pattern></defs>';
+        GZONES.forEach(function (z, i) {
+          if (!z.p || z.p.length < 3) return;
+          var d = z.p.map(function (q, k) {
+            return (k ? "L" : "M") + (q[0] * MAP_WORLD_W).toFixed(1) + " " +
+                   (q[1] * MAP_WORLD_H).toFixed(1);
+          }).join(" ") + " Z";
+          zh += '<path d="' + d + '" class="m2-gz" data-zi="' + i +
+                '" fill="url(#' + zid + ')"/>';
+          var c = zoneCenter(z.p);
+          zh += '<text class="m2-gzt" data-zi="' + i + '" x="' + (c[0] * MAP_WORLD_W).toFixed(1) +
+                '" y="' + (c[1] * MAP_WORLD_H).toFixed(1) + '">' + CBA.esc(z.n || "") + '</text>';
+        });
+        zh += '</svg>';
+        worldEl.insertAdjacentHTML("afterbegin", zh);
+        zoneSvg = worldEl.querySelector(".map-gzones");
+      }
+      /* מרכז ויזואלי גס — ממוצע הפינות. מספיק טוב לתווית, וזול. */
+      function zoneCenter(pts) {
+        var sx = 0, sy = 0;
+        pts.forEach(function (q) { sx += q[0]; sy += q[1]; });
+        return [sx / pts.length, sy / pts.length];
+      }
+      function markZone(n) {
+        if (!zoneSvg) return;
+        var hit = -1;
+        if (n) for (var i = 0; i < GZONES.length; i++) {
+          if (GZONES[i].p && ptInZone(n.x, n.y, GZONES[i].p)) { hit = i; break; }
+        }
+        Array.prototype.forEach.call(zoneSvg.querySelectorAll("[data-zi]"), function (el) {
+          el.classList.toggle("is-on", +el.dataset.zi === hit);
+        });
+      }
+
+      if (opts.pinAt) { setPin(opts.pinAt); markZone(opts.pinAt); }
       if (opts.markers && opts.markers.length) setMarkers(opts.markers);
 
       /* מצב נקי לצילום מסך: גיאומטריה ומספרי בתים בלבד. מצב *תצוגה* בלבד —
@@ -3176,7 +3302,7 @@ CBA.screens = CBA.screens || {};
       }
       // ידית לקורא — כדי שמסך הגינון יוכל לרענן סימונים בלי לצייר מפה מחדש
       return {
-        setMarkers: setMarkers, setPin: setPin, getPin: getPin,
+        setMarkers: setMarkers, setPin: setPin, getPin: getPin, areaAt: areaAt,
         goToHouse: goToHouse, fit: function () { fitToScreen(true); }
       };
     }

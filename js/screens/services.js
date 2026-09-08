@@ -404,6 +404,21 @@ CBA.serviceUtils = (function () {
     return { state: "closed", label: "סגור" };
   }
 
+  /* שורת "היום" — הטווחים שחלים על התאריך הנוכחי, כטקסט קצר. משמשת את
+     הפופאפ במפה, שבו אין מקום לטבלה שלמה אבל דווקא שם השאלה היא "עכשיו". */
+  function hoursToday(parsed, now) {
+    now = now || new Date();
+    if (!parsed) return "";
+    if (!inSeason(parsed.season, now)) return "מחוץ לעונה";
+    var r = rangesOn(parsed, now);
+    if (r === null || r === undefined) return "";
+    var open = r.filter(function (x) { return !x.off; });
+    if (!open.length) return "סגור";
+    return open.map(function (x) {
+      return hhmm(x.a) + "–" + hhmm(x.b) + (x.l ? " " + x.l : "");
+    }).join(" · ");
+  }
+
   /* הסעיף הראשון מסוג "שעות" בשירות — יש רק אחד בפועל, אבל לא מסתמכים על זה. */
   function serviceHours(svc) {
     var secs = (svc && svc.sections) || [];
@@ -536,7 +551,7 @@ CBA.serviceUtils = (function () {
   return {
     TYPES: TYPES, KINDS: KINDS, KIND_INFRA: KIND_INFRA, KIND_VENDOR: KIND_VENDOR,
     build: build, flatten: flatten,
-    parseHours: parseHours, hoursStatus: hoursStatus,
+    parseHours: parseHours, hoursStatus: hoursStatus, hoursToday: hoursToday,
     serviceHours: serviceHours, serviceStatus: serviceStatus, renderHours: renderHours,
     toLines: toLines, toGrid: toGrid, toContacts: toContacts,
     telDigits: telDigits, waDigits: waDigits,

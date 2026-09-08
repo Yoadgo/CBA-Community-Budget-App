@@ -1765,3 +1765,41 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .map-shell.photo .m2-fillf { fill: rgba(255,255,255,.24); stroke: none; }
 /* מפרצי חנייה — קווים דקים, רק כדי שיהיה ברור שזו חנייה מסומנת */
 .map-shell.photo .m2-bay { stroke: rgba(255,255,255,.34); }
+
+/* ==== אזורי גינון על המפה (2026-09-08) ====================================
+   ⚠️ השכבה הזו קיימת **רק** במצב נעיצת תקלה. תושב שפותח את מפת השיכון לא
+   רואה אותה בכלל — חלוקת אחריות של הגנן אינה מידע שהמפה הכללית צריכה.
+   פסים אלכסוניים דקים במקום מילוי: מילוי, בכל שקיפות שהיא, צובע את כל מה
+   שמתחתיו ומשנה את צבע הבתים והדשא. פסים משאירים את הרקע כפי שהוא.
+   ============================================================================ */
+.map-gzones { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.m2-gzs { stroke: #6B7280; stroke-width: 1.1; opacity: .16; }
+.m2-gz  { stroke: #6B7280; stroke-width: 1.2; stroke-dasharray: 7 6;
+          stroke-opacity: .3; opacity: .55; transition: opacity .18s ease; }
+/* ⚠️ font-size ביחידות **עולם**, לא מסך. ה-SVG מתכווץ עם הזום, ולכן 13px
+   ירדו ל-5.6px אמיתיים בזום ההתחלתי — נמדד. 28 נותנות ~12px בזום שבו המפה
+   נפתחת, וזה בדיוק הגבול שבו שם אזור נקרא אבל לא מושך את העין. */
+.m2-gzt { fill: #6B7280; font-size: 28px; font-weight: 600; text-anchor: middle;
+          opacity: .5; paint-order: stroke; stroke: rgba(255,255,255,.8);
+          stroke-width: 5px; transition: opacity .18s ease, fill .18s ease; }
+/* האזור שהסיכה נמצאת בו — היחיד שמתחזק. זו התשובה, והיא נקראת בלי לקרוא. */
+.m2-gz.is-on  { opacity: 1; stroke-opacity: .75; stroke-dasharray: none; }
+.m2-gzt.is-on { opacity: 1; fill: #0F6B45; }
+
+/* ==== פופאפ תשתית ציבורית על המפה (2026-09-08) =============================
+   חלון קצר: מה זה, מה עכשיו, מה היום, ומתי העונה — וכפתור לכרטיס המלא.
+   בכוונה לא הטבלה השלמה: זה חלון על מפה, לא המסך. */
+.mp-inf { padding: 13px 14px 12px; }
+.mp-inf__head { display: flex; align-items: flex-start; gap: 10px; }
+.mp-inf__ico { font-size: 22px; line-height: 1; flex: none; }
+.mp-inf__t { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.mp-inf__name { font-size: 15px; font-weight: 800; letter-spacing: -.01em; }
+.mp-inf__desc { font-size: 12.5px; color: var(--text-soft); }
+.mp-inf__row {
+  display: flex; gap: 8px; align-items: baseline; margin-top: 8px;
+  font-size: 12.5px; color: var(--text);
+  border-top: 1px solid var(--hairline); padding-top: 8px;
+}
+.mp-inf__row b { flex: none; width: 3.2em; color: var(--text-soft); font-weight: 600; }
+.mp-inf__row span { font-variant-numeric: tabular-nums; }
+.mp-inf__go { width: 100%; margin-top: 11px; }

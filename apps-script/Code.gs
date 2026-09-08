@@ -7684,6 +7684,13 @@ function submitGardenReport_(ss, body) {
   }
   var desc = String(body.desc || '').trim();
   if (!cat) return { ok: false, error: 'לא נבחרה קטגוריה' };
+  /* האזור מגיע מהלקוח — הוא נגזר מהנעיצה מול מצולעי אזורי הגינון
+     (CBA.map.areaAt). ⚠️ הוא **מאומת מול הרשימה** ולא נכתב כמות שהוא: הוא
+     נשלח מהדפדפן, ואזור שאינו קיים היה זורע בגיליון ערך שאף מסך לא יודע
+     לסנן לפיו. שם שלא מוכר פשוט נזרק, והתקלה נפתחת בלי אזור — בדיוק כמו
+     לפני שהיו מצולעים בכלל. */
+  var area = String(body.area || '').trim();
+  if (area && lists.areas.length && lists.areas.indexOf(area) === -1) area = '';
 
   var x = (body.x === null || body.x === undefined) ? '' : Number(body.x);
   var y = (body.y === null || body.y === undefined) ? '' : Number(body.y);
@@ -7730,7 +7737,7 @@ function submitGardenReport_(ss, body) {
     trow[tc['סוג']] = GARDEN_KIND_REPORT;
     trow[tc['כותרת']] = desc ? desc.substring(0, 120) : title;
     trow[tc['קטגוריה']] = cat;
-    trow[tc['אזור']] = String(body.area || '');
+    trow[tc['אזור']] = area;
     trow[tc['מיקום X']] = x; trow[tc['מיקום Y']] = y;
     trow[tc['שלב']] = 'התקבל';
     trow[tc['נוצר בתאריך']] = new Date();
@@ -7747,7 +7754,7 @@ function submitGardenReport_(ss, body) {
     rrow[rc['שם מדווח']] = name;
     rrow[rc['טלפון']] = String(body.phone || '');
     rrow[rc['קטגוריה']] = cat;
-    rrow[rc['אזור']] = String(body.area || '');
+    rrow[rc['אזור']] = area;
     rrow[rc['מיקום X']] = x; rrow[rc['מיקום Y']] = y;
     rrow[rc['מיקום מילולי']] = String(body.place || '');
     rrow[rc['תיאור']] = desc;
@@ -7758,7 +7765,7 @@ function submitGardenReport_(ss, body) {
 
     gardenLog_(ss, taskId, 'נפתח', 'שלב', '', 'התקבל', name, 'דיווח תושב #' + repId);
 
-    var place = String(body.place || body.area || '').trim() || 'השיכון';
+    var place = String(body.place || area || '').trim() || 'השיכון';
     try {
       sendResidentTemplate_(ss, 'GARDEN_REPORT_RECEIVED',
         emailsForFamilyId_(ss, perm.familyId),
