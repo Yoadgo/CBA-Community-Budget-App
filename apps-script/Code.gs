@@ -3848,6 +3848,17 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['GARDEN_COMPLETED', "הטיפול בדיווח שלך הושלם (מס' {{מזהה}})",
     "שלום {{שם}},\n\nהטיפול בדיווח שלך על {{קטגוריה}} ב{{מיקום}} הושלם ואושר על ידי הוועד.\n\n{{איחוד}}אם משהו לא נראה לך תקין — אפשר להשיב לנו באפליקציה בתוך שבוע.\n\nתודה שדיווחת,\nועד הקהילה",
     'נשלח לתושב רק אחרי שמנהל הגינון אישר את הסיום — לא כשצוות הגינון סימן "בוצע". {{איחוד}} מתמלא במשפט על האיחוד רק אם הדיווח אוחד', PERM_GARDEN, 'כן'],
+  /* סגירה שאינה "בוצע" (2026-09-08, החלטת יועד). עד היום היא הייתה שקטה
+     לגמרי: התושב דיווח, המשימה נסגרה כ"בוטל" או "לא רלוונטי", ומבחינתו
+     הפנייה פשוט נעלמה. {{סיבה}} הוא **טקסט חופשי שהמנהל כותב** ולא שם
+     הסגירה — "בוטל" אינו הסבר, והתושב זכאי לאחד. */
+  ['GARDEN_REPORT_DECLINED', "עדכון על הדיווח שלך (מס' {{מזהה}})",
+    "שלום {{שם}},\n\nבדקנו את הדיווח שלך על {{קטגוריה}} ב{{מיקום}} (מס' {{מזהה}}), " +
+    "ולא ייפתח עליו טיפול.\n\n{{סיבה}}\n\nאם נראה לך שזו טעות — אפשר לפנות אלינו " +
+    "ונשמח לבדוק שוב.\n\nבברכה,\nועד הקהילה",
+    'נשלח לתושב כשמנהל הגינון סוגר דיווח בלי לבצע (בוטל / לא רלוונטי / הועבר לבינוי). ' +
+    '{{סיבה}} הוא ההסבר שהמנהל כתב — הוא חובה, כי "בוטל" לבדו אינו תשובה',
+    PERM_GARDEN, 'כן'],
   ['ADMIN_NEW_GARDEN_REPORT', 'דיווח גינון חדש ממתין',
     'התקבל דיווח גינון חדש מ-{{שם}}: {{קטגוריה}} ב{{מיקום}} (מס\' {{מזהה}}).', 'למנהלי גינון + מנהל-על', PERM_GARDEN, 'כן'],
   ['ADMIN_GARDEN_NEGATIVE_FEEDBACK', 'תושב סימן שהטיפול לא הושלם כראוי',
@@ -7601,6 +7612,22 @@ function handleMyGardenReports_(p) {
       }
     }
 
+    /* ההסבר שהמנהל כתב בסגירה — נשלף מהיומן ולא מעמודה חדשה, כי הוא כבר
+       נשמר שם (gardenLog_ עם סוג רשומה "סגירה"). כך התושב רואה באפליקציה
+       בדיוק את מה שקיבל במייל, ולא רק את המילה "בוטל". */
+    var closeWhy = {};
+    try {
+      var lsh = ss.getSheetByName(GARDEN_LOG_SHEET);
+      if (lsh && lsh.getLastRow() > 1) {
+        var lc = gardenCols_(lsh), lv = lsh.getDataRange().getValues();
+        for (var li = 1; li < lv.length; li++) {
+          if (String(lv[li][lc['סוג רשומה']]).trim() !== 'סגירה') continue;
+          var note = String(lv[li][lc['הערה']] || '').trim();
+          if (note) closeWhy[String(lv[li][lc['מזהה משימה']]).trim()] = note;
+        }
+      }
+    } catch (e) { /* בלי היומן פשוט אין הסבר — הסטטוס עצמו עדיין מוצג */ }
+
     var settings = getEmailSettings_(ss);
     var fbDays = parseInt(emailRule_(settings, 'RULE_GARDEN_FEEDBACK_DAYS', 7), 10) || 7;
     var now = new Date().getTime();
@@ -7621,6 +7648,7 @@ function handleMyGardenReports_(p) {
       var canFb = (t.stage === 'הושלם') && !already && inWindow &&
                   t.closure !== GARDEN_CLOSURE_MERGED;
       out.push({
+        closeWhy: closeWhy[taskId] || '',
         id: String(rows[r][rc['מזהה']]),
         date: d instanceof Date ? d.toISOString() : String(d || ''),
         category: String(rows[r][rc['קטגוריה']] || ''),
@@ -7912,7 +7940,11 @@ function handleGardenTasks_(p) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var perm = gate.perm || {};
     var scope = String(p.scope || 'week');
-    if (perm.isExternal && scope !== 'week') scope = 'week';
+    /* ⚠️ הגנן רואה גם 'unplanned' (החלטת יועד 8.9): **שיבוץ תקלת תושב עבר
+       אליו**, והוא זה שיודע אם שתי פניות הן אותה ממטרה ואם משהו כבר מתוזמן.
+       'pending' — תור האישורים — נשאר חסום: זה תור שממתין *למנהל*, ולתת
+       לקבלן לראות את מה שממתין לאישור שלו עצמו זה להזמין לחץ. */
+    if (perm.isExternal && scope !== 'week' && scope !== 'unplanned') scope = 'week';
 
     var week = String(p.week || '').match(/^\d{4}-\d{2}-\d{2}$/) ? p.week : gardenWeekKey_();
     /* מימוש התוכנית לשבוע המבוקש — **לפני** קריאת הגיליון, אחרת המשימות
@@ -7955,7 +7987,7 @@ function handleGardenTasks_(p) {
     }
     /* מועמד לאיחוד מחושב רק לתצוגת "לשיבוץ" ורק למנהל: זה הרגע שבו הוא פוגש
        דיווח חדש בפעם הראשונה, ולפני ששיבץ עבודה כפולה. ר' gardenDupCandidate_. */
-    if (scope === 'unplanned' && !perm.isExternal) {
+    if (scope === 'unplanned') {
       var defs = gardenPlanRows_(ss);
       var lists0 = gardenLists_(ss);
       for (var q = 0; q < rows.length; q++) {
@@ -8476,7 +8508,8 @@ function gardenShiftWeek_(weekKey, n) {
    נשאר קשור למשימה שתטפל בו, והוא יקבל את הודעת הסיום כשהיא תסגר. */
 function gardenCoverByPlan_(ss, body) {
   var perm = body._perm || {};
-  if (perm.isExternal) return { ok: false, error: 'הפעולה היא בסמכות מנהל הגינון' };
+  /* "כבר בתוכנית" **אינו** חסום לגנן (8.9) — הוא נופל תחת אותו שיפוט שטח
+     כמו איחוד, והוא בעצם איחוד אל תוך משימת שגרה. */
   var week = String(body.week || '').match(/^\d{4}-\d{2}-\d{2}$/) ? body.week : '';
   var defId = String(body.defId || '').trim();
   if (!week || !defId) return { ok: false, error: 'חסרים פרטי התוכנית' };
@@ -8595,8 +8628,28 @@ function gardenReportsForTask_(ss, taskId) {
   return out;
 }
 
+/* סגירה בלי ביצוע — מייל לכל מי שדיווח. זו הייתה הפינה השקטה של המודול:
+   התושב דיווח, המנהל סגר "לא רלוונטי", ואף אחד לא אמר לו כלום.
+   ⚠️ ההסבר עצמו (why) הוא טקסט שהמנהל כתב, לא שם הסגירה. */
+function gardenNotifyDeclined_(ss, taskId, closure, why) {
+  try {
+    var reps = gardenReportsForTask_(ss, taskId);
+    for (var i = 0; i < reps.length; i++) {
+      var rep = reps[i];
+      if (!rep.familyId) continue;
+      sendResidentTemplate_(ss, 'GARDEN_REPORT_DECLINED', emailsForFamilyId_(ss, rep.familyId), {
+        'שם': rep.name || '',
+        'מזהה': rep.id,
+        'קטגוריה': rep.category || '',
+        'מיקום': rep.place || '',
+        'סיבה': String(why || '').trim()
+      });
+    }
+  } catch (e) { /* מייל שנכשל לא מבטל סגירה שכבר נרשמה */ }
+}
+
 /** מייל "הטיפול הושלם" לכל מי שדיווח על המשימה. נשלח **רק** אחרי אישור מנהל
- *  ורק בסגירה "בוצע" — סגירה מסוג אחר אינה "הושלם" ואין לה תבנית משלה. */
+ *  ורק בסגירה "בוצע" — סגירה מסוג אחר יוצאת דרך gardenNotifyDeclined_. */
 function gardenNotifyCompleted_(ss, taskId) {
   try {
     var reps = gardenReportsForTask_(ss, taskId);
@@ -8617,7 +8670,7 @@ function gardenNotifyCompleted_(ss, taskId) {
 
 /** סוגר משימה אחת בשורה נתונה. מרכז את כל מה שאישור/סגירה משנים, כדי
  *  שאישור בודד ואישור מרוכז לעולם לא ייפרדו בהתנהגות. */
-function gardenCloseRow_(ss, sh, row, c, cur, closure, who) {
+function gardenCloseRow_(ss, sh, row, c, cur, closure, who, why) {
   gardenSet_(sh, row, c, 'שלב', 'הושלם');
   gardenSet_(sh, row, c, 'דגל', '');
   gardenSet_(sh, row, c, 'סגירה', closure);
@@ -8625,8 +8678,13 @@ function gardenCloseRow_(ss, sh, row, c, cur, closure, who) {
   gardenSet_(sh, row, c, 'תאריך אישור', new Date());
   gardenSet_(sh, row, c, 'עודכן בתאריך', new Date());
   gardenSet_(sh, row, c, 'עודכן על ידי', who);
-  gardenLog_(ss, cur.id, 'סגירה', 'סגירה', cur.closure, closure, who, '');
-  if (closure === 'בוצע') gardenNotifyCompleted_(ss, cur.id);
+  gardenLog_(ss, cur.id, 'סגירה', 'סגירה', cur.closure, closure, who,
+             String(why || '').trim());
+  if (closure === 'בוצע') { gardenNotifyCompleted_(ss, cur.id); return; }
+  /* "אוחד" יוצא דרך gardenMerge_, ולתושב כבר נשלח GARDEN_REPORT_MERGED —
+     שליחה נוספת כאן הייתה אומרת לו גם "אוחד" וגם "לא ייפתח טיפול". */
+  if (closure === GARDEN_CLOSURE_MERGED) return;
+  gardenNotifyDeclined_(ss, cur.id, closure, why);
 }
 
 
@@ -8725,7 +8783,8 @@ function gardenDateOf_(v) {
    המשימה הנבלעת נסגרת ב'אוחד' ויורדת מרשימות העבודה. */
 function gardenMerge_(ss, body) {
   var perm = body._perm || {};
-  if (perm.isExternal) return { ok: false, error: 'איחוד הוא בסמכות מנהל הגינון' };
+  /* איחוד **אינו** חסום לגנן (8.9): זיהוי ששתי פניות הן אותה תקלה הוא שיפוט
+     שטח, לא החלטת ועד. הוא גם מה שמונע ממנו לנסוע פעמיים לאותה ממטרה. */
   var who = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email || '';
   var childId = String(body.id || '').trim();
   var parentId = String(body.into || '').trim();
@@ -8913,7 +8972,13 @@ function gardenTaskAction_(ss, body) {
       if (perm.isExternal) return { ok: false, error: 'אישור הוא בסמכות מנהל הגינון' };
       var reason = act === 'approve' ? 'בוצע' : String(body.closure || '').trim();
       if (GARDEN_CLOSURES.indexOf(reason) === -1) return { ok: false, error: 'סיבת סגירה לא מוכרת' };
-      gardenCloseRow_(ss, sh, row, c, cur, reason, who);
+      var why = String(body.note || '').trim().substring(0, 600);
+      /* ⚠️ סגירה בלי ביצוע של פנייה שתושב פתח מחייבת הסבר. "בוטל" הוא ערך
+         במערכת, לא תשובה לאדם — והמייל שיוצא אליו בנוי סביב ההסבר הזה. */
+      if (reason !== 'בוצע' && cur.kind === GARDEN_KIND_REPORT && !why) {
+        return { ok: false, error: 'צריך לכתוב לתושב מה הסיבה' };
+      }
+      gardenCloseRow_(ss, sh, row, c, cur, reason, who, why);
       return { ok: true };
 
     } else if (act === 'return') {
@@ -8932,7 +8997,8 @@ function gardenTaskAction_(ss, body) {
        * ובלי "שבוע", ולכן לא הופיע בשום רשימה שבועית: לא אצל הצוות ולא אצל
        * המנהל. השיבוץ הוא מה שמכניס אותו לתוכנית העבודה, והוא מקדם את השלב
        * ל"מתוכנן" — הערך שהאפיון ייעד בדיוק לרגע הזה. */
-      if (perm.isExternal) return { ok: false, error: 'שיבוץ הוא בסמכות מנהל הגינון' };
+      /* שיבוץ **אינו** חסום לגנן (8.9). הוא מי שנמצא בשטח ויודע מתי הוא
+         מגיע לשם; המנהל רואה את התוצאה כמטלה פתוחה במעקב. */
       var wk = String(body.week || '').trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) return { ok: false, error: 'שבוע לא תקין' };
       gardenSet_(sh, row, c, 'שבוע', wk);

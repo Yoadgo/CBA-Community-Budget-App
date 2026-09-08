@@ -251,8 +251,15 @@
             (r.mergedInto
               ? '<div class="gd-rep__merged">אוחד עם פנייה #' + esc(r.mergedInto) +
                 (r.closure ? ' · נסגר: ' + esc(r.closure) : '') + '</div>'
+              /* סגירה בלי ביצוע: מציגים את **ההסבר שהמנהל כתב** ולא רק את
+                 המילה "בוטל". זה בדיוק אותו טקסט שנשלח לתושב במייל
+                 (GARDEN_REPORT_DECLINED), וכך המייל והאפליקציה לא סותרים.
+                 שם הסגירה נשאר כתווית קטנה — הוא הקטגוריה, לא התשובה. */
               : (done && r.closure && r.closure !== "בוצע"
-                  ? '<div class="gd-rep__merged">נסגר: ' + esc(r.closure) + '</div>' : '')) +
+                  ? '<div class="gd-rep__closed">' +
+                    '<b>לא נפתח טיפול · ' + esc(r.closure) + '</b>' +
+                    (r.closeWhy ? '<span>' + esc(r.closeWhy) + '</span>' : '') +
+                    '</div>' : '')) +
             (r.canFeedback
               ? '<div class="gd-fb"><span>הטיפול היה בסדר?</span>' +
                 '<button type="button" class="y" data-fb="y" data-id="' + esc(r.id) + '">כן, תודה</button>' +

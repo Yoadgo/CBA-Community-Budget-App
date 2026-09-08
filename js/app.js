@@ -135,7 +135,9 @@
        שניהם בעצמו (ר' handleGardenPlan_ ו-gardenPlanSave_); כאן רק מסתירים,
        כדי שלא יראה טאב שייתן לו שגיאה. */
     gardenPlan: "MANAGER",
-    gardenInbox: "MANAGER"
+    /* "לטיפולך" פתוח גם לגנן (8.9): אצלו הוא הדיווחים החדשים לשיבוץ, ואצל
+       המנהל הוא תור האישורים. אותו מסך, שני תפקידים, מקטע אחד לכל אחד. */
+    gardenInbox: PERM.GARDEN
   };
 
   function myPerms() {

@@ -230,12 +230,17 @@
               return;
             }
             loadErr = null;
-            unplanned = (r1 && r1.ok) ? (r1.rows || []) : [];
-            order.area = (r1 && r1.areas) || order.area;
-            order.type = (r1 && r1.categories) || order.type;
-            isManager = true;
+            unplanned = r1.rows || [];
+            order.area = r1.areas || order.area;
+            order.type = r1.categories || order.type;
+            /* ⚠️ מגיע מהשרת ולא מקובע ל-true. עד 8.9 התיבה הייתה של המנהל
+               בלבד ולכן ההנחה עבדה; מאז שהגנן משבץ בעצמו, קיבוע היה נותן לו
+               מסך של מנהל — כולל תיבות אישור על עבודה של עצמו. */
+            var sim = window.CBA.user;
+            isManager = (sim && sim.isRoleSim) ? !sim.isExternal : !!r1.isManager;
             draw();
-            loadPending();
+            // תור האישורים ממתין *למנהל*; לגנן אין מה לעשות איתו, והשרת חוסם.
+            if (isManager) loadPending(); else pending = [];
           });
           return;
         }
@@ -393,8 +398,14 @@
            ששמה כתוב עליה. "משימה חדשה" עבר לשורת הבקרה כלחצן ראשי. */
         /* ================= לטיפולך ================= */
         if (inbox) {
-          var newOnes = unplanned.slice();
-          var toOk = pending.slice();
+          /* ⚠️ שני המקטעים **אינם** לאותו אדם (החלטת יועד 8.9):
+             שיבוץ תקלת תושב עבר לגנן — הוא בשטח והוא יודע מתי הוא מגיע לשם,
+             אם שתי פניות הן אותה ממטרה, ואם משהו כבר מתוזמן.
+             אישור עבודה נשאר של המנהל, והוא רואה את הדיווחים כמטלות פתוחות
+             במעקב — לא כתור שמחכה להחלטה שלו. לכן כל תפקיד רואה מקטע אחד,
+             והמסך מגיע לאפס אצל שניהם. */
+          var newOnes = isManager ? [] : unplanned.slice();
+          var toOk = isManager ? pending.slice() : [];
           root.innerHTML = (!newOnes.length && !toOk.length)
             ? '<div class="gd-reps"><div class="gd-rep gi-zero"><u>' + ico("check") + '</u>' +
               '<b>אין מה לטפל</b><span>כשתושב ידווח, או כשהצוות יסמן משימה כבוצעה — ' +
@@ -1222,6 +1233,9 @@
       /* סגירה שאינה "בוצע". שלוש הסיבות מהאפיון; "בוצע" לא מופיע כאן כי הוא
          כפתור האישור עצמו, והוא היחיד ששולח מייל לתושב. */
       function askClosure(t) {
+        /* הסבר לתושב נדרש רק כשיש תושב מאחורי הפנייה. משימת שגרה או יזומה
+           נסגרת בלחיצה אחת — אין למי לכתוב. */
+        var isReport = t.kind === GK_REPORT;
         var reasons = [
           { k: "הועבר לבינוי", sub: "לא בתחום הגינון" },
           { k: "בוטל",         sub: "הוחלט לא לבצע" },
@@ -1234,13 +1248,26 @@
           '<div class="gt-sheet" role="dialog" aria-label="סגירה עם סיבה">' +
             '<div class="gt-grip" aria-hidden="true"></div>' +
             '<h4>סגירה עם סיבה</h4>' +
-            '<p class="sub">' + esc(t.title || t.category || "משימה") +
-              '<br>המדווח לא יקבל מייל "הושלם" — הסיבה תופיע לו במסך.</p>' +
+            '<p class="sub">' + esc(t.title || t.category || "משימה") + '</p>' +
             reasons.map(function (o) {
               return '<button type="button" class="gt-opt" data-cl="' + esc(o.k) + '"><u>' +
                 ico("check") + '</u><div>' + esc(o.k) +
                 '<span>' + esc(o.sub) + '</span></div></button>';
             }).join("") +
+            /* ⚠️ שלב שני, ולא שדה שמופיע מראש: קודם בוחרים סיבה, ורק אז
+               כותבים לתושב. טופס שמציג הכול בבת אחת גורם לדלג על הכתיבה —
+               והכתיבה היא כל העניין. לדיווח תושב היא חובה, וגם בשרת. */
+            (isReport
+              ? '<div id="gt-why" hidden style="margin-top:14px">' +
+                  '<label class="gd-lbl">מה לכתוב לתושב <s>*</s></label>' +
+                  '<textarea class="gd-inp" id="gt-why-t" rows="3" maxlength="600" ' +
+                    'placeholder="למשל: בדקנו בשטח — העץ תקין ואינו מהווה סכנה."></textarea>' +
+                  '<p class="gp-note">זה ייצא אליו במייל ויופיע לו באפליקציה. ' +
+                  '"בוטל" לבדו אינו תשובה.</p>' +
+                  '<button type="button" class="gd-cta" id="gt-why-go" ' +
+                    'style="margin-top:12px">סגירה ושליחה</button>' +
+                '</div>'
+              : '') +
           '</div>';
         document.body.appendChild(wrap);
         requestAnimationFrame(function () { wrap.classList.add("is-open"); });
@@ -1249,11 +1276,24 @@
           setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
         }
         wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        var picked = "";
         wrap.addEventListener("click", function (e) {
           var b = e.target.closest("[data-cl]");
-          if (!b) return;
+          if (b) {
+            if (!isReport) { close(); return run("close", t.id, { closure: b.dataset.cl }); }
+            picked = b.dataset.cl;
+            Array.prototype.forEach.call(wrap.querySelectorAll("[data-cl]"), function (x) {
+              x.classList.toggle("is-picked", x === b);
+            });
+            wrap.querySelector("#gt-why").hidden = false;
+            wrap.querySelector("#gt-why-t").focus();
+            return;
+          }
+          if (!e.target.closest("#gt-why-go")) return;
+          var why = wrap.querySelector("#gt-why-t").value.trim();
+          if (!why) return CBA.ui.alert("צריך לכתוב לתושב מה הסיבה");
           close();
-          run("close", t.id, { closure: b.dataset.cl });
+          run("close", t.id, { closure: picked, note: why });
         });
       }
 

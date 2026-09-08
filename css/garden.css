@@ -541,6 +541,16 @@
 .gt-opt span { display: block; font-size: 11.5px; color: #9CA3AF; font-weight: 400; margin-top: 1px; }
 .gt-sheet-wrap.is-map .gd-map { height: 62vh; margin-top: 4px; }
 
+/* סגירה בלי ביצוע, בעיני התושב. ניטרלי ולא אדום: זו החלטה מנומקת ולא
+   תקלה, ואדום היה קורא כאילו משהו השתבש אצלו. ההסבר הוא העיקר כאן —
+   שם הסגירה לבדו ("בוטל") אינו תשובה לאדם ששאל שאלה. */
+.gd-rep__closed { margin-top: 8px; padding: 9px 11px; border-radius: 10px;
+  background: rgba(17,24,39,.045); }
+.gd-rep__closed b { display: block; font-size: 12px; font-weight: 700;
+  color: var(--text, #374151); }
+.gd-rep__closed span { display: block; font-size: 12.5px; color: #6B7280;
+  line-height: 1.5; margin-top: 4px; }
+
 /* ---- דיווח תושב נראה אחרת, לא רק מסונן אחרת (2026-09-08) ----
    בקשת יועד. הפתרון הוא **מרקם ולא צבע**: הפס בשפת הכרטיס נשאר בצבע
    הקטגוריה — כי הקטגוריה לא השתנתה — אבל הופך למקוטע. כך אפשר לסרוק עמודה
@@ -616,6 +626,10 @@
 .gi-cta { border: 0; border-radius: 8px; background: var(--action, #111827); color: #fff;
   font: inherit; font-size: 11.5px; font-weight: 600; padding: 5px 11px; cursor: pointer;
   display: inline-flex; align-items: center; gap: 5px; }
+/* ⚠️ חובה. ico() מייצר <svg> בלי width/height, וברירת המחדל של SVG בלי
+   מידות בתוך flex היא להימתח לרוחב הזמין — הסמליל תפס את כל הכרטיס.
+   כל בלוק כפתורים חדש חייב את השורה הזאת. */
+.gi-cta svg { width: 13px; height: 13px; flex: none; }
 .gi-cta:hover { background: #000; }
 /* "כבר בתוכנית" הוא ירוק-מתאר ולא שחור-מלא: הוא התשובה שלא מייצרת עבודה,
    והוא צריך להיראות כמו מוצא ולא כמו הפעולה הראשית. */
