@@ -8618,10 +8618,26 @@ function handleGardenStats_(p) {
        תוכנית לא ריאלית או חסם בשטח, ובשני המקרים המנהל צריך לגעת בסעיף.
        ⚠️ השבוע הנוכחי לא נספר כאן, בדיוק כמו ב-overall — הוא עדיין רץ. */
     var perDef = {};
+    /* ⚠️ **רצפת התוכנית.** המכנה מחושב מההגדרות ולכן הוא זמין גם לשבועות
+       שקדמו לקיומה של התוכנית — ומייד אחרי זריעה ראשונה כל ההיסטוריה
+       נצבעת "0%, בעיה", על עבודה שאיש מעולם לא התבקש לעשות. הרצפה היא
+       השבוע של משימת השגרה הראשונה שנוצרה אי פעם: לפניו התוכנית לא רצה,
+       ושבוע כזה מצויר כעמודה ריקה ("אין משימות בתוכנית") ולא כאפס.
+       נגזר מהנתונים הקיימים — בלי עמודה חדשה ובלי bump ל-SCHEMA_REV. */
+    var planFloor = '';
+    tasks.forEach(function (t) {
+      if (t.kind !== GARDEN_KIND_ROUTINE) return;
+      var w = t.firstWeek || t.week;
+      if (w && (!planFloor || w < planFloor)) planFloor = w;
+    });
+    /* אין ולו משימת שגרה אחת: התוכנית מעולם לא רצה. הרצפה היא השבוע הנוכחי,
+       אחרת "אין נתונים" היה מוצג כ-0% על פני כל החלון. */
+    if (!planFloor) planFloor = thisWeek;
     var byWeek = keys.map(function (k) {
-      var want = gardenPlanForWeek_(ss, k, defs, lists.areas);
+      var live = k >= planFloor;
+      var want = live ? gardenPlanForWeek_(ss, k, defs, lists.areas) : [];
       var planned = want.length;
-      var counts = (k !== thisWeek);
+      var counts = live && (k !== thisWeek);
       if (counts) want.forEach(function (w) {
         var e = perDef[w.def.id];
         if (!e) e = perDef[w.def.id] = { id: w.def.id, title: w.def.title,

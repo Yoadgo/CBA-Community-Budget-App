@@ -83,8 +83,11 @@
     return t;
   }
 
+  /* ⚠️ ריק ≠ "כל האזורים". שורה בלי אזורים מייצרת **משימה כללית אחת**
+     (ר' gardenPlanAreas_ בשרת), ולא משימה נפרדת לכל אזור. הכיתוב הקודם
+     אמר את ההפך, ומי שקרא אותו היה מצפה ל-12 משימות ומקבל אחת. */
   function areaLabel(d, allAreas) {
-    if (!d.areas || !d.areas.length) return "כל האזורים";
+    if (!d.areas || !d.areas.length) return "משימה אחת, בלי חלוקה לאזורים";
     if (d.rotate) return "אזור אחד בכל מופע, בסבב";
     if (allAreas && d.areas.length === allAreas.length) return "כל האזורים";
     return d.areas.join(" · ");
@@ -305,7 +308,7 @@
                   '" data-area="' + esc(a) + '">' + esc(a) + '</button>';
               }).join("") +
             '</div>' +
-            '<p class="gp-note">בלי בחירה — כל האזורים.</p>' +
+            '<p class="gp-note">בלי בחירה — משימה כללית אחת, בלי חלוקה לאזורים.</p>' +
 
             '<label class="gp-check" style="margin-top:10px">' +
               '<input type="checkbox" id="gp-rot"' + (d.rotate ? " checked" : "") + '>' +

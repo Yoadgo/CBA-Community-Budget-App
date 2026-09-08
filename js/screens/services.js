@@ -564,10 +564,25 @@ CBA.screens.resServices = {
   title: "שירותים",
 
   render: function (container) {
+    /* קיצור למנהל-על (2026-09-08, לבקשת יועד) — מסך העריכה תמיד היה קיים
+       (servicesAdmin, אזור הניהול), אבל מי שעומד כאן ורואה משהו לתקן צריך
+       לזכור שהוא נמצא במקום אחר לגמרי. הכפתור לא משנה שום הרשאה: האכיפה
+       היא בשרת (saveServices: PERM_SUPER ב-ACTION_PERMS), וזה רק ניווט.
+       ⚠️ CBA.isSuper נקבע פעם אחת באתחול (app.js) — לא לגזור הרשאה מכאן
+          לשום דבר מלבד הצגת קיצור דרך. */
+    var canEdit = window.CBA && CBA.isSuper === true && CBA.screens && CBA.screens.servicesAdmin;
     container.innerHTML =
-      '<div class="screen-head"><div class="screen-head__title">שירותים</div>' +
-      '<div class="screen-head__sub">כל השירותים בשיכון — פרטים מלאים, מחירים ואנשי קשר</div></div>' +
+      '<div class="screen-head screen-head--row">' +
+        '<div><div class="screen-head__title">שירותים</div>' +
+        '<div class="screen-head__sub">כל השירותים בשיכון — פרטים מלאים, מחירים ואנשי קשר</div></div>' +
+        (canEdit ? '<button type="button" class="btn-ghost btn-sm" id="svc-edit">עריכת הכרטיסים</button>' : '') +
+      '</div>' +
       '<div id="svc-body"></div>';
+
+    if (canEdit) {
+      var ed = container.querySelector("#svc-edit");
+      if (ed) ed.addEventListener("click", function () { CBA.navigate("servicesAdmin"); });
+    }
 
     var body = container.querySelector("#svc-body");
 
