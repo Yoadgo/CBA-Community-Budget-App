@@ -195,6 +195,11 @@
          תקלת רשת. זו התשובה הכי גרועה האפשרית: היא נראית תקינה, היא שקרית,
          והיא גורמת לו ללכת הביתה. */
       var loadErr = null;
+      /* ⚠️ שורה שסומנה **חייבת להישאר רגע**. בלי זה הסימון האופטימי גורם לה
+         לצאת מהמסנן באותו רגע והכרטיס נעלם בהינף — כלומר המשתמש לוחץ, משהו
+         מהבהב, ואין לו שום אישור שהפעולה נקלטה. זה בדיוק אותו כשל שהוא תיאר,
+         רק מהיר יותר. הרשימה מתנקה בטעינה הבאה, אחרי שהשרת אישר. */
+      var justActed = {};
 
       container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
       var root = container.querySelector("#gt-root");
@@ -230,6 +235,7 @@
             return;
           }
           loadErr = null;
+          justActed = {};        // השרת ענה — הרשימה חוזרת להיות מסוננת רגיל
           rows = res.rows || [];
           order.area = res.areas || [];
           order.type = res.categories || [];
@@ -291,6 +297,7 @@
           return rows.filter(function (t) { return !!t.closure; });
         }
         return rows.filter(function (t) {
+          if (justActed[t.id]) return true;      // ר' ההערה ליד justActed
           if (t.closure) return false;
           if (filter === "done") return t.flag === "ממתין לאישור";
           if (filter === "dragged") return t.flag === "נגררה" || (t.drags || 0) > 0;
@@ -745,8 +752,11 @@
         if (t && OPTIMISTIC[op]) {
           OPTIMISTIC[op](t);
           applied = true;
-          markRowBusy(id, true);
+          justActed[id] = true;
+          /* ⚠️ הסדר הפוך ממה שנראה טבעי: draw() בונה את ה-DOM מחדש, ולכן
+             מחלקה שנוספה לפניו נמחקת. מסמנים אחרי. */
           draw();
+          markRowBusy(id, true);
         }
 
         CBA.data.gardenTask(op, id, extra || {}, function (res) {
@@ -756,6 +766,7 @@
                מאמין שהעבודה נרשמה — טעות שמתגלה רק שבוע אחרי. */
             if (applied && snapshot) {
               Object.keys(snapshot).forEach(function (k) { t[k] = snapshot[k]; });
+              delete justActed[id];
               draw();
             }
             CBA.ui.alert((res && res.error) || "הפעולה לא הצליחה");

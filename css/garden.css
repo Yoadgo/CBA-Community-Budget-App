@@ -533,6 +533,27 @@
 .gt-opt span { display: block; font-size: 11.5px; color: #9CA3AF; font-weight: 400; margin-top: 1px; }
 .gt-sheet-wrap.is-map .gd-map { height: 62vh; margin-top: 4px; }
 
+/* ---- חיווי ברמת השורה + מצב שגיאה (2026-09-08) ----
+   החיווי הגלובלי בכותרת אומר "משהו נשמר"; הוא לא אומר **מה**. כשהאצבע על
+   כרטיס אחד מתוך תשעה זו לא אותה שאלה. הפעימה עדינה בכוונה: הפעולה כבר
+   נראית שקרתה (הווי נכנס מיד), וזה רק רומז שהיא עוד בדרך לשרת. */
+.gt-row.is-saving { animation: gtPulse 1.1s ease-in-out infinite; }
+@keyframes gtPulse { 0%, 100% { opacity: 1; } 50% { opacity: .62; } }
+@media (prefers-reduced-motion: reduce) {
+  .gt-row.is-saving { animation: none; opacity: .7; }
+}
+
+/* מצב שגיאה. הוא **לא** נראה כמו מצב ריק: מצב ריק אומר "אין עבודה" ומצב
+   שגיאה אומר "לא יודע" — ולגנן שמסתכל על המסך בשטח זה ההבדל בין ללכת
+   הביתה לבין לנסות שוב. */
+.gt-err { display: block; text-align: center; padding: 30px 18px; }
+.gt-err u { text-decoration: none; display: block; color: #C08A8A; margin-bottom: 10px; }
+.gt-err u svg { width: 30px; height: 30px; }
+.gt-err b { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.gt-err span { display: block; font-size: 12.5px; color: #8A9199; line-height: 1.55;
+  margin-bottom: 14px; }
+.gt-err .gd-cta { width: auto; padding-inline: 26px; }
+
 /* ---- הארכיון: משימה שנסגרה (2026-09-08) ----
    עד היום היא נעלמה מהאפליקציה ברגע האישור. עכשיו היא נשארת בשבוע שלה,
    אבל **לא כמשימה**: אין תיבת סימון ואין תפריט פעולות, כי אין מה לעשות
@@ -585,7 +606,9 @@
 .gi-cta.is-ghost { background: transparent; color: var(--text, #374151); font-weight: 500;
   box-shadow: inset 0 0 0 1px rgba(17,24,39,.14); }
 .gi-cta.is-ghost:hover { background: rgba(17,24,39,.04); }
-.gi-zero { text-align: center; padding: 30px 16px; }
+/* ⚠️ display:block מפורש — .gd-rep הוא flex בשורה, ובלעדיו האייקון,
+   הכותרת והמשפט נפרסים זה לצד זה. אותה מלכודת בדיוק ב-.gt-err. */
+.gi-zero { display: block; text-align: center; padding: 30px 16px; }
 .gi-zero u { text-decoration: none; display: block; color: #8FBFA4; margin-bottom: 10px; }
 .gi-zero u svg { width: 30px; height: 30px; }
 .gi-zero b { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }

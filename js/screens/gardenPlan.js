@@ -30,6 +30,8 @@
     cal:   '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
     plus:  '<path d="M12 5v14M5 12h14"/>',
     edit:  '<path d="M4 20h4L19 9a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5 4 20Z"/>',
+    cloud: '<path d="M6.5 19a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 11.2-1.6A4.2 4.2 0 0 1 21 12.6"/>' +
+           '<path d="m15 15 6 6M21 15l-6 6"/>',
     rot:   '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14"/><path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v2a3 3 0 0 1-3 3h-14"/>'
   };
   function ico(n, w) {
@@ -89,6 +91,10 @@
   CBA.screens.gardenPlan = {
     render: function (container) {
       var defs = [], areas = [], cats = [], busy = false;
+      /* כישלון טעינה אינו תוכנית ריקה — ר' אותה הערה ב-gardenTasks.js.
+         כאן זה חמור אפילו יותר: "התוכנית עדיין ריקה" מזמין את המנהל להזין
+         מחדש משימות שכבר קיימות. */
+      var loadErr = null;
 
       container.innerHTML = '<div class="gd-screen" id="gp-root"></div>';
       var root = container.querySelector("#gp-root");
@@ -98,11 +104,11 @@
       function load() {
         CBA.data.getGardenPlan(function (res) {
           if (!res || !res.ok) {
-            defs = [];
+            loadErr = (res && res.error) || "לא הצלחתי לטעון את התוכנית";
             draw();
-            if (res && res.error) CBA.ui.alert(res.error);
             return;
           }
+          loadErr = null;
           defs = res.defs || [];
           areas = res.areas || [];
           cats = res.categories || [];
@@ -136,6 +142,18 @@
       }
 
       function draw(skeleton) {
+        if (loadErr && !skeleton) {
+          root.innerHTML =
+            '<div class="gd-reps"><div class="gd-rep gt-err">' +
+              '<u>' + ico("cloud", 30) + '</u><b>לא הצלחתי לטעון</b>' +
+              '<span>' + esc(loadErr) + '</span>' +
+              '<button type="button" class="gd-cta" id="gp-retry">נסה שוב</button>' +
+            '</div></div>';
+          root.querySelector("#gp-retry").addEventListener("click", function () {
+            loadErr = null; draw(true); load();
+          });
+          return;
+        }
         var body;
         if (skeleton) {
           body = '<div class="gd-reps">' +
