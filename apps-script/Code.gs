@@ -81,6 +81,7 @@ var ACTION_PERMS = {
   gardenTask: PERM_GARDEN,
   gardenApproveBatch: PERM_GARDEN,
   gardenMerge: PERM_GARDEN,
+  gardenCreateTask: PERM_GARDEN,
   // ניהול תקציב ותשלומים
   saveTransaction: PERM_BUDGET, deleteTransaction: PERM_BUDGET, saveBudget: PERM_BUDGET,
   setBudgetMeta: PERM_BUDGET, renameCategory: PERM_BUDGET, logBudgetUpdate: PERM_BUDGET,
@@ -642,6 +643,7 @@ function doPost(e) {
       case 'gardenTask':          return json_(gardenTaskAction_(ss, body));
       case 'gardenApproveBatch':  return json_(gardenApproveBatch_(ss, body));
       case 'gardenMerge':         return json_(gardenMerge_(ss, body));
+      case 'gardenCreateTask':    return json_(gardenCreateTask_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -7805,6 +7807,58 @@ function gardenCloseRow_(ss, sh, row, c, cur, closure, who) {
 }
 
 
+
+
+/* ---------- פתיחת משימה יזומה (doPost) ----------
+   המנהל פותח משימה שלא נולדה מדיווח ולא מתבנית שגרה — עץ שהוא ראה בעצמו,
+   עבודה שהוחלט עליה בישיבה, או בדיקה בשטח. `סוג` = "יזום" (ר' GARDEN_KINDS),
+   ולכן היא **לא** נספרת כחוב חוזי ולא כדיווח תושב.
+   ⚠️ לא פתוח לאחראי הגינון: פתיחת משימה היא הגדרת עבודה, וזו סמכות המנהל.
+   הצוות מדווח על מה שמונע ביצוע (op:'block') — לא פותח לעצמו משימות. */
+function gardenCreateTask_(ss, body) {
+  var perm = body._perm || {};
+  if (perm.isExternal) return { ok: false, error: 'פתיחת משימה היא בסמכות מנהל הגינון' };
+  var who = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email || '';
+
+  var title = String(body.title || '').trim().substring(0, 120);
+  if (!title) return { ok: false, error: 'צריך כותרת למשימה' };
+  var lists = gardenLists_(ss);
+  var cat = String(body.category || '').trim();
+  if (lists.categories.length && lists.categories.indexOf(cat) === -1) {
+    return { ok: false, error: 'קטגוריה לא מוכרת' };
+  }
+  var area = String(body.area || '').trim();
+  if (area && lists.areas.length && lists.areas.indexOf(area) === -1) {
+    return { ok: false, error: 'אזור לא מוכר' };
+  }
+  var wk = String(body.week || '').trim();
+  if (wk && !/^\d{4}-\d{2}-\d{2}$/.test(wk)) return { ok: false, error: 'שבוע לא תקין' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGardenSheets_(ss);
+    var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    var tc = gardenCols_(sh);
+    var id = nextGardenId_(sh);
+    var row = new Array(sh.getLastColumn()).fill('');
+    row[tc['מזהה']] = id;
+    row[tc['סוג']] = GARDEN_KIND_MANUAL;
+    row[tc['כותרת']] = title;
+    row[tc['קטגוריה']] = cat;
+    row[tc['אזור']] = area;
+    if (tc['נוצר בתאריך'] !== undefined) row[tc['נוצר בתאריך']] = new Date();
+    // משימה שנפתחה עם שבוע כבר מתוכננת; בלי שבוע היא ממתינה לשיבוץ כמו דיווח.
+    row[tc['שלב']] = wk ? 'מתוכנן' : 'התקבל';
+    if (wk) row[tc['שבוע']] = wk;
+    row[tc['עודכן בתאריך']] = new Date();
+    row[tc['עודכן על ידי']] = who;
+    row[tc['שנת תקציב']] = readSettings_(ss)['שנה נוכחית'] || '';
+    sh.appendRow(row);
+    gardenLog_(ss, id, 'נפתח', 'שלב', '', row[tc['שלב']], who, 'משימה יזומה');
+    return { ok: true, id: id };
+  } finally { lock.releaseLock(); }
+}
 
 /* ---------- איחוד כפילויות (F-05) ----------
    הסף הוא **מבני ולא סמנטי**: אותה קטגוריה, אותו אזור, בתוך 14 יום. אין כאן

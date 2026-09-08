@@ -1377,6 +1377,10 @@ CBA.data = (function () {
       if (extra && extra.closure !== undefined) payload.closure = extra.closure;
       CBA.sheets.postRead("gardenTask", payload, cb);
     },
+    /* פתיחת משימה יזומה ע"י המנהל. payload: {title, category, area, week}. */
+    gardenCreateTask: function (payload, cb) {
+      CBA.sheets.postRead("gardenCreateTask", payload, cb);
+    },
     /* איחוד כפילות: משימה id נבלעת לתוך משימה into. */
     gardenMerge: function (id, into, cb) {
       CBA.sheets.postRead("gardenMerge", { id: id, into: into }, cb);

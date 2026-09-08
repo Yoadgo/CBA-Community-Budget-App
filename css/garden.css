@@ -278,6 +278,27 @@
 .gt-bar i { display: block; height: 100%; border-radius: 99px;
   background: linear-gradient(90deg, #0F6B45, #3FA37A); transition: width .35s ease; }
 
+/* רצועת העבודה של המנהל — ארבעה מספרים שהם גם כפתורים. אריח באפס מתעמעם
+   ולא נעלם: "אין מה לאשר" הוא מידע, והיעלמות הייתה מזיזה את שאר האריחים. */
+.gt-tiles { display: flex; gap: 7px; margin-bottom: 11px; }
+.gt-tile { flex: 1 1 0; min-width: 0; border: 1px solid rgba(17,24,39,.09);
+  border-radius: 11px; background: rgba(255,255,255,.72); padding: 9px 8px 8px;
+  font: inherit; cursor: pointer; text-align: center;
+  -webkit-backdrop-filter: saturate(180%) blur(12px); backdrop-filter: saturate(180%) blur(12px);
+  transition: border-color .15s ease, background .15s ease; }
+.gt-tile b { display: block; font-size: 21px; font-weight: 700; line-height: 1;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.gt-tile span { display: block; font-size: 10.5px; color: var(--text-soft, #6B7280);
+  margin-top: 4px; line-height: 1.25; }
+.gt-tile:hover { border-color: rgba(17,24,39,.22); background: #fff; }
+.gt-tile.is-wait b { color: var(--ok, #059669); }
+.gt-tile.is-plan b { color: var(--action, #111827); }
+.gt-tile.is-drag b { color: #B45309; }
+.gt-tile.is-hot  b { color: #B91C1C; }
+.gt-tile.is-zero { opacity: .45; }
+.gt-tile.is-zero b { color: var(--text-soft, #6B7280); }
+@media (max-width: 380px) { .gt-tile span { font-size: 10px; } }
+
 .gt-sort { display: flex; align-items: center; gap: 7px; margin: 10px 0 2px;
   overflow-x: auto; padding-bottom: 2px; }
 .gt-sort::-webkit-scrollbar { display: none; }
@@ -384,6 +405,16 @@
 .gt-sheet-wrap.is-open .gt-sheet { transform: translateY(0); }
 .gt-grip { width: 38px; height: 4px; border-radius: 99px; background: rgba(17,24,39,.16); margin: 0 auto 12px; }
 .gt-sheet h4 { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
+/* הטופס בתוך הגיליון משתמש ברכיבי הטופס הקיימים (.gd-inp/.gd-lbl/.gd-cta),
+   אבל select צריך חץ משלו — appearance:none מוריד את הנייטיב יחד עם החץ. */
+.gt-sheet select.gd-inp {
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat; background-size: 15px;
+  background-position: left 11px center; padding-inline-start: 34px;
+}
+.gt-sheet .gd-lbl { margin-bottom: 5px; }
+.gt-sheet .gd-cta { width: 100%; }
 .gt-sheet p.sub { margin: 0 0 12px; font-size: 12px; color: var(--text-soft, #6B7280); line-height: 1.5; }
 .gt-opt { width: 100%; display: flex; align-items: center; gap: 11px; padding: 11px 12px;
   border: 0; border-radius: 12px; background: rgba(17,24,39,.035); font: inherit; font-size: 13.5px;

@@ -31,6 +31,7 @@
     weed:  '<path d="M12 21v-8"/><path d="M12 13c0-3-2.2-5-5-5 0 3 2.2 5 5 5Z"/><path d="M12 13c0-3.4 2.5-5.6 5.6-5.6 0 3.4-2.5 5.6-5.6 5.6Z"/>',
     clean: '<path d="M5 7h14"/><path d="M10 7V4.6h4V7"/><path d="M6.6 7 8 20h8l1.4-13"/>',
     bed:   '<circle cx="12" cy="8.4" r="2.4"/><path d="M12 6c0-2.2-3.6-2.2-3.6 0S12 10.6 12 8.4ZM12 6c0-2.2 3.6-2.2 3.6 0S12 10.6 12 8.4ZM12 21v-8"/>',
+    plus:  '<path d="M12 5v14M5 12h14"/>',
     check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>',
     prev:  '<path d="M15 18l-6-6 6-6"/>',
@@ -148,6 +149,10 @@
          כי הן לא שייכות לאף שבוע ולכן לא מגיעות עם רשימת השבוע. הן
          מוצגות רק למנהל — לצוות אין מה לעשות עם משימה שטרם תוכננה. */
       var unplanned = [];
+      /* תור האישורים נטען בנפרד (scope=pending) ו**אינו תלוי בשבוע הנבחר**.
+         אישור שממתין משבוע שעבר לא אמור להיעלם כשמדפדפים לשבוע הבא —
+         זו בדיוק הדרך שבה משימות נופלות בין הכיסאות. */
+      var pending = [];
 
       container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
       var root = container.querySelector("#gt-root");
@@ -173,7 +178,7 @@
           isManager = (sim && sim.isRoleSim) ? !sim.isExternal : !!res.isManager;
           if (res.week) week = res.week;
           draw();
-          if (isManager) loadUnplanned();
+          if (isManager) { loadUnplanned(); loadPending(); }
         });
       }
 
@@ -183,18 +188,30 @@
           draw();
         });
       }
+      function loadPending() {
+        CBA.data.getGardenTasks({ scope: "pending" }, function (res) {
+          pending = (res && res.ok) ? (res.rows || []) : [];
+          draw();
+        });
+      }
 
       function counts() {
-        var c = { open: 0, done: 0, dragged: 0 };
+        var c = { open: 0, done: 0, dragged: 0, recheck: 0 };
         rows.forEach(function (t) {
           if (t.flag === "ממתין לאישור") c.done++;
           else c.open++;
           if (t.flag === "נגררה" || (t.drags || 0) > 0) c.dragged++;
         });
+        // למנהל, "בוצעו" הוא התור המלא ולא רק של השבוע המוצג.
+        if (isManager) c.done = pending.length;
+        rows.concat(unplanned).concat(pending).forEach(function (t) {
+          if (t.flag === "דורש בדיקה חוזרת") c.recheck++;
+        });
         return c;
       }
       function visible() {
         if (filter === "unplanned") return unplanned.slice();
+        if (filter === "done" && isManager) return pending.slice();
         return rows.filter(function (t) {
           if (filter === "done") return t.flag === "ממתין לאישור";
           if (filter === "dragged") return t.flag === "נגררה" || (t.drags || 0) > 0;
@@ -278,7 +295,14 @@
           '<div class="gd-head"><span class="gd-head__em">' + ico("leaf") + '</span>' +
             '<div class="gd-head__t"><h3>משימות השבוע</h3><p>' +
             esc(isManager ? "מנהל גינון · מראה שיכון" : "אחראי גינון · מראה שיכון") +
-            '</p></div></div>' +
+            '</p></div>' +
+            /* פתיחת משימה יזומה — סמכות מנהל בלבד. עד כה משימה יכלה להיוולד
+               רק מדיווח תושב, כלומר המנהל לא יכול היה להגדיר עבודה בעצמו. */
+            (isManager
+              ? '<button type="button" class="gd-newbtn" id="gt-new">' +
+                ico("plus") + 'משימה חדשה</button>'
+              : '') +
+          '</div>' +
           '<div class="gt-week">' +
             '<button type="button" data-wk="-1" aria-label="שבוע קודם">' + ico("prev") + '</button>' +
             '<div class="gt-week__c"><b>' + esc(weekLabel(week)) + '</b>' +
@@ -286,6 +310,19 @@
               '<div class="gt-bar"><i style="width:' + pct + '%"></i></div></div>' +
             '<button type="button" data-wk="1" aria-label="שבוע הבא">' + ico("next") + '</button>' +
           '</div>' +
+          /* רצועת העבודה של המנהל. לא סטטיסטיקה — לוח הנתונים הוא שלב ג׳ ותלוי
+             במנוע השגרה (ר' cba-garden-dashboard-spec). ארבעת המספרים האלה
+             נספרים מנתונים שכבר קיימים, והם עונים על שאלה אחת: **מה מונח על
+             שולחני עכשיו**. כל אריח הוא כפתור שקופץ לרשימה שלו — אחרת זו
+             תצוגה שמודיעה על בעיה ולא נותנת דרך לטפל בה. */
+          (isManager
+            ? '<div class="gt-tiles">' +
+                tile("done", "ממתינות לאישורך", c.done, "wait") +
+                tile("unplanned", "לשיבוץ", unplanned.length, "plan") +
+                tile("dragged", "נגררו", c.dragged, "drag") +
+                tile("open", "דורש בדיקה חוזרת", c.recheck, "hot") +
+              '</div>'
+            : '') +
           '<div class="gd-seg">' +
             seg("open", "לביצוע", c.open) + seg("done", "בוצעו", c.done) +
             seg("dragged", "נגררו", c.dragged) +
@@ -306,6 +343,11 @@
         var list = order[sortBy] || [];
         var i = list.indexOf(name);
         return i === -1 ? 9999 : i;
+      }
+
+      function tile(f, label, n, kind) {
+        return '<button type="button" class="gt-tile is-' + kind + (n ? '' : ' is-zero') +
+          '" data-f="' + f + '"><b>' + n + '</b><span>' + esc(label) + '</span></button>';
       }
 
       function seg(k, label, n) {
@@ -389,6 +431,8 @@
         Array.prototype.forEach.call(root.querySelectorAll("[data-sort]"), function (b) {
           b.addEventListener("click", function () { sortBy = b.dataset.sort; draw(); });
         });
+        var nb = root.querySelector("#gt-new");
+        if (nb) nb.addEventListener("click", openNewTask);
         root.addEventListener("click", onCardClick);
       }
 
@@ -529,6 +573,75 @@
               load();
             });
           });
+      }
+
+      /* טופס פתיחת משימה. גיליון תחתון ולא מסך נפרד: הוא נפתח מעל הרשימה,
+         נסגר אליה, והמנהל רואה מיד את המשימה נכנסת. הקטגוריות והאזורים מגיעים
+         מאותה תשובת שרת שבנתה את הרשימה — מקור אמת אחד, בלי קריאה נוספת. */
+      function openNewTask() {
+        var cats = order.type.length ? order.type : [];
+        var areas = order.area.length ? order.area : [];
+        var wrap = document.createElement("div");
+        wrap.className = "gt-sheet-wrap";
+        wrap.innerHTML =
+          '<div class="gt-sheet-bd"></div>' +
+          '<div class="gt-sheet" role="dialog" aria-label="משימה חדשה">' +
+            '<div class="gt-grip" aria-hidden="true"></div>' +
+            '<h4>משימה חדשה</h4>' +
+            '<p class="sub">משימה שאתה פותח בעצמך — לא דיווח תושב ולא שגרה מהחוזה.</p>' +
+            '<label class="gd-lbl">מה צריך לעשות <s>*</s></label>' +
+            '<input class="gd-inp" id="nt-title" maxlength="120" autocomplete="off" ' +
+              'placeholder="למשל: לגזום את העץ שחוסם את התמרור">' +
+            '<div class="gd-row2" style="margin-top:10px">' +
+              '<div><label class="gd-lbl">קטגוריה <s>*</s></label>' +
+                '<select class="gd-inp" id="nt-cat">' +
+                  cats.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join("") +
+                '</select></div>' +
+              '<div><label class="gd-lbl">אזור</label>' +
+                '<select class="gd-inp" id="nt-area"><option value="">ללא</option>' +
+                  areas.map(function (a) { return '<option>' + esc(a) + '</option>'; }).join("") +
+                '</select></div>' +
+            '</div>' +
+            '<label class="gd-lbl" style="margin-top:10px">מתי</label>' +
+            '<select class="gd-inp" id="nt-week">' +
+              '<option value="' + shiftKey(todayKey(), 0) + '">השבוע · ' + esc(weekLabel(shiftKey(todayKey(), 0))) + '</option>' +
+              '<option value="' + shiftKey(todayKey(), 1) + '">שבוע הבא</option>' +
+              '<option value="">בלי שבוע — לרשימת השיבוץ</option>' +
+            '</select>' +
+            '<button type="button" class="gd-cta" id="nt-go" style="margin-top:14px">' +
+              ico("plus") + 'פתיחת המשימה</button>' +
+          '</div>';
+        document.body.appendChild(wrap);
+        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
+        function close() {
+          wrap.classList.remove("is-open");
+          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
+        }
+        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        var titleEl = wrap.querySelector("#nt-title");
+        setTimeout(function () { titleEl.focus(); }, 120);
+        wrap.querySelector("#nt-go").addEventListener("click", function () {
+          var title = titleEl.value.trim();
+          if (!title) { titleEl.focus(); return CBA.ui.alert("צריך לכתוב מה צריך לעשות"); }
+          if (busy) return;
+          busy = true;
+          var wk = wrap.querySelector("#nt-week").value;
+          CBA.data.gardenCreateTask({
+            title: title,
+            category: wrap.querySelector("#nt-cat").value,
+            area: wrap.querySelector("#nt-area").value,
+            week: wk
+          }, function (res) {
+            busy = false;
+            if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "המשימה לא נפתחה");
+            close();
+            CBA.ui.toast("נפתחה משימה #" + res.id);
+            // קופצים לרשימה שבה היא באמת נחתה, אחרת היא "נעלמת" מול העיניים
+            filter = wk ? "open" : "unplanned";
+            if (wk) week = wk;
+            load();
+          });
+        });
       }
 
       function openMenu(id) {
