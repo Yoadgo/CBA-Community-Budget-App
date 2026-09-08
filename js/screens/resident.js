@@ -2239,7 +2239,7 @@ CBA.screens = CBA.screens || {};
            הכפתור — 700KB לא נטענים למי שלא ביקש. */
         worldEl.insertAdjacentHTML('afterbegin',
           '<img class="map-aerial" id="map-aerial" alt="" aria-hidden="true" decoding="async" ' +
-            'data-src="img/aerial-1.webp">' +
+            'data-src="img/aerial-2.webp">' +
           '<svg class="map-terrain map-base" width="' + MAP_WORLD_W + '" height="' + MAP_WORLD_H +
           '" viewBox="0 0 ' + MAP_WORLD_W + ' ' + MAP_WORLD_H + '" aria-hidden="true">' +
             E('rect', { x: 0, y: 0, width: MAP_WORLD_W, height: MAP_WORLD_H, 'class': 'm2-ground' }) +
@@ -2248,7 +2248,7 @@ CBA.screens = CBA.screens || {};
             E('g', { 'class': 'm2-paved', 'data-g': 'traffic' }, E('g', {}, caseS) + E('g', {}, fillS)) +
             E('g', { 'data-g': 'green' }, isl) +
             E('g', { 'class': 'm2-l-tree', 'data-g': 'green' }, tree) +
-            E('g', { 'data-g': 'traffic' }, bays) +
+            E('g', { 'class': 'm2-l-bay', 'data-g': 'traffic' }, bays) +
             /* שלוש השכבות הבאות מסומנות בנפרד כי במצב תצ״א רק הן נשארות:
                שלטי רחוב ומיכלים אינם נראים בתצלום, ולכן הם המידע היחיד
                שהציור מוסיף מעליו. */
@@ -2534,11 +2534,15 @@ CBA.screens = CBA.screens || {};
         el.setAttribute("tabindex", "0");
         el.setAttribute("aria-label", "בית " + t.n + (mine ? " — הבית שלי" : ""));
         el.style.cssText = "left:" + px(t.x) + "px;top:" + py(t.y) + "px;width:" + px(t.w) + "px;height:" + py(t.h) + "px";
+        /* עטיפה אחת (mh-in) ולא שני אלמנטים מוחלטים: המספר והשם צריכים
+           לזרום זה מתחת לזה ולקבל קנה מידה נגדי *משותף*, אחרת כל אחד
+           מתמרכז בנפרד והם נדרסים. */
         el.innerHTML =
-          '<span class="mh-num"><span class="mh-num__ico">' + houseIcon + '</span>' + t.n + '</span>' +
-          '<div class="mh-body"><span class="mh-corner">' + t.n + '</span>' +
-          '<span class="mh-fam"></span>' +
-          '<span class="mh-kids">' + kidsIcon + '</span></div>' +
+          '<div class="mh-in">' +
+            '<span class="mh-num">' + t.n + '</span>' +
+            '<div class="mh-body"><span class="mh-fam"></span>' +
+            '<span class="mh-kids">' + kidsIcon + '</span></div>' +
+          '</div>' +
           (mine ? '<span class="mh-mine">הבית שלי</span>' : "");
         el.addEventListener("keydown", function (ev) {
           if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); openPopup(t.n); }
@@ -2613,8 +2617,23 @@ CBA.screens = CBA.screens || {};
            הפתרון: הטקסט מקבל קנה מידה נגדי (--inv) ולכן מרונדר תמיד בגודלו
            האמיתי, וה-font-size נקבע כאן בפיקסלי מסך לפי רוחב הבית בפועל.
            אותו עיקרון בדיוק שהשבבים והתוויות עובדים לפיו מההתחלה. */
-        worldEl.style.setProperty('--mh-fs', Math.max(7, Math.min(15, tw * 0.30)).toFixed(2) + 'px');
-        var tier = tw > 64 ? 2 : (tw > 46 ? 1 : 0);
+        /* ==== טיפוגרפיה של הבתים (2026-09-08, סבב רביעי) ====
+           הגרסה הקודמת עשתה בדיוק את ההפך ממה שצריך: היא *הקטינה* את השם
+           עד 7px כדי שיוצג גם בזום אאוט (יועד: "בזום אאוט אני כן רואה את
+           השמות"), וחסמה אותו ב-15px בזום פנימה ("בזום אין הם קטנים מדי").
+
+           הכלל שגוגל ואפל עובדים לפיו, ומיושם כאן:
+             · תווית לא מוצגת קטן — היא פשוט **לא מוצגת**. אין "קצת קטן מדי".
+             · יש סף הופעה, ומעליו התווית גדלה עם המרחב שיש לה.
+             · טקסט לא נמתח לעולם — נקבע בפיקסלי מסך ומרונדר בגודלו האמיתי.
+
+           מספר הבית הוא זהות המבנה ולכן מוצג תמיד (החלטה של יועד מסבב קודם:
+           "נשארים תמיד, רק עדינים יותר"). השם מופיע רק כשיש לו באמת מקום,
+           ואז הוא הגיבור — והמספר מצטמצם לטובתו. */
+        var named = tw >= 72;
+        worldEl.style.setProperty('--mh-fs',  Math.max(6.5, tw * (named ? 0.17 : 0.26)).toFixed(2) + 'px');
+        worldEl.style.setProperty('--mh-fs2', Math.max(11,  tw * 0.22).toFixed(2) + 'px');
+        var tier = named ? 2 : (tw > 46 ? 1 : 0);
         if (tier !== curTier) {
           curTier = tier;
           worldEl.classList.toggle("tier1", tier === 1);
