@@ -7307,7 +7307,10 @@ function gardenEnsureSheet_(ss, name, headers, widths) {
  *     בלעדיהן עמודה חדשה לא תיווצר עד שהמטמון יפוג, וכל כתיבה
  *     אליה תיפול בשקט (זו בדיוק התקלה ש-gardenAddMissingCols_ נולד לפתור).
  * ========================================================================== */
-var GARDEN_SCHEMA_REV = 1;
+/* 2 (2026-09-08): GARDEN_ROUTINE_HEADERS השתנו עם תוכנית העבודה — נוספו
+   'שבוע ראשון' ו'סבב אזורים'. בלי ההעלאה הזאת המטמון היה מדלג על
+   ensureGardenSheets_ עד שיפוג, והעמודות החדשות פשוט לא היו נוצרות. */
+var GARDEN_SCHEMA_REV = 2;
 function ensureGardenSheetsCached_(ss) {
   var key = 'garden_schema_v' + GARDEN_SCHEMA_REV;
   try {
