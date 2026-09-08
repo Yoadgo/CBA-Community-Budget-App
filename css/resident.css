@@ -1609,3 +1609,20 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
   border: 1px solid rgba(255,255,255,.9);
   box-shadow: 0 1px 1px rgba(16,24,40,.04), 0 10px 26px rgba(16,24,40,.10);
 }
+
+/* ==== חיווי פתיחה על שבב במפה (2026-09-08) ================================
+   נקודה קטנה על פינת השבב של תשתית ציבורית — פתוח/סגור/מחוץ לעונה. נוספת
+   ב-resident.js רק אחרי שכרטיסי השירות חזרו מהשרת, ולכן מפה בלי רשת נראית
+   בדיוק כמו קודם. */
+.map-poi.has-st .map-amenity__chip { position: relative; }
+.map-poi.has-st .map-amenity__chip::after {
+  content: ""; position: absolute; top: -1px; inset-inline-end: -1px;
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1.6px solid var(--m2-asphalt, #FCFBF8);
+  box-shadow: 0 1px 2px rgba(16,24,40,.2);
+}
+.map-poi.st-open   .map-amenity__chip::after { background: #2E9E58; }
+.map-poi.st-closed .map-amenity__chip::after { background: #B4564B; }
+.map-poi.st-season .map-amenity__chip::after { background: #9B84C4; }
+/* במצב נקי לצילום המסך אין חיווי — הצילום נשלח והסטטוס בו כבר לא נכון */
+.map-shell.clean .map-poi.has-st .map-amenity__chip::after { display: none; }

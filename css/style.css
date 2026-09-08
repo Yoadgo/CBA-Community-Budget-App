@@ -2328,3 +2328,80 @@ button.is-busy,
 .club-bulk__count { flex: 1; font-size: 13.5px; font-weight: 700; color: var(--text-soft); }
 .club-row__cb { width: 17px; height: 17px; flex: none; accent-color: var(--action); cursor: pointer; margin-inline-end: 2px; }
 .club-row__cbspace { width: 17px; flex: none; }
+
+/* ============================================================================
+ *  תשתיות ציבוריות ושעות פתיחה (2026-09-08)
+ *  סעיף "שעות" בכרטיס שירות, תג פתוח/סגור, ופיצול המסך לשתי קבוצות.
+ * ========================================================================== */
+
+/* --- כותרת קבוצה במסך השירותים --- */
+.svc-group {
+  font-size: 13px; font-weight: 800; color: var(--text-soft);
+  letter-spacing: -.01em; margin: 22px 2px 10px;
+}
+.svc-group:first-child { margin-top: 4px; }
+/* ⚠️ .svc-grid הוא ה-grid עצמו (3 עמודות). כשיש קבוצות, הכותרות הן ילדים
+   שלו — ולכן הן חייבות לפרוץ את כל הרוחב, אחרת "תשתיות השיכון" יושבת
+   בעמודה אחת וכרטיס נדחק לצידה. */
+.svc-group { grid-column: 1 / -1; }
+.svc-grid__in { display: contents; }
+
+/* --- תג הסטטוס --- */
+.svc-st {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  font-size: 11.5px; font-weight: 700; padding: 3px 9px 3px 7px;
+  border-radius: 999px; margin: 2px 0 4px; white-space: nowrap;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.svc-st i { width: 7px; height: 7px; border-radius: 50%; flex: none; background: currentColor; }
+.svc-st em { font-style: normal; font-weight: 600; opacity: .8; }
+.svc-st--open    { color: #1B7A3E; background: rgba(27,122,62,.10); }
+.svc-st--closed  { color: #9A3B32; background: rgba(154,59,50,.09); }
+.svc-st--season  { color: #7A5AA8; background: rgba(122,90,168,.10); }
+/* "לפי הלוח" — אפור בכוונה ולא כתום: זה לא אזהרה, זו הימנעות מלהמציא תשובה */
+.svc-st--unknown { color: var(--text-soft); background: rgba(17,24,39,.06); }
+
+/* --- סעיף השעות בכרטיס --- */
+.svc-hrs__now {
+  display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700;
+  padding: 9px 12px; border-radius: 12px; margin-bottom: 10px;
+}
+.svc-hrs__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.svc-hrs__det { font-weight: 600; opacity: .85; }
+.svc-hrs__now--open   { color: #1B7A3E; background: rgba(27,122,62,.09); }
+.svc-hrs__now--closed { color: #9A3B32; background: rgba(154,59,50,.08); }
+.svc-hrs__now--season { color: #7A5AA8; background: rgba(122,90,168,.09); }
+.svc-hrs__season { font-size: 12.5px; color: var(--text-soft); margin-bottom: 8px; }
+
+.svc-hrs { width: 100%; border-collapse: collapse; font-size: 13px; }
+.svc-hrs th, .svc-hrs td { padding: 6px 8px; text-align: start; border-bottom: 1px solid var(--hairline); }
+.svc-hrs th { font-weight: 600; color: var(--text-soft); width: 5.5em; }
+.svc-hrs td { font-variant-numeric: tabular-nums; }
+.svc-hrs tr:last-child th, .svc-hrs tr:last-child td { border-bottom: none; }
+.svc-hrs tr.is-today th, .svc-hrs tr.is-today td { font-weight: 800; color: var(--text); }
+.svc-hrs tr.is-today { background: rgba(17,24,39,.035); }
+
+.svc-hrs__ex { margin-top: 10px; font-size: 12.5px; color: var(--text-soft); }
+.svc-hrs__ex b { display: block; color: var(--text); margin-bottom: 3px; font-size: 12px; }
+.svc-hrs__ex ul, .svc-hrs__bad ul { margin: 0; padding-inline-start: 18px; }
+/* שורה שלא נקראה — צריכה להיראות, לא להסתתר. זו הסיבה שהתג לא אומר "פתוח". */
+.svc-hrs__bad {
+  margin-top: 10px; font-size: 12.5px; color: #9A3B32;
+  background: rgba(154,59,50,.07); border-radius: 10px; padding: 9px 11px;
+}
+.svc-hrs__bad b { display: block; margin-bottom: 3px; }
+
+/* --- מסך הניהול --- */
+.sadm-hrs-prev {
+  margin-top: 10px; padding: 11px 13px; border-radius: 12px;
+  background: var(--bg); border: 1px solid var(--hairline);
+}
+.sadm-hrs-prev::before {
+  content: "כך זה ייראה לתושב"; display: block; font-size: 11px; font-weight: 700;
+  color: var(--text-muted); margin-bottom: 8px;
+}
+.sadm-mapok, .sadm-mapwarn {
+  margin-top: 7px; font-size: 12px; border-radius: 9px; padding: 7px 10px; line-height: 1.5;
+}
+.sadm-mapok   { color: #1B7A3E; background: rgba(27,122,62,.08); }
+.sadm-mapwarn { color: #9A3B32; background: rgba(154,59,50,.08); }

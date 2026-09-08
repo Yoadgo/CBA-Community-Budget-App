@@ -53,6 +53,8 @@
     repeat: '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14"/>' +
             '<path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v2a3 3 0 0 1-3 3h-14"/>',
     filter: '<path d="M3 5h18M6.5 12h11M10 19h4"/>',
+    hist:   '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3 4v4h4"/>' +
+            '<path d="M12 7.5V12l3 1.8"/>',
     help:   '<circle cx="12" cy="12" r="9"/>' +
             '<path d="M9.6 9.2a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.8.7-.8 1.3v.4"/><path d="M12 17h.01"/>'
   };
@@ -154,10 +156,24 @@
     return SORTS[0];
   }
 
+  /* ============================================================================
+   *  שני מסכים, קובץ אחד (2026-09-08)
+   * ----------------------------------------------------------------------------
+   *  "לטיפולך" אינו קובץ נפרד אלא **מצב** של אותו render. הסיבה מעשית: הוא
+   *  משתמש באותם כרטיסים, אותו איחוד, אותו שיבוץ, אותו אישור מרוכז ואותם
+   *  גיליונות. קובץ שני היה מעתיק את כולם, וכל תיקון עתידי היה צריך לקרות
+   *  פעמיים — עד שיום אחד יקרה רק פעם אחת. ר' [[cba-visible-drift-rule]].
+   *  ההבדל בין המצבים הוא בציור בלבד: מה נטען, ומה מצויר מעל הרשימה.
+   * ========================================================================== */
+  CBA.screens.gardenInbox = {
+    render: function (container) { CBA.screens.gardenTasks.render(container, "inbox"); }
+  };
+
   CBA.screens.gardenTasks = {
-    render: function (container) {
+    render: function (container, mode) {
+      var inbox = mode === "inbox";
       var week = todayKey();
-      var filter = "open";     // open | done | dragged
+      var filter = inbox ? "unplanned" : "open";   // open | done | dragged
       var sortBy = "area";
       var rows = [], isManager = false, busy = false;
       // הסדר שבו האזורים והקטגוריות מוגדרים בטאב ההגדרות. הוא הסדר שבו
@@ -179,6 +195,21 @@
       load();
 
       function load() {
+        /* בתיבה הנכנסת אין שבוע — שני התורים שלה חוצי-שבועות בהגדרה. טעינת
+           שבוע כאן הייתה גם מיותרת וגם מזיקה: היא מממשת את התוכנית, ואין
+           סיבה שפתיחת התיבה תייצר משימות. */
+        if (inbox) {
+          rows = [];
+          CBA.data.getGardenTasks({ scope: "unplanned" }, function (r1) {
+            unplanned = (r1 && r1.ok) ? (r1.rows || []) : [];
+            order.area = (r1 && r1.areas) || order.area;
+            order.type = (r1 && r1.categories) || order.type;
+            isManager = true;
+            draw();
+            loadPending();
+          });
+          return;
+        }
         CBA.data.getGardenTasks({ week: week }, function (res) {
           if (!res || !res.ok) {
             rows = [];
@@ -215,8 +246,14 @@
       }
 
       function counts() {
-        var c = { open: 0, done: 0, dragged: 0, recheck: 0 };
+        var c = { open: 0, done: 0, dragged: 0, recheck: 0, closed: 0, total: 0 };
         rows.forEach(function (t) {
+          /* משימה סגורה מגיעה עכשיו מהשרת בתצוגת השבוע, ולכן היא נספרת
+             לחוד ולא כ"פתוחה". עד 8.9 היא לא הגיעה בכלל — והמונה "3 מתוך 12"
+             *הקטין את המכנה* בכל אישור, כך ששבוע שהושלם כולו הראה
+             "אין משימות". ר' handleGardenTasks_. */
+          c.total++;
+          if (t.closure) { c.closed++; return; }
           if (t.flag === "ממתין לאישור") c.done++;
           else c.open++;
           if (t.flag === "נגררה" || (t.drags || 0) > 0) c.dragged++;
@@ -236,7 +273,12 @@
             return t.flag === "דורש בדיקה חוזרת";
           });
         }
+        /* "בוצעו" הוא הארכיון של השבוע — היחיד שמראה משימות סגורות. */
+        if (filter === "closed") {
+          return rows.filter(function (t) { return !!t.closure; });
+        }
         return rows.filter(function (t) {
+          if (t.closure) return false;
           if (filter === "done") return t.flag === "ממתין לאישור";
           if (filter === "dragged") return t.flag === "נגררה" || (t.drags || 0) > 0;
           return t.flag !== "ממתין לאישור";
@@ -245,8 +287,11 @@
 
       function draw(skeleton) {
         var c = counts();
-        var total = rows.length;
-        var pct = total ? Math.round((c.done / total) * 100) : 0;
+        var total = c.total;
+        /* ההתקדמות נמדדת ב**סגורות**, לא ב"סומן כבוצע": סימון הוא הצהרה של
+           הצוות, ורק האישור סוגר. עד 8.9 הפס מדד את ההצהרות, כלומר קפץ
+           קדימה ברגע שהגנן סימן — וחזר אחורה ברגע שהמנהל אישר. */
+        var pct = total ? Math.round((c.closed / total) * 100) : 0;
         var s = sortDef(sortBy);
         var list = visible().slice();
 
@@ -274,30 +319,7 @@
                         : "כשמנהל הגינון ישבץ משימות לשבוע — הן יופיעו כאן.")
                 });
         } else if (filter === "done" && isManager) {
-          /* תור האישורים מקובץ אחרת מכל שאר המסך, ובכוונה: כאן הקיבוץ **הוא
-             הכלל** ולא העדפת תצוגה. משימות שגרה מאותה תבנית ואותו שבוע הן
-             היחידות שמותר לאשר יחד (החלטה 3), אז הן מקובצות יחד ומקבלות
-             כפתור "אשר את כל N". כל השאר — תקלות מדיווח ומשימות יזומות —
-             נופלות לקבוצת "לאישור פרטני", ושם כל אחת מאושרת לחוד.
-             לכן שורת הסידור לא משפיעה על התצוגה הזאת. */
-          var batches = [], seenB = {};
-          list.forEach(function (t) {
-            var k = (t.kind === "שגרה" && t.templateId)
-              ? "b:" + t.templateId + "|" + t.week : "solo";
-            if (!seenB[k]) { seenB[k] = []; batches.push(k); }
-            seenB[k].push(t);
-          });
-          body = batches.map(function (k) {
-            var items = seenB[k];
-            var bulk = k !== "solo" && items.length > 1;
-            var label = k === "solo" ? "לאישור פרטני"
-              : "שגרה · " + (items[0].title || items[0].category || "");
-            return '<div class="gt-grp">' + esc(label) +
-              ' <em>· ' + (items.length === 1 ? "משימה אחת" : items.length + " משימות") + '</em><hr>' +
-              (bulk ? '<button type="button" class="gt-bulk" data-act="batch" data-tpl="' +
-                 esc(k) + '">' + ico("check") + 'אשר את כל ' + items.length + '</button>' : '') +
-              '</div><div class="gd-reps">' + items.map(card).join("") + '</div>';
-          }).join("");
+          body = approvalBody(list);
         } else if (s.group) {
           var groups = [], seen = {};
           list.forEach(function (t) {
@@ -323,11 +345,33 @@
         /* אין כותרת מסך (2026-09-08). הסמליל והכותרת "משימות השבוע" החזיקו
            68px קבועים ולא אמרו דבר שהניווט לא אומר — המשתמש הגיע לכאן מלשונית
            ששמה כתוב עליה. "משימה חדשה" עבר לשורת הבקרה כלחצן ראשי. */
+        /* ================= לטיפולך ================= */
+        if (inbox) {
+          var newOnes = unplanned.slice();
+          var toOk = pending.slice();
+          root.innerHTML = (!newOnes.length && !toOk.length)
+            ? '<div class="gd-reps"><div class="gd-rep gi-zero"><u>' + ico("check") + '</u>' +
+              '<b>אין מה לטפל</b><span>כשתושב ידווח, או כשהצוות יסמן משימה כבוצעה — ' +
+              'זה יופיע כאן.</span></div></div>'
+            : (newOnes.length
+                ? '<div class="gt-grp">דיווחים חדשים <em>· ' + newOnes.length + '</em><hr></div>' +
+                  '<p class="gi-hint">תושב מחכה לתשובה, וזה עדיין לא עבודה.</p>' +
+                  '<div class="gd-reps">' + newOnes.map(inCard).join("") + '</div>'
+                : '') +
+              (toOk.length
+                ? '<div class="gt-grp">בוצע — ממתין לאישורך <em>· ' + toOk.length + '</em><hr></div>' +
+                  '<p class="gi-hint">אין כאן מי שמחכה, ולכן זה לא נספר בתג. אישור סוגר, ' +
+                  'ואם המשימה הגיעה מתושב — נשלח אליו עדכון.</p>' + approvalBody(toOk)
+                : '');
+          wire();
+          return;
+        }
+
         root.innerHTML =
           '<div class="gt-week">' +
             '<button type="button" data-wk="-1" aria-label="שבוע קודם">' + ico("prev") + '</button>' +
             '<div class="gt-week__c"><b>' + esc(weekLabel(week)) + '</b>' +
-              '<span>' + (total ? c.done + " מתוך " + total + " בוצעו" : "אין משימות") + '</span>' +
+              '<span>' + (total ? c.closed + " מתוך " + total + " הושלמו" : "אין משימות") + '</span>' +
               '<div class="gt-bar"><i style="width:' + pct + '%"></i></div></div>' +
             '<button type="button" data-wk="1" aria-label="שבוע הבא">' + ico("next") + '</button>' +
           '</div>' +
@@ -349,6 +393,9 @@
               seg("done", isManager ? "לאישורך" : "בוצעו", c.done) +
               seg("dragged", "נגררו", c.dragged) +
               (isManager && unplanned.length ? seg("unplanned", "לשיבוץ", unplanned.length) : "") +
+              /* אחרון בכוונה: הוא ארכיון, לא תור עבודה. מופיע רק כשיש מה
+                 להראות, כדי שבשבוע שטרם התחיל הוא לא יציע אפס. */
+              (c.closed ? seg("closed", "בוצעו", c.closed) : "") +
             '</div>' +
             (isManager
               ? '<button type="button" class="gt-tool is-primary" id="gt-new" ' +
@@ -363,6 +410,83 @@
         wire();
       }
 
+      /* תור האישורים מקובץ אחרת מכל שאר המסך, ובכוונה: כאן הקיבוץ **הוא
+         הכלל** ולא העדפת תצוגה. משימות שגרה מאותה תבנית ואותו שבוע הן
+         היחידות שמותר לאשר יחד (החלטה 3), אז הן מקובצות יחד ומקבלות כפתור
+         "אשר את כל N". כל השאר — דיווחי תושבים ומשימות יזומות — נופלות
+         לקבוצת "לאישור פרטני", ושם כל אחת מאושרת לחוד. לכן שורת הסידור לא
+         משפיעה על התצוגה הזאת.
+         משותף למסך המעקב (מסנן "לאישורך") ולמסך "לטיפולך" — אותה קבוצה
+         בדיוק, ולכן פונקציה אחת ולא שני עותקים. */
+      function approvalBody(list) {
+        var batches = [], seenB = {};
+        list.forEach(function (t) {
+          var k = (t.kind === GK_ROUTINE && t.templateId)
+            ? "b:" + t.templateId + "|" + t.week : "solo";
+          if (!seenB[k]) { seenB[k] = []; batches.push(k); }
+          seenB[k].push(t);
+        });
+        return batches.map(function (k) {
+          var items = seenB[k];
+          var bulk = k !== "solo" && items.length > 1;
+          var label = k === "solo" ? "לאישור פרטני"
+            : "שגרה · " + (items[0].title || items[0].category || "");
+          return '<div class="gt-grp">' + esc(label) +
+            ' <em>· ' + (items.length === 1 ? "משימה אחת" : items.length + " משימות") + '</em><hr>' +
+            (bulk ? '<button type="button" class="gt-bulk" data-act="batch" data-tpl="' +
+               esc(k) + '">' + ico("check") + 'אשר את כל ' + items.length + '</button>' : '') +
+            '</div><div class="gd-reps">' + items.map(card).join("") + '</div>';
+        }).join("");
+      }
+
+      /* כרטיס דיווח חדש. ההבדל מכרטיס משימה הוא לא ויזואלי אלא מהותי: כאן
+         לא מסמנים ביצוע אלא **מחליטים אם זו בכלל עבודה**, ולכן במקום תיבת
+         סימון יש שלוש תשובות מפורשות. הראשונה — "כבר בתוכנית" — נפתחה רק
+         ברגע שיש תוכנית עבודה, והיא היחידה שלא מייצרת עבודה חדשה. */
+      function inCard(t) {
+        var cat = catOf(t.category);
+        return '<article class="gd-rep gt-row k-' + cat.key +
+            '" data-id="' + esc(t.id) + '">' +
+          '<div class="gt-body">' +
+            '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
+            '<div class="gt-meta">' +
+              (t.kind === GK_REPORT
+                ? '<span class="gt-res">' + ico("person") + 'תושב</span><i>·</i>' : '') +
+              '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
+              (t.area ? '<i>·</i><span class="gt-nb">' + ico("pin") + esc(t.area) + '</span>' : '') +
+            '</div>' +
+            (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
+            (t.dupOf
+              ? '<div class="gt-dup">' + ico("merge") +
+                'נראה כמו כפילות של <b>#' + esc(t.dupOf.id) + '</b> · ' +
+                esc(t.dupOf.title || "") + '</div>'
+              : '') +
+            '<div class="gi-acts">' +
+              (t.coveredBy
+                ? '<button type="button" class="gi-cta is-plan" data-act="cover">' +
+                  ico("repeat") + 'כבר בתוכנית · ' + esc(shortWeek(t.coveredBy.week)) + '</button>'
+                : '') +
+              (t.dupOf
+                ? '<button type="button" class="gi-cta" data-act="merge">' +
+                  ico("merge") + 'איחוד</button>'
+                : '') +
+              '<button type="button" class="gi-cta' + (t.coveredBy || t.dupOf ? " is-ghost" : "") +
+                '" data-act="plan">' + ico("cal") + 'שיבוץ</button>' +
+              '<button type="button" class="gi-cta is-ghost" data-act="menu">עוד</button>' +
+            '</div>' +
+          '</div>' +
+        '</article>';
+      }
+
+      /* "השבוע" / "הבא" / "6.10" — בכפתור אין מקום ל"שבוע 2 · 6–12 באוקטובר",
+         והמנהל צריך לדעת רק אם זה קרוב מספיק כדי לענות לתושב. */
+      function shortWeek(k) {
+        if (k === todayKey()) return "השבוע";
+        if (k === shiftKey(todayKey(), 1)) return "שבוע הבא";
+        var d = parseKey(k);
+        return d ? d.getDate() + "." + (d.getMonth() + 1) : k;
+      }
+
       /* מיקום קבוצה בסדר שהוגדר בהגדרות. לא נמצא -> לסוף הרשימה. */
       function groupRank(name) {
         var list = order[sortBy] || [];
@@ -375,9 +499,49 @@
           (filter === k ? ' class="on"' : '') + '>' + esc(label) + '<b>' + n + '</b></button>';
       }
 
+      /* "לפני 3 ימים" · "אתמול" · "היום". תאריך מלא נשמר לגיליון וליומן —
+         כאן חשוב *כמה זמן עבר*, לא היום בשבוע. */
+      function ago(v) {
+        var d = v ? new Date(v) : null;
+        if (!d || isNaN(d.getTime())) return "";
+        var days = Math.floor((Date.now() - d.getTime()) / 86400000);
+        if (days <= 0) return "היום";
+        if (days === 1) return "אתמול";
+        if (days < 7) return "לפני " + days + " ימים";
+        if (days < 14) return "לפני שבוע";
+        if (days < 60) return "לפני " + Math.round(days / 7) + " שבועות";
+        return "לפני " + Math.round(days / 30) + " חודשים";
+      }
+
       function card(t) {
         var cat = catOf(t.category);
         var done = t.flag === "ממתין לאישור";
+        /* כרטיס סגור. הוא **לא** מנוסח כמשימה שאפשר לפעול עליה: אין תיבת
+           סימון, אין תפריט פעולות — רק מה נסגר, על ידי מי, ומתי, וכפתור
+           שפותח את קו הזמן המלא. זה הארכיון, לא רשימת עבודה. */
+        if (t.closure) {
+          return '<article class="gd-rep gt-row gt-closed k-' + cat.key +
+              '" data-id="' + esc(t.id) + '">' +
+            '<span class="gt-cbox">' + ico("check") + '</span>' +
+            '<div class="gt-body">' +
+              '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
+              '<div class="gt-meta">' +
+                '<span class="gt-cls">' + esc(t.closure) + '</span><i>·</i>' +
+                (sortBy === "type" ? "" :
+                  '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>') +
+                (t.area && sortBy !== "area"
+                  ? (sortBy === "type" ? "" : '<i>·</i>') +
+                    '<span class="gt-nb">' + ico("pin") + esc(t.area) + '</span>'
+                  : '') +
+                (t.approvedAt ? '<i>·</i>' + esc(ago(t.approvedAt)) : '') +
+                (t.approvedBy ? '<i>·</i>' + esc(t.approvedBy) : '') +
+              '</div>' +
+              (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
+            '</div>' +
+            '<button type="button" class="gt-more" data-act="hist" aria-label="היסטוריה">' +
+              ico("hist") + '</button>' +
+          '</article>';
+        }
         var tags = "";
         if (t.flag && t.flag !== "ממתין לאישור") {
           tags += '<span class="gt-age' + (FLAG_HOT[t.flag] ? " is-hot" : "") + '">' +
@@ -387,7 +551,12 @@
         var where = t.area || "";
         /* בתצוגת "לשיבוץ" תיבת הסימון מוחלפת בכפתור שיבוץ: אי אפשר לסמן
            כבוצעה משימה שעוד לא נכנסה לשום שבוע, והפעולה הנכונה שם היא אחת. */
-        var planning = filter === "unplanned";
+        /* ⚠️ במצב "לטיפולך" הערך ההתחלתי של filter הוא "unplanned", אבל
+           card() משמש שם **רק** לתור האישורים (הדיווחים החדשים מצוירים
+           ב-inCard). בלי החרגת inbox כל כרטיס בתור האישורים היה מקבל כפתור
+           שיבוץ במקום תיבת אישור — כלומר הפעולה הראשית של המסך פשוט לא
+           הייתה שם. */
+        var planning = !inbox && filter === "unplanned";
         /* בתצוגת "בוצעו" התיבה משנה משמעות לפי מי מסתכל: לצוות היא ביטול
            הסימון שלו, ולמנהל היא **האישור** — הפעולה שבאמת סוגרת. שאר
            ההחלטות של המנהל (החזרה, סגירה עם סיבה) יושבות בתפריט ה-⋯. */
@@ -465,8 +634,14 @@
         });
         var nb = root.querySelector("#gt-new");
         if (nb) nb.addEventListener("click", openNewTask);
-        root.querySelector("#gt-sort").addEventListener("click", openSort);
-        root.querySelector("#gt-legend").addEventListener("click", openLegend);
+        /* ⚠️ בדיקת קיום ולא גישה ישירה: במצב "לטיפולך" אין שורת בקרה כלל,
+           ו-querySelector מחזיר null. בלי השמירה הזאת wire() נפל על
+           addEventListener והמסך כולו לא היה מצויר — שגיאה שקרתה בזמן
+           הציור ולכן לא הותירה אחריה כלום חוץ ממסך ריק. */
+        var sortBtn = root.querySelector("#gt-sort");
+        if (sortBtn) sortBtn.addEventListener("click", openSort);
+        var legBtn = root.querySelector("#gt-legend");
+        if (legBtn) legBtn.addEventListener("click", openLegend);
         /* הרצועה נגללת, ואחרי ציור מחדש היא חוזרת להתחלה — כך שהמסנן שנבחר
            זה עתה עלול לשבת מחוץ למסך והמשתמש רואה רשימה בלי לדעת מה סינן
            אותה. inline:"nearest" כדי לא להזיז אותה כשהוא כבר נראה. */
@@ -492,6 +667,8 @@
         if (!art) return;
         var id = art.dataset.id;
         var act = btn.dataset.act;
+        if (act === "cover") return coverByPlan(id);
+        if (act === "hist") return openHistory(id);
         if (act === "menu") return openMenu(id);
         if (act === "plan") return askWeek(id);
         if (act === "approve") return run("approve", id, {});
@@ -668,6 +845,77 @@
           function (e, close) { if (e.target.closest("[data-close]")) close(); });
       }
 
+      /* "כבר בתוכנית". מאשרים לפני, כי התוצאה נראית לתושב: הפנייה שלו
+         נסגרת כ"אוחד" והוא יקבל עדכון כשמשימת השגרה תיסגר — לא מיד. */
+      function coverByPlan(id) {
+        var t = byId(id);
+        if (!t || !t.coveredBy || busy) return;
+        CBA.ui.confirm(
+          'הפנייה תיסגר ותקושר ל"' + (t.coveredBy.title || "משימת השגרה") + '" ' +
+          shortWeek(t.coveredBy.week) + '. התושב יקבל עדכון כשהיא תבוצע.',
+          { title: "כבר בתוכנית", okText: "אישור" }
+        ).then(function (yes) {
+          if (!yes || busy) return;
+          busy = true;
+          CBA.data.gardenCoverByPlan(id, t.coveredBy.defId, t.coveredBy.week, function (res) {
+            busy = false;
+            if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "הפעולה לא הצליחה");
+            CBA.ui.toast("קושר לתוכנית העבודה");
+            load();
+          });
+        });
+      }
+
+      /* קו הזמן של משימה. הנתונים כבר נכתבו מהיום הראשון בטאב היומן —
+         עד 8.9 פשוט אף מסך לא קרא אותם. זו התשובה ל"מי סגר את זה ומתי",
+         והיא נשאלת דווקא כשמשהו השתבש. */
+      var LOG_ICON = {
+        "נפתח": "plus", "שיבוץ": "cal", "ביצוע": "check", "ביטול ביצוע": "undo",
+        "סגירה": "check", "החזרה": "undo", "גרירה": "cal", "חסימה": "clock",
+        "הערה": "note", "איחוד": "merge", "משוב": "person"
+      };
+      function openHistory(id) {
+        var t = byId(id);
+        var close = sheet("היסטוריה",
+          '<h4>היסטוריה</h4>' +
+          '<p class="sub">' + esc(t ? (t.title || t.category || "משימה") : "משימה") +
+            ' · #' + esc(id) + '</p>' +
+          '<div id="gt-hist"><div class="skeleton" style="height:54px;border-radius:12px"></div>' +
+            '<div class="skeleton" style="height:54px;border-radius:12px;margin-top:8px"></div></div>' +
+          /* כפתור סגירה מפורש, בדיוק כמו במקרא: משימה ותיקה צוברת רשומות,
+             הגיליון גדל עד גובה המסך, והרקע שנשאר ללחיצה הוא רצועה דקה.
+             כלל: גיליון שגובהו משתנה עם הנתונים חייב כפתור. */
+          '<button type="button" class="gd-cta" data-close="1" ' +
+            'style="margin-top:14px">סגירה</button>',
+          function (e, close) { if (e.target.closest("[data-close]")) close(); });
+        CBA.data.getGardenTaskLog(id, function (res) {
+          var el = document.getElementById("gt-hist");
+          if (!el) return;                      // הגיליון נסגר בזמן הטעינה
+          if (!res || !res.ok) {
+            el.innerHTML = '<p class="gt-hist__none">' +
+              esc((res && res.error) || "לא הצלחתי לטעון את ההיסטוריה") + '</p>';
+            return;
+          }
+          var rows = res.rows || [];
+          if (!rows.length) {
+            el.innerHTML = '<p class="gt-hist__none">אין עדיין רשומות למשימה הזאת.</p>';
+            return;
+          }
+          el.innerHTML = rows.map(function (r) {
+            /* השינוי עצמו מוצג רק כשיש **שני** ערכים אמיתיים. "מ- ל-בוצע"
+               בלי מקור קורא כמו שגיאה, וזה המצב הרגיל ברשומה ראשונה. */
+            var change = (r.from && r.to) ? esc(r.from) + " ← " + esc(r.to)
+                       : (r.to ? esc(r.to) : "");
+            return '<div class="gt-hist"><u>' + ico(LOG_ICON[r.kind] || "note") + '</u>' +
+              '<div><b>' + esc(r.kind || "שינוי") + '</b>' +
+              (change ? '<span>' + change + '</span>' : '') +
+              (r.note ? '<span>' + esc(r.note) + '</span>' : '') +
+              '<em>' + esc(ago(r.at)) + (r.who ? " · " + esc(r.who) : "") + '</em></div></div>';
+          }).join("");
+        });
+        return close;
+      }
+
       /* אישור מרוכז. המפתח כולל תבנית+שבוע, ולכן אי אפשר לצרף לקבוצה משימה
          משבוע אחר גם אם המסך יצייר אותה בטעות. השרת מאמת שוב. */
       function approveBatch(key) {
@@ -798,6 +1046,8 @@
             (t.x !== null && t.y !== null
               ? '<button type="button" class="gt-opt" data-m="map"><u>' + ico("pin") + '</u>' +
                 '<div>הצגה על המפה<span>הנקודה שסומנה בדיווח</span></div></button>' : '') +
+            '<button type="button" class="gt-opt" data-m="hist"><u>' + ico("hist") + '</u>' +
+              '<div>היסטוריה<span>כל מה שקרה למשימה, לפי הסדר</span></div></button>' +
             '<button type="button" class="gt-opt" data-m="note"><u>' + ico("note") + '</u>' +
               '<div>הערת ביצוע<span>מה נעשה בפועל — נשמר ביומן</span></div></button>' +
             '<button type="button" class="gt-opt" data-m="defer"><u>' + ico("cal") + '</u>' +
@@ -830,6 +1080,7 @@
           if (!b) return;
           var m = b.dataset.m;
           close();
+          if (m === "hist") return openHistory(id);
           if (m === "map") return showOnMap(t, cat);
           if (m === "note") {
             // CBA.ui.prompt מחזירה Promise (null בביטול), לא מקבלת callback

@@ -1361,6 +1361,11 @@ CBA.data = (function () {
     gardenFeedback: function (id, positive, note, cb) {
       CBA.sheets.postRead("gardenFeedback", { id: id, positive: positive, note: note }, cb);
     },
+    /* יומן המשימה — קו הזמן המלא שלה (2026-09-08). הטאב נכתב מהיום הראשון
+       ומעולם לא נקרא; זה מה שהופך "מי סגר את זה ומתי" לשאלה שאפשר לענות. */
+    getGardenTaskLog: function (id, cb) {
+      CBA.sheets.get({ action: "gardenTaskLog", id: id }, cb);
+    },
     /* תוכנית העבודה (2026-09-08) — ההגדרות החוזרות, לא משימות. השרת חוסם
        אותה למשתמש חיצוני, ולכן הקריאה תיכשל אצל אחראי הגינון גם אם איכשהו
        יגיע למסך. ר' handleGardenPlan_. */
@@ -1370,6 +1375,11 @@ CBA.data = (function () {
     /* יצירה או עדכון של הגדרה. עם id — עדכון; בלי — חדשה. */
     gardenPlanSave: function (payload, cb) {
       CBA.sheets.postRead("gardenPlanSave", payload, cb);
+    },
+    /* "כבר בתוכנית" — קושר דיווח למשימת שגרה שכבר מתוזמנת, במקום לפתוח
+       עבודה כפולה. בשרת זה מתגלגל ל-gardenMerge_, ולכן התושב נשאר קשור. */
+    gardenCoverByPlan: function (id, defId, week, cb) {
+      CBA.sheets.postRead("gardenCoverByPlan", { id: id, defId: defId, week: week }, cb);
     },
     gardenPlanActive: function (id, active, cb) {
       CBA.sheets.postRead("gardenPlanActive", { id: id, active: !!active }, cb);

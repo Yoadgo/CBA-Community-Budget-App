@@ -2293,11 +2293,55 @@ CBA.screens = CBA.screens || {};
         }
         el.style.cssText = "left:" + c[0] + "px;top:" + c[1] + "px";
         el.dataset.a = Math.round(area(o));
+        // השם נשמר על השבב כדי שאפשר יהיה להצליב אותו מול כרטיסי השירות
+        // (ר' linkInfra למטה). הצלבה לפי שם ולא לפי מזהה — כי במפה אין
+        // מזהים, יש תוויות שיועד כותב בכלי הכיול.
+        if (o.l) el.dataset.name = String(o.l).trim();
         el.innerHTML = '<span class="map-amenity__chip">' + svg(amenIcons[cat[1]] || amenIcons.house) + '</span>';
         worldEl.appendChild(el);
         if (o.l) { var id2 = 'p' + (poiSeq++); el.dataset.lbl = id2;
           poiLabel(o.l, c[0], c[1] + 16, area(o), id2, 'public'); }
       });
+
+      /* ---- תשתיות ציבוריות: חיווי פתיחה חי על השבב ----
+         כל שירות מסוג "תשתית ציבורית" שיש לו סעיף שעות, ושמו זהה לשם מרחב
+         במפה, מקבל נקודת פתוח/סגור ולחיצה שמובילה לכרטיס שלו. בכוונה לא
+         רשימה קשיחה של "בריכה": ברגע שיועד יגדיר מכון כושר או מגרש כתשתית,
+         זה יעבוד מעצמו בלי שורת קוד.
+         ⚠️ ההצלבה היא לפי *שם*, ולכן שינוי שם באחד הצדדים מנתק את החיווי
+            בשקט. בגלל זה מסך ניהול השירותים מציג למנהל, ליד סוג השירות,
+            האם קיים מרחב במפה בשם הזה (ר' sadmMapNote ב-servicesAdmin.js).
+         נכשל בשקט לגמרי: מפה בלי רשת או בלי כרטיסי שירות היא בדיוק המפה
+         שהייתה קודם. */
+      function linkInfra() {
+        if (!opts.full || !CBA.data || !CBA.data.getServices || !CBA.serviceUtils) return;
+        CBA.data.getServices(function (res) {
+          if (!res || !res.ok) return;
+          var list;
+          try { list = CBA.serviceUtils.build(res.services, res.sections); } catch (e) { return; }
+          list.forEach(function (svc) {
+            if (!svc.active || svc.kind !== CBA.serviceUtils.KIND_INFRA) return;
+            var el = worldEl.querySelector('.map-poi[data-name="' + (svc.name || '').replace(/"/g, '') + '"]');
+            if (!el) return;
+            var st = CBA.serviceUtils.serviceStatus(svc);
+            if (st && st.state !== 'unknown') {
+              el.classList.add('has-st', 'st-' + st.state);
+              el.title = svc.name + ' — ' + st.label + (st.detail ? ' · ' + st.detail : '');
+            }
+            if (el.dataset.goto) return;      // יעד ייעודי (מועדון, חדר כושר) גובר
+            el.classList.add('is-link');
+            el.dataset.goto = 'resServices';
+            el.setAttribute('role', 'button');
+            el.setAttribute('tabindex', '0');
+            el.setAttribute('aria-label', svc.name + (st && st.state !== 'unknown' ? ' — ' + st.label : '') + ' — פתיחת הכרטיס');
+            if (!el.title) el.title = svc.name;
+            el.addEventListener('keydown', function (ev) {
+              if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); CBA.navigate('resServices'); }
+            });
+          });
+        });
+      }
+      linkInfra();
 
       /* פריסת תוויות: הגדול נכנס ראשון, השאר מנסים חמישה מיקומים ואז נופלים.
          תווית חתוכה או דחוסה גרועה מתווית חסרה. ר' "מערכת ההתנגשויות". */

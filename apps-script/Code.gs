@@ -405,6 +405,9 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'gardenMeta') {
       return handleGardenMeta_(e.parameter);
     }
+    if (e && e.parameter && e.parameter.action === 'gardenTaskLog') {
+      return handleGardenTaskLog_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'gardenPlan') {
       return handleGardenPlan_(e.parameter);
     }
@@ -653,6 +656,7 @@ function doPost(e) {
       case 'gardenCreateTask':    return json_(gardenCreateTask_(ss, body));
       case 'gardenPlanSave':      return json_(gardenPlanSave_(ss, body));
       case 'gardenPlanActive':    return json_(gardenPlanSetActive_(ss, body));
+      case 'gardenCoverByPlan':   return json_(gardenCoverByPlan_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -4757,21 +4761,50 @@ function repairMisplacedReceiptsExecute() { return repairMisplacedReceipts_(fals
  *    רשימה      — שורה = בולט
  *    טבלה       — תאים מופרדים ב-"|", השורה הראשונה היא הכותרות
  *    אנשי קשר   — שורה = "שם|תפקיד|טלפון"
+ *    שעות       — "ימים | טווחים" · "עונה | 15/05-30/09" · "חריג | 02/10 | סגור"
+ *                 (הפענוח והחישוב בצד הלקוח, ר' CBA.serviceUtils ב-services.js)
  * ========================================================================== */
 var SERVICES_SHEET = 'שירותים לתושב';
 var SERVICES_HEADERS = ['מזהה שירות', 'שם', 'תיאור קצר', 'אייקון', 'ספק',
-  'טלפון ראשי', 'קישור למסמך', 'סדר', 'פעיל', 'עודכן', 'עודכן ע"י'];
+  'טלפון ראשי', 'קישור למסמך', 'סדר', 'פעיל', 'עודכן', 'עודכן ע"י',
+  /* 2026-09-08 — ההבחנה בין ספק חיצוני (דורגז, אינטרנט) לתשתית ציבורית של
+     השיכון (בריכה, מכון כושר, מגרשים). ריק = ספק חיצוני, כדי שכל השורות
+     שכבר בגיליון ימשיכו להתנהג בדיוק כמו קודם. */
+  'סוג שירות'];
 
 var SERVICE_SECTIONS_SHEET = 'סעיפי שירותים';
 var SERVICE_SECTIONS_HEADERS = ['מזהה שירות', 'מזהה סעיף', 'סדר', 'סוג', 'כותרת', 'תוכן'];
 
 /** סוגי הסעיפים המותרים. שמירה עם סוג שאינו ברשימה נדחית — עדיף להיכשל
  * בבירור מאשר לכתוב לגיליון ערך שהמסך לא ידע לצייר. */
-var SERVICE_SECTION_TYPES = ['טקסט', 'רשימה', 'טבלה', 'אנשי קשר', 'הדגשה'];
+var SERVICE_SECTION_TYPES = ['טקסט', 'רשימה', 'טבלה', 'אנשי קשר', 'הדגשה', 'שעות'];
+
+/** משלים כותרות חסרות בטאב קיים ומחזיר את שורת הכותרות בפועל.
+ *
+ *  ⚠️ למה זה קיים, ולמה זה לא "רק להוסיף לקבוע": ensureServicesSheet_ יצר
+ *     כותרות רק כשהטאב לא היה קיים. בגיליון שכבר רץ בייצור, הוספת שם חדש
+ *     ל-SERVICES_HEADERS הייתה גורמת ל-saveServices_ לכתוב ערך לעמודה
+ *     ה-12 — עמודה בלי כותרת. ו-readTable_ מדלג על עמודות בלי כותרת, אז
+ *     הערך היה *נעלם בשקט* בקריאה הבאה. בדיוק סוג התקלה שלא מתגלה עד
+ *     שמישהו שואל למה השדה מתאפס.
+ *
+ *  אידמפוטנטי: רץ בכל קריאה, מוסיף רק מה שחסר, ולעולם לא מזיז או משנה
+ *  עמודה קיימת — כך שסדר עמודות שיועד שינה ידנית בגיליון נשמר. */
+function ensureHeaders_(sh, required) {
+  var lastCol = Math.max(sh.getLastColumn(), 1);
+  var have = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+               .map(function (h) { return String(h).trim(); });
+  var missing = required.filter(function (h) { return have.indexOf(h) === -1; });
+  if (missing.length) {
+    sh.getRange(1, have.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
+    have = have.concat(missing);
+  }
+  return have;
+}
 
 function ensureServicesSheet_(ss) {
   var sh = ss.getSheetByName(SERVICES_SHEET);
-  if (sh) return sh;
+  if (sh) { ensureHeaders_(sh, SERVICES_HEADERS); return sh; }
   sh = ss.insertSheet(SERVICES_SHEET);
   sh.getRange(1, 1, 1, SERVICES_HEADERS.length).setValues([SERVICES_HEADERS]);
   sh.getRange(1, 1, 1, SERVICES_HEADERS.length).setFontWeight('bold');
@@ -4784,7 +4817,7 @@ function ensureServicesSheet_(ss) {
 
 function ensureServiceSectionsSheet_(ss) {
   var sh = ss.getSheetByName(SERVICE_SECTIONS_SHEET);
-  if (sh) return sh;
+  if (sh) { ensureHeaders_(sh, SERVICE_SECTIONS_HEADERS); return sh; }
   sh = ss.insertSheet(SERVICE_SECTIONS_SHEET);
   sh.getRange(1, 1, 1, SERVICE_SECTIONS_HEADERS.length).setValues([SERVICE_SECTIONS_HEADERS]);
   sh.getRange(1, 1, 1, SERVICE_SECTIONS_HEADERS.length).setFontWeight('bold');
@@ -4856,32 +4889,36 @@ function saveServices_(ss, body) {
     var who = String(body._email || '').trim();
     var stamp = Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'yyyy-MM-dd');
 
+    /* הכתיבה מסודרת לפי *שורת הכותרות שבגיליון*, לא לפי סדר הקבוע. אחרת
+       עמודה שנוספה בסוף (או שיועד הזיז ידנית) הייתה נכתבת למקום הלא נכון. */
     var svcSheet = ensureServicesSheet_(ss);
+    var svcHead = ensureHeaders_(svcSheet, SERVICES_HEADERS);
     var lastSvc = svcSheet.getLastRow();
-    if (lastSvc > 1) svcSheet.getRange(2, 1, lastSvc - 1, SERVICES_HEADERS.length).clearContent();
+    if (lastSvc > 1) svcSheet.getRange(2, 1, lastSvc - 1, svcHead.length).clearContent();
     if (services.length) {
       var svcGrid = services.map(function (r, idx) {
         var row = {};
-        SERVICES_HEADERS.forEach(function (h) { row[h] = (r[h] == null) ? '' : r[h]; });
+        svcHead.forEach(function (h) { row[h] = (r[h] == null) ? '' : r[h]; });
         // "סדר" נגזר תמיד ממיקום בפועל במערך שהגיע מהמסך — כך שגרירה/חצים
         // במסך הניהול הם מקור האמת היחיד, ואי אפשר להגיע למצב של שני שירותים
         // עם אותו מספר סדר.
         row['סדר'] = idx + 1;
         row['עודכן'] = stamp;
         if (who) row['עודכן ע"י'] = who;
-        return SERVICES_HEADERS.map(function (h) { return row[h]; });
+        return svcHead.map(function (h) { return row[h]; });
       });
-      svcSheet.getRange(2, 1, svcGrid.length, SERVICES_HEADERS.length).setValues(svcGrid);
+      svcSheet.getRange(2, 1, svcGrid.length, svcHead.length).setValues(svcGrid);
     }
 
     var secSheet = ensureServiceSectionsSheet_(ss);
+    var secHead = ensureHeaders_(secSheet, SERVICE_SECTIONS_HEADERS);
     var lastSec = secSheet.getLastRow();
-    if (lastSec > 1) secSheet.getRange(2, 1, lastSec - 1, SERVICE_SECTIONS_HEADERS.length).clearContent();
+    if (lastSec > 1) secSheet.getRange(2, 1, lastSec - 1, secHead.length).clearContent();
     if (sections.length) {
       var secGrid = sections.map(function (r) {
-        return SERVICE_SECTIONS_HEADERS.map(function (h) { return (r[h] == null) ? '' : r[h]; });
+        return secHead.map(function (h) { return (r[h] == null) ? '' : r[h]; });
       });
-      secSheet.getRange(2, 1, secGrid.length, SERVICE_SECTIONS_HEADERS.length).setValues(secGrid);
+      secSheet.getRange(2, 1, secGrid.length, secHead.length).setValues(secGrid);
     }
 
     return { ok: true, services: services.length, sections: sections.length };
@@ -7843,7 +7880,12 @@ function gardenTaskObj_(row, c) {
     firstWeek: g('שבוע מקורי'),
     createdAt: g('נוצר בתאריך'),
     updatedAt: g('עודכן בתאריך'),
-    updatedBy: g('עודכן על ידי')
+    updatedBy: g('עודכן על ידי'),
+    /* מי אישר ומתי (2026-09-08). בלי שני אלה משימה שאושרה נראית בדיוק כמו
+       משימה שנסגרה מעצמה, ואי אפשר לענות על "מי סגר את זה ומתי" — שאלה
+       שנשאלת דווקא כשמשהו השתבש. */
+    approvedBy: g('אושר על ידי'),
+    approvedAt: g('תאריך אישור')
   };
 }
 
@@ -7885,18 +7927,30 @@ function handleGardenTasks_(p) {
     for (var r = 1; r < vals.length; r++) {
       if (!gardenCell_(vals[r][c['מזהה']])) continue;
       var o = gardenTaskObj_(vals[r], c);
-      if (o.closure) continue;                       // משימה סגורה יורדת מהרשימות
+      /* משימה סגורה **חוזרת לתצוגת השבוע** (2026-09-08). עד היום היא נעלמה
+         מהאפליקציה לגמרי ברגע האישור, ויועד תיאר בדיוק את התוצאה: "לוחצים
+         אישור והיא פשוט נעלמת, אין דרך לראות משימות שבוצעו".
+         ⚠️ זה גם היה באג במונה: `סה"כ` נספר מ-rows, ולכן כל אישור *הקטין*
+         את המכנה — שבוע שהושלם כולו הראה "אין משימות" במקום 12 מתוך 12.
+         היא נשארת מחוץ ל-unplanned, ל-pending ולבריכת הכפילויות: שם היא
+         באמת לא רלוונטית, ו"אוחד" הוא סגירה בפני עצמה. */
+      if (scope === 'unplanned') { if (!o.closure && !o.week) rows.push(o); }
+      else if (scope === 'pending') { if (!o.closure && o.flag === 'ממתין לאישור') rows.push(o); }
+      else if (o.week === week) rows.push(o);
+      if (o.closure) continue;
       /* all נאסף תמיד ובלי תלות ב-scope: מועמד לאיחוד יכול להיות דווקא משימה
          שכבר שובצה לשבוע — וזה המקרה השכיח, כי הכפילות מגיעה אחרי המקור. */
       all.push(o);
-      if (scope === 'unplanned') { if (!o.week) rows.push(o); }
-      else if (scope === 'pending') { if (o.flag === 'ממתין לאישור') rows.push(o); }
-      else if (o.week === week) rows.push(o);
     }
     /* מועמד לאיחוד מחושב רק לתצוגת "לשיבוץ" ורק למנהל: זה הרגע שבו הוא פוגש
        דיווח חדש בפעם הראשונה, ולפני ששיבץ עבודה כפולה. ר' gardenDupCandidate_. */
     if (scope === 'unplanned' && !perm.isExternal) {
-      for (var q = 0; q < rows.length; q++) rows[q].dupOf = gardenDupCandidate_(rows[q], all);
+      var defs = gardenPlanRows_(ss);
+      var lists0 = gardenLists_(ss);
+      for (var q = 0; q < rows.length; q++) {
+        rows[q].dupOf = gardenDupCandidate_(rows[q], all);
+        rows[q].coveredBy = gardenPlanCovers_(ss, rows[q], defs, lists0.areas);
+      }
     }
     /* areas/categories מוחזרות בסדר שבו הן מוגדרות בטאב ההגדרות (עמודת "סדר"),
        ולא לפי א"ב. זה הסדר שבו הן נכתבו — צפון לדרום — והוא הסדר שבו אחראי
@@ -8212,6 +8266,127 @@ function gardenPlanFindRow_(sh, id) {
     if (String(ids[i][0]).trim() === id) return i + 2;
   }
   return 0;
+}
+
+/* האם תוכנית העבודה כבר מכסה את הדיווח הזה, ומתי.
+ * ----------------------------------------------------------------------------
+ * זו התשובה השלישית בתיבה הנכנסת, וזו שנפתחה רק ברגע שיש תוכנית: "הדשא
+ * גבוה" לא צריך משימה חדשה אם כיסוח מתוכנן ליום שלישי. בלי זה המנהל פותח
+ * עבודה כפולה למשהו שכבר מתוזמן.
+ * המפתח הוא **קטגוריה + אזור**, ולא הכותרת: הכותרת היא מה שהתושב הקליד.
+ * מסתכלים ארבעה שבועות קדימה בלבד — "מתוכנן בעוד חודשיים" אינה תשובה
+ * לתושב שמחכה, ושם התשובה הנכונה היא שיבוץ אמיתי. */
+function gardenPlanCovers_(ss, task, defs, allAreas) {
+  if (!defs || !defs.length || !task.category) return null;
+  var wk = gardenWeekKey_();
+  for (var i = 0; i < 4; i++) {
+    var meta = gardenWeekMeta_(wk);
+    if (meta && meta.n !== 5) {
+      for (var d = 0; d < defs.length; d++) {
+        var def = defs[d];
+        if (def.category !== task.category) continue;
+        if (!gardenPlanApplies_(def, meta)) continue;
+        var areas = gardenPlanAreas_(def, meta, allAreas);
+        // אזור ריק בדיווח = לא ידוע איפה, ואז אי אפשר להבטיח שהסבב יגיע לשם.
+        if (task.area && areas.indexOf(task.area) === -1) continue;
+        if (!task.area && def.rotate) continue;
+        return { defId: def.id, title: def.title, week: wk };
+      }
+    }
+    wk = gardenShiftWeek_(wk, 1);
+  }
+  return null;
+}
+
+function gardenShiftWeek_(weekKey, n) {
+  var m = gardenWeekMeta_(weekKey);
+  if (!m) return weekKey;
+  var d = new Date(m.date.getTime());
+  d.setDate(d.getDate() + n * 7);
+  return gardenWeekKey_(d);
+}
+
+/* "כבר בתוכנית" — מממש את השבוע, מוצא את משימת השגרה שמכסה, ומאחד לתוכה.
+   האיחוד הוא המנגנון הקיים (gardenMerge_): הדיווח נסגר כ"אוחד", התושב
+   נשאר קשור למשימה שתטפל בו, והוא יקבל את הודעת הסיום כשהיא תסגר. */
+function gardenCoverByPlan_(ss, body) {
+  var perm = body._perm || {};
+  if (perm.isExternal) return { ok: false, error: 'הפעולה היא בסמכות מנהל הגינון' };
+  var week = String(body.week || '').match(/^\d{4}-\d{2}-\d{2}$/) ? body.week : '';
+  var defId = String(body.defId || '').trim();
+  if (!week || !defId) return { ok: false, error: 'חסרים פרטי התוכנית' };
+
+  gardenMaterializeWeek_(ss, week);
+
+  var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+  if (!sh) return { ok: false, error: 'טאב המשימות לא קיים' };
+  var c = gardenCols_(sh);
+  var v = sh.getDataRange().getValues();
+
+  var src = null;
+  for (var r = 1; r < v.length; r++) {
+    if (String(v[r][c['מזהה']]).trim() === String(body.id).trim()) { src = gardenTaskObj_(v[r], c); break; }
+  }
+  if (!src) return { ok: false, error: 'הדיווח לא נמצא' };
+
+  /* מחפשים את המופע שמתאים לאזור של הדיווח. אם התוכנית מייצרת שורה לכל
+     אזור, יש כמה מועמדים — ורק זה שבאזור הנכון באמת יטפל בו. */
+  var target = null, fallback = null;
+  for (var r2 = 1; r2 < v.length; r2++) {
+    if (String(v[r2][c['מזהה תבנית']]).trim() !== defId) continue;
+    if (String(v[r2][c['שבוע']]).trim() !== week) continue;
+    if (gardenCell_(v[r2][c['סגירה']])) continue;
+    var o = gardenTaskObj_(v[r2], c);
+    if (!fallback) fallback = o;
+    if (!src.area || o.area === src.area) { target = o; break; }
+  }
+  target = target || fallback;
+  if (!target) return { ok: false, error: 'לא נמצאה משימת שגרה מתאימה בשבוע הזה' };
+
+  /* מעבירים גם _email: gardenMerge_ נופל עליו כשאין שם פרטי/משפחה בהרשאה,
+     ובלעדיו שורת היומן הייתה נרשמת בלי מבצע — בדיוק בפעולה שכל הערך שלה
+     הוא שיהיה אפשר לשחזר מי החליט. */
+  return gardenMerge_(ss, { id: src.id, into: target.id,
+                            _perm: perm, _email: body._email });
+}
+
+/* ---------- יומן המשימה (doGet) — "תיעוד אחורה" ----------
+   הטאב הזה נכתב מהיום הראשון ומעולם לא נקרא. הוא מחזיק את קו הזמן המלא של
+   כל משימה — נפתח · שיבוץ · ביצוע · סגירה · החזרה · גרירה · חסימה · איחוד ·
+   משוב — עם חותמת זמן ומבצע לכל מעבר. זה גם מה שעונה על "מי עשה מה ומתי",
+   וגם הבסיס לחישוב זמני הטיפול בלוח הנתונים. */
+function handleGardenTaskLog_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_GARDEN);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var id = String(p.id || '').trim();
+    if (!id) return json_({ ok: false, error: 'חסר מזהה משימה' });
+
+    var sh = ss.getSheetByName(GARDEN_LOG_SHEET);
+    if (!sh || sh.getLastRow() < 2) return json_({ ok: true, rows: [] });
+    var c = gardenCols_(sh);
+    var v = sh.getDataRange().getValues();
+    var out = [];
+    for (var r = 1; r < v.length; r++) {
+      if (String(v[r][c['מזהה משימה']]).trim() !== id) continue;
+      var ts = v[r][c['חותמת זמן']];
+      out.push({
+        at:   (ts instanceof Date) ? ts.toISOString() : String(ts || ''),
+        kind: gardenCell_(v[r][c['סוג רשומה']]),
+        field: gardenCell_(v[r][c['שדה']]),
+        from: gardenCell_(v[r][c['מערך']]),
+        to:   gardenCell_(v[r][c['לערך']]),
+        who:  gardenCell_(v[r][c['מבצע']]),
+        note: gardenCell_(v[r][c['הערה']])
+      });
+    }
+    /* מיון בשרת ולא בלקוח: היומן הוא append-only ולכן *בדרך כלל* כרונולוגי,
+       אבל שורה שנערכה ידנית בגיליון יכולה לשבור את זה, ותצוגת קו-זמן שיוצאת
+       מהסדר קשה יותר לזהות כשגויה מאשר רשימה שממוינת תמיד. */
+    out.sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
+    return json_({ ok: true, rows: out });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
 /** איתור שורת משימה לפי מזהה. מחזיר null אם לא נמצאה. */

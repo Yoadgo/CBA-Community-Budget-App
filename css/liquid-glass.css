@@ -77,7 +77,16 @@ body::after {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
 }
 /* התוכן חייב לשבת מעל שתי השכבות האלה */
-.app, .login-gate, .user-panel { position: relative; z-index: 1; }
+/* ⚠️ .login-gate הוסר מהרשימה הזו (2026-09-08 — תיקון באג).
+ * liquid-glass.css נטען *אחרון* מכל גיליונות הסגנון, והסלקטור הזה הוא
+ * באותה ספציפיות בדיוק כמו `.login-gate` ב-style.css — ולכן הוא ניצח
+ * ודרס לו את `position: fixed` ל-`relative`. התוצאה: מסך הכניסה הפסיק
+ * להיות מוצמד למסך, `inset: 0` איבד משמעות, והכרטיס זרם בתוך הדף *מתחת*
+ * לשלד הטעינה — נראה כאילו "נפל למטה" — ועם z-index:1 במקום 200 גם בר
+ * הניווט התחתון צויר מעליו. דווח מאייפון, 8.9.26.
+ * .login-gate ממילא `position: fixed; z-index: 200`, כלומר כבר הרבה מעל
+ * שכבות ה-body::before/::after — הוא לא היה צריך את הכלל הזה מלכתחילה. */
+.app, .user-panel { position: relative; z-index: 1; }
 
 /* ============================================================================
  *  2. הגוף — .lg

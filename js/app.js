@@ -134,7 +134,8 @@
        התוכנית ואינו קובע אותה, ולא הוא מחליט מה נכנס לשבוע. השרת חוסם את
        שניהם בעצמו (ר' handleGardenPlan_ ו-gardenPlanSave_); כאן רק מסתירים,
        כדי שלא יראה טאב שייתן לו שגיאה. */
-    gardenPlan: "MANAGER"
+    gardenPlan: "MANAGER",
+    gardenInbox: "MANAGER"
   };
 
   function myPerms() {
@@ -177,7 +178,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -213,6 +214,7 @@
            הקבוצה מצטמצמת לפריט אחד ומתקפלת לטאב רגיל — ר' rebuildAreas. */
         { group: "ginun", label: "גינון", items: [
             ["gardenPlan",  "תוכנית העבודה"],
+            ["gardenInbox", "לטיפולך"],
             ["gardenTasks", "מעקב"]
           ] }
       ]
@@ -344,6 +346,7 @@
     resGarden:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
     /* הקבוצה יורשת את העלה — הוא כבר מזוהה עם הגינון בשני האזורים. */
     ginun:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
+    gardenInbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5.5 3 13v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5l-2.5-7.5A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.9 1.5Z"/></svg>',
     gardenPlan:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m8.5 14.5 2 2 4-4"/></svg>',
     // "גינון" באזור הניהול — אותו עלה בדיוק כמו resGarden באזור התושב, לפי
     // אותו כלל שכבר קיים ב-committeeAdmin/resCommittee וב-servicesAdmin/

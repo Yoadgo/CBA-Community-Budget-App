@@ -185,6 +185,7 @@ function sadmOpenEditor(index) {
   sadmState.editIndex = index;
   sadmState.draft = index === -1
     ? { id: sadmNewId(), name: "", desc: "", icon: "", provider: "", phone: "", doc: "",
+        kind: CBA.serviceUtils.KIND_VENDOR,
         active: true, updated: "", updatedBy: "", sections: [] }
     : sadmClone(sadmState.list[index]);
 
@@ -245,6 +246,17 @@ function sadmPaintEditor() {
         '<div class="form-field"><label>ספק</label>' +
           '<input class="field-input" data-f="provider" value="' + sadmEsc(d.provider) + '"></div>' +
       "</div>" +
+      /* סוג השירות קובע איך התושב רואה אותו: תשתית ציבורית מוצגת בקבוצה
+         נפרדת ומקבלת חיווי פתיחה מסעיף "שעות". ספק חיצוני נשאר כמו שהיה. */
+      '<div class="form-field form-field--wide"><label>סוג השירות</label>' +
+        '<select class="field-input" data-f="kind">' +
+          CBA.serviceUtils.KINDS.map(function (k) {
+            return '<option value="' + sadmEsc(k) + '"' +
+              ((d.kind || CBA.serviceUtils.KIND_VENDOR) === k ? " selected" : "") + ">" + sadmEsc(k) + "</option>";
+          }).join("") +
+        "</select>" +
+        '<div class="sadm-hint">תשתית ציבורית = בריכה, מכון כושר, מגרשים — מה שיש לו שעות ואין לו ספק לחייג אליו.</div>' +
+        '<div id="sadm-mapnote">' + sadmMapNote(d) + "</div></div>" +
       '<div class="form-field form-field--wide"><label>תיאור קצר (שורה אחת בכרטיס)</label>' +
         '<input class="field-input" data-f="desc" value="' + sadmEsc(d.desc) + '"></div>' +
       '<div class="form-grid">' +
@@ -271,6 +283,26 @@ function sadmPaintEditor() {
 
   body.scrollTop = scroll;
   sadmBindEditor(body);
+}
+
+/* ⚠️ מלכודת השכפול: החיווי החי על המפה מוצלב לפי *שם* בין כרטיס השירות לבין
+   תווית המרחב בכלי הכיול. שני מקורות אמת שמישהו צריך לזכור לסנכרן — ובלי
+   החיווי הזה, שינוי שם באחד הצדדים היה מנתק את הנקודה מהמפה בשקט מוחלט.
+   אז במקום "אוטומטי" שנשבר — הפער צועק כאן, במסך שבו עורכים את השם. */
+function sadmMapNote(d) {
+  if ((d.kind || CBA.serviceUtils.KIND_VENDOR) !== CBA.serviceUtils.KIND_INFRA) return "";
+  var geo = (window.CBA && CBA.mapGeo && CBA.mapGeo.objects) || null;
+  if (!geo) return "";
+  var name = String(d.name || "").trim();
+  if (!name) return "";
+  var hit = false;
+  for (var i = 0; i < geo.length; i++) {
+    if (geo[i].t === "public" && String(geo[i].l || "").trim() === name) { hit = true; break; }
+  }
+  return hit
+    ? '<div class="sadm-mapok">מופיע במפת השיכון בשם הזה — חיווי הפתיחה יוצג על המפה.</div>'
+    : '<div class="sadm-mapwarn">אין במפת השיכון מרחב ציבורי בשם <b>' + sadmEsc(name) + '</b>. ' +
+      "הכרטיס יעבוד רגיל, אבל לא יופיע חיווי פתיחה על המפה. השמות חייבים להיות זהים.</div>";
 }
 
 function sadmSectionBoxHTML(sec, k) {
@@ -336,6 +368,19 @@ function sadmSectionEditorHTML(sec, k) {
       '<div class="sadm-hint">השורה הראשונה היא הכותרות של הטבלה.</div>';
   }
 
+  /* עורך השעות הוא תיבת טקסט *עם מראה* — למה לא שדות מובנים כמו בשאר
+     הסוגים: לוח פתיחה אמיתי כולל עונה, טווחים כפולים ביום וחריגים, וטופס
+     שמכסה את כל אלה יוצא מסובך יותר מהטקסט עצמו. במקום זה — התצוגה
+     המקדימה מראה בדיוק מה המנוע *הבין*, כולל שורות שלא נקראו. הפער בין מה
+     שהוקלד למה שנקרא חייב לצעוק, לא להיעלם. */
+  if (t === "שעות") {
+    return '<textarea class="field-input sadm-ta" data-sec-content="' + k + '" rows="6">' +
+        sadmEsc(sec.content) + "</textarea>" +
+      '<div class="sadm-hint">שורה = <code>ימים | שעות</code>. גם: <code>עונה | 15/05-30/09</code> ו-' +
+        '<code>חריג | 02/10 | סגור</code>. יום סגור: <code>שבת | סגור</code>.</div>' +
+      '<div class="sadm-hrs-prev" data-hrs-prev="' + k + '">' + CBA.serviceUtils.renderHours(sec.content) + "</div>";
+  }
+
   if (t === "אנשי קשר") {
     var people = CBA.serviceUtils.toContacts(sec.content);
     if (!people.length) people = [{ name: "", role: "", phone: "" }];
@@ -384,7 +429,13 @@ function sadmBindEditor(body) {
   // שדות ראשיים — הקלדה מעדכנת את ה-draft בלבד; אין ציור מחדש, אחרת הפוקוס
   // היה קופץ מהשדה בכל תו.
   body.querySelectorAll("[data-f]").forEach(function (inp) {
-    inp.addEventListener("input", function () { d[inp.dataset.f] = inp.value; sadmTouch(); });
+    inp.addEventListener("input", function () {
+      d[inp.dataset.f] = inp.value; sadmTouch();
+      if (inp.dataset.f === "name" || inp.dataset.f === "kind") {
+        var note = document.getElementById("sadm-mapnote");
+        if (note) note.innerHTML = sadmMapNote(d);
+      }
+    });
   });
 
   body.querySelectorAll("[data-sec-title]").forEach(function (inp) {
@@ -394,7 +445,12 @@ function sadmBindEditor(body) {
   });
   body.querySelectorAll("[data-sec-content]").forEach(function (ta) {
     ta.addEventListener("input", function () {
-      d.sections[Number(ta.dataset.secContent)].content = ta.value; sadmTouch();
+      var k = Number(ta.dataset.secContent);
+      d.sections[k].content = ta.value; sadmTouch();
+      // התצוגה המקדימה של השעות מתעדכנת תוך כדי הקלדה, בלי לצייר מחדש את
+      // כל העורך (זה היה גוזל את המיקוד מתיבת הטקסט בכל תו).
+      var prev = body.querySelector('[data-hrs-prev="' + k + '"]');
+      if (prev) prev.innerHTML = CBA.serviceUtils.renderHours(ta.value);
     });
   });
 
@@ -505,7 +561,12 @@ function sadmBindEditor(body) {
         order: d.sections.length + 1,
         type: type,
         title: "",
-        content: type === "טבלה" ? "עמודה א|עמודה ב" : (type === "אנשי קשר" ? "||" : "")
+        content: type === "טבלה" ? "עמודה א|עמודה ב"
+               : type === "אנשי קשר" ? "||"
+               /* תבנית פתיחה לסעיף שעות — עדיף להתחיל משורות תקינות שאפשר
+                  לערוך מאשר מתיבה ריקה שצריך לנחש את הפורמט שלה. */
+               : type === "שעות" ? "עונה | 15/05-30/09\nראשון-חמישי | 06:00-08:00, 16:00-20:00\nשישי | 06:00-10:00\nשבת | 08:00-18:00"
+               : ""
       });
       sadmTouch(); sadmPaintEditor();
       // גלילה לסעיף החדש — אחרת בכרטיס ארוך הוא נוסף מחוץ למסך והלחיצה

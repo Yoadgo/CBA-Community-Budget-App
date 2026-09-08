@@ -533,6 +533,64 @@
 .gt-opt span { display: block; font-size: 11.5px; color: #9CA3AF; font-weight: 400; margin-top: 1px; }
 .gt-sheet-wrap.is-map .gd-map { height: 62vh; margin-top: 4px; }
 
+/* ---- הארכיון: משימה שנסגרה (2026-09-08) ----
+   עד היום היא נעלמה מהאפליקציה ברגע האישור. עכשיו היא נשארת בשבוע שלה,
+   אבל **לא כמשימה**: אין תיבת סימון ואין תפריט פעולות, כי אין מה לעשות
+   איתה. הכרטיס שקט — אפור, בלי צבע קטגוריה במילוי — כדי שהוא לא יתחרה
+   על תשומת הלב עם מה שעוד פתוח. */
+.gt-closed { opacity: .72; }
+.gt-closed .gt-t { font-weight: 500; }
+.gt-cbox { width: 27px; height: 27px; flex: none; margin-top: 2px; border-radius: 8px;
+  background: rgba(5,150,105,.1); color: var(--ok, #059669);
+  display: grid; place-items: center; }
+.gt-cbox svg { width: 15px; height: 15px; }
+/* סיבת הסגירה היא הדבר היחיד שנקרא ראשון בכרטיס סגור — "בוצע" מול
+   "הועבר לבינוי" מול "בוטל" הן תוצאות שונות לגמרי, ואחרי חודש זה כל מה
+   שזוכרים. טקסט ולא שבב צבעוני: זו עובדה, לא התרעה. */
+.gt-closed .gt-cls { font-weight: 600; color: #3D4A44; }
+.gt-closed .gt-more { color: #C4CBC8; }
+
+/* ---- קו הזמן של משימה ---- */
+.gt-hist { display: flex; align-items: flex-start; gap: 11px; padding: 8px 0; }
+.gt-hist + .gt-hist { border-top: 1px solid rgba(17,24,39,.06); }
+.gt-hist > u { text-decoration: none; width: 28px; height: 28px; flex: none; border-radius: 9px;
+  display: grid; place-items: center; background: rgba(17,24,39,.05);
+  color: var(--text-soft, #6B7280); }
+.gt-hist > u svg { width: 14px; height: 14px; }
+.gt-hist b { display: block; font-size: 13.5px; font-weight: 600; }
+.gt-hist span { display: block; font-size: 12px; color: #7A847F; line-height: 1.45; margin-top: 1px; }
+/* מי ומתי — הקטן והחיוור ביותר בשורה. הוא ההקשר, לא האירוע. */
+.gt-hist em { display: block; font-style: normal; font-size: 11px; color: #9BA3A0; margin-top: 3px; }
+.gt-hist__none { font-size: 12.5px; color: #8A9199; text-align: center; padding: 18px 8px; margin: 0; }
+
+/* ---- לטיפולך: התיבה הנכנסת (2026-09-08) ----
+   שני מקטעים בכותרות ולא בפילטרים — זו כל הנקודה. יועד: "איפה אני מבדיל
+   בין בקשות תושבים לאישור? הכול מעורבב." מסנן מראה אחד בכל פעם ולכן קורא
+   כרשימה אחת; כותרת מראה את שניהם יחד ואומרת שהם שונים. */
+.gi-hint { font-size: 11.5px; color: #8A9199; margin: 0 2px 9px; line-height: 1.45; }
+.gi-acts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.gi-cta { border: 0; border-radius: 8px; background: var(--action, #111827); color: #fff;
+  font: inherit; font-size: 11.5px; font-weight: 600; padding: 5px 11px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px; }
+.gi-cta:hover { background: #000; }
+/* "כבר בתוכנית" הוא ירוק-מתאר ולא שחור-מלא: הוא התשובה שלא מייצרת עבודה,
+   והוא צריך להיראות כמו מוצא ולא כמו הפעולה הראשית. */
+/* שורה משלו, ברוחב מלא. שתי סיבות: הטקסט ארוך ("כבר בתוכנית · שבוע הבא")
+   ובשלישייה הוא נשבר לשלוש שורות בתוך הכפתור; וזו התשובה המומלצת — היחידה
+   שלא מייצרת עבודה — ולכן נכון שהיא תיקרא ראשונה ולבדה. */
+.gi-cta.is-plan { flex: 0 0 100%; justify-content: center; padding: 7px 11px;
+  background: transparent; color: #0F6B45;
+  box-shadow: inset 0 0 0 1px rgba(15,107,69,.4); }
+.gi-cta.is-plan:hover { background: rgba(15,107,69,.07); }
+.gi-cta.is-ghost { background: transparent; color: var(--text, #374151); font-weight: 500;
+  box-shadow: inset 0 0 0 1px rgba(17,24,39,.14); }
+.gi-cta.is-ghost:hover { background: rgba(17,24,39,.04); }
+.gi-zero { text-align: center; padding: 30px 16px; }
+.gi-zero u { text-decoration: none; display: block; color: #8FBFA4; margin-bottom: 10px; }
+.gi-zero u svg { width: 30px; height: 30px; }
+.gi-zero b { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.gi-zero span { display: block; font-size: 12.5px; color: #8A9199; line-height: 1.6; }
+
 /* ---- מקרא. נפתח מסמליל ה-? בשורת הבקרה. הוא הכתובת היחידה שבה מותר
    להסביר סמלילים: ברגע שהמסך עצמו צריך תוויות טקסט ליד כל סמליל, הוא
    חוזר להיות עמוס. ---- */
