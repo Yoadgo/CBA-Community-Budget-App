@@ -765,15 +765,42 @@ CBA.sheets = (function () {
   // אם הצליחו (למשל login, ובשלב 8: תפוסת יומן + יצירת שריון). params -> querystring.
   // מצרפת את המושב החתום אוטומטית (כמו push) — פעולות שדורשות הרשאה בודקות
   // אותו בשרת דרך authorize_. (2026-08-24: מסלול "סיסמת מנהל" בוטל לגמרי.)
+  /* ⚠️ תקציב זמן (2026-09-08). עד היום ל-fetch כאן לא היה שום גבול: כשהבקשה
+     נתקעה — Apps Script בהתעוררות קרה, רשת סלולרית שנפלה, טאב שהושהה וחזר —
+     ה-Promise פשוט לא נפתר לעולם, ה-callback לא נקרא, והמסך נשאר בשלד טעינה
+     **בלי שום סימן שמשהו לא בסדר**. זה בדיוק מה שיועד תיאר: "לפעמים הטעינה
+     לא נגמרת ואין שום סימן לזה".
+     30 שניות ולא פחות: התעוררות קרה של Apps Script לוקחת בקלות 10-15.
+     timedOut מוחזר בנפרד מ-error כדי שמסך יוכל להציע "נסה שוב" במקום
+     להציג שגיאה גנרית — כישלון זמני ותקלה אמיתית דורשים תגובה שונה. */
+  var GET_TIMEOUT_MS = 30000;
   function get(params, cb) {
     var body = Object.assign({ session: authSession() }, params || {});
     var qs = Object.keys(body).map(function (k) {
       return encodeURIComponent(k) + "=" + encodeURIComponent(body[k] == null ? "" : body[k]);
     }).join("&");
-    fetch(API_URL + "?" + qs)
+
+    var done = false;
+    var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var timer = setTimeout(function () {
+      if (done) return;
+      done = true;
+      if (ctl) { try { ctl.abort(); } catch (e) {} }
+      cb({ ok: false, timedOut: true, error: "הבקשה לא חזרה בזמן. בדקו את החיבור ונסו שוב." });
+    }, GET_TIMEOUT_MS);
+
+    fetch(API_URL + "?" + qs, ctl ? { signal: ctl.signal } : undefined)
       .then(function (r) { return r.json(); })
-      .then(function (data) { cb(withAuthNote(data)); })
-      .catch(function (err) { cb({ ok: false, error: String(err) }); });
+      .then(function (data) {
+        if (done) return;                 // כבר דיווחנו על תקיעה — לא קוראים ל-cb פעמיים
+        done = true; clearTimeout(timer);
+        cb(withAuthNote(data));
+      })
+      .catch(function (err) {
+        if (done) return;                 // abort שלנו — הודעת התקיעה כבר יצאה
+        done = true; clearTimeout(timer);
+        cb({ ok: false, error: String(err) });
+      });
   }
 
   // כתיבה (doPost) עם תשובה קריאה — בשביל פעולות שחייבות לדעת מיד אם הצליחו ולקבל
@@ -903,6 +930,11 @@ CBA.sheets = (function () {
       failBusy("שגיאת רשת בשליחה. בדקו את החיבור ונסו שוב.");
       if (cb) cb({ ok: false, error: "שגיאת רשת" });
     };
+    /* ⚠️ xhr.ontimeout היה מוגדר כאן מאז ומעולם, אבל xhr.timeout **מעולם לא
+       נקבע** — וברירת המחדל של XHR היא 0, כלומר בלי הגבלה. המטפל היה קוד מת,
+       וכתיבה תקועה נשארה תקועה עם חיווי "שומר" לנצח. 90 שניות ולא פחות: דרך
+       postRead עוברות גם העלאות קבצים (קבלות, תמונות ביצוע). */
+    xhr.timeout = 90000;
     xhr.ontimeout = function () {
       clearUnloadGuard();
       bumpWriteFloor();

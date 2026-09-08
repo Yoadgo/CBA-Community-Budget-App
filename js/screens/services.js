@@ -211,22 +211,50 @@ CBA.serviceUtils = (function () {
     return h * 60 + mi;
   }
 
-  /* "06:00-08:00, 16:00-20:00" -> [{a,b},...] · "סגור" -> [] · null = לא הובן.
-     חוצה חצות ("22:00-01:00") נחתך בחצות — היום מקבל 22:00-24:00 והמשך
+  /* "06:00-08:00 שחיית בוקר, 16:00-20:00" -> [{a,b,l,off},...]
+     "סגור" -> [] · null = לא הובן.
+
+     ⚠️ שתי החלטות שנגזרו מהשלט האמיתי של הבריכה (2026-09-08), ושתיהן על
+        אותו ציר — שהמנוע לעולם לא יכריז "פתוח" בטעות:
+
+     1. **תווית היא מידע בלבד.** "08:00-10:00 שחיית גברים" הוא טווח פתוח
+        שהתווית שלו מספרת למי. התווית לא נבדקת מול שום מילון ולא משנה אף
+        פעם את הפתיחה — כי מילון מילים ("ניקיון"? "תחזוקה"? "אירוע"?) הוא
+        בדיוק המנגנון שיחמיץ מילה חדשה ויכריז "פתוח" על בריכה סגורה.
+
+     2. **סוגריים = לא פתוח לקהל, אבל כן מוצג.** בשלט כתוב
+        "08:00-15:00 ניקיון בריכה" ביום א׳ — שעה שאסור לספור כפתוחה. במקום
+        לנחש מהמילים, יועד עוטף אותה בסוגריים. הכיוון בטוח: סוגריים רק
+        *מורידים* זמינות. טעות אפשרית = משהו נראה סגור בזמן שהוא פתוח,
+        ולעולם לא ההפך.
+
+     כל מה שלא נרשם בכלל — סגור. זו ברירת המחדל, ולכן גם מי ששוכח לרשום
+     משהו נופל לצד הבטוח.
+
+     חוצה חצות ("22:00-01:00") נחתך בחצות — היום מקבל 22:00-24:00 וההמשך
      ליום הבא נשמר בנפרד, כדי שחישוב "פתוח עכשיו" יישאר השוואה פשוטה. */
+  var RANGE_RE = /^(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})(?:\s+(.*))?$/;
   function parseRanges(spec) {
     var s = String(spec || "").trim();
     if (!s) return null;
     if (/^(סגור|סגורה|אין|—|-)$/.test(s)) return [];
     var out = [], over = [], parts = s.split(/\s*,\s*/);
     for (var i = 0; i < parts.length; i++) {
-      var m = parts[i].split(/\s*[-–]\s*/);
-      if (m.length !== 2) return null;
-      var a = parseClock(m[0]), b = parseClock(m[1]);
-      if (a === null || b === null) return null;
-      if (b === a) return null;
-      if (b < a) { out.push({ a: a, b: 1440 }); over.push({ a: 0, b: b }); }
-      else out.push({ a: a, b: b });
+      var part = parts[i].trim(), off = false;
+      if (part.charAt(0) === "(" && part.charAt(part.length - 1) === ")") {
+        off = true; part = part.slice(1, -1).trim();
+      }
+      var m = RANGE_RE.exec(part);
+      if (!m) return null;
+      var a = parseClock(m[1]), b = parseClock(m[2]);
+      if (a === null || b === null || b === a) return null;
+      var lab = (m[3] || "").trim();
+      if (b < a) {
+        out.push({ a: a, b: 1440, l: lab, off: off || undefined });
+        if (!off) over.push({ a: 0, b: b, l: lab });
+      } else {
+        out.push({ a: a, b: b, l: lab, off: off || undefined });
+      }
     }
     out.sort(function (x, y) { return x.a - y.a; });
     if (over.length) out.over = over;
@@ -298,10 +326,25 @@ CBA.serviceUtils = (function () {
     return p.week[date.getDay()];
   }
 
+  /* "פתוח · עד 20:00" — ואם למשבצת יש תווית ("שחיית נשים"), היא נכנסת
+     לחיווי. תושב שרואה רק "פתוח" ומגיע לשחיית נשים קיבל תשובה נכונה
+     טכנית וחסרת ערך בפועל. */
+  function openAt(r) {
+    var d = "עד " + hhmm(r.b);
+    return { state: "open", label: "פתוח", detail: r.l ? r.l + " · " + d : d, note: r.l || "" };
+  }
+
   function hhmm(mins) {
     var h = Math.floor(mins / 60) % 24, m = mins % 60;
     return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
   }
+  /* ⚠️ טווח שעות בתוך פסקה בעברית **מתהפך**: "08:00–15:00" הוא רצף של שני
+     מספרים אירופיים עם תו ניטרלי ביניהם, ואלגוריתם ה-bidi מסדר את *סדר
+     המספרים* לפי כיוון הפסקה — כלומר RTL. התוצאה שנראתה על המסך הייתה
+     "15:00–08:00", כלומר שעת הסגירה לפני שעת הפתיחה. dir="ltr" יוצר
+     בידוד (isolate) ומחזיר את הסדר. חל גם על תאריכים (15/5 – 30/9). */
+  function ltr(t) { return '<bdi dir="ltr">' + t + "</bdi>"; }
+  function span(a, b) { return ltr(hhmm(a) + "–" + hhmm(b)); }
 
   /* ------------------------------------------------------------------------
    *  hoursStatus — הסטטוס ברגע נתון.
@@ -332,21 +375,18 @@ CBA.serviceUtils = (function () {
     var yr = inSeason(p.season, yest) ? rangesOn(p, yest) : null;
     if (yr && yr.over) {
       for (var o = 0; o < yr.over.length; o++) {
-        if (mins >= yr.over[o].a && mins < yr.over[o].b) {
-          return { state: "open", label: "פתוח", detail: "עד " + hhmm(yr.over[o].b) };
-        }
+        if (mins >= yr.over[o].a && mins < yr.over[o].b) return openAt(yr.over[o]);
       }
     }
 
     var today = rangesOn(p, now);
     if (today === undefined || today === null) return { state: "unknown", label: "לפי הלוח" };
+    /* טווח מסומן בסוגריים אינו זמן פתיחה — הוא רק מוצג בטבלה. */
     for (var i = 0; i < today.length; i++) {
-      if (mins >= today[i].a && mins < today[i].b) {
-        return { state: "open", label: "פתוח", detail: "עד " + hhmm(today[i].b) };
-      }
+      if (!today[i].off && mins >= today[i].a && mins < today[i].b) return openAt(today[i]);
     }
     for (var k = 0; k < today.length; k++) {
-      if (today[k].a > mins) {
+      if (!today[k].off && today[k].a > mins) {
         return { state: "closed", label: "סגור", detail: "נפתח ב-" + hhmm(today[k].a) };
       }
     }
@@ -354,10 +394,11 @@ CBA.serviceUtils = (function () {
     for (var n = 1; n <= 7; n++) {
       var dt = new Date(now.getTime() + n * 86400000);
       if (!inSeason(p.season, dt)) continue;
-      var r = rangesOn(p, dt);
-      if (r && r.length) {
+      var r = rangesOn(p, dt), first = null;
+      if (r) for (var q = 0; q < r.length; q++) if (!r[q].off) { first = r[q]; break; }
+      if (first) {
         return { state: "closed", label: "סגור",
-                 detail: (n === 1 ? "נפתח מחר ב-" : "נפתח ביום " + DAY_NAMES[dt.getDay()] + " ב-") + hhmm(r[0].a) };
+                 detail: (n === 1 ? "נפתח מחר ב-" : "נפתח ביום " + DAY_NAMES[dt.getDay()] + " ב-") + hhmm(first.a) };
       }
     }
     return { state: "closed", label: "סגור" };
@@ -390,15 +431,21 @@ CBA.serviceUtils = (function () {
     }
     if (p.season) {
       html += '<div class="svc-hrs__season">תקופת פתיחה: ' +
-        p.season.from.d + "/" + p.season.from.m + " – " + p.season.to.d + "/" + p.season.to.m + "</div>";
+        ltr(p.season.from.d + "/" + p.season.from.m + " – " + p.season.to.d + "/" + p.season.to.m) + "</div>";
     }
     var rows = "";
     for (var d = 0; d < 7; d++) {
       var r = p.week[d];
-      var txt = r === null || r === undefined ? "—" :
-        (r.length ? r.map(function (x) { return hhmm(x.a) + "–" + hhmm(x.b); }).join(", ") : "סגור");
-      var isToday = d === now.getDay();
-      rows += '<tr' + (isToday ? ' class="is-today"' : "") + "><th>" + DAY_NAMES[d] + "</th><td>" + esc(txt) + "</td></tr>";
+      var isToday = d === now.getDay(), cell;
+      if (r === null || r === undefined) cell = "—";
+      else if (!r.length) cell = "סגור";
+      else cell = r.map(function (x) {
+        return '<span class="svc-hrs__slot' + (x.off ? " svc-hrs__off" : "") + '">' +
+          "<b>" + span(x.a, x.b) + "</b>" +
+          (x.l ? ' <span class="svc-hrs__lab">' + esc(x.l) + "</span>" : "") +
+          (x.off ? ' <span class="svc-hrs__lab">(סגור)</span>' : "") + "</span>";
+      }).join("");
+      rows += '<tr' + (isToday ? ' class="is-today"' : "") + "><th>" + DAY_NAMES[d] + "</th><td>" + cell + "</td></tr>";
     }
     html += '<table class="svc-hrs"><tbody>' + rows + "</tbody></table>";
 
@@ -408,7 +455,9 @@ CBA.serviceUtils = (function () {
         var parts = k.split("-"), md = (parts[1] || parts[0]).split("/");
         var r = p.exceptions[k];
         return "<li>" + esc(md[1] + "/" + md[0] + (parts[1] ? "/" + parts[0] : "")) + " — " +
-          esc(r.length ? r.map(function (x) { return hhmm(x.a) + "–" + hhmm(x.b); }).join(", ") : "סגור") + "</li>";
+          (r.length ? r.map(function (x) {
+            return span(x.a, x.b) + esc((x.l ? " " + x.l : "") + (x.off ? " (סגור)" : ""));
+          }).join(", ") : "סגור") + "</li>";
       }).join("") + "</ul></div>";
     }
     if (p.bad.length) {

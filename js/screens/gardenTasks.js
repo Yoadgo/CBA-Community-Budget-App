@@ -53,6 +53,8 @@
     repeat: '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14"/>' +
             '<path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v2a3 3 0 0 1-3 3h-14"/>',
     filter: '<path d="M3 5h18M6.5 12h11M10 19h4"/>',
+    cloud:  '<path d="M6.5 19a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 11.2-1.6A4.2 4.2 0 0 1 21 12.6"/>' +
+            '<path d="m15 15 6 6M21 15l-6 6"/>',
     hist:   '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3 4v4h4"/>' +
             '<path d="M12 7.5V12l3 1.8"/>',
     help:   '<circle cx="12" cy="12" r="9"/>' +
@@ -188,6 +190,11 @@
          אישור שממתין משבוע שעבר לא אמור להיעלם כשמדפדפים לשבוע הבא —
          זו בדיוק הדרך שבה משימות נופלות בין הכיסאות. */
       var pending = [];
+      /* ⚠️ כישלון טעינה **אינו** רשימה ריקה. עד היום load() היה מאפס rows
+         ומצייר "אין משימות בשבוע הזה" — כלומר אומר לגנן שאין לו עבודה בגלל
+         תקלת רשת. זו התשובה הכי גרועה האפשרית: היא נראית תקינה, היא שקרית,
+         והיא גורמת לו ללכת הביתה. */
+      var loadErr = null;
 
       container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
       var root = container.querySelector("#gt-root");
@@ -201,6 +208,12 @@
         if (inbox) {
           rows = [];
           CBA.data.getGardenTasks({ scope: "unplanned" }, function (r1) {
+            if (!r1 || !r1.ok) {
+              loadErr = (r1 && r1.error) || "לא הצלחתי לטעון את התיבה";
+              draw();
+              return;
+            }
+            loadErr = null;
             unplanned = (r1 && r1.ok) ? (r1.rows || []) : [];
             order.area = (r1 && r1.areas) || order.area;
             order.type = (r1 && r1.categories) || order.type;
@@ -212,11 +225,11 @@
         }
         CBA.data.getGardenTasks({ week: week }, function (res) {
           if (!res || !res.ok) {
-            rows = [];
+            loadErr = (res && res.error) || "לא הצלחתי לטעון את המשימות";
             draw();
-            if (res && res.error) CBA.ui.alert(res.error);
             return;
           }
+          loadErr = null;
           rows = res.rows || [];
           order.area = res.areas || [];
           order.type = res.categories || [];
@@ -286,6 +299,21 @@
       }
 
       function draw(skeleton) {
+        /* מצויר לפני הכול, גם לפני מצב התיבה: כשהטעינה נכשלה אין שום נתון
+           אמיתי להציג, וכל מסך שייבנה מעליו יהיה מסך של שקרים. */
+        if (loadErr && !skeleton) {
+          root.innerHTML =
+            '<div class="gd-reps"><div class="gd-rep gt-err">' +
+              '<u>' + ico("cloud") + '</u>' +
+              '<b>לא הצלחתי לטעון</b>' +
+              '<span>' + esc(loadErr) + '</span>' +
+              '<button type="button" class="gd-cta" id="gt-retry">נסה שוב</button>' +
+            '</div></div>';
+          root.querySelector("#gt-retry").addEventListener("click", function () {
+            loadErr = null; draw(true); load();
+          });
+          return;
+        }
         var c = counts();
         var total = c.total;
         /* ההתקדמות נמדדת ב**סגורות**, לא ב"סומן כבוצע": סימון הוא הצהרה של
@@ -675,6 +703,14 @@
         if (act === "done" || act === "undo") return run(act, id, {});
       }
 
+      /* חיווי ברמת השורה. החיווי הגלובלי בכותרת ("שומר") אומר שמשהו קורה
+         באפליקציה; הוא לא אומר **על מה**. בטלפון, כשהאצבע על כרטיס אחד מתוך
+         תשעה, זו לא אותה שאלה. */
+      function markRowBusy(id, on) {
+        var el = root.querySelector('.gt-row[data-id="' + String(id).replace(/"/g, '') + '"]');
+        if (el) el.classList.toggle("is-saving", !!on);
+      }
+
       function byId(id) {
         var all = rows.concat(unplanned);
         for (var i = 0; i < all.length; i++) if (String(all[i].id) === String(id)) return all[i];
@@ -683,12 +719,45 @@
 
       /* פעולה אחת מול השרת. ננעל בזמן הפעולה כדי ששתי הקשות מהירות על אותה
          משימה לא ישלחו שתי בקשות סותרות (done ואז undo על מצב שטרם התרענן). */
+      /* מה שכל פעולה עושה לשורה **מיד**, לפני שהשרת ענה. שלוש הפעולות
+         שנעשות בלחיצה אחת על הכרטיס הן היחידות שצריכות את זה — השאר עוברות
+         דרך דיאלוג, ושם ההמתנה מובנת ממילא. הערכים זהים למה שהשרת כותב
+         (ר' gardenTaskAction_): סימון מרים דגל ואינו סוגר. */
+      var OPTIMISTIC = {
+        done:    function (t) { t.stage = "בטיפול"; t.flag = "ממתין לאישור"; },
+        undo:    function (t) { t.flag = ""; },
+        approve: function (t) { t.stage = "הושלם"; t.flag = ""; t.closure = "בוצע";
+                                t.approvedAt = new Date().toISOString(); }
+      };
+
+      /* פעולה על משימה. הכרטיס משתנה מיד ומתגלגל אחורה אם השרת סירב.
+         ⚠️ עד 8.9 לא היה כאן שום שינוי מקומי: הלחיצה על תיבת הסימון לא סימנה
+         כלום, המסך עבר לחיווי "שומר" הגלובלי, והווי הופיע רק אחרי סבב מלא
+         לשרת ורענון של כל הרשימה. יועד: "זה לא מסמן וי אלא ישר עובר למצב
+         טעינה". פעולה שהמשתמש יזם צריכה להיראות קרתה — הרשת היא פרט טכני. */
       function run(op, id, extra) {
         if (busy) return;
         busy = true;
+
+        var t = byId(id);
+        var snapshot = t ? JSON.parse(JSON.stringify(t)) : null;
+        var applied = false;
+        if (t && OPTIMISTIC[op]) {
+          OPTIMISTIC[op](t);
+          applied = true;
+          markRowBusy(id, true);
+          draw();
+        }
+
         CBA.data.gardenTask(op, id, extra || {}, function (res) {
           busy = false;
           if (!res || !res.ok) {
+            /* גלגול אחורה. בלעדיו הכרטיס נשאר מסומן אחרי כשל, והמשתמש
+               מאמין שהעבודה נרשמה — טעות שמתגלה רק שבוע אחרי. */
+            if (applied && snapshot) {
+              Object.keys(snapshot).forEach(function (k) { t[k] = snapshot[k]; });
+              draw();
+            }
             CBA.ui.alert((res && res.error) || "הפעולה לא הצליחה");
             return;
           }
