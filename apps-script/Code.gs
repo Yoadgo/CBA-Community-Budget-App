@@ -7174,6 +7174,38 @@ function gardenEnsureSheet_(ss, name, headers, widths) {
   return sh;
 }
 
+/* ============================================================================
+ *  דילוג על ensureGardenSheets_ בשמירות חוזרות (2026-09-08 — תיקון ביצועים)
+ * ----------------------------------------------------------------------------
+ *  ensureGardenSheets_ רץ בכל שמירה, וכל ריצה היא כ-10 פניות לגיליון:
+ *  חמישה getSheetByName ועוד קריאת שורת-כותרות לכל טאב בתוך
+ *  gardenAddMissingCols_. בקצב שנמדד (~100-300ms לפעולת גיליון) זה
+ *  1-3 שניות שהתושב מחכה להן בכל דיווח — כמעט תמיד רק כדי לגלות
+ *  שהכול כבר במקום.
+ *
+ *  מעכשיו שני מסלולי הכתיבה (submitGardenReport_ / gardenCreateTask_)
+ *  עוברים דרך ensureGardenSheetsCached_, שרושם דגל במטמון אחרי ריצה
+ *  מוצלחת ומדלגים בפעם הבאה.
+ *
+ *  ⚠️ שתי דרכים לאלץ ריצה מחדש אחרי שמוסיפים עמודה ל-GARDEN_*_HEADERS:
+ *     (א) להעלות את GARDEN_SCHEMA_REV כאן למטה — זו הדרך הנכונה;
+ *     (ב) להריץ installGardenModule() מהעורך — הוא עוקף את המטמון בכוונה.
+ *     בלעדיהן עמודה חדשה לא תיווצר עד שהמטמון יפוג, וכל כתיבה
+ *     אליה תיפול בשקט (זו בדיוק התקלה ש-gardenAddMissingCols_ נולד לפתור).
+ * ========================================================================== */
+var GARDEN_SCHEMA_REV = 1;
+function ensureGardenSheetsCached_(ss) {
+  var key = 'garden_schema_v' + GARDEN_SCHEMA_REV;
+  try {
+    var c = CacheService.getScriptCache();
+    if (c.get(key)) return;
+    ensureGardenSheets_(ss);
+    c.put(key, '1', 21600);   // 6 שעות — המקסימום ש-CacheService מאפשר
+  } catch (e) {
+    ensureGardenSheets_(ss);  // מטמון לא זמין — מתנהגים בדיוק כמו קודם
+  }
+}
+
 /** יוצר את חמשת הטאבים של הגינון. בטוח להרצה חוזרת. */
 function ensureGardenSheets_(ss) {
   gardenEnsureSheet_(ss, GARDEN_REPORTS_SHEET, GARDEN_REPORT_HEADERS,
@@ -7469,7 +7501,7 @@ function submitGardenReport_(ss, body) {
   var lock = LockService.getScriptLock();
   try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
   try {
-    ensureGardenSheets_(ss);
+    ensureGardenSheetsCached_(ss);   // ר' ההערה ליד ensureGardenSheetsCached_
     var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
     var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
     var rc = gardenCols_(rsh), tc = gardenCols_(tsh);
@@ -7858,7 +7890,7 @@ function gardenCreateTask_(ss, body) {
   var lock = LockService.getScriptLock();
   try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
   try {
-    ensureGardenSheets_(ss);
+    ensureGardenSheetsCached_(ss);   // ר' ההערה ליד ensureGardenSheetsCached_
     var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
     var tc = gardenCols_(sh);
     var id = nextGardenId_(sh);

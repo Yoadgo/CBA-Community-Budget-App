@@ -18,6 +18,57 @@
   CBA.screens = CBA.screens || {};
   var esc = CBA.esc;
 
+  /* ============================================================================
+   *  כיווץ תמונות לפני שליחה (2026-09-08 — תיקון ביצועים)
+   * ----------------------------------------------------------------------------
+   *  עד היום התמונה נשלחה כמו שהיא: FileReader -> base64, שמנפח בעוד שליש.
+   *  תמונת טלפון היא 3-5MB, כלומר 4-7MB על החוט, כפול עד 8 תמונות — וזה היה
+   *  רוב זמן ההמתנה בשליחת דיווח (נמדד 8.9.26 בלוח ההפעלות של Apps Script).
+   *  עכשיו: הקטנה לצלע ארוכה MAX_EDGE ודחיסת JPEG. תמונה של 4MB יורדת לרבע MB.
+   *  יועד אישר (8.9.26) שהעותק המכווץ הוא מה שנשמר בארכיון.
+   *
+   *  ⚠️ בכל נפילה חוזרים לקובץ המקורי ולא מפילים את הדיווח: פורמט שהדפדפן לא
+   *     יודע לפענח (HEIC במחשב), canvas חסום, או תוצאה שיצאה גדולה מהמקור
+   *     (קורה בתמונה זעירה שכבר דחוסה היטב).
+   *  ⚠️ בכוונה דרך <img> ולא createImageBitmap: הדפדפנים מיישמים סיבוב EXIF
+   *     על <img> אוטומטית, ואילו ל-createImageBitmap ברירת המחדל השתנתה בין
+   *     גרסאות — ובלי זה תמונות מהאייפון יוצאות מסובבות.
+   * ========================================================================== */
+  var MAX_EDGE = 1600;
+  var JPEG_Q   = 0.72;
+
+  function readAsDataURL(file, cb) {
+    var rd = new FileReader();
+    rd.onload  = function () { cb(String(rd.result)); };
+    rd.onerror = function () { cb(null); };
+    rd.readAsDataURL(file);
+  }
+
+  function compressImage(file, cb) {
+    function fallback() { readAsDataURL(file, cb); }
+    if (!file || !/^image\//.test(file.type || "")) return fallback();
+    var objUrl = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      var out = null;
+      try {
+        var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+        var scale = Math.min(1, MAX_EDGE / Math.max(w || 1, h || 1));
+        var cv = document.createElement("canvas");
+        cv.width  = Math.max(1, Math.round(w * scale));
+        cv.height = Math.max(1, Math.round(h * scale));
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        out = cv.toDataURL("image/jpeg", JPEG_Q);
+      } catch (e) { out = null; }
+      URL.revokeObjectURL(objUrl);
+      if (!out) return fallback();
+      if (file.size && (out.length * 0.75) >= file.size) return fallback();
+      cb(out);
+    };
+    img.onerror = function () { URL.revokeObjectURL(objUrl); fallback(); };
+    img.src = objUrl;
+  }
+
   var STAGES = ["התקבל", "נבדק", "מתוכנן", "בטיפול", "הושלם"];
   function stageIdx(s) { var i = STAGES.indexOf(String(s || "").trim()); return i < 0 ? 0 : i; }
 
@@ -348,13 +399,20 @@
           var files = Array.prototype.slice.call(fileEl.files || []);
           files.forEach(function (f) {
             if (state.photos.length >= photoMax) return;
-            var rd = new FileReader();
-            rd.onload = function () {
-              var b64 = String(rd.result).split(",")[1];
-              state.photos.push({ name: f.name, mime: f.type || "image/jpeg", data: b64 });
-              drawThumbs(String(rd.result));
-            };
-            rd.readAsDataURL(f);
+            /* הכיווץ אסינכרוני, וכמה קבצים שנבחרו יחד מסיימים בסדר לא צפוי —
+               ולכן המכסה נבדקת *שוב* בתוך ה-callback. (בגרסה הקודמת היא נבדקה
+               רק לפני הקריאה, כך שבחירה של 10 קבצים בבת אחת יכלה לעקוף אותה.) */
+            compressImage(f, function (dataUrl) {
+              if (!dataUrl) return;
+              if (state.photos.length >= photoMax) return;
+              var comma = dataUrl.indexOf(",");
+              if (comma < 0) return;
+              var mime = (dataUrl.substring(0, comma).match(/data:([^;]+)/) || [])[1] || f.type || "image/jpeg";
+              var name = String(f.name || "photo");
+              if (/jpeg/.test(mime)) name = name.replace(/\.[^.]+$/, "") + ".jpg";
+              state.photos.push({ name: name, mime: mime, data: dataUrl.substring(comma + 1) });
+              drawThumbs(dataUrl);
+            });
           });
           fileEl.value = "";
         });
