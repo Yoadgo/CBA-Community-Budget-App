@@ -41,7 +41,16 @@
     pin:   '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/>',
     cal:   '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
     note:  '<path d="M4 5h16v11l-4 4H4z"/><path d="M20 16h-4v4"/><path d="M8 9h8M8 13h5"/>',
-    merge: '<path d="M7 4v5a4 4 0 0 0 4 4h6"/><path d="M7 20v-5a4 4 0 0 1 4-4h6"/><path d="m14 9 3 2.5-3 2.5"/>'
+    merge: '<path d="M7 4v5a4 4 0 0 0 4 4h6"/><path d="M7 20v-5a4 4 0 0 1 4-4h6"/><path d="m14 9 3 2.5-3 2.5"/>',
+    /* שלושת אלה נוספו ב-8.9 עם הכרטיס השקט: person מסמן דיווח תושב (החריג
+       היחיד שנשאר מסומן במפורש), repeat מסמן משימה חוזרת מתוכנית העבודה,
+       ו-filter/help הם שני הלחצנים בשורת הבקרה. */
+    person: '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/>',
+    repeat: '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14"/>' +
+            '<path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v2a3 3 0 0 1-3 3h-14"/>',
+    filter: '<path d="M3 5h18M6.5 12h11M10 19h4"/>',
+    help:   '<circle cx="12" cy="12" r="9"/>' +
+            '<path d="M9.6 9.2a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.8.7-.8 1.3v.4"/><path d="M12 17h.01"/>'
   };
   function ico(n, cls) {
     return '<svg class="' + (cls || "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
@@ -74,6 +83,12 @@
     "ממתין לאישור":    1
   };
   var FLAG_HOT = { "דורש בדיקה חוזרת": 1, "הוחזר להשלמה": 1, "דורש בדיקה בשטח": 1 };
+
+  /* המילים כפי שהן רשומות בעמודה "סוג" בגיליון — ר' GARDEN_KIND_* ב-Code.gs.
+     כאן הן משמשות רק לתצוגה, וההשוואה נעשית מול המחרוזת שהשרת החזיר ולא
+     מול ניחוש: תצוגה שמנחשת הייתה מתייגת כל מה שאינו שגרה כדיווח תושב. */
+  var GK_ROUTINE = "שגרה";
+  var GK_REPORT  = "דיווח תושב";
 
   var MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני",
                 "יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -212,6 +227,11 @@
       function visible() {
         if (filter === "unplanned") return unplanned.slice();
         if (filter === "done" && isManager) return pending.slice();
+        if (filter === "recheck") {
+          return rows.concat(unplanned).concat(pending).filter(function (t) {
+            return t.flag === "דורש בדיקה חוזרת";
+          });
+        }
         return rows.filter(function (t) {
           if (filter === "done") return t.flag === "ממתין לאישור";
           if (filter === "dragged") return t.flag === "נגררה" || (t.drags || 0) > 0;
@@ -291,18 +311,10 @@
           body = '<div class="gd-reps" style="margin-top:10px">' + list.map(card).join("") + '</div>';
         }
 
+        /* אין כותרת מסך (2026-09-08). הסמליל והכותרת "משימות השבוע" החזיקו
+           68px קבועים ולא אמרו דבר שהניווט לא אומר — המשתמש הגיע לכאן מלשונית
+           ששמה כתוב עליה. "משימה חדשה" עבר לשורת הבקרה כלחצן ראשי. */
         root.innerHTML =
-          '<div class="gd-head"><span class="gd-head__em">' + ico("leaf") + '</span>' +
-            '<div class="gd-head__t"><h3>משימות השבוע</h3><p>' +
-            esc(isManager ? "מנהל גינון · מראה שיכון" : "אחראי גינון · מראה שיכון") +
-            '</p></div>' +
-            /* פתיחת משימה יזומה — סמכות מנהל בלבד. עד כה משימה יכלה להיוולד
-               רק מדיווח תושב, כלומר המנהל לא יכול היה להגדיר עבודה בעצמו. */
-            (isManager
-              ? '<button type="button" class="gd-newbtn" id="gt-new">' +
-                ico("plus") + 'משימה חדשה</button>'
-              : '') +
-          '</div>' +
           '<div class="gt-week">' +
             '<button type="button" data-wk="-1" aria-label="שבוע קודם">' + ico("prev") + '</button>' +
             '<div class="gt-week__c"><b>' + esc(weekLabel(week)) + '</b>' +
@@ -310,29 +322,29 @@
               '<div class="gt-bar"><i style="width:' + pct + '%"></i></div></div>' +
             '<button type="button" data-wk="1" aria-label="שבוע הבא">' + ico("next") + '</button>' +
           '</div>' +
-          /* רצועת העבודה של המנהל. לא סטטיסטיקה — לוח הנתונים הוא שלב ג׳ ותלוי
-             במנוע השגרה (ר' cba-garden-dashboard-spec). ארבעת המספרים האלה
-             נספרים מנתונים שכבר קיימים, והם עונים על שאלה אחת: **מה מונח על
-             שולחני עכשיו**. כל אריח הוא כפתור שקופץ לרשימה שלו — אחרת זו
-             תצוגה שמודיעה על בעיה ולא נותנת דרך לטפל בה. */
-          (isManager
-            ? '<div class="gt-tiles">' +
-                tile("done", "ממתינות לאישורך", c.done, "wait") +
-                tile("unplanned", "לשיבוץ", unplanned.length, "plan") +
-                tile("dragged", "נגררו", c.dragged, "drag") +
-                tile("open", "דורש בדיקה חוזרת", c.recheck, "hot") +
-              '</div>'
-            : '') +
-          '<div class="gd-seg">' +
-            seg("open", "לביצוע", c.open) + seg("done", "בוצעו", c.done) +
-            seg("dragged", "נגררו", c.dragged) +
-            (isManager ? seg("unplanned", "לשיבוץ", unplanned.length) : "") +
-          '</div>' +
-          '<div class="gt-sort"><b>סידור לפי</b>' +
-            SORTS.map(function (o) {
-              return '<button type="button" data-sort="' + o.k + '"' +
-                (sortBy === o.k ? ' class="on"' : '') + '>' + esc(o.label) + '</button>';
-            }).join("") +
+          /* שורת בקרה אחת (2026-09-08). לפניה היו כאן שלוש שורות: ארבעה
+             אריחים צבעוניים, רצועת מסננים, ורצועת "סידור לפי". האריחים
+             ורצועת המסננים החזיקו את אותם מספרים בדיוק, אז נשאר אחד; הסידור
+             נכנס לגיליון מאחורי סמליל המסנן, כי הוא בחירה שנעשית פעם בהרבה
+             זמן ולא פעולה שחוזרת. המספר היחיד שאיבד מקום קבוע הוא "דורש
+             בדיקה חוזרת" — הוא מופיע כמסנן רק כשיש כזה, כי מסנן שתמיד מציג
+             אפס הוא רעש. */
+          '<div class="gt-ctl">' +
+            '<div class="gt-ctl__f">' +
+              seg("open", "לביצוע", c.open) +
+              seg("done", isManager ? "לאישורך" : "בוצעו", c.done) +
+              seg("dragged", "נגררו", c.dragged) +
+              (isManager && unplanned.length ? seg("unplanned", "לשיבוץ", unplanned.length) : "") +
+              (isManager && c.recheck ? seg("recheck", "לבדיקה", c.recheck) : "") +
+            '</div>' +
+            (isManager
+              ? '<button type="button" class="gt-tool is-primary" id="gt-new" ' +
+                'aria-label="משימה חדשה">' + ico("plus") + '</button>'
+              : '') +
+            '<button type="button" class="gt-tool" id="gt-sort" aria-label="סידור הרשימה">' +
+              ico("filter") + '</button>' +
+            '<button type="button" class="gt-tool" id="gt-legend" aria-label="מקרא">' +
+              ico("help") + '</button>' +
           '</div>' + body;
 
         wire();
@@ -345,14 +357,9 @@
         return i === -1 ? 9999 : i;
       }
 
-      function tile(f, label, n, kind) {
-        return '<button type="button" class="gt-tile is-' + kind + (n ? '' : ' is-zero') +
-          '" data-f="' + f + '"><b>' + n + '</b><span>' + esc(label) + '</span></button>';
-      }
-
       function seg(k, label, n) {
         return '<button type="button" data-f="' + k + '"' +
-          (filter === k ? ' class="on"' : '') + '>' + esc(label) + ' · ' + n + '</button>';
+          (filter === k ? ' class="on"' : '') + '>' + esc(label) + '<b>' + n + '</b></button>';
       }
 
       function card(t) {
@@ -364,12 +371,6 @@
             esc(t.flag === "נגררה" && (t.drags || 0) > 1 ? "נגררה " + t.drags + " פעמים" : t.flag) +
             '</span>';
         }
-        /* מקור המשימה מוצג כפי שהוא רשום בעמודה "סוג" בגיליון (שגרה / דיווח
-           תושב / יזום — ר' GARDEN_KINDS ב-Code.gs), ולא נגזר בניחוש: תצוגה
-           שמנחשת הייתה מתייגת כל מה שאינו שגרה כ"דיווח תושב", כולל משימות
-           שהמנהל פתח בעצמו. משימת שגרה מקבלת גם רמז שהיא חוזית. */
-        var src = t.kind || "משימה";
-        var contract = t.kind === "שגרה";
         var where = t.area || "";
         /* בתצוגת "לשיבוץ" תיבת הסימון מוחלפת בכפתור שיבוץ: אי אפשר לסמן
            כבוצעה משימה שעוד לא נכנסה לשום שבוע, והפעולה הנכונה שם היא אחת. */
@@ -389,15 +390,23 @@
                 ' aria-label="' + (approving ? "אישור" : (done ? "ביטול סימון" : "סימון כבוצע")) +
                 '">' + ico("check") + '</button>') +
           '<div class="gt-body">' +
-            '<div class="gt-top"><span class="gd-rep__id">#' + esc(t.id) + '</span>' +
+            /* הכותרת ראשונה ולבדה. מתחתיה שורת מטא אחת שבה כל שדה הוא
+               סמליל + טקסט אפור, מופרדים בנקודה. הסדר קבוע ואינו תלוי
+               בנתונים, כדי שהעין תמצא כל שדה באותו מקום בכל שורה:
+                 מקור · קטגוריה · מיקום · מזהה · [דגל]
+               המקור הוא היחיד שמשנה צורה: "תושב" נכתב במפורש ובולד (יש שם
+               אדם שמחכה), שגרה מקבלת סמליל ↻ בלבד, ומשימה יזומה — כלום.
+               אין מה לסמן במשימה שהמנהל פתח בעצמו והוא זה שמסתכל. */
+            '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
+            '<div class="gt-meta">' +
+              (t.kind === GK_REPORT
+                ? '<span class="gt-res">' + ico("person") + 'תושב</span><i>·</i>'
+                : (t.kind === GK_ROUTINE ? ico("repeat") + '<i>·</i>' : '')) +
               '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
-              tags + '<span class="gt-src' + (contract ? " is-contract" : "") + '">' +
-                esc(src) + '</span></div>' +
-            /* הכותרת והמיקום על שורה אחת (2026-09-07): המיקום הוא הקשר לכותרת
-               ולא נתון עצמאי, ושורה שלישית לכל כרטיס עלתה ~18px × מספר
-               המשימות — מה שהוריד כמעט שתי משימות מכל מסך. */
-            '<div class="gt-t">' + esc(t.title || t.category || "משימה") +
-              (where ? '<em>' + ico("pin") + esc(where) + '</em>' : '') + '</div>' +
+              (where ? '<i>·</i>' + ico("pin") + esc(where) : '') +
+              '<i>·</i><span class="gd-rep__id">#' + esc(t.id) + '</span>' +
+              (tags ? '<i>·</i>' + tags : '') +
+            '</div>' +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
             /* רמז הכפילות מופיע רק ב"לשיבוץ" — הרגע שבו המנהל פוגש דיווח
                חדש, ולפני ששיבץ עליו עבודה. הוא **הצעה**: הכפתור מאחד,
@@ -408,9 +417,11 @@
                 esc(t.dupOf.title || "") +
                 '<button type="button" data-act="merge">איחוד</button></div>'
               : '') +
-            (done
-              ? '<div class="gt-wait">' + ico("clock") +
-                (isManager ? 'ממתין לאישורך' : 'ממתין לאישור הוועד') + '</div>'
+            /* שורת "ממתין לאישור" נשארת רק לצוות (2026-09-08). אצל המנהל
+               היא הופיעה על כל כרטיס בתור האישורים — כלומר על מסך שכולו
+               ממתין לאישורו — לצד תיבת אישור ירוקה שאומרת בדיוק את זה. */
+            (done && !isManager
+              ? '<div class="gt-wait">' + ico("clock") + 'ממתין לאישור הוועד</div>'
               : '') +
           '</div>' +
           '<button type="button" class="gt-more" data-act="menu" aria-label="עוד פעולות">' +
@@ -428,11 +439,10 @@
         Array.prototype.forEach.call(root.querySelectorAll("[data-f]"), function (b) {
           b.addEventListener("click", function () { filter = b.dataset.f; draw(); });
         });
-        Array.prototype.forEach.call(root.querySelectorAll("[data-sort]"), function (b) {
-          b.addEventListener("click", function () { sortBy = b.dataset.sort; draw(); });
-        });
         var nb = root.querySelector("#gt-new");
         if (nb) nb.addEventListener("click", openNewTask);
+        root.querySelector("#gt-sort").addEventListener("click", openSort);
+        root.querySelector("#gt-legend").addEventListener("click", openLegend);
         root.addEventListener("click", onCardClick);
       }
 
@@ -531,6 +541,96 @@
         });
       }
 
+      /* גיליון בסיסי — שני הגיליונות הקטנים למטה (סידור, מקרא) חלקו את אותן
+         עשר שורות של יצירה-הנפשה-סגירה, וכל שכפול כזה הוא מקום שבו אחד
+         מהם יפסיק להיסגר על לחיצה ברקע ואיש לא ישים לב. */
+      function sheet(label, html, onPick) {
+        var wrap = document.createElement("div");
+        wrap.className = "gt-sheet-wrap";
+        wrap.innerHTML =
+          '<div class="gt-sheet-bd"></div>' +
+          '<div class="gt-sheet" role="dialog" aria-label="' + esc(label) + '">' +
+            '<div class="gt-grip" aria-hidden="true"></div>' + html +
+          '</div>';
+        document.body.appendChild(wrap);
+        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
+        function close() {
+          wrap.classList.remove("is-open");
+          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
+        }
+        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        if (onPick) wrap.addEventListener("click", function (e) { onPick(e, close); });
+        return close;
+      }
+
+      /* הסידור. עבר מרצועה קבועה בראש המסך לגיליון, כי הוא נבחר פעם ונשאר —
+         ורצועה שיושבת שם תמיד עלתה 34px בכל מסך, כל הזמן. */
+      function openSort() {
+        sheet("סידור הרשימה",
+          '<h4>סידור הרשימה</h4>' +
+          '<p class="sub">לפי מה לסדר את המשימות שמוצגות עכשיו.</p>' +
+          SORTS.map(function (o) {
+            return '<button type="button" class="gt-opt" data-sort="' + o.k + '"><u>' +
+              ico(o.k === "area" ? "pin" : (o.k === "date" ? "cal" : (o.k === "urgent" ? "clock" : "leaf"))) +
+              '</u><div>' + esc(o.label) +
+              '<span>' + esc(o.group ? "מקבץ בכותרות" : "רשימה אחת") + '</span></div>' +
+              (sortBy === o.k ? '<span style="margin-inline-start:auto;color:#0F6B45">' +
+                 ico("check") + '</span>' : '') + '</button>';
+          }).join(""),
+          function (e, close) {
+            var b = e.target.closest("[data-sort]");
+            if (!b) return;
+            sortBy = b.dataset.sort;
+            close(); draw();
+          });
+      }
+
+      /* המקרא. הוא הכתובת היחידה שבה מסבירים סמלילים — ברגע שהמסך עצמו צריך
+         תווית טקסט ליד כל סמליל הוא חוזר להיות עמוס, וזו בדיוק הבעיה שממנה
+         באנו. שים לב שהוא מתאר את מה שבאמת על המסך: אם יתווסף סימון חדש
+         לכרטיס, מקומו כאן. */
+      function openLegend() {
+        var cats = [
+          ["lawn", "מדשאות"], ["water", "השקיה / ממטרות"], ["tree", "עצים"],
+          ["prune", "שיחים / גיזום"], ["weed", "עשבייה / קרקע"],
+          ["clean", "ניקיון / גזם"], ["bed", "ערוגות / שתילה"]
+        ];
+        sheet("מקרא",
+          '<h4>מקרא</h4>' +
+          '<div class="gt-lg">מאיפה המשימה הגיעה</div>' +
+          '<div class="gt-lgi"><u>' + ico("person") + '</u><div><b>תושב</b>' +
+            '<span>מישהו דיווח על זה מהאפליקציה. יש לו מספר פנייה, והוא מקבל עדכון בסיום.</span></div></div>' +
+          '<div class="gt-lgi"><u>' + ico("repeat") + '</u><div><b>חוזרת</b>' +
+            '<span>מגיעה מתוכנית העבודה וחוזרת לפי התדירות שהוגדרה לה.</span></div></div>' +
+          '<div class="gt-lgi"><u style="color:#C4CBC8">—</u><div><b>בלי סימון</b>' +
+            '<span>משימה שנפתחה כאן ידנית, פעם אחת.</span></div></div>' +
+
+          '<div class="gt-lg">הפס בשפת הכרטיס</div>' +
+          '<div class="gt-lgi"><u><span class="gt-lgs" style="background:var(--c-lawn)"></span></u>' +
+            '<div><b>קטגוריה</b><span>מאפשר לסרוק את הרשימה לפי סוג עבודה בלי לקרוא.</span>' +
+            '<div class="gt-lgc">' + cats.map(function (c) {
+              return '<div><i style="background:var(--c-' + c[0] + ')"></i>' + esc(c[1]) + '</div>';
+            }).join("") + '</div></div></div>' +
+
+          '<div class="gt-lg">תג צבעוני</div>' +
+          '<div class="gt-lgi"><u style="width:auto"><span class="gt-age">נגררה</span></u>' +
+            '<div><b>משהו חורג</b><span>זה הדבר הצבעוני היחיד בכרטיס. אין תג — הכול כרגיל.</span></div></div>' +
+          '<div class="gt-lgi"><u style="width:auto"><span class="gt-age is-hot">דורש בדיקה חוזרת</span></u>' +
+            '<div><b>דורש תשומת לב</b><span>תושב אמר שהטיפול לא הושלם, או שהעבודה נחסמה בשטח.</span></div></div>' +
+
+          '<div class="gt-lg">תיבת הסימון</div>' +
+          '<div class="gt-lgi"><u><span class="gt-box" style="width:22px;height:22px;margin:0"></span></u>' +
+            '<div><b>ריקה</b><span>' +
+            esc(isManager ? "סימון ביצוע. לא סוגר את המשימה — מרים אותה לאישורך."
+                          : "לחיצה מסמנת שביצעת. המשימה עוברת לאישור הוועד ולא נסגרת מיד.") +
+            '</span></div></div>' +
+          (isManager
+            ? '<div class="gt-lgi"><u><span class="gt-box is-approve" style="width:22px;height:22px;margin:0">' +
+              ico("check") + '</span></u><div><b>ירוקה</b>' +
+              '<span>אישור. הלחיצה סוגרת את המשימה, ואם היא הגיעה מתושב — נשלח אליו עדכון.</span></div></div>'
+            : ''));
+      }
+
       /* אישור מרוכז. המפתח כולל תבנית+שבוע, ולכן אי אפשר לצרף לקבוצה משימה
          משבוע אחר גם אם המסך יצייר אותה בטעות. השרת מאמת שוב. */
       function approveBatch(key) {
@@ -588,7 +688,8 @@
           '<div class="gt-sheet" role="dialog" aria-label="משימה חדשה">' +
             '<div class="gt-grip" aria-hidden="true"></div>' +
             '<h4>משימה חדשה</h4>' +
-            '<p class="sub">משימה שאתה פותח בעצמך — לא דיווח תושב ולא שגרה מהחוזה.</p>' +
+            '<p class="sub">משימה שאתה פותח בעצמך — לא דיווח של תושב ולא משימה חוזרת ' +
+              'מתוכנית העבודה.</p>' +
             '<label class="gd-lbl">מה צריך לעשות <s>*</s></label>' +
             '<input class="gd-inp" id="nt-title" maxlength="120" autocomplete="off" ' +
               'placeholder="למשל: לגזום את העץ שחוסם את התמרור">' +

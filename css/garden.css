@@ -263,51 +263,50 @@
    2. שורת הסידור נגללת אופקית ולא נשברת לשתי שורות: היא קבועה בגובהה, כך
       שראש המסך לא "קופץ" כשמוסיפים אפשרות סידור.
    ========================================================================== */
-.gt-week { display: flex; align-items: center; gap: 6px; padding: 9px 10px; margin-bottom: 12px;
-  background: rgba(255,255,255,.76); border: 1px solid rgba(255,255,255,.7); border-radius: 14px;
+.gt-week { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin-bottom: 9px;
+  background: rgba(255,255,255,.76); border: 1px solid rgba(255,255,255,.7); border-radius: 12px;
   -webkit-backdrop-filter: saturate(180%) blur(14px); backdrop-filter: saturate(180%) blur(14px);
   box-shadow: 0 4px 16px rgba(16,24,40,.06); }
-.gt-week > button { width: 30px; height: 30px; flex: none; border: 0; border-radius: 9px;
+.gt-week > button { width: 26px; height: 26px; flex: none; border: 0; border-radius: 8px;
   background: rgba(17,24,39,.05); color: var(--text, #374151); display: grid; place-items: center; cursor: pointer; }
-.gt-week > button svg { width: 15px; height: 15px; }
+.gt-week > button svg { width: 14px; height: 14px; }
 .gt-week > button:hover { background: rgba(17,24,39,.09); }
 .gt-week__c { flex: 1; min-width: 0; text-align: center; }
-.gt-week__c b { display: block; font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
-.gt-week__c span { display: block; font-size: 11.5px; color: var(--text-soft, #6B7280); margin-top: 1px; }
-.gt-bar { height: 4px; border-radius: 99px; background: rgba(17,24,39,.08); margin-top: 9px; overflow: hidden; }
+.gt-week__c b { display: block; font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
+.gt-week__c span { display: block; font-size: 10.5px; color: var(--text-soft, #6B7280); }
+.gt-bar { height: 3px; border-radius: 99px; background: rgba(17,24,39,.08); margin-top: 5px; overflow: hidden; }
 .gt-bar i { display: block; height: 100%; border-radius: 99px;
   background: linear-gradient(90deg, #0F6B45, #3FA37A); transition: width .35s ease; }
 
-/* רצועת העבודה של המנהל — ארבעה מספרים שהם גם כפתורים. אריח באפס מתעמעם
-   ולא נעלם: "אין מה לאשר" הוא מידע, והיעלמות הייתה מזיזה את שאר האריחים. */
-.gt-tiles { display: flex; gap: 7px; margin-bottom: 11px; }
-.gt-tile { flex: 1 1 0; min-width: 0; border: 1px solid rgba(17,24,39,.09);
-  border-radius: 11px; background: rgba(255,255,255,.72); padding: 9px 8px 8px;
-  font: inherit; cursor: pointer; text-align: center;
-  -webkit-backdrop-filter: saturate(180%) blur(12px); backdrop-filter: saturate(180%) blur(12px);
-  transition: border-color .15s ease, background .15s ease; }
-.gt-tile b { display: block; font-size: 21px; font-weight: 700; line-height: 1;
-  letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.gt-tile span { display: block; font-size: 10.5px; color: var(--text-soft, #6B7280);
-  margin-top: 4px; line-height: 1.25; }
-.gt-tile:hover { border-color: rgba(17,24,39,.22); background: #fff; }
-.gt-tile.is-wait b { color: var(--ok, #059669); }
-.gt-tile.is-plan b { color: var(--action, #111827); }
-.gt-tile.is-drag b { color: #B45309; }
-.gt-tile.is-hot  b { color: #B91C1C; }
-.gt-tile.is-zero { opacity: .45; }
-.gt-tile.is-zero b { color: var(--text-soft, #6B7280); }
-@media (max-width: 380px) { .gt-tile span { font-size: 10px; } }
-
-.gt-sort { display: flex; align-items: center; gap: 7px; margin: 10px 0 2px;
-  overflow-x: auto; padding-bottom: 2px; }
-.gt-sort::-webkit-scrollbar { display: none; }
-.gt-sort > b { font-size: 11.5px; font-weight: 600; color: #9CA3AF; flex: none; }
-.gt-sort button { flex: none; border: 1px solid rgba(17,24,39,.1); border-radius: 99px;
-  background: rgba(255,255,255,.7); padding: 5px 12px; font: inherit; font-size: 12px;
-  font-weight: 500; color: var(--text-soft, #6B7280); cursor: pointer; }
-.gt-sort button.on { background: var(--action, #111827); border-color: var(--action, #111827);
-  color: #fff; font-weight: 600; }
+/* ==========================================================================
+   שורת הבקרה — מסננים + פעולות, שורה אחת (2026-09-08)
+   --------------------------------------------------------------------------
+   קדמה לה רצועת ארבעה אריחים צבעוניים ומתחתיה שורת "סידור לפי". שתיהן ירדו
+   יחד עם כותרת המסך: הן החזיקו 209px לפני המשימה הראשונה, ובעיקר הן החזיקו
+   ארבעה צבעים שלא אמרו כלום — וכל צבע נוסף במסך גוזל מהתג הצבעוני, שהוא
+   הדבר היחיד שאמור לצעוק. המספרים לא אבדו: הם יושבים עכשיו בתוך המסננים,
+   שהיו שם ממילא. הסידור עבר לגיליון מאחורי סמליל המסנן.
+   ========================================================================== */
+.gt-ctl { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.gt-ctl__f { display: flex; gap: 5px; flex: 1; min-width: 0; overflow-x: auto;
+  scrollbar-width: none; }
+.gt-ctl__f::-webkit-scrollbar { display: none; }
+.gt-ctl__f button { flex: none; border: 1px solid rgba(17,24,39,.09); border-radius: 99px;
+  background: rgba(255,255,255,.72); padding: 5px 11px; font: inherit; font-size: 12px;
+  color: var(--text-soft, #6B7280); cursor: pointer; white-space: nowrap; }
+.gt-ctl__f button b { font-weight: 700; margin-inline-start: 4px; color: var(--text, #374151);
+  font-variant-numeric: tabular-nums; }
+.gt-ctl__f button.on { background: var(--action, #111827); border-color: var(--action, #111827); color: #fff; }
+.gt-ctl__f button.on b { color: #fff; }
+/* הלחצנים בפורמט הקבוע של המסך: ריבוע 32x30 עם מתאר, כמו .gt-more וכמו
+   חצי השבוע. "משימה חדשה" הוא היחיד המלא — הוא הפעולה הראשית. */
+.gt-tool { width: 32px; height: 30px; flex: none; border: 1px solid rgba(17,24,39,.09);
+  border-radius: 10px; background: rgba(255,255,255,.72); color: var(--text-soft, #6B7280);
+  display: grid; place-items: center; cursor: pointer; }
+.gt-tool svg { width: 16px; height: 16px; }
+.gt-tool:hover { border-color: rgba(17,24,39,.22); background: #fff; color: var(--text, #374151); }
+.gt-tool.is-primary { background: var(--action, #111827); border-color: var(--action, #111827); color: #fff; }
+.gt-tool.is-primary:hover { background: #000; color: #fff; }
 
 .gt-grp { display: flex; align-items: center; gap: 8px; margin: 13px 2px 7px;
   font-size: 12.5px; font-weight: 700; color: var(--text, #374151); }
@@ -343,13 +342,29 @@
 .gt-plan svg { width: 15px; height: 15px; }
 .gt-plan:hover { background: #000; }
 .gt-body { flex: 1; min-width: 0; }
-.gt-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-/* כותרת + מיקום על שורה אחת. המיקום ב-<em> אפור וקטן, נשבר לשורה שנייה רק
-   כשהכותרת באמת ארוכה — ר' ההערה ב-card() ב-gardenTasks.js. */
-.gt-t { font-weight: 600; font-size: 14px; margin-top: 2px; line-height: 1.4; }
-.gt-t em { font-style: normal; font-weight: 400; font-size: 12px;
-  color: var(--text-soft, #6B7280); margin-inline-start: 7px; white-space: nowrap; }
-.gt-t em svg { width: 11px; height: 11px; vertical-align: -1px; margin-inline-end: 2px; }
+/* הכרטיס השקט (2026-09-08). קדמו לו שתי שורות: שורת שבבים צבעוניים (מזהה,
+   קטגוריה בשבב ממולא, תג מקור) ומתחתיה הכותרת. זה נתן ארבעה צבעי טקסט
+   וארבעה רקעים על כרטיס אחד. עכשיו: כותרת בשורה אחת, ומתחתיה שורת מטא
+   אחת אפורה שבה הכול סמלילים — למעט שני חריגים שנשארים קריאים, "תושב"
+   והתג הצבעוני. הכרטיס ירד מ-107px ל-61px. */
+.gt-t { font-weight: 600; font-size: 14px; line-height: 1.35; margin: 0; }
+.gt-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 3px;
+  font-size: 11.5px; color: #7A847F; }
+.gt-meta svg { width: 12px; height: 12px; opacity: .75; }
+.gt-meta i { font-style: normal; color: #C4CBC8; }
+/* דיווח תושב — הסימון המפורש היחיד שנשאר, כי הוא החריג ולא ברירת המחדל:
+   מאחוריו עומד אדם שמחכה לתשובה, ובסיום נשלח אליו מייל. שגרה מקבלת סמליל
+   בלבד; משימה יזומה לא מקבלת כלום. */
+.gt-meta .gt-res { display: inline-flex; align-items: center; gap: 4px;
+  font-weight: 600; color: #3D4A44; }
+.gt-meta .gt-res svg { opacity: 1; }
+/* בתוך שורת המשימה השבב מאבד את המילוי הצבעוני שלו והופך לסמליל + טקסט
+   אפור. הצבע לא נעלם מהמסך — הוא נשאר בפס שבשפת הכרטיס (.gd-rep), שם הוא
+   מאפשר סריקה מהירה בלי להתחרות בשום דבר. */
+.gt-row .gd-kchip { background: transparent; color: #7A847F; padding: 0;
+  font-weight: 500; font-size: 11.5px; }
+.gt-row .gd-kchip svg { width: 12px; height: 12px; opacity: .75; }
+.gt-row .gd-rep__id { font-weight: 400; color: #9BA3A0; font-size: 11px; }
 .gt-note { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 5px;
   border-inline-start: 2px solid rgba(17,24,39,.12); padding-inline-start: 8px; }
 /* רמז כפילות. ענבר ולא אדום: זו הצעה לבדיקה, לא תקלה — ואדום היה גורם
@@ -380,16 +395,14 @@
   font-size: 11.5px; font-weight: 600; color: var(--ok, #059669); }
 .gt-wait svg { width: 13px; height: 13px; }
 
-.gt-age { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
-  background: #FEF3C7; color: #B45309; }
-.gt-age.is-hot { background: #FEE2E2; color: #B91C1C; }
-.gt-src { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
-  background: rgba(17,24,39,.055); color: var(--text-soft, #6B7280); }
-/* משימת שגרה = חוב חוזי. מסומנת במתאר ולא במילוי: תג המקור חייב להישאר
-   שקט יותר משבב הקטגוריה שלצידו, ומילוי ירוק התנגש חזותית עם קטגוריה
-   ירוקה ("מדשאות") שיושבת בדיוק באותה שורה. המתאר מבחין בלי להתחרות. */
-.gt-src.is-contract { background: transparent; color: #0F6B45;
-  box-shadow: inset 0 0 0 1px rgba(15,107,69,.35); }
+/* התג הצבעוני — הדבר הצבעוני היחיד שנשאר בכרטיס, ולכן היחיד שמסוגל
+   לצעוק. צורתו זוויתית (clip-path) ולא גלולה, כדי שייקרא כתג-דגל ולא
+   כשבב מידע נוסף. שני מצבים בלבד: ענבר = חריגה, אדום = דורש תשומת לב.
+   כלל: דגל אחד לכל היותר, ורוב המשימות בלי דגל בכלל. */
+.gt-age { font-size: 10.5px; font-weight: 600; padding: 2px 9px 2px 12px; border-radius: 3px;
+  clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%);
+  background: #FDEBD0; color: #96560A; }
+.gt-age.is-hot { background: #FBE0E1; color: #A32F3E; }
 
 /* גיליון תחתון — אותה תבנית של nav-sheet, בקנה מידה של תוכן ולא של ניווט */
 .gt-sheet-wrap { position: fixed; inset: 0; z-index: 60; }
@@ -426,6 +439,23 @@
 .gt-opt u svg { width: 15px; height: 15px; }
 .gt-opt span { display: block; font-size: 11.5px; color: #9CA3AF; font-weight: 400; margin-top: 1px; }
 .gt-sheet-wrap.is-map .gd-map { height: 62vh; margin-top: 4px; }
+
+/* ---- מקרא. נפתח מסמליל ה-? בשורת הבקרה. הוא הכתובת היחידה שבה מותר
+   להסביר סמלילים: ברגע שהמסך עצמו צריך תוויות טקסט ליד כל סמליל, הוא
+   חוזר להיות עמוס. ---- */
+.gt-lg { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: #9BA3A0; margin: 14px 0 7px; }
+.gt-lg:first-of-type { margin-top: 0; }
+.gt-lgi { display: flex; align-items: flex-start; gap: 11px; padding: 6px 0; }
+.gt-lgi > u { text-decoration: none; width: 26px; flex: none; display: grid; place-items: center;
+  padding-top: 1px; color: #3D4A44; }
+.gt-lgi > u svg { width: 14px; height: 14px; }
+.gt-lgi b { display: block; font-size: 13.5px; font-weight: 600; }
+.gt-lgi span { display: block; font-size: 12px; color: #7A847F; line-height: 1.45; margin-top: 1px; }
+.gt-lgs { width: 4px; height: 17px; border-radius: 2px; display: block; }
+.gt-lgc { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 5px; }
+.gt-lgc div { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #7A847F; }
+.gt-lgc i { width: 4px; height: 12px; border-radius: 2px; display: block; font-style: normal; }
 
 /* בדסקטופ הגיליון הופך לכרטיס צף וממורכז. הריכוז נעשה ב-margin-inline:auto
    ולא ב-translateX(-50%) עם inset-inline-start — שבתוך RTL היה דוחף אותו
