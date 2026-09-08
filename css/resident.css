@@ -1299,7 +1299,10 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 
 /* 5. שבב ותווית של מרחב נשארים בגודל קבוע על המסך — לא גדלים עם הזום.
       --inv נקבע ב-resident.js בכל שינוי זום ושווה ל-1/scale. */
-.map-poi { transform: translate(-50%,-50%) scale(var(--inv,1)); }
+/* --poi-k מתווסף ל---inv כדי שבזום אאוט השבבים יתכווצו במקום להיעלם
+   (ר' poiScale ב-resident.js). התווית לא מתכווצת — טקסט קטן יותר מ-10px
+   פשוט לא נקרא, ולכן היא נעלמת לגמרי בדרגה 0 במקום להצטמק. */
+.map-poi { transform: translate(-50%,-50%) scale(calc(var(--inv,1) * var(--poi-k,1))); }
 .map-amenity__label { transform: translateX(-50%) scale(var(--inv,1)); transform-origin: top center; }
 
 /* רחבה מרוצפת — חלק מרשת הריצוף, בגוון של השבילים כדי ששביל שנכנס אליה
@@ -1626,3 +1629,10 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .map-poi.st-season .map-amenity__chip::after { background: #9B84C4; }
 /* במצב נקי לצילום המסך אין חיווי — הצילום נשלח והסטטוס בו כבר לא נכון */
 .map-shell.clean .map-poi.has-st .map-amenity__chip::after { display: none; }
+
+/* כפתור שמירת התמונה — קיים רק במצב נקי, כי זה בדיוק המצב שהתמונה שלו
+   שווה משהו: גיאומטריה ומספרי בתים, בלי שמות משפחה ובלי סימון "הבית שלי". */
+#map-shot { display: none; }
+.map-shell.clean #map-shot { display: grid; }
+.map-shell.clean .map-toolbar { display: flex; }
+.map-shell.shot-busy #map-shot { animation: mapPhotoWait 1s ease-in-out infinite; }

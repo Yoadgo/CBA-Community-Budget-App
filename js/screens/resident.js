@@ -34,6 +34,7 @@ CBA.screens = CBA.screens || {};
   /* תצ״א — פרוסת נוף עם שמש; שכבות — לרייל ההבלטה */
   var photoIcon  = svg('<rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M3 16l5-4.5 4 3.5 3-2.5 6 5"/>');
   var layersIcon = svg('<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>');
+  var saveIcon   = svg('<path d="M12 3v12"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>');
   var fitIcon    = svg('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>');
   var parkIcon   = svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 16V8h4a3 3 0 0 1 0 6H9"/>');
   var pinIcon    = svg('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>');
@@ -2008,8 +2009,10 @@ CBA.screens = CBA.screens || {};
               'aria-label="תצלום אוויר" title="תצ״א — התצלום מתחת לציור">' +
               photoIcon + '</button>' +
               '<button type="button" class="map-btn lg" id="map-clean" aria-pressed="false" ' +
-              'aria-label="מצב נקי לצילום מסך" title="מצב נקי — גיאומטריה ומספרי בתים בלבד, לצילום מסך">' +
-              cameraIcon + '</button>' : '') +
+              'aria-label="מצב נקי לצילום מסך" title="מצב נקי — גיאומטריה ומספרי בתים בלבד">' +
+              cameraIcon + '</button>' +
+              '<button type="button" class="map-btn lg" id="map-shot" ' +
+              'aria-label="שמירת תמונה" title="שמירת תמונה של המפה">' + saveIcon + '</button>' : '') +
           '</div>' +
           (oHint ? '<div class="map-hint lg">' +
             (opts.pin ? 'גררו כדי לנוע · גלגלת/צביטה כדי לזום · <b>לחצו על המקום שבו נמצאת התקלה</b>'
@@ -2372,36 +2375,54 @@ CBA.screens = CBA.screens || {};
       }
       var _svg = null;
       function svg2() { return _svg || (_svg = worldEl.querySelector('.map-base')); }
+      /* מקדם ההקטנה של השבבים (2026-09-08, לבקשת יועד: "שתמיד יראו את כל
+         הסמלילים בזום אאוט, גם אם זה אומר להקטין אותם מעט").
+         עד היום שבב של מרחב קטן פשוט *נעלם* בזום אאוט — נמדד: בטלפון
+         בתצוגת הפתיחה רק 5 מתוך 34 השבבים הוצגו, כלומר המפה הראתה פחות
+         משישית מהמרחבים הציבוריים בדיוק במבט שאמור לתת תמונה כללית.
+         עכשיו אף שבב לא נעלם; במקום זה כולם מתכווצים עד 62%, ומדד ההתכווצות
+         הוא רוחב הבית על המסך — אותו אות בדיוק שקובע את דרגת הפירוט. */
+      function poiScale() {
+        var tw = MED_TILE * scale;
+        if (tw >= 46) return 1;
+        if (tw <= 14) return 0.62;
+        return 0.62 + (tw - 14) / (46 - 14) * 0.38;
+      }
       function layoutPoi(tier) {
         if (!POI.length) return;
-        var inv = 1 / scale, boxes = [];
+        var inv = 1 / scale, boxes = [], k = poiScale();
         worldEl.style.setProperty('--inv', inv.toFixed(4));
+        worldEl.style.setProperty('--poi-k', k.toFixed(3));
         POI.forEach(function (o) {
-          var vis = Math.sqrt(o.a) * scale > 30;       /* המבנה גדול מספיק על המסך */
           var forced = EMPH && EMPH.length > 0 && o.l && EMPH.indexOf(o.l.dataset.g) >= 0;
-          var lvis = vis && !!o.l && (tier >= 1 || forced);
-          o.c.style.display = vis ? '' : 'none';
-          if (o.l) o.l.style.display = lvis ? '' : 'none';
-          if (!vis) return;
-          var cw = (o.c.offsetWidth || 26) * inv, ch = (o.c.offsetHeight || 26) * inv;
+          var lvis = !!o.l && (tier >= 1 || forced);
+          o.c.style.display = '';                       /* שבב לעולם לא נעלם */
+          var cw = (o.c.offsetWidth || 26) * inv * k, ch = (o.c.offsetHeight || 26) * inv * k;
           var lw = lvis ? (o.l.offsetWidth || 0) * inv : 0, lh = lvis ? (o.l.offsetHeight || 0) * inv : 0;
+          var gap = ch / 2 + 2 * inv;
           var step = ch + 5 * inv, tries = [0, -step, step, -2 * step, 2 * step, -3 * step], i2;
-          for (i2 = 0; i2 < tries.length; i2++) {
-            var dy = tries[i2];
-            var b1 = { x: o.x - cw / 2, y: o.y + dy - ch / 2, w: cw, h: ch };
-            var b2 = lvis ? { x: o.x - lw / 2, y: o.y + dy + ch / 2 + 2 * inv, w: lw, h: lh } : null;
-            var hit = boxes.some(function (p2) {
-              function ov(b) { return b && !(b.x + b.w < p2.x || p2.x + p2.w < b.x ||
-                                             b.y + b.h < p2.y || p2.y + p2.h < b.y); }
-              return ov(b1) || ov(b2);
+          function ovAny(b) {
+            return b && boxes.some(function (p2) {
+              return !(b.x + b.w < p2.x || p2.x + p2.w < b.x || b.y + b.h < p2.y || p2.y + p2.h < b.y);
             });
-            if (!hit || i2 === tries.length - 1) {
-              o.c.style.top = (o.y + dy) + 'px';
-              if (lvis) { o.l.style.top = (o.y + dy + ch / 2 + 2 * inv) + 'px'; boxes.push(b2); }
-              boxes.push(b1);
-              return;
-            }
           }
+          /* השבב מקבל את המיקום הראשון שאינו מתנגש, ואם אין כזה — את מקומו
+             שלו. חפיפה קלה בין שני עיגולים קטנים עדיפה על סמליל חסר. */
+          var placed = 0;
+          for (i2 = 0; i2 < tries.length; i2++) {
+            var b1 = { x: o.x - cw / 2, y: o.y + tries[i2] - ch / 2, w: cw, h: ch };
+            if (!ovAny(b1) || i2 === tries.length - 1) { placed = tries[i2]; boxes.push(b1); break; }
+          }
+          o.c.style.top = (o.y + placed) + 'px';
+          /* הטקסט הפוך: תווית מוצגת רק אם יש לה מקום נקי. תווית שנדחסת על
+             תווית אחרת גרועה מתווית חסרה — וזה בדיוק מה שקרה עד היום, כי
+             הניסיון האחרון בסולם *אילץ* מיקום גם כשהוא התנגש. */
+          if (!lvis) { if (o.l) o.l.style.display = 'none'; return; }
+          var lb = { x: o.x - lw / 2, y: o.y + placed + gap, w: lw, h: lh };
+          if (ovAny(lb)) { o.l.style.display = 'none'; return; }
+          o.l.style.display = '';
+          o.l.style.top = lb.y + 'px';
+          boxes.push(lb);
         });
       }
 
@@ -2959,6 +2980,126 @@ CBA.screens = CBA.screens || {};
           btn.setAttribute('aria-pressed', on);
         });
       })();
+
+      /* ---- שמירת תמונה אמיתית של המפה (2026-09-08) ----
+         "המטרה של כפתור צילום היא שזה ייקח גם צילום מסך" — עד היום הוא רק
+         ניקה את המסך והשאיר למשתמש לצלם בעצמו.
+
+         הייצוא הוא של **כל המפה**, לא של החלון הנוכחי: התמונה הזאת נשלחת
+         למישהו כדי שימצא בית, ולכן חצי שכונה בפריים הוא לא מה שרוצים. גם
+         אין בה שאלה של מסגור — מה שיוצא זהה בכל פעם.
+
+         ⚠️ למה מעתיקים סגנון מחושב ולא כותבים גיליון סגנונות לייצוא: SVG
+            עצמאי לא רואה את קובץ ה-CSS של האתר, וכל צבע היה חייב להיכתב
+            פעם שנייה — שני מקורות אמת שמישהו צריך לזכור לסנכרן, ובדיוק כאן
+            זה היה נשבר בשקט (התמונה נראית אחרת מהמסך ואף אחד לא יודע למה).
+            העתקת getComputedStyle מבטיחה שהתמונה היא מה שרואים. */
+      var SVG_PROPS = ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'stroke-opacity',
+        'stroke-linecap', 'stroke-linejoin', 'stroke-dasharray', 'opacity',
+        'font-size', 'font-weight', 'font-family', 'text-anchor', 'vector-effect'];
+      function inlineStyles(a, b) {
+        var cs = getComputedStyle(a);
+        if (cs.display === 'none' || cs.visibility === 'hidden') {
+          if (b.parentNode) b.parentNode.removeChild(b);
+          return;
+        }
+        for (var i = 0; i < SVG_PROPS.length; i++) {
+          var v = cs.getPropertyValue(SVG_PROPS[i]);
+          if (v) b.setAttribute(SVG_PROPS[i], v);
+        }
+        b.removeAttribute('class');
+        var ac = a.children, bc = b.children;
+        for (var j = ac.length - 1; j >= 0; j--) inlineStyles(ac[j], bc[j]);
+      }
+
+      function mapToBlob(cb) {
+        var K = 2, W = MAP_WORLD_W, H = MAP_WORLD_H;
+        var src = svg2(); if (!src) return cb(null);
+        var clone = src.cloneNode(true);
+        inlineStyles(src, clone);
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        clone.setAttribute('width', W); clone.setAttribute('height', H);
+        clone.removeAttribute('opacity');           /* אטימות השורש מוחלת בציור */
+
+        /* מספרי הבתים — הם DOM ולא SVG, ולכן נבנים כאן מחדש כטקסט וקטורי.
+           ספרות בלבד, אז אין תלות בגופן שנטען מהרשת (הוא לא זמין בכלל
+           כשמרנדרים SVG מתוך data URL). */
+        var edge = getComputedStyle(worldEl).getPropertyValue('--m2-build-edge') || '#D8D2C2';
+        var houses = '';
+        Object.keys(houseEls).forEach(function (n) {
+          var el = houseEls[n];
+          if (!el || !el.offsetParent) return;
+          var x = parseFloat(el.style.left), y = parseFloat(el.style.top),
+              w = parseFloat(el.style.width), h = parseFloat(el.style.height);
+          if (!(w > 0 && h > 0)) return;
+          var fs = Math.max(3.5, Math.min(w, h) * 0.34);
+          houses += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) +
+              '" height="' + h.toFixed(1) + '" rx="1.6" fill="#FFFFFF" fill-opacity="0.93" stroke="' +
+              edge.trim() + '" stroke-width="0.5"/>' +
+            '<text x="' + (x + w / 2).toFixed(1) + '" y="' + (y + h / 2).toFixed(1) +
+              '" font-family="Arial, Helvetica, sans-serif" font-size="' + fs.toFixed(1) +
+              '" font-weight="700" fill="#3F3D38" text-anchor="middle" dominant-baseline="central">' +
+              CBA.esc(n) + '</text>';
+        });
+        clone.insertAdjacentHTML('beforeend', '<g>' + houses + '</g>');
+
+        var str = new XMLSerializer().serializeToString(clone);
+        var img = new Image();
+        img.onload = function () {
+          try {
+            var cv = document.createElement('canvas');
+            cv.width = Math.round(W * K); cv.height = Math.round(H * K);
+            var ctx = cv.getContext('2d');
+            ctx.fillStyle = (getComputedStyle(worldEl).getPropertyValue('--m2-ground') || '#EFEDE6').trim();
+            ctx.fillRect(0, 0, cv.width, cv.height);
+            /* במצב תצ״א התצלום נכנס לתמונה מתחת לציור, בדיוק כמו על המסך */
+            var ae = container.querySelector('#map-aerial');
+            if (shellEl.classList.contains('photo') && ae && ae.naturalWidth) {
+              ctx.drawImage(ae, 0, 0, cv.width, cv.height);
+            }
+            ctx.globalAlpha = parseFloat(getComputedStyle(src).opacity) || 1;
+            ctx.drawImage(img, 0, 0, cv.width, cv.height);
+            ctx.globalAlpha = 1;
+            /* PNG לציור וקטורי, JPEG כשיש תצ״א מתחתיו: נמדד — אותה תמונה
+               בדיוק יצאה 554KB כ-PNG ו-10.4MB כשהתצלום נכלל בה. תמונה של
+               10 מגה לא נשלחת בוואטסאפ. */
+            var photo = shellEl.classList.contains('photo');
+            cv.toBlob(function (blob) { cb(blob, photo ? 'jpg' : 'png'); },
+                      photo ? 'image/jpeg' : 'image/png', 0.88);
+          } catch (e) { cb(null); }
+        };
+        img.onerror = function () { cb(null); };
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str);
+      }
+
+      (function () {
+        var btn = container.querySelector('#map-shot'); if (!btn) return;
+        btn.addEventListener('click', function () {
+          if (btn.disabled) return;
+          btn.disabled = true; shellEl.classList.add('shot-busy');
+          mapToBlob(function (blob, ext) {
+            btn.disabled = false; shellEl.classList.remove('shot-busy');
+            if (!blob) { if (CBA.ui && CBA.ui.alert) CBA.ui.alert('לא הצלחתי להכין את התמונה.'); return; }
+            var name = 'מפת-השיכון.' + (ext || 'png');
+            /* בטלפון — גיליון השיתוף (שמירה לתמונות / שליחה בוואטסאפ), שזה
+               מה שבאמת עושים עם התמונה הזאת. בדסקטופ — הורדה. */
+            try {
+              var file = new File([blob], name, { type: blob.type || 'image/png' });
+              if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                navigator.share({ files: [file], title: 'מפת השיכון' })
+                  .catch(function () { downloadBlob(blob, name); });
+                return;
+              }
+            } catch (e) { /* File לא נתמך — יורדים להורדה */ }
+            downloadBlob(blob, name);
+          });
+        });
+      })();
+      function downloadBlob(blob, name) {
+        var u = URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = u; a.download = name; document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(u); a.remove(); }, 5000);
+      }
 
       /* ---- מצב תצ״א ----
          הציור *נשאר* ומקבל שקיפות, התצלום עולה מתחתיו (יועד: "אותם ציורים
