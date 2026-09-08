@@ -1361,6 +1361,12 @@ CBA.data = (function () {
     gardenFeedback: function (id, positive, note, cb) {
       CBA.sheets.postRead("gardenFeedback", { id: id, positive: positive, note: note }, cb);
     },
+    /* מסך הנתונים. weeks הוא חלון הזמן; השרת חוסם אותו ל-2..26.
+       ⚠️ מה שמוחזר תלוי בתפקיד — אחראי הגינון לא מקבל את החתך מול
+       התוכנית ולא את המשוב. הסינון בשרת ולא בתצוגה (F-13). */
+    getGardenStats: function (weeks, cb) {
+      CBA.sheets.get({ action: "gardenStats", weeks: weeks || 8 }, cb);
+    },
     /* יומן המשימה — קו הזמן המלא שלה (2026-09-08). הטאב נכתב מהיום הראשון
        ומעולם לא נקרא; זה מה שהופך "מי סגר את זה ומתי" לשאלה שאפשר לענות. */
     getGardenTaskLog: function (id, cb) {

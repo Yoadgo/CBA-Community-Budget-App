@@ -676,3 +676,268 @@
   .gt-sheet { inset-inline: 0; margin-inline: auto; width: min(460px, 92vw);
     border-radius: 18px; bottom: 24px; max-height: 78vh; }
 }
+
+/* ==========================================================================
+   מסך הנתונים — קידומת gs- (2026-09-08)
+   --------------------------------------------------------------------------
+   ⚠️ זה המסך היחיד במודול שבו **צבע הוא תוכן ולא קישוט**, ולכן הוא היחיד
+   שמותר לו יותר מרגיסטר אחד. שני רגיסטרים, ושניהם שמורים:
+     • סולם מצב — תקין / במעקב / בעיה. אותם ירוק, ענבר ואדום בדיוק שמסמנים
+       דגלים בכרטיסי המשימות. אותה משמעות, אותו צבע, בכל המודול.
+       הם **תמיד עם סמליל ומילה** — נמדד שהענבר והאדום נפרדים ב-ΔE 11 בלבד
+       בראייה מלאה ו-5.5 בפרוטן, כלומר צבע לבד אינו קריא לכולם.
+     • רמפה סדרתית כחולה-אפרפרה לשלושת שלבי המסע. בהיר->כהה = רצף, וזה
+       בדיוק מה שהם. לא שלושה גוונים קטגוריים: הם לא שלוש זהויות, הם שלבים.
+       נמדד: ΔE ~20 בין שלבים סמוכים, גם בפרוטן וגם בטריטן.
+   ========================================================================== */
+.gd-screen {
+  --gs-ok: #0F6B45;  --gs-ok-s: rgba(15,107,69,.09);
+  --gs-wa: #96560A;  --gs-wa-s: rgba(150,86,10,.10);
+  --gs-bd: #A32F3E;  --gs-bd-s: rgba(163,47,62,.09);
+  /* שלושת שלבי המסע — רמפה אחת, שלושה צעדי בהירות */
+  --gs-s1: #B9CBD9;  --gs-s2: #6A8FAC;  --gs-s3: #2F5068;
+}
+
+/* ---- המספר הראשי. ערך יחיד עם מד, לא גרף של נתון אחד. ---- */
+.gs-hero { background: rgba(255,255,255,.8); border: 1px solid rgba(255,255,255,.7);
+  border-radius: 14px 14px 0 0; padding: 14px 16px 16px;
+  box-shadow: 0 4px 16px rgba(16,24,40,.06); }
+.gs-hero__n { display: flex; align-items: baseline; gap: 10px; }
+.gs-hero__n b { font-size: 36px; font-weight: 800; line-height: 1;
+  letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.gs-hero__n b i { font-style: normal; font-size: 20px; font-weight: 700;
+  margin-inline-start: 2px; }
+.gs-hero p { margin: 8px 0 0; font-size: 11px; color: #8A9199; line-height: 1.4; }
+.gs-hero.is-empty b { display: block; font-size: 15px; font-weight: 700; }
+.gs-hero.is-empty span { display: block; font-size: 12.5px; color: #8A9199;
+  line-height: 1.55; margin-top: 5px; }
+/* המד: מסלול ומילוי הם אותו גוון בשתי עוצמות, לא שני צבעים שמתחרים. */
+.gs-meter { height: 7px; border-radius: 99px; margin-top: 10px; overflow: hidden; }
+.gs-meter i { display: block; height: 100%; border-radius: 99px;
+  transition: width .5s cubic-bezier(.2,.7,.2,1); }
+.gs-hero.is-ok   .gs-hero__n b { color: var(--gs-ok); }
+.gs-hero.is-ok   .gs-meter { background: var(--gs-ok-s); }
+.gs-hero.is-ok   .gs-meter i { background: var(--gs-ok); }
+.gs-hero.is-watch .gs-hero__n b { color: var(--gs-wa); }
+.gs-hero.is-watch .gs-meter { background: var(--gs-wa-s); }
+.gs-hero.is-watch .gs-meter i { background: var(--gs-wa); }
+.gs-hero.is-bad  .gs-hero__n b { color: var(--gs-bd); }
+.gs-hero.is-bad  .gs-meter { background: var(--gs-bd-s); }
+.gs-hero.is-bad  .gs-meter i { background: var(--gs-bd); }
+
+/* סמליל + מילה. ⚠️ אף פעם לא צבע לבד — ר' ההערה בראש הקובץ. */
+.gs-state { display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 700; }
+.gs-hero.is-ok    .gs-state { color: var(--gs-ok); }
+.gs-hero.is-watch .gs-state { color: var(--gs-wa); }
+.gs-hero.is-bad   .gs-state { color: var(--gs-bd); }
+
+/* ---- שורת אריחים. ארבעה מספרים = שורת אריחים, לא גרף עמודות.
+   דבוקה לכרטיס המספר הראשי (margin-top שלילי + פינות עליונות ישרות): הן
+   עונות על אותה שאלה, ושתי מסגרות נפרדות היו אומרות שהן שני נושאים. ---- */
+.gs-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  margin: -10px 0 14px; background: rgba(17,24,39,.07);
+  border: 1px solid rgba(17,24,39,.07); border-top: 0;
+  border-radius: 0 0 14px 14px; overflow: hidden; }
+.gs-tile { background: #F7F8F7; padding: 9px 4px 8px; text-align: center; }
+.gs-tile b { display: block; font-size: 19px; font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--text-strong, #111827); }
+.gs-tile span { display: block; font-size: 10px; color: #8A9199; margin-top: 4px;
+  line-height: 1.25; }
+.gs-tile.is-watch b { color: var(--gs-wa); }
+.gs-tile.is-bad b { color: var(--gs-bd); }
+@media (max-width: 360px) { .gs-tile span { font-size: 9.5px; } }
+
+.gs-sec { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 7px;
+  margin: 16px 2px 7px;
+  font-size: 13px; font-weight: 700; color: var(--text-strong, #111827); }
+.gs-sec em { font-style: normal; font-weight: 600; color: #9BA3A0; font-size: 11.5px; }
+.gs-note { font-size: 11px; color: #8A9199; margin: 0 2px 8px; line-height: 1.45; }
+.gs-empty { display: block; font-size: 12.5px; color: #8A9199; line-height: 1.6;
+  padding: 18px 16px; text-align: center; }
+
+/* ---- עמידה בתוכנית. סדרה אחת, גוון אחד, בלי מקרא. ---- */
+.gs-chart { position: relative; background: rgba(255,255,255,.72);
+  border: 1px solid rgba(17,24,39,.07); border-radius: 14px; padding: 14px 12px 4px; }
+/* קווי עזר דקים ורצופים, לא מקווקווים, ונסוגים אל הרקע. */
+.gs-grid { position: absolute; inset: 14px 12px 26px; display: flex;
+  flex-direction: column; justify-content: space-between; pointer-events: none; }
+.gs-grid i { display: block; height: 1px; background: rgba(17,24,39,.07); }
+.gs-cols { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 88px; }
+.gs-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end; height: 100%; cursor: default; }
+.gs-col span { font-size: 10px; font-weight: 700; color: #6B7280; margin-bottom: 3px;
+  font-variant-numeric: tabular-nums; }
+/* קצה עליון מעוגל, בסיס מרובע — העמודה צומחת מקו אחד. עד 24px עובי. */
+.gs-col u { display: block; width: 100%; max-width: 24px; border-radius: 4px 4px 0 0;
+  background: var(--gs-ok); opacity: .8; text-decoration: none;
+  transition: opacity .15s ease; }
+.gs-col:hover u, .gs-col:focus u { opacity: 1; }
+/* ⚠️ השבוע הנוכחי עדיין רץ. עמודה מלאה לצד שבועות שהסתיימו קוראת כאילו
+   הוא נכשל, בזמן שהוא פשוט באמצע — ולכן היא מסומנת כחלקית ולא נכנסת
+   למספר הראשי (ר' handleGardenStats_). */
+.gs-col.is-now u { opacity: 1;
+  background: repeating-linear-gradient(135deg,
+    var(--gs-ok) 0 5px, rgba(15,107,69,.45) 5px 10px); }
+.gs-col.is-now em { color: var(--gs-ok); font-weight: 600; }
+/* שבוע בלי תוכנית — מתאר ריק. "לא היה מה לעשות" אינו "לא נעשה". */
+.gs-col.is-none u { height: 6px; background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(17,24,39,.13); border-radius: 3px; }
+.gs-col em { font-style: normal; font-size: 9.5px; color: #9BA3A0; margin-top: 6px;
+  height: 14px; white-space: nowrap; }
+
+/* ---- מסע המשימה. חלק-מהשלם -> עמודה מוערמת אחת. ---- */
+.gs-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden;
+  background: rgba(17,24,39,.05); }
+/* פער 2px בצבע המשטח בין מקטעים — הפרדה בלי קו מסביב. */
+.gs-seg + .gs-seg { border-inline-start: 2px solid #EEF1F4; }
+.gs-seg.s1 { background: var(--gs-s1); }
+.gs-seg.s2 { background: var(--gs-s2); }
+.gs-seg.s3 { background: var(--gs-s3); }
+.gs-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 11px; }
+.gs-lg { display: flex; align-items: flex-start; gap: 7px; }
+.gs-lg i { width: 10px; height: 10px; border-radius: 3px; flex: none; margin-top: 3px; }
+.gs-lg i.s1 { background: var(--gs-s1); }
+.gs-lg i.s2 { background: var(--gs-s2); }
+.gs-lg i.s3 { background: var(--gs-s3); }
+.gs-lg b { display: block; font-size: 12.5px; font-weight: 600; }
+.gs-lg span { display: block; font-size: 11.5px; color: #7A847F; margin-top: 1px; }
+
+/* ---- שלוש התקועות ---- */
+.gs-stuck { padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
+.gs-stuck u { text-decoration: none; width: 26px; height: 26px; flex: none; border-radius: 8px;
+  background: var(--gs-wa-s); color: var(--gs-wa); display: grid; place-items: center; }
+.gs-stuck > div { flex: 1; min-width: 0; }
+.gs-stuck b { display: block; font-size: 13px; font-weight: 600; line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-stuck span { display: block; font-size: 11px; color: #7A847F; margin-top: 1px; }
+.gs-stuck em { font-style: normal; flex: none; font-size: 12px; font-weight: 700;
+  color: var(--gs-wa); text-align: center; }
+.gs-stuck em i { display: block; font-style: normal; font-size: 10px; font-weight: 500;
+  color: #9BA3A0; }
+
+/* ---- אזורים ---- */
+.gs-area { padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
+.gs-area u { text-decoration: none; width: 26px; height: 26px; flex: none; border-radius: 8px;
+  display: grid; place-items: center; }
+.gs-area.is-ok    u { background: var(--gs-ok-s); color: var(--gs-ok); }
+.gs-area.is-watch u { background: var(--gs-wa-s); color: var(--gs-wa); }
+.gs-area.is-bad   u { background: var(--gs-bd-s); color: var(--gs-bd); }
+/* ⚠️ בלי זה העמודה הפנימית מתכווצת לרוחב הטקסט, ושורת ה"חוזר" שמתחתיה
+   מקבלת סרגל באורך אחר בכל שורה — נמדד 24/27/24px במקום ציר קבוע. */
+.gs-area > div { flex: 1; min-width: 0; }
+.gs-area b { font-size: 13px; font-weight: 600; }
+.gs-area .gs-state { font-size: 11.5px; margin-inline-start: 7px; }
+.gs-area.is-ok    .gs-state { color: var(--gs-ok); }
+.gs-area.is-watch .gs-state { color: var(--gs-wa); }
+.gs-area.is-bad   .gs-state { color: var(--gs-bd); }
+.gs-sub { display: block; font-size: 11px; color: #7A847F; margin-top: 1px; }
+/* קישור בכותרת המקטע ולא כפתור ברוחב מלא: הוא ניווט משני, והוא עלה 44px
+   כדי לומר מה ששתי מילים אומרות. */
+.gs-map { margin-inline-start: auto; border: 0; background: none; padding: 0;
+  font: inherit; font-size: 11.5px; font-weight: 600; color: #0F6B45;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.gs-map:hover { text-decoration: underline; }
+
+/* ---- חזרה, בתוך שורת האזור ----
+   ⚠️ הרוחבים כאן קבועים בכוונה, מאותה סיבה שהיו קבועים במקטע הנפרד שקדם
+   לו: אם ה-em בקצה משתנה באורכו ("5 · 2 אוחדו" מול "3"), הציר הגמיש בולע
+   את ההפרש וכל שורה מקבלת סרגל באורך אחר — נמדד 132/174/132px. גרף שהציר
+   שלו משתנה בין שורות אינו גרף. */
+.gs-rec { display: flex; align-items: center; gap: 6px; margin-top: 5px;
+  padding-top: 5px; border-top: 1px dashed rgba(17,24,39,.09); font-size: 11px; }
+.gs-rec svg { color: #9BA3A0; }
+/* ⚠️ רוחב **קבוע**, לא max-width. עם max-width שם ארוך ושם קצר נותנים
+   שני רוחבים, הציר הגמיש בולע את ההפרש, וכל שורה מקבלת סרגל באורך אחר —
+   בדיוק התקלה שנמדדה במקטע הנפרד שקדם לזה (132/174/132px). */
+.gs-rec b { font-size: 11.5px; font-weight: 600; color: var(--text, #374151);
+  flex: none; width: 40%; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.gs-rect { flex: 1; min-width: 24px; height: 6px; border-radius: 99px;
+  background: rgba(17,24,39,.07); overflow: hidden; }
+.gs-rect s { display: block; height: 100%; border-radius: 99px;
+  background: var(--gs-s2); text-decoration: none; }
+.gs-rec em { font-style: normal; flex: none; width: 66px; text-align: start;
+  font-weight: 700; color: var(--text, #374151); font-variant-numeric: tabular-nums; }
+.gs-rec em.gs-more { width: auto; font-weight: 600; color: #9BA3A0; }
+
+/* ---- משוב ---- */
+.gs-fb { display: flex; align-items: center; gap: 10px; padding: 10px 13px;
+  margin-top: 16px; font-size: 12px; font-weight: 600; color: var(--gs-ok); }
+.gs-fb > b { flex: none; font-size: 12.5px; color: var(--text-strong, #111827); }
+.gs-fb__bar { flex: 1; min-width: 40px; display: flex; height: 9px;
+  border-radius: 99px; overflow: hidden; background: rgba(17,24,39,.05); }
+.gs-fb__bar i.y { background: var(--gs-ok); }
+.gs-fb__bar i.n { background: var(--gs-bd); border-inline-start: 2px solid #EEF1F4; }
+.gs-fb > span { flex: none; display: inline-flex; align-items: center; gap: 3px; }
+.gs-fb > span.n { color: var(--gs-bd); }
+.gs-fb > em { flex: none; font-style: normal; color: #9BA3A0; font-weight: 500;
+  font-size: 11px; }
+
+
+/* ==========================================================================
+   התכנסות למסך אחד (2026-09-08) — שני חצאים בשורה, וכרטיס במקום מקטע
+   --------------------------------------------------------------------------
+   "קצב" ו"תמהיל" הם גרפים קטנים שנקראים במבט אחד. רוחב מלא + כותרת מקטע
+   לכל אחד עלה 260px; זו לצד זו הם 120.
+   ========================================================================== */
+.gs-half { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0 0; }
+.gs-card { background: rgba(255,255,255,.72); border: 1px solid rgba(17,24,39,.07);
+  border-radius: 14px; padding: 11px 12px 10px; min-width: 0; }
+.gs-ct { display: flex; align-items: baseline; gap: 6px; font-size: 12px; font-weight: 700;
+  color: var(--text-strong, #111827); margin-bottom: 9px; }
+.gs-ct em { font-style: normal; font-weight: 500; font-size: 10px; color: #9BA3A0;
+  margin-inline-start: auto; white-space: nowrap; }
+
+/* ---- קצב: גרף מתפצל סביב קו אפס ----
+   ⚠️ הכיוון הוא המסר, ולכן קו האפס חייב להיראות — בלעדיו העמודות נקראות
+   כגובה ולא ככיוון, וזה בדיוק ההפך ממה שהגרף אומר. */
+.gs-flow { position: relative; display: flex; align-items: center; gap: 2px; height: 56px;
+  overflow: hidden; }   /* ⚠️ הגובה כאן ו-FLOW_H ב-JS חייבים להישאר זהים */
+.gs-zero { position: absolute; inset-inline: 0; top: 50%; height: 1px;
+  background: rgba(17,24,39,.16); }
+/* ⚠️ מיקום מוחלט סביב 50%, לא margin+transform. הניסיון הקודם עם
+   margin-bottom:calc(50%) ו-translateY הזיז את העמודות ביחס לגובה **שלהן**
+   ולא ביחס לקו — עמודות גבוהות יצאו מהמקום ונמוכות נשארו, והכיוון, שהוא כל
+   המסר של הגרף הזה, נקרא הפוך. */
+.gs-fb2 { position: relative; flex: 1 1 0; min-width: 0; height: 100%; }
+/* ⚠️ min() ולא 14px קבוע. בטווח של 13 שבועות הכרטיס הזה הוא חצי רוחב,
+   המשבצת יורדת ל-~10px, ועמודה קשיחה של 14 גלשה החוצה ודרסה את שכנתה. */
+.gs-fb2 u { position: absolute; inset-inline: 0; width: min(14px, 100%); margin: 0 auto;
+  text-decoration: none; border-radius: 3px; }
+/* מעל הקו = הערימה גדלה. אותם קטבים שנושאים את אותה משמעות בכל המודול. */
+.gs-fb2 u.up { background: var(--gs-bd); bottom: 50%; border-radius: 3px 3px 0 0; }
+.gs-fb2 u.dn { background: var(--gs-ok); top: 50%; border-radius: 0 0 3px 3px; }
+.gs-fb2 u.eq { background: rgba(17,24,39,.2); top: calc(50% - 1px); height: 2px !important;
+  border-radius: 1px; }
+.gs-cf { display: flex; align-items: center; gap: 5px; margin-top: 8px;
+  font-size: 11.5px; font-weight: 700; }
+.gs-cf.is-ok { color: var(--gs-ok); }
+.gs-cf.is-bad { color: var(--gs-bd); }
+
+/* ---- תמהיל ---- */
+.gs-mix { display: flex; height: 22px; border-radius: 6px; overflow: hidden;
+  background: rgba(17,24,39,.05); margin-bottom: 9px; }
+.gs-mix i + i { border-inline-start: 2px solid #F4F6F5; }
+.gs-mix i.r { background: var(--gs-s3); }
+.gs-mix i.p { background: var(--gs-s2); }
+.gs-mix i.m { background: var(--gs-s1); }
+.gs-ml { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 11px; color: #7A847F; }
+.gs-ml span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.gs-ml i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.gs-ml i.r { background: var(--gs-s3); }
+.gs-ml i.p { background: var(--gs-s2); }
+
+@media (max-width: 340px) { .gs-half { grid-template-columns: 1fr; } }
+
+/* ---- הסעיף שהכי נופל, מתחת לגרף העמידה ----
+   שורה ולא כרטיס: היא ממשיכה את הגרף שמעליה ואומרת עליו דבר אחד. */
+.gs-fall { display: flex; align-items: center; gap: 6px; margin: 7px 2px 0;
+  font-size: 11.5px; color: #7A847F; }
+.gs-fall svg { color: var(--gs-wa); flex: none; }
+.gs-fall b { font-weight: 700; color: var(--text-strong, #111827); }
+.gs-fall em { font-style: normal; color: #9BA3A0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+/* ההערה במפת הכאב נושאת סמליל, ולכן היא שורת flex ולא פסקה. */
+.gs-note { display: flex; align-items: flex-start; gap: 5px; }
+.gs-note svg { flex: none; margin-top: 2px; color: #9BA3A0; }

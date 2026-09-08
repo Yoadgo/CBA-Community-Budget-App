@@ -137,7 +137,11 @@
     gardenPlan: "MANAGER",
     /* "לטיפולך" פתוח גם לגנן (8.9): אצלו הוא הדיווחים החדשים לשיבוץ, ואצל
        המנהל הוא תור האישורים. אותו מסך, שני תפקידים, מקטע אחד לכל אחד. */
-    gardenInbox: PERM.GARDEN
+    gardenInbox: PERM.GARDEN,
+    /* מסך הנתונים פתוח גם לגנן — אבל הוא רואה בו מסך אחר לגמרי:
+       מה עשה ומה פתוח אצלו, בלי ציון ובלי חתך מול התוכנית. השרת
+       פשוט לא שולח לו את השדות האלה. ר' F-13 ו-handleGardenStats_. */
+    gardenStats: PERM.GARDEN
   };
 
   function myPerms() {
@@ -180,7 +184,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -217,7 +221,8 @@
         { group: "ginun", label: "גינון", items: [
             ["gardenPlan",  "תוכנית העבודה"],
             ["gardenInbox", "לטיפולך"],
-            ["gardenTasks", "מעקב"]
+            ["gardenTasks", "מעקב"],
+            ["gardenStats", "נתונים"]
           ] }
       ]
     },
@@ -349,6 +354,7 @@
     /* הקבוצה יורשת את העלה — הוא כבר מזוהה עם הגינון בשני האזורים. */
     ginun:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
     gardenInbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5.5 3 13v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5l-2.5-7.5A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.9 1.5Z"/></svg>',
+    gardenStats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M6 21v-7M11 21V6M16 21v-4M21 21V10"/></svg>',
     gardenPlan:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m8.5 14.5 2 2 4-4"/></svg>',
     // "גינון" באזור הניהול — אותו עלה בדיוק כמו resGarden באזור התושב, לפי
     // אותו כלל שכבר קיים ב-committeeAdmin/resCommittee וב-servicesAdmin/
