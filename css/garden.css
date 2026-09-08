@@ -492,6 +492,14 @@
   padding: 5px 11px; font: inherit; font-size: 12px; color: var(--text-soft, #6B7280); cursor: pointer; }
 .gp-chip.on { background: var(--action, #111827); border-color: var(--action, #111827);
   color: #fff; font-weight: 600; }
+/* מחיקה — כתובה בצבע הסכנה אבל בלי מילוי: היא בלתי הפיכה, ולכן היא צריכה
+   להיקרא כאזהרה; היא גם לא הפעולה שבשבילה נכנסו לטופס, ולכן היא לא מתחרה
+   עם "שמירה" על תשומת הלב. */
+.gp-del { width: 100%; margin-top: 8px; border: 0; background: none;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: #A32F3E;
+  padding: 10px; border-radius: 10px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.gp-del:hover { background: rgba(163,47,62,.07); }
 .gp-check { display: flex; align-items: center; gap: 8px; font-size: 13px;
   color: var(--text, #374151); cursor: pointer; }
 .gp-check span { display: inline-flex; align-items: center; gap: 6px; }
@@ -532,6 +540,21 @@
 .gt-opt u svg { width: 15px; height: 15px; }
 .gt-opt span { display: block; font-size: 11.5px; color: #9CA3AF; font-weight: 400; margin-top: 1px; }
 .gt-sheet-wrap.is-map .gd-map { height: 62vh; margin-top: 4px; }
+
+/* ---- דיווח תושב נראה אחרת, לא רק מסונן אחרת (2026-09-08) ----
+   בקשת יועד. הפתרון הוא **מרקם ולא צבע**: הפס בשפת הכרטיס נשאר בצבע
+   הקטגוריה — כי הקטגוריה לא השתנתה — אבל הופך למקוטע. כך אפשר לסרוק עמודה
+   של כרטיסים ולראות מיד מה הגיע מתושב, בלי להוסיף אף רגיסטר צבע חדש ובלי
+   לגזול מהתג הצבעוני, שנשאר הדבר היחיד שצועק.
+   ⚠️ הפס נצבע ב-.gd-rep.k-*::before דרך background; כאן משתמשים ב-mask
+   ולא ב-background כדי לא לדרוס אותו — הצבע נשאר מהקטגוריה, המסכה חותכת. */
+.gt-row.is-report::before {
+  -webkit-mask-image: repeating-linear-gradient(to bottom,
+    #000 0 7px, transparent 7px 12px);
+  mask-image: repeating-linear-gradient(to bottom,
+    #000 0 7px, transparent 7px 12px);
+  width: 4px;
+}
 
 /* ---- חיווי ברמת השורה + מצב שגיאה (2026-09-08) ----
    החיווי הגלובלי בכותרת אומר "משהו נשמר"; הוא לא אומר **מה**. כשהאצבע על

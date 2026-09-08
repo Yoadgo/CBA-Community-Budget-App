@@ -1381,6 +1381,10 @@ CBA.data = (function () {
     gardenCoverByPlan: function (id, defId, week, cb) {
       CBA.sheets.postRead("gardenCoverByPlan", { id: id, defId: defId, week: week }, cb);
     },
+    /* מחיקה מהתוכנית. משימות שכבר נוצרו ממנה נשארות — ר' gardenPlanDelete_. */
+    gardenPlanDelete: function (id, cb) {
+      CBA.sheets.postRead("gardenPlanDelete", { id: id }, cb);
+    },
     gardenPlanActive: function (id, active, cb) {
       CBA.sheets.postRead("gardenPlanActive", { id: id, active: !!active }, cb);
     },

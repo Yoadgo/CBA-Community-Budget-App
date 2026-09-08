@@ -656,6 +656,7 @@ function doPost(e) {
       case 'gardenCreateTask':    return json_(gardenCreateTask_(ss, body));
       case 'gardenPlanSave':      return json_(gardenPlanSave_(ss, body));
       case 'gardenPlanActive':    return json_(gardenPlanSetActive_(ss, body));
+      case 'gardenPlanDelete':    return json_(gardenPlanDelete_(ss, body));
       case 'gardenCoverByPlan':   return json_(gardenCoverByPlan_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
@@ -8087,12 +8088,23 @@ function gardenPlanApplies_(def, meta) {
   return meta.n === Math.min(Math.max(def.weekOfMonth, 1), 4);
 }
 
-/** האזורים שמקבלים עבודה במופע הזה. סבב = אזור אחד, לפי התור. */
+/** האזורים שמקבלים עבודה במופע הזה. סבב = אזור אחד, לפי התור.
+ * ----------------------------------------------------------------------------
+ * ⚠️ הסבב מפתח לפי **השבוע בחודש**, לא לפי מונה מופעים (תוקן 8.9 אחרי
+ * שקראתי את תוכנית העבודה של יועד). התוכנית שלו כתובה בדיוק ככה:
+ *   "גיזום עצים · מרץ/יוני/ספטמבר/דצמבר · שבוע 1 צפונית; 2 מרכזית צפונית;
+ *    3 מרכזית דרומית; 4 דרומית"
+ * כלומר: המשימה רצה כל שבוע בחודשים האלה, והאזור נקבע מהשבוע בחודש.
+ * מונה מופעים היה נותן אזור אחד לכל *חודש* — מה שהופך משימה של ארבעה
+ * שבועות למשימה אחת, ומשאיר שלושה אזורים בלי טיפול.
+ * זה גם פשוט יותר לזכור בשטח: "בשבוע הראשון של החודש אני בצפון".
+ * לתדירות שאינה שבועית אין "שבוע בחודש" משמעותי, ושם נשאר מונה המופעים.
+ */
 function gardenPlanAreas_(def, meta, allAreas) {
   var list = def.areas.length ? def.areas : (allAreas || []);
   if (!list.length) return [''];                   // בלי אזורים — משימה אחת כללית
   if (!def.rotate) return list;
-  var i = gardenOccIndex_(def, meta);
+  var i = (def.freq === 'שבועי') ? (meta.n - 1) : gardenOccIndex_(def, meta);
   return [list[((i % list.length) + list.length) % list.length]];
 }
 
@@ -8254,6 +8266,39 @@ function gardenPlanSetActive_(ss, body) {
   if (c['פעיל'] === undefined) return { ok: false, error: 'אין עמודת "פעיל"' };
   sh.getRange(found, c['פעיל'] + 1).setValue(body.active ? 'כן' : 'לא');
   return { ok: true };
+}
+
+/* מחיקה מהתוכנית (בקשת יועד 8.9 — כיבוי לבדו לא הספיק).
+ * ⚠️ המשימות שכבר נוצרו מההגדרה **אינן נמחקות**, ובכוונה: הן היסטוריה, הן
+ * מופיעות בארכיון של השבוע שלהן, וחלקן כבר אושרו. הן ימשיכו להחזיק
+ * "מזהה תבנית" שמצביע לשורה שאיננה — וזה בסדר, כי הוא משמש רק לקיבוץ
+ * אישור מרוכז ולמניעת כפילות במימוש, ושניהם עובדים על מחרוזת ולא על קשר.
+ * מה שכן מפסיק: ייצור מופעים חדשים. זה בדיוק ההבדל מכיבוי — כיבוי משאיר
+ * את השורה כדי שאפשר יהיה להחזיר אותה, מחיקה אומרת "זה כבר לא בתוכנית".
+ */
+function gardenPlanDelete_(ss, body) {
+  var perm = body._perm || {};
+  if (perm.isExternal) return { ok: false, error: 'תוכנית העבודה היא בסמכות מנהל הגינון' };
+  var sh = ss.getSheetByName(GARDEN_ROUTINE_SHEET);
+  if (!sh) return { ok: false, error: 'טאב השגרה לא קיים' };
+  var id = String(body.id || '').trim();
+  var row = gardenPlanFindRow_(sh, id);
+  if (!row) return { ok: false, error: 'המשימה לא נמצאה בתוכנית' };
+
+  /* כמה משימות כבר נולדו ממנה — מוחזר ללקוח כדי שההודעה אחרי המחיקה תגיד
+     את האמת ("3 משימות שכבר נוצרו נשארות") ולא הבטחה כללית. */
+  var made = 0;
+  try {
+    var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    if (tsh && tsh.getLastRow() > 1) {
+      var tc = gardenCols_(tsh);
+      var tv = tsh.getRange(2, tc['מזהה תבנית'] + 1, tsh.getLastRow() - 1, 1).getValues();
+      for (var i = 0; i < tv.length; i++) if (String(tv[i][0]).trim() === id) made++;
+    }
+  } catch (e) { /* ספירה בלבד — לא מעכבת מחיקה */ }
+
+  sh.deleteRow(row);
+  return { ok: true, made: made };
 }
 
 function gardenPlanFindRow_(sh, id) {

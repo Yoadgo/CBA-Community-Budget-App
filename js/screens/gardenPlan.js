@@ -29,6 +29,8 @@
     pin:   '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/>',
     cal:   '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
     plus:  '<path d="M12 5v14M5 12h14"/>',
+    trash: '<path d="M5 7h14"/><path d="M10 7V4.6h4V7"/><path d="M6.6 7 8 20h8l1.4-13"/>' +
+           '<path d="M10 11v5M14 11v5"/>',
     edit:  '<path d="M4 20h4L19 9a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5 4 20Z"/>',
     cloud: '<path d="M6.5 19a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 11.2-1.6A4.2 4.2 0 0 1 21 12.6"/>' +
            '<path d="m15 15 6 6M21 15l-6 6"/>',
@@ -316,6 +318,12 @@
 
             '<button type="button" class="gd-cta" id="gp-save" style="margin-top:16px">' +
               (isNew ? "הוספה לתוכנית" : "שמירה") + '</button>' +
+            /* מחיקה יושבת בתוך טופס העריכה ולא כפעולה על השורה: היא בלתי
+               הפיכה, וכפתור פח ליד מתג בשורה צפופה הוא הזמנה ללחיצה בטעות.
+               כאן צריך לפתוח, לקרוא, ולבחור אותה במפורש. */
+            (isNew ? '' :
+              '<button type="button" class="gp-del" id="gp-delete">' +
+                ico("trash", 14) + 'מחיקה מהתוכנית</button>') +
           '</div>';
 
         document.body.appendChild(wrap);
@@ -338,6 +346,29 @@
         wrap.querySelector("#gp-areas").addEventListener("click", function (e) {
           var b = e.target.closest("[data-area]");
           if (b) b.classList.toggle("on");
+        });
+
+        var delBtn = wrap.querySelector("#gp-delete");
+        if (delBtn) delBtn.addEventListener("click", function () {
+          CBA.ui.confirm(
+            '"' + (d.title || "המשימה") + '" תרד מתוכנית העבודה ולא תייצר יותר משימות. ' +
+            'משימות שכבר נוצרו ממנה יישארו כמו שהן.',
+            { title: "מחיקה מהתוכנית", okText: "מחיקה", danger: true }
+          ).then(function (yes) {
+            if (!yes || busy) return;
+            busy = true;
+            CBA.data.gardenPlanDelete(d.id, function (res) {
+              busy = false;
+              if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "המחיקה לא הצליחה");
+              close();
+              /* ההודעה אומרת מה באמת קרה ולא הבטחה כללית: אם נוצרו ממנה
+                 משימות, זה הרגע היחיד שבו נכון להזכיר שהן נשארו. */
+              CBA.ui.toast(res.made
+                ? "הוסרה מהתוכנית · " + res.made + " משימות שכבר נוצרו נשארו"
+                : "הוסרה מהתוכנית");
+              load();
+            });
+          });
         });
 
         wrap.querySelector("#gp-save").addEventListener("click", function () {

@@ -492,6 +492,7 @@
       function inCard(t) {
         var cat = catOf(t.category);
         return '<article class="gd-rep gt-row k-' + cat.key +
+            (t.kind === GK_REPORT ? " is-report" : "") +
             '" data-id="' + esc(t.id) + '">' +
           '<div class="gt-body">' +
             '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
@@ -567,6 +568,7 @@
            שפותח את קו הזמן המלא. זה הארכיון, לא רשימת עבודה. */
         if (t.closure) {
           return '<article class="gd-rep gt-row gt-closed k-' + cat.key +
+              (t.kind === GK_REPORT ? " is-report" : "") +
               '" data-id="' + esc(t.id) + '">' +
             '<span class="gt-cbox">' + ico("check") + '</span>' +
             '<div class="gt-body">' +
@@ -608,6 +610,7 @@
            ההחלטות של המנהל (החזרה, סגירה עם סיבה) יושבות בתפריט ה-⋯. */
         var approving = done && isManager;
         return '<article class="gd-rep gt-row k-' + cat.key +
+            (t.kind === GK_REPORT ? " is-report" : "") +
             (done ? (approving ? " is-await" : " is-done") : "") +
             '" data-id="' + esc(t.id) + '">' +
           (planning
