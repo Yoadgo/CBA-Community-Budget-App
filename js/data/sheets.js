@@ -573,6 +573,9 @@ CBA.sheets = (function () {
           // עדיין ישנים ואסור לסמן אותנו כמעודכנים.
           if (typeof payload.rev === "number") { lastRev = payload.rev; revSupported = true; }
           else revSupported = false;   // שרת ישן שעוד לא פורסם — נשארים על התנהגות "משיכה מלאה תמיד"
+          // נקודת הייחוס למונים לפי תחום (2026-09-08). בלעדיה הבדיקה הזולה
+          // אחרי משיכה מלאה לא יודעת מול מה להשוות, ומושכת שוב מיד.
+          lastDomains = (payload.domains && typeof payload.domains === "object") ? payload.domains : null;
           lastFullFetch = Date.now();
           try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), store: store })); } catch (e) { /* מכסת אחסון מלאה — לא קריטי */ }
         }
@@ -632,6 +635,35 @@ CBA.sheets = (function () {
   var revSupported = false;    // נדלק רק אחרי שהשרת באמת החזיר rev
   var FULL_EVERY_MS = 60000;
 
+  /* ---------- מונה לכל תחום (2026-09-08, צעד ב') ----------------------------
+     המונה הגלובלי עלה בכל כתיבה, בכל נושא — ולכן תושב ששלח דיווח גינון גרם
+     לדפדפן של כל מנהל פתוח למשוך מחדש את *כל* המטען. משיכה מלאה נמדדה
+     ב-2-10 שניות (לוח ההפעלות, 8.9.26), והזנב הגיע ל-22.8ש' כששלוש נערמו.
+
+     עכשיו השרת מחזיר מונה לכל תחום (ר' ACTION_DOMAIN ב-Code.gs), ואנחנו
+     מושכים מלא רק אם זז תחום שהמטען הראשי באמת תלוי בו.
+
+     ⚠️ PAYLOAD_DOMAINS היא רשימת התחומים שמשנים את doGet הראשי — לא "מה
+        שמעניין אותנו". היא נגזרה ממעבר על *כל* הפונקציות שכותבות לטאבי
+        תקציב/הכנסות/תנועות/קבוצות/פיצול/פירוט/הערות. גינון, מועדון, מכון,
+        ועד, שירותים ותושבים נמשכים ב-endpoints נפרדים ולכן אינם כאן.
+     ⚠️ 'other' נמצא ברשימה **בכוונה**: כל פעולה שלא מופתה בשרת נופלת לשם,
+        וכך פעולה חדשה שמישהו יוסיף ולא ירשום תגרום למשיכה מיותרת — ולא
+        לנתון ישן על המסך. זו טעות לכיוון הבטוח.
+     ⚠️ שרת ישן שלא מחזיר domains נופל אוטומטית להשוואת המונה הגלובלי,
+        כלומר בדיוק ההתנהגות של אתמול. אין "מסך שבור" בין דחיפה ל-Deploy. */
+  var PAYLOAD_DOMAINS = ["budget", "other"];
+  var lastDomains = null;      // null = השרת עוד לא דיווח מונים לפי תחום
+
+  function payloadDomainsMoved(now) {
+    if (!lastDomains || !now) return true;        // אין מול מה להשוות — לא מנחשים
+    for (var i = 0; i < PAYLOAD_DOMAINS.length; i++) {
+      var d = PAYLOAD_DOMAINS[i];
+      if ((now[d] || 0) !== (lastDomains[d] || 0)) return true;
+    }
+    return false;
+  }
+
   function refreshIfChanged(cb) {
     if (!revSupported || lastRev === null || (Date.now() - lastFullFetch) > FULL_EVERY_MS) {
       refresh(cb);
@@ -641,8 +673,17 @@ CBA.sheets = (function () {
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data || typeof data.rev !== "number") { revSupported = false; refresh(cb); return; }
-        if (data.rev !== lastRev) { refresh(cb); return; }
-        cb(true, { source: "unchanged" });   // הזול מכולם — לא נגענו בגיליון בכלל
+        if (data.rev === lastRev) { cb(true, { source: "unchanged" }); return; }
+        /* המונה הגלובלי זז. השאלה היחידה שנשארה: האם זה נגע במטען הראשי?
+           אם השרת החזיר מונים לפי תחום ואף תחום רלוונטי לא זז — מעדכנים
+           את נקודת הייחוס ולא מושכים כלום. */
+        if (data.domains && lastDomains && !payloadDomainsMoved(data.domains)) {
+          lastRev = data.rev;
+          lastDomains = data.domains;
+          cb(true, { source: "unchanged" });
+          return;
+        }
+        refresh(cb);
       })
       .catch(function () { cb(false, { source: "rev-failed" }); });
   }

@@ -1361,6 +1361,19 @@ CBA.data = (function () {
     gardenFeedback: function (id, positive, note, cb) {
       CBA.sheets.postRead("gardenFeedback", { id: id, positive: positive, note: note }, cb);
     },
+    /* תוכנית העבודה (2026-09-08) — ההגדרות החוזרות, לא משימות. השרת חוסם
+       אותה למשתמש חיצוני, ולכן הקריאה תיכשל אצל אחראי הגינון גם אם איכשהו
+       יגיע למסך. ר' handleGardenPlan_. */
+    getGardenPlan: function (cb) {
+      CBA.sheets.get({ action: "gardenPlan" }, cb);
+    },
+    /* יצירה או עדכון של הגדרה. עם id — עדכון; בלי — חדשה. */
+    gardenPlanSave: function (payload, cb) {
+      CBA.sheets.postRead("gardenPlanSave", payload, cb);
+    },
+    gardenPlanActive: function (id, active, cb) {
+      CBA.sheets.postRead("gardenPlanActive", { id: id, active: !!active }, cb);
+    },
     /* שלב 4 — משימות הצוות. opts: { week, scope }. שתיהן אופציונליות: בלי week
        השרת מחזיר את השבוע הנוכחי, ו-scope='week' הוא ברירת המחדל. */
     getGardenTasks: function (opts, cb) {

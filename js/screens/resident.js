@@ -1997,16 +1997,17 @@ CBA.screens = CBA.screens || {};
             '</div>'
           : '') +
           '<div class="map-viewport" id="map-viewport"><div class="map-world" id="map-world"></div></div>' +
-          '<div class="map-toolbar lg">' +
-            '<button type="button" class="map-btn" id="map-zoom-in" aria-label="הגדלה">' + plusIcon + '</button>' +
-            '<button type="button" class="map-btn" id="map-zoom-out" aria-label="הקטנה">' + minusIcon + '</button>' +
-            '<hr>' +
-            '<button type="button" class="map-btn" id="map-fit" aria-label="התאמה למסך">' + fitIcon + '</button>' +
-            (opts.full ? '<hr>' +
-              '<button type="button" class="map-btn" id="map-photo" aria-pressed="false" ' +
+          /* בלי מגש (2026-09-08, יועד: "מבחינתי אין בכרטיס צורך") — כל פקד
+             במפה הוא עיגול זכוכית עצמאי, בדיוק כמו מתג ההבלטה והמקרא. */
+          '<div class="map-toolbar">' +
+            '<button type="button" class="map-btn lg" id="map-zoom-in" aria-label="הגדלה">' + plusIcon + '</button>' +
+            '<button type="button" class="map-btn lg" id="map-zoom-out" aria-label="הקטנה">' + minusIcon + '</button>' +
+            '<button type="button" class="map-btn lg" id="map-fit" aria-label="התאמה למסך">' + fitIcon + '</button>' +
+            (opts.full ?
+              '<button type="button" class="map-btn lg" id="map-photo" aria-pressed="false" ' +
               'aria-label="תצלום אוויר" title="תצ״א — התצלום מתחת לציור">' +
               photoIcon + '</button>' +
-              '<button type="button" class="map-btn" id="map-clean" aria-pressed="false" ' +
+              '<button type="button" class="map-btn lg" id="map-clean" aria-pressed="false" ' +
               'aria-label="מצב נקי לצילום מסך" title="מצב נקי — גיאומטריה ומספרי בתים בלבד, לצילום מסך">' +
               cameraIcon + '</button>' : '') +
           '</div>' +

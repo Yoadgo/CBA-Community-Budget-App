@@ -437,6 +437,66 @@
   background: #FDEBD0; color: #96560A; }
 .gt-age.is-hot { background: #FBE0E1; color: #A32F3E; }
 
+/* ==========================================================================
+   תוכנית העבודה — קידומת gp- (2026-09-08)
+   --------------------------------------------------------------------------
+   השורה כאן היא *הגדרה* ולא משימה, ולכן היא נראית אחרת מ-.gt-row בשתי דרכים
+   מכוונות: אין תיבת סימון (אין מה לסמן — זה לא קורה עכשיו), ויש מתג, שהוא
+   הפעולה היחידה שאפשר לעשות בלחיצה אחת.
+   ========================================================================== */
+.gp-sum { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-soft, #6B7280); }
+.gp-sum b { font-weight: 700; color: var(--text-strong, #111827); font-variant-numeric: tabular-nums; }
+.gp-sum em { font-style: normal; color: #9BA3A0; }
+.gp-hint { font-size: 11.5px; color: #8A9199; margin: 0 2px 10px; line-height: 1.45; }
+
+.gp-row { padding: 10px 13px; display: flex; gap: 11px; align-items: flex-start; }
+.gp-b { flex: 1; min-width: 0; }
+.gp-t { font-weight: 600; font-size: 14px; line-height: 1.35; }
+.gp-m { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 3px;
+  font-size: 11.5px; color: #7A847F; }
+.gp-m i { font-style: normal; color: #C4CBC8; }
+.gp-m .nb { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.gp-m .nb svg { opacity: .75; }
+/* אותו הד צבע בדיוק כמו בכרטיס המשימה: הסמליל בצבע הקטגוריה, וזה הצבע
+   של הפס בשפת הכרטיס. אין כאן רגיסטר חדש. */
+.gp-cat { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.gp-row.k-lawn  .gp-cat svg { color: var(--c-lawn); }
+.gp-row.k-water .gp-cat svg { color: var(--c-water); }
+.gp-row.k-tree  .gp-cat svg { color: var(--c-tree); }
+.gp-row.k-prune .gp-cat svg { color: var(--c-prune); }
+.gp-row.k-weed  .gp-cat svg { color: var(--c-weed); }
+.gp-row.k-clean .gp-cat svg { color: var(--c-clean); }
+.gp-row.k-bed   .gp-cat svg { color: var(--c-bed); }
+/* חלון הזמן הוא תכונה ולא קטגוריה — שבב אפור ניטרלי, לא צבע. הוא מופיע רק
+   כשיש הגבלה: "כל השנה" בכל שורה הוא רעש, לא מידע. */
+.gp-win { background: rgba(17,24,39,.05); border-radius: 4px; padding: 1px 6px;
+  color: var(--text-soft, #6B7280); font-weight: 500; }
+
+.gp-edit { width: 26px; height: 26px; flex: none; border: 0; border-radius: 8px; background: none;
+  color: #B0B6BF; display: grid; place-items: center; cursor: pointer; margin-top: 2px; }
+.gp-edit:hover { background: rgba(17,24,39,.05); color: var(--text-soft, #6B7280); }
+
+.gp-sw { width: 36px; height: 21px; border-radius: 99px; background: #0F6B45; position: relative;
+  flex: none; border: 0; cursor: pointer; margin-top: 3px; transition: background .18s ease; }
+.gp-sw::after { content: ""; position: absolute; width: 15px; height: 15px; border-radius: 50%;
+  background: #fff; top: 3px; inset-inline-start: 3px; transition: inset-inline-start .18s ease; }
+.gp-sw.off { background: rgba(17,24,39,.18); }
+.gp-sw.off::after { inset-inline-start: 18px; }
+/* הגדרה כבויה מתעמעמת ולא נעלמת: "מה כרגע לא רץ" הוא מידע שהמנהל צריך,
+   ורשימה שפריטים נעלמים ממנה מאבדת את ההקשר של מה שהוגדר פעם. */
+.gp-row.is-off { opacity: .45; }
+
+.gp-note { font-size: 11px; color: #9BA3A0; margin: 4px 0 0; line-height: 1.4; }
+.gp-areas { display: flex; flex-wrap: wrap; gap: 6px; }
+.gp-chip { border: 1px solid rgba(17,24,39,.12); border-radius: 99px; background: rgba(255,255,255,.7);
+  padding: 5px 11px; font: inherit; font-size: 12px; color: var(--text-soft, #6B7280); cursor: pointer; }
+.gp-chip.on { background: var(--action, #111827); border-color: var(--action, #111827);
+  color: #fff; font-weight: 600; }
+.gp-check { display: flex; align-items: center; gap: 8px; font-size: 13px;
+  color: var(--text, #374151); cursor: pointer; }
+.gp-check span { display: inline-flex; align-items: center; gap: 6px; }
+.gp-check svg { opacity: .6; }
+
 /* גיליון תחתון — אותה תבנית של nav-sheet, בקנה מידה של תוכן ולא של ניווט */
 .gt-sheet-wrap { position: fixed; inset: 0; z-index: 60; }
 .gt-sheet-bd { position: absolute; inset: 0; background: rgba(16,24,40,.32);

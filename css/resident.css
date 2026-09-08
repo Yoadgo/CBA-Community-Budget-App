@@ -1396,7 +1396,7 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .map-shell.clean .mh-mine { display: none !important; }
 .map-shell.clean .mh-num { opacity: 1 !important; color: #3F3D38; font-weight: 700; }
 .map-shell.clean .map-house.is-mine { box-shadow: none; border-color: var(--m2-build-edge); }
-.map-shell.clean #map-clean { background: #2B2924; color: #FBFAF7; }
+.map-shell.clean #map-clean { background: linear-gradient(165deg, #3A3833, #2B2924); color: #FBFAF7; }
 
 /* מרחב שמוביל למסך באפליקציה — לחיץ, עם טבעת עדינה שמסמנת שיש כאן יעד */
 .map-poi.is-link { pointer-events: auto; cursor: pointer; }
@@ -1500,9 +1500,19 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
    עכשיו: כפתור עגול בודד, ומתחתיו עמודה שנפתחת. הצד השמאלי נבחר כי החיפוש
    יושב מימין והמקרא מעליו — ושלושתם כבר לא מתנגשים.                        */
 .map-emph {
-  position: absolute; top: 68px; left: 14px; z-index: 24;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  position: absolute; top: 68px; left: 14px; z-index: 24; width: 38px;
 }
+/* ⚠️ למה לא flex-column: בעמודת flex ציר-הרוחב הוא הציר המשני, ו-flex-start
+   בעמוד RTL הוא הקצה ה*ימני*. ברגע שהרייל נפתח המכולה התרחבה ל-148px
+   והכפתור קפץ 110 פיקסלים ימינה (יועד: "הכפתור פתיחה של השכבות זז ימינה").
+   עכשיו רוחב המכולה קבוע על הכפתור, והרייל תלוי ממנה במיקום מוחלט — כך
+   שהכפתור לא זז לעולם, בלי קשר לרוחב התוכן שנפתח. */
+/* ⚠️ שוב .lg מול position (זו הפעם השלישית בקובץ הזה): .lg קובע
+   position:relative ונטען אחרי, אז סלקטור בעל אותה ספציפיות מפסיד לו.
+   ובנוסף right:auto חובה — הכלל המקורי של .map-chipbar עוד קובע right:14px,
+   ובאלמנט מוחלט עם left+right+width בעמוד RTL ה-CSS מתעלם דווקא מ-left.
+   שתי הטעויות יחד נתנו רייל ב-x=-96, כלומר מחוץ למסך. */
+.map-emph .map-chipbar.lg { position: absolute; top: 46px; left: 0; right: auto; }
 .map-emph__tg {
   width: 38px; height: 38px; padding: 0; border: none;
   color: var(--text-soft); position: relative;
@@ -1526,7 +1536,6 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 
 /* הפס עצמו — אותו רכיב, כיוון אחר */
 .map-chipbar {
-  position: static; inset: auto;
   flex-direction: column; align-items: stretch;
   overflow: visible; padding: 5px; gap: 3px; width: 148px;
   background: none; border: none; box-shadow: none;
@@ -1564,23 +1573,33 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
    כלומר הוא גובר על כל position:absolute בסלקטור בעל אותה ספציפיות. נמדד:
    סרגל הכלים איבד את המיקום המוחלט, נמתח ל-1920×256 וחסם בלחיצה את כל
    הפקדים שמעליו. לכן המיקום מוחזר כאן בסלקטור עשיר יותר. */
-.map-shell .map-toolbar.lg { position: absolute; bottom: 18px; left: 18px; }
+.map-shell .map-toolbar { position: absolute; bottom: 18px; left: 18px;
+  background: none; border: none; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none; }
 .map-shell .map-hint.lg    { position: absolute; bottom: 18px; right: 18px; }
 @media (max-width: 720px) {
-  .map-shell .map-toolbar.lg { bottom: 14px; left: 10px; }
+  .map-shell .map-toolbar { bottom: 14px; left: 10px; }
   .map-shell .map-legend.lg  { position: absolute; top: 40px; inset-inline-start: 0; }
 }
-.map-toolbar.lg { border-radius: 18px; padding: 6px; }
+/* בלי מגש: המכולה שקופה לגמרי ורק מסדרת, וכל כפתור הוא הגוף עצמו. */
+.map-toolbar { padding: 0; gap: 9px; }
+.map-toolbar hr { display: none; }
+.map-btn.lg {
+  width: 38px; height: 38px; border-radius: 50%; padding: 0;
+  color: var(--text-soft); display: grid; place-items: center;
+}
+.map-btn.lg:hover { color: var(--text); }
+.map-btn.lg::before { display: none; }
+.map-btn.lg[aria-pressed="true"] {
+  background: linear-gradient(165deg, #3A3833, #2B2924); color: #FBFAF7;
+}
 .map-chipbar.lg { border-radius: 16px; }
 .map-legend.lg  { border-radius: var(--lg-r-pill); padding: 9px 15px; }
 .map-hint.lg    { border-radius: var(--lg-r-pill); padding: 8px 16px; }
 .map-legend-toggle.lg { width: 32px; height: 32px; color: var(--text-soft); }
 /* הטבעת של .lg יקרה, ומעל מפה שזזה היא נמרחת. הגוף נשאר, העדשה יורדת. */
-.map-toolbar.lg::before, .map-chipbar.lg::before,
+.map-chipbar.lg::before,
 .map-legend.lg::before, .map-hint.lg::before { display: none; }
-/* זכוכית בתוך זכוכית לא דוגמת שום דבר חדש — הכפתורים בתוך המגש נשארים שקופים */
-.map-toolbar .map-btn { background: transparent; }
-.map-toolbar hr { border-top-color: rgba(17,24,39,.10); }
 
 /* גדר מס' 1 של השפה: שדה קלט לעולם לא שקוף. זו גם הסיבה השורשית שסמל
    החיפוש נעלם ב-iOS — ה-backdrop-filter של השדה צייר מעליו. */

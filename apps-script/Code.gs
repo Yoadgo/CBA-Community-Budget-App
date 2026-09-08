@@ -326,9 +326,9 @@ function doGet(e) {
     // בודד מ-Script Properties, בלי לפתוח את הגיליון בכלל. חייבת להיות
     // *ראשונה*, לפני כל שאר הבדיקות. אין כאן שום מידע רגיש — רק מספר.
     if (e && e.parameter && e.parameter.action === 'rev') {
-      return json_({ ok: true, rev: currentRev_() });
+      return json_({ ok: true, rev: currentRev_(), domains: currentDomains_() });
     }
-    if (e && e.parameter && GET_WRITE_ACTIONS.indexOf(e.parameter.action) !== -1) bumpRev_();
+    if (e && e.parameter && GET_WRITE_ACTIONS.indexOf(e.parameter.action) !== -1) bumpRev_(e.parameter.action);
     // בקשת התחברות (שלב ב') — מזוהה לפי action=login ומטופלת בנפרד
     if (e && e.parameter && e.parameter.action === 'login') {
       return handleLogin_(e.parameter.token);
@@ -404,6 +404,9 @@ function doGet(e) {
        משתמש חיצוני נחסם מהן ממילא בשער שב-authorize_. */
     if (e && e.parameter && e.parameter.action === 'gardenMeta') {
       return handleGardenMeta_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'gardenPlan') {
+      return handleGardenPlan_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'gardenTasks') {
       return handleGardenTasks_(e.parameter);
@@ -538,7 +541,11 @@ function doGet(e) {
       // מספר הגרסה נשלח יחד עם המטען המלא, כדי שהלקוח יידע מול מה
       // להשוות בבדיקות ה-rev הזולות שאחריו (ר' bumpRev_ למעלה).
       rev: currentRev_(),
-      ok: true, version: 'v40-data-min', years: years,
+      /* המונים לפי תחום נשלחים גם עם המטען המלא (2026-09-08), כדי שהלקוח
+         יידע מול מה להשוות בבדיקות הזולות שאחריו. בלי זה, אחרי משיכה מלאה
+         אין לו נקודת ייחוס והוא היה מושך שוב בבדיקה הבאה. ר' bumpRev_. */
+      domains: currentDomains_(),
+      ok: true, version: 'v41-rev-domains', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -597,7 +604,7 @@ function doPost(e) {
     // כל כתיבה מאושרת מעלה את מונה השינויים (2026-08-19, ר' bumpRev_).
     // אחרי השער בכוונה — בקשה שנדחתה לא שינתה כלום ואין סיבה שתגרום לכל
     // הלקוחות למשוך את הגיליון מחדש.
-    bumpRev_();
+    bumpRev_(body.action);
     switch (body.action) {
       case 'auth':              return json_({ ok: true });
       case 'savePermissions':   return json_(savePermissions_(ss, body));
@@ -644,6 +651,8 @@ function doPost(e) {
       case 'gardenApproveBatch':  return json_(gardenApproveBatch_(ss, body));
       case 'gardenMerge':         return json_(gardenMerge_(ss, body));
       case 'gardenCreateTask':    return json_(gardenCreateTask_(ss, body));
+      case 'gardenPlanSave':      return json_(gardenPlanSave_(ss, body));
+      case 'gardenPlanActive':    return json_(gardenPlanSetActive_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -2217,12 +2226,90 @@ function readNotesMap_(ss) {
  *  ~95% מהמשיכות המלאות.
  * ========================================================================== */
 var REV_KEY = 'cba_data_rev';
-function bumpRev_() {
+
+/* ============================================================================
+ *  מונה שינויים לכל תחום (2026-09-08 — צעד א' של ייעול הרענון)
+ * ----------------------------------------------------------------------------
+ *  עד היום היה מונה אחד גלובלי: כל כתיבה, בכל נושא, גרמה לכל לקוח פתוח
+ *  למשוך מחדש את *כל* המטען — ומשיכה מלאה נמדדה ב-2 עד 10 שניות. כלומר
+ *  תושב ששלח דיווח גינון גרם לדפדפן של כל מנהל להוריד מחדש את כל התקציב.
+ *
+ *  מעכשיו כל פעולה משויכת לתחום ולכל תחום מונה משלו. הלקוח שואל שאלה זולה
+ *  אחת ומקבל את כל המונים, ומושך מחדש רק תחום שהמסך שפתוח לפניו באמת צריך.
+ *
+ *  ⚠️ תוסף בלבד: cba_data_rev ממשיך לעלות בדיוק כמו קודם, ולכן לקוח בגרסה
+ *     ישנה מתנהג בדיוק כמו היום. אפשר לפרוס את זה לבד, בלי שאף אחד ירגיש.
+ *  ⚠️ כל המונים יושבים ב-**מאפיין אחד** כ-JSON, ולא במאפיין לכל תחום, כדי
+ *     שהבדיקה הזולה תישאר קריאה אחת. זו כל הנקודה שלה — לתת לכל תחום
+ *     טיימר/מאפיין משלו רק היה מגדיל את מספר הפניות.
+ *  ⚠️ פעולה שאינה ברשימה נופלת ל-'other' ומעלה רק את המונה הגלובלי, כלומר
+ *     בדיוק ההתנהגות של היום. שכחה לרשום פעולה חדשה כאן היא "בזבזנית",
+ *     לא שוברת.
+ * ========================================================================== */
+var REV_DOMAINS_KEY = 'cba_rev_domains';
+var ACTION_DOMAIN = {
+  // תקציב — כל מה שמשנה את המטען הראשי (CBA.mock.years) אצל הלקוח
+  saveTransaction: 'budget', deleteTransaction: 'budget', saveBudget: 'budget',
+  setBudgetMeta: 'budget', renameCategory: 'budget', logBudgetUpdate: 'budget',
+  saveNotes: 'budget', addYear: 'budget', submitReceipt: 'budget',
+  uploadReceiptFile: 'budget', deleteReceiptFile: 'budget',
+  saveColumnValues: 'budget', ensureColumns: 'budget', saveColumnConfig: 'budget',
+  // תושבים, הרשאות והרשמה
+  savePermissions: 'residents', ensurePermissionCols: 'residents',
+  saveResidentNames: 'residents', formatResidents: 'residents',
+  approveSignup: 'residents', rejectSignup: 'residents', saveResidentRow: 'residents',
+  ensureResidentCols: 'residents', replaceFamily: 'residents', exportResidents: 'residents',
+  createResidents: 'residents', submitSignup: 'residents', assignResidentIds: 'residents',
+  /* ⚠️ saveFamilyIds כותב לעמודת "מזהה משפחה" בטאב **תנועות** — כלומר הוא
+     משנה גם את המטען הראשי, לא רק את טאב התושבים. לכן שני תחומים. מיפוי
+     לפי *נושא* במקום לפי *מה באמת השתנה* הוא בדיוק איך נולד באג של נתון
+     ישן על המסך. אומת ע"י מעבר על כל הפונקציות שנוגעות בטאב "תנועות". */
+  saveFamilyIds: ['residents', 'budget'],
+  saveMyProfile: 'residents', submitProfileChange: 'residents',
+  cancelProfileChange: 'residents', approveProfileChange: 'residents',
+  rejectProfileChange: 'residents',
+  // מועדון (כולן ב-GET_WRITE_ACTIONS)
+  reserveClub: 'club', cancelClubReservation: 'club', approveClubReservation: 'club',
+  approveClubReservations: 'club', rejectClubReservation: 'club',
+  // מראה שיכון
+  submitGardenReport: 'garden', gardenFeedback: 'garden', gardenTask: 'garden',
+  gardenApproveBatch: 'garden', gardenMerge: 'garden', gardenCreateTask: 'garden',
+  gardenPlanSave: 'garden', gardenPlanActive: 'garden',
+  // מכון כושר
+  submitGymApplication: 'gym', createGymMembership: 'gym', requestGymDeclaration: 'gym',
+  reportGymPayment: 'gym', confirmGymPayment: 'gym', rejectGymPayment: 'gym',
+  recordGymPayment: 'gym', extendGymMembership: 'gym', renewGymMembership: 'gym',
+  updateGymMembership: 'gym',
+  // ועד השיכון ושירותים
+  saveCommitteeTree: 'committee', saveCommitteeCategories: 'committee',
+  saveServices: 'services', notifyServiceUpdate: 'services'
+};
+
+function bumpRev_(action) {
   try {
     var props = PropertiesService.getScriptProperties();
     var n = parseInt(props.getProperty(REV_KEY) || '0', 10) || 0;
     props.setProperty(REV_KEY, String(n + 1));
+    /* פעולה יכולה להשפיע על יותר מתחום אחד (ר' saveFamilyIds) — ולכן
+       הערך במפה הוא מחרוזת *או* מערך. */
+    var dom = ACTION_DOMAIN[String(action || '')] || 'other';
+    var doms = (Object.prototype.toString.call(dom) === '[object Array]') ? dom : [dom];
+    var raw = props.getProperty(REV_DOMAINS_KEY);
+    var map = {};
+    if (raw) { try { map = JSON.parse(raw) || {}; } catch (e) { map = {}; } }
+    for (var i = 0; i < doms.length; i++) {
+      map[doms[i]] = (parseInt(map[doms[i]], 10) || 0) + 1;
+    }
+    props.setProperty(REV_DOMAINS_KEY, JSON.stringify(map));
   } catch (err) { /* לא קריטי — במקרה הגרוע הלקוח פשוט ימשוך מלא */ }
+}
+
+/** מפת {תחום: מונה}. מאפיין אחד, קריאה אחת — ר' ההערה למעלה. */
+function currentDomains_() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty(REV_DOMAINS_KEY);
+    return raw ? (JSON.parse(raw) || {}) : {};
+  } catch (err) { return {}; }
 }
 function currentRev_() {
   try { return parseInt(PropertiesService.getScriptProperties().getProperty(REV_KEY) || '0', 10) || 0; }
@@ -7120,9 +7207,36 @@ var GARDEN_TASK_HEADERS = [
   'עודכן בתאריך', 'עודכן על ידי', 'אושר על ידי', 'תאריך אישור', 'שנת תקציב'
 ];
 
+/* ============================================================================
+ *  תוכנית העבודה — סכימת טאב השגרה (2026-09-08, אחרי הצוות האדום)
+ * ----------------------------------------------------------------------------
+ *  המודל שיועד הגדיר: **לא מנוע אוטומטי, אלא אירועים חוזרים שפשוט קיימים
+ *  והמנהל עורך אותם.** לכן הטאב הזה מחזיק *הגדרות*, לא משימות. משימה נולדת
+ *  ממנו רק כשהשבוע שלה מגיע (ר' gardenMaterializeWeek_).
+ *
+ *  שלוש החלטות שמעצבות את הכותרות:
+ *  1. **תדירות היא הציר היחיד לקיבוץ, וחלון הזמן הוא תכונה.** קודם היה כאן
+ *     גם 'עונה', וזה ערבב שני צירים: משימה יכולה להיות *חודשית* וגם *רק
+ *     בחורף*, ואז היא שייכת לשתי קבוצות. עכשיו: תדירות = כל כמה זמן,
+ *     'חודשים פעילים' = מתי בכלל. 'הכנת ההשקיה לחורף' היא שנתית שחלונה
+ *     אוקטובר — לא "תדירות עונתית".
+ *  2. **'שבוע ראשון' הוא העוגן.** בלעדיו אי אפשר לדעת על איזה משני השבועות
+ *     נופל מחזור דו-שבועי. הוא תאריך של יום ראשון, וממנו נספרות המחזורים.
+ *  3. **אין עמודת עדיפות, בכוונה.** הדחיפות נגזרת (דגל × גרירות × ותק) —
+ *     החלטת יועד 8.9: שדה ידני ב-12 משימות בשבוע הוא משבצת שאיש לא ימלא.
+ *
+ *  ⚠️ 'עונה' ירדה מהרשימה. gardenAddMissingCols_ לא מוחק עמודות, ולכן היא
+ *  תישאר בטאב קיים כעמודה ריקה ומיותמת — אפשר למחוק ידנית, ואין נזק אם לא.
+ * ========================================================================== */
+var GARDEN_FREQS = ['שבועי', 'דו-שבועי', 'חודשי', 'שנתי'];
+
 var GARDEN_ROUTINE_HEADERS = [
-  'מזהה', 'שם משימה', 'קטגוריה', 'אזורים', 'תדירות', 'חודשים פעילים',
-  'שבוע בחודש', 'עונה', 'סעיף בתוכנית', 'פעיל', 'הערות'
+  'מזהה', 'שם משימה', 'קטגוריה', 'אזורים', 'תדירות',
+  'שבוע ראשון',      // עוגן — יום ראשון של המופע הראשון. חובה לדו-שבועי.
+  'שבוע בחודש',      // 1–4 לחודשי. לעולם לא 5 (ר' ההערה במנוע).
+  'חודשים פעילים',   // '3-11' · '10' · '11,12,1,2' · ריק = כל השנה
+  'סבב אזורים',      // 'כן' = אזור אחד בכל מופע, לפי הסדר (§13.3)
+  'סעיף בתוכנית', 'פעיל', 'הערות'
 ];
 
 /* היסטוריה שאינה משתכתבת (עקרון מהאפיון) — כל שינוי שלב/דגל/סגירה נרשם כאן
@@ -7744,13 +7858,22 @@ function handleGardenTasks_(p) {
     var scope = String(p.scope || 'week');
     if (perm.isExternal && scope !== 'week') scope = 'week';
 
+    var week = String(p.week || '').match(/^\d{4}-\d{2}-\d{2}$/) ? p.week : gardenWeekKey_();
+    /* מימוש התוכנית לשבוע המבוקש — **לפני** קריאת הגיליון, אחרת המשימות
+       שנוצרו עכשיו לא יופיעו בתשובה הזאת אלא רק ברענון הבא. הפעולה
+       אידמפוטנטית ואינה נוגעת בשבועות שעברו (ר' gardenMaterializeWeek_),
+       ולכן בטוח לקרוא לה בכל טעינה. */
+    if (scope === 'week') {
+      try { gardenMaterializeWeek_(ss, week); }
+      catch (mErr) { /* כשל מימוש לא מפיל את טעינת המסך */ }
+    }
+
     var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
     if (!sh || sh.getLastRow() < 2) {
-      return json_({ ok: true, rows: [], week: gardenWeekKey_(), isManager: !perm.isExternal });
+      return json_({ ok: true, rows: [], week: week, isManager: !perm.isExternal });
     }
     var c = gardenCols_(sh);
     var vals = sh.getDataRange().getValues();
-    var week = String(p.week || '').match(/^\d{4}-\d{2}-\d{2}$/) ? p.week : gardenWeekKey_();
 
     var rows = [];
     // כל המשימות הפתוחות — נחוץ רק לזיהוי כפילויות בתצוגת "לשיבוץ",
@@ -7782,6 +7905,310 @@ function handleGardenTasks_(p) {
       areas: lists.areas, categories: lists.categories
     });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+/* ============================================================================
+ *  תוכנית העבודה — המנוע (2026-09-08)
+ * ----------------------------------------------------------------------------
+ *  המודל, במילים של יועד: *"לא מנוע אוטומטי, אלא מערכת שבה אני מייצר אירועים
+ *  חוזרים... זה פשוט קיים בזיכרון כמשימות שגרה. המנהל עורך אותן."*
+ *
+ *  ולכן: הטאב מחזיק **הגדרות**. שורת משימה נולדת רק כשהשבוע שלה מגיע ומישהו
+ *  פותח אותו — gardenMaterializeWeek_. שלוש תוצאות שנובעות מזה, וכולן רצויות:
+ *
+ *  1. **עריכה משפיעה קדימה בלבד**, בלי שום קוד מיוחד: שבוע שכבר מומש מחזיק
+ *     שורות אמיתיות, ושינוי ההגדרה לא נוגע בהן.
+ *  2. **אין מימוש רטרואקטיבי.** שבוע שעבר ואיש לא פתח נשאר ריק לנצח — וזו
+ *     האמת: אף אחד לא עבד לפיו. מימוש אחורה היה ממציא עבודה שלא נעשתה
+ *     ומזייף את המכנה של "כמה מהתוכנית בוצע".
+ *  3. **המכנה לסטטיסטיקה תמיד זמין**, גם לשבועות שלא מומשו: כמה *היה אמור*
+ *     לקרות מחושב מההגדרות בכל רגע (gardenPlanForWeek_), בלי לגעת בגיליון.
+ *
+ *  ⚠️ שבוע 5 לעולם אינו מקבל שגרה. החודש הוא ארבעה שבועות (החלטת יועד),
+ *  והשבוע החמישי נוצר רק כשמשימה **נגררת** אליו. שגרה שתיפול בו הייתה
+ *  מייצרת חודש בן חמישה כיסוחים פעם בכמה חודשים, בלי שאיש ביקש.
+ * ========================================================================== */
+
+/** פירוק מפתח שבוע (יום ראשון) למה שהמנוע צריך: מספר השבוע בחודש, חודש, שנה. */
+function gardenWeekMeta_(weekKey) {
+  var p = String(weekKey || '').split('-');
+  var d = new Date(+p[0], (+p[1]) - 1, +p[2], 12, 0, 0);
+  if (isNaN(d.getTime())) return null;
+  return {
+    date: d,
+    n: Math.floor((d.getDate() - 1) / 7) + 1,   // 1–5, לפי יום ראשון
+    month: d.getMonth() + 1,
+    year: d.getFullYear()
+  };
+}
+
+/** '3-11' · '10' · '11,12,1,2' · ריק. מחזיר null כשאין הגבלה (כל השנה). */
+function gardenParseMonths_(txt) {
+  var t = String(txt || '').trim();
+  if (!t) return null;
+  var out = {};
+  t.split(',').forEach(function (part) {
+    var m = part.trim().match(/^(\d{1,2})\s*[-–]\s*(\d{1,2})$/);
+    if (m) {
+      var a = +m[1], b = +m[2];
+      // טווח שעובר את סוף השנה ('11-2') נספר מסביב ולא הופך לריק.
+      for (var i = 0; i < 12; i++) {
+        var mo = ((a - 1 + i) % 12) + 1;
+        out[mo] = 1;
+        if (mo === b) break;
+      }
+    } else {
+      var one = parseInt(part, 10);
+      if (one >= 1 && one <= 12) out[one] = 1;
+    }
+  });
+  return Object.keys(out).length ? out : null;
+}
+
+/** קריאת טאב השגרה כאובייקטים. defs תמיד מערך, גם כשהטאב ריק. */
+function gardenPlanRows_(ss) {
+  var sh = ss.getSheetByName(GARDEN_ROUTINE_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  var c = gardenCols_(sh);
+  var v = sh.getDataRange().getValues();
+  var out = [];
+  for (var r = 1; r < v.length; r++) {
+    var g = function (k) { return c[k] === undefined ? '' : gardenCell_(v[r][c[k]]); };
+    if (!g('מזהה')) continue;
+    var first = c['שבוע ראשון'] === undefined ? '' : v[r][c['שבוע ראשון']];
+    out.push({
+      id:        g('מזהה'),
+      row:       r + 1,
+      title:     g('שם משימה'),
+      category:  g('קטגוריה'),
+      areas:     String(g('אזורים') || '').split(',')
+                   .map(function (x) { return x.trim(); }).filter(Boolean),
+      freq:      g('תדירות') || 'שבועי',
+      firstWeek: (first instanceof Date) ? gardenWeekKey_(first) : String(first || '').trim(),
+      weekOfMonth: parseInt(g('שבוע בחודש'), 10) || 1,
+      months:    g('חודשים פעילים'),
+      rotate:    /^(כן|yes|true|1)$/i.test(String(g('סבב אזורים') || '')),
+      clause:    g('סעיף בתוכנית'),
+      active:    !/^(לא|no|false|0)$/i.test(String(g('פעיל') || 'כן')),
+      note:      g('הערות')
+    });
+  }
+  return out;
+}
+
+/* מונה המופעים מאז העוגן. הוא משמש לשני דברים: להכריע אם מחזור דו-שבועי
+   נופל על השבוע הזה, ולקבוע לאיזה אזור הגיע התור בסבב (§13.3). בלי עוגן
+   נופלים לראשון בינואר של שנת השבוע — דטרמיניסטי, ולכן הסבב עדיין יציב. */
+function gardenOccIndex_(def, meta) {
+  var a = gardenWeekMeta_(def.firstWeek) ||
+          gardenWeekMeta_(gardenWeekKey_(new Date(meta.year, 0, 1)));
+  var days = Math.round((meta.date.getTime() - a.date.getTime()) / 86400000);
+  if (def.freq === 'שבועי')     return Math.floor(days / 7);
+  if (def.freq === 'דו-שבועי')  return Math.floor(days / 14);
+  if (def.freq === 'חודשי')     return (meta.year - a.year) * 12 + (meta.month - a.month);
+  return meta.year - a.year;                       // שנתי
+}
+
+/** האם ההגדרה חלה על השבוע הזה. */
+function gardenPlanApplies_(def, meta) {
+  if (!def.active) return false;
+  if (meta.n === 5) return false;                  // ⚠️ ר' ההערה בראש המנוע
+  if (def.firstWeek && def.firstWeek > gardenWeekKey_(meta.date)) return false;
+
+  var months = gardenParseMonths_(def.months);
+  if (months && !months[meta.month]) return false;
+
+  if (def.freq === 'שבועי') return true;
+  if (def.freq === 'דו-שבועי') {
+    var a = gardenWeekMeta_(def.firstWeek);
+    if (!a) return meta.n === 1 || meta.n === 3;   // בלי עוגן: שבועות 1 ו-3
+    var days = Math.round((meta.date.getTime() - a.date.getTime()) / 86400000);
+    return days % 14 === 0;
+  }
+  // חודשי ושנתי — שניהם נופלים על שבוע קבוע בחודש. ההבדל ביניהם הוא
+  // 'חודשים פעילים', שכבר סונן למעלה: לשנתי יש שם חודש אחד.
+  return meta.n === Math.min(Math.max(def.weekOfMonth, 1), 4);
+}
+
+/** האזורים שמקבלים עבודה במופע הזה. סבב = אזור אחד, לפי התור. */
+function gardenPlanAreas_(def, meta, allAreas) {
+  var list = def.areas.length ? def.areas : (allAreas || []);
+  if (!list.length) return [''];                   // בלי אזורים — משימה אחת כללית
+  if (!def.rotate) return list;
+  var i = gardenOccIndex_(def, meta);
+  return [list[((i % list.length) + list.length) % list.length]];
+}
+
+/** מה *אמור* לקרות בשבוע נתון — מחושב מההגדרות בלבד, בלי לגעת בגיליון.
+ *  זה המכנה של "כמה מתוכנית העבודה בוצע", והוא זמין גם לשבוע שלא מומש. */
+function gardenPlanForWeek_(ss, weekKey, defs, allAreas) {
+  var meta = gardenWeekMeta_(weekKey);
+  if (!meta) return [];
+  var list = defs || gardenPlanRows_(ss);
+  var areas = allAreas || gardenLists_(ss).areas;
+  var out = [];
+  list.forEach(function (def) {
+    if (!gardenPlanApplies_(def, meta)) return;
+    gardenPlanAreas_(def, meta, areas).forEach(function (area) {
+      out.push({ def: def, area: area });
+    });
+  });
+  return out;
+}
+
+/** מימוש: יוצר בטאב המשימות את מה שחסר לשבוע הזה. אידמפוטנטי — מפתח
+ *  הזהות הוא (מזהה תבנית, שבוע, אזור), ולכן קריאה חוזרת לא מכפילה כלום.
+ *  אינו נוגע בשבועות שעברו (ר' ההערה בראש המנוע). מחזיר כמה נוצרו. */
+function gardenMaterializeWeek_(ss, weekKey) {
+  if (weekKey < gardenWeekKey_()) return 0;        // אין מימוש אחורה
+  var meta = gardenWeekMeta_(weekKey);
+  if (!meta || meta.n === 5) return 0;
+
+  var defs = gardenPlanRows_(ss);
+  if (!defs.length) return 0;
+  var want = gardenPlanForWeek_(ss, weekKey, defs);
+  if (!want.length) return 0;
+
+  var sh = gardenEnsureSheet_(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_HEADERS);
+  var c = gardenCols_(sh);
+  var v = sh.getLastRow() > 1 ? sh.getDataRange().getValues() : [];
+  var seen = {};
+  for (var r = 1; r < v.length; r++) {
+    var tpl = gardenCell_(v[r][c['מזהה תבנית']]);
+    if (!tpl) continue;
+    seen[tpl + '|' + gardenCell_(v[r][c['שבוע']]) + '|' + gardenCell_(v[r][c['אזור']])] = 1;
+  }
+
+  var now = new Date();
+  /* ⚠️ אין gardenBudgetYear_ במערכת. הדפוס הקיים בכל שאר הקוד הוא קריאה
+     ישירה מההגדרות (ר' gardenCreateTask_), וזה מה שנעשה כאן. שם פונקציה
+     שאינו קיים היה נופל ב-ReferenceError בזמן ריצה ולא בבדיקת התחביר. */
+  var year = readSettings_(ss)['שנה נוכחית'] || '';
+  var nextId = nextGardenId_(sh, 'מזהה');
+  var add = [];
+  want.forEach(function (w) {
+    if (seen[w.def.id + '|' + weekKey + '|' + w.area]) return;
+    var row = new Array(sh.getLastColumn()).fill('');
+    function set(k, val) { if (c[k] !== undefined) row[c[k]] = val; }
+    set('מזהה', nextId++);
+    set('סוג', GARDEN_KIND_ROUTINE);
+    set('כותרת', w.def.title);
+    set('קטגוריה', w.def.category);
+    set('אזור', w.area);
+    /* ⚠️ בלי זה אי אפשר לחשב זמן טיפול, ואי אפשר להשלים רטרואקטיבית.
+       זה הנתון שכמעט איבדנו פעם אחת כבר. */
+    set('נוצר בתאריך', now);
+    set('שלב', 'מתוכננת');
+    set('מזהה תבנית', w.def.id);
+    set('שבוע', weekKey);
+    /* "שבוע מקורי" נכתב כבר עכשיו ולא רק בגרירה הראשונה: הוא המכנה של
+       "בוצע בשבוע שלו", והוא חייב לשקף את מה שהתוכנית ביקשה. */
+    set('שבוע מקורי', weekKey);
+    set('מונה גרירות', 0);
+    set('עודכן בתאריך', now);
+    set('עודכן על ידי', 'תוכנית העבודה');
+    if (year) set('שנת תקציב', year);
+    add.push(row);
+  });
+  if (!add.length) return 0;
+  sh.getRange(sh.getLastRow() + 1, 1, add.length, add[0].length).setValues(add);
+  return add.length;
+}
+
+/* ---------- תוכנית העבודה: קריאה (doGet) ---------- */
+function handleGardenPlan_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_GARDEN);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    /* ⚠️ מידור, לא הסתרה: התוכנית היא סמכות המנהל. אחראי הגינון החיצוני
+       לא רואה אותה — וזה נבדק כאן בשרת, לא רק בתפריט הניווט בלקוח. */
+    if ((gate.perm || {}).isExternal) {
+      return json_({ ok: false, error: 'תוכנית העבודה היא בסמכות מנהל הגינון' });
+    }
+    var lists = gardenLists_(ss);
+    return json_({
+      ok: true,
+      defs: gardenPlanRows_(ss),
+      freqs: GARDEN_FREQS,
+      areas: lists.areas,
+      categories: lists.categories
+    });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+/* ---------- תוכנית העבודה: כתיבה (doPost) ---------- */
+function gardenPlanSave_(ss, body) {
+  var perm = body._perm || {};
+  if (perm.isExternal) return { ok: false, error: 'תוכנית העבודה היא בסמכות מנהל הגינון' };
+
+  var title = String(body.title || '').trim();
+  if (!title) return { ok: false, error: 'צריך שם למשימה' };
+  var freq = String(body.freq || '').trim();
+  if (GARDEN_FREQS.indexOf(freq) === -1) return { ok: false, error: 'תדירות לא מוכרת' };
+  if (freq === 'דו-שבועי' && !String(body.firstWeek || '').match(/^\d{4}-\d{2}-\d{2}$/)) {
+    /* בלי עוגן אי אפשר לדעת על איזה משני השבועות המחזור נופל. אפשר היה
+       לבחור ברירת מחדל בשקט, אבל אז השבוע היה נקבע במקרה — ויועד היה
+       מגלה את זה רק כשהצוות מגיע בשבוע הלא נכון. */
+    return { ok: false, error: 'למחזור דו-שבועי צריך לבחור את השבוע הראשון' };
+  }
+
+  var sh = gardenEnsureSheet_(ss, GARDEN_ROUTINE_SHEET, GARDEN_ROUTINE_HEADERS);
+  var c = gardenCols_(sh);
+  var vals = {
+    'שם משימה':      title,
+    'קטגוריה':       String(body.category || '').trim(),
+    'אזורים':        (body.areas || []).join(', '),
+    'תדירות':        freq,
+    'שבוע ראשון':    String(body.firstWeek || '').trim(),
+    'שבוע בחודש':    Math.min(Math.max(parseInt(body.weekOfMonth, 10) || 1, 1), 4),
+    'חודשים פעילים': String(body.months || '').trim(),
+    'סבב אזורים':    body.rotate ? 'כן' : '',
+    'סעיף בתוכנית':  String(body.clause || '').trim(),
+    'פעיל':          body.active === false ? 'לא' : 'כן',
+    'הערות':         String(body.note || '').trim().substring(0, 500)
+  };
+
+  var id = String(body.id || '').trim();
+  if (id) {
+    var found = gardenPlanFindRow_(sh, id);
+    if (!found) return { ok: false, error: 'המשימה לא נמצאה בתוכנית' };
+    Object.keys(vals).forEach(function (k) {
+      if (c[k] !== undefined) sh.getRange(found, c[k] + 1).setValue(vals[k]);
+    });
+    return { ok: true, id: id };
+  }
+  var row = new Array(sh.getLastColumn()).fill('');
+  var newId = 'T' + nextGardenId_(sh, 'מזהה');
+  row[c['מזהה']] = newId;
+  Object.keys(vals).forEach(function (k) { if (c[k] !== undefined) row[c[k]] = vals[k]; });
+  sh.appendRow(row);
+  return { ok: true, id: newId };
+}
+
+function gardenPlanSetActive_(ss, body) {
+  var perm = body._perm || {};
+  if (perm.isExternal) return { ok: false, error: 'תוכנית העבודה היא בסמכות מנהל הגינון' };
+  var sh = ss.getSheetByName(GARDEN_ROUTINE_SHEET);
+  if (!sh) return { ok: false, error: 'טאב השגרה לא קיים' };
+  var found = gardenPlanFindRow_(sh, String(body.id || '').trim());
+  if (!found) return { ok: false, error: 'המשימה לא נמצאה בתוכנית' };
+  var c = gardenCols_(sh);
+  if (c['פעיל'] === undefined) return { ok: false, error: 'אין עמודת "פעיל"' };
+  sh.getRange(found, c['פעיל'] + 1).setValue(body.active ? 'כן' : 'לא');
+  return { ok: true };
+}
+
+function gardenPlanFindRow_(sh, id) {
+  if (!id) return 0;
+  var c = gardenCols_(sh);
+  var n = sh.getLastRow() - 1;
+  if (n < 1) return 0;
+  var ids = sh.getRange(2, c['מזהה'] + 1, n, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]).trim() === id) return i + 2;
+  }
+  return 0;
 }
 
 /** איתור שורת משימה לפי מזהה. מחזיר null אם לא נמצאה. */

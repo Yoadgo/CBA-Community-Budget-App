@@ -129,7 +129,12 @@
     // ניהול הגינון (2026-09-07) — מידור "גינון" בלבד. אותו דפוס כמו gymAdmin:
     // המסך שייך לאזור הניהול, והצפייה המקבילה של התושב (resGarden, "הדיווחים
     // שלי") יושבת באזור התושב ופתוחה לכולם ולכן אינה מופיעה כאן כלל.
-    gardenTasks: PERM.GARDEN
+    gardenTasks: PERM.GARDEN,
+    /* "MANAGER" — הרשאת גינון **ולא** משתמש חיצוני. אחראי הגינון עובד לפי
+       התוכנית ואינו קובע אותה, ולא הוא מחליט מה נכנס לשבוע. השרת חוסם את
+       שניהם בעצמו (ר' handleGardenPlan_ ו-gardenPlanSave_); כאן רק מסתירים,
+       כדי שלא יראה טאב שייתן לו שגיאה. */
+    gardenPlan: "MANAGER"
   };
 
   function myPerms() {
@@ -156,6 +161,7 @@
   }
   function canScreen(name) {
     if (SCREEN_PERM[name] === "ANY") return hasAnyAdmin();
+    if (SCREEN_PERM[name] === "MANAGER") return can(PERM.GARDEN) && !isExternalUser();
     return !SCREEN_PERM[name] || can(SCREEN_PERM[name]);
   }
   // תיאור ההרשאה להצגה בתפריט המשתמש
@@ -171,7 +177,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -197,11 +203,18 @@
         // יועד — הוא שייך להגדרות המערכת ולא ליעד ניווט יומיומי); הוא נשאר
         // ב-screens למעלה, כך שניווט אליו עובד רגיל.
         { group: "shikun", label: "השיכון", items: [["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"], ["servicesAdmin", "שירותים"]] },
-        // "גינון" (2026-09-07) — טאב ניהול עצמאי ולא פריט בתוך "השיכון": הוא
-        // מסונן להרשאה משלו (ר' SCREEN_PERM.gardenTasks), ולכן מי שאין לו אותה
-        // לא רואה אותו כלל — בדיוק כמו "תקציב". מכאן מנהל הגינון עובד, וכאן
-        // גם אחראי הגינון החיצוני נוחת: זה הטאב היחיד שיישאר לו אחרי הסינון.
-        ["gardenTasks", "גינון"]
+        /* "גינון" — קבוצה, לא טאב בודד (2026-09-08, אחרי הצוות האדום).
+           קדמה לזה הצעה לסרגל טאבים *בתוך* המסך, והיא נפסלה: היא הוסיפה
+           49px קבועים לכל מסך גינון ורמת ניווט שלישית, שבוע אחרי שהורדנו
+           235px של כרום. קבוצה עולה אפס פיקסלים בתוך המסך, והיא כבר הדפוס
+           של "תקציב" ו"השיכון" — אותו מנגנון בדיוק, בלי קוד חדש.
+           הסדר הוא סדר מסלול החיים של משימה: תוכנית -> נכנס לשבוע -> מעקב.
+           ⚠️ לאחראי הגינון החיצוני שני הראשונים מסוננים (SCREEN_PERM), ואז
+           הקבוצה מצטמצמת לפריט אחד ומתקפלת לטאב רגיל — ר' rebuildAreas. */
+        { group: "ginun", label: "גינון", items: [
+            ["gardenPlan",  "תוכנית העבודה"],
+            ["gardenTasks", "מעקב"]
+          ] }
       ]
     },
     resident: {
@@ -263,7 +276,13 @@
     var tabs = a.tabs.map(function (t) {
       if (t && t.group) {
         var items = t.items.filter(function (it) { return canScreen(it[0]); });
-        return items.length ? { group: t.group, label: t.label, items: items } : null;
+        if (!items.length) return null;
+        /* קבוצה ששרד בה פריט אחד מתקפלת לטאב רגיל. אחרת אחראי הגינון היה
+           מקבל כפתור-קבוצה שנפתח לגיליון עם שורה אחת — ניווט לשום מקום.
+           התווית הנשארת היא של *הקבוצה* ולא של הפריט: "גינון" אומר לו איפה
+           הוא, בעוד "מעקב" לבדו בבר הניווט לא אומר על מה. */
+        if (items.length === 1) return [items[0][0], t.label];
+        return { group: t.group, label: t.label, items: items };
       }
       return canScreen(t[0]) ? t : null;
     }).filter(Boolean);
@@ -323,6 +342,9 @@
     resMap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3.5 5v16L9 19l6 2 5.5-2V3L15 5 9 3Z"/><path d="M9 3v16M15 5v16"/></svg>',
     // "מראה שיכון" — עלה. הסמליל של המודול, מופיע גם בכותרת המסך ובבר המובייל.
     resGarden:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
+    /* הקבוצה יורשת את העלה — הוא כבר מזוהה עם הגינון בשני האזורים. */
+    ginun:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/></svg>',
+    gardenPlan:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m8.5 14.5 2 2 4-4"/></svg>',
     // "גינון" באזור הניהול — אותו עלה בדיוק כמו resGarden באזור התושב, לפי
     // אותו כלל שכבר קיים ב-committeeAdmin/resCommittee וב-servicesAdmin/
     // resServices: אותו נושא, אותו סמליל, רק צד ניהול מול צד צפייה.
