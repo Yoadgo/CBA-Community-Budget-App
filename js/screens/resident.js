@@ -2249,11 +2249,14 @@ CBA.screens = CBA.screens || {};
             E('g', { 'data-g': 'green' }, isl) +
             E('g', { 'class': 'm2-l-tree', 'data-g': 'green' }, tree) +
             E('g', { 'data-g': 'traffic' }, bays) +
-            E('g', { 'data-g': 'traffic' }, stre) +
-            E('g', { 'data-g': 'public' }, pub) +
-            E('g', { 'data-g': 'traffic' }, mkBus) +
-            E('g', { 'data-g': 'shelter' }, mkShel) +
-            E('g', { 'data-g': 'waste' }, mkBin) +
+            /* שלוש השכבות הבאות מסומנות בנפרד כי במצב תצ״א רק הן נשארות:
+               שלטי רחוב ומיכלים אינם נראים בתצלום, ולכן הם המידע היחיד
+               שהציור מוסיף מעליו. */
+            E('g', { 'class': 'm2-l-street', 'data-g': 'traffic' }, stre) +
+            E('g', { 'class': 'm2-l-pub', 'data-g': 'public' }, pub) +
+            E('g', { 'class': 'm2-l-mk', 'data-g': 'traffic' }, mkBus) +
+            E('g', { 'class': 'm2-l-mk', 'data-g': 'shelter' }, mkShel) +
+            E('g', { 'class': 'm2-l-mk', 'data-g': 'waste' }, mkBin) +
           '</svg>' +
           '<div class="map-grain"></div>');
       })();
@@ -2604,6 +2607,13 @@ CBA.screens = CBA.screens || {};
            קצר, 64 = יש מקום גם לחיווי הילדים. (לא יחס זום — יחס נשבר ברגע
            שהבתים קיבלו מידות אמיתיות.) */
         var tw = MED_TILE * scale;
+        /* ⚠️ מקור ה"מריחה": הטקסט בתוך הבית יושב באלמנט שעובר transform:scale
+           של העולם — כלומר הדפדפן מרנדר אותו בגודל הפריסה ואז *מותח את
+           הפיקסלים*. לכן הוא תמיד היה רך, ודווקא בזום שבו קוראים אותו.
+           הפתרון: הטקסט מקבל קנה מידה נגדי (--inv) ולכן מרונדר תמיד בגודלו
+           האמיתי, וה-font-size נקבע כאן בפיקסלי מסך לפי רוחב הבית בפועל.
+           אותו עיקרון בדיוק שהשבבים והתוויות עובדים לפיו מההתחלה. */
+        worldEl.style.setProperty('--mh-fs', Math.max(7, Math.min(15, tw * 0.30)).toFixed(2) + 'px');
         var tier = tw > 64 ? 2 : (tw > 46 ? 1 : 0);
         if (tier !== curTier) {
           curTier = tier;

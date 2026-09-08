@@ -1636,3 +1636,84 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 .map-shell.clean #map-shot { display: grid; }
 .map-shell.clean .map-toolbar { display: flex; }
 .map-shell.shot-busy #map-shot { animation: mapPhotoWait 1s ease-in-out infinite; }
+
+/* ============================================================================
+ *  קריאוּת הבתים ומצב תצ״א — סבב שלישי (2026-09-08)
+ *  יועד: "הטקסט משפחות לא טוב, תמיד מרוח" · "הסימון של הבית שלי לא נראה
+ *  טוב" · "השקיפות על התצ״א לא נראית טוב".
+ * ========================================================================== */
+
+/* ---- 1. הטקסט מפסיק להימרח ------------------------------------------------
+   הבית הוא קופסה שמותחת אותו transform של העולם, ולכן כל טקסט בתוכו רונדר
+   בגודל הפריסה ואז נמתח — מריחה, ודווקא בזום שבו קוראים אותו. עכשיו הטקסט
+   מקבל קנה מידה נגדי ומרונדר בגודלו האמיתי, ו---mh-fs (נקבע ב-resident.js
+   לפי רוחב הבית על המסך) שומר שהוא עדיין יגדל עם הזום.
+   ובנוסף: width:max-content + overflow גלוי = סוף ל"בינמ..." ול"סלו...".  */
+.map-house { overflow: visible; }
+.mh-num, .mh-body {
+  position: absolute; top: 50%; left: 50%; inset: auto auto auto 50%;
+  transform: translate(-50%, -50%) scale(var(--inv, 1));
+  transform-origin: center center;
+  width: max-content; max-width: none; padding: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; pointer-events: none;
+}
+.mh-num { font-size: var(--mh-fs, 12px); }
+/* שם המשפחה יוצא מגבולות הבית כשהוא ארוך, ולכן הוא צריך רקע משלו — אחרת
+   הוא נקרא על גג של שכן. גלולה שקטה, באותה שפה של תוויות המרחבים. */
+.mh-fam {
+  display: block; white-space: nowrap; overflow: visible; text-overflow: clip;
+  width: auto; font-size: var(--mh-fs, 11px); line-height: 1.1;
+  font-weight: 700; color: #2F3A46;
+  background: rgba(255,255,255,.82); border-radius: 999px;
+  padding: 1px 5px; box-shadow: 0 1px 2px rgba(62,54,40,.10);
+}
+.mh-corner {
+  position: static; font-size: calc(var(--mh-fs, 11px) * 0.78);
+  font-weight: 600; color: #8C8880; line-height: 1;
+}
+.mh-kids { position: static; margin-top: 1px; color: #8AA07E; }
+
+/* ---- 2. "הבית שלי" -------------------------------------------------------
+   התווית נחתכה כי לבית היה overflow:hidden, אז חצי ממנה פשוט לא הוצג. עכשיו
+   היא לא נחתכת — ובנוסף היא בגודל מסך קבוע, כמו כל טקסט אחר על המפה, ולא
+   נמתחת עם הזום. */
+.mh-mine {
+  bottom: auto; top: 100%; margin-top: 3px;
+  transform: translateX(-50%) scale(var(--inv, 1));
+  transform-origin: top center;
+  font-size: 9px; padding: 2px 7px; z-index: 4;
+  box-shadow: 0 2px 6px rgba(37,40,120,.28);
+}
+.map-house.is-mine { z-index: 4; }
+
+/* ---- 3. תצ״א: שכבת מידע, לא שכבה שקופה -----------------------------------
+   ⚠️ שינוי גישה. עד עכשיו כל הציור הועם ל-50% מעל התצלום, והתוצאה היא בדיוק
+      מה שיועד ראה: כתמים חיוורים של צמרות ומדשאות מרוחים על עצים אמיתיים.
+      שתי שכבות שמתארות את אותו דבר לא מתחברות — הן מלכלכות זו את זו.
+      עכשיו הציור *נעלם* בכל מקום שהתצלום כבר מספר אותו (קרקע, צמרות, עצים,
+      מדשאות, כבישים, שבילים, מפרצי חנייה), ונשאר רק מה שאין בתצלום: שלטי
+      רחוב, מיגוניות, פחים ותחנות אוטובוס — ומתאר דק למבני ציבור, שאי-אפשר
+      לזהות מלמעלה שהם ציבוריים. */
+.map-shell.photo .map-base > g { display: none; }
+.map-shell.photo .m2-ground { display: none; }
+.map-shell.photo .map-grain { display: none; }
+.map-shell.photo .map-base { opacity: 1; }
+/* ⚠️ הספציפיות חייבת להיות גבוהה מכלל ההסתרה שמעליו
+   (.map-shell.photo .map-base > g), אחרת השכבות האלה נשארות מוסתרות
+   והתצ״א יוצא בלי שלטי רחוב ובלי מיכלים — נמדד. */
+.map-shell.photo .map-base > g.m2-l-street,
+.map-shell.photo .map-base > g.m2-l-pub,
+.map-shell.photo .map-base > g.m2-l-mk { display: block; }
+/* מבנה ציבור: קו מתאר במקום מילוי — הגג נשאר גלוי בתצלום */
+.map-shell.photo .m2-pub {
+  fill: none; stroke: rgba(255,255,255,.85); stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+/* שלט רחוב על תצלום כהה צריך יותר גוף */
+.map-shell.photo .m2-stq rect { fill: rgba(251,250,247,.96); }
+.map-shell.photo .m2-stdash { stroke: rgba(255,255,255,.55); }
+/* הבתים והתוויות נשארים אטומים — הם כל המידע שהתצלום לא נותן */
+.map-shell.photo .map-house { background: rgba(255,255,255,.92); border-color: rgba(255,255,255,.9); }
+.map-shell.photo .mh-num, .map-shell.photo .mh-fam { color: #24292F; }
+.map-shell.photo .mh-fam { background: rgba(255,255,255,.9); }
