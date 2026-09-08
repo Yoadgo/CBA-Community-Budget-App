@@ -4,7 +4,11 @@
  *  מבוסס על הסקיצה שיועד אישר ב-7.9. ר' cba-glass-on-content-cards-2026-09-07.
  * ========================================================================== */
 
-.gd-screen {
+/* ⚠️ המשתנים מוצהרים גם על .gt-sheet ולא רק על .gd-screen: הגיליונות
+   נוספים ל-document.body ולכן יוצאים מהעץ של המסך, וכל var(--c-…) בתוכם
+   היה מתפוגג לשקוף בלי שגיאה — כך המקרא הראה שבעה פסי צבע ריקים. */
+.gd-screen,
+.gt-sheet {
   --g: #0F6B45;
   --c-lawn: #16A34A;  --c-lawn-s: #E7F7EC;
   --c-water: #0EA5E9; --c-water-s: #E4F4FD;
@@ -288,8 +292,12 @@
    שהיו שם ממילא. הסידור עבר לגיליון מאחורי סמליל המסנן.
    ========================================================================== */
 .gt-ctl { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+/* הרצועה נגללת כשיש יותר מסננים מרוחב המסך. המסכה בקצה הופכת "מילה
+   חתוכה" ל"יש עוד בהמשך" — בלעדיה המסנן החלקי ליד הכפתורים נראה שבור. */
 .gt-ctl__f { display: flex; gap: 5px; flex: 1; min-width: 0; overflow-x: auto;
-  scrollbar-width: none; }
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent); }
 .gt-ctl__f::-webkit-scrollbar { display: none; }
 .gt-ctl__f button { flex: none; border: 1px solid rgba(17,24,39,.09); border-radius: 99px;
   background: rgba(255,255,255,.72); padding: 5px 11px; font: inherit; font-size: 12px;
@@ -352,19 +360,44 @@
   font-size: 11.5px; color: #7A847F; }
 .gt-meta svg { width: 12px; height: 12px; opacity: .75; }
 .gt-meta i { font-style: normal; color: #C4CBC8; }
+/* סמליל וטקסט שלו נשברים יחד. בלי זה נקודת השבירה נופלת ביניהם, והסמליל
+   נשאר תלוי בסוף השורה מנותק מהמילה שהוא מתאר. */
+.gt-meta .gt-nb { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 /* דיווח תושב — הסימון המפורש היחיד שנשאר, כי הוא החריג ולא ברירת המחדל:
    מאחוריו עומד אדם שמחכה לתשובה, ובסיום נשלח אליו מייל. שגרה מקבלת סמליל
    בלבד; משימה יזומה לא מקבלת כלום. */
 .gt-meta .gt-res { display: inline-flex; align-items: center; gap: 4px;
   font-weight: 600; color: #3D4A44; }
 .gt-meta .gt-res svg { opacity: 1; }
-/* בתוך שורת המשימה השבב מאבד את המילוי הצבעוני שלו והופך לסמליל + טקסט
-   אפור. הצבע לא נעלם מהמסך — הוא נשאר בפס שבשפת הכרטיס (.gd-rep), שם הוא
-   מאפשר סריקה מהירה בלי להתחרות בשום דבר. */
+/* בתוך שורת המשימה השבב מאבד את המילוי הצבעוני שלו: נשאר סמליל + טקסט
+   אפור. אבל *הסמליל עצמו* צבוע בצבע הקטגוריה (בקשת יועד, 8.9) — הוא
+   הנפח היחיד שהכרטיס מקבל, והוא עולה אפס פיקסלים כי הוא צובע גליף שכבר
+   שם. הוא לא רגיסטר צבע חדש: זה בדיוק הצבע של הפס בשפת הכרטיס, כך
+   שהעין קוראת אותם כאותו דבר בשני גדלים. */
 .gt-row .gd-kchip { background: transparent; color: #7A847F; padding: 0;
   font-weight: 500; font-size: 11.5px; }
-.gt-row .gd-kchip svg { width: 12px; height: 12px; opacity: .75; }
-.gt-row .gd-rep__id { font-weight: 400; color: #9BA3A0; font-size: 11px; }
+.gt-row .gd-kchip svg { width: 13px; height: 13px; opacity: 1; stroke-width: 2.1; }
+.gt-row.k-lawn  .gd-kchip svg { color: var(--c-lawn); }
+.gt-row.k-water .gd-kchip svg { color: var(--c-water); }
+.gt-row.k-tree  .gd-kchip svg { color: var(--c-tree); }
+.gt-row.k-prune .gd-kchip svg { color: var(--c-prune); }
+.gt-row.k-weed  .gd-kchip svg { color: var(--c-weed); }
+.gt-row.k-clean .gd-kchip svg { color: var(--c-clean); }
+.gt-row.k-bed   .gd-kchip svg { color: var(--c-bed); }
+/* בסידור לפי קטגוריה השבב יורד מהכרטיס (הוא בכותרת הקבוצה), ואיתו הצבע.
+   הכותרת מקבלת אותו במקומו — אחרת מסך שלם מאבד את הנפח. */
+.gt-grp__d { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.gt-grp__d.k-lawn  { background: var(--c-lawn); }
+.gt-grp__d.k-water { background: var(--c-water); }
+.gt-grp__d.k-tree  { background: var(--c-tree); }
+.gt-grp__d.k-prune { background: var(--c-prune); }
+.gt-grp__d.k-weed  { background: var(--c-weed); }
+.gt-grp__d.k-clean { background: var(--c-clean); }
+.gt-grp__d.k-bed   { background: var(--c-bed); }
+/* המזהה יורש את אפור המטא ולא מקבל אפור שלישי משלו: שלוש דרגות אפור על
+   כרטיס אחד הן עוד רגיסטר שהעין צריכה לפענח, והמזהה מובחן ממילא בזכות ה-#
+   ובזכות מיקומו הקבוע בסוף השורה. */
+.gt-row .gd-rep__id { font-weight: 400; color: inherit; font-size: 11px; }
 .gt-note { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 5px;
   border-inline-start: 2px solid rgba(17,24,39,.12); padding-inline-start: 8px; }
 /* רמז כפילות. ענבר ולא אדום: זו הצעה לבדיקה, לא תקלה — ואדום היה גורם
@@ -443,8 +476,9 @@
 /* ---- מקרא. נפתח מסמליל ה-? בשורת הבקרה. הוא הכתובת היחידה שבה מותר
    להסביר סמלילים: ברגע שהמסך עצמו צריך תוויות טקסט ליד כל סמליל, הוא
    חוזר להיות עמוס. ---- */
-.gt-lg { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
-  color: #9BA3A0; margin: 14px 0 7px; }
+/* בלי letter-spacing ובלי uppercase: שניהם נועדו לאותיות לטיניות ובעברית
+   הם רק מותחים את המילה ומקשים לקרוא אותה. */
+.gt-lg { font-size: 11.5px; font-weight: 700; color: #9BA3A0; margin: 15px 0 6px; }
 .gt-lg:first-of-type { margin-top: 0; }
 .gt-lgi { display: flex; align-items: flex-start; gap: 11px; padding: 6px 0; }
 .gt-lgi > u { text-decoration: none; width: 26px; flex: none; display: grid; place-items: center;

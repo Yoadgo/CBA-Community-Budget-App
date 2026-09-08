@@ -1409,3 +1409,184 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 }
 .map-poi.is-link:focus-visible { outline: none; }
 .map-poi.is-link:focus-visible .map-amenity__chip { box-shadow: 0 0 0 3px rgba(47,111,208,.5); }
+
+/* ============================================================================
+ *  מפת השיכון — מילוי השטח, תצ״א ושפת Liquid Glass (2026-09-08)
+ *
+ *  שלוש בקשות של יועד בבת אחת, וכולן נוגעות באותו דבר: המפה מקבלת את כל
+ *  המסך, והפקדים מפסיקים לגזול ממנה.
+ * ========================================================================== */
+
+/* ---- 1. מסך המפה מקצה לקצה ------------------------------------------------
+   הכותרת ("מפת השיכון" + תת-כותרת) ירדה ב-resident.js. מה שנשאר כאן הוא
+   הריפוד של אזור התוכן: 32 למעלה + 64 למטה. במסך 1080 הם דחפו את המפה
+   לגובה 890 והדף גלש ב-50 פיקסלים — כלומר לא הייתה שום נקודה שבה רואים
+   את כל המפה. עכשיו אין ריפוד, אין גלילה, והמפה היא בדיוק החלון פחות
+   הכותרת העליונה.                                                          */
+@media (min-width: 900px) {
+  body[data-screen="resMap"] .app-main { padding: 0; }
+  .map-shell--full {
+    height: calc(100vh - var(--header-h, 64px));
+    height: calc(100dvh - var(--header-h, 64px));
+    min-height: 520px; margin-inline: 0;
+    border: none; border-radius: 0;
+  }
+}
+/* טאבלט צר: אין בר תחתון ואין כותרת מקובעת — אותו חשבון כמו בדסקטופ. */
+@media (min-width: 721px) and (max-width: 899px) {
+  body[data-screen="resMap"] .app-main { padding: 0; }
+  .map-shell--full {
+    height: calc(100vh - var(--header-h, 64px));
+    height: calc(100dvh - var(--header-h, 64px));
+    min-height: 460px; margin-inline: 0; border: none; border-radius: 0;
+  }
+}
+/* טלפון: הכותרת מקובעת למעלה והבר התחתון צף. המפה לוקחת את כל מה שביניהם —
+   כולל 16 הפיקסלים בכל צד שאזור התוכן שמר לעצמו, שהם בדיוק אותו בזבוז
+   בצדדים שיועד הצביע עליו בדסקטופ.                                        */
+@media (max-width: 720px) {
+  body[data-screen="resMap"] .app-main { padding-bottom: 0; }
+  .map-shell--full {
+    margin-inline: -16px; margin-top: -12px;
+    border: none; border-radius: 0; box-shadow: none;
+    height: calc(100vh - var(--header-h, 54px) - var(--botnav-h, 49px) - 10px);
+    height: calc(100dvh - var(--header-h, 54px) - var(--botnav-h, 49px)
+                 - env(safe-area-inset-bottom) - 10px);
+    min-height: 380px;
+  }
+}
+
+/* ---- 2. תצ״א ---------------------------------------------------------------
+   התמונה נמתחת בדיוק על תיבת העולם (היא נוצרה באותו טרנספורם), ולכן היא
+   יושבת מתחת לגיאומטריה פיקסל על פיקסל. הציור לא נעלם — הוא מקבל שקיפות,
+   בדיוק כפי שיועד ביקש. מה ש*לא* מתעמעם: מספרי הבתים, השבבים והתוויות —
+   הם DOM נפרד מה-SVG, וזו בדיוק הסיבה שהמצב הזה שימושי ולא רק יפה.        */
+.map-aerial {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: fill; pointer-events: none; user-select: none;
+  opacity: 0; transition: opacity .4s ease;
+  /* התצלום לא מכסה 100% מתיבת העולם (הסיבוב משאיר פינות ריקות, ~3%). הקצה
+     מדוהה באלפא בתמונה עצמה, וכאן יושב מתחתיו בדיוק גוון הקרקע של המפה —
+     כך שבמקום קו אלכסוני חד מקבלים דהייה מהתצלום אל המפה. */
+  background: var(--m2-ground);
+}
+.map-shell.photo .map-aerial { opacity: 1; }
+.map-shell.photo .m2-ground  { opacity: 0; }
+.map-shell.photo .map-grain  { opacity: 0; }
+.map-shell.photo .map-base   { opacity: .5; }
+/* הצמרות והעצים המצוירים יורדים נמוך יותר מהשאר: התצלום כבר מראה את אותם
+   עצים ממש, ושתי שכבות ירק זו על זו נקראות כבוץ ולא כמפה. */
+.map-shell.photo .m2-l-canopy { opacity: .2; }
+.map-shell.photo .m2-l-tree   { opacity: .3; }
+/* על רקע תצלום כהה הכרטיסים הלבנים צריכים מעט יותר גוף כדי להישאר קריאים */
+.map-shell.photo .map-house { background: rgba(255,255,255,.9); }
+.map-shell.photo .mh-num    { color: #2F2D28; }
+.map-shell.clean .map-aerial { opacity: 1; }   /* מצב נקי + תצ״א = צילום מסך אמיתי */
+.map-shell.clean:not(.photo) .map-aerial { opacity: 0; }
+/* חיווי טעינה על הכפתור עצמו — 686KB זה רגע, אבל רגע שצריך להסביר */
+.map-shell.photo-load #map-photo { animation: mapPhotoWait 1s ease-in-out infinite; }
+@keyframes mapPhotoWait { 50% { opacity: .45; } }
+
+/* חלב הזכוכית של המפה — כיול מקומי, לא שינוי בשפה.
+   ⚠️ --lg-w1/--lg-w2 בשפה מכוילים לרקע האמביינטי החיוור של האפליקציה. מעל
+      מפה (ועל אחת כמה וכמה מעל תצ״א ירוק-כהה) אותם ערכים הופכים כל טקסט
+      בפקד לבלתי-קריא — נמדד: השבבים "מיגוניות" ו"הכול" נעלמו לגמרי במצב
+      תצ״א. אותו חומר, אותן חמש שכבות, רק יותר חלב. */
+.map-shell { --lg-w1: .50; --lg-w2: .40; }
+.map-shell.photo { --lg-w1: .74; --lg-w2: .66; }
+
+/* ---- 3. רייל ההבלטה: אנכי, שמאלה, מתקפל -----------------------------------
+   הפס האופקי חצה את כל רוחב המפה וכיסה בדיוק את השורה העליונה של הבתים.
+   עכשיו: כפתור עגול בודד, ומתחתיו עמודה שנפתחת. הצד השמאלי נבחר כי החיפוש
+   יושב מימין והמקרא מעליו — ושלושתם כבר לא מתנגשים.                        */
+.map-emph {
+  position: absolute; top: 68px; left: 14px; z-index: 24;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+}
+.map-emph__tg {
+  width: 38px; height: 38px; padding: 0; border: none;
+  color: var(--text-soft); position: relative;
+}
+.map-emph__tg svg { width: 17px; height: 17px; display: block; }
+.map-emph__tg.is-on { background: linear-gradient(165deg, #3A3833, #2B2924); color: #FBFAF7; }
+.map-emph__tg.is-on::before { display: none; }
+/* מונה הבחירות — כדי שגם כשהרייל סגור רואים שההבלטה פעילה ולמה */
+.map-emph__n {
+  position: absolute; top: -3px; inset-inline-end: -3px; min-width: 16px; height: 16px;
+  border-radius: 999px; background: #2B2924; color: #FBFAF7;
+  font: 700 10px/16px inherit; text-align: center; padding: 0 4px; z-index: 3;
+}
+.map-emph__tg.is-on .map-emph__n { background: #FBFAF7; color: #2B2924; }
+
+/* ⚠️ .lg-circle של השפה קובע display:grid — ועל מתג המקרא, שאמור להיות
+      display:none בדסקטופ, זה החזיר אותו למסך וריחף לו באמצע הכותרת.
+      לכן העיגול נקבע כאן ידנית ולא דרך מחלקת הצורה. */
+.map-emph__tg.lg { border-radius: 50%; display: grid; place-items: center; }
+.map-legend-toggle.lg { border-radius: 50%; }
+
+/* הפס עצמו — אותו רכיב, כיוון אחר */
+.map-chipbar {
+  position: static; inset: auto;
+  flex-direction: column; align-items: stretch;
+  overflow: visible; padding: 5px; gap: 3px; width: 148px;
+  background: none; border: none; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  transform-origin: top left;
+  animation: mapRailIn .22s cubic-bezier(.2,.8,.3,1) both;
+}
+.map-chipbar[hidden] { display: none; }
+.map-chip { text-align: start; padding: 8px 12px; }
+.map-chip[aria-pressed="true"] { background: linear-gradient(165deg, #3A3833, #2B2924); color: #FBFAF7; }
+.map-chip--all {
+  margin-top: 2px; border-top: 1px solid rgba(17,24,39,.12); border-radius: 0 0 12px 12px;
+  color: var(--text-soft); font-weight: 700;
+}
+@keyframes mapRailIn { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .map-chipbar { animation: none; } }
+
+/* במסך צר הרייל יורד מתחת לכפתורי הזום — שם אין מה לכסות */
+@media (max-width: 720px) {
+  .map-emph { top: 60px; left: 10px; }
+  .map-chipbar { width: 132px; }
+}
+
+/* ---- 4. השפה החדשה: הפקדים עוברים ל-.lg -----------------------------------
+   הפקדים של המפה נכתבו לפני css/liquid-glass.css והחזיקו זכוכית תוצרת בית
+   (rgba לבן + blur, בכ-20 גרסאות אלפא שונות). עכשיו הם גופי .lg אמיתיים,
+   וכל מה שנשאר כאן הוא לפרק את הזכוכית הישנה כדי שלא תצויר פעמיים.
+   ⚠️ שתי הגדרות של הקובץ ההוא נשמרות בכוונה: שדה קלט לעולם לא שקוף, ומשטח
+      תוכן (כרטיס הדיירים) נשאר אטום — זכוכית מתחת לטקסט רץ היא לא קריאה.  */
+.map-toolbar, .map-chipbar, .map-legend, .map-hint, .map-legend-toggle {
+  background: none; border: none; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+/* ⚠️ .lg קובע position:relative, ו-liquid-glass.css נטען *אחרי* הקובץ הזה —
+   כלומר הוא גובר על כל position:absolute בסלקטור בעל אותה ספציפיות. נמדד:
+   סרגל הכלים איבד את המיקום המוחלט, נמתח ל-1920×256 וחסם בלחיצה את כל
+   הפקדים שמעליו. לכן המיקום מוחזר כאן בסלקטור עשיר יותר. */
+.map-shell .map-toolbar.lg { position: absolute; bottom: 18px; left: 18px; }
+.map-shell .map-hint.lg    { position: absolute; bottom: 18px; right: 18px; }
+@media (max-width: 720px) {
+  .map-shell .map-toolbar.lg { bottom: 14px; left: 10px; }
+  .map-shell .map-legend.lg  { position: absolute; top: 40px; inset-inline-start: 0; }
+}
+.map-toolbar.lg { border-radius: 18px; padding: 6px; }
+.map-chipbar.lg { border-radius: 16px; }
+.map-legend.lg  { border-radius: var(--lg-r-pill); padding: 9px 15px; }
+.map-hint.lg    { border-radius: var(--lg-r-pill); padding: 8px 16px; }
+.map-legend-toggle.lg { width: 32px; height: 32px; color: var(--text-soft); }
+/* הטבעת של .lg יקרה, ומעל מפה שזזה היא נמרחת. הגוף נשאר, העדשה יורדת. */
+.map-toolbar.lg::before, .map-chipbar.lg::before,
+.map-legend.lg::before, .map-hint.lg::before { display: none; }
+/* זכוכית בתוך זכוכית לא דוגמת שום דבר חדש — הכפתורים בתוך המגש נשארים שקופים */
+.map-toolbar .map-btn { background: transparent; }
+.map-toolbar hr { border-top-color: rgba(17,24,39,.10); }
+
+/* גדר מס' 1 של השפה: שדה קלט לעולם לא שקוף. זו גם הסיבה השורשית שסמל
+   החיפוש נעלם ב-iOS — ה-backdrop-filter של השדה צייר מעליו. */
+.map-search {
+  background: rgba(255,255,255,.93);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  border: 1px solid rgba(255,255,255,.9);
+  box-shadow: 0 1px 1px rgba(16,24,40,.04), 0 10px 26px rgba(16,24,40,.10);
+}

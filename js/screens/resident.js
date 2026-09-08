@@ -31,6 +31,9 @@ CBA.screens = CBA.screens || {};
   var phoneIcon  = svg('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13 1 .36 1.98.68 2.92a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.16-1.16a2 2 0 0 1 2.11-.45c.94.32 1.92.55 2.92.68A2 2 0 0 1 22 16.92z"/>');
   var minusIcon  = svg('<path d="M5 12h14"/>');
   var searchIcon = svg('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>');
+  /* תצ״א — פרוסת נוף עם שמש; שכבות — לרייל ההבלטה */
+  var photoIcon  = svg('<rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M3 16l5-4.5 4 3.5 3-2.5 6 5"/>');
+  var layersIcon = svg('<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>');
   var fitIcon    = svg('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>');
   var parkIcon   = svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 16V8h4a3 3 0 0 1 0 6H9"/>');
   var pinIcon    = svg('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>');
@@ -1971,8 +1974,8 @@ CBA.screens = CBA.screens || {};
                 '</div>'
               : '') +
               (oLegend ?
-                '<button type="button" class="map-legend-toggle" id="map-legend-toggle" aria-label="מקרא">?</button>' +
-                '<div class="map-legend" id="map-legend">' +
+                '<button type="button" class="map-legend-toggle lg" id="map-legend-toggle" aria-label="מקרא">?</button>' +
+                '<div class="map-legend lg" id="map-legend">' +
                   '<i><b class="lg-house"></b>בית</i>' +
                   '<i><b class="lg-amen"></b>מבנה ציבור</i>' +
                   '<i><b class="lg-park"></b>חניון</i>' +
@@ -1981,19 +1984,33 @@ CBA.screens = CBA.screens || {};
               : '') +
             '</div>'
           : '') +
-          (opts.full ? '<div class="map-chipbar" id="map-chips" role="group" aria-label="הבלטה"></div>' : '') +
+          /* רייל ההבלטה (2026-09-08) — עבר מפס אופקי שחצה את רוחב המפה
+             לעמודה מתקפלת בצד שמאל (לבקשת יועד: "שלא יכסה דברים על המפה").
+             סגור = כפתור אחד. מספר הבחירות הפעילות מוצג עליו גם כשהוא סגור. */
+          (opts.full ?
+            '<div class="map-emph" id="map-emph">' +
+              '<button type="button" class="map-emph__tg lg" id="map-emph-tg" ' +
+                'aria-expanded="false" aria-controls="map-chips" aria-label="הבלטת שכבות" ' +
+                'title="הבלטה — בחרו מה להדגיש במפה">' + layersIcon +
+                '<span class="map-emph__n" hidden></span></button>' +
+              '<div class="map-chipbar lg" id="map-chips" role="group" aria-label="הבלטה" hidden></div>' +
+            '</div>'
+          : '') +
           '<div class="map-viewport" id="map-viewport"><div class="map-world" id="map-world"></div></div>' +
-          '<div class="map-toolbar">' +
+          '<div class="map-toolbar lg">' +
             '<button type="button" class="map-btn" id="map-zoom-in" aria-label="הגדלה">' + plusIcon + '</button>' +
             '<button type="button" class="map-btn" id="map-zoom-out" aria-label="הקטנה">' + minusIcon + '</button>' +
             '<hr>' +
             '<button type="button" class="map-btn" id="map-fit" aria-label="התאמה למסך">' + fitIcon + '</button>' +
             (opts.full ? '<hr>' +
+              '<button type="button" class="map-btn" id="map-photo" aria-pressed="false" ' +
+              'aria-label="תצלום אוויר" title="תצ״א — התצלום מתחת לציור">' +
+              photoIcon + '</button>' +
               '<button type="button" class="map-btn" id="map-clean" aria-pressed="false" ' +
               'aria-label="מצב נקי לצילום מסך" title="מצב נקי — גיאומטריה ומספרי בתים בלבד, לצילום מסך">' +
               cameraIcon + '</button>' : '') +
           '</div>' +
-          (oHint ? '<div class="map-hint">' +
+          (oHint ? '<div class="map-hint lg">' +
             (opts.pin ? 'גררו כדי לנוע · גלגלת/צביטה כדי לזום · <b>לחצו על המקום שבו נמצאת התקלה</b>'
                       : 'גררו כדי לנוע · גלגלת/צביטה כדי לזום · לחצו על בית לפרטים') +
           '</div>' : '') +
@@ -2212,7 +2229,13 @@ CBA.screens = CBA.screens || {};
           }
         });
 
+        /* תצ״א: תמונה אחת שמתוחה בדיוק על תיבת העולם. היא נוצרה מהתצלום
+           המקורי באותו טרנספורם של mkdata.py (סיבוב סביב הצנטרואיד, קנה מידה,
+           הזזה), ולכן כל גג נוחת מתחת למלבן שמצויר עליו. נטענת רק בלחיצה על
+           הכפתור — 700KB לא נטענים למי שלא ביקש. */
         worldEl.insertAdjacentHTML('afterbegin',
+          '<img class="map-aerial" id="map-aerial" alt="" aria-hidden="true" decoding="async" ' +
+            'data-src="img/aerial-1.webp">' +
           '<svg class="map-terrain map-base" width="' + MAP_WORLD_W + '" height="' + MAP_WORLD_H +
           '" viewBox="0 0 ' + MAP_WORLD_W + ' ' + MAP_WORLD_H + '" aria-hidden="true">' +
             E('rect', { x: 0, y: 0, width: MAP_WORLD_W, height: MAP_WORLD_H, 'class': 'm2-ground' }) +
@@ -2363,6 +2386,20 @@ CBA.screens = CBA.screens || {};
       }
       function buildChips() {
         var bar = container.querySelector('#map-chips'); if (!bar) return;
+        var tg = container.querySelector('#map-emph-tg');
+        var badge = container.querySelector('.map-emph__n');
+        function syncBadge() {
+          if (!badge) return;
+          badge.textContent = EMPH.length || '';
+          badge.hidden = !EMPH.length;
+          if (tg) tg.classList.toggle('is-on', EMPH.length > 0);
+        }
+        if (tg) tg.addEventListener('click', function () {
+          var open = bar.hidden;
+          bar.hidden = !open;
+          tg.setAttribute('aria-expanded', open);
+          container.querySelector('#map-emph').classList.toggle('is-open', open);
+        });
         var GROUPS = [['traffic', 'תנועה וחנייה'], ['public', 'מבני ציבור'], ['homes', 'בתים'],
                       ['green', 'ירק ועצים'], ['waste', 'פינוי אשפה'], ['shelter', 'מיגוניות']];
         var have = {};
@@ -2378,7 +2415,9 @@ CBA.screens = CBA.screens || {};
             x.setAttribute('aria-pressed', x.dataset.e !== '__all' && EMPH.indexOf(x.dataset.e) >= 0);
           });
           applyEmph();
+          syncBadge();
         });
+        syncBadge();
       }
 
       function area(o) {
@@ -2525,11 +2564,21 @@ CBA.screens = CBA.screens || {};
          למטה. "התאמה למסך" (⛶) נשאר בדיוק כמו שהיה, למבט-על על כל השכונה. */
       function initialView(animated) {
         computeFit();
-        var widthFit = viewport.clientWidth / MAP_WORLD_W;
-        // תקרה של 1.25 ולא 1.0: כל המפה מצוירת ב-DOM/SVG (לא תמונה), אז הגדלה
-        // מעבר ל-1:1 לא מטשטשת כלום — היא רק מגדילה גם את הטקסט, וזה בדיוק מה
-        // שהיה חסר. בלי התקרה מסך רחב מאוד היה מנפח את המפה בלי סוף.
-        scale = Math.max(fitScaleVal, Math.min(1.25, widthFit));
+        /* "למלא", לא "להכיל": קנה המידה נגזר מהצלע שדורשת יותר, ולכן החלון
+           מתמלא לגמרי בשני הכיוונים. בדסקטופ (חלון רחב, מפה לגובה) הצלע
+           הקובעת היא הרוחב; בטלפון (חלון לגובה) דווקא הגובה — שם הגרסה
+           הקודמת, שהתאימה לרוחב בלבד, השאירה 272 פיקסלים ריקים מעל ומתחת
+           והקטינה את הבית ל-12 פיקסלים. עכשיו 19. */
+        var widthFit = Math.max(viewport.clientWidth / MAP_WORLD_W,
+                                viewport.clientHeight / MAP_WORLD_H);
+        /* התקרה (2026-09-08) — הייתה 1.25 קבוע, וזה מה שהשאיר 271 פיקסלים
+           ריקים בכל צד על מסך 1920 (יועד: "תראה כמה שטח מבוזבז בעיקר
+           בצדדים"). עכשיו התקרה נגזרת ממה שהיא באמת אמורה להגן עליו — שהבית
+           לא יתנפח לגודל אבסורדי — ולכן נמדדת ברוחב הבית על המסך ולא ביחס
+           זום: 100 פיקסלים לבית חציוני. במסך 1920 זה מאפשר 2.94 והמפה ממלאת
+           את הרוחב בפועל; במסך רחב במיוחד התקרה עדיין עוצרת. */
+        var capScale = Math.max(1.25, 100 / (MED_TILE || 34));
+        scale = Math.max(fitScaleVal, Math.min(capScale, widthFit));
         tx = (viewport.clientWidth - MAP_WORLD_W * scale) / 2;
         ty = 0;
         if (animated) { worldEl.style.transition = "transform .38s cubic-bezier(.2,.6,.2,1)"; setTimeout(function () { worldEl.style.transition = ""; }, 400); }
@@ -2866,6 +2915,31 @@ CBA.screens = CBA.screens || {};
         });
       })();
 
+      /* ---- מצב תצ״א ----
+         הציור *נשאר* ומקבל שקיפות, התצלום עולה מתחתיו (יועד: "אותם ציורים
+         פשוט קצת יותר שקופים"). מספרי הבתים, השבבים והתוויות לא נוגעים בזה
+         בכלל — הם DOM נפרד מה-SVG, ולכן נשארים קריאים במלוא האטימות.
+         התמונה נטענת בלחיצה הראשונה בלבד. */
+      (function () {
+        var btn = container.querySelector('#map-photo'); if (!btn || !shellEl) return;
+        var img = container.querySelector('#map-aerial');
+        btn.addEventListener('click', function () {
+          var on = !shellEl.classList.contains('photo');
+          if (on && img && !img.getAttribute('src')) {
+            shellEl.classList.add('photo-load');
+            img.addEventListener('load', function () { shellEl.classList.remove('photo-load'); }, { once: true });
+            img.addEventListener('error', function () {
+              shellEl.classList.remove('photo-load', 'photo');
+              btn.setAttribute('aria-pressed', 'false');
+              btn.disabled = true; btn.title = 'התצ״א לא נטען';
+            }, { once: true });
+            img.setAttribute('src', img.dataset.src);
+          }
+          shellEl.classList.toggle('photo', on);
+          btn.setAttribute('aria-pressed', on);
+        });
+      })();
+
       /* נקרא רק אחרי שכל אלמנטי המפה קיימים — כולל הבתים, שנוצרים אחרי
          המרחבים. אחרת שבב "בתים" לא היה נוצר בכלל. */
       buildChips();
@@ -2896,7 +2970,11 @@ CBA.screens = CBA.screens || {};
   /* מסך "מפת השיכון" של אזור התושב — עוטף דק סביב הרכיב, עם כל ברירות המחדל.
      כל ההתנהגות שהתושבים מכירים נשארת בדיוק כפי שהייתה. */
   CBA.screens.resMap = {
-    render: function (container) { CBA.map.render(container, { full: true }); }
+    /* בלי screen-head (2026-09-08, לבקשת יועד: "הכותרת למעלה מבזבזת מקום").
+       שם הטאב בניווט כבר אומר "מפת השיכון", והכותרת גבתה 176 פיקסלים שגרמו
+       לדף לגלוש — כלומר אי-אפשר היה לראות את המפה במלואה. אותו שיקול בדיוק
+       כמו במסך "ועד השיכון". */
+    render: function (container) { CBA.map.render(container, { full: true, head: false }); }
   };
   /* ==== "ועד השיכון" — עץ ארגוני של הוועד, תצוגת קריאה בלבד (2026-08-10) ====
      פתוח לכל תושב מחובר ופעיל (CBA.data.getCommitteeTree, כמו טאב

@@ -34,8 +34,12 @@
     plus:  '<path d="M12 5v14M5 12h14"/>',
     check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>',
-    prev:  '<path d="M15 18l-6-6 6-6"/>',
-    next:  '<path d="M9 18l6-6-6-6"/>',
+    /* בממשק RTL "שבוע קודם" יושב מימין ו"שבוע הבא" משמאל, ולכן החץ של כל
+       אחד מהם מצביע **החוצה** — ימינה מימין, שמאלה משמאל. הגדרות ה-SVG
+       האלה תואמות את המיקום ולא את השם הלועזי: prev מצייר "›" ו-next מצייר
+       "‹". קודם היה הפוך, ושני החצים הצביעו זה אל זה. */
+    prev:  '<path d="M9 18l6-6-6-6"/>',
+    next:  '<path d="M15 18l-6-6 6-6"/>',
     dots:  '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
     undo:  '<path d="M3 8h11a5 5 0 0 1 0 10H8"/><path d="m6.5 4.5-3 3.5 3 3.5"/>',
     pin:   '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/>',
@@ -303,7 +307,12 @@
           });
           body = groups.map(function (g) {
             var n = seen[g].length;
-            return '<div class="gt-grp">' + esc(g) +
+            /* בסידור לפי קטגוריה השבב ירד מהכרטיסים, אז הכותרת נושאת את
+               הצבע במקומם — נקודה קטנה בצבע הקטגוריה. בסידור לפי אזור אין
+               לכותרת צבע, כי לאזור אין צבע בשום מקום אחר במסך. */
+            var dot = sortBy === "type"
+              ? '<span class="gt-grp__d k-' + catOf(g).key + '"></span>' : '';
+            return '<div class="gt-grp">' + dot + esc(g) +
               ' <em>· ' + (n === 1 ? "משימה אחת" : n + " משימות") + '</em><hr></div>' +
               '<div class="gd-reps">' + seen[g].map(card).join("") + '</div>';
           }).join("");
@@ -331,11 +340,15 @@
              אפס הוא רעש. */
           '<div class="gt-ctl">' +
             '<div class="gt-ctl__f">' +
+              /* "לבדיקה" ראשון ולא אחרון, כשהוא קיים. הרצועה נגללת אופקית,
+                 ובמסך 390px עם חמישה מסננים המסנן החמישי יושב מחוץ לשדה
+                 הראייה — ומדובר במסנן היחיד שמצביע על משהו שהשתבש. הוא מופיע
+                 רק כשיש מה לבדוק, ולכן אין כאן מיקום קבוע שנשבר. */
+              (isManager && c.recheck ? seg("recheck", "לבדיקה", c.recheck) : "") +
               seg("open", "לביצוע", c.open) +
               seg("done", isManager ? "לאישורך" : "בוצעו", c.done) +
               seg("dragged", "נגררו", c.dragged) +
               (isManager && unplanned.length ? seg("unplanned", "לשיבוץ", unplanned.length) : "") +
-              (isManager && c.recheck ? seg("recheck", "לבדיקה", c.recheck) : "") +
             '</div>' +
             (isManager
               ? '<button type="button" class="gt-tool is-primary" id="gt-new" ' +
@@ -399,12 +412,23 @@
                אין מה לסמן במשימה שהמנהל פתח בעצמו והוא זה שמסתכל. */
             '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
             '<div class="gt-meta">' +
+              /* המזהה אינו על הכרטיס (2026-09-08, בקשת יועד). הוא מפתח
+                 פנימי: מי שסורק רשימת משימות לא מחפש מספר, ומי שכן צריך
+                 אותו — כדי לענות לתושב שמצטט מספר פנייה — פותח את התפריט
+                 (⋯), שם הוא כתוב בשורה הראשונה יחד עם הקטגוריה והאזור. */
               (t.kind === GK_REPORT
                 ? '<span class="gt-res">' + ico("person") + 'תושב</span><i>·</i>'
                 : (t.kind === GK_ROUTINE ? ico("repeat") + '<i>·</i>' : '')) +
-              '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
-              (where ? '<i>·</i>' + ico("pin") + esc(where) : '') +
-              '<i>·</i><span class="gd-rep__id">#' + esc(t.id) + '</span>' +
+              /* שדה שכבר מופיע בכותרת הקבוצה אינו חוזר על הכרטיס. בסידור
+                 לפי אזור, האזור נכתב פעם אחת מעל הקבוצה ואז שוב על כל אחת
+                 מתשע המשימות שמתחתיו — וכשהשם ארוך ("שכונה מרכזית צפונית")
+                 הוא גם שובר את שורת המטא לשתיים. אותו כלל לקטגוריה. */
+              (sortBy === "type" ? "" :
+                '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>') +
+              (where && sortBy !== "area"
+                ? (sortBy === "type" ? "" : '<i>·</i>') +
+                  '<span class="gt-nb">' + ico("pin") + esc(where) + '</span>'
+                : '') +
               (tags ? '<i>·</i>' + tags : '') +
             '</div>' +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
@@ -443,6 +467,13 @@
         if (nb) nb.addEventListener("click", openNewTask);
         root.querySelector("#gt-sort").addEventListener("click", openSort);
         root.querySelector("#gt-legend").addEventListener("click", openLegend);
+        /* הרצועה נגללת, ואחרי ציור מחדש היא חוזרת להתחלה — כך שהמסנן שנבחר
+           זה עתה עלול לשבת מחוץ למסך והמשתמש רואה רשימה בלי לדעת מה סינן
+           אותה. inline:"nearest" כדי לא להזיז אותה כשהוא כבר נראה. */
+        var on = root.querySelector(".gt-ctl__f button.on");
+        if (on && on.scrollIntoView) {
+          try { on.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) {}
+        }
         root.addEventListener("click", onCardClick);
       }
 
@@ -628,7 +659,13 @@
             ? '<div class="gt-lgi"><u><span class="gt-box is-approve" style="width:22px;height:22px;margin:0">' +
               ico("check") + '</span></u><div><b>ירוקה</b>' +
               '<span>אישור. הלחיצה סוגרת את המשימה, ואם היא הגיעה מתושב — נשלח אליו עדכון.</span></div></div>'
-            : ''));
+            : '') +
+          /* כפתור סגירה מפורש. שאר הגיליונות נסגרים בלחיצה על הרקע, אבל
+             המקרא גבוה ~700px ובטלפון הוא כמעט ממלא את המסך — הרקע שנשאר
+             הוא רצועה דקה שקשה לפגוע בה. */
+          '<button type="button" class="gd-cta" data-close="1" ' +
+            'style="margin-top:16px">סגירה</button>',
+          function (e, close) { if (e.target.closest("[data-close]")) close(); });
       }
 
       /* אישור מרוכז. המפתח כולל תבנית+שבוע, ולכן אי אפשר לצרף לקבוצה משימה
