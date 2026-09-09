@@ -146,6 +146,13 @@
     return Math.min(Math.round((Date.now() - d.getTime()) / 86400000), 400);
   }
 
+  /* ⚠️ ברמת המודול ולא בתוך render(). groupRank() מורמת (hoisted) ונקראת
+     כבר בציור הראשון — לפני ששורות ה-var בתוך render() הספיקו לרוץ — ולכן
+     קבוע שמוגדר שם היה undefined באותו רגע, ו-indexOf עליו הפיל את כל הציור:
+     מסך ריק לגמרי בלי שום הודעה. אותו באג בדיוק כמו FLOW_H במסך הנתונים. */
+  var WEEK_ORDER = ["לשיבוץ · אין שבוע", "שבועות שעברו", "השבוע",
+                    "שבוע הבא", "בהמשך"];
+
   var SORTS = [
     /* ⚠️ "שבוע" ראשון וברירת מחדל (9.9). הקיבוץ הזה הוא מה שהופך את ההבחנה
        בין "יש שבוע" ל"אין שבוע" לגלויה במבט אחד — היא הייתה מוסתרת מאחורי
@@ -174,12 +181,14 @@
    *  ההבדל בין המצבים הוא בציור בלבד: מה נטען, ומה מצויר מעל הרשימה.
    * ========================================================================== */
   CBA.screens.gardenInbox = {
-    render: function (container) { CBA.screens.gardenTasks.render(container, "inbox"); }
+    /* ⚠️ "לטיפולך" אינו מסך בפני עצמו יותר (9.9) — הוא מסנן "מחכה לך"
+       בתוך "משימות". הרישום נשאר כדי שקישור ישן יגיע למסך אמיתי ולא ייפול,
+       והוא פשוט פותח את המסך כשהמסנן הזה כבר נבחר. */
+    render: function (container) { CBA.screens.gardenTasks.render(container, "mine"); }
   };
 
   CBA.screens.gardenTasks = {
     render: function (container, mode) {
-      var inbox = mode === "inbox";
       var week = todayKey();
       /* ⚠️ שלושה מסננים (2026-09-09), אחרי הצוות האדום. קודם היו שישה,
          ושניים מהם שינו משמעות לפי מי מסתכל — "בוצעו" הופיע פעמיים ברצועה
@@ -189,7 +198,7 @@
            closed — הארכיון, כולל מה שאין לו שבוע (ר' הממצא על משימות שאוחדו).
          "נגררו" ו"לבדיקה" ירדו כמסננים: גרירה היא תכונה של משימה ולא קטגוריה
          שלה, ומשוב שלילי הוא החלטה שממתינה — ולכן מקומו ב-mine. */
-      var filter = "open";                         // mine | open | closed
+      var filter = mode === "mine" ? "mine" : "open";   // mine | open | closed
       /* הסידור הוא גם הקיבוץ. ברירת המחדל היא שבוע, כי זו השאלה שהמסך הזה
          נכשל בה: "לא ברור שיש דברים לשבוע ויש דברים שצריך להכניס לשיבוץ".
          כשהקבוצה "לשיבוץ · אין שבוע" יושבת בראש אותה רשימה, אין מה להסביר. */
@@ -310,8 +319,6 @@
         if (t.week === shiftKey(week, 1)) return "שבוע הבא";
         return "בהמשך";
       }
-      var WEEK_ORDER = ["לשיבוץ · אין שבוע", "שבועות שעברו", "השבוע",
-                        "שבוע הבא", "בהמשך"];
 
       function draw(skeleton) {
         /* מצויר לפני הכול, גם לפני מצב התיבה: כשהטעינה נכשלה אין שום נתון
@@ -473,44 +480,9 @@
          לא מסמנים ביצוע אלא **מחליטים אם זו בכלל עבודה**, ולכן במקום תיבת
          סימון יש שלוש תשובות מפורשות. הראשונה — "כבר בתוכנית" — נפתחה רק
          ברגע שיש תוכנית עבודה, והיא היחידה שלא מייצרת עבודה חדשה. */
-      function inCard(t) {
-        var cat = catOf(t.category);
-        return '<article class="gd-rep gt-row k-' + cat.key +
-            (t.kind === GK_REPORT ? " is-report" : "") +
-            '" data-id="' + esc(t.id) + '">' +
-          '<div class="gt-body">' +
-            '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
-            '<div class="gt-meta">' +
-              (t.kind === GK_REPORT
-                ? '<span class="gt-res">' + ico("person") + 'תושב</span><i>·</i>' : '') +
-              '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
-              (t.area ? '<i>·</i><span class="gt-nb">' + ico("pin") + esc(t.area) + '</span>' : '') +
-            '</div>' +
-            (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
-            (t.dupOf
-              ? '<div class="gt-dup">' + ico("merge") +
-                'נראה כמו כפילות של <b>#' + esc(t.dupOf.id) + '</b> · ' +
-                esc(t.dupOf.title || "") + '</div>'
-              : '') +
-            '<div class="gi-acts">' +
-              (t.coveredBy
-                ? '<button type="button" class="gi-cta is-plan" data-act="cover">' +
-                  ico("repeat") + 'כבר בתוכנית · ' + esc(shortWeek(t.coveredBy.week)) + '</button>'
-                : '') +
-              (t.dupOf
-                ? '<button type="button" class="gi-cta" data-act="merge">' +
-                  ico("merge") + 'איחוד</button>'
-                : '') +
-              '<button type="button" class="gi-cta' + (t.coveredBy || t.dupOf ? " is-ghost" : "") +
-                '" data-act="plan">' + ico("cal") + 'שיבוץ</button>' +
-              '<button type="button" class="gi-cta is-ghost" data-act="menu">עוד</button>' +
-            '</div>' +
-          '</div>' +
-        '</article>';
-      }
-
-      /* "השבוע" / "הבא" / "6.10" — בכפתור אין מקום ל"שבוע 2 · 6–12 באוקטובר",
-         והמנהל צריך לדעת רק אם זה קרוב מספיק כדי לענות לתושב. */
+      /* inCard() הוסרה (9.9) — היא הייתה מרנדר כרטיסים שני, ייחודי למסך
+         "לטיפולך", ועכשיו יש מרנדר אחד: card(). הצעות האיחוד ו"כבר בתוכנית"
+         שהיו רק בה עברו ל-card() ומופיעות על כל משימה שממתינה לשיבוץ. */
       function shortWeek(k) {
         if (k === todayKey()) return "השבוע";
         if (k === shiftKey(todayKey(), 1)) return "שבוע הבא";

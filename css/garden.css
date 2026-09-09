@@ -962,3 +962,11 @@
 .gt-opt.is-danger { color: #A32F3E; }
 .gt-opt.is-danger u { background: rgba(163,47,62,.10); color: #A32F3E; }
 .gt-opt.is-danger span { color: rgba(163,47,62,.75); }
+
+/* מחיקת דיווח אצל התושב — מופיעה רק על דיווח שאיש עוד לא נגע בו, ולכן היא
+   שקטה: אפור בשורת הכותרת, אדומה רק במגע. */
+.gd-rep__del { margin-inline-start: auto; width: 26px; height: 26px; flex: none;
+  border: 0; border-radius: 8px; background: none; color: #A5ADA8; cursor: pointer;
+  display: grid; place-items: center; }
+.gd-rep__del svg { width: 15px; height: 15px; }
+.gd-rep__del:hover { background: rgba(163,47,62,.10); color: #A32F3E; }

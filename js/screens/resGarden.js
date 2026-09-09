@@ -108,6 +108,8 @@
     clean: '<path d="M5 7h14"/><path d="M10 7V4.6h4V7"/><path d="M6.6 7 8 20h8l1.4-13"/>',
     bed:   '<circle cx="12" cy="8.4" r="2.4"/><path d="M12 6c0-2.2-3.6-2.2-3.6 0S12 10.6 12 8.4ZM12 6c0-2.2 3.6-2.2 3.6 0S12 10.6 12 8.4ZM12 21v-8"/>',
     plus:  '<path d="M12 5v14M5 12h14"/>',
+    trash: '<path d="M4.5 7h15"/><path d="M9.5 7V4.6h5V7"/>' +
+           '<path d="M6.8 7 8 20.4h8L17.2 7"/><path d="M10.3 10.6v6M13.7 10.6v6"/>',
     send:  '<path d="M21 3 10.5 13.5"/><path d="M21 3 14.5 21l-4-7.5L3 9.5Z"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>',
     check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
@@ -210,6 +212,9 @@
         Array.prototype.forEach.call(listEl.querySelectorAll("[data-fb]"), function (b) {
           b.addEventListener("click", function () { sendFeedback(b.dataset.id, b.dataset.fb === "y"); });
         });
+        Array.prototype.forEach.call(listEl.querySelectorAll("[data-del]"), function (b) {
+          b.addEventListener("click", function () { askDelete(b.dataset.del); });
+        });
       }
 
       function statTile(kind, iconName, num, label) {
@@ -238,6 +243,15 @@
             '<div class="gd-rep__top">' +
               '<span class="gd-rep__id">#' + esc(r.id) + '</span>' +
               '<span class="gd-kchip">' + ico(c.ico) + esc(r.category) + '</span>' +
+              /* ⚠️ מחיקה מוצעת **רק כל עוד איש לא נגע** — עדיין "התקבל",
+                 בלי דגל ובלי איחוד. ברגע שהצוות שיבץ או סימן משהו, יש כבר
+                 עבודה מאחורי הדיווח וזה כבר לא "טעות בהקלדה"; השרת אוכף את
+                 אותו תנאי בעצמו (gardenReportDelete_), וזה כאן רק כדי לא
+                 להציע כפתור שייתן שגיאה. */
+              (r.stage === "התקבל" && !r.flag && !r.mergedInto && !r.closure
+                ? '<button type="button" class="gd-rep__del" data-del="' + esc(r.id) + '" ' +
+                  'aria-label="מחיקת הדיווח">' + ico("trash") + '</button>'
+                : '') +
             '</div>' +
             '<div class="gd-rep__t">' + esc(r.desc || r.place || r.category) + '</div>' +
             '<div class="gd-rep__m">' +
@@ -266,6 +280,24 @@
                 '<button type="button" class="n" data-fb="n" data-id="' + esc(r.id) + '">לא הושלם</button></div>'
               : (r.feedback ? '<div class="gd-rep__merged">המשוב שלך: ' + esc(r.feedback) + '</div>' : '')) +
           '</div></article>';
+      }
+
+      /* מחיקת דיווח על ידי מי שכתב אותו. הטקסט אומר במפורש מה יורד ומה
+         נשאר — התמונות יורדות איתו, וזה לא מובן מאליו. */
+      function askDelete(id) {
+        CBA.ui.confirm(
+          "הדיווח והתמונות שצירפת יימחקו, ולא נטפל בו. אי אפשר לבטל את זה.",
+          { title: "מחיקת דיווח #" + id, okText: "מחיקה", danger: true }
+        ).then(function (yes) {
+          if (!yes) return;
+          CBA.data.gardenReportDelete(id, function (res) {
+            if (!res || !res.ok) {
+              return CBA.ui.alert((res && res.error) || "הדיווח לא נמחק");
+            }
+            CBA.ui.toast("הדיווח נמחק");
+            load();
+          });
+        });
       }
 
       function sendFeedback(id, positive) {
