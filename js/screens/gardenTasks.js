@@ -145,9 +145,13 @@
   }
 
   var SORTS = [
+    /* ⚠️ "שבוע" ראשון וברירת מחדל (9.9). הקיבוץ הזה הוא מה שהופך את ההבחנה
+       בין "יש שבוע" ל"אין שבוע" לגלויה במבט אחד — היא הייתה מוסתרת מאחורי
+       מסנן שהמשתמש היה צריך לדעת שהוא קיים. group מוגדר ב-render, כי הוא
+       תלוי בשבוע הנוכחי. */
+    { k: "week",  label: "שבוע",   group: "byWeek" },
     { k: "area",  label: "אזור",   group: function (t) { return t.area || "ללא אזור"; } },
     { k: "urgent", label: "דחיפות", group: null },
-    { k: "date",  label: "תאריך",  group: null },
     /* התווית היא "קטגוריה" ולא "סוג" בכוונה: מאז 7.9 העמודה "סוג" בגיליון
        מחזיקה את *מקור* המשימה (שגרה / דיווח תושב / יזום), וכפתור סידור בשם
        "סוג" שמקבץ לפי מדשאות-עצים-השקיה היה מתנגש בדיוק במונח הזה. */
@@ -175,9 +179,20 @@
     render: function (container, mode) {
       var inbox = mode === "inbox";
       var week = todayKey();
-      var filter = inbox ? "unplanned" : "open";   // open | done | dragged
-      var sortBy = "area";
-      var rows = [], isManager = false, busy = false;
+      /* ⚠️ שלושה מסננים (2026-09-09), אחרי הצוות האדום. קודם היו שישה,
+         ושניים מהם שינו משמעות לפי מי מסתכל — "בוצעו" הופיע פעמיים ברצועה
+         אצל הגנן, פעם למה שסימן ופעם למה שאושר.
+           mine   — מה שדורש החלטה **ממני**, לפי התפקיד. זה מה שהיה "לטיפולך".
+           open   — כל מה שפתוח, כולל מה שאין לו שבוע.
+           closed — הארכיון, כולל מה שאין לו שבוע (ר' הממצא על משימות שאוחדו).
+         "נגררו" ו"לבדיקה" ירדו כמסננים: גרירה היא תכונה של משימה ולא קטגוריה
+         שלה, ומשוב שלילי הוא החלטה שממתינה — ולכן מקומו ב-mine. */
+      var filter = "open";                         // mine | open | closed
+      /* הסידור הוא גם הקיבוץ. ברירת המחדל היא שבוע, כי זו השאלה שהמסך הזה
+         נכשל בה: "לא ברור שיש דברים לשבוע ויש דברים שצריך להכניס לשיבוץ".
+         כשהקבוצה "לשיבוץ · אין שבוע" יושבת בראש אותה רשימה, אין מה להסביר. */
+      var sortBy = "week";
+      var isManager = false, busy = false;
       /* ⚠️ `busy` הוא נעילה **גלובלית** למסך, והיא נכונה רק לפעולות שנפתחות
          מדיאלוג (איחוד, סגירה, אישור מרוכז) — שם ממילא אי אפשר להתחיל שנייה
          לפני שהראשונה נגמרה. לסימון ✓ היא שגויה: יועד תיאר בדיוק את התוצאה —
@@ -193,14 +208,13 @@
       // מקבצים — לא א"ב: האזורים כתובים שם מצפון לדרום, וזה מסלול ההליכה
       // האמיתי בשטח. אזור שאינו ברשימה (נמחק/שונה שמו) יורד לסוף.
       var order = { area: [], type: [] };
-      /* המשימות שטרם שובצו לשבוע נטענות בקריאה נפרדת (scope=unplanned),
-         כי הן לא שייכות לאף שבוע ולכן לא מגיעות עם רשימת השבוע. הן
-         מוצגות רק למנהל — לצוות אין מה לעשות עם משימה שטרם תוכננה. */
-      var unplanned = [];
-      /* תור האישורים נטען בנפרד (scope=pending) ו**אינו תלוי בשבוע הנבחר**.
-         אישור שממתין משבוע שעבר לא אמור להיעלם כשמדפדפים לשבוע הבא —
-         זו בדיוק הדרך שבה משימות נופלות בין הכיסאות. */
-      var pending = [];
+      /* ⚠️ **קריאה אחת.** עד 9.9 המסך שלח שלוש — week, unplanned, pending —
+         ולכל אחת מהן רצפה של ~1.5 שניות ב-Apps Script גם כשהיא לא נוגעת
+         בגיליון (ר' ההערה בראש handleHomeExtras_). זה גם מה שגרם לשלוש
+         הרשימות להיות שלושה מצבים נפרדים שיכלו לסתור זה את זה, ולמסננים
+         לשנות משמעות לפי איזו מהן נטענה. עכשיו יש רשימה אחת, והסינון
+         והקיבוץ קורים בלקוח — כלומר מיידית. */
+      var rowsAll = [];
       /* ⚠️ כישלון טעינה **אינו** רשימה ריקה. עד היום load() היה מאפס rows
          ומצייר "אין משימות בשבוע הזה" — כלומר אומר לגנן שאין לו עבודה בגלל
          תקלת רשת. זו התשובה הכי גרועה האפשרית: היא נראית תקינה, היא שקרית,
@@ -218,33 +232,10 @@
       load();
 
       function load() {
-        /* בתיבה הנכנסת אין שבוע — שני התורים שלה חוצי-שבועות בהגדרה. טעינת
-           שבוע כאן הייתה גם מיותרת וגם מזיקה: היא מממשת את התוכנית, ואין
-           סיבה שפתיחת התיבה תייצר משימות. */
-        if (inbox) {
-          rows = [];
-          CBA.data.getGardenTasks({ scope: "unplanned" }, function (r1) {
-            if (!r1 || !r1.ok) {
-              loadErr = (r1 && r1.error) || "לא הצלחתי לטעון את התיבה";
-              draw();
-              return;
-            }
-            loadErr = null;
-            unplanned = r1.rows || [];
-            order.area = r1.areas || order.area;
-            order.type = r1.categories || order.type;
-            /* ⚠️ מגיע מהשרת ולא מקובע ל-true. עד 8.9 התיבה הייתה של המנהל
-               בלבד ולכן ההנחה עבדה; מאז שהגנן משבץ בעצמו, קיבוע היה נותן לו
-               מסך של מנהל — כולל תיבות אישור על עבודה של עצמו. */
-            var sim = window.CBA.user;
-            isManager = (sim && sim.isRoleSim) ? !sim.isExternal : !!r1.isManager;
-            draw();
-            // תור האישורים ממתין *למנהל*; לגנן אין מה לעשות איתו, והשרת חוסם.
-            if (isManager) loadPending(); else pending = [];
-          });
-          return;
-        }
-        CBA.data.getGardenTasks({ week: week }, function (res) {
+        /* scope 'all' — כל המשימות בקריאה אחת. השרת ממש את התוכנית לשבוע
+           הנוכחי לפני שהוא קורא את הגיליון, כך שמשימות שגרה שנוצרו עכשיו
+           מגיעות כבר בתשובה הזאת ולא רק ברענון הבא. */
+        CBA.data.getGardenTasks({ scope: "all", week: todayKey() }, function (res) {
           if (!res || !res.ok) {
             loadErr = (res && res.error) || "לא הצלחתי לטעון את המשימות";
             draw();
@@ -252,7 +243,7 @@
           }
           loadErr = null;
           justActed = {};        // השרת ענה — הרשימה חוזרת להיות מסוננת רגיל
-          rows = res.rows || [];
+          rowsAll = res.rows || [];
           order.area = res.areas || [];
           order.type = res.categories || [];
           /* בהדמיית תפקיד השרת עדיין עונה לפי המשתמש האמיתי (ר' startRoleSim
@@ -263,63 +254,62 @@
           isManager = (sim && sim.isRoleSim) ? !sim.isExternal : !!res.isManager;
           if (res.week) week = res.week;
           draw();
-          if (isManager) { loadUnplanned(); loadPending(); }
         });
       }
 
-      function loadUnplanned() {
-        CBA.data.getGardenTasks({ scope: "unplanned" }, function (res) {
-          unplanned = (res && res.ok) ? (res.rows || []) : [];
-          draw();
-        });
-      }
-      function loadPending() {
-        CBA.data.getGardenTasks({ scope: "pending" }, function (res) {
-          pending = (res && res.ok) ? (res.rows || []) : [];
-          draw();
-        });
+      /* ---- "מחכה לך" ----
+         ⚠️ ההגדרה **תלוית תפקיד**, וזו כל הנקודה. עד היום היה מסך בשם
+         "לטיפולך" שהראה לכל תפקיד חצי אחר, ואף אחד מהם לא ראה את החצי השני;
+         עכשיו זו רשימה אחת שיודעת מי שואל.
+         הגנן: מה שצריך שיבוץ, ומה שהוחזר אליו להשלמה.
+         המנהל: מה שסומן ומחכה לאישורו, מה שנחסם בשטח, ומשוב שלילי של תושב —
+         שלושתם החלטות שממתינות לו ולא עבודה. */
+      function isMine(t) {
+        if (isManager) {
+          if (t.flag === "דורש בדיקה חוזרת") return true;   // גם אם כבר נסגרה
+          if (t.closure) return false;
+          return t.flag === "ממתין לאישור" || t.flag === "דורש בדיקה בשטח";
+        }
+        if (t.closure) return false;
+        if (!t.week) return true;                            // ממתין לשיבוץ
+        return t.flag === "הוחזר להשלמה";
       }
 
       function counts() {
-        var c = { open: 0, done: 0, dragged: 0, recheck: 0, closed: 0, total: 0 };
-        rows.forEach(function (t) {
-          /* משימה סגורה מגיעה עכשיו מהשרת בתצוגת השבוע, ולכן היא נספרת
-             לחוד ולא כ"פתוחה". עד 8.9 היא לא הגיעה בכלל — והמונה "3 מתוך 12"
-             *הקטין את המכנה* בכל אישור, כך ששבוע שהושלם כולו הראה
-             "אין משימות". ר' handleGardenTasks_. */
-          c.total++;
-          if (t.closure) { c.closed++; return; }
-          if (t.flag === "ממתין לאישור") c.done++;
-          else c.open++;
-          if (t.flag === "נגררה" || (t.drags || 0) > 0) c.dragged++;
-        });
-        // למנהל, "בוצעו" הוא התור המלא ולא רק של השבוע המוצג.
-        if (isManager) c.done = pending.length;
-        rows.concat(unplanned).concat(pending).forEach(function (t) {
-          if (t.flag === "דורש בדיקה חוזרת") c.recheck++;
+        var c = { mine: 0, open: 0, closed: 0, weekTotal: 0, weekDone: 0 };
+        rowsAll.forEach(function (t) {
+          if (isMine(t)) c.mine++;
+          if (t.closure) c.closed++; else c.open++;
+          /* פס ההתקדמות נשאר של **השבוע הנוכחי** — הוא עונה על "איך אנחנו
+             עומדים השבוע", ולא על "כמה משימות יש בעולם". נמדד בסגורות ולא
+             ב"סומן כבוצע": סימון הוא הצהרה של הצוות, ורק האישור סוגר. */
+          if (t.week === week) { c.weekTotal++; if (t.closure) c.weekDone++; }
         });
         return c;
       }
+
       function visible() {
-        if (filter === "unplanned") return unplanned.slice();
-        if (filter === "done" && isManager) return pending.slice();
-        if (filter === "recheck") {
-          return rows.concat(unplanned).concat(pending).filter(function (t) {
-            return t.flag === "דורש בדיקה חוזרת";
-          });
-        }
-        /* "בוצעו" הוא הארכיון של השבוע — היחיד שמראה משימות סגורות. */
-        if (filter === "closed") {
-          return rows.filter(function (t) { return !!t.closure; });
-        }
-        return rows.filter(function (t) {
+        return rowsAll.filter(function (t) {
           if (justActed[t.id]) return true;      // ר' ההערה ליד justActed
-          if (t.closure) return false;
-          if (filter === "done") return t.flag === "ממתין לאישור";
-          if (filter === "dragged") return t.flag === "נגררה" || (t.drags || 0) > 0;
-          return t.flag !== "ממתין לאישור";
+          if (filter === "mine") return isMine(t);
+          if (filter === "closed") return !!t.closure;
+          return !t.closure;
         });
       }
+
+      /* ---- קיבוץ לפי שבוע ----
+         חמש קבוצות, ובסדר הזה בכוונה: שתי הראשונות הן מצבים שגויים —
+         משימה בלי שבוע לא תקרה לעולם, ומשימה פתוחה משבוע שעבר כבר איחרה.
+         הן יושבות מעל העבודה של השבוע כי הן מה שדורש מבט. */
+      function weekGroup(t) {
+        if (!t.week) return "לשיבוץ · אין שבוע";
+        if (t.week < week) return "שבועות שעברו";
+        if (t.week === week) return "השבוע";
+        if (t.week === shiftKey(week, 1)) return "שבוע הבא";
+        return "בהמשך";
+      }
+      var WEEK_ORDER = ["לשיבוץ · אין שבוע", "שבועות שעברו", "השבוע",
+                        "שבוע הבא", "בהמשך"];
 
       function draw(skeleton) {
         /* מצויר לפני הכול, גם לפני מצב התיבה: כשהטעינה נכשלה אין שום נתון
@@ -338,18 +328,19 @@
           return;
         }
         var c = counts();
-        var total = c.total;
+
         /* ההתקדמות נמדדת ב**סגורות**, לא ב"סומן כבוצע": סימון הוא הצהרה של
            הצוות, ורק האישור סוגר. עד 8.9 הפס מדד את ההצהרות, כלומר קפץ
            קדימה ברגע שהגנן סימן — וחזר אחורה ברגע שהמנהל אישר. */
-        var pct = total ? Math.round((c.closed / total) * 100) : 0;
+        var pct = c.weekTotal ? Math.round((c.weekDone / c.weekTotal) * 100) : 0;
         var s = sortDef(sortBy);
+        var grp = s.group === "byWeek" ? weekGroup : s.group;
         var list = visible().slice();
 
         list.sort(function (a, b) {
           if (sortBy === "urgent") return urgency(b) - urgency(a);
           if (sortBy === "date") return String(a.due || a.week).localeCompare(String(b.due || b.week));
-          var ga = s.group ? s.group(a) : "", gb = s.group ? s.group(b) : "";
+          var ga = grp ? grp(a) : "", gb = grp ? grp(b) : "";
           if (ga !== gb) return groupRank(ga) - groupRank(gb) || ga.localeCompare(gb, "he");
           return urgency(b) - urgency(a);
         });
@@ -360,21 +351,20 @@
             '<div class="skeleton" style="height:86px;border-radius:16px"></div>'.repeat(3) + '</div>';
         } else if (!list.length) {
           body = CBA.ui.emptyState(
-            filter === "unplanned"
-              ? { title: "הכול משובץ", sub: "כל דיווח שהגיע כבר קיבל שבוע." }
-              : {
-                  title: total ? "אין כאן משימות" : "אין משימות בשבוע הזה",
-                  sub: total ? "נסה מסנן אחר."
-                    : (isManager && unplanned.length
-                        ? unplanned.length + " משימות ממתינות לשיבוץ — ר' הלשונית \"לשיבוץ\"."
-                        : "כשמנהל הגינון ישבץ משימות לשבוע — הן יופיעו כאן.")
-                });
-        } else if (filter === "done" && isManager) {
-          body = approvalBody(list);
-        } else if (s.group) {
+            filter === "mine"
+              ? { title: "אין מה לטפל",
+                  sub: isManager
+                    ? "כשהצוות יסמן משימה כבוצעה, או כשתושב יגיב על טיפול — זה יופיע כאן."
+                    : "כשתושב ידווח על משהו חדש — זה יופיע כאן." }
+              : filter === "closed"
+                ? { title: "עוד לא נסגרה אף משימה",
+                    sub: "משימה שאושרה או נסגרה בסיבה תופיע כאן, גם אם לא הייתה משובצת לשבוע." }
+                : { title: "אין משימות פתוחות",
+                    sub: "הכול סגור. תוכנית העבודה תייצר משימות חדשות בתחילת השבוע." });
+        } else if (grp) {
           var groups = [], seen = {};
           list.forEach(function (t) {
-            var g = s.group(t);
+            var g = grp(t);
             if (!seen[g]) { seen[g] = []; groups.push(g); }
             seen[g].push(t);
           });
@@ -396,63 +386,28 @@
         /* אין כותרת מסך (2026-09-08). הסמליל והכותרת "משימות השבוע" החזיקו
            68px קבועים ולא אמרו דבר שהניווט לא אומר — המשתמש הגיע לכאן מלשונית
            ששמה כתוב עליה. "משימה חדשה" עבר לשורת הבקרה כלחצן ראשי. */
-        /* ================= לטיפולך ================= */
-        if (inbox) {
-          /* ⚠️ שני המקטעים **אינם** לאותו אדם (החלטת יועד 8.9):
-             שיבוץ תקלת תושב עבר לגנן — הוא בשטח והוא יודע מתי הוא מגיע לשם,
-             אם שתי פניות הן אותה ממטרה, ואם משהו כבר מתוזמן.
-             אישור עבודה נשאר של המנהל, והוא רואה את הדיווחים כמטלות פתוחות
-             במעקב — לא כתור שמחכה להחלטה שלו. לכן כל תפקיד רואה מקטע אחד,
-             והמסך מגיע לאפס אצל שניהם. */
-          var newOnes = isManager ? [] : unplanned.slice();
-          var toOk = isManager ? pending.slice() : [];
-          root.innerHTML = (!newOnes.length && !toOk.length)
-            ? '<div class="gd-reps"><div class="gd-rep gi-zero"><u>' + ico("check") + '</u>' +
-              '<b>אין מה לטפל</b><span>כשתושב ידווח, או כשהצוות יסמן משימה כבוצעה — ' +
-              'זה יופיע כאן.</span></div></div>'
-            : (newOnes.length
-                ? '<div class="gt-grp">דיווחים חדשים <em>· ' + newOnes.length + '</em><hr></div>' +
-                  '<p class="gi-hint">תושב מחכה לתשובה, וזה עדיין לא עבודה.</p>' +
-                  '<div class="gd-reps">' + newOnes.map(inCard).join("") + '</div>'
-                : '') +
-              (toOk.length
-                ? '<div class="gt-grp">בוצע — ממתין לאישורך <em>· ' + toOk.length + '</em><hr></div>' +
-                  '<p class="gi-hint">אין כאן מי שמחכה, ולכן זה לא נספר בתג. אישור סוגר, ' +
-                  'ואם המשימה הגיעה מתושב — נשלח אליו עדכון.</p>' + approvalBody(toOk)
-                : '');
-          wire();
-          return;
-        }
-
+        /* ⚠️ מצב "לטיפולך" הוסר (9.9). הוא היה מסך שני שהראה לכל תפקיד חצי
+           אחר מאותה שאלה, ואף אחד מהם לא ראה את החצי השני. מה שהיה בו נמצא
+           עכשיו במסנן "מחכה לך" של המסך הזה — ר' isMine. */
         root.innerHTML =
-          '<div class="gt-week">' +
-            '<button type="button" data-wk="-1" aria-label="שבוע קודם">' + ico("prev") + '</button>' +
+          /* ⚠️ בלי חיצי שבוע (9.9). המסך כבר לא ממוסגר בשבוע אחד — הוא מחזיק
+             את כל המשימות, והשבוע הוא קיבוץ בתוך הרשימה. הכותרת נשארה כדי
+             לענות על "איך אנחנו עומדים השבוע", וזה כל מה שהיא אומרת. */
+          '<div class="gt-week is-static">' +
             '<div class="gt-week__c"><b>' + esc(weekLabel(week)) + '</b>' +
-              '<span>' + (total ? c.closed + " מתוך " + total + " הושלמו" : "אין משימות") + '</span>' +
+              '<span>' + (c.weekTotal
+                ? c.weekDone + " מתוך " + c.weekTotal + " הושלמו השבוע"
+                : "אין משימות משובצות לשבוע הזה") + '</span>' +
               '<div class="gt-bar"><i style="width:' + pct + '%"></i></div></div>' +
-            '<button type="button" data-wk="1" aria-label="שבוע הבא">' + ico("next") + '</button>' +
           '</div>' +
-          /* שורת בקרה אחת (2026-09-08). לפניה היו כאן שלוש שורות: ארבעה
-             אריחים צבעוניים, רצועת מסננים, ורצועת "סידור לפי". האריחים
-             ורצועת המסננים החזיקו את אותם מספרים בדיוק, אז נשאר אחד; הסידור
-             נכנס לגיליון מאחורי סמליל המסנן, כי הוא בחירה שנעשית פעם בהרבה
-             זמן ולא פעולה שחוזרת. המספר היחיד שאיבד מקום קבוע הוא "דורש
-             בדיקה חוזרת" — הוא מופיע כמסנן רק כשיש כזה, כי מסנן שתמיד מציג
-             אפס הוא רעש. */
           '<div class="gt-ctl">' +
             '<div class="gt-ctl__f">' +
-              /* "לבדיקה" ראשון ולא אחרון, כשהוא קיים. הרצועה נגללת אופקית,
-                 ובמסך 390px עם חמישה מסננים המסנן החמישי יושב מחוץ לשדה
-                 הראייה — ומדובר במסנן היחיד שמצביע על משהו שהשתבש. הוא מופיע
-                 רק כשיש מה לבדוק, ולכן אין כאן מיקום קבוע שנשבר. */
-              (isManager && c.recheck ? seg("recheck", "לבדיקה", c.recheck) : "") +
-              seg("open", "לביצוע", c.open) +
-              seg("done", isManager ? "לאישורך" : "בוצעו", c.done) +
-              seg("dragged", "נגררו", c.dragged) +
-              (isManager && unplanned.length ? seg("unplanned", "לשיבוץ", unplanned.length) : "") +
-              /* אחרון בכוונה: הוא ארכיון, לא תור עבודה. מופיע רק כשיש מה
-                 להראות, כדי שבשבוע שטרם התחיל הוא לא יציע אפס. */
-              (c.closed ? seg("closed", "בוצעו", c.closed) : "") +
+              /* "מחכה לך" ראשון תמיד, וגם כשהוא ריק: הוא המקום שהמשתמש אמור
+                 לפתוח בו את הבוקר, ומסנן שנעלם כשהוא מתרוקן מלמד לא להסתכל
+                 עליו. אפס כאן הוא תשובה טובה, לא רעש. */
+              seg("mine", "מחכה לך", c.mine) +
+              seg("open", "פתוחות", c.open) +
+              seg("closed", "סגורות", c.closed) +
             '</div>' +
             (isManager
               ? '<button type="button" class="gt-tool is-primary" id="gt-new" ' +
@@ -547,6 +502,11 @@
 
       /* מיקום קבוצה בסדר שהוגדר בהגדרות. לא נמצא -> לסוף הרשימה. */
       function groupRank(name) {
+        /* קיבוץ לפי שבוע הוא סדר קבוע ומשמעותי, לא סדר הגדרה בגיליון. */
+        if (sortBy === "week") {
+          var w = WEEK_ORDER.indexOf(name);
+          return w === -1 ? 9999 : w;
+        }
         var list = order[sortBy] || [];
         var i = list.indexOf(name);
         return i === -1 ? 9999 : i;
@@ -610,12 +570,11 @@
         var where = t.area || "";
         /* בתצוגת "לשיבוץ" תיבת הסימון מוחלפת בכפתור שיבוץ: אי אפשר לסמן
            כבוצעה משימה שעוד לא נכנסה לשום שבוע, והפעולה הנכונה שם היא אחת. */
-        /* ⚠️ במצב "לטיפולך" הערך ההתחלתי של filter הוא "unplanned", אבל
-           card() משמש שם **רק** לתור האישורים (הדיווחים החדשים מצוירים
-           ב-inCard). בלי החרגת inbox כל כרטיס בתור האישורים היה מקבל כפתור
-           שיבוץ במקום תיבת אישור — כלומר הפעולה הראשית של המסך פשוט לא
-           הייתה שם. */
-        var planning = !inbox && filter === "unplanned";
+        /* ⚠️ הפעולה הראשית נגזרת מ**מצב המשימה**, לא מהמסנן שנבחר (9.9).
+           קודם היא נגזרה מהמסנן, ולכן אותה משימה קיבלה כפתור אחר בכל רשימה
+           שהיא הופיעה בה. משימה בלי שבוע אי אפשר לסמן כבוצעה — הפעולה
+           הנכונה עליה היא אחת: שיבוץ. */
+        var planning = !t.closure && !t.week;
         /* בתצוגת "בוצעו" התיבה משנה משמעות לפי מי מסתכל: לצוות היא ביטול
            הסימון שלו, ולמנהל היא **האישור** — הפעולה שבאמת סוגרת. שאר
            ההחלטות של המנהל (החזרה, סגירה עם סיבה) יושבות בתפריט ה-⋯. */
@@ -744,8 +703,9 @@
       }
 
       function byId(id) {
-        var all = rows.concat(unplanned);
-        for (var i = 0; i < all.length; i++) if (String(all[i].id) === String(id)) return all[i];
+        for (var i = 0; i < rowsAll.length; i++) {
+          if (String(rowsAll[i].id) === String(id)) return rowsAll[i];
+        }
         return null;
       }
 
@@ -1141,8 +1101,7 @@
             close();
             CBA.ui.toast("נפתחה משימה #" + res.id);
             // קופצים לרשימה שבה היא באמת נחתה, אחרת היא "נעלמת" מול העיניים
-            filter = wk ? "open" : "unplanned";
-            if (wk) week = wk;
+            filter = "open";
             load();
           });
         });
