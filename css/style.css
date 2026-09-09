@@ -272,6 +272,17 @@ body.is-gated { overflow: hidden; }
    רק מסגרת יישור; התג עצמו קובע את הרוחב/מראה שלו (max-width transition). */
 .save-indicator-slot { display: flex; align-items: center; }
 .year-switch__label { font-size: 12px; color: var(--text-soft); }
+/* סימון "אתה צופה בשנה שאינה שנת העבודה" + הפעולה שמשנה אותה.
+   מוצגים רק כשהשתיים נבדלות — ר' renderYearSwitch ב-app.js. */
+.year-switch__note { font-size: 12px; color: var(--text-soft); margin-inline-start: 10px; white-space: nowrap; }
+.year-switch__note b { color: var(--text); font-weight: 700; }
+.year-switch__set {
+  margin-inline-start: 8px; font-family: inherit; font-size: 12px; font-weight: 600;
+  padding: 4px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  transition: border-color var(--t), color var(--t);
+}
+.year-switch__set:hover { border-color: var(--text-muted); }
 .year-switch__select {
   border: 1px solid var(--border); background: var(--surface); font-family: inherit;
   font-size: 11px; font-weight: 700; color: var(--text); padding: 3px 8px; border-radius: 7px; cursor: pointer;

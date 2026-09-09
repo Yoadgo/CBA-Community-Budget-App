@@ -1004,9 +1004,34 @@ CBA.data = (function () {
   // --- ניהול שנים (רב־שנתי) ---
   function getYears() { return (CBA.mock.yearList || []).slice(); }
   function getCurrentYear() { return CBA.mock.currentYear; }
-  function setCurrentYear(y) {
-    if (CBA.mock.years[y]) CBA.mock.currentYear = y;
+  /* ⚠️ עד 2026-09-09 הפונקציה הזאת שינתה **רק** משתנה בזיכרון הדפדפן, ואף
+     שורה במערכת לא כתבה אי פעם להגדרה 'שנה נוכחית' בגיליון. התוצאה: בורר
+     השנה שינה מה שהמשתמש רואה, האפליקציה המשיכה להיפתח על השנה הישנה, וכל
+     הוצאה חדשה נכתבה אליה — כך כל הוצאות ספטמבר 2026 נרשמו לתשפ"ו.
+     persist=true שומר את הבחירה בשרת לכל המשתמשים (מוגן PERM_BUDGET שם).
+     בלי persist ההתנהגות נשארת מקומית בדיוק כמו קודם — למי שאין לו הרשאת
+     תקציב, ולמסלול השחזור מ-localStorage בעליית האפליקציה. */
+  function setCurrentYear(y, persist) {
+    if (!CBA.mock.years[y]) return CBA.mock.currentYear;
+    CBA.mock.currentYear = y;
+    if (persist && pushConnected()) {
+      CBA.sheets.push("setCurrentYear", { year: y });
+      // עדכון אופטימי של ההגדרה המקומית, כדי שהסימון "שנת העבודה" יתעדכן
+      // מיד ולא רק אחרי המשיכה הבאה מהשרת
+      CBA.mock._settings = Object.assign({}, CBA.mock._settings, { "שנה נוכחית": y });
+    }
     return CBA.mock.currentYear;
+  }
+
+  /* ⚠️ שתי שנים שונות, ואסור לבלבל ביניהן:
+     • getCurrentYear()  — השנה ש**מוצגת** כרגע. אישית, זמנית, לא נשמרת בשרת.
+     • getWorkingYear()  — שנת התקציב ש**עובדים עליה**, מההגדרה 'שנה נוכחית'
+       בגיליון. גלובלית לכל המשתמשים, וזו שהאפליקציה נפתחת עליה.
+     ההפרדה נוספה 9.9.26 אחרי שיועד הצביע על כך שגרסה קודמת ערבבה ביניהן,
+     והפכה כל הצצה לשנה קודמת לשינוי גלובלי. */
+  function getWorkingYear() {
+    const w = String((CBA.mock._settings || {})["שנה נוכחית"] || "").trim();
+    return w || getCurrentYear();
   }
   // יצירת שנה חדשה — משוכפלת מבנית משנה קיימת (סעיפים + מקורות הכנסה), תנועות ריקות, מצב טיוטה
   function addYear(newYear, fromYear) {
@@ -1525,6 +1550,7 @@ CBA.data = (function () {
     getYears: getYears,
     getCurrentYear: getCurrentYear,
     setCurrentYear: setCurrentYear,
+    getWorkingYear: getWorkingYear,
     addYear: addYear,
     getComparisonYears: getComparisonYears,
     getYearPlan: getYearPlan,

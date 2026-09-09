@@ -1617,8 +1617,9 @@
   /* --- מתג השנה — בורר בין כל השנים + כפתור יצירת שנה --- */
   function renderYearSwitch() {
     if (!yearBox) return;
-    const years = CBA.data.getYears();
-    const cur   = CBA.data.getCurrentYear();
+    const years   = CBA.data.getYears();
+    const cur     = CBA.data.getCurrentYear();
+    const working = CBA.data.getWorkingYear ? CBA.data.getWorkingYear() : cur;
     yearBox.innerHTML =
       '<span class="year-switch__label">שנת תקציב</span>' +
       '<select class="year-switch__select" id="year-select" aria-label="בחירת שנת תקציב">' +
@@ -1626,12 +1627,46 @@
           return '<option value="' + CBA.esc(y) + '"' + (y === cur ? " selected" : "") + '>' + CBA.esc(y) + '</option>';
         }).join("") +
       '</select>' +
+      /* ⚠️ שתי שנים שונות ולא אחת (משוב יועד 9.9.26):
+         הבורר הוא **תצוגה בלבד** — אישית וזמנית, כדי שאפשר יהיה להסתכל על
+         שנים קודמות בלי לשנות כלום לאף אחד. "שנת העבודה" היא ההגדרה
+         הגלובלית שקובעת על מה האפליקציה נפתחת. הסימון והכפתור מופיעים רק
+         כשהשתיים נבדלות — כשהן זהות אין מה להציג ואין במה לבלבל. */
+      (working !== cur
+        ? '<span class="year-switch__note" title="הבורר משנה רק את מה שאתה רואה">' +
+            'צופה · שנת העבודה: <b>' + CBA.esc(working) + '</b>' +
+          '</span>' +
+          (can(PERM.BUDGET)
+            ? '<button class="year-switch__set" id="year-set" type="button">הגדר את ' +
+                CBA.esc(cur) + ' כשנת העבודה</button>'
+            : "")
+        : "") +
       '<button class="year-switch__add" id="year-add" title="צור שנה חדשה" aria-label="צור שנה חדשה">+</button>';
 
+    // הבורר = תצוגה בלבד. אישי, מיידי, בלי דיאלוג ובלי לגעת בשרת.
     yearBox.querySelector("#year-select").addEventListener("change", function () {
       CBA.data.setCurrentYear(this.value);
+      renderYearSwitch();
       showScreen(currentScreen);
     });
+
+    /* קביעת שנת העבודה — פעולה נפרדת ומפורשת, כי היא משנה את מה שכל
+       המשתמשים רואים ואת השנה שהאפליקציה נפתחת עליה. */
+    const setBtn = yearBox.querySelector("#year-set");
+    if (setBtn) setBtn.addEventListener("click", function () {
+      const y = CBA.data.getCurrentYear();
+      CBA.ui.confirm(
+        'שנת העבודה תשתנה ל' + y + ' לכל המשתמשים, והאפליקציה תיפתח עליה. ' +
+        'אפשר לשנות חזרה בכל רגע.',
+        { title: "קביעת שנת העבודה", okText: "קבע את " + y }
+      ).then(function (ok) {
+        if (!ok) return;
+        CBA.data.setCurrentYear(y, true);
+        renderYearSwitch();
+        CBA.ui.toast('שנת העבודה היא עכשיו ' + y);
+      });
+    });
+
     yearBox.querySelector("#year-add").addEventListener("click", function () {
       // (2026-08-19, ממצא 2.6) היה window.prompt — פעולה משמעותית (יצירת שנת
       // תקציב שלמה, משוכפלת מהשנה הנוכחית) דרך חלון אפור של הדפדפן בלי שום
@@ -1647,7 +1682,9 @@
         if (!y) { CBA.ui.alert("צריך להזין שם לשנה החדשה."); return; }
         if (CBA.data.getYears().indexOf(y) !== -1) { CBA.ui.alert('כבר קיימת שנה בשם "' + y + '".'); return; }
         CBA.data.addYear(y, from);
-        CBA.data.setCurrentYear(y);
+        // persist: שנה שנוצרה ומיד הוגדרה כנוכחית — אחרת היא הייתה "נשכחת"
+        // בטעינה הבאה בדיוק כמו הבאג שתוקן בבורר למעלה
+        CBA.data.setCurrentYear(y, true);
         renderYearSwitch();
         showScreen(currentScreen);
         CBA.ui.toast('נוצרה שנת תקציב ' + y);

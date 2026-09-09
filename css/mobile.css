@@ -65,6 +65,7 @@
      נמדד רק בטעינה/שינוי גודל ונשאר 56px). במקום להזיז את החיווי לתחתית
      המסך (יועד ביקש במפורש שיהיה בכותרת) — פינינו לו את הרוחב שחסר. */
   .year-switch__label { display: none; }
+  .year-switch__note { display: none; }   /* אין מקום לשורת ההסבר; הכפתור נשאר */
   .app-brand__title { white-space: nowrap; }
   .save-indicator-slot { flex: none; }
   .save-indicator { max-width: 118px; }

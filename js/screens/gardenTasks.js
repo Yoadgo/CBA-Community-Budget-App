@@ -150,6 +150,18 @@
      כבר בציור הראשון — לפני ששורות ה-var בתוך render() הספיקו לרוץ — ולכן
      קבוע שמוגדר שם היה undefined באותו רגע, ו-indexOf עליו הפיל את כל הציור:
      מסך ריק לגמרי בלי שום הודעה. אותו באג בדיוק כמו FLOW_H במסך הנתונים. */
+  /* חלון הערעור — חייב להיות זהה ל-GARDEN_DISPUTE_DAYS בשרת. משימת שגרה
+     נסגרת בסימון של הגנן, ובמשך החלון הזה המנהל עוד יכול לפתוח אותה מחדש.
+     זה מה שהחליף את האישור מראש על כל 547 משימות השנה. */
+  var DISPUTE_DAYS = 14;
+  function canDispute(t) {
+    if (!t.closure || t.closure !== "בוצע" || t.kind === GK_REPORT) return false;
+    if (!t.approvedAt) return true;
+    var ms = new Date(t.approvedAt).getTime();
+    if (isNaN(ms)) return true;
+    return (Date.now() - ms) <= DISPUTE_DAYS * 86400000;
+  }
+
   var WEEK_ORDER = ["לשיבוץ · אין שבוע", "שבועות שעברו", "השבוע",
                     "שבוע הבא", "בהמשך"];
 
@@ -547,8 +559,14 @@
               '</div>' +
               (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
             '</div>' +
-            '<button type="button" class="gt-more" data-act="hist" aria-label="היסטוריה">' +
-              ico("hist") + '</button>' +
+            /* ⚠️ כרטיס סגור אינו בהכרח נעול. משימת שגרה שהגנן סגר בעצמו
+               נשארת פתוחה לערעור למשך שבועיים, ולכן היא מקבלת את תפריט
+               הפעולות המלא ולא רק קיצור להיסטוריה. */
+            (canDispute(t)
+              ? '<button type="button" class="gt-more" data-act="menu" aria-label="עוד פעולות">' +
+                ico("dots") + '</button>'
+              : '<button type="button" class="gt-more" data-act="hist" aria-label="היסטוריה">' +
+                ico("hist") + '</button>') +
           '</article>';
         }
         var tags = "";
@@ -719,8 +737,16 @@
          דרך דיאלוג, ושם ההמתנה מובנת ממילא. הערכים זהים למה שהשרת כותב
          (ר' gardenTaskAction_): סימון מרים דגל ואינו סוגר. */
       var OPTIMISTIC = {
-        done:    function (t) { t.stage = "בטיפול"; t.flag = "ממתין לאישור"; },
-        undo:    function (t) { t.flag = ""; },
+        /* דיווח תושב ממתין לאישור; שגרה ויזום נסגרים בסימון עצמו (9.9). */
+        done:    function (t) {
+                   if (t.kind === GK_REPORT) { t.stage = "בטיפול"; t.flag = "ממתין לאישור"; return; }
+                   t.stage = "הושלם"; t.flag = ""; t.closure = "בוצע";
+                   t.approvedAt = new Date().toISOString();
+                 },
+        undo:    function (t) {
+                   t.flag = "";
+                   if (t.closure === "בוצע") { t.closure = ""; t.stage = "בטיפול"; t.approvedAt = ""; }
+                 },
         approve: function (t) { t.stage = "הושלם"; t.flag = ""; t.closure = "בוצע";
                                 t.approvedAt = new Date().toISOString(); }
       };
@@ -910,13 +936,18 @@
           '<div class="gt-lg">תיבת הסימון</div>' +
           '<div class="gt-lgi"><u><span class="gt-box" style="width:22px;height:22px;margin:0"></span></u>' +
             '<div><b>ריקה</b><span>' +
-            esc(isManager ? "סימון ביצוע. לא סוגר את המשימה — מרים אותה לאישורך."
-                          : "לחיצה מסמנת שביצעת. המשימה עוברת לאישור הוועד ולא נסגרת מיד.") +
+            esc(isManager
+              ? "סימון ביצוע. במשימת שגרה הוא סוגר; בדיווח של תושב הוא מרים אותה לאישורך."
+              : "לחיצה מסמנת שביצעת. משימת שגרה נסגרת מיד; דיווח של תושב עובר לאישור הוועד.") +
             '</span></div></div>' +
           (isManager
             ? '<div class="gt-lgi"><u><span class="gt-box is-approve" style="width:22px;height:22px;margin:0">' +
               ico("check") + '</span></u><div><b>ירוקה</b>' +
-              '<span>אישור. הלחיצה סוגרת את המשימה, ואם היא הגיעה מתושב — נשלח אליו עדכון.</span></div></div>'
+              '<span>אישור, ורק בדיווח של תושב. הלחיצה סוגרת ושולחת לו עדכון.</span></div></div>' +
+              '<div class="gt-lgi"><u><span class="gt-cbox" style="width:22px;height:22px;margin:0">' +
+              ico("check") + '</span></u><div><b>אפורה</b>' +
+              '<span>נסגרה. משימת שגרה נשארת פתוחה לערעור שבועיים — «לא בוצע כמו שצריך» ' +
+              'בתפריט פותחת אותה מחדש.</span></div></div>'
             : '') +
           /* כפתור סגירה מפורש. שאר הגיליונות נסגרים בלחיצה על הרקע, אבל
              המקרא גבוה ~700px ובטלפון הוא כמעט ממלא את המסך — הרקע שנשאר
@@ -1129,19 +1160,30 @@
                 '<div>הצגה על המפה<span>הנקודה שסומנה בדיווח</span></div></button>' : '') +
             '<button type="button" class="gt-opt" data-m="hist"><u>' + ico("hist") + '</u>' +
               '<div>היסטוריה<span>כל מה שקרה למשימה, לפי הסדר</span></div></button>' +
-            '<button type="button" class="gt-opt" data-m="note"><u>' + ico("note") + '</u>' +
-              '<div>הערת ביצוע<span>מה נעשה בפועל — נשמר ביומן</span></div></button>' +
-            '<button type="button" class="gt-opt" data-m="defer"><u>' + ico("cal") + '</u>' +
-              '<div>דחייה לשבוע הבא<span>תסומן "נגררה" ותעלה בראש הרשימה</span></div></button>' +
-            (isManager
-              ? ''
-              : '<button type="button" class="gt-opt" data-m="block"><u>' + ico("clock") + '</u>' +
-                '<div>לא ניתן לביצוע<span>עובר למנהל הגינון עם הסיבה</span></div></button>') +
+            /* ⚠️ על משימה סגורה השרת דוחה כל פעולה חוץ מערעור, "טופל" ומחיקה
+               (ר' המשמר ב-gardenTaskAction_). כפתור שמחזיר "המשימה כבר נסגרה"
+               הוא כפתור מת, ולכן שלוש הפעולות האלה פשוט לא מוצגות שם. */
+            (t.closure ? '' :
+              '<button type="button" class="gt-opt" data-m="note"><u>' + ico("note") + '</u>' +
+                '<div>הערת ביצוע<span>מה נעשה בפועל — נשמר ביומן</span></div></button>' +
+              '<button type="button" class="gt-opt" data-m="defer"><u>' + ico("cal") + '</u>' +
+                '<div>דחייה לשבוע הבא<span>תסומן "נגררה" ותעלה בראש הרשימה</span></div></button>' +
+              (isManager ? ''
+                : '<button type="button" class="gt-opt" data-m="block"><u>' + ico("clock") + '</u>' +
+                  '<div>לא ניתן לביצוע<span>עובר למנהל הגינון עם הסיבה</span></div></button>')) +
             /* פעולות המנהל. "החזרה להשלמה" מוצעת רק כשיש מה להחזיר — כלומר
                כשהצוות כבר סימן ביצוע וזה ממתין לאישור. */
-            (isManager && t.flag === "ממתין לאישור"
+            (isManager && (t.flag === "ממתין לאישור" || canDispute(t))
               ? '<button type="button" class="gt-opt" data-m="return"><u>' + ico("undo") + '</u>' +
-                '<div>החזרה להשלמה<span>חוזרת לצוות עם מה שחסר</span></div></button>'
+                '<div>' + (t.closure ? "לא בוצע כמו שצריך" : "החזרה להשלמה") +
+                '<span>' + (t.closure
+                  ? "פותחת מחדש וחוזרת לצוות עם מה שחסר"
+                  : "חוזרת לצוות עם מה שחסר") + '</span></div></button>'
+              : '') +
+            /* "סימנתי בטעות" — למי שסימן, בתוך אותו חלון. */
+            (canDispute(t)
+              ? '<button type="button" class="gt-opt" data-m="undo"><u>' + ico("undo") + '</u>' +
+                '<div>ביטול סימון<span>המשימה חוזרת להיות פתוחה</span></div></button>'
               : '') +
             (isManager && !t.closure
               ? '<button type="button" class="gt-opt" data-m="close"><u>' + ico("check") + '</u>' +
@@ -1186,6 +1228,7 @@
             }).then(function (txt) { if (txt !== null) run("note", t.id, { note: txt }); });
           }
           if (m === "clearflag") return run("clearflag", t.id, {});
+          if (m === "undo") return run("undo", t.id, {});
           if (m === "del") {
             CBA.ui.prompt(
               "המשימה תרד מהגיליון ומהנתונים, יחד עם הדיווח והתמונות שלה. " +
@@ -1213,8 +1256,10 @@
             });
           }
           if (m === "return") {
-            CBA.ui.prompt("המשימה תחזור לצוות עם הדגל \"הוחזר להשלמה\".", {
-              title: "מה חסר?",
+            CBA.ui.prompt(t.closure
+              ? "המשימה תיפתח מחדש ותחזור לצוות עם מה שחסר. הסגירה שלה תבוטל."
+              : "המשימה תחזור לצוות עם הדגל \"הוחזר להשלמה\".", {
+              title: t.closure ? "מה לא בוצע?" : "מה חסר?",
               placeholder: "למשל: הגיזום נעשה אבל הגזם לא פונה",
               okText: "החזרה לצוות"
             }).then(function (txt) { if (txt) run("return", t.id, { note: txt }); });

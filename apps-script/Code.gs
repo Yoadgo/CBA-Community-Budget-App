@@ -86,6 +86,7 @@ var ACTION_PERMS = {
   saveTransaction: PERM_BUDGET, deleteTransaction: PERM_BUDGET, saveBudget: PERM_BUDGET,
   setBudgetMeta: PERM_BUDGET, renameCategory: PERM_BUDGET, logBudgetUpdate: PERM_BUDGET,
   addYear: PERM_BUDGET, saveColumnValues: PERM_BUDGET, ensureColumns: PERM_BUDGET,
+  setCurrentYear: PERM_BUDGET,
   saveColumnConfig: PERM_BUDGET, deleteReceiptFile: PERM_BUDGET,
   // פנקס הערות (סעיף 1) — נגיש רק מלשונית "הערות" במסך "בניית תקציב", לכן
   // אותה הרשאה כמו שאר פעולות התקציב
@@ -750,6 +751,7 @@ function doPostDispatch_(ss, body) {
       case 'logBudgetUpdate':   return json_(logBudgetUpdate_(ss, body));
       case 'saveNotes':         return json_(saveNotes_(ss, body));
       case 'addYear':           return json_(addYear_(ss, body));
+      case 'setCurrentYear':    return json_(setCurrentYear_(ss, body));
       case 'submitReceipt':     return json_(submitReceipt_(ss, body));
       case 'saveResidentNames': return json_(saveResidentNames_(ss, body));
       case 'formatResidents':   return json_(formatResidents_(ss, body));
@@ -2284,6 +2286,31 @@ function writeMixedIncomeCol_(sh, firstRow, ordered, col, forType, valFn) {
 }
 
 /** יצירת שנה חדשה: משכפל את 3 הטאבים במבנה הזהה, מנקה תנועות, ומעדכן נוסחאות. */
+/* ============ קביעת שנת התקציב הפעילה (2026-09-09) ============
+ * ⚠️ עד היום ההגדרה 'שנה נוכחית' **נקראה בשישה מקומות ולא נכתבה באף אחד**.
+ * בורר השנה בראש האפליקציה שינה רק משתנה בזיכרון הדפדפן, ולכן האפליקציה
+ * המשיכה להיפתח על השנה הישנה וכל הוצאה חדשה נכתבה אליה — כך כל הוצאות
+ * ספטמבר 2026 נרשמו לתשפ"ו. זו הכתיבה היחידה להגדרה הזאת במערכת.
+ *
+ * ההחלפה נשארת **ידנית ומאושרת אנושית** בכוונה (הכרעת יועד 9.9.26): מעבר
+ * שנה משנה את מה שכל המשתמשים רואים ואת היעד של כל הוצאה חדשה. הטריגר
+ * (yearRolloverJob_) רק מתריע, לעולם לא מחליף לבד. */
+function setCurrentYear_(ss, body) {
+  var year = String(body.year == null ? '' : body.year).trim();
+  if (!year) return { ok: false, error: 'לא נבחרה שנה' };
+  // ולידציה לפני כתיבה: השנה חייבת להיות שנה שקיימת בפועל, אחרת האפליקציה
+  // תיפתח על שנה שאין לה טאבים והמסכים יישארו ריקים
+  if (!ss.getSheetByName('תנועות ' + year) || !ss.getSheetByName('תקציב ' + year)) {
+    return { ok: false, error: 'אין טאבים לשנה ' + year + ' — צריך ליצור אותה קודם' };
+  }
+  var prev = String(readSettings_(ss)['שנה נוכחית'] || '').trim();
+  if (prev === year) return { ok: true, year: year, unchanged: true };
+  setSetting_(ss, 'שנה נוכחית', year);
+  setSetting_(ss, 'שנה נוכחית עודכנה', new Date());
+  bumpRev_();
+  return { ok: true, year: year, previous: prev };
+}
+
 function addYear_(ss, body) {
   var newYear = body.year, fromYear = body.fromYear;
   if (ss.getSheetByName('תקציב ' + newYear)) return { ok: false, error: 'השנה כבר קיימת' };
@@ -4109,6 +4136,15 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['ADMIN_GARDEN_WEEKLY', 'סיכום שבועי — גינון',
     'הנה סיכום שבוע העבודה של הגינון:', 'למנהלי גינון + מנהל-על, ביום RULE_GARDEN_WEEKLY_DAY. מופק תמיד, גם אם נשארו משימות שממתינות לאישור — הן מופיעות בתוכו כשורה משלהן', PERM_GARDEN, 'כן'],
 
+  ['ADMIN_YEAR_ROLLOVER', 'שנת תקציב חדשה מתחילה — צריך להחליף שנה',
+    'שלום,\n\nספטמבר התחיל, ושנת התקציב מתחלפת.\n\n' +
+    'השנה שמוגדרת כרגע באפליקציה: {{שנה נוכחית}}\n' +
+    'השנה הבאה ברשימה: {{שנה הבאה}}\n\n' +
+    'כל עוד לא מחליפים, כל הוצאה חדשה נרשמת לשנה הישנה.\n' +
+    'ההחלפה נעשית מבורר "שנת תקציב" בראש האפליקציה, ודורשת הרשאת תקציב.',
+    'למנהלי תקציב + מנהל-על, פעם אחת בכל ספטמבר, כשהשנה המוגדרת אינה האחרונה ברשימת השנים. ⚠️ ההחלפה עצמה נשארת ידנית בכוונה — מעבר שנה משנה את מה שכל המשתמשים רואים ואת היעד של כל הוצאה חדשה, ולכן הוא דורש אישור אנושי',
+    PERM_BUDGET, 'כן'],
+
   ['ADMIN_STALE_SIGNUP', 'בקשת הרשמה ממתינה כבר {{ימים}} ימים',
     'בקשת ההרשמה של {{שם}} ({{אימייל}}) ממתינה לטיפול כבר {{ימים}} ימים.', 'תזכורת חד-פעמית כשבקשה חוצה את הסף (ר\' RULE_STALE_DAYS)', PERM_RESIDENTS, 'כן'],
   ['ADMIN_STALE_REIMBURSEMENT', 'בקשת החזר ממתינה כבר {{ימים}} ימים',
@@ -4548,6 +4584,40 @@ function dailyEmailJobs_() {
   try { gymDailyJob_(ss); } catch (e) { Logger.log('gymDailyJob_ נכשל: ' + e); }
   try { weeklyDigestJob_(ss); } catch (e) { Logger.log('weeklyDigestJob_ נכשל: ' + e); }
   try { monthlyDigestJob_(ss); } catch (e) { Logger.log('monthlyDigestJob_ נכשל: ' + e); }
+  try { yearRolloverJob_(ss); } catch (e) { Logger.log('yearRolloverJob_ נכשל: ' + e); }
+}
+
+/* ============ התראת מעבר שנת תקציב (2026-09-09) ============
+ * שנת התקציב רצה ספטמבר–אוגוסט. ב-1.9 השנה מתחלפת, אבל ההגדרה 'שנה נוכחית'
+ * לא זזה לבד — ובספטמבר 2026 היא אכן לא זזה, וכל הוצאות החודש נרשמו לשנה
+ * הקודמת. זו ההתראה שמונעת את החזרה של זה.
+ *
+ * ⚠️ מתריעה בלבד ולא מחליפה (הכרעת יועד 9.9.26). ⚠️ נתלית ב-dailyEmailJobs_
+ * הקיים ולא בטריגר נפרד — טריגר נוסף היה עוד מנגנון שצריך להתקין ולזכור.
+ * אידמפוטנטית: ההגדרה 'התראת מעבר שנה' מחזיקה את השנה הלועזית שכבר טופלה,
+ * ולכן נשלחת פעם אחת בלבד לכל ספטמבר ולא הופכת לנודניק יומי. */
+var YEAR_ROLLOVER_MONTH = 9;   // ספטמבר
+
+function yearRolloverJob_(ss) {
+  var now = new Date();
+  if (now.getMonth() + 1 < YEAR_ROLLOVER_MONTH) return;   // עוד לא הגיע ספטמבר
+  var s = readSettings_(ss);
+  var stamp = String(now.getFullYear());
+  if (String(s['התראת מעבר שנה'] || '').trim() === stamp) return;   // כבר נשלח השנה
+
+  var cur = String(s['שנה נוכחית'] || '').trim();
+  var list = String(s['שנים'] || '').split(',')
+               .map(function (x) { return x.trim(); }).filter(Boolean);
+  var i = list.indexOf(cur);
+  // אם השנה המוגדרת היא כבר האחרונה ברשימה — עדיין מתריעים, כי המשמעות היא
+  // שצריך *ליצור* את השנה הבאה. ההודעה מבחינה בין שני המצבים.
+  var next = (i > -1 && i + 1 < list.length) ? list[i + 1] : '';
+
+  notifyAdmins_(ss, PERM_BUDGET, 'ADMIN_YEAR_ROLLOVER', {
+    'שנה נוכחית': cur || '(לא מוגדרת)',
+    'שנה הבאה': next || '(עוד לא נוצרה — צריך ליצור אותה בכפתור + שליד בורר השנה)'
+  });
+  setSetting_(ss, 'התראת מעבר שנה', stamp);
 }
 
 /* ============================================================================
@@ -9492,6 +9562,33 @@ function gardenNotifyCompleted_(ss, taskId) {
 
 /** סוגר משימה אחת בשורה נתונה. מרכז את כל מה שאישור/סגירה משנים, כדי
  *  שאישור בודד ואישור מרוכז לעולם לא ייפרדו בהתנהגות. */
+/* ============================================================================
+ *  אישור — רק איפה שיש מי שמחכה (2026-09-09)
+ * ----------------------------------------------------------------------------
+ *  עד היום **כל** משימה עברה דרך אישור המנהל. תוכנית העבודה מייצרת ~547
+ *  משימות בשנה, כלומר כ-550 לחיצות "אישור" על כיסוח דשא וניקיון שבילים —
+ *  ובפועל המנהל לא יוצא לבדוק את הדשא, הוא לוחץ כי הגנן אמר. זו חותמת גומי,
+ *  והיא גרועה מכלום: היא נראית כמו בקרה, מייצרת תור שרק גדל, ומעכבת.
+ *
+ *  ההבחנה הנכונה אינה לפי **תפקיד** אלא לפי **מי מחכה בצד השני**:
+ *    · דיווח תושב — אישור נשאר. יש אדם שמחכה, ובאישור יוצא אליו מייל
+ *      שאומר "נפתר"; "בוצע" שגוי שם שורף את האמון בכל המערכת.
+ *    · שגרה ויזום — הסימון **הוא** הסגירה. אין מי שמחכה, ואין מה לאשר.
+ *
+ *  ובמקום לאשר הכול מראש, המנהל מקבל את מה שהאישור נועד לו: **ערעור**.
+ *  משימה שנסגרה כך נשארת פתוחה לפתיחה מחדש למשך GARDEN_DISPUTE_DAYS — כך
+ *  עובדת בקרה על קבלן באמת: לא מאשרים כל גיזום, תופסים את החריגים.
+ * ========================================================================== */
+var GARDEN_DISPUTE_DAYS = 14;
+
+/** האם משימה שנסגרה עדיין בתוך חלון הערעור. בלי חותמת אישור אין איך למדוד,
+ *  ואז מותר — עדיף לאפשר תיקון מאשר לנעול שורה בטעות. */
+function gardenWithinDispute_(cur) {
+  var t = (cur.approvedAt instanceof Date) ? cur.approvedAt.getTime() : 0;
+  if (!t) return true;
+  return (new Date().getTime() - t) <= GARDEN_DISPUTE_DAYS * 86400000;
+}
+
 function gardenCloseRow_(ss, sh, row, c, cur, closure, who, why) {
   gardenSet_(sh, row, c, 'שלב', 'הושלם');
   gardenSet_(sh, row, c, 'דגל', '');
@@ -9759,23 +9856,48 @@ function gardenTaskAction_(ss, body) {
        (gardenFeedback_ לא בודק סגירה — וזה נכון, המשוב אמיתי). בלי דרך
        לכבות את הדגל הוא נספר בתג לנצח, הכרטיס לקריאה בלבד, וכל פעולה אחרת
        נענית "המשימה כבר נסגרה". זה היה מסלול ללא מוצא. */
-    if (cur.closure && act !== 'clearflag') {
-      return { ok: false, error: 'המשימה כבר נסגרה' };
+    /* משימה שנסגרה בסימון של הצוות (שגרה/יזום) נשארת פתוחה לפתיחה מחדש
+       בתוך חלון הערעור — זה מה שהחליף את האישור מראש. דיווח תושב לא נכנס
+       לכאן: הוא ממילא עובר אישור, וסגירתו כבר הודיעה למישהו. */
+    if (cur.closure) {
+      var reopenable = (act === 'undo' || act === 'return') &&
+                       cur.closure === 'בוצע' &&
+                       cur.kind !== GARDEN_KIND_REPORT &&
+                       gardenWithinDispute_(cur);
+      if (act !== 'clearflag' && !reopenable) {
+        return { ok: false, error: 'המשימה כבר נסגרה' };
+      }
     }
 
     if (act === 'done') {
-      /* ⚠️ הצוות מקדם עד "בטיפול" בלבד — **רק המנהל קובע "הושלם"** (עקרון
-       * מהאפיון). סימון הוא הצהרה, לא קבלה. עד 7.9 נכתב כאן 'הושלם', מה
-       * שנתן לקבלן לקבוע את השלב האחרון והציג לתושב "הושלם" לפני שהוועד
-       * ראה את העבודה. הדגל הוא מה שמסמן שהעבודה נעשתה. */
-      gardenSet_(sh, row, c, 'שלב', 'בטיפול');
-      gardenSet_(sh, row, c, 'דגל', 'ממתין לאישור');
-      gardenLog_(ss, id, 'ביצוע', 'דגל', cur.flag, 'ממתין לאישור', who, '');
+      /* ⚠️ **דיווח תושב בלבד ממתין לאישור** (9.9 — ר' הבלוק מעל
+         gardenCloseRow_). שם יש אדם שמחכה ומייל שייצא בשמו של הוועד, ולכן
+         הסימון הוא הצהרה ולא קבלה. בשגרה וביזום אין מי שמחכה: הסימון סוגר,
+         והבקרה עברה לערעור בדיעבד. */
+      if (cur.kind === GARDEN_KIND_REPORT) {
+        gardenSet_(sh, row, c, 'שלב', 'בטיפול');
+        gardenSet_(sh, row, c, 'דגל', 'ממתין לאישור');
+        gardenLog_(ss, id, 'ביצוע', 'דגל', cur.flag, 'ממתין לאישור', who, '');
+      } else {
+        gardenLog_(ss, id, 'ביצוע', 'דגל', cur.flag, 'בוצע', who, '');
+        gardenCloseRow_(ss, sh, row, c, cur, 'בוצע', who, '');
+      }
 
     } else if (act === 'undo') {
-      if (cur.flag !== 'ממתין לאישור') return { ok: false, error: 'אי אפשר לבטל אחרי אישור' };
-      gardenSet_(sh, row, c, 'דגל', '');
-      gardenLog_(ss, id, 'ביטול ביצוע', 'דגל', 'ממתין לאישור', '', who, '');
+      /* שני מקרים: ביטול סימון שממתין לאישור (דיווח תושב), וביטול סגירה
+         עצמית בתוך חלון הערעור (שגרה/יזום). השני הוא "סימנתי בטעות". */
+      if (cur.closure) {
+        gardenSet_(sh, row, c, 'סגירה', '');
+        gardenSet_(sh, row, c, 'שלב', 'בטיפול');
+        gardenSet_(sh, row, c, 'דגל', '');
+        gardenSet_(sh, row, c, 'אושר על ידי', '');
+        gardenSet_(sh, row, c, 'תאריך אישור', '');
+        gardenLog_(ss, id, 'ביטול ביצוע', 'סגירה', 'בוצע', '', who, '');
+      } else {
+        if (cur.flag !== 'ממתין לאישור') return { ok: false, error: 'אי אפשר לבטל אחרי אישור' };
+        gardenSet_(sh, row, c, 'דגל', '');
+        gardenLog_(ss, id, 'ביטול ביצוע', 'דגל', 'ממתין לאישור', '', who, '');
+      }
 
     } else if (act === 'note') {
       var note = String(body.note || '').trim().substring(0, 500);
@@ -9816,6 +9938,12 @@ function gardenTaskAction_(ss, body) {
       if (perm.isExternal) return { ok: false, error: 'הפעולה בסמכות מנהל הגינון' };
       var why = String(body.note || '').trim().substring(0, 500);
       if (!why) return { ok: false, error: 'צריך לכתוב מה חסר' };
+      /* זהו גם **הערעור**: משימה שהגנן סגר בעצמו נפתחת כאן מחדש. */
+      if (cur.closure) {
+        gardenSet_(sh, row, c, 'סגירה', '');
+        gardenSet_(sh, row, c, 'אושר על ידי', '');
+        gardenSet_(sh, row, c, 'תאריך אישור', '');
+      }
       gardenSet_(sh, row, c, 'שלב', 'בטיפול');
       gardenSet_(sh, row, c, 'דגל', 'הוחזר להשלמה');
       gardenSet_(sh, row, c, 'הערת ביצוע', why);
@@ -9876,172 +10004,3 @@ function gardenTaskAction_(ss, body) {
   } finally { lock.releaseLock(); }
 }
 
-
-/* ============================================================================
- *  תחזוקה חד-פעמית (2026-09-09) — העברת תנועות ספטמבר מתשפ"ו לתשפ"ז
- *  ============================================================================
- *  הרקע: ההגדרה 'שנה נוכחית' נשארה על תשפ"ו אחרי 1.9, ולכן כל ההוצאות של
- *  ספטמבר 2026 נכתבו לטאב "תנועות תשפ"ו". שנת התקציב רצה ספטמבר–אוגוסט,
- *  ולכן הן שייכות לתשפ"ז.
- *
- *  ⚠️ אינה חשופה ל-doGet/doPost בכוונה — מריצים אותה ידנית מעורך ה-Apps
- *  Script בלבד. אין לה שום משטח תקיפה.
- *
- *  הקריטריון הוא **'חודש הגשה'** ולא 'תאריך רכישה' (הכרעת יועד 9.9.26):
- *  חודש ההגשה הוא מה שדיווח התקציב בנוי עליו. שני המקרים שהובילו להכרעה:
- *    · #47  — חודש 01/2026 אבל תאריך 30/12/2026. קריטריון לפי תאריך היה
- *             מעביר אותו בטעות; זו שגיאת הקלדה והפונקציה מתקנת אותה ל-2025.
- *    · #149 — חודש 09/2026 אבל נרכשה ב-20.07. יועד הכריע שהיא **נשארת**
- *             בתשפ"ו, ולכן היא איננה ברשימה למטה.
- *
- *  סדר הרצה:
- *    1. לגבות את הגיליון (קובץ ← יצירת עותק).
- *    2. migrateSept2026DryRun()  — רק מדווח, לא נוגע בכלום.
- *    3. migrateSept2026Run()     — מבצע בפועל.
- * ========================================================================== */
-
-/** הגדרת ההעברה. ⚠️ הבחירה היא **לפי כלל** ולא לפי רשימת מזהים.
- *  הגרסה הראשונה נעלה רשימה מפורשת (147,148,150..154) — ותוך שעה היא כבר
- *  הייתה מיושנת, כי יועד תיקן את חודש ההגשה של שכר הגנן (#154) מספטמבר
- *  ליולי. רשימה קשיחה מתיישנת בכל עריכה בגיליון; כלל לא.
- *
- *  הכלל (יועד, 9.9.26): **"מה שבסוף קובע זה חודש ההגשה — אם משהו הוגש
- *  בחודש ספטמבר הוא כבר על השנה הבאה."**  ולא תאריך הרכישה. */
-var MIG_SEPT2026 = {
-  from:   'תנועות תשפ"ו',
-  to:     'תנועות תשפ"ז',
-  cutoff: '2026-09',        // כל 'חודש הגשה' >= זה עובר
-  /* חתימת בקרה — נמדד חי 9.9.26 *אחרי* התיקונים של יועד. אם הגיליון השתנה
-     מאז, הפונקציה עוצרת ולא נוגעת בכלום; להריץ יבש שוב ולעדכן רק את שני
-     המספרים האלה. זה מה שמונע העברה על סמך תמונת מצב ישנה. */
-  expect: { count: 7, total: 2681 },
-  /* תיקון שגיאת הקלדה בתנועה שנשארת בתשפ"ו: 30/12/2026 ← 30/12/2025.
-     אינה קשורה לכלל — חודש ההגשה שלה הוא 01/2026 והיא נשארת. */
-  dateFix: { id: 47, fromYear: 2026, toYear: 2025 }
-};
-
-function migrateSept2026DryRun() { return migrateSept2026_(true); }
-function migrateSept2026Run()    { return migrateSept2026_(false); }
-
-function migrateSept2026_(dryRun) {
-  // הדפוס בכל שאר הקוד — הסקריפט מקושר לגיליון עצמו. ⚠️ SHEET_ID אינו קיים
-  // כאן, והשימוש בו היה נופל ב-ReferenceError בזמן ריצה ולא בבדיקת תחביר.
-  var ss  = SpreadsheetApp.getActiveSpreadsheet();
-  var src = ss.getSheetByName(MIG_SEPT2026.from);
-  var dst = ss.getSheetByName(MIG_SEPT2026.to);
-  var log = [];
-  var NL = String.fromCharCode(10);
-  function say(t) { log.push(t); Logger.log(t); }
-
-  say(dryRun ? '=== מצב יבש — לא ייכתב כלום ===' : '=== ביצוע בפועל ===');
-  if (!src) { say('✗ אין טאב ' + MIG_SEPT2026.from); return log.join('\n'); }
-  if (!dst) { say('✗ אין טאב ' + MIG_SEPT2026.to);   return log.join('\n'); }
-
-  var sv = src.getDataRange().getValues();
-  var dv = dst.getDataRange().getValues();
-  var sh = sv[0].map(function (h) { return String(h).trim(); });
-  var dh = dv[0].map(function (h) { return String(h).trim(); });
-  var sIdx = sh.indexOf('מזהה'), sAmt = sh.indexOf('סכום'), sDate = sh.indexOf('תאריך רכישה');
-  var sMon = sh.indexOf('חודש הגשה');
-  if (sIdx < 0 || sAmt < 0) { say('✗ חסרות עמודות מזהה/סכום במקור'); return log.join('\n'); }
-
-  /* ⚠️ המיפוי הוא **לפי שם עמודה** ולא לפי מיקום: לשני הטאבים אין ערובה
-     שסדר העמודות זהה, והעתקה לפי אינדקס הייתה מזיזה סכומים לעמודה אחרת. */
-  var missing = [];
-  sh.forEach(function (h) { if (h && dh.indexOf(h) === -1) missing.push(h); });
-  if (missing.length) say('⚠ עמודות שקיימות במקור ואין ביעד (יאבדו): ' + missing.join(', '));
-
-  if (sMon < 0) { say('✗ אין עמודת "חודש הגשה" במקור — זהו הכלל היחיד לבחירה'); return log.join(NL); }
-
-  /* 'חודש הגשה' עשוי להיות תא תאריך או מחרוזת — מנרמלים את שניהם ל-YYYY-MM,
-     אחרת ההשוואה הייתה שקטה ושגויה. */
-  function monKey(v) {
-    if (v && typeof v.getFullYear === 'function') {
-      var mm = v.getMonth() + 1;
-      return v.getFullYear() + '-' + (mm < 10 ? '0' + mm : mm);
-    }
-    return String(v || '').trim().slice(0, 7);
-  }
-  var picked = [];
-  for (var r = 1; r < sv.length; r++) {
-    if (String(sv[r][sIdx]).trim() === '') continue;
-    if (monKey(sv[r][sMon]) >= MIG_SEPT2026.cutoff) picked.push(r);
-  }
-  var total = picked.reduce(function (a, r) { return a + (Number(sv[r][sAmt]) || 0); }, 0);
-  total = Math.round(total * 100) / 100;
-
-  say('נבחרו לפי הכלל "חודש הגשה >= ' + MIG_SEPT2026.cutoff + '":');
-  picked.forEach(function (r) {
-    say('   #' + sv[r][sIdx] + ' | חודש ' + monKey(sv[r][sMon]) + ' | ' +
-        (Number(sv[r][sAmt]) || 0) + ' ₪ | ' + sv[r][sh.indexOf('ספק/נמען')] +
-        ' | ' + sv[r][sh.indexOf('סעיף')]);
-  });
-  say('סה"כ: ' + picked.length + ' תנועות, ' + total + ' ₪');
-
-  var e = MIG_SEPT2026.expect;
-  if (picked.length !== e.count || Math.abs(total - e.total) > 0.005) {
-    say('✗ עצירה — הגיליון השתנה מאז המדידה (ציפייה: ' + e.count + ' תנועות, ' + e.total + ' ₪).');
-    say('   לא בוצע כלום. להריץ יבש שוב ולעדכן את MIG_SEPT2026.expect לשני המספרים שלמעלה.');
-    return log.join(NL);
-  }
-  say('✓ תואם לחתימת הבקרה');
-
-  // תיקון התאריך של #47
-  var fix = MIG_SEPT2026.dateFix, fixRow = -1;
-  for (var r2 = 1; r2 < sv.length; r2++) {
-    if (Number(sv[r2][sIdx]) === fix.id) { fixRow = r2; break; }
-  }
-  var fixVal = (fixRow > -1 && sDate > -1) ? sv[fixRow][sDate] : null;
-  /* בדיקה לפי יכולת ולא `instanceof Date`: אובייקט Date שהגיע משירות
-     הגיליונות אינו בהכרח מאותו realm, ו-instanceof היה מחזיר false בשקט
-     ומדלג על התיקון בלי שום הודעה. */
-  var isDate = fixVal && typeof fixVal.getFullYear === 'function';
-  var fixOk = isDate && fixVal.getFullYear() === fix.fromYear;
-  if (fixRow < 0)      say('⚠ #' + fix.id + ' לא נמצא — התאריך לא יתוקן');
-  else if (!fixOk)     say('⚠ #' + fix.id + ' התאריך אינו ' + fix.fromYear + ' (' + fixVal + ') — לא יתוקן');
-  else                 say('✓ #' + fix.id + ' יתוקן: ' + fixVal + ' ← אותו יום ב-' + fix.toYear);
-
-  if (dryRun) { say('— מצב יבש, לא בוצע כלום —'); return log.join('\n'); }
-
-  var lock = LockService.getScriptLock();
-  try { lock.waitLock(30000); } catch (e) { say('✗ תפוס'); return log.join('\n'); }
-  try {
-    // 1) הוספה ליעד — קודם כותבים, ורק אם הצליח מוחקים מהמקור
-    var add = picked.map(function (pr) {
-      var srcRow = sv[pr];
-      var out = new Array(dh.length).fill('');
-      sh.forEach(function (h, c) {
-        if (!h) return;
-        var d = dh.indexOf(h);
-        if (d > -1) out[d] = srcRow[c];
-      });
-      return out;
-    });
-    dst.getRange(dst.getLastRow() + 1, 1, add.length, dh.length).setValues(add);
-    SpreadsheetApp.flush();
-    say('✓ נוספו ' + add.length + ' שורות ל-' + MIG_SEPT2026.to);
-
-    // 2) מחיקה מהמקור — מלמטה למעלה, אחרת אינדקסי השורות זזים תוך כדי
-    var rowsToDelete = picked.map(function (pr) { return pr + 1; })
-                        .sort(function (a, b) { return b - a; });
-    rowsToDelete.forEach(function (rowNum) { src.deleteRow(rowNum); });
-    say('✓ נמחקו ' + rowsToDelete.length + ' שורות מ-' + MIG_SEPT2026.from);
-
-    // 3) תיקון התאריך (אחרי המחיקות — השורה של #47 זזה, מאתרים מחדש)
-    if (fixOk) {
-      var sv2 = src.getDataRange().getValues();
-      for (var r3 = 1; r3 < sv2.length; r3++) {
-        if (Number(sv2[r3][sIdx]) !== fix.id) continue;
-        var d0 = sv2[r3][sDate];
-        if (d0 && typeof d0.getFullYear === 'function' && d0.getFullYear() === fix.fromYear) {
-          src.getRange(r3 + 1, sDate + 1).setValue(new Date(fix.toYear, d0.getMonth(), d0.getDate()));
-          say('✓ תוקן התאריך של #' + fix.id);
-        }
-        break;
-      }
-    }
-    bumpRev_();
-    say('✓ הושלם. לרענן את האפליקציה.');
-  } finally { lock.releaseLock(); }
-  return log.join('\n');
-}
