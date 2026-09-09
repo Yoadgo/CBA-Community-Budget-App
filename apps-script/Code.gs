@@ -556,17 +556,17 @@ function doGet(e) {
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
       // הלקוח החדשה מדברת עם השרת הישן; לא בשימוש יותר ע"י לקוח מעודכן.
-      groups: seesBudget ? readColumn_(ss, 'קבוצות') : [],
-      updates: seesBudget ? readTable_(ss, 'עדכוני תקציב') : [],   // יומן עדכוני תקציב (אם הטאב קיים)
+      groups: seesBudget ? cached_('cba_groups_' + budgetStamp_(), function () { return readColumn_(ss, 'קבוצות'); }) : [],
+      updates: seesBudget ? cached_('cba_updates_' + budgetStamp_(), function () { return readTable_(ss, 'עדכוני תקציב'); }) : [],
       // פנקס הערות כלליות (סעיף 1, 2026-08-09) — טאב "הערות" (שורה אחת לכל
       // שנה) + טאב "יומן הערות" (כרונולוגי, מי ערך ומתי). שני הטאבים נוצרים
       // אוטומטית ע"י saveNotes_ בשמירה הראשונה, כמו "עדכוני תקציב".
-      notes: seesBudget ? readNotesMap_(ss) : {},
-      notesLog: seesBudget ? readTable_(ss, 'יומן הערות') : [],
+      notes: seesBudget ? cached_('cba_notes_' + budgetStamp_(), function () { return readNotesMap_(ss); }) : {},
+      notesLog: seesBudget ? cached_('cba_noteslog_' + budgetStamp_(), function () { return readTable_(ss, 'יומן הערות'); }) : [],
       settings: publicSettings, data: {}
     };
     years.forEach(function (y) {
-      var tx = readTable_(ss, 'תנועות ' + y);
+      var tx = cached_('cba_tx_' + budgetStamp_() + '_' + y, function () { return readTable_(ss, 'תנועות ' + y); });
       if (!seesBudget) {
         // בלי מזהה משפחה אין למי לשייך — מחזירים ריק, לא הכול. שגיאת נתונים
         // בטאב "תושבים" לא תהפוך כאן להדלפה של כל התנועות.
@@ -576,18 +576,23 @@ function doGet(e) {
         out.data[y] = { budget: [], income: [], transactions: tx, groups: [], splits: [], items: [] };
         return;
       }
+      /* חמש הטבלאות של השנה נשמרות כערך אחד — פחות מפתחות, פחות פניות. */
+      var yd = cached_('cba_year_' + budgetStamp_() + '_' + y, function () {
+        return {
+          budget: readTable_(ss, 'תקציב ' + y),
+          income: readTable_(ss, 'הכנסות ' + y),
+          groups: readGroupsForYear_(ss, y),
+          splits: readTable_(ss, 'פיצול מימון ' + y),
+          items:  readTable_(ss, 'פירוט סעיפים ' + y)
+        };
+      });
       out.data[y] = {
-        budget: readTable_(ss, 'תקציב ' + y),
-        income: readTable_(ss, 'הכנסות ' + y),
+        budget: yd.budget,
+        income: yd.income,
         transactions: tx,
-        // קבוצות פר-שנה (סעיף 3, 2026-08-09) — ר' readGroupsForYear_
-        groups: readGroupsForYear_(ss, y),
-        // פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — שורות שטוחות
-        // מטאב "פיצול מימון <שנה>" (אם קיים); הלקוח מקבץ לפי שם סעיף בעצמו.
-        splits: readTable_(ss, 'פיצול מימון ' + y),
-        // פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10) — שורות שטוחות מטאב
-        // "פירוט סעיפים <שנה>" (אם קיים); הלקוח מקבץ לפי שם סעיף בעצמו.
-        items: readTable_(ss, 'פירוט סעיפים ' + y)
+        groups: yd.groups,
+        splits: yd.splits,
+        items:  yd.items
       };
     });
     return json_(out);
@@ -2310,6 +2315,57 @@ function bumpRev_(action) {
     }
     props.setProperty(REV_DOMAINS_KEY, JSON.stringify(map));
   } catch (err) { /* לא קריטי — במקרה הגרוע הלקוח פשוט ימשוך מלא */ }
+}
+
+/* ============================================================================
+ *  מטמון המטען הראשי (2026-09-08)
+ * ----------------------------------------------------------------------------
+ *  נמדד בלוח ההפעלות: משיכה מלאה לוקחת 2-13 שניות. הסיבה היא מספר הפניות
+ *  לגיליון — שש לכל שנה ועוד חמש כלליות, כל אחת round-trip נפרד.
+ *  כמעט תמיד הן מחזירות בדיוק את אותם נתונים.
+ *
+ *  מעכשיו התוצאה הגולמית נשמרת ב-ScriptCache, והמפתח כולל את מוני התחומים
+ *  שיכולים לשנות אותה. כתיבה תקציבית מעלה את המונה -> המפתח משתנה ->
+ *  הקריאה הבאה טרייה. בלי כתיבה, כל המשיכות מוגשות מהמטמון.
+ *
+ *  ⚠️ **המטמון יושב על הקריאה הגולמית, לא על התשובה.** הסינון לפי משתמש
+ *     (DATA_MIN) קורה *אחרי* השליפה. למטמן את התשובה המוגמרת תחת מפתח
+ *     שאינו כולל את המשפחה/התפקיד = הדלפה בין משתמשים.
+ *  ⚠️ **השער לפני המטמון, תמיד.** authorize_ רץ למעלה ב-doGet; אסור
+ *     שקריאת מטמון תעקוף אותו (זה החור שנסגר ב-23.08).
+ *  ⚠️ המפתח כולל את budget **ואת other** — פעולה שלא מופתה ב-ACTION_DOMAIN
+ *     נופלת ל-other, וכך שכחה עתידית מבטלת מטמון במקום להגיש נתון ישן.
+ *  ⚠️ TTL 90 שניות: עריכה **ידנית** בגיליון לא מעלה שום מונה, ולכן היא
+ *     צריכה להתגלות תוך זמן סביר. זה גם תואם ל-FULL_EVERY_MS בלקוח.
+ *  ⚠️ ערך מעל ~95KB לא נשמר (מגבלת CacheService) — פשוט לא ממטמנים,
+ *     במקום שה-put ייכשל בשקט ונחשוב שיש מטמון.
+ * ========================================================================== */
+var CACHE_TTL_SEC = 90;
+var CACHE_MAX_BYTES = 95000;
+
+function budgetStamp_() {
+  var d = currentDomains_();
+  return (d.budget || 0) + '.' + (d.other || 0);
+}
+
+/** מריץ את build() רק אם אין ערך במטמון תחת המפתח. */
+function cached_(key, build) {
+  var c = null;
+  try { c = CacheService.getScriptCache(); } catch (e) { c = null; }
+  if (c) {
+    try {
+      var hit = c.get(key);
+      if (hit) return JSON.parse(hit);
+    } catch (e) { /* ערך פגום — נבנה מחדש */ }
+  }
+  var val = build();
+  if (c) {
+    try {
+      var str = JSON.stringify(val);
+      if (str.length <= CACHE_MAX_BYTES) c.put(key, str, CACHE_TTL_SEC);
+    } catch (e) { /* לא קריטי */ }
+  }
+  return val;
 }
 
 /** מפת {תחום: מונה}. מאפיין אחד, קריאה אחת — ר' ההערה למעלה. */

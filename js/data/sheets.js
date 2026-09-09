@@ -688,6 +688,35 @@ CBA.sheets = (function () {
       .catch(function () { cb(false, { source: "rev-failed" }); });
   }
 
+  /* ============================================================================
+   *  רענון מיד אחרי שכתיבה הסתיימה (2026-09-08)
+   * ----------------------------------------------------------------------------
+   *  עד היום **לא היה שום רענון אחרי שמירה** — הסקר התקופתי היה הדרך היחידה
+   *  שבה האמת של השרת (מזהה שנוצר, נוסחאות ביצוע/יתרה שחושבו מחדש) חוזרת
+   *  למסך. זו הסיבה האמיתית שהסקר היה חייב להיות כל 3 שניות.
+   *
+   *  עכשיו כל כתיבה מוצלחת יורה `cba:write-settled`, ו-app.js מגיב בהרצת
+   *  מחזור הסקר הרגיל — כלומר בדיוק אותה לוגיקה, עם כל ההגנות שכבר קיימות
+   *  (isDirty, userIsEditingMain, טביעת אצבע), רק בלי לחכות לטיק הבא.
+   *  זה מה שמאפשר להוריד את קצב הסקר: הפעולות שלך מתעדכנות מיד, והסקר
+   *  נשאר רק בשביל לראות מה *אחרים* עשו.
+   *
+   *  ⚠️ מקובץ (debounce): שמירה עם debounce של 700ms שולחת כמה כתיבות
+   *     ברצף — בלי הקיבוץ היינו מקבלים רענון מלא על כל אחת מהן.
+   *  ⚠️ ממתין ל-inFlightWrites===0: רענון בזמן שכתיבה עוד באוויר היה נדחה
+   *     ממילא ע"י isDirty, ורק מבזבז בקשה.
+   * ========================================================================== */
+  var WRITE_SETTLED_MS = 900;
+  var writeSettledTimer = null;
+  function scheduleWriteSettled() {
+    if (writeSettledTimer) clearTimeout(writeSettledTimer);
+    writeSettledTimer = setTimeout(function () {
+      writeSettledTimer = null;
+      if (inFlightWrites > 0) { scheduleWriteSettled(); return; }   // עוד כותבים — ננסה שוב
+      try { window.dispatchEvent(new CustomEvent("cba:write-settled")); } catch (e) { /* דפדפן ישן */ }
+    }, WRITE_SETTLED_MS);
+  }
+
   // ניקוי המטמון (למשל בעת יציאה/החלפת משתמש)
   function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch (e) {} }
 
@@ -740,6 +769,7 @@ CBA.sheets = (function () {
         // לוגית לא תתקבל בניסיון חוזר, ואסור שתישאר תקועה בתור לנצח.
         dequeueWrite(action, payload);
         if (res && res.ok === true) retryPending(false);   // הרשת חזרה — הזדמנות טובה לנסות את השאר
+        if (res && res.ok === true) scheduleWriteSettled();
         notifyDirtyChange();
         if (cb) cb(res && typeof res === "object" ? res : { ok: false, error: "תשובה לא תקינה מהשרת" });
       })
