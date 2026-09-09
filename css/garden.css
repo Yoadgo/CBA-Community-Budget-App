@@ -347,6 +347,24 @@
 .gt-grp em { font-style: normal; font-weight: 600; color: var(--text-soft, #6B7280); font-size: 11.5px; }
 .gt-grp hr { flex: 1; border: 0; height: 1px; background: rgba(17,24,39,.08); margin: 0; }
 
+/* שני מסלולים (2026-09-09, גל 2). שתי רמות כותרת ולא שלוש:
+   מסלול ("תקלות שדווחו" / "עבודת השבוע") ובתוכו מקום (האזור).
+   ⚠️ ההיררכיה נקראת מהמשקל ומהמרווח, לא מהזחה — הזחה על כותרת ברוחב מלא
+   שוברת את היישור של הכרטיסים שמתחתיה. */
+.gt-grp--lane { margin-top: 22px; font-size: 13.5px; color: var(--text, #374151); }
+.gt-grp--lane:first-child { margin-top: 4px; }
+.gt-grp--lane hr { background: rgba(17,24,39,.14); }
+.gt-grp--sub { margin: 10px 2px 6px; font-size: 12px; font-weight: 600;
+  color: var(--text-soft, #6B7280); }
+.gt-grp--sub em { font-weight: 600; }
+.gt-grp--sub hr { background: rgba(17,24,39,.05); }
+
+/* מסלול ריק. "אין תקלות פתוחות" הוא תשובה, ולכן הוא נכתב — ולא מושמט.
+   מסלול שנעלם כשהוא מתרוקן מלמד את העין לא לחפש אותו. */
+.gt-none { font-size: 12.5px; color: var(--text-soft, #6B7280);
+  padding: 12px 14px; border-radius: 12px; background: rgba(17,24,39,.02);
+  border: 1px dashed rgba(17,24,39,.08); }
+
 .gt-row { padding: 9px 12px; display: flex; gap: 10px; align-items: flex-start; }
 .gt-box { width: 28px; height: 28px; flex: none; margin-top: 2px; border-radius: 8px;
   border: 1.8px solid rgba(17,24,39,.18); background: rgba(255,255,255,.75);
