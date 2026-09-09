@@ -207,6 +207,10 @@
   .bottomline-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .bottomline-bar .bl-cell { min-width: 0; }
   .bottomline-bar .bl-cell__val { overflow-wrap: anywhere; }
+  /* פס הפרופורציות של מצב התצוגה מוסתר במובייל: חמישה מקטעים וחמש תוויות
+     ברוחב 390px אינם קריאים, והוא גם היה מגדיל את --bottomline-h (60px)
+     שעליו נשען חישוב הריפוד התחתון של כל המסכים. */
+  .bottomline-bar .present-strip { display: none; }
 
   /* ---------- שלב 2: מסך "תכנון מול ביצוע" — פריסה אנכית מרווחת ---------- */
   .budget-cols { gap: 26px; }

@@ -41,14 +41,16 @@
   --org-vol:       #6B7280;
 
   /* צבעי מקורות מימון בתצוגה להצגה (2026-09-09) — במכוון לא ירוק/אדום/כתום,
-     ששמורים ל-ok/danger/warn ואסור לבלבל איתם. "מיסי שיכון" מקבל את האפור
-     השקט ביותר דווקא כי הוא ~80% מהתקציב: מקור ברירת המחדל לא צריך לצעוק. */
-  --fund-dues:      #475569;  --fund-dues-bg:      #F1F5F9;
-  --fund-tbr:       #0E7490;  --fund-tbr-bg:       #ECFEFF;
-  --fund-council:   #6D28D9;  --fund-council-bg:   #F5F3FF;
-  --fund-residents: #A16207;  --fund-residents-bg: #FEFCE8;
-  --fund-shikun:    #3730A3;  --fund-shikun-bg:    #EEF2FF;
-  --fund-alt:       #475569;  --fund-alt-bg:       #F1F5F9;
+     ששמורים ל-ok/danger/warn ואסור לבלבל איתם. "מיסי שיכון" (סוג "מחושב")
+     מקבל את האפור השקט ביותר דווקא כי הוא ~80% מהתקציב: מקור ברירת המחדל
+     לא צריך לצעוק. ⚠️ c1..c5 הם *מקומות בפלטה* ולא מקורות מסוימים — בייצור
+     מזהה המקור הוא שמו בעברית ואין שום קוד קבוע להיתלות בו (ר' planFundClass). */
+  --fund-dues: #475569;  --fund-dues-bg: #F1F5F9;
+  --fund-c1:   #0E7490;  --fund-c1-bg:   #ECFEFF;
+  --fund-c2:   #6D28D9;  --fund-c2-bg:   #F5F3FF;
+  --fund-c3:   #A16207;  --fund-c3-bg:   #FEFCE8;
+  --fund-c4:   #3730A3;  --fund-c4-bg:   #EEF2FF;
+  --fund-c5:   #9D174D;  --fund-c5-bg:   #FDF2F8;
 
   --page-pad:      40px;      /* שוליים צדדיים — התוכן ממלא את כל רוחב המסך */
   --t:             160ms cubic-bezier(.2,.6,.2,1);
@@ -989,16 +991,26 @@ body[data-screen="planning"] .year-switch__add {
 .plan-present-card { padding: 18px; }
 .present-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px 22px; align-items: start; }
 .present-group__head {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  /* ⚠️ עד 2026-09-09 השם והסכום חלקו שורה אחת, ולכן לשם נשארו ~130px בלבד
+     בעמודה של 230px — "תשתיות, תחזוקה ופרויקטים" נשבר לשלוש-ארבע שורות
+     והכרטיסים בעמודה הזאת התחילו הרבה מתחת לשכנות (משוב יועד). עכשיו השם
+     מקבל שורה משלו ברוחב מלא, הסכום מתחתיו, וגובה מינימלי מיישר את כל
+     העמודות לאותו קו — גם כשהשם נכנס בשורה אחת. */
+  display: flex; flex-direction: column; align-items: stretch; gap: 2px;
   padding-bottom: 6px; margin-bottom: 8px; border-bottom: 1px solid var(--border);
+  min-height: 84px; justify-content: flex-end;
 }
-/* גופן כותרת קבוצה גדול במפורש מכותרת סעיף (משוב יועד, 2026-08-10) */
-.present-group__name { font-size: 24px; font-weight: 700; color: var(--text-soft); }
-.present-group__total { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* גופן כותרת קבוצה גדול במפורש מכותרת סעיף (משוב יועד, 2026-08-10) —
+   ירד מ-24 ל-22 כדי שפחות שמות יישברו, ועדיין גדול מ-19 של הסעיף */
+.present-group__name { font-size: 20px; font-weight: 700; color: var(--text-soft); line-height: 1.2; }
+.present-group__total {
+  font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
 .present-grid { display: flex; flex-direction: column; gap: 8px; }
 .present-card { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 10px 14px; }
 .present-card__top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.present-card__name { font-size: 19px; font-weight: 600; }
+.present-card__name { font-size: 19px; font-weight: 600; flex: 1 1 auto; min-width: 0; }
 .present-card__amount { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* פירוט ומימון — שורה נפרדת לכל פריט/מקור. הפירוט (אם קיים) מוצג ראשון
@@ -1062,13 +1074,13 @@ body[data-screen="planning"] .year-switch__add {
      נשבר לשתי שורות בתוך התגית — עדיף על חיתוך שמסתיר מידע. */
   white-space: normal; max-width: 100%;
 }
-.fund-chip .n { font-variant-numeric: tabular-nums; font-weight: 700; opacity: .85; }
-.fund-chip--dues      { background: var(--fund-dues-bg);      color: var(--fund-dues); }
-.fund-chip--tbr       { background: var(--fund-tbr-bg);       color: var(--fund-tbr); }
-.fund-chip--council   { background: var(--fund-council-bg);   color: var(--fund-council); }
-.fund-chip--residents { background: var(--fund-residents-bg); color: var(--fund-residents); }
-.fund-chip--shikun    { background: var(--fund-shikun-bg);    color: var(--fund-shikun); }
-.fund-chip--alt       { background: var(--fund-alt-bg);       color: var(--fund-alt); }
+.fund-chip__n { font-variant-numeric: tabular-nums; font-weight: 700; opacity: .85; }
+.fund-chip--dues { background: var(--fund-dues-bg); color: var(--fund-dues); }
+.fund-chip--c1   { background: var(--fund-c1-bg);   color: var(--fund-c1); }
+.fund-chip--c2   { background: var(--fund-c2-bg);   color: var(--fund-c2); }
+.fund-chip--c3   { background: var(--fund-c3-bg);   color: var(--fund-c3); }
+.fund-chip--c4   { background: var(--fund-c4-bg);   color: var(--fund-c4); }
+.fund-chip--c5   { background: var(--fund-c5-bg);   color: var(--fund-c5); }
 
 /* --- פסי גודל: בלי זה 432,000 ו-500 נראים זהים לחלוטין --- */
 .present-bar { height: 3px; border-radius: 2px; background: #EDEFF2; margin-top: 7px; overflow: hidden; }
@@ -1078,6 +1090,8 @@ body[data-screen="planning"] .year-switch__add {
 .present-gbar { height: 4px; border-radius: 2px; background: #E9EBEF; margin: -2px 0 10px; overflow: hidden; }
 .present-gbar > i { display: block; height: 100%; background: var(--text); border-radius: 2px; }
 .present-gpct { font-size: 12.5px; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-inline-start: 8px; }
+/* האחוז עובר לשורת הסכום, שם יש לו מקום — בשורת השם הוא דחק אותו לשבירה */
+.present-group__total .present-gpct { margin-inline-start: 0; }
 
 /* --- קיפול הפירוט --- */
 .present-toggle {
@@ -1085,12 +1099,16 @@ body[data-screen="planning"] .year-switch__add {
   font-family: inherit; color: inherit; text-align: start; cursor: pointer;
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
 }
-.present-toggle .chev {
-  font-size: 10px; color: var(--text-muted); flex: none; align-self: center;
+/* ⚠️ משבצת קבועה בכל כרטיס — גם בסעיף בלי פירוט, שם היא ריקה. בגרסה
+   הראשונה החץ הופיע רק בסעיפים מפורטים ודחף להם את הסכום פנימה, וטור
+   הסכומים יצא משונן (משוב יועד, 2026-09-09). */
+.present-card__chev {
+  width: 12px; flex: none; align-self: center; text-align: center;
+  font-size: 10px; color: var(--text-muted);
   transition: transform var(--t);
 }
-.present-toggle:hover .chev { color: var(--text); }
-.present-card.is-open .present-toggle .chev { transform: rotate(-90deg); }
+.present-toggle:hover .present-card__chev { color: var(--text); }
+.present-card.is-open .present-card__chev { transform: rotate(-90deg); }
 /* הפירוט תמיד ב-DOM ומוסתר ב-CSS בלבד — כך הקיפול מיידי בלי ציור-מחדש,
    וגם ההדפסה יכולה להחזיר אותו (ר' @media print למטה). */
 .present-wrap.is-collapsed .present-card:not(.is-open) .present-card__section--items { display: none; }
@@ -1103,22 +1121,35 @@ body[data-screen="planning"] .year-switch__add {
   padding: 1px 7px; border-radius: 999px; white-space: nowrap; vertical-align: middle;
 }
 
-/* --- פס הפרופורציות העליון --- */
-/* במכוון בלי מספרי הכנסות/הוצאות/מאזן: אלה כבר יושבים ב-.bottomline-bar
-   שמוצג גם במצב תצוגה. הפס הזה מוסיף רק את מה שאין שם — היחס בין התחומים. */
-.present-macro { padding: 14px 18px; margin-bottom: 16px; }
-.present-stack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #EDEFF2; }
+/* --- סרגל הפקדים של הלוח --- */
+.present-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+
+/* --- פס הפרופורציות — בתוך הסרגל התחתון (משוב יועד, 2026-09-09) --- */
+/* ⚠️ אסור להשתמש כאן בשמות קצרים: הגרסה הראשונה קראה לפריטי הלגנדה .lg
+   והם חטפו את עיצוב הזכוכית מ-css/liquid-glass.css. כל שם עם תחילית. */
+.present-strip { grid-column: 1 / -1; padding: 0 4px 10px; }
+.present-stack { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: #EDEFF2; }
 .present-stack > i { display: block; height: 100%; }
 .present-stack > i + i { border-inline-start: 2px solid var(--surface); }
-.present-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 11px; font-size: 13px; color: var(--text-soft); }
-.present-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
-.present-legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-.present-legend .pc { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.present-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center;
+  justify-content: center; margin-top: 7px; font-size: 12px; color: var(--text-soft);
+}
+.present-legend__item { display: inline-flex; align-items: center; gap: 5px; }
+.present-legend__dot { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.present-legend__pct { font-variant-numeric: tabular-nums; color: var(--text-muted); font-weight: 600; }
+
+/* הסרגל התחתון מקבל שורה נוספת במצב תצוגה — ולכן גם קצת יותר אוויר מתחתיו.
+   בדסקטופ בלבד: במובייל הפס מוסתר (ר' mobile.css) ולריפוד יש חישוב משלו. */
+@media (min-width: 721px) {
+  .bottomline-bar--present { padding-top: 12px; }
+  .app-main:has(.bottomline-bar--present) { padding-bottom: 128px; }
+}
 
 /* --- הדפסה: המסך הזה מוצג בישיבות ומודפס, ובנייר אין למי ללחוץ --- */
 @media print {
   .present-wrap.is-collapsed .present-card:not(.is-open) .present-card__section--items { display: flex; }
-  .present-toggle .chev { display: none; }
+  .present-card__chev { display: none; }
 }
 
 .mini-x {
@@ -1184,6 +1215,13 @@ body[data-screen="planning"] .year-switch__add {
   position: fixed; inset-inline: var(--page-pad); bottom: 16px; z-index: 20;
   box-shadow: var(--shadow-hover);
 }
+/* ⚠️ הסלקטור הכפול הוא הכרחי ואסור לפשט אותו.
+   css/liquid-glass.css מגדיר `.card, .stat { position: relative }`, נטען
+   *אחרי* style.css, ובעל אותה ספציפיות כמו `.bottomline-bar` — ולכן דרס
+   כאן את ה-fixed והשורה התחתונה הפסיקה להיות נעוצה לתחתית המסך (אובחן
+   9.9.26 בעקבות משוב יועד). זו הפעם השנייה שאותה מלכודת בדיוק תופסת את
+   הפרויקט — ר' ההערה ליד .app ב-liquid-glass.css על מסך הכניסה. */
+.card.bottomline-bar { position: fixed; }
 /* התוכן מפנה מקום לשורה התחתונה הקבועה — רק במסכים שיש בהם כזו */
 body[data-screen="budget"] .app-main,
 body[data-screen="planning"] .app-main { padding-bottom: 108px; }

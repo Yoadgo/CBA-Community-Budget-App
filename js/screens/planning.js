@@ -113,13 +113,13 @@ CBA.screens.planning = {
 
       <div class="screen-controls">
         <div class="phase-ctrl">${planPhaseControl()}</div>
-        ${planViewMode ? planPresentControlsHTML() : ""}
         <button class="btn-ghost" type="button" data-toggle-present>${planViewMode ? "חזרה לעריכה" : "תצוגה להצגה"}</button>
       </div>
 
       ${planViewMode ? planPresentHTML(groups, cats, income) : editModeHTML}
 
-      <div class="card bottomline-bar">
+      <div class="card bottomline-bar${planViewMode ? " bottomline-bar--present" : ""}">
+        ${planViewMode ? planPresentStripHTML(groups, cats, income) : ""}
         <div class="bl-cell">
           <div class="bl-cell__label">הכנסות</div>
           <div class="bl-cell__val" id="bl-income"></div>
@@ -776,20 +776,23 @@ function planPresentHTML(groups, cats, income) {
     <div class="plan-cols">
       ${planPresentIncomeHTML(income)}
       <div class="card plan-present-card">
-        ${planPresentMacroHTML(blocks, grand)}
+        ${planPresentControlsHTML()}
         <div class="present-wrap is-collapsed">${blocks.map(planPresentBlockHTML).join("")}</div>
       </div>
     </div>`;
 }
 
-/* פקדי מצב התצוגה — יושבים ב-screen-controls ליד "חזרה לעריכה", כי כולם
-   פקדי *תצוגה* ולא פקדי תוכן. מוצגים רק כשמצב התצוגה פעיל. */
+/* פקדי מצב התצוגה — סרגל ייעודי בראש הלוח עצמו. ישבו קודם ב-screen-controls
+   ונבלעו שם בין שישה כפתורים אחרים; "הרחב הכל" הוא הפקד המרכזי של המסך
+   (הוא מחזיר את התצוגה המלאה שהייתה לפני הקיפול) וחייב להיות גלוי. */
 function planPresentControlsHTML() {
   const expandLabel = planPresentExpandAll ? "כווץ הכל" : "הרחב הכל";
   const axisLabel = (planPresentAxis === "fund") ? "לפי תחום" : "לפי מקור מימון";
   return `
-        <button class="btn-ghost" type="button" data-present-expand aria-pressed="${planPresentExpandAll ? "true" : "false"}">${expandLabel}</button>
-        <button class="btn-ghost" type="button" data-present-axis aria-pressed="${planPresentAxis === "fund" ? "true" : "false"}">${axisLabel}</button>`;
+        <div class="present-toolbar">
+          <button class="btn-ghost" type="button" data-present-expand aria-pressed="${planPresentExpandAll ? "true" : "false"}">${expandLabel}</button>
+          <button class="btn-ghost" type="button" data-present-axis aria-pressed="${planPresentAxis === "fund" ? "true" : "false"}">${axisLabel}</button>
+        </div>`;
 }
 
 /* הציר הרגיל — לפי תחום (קבוצה) */
@@ -833,8 +836,8 @@ function planPresentBlockHTML(b) {
   return `
       <div class="present-group">
         <div class="present-group__head">
-          <span class="present-group__name">${CBA.esc(b.name)}<span class="present-gpct">${b.pct}%</span></span>
-          <span class="present-group__total">${CBA.formatILS(b.total)}</span>
+          <span class="present-group__name">${CBA.esc(b.name)}</span>
+          <span class="present-group__total">${CBA.formatILS(b.total)}<span class="present-gpct">${b.pct}%</span></span>
         </div>
         <div class="present-gbar"><i style="width:${b.barPct}%"></i></div>
         <div class="present-grid">
@@ -843,10 +846,17 @@ function planPresentBlockHTML(b) {
       </div>`;
 }
 
-/* פס הפרופורציות העליון — במכוון *בלי* הכנסות/הוצאות/מאזן: שלושתם כבר
-   מוצגים ב-.bottomline-bar שנשאר גלוי גם במצב תצוגה. הפס מוסיף רק את מה
-   שאין שם — היחס בין התחומים, שהיום אי אפשר לראות בשום מקום. */
-function planPresentMacroHTML(blocks, grand) {
+/* פס הפרופורציות — יושב בתוך .bottomline-bar התחתונה (לבקשת יועד 9.9),
+   כי שם כבר מרוכזים ההכנסות/ההוצאות/המאזן וזה המקום הטבעי לתמונה הכוללת.
+   במכוון אינו חוזר על שלושת המספרים האלה, אלא מוסיף רק את מה שאין שם —
+   היחס בין התחומים. מוסתר במובייל: חמישה מקטעים ברוחב 390px אינם קריאים.
+   ⚠️ כל שם מחלקה כאן חייב תחילית: הגרסה הראשונה השתמשה ב-.lg/.sw/.pc,
+   ו-.lg התנגש עם css/liquid-glass.css — הלגנדה קיבלה רקע זכוכית אפור. */
+function planPresentStripHTML(groups, cats, income) {
+  const blocks = (planPresentAxis === "fund")
+    ? planPresentFundBlocks(cats, income)
+    : planPresentGroupBlocks(groups, cats);
+  const grand = blocks.reduce(function (a, b) { return a + b.total; }, 0);
   if (!grand || blocks.length < 2) return "";
   const ramp = ["#111827", "#374151", "#6B7280", "#9CA3AF", "#D1D5DB", "#E5E7EB"];
   const color = function (b, i) {
@@ -856,10 +866,11 @@ function planPresentMacroHTML(blocks, grand) {
     return `<i style="width:${(b.total / grand) * 100}%;background:${color(b, i)}" title="${CBA.esc(b.name)} — ${CBA.formatILS(b.total)}"></i>`;
   }).join("");
   const legend = blocks.map(function (b, i) {
-    return `<span class="lg"><span class="sw" style="background:${color(b, i)}"></span>${CBA.esc(b.name)}<span class="pc">${b.pct}%</span></span>`;
+    const pct = Math.round((b.total / grand) * 1000) / 10;
+    return `<span class="present-legend__item"><span class="present-legend__dot" style="background:${color(b, i)}"></span>${CBA.esc(b.name)}<span class="present-legend__pct">${pct}%</span></span>`;
   }).join("");
   return `
-        <div class="present-macro">
+        <div class="present-strip">
           <div class="present-stack">${segs}</div>
           <div class="present-legend">${legend}</div>
         </div>`;
@@ -902,13 +913,17 @@ function planPresentCardHTML(c, maxInBlock) {
     ? `<span class="present-gapflag" title="הפירוט אינו מסתכם לסכום הסעיף">${gap > 0 ? "חוסר" : "עודף"} ${planNumFmt(Math.abs(gap))}</span>`
     : "";
 
+  // ⚠️ משבצת החץ קיימת בכל כרטיס, גם בלי פירוט (אז היא ריקה). בלעדיה החץ
+  // דחף את הסכום פנימה רק בכרטיסים מפורטים, וטור הסכומים יצא משונן.
+  // היא גם *לפני* השם ולא אחרי הסכום, כדי שהסכום יישאר צמוד לקצה הכרטיס.
   const inner =
+    `<span class="present-card__chev"${hasItems ? "" : " aria-hidden=\"true\""}>${hasItems ? "&#9660;" : ""}</span>` +
     `<span class="present-card__name">${CBA.esc(c.name)}${flag}</span>` +
     `<span class="present-card__amount">${CBA.formatILS(c.plan || 0)}</span>`;
 
   // רק סעיף מפורט הוא כפתור — סעיף בלי פירוט אין מה לפתוח בו
   const head = hasItems
-    ? `<button class="present-toggle" type="button" data-present-card="${CBA.esc(c.id)}" aria-expanded="${isOpen ? "true" : "false"}">${inner}<span class="chev">&#9660;</span></button>`
+    ? `<button class="present-toggle" type="button" data-present-card="${CBA.esc(c.id)}" aria-expanded="${isOpen ? "true" : "false"}">${inner}</button>`
     : `<div class="present-card__top">${inner}</div>`;
 
   // מינימום 1% כדי שסעיף זעיר לא ייעלם לגמרי — אבל סעיף על 0 באמת מקבל 0,
@@ -950,14 +965,25 @@ function planCatSources(c) {
     : [{ incomeSourceId: c.incomeSourceId, amount: null }];
 }
 
-/* מזהי מקורות ההכנסה קבועים במודל (ר' income() ב-mock.js). מקור לא מוכר,
-   אם יתווסף בגיליון, נופל ל-alt ומקבל אפור ניטרלי — עדיף על צבע אקראי
-   שיתנגש עם צבע קיים בלי שאיש ישים לב. */
-var PLAN_FUND_CLASS = {
-  dues: "dues", council: "council", tbr: "tbr",
-  residents_fund: "residents", shikun_fund: "shikun"
-};
-function planFundClass(id) { return PLAN_FUND_CLASS[id] || "alt"; }
+/* ⚠️ צבע התגית נקבע לפי *מיקום* המקור ברשימה, לא לפי מזהה.
+   בנתונים החיים המזהה הוא שם המקור בעברית ("מיסי שיכון"), כי `toIncome`
+   ב-sheets.js עושה `id: String(row["מקור"]).trim()` — אין שום קוד קבוע.
+   הגרסה הראשונה מיפתה לפי המזהים של mock.js (dues/tbr/council...), הם לא
+   התאימו לכלום בייצור, והכול נפל לברירת המחדל — כל התגיות יצאו באותו אפור
+   (משוב יועד, 2026-09-09). מיפוי לפי מיקום עובד על כל גיליון.
+   מקור מסוג "מחושב" (מיסי שיכון) מקבל תמיד את האפור השקט בלי קשר למיקומו:
+   הוא ~80% מהתקציב, ומקור ברירת המחדל לא צריך לצעוק. */
+var PLAN_FUND_PALETTE = ["c1", "c2", "c3", "c4", "c5"];
+function planFundClass(id) {
+  const all = CBA.data.getIncomeSources();
+  let rank = 0;
+  for (let i = 0; i < all.length; i++) {
+    if (all[i].id !== id) { if (all[i].type !== "dues") rank++; continue; }
+    if (all[i].type === "dues") return "dues";
+    return PLAN_FUND_PALETTE[rank % PLAN_FUND_PALETTE.length];
+  }
+  return "dues";   // מקור שלא נמצא — אפור שקט, לא צבע אקראי
+}
 
 /* מספר בלי סימן שקל — בכרטיס שכבר יש בו ₪ בסכום הראשי, חזרת הסימן בכל
    שורת פירוט היא רעש בלבד (משוב יועד 2026-09-09). */
@@ -970,7 +996,7 @@ function planPresentFundingChips(c) {
   const all = CBA.data.getIncomeSources();
   const chips = planCatSources(c).map(function (s) {
     const src = all.find(function (x) { return x.id === s.incomeSourceId; });
-    const amt = (s.amount == null) ? "" : ` <span class="n">${planNumFmt(s.amount)}</span>`;
+    const amt = (s.amount == null) ? "" : ` <span class="fund-chip__n">${planNumFmt(s.amount)}</span>`;
     return `<span class="fund-chip fund-chip--${planFundClass(s.incomeSourceId)}">${CBA.esc(src ? src.name : "—")}${amt}</span>`;
   }).join("");
   return `<div class="present-fundchips">${chips}</div>`;
