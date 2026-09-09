@@ -532,6 +532,10 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'tour') {
       return handleTour_(e.parameter);
     }
+    /* עמוד הבית בקריאה אחת (2026-09-09) — ר' handleHomeExtras_. */
+    if (e && e.parameter && e.parameter.action === 'homeExtras') {
+      return handleHomeExtras_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'services') {
       return handleServices_(e.parameter);
     }
@@ -783,6 +787,8 @@ function doPostDispatch_(ss, body) {
       case 'gardenPlanSave':      return json_(gardenPlanSave_(ss, body));
       case 'gardenPlanActive':    return json_(gardenPlanSetActive_(ss, body));
       case 'gardenPlanDelete':    return json_(gardenPlanDelete_(ss, body));
+      case 'gardenTaskDelete':    return json_(gardenTaskDelete_(ss, body));
+      case 'gardenReportDelete':  return json_(gardenReportDelete_(ss, body));
       case 'gardenCoverByPlan':   return json_(gardenCoverByPlan_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
@@ -2456,6 +2462,7 @@ var ACTION_DOMAIN = {
   approveClubReservations: 'club', rejectClubReservation: 'club',
   // מראה שיכון
   submitGardenReport: 'garden', gardenFeedback: 'garden', gardenTask: 'garden',
+  gardenTaskDelete: 'garden',
   gardenApproveBatch: 'garden', gardenMerge: 'garden', gardenCreateTask: 'garden',
   gardenPlanSave: 'garden', gardenPlanActive: 'garden',
   // מכון כושר
@@ -6962,6 +6969,60 @@ function tourSeenFor_(ss, email) {
 /* קריאה: מחזיר את הצעדים שמתאימים לקהל של הקורא, ואת הגרסה שכבר ראה.
    הסינון לפי קהל נעשה כאן ולא בלקוח — צעד שמיועד למנהלים לא יוצא מהשרת
    למי שאינו מנהל, בדיוק כמו כל שאר המידע המסונן-לפי-הרשאה במערכת. */
+/* ============================================================================
+ *  עמוד הבית בקריאה אחת (2026-09-09)
+ * ----------------------------------------------------------------------------
+ *  נמדד חי על הייצור, וזה המספר שהכריע: **קריאה ל-Apps Script עולה ~1.5
+ *  שניות מינימום גם כשהיא לא נוגעת בגיליון בכלל** (`?action=rev` מחזירה 95
+ *  בתים ולוקחת 1,541ms). כלומר הרצפה, ולא העבודה, היא רוב הזמן.
+ *
+ *  עמוד הבית שלח שש קריאות נפרדות. הדוגמה שממחישה: `profileChanges` מחזירה
+ *  **21 בתים** ("אין כלום") ולוקחת 3.3 שניות. שש קריאות = ~9 שניות של תקורה
+ *  לפני שנקראה שורה אחת מהגיליון.
+ *
+ *  ⚠️ **ההנדלר הזה לא מממש שום לוגיקה משלו — הוא קורא להנדלרים הקיימים
+ *     ומפרק את התשובה שלהם.** זו החלטה מכוונת: כל בדיקת הרשאה, כל סינון וכל
+ *     תיקון עתידי נשארים במקום אחד. מימוש מחדש כאן היה בדיוק הדפוס שייצר את
+ *     חורי האבטחה שנסגרו ב-4.0 — פונקציה שנייה שעושה "כמעט אותו דבר".
+ *  ⚠️ הפעולה **אינה** ב-GET_ACTION_PERMS: היא פתוחה לכל תושב פעיל, ובדיוק
+ *     כמו שעמוד הבית עצמו נראה אחרת לכל אחד — כל מקטע נבדק בנפרד מול
+ *     ההרשאה שלו. תושב רגיל מקבל tour + reservations בלבד, ואפילו לא
+ *     *מפעיל* את הקריאות האחרות.
+ *  ⚠️ כישלון של מקטע אחד לא מפיל את השאר — כל אחד עטוף בנפרד, בדיוק כמו
+ *     שהלקוח היום סופג כישלון של קריאה בודדת בלי לשבור את העמוד.
+ * ========================================================================== */
+function handleHomeExtras_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var perm = gate.perm || {};
+    var has = function (code) {
+      return !!perm.isSuper || (perm.perms || []).indexOf(code) !== -1;
+    };
+    /* קורא הנדלר קיים ומחזיר את האובייקט שלו. ContentService.getContent()
+       מחזיר את אותה מחרוזת JSON שהייתה נשלחת ברשת — כלומר בדיוק אותה תשובה
+       שהלקוח מקבל היום, רק בלי סיבוב הרשת. */
+    var sub = function (fn) {
+      try { return JSON.parse(fn(p).getContent()); }
+      catch (e) { return { ok: false, error: String(e) }; }
+    };
+
+    var out = { ok: true, homeExtras: true };
+    out.tour         = sub(handleTour_);                  // כרטיס "יש משהו חדש"
+    out.reservations = sub(handleMyClubReservations_);     // השריון הקרוב
+    if (has(PERM_RESIDENTS)) {
+      out.signups = sub(handleListSignups_);
+      out.profile = sub(handleProfileChanges_);
+    }
+    if (has(PERM_GYM))  { out.gym  = sub(handleGymList_);  }
+    if (has(PERM_CLUB)) { out.club = sub(handleClubList_); }
+    return json_(out);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
 function handleTour_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -7794,6 +7855,139 @@ function gardenLog_(ss, taskId, kind, field, from, to, who, note) {
   } catch (e) { /* יומן לא מפיל פעולה */ }
 }
 
+/* ============================================================================
+ *  מחיקה (2026-09-09) — ר' "הצוות האדום של מראה שיכון"
+ * ----------------------------------------------------------------------------
+ *  ⚠️ **מחיקה אינה סגירה, ובכוונה הן מתנהגות הפוך.**
+ *  סגירה אומרת "הטיפול הסתיים": השורה נשארת, נספרת בנתונים, והתושב רואה
+ *  אותה. מחיקה אומרת "השורה הזו לא הייתה צריכה להיווצר" — בדיקה, כפילות
+ *  שהוקלדה פעמיים, שטות — והיא יורדת מהגיליון ויוצאת מהנתונים גם למפרע.
+ *
+ *  מה נשאר לתחקור: **היומן, שלם.** הוא ממילא טאב שרק מוסיפים לו. כל שורה
+ *  שנכתבה על הפריט — נפתח, שיבוץ, ביצוע, סגירה, הערות — נשארת, ונוספת שורת
+ *  'מחיקה' עם מי, מתי, איזו כותרת ולמה. מסך ההיסטוריה קורא את היומן לפי
+ *  מזהה, ולכן הוא עונה על "מה היה שם" בלי שנבנה שום דבר חדש.
+ *
+ *  מה יורד: שורת המשימה, שורות הדיווח שמצביעות עליה, והתמונות שלהן בדרייב —
+ *  אחרת נשארות תמונות פרטיות של תושב בלי שום דבר שמצביע עליהן.
+ *
+ *  ⚠️ הסיבה היא **חובה**, והפעולה היא של המנהל בלבד: מחיקה מזיזה אחוזים
+ *  בשבועות שעברו, וזה בדיוק המחיר שמצדיק את שני התנאים האלה.
+ * ========================================================================== */
+
+/** מוחק את שורות הדיווח שמצביעות על משימה, ואת התמונות שלהן.
+ *  מחזיר כמה נמחקו. מוחק מלמטה למעלה כדי שהאינדקסים לא יזוזו תוך כדי. */
+function gardenDeleteReportsFor_(ss, taskId, who) {
+  var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+  if (!rsh || rsh.getLastRow() < 2) return 0;
+  var rc = gardenCols_(rsh), rv = rsh.getDataRange().getValues();
+  var kill = [];
+  for (var r = 1; r < rv.length; r++) {
+    if (String(rv[r][rc['מזהה משימה']] || '').trim() !== String(taskId)) continue;
+    kill.push({ row: r + 1, id: String(rv[r][rc['מזהה']] || '').trim(),
+                photos: String(rv[r][rc['תמונות']] || '') });
+  }
+  for (var k = kill.length - 1; k >= 0; k--) {
+    gardenDeletePhotos_(kill[k].photos);
+    rsh.deleteRow(kill[k].row);
+    gardenLog_(ss, taskId, 'מחיקה', 'דיווח', kill[k].id, '', who, 'שורת הדיווח נמחקה');
+  }
+  return kill.length;
+}
+
+/** התמונות בדרייב. כישלון על קובץ אחד לא עוצר את המחיקה — קובץ שכבר אינו
+ *  קיים הוא בדיוק התוצאה שרצינו. */
+function gardenDeletePhotos_(idsCsv) {
+  String(idsCsv || '').split(',').forEach(function (id) {
+    id = String(id).trim(); if (!id) return;
+    try { DriveApp.getFileById(id).setTrashed(true); } catch (e) {}
+  });
+}
+
+/** מחיקת משימה — מנהל בלבד, עם סיבה. */
+function gardenTaskDelete_(ss, body) {
+  var perm = body._perm || {};
+  if (perm.isExternal) return { ok: false, error: 'מחיקה היא בסמכות מנהל הגינון' };
+  var who = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email || '';
+  var id = String(body.id || '').trim();
+  if (!id) return { ok: false, error: 'חסר מזהה' };
+  var why = String(body.why || '').trim();
+  if (!why) return { ok: false, error: 'צריך לכתוב למה מוחקים — זה נשמר ביומן' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    if (!sh || sh.getLastRow() < 2) return { ok: false, error: 'המשימה לא נמצאה' };
+    var c = gardenCols_(sh), v = sh.getDataRange().getValues();
+    for (var r = 1; r < v.length; r++) {
+      if (String(v[r][c['מזהה']]).trim() !== id) continue;
+      var title = String(v[r][c['כותרת']] || '').trim();
+      var kind  = String(v[r][c['סוג']] || '').trim();
+      var reps  = gardenDeleteReportsFor_(ss, id, who);
+      /* היומן **קודם**. אם המחיקה תיפול באמצע, עדיף שתישאר שורת יומן בלי
+         מחיקה מאשר מחיקה בלי שום עקבה. */
+      gardenLog_(ss, id, 'מחיקה', 'משימה', title, '', who, why);
+      sh.deleteRow(r + 1);
+      return { ok: true, id: id, title: title, kind: kind, reports: reps };
+    }
+    return { ok: false, error: 'המשימה לא נמצאה' };
+  } finally { lock.releaseLock(); }
+}
+
+/** מחיקת דיווח על ידי התושב שכתב אותו — ורק כל עוד איש לא נגע בו.
+ *  ⚠️ אין כאן ACTION_PERMS: כמו שאר פעולות התושב, הבעלות נאכפת לפי מזהה
+ *  המשפחה במושב החתום ולא לפי מה שהלקוח שלח. */
+function gardenReportDelete_(ss, body) {
+  var perm = body._perm || {};
+  var famId = String(perm.familyId || '');
+  if (!famId) return { ok: false, error: 'לא זוהתה משפחה' };
+  var who = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email || '';
+  var id = String(body.id || '').trim();
+  if (!id) return { ok: false, error: 'חסר מזהה' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+    if (!rsh || rsh.getLastRow() < 2) return { ok: false, error: 'הדיווח לא נמצא' };
+    var rc = gardenCols_(rsh), rv = rsh.getDataRange().getValues();
+    for (var r = 1; r < rv.length; r++) {
+      if (String(rv[r][rc['מזהה']] || '').trim() !== id) continue;
+      if (String(rv[r][rc['מזהה משפחה']] || '').trim() !== famId) {
+        return { ok: false, error: 'הדיווח הזה אינו שלך' };
+      }
+      if (String(rv[r][rc['אוחד לדיווח']] || '').trim()) {
+        return { ok: false, error: 'הדיווח אוחד עם פנייה אחרת ואי אפשר למחוק אותו' };
+      }
+      var taskId = String(rv[r][rc['מזהה משימה']] || '').trim();
+      /* החלון היחיד שבו מחיקה עצמית מותרת: איש עוד לא נגע. משובץ, מסומן,
+         חסום או סגור — כבר יש עבודה מאחוריו, וזה כבר לא "טעות בהקלדה". */
+      var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+      var trow = -1, ttl = '';
+      if (taskId && tsh && tsh.getLastRow() > 1) {
+        var tc = gardenCols_(tsh), tv = tsh.getDataRange().getValues();
+        for (var t = 1; t < tv.length; t++) {
+          if (String(tv[t][tc['מזהה']]).trim() !== taskId) continue;
+          if (String(tv[t][tc['שבוע']] || '').trim() ||
+              String(tv[t][tc['דגל']] || '').trim() ||
+              String(tv[t][tc['סגירה']] || '').trim()) {
+            return { ok: false, error: 'הטיפול בדיווח כבר התחיל — אי אפשר למחוק אותו' };
+          }
+          trow = t + 1; ttl = String(tv[t][tc['כותרת']] || '').trim();
+          break;
+        }
+      }
+      gardenDeletePhotos_(String(rv[r][rc['תמונות']] || ''));
+      gardenLog_(ss, taskId || id, 'מחיקה', 'דיווח', id, '', who, 'נמחק על ידי המדווח');
+      rsh.deleteRow(r + 1);
+      if (trow > 0) tsh.deleteRow(trow);
+      return { ok: true, id: id, title: ttl };
+    }
+    return { ok: false, error: 'הדיווח לא נמצא' };
+  } finally { lock.releaseLock(); }
+}
+
 /* ---------- קטגוריות ואזורים למסך הדיווח (doGet) ---------- */
 function handleGardenMeta_(p) {
   try {
@@ -8180,14 +8374,23 @@ function handleGardenTasks_(p) {
        אליו**, והוא זה שיודע אם שתי פניות הן אותה ממטרה ואם משהו כבר מתוזמן.
        'pending' — תור האישורים — נשאר חסום: זה תור שממתין *למנהל*, ולתת
        לקבלן לראות את מה שממתין לאישור שלו עצמו זה להזמין לחץ. */
-    if (perm.isExternal && scope !== 'week' && scope !== 'unplanned') scope = 'week';
+    /* ⚠️ 'all' (2026-09-09) — **קריאה אחת שמחזירה את כל המשימות**, במקום
+       שלוש קריאות נפרדות (week / unplanned / pending) שהמסך שלח בכל טעינה.
+       שתי סיבות, ושתיהן נמדדו על הייצור:
+       1. קריאה ל-Apps Script עולה ~1.5 שניות **מינימום** גם כשהיא לא נוגעת
+          בגיליון — ר' ההערה בראש handleHomeExtras_. שלוש קריאות = 4.5 שניות
+          של תקורה לפני שנקראה שורה אחת.
+       2. הסינון עבר ללקוח, ולכן החלפת מסנן היא מיידית ולא עוד הלוך-חזור.
+       הגנן מקבל 'all' בדיוק כמו המנהל: הסינון של *מה מותר לו לראות* אף פעם
+       לא היה כאן — הוא בהרשאות הפעולה ובמסך הנתונים. ר' F-13. */
+    if (perm.isExternal && scope !== 'week' && scope !== 'unplanned' && scope !== 'all') scope = 'week';
 
     var week = String(p.week || '').match(/^\d{4}-\d{2}-\d{2}$/) ? p.week : gardenWeekKey_();
     /* מימוש התוכנית לשבוע המבוקש — **לפני** קריאת הגיליון, אחרת המשימות
        שנוצרו עכשיו לא יופיעו בתשובה הזאת אלא רק ברענון הבא. הפעולה
        אידמפוטנטית ואינה נוגעת בשבועות שעברו (ר' gardenMaterializeWeek_),
        ולכן בטוח לקרוא לה בכל טעינה. */
-    if (scope === 'week') {
+    if (scope === 'week' || scope === 'all') {
       try { gardenMaterializeWeek_(ss, week); }
       catch (mErr) { /* כשל מימוש לא מפיל את טעינת המסך */ }
     }
@@ -8213,7 +8416,8 @@ function handleGardenTasks_(p) {
          את המכנה — שבוע שהושלם כולו הראה "אין משימות" במקום 12 מתוך 12.
          היא נשארת מחוץ ל-unplanned, ל-pending ולבריכת הכפילויות: שם היא
          באמת לא רלוונטית, ו"אוחד" הוא סגירה בפני עצמה. */
-      if (scope === 'unplanned') { if (!o.closure && !o.week) rows.push(o); }
+      if (scope === 'all') rows.push(o);
+      else if (scope === 'unplanned') { if (!o.closure && !o.week) rows.push(o); }
       else if (scope === 'pending') { if (!o.closure && o.flag === 'ממתין לאישור') rows.push(o); }
       else if (o.week === week) rows.push(o);
       if (o.closure) continue;
@@ -8223,13 +8427,38 @@ function handleGardenTasks_(p) {
     }
     /* מועמד לאיחוד מחושב רק לתצוגת "לשיבוץ" ורק למנהל: זה הרגע שבו הוא פוגש
        דיווח חדש בפעם הראשונה, ולפני ששיבץ עבודה כפולה. ר' gardenDupCandidate_. */
-    if (scope === 'unplanned') {
+    if (scope === 'unplanned' || scope === 'all') {
       var defs = gardenPlanRows_(ss);
       var lists0 = gardenLists_(ss);
       for (var q = 0; q < rows.length; q++) {
+        /* רק על מה שבאמת ממתין לשיבוץ. החישוב הזה עולה, ואין שום טעם לחפש
+           כפילות למשימה שכבר סגורה או כבר משובצת. */
+        if (rows[q].closure || rows[q].week) continue;
         rows[q].dupOf = gardenDupCandidate_(rows[q], all);
         rows[q].coveredBy = gardenPlanCovers_(ss, rows[q], defs, lists0.areas);
       }
+    }
+
+    /* ---- מספר הפנייה (2026-09-09) ----
+       ⚠️ לתקלה של תושב יש **שני** מספרים רצים: אחד בטאב הדיווחים ואחד בטאב
+       המשימות. התושב מקבל את הראשון ("הדיווח נשלח · מספר 7") והצוות עבד עד
+       היום לפי השני, ואף מסך לא הציג את שניהם — כך שאי אפשר היה למצוא תקלה
+       לפי המספר שנמסר עליה. מהיום מספר הפנייה נוסע עם המשימה, והוא היחיד
+       שמוצג. ר' הצוות האדום, 9.9. */
+    var repOf = {};
+    var rshx = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+    if (rshx && rshx.getLastRow() > 1) {
+      var rcx = gardenCols_(rshx), rvx = rshx.getDataRange().getValues();
+      for (var ri = 1; ri < rvx.length; ri++) {
+        var tk = String(rvx[ri][rcx['מזהה משימה']] || '').trim();
+        var rk = String(rvx[ri][rcx['מזהה']] || '').trim();
+        /* הראשון מנצח: אחרי איחוד כמה דיווחים מצביעים לאותה משימה, והמספר
+           שמוצג הוא של הפנייה שפתחה אותה. */
+        if (tk && rk && !repOf[tk]) repOf[tk] = rk;
+      }
+    }
+    for (var q2 = 0; q2 < rows.length; q2++) {
+      if (repOf[rows[q2].id]) rows[q2].repId = repOf[rows[q2].id];
     }
     /* areas/categories מוחזרות בסדר שבו הן מוגדרות בטאב ההגדרות (עמודת "סדר"),
        ולא לפי א"ב. זה הסדר שבו הן נכתבו — צפון לדרום — והוא הסדר שבו אחראי
@@ -8450,7 +8679,10 @@ function gardenMaterializeWeek_(ss, weekKey) {
     /* ⚠️ בלי זה אי אפשר לחשב זמן טיפול, ואי אפשר להשלים רטרואקטיבית.
        זה הנתון שכמעט איבדנו פעם אחת כבר. */
     set('נוצר בתאריך', now);
-    set('שלב', 'מתוכננת');
+    /* ⚠️ 'מתוכנן', בזכר. היה כאן 'מתוכננת' — ערך שאינו ב-GARDEN_STAGES,
+       ולכן indexOf החזיר ‎-1 לכל משימת שגרה: השוואות שלב נשברו, וסרגל
+       ההתקדמות אצל התושב הציג משימה מתוכננת בשלב הראשון, 'התקבל'. */
+    set('שלב', 'מתוכנן');
     set('מזהה תבנית', w.def.id);
     set('שבוע', weekKey);
     /* "שבוע מקורי" נכתב כבר עכשיו ולא רק בגרירה הראשונה: הוא המכנה של
@@ -9218,6 +9450,26 @@ function gardenNotifyDeclined_(ss, taskId, closure, why) {
   } catch (e) { /* מייל שנכשל לא מבטל סגירה שכבר נרשמה */ }
 }
 
+/** "הדיווח שלך נכנס לתוכנית העבודה". התבנית קיימת מהיום הראשון ואף שורת קוד
+ *  לא שלחה אותה — התושב לא שמע כלום מרגע הקבלה ועד הסיום. נשלח בשיבוץ
+ *  הראשון בלבד (ר' הקריאה ב-op 'plan'). */
+function gardenNotifyPlanned_(ss, taskId, week) {
+  try {
+    var reps = gardenReportsForTask_(ss, taskId);
+    for (var i = 0; i < reps.length; i++) {
+      var rep = reps[i];
+      if (!rep.familyId) continue;
+      sendResidentTemplate_(ss, 'GARDEN_PLANNED', emailsForFamilyId_(ss, rep.familyId), {
+        'שם': rep.name || '',
+        'מזהה': rep.id,
+        'קטגוריה': rep.category || '',
+        'מיקום': rep.place || '',
+        'שבוע': week || ''
+      });
+    }
+  } catch (e) { /* מייל שנכשל לא מבטל שיבוץ שכבר נרשם */ }
+}
+
 /** מייל "הטיפול הושלם" לכל מי שדיווח על המשימה. נשלח **רק** אחרי אישור מנהל
  *  ורק בסגירה "בוצע" — סגירה מסוג אחר יוצאת דרך gardenNotifyDeclined_. */
 function gardenNotifyCompleted_(ss, taskId) {
@@ -9502,7 +9754,14 @@ function gardenTaskAction_(ss, body) {
     if (!f) return { ok: false, error: 'המשימה לא נמצאה' };
     var c = f.cols, row = f.row;
     var cur = gardenTaskObj_(sh.getRange(row, 1, 1, sh.getLastColumn()).getValues()[0], c);
-    if (cur.closure) return { ok: false, error: 'המשימה כבר נסגרה' };
+    /* ⚠️ 'clearflag' הוא **הפעולה היחידה שמותרת על משימה סגורה**, ובכוונה.
+       משוב שלילי של תושב מרים 'דורש בדיקה חוזרת' גם על משימה שכבר נסגרה
+       (gardenFeedback_ לא בודק סגירה — וזה נכון, המשוב אמיתי). בלי דרך
+       לכבות את הדגל הוא נספר בתג לנצח, הכרטיס לקריאה בלבד, וכל פעולה אחרת
+       נענית "המשימה כבר נסגרה". זה היה מסלול ללא מוצא. */
+    if (cur.closure && act !== 'clearflag') {
+      return { ok: false, error: 'המשימה כבר נסגרה' };
+    }
 
     if (act === 'done') {
       /* ⚠️ הצוות מקדם עד "בטיפול" בלבד — **רק המנהל קובע "הושלם"** (עקרון
@@ -9578,6 +9837,21 @@ function gardenTaskAction_(ss, body) {
       // "נגררה" הוא דגל של גרירה אוטומטית; שיבוץ ידני מנקה אותו.
       if (cur.flag === 'נגררה') gardenSet_(sh, row, c, 'דגל', '');
       gardenLog_(ss, id, 'שיבוץ', 'שבוע', cur.week, wk, who, '');
+      /* ⚠️ המייל הזה היה מוגדר מהיום הראשון ואף שורת קוד לא שלחה אותו —
+         מבחינת התושב הייתה שתיקה מלאה מרגע הקבלה ועד הסיום. שיבוץ **ראשון**
+         בלבד: גרירה ושינוי שבוע לא מייצרים הודעה נוספת. */
+      if (!cur.week && cur.kind === GARDEN_KIND_REPORT) {
+        try { gardenNotifyPlanned_(ss, id, wk); } catch (e) {}
+      }
+
+    } else if (act === 'clearflag') {
+      /* "טופל" — המנהל מסמן שהוא ראה את המשוב וסגר את הפינה. מנקה את הדגל
+         בלבד: לא פותח מחדש, לא נוגע בסגירה, ולא משנה שלב. */
+      if (perm.isExternal) return { ok: false, error: 'הפעולה בסמכות מנהל הגינון' };
+      if (!cur.flag) return { ok: true, id: id, noop: true };
+      gardenSet_(sh, row, c, 'דגל', '');
+      gardenLog_(ss, id, 'דגל', 'דגל', cur.flag, '', who,
+                 String(body.note || '').trim().substring(0, 500));
 
     } else if (act === 'block') {
       // "לא ניתן לביצוע" — לא סוגר ולא מעביר לבינוי. מרים דגל שמחזיר את

@@ -112,6 +112,58 @@ CBA.screens = CBA.screens || {};
   var lazyCache = { signups: null, gym: null, profile: null, ts: 0 };
   function cacheFresh() { return lazyCache.ts && (Date.now() - lazyCache.ts) < LAZY_TTL; }
 
+  /* שלושת הסינונים, במקום אחד (2026-09-09). שני מסלולים סופרים אותם עכשיו —
+     הקריאה המאוחדת והקריאות הבודדות — ושתי העתקות של אותו תנאי הן בדיוק איך
+     נולד "המספר במסך לא מסכים עם המספר בגיליון". */
+  function countPending(rows) {
+    return (rows || []).filter(function (r) {
+      return String(r.status || r["סטטוס"] || "").trim() === "ממתין";
+    }).length;
+  }
+  function countGymPending(res) {
+    return ((res && (res.members || res.rows)) || []).filter(function (x) {
+      return String(x["סטטוס"] || "").trim() === "ממתין לאימות";
+    }).length;
+  }
+
+  /* ============================================================================
+   *  עמוד הבית בקריאה אחת (2026-09-09)
+   * ----------------------------------------------------------------------------
+   *  נמדד חי: קריאה ל-Apps Script עולה ~1.5 שניות **מינימום**, גם כשהיא לא
+   *  נוגעת בגיליון. עמוד הבית שלח שש קריאות — כלומר ~9 שניות של תקורה טהורה
+   *  לפני שנקראה שורה אחת. `profileChanges` לבדה החזירה 21 בתים ב-3.3 שניות.
+   *
+   *  הפונקציה הזאת מושכת הכול פעם אחת ו**מזינה את המטמונים הקיימים**. היא
+   *  במכוון לא נוגעת ב-loadLazyCounts/loadNextReservation/loadNewCard עצמן:
+   *  הן רצות אחריה בדיוק כמו קודם, מוצאות מטמון טרי, ולא פונות לרשת.
+   *
+   *  ⚠️ **זו הסיבה שהנפילה-לאחור עובדת מעצמה.** אם השרת עדיין ישן, או שהקריאה
+   *     נכשלה — המטמונים נשארים ריקים ושלוש הפונקציות פונות לרשת בדיוק כמו
+   *     היום. אין תלות בסדר הדיפלוי בין הלקוח לשרת.
+   *  ⚠️ מקטע שהמשתמש לא רשאי לראות פשוט **לא חוזר** מהשרת (ר' handleHomeExtras_),
+   *     ולכן `undefined` כאן הוא תשובה תקינה ולא כשל. */
+  function primeHomeExtras(done) {
+    if (!CBA.data || !CBA.data.getHomeExtras) { done(); return; }
+    if (cacheFresh() && resvFresh()) { done(); return; }   // הכול טרי — אין מה למשוך
+    CBA.data.getHomeExtras(function (res) {
+      if (!res || !res.ok || !res.homeExtras) { done(); return; }   // שרת ישן/כשל -> המסלול הישן
+      if (res.signups && res.signups.ok) lazyCache.signups = countPending(res.signups.rows);
+      if (res.profile && res.profile.ok) lazyCache.profile = countPending(res.profile.rows);
+      if (res.gym && res.gym.ok) lazyCache.gym = countGymPending(res.gym);
+      lazyCache.ts = Date.now();
+
+      if (res.reservations && res.reservations.ok) {
+        resvCache.list = (res.reservations.reservations || []).slice().sort(function (a, b) {
+          return new Date(a.start) - new Date(b.start);
+        });
+        resvCache.ts = Date.now();
+      }
+      if (res.tour && window.CBA.tour && CBA.tour.seed) CBA.tour.seed(res.tour);
+      if (res.club && window.CBA.seedClubAlerts) CBA.seedClubAlerts(res.club);
+      done();
+    });
+  }
+
   /* טעינת שתי הספירות שדורשות שרת. כל אחת עצמאית: כישלון של אחת לא מוחק
      את השנייה ולא שובר את העמוד — היא פשוט נעלמת בשקט. */
   function loadLazyCounts(container) {
@@ -140,12 +192,7 @@ CBA.screens = CBA.screens || {};
 
     if (slotS && CBA.data.listSignups) {
       CBA.data.listSignups(function (res) {
-        var n = 0;
-        if (res && res.ok) {
-          n = (res.rows || []).filter(function (r) {
-            return String(r.status || r["סטטוס"] || "").trim() === "ממתין";
-          }).length;
-        }
+        var n = (res && res.ok) ? countPending(res.rows) : 0;
         lazyCache.signups = n;
         done(slotS, signupRow(n));
       });
@@ -153,12 +200,7 @@ CBA.screens = CBA.screens || {};
 
     if (slotG && CBA.data.getGymList) {
       CBA.data.getGymList(function (res) {
-        var n = 0;
-        if (res && res.ok) {
-          n = (res.members || res.rows || []).filter(function (x) {
-            return String(x["סטטוס"] || "").trim() === "ממתין לאימות";
-          }).length;
-        }
+        var n = (res && res.ok) ? countGymPending(res) : 0;
         lazyCache.gym = n;
         done(slotG, gymRow(n));
       });
@@ -166,12 +208,7 @@ CBA.screens = CBA.screens || {};
 
     if (slotP && CBA.data.getProfileChanges) {
       CBA.data.getProfileChanges(function (res) {
-        var n = 0;
-        if (res && res.ok) {
-          n = (res.rows || []).filter(function (x) {
-            return String(x["סטטוס"] || "").trim() === "ממתין";
-          }).length;
-        }
+        var n = (res && res.ok) ? countPending(res.rows) : 0;
         lazyCache.profile = n;
         done(slotP, profileRow(n));
       });
@@ -337,9 +374,13 @@ CBA.screens = CBA.screens || {};
 
       bindClicks(container);
       syncClearState(container);
-      loadLazyCounts(container);
-      loadNextReservation(container);
-      loadNewCard(container);
+      /* קריאה אחת מזינה את כל המטמונים, ואז שלוש הפונקציות רצות בדיוק כמו
+         קודם — רק בלי לפנות לרשת. ר' primeHomeExtras. */
+      primeHomeExtras(function () {
+        loadLazyCounts(container);
+        loadNextReservation(container);
+        loadNewCard(container);
+      });
     }
   };
 })();

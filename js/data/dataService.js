@@ -1431,7 +1431,17 @@ CBA.data = (function () {
       if (opts && opts.scope) q.scope = opts.scope;
       CBA.sheets.get(q, cb);
     },
-    /* פעולה בודדת על משימה. op: done | undo | note | defer | block */
+    /* מחיקת משימה — מנהל בלבד, סיבה חובה. מוחקת גם את שורות הדיווח
+       המקושרות ואת התמונות; היומן נשאר שלם. ר' gardenTaskDelete_ בשרת. */
+    gardenTaskDelete: function (id, why, cb) {
+      CBA.sheets.postRead("gardenTaskDelete", { id: id, why: why }, cb);
+    },
+    /* מחיקת דיווח ע"י התושב שכתב אותו — רק כל עוד איש לא נגע בו. */
+    gardenReportDelete: function (id, cb) {
+      CBA.sheets.postRead("gardenReportDelete", { id: id }, cb);
+    },
+    /* פעולה בודדת על משימה. op: done | undo | note | defer | block | plan |
+       return | approve | close | clearflag */
     gardenTask: function (op, id, extra, cb) {
       var payload = { op: op, id: id };
       if (extra && extra.note !== undefined) payload.note = extra.note;
@@ -1546,6 +1556,10 @@ CBA.data = (function () {
       CBA.sheets.postRead("rejectProfileChange", { id: id, reason: reason || "" }, cb);
     },
     getTour: function (cb) { CBA.sheets.get({ action: "tour" }, cb); },
+    /* עמוד הבית בקריאה אחת (2026-09-09). מחזירה את כל מה שהעמוד צריך —
+       ר' handleHomeExtras_ ב-Code.gs. אם השרת עדיין ישן, התשובה לא תכיל
+       `homeExtras:true` והלקוח נופל חזרה לקריאות הבודדות. */
+    getHomeExtras: function (cb) { CBA.sheets.get({ action: "homeExtras" }, cb); },
     markTourSeen: function (version, cb) { CBA.sheets.postRead("markTourSeen", { version: version }, cb); },
     listEmailSettings: function (cb) { CBA.sheets.get({ action: "listEmailSettings" }, cb); },
     saveEmailSetting: function (key, fields, cb) {

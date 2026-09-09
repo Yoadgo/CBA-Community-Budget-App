@@ -221,9 +221,22 @@ CBA.tour = (function () {
     return 0;
   }
 
+  /* הזרעה מבחוץ (2026-09-09). עמוד הבית מושך היום את כל מה שהוא צריך
+     בקריאה אחת (`homeExtras`), והסיור הוא אחד המקטעים שם. במקום שהוא ישלח
+     קריאת רשת שנייה לאותו מידע בדיוק — הוא מקבל אותו ישירות.
+     ⚠️ אותה תשובה בדיוק שמגיעה מ-`action=tour`, ולכן אין כאן פענוח שני של
+        הפורמט. אם ההזרעה לא קרתה, `load()` ימשיך לעבוד כרגיל. */
+  function seed(res) {
+    if (loaded || !res || !res.ok) return false;
+    steps = res.steps || [];
+    seen = num(res.seen, 0);
+    loaded = true;
+    return true;
+  }
+
   return {
     start: start, startNew: startNew, close: close,
-    maybeAutoStart: maybeAutoStart, newCount: newCount,
+    maybeAutoStart: maybeAutoStart, newCount: newCount, seed: seed,
     isOpen: function () { return !!el; }
   };
 })();
