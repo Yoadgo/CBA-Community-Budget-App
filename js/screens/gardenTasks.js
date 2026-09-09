@@ -251,6 +251,7 @@
 
       container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
       var root = container.querySelector("#gt-root");
+      var cardsWired = false;   // ראה wire() — מאזין הלחיצות המואצל נרשם פעם אחת
       draw(true);
       load();
 
@@ -689,7 +690,12 @@
         if (on && on.scrollIntoView) {
           try { on.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) {}
         }
-        root.addEventListener("click", onCardClick);
+        /* ⚠️ פעם אחת בלבד (2026-09-09). wire() נקראת בכל draw(), ו-root עצמו
+           אינו מוחלף — רק התוכן שלו. בלי השמירה הזאת נרשם מאזין נוסף
+           בכל ציור, ואחרי ארבע החלפות מסנן לחיצה אחת על ‹› פתחה ארבעה
+           גיליונות מוערמים. שאר המאזינים כאן יושבים על אלמנטים שנבנים
+           מחדש בכל ציור, ולכן הם אינם צוברים. */
+        if (!cardsWired) { root.addEventListener("click", onCardClick); cardsWired = true; }
       }
 
       function onCardClick(e) {
@@ -761,6 +767,10 @@
         busyIds[id] = true;
 
         var t = byId(id);
+        /* ⚠️ נקרא **לפני** ה-OPTIMISTIC, שמשנה את השורה במקום (2026-09-09).
+           ההודעה אחרי סימון הייתה קבועה — "ממתין לאישור" — גם למשימות
+           שגרה ויזום, שנסגרות מיד. הגנן חיכה לאישור שכבר לא יגיע. */
+        var wasReport = !!(t && t.kind === GK_REPORT);
         var snapshot = t ? JSON.parse(JSON.stringify(t)) : null;
         var applied = false;
         if (t && OPTIMISTIC[op]) {
@@ -787,7 +797,7 @@
             CBA.ui.alert((res && res.error) || "הפעולה לא הצליחה");
             return;
           }
-          if (op === "done") CBA.ui.toast("סומן כבוצע · ממתין לאישור");
+          if (op === "done") CBA.ui.toast(wasReport ? "סומן כבוצע · ממתין לאישור" : "סומן כבוצע");
           if (op === "undo") CBA.ui.toast("הסימון בוטל");
           if (op === "defer") CBA.ui.toast("נדחה לשבוע הבא");
           if (op === "note") CBA.ui.toast("ההערה נשמרה");

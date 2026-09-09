@@ -213,6 +213,15 @@
      שעליו נשען חישוב הריפוד התחתון של כל המסכים. */
   .bottomline-bar .present-strip { display: none; }
 
+  /* גרפי מצב התצוגה (2026-09-09) — במסך צר טור הסכומים בגרף הניצול
+     והתוויות בגרף הקצב נדחסים עד לבלתי-קריאים. הגרפים נשארים זמינים,
+     רק מצומצמים: הסכומים המספריים יורדים והשמות מקבלים את המקום. */
+  .present-util__row { grid-template-columns: minmax(70px, 1.2fr) 3fr 38px; }
+  .present-util__nums { display: none; }
+  .present-chart { padding: 12px 12px 8px; }
+  .present-chart__legend { margin-inline-start: 0; width: 100%; }
+  .present-toolbar__charts { margin-inline-start: 0; }
+
   /* ---------- שלב 2: מסך "תכנון מול ביצוע" — פריסה אנכית מרווחת ---------- */
   .budget-cols { gap: 26px; }
   .bgroup__head { margin-bottom: 14px; }

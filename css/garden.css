@@ -207,9 +207,25 @@
 .gd-rep.k-weed::before  { background: var(--c-weed); }
 .gd-rep.k-clean::before { background: var(--c-clean); }
 .gd-rep.k-bed::before   { background: var(--c-bed); }
+/* ⚠️ 2026-09-09 — כאן היה גרדיאנט ירוק שנראה כמו תמונה ממוזערת ולא היה
+   כזה: התכונה data-photo נכתבה ואיש לא קרא אותה, ולכן כל הכרטיסים נראו
+   זהים בין אם צורפו תמונות ובין אם לא. עכשיו האריח מציג את סמליל הקטגוריה
+   בצבע שלה, ומונה תמונות קטן כשיש. */
 .gd-rep__th { width: 56px; height: 56px; border-radius: 11px; flex: none;
-  background: linear-gradient(140deg, #CFE0C4, #94B786);
-  background-size: cover; background-position: center; }
+  display: grid; place-items: center; position: relative;
+  background: var(--c-clean-s); color: var(--c-clean); }
+.gd-rep__th svg { width: 24px; height: 24px; }
+.k-lawn  .gd-rep__th { background: var(--c-lawn-s);  color: var(--c-lawn); }
+.k-water .gd-rep__th { background: var(--c-water-s); color: var(--c-water); }
+.k-tree  .gd-rep__th { background: var(--c-tree-s);  color: var(--c-tree); }
+.k-prune .gd-rep__th { background: var(--c-prune-s); color: var(--c-prune); }
+.k-weed  .gd-rep__th { background: var(--c-weed-s);  color: var(--c-weed); }
+.k-clean .gd-rep__th { background: var(--c-clean-s); color: var(--c-clean); }
+.k-bed   .gd-rep__th { background: var(--c-bed-s);   color: var(--c-bed); }
+.gd-rep__ph { position: absolute; inset-block-end: -3px; inset-inline-end: -3px;
+  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 99px;
+  background: var(--action, #111827); color: #fff; font-size: 10.5px; font-weight: 700;
+  display: grid; place-items: center; border: 2px solid #fff; }
 .gd-rep__b { flex: 1; min-width: 0; }
 .gd-rep__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .gd-rep__id { font-size: 11.5px; color: var(--text-soft, #6B7280); font-weight: 600; }
@@ -234,8 +250,14 @@
    כדי שאפשר יהיה להבחין ביניהם בלי לקרוא. ר' מסמך האפיון המותאם. */
 .gd-axis { display: flex; align-items: center; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
 .gd-track { display: flex; gap: 4px; }
-.gd-track i { width: 7px; height: 7px; border-radius: 50%; background: #E1E5E9; display: block; }
-.gd-track i.on { background: #9CA3AF; }
+/* ⚠️ שלוש מצבים ולא שניים (2026-09-09): מה שמאחור, **הנוכחי**, ומה שלפנים.
+   קודם השלב הנוכחי לא סומן כלל, וההפרש בין "מאחור" (#9CA3AF) ל"לפנים"
+   (#E1E5E9) בעיגול של 7px היה כמעט בלתי נראה — הציר נקרא כשורת נקודות ריקות. */
+.gd-track i { width: 7px; height: 7px; border-radius: 50%; background: #DFE3E7;
+  display: block; }
+.gd-track i.on { background: #6B7280; }
+.gd-track i.now { background: var(--action, #111827); transform: scale(1.15);
+  box-shadow: 0 0 0 3px rgba(17,24,39,.12); }
 .gd-track i.done { background: var(--ok, #059669); box-shadow: 0 0 0 3px rgba(5,150,105,.16); }
 .gd-axis b { font-size: 12.5px; font-weight: 600; color: var(--text, #374151); }
 .gd-axis.is-done b { color: var(--ok, #059669); }
@@ -245,6 +267,10 @@
 .gd-flag.is-crit { background: #FDE7EC; color: var(--danger, #F43F5E); }
 
 /* ---------- משוב ---------- */
+/* סינון בלי תוצאות — שורה אחת במקום אזור ריק בלי מילה. */
+.gd-none { text-align: center; padding: 26px 12px; font-size: 13.5px;
+  color: var(--text-soft, #6B7280); }
+
 .gd-fb { display: flex; gap: 7px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
 .gd-fb span { font-size: 12px; color: var(--text-soft, #6B7280); }
 .gd-fb button { font-family: inherit; border-radius: 9px; padding: 5px 13px;
@@ -952,11 +978,17 @@
 .gt-week.is-static .gt-week__c { text-align: start; }
 
 /* מחיקה על שורת תוכנית העבודה, לצד העריכה והמתג. אדום רק במגע — שורת
-   רשימה עם כפתור אדום קבוע קוראת כאילו משהו לא בסדר בשורה עצמה. */
-.gp-del { width: 26px; height: 26px; flex: none; border: 0; border-radius: 8px;
-  background: none; color: #9BA3A0; cursor: pointer; display: grid; place-items: center; }
-.gp-del svg { width: 15px; height: 15px; }
-.gp-del:hover { background: rgba(163,47,62,.10); color: #A32F3E; }
+   רשימה עם כפתור אדום קבוע קוראת כאילו משהו לא בסדר בשורה עצמה.
+   ⚠️ 2026-09-09 — עד היום המחלקה כאן נקראה .gp-del, בדיוק כמו כפתור המחיקה
+   שבתוך טופס העריכה, ובאותה ספציפיות. הכלל הזה נטען אחרון ולכן ניצח, וכפתור
+   "מחיקה מהתוכנית" שבטופס קיבל קופסה של 26×26 פיקסלים: הטקסט גלש ממנה והצבע
+   יצא אפור במקום אדום. שני כפתורים שונים = שני שמות. */
+.gp-del-row { width: 26px; height: 26px; flex: none; border: 0; border-radius: 8px;
+  background: none; color: #9BA3A0; cursor: pointer; display: grid; place-items: center;
+  /* רווח מהמתג שלידו — פח צמוד למתג הוא הזמנה ללחיצה בטעות. */
+  margin-inline-end: 8px; }
+.gp-del-row svg { width: 15px; height: 15px; }
+.gp-del-row:hover { background: rgba(163,47,62,.10); color: #A32F3E; }
 
 /* פעולה הרסנית בתפריט ה-⋯. */
 .gt-opt.is-danger { color: #A32F3E; }

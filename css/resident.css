@@ -6,6 +6,12 @@
 
 /* אריחי סיכום — נגזרים מ-.stat, עם ערך בצבע סמנטי */
 .res-summary { grid-template-columns: repeat(3, 1fr); }
+/* התווית של מונה הכסף נושאת מעכשיו גם את שנת התקציב ("שולמו בתשפ"ז", 2026-09-09),
+   כדי ש-₪0 ב-1 בספטמבר לא ייראה כמו באג. שלוש עמודות שוות ברוחב קבוע — בטלפון
+   צר התווית נשברת לשתי שורות, והגריד משווה גבהים ממילא. זה רק מוודא שמילה
+   ארוכה לא גולשת מהכרטיס. */
+.res-summary .stat { padding-left: 14px; padding-right: 14px; }
+.res-summary .stat__label { overflow-wrap: anywhere; line-height: 1.35; }
 .stat--warn .stat__value { color: var(--warn); }
 .stat--blue .stat__value { color: #2563EB; }
 .stat--ok   .stat__value { color: var(--ok); }

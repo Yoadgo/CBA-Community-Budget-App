@@ -2592,3 +2592,76 @@ button.is-busy,
 
 /* כפתורי "הוסף שורה" לסעיף שעות — מוסיפים שורה תקינה, לא מחליפים את הטקסט */
 .sadm-hrs-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+
+/* ==========================================================================
+   מצב תצוגה — שכבת ביצוע וגרפים  (2026-09-09)
+   כל מה שכאן נכנס לפעולה רק כשהמתגים דלוקים. כשהם כבויים אף כלל כאן
+   לא מוצא אלמנט, ולכן מצב התצוגה נראה בדיוק כפי שנראה קודם.
+   ⚠️ כל שם מחלקה נושא תחילית present- מסיבה טובה: .lg קצר כבר התנגש פעם
+   אחת עם liquid-glass.css והפיל עיצוב על הלגנדה.
+   ========================================================================== */
+
+/* --- שורת "בוצע": תווית · מד · סכום · אחוז ---
+   ⚠️ הפס הקיים (.present-bar) לא נגעו בו. המד כאן הוא מדידה אחרת לגמרי:
+   100% שלו = התכנון של הסעיף עצמו, בעוד 100% של הפס = הסעיף הגדול בבלוק.
+   ר' ההערה ב-planPresentCardHTML. */
+.present-actline {
+  display: grid; grid-template-columns: auto 1fr auto auto;
+  align-items: center; gap: 7px;
+  font-size: 11px; color: var(--text-soft); margin-top: 6px;
+}
+.present-actline__k { color: var(--text-muted); }
+.present-actline__v { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.present-actline__pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+.present-meter { height: 5px; border-radius: 3px; background: #EDEFF2; overflow: hidden; }
+.present-meter > i { display: block; height: 100%; border-radius: 3px; background: #0E7490; }
+.present-meter--none { background: repeating-linear-gradient(90deg,#E5E7EB 0 3px,transparent 3px 6px); }
+.present-actline--warn   .present-meter > i { background: var(--warn); }
+.present-actline--danger .present-meter > i { background: var(--danger); }
+.present-actline--ok     .present-actline__pct { color: var(--badge-ok); }
+.present-actline--warn   .present-actline__pct { color: var(--badge-warn); }
+.present-actline--danger .present-actline__pct { color: var(--badge-danger); }
+
+/* --- צ'יפים לפתיחת גרף --- */
+.present-toolbar__charts { display: inline-flex; gap: 8px; margin-inline-start: auto; }
+.present-chip.is-on { background: var(--action); color: #fff; border-color: var(--action); }
+
+/* --- מסגרת הגרף --- */
+.present-chart {
+  border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+  padding: 14px 16px 10px; margin-bottom: 16px; background: var(--surface);
+}
+.present-chart__head {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.present-chart__title { font-size: 13px; font-weight: 700; color: var(--text); }
+.present-chart__legend {
+  display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text-soft);
+  margin-inline-start: auto;
+}
+.present-chart__legend span { display: inline-flex; align-items: center; gap: 5px; }
+.present-dot { width: 9px; height: 3px; border-radius: 2px; display: inline-block; }
+.present-chart__note, .present-chart__hint { font-size: 11px; color: var(--text-muted); }
+.present-chart__note { margin-top: 8px; }
+.present-chart__empty { font-size: 13px; color: var(--text-soft); padding: 18px 2px; }
+
+/* --- גרף הניצול --- */
+.present-util { display: grid; gap: 7px; }
+.present-util__row {
+  display: grid; grid-template-columns: minmax(90px, 1.4fr) 3fr 42px auto;
+  align-items: center; gap: 10px; font-size: 12px;
+}
+.present-util__name {
+  color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.present-util__track {
+  position: relative; height: 9px; border-radius: 5px; background: #EDEFF2; overflow: hidden;
+}
+.present-util__track > i { display: block; height: 100%; border-radius: 5px; }
+/* קו ה-100% — בלעדיו אחוז החריגה נראה כמו עוד עמודה ארוכה */
+.present-util__mark {
+  position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--text-muted); opacity: .55;
+}
+.present-util__pct { font-weight: 700; text-align: end; font-variant-numeric: tabular-nums; color: var(--text-soft); }
+.present-util__pct.is-over { color: var(--badge-danger); }
+.present-util__nums { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }

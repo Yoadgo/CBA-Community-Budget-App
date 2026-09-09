@@ -789,16 +789,63 @@ CBA.data = (function () {
   function getBudgetByGroup() { return groupRowsByGroup(getBudgetRows()); }
 
   // --- תצוגה "מול השלב בשנה" ---
-  const FISCAL_KEYS = ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02",
-                       "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"];
+  /* ⚠️ 2026-09-09 — הרשימה הזאת הייתה מקודדת קשיח לתשפ"ו (2025-09..2026-08).
+     ברגע שתשפ"ז נהייתה השנה הפעילה זה נשבר בשקט ובגדול: תנועות ספטמבר 2026
+     נושאות חודש "2026-09" שאינו ברשימה, ולכן actualToDate החזירה 0 לכל סעיף,
+     cumulativeSeries צייר קו ביצוע שטוח באפס, ו-currentFiscalIndex לא מצאה
+     את החודש הנוכחי ונפלה ל-11 — כלומר המסך "מול השלב בשנה" הכריז שהשנה
+     נגמרה והציג צפי של כל התקציב השנתי מול ביצוע אפס.
+     מעכשיו החודשים נגזרים משם השנה. לתשפ"ו התוצאה זהה **בדיוק** לרשימה
+     הישנה, ולכן שום דבר קיים לא זז. */
+  const FISCAL_KEYS_LEGACY = ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02",
+                              "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"];
+
+  /* גימטריה של שם שנה עברית -> שנת ההתחלה הלועזית (ספטמבר).
+     תשפ"ו = 400+300+80+6 = 786 -> 5786 -> 5786-3761 = 2025.
+     תשפ"ז -> 787 -> 2026. גרשיים/רווחים מתעלמים. אות לא מוכרת או תוצאה
+     מחוץ לטווח הסביר -> null, והקורא נופל חזרה להתנהגות הישנה. */
+  const HEB_GEMATRIA = {
+    "א":1,"ב":2,"ג":3,"ד":4,"ה":5,"ו":6,"ז":7,"ח":8,"ט":9,
+    "י":10,"כ":20,"ך":20,"ל":30,"מ":40,"ם":40,"נ":50,"ן":50,
+    "ס":60,"ע":70,"פ":80,"ף":80,"צ":90,"ץ":90,"ק":100,"ר":200,"ש":300,"ת":400
+  };
+  function hebYearStartGreg(name) {
+    const letters = String(name || "").replace(/[^\u05D0-\u05EA]/g, "");
+    if (!letters) return null;
+    let n = 0;
+    for (let i = 0; i < letters.length; i++) {
+      const v = HEB_GEMATRIA[letters.charAt(i)];
+      if (!v) return null;
+      n += v;
+    }
+    if (n < 700 || n > 899) return null;   // ה'ת"ש עד ה'תתצ"ט — טווח שפוי לאלף השישי
+    return 5000 + n - 3761;
+  }
+  /* 12 מפתחות החודשים (yyyy-MM) של שנת תקציב, ספטמבר עד אוגוסט. */
+  function fiscalKeysFor(year) {
+    const g = hebYearStartGreg(year);
+    if (g == null) return FISCAL_KEYS_LEGACY;
+    const out = [];
+    for (let i = 0; i < 12; i++) {
+      let m = 9 + i, y = g;
+      if (m > 12) { m -= 12; y += 1; }
+      out.push(y + "-" + (m < 10 ? "0" + m : String(m)));
+    }
+    return out;
+  }
+  function fiscalKeys() { return fiscalKeysFor(getCurrentYear()); }
   function getFiscalMonths() {
     const labels = getMonthLabels();
-    return FISCAL_KEYS.map(function (k, i) { return { key: k, label: labels[i], index: i }; });
+    return fiscalKeys().map(function (k, i) { return { key: k, label: labels[i], index: i }; });
   }
   function currentFiscalIndex() {
     const today = new Date().toISOString().slice(0, 7);
-    const i = FISCAL_KEYS.indexOf(today);
-    return i < 0 ? FISCAL_KEYS.length - 1 : i;
+    const keys = fiscalKeys();
+    const i = keys.indexOf(today);
+    /* לפני תחילת השנה -> 0 (עוד לא נצבר כלום), אחריה -> 11 (השנה נגמרה).
+       הנפילה הגורפת ל-11 היא שגרמה לשנה חדשה להיראות כאילו הסתיימה. */
+    if (i >= 0) return i;
+    return today < keys[0] ? 0 : keys.length - 1;
   }
   // חלוקה חודשית מחושבת לפי מצב נתון (12 ערכים) — לוגיקה משותפת לסעיף
   // שלם ולתת-סעיף בודד (סעיף 7ג, 2026-08-10).
@@ -831,14 +878,14 @@ CBA.data = (function () {
     return s;
   }
   function actualToDate(c, asOf) {
-    const keys = FISCAL_KEYS.slice(0, asOf + 1);
+    const keys = fiscalKeys().slice(0, asOf + 1);
     return getTransactions().filter(function (t) {
       return t.categoryId === c.id && SPENT_STATUSES.indexOf(t.status) !== -1 && keys.indexOf(t.month) !== -1;
     }).reduce(function (s, t) { return s + (t.amount || 0); }, 0);
   }
   // שורות תקציב "נכון לחודש X" — צפי מול ביצוע עד אותו חודש
   function getBudgetRowsAsOf(asOf) {
-    const monthKeys = FISCAL_KEYS.slice(0, asOf + 1);
+    const monthKeys = fiscalKeys().slice(0, asOf + 1);
     return getCategories().map(function (c) {
       const expected = expectedToDate(c, asOf);
       const actual = actualToDate(c, asOf);
@@ -853,17 +900,103 @@ CBA.data = (function () {
   }
   // סדרות מצטברות לגרף: תכנון מצטבר מול ביצוע מצטבר לאורך החודשים
   function cumulativeSeries() {
+    const keys = fiscalKeys();
     const monthly = getCategories().map(categoryMonthly);
     const plan = [], actual = [];
     let cp = 0, ca = 0;
     for (let i = 0; i < 12; i++) {
       cp += monthly.reduce(function (s, arr) { return s + arr[i]; }, 0);
       ca += getTransactions().filter(function (t) {
-        return SPENT_STATUSES.indexOf(t.status) !== -1 && t.month === FISCAL_KEYS[i];
+        return SPENT_STATUSES.indexOf(t.status) !== -1 && t.month === keys[i];
       }).reduce(function (s, t) { return s + (t.amount || 0); }, 0);
       plan.push(cp); actual.push(ca);
     }
     return { labels: getFiscalMonths().map(function (m) { return m.label; }), plan: plan, actual: actual };
+  }
+
+  /* ==================================================================
+     נתוני שנה כלשהי  (2026-09-09) — תוספת בלבד, שום קוד קיים לא משתנה
+     ------------------------------------------------------------------
+     כל הפונקציות שמעל קוראות את השנה הפעילה דרך ה-getters של CBA.mock
+     (ר' mock.js: categories/transactions/income הם getters על
+     years[currentYear]). השוואה בין שנים צריכה בדיוק אותם חישובים על
+     שנה אחרת — בלי להחליף את השנה הפעילה ובלי לגעת במסכים הקיימים.
+     הנתונים כבר בזיכרון: doGet מחזיר את כל השנים, אז אין כאן פנייה לשרת.
+
+     ⚠️ הלוגיקה כאן תאומה ל-getBudgetRows / cumulativeSeries שמעל. אם
+        משתנה כלל ספירה (SPENT_STATUSES, ספי הרמזור) — לשנות בשני המקומות.
+        זו בדיוק מלכודת השכפול, ולכן ההערה הזאת קיימת.
+     ================================================================== */
+  function yearData(year) { return (CBA.mock.years || {})[year] || null; }
+  function getDataYears() { return Object.keys(CBA.mock.years || {}); }
+
+  /* שורות תכנון-מול-ביצוע לשנה כלשהי. אותם שדות כמו getBudgetRows(). */
+  function getYearRows(year) {
+    const d = yearData(year);
+    if (!d) return [];
+    const cats = d.categories || [], txs = d.transactions || [];
+    const sums = {};
+    cats.forEach(function (c) { sums[c.id] = 0; });
+    txs.forEach(function (t) {
+      if (SPENT_STATUSES.indexOf(t.status) !== -1 && sums.hasOwnProperty(t.categoryId)) {
+        sums[t.categoryId] += (t.amount || 0);
+      }
+    });
+    return cats.map(function (c) {
+      const plan = Number(c.plan) || 0;
+      const spent = sums[c.id] || 0;
+      const pct = plan > 0 ? (spent / plan) * 100 : (spent > 0 ? 999 : 0);
+      let band = "ok";
+      if (pct >= 100) band = "danger";
+      else if (pct >= 85) band = "warn";
+      return {
+        id: c.id, name: c.name, group: c.group,
+        incomeSourceId: c.incomeSourceId, sources: c.sources,
+        plan: plan, actual: spent, remaining: plan - spent, pct: pct, band: band
+      };
+    });
+  }
+
+  /* תכנון מצטבר מול ביצוע מצטבר לשנה כלשהי — 12 ערכים לכל סדרה.
+     מחזיר null לשנה שאין לה נתונים, כדי שהקורא ידע לוותר על הסדרה. */
+  function cumulativeSeriesFor(year) {
+    const d = yearData(year);
+    if (!d) return null;
+    const keys = fiscalKeysFor(year);
+    const monthly = (d.categories || []).map(categoryMonthly);
+    const txs = d.transactions || [];
+    const plan = [], actual = [];
+    let cp = 0, ca = 0;
+    for (let i = 0; i < 12; i++) {
+      cp += monthly.reduce(function (s, arr) { return s + arr[i]; }, 0);
+      ca += txs.filter(function (t) {
+        return SPENT_STATUSES.indexOf(t.status) !== -1 && t.month === keys[i];
+      }).reduce(function (s, t) { return s + (t.amount || 0); }, 0);
+      plan.push(cp); actual.push(ca);
+    }
+    return { year: year, labels: getMonthLabels(), plan: plan, actual: actual, keys: keys };
+  }
+
+  /* מקורות ההכנסה של שנה כלשהי, עם computed — כמו getIncomeSources(). */
+  function getIncomeSourcesFor(year) {
+    const d = yearData(year);
+    if (!d) return [];
+    return (d.income || []).map(function (src) {
+      const copy = Object.assign({}, src);
+      copy.computed = incomeAmount(src);
+      return copy;
+    });
+  }
+
+  /* עד איזה חודש (0-11) יש משמעות להשוואה בשנה נתונה: השנה שהסתיימה —
+     כל ה-12; השנה שרצה — עד החודש הנוכחי. משמש כדי לא לצייר קו ביצוע
+     שנופל לאפס בחודשים שעוד לא קרו. */
+  function fiscalIndexIn(year) {
+    const keys = fiscalKeysFor(year);
+    const today = new Date().toISOString().slice(0, 7);
+    const i = keys.indexOf(today);
+    if (i >= 0) return i;
+    return today < keys[0] ? -1 : 11;
   }
 
   // סיכום כללי לראש הדשבורד
@@ -1515,6 +1648,13 @@ CBA.data = (function () {
     currentFiscalIndex: currentFiscalIndex,
     getBudgetRowsAsOf: getBudgetRowsAsOf,
     cumulativeSeries: cumulativeSeries,
+    // השוואה בין שנים (2026-09-09) — תוספת, ר' הבלוק "נתוני שנה כלשהי"
+    getDataYears: getDataYears,
+    getYearRows: getYearRows,
+    cumulativeSeriesFor: cumulativeSeriesFor,
+    getIncomeSourcesFor: getIncomeSourcesFor,
+    fiscalIndexIn: fiscalIndexIn,
+    fiscalKeysFor: fiscalKeysFor,
     getSummary: getSummary,
     getIncomeSources: getIncomeSources,
     getIncomeTotal: getIncomeTotal,

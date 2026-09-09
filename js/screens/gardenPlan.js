@@ -147,7 +147,7 @@
           /* ⚠️ המחיקה ישבה עד 9.9 **רק בתוך טופס העריכה**, כך שכדי למחוק שורה
              היה צריך קודם לפתוח עריכה — ויועד פשוט לא מצא אותה. היא פעולה
              על השורה, ולכן מקומה על השורה. */
-          '<button type="button" class="gp-del" data-act="del" aria-label="מחיקה מהתוכנית">' +
+          '<button type="button" class="gp-del-row" data-act="del" aria-label="מחיקה מהתוכנית">' +
             ico("trash", 15) + '</button>' +
           '<button type="button" class="gp-sw' + (d.active ? "" : " off") +
             '" data-act="toggle" role="switch" aria-checked="' + (d.active ? "true" : "false") +

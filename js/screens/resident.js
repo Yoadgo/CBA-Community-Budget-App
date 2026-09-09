@@ -372,7 +372,7 @@ CBA.screens = CBA.screens || {};
      לתושב את העבר מהמסך — ר' ההערה ב-myRequestsAllYears.
      כשאין שנים קודמות (המצב היום) מוחזרת מחרוזת ריקה ושום דבר במסך
      לא משתנה. */
-  function pastYearsHTML(all, curYear) {
+  function pastYearsHTML(all, curYear, openByDefault) {
     var past = all.filter(function (t) { return String(t.year || "") !== String(curYear); });
     if (!past.length) return "";
     var byYear = {}, years = [];
@@ -385,9 +385,18 @@ CBA.screens = CBA.screens || {};
       return '<div class="rq-past__y">' + CBA.esc(y) + '</div>' +
              '<div class="rq-list">' + byYear[y].map(reqCardHTML).join("") + '</div>';
     }).join("");
-    return '<div class="rq-past">' +
-        '<button type="button" class="rq-past__toggle" aria-expanded="false">' +
-          '<span class="rq-past__toggle-t">הצג היסטוריה משנים קודמות (' + past.length + ')</span>' +
+    /* 2026-09-09: כשאין ולו בקשה אחת בשנה הפעילה, הבלוק נפתח מעצמו. אחרת
+       תושב שכל ההיסטוריה שלו בשנה קודמת ראה מסך שמכריז "עדיין אין בקשות"
+       ומתחתיו כפתור סגור — כלומר האפליקציה שיקרה לו ביום שהשנה התחלפה.
+       data-closed-label נשמר כאן ולא מחושב ב-bindCollapsibles, כי כשהבלוק
+       נפתח מראש הטקסט המוצג הוא כבר "הסתר" ואין ממה לגזור את הספירה. */
+    var openNow = !!openByDefault;
+    var closedLabel = 'הצג היסטוריה משנים קודמות (' + past.length + ')';
+    return '<div class="rq-past' + (openNow ? ' is-open' : '') + '">' +
+        '<button type="button" class="rq-past__toggle" aria-expanded="' + (openNow ? 'true' : 'false') + '">' +
+          '<span class="rq-past__toggle-t" data-closed-label="' + CBA.esc(closedLabel) + '">' +
+            (openNow ? 'הסתר היסטוריה' : closedLabel) +
+          '</span>' +
           chevDownIcon +
         '</button>' +
         '<div class="rq-past__body">' + body + '</div>' +
@@ -430,6 +439,11 @@ CBA.screens = CBA.screens || {};
       // כל השנים — לחלק ההיסטוריה בלבד. הרשימה הראשית והמונים נשארים
       // על השנה הפעילה, כדי ש"שולמו" ימשיך להיות "שולמו השנה".
       var allYears = myRequestsAllYears();
+      // השנה שמוצגת כרגע — משמשת גם לחיתוך ההיסטוריה וגם לתווית המונים.
+      var curYear = CBA.data.getCurrentYear();
+      var pastCount = allYears.filter(function (t) {
+        return String(t.year || "") !== String(curYear);
+      }).length;
 
       // הסטטיסטיקות למעלה (ממתינות/אושרו/שולמו) מתייחסות רק להחזרים בפועל —
       // "בקשות אחרות שטיפלנו בהן" זה לא כסף שמגיע למשפחה, אז לא נספר בתוכן.
@@ -453,6 +467,14 @@ CBA.screens = CBA.screens || {};
           listHTML += '<div class="rq-section-title">בקשות אחרות שטיפלנו בהן</div>';
           listHTML += '<div class="rq-list">' + handled.map(reqCardHTML).join("") + '</div>';
         }
+      } else if (pastCount) {
+        /* יש היסטוריה, רק לא בשנה הפעילה. "עדיין אין בקשות" כאן היה פשוט לא
+           נכון — ב-1 בספטמבר, ברגע שהשנה התחלפה, כל תושב היה מקבל את המסך
+           הזה למרות שהקבלות וההחזרים שלו קיימים במערכת. */
+        listHTML = '<div class="rs-empty rs-empty--compact">' +
+              '<p>אין בקשות חדשות בשנת התקציב ' + CBA.esc(curYear) +
+              '. הבקשות והקבלות מהשנים הקודמות מופיעות למטה.</p>' +
+            '</div>';
       } else {
         listHTML = '<div class="rs-empty">' + inboxIcon +
               '<b>עדיין אין בקשות</b>' +
@@ -464,7 +486,8 @@ CBA.screens = CBA.screens || {};
       // מכבים את הדגל קודם: הסיכום מכסה רק את השנה הפעילה, ובקשה משנה
       // קודמת שעדיין "הועבר להנה"ח" כן צריכה להציג את המועד שלה.
       refundSummaryShown = false;
-      listHTML += pastYearsHTML(allYears, CBA.data.getCurrentYear());
+      // נפתח מעצמו בדיוק כשאין מה להראות בשנה הפעילה — ר' pastYearsHTML.
+      listHTML += pastYearsHTML(allYears, curYear, !refunds.length && !handled.length);
 
       container.innerHTML =
         '<div class="screen-head"><div class="screen-head__title">שלום, ' + CBA.esc(fullName(u)) + '</div>' +
@@ -472,7 +495,7 @@ CBA.screens = CBA.screens || {};
         '<div class="summary res-summary">' +
           '<div class="stat stat--warn"><div class="stat__label">ממתינות</div><div class="stat__value">' + counts.pending + '</div></div>' +
           '<div class="stat stat--blue"><div class="stat__label">אושרו</div><div class="stat__value">' + counts.ready + '</div></div>' +
-          '<div class="stat stat--ok"><div class="stat__label">שולמו</div><div class="stat__value">' + CBA.formatILS(counts.paid) + '</div></div>' +
+          '<div class="stat stat--ok"><div class="stat__label">שולמו ב' + CBA.esc(curYear) + '</div><div class="stat__value">' + CBA.formatILS(counts.paid) + '</div></div>' +
         '</div>' +
         '<button class="btn-primary rs-cta" data-goto="resSubmit">' + plusIcon + ' הגשת בקשה חדשה</button>' +
         '<div id="rq-gym">' + gymCardHTML() + '</div>' +

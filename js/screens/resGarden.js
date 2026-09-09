@@ -141,8 +141,11 @@
   function withMeta(cb) {
     if (META) return cb(META);
     CBA.data.getGardenMeta(function (res) {
-      META = (res && res.ok) ? res : { categories: [], areas: [], photoMax: 8 };
-      cb(META);
+      /* ⚠️ שומרים במטמון **רק הצלחה** (2026-09-09). קודם גם כישלון נשמר,
+         ולכן נפילת רשת אחת נעלה את המסך על רשימת קטגוריות ריקה עד רענון
+         מלא של הדף — כולל שדה חובה שאין בו מה לבחור. */
+      if (res && res.ok) { META = res; return cb(META); }
+      cb({ categories: [], areas: [], photoMax: 8, failed: true });
     });
   }
 
@@ -164,7 +167,7 @@
       });
 
       var listEl = container.querySelector("#gd-list");
-      var all = [], filter = "all";
+      var all = [], filter = "all", loadErr = false;
 
       function counts() {
         var open = 0, wait = 0, done = 0;
@@ -176,6 +179,19 @@
       }
 
       function draw() {
+        if (loadErr) {
+          listEl.innerHTML = CBA.ui.emptyState({
+            title: "לא הצלחנו לטעון את הדיווחים",
+            sub: "זו תקלת תקשורת, לא מחיקה — הדיווחים שלך שמורים.",
+            ctaLabel: "לנסות שוב", ctaAttr: 'id="gd-retry"'
+          });
+          var rb = listEl.querySelector("#gd-retry");
+          if (rb) rb.addEventListener("click", function () {
+            listEl.innerHTML = CBA.skel ? CBA.skel.cards(4) : "";
+            load();
+          });
+          return;
+        }
         if (!all.length) {
           listEl.innerHTML = CBA.ui.emptyState({
             title: "עדיין לא דיווחת על כלום",
@@ -195,8 +211,12 @@
 
         listEl.innerHTML =
           '<div class="gd-stats">' +
-            statTile("open", "clock", n.open, "בטיפול") +
-            statTile("wait", "list", n.wait, "ממתין לאישור") +
+            /* ⚠️ התוויות כאן חייבות להסכים עם מה שכתוב על הכרטיס ועל הסינון
+               (2026-09-09). "בטיפול" ספר גם דיווחים שאיש עוד לא נגע בהם,
+               בזמן שהכרטיס שמתחתיו אמר "התקבל"; ו"ממתין לאישור" בניסוח הגולמי
+               נקרא כאילו הדיווח לא אושר, כשהכוונה הפוכה — העבודה כבר בוצעה. */
+            statTile("open", "clock", n.open, "פתוחים") +
+            statTile("wait", "list", n.wait, "בוצע, לאישור") +
             statTile("done", "check", n.done, "הושלמו") +
           '</div>' +
           '<div class="gd-seg" role="tablist">' +
@@ -204,7 +224,13 @@
             segBtn("open", "פתוחים", n.open) +
             segBtn("done", "הושלמו", n.done) +
           '</div>' +
-          '<div class="gd-reps">' + shown.map(card).join("") + '</div>';
+          (shown.length
+            ? '<div class="gd-reps">' + shown.map(card).join("") + '</div>'
+            /* סינון שאין בו כלום הציג אזור ריק בלי מילה — ר' הצוות האדום. */
+            : '<div class="gd-none">' +
+                (filter === "done" ? "עוד לא הושלם אף דיווח."
+                                   : "אין דיווחים פתוחים. הכול טופל.") +
+              '</div>');
 
         Array.prototype.forEach.call(listEl.querySelectorAll(".gd-seg button"), function (b) {
           b.addEventListener("click", function () { filter = b.dataset.f; draw(); });
@@ -230,15 +256,28 @@
         var c = catOf(r.category);
         var idx = stageIdx(r.stage);
         var done = r.stage === "הושלם";
+        /* ⚠️ עד 9.9 התנאי היה i < idx בלבד, כלומר **השלב הנוכחי לא הודלק**:
+           דיווח חדש בשלב "התקבל" הציג חמש נקודות ריקות, בדיוק ברגע שבו התושב
+           הכי צריך לראות שמשהו קרה. עכשיו: מה שמאחור מלא, הנוכחי מודגש. */
         var dots = "";
         for (var i = 0; i < 5; i++) {
-          dots += '<i class="' + (i < idx ? "on" : (i === 4 && done ? "done" : (i === idx && done ? "done" : ""))) + '"></i>';
+          var cls = i < idx ? "on" : (i === idx ? (done ? "done" : "now") : "");
+          dots += '<i class="' + cls + '"></i>';
         }
         var flagTxt = r.flag ? (FLAG_TEXT[r.flag] || r.flag) : "";
         var crit = r.flag === "דורש בדיקה חוזרת";
         return '<article class="gd-rep k-' + c.key + '">' +
-          '<span class="gd-rep__th"' +
-            (r.photos && r.photos.length ? ' data-photo="' + esc(r.photos[0]) + '"' : '') + '></span>' +
+          /* ⚠️ 2026-09-09 — כאן ישב ריבוע עם גרדיאנט ירוק ותכונת data-photo
+             שאיש לא קרא אף פעם. התוצאה: מי שצירף שמונה תמונות ראה בדיוק את
+             אותו ריבוע כמו מי שלא צירף כלום, ולא היה לו שום אישור שהתמונות
+             נשלחו. עד שנחליט איך מגישים את התמונות עצמן (הן מזהי Drive, לא
+             כתובות), האריח מציג את הקטגוריה — מידע אמיתי — ומונה תמונות. */
+          '<span class="gd-rep__th">' + ico(c.ico) +
+            (r.photos && r.photos.length
+              ? '<b class="gd-rep__ph" title="' + r.photos.length + ' תמונות שצירפת">' +
+                r.photos.length + '</b>'
+              : '') +
+          '</span>' +
           '<div class="gd-rep__b">' +
             '<div class="gd-rep__top">' +
               '<span class="gd-rep__id">#' + esc(r.id) + '</span>' +
@@ -253,9 +292,16 @@
                   'aria-label="מחיקת הדיווח">' + ico("trash") + '</button>'
                 : '') +
             '</div>' +
-            '<div class="gd-rep__t">' + esc(r.desc || r.place || r.category) + '</div>' +
+            /* ⚠️ הנפילה־לאחור הייתה לשם הקטגוריה — בדיוק מה שכתוב בתג שורה
+               מעל. דיווח בלי תיאור הציג "השקיה / ממטרות" פעמיים ולא אמר כלום.
+               עכשיו: תיאור, ואם אין — המיקום, ואם גם אין — מספר הדיווח.
+               וכשהמיקום עלה לכותרת הוא יורד משורת המטא, כדי לא לחזור עליו. */
+            '<div class="gd-rep__t">' +
+              esc(r.desc || r.place || r.area || ("דיווח #" + r.id)) + '</div>' +
             '<div class="gd-rep__m">' +
-              (r.place ? esc(r.place) + " · " : (r.area ? esc(r.area) + " · " : "")) +
+              (r.desc
+                ? (r.place ? esc(r.place) + " · " : (r.area ? esc(r.area) + " · " : ""))
+                : "") +
               'דווח ב-' + fmtDate(r.date) + '</div>' +
             '<div class="gd-axis' + (done ? " is-done" : "") + '">' +
               '<span class="gd-track">' + dots + '</span>' +
@@ -274,7 +320,11 @@
                     '<b>לא נפתח טיפול · ' + esc(r.closure) + '</b>' +
                     (r.closeWhy ? '<span>' + esc(r.closeWhy) + '</span>' : '') +
                     '</div>' : '')) +
-            (r.canFeedback
+            /* ⚠️ 2026-09-09 — קודם השאלה הוצגה גם על דיווח שנסגר בלי טיפול
+               ("לא נפתח טיפול · בוטל"), כלומר ביקשנו מהתושב לדרג עבודה שלא
+               נעשתה. משוב הוא על ביצוע; סגירה בלי ביצוע היא החלטה, ואם היא
+               לא ברורה — מקומה בשיחה, לא בכפתור "לא הושלם". */
+            ((r.canFeedback && (!r.closure || r.closure === "בוצע"))
               ? '<div class="gd-fb"><span>הטיפול היה בסדר?</span>' +
                 '<button type="button" class="y" data-fb="y" data-id="' + esc(r.id) + '">כן, תודה</button>' +
                 '<button type="button" class="n" data-fb="n" data-id="' + esc(r.id) + '">לא הושלם</button></div>'
@@ -322,7 +372,11 @@
 
       function load() {
         CBA.data.getMyGardenReports(function (res) {
-          all = (res && res.ok) ? (res.rows || []) : [];
+          /* ⚠️ כשל רשת אינו "אין דיווחים" (2026-09-09). קודם שניהם הובילו
+             לאותו מסך — "עדיין לא דיווחת על כלום" — ותושב שדיווח אתמול על
+             עץ שנפל ראה שהמערכת שכחה אותו. */
+          loadErr = !(res && res.ok);
+          all = loadErr ? [] : (res.rows || []);
           draw();
         });
       }
@@ -339,9 +393,38 @@
       var state = { cat: "", x: null, y: null, area: "", photos: [] };
       var user = (window.CBA && CBA.user) || {};
 
+      /* ⚠️ 2026-09-09 — עד היום הטופס לא צייר כלום עד ש-getGardenMeta חזר,
+         ולכן הכניסה הראשונה הייתה מסך לבן של כשנייה וחצי (קריאה ל-Apps
+         Script עולה ~1.5ש' מינימום — ר' זיכרון הביצועים). */
+      container.innerHTML = '<div class="gd-screen">' +
+        moduleHead("דיווח חדש", "מגיע ישירות לצוות הגינון · שיכון פלמחים", "") +
+        (CBA.skel ? CBA.skel.cards(3) : "") + '</div>';
+
       withMeta(function (meta) {
         var cats = (meta.categories || []);
         var photoMax = meta.photoMax || 8;
+
+        /* רשימת קטגוריות ריקה = הטופס אינו שמיש (הקטגוריה היא שדה חובה).
+           עדיף לומר את זה מראש מאשר לתת ללחוץ "שליחה" ולקבל "צריך לבחור
+           קטגוריה" על שדה שאין בו מה לבחור. */
+        if (!cats.length) {
+          container.innerHTML = '<div class="gd-screen">' +
+            moduleHead("דיווח חדש", "מגיע ישירות לצוות הגינון · שיכון פלמחים",
+              '<button type="button" class="gd-backbtn" id="gd-back">' + ico("back") +
+              ' לדיווחים שלי</button>') +
+            CBA.ui.emptyState({
+              title: "לא הצלחנו לטעון את הטופס",
+              sub: "זו תקלת תקשורת. אפשר לנסות שוב בעוד רגע.",
+              ctaLabel: "לנסות שוב", ctaAttr: 'id="gd-retry"'
+            }) + '</div>';
+          var bk = container.querySelector("#gd-back");
+          if (bk) bk.addEventListener("click", function () { CBA.navigate("resGarden"); });
+          var rt = container.querySelector("#gd-retry");
+          if (rt) rt.addEventListener("click", function () {
+            CBA.screens.resGardenNew.render(container);
+          });
+          return;
+        }
 
         container.innerHTML = '<div class="gd-screen">' +
           moduleHead("דיווח חדש", "מגיע ישירות לצוות הגינון · שיכון פלמחים",

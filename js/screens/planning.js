@@ -21,6 +21,13 @@ var planViewMode = false;
 var planPresentOpen = {};
 var planPresentExpandAll = false;
 var planPresentAxis = "group";   // "group" = לפי תחום · "fund" = לפי מקור מימון
+/* ==== תוספות 2026-09-09 — כולן כבויות כברירת מחדל ====
+   הדרישה של יועד: "תוספות על הקיים, המצב הקיים יישמר". לכן שני המתגים
+   האלה מתחילים כבויים, וכשהם כבויים הפלט של מצב התצוגה זהה בדיוק למה
+   שהיה לפני התוספת (יש על זה בדיקת רגרסיה — ר' scratch/t_present.js). */
+var planPresentActual = false;   // false = כרטיסי תכנון בלבד, כמו היום
+var planPresentChart  = null;    // null = אין גרף פתוח · "pace" · "util"
+var planActualMap     = null;    // ביצוע לפי מזהה סעיף, מחושב פעם אחת לציור
 
 // סמליל "פנקס הערות" (סעיף 1) — דף+קווים, באותו סגנון SVG כמו NAV_ICONS ב-app.js
 var PLAN_NOTES_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/><path d="M9.5 12h6M9.5 16h4"/></svg>';
@@ -791,6 +798,13 @@ function planSourceName(c) {
    גם פירוט הפריטים הפנימיים. משתמשת באותם c.sources/c.items שכבר קיימים —
    לא צריך נתונים חדשים, רק תצוגה אחרת שלהם. =================================================================== */
 function planPresentHTML(groups, cats, income) {
+  /* ⚠️ ביצוע אינו ניתן לשיוך לציר מקורות המימון: בציר הזה סעיף מפוצל
+     מפוצל גם לכרטיסים נפרדים עם מזהים סינתטיים ("<id>__<מקור>"), ואין
+     בנתונים שום שיוך של תנועה למקור מימון — רק לסעיף. חלוקת הביצוע לפי
+     יחס התכנון הייתה המצאה. לכן המתג פשוט לא זמין שם. */
+  if (planPresentAxis === "fund") planPresentActual = false;
+  planActualMap = planPresentActual ? planActualByCat() : null;
+
   const blocks = (planPresentAxis === "fund")
     ? planPresentFundBlocks(cats, income)
     : planPresentGroupBlocks(groups, cats);
@@ -808,6 +822,7 @@ function planPresentHTML(groups, cats, income) {
       ${planPresentIncomeHTML(income)}
       <div class="card plan-present-card">
         ${planPresentControlsHTML()}
+        ${planPresentChartHTML()}
         <div class="present-wrap is-collapsed">${blocks.map(planPresentBlockHTML).join("")}</div>
       </div>
     </div>`;
@@ -828,11 +843,178 @@ function planPresentControlsHTML() {
   const cmpBtn = years.length
     ? `<button class="btn-ghost" type="button" data-present-compare aria-pressed="${planShowCompare ? "true" : "false"}">${CBA.esc(cmpLabel)}</button>`
     : "";
+  /* מתג הביצוע (2026-09-09) — מוצג רק בציר התחום, ר' ההערה ב-planPresentHTML.
+     כבוי כברירת מחדל: מצב התצוגה נועד להציג את *התוכנית*, והביצוע הוא
+     שכבה שמוסיפים כשרוצים אותה. */
+  const actBtn = (planPresentAxis === "fund")
+    ? ""
+    : `<button class="btn-ghost" type="button" data-present-actual aria-pressed="${planPresentActual ? "true" : "false"}">${planPresentActual ? "הסתר ביצוע" : "תכנון מול ביצוע"}</button>`;
   return `
         <div class="present-toolbar">
           <button class="btn-ghost" type="button" data-present-expand aria-pressed="${planPresentExpandAll ? "true" : "false"}">${expandLabel}</button>
           <button class="btn-ghost" type="button" data-present-axis aria-pressed="${planPresentAxis === "fund" ? "true" : "false"}">${axisLabel}</button>
+          ${actBtn}
           ${cmpBtn}
+          ${planPresentChartChipsHTML()}
+        </div>`;
+}
+
+/* ===================================================================
+   ביצוע + גרפים במצב תצוגה  (2026-09-09) — תוספת בלבד
+   -------------------------------------------------------------------
+   הנתונים מגיעים משכבת הנתונים ולא מחושבים כאן: getBudgetRows() לשנה
+   המוצגת, ו-cumulativeSeriesFor()/getYearRows() לשנים אחרות. זה הסֶפֶר
+   שמונע סחיפה בין המסך הזה למסך "תכנון מול ביצוע" בדשבורד — שני
+   רינדורים, מקור מספרים אחד.
+   =================================================================== */
+
+/* ביצוע לפי מזהה סעיף לשנה המוצגת. */
+function planActualByCat() {
+  const map = {};
+  (CBA.data.getBudgetRows() || []).forEach(function (r) { map[r.id] = r; });
+  return map;
+}
+
+/* צ'יפים לפתיחת גרף. אף גרף אינו פתוח כברירת מחדל. */
+function planPresentChartChipsHTML() {
+  const chip = function (key, label) {
+    const on = planPresentChart === key;
+    return `<button class="btn-ghost present-chip${on ? " is-on" : ""}" type="button" data-present-chart="${key}" aria-pressed="${on ? "true" : "false"}">${label}</button>`;
+  };
+  return `<span class="present-toolbar__charts">${chip("pace", "גרף קצב")}${chip("util", "גרף ניצול")}</span>`;
+}
+
+/* פאנל הגרף — ריק לגמרי כשאין גרף פתוח, ולכן המסך נראה בדיוק כמו קודם. */
+function planPresentChartHTML() {
+  if (planPresentChart === "pace") return planPaceChartHTML();
+  if (planPresentChart === "util") return planUtilChartHTML();
+  return "";
+}
+
+/* ---- גרף 1: קצב — מצטבר, עם שנה קודמת מתחת ----
+   שלוש סדרות: תכנון מצטבר (אפור מקווקו), ביצוע השנה (ירוק רציף — אותו
+   צבע כמו בדשבורד, בכוונה), וביצוע השנה הקודמת (סגול עמום, רקע בלבד).
+   קו הביצוע נעצר בחודש הנוכחי ולא ממשיך שטוח אל תוך העתיד.
+   ⚠️ ציר הזמן שמאל->ימין (ספטמבר בשמאל) — זהה לגרף שבדשבורד. */
+function planPaceChartHTML() {
+  const year = CBA.data.getCurrentYear();
+  const cur = CBA.data.cumulativeSeriesFor(year);
+  if (!cur) return planChartShell("קצב מצטבר", '<div class="present-chart__empty">אין נתונים לשנה הזו.</div>');
+
+  const prevYear = planPrevDataYear(year);
+  const prev = prevYear ? CBA.data.cumulativeSeriesFor(prevYear) : null;
+  const asOf = CBA.data.fiscalIndexIn(year);
+
+  const W = 720, H = 220, padL = 14, padR = 58, padT = 14, padB = 24;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  let all = cur.plan.concat(cur.actual);
+  if (prev) all = all.concat(prev.actual);
+  const max = Math.max.apply(null, all) || 1;
+  const x = function (i) { return padL + (i / 11) * iw; };
+  const y = function (v) { return padT + ih - (v / max) * ih; };
+  const pts = function (arr, upto) {
+    return arr.slice(0, (upto == null ? 11 : upto) + 1)
+      .map(function (v, i) { return x(i) + "," + y(v); }).join(" ");
+  };
+  const grid = [0.25, 0.5, 0.75, 1].map(function (f) {
+    return `<line x1="${padL}" y1="${y(max * f)}" x2="${padL + iw}" y2="${y(max * f)}" stroke="#EEF0F3" stroke-width="1"></line>`;
+  }).join("");
+  const labels = cur.labels.map(function (lab, i) {
+    return `<text x="${x(i)}" y="${H - 7}" text-anchor="middle" font-size="10" fill="#9CA3AF">${lab}</text>`;
+  }).join("");
+  /* תווית קצה לכל סדרה — כך הזיהוי אינו נשען על צבע בלבד.
+     מעל הקו ולא לצידו: לצד הנקודה היא התנגשה עם הסמן ועם קו התכנון
+     המקווקו שממשיך מעבר לחודש הנוכחי. הילה לבנה (paint-order) כדי
+     שהמספר יישאר קריא גם כשהוא נופל על קו רשת. */
+  const tag = function (v, i, fill, text) {
+    return `<text x="${x(i)}" y="${Math.max(11, y(v) - 9)}" text-anchor="middle" font-size="10"`
+         + ` font-weight="700" fill="${fill}" stroke="#fff" stroke-width="3" paint-order="stroke">${text}</text>`;
+  };
+  const nis = function (v) { return Math.round(v / 1000) + "K"; };
+  const prevLine = prev
+    ? `<polyline points="${pts(prev.actual)}" fill="none" stroke="#6D28D9" stroke-width="2" opacity=".38"></polyline>` +
+      tag(prev.actual[11], 11, "#6D28D9", nis(prev.actual[11]))
+    : "";
+  const actLine = asOf >= 0
+    ? `<polyline points="${pts(cur.actual, asOf)}" fill="none" stroke="#059669" stroke-width="2.6"></polyline>` +
+      `<circle cx="${x(asOf)}" cy="${y(cur.actual[asOf])}" r="3.5" fill="#059669"></circle>` +
+      tag(cur.actual[asOf], asOf, "#059669", nis(cur.actual[asOf]))
+    : "";
+  const legend =
+    `<span><i class="present-dot" style="background:#9CA3AF"></i>תכנון מצטבר</span>` +
+    `<span><i class="present-dot" style="background:#059669"></i>ביצוע ${CBA.esc(year)}</span>` +
+    (prev ? `<span><i class="present-dot" style="background:#6D28D9;opacity:.45"></i>ביצוע ${CBA.esc(prevYear)}</span>` : "");
+  const svg = `
+        <!-- ללא preserveAspectRatio="none": מתיחה לא-אחידה מעוותת את הטקסט
+             ומשטיחה את שיפוע הקווים, וכאן דווקא השיפוע הוא כל הסיפור. -->
+        <svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto">
+          ${grid}
+          ${prevLine}
+          <polyline points="${pts(cur.plan)}" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-dasharray="6 4"></polyline>
+          ${tag(cur.plan[11], 11, "#9CA3AF", nis(cur.plan[11]))}
+          ${actLine}
+          ${labels}
+        </svg>`;
+  return planChartShell("קצב מצטבר — תכנון מול ביצוע", svg, legend);
+}
+
+/* ---- גרף 2: ניצול לפי סעיף ----
+   עמודות אופקיות ממוינות לפי אחוז ניצול. גוון אחד למי שבתוך התקציב,
+   וצבע סטטוס *רק* למי שחרג — אחרת הצבע מפסיק להגיד משהו. */
+function planUtilChartHTML() {
+  const rows = (CBA.data.getBudgetRows() || [])
+    .filter(function (r) { return (r.plan || 0) > 0 || (r.actual || 0) > 0; })
+    .sort(function (a, b) { return b.pct - a.pct; });
+  if (!rows.length) {
+    return planChartShell("ניצול לפי סעיף", '<div class="present-chart__empty">אין סעיפים להצגה.</div>');
+  }
+  const spent = rows.reduce(function (a, r) { return a + (r.actual || 0); }, 0);
+  if (!spent) {
+    return planChartShell("ניצול לפי סעיף",
+      '<div class="present-chart__empty">עוד לא נרשם ביצוע בשנה הזו. אפשר לעבור לשנה קודמת בבורר השנים כדי לראות את התמונה שלה.</div>');
+  }
+  const TOP = 14;
+  const shown = rows.slice(0, TOP);
+  const bars = shown.map(function (r) {
+    const pct = Math.max(0, Math.min(r.pct, 140));
+    const over = r.pct >= 100;
+    // גוון אחד, כהה יותר ככל שהניצול גבוה — למעט חריגה שמקבלת צבע סטטוס
+    const fill = over ? "var(--danger)" : "#0E7490";
+    const op = over ? 1 : (0.35 + 0.5 * Math.min(r.pct, 100) / 100);
+    return `
+        <div class="present-util__row">
+          <span class="present-util__name" title="${CBA.esc(r.name)}">${CBA.esc(r.name)}</span>
+          <span class="present-util__track"><i style="width:${(pct / 140) * 100}%;background:${fill};opacity:${op}"></i>
+            <b class="present-util__mark" style="right:${(100 / 140) * 100}%"></b></span>
+          <span class="present-util__pct${over ? " is-over" : ""}">${Math.round(r.pct)}%</span>
+          <span class="present-util__nums">${planNumFmt(r.actual)} / ${planNumFmt(r.plan)}</span>
+        </div>`;
+  }).join("");
+  const more = rows.length > TOP
+    ? `<div class="present-chart__note">מוצגים ${TOP} הסעיפים עם הניצול הגבוה ביותר מתוך ${rows.length}.</div>`
+    : "";
+  const legend = `<span><i class="present-dot" style="background:#0E7490"></i>בתוך התקציב</span>` +
+                 `<span><i class="present-dot" style="background:var(--danger)"></i>חריגה</span>` +
+                 `<span class="present-chart__hint">הקו האנכי = 100%</span>`;
+  return planChartShell("ניצול לפי סעיף", `<div class="present-util">${bars}</div>${more}`, legend);
+}
+
+/* השנה שלפני השנה המוצגת, מבין השנים שיש להן נתונים בפועל. */
+function planPrevDataYear(year) {
+  const years = (CBA.data.getDataYears ? CBA.data.getDataYears() : []).slice().sort();
+  const i = years.indexOf(year);
+  return (i > 0) ? years[i - 1] : null;
+}
+
+/* מסגרת אחידה לכל גרף — כותרת, מקרא, גוף. */
+function planChartShell(title, bodyHTML, legendHTML) {
+  return `
+        <div class="present-chart">
+          <div class="present-chart__head">
+            <span class="present-chart__title">${CBA.esc(title)}</span>
+            <span class="present-chart__legend">${legendHTML || ""}</span>
+          </div>
+          ${bodyHTML}
         </div>`;
 }
 
@@ -991,14 +1173,40 @@ function planPresentCardHTML(c, maxInBlock) {
   const barPct = (maxInBlock > 0 && (c.plan || 0) > 0)
     ? Math.max(1, Math.round(((c.plan || 0) / maxInBlock) * 100))
     : 0;
+  /* שכבת הביצוע (2026-09-09) — נוספת *בתוך* הפס הקיים ומתחתיו, ולא
+     מחליפה כלום. כשהמתג כבוי planActualMap הוא null ושתי המחרוזות
+     ריקות, כך שהפלט זהה בדיוק לגרסה שלפני התוספת. */
+  const act = planActualMap ? planActualMap[c.id] : null;
   const bar = (maxInBlock > 0)
     ? `<div class="present-bar"><i style="width:${barPct}%"></i></div>`
+    : "";
+  /* ⚠️ הביצוע מקבל מד *נפרד* ולא נדחס לתוך הפס הקיים, ואי-אפשר אחרת:
+     לפס הקיים יש 100% אחר לגמרי — הוא יחסי לסעיף הגדול ביותר בבלוק, כדי
+     שאפשר יהיה להשוות סעיפים זה לזה. סעיף של 30,000 לצד סעיף של 432,000
+     מקבל שם 7% רוחב, וניצול של 91% בתוכו יוצא פס באורך 6% — כלומר
+     בלתי-קריא לחלוטין. נוסה, נראה על המסך, והוחלף.
+     המד כאן הוא יחס אחד מול גבול אחד: 100% = התכנון של הסעיף עצמו.
+     גם ככה הפס הקיים נשאר בדיוק כפי שהיה — בלי מחלקה נוספת ובלי ילד נוסף. */
+  const actLine = act
+    ? (function () {
+        const over = act.plan > 0 && act.pct >= 100;
+        const w = act.plan > 0 ? Math.max(1, Math.min(Math.round(act.pct), 100)) : 0;
+        const meter = act.plan > 0
+          ? `<span class="present-meter"><i style="width:${w}%"></i></span>`
+          : `<span class="present-meter present-meter--none"></span>`;
+        return `<div class="present-actline present-actline--${act.band}">` +
+            `<span class="present-actline__k">בוצע</span>` +
+            meter +
+            `<span class="present-actline__v">${planNumFmt(act.actual)}</span>` +
+            `<span class="present-actline__pct">${act.plan > 0 ? Math.round(act.pct) + "%" : "ללא תכנון"}</span>` +
+          `</div>`;
+      })()
     : "";
 
   return `
     <div class="present-card${isOpen ? " is-open" : ""}">
       ${head}
-      ${bar}
+      ${bar}${actLine}
       ${planPresentItemRows(c)}
       ${planPresentFundingChips(c, planPresentCompareHTML(c))}
     </div>`;
@@ -1559,6 +1767,22 @@ function planBindPresent(container, rerender) {
     planPresentAxis = (planPresentAxis === "fund") ? "group" : "fund";
     planPresentOpen = {};   // מזהי הכרטיסים שונים בין הצירים (סעיף מפוצל מקבל id מורכב)
     rerender();
+  });
+
+  /* --- התוספות של 2026-09-09 --- */
+  const actualBtn = container.querySelector("[data-present-actual]");
+  if (actualBtn) actualBtn.addEventListener("click", function () {
+    planPresentActual = !planPresentActual;
+    rerender();
+  });
+
+  // צ'יפ שכבר פתוח סוגר את עצמו — אין "אין גרף" ככפתור נפרד
+  container.querySelectorAll("[data-present-chart]").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      const key = chip.getAttribute("data-present-chart");
+      planPresentChart = (planPresentChart === key) ? null : key;
+      rerender();
+    });
   });
 }
 
