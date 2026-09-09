@@ -9626,22 +9626,23 @@ function gardenTaskAction_(ss, body) {
  *    3. migrateSept2026Run()     — מבצע בפועל.
  * ========================================================================== */
 
-/** התנועות שעוברות — רשימה מפורשת ולא חישוב, כדי שההעברה תהיה ניתנת לביקורת. */
+/** הגדרת ההעברה. ⚠️ הבחירה היא **לפי כלל** ולא לפי רשימת מזהים.
+ *  הגרסה הראשונה נעלה רשימה מפורשת (147,148,150..154) — ותוך שעה היא כבר
+ *  הייתה מיושנת, כי יועד תיקן את חודש ההגשה של שכר הגנן (#154) מספטמבר
+ *  ליולי. רשימה קשיחה מתיישנת בכל עריכה בגיליון; כלל לא.
+ *
+ *  הכלל (יועד, 9.9.26): **"מה שבסוף קובע זה חודש ההגשה — אם משהו הוגש
+ *  בחודש ספטמבר הוא כבר על השנה הבאה."**  ולא תאריך הרכישה. */
 var MIG_SEPT2026 = {
-  from: 'תנועות תשפ"ו',
-  to:   'תנועות תשפ"ז',
-  /* סכום צפוי לכל מזהה — משמש כ**חתימת בקרה**: אם הנתונים השתנו מאז
-     האבחון (9.9.26), הפונקציה עוצרת ולא נוגעת בכלום. */
-  rows: [
-    { id: 147, amount: 395    },
-    { id: 148, amount: 98     },
-    { id: 150, amount: 99.9   },
-    { id: 151, amount: 500    },
-    { id: 152, amount: 192.6  },
-    { id: 153, amount: 445    },
-    { id: 154, amount: 36412  }
-  ],
-  /* תיקון שגיאת ההקלדה בתנועה שנשארת בתשפ"ו */
+  from:   'תנועות תשפ"ו',
+  to:     'תנועות תשפ"ז',
+  cutoff: '2026-09',        // כל 'חודש הגשה' >= זה עובר
+  /* חתימת בקרה — נמדד חי 9.9.26 *אחרי* התיקונים של יועד. אם הגיליון השתנה
+     מאז, הפונקציה עוצרת ולא נוגעת בכלום; להריץ יבש שוב ולעדכן רק את שני
+     המספרים האלה. זה מה שמונע העברה על סמך תמונת מצב ישנה. */
+  expect: { count: 7, total: 2681 },
+  /* תיקון שגיאת הקלדה בתנועה שנשארת בתשפ"ו: 30/12/2026 ← 30/12/2025.
+     אינה קשורה לכלל — חודש ההגשה שלה הוא 01/2026 והיא נשארת. */
   dateFix: { id: 47, fromYear: 2026, toYear: 2025 }
 };
 
@@ -9655,6 +9656,7 @@ function migrateSept2026_(dryRun) {
   var src = ss.getSheetByName(MIG_SEPT2026.from);
   var dst = ss.getSheetByName(MIG_SEPT2026.to);
   var log = [];
+  var NL = String.fromCharCode(10);
   function say(t) { log.push(t); Logger.log(t); }
 
   say(dryRun ? '=== מצב יבש — לא ייכתב כלום ===' : '=== ביצוע בפועל ===');
@@ -9666,6 +9668,7 @@ function migrateSept2026_(dryRun) {
   var sh = sv[0].map(function (h) { return String(h).trim(); });
   var dh = dv[0].map(function (h) { return String(h).trim(); });
   var sIdx = sh.indexOf('מזהה'), sAmt = sh.indexOf('סכום'), sDate = sh.indexOf('תאריך רכישה');
+  var sMon = sh.indexOf('חודש הגשה');
   if (sIdx < 0 || sAmt < 0) { say('✗ חסרות עמודות מזהה/סכום במקור'); return log.join('\n'); }
 
   /* ⚠️ המיפוי הוא **לפי שם עמודה** ולא לפי מיקום: לשני הטאבים אין ערובה
@@ -9674,28 +9677,40 @@ function migrateSept2026_(dryRun) {
   sh.forEach(function (h) { if (h && dh.indexOf(h) === -1) missing.push(h); });
   if (missing.length) say('⚠ עמודות שקיימות במקור ואין ביעד (יאבדו): ' + missing.join(', '));
 
-  // איתור השורות + אימות חתימת הסכומים
-  var found = {}, bad = [];
-  MIG_SEPT2026.rows.forEach(function (want) {
-    for (var r = 1; r < sv.length; r++) {
-      if (Number(sv[r][sIdx]) !== want.id) continue;
-      var got = Number(sv[r][sAmt]);
-      if (Math.abs(got - want.amount) > 0.005) {
-        bad.push('#' + want.id + ' סכום ' + got + ' במקום ' + want.amount);
-      }
-      found[want.id] = r;   // אינדקס במערך (שורה בגיליון = r+1)
-      return;
-    }
-    bad.push('#' + want.id + ' לא נמצא');
-  });
-  if (bad.length) { say('✗ עצירה — הנתונים אינם כפי שאובחנו:'); bad.forEach(function (b) { say('   ' + b); }); return log.join('\n'); }
+  if (sMon < 0) { say('✗ אין עמודת "חודש הגשה" במקור — זהו הכלל היחיד לבחירה'); return log.join(NL); }
 
-  var total = MIG_SEPT2026.rows.reduce(function (a, x) { return a + x.amount; }, 0);
-  say('✓ אותרו ' + MIG_SEPT2026.rows.length + ' תנועות, סה"כ ' + total + ' ₪');
-  MIG_SEPT2026.rows.forEach(function (x) {
-    var r = found[x.id];
-    say('   #' + x.id + ' | ' + x.amount + ' ₪ | ' + sv[r][sh.indexOf('ספק/נמען')] + ' | ' + sv[r][sh.indexOf('סעיף')]);
+  /* 'חודש הגשה' עשוי להיות תא תאריך או מחרוזת — מנרמלים את שניהם ל-YYYY-MM,
+     אחרת ההשוואה הייתה שקטה ושגויה. */
+  function monKey(v) {
+    if (v && typeof v.getFullYear === 'function') {
+      var mm = v.getMonth() + 1;
+      return v.getFullYear() + '-' + (mm < 10 ? '0' + mm : mm);
+    }
+    return String(v || '').trim().slice(0, 7);
+  }
+  var picked = [];
+  for (var r = 1; r < sv.length; r++) {
+    if (String(sv[r][sIdx]).trim() === '') continue;
+    if (monKey(sv[r][sMon]) >= MIG_SEPT2026.cutoff) picked.push(r);
+  }
+  var total = picked.reduce(function (a, r) { return a + (Number(sv[r][sAmt]) || 0); }, 0);
+  total = Math.round(total * 100) / 100;
+
+  say('נבחרו לפי הכלל "חודש הגשה >= ' + MIG_SEPT2026.cutoff + '":');
+  picked.forEach(function (r) {
+    say('   #' + sv[r][sIdx] + ' | חודש ' + monKey(sv[r][sMon]) + ' | ' +
+        (Number(sv[r][sAmt]) || 0) + ' ₪ | ' + sv[r][sh.indexOf('ספק/נמען')] +
+        ' | ' + sv[r][sh.indexOf('סעיף')]);
   });
+  say('סה"כ: ' + picked.length + ' תנועות, ' + total + ' ₪');
+
+  var e = MIG_SEPT2026.expect;
+  if (picked.length !== e.count || Math.abs(total - e.total) > 0.005) {
+    say('✗ עצירה — הגיליון השתנה מאז המדידה (ציפייה: ' + e.count + ' תנועות, ' + e.total + ' ₪).');
+    say('   לא בוצע כלום. להריץ יבש שוב ולעדכן את MIG_SEPT2026.expect לשני המספרים שלמעלה.');
+    return log.join(NL);
+  }
+  say('✓ תואם לחתימת הבקרה');
 
   // תיקון התאריך של #47
   var fix = MIG_SEPT2026.dateFix, fixRow = -1;
@@ -9718,8 +9733,8 @@ function migrateSept2026_(dryRun) {
   try { lock.waitLock(30000); } catch (e) { say('✗ תפוס'); return log.join('\n'); }
   try {
     // 1) הוספה ליעד — קודם כותבים, ורק אם הצליח מוחקים מהמקור
-    var add = MIG_SEPT2026.rows.map(function (x) {
-      var srcRow = sv[found[x.id]];
+    var add = picked.map(function (pr) {
+      var srcRow = sv[pr];
       var out = new Array(dh.length).fill('');
       sh.forEach(function (h, c) {
         if (!h) return;
@@ -9733,7 +9748,7 @@ function migrateSept2026_(dryRun) {
     say('✓ נוספו ' + add.length + ' שורות ל-' + MIG_SEPT2026.to);
 
     // 2) מחיקה מהמקור — מלמטה למעלה, אחרת אינדקסי השורות זזים תוך כדי
-    var rowsToDelete = MIG_SEPT2026.rows.map(function (x) { return found[x.id] + 1; })
+    var rowsToDelete = picked.map(function (pr) { return pr + 1; })
                         .sort(function (a, b) { return b - a; });
     rowsToDelete.forEach(function (rowNum) { src.deleteRow(rowNum); });
     say('✓ נמחקו ' + rowsToDelete.length + ' שורות מ-' + MIG_SEPT2026.from);
