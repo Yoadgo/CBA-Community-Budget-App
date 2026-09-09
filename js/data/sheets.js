@@ -804,11 +804,47 @@ CBA.sheets = (function () {
      timedOut מוחזר בנפרד מ-error כדי שמסך יוכל להציע "נסה שוב" במקום
      להציג שגיאה גנרית — כישלון זמני ותקלה אמיתית דורשים תגובה שונה. */
   var GET_TIMEOUT_MS = 30000;
+  /* ============================================================================
+   *  איחוד בקשות זהות שכבר בדרך (2026-09-09)
+   * ----------------------------------------------------------------------------
+   *  נמדד חי על הייצור: טעינה אחת של עמוד הבית שלחה **9 בקשות**, ושלוש מהן
+   *  היו `myClubReservations` — אותה בקשה בדיוק, כי המסך מצייר את עצמו כמה
+   *  פעמים באתחול (ניתוב -> sheetsLoadHandler -> רענון שקט) ולכל ציור אין שום
+   *  דרך לדעת שהבקשה כבר באוויר.
+   *
+   *  ל-Apps Script יש מחיר קבוע לכל הפעלה (~0.5ש') והפעלות מקבילות של אותו
+   *  משתמש נלחמות על אותו תור — כלומר בקשה כפולה לא רק מבזבזת, היא **מאטה
+   *  את כל השאר**. באותה מדידה `profileChanges` לקחה 13.8 שניות, כמעט הכול
+   *  המתנה בתור.
+   *
+   *  הפתרון כאן הוא הצנוע ביותר שסוגר את זה: אם בקשה **זהה לחלוטין** כבר
+   *  בדרך — לא שולחים שנייה, אלא מצרפים את ה-callback לראשונה. שתיהן יקבלו
+   *  את אותה תשובה, באותו רגע.
+   *
+   *  ⚠️ **זה איחוד, לא מטמון.** אין כאן שמירה של תשובות ואין TTL: ברגע
+   *     שהבקשה חוזרת המפתח נמחק, והבקשה הבאה יוצאת לרשת כרגיל. לכן אי אפשר
+   *     לקבל כאן נתון ישן — וזו הסיבה שנבחר דווקא הדפוס הזה ולא מטמון קצר,
+   *     אחרי מה שקרה היום עם מטמון השרת.
+   *  ⚠️ המפתח הוא ה-query המלא (כולל ה-session), כך ששני משתמשים או שתי
+   *     פעולות שונות לעולם לא יתאחדו בטעות.
+   *  ⚠️ כל callback עטוף ב-try: אחד שזורק לא ימנע מהשאר לקבל את התשובה. */
+  var inFlightGets = {};
+
   function get(params, cb) {
     var body = Object.assign({ session: authSession() }, params || {});
     var qs = Object.keys(body).map(function (k) {
       return encodeURIComponent(k) + "=" + encodeURIComponent(body[k] == null ? "" : body[k]);
     }).join("&");
+
+    if (inFlightGets[qs]) { inFlightGets[qs].push(cb); return; }
+    inFlightGets[qs] = [cb];
+    function settle(res) {
+      var waiting = inFlightGets[qs] || [];
+      delete inFlightGets[qs];
+      for (var i = 0; i < waiting.length; i++) {
+        try { if (waiting[i]) waiting[i](res); } catch (e) { /* callback אחד לא מפיל את השאר */ }
+      }
+    }
 
     var done = false;
     var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
@@ -816,7 +852,7 @@ CBA.sheets = (function () {
       if (done) return;
       done = true;
       if (ctl) { try { ctl.abort(); } catch (e) {} }
-      cb({ ok: false, timedOut: true, error: "הבקשה לא חזרה בזמן. בדקו את החיבור ונסו שוב." });
+      settle({ ok: false, timedOut: true, error: "הבקשה לא חזרה בזמן. בדקו את החיבור ונסו שוב." });
     }, GET_TIMEOUT_MS);
 
     fetch(API_URL + "?" + qs, ctl ? { signal: ctl.signal } : undefined)
@@ -824,12 +860,12 @@ CBA.sheets = (function () {
       .then(function (data) {
         if (done) return;                 // כבר דיווחנו על תקיעה — לא קוראים ל-cb פעמיים
         done = true; clearTimeout(timer);
-        cb(withAuthNote(data));
+        settle(withAuthNote(data));
       })
       .catch(function (err) {
         if (done) return;                 // abort שלנו — הודעת התקיעה כבר יצאה
         done = true; clearTimeout(timer);
-        cb({ ok: false, error: String(err) });
+        settle({ ok: false, error: String(err) });
       });
   }
 

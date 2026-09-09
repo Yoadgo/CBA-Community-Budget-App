@@ -1779,11 +1779,26 @@
       ensureHeaderShell();
       if (currentUser) { routeByRole(); }
       else { applyUser(); AREAS = JSON.parse(JSON.stringify(AREAS_ALL)); initialRoute("resident"); }   // אורח מאחורי הגייט — שלד מלא, לא נגיש בפועל
-      window.CBA.refreshAlerts();
+      /* ⏱️ שתי הקריאות האלה נדחות בכוונה (2026-09-09).
+         נמדד חי: ברגע שהמטען הראשי חוזר, **שמונה** קריאות משנה יוצאות באותה
+         שנייה. ל-Apps Script יש תור פר-משתמש, וכולן נלחמות עליו — באותה
+         מדידה `profileChanges` לקחה 13.8 שניות שרובן המתנה, והמסך התייצב
+         רק אחרי 18.3 שניות.
+         שתי הקריאות כאן לא מציירות שום דבר שהמשתמש מסתכל עליו ברגע הנחיתה:
+         `refreshAlerts` ממלאת תגית ספירה בכותרת, והסיור בודק אם יש גרסה
+         חדשה להציג. לכן הן מפנות את התור לקריאות שכן מציירות את המסך.
+         ⚠️ ההשהיה היא לא "כדי שיהיה יפה" — היא מה שמקצר את זמן הצביעה
+            בפועל, כי התור משותף. לא לקצר בלי למדוד מחדש.
+         ⚠️ `refreshAlertsLocal` (המקומי, בלי רשת) ממשיך לרוץ מיד — רק החלק
+            שפונה לרשת נדחה. */
+      refreshAlertsLocal();
+      setTimeout(function () { refreshAlertsClub(); }, 2500);
       /* סיור היכרות (2026-08-28) — אחרי שהמסך הראשון כבר צויר ולא לפניו:
          סיור שנפתח מעל מסך ריק נראה כמו תקלה. הפונקציה עצמה בודקת שזו באמת
-         כניסה ראשונה ושאין מסך כניסה פתוח. */
-      if (currentUser && window.CBA.tour) setTimeout(function () { CBA.tour.maybeAutoStart(); }, 600);
+         כניסה ראשונה ושאין מסך כניסה פתוח.
+         (2026-09-09) 600ms -> 3200ms מאותה סיבה בדיוק: ב-600ms הוא נחת בדיוק
+         בתוך הצרור. */
+      if (currentUser && window.CBA.tour) setTimeout(function () { CBA.tour.maybeAutoStart(); }, 3200);
       lastDataFingerprint = dataFingerprint();
     } else {
       // הגיע עדכון נוסף — מציגים רק אם הנתונים בפועל שונים, ובעדינות (פולס

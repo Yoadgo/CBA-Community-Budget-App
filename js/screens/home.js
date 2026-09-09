@@ -212,6 +212,18 @@ CBA.screens = CBA.screens || {};
       '</section>';
   }
 
+  /* מטמון נפרד לשריון הקרוב (2026-09-09).
+     ⚠️ ה-lazyCache שמעל נבנה ב-27.8 בדיוק בשביל הבעיה הזאת — אבל הוא מכסה
+     שלושה מארבעת הטעונים העצלים של העמוד ו**מפספס דווקא את הרביעי**.
+     נמדד חי על הייצור: טעינה אחת של עמוד הבית שלחה `myClubReservations`
+     **שלוש פעמים** (העמוד מצייר את עצמו שלוש פעמים באתחול), מול פעם אחת
+     לכל אחד משלושת האחרים. איחוד הבקשות ב-sheets.js תופס את שתי הראשונות
+     שחופפות בזמן; השלישית יוצאת אחרי שהראשונה כבר חזרה, ורק מטמון תופס אותה.
+     ts נפרד ולא שימוש ב-lazyCache.ts: הטעונים לא רצים תמיד יחד, ו-ts משותף
+     היה גורם ל"טרי" לחזור אמת בזמן שהערך כאן מעולם לא נטען. */
+  var resvCache = { list: null, ts: 0 };
+  function resvFresh() { return resvCache.ts && (Date.now() - resvCache.ts) < LAZY_TTL; }
+
   /* השריון הקרוב — שורה אחת בלבד. מי שרוצה את הרשימה המלאה הולך למסך השריון. */
   function loadNextReservation(container) {
     var slot = container.querySelector("#hm-next");
@@ -220,12 +232,24 @@ CBA.screens = CBA.screens || {};
     var fam = String(me.familyId || me.house || "").trim();
     if (!fam || !CBA.data.getMyClubReservations) { slot.innerHTML = ""; return; }
 
+    if (resvFresh()) { paintNext(slot, resvCache.list || []); return; }
+
     CBA.data.getMyClubReservations({ family: fam, email: me.email || "" }, function (res) {
-      if (!slot.isConnected) return;
-      if (!res || !res.ok) { slot.innerHTML = ""; return; }
+      if (!res || !res.ok) { if (slot.isConnected) slot.innerHTML = ""; return; }
       var list = (res.reservations || []).slice().sort(function (a, b) {
         return new Date(a.start) - new Date(b.start);
       });
+      resvCache.list = list;
+      resvCache.ts = Date.now();
+      if (!slot.isConnected) return;
+      paintNext(slot, list);
+    });
+  }
+
+  /* ציור השורה — חולץ מתוך ה-callback כדי שגם המסלול מהמטמון וגם המסלול
+     מהרשת יציירו בדיוק אותו דבר. */
+  function paintNext(slot, list) {
+    {
       var next = list[0];
       if (!next) {
         slot.innerHTML = '<button type="button" class="hm-next__empty" data-goto="resReserve">' +
@@ -241,7 +265,7 @@ CBA.screens = CBA.screens || {};
         '<span class="hm-next__txt"><b>המועדון ' + esc(day) + '</b><small>' + esc(time) +
           (pend ? " · ממתין לאישור" : " · מאושר") + '</small></span>' +
         svg(ICO.chev, 16) + '</button>';
-    });
+    }
   }
   function pad(n) { return n < 10 ? "0" + n : String(n); }
 
