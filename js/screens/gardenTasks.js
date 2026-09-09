@@ -823,7 +823,8 @@
         if (act === "menu") return openMenu(id);
         if (act === "plan") return askWeek(id);
         if (act === "approve") return run("approve", id, {});
-        if (act === "done" || act === "undo") return run(act, id, {});
+        if (act === "done") return markDone(id);
+        if (act === "undo") return run("undo", id, {});
       }
 
       /* חיווי ברמת השורה. החיווי הגלובלי בכותרת ("שומר") אומר שמשהו קורה
@@ -849,8 +850,9 @@
          (ר' gardenTaskAction_): סימון מרים דגל ואינו סוגר. */
       var OPTIMISTIC = {
         /* דיווח תושב ממתין לאישור; שגרה ויזום נסגרים בסימון עצמו (9.9). */
+        /* ⚠️ 2026-09-09 — גם דיווח תושב נסגר בסימון (גל 3). קודם הוא קיבל
+           כאן דגל "ממתין לאישור"; זה כבר לא מה שהשרת כותב. */
         done:    function (t) {
-                   if (t.kind === GK_REPORT) { t.stage = "בטיפול"; t.flag = "ממתין לאישור"; return; }
                    t.stage = "הושלם"; t.flag = ""; t.closure = "בוצע";
                    t.approvedAt = new Date().toISOString();
                  },
@@ -861,6 +863,33 @@
         approve: function (t) { t.stage = "הושלם"; t.flag = ""; t.closure = "בוצע";
                                 t.approvedAt = new Date().toISOString(); }
       };
+
+      /* ⚠️ 2026-09-09, גל 3 — סימון "בוצע" על **דיווח תושב** מבקש קודם משפט
+         אחד על מה נעשה, והוא חובה. זה לא חיכוך לשם חיכוך: משבוטל שלב האישור,
+         המשפט הזה הוא מה שנכנס למייל שיוצא לתושב במקום "אושר על ידי הוועד",
+         והוא מה שהופך הודעת סיום למשהו שאפשר לערער עליו. השרת אוכף את אותו
+         תנאי בעצמו — כאן זה רק כדי לא לשלוח פעולה שתידחה.
+         שגרה ומשימה יזומה נסגרות בלחיצה אחת, בלי דיאלוג: אין למי לכתוב. */
+      function markDone(id) {
+        var t = byId(id);
+        if (!t) return;
+        if (t.kind !== GK_REPORT) return run("done", id, {});
+        CBA.ui.prompt("המשפט הזה נשלח לתושב שדיווח, ונשמר ביומן המשימה.", {
+          title: "מה נעשה?", value: t.note || "",
+          placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
+          okText: "סיום וסגירה"
+        }).then(function (txt) {
+          if (txt === null) return;                 // ביטול — לא סוגרים
+          var note = String(txt).trim();
+          if (!note) {
+            /* ריק אינו ביטול: הגנן התכוון לסמן. מסבירים ומחזירים אותו לשדה,
+               במקום להשאיר אותו מול כרטיס לא מסומן ובלי לדעת למה. */
+            return CBA.ui.alert("צריך לכתוב מה נעשה — המשפט נשלח לתושב.")
+              .then(function () { markDone(id); });
+          }
+          run("done", id, { note: note });
+        });
+      }
 
       /* פעולה על משימה. הכרטיס משתנה מיד ומתגלגל אחורה אם השרת סירב.
          ⚠️ עד 8.9 לא היה כאן שום שינוי מקומי: הלחיצה על תיבת הסימון לא סימנה
@@ -902,7 +931,7 @@
             CBA.ui.alert((res && res.error) || "הפעולה לא הצליחה");
             return;
           }
-          if (op === "done") CBA.ui.toast(wasReport ? "סומן כבוצע · ממתין לאישור" : "סומן כבוצע");
+          if (op === "done") CBA.ui.toast(wasReport ? "נסגר · נשלח עדכון למדווח" : "סומן כבוצע");
           if (op === "undo") CBA.ui.toast("הסימון בוטל");
           if (op === "defer") CBA.ui.toast("נדחה לשבוע הבא");
           if (op === "note") CBA.ui.toast("ההערה נשמרה");
@@ -1032,9 +1061,11 @@
           '<div class="gt-lg">תיבת הסימון</div>' +
           '<div class="gt-lgi"><u><span class="gt-box" style="width:22px;height:22px;margin:0"></span></u>' +
             '<div><b>ריקה</b><span>' +
+            /* ⚠️ 2026-09-09, גל 3 — הסימון סוגר הכול. מה שנשאר להסביר הוא
+               ההבדל היחיד שנותר: דיווח תושב דורש משפט על מה נעשה. */
             esc(isManager
-              ? "סימון ביצוע. במשימת שגרה הוא סוגר; בדיווח של תושב הוא מרים אותה לאישורך."
-              : "לחיצה מסמנת שביצעת. משימת שגרה נסגרת מיד; דיווח של תושב עובר לאישור " + GL.T.manager + ".") +
+              ? "סימון ביצוע — הוא גם סוגר. בדיווח של תושב תתבקש לכתוב מה נעשה, והמשפט נשלח אליו."
+              : "לחיצה מסמנת שביצעת וסוגרת. בדיווח של תושב תתבקש לכתוב מה נעשה, והמשפט נשלח אליו.") +
             '</span></div></div>' +
           (isManager
             ? '<div class="gt-lgi"><u><span class="gt-box is-approve" style="width:22px;height:22px;margin:0">' +
