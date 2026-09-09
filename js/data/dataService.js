@@ -1082,25 +1082,18 @@ CBA.data = (function () {
   function findIncomeSource(id) { return CBA.mock.income.find(function (s) { return s.id === id; }); }
   function getDuesSource()      { return CBA.mock.income.find(function (s) { return s.type === "dues"; }); }
 
-  /* מזהה מקור ברירת המחדל — ⚠️ חייב להיגזר מהנתונים ולא להיות קבוע בקוד.
-     עד 2026-09-09 היה כאן `"dues"` קשיח, שהוא מזהה מ-mock.js בלבד: בייצור
-     `toIncome` ב-sheets.js קובע `id` = *שם המקור בעברית* ("מיסי שיכון"),
-     ולכן `"dues"` לא התאים לשום מקור. כל סעיף שנוסף בלי לבחור מקור נחתם
-     במזהה רפאים, הוצג כ-"—", נספר כ"ללא שיוך", והכסף שלו נזקף לדלי שאינו
-     מוצג בשום מקום. (אומת חי על תשפ"ז: 4 סעיפים, 6,000 ₪.) */
-  function defaultIncomeSourceId() {
-    const d = getDuesSource();
-    if (d) return d.id;
-    const first = (CBA.mock.income || [])[0];
-    return first ? first.id : "";
-  }
-
   // מזהה ייחודי חדש לרשומה
   function newId(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 8); }
 
   // נרמול סעיף: מבטיח שלכל סעיף יש שיוך למקור הכנסה + מצב חלוקה חודשית + סכום מספרי
   function normalizeCategory(c) {
-    if (!c.incomeSourceId) c.incomeSourceId = defaultIncomeSourceId();
+    /* ⚠️ אין כאן ברירת מחדל בכוונה (2026-09-09, הנחיית יועד).
+       קודם נכתב כאן `"dues"` — מזהה מ-mock.js שאינו קיים בייצור, ולכן סעיף
+       חדש "נולד" על מקור רפאים: הוא *נראה* משויך למיסי שיכון (כי ה-select
+       נופל לאופציה הראשונה כשהערך אינו מוכר) אבל לא נספר בשום מקום, ובחירה
+       חוזרת באותו ערך גם לא שידרה `change` ולכן לא שמרה כלום.
+       מקור ריק נשאר ריק, מסומן "ללא מקור", ומחייב בחירה מפורשת. */
+    if (!c.incomeSourceId) c.incomeSourceId = "";
     // פיצול בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — c.sources תקף רק כשיש
     // בו 2+ שורות (זו ההגדרה של "סעיף מפוצל"); מערך עם 0/1 שורות מתקפל בחזרה
     // למקור יחיד (incomeSourceId), כדי שלא יישאר "פיצול" שקוף עם שורה אחת בלבד.
@@ -1108,7 +1101,7 @@ CBA.data = (function () {
     // מחדל/תאימות לאחור לכל קוד שעדיין לא יודע להסתכל על sources (למשל שרת ישן).
     if (c.sources && c.sources.length > 1) {
       c.sources = c.sources.map(function (s) {
-        return { incomeSourceId: s.incomeSourceId || defaultIncomeSourceId(), amount: Number(s.amount) || 0 };
+        return { incomeSourceId: s.incomeSourceId || "", amount: Number(s.amount) || 0 };
       });
       c.incomeSourceId = c.sources[0].incomeSourceId;
     } else {
@@ -1192,8 +1185,11 @@ CBA.data = (function () {
 
   // --- CRUD סעיפי תקציב ---
   function addCategory(fields) {
+    // incomeSourceId ריק במפורש — הבחירה חייבת להיות של המשתמש (ר' ההערה
+    // ב-normalizeCategory). group: "misc" נשאר כברירת מחדל היסטורית, אבל
+    // בפועל כפתור ההוספה תמיד מעביר את הקבוצה שממנה נלחץ.
     const c = normalizeCategory(Object.assign(
-      { id: newId("cat"), name: "סעיף חדש", plan: 0, group: "misc" }, fields || {}));
+      { id: newId("cat"), name: "סעיף חדש", plan: 0, group: "misc", incomeSourceId: "" }, fields || {}));
     CBA.mock.categories.push(c);
     return c;
   }
@@ -1516,7 +1512,6 @@ CBA.data = (function () {
     getUnassignedCategories: getUnassignedCategories,
     getSplitMismatchCategories: getSplitMismatchCategories,
     getOrphanGroupCategories: getOrphanGroupCategories,
-    defaultIncomeSourceId: defaultIncomeSourceId,
     getYears: getYears,
     getCurrentYear: getCurrentYear,
     setCurrentYear: setCurrentYear,

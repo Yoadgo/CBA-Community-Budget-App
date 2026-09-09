@@ -736,8 +736,16 @@ function planRecompute(container) {
 }
 
 function planIncomeOptions(selectedId) {
-  return CBA.data.getIncomeSources().map(function (s) {
-    return `<option value="${CBA.esc(s.id)}"${s.id === selectedId ? " selected" : ""}>${CBA.esc(s.name)}</option>`;
+  const list = CBA.data.getIncomeSources();
+  const known = list.some(function (x) { return x.id === selectedId; });
+  /* ⚠️ אופציית "בחר מקור" הכרחית ואסור להסיר אותה.
+     כשהערך השמור אינו מוכר (סעיף חדש, או מזהה שנשאר מגרסה ישנה), הדפדפן
+     מציג את האופציה הראשונה כאילו נבחרה — הסעיף *נראה* משויך למיסי שיכון
+     אבל אינו נספר בשום מקום. גרוע מכך: בחירה חוזרת באותה אופציה אינה משדרת
+     `change`, ולכן גם ניסיון לתקן ידנית לא שמר כלום (משוב יועד 2026-09-09). */
+  const placeholder = known ? "" : '<option value="" selected>— בחר מקור —</option>';
+  return placeholder + list.map(function (x) {
+    return `<option value="${CBA.esc(x.id)}"${x.id === selectedId ? " selected" : ""}>${CBA.esc(x.name)}</option>`;
   }).join("");
 }
 
@@ -811,11 +819,40 @@ function planPresentHTML(groups, cats, income) {
 function planPresentControlsHTML() {
   const expandLabel = planPresentExpandAll ? "כווץ הכל" : "הרחב הכל";
   const axisLabel = (planPresentAxis === "fund") ? "לפי תחום" : "לפי מקור מימון";
+  // ההשוואה חולקת מצב עם מצב העריכה (planShowCompare/planCompareYear), כדי
+  // שלא יהיו שני מתגים שסותרים זה את זה על אותו נתון
+  const years = CBA.data.getComparisonYears();
+  const cmpLabel = planShowCompare
+    ? "הסתר השוואה"
+    : ("השוואה ל" + (planCompareYear || years[0] || "שנה קודמת"));
+  const cmpBtn = years.length
+    ? `<button class="btn-ghost" type="button" data-present-compare aria-pressed="${planShowCompare ? "true" : "false"}">${CBA.esc(cmpLabel)}</button>`
+    : "";
   return `
         <div class="present-toolbar">
           <button class="btn-ghost" type="button" data-present-expand aria-pressed="${planPresentExpandAll ? "true" : "false"}">${expandLabel}</button>
           <button class="btn-ghost" type="button" data-present-axis aria-pressed="${planPresentAxis === "fund" ? "true" : "false"}">${axisLabel}</button>
+          ${cmpBtn}
         </div>`;
+}
+
+/* השוואה לשנה קודמת בכרטיס התצוגה (2026-09-09, בקשת יועד) — יושבת בפינה
+   הנגדית לתגיות המימון באותה שורה. ⚠️ הצבעים כאן הם לפי הנחיית יועד:
+   *הגדלת* תקציב = ירוק עם חץ למעלה, *הקטנה* = אדום עם חץ למטה. זה הפוך
+   מהסמנטיקה הרגילה של חריגה, ובכוונה: כאן מסתכלים על גידול בתקציב התחום
+   כעל בשורה טובה ולא כעל חריגה. */
+function planPresentCompareHTML(c) {
+  if (!planShowCompare || !planCompareYear) return "";
+  const prev = CBA.data.getYearPlan(planCompareYear, c.id);
+  if (prev === null) {
+    return `<span class="present-cmp"><span class="present-cmp__new">חדש השנה</span></span>`;
+  }
+  const diff = Math.round((c.plan || 0) - prev);
+  const delta = diff === 0
+    ? '<span class="present-cmp__delta">ללא שינוי</span>'
+    : `<span class="present-cmp__delta ${diff > 0 ? "up" : "down"}">${diff > 0 ? "&#9650;" : "&#9660;"} ${planNumFmt(Math.abs(diff))}</span>`;
+  return `<span class="present-cmp" title="${CBA.esc(planCompareYear)}: ${CBA.formatILS(prev)}">`
+       + `<span class="present-cmp__prev">${CBA.esc(planCompareYear)} ${planNumFmt(prev)}</span>${delta}</span>`;
 }
 
 /* הציר הרגיל — לפי תחום (קבוצה) */
@@ -963,7 +1000,7 @@ function planPresentCardHTML(c, maxInBlock) {
       ${head}
       ${bar}
       ${planPresentItemRows(c)}
-      ${planPresentFundingChips(c)}
+      ${planPresentFundingChips(c, planPresentCompareHTML(c))}
     </div>`;
 }
 
@@ -1015,7 +1052,7 @@ function planNumFmt(n) { return Math.round(n || 0).toLocaleString("he-IL"); }
 /* מימון כתגיות (2026-09-09) — מקור ההכנסה הוא ציר אחר מההוצאה, ולכן קיבל
    שפה ויזואלית אחרת לגמרי במקום עוד שורת טקסט חיוורת. בסעיף מפוצל התגית
    *שומרת על הסכום*: בלעדיו הפיצול נעלם וזה איבוד מידע אמיתי. */
-function planPresentFundingChips(c) {
+function planPresentFundingChips(c, extraHTML) {
   const all = CBA.data.getIncomeSources();
   const chips = planCatSources(c).map(function (s) {
     const src = all.find(function (x) { return x.id === s.incomeSourceId; });
@@ -1025,7 +1062,7 @@ function planPresentFundingChips(c) {
     if (!src) return `<span class="fund-chip fund-chip--missing">ללא מקור${amt}</span>`;
     return `<span class="fund-chip fund-chip--${planFundClass(s.incomeSourceId)}">${CBA.esc(src.name)}${amt}</span>`;
   }).join("");
-  return `<div class="present-fundchips">${chips}</div>`;
+  return `<div class="present-fundchips">${chips}${extraHTML || ""}</div>`;
 }
 
 /* פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10). במצב רגיל (לא מפוצל) —
@@ -1508,6 +1545,12 @@ function planBindPresent(container, rerender) {
   if (expandBtn) expandBtn.addEventListener("click", function () {
     planPresentExpandAll = !planPresentExpandAll;
     planPresentOpen = {};   // מנקה עקיפות ידניות, אחרת "הרחב הכל" לא באמת מרחיב הכל
+    rerender();
+  });
+
+  const cmpBtn = container.querySelector("[data-present-compare]");
+  if (cmpBtn) cmpBtn.addEventListener("click", function () {
+    planShowCompare = !planShowCompare;
     rerender();
   });
 

@@ -764,9 +764,12 @@ body[data-screen="planning"] .year-switch__add {
   text-decoration: underline dotted; transition: color var(--t), background var(--t);
 }
 .cmp-copy:hover { color: var(--action); background: var(--hover); }
+/* ⚠️ הצבעים הפוכים מהאינטואיציה של "חריגה" ובכוונה (הנחיית יועד 2026-09-09):
+   *הגדלת* תקציב = ירוק עם חץ למעלה, *הקטנה* = אדום עם חץ למטה. כאן מסתכלים
+   על גידול בתקציב התחום כעל בשורה טובה, לא כעל חריגה. עד 9.9 היה הפוך. */
 .cmp-delta { color: var(--text-soft); font-weight: 600; }
-.cmp-delta.up { color: var(--danger); }
-.cmp-delta.down { color: var(--ok); }
+.cmp-delta.up { color: var(--ok); }
+.cmp-delta.down { color: var(--danger); }
 
 /* סעיפים שהיו בשנה קודמת ואינם כעת */
 .cmp-extras { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); }
@@ -1084,6 +1087,20 @@ body[data-screen="planning"] .year-switch__add {
 /* מקור שאינו קיים — כאן warn היא הסמנטיקה הנכונה (תקלה), בשונה מתגיות
    המימון הרגילות שנמנעות ממנה בכוונה */
 .fund-chip--missing { background: var(--warn-soft); color: var(--badge-warn); }
+
+/* --- השוואה לשנה קודמת בכרטיס התצוגה --- */
+/* יושבת באותה שורה של תגיות המימון, נדחפת לקצה הנגדי (משוב יועד: "בצד
+   שמאל שלה למטה"). ה-auto הוא מה שדוחף אותה, ולכן חייבת להיות ילדה של
+   .present-fundchips ולא אלמנט נפרד. */
+.present-cmp {
+  margin-inline-start: auto; display: inline-flex; align-items: baseline; gap: 6px;
+  font-size: 12px; white-space: nowrap; align-self: center;
+}
+.present-cmp__prev { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.present-cmp__delta { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.present-cmp__delta.up { color: var(--ok); }
+.present-cmp__delta.down { color: var(--danger); }
+.present-cmp__new { color: var(--badge-warn); font-weight: 600; }
 
 /* --- פסי גודל: בלי זה 432,000 ו-500 נראים זהים לחלוטין --- */
 .present-bar { height: 3px; border-radius: 2px; background: #EDEFF2; margin-top: 7px; overflow: hidden; }
