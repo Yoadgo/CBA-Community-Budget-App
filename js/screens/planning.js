@@ -474,11 +474,42 @@ function planBind(container) {
       planFocusNewCategory(container, newCat.id);
     });
   });
+  /* (2026-09-09) שתי המחיקות כאן היו הפעולות ההרסניות היחידות באפליקציה
+     שרצו בלי אישור — לחיצה אחת על ה-"×" הקטן שצמוד לשדה השם, ותוך 700ms
+     (ה-debounce של planSave) השורה נמחקת פיזית מהגיליון ע"י reconcileRows_.
+     מחיקת **קבוצה** גרועה עוד יותר: removeGroup מסננת גם את כל הסעיפים
+     ששייכים לה, כלומר לחיצה אחת מוחקת כמה שורות בבת אחת.
+     ומלכודת נוספת: מנגנון ה-beforeunload שנבנה כדי שלא יאבדו שמירות עובד
+     כאן *נגד* המשתמש — גם סגירת הטאב מיד לא מבטלת את המחיקה.
+     האזהרה סופרת תנועות מקושרות, כי סעיף עם תנועות משאיר אותן "יתומות":
+     הן לא נמחקות, אבל הן נעלמות מכל תצוגה שמקבצת לפי סעיף. */
+  function planTxCount(catId) {
+    try {
+      var all = (CBA.data.getTransactions && CBA.data.getTransactions()) || [];
+      return all.filter(function (t) { return String(t.categoryId || "") === String(catId); }).length;
+    } catch (e) { return 0; }
+  }
+  function planTxNote(n) {
+    if (!n) return "";
+    return n === 1
+      ? " יש תנועה אחת שמשויכת אליו, והיא תישאר בלי סעיף."
+      : " יש " + n + " תנועות שמשויכות אליו, והן יישארו בלי סעיף.";
+  }
+
   container.querySelectorAll("[data-remove-cat]").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      CBA.data.removeCategory(btn.dataset.removeCat);
-      planSave();
-      rerender();
+      var catId = btn.dataset.removeCat;
+      CBA.ui.confirm(
+        'הסעיף "' + catId + '" יימחק מהתקציב, כולל התכנון והחלוקה החודשית שלו.' +
+        planTxNote(planTxCount(catId)) + " אי אפשר לשחזר מתוך האפליקציה.",
+        { title: "למחוק את הסעיף?", okText: "כן, מחק סעיף", danger: true }
+      ).then(function (ok) {
+        if (!ok) return;
+        CBA.data.removeCategory(catId);
+        planSave();
+        rerender();
+        CBA.ui.toast("הסעיף נמחק");
+      });
     });
   });
   const addGroup = container.querySelector("[data-add-group]");
@@ -489,9 +520,39 @@ function planBind(container) {
   });
   container.querySelectorAll("[data-remove-group]").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      CBA.data.removeGroup(btn.dataset.removeGroup);
-      planSave();
-      rerender();
+      var gid = btn.dataset.removeGroup;
+      var kids = [];
+      try {
+        kids = ((CBA.data.getCategories && CBA.data.getCategories()) || [])
+          .filter(function (c) { return String(c.group || "") === String(gid); });
+      } catch (e) { kids = []; }
+      var txTotal = 0;
+      kids.forEach(function (c) { txTotal += planTxCount(c.id); });
+
+      var msg = kids.length
+        ? 'הקבוצה "' + gid + '" תימחק, ואיתה ' +
+          (kids.length === 1 ? "גם הסעיף שבתוכה" : "גם כל " + kids.length + " הסעיפים שבתוכה") +
+          ": " + kids.map(function (c) { return c.id; }).join(" · ") + "."
+        : 'הקבוצה "' + gid + '" תימחק. אין בה סעיפים.';
+      /* משפט נפרד ולא המשך של רשימת הסעיפים: אחרי רשימה שמסתיימת בשם סעיף,
+         מספר שמתחיל משפט חדש נקרא רגע כאילו הוא חלק מהשם. */
+      if (txTotal) {
+        msg += txTotal === 1
+          ? " בנוסף, תנועה אחת משויכת אליהם ותישאר בלי סעיף."
+          : " בנוסף, " + txTotal + " תנועות משויכות אליהם ויישארו בלי סעיף.";
+      }
+      msg += " אי אפשר לשחזר מתוך האפליקציה.";
+
+      CBA.ui.confirm(msg, {
+        title: kids.length ? "למחוק את הקבוצה ואת הסעיפים שבה?" : "למחוק את הקבוצה?",
+        okText: "כן, מחק", danger: true
+      }).then(function (ok) {
+        if (!ok) return;
+        CBA.data.removeGroup(gid);
+        planSave();
+        rerender();
+        CBA.ui.toast(kids.length ? "הקבוצה והסעיפים שבה נמחקו" : "הקבוצה נמחקה");
+      });
     });
   });
   // סדר קבוצות (סעיף 2) — חצים פשוטים ליד ה-X, מזיזים מקום אחד ושומרים

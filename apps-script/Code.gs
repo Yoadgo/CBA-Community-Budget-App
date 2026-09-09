@@ -148,14 +148,69 @@ var ACTION_PERMS = {
    * מועדון, והן פועלות על השורה של הקורא בלבד לפי המושב החתום.
    * אין הפרדה בין "צוות גינון" ל"מנהל גינון" ברמת ההרשאה — ההבדל היחיד
    * הוא ש-approve/bulkApprove משנות שלב ל"הושלם", ור' ההערה ליד PERM_GARDEN. */
-  gardenList: PERM_GARDEN,
-  updateGardenTask: PERM_GARDEN,
-  approveGardenTask: PERM_GARDEN,
-  bulkApproveGardenTasks: PERM_GARDEN,
-  mergeGardenReports: PERM_GARDEN,
-  transferGardenTask: PERM_GARDEN,
-  saveGardenSetting: PERM_GARDEN,
-  saveGardenRoutine: PERM_GARDEN
+  /* ⚠️ (2026-09-09) ארבע הפעולות האלה **חסרו כאן לגמרי** עד היום, ולכן
+   * `ACTION_PERMS[action]` היה undefined, `authorize_` קיבל need=undefined,
+   * וכל תושב מחובר (לא רק בעל הרשאת גינון) יכול היה לערוך ולמחוק את תוכנית
+   * העבודה של השיכון — ודרך gardenCoverByPlan גם לסגור דיווח של תושב אחר.
+   * הבדיקה שכן הייתה בפונקציות עצמן היא `if (perm.isExternal)` בלבד, כלומר
+   * היא חסמה את הקבלן ולא את התושב. ואירוני: **קריאה** של התוכנית
+   * (handleGardenPlan_) כן דרשה PERM_GARDEN מהיום הראשון. */
+  gardenPlanSave: PERM_GARDEN,
+  gardenPlanActive: PERM_GARDEN,
+  gardenPlanDelete: PERM_GARDEN,
+  gardenCoverByPlan: PERM_GARDEN
+};
+
+/* מה ש**הוסר** מכאן ב-2026-09-09, ולמה זה חשוב: היו כאן שמונה מפתחות
+ * (gardenList, updateGardenTask, approveGardenTask, bulkApproveGardenTasks,
+ * mergeGardenReports, transferGardenTask, saveGardenSetting, saveGardenRoutine)
+ * משלב תכנון מוקדם של מודול הגינון. אף אחד מהם לא היה שם `case` קיים ב-doPost
+ * (השמות שנבחרו בפועל הם gardenTask/gardenApproveBatch/gardenMerge/gardenCreateTask),
+ * ואף לקוח לא קרא להם. הם לא היו מסוכנים בעצמם — אבל הם יצרו את **האשליה**
+ * ש"גינון מכוסה", וזו בדיוק הסיבה שארבע הפעולות האמיתיות למעלה נעדרו כל כך
+ * הרבה זמן בלי שאיש שם לב. רשימת הרשאות שמכילה שמות שאינם קיימים היא רשימה
+ * שאי אפשר לסרוק בעין. */
+
+/* ============================================================================
+ *  שער ההרשאות של doGet (2026-09-09)
+ * ----------------------------------------------------------------------------
+ *  למה זה נולד: ב-doPost יש **שורה אחת** שמגינה על כל הפעולות
+ *  (`authorize_(ss, body, ACTION_PERMS[body.action])`), אבל ב-doGet כל handler
+ *  היה אחראי לקרוא ל-authorize_ בעצמו. 27 מהם עשו זאת — וחמשת ההנדלרים של
+ *  שריון המועדון פשוט לא. הם נכתבו לפני המעבר למושב חתום (7.8) ולא עברו איתו,
+ *  ואף אחד לא שם לב, כי אין שום מנגנון שאומר "שכחת". התוצאה: כל מי שידע את
+ *  כתובת ה-/exec (והיא גלויה בקוד הפומבי) יכול היה ליצור שריונים, לראות את
+ *  השריונים של כל משפחה, ולבטל שריון של שכן — בלי חשבון גוגל בכלל.
+ *
+ *  מעכשיו יש שער אחד בראש doGet, בדיוק כמו ב-doPost. שלושה עקרונות:
+ *  1. **הרשימה כאן לא מחליפה את הבדיקה שבתוך ההנדלר** — היא רצפה, לא תקרה.
+ *     כל handler ממשיך לקרוא ל-authorize_ בעצמו (הגנה כפולה). זה עולה כמעט
+ *     כלום בזכות PERMS_MEMO_.
+ *  2. **הערכים חייבים להיות זהים למה שההנדלר עצמו דורש**, אחרת השער יחסום
+ *     פעולה תקינה. הם הועתקו אחד-אחד מהקריאות בפועל ולא מהזיכרון.
+ *  3. ⚠️ **בדיוק בגלל isExternal אי אפשר להסתפק כאן ב-null גורף.** authorize_
+ *     חוסם משתמש חיצוני על כל need שאינו PERM_GARDEN — כלומר שער אחיד עם
+ *     need=null היה נועל את אביתר מחוץ לכל מסכי הגינון שלו. לכן יש מפה.
+ *
+ *  פעולה שאינה כאן מקבלת need=null: מושב תקין + תושב פעיל. זו ברירת מחדל
+ *  נכונה לפעולות התושב (שריון, קבלה, פרופיל), והיא גם רצפת הבטיחות של
+ *  handler עתידי שישכח שער משלו — הכשל שקרה כאן פעם אחת וכבר לא יכול לחזור.
+ * ========================================================================== */
+var GET_PUBLIC_ACTIONS = [
+  'rev',            // מספר גרסה בלבד, בלי גישה לגיליון
+  'login',          // מאמת טוקן גוגל — זו *עצמה* פעולת ההתחברות
+  'submitSignup'    // מגיע ממי שעדיין אינו תושב; מאומת מול טוקן גוגל בתוך ההנדלר
+];
+
+var GET_ACTION_PERMS = {
+  listSignups: PERM_RESIDENTS, getResidents: PERM_RESIDENTS,
+  assignResidentIds: PERM_RESIDENTS, profileChanges: PERM_RESIDENTS,
+  clubList: PERM_CLUB, approveClubReservation: PERM_CLUB,
+  rejectClubReservation: PERM_CLUB, approveClubReservations: PERM_CLUB,
+  residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN,
+  gardenStats: PERM_GARDEN, gardenTaskLog: PERM_GARDEN,
+  gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
+  gymList: PERM_GYM
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -212,20 +267,35 @@ function parsePerms_(raw) {
     .filter(function (s, i, a) { return a.indexOf(s) === i; });
 }
 
+/* מטמון לכל *ריצה בודדת* (2026-09-09). לא מטמון בין בקשות — ר' האזהרה למטה.
+ * הסיבה: מאז שהשער עבר לראש doGet, בקשה אחת עוברת ב-authorize_ פעמיים —
+ * פעם בשער הכללי ופעם בתוך ההנדלר עצמו (הגנה כפולה, בכוונה). בלי המטמון
+ * הזה כל בקשה הייתה קוראת את **כל** טאב "תושבים" פעמיים (lookupResident_
+ * עושה getDataRange().getValues()), וזו נסיגה ישירה בביצועים.
+ * ⚠️ המשתנה חי רק כל עוד הריצה חיה. Apps Script מריץ כל בקשה בהקשר משלו,
+ *    ולכן שלילת הרשאה עדיין נכנסת לתוקף **בבקשה הבאה** — בדיוק כמו קודם.
+ *    אסור בשום אופן להעביר את זה ל-CacheService/PropertiesService: זו בדיוק
+ *    התכונה שנשמרה במכוון (ר' ההערה על "דור" המושבים). */
+var PERMS_MEMO_ = {};
+
 /** ההרשאות בפועל של אימייל נתון, נקראות מהגיליון בזמן אמת. */
 function permissionsFor_(email) {
+  var memoKey = normalizeEmail_(email);
+  if (memoKey && PERMS_MEMO_[memoKey]) return PERMS_MEMO_[memoKey];
   var r = lookupResident_(email);
   if (!r.found) return { found: false, active: false, perms: [], isSuper: false, isExternal: false };
   var active = !(r.status && r.status.indexOf('פעיל') === -1);
   var perms = parsePerms_(r.permissions);
   // תאימות לאחור לעמודת "תפקיד" הישנה
   if (!perms.length && r.role && r.role.indexOf('מנהל') !== -1) perms = [PERM_SUPER];
-  return {
+  var out = {
     found: true, active: active, perms: perms,
     isSuper: perms.indexOf(PERM_SUPER) !== -1,
     isExternal: !!r.isExternal,
     familyId: r.familyId, family: r.family, house: r.house, firstName: r.firstName
   };
+  if (memoKey) PERMS_MEMO_[memoKey] = out;
+  return out;
 }
 
 /**
@@ -341,17 +411,32 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'submitSignup') {
       return handleSubmitSignup_(e.parameter);
     }
+
+    /* ===== השער האחד של doGet (2026-09-09) — ר' GET_ACTION_PERMS למעלה =====
+       כל מה שמתחת לשורה הזו עבר אימות. שלוש הפעולות שמעליה הן היחידות
+       שמותרות ללא מושב, וכל אחת מהן מאמתת משהו אחר בעצמה. */
+    var getAction = (e && e.parameter && e.parameter.action) || '';
+    if (GET_PUBLIC_ACTIONS.indexOf(getAction) === -1) {
+      var ssGate = SpreadsheetApp.getActiveSpreadsheet();
+      var topGate = authorize_(ssGate, e && e.parameter, GET_ACTION_PERMS[getAction]);
+      if (!topGate.ok) return json_({ ok: false, error: topGate.error });
+      /* ההרשאות המאומתות זמינות להנדלרים דרך הפרמטרים, כדי שפעולות שגוזרות
+         זהות (שריון המועדון) לא ייקחו אותה מהלקוח. שם עם קו תחתון מוביל
+         כדי שלא יתנגש בשום פרמטר אמיתי מה-query string. */
+      if (e && e.parameter) { e.parameter._email = topGate.email; e.parameter._perm = topGate.perm; }
+    }
+
     if (e && e.parameter && e.parameter.action === 'listSignups') {
       return handleListSignups_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'clubBusy') {
-      return handleClubBusy_(e.parameter.date);
+      return handleClubBusy_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'reserveClub') {
       return handleReserveClub_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'clubMonth') {
-      return handleClubMonth_(e.parameter.month);
+      return handleClubMonth_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'myClubReservations') {
       return handleMyClubReservations_(e.parameter);
@@ -911,8 +996,40 @@ function ensureColumns_(ss, body) {
  *    "טרייה" תחת נעילה ממש לפני היצירה (שני תושבים עלולים לבחור אותו זמן במקביל).
  * שתיהן דרך GET (לא doPost/no-cors) — כדי שהאפליקציה תוכל לקרוא את התשובה בחזרה
  * (בדיוק כמו handleLogin_): לשריון קריטי לדעת מיד אם הצליח או שהזמן נתפס. */
-function handleClubBusy_(dateStr) {
+/* זהות המשריין — **מהמושב החתום בלבד** (2026-09-09).
+ * עד היום חמש הפונקציות כאן לקחו את `family`/`email` ישירות מה-query string,
+ * וזה היה כל האימות שלהן. `_perm`/`_email` נקבעים בשער שבראש doGet ולא ניתנים
+ * לזיוף מהלקוח.
+ * ⚠️ **תאימות לשריונים שכבר קיימים ביומן.** התג `family` נכתב בעבר ממה
+ *    שהמסך שלח, והמסכים לא הסכימו ביניהם: מסך השריון שלח את **שם המשפחה**
+ *    (resident.js: `u.family || u.name`) ואילו עמוד הבית שאל לפי
+ *    **מזהה משפחה או מספר בית** (home.js: `me.familyId || me.house`). לכן
+ *    ההשוואה כאן היא מול **כל שלושת** הערכים ולא מול אחד — אחרת שריונים
+ *    קיימים היו "נעלמים" מהתושב ברגע הדיפלוי. */
+function clubIdentity_(p) {
+  var perm = (p && p._perm) || {};
+  var email = String((p && p._email) || '').trim().toLowerCase();
+  var keys = [perm.family, perm.familyId, perm.house]
+    .map(function (v) { return String(v == null ? '' : v).trim(); })
+    .filter(Boolean);
+  return {
+    email: email,
+    famName: String(perm.family || '').trim(),
+    house: String(perm.house || '').trim(),
+    keys: keys,
+    matches: function (tagEmail, tagFamily) {
+      var te = String(tagEmail || '').trim().toLowerCase();
+      var tf = String(tagFamily || '').trim();
+      if (email && te) return te === email;
+      if (tf) return keys.indexOf(tf) !== -1;
+      return false;
+    }
+  };
+}
+
+function handleClubBusy_(p) {
   try {
+    var dateStr = p && p.date;
     if (!dateStr) return json_({ ok: false, error: 'חסר תאריך' });
     var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
     if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
@@ -945,17 +1062,20 @@ function handleReserveClub_(p) {
     // שריון חדש נוצר כ"ממתין לאישור מנהל" — התור/משבצת הזמן כן ננעלת מיד (מונעת
     // התנגשות עם תושב אחר בזמן שהמנהל טרם הגיב), אבל האירוע מסומן ככזה גם בכותרת
     // (גלוי גם למי שמסתכל ישירות ב-Google Calendar) וגם בתג status לצורך המסך הפנימי.
-    var title = 'שריון מועדון (ממתין לאישור) — ' + (p.family || p.email || 'תושב');
+    /* הזהות מהמושב, לא מהבקשה — ר' clubIdentity_. ההערה (note) כן מגיעה
+       מהלקוח: היא הטקסט החופשי של התושב על עצמו, ואין בה שום סמכות. */
+    var who = clubIdentity_(p);
+    var title = 'שריון מועדון (ממתין לאישור) — ' + (who.famName || who.email || 'תושב');
     var desc = [
-      p.house ? ('בית ' + p.house) : '',
-      p.email || '',
+      who.house ? ('בית ' + who.house) : '',
+      who.email,
       p.note ? ('הערה: ' + p.note) : ''
     ].filter(Boolean).join('\n');
     var ev = cal.createEvent(title, startDt, endDt, { description: desc });
     // תגיות (מטא-דאטה פרטית של הסקריפט, לא מוצגות ביומן עצמו) — כדי ש"השריונים שלי",
     // ביטול שריון, ומסך האישורים של המנהל יוכלו לשייך/לסנן אירוע בלי לחשוף פרטים לאחרים.
-    ev.setTag('family', String(p.family || ''));
-    ev.setTag('email', String(p.email || '').trim().toLowerCase());
+    ev.setTag('family', who.famName);
+    ev.setTag('email', who.email);
     ev.setTag('note', p.note || '');
     ev.setTag('status', 'pending');
     // חותמת זמן הבקשה (2026-08-09) — משמשת לתזכורת "ממתין כבר X ימים" למנהל המועדון.
@@ -966,7 +1086,7 @@ function handleReserveClub_(p) {
       // זה קרוב לוודאי הגורם למה שיועד דיווח ("שריון מועדון לא שלח מייל").
       var ssForMail = SpreadsheetApp.getActiveSpreadsheet();
       notifyAdmins_(ssForMail, PERM_CLUB, 'ADMIN_NEW_CLUB', {
-        'שם': p.family || p.email || 'תושב',
+        'שם': who.famName || who.email || 'תושב',
         'תאריך': Utilities.formatDate(startDt, Session.getScriptTimeZone(), 'dd/MM/yyyy'),
         'שעה': p.start + '–' + p.end, 'קישור': CBA_APP_URL
       });
@@ -981,8 +1101,9 @@ function handleReserveClub_(p) {
 
 /* מחזירה אילו ימים בחודש נתון (YYYY-MM) יש בהם לפחות שריון אחד — לתצוגה החודשית
  * (heatmap פשוט). לא חושפת פרטי אירוע, רק תאריכים. */
-function handleClubMonth_(monthStr) {
+function handleClubMonth_(p) {
   try {
+    var monthStr = p && p.month;
     if (!monthStr) return json_({ ok: false, error: 'חסר חודש' });
     var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
     if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
@@ -1013,19 +1134,14 @@ function handleClubMonth_(monthStr) {
  * המייל/שם המשפחה שסופקו, מוצלב מול התגיות שנשמרו על האירוע ביצירה. */
 function handleMyClubReservations_(p) {
   try {
-    var email = String(p.email || '').trim().toLowerCase();
-    var family = String(p.family || '').trim();
-    if (!email && !family) return json_({ ok: false, error: 'חסרים פרטי משתמש' });
+    var who = clubIdentity_(p);
+    if (!who.email && !who.keys.length) return json_({ ok: false, error: 'חסרים פרטי משתמש' });
     var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
     if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
     var from = new Date(Date.now() - 24 * 3600 * 1000);
     var to = new Date(Date.now() + 180 * 24 * 3600 * 1000);
     var mine = cal.getEvents(from, to).filter(function (ev) {
-      var tagEmail = String(ev.getTag('email') || '').trim().toLowerCase();
-      var tagFamily = String(ev.getTag('family') || '').trim();
-      if (email && tagEmail) return tagEmail === email;
-      if (family && tagFamily) return tagFamily === family;
-      return false;
+      return who.matches(ev.getTag('email'), ev.getTag('family'));
     }).map(function (ev) {
       return {
         id: ev.getId(),
@@ -1052,12 +1168,13 @@ function handleCancelClubReservation_(p) {
     if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
     var ev = cal.getEventById(p.id);
     if (!ev) return json_({ ok: false, error: 'השריון לא נמצא — ייתכן שכבר בוטל' });
-    var email = String(p.email || '').trim().toLowerCase();
-    var family = String(p.family || '').trim();
-    var tagEmail = String(ev.getTag('email') || '').trim().toLowerCase();
-    var tagFamily = String(ev.getTag('family') || '').trim();
-    var owns = (email && tagEmail && tagEmail === email) || (family && tagFamily && tagFamily === family);
-    if (!owns) return json_({ ok: false, error: 'אין הרשאה לבטל שריון זה' });
+    /* הבעלות נבדקת מול הזהות שבמושב החתום. עד 9.9 היא נבדקה מול
+       `p.email`/`p.family` — ערכים שהמבקש עצמו שלח, כלומר "בדיקה" שכל אחד
+       יכול היה לעבור פשוט בכך שיכתוב את שם המשפחה הנכון. */
+    var who = clubIdentity_(p);
+    if (!who.matches(ev.getTag('email'), ev.getTag('family'))) {
+      return json_({ ok: false, error: 'אין הרשאה לבטל שריון זה' });
+    }
     ev.deleteEvent();
     return json_({ ok: true });
   } catch (err) {
@@ -1265,11 +1382,14 @@ function submitReceipt_(ss, body) {
       '  מתקציב: טרם שויך' + ' פירוט: ' + (body.description || '') + (bankFull ? (' ' + bankFull) : '');
     try { file.setName(displayName); } catch (e) { /* לא קריטי */ }
 
-    // מזהה משפחה (2026-08-06): נגזר בשרת מהאימייל המאומת של הפונה (לא מהלקוח) —
-    // כך שהשורה מקושרת אוטומטית ובוודאות למשפחה הנכונה מרגע היצירה, בלי שום ניחוש.
+    /* מזהה משפחה (2026-08-06): נגזר בשרת מהאימייל המאומת של הפונה, לא מהלקוח.
+     * ⚠️ תיקון 2026-09-09: ההערה הזו הייתה נכונה בכוונה ושגויה במימוש — הקוד
+     * קרא `body.email`, כלומר שדה רגיל מגוף הבקשה שהלקוח שולח, ולא `body._email`
+     * שנקבע ע"י שער ההרשאות מתוך המושב החתום. כל תושב מחובר יכול היה לשלוח
+     * אימייל של משפחה אחרת ולשייך אליה את בקשת ההחזר — כולל מייל האישור. */
     var famId = '';
-    if (body.email) {
-      var residentInfo = lookupResident_(body.email);
+    if (body._email) {
+      var residentInfo = lookupResident_(body._email);
       if (residentInfo && residentInfo.found) famId = residentInfo.familyId || '';
     }
 
@@ -1303,7 +1423,7 @@ function submitReceipt_(ss, body) {
     try {
       var buyerName = body.buyer || (residentInfo && residentInfo.firstName) || '';
       var famEmails = emailsForFamilyId_(ss, famId);
-      var toEmails = famEmails.length ? famEmails : (body.email ? [body.email] : []);
+      var toEmails = famEmails.length ? famEmails : (body._email ? [body._email] : []);
       var amountRounded = Math.round(Number(body.amount) || 0);
       sendResidentTemplate_(ss, 'REIMBURSEMENT_RECEIVED', toEmails, { 'שם': buyerName, 'סכום': amountRounded, 'מזהה': newId });
       notifyAdmins_(ss, PERM_BUDGET, 'ADMIN_NEW_REIMBURSEMENT', {
@@ -1590,6 +1710,26 @@ function uploadReceiptFile_(ss, body) {
     var row = -1;
     for (var i = 0; i < ids.length; i++) { if (String(ids[i][0]) === String(body.id)) { row = i + 2; break; } }
     if (row === -1) return { ok: false, error: 'התנועה לא נמצאה — שמור אותה קודם' };
+
+    /* ⚠️ בדיקת בעלות (2026-09-09). הפעולה הזו **פתוחה לכל תושב** במכוון —
+     * תושב חייב להיות מסוגל לצרף קבלה לבקשה שלו, ולכן היא לא ב-ACTION_PERMS.
+     * אבל עד היום היא איתרה את השורה לפי `body.id` בלבד ולא בדקה של מי היא,
+     * ואז זרקה את הקובץ הישן ל-Drive trash והחליפה את הקישור. המזהים הם
+     * רצף (maxId+1), כלומר לא צריך לנחש כלום — 1,2,3 עובד. התוצאה: כל תושב
+     * מחובר יכול היה להחליף את הקבלה של **כל** תנועה במערכת.
+     * המקבילה לצפייה (handleReceiptFile_) עשתה את הבדיקה הזו נכון מ-24.8;
+     * רק ההעלאה נשארה בלי. */
+    var upPerm = body._perm || {};
+    var upAllowed = !!upPerm.isSuper || (upPerm.perms || []).indexOf(PERM_BUDGET) !== -1;
+    if (!upAllowed) {
+      var famColUp = headers.indexOf('מזהה משפחה');
+      var rowFam = famColUp === -1 ? '' : String(sh.getRange(row, famColUp + 1).getValue() || '').trim();
+      var myFam = String(upPerm.familyId || '').trim();
+      /* שורה בלי מזהה משפחה שייכת להוצאה כללית של הוועד ולא לתושב — לכן
+         היא נחסמת למי שאינו מנהל תקציב, ולא נפתחת "כי אין למי להשוות". */
+      upAllowed = !!(myFam && rowFam && rowFam === myFam);
+    }
+    if (!upAllowed) return { ok: false, error: 'אין לך הרשאה לשנות את הקבלה של התנועה הזו' };
 
     var status = statusCol !== -1 ? String(sh.getRange(row, statusCol + 1).getValue()) : '';
     var monthKey = monthCol !== -1 ? sh.getRange(row, monthCol + 1).getValue() : '';
@@ -8943,6 +9083,7 @@ function handleGardenTaskLog_(p) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var gate = authorize_(ss, p, PERM_GARDEN);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var isExtLog = !!(gate.perm || {}).isExternal;   // ר' הסינון בלולאה למטה
     var id = String(p.id || '').trim();
     if (!id) return json_({ ok: false, error: 'חסר מזהה משימה' });
 
@@ -8954,14 +9095,28 @@ function handleGardenTaskLog_(p) {
     for (var r = 1; r < v.length; r++) {
       if (String(v[r][c['מזהה משימה']]).trim() !== id) continue;
       var ts = v[r][c['חותמת זמן']];
+      var lgKind = gardenCell_(v[r][c['סוג רשומה']]);
+      var lgWho  = gardenCell_(v[r][c['מבצע']]);
+      var lgNote = gardenCell_(v[r][c['הערה']]);
+      /* מידור המשתמש החיצוני (2026-09-09). שתי שורות ביומן נכתבות עם השם
+       * המלא של **תושב** ולא של איש צוות: פתיחת משימה מדיווח תושב, והמשוב
+       * שהתושב נתן. כל שאר נקודות הגישה של הגינון כבר מטפלות ב-isExternal
+       * (gardenPlan חסום, gardenStats מסנן שדות, gardenTasks מגביל scope) —
+       * היומן היה היחיד שלא, וכפתור "היסטוריה" פתוח לכל בעל הרשאת גינון.
+       * שים לב: רשומת 'נפתח' של **משימה יזומה** (gardenCreateTask_) נושאת שם
+       * של איש צוות ולכן נשארת גלויה — הסינון הוא על מקור הרשומה, לא על הסוג. */
+      if (isExtLog) {
+        if (lgKind === 'משוב') { lgWho = 'תושב'; lgNote = ''; }
+        else if (lgKind === 'נפתח' && lgNote.indexOf('דיווח תושב') === 0) { lgWho = 'תושב'; }
+      }
       out.push({
         at:   (ts instanceof Date) ? ts.toISOString() : String(ts || ''),
-        kind: gardenCell_(v[r][c['סוג רשומה']]),
+        kind: lgKind,
         field: gardenCell_(v[r][c['שדה']]),
         from: gardenCell_(v[r][c['מערך']]),
         to:   gardenCell_(v[r][c['לערך']]),
-        who:  gardenCell_(v[r][c['מבצע']]),
-        note: gardenCell_(v[r][c['הערה']])
+        who:  lgWho,
+        note: lgNote
       });
     }
     /* מיון בשרת ולא בלקוח: היומן הוא append-only ולכן *בדרך כלל* כרונולוגי,
