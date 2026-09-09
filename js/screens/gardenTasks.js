@@ -97,6 +97,14 @@
   /* המילים כפי שהן רשומות בעמודה "סוג" בגיליון — ר' GARDEN_KIND_* ב-Code.gs.
      כאן הן משמשות רק לתצוגה, וההשוואה נעשית מול המחרוזת שהשרת החזיר ולא
      מול ניחוש: תצוגה שמנחשת הייתה מתייגת כל מה שאינו שגרה כדיווח תושב. */
+  /* המילון המשותף (js/data/gardenLang.js). נטען לפני המסך הזה ב-index.html.
+     הנפילה-לאחור קיימת כדי שקובץ חסר יוריד את איכות הניסוח ולא יפיל
+     את המסך — אותו כלל כמו בכל תלות אחרת במודול. */
+  var GL = (window.CBA && CBA.gardenLang) || {
+    T: { report: "דיווח", routine: "שגרה", manager: "מנהל הגינון" },
+    reportRef: function (id) { return id ? "דיווח " + id : "דיווח"; },
+    mineLabel: function (m) { return m ? "להחלטתך" : "לביצוע"; }
+  };
   var GK_ROUTINE = "שגרה";
   var GK_REPORT  = "דיווח תושב";
 
@@ -443,7 +451,10 @@
               /* "מחכה לך" ראשון תמיד, וגם כשהוא ריק: הוא המקום שהמשתמש אמור
                  לפתוח בו את הבוקר, ומסנן שנעלם כשהוא מתרוקן מלמד לא להסתכל
                  עליו. אפס כאן הוא תשובה טובה, לא רעש. */
-              seg("mine", "מחכה לך", c.mine) +
+              /* ⚠️ 2026-09-09 — התווית נגזרת מהתפקיד. "מחכה לך" הציג שתי
+                 רשימות שונות לגמרי תחת אותה מילה ואותו מונה: אצל המנהל מה
+                 שממתין להחלטתו, ואצל הגנן מה שלא שובץ ומה שהוחזר אליו. */
+              seg("mine", GL.mineLabel(isManager), c.mine) +
               seg("open", "פתוחות", c.open) +
               seg("closed", "סגורות", c.closed) +
             '</div>' +
@@ -613,7 +624,7 @@
                  ואין מי שמצטט אותן. */
               (t.kind === GK_REPORT
                 ? '<span class="gt-res">' + ico("person") +
-                  (t.repId ? 'פנייה ' + esc(t.repId) : 'תושב') + '</span><i>·</i>'
+                  (t.repId ? esc(GL.reportRef(t.repId)) : 'תושב') + '</span><i>·</i>'
                 : (t.kind === GK_ROUTINE ? ico("repeat") + '<i>·</i>' : '')) +
               /* שדה שכבר מופיע בכותרת הקבוצה אינו חוזר על הכרטיס. בסידור
                  לפי אזור, האזור נכתב פעם אחת מעל הקבוצה ואז שוב על כל אחת
@@ -640,7 +651,7 @@
             (planning && t.dupOf && t.dupOf.kind === GK_REPORT
               ? '<div class="gt-dup">' + ico("merge") +
                 'נראה כמו כפילות של <b>' +
-                esc(t.dupOf.repId ? "פנייה " + t.dupOf.repId : "#" + t.dupOf.id) + '</b> · ' +
+                esc(t.dupOf.repId ? GL.reportRef(t.dupOf.repId) : "#" + t.dupOf.id) + '</b> · ' +
                 esc(t.dupOf.title || "") +
                 '<button type="button" data-act="merge">איחוד</button></div>'
               : '') +
@@ -656,7 +667,8 @@
                היא הופיעה על כל כרטיס בתור האישורים — כלומר על מסך שכולו
                ממתין לאישורו — לצד תיבת אישור ירוקה שאומרת בדיוק את זה. */
             (done && !isManager
-              ? '<div class="gt-wait">' + ico("clock") + 'ממתין לאישור הוועד</div>'
+              ? '<div class="gt-wait">' + ico("clock") +
+                esc('ממתין לאישור ' + GL.T.manager) + '</div>'
               : '') +
           '</div>' +
           '<button type="button" class="gt-more" data-act="menu" aria-label="עוד פעולות">' +
@@ -924,8 +936,8 @@
           '<h4>מקרא</h4>' +
           '<div class="gt-lg">מאיפה המשימה הגיעה</div>' +
           '<div class="gt-lgi"><u>' + ico("person") + '</u><div><b>תושב</b>' +
-            '<span>מישהו דיווח על זה מהאפליקציה. יש לו מספר פנייה, והוא מקבל עדכון בסיום.</span></div></div>' +
-          '<div class="gt-lgi"><u>' + ico("repeat") + '</u><div><b>חוזרת</b>' +
+            '<span>מישהו דיווח על זה מהאפליקציה. יש לו מספר דיווח, והוא מקבל עדכון בסיום.</span></div></div>' +
+          '<div class="gt-lgi"><u>' + ico("repeat") + '</u><div><b>' + esc(GL.T.routine) + '</b>' +
             '<span>מגיעה מתוכנית העבודה וחוזרת לפי התדירות שהוגדרה לה.</span></div></div>' +
           '<div class="gt-lgi"><u style="color:#C4CBC8">—</u><div><b>בלי סימון</b>' +
             '<span>משימה שנפתחה כאן ידנית, פעם אחת.</span></div></div>' +
@@ -948,7 +960,7 @@
             '<div><b>ריקה</b><span>' +
             esc(isManager
               ? "סימון ביצוע. במשימת שגרה הוא סוגר; בדיווח של תושב הוא מרים אותה לאישורך."
-              : "לחיצה מסמנת שביצעת. משימת שגרה נסגרת מיד; דיווח של תושב עובר לאישור הוועד.") +
+              : "לחיצה מסמנת שביצעת. משימת שגרה נסגרת מיד; דיווח של תושב עובר לאישור " + GL.T.manager + ".") +
             '</span></div></div>' +
           (isManager
             ? '<div class="gt-lgi"><u><span class="gt-box is-approve" style="width:22px;height:22px;margin:0">' +
@@ -1046,9 +1058,9 @@
         var t = byId(id);
         if (!t || !t.dupOf) return;
         CBA.ui.confirm(
-          "משימה #" + id + " תיסגר, והדיווח שלה יצורף לפנייה #" + t.dupOf.id + ".\n\n" +
+          "משימה #" + id + " תיסגר, והדיווח שלה יצורף ל" + GL.reportRef(t.dupOf.repId || t.dupOf.id) + ".\n\n" +
           "המדווח יקבל מייל שמסביר את האיחוד, ובהמשך גם את הודעת הסיום.", {
-            title: "איחוד עם פנייה #" + t.dupOf.id, okText: "אחד"
+            title: "איחוד עם " + GL.reportRef(t.dupOf.repId || t.dupOf.id), okText: "אחד"
           }).then(function (yes) {
             if (!yes || busy) return;
             busy = true;
@@ -1142,7 +1154,7 @@
             '<div class="gt-grip" aria-hidden="true"></div>' +
             '<h4>' + esc(t.title || t.category || "משימה") + '</h4>' +
             '<p class="sub">' +
-              (t.repId ? 'פנייה ' + esc(t.repId) + ' · ' : '') + esc(t.category || "") +
+              (t.repId ? esc(GL.reportRef(t.repId)) + ' · ' : '') + esc(t.category || "") +
               (t.area ? ' · ' + esc(t.area) : '') + '</p>' +
             (t.x !== null && t.y !== null
               ? '<button type="button" class="gt-opt" data-m="map"><u>' + ico("pin") + '</u>' +

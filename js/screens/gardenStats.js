@@ -237,9 +237,9 @@
       function journey() {
         var t = d.timing;
         var segs = [
-          { k: "toPlan",    label: "עד שיבוץ",    who: d.isManager ? "אצלך" : "אצל הוועד" },
+          { k: "toPlan",    label: "עד שיבוץ",    who: d.isManager ? "אצלך" : "אצל מנהל הגינון" },
           { k: "toDo",      label: "עד ביצוע",    who: "אצל הצוות" },
-          { k: "toApprove", label: "עד אישור",    who: d.isManager ? "אצלך" : "אצל הוועד" }
+          { k: "toApprove", label: "עד אישור",    who: d.isManager ? "אצלך" : "אצל מנהל הגינון" }
         ];
         var vals = segs.map(function (s) { return (t[s.k] && t[s.k].median) || 0; });
         var sum = vals.reduce(function (a, b) { return a + b; }, 0);
