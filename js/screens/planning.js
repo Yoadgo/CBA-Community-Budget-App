@@ -66,7 +66,7 @@ CBA.screens.planning = {
                 <input class="num-input num-input--full" type="number" inputmode="numeric" data-cat="${CBA.esc(c.id)}" value="${c.plan}">
                 ${planBaselineLine(c)}
                 ${planShowCompare ? planCompareLine(c) : ""}
-                ${c.items && c.items.length ? "" : `<div class="dist-chip" data-chip="${CBA.esc(c.id)}">${planDistLabel(c)} · ${CBA.esc(planSourceName(c))}</div>`}
+                ${c.items && c.items.length ? "" : `<div class="dist-chip" data-chip="${CBA.esc(c.id)}">${planDistLabel(c)} · ${planSourceName(c)}</div>`}
                 <div class="plan-item__more">
                   ${planSourceSplitHTML(c)}
                   ${planItemsHTML(c)}
@@ -426,7 +426,9 @@ function planBind(container) {
       if (!c) return;
       c.dist.months = Math.max(1, Math.min(12, planNum(inp.value) || 1));
       const chip = container.querySelector('[data-chip=' + CSS.escape(c.id) + ']');
-      if (chip) chip.textContent = planDistLabel(c) + " · " + planSourceName(c);
+      // innerHTML ולא textContent: planSourceName מחזירה סימון תקלה כ-HTML
+      // (השם עצמו כבר עובר CBA.esc בתוכה)
+      if (chip) chip.innerHTML = planDistLabel(c) + " · " + planSourceName(c);
     });
   });
   // עריכת שמות קבוצות — תוך כדי הקלדה מעדכן שם; בסיום (blur) מבצע "מיגרציה"
@@ -709,9 +711,10 @@ function planRecompute(container) {
   const annualEl = container.querySelector("#plan-annual");
   if (annualEl) {
     const annual = CBA.data.getAnnualTotal();
-    const unassigned = CBA.data.getUnassignedCategories();
     let html = 'מתוכנן שנתי (לא מחולק לחודשים): <b>' + CBA.formatILS(annual) + "</b>";
-    if (unassigned.length) html += ' · <span class="neg">' + unassigned.length + " סעיפים ללא שיוך למקור</span>";
+    html += planWarnHTML(CBA.data.getUnassignedCategories(), "ללא שיוך למקור");
+    html += planWarnHTML(CBA.data.getSplitMismatchCategories(), "הפיצול אינו מסתכם לתכנון");
+    html += planWarnHTML(CBA.data.getOrphanGroupCategories(), "בקבוצה שאינה קיימת — לא מוצגים בלוח");
     annualEl.innerHTML = html;
   }
 
@@ -738,6 +741,17 @@ function planIncomeOptions(selectedId) {
   }).join("");
 }
 
+/* התראת תקינות אחת בשורת הסיכום. מציגה **שמות** ולא רק מספר: התראה
+   שאומרת "4 סעיפים" ואינה אומרת אילו, שולחת את יועד לחפש במסך של 23
+   סעיפים (משוב 2026-09-09). עד 3 שמות בשורה, השאר ב-title. */
+function planWarnHTML(list, label) {
+  if (!list || !list.length) return "";
+  const names = list.map(function (c) { return c.name || "(ללא שם)"; });
+  const shown = names.slice(0, 3).join(", ") + (names.length > 3 ? " ועוד " + (names.length - 3) : "");
+  return ' · <span class="neg" title="' + CBA.esc(names.join(" · ")) + '">'
+       + list.length + " סעיפים " + label + ": " + CBA.esc(shown) + "</span>";
+}
+
 /* תווית מצב החלוקה החודשית (לשבב הקומפקטי) */
 function planDistLabel(c) {
   const d = c.dist || { mode: "equal", months: 12 };
@@ -746,11 +760,20 @@ function planDistLabel(c) {
   return "שווה · " + d.months + " ח׳";
 }
 
-/* שם מקור ההכנסה שהסעיף משויך אליו (או "מפוצל בין N מקורות" — סעיף 4) */
+/* שם מקור ההכנסה שהסעיף משויך אליו (או "מפוצל בין N מקורות" — סעיף 4).
+   מסמן בכרטיס עצמו שתי תקלות שקודם היו גלויות רק כמספר בשורת הסיכום:
+   פיצול שאינו מסתכם לתכנון, ומקור שאינו קיים ברשימת המקורות. */
 function planSourceName(c) {
-  if (c.sources && c.sources.length > 1) return "מפוצל בין " + c.sources.length + " מקורות";
+  if (c.sources && c.sources.length > 1) {
+    const sum = c.sources.reduce(function (a, s) { return a + (Number(s.amount) || 0); }, 0);
+    const gap = Math.round(sum) - Math.round(c.plan || 0);
+    const warn = gap
+      ? ' <span class="neg">(' + (gap > 0 ? "עודף " : "חוסר ") + Math.abs(gap).toLocaleString("he-IL") + ")</span>"
+      : "";
+    return "מפוצל בין " + c.sources.length + " מקורות" + warn;
+  }
   const s = CBA.data.getIncomeSources().find(function (x) { return x.id === c.incomeSourceId; });
-  return s ? s.name : "—";
+  return s ? CBA.esc(s.name) : '<span class="neg">ללא מקור</span>';
 }
 
 /* ===================================================================
@@ -997,7 +1020,10 @@ function planPresentFundingChips(c) {
   const chips = planCatSources(c).map(function (s) {
     const src = all.find(function (x) { return x.id === s.incomeSourceId; });
     const amt = (s.amount == null) ? "" : ` <span class="fund-chip__n">${planNumFmt(s.amount)}</span>`;
-    return `<span class="fund-chip fund-chip--${planFundClass(s.incomeSourceId)}">${CBA.esc(src ? src.name : "—")}${amt}</span>`;
+    // מקור שאינו קיים ברשימה מסומן במפורש ולא כמקף חסר-משמעות — הלוח הזה
+    // מוצג לוועד, ו-"—" נראה כמו עיצוב ולא כמו תקלה (משוב יועד 2026-09-09)
+    if (!src) return `<span class="fund-chip fund-chip--missing">ללא מקור${amt}</span>`;
+    return `<span class="fund-chip fund-chip--${planFundClass(s.incomeSourceId)}">${CBA.esc(src.name)}${amt}</span>`;
   }).join("");
   return `<div class="present-fundchips">${chips}</div>`;
 }

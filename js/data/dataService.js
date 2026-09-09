@@ -1048,6 +1048,24 @@ CBA.data = (function () {
   }
 
   // סעיפים שמשויכים למקור הכנסה שכבר לא קיים (כולל שורות בפיצול, סעיף 4)
+  /* סעיפים מפוצלים שסכום שורות הפיצול בהם אינו שווה לתכנון הסעיף.
+     נמצא חי 9.9.26 (תרבות מבוגרים 72,000 מול 73,000; יוזמות תושבים 5,000
+     מול 6,000) ולא הייתה שום דרך לראות את זה במסך. ר' [[cba-visible-drift-rule]] */
+  function getSplitMismatchCategories() {
+    return getCategories().filter(function (c) {
+      if (!c.sources || c.sources.length < 2) return false;
+      const sum = c.sources.reduce(function (a, s) { return a + (Number(s.amount) || 0); }, 0);
+      return Math.round(sum) !== Math.round(c.plan || 0);
+    });
+  }
+
+  /* סעיפים ששויכו לקבוצה שאינה קיימת — הם פשוט לא מרונדרים בלוח, ולכן
+     סכום העמודות קטן מהשורה התחתונה בלי שום הסבר (נמצא חי 9.9.26: 2,500 ₪). */
+  function getOrphanGroupCategories() {
+    const gids = getGroups().map(function (g) { return g.id; });
+    return getCategories().filter(function (c) { return gids.indexOf(c.group) === -1; });
+  }
+
   function getUnassignedCategories() {
     const ids = getIncomeSources().map(function (s) { return s.id; });
     return getCategories().filter(function (c) {
@@ -1064,12 +1082,25 @@ CBA.data = (function () {
   function findIncomeSource(id) { return CBA.mock.income.find(function (s) { return s.id === id; }); }
   function getDuesSource()      { return CBA.mock.income.find(function (s) { return s.type === "dues"; }); }
 
+  /* מזהה מקור ברירת המחדל — ⚠️ חייב להיגזר מהנתונים ולא להיות קבוע בקוד.
+     עד 2026-09-09 היה כאן `"dues"` קשיח, שהוא מזהה מ-mock.js בלבד: בייצור
+     `toIncome` ב-sheets.js קובע `id` = *שם המקור בעברית* ("מיסי שיכון"),
+     ולכן `"dues"` לא התאים לשום מקור. כל סעיף שנוסף בלי לבחור מקור נחתם
+     במזהה רפאים, הוצג כ-"—", נספר כ"ללא שיוך", והכסף שלו נזקף לדלי שאינו
+     מוצג בשום מקום. (אומת חי על תשפ"ז: 4 סעיפים, 6,000 ₪.) */
+  function defaultIncomeSourceId() {
+    const d = getDuesSource();
+    if (d) return d.id;
+    const first = (CBA.mock.income || [])[0];
+    return first ? first.id : "";
+  }
+
   // מזהה ייחודי חדש לרשומה
   function newId(prefix) { return prefix + "_" + Math.random().toString(36).slice(2, 8); }
 
   // נרמול סעיף: מבטיח שלכל סעיף יש שיוך למקור הכנסה + מצב חלוקה חודשית + סכום מספרי
   function normalizeCategory(c) {
-    if (!c.incomeSourceId) c.incomeSourceId = "dues";
+    if (!c.incomeSourceId) c.incomeSourceId = defaultIncomeSourceId();
     // פיצול בין כמה מקורות הכנסה (סעיף 4, 2026-08-10) — c.sources תקף רק כשיש
     // בו 2+ שורות (זו ההגדרה של "סעיף מפוצל"); מערך עם 0/1 שורות מתקפל בחזרה
     // למקור יחיד (incomeSourceId), כדי שלא יישאר "פיצול" שקוף עם שורה אחת בלבד.
@@ -1077,7 +1108,7 @@ CBA.data = (function () {
     // מחדל/תאימות לאחור לכל קוד שעדיין לא יודע להסתכל על sources (למשל שרת ישן).
     if (c.sources && c.sources.length > 1) {
       c.sources = c.sources.map(function (s) {
-        return { incomeSourceId: s.incomeSourceId || "dues", amount: Number(s.amount) || 0 };
+        return { incomeSourceId: s.incomeSourceId || defaultIncomeSourceId(), amount: Number(s.amount) || 0 };
       });
       c.incomeSourceId = c.sources[0].incomeSourceId;
     } else {
@@ -1258,13 +1289,15 @@ CBA.data = (function () {
       // לא לפי כל התכנון של הסעיף כמו שהיה נכון למקור יחיד.
       if (c.sources && c.sources.length > 1) {
         c.sources.forEach(function (s) {
-          const sid = s.incomeSourceId || "dues";
-          alloc[sid] = (alloc[sid] || 0) + (Number(s.amount) || 0);
+          // בלי `|| "dues"`: מזהה ריק/לא מוכר לא נזקף לשום מקור, וכך הוא
+          // נשאר גלוי כ"ללא שיוך" במקום להיבלע בדלי שאיש לא רואה
+          const sid = s.incomeSourceId;
+          if (sid) alloc[sid] = (alloc[sid] || 0) + (Number(s.amount) || 0);
         });
         return;
       }
-      const sid = c.incomeSourceId || "dues";
-      alloc[sid] = (alloc[sid] || 0) + (c.plan || 0);
+      const sid = c.incomeSourceId;
+      if (sid) alloc[sid] = (alloc[sid] || 0) + (c.plan || 0);
     });
     return getIncomeSources().map(function (s) {
       const allocated = alloc[s.id] || 0;
@@ -1481,6 +1514,9 @@ CBA.data = (function () {
     getIncomeAllocation: getIncomeAllocation,
     getAnnualTotal: getAnnualTotal,
     getUnassignedCategories: getUnassignedCategories,
+    getSplitMismatchCategories: getSplitMismatchCategories,
+    getOrphanGroupCategories: getOrphanGroupCategories,
+    defaultIncomeSourceId: defaultIncomeSourceId,
     getYears: getYears,
     getCurrentYear: getCurrentYear,
     setCurrentYear: setCurrentYear,

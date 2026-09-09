@@ -1081,6 +1081,9 @@ body[data-screen="planning"] .year-switch__add {
 .fund-chip--c3   { background: var(--fund-c3-bg);   color: var(--fund-c3); }
 .fund-chip--c4   { background: var(--fund-c4-bg);   color: var(--fund-c4); }
 .fund-chip--c5   { background: var(--fund-c5-bg);   color: var(--fund-c5); }
+/* מקור שאינו קיים — כאן warn היא הסמנטיקה הנכונה (תקלה), בשונה מתגיות
+   המימון הרגילות שנמנעות ממנה בכוונה */
+.fund-chip--missing { background: var(--warn-soft); color: var(--badge-warn); }
 
 /* --- פסי גודל: בלי זה 432,000 ו-500 נראים זהים לחלוטין --- */
 .present-bar { height: 3px; border-radius: 2px; background: #EDEFF2; margin-top: 7px; overflow: hidden; }
