@@ -9601,3 +9601,158 @@ function gardenTaskAction_(ss, body) {
     return { ok: true };
   } finally { lock.releaseLock(); }
 }
+
+
+/* ============================================================================
+ *  תחזוקה חד-פעמית (2026-09-09) — העברת תנועות ספטמבר מתשפ"ו לתשפ"ז
+ *  ============================================================================
+ *  הרקע: ההגדרה 'שנה נוכחית' נשארה על תשפ"ו אחרי 1.9, ולכן כל ההוצאות של
+ *  ספטמבר 2026 נכתבו לטאב "תנועות תשפ"ו". שנת התקציב רצה ספטמבר–אוגוסט,
+ *  ולכן הן שייכות לתשפ"ז.
+ *
+ *  ⚠️ אינה חשופה ל-doGet/doPost בכוונה — מריצים אותה ידנית מעורך ה-Apps
+ *  Script בלבד. אין לה שום משטח תקיפה.
+ *
+ *  הקריטריון הוא **'חודש הגשה'** ולא 'תאריך רכישה' (הכרעת יועד 9.9.26):
+ *  חודש ההגשה הוא מה שדיווח התקציב בנוי עליו. שני המקרים שהובילו להכרעה:
+ *    · #47  — חודש 01/2026 אבל תאריך 30/12/2026. קריטריון לפי תאריך היה
+ *             מעביר אותו בטעות; זו שגיאת הקלדה והפונקציה מתקנת אותה ל-2025.
+ *    · #149 — חודש 09/2026 אבל נרכשה ב-20.07. יועד הכריע שהיא **נשארת**
+ *             בתשפ"ו, ולכן היא איננה ברשימה למטה.
+ *
+ *  סדר הרצה:
+ *    1. לגבות את הגיליון (קובץ ← יצירת עותק).
+ *    2. migrateSept2026DryRun()  — רק מדווח, לא נוגע בכלום.
+ *    3. migrateSept2026Run()     — מבצע בפועל.
+ * ========================================================================== */
+
+/** התנועות שעוברות — רשימה מפורשת ולא חישוב, כדי שההעברה תהיה ניתנת לביקורת. */
+var MIG_SEPT2026 = {
+  from: 'תנועות תשפ"ו',
+  to:   'תנועות תשפ"ז',
+  /* סכום צפוי לכל מזהה — משמש כ**חתימת בקרה**: אם הנתונים השתנו מאז
+     האבחון (9.9.26), הפונקציה עוצרת ולא נוגעת בכלום. */
+  rows: [
+    { id: 147, amount: 395    },
+    { id: 148, amount: 98     },
+    { id: 150, amount: 99.9   },
+    { id: 151, amount: 500    },
+    { id: 152, amount: 192.6  },
+    { id: 153, amount: 445    },
+    { id: 154, amount: 36412  }
+  ],
+  /* תיקון שגיאת ההקלדה בתנועה שנשארת בתשפ"ו */
+  dateFix: { id: 47, fromYear: 2026, toYear: 2025 }
+};
+
+function migrateSept2026DryRun() { return migrateSept2026_(true); }
+function migrateSept2026Run()    { return migrateSept2026_(false); }
+
+function migrateSept2026_(dryRun) {
+  // הדפוס בכל שאר הקוד — הסקריפט מקושר לגיליון עצמו. ⚠️ SHEET_ID אינו קיים
+  // כאן, והשימוש בו היה נופל ב-ReferenceError בזמן ריצה ולא בבדיקת תחביר.
+  var ss  = SpreadsheetApp.getActiveSpreadsheet();
+  var src = ss.getSheetByName(MIG_SEPT2026.from);
+  var dst = ss.getSheetByName(MIG_SEPT2026.to);
+  var log = [];
+  function say(t) { log.push(t); Logger.log(t); }
+
+  say(dryRun ? '=== מצב יבש — לא ייכתב כלום ===' : '=== ביצוע בפועל ===');
+  if (!src) { say('✗ אין טאב ' + MIG_SEPT2026.from); return log.join('\n'); }
+  if (!dst) { say('✗ אין טאב ' + MIG_SEPT2026.to);   return log.join('\n'); }
+
+  var sv = src.getDataRange().getValues();
+  var dv = dst.getDataRange().getValues();
+  var sh = sv[0].map(function (h) { return String(h).trim(); });
+  var dh = dv[0].map(function (h) { return String(h).trim(); });
+  var sIdx = sh.indexOf('מזהה'), sAmt = sh.indexOf('סכום'), sDate = sh.indexOf('תאריך רכישה');
+  if (sIdx < 0 || sAmt < 0) { say('✗ חסרות עמודות מזהה/סכום במקור'); return log.join('\n'); }
+
+  /* ⚠️ המיפוי הוא **לפי שם עמודה** ולא לפי מיקום: לשני הטאבים אין ערובה
+     שסדר העמודות זהה, והעתקה לפי אינדקס הייתה מזיזה סכומים לעמודה אחרת. */
+  var missing = [];
+  sh.forEach(function (h) { if (h && dh.indexOf(h) === -1) missing.push(h); });
+  if (missing.length) say('⚠ עמודות שקיימות במקור ואין ביעד (יאבדו): ' + missing.join(', '));
+
+  // איתור השורות + אימות חתימת הסכומים
+  var found = {}, bad = [];
+  MIG_SEPT2026.rows.forEach(function (want) {
+    for (var r = 1; r < sv.length; r++) {
+      if (Number(sv[r][sIdx]) !== want.id) continue;
+      var got = Number(sv[r][sAmt]);
+      if (Math.abs(got - want.amount) > 0.005) {
+        bad.push('#' + want.id + ' סכום ' + got + ' במקום ' + want.amount);
+      }
+      found[want.id] = r;   // אינדקס במערך (שורה בגיליון = r+1)
+      return;
+    }
+    bad.push('#' + want.id + ' לא נמצא');
+  });
+  if (bad.length) { say('✗ עצירה — הנתונים אינם כפי שאובחנו:'); bad.forEach(function (b) { say('   ' + b); }); return log.join('\n'); }
+
+  var total = MIG_SEPT2026.rows.reduce(function (a, x) { return a + x.amount; }, 0);
+  say('✓ אותרו ' + MIG_SEPT2026.rows.length + ' תנועות, סה"כ ' + total + ' ₪');
+  MIG_SEPT2026.rows.forEach(function (x) {
+    var r = found[x.id];
+    say('   #' + x.id + ' | ' + x.amount + ' ₪ | ' + sv[r][sh.indexOf('ספק/נמען')] + ' | ' + sv[r][sh.indexOf('סעיף')]);
+  });
+
+  // תיקון התאריך של #47
+  var fix = MIG_SEPT2026.dateFix, fixRow = -1;
+  for (var r2 = 1; r2 < sv.length; r2++) {
+    if (Number(sv[r2][sIdx]) === fix.id) { fixRow = r2; break; }
+  }
+  var fixVal = (fixRow > -1 && sDate > -1) ? sv[fixRow][sDate] : null;
+  /* בדיקה לפי יכולת ולא `instanceof Date`: אובייקט Date שהגיע משירות
+     הגיליונות אינו בהכרח מאותו realm, ו-instanceof היה מחזיר false בשקט
+     ומדלג על התיקון בלי שום הודעה. */
+  var isDate = fixVal && typeof fixVal.getFullYear === 'function';
+  var fixOk = isDate && fixVal.getFullYear() === fix.fromYear;
+  if (fixRow < 0)      say('⚠ #' + fix.id + ' לא נמצא — התאריך לא יתוקן');
+  else if (!fixOk)     say('⚠ #' + fix.id + ' התאריך אינו ' + fix.fromYear + ' (' + fixVal + ') — לא יתוקן');
+  else                 say('✓ #' + fix.id + ' יתוקן: ' + fixVal + ' ← אותו יום ב-' + fix.toYear);
+
+  if (dryRun) { say('— מצב יבש, לא בוצע כלום —'); return log.join('\n'); }
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (e) { say('✗ תפוס'); return log.join('\n'); }
+  try {
+    // 1) הוספה ליעד — קודם כותבים, ורק אם הצליח מוחקים מהמקור
+    var add = MIG_SEPT2026.rows.map(function (x) {
+      var srcRow = sv[found[x.id]];
+      var out = new Array(dh.length).fill('');
+      sh.forEach(function (h, c) {
+        if (!h) return;
+        var d = dh.indexOf(h);
+        if (d > -1) out[d] = srcRow[c];
+      });
+      return out;
+    });
+    dst.getRange(dst.getLastRow() + 1, 1, add.length, dh.length).setValues(add);
+    SpreadsheetApp.flush();
+    say('✓ נוספו ' + add.length + ' שורות ל-' + MIG_SEPT2026.to);
+
+    // 2) מחיקה מהמקור — מלמטה למעלה, אחרת אינדקסי השורות זזים תוך כדי
+    var rowsToDelete = MIG_SEPT2026.rows.map(function (x) { return found[x.id] + 1; })
+                        .sort(function (a, b) { return b - a; });
+    rowsToDelete.forEach(function (rowNum) { src.deleteRow(rowNum); });
+    say('✓ נמחקו ' + rowsToDelete.length + ' שורות מ-' + MIG_SEPT2026.from);
+
+    // 3) תיקון התאריך (אחרי המחיקות — השורה של #47 זזה, מאתרים מחדש)
+    if (fixOk) {
+      var sv2 = src.getDataRange().getValues();
+      for (var r3 = 1; r3 < sv2.length; r3++) {
+        if (Number(sv2[r3][sIdx]) !== fix.id) continue;
+        var d0 = sv2[r3][sDate];
+        if (d0 && typeof d0.getFullYear === 'function' && d0.getFullYear() === fix.fromYear) {
+          src.getRange(r3 + 1, sDate + 1).setValue(new Date(fix.toYear, d0.getMonth(), d0.getDate()));
+          say('✓ תוקן התאריך של #' + fix.id);
+        }
+        break;
+      }
+    }
+    bumpRev_();
+    say('✓ הושלם. לרענן את האפליקציה.');
+  } finally { lock.releaseLock(); }
+  return log.join('\n');
+}
