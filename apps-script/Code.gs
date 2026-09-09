@@ -9050,9 +9050,19 @@ function gardenShiftWeek_(weekKey, n) {
    האיחוד הוא המנגנון הקיים (gardenMerge_): הדיווח נסגר כ"אוחד", התושב
    נשאר קשור למשימה שתטפל בו, והוא יקבל את הודעת הסיום כשהיא תסגר. */
 function gardenCoverByPlan_(ss, body) {
+  /* ⚠️ הפעולה בוטלה (2026-09-09, החלטת יועד) והיא מסרבת תמיד.
+     מה שהיא עשתה: איחדה דיווח של תושב **לתוך משימת שגרה**. מכיוון שמשימת
+     שגרה נסגרת מיד בסימון של הגנן, סימון הכיסוח השבועי סגר את התקלה ושלח
+     לתושב מייל "טופל" בשם הוועד — בלי שאף אדם בדק את התקלה עצמה.
+     הכלל עכשיו: **איחוד רק בין דיווחי תושבים**, ודיווח תושב נסגר תמיד
+     בפעולה מפורשת עליו.
+     ⚠️ הסירוב חייב לחיות **בשרת** ולא רק בהסתרת הכפתור: ה-Service Worker
+     הוא cache-first, ולכן טלפונים ימשיכו להריץ את הגרסה הישנה של
+     gardenTasks.js — עם הכפתור — עוד ימים אחרי הדיפלוי. */
+  return { ok: false, error: 'הפעולה בוטלה. דיווח של תושב נסגר בפעולה מפורשת עליו, ולא דרך משימת שגרה.' };
+
+  /* eslint-disable no-unreachable */
   var perm = body._perm || {};
-  /* "כבר בתוכנית" **אינו** חסום לגנן (8.9) — הוא נופל תחת אותו שיפוט שטח
-     כמו איחוד, והוא בעצם איחוד אל תוך משימת שגרה. */
   var week = String(body.week || '').match(/^\d{4}-\d{2}-\d{2}$/) ? body.week : '';
   var defId = String(body.defId || '').trim();
   if (!week || !defId) return { ok: false, error: 'חסרים פרטי התוכנית' };
@@ -9679,6 +9689,11 @@ function gardenDupCandidate_(o, all) {
     var c = all[i];
     if (String(c.id) === String(o.id)) continue;
     if (c.closure) continue;
+    /* ⚠️ 2026-09-09 — המועמד חייב להיות **דיווח תושב** בעצמו. עד היום סוננה
+       רק המשימה שממנה יוצאים (שורה 9674), והמועמד יכול היה להיות משימת שגרה
+       — כלומר המערכת הציעה לאחד תקלה של תושב לתוך הכיסוח השבועי. נראה חי
+       בייצור. הכלל: איחוד רק בין דיווחי תושבים. */
+    if (c.kind !== GARDEN_KIND_REPORT) continue;
     if (c.category !== o.category || c.area !== o.area) continue;
     var his = gardenDateOf_(c.createdAt);
     if (!his) continue;
@@ -9686,7 +9701,8 @@ function gardenDupCandidate_(o, all) {
     if (his > mine) continue;                        // רק ותיקה ממני
     if (!best || his < gardenDateOf_(best.createdAt)) best = c;
   }
-  return best ? { id: best.id, title: best.title, week: best.week } : null;
+  /* kind נשלח ללקוח כדי שגם הוא יוכל לאכוף את הכלל ולא רק לסמוך עלינו. */
+  return best ? { id: best.id, title: best.title, week: best.week, kind: best.kind } : null;
 }
 
 function gardenDateOf_(v) {
