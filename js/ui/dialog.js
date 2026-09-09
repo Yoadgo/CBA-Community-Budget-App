@@ -122,7 +122,10 @@ CBA.ui = (function () {
     return open({
       title: opts.title || "", message: message, input: true,
       value: opts.value || "", placeholder: opts.placeholder || "",
-      okText: opts.okText || "אישור", cancelText: opts.cancelText || "ביטול"
+      okText: opts.okText || "אישור", cancelText: opts.cancelText || "ביטול",
+      /* danger עבר גם לכאן (9.9): פעולה הרסנית שדורשת סיבה בכתב — מחיקה —
+         היא prompt ולא confirm, ובלי זה כפתור האישור שלה נראה רגיל לגמרי. */
+      danger: !!opts.danger
     });
   }
 

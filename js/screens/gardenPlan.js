@@ -9,9 +9,13 @@
  *     קודם קובץ גם לפי "עונה", וזה ערבב שני צירים: משימה יכולה להיות חודשית
  *     *וגם* רק בחורף. חלון החודשים ירד להיות תכונה על השורה.
  *  2. **"כל השנה" אינו מוצג.** ברירת מחדל שחוזרת בכל שורה מפסיקה להיות מידע.
- *  3. **אין מחיקה, יש כיבוי.** הגדרה שנמחקת לוקחת איתה את ההיסטוריה של
- *     המשימות שנולדו ממנה (הן מצביעות אליה ב"מזהה תבנית"). מתג פעיל/כבוי
- *     עוצר את הייצור קדימה ומשאיר את העבר שלם.
+ *  3. **כיבוי ומחיקה, ולא רק כיבוי.** כיבוי עוצר את הייצור קדימה ומשאיר את
+ *     העבר שלם — זו ברירת המחדל, והיא הפיכה. מחיקה (בקשת יועד 8.9) מורידה
+ *     את השורה עצמה; המשימות שכבר נולדו ממנה נשארות ומחזיקות "מזהה תבנית"
+ *     שמצביע לשורה שאיננה, וזה בסדר — הוא משמש רק לקיבוץ ולמניעת כפילות,
+ *     ושניהם עובדים על מחרוזת ולא על קשר.
+ *     ⚠️ שני הכפתורים יושבים **על השורה** (9.9). המחיקה ישבה קודם רק בתוך
+ *     טופס העריכה, ולכן היא לא נמצאה.
  * ========================================================================== */
 (function () {
   var CBA = window.CBA = window.CBA || {};
@@ -140,6 +144,11 @@
           '</div>' +
           '<button type="button" class="gp-edit" data-act="edit" aria-label="עריכה">' +
             ico("edit", 15) + '</button>' +
+          /* ⚠️ המחיקה ישבה עד 9.9 **רק בתוך טופס העריכה**, כך שכדי למחוק שורה
+             היה צריך קודם לפתוח עריכה — ויועד פשוט לא מצא אותה. היא פעולה
+             על השורה, ולכן מקומה על השורה. */
+          '<button type="button" class="gp-del" data-act="del" aria-label="מחיקה מהתוכנית">' +
+            ico("trash", 15) + '</button>' +
           '<button type="button" class="gp-sw' + (d.active ? "" : " off") +
             '" data-act="toggle" role="switch" aria-checked="' + (d.active ? "true" : "false") +
             '" aria-label="' + (d.active ? "כיבוי" : "הפעלה") + '"></button>' +
@@ -217,11 +226,36 @@
         if (!d) return;
         if (btn.dataset.act === "edit") return openForm(d);
         if (btn.dataset.act === "toggle") return toggle(d, btn);
+        if (btn.dataset.act === "del") return askDelete(d);
       }
 
       /* המתג מתהפך מיד ומתוקן אם השרת סירב. הפעולה הזאת היא היחידה במסך
          שנעשית בלחיצה אחת בלי דיאלוג, ולכן היא גם היחידה שבה השהיה של שנייה
          נקראת כ"לא עבד" ומזמינה לחיצה שנייה. */
+      /* מחיקה אחת לשני מקומות הכניסה — הכפתור על השורה וזה שבתוך הטופס.
+         onDone נקראת רק כשיש טופס פתוח שצריך להיסגר. */
+      function askDelete(d, onDone) {
+        CBA.ui.confirm(
+          '"' + (d.title || "המשימה") + '" תרד מתוכנית העבודה ולא תייצר יותר משימות. ' +
+          'משימות שכבר נוצרו ממנה יישארו כמו שהן.',
+          { title: "מחיקה מהתוכנית", okText: "מחיקה", danger: true }
+        ).then(function (yes) {
+          if (!yes || busy) return;
+          busy = true;
+          CBA.data.gardenPlanDelete(d.id, function (res) {
+            busy = false;
+            if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "המחיקה לא הצליחה");
+            if (onDone) onDone();
+            /* ההודעה אומרת מה באמת קרה ולא הבטחה כללית: אם נוצרו ממנה
+               משימות, זה הרגע היחיד שבו נכון להזכיר שהן נשארו. */
+            CBA.ui.toast(res.made
+              ? "הוסרה מהתוכנית · " + res.made + " משימות שכבר נוצרו נשארו"
+              : "הוסרה מהתוכנית");
+            load();
+          });
+        });
+      }
+
       function toggle(d, btn) {
         if (busy) return;
         busy = true;
@@ -352,27 +386,7 @@
         });
 
         var delBtn = wrap.querySelector("#gp-delete");
-        if (delBtn) delBtn.addEventListener("click", function () {
-          CBA.ui.confirm(
-            '"' + (d.title || "המשימה") + '" תרד מתוכנית העבודה ולא תייצר יותר משימות. ' +
-            'משימות שכבר נוצרו ממנה יישארו כמו שהן.',
-            { title: "מחיקה מהתוכנית", okText: "מחיקה", danger: true }
-          ).then(function (yes) {
-            if (!yes || busy) return;
-            busy = true;
-            CBA.data.gardenPlanDelete(d.id, function (res) {
-              busy = false;
-              if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "המחיקה לא הצליחה");
-              close();
-              /* ההודעה אומרת מה באמת קרה ולא הבטחה כללית: אם נוצרו ממנה
-                 משימות, זה הרגע היחיד שבו נכון להזכיר שהן נשארו. */
-              CBA.ui.toast(res.made
-                ? "הוסרה מהתוכנית · " + res.made + " משימות שכבר נוצרו נשארו"
-                : "הוסרה מהתוכנית");
-              load();
-            });
-          });
-        });
+        if (delBtn) delBtn.addEventListener("click", function () { askDelete(d, close); });
 
         wrap.querySelector("#gp-save").addEventListener("click", function () {
           if (busy) return;

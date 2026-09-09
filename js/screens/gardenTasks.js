@@ -41,6 +41,8 @@
     prev:  '<path d="M9 18l6-6-6-6"/>',
     next:  '<path d="M15 18l-6-6 6-6"/>',
     dots:  '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+    trash: '<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/>' +
+           '<path d="M6.5 7l1 12.5h9L17.5 7"/><path d="M10 11v5M14 11v5"/>',
     undo:  '<path d="M3 8h11a5 5 0 0 1 0 10H8"/><path d="m6.5 4.5-3 3.5 3 3.5"/>',
     pin:   '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/>',
     cal:   '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
@@ -361,6 +363,22 @@
                     sub: "משימה שאושרה או נסגרה בסיבה תופיע כאן, גם אם לא הייתה משובצת לשבוע." }
                 : { title: "אין משימות פתוחות",
                     sub: "הכול סגור. תוכנית העבודה תייצר משימות חדשות בתחילת השבוע." });
+        } else if (filter === "mine" && isManager) {
+          /* ⚠️ ב"מחכה לך" של המנהל יושבים שלושה דברים שונים, ורק אחד מהם
+             ניתן לאישור מרוכז. לכן הפיצול: תור האישורים מקובץ לפי תבנית
+             ושבוע (החלטה 3 — רק שגרה מאותה תבנית ואותו שבוע מותרת יחד),
+             וכל השאר — נחסם בשטח, ומשוב שלילי — הן החלטות פרטניות. */
+          var awaiting = list.filter(function (t) { return t.flag === "ממתין לאישור"; });
+          var decide   = list.filter(function (t) { return t.flag !== "ממתין לאישור"; });
+          body =
+            (awaiting.length
+              ? '<div class="gt-grp">בוצע — ממתין לאישורך <em>· ' + awaiting.length +
+                '</em><hr></div>' + approvalBody(awaiting)
+              : '') +
+            (decide.length
+              ? '<div class="gt-grp">דורש החלטה <em>· ' + decide.length + '</em><hr></div>' +
+                '<div class="gd-reps">' + decide.map(card).join("") + '</div>'
+              : '');
         } else if (grp) {
           var groups = [], seen = {};
           list.forEach(function (t) {
@@ -600,12 +618,17 @@
                אין מה לסמן במשימה שהמנהל פתח בעצמו והוא זה שמסתכל. */
             '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
             '<div class="gt-meta">' +
-              /* המזהה אינו על הכרטיס (2026-09-08, בקשת יועד). הוא מפתח
-                 פנימי: מי שסורק רשימת משימות לא מחפש מספר, ומי שכן צריך
-                 אותו — כדי לענות לתושב שמצטט מספר פנייה — פותח את התפריט
-                 (⋯), שם הוא כתוב בשורה הראשונה יחד עם הקטגוריה והאזור. */
+              /* ⚠️ **מספר הפנייה חוזר לכרטיס** (9.9), ורק הוא. עד היום היה
+                 כאן מזהה המשימה — מספר שהתושב מעולם לא ראה — ולכן ב-8.9
+                 הורדנו אותו לגמרי. אבל אז נוצר המצב שיועד נתקל בו: הוא קיבל
+                 "הדיווח נשלח · מספר 7", חיפש 7, ומצא משימה אחרת לגמרי, כי
+                 המספר שהוא קיבל הוא של טאב הדיווחים והצוות עבד לפי טאב
+                 המשימות. מהיום מוצג המספר שהתושב מחזיק ביד, והוא היחיד.
+                 משימת שגרה ומשימה יזומה נשארות בלי מספר — אין להן פנייה
+                 ואין מי שמצטט אותן. */
               (t.kind === GK_REPORT
-                ? '<span class="gt-res">' + ico("person") + 'תושב</span><i>·</i>'
+                ? '<span class="gt-res">' + ico("person") +
+                  (t.repId ? 'פנייה ' + esc(t.repId) : 'תושב') + '</span><i>·</i>'
                 : (t.kind === GK_ROUTINE ? ico("repeat") + '<i>·</i>' : '')) +
               /* שדה שכבר מופיע בכותרת הקבוצה אינו חוזר על הכרטיס. בסידור
                  לפי אזור, האזור נכתב פעם אחת מעל הקבוצה ואז שוב על כל אחת
@@ -625,9 +648,17 @@
                והתעלמות ממנו משאירה את המשימה עצמאית. */
             (planning && t.dupOf
               ? '<div class="gt-dup">' + ico("merge") +
-                'נראה כמו כפילות של <b>#' + esc(t.dupOf.id) + '</b> · ' +
+                'נראה כמו כפילות של <b>' +
+                esc(t.dupOf.repId ? "פנייה " + t.dupOf.repId : "#" + t.dupOf.id) + '</b> · ' +
                 esc(t.dupOf.title || "") +
                 '<button type="button" data-act="merge">איחוד</button></div>'
+              : '') +
+            /* "כבר בתוכנית" — התשובה השנייה לדיווח חדש, לצד איחוד: לא כפילות
+               של פנייה אחרת, אלא עבודה שממילא מתוזמנת בתוכנית העבודה. */
+            (planning && t.coveredBy
+              ? '<div class="gt-dup">' + ico("repeat") +
+                'כבר בתוכנית · ' + esc(shortWeek(t.coveredBy.week)) +
+                '<button type="button" data-act="cover">קישור</button></div>'
               : '') +
             /* שורת "ממתין לאישור" נשארת רק לצוות (2026-09-08). אצל המנהל
                היא הופיעה על כל כרטיס בתור האישורים — כלומר על מסך שכולו
@@ -1118,7 +1149,8 @@
           '<div class="gt-sheet" role="dialog" aria-label="' + esc(t.title || "משימה") + '">' +
             '<div class="gt-grip" aria-hidden="true"></div>' +
             '<h4>' + esc(t.title || t.category || "משימה") + '</h4>' +
-            '<p class="sub">#' + esc(t.id) + ' · ' + esc(t.category || "") +
+            '<p class="sub">' +
+              (t.repId ? 'פנייה ' + esc(t.repId) + ' · ' : '') + esc(t.category || "") +
               (t.area ? ' · ' + esc(t.area) : '') + '</p>' +
             (t.x !== null && t.y !== null
               ? '<button type="button" class="gt-opt" data-m="map"><u>' + ico("pin") + '</u>' +
@@ -1139,9 +1171,24 @@
               ? '<button type="button" class="gt-opt" data-m="return"><u>' + ico("undo") + '</u>' +
                 '<div>החזרה להשלמה<span>חוזרת לצוות עם מה שחסר</span></div></button>'
               : '') +
-            (isManager
+            (isManager && !t.closure
               ? '<button type="button" class="gt-opt" data-m="close"><u>' + ico("check") + '</u>' +
                 '<div>סגירה עם סיבה<span>הועבר לבינוי · בוטל · לא רלוונטי</span></div></button>'
+              : '') +
+            /* ⚠️ הפעולה היחידה שמותרת גם על משימה סגורה. משוב שלילי של תושב
+               מרים "דורש בדיקה חוזרת" גם על משימה שכבר נסגרה, ובלי הכפתור
+               הזה הדגל נשאר דלוק לנצח וכל פעולה אחרת נענית "כבר נסגרה". */
+            (isManager && t.flag === "דורש בדיקה חוזרת"
+              ? '<button type="button" class="gt-opt" data-m="clearflag"><u>' + ico("check") + '</u>' +
+                '<div>טופל<span>מוריד את סימון הבדיקה החוזרת</span></div></button>'
+              : '') +
+            /* ⚠️ מחיקה **אינה** סגירה. סגירה אומרת שהטיפול הסתיים והשורה
+               נשארת ונספרת; מחיקה אומרת שהשורה לא הייתה צריכה להיווצר, והיא
+               יורדת מהגיליון ומהנתונים. היומן נשאר שלם. ר' gardenTaskDelete_. */
+            (isManager
+              ? '<button type="button" class="gt-opt is-danger" data-m="del"><u>' +
+                ico("trash") + '</u><div>מחיקה' +
+                '<span>יורדת מהגיליון ומהנתונים · נרשמת ביומן</span></div></button>'
               : '') +
           '</div>';
         document.body.appendChild(wrap);
@@ -1165,6 +1212,28 @@
               title: "הערת ביצוע", value: t.note || "",
               placeholder: "למשל: נגזם, הגזם פונה למחרת", okText: "שמירה"
             }).then(function (txt) { if (txt !== null) run("note", t.id, { note: txt }); });
+          }
+          if (m === "clearflag") return run("clearflag", t.id, {});
+          if (m === "del") {
+            CBA.ui.prompt(
+              "המשימה תרד מהגיליון ומהנתונים, יחד עם הדיווח והתמונות שלה. " +
+              "מה שכבר נרשם ביומן יישאר, ותיווסף שורת מחיקה עם הסיבה שתכתוב.", {
+                title: "מחיקת משימה", placeholder: "למשל: שורת בדיקה",
+                okText: "מחיקה", danger: true
+              }).then(function (why) {
+                if (!why) return;
+                if (busy) return;
+                busy = true;
+                CBA.data.gardenTaskDelete(t.id, why, function (res) {
+                  busy = false;
+                  if (!res || !res.ok) {
+                    return CBA.ui.alert((res && res.error) || "המשימה לא נמחקה");
+                  }
+                  CBA.ui.toast("נמחקה");
+                  load();
+                });
+              });
+            return;
           }
           if (m === "defer") {
             CBA.ui.confirm("המשימה תעבור לשבוע הבא ותסומן \"נגררה\".").then(function (yes) {

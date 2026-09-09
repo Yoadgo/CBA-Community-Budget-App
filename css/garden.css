@@ -941,3 +941,24 @@
 /* ההערה במפת הכאב נושאת סמליל, ולכן היא שורת flex ולא פסקה. */
 .gs-note { display: flex; align-items: flex-start; gap: 5px; }
 .gs-note svg { flex: none; margin-top: 2px; color: #9BA3A0; }
+
+/* ==== ריכוז המשימות (2026-09-09) ==========================================
+   שלושה טאבים במקום ארבעה, ורשימה אחת שמחזיקה את כל המשימות. ר' הצוות
+   האדום של מראה שיכון.
+   ========================================================================== */
+/* כותרת השבוע בלי חיצים — היא כבר לא ניווט אלא מדד. בלי הכפתורים משני
+   הצדדים היא צריכה את הריפוד של עצמה. */
+.gt-week.is-static { padding: 8px 12px; }
+.gt-week.is-static .gt-week__c { text-align: start; }
+
+/* מחיקה על שורת תוכנית העבודה, לצד העריכה והמתג. אדום רק במגע — שורת
+   רשימה עם כפתור אדום קבוע קוראת כאילו משהו לא בסדר בשורה עצמה. */
+.gp-del { width: 26px; height: 26px; flex: none; border: 0; border-radius: 8px;
+  background: none; color: #9BA3A0; cursor: pointer; display: grid; place-items: center; }
+.gp-del svg { width: 15px; height: 15px; }
+.gp-del:hover { background: rgba(163,47,62,.10); color: #A32F3E; }
+
+/* פעולה הרסנית בתפריט ה-⋯. */
+.gt-opt.is-danger { color: #A32F3E; }
+.gt-opt.is-danger u { background: rgba(163,47,62,.10); color: #A32F3E; }
+.gt-opt.is-danger span { color: rgba(163,47,62,.75); }
