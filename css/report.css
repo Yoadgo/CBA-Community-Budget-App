@@ -1,0 +1,142 @@
+/* ==========================================================================
+ *  report.css — כפתור הדיווחים על האפליקציה והחלונית שלו
+ * --------------------------------------------------------------------------
+ *  הכפתור צף בפינה התחתונה בכל מסך ובשני האזורים. הצבע (ורוד) נבחר בכוונה
+ *  מחוץ לפלטת הסטטוסים של האפליקציה: ok/warn/danger מדברים על *הנתונים*
+ *  שבמסך, והכפתור הזה מדבר על האפליקציה עצמה. אסור שייקרא כהתראה.
+ *
+ *  ⚠️ מיקום: הצד ה*פיזי* הימני. .tx-fab (הוספת תנועה במסך ההוצאות) כבר יושב
+ *     על left:16px, ושני כפתורים צפים באותה פינה נראים כמו באג.
+ * ========================================================================== */
+:root {
+  --report:      #DB2777;
+  --report-soft: #FDF2F8;
+}
+
+.rep-fab-wrap {
+  position: fixed; z-index: 46;
+  right: 18px; bottom: calc(20px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+}
+/* ⚠️ .bottomline-bar (תקציב / בניית תקציב) מקובעת לרוחב המסך ב-bottom:16px.
+   בלי ההרמה הזאת הכפתור היה יושב עליה בדיוק בשני המסכים שבהם יועד עובד
+   הכי הרבה. אותו טיפול חוזר בגרסת המובייל למטה, עם --bottomline-h. */
+body[data-screen="budget"] .rep-fab-wrap,
+body[data-screen="planning"] .rep-fab-wrap { bottom: 104px; }
+.rep-fab {
+  width: 54px; height: 54px; border-radius: 50%; border: none; cursor: pointer;
+  display: grid; place-items: center; color: #fff;
+  background: linear-gradient(140deg, #F472B6 0%, #DB2777 100%);
+  box-shadow: 0 6px 18px rgba(219,39,119,.34), 0 2px 6px rgba(16,24,40,.12);
+  transition: transform var(--t), box-shadow var(--t);
+}
+.rep-fab:hover  { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(219,39,119,.42); }
+.rep-fab:active { transform: scale(.94); }
+.rep-fab svg { width: 25px; height: 25px; }
+.rep-fab-wrap.is-open .rep-fab { transform: rotate(45deg); }
+
+/* שני הכפתורים שנפתחים מעליו */
+.rep-menu { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.rep-menu[hidden] { display: none; }
+.rep-menu__btn {
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  padding: 10px 15px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(219,39,119,.22);
+  background: rgba(255,255,255,.92);
+  backdrop-filter: saturate(190%) blur(16px);
+  -webkit-backdrop-filter: saturate(190%) blur(16px);
+  color: var(--text); font-size: 14px; font-weight: 600;
+  box-shadow: 0 6px 20px rgba(16,24,40,.14);
+  animation: rep-pop .18s cubic-bezier(.2,.7,.3,1) both;
+}
+.rep-menu__btn:nth-child(2) { animation-delay: .04s; }
+.rep-menu__btn:hover { border-color: var(--report); color: var(--report); }
+.rep-menu__btn svg { width: 17px; height: 17px; color: var(--report); }
+@keyframes rep-pop { from { opacity: 0; transform: translateY(8px) scale(.94); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .rep-menu__btn { animation: none; }
+  .rep-fab, .rep-fab:hover, .rep-fab:active { transition: none; transform: none; }
+}
+
+/* ---------- החלונית ---------- */
+.rep-form { display: flex; flex-direction: column; gap: 10px; text-align: start; }
+.rep-item { position: relative; display: flex; align-items: flex-start; gap: 6px; }
+.rep-item__n {
+  flex: 0 0 auto; width: 22px; height: 22px; margin-top: 9px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--report-soft); color: var(--report);
+}
+.rep-item textarea {
+  flex: 1 1 auto; min-height: 62px; resize: vertical; width: 100%;
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font: inherit; color: var(--text); background: var(--surface);
+}
+.rep-item textarea:focus { outline: none; border-color: var(--report); box-shadow: 0 0 0 3px rgba(219,39,119,.12); }
+.rep-item__x {
+  flex: 0 0 auto; margin-top: 9px; width: 24px; height: 24px; border-radius: 50%;
+  border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 15px;
+}
+.rep-item__x:hover { background: var(--danger-soft); color: var(--danger); }
+.rep-add {
+  align-self: flex-start; background: none; border: 1px dashed var(--border);
+  border-radius: 999px; padding: 6px 13px; font: inherit; font-size: 13px;
+  color: var(--text-soft); cursor: pointer;
+}
+.rep-add:hover:not(:disabled) { border-color: var(--report); color: var(--report); }
+.rep-add:disabled { opacity: .45; cursor: default; }
+
+.rep-photos { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rep-photo-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 13px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface); font: inherit; font-size: 13px; color: var(--text-soft); cursor: pointer;
+}
+.rep-photo-btn:hover { border-color: var(--report); color: var(--report); }
+.rep-photo-btn svg { width: 16px; height: 16px; }
+.rep-th {
+  position: relative; width: 46px; height: 46px; border-radius: 10px;
+  background-size: cover; background-position: center; border: 1px solid var(--border);
+}
+.rep-th x {
+  position: absolute; top: -6px; inset-inline-end: -6px; width: 19px; height: 19px;
+  border-radius: 50%; background: var(--danger); color: #fff; font-size: 11px;
+  display: grid; place-items: center; cursor: pointer;
+}
+.rep-hint { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.5; }
+.rep-err { font-size: 13px; color: var(--badge-danger); margin: 0; }
+
+/* ---------- מסך הניהול ---------- */
+.rr-row { display: flex; gap: 12px; align-items: flex-start; padding: 13px 0; border-top: 1px solid var(--hairline); }
+.rr-row:first-child { border-top: none; }
+.rr-row.is-done { opacity: .55; }
+.rr-chk { flex: 0 0 auto; margin-top: 2px; width: 22px; height: 22px; cursor: pointer; accent-color: var(--ok); }
+.rr-body { flex: 1 1 auto; min-width: 0; }
+.rr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--text-soft); }
+.rr-kind { padding: 2px 9px; border-radius: 999px; font-weight: 600; font-size: 11px; }
+.rr-kind--bug  { background: var(--danger-soft); color: var(--badge-danger); }
+.rr-kind--idea { background: var(--report-soft); color: var(--report); }
+.rr-items { margin: 6px 0 0; padding-inline-start: 18px; color: var(--text); font-size: 14px; line-height: 1.6; }
+.rr-items li { margin-bottom: 2px; }
+.rr-meta { margin-top: 5px; font-size: 11.5px; color: var(--text-muted); }
+.rr-acts { display: flex; gap: 7px; margin-top: 8px; flex-wrap: wrap; }
+.rr-acts button {
+  padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface); font: inherit; font-size: 12.5px; color: var(--text-soft); cursor: pointer;
+}
+.rr-acts button:hover { border-color: var(--action); color: var(--text); }
+.rr-reply { margin-top: 7px; padding: 7px 11px; border-radius: var(--radius-sm); background: var(--hover); font-size: 13px; color: var(--text-soft); }
+.rr-img { max-width: 100%; border-radius: var(--radius-sm); margin-top: 8px; display: block; }
+
+/* גוף HTML חופשי בתוך המודל הכללי (ר' CBA.ui.dialog) */
+.cba-dlg--wide { max-width: 520px; }
+.cba-dlg__body { margin-top: 14px; max-height: min(62vh, 560px); overflow-y: auto; }
+@media (max-width: 720px) {
+  .cba-dlg__body { max-height: 58vh; }
+  .rep-fab-wrap { right: 14px; bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 14px); }
+  /* מסכים שיש בהם שורה תחתונה קבועה — הכפתור מטפס מעליה (ר' mobile.css) */
+  body[data-screen="budget"] .rep-fab-wrap,
+  body[data-screen="planning"] .rep-fab-wrap {
+    bottom: calc(var(--botnav-h) + var(--bottomline-h) + env(safe-area-inset-bottom) + 14px);
+  }
+  .rep-fab { width: 50px; height: 50px; }
+}

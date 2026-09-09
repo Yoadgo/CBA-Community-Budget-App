@@ -1537,6 +1537,17 @@ CBA.data = (function () {
       CBA.sheets.postRead("savePermissions", { rowIndex: rowIndex, slot: slot, perms: perms }, cb);
     },
     ensurePermissionCols: function (cb) { CBA.sheets.postRead("ensurePermissionCols", {}, cb); },
+    /* ---- דיווחים על האפליקציה (2026-09-09) ----
+       submitAppReport פתוח לכל משתמש מחובר (הכפתור הצף בכל מסך);
+       שני האחרים הם מנהל-על בלבד, והאכיפה בשרת. */
+    submitAppReport: function (payload, cb) {
+      CBA.sheets.postRead("submitAppReport", payload, cb);
+    },
+    getAppReports: function (cb) { CBA.sheets.get({ action: "appReports" }, cb); },
+    setAppReportDone: function (id, done, reply, cb) {
+      CBA.sheets.postRead("setAppReportDone", { id: id, done: !!done, reply: reply || "" }, cb);
+    },
+
     /* ---- מראה שיכון / גינון (2026-09-07) ----
        שלוש הפעולות פתוחות לכל תושב מחובר ופעיל ומחזירות רק את הנתונים שלו —
        הסינון נעשה בשרת לפי המושב החתום, לא כאן. ר' handleMyGardenReports_. */

@@ -830,6 +830,23 @@
 .gs-col em { font-style: normal; font-size: 9.5px; color: #9BA3A0; margin-top: 6px;
   height: 14px; white-space: nowrap; }
 
+/* ---- מסע המשימה. חלק-מהשלם -> עמודה מוערמת אחת. ---- */
+.gs-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden;
+  background: rgba(17,24,39,.05); }
+/* פער 2px בצבע המשטח בין מקטעים — הפרדה בלי קו מסביב. */
+.gs-seg + .gs-seg { border-inline-start: 2px solid #EEF1F4; }
+.gs-seg.s1 { background: var(--gs-s1); }
+.gs-seg.s2 { background: var(--gs-s2); }
+.gs-seg.s3 { background: var(--gs-s3); }
+.gs-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 11px; }
+.gs-lg { display: flex; align-items: flex-start; gap: 7px; }
+.gs-lg i { width: 10px; height: 10px; border-radius: 3px; flex: none; margin-top: 3px; }
+.gs-lg i.s1 { background: var(--gs-s1); }
+.gs-lg i.s2 { background: var(--gs-s2); }
+.gs-lg i.s3 { background: var(--gs-s3); }
+.gs-lg b { display: block; font-size: 12.5px; font-weight: 600; }
+.gs-lg span { display: block; font-size: 11.5px; color: #7A847F; margin-top: 1px; }
+
 /* ---- שלוש התקועות ---- */
 .gs-stuck { padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
 .gs-stuck u { text-decoration: none; width: 26px; height: 26px; flex: none; border-radius: 8px;
@@ -888,15 +905,6 @@
   font-weight: 700; color: var(--text, #374151); font-variant-numeric: tabular-nums; }
 .gs-rec em.gs-more { width: auto; font-weight: 600; color: #9BA3A0; }
 
-/* ---- כותרת-משנה בתוך מקטע (2026-09-09) ----
-   המסך צומצם לשלוש שאלות, ולכן "מה דורש טיפול" הוא מקטע אחד עם כמה חלקים
-   בתוכו. כותרת-המשנה קלה מ-.gs-sec במשקל ובמרווח, כדי שההיררכיה תיקרא
-   כשתיים ולא כשש כותרות שוות. ⚠️ **לא** .gs-sub — השם הזה כבר תפוס לשורת
-   הנפח בתוך כרטיס אזור (ר' למטה), ודריסה שלו הייתה משנה כרטיסים אחרים. */
-.gs-sub-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 7px;
-  margin: 13px 2px 6px; font-size: 12px; font-weight: 600; color: #4B5563; }
-.gs-sub-h em { font-style: normal; font-weight: 500; color: #9BA3A0; font-size: 11px; }
-
 /* ---- משוב ---- */
 .gs-fb { display: flex; align-items: center; gap: 10px; padding: 10px 13px;
   margin-top: 16px; font-size: 12px; font-weight: 600; color: var(--gs-ok); }
@@ -909,16 +917,62 @@
 .gs-fb > span.n { color: var(--gs-bd); }
 .gs-fb > em { flex: none; font-style: normal; color: #9BA3A0; font-weight: 500;
   font-size: 11px; }
-/* ⚠️ מוצגת גם כשאין תגובות. מגל 3 חלון התגובה של התושב הוא מה שהחליף את
-   אישור המנהל, ולכן "אף אחד לא הגיב" הוא המידע שאומר שהוויתור עובד — ולא
-   היעדר מידע שמותר להסתיר. שקטה ואפורה, לא ירוקה: אין כאן הישג. */
-.gs-fb.is-quiet { color: #8A9199; font-weight: 500; }
-.gs-fb.is-quiet > em { font-style: normal; }
-/* תושב שאמר "לא הושלם" הוא הדבר היחיד במסך שדורש פעולה מיידית מהמנהל.
-   ⚠️ **התווית בלבד, לא כל השורה.** צביעת השורה כולה הפכה גם את מספר
-   המרוצים לאדום — נמדד בהרמס: "9 ✓" הופיע באדום לצד "2 ⚠". */
-.gs-fb.is-bad > b { color: var(--gs-bd); }
 
+
+/* ==========================================================================
+   התכנסות למסך אחד (2026-09-08) — שני חצאים בשורה, וכרטיס במקום מקטע
+   --------------------------------------------------------------------------
+   "קצב" ו"תמהיל" הם גרפים קטנים שנקראים במבט אחד. רוחב מלא + כותרת מקטע
+   לכל אחד עלה 260px; זו לצד זו הם 120.
+   ========================================================================== */
+.gs-half { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0 0; }
+.gs-card { background: rgba(255,255,255,.72); border: 1px solid rgba(17,24,39,.07);
+  border-radius: 14px; padding: 11px 12px 10px; min-width: 0; }
+.gs-ct { display: flex; align-items: baseline; gap: 6px; font-size: 12px; font-weight: 700;
+  color: var(--text-strong, #111827); margin-bottom: 9px; }
+.gs-ct em { font-style: normal; font-weight: 500; font-size: 10px; color: #9BA3A0;
+  margin-inline-start: auto; white-space: nowrap; }
+
+/* ---- קצב: גרף מתפצל סביב קו אפס ----
+   ⚠️ הכיוון הוא המסר, ולכן קו האפס חייב להיראות — בלעדיו העמודות נקראות
+   כגובה ולא ככיוון, וזה בדיוק ההפך ממה שהגרף אומר. */
+.gs-flow { position: relative; display: flex; align-items: center; gap: 2px; height: 56px;
+  overflow: hidden; }   /* ⚠️ הגובה כאן ו-FLOW_H ב-JS חייבים להישאר זהים */
+.gs-zero { position: absolute; inset-inline: 0; top: 50%; height: 1px;
+  background: rgba(17,24,39,.16); }
+/* ⚠️ מיקום מוחלט סביב 50%, לא margin+transform. הניסיון הקודם עם
+   margin-bottom:calc(50%) ו-translateY הזיז את העמודות ביחס לגובה **שלהן**
+   ולא ביחס לקו — עמודות גבוהות יצאו מהמקום ונמוכות נשארו, והכיוון, שהוא כל
+   המסר של הגרף הזה, נקרא הפוך. */
+.gs-fb2 { position: relative; flex: 1 1 0; min-width: 0; height: 100%; }
+/* ⚠️ min() ולא 14px קבוע. בטווח של 13 שבועות הכרטיס הזה הוא חצי רוחב,
+   המשבצת יורדת ל-~10px, ועמודה קשיחה של 14 גלשה החוצה ודרסה את שכנתה. */
+.gs-fb2 u { position: absolute; inset-inline: 0; width: min(14px, 100%); margin: 0 auto;
+  text-decoration: none; border-radius: 3px; }
+/* מעל הקו = הערימה גדלה. אותם קטבים שנושאים את אותה משמעות בכל המודול. */
+.gs-fb2 u.up { background: var(--gs-bd); bottom: 50%; border-radius: 3px 3px 0 0; }
+.gs-fb2 u.dn { background: var(--gs-ok); top: 50%; border-radius: 0 0 3px 3px; }
+.gs-fb2 u.eq { background: rgba(17,24,39,.2); top: calc(50% - 1px); height: 2px !important;
+  border-radius: 1px; }
+.gs-cf { display: flex; align-items: center; gap: 5px; margin-top: 8px;
+  font-size: 11.5px; font-weight: 700; }
+.gs-cf.is-ok { color: var(--gs-ok); }
+.gs-cf.is-bad { color: var(--gs-bd); }
+
+/* ---- תמהיל ---- */
+.gs-mix { display: flex; height: 22px; border-radius: 6px; overflow: hidden;
+  background: rgba(17,24,39,.05); margin-bottom: 9px; }
+.gs-mix i + i { border-inline-start: 2px solid #F4F6F5; }
+.gs-mix i.r { background: var(--gs-s3); }
+.gs-mix i.p { background: var(--gs-s2); }
+.gs-mix i.m { background: var(--gs-s1); }
+.gs-ml { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 11px; color: #7A847F; }
+.gs-ml span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.gs-ml i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.gs-ml i.r { background: var(--gs-s3); }
+.gs-ml i.p { background: var(--gs-s2); }
+
+@media (max-width: 340px) { .gs-half { grid-template-columns: 1fr; } }
 
 /* ---- הסעיף שהכי נופל, מתחת לגרף העמידה ----
    שורה ולא כרטיס: היא ממשיכה את הגרף שמעליה ואומרת עליו דבר אחד. */

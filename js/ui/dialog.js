@@ -33,10 +33,16 @@ CBA.ui = (function () {
     var wrap = document.createElement("div");
     wrap.className = "cba-dlg-backdrop";
     wrap.innerHTML =
-      '<div class="cba-dlg" role="dialog" aria-modal="true"' +
+      '<div class="cba-dlg' + (opts.wide ? ' cba-dlg--wide' : '') + '" role="dialog" aria-modal="true"' +
         (opts.title ? ' aria-label="' + esc(opts.title) + '"' : "") + '>' +
         (opts.title ? '<div class="cba-dlg__title">' + textHTML(opts.title) + '</div>' : "") +
         (opts.message ? '<div class="cba-dlg__msg">' + textHTML(opts.message) + '</div>' : "") +
+        /* גוף HTML חופשי (2026-09-09). נולד בשביל חלונית הדיווחים, שהיא טופס
+           ולא שאלה — וכל האלטרנטיבה הייתה מודל שני מקביל עם אותה לוגיקת
+           פתיחה/סגירה/מלכודת-מיקוד, כלומר בדיוק סוג הכפילות שנשברת בשקט.
+           ⚠️ opts.html נכנס כמות שהוא ולכן הוא **קוד של האפליקציה בלבד** —
+           לעולם לא טקסט שהגיע ממשתמש או מהשרת (אותו מבריחים ב-CBA.esc). */
+        (opts.html ? '<div class="cba-dlg__body">' + opts.html + '</div>' : "") +
         (opts.input
           ? '<input class="cba-dlg__input field-input" type="text" value="' + esc(opts.value || "") + '"' +
             (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : "") + '>'
@@ -60,7 +66,11 @@ CBA.ui = (function () {
 
       var inputEl = wrap.querySelector(".cba-dlg__input");
       var okBtn = wrap.querySelector('[data-dlg="ok"]');
-      setTimeout(function () { (inputEl || okBtn).focus(); if (inputEl) inputEl.select(); }, 40);
+      /* מיקוד ראשון: שדה הקלט, ובטופס (opts.html) — השדה הראשון שבתוכו.
+         בלי החריג הזה המיקוד היה נוחת על כפתור האישור ומשתמש מקלדת היה
+         צריך Shift+Tab כדי להגיע לשדה הראשון של הטופס שהרגע נפתח. */
+      var firstEl = inputEl || (opts.html ? wrap.querySelector(".cba-dlg__body textarea, .cba-dlg__body input, .cba-dlg__body select") : null);
+      setTimeout(function () { (firstEl || okBtn).focus(); if (inputEl) inputEl.select(); }, 40);
 
       var done = false;
       function close(result) {
@@ -77,13 +87,16 @@ CBA.ui = (function () {
         resolve(result);
       }
       function onKey(e) {
-        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(opts.input ? null : false); }
+        if (e.key === "Escape") {
+          if (opts.sticky) return;   // טופס — Escape לא זורק לפח טקסט שהוקלד
+          e.preventDefault(); e.stopPropagation(); close(opts.input ? null : false);
+        }
         else if (e.key === "Enter" && (!inputEl || document.activeElement === inputEl)) {
           e.preventDefault(); e.stopPropagation(); close(opts.input ? inputEl.value : true);
         }
         // מלכודת מיקוד — Tab לא יוצא מהמודל
         else if (e.key === "Tab") {
-          var f = wrap.querySelectorAll("input, button");
+          var f = wrap.querySelectorAll("input, textarea, select, button");
           if (!f.length) return;
           var first = f[0], last = f[f.length - 1];
           if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -91,11 +104,20 @@ CBA.ui = (function () {
         }
       }
       document.addEventListener("keydown", onKey, true);
+      if (opts.onMount) { try { opts.onMount(wrap, close); } catch (e) {} }
       wrap.addEventListener("click", function (e) {
-        if (e.target === wrap) { close(opts.input ? null : false); return; }   // לחיצה ברקע = ביטול
+        if (e.target === wrap) {
+          if (opts.sticky) return;   // ר' ההערה ליד Escape
+          close(opts.input ? null : false); return;   // לחיצה ברקע = ביטול
+        }
         var b = e.target.closest("[data-dlg]");
         if (!b) return;
-        if (b.dataset.dlg === "ok") close(opts.input ? inputEl.value : true);
+        if (b.dataset.dlg === "ok") {
+          /* onOk מקבל את השליטה על הסגירה: הוא זה שקורא ל-close, ולכן הוא
+             יכול לחסום אותה (שדה ריק) או לדחות אותה (שליחה לשרת). */
+          if (opts.onOk) { opts.onOk(wrap, close); return; }
+          close(opts.input ? inputEl.value : true);
+        }
         else close(opts.input ? null : false);
       });
     });
@@ -290,5 +312,7 @@ CBA.ui = (function () {
   }
 
   return { alert: alertBox, confirm: confirmBox, prompt: promptBox, toast: toast,
+           /* dialog — המודל הגולמי, לטפסים (ר' opts.html/onMount/onOk/sticky) */
+           dialog: open,
            busy: busy, busyText: busyText, emptyState: emptyState };
 })();

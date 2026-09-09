@@ -522,7 +522,7 @@ CBA.sheets = (function () {
      בגרסה החדשה. מוסיפים את ההסבר להודעת השגיאה במקום להשאיר "אין הרשאה" יבש
      שאי אפשר לעשות איתו כלום. */
   // הגרסה המינימלית של ה-Apps Script שהאפליקציה הזו יודעת לעבוד מולה
-  var MIN_SERVER = 39;
+  var MIN_SERVER = 42;
   function serverVer() {
     var m = String((CBA.mock && CBA.mock._serverVersion) || "").match(/v(\d+)/);
     return m ? parseInt(m[1], 10) : 0;

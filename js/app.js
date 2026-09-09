@@ -141,7 +141,11 @@
     /* מסך הנתונים פתוח גם לגנן — אבל הוא רואה בו מסך אחר לגמרי:
        מה עשה ומה פתוח אצלו, בלי ציון ובלי חתך מול התוכנית. השרת
        פשוט לא שולח לו את השדות האלה. ר' F-13 ו-handleGardenStats_. */
-    gardenStats: PERM.GARDEN
+    gardenStats: PERM.GARDEN,
+    /* דיווחים על האפליקציה (2026-09-09) — מנהל-על בלבד. *שליחת* דיווח פתוחה
+       לכל משתמש מחובר (הכפתור הצף), אבל הקריאה של כולם היא ניהול המוצר.
+       השרת אוכף את זה בעצמו ב-GET_ACTION_PERMS.appReports — כאן רק מסתירים. */
+    appReports: PERM.SUPER
   };
 
   function myPerms() {
@@ -184,7 +188,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -1097,7 +1101,10 @@
     /* סימן שאלה בעיגול — "סיור באפליקציה" (2026-09-07). החליף את המצפן: מצפן
        הוא מטאפורה שאיש לא מפענח, סימן שאלה הוא מוסכמה חוצת-אפליקציות ולכן
        הוא היחיד שיכול לעמוד בלי תווית. */
-    help: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .9-1 1.6v.4"/><path d="M12 17h.01"/></svg>'
+    help: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .9-1 1.6v.4"/><path d="M12 17h.01"/></svg>',
+    // דיווחים על האפליקציה (2026-09-09) — בועת שיחה עם קו, לא פעמון: פעמון
+    // כבר תפוס להתראות המערכת, ודיווח הוא משהו שהמשתמש *אומר* ולא שמקבל.
+    report: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3 1.2-4.4A8 8 0 1 1 21 12z"/><path d="M12 8.5v3.2M12 15h.01"/></svg>'
   };
 
   function initials(name) {
@@ -1234,6 +1241,10 @@
     const outBtn = panel.querySelector("[data-panel-logout]");
     if (outBtn) outBtn.addEventListener("click", logout);
 
+    /* הכפתור הצף של הדיווחים. renderControls נקרא בכניסה, ביציאה ובכל
+       החלפת אזור — ולכן זה המקום היחיד שצריך לדעת על קיומו. */
+    if (window.CBA.report) CBA.report.mount(!!currentUser);
+
     if (wasOpen) openUserPanel(panel, btn);   // היה פתוח לפני הציור — נשאר פתוח
 
     if (!panelOutsideBound) {   // סגירה בלחיצה מחוץ למגש — נרשם פעם אחת בלבד
@@ -1337,6 +1348,12 @@
     }
     if (currentArea === "admin" && canScreen("emailSettings")) {
       tiles.push(['data-panel-goto="emailSettings"', ICON.mail, 'מיילים', 'ניהול מיילים']);
+    }
+    /* דיווחים על האפליקציה — מנהל-על בלבד. במכוון אריח בתפריט ולא טאב ניווט:
+       זה מסך שנכנסים אליו כשמתפנים לטפל במשוב, לא יעד יומיומי, ובר הניווט
+       התחתון במובייל כבר מחלק את רוחבו בין היעדים הקיימים. */
+    if (isSuper()) {
+      tiles.push(['data-panel-goto="appReports"', ICON.report, 'דיווחים', 'דיווחים על האפליקציה']);
     }
     // נעלם מעצמו ברגע שהאפליקציה כבר מותקנת (ר' מסמך אפיון PWA, סעיפים 6-7)
     if (window.CBA.pwa && CBA.pwa.canInstall()) {
@@ -1694,6 +1711,24 @@
 
   window.CBA = window.CBA || {};
   window.CBA.navigate = showScreen;
+
+  /* שמו של מסך בעברית, מתוך הגדרת הטאבים עצמה (2026-09-09). נולד בשביל
+     חלונית הדיווחים, שצריכה לרשום "התושב היה במסך X" — ו"budget" אינו משפט
+     שתושב מבין. ⚠️ בכוונה נגזר מ-AREAS_ALL ולא מטבלת שמות שנייה: טבלה כזאת
+     הייתה נשארת מאחור בכל פעם שטאב מתווסף או משנה שם, ובשקט. */
+  window.CBA.screenLabel = function (name) {
+    var found = "";
+    Object.keys(AREAS_ALL).forEach(function (areaKey) {
+      (AREAS_ALL[areaKey].tabs || []).forEach(function (tab) {
+        if (Array.isArray(tab)) {
+          if (!found && tab[0] === name) found = tab[1];
+        } else {
+          (tab.items || []).forEach(function (it) { if (!found && it[0] === name) found = it[1]; });
+        }
+      });
+    });
+    return found || name || "";
+  };
 
   /* קפיצה לאזור הניהול ממקום שאינו התפריט (עמוד הקבלה). בכוונה אותו מסלול
      בדיוק של [data-panel-goto] בתפריט המשתמש — כולל המקרה המיוחד של

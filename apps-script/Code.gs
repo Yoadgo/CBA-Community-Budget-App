@@ -159,7 +159,11 @@ var ACTION_PERMS = {
   gardenPlanSave: PERM_GARDEN,
   gardenPlanActive: PERM_GARDEN,
   gardenPlanDelete: PERM_GARDEN,
-  gardenCoverByPlan: PERM_GARDEN
+  gardenCoverByPlan: PERM_GARDEN,
+  /* דיווחים על האפליקציה (2026-09-09). ⚠️ submitAppReport **אינו** כאן
+     בכוונה — הוא פתוח לכל משתמש מחובר ופעיל, כמו הגשת קבלה ודיווח גינון.
+     סימון "טופל" ותגובה לתושב הם ניהול המוצר, ולכן מנהל-על. */
+  setAppReportDone: PERM_SUPER
 };
 
 /* מה ש**הוסר** מכאן ב-2026-09-09, ולמה זה חשוב: היו כאן שמונה מפתחות
@@ -211,7 +215,8 @@ var GET_ACTION_PERMS = {
   residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN,
   gardenStats: PERM_GARDEN, gardenTaskLog: PERM_GARDEN,
   gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
-  gymList: PERM_GYM
+  gymList: PERM_GYM,
+  appReports: PERM_SUPER
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -427,6 +432,9 @@ function doGet(e) {
       if (e && e.parameter) { e.parameter._email = topGate.email; e.parameter._perm = topGate.perm; }
     }
 
+    if (e && e.parameter && e.parameter.action === 'appReports') {
+      return handleAppReports_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'listSignups') {
       return handleListSignups_(e.parameter);
     }
@@ -641,7 +649,7 @@ function doGet(e) {
          יידע מול מה להשוות בבדיקות הזולות שאחריו. בלי זה, אחרי משיכה מלאה
          אין לו נקודת ייחוס והוא היה מושך שוב בבדיקה הבאה. ר' bumpRev_. */
       domains: currentDomains_(),
-      ok: true, version: 'v41-rev-domains', years: years,
+      ok: true, version: 'v42-app-reports', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -780,6 +788,10 @@ function doPostDispatch_(ss, body) {
       case 'rejectProfileChange':  return json_(rejectProfileChange_(ss, body));
       // גינון — אזור התושב (2026-09-07). אינן ב-ACTION_PERMS בכוונה: פתוחות
       // לכל תושב מחובר ופעיל, ופועלות רק על השורות שלו לפי המושב החתום.
+      // דיווחים על האפליקציה (2026-09-09). submitAppReport אינו ב-ACTION_PERMS
+      // בכוונה — פתוח לכל משתמש מחובר ופעיל, ר' ההערה שם.
+      case 'submitAppReport':     return json_(submitAppReport_(ss, body));
+      case 'setAppReportDone':    return json_(setAppReportDone_(ss, body));
       case 'submitGardenReport':  return json_(submitGardenReport_(ss, body));
       case 'gardenFeedback':      return json_(gardenFeedback_(ss, body));
       case 'gardenTask':          return json_(gardenTaskAction_(ss, body));
@@ -2499,7 +2511,10 @@ var ACTION_DOMAIN = {
   updateGymMembership: 'gym',
   // ועד השיכון ושירותים
   saveCommitteeTree: 'committee', saveCommitteeCategories: 'committee',
-  saveServices: 'services', notifyServiceUpdate: 'services'
+  saveServices: 'services', notifyServiceUpdate: 'services',
+  /* תחום משלו ולא ברירת המחדל 'other': 'other' נכלל במפתח המטמון של המטען
+     הראשי, כלומר כל דיווח על האפליקציה היה מבטל את המטמון של *כולם*. */
+  submitAppReport: 'appReports', setAppReportDone: 'appReports'
 };
 
 function bumpRev_(action) {
@@ -4125,6 +4140,18 @@ var DEFAULT_EMAIL_SETTINGS = [
     'נשלח לתושב כשמנהל הגינון סוגר דיווח בלי לבצע (בוטל / לא רלוונטי / הועבר לבינוי). ' +
     '{{סיבה}} הוא ההסבר שהמנהל כתב — הוא חובה, כי "בוטל" לבדו אינו תשובה',
     PERM_GARDEN, 'כן'],
+  /* דיווחים על האפליקציה (2026-09-09). ⚠️ אין תבנית "קיבלנו את הדיווח" —
+     האישור מוצג באפליקציה, ומייל אוטומטי על כל הצעת ניסוח היה רעש.
+     APP_REPORT_REPLY נשלח רק כשמנהל-על כותב תגובה ידנית במסך הדיווחים. */
+  ['APP_REPORT_REPLY', "תשובה לדיווח שלך על האפליקציה (מס' {{מזהה}})",
+    "שלום {{שם}},\n\nלגבי מה ששלחת לנו על האפליקציה (מס' {{מזהה}}):\n\n{{תגובה}}\n\nתודה שדיווחת — זה בדיוק מה שעוזר לנו לשפר אותה.\n\nבברכה,\nועד הקהילה",
+    'נשלח לתושב רק כשמנהל-על כותב לו תגובה ידנית לדיווח על האפליקציה. אין שליחה אוטומטית עם קבלת הדיווח', PERM_SUPER, 'כן'],
+  /* מגיע **כבוי** בכוונה: לפני ההשקה הרחבה צפוי גל דיווחים, ומייל על כל אחד
+     מהם מרעיל את התיבה של מנהל-העל דווקא בשבוע שבו הוא הכי צריך אותה. */
+  ['ADMIN_NEW_APP_REPORT', 'דיווח חדש על האפליקציה',
+    "{{שם}} שלח {{סוג}} (מס' {{מזהה}}), ממסך {{מסך}}:\n\n{{תוכן}}",
+    'למנהלי-על בלבד. מגיע כבוי — אפשר להדליק כאן אם רוצים התראה על כל דיווח', PERM_SUPER, 'לא'],
+
   ['ADMIN_NEW_GARDEN_REPORT', 'דיווח גינון חדש ממתין',
     'התקבל דיווח גינון חדש מ-{{שם}}: {{קטגוריה}} ב{{מיקום}} (מס\' {{מזהה}}).', 'למנהלי גינון + מנהל-על', PERM_GARDEN, 'כן'],
   ['ADMIN_GARDEN_NEGATIVE_FEEDBACK', 'תושב סימן שהטיפול לא הושלם כראוי',
@@ -10047,3 +10074,182 @@ function gardenTaskAction_(ss, body) {
   } finally { lock.releaseLock(); }
 }
 
+
+/* ============================================================================
+ *  דיווחי תושבים על האפליקציה עצמה  (2026-09-09)
+ * ----------------------------------------------------------------------------
+ *  הכפתור הוורוד הצף בכל מסך (js/ui/report.js) -> submitAppReport
+ *  מסך הניהול (js/screens/appReports.js, מנהל-על בלבד) -> appReports / setAppReportDone
+ *
+ *  שלוש החלטות שכדאי לזכור, כי הן נראות כמו "חסר" ואינן:
+ *  1. **אין סטטוסים.** רק "טופל / לא טופל". משוב פנימי על אפליקציה של שיכון
+ *     אינו תור תמיכה, ומעקב אגרסיבי היה מייצר עבודת ניהול במקום מידע.
+ *  2. **אין מייל אוטומטי לתושב בקבלת הדיווח.** האישור מוצג באפליקציה עצמה.
+ *     APP_REPORT_REPLY נשלח **רק** כשמנהל-על כותב תגובה ידנית.
+ *  3. **התמונות אינן צילום מסך אוטומטי** אלא קובץ שהמשתמש בחר — ר' ההסבר
+ *     המלא בראש js/ui/report.js (getDisplayMedia אינו נתמך ב-iOS Safari).
+ *     במקומו נלכד ההקשר: מסך, גרסת לקוח, דפדפן/מכשיר.
+ *
+ *  ⚠️ הצפייה בתמונות במסך הניהול עוברת בפעולת 'receipt' הקיימת, שכבר מגישה
+ *     קובץ פרטי מ-Drive אחרי בדיקת הרשאה ומתירה למנהל-על. אין כאן מסלול
+ *     הגשת קבצים שני.
+ * ========================================================================== */
+var APP_REPORTS_SHEET = 'דיווחי אפליקציה';
+var APP_REPORT_HEADERS = [
+  'מזהה', 'תאריך', 'מייל', 'שם', 'סוג', 'סעיפים',
+  'מסך', 'גרסת לקוח', 'דפדפן', 'תמונות',
+  'טופל', 'תגובה', 'תאריך טיפול', 'טופל על ידי'
+];
+var APP_REPORT_PHOTOS_FOLDER_NAME = 'דיווחי אפליקציה';
+var APP_REPORT_ITEM_MAX  = 5;
+var APP_REPORT_CHAR_MAX  = 300;
+var APP_REPORT_PHOTO_MAX = 3;
+var APP_REPORT_LIST_MAX  = 300;   // כמה שורות אחרונות נשלחות למסך הניהול
+
+/** יוצר/משלים את הטאב. אידמפוטנטי — gardenEnsureSheet_ מוסיף רק עמודות חסרות
+ *  ואינו נוגע בשורות או בעריכות ידניות. (הפונקציה נולדה במודול הגינון אבל
+ *  אינה תלויה בו בכלום; שכפול שלה כאן היה שני עותקים של אותה לוגיקה.) */
+function ensureAppReportsSheet_(ss) {
+  return gardenEnsureSheet_(ss, APP_REPORTS_SHEET, APP_REPORT_HEADERS,
+    [60, 140, 200, 130, 70, 430, 190, 100, 230, 210, 60, 320, 130, 140]);
+}
+
+function getAppReportPhotosFolder_() {
+  var root = DriveApp.getFolderById(ROOT_RECEIPTS_FOLDER_ID);
+  return findOrCreateSubfolder_(root, APP_REPORT_PHOTOS_FOLDER_NAME);
+}
+
+/** doPost — פתוח לכל משתמש מחובר ופעיל (אינו ב-ACTION_PERMS, בכוונה). */
+function submitAppReport_(ss, body) {
+  var perm = body._perm || {};
+  var kind = String(body.kind || '').trim();
+  // רשימה סגורה: שני הכפתורים שקיימים בממשק, ולא טקסט חופשי מהלקוח.
+  if (kind !== 'תקלה' && kind !== 'ייעול') return { ok: false, error: 'סוג דיווח לא מוכר' };
+
+  var items = (body.items || []).map(function (t) {
+    return String(t == null ? '' : t).trim().substring(0, APP_REPORT_CHAR_MAX);
+  }).filter(Boolean).slice(0, APP_REPORT_ITEM_MAX);
+  if (!items.length) return { ok: false, error: 'הדיווח ריק' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ensureAppReportsSheet_(ss);
+    var c = gardenCols_(sh);
+
+    var ids = [];
+    var photos = (body.photos || []).slice(0, APP_REPORT_PHOTO_MAX);
+    for (var i = 0; i < photos.length; i++) {
+      try {
+        var blob = Utilities.newBlob(
+          Utilities.base64Decode(photos[i].data),
+          photos[i].mime || 'image/jpeg',
+          photos[i].name || ('app-report-' + Date.now() + '-' + i + '.jpg'));
+        ids.push(getAppReportPhotosFolder_().createFile(blob).getId());
+      } catch (e) { /* תמונה שנכשלה לא מפילה דיווח שכבר נכתב */ }
+    }
+
+    var id = nextGardenId_(sh);
+    var name = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email;
+
+    var row = new Array(sh.getLastColumn()).fill('');
+    row[c['מזהה']]       = id;
+    row[c['תאריך']]      = new Date();
+    row[c['מייל']]       = body._email || '';
+    row[c['שם']]         = name;
+    row[c['סוג']]        = kind;
+    row[c['סעיפים']]     = items.join('\n');
+    row[c['מסך']]        = String(body.screen || '').substring(0, 120);
+    row[c['גרסת לקוח']]  = String(body.ver || '').substring(0, 40);
+    row[c['דפדפן']]      = String(body.ua || '').substring(0, 200);
+    row[c['תמונות']]     = ids.join(',');
+    row[c['טופל']]       = '';
+    sh.appendRow(row);
+
+    try {
+      notifyAdmins_(ss, PERM_SUPER, 'ADMIN_NEW_APP_REPORT', {
+        'שם': name, 'סוג': kind === 'תקלה' ? 'דיווח על תקלה' : 'הצעת ייעול',
+        'מזהה': id, 'תוכן': items.join('\n'), 'מסך': String(body.screen || '')
+      });
+    } catch (e) { /* כשל מייל לא מבטל דיווח שכבר נשמר */ }
+
+    return { ok: true, id: id };
+  } finally { lock.releaseLock(); }
+}
+
+/** doGet — מנהל-על בלבד (ר' GET_ACTION_PERMS.appReports). */
+function handleAppReports_(p) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var gate = authorize_(ss, p, PERM_SUPER);   // הגנה כפולה, ר' ההערה ליד GET_ACTION_PERMS
+  if (!gate.ok) return json_({ ok: false, error: gate.error });
+
+  var sh = ss.getSheetByName(APP_REPORTS_SHEET);
+  if (!sh || sh.getLastRow() < 2) return json_({ ok: true, rows: [] });
+
+  var c = gardenCols_(sh);
+  var v = sh.getDataRange().getValues();
+  var out = [];
+  for (var r = 1; r < v.length; r++) {
+    if (!v[r][c['מזהה']] && !v[r][c['סעיפים']]) continue;
+    out.push({
+      id:     v[r][c['מזהה']],
+      date:   v[r][c['תאריך']] ? new Date(v[r][c['תאריך']]).toISOString() : '',
+      email:  String(v[r][c['מייל']] || ''),
+      name:   String(v[r][c['שם']] || ''),
+      kind:   String(v[r][c['סוג']] || ''),
+      items:  String(v[r][c['סעיפים']] || '').split('\n').filter(function (t) { return t.trim(); }),
+      screen: String(v[r][c['מסך']] || ''),
+      ver:    String(v[r][c['גרסת לקוח']] || ''),
+      ua:     String(v[r][c['דפדפן']] || ''),
+      photos: String(v[r][c['תמונות']] || '').split(',').filter(Boolean),
+      done:   String(v[r][c['טופל']] || '').trim() === 'כן',
+      reply:  String(v[r][c['תגובה']] || '')
+    });
+  }
+  out.reverse();                              // החדש למעלה
+  if (out.length > APP_REPORT_LIST_MAX) out = out.slice(0, APP_REPORT_LIST_MAX);
+  return json_({ ok: true, rows: out });
+}
+
+/** doPost — מנהל-על בלבד (ר' ACTION_PERMS.setAppReportDone).
+ *  reply ריק = רק סימון "טופל". reply עם טקסט = גם מייל לתושב. */
+function setAppReportDone_(ss, body) {
+  var perm = body._perm || {};
+  var id = String(body.id || '').trim();
+  if (!id) return { ok: false, error: 'אין מזהה דיווח' };
+
+  var sh = ss.getSheetByName(APP_REPORTS_SHEET);
+  if (!sh) return { ok: false, error: 'אין טאב דיווחים' };
+  var c = gardenCols_(sh);
+  var v = sh.getDataRange().getValues();
+
+  var row = -1;
+  for (var r = 1; r < v.length; r++) {
+    if (String(v[r][c['מזהה']]).trim() === id) { row = r + 1; break; }
+  }
+  if (row < 0) return { ok: false, error: 'הדיווח לא נמצא' };
+
+  var who = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email;
+  var done = !!body.done;
+  sh.getRange(row, c['טופל'] + 1).setValue(done ? 'כן' : '');
+  sh.getRange(row, c['תאריך טיפול'] + 1).setValue(done ? new Date() : '');
+  sh.getRange(row, c['טופל על ידי'] + 1).setValue(done ? who : '');
+
+  var reply = String(body.reply || '').trim().substring(0, 1000);
+  if (reply) {
+    /* התגובות נצברות ולא נדרסות: שיחה קצרה עם תושב יכולה להיות שני משפטים
+       בשני מועדים, ודריסה הייתה מוחקת את מה שכבר נשלח לו בפועל. */
+    var prev = String(v[row - 1][c['תגובה']] || '').trim();
+    sh.getRange(row, c['תגובה'] + 1).setValue(prev ? (prev + '\n---\n' + reply) : reply);
+    try {
+      var to = String(v[row - 1][c['מייל']] || '').trim();
+      if (to) {
+        sendResidentTemplate_(ss, 'APP_REPORT_REPLY', [to], {
+          'שם': String(v[row - 1][c['שם']] || '').split(' ')[0] || '',
+          'מזהה': id, 'תגובה': reply
+        });
+      }
+    } catch (e) { /* כשל מייל לא מבטל את מה שכבר נכתב בגיליון */ }
+  }
+  return { ok: true };
+}
