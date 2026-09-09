@@ -114,8 +114,16 @@ CBA.screens = CBA.screens || {};
      כל תזוזה כזו הייתה מייצרת שתי קריאות רשת נוספות. דקה היא מספיק טרי
      לעמוד נחיתה, ומספיק ארוך כדי שרצף ציורים לא יהפוך לרצף בקשות. */
   var LAZY_TTL = 60 * 1000;
-  var lazyCache = { signups: null, gym: null, profile: null, garden: null, ts: 0 };
+  /* ⚠️ לגינון חותמת זמן **נפרדת** (2026-09-09). `ts` המשותף נכתב גם ע"י
+     primeHomeExtras — הקריאה המאוחדת — שאינה מביאה את ספירת הגינון כלל.
+     התוצאה עם ts משותף: cacheFresh() חוזר true, `garden` נשאר null, והשורה
+     מצוירת כאפס ולכן לא מוצגת — לנצח. נתפס בבדיקה חיה: השרת החזיר משימה
+     אחת ממתינה, והכרטיס הכריז "הכול מטופל".
+     זו בדיוק המלכודת שכבר מתועדת בקובץ הזה עצמו לגבי הטעונים האחרים. */
+  var lazyCache = { signups: null, gym: null, profile: null, garden: null,
+                    ts: 0, gardenTs: 0 };
   function cacheFresh() { return lazyCache.ts && (Date.now() - lazyCache.ts) < LAZY_TTL; }
+  function gardenFresh() { return lazyCache.gardenTs && (Date.now() - lazyCache.gardenTs) < LAZY_TTL; }
 
   /* שלושת הסינונים, במקום אחד (2026-09-09). שני מסלולים סופרים אותם עכשיו —
      הקריאה המאוחדת והקריאות הבודדות — ושתי העתקות של אותו תנאי הן בדיוק איך
@@ -187,15 +195,32 @@ CBA.screens = CBA.screens || {};
     function signupRow(n) { return n ? taskRow("בקשות הרשמה לקהילה", n, "residents", "warn") : ""; }
     function profileRow(n) { return n ? taskRow("בקשות שינוי פרטים", n, "residents", "warn") : ""; }
     function gymRow(n) { return n ? taskRow("תשלומי מכון כושר לאימות", n, "gymAdmin", "warn") : ""; }
-    /* היעד הוא gardenInbox ולא gardenTasks: הוא פותח את אותו מסך כשהמסנן
-       "מחכה לך" כבר נבחר — כלומר בדיוק הרשימה שהמספר הזה ספר. */
-    function gardenRow(n) { return n ? taskRow("משימות גינון שמחכות לך", n, "gardenInbox", "warn") : ""; }
+    /* ⚠️ התווית חייבת לתאר בדיוק את מה שנספר. `scope:"pending"` בשרת מחזיר
+       **רק** משימות עם דגל "ממתין לאישור" — לא "דורש בדיקה בשטח" ולא משוב
+       שלילי, שגם הם ברשימת "להחלטתך" של מסך המשימות. "שמחכות לך" היה מבטיח
+       את הרשימה הרחבה ומראה את המספר הצר, וזה בדיוק "שני מספרים שלא מסכימים"
+       שאנחנו מנקים מהמודול. היעד נשאר gardenInbox — הוא נוחת על הרשימה
+       הרחבה, שמכילה תמיד את מה שנספר כאן. */
+    function gardenRow(n) { return n ? taskRow("משימות גינון לאישורך", n, "gardenInbox", "warn") : ""; }
+
+    /* הגינון נטען לפי החותמת שלו ולא לפי המשותפת — ר' ההערה ליד lazyCache. */
+    if (slotN) {
+      if (gardenFresh()) {
+        done(slotN, gardenRow(lazyCache.garden || 0));
+      } else if (CBA.data.getGardenTasks) {
+        lazyCache.gardenTs = Date.now();
+        CBA.data.getGardenTasks({ scope: "pending" }, function (res) {
+          var n = (res && res.ok) ? (res.rows || []).length : 0;
+          lazyCache.garden = n;
+          done(slotN, gardenRow(n));
+        });
+      } else { done(slotN, ""); }
+    }
 
     if (cacheFresh()) {
       if (slotS) done(slotS, signupRow(lazyCache.signups || 0));
       if (slotG) done(slotG, gymRow(lazyCache.gym || 0));
       if (slotP) done(slotP, profileRow(lazyCache.profile || 0));
-      if (slotN) done(slotN, gardenRow(lazyCache.garden || 0));
       return;
     }
     lazyCache.ts = Date.now();
@@ -215,17 +240,6 @@ CBA.screens = CBA.screens || {};
         done(slotG, gymRow(n));
       });
     } else if (slotG) { done(slotG, ""); }
-
-    /* גינון (2026-09-09). scope:"pending" הוא בדיוק "מחכה לך" של מסך המשימות
-       — בוצע וממתין לאישור, ומה שדורש החלטה. ספירה בלבד; אין כאן שום בדיקת
-       הרשאה חדשה, השרת מסנן לפי המושב. */
-    if (slotN && CBA.data.getGardenTasks) {
-      CBA.data.getGardenTasks({ scope: "pending" }, function (res) {
-        var n = (res && res.ok) ? (res.rows || []).length : 0;
-        lazyCache.garden = n;
-        done(slotN, gardenRow(n));
-      });
-    } else if (slotN) { done(slotN, ""); }
 
     if (slotP && CBA.data.getProfileChanges) {
       CBA.data.getProfileChanges(function (res) {
