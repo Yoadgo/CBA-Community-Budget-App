@@ -40,6 +40,16 @@
   --org-ops:       #0891B2;
   --org-vol:       #6B7280;
 
+  /* צבעי מקורות מימון בתצוגה להצגה (2026-09-09) — במכוון לא ירוק/אדום/כתום,
+     ששמורים ל-ok/danger/warn ואסור לבלבל איתם. "מיסי שיכון" מקבל את האפור
+     השקט ביותר דווקא כי הוא ~80% מהתקציב: מקור ברירת המחדל לא צריך לצעוק. */
+  --fund-dues:      #475569;  --fund-dues-bg:      #F1F5F9;
+  --fund-tbr:       #0E7490;  --fund-tbr-bg:       #ECFEFF;
+  --fund-council:   #6D28D9;  --fund-council-bg:   #F5F3FF;
+  --fund-residents: #A16207;  --fund-residents-bg: #FEFCE8;
+  --fund-shikun:    #3730A3;  --fund-shikun-bg:    #EEF2FF;
+  --fund-alt:       #475569;  --fund-alt-bg:       #F1F5F9;
+
   --page-pad:      40px;      /* שוליים צדדיים — התוכן ממלא את כל רוחב המסך */
   --t:             160ms cubic-bezier(.2,.6,.2,1);
 }
@@ -988,21 +998,25 @@ body[data-screen="planning"] .year-switch__add {
 .present-grid { display: flex; flex-direction: column; gap: 8px; }
 .present-card { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 10px 14px; }
 .present-card__top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.present-card__name { font-size: 20px; font-weight: 600; }
-.present-card__amount { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.present-card__name { font-size: 19px; font-weight: 600; }
+.present-card__amount { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* פירוט ומימון — שורה נפרדת לכל פריט/מקור. הפירוט (אם קיים) מוצג ראשון
    ובולט יותר מהמימון (גופן גדול יותר וכהה יותר), אבל לא מודגש (בולד) —
    כדי לא להתבלבל עם כותרת הסעיף עצמה, שנשארת המודגשת ביותר בכרטיס. */
-.present-card__section { margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 3px; }
+.present-card__section { margin-top: 6px; padding-top: 5px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 2px; }
 .present-card__item-row,
 .present-card__fund-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.present-card__item-name,
-.present-card__item-amount { font-size: 18px; font-weight: 400; color: var(--text); }
+/* היררכיה (2026-09-09): עד כאן הפירוט היה 18px ב-var(--text) — אותו שחור
+   בדיוק של כותרת הסעיף שמעליו, ולכן לא היה כפוף לה בשום צורה. זה, ולא
+   היעדר סולם גדלים, מה שיצר את תחושת "בליל הסעיפים" (משוב יועד 9.9.26).
+   הסולם היום: 24 קבוצה / 19 סעיף / 15 פירוט / 13 מימון. */
+.present-card__item-name { font-size: 15px; font-weight: 400; color: var(--text-soft); }
+.present-card__item-amount { font-size: 15px; font-weight: 500; color: #4B5563; }
 .present-card__item-name { min-width: 0; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
 .present-card__item-amount { font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
 .present-card__fund-name,
-.present-card__fund-amount { font-size: 16.5px; color: var(--text-soft); }
+.present-card__fund-amount { font-size: 13px; color: var(--text-muted); }
 .present-card__fund-name { font-weight: 500; min-width: 0; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
 .present-card__fund-amount { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
 /* שמות שלא נכנסים במלואם (סעיף/מקור/פריט) גוללים הצידה במקום להיחתך
@@ -1030,6 +1044,82 @@ body[data-screen="planning"] .year-switch__add {
 .present-income-row:last-child { border-bottom: none; }
 .present-income-row__name { font-size: 17px; font-weight: 600; min-width: 0; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
 .present-income-row__amount { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+
+/* ===================================================================
+   תצוגה להצגה — שכבת הקריאוּת (2026-09-09)
+   ארבעה מהלכים שנבנו יחד: תגיות מימון, פסי גודל יחסיים, קיפול הפירוט,
+   ופס פרופורציות עליון. כולם חיים *רק* במצב התצוגה — מצב העריכה
+   (.plan-item / .plan-group) לא נגע כלל.
+   =================================================================== */
+
+/* --- תגיות מימון: מקור ההכנסה הוא ציר אחר, ולכן שפה ויזואלית אחרת --- */
+.present-fundchips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.fund-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 1.5;
+  /* בכוונה *לא* nowrap: בעמודה של 230px שם ארוך כמו "תקציב קהילה מהמועצה"
+     נשבר לשתי שורות בתוך התגית — עדיף על חיתוך שמסתיר מידע. */
+  white-space: normal; max-width: 100%;
+}
+.fund-chip .n { font-variant-numeric: tabular-nums; font-weight: 700; opacity: .85; }
+.fund-chip--dues      { background: var(--fund-dues-bg);      color: var(--fund-dues); }
+.fund-chip--tbr       { background: var(--fund-tbr-bg);       color: var(--fund-tbr); }
+.fund-chip--council   { background: var(--fund-council-bg);   color: var(--fund-council); }
+.fund-chip--residents { background: var(--fund-residents-bg); color: var(--fund-residents); }
+.fund-chip--shikun    { background: var(--fund-shikun-bg);    color: var(--fund-shikun); }
+.fund-chip--alt       { background: var(--fund-alt-bg);       color: var(--fund-alt); }
+
+/* --- פסי גודל: בלי זה 432,000 ו-500 נראים זהים לחלוטין --- */
+.present-bar { height: 3px; border-radius: 2px; background: #EDEFF2; margin-top: 7px; overflow: hidden; }
+.present-bar > i { display: block; height: 100%; background: var(--text-muted); border-radius: 2px; }
+/* פס הקבוצה מנורמל לכל הלוח; פס הכרטיס מנורמל לסעיף הגדול *באותה קבוצה*,
+   אחרת שכר הגנן (432,000) היה מוחק ויזואלית את כל שאר הלוח. */
+.present-gbar { height: 4px; border-radius: 2px; background: #E9EBEF; margin: -2px 0 10px; overflow: hidden; }
+.present-gbar > i { display: block; height: 100%; background: var(--text); border-radius: 2px; }
+.present-gpct { font-size: 12.5px; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-inline-start: 8px; }
+
+/* --- קיפול הפירוט --- */
+.present-toggle {
+  border: none; background: none; padding: 0; margin: 0; width: 100%;
+  font-family: inherit; color: inherit; text-align: start; cursor: pointer;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
+.present-toggle .chev {
+  font-size: 10px; color: var(--text-muted); flex: none; align-self: center;
+  transition: transform var(--t);
+}
+.present-toggle:hover .chev { color: var(--text); }
+.present-card.is-open .present-toggle .chev { transform: rotate(-90deg); }
+/* הפירוט תמיד ב-DOM ומוסתר ב-CSS בלבד — כך הקיפול מיידי בלי ציור-מחדש,
+   וגם ההדפסה יכולה להחזיר אותו (ר' @media print למטה). */
+.present-wrap.is-collapsed .present-card:not(.is-open) .present-card__section--items { display: none; }
+
+/* --- דגל פער בין הפירוט לסכום הסעיף --- */
+/* כאן warn הוא הסמנטיקה *הנכונה* (חריגה), בשונה מתגיות המימון שנמנעות ממנה */
+.present-gapflag {
+  display: inline-flex; align-items: center; margin-inline-start: 7px;
+  font-size: 11px; font-weight: 700; color: var(--badge-warn); background: var(--warn-soft);
+  padding: 1px 7px; border-radius: 999px; white-space: nowrap; vertical-align: middle;
+}
+
+/* --- פס הפרופורציות העליון --- */
+/* במכוון בלי מספרי הכנסות/הוצאות/מאזן: אלה כבר יושבים ב-.bottomline-bar
+   שמוצג גם במצב תצוגה. הפס הזה מוסיף רק את מה שאין שם — היחס בין התחומים. */
+.present-macro { padding: 14px 18px; margin-bottom: 16px; }
+.present-stack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #EDEFF2; }
+.present-stack > i { display: block; height: 100%; }
+.present-stack > i + i { border-inline-start: 2px solid var(--surface); }
+.present-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-top: 11px; font-size: 13px; color: var(--text-soft); }
+.present-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+.present-legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.present-legend .pc { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+
+/* --- הדפסה: המסך הזה מוצג בישיבות ומודפס, ובנייר אין למי ללחוץ --- */
+@media print {
+  .present-wrap.is-collapsed .present-card:not(.is-open) .present-card__section--items { display: flex; }
+  .present-toggle .chev { display: none; }
+}
 
 .mini-x {
   border: none; background: none; cursor: pointer; color: var(--text-muted);

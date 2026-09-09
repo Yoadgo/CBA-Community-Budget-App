@@ -14,6 +14,13 @@ var planCompareYear = null;  // איזו שנה מושווית
 // (בלי שדות/כפתורי עריכה, בלי צורך לרחף כדי לראות פירוט) — לשימוש בהצגות
 // לוועד השיכון, כדי שהתקציב כולו ייראה בתמונה אחת. ר' planPresentHTML למטה.
 var planViewMode = false;
+/* מצב התצוגה להצגה (2026-09-09) — ברמת המודול, כדי לשרוד ציור-מחדש של המסך.
+   planPresentOpen מחזיק *עקיפה* לכל סעיף (true/false), ולכן חייב להיות
+   undefined ולא false כברירת מחדל — אחרת "הרחב הכל" לא היה משפיע על סעיף
+   שהמשתמש נגע בו פעם אחת. */
+var planPresentOpen = {};
+var planPresentExpandAll = false;
+var planPresentAxis = "group";   // "group" = לפי תחום · "fund" = לפי מקור מימון
 
 // סמליל "פנקס הערות" (סעיף 1) — דף+קווים, באותו סגנון SVG כמו NAV_ICONS ב-app.js
 var PLAN_NOTES_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4"/><path d="M9.5 12h6M9.5 16h4"/></svg>';
@@ -106,6 +113,7 @@ CBA.screens.planning = {
 
       <div class="screen-controls">
         <div class="phase-ctrl">${planPhaseControl()}</div>
+        ${planViewMode ? planPresentControlsHTML() : ""}
         <button class="btn-ghost" type="button" data-toggle-present>${planViewMode ? "חזרה לעריכה" : "תצוגה להצגה"}</button>
       </div>
 
@@ -188,7 +196,8 @@ function planBind(container) {
     planViewMode = !planViewMode;
     rerender();
   });
-  if (planViewMode) { planBindPresentScroll(container); return; }  // מצב תצוגה סטטי — מחברים רק את הגלילה האוטומטית בריחוף
+  // מצב תצוגה — אין עריכה מכאן והלאה, רק הגלילה בריחוף ופקדי התצוגה
+  if (planViewMode) { planBindPresentScroll(container); planBindPresent(container, rerender); return; }
 
   // שמירה אוטומטית לגיליון בכל סיום עריכת שדה (blur/change).
   // נרשם פעם אחת בלבד — ה-dataset שורד ציור-מחדש (innerHTML לא מוחק את container עצמו).
@@ -751,26 +760,109 @@ function planSourceName(c) {
    גם פירוט הפריטים הפנימיים. משתמשת באותם c.sources/c.items שכבר קיימים —
    לא צריך נתונים חדשים, רק תצוגה אחרת שלהם. =================================================================== */
 function planPresentHTML(groups, cats, income) {
-  const blocks = groups.map(function (g) {
-    const rows = cats.filter(function (c) { return c.group === g.id; });
-    if (!rows.length) return "";
-    const total = rows.reduce(function (s, c) { return s + (c.plan || 0); }, 0);
-    return `
-      <div class="present-group">
-        <div class="present-group__head">
-          <span class="present-group__name">${CBA.esc(g.name)}</span>
-          <span class="present-group__total">${CBA.formatILS(total)}</span>
-        </div>
-        <div class="present-grid">
-          ${rows.map(planPresentCardHTML).join("")}
-        </div>
-      </div>`;
-  }).join("");
+  const blocks = (planPresentAxis === "fund")
+    ? planPresentFundBlocks(cats, income)
+    : planPresentGroupBlocks(groups, cats);
+
+  // אחוזים ואורכי פסים מחושבים פעם אחת לכל הלוח, לא לכל כרטיס
+  const grand = blocks.reduce(function (s, b) { return s + b.total; }, 0);
+  const maxBlock = blocks.reduce(function (m, b) { return Math.max(m, b.total); }, 0);
+  blocks.forEach(function (b) {
+    b.pct = grand ? Math.round((b.total / grand) * 1000) / 10 : 0;
+    b.barPct = maxBlock ? Math.max(1, Math.round((b.total / maxBlock) * 100)) : 0;
+  });
+
   return `
     <div class="plan-cols">
       ${planPresentIncomeHTML(income)}
-      <div class="card plan-present-card"><div class="present-wrap">${blocks}</div></div>
+      <div class="card plan-present-card">
+        ${planPresentMacroHTML(blocks, grand)}
+        <div class="present-wrap is-collapsed">${blocks.map(planPresentBlockHTML).join("")}</div>
+      </div>
     </div>`;
+}
+
+/* פקדי מצב התצוגה — יושבים ב-screen-controls ליד "חזרה לעריכה", כי כולם
+   פקדי *תצוגה* ולא פקדי תוכן. מוצגים רק כשמצב התצוגה פעיל. */
+function planPresentControlsHTML() {
+  const expandLabel = planPresentExpandAll ? "כווץ הכל" : "הרחב הכל";
+  const axisLabel = (planPresentAxis === "fund") ? "לפי תחום" : "לפי מקור מימון";
+  return `
+        <button class="btn-ghost" type="button" data-present-expand aria-pressed="${planPresentExpandAll ? "true" : "false"}">${expandLabel}</button>
+        <button class="btn-ghost" type="button" data-present-axis aria-pressed="${planPresentAxis === "fund" ? "true" : "false"}">${axisLabel}</button>`;
+}
+
+/* הציר הרגיל — לפי תחום (קבוצה) */
+function planPresentGroupBlocks(groups, cats) {
+  return groups.map(function (g) {
+    const rows = cats.filter(function (c) { return c.group === g.id; });
+    if (!rows.length) return null;
+    return {
+      name: g.name, cards: rows,
+      total: rows.reduce(function (s, c) { return s + (c.plan || 0); }, 0)
+    };
+  }).filter(Boolean);
+}
+
+/* היפוך הציר (2026-09-09) — אותם סעיפים בדיוק, מקובצים לפי מקור המימון.
+   סעיף מפוצל מופיע פעם אחת תחת כל מקור, עם חלקו בלבד ובלי פירוט פנימי:
+   הפריטים אינם משויכים למקור, והצגתם תחת אחד מהם הייתה שקר. */
+function planPresentFundBlocks(cats, income) {
+  return income.map(function (src) {
+    const cards = [];
+    cats.forEach(function (c) {
+      planCatSources(c).forEach(function (s) {
+        if (s.incomeSourceId !== src.id) return;
+        cards.push((s.amount == null) ? c : {
+          id: c.id + "__" + src.id, name: c.name, plan: s.amount,
+          items: null, sources: null, incomeSourceId: src.id
+        });
+      });
+    });
+    if (!cards.length) return null;
+    return {
+      name: src.name, cards: cards, fundId: src.id,
+      total: cards.reduce(function (s, c) { return s + (c.plan || 0); }, 0)
+    };
+  }).filter(Boolean);
+}
+
+/* בלוק אחד בלוח (קבוצה או מקור מימון, לפי הציר) */
+function planPresentBlockHTML(b) {
+  const maxInBlock = b.cards.reduce(function (m, c) { return Math.max(m, c.plan || 0); }, 0);
+  return `
+      <div class="present-group">
+        <div class="present-group__head">
+          <span class="present-group__name">${CBA.esc(b.name)}<span class="present-gpct">${b.pct}%</span></span>
+          <span class="present-group__total">${CBA.formatILS(b.total)}</span>
+        </div>
+        <div class="present-gbar"><i style="width:${b.barPct}%"></i></div>
+        <div class="present-grid">
+          ${b.cards.map(function (c) { return planPresentCardHTML(c, maxInBlock); }).join("")}
+        </div>
+      </div>`;
+}
+
+/* פס הפרופורציות העליון — במכוון *בלי* הכנסות/הוצאות/מאזן: שלושתם כבר
+   מוצגים ב-.bottomline-bar שנשאר גלוי גם במצב תצוגה. הפס מוסיף רק את מה
+   שאין שם — היחס בין התחומים, שהיום אי אפשר לראות בשום מקום. */
+function planPresentMacroHTML(blocks, grand) {
+  if (!grand || blocks.length < 2) return "";
+  const ramp = ["#111827", "#374151", "#6B7280", "#9CA3AF", "#D1D5DB", "#E5E7EB"];
+  const color = function (b, i) {
+    return b.fundId ? "var(--fund-" + planFundClass(b.fundId) + ")" : ramp[i % ramp.length];
+  };
+  const segs = blocks.map(function (b, i) {
+    return `<i style="width:${(b.total / grand) * 100}%;background:${color(b, i)}" title="${CBA.esc(b.name)} — ${CBA.formatILS(b.total)}"></i>`;
+  }).join("");
+  const legend = blocks.map(function (b, i) {
+    return `<span class="lg"><span class="sw" style="background:${color(b, i)}"></span>${CBA.esc(b.name)}<span class="pc">${b.pct}%</span></span>`;
+  }).join("");
+  return `
+        <div class="present-macro">
+          <div class="present-stack">${segs}</div>
+          <div class="present-legend">${legend}</div>
+        </div>`;
 }
 
 /* עמודת מקורות ההכנסה בתצוגה להצגה — שם + סכום מחושב לכל מקור, סטטי (חוזר
@@ -794,19 +886,46 @@ function planPresentIncomeHTML(income) {
     </div>`;
 }
 
-/* כרטיס סעיף בתצוגה להצגה — שם+סכום תמיד, פירוט פריטים (אם קיים, בולט יותר
-   ולפני המימון), ואחריו מימון. סדר ובולטות עודכנו לפי משוב יועד (2026-08-10) */
-function planPresentCardHTML(c) {
-  const items = planPresentItemRows(c);
-  const funding = planPresentFundingRows(c);
+/* כרטיס סעיף בתצוגה להצגה — שם+סכום תמיד, פס גודל יחסי, פירוט מקופל
+   (אם קיים), ותגיות מימון. עודכן 2026-09-09: הפירוט ירד להיות משני והמימון
+   הפך לתגיות, כי שלוש השכבות נראו קודם זהות (משוב יועד). */
+function planPresentCardHTML(c, maxInBlock) {
+  const hasItems = !!(c.items && c.items.length);
+  // עקיפה ידנית לסעיף בודד גוברת על "הרחב הכל" — ר' ההערה ליד planPresentOpen
+  const isOpen = (planPresentOpen[c.id] != null) ? planPresentOpen[c.id] : planPresentExpandAll;
+
+  // פער בין הפירוט לסכום הסעיף. אינו נגזר מהתצוגה אלא מהנתונים עצמם, ועד
+  // היום לא היה שום מקום שבו אפשר לראות אותו (ר' [[cba-visible-drift-rule]]).
+  const sum = hasItems ? c.items.reduce(function (a, it) { return a + (it.plan || 0); }, 0) : 0;
+  const gap = hasItems ? Math.round((c.plan || 0) - sum) : 0;
+  const flag = gap
+    ? `<span class="present-gapflag" title="הפירוט אינו מסתכם לסכום הסעיף">${gap > 0 ? "חוסר" : "עודף"} ${planNumFmt(Math.abs(gap))}</span>`
+    : "";
+
+  const inner =
+    `<span class="present-card__name">${CBA.esc(c.name)}${flag}</span>` +
+    `<span class="present-card__amount">${CBA.formatILS(c.plan || 0)}</span>`;
+
+  // רק סעיף מפורט הוא כפתור — סעיף בלי פירוט אין מה לפתוח בו
+  const head = hasItems
+    ? `<button class="present-toggle" type="button" data-present-card="${CBA.esc(c.id)}" aria-expanded="${isOpen ? "true" : "false"}">${inner}<span class="chev">&#9660;</span></button>`
+    : `<div class="present-card__top">${inner}</div>`;
+
+  // מינימום 1% כדי שסעיף זעיר לא ייעלם לגמרי — אבל סעיף על 0 באמת מקבל 0,
+  // אחרת היה נראה כאילו תוקצב לו משהו
+  const barPct = (maxInBlock > 0 && (c.plan || 0) > 0)
+    ? Math.max(1, Math.round(((c.plan || 0) / maxInBlock) * 100))
+    : 0;
+  const bar = (maxInBlock > 0)
+    ? `<div class="present-bar"><i style="width:${barPct}%"></i></div>`
+    : "";
+
   return `
-    <div class="present-card">
-      <div class="present-card__top">
-        <span class="present-card__name">${CBA.esc(c.name)}</span>
-        <span class="present-card__amount">${CBA.formatILS(c.plan || 0)}</span>
-      </div>
-      ${items}
-      ${funding}
+    <div class="present-card${isOpen ? " is-open" : ""}">
+      ${head}
+      ${bar}
+      ${planPresentItemRows(c)}
+      ${planPresentFundingChips(c)}
     </div>`;
 }
 
@@ -817,35 +936,44 @@ function planPresentItemRows(c) {
     return `
       <div class="present-card__item-row">
         <span class="present-card__item-name">${CBA.esc(it.name)}</span>
-        <span class="present-card__item-amount">${CBA.formatILS(it.plan || 0)}</span>
+        <span class="present-card__item-amount">${planNumFmt(it.plan || 0)}</span>
       </div>`;
   }).join("");
   return `<div class="present-card__section present-card__section--items">${rows}</div>`;
 }
 
-/* מימון: שורה נפרדת לכל מקור הכנסה — מקור יחיד (בלי סכום, זהה לסכום הסעיף)
-   או כמה מקורות (סעיף 4, מפוצל — כל אחד עם סכומו) */
-function planPresentFundingRows(c) {
-  function incName(id) {
-    const s = CBA.data.getIncomeSources().find(function (x) { return x.id === id; });
-    return s ? s.name : "—";
-  }
-  let rows;
-  if (c.sources && c.sources.length > 1) {
-    rows = c.sources.map(function (s) {
-      return `
-        <div class="present-card__fund-row">
-          <span class="present-card__fund-name">${CBA.esc(incName(s.incomeSourceId))}</span>
-          <span class="present-card__fund-amount">${CBA.formatILS(s.amount)}</span>
-        </div>`;
-    }).join("");
-  } else {
-    rows = `
-      <div class="present-card__fund-row">
-        <span class="present-card__fund-name">${CBA.esc(incName(c.incomeSourceId))}</span>
-      </div>`;
-  }
-  return `<div class="present-card__section present-card__section--funding">${rows}</div>`;
+/* מקורות המימון של סעיף, במבנה אחיד: מקור יחיד מוחזר עם amount === null
+   (סכומו זהה לסכום הסעיף ולכן אין טעם לחזור עליו), מפוצל — כל אחד עם חלקו. */
+function planCatSources(c) {
+  return (c.sources && c.sources.length > 1)
+    ? c.sources
+    : [{ incomeSourceId: c.incomeSourceId, amount: null }];
+}
+
+/* מזהי מקורות ההכנסה קבועים במודל (ר' income() ב-mock.js). מקור לא מוכר,
+   אם יתווסף בגיליון, נופל ל-alt ומקבל אפור ניטרלי — עדיף על צבע אקראי
+   שיתנגש עם צבע קיים בלי שאיש ישים לב. */
+var PLAN_FUND_CLASS = {
+  dues: "dues", council: "council", tbr: "tbr",
+  residents_fund: "residents", shikun_fund: "shikun"
+};
+function planFundClass(id) { return PLAN_FUND_CLASS[id] || "alt"; }
+
+/* מספר בלי סימן שקל — בכרטיס שכבר יש בו ₪ בסכום הראשי, חזרת הסימן בכל
+   שורת פירוט היא רעש בלבד (משוב יועד 2026-09-09). */
+function planNumFmt(n) { return Math.round(n || 0).toLocaleString("he-IL"); }
+
+/* מימון כתגיות (2026-09-09) — מקור ההכנסה הוא ציר אחר מההוצאה, ולכן קיבל
+   שפה ויזואלית אחרת לגמרי במקום עוד שורת טקסט חיוורת. בסעיף מפוצל התגית
+   *שומרת על הסכום*: בלעדיו הפיצול נעלם וזה איבוד מידע אמיתי. */
+function planPresentFundingChips(c) {
+  const all = CBA.data.getIncomeSources();
+  const chips = planCatSources(c).map(function (s) {
+    const src = all.find(function (x) { return x.id === s.incomeSourceId; });
+    const amt = (s.amount == null) ? "" : ` <span class="n">${planNumFmt(s.amount)}</span>`;
+    return `<span class="fund-chip fund-chip--${planFundClass(s.incomeSourceId)}">${CBA.esc(src ? src.name : "—")}${amt}</span>`;
+  }).join("");
+  return `<div class="present-fundchips">${chips}</div>`;
 }
 
 /* פיצול סעיף בין כמה מקורות הכנסה (סעיף 4, 2026-08-10). במצב רגיל (לא מפוצל) —
@@ -1309,9 +1437,41 @@ function planFocusNewCategory(container, catId) {
    הצידה כשעומדים עליהם עם העכבר, בלי צורך לגרור את פס הגלילה ידנית —
    וחוזרים למצב ההתחלתי כשהעכבר יוצא (משוב יועד, 2026-08-10). פועל רק על
    שמות שבאמת חתוכים (scrollWidth > clientWidth); שם שנכנס במלואו לא זז. */
+/* פקדי מצב התצוגה (2026-09-09).
+   קיפול סעיף בודד מתבצע בהחלפת מחלקה בלבד, *בלי* ציור-מחדש — בלוח ארוך
+   ציור-מחדש היה מקפיץ את הגלילה לראש העמוד בכל לחיצה. "הרחב הכל" והיפוך
+   הציר כן מציירים מחדש, כי הם משנים את מבנה הלוח כולו. */
+function planBindPresent(container, rerender) {
+  container.querySelectorAll("[data-present-card]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const card = btn.closest(".present-card");
+      if (!card) return;
+      const open = card.classList.toggle("is-open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      planPresentOpen[btn.getAttribute("data-present-card")] = open;
+    });
+  });
+
+  const expandBtn = container.querySelector("[data-present-expand]");
+  if (expandBtn) expandBtn.addEventListener("click", function () {
+    planPresentExpandAll = !planPresentExpandAll;
+    planPresentOpen = {};   // מנקה עקיפות ידניות, אחרת "הרחב הכל" לא באמת מרחיב הכל
+    rerender();
+  });
+
+  const axisBtn = container.querySelector("[data-present-axis]");
+  if (axisBtn) axisBtn.addEventListener("click", function () {
+    planPresentAxis = (planPresentAxis === "fund") ? "group" : "fund";
+    planPresentOpen = {};   // מזהי הכרטיסים שונים בין הצירים (סעיף מפוצל מקבל id מורכב)
+    rerender();
+  });
+}
+
 function planBindPresentScroll(container) {
+  // תגיות המימון נשברות לשתי שורות במקום להיחתך, ולכן אינן צריכות גלילה —
+  // מאז 2026-09-09 אין יותר .present-card__fund-name בתצוגה.
   const names = container.querySelectorAll(
-    ".present-card__item-name, .present-card__fund-name, .present-income-row__name"
+    ".present-card__item-name, .present-income-row__name"
   );
   names.forEach(function (el) {
     el.addEventListener("mouseenter", function () {

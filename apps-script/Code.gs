@@ -697,10 +697,43 @@ function doPost(e) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     body._email = gate.email;
     body._perm = gate.perm;
-    // כל כתיבה מאושרת מעלה את מונה השינויים (2026-08-19, ר' bumpRev_).
-    // אחרי השער בכוונה — בקשה שנדחתה לא שינתה כלום ואין סיבה שתגרום לכל
-    // הלקוחות למשוך את הגיליון מחדש.
+    /* ⚠️⚠️ סדר הפעולות כאן הוא קריטי, ואיבוד נתונים אמיתי כבר נגרם בגללו (9.9.26).
+     *
+     *  עד היום `bumpRev_` רץ **כאן**, לפני שהפעולה בכלל התחילה. כל עוד המונה
+     *  שימש רק כדי לומר ללקוחות "משהו השתנה, כדאי למשוך" זה היה בזבזני בלבד.
+     *  אבל ב-8.9 נוסף מטמון שרת שהמפתח שלו הוא **בדיוק אותו מונה**
+     *  (`budgetStamp_`), ואז הצירוף הפך להרסני:
+     *
+     *    1. מגיעה שמירת תקציב  ->  המונה עולה מיד (S1 -> S2)
+     *    2. `saveBudget_` ממתין לנעילה (עד 20 שניות!) ואז כותב 2-8 שניות
+     *    3. בתוך החלון הזה מגיעה קריאת doGet כלשהי — סקר, טאב אחר, מנהל אחר.
+     *       היא מחשבת stamp = S2 (כבר עלה!), לא מוצאת מטמון, קוראת את הגיליון
+     *       **לפני שהכתיבה נחתה**, ושומרת את הנתון הישן תחת S2 ל-90 שניות.
+     *    4. הכתיבה מסתיימת. אין באמפ נוסף. המפתח נשאר S2.
+     *    5. במשך 90 שניות **כל** לקוח מקבל את התמונה שלפני השמירה.
+     *    6. הלקוח מחיל אותה על CBA.mock, המסך חוזר אחורה — והשמירה האוטומטית
+     *       הבאה כותבת את הערכים הישנים בחזרה לגיליון. **כאן הנתון נהרס.**
+     *
+     *  התיקון: המונה עולה **רק אחרי** שהפעולה הסתיימה, ורק אחרי `flush()`
+     *  שמוודא שהנתונים באמת בגיליון ולא בתור הכתיבה של Apps Script. כך קריאה
+     *  שמתרחשת באמצע כתיבה מחשבת עדיין את ה-stamp הישן, וגם אם היא ממטמנת
+     *  נתון חלקי — הוא נשמר תחת מפתח שאיש כבר לא ישאל עליו.
+     *
+     *  ⚠️ אסור להחזיר את `bumpRev_` לכאן, ואסור להסיר את ה-flush, כל עוד
+     *     `cached_` ממופתח לפי המונה. */
+    var res = doPostDispatch_(ss, body);
+    try { SpreadsheetApp.flush(); } catch (e) { /* אין מה לרוקן */ }
     bumpRev_(body.action);
+    return res;
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** גוף הניתוב של doPost. חולץ לפונקציה נפרדת (9.9.26) רק כדי ש-doPost יוכל
+ *  להריץ flush + bumpRev_ **אחרי** הפעולה — ר' ההערה הארוכה למעלה. שום case
+ *  לא שונה. */
+function doPostDispatch_(ss, body) {
     switch (body.action) {
       case 'auth':              return json_({ ok: true });
       case 'savePermissions':   return json_(savePermissions_(ss, body));
@@ -768,9 +801,6 @@ function doPost(e) {
       case 'updateGymMembership':   return json_(updateGymMembership_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
-  } catch (err) {
-    return json_({ ok: false, error: String(err) });
-  }
 }
 
 function saveTransaction_(ss, body) {
