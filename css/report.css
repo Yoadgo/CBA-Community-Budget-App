@@ -132,11 +132,14 @@ body[data-screen="planning"] .rep-fab-wrap { bottom: 104px; }
 .cba-dlg__body { margin-top: 14px; max-height: min(62vh, 560px); overflow-y: auto; }
 @media (max-width: 720px) {
   .cba-dlg__body { max-height: 58vh; }
-  .rep-fab-wrap { right: 14px; bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 14px); }
+  /* ⚠️ המרווח הוא 30px ולא 14px (9.9.26, אחרי בדיקה במכשיר אמיתי): --botnav-h
+     הוא ערך *מדוד* של בר הניווט, וכשנוסף לו טאב או תווית ארוכה הוא גדל בפועל
+     בלי שהמשתנה מתעדכן — ואז הכפתור יושב על הבר. מרווח נדיב הוא ההגנה. */
+  .rep-fab-wrap { right: 14px; bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 30px); }
   /* מסכים שיש בהם שורה תחתונה קבועה — הכפתור מטפס מעליה (ר' mobile.css) */
   body[data-screen="budget"] .rep-fab-wrap,
   body[data-screen="planning"] .rep-fab-wrap {
-    bottom: calc(var(--botnav-h) + var(--bottomline-h) + env(safe-area-inset-bottom) + 14px);
+    bottom: calc(var(--botnav-h) + var(--bottomline-h) + env(safe-area-inset-bottom) + 26px);
   }
   .rep-fab { width: 50px; height: 50px; }
 }

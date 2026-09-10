@@ -1104,7 +1104,10 @@
     help: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .9-1 1.6v.4"/><path d="M12 17h.01"/></svg>',
     // דיווחים על האפליקציה (2026-09-09) — בועת שיחה עם קו, לא פעמון: פעמון
     // כבר תפוס להתראות המערכת, ודיווח הוא משהו שהמשתמש *אומר* ולא שמקבל.
-    report: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3 1.2-4.4A8 8 0 1 1 21 12z"/><path d="M12 8.5v3.2M12 15h.01"/></svg>'
+    report: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3 1.2-4.4A8 8 0 1 1 21 12z"/><path d="M12 8.5v3.2M12 15h.01"/></svg>',
+    // תיבת הדיווחים שהתקבלו (מנהל-על) — סל נכנס, מובחן בכוונה מבועת השיחה
+    // של *שליחת* דיווח. שני אריחים דומים בשם ובאייקון היו נקראים כאותו דבר.
+    inbox: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h4l1.6 2.5h4.8L16 13h4"/><path d="M5.6 5.6h12.8L21 13v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/></svg>'
   };
 
   function initials(name) {
@@ -1233,6 +1236,11 @@
       closeUserPanel(panel, btn);
       if (window.CBA.tour) CBA.tour.start();
     });
+    const repBtn = panel.querySelector("[data-panel-report]");
+    if (repBtn) repBtn.addEventListener("click", function () {
+      closeUserPanel(panel, btn);
+      if (window.CBA.report) CBA.report.openMenu();
+    });
     const secBtn = panel.querySelector("[data-panel-security]");
     if (secBtn) secBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn);
@@ -1345,6 +1353,10 @@
     if (currentUser) {
       tiles.push(['data-panel-profile', ICON.person, 'פרטים', 'הפרטים שלי']);
       tiles.push(['data-panel-security', ICON.shield, 'אבטחה', 'אבטחת המידע שלי']);
+      /* דיווח על האפליקציה — נקודת הכניסה השנייה, לצד הכפתור הצף. היא כאן
+         כבר עכשיו ולא "אחר כך": התוכנית היא להסיר את הכפתור הצף אחרי
+         שהאפליקציה נקלטת, ואז האריח הזה הוא מה שנשאר. */
+      tiles.push(['data-panel-report', ICON.report, 'דיווח', 'דיווח על האפליקציה']);
     }
     if (currentArea === "admin" && canScreen("emailSettings")) {
       tiles.push(['data-panel-goto="emailSettings"', ICON.mail, 'מיילים', 'ניהול מיילים']);
@@ -1353,7 +1365,7 @@
        זה מסך שנכנסים אליו כשמתפנים לטפל במשוב, לא יעד יומיומי, ובר הניווט
        התחתון במובייל כבר מחלק את רוחבו בין היעדים הקיימים. */
     if (isSuper()) {
-      tiles.push(['data-panel-goto="appReports"', ICON.report, 'דיווחים', 'דיווחים על האפליקציה']);
+      tiles.push(['data-panel-goto="appReports"', ICON.inbox, 'תיבת דיווחים', 'ניהול הדיווחים שהתקבלו']);
     }
     // נעלם מעצמו ברגע שהאפליקציה כבר מותקנת (ר' מסמך אפיון PWA, סעיפים 6-7)
     if (window.CBA.pwa && CBA.pwa.canInstall()) {

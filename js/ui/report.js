@@ -272,6 +272,12 @@ CBA.report = (function () {
       wrapEl.classList.toggle("is-open", !!on);
       fab.setAttribute("aria-expanded", on ? "true" : "false");
     }
+    /* נקודת הכניסה השנייה — האריח בתפריט המשתמש. בכוונה **אותו** תפריט
+       ואותו קוד ולא חלונית בחירה שנייה: שתי דרכים לבחור בין אותם שני
+       כפתורים היו נפרדות זו מזו בעדכון הראשון. וזו גם הסיבה שהיא קיימת
+       כבר עכשיו — כשהכפתור הצף יוסר אחרי שהאפליקציה נקלטת, האריח נשאר
+       הדרך היחידה, ואין מה להמציא באותו רגע. */
+    wrapEl.__openMenu = function () { setOpen(true); };
     fab.addEventListener("click", function (e) {
       e.stopPropagation();
       setOpen(menu.hidden);
@@ -299,5 +305,12 @@ CBA.report = (function () {
     else if (wrapEl) { wrapEl.hidden = true; }
   }
 
-  return { mount: mount, open: openForm, KIND_IDEA: KIND_IDEA, KIND_BUG: KIND_BUG };
+  function openMenu() {
+    build();
+    wrapEl.hidden = false;
+    if (wrapEl.__openMenu) wrapEl.__openMenu();
+  }
+
+  return { mount: mount, open: openForm, openMenu: openMenu,
+           KIND_IDEA: KIND_IDEA, KIND_BUG: KIND_BUG };
 })();
