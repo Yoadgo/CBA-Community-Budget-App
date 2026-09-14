@@ -20,6 +20,79 @@
   var esc = CBA.esc;
 
   /* ============================================================================
+   *  שליחת דיווח ברקע (2026-09-14 — לבקשת יועד)
+   * ----------------------------------------------------------------------------
+   *  השליחה לוקחת 5-8 שניות עם שתי תמונות: העלאת הקבצים, יצירתם בדרייב,
+   *  שלוש כתיבות לגיליון ושני מיילים שנשלחים בתוך הבקשה. עד היום הכפתור אמר
+   *  "שולח…" בלי לזוז והתושב היה כלוא במסך.
+   *
+   *  עכשיו הוא חופשי לעבור מסך: ⚠️ **בקשת XHR שורדת ניווט פנימי ב-SPA** —
+   *  showScreen/CBA.navigate אינם עזיבת דף אמיתית, והבקשה ממשיכה לרוץ ומגיעה
+   *  ל-callback גם אם המסך הנראה כבר התחלף (ר' ההערה ב-sheets.js).
+   *
+   *  ⚠️ הטופס המלא — כולל התמונות המכווצות — נשמר כאן ברמת המודול ולא במסך,
+   *     כדי שכישלון בזמן שהתושב במקום אחר לא ימחק את מה שהקליד. **בזיכרון
+   *     בלבד, לא ב-localStorage:** תמונה מכווצת היא ~250KB ויש עד 8, מעל
+   *     המכסה של localStorage — והזיכרון חי בדיוק כל עוד הלשונית חיה, שזה
+   *     בדיוק הטווח שהבקשה חיה בו. את סגירת הלשונית תופס beforeunload
+   *     שב-postReadProgress.
+   * ========================================================================== */
+  var pendingReport = null;
+
+  function sendReport(data, btn) {
+    pendingReport = data;
+    /* חוסם רענון רקע כל עוד הדיווח בדרך — אותו מנגנון שמגן על העלאת קבלה. */
+    if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("gardenReport");
+
+    var release = (btn && CBA.ui.busy) ? CBA.ui.busy(btn, "שולח…") : function () {};
+    var prog = null;
+    if (btn && btn.parentNode) {
+      prog = document.createElement("div");
+      prog.className = "gd-progress";
+      prog.textContent = "מעלה את הדיווח…";
+      btn.parentNode.insertBefore(prog, btn.nextSibling);
+    } else {
+      CBA.ui.toast("שולח את הדיווח…");
+    }
+
+    CBA.data.submitGardenReport(data, function (res) {
+      if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gardenReport");
+      /* isConnected עונה בדיוק על השאלה "התושב עדיין בטופס?" — כשהמסך מתחלף
+         ה-container נכתב מחדש והכפתור מתנתק מה-DOM. בלי צורך לחשוף את
+         currentScreen מ-app.js. */
+      var onForm = !!(btn && btn.isConnected);
+      if (prog && prog.parentNode) prog.parentNode.removeChild(prog);
+      release();
+
+      if (res && res.ok) {
+        pendingReport = null;
+        CBA.ui.toast("הדיווח נשלח · מספר " + res.id);
+        /* ⚠️ לנווט רק אם הוא עדיין בטופס. אם הוא כבר עבר למסך אחר, גרירה
+           חזרה לרשימת הדיווחים היא בדיוק מה שהיציאה-ברקע באה למנוע. */
+        if (onForm) CBA.navigate("resGarden");
+        return;
+      }
+
+      var msg = (res && res.error) || "לא הצלחנו לשלוח את הדיווח";
+      if (onForm) return CBA.ui.alert(msg);
+      CBA.ui.confirm(msg + ". מה שכתבת נשמר — לנסות לשלוח שוב?", {
+        title: "השליחה נכשלה", okText: "נסה שוב", cancelText: "לא עכשיו"
+      }).then(function (yes) {
+        if (yes) sendReport(pendingReport, null);
+      });
+    }, function (pct) {
+      var up = pct < 100;
+      /* כש-pct מגיע ל-100 הבייטים אצל גוגל אבל השרת עוד עובד כמה שניות —
+         ולכן הטקסט משתנה במקום להיתקע על "100%". */
+      var txt = up ? ("מעלה את הדיווח… " + pct + "%") : "הדיווח נשלח, מעבד בשרת…";
+      if (prog) prog.textContent = txt;
+      if (btn && btn.isConnected && CBA.ui.busyText) {
+        CBA.ui.busyText(btn, up ? ("שולח… " + pct + "%") : "מעבד בשרת…");
+      }
+    });
+  }
+
+  /* ============================================================================
    *  כיווץ תמונות לפני שליחה (2026-09-08 — תיקון ביצועים)
    * ----------------------------------------------------------------------------
    *  עד היום התמונה נשלחה כמו שהיא: FileReader -> base64, שמנפח בעוד שליש.
@@ -625,6 +698,36 @@
           }
         });
 
+        /* ---- שחזור דיווח שנכשל (restore-pending) ----
+           התושב בחר "לא עכשיו" אחרי כישלון, וחזר לטופס. משחזרים כאן את מה
+           שהקליד במקום לתת לו להתחיל מאפס.
+           ⚠️ הקטגוריה משוחזרת ע"י click על הכפתור הקיים ולא ע"י קביעת
+              state.cat ידנית — כך גם המצב הוויזואלי (is-on) נשאר נכון, ואם
+              הלוגיקה של הבחירה תשתנה מתישהו השחזור ילך אחריה מעצמו.
+           ⚠️ הנעיצה על המפה **אינה** מצוירת מחדש (ל-CBA.map אין היום API
+              לנעיצה התחלתית), אבל הקואורדינטות עצמן משוחזרות ל-state ויישלחו
+              כרגיל. הטקסט אומר את זה במדויק במקום להבטיח סימון שלא רואים. */
+        if (pendingReport) {
+          var pr = pendingReport;
+          var catBtn = container.querySelector('.gd-cat[data-c="' + esc(pr.category || "") + '"]');
+          if (catBtn) catBtn.click();
+          descEl.value = pr.desc || "";
+          descEl.dispatchEvent(new Event("input"));
+          container.querySelector("#gd-place").value = pr.place || "";
+          container.querySelector("#gd-phone").value = pr.phone || "";
+          if (pr.x !== null && pr.x !== undefined && pr.x !== "") {
+            state.x = pr.x; state.y = pr.y; state.area = pr.area || "";
+            locEl.textContent = "המיקום שסימנת נשמר. אפשר ללחוץ על המפה כדי לסמן מחדש.";
+            locEl.classList.add("is-ok");
+          }
+          (pr.photos || []).forEach(function (ph) {
+            if (state.photos.length >= photoMax) return;
+            state.photos.push(ph);
+            drawThumbs("data:" + (ph.mime || "image/jpeg") + ";base64," + ph.data);
+          });
+          CBA.ui.toast("שחזרנו את הדיווח שלא נשלח");
+        }
+
         // ---- שליחה ----
         var sendBtn = container.querySelector("#gd-send");
         sendBtn.addEventListener("click", function () {
@@ -633,24 +736,14 @@
           if (state.x === null && !place) {
             return CBA.ui.alert("צריך לסמן מיקום על המפה או לכתוב אותו במילים");
           }
-          sendBtn.disabled = true;
-          sendBtn.innerHTML = "שולח…";
-          CBA.data.submitGardenReport({
+          sendReport({
             category: state.cat,
             desc: descEl.value.trim(),
             place: place,
             phone: container.querySelector("#gd-phone").value.trim(),
             x: state.x, y: state.y, area: state.area || "",
-            photos: state.photos
-          }, function (res) {
-            if (!res || !res.ok) {
-              sendBtn.disabled = false;
-              sendBtn.innerHTML = ico("send") + " שליחת דיווח";
-              return CBA.ui.alert((res && res.error) || "לא הצלחנו לשלוח את הדיווח");
-            }
-            CBA.ui.toast("הדיווח נשלח · מספר " + res.id);
-            CBA.navigate("resGarden");
-          });
+            photos: state.photos.slice()
+          }, sendBtn);
         });
       });
     }

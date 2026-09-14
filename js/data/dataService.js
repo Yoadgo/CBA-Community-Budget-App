@@ -1631,8 +1631,18 @@ CBA.data = (function () {
        הסינון נעשה בשרת לפי המושב החתום, לא כאן. ר' handleMyGardenReports_. */
     getGardenMeta: function (cb) { CBA.sheets.get({ action: "gardenMeta" }, cb); },
     getMyGardenReports: function (cb) { CBA.sheets.get({ action: "myGardenReports" }, cb); },
-    submitGardenReport: function (payload, cb) {
-      CBA.sheets.postRead("submitGardenReport", payload, cb);
+    /* ⚠️ postReadProgress ולא postRead, משתי סיבות (2026-09-14):
+       (א) **הגנת beforeunload.** ל-postRead אין אחת, ולכן תושב שסגר/רענן את
+           הדף באמצע שליחה איבד את הדיווח **בשקט** — בלי שורה בגיליון ובלי
+           הודעת שגיאה. זה אותו באג בדיוק שנמצא בייצור ב-submitReceipt
+           (10.8.26) ותוקן שם, ונשאר פתוח כאן.
+       (ב) אחוזי העלאה אמיתיים. הדיווח נושא עד 8 תמונות Base64, והשליחה
+           לוקחת כמה שניות — בלי מדד אמיתי הכפתור נראה תקוע.
+       onProgress הוא פרמטר שלישי אופציונלי; קריאות קיימות עם cb בלבד
+       ממשיכות לעבוד כמו שהן. */
+    submitGardenReport: function (payload, cb, onProgress) {
+      CBA.sheets.postReadProgress("submitGardenReport", payload,
+        onProgress || function () {}, cb);
     },
     gardenFeedback: function (id, positive, note, cb) {
       CBA.sheets.postRead("gardenFeedback", { id: id, positive: positive, note: note }, cb);
