@@ -52,6 +52,8 @@
        היחיד שנשאר מסומן במפורש), repeat מסמן משימה חוזרת מתוכנית העבודה,
        ו-filter/help הם שני הלחצנים בשורת הבקרה. */
     person: '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/>',
+    // מצלמה — תמונות שצירף התושב לדיווח (PHASE 4.2)
+    camera: '<rect x="3" y="6.5" width="18" height="13" rx="2.5"/><circle cx="12" cy="13" r="3.2"/><path d="M8.5 6.5 9.6 4.5h4.8l1.1 2"/>',
     repeat: '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14"/>' +
             '<path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v2a3 3 0 0 1-3 3h-14"/>',
     filter: '<path d="M3 5h18M6.5 12h11M10 19h4"/>',
@@ -721,6 +723,15 @@
                 ? '<span class="gt-res">' + ico("person") +
                   (t.repId ? esc(GL.reportRef(t.repId)) : 'תושב') + '</span><i>·</i>'
                 : (t.kind === GK_ROUTINE ? ico("repeat") + '<i>·</i>' : '')) +
+              /* ---- תמונות הדיווח (PHASE 4.2, 2026-09-14) ----
+                 עד היום התושב צילם, התמונה נשמרה ב-Drive, ומי שיצא לשטח
+                 לא ראה אותה מעולם. זה מה שהופך "יש רטיבות ליד השביל"
+                 לביקור אחד במקום שניים. מוצג רק כשיש תמונות בפועל. */
+              ((t.photos && t.photos.length)
+                ? '<button type="button" class="gt-nb gt-ph" data-act="photos" ' +
+                    'title="צפייה בתמונות שצירף התושב">' + ico("camera") +
+                    t.photos.length + '</button><i>·</i>'
+                : '') +
               /* שדה שכבר מופיע בכותרת הקבוצה אינו חוזר על הכרטיס. בסידור
                  לפי אזור, האזור נכתב פעם אחת מעל הקבוצה ואז שוב על כל אחת
                  מתשע המשימות שמתחתיו — וכשהשם ארוך ("שכונה מרכזית צפונית")
@@ -819,6 +830,11 @@
         if (!art) return;
         var id = art.dataset.id;
         var act = btn.dataset.act;
+        if (act === "photos") {
+          var pt = byId(id);
+          if (pt && CBA.photos) CBA.photos.open(pt.photos, "תמונות " + (pt.repId ? GL.reportRef(pt.repId) : "הדיווח"));
+          return;
+        }
         if (act === "hist") return openHistory(id);
         if (act === "menu") return openMenu(id);
         if (act === "plan") return askWeek(id);

@@ -1839,8 +1839,17 @@ function planSave() {
   var doSave = function () {
     clearTimeout(planSaveTimer);
     if (CBA.sheets.registerFlush) CBA.sheets.registerFlush("planSave", null);   // כבר נשלח — אין מה להבריח
-    CBA.data.saveBudgetToSheet(year, function () {
+    CBA.data.saveBudgetToSheet(year, function (res) {
       if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
+      /* ⚠️ עד 14.9 ה-callback התעלם לגמרי מהתשובה (PHASE 4.2). שמירת תקציב
+         שנדחתה — שנה נעולה, אין הרשאת תקציב, נעילה שלא נתפסה — הייתה נגמרת
+         ב"נשמר ✓" בכותרת, והמנהל המשיך לערוך עוד עשר דקות על בסיס שלא קיים
+         בגיליון. זה בדיוק התסריט של אובדן עריכות התקציב מ-9.9. */
+      if (res && res.ok === true) return;
+      if (CBA.ui && CBA.ui.toast) {
+        CBA.ui.toast("התקציב לא נשמר" + ((res && res.error) ? " — " + res.error : "") +
+                     ". אל תסגרו את המסך — נסו שינוי נוסף כדי לשלוח שוב.", "error");
+      }
     });
   };
   if (CBA.sheets.registerFlush) CBA.sheets.registerFlush("planSave", doSave);

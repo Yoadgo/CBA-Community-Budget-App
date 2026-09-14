@@ -145,7 +145,9 @@
     /* דיווחים על האפליקציה (2026-09-09) — מנהל-על בלבד. *שליחת* דיווח פתוחה
        לכל משתמש מחובר (הכפתור הצף), אבל הקריאה של כולם היא ניהול המוצר.
        השרת אוכף את זה בעצמו ב-GET_ACTION_PERMS.appReports — כאן רק מסתירים. */
-    appReports: PERM.SUPER
+    appReports: PERM.SUPER,
+    /* בדיקת החזרים (PHASE 4.2) — אותה הרשאה כמו שאר מסכי הכסף. */
+    reconcile: PERM.BUDGET
   };
 
   function myPerms() {
@@ -188,7 +190,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "reconcile"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -1723,6 +1725,14 @@
 
   window.CBA = window.CBA || {};
   window.CBA.navigate = showScreen;
+
+  /* ציור מחדש של המסך הנוכחי בלי לנווט (PHASE 4.2). נולד בשביל ההחזרה לאחור
+     של תנועה שנדחתה בשרת: אחרי שהמערך המקומי חוזר לקדמותו, המסך עדיין מציג
+     את המצב האופטימי. silent=true שומר על מיקום הגלילה ועל הפעימה העדינה,
+     בדיוק כמו רענון רקע — זו לא "כניסה מחדש למסך". */
+  window.CBA.redraw = function () {
+    if (currentScreen) showScreen(currentScreen, { silent: true });
+  };
 
   /* שמו של מסך בעברית, מתוך הגדרת הטאבים עצמה (2026-09-09). נולד בשביל
      חלונית הדיווחים, שצריכה לרשום "התושב היה במסך X" — ו"budget" אינו משפט

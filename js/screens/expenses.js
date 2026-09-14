@@ -89,6 +89,10 @@ CBA.screens.expenses = {
         ${txViewTab("over", "חריגות")}
         ${txCustomViews.map(txCustomTab).join("")}
         <button class="tx-view tx-view--add" data-save-view title="שמור את הסינון הנוכחי כתצוגה">+ שמור תצוגה</button>
+        <!-- בדיקת החזרים (PHASE 4.2) — היעד יושב כאן ולא בבר הניווט בכוונה:
+             הוא פעולה חודשית על ההוצאות, לא מודול בפני עצמו, וזה המסך שממנו
+             מגיעים אליו. ר' js/screens/reconcile.js -->
+        <button class="tx-view tx-view--rec" data-goto-reconcile title="השוואת רשימת התשלומים של העמותה מול הבקשות שאושרו">בדיקת החזרים</button>
       </div>
 
       <div class="tx-bar">
@@ -494,6 +498,8 @@ function txBind(container) {
       CBA.screens.expenses.render(container);
     });
   });
+  const recBtn = container.querySelector("[data-goto-reconcile]");
+  if (recBtn) recBtn.addEventListener("click", function () { CBA.navigate("reconcile"); });
   const saveViewBtn = container.querySelector("[data-save-view]");
   // (2026-08-19, ממצא 2.6) כל החלונות במסך הזה עברו מ-window.* ל-CBA.ui —
   // אותה שפה ויזואלית כמו שאר האפליקציה, ובלי לחסום את הדפדפן.

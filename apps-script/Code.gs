@@ -163,7 +163,11 @@ var ACTION_PERMS = {
   /* דיווחים על האפליקציה (2026-09-09). ⚠️ submitAppReport **אינו** כאן
      בכוונה — הוא פתוח לכל משתמש מחובר ופעיל, כמו הגשת קבלה ודיווח גינון.
      סימון "טופל" ותגובה לתושב הם ניהול המוצר, ולכן מנהל-על. */
-  setAppReportDone: PERM_SUPER
+  setAppReportDone: PERM_SUPER,
+  /* קליטת קובץ החיובים (PHASE 4.2). doPost ולא doGet כי הקובץ מגיע כ-Base64
+     בגוף הבקשה. הפעולה **קוראת בלבד** — היא לא כותבת שום דבר לגיליון
+     העבודה; היא ממירה קובץ ומחזירה טבלה. */
+  parseChargeFile: PERM_BUDGET
 };
 
 /* מה ש**הוסר** מכאן ב-2026-09-09, ולמה זה חשוב: היו כאן שמונה מפתחות
@@ -216,7 +220,11 @@ var GET_ACTION_PERMS = {
   gardenStats: PERM_GARDEN, gardenTaskLog: PERM_GARDEN,
   gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
   gymList: PERM_GYM,
-  appReports: PERM_SUPER
+  appReports: PERM_SUPER,
+  /* תמונת דיווח גינון (PHASE 4.2) — need=null בכוונה: התושב המדווח *וגם*
+     צוות הגינון צריכים אותה, ואלה שתי הרשאות שונות לגמרי. הבדיקה האמיתית
+     יושבת בתוך ההנדלר (gardenPhotoAllowed_) ולא כאן. */
+  gardenPhoto: null
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
@@ -435,6 +443,9 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'appReports') {
       return handleAppReports_(e.parameter);
     }
+    if (e && e.parameter && e.parameter.action === 'gardenPhoto') {
+      return handleGardenPhoto_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'listSignups') {
       return handleListSignups_(e.parameter);
     }
@@ -649,7 +660,7 @@ function doGet(e) {
          יידע מול מה להשוות בבדיקות הזולות שאחריו. בלי זה, אחרי משיכה מלאה
          אין לו נקודת ייחוס והוא היה מושך שוב בבדיקה הבאה. ר' bumpRev_. */
       domains: currentDomains_(),
-      ok: true, version: 'v42-app-reports', years: years,
+      ok: true, version: 'v43-charge-photos', years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -790,6 +801,7 @@ function doPostDispatch_(ss, body) {
       // לכל תושב מחובר ופעיל, ופועלות רק על השורות שלו לפי המושב החתום.
       // דיווחים על האפליקציה (2026-09-09). submitAppReport אינו ב-ACTION_PERMS
       // בכוונה — פתוח לכל משתמש מחובר ופעיל, ר' ההערה שם.
+      case 'parseChargeFile':     return json_(parseChargeFile_(ss, body));
       case 'submitAppReport':     return json_(submitAppReport_(ss, body));
       case 'setAppReportDone':    return json_(setAppReportDone_(ss, body));
       case 'submitGardenReport':  return json_(submitGardenReport_(ss, body));
@@ -823,7 +835,26 @@ function doPostDispatch_(ss, body) {
     }
 }
 
+/* ============================================================================
+ *  נעילה על כתיבת תנועה  (PHASE 4.2, 2026-09-14)
+ * ----------------------------------------------------------------------------
+ *  שתי הפונקציות קוראות את כל עמודת המזהים, מחליטות על שורה, ואז כותבות —
+ *  ובין הקריאה לכתיבה יכולה לרוץ בקשה שנייה. Apps Script מריץ בקשות במקביל,
+ *  וזה קורה באמת: שני מנהלים באותה ישיבת ועד, או מנהל אחד ששומר תנועה בזמן
+ *  שתושב מגיש קבלה. בלי נעילה שתיהן יכולות למצוא את אותה "שורה אחרונה"
+ *  ולדרוס זו את זו, או שמחיקה תזיז את המספור מתחת לרגליים של שמירה.
+ *
+ *  אותו דפוס בדיוק שכבר קיים ב-renameCategory_, ב-submitGardenReport_
+ *  וב-submitAppReport_ — לא מנגנון חדש.
+ * ========================================================================== */
 function saveTransaction_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); }
+  catch (e) { return { ok: false, error: 'המערכת עסוקה בשמירה אחרת — נסו שוב בעוד רגע' }; }
+  try { return saveTransactionRow_(ss, body); } finally { lock.releaseLock(); }
+}
+
+function saveTransactionRow_(ss, body) {
   var sh = ss.getSheetByName('תנועות ' + body.year);
   if (!sh) return { ok: false, error: 'אין טאב תנועות לשנה ' + body.year };
   var t = body.tx;
@@ -918,6 +949,13 @@ function saveTransaction_(ss, body) {
 }
 
 function deleteTransaction_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); }
+  catch (e) { return { ok: false, error: 'המערכת עסוקה בשמירה אחרת — נסו שוב בעוד רגע' }; }
+  try { return deleteTransactionRow_(ss, body); } finally { lock.releaseLock(); }
+}
+
+function deleteTransactionRow_(ss, body) {
   var sh = ss.getSheetByName('תנועות ' + body.year);
   if (!sh) return { ok: false, error: 'אין טאב' };
   var n = Math.max(sh.getLastRow() - 1, 0);
@@ -1924,6 +1962,19 @@ function renameCategory_(ss, body) {
     var bud = ss.getSheetByName('תקציב ' + year);
     if (bud) {
       var bh = headerMap_(bud), kc = bh['סעיף'], last = bud.getLastRow();
+      /* ⚠️ בדיקת התנגשות שם (PHASE 4.2, 2026-09-14). שם הסעיף **הוא המפתח**
+         שמקשר תנועה לתקציב — אין מזהה נפרד (ר' הלולאה על עמודת 'סעיף' למטה).
+         שינוי שם ל-שם שכבר תפוס היה ממזג בשקט שני סעיפים לאחד: כל התנועות
+         של הישן היו מצטרפות לתקציב של הקיים, בלי שום הודעה ובלי דרך לפרק
+         את זה אחר כך. נבדק לפני כל כתיבה, ולא אחריה. */
+      if (kc && last >= 2) {
+        var allKeys = bud.getRange(2, kc, last - 1, 1).getValues();
+        for (var q = 0; q < allKeys.length; q++) {
+          if (String(allKeys[q][0]).trim() === newN) {
+            return { ok: false, error: 'כבר קיים סעיף בשם "' + newN + '". שני סעיפים באותו שם היו מתמזגים לאחד.' };
+          }
+        }
+      }
       if (kc && last >= 2) {
         var keys = bud.getRange(2, kc, last - 1, 1).getValues();
         for (var i = 0; i < keys.length; i++) {
@@ -2514,7 +2565,11 @@ var ACTION_DOMAIN = {
   saveServices: 'services', notifyServiceUpdate: 'services',
   /* תחום משלו ולא ברירת המחדל 'other': 'other' נכלל במפתח המטמון של המטען
      הראשי, כלומר כל דיווח על האפליקציה היה מבטל את המטמון של *כולם*. */
-  submitAppReport: 'appReports', setAppReportDone: 'appReports'
+  submitAppReport: 'appReports', setAppReportDone: 'appReports',
+  /* קליטת קובץ החיובים אינה משנה שום נתון בגיליון — היא ממירה קובץ זמני
+     וקוראת אותו. ברירת המחדל 'other' הייתה מבטלת את מטמון המטען הראשי
+     של *כל* המשתמשים בכל העלאה, בלי שהשתנה דבר. */
+  parseChargeFile: 'charge'
 };
 
 function bumpRev_(action) {
@@ -8545,7 +8600,7 @@ function handleGardenTasks_(p) {
        היום לפי השני, ואף מסך לא הציג את שניהם — כך שאי אפשר היה למצוא תקלה
        לפי המספר שנמסר עליה. מהיום מספר הפנייה נוסע עם המשימה, והוא היחיד
        שמוצג. ר' הצוות האדום, 9.9. */
-    var repOf = {};
+    var repOf = {}, photoOf = {};
     var rshx = ss.getSheetByName(GARDEN_REPORTS_SHEET);
     if (rshx && rshx.getLastRow() > 1) {
       var rcx = gardenCols_(rshx), rvx = rshx.getDataRange().getValues();
@@ -8555,10 +8610,22 @@ function handleGardenTasks_(p) {
         /* הראשון מנצח: אחרי איחוד כמה דיווחים מצביעים לאותה משימה, והמספר
            שמוצג הוא של הפנייה שפתחה אותה. */
         if (tk && rk && !repOf[tk]) repOf[tk] = rk;
+        /* ---- תמונות (PHASE 4.2, 2026-09-14) ----
+           נאספות **באותה לולאה** ולא בקריאת גיליון שנייה: הטאב כבר בזיכרון,
+           וקריאה נוספת הייתה מוסיפה עוד round-trip למסך שכבר נלחמנו על
+           זמן הטעינה שלו. מוחזרים מזהי Drive בלבד — הקובץ עצמו נמשך
+           לפי דרישה דרך action=gardenPhoto, אחרי בדיקת הרשאה.
+           ⚠️ אחרי איחוד: התמונות של **כל** הפניות שמצביעות למשימה. */
+        if (tk && rcx['תמונות'] !== undefined) {
+          var pid = String(rvx[ri][rcx['תמונות']] || '').split(',')
+            .map(function (x) { return x.trim(); }).filter(Boolean);
+          if (pid.length) photoOf[tk] = (photoOf[tk] || []).concat(pid);
+        }
       }
     }
     for (var q2 = 0; q2 < rows.length; q2++) {
       if (repOf[rows[q2].id]) rows[q2].repId = repOf[rows[q2].id];
+      if (photoOf[rows[q2].id]) rows[q2].photos = photoOf[rows[q2].id];
     }
     /* areas/categories מוחזרות בסדר שבו הן מוגדרות בטאב ההגדרות (עמודת "סדר"),
        ולא לפי א"ב. זה הסדר שבו הן נכתבו — צפון לדרום — והוא הסדר שבו אחראי
@@ -10252,4 +10319,171 @@ function setAppReportDone_(ss, body) {
     } catch (e) { /* כשל מייל לא מבטל את מה שכבר נכתב בגיליון */ }
   }
   return { ok: true };
+}
+
+
+/* ============================================================================
+ *  הגשת תמונת דיווח גינון  (PHASE 4.2, 2026-09-14)
+ * ----------------------------------------------------------------------------
+ *  התמונות נשמרו מהיום הראשון של המודול (submitGardenReport_ כותב מזהי Drive
+ *  לעמודת 'תמונות') — ו**אף מסך לא הציג אותן**. התושב צירף שמונה תמונות
+ *  וראה ריבוע עם ספרה; הגנן, שהוא היחיד שבאמת צריך לראות איך נראית התקלה,
+ *  לא ראה כלום. זה החוב השקט הגדול ביותר במודול.
+ *
+ *  הקבצים **נשארים פרטיים ב-Drive** והשרת מגיש אותם אחרי בדיקה — בדיוק
+ *  הדפוס של handleReceiptFile_ (2026-08-24). לא משתפים ולא מקשרים ישירות.
+ *
+ *  ⚠️ למה לא השתמשנו בפעולת 'receipt' הקיימת: היא מתירה למנהל-על ולבעל
+ *     הרשאת תקציב, ובודקת בעלות מול טאב ה**קבלות**. אף אחד משלושת המסלולים
+ *     האלה אינו נכון כאן — הגנן (PERM_GARDEN) היה נחסם, והתושב המדווח היה
+ *     נחסם. הרשאה שונה = שער משלה.
+ *
+ *  ⚠️ הקבלן החיצוני (isExternal) **כן** רואה את התמונות. זו החלטה ולא שכחה:
+ *     התמונה היא של תקלה בשטח ציבורי והיא כל מה שמאפשר לו להגיע מוכן, בעוד
+ *     שמה שסוננו ממנו קודם (handleGardenTaskLog_) הם *שמות התושבים*. אם
+ *     תרצה להפוך את זה — להוסיף `&& !perm.isExternal` בשורה של הצוות למטה.
+ * ========================================================================== */
+function gardenPhotoAllowed_(ss, id, perm) {
+  perm = perm || {};
+  // צוות הגינון ומנהל-על — כל תמונה
+  if (perm.isSuper || (perm.perms || []).indexOf(PERM_GARDEN) !== -1) return true;
+  // תושב — רק תמונה שהוא עצמו צירף
+  var famId = String(perm.familyId || '');
+  if (!famId) return false;
+  var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+  if (!rsh || rsh.getLastRow() < 2) return false;
+  var c = gardenCols_(rsh);
+  var v = rsh.getDataRange().getValues();
+  for (var r = 1; r < v.length; r++) {
+    if (String(v[r][c['מזהה משפחה']]).trim() !== famId) continue;
+    var ids = String(v[r][c['תמונות']] || '').split(',');
+    for (var k = 0; k < ids.length; k++) if (ids[k].trim() === id) return true;
+  }
+  return false;
+}
+
+function handleGardenPhoto_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);   // מושב תקין + תושב פעיל
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+
+    var id = String((p && p.id) || '').trim();
+    if (!/^[a-zA-Z0-9_-]{10,}$/.test(id)) return json_({ ok: false, error: 'מזהה קובץ לא תקין' });
+
+    if (!gardenPhotoAllowed_(ss, id, gate.perm)) {
+      return json_({ ok: false, error: 'אין לך הרשאה לצפות בתמונה הזו' });
+    }
+
+    var file;
+    try { file = DriveApp.getFileById(id); }
+    catch (err) { return json_({ ok: false, error: 'התמונה לא נמצאה ב-Drive' }); }
+
+    var size = 0;
+    try { size = file.getSize(); } catch (err) { size = 0; }
+    if (size > RECEIPT_MAX_BYTES) {
+      return json_({ ok: false, tooLarge: true, size: size, error: 'התמונה גדולה מכדי להציג אותה כאן' });
+    }
+    var blob = file.getBlob();
+    return json_({
+      ok: true, name: file.getName(), size: size,
+      mimeType: blob.getContentType() || 'image/jpeg',
+      dataBase64: Utilities.base64Encode(blob.getBytes())
+    });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+
+/* ============================================================================
+ *  קליטת קובץ החיובים החודשי  (PHASE 4.2, 2026-09-14)
+ * ----------------------------------------------------------------------------
+ *  מנוע ההשוואה (js/data/reconcile.js) נכתב ונבדק כבר ב-7.9 ומאז שכב בלי
+ *  שאיש קרא לו, כי לא היה מי שיביא לו את הטבלה. זו החוליה החסרה.
+ *
+ *  המסלול: הדפדפן שולח את קובץ ה-xlsx כ-Base64 -> אנחנו מעלים אותו ל-Drive
+ *  **תוך המרה לגיליון** -> קוראים את הערכים -> **מוחקים את הקובץ הזמני**.
+ *
+ *  ⚠️ ההמרה נעשית ב-UrlFetch ישירות מול Drive API ו**לא** דרך "שירות Drive
+ *     המתקדם". זה חשב: השירות המתקדם דורש הפעלה ידנית חד-פעמית בעורך
+ *     Apps Script שרק בעל החשבון יכול לבצע, וזה היה הופך כל פריסה עתידית
+ *     לפרויקט חדש למשימה ידנית שקל לשכוח. ScriptApp.getOAuthToken() כבר
+ *     נושא הרשאת Drive מלאה, כי הקובץ הזה משתמש ב-DriveApp לקבלות
+ *     ולתמונות הגינון — אז אין כאן הרשאה חדשה ואין מה להפעיל.
+ *
+ *  ⚠️ הקובץ הזמני נמחק ב-finally — גם כשההמרה הצליחה וגם כשהקריאה נכשלה.
+ *     קובץ חיובים שנשאר ב-Drive הוא דליפת מידע פיננסי, לא "לכלוך".
+ *
+ *  ⚠️ אנחנו **לא** מפרשים כאן את התוכן. הפירוש, זיהוי המגזר, הדילוג על
+ *     שורת הסה"כ וכל ההשוואה — כולם ב-reconcile.js בצד הלקוח, שנבדק ב-21
+ *     בדיקות. שרת שיפרש בעצמו היה מייצר מקור אמת שני.
+ * ========================================================================== */
+var CHARGE_SHEET_PREFERRED = 'פלמחים';
+var CHARGE_MAX_ROWS = 2000;
+
+function parseChargeFile_(ss, body) {
+  var b64 = String(body.data || '');
+  if (!b64) return { ok: false, error: 'לא התקבל קובץ' };
+  var name = String(body.fileName || 'charges.xlsx');
+
+  var tempId = '';
+  try {
+    var token = ScriptApp.getOAuthToken();
+    var boundary = 'cba' + Utilities.getUuid();
+    var meta = { name: name.replace(/\.[^.]+$/, '') + ' (זמני)', mimeType: 'application/vnd.google-apps.spreadsheet' };
+
+    /* גוף multipart נבנה כבייטים ולא כמחרוזת: חיבור מחרוזות היה הופך את
+       תוכן הקובץ הבינארי ל-UTF-8 ומשחית אותו. */
+    var pre = Utilities.newBlob(
+      '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(meta) +
+      '\r\n--' + boundary + '\r\nContent-Type: ' +
+      (body.mime || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') +
+      '\r\n\r\n').getBytes();
+    var mid = Utilities.base64Decode(b64);
+    var post = Utilities.newBlob('\r\n--' + boundary + '--\r\n').getBytes();
+
+    var payload = Utilities.newBlob(pre.concat(mid).concat(post)).getBytes();
+
+    var resp = UrlFetchApp.fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+        method: 'post',
+        contentType: 'multipart/related; boundary=' + boundary,
+        payload: payload,
+        headers: { Authorization: 'Bearer ' + token },
+        muteHttpExceptions: true
+      });
+    if (resp.getResponseCode() >= 300) {
+      return { ok: false, error: 'ההמרה נכשלה (' + resp.getResponseCode() + '). ודאו שזה קובץ Excel תקין.' };
+    }
+    tempId = (JSON.parse(resp.getContentText()) || {}).id || '';
+    if (!tempId) return { ok: false, error: 'ההמרה לא החזירה קובץ' };
+
+    var tmp = SpreadsheetApp.openById(tempId);
+    var sheets = tmp.getSheets().map(function (sh) { return sh.getName(); });
+    var want = String(body.sheet || '').trim();
+    var target = null;
+    if (want) target = tmp.getSheetByName(want);
+    if (!target) target = tmp.getSheetByName(CHARGE_SHEET_PREFERRED);
+    if (!target) target = tmp.getSheets()[0];
+    if (!target) return { ok: false, error: 'הקובץ ריק' };
+
+    var lastRow = Math.min(target.getLastRow(), CHARGE_MAX_ROWS);
+    var lastCol = target.getLastColumn();
+    if (lastRow < 2 || lastCol < 2) return { ok: false, error: 'הגיליון "' + target.getName() + '" ריק' };
+
+    /* getDisplayValues ולא getValues: עמודת "ת. תשלום" מגיעה לפעמים כתאריך
+       ולפעמים כטקסט, ו-creditDateFor בלקוח יודע לקרוא את שתי הצורות —
+       אבל אובייקט Date לא שורד JSON.stringify בצורה צפויה. */
+    var grid = target.getRange(1, 1, lastRow, lastCol).getDisplayValues();
+    return { ok: true, grid: grid, sheet: target.getName(), sheets: sheets, rows: lastRow - 1 };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    if (tempId) {
+      try { DriveApp.getFileById(tempId).setTrashed(true); }
+      catch (e) { /* אם המחיקה נכשלה אין מה לעשות מכאן — ר' האזהרה למעלה */ }
+    }
+  }
 }

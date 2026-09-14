@@ -243,6 +243,13 @@
         Array.prototype.forEach.call(listEl.querySelectorAll("[data-del]"), function (b) {
           b.addEventListener("click", function () { askDelete(b.dataset.del); });
         });
+        // התמונות שהתושב עצמו צירף (PHASE 4.2) — ר' js/ui/photos.js
+        Array.prototype.forEach.call(listEl.querySelectorAll("[data-photos]"), function (b) {
+          b.addEventListener("click", function () {
+            var rep = all.filter(function (x) { return String(x.id) === String(b.dataset.photos); })[0];
+            if (rep && CBA.photos) CBA.photos.open(rep.photos, "התמונות שצירפת לדיווח #" + rep.id);
+          });
+        });
       }
 
       function statTile(kind, iconName, num, label) {
@@ -258,6 +265,23 @@
         var c = catOf(r.category);
         var idx = stageIdx(r.stage);
         var done = r.stage === "הושלם";
+        /* 🔴 2026-09-14 — שני תיקונים, ושניהם נמדדו בהרמס.
+           (א) דיווח שנסגר **בלי שבוצעה עבודה** הציג "הושלם" מעל מסלול נקודות
+               ירוק ומלא, ומיד מתחתיו "לא נפתח טיפול · בוטל" — שתי אמירות
+               סותרות באותו כרטיס. המילון המשותף (גל 1) כבר יודע להכריע; הוא
+               פשוט לא חובר לכאן.
+           ⚠️ (ב) אבל **רק על דיווח סגור**. `L.state` נכתב לאובייקט *משימה*,
+               ובדיקה 9 שלו היא `if (!t.week)`. הדיווח שהשרת שולח לתושב לא
+               מכיל `week` כלל, ולכן שימוש גורף הפך כל דיווח פתוח ל"התקבל,
+               ממתין לשיבוץ" — גם כשהוא "בטיפול". נמדד: #39 בשלב "בטיפול"
+               הציג "ממתין לשיבוץ". לדיווח פתוח סולם 5 השלבים של התושב הוא
+               הניסוח הנכון, והוא גם מה שהנקודות מציירות.
+           ⚠️ (ג) "אוחד" מוחרג — לזה יש כבר בלוק משלו מתחת, ו-L.state היה
+               אומר את אותו משפט פעם שנייה. */
+        var shut = !!(r.closure && r.closure !== "בוצע" && !r.mergedInto);
+        var st = (r.closure && !r.mergedInto && CBA.gardenLang && CBA.gardenLang.state)
+          ? CBA.gardenLang.state(r, "resident")
+          : { text: r.stage, tone: "" };
         /* ⚠️ עד 9.9 התנאי היה i < idx בלבד, כלומר **השלב הנוכחי לא הודלק**:
            דיווח חדש בשלב "התקבל" הציג חמש נקודות ריקות, בדיוק ברגע שבו התושב
            הכי צריך לראות שמשהו קרה. עכשיו: מה שמאחור מלא, הנוכחי מודגש. */
@@ -268,29 +292,20 @@
         }
         var flagTxt = r.flag ? flagText(r.flag) : "";
         var crit = r.flag === "דורש בדיקה חוזרת";
-        /* 🔴 2026-09-14 — עד כאן הציר הציג את **שם השלב הגולמי** (`r.stage`),
-           ולכן דיווח שבוטל הציג "הושלם" מעל מסלול נקודות ירוק ומלא, ומיד
-           מתחתיו "לא נפתח טיפול · בוטל". שתי אמירות סותרות באותו כרטיס.
-           המילון המשותף (גל 1) כבר יודע להכריע בין closure, flag ושלב
-           ולהחזיר **משפט אחד**; הוא פשוט לא חובר לכאן.
-           ⚠️ נפילה־לאחור ל-r.stage אם המילון לא נטען — לעולם לא כרטיס ריק. */
-        var st = (CBA.gardenLang && CBA.gardenLang.state)
-          ? CBA.gardenLang.state(r, "resident")
-          : { text: r.stage, tone: "" };
-        /* "נסגר בלי שבוצעה עבודה" הוא לא הצלחה, ולכן גם המסלול לא ירוק. */
-        var shut = !!(r.closure && r.closure !== "בוצע" && !r.mergedInto);
         return '<article class="gd-rep k-' + c.key + '">' +
           /* ⚠️ 2026-09-09 — כאן ישב ריבוע עם גרדיאנט ירוק ותכונת data-photo
-             שאיש לא קרא אף פעם. התוצאה: מי שצירף שמונה תמונות ראה בדיוק את
-             אותו ריבוע כמו מי שלא צירף כלום, ולא היה לו שום אישור שהתמונות
-             נשלחו. עד שנחליט איך מגישים את התמונות עצמן (הן מזהי Drive, לא
-             כתובות), האריח מציג את הקטגוריה — מידע אמיתי — ומונה תמונות. */
-          '<span class="gd-rep__th">' + ico(c.ico) +
-            (r.photos && r.photos.length
-              ? '<b class="gd-rep__ph" title="' + r.photos.length + ' תמונות שצירפת">' +
-                r.photos.length + '</b>'
-              : '') +
-          '</span>' +
+             שאיש לא קרא אף פעם, ומי שצירף שמונה תמונות ראה בדיוק את אותו
+             ריבוע כמו מי שלא צירף כלום.
+             ✅ 2026-09-14 (PHASE 4.2) — התמונות סוף-סוף ניתנות לצפייה:
+             הקבצים נשארים פרטיים ב-Drive והשרת מגיש אותם אחרי בדיקת הרשאה
+             (action=gardenPhoto). האריח עם המונה הוא עכשיו **כפתור**. */
+          (r.photos && r.photos.length
+            ? '<button type="button" class="gd-rep__th gd-rep__th--btn" data-photos="' + esc(r.id) + '" ' +
+                'title="צפייה ב-' + r.photos.length + ' תמונות שצירפת" ' +
+                'aria-label="צפייה בתמונות שצירפת לדיווח">' + ico(c.ico) +
+                '<b class="gd-rep__ph">' + r.photos.length + '</b>' +
+              '</button>'
+            : '<span class="gd-rep__th">' + ico(c.ico) + '</span>') +
           '<div class="gd-rep__b">' +
             '<div class="gd-rep__top">' +
               '<span class="gd-rep__id">#' + esc(r.id) + '</span>' +

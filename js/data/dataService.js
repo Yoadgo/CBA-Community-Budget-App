@@ -199,28 +199,76 @@ CBA.data = (function () {
 
   // --- פעולות על תנועות (הוספה/עריכה/מחיקה) — מסונכרנות לגיליון כשמחוברים ---
   function pushConnected() { return CBA.sheets && CBA.sheets.push && CBA.mock._source === "sheets"; }
-  function syncTx(t) {
-    if (!pushConnected()) return;
-    const payload = Object.assign({}, t, { fileName: receiptFileName(t) });
-    CBA.sheets.push("saveTransaction", { year: t.year || getCurrentYear(), tx: payload });
-  }
+  /* (syncTx הוסרה 14.9 — שלושת הקוראים שלה עברו לשליחה עם בדיקת תשובה.
+     פונקציה ששולחת בלי לבדוק הייתה נשארת כאן כפיתוי לקריאה הבאה.) */
   function addTransaction(tx) {
     const seq = CBA.mock.transactions.reduce(function (m, t) { return Math.max(m, t.id || 0); }, 0) + 1;
     const row = Object.assign({ id: seq, source: "admin", status: "submitted", year: getCurrentYear() }, tx);
     CBA.mock.transactions.push(row);
-    syncTx(row);
+    if (pushConnected()) {
+      const payload = Object.assign({}, row, { fileName: receiptFileName(row) });
+      CBA.sheets.push("saveTransaction", { year: row.year || getCurrentYear(), tx: payload }, function (res) {
+        if (res && res.ok === true) return;
+        /* שורה שלא הגיעה לגיליון חייבת להיעלם גם מהמסך — אחרת המנהל רואה
+           תנועה שלא קיימת, מסתמך עליה בסיכום, ומגלה רק ברענון הבא. */
+        CBA.mock.transactions = CBA.mock.transactions.filter(function (x) { return x !== row; });
+        rollbackNote("התנועה לא נשמרה בגיליון והוסרה מהמסך", res);
+      });
+    }
     return row;
   }
+  /* ========================================================================
+   *  החזרה לאחור כשהשרת דוחה  (PHASE 4.2, 2026-09-14)
+   * ------------------------------------------------------------------------
+   *  שלוש הפעולות האלה הן Optimistic UI: המסך משתנה מיד והשליחה לשרת
+   *  יוצאת אחריה. זה נכון ומהיר — אבל עד היום התשובה **לא נבדקה בכלל**.
+   *  שמירה שנדחתה (אין הרשאה, שנה שנסגרה, נעילה שלא נתפסה) השאירה את
+   *  המסך מראה מציאות שלא קיימת בגיליון, והמשתמש ראה את זה רק ברענון הבא —
+   *  אם בכלל. במחיקה זה החמור ביותר: השורה נעלמת מהמסך ונשארת בגיליון.
+   *
+   *  ⚠️ ההחזרה מחזירה את **המצב הקודם**, לא "מבטלת פעולה": אם המשתמש הספיק
+   *     לערוך שוב בינתיים, אנחנו לא נוגעים — עדיף מסך לא מעודכן מדריסה של
+   *     עריכה חדשה. לכן ההשוואה היא מול הרשומה שקיימת *עכשיו*.
+   * ===================================================================== */
+  function rollbackNote(msg, res) {
+    var extra = (res && res.error) ? (" — " + res.error) : "";
+    if (CBA.ui && CBA.ui.toast) CBA.ui.toast(msg + extra, "error");
+    else if (CBA.ui && CBA.ui.alert) CBA.ui.alert(msg + extra);
+    if (CBA.redraw) CBA.redraw();
+  }
+
   function updateTransaction(id, fields) {
     const t = CBA.mock.transactions.find(function (x) { return x.id === id; });
-    if (t) { Object.assign(t, fields); syncTx(t); }
+    if (!t) return t;
+    // תצלום של השדות שעומדים להשתנות בלבד — לא של כל הרשומה
+    const before = {};
+    Object.keys(fields).forEach(function (k) { before[k] = t[k]; });
+    Object.assign(t, fields);
+    if (!pushConnected()) return t;
+    const payload = Object.assign({}, t, { fileName: receiptFileName(t) });
+    CBA.sheets.push("saveTransaction", { year: t.year || getCurrentYear(), tx: payload }, function (res) {
+      if (res && res.ok === true) return;
+      const live = CBA.mock.transactions.find(function (x) { return x.id === id; });
+      if (!live) return;   // נמחקה בינתיים — אין למה לחזור
+      Object.keys(before).forEach(function (k) { live[k] = before[k]; });
+      rollbackNote("העדכון לא נשמר והוחזר לקדמותו", res);
+    });
     return t;
   }
+
   function deleteTransaction(id) {
     const t = CBA.mock.transactions.find(function (x) { return x.id === id; });
     const yr = t && t.year;
+    const at = CBA.mock.transactions.indexOf(t);
     CBA.mock.transactions = CBA.mock.transactions.filter(function (x) { return x.id !== id; });
-    if (pushConnected()) CBA.sheets.push("deleteTransaction", { year: yr || getCurrentYear(), id: id });
+    if (!pushConnected()) return;
+    CBA.sheets.push("deleteTransaction", { year: yr || getCurrentYear(), id: id }, function (res) {
+      if (res && res.ok === true) return;
+      // כבר הוחזרה איכשהו (רענון שהספיק לרוץ) — לא מכניסים כפילות
+      if (CBA.mock.transactions.some(function (x) { return x.id === id; })) return;
+      if (t) CBA.mock.transactions.splice(at < 0 ? CBA.mock.transactions.length : at, 0, t);
+      rollbackNote("המחיקה לא בוצעה בגיליון והשורה הוחזרה", res);
+    });
   }
 
   // --- מחזור חיי קובץ הקבלה (סעיף 4, 2026-08-06) — העלאה/החלפה ומחיקה בפועל
@@ -274,6 +322,29 @@ CBA.data = (function () {
     var arr = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
     return URL.createObjectURL(new Blob([arr], { type: mimeType || "application/octet-stream" }));
+  }
+
+  /** getGardenPhoto(fileId, cb) — תמונת דיווח גינון (PHASE 4.2).
+   *  אותו צינור בדיוק של getReceipt, אבל דרך action=gardenPhoto — כי
+   *  ההרשאה שונה לגמרי: שם מנהל תקציב ובעל הקבלה, כאן צוות הגינון והתושב
+   *  המדווח. חולק את אותו מטמון blob (ר' receiptCache) כי המחיר זהה. */
+  function getGardenPhoto(fileId, cb) {
+    if (!fileId) { cb({ ok: false, error: "אין מזהה תמונה" }); return; }
+    var cachedP = receiptCacheGet(fileId);
+    if (cachedP) { cb(cachedP); return; }
+    CBA.sheets.get({ action: "gardenPhoto", id: fileId }, function (res) {
+      if (!res || !res.ok) {
+        cb({ ok: false, error: (res && res.error) || "שליפת התמונה נכשלה", tooLarge: !!(res && res.tooLarge) });
+        return;
+      }
+      var outP;
+      try {
+        outP = { ok: true, url: base64ToBlobUrl(res.dataBase64, res.mimeType),
+                 mimeType: res.mimeType || "", name: res.name || "" };
+      } catch (e) { cb({ ok: false, error: "התמונה הגיעה פגומה" }); return; }
+      receiptCachePut(fileId, outP);
+      cb(outP);
+    });
   }
 
   /** getReceipt(fileId, cb) -> cb({ok:true, url, mimeType, name}) או {ok:false, error, tooLarge} */
@@ -1476,6 +1547,7 @@ CBA.data = (function () {
     uploadReceiptFile: uploadReceiptFile,
     deleteReceiptFile: deleteReceiptFile,
     getReceipt: getReceipt,
+    getGardenPhoto: getGardenPhoto,
     getColumnConfig: getColumnConfig,
     saveColumnConfig: saveColumnConfig,
     expectedRefundDate: expectedRefundDate,
@@ -1537,6 +1609,12 @@ CBA.data = (function () {
       CBA.sheets.postRead("savePermissions", { rowIndex: rowIndex, slot: slot, perms: perms }, cb);
     },
     ensurePermissionCols: function (cb) { CBA.sheets.postRead("ensurePermissionCols", {}, cb); },
+    /* ---- בדיקת החזרים (PHASE 4.2) ----
+       postRead ולא push: זו קריאה שממתינים לתשובתה, והיא לא כותבת כלום. */
+    parseChargeFile: function (payload, cb) {
+      CBA.sheets.postRead("parseChargeFile", payload, cb);
+    },
+
     /* ---- דיווחים על האפליקציה (2026-09-09) ----
        submitAppReport פתוח לכל משתמש מחובר (הכפתור הצף בכל מסך);
        שני האחרים הם מנהל-על בלבד, והאכיפה בשרת. */

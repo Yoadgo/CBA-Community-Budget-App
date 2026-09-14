@@ -143,3 +143,79 @@ body[data-screen="planning"] .rep-fab-wrap { bottom: 104px; }
   }
   .rep-fab { width: 50px; height: 50px; }
 }
+
+/* ==========================================================================
+ *  צפייה בתמונות דיווח (js/ui/photos.js, PHASE 4.2)
+ *  יושב כאן ולא ב-garden.css בכוונה: הקובץ הזה נטען תמיד, ו-garden.css
+ *  מגדיר את המשתנים שלו על .gd-screen — חלונית שמרחפת ב-body הייתה מאבדת
+ *  אותם בשקט (המלכודת שכבר תפסה אותנו פעם, ר' הצוות האדום של הגינון).
+ * ========================================================================== */
+.ph-wrap { display: flex; flex-direction: column; gap: 12px; }
+.ph-img { width: 100%; height: auto; display: block; border-radius: var(--radius-sm); background: var(--hover); }
+.ph-load, .ph-err {
+  padding: 26px 12px; text-align: center; font-size: 13px;
+  border-radius: var(--radius-sm); background: var(--hover); color: var(--text-soft);
+}
+.ph-err { background: var(--danger-soft); color: var(--badge-danger); }
+
+/* האריח בכרטיס הדיווח של התושב — עכשיו כפתור */
+.gd-rep__th--btn { cursor: pointer; border: none; padding: 0; font: inherit; }
+.gd-rep__th--btn:hover { filter: brightness(.96); }
+.gd-rep__th--btn:focus-visible { outline: 2px solid var(--report); outline-offset: 2px; }
+
+/* מונה התמונות בשורת המטא של כרטיס המשימה */
+.gt-ph {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+  color: inherit;
+}
+.gt-ph:hover { color: var(--text); text-decoration: underline; }
+.gt-ph svg { width: 14px; height: 14px; }
+
+/* ==========================================================================
+ *  בדיקת החזרים (js/screens/reconcile.js, PHASE 4.2)
+ * ========================================================================== */
+.rc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.rc-meta .rc-sub { margin: 0; }
+.rc-sub { font-size: 12.5px; color: var(--text-soft); margin: 4px 0 0; line-height: 1.5; }
+.rc-again, .rc-btn {
+  margin-inline-start: auto; padding: 7px 15px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); font: inherit; font-size: 13px; color: var(--text-soft);
+}
+.rc-again:hover, .rc-btn:hover { border-color: var(--action); color: var(--text); }
+.rc-btn { margin: 0; background: var(--action); color: #fff; border-color: var(--action); font-weight: 600; }
+.rc-btn:hover { background: var(--action-hover); color: #fff; }
+.rc-actions { display: flex; justify-content: center; padding-bottom: 6px; }
+.rc-err { margin: 10px 0 0; text-align: center; font-size: 13px; color: var(--badge-danger); }
+
+.rc-block { border-inline-start: 3px solid var(--border); }
+.rc-block.is-danger { border-inline-start-color: var(--danger); }
+.rc-block.is-warn   { border-inline-start-color: var(--warn); }
+.rc-block.is-ok     { border-inline-start-color: var(--ok); }
+.rc-head { display: flex; align-items: center; gap: 9px; font-size: 15px; }
+.rc-n {
+  min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px;
+  display: inline-grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--hover); color: var(--text-soft);
+}
+.is-danger .rc-n { background: var(--danger-soft); color: var(--badge-danger); }
+.is-warn   .rc-n { background: var(--warn-soft);   color: var(--badge-warn); }
+.is-ok     .rc-n { background: var(--ok-soft);     color: var(--badge-ok); }
+
+.rc-item { padding: 12px 0; border-top: 1px solid var(--hairline); }
+.rc-item:first-of-type { border-top: none; }
+.rc-item__top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.rc-nums { font-size: 12.5px; color: var(--text-soft); }
+.rc-nums u { text-decoration: none; color: var(--badge-danger); font-weight: 700; }
+.rc-txs { margin: 6px 0 0; padding-inline-start: 18px; font-size: 13px; color: var(--text-soft); line-height: 1.7; }
+.rc-why { margin-top: 7px; padding: 8px 11px; border-radius: var(--radius-sm); background: var(--hover); font-size: 13px; line-height: 1.6; }
+.rc-why--warn { background: var(--warn-soft); color: var(--badge-warn); }
+.rc-oks { display: flex; flex-direction: column; gap: 2px; }
+.rc-ok-row { display: flex; align-items: baseline; gap: 10px; font-size: 13.5px; padding: 4px 0; }
+.rc-ok-row b { margin-inline-start: auto; }
+.tx-view--rec { margin-inline-start: auto; }
+@media (max-width: 720px) {
+  .rc-meta { flex-direction: column; align-items: flex-start; }
+  .rc-again { margin-inline-start: 0; }
+  .tx-view--rec { margin-inline-start: 0; }
+}

@@ -51,8 +51,13 @@ CBA.notesPanel = (function () {
       var year = CBA.data.getCurrentYear();
       var content = editorEl.innerHTML;
       var by = currentUserLabel();
-      CBA.data.saveNotesToSheet(year, content, by, function () {
+      CBA.data.saveNotesToSheet(year, content, by, function (res) {
         if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("notesSave");
+        if (res && res.ok === true) return;   // ר' ההערה המקבילה ב-planSave
+        if (CBA.ui && CBA.ui.toast) {
+          CBA.ui.toast("הפנקס לא נשמר" + ((res && res.error) ? " — " + res.error : "") +
+                       ". העתיקו את מה שכתבתם לפני שתסגרו את המסך.", "error");
+        }
       });
       if (metaEl) metaEl.textContent = metaLabel(CBA.data.getNotes());
     };
