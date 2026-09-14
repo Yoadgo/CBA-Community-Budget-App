@@ -37,27 +37,22 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid != null;
     }
 
-    function memberPath() {
-      return /databases/$(database)/documents/members/$(request.auth.uid);
+    /* ⚠️ **פונקציה בכללי Firestore לא מחזירה נתיב.** הנתיב נבנה בתוך
+       `get()`/`exists()` עצמם — זה הדפוס המתועד, והיחיד שאפשר לסמוך עליו. */
+    function memberExists() {
+      return signedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid));
     }
 
-    /* ⚠️ `exists()` לפני `get()` — משתמש שהתחבר ל-Firebase אבל עדיין אין לו
-       רשומת חבר (למשל ההתחברות הצליחה והקישור לשרת נכשל) אינו שגיאה, הוא
-       פשוט לא-חבר. בלי הבדיקה הזו הכלל היה נכשל בחריגה במקום להחזיר "אסור". */
+    function m() {
+      return get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
+    }
+
     function isMember() {
-      return signedIn() && exists(memberPath()) && member().active == true;
-    }
-
-    function member() {
-      return get(memberPath()).data;
-    }
-
-    function perms() {
-      return isMember() ? member().perms : [];
+      return memberExists() && m().active == true;
     }
 
     function isSuper() {
-      return isMember() && ('על' in member().perms);
+      return isMember() && ('על' in m().perms);
     }
 
     /* מנהל-על מקבל כל הרשאה, בדיוק כמו ב-authorize_ בצד Apps Script.
@@ -65,15 +60,15 @@ service cloud.firestore {
        בלבד, אותו משתמש יראה דברים שונים בשני המסלולים — וזה בדיוק סוג
        הסטייה השקטה שכלל הסטייה הגלויה בא למנוע. */
     function hasPerm(p) {
-      return isMember() && (isSuper() || (p in member().perms));
+      return isMember() && (isSuper() || (p in m().perms));
     }
 
     function myFamilyId() {
-      return isMember() ? member().familyId : '';
+      return isMember() ? m().familyId : '';
     }
 
     function isExternalUser() {
-      return isMember() && member().isExternal == true;
+      return isMember() && m().isExternal == true;
     }
 
     /* 🔴 **`active` הוא מתג הכיבוי.** תושב שסומן "עזב" בגיליון חייב לאבד
