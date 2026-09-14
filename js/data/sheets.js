@@ -965,11 +965,33 @@ CBA.sheets = (function () {
     window.addEventListener("beforeunload", onBeforeUnload);
     function clearUnloadGuard() { window.removeEventListener("beforeunload", onBeforeUnload); }
 
-    if (xhr.upload && typeof onProgress === "function") {
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-      };
-    }
+    /* ============================================================================
+     *  ⛔ אסור לרשום מאזין על xhr.upload — הוא שובר את הבקשה לגמרי
+     * ----------------------------------------------------------------------------
+     *  כאן ישבה שורה שרשמה xhr.upload.onprogress כדי לקבל אחוזי העלאה
+     *  אמיתיים. היא נראית תמימה והיא **הורגת את הבקשה מול Apps Script**.
+     *
+     *  למה: לפי תקן ה-CORS, עצם קיומו של מאזין כלשהו על XMLHttpRequestUpload
+     *  מוציא את הבקשה מהגדרת "בקשה פשוטה". הדפדפן שולח לפניה בקשת
+     *  preflight מסוג OPTIONS — ו-Apps Script **אינו יודע לענות ל-OPTIONS
+     *  בכלל** (אין doOptions ב-Web App). ה-preflight נכשל, והבקשה האמיתית
+     *  לא נשלחת. התוצאה בצד המשתמש: onerror ⇐ "שגיאת רשת".
+     *
+     *  נמדד ממקור חיצוני (14.9.2026), אותה בקשה בדיוק, שלוש פעמים כל אחת:
+     *      fetch רגיל .................. 200 ✓
+     *      XHR בלי מאזין .............. 200 ✓ (×3)
+     *      XHR עם xhr.upload.onprogress  ONERROR אחרי ~300ms ✗ (×3)
+     *      OPTIONS ל-/exec ............ Failed to fetch
+     *
+     *  ⚠️ **בדיקה מתוך דף ב-script.google.com לא תתפוס את זה** — שם הבקשה
+     *     היא same-origin, אין CORS ואין preflight, והכול "עובד". חייבים
+     *     לבדוק ממקור חיצוני.
+     *
+     *  המחיר: אין אחוזי העלאה אמיתיים, וזו מגבלה של Apps Script שאי אפשר
+     *  לעקוף מבפנים. מסכי השליחה מציגים במקום זה חיווי לפי זמן שחלף,
+     *  בלי להמציא מספרים. onProgress עדיין נקרא עם 100 כשהתשובה חוזרת,
+     *  כדי שמסלול הסיום של הקוראים הקיימים לא ישתנה.
+     * ========================================================================== */
     function failBusy(msg) {
       lastWriteHadError = true;
       lastWriteErrorMsg = msg;

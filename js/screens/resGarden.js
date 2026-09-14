@@ -48,6 +48,14 @@
     return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
   }
 
+  /* הניסוח לפי שניות שחלפו. שליחה עם תמונה נמדדה בייצור ב-15 שניות
+     (14.9.26), ולכן הטקסט מכין לזה במקום להיראות תקוע. */
+  function stageText(sec) {
+    if (sec < 4)  return "מעלה את הדיווח…";
+    if (sec < 10) return "התמונות בדרך — זה לוקח כמה שניות (" + sec + " שנ׳)";
+    return "עדיין עובד, הדיווח בדרך. אפשר להמשיך לגלוש (" + sec + " שנ׳)";
+  }
+
   function sendReport(data, btn) {
     pendingReport = data;
     /* חוסם רענון רקע כל עוד הדיווח בדרך — אותו מנגנון שמגן על העלאת קבלה. */
@@ -58,11 +66,24 @@
     if (btn && btn.parentNode) {
       prog = document.createElement("div");
       prog.className = "gd-progress";
-      prog.textContent = "מעלה את הדיווח…";
+      prog.textContent = stageText(0);
       btn.parentNode.insertBefore(prog, btn.nextSibling);
     } else {
       CBA.ui.toast("שולח את הדיווח…");
     }
+
+    /* ⚠️ החיווי לפי **זמן שחלף** ולא לפי אחוזי העלאה, כי אחוזים אמיתיים
+       דורשים מאזין על xhr.upload — וזה בדיוק מה ששובר את הבקשה מול
+       Apps Script (ר' ההערה הארוכה ב-sheets.js). לא ממציאים מספרים:
+       אומרים כמה זמן עבר ומה קורה עכשיו. */
+    var t0 = Date.now();
+    var ticker = setInterval(function () {
+      var sec = Math.round((Date.now() - t0) / 1000);
+      if (prog) prog.textContent = stageText(sec);
+      if (btn && btn.isConnected && CBA.ui.busyText) {
+        CBA.ui.busyText(btn, sec < 4 ? "שולח…" : ("שולח… " + sec + " שנ׳"));
+      }
+    }, 1000);
 
     CBA.data.submitGardenReport(data, function (res) {
       if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("gardenReport");
@@ -70,6 +91,7 @@
          ה-container נכתב מחדש והכפתור מתנתק מה-DOM. בלי צורך לחשוף את
          currentScreen מ-app.js. */
       var onForm = !!(btn && btn.isConnected);
+      clearInterval(ticker);
       if (prog && prog.parentNode) prog.parentNode.removeChild(prog);
       release();
 
@@ -92,14 +114,9 @@
         if (yes) sendReport(pendingReport, null);
       });
     }, function (pct) {
-      var up = pct < 100;
-      /* כש-pct מגיע ל-100 הבייטים אצל גוגל אבל השרת עוד עובד כמה שניות —
-         ולכן הטקסט משתנה במקום להיתקע על "100%". */
-      var txt = up ? ("מעלה את הדיווח… " + pct + "%") : "הדיווח נשלח, מעבד בשרת…";
-      if (prog) prog.textContent = txt;
-      if (btn && btn.isConnected && CBA.ui.busyText) {
-        CBA.ui.busyText(btn, up ? ("שולח… " + pct + "%") : "מעבד בשרת…");
-      }
+      /* מגיע רק כ-100, כשהתשובה כבר חזרה (ר' sheets.js). משאירים אותו
+         כדי שהרגע האחרון לפני הסגירה לא ייראה תקוע. */
+      if (pct >= 100 && prog) prog.textContent = "התקבל, מסיים…";
     });
   }
 
