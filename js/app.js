@@ -1624,6 +1624,40 @@
     document.body.classList.remove("is-gated");
   }
 
+  /* ============================================================================
+   *  התחברות ל-Firebase  (צעד 02ב, 2026-09-14 — גרסה שנייה)
+   * ----------------------------------------------------------------------------
+   *  לוקחים את **אותו** טוקן זהות שגוגל כבר הנפיקה ושהשרת שלנו כבר אימת,
+   *  ומציגים אותו גם ל-Firebase. אין מסך התחברות שני והמשתמש לא מרגיש דבר.
+   *  התוצאה היא uid קבוע, שיהיה המפתח ל-members/{uid} ודרכו חוקי האבטחה של
+   *  Firestore יידעו מה מותר לו.
+   *
+   *  🔴 **הגרסה הראשונה של הצעד הזה הוחזרה לאחור, ולמה זה חשוב:**
+   *  היא השתמשה ב-`requestIdleCallback` מתוך הנחה שהוא ימתין לרגע שקט.
+   *  ההנחה הפוכה מהמציאות — **מיד אחרי התחברות הדפדפן דווקא *כן* בטל**,
+   *  כי הוא ממתין לרשת. כלומר נבחר בלי כוונה הרגע הגרוע ביותר: הורדה של
+   *  ~300KB במקביל בדיוק למשיכת נתוני התקציב.
+   *
+   *  ✅ לכן כאן **אין ניחוש על מצב הדפדפן**. ההמתנה תלויה באירוע מפורש:
+   *  התשובה מהרשת של המשיכה הראשית כבר חזרה (`source !== "cache"`), ועוד
+   *  שהות קצרה שמפנה את הדרך גם לשתי הקריאות הנדחות שכבר קיימות שם
+   *  (התראות ב-2.5ש', סיור ב-3.2ש').
+   *
+   *  ⚠️ כישלון כאן הוא חסר-משמעות במכוון: אין קולבק, אין הודעה, אין חסימה.
+   *     האפליקציה ממשיכה על המושב החתום של Apps Script בדיוק כמו אתמול.
+   * ========================================================================== */
+  var FIREBASE_SIGNIN_DELAY_MS = 5000;
+  var firebaseSignInDone = false;
+
+  function firebaseSignInAfterLoad(googleIdToken) {
+    if (firebaseSignInDone) return;          // המשיכה מדווחת עד פעמיים
+    firebaseSignInDone = true;
+    if (!googleIdToken || !window.CBA || !CBA.fb) return;
+    setTimeout(function () {
+      try { CBA.fb.signIn(googleIdToken, function () {}); } catch (e) {}
+    }, FIREBASE_SIGNIN_DELAY_MS);
+  }
+
   function onGoogleLogin(resp) {
     loginError = null;
     showLoginConnecting();   // גוגל כבר סיימה; עכשיו מחכים לשרת שלנו — תראו את זה, לא מסך ריק
@@ -1643,9 +1677,13 @@
              ולכן היא מתחילה כאן — אחרי שגוגל אימתה והשרת אישר. */
           if (!inited) main.innerHTML = skeletonScreen();
           var routedAfterLogin = false;
+          firebaseSignInDone = false;
           CBA.sheets.load(function (ok, info) {
             var wasInited = inited;
             sheetsLoadHandler(ok, info);
+            /* ⚠️ `source === "cache"` הוא הקריאה הראשונה מתוך שתיים —
+               הרשת עוד בדרך, וזה בדיוק הרגע שאסור להתחרות בו. */
+            if (!info || info.source !== "cache") firebaseSignInAfterLoad(resp.credential);
             // ציור ראשון: sheetsLoadHandler כבר קורא ל-routeByRole בעצמו.
             // כניסה חוזרת באותה טעינת עמוד (אחרי יציאה): המסך כבר מאותחל,
             // ולכן צריך לנתב כאן — פעם אחת בלבד.
@@ -1671,6 +1709,7 @@
 
   function logout() {
     if (googleReady && google.accounts.id.disableAutoSelect) google.accounts.id.disableAutoSelect();
+    if (window.CBA && CBA.fb) { try { CBA.fb.signOut(); } catch (e) {} }   // יציאה = יציאה משתי המערכות
     clearSession();
     clearRoute();
     if (CBA.sheets.clearCache) CBA.sheets.clearCache();
