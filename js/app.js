@@ -1590,6 +1590,30 @@
     document.body.classList.remove("is-gated");
   }
 
+  /* התחברות ל-Firebase (צעד 02ב, 2026-09-14) — תוספת בלבד.
+     לוקחים את *אותו* טוקן זהות שגוגל כבר הנפיקה ושהשרת שלנו כבר אימת,
+     ומציגים אותו גם ל-Firebase. אין מסך התחברות שני והמשתמש לא מרגיש דבר.
+     התוצאה היא uid קבוע, שיהיה בהמשך המפתח ל-members/{uid} ודרכו חוקי
+     האבטחה של Firestore יידעו מה מותר לו.
+
+     ⚠️ **למה זה לא רץ מיד אלא בזמן סרק:** ההתחברות גוררת הורדה של
+     ~300KB (ה-SDK). מיד אחרי login רוחב הפס שייך ל-CBA.sheets.load —
+     כלומר בדיוק למסלול שכל המעבר ל-Firebase בא להאיץ. תחרות עליו הייתה
+     מייקרת היום את מה שאמור להוזיל מחר. requestIdleCallback עם timeout,
+     ו-setTimeout כגיבוי לדפדפנים שאין להם אותו (ספארי).
+
+     ⚠️ כישלון כאן הוא חסר-משמעות במכוון: אין קולבק, אין הודעה, אין חסימה.
+     האפליקציה כולה ממשיכה לרוץ על המושב החתום של Apps Script בדיוק כמו
+     אתמול. ר' ההערות בראש js/data/firebase.js. */
+  function firebaseSignInWhenIdle(googleIdToken) {
+    if (!googleIdToken || !window.CBA || !CBA.fb) return;
+    var fire = function () {
+      try { CBA.fb.signIn(googleIdToken, function () {}); } catch (e) {}
+    };
+    if (window.requestIdleCallback) window.requestIdleCallback(fire, { timeout: 8000 });
+    else setTimeout(fire, 4000);
+  }
+
   function onGoogleLogin(resp) {
     loginError = null;
     showLoginConnecting();   // גוגל כבר סיימה; עכשיו מחכים לשרת שלנו — תראו את זה, לא מסך ריק
@@ -1601,6 +1625,7 @@
           // הטוקן החתום שהשרת הנפיק — נשלח מעכשיו בכל פעולת כתיבה במקום הסיסמה
           window.CBA.authSession = data.session || "";
           saveSession(currentUser);
+          firebaseSignInWhenIdle(resp.credential);   // תוספת בלבד; ר' ההערה למעלה
           hideLoginGate();
           renderControls();
           /* טעינת הנתונים מתחילה רק עכשיו (2026-08-23 — תיקון אבטחה).
@@ -1637,6 +1662,7 @@
 
   function logout() {
     if (googleReady && google.accounts.id.disableAutoSelect) google.accounts.id.disableAutoSelect();
+    if (window.CBA && CBA.fb) { try { CBA.fb.signOut(); } catch (e) {} }   // יציאה = יציאה משתי המערכות
     clearSession();
     clearRoute();
     if (CBA.sheets.clearCache) CBA.sheets.clearCache();

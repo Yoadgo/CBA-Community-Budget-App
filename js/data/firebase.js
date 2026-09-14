@@ -114,6 +114,13 @@ CBA.fb = (function () {
       if (err) { log("SDK לא נטען: " + err.message); return settle(err); }
       try {
         if (!window.firebase.apps.length) window.firebase.initializeApp(CONFIG);
+        /* ⚠️ מאזין מצב, ולא רק signIn: ל-Firebase יש persistence מקומי, ולכן
+           אחרי רענון עמוד המשתמש כבר מחובר — אבל state.user שלנו היה ריק,
+           כי הוא מתמלא רק במסלול signIn. בלי השורות האלה CBA.fb.uid() היה
+           מחזיר null למשתמש מחובר לגמרי, וזה היה נראה כמו באג בצעד הבא. */
+        window.firebase.auth().onAuthStateChanged(function (u) {
+          state.user = u ? { uid: u.uid, email: u.email || "" } : null;
+        });
         log("SDK מוכן, גרסה " + SDK_VERSION);
         settle(null);
       } catch (e) {
