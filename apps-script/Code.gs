@@ -221,6 +221,11 @@ var GET_ACTION_PERMS = {
   gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
   gymList: PERM_GYM,
   appReports: PERM_SUPER,
+  /* שנת תקציב בודדת לפי דרישה (2026-09-14, דיאטת המטען שלב ב').
+     PERM_BUDGET ולא null: מי שאין לו הרשאת תקציב אינו אמור לקבל את
+     התנועות של כל המשפחות בשום מסלול — DATA_MIN במטען הראשי היה מסונן
+     והפעולה הזו הייתה עוקפת אותו. */
+  budgetYear: PERM_BUDGET,
   /* תמונת דיווח גינון (PHASE 4.2) — need=null בכוונה: התושב המדווח *וגם*
      צוות הגינון צריכים אותה, ואלה שתי הרשאות שונות לגמרי. הבדיקה האמיתית
      יושבת בתוך ההנדלר (gardenPhotoAllowed_) ולא כאן. */
@@ -445,6 +450,10 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'gardenPhoto') {
       return handleGardenPhoto_(e.parameter);
+    }
+    /* שנת תקציב בודדת (2026-09-14). ר' handleBudgetYear_ להסבר המלא. */
+    if (e && e.parameter && e.parameter.action === 'budgetYear') {
+      return handleBudgetYear_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'listSignups') {
       return handleListSignups_(e.parameter);
@@ -705,6 +714,75 @@ function doGet(e) {
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
+}
+
+/* ============================================================================
+ *  handleBudgetYear_ — שנת תקציב אחת, לפי דרישה   (2026-09-14, דיאטת המטען)
+ * ----------------------------------------------------------------------------
+ *  למה זה קיים: נמדד על הייצור שמטען הפתיחה הוא 99.1KB, שמתוכם **97%** נתוני
+ *  תקציב ו-**71%** תנועות של *שנה שעברה* — מידע שאף אחד לא מסתכל עליו ברגע
+ *  הנחיתה. הפעולה הזו מאפשרת ללקוח למשוך שנה בודדת כשהיא באמת נדרשת, ובכך
+ *  לאפשר למטען הראשי להפסיק לשלוח שנים ישנות.
+ *
+ *  ⚠️ **הצעד הזה לבדו אינו משנה שום התנהגות.** הוא תוספת טהורה: המטען הראשי
+ *     עדיין מחזיר את כל השנים, ואף לקוח עדיין לא קורא לפעולה הזו. זה מכוון —
+ *     סדר הפריסה חייב להיות שרת(תוספת) -> לקוח -> שרת(דיאטה), אחרת לקוח
+ *     מקושח שיושב במטמון יבקש שנה שהשרת עוד לא יודע להגיש.
+ *
+ *  ⚠️ **אותם מפתחות מטמון בדיוק כמו doGet** (`cba_tx_` / `cba_year_` עם
+ *     `budgetStamp_()`). זה לא קישוט: אילו היה כאן מפתח אחר, אותה שנה הייתה
+ *     נקראת מהגיליון פעמיים ושתי התשובות היו יכולות להיפרד זו מזו אחרי שמירה.
+ *
+ *  ⚠️ **בלי הרשאת תקציב אין כאן כלום.** ל-DATA_MIN במטען הראשי יש סינון לפי
+ *     משפחה; פעולה שהייתה פתוחה ל-need=null הייתה דלת אחורית שעוקפת אותו
+ *     לגמרי. ההרשאה נאכפת גם בשער העליון (GET_ACTION_PERMS) וגם כאן.
+ * ========================================================================== */
+function handleBudgetYear_(p) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var gate = authorize_(ss, p, PERM_BUDGET);   // הגנה כפולה, כמו handleAppReports_
+  if (!gate.ok) return json_({ ok: false, error: gate.error });
+
+  var y = String((p && p.year) || '').trim();
+  if (!y) return json_({ ok: false, error: 'חסרה שנה' });
+
+  /* ⚠️ בדיקת קיום לפני קריאה, ולא הסתמכות על כך ש-readTable_ יחזיר ריק:
+     "תנועות " + קלט של המשתמש הוא שם טאב, ושם טאב שרירותי הוא לא משהו
+     שרוצים לבנות מקלט בלי לוודא שהוא אחד מהשמות שאנחנו עצמנו יצרנו.
+     חוץ מזה, "השנה לא קיימת" ו"השנה ריקה" הם שני דברים שונים ללקוח. */
+  if (!ss.getSheetByName('תנועות ' + y)) {
+    return json_({ ok: false, error: 'שנת תקציב לא מוכרת: ' + y });
+  }
+
+  var stamp = budgetStamp_();
+  var tx = cached_('cba_tx_' + stamp + '_' + y, function () {
+    return readTable_(ss, 'תנועות ' + y);
+  });
+  var yd = cached_('cba_year_' + stamp + '_' + y, function () {
+    return {
+      budget: readTable_(ss, 'תקציב ' + y),
+      income: readTable_(ss, 'הכנסות ' + y),
+      groups: readGroupsForYear_(ss, y),
+      splits: readTable_(ss, 'פיצול מימון ' + y),
+      items:  readTable_(ss, 'פירוט סעיפים ' + y)
+    };
+  });
+
+  return json_({
+    ok: true,
+    year: y,
+    /* מספר הגרסה נשלח כדי שהלקוח יידע לאיזה מצב הנתונים האלה שייכים.
+       בלעדיו שנה שנמשכה פעם אחת הייתה נשארת בזיכרון לנצח גם אחרי שמישהו
+       ערך אותה, בלי שום דרך לדעת. */
+    rev: currentRev_(),
+    data: {
+      budget: yd.budget,
+      income: yd.income,
+      transactions: tx,
+      groups: yd.groups,
+      splits: yd.splits,
+      items:  yd.items
+    }
+  });
 }
 
 /* ===================== כתיבה ===================== */
