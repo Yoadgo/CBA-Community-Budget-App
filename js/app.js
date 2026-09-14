@@ -1056,6 +1056,20 @@
       if (!(window.CBA.data && CBA.data.getYears && CBA.data.setCurrentYear)) return false;
       if (CBA.data.getYears().indexOf(saved.year) === -1) return false;
       if (CBA.data.getCurrentYear() === saved.year) return false;
+      /* השנה קיימת ברשימה אבל הנתונים שלה לא נמשכו (2026-09-14).
+         ⚠️ **לא חוסמים את עליית האפליקציה בשבילה.** מחזירים false —
+         כלומר נוחתים על שנת ברירת המחדל שכן טעונה — ומושכים אותה ברקע;
+         כשהיא מגיעה, עוברים אליה ומציירים. אתחול שממתין לרשת בשביל
+         העדפת תצוגה הוא בדיוק מה שהוצאנו ממסלול הטעינה. */
+      if (CBA.sheets.yearLoaded && !CBA.sheets.yearLoaded(saved.year)) {
+        CBA.sheets.loadYear(saved.year, function (ok) {
+          if (!ok || !inited) return;
+          CBA.data.setCurrentYear(saved.year);
+          renderYearSwitch();
+          showScreen(currentScreen);
+        });
+        return false;
+      }
       CBA.data.setCurrentYear(saved.year);
       return true;
     } catch (e) { return false; }
@@ -1682,11 +1696,34 @@
         : "") +
       '<button class="year-switch__add" id="year-add" title="צור שנה חדשה" aria-label="צור שנה חדשה">+</button>';
 
-    // הבורר = תצוגה בלבד. אישי, מיידי, בלי דיאלוג ובלי לגעת בשרת.
+    /* הבורר = תצוגה בלבד. אישי, מיידי, בלי דיאלוג ובלי לגעת בשרת —
+       **אלא אם** נתוני השנה הזאת עוד לא בזיכרון (2026-09-14, דיאטת המטען).
+       ⚠️ היום זה מסלול רדום: המטען עדיין מחזיר את כל השנים, ולכן
+       `yearLoaded` תמיד true והמעבר נשאר מיידי בדיוק כמו קודם. */
     yearBox.querySelector("#year-select").addEventListener("change", function () {
-      CBA.data.setCurrentYear(this.value);
-      renderYearSwitch();
-      showScreen(currentScreen);
+      var sel = this, y = sel.value, prev = CBA.data.getCurrentYear();
+      if (!CBA.sheets.yearLoaded || CBA.sheets.yearLoaded(y)) {
+        CBA.data.setCurrentYear(y);
+        renderYearSwitch();
+        showScreen(currentScreen);
+        return;
+      }
+      sel.disabled = true;
+      main.innerHTML = skeletonScreen();
+      CBA.sheets.loadYear(y, function (ok, err) {
+        sel.disabled = false;
+        if (!ok) {
+          /* ⚠️ מחזירים את הבורר לשנה הקודמת. בורר שמראה שנה שלא נטענה
+             הוא שקר ויזואלי — המשתמש היה בטוח שהוא מסתכל עליה. */
+          CBA.ui.toast("לא הצלחנו לטעון את " + y + (err ? " — " + err : ""), "error");
+          if (sel.isConnected) sel.value = prev;
+          showScreen(currentScreen);
+          return;
+        }
+        CBA.data.setCurrentYear(y);
+        renderYearSwitch();
+        showScreen(currentScreen);
+      });
     });
 
     /* קביעת שנת העבודה — פעולה נפרדת ומפורשת, כי היא משנה את מה שכל

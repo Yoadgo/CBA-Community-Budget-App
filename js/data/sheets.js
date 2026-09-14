@@ -153,20 +153,23 @@ CBA.sheets = (function () {
     };
   }
 
-  function transform(payload) {
-    var years = {};
-    (payload.years || []).forEach(function (y) {
-      var d = payload.data[y] || {};
-      var closed = payload.settings && payload.settings["מצב תקציב " + y] === "סגור";
+  /* בונה שנת תקציב אחת מהשורות הגולמיות של הגיליון.
+     ⚠️ **חולץ מתוך transform בכוונה (2026-09-14)** כדי שלמשיכה המלאה
+     ולמשיכה של שנה בודדת (`loadYear`) יהיה **קוד המרה אחד בדיוק**. שני
+     מסלולי המרה מקבילים היו נפרדים בשקט אחרי השינוי הראשון בפורמט, וזו
+     בדיוק המשפחה של באגים ש"כלל הסטייה הגלויה" בא למנוע. */
+  function buildYear(y, d, settings, notesMap, loaded) {
+      d = d || {};
+      var closed = settings && settings["מצב תקציב " + y] === "סגור";
       var baseline = null;
-      var braw = payload.settings && payload.settings["בסיס תקציב " + y];
+      var braw = settings && settings["בסיס תקציב " + y];
       if (braw) { try { baseline = JSON.parse(braw); } catch (e) { baseline = null; } }
       // קבוצות פר-שנה (סעיף 3, 2026-08-09) — d.groups קיים (גם אם ריק) בשרת
       // מעודכן; d.groups === undefined רק אם השרת עדיין בגרסה הישנה (לפני
       // שהודבק/פורסם Code.gs החדש) — אז נופלים לשדה השטוח הישן payload.groups
       // (עדיין נשלח לתאימות לאחור, ר' doGet ב-Code.gs), כדי לא לאבד את
       // הקבוצות בזמן המעבר בין שמירה בקוד ללחיצת Deploy בפועל.
-      var yearGroupsRaw = (d.groups !== undefined) ? d.groups : (payload.groups || []);
+      var yearGroupsRaw = (d.groups !== undefined) ? d.groups : (LAST_FLAT_GROUPS || []);
       // פיצול מימון פר-שנה (סעיף 4, 2026-08-10) — d.splits הוא רשימת שורות
       // שטוחה מטאב "פיצול מימון <שנה>"; מקבצים לפי שם סעיף לפני שמעבירים ל-toCategory.
       var splitsByName = {};
@@ -183,16 +186,32 @@ CBA.sheets = (function () {
         if (!name) return;
         (itemsByName[name] = itemsByName[name] || []).push(r);
       });
-      years[y] = {
+      return {
+        /* ⚠️ מבדיל בין "השנה נטענה והיא ריקה" ל"השנה לא נטענה".
+           בלי הדגל הזה, שנה שהשרת הפסיק לשלוח הייתה נראית כתקציב ריק —
+           אפס שקרי במקום הודעה, וזה בדיוק מה שאסור. */
+        _loaded: loaded !== false,
         income: (d.income || []).map(toIncome),
         categories: (d.budget || []).map(function (row) { return toCategory(row, splitsByName, itemsByName); }),
         transactions: (d.transactions || []).map(function (r) { return toTx(r, y); }),
         budget: { phase: closed ? "locked" : "draft", lockedAt: null, baseline: baseline },
         // פנקס הערות (סעיף 1) — payload.notes הוא מפה {שנה: {content, editedBy, editedAt}}
         // שנקראת ב-Code.gs מטאב "הערות" (שורה אחת לכל שנה, לא טאב פר-שנה)
-        notes: (payload.notes && payload.notes[y]) || { content: "", editedBy: "", editedAt: "" },
+        notes: (notesMap && notesMap[y]) || { content: "", editedBy: "", editedAt: "" },
         groups: yearGroupsRaw.map(function (g) { return { id: g, name: g }; })
       };
+  }
+
+  /* השדה השטוח הישן payload.groups — נשמר רק בשביל מסלול התאימות לאחור
+     שבתוך buildYear (שרת שעוד לא פורסם). ר' ההערה שם. */
+  var LAST_FLAT_GROUPS = null;
+
+  function transform(payload) {
+    var years = {};
+    LAST_FLAT_GROUPS = payload.groups || [];
+    (payload.years || []).forEach(function (y) {
+      years[y] = buildYear(y, payload.data[y], payload.settings,
+                           payload.notes, payload.data[y] !== undefined);
     });
     var updates = (payload.updates || []).map(function (r) {
       return {
@@ -492,11 +511,33 @@ CBA.sheets = (function () {
        בהגדרות בזמן שהוא צופה/עורך שנה אחרת שבחר. אם השנה הנוכחית כבר לא
        קיימת ברשימת השנים העדכנית (מקרה קצה) - נופלים בחזרה לברירת המחדל
        מהשרת, כדי לא להישאר על שנה שלא קיימת. */
+  /* ============================================================================
+   *  שנים שנמשכו לפי דרישה  (2026-09-14, דיאטת המטען שלב ב2)
+   * ----------------------------------------------------------------------------
+   *  ⚠️ **הבעיה שהמנגנון הזה פותר:** `apply()` דורס את `CBA.mock.years`
+   *     **במלואו** בכל רענון — והרענון התקופתי רץ כל 3 שניות. בלי המפה הזאת,
+   *     שנה שהמשתמש משך ידנית הייתה נעלמת מתחת לידיים שלו תוך שניות, והמסך
+   *     היה מתרוקן בלי שום הסבר.
+   *  ⚠️ **והן נזרקות ברגע שמספר הגרסה זז**, כי מישהו ערך משהו ואי אפשר לדעת
+   *     מה. עדיף למשוך שוב מאשר להציג מספר ישן שנראה עדכני.
+   * ========================================================================== */
+  var extraYears = {};        // {שנה: אובייקט שנה מוכן}
+  var extraYearsRev = null;   // מספר הגרסה שבו הם נמשכו
+
+  function dropExtraYears() { extraYears = {}; extraYearsRev = null; }
+
   function apply(store, isBackgroundRefresh) {
     if (isBackgroundRefresh && isDirty()) return false;
     // groups כבר לא שדה שטוח נפרד — הוא מקונן בתוך store.years[y].groups
     // ומועתק אוטומטית ע"י השורה הבאה (סעיף 3, קבוצות פר-שנה).
     CBA.mock.years = store.years;
+    /* מיזוג השנים שנמשכו לפי דרישה — **אחרי** ההשמה, אחרת הן נדרסות.
+       ⚠️ המטען תמיד מנצח: אם השרת שלח את השנה הזאת, היא הטרייה מבין השתיים. */
+    Object.keys(extraYears).forEach(function (y) {
+      if (!CBA.mock.years[y] || CBA.mock.years[y]._loaded === false) {
+        CBA.mock.years[y] = extraYears[y];
+      }
+    });
     CBA.mock.yearList = store.yearList;
     if (!isBackgroundRefresh || !CBA.mock.years[CBA.mock.currentYear]) {
       CBA.mock.currentYear = store.currentYear;
@@ -1035,6 +1076,64 @@ CBA.sheets = (function () {
   // refresh נשכח מהייצוא (התגלה 2026-08-07 בבדיקת הרשאות): app.js קורא ל-
   // CBA.sheets.refresh במחזור הרענון התקופתי, וזה נכשל בשקט — כלומר הנתונים
   // לא התרעננו מעצמם כלל, רק ברענון עמוד.
+  /* ============================================================================
+   *  loadYear — משיכת שנת תקציב בודדת לפי דרישה   (2026-09-14, שלב ב2)
+   * ----------------------------------------------------------------------------
+   *  היום זה קוד רדום: המטען הראשי עדיין מחזיר את כל השנים, ולכן
+   *  `yearLoaded()` תמיד מחזירה true ואף קריאה לא יוצאת. הוא נכתב **לפני**
+   *  שהשרת יפסיק לשלוח שנים ישנות, כי הסדר ההפוך שובר לקוח מקושח שיושב
+   *  במטמון וייתקל בשנה שהוא לא יודע להביא.
+   *
+   *  cb(ok, err). כישלון אינו זורק — הקורא מחליט מה להציג.
+   * ========================================================================== */
+  function yearLoaded(y) {
+    var rec = CBA.mock && CBA.mock.years && CBA.mock.years[y];
+    return !!(rec && rec._loaded !== false);
+  }
+
+  var yearInFlight = {};   // {שנה: [קולבקים]} — שתי לחיצות רצופות = בקשה אחת
+
+  function loadYear(y, cb) {
+    cb = cb || function () {};
+    y = String(y || "").trim();
+    if (!y) return cb(false, "חסרה שנה");
+    if (yearLoaded(y)) return cb(true);
+
+    /* גרסה זזה ⇒ מה שנמשך קודם כבר לא אמין. ר' ההערה ליד extraYears. */
+    if (extraYearsRev !== null && extraYearsRev !== lastRev) dropExtraYears();
+
+    if (yearInFlight[y]) { yearInFlight[y].push(cb); return; }
+    yearInFlight[y] = [cb];
+
+    function settle(ok, err) {
+      var list = yearInFlight[y] || []; delete yearInFlight[y];
+      list.forEach(function (f) { try { f(ok, err); } catch (e) {} });
+    }
+
+    fetch(API_URL + "?session=" + encodeURIComponent(authSession()) +
+          "&action=budgetYear&year=" + encodeURIComponent(y), { method: "GET" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res || !res.ok) throw new Error((res && res.error) || "bad payload");
+        /* אותו buildYear בדיוק כמו המטען המלא — ר' ההערה שם. ההגדרות
+           וההערות נלקחות ממה שכבר בזיכרון, כי הן מגיעות במטען הראשי
+           לכל השנים גם אחרי הדיאטה (הן מפה קטנה אחת, לא נתון פר-שנה). */
+        var notesMap = {};
+        Object.keys((CBA.mock && CBA.mock.years) || {}).forEach(function (k) {
+          if (CBA.mock.years[k] && CBA.mock.years[k].notes) notesMap[k] = CBA.mock.years[k].notes;
+        });
+        var built = buildYear(y, res.data, (CBA.mock && CBA.mock._settings) || {}, notesMap, true);
+        extraYears[y] = built;
+        extraYearsRev = (typeof res.rev === "number") ? res.rev : lastRev;
+        CBA.mock.years[y] = built;
+        settle(true);
+      })
+      ["catch"](function (err) {
+        console.error("[CBA] משיכת שנה נכשלה:", y, err);
+        settle(false, String(err && err.message ? err.message : err));
+      });
+  }
+
   return { url: API_URL, load: load, refresh: refresh, refreshIfChanged: refreshIfChanged,
-    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
+    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, yearLoaded: yearLoaded, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
 })();

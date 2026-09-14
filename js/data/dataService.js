@@ -1217,6 +1217,10 @@ CBA.data = (function () {
      תקציב, ולמסלול השחזור מ-localStorage בעליית האפליקציה. */
   function setCurrentYear(y, persist) {
     if (!CBA.mock.years[y]) return CBA.mock.currentYear;
+    /* רשת ביטחון (2026-09-14): שנה שקיימת ברשימה אבל הנתונים שלה עוד לא
+       נמשכו היא מסך תקציב ריק שנראה אמיתי. המעבר אליה חייב לעבור קודם
+       ב-CBA.sheets.loadYear. ⚠️ זה שומר גם על מסלולים שעוד לא נכתבו. */
+    if (CBA.mock.years[y]._loaded === false) return CBA.mock.currentYear;
     CBA.mock.currentYear = y;
     if (persist && pushConnected()) {
       CBA.sheets.push("setCurrentYear", { year: y });
