@@ -259,8 +259,13 @@
 .gd-track i.now { background: var(--action, #111827); transform: scale(1.15);
   box-shadow: 0 0 0 3px rgba(17,24,39,.12); }
 .gd-track i.done { background: var(--ok, #059669); box-shadow: 0 0 0 3px rgba(5,150,105,.16); }
+/* ⚠️ 2026-09-14 — דיווח שנסגר **בלי שבוצעה עבודה** הגיע לשלב האחרון בדיוק
+   כמו דיווח שבוצע, וקיבל את אותה נקודה ירוקה. מבחינת התושב זה מסלול שהגיע
+   ליעדו בהצלחה, וזו בדיוק ההפך מהמסר. אותו מיקום במסלול, גוון ניטרלי. */
+.gd-track i.shut { background: #9CA3AF; box-shadow: 0 0 0 3px rgba(17,24,39,.10); }
 .gd-axis b { font-size: 12.5px; font-weight: 600; color: var(--text, #374151); }
 .gd-axis.is-done b { color: var(--ok, #059669); }
+.gd-axis.is-shut b { color: var(--text-soft, #6B7280); }
 .gd-flag { font-size: 11.5px; font-weight: 600; padding: 3px 10px 3px 15px;
   border-radius: 4px; clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%);
   background: #FDF0DF; color: var(--warn, #D97706); }
@@ -593,6 +598,18 @@
 .gd-rep__closed b { display: block; font-size: 12px; font-weight: 700;
   color: var(--text, #374151); }
 .gd-rep__closed span { display: block; font-size: 12.5px; color: #6B7280;
+  line-height: 1.5; margin-top: 4px; }
+
+/* ---- "מה נעשה" — הסגירה המוצלחת (2026-09-14) ----
+   אותו מבנה כמו .gd-rep__closed, אבל בירוק ולא באפור: אלה שתי תשובות
+   הפוכות ("נעשה" מול "לא נפתח טיפול") ואסור שייראו כאותה הודעה.
+   ⚠️ הפס בהתחלה ולא רקע מלא: הכרטיס כבר נושא רקע קטגוריה, וריבוע ירוק
+   מלא היה מתחרה בתג הצבעוני שהוא הדבר היחיד שאמור לצעוק. */
+.gd-rep__done { margin-top: 8px; padding: 9px 11px; border-radius: 10px;
+  background: rgba(15,107,69,.06); border-inline-start: 3px solid rgba(15,107,69,.55); }
+.gd-rep__done b { display: block; font-size: 12px; font-weight: 700;
+  color: var(--gs-ok, #0F6B45); }
+.gd-rep__done span { display: block; font-size: 12.5px; color: #4B5563;
   line-height: 1.5; margin-top: 4px; }
 
 /* ---- דיווח תושב נראה אחרת, לא רק מסונן אחרת (2026-09-08) ----
