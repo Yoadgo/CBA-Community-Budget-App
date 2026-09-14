@@ -226,6 +226,11 @@ var GET_ACTION_PERMS = {
      התנועות של כל המשפחות בשום מסלול — DATA_MIN במטען הראשי היה מסונן
      והפעולה הזו הייתה עוקפת אותו. */
   budgetYear: PERM_BUDGET,
+  /* גשר הזהות ל-Firestore (2026-09-14, צעד 02ג).
+     need=null בכוונה: **כל** תושב פעיל צריך רשומת חבר, לא רק מנהל — היא
+     מה שיאפשר לו לקרוא את מה ששלו. ההגנה האמיתית אינה בהרשאה אלא בכך
+     שה-uid מגיע מאימות של גוגל ולא מהלקוח. ר' handleFirebaseLink_. */
+  firebaseLink: null,
   /* תמונת דיווח גינון (PHASE 4.2) — need=null בכוונה: התושב המדווח *וגם*
      צוות הגינון צריכים אותה, ואלה שתי הרשאות שונות לגמרי. הבדיקה האמיתית
      יושבת בתוך ההנדלר (gardenPhotoAllowed_) ולא כאן. */
@@ -454,6 +459,10 @@ function doGet(e) {
     /* שנת תקציב בודדת (2026-09-14). ר' handleBudgetYear_ להסבר המלא. */
     if (e && e.parameter && e.parameter.action === 'budgetYear') {
       return handleBudgetYear_(e.parameter);
+    }
+    /* גשר הזהות ל-Firestore (2026-09-14). ר' handleFirebaseLink_. */
+    if (e && e.parameter && e.parameter.action === 'firebaseLink') {
+      return handleFirebaseLink_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'listSignups') {
       return handleListSignups_(e.parameter);
@@ -814,6 +823,70 @@ function handleBudgetYear_(p) {
       items:  yd.items
     }
   });
+}
+
+/* ============================================================================
+ *  handleFirebaseLink_ — כותב את גשר הזהות   (צעד 02ג, 2026-09-14)
+ * ----------------------------------------------------------------------------
+ *  יוצר/מעדכן `members/{uid}` ב-Firestore עם **מזהה המשפחה וההרשאות בלבד**.
+ *  זהו המסמך היחיד שחוקי האבטחה של Firestore יקראו ממנו כדי לדעת מה מותר
+ *  למשתמש — ובלעדיו הוא לא יוכל לקרוא שום דבר שם.
+ *
+ *  🔴 **שלוש הגנות, וכל אחת מהן נחוצה בפני עצמה:**
+ *  1. **ה-uid מגיע מגוגל, לא מהלקוח.** הלקוח שולח טוקן זהות; `fsVerifyIdToken_`
+ *     מבקש מגוגל לאמת אותו ולהחזיר את ה-uid. לקוח ששולח uid זר היה כותב
+ *     הרשאות לחשבון של מישהו אחר.
+ *  2. **המייל ב-Firebase חייב להיות זהה למייל שבמושב החתום שלנו.** בלי
+ *     הבדיקה הזו מישהו יכול היה להתחבר ל-Firebase כחשבון א', לשלוח מושב
+ *     של חשבון ב', ולקבל לחשבון א' את ההרשאות של ב'.
+ *  3. **ההרשאות נקראות מהגיליון בזמן אמת** (`gate.perm`), לעולם לא מפרמטר
+ *     שהלקוח שלח.
+ *
+ *  ⚠️ **אין במסמך שם, מייל או טלפון.** רק `familyId` ו-`perms`. זה הגבול
+ *     שיועד קבע: נתונים אישיים נשארים בגיליון שבדרייב. השם מורכב בלקוח
+ *     מתוך מפת {familyId → שם} שמגיעה מ-Apps Script.
+ *
+ *  ⚠️ `updatedAt` ו-`schema` בכל מסמך — כלל היברידיות מס' 3. `updatedAt`
+ *     מזין את הגיבוי המצטבר ("מה השתנה מאז"), ו-`schema` מאפשר לשנות מבנה
+ *     בעתיד בלי לשבור קוד ישן.
+ *
+ *  ⏭️ **פתוח לצעד הבא:** `savePermissions` צריך לעדכן גם את המסמך הזה,
+ *     אחרת שלילת הרשאה תיכנס לתוקף רק בהתחברות הבאה. היום היא מיידית כי
+ *     הכול עובר דרך Apps Script; ברגע שכללי האבטחה יתחילו לקרוא מכאן, זה
+ *     משתנה. **לא לפתוח אוסף לקריאה מהדפדפן לפני שזה נסגר.**
+ * ========================================================================== */
+function handleFirebaseLink_(p) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var gate = authorize_(ss, p, null);
+  if (!gate.ok) return json_({ ok: false, error: gate.error });
+
+  var v = fsVerifyIdToken_(p && p.idToken);
+  if (!v.ok) return json_({ ok: false, error: v.error });
+
+  /* הגנה 2 — ר' ההערה למעלה. השוואה מנורמלת, כמו בכל השוואת מייל בקובץ. */
+  if (normalizeEmail_(v.email) !== normalizeEmail_(gate.email)) {
+    return json_({ ok: false, error: 'הזהות ב-Firebase אינה תואמת למשתמש המחובר' });
+  }
+
+  var perm = gate.perm || {};
+  var perms = (perm.perms || []).slice();
+  if (perm.isSuper && perms.indexOf(PERM_SUPER) === -1) perms.push(PERM_SUPER);
+
+  try {
+    fsSet_('members/' + v.uid, {
+      familyId: String(perm.familyId || ''),
+      perms: perms,
+      isExternal: !!perm.isExternal,
+      updatedAt: new Date(),
+      schema: 1
+    });
+  } catch (err) {
+    return json_({ ok: false, error: 'כתיבת רשומת החבר נכשלה: ' + String(err) });
+  }
+
+  /* ⚠️ מוחזר ה-uid בלבד, בלי ההרשאות: הלקוח כבר מכיר אותן מההתחברות,
+     ואין סיבה להחזיר אותן פעמיים ממקור שני שעלול לסטות. */
+  return json_({ ok: true, uid: v.uid });
 }
 
 /* ===================== כתיבה ===================== */

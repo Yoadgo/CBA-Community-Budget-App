@@ -18,6 +18,12 @@
  * ========================================================================== */
 
 var FS_PROP = 'FIREBASE_SA_JSON';
+/* מפתח ה-API הציבורי של אפליקציית הווב (צעד 02ג).
+   ⚠️ **אינו סוד.** apiKey של Firebase הוא מזהה ציבורי שיושב ממילא בקוד
+   הלקוח (js/data/firebase.js) וגלוי לכל מי שפותח את האתר. הוא אינו מעניק
+   שום הרשאה בפני עצמו — כאן הוא משמש רק כדי לבקש מגוגל לאמת טוקן זהות.
+   **לא לבלבל עם מפתח חשבון השירות**, שהוא כן סוד ויושב רק ב-Script Properties. */
+var FS_WEB_API_KEY = 'AIzaSyC548H-lJj3p7ppYfD_ekcMwJ-g7qOoyPw';
 var FS_SCOPE = 'https://www.googleapis.com/auth/datastore';
 var FS_TOKEN_CACHE_KEY = 'fs_access_token_v1';
 
@@ -169,6 +175,41 @@ function fsDelete_(path) {
   var r = fsFetch_(path, 'delete');
   if (r.code !== 200) throw new Error('מחיקה נכשלה (' + r.code + '): ' + r.text.substring(0, 300));
   return true;
+}
+
+/* ============================================================================
+ *  fsVerifyIdToken_ — מי באמת שלח את הבקשה   (צעד 02ג, 2026-09-14)
+ * ----------------------------------------------------------------------------
+ *  🔴 **למה לא לקבל את ה-uid מהלקוח:** ה-uid הוא סתם מחרוזת. לקוח שישלח
+ *  את ה-uid של מישהו אחר היה גורם לנו לכתוב `members/<uid זר>` עם ההרשאות
+ *  *שלו* — כלומר להעניק לעצמו את ההרשאות של אדם אחר. לכן הלקוח שולח את
+ *  **טוקן הזהות** של Firebase, וגוגל היא שמאמתת אותו ומחזירה את ה-uid.
+ *
+ *  ⚠️ accounts:lookup מאמת חתימה, תוקף ושייכות לפרויקט — כלומר טוקן שהומצא,
+ *     פג, או שייך לפרויקט אחר פשוט לא יחזיר משתמש.
+ *
+ *  מחזיר { ok, uid, email } או { ok:false, error }.
+ * ========================================================================== */
+function fsVerifyIdToken_(idToken) {
+  if (!idToken) return { ok: false, error: 'חסר טוקן זהות' };
+  var res = UrlFetchApp.fetch(
+    'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FS_WEB_API_KEY, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ idToken: String(idToken) }),
+      muteHttpExceptions: true
+    });
+  var code = res.getResponseCode();
+  var body = res.getContentText();
+  if (code !== 200) {
+    return { ok: false, error: 'אימות הטוקן נכשל (' + code + ')' };
+  }
+  var users;
+  try { users = JSON.parse(body).users; } catch (e) { return { ok: false, error: 'תשובת אימות לא תקינה' }; }
+  if (!users || !users.length) return { ok: false, error: 'הטוקן אינו מזוהה' };
+  var u = users[0];
+  if (!u.localId) return { ok: false, error: 'לא התקבל מזהה משתמש' };
+  return { ok: true, uid: String(u.localId), email: String(u.email || '') };
 }
 
 /* ============================================================================

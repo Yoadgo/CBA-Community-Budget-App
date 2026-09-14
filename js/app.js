@@ -1654,8 +1654,36 @@
     firebaseSignInDone = true;
     if (!googleIdToken || !window.CBA || !CBA.fb) return;
     setTimeout(function () {
-      try { CBA.fb.signIn(googleIdToken, function () {}); } catch (e) {}
+      try {
+        CBA.fb.signIn(googleIdToken, function (err) {
+          if (err) return;               // ר' כלל 1 — כישלון שקט
+          firebaseLinkMember();
+        });
+      } catch (e) {}
     }, FIREBASE_SIGNIN_DELAY_MS);
+  }
+
+  /* מבקש מהשרת לכתוב `members/{uid}` ב-Firestore (צעד 02ג, 2026-09-14).
+     ⚠️ **שולחים את טוקן הזהות של Firebase, לא את ה-uid.** ה-uid הוא סתם
+        מחרוזת — לקוח שישלח uid זר היה גורם לשרת לכתוב את ההרשאות שלנו
+        לחשבון של מישהו אחר. השרת מבקש מגוגל לאמת את הטוקן ולחלץ ממנו את
+        ה-uid בעצמו. ר' handleFirebaseLink_ ב-Code.gs.
+     ⚠️ שקט לחלוטין, כמו כל צעד 02: אין קולבק למשתמש ואין הודעה. המסמך הזה
+        נחוץ רק לקריאות עתידיות מ-Firestore, ואין היום מסך שתלוי בו. */
+  function firebaseLinkMember() {
+    if (!window.CBA || !CBA.fb || !CBA.fb.idToken) return;
+    CBA.fb.idToken(function (err, token) {
+      if (err || !token) return;
+      fetch(CBA.sheets.url + "?action=firebaseLink" +
+            "&session=" + encodeURIComponent(CBA.authSession || "") +
+            "&idToken=" + encodeURIComponent(token))
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok) { try { console.log("[CBA.fb] נרשמה רשומת חבר", res.uid); } catch (e) {} }
+          else { try { console.log("[CBA.fb] רשומת חבר נכשלה:", res && res.error); } catch (e) {} }
+        })
+        ["catch"](function () { /* שקט — ר' ההערה למעלה */ });
+    });
   }
 
   function onGoogleLogin(resp) {
