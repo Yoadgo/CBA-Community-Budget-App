@@ -51,7 +51,15 @@
     currentScreen = name;
     main.innerHTML = "";
     document.body.dataset.screen = name;
-    screen.render(main, opts);
+    /* אין נתונים אמיתיים ביד — מסך שכולו תקציב מציג את הפאנל במקום מספרים.
+       ⚠️ אסור לצייר אותו "בלי מספרים": CBA.mock עדיין מחזיק את נתוני הדמו
+       מ-mock.js, ושרטוט שלהם היה מציג סכומים מומצאים כאילו הם אמיתיים. */
+    if (screenNeedsBudget(name) && !CBA.sheets.isConnected()) {
+      main.innerHTML = dataUnavailableHTML();
+      wireDataRetry(main);
+    } else {
+      screen.render(main, opts);
+    }
     if (silent) {
       applyPulse(main, before);
     } else {
@@ -1846,19 +1854,55 @@
   // מטמון מפעם קודמת ולא תשובה מהרשת). לא נופלים חזרה לנתוני הדמו המקוריים
   // מ-mock.js (אלה נבנו בתחילת הפיתוח כדי לעצב את המסכים, לפני שהייתה בכלל
   // אינטגרציה עם הגיליון) — יועד ביקש במפורש שלא להציג אותם כאילו הם אמיתיים.
-  function showLoadFailure() {
-    main.innerHTML =
-      '<div class="load-error">' +
+  /* הפאנל "אין נתוני תקציב" — מוצג **בתוך המסך שצריך אותם**, לא במקום
+     האפליקציה כולה (2026-09-14).
+
+     ⚠️ עד היום כישלון של המשיכה הראשית מחק את כל המסך, גם למי שנחת על
+     עמוד הבית או על הגינון — מסכים שאינם נוגעים בתקציב כלל ומושכים את
+     הנתונים שלהם בקריאות נפרדות משלהם. נמדד: **97%** ממטען הפתיחה (99KB)
+     הם נתוני תקציב, ו-71% ממנו הן תנועות של *שנה שעברה*. כלומר האפליקציה
+     כולה הייתה תלויה בנתון שרוב המסכים לא צריכים.
+
+     מה שקובע "יש נתונים אמיתיים?" הוא `CBA.sheets.isConnected()`, כלומר
+     `CBA.mock._source === "sheets"` — הדגל הזה כבר קיים ומתרומם רק כש-apply()
+     החיל מטען אמיתי. **בכוונה לא הומצא דגל חדש**: דגל שני היה יכול להיפרד
+     מהראשון ולהציג נתוני דמו כאילו הם אמיתיים, וזה בדיוק מה שיועד אסר. */
+  function dataUnavailableHTML(sub) {
+    return '<div class="load-error">' +
         '<div class="load-error__title">לא הצלחנו לטעון את נתוני התקציב</div>' +
-        '<div class="load-error__sub">ייתכן שיש בעיית חיבור לאינטרנט. אפשר לנסות שוב.</div>' +
-        '<button type="button" class="btn-primary" id="load-retry">נסה שוב</button>' +
+        '<div class="load-error__sub">' + CBA.esc(sub || "ייתכן שיש בעיית חיבור לאינטרנט. אפשר לנסות שוב.") + '</div>' +
+        '<button type="button" class="btn-primary" data-data-retry>נסה שוב</button>' +
       '</div>';
-    const btn = document.getElementById("load-retry");
-    if (btn) btn.addEventListener("click", function () {
-      main.innerHTML = skeletonScreen();
-      CBA.sheets.load(sheetsLoadHandler);
+  }
+
+  /* מחבר את כפתור "נסה שוב" בכל פאנל כזה שנמצא ב-root. */
+  function wireDataRetry(root) {
+    var btn = root && root.querySelector("[data-data-retry]");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      btn.textContent = "טוען…";
+      CBA.sheets.load(function (ok, info) {
+        sheetsLoadHandler(ok, info);
+        // הצליח? sheetsLoadHandler כבר צייר מחדש. נכשל שוב? מחזירים את הכפתור.
+        if (!CBA.sheets.isConnected() && btn.isConnected) {
+          btn.disabled = false;
+          btn.textContent = "נסה שוב";
+        }
+      });
     });
   }
+  // חשוף כדי שמסכים יוכלו להציג את אותו פאנל בעצמם (עמוד הבית עושה זאת)
+  CBA.dataUnavailableHTML = dataUnavailableHTML;
+  CBA.wireDataRetry = wireDataRetry;
+
+  /* המסכים שכל תוכנם נגזר מנתוני התקציב. מסך שאינו ברשימה נפתח כרגיל גם
+     כשהמשיכה נכשלה, כי הוא מביא את הנתונים שלו בעצמו.
+     ⚠️ `resRequests` נמצא כאן אף שהוא מסך תושב — כל תוכנו הוא תנועות.
+     ⚠️ `residents` **אינו** כאן במכוון: רק סכום אחד בשורה נגזר מתנועות,
+        והוא מוצג כ-"—" במקום לחסום ספר טלפונים שלם. */
+  var BUDGET_SCREENS = ["budget", "expenses", "planning", "reconcile", "resRequests"];
+  function screenNeedsBudget(name) { return BUDGET_SCREENS.indexOf(name) !== -1; }
 
   function sheetsLoadHandler(ok, info) {
     window.CBA.connected = CBA.sheets.isConnected();
@@ -1874,13 +1918,14 @@
     }
 
     if (!inited) {
-      if (!ok && info && info.source === "none") {
-        // אין מטמון ואין תשובה מהרשת — שום נתון אמיתי להראות. לא מציגים את
-        // נתוני הדמו המקוריים כאילו הם אמיתיים; מציגים מסך שגיאה עם "נסה שוב".
-        ensureHeaderShell();
-        showLoadFailure();
-        return;
-      }
+      /* אין מטמון ואין תשובה מהרשת — אין שום נתון תקציבי אמיתי.
+         ⚠️ **עד 14.9.26 עצרנו כאן והצגנו מסך שגיאה במקום האפליקציה כולה.**
+         זו הייתה טעות ארכיטקטונית: עמוד הבית, הגינון, המועדון, המכון, המפה
+         וספר התושבים מושכים את הנתונים שלהם בקריאות נפרדות משלהם ולא נוגעים
+         בתקציב — ובכל זאת נפלו יחד איתו. מהיום האפליקציה **עולה כרגיל**,
+         והפאנל מוצג רק בתוך המסכים שבאמת תלויים בתקציב (BUDGET_SCREENS).
+         נתוני הדמו מ-mock.js עדיין יושבים ב-CBA.mock, ולכן השער ב-showScreen
+         הוא מה שמונע מהם להיראות כאילו הם אמיתיים — ולא העצירה הזו. */
       // ציור ראשון — יש לנו נתונים אמיתיים (מהרשת עכשיו, או מהמטמון כגיבוי
       // אחרי שהרשת נכשלה — "cache-kept" למעלה כבר החיל אותם על CBA.mock)
       inited = true;

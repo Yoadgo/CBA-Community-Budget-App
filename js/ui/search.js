@@ -109,7 +109,11 @@ CBA.search = (function () {
         sub: t.group || "", run: function () { go(t.key); } });
     });
 
-    var canExpenses = hasTarget("expenses");
+    /* ⚠️ בלי הבדיקה הזו, כשנתוני התקציב לא נטענו החיפוש היה מציע סעיפים
+       והוצאות מתוך נתוני הדמו של mock.js — תוצאות שנראות אמיתיות לגמרי
+       ומובילות למסך ריק (2026-09-14). */
+    var haveBudget = !(window.CBA && CBA.sheets) || CBA.sheets.isConnected();
+    var canExpenses = hasTarget("expenses") && haveBudget;
 
     /* 2. סעיפי תקציב — רק למי שרואה בכלל את מסך ההוצאות */
     if (canExpenses && CBA.data && CBA.data.getCategories) {

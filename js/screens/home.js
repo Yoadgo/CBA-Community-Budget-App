@@ -262,6 +262,16 @@ CBA.screens = CBA.screens || {};
 
   /* ------------------------------------------------------ "אצלי בבית" */
   function mineSectionHTML() {
+    /* ⚠️ הכרטיס הזה נגזר כולו מתנועות. אם המשיכה הראשית נכשלה, CBA.mock
+       עדיין מחזיק את נתוני הדמו מ-mock.js — והכרטיס היה מציג "0 ממתינות,
+       ₪0 שולמו השנה" כאילו אלה המספרים האמיתיים של המשפחה. אפס שקרי גרוע
+       יותר מהודעת שגיאה, ולכן כאן מוצג הפאנל המשותף (2026-09-14). */
+    if (window.CBA && CBA.sheets && !CBA.sheets.isConnected() && CBA.dataUnavailableHTML) {
+      return '<section class="card hm-card">' +
+        '<div class="hm-card__head"><h2 class="hm-card__t">אצלנו בבית</h2></div>' +
+        CBA.dataUnavailableHTML("הנתונים הכספיים לא נטענו. שאר האפליקציה עובדת כרגיל.") +
+        '</section>';
+    }
     var counts = { pending: 0, ready: 0, paid: 0 };
     if (CBA.residentUtils && CBA.residentUtils.myRequests) {
       var groups = CBA.residentUtils.splitRequests(CBA.residentUtils.myRequests());
@@ -408,6 +418,8 @@ CBA.screens = CBA.screens || {};
         actionsHTML();
 
       bindClicks(container);
+      // כפתור "נסה שוב" של הפאנל, אם הכרטיס הכספי הוחלף בו
+      if (window.CBA && CBA.wireDataRetry) CBA.wireDataRetry(container);
       syncClearState(container);
       /* קריאה אחת מזינה את כל המטמונים, ואז שלוש הפונקציות רצות בדיוק כמו
          קודם — רק בלי לפנות לרשת. ר' primeHomeExtras. */
