@@ -60,6 +60,13 @@ var PERM_GYM       = 'מכון';
 var PERM_GARDEN    = 'גינון';
 var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN];
 var PERM_HEADER = 'הרשאות';
+/* עמודת גשר הזהות (2026-09-14, צעד 02ד). כמו עמודות האימייל וההרשאות, היא
+   **פר-משבצת**: 'מזהה Firebase 1', 'מזהה Firebase 2' וכו'.
+   ⚠️ **ה-uid אינו נתון אישי** — הוא מחרוזת אקראית שגוגל הנפיקה, בלי שם,
+   מייל או טלפון. הוא יושב כאן ולא ב-Firestore בדיוק מהסיבה ההפוכה: כדי
+   שהקישור בין *אדם* לבין *זהות* יישאר בגיליון שבדרייב, ו-Firestore יכיר
+   רק מזהה חסר משמעות. זה בדיוק הגבול שיועד קבע. */
+var FB_UID_HEADER = 'מזהה Firebase';
 
 /* משתמש חיצוני (2026-09-07) — עמודה "סוג משתמש" בטאב תושבים, ערך "חיצוני".
  * אביתר (קבלן הגינון) הוא שורה רגילה בטאב — כך ההתחברות עובדת — ומסומן כחיצוני.
@@ -855,6 +862,86 @@ function handleBudgetYear_(p) {
  *     הכול עובר דרך Apps Script; ברגע שכללי האבטחה יתחילו לקרוא מכאן, זה
  *     משתנה. **לא לפתוח אוסף לקריאה מהדפדפן לפני שזה נסגר.**
  * ========================================================================== */
+/* ============================================================================
+ *  גשר ה-uid בגיליון   (צעד 02ד, 2026-09-14)
+ * ----------------------------------------------------------------------------
+ *  🔴 **הבעיה שזה פותר:** השרת מכיר אנשים לפי **מייל**; Firestore מכיר אותם
+ *  לפי **uid**. בלי מיפוי ביניהם, `savePermissions` אינו יודע איזה מסמך
+ *  לעדכן — ולכן שלילת הרשאה הייתה נכנסת לתוקף רק בהתחברות הבאה של אותו אדם.
+ *  זה פער אבטחה אמיתי ברגע שכללי האבטחה יתחילו לקרוא מ-`members/{uid}`.
+ *
+ *  ✅ ההכרעה (יועד, 14.9): **עמודה בטאב "תושבים"**, פר-משבצת, בדיוק כמו
+ *  עמודות האימייל וההרשאות. כך הקישור בין אדם לזהות חי בגיליון שבדרייב —
+ *  יחד עם שאר הנתונים האישיים — ו-Firestore מכיר רק מזהה חסר משמעות.
+ * ========================================================================== */
+
+/** מוסיף עמודות "מזהה Firebase N" כך שיהיו כמספר עמודות האימייל. */
+function ensureFbUidCols_(ss) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var emails = 0, uids = 0;
+  headers.forEach(function (h) {
+    if (h.indexOf(FB_UID_HEADER) !== -1) uids++;
+    else if (h.indexOf('אימייל') !== -1) emails++;
+  });
+  var need = Math.max(0, emails - uids);
+  if (!need) return { ok: true, added: [] };
+  var add = [];
+  for (var i = 0; i < need; i++) add.push(FB_UID_HEADER + ' ' + (uids + i + 1));
+  sh.getRange(1, lastCol + 1, 1, add.length).setValues([add]);
+  sh.getRange(1, lastCol + 1, 1, add.length).setFontWeight('bold');
+  return { ok: true, added: add };
+}
+
+/** אינדקסים של עמודות האימייל, ההרשאות וה-uid (0-based), באותו סדר משבצות. */
+function residentSlotCols_(sh) {
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+                  .map(function (h) { return String(h).trim(); });
+  var email = [], perm = [], uid = [];
+  headers.forEach(function (h, i) {
+    if (h.indexOf(FB_UID_HEADER) !== -1) uid.push(i);
+    else if (h.indexOf(PERM_HEADER) !== -1) perm.push(i);
+    else if (h.indexOf('אימייל') !== -1) email.push(i);
+  });
+  return { email: email, perm: perm, uid: uid };
+}
+
+/* רושם את ה-uid בשורת התושב, **רק אם הוא באמת השתנה**.
+   ⚠️ כתיבה לגיליון בכל התחברות הייתה מיותרת ויקרה (נעילה + סיבוב שלם),
+      ובפועל ה-uid של אדם אינו משתנה כמעט לעולם. */
+function fbRememberUid_(ss, email, uid) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh || !email || !uid) return false;
+  var ensured = ensureFbUidCols_(ss);
+  if (!ensured.ok) return false;
+  var cols = residentSlotCols_(sh);
+  if (!cols.email.length || cols.uid.length < cols.email.length) return false;
+
+  var want = normalizeEmail_(email);
+  var last = sh.getLastRow();
+  if (last < 2) return false;
+  var values = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();
+  for (var r = 0; r < values.length; r++) {
+    for (var sIdx = 0; sIdx < cols.email.length; sIdx++) {
+      if (normalizeEmail_(values[r][cols.email[sIdx]]) !== want) continue;
+      var cur = String(values[r][cols.uid[sIdx]] || '').trim();
+      if (cur === uid) return true;                      // כבר רשום — לא נוגעים
+      sh.getRange(r + 2, cols.uid[sIdx] + 1).setValue(uid);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** ה-uid הרשום לשורה+משבצת, או '' אם אין. */
+function fbUidForSlot_(sh, rowIndex, slot) {
+  var cols = residentSlotCols_(sh);
+  if (cols.uid.length < slot) return '';
+  return String(sh.getRange(rowIndex, cols.uid[slot - 1] + 1).getValue() || '').trim();
+}
+
 function handleFirebaseLink_(p) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var gate = authorize_(ss, p, null);
@@ -877,6 +964,10 @@ function handleFirebaseLink_(p) {
       familyId: String(perm.familyId || ''),
       perms: perms,
       isExternal: !!perm.isExternal,
+      /* ⚠️ תמיד true כאן — `authorize_` כבר דחה משתמש לא-פעיל לפני שהגענו.
+         השדה קיים כדי שכללי האבטחה יוכלו לדרוש אותו, וכדי שיהיה מקום אחד
+         לכבות משתמש בלי למחוק את המסמך. ר' האזהרה על "עזב" בזיכרון הפרויקט. */
+      active: true,
       updatedAt: new Date(),
       schema: 1
     });
@@ -884,9 +975,16 @@ function handleFirebaseLink_(p) {
     return json_({ ok: false, error: 'כתיבת רשומת החבר נכשלה: ' + String(err) });
   }
 
+  /* רושמים את ה-uid בשורת התושב, כדי ש-savePermissions יידע איזה מסמך
+     לעדכן. ⚠️ **אחרי** הכתיבה ל-Firestore ובנפרד ממנה: אם הרישום בגיליון
+     נכשל, רשומת החבר כבר קיימת והמשתמש עובד — רק שלילה עתידית תתעכב
+     להתחברות הבאה. זו פשרה מודעת, ולא סיבה להיכשל בכל הפעולה. */
+  var remembered = false;
+  try { remembered = fbRememberUid_(ss, gate.email, v.uid); } catch (err2) { remembered = false; }
+
   /* ⚠️ מוחזר ה-uid בלבד, בלי ההרשאות: הלקוח כבר מכיר אותן מההתחברות,
      ואין סיבה להחזיר אותן פעמיים ממקור שני שעלול לסטות. */
-  return json_({ ok: true, uid: v.uid });
+  return json_({ ok: true, uid: v.uid, remembered: remembered });
 }
 
 /* ===================== כתיבה ===================== */
@@ -4091,7 +4189,42 @@ function savePermissions_(ss, body) {
   }
 
   sh.getRange(rowIndex, permCols[slot - 1] + 1).setValue(perms.join(', '));
-  return { ok: true, perms: perms };
+
+  /* ============================================================
+   *  🔴 סנכרון מיידי ל-Firestore  (2026-09-14, צעד 02ד)
+   * ------------------------------------------------------------
+   *  בלי השורות האלה שלילת הרשאה הייתה נכנסת לתוקף **רק בהתחברות הבאה**
+   *  של אותו אדם — כי `members/{uid}` נכתב בהתחברות בלבד. ברגע שכללי
+   *  האבטחה של Firestore קוראים מהמסמך הזה, זהו פער אבטחה אמיתי: מנהל
+   *  שמסיר הרשאה מצפה שהיא תיעלם עכשיו, לא מחר.
+   *
+   *  ⚠️ **נכשל בשקט במכוון.** השמירה לגיליון כבר בוצעה והיא מקור האמת;
+   *     אם Firestore לא זמין ברגע הזה, אסור שהפעולה כולה תיכשל ותשאיר
+   *     את המנהל בלי לדעת אם ההרשאה נשמרה. הסטייה נסגרת בהתחברות הבאה.
+   *  ⚠️ שדה `fsSynced` בתשובה כדי שאפשר יהיה לראות מתי זה קרה ומתי לא.
+   * ============================================================ */
+  var fsSynced = false;
+  try {
+    var uid = fbUidForSlot_(sh, rowIndex, slot);
+    if (uid) {
+      /* ⚠️ `permissionsFor_` משמש כאן **רק** ל-familyId/isExternal/active.
+         ההרשאות נלקחות מ-`perms` שזה עתה נשמר — הזיכרון `PERMS_MEMO_` עדיין
+         מחזיק את הערך הישן בתוך הריצה הזו, ושימוש בו היה כותב ל-Firestore
+         בדיוק את ההרשאה שהרגע הסרנו. */
+      var tp = permissionsFor_(targetEmail) || {};
+      fsSet_('members/' + uid, {
+        familyId: String(tp.familyId || ''),
+        perms: perms,
+        isExternal: !!tp.isExternal,
+        active: tp.active !== false,
+        updatedAt: new Date(),
+        schema: 1
+      });
+      fsSynced = true;
+    }
+  } catch (err) { fsSynced = false; }
+
+  return { ok: true, perms: perms, fsSynced: fsSynced };
 }
 
 /* ---------- "משפחה עזבה, נכנסה משפחה חדשה" (2026-08-07) ----------
