@@ -935,6 +935,58 @@ function fbRememberUid_(ss, email, uid) {
   return false;
 }
 
+/* ============================================================================
+ *  fbSyncRow_ — מיישר את Firestore לפי שורה בגיליון   (2026-09-14, סוגר חוסם)
+ * ----------------------------------------------------------------------------
+ *  🔴 **החוסם שזה סוגר:** תושב שסומן "עזב" איבד גישה דרך Apps Script
+ *  (`authorize_` חוסם לא-פעיל) — אבל כללי האבטחה של Firestore רואים **רק**
+ *  את `members/{uid}`, ושם לא היה שום סימן לכך. כלומר ברגע שייפתח תחום ראשון
+ *  לקריאה ישירה, מי שעזב היה ממשיך לקרוא אותו. **לא קריסה — דליפה שקטה.**
+ *
+ *  ✅ הפתרון: פונקציה אחת שמסנכרנת **שורה שלמה** (כל המשבצות שלה), ונקראת
+ *  מכל מקום שכותב לטאב "תושבים". עדיף מלרדוף אחרי כל שדה בנפרד: מי שיוסיף
+ *  בעתיד מסלול כתיבה חדש צריך לזכור דבר אחד — לקרוא לזה.
+ *
+ *  ⚠️ **מנקה את `PERMS_MEMO_` לפני הקריאה.** הזיכרון הזה ממטמן הרשאות לכל
+ *     הריצה, וזה עתה כתבנו לגיליון — בלי הניקוי היינו מסנכרנים ל-Firestore
+ *     בדיוק את המצב הישן שהרגע שינינו.
+ *
+ *  ⚠️ מייל שנמחק מהשורה ⇒ `found=false` ⇒ `active:false`. גם זו שלילה,
+ *     והיא נכונה: אין דרך לזהות את האדם, ולכן אין סיבה להשאיר לו גישה.
+ *
+ *  ⚠️ נכשל בשקט ומחזיר -1. הגיליון הוא מקור האמת והוא כבר נשמר; כישלון
+ *     סנכרון לא אמור להפיל פעולה ניהולית ולהשאיר את המנהל בלי לדעת מה קרה.
+ * ========================================================================== */
+function fbSyncRow_(ss, rowIndex) {
+  try {
+    var sh = ss.getSheetByName('תושבים');
+    if (!sh || !rowIndex || rowIndex < 2) return 0;
+    var cols = residentSlotCols_(sh);
+    if (!cols.uid.length || !cols.email.length) return 0;
+    var row = sh.getRange(rowIndex, 1, 1, sh.getLastColumn()).getValues()[0];
+    var n = 0;
+    var slots = Math.min(cols.email.length, cols.uid.length);
+    for (var i = 0; i < slots; i++) {
+      var uid = String(row[cols.uid[i]] || '').trim();
+      if (!uid) continue;                       // מעולם לא התחבר — אין מה לסנכרן
+      var email = String(row[cols.email[i]] || '').trim();
+      var key = normalizeEmail_(email);
+      if (key && PERMS_MEMO_[key]) delete PERMS_MEMO_[key];
+      var pr = email ? permissionsFor_(email) : { found: false, active: false, perms: [] };
+      fsSet_('members/' + uid, {
+        familyId: String((pr && pr.familyId) || ''),
+        perms: (pr && pr.perms) || [],
+        isExternal: !!(pr && pr.isExternal),
+        active: !!(pr && pr.found && pr.active),
+        updatedAt: new Date(),
+        schema: 1
+      });
+      n++;
+    }
+    return n;
+  } catch (e) { return -1; }
+}
+
 /** ה-uid הרשום לשורה+משבצת, או '' אם אין. */
 function fbUidForSlot_(sh, rowIndex, slot) {
   var cols = residentSlotCols_(sh);
@@ -3732,6 +3784,12 @@ function saveResidentRow_(ss, body) {
   });
   if (!written.length) return { ok: false, error: 'לא נמצאו עמודות תואמות' };
 
+  /* 🔴 כל עריכה של שורת תושב מסנכרנת את Firestore — לא רק שינוי סטטוס.
+     ⚠️ **בכוונה גורף ולא "רק אם נגעו בסטטוס":** מייל שהוחלף, מייל שנמחק
+     ושורה שהועברה לבית אחר משנים כולם את מה שהמשתמש אמור לראות. תנאי
+     שמנסה לנחש מתי זה רלוונטי הוא בדיוק המקום שבו פערים כאלה נולדים. */
+  fbSyncRow_(ss, rowIdx);
+
   try {
     headers.forEach(function (h, c) {
       if (h.indexOf('אימייל') === -1) return;
@@ -4321,6 +4379,8 @@ function createResidents_(ss, body) {
       Object.keys(markLeft).forEach(function (k) {
         var rn = parseInt(k, 10);
         sh.getRange(rn, statusCol + 1).setValue('עזב');
+        /* 🔴 שלילת הגישה ב-Firestore באותו רגע. ר' fbSyncRow_. */
+        fbSyncRow_(ss, rn);
         marked.push(rn);
       });
     }
@@ -4369,7 +4429,10 @@ function replaceFamily_(ss, body) {
   });
 
   // 1. סימון השורה הישנה כ"עזב" — ההיסטוריה שלה נשארת שלה
-  if (statusCol > -1) sh.getRange(oldRow, statusCol + 1).setValue('עזב');
+  if (statusCol > -1) {
+    sh.getRange(oldRow, statusCol + 1).setValue('עזב');
+    fbSyncRow_(ss, oldRow);   // 🔴 שלילת הגישה ב-Firestore. ר' fbSyncRow_.
+  }
 
   // 2. שורה חדשה למשפחה הנכנסת
   var blank = [];
