@@ -7680,7 +7680,10 @@ var GARDEN_REPORT_HEADERS = [
   'מזהה', 'תאריך דיווח', 'מזהה משפחה', 'שם מדווח', 'טלפון',
   'קטגוריה', 'אזור', 'מיקום X', 'מיקום Y', 'מיקום מילולי', 'תיאור', 'תמונות',
   'מזהה משימה', 'אוחד לדיווח', 'שנת תקציב',
-  'משוב', 'תאריך משוב', 'הערת משוב'
+  'משוב', 'תאריך משוב', 'הערת משוב',
+  /* מזהה שהדפדפן מייצר פעם אחת לכל טופס (ולא לכל ניסיון שליחה), כדי שאותו
+     דיווח לא ייכתב פעמיים. ר' ההערה ב-submitGardenReport_. */
+  'מזהה שליחה'
 ];
 
 /* מיקום X/Y נשמרים **מנורמלים 0–1** ולא בפיקסלים ולא באחוזי המפה הנוכחית.
@@ -7811,7 +7814,8 @@ function gardenEnsureSheet_(ss, name, headers, widths) {
 /* 2 (2026-09-08): GARDEN_ROUTINE_HEADERS השתנו עם תוכנית העבודה — נוספו
    'שבוע ראשון' ו'סבב אזורים'. בלי ההעלאה הזאת המטמון היה מדלג על
    ensureGardenSheets_ עד שיפוג, והעמודות החדשות פשוט לא היו נוצרות. */
-var GARDEN_SCHEMA_REV = 2;
+/* 3 (2026-09-14): נוספה 'מזהה שליחה' ל-GARDEN_REPORT_HEADERS. */
+var GARDEN_SCHEMA_REV = 3;
 function ensureGardenSheetsCached_(ss) {
   var key = 'garden_schema_v' + GARDEN_SCHEMA_REV;
   try {
@@ -8246,6 +8250,27 @@ function handleMyGardenReports_(p) {
 }
 
 /* ---------- הגשת דיווח (doPost) ---------- */
+/* מחזירה את תשובת ההצלחה של דיווח שכבר נכתב עם אותו 'מזהה שליחה', או null.
+   ר' ההערה בתוך submitGardenReport_ למה זה קיים. */
+function gardenFindByRef_(rsh, refCol, ref) {
+  var last = rsh.getLastRow();
+  if (last < 2) return null;
+  var col = rsh.getRange(2, refCol + 1, last - 1, 1).getValues();
+  for (var i = col.length - 1; i >= 0; i--) {      // מהסוף — הכפילות תמיד טרייה
+    if (String(col[i][0]).trim() !== ref) continue;
+    var c = gardenCols_(rsh);
+    var row = rsh.getRange(i + 2, 1, 1, rsh.getLastColumn()).getValues()[0];
+    return {
+      ok: true,
+      duplicate: true,                              // הלקוח אומר "כבר נשמר" ולא "נשלח"
+      id: row[c['מזהה']],
+      taskId: row[c['מזהה משימה']],
+      photos: String(row[c['תמונות']] || '').split(',').filter(function (s) { return s; })
+    };
+  }
+  return null;
+}
+
 function submitGardenReport_(ss, body) {
   var perm = body._perm || {};
   var lists = gardenLists_(ss);
@@ -8280,6 +8305,27 @@ function submitGardenReport_(ss, body) {
     var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
     var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
     var rc = gardenCols_(rsh), tc = gardenCols_(tsh);
+
+    /* ============================================================
+     *  מניעת דיווח כפול (2026-09-14 — נולד מתקלה אמיתית בייצור)
+     * ------------------------------------------------------------
+     *  14.9 נשלח דיווח, הפונקציה הזאת רצה 15.1 שניות **והצליחה**
+     *  (הדיווח #5 נכתב לגיליון עם התמונה והמשימה) — ובדפדפן נפלה
+     *  קבלת התשובה, כך שהתושב קיבל "שגיאת רשת" על דיווח ששמור.
+     *  מי שילחץ "נסה שוב" במצב הזה ייצר דיווח שני זהה.
+     *
+     *  ⚠️ הבדיקה חייבת להיות **בתוך הנעילה**: שתי בקשות זהות
+     *     שמגיעות יחד (לחיצה כפולה, ניסיון חוזר אוטומטי) היו שתיהן
+     *     עוברות את הבדיקה לפני שאחת מהן הספיקה לכתוב.
+     *  ⚠️ קוראים **רק את עמודת המזהה** ולא את כל הטבלה — הבדיקה
+     *     הזאת רצה בכל דיווח, ואסור שהיא תוסיף זמן המתנה.
+     * ============================================================ */
+    var clientRef = String(body.clientRef || '').trim().substring(0, 64);
+    var refCol = rc['מזהה שליחה'];
+    if (clientRef && refCol !== undefined) {
+      var dup = gardenFindByRef_(rsh, refCol, clientRef);
+      if (dup) return dup;
+    }
 
     var settings = getEmailSettings_(ss);
     var photoMax = parseInt(emailRule_(settings, 'RULE_GARDEN_PHOTO_MAX', 8), 10) || 8;
@@ -8333,6 +8379,7 @@ function submitGardenReport_(ss, body) {
     rrow[rc['תמונות']] = ids.join(',');
     rrow[rc['מזהה משימה']] = taskId;
     rrow[rc['שנת תקציב']] = year;
+    if (refCol !== undefined) rrow[refCol] = clientRef;
     rsh.appendRow(rrow);
 
     gardenLog_(ss, taskId, 'נפתח', 'שלב', '', 'התקבל', name, 'דיווח תושב #' + repId);

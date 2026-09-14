@@ -39,6 +39,15 @@
    * ========================================================================== */
   var pendingReport = null;
 
+  /* מזהה שנוצר **פעם אחת לטופס** ולא פעם אחת לכל ניסיון שליחה. הוא נוסע עם
+     הדיווח, השרת שומר אותו בעמודה 'מזהה שליחה', ושליחה חוזרת עם אותו מזהה
+     מחזירה את הדיווח הקיים במקום ליצור חדש.
+     ⚠️ בלי זה, "נסה שוב" אחרי נפילת רשת מייצר דיווח כפול — וזה קרה בייצור
+        ב-14.9: השרת כתב את הדיווח ורץ 15 שניות, והדפדפן הודיע "שגיאת רשת". */
+  function newRef() {
+    return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+  }
+
   function sendReport(data, btn) {
     pendingReport = data;
     /* חוסם רענון רקע כל עוד הדיווח בדרך — אותו מנגנון שמגן על העלאת קבלה. */
@@ -66,7 +75,9 @@
 
       if (res && res.ok) {
         pendingReport = null;
-        CBA.ui.toast("הדיווח נשלח · מספר " + res.id);
+        /* duplicate=true — השרת מצא שהדיווח כבר נכתב עם אותו מזהה שליחה.
+           אומרים את האמת ולא "נשלח", כדי שהתושב לא יחפש דיווח שני. */
+        CBA.ui.toast((res.duplicate ? "הדיווח כבר נשמר · מספר " : "הדיווח נשלח · מספר ") + res.id);
         /* ⚠️ לנווט רק אם הוא עדיין בטופס. אם הוא כבר עבר למסך אחר, גרירה
            חזרה לרשימת הדיווחים היא בדיוק מה שהיציאה-ברקע באה למנוע. */
         if (onForm) CBA.navigate("resGarden");
@@ -509,7 +520,7 @@
   CBA.screens.resGardenNew = {
     render: function (container) {
       var WORD_MAX = 75;
-      var state = { cat: "", x: null, y: null, area: "", photos: [] };
+      var state = { cat: "", x: null, y: null, area: "", photos: [], clientRef: newRef() };
       var user = (window.CBA && CBA.user) || {};
 
       /* ⚠️ 2026-09-09 — עד היום הטופס לא צייר כלום עד ש-getGardenMeta חזר,
@@ -709,6 +720,8 @@
               כרגיל. הטקסט אומר את זה במדויק במקום להבטיח סימון שלא רואים. */
         if (pendingReport) {
           var pr = pendingReport;
+          /* ⚠️ אותו מזהה שליחה, אחרת השרת יראה בזה דיווח חדש וייווצר כפל. */
+          if (pr.clientRef) state.clientRef = pr.clientRef;
           var catBtn = container.querySelector('.gd-cat[data-c="' + esc(pr.category || "") + '"]');
           if (catBtn) catBtn.click();
           descEl.value = pr.desc || "";
@@ -742,7 +755,8 @@
             place: place,
             phone: container.querySelector("#gd-phone").value.trim(),
             x: state.x, y: state.y, area: state.area || "",
-            photos: state.photos.slice()
+            photos: state.photos.slice(),
+            clientRef: state.clientRef
           }, sendBtn);
         });
       });
