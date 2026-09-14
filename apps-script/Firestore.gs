@@ -23,7 +23,21 @@ var FS_TOKEN_CACHE_KEY = 'fs_access_token_v1';
 
 /** קורא את פרטי חשבון השירות. זורק שגיאה ברורה אם המאפיין חסר. */
 function fsAccount_() {
-  var raw = PropertiesService.getScriptProperties().getProperty(FS_PROP);
+  var props = PropertiesService.getScriptProperties();
+  var raw = props.getProperty(FS_PROP);
+  /* ⚠️ שמות מאפיינים ב-Script Properties רגישים לאותיות גדולות/קטנות, וזו
+     טעות קלה מאוד בהקלדה ידנית (קרה ב-14.9.26: הוקלד Firebase_SA_JSON).
+     לכן אם השם המדויק לא נמצא — מחפשים התאמה בלי תלות ברישיות, במקום
+     לשלוח את יועד לגעת שוב במפתח פרטי רק בגלל אות אחת. */
+  if (!raw) {
+    var keys = props.getKeys();
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i]).toLowerCase() === FS_PROP.toLowerCase()) {
+        raw = props.getProperty(keys[i]);
+        break;
+      }
+    }
+  }
   if (!raw) throw new Error('חסר המאפיין ' + FS_PROP + ' ב-Script Properties');
   var sa;
   try { sa = JSON.parse(raw); }
@@ -170,7 +184,15 @@ function firebaseSelfTest() {
     say('✓ נמצא מפתח חשבון שירות');
     say('  פרויקט: ' + sa.project_id);
     say('  חשבון:  ' + sa.client_email);
-  } catch (e) { say('✗ ' + e.message); return log.join('\n'); }
+  } catch (e) {
+    say('✗ ' + e.message);
+    /* שמות המאפיינים בלבד — לעולם לא הערכים. עוזר לתפוס שם שנכתב אחרת. */
+    try {
+      var keys = PropertiesService.getScriptProperties().getKeys();
+      say('  מאפיינים שקיימים כרגע: ' + (keys.length ? keys.join(', ') : '(אין)'));
+    } catch (e2) { say('  לא הצלחנו לקרוא את רשימת המאפיינים'); }
+    return log.join('\n');
+  }
 
   try {
     fsToken_();
