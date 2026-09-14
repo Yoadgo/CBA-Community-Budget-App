@@ -1884,8 +1884,16 @@
       btn.textContent = "טוען…";
       CBA.sheets.load(function (ok, info) {
         sheetsLoadHandler(ok, info);
-        // הצליח? sheetsLoadHandler כבר צייר מחדש. נכשל שוב? מחזירים את הכפתור.
-        if (!CBA.sheets.isConnected() && btn.isConnected) {
+        if (CBA.sheets.isConnected()) {
+          /* ⚠️ **חייבים לצייר מחדש כאן במפורש.** נמדד חי בייצור 14.9.26:
+             הניסיון החוזר הצליח, `isConnected()` הפך ל-true — והפאנל נשאר
+             על המסך והכפתור נתקע על "טוען…". הסיבה: המסלול ב-sheetsLoadHandler
+             מצייר מחדש רק `if (changed)` לפי טביעת אצבע של הנתונים, ואם
+             הנתונים שחזרו זהים לאלה שכבר בזיכרון — אין שינוי, אין ציור,
+             והמשתמש נשאר מול שגיאה שכבר לא קיימת. הציור כאן אינו תלוי
+             בהשוואת נתונים אלא בעובדה שעברנו ממצב "אין נתונים" ל"יש". */
+          showScreen(currentScreen);
+        } else if (btn.isConnected) {
           btn.disabled = false;
           btn.textContent = "נסה שוב";
         }
