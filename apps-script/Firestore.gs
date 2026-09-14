@@ -36,6 +36,7 @@ function fsAccount_() {
 
 function fsProjectId_() { return fsAccount_().project_id; }
 
+function fsB64_(s) {
   return Utilities.base64EncodeWebSafe(s).replace(/=+$/, '');
 }
 
