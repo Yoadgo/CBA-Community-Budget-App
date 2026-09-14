@@ -226,6 +226,11 @@ var GET_ACTION_PERMS = {
   residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN,
   gardenStats: PERM_GARDEN, gardenTaskLog: PERM_GARDEN,
   gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
+  /* סנכרון יזום של תוכנית העבודה אל Firestore (2026-09-14, צעד 03א).
+     🔴 **PERM_SUPER ולא PERM_GARDEN.** הפעולה אינה נוגעת לעבודת
+     הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
+     מנהל גינון צריך לערוך משימות, לא לבנות מחדש מסד נתונים. */
+  gardenPlanSync: PERM_SUPER,
   gymList: PERM_GYM,
   appReports: PERM_SUPER,
   /* שנת תקציב בודדת לפי דרישה (2026-09-14, דיאטת המטען שלב ב').
@@ -543,6 +548,9 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'gardenPlan') {
       return handleGardenPlan_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'gardenPlanSync') {
+      return handleGardenPlanSync_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'gardenTasks') {
       return handleGardenTasks_(e.parameter);
@@ -9650,6 +9658,27 @@ function gardenPlanSeedFirestore() {
   var r = gardenPlanSyncAll_(SpreadsheetApp.getActiveSpreadsheet());
   Logger.log(JSON.stringify(r));
   return r;
+}
+
+/* אותה פעולה בדיוק, כפעולת doGet.
+ * ----------------------------------------------------------------------------
+ *  ⚠️ **למה זה קיים ולא רק הרצה ידנית מהעורך:** בורר הפונקציות
+ *     בעורך הוא רכיב שנכשל בשקט — הוא מראה שם אחד ומריץ אחר.
+ *     זה קרה כאן בפועל (14.9: הורץ seedGardenPlan — שם דומה,
+ *     פונקציה אחרת לגמרי, שכתבה לגיליון). פעולה עם כתובת מפורשת
+ *     אי אפשר לבלבל עם פעולה אחרת.
+ *
+ *  🔑 **והיא לא חד-פעמית:** עריכה ידנית בגיליון אינה עוברת דרך הקוד,
+ *     ולכן צריך להיות כפתור שמחזיר את Firestore להיות העתק המדוייק
+ *     של הטאב. זה יישום ישיר של כלל הסטייה הגלויה. */
+function handleGardenPlanSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var r = gardenPlanSyncAll_(ss);
+    return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, error: r.error });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
 /* האם תוכנית העבודה כבר מכסה את הדיווח הזה, ומתי.
