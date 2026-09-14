@@ -57,6 +57,18 @@
     if (screenNeedsBudget(name) && !CBA.sheets.isConnected()) {
       main.innerHTML = dataUnavailableHTML();
       wireDataRetry(main);
+    } else if (screenNeedsAllYears(name) && CBA.sheets.loadAllYears &&
+               !allYearsReady()) {
+      /* ⚠️ מציירים שלד ולא את המסך: מסך שיצויר עכשיו יחשב על שנים חלקיות
+         ויציג מספרים שגויים, ואז "יתקן" את עצמו — וזה גרוע יותר מהמתנה. */
+      main.innerHTML = skeletonScreen();
+      var want = name;
+      CBA.sheets.loadAllYears(function (ok) {
+        if (currentScreen !== want || !main.isConnected) return;   // המשתמש כבר עבר מסך
+        if (!ok) { main.innerHTML = dataUnavailableHTML("לא הצלחנו לטעון את נתוני השנים הקודמות."); wireDataRetry(main); return; }
+        main.innerHTML = "";
+        screen.render(main, opts);
+      });
     } else {
       screen.render(main, opts);
     }
@@ -1948,6 +1960,23 @@
         והוא מוצג כ-"—" במקום לחסום ספר טלפונים שלם. */
   var BUDGET_SCREENS = ["budget", "expenses", "planning", "reconcile", "resRequests"];
   function screenNeedsBudget(name) { return BUDGET_SCREENS.indexOf(name) !== -1; }
+
+  /* 🔴 מסכים שסורקים תנועות של **כל השנים יחד**, ולא רק את השנה המוצגת
+     (2026-09-14). ⚠️ אחרי שהמטען יפסיק לשלוח שנים ישנות, מסך כזה לא יזרוק
+     שגיאה — הוא פשוט יחשב על פחות נתונים ויציג **תשובה שגויה שנראית תקינה**:
+       • `reconcile` — משווה את קובץ החיובים החודשי מול `getAllTransactions()`.
+         החזר שנרשם בתשפ"ו שהחיוב שלו הגיע בתשפ"ז הוא מקרה רגיל, והוא היה
+         מסומן כ"לא נמצאה התאמה".
+       • `resRequests` — `myRequestsAllYears()` מזינה את היסטוריית ההחזרים
+         של המשפחה, שנבנתה במפורש כחוצת-שנים.
+     לכן הם ממתינים ל-`loadAllYears` לפני הציור. לתושב רגיל זו פעולה ריקה
+     (DATA_MIN ממילא שולח לו את שורות משפחתו מכל השנים). */
+  var ALL_YEARS_SCREENS = ["reconcile", "resRequests"];
+  function screenNeedsAllYears(name) { return ALL_YEARS_SCREENS.indexOf(name) !== -1; }
+  function allYearsReady() {
+    if (!CBA.sheets.yearLoaded) return true;
+    return ((CBA.mock && CBA.mock.yearList) || []).every(function (y) { return CBA.sheets.yearLoaded(y); });
+  }
 
   function sheetsLoadHandler(ok, info) {
     window.CBA.connected = CBA.sheets.isConnected();

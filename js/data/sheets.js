@@ -597,7 +597,10 @@ CBA.sheets = (function () {
     /* המושב החתום מצורף גם למשיכה הראשית (2026-08-23 — תיקון אבטחה).
        עד היום זו הייתה הקריאה היחידה בקובץ שיצאה בלי session, כי בצד השרת
        ממילא לא נבדק כלום. עכשיו doGet דורש מושב תקין גם כאן. */
-    fetch(API_URL + "?session=" + encodeURIComponent(authSession()), { method: "GET" })
+    /* `slim=1` = "אני יודע למשוך שנה חסרה בעצמי" (2026-09-14, שלב ב3).
+       ⚠️ **אסור להסיר את הדגל בלי להסיר גם את הדיאטה בשרת** — הוא מה
+       שמונע מלקוח ישן לקבל מטען חסר ולהציג תקציב ריק. ר' doGet ב-Code.gs. */
+    fetch(API_URL + "?session=" + encodeURIComponent(authSession()) + "&slim=1", { method: "GET" })
       .then(function (r) { return r.json(); })
       .then(function (payload) {
         if (!payload || !payload.ok) throw new Error((payload && payload.error) || "bad payload");
@@ -1134,6 +1137,34 @@ CBA.sheets = (function () {
       });
   }
 
+  /* ============================================================================
+   *  loadAllYears — מוודא שכל השנים בזיכרון   (2026-09-14, שלב ב2.5)
+   * ----------------------------------------------------------------------------
+   *  🔴 **למה זה חייב להתקיים לפני שהשרת מפסיק לשלוח שנים ישנות:**
+   *  שתי פונקציות באפליקציה סורקות תנועות של **כל השנים יחד**, במכוון:
+   *    1. `CBA.data.getAllTransactions()` → `reconcile.js` — השוואת קובץ
+   *       החיובים החודשי מול התנועות. החזר שנרשם בתשפ"ו והחיוב שלו הגיע
+   *       בתשפ"ז הוא מקרה רגיל לגמרי.
+   *    2. `resident.js:myRequestsAllYears()` — היסטוריית ההחזרים של המשפחה.
+   *  שתיהן היו ממשיכות לרוץ בלי לזרוק שגיאה, פשוט **על פחות נתונים** —
+   *  כלומר תשובה שגויה שנראית תקינה. זה בדיוק סוג הכשל שאסור אצלנו.
+   *
+   *  ⚠️ לתושב רגיל זו פעולה ריקה: DATA_MIN ממילא מחזיר לו את שורות משפחתו
+   *     מכל השנים, ולכן כולן כבר מסומנות כטעונות ואף קריאה לא יוצאת.
+   * ========================================================================== */
+  function loadAllYears(cb) {
+    cb = cb || function () {};
+    var list = ((CBA.mock && CBA.mock.yearList) || []).filter(function (y) { return !yearLoaded(y); });
+    if (!list.length) return cb(true);
+    var left = list.length, allOk = true;
+    list.forEach(function (y) {
+      loadYear(y, function (ok) {
+        if (!ok) allOk = false;
+        if (--left === 0) cb(allOk);
+      });
+    });
+  }
+
   return { url: API_URL, load: load, refresh: refresh, refreshIfChanged: refreshIfChanged,
-    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, yearLoaded: yearLoaded, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
+    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, yearLoaded: yearLoaded, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
 })();
