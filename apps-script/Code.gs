@@ -525,9 +525,6 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'myGardenReports') {
       return handleMyGardenReports_(e.parameter);
     }
-    if (e && e.parameter && e.parameter.action === 'gardenPhoto') {
-      return handleGardenPhoto_(e.parameter);
-    }
     // קטגוריות עץ הוועד (2026-08-10) — ר' handleCommitteeCategories_ למטה.
     if (e && e.parameter && e.parameter.action === 'committeeCategories') {
       return handleCommitteeCategories_(e.parameter);
