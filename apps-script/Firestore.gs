@@ -177,6 +177,28 @@ function fsDelete_(path) {
   return true;
 }
 
+/** רשימת המסמכים באוסף. מחזיר [{ id, data }].
+ *  מרפרף דפים עד הסוף — אוסף של עשרות מסמכים יושב בדף אחד,
+ *  אבל על דף אחד אי-אפשר לבנות פונקציית ניקוי שמוחקת יתומים:
+ *  דף חלקי היה נראה כמו "השאר כבר לא קיים". */
+function fsList_(collection) {
+  var out = [], token = '', guard = 0;
+  do {
+    var path = collection + '?pageSize=300' + (token ? '&pageToken=' + encodeURIComponent(token) : '');
+    var r = fsFetch_(path, 'get');
+    if (r.code !== 200) {
+      throw new Error('רשימה נכשלה (' + r.code + '): ' + r.text.substring(0, 300));
+    }
+    var body = JSON.parse(r.text);
+    (body.documents || []).forEach(function (doc) {
+      var name = String(doc.name || '');
+      out.push({ id: name.substring(name.lastIndexOf('/') + 1), data: fsUnfields_(doc.fields || {}) });
+    });
+    token = body.nextPageToken || '';
+  } while (token && ++guard < 20);
+  return out;
+}
+
 /* ============================================================================
  *  fsVerifyIdToken_ — מי באמת שלח את הבקשה   (צעד 02ג, 2026-09-14)
  * ----------------------------------------------------------------------------

@@ -9349,6 +9349,7 @@ function gardenPlanSave_(ss, body) {
     Object.keys(vals).forEach(function (k) {
       if (c[k] !== undefined) sh.getRange(found, c[k] + 1).setValue(vals[k]);
     });
+    gardenPlanSyncOne_(ss, id);            /* עותק הקריאה — ר' בלוק הסנכרון */
     return { ok: true, id: id };
   }
   var row = new Array(sh.getLastColumn()).fill('');
@@ -9356,6 +9357,7 @@ function gardenPlanSave_(ss, body) {
   row[c['מזהה']] = newId;
   Object.keys(vals).forEach(function (k) { if (c[k] !== undefined) row[c[k]] = vals[k]; });
   sh.appendRow(row);
+  gardenPlanSyncOne_(ss, newId);
   return { ok: true, id: newId };
 }
 
@@ -9369,6 +9371,7 @@ function gardenPlanSetActive_(ss, body) {
   var c = gardenCols_(sh);
   if (c['פעיל'] === undefined) return { ok: false, error: 'אין עמודת "פעיל"' };
   sh.getRange(found, c['פעיל'] + 1).setValue(body.active ? 'כן' : 'לא');
+  gardenPlanSyncOne_(ss, String(body.id || '').trim());
   return { ok: true };
 }
 
@@ -9512,6 +9515,7 @@ function gardenPlanDelete_(ss, body) {
   } catch (e) { /* ספירה בלבד — לא מעכבת מחיקה */ }
 
   sh.deleteRow(row);
+  gardenPlanSyncDelete_(id);
   return { ok: true, made: made };
 }
 
@@ -9525,6 +9529,127 @@ function gardenPlanFindRow_(sh, id) {
     if (String(ids[i][0]).trim() === id) return i + 2;
   }
   return 0;
+}
+
+/* ============================================================================
+ *  תוכנית העבודה → Firestore        (צעד 03א, 2026-09-14)
+ * ----------------------------------------------------------------------------
+ *  🔴 **הגיליון נשאר מקור האמת.** Firestore הוא עותק-קריאה בלבד:
+ *     כל כתיבה עוברת דרך Apps Script אל הגיליון, ורק אחר כך
+ *     מסונכרנת לכאן. **אין מסלול שני שבו הדפדפן כותב** — ולכן
+ *     אין מצב שבו שני מקורות סותרים זה את זה. כללי האבטחה
+ *     אוסרים כתיבה לאוסף הזה לחלוטין; חשבון השירות עוקף אותם.
+ *
+ *  ⚠️ **כישלון סנכרון לא מפיל שמירה.** השמירה לגיליון כבר הצליחה
+ *     בשלב זה; להחזיר שגיאה היה אומר למנהל "לא נשמר" על משהו
+ *     שכן נשמר — והוא היה מקליד אותו פעם שנייה. מה שכן קורה במקרה
+ *     כזה: Firestore נשאר מאחור עד לסנכרון המלא הבא.
+ *
+ *  ⚠️ **עריכה ידנית בגיליון אינה עוברת דרך הקוד**, ולכן אינה מסונכרנת.
+ *     זו הסיבה ש-gardenPlanSyncAll_ קיימת ומוחקת גם יתומים: הרצה
+ *     שלה מחזירה את Firestore להיות העתק המדוייק של הטאב, תמיד.
+ *
+ *  🔑 **מזהה המסמך הוא המזהה שבגיליון** (T7 וכו'), ולכן הרצה חוזרת
+ *     של הזריעה **דורסת ולא מכפילה**. זו הסיבה שאפשר להריץ
+ *     אותה בלי לבדוק קודם מה כבר נמצא שם.
+ *
+ *  🔒 **אין שום מידע אישי כאן.** הטאב מכיל הגדרות עבודה בלבד — לא
+ *     שמות, לא טלפונים, לא כתובות. זה מה שהופך אותו לתחום הראשון
+ *     שעובר — ר' הקו האדום של יועד.
+ * ========================================================================== */
+var FS_GARDEN_PLAN = 'gardenPlan';
+var FS_GARDEN_META = 'gardenMeta/lists';
+
+/* המרה אחת ויחידה משורה למסמך. הקלט הוא תמיד פלט של
+   gardenPlanRows_, ולכן מה שהדפדפן יקרא מ-Firestore זהה למה שהוא היה
+   מקבל מ-handleGardenPlan_. נקודת המרה אחת היא מה שמונע סטייה שקטה.
+   ⚠️ `row` מושמט בכוונה: מספר השורה בגיליון מתיישן ברגע שמוסיפים
+   שורה, והלקוח בין כך אינו משתמש בו. */
+function gardenPlanDoc_(def) {
+  return {
+    id:          String(def.id || ''),
+    title:       String(def.title || ''),
+    category:    String(def.category || ''),
+    areas:       def.areas || [],
+    freq:        String(def.freq || ''),
+    firstWeek:   String(def.firstWeek || ''),
+    weekOfMonth: def.weekOfMonth || 1,
+    months:      String(def.months || ''),
+    rotate:      !!def.rotate,
+    clause:      String(def.clause || ''),
+    active:      !!def.active,
+    note:        String(def.note || ''),
+    schema:      1,
+    updatedAt:   new Date()
+  };
+}
+
+/** סנכרון מלא: כל השורות, הרשימות, ומחיקת יתומים.
+ *  מחזיר סיכום — ולעולם אינו זורק. */
+function gardenPlanSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, wrote: 0, deleted: 0, error: '' };
+  try {
+    var defs = gardenPlanRows_(ss);
+    var live = {};
+    for (var i = 0; i < defs.length; i++) {
+      fsSet_(FS_GARDEN_PLAN + '/' + defs[i].id, gardenPlanDoc_(defs[i]));
+      live[defs[i].id] = 1;
+      out.wrote++;
+    }
+    var lists = gardenLists_(ss);
+    fsSet_(FS_GARDEN_META, {
+      areas:      lists.areas,
+      categories: lists.categories,
+      freqs:      GARDEN_FREQS,
+      schema:     1,
+      updatedAt:  new Date()
+    });
+    out.wrote++;
+
+    /* יתומים — מסמך שנשאר אחרי שהשורה ירדה מהגיליון. בדרך כלל
+       gardenPlanDelete_ כבר מחק אותו, אבל מחיקה ידנית בגיליון אינה
+       עוברת דרך הקוד, וזו הרשת שתופסת אותה. */
+    var have = fsList_(FS_GARDEN_PLAN);
+    for (var j = 0; j < have.length; j++) {
+      if (!live[have[j].id]) { fsDelete_(FS_GARDEN_PLAN + '/' + have[j].id); out.deleted++; }
+    }
+    out.ok = true;
+  } catch (err) {
+    out.error = String(err);
+  }
+  return out;
+}
+
+/** מסמך אחד. שקט בכוונה — ר' ההערה בראש הבלוק. */
+function gardenPlanSyncOne_(ss, id) {
+  id = String(id || '').trim();
+  if (!id) return false;
+  try {
+    var defs = gardenPlanRows_(ss);
+    for (var i = 0; i < defs.length; i++) {
+      if (defs[i].id === id) {
+        fsSet_(FS_GARDEN_PLAN + '/' + id, gardenPlanDoc_(defs[i]));
+        return true;
+      }
+    }
+    return false;
+  } catch (e) { return false; }
+}
+
+/** מחיקת מסמך אחד. שקט באותה מידה. */
+function gardenPlanSyncDelete_(id) {
+  id = String(id || '').trim();
+  if (!id) return false;
+  try { fsDelete_(FS_GARDEN_PLAN + '/' + id); return true; } catch (e) { return false; }
+}
+
+/** נקודת הרצה ידנית מעורך ה-Apps Script (בלי קו תחתי, כדי שתופיע
+ *  ברשימת הפונקציות). בטוחה להרצה חוזרת. */
+function gardenPlanSeedFirestore() {
+  var r = gardenPlanSyncAll_(SpreadsheetApp.getActiveSpreadsheet());
+  Logger.log(JSON.stringify(r));
+  return r;
 }
 
 /* האם תוכנית העבודה כבר מכסה את הדיווח הזה, ומתי.
