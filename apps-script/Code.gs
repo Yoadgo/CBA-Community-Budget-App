@@ -226,6 +226,8 @@ var GET_ACTION_PERMS = {
   residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN,
   gardenStats: PERM_GARDEN, gardenTaskLog: PERM_GARDEN,
   gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
+  /* גיבוי Firestore ← גיליון (2026-09-15, צעד 07א) — מנהל-על בלבד. */
+  backupRun: PERM_SUPER,
   /* סנכרון יזום של תוכנית העבודה אל Firestore (2026-09-14, צעד 03א).
      🔴 **PERM_SUPER ולא PERM_GARDEN.** הפעולה אינה נוגעת לעבודת
      הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
@@ -566,6 +568,11 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'flagsGet') {
       return handleFlagsGet_(e.parameter);
+    }
+    /* גיבוי מלא לפי דרישה (2026-09-15, צעד 07א). לפני שיש טריגר —
+       וגם אחרי שיהיה, כדי שאפשר יהיה לבקש גיבוי לפני שינוי גדול. */
+    if (e && e.parameter && e.parameter.action === 'backupRun') {
+      return handleBackupRun_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'gardenTasks') {
       return handleGardenTasks_(e.parameter);
@@ -7786,6 +7793,126 @@ function handleHomeExtras_(p) {
       if (g && g.ok) out.garden = { ok: true, pending: (g.rows || []).length };
     }
     return json_(out);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ============================================================================
+ *  גיבוי Firestore ← גיליון   (צעד 07א, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴 **למה בונים את זה עכשיו, כשהוא עדיין לא מגן על כלום:**
+ *  ברגע זה **אין אף תחום ש-Firestore הוא מקור האמת שלו** — כל
+ *  אוסף נגזר מהגיליון. כלומר הגיבוי הזה מעתיק היום מידע
+ *  שכבר קיים בגיליון. **וזו בדיוק הסיבה לבנות אותו עכשיו:**
+ *  אפשר לבדוק אותו עד הסוף כשהסיכון אפס, ורק אז להעביר תחום
+ *  לכתיבה ישירה ל-Firestore. הגיבוי הוא **תנאי סף לתקציב**
+ *  (ר' האפיון), ולא המלצה.
+ *
+ *  🔴 **הסכנה האמיתית כאן היא לא "גיבוי חסר" — היא "גיבוי שדורס".**
+ *  גיבוי שיכתוב בטעות אל טאב המקור ימחק את מקור האמת עצמו,
+ *  ויעשה זאת בשקט ובאמצע הלילה. לכן:
+ *  ⚠️ **כל כתיבה עוברת דרך `bkTabOk_`**, שמאשר רק שמות שמתחילים
+ *     ב-`_נתוני_`. טאב שלא עונה לכך מעולם לא ייכתב, גם אם מישהו
+ *     ירשום אותו ברישום בטעות. זה השער היחיד שמונע את הנזק הזה.
+ *  ⚠️ **הקידומת `_` גם מסמנת ליועד גבול:** טאב שמתחיל בקו תחתון
+ *     הוא **אזור כתיבה של המכונה**. כל נוסחה/עמודה/צבע שיועד יוסיף
+ *     *בתוך* טאב כזה יימחק בגיבוי הבא בלי אזהרה. העבודה שלו
+ *     יושבת בטאבים נפרדים שמפנים לכאן ב-QUERY/FILTER.
+ *
+ *  **למה JSON בתא אחד ולא עמודה לכל שדה:** גיבוי עם עמודות
+ *  מפורשות חייב מיפוי לכל אוסף, וכל שדה חדש שייווסף בעתיד **ייפול
+ *  מהגיבוי בשקט** — וזה הכישלון הגרוע ביותר של גיבוי: שהוא נראה
+ *  תקין עד שצריך אותו. JSON מלא אדיש למבנה ושומר הכול.
+ *  העמודות `id`/`עודכן`/`schema` הן לקריאה אנושית ול-QUERY של יועד.
+ *
+ *  ⚠️ **מכסה (Spark):** גיבוי מלא עולה **קריאה לכל מסמך** מתוך
+ *     50,000 ליום. לכן מלא רץ **פעם בלילה בלבד**; המצטבר (צעד 07ב)
+ *     הוא שירוץ כל חצי שעה. התוצאה מחזירה `read` כדי שהמספר
+ *     יירשם וייבדק מול המכסה (שער 5 באפיון).
+ * ========================================================================== */
+var BK_PREFIX = '_נתוני_';
+/* הרישום: אוסף ← טאב. הוספת אוסף עתידי היא שורה אחת כאן.
+   ⚠️ כל השמות חייבים להתחיל ב-BK_PREFIX — `bkTabOk_` אוכף את זה
+      בזמן ריצה, כדי שטעות ברישום לא תדרוס טאב אמיתי. */
+var BK_COLLECTIONS = [
+  { collection: 'gardenPlan', tab: BK_PREFIX + 'תוכנית גינון' },
+  { collection: 'gardenMeta', tab: BK_PREFIX + 'רשימות גינון' },
+  { collection: 'services',   tab: BK_PREFIX + 'שירותים' },
+  { collection: 'appConfig',  tab: BK_PREFIX + 'הגדרות אפליקציה' }
+];
+var BK_HEADERS = ['id', 'עודכן', 'schema', 'json'];
+
+/* השער. שם טאב לגיבוי חייב להתחיל ב-`_נתוני_` — וזה הכל.
+   פונקציה נפרדת ולא תנאי בתוך הכתיבה, כדי שהבדיקות יוכלו לחקור אותה
+   ישירות מול שמות אמיתיים מהגיליון. */
+function bkTabOk_(name) {
+  var n = String(name == null ? '' : name);
+  return n.length > BK_PREFIX.length && n.indexOf(BK_PREFIX) === 0;
+}
+
+/* שורה אחת למסמך. נקודת המרה אחת, כמו gardenPlanDoc_/svcDoc_.
+   ה-JSON נשמר **כמו שהוא** ולא מסונן — גיבוי שמשמיט שדות אינו גיבוי. */
+function bkRow_(id, data) {
+  var d = data || {};
+  var upd = d.updatedAt;
+  return [
+    String(id),
+    (upd && typeof upd.getTime === 'function') ? Utilities.formatDate(upd, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss')
+                                               : String(upd == null ? '' : upd),
+    d.schema == null ? '' : d.schema,
+    JSON.stringify(d)
+  ];
+}
+
+/* כתיבה מחדש של טאב גיבוי אחד.
+   ⚠️ **מנקה וכותב בפעולה אחת** (`setValues` על כל הטווח) ולא
+      שורה-שורה: גיליון הוא קריאה יקרה, וגם — מחיקה שמצליחה
+      וכתיבה שנכשלת באמצע משאירה גיבוי חצי. */
+function bkWriteTab_(ss, tab, rows) {
+  if (!bkTabOk_(tab)) throw new Error('טאב גיבוי חייב להתחיל ב-' + BK_PREFIX + ': ' + tab);
+  var sh = ss.getSheetByName(tab) || ss.insertSheet(tab);
+  sh.clear();
+  var out = [BK_HEADERS].concat(rows);
+  sh.getRange(1, 1, out.length, BK_HEADERS.length).setValues(out);
+  sh.setFrozenRows(1);
+  return rows.length;
+}
+
+/* הגיבוי המלא. מחזיר פירוט לכל אוסף ואת סך הקריאות.
+   ⚠️ **כישלון באוסף אחד לא מפיל את השאר** — גיבוי חלקי עדיף
+      על כלום, והשגיאה חוזרת בתוצאה כדי שלא תיעלם בשקט. */
+function fsBackupAll_(ss) {
+  var out = { ok: true, read: 0, tabs: [], errors: [] };
+  for (var i = 0; i < BK_COLLECTIONS.length; i++) {
+    var c = BK_COLLECTIONS[i];
+    try {
+      var docs = fsList_(c.collection);
+      var rows = docs.map(function (d) { return bkRow_(d.id, d.data); });
+      bkWriteTab_(ss, c.tab, rows);
+      out.read += docs.length;
+      out.tabs.push({ collection: c.collection, tab: c.tab, docs: docs.length });
+    } catch (e) {
+      out.errors.push(c.collection + ': ' + String(e));
+    }
+  }
+  out.ok = out.errors.length === 0;
+  return out;
+}
+
+/* הפעלה ידנית מהאפליקציה (מנהל-על בלבד), לפני שיש טריגר.
+   ⚠️ במכוון לא פונקציה שרצה מבורר הפונקציות בעורך — ר' מלכודת
+      seedGardenPlan ב-[[cba-firebase-step03a]]: שם הורצה פונקציה דומת-שם
+      בטעות והיא כתבה לגיליון. פעולה ב-doGet אינה דורשת בחירה ידנית. */
+function handleBackupRun_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var t0 = new Date().getTime();
+    var r = fsBackupAll_(ss);
+    r.ms = new Date().getTime() - t0;
+    return json_(r);
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
