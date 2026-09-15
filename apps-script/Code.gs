@@ -230,6 +230,7 @@ var GET_ACTION_PERMS = {
   backupRun: PERM_SUPER,
   backupVerify: PERM_SUPER, backupRestore: PERM_SUPER,
   backupIncremental: PERM_SUPER,
+  budgetSync: PERM_SUPER,
   /* סנכרון יזום של תוכנית העבודה אל Firestore (2026-09-14, צעד 03א).
      🔴 **PERM_SUPER ולא PERM_GARDEN.** הפעולה אינה נוגעת לעבודת
      הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
@@ -575,6 +576,9 @@ function doGet(e) {
        וגם אחרי שיהיה, כדי שאפשר יהיה לבקש גיבוי לפני שינוי גדול. */
     if (e && e.parameter && e.parameter.action === 'backupRun') {
       return handleBackupRun_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'budgetSync') {
+      return handleBudgetSync_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'backupVerify') {
       return handleBackupVerify_(e.parameter);
@@ -7857,6 +7861,118 @@ function handleHomeExtras_(p) {
 }
 
 /* ============================================================================
+ *  מטא-התקציב → Firestore   (צעד 08א, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  חמש הטבלאות הלא-אישיות של כל שנה: סעיפים, הכנסות, קבוצות,
+ *  פיצולי מימון ופירוט סעיפים. **תנועות אינן כאן** — הן נושאות
+ *  מזהה משפחה ודורשות סינון לפי משפחה בכללי האבטחה. זה צעד 08ב.
+ *
+ *  🔴 **נבדק לפני הכתיבה (15.9), ולא הונח:** בחמש הטבלאות
+ *  האלה אין נתונים אישיים. השדה היחיד שהדאיג — `משפחות` בטבלת
+ *  ההכנסות — הוא **מספר** (71), לא שמות. מקורות ההכנסה הם
+ *  מוסדיים ("מיסי שיכון", "קרן שיכון"), והקבוצות מחרוזות.
+ *
+ *  🔑 **מסמך אחד לכל שנה, ולא מסמך לכל סעיף.**
+ *  הלקוח צורך שנה שלמה בבת אחת (`buildYear`), ולכן **מסמך אחד =
+ *  קריאה אחת** במקום ~60 קריאות. מול מכסת Spark של 50,000/יום
+ *  ו-75 משפחות, זה ההבדל בין זניח לבין להתקרב לתקרה.
+ *  ⚠️ מסמך ב-Firestore מוגבל ל-1MiB. שנה טיפוסית היא ~10–15KB, אבל
+ *     יש שער מפורש (`BY_MAX_BYTES`) שנופל ברעש במקום להשאיר שנה
+ *     שנכתבה חלקית.
+ *
+ *  🔴 **מזהה המסמך מקודד.** שמות השנים מכילים מרכאות (תשפ"ו),
+ *  ו-`fsUrl_` מרכיב נתיב בשרשור פשוט בלי קידוד. לכן המזהה הוא
+ *  `encodeURIComponent(year)` — הפיך, חד-חד-ערכי, וללא תווים בעייתיים.
+ *  ⚠️ **השנה נשמרת גם כשדה `year` בתוך המסמך**, והוא המקור
+ *     לקריאה — לעולם לא לפענח את המזהה בחזרה.
+ *
+ *  🔴 **אותם מפתחות מטמון בדיוק כמו doGet ו-handleBudgetYear_.**
+ *  מפתח אחר = שתי תשובות שנפרדות אחרי שמירה — המלכודת שכבר
+ *  מתועדת ב-handleBudgetYear_. לא להמציא מפתח חדש כאן.
+ * ========================================================================== */
+var FS_BUDGET_YEARS = 'budgetYears';
+var BY_MAX_BYTES = 900000;          /* מתחת ל-1MiB של Firestore, עם מרווח */
+
+function budgetYearId_(year) { return encodeURIComponent(String(year || '').trim()); }
+
+/* נקודת המרה אחת, כמו gardenPlanDoc_/svcDoc_. */
+function budgetYearDoc_(ss, y) {
+  var stamp = budgetStamp_();
+  var yd = cached_('cba_year_' + stamp + '_' + y, function () {
+    return {
+      budget: readTable_(ss, 'תקציב ' + y),
+      income: readTable_(ss, 'הכנסות ' + y),
+      groups: readGroupsForYear_(ss, y),
+      splits: readTable_(ss, 'פיצול מימון ' + y),
+      items:  readTable_(ss, 'פירוט סעיפים ' + y)
+    };
+  });
+  return {
+    year:   String(y),
+    budget: yd.budget || [],
+    income: yd.income || [],
+    groups: yd.groups || [],
+    splits: yd.splits || [],
+    items:  yd.items  || [],
+    schema: 1,
+    updatedAt: new Date()
+  };
+}
+
+function budgetYearsSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var settings = readSettings_(ss);
+  var years = String(settings['שנים'] || '').split(',')
+                .map(function (x) { return x.trim(); }).filter(Boolean);
+  var out = { ok: true, wrote: 0, deleted: 0, skipped: 0, years: [], errors: [] };
+  var live = {};
+  for (var i = 0; i < years.length; i++) {
+    var y = years[i];
+    try {
+      /* ⚠️ בדיקת קיום הטאב לפני הקריאה — שם טאב נבנה מקלט. שנה
+         שרשומה בהגדרות אבל אין לה טאב אינה שגיאה — פשוט עדיין לא נוצרה. */
+      if (!ss.getSheetByName('תקציב ' + y)) { out.skipped++; continue; }
+      var id = budgetYearId_(y);
+      if (!fsIdOk_(id)) { out.skipped++; continue; }
+      var doc = budgetYearDoc_(ss, y);
+      var size = JSON.stringify(doc).length;
+      if (size > BY_MAX_BYTES) {
+        throw new Error('שנה גדולה מדי למסמך אחד (' + size + ' תווים)');
+      }
+      fsSet_(FS_BUDGET_YEARS + '/' + id, doc);
+      live[id] = 1;
+      out.wrote++;
+      out.years.push({ year: y, id: id, bytes: size,
+                       rows: (doc.budget.length + doc.income.length + doc.splits.length + doc.items.length) });
+    } catch (e) {
+      out.ok = false;
+      out.errors.push(y + ': ' + String(e));
+    }
+  }
+  /* ניקוי יתומים — רק אם כל השנים נכתבו בהצלחה.
+     ⚠️ אחרת שנה שנכשלה במקרה היתה נמחקת מ-Firestore כ"יתומה". */
+  if (out.ok) {
+    try { fsSweepOrphans_(FS_BUDGET_YEARS, live, out); }
+    catch (e) { out.ok = false; out.errors.push('sweep: ' + String(e)); }
+  }
+  return out;
+}
+
+function handleBudgetSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var t0 = new Date().getTime();
+    var r = budgetYearsSyncAll_(ss);
+    r.ms = new Date().getTime() - t0;
+    return json_(r);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ============================================================================
  *  גיבוי Firestore ← גיליון   (צעד 07א, 2026-09-15)
  * ----------------------------------------------------------------------------
  *  🔴 **למה בונים את זה עכשיו, כשהוא עדיין לא מגן על כלום:**
@@ -7897,7 +8013,8 @@ var BK_COLLECTIONS = [
   { collection: 'gardenPlan', tab: BK_PREFIX + 'תוכנית גינון' },
   { collection: 'gardenMeta', tab: BK_PREFIX + 'רשימות גינון' },
   { collection: 'services',   tab: BK_PREFIX + 'שירותים' },
-  { collection: 'appConfig',  tab: BK_PREFIX + 'הגדרות אפליקציה' }
+  { collection: 'appConfig',  tab: BK_PREFIX + 'הגדרות אפליקציה' },
+  { collection: 'budgetYears', tab: BK_PREFIX + 'תקציב לפי שנה' }
 ];
 var BK_HEADERS = ['id', 'עודכן', 'schema', 'json'];
 

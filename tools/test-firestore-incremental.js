@@ -208,7 +208,7 @@ section('6. 🔴 כישלון — הסימן לא זז');
      sandbox.bkMarkGet_('gardenPlan').getTime() === old.getTime(),
      String(sandbox.bkMarkGet_('gardenPlan')));
   ok('🔴 והוא מדווח ולא נבלע', r.ok === false && /gardenPlan/.test(r.errors[0]), JSON.stringify(r.errors));
-  ok('🔴 שאר האוספים המשיכו', r.collections.length === 3, String(r.collections.length));
+  ok('🔴 שאר האוספים המשיכו', r.collections.length === 4, String(r.collections.length));
   ok('והסימן שלהם כן התקדם', sandbox.bkMarkGet_('services').getTime() > old.getTime());
 }
 

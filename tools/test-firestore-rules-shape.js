@@ -52,7 +52,7 @@ const idxDeny = CODE.indexOf('match /{document=**}');
 });
 ok('\ud83d\udd34 כל allow בקובץ הוא מהצורות המוכרות בלבד',
    (CODE.match(/allow [^\n]*/g) || []).every(function (t) { t = t.trim();
-     return /^allow read: if (canSeePlan\(\)|canSeeServices\(\)|isMember\(\)|signedIn\(\) && request\.auth\.uid == uid);$/.test(t) ||
+     return /^allow read: if (canSeePlan\(\)|canSeeServices\(\)|canSeeBudget\(\)|isMember\(\)|signedIn\(\) && request\.auth\.uid == uid);$/.test(t) ||
             /^allow write: if false;$/.test(t) || /^allow read, write: if false;$/.test(t);
    }), (CODE.match(/allow [^\n]*/g) || []).join(' | '));
 
@@ -95,11 +95,20 @@ ok('🔴 בצורת == false (נכשל-סגור) ולא != true',
 ok('⚠️ שתי הדרישות ב-AND ולא ב-OR', /&&/.test(fn) && !/\|\|/.test(fn), fn.trim());
 
 section('5. מה שלא נפתח');
-['gardenTasks', 'residents', 'budget', 'families', 'gardenReports', 'emails'].forEach(function (c) {
-  ok('🔴 ' + c + ' לא נפתח', CODE.indexOf('match /' + c) === -1);
+/* ⚠️ **הבדיקה הזאת היתה רפופה עד 15.9** והשוותה קידומת:
+   `match /budget` התאים גם ל-`match /budgetYears` שנפתח במכוון
+   בצעד 08א, ולכן דיווח על "התקציב נפתח" שלא היה נכון.
+   עכשיו ההתאמה היא על שם האוסף המלא (`match /<שם>/`). */
+['gardenTasks', 'residents', 'budget', 'families', 'gardenReports', 'emails',
+ 'transactions', 'tx'].forEach(function (c) {
+  ok('🔴 ' + c + ' לא נפתח', CODE.indexOf('match /' + c + '/') === -1);
 });
-ok('🔴 סך הכול חמישה בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
-   (CODE.match(/^\s*match \//gm) || []).length === 7,
+/* 🔴 הגבול של צעד 08א: מטא-תקציב כן, תנועות לא. */
+ok('🔴 budgetYears כן נפתח (ובמכוון)', CODE.indexOf('match /budgetYears/') !== -1);
+ok('🔴 והוא לא נפתח לכל חבר אלא לבעלי הרשאת תקציב',
+   /function canSeeBudget\(\)\s*\{\s*return hasPerm\('\u05ea\u05e7\u05e6\u05d9\u05d1'\)/.test(CODE));
+ok('🔴 שישה בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
+   (CODE.match(/^\s*match \//gm) || []).length === 8,
    String((CODE.match(/^\s*match \//gm) || []).length));
 
 section('6. members — לא נשבר');
