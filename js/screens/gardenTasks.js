@@ -40,7 +40,7 @@
        "‹". קודם היה הפוך, ושני החצים הצביעו זה אל זה. */
     prev:  '<path d="M9 18l6-6-6-6"/>',
     next:  '<path d="M15 18l-6-6 6-6"/>',
-    dots:  '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+    dots:  '<circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/>',
     trash: '<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/>' +
            '<path d="M6.5 7l1 12.5h9L17.5 7"/><path d="M10 11v5M14 11v5"/>',
     undo:  '<path d="M3 8h11a5 5 0 0 1 0 10H8"/><path d="m6.5 4.5-3 3.5 3 3.5"/>',
@@ -1478,13 +1478,40 @@
         });
       }
 
+      /* גלילה/החלקה על גיליון שאין לו בכלל מה לגלול (התוכן קטן מהגובה שלו)
+         סוגרת אותו — בדיוק כמו לחיצה על הרקע, רק בלי לצאת מהאצבע/מהעכבר
+         (יועד, 15.9). כשיש בפועל מה לגלול (תוכן ארוך) לא מתערבים — אחרת
+         גלילה לגיטימית הייתה סוגרת את הגיליון על המשתמש. חצי שנייה של
+         דחייה בהתחלה כדי שתנופת האנימציה של הפתיחה עצמה לא תיספר כבקשת
+         סגירה. */
+      function bindScrollClose(sheetEl, close) {
+        if (!sheetEl) return;
+        var ready = false;
+        setTimeout(function () { ready = true; }, 260);
+        function maybeClose() {
+          if (!ready) return;
+          if (sheetEl.scrollHeight <= sheetEl.clientHeight + 2) close();
+        }
+        sheetEl.addEventListener("wheel", maybeClose, { passive: true });
+        var startY = null;
+        sheetEl.addEventListener("touchstart", function (e) {
+          startY = e.touches && e.touches[0] ? e.touches[0].clientY : null;
+        }, { passive: true });
+        sheetEl.addEventListener("touchmove", function (e) {
+          if (startY == null) return;
+          var y = e.touches && e.touches[0] ? e.touches[0].clientY : null;
+          if (y == null) return;
+          if (Math.abs(y - startY) > 14) maybeClose();
+        }, { passive: true });
+      }
+
       /* ---------------------------------------------------------------------
-         כרטיס פרטים לדיווח תושב (2026-09-15). לחיצה על גוף השורה — לא על
-         התיבה, לא על ⋮ — פותחת אותו. הוא **לא** מנגנון שרת חדש: כל שדה
-         מגיע מאותו אובייקט משימה שכבר בזיכרון, כל פעולה עוברת דרך run()/
-         menuAction() הקיימים, וה-⋯ נשאר בדיוק כמו שהיה (4 פעולות מהירות,
-         בלי מפה — המפה עברה לכאן). מוצג רק לדיווחי תושב (GK_REPORT); ר'
-         השער ב-onCardClick. אושר כסקיצה מול יועד לפני המימוש. */
+         כרטיס פרטים לדיווח תושב (2026-09-15, עודכן לפי הערות יועד על הגרסה
+         הראשונה). לחיצה על גוף השורה — לא על התיבה, לא על ⋮ — פותחת אותו.
+         הוא **לא** מנגנון שרת חדש: כל שדה מגיע מאותו אובייקט משימה שכבר
+         בזיכרון, כל פעולה עוברת דרך run()/menuAction() הקיימים, וה-⋯ נשאר
+         בדיוק כמו שהיה (4 פעולות מהירות, בלי מפה — המפה עברה לכאן). מוצג רק
+         לדיווחי תושב (GK_REPORT); ר' השער ב-onCardClick. */
       function openDetails(id) {
         var t = byId(id);
         if (!t) return;
@@ -1517,11 +1544,14 @@
         }
 
         /* פעולות משניות — אותן תנאים בדיוק כמו ב-openMenu (ללא "map", שכבר
-           לא קיים גם שם), רק שהתגית data-m עוברת ל-menuAction() המשותפת. */
+           לא קיים גם שם, וללא "hist", שעברה לשורת היומן למעלה), רק שהתגית
+           data-m עוברת ל-menuAction() המשותפת. שני שינויי ניסוח לפי יועד:
+           "הערת ביצוע"→"דווח סטטוס", "סגירה עם סיבה"→"סגירה" (הדרישה
+           לנמק בפועל נשארת זהה — ר' askClosure — רק המילים על הכפתור השתנו). */
         var secHtml = "";
         if (!closed) {
           secHtml +=
-            '<button type="button" class="gd-det-b" data-m="note">' + ico("note") + 'הערת ביצוע</button>' +
+            '<button type="button" class="gd-det-b" data-m="note">' + ico("note") + 'דווח סטטוס</button>' +
             '<button type="button" class="gd-det-b" data-m="defer">' + ico("cal") + 'דחייה לשבוע הבא</button>' +
             (!isManager
               ? '<button type="button" class="gd-det-b" data-m="block">' + ico("clock") + 'לא ניתן לביצוע</button>'
@@ -1532,8 +1562,8 @@
             ico("undo") + 'החזרה להשלמה</button>';
         }
         if (isManager && !closed) {
-          secHtml += '<button type="button" class="gd-det-b" data-m="close">' +
-            ico("check") + 'סגירה עם סיבה</button>';
+          secHtml += '<button type="button" class="gd-det-b is-positive" data-m="close">' +
+            ico("check") + 'סגירה</button>';
         }
         if (isManager && t.flag === "דורש בדיקה חוזרת") {
           secHtml += '<button type="button" class="gd-det-b" data-m="clearflag">' +
@@ -1543,7 +1573,6 @@
           secHtml += '<button type="button" class="gd-det-b is-danger" data-m="del">' +
             ico("trash") + 'מחיקה</button>';
         }
-        secHtml += '<button type="button" class="gd-det-b" data-m="hist">' + ico("hist") + 'היסטוריה מלאה</button>';
 
         var wrap = document.createElement("div");
         wrap.className = "gt-sheet-wrap is-detail";
@@ -1551,28 +1580,35 @@
           '<div class="gt-sheet-bd"></div>' +
           '<div class="gt-sheet gd-det" role="dialog" aria-label="' + esc(t.title || "משימה") + '">' +
             '<div class="gt-grip" aria-hidden="true"></div>' +
-            (hasPhotos
-              ? '<div class="gd-det-photo" id="gd-det-photo">' +
-                  '<button type="button" class="gd-det-photo__cnt" data-m="photos">' +
-                    ico("camera") + ' ' + t.photos.length + '</button>' +
-                '</div>'
-              : '<div class="gd-det-nophoto">' + ico("camera") + '<span>לא צורפה תמונה</span></div>') +
+            /* הכותרת עוברת מעל התמונה, לפי יועד — כך שהעין פוגשת קודם מה
+               התקלה ומאיפה, ורק אז את מה שהתושב צילם. "נפתח" זז מהרשת
+               למטה לשורת התיאור, מיד אחרי מספר הפנייה. */
             '<div class="gd-det-kicker"><span class="gd-det-dot" style="background:var(--c-' +
               esc(cat.key) + ')"></span>' + esc(t.category || "") + ' · ' + esc(GL.T.report) + '</div>' +
             '<h4 class="gd-det-title">' + esc(t.title || t.category || "משימה") + '</h4>' +
             '<p class="gd-det-sub">' +
               (t.repId ? esc(GL.reportRef(t.repId)) : "") +
-              (t.area ? (t.repId ? ' · ' : '') + esc(t.area) : '') +
+              (t.createdAt ? (t.repId ? ' · ' : '') + esc(ago(t.createdAt)) : '') +
             '</p>' +
+            (hasPhotos
+              ? '<div class="gd-det-photo" id="gd-det-photo" data-m="photos">' +
+                  '<div class="spinner" id="gd-det-photo-spin"></div>' +
+                  '<button type="button" class="gd-det-photo__cnt" data-m="photos">' +
+                    ico("camera") + ' ' + t.photos.length + '</button>' +
+                '</div>'
+              : '<div class="gd-det-nophoto">' + ico("camera") + '<span>לא צורפה תמונה</span></div>') +
             '<div class="gd-det-state is-' + esc(st.tone || "plan") + '">' + esc(st.text) + '</div>' +
+            /* "מקור" ירד — הכותרת/כותרת-המשנה כבר אומרות "דיווח" במפורש,
+               ושדה שחוזר על עצמו לא מרוויח כלום. */
             '<div class="gd-det-fields">' +
-              '<div class="gd-det-f"><span class="l">מקור</span><span class="v">' + ico("person") + ' תושב</span></div>' +
               (t.area ? '<div class="gd-det-f"><span class="l">אזור</span><span class="v">' + esc(t.area) + '</span></div>' : '') +
-              (t.createdAt ? '<div class="gd-det-f"><span class="l">נפתח</span><span class="v">' + esc(ago(t.createdAt)) + '</span></div>' : '') +
               '<div class="gd-det-f"><span class="l">שבוע</span><span class="v">' +
                 (t.week ? esc(weekLabel(t.week)) : 'לשיבוץ') + '</span></div>' +
             '</div>' +
-            (hasMap ? '<div class="gd-map" id="gd-det-map"></div>' : '') +
+            (hasMap
+              ? '<div class="gd-det-mapbox" data-m="fullmap"><div class="gd-map" id="gd-det-map"></div>' +
+                  '<span class="gd-det-mapbox__hint">' + ico("pin") + 'הקשה להגדלה</span></div>'
+              : '') +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
             (closed
               ? '<div class="gd-rep__closed"><b>' + esc(t.closure) + '</b>' +
@@ -1581,6 +1617,18 @@
                     : '') +
                 '</div>'
               : '') +
+            /* יומן מצומצם — שתי הפעולות האחרונות בלבד, עם כפתור "היסטוריה
+               מלאה" **על אותה שורה** בדיוק כמו שיועד ביקש; ה-openHistory()
+               הקיים נשאר האחראי היחיד על התצוגה המלאה. */
+            '<div class="gd-det-journal">' +
+              '<div class="gd-det-journal__h"><span>מה קרה עד עכשיו</span>' +
+                '<button type="button" class="gd-det-journal__more" data-m="hist">' +
+                  ico("hist") + 'היסטוריה מלאה</button></div>' +
+              '<div class="gd-det-journal__list" id="gd-det-j-list">' +
+                '<div class="skeleton sk-line sk-sm" style="width:65%"></div>' +
+                '<div class="skeleton sk-line sk-sm" style="width:45%;margin-top:6px"></div>' +
+              '</div>' +
+            '</div>' +
             '<div class="gd-det-actions">' + primaryHtml + secHtml + '</div>' +
           '</div>';
         document.body.appendChild(wrap);
@@ -1591,21 +1639,29 @@
           setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
         }
         wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        bindScrollClose(wrap.querySelector(".gt-sheet"), close);
 
         /* תמונה ראשונה בלבד, כתצוגה מקדימה — בדיוק כמו photos.js, דרך אותה
-           קריאת שרת (getGardenPhoto) ואותו מטמון. הגלריה המלאה נפתחת בנפרד. */
+           קריאת שרת (getGardenPhoto) ואותו מטמון. הגלריה המלאה (כל התמונות,
+           מסך מלא) נפתחת בנפרד בלחיצה על התמונה או על מונה התמונות. עיגול
+           הטעינה הוא אותו .spinner שמופיע במסך ההתחברות — אותה שפת עיצוב. */
         if (hasPhotos) {
           var phEl = wrap.querySelector("#gd-det-photo");
+          var spinEl = wrap.querySelector("#gd-det-photo-spin");
           CBA.data.getGardenPhoto(t.photos[0], function (res) {
             if (!phEl || !phEl.parentNode) return;      // הגיליון נסגר בזמן הטעינה
+            if (spinEl && spinEl.parentNode) spinEl.parentNode.removeChild(spinEl);
             if (res && res.ok && res.url) {
               phEl.style.backgroundImage = "url('" + res.url + "')";
               phEl.classList.add("has-img");
+            } else {
+              phEl.classList.add("is-err");
             }
           });
         }
         /* אותה קריאה בדיוק ל-CBA.map כמו showOnMap — תצוגה בלבד, בלי חיפוש,
-           אבל פאן/זום עובדים כרגיל ברכיב המפה המשותף. */
+           אבל פאן/זום עובדים כרגיל ברכיב המפה המשותף. לחיצה על תיבת המפה
+           פותחת את showOnMap() כתצוגת מסך-מלא עם כפתור חזרה (ר' data-m="fullmap"). */
         if (hasMap && CBA.map) {
           var mapApi = CBA.map.render(wrap.querySelector("#gd-det-map"), {
             head: false, search: false, legend: false, hint: false, popup: false,
@@ -1613,6 +1669,24 @@
           });
           if (mapApi && mapApi.fit) setTimeout(function () { mapApi.fit(); }, 60);
         }
+        /* שתי הרשומות האחרונות מהיומן — אותה קריאת שרת בדיוק כמו openHistory,
+           רק שמוצגות כאן רק שתי האחרונות; res.rows מגיע בסדר כרונולוגי עולה
+           (הישנה קודם), ולכן slice(-2) נותן את שתי האחרונות באותו סדר תצוגה. */
+        CBA.data.getGardenTaskLog(id, function (res) {
+          var jEl = wrap.querySelector("#gd-det-j-list");
+          if (!jEl || !jEl.parentNode) return;
+          if (!res || !res.ok || !res.rows || !res.rows.length) {
+            jEl.innerHTML = '<p class="gd-det-journal__none">אין עדיין רשומות למשימה הזאת.</p>';
+            return;
+          }
+          jEl.innerHTML = res.rows.slice(-2).map(function (r) {
+            var change = (r.from && r.to) ? esc(r.from) + " ← " + esc(r.to) : (r.to ? esc(r.to) : "");
+            return '<div class="gd-det-j"><u>' + ico(LOG_ICON[r.kind] || "note") + '</u>' +
+              '<b>' + esc(r.kind || "שינוי") + '</b>' +
+              (r.note ? '<span>' + esc(r.note) + '</span>' : (change ? '<span>' + change + '</span>' : '')) +
+              '<time>' + esc(ago(r.at)) + '</time></div>';
+          }).join("");
+        });
 
         wrap.addEventListener("click", function (e) {
           var b = e.target.closest("[data-m]");
@@ -1624,6 +1698,7 @@
             }
             return;
           }
+          if (m === "fullmap") return showOnMap(t, cat);
           close();
           if (m === "plan") return askWeek(id);
           if (m === "approve") return run("approve", id, {});
@@ -1640,7 +1715,10 @@
         wrap.innerHTML =
           '<div class="gt-sheet-bd"></div>' +
           '<div class="gt-sheet"><div class="gt-grip" aria-hidden="true"></div>' +
-            '<h4>' + esc(t.title || "משימה") + '</h4>' +
+            /* כפתור חזרה מפורש (יועד: "מפה... לחיצה עליה מגדילה למסך מלא
+               כולל כפתור חזרה") — בנוסף לרקע-לחיצה ולגלילה-סוגרת. */
+            '<div class="gd-map-head"><button type="button" class="gd-map-back" data-close="1">' +
+              ico("prev") + 'חזרה</button><h4>' + esc(t.title || "משימה") + '</h4></div>' +
             '<p class="sub">' + esc(t.area || "") + '</p>' +
             '<div class="gd-map" id="gt-map"></div></div>';
         document.body.appendChild(wrap);
@@ -1650,6 +1728,8 @@
           setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
         }
         wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        wrap.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) close(); });
+        bindScrollClose(wrap.querySelector(".gt-sheet"), close);
         if (CBA.map) {
           var api = CBA.map.render(wrap.querySelector("#gt-map"), {
             head: false, search: false, legend: false, hint: false, popup: false,
