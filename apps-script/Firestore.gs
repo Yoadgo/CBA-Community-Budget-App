@@ -137,6 +137,23 @@ function fsUnfields_(fields) {
   return out;
 }
 
+/* נתיב מסמך בטוח ל-URL.
+ *  🔴 **למה זה קיים (2026-09-15, צעד 08א):** מזהה מסמך נגזר
+ *  מהגיליון ויכול להכיל כל תו — למשל גרשיים בשם שנה
+ *  (תשפ"ו). גרשיים ב-URL הם תו לא חוקי, ו-UrlFetchApp זורק
+ *  "ארגומנט לא חוקי" לפני שהבקשה יוצאת.
+ *
+ *  ⚠️ **הקידוד הוא של ה-URL בלבד, לא של המזהה.** Firestore
+ *  מפענח את הנתיב, ולכן המסמך נשמר תחת המזהה המקורי.
+ *  משמעות הדבר: `fsList_` מחזיר את המזהה המקורי, וכל
+ *  השוואה (מפת החיים של סחיפת היתומים בראשם) חייבת
+ *  להיעשות על המזהה המקורי — לעולם לא על המקודד.
+ *  בדיוק הפער הזה גרם לסחיפה לנסות למחוק את שתי
+ *  שנות התקציב שזה רגע נכתבו. */
+function fsDocPath_(collection, id) {
+  return collection + '/' + encodeURIComponent(String(id == null ? '' : id));
+}
+
 function fsUrl_(path) {
   return 'https://firestore.googleapis.com/v1/projects/' + fsProjectId_() +
          '/databases/(default)/documents/' + path;

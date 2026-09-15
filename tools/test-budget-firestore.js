@@ -20,6 +20,7 @@ const ok = (n, c, x) => c ? (pass++, console.log('  ✓ ' + n))
 const section = t => console.log('\n' + t);
 const ROOT = path.join(__dirname, '..');
 const CODE = fs.readFileSync(path.join(ROOT, 'apps-script', 'Code.gs'), 'utf8');
+const FIRESTORE = fs.readFileSync(path.join(ROOT, 'apps-script', 'Firestore.gs'), 'utf8');
 const RULES = fs.readFileSync(path.join(ROOT, 'firestore.rules'), 'utf8');
 
 let sheets, written, cacheKeys;
@@ -41,6 +42,9 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 vm.runInContext(CODE, sandbox);
+/* 🔴 Firestore.gs נטען גם הוא: `fsDocPath_` יושב שם, ובלעדיו
+   הבדיקה היתה רצה מול סביבה שאינה הקוד האמיתי. */
+vm.runInContext(FIRESTORE, sandbox);
 sandbox.json_ = o => o;
 
 function reset(opts) {
@@ -67,13 +71,17 @@ function reset(opts) {
 reset();
 
 section('1. מזהה המסמך');
-ok('שנה מקודדת', sandbox.budgetYearId_('תשפ"ז') === encodeURIComponent('תשפ"ז'), sandbox.budgetYearId_('תשפ"ז'));
-ok('🔴 אין מרכאה במזהה (fsUrl_ לא מקודד נתיב)', sandbox.budgetYearId_('תשפ"ז').indexOf('"') === -1);
+ok('המזהה הוא שם השנה כמו שהוא', sandbox.budgetYearId_('תשפ"ז') === 'תשפ"ז', sandbox.budgetYearId_('תשפ"ז'));
+ok('🔴 הקידוד הוא של ה-URL: אין מרכאה בנתיב',
+   sandbox.fsDocPath_('budgetYears', 'תשפ"ז').indexOf('"') === -1,
+   sandbox.fsDocPath_('budgetYears', 'תשפ"ז'));
+ok('🔴 והנתיב המפוענח חוזר למזהה המקורי',
+   decodeURIComponent(sandbox.fsDocPath_('budgetYears', 'תשפ"ז')) === 'budgetYears/תשפ"ז');
 ok('אין לוכסן במזהה', sandbox.budgetYearId_('תשפ"ז').indexOf('/') === -1);
 ok('המזהה עובר את fsIdOk_', sandbox.fsIdOk_(sandbox.budgetYearId_('תשפ"ז')) === true);
 ok('שתי שנים שונות → שני מזהים שונים',
    sandbox.budgetYearId_('תשפ"ו') !== sandbox.budgetYearId_('תשפ"ז'));
-ok('הפיך', decodeURIComponent(sandbox.budgetYearId_('תשפ"ז')) === 'תשפ"ז');
+ok('הפיך', sandbox.budgetYearId_('תשפ"ז') === 'תשפ"ז');
 ok('רווחים מסביב נגזרים', sandbox.budgetYearId_('  תשפ"ז  ') === sandbox.budgetYearId_('תשפ"ז'));
 
 section('2. המסמך');
@@ -111,7 +119,22 @@ section('3. הסנכרון');
 {
   reset({ live: [{ id: 'ישן', data: {} }] });
   const r = sandbox.budgetYearsSyncAll_(sandbox.SpreadsheetApp.getActiveSpreadsheet());
-  ok('יתום נמחק', written.some(w => w.deleted === 'budgetYears/ישן'), JSON.stringify(written.map(w=>w.deleted||w.path)));
+  ok('יתום נמחק', written.some(w => w.deleted === sandbox.fsDocPath_('budgetYears', 'ישן')),
+     JSON.stringify(written.map(w=>w.deleted||w.path)));
+}
+{
+  /* 🔴 הרגרסיה של 15.9.26, אחרי הרצה אמיתית בייצור:
+     המזהה היה מקודד במפת החיים וגולמי ב-`fsList_`, ולכן
+     סחיפת היתומים ראתה את שתי השנים שזה רגע נכתבו
+     כיתומות וניסתה למחוק אותן. רק כשל בבניית ה-URL מנע
+     איבוד נתונים. הבדיקה הזאת התנהגותית בכוונה:
+     מה ש-`fsList_` מחזיר הוא בדיוק מה שנכתב, ואסור שיימחק. */
+  reset({ live: [{ id: 'תשפ"ו', data: {} }, { id: 'תשפ"ז', data: {} }] });
+  const r = sandbox.budgetYearsSyncAll_(sandbox.SpreadsheetApp.getActiveSpreadsheet());
+  ok('🔴 שנה שזה רגע נכתבה אינה נמחקת כיתומה',
+     r.deleted === 0 && !written.some(w => w.deleted),
+     JSON.stringify({ deleted: r.deleted, paths: written.map(w => w.deleted).filter(Boolean) }));
+  ok('והסנכרון עצמו הצליח', r.ok === true && r.wrote === 2, JSON.stringify({ok:r.ok,w:r.wrote,e:r.errors}));
 }
 {
   reset({ live: [{ id: 'ישן', data: {} }] });

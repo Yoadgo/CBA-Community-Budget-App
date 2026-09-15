@@ -5854,7 +5854,7 @@ function fsWriteAll_(collection, items, out, live) {
   for (var i = 0; i < items.length; i++) {
     var id = String(items[i].id == null ? '' : items[i].id).trim();
     if (!fsIdOk_(id)) { out.skipped = (out.skipped || 0) + 1; continue; }
-    fsSet_(collection + '/' + id, items[i].doc);
+    fsSet_(fsDocPath_(collection, id), items[i].doc);
     live[id] = 1;
     out.wrote++;
   }
@@ -5865,7 +5865,7 @@ function fsWriteAll_(collection, items, out, live) {
 function fsSweepOrphans_(collection, live, out) {
   var have = fsList_(collection);
   for (var j = 0; j < have.length; j++) {
-    if (!live[have[j].id]) { fsDelete_(collection + '/' + have[j].id); out.deleted++; }
+    if (!live[have[j].id]) { fsDelete_(fsDocPath_(collection, have[j].id)); out.deleted++; }
   }
 }
 
@@ -7893,7 +7893,10 @@ function handleHomeExtras_(p) {
 var FS_BUDGET_YEARS = 'budgetYears';
 var BY_MAX_BYTES = 900000;          /* מתחת ל-1MiB של Firestore, עם מרווח */
 
-function budgetYearId_(year) { return encodeURIComponent(String(year || '').trim()); }
+/* 🔴 המזהה הוא **שם השנה כמו שהוא**, גרשיים וכל. הקידוד ל-URL
+   קורה ב-`fsDocPath_` ושם בלבד — מזהה מקודד כאן היה נראה
+   לסחיפת היתומים כמזהה אחר מזה ש-`fsList_` מחזיר. */
+function budgetYearId_(year) { return String(year == null ? '' : year).trim(); }
 
 /* נקודת המרה אחת, כמו gardenPlanDoc_/svcDoc_. */
 function budgetYearDoc_(ss, y) {
@@ -7939,7 +7942,7 @@ function budgetYearsSyncAll_(ss) {
       if (size > BY_MAX_BYTES) {
         throw new Error('שנה גדולה מדי למסמך אחד (' + size + ' תווים)');
       }
-      fsSet_(FS_BUDGET_YEARS + '/' + id, doc);
+      fsSet_(fsDocPath_(FS_BUDGET_YEARS, id), doc);
       live[id] = 1;
       out.wrote++;
       out.years.push({ year: y, id: id, bytes: size,
@@ -8197,7 +8200,7 @@ function fsRestoreCollection_(ss, collection) {
   for (var d = 0; d < back.docs.length; d++) {
     var doc = back.docs[d];
     if (!fsIdOk_(doc.id)) { out.badRows.push({ id: doc.id, why: 'מזהה לא חוקי' }); continue; }
-    fsSet_(collection + '/' + doc.id, doc.data);
+    fsSet_(fsDocPath_(collection, doc.id), doc.data);
     inBackup[doc.id] = 1;
     out.wrote++;
   }
@@ -10498,7 +10501,7 @@ function gardenPlanSyncOne_(ss, id) {
     var defs = gardenPlanRows_(ss);
     for (var i = 0; i < defs.length; i++) {
       if (defs[i].id === id) {
-        fsSet_(FS_GARDEN_PLAN + '/' + id, gardenPlanDoc_(defs[i]));
+        fsSet_(fsDocPath_(FS_GARDEN_PLAN, id), gardenPlanDoc_(defs[i]));
         return true;
       }
     }
@@ -10510,7 +10513,7 @@ function gardenPlanSyncOne_(ss, id) {
 function gardenPlanSyncDelete_(id) {
   id = String(id || '').trim();
   if (!id) return false;
-  try { fsDelete_(FS_GARDEN_PLAN + '/' + id); return true; } catch (e) { return false; }
+  try { fsDelete_(fsDocPath_(FS_GARDEN_PLAN, id)); return true; } catch (e) { return false; }
 }
 
 /** נקודת הרצה ידנית מעורך ה-Apps Script (בלי קו תחתי, כדי שתופיע
