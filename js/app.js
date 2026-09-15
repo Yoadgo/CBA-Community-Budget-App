@@ -1276,7 +1276,14 @@
     // את התפריט במקום, בלי הבזק של סגירה+פתיחה מחדש. "הגדר כשנת עבודה"
     // פותח את דיאלוג האישור (אותה לוגיקה שהייתה בהדר).
     panel.querySelectorAll("[data-year]").forEach(function (chip) {
-      chip.addEventListener("click", function () {
+      chip.addEventListener("click", function (e) {
+        // stopPropagation קריטי כאן: renderControls בתוך switchViewYear בונה
+        // מחדש את #user-panel/#user-btn עוד לפני שהקליק מסיים לבעבע ל-
+        // document; בלעדיו, מאזין הסגירה-מחוץ-לתפריט (document click) קורא
+        // e.target שכבר מנותק מה-DOM (השבב הישן) מול הפאנל *החדש* — ותמיד
+        // "לא מוכל", כאילו לחצו מחוץ לתפריט — וסוגר אותו מיד אחרי שנפתח
+        // מחדש. זה בדיוק ה"תפריט נעלם אחרי לחיצה על שנה" (יועד, סבב ד׳).
+        e.stopPropagation();
         switchViewYear(chip.dataset.year, panel, btn);
       });
     });

@@ -1503,48 +1503,46 @@
         var hasPhotos = !!(t.photos && t.photos.length);
         var planning = !closed && !t.week;
         var done = t.flag === "ממתין לאישור";
-        var approving = done && isManager;
 
-        /* הפעולה הראשית — בדיוק אותה נגזרת שקובעת את תיבת הסימון בשורה
-           עצמה (ר' card()), רק כפתור מלא ולא אייקון. */
-        var primaryHtml = "";
+        /* שורת פעולה מהירה (2026-09-15, סבב ד׳) — שלושה כפתורים באותה שורה:
+           יועד: "שיבוץ (שהופך לסימון כבוצע, שגם הוא כפתור שלא צריך אם יש
+           כפתור סגירה)... אפשר לצמצם (לשיבוץ / סגירה, דווח סטטוס, דחייה)".
+           למנהל, שיש לו סגירה ישירה בכל שלב, הסלוט הראשי הוא רק "שיבוץ" (כשאין שבוע)
+           או "סגירה" (בכל מצב אחר) — בלי מצבי הביניים אישור/סימון-כבוצע/ביטול-סימון,
+           שהופכים למיותרים כשיש סגירה ישירה. לגנן, שאין לו סגירה, נשאר הזרם הקודם:
+           שיבוץ→סימון כבוצע→ביטול. */
+        var slotHtml = "";
         if (!closed) {
           if (planning) {
-            primaryHtml = '<button type="button" class="gd-det-cta" data-m="plan">' +
-              ico("cal") + 'שיבוץ לשבוע</button>';
-          } else if (approving) {
-            primaryHtml = '<button type="button" class="gd-det-cta" data-m="approve">' +
-              ico("check") + 'אישור</button>';
+            slotHtml = '<button type="button" class="gd-det-cta" data-m="plan">' +
+              ico("cal") + 'שיבוץ</button>';
+          } else if (isManager) {
+            slotHtml = '<button type="button" class="gd-det-cta is-positive" data-m="close">' +
+              ico("check") + 'סגירה</button>';
           } else if (done) {
-            primaryHtml = '<button type="button" class="gd-det-cta is-ghost" data-m="undo">' +
+            slotHtml = '<button type="button" class="gd-det-cta is-ghost" data-m="undo">' +
               ico("undo") + 'ביטול סימון</button>';
           } else {
-            primaryHtml = '<button type="button" class="gd-det-cta" data-m="markdone">' +
+            slotHtml = '<button type="button" class="gd-det-cta" data-m="markdone">' +
               ico("check") + 'סימון כבוצע</button>';
           }
         }
+        var quickHtml = !closed
+          ? '<div class="gd-det-quickrow">' + slotHtml +
+              '<button type="button" class="gd-det-b" data-m="note">' + ico("note") + 'דווח סטטוס</button>' +
+              '<button type="button" class="gd-det-b" data-m="defer">' + ico("cal") + 'דחייה</button>' +
+            '</div>'
+          : "";
 
-        /* פעולות משניות — אותן תנאים בדיוק כמו ב-openMenu (ללא "map", שכבר
-           לא קיים גם שם, וללא "hist", שעברה לשורת היומן למעלה), רק שהתגית
-           data-m עוברת ל-menuAction() המשותפת. שני שינויי ניסוח לפי יועד:
-           "הערת ביצוע"→"דווח סטטוס", "סגירה עם סיבה"→"סגירה" (הדרישה
-           לנמק בפועל נשארת זהה — ר' askClosure — רק המילים על הכפתור השתנו). */
+        /* פעולות משניות — נדירות יותר, שורה נפרדת מתחת לשורה המהירה. "סגירה"
+           למנהל עברה לשורה המהירה (למעלה) ואינה חוזרת כאן. */
         var secHtml = "";
-        if (!closed) {
-          secHtml +=
-            '<button type="button" class="gd-det-b" data-m="note">' + ico("note") + 'דווח סטטוס</button>' +
-            '<button type="button" class="gd-det-b" data-m="defer">' + ico("cal") + 'דחייה לשבוע הבא</button>' +
-            (!isManager
-              ? '<button type="button" class="gd-det-b" data-m="block">' + ico("clock") + 'לא ניתן לביצוע</button>'
-              : '');
+        if (!closed && !isManager) {
+          secHtml += '<button type="button" class="gd-det-b" data-m="block">' + ico("clock") + 'לא ניתן לביצוע</button>';
         }
         if (isManager && t.flag === "ממתין לאישור") {
           secHtml += '<button type="button" class="gd-det-b" data-m="return">' +
             ico("undo") + 'החזרה להשלמה</button>';
-        }
-        if (isManager && !closed) {
-          secHtml += '<button type="button" class="gd-det-b is-positive" data-m="close">' +
-            ico("check") + 'סגירה</button>';
         }
         if (isManager && t.flag === "דורש בדיקה חוזרת") {
           secHtml += '<button type="button" class="gd-det-b" data-m="clearflag">' +
@@ -1561,14 +1559,19 @@
           '<div class="gt-sheet-bd"></div>' +
           '<div class="gt-sheet gd-det" role="dialog" aria-label="' + esc(t.title || "משימה") + '">' +
             '<div class="gt-grip" aria-hidden="true"></div>' +
-            '<div class="gd-det-topbar"><button type="button" class="gd-sheet-close" data-close="1">' +
-              ico("x") + 'סגירה</button></div>' +
+            /* כותרת+סגירה מוזגו לשורה אחת (2026-09-15, סבב ד׳) — יועד: "כפתור
+               סגירה שתופס מרווח אפשר לשים באותה שורה של הכותרת". השורה
+               נבנית מתחת ל-.gd-det-kicker (למטה) כדי שהקטגוריה תישאר מעל לכותרת, לא
+               בתוך השורה עצמה. */
             /* הכותרת עוברת מעל התמונה, לפי יועד — כך שהעין פוגשת קודם מה
                התקלה ומאיפה, ורק אז את מה שהתושב צילם. "נפתח" זז מהרשת
                למטה לשורת התיאור, מיד אחרי מספר הפנייה. */
             '<div class="gd-det-kicker"><span class="gd-det-dot" style="background:var(--c-' +
               esc(cat.key) + ')"></span>' + esc(t.category || "") + ' · ' + esc(GL.T.report) + '</div>' +
-            '<h4 class="gd-det-title">' + esc(t.title || t.category || "משימה") + '</h4>' +
+            '<div class="gd-sheet-head gd-det-head">' +
+              '<h4 class="gd-det-title" data-title-toggle="1">' + esc(t.title || t.category || "משימה") + '</h4>' +
+              '<button type="button" class="gd-sheet-close" data-close="1">' + ico("x") + 'סגירה</button>' +
+            '</div>' +
             '<p class="gd-det-sub">' +
               (t.repId ? esc(GL.reportRef(t.repId)) : "") +
               (t.createdAt ? (t.repId ? ' · ' : '') + esc(ago(t.createdAt)) : '') +
@@ -1580,16 +1583,20 @@
                     ico("camera") + ' ' + t.photos.length + '</button>' +
                 '</div>'
               : '<div class="gd-det-nophoto">' + ico("camera") + '<span>לא צורפה תמונה</span></div>') +
-            '<div class="gd-det-state is-' + esc(st.tone || "plan") + '">' + esc(st.text) + '</div>' +
-            /* "מקור" ירד — הכותרת/כותרת-המשנה כבר אומרות "דיווח" במפורש,
-               ושדה שחוזר על עצמו לא מרוויח כלום. */
-            '<div class="gd-det-fields">' +
-              (t.area ? '<div class="gd-det-f"><span class="l">אזור</span><span class="v">' + esc(t.area) + '</span></div>' : '') +
-              '<div class="gd-det-f"><span class="l">שבוע</span><span class="v">' +
-                (t.week ? esc(weekLabel(t.week)) : 'לשיבוץ') + '</span></div>' +
+            /* מצב+שבוע מוזגו לשורה קטנה אחת (2026-09-15, סבב ד׳). */
+            '<div class="gd-det-staterow">' +
+              '<span class="gd-det-chip is-' + esc(st.tone || "plan") + '">' + esc(st.text) + '</span>' +
+              '<span class="gd-det-week">' + (t.week ? esc(weekLabel(t.week)) : 'לשיבוץ') + '</span>' +
             '</div>' +
+            (t.area
+              ? '<div class="gd-det-fields"><div class="gd-det-f"><span class="l">אזור</span><span class="v">' + esc(t.area) + '</span></div></div>'
+              : '') +
             (hasMap
               ? '<div class="gd-det-mapbox" data-m="fullmap"><div class="gd-map" id="gd-det-map"></div>' +
+                  /* כפתור "מרכז לנעיצה" גם במפה הקטנה (2026-09-15, סבב ד') — אותה
+                     CBA.map.centerOnPin() כמו במפה המלאה; stopPropagation משלו
+                     כדי שהקליק לא יבעבע ל-data-m="fullmap" של ההורה. */
+                  '<button type="button" class="gd-map-recenter gd-map-recenter--sm" id="gd-det-map-recenter" title="מרכז לנעיצה">' + ico("pin") + '</button>' +
                   '<span class="gd-det-mapbox__hint">' + ico("expand") + '</span></div>'
               : '') +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
@@ -1612,7 +1619,9 @@
                 '<div class="skeleton sk-line sk-sm" style="width:45%;margin-top:6px"></div>' +
               '</div>' +
             '</div>' +
-            '<div class="gd-det-actions">' + primaryHtml + secHtml + '</div>' +
+            '<div class="gd-det-actions">' + quickHtml +
+              (secHtml ? '<div class="gd-det-secrow">' + secHtml + '</div>' : '') +
+            '</div>' +
           '</div>';
         document.body.appendChild(wrap);
         requestAnimationFrame(function () { wrap.classList.add("is-open"); });
@@ -1651,7 +1660,19 @@
             pinAt: { x: t.x, y: t.y }
           });
           if (mapApi && mapApi.fit) setTimeout(function () { mapApi.fit(); }, 60);
+          var recenterSmBtn = wrap.querySelector("#gd-det-map-recenter");
+          if (recenterSmBtn) recenterSmBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            if (mapApi && mapApi.centerOnPin) mapApi.centerOnPin();
+          });
         }
+        /* כותרת ארוכה נחתכת (ellipsis) בשורה עם כפתור הסגירה — לחיצה
+           עליה פותחת אותה במלואה, שוב תחתכו בלחיצה נוספת (יועד, סבב ד׳). */
+        var titleEl = wrap.querySelector("[data-title-toggle]");
+        if (titleEl) titleEl.addEventListener("click", function (e) {
+          e.stopPropagation();
+          titleEl.classList.toggle("is-expanded");
+        });
         /* שתי הרשומות האחרונות מהיומן — אותה קריאת שרת בדיוק כמו openHistory,
            רק שמוצגות כאן רק שתי האחרונות; res.rows מגיע בסדר כרונולוגי עולה
            (הישנה קודם), ולכן slice(-2) נותן את שתי האחרונות באותו סדר תצוגה. */
