@@ -35,11 +35,12 @@ const HEAD = ['מזהה', 'חודש הגשה', 'רוכש', 'סכום', 'סטטו
 
 let sheets, written, mails, moved, bumped;
 
-function makeSheet(rows) {
-  const data = [HEAD.slice()].concat(rows.map(r => r.slice()));
+function makeSheet(rows, head) {
+  head = head || HEAD;
+  const data = [head.slice()].concat(rows.map(r => r.slice()));
   return {
     _data: data,
-    getLastColumn: () => HEAD.length,
+    getLastColumn: () => data[0].length,
     getLastRow: () => data.length,
     getRange: (r, c, nr, nc) => ({
       getValues: () => {
@@ -88,7 +89,14 @@ function row(id, status, extra) {
 function reset(opts) {
   opts = opts || {};
   sheets = {}; written = []; mails = []; moved = []; bumped = [];
-  sheets['תנועות תשפ"ז'] = makeSheet(opts.rows || [row(1, S.submitted)]);
+  let rows = opts.rows || [row(1, S.submitted)];
+  let head = HEAD;
+  if (opts.noNoteCol) {
+    const i = HEAD.indexOf('הערת בדיקה');
+    head = HEAD.filter((h, j) => j !== i);
+    rows = rows.map(r => r.filter((c, j) => j !== i));
+  }
+  sheets['תנועות תשפ"ז'] = makeSheet(rows, head);
   sandbox.fsQuery_ = () => (opts.pending || []);
   sandbox.fsSet_ = (p, o) => { written.push({ path: p, doc: o }); return {}; };
   sandbox.fsDelete_ = p => written.push({ deleted: p });
@@ -151,6 +159,26 @@ section('2. החלה על הגיליון');
   const ss = reset({ pending: [pend(1, S.review, { note: 'חסרה קבלה' })] });
   sandbox.budgetTxApplyPending_(ss);
   ok('הערת בדיקה נכתבת גם היא', noteAt(1) === 'חסרה קבלה', String(noteAt(1)));
+}
+{
+  /* 🔴 **נתפס בבדיקה חיה (15.9):** טאב "תנועות תשפ"ז" נולד **בלי עמודת
+     "הערת בדיקה"**, ולכן ההערה שהגזבר מקליד ב"העבר לבדיקה" נבלעה בשקט —
+     והיא בדיוק הסיבה שהתושב מקבל במייל. העמודה נוצרת עכשיו בעת הצורך,
+     באותו דפוס של 'תת-סעיף' ב-saveTransactionRow_. */
+  const ss = reset({ noNoteCol: true, pending: [pend(1, S.review, { note: 'חסרה קבלה' })] });
+  const r = sandbox.budgetTxApplyPending_(ss);
+  const d = sheets['תנועות תשפ"ז']._data;
+  ok('🔴 עמודה חסרה — נוצרת', d[0].indexOf('הערת בדיקה') !== -1, JSON.stringify(d[0]));
+  ok('🔴 וההערה נכתבת אליה ולא נבלעת',
+     d[1][d[0].indexOf('הערת בדיקה')] === 'חסרה קבלה', JSON.stringify(d[1]));
+  ok('והסטטוס הוחל כרגיל', r.applied === 1 && d[1][4] === S.review, JSON.stringify(r));
+}
+{
+  /* ⚠️ ובלי הערה — לא נוגעים במבנה הגיליון סתם. */
+  const ss = reset({ noNoteCol: true, pending: [pend(1, S.ready)] });
+  sandbox.budgetTxApplyPending_(ss);
+  ok('🔴 בלי הערה — העמודה לא נוצרת',
+     sheets['תנועות תשפ"ז']._data[0].indexOf('הערת בדיקה') === -1);
 }
 {
   const ss = reset({ pending: [] });
