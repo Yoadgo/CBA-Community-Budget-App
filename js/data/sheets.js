@@ -237,6 +237,11 @@ CBA.sheets = (function () {
       currentYear: payload.currentYear || (payload.years || [])[0],
       settings: payload.settings || {},
       version: payload.version || "",
+      /* 🔴 הדגל החי לתחום התנועות, כפי שהשרת מדווח אותו
+         בכל משיכה. ר' ההערה הארוכה ליד `out.txFsOn` ב-Code.gs.
+         ⚠️ `null` = שרת ישן שעוד לא מדווח — ואז נופלים לדגל
+            שנקרא בטעינה, כלומר בדיוק ההתנהגות של אתמול. */
+      txFsOn: (typeof payload.txFsOn === "boolean") ? payload.txFsOn : null,
       budgetUpdates: updates,
       notesLog: notesLog
     };
@@ -555,6 +560,9 @@ CBA.sheets = (function () {
     CBA.mock._settings = store.settings || {};
     // גרסת השרת שעונה בפועל — כדי שאפשר יהיה לראות מיד אם ה-Apps Script עודכן
     CBA.mock._serverVersion = store.version || "";
+    /* 🔴 שער הכתיבה של התנועות קורא מכאן (dataService:txWriteOn),
+       כדי שהקריאה והכתיבה יתהפכו מאותו אות בדיוק. */
+    CBA.mock._txFsOn = (store.txFsOn === true || store.txFsOn === false) ? store.txFsOn : null;
     CBA.mock.budgetUpdates = store.budgetUpdates || [];
     CBA.mock.notesLog = store.notesLog || [];
     return true;

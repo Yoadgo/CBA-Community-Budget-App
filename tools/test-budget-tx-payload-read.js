@@ -107,6 +107,7 @@ function payload(slim) {
            settings: {}, notes: {}, groups: [], updates: [], notesLog: [],
            domains: { budget: budgetCounter, other: 1 },
            txFromFirestore: (slim === '2' && txFromFirestore),
+           txFsOn: txFromFirestore,
            data: { [CUR]: yr(empty ? [] : sheetTx) } };
 }
 
@@ -304,6 +305,35 @@ ok('🔴 וכתיבת סטטוס זורקת אף היא את המטמון',
   ok('\u26A0\uFE0F \u05D5\u05D4\u05D9\u05D0 \u05DE\u05E7\u05D1\u05DC\u05EA \u05D0\u05D5\u05EA\u05D4 \u05DE\u05D1\u05D7\u05D5\u05E5', /function fsTxRows\(y, seesAll, done\)/.test(SRC));
   ok('\u26A0\uFE0F \u05D5\u05D4\u05DE\u05D8\u05E2\u05DF \u05DE\u05E2\u05D1\u05D9\u05E8 true (\u05D4\u05E9\u05E8\u05EA \u05D4\u05E2\u05D9\u05D3)', /fsTxRows\(y, true, function/.test(SRC));
   ok('\u26A0\uFE0F \u05D5\u05D4\u05E9\u05E0\u05D4 \u05D4\u05D1\u05D5\u05D3\u05D3\u05EA \u05DE\u05E2\u05D1\u05D9\u05E8\u05D4 \u05D0\u05EA \u05E9\u05DC\u05D4', /fsTxRows\(y, seesBudget, function/.test(SRC));
+
+
+  /* =============================================================== */
+  /*  \uD83D\uDD34\uD83D\uDD34 \u05E1\u05E2\u05D9\u05E3 9 \u2014 **\u05DE\u05EA\u05D2 \u05D0\u05D7\u05D3, \u05DC\u05D0 \u05E9\u05E0\u05D9\u05D9\u05DD**                */
+  /*  \u05E0\u05EA\u05E4\u05E1 \u05D7\u05D9 (15.9): \u05DE\u05E4\u05EA \u05D4\u05D3\u05D2\u05DC\u05D9\u05DD \u05E9\u05DC \u05D4-SDK \u05E0\u05E7\u05E8\u05D0\u05EA \u05E4\u05E2\u05DD */
+  /*  \u05D0\u05D7\u05EA \u05D1\u05D8\u05E2\u05D9\u05E0\u05EA \u05D4\u05E2\u05DE\u05D5\u05D3, \u05D5\u05DC\u05DB\u05DF flagSet \u05DC\u05D0 \u05D4\u05D2\u05D9\u05E2 \u05DC\u05DC\u05E9\u05D5\u05E0\u05D9\u05D5\u05EA  */
+  /*  \u05E4\u05EA\u05D5\u05D7\u05D5\u05EA. \u05D4\u05E9\u05E8\u05EA \u05DE\u05EA\u05E2\u05D3\u05DB\u05DF \u05EA\u05D5\u05DA \u05D3\u05E7\u05D4 \u2014 \u05D5\u05D0\u05D6 \u05E7\u05D5\u05E8\u05D0\u05D9\u05DD     */
+  /*  \u05DE-Firestore \u05D5\u05DB\u05D5\u05EA\u05D1\u05D9\u05DD \u05DC\u05D2\u05DC\u05D9\u05D5\u05DF: \u05EA\u05E0\u05D5\u05E2\u05D4 \u05E9\u05E0\u05E2\u05DC\u05DE\u05EA.      */
+  section('9. \uD83D\uDD34 \u05DE\u05EA\u05D2 \u05D0\u05D7\u05D3 \u2014 \u05D4\u05DE\u05D8\u05E2\u05DF \u05E0\u05D5\u05E9\u05D0 \u05D0\u05EA \u05D4\u05D3\u05D2\u05DC \u05D4\u05D7\u05D9');
+  ok('\u05D4\u05E9\u05E8\u05EA \u05DE\u05D3\u05D5\u05D5\u05D7 txFsOn \u05DC\u05DB\u05DC \u05DE\u05E9\u05EA\u05DE\u05E9', /out\.txFsOn = txJobsUseFirestore_\(\);/.test(GS));
+  ok('\uD83D\uDD34 **\u05D5\u05D1\u05DC\u05D9 seesBudget** \u2014 \u05EA\u05D5\u05E9\u05D1 \u05E9\u05DE\u05D2\u05D9\u05E9 \u05D1\u05E7\u05E9\u05D4 \u05E6\u05E8\u05D9\u05DA \u05D0\u05D5\u05EA\u05D5 \u05D2\u05DD \u05DB\u05DF',
+     !/out\.txFsOn = seesBudget/.test(GS));
+  ok('\u05D4\u05DC\u05E7\u05D5\u05D7 \u05DE\u05E2\u05D1\u05D9\u05E8 \u05D0\u05D5\u05EA\u05D5 \u05D3\u05E8\u05DA transform', /txFsOn: \(typeof payload\.txFsOn === "boolean"\)/.test(SRC));
+  ok('\u05D5\u05DE\u05E0\u05D9\u05D7 \u05D0\u05D5\u05EA\u05D5 \u05D1-apply', /CBA\.mock\._txFsOn = /.test(SRC));
+  ok('\uD83D\uDD34 \u05D5\u05E9\u05E2\u05E8 \u05D4\u05DB\u05EA\u05D9\u05D1\u05D4 \u05E7\u05D5\u05E8\u05D0 \u05DE\u05DE\u05E0\u05D5 \u05DC\u05E4\u05E0\u05D9 \u05DE\u05E4\u05EA \u05D4\u05D3\u05D2\u05DC\u05D9\u05DD',
+     /var fromPayload = CBA\.mock && CBA\.mock\._txFsOn;[\s\S]{0,200}if \(!fromPayload\) return cb\(false, "flag-off"\);/.test(DS));
+  ok('\u26A0\uFE0F \u05D5\u05E9\u05E8\u05EA \u05D9\u05E9\u05DF (null) \u05E0\u05D5\u05E4\u05DC \u05DC\u05D4\u05EA\u05E0\u05D4\u05D2\u05D5\u05EA \u05D4\u05E7\u05D5\u05D3\u05DE\u05EA',
+     /if \(fromPayload === true \|\| fromPayload === false\)/.test(DS) &&
+     /CBA\.fb\.flag\("budgetTxFromFirestore", BUDGET_TX_FROM_FIRESTORE\)/.test(DS));
+
+  /* \u05D4\u05D4\u05EA\u05E0\u05D4\u05D2\u05D5\u05EA \u05E2\u05E6\u05DE\u05D4, \u05DC\u05D0 \u05E8\u05E7 \u05D4\u05E7\u05D5\u05D3 */
+  env = makeEnv({ rows: [] }); S = env.CBA.sheets; st = env.CBA.mock;
+  txFromFirestore = false; budgetCounter++;
+  await new Promise(r => S.load(() => r())); await wait(20);
+  ok('\u05D4\u05D3\u05D2\u05DC \u05DE\u05D4\u05DE\u05D8\u05E2\u05DF \u05D4\u05D2\u05D9\u05E2 \u05DC-CBA.mock', st._txFsOn === false, String(st._txFsOn));
+  txFromFirestore = true; budgetCounter++;
+  await new Promise(r => S.refresh(() => r())); await wait(20);
+  ok('\uD83D\uDD34 \u05D5\u05D4\u05EA\u05D4\u05E4\u05DA \u05D1\u05DC\u05D9 \u05E8\u05E2\u05E0\u05D5\u05DF \u05E2\u05DE\u05D5\u05D3 \u2014 \u05D6\u05D4 \u05DE\u05D4 \u05E9\u05DE\u05D5\u05E0\u05E2 \u05D0\u05EA \u05D4\u05E4\u05D9\u05E6\u05D5\u05DC',
+     st._txFsOn === true, String(st._txFsOn));
 
   console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);

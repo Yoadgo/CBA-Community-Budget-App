@@ -614,6 +614,21 @@ CBA.data = (function () {
       if (!user) return cb(false, "no-user");
       CBA.fb.ensureDb(function (err) {
         if (err) return cb(false, "db");
+        /* 🔴🔴 **המטען מנצח על מפת הדגלים.** מפת הדגלים של
+           ה-SDK נקראת פעם אחת, ב-`ensureDb`, בטעינת העמוד — ולכן
+           `flagSet` לא מגיע ללשוניות שכבר פתוחות. השרת, לעומת
+           זאת, מתעדכן תוך דקה — ואז הקריאה והכתיבה מתהפכות
+           בזמנים שונים, ותנועה שנכתבת למקום אחד בזמן
+           שקוראים מהשני **נעלמת מהמסך**. נתפס חי ב-15.9.
+           עכשיו שניהם קוראים אותו אות — הדגל שהמטען נושא.
+           ⚠️ `null` = שרת ישן שעוד לא מדווח — נופלים למפת הדגלים,
+              כלומר בדיוק ההתנהגות של אתמול. אין "מסך שבור"
+              בחלון שבין הדחיפה ל-Deploy. */
+        var fromPayload = CBA.mock && CBA.mock._txFsOn;
+        if (fromPayload === true || fromPayload === false) {
+          if (!fromPayload) return cb(false, "flag-off");
+          return cb(true, "");
+        }
         if (CBA.fb.flag && !CBA.fb.flag("budgetTxFromFirestore", BUDGET_TX_FROM_FIRESTORE)) {
           return cb(false, "flag-off");
         }
