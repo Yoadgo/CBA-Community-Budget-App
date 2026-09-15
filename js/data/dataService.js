@@ -359,7 +359,7 @@ CBA.data = (function () {
         row.id = n;
         CBA.fb.createDoc("budgetTx", txDocId(row), txToDoc(row), function (e2) {
           if (e2) return txAddViaSheets(row);
-          txNote("add", "firestore", "");
+          txWrote("add");
         });
       });
     });
@@ -385,6 +385,27 @@ CBA.data = (function () {
       CBA.perf = CBA.perf || {};
       CBA.perf["tx_" + op] = { source: source, why: why || "", at: new Date().toISOString() };
     } catch (e) {}
+  }
+
+  /* ==========================================================================
+   *  🔴🔴 **כל כתיבת תנועה ל-Firestore עוברת כאן.**
+   * --------------------------------------------------------------------------
+   *  שני דברים חייבים לקרות אחריה, ובלעדיהם השינוי פשוט לא נראה:
+   *
+   *  1. **זורקים את מטמון התנועות המקומי** — אחרת המשיכה
+   *     הבאה תגיש את השורות הישנות מהזיכרון ותדרוס את מה
+   *     שזה עטה נכתב. ר' `fsTxCache` ב-sheets.js.
+   *  2. **דחיפה לשרת שמרימה את מונה תחום התקציב** — זה האות
+   *     ש**דפדפנים אחרים** מחכים לו. עד ההיפוך הכתיבה עברה
+   *     ב-Apps Script והמונה עלה מעצמו; כתיבה ישירה ל-Firestore
+   *     אינה נוגעת בשרת בכלל, ולכן בלי הדחיפה הזאת הגזבר
+   *     לא יראה בקשת החזר חדשה עד רשת הביטחון של 10 דקות.
+   *
+   *  ⚠️ כשל בדחיפה אינו שגיאה למשתמש — הכתיבה כבר הצליחה. */
+  function txWrote(op) {
+    txNote(op, "firestore", "");
+    try { CBA.sheets.dropTxCache(); } catch (e) {}
+    txNudgeApply(false);
   }
   /* ========================================================================
    *  החזרה לאחור כשהשרת דוחה  (PHASE 4.2, 2026-09-14)
@@ -482,8 +503,13 @@ CBA.data = (function () {
      הביטחון, ולכן כשל כאן אינו שגיאה למשתמש.
      השהיה קצרה מאחדת אישור גורף של 20 שורות לדחיפה אחת. */
   var txNudgeTimer = null, txNudgeHeld = 0;
-  function txNudgeApply() {
-    txNudgeHeld++;
+  /* 🔴 `holds === false` = דחיפה "רק כדי להרים את המונה בשרת",
+     בלי שום דגל עריכה תלוי בה. הבחנה הכרחית: ספירת
+     `txNudgeHeld` משוחררת `txDirtyDown` פעם לכל החזקה — ושחרור
+     שלא היתה לו החזקה היה משחרר את הדגל של **כתיבת סטטוס
+     מקבילה** מוקדם מדי — וזה בדיוק הבאג שתוקן ב-15.9 (הבהוב). */
+  function txNudgeApply(holds) {
+    if (holds !== false) txNudgeHeld++;
     if (txNudgeTimer) clearTimeout(txNudgeTimer);
     txNudgeTimer = setTimeout(function () {
       txNudgeTimer = null;
@@ -529,6 +555,8 @@ CBA.data = (function () {
         txDirtyUp();
         CBA.fb.updateDoc("budgetTx", year + "__" + t.id, patch, function (err) {
           if (err) { txDirtyDown(); return done(false, (err && (err.code || err.message)) || "write"); }
+          /* השורות שבמטמון מחזיקות סטטוס ישן — ר' `txWrote`. */
+          try { CBA.sheets.dropTxCache(); } catch (e) {}
           txNudgeApply();     /* הדגל משוחרר בקולבק של הדחיפה */
           done(true, "");
         });
@@ -657,7 +685,7 @@ CBA.data = (function () {
       if (!on) return txPushWhole(id, t, before);
       CBA.fb.mergeDoc("budgetTx", txDocId(t), txDetailsPatch(t), function (err) {
         if (err) return txPushWhole(id, t, before);
-        txNote("update", "firestore", "");
+        txWrote("update");
       });
     });
     return t;
@@ -685,7 +713,7 @@ CBA.data = (function () {
       if (!on || !copy) return txDeleteViaSheets(id, yr, copy, at);
       CBA.fb.deleteDoc("budgetTx", txDocId(copy), function (err) {
         if (err) return txDeleteViaSheets(id, yr, copy, at);
-        txNote("delete", "firestore", "");
+        txWrote("delete");
       });
     });
   }
@@ -978,7 +1006,7 @@ CBA.data = (function () {
           doc.mailPending = true;
           CBA.fb.createDoc("budgetTx", txDocId(t), doc, function (e2) {
             if (e2) return fallback();
-            txNote("receipt", "firestore", "");
+            txWrote("receipt");
             CBA.mock.transactions.push(Object.assign({ buyer: fields.buyer || "", payType:
               fields.expenseType === "refund" ? "refund" : "supplier" }, t));
             if (cb) cb({ ok: true, id: n });

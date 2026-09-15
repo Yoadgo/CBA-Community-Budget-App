@@ -599,46 +599,164 @@ CBA.sheets = (function () {
   // מפתח המטמון המקומי. שינוי הגרסה מבטל מטמון ישן (למשל אם מבנה הנתונים משתנה).
   var CACHE_KEY = "cba_data_v2";   // v2 (2026-08-07): מטמון ישן הכיל את סיסמת המנהל — נזרק
 
+  /* ==========================================================================
+   *  🔴 **היפוך התנועות במטען הראשי** (צעד 09ב-5ג, 2026-09-15)
+   * --------------------------------------------------------------------------
+   *  `slim=2` = "אני יודע למשוך שנה חסרה **וגם את התנועות**".
+   *  השרת מפסיק לשלוח אותן רק אם גם הדגל החי דלוק, ומצהיר
+   *  על כך ב-`payload.txFromFirestore`.
+   *
+   *  🔴🔴 **השרת מכריע, לא הלקוח.** לכן בטוח שברירת
+   *  המחדל שבקוד כאן היא `true`: מגיעים לכאן רק אחרי
+   *  שהשרת כבר אמר "רוקנתי". וזו **חובה**, לא נוחות:
+   *  `fsFirstRead` מקצרת ל-Apps Script **לפני** שהיא קוראת את
+   *  הדגל החי כש-`enabled === false` — כלומר ברירת מחדל `false`
+   *  היתה גורמת לכך שההדלקה לעולם לא תיקלט והתקציב היה
+   *  נשאר בלי תנועות. ר' אותה הערה ליד `BUDGET_YEAR_FROM_FIRESTORE`.
+   *
+   *  ⚠️ **כשל ב-Firestore אינו תקציב ריק** — הוא משיכה חוזרת של
+   *     המטען עם `slim=1`, שבה השרת שולח תנועות מהגיליון כרגיל.
+   *     עולה נסיעת רשת נוספת, וזה בדיוק המחיר הנכון לשלם
+   *     על כך שתקלה ב-Firebase לא מרוקנת לאף אחד את המסך.
+   *  ⚠️ **השנה הנוכחית בלבד.** שנים אחרות מגיעות דרך `loadYear`
+   *     לפי דרישה, ושם המסלול כבר עובר ב-`fsYearLoad`.
+   * ======================================================================== */
+  var BUDGET_TX_FROM_FIRESTORE_READ = true;
+
+  function fetchPayload(slim, done) {
+    /* המושב החתום מצורף גם למשיכה הראשית (2026-08-23 — תיקון אבטחה).
+       עד היום זו הייתה הקריאה היחידה בקובץ שיצאה בלי session, כי בצד השרת
+       ממילא לא נבדק כלום. עכשיו doGet דורש מושב תקין גם כאן.
+       ⚠️ **אסור להסיר את הדגל בלי להסיר גם את הדיאטה בשרת** — הוא מה
+          שמונע מלקוח ישן לקבל מטען חסר ולהציג תקציב ריק. ר' doGet ב-Code.gs. */
+    fetch(API_URL + "?session=" + encodeURIComponent(authSession()) + "&slim=" + slim, { method: "GET" })
+      .then(function (r) { return r.json(); })
+      .then(function (payload) {
+        if (!payload || !payload.ok) throw new Error((payload && payload.error) || "bad payload");
+        done(null, payload);
+      })
+      ["catch"](function (err) { done(err); });
+  }
+
+  /* ==========================================================================
+   *  🔴🔴 **מטמון התנועות — זו אינה אופטימיזציה, זה תנאי לצעד**
+   * --------------------------------------------------------------------------
+   *  שאילתת התנועות עולה **קריאה לכל מסמך** — כ-144 בתשפ"ז,
+   *  ויותר עם השנה. המטען המלא נמשך לפחות פעם בדקה
+   *  (`FULL_EVERY_MS`) — כלומר בלי מטמון זה 8,640 קריאות לשעה
+   *  **לכל לשונית פתוחה**, שהוא שבר של מכסת Spark (50,000
+   *  ליום) תוך שש שעות עבודה של משתמש אחד. ואין כרטיס אשראי.
+   *
+   *  🔴 **אותו רעיון בדיוק כמו `rev`** (ר' refreshIfChanged): לא מושכים
+   *  שוב כל עוד שום דבר לא זז. האות הוא מונה התחום
+   *  `domains.budget`, ו**כל כתיבת תנועה מהדפדפן מרימה אותו**
+   *  דרך הדחיפה ל-`budgetTxApply` (ר' `txNudgeApply` ב-dataService).
+   *  לכן ההיענות נשארת של שלוש שניות, בדיוק כמו היום.
+   *
+   *  ⚠️ **רשת הביטחון (`TX_REQUERY_MS`) אינה קישוט.** כתיבה
+   *     שהצליחה והדחיפה אחריה נכשלה (ניתוק רגעי) היא שינוי
+   *     שאיש אחר לא יראה שום אות עליו. בלעדיה הוא נעלם עד
+   *     לכתיבה הבאה — כלומר מסך שנראה נכון ואינו.
+   *  ⚠️ שרת שלא מחזיר `domains` נופל ל-`rev` הגלובלי — רעשני
+   *     יותר (כל כתיבה בכל נושא מרימה אותו), אבל לעולם לא מפספס.
+   * ======================================================================== */
+  var fsTxCache = null;               /* {y, key, at, rows} */
+  var TX_REQUERY_MS = 600000;         /* 10 דקות */
+
+  function dropTxCache() { fsTxCache = null; }
+
+  function txCacheKey(payload) {
+    var d = (payload.domains && typeof payload.domains === "object") ? payload.domains : null;
+    if (d) return "d:" + String(d.budget || 0);
+    return "r:" + String(payload.rev == null ? "" : payload.rev);
+  }
+
+  /* ממלא את תנועות השנה הנוכחית לתוך המטען, **לפני** `transform`,
+     כדי שכל הנגזרות (סכומים, ניצול, התאמה) יחושבו מהשורות האמיתיות.
+     ok(payload) / fail(err). */
+  function payloadTx(payload, ok, fail) {
+    var y = payload.currentYear;
+    /* אין לאן להזריק — נותנים למטען לעבור כמו שהוא. */
+    if (!y || !payload.data || !payload.data[y]) return ok(payload);
+
+    var key = txCacheKey(payload);
+    if (fsTxCache && fsTxCache.y === y && fsTxCache.key === key &&
+        (Date.now() - fsTxCache.at) < TX_REQUERY_MS) {
+      payload.data[y].transactions = fsTxCache.rows;
+      return ok(payload);
+    }
+
+    if (!(CBA.data && CBA.data.fsFirstRead)) {
+      return fetchPayload("1", function (e, p) { if (e) return fail(e); ok(p); });
+    }
+    CBA.data.fsFirstRead("budgetTx", BUDGET_TX_FROM_FIRESTORE_READ,
+      function (done) {
+        fsTxRows(y, function (err, rows) {
+          if (err) return done(err);
+          done(null, { ok: true, rows: rows });
+        });
+      },
+      function (done) {
+        fetchPayload("1", function (e, p) {
+          done(e ? { ok: false, error: String(e && e.message ? e.message : e) }
+                 : { ok: true, payload: p });
+        });
+      },
+      function (res) {
+        if (!res || res.ok === false) return fail(new Error((res && res.error) || "tx-fallback"));
+        /* נפילה לאחור: מטען מלא חדש — **ולא מטמינים**, כדי
+           שהניסיון הבא יחזור ל-Firestore ולא ינעל עצמו על הנפילה. */
+        if (res.payload) return ok(res.payload);
+        fsTxCache = { y: y, key: key, at: Date.now(), rows: res.rows };
+        payload.data[y].transactions = res.rows;
+        ok(payload);
+      });
+  }
+
   // שולפת מהגיליון, מחילה על CBA.mock ומעדכנת מטמון. משותף בין load() (רענון הרקע
   // הראשוני) ובין refresh() (רענון תקופתי מאוחר יותר, ר' למטה) — קוד אחד, לא כפול.
   function fetchAndApply(hadCache, cb, isBackgroundRefresh) {
     var mySeq = ++seqCounter;   // נתפס כאן, ברגע השליחה — לא ברגע שהתשובה חוזרת
-    /* המושב החתום מצורף גם למשיכה הראשית (2026-08-23 — תיקון אבטחה).
-       עד היום זו הייתה הקריאה היחידה בקובץ שיצאה בלי session, כי בצד השרת
-       ממילא לא נבדק כלום. עכשיו doGet דורש מושב תקין גם כאן. */
-    /* `slim=1` = "אני יודע למשוך שנה חסרה בעצמי" (2026-09-14, שלב ב3).
-       ⚠️ **אסור להסיר את הדגל בלי להסיר גם את הדיאטה בשרת** — הוא מה
-       שמונע מלקוח ישן לקבל מטען חסר ולהציג תקציב ריק. ר' doGet ב-Code.gs. */
-    fetch(API_URL + "?session=" + encodeURIComponent(authSession()) + "&slim=1", { method: "GET" })
-      .then(function (r) { return r.json(); })
-      .then(function (payload) {
-        if (!payload || !payload.ok) throw new Error((payload && payload.error) || "bad payload");
-        // תשובה "ישנה" שהגיעה באיחור (ר' ההסבר המלא ליד isDirty/writeFloor למעלה) — מתעלמים
-        if (mySeq <= writeFloor || mySeq <= lastAppliedSeq) {
-          cb(true, { source: "stale-ignored", hadCache: hadCache });
-          return;
-        }
-        var store = transform(payload);
-        if (apply(store, isBackgroundRefresh)) {
-          lastAppliedSeq = mySeq;
-          // (2026-08-19, ממצא 2.3) קולטים את מספר הגרסה שהגיע יחד עם הנתונים.
-          // רק כשבאמת יישמנו — אם דילגנו (עריכה מקומית פתוחה), הנתונים שבידינו
-          // עדיין ישנים ואסור לסמן אותנו כמעודכנים.
-          if (typeof payload.rev === "number") { lastRev = payload.rev; revSupported = true; }
-          else revSupported = false;   // שרת ישן שעוד לא פורסם — נשארים על התנהגות "משיכה מלאה תמיד"
-          // נקודת הייחוס למונים לפי תחום (2026-09-08). בלעדיה הבדיקה הזולה
-          // אחרי משיכה מלאה לא יודעת מול מה להשוות, ומושכת שוב מיד.
-          lastDomains = (payload.domains && typeof payload.domains === "object") ? payload.domains : null;
-          lastFullFetch = Date.now();
-          try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), store: store })); } catch (e) { /* מכסת אחסון מלאה — לא קריטי */ }
-        }
-        cb(true, { source: "fresh", hadCache: hadCache });
-      })
-      .catch(function (err) {
-        console.error("[CBA] טעינה מהגיליון נכשלה:", err);
-        if (!hadCache) cb(false, { source: "none" });
-        else cb(true, { source: "cache-kept", error: String(err) });
-      });
+
+    function useIt(payload) {
+      /* תשובה "ישנה" שהגיעה באיחור (ר' ההסבר המלא ליד isDirty/writeFloor
+         למעלה) — מתעלמים.
+         ⚠️ **נבדק שוב כאן, אחרי הפער האסינכרוני של קריאת התנועות** —
+            הקריאה מ-Firestore מוסיפה זמן שבו כתיבה יכולה להסתיים,
+            ובדיקה שנעשתה רק לפני הפער היתה מפספסת אותה. */
+      if (mySeq <= writeFloor || mySeq <= lastAppliedSeq) {
+        cb(true, { source: "stale-ignored", hadCache: hadCache });
+        return;
+      }
+      var store = transform(payload);
+      if (apply(store, isBackgroundRefresh)) {
+        lastAppliedSeq = mySeq;
+        // (2026-08-19, ממצא 2.3) קולטים את מספר הגרסה שהגיע יחד עם הנתונים.
+        // רק כשבאמת יישמנו — אם דילגנו (עריכה מקומית פתוחה), הנתונים שבידינו
+        // עדיין ישנים ואסור לסמן אותנו כמעודכנים.
+        if (typeof payload.rev === "number") { lastRev = payload.rev; revSupported = true; }
+        else revSupported = false;   // שרת ישן שעוד לא פורסם — נשארים על התנהגות "משיכה מלאה תמיד"
+        // נקודת הייחוס למונים לפי תחום (2026-09-08). בלעדיה הבדיקה הזולה
+        // אחרי משיכה מלאה לא יודעת מול מה להשוות, ומושכת שוב מיד.
+        lastDomains = (payload.domains && typeof payload.domains === "object") ? payload.domains : null;
+        lastFullFetch = Date.now();
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), store: store })); } catch (e) { /* מכסת אחסון מלאה — לא קריטי */ }
+      }
+      cb(true, { source: "fresh", hadCache: hadCache });
+    }
+
+    function failed(err) {
+      console.error("[CBA] טעינה מהגיליון נכשלה:", err);
+      if (!hadCache) cb(false, { source: "none" });
+      else cb(true, { source: "cache-kept", error: String(err) });
+    }
+
+    fetchPayload("2", function (err, payload) {
+      if (err) return failed(err);
+      /* השרת לא רוקן כלום (דגל כבוי, או שרת ישן, או תושב) — מסלול רגיל. */
+      if (!payload.txFromFirestore) return useIt(payload);
+      payloadTx(payload, useIt, failed);
+    });
   }
 
   /* טעינה בשיטת stale-while-revalidate:
@@ -771,7 +889,7 @@ CBA.sheets = (function () {
   }
 
   // ניקוי המטמון (למשל בעת יציאה/החלפת משתמש)
-  function clearCache() { try { localStorage.removeItem(CACHE_KEY); } catch (e) {} }
+  function clearCache() { dropTxCache(); try { localStorage.removeItem(CACHE_KEY); } catch (e) {} }
 
   /* כתיבה לגיליון (2026-08-18 — שוכתב, ממצא 4.1 בדו"ח הבדיקה).
      קודם זה עבד ב-mode:"no-cors" ("שגר ושכח"): הבקשה יוצאת, אבל הדפדפן לא
@@ -1231,8 +1349,60 @@ CBA.sheets = (function () {
     return out;
   }
 
+  /* ==========================================================================
+   *  fsTxRows — תנועות שנה מ-Firestore, בצורת הגיליון
+   * --------------------------------------------------------------------------
+   *  🔴 **נקודת הקריאה האחת לתנועות.** שני צרכנים:
+   *  `fsYearLoad` (שנה בודדת לפי דרישה) ו-`payloadTx` (הזרקה
+   *  למטען הראשי, צעד 09ב05ג). חולץ לכאן במכוון לפני
+   *  שהיה צרכן שני — שני מסלולי המרה מקבילים נפרדים
+   *  בשקט בשינוי הפורמט הראשון (ר' אותה הערה ליד `buildYear`).
+   *
+   *  ⚠️ **שם הרוכש מורכב כאן** ממזהה המשפחה — הוא אינו
+   *     יושב ב-Firestore ולעולם לא ישב שם. טעינת הספרייה רצה
+   *     **במקביל** לשאילתה, אחרת היינו משלמים שתי המתנות.
+   *  ⚠️ תושב שאין לו מזהה משפחה מקבל **רשימה ריקה לגיטימית**,
+   *     לא שגיאה — הכלל דוחה שאילתה רחבה יותר בלאו הכי.
+   * ======================================================================== */
+  function fsTxRows(y, done) {
+    var raw = null, namesOk = false, failed = false;
+    function fail(e) { if (failed) return; failed = true; done(e); }
+    function maybe() {
+      if (failed || raw === null || !namesOk) return;
+      done(null, fsPlainRows(raw).map(function (r) {
+        if (String(r["רוכש"] || "").trim()) return r;
+        var name = CBA.data.familyDisplayName ? CBA.data.familyDisplayName(r["מזהה משפחה"]) : "";
+        if (!name) return r;
+        var out = {};
+        Object.keys(r).forEach(function (k) { out[k] = r[k]; });
+        out["רוכש"] = name;
+        return out;
+      }));
+    }
+
+    var seesAll = !!(CBA.isSuper || (CBA.perms && CBA.perms.indexOf("תקציב") !== -1));
+    var mine = (CBA.user && CBA.user.familyId) ? String(CBA.user.familyId).trim() : "";
+    /* 🔴 **מסמך לכל תנועה** (צעד 09) — שאילתת שוויון, בלי אינדקס
+       מורכב (קונסולת Google Cloud חסומה ב-2SV). תושב מסנן גם לפי
+       משפחה — והכלל דוחה כל שאילתה רחבה יותר, אז הסינון אינו
+       "הגנה" אלא מה שמאפשר לקריאה להצליח בכלל. */
+    if (!seesAll && !mine) { raw = []; maybe(); }
+    else {
+      var conds = [["year", String(y)]];
+      if (!seesAll) conds.push(["familyId", mine]);
+      CBA.fb.queryCollection("budgetTx", conds, function (err, all) {
+        if (err) return fail(err);
+        raw = (all || []).map(btxStrip);
+        maybe();
+      });
+    }
+
+    if (CBA.data.ensureFamilyNames) CBA.data.ensureFamilyNames(function () { namesOk = true; maybe(); });
+    else { namesOk = true; maybe(); }
+  }
+
   function fsYearLoad(y, done) {
-    var doc = null, txRows = null, namesOk = false, failed = false;
+    var doc = null, rows = null, failed = false;
     /* 🔴🔴 **מושכים רק את מה שלמשתמש הזה מותר ונדרש**
        (עקרון שיועד קבע, 15.9.2026). תוכנית התקציב פתוחה בכללי
        האבטחה **רק לבעלי הרשאת תקציב**. קריאה של תושב
@@ -1245,16 +1415,7 @@ CBA.sheets = (function () {
     var EMPTY_PLAN = { budget: [], income: [], groups: [], splits: [], items: [] };
     function fail(e) { if (failed) return; failed = true; done(e); }
     function maybe() {
-      if (failed || !doc || txRows === null || !namesOk) return;
-      var rows = fsPlainRows(txRows).map(function (r) {
-        if (String(r["רוכש"] || "").trim()) return r;
-        var name = CBA.data.familyDisplayName ? CBA.data.familyDisplayName(r["מזהה משפחה"]) : "";
-        if (!name) return r;
-        var out = {};
-        Object.keys(r).forEach(function (k) { out[k] = r[k]; });
-        out["רוכש"] = name;
-        return out;
-      });
+      if (failed || !doc || rows === null) return;
       done(null, { ok: true, rev: lastRev, data: {
         budget: fsPlainRows(doc.budget), income: fsPlainRows(doc.income),
         groups: (doc.groups || []).map(fsPlain),
@@ -1273,25 +1434,10 @@ CBA.sheets = (function () {
       doc = EMPTY_PLAN; maybe();   /* בלי קריאה בכלל */
     }
 
-    var mine = (CBA.user && CBA.user.familyId) ? String(CBA.user.familyId).trim() : "";
-    var seesAll = seesBudget;
-    /* 🔴 **מסמך לכל תנועה** (צעד 09) — שאילתת שוויון, בלי אינדקס
-       מורכב. תושב מסנן גם לפי משפחה — והכלל דוחה כל שאילתה
-       רחבה יותר, אז הסינון אינו "הגנה" אלא מה שמאפשר לקריאה
-       להצליח בכלל. */
-    if (!seesAll && !mine) { txRows = []; maybe(); }
-    else {
-      var conds = [["year", String(y)]];
-      if (!seesAll) conds.push(["familyId", mine]);
-      CBA.fb.queryCollection("budgetTx", conds, function (err, all) {
-        if (err) return fail(err);
-        txRows = (all || []).map(btxStrip);
-        maybe();
-      });
-    }
-
-    if (CBA.data.ensureFamilyNames) CBA.data.ensureFamilyNames(function () { namesOk = true; maybe(); });
-    else { namesOk = true; maybe(); }
+    fsTxRows(y, function (err, rr) {
+      if (err) return fail(err);
+      rows = rr; maybe();
+    });
   }
 
   /* ============================================================================
@@ -1323,5 +1469,5 @@ CBA.sheets = (function () {
   }
 
   return { url: API_URL, load: load, refresh: refresh, refreshIfChanged: refreshIfChanged,
-    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, yearLoaded: yearLoaded, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
+    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, yearLoaded: yearLoaded, dropTxCache: dropTxCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
 })();

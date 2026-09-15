@@ -124,10 +124,58 @@ ok('ערך שאינו "1" נחשב ללא-דגל', Object.keys(r.data).length ==
 section('6. הקוד עצמו');
 ok('התנאי דורש הרשאת תקציב **וגם** הצהרת לקוח',
    /var slimYears = seesBudget && clientSlim && currentY/.test(CODE));
-ok('הדגל נקרא מהפרמטרים ולא מהמושב', /e\.parameter\.slim\) \|\| ''\) === '1'/.test(CODE));
+ok('הדגל נקרא מהפרמטרים ולא מהמושב', /e\.parameter\.slim\) \|\| ''\)/.test(CODE));
+ok('ו-slim=2 נחשב גם הוא להצהרת "אני יודע למשוך שנה"',
+   /clientSlim = slimRaw === '1' \|\| slimRaw === '2'/.test(CODE));
 ok('⚠️ ודורש שהשנה הנוכחית קיימת ברשימה', /years\.indexOf\(currentY\) !== -1/.test(CODE));
 ok('הדילוג הוא לפני קריאת הגיליון', /if \(slimYears && y !== currentY\) return;/.test(CODE));
 ok('⚠️ out.years לא צומצם', /ok: true, version: [^\n]*years: years/.test(CODE));
+
+
+/* ================================================================= */
+/*  🔴 צעד 09ב-5ג — slim=2: השרת מפסיק לשלוח תנועות       */
+/*  הסעיף החשוב כאן הוא האחרון: ריקון **רק** לשנה       */
+/*  הנוכחית. ריקון גורף לא היה זורק שגיאה — הוא היה  */
+/*  מציג שנים קודמות כשנים בלי תנועות — אפס שקרי.        */
+section('7. \u05D4\u05D9\u05E4\u05D5\u05DA \u05D4\u05EA\u05E0\u05D5\u05E2\u05D5\u05EA (slim=2)');
+const run2 = () => sandbox.doGet({ parameter: { session: 's', slim: '2' } });
+const realFlag = sandbox.txJobsUseFirestore_;
+
+reset({ isSuper: true, familyId: '401' });
+sandbox.txJobsUseFirestore_ = () => false;
+r = run2();
+ok('\u05D3\u05D2\u05DC \u05DB\u05D1\u05D5\u05D9: txFromFirestore=false', r.txFromFirestore === false, String(r.txFromFirestore));
+ok('\u26A0\uFE0F \u05D5\u05D4\u05EA\u05E0\u05D5\u05E2\u05D5\u05EA \u05E2\u05D3\u05D9\u05D9\u05DF \u05E0\u05E9\u05DC\u05D7\u05D5\u05EA', r.data['\u05EA\u05E9\u05E4"\u05D6'].transactions.length === 2);
+
+reset({ isSuper: true, familyId: '401' });
+sandbox.txJobsUseFirestore_ = () => true;
+r = run2();
+ok('\u05D3\u05D2\u05DC \u05D3\u05DC\u05D5\u05E7: txFromFirestore=true', r.txFromFirestore === true);
+ok('\uD83D\uDD34 \u05D5\u05D4\u05EA\u05E0\u05D5\u05E2\u05D5\u05EA \u05E8\u05D9\u05E7\u05D5\u05EA', r.data['\u05EA\u05E9\u05E4"\u05D6'].transactions.length === 0);
+ok('\u26A0\uFE0F \u05D0\u05D1\u05DC \u05D4\u05EA\u05E7\u05E6\u05D9\u05D1 \u05E2\u05E6\u05DE\u05D5 \u05DE\u05DE\u05E9\u05D9\u05DA \u05DC\u05D4\u05D2\u05D9\u05E2 \u05DE\u05D4\u05D2\u05DC\u05D9\u05D5\u05DF',
+   !!r.data['\u05EA\u05E9\u05E4"\u05D6'].budget && r.data['\u05EA\u05E9\u05E4"\u05D6'].budget.length > 0);
+ok('\u05D5\u05D4\u05D3\u05D9\u05D0\u05D8\u05D4 \u05E2\u05D3\u05D9\u05D9\u05DF \u05E4\u05D5\u05E2\u05DC\u05EA', Object.keys(r.data).length === 1, Object.keys(r.data).join(','));
+
+reset({ isSuper: false, perms: [], familyId: '401' });
+r = run2();
+ok('\uD83D\uDD34 \u05EA\u05D5\u05E9\u05D1 \u05D1\u05DC\u05D9 \u05D4\u05E8\u05E9\u05D0\u05EA \u05EA\u05E7\u05E6\u05D9\u05D1 \u05DC\u05D0 \u05DE\u05D5\u05E9\u05E4\u05E2', r.txFromFirestore === false);
+YEARS.forEach(y => ok(y + ': \u05E9\u05D5\u05E8\u05EA \u05DE\u05E9\u05E4\u05D7\u05EA\u05D5 \u05E2\u05D3\u05D9\u05D9\u05DF \u05E9\u05DD',
+                      r.data[y].transactions.length === 1, String(r.data[y].transactions.length)));
+
+sandbox.readSettings_ = () => ({ '\u05E9\u05E0\u05D4 \u05E0\u05D5\u05DB\u05D7\u05D9\u05EA': '\u05EA\u05E9\u05E4"\u05D8' });
+reset({ isSuper: true, familyId: '401' });
+r = run2();
+ok('\uD83D\uDD34\uD83D\uDD34 \u05E9\u05E0\u05D4 \u05E0\u05D5\u05DB\u05D7\u05D9\u05EA \u05E9\u05D0\u05D9\u05E0\u05D4 \u05D1\u05E8\u05E9\u05D9\u05DE\u05D4 \u2014 \u05E9\u05E0\u05D9\u05DD \u05D0\u05D7\u05E8\u05D5\u05EA \u05E9\u05D5\u05DE\u05E8\u05D5\u05EA \u05EA\u05E0\u05D5\u05E2\u05D5\u05EA',
+   YEARS.every(y => r.data[y] && r.data[y].transactions.length === 2),
+   YEARS.map(y => y + '=' + (r.data[y] ? r.data[y].transactions.length : 'x')).join(','));
+sandbox.readSettings_ = () => ({ '\u05E9\u05E0\u05D4 \u05E0\u05D5\u05DB\u05D7\u05D9\u05EA': '\u05EA\u05E9\u05E4"\u05D6' });
+sandbox.txJobsUseFirestore_ = realFlag;
+
+ok('\u05D4\u05EA\u05E0\u05D0\u05D9 \u05D3\u05D5\u05E8\u05E9 \u05D4\u05E8\u05E9\u05D0\u05EA \u05EA\u05E7\u05E6\u05D9\u05D1 + slim=2 + \u05D4\u05D3\u05D2\u05DC \u05D4\u05D7\u05D9',
+   /var txFs = seesBudget && slimRaw === '2' && txJobsUseFirestore_\(\)/.test(CODE));
+ok('\uD83D\uDD34 \u05D4\u05E8\u05D9\u05E7\u05D5\u05DF \u05DE\u05D5\u05D2\u05D1\u05DC \u05DC\u05E9\u05E0\u05D4 \u05D4\u05E0\u05D5\u05DB\u05D7\u05D9\u05EA \u05D1\u05DC\u05D1\u05D3',
+   /transactions: \(txFs && y === currentY\) \? \[\] : tx,/.test(CODE));
+ok('\u05D5\u05D4\u05E9\u05E8\u05EA \u05DE\u05E6\u05D4\u05D9\u05E8 \u05E2\u05DC \u05DB\u05DA \u05DC\u05DC\u05E7\u05D5\u05D7', /out\.txFromFirestore = txFs;/.test(CODE));
 
 console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

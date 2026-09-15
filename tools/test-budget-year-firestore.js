@@ -280,9 +280,14 @@ section('1. הדגל כבוי — המסלול הישן');
      /var BUDGET_YEAR_FROM_FIRESTORE = true;/.test(SH));
   ok('משתמש ב-fsFirstRead המשותף ולא במנגנון משלו',
      /CBA\.data\.fsFirstRead\("budgetYear"/.test(SH));
+  /* 🔴 מ-15.9 הקריאה לתנועות חולצה ל-`fsTxRows`, כדי
+     שגם המטען הראשי (צעד 09ב-5ג) ישתמש באותה אחת.
+     הדרישה לא השתנתה: **כל ערך עובר דרך הנירוול.** */
   ok('🔴 וכל ערך מ-Firestore עובר דרך הנירוול',
      /transactions: rows/.test(SH) && /budget: fsPlainRows\(doc\.budget\)/.test(SH) &&
-     /var rows = fsPlainRows\(txRows\)/.test(SH));
+     /done\(null, fsPlainRows\(raw\)\.map/.test(SH));
+  ok('⚠️ והשנה הבודדת צורכת את אותה פונקציה',
+     /fsTxRows\(y, function \(err, rr\)/.test(SH));
 
   console.log('\n' + (fail ? '\u2717' : '\u2713') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);
