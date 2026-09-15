@@ -229,6 +229,7 @@ var GET_ACTION_PERMS = {
   /* גיבוי Firestore ← גיליון (2026-09-15, צעד 07א) — מנהל-על בלבד. */
   backupRun: PERM_SUPER,
   backupVerify: PERM_SUPER, backupRestore: PERM_SUPER,
+  backupIncremental: PERM_SUPER,
   /* סנכרון יזום של תוכנית העבודה אל Firestore (2026-09-14, צעד 03א).
      🔴 **PERM_SUPER ולא PERM_GARDEN.** הפעולה אינה נוגעת לעבודת
      הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
@@ -577,6 +578,9 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'backupVerify') {
       return handleBackupVerify_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'backupIncremental') {
+      return handleBackupIncremental_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'backupRestore') {
       return handleBackupRestore_(e.parameter);
@@ -8039,6 +8043,121 @@ function fsRestoreCollection_(ss, collection) {
   }
   out.ok = out.badRows.length === 0;
   return out;
+}
+
+/* ============================================================================
+ *  גיבוי מצטבר   (צעד 07ג, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  המלא עולה קריאה לכל מסמך; המצטבר עולה קריאה רק למה שזז.
+ *  זה מה שמאפשר לרוץ כל חצי שעה במקום פעם ביום.
+ *
+ *  🔴 **סימן המים נקבע לפני השאילתה, לא אחריה.**
+ *  אם נקבע את הסימן ל-`now` בסוף הריצה, כל מסמך שנכתב **במהלך**
+ *  הריצה ייפול בין הכסאות ולא יגובה לעולם. עם סימן מלפני השאילתה
+ *  המסמך ייתפס שוב בריצה הבאה — **כפילות לא מזיקה (הכתיבה
+ *  אידמפוטנטית), חוסר מזיק.**
+ *
+ *  ⚠️ **מצטבר לעולם לא רואה מחיקות.** מסמך שנמחק מ-Firestore
+ *     יישאר בגיבוי עד הגיבוי המלא הבא. **לגיבוי זו התנהגות
+ *     רצויה** (מחיקה בטעות לא מוחקת את העותק האחרון), אבל זו
+ *     גם הסיבה ש**המלא הלילי חייב להמשיך לרוץ** — הוא המתאם.
+ *  ⚠️ ריצה ראשונה בלי סימן מים = גיבוי מלא לאותו אוסף, ולא "אפס
+ *     שינויים". אחרת הגיבוי היה נשאר ריק לנצח ונראה תקין.
+ *  ⚠️ הסימן נשמר **רק אחרי כתיבה מוצלחת לגיליון**. ריצה שנכשלה
+ *     באמצע משאירה את הסימן הישן, והריצה הבאה תנסה שוב את אותם
+ *     מסמכים. סימן שמתקדם לפני כתיבה = חור שקט בגיבוי.
+ * ========================================================================== */
+var BK_MARK_PREFIX = 'bkMark_';
+
+function bkMarkGet_(collection) {
+  var raw = PropertiesService.getScriptProperties().getProperty(BK_MARK_PREFIX + collection);
+  if (!raw) return null;
+  var d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+function bkMarkSet_(collection, when) {
+  PropertiesService.getScriptProperties()
+    .setProperty(BK_MARK_PREFIX + collection, when.toISOString());
+}
+
+/* מיזוג שורות שהשתנו אל טאב הגיבוי הקיים.
+   ⚠️ קורא את הטאב הקיים וכותב אותו מחדש בפעולה אחת — זו קריאה
+      מהגיליון ולא מ-Firestore, ולכן היא אינה עולה מהמכסה.
+   ⚠️ מסמך שכבר בטאב מתעדכן במקום; חדש נוסף בסוף. הסדר בטאב
+      אינו משמעותי — מה שמשמעותי הוא שלכל מזהה יש שורה אחת. */
+function bkMergeRows_(ss, tab, changed) {
+  if (!bkTabOk_(tab)) throw new Error('טאב גיבוי חייב להתחיל ב-' + BK_PREFIX + ': ' + tab);
+  var sh = ss.getSheetByName(tab);
+  if (!sh) return { updated: 0, added: 0, total: 0, wroteWholeTab: true };
+
+  var v = sh.getDataRange().getValues();
+  var rows = [];
+  var idx = {};
+  for (var r = 1; r < v.length; r++) {
+    var id = String(v[r][0] == null ? '' : v[r][0]).trim();
+    if (!id) continue;
+    idx[id] = rows.length;
+    rows.push([v[r][0], v[r][1], v[r][2], v[r][3]]);
+  }
+  var updated = 0, added = 0;
+  for (var i = 0; i < changed.length; i++) {
+    var row = bkRow_(changed[i].id, changed[i].data);
+    if (idx.hasOwnProperty(changed[i].id)) { rows[idx[changed[i].id]] = row; updated++; }
+    else { idx[changed[i].id] = rows.length; rows.push(row); added++; }
+  }
+  sh.clear();
+  var out = [BK_HEADERS].concat(rows);
+  sh.getRange(1, 1, out.length, BK_HEADERS.length).setValues(out);
+  sh.setFrozenRows(1);
+  return { updated: updated, added: added, total: rows.length, wroteWholeTab: false };
+}
+
+function fsBackupIncremental_(ss) {
+  var out = { ok: true, read: 0, collections: [], errors: [] };
+  for (var i = 0; i < BK_COLLECTIONS.length; i++) {
+    var c = BK_COLLECTIONS[i];
+    try {
+      /* הסימן נקבע **לפני** השאילתה — ר' ההסבר למעלה. */
+      var t0 = new Date();
+      var mark = bkMarkGet_(c.collection);
+      var res;
+      if (!mark || !ss.getSheetByName(c.tab)) {
+        /* אין סימן או אין טאב — מלא לאוסף הזה בלבד. */
+        var all = fsList_(c.collection);
+        out.read += all.length;
+        bkWriteTab_(ss, c.tab, all.map(function (d) { return bkRow_(d.id, d.data); }));
+        res = { collection: c.collection, mode: 'full', changed: all.length,
+                updated: 0, added: all.length, total: all.length };
+      } else {
+        var changed = fsQuery_(c.collection, 'updatedAt', 'GREATER_THAN', mark);
+        out.read += changed.length;
+        var m = bkMergeRows_(ss, c.tab, changed);
+        res = { collection: c.collection, mode: 'incremental', changed: changed.length,
+                updated: m.updated, added: m.added, total: m.total };
+      }
+      bkMarkSet_(c.collection, t0);          /* רק אחרי שהכתיבה הצליחה */
+      res.markAt = t0.toISOString();
+      out.collections.push(res);
+    } catch (e) {
+      out.ok = false;
+      out.errors.push(c.collection + ': ' + String(e));
+    }
+  }
+  return out;
+}
+
+function handleBackupIncremental_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var t0 = new Date().getTime();
+    var r = fsBackupIncremental_(ss);
+    r.ms = new Date().getTime() - t0;
+    return json_(r);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
 }
 
 function handleBackupVerify_(p) {

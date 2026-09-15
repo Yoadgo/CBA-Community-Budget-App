@@ -200,6 +200,65 @@ function fsList_(collection) {
 }
 
 /* ============================================================================
+ *  fsQuery_ — שאילתה על אוסף   (צעד 07ג, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴 **למה זה נדרש ולמה `fsList_` לא מספיק:** גיבוי מצטבר
+ *  צריך לשלם **קריאה רק על מה שהשתנה**. `fsList_` קורא את כל
+ *  האוסף, ולכן "מצטבר" שבנוי עליו עולה בדיוק כמו מלא — ומבטל
+ *  את כל הטעם. מול מכסת Spark של 50,000 קריאות/יום, זה ההבדל בין
+ *  לרוץ כל חצי שעה לבין לרוץ פעם ביום.
+ *
+ *  ⚠️ **אי-שוויון על שדה בודד משתמש באינדקס האוטומטי** ש-Firestore
+ *     מתחזק לכל שדה, ולכן **אינו דורש אינדקס מורכב**. זה קריטי
+ *     כאן: קונסולת Google Cloud חסומה לחשבון הגזבר (2SV), ולא נוכל
+ *     ליצור אינדקס אם נזדקק לו. לכן הפונקציה הזאת במכוון **לא**
+ *     בונה שאילתות מורכבות — תנאי אחד על שדה אחד, וזהו.
+ *  ⚠️ `runQuery` מחזיר זרם של איברים; איבר בלי `document` הוא איבר
+ *     סנכרון תקין (`readTime` בלבד) ולא שגיאה — מדלגים עליו.
+ *  ⚠️ הנתיב ל-runQuery הוא של **האב** (השורש), ושם האוסף עובר
+ *     בתוך `from` — לא כחלק מה-URL.
+ * ========================================================================== */
+function fsQuery_(collection, field, op, value, limit) {
+  var body = {
+    structuredQuery: {
+      from: [{ collectionId: collection }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: field },
+          op: op,                                  /* GREATER_THAN, EQUAL, ... */
+          value: fsVal_(value)
+        }
+      }
+    }
+  };
+  if (limit) body.structuredQuery.limit = limit;
+
+  var opt = {
+    method: 'post',
+    headers: { Authorization: 'Bearer ' + fsToken_() },
+    contentType: 'application/json',
+    payload: JSON.stringify(body),
+    muteHttpExceptions: true
+  };
+  var url = 'https://firestore.googleapis.com/v1/projects/' + fsProjectId_() +
+            '/databases/(default)/documents:runQuery';
+  var res = UrlFetchApp.fetch(url, opt);
+  var code = res.getResponseCode(), text = res.getContentText();
+  if (code !== 200) {
+    throw new Error('שאילתה נכשלה (' + code + '): ' + text.substring(0, 300));
+  }
+  var rows = JSON.parse(text);
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    var doc = rows[i] && rows[i].document;
+    if (!doc) continue;                            /* איבר סנכרון — לא תוצאה */
+    var name = String(doc.name || '');
+    out.push({ id: name.substring(name.lastIndexOf('/') + 1), data: fsUnfields_(doc.fields || {}) });
+  }
+  return out;
+}
+
+/* ============================================================================
  *  fsVerifyIdToken_ — מי באמת שלח את הבקשה   (צעד 02ג, 2026-09-14)
  * ----------------------------------------------------------------------------
  *  🔴 **למה לא לקבל את ה-uid מהלקוח:** ה-uid הוא סתם מחרוזת. לקוח שישלח
