@@ -328,7 +328,9 @@ CBA.data = (function () {
      פונקציה ששולחת בלי לבדוק הייתה נשארת כאן כפיתוי לקריאה הבאה.) */
   function addTransaction(tx) {
     const seq = CBA.mock.transactions.reduce(function (m, t) { return Math.max(m, t.id || 0); }, 0) + 1;
-    const row = Object.assign({ id: seq, source: "admin", status: "submitted", year: getCurrentYear() }, tx);
+    /* 🔴 שנת **העבודה**, לא השנה המוצגת (2026-09-15, הכרעת יועד).
+       הצצה לשנה קודמת היא פעולת צפייה; הזנה היא פעולת עבודה. */
+    const row = Object.assign({ id: seq, source: "admin", status: "submitted", year: getWorkingYear() }, tx);
     CBA.mock.transactions.push(row);
     if (pushConnected()) {
       const payload = Object.assign({}, row, { fileName: receiptFileName(row) });
@@ -639,7 +641,10 @@ CBA.data = (function () {
   // ב"הבקשות שלי" בלי לחכות לרענון מהגיליון (מזהה זמני — יוחלף באמיתי ברענון הבא).
   function submitReceipt(fields, cb, onProgress) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
-    const year = getCurrentYear();
+    /* 🔴🔴 **שנת העבודה, לא השנה המוצגת** (2026-09-15).
+       זה המסלול שבו תושב מגיש בקשת החזר, והוא זה שגרם
+       לכך שהוצאות ספטמבר 2026 נרשמו לשנה הקודמת. */
+    const year = getWorkingYear();
     const payload = Object.assign({ year: year }, fields);
     CBA.sheets.postReadProgress("submitReceipt", payload, onProgress, function (res) {
       if (res && res.ok) {

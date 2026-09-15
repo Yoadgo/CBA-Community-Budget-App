@@ -968,7 +968,9 @@ function txOpenDrawer(container, id) {
   const editing = id !== null;
   const t = editing ? CBA.data.getTransactions().find(function (x) { return x.id === id; }) : {
     date: new Date().toISOString().slice(0, 10), month: txDefaultSubmissionMonth(),
-    year: CBA.data.getCurrentYear(), buyer: "", supplier: "", amount: "", bankName: "", bankBranch: "", bankAccount: "",
+    /* 🔴 הוצאה חדשה נפתחת על שנת העבודה (2026-09-15). */
+    year: CBA.data.getWorkingYear ? CBA.data.getWorkingYear() : CBA.data.getCurrentYear(),
+    buyer: "", supplier: "", amount: "", bankName: "", bankBranch: "", bankAccount: "",
     categoryId: txPresetCategory || (CBA.data.getCategories()[0] || {}).id, source: "admin", expenseType: "supplier", payType: "supplier",
     status: "ready", description: "", receiptUrl: "", reviewNote: "",
     // תת-סעיף (רשות) — קישור ספציפי בתוך הסעיף התקציבי (סעיף 5, 2026-08-10)
@@ -979,11 +981,19 @@ function txOpenDrawer(container, id) {
 
   const overlay = document.createElement("div");
   overlay.id = "cba-drawer";
+  /* 🔴 **כלל הסטייה הגלויה** (2026-09-15): מרגע שההזנה נכתבת
+     לשנת העבודה ולא לשנה שעל המסך, **אסור שזה יקרה בשקט.**
+     מנהל שצופה בשנה קודמת ומוסיף הוצאה חייב לראות לאן היא הולכת. */
+  var _wy = CBA.data.getWorkingYear ? CBA.data.getWorkingYear() : "";
+  var _cy = CBA.data.getCurrentYear();
+  var yearNote = (!editing && _wy && _wy !== _cy)
+    ? `<div class="drawer__year-note">⚠️ תירשם לשנת העבודה <b>${CBA.esc(_wy)}</b> — לא לשנה המוצגת (${CBA.esc(_cy)})</div>`
+    : "";
   overlay.innerHTML = `
     <div class="drawer-backdrop" data-close></div>
     <aside class="drawer" role="dialog" aria-label="${editing ? "עריכת הוצאה" : "הוספת הוצאה"}">
       <div class="drawer__head">
-        <div class="drawer__title">${editing ? "עריכת הוצאה" : "הוספת הוצאה"}</div>
+        <div class="drawer__title">${editing ? "עריכת הוצאה" : "הוספת הוצאה"}${yearNote}</div>
         <div class="drawer__head-actions">
           <button class="btn-ai" data-ai title="סריקת קבלה ב-AI (בקרוב)">✨ AI</button>
           <button class="drawer__close" data-close aria-label="סגור">×</button>

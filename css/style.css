@@ -629,6 +629,11 @@ body[data-screen="planning"] .year-switch__add {
   gap: 12px; padding: 20px 22px; border-bottom: 1px solid var(--border);
 }
 .drawer__title { font-size: 17px; font-weight: 700; }
+/* הערת שנת העבודה — מופיעה רק כשההזנה הולכת לשנה
+   שאינה המוצגת (2026-09-15). רוחב מלא ומתחת לכותרת. */
+.drawer__year-note { margin-top: 4px; font-size: 12px; font-weight: 500; line-height: 1.4;
+  color: var(--warn-text, #92400e); background: var(--warn-bg, #fef3c7);
+  border: 1px solid var(--warn-border, #fcd34d); border-radius: 8px; padding: 4px 8px; }
 .drawer__sub { font-size: 13px; color: var(--text-soft); margin-top: 3px; }
 .drawer__close {
   border: none; background: none; cursor: pointer; color: var(--text-soft);

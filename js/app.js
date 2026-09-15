@@ -1066,7 +1066,13 @@
   function saveRoute() {
     try {
       var y = (window.CBA.data && CBA.data.getCurrentYear) ? CBA.data.getCurrentYear() : "";
-      localStorage.setItem(ROUTE_KEY, JSON.stringify({ area: currentArea, screen: currentScreen, year: y, ts: Date.now() }));
+      /* 🔴 **שומרים גם את שנת העבודה שהייתה בתוקף** (2026-09-15).
+         בלעדיה אי-אפשר להבחין בין "המשתמש בחר שנה" לבין
+         "זו פשוט היתה ברירת המחדל דאז" — וזו בדיוק ההבחנה
+         שחסרה כדי שהחלפת שנה ע"י מנהל תגיע לכולם. */
+      var w = (window.CBA.data && CBA.data.getWorkingYear) ? CBA.data.getWorkingYear() : "";
+      localStorage.setItem(ROUTE_KEY, JSON.stringify({ area: currentArea, screen: currentScreen,
+                                                       year: y, workingYear: w, ts: Date.now() }));
     } catch (e) {}
   }
   // משחזר את השנה השמורה — רק אם היא עדיין קיימת ברשימת השנים של הגיליון
@@ -1077,6 +1083,18 @@
       if (!saved || !saved.year) return false;
       if (!(window.CBA.data && CBA.data.getYears && CBA.data.setCurrentYear)) return false;
       if (CBA.data.getYears().indexOf(saved.year) === -1) return false;
+      /* 🔴🔴 **שנת העבודה מנצחת על הזיכרון המקומי** (2026-09-15).
+         עד התאריך הזה הרשומה הזו דרסה את ברירת המחדל מהשרת
+         **ללא הגבלת זמן**, ולכן משתמש שלא נכנס מאז שהמנהל החליף
+         שנה המשיך להיפתח על השנה הישנה — וכל הוצאה חדשה נרשמה
+         אליה. שוחזר חי ב-15.9.26. עכשיו: רשומה שנשמרה כששנת העבודה
+         היתה אחרת — מבוטלת.
+         ⚠️ רשומה ישנה **בלי** השדה נחשבת לא-תואמת בכוונה, אחרת
+            כל המשתמשים הקיימים לא ייהנו מהתיקון בכלל.
+         ⚠️ רענון F5 באמצע עבודה ממשיך לעבוד — שם שנת העבודה
+            לא השתנתה. */
+      var wNow = CBA.data.getWorkingYear ? CBA.data.getWorkingYear() : "";
+      if (String(saved.workingYear || "") !== String(wNow)) return false;
       if (CBA.data.getCurrentYear() === saved.year) return false;
       /* השנה קיימת ברשימה אבל הנתונים שלה לא נמשכו (2026-09-14).
          ⚠️ **לא חוסמים את עליית האפליקציה בשבילה.** מחזירים false —
