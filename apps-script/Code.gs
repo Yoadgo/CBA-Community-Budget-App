@@ -5890,7 +5890,7 @@ function fsSweepOrphans_(collection, live, out) {
  *  שכיבה משהו שבפועל עדיין דולק.
  * ========================================================================== */
 var FS_FLAGS_DOC = 'appConfig/flags';
-var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore'];
+var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYearFromFirestore'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {

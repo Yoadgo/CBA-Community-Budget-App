@@ -64,7 +64,17 @@ function payload(withOld) {
 section('1. הקוד עצמו — מסלול המרה אחד בלבד');
 ok('buildYear חולצה כפונקציה נפרדת', /function buildYear\(y, d, settings, notesMap, loaded\)/.test(SRC));
 ok('transform קורא לה', /years\[y\] = buildYear\(y, payload\.data\[y\]/.test(SRC));
-ok('⚠️ ו-loadYear קורא לאותה פונקציה', /var built = buildYear\(y, res\.data/.test(SRC));
+/* 🔴 מ-15.9 יש שני מקורות (Apps Script / Firestore), ולכן הדרישה
+   היא שיש **נקודת הרכבה אחת** — `applyYearData` — וששניהם
+   עוברים דרכה. שתי קריאות נפרדות ל-buildYear = שני מסלולים. */
+ok('⚠️ ו-loadYear קורא לאותה פונקציה', /var built = buildYear\(y, data,/.test(SRC));
+ok('🔴 ויש נקודת הרכבה אחת בלבד',
+   /* רק קריאות (`= buildYear(`), לא ההגדרה */
+   (SRC.match(/= buildYear\(y, /g) || []).length === 2,
+   String((SRC.match(/= buildYear\(y, /g) || []).length));
+ok('🔴 ושני המסלולים עוברים דרכה',
+   /function finish\(res\)[\s\S]{0,200}applyYearData\(res\.data, res\.rev\)/.test(SRC) &&
+   (SRC.match(/applyYearData\(/g) || []).length === 2);
 ok('⚠️ אין מיפוי שני מקביל ב-loadYear',
    !/loadYear[\s\S]{0,2000}?\.map\(toTx\)/.test(SRC));
 ok('הדגל _loaded נכתב בכל שנה', /_loaded: loaded !== false/.test(SRC));

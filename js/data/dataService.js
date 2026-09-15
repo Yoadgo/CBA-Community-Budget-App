@@ -954,6 +954,56 @@ CBA.data = (function () {
     });
   }
 
+  /* ========================================================================
+   *  שם משפחה מתוך מזהה   (צעד 08ב-3, 2026-09-15)
+   * ------------------------------------------------------------------------
+   *  🔴 **למה זה קיים:** שם הרוכש הוא נתון אישי, ולכן
+   *  **אינו נכתב ל-Firestore** (הכרעה קבועה — ר׳ שיטת העבודה).
+   *  מסמך התנועות נושא מזהה משפחה בלבד, והשם מורכב כאן.
+   *
+   *  ⚠️ **המזהה מזהה משק בית, לא אדם.** שני בני זוג חולקים שורה
+   *  ומזהה (נמדד: 9 מתוך 18 המשפחות עם תנועות), ולכן השם
+   *  המורכב אינו מבחין ביניהם. זו התנהגות מוסכמת.
+   *
+   *  ⚠️ **הספרייה מגיעה מ-Apps Script ותישאר שם** — יש בה שמות.
+   *  לכן הקריאה הראשונה עולה סבב של Apps Script; אחריה הכול
+   *  מהמטמון. ב-`loadYear` היא רצה **במקביל** לקריאות Firestore
+   *  ולא אחריהן — אחרת היינו משלמים את שתי ההמתנות זו אחרי זו.
+   * ====================================================================== */
+  var familyNameMap = null;   // {מזהה: שם לתצוגה}
+
+  function buildFamilyNameMap(rows) {
+    var map = {};
+    (rows || []).forEach(function (r) {
+      var rid = r["מזהה קבוע"];
+      if (rid == null || rid === "") return;
+      var fam = String(r["משפחה"] || "").trim();
+      var a = String(r["שם פרטי 1"] || "").trim();
+      var b = String(r["שם פרטי 2"] || "").trim();
+      var label = (a && b) ? (a + " ו" + b + (fam ? " " + fam : ""))
+                : (a || b)  ? ((a || b) + (fam ? " " + fam : ""))
+                : fam       ? ("משפחת " + fam) : "";
+      if (label) map[String(rid).trim()] = label;
+    });
+    return map;
+  }
+
+  /* סינכרונית. מחזירה "" כל עוד הספרייה לא נטענה — הקורא
+     אחראי לקרוא קודם ל-`ensureFamilyNames`. */
+  function familyDisplayName(familyId) {
+    var k = String(familyId == null ? "" : familyId).trim();
+    if (!k || !familyNameMap) return "";
+    return familyNameMap[k] || "";
+  }
+
+  function ensureFamilyNames(cb) {
+    if (familyNameMap) { if (cb) cb(true); return; }
+    getResidentDirectory(function (res) {
+      if (res && res.ok) familyNameMap = buildFamilyNameMap(res.rows);
+      if (cb) cb(!!(res && res.ok));
+    });
+  }
+
   function residentPickerOptions(cb) {
     getResidentDirectory(function (res) {
       var rows = (res && res.ok && res.rows) || [];
@@ -1829,6 +1879,11 @@ CBA.data = (function () {
     getResidents: getResidents,
     refreshResidents: function (cb) { residentsCache = null; directoryCache = null; communityCache = null; getResidents(cb); },
     residentPickerOptions: residentPickerOptions,
+    familyDisplayName: familyDisplayName,
+    ensureFamilyNames: ensureFamilyNames,
+    /* משותף עם sheets.js (צעד 08ב-3): מנגנון הדגל + הנפילה
+       לאחור הוא אחד בלבד. שכפול שלו היה נפרד בשקט. */
+    fsFirstRead: fsFirstRead,
     getCommunityDirectory: getCommunityDirectory,
     getCommitteeTree: getCommitteeTree,
     saveCommitteeTree: saveCommitteeTree,

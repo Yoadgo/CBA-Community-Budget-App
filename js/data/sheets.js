@@ -1113,28 +1113,132 @@ CBA.sheets = (function () {
       list.forEach(function (f) { try { f(ok, err); } catch (e) {} });
     }
 
-    fetch(API_URL + "?session=" + encodeURIComponent(authSession()) +
-          "&action=budgetYear&year=" + encodeURIComponent(y), { method: "GET" })
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        if (!res || !res.ok) throw new Error((res && res.error) || "bad payload");
-        /* אותו buildYear בדיוק כמו המטען המלא — ר' ההערה שם. ההגדרות
-           וההערות נלקחות ממה שכבר בזיכרון, כי הן מגיעות במטען הראשי
-           לכל השנים גם אחרי הדיאטה (הן מפה קטנה אחת, לא נתון פר-שנה). */
-        var notesMap = {};
-        Object.keys((CBA.mock && CBA.mock.years) || {}).forEach(function (k) {
-          if (CBA.mock.years[k] && CBA.mock.years[k].notes) notesMap[k] = CBA.mock.years[k].notes;
-        });
-        var built = buildYear(y, res.data, (CBA.mock && CBA.mock._settings) || {}, notesMap, true);
-        extraYears[y] = built;
-        extraYearsRev = (typeof res.rev === "number") ? res.rev : lastRev;
-        CBA.mock.years[y] = built;
-        settle(true);
-      })
-      ["catch"](function (err) {
-        console.error("[CBA] משיכת שנה נכשלה:", y, err);
-        settle(false, String(err && err.message ? err.message : err));
+    /* אותו buildYear בדיוק כמו המטען המלא. ההגדרות וההערות
+       נלקחות ממה שכבר בזיכרון — הן מפה קטנה אחת, לא נתון פר-שנה.
+       🔴 **נקודת ההרכבה האחת לשני המסלולים** (Apps Script / Firestore).
+       שני מסלולי הרכבה מקבילים היו נפרדים בשקט בשינוי הפורמט הראשון. */
+    function applyYearData(data, rev) {
+      var notesMap = {};
+      Object.keys((CBA.mock && CBA.mock.years) || {}).forEach(function (k) {
+        if (CBA.mock.years[k] && CBA.mock.years[k].notes) notesMap[k] = CBA.mock.years[k].notes;
       });
+      var built = buildYear(y, data, (CBA.mock && CBA.mock._settings) || {}, notesMap, true);
+      extraYears[y] = built;
+      extraYearsRev = (typeof rev === "number") ? rev : lastRev;
+      CBA.mock.years[y] = built;
+    }
+
+    function viaAppsScript(done) {
+      fetch(API_URL + "?session=" + encodeURIComponent(authSession()) +
+            "&action=budgetYear&year=" + encodeURIComponent(y), { method: "GET" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error((res && res.error) || "bad payload");
+          done({ ok: true, data: res.data, rev: res.rev });
+        })
+        ["catch"](function (err) {
+          console.error("[CBA] משיכת שנה נכשלה:", y, err);
+          done({ ok: false, error: String(err && err.message ? err.message : err) });
+        });
+    }
+
+    function finish(res) {
+      if (!res || !res.ok) return settle(false, res && res.error);
+      applyYearData(res.data, res.rev);
+      settle(true);
+    }
+
+    /* אין מנגנון דגל/נפילה-לאחור זמין ⇒ המסלול הישן בלבד. */
+    if (!(CBA.data && CBA.data.fsFirstRead && CBA.fb && CBA.fb.readDoc)) {
+      viaAppsScript(finish);
+      return;
+    }
+    CBA.data.fsFirstRead("budgetYear", BUDGET_YEAR_FROM_FIRESTORE,
+      function (done) { fsYearLoad(y, done); }, viaAppsScript, finish);
+  }
+
+  /* ==========================================================================
+   *  שנה ישירות מ-Firestore   (צעד 08ב-3, 2026-09-15)
+   * --------------------------------------------------------------------------
+   *  🔴 **מחזיר את הנתונים בדיוק בצורת הגיליון** — מפתחות
+   *  עבריים, כמו ש-`handleBudgetYear_` מחזיר. כך `buildYear`/`toTx`
+   *  נשארים מסלול ההמרה היחיד.
+   *
+   *  🔴 **התנועות נקראות לפי מי ששואל:**
+   *  • בעל הרשאת תקציב — כל האוסף, מסונן לשנה בלקוח.
+   *  • תושב — **מסמך בודד לפי מזהה**, בלי שאילתה ובלי אינדקס
+   *    מורכב (קונסולת Google Cloud חסומה ב-2SV — אי-אפשר ליצור אחד).
+   *  תושב שאין לו מסמך מקבל **שנה ריקה לגיטימית**, לא שגיאה.
+   *
+   *  ⚠️ **מסמך שנה חסר הוא כן שגיאה** — כך נראה סנכרון שמעולם
+   *  לא רץ, ותקציב ריק שנראה אמיתי גרוע מנפילה לאחור.
+   *
+   *  ⚠️ **שם הרוכש מורכב כאן** ממזהה המשפחה — הוא אינו יושב
+   *  ב-Firestore ולעולם לא ישב שם. טעינת הספרייה רצה **במקביל**
+   *  לקריאות Firestore ולא אחריהן, אחרת היינו משלמים שתי המתנות.
+   *
+   *  ⚠️ `rev` — ל-Firestore אין מונה הגרסה שלנו, ולכן מחזירים את
+   *  `lastRev` המוכר — בדיוק כמו כל עותק-קריאה.
+   * ======================================================================== */
+  /* 🔴 **ברירת המחדל בקוד חייבת להיות `true`, וזה לא רשלנות:**
+     `fsFirstRead` מקצרת ויוצאת ל-Apps Script **לפני** שהיא קוראת את
+     הדגל החי כש-`enabled === false`. כלומר, ברירת מחדל `false` היתה
+     הופכת את הדגל לחסר-משמעות ומחזירה אותנו לדיפלוי-לכל-צעד.
+     ⚠️ **ולכן סדר העלייה מחייב:** קודם Deploy של Code.gs עם המפתח
+     ב-FLAG_KEYS ו-`flagSet` שכותב אותו כ-false, ורק אחר כך הלקוח.
+     אחרת הלקוח ינחת עם דגל חסר ⇒ ברירת המחדל ⇒ דלוק מיד. */
+  var BUDGET_YEAR_FROM_FIRESTORE = true;
+
+  function fsYearLoad(y, done) {
+    var doc = null, txRows = null, namesOk = false, failed = false;
+    function fail(e) { if (failed) return; failed = true; done(e); }
+    function maybe() {
+      if (failed || !doc || txRows === null || !namesOk) return;
+      var rows = txRows.map(function (r) {
+        if (String(r["רוכש"] || "").trim()) return r;
+        var name = CBA.data.familyDisplayName ? CBA.data.familyDisplayName(r["מזהה משפחה"]) : "";
+        if (!name) return r;
+        var out = {};
+        Object.keys(r).forEach(function (k) { out[k] = r[k]; });
+        out["רוכש"] = name;
+        return out;
+      });
+      done(null, { ok: true, rev: lastRev, data: {
+        budget: doc.budget || [], income: doc.income || [], groups: doc.groups || [],
+        splits: doc.splits || [], items: doc.items || [], transactions: rows
+      } });
+    }
+
+    CBA.fb.readDoc("budgetYears", y, function (err, d) {
+      if (err) return fail(err);
+      if (!d) return fail(new Error("no-year-doc"));
+      doc = d; maybe();
+    });
+
+    var mine = (CBA.user && CBA.user.familyId) ? String(CBA.user.familyId).trim() : "";
+    var seesAll = !!(CBA.isSuper || (CBA.perms && CBA.perms.indexOf("תקציב") !== -1));
+    if (seesAll) {
+      CBA.fb.readCollection("budgetTx", function (err, all) {
+        if (err) return fail(err);
+        var rows = [];
+        (all || []).forEach(function (d) {
+          if (String(d.year || "") !== String(y)) return;
+          (d.rows || []).forEach(function (r) { rows.push(r); });
+        });
+        txRows = rows; maybe();
+      });
+    } else if (!mine) {
+      txRows = []; maybe();
+    } else {
+      CBA.fb.readDoc("budgetTx", y + "__" + mine, function (err, d) {
+        if (err) return fail(err);
+        txRows = (d && d.rows) || [];
+        maybe();
+      });
+    }
+
+    if (CBA.data.ensureFamilyNames) CBA.data.ensureFamilyNames(function () { namesOk = true; maybe(); });
+    else { namesOk = true; maybe(); }
   }
 
   /* ============================================================================

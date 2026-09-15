@@ -51,7 +51,8 @@ const isDate = x => !!x && typeof x.getTime === 'function';
 section('1. רישום');
 reset();
 ok('FS_FLAGS_DOC = appConfig/flags', sandbox.FS_FLAGS_DOC === 'appConfig/flags', sandbox.FS_FLAGS_DOC);
-ok('שני דגלים ברשימה', sandbox.FLAG_KEYS.length === 2, JSON.stringify(sandbox.FLAG_KEYS));
+ok('שלושה דגלים ברשימה', sandbox.FLAG_KEYS.length === 3, JSON.stringify(sandbox.FLAG_KEYS));
+ok('budgetYearFromFirestore', sandbox.FLAG_KEYS.indexOf('budgetYearFromFirestore') !== -1);
 ok('gardenPlanFromFirestore', sandbox.FLAG_KEYS.indexOf('gardenPlanFromFirestore') !== -1);
 ok('servicesFromFirestore', sandbox.FLAG_KEYS.indexOf('servicesFromFirestore') !== -1);
 ok('🔴 flagSet דורשת PERM_SUPER', sandbox.GET_ACTION_PERMS.flagSet === sandbox.PERM_SUPER);
@@ -109,7 +110,7 @@ ok('כישלון כתיבה נתפס', g.ok === false && /503/.test(g.error), JS
 reset(); sandbox.authorize_ = () => ({ ok: true, perm: { isSuper: true } });
 store = { servicesFromFirestore: true, gardenPlanFromFirestore: false };
 g = sandbox.handleFlagsGet_({});
-ok('flagsGet מחזירה מצב ורשימה', g.ok === true && g.keys.length === 2 && g.flags.servicesFromFirestore === true,
+ok('flagsGet מחזירה מצב ורשימה', g.ok === true && g.keys.length === 3 && g.flags.servicesFromFirestore === true,
    JSON.stringify(g));
 sandbox.authorize_ = realAuth;
 
