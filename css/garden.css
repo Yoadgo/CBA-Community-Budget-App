@@ -461,8 +461,10 @@
   font: inherit; font-size: 11px; font-weight: 600; padding: 2px 10px; cursor: pointer; }
 .gt-dup button:hover { background: #8A5A12; color: #fff; border-color: #8A5A12; }
 
-.gt-more { width: 28px; height: 28px; flex: none; border: 0; border-radius: 8px; background: none;
-  color: #B0B6BF; display: grid; place-items: center; cursor: pointer; margin-top: 1px; }
+/* אזור לחיצה 44px (יעד נגיעה תקין), אבל בלי לתפוח את גובה השורה — הריפוד
+   העודף נבלע במרווח השלילי מסביב, כך שהסמליל עצמו נשאר באותו גודל. */
+.gt-more { width: 44px; height: 44px; flex: none; border: 0; border-radius: 10px; background: none;
+  color: #B0B6BF; display: grid; place-items: center; cursor: pointer; margin: -9px -9px -9px 0; }
 .gt-more svg { width: 16px; height: 16px; }
 .gt-more:hover { background: rgba(17,24,39,.05); color: var(--text-soft, #6B7280); }
 .gt-row.is-done { opacity: .75; }

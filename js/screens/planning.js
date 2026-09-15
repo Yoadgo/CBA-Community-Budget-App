@@ -121,6 +121,7 @@ CBA.screens.planning = {
       <div class="screen-controls">
         <div class="phase-ctrl">${planPhaseControl()}</div>
         <button class="btn-ghost" type="button" data-toggle-present>${planViewMode ? "חזרה לעריכה" : "תצוגה להצגה"}</button>
+        <button class="btn-ghost" type="button" data-new-year title="שנה חדשה נוצרת עם אותם סעיפי תקציב ומקורות הכנסה, בלי תנועות">+ שנת תקציב חדשה</button>
       </div>
 
       ${planViewMode ? planPresentHTML(groups, cats, income) : editModeHTML}
@@ -202,6 +203,32 @@ function planBind(container) {
   if (presentBtn) presentBtn.addEventListener("click", function () {
     planViewMode = !planViewMode;
     rerender();
+  });
+
+  /* יצירת שנת תקציב חדשה — עברה לכאן מהדר האפליקציה (15.9.26, יועד: "להעביר
+     מקסימום מהתכולה לתפריט משתמש"). אותה לוגיקה בדיוק שהייתה מאחורי כפתור
+     ה-"+" בהדר, רק שעכשיו יש לה בית קבוע ליד שאר הגדרות התקציב. אין כאן
+     בדיקת הרשאה נוספת: מי שרואה את המסך הזה כבר עבר את שער PERM.BUDGET
+     (ר' SCREEN_PERM ב-app.js). */
+  const newYearBtn = container.querySelector("[data-new-year]");
+  if (newYearBtn) newYearBtn.addEventListener("click", function () {
+    var from = CBA.data.getCurrentYear();
+    CBA.ui.prompt(
+      'השנה החדשה תיווצר עם אותם סעיפי תקציב ומקורות הכנסה כמו ' + from + ', בלי תנועות.',
+      { title: "יצירת שנת תקציב חדשה", placeholder: 'למשל תשפ"ח', okText: "צור שנה" }
+    ).then(function (name) {
+      if (name === null) return;
+      var y = String(name).trim();
+      if (!y) { CBA.ui.alert("צריך להזין שם לשנה החדשה."); return; }
+      if (CBA.data.getYears().indexOf(y) !== -1) { CBA.ui.alert('כבר קיימת שנה בשם "' + y + '".'); return; }
+      CBA.data.addYear(y, from);
+      // persist: שנה שנוצרה ומיד הוגדרה כנוכחית — אחרת היא הייתה "נשכחת"
+      // בטעינה הבאה, בדיוק כמו הבאג שתוקן במיתוג ב-15.9.26.
+      CBA.data.setCurrentYear(y, true);
+      if (window.CBA.refreshHeaderYear) CBA.refreshHeaderYear();
+      rerender();
+      CBA.ui.toast('נוצרה שנת תקציב ' + y);
+    });
   });
   // מצב תצוגה — אין עריכה מכאן והלאה, רק הגלילה בריחוף ופקדי התצוגה
   if (planViewMode) { planBindPresentScroll(container); planBindPresent(container, rerender); return; }

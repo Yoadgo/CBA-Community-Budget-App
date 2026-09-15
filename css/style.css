@@ -265,48 +265,20 @@ body.is-gated { overflow: hidden; }
 }
 .ctl-btn:hover { border-color: var(--action); background: var(--hover); }
 
-/* מתג השנה — יושב מתחת לכותרת המותג */
+/* מתג השנה — 15.9.26: הפך לתג תצוגה-בלבד. המיתוג עבר לתפריט המשתמש
+   (yearPanelHTML ב-app.js) ו"יצירת שנה" עברה למסך "בניית תקציב"
+   (planNewYearBlock ב-planning.js).
+   ⚠️ עד כאן היה כאן select+note+כפתורים; כל הפקדים האלה הוסרו כי אין להם
+   יותר עוגן ב-DOM (renderYearSwitch ב-app.js כבר לא מצייר אותם). */
 .year-switch { display: flex; align-items: center; }
+.year-switch__chip {
+  font-size: 12px; font-weight: 600; color: var(--text-soft);
+  background: var(--hover); border-radius: 20px; padding: 4px 12px; white-space: nowrap;
+}
 
 /* עוגן חיווי "שומר…/נשמר ✓" בכותרת — ר' .save-indicator ב-loading.css.
    רק מסגרת יישור; התג עצמו קובע את הרוחב/מראה שלו (max-width transition). */
 .save-indicator-slot { display: flex; align-items: center; }
-.year-switch__label { font-size: 12px; color: var(--text-soft); }
-/* סימון "אתה צופה בשנה שאינה שנת העבודה" + הפעולה שמשנה אותה.
-   מוצגים רק כשהשתיים נבדלות — ר' renderYearSwitch ב-app.js. */
-.year-switch__note { font-size: 12px; color: var(--text-soft); margin-inline-start: 10px; white-space: nowrap; }
-.year-switch__note b { color: var(--text); font-weight: 700; }
-.year-switch__set {
-  margin-inline-start: 8px; font-family: inherit; font-size: 12px; font-weight: 600;
-  padding: 4px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap;
-  border: 1px solid var(--border); background: var(--surface); color: var(--text);
-  transition: border-color var(--t), color var(--t);
-}
-.year-switch__set:hover { border-color: var(--text-muted); }
-.year-switch__select {
-  border: 1px solid var(--border); background: var(--surface); font-family: inherit;
-  font-size: 11px; font-weight: 700; color: var(--text); padding: 3px 8px; border-radius: 7px; cursor: pointer;
-  margin-inline-start: 6px;
-  transition: border-color var(--t), box-shadow var(--t);
-}
-.year-switch__select:hover { border-color: #D5D8DE; }
-.year-switch__select:focus { outline: none; border-color: var(--action); box-shadow: 0 0 0 3px rgba(17,24,39,.08); }
-.year-switch__add {
-  border: 1px solid var(--border); background: none; color: var(--text-soft);
-  height: 20px; border-radius: 7px; cursor: pointer; font-size: 14px; line-height: 1;
-  display: grid; place-items: center; flex: none;
-  /* מצב מכווץ — נחשף בגלישה אלגנטית בבניית תקציב (width+opacity+scale) */
-  width: 0; margin-inline-start: 0; opacity: 0; transform: scale(.7);
-  overflow: hidden; pointer-events: none;
-  transition: width .24s cubic-bezier(.2,.6,.2,1), margin-inline-start .24s cubic-bezier(.2,.6,.2,1),
-              opacity .18s ease, transform .24s cubic-bezier(.2,.6,.2,1),
-              border-color var(--t), color var(--t), background var(--t);
-}
-/* כפתור "צור שנה חדשה" — נחשף בגלישה רק במסך בניית תקציב */
-body[data-screen="planning"] .year-switch__add {
-  width: 20px; margin-inline-start: 6px; opacity: 1; transform: scale(1); pointer-events: auto;
-}
-.year-switch__add:hover { border-color: var(--action); color: var(--text); background: var(--hover); }
 
 /* ---------- תפריט ניווט ---------- */
 /* 2026-08-08, תיקון שני לאותו באג: הגרסה הקודמת שמה flex:1 ישירות על .app-nav

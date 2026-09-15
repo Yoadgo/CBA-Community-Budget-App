@@ -301,6 +301,25 @@ input.lg, textarea.lg, select.lg {
 .up-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .up-tg { padding: 8px 6px; font-size: 12px; font-weight: 700; text-align: center; }
 
+/* "שנת צפייה" — תפריט החלקה (accordion). ראש באותו דפוס כמו up-pill
+   (עיגול+תווית), עם ערך השנה בקצה וחץ שמסתובב; הגוף נפתח ב-max-height,
+   לא ב-hidden, כדי שההחלקה תהיה אנימציה אמיתית ולא קפיצה. */
+.up-year__head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 9px; font-size: 12px; text-align: start; font-family: inherit;
+  border: none; background: none; cursor: pointer; color: inherit;
+}
+.up-year__val { margin-inline-start: auto; font-weight: 700; color: var(--text); font-size: 12px; }
+.up-year__head .lg-ico { transition: transform .18s ease; }
+.up-year__head[aria-expanded="true"] .lg-ico { transform: rotate(180deg); }
+.up-year__body { max-height: 0; overflow: hidden; transition: max-height .2s ease; padding: 0 9px; }
+.up-year__body.is-open { max-height: 220px; padding: 2px 9px 8px; }
+.up-year__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.up-year__chip { padding: 6px 12px; font-size: 12px; font-weight: 700; }
+.up-year__note { font-size: 11px; color: var(--text-soft); margin-top: 8px; }
+.up-year__note b { color: var(--text); }
+.up-year__set { margin-top: 6px; width: 100%; font-size: 12px; padding: 7px; text-align: center; }
+
 /* רשת האריחים */
 .up-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 1px; }
 .up-tiles:has(.up-tile:nth-child(3):last-child) { grid-template-columns: repeat(3, 1fr); }

@@ -1147,6 +1147,7 @@
     bell: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
     gear: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     logout: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+    chevron: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
     swap: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4l3 3-3 3"/><path d="M20 7H8a4 4 0 0 0-4 4"/><path d="M7 20l-3-3 3-3"/><path d="M4 17h12a4 4 0 0 0 4-4"/></svg>',
     mail: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></svg>',
     // התקנת האפליקציה (2026-08-20, PWA) — טלפון עם חץ פנימה. אותו גודל/עובי
@@ -1263,6 +1264,37 @@
         var target = sw.dataset.panelSwitch;
         closeUserPanel(panel, btn);
         if (target !== currentArea) setArea(target);
+      });
+    });
+    // "שנת צפייה" — תפריט החלקה: ראש פותח/סוגר, שבב מחליף שנה, "הגדר
+    // כשנת עבודה" פותח את דיאלוג האישור (אותה לוגיקה שהייתה בהדר).
+    const yearHead = panel.querySelector("[data-panel-year-toggle]");
+    if (yearHead) yearHead.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var body = panel.querySelector("#up-year-body");
+      var open = !body.classList.contains("is-open");
+      body.classList.toggle("is-open", open);
+      yearHead.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    panel.querySelectorAll("[data-year]").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        closeUserPanel(panel, btn);
+        switchViewYear(chip.dataset.year, panel, btn);
+      });
+    });
+    const yearSetBtn = panel.querySelector("[data-panel-year-set]");
+    if (yearSetBtn) yearSetBtn.addEventListener("click", function () {
+      closeUserPanel(panel, btn);
+      const y = CBA.data.getCurrentYear();
+      CBA.ui.confirm(
+        'שנת העבודה תשתנה ל' + y + ' לכל המשתמשים, והאפליקציה תיפתח עליה. ' +
+        'אפשר לשנות חזרה בכל רגע.',
+        { title: "קביעת שנת העבודה", okText: "קבע את " + y }
+      ).then(function (ok) {
+        if (!ok) return;
+        CBA.data.setCurrentYear(y, true);
+        renderYearSwitch();
+        CBA.ui.toast('שנת העבודה היא עכשיו ' + y);
       });
     });
     // לחיצה על נקודת החיבור פותחת/סוגרת את פרטי האבחון
@@ -1401,6 +1433,8 @@
         '</div>'
       : "";
 
+    var yearItem = currentUser ? yearPanelHTML() : "";
+
     // הדמיית תושב — כלי רב-עוצמה (רואים דרכו נתונים של אחרים), מנהל על בלבד.
     // נשאר שורה שלמה עם מילים, לבקשת יועד: חצים לא אומרים "לראות כמו מישהו אחר".
     var simItem = isSuper()
@@ -1450,6 +1484,7 @@
       '<div class="up-stack">' +
         notifItemsHTML() +
         switchItem +
+        yearItem +
         simItem +
         tilesItem +
       '</div>' +
@@ -1774,104 +1809,74 @@
     showLoginGate();
   }
 
-  /* --- מתג השנה — בורר בין כל השנים + כפתור יצירת שנה --- */
+  /* --- מתג השנה --- */
+  /* ⚠️ 2026-09-15 (יועד: "להעביר מקסימום מהתכולה לתפריט משתמש") — ההדר
+     הגלובלי הפך לתג תצוגה בלבד. כל מה שהיה כאן (מיתוג הצפייה, ההגדרה
+     כשנת עבודה, ויצירת שנה) עבר: המיתוג ל-yearPanelHTML/הפאנל למטה,
+     ויצירת שנה למסך "בניית תקציב" (ר' planning.js). */
   function renderYearSwitch() {
     if (!yearBox) return;
-    const years   = CBA.data.getYears();
+    const cur = CBA.data.getCurrentYear();
+    yearBox.innerHTML =
+      '<span class="year-switch__chip" title="שנה מוצגת — להחלפה: תפריט המשתמש">' +
+        CBA.esc(cur) +
+      '</span>';
+  }
+
+  /* שורת "שנת צפייה" בתפריט המשתמש — תפריט החלקה (accordion): ראש קבוע
+     שמראה את השנה הנוכחית, ומתחתיו רשימת שבבים שנפתחת/נסגרת. פחות משנה
+     אחת בכלל — אין מה להחליף, אז לא מוצג שורה ריקה. */
+  function yearPanelHTML() {
+    const years = CBA.data.getYears();
+    if (!years || years.length < 2) return "";
     const cur     = CBA.data.getCurrentYear();
     const working = CBA.data.getWorkingYear ? CBA.data.getWorkingYear() : cur;
-    yearBox.innerHTML =
-      '<span class="year-switch__label">שנת תקציב</span>' +
-      '<select class="year-switch__select" id="year-select" aria-label="בחירת שנת תקציב">' +
-        years.map(function (y) {
-          return '<option value="' + CBA.esc(y) + '"' + (y === cur ? " selected" : "") + '>' + CBA.esc(y) + '</option>';
-        }).join("") +
-      '</select>' +
-      /* ⚠️ שתי שנים שונות ולא אחת (משוב יועד 9.9.26):
-         הבורר הוא **תצוגה בלבד** — אישית וזמנית, כדי שאפשר יהיה להסתכל על
-         שנים קודמות בלי לשנות כלום לאף אחד. "שנת העבודה" היא ההגדרה
-         הגלובלית שקובעת על מה האפליקציה נפתחת. הסימון והכפתור מופיעים רק
-         כשהשתיים נבדלות — כשהן זהות אין מה להציג ואין במה לבלבל. */
-      (working !== cur
-        ? '<span class="year-switch__note" title="הבורר משנה רק את מה שאתה רואה">' +
-            'צופה · שנת העבודה: <b>' + CBA.esc(working) + '</b>' +
-          '</span>' +
-          (can(PERM.BUDGET)
-            ? '<button class="year-switch__set" id="year-set" type="button">הגדר את ' +
-                CBA.esc(cur) + ' כשנת העבודה</button>'
-            : "")
-        : "") +
-      '<button class="year-switch__add" id="year-add" title="צור שנה חדשה" aria-label="צור שנה חדשה">+</button>';
+    return (
+      '<div class="up-year">' +
+        '<button type="button" class="up-year__head" data-panel-year-toggle aria-expanded="false" aria-controls="up-year-body">' +
+          '<span class="up-row__ico lg-ico">' + ICON.chevron + '</span>' +
+          '<span class="up-pill__t">שנת צפייה</span>' +
+          '<span class="up-year__val">' + CBA.esc(cur) + '</span>' +
+        '</button>' +
+        '<div class="up-year__body" id="up-year-body">' +
+          '<div class="up-year__chips">' +
+            years.map(function (y) {
+              return '<button type="button" class="lg lg-pill up-year__chip' + (y === cur ? " is-on" : "") +
+                '" data-year="' + CBA.esc(y) + '">' + CBA.esc(y) + '</button>';
+            }).join("") +
+          '</div>' +
+          (working !== cur
+            ? '<div class="up-year__note">צופה בלבד · שנת העבודה היא <b>' + CBA.esc(working) + '</b></div>' +
+              (can(PERM.BUDGET)
+                ? '<button type="button" class="btn-ghost up-year__set" data-panel-year-set>הגדר את ' +
+                    CBA.esc(cur) + ' כשנת העבודה</button>'
+                : "")
+            : "") +
+        '</div>' +
+      '</div>'
+    );
+  }
 
-    /* הבורר = תצוגה בלבד. אישי, מיידי, בלי דיאלוג ובלי לגעת בשרת —
-       **אלא אם** נתוני השנה הזאת עוד לא בזיכרון (2026-09-14, דיאטת המטען).
-       ⚠️ היום זה מסלול רדום: המטען עדיין מחזיר את כל השנים, ולכן
-       `yearLoaded` תמיד true והמעבר נשאר מיידי בדיוק כמו קודם. */
-    yearBox.querySelector("#year-select").addEventListener("change", function () {
-      var sel = this, y = sel.value, prev = CBA.data.getCurrentYear();
-      if (!CBA.sheets.yearLoaded || CBA.sheets.yearLoaded(y)) {
-        CBA.data.setCurrentYear(y);
-        renderYearSwitch();
+  /* מיתוג שנת הצפייה בפועל — הועבר מ-onChange של ה-select הישן ללחיצה על
+     שבב. אותה לוגיקה בדיוק (כולל דיאטת המטען מ-14.9), רק שהקריאה מגיעה
+     מ-renderControls במקום מ-renderYearSwitch. */
+  function switchViewYear(y, panel, btn) {
+    var prev = CBA.data.getCurrentYear();
+    if (y === prev) return;
+    function apply() {
+      CBA.data.setCurrentYear(y);
+      renderYearSwitch();
+      showScreen(currentScreen);
+    }
+    if (!CBA.sheets.yearLoaded || CBA.sheets.yearLoaded(y)) { apply(); return; }
+    main.innerHTML = skeletonScreen();
+    CBA.sheets.loadYear(y, function (ok, err) {
+      if (!ok) {
+        CBA.ui.toast("לא הצלחנו לטעון את " + y + (err ? " — " + err : ""), "error");
         showScreen(currentScreen);
         return;
       }
-      sel.disabled = true;
-      main.innerHTML = skeletonScreen();
-      CBA.sheets.loadYear(y, function (ok, err) {
-        sel.disabled = false;
-        if (!ok) {
-          /* ⚠️ מחזירים את הבורר לשנה הקודמת. בורר שמראה שנה שלא נטענה
-             הוא שקר ויזואלי — המשתמש היה בטוח שהוא מסתכל עליה. */
-          CBA.ui.toast("לא הצלחנו לטעון את " + y + (err ? " — " + err : ""), "error");
-          if (sel.isConnected) sel.value = prev;
-          showScreen(currentScreen);
-          return;
-        }
-        CBA.data.setCurrentYear(y);
-        renderYearSwitch();
-        showScreen(currentScreen);
-      });
-    });
-
-    /* קביעת שנת העבודה — פעולה נפרדת ומפורשת, כי היא משנה את מה שכל
-       המשתמשים רואים ואת השנה שהאפליקציה נפתחת עליה. */
-    const setBtn = yearBox.querySelector("#year-set");
-    if (setBtn) setBtn.addEventListener("click", function () {
-      const y = CBA.data.getCurrentYear();
-      CBA.ui.confirm(
-        'שנת העבודה תשתנה ל' + y + ' לכל המשתמשים, והאפליקציה תיפתח עליה. ' +
-        'אפשר לשנות חזרה בכל רגע.',
-        { title: "קביעת שנת העבודה", okText: "קבע את " + y }
-      ).then(function (ok) {
-        if (!ok) return;
-        CBA.data.setCurrentYear(y, true);
-        renderYearSwitch();
-        CBA.ui.toast('שנת העבודה היא עכשיו ' + y);
-      });
-    });
-
-    yearBox.querySelector("#year-add").addEventListener("click", function () {
-      // (2026-08-19, ממצא 2.6) היה window.prompt — פעולה משמעותית (יצירת שנת
-      // תקציב שלמה, משוכפלת מהשנה הנוכחית) דרך חלון אפור של הדפדפן בלי שום
-      // הסבר ובלי ולידציה. עכשיו מודל של האפליקציה, עם הסבר מה עומד לקרות
-      // ובדיקה ששם השנה אינו ריק ואינו קיים כבר.
-      var from = CBA.data.getCurrentYear();
-      CBA.ui.prompt(
-        'השנה החדשה תיווצר עם אותם סעיפי תקציב ומקורות הכנסה כמו ' + from + ', בלי תנועות.',
-        { title: "יצירת שנת תקציב חדשה", placeholder: 'למשל תשפ"ח', okText: "צור שנה" }
-      ).then(function (name) {
-        if (name === null) return;
-        var y = String(name).trim();
-        if (!y) { CBA.ui.alert("צריך להזין שם לשנה החדשה."); return; }
-        if (CBA.data.getYears().indexOf(y) !== -1) { CBA.ui.alert('כבר קיימת שנה בשם "' + y + '".'); return; }
-        CBA.data.addYear(y, from);
-        // persist: שנה שנוצרה ומיד הוגדרה כנוכחית — אחרת היא הייתה "נשכחת"
-        // בטעינה הבאה בדיוק כמו הבאג שתוקן בבורר למעלה
-        CBA.data.setCurrentYear(y, true);
-        renderYearSwitch();
-        showScreen(currentScreen);
-        CBA.ui.toast('נוצרה שנת תקציב ' + y);
-      });
+      apply();
     });
   }
 
@@ -1884,6 +1889,15 @@
      בדיוק כמו רענון רקע — זו לא "כניסה מחדש למסך". */
   window.CBA.redraw = function () {
     if (currentScreen) showScreen(currentScreen, { silent: true });
+  };
+
+  /* רענון התג בהדר + תוכן תפריט המשתמש בלי לפתוח אותו — נולד בשביל
+     "יצירת שנה" שעברה למסך בניית תקציב (planning.js, 15.9.26): שם, אחרי
+     הוספת שנה, צריך גם לעדכן את התג וגם לרענן את רשימת השבבים בפאנל,
+     בלי לגעת בתוכן המסך עצמו (ה-render של planning כבר דואג לזה בעצמו). */
+  window.CBA.refreshHeaderYear = function () {
+    renderYearSwitch();
+    renderControls(); // בונה מחדש את הפאנל *עם* החיווט שלו, לא רק ה-HTML — ומשמר אם היה פתוח
   };
 
   /* שמו של מסך בעברית, מתוך הגדרת הטאבים עצמה (2026-09-09). נולד בשביל
