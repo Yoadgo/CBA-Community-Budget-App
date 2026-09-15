@@ -1211,6 +1211,17 @@ CBA.sheets = (function () {
   }
   function fsPlainRows(arr) { return (arr || []).map(fsPlainRow); }
 
+  /* 🔴 **השדות התפעוליים אינם חלק מהתנועה.** `toTx` אוסף
+     כל מפתח לא מוכר אל `customFields` — ואז `year`/`familyId`/`schema`
+     היו מופיעים כ"שדות מותאמים" במסך וגם היו מפרידים בין
+     שני המסלולים. מסירים אותם לפני ההמרה. */
+  var BTX_META = { year: 1, familyId: 1, schema: 1, updatedAt: 1, statusPending: 1, id: 1 };
+  function btxStrip(d) {
+    var out = {};
+    Object.keys(d || {}).forEach(function (k) { if (!BTX_META[k]) out[k] = d[k]; });
+    return out;
+  }
+
   function fsYearLoad(y, done) {
     var doc = null, txRows = null, namesOk = false, failed = false;
     /* 🔴🔴 **מושכים רק את מה שלמשתמש הזה מותר ונדרש**
@@ -1255,22 +1266,17 @@ CBA.sheets = (function () {
 
     var mine = (CBA.user && CBA.user.familyId) ? String(CBA.user.familyId).trim() : "";
     var seesAll = seesBudget;
-    if (seesAll) {
-      CBA.fb.readCollection("budgetTx", function (err, all) {
+    /* 🔴 **מסמך לכל תנועה** (צעד 09) — שאילתת שוויון, בלי אינדקס
+       מורכב. תושב מסנן גם לפי משפחה — והכלל דוחה כל שאילתה
+       רחבה יותר, אז הסינון אינו "הגנה" אלא מה שמאפשר לקריאה
+       להצליח בכלל. */
+    if (!seesAll && !mine) { txRows = []; maybe(); }
+    else {
+      var conds = [["year", String(y)]];
+      if (!seesAll) conds.push(["familyId", mine]);
+      CBA.fb.queryCollection("budgetTx", conds, function (err, all) {
         if (err) return fail(err);
-        var rows = [];
-        (all || []).forEach(function (d) {
-          if (String(d.year || "") !== String(y)) return;
-          (d.rows || []).forEach(function (r) { rows.push(r); });
-        });
-        txRows = rows; maybe();
-      });
-    } else if (!mine) {
-      txRows = []; maybe();
-    } else {
-      CBA.fb.readDoc("budgetTx", y + "__" + mine, function (err, d) {
-        if (err) return fail(err);
-        txRows = (d && d.rows) || [];
+        txRows = (all || []).map(btxStrip);
         maybe();
       });
     }

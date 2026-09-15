@@ -192,9 +192,36 @@ service cloud.firestore {
        מזהה** (`<שנה>__<משפחה>`) — בלי שאילתה בכלל; ובעל התקציב
        מסנן `year ==` בלבד, שוויון על שדה אחד.
        ------------------------------------------------------------------ */
+    /* שלבי הסטטוס כפי שהם נשמרים בגיליון (STATUS_HE ב-Code.gs). */
+    function txLegalStep(from, to) {
+      return (from == 'הוגשה קבלה' && (to == 'בבדיקה' || to == 'הועבר להנה"ח' || to == 'נדחה')) ||
+             (from == 'בבדיקה'   && (to == 'הועבר להנה"ח' || to == 'נדחה')) ||
+             (from == 'הועבר להנה"ח' && (to == 'שולם' || to == 'נדחה'));
+    }
+
+    /* הכתיבה היחידה שהדפדפן מורשה לעשות על תנועה.
+       🔴 **שלושה תנאים, וכל אחד נחוץ בפני עצמו:**
+       1. **רק ארבעה שדות משתנים** (`hasOnly`). בלעדיו הדפדפן
+          יכול לשנות סכום, סעיף או מזהה משפחה — כלומר להעביר
+          כסף למשפחה אחרת או לנפח הוצאה.
+       2. **מעבר חוקי בלבד.** אי-אפשר לקפוץ מ"הוגשה" ל"שולם"
+          בלי לעבור באישור, ואי-אפשר להחזיר מ"שולם" אחורה.
+       3. **`statusPending` חייב לעלות ל-true.** זה מה שגורם לטריגר
+          להחיל על הגיליון ולסנכרון לא לדרוס. כתיבה בלעדיו
+          היתה נעלמת בסנכרון הבא — שינוי שנראה שנשמר ונעלם.
+       ⚠️ יצירה ומחיקה סגורות לגמרי — הן שייכות לסנכרון בלבד. */
+    function txStatusUpdateOk() {
+      return canSeeBudget() &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['סטטוס', 'הערת בדיקה', 'statusPending', 'updatedAt']) &&
+             request.resource.data.statusPending == true &&
+             txLegalStep(resource.data.סטטוס, request.resource.data.סטטוס);
+    }
+
     match /budgetTx/{docId} {
       allow read: if canSeeFamilyTx(resource.data.familyId);
-      allow write: if false;
+      allow update: if txStatusUpdateOk();
+      allow create, delete: if false;
     }
 
     /* ---------- דגלי זמן ריצה (צעד 05א) ---------- */

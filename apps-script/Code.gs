@@ -8051,38 +8051,49 @@ function btxRow_(row) {
 /* מזהה המסמך: שנה + משפחה. המזהה גולמי — הקידוד ב-`fsDocPath_`.
    ⚠️ משפחה ריקה מקבלת `__none__` ולא מחרוזת ריקה, אחרת המזהה
       היה מסתיים בקו תחתון כפול ונראה כמו באג. */
-function btxDocId_(year, familyId) {
-  var f = String(familyId == null ? '' : familyId).trim();
-  return String(year) + '__' + (f || '__none__');
+/* מזהה המסמך: שנה + מזהה התנועה. המזהה גולמי — הקידוד ב-`fsDocPath_`. */
+function btxDocId_(year, txId) {
+  return String(year) + '__' + String(txId == null ? '' : txId).trim();
 }
 
-/* מקבץ את תנועות השנה למסמכים לפי משפחה. */
+/* ============================================================================
+ *  מסמך לכל תנועה   (שונה ממסמך-למשפחה, צעד 09, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴 **למה שינינו מבנה שעבד:** מסמך-למשפחה החזיק **מערך**
+ *  של תנועות. לקריאה זה היה מצוין, ולכתיבה זה חסר תועלת:
+ *  **כלל אבטחה אינו יודע לאמת שינוי של איבר אחד בתוך מערך.**
+ *  כלומר בדיוק הדבר שצעד 09 קיים בשבילו — "מותר לעבור מהוגשה
+ *  להועבר, אסור לקפוץ לשולם, ואסור לשנות סכום" — לא היה
+ *  ניתן לאכיפה. וגם: שני מנהלים שמשנים באותו רגע היו דורסים
+ *  זה את זה, כי כל אחד כותב את כל המערך.
+ *
+ *  ⚠️ **המחיר:** גזבר שטוען שנה קורא ~150 מסמכים במקום ~20.
+ *  מול 50,000 קריאות/יום זה זניח. **המדידה הזו נעשתה מראש.**
+ *
+ *  🔑 **תיבת הדואר לסטטוס:** הדפדפן כותב `סטטוס` ומרים
+ *  `statusPending:true`. הטריגר מחיל על הגיליון ומוריד את הדגל.
+ *  🔴 **והסנכרון חייב לכבד את הדגל הזה** — אחרת כל שינוי
+ *  סטטוס שטרם הוחל על הגיליון נמחק בסנכרון הבא. זה החסם
+ *  שבגללו "רק סטטוס" אינו צעד עצמאי בלי הכרעת בעלות.
+ * ========================================================================== */
 function btxYearDocs_(ss, y) {
   var rows = cached_('cba_tx_' + budgetStamp_() + '_' + y, function () {
     return readTable_(ss, 'תנועות ' + y);
   }) || [];
-  var byFam = {}, order = [];
-  for (var i = 0; i < rows.length; i++) {
-    var fam = String(rows[i]['מזהה משפחה'] == null ? '' : rows[i]['מזהה משפחה']).trim();
-    if (!byFam[fam]) { byFam[fam] = []; order.push(fam); }
-    byFam[fam].push(btxRow_(rows[i]));
-  }
   var out = [];
-  for (var j = 0; j < order.length; j++) {
-    var f = order[j];
-    out.push({
-      id: btxDocId_(y, f),
-      doc: {
-        year: String(y),
-        /* 🔴 השדה שהכלל משווה מולו. מחרוזת ריקה = דלי
-           החסרי-משפחה, והכלל דוחה אותה מפורשות. */
-        familyId: f,
-        rows: byFam[f],
-        count: byFam[f].length,
-        schema: 1,
-        updatedAt: new Date()
-      }
-    });
+  for (var i = 0; i < rows.length; i++) {
+    var id = String(rows[i]['מזהה'] == null ? '' : rows[i]['מזהה']).trim();
+    if (!id) continue;                     /* שורה בלי מזהה — אין לה מסמך */
+    var fam = String(rows[i]['מזהה משפחה'] == null ? '' : rows[i]['מזהה משפחה']).trim();
+    var doc = btxRow_(rows[i]);
+    doc.year = String(y);
+    /* 🔴 השדה שהכלל משווה מולו. מחרוזת ריקה = חסר-משפחה,
+       והכלל דוחה אותה מפורשות. */
+    doc.familyId = fam;
+    doc.statusPending = false;
+    doc.schema = 2;
+    doc.updatedAt = new Date();
+    out.push({ id: btxDocId_(y, id), doc: doc });
   }
   return out;
 }
@@ -8092,39 +8103,58 @@ function budgetTxSyncAll_(ss) {
   var settings = readSettings_(ss);
   var years = String(settings['שנים'] || '').split(',')
                 .map(function (x) { return x.trim(); }).filter(Boolean);
-  var out = { ok: true, wrote: 0, deleted: 0, skipped: 0, years: [], errors: [] };
+  var out = { ok: true, wrote: 0, deleted: 0, skipped: 0, kept: 0, years: [], errors: [] };
+
+  /* קריאה אחת של הקיים — משמשת גם לכיבוד `statusPending`
+     וגם לסחיפת היתומים, כדי לא לשלם פעמיים על אותו אוסף. */
+  var have = {};
+  try {
+    fsList_(FS_BUDGET_TX).forEach(function (d) { have[d.id] = d.data || {}; });
+  } catch (e) {
+    out.ok = false; out.errors.push('list: ' + String(e));
+    return out;                                  /* בלי הרשימה אסור לכתוב */
+  }
+
   var live = {};
   for (var i = 0; i < years.length; i++) {
     var y = years[i];
     try {
-      /* ⚠️ שם טאב נבנה מקלט — לאמת קיום לפני קריאה. */
       if (!ss.getSheetByName('תנועות ' + y)) { out.skipped++; continue; }
       var docs = btxYearDocs_(ss, y);
-      var wrote = 0, rows = 0;
+      var wrote = 0;
       for (var j = 0; j < docs.length; j++) {
-        if (!fsIdOk_(docs[j].id)) { out.skipped++; continue; }
-        var size = JSON.stringify(docs[j].doc).length;
-        if (size > BTX_MAX_BYTES) {
-          throw new Error('מסמך משפחה גדול מדי (' + docs[j].id + ', ' + size + ' תווים)');
+        var id = docs[j].id, doc = docs[j].doc;
+        if (!fsIdOk_(id)) { out.skipped++; continue; }
+        var prev = have[id];
+        /* 🔴 שינוי סטטוס שטרם הוחל על הגיליון — לא לדרוס. */
+        if (prev && prev.statusPending === true) {
+          doc['סטטוס'] = prev['סטטוס'];
+          doc.statusPending = true;
+          out.kept++;
         }
-        fsSet_(fsDocPath_(FS_BUDGET_TX, docs[j].id), docs[j].doc);
-        live[docs[j].id] = 1;
-        wrote++; rows += docs[j].doc.count;
-        out.wrote++;
+        var size = JSON.stringify(doc).length;
+        if (size > BTX_MAX_BYTES) {
+          throw new Error('מסמך גדול מדי (' + id + ', ' + size + ')');
+        }
+        fsSet_(fsDocPath_(FS_BUDGET_TX, id), doc);
+        live[id] = 1; wrote++; out.wrote++;
       }
-      out.years.push({ year: y, docs: wrote, rows: rows });
+      out.years.push({ year: y, docs: wrote });
     } catch (e) {
       out.ok = false;
       out.errors.push(y + ': ' + String(e));
     }
   }
-  /* ניקוי יתומים — רק אם כל השנים נכתבו בהצלחה.
-     ⚠️ אחרת משפחה ששנתה נכשלה במקרה היתה נמחקת כ"יתומה".
-     ⚠️ המזהה ב-`live` גולמי, בדיוק כמו ש-`fsList_` מחזיר — ר׳
-     הבאג שנתפס בצעד 08א. */
+
+  /* סחיפת יתומים — רק אם כל השנים נכתבו בהצלחה,
+     ומתוך הרשימה שכבר קראנו (בלי fsList_ נוסף).
+     ⚠️ המזהה גולמי, בדיוק כמו ש-`fsList_` מחזיר — ר׳ הבאג ב-08א. */
   if (out.ok) {
-    try { fsSweepOrphans_(FS_BUDGET_TX, live, out); }
-    catch (e) { out.ok = false; out.errors.push('sweep: ' + String(e)); }
+    try {
+      Object.keys(have).forEach(function (id) {
+        if (!live[id]) { fsDelete_(fsDocPath_(FS_BUDGET_TX, id)); out.deleted++; }
+      });
+    } catch (e) { out.ok = false; out.errors.push('sweep: ' + String(e)); }
   }
   return out;
 }

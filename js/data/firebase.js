@@ -319,6 +319,28 @@ CBA.fb = (function () {
     });
   }
 
+  /** שאילתה על אוסף — עד שני תנאי שוויון. cb(err, [{id,...}]).
+   🔴 **שוויון בלבד, ובמכוון.** שאילתות שוויון על שדות שונים
+      נשרתות מהאינדקסים האוטומטיים (מיזוג זיגזג) ואינן דורשות
+      אינדקס מורכב — וזה קריטי כאן, כי קונסולת Google Cloud
+      חסומה ב-2SV ואי-אפשר ליצור אחד. **אל תוסיף כאן מיון או
+      אי-שוויון** — שניהם ידרשו אינדקס והשאילתה תיפול בייצור. */
+  function queryCollection(name, conds, cb) {
+    cb = withTimeout(cb || function () {});
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      try {
+        var q = window.firebase.firestore().collection(name);
+        (conds || []).forEach(function (c) { q = q.where(c[0], '==', c[1]); });
+        q.get().then(function (snap) {
+          var out = [];
+          snap.forEach(function (d) { var o = d.data() || {}; o.id = o.id || d.id; out.push(o); });
+          cb(null, out);
+        })["catch"](function (e) { state.lastError = e; cb(e); });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+  }
+
   /** קורא מסמך בודד. cb(err, data|null). */
   function readDoc(collection, id, cb) {
     cb = withTimeout(cb || function () {});
@@ -353,6 +375,7 @@ CBA.fb = (function () {
     ensureDb: ensureDb,
     authReady: authReady,
     readCollection: readCollection,
+    queryCollection: queryCollection,
     readDoc:  readDoc,
     signIn:   signIn,
     signOut:  signOut,
