@@ -354,6 +354,40 @@ CBA.fb = (function () {
     });
   }
 
+  /* ============================================================================
+   *  updateDoc — **הכתיבה הראשונה מהדפדפן ישירות ל-Firestore**
+   *  (צעד 09א, 2026-09-15)
+   * ----------------------------------------------------------------------------
+   *  עד כאן כל הכתיבות עברו דרך Apps Script, ו-Firestore היה
+   *  קריאה בלבד. מכאן ואילך הכלל ב-firestore.rules הוא הדבר
+   *  היחיד שעומד בין הדפדפן לבין מסד הנתונים.
+   *
+   *  ⚠️ **`update` ולא `set`** — `set` דורס את כל המסמך,
+   *     והכלל (שבודק `affectedKeys().hasOnly`) היה דוחה אותו בכל
+   *     מקרה. זה בדיוק ההתנהגות הרצויה.
+   *  ⚠️ **מסמך שאינו קיים גורם ל-`update` להיכשל** (not-found),
+   *     וזה נכון: תנועה שטרם סונכרנה ל-Firestore חייבת לעבור
+   *     במסלול Apps Script, לא להיווצר כאן יש מאין.
+   * ========================================================================== */
+  function updateDoc(collection, id, fields, cb) {
+    cb = withTimeout(cb || function () {});
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      try {
+        window.firebase.firestore().collection(collection).doc(String(id))
+          .update(fields || {})
+          .then(function () { cb(null, true); })
+          ["catch"](function (e) { state.lastError = e; cb(e); });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+  }
+
+  /** חותמת זמן של השרת — לא שעון המכשיר, שיכול להיות מוטעה. */
+  function serverNow() {
+    try { return window.firebase.firestore.FieldValue.serverTimestamp(); }
+    catch (e) { return new Date(); }
+  }
+
   /* ---------- בדיקה עצמית ---------- */
 
   function selfTest() {
@@ -377,6 +411,8 @@ CBA.fb = (function () {
     readCollection: readCollection,
     queryCollection: queryCollection,
     readDoc:  readDoc,
+    updateDoc: updateDoc,
+    serverNow: serverNow,
     signIn:   signIn,
     signOut:  signOut,
     idToken:  idToken,

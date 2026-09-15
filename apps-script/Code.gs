@@ -231,6 +231,10 @@ var GET_ACTION_PERMS = {
   backupVerify: PERM_SUPER, backupRestore: PERM_SUPER,
   backupIncremental: PERM_SUPER,
   budgetSync: PERM_SUPER, budgetTxSync: PERM_SUPER,
+  /* דחיפה מהדפדפן שתחיל סטטוסים ממתינים על הגיליון מיד
+     (2026-09-15, צעד 09א). PERM_BUDGET ולא PERM_SUPER: זו בדיוק
+     הקבוצה שהכלל מרשה לה לכתוב את הסטטוס מלכתחילה. */
+  budgetTxApply: PERM_BUDGET,
   /* סנכרון יזום של תוכנית העבודה אל Firestore (2026-09-14, צעד 03א).
      🔴 **PERM_SUPER ולא PERM_GARDEN.** הפעולה אינה נוגעת לעבודת
      הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
@@ -582,6 +586,9 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'budgetTxSync') {
       return handleBudgetTxSync_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'budgetTxApply') {
+      return handleBudgetTxApply_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'backupVerify') {
       return handleBackupVerify_(e.parameter);
@@ -5087,6 +5094,11 @@ function installDailyEmailTrigger() {
 
 function dailyEmailJobs_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  /* 🔴 **ראשונה, לפני כל המיילים** (2026-09-15, צעד 09א).
+     `staleNudgeJob_` קוראת את עמודת הסטטוס מהגיליון; אם
+     הגיליון מפגר אחרי Firestore, היא תנדנד על בקשה שכבר
+     טופלה. הסדר כאן הוא הפתרון — לא להזיז למטה. */
+  try { budgetTxApplyPending_(ss); } catch (e) { Logger.log('budgetTxApplyPending_ נכשל: ' + e); }
   try { clubReminderJob_(ss); } catch (e) { Logger.log('clubReminderJob_ נכשל: ' + e); }
   try { staleNudgeJob_(ss); } catch (e) { Logger.log('staleNudgeJob_ נכשל: ' + e); }
   try { gymDailyJob_(ss); } catch (e) { Logger.log('gymDailyJob_ נכשל: ' + e); }
@@ -5122,6 +5134,20 @@ function dailyEmailJobs_() {
  * ========================================================================== */
 function hourlyJobs() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  /* תיבת הדואר (2026-09-15, צעד 09א) — סטטוסים שהדפדפן
+     כתב ל-Firestore וטרם הוחלו על הגיליון.
+     ⚠️ **לפני הגיבוי המצטבר** — אחרת הגיבוי מעתיק מסמכים
+        עם דגל פתוח ושחזור מגיבוי יחזיר אותו לחיים. */
+  try {
+    var a = budgetTxApplyPending_(ss);
+    if (a.found) {
+      Logger.log('סטטוסים ממתינים: נמצאו ' + a.found + ', הוחלו ' + a.applied +
+                 ', נדחו ' + a.rejected + ', חסרים ' + a.missing +
+                 (a.errors.length ? ' | שגיאות: ' + a.errors.join(' ; ') : ''));
+    }
+  } catch (e) {
+    Logger.log('budgetTxApplyPending_ נכשל: ' + e);
+  }
   try {
     var r = fsBackupIncremental_(ss);
     Logger.log('גיבוי מצטבר: נקראו ' + r.read + ' מסמכים' +
@@ -5890,7 +5916,12 @@ function fsSweepOrphans_(collection, live, out) {
  *  שכיבה משהו שבפועל עדיין דולק.
  * ========================================================================== */
 var FS_FLAGS_DOC = 'appConfig/flags';
-var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYearFromFirestore'];
+var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYearFromFirestore',
+  /* כתיבה ולא קריאה (2026-09-15, צעד 09א) — ולכן השם אינו מסתיים
+     ב-FromFirestore. כיבוי מחזיר את שינויי הסטטוס למסלול Apps Script
+     המלא בלי דיפלוי. הסטטוסים שכבר נכתבו וטרם הוחלו
+     מוחלים בכל מקרה — הטריגר אינו תלוי בדגל. */
+  'budgetTxStatusToFirestore'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {
@@ -8157,6 +8188,225 @@ function budgetTxSyncAll_(ss) {
     } catch (e) { out.ok = false; out.errors.push('sweep: ' + String(e)); }
   }
   return out;
+}
+
+/* ============================================================================
+ *  תיבת הדואר: החלת שינויי סטטוס על הגיליון
+ *  (צעד 09א, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  הדפדפן כותב `סטטוס` ישירות ל-Firestore ומרים
+ *  `statusPending:true`. הפונקציה הזאת היא הצד השני של
+ *  התיבה: היא מושכת את הממתינים, מחילה אותם על
+ *  הגיליון — שנשאר מקור האמת — ומורידה את הדגל.
+ *
+ *  🔴 **למה בדיקת המעבר חוזרת כאן, אחרי שכלל האבטחה
+ *  כבר בדק אותו:** הכלל בודק מול מה שיש ב-Firestore
+ *  ברגע הכתיבה. אבל בין הכתיבה להחלה עובר זמן, ובזמן
+ *  הזה מנהל אחר יכול לקדם את השורה בגיליון עצמו.
+ *  לכן המעבר נבדק **מול הסטטוס שבגיליון ברגע ההחלה**,
+ *  ומעבר שהפך ללא-חוקי נדחה — הגיליון מנצח.
+ *
+ *  ⚠️ **תופעות הלוואי חייבות לקרות גם כאן.** במסלול
+ *  הישן (`saveTransactionRow_`) שינוי סטטוס שולח מייל לתושב
+ *  ומעביר את הקבלה לתיקייה הקבועה. מסלול שלא עושה את
+ *  שתי אלה היה מפסיק בשקט את העדכונים לתושבים.
+ *
+ *  ⚠️ **סדר הפעולות בעבודה היומית אינו שרירותי:**
+ *  `staleNudgeJob_` קוראת את עמודת הסטטוס **מהגיליון**.
+ *  אם הגיליון מפגר שעה, היא תנדנד על בקשה שכבר טופלה.
+ *  לכן ההחלה רצה **ראשונה** ב-`dailyEmailJobs_`.
+ * ========================================================================== */
+
+/* המעברים החוקיים — **תאום מדויק של `txLegalStep` ב-firestore.rules**.
+   שני המקומות חייבים להסכים. שינוי באחד בלי השני =
+   או כתיבות שנדחות בשקט, או מעבר שעובר את הכלל ונדחה כאן. */
+var BTX_STEPS_ = (function () {
+  var m = {};
+  m[STATUS_HE.submitted] = [STATUS_HE.review, STATUS_HE.ready, STATUS_HE.rejected];
+  m[STATUS_HE.review]    = [STATUS_HE.ready, STATUS_HE.rejected];
+  m[STATUS_HE.ready]     = [STATUS_HE.paid, STATUS_HE.rejected];
+  return m;
+})();
+
+function btxLegalStep_(from, to) {
+  var allowed = BTX_STEPS_[String(from == null ? '' : from).trim()];
+  if (!allowed) return false;
+  return allowed.indexOf(String(to == null ? '' : to).trim()) !== -1;
+}
+
+/* מוריד את הדגל ומקבע את הסטטוס שהוכרע בפועל.
+   ⚠️ כותב את המסמך המלא בחזרה — `fsUnval_`/`fsVal_` שומרים
+      טיפוסים (Date ↔ timestamp), ולכן הסבב אינו משנה שדה. */
+function btxClearPending_(docId, data, resolvedStatus) {
+  var doc = {};
+  for (var k in data) if (Object.prototype.hasOwnProperty.call(data, k)) doc[k] = data[k];
+  if (resolvedStatus !== null && resolvedStatus !== undefined) doc['סטטוס'] = resolvedStatus;
+  doc.statusPending = false;
+  doc.updatedAt = new Date();
+  fsSet_(fsDocPath_(FS_BUDGET_TX, docId), doc);
+}
+
+/* אותן שתי תופעות לוואי שיש ב-`saveTransactionRow_`, בדיוק. */
+function btxSideEffects_(ss, headers, rowArr, from, to) {
+  var g = function (name) {
+    var i = headers.indexOf(name);
+    return i === -1 ? '' : rowArr[i];
+  };
+  if ((to === STATUS_HE.ready || to === STATUS_HE.paid) && g('קישור קבלה')) {
+    moveReceiptToPermanentIfNeeded_(g('קישור קבלה'), g('חודש הגשה'));
+  }
+  var KEY = {};
+  KEY[STATUS_HE.ready]    = 'REIMBURSEMENT_READY';
+  KEY[STATUS_HE.paid]     = 'REIMBURSEMENT_PAID';
+  KEY[STATUS_HE.rejected] = 'REIMBURSEMENT_REJECTED';
+  if (from !== to && String(g('מקור')) === SOURCE_HE.resident && KEY[to]) {
+    var emails = emailsForFamilyId_(ss, g('מזהה משפחה'));
+    sendResidentTemplate_(ss, KEY[to], emails, {
+      'שם': g('רוכש') || '',
+      'סכום': Math.round(Number(g('סכום')) || 0),
+      'מזהה': g('מזהה'),
+      'הערה': g('הערת בדיקה') ? ('\nהערה: ' + g('הערת בדיקה')) : ''
+    });
+  }
+}
+
+function btxApplyYear_(ss, y, items, out) {
+  var sh = ss.getSheetByName('תנועות ' + y);
+  if (!sh) {
+    out.missing += items.length;
+    out.errors.push('אין טאב תנועות ' + y);
+    return false;
+  }
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+                  .map(function (h) { return String(h).trim(); });
+  var cId = headers.indexOf('מזהה');
+  var cStatus = headers.indexOf('סטטוס');
+  var cNote = headers.indexOf('הערת בדיקה');
+  if (cId === -1 || cStatus === -1) {
+    out.errors.push('חסרות עמודות בתנועות ' + y);
+    return false;
+  }
+  var n = Math.max(sh.getLastRow() - 1, 0);
+  if (!n) { out.missing += items.length; return false; }
+  var values = sh.getRange(2, 1, n, lastCol).getValues();
+  var rowOf = {};
+  for (var i = 0; i < n; i++) rowOf[String(values[i][cId]).trim()] = i;
+
+  var changed = false;
+  for (var k = 0; k < items.length; k++) {
+    var docId = items[k].id, d = items[k].data || {};
+    var txId = String(d['מזהה'] == null ? '' : d['מזהה']).trim();
+    var idx = (txId && Object.prototype.hasOwnProperty.call(rowOf, txId)) ? rowOf[txId] : -1;
+    if (idx === -1) {
+      /* השורה נמחקה מהגיליון אחרי שהדפדפן כתב. אין מה
+         להחיל, והמסמך ייסחף בסנכרון הבא — רק להוריד את הדגל,
+         אחרת השאילתה תחזיר אותו שוב בכל שעה. */
+      out.missing++;
+      try { btxClearPending_(docId, d, null); }
+      catch (e) { out.errors.push('ניקוי דגל (' + docId + '): ' + String(e)); }
+      continue;
+    }
+    var from = String(values[idx][cStatus] == null ? '' : values[idx][cStatus]).trim();
+    var to = String(d['סטטוס'] == null ? '' : d['סטטוס']).trim();
+
+    if (from === to) {
+      try { btxClearPending_(docId, d, from); }
+      catch (e) { out.errors.push('ניקוי דגל (' + docId + '): ' + String(e)); }
+      continue;
+    }
+    if (!btxLegalStep_(from, to)) {
+      /* הגיליון מנצח: מחזירים את המסמך למצב האמיתי. */
+      out.rejected++;
+      try { btxClearPending_(docId, d, from); }
+      catch (e) { out.errors.push('החזרה (' + docId + '): ' + String(e)); }
+      continue;
+    }
+
+    sh.getRange(idx + 2, cStatus + 1).setValue(to);
+    values[idx][cStatus] = to;
+    if (cNote !== -1 && d['הערת בדיקה'] !== undefined) {
+      var note = String(d['הערת בדיקה'] == null ? '' : d['הערת בדיקה']);
+      sh.getRange(idx + 2, cNote + 1).setValue(note);
+      values[idx][cNote] = note;
+    }
+    changed = true;
+    out.applied++;
+    try { btxClearPending_(docId, d, to); }
+    catch (e) { out.errors.push('ניקוי דגל (' + docId + '): ' + String(e)); }
+    try { btxSideEffects_(ss, headers, values[idx], from, to); }
+    catch (e) { out.errors.push('תופעות לוואי (' + txId + '): ' + String(e)); }
+  }
+  return changed;
+}
+
+function budgetTxApplyPending_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: true, found: 0, applied: 0, rejected: 0, missing: 0, errors: [] };
+
+  var pend;
+  try {
+    pend = fsQuery_(FS_BUDGET_TX, 'statusPending', 'EQUAL', true, 300);
+  } catch (e) {
+    out.ok = false; out.errors.push('שאילתה: ' + String(e));
+    return out;
+  }
+  out.found = pend.length;
+  if (!pend.length) return out;
+
+  /* אותה נעילה של `saveTransaction_` — ההחלה כותבת לאותן
+     שורות, ושתי ריצות מקבילות (הטריגר ודחיפה מהדפדפן)
+     הן תרחיש רגיל ולא קצה. */
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); }
+  catch (e) {
+    out.ok = false; out.errors.push('המערכת עסוקה — לא הוחל');
+    return out;
+  }
+  try {
+    var byYear = {};
+    for (var i = 0; i < pend.length; i++) {
+      var y = String((pend[i].data && pend[i].data.year) || '').trim();
+      if (!y) {
+        out.missing++;
+        out.errors.push('מסמך בלי שנה: ' + pend[i].id);
+        continue;
+      }
+      (byYear[y] = byYear[y] || []).push(pend[i]);
+    }
+    var touched = false;
+    Object.keys(byYear).forEach(function (y) {
+      try {
+        if (btxApplyYear_(ss, y, byYear[y], out)) touched = true;
+      } catch (e) {
+        out.ok = false;
+        out.errors.push(y + ': ' + String(e));
+      }
+    });
+    /* הגיליון השתנה — להעלות מונה כדי שהמטמון לא יגיש
+       סטטוס ישן למשך 90 שניות נוספות. */
+    if (touched) bumpRev_('saveTransaction');
+  } finally {
+    lock.releaseLock();
+  }
+  return out;
+}
+
+/* דחיפה מהדפדפן (fire-and-forget) — כדי שמייל עדכון לתושב
+   לא יחכה עד שעה. הטריגר השעתי הוא רשת הביטחון,
+   ולכן כישלון כאן אינו מעניין את הלקוח. */
+function handleBudgetTxApply_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_BUDGET);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var t0 = new Date().getTime();
+    var r = budgetTxApplyPending_(ss);
+    r.ms = new Date().getTime() - t0;
+    return json_(r);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
 }
 
 function handleBudgetTxSync_(p) {

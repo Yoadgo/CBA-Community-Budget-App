@@ -378,14 +378,128 @@ CBA.data = (function () {
     if (CBA.redraw) CBA.redraw();
   }
 
+  /* ==========================================================================
+   *  שינוי סטטוס — כתיבה ישירה ל-Firestore   (צעד 09א, 2026-09-15)
+   * --------------------------------------------------------------------------
+   *  🔴 **מתג הביטול של הצעד הוא שורה אחת:**
+   *  `BUDGET_TX_STATUS_TO_FIRESTORE = false` — והכל חוזר ל-Apps Script.
+   *  ⚠️ **ברירת המחדל בקוד חייבת להיות `true`** — אחרת הקוד
+   *     מקצר לפני שהוא קורא את הדגל החי, והדגל לא ידליק
+   *     כלום. הכיבוי הוא דרך `flagSet`, לא דרך השורה הזאת.
+   *
+   *  מה עובר כאן: **שינוי סטטוס בלבד** (עם או בלי הערת
+   *  בדיקה). כל שינוי אחר — סכום, סעיף, קבלה — ממשיך
+   *  במסלול Apps Script המלא. זה לא קיצור דרך: כלל האבטחה
+   *  ב-Firestore מרשה לדפדפן לגעת **בשדות האלה בלבד**.
+   *
+   *  🔑 **תיבת דואר, לא בעלות:** הגיליון נשאר מקור האמת.
+   *  הדפדפן מרים `statusPending:true`, והשרת מחיל ומוריד את
+   *  הדגל. לכן הסנכרון מכבד את הדגל — בלעדיו הסנכרון
+   *  הבא היה מוחק את השינוי בשקט.
+   * ======================================================================== */
+  var BUDGET_TX_STATUS_TO_FIRESTORE = true;
+
+  /* המעברים החוקיים — תאום של `txLegalStep` ב-firestore.rules
+     ושל `BTX_STEPS_` ב-Code.gs. מעבר שאינו כאן (למשל תיקון
+     ידני מ"שולם" חזרה ל"בבדיקה") פשוט הולך במסלול
+     המלא — לא נחסם. */
+  var TX_STEPS = {
+    submitted: ["review", "ready", "rejected"],
+    review:    ["ready", "rejected"],
+    ready:     ["paid", "rejected"]
+  };
+  function txLegalStep(from, to) {
+    var a = TX_STEPS[from];
+    return !!a && a.indexOf(to) !== -1;
+  }
+  function txStatusOnly(fields) {
+    var ks = Object.keys(fields || {});
+    if (!ks.length || ks.indexOf("status") === -1) return false;
+    for (var i = 0; i < ks.length; i++) {
+      if (ks[i] !== "status" && ks[i] !== "reviewNote") return false;
+    }
+    return true;
+  }
+
+  /* דחיפה לשרת אחרי כתיבה — כדי שהמייל לתושב לא יחכה
+     עד לריצה השעתית. ⚠️ **איש אינו מחכה לתשובה וכשל
+     אינו מעניין** — הטריגר השעתי הוא רשת הביטחון.
+     השהיה קצרה מאחדת אישור גורף של 20 שורות לדחיפה אחת. */
+  var txNudgeTimer = null;
+  function txNudgeApply() {
+    if (txNudgeTimer) clearTimeout(txNudgeTimer);
+    txNudgeTimer = setTimeout(function () {
+      txNudgeTimer = null;
+      try { CBA.sheets.get({ action: "budgetTxApply" }, function () {}); } catch (e) {}
+    }, 1500);
+  }
+
+  /* מנסה לכתוב סטטוס ישירות. done(true) = נכתב,
+     done(false) = לא נכתב וצריך לנפול אחורה. */
+  function txStatusToFirestore(t, fields, done) {
+    if (!BUDGET_TX_STATUS_TO_FIRESTORE) return done(false, "disabled");
+    if (!(CBA.fb && CBA.fb.updateDoc && CBA.fb.ensureDb)) return done(false, "no-sdk");
+    var year = t.year || getCurrentYear();
+    if (!year || t.id == null) return done(false, "no-id");
+
+    CBA.fb.authReady(function (user) {
+      if (!user) return done(false, "no-user");
+      /* 🔴 אותה מלכודת של `fsFirstRead`: הדגל נקרא ב-`ensureDb`,
+         ובדיקה לפניו מקבלת את ברירת המחדל בקוד. */
+      CBA.fb.ensureDb(function (dbErr) {
+        if (dbErr) return done(false, "db");
+        if (CBA.fb.flag && !CBA.fb.flag("budgetTxStatusToFirestore", BUDGET_TX_STATUS_TO_FIRESTORE)) {
+          return done(false, "flag-off");
+        }
+        var patch = {
+          statusPending: true,
+          updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+        };
+        patch[STATUS_COL] = statusMeta(fields.status).label;
+        if (Object.prototype.hasOwnProperty.call(fields, "reviewNote")) {
+          patch[NOTE_COL] = String(fields.reviewNote == null ? "" : fields.reviewNote);
+        }
+        CBA.fb.updateDoc("budgetTx", year + "__" + t.id, patch, function (err) {
+          if (err) return done(false, (err && (err.code || err.message)) || "write");
+          txNudgeApply();
+          done(true, "");
+        });
+      });
+    });
+  }
+  var STATUS_COL = "סטטוס";
+  var NOTE_COL = "הערת בדיקה";
+
   function updateTransaction(id, fields) {
     const t = CBA.mock.transactions.find(function (x) { return x.id === id; });
     if (!t) return t;
     // תצלום של השדות שעומדים להשתנות בלבד — לא של כל הרשומה
     const before = {};
     Object.keys(fields).forEach(function (k) { before[k] = t[k]; });
+    const fromStatus = t.status;
     Object.assign(t, fields);
     if (!pushConnected()) return t;
+
+    /* מסלול מהיר: סטטוס בלבד, מעבר חוקי, והמשתמש באמת
+       בעל הרשאת תקציב (אחרת הכלל ידחה ונשלם סיבוב מיותר). */
+    var seesBudget = !!(CBA.isSuper || (CBA.perms && CBA.perms.indexOf("תקציב") !== -1));
+    if (seesBudget && txStatusOnly(fields) && txLegalStep(fromStatus, fields.status)) {
+      txStatusToFirestore(t, fields, function (ok, why) {
+        try {
+          CBA.perf = CBA.perf || {};
+          CBA.perf.txStatus = { source: ok ? "firestore" : "appsscript", why: why || "",
+                                at: new Date().toISOString() };
+        } catch (e) {}
+        if (!ok) txPushWhole(id, t, before);
+      });
+      return t;
+    }
+
+    txPushWhole(id, t, before);
+    return t;
+  }
+
+  function txPushWhole(id, t, before) {
     const payload = Object.assign({}, t, { fileName: receiptFileName(t) });
     CBA.sheets.push("saveTransaction", { year: t.year || getCurrentYear(), tx: payload }, function (res) {
       if (res && res.ok === true) return;
@@ -394,7 +508,6 @@ CBA.data = (function () {
       Object.keys(before).forEach(function (k) { live[k] = before[k]; });
       rollbackNote("העדכון לא נשמר והוחזר לקדמותו", res);
     });
-    return t;
   }
 
   function deleteTransaction(id) {
@@ -1898,6 +2011,8 @@ CBA.data = (function () {
     /* משותף עם sheets.js (צעד 08ב-3): מנגנון הדגל + הנפילה
        לאחור הוא אחד בלבד. שכפול שלו היה נפרד בשקט. */
     fsFirstRead: fsFirstRead,
+    txLegalStep: txLegalStep,
+    txStatusOnly: txStatusOnly,
     getCommunityDirectory: getCommunityDirectory,
     getCommitteeTree: getCommitteeTree,
     saveCommitteeTree: saveCommitteeTree,

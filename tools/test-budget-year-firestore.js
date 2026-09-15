@@ -21,7 +21,7 @@ const ROOT = path.join(__dirname, '..');
 const DS = fs.readFileSync(path.join(ROOT, 'js', 'data', 'dataService.js'), 'utf8');
 const SH = fs.readFileSync(path.join(ROOT, 'js', 'data', 'sheets.js'), 'utf8');
 
-const Y = '\u05ea\u05e9\u05e4"\u05d6';
+const Y = 'תשפ"ז';
 
 function env(opts) {
   opts = opts || {};
@@ -39,7 +39,7 @@ function env(opts) {
                                  this.setRequestHeader = function () {}; this.upload = {}; },
     fetch: (url) => {
       log.push('appsscript');
-      return Promise.resolve({ json: () => Promise.resolve(opts.sheetsRes || { ok: true, rev: 9, data: { budget: [], income: [], groups: [], splits: [], items: [], transactions: [{ '\u05de\u05d6\u05d4\u05d4': 99 }] } }) });
+      return Promise.resolve({ json: () => Promise.resolve(opts.sheetsRes || { ok: true, rev: 9, data: { budget: [], income: [], groups: [], splits: [], items: [], transactions: [{ 'מזהה': 99 }] } }) });
     }
   };
   sb.window = sb;
@@ -65,6 +65,20 @@ function env(opts) {
       readCollection: (col, cb) => {
         log.push('readCollection:' + col);
         setTimeout(() => { log.push('readCollection!'); cb(opts.colErr ? new Error('boom') : null, (opts.cols && opts.cols[col]) || []); }, 0);
+      },
+      /* 🔴 **מצעד 09: מסמך לכל תנועה, ולכן שאילתה.**
+         המדמה מסננת באמת לפי התנאים — אחרת בדיקה של
+         "התושב קיבל רק את שלו" היתה עוברת גם אם הקוד
+         לא היה מעביר את תנאי המשפחה בכלל. */
+      queryCollection: (col, conds, cb) => {
+        log.push('query:' + col + ':' + JSON.stringify(conds));
+        setTimeout(() => {
+          log.push('query!');
+          if (opts.colErr) return cb(new Error('boom'));
+          var all = (opts.cols && opts.cols[col]) || [];
+          var out = all.filter(d => (conds || []).every(c => String(d[c[0]]) === String(c[1])));
+          cb(null, out);
+        }, 0);
       }
     }
   };
@@ -88,33 +102,44 @@ section('1. הדגל כבוי — המסלול הישן');
     const r = await loadYear(e);
     ok('נטען בהצלחה', r.ok === true, JSON.stringify(r));
     ok('🔴 דרך Apps Script', e.log.indexOf('appsscript') !== -1);
-    ok('🔴 ו-Firestore לא נוגע כלל', !e.log.some(x => /readDoc|readCollection/.test(x)), JSON.stringify(e.log));
+    ok('🔴 ו-Firestore לא נוגע כלל', !e.log.some(x => /readDoc|readCollection|query/.test(x)), JSON.stringify(e.log));
   }
 
   section('2. 🔴 בעל הרשאת תקציב — כל השנה');
   {
     const e = env({
       flags: { budgetYearFromFirestore: true }, isSuper: true,
-      docs: { ['budgetYears/' + Y]: { year: Y, budget: [{ '\u05e1\u05e2\u05d9\u05e3': '\u05d2\u05d9\u05e0\u05d5\u05df' }], income: [], groups: [], splits: [], items: [] } },
+      docs: { ['budgetYears/' + Y]: { year: Y, budget: [{ 'סעיף': 'גינון' }], income: [], groups: [], splits: [], items: [] } },
       cols: { budgetTx: [
-        { id: Y + '__3', year: Y, familyId: '3', rows: [{ '\u05de\u05d6\u05d4\u05d4': 1, '\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05e4\u05d7\u05d4': '3' }] },
-        { id: Y + '__7', year: Y, familyId: '7', rows: [{ '\u05de\u05d6\u05d4\u05d4': 2, '\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05e4\u05d7\u05d4': '7' }] },
-        { id: '\u05ea\u05e9\u05e4"\u05d5__3', year: '\u05ea\u05e9\u05e4"\u05d5', familyId: '3', rows: [{ '\u05de\u05d6\u05d4\u05d4': 3 }] }
+        { id: Y + '__1', year: Y, familyId: '3', 'מזהה': 1, 'מזהה משפחה': '3' },
+        { id: Y + '__2', year: Y, familyId: '7', 'מזהה': 2, 'מזהה משפחה': '7' },
+        { id: 'תשפ"ו__3', year: 'תשפ"ו', familyId: '3', 'מזהה': 3 }
       ] },
-      names: { '3': '\u05de\u05e9\u05e4\u05d7\u05ea \u05db\u05d4\u05df', '7': '\u05de\u05e9\u05e4\u05d7\u05ea \u05dc\u05d5\u05d9' }
+      names: { '3': 'משפחת כהן', '7': 'משפחת לוי' }
     });
     const r = await loadYear(e);
     const yr = e.sb.CBA.mock.years[Y];
     ok('נטען בהצלחה', r.ok === true, JSON.stringify(r));
     ok('🔴 בלי Apps Script', e.log.indexOf('appsscript') === -1, JSON.stringify(e.log));
     ok('קרא את מסמך השנה', e.log.indexOf('readDoc:budgetYears/' + Y) !== -1);
-    ok('ואת אוסף התנועות', e.log.indexOf('readCollection:budgetTx') !== -1);
+    ok('ושאל את התנועות לפי שנה',
+       e.log.some(x => x.indexOf('query:budgetTx') === 0 && x.indexOf('"year"') !== -1), JSON.stringify(e.log));
+    ok('🔴 ולא קרא את האוסף השלם',
+       e.log.indexOf('readCollection:budgetTx') === -1, JSON.stringify(e.log));
+    /* 🔴 שאילתה של בעל תקציב — תנאי אחד בלבד (שנה),
+       בלי מיון ובלי אי-שוויון — אחרת נדרש אינדקס מורכב. */
+    ok('🔴 תנאי אחד בלבד לבעל תקציב',
+       e.log.indexOf('query:budgetTx:' + JSON.stringify([['year', Y]])) !== -1, JSON.stringify(e.log));
     ok('🔴 שתי תנועות בלבד — שנה אחרת סוננה',
        yr.transactions.length === 2, String(yr.transactions.length));
+    /* 🔴 שדות התשתית של המסמך אינם נתוני תנועה — אסור
+       להם לזלוג לשורה ש-`toTx` מקבל. */
+    ok('🔴 שדות התשתית נוקו מהשורה',
+       /var BTX_META/.test(SH) && /function btxStrip/.test(SH));
     ok('השנה נבנתה עם הסעיף', yr.categories.length === 1);
     ok('_loaded=true', yr._loaded === true);
     ok('🔴 שם הרוכש הורכב ממזהה המשפחה',
-       yr.transactions.some(t => t.buyer === '\u05de\u05e9\u05e4\u05d7\u05ea \u05db\u05d4\u05df'),
+       yr.transactions.some(t => t.buyer === 'משפחת כהן'),
        JSON.stringify(yr.transactions.map(t => t.buyer)));
     /* 🔴 "במקביל" = טעינת השמות הופעלה **לפני שאף קריאה
        הסתיימה**. אחרת היינו משלמים את סבב Apps Script אחרי Firestore. */
@@ -124,21 +149,26 @@ section('1. הדגל כבוי — המסלול הישן');
        JSON.stringify(e.log));
   }
 
-  section('3. 🔴 תושב — מסמך בודד בלבד');
+  section('3. 🔴 תושב — שאילתה מסוננת למשפחתו בלבד');
   {
     const e = env({
       flags: { budgetYearFromFirestore: true }, isSuper: false, perms: [], familyId: '7',
-      docs: { ['budgetYears/' + Y]: { year: Y, budget: [], income: [], groups: [], splits: [], items: [] },
-              ['budgetTx/' + Y + '__7']: { year: Y, familyId: '7', rows: [{ '\u05de\u05d6\u05d4\u05d4': 5, '\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05e4\u05d7\u05d4': '7' }] } },
-      names: { '7': '\u05de\u05e9\u05e4\u05d7\u05ea \u05dc\u05d5\u05d9' }
+      docs: { ['budgetYears/' + Y]: { year: Y, budget: [], income: [], groups: [], splits: [], items: [] } },
+      cols: { budgetTx: [
+        { id: Y + '__5', year: Y, familyId: '7', 'מזהה': 5, 'מזהה משפחה': '7' },
+        /* השכן. אסור שיגיע — וב-Firestore הכלל באמת ידחה אותו. */
+        { id: Y + '__6', year: Y, familyId: '3', 'מזהה': 6, 'מזהה משפחה': '3' }
+      ] },
+      names: { '7': 'משפחת לוי' }
     });
     const r = await loadYear(e);
     ok('נטען בהצלחה', r.ok === true, JSON.stringify(r));
-    ok('🔴 קרא מסמך בודד לפי מזהה',
-       e.log.indexOf('readDoc:budgetTx/' + Y + '__7') !== -1, JSON.stringify(e.log));
+    ok('🔴 השאילתה נושאת גם את תנאי המשפחה',
+       e.log.indexOf('query:budgetTx:' + JSON.stringify([['year', Y], ['familyId', '7']])) !== -1, JSON.stringify(e.log));
     ok('🔴 ולא קרא את האוסף (דליפה + אינדקס)',
        e.log.indexOf('readCollection:budgetTx') === -1, JSON.stringify(e.log));
-    ok('וקיבל את התנועה שלו', e.sb.CBA.mock.years[Y].transactions.length === 1);
+    ok('וקיבל את התנועה שלו בלבד',
+       e.sb.CBA.mock.years[Y].transactions.length === 1, String(e.sb.CBA.mock.years[Y].transactions.length));
   }
   {
     const e = env({
@@ -146,9 +176,23 @@ section('1. הדגל כבוי — המסלול הישן');
       docs: { ['budgetYears/' + Y]: { year: Y, budget: [], income: [], groups: [], splits: [], items: [] } }
     });
     const r = await loadYear(e);
-    ok('🔴 תושב בלי מסמך — שנה ריקה לגיטימית ולא שגיאה',
+    ok('🔴 תושב בלי תנועות — שנה ריקה לגיטימית ולא שגיאה',
        r.ok === true && e.sb.CBA.mock.years[Y].transactions.length === 0, JSON.stringify(r));
     ok('ולא נפל ל-Apps Script', e.log.indexOf('appsscript') === -1, JSON.stringify(e.log));
+  }
+  {
+    /* 🔴 מי שאין לו מזהה משפחה ואין לו הרשאת תקציב — **לא
+       שולחים שאילתה בכלל.** שאילתה עם `familyId == ''` היתה
+       נדחית ע"י הכלל, וכל השנה היתה נופלת לאחור על לא דבר. */
+    const e = env({
+      flags: { budgetYearFromFirestore: true }, isSuper: false, perms: [], familyId: '',
+      docs: { ['budgetYears/' + Y]: { year: Y, budget: [], income: [], groups: [], splits: [], items: [] } },
+      cols: { budgetTx: [{ id: Y + '__5', year: Y, familyId: '7', 'מזהה': 5 }] }
+    });
+    const r = await loadYear(e);
+    ok('🔴 בלי משפחה ובלי תקציב — אף שאילתה לא יוצאת',
+       !e.log.some(x => x.indexOf('query:') === 0), JSON.stringify(e.log));
+    ok('ולא נפל ל-Apps Script', r.ok === true && e.log.indexOf('appsscript') === -1, JSON.stringify(e.log));
   }
 
   section('3ב. 🔴🔴 תושב אינו קורא את תוכנית התקציב כלל');
@@ -159,7 +203,7 @@ section('1. הדגל כבוי — המסלול הישן');
        לתושבים כלום, ועוד משלם קריאה שנדחתה. */
     const e = env({
       flags: { budgetYearFromFirestore: true }, isSuper: false, perms: [], familyId: '7',
-      docs: { ['budgetTx/' + Y + '__7']: { year: Y, familyId: '7', rows: [{ '\u05de\u05d6\u05d4\u05d4': 5 }] } }
+      cols: { budgetTx: [{ id: Y + '__5', year: Y, familyId: '7', 'מזהה': 5 }] }
       /* שים לב: אין כאן budgetYears בכלל — וזה לא אמור להפריע. */
     });
     const r = await loadYear(e);
@@ -199,13 +243,13 @@ section('1. הדגל כבוי — המסלול הישן');
     const e = env({
       flags: { budgetYearFromFirestore: true }, isSuper: true,
       docs: { ['budgetYears/' + Y]: { year: Y, budget: [], income: [], groups: [], splits: [], items: [] } },
-      cols: { budgetTx: [{ id: Y + '__3', year: Y, familyId: '3',
-                           rows: [{ '\u05de\u05d6\u05d4\u05d4': 1, '\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05e4\u05d7\u05d4': '3', '\u05e8\u05d5\u05db\u05e9': '\u05e9\u05dd \u05de\u05e4\u05d5\u05e8\u05e9' }] }] },
-      names: { '3': '\u05de\u05e9\u05e4\u05d7\u05ea \u05db\u05d4\u05df' }
+      cols: { budgetTx: [{ id: Y + '__1', year: Y, familyId: '3',
+                           'מזהה': 1, 'מזהה משפחה': '3', 'רוכש': 'שם מפורש' }] },
+      names: { '3': 'משפחת כהן' }
     });
     await loadYear(e);
     ok('לא נדרס ע"י השם המורכב',
-       e.sb.CBA.mock.years[Y].transactions[0].buyer === '\u05e9\u05dd \u05de\u05e4\u05d5\u05e8\u05e9',
+       e.sb.CBA.mock.years[Y].transactions[0].buyer === 'שם מפורש',
        e.sb.CBA.mock.years[Y].transactions[0].buyer);
   }
 
@@ -219,9 +263,9 @@ section('1. הדגל כבוי — המסלול הישן');
     const e = env({
       flags: { budgetYearFromFirestore: true }, isSuper: true,
       docs: { ['budgetYears/' + Y]: { year: Y, budget: [], income: [], groups: [], splits: [], items: [] } },
-      cols: { budgetTx: [{ id: Y + '__3', year: Y, familyId: '3',
-        rows: [{ '\u05de\u05d6\u05d4\u05d4': 1, '\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05e4\u05d7\u05d4': '3',
-                 '\u05ea\u05d0\u05e8\u05d9\u05da \u05e8\u05db\u05d9\u05e9\u05d4': stamp, '\u05d7\u05d5\u05d3\u05e9 \u05d4\u05d2\u05e9\u05d4': stamp }] }] }
+      cols: { budgetTx: [{ id: Y + '__1', year: Y, familyId: '3',
+                 'מזהה': 1, 'מזהה משפחה': '3',
+                 'תאריך רכישה': stamp, 'חודש הגשה': stamp }] }
     });
     await loadYear(e);
     const t0 = e.sb.CBA.mock.years[Y].transactions[0];

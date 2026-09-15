@@ -1,4 +1,10 @@
-/* בדיקות לתנועות ב-Firestore (2026-09-15, צעד 08ב-1).
+/* בדיקות לתנועות ב-Firestore (2026-09-15, צעד 08ב-1,
+   עודכן למבנה מסמך-לתנועה בצעד 09א).
+
+   🔴 **למה הבדיקות האלה שונו:** המבנה היה מסמך
+   למשפחה עם **מערך** תנועות. כלל אבטחה אינו יודע
+   לאמת שינוי של איבר אחד בתוך מערך, ולכן מסמך-למשפחה
+   היה חוסם לצמיתות כל כתיבה מהדפדפן.
    הרצה:  node tools/test-budget-tx-firestore.js
 
    🔴 **זה התחום הראשון שבו כלל רחב מדי חושף תושב אחד לשני.**
@@ -77,10 +83,10 @@ function reset(opts) {
 
 section('מזהה המסמך');
 reset();
-ok('מזהה = שנה__משפחה, גולמי',
-   sandbox.btxDocId_('תשפ"ו', '3') === 'תשפ"ו__3', sandbox.btxDocId_('תשפ"ו', '3'));
-ok('משפחה ריקה ← __none__',
-   sandbox.btxDocId_('תשפ"ו', '  ') === 'תשפ"ו____none__', sandbox.btxDocId_('תשפ"ו', '  '));
+ok('מזהה = שנה__תנועה, גולמי',
+   sandbox.btxDocId_('תשפ"ו', 3) === 'תשפ"ו__3', sandbox.btxDocId_('תשפ"ו', 3));
+ok('🔴 שתי תנועות של אותה משפחה — שני מסמכים נפרדים',
+   sandbox.btxDocId_('תשפ"ו', 1) !== sandbox.btxDocId_('תשפ"ו', 2));
 ok('המזהה עובר את fsIdOk_', sandbox.fsIdOk_(sandbox.btxDocId_('תשפ"ו', '3')) === true);
 ok('🔴 הקידוד הוא של ה-URL בלבד — אין מרכאה בנתיב',
    sandbox.fsDocPath_('budgetTx', sandbox.btxDocId_('תשפ"ו', '3')).indexOf('"') === -1);
@@ -107,17 +113,19 @@ section('🔴 רשימת ההיתר');
      sandbox.BTX_ALLOWED_COLS.indexOf('\u05e8\u05d5\u05db\u05e9') === -1);
 }
 
-section('קיבוץ לפי משפחה');
+section('מסמך לכל תנועה');
 {
   reset();
   const r = sandbox.budgetTxSyncAll_(sandbox.SpreadsheetApp.getActiveSpreadsheet());
   const docs = written.filter(w => w.path);
   ok('הסנכרון הצליח', r.ok === true, JSON.stringify(r.errors));
-  ok('שלושה מסמכים לכל שנה', docs.length === 6, String(docs.length));
-  const one = docs.find(d => d.doc.familyId === '3');
-  ok('מסמך משפחה 3 מכיל שתי שורות', !!one && one.doc.rows.length === 2);
-  ok('count תואם', !!one && one.doc.count === 2);
-  ok('והשורות שמרו את מפתחות הגיליון', !!one && one.doc.rows[0]['סכום'] === 100);
+  ok('ארבעה מסמכים לכל שנה', docs.length === 8, String(docs.length));
+  ok('🔴 ואין יותר מערך rows בשום מסמך',
+     docs.every(d => !('rows' in d.doc) && !('count' in d.doc)));
+  const one = docs.find(d => d.path.indexOf('__1') !== -1);
+  ok('מסמך לתנועה 1 קיים', !!one);
+  ok('והוא שמר את מפתחות הגיליון', !!one && one.doc['סכום'] === 100);
+  ok('ונושא familyId שלו', !!one && one.doc.familyId === '3');
   /* 🔴 השורות עם מזהה משפחה — בלי שם. השורה הרביעית
      ב-`rawRows` היא בלי מזהה, ולכן השם שלה ("ועד") כן עובר. */
   const withFam = docs.filter(d => d.doc.familyId);
@@ -128,17 +136,47 @@ section('קיבוץ לפי משפחה');
      JSON.stringify(docs).indexOf('050-0000000') === -1);
   const none = docs.find(d => d.doc.familyId === '');
   ok('🔴 תנועה בלי משפחה לא מושמטת', !!none);
-  ok('🔴 ואינה משויכת למשפחה שרירותית',
-     !!none && none.doc.familyId === '' && none.path.indexOf('__none__') !== -1);
-  ok('כל מסמך נושא updatedAt ו-schema',
-     docs.every(d => !!d.doc.updatedAt && d.doc.schema === 1));
+  ok('🔴 ואינה משוייכת למשפחה שרירותית', !!none && none.doc.familyId === '');
+  ok('כל מסמך נושא updatedAt ו-schema 2',
+     docs.every(d => !!d.doc.updatedAt && d.doc.schema === 2));
   ok('וכל מסמך נושא שנה', docs.every(d => !!d.doc.year));
+  ok('🔴 וכל מסמך נולד עם statusPending=false',
+     docs.every(d => d.doc.statusPending === false));
+}
+{
+  /* שורה בלי מזהה אינה יכולה לקבל מסמך — אין לה מזהה. */
+  reset({ rows: [{ 'מזהה': '  ', 'סכום': 5 }, { 'מזהה': 7, 'סכום': 6 }] });
+  sandbox.budgetTxSyncAll_(sandbox.SpreadsheetApp.getActiveSpreadsheet());
+  ok('שורה בלי מזהה מדולגת',
+     written.filter(w => w.path).length === 2, String(written.filter(w => w.path).length));
+}
+
+section('🔑 תיבת הדואר — הסנכרון מכבד את הדגל');
+{
+  /* 🔴 הבדיקה החשובה ביותר בקובץ הזה. בלעדיה כל שינוי
+     סטטוס שהדפדפן כתב וטרם הוחל על הגיליון נמחק בשקט
+     בסנכרון הבא — שינוי שנראה שנשמר ונעלם. */
+  const id = 'תשפ"ו__1';
+  reset({ live: [{ id: id, data: { statusPending: true, 'סטטוס': 'שולם' } }] });
+  const r = sandbox.budgetTxSyncAll_(sandbox.SpreadsheetApp.getActiveSpreadsheet());
+  const want = sandbox.fsDocPath_('budgetTx', id);
+  const d = written.filter(w => w.path === want)[0];
+  ok('🔴 סטטוס ממתין לא נדרס', !!d && d.doc['סטטוס'] === 'שולם',
+     JSON.stringify(d && d.doc['סטטוס']));
+  ok('🔴 והדגל נשאר מורם', !!d && d.doc.statusPending === true);
+  ok('והספירה מדווחת', r.kept === 1, String(r.kept));
+}
+{
+  const id = 'תשפ"ו__1';
+  reset({ live: [{ id: id, data: { statusPending: false, 'סטטוס': 'שולם' } }] });
+  const r = sandbox.budgetTxSyncAll_(sandbox.SpreadsheetApp.getActiveSpreadsheet());
+  ok('ודגל מורד אינו משמר כלום', r.kept === 0, String(r.kept));
 }
 
 section('🔴 סחיפת יתומים');
 {
-  const ids = ['תשפ"ו__3', 'תשפ"ו__7', 'תשפ"ו____none__',
-               'תשפ"ז__3', 'תשפ"ז__7', 'תשפ"ז____none__'];
+  const ids = ['תשפ"ו__1', 'תשפ"ו__2', 'תשפ"ו__3', 'תשפ"ו__4',
+               'תשפ"ז__1', 'תשפ"ז__2', 'תשפ"ז__3', 'תשפ"ז__4'];
   reset({ live: ids.map(id => ({ id: id, data: {} })) });
   const r = sandbox.budgetTxSyncAll_(sandbox.SpreadsheetApp.getActiveSpreadsheet());
   ok('🔴 מסמך שזה רגע נכתב אינו נמחק כיתום',
@@ -199,7 +237,10 @@ section('🔴 כלל האבטחה');
   const m = RULES.match(/match \/budgetTx\/\{[^}]+\}\s*\{([\s\S]*?)\n    \}/);
   ok('בלוק budgetTx קיים', !!m);
   const body = m ? m[1] : '';
-  ok('🔴 כתיבה סגורה לגמרי', /allow write: if false;/.test(body));
+  ok('🔴 יצירה ומחיקה סגורות לגמרי',
+     /allow create, delete: if false;/.test(body), body.slice(0, 300));
+  ok('🔴 והעדכון היחיד עובר דרך txStatusUpdateOk',
+     /allow update: if txStatusUpdateOk\(\);/.test(body), body.slice(0, 300));
   ok('🔴 הקריאה נשענת על פונקציה אחת בעלת שם',
      /^\s*allow read: if canSeeFamilyTx\(resource\.data\.familyId\);\s*$/m.test(body), body.slice(0, 200));
   /* ושלושת התנאים עצמם — בפונקציה, ולא פרושים בכל בלוק. */

@@ -188,9 +188,12 @@ service cloud.firestore {
        3. ההשוואה עצמה.
 
        ⚠️ **אין כאן צורך באינדקס מורכב** (וזה קריטי — קונסולת
-       Google Cloud חסומה ב-2SV): התושב קורא **מסמך בודד לפי
-       מזהה** (`<שנה>__<משפחה>`) — בלי שאילתה בכלל; ובעל התקציב
-       מסנן `year ==` בלבד, שוויון על שדה אחד.
+       Google Cloud חסומה ב-2SV): מצעד 09 יש **מסמך לכל תנועה**,
+       והקריאה היא שאילת שוויון: בעל התקציב מסנן `year ==`
+       בלבד, והתושב `year ==` וגם `familyId ==`. שתי שאילתות שוויון
+       על שדות שונים נשרתות מהאינדקסים האוטומטיים (מיזוג זיגזג).
+       🔴 **אל תוסיף מיון או אי-שוויון** — הם ידרשו אינדקס
+       שאי-אפשר ליצור, והשאילתה תיפול בייצור.
        ------------------------------------------------------------------ */
     /* שלבי הסטטוס כפי שהם נשמרים בגיליון (STATUS_HE ב-Code.gs). */
     function txLegalStep(from, to) {
@@ -215,7 +218,11 @@ service cloud.firestore {
              request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['סטטוס', 'הערת בדיקה', 'statusPending', 'updatedAt']) &&
              request.resource.data.statusPending == true &&
-             txLegalStep(resource.data.סטטוס, request.resource.data.סטטוס);
+             /* ⚠️ **סוגריים מרובעים ולא נקודה.** מזהה בשפת הכללים
+                חייב להיות ASCII; גישה בנקודה לשדה עברי היא שגיאת פרסור
+                שמפילה את פרסום הכללים כולו. */
+             request.resource.data['סטטוס'] is string &&
+             txLegalStep(resource.data['סטטוס'], request.resource.data['סטטוס']);
     }
 
     match /budgetTx/{docId} {

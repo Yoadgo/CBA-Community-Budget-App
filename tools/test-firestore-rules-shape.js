@@ -53,7 +53,10 @@ const idxDeny = CODE.indexOf('match /{document=**}');
 ok('\ud83d\udd34 כל allow בקובץ הוא מהצורות המוכרות בלבד',
    (CODE.match(/allow [^\n]*/g) || []).every(function (t) { t = t.trim();
      return /^allow read: if (canSeePlan\(\)|canSeeServices\(\)|canSeeBudget\(\)|canSeeFamilyTx\(resource\.data\.familyId\)|isMember\(\)|signedIn\(\) && request\.auth\.uid == uid);$/.test(t) ||
-            /^allow write: if false;$/.test(t) || /^allow read, write: if false;$/.test(t);
+            /^allow write: if false;$/.test(t) || /^allow read, write: if false;$/.test(t) ||
+            /* \u05e6\u05e2\u05d3 09\u05d0 \u2014 \u05d4\u05db\u05ea\u05d9\u05d1\u05d4 \u05d4\u05d9\u05d7\u05d9\u05d3\u05d4 \u05d1\u05e7\u05d5\u05d1\u05e5, \u05d5\u05d4\u05d9\u05d0 \u05d3\u05e8\u05da \u05e4\u05d5\u05e0\u05e7\u05e6\u05d9\u05d4 \u05d1\u05e2\u05dc\u05ea \u05e9\u05dd. */
+            /^allow update: if txStatusUpdateOk\(\);$/.test(t) ||
+            /^allow create, delete: if false;$/.test(t);
    }), (CODE.match(/allow [^\n]*/g) || []).join(' | '));
 
 section('3. תוכנית הגינון — מה שנפתח');
@@ -65,8 +68,21 @@ ok('gardenPlan — קריאה לפי canSeePlan', /allow read: if canSeePlan\(\)
 ok('gardenMeta — קריאה לפי canSeePlan', /allow read: if canSeePlan\(\);/.test(gm || ''));
 ok('🔴 gardenPlan — כתיבה אסורה לכולם', /allow write: if false;/.test(gp || ''));
 ok('🔴 gardenMeta — כתיבה אסורה לכולם', /allow write: if false;/.test(gm || ''));
-ok('🔴 אין allow create/update/delete בשום מקום',
-   !/allow (create|update|delete)/.test(CODE));
+/* 🔴 **הגובה הזה נפתח במכוון בצעד 09א (15.9.2026)** — עד אז
+   הדפדפן לא כתב ל-Firestore כלל, והבדיקה היתה "אין כתיבה,
+   נקודה". עכשיו יש בדיוק אחת, ולכן הבדיקה מהדקת אותה
+   במקום לוותר עליה: כל `allow update` חייב להיות זה של budgetTx,
+   ו-`allow create`/`allow delete` חייבים להישאר סגורים. כל כתיבה
+   עתידית תפיל את הבדיקה הזאת, וזו המטרה. */
+ok('🔴 הכתיבה היחידה היא עדכון סטטוס של budgetTx',
+   (CODE.match(/allow (create|update|delete)[^\n]*/g) || [])
+     .every(function (t) { t = t.trim();
+       return t === 'allow update: if txStatusUpdateOk();' ||
+              t === 'allow create, delete: if false;'; }),
+   (CODE.match(/allow (create|update|delete)[^\n]*/g) || []).join(' | '));
+ok('🔴 והיא מופיעה פעם אחת בלבד',
+   (CODE.match(/allow update:/g) || []).length === 1,
+   String((CODE.match(/allow update:/g) || []).length));
 
 
 section('3ב. שירותים לתושב (צעד 04ב)');
