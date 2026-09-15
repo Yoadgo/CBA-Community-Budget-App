@@ -96,6 +96,15 @@ section('🔴 רשימת ההיתר');
   ok('תיאור עובר', r['תיאור'] === 'שתילים');
   ok('הרשימה אינה מכילה רוכש', sandbox.BTX_ALLOWED_COLS.indexOf('רוכש') === -1);
   ok('שדה ריק אינו נכתב כלל', !('בנק' in r));
+  /* 🔴🔴 החריג היחיד (הכרעת יועד, 15.9): שורה **בלי מזהה
+     משפחה** כן נושאת שם — אחרת אין ממה להרכיב והתא נשאר ריק. */
+  const rn = sandbox.btxRow_({ '\u05de\u05d6\u05d4\u05d4': 9, '\u05e1\u05db\u05d5\u05dd': 1, '\u05e8\u05d5\u05db\u05e9': '\u05d0\u05dc\u05d9 \u05d9\u05ea\u05d5\u05dd', '\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05e4\u05d7\u05d4': '  ' });
+  ok('🔴 שורה בלי מזהה משפחה — השם כן עובר',
+     rn['\u05e8\u05d5\u05db\u05e9'] === '\u05d0\u05dc\u05d9 \u05d9\u05ea\u05d5\u05dd', JSON.stringify(Object.keys(rn)));
+  ok('🔴🔴 ושורה **עם** מזהה משפחה לעולם לא נושאת שם',
+     !('\u05e8\u05d5\u05db\u05e9' in sandbox.btxRow_({ '\u05de\u05d6\u05d4\u05d4': 8, '\u05e8\u05d5\u05db\u05e9': '\u05d9\u05e2\u05dc', '\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05e4\u05d7\u05d4': '3' })));
+  ok('והרשימה עצמה עדיין אינה מכילה רוכש',
+     sandbox.BTX_ALLOWED_COLS.indexOf('\u05e8\u05d5\u05db\u05e9') === -1);
 }
 
 section('קיבוץ לפי משפחה');
@@ -109,9 +118,12 @@ section('קיבוץ לפי משפחה');
   ok('מסמך משפחה 3 מכיל שתי שורות', !!one && one.doc.rows.length === 2);
   ok('count תואם', !!one && one.doc.count === 2);
   ok('והשורות שמרו את מפתחות הגיליון', !!one && one.doc.rows[0]['סכום'] === 100);
-  ok('🔴 ואין בהן שם רוכש',
-     JSON.stringify(docs).indexOf('יעל כהן') === -1 &&
-     JSON.stringify(docs).indexOf('רוכש') === -1);
+  /* 🔴 השורות עם מזהה משפחה — בלי שם. השורה הרביעית
+     ב-`rawRows` היא בלי מזהה, ולכן השם שלה ("ועד") כן עובר. */
+  const withFam = docs.filter(d => d.doc.familyId);
+  ok('🔴 במסמכים עם משפחה אין שם רוכש',
+     JSON.stringify(withFam).indexOf('יעל כהן') === -1 &&
+     JSON.stringify(withFam).indexOf('רוכש') === -1);
   ok('🔴 ואין בהן את העמודה הלא-מוכרת',
      JSON.stringify(docs).indexOf('050-0000000') === -1);
   const none = docs.find(d => d.doc.familyId === '');

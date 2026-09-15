@@ -151,6 +151,26 @@ section('1. הדגל כבוי — המסלול הישן');
     ok('ולא נפל ל-Apps Script', e.log.indexOf('appsscript') === -1, JSON.stringify(e.log));
   }
 
+  section('3ב. 🔴🔴 תושב אינו קורא את תוכנית התקציב כלל');
+  {
+    /* 🔴 הכלל פותח את `budgetYears` רק לבעלי הרשאת תקציב.
+       לו היינו קוראים אותו בכל מקרה, קריאת תושב היתה נדחית
+       וכל השנה היתה נופלת לאחור — כלומר הצעד לא נותן
+       לתושבים כלום, ועוד משלם קריאה שנדחתה. */
+    const e = env({
+      flags: { budgetYearFromFirestore: true }, isSuper: false, perms: [], familyId: '7',
+      docs: { ['budgetTx/' + Y + '__7']: { year: Y, familyId: '7', rows: [{ '\u05de\u05d6\u05d4\u05d4': 5 }] } }
+      /* שים לב: אין כאן budgetYears בכלל — וזה לא אמור להפריע. */
+    });
+    const r = await loadYear(e);
+    ok('🔴 לא נקרא מסמך התוכנית',
+       !e.log.some(x => x.indexOf('readDoc:budgetYears') === 0), JSON.stringify(e.log));
+    ok('🔴 ולא נפל ל-Apps Script', r.ok === true && e.log.indexOf('appsscript') === -1, JSON.stringify(e.log));
+    const yr = e.sb.CBA.mock.years[Y];
+    ok('התוכנית ריקה — בדיוק כמו DATA_MIN', (yr.categories || []).length === 0);
+    ok('והתנועות שלו הגיעו', (yr.transactions || []).length === 1);
+  }
+
   section('4. 🔴 נפילה לאחור');
   {
     const e = env({ flags: { budgetYearFromFirestore: true }, isSuper: true, docs: {} });

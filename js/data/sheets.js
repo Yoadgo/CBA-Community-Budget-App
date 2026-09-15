@@ -1213,6 +1213,16 @@ CBA.sheets = (function () {
 
   function fsYearLoad(y, done) {
     var doc = null, txRows = null, namesOk = false, failed = false;
+    /* 🔴🔴 **מושכים רק את מה שלמשתמש הזה מותר ונדרש**
+       (עקרון שיועד קבע, 15.9.2026). תוכנית התקציב פתוחה בכללי
+       האבטחה **רק לבעלי הרשאת תקציב**. קריאה של תושב
+       ל-`budgetYears/<שנה>` תידחה — ואז **כל השנה נופלת לאחור
+       ל-Apps Script**, כלומר כל הצעד לא נתן לתושבים כלום וגם
+       עלה לו קריאה שנדחתה. לכן לא קוראים אותה בכלל.
+       ⚠️ התוצאה זהה למה ש-`DATA_MIN` מחזיר היום: תוכנית ריקה
+          והתנועות של המשפחה — לא רגרסיה, אלא אותה התנהגות. */
+    var seesBudget = !!(CBA.isSuper || (CBA.perms && CBA.perms.indexOf("תקציב") !== -1));
+    var EMPTY_PLAN = { budget: [], income: [], groups: [], splits: [], items: [] };
     function fail(e) { if (failed) return; failed = true; done(e); }
     function maybe() {
       if (failed || !doc || txRows === null || !namesOk) return;
@@ -1233,14 +1243,18 @@ CBA.sheets = (function () {
       } });
     }
 
-    CBA.fb.readDoc("budgetYears", y, function (err, d) {
-      if (err) return fail(err);
-      if (!d) return fail(new Error("no-year-doc"));
-      doc = d; maybe();
-    });
+    if (seesBudget) {
+      CBA.fb.readDoc("budgetYears", y, function (err, dd) {
+        if (err) return fail(err);
+        if (!dd) return fail(new Error("no-year-doc"));
+        doc = dd; maybe();
+      });
+    } else {
+      doc = EMPTY_PLAN; maybe();   /* בלי קריאה בכלל */
+    }
 
     var mine = (CBA.user && CBA.user.familyId) ? String(CBA.user.familyId).trim() : "";
-    var seesAll = !!(CBA.isSuper || (CBA.perms && CBA.perms.indexOf("תקציב") !== -1));
+    var seesAll = seesBudget;
     if (seesAll) {
       CBA.fb.readCollection("budgetTx", function (err, all) {
         if (err) return fail(err);
