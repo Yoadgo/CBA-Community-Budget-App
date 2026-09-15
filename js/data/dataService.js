@@ -1710,6 +1710,65 @@ CBA.data = (function () {
     });
   }
 
+  /* ==========================================================================
+   *  שער ההזרעה של עמוד הבית   (2026-09-15, צעד 06)
+   * --------------------------------------------------------------------------
+   *  📊 **המדידה שהולידה את זה (אתר חי, 15.9):** חמש קריאות
+   *  Apps Script בעלייה — `(boot)` 3.8ש' · `homeExtras` 8.4ש' · `clubList`
+   *  6.3ש' · `tour` 4.3ש' · `gardenTasks` 3.6ש'. **ושתיים מהן מיותרות
+   *  לחלוטין:** `homeExtras` מחזירה את `tour` ואת `club` בתוכה, וההזרעה
+   *  (`seedClubAlerts` / `CBA.tour.seed`) נבנתה בדיוק כדי לבטל אותן.
+   *
+   *  🔴 **למה ההזרעה לא עבדה:** שתי הקריאות הושהו בשעון קבוע
+   *  (2,500מלי ו-3,200מלי), שכוייל כש-`homeExtras` חזרה תוך ~1.5–3 שניות.
+   *  היום היא לוקחת 7–8 שניות, השעון מצלצל הרבה לפני שההזרעה
+   *  מגיעה, ושתי הקריאות יוצאות. גרוע מזה: התור של Apps Script
+   *  משותף למשתמש, ולכן הן מאטות את `homeExtras` עצמה — **מעגל שמזין
+   *  את עצמו**: ככל שהיא איטית יותר, כך גדל הסיכוי שהכפילויות יצאו.
+   *
+   *  התיקון הוא **להמתין לאירוע ולא לשעון**. מספר גדול יותר היה
+   *  סוגר את זה היום ונשבר שוב בפעם הבאה שהשרת יאט.
+   *
+   *  שלושה מצבים, ולכל אחד תשובה שונה:
+   *    `idle`    — עמוד הבית לא נפתח (מנהל שנחת על מסך ניהול). אין
+   *                הזרעה בדרך — הקריאה הבודדת יוצאת, בדיוק כמו היום.
+   *    `pending` — הקריאה המאוחדת באוויר. מחכים לה.
+   *    `done`    — חזרה. ממשיכים מיד; הקורא בודק אם הוזרע בפועל.
+   *
+   *  ⚠️ **לעולם לא נתקעים.** גם ב-`pending` יש תקרה (`capMs`): אם
+   *     `homeExtras` לא חזרה כלל — הקריאה הבודדת יוצאת בכל מקרה.
+   *  ⚠️ **השעון הישן לא נמחק — הוא הפך ל-`graceMs`**: הזמן שנותנים
+   *     לעמוד הבית לפתוח ולהתחיל את הקריאה. מי שלא נוחת על עמוד
+   *     הבית מקבל בדיוק את ההתנהגות של היום, באותו עיתוי.
+   *  ⚠️ השער מתאפס בכל קריאה חדשה ל-`getHomeExtras` (רענון, חזרה
+   *     לעמוד הבית), כך שהוא מתאר תמיד את הקריאה האחרונה.
+   * ====================================================================== */
+  var hxState = "idle";        // idle | pending | done
+  var hxWaiters = [];
+
+  function hxSettle() {
+    hxState = "done";
+    var list = hxWaiters;
+    hxWaiters = [];
+    for (var i = 0; i < list.length; i++) {
+      try { list[i](); } catch (e) { /* ממתין אחד שזורק לא מפיל את השאר */ }
+    }
+  }
+
+  function homeExtrasWhenSettled(cb, graceMs, capMs) {
+    var fired = false;
+    function go() { if (fired) return; fired = true; try { cb(); } catch (e) {} }
+    function waitForIt() { hxWaiters.push(go); setTimeout(go, capMs || 12000); }
+
+    if (hxState === "done")    { go(); return; }
+    if (hxState === "pending") { waitForIt(); return; }
+    setTimeout(function () {
+      if (fired) return;
+      if (hxState === "pending") { waitForIt(); return; }
+      go();                                   // idle (עמוד הבית לא נפתח) או done
+    }, graceMs || 2500);
+  }
+
   return {
     getMonthLabels: getMonthLabels,
     getGroups: getGroups,
@@ -2000,7 +2059,17 @@ CBA.data = (function () {
     /* עמוד הבית בקריאה אחת (2026-09-09). מחזירה את כל מה שהעמוד צריך —
        ר' handleHomeExtras_ ב-Code.gs. אם השרת עדיין ישן, התשובה לא תכיל
        `homeExtras:true` והלקוח נופל חזרה לקריאות הבודדות. */
-    getHomeExtras: function (cb) { CBA.sheets.get({ action: "homeExtras" }, cb); },
+    getHomeExtras: function (cb) {
+      hxState = "pending";
+      hxWaiters = [];
+      CBA.sheets.get({ action: "homeExtras" }, function (res) {
+        hxSettle();
+        if (cb) cb(res);
+      });
+    },
+    /* מי שרוצה את אותו מידע ש-`homeExtras` מביאה ממתין לה דרך כאן
+       במקום לנחש זמן בשעון. ר' ההסבר המלא למעלה. */
+    homeExtrasWhenSettled: homeExtrasWhenSettled,
     markTourSeen: function (version, cb) { CBA.sheets.postRead("markTourSeen", { version: version }, cb); },
     listEmailSettings: function (cb) { CBA.sheets.get({ action: "listEmailSettings" }, cb); },
     saveEmailSetting: function (key, fields, cb) {

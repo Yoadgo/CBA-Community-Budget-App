@@ -703,6 +703,16 @@
   // חשוף לשאר המסכים (למשל expenses.js אחרי כל פעולה) כדי שהתגיות יתעדכנו מיד,
   // בלי לחכות למחזור הרענון התקופתי.
   window.CBA.refreshAlerts = function () { refreshAlertsLocal(); refreshAlertsClub(); };
+
+  /* עוטף לשער ההזרעה של עמוד הבית (2026-09-15). אם שכבת הנתונים
+     עדיין לא מכירה אותו — נופלים לשעון הקבוע, בדיוק כמו קודם. */
+  function hxWait(cb, ms) {
+    if (window.CBA.data && CBA.data.homeExtrasWhenSettled) {
+      CBA.data.homeExtrasWhenSettled(cb, ms);
+      return;
+    }
+    setTimeout(cb, ms);
+  }
   // מסך "שריון מועדון — ניהול" כבר שולף בעצמו את רשימת השריונים (לתצוגה שלו) —
   // כך הוא יכול לעדכן את הספירה הגלובלית ישירות בלי קריאת רשת כפולה.
   window.CBA.setClubPendingCount = function (n) {
@@ -2093,13 +2103,20 @@
          השנייה, בעלות של עוד ~1.5 שניות. מי שנוחת על מסך ניהול (ולא על
          עמוד הבית) לא עבר בהזרעה, `clubChecked` נשאר false, והקריאה יוצאת
          כרגיל. הרענון התקופתי כל 45 שניות ממשיך לעדכן בכל מקרה. */
-      setTimeout(function () { if (!notif.clubChecked) refreshAlertsClub(); }, 2500);
+      /* (2026-09-15) היה כאן `setTimeout(..., 2500)`. נמדד ש-`homeExtras`
+         לוקחת 7–8 שניות, ולכן השעון צלצל לפני ההזרעה והקריאה
+         הכפולה יצאה בכל עלייה. עכשיו ממתינים לאירוע. ר' השער
+         ב-dataService.js. 2500 נשאר כ-graceMs — הזמן לעמוד הבית לצאת
+         לדרך — כך שמי שנוחת על מסך ניהול מקבל את ההתנהגות הישנה. */
+      hxWait(function () { if (!notif.clubChecked) refreshAlertsClub(); }, 2500);
       /* סיור היכרות (2026-08-28) — אחרי שהמסך הראשון כבר צויר ולא לפניו:
          סיור שנפתח מעל מסך ריק נראה כמו תקלה. הפונקציה עצמה בודקת שזו באמת
          כניסה ראשונה ושאין מסך כניסה פתוח.
          (2026-09-09) 600ms -> 3200ms מאותה סיבה בדיוק: ב-600ms הוא נחת בדיוק
          בתוך הצרור. */
-      if (currentUser && window.CBA.tour) setTimeout(function () { CBA.tour.maybeAutoStart(); }, 3200);
+      /* (2026-09-15) גם כאן הוחלף שעון קבוע בהמתנה להזרעה: הסיור
+         שולח `action=tour` רק אם לא הוזרע, וההזרעה מגיעה מ-`homeExtras`. */
+      if (currentUser && window.CBA.tour) hxWait(function () { CBA.tour.maybeAutoStart(); }, 3200);
       lastDataFingerprint = dataFingerprint();
     } else {
       // הגיע עדכון נוסף — מציגים רק אם הנתונים בפועל שונים, ובעדינות (פולס
