@@ -63,7 +63,8 @@ CBA.fb = (function () {
     authKnown: false,   // האם onAuthStateChanged כבר דיווח פעם אחת
     dbLoading: false,
     dbLoaded: false,
-    dbErr: null
+    dbErr: null,
+    flags: null        // appConfig/flags — null = עדיין לא נקרא/לא ניתן לקרוא
   };
   var waiters = [];     // מי שביקש את ה-SDK בזמן שהוא עוד בדרך
   var dbWaiters = [];
@@ -238,10 +239,39 @@ CBA.fb = (function () {
         try {
           window.firebase.firestore();
           log("Firestore מוכן");
-          settleDb(null);
+          /* 🔑 **דגלי זמן ריצה נקראים כאן, לפני הקריאה הראשונה.**
+             אחרת מתג כיבוי לא היה תופס את הקריאה הראשונה של כל טעינת עמוד —
+             ובדיוק הקריאה הזו היא שמגיעה למשתמש.
+             🔴 **כישלון כאן אינו מפיל את ensureDb.** דגל שאי-אפשר לקרוא
+             אסור שיהפוך לנקודת כשל חדשה; נופלים לברירות המחדל שבקוד. */
+          loadFlags(function () { settleDb(null); });
         } catch (e3) { log("אתחול Firestore נכשל: " + e3.message); settleDb(e3); }
       });
     });
+  }
+
+  /** קריאה חד-פעמית של מסמך הדגלים. לעולם אינה מעבירה שגיאה הלאה. */
+  function loadFlags(done) {
+    var fired = false;
+    function finish() { if (fired) return; fired = true; done(); }
+    var t = setTimeout(finish, 4000);
+    try {
+      window.firebase.firestore().collection("appConfig").doc("flags").get()
+        .then(function (d) {
+          state.flags = d.exists ? (d.data() || {}) : {};
+          log("דגלי זמן ריצה", state.flags);
+          clearTimeout(t); finish();
+        })["catch"](function (e) {
+          log("קריאת דגלים נכשלה: " + (e && (e.code || e.message)));
+          clearTimeout(t); finish();
+        });
+    } catch (e) { clearTimeout(t); finish(); }
+  }
+
+  /** ערך הדגל, או ברירת המחדל שבקוד אם אינו ידוע. */
+  function flag(key, dflt) {
+    if (!state.flags || !(key in state.flags)) return !!dflt;
+    return state.flags[key] === true;
   }
 
   function settleDb(err) {
@@ -330,6 +360,8 @@ CBA.fb = (function () {
     uid:      function () { return state.user ? state.user.uid : null; },
     isReady:  function () { return state.loaded; },
     isDbReady: function () { return state.dbLoaded; },
+    flag:     flag,
+    flags:    function () { return state.flags; },
     state:    function () { return { loaded: state.loaded, user: state.user,
                                      initErr: state.initErr && state.initErr.message,
                                      lastError: state.lastError && (state.lastError.code || state.lastError.message) }; },

@@ -32,6 +32,9 @@ CBA.data = (function () {
    *  sheets(done) — done(result). מסלול Apps Script, כולל המטמון שלו.
    * ======================================================================== */
   function fsFirstRead(key, enabled, load, sheets, cb) {
+    /* 🔑 `enabled` הוא **ברירת המחדל שבקוד**. הדגל החי נבדק
+       אחרי שה-SDK עלה (שם הוא נקרא), כלומר לפני הקריאה הראשונה
+       לנתונים. ברירת מחדל `false` מקצרת לגמרי — אפילו ה-SDK לא נטען. */
     var t0 = Date.now();
     var settled = false;
     var warm = !!(CBA.fb && CBA.fb.isDbReady && CBA.fb.isDbReady());
@@ -57,6 +60,10 @@ CBA.data = (function () {
     CBA.fb.authReady(function (user) {
       if (settled) return;
       if (!user) return viaSheets("no-user");
+      /* המתג החי. מגיע לכאן רק אחרי ש-ensureDb קרא את הדגלים. */
+      if (CBA.fb.flag && !CBA.fb.flag(key + "FromFirestore", enabled)) {
+        return viaSheets("flag-off");
+      }
       load(function (err, result) {
         if (settled) return;
         if (err) return viaSheets("firestore:" + ((err && (err.code || err.message)) || "?"));

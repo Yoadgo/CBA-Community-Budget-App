@@ -234,6 +234,9 @@ var GET_ACTION_PERMS = {
   /* סנכרון יזום של "שירותים לתושב" (2026-09-15, צעד 04א).
      אותה סיבה כמו gardenPlanSync — פעולת תשתית שדורסת אוסף. */
   servicesSync: PERM_SUPER,
+  /* דגלי זמן ריצה (2026-09-15, צעד 05א) — מדליקים ומכבים תחום
+     בלי דיפלוי. שינוי התנהגות לכל המשתמשים — מנהל-על בלבד. */
+  flagSet: PERM_SUPER, flagsGet: PERM_SUPER,
   gymList: PERM_GYM,
   appReports: PERM_SUPER,
   /* שנת תקציב בודדת לפי דרישה (2026-09-14, דיאטת המטען שלב ב').
@@ -557,6 +560,12 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'servicesSync') {
       return handleServicesSync_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'flagSet') {
+      return handleFlagSet_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'flagsGet') {
+      return handleFlagsGet_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'gardenTasks') {
       return handleGardenTasks_(e.parameter);
@@ -5789,6 +5798,64 @@ function fsSweepOrphans_(collection, live, out) {
   for (var j = 0; j < have.length; j++) {
     if (!live[have[j].id]) { fsDelete_(collection + '/' + have[j].id); out.deleted++; }
   }
+}
+
+/* ============================================================================
+ *  דגלי זמן ריצה   (צעד 05א, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴 **הבעיה שזה פותר:** עד היום "הדרגתי" אילץ דיפלוי נפרד
+ *  לכל תחום, וכיבוי במקרה חירום אילץ פוש + דיפלוי נוסף. עכשיו
+ *  הדגל יושב ב-`appConfig/flags`: מפרסים פעם אחת עם הכול כבוי,
+ *  ומדליקים תחום-תחום בזמן אמת. **ההדרגתיות נשמרת במלואה** —
+ *  מה שנעלם הוא סבב ההמתנה.
+ *
+ *  🔑 **לכל דגל יש גם ברירת מחדל בקוד.** אם המסמך חסר, לא נקרא
+ *  או פגום — הלקוח ממשיך עם ברירת המחדל. דגל שאי-אפשר לקרוא אסור
+ *  שיהפוך לנקודת כשל חדשה.
+ *
+ *  ⚠️ **הרשימה סגורה בכוונה.** מפתח שאינו ב-FLAG_KEYS נדחה. אחרת כל
+ *  הקלדה שגויה היתה יוצרת דגל חדש שאיש אינו קורא, והמנהל היה בטוח
+ *  שכיבה משהו שבפועל עדיין דולק.
+ * ========================================================================== */
+var FS_FLAGS_DOC = 'appConfig/flags';
+var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore'];
+
+/** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
+function flagsSet_(key, value) {
+  if (FLAG_KEYS.indexOf(key) === -1) throw new Error('דגל לא מוכר: ' + key);
+  var cur = fsGet_(FS_FLAGS_DOC) || {};
+  var next = {};
+  FLAG_KEYS.forEach(function (k) { next[k] = (cur[k] === true); });
+  next[key] = !!value;
+  next.schema = 1;
+  next.updatedAt = new Date();
+  fsSet_(FS_FLAGS_DOC, next);
+  return next;
+}
+
+function handleFlagSet_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var key = String((p && p.key) || '').trim();
+    var raw = String((p && p.value) || '').trim().toLowerCase();
+    if (raw !== 'true' && raw !== 'false') {
+      return json_({ ok: false, error: 'ערך חייב להיות true או false' });
+    }
+    var flags = flagsSet_(key, raw === 'true');
+    return json_({ ok: true, flags: flags });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+/** מצב הדגלים כפי שהשרת רואה אותם — לאימות ולאבחון. */
+function handleFlagsGet_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    return json_({ ok: true, keys: FLAG_KEYS, flags: fsGet_(FS_FLAGS_DOC) || {} });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
 /** שורה → מפה נקייה, בלי העמודות החסומות ובלי תאים ריקים. */
