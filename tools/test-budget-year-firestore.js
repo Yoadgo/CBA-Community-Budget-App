@@ -287,7 +287,7 @@ section('1. הדגל כבוי — המסלול הישן');
      /transactions: rows/.test(SH) && /budget: fsPlainRows\(doc\.budget\)/.test(SH) &&
      /done\(null, fsPlainRows\(raw\)\.map/.test(SH));
   ok('⚠️ והשנה הבודדת צורכת את אותה פונקציה',
-     /fsTxRows\(y, function \(err, rr\)/.test(SH));
+     /fsTxRows\(y, seesBudget, function \(err, rr\)/.test(SH));
 
   console.log('\n' + (fail ? '\u2717' : '\u2713') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);

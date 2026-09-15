@@ -691,7 +691,15 @@ CBA.sheets = (function () {
     }
     CBA.data.fsFirstRead("budgetTx", BUDGET_TX_FROM_FIRESTORE_READ,
       function (done) {
-        fsTxRows(y, function (err, rows) {
+        /* 🔴 **`true` כי השרת כבר העיד.** הגענו לכאן רק מפני
+           ש-`payload.txFromFirestore === true`, והשרת מדליק אותו רק
+           כש-`seesBudget` אמת (ר' `var txFs = seesBudget && ...` ב-doGet).
+           כלומר זו ההרשאה שהשרת חישב מהגיליון באותה
+           בקשה עצמה — טרייה וסמכותית יותר מכל מצב לקוח.
+           ⚠️ ואם בכל זאת אין הרשאה ב-Firestore — הכלל **דוחה** את
+              השאילתה, ואנחנו נופלים לאחור ל-slim=1. כשל רועש,
+              לא שנה ריקה. */
+        fsTxRows(y, true, function (err, rows) {
           if (err) return done(err);
           done(null, { ok: true, rows: rows });
         });
@@ -1364,7 +1372,16 @@ CBA.sheets = (function () {
    *  ⚠️ תושב שאין לו מזהה משפחה מקבל **רשימה ריקה לגיטימית**,
    *     לא שגיאה — הכלל דוחה שאילתה רחבה יותר בלאו הכי.
    * ======================================================================== */
-  function fsTxRows(y, done) {
+  /* 🔴🔴 **`seesAll` מגיע מבחוץ, וזה תיקון לבאג שנתפס בייצור**
+     (15.9.2026, בהדלקה הראשונה של הדגל). עד כאן הפונקציה
+     גזרה את ההרשאה מ-`CBA.isSuper`/`CBA.perms` — והם **עדיין לא
+     מאוכלסים** ברגע שהמטען הראשי נקרא, כי הם נגזרים ממנו.
+     התוצאה: מנהל-על קיבל שאילתה מסוננת למשפחה שלו וראה
+     **תקציב עם אפס תנועות** — בלי שום שגיאה, שנה ריקה
+     שנראית אמיתית לחלוטין. זה בדיוק הכשל שאסור אצלנו.
+     ⚠️ **מצב שנגזר מהמטען אינו זמין לפני שהמטען הוחל.**
+        לכן ההרשאה חייבת להישלח פנימה, לא להיקרא מבפנים. */
+  function fsTxRows(y, seesAll, done) {
     var raw = null, namesOk = false, failed = false;
     function fail(e) { if (failed) return; failed = true; done(e); }
     function maybe() {
@@ -1380,7 +1397,6 @@ CBA.sheets = (function () {
       }));
     }
 
-    var seesAll = !!(CBA.isSuper || (CBA.perms && CBA.perms.indexOf("תקציב") !== -1));
     var mine = (CBA.user && CBA.user.familyId) ? String(CBA.user.familyId).trim() : "";
     /* 🔴 **מסמך לכל תנועה** (צעד 09) — שאילתת שוויון, בלי אינדקס
        מורכב (קונסולת Google Cloud חסומה ב-2SV). תושב מסנן גם לפי
@@ -1434,7 +1450,9 @@ CBA.sheets = (function () {
       doc = EMPTY_PLAN; maybe();   /* בלי קריאה בכלל */
     }
 
-    fsTxRows(y, function (err, rr) {
+    /* כאן `seesBudget` אמין: `loadYear` נקרא לפי דרישה, הרבה
+       אחרי שהמטען הראשון מילא את `CBA.isSuper`/`CBA.perms`. */
+    fsTxRows(y, seesBudget, function (err, rr) {
       if (err) return fail(err);
       rows = rr; maybe();
     });

@@ -60,9 +60,12 @@ function makeEnv(opts) {
   sandbox.window = sandbox;
   sandbox.CBA = {
     mock: store, authSession: 'SESS', esc: s => String(s),
-    isSuper: opts.resident ? false : true,
-    perms: opts.resident ? [] : ['תקציב'],
-    user: { familyId: opts.resident ? '401' : '' },
+    /* 🔴 `coldBoot` מחקה את מה שקורה באמת בטעינה הראשונה:
+       `CBA.isSuper`/`CBA.perms` נגזרים **מהמטען**, ולכן ברגע
+       שהמטען נקרא הם עדיין ריקים. ר' סעיף 8. */
+    isSuper: (opts.coldBoot || opts.resident) ? false : true,
+    perms: (opts.coldBoot || opts.resident) ? [] : ['תקציב'],
+    user: { familyId: opts.resident ? '401' : (opts.coldBoot ? '1' : '') },
     fb: {
       isDbReady: () => true,
       queryCollection: (name, conds, cb) => {
@@ -118,8 +121,8 @@ ok('ההזרקה קורית לפני transform',
 ok('🔴 והלקוח פועל לפי הצהרת השרת, לא לפי הדגל שלו',
    /if \(!payload\.txFromFirestore\) return useIt\(payload\);/.test(SRC));
 ok('🔴 נקודת קריאה אחת לתנועות (fsTxRows), ושני צרכנים',
-   (SRC.match(/fsTxRows\(y, function/g) || []).length === 2,
-   String((SRC.match(/fsTxRows\(y, function/g) || []).length));
+   (SRC.match(/fsTxRows\(y, (true|seesBudget), function/g) || []).length === 2,
+   String((SRC.match(/fsTxRows\(y, (true|seesBudget), function/g) || []).length));
 ok('⚠️ אין שאילתת budgetTx שנייה מקבילה',
    (SRC.match(/queryCollection\("budgetTx"/g) || []).length === 1);
 ok('הנפילה לאחור מושכת מטען slim=1', (SRC.match(/fetchPayload\("1",/g) || []).length === 2);
@@ -255,6 +258,35 @@ ok('🔴 וכתיבת סטטוס זורקת אף היא את המטמון',
   } else {
     ok('⚠️ הסינון לפי משפחה קיים', false, 'לא יצאה שאילתה');
   }
+
+
+  /* =============================================================== */
+  /*  🔴🔴 סעיף 8 — **הבאג שנתפס בייצור בהדלקה הראשונה**  */
+  /*  (15.9.2026). הדגל הודלק, העמוד נטען, והמסך הראה       */
+  /*  **אפס תנועות** למנהל-על, בלי שום שגיאה. `fsTxRows`       */
+  /*  גזרה את ההרשאה מ-`CBA.isSuper` — שנגזר מהמטען שאותו  */
+  /*  בדיוק עיבדנו, ולכן עוד לא היה מאוכלס — וצימצמה את     */
+  /*  השאילתה למשפחת המשתמש. שנה ריקה שנראית אמיתית.   */
+  section('8. \uD83D\uDD34 \u05D8\u05E2\u05D9\u05E0\u05D4 \u05E8\u05D0\u05E9\u05D5\u05E0\u05D4 \u2014 \u05D4\u05D4\u05E8\u05E9\u05D0\u05D4 \u05E2\u05D5\u05D3 \u05DC\u05D0 \u05D9\u05D3\u05D5\u05E2\u05D4 \u05D1\u05DC\u05E7\u05D5\u05D7');
+  txFromFirestore = true;
+  budgetCounter++;
+  env = makeEnv({ coldBoot: true, rows: [
+    { '\u05DE\u05D6\u05D4\u05D4': 11, '\u05E1\u05DB\u05D5\u05DD': 111, '\u05DE\u05D6\u05D4\u05D4 \u05DE\u05E9\u05E4\u05D7\u05D4': '401' },
+    { '\u05DE\u05D6\u05D4\u05D4': 12, '\u05E1\u05DB\u05D5\u05DD': 122, '\u05DE\u05D6\u05D4\u05D4 \u05DE\u05E9\u05E4\u05D7\u05D4': '777' }
+  ] });
+  S = env.CBA.sheets; st = env.CBA.mock;
+  await new Promise(r => S.load(() => r())); await wait(20);
+  ok('\u05D9\u05E6\u05D0\u05D4 \u05E9\u05D0\u05D9\u05DC\u05EA\u05D4', queryLog.length === 1, String(queryLog.length));
+  ok('\uD83D\uDD34\uD83D\uDD34 **\u05D5\u05D4\u05D9\u05D0 \u05D0\u05D9\u05E0\u05D4 \u05DE\u05E1\u05D5\u05E0\u05E0\u05EA \u05DC\u05DE\u05E9\u05E4\u05D7\u05D4** \u2014 \u05D4\u05E9\u05E8\u05EA \u05DB\u05D1\u05E8 \u05D4\u05E2\u05D9\u05D3',
+     queryLog[0].conds.length === 1 && queryLog[0].conds[0][0] === 'year',
+     JSON.stringify(queryLog[0].conds));
+  ok('\uD83D\uDD34 \u05D5\u05E9\u05EA\u05D9 \u05D4\u05EA\u05E0\u05D5\u05E2\u05D5\u05EA \u05D4\u05D2\u05D9\u05E2\u05D5 \u2014 \u05DC\u05D0 \u05E9\u05E0\u05D4 \u05E8\u05D9\u05E7\u05D4',
+     st.years[CUR].transactions.length === 2, String(st.years[CUR].transactions.length));
+  ok('\u26A0\uFE0F \u05D5\u05D4\u05E7\u05D5\u05D3 \u05D0\u05D9\u05E0\u05D5 \u05D2\u05D5\u05D6\u05E8 \u05D4\u05E8\u05E9\u05D0\u05D4 \u05D1\u05EA\u05D5\u05DA fsTxRows',
+     !/function fsTxRows\(y, seesAll, done\) \{[\s\S]{0,1400}CBA\.isSuper/.test(SRC));
+  ok('\u26A0\uFE0F \u05D5\u05D4\u05D9\u05D0 \u05DE\u05E7\u05D1\u05DC\u05EA \u05D0\u05D5\u05EA\u05D4 \u05DE\u05D1\u05D7\u05D5\u05E5', /function fsTxRows\(y, seesAll, done\)/.test(SRC));
+  ok('\u26A0\uFE0F \u05D5\u05D4\u05DE\u05D8\u05E2\u05DF \u05DE\u05E2\u05D1\u05D9\u05E8 true (\u05D4\u05E9\u05E8\u05EA \u05D4\u05E2\u05D9\u05D3)', /fsTxRows\(y, true, function/.test(SRC));
+  ok('\u26A0\uFE0F \u05D5\u05D4\u05E9\u05E0\u05D4 \u05D4\u05D1\u05D5\u05D3\u05D3\u05EA \u05DE\u05E2\u05D1\u05D9\u05E8\u05D4 \u05D0\u05EA \u05E9\u05DC\u05D4', /fsTxRows\(y, seesBudget, function/.test(SRC));
 
   console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);
