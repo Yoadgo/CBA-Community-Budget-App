@@ -1765,6 +1765,8 @@
           // הטוקן החתום שהשרת הנפיק — נשלח מעכשיו בכל פעולת כתיבה במקום הסיסמה
           window.CBA.authSession = data.session || "";
           saveSession(currentUser);
+          /* 🔴 הפעימה החיה — רגע אחרי התחברות, כשיש משתמש. */
+          if (window.CBA.startPulse) window.CBA.startPulse();
           hideLoginGate();
           renderControls();
           /* טעינת הנתונים מתחילה רק עכשיו (2026-08-23 — תיקון אבטחה).
@@ -2112,6 +2114,8 @@
       // ציור ראשון — יש לנו נתונים אמיתיים (מהרשת עכשיו, או מהמטמון כגיבוי
       // אחרי שהרשת נכשלה — "cache-kept" למעלה כבר החיל אותם על CBA.mock)
       inited = true;
+      /* 🔴 הפעימה החיה — כאן הזהות כבר משוחזרת בוודאות. */
+      if (window.CBA.startPulse) window.CBA.startPulse();
       document.body.classList.remove("app-booting");   // הניווט הופך לפעיל בדיוק עכשיו, לא לפני
       ensureHeaderShell();
       if (currentUser) { routeByRole(); }
@@ -2307,6 +2311,14 @@
         הקבוע הוא **ברירת המחדל שמועברת ל-`flag()`**, לא שער. */
   var PULSE_DEFAULT = false;
 
+  /* 🔴🔴 **לא ניסיון אחד בטעינת המודול — נתפס בייצור (15.9).**
+     `startPulse` נקראה פעם אחת כשהסקריפט נטען, והתחרת בשחזור
+     הזהות של Firebase: `authReady` ממתינה עד 4 שניות ואז מחזירה
+     את מה שידוע — ובטעינה רגילה זה **עדיין `null`**, כי ההתחברות
+     קורית אחרי כן. התוצאה: המאזין פשוט לא עלה אף פעם,
+     בלי שום שגיאה — הסקר המשיך לעבוד ואיש לא היה מרגיש.
+     ⚠️ לכן קוראים לה **גם אחרי התחברות וגם אחרי הציור הראשון**,
+        והיא אידמפוטנטית (`pulseStop` הוא השער). */
   function startPulse() {
     if (pulseStop || !(CBA.fb && CBA.fb.watchDoc && CBA.fb.ensureDb)) return;
     CBA.fb.authReady(function (user) {
@@ -2329,6 +2341,7 @@
     });
   }
   startPulse();
+  window.CBA.startPulse = startPulse;   /* נקראת שוב אחרי התחברות ואחרי הציור הראשון */
   /* חשיפה לאבחון בלבד — כדי שאפשר יהיה לראות בייצור מה באמת רץ. */
   window.CBA.pulseState = function () { return { on: pulseOn, slowMs: PULSE_SLOW_MS, lastCycleAt: lastCycleAt }; };
   /* כתיבה שהסתיימה = רענון מיד, בלי לחכות לטיק הבא (2026-09-08). מריץ את
