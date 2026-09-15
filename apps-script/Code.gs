@@ -8292,10 +8292,30 @@ function btxApplyYear_(ss, y, items, out) {
                   .map(function (h) { return String(h).trim(); });
   var cId = headers.indexOf('מזהה');
   var cStatus = headers.indexOf('סטטוס');
-  var cNote = headers.indexOf('הערת בדיקה');
   if (cId === -1 || cStatus === -1) {
     out.errors.push('חסרות עמודות בתנועות ' + y);
     return false;
+  }
+  /* 🔴 **העמודה נוצרת אם היא חסרה** (2026-09-15, נתפס בבדיקה חיה).
+     טאב "תנועות תשפ"ז" נולד **בלי עמודת "הערת בדיקה"**,
+     ולכן כל הערה שהגזבר מקליד ב"העבר לבדיקה" היתה
+     **נבלעת בשקט** — גם במסלול הישן. ההערה היא הסיבה
+     שהתושב מקבל במייל, ובלעדיה "בבדיקה" חסר משמעות.
+     ⚠️ אותו דפוס בדיוק כמו 'תת-סעיף' ב-`saveTransactionRow_`:
+        נוצרת פעם אחת, בפעם הראשונה שבאמת צריך אותה. */
+  var cNote = headers.indexOf('הערת בדיקה');
+  if (cNote === -1) {
+    var wantsNote = false;
+    for (var w = 0; w < items.length; w++) {
+      var dd = items[w].data || {};
+      if (String(dd['הערת בדיקה'] == null ? '' : dd['הערת בדיקה']).trim()) { wantsNote = true; break; }
+    }
+    if (wantsNote) {
+      sh.getRange(1, headers.length + 1).setValue('הערת בדיקה');
+      headers.push('הערת בדיקה');
+      cNote = headers.length - 1;
+      lastCol = headers.length;
+    }
   }
   var n = Math.max(sh.getLastRow() - 1, 0);
   if (!n) { out.missing += items.length; return false; }
