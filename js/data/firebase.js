@@ -382,6 +382,42 @@ CBA.fb = (function () {
     });
   }
 
+  /* ============================================================================
+   *  nextId — מזהה רץ מתוך מסמך-מונה   (צעד 09ב-1, 2026-09-15)
+   * ----------------------------------------------------------------------------
+   *  🔴 **למה עסקה ולא קריאה-ואז-כתיבה:** בין הקריאה לכתיבה יכול לרוץ
+   *  מישהו אחר. `runTransaction` קורא, מחשב וכותב **כיחידה אחת**, ואם
+   *  המסמך זז בינתיים ה-SDK מריץ את הפונקציה שוב מאליו. בלי זה, שני
+   *  אנשים שמזינים תנועה באותו רגע מקבלים את אותו מספר ואחד דורס את השני.
+   *
+   *  🔴 **מונה חסר הוא שגיאה, לא התחלה מאפס.** הזריעה נעשית ב-Apps Script
+   *  מתוך המזהה הגבוה בגיליון. אילו היינו יוצרים אותו כאן ב-0, התנועה
+   *  הבאה היתה מקבלת מזהה 1 — ודורסת תנועה קיימת. נפילה לאחור עדיפה.
+   *
+   *  cb(err, n) — n הוא המזהה החדש שהוקצה (המונה כבר קודם).
+   * ========================================================================== */
+  function nextId(key, cb) {
+    cb = withTimeout(cb || function () {});
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      try {
+        var db = window.firebase.firestore();
+        var ref = db.collection("counters").doc(String(key));
+        db.runTransaction(function (t) {
+          return t.get(ref).then(function (d) {
+            if (!d.exists) throw new Error("no-counter");
+            var cur = Number((d.data() || {}).n);
+            if (!isFinite(cur)) throw new Error("bad-counter");
+            var next = cur + 1;
+            t.update(ref, { n: next, updatedAt: serverNow() });
+            return next;
+          });
+        }).then(function (n) { cb(null, n); })
+          ["catch"](function (e) { state.lastError = e; cb(e); });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+  }
+
   /** חותמת זמן של השרת — לא שעון המכשיר, שיכול להיות מוטעה. */
   function serverNow() {
     try { return window.firebase.firestore.FieldValue.serverTimestamp(); }
@@ -412,6 +448,7 @@ CBA.fb = (function () {
     queryCollection: queryCollection,
     readDoc:  readDoc,
     updateDoc: updateDoc,
+    nextId:   nextId,
     serverNow: serverNow,
     signIn:   signIn,
     signOut:  signOut,

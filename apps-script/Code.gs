@@ -235,6 +235,8 @@ var GET_ACTION_PERMS = {
      (2026-09-15, צעד 09א). PERM_BUDGET ולא PERM_SUPER: זו בדיוק
      הקבוצה שהכלל מרשה לה לכתוב את הסטטוס מלכתחילה. */
   budgetTxApply: PERM_BUDGET,
+  /* זריעת מונה המזהים (2026-09-15, צעד 09ב-1) — פעולת תשתית. */
+  txCountersSeed: PERM_SUPER,
   /* סנכרון יזום של תוכנית העבודה אל Firestore (2026-09-14, צעד 03א).
      🔴 **PERM_SUPER ולא PERM_GARDEN.** הפעולה אינה נוגעת לעבודת
      הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
@@ -589,6 +591,9 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'budgetTxApply') {
       return handleBudgetTxApply_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'txCountersSeed') {
+      return handleTxCountersSeed_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'backupVerify') {
       return handleBackupVerify_(e.parameter);
@@ -5148,6 +5153,17 @@ function hourlyJobs() {
   } catch (e) {
     Logger.log('budgetTxApplyPending_ נכשל: ' + e);
   }
+  /* מונה המזהים (2026-09-15, צעד 09ב-1) — עוקב אחרי שורות שנוצרו
+     במסלול הישן. לעולם אינו מוריד את המונה. */
+  try {
+    var c = seedTxCounters_(ss);
+    if (c.seeded || c.errors.length) {
+      Logger.log('מונה מזהים: נזרעו ' + c.seeded + ', נשמרו ' + c.kept +
+                 (c.errors.length ? ' | שגיאות: ' + c.errors.join(' ; ') : ''));
+    }
+  } catch (e) {
+    Logger.log('seedTxCounters_ נכשל: ' + e);
+  }
   try {
     var r = fsBackupIncremental_(ss);
     Logger.log('גיבוי מצטבר: נקראו ' + r.read + ' מסמכים' +
@@ -8446,6 +8462,98 @@ function handleBudgetTxSync_(p) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var t0 = new Date().getTime();
     var r = budgetTxSyncAll_(ss);
+    r.ms = new Date().getTime() - t0;
+    return json_(r);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ============================================================================
+ *  מונה המזהים הרצים   (צעד 09ב-1, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴 **מה הבעיה שזה פותר:** המזהה של תנועה הוא מספר רץ קצר (1, 2, 3…)
+ *  שמופיע במיילים לתושבים ובשיחות ("בקשה 147"). היום Apps Script סופר
+ *  אותו מעמודת המזהים בגיליון, תחת נעילה. ברגע שהדפדפן יכתוב תנועות
+ *  ישירות ל-Firestore אין מי שיספור — **ושני אנשים שמזינים באותו רגע
+ *  יקבלו את אותו מספר**, כלומר אחד ידרוס את השני.
+ *
+ *  🔑 **הפתרון:** מסמך `counters/tx_<שנה>` עם שדה `n` = המזהה הגבוה
+ *  שהוקצה. הדפדפן מקדם אותו **בעסקה** (`runTransaction`), וכלל האבטחה
+ *  מתיר קידום ב-1 בלבד — לא הורדה ולא קפיצה.
+ *
+ *  🔴 **הפונקציה הזאת לעולם אינה מורידה את המונה.** בתקופת המעבר שני
+ *  הצדדים חיים יחד: הדפדפן כבר מקדם את המונה, והגיליון עדיין מפגר אחריו
+ *  עד שהסטטוסים והשורות מוחלים. זריעה "לפי הגיליון" בלי התנאי הזה היתה
+ *  **מחזירה את המונה אחורה ומחלקת מזהה שכבר בשימוש**.
+ *
+ *  ⚠️ רצה כל שעה כדי שהמונה יעקוב אחרי שורות שנוצרו במסלול הישן.
+ *     כשהמסלול הישן ייסגר (צעד 09ב-5) היא הופכת לרשת ביטחון בלבד.
+ * ========================================================================== */
+var FS_COUNTERS = 'counters';
+
+function txCounterId_(year) {
+  return 'tx_' + String(year == null ? '' : year).trim();
+}
+
+/** המזהה המספרי הגבוה ביותר בטאב התנועות של השנה. 0 אם אין. */
+function txMaxIdInSheet_(ss, y) {
+  var sh = ss.getSheetByName('תנועות ' + y);
+  if (!sh) return null;
+  var n = Math.max(sh.getLastRow() - 1, 0);
+  if (!n) return 0;
+  var ids = sh.getRange(2, 1, n, 1).getValues();
+  var max = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var v = parseInt(ids[i][0], 10);
+    if (!isNaN(v) && v > max) max = v;
+  }
+  return max;
+}
+
+function seedTxCounters_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var settings = readSettings_(ss);
+  var years = String(settings['שנים'] || '').split(',')
+                .map(function (x) { return x.trim(); }).filter(Boolean);
+  var out = { ok: true, seeded: 0, kept: 0, skipped: 0, years: [], errors: [] };
+
+  for (var i = 0; i < years.length; i++) {
+    var y = years[i];
+    try {
+      var max = txMaxIdInSheet_(ss, y);
+      if (max === null) { out.skipped++; continue; }      /* אין טאב לשנה */
+      var id = txCounterId_(y);
+      if (!fsIdOk_(id)) { out.skipped++; continue; }
+
+      var cur = fsGet_(fsDocPath_(FS_COUNTERS, id));
+      var have = (cur && !isNaN(parseInt(cur.n, 10))) ? parseInt(cur.n, 10) : -1;
+
+      /* 🔴 לעולם לא מורידים — ר' ההערה למעלה. */
+      if (have >= max) {
+        out.kept++;
+        out.years.push({ year: y, n: have, sheetMax: max, action: 'kept' });
+        continue;
+      }
+      fsSet_(fsDocPath_(FS_COUNTERS, id),
+             { n: max, year: String(y), schema: 1, updatedAt: new Date() });
+      out.seeded++;
+      out.years.push({ year: y, n: max, from: have, action: 'seeded' });
+    } catch (e) {
+      out.ok = false;
+      out.errors.push(y + ': ' + String(e));
+    }
+  }
+  return out;
+}
+
+function handleTxCountersSeed_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var t0 = new Date().getTime();
+    var r = seedTxCounters_(ss);
     r.ms = new Date().getTime() - t0;
     return json_(r);
   } catch (err) {

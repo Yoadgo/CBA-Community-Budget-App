@@ -55,7 +55,7 @@ ok('\ud83d\udd34 כל allow בקובץ הוא מהצורות המוכרות בל
      return /^allow read: if (canSeePlan\(\)|canSeeServices\(\)|canSeeBudget\(\)|canSeeFamilyTx\(resource\.data\.familyId\)|isMember\(\)|signedIn\(\) && request\.auth\.uid == uid);$/.test(t) ||
             /^allow write: if false;$/.test(t) || /^allow read, write: if false;$/.test(t) ||
             /* \u05e6\u05e2\u05d3 09\u05d0 \u2014 \u05d4\u05db\u05ea\u05d9\u05d1\u05d4 \u05d4\u05d9\u05d7\u05d9\u05d3\u05d4 \u05d1\u05e7\u05d5\u05d1\u05e5, \u05d5\u05d4\u05d9\u05d0 \u05d3\u05e8\u05da \u05e4\u05d5\u05e0\u05e7\u05e6\u05d9\u05d4 \u05d1\u05e2\u05dc\u05ea \u05e9\u05dd. */
-            /^allow update: if txStatusUpdateOk\(\);$/.test(t) ||
+            /^allow update: if (txStatusUpdateOk|counterBumpOk)\(\);$/.test(t) ||
             /^allow create, delete: if false;$/.test(t);
    }), (CODE.match(/allow [^\n]*/g) || []).join(' | '));
 
@@ -74,14 +74,18 @@ ok('🔴 gardenMeta — כתיבה אסורה לכולם', /allow write: if fals
    במקום לוותר עליה: כל `allow update` חייב להיות זה של budgetTx,
    ו-`allow create`/`allow delete` חייבים להישאר סגורים. כל כתיבה
    עתידית תפיל את הבדיקה הזאת, וזו המטרה. */
-ok('🔴 הכתיבה היחידה היא עדכון סטטוס של budgetTx',
+ok('🔴 כל כתיבה היא אחת מהשתיים המוכרות',
    (CODE.match(/allow (create|update|delete)[^\n]*/g) || [])
      .every(function (t) { t = t.trim();
        return t === 'allow update: if txStatusUpdateOk();' ||
+              t === 'allow update: if counterBumpOk();' ||
               t === 'allow create, delete: if false;'; }),
    (CODE.match(/allow (create|update|delete)[^\n]*/g) || []).join(' | '));
-ok('🔴 והיא מופיעה פעם אחת בלבד',
-   (CODE.match(/allow update:/g) || []).length === 1,
+/* 🔴 **המספר הזה הוא הבדיקה.** כתיבה שלישית תפיל את השורה הזאת
+   ותחייב הכרעה מודעת — בדיוק כמו שהכתיבה השנייה (מונה המזהים,
+   צעד 09ב-1) חייבה לעדכן את השורה הזאת ביודעין. */
+ok('🔴 ויש בדיוק שתי כתיבות בכל הקובץ',
+   (CODE.match(/allow update:/g) || []).length === 2,
    String((CODE.match(/allow update:/g) || []).length));
 
 
@@ -128,8 +132,8 @@ ok('🔴 ו-canSeeFamilyTx חוסם את המחרוזת הריקה',
    /function canSeeFamilyTx\(fid\)[\s\S]*?fid is string && fid != '' && fid == myFamilyId\(\)/.test(CODE));
 ok('🔴 והוא לא נפתח לכל חבר אלא לבעלי הרשאת תקציב',
    /function canSeeBudget\(\)\s*\{\s*return hasPerm\('\u05ea\u05e7\u05e6\u05d9\u05d1'\)/.test(CODE));
-ok('🔴 שבעה בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
-   (CODE.match(/^\s*match \//gm) || []).length === 9,
+ok('🔴 שמונה בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
+   (CODE.match(/^\s*match \//gm) || []).length === 10,
    String((CODE.match(/^\s*match \//gm) || []).length));
 
 section('6. members — לא נשבר');
