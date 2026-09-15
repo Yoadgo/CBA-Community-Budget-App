@@ -100,9 +100,9 @@ ok('אין כפילות בשמות הטאבים',
    new Set(sandbox.BK_COLLECTIONS.map(c => c.tab)).size === sandbox.BK_COLLECTIONS.length);
 ok('אין כפילות באוספים',
    new Set(sandbox.BK_COLLECTIONS.map(c => c.collection)).size === sandbox.BK_COLLECTIONS.length);
-ok('חמשת האוספים שיש בהם מידע', sandbox.BK_COLLECTIONS.length === 5,
+ok('ששת האוספים שיש בהם מידע', sandbox.BK_COLLECTIONS.length === 6,
    String(sandbox.BK_COLLECTIONS.length));
-['gardenPlan', 'gardenMeta', 'services', 'appConfig', 'budgetYears'].forEach(c => {
+['gardenPlan', 'gardenMeta', 'services', 'appConfig', 'budgetYears', 'budgetTx'].forEach(c => {
   ok('  ' + c + ' ברישום', sandbox.BK_COLLECTIONS.some(x => x.collection === c));
 });
 ok('🔴 members אינו ברישום (נגזר מהגיליון, ואין בו מה לשחזר)',
@@ -175,7 +175,7 @@ section('6. הגיבוי המלא — ריצה מקצה לקצה');
   const r = sandbox.fsBackupAll_(ss);
   ok('ok', r.ok === true, JSON.stringify(r.errors));
   ok('🔴 read = סך המסמכים (המספר שנמדד מול המכסה)', r.read === 5, String(r.read));
-  ok('חמישה טאבים', r.tabs.length === 5, String(r.tabs.length));
+  ok('שישה טאבים', r.tabs.length === 6, String(r.tabs.length));
   ok('כל טאב מדווח כמה מסמכים', r.tabs.every(t => typeof t.docs === 'number'));
   ok('tabs כולל גם את שם האוסף (לאבחון)', r.tabs.every(t => t.collection && t.tab));
   ok('🔴 נכתבו רק טאבי _נתוני_', Object.keys(sheets).every(n => sandbox.bkTabOk_(n)),
@@ -191,10 +191,10 @@ section('6. הגיבוי המלא — ריצה מקצה לקצה');
     return [{ id: 'A', data: { schema: 1 } }];
   };
   const r = sandbox.fsBackupAll_(ss);
-  ok('🔴 כישלון באוסף אחד לא מפיל את השאר', r.tabs.length === 4, String(r.tabs.length));
+  ok('🔴 כישלון באוסף אחד לא מפיל את השאר', r.tabs.length === 5, String(r.tabs.length));
   ok('🔴 והוא מדווח ולא נבלע', r.ok === false && r.errors.length === 1, JSON.stringify(r.errors));
   ok('השגיאה מזהה את האוסף', /services/.test(r.errors[0]), r.errors[0]);
-  ok('read סופר רק מה שנקרא בפועל', r.read === 4, String(r.read));
+  ok('read סופר רק מה שנקרא בפועל', r.read === 5, String(r.read));
 }
 
 section('7. הרשאות וניתוב');

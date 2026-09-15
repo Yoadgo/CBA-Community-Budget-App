@@ -230,7 +230,7 @@ var GET_ACTION_PERMS = {
   backupRun: PERM_SUPER,
   backupVerify: PERM_SUPER, backupRestore: PERM_SUPER,
   backupIncremental: PERM_SUPER,
-  budgetSync: PERM_SUPER,
+  budgetSync: PERM_SUPER, budgetTxSync: PERM_SUPER,
   /* סנכרון יזום של תוכנית העבודה אל Firestore (2026-09-14, צעד 03א).
      🔴 **PERM_SUPER ולא PERM_GARDEN.** הפעולה אינה נוגעת לעבודת
      הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
@@ -579,6 +579,9 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'budgetSync') {
       return handleBudgetSync_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'budgetTxSync') {
+      return handleBudgetTxSync_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'backupVerify') {
       return handleBackupVerify_(e.parameter);
@@ -7976,6 +7979,157 @@ function handleBudgetSync_(p) {
 }
 
 /* ============================================================================
+ *  התנועות ← Firestore   (צעד 08ב-1, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴 **זה התחום הראשון שבו כלל רחב מדי חושף תושב אחד לשני.**
+ *  בכל התחומים עד כאן השאלה היתה "מי רואה" ברמת הפיצ׳ר;
+ *  כאן השאלה היא "מי רואה **את של מי**".
+ *
+ *  🔑 **מסמך לכל (שנה, משפחה), באוסף שטוח.** כלל אבטחה פועל
+ *  על **מסמך שלם** ואינו יודע לסנן שדות בתוכו — ולכן החלוקה
+ *  למסמכים היא עצמה מנגנון המידור. אוסף שטוח (ולא תת-אוסף
+ *  לכל שנה) כדי שהגיבוי, הגיבוי המצטבר וסחיפת היתומים יעבדו
+ *  עליו בלי שום מנגנון חדש — ובלי שרשימת האוספים תגדל בכל שנה חדשה.
+ *
+ *  🔴 **רשימת היתר, לעולם לא רשימת חסימה.** טאב "תנועות" הוא
+ *  מבנה פתוח: הלקוח אוסף כל עמודה לא מוכרת אל `customFields`.
+ *  עם רשימת חסימה, עמודה חדשה שיועד יוסיף (טלפון, הערה
+ *  אישית) היתה זולגת ל-Firestore **בלי ששורה אחת בקוד תשתנה**.
+ *
+ *  🔴 **`רוכש` אינו עובר.** הוא שם של אדם. הלקוח מרכיב אותו
+ *  ממזהה המשפחה מול טבלת התושבים שמגיעה מ-Apps Script.
+ *  ⚠️ מזהה משפחה מזהה **משק בית**, לא אדם: שני בני זוג חולקים
+ *  שורה ומזהה. נמדד חי: **9 מתוך 18 המשפחות** מופיעות עם שני
+ *  שמות רוכש שונים. השם המורכב הוא שם המשפחה — זו התנהגות
+ *  מוסכמת, לא באג.
+ *
+ *  ⚠️ **השורות נשמרות עם מפתחות הגיליון המקוריים** ("סכום",
+ *  "סעיף"…) ולא בצורה מומרת. כך `buildYear`/`toTx` בלקוח נשאר
+ *  **מסלול ההמרה היחיד**, בדיוק כמו שהוא היום למטען ול-`loadYear`.
+ *  שני מסלולי המרה מקבילים ייפרדו בשקט בשינוי הפורמט הראשון.
+ *
+ *  ⚠️ **תנועה בלי מזהה משפחה אינה מושמטת ואינה משויכת למישהו.**
+ *  היא נכנסת למסמך נפרד שהכלל חושף **רק לבעלי הרשאת
+ *  "תקציב"**. נמדד חי: **44 שורות כאלה בתשפ"ו**, מהן 28 בקשות
+ *  החזר של תושבים. השמטה היתה משנה את סך הביצוע בשקט.
+ * ========================================================================== */
+var FS_BUDGET_TX   = 'budgetTx';
+var BTX_MAX_BYTES  = 900000;          /* מתחת ל-1MiB של Firestore, עם מרווח */
+
+/* 🔴 רשימת היתר — שמות העמודות המותרות בדיוק.
+   `רוכש` אינו כאן בכוונה (שם של אדם), וכל עמודה שאינה
+   ברשימה פשוט אינה נכתבת. עמודה חדשה בגיליון לא תזלוג
+   לעולם בלי שמישהו יוסיף אותה לכאן במפורש. */
+var BTX_ALLOWED_COLS = ['מזהה', 'חודש הגשה', 'תאריך רכישה', 'ספק/נמען', 'בנק',
+  'סכום', 'סעיף', 'תת-סעיף', 'סוג הוצאה', 'מקור', 'סטטוס', 'הערת בדיקה',
+  'תיאור', 'שם קובץ קבלה', 'קישור קבלה', 'מזהה משפחה'];
+
+/* מסנן שורה אחת לפי רשימת ההיתר. */
+function btxRow_(row) {
+  var out = {};
+  for (var i = 0; i < BTX_ALLOWED_COLS.length; i++) {
+    var k = BTX_ALLOWED_COLS[i];
+    if (row[k] !== undefined && row[k] !== null && row[k] !== '') out[k] = row[k];
+  }
+  return out;
+}
+
+/* מזהה המסמך: שנה + משפחה. המזהה גולמי — הקידוד ב-`fsDocPath_`.
+   ⚠️ משפחה ריקה מקבלת `__none__` ולא מחרוזת ריקה, אחרת המזהה
+      היה מסתיים בקו תחתון כפול ונראה כמו באג. */
+function btxDocId_(year, familyId) {
+  var f = String(familyId == null ? '' : familyId).trim();
+  return String(year) + '__' + (f || '__none__');
+}
+
+/* מקבץ את תנועות השנה למסמכים לפי משפחה. */
+function btxYearDocs_(ss, y) {
+  var rows = cached_('cba_tx_' + budgetStamp_() + '_' + y, function () {
+    return readTable_(ss, 'תנועות ' + y);
+  }) || [];
+  var byFam = {}, order = [];
+  for (var i = 0; i < rows.length; i++) {
+    var fam = String(rows[i]['מזהה משפחה'] == null ? '' : rows[i]['מזהה משפחה']).trim();
+    if (!byFam[fam]) { byFam[fam] = []; order.push(fam); }
+    byFam[fam].push(btxRow_(rows[i]));
+  }
+  var out = [];
+  for (var j = 0; j < order.length; j++) {
+    var f = order[j];
+    out.push({
+      id: btxDocId_(y, f),
+      doc: {
+        year: String(y),
+        /* 🔴 השדה שהכלל משווה מולו. מחרוזת ריקה = דלי
+           החסרי-משפחה, והכלל דוחה אותה מפורשות. */
+        familyId: f,
+        rows: byFam[f],
+        count: byFam[f].length,
+        schema: 1,
+        updatedAt: new Date()
+      }
+    });
+  }
+  return out;
+}
+
+function budgetTxSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var settings = readSettings_(ss);
+  var years = String(settings['שנים'] || '').split(',')
+                .map(function (x) { return x.trim(); }).filter(Boolean);
+  var out = { ok: true, wrote: 0, deleted: 0, skipped: 0, years: [], errors: [] };
+  var live = {};
+  for (var i = 0; i < years.length; i++) {
+    var y = years[i];
+    try {
+      /* ⚠️ שם טאב נבנה מקלט — לאמת קיום לפני קריאה. */
+      if (!ss.getSheetByName('תנועות ' + y)) { out.skipped++; continue; }
+      var docs = btxYearDocs_(ss, y);
+      var wrote = 0, rows = 0;
+      for (var j = 0; j < docs.length; j++) {
+        if (!fsIdOk_(docs[j].id)) { out.skipped++; continue; }
+        var size = JSON.stringify(docs[j].doc).length;
+        if (size > BTX_MAX_BYTES) {
+          throw new Error('מסמך משפחה גדול מדי (' + docs[j].id + ', ' + size + ' תווים)');
+        }
+        fsSet_(fsDocPath_(FS_BUDGET_TX, docs[j].id), docs[j].doc);
+        live[docs[j].id] = 1;
+        wrote++; rows += docs[j].doc.count;
+        out.wrote++;
+      }
+      out.years.push({ year: y, docs: wrote, rows: rows });
+    } catch (e) {
+      out.ok = false;
+      out.errors.push(y + ': ' + String(e));
+    }
+  }
+  /* ניקוי יתומים — רק אם כל השנים נכתבו בהצלחה.
+     ⚠️ אחרת משפחה ששנתה נכשלה במקרה היתה נמחקת כ"יתומה".
+     ⚠️ המזהה ב-`live` גולמי, בדיוק כמו ש-`fsList_` מחזיר — ר׳
+     הבאג שנתפס בצעד 08א. */
+  if (out.ok) {
+    try { fsSweepOrphans_(FS_BUDGET_TX, live, out); }
+    catch (e) { out.ok = false; out.errors.push('sweep: ' + String(e)); }
+  }
+  return out;
+}
+
+function handleBudgetTxSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var t0 = new Date().getTime();
+    var r = budgetTxSyncAll_(ss);
+    r.ms = new Date().getTime() - t0;
+    return json_(r);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ============================================================================
  *  גיבוי Firestore ← גיליון   (צעד 07א, 2026-09-15)
  * ----------------------------------------------------------------------------
  *  🔴 **למה בונים את זה עכשיו, כשהוא עדיין לא מגן על כלום:**
@@ -8017,7 +8171,8 @@ var BK_COLLECTIONS = [
   { collection: 'gardenMeta', tab: BK_PREFIX + 'רשימות גינון' },
   { collection: 'services',   tab: BK_PREFIX + 'שירותים' },
   { collection: 'appConfig',  tab: BK_PREFIX + 'הגדרות אפליקציה' },
-  { collection: 'budgetYears', tab: BK_PREFIX + 'תקציב לפי שנה' }
+  { collection: 'budgetYears', tab: BK_PREFIX + 'תקציב לפי שנה' },
+  { collection: 'budgetTx',   tab: BK_PREFIX + 'תנועות לפי משפחה' }
 ];
 var BK_HEADERS = ['id', 'עודכן', 'schema', 'json'];
 

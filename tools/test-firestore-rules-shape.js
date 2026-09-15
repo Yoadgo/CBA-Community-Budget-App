@@ -52,7 +52,7 @@ const idxDeny = CODE.indexOf('match /{document=**}');
 });
 ok('\ud83d\udd34 כל allow בקובץ הוא מהצורות המוכרות בלבד',
    (CODE.match(/allow [^\n]*/g) || []).every(function (t) { t = t.trim();
-     return /^allow read: if (canSeePlan\(\)|canSeeServices\(\)|canSeeBudget\(\)|isMember\(\)|signedIn\(\) && request\.auth\.uid == uid);$/.test(t) ||
+     return /^allow read: if (canSeePlan\(\)|canSeeServices\(\)|canSeeBudget\(\)|canSeeFamilyTx\(resource\.data\.familyId\)|isMember\(\)|signedIn\(\) && request\.auth\.uid == uid);$/.test(t) ||
             /^allow write: if false;$/.test(t) || /^allow read, write: if false;$/.test(t);
    }), (CODE.match(/allow [^\n]*/g) || []).join(' | '));
 
@@ -105,10 +105,15 @@ section('5. מה שלא נפתח');
 });
 /* 🔴 הגבול של צעד 08א: מטא-תקציב כן, תנועות לא. */
 ok('🔴 budgetYears כן נפתח (ובמכוון)', CODE.indexOf('match /budgetYears/') !== -1);
+/* 🔴 הגבול של צעד 08ב: התנועות נפתחו — אבל לעולם לא לכל חבר. */
+ok('🔴 budgetTx נפתח רק דרך canSeeFamilyTx',
+   /match \/budgetTx\/\{[^}]+\}\s*\{\s*allow read: if canSeeFamilyTx\(resource\.data\.familyId\);/.test(CODE));
+ok('🔴 ו-canSeeFamilyTx חוסם את המחרוזת הריקה',
+   /function canSeeFamilyTx\(fid\)[\s\S]*?fid is string && fid != '' && fid == myFamilyId\(\)/.test(CODE));
 ok('🔴 והוא לא נפתח לכל חבר אלא לבעלי הרשאת תקציב',
    /function canSeeBudget\(\)\s*\{\s*return hasPerm\('\u05ea\u05e7\u05e6\u05d9\u05d1'\)/.test(CODE));
-ok('🔴 שישה בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
-   (CODE.match(/^\s*match \//gm) || []).length === 8,
+ok('🔴 שבעה בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
+   (CODE.match(/^\s*match \//gm) || []).length === 9,
    String((CODE.match(/^\s*match \//gm) || []).length));
 
 section('6. members — לא נשבר');

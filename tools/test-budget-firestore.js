@@ -190,7 +190,7 @@ ok('budgetYears ברישום הגיבוי',
    sandbox.BK_COLLECTIONS.some(c => c.collection === 'budgetYears'));
 ok('והטאב שלו חוקי',
    sandbox.bkTabOk_((sandbox.BK_COLLECTIONS.find(c => c.collection === 'budgetYears') || {}).tab));
-ok('חמישה אוספים מגובים', sandbox.BK_COLLECTIONS.length === 5, String(sandbox.BK_COLLECTIONS.length));
+ok('שישה אוספים מגובים', sandbox.BK_COLLECTIONS.length === 6, String(sandbox.BK_COLLECTIONS.length));
 
 console.log('\n' + (fail ? '✗' : '✓') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);
