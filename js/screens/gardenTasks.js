@@ -817,7 +817,17 @@
 
       function onCardClick(e) {
         var btn = e.target.closest("[data-act]");
-        if (!btn) return;
+        if (!btn) {
+          /* לחיצה על גוף השורה עצמה (לא על תיבה/שיבוץ/⋯, שכולם נושאים
+             data-act) פותחת את כרטיס הפרטים — רק לדיווחי תושב, שבשבילם
+             נבנה הכרטיס. משימת שגרה/יזומה ממשיכה בלי תגובה, כמו קודם. */
+          var detRow = e.target.closest(".gt-row");
+          if (detRow && detRow.dataset.id) {
+            var detT = byId(detRow.dataset.id);
+            if (detT && detT.kind === GK_REPORT) openDetails(detRow.dataset.id);
+          }
+          return;
+        }
         /* "אשר את כל N" יושב בכותרת הקבוצה ולא בתוך כרטיס, ולכן הוא נבדק
            **לפני** איתור ה-.gt-row — אחרת החיפוש נכשל והלחיצה נבלעת בשקט. */
         if (btn.dataset.act === "batch") return approveBatch(btn.dataset.tpl);
@@ -1277,9 +1287,6 @@
             '<p class="sub">' +
               (t.repId ? esc(GL.reportRef(t.repId)) + ' · ' : '') + esc(t.category || "") +
               (t.area ? ' · ' + esc(t.area) : '') + '</p>' +
-            (t.x !== null && t.y !== null
-              ? '<button type="button" class="gt-opt" data-m="map"><u>' + ico("pin") + '</u>' +
-                '<div>הצגה על המפה<span>הנקודה שסומנה בדיווח</span></div></button>' : '') +
             '<button type="button" class="gt-opt" data-m="hist"><u>' + ico("hist") + '</u>' +
               '<div>היסטוריה<span>כל מה שקרה למשימה, לפי הסדר</span></div></button>' +
             /* ⚠️ על משימה סגורה השרת דוחה כל פעולה חוץ מערעור, "טופל" ומחיקה
@@ -1340,61 +1347,68 @@
           if (!b) return;
           var m = b.dataset.m;
           close();
-          if (m === "hist") return openHistory(id);
-          if (m === "map") return showOnMap(t, cat);
-          if (m === "note") {
-            // CBA.ui.prompt מחזירה Promise (null בביטול), לא מקבלת callback
-            CBA.ui.prompt("ההערה נשמרת ביומן המשימה ונשארת גלויה למנהל.", {
-              title: "הערת ביצוע", value: t.note || "",
-              placeholder: "למשל: נגזם, הגזם פונה למחרת", okText: "שמירה"
-            }).then(function (txt) { if (txt !== null) run("note", t.id, { note: txt }); });
-          }
-          if (m === "clearflag") return run("clearflag", t.id, {});
-          if (m === "undo") return run("undo", t.id, {});
-          if (m === "del") {
-            CBA.ui.prompt(
-              "המשימה תרד מהגיליון ומהנתונים, יחד עם הדיווח והתמונות שלה. " +
-              "מה שכבר נרשם ביומן יישאר, ותיווסף שורת מחיקה עם הסיבה שתכתוב.", {
-                title: "מחיקת משימה", placeholder: "למשל: שורת בדיקה",
-                okText: "מחיקה", danger: true
-              }).then(function (why) {
-                if (!why) return;
-                if (busy) return;
-                busy = true;
-                CBA.data.gardenTaskDelete(t.id, why, function (res) {
-                  busy = false;
-                  if (!res || !res.ok) {
-                    return CBA.ui.alert((res && res.error) || "המשימה לא נמחקה");
-                  }
-                  CBA.ui.toast("נמחקה");
-                  load();
-                });
-              });
-            return;
-          }
-          if (m === "defer") {
-            CBA.ui.confirm("המשימה תעבור לשבוע הבא ותסומן \"נגררה\".").then(function (yes) {
-              if (yes) run("defer", t.id, {});
-            });
-          }
-          if (m === "return") {
-            CBA.ui.prompt(t.closure
-              ? "המשימה תיפתח מחדש ותחזור לצוות עם מה שחסר. הסגירה שלה תבוטל."
-              : "המשימה תחזור לצוות עם הדגל \"הוחזר להשלמה\".", {
-              title: t.closure ? "מה לא בוצע?" : "מה חסר?",
-              placeholder: "למשל: הגיזום נעשה אבל הגזם לא פונה",
-              okText: "החזרה לצוות"
-            }).then(function (txt) { if (txt) run("return", t.id, { note: txt }); });
-          }
-          if (m === "close") return askClosure(t);
-          if (m === "block") {
-            CBA.ui.prompt("המשימה לא תיסגר — היא חוזרת לשולחן מנהל הגינון עם הסיבה.", {
-              title: "מה מונע את הביצוע?",
-              placeholder: "למשל: דורש מנוף, הגישה חסומה ברכב",
-              okText: "שליחה למנהל"
-            }).then(function (txt) { if (txt) run("block", t.id, { note: txt }); });
-          }
+          menuAction(t, cat, m);
         });
+      }
+
+      /* פעולות ה-⋯ ושל כרטיס הפרטים חולקות את אותה פונקציה ממש. עד עכשיו היא
+         ישבה רק כ-listener פנימי ב-openMenu; עכשיו גם openDetails() קורא לה, כדי שכפתורי
+         הפעולה (מה נשלח לשרת, איזה שאלה נשאלת) יישאר אחד, ולא יוכפל להסטות
+         בין מקורות הקריאה השונים. */
+      function menuAction(t, cat, m) {
+        if (m === "hist") return openHistory(t.id);
+        if (m === "note") {
+          // CBA.ui.prompt מחזירה Promise (null בביטול), לא מקבלת callback
+          CBA.ui.prompt("ההערה נשמרת ביומן המשימה ונשארת גלויה למנהל.", {
+            title: "הערת ביצוע", value: t.note || "",
+            placeholder: "למשל: נגזם, הגזם פונה למחרת", okText: "שמירה"
+          }).then(function (txt) { if (txt !== null) run("note", t.id, { note: txt }); });
+        }
+        if (m === "clearflag") return run("clearflag", t.id, {});
+        if (m === "undo") return run("undo", t.id, {});
+        if (m === "del") {
+          CBA.ui.prompt(
+            "המשימה תרד מהגיליון ומהנתונים, יחד עם הדיווח והתמונות שלה. " +
+            "מה שכבר נרשם ביומן יישאר, ותיווסף שורת מחיקה עם הסיבה שתכתוב.", {
+              title: "מחיקת משימה", placeholder: "למשל: שורת בדיקה",
+              okText: "מחיקה", danger: true
+            }).then(function (why) {
+              if (!why) return;
+              if (busy) return;
+              busy = true;
+              CBA.data.gardenTaskDelete(t.id, why, function (res) {
+                busy = false;
+                if (!res || !res.ok) {
+                  return CBA.ui.alert((res && res.error) || "המשימה לא נמחקה");
+                }
+                CBA.ui.toast("נמחקה");
+                load();
+              });
+            });
+          return;
+        }
+        if (m === "defer") {
+          CBA.ui.confirm("המשימה תעבור לשבוע הבא ותסומן \"נגררה\".").then(function (yes) {
+            if (yes) run("defer", t.id, {});
+          });
+        }
+        if (m === "return") {
+          CBA.ui.prompt(t.closure
+            ? "המשימה תיפתח מחדש ותחזור לצוות עם מה שחסר. הסגירה שלה תבוטל."
+            : "המשימה תחזור לצוות עם הדגל \"הוחזר להשלמה\".", {
+            title: t.closure ? "מה לא בוצע?" : "מה חסר?",
+            placeholder: "למשל: הגיזום נעשה אבל הגזם לא פונה",
+            okText: "החזרה לצוות"
+          }).then(function (txt) { if (txt) run("return", t.id, { note: txt }); });
+        }
+        if (m === "close") return askClosure(t);
+        if (m === "block") {
+          CBA.ui.prompt("המשימה לא תיסגר — היא חוזרת לשולחן מנהל הגינון עם הסיבה.", {
+            title: "מה מונע את הביצוע?",
+            placeholder: "למשל: דורש מנוף, הגישה חסומה ברכב",
+            okText: "שליחה למנהל"
+          }).then(function (txt) { if (txt) run("block", t.id, { note: txt }); });
+        }
       }
 
       /* סגירה שאינה "בוצע". שלוש הסיבות מהאפיון; "בוצע" לא מופיע כאן כי הוא
@@ -1461,6 +1475,160 @@
           if (!why) return CBA.ui.alert("צריך לכתוב לתושב מה הסיבה");
           close();
           run("close", t.id, { closure: picked, note: why });
+        });
+      }
+
+      /* ---------------------------------------------------------------------
+         כרטיס פרטים לדיווח תושב (2026-09-15). לחיצה על גוף השורה — לא על
+         התיבה, לא על ⋮ — פותחת אותו. הוא **לא** מנגנון שרת חדש: כל שדה
+         מגיע מאותו אובייקט משימה שכבר בזיכרון, כל פעולה עוברת דרך run()/
+         menuAction() הקיימים, וה-⋯ נשאר בדיוק כמו שהיה (4 פעולות מהירות,
+         בלי מפה — המפה עברה לכאן). מוצג רק לדיווחי תושב (GK_REPORT); ר'
+         השער ב-onCardClick. אושר כסקיצה מול יועד לפני המימוש. */
+      function openDetails(id) {
+        var t = byId(id);
+        if (!t) return;
+        var cat = catOf(t.category);
+        var closed = !!t.closure;
+        var st = GL.state(t, isManager ? "manager" : "gardener");
+        var hasMap = (t.x !== null && t.x !== undefined && t.y !== null && t.y !== undefined);
+        var hasPhotos = !!(t.photos && t.photos.length);
+        var planning = !closed && !t.week;
+        var done = t.flag === "ממתין לאישור";
+        var approving = done && isManager;
+
+        /* הפעולה הראשית — בדיוק אותה נגזרת שקובעת את תיבת הסימון בשורה
+           עצמה (ר' card()), רק כפתור מלא ולא אייקון. */
+        var primaryHtml = "";
+        if (!closed) {
+          if (planning) {
+            primaryHtml = '<button type="button" class="gd-det-cta" data-m="plan">' +
+              ico("cal") + 'שיבוץ לשבוע</button>';
+          } else if (approving) {
+            primaryHtml = '<button type="button" class="gd-det-cta" data-m="approve">' +
+              ico("check") + 'אישור</button>';
+          } else if (done) {
+            primaryHtml = '<button type="button" class="gd-det-cta is-ghost" data-m="undo">' +
+              ico("undo") + 'ביטול סימון</button>';
+          } else {
+            primaryHtml = '<button type="button" class="gd-det-cta" data-m="markdone">' +
+              ico("check") + 'סימון כבוצע</button>';
+          }
+        }
+
+        /* פעולות משניות — אותן תנאים בדיוק כמו ב-openMenu (ללא "map", שכבר
+           לא קיים גם שם), רק שהתגית data-m עוברת ל-menuAction() המשותפת. */
+        var secHtml = "";
+        if (!closed) {
+          secHtml +=
+            '<button type="button" class="gd-det-b" data-m="note">' + ico("note") + 'הערת ביצוע</button>' +
+            '<button type="button" class="gd-det-b" data-m="defer">' + ico("cal") + 'דחייה לשבוע הבא</button>' +
+            (!isManager
+              ? '<button type="button" class="gd-det-b" data-m="block">' + ico("clock") + 'לא ניתן לביצוע</button>'
+              : '');
+        }
+        if (isManager && t.flag === "ממתין לאישור") {
+          secHtml += '<button type="button" class="gd-det-b" data-m="return">' +
+            ico("undo") + 'החזרה להשלמה</button>';
+        }
+        if (isManager && !closed) {
+          secHtml += '<button type="button" class="gd-det-b" data-m="close">' +
+            ico("check") + 'סגירה עם סיבה</button>';
+        }
+        if (isManager && t.flag === "דורש בדיקה חוזרת") {
+          secHtml += '<button type="button" class="gd-det-b" data-m="clearflag">' +
+            ico("check") + 'טופל</button>';
+        }
+        if (isManager) {
+          secHtml += '<button type="button" class="gd-det-b is-danger" data-m="del">' +
+            ico("trash") + 'מחיקה</button>';
+        }
+        secHtml += '<button type="button" class="gd-det-b" data-m="hist">' + ico("hist") + 'היסטוריה מלאה</button>';
+
+        var wrap = document.createElement("div");
+        wrap.className = "gt-sheet-wrap is-detail";
+        wrap.innerHTML =
+          '<div class="gt-sheet-bd"></div>' +
+          '<div class="gt-sheet gd-det" role="dialog" aria-label="' + esc(t.title || "משימה") + '">' +
+            '<div class="gt-grip" aria-hidden="true"></div>' +
+            (hasPhotos
+              ? '<div class="gd-det-photo" id="gd-det-photo">' +
+                  '<button type="button" class="gd-det-photo__cnt" data-m="photos">' +
+                    ico("camera") + ' ' + t.photos.length + '</button>' +
+                '</div>'
+              : '<div class="gd-det-nophoto">' + ico("camera") + '<span>לא צורפה תמונה</span></div>') +
+            '<div class="gd-det-kicker"><span class="gd-det-dot" style="background:var(--c-' +
+              esc(cat.key) + ')"></span>' + esc(t.category || "") + ' · ' + esc(GL.T.report) + '</div>' +
+            '<h4 class="gd-det-title">' + esc(t.title || t.category || "משימה") + '</h4>' +
+            '<p class="gd-det-sub">' +
+              (t.repId ? esc(GL.reportRef(t.repId)) : "") +
+              (t.area ? (t.repId ? ' · ' : '') + esc(t.area) : '') +
+            '</p>' +
+            '<div class="gd-det-state is-' + esc(st.tone || "plan") + '">' + esc(st.text) + '</div>' +
+            '<div class="gd-det-fields">' +
+              '<div class="gd-det-f"><span class="l">מקור</span><span class="v">' + ico("person") + ' תושב</span></div>' +
+              (t.area ? '<div class="gd-det-f"><span class="l">אזור</span><span class="v">' + esc(t.area) + '</span></div>' : '') +
+              (t.createdAt ? '<div class="gd-det-f"><span class="l">נפתח</span><span class="v">' + esc(ago(t.createdAt)) + '</span></div>' : '') +
+              '<div class="gd-det-f"><span class="l">שבוע</span><span class="v">' +
+                (t.week ? esc(weekLabel(t.week)) : 'לשיבוץ') + '</span></div>' +
+            '</div>' +
+            (hasMap ? '<div class="gd-map" id="gd-det-map"></div>' : '') +
+            (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
+            (closed
+              ? '<div class="gd-rep__closed"><b>' + esc(t.closure) + '</b>' +
+                  (t.approvedAt
+                    ? '<span>' + esc(ago(t.approvedAt)) + (t.approvedBy ? ' · ' + esc(t.approvedBy) : '') + '</span>'
+                    : '') +
+                '</div>'
+              : '') +
+            '<div class="gd-det-actions">' + primaryHtml + secHtml + '</div>' +
+          '</div>';
+        document.body.appendChild(wrap);
+        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
+
+        function close() {
+          wrap.classList.remove("is-open");
+          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
+        }
+        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+
+        /* תמונה ראשונה בלבד, כתצוגה מקדימה — בדיוק כמו photos.js, דרך אותה
+           קריאת שרת (getGardenPhoto) ואותו מטמון. הגלריה המלאה נפתחת בנפרד. */
+        if (hasPhotos) {
+          var phEl = wrap.querySelector("#gd-det-photo");
+          CBA.data.getGardenPhoto(t.photos[0], function (res) {
+            if (!phEl || !phEl.parentNode) return;      // הגיליון נסגר בזמן הטעינה
+            if (res && res.ok && res.url) {
+              phEl.style.backgroundImage = "url('" + res.url + "')";
+              phEl.classList.add("has-img");
+            }
+          });
+        }
+        /* אותה קריאה בדיוק ל-CBA.map כמו showOnMap — תצוגה בלבד, בלי חיפוש,
+           אבל פאן/זום עובדים כרגיל ברכיב המפה המשותף. */
+        if (hasMap && CBA.map) {
+          var mapApi = CBA.map.render(wrap.querySelector("#gd-det-map"), {
+            head: false, search: false, legend: false, hint: false, popup: false,
+            pinAt: { x: t.x, y: t.y }
+          });
+          if (mapApi && mapApi.fit) setTimeout(function () { mapApi.fit(); }, 60);
+        }
+
+        wrap.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-m]");
+          if (!b) return;
+          var m = b.dataset.m;
+          if (m === "photos") {
+            if (CBA.photos) {
+              CBA.photos.open(t.photos, "תמונות " + (t.repId ? GL.reportRef(t.repId) : "הדיווח"));
+            }
+            return;
+          }
+          close();
+          if (m === "plan") return askWeek(id);
+          if (m === "approve") return run("approve", id, {});
+          if (m === "markdone") return markDone(id);
+          menuAction(t, cat, m);
         });
       }
 

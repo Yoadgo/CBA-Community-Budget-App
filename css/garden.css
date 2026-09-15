@@ -592,6 +592,51 @@
 .gt-opt span { display: block; font-size: 11.5px; color: #9CA3AF; font-weight: 400; margin-top: 1px; }
 .gt-sheet-wrap.is-map .gd-map { height: 62vh; margin-top: 4px; }
 
+/* ---------- כרטיס פרטים לדיווח תושב (2026-09-15) ----------
+   נפתח בלחיצה על גוף השורה. אותם משתני צבע כמו שאר המודול (מוצהרים על
+   .gt-sheet למעלה), רק פריסה שונה: תמונה בראש (או ריק מוסבר), משפט מצב
+   אחד, שדות, מפה, ואז פעולות. */
+.gd-det-photo { height: 170px; margin: -8px -16px 14px; border-radius: 20px 20px 0 0;
+  background: rgba(17,24,39,.06) center / cover no-repeat; position: relative; }
+.gd-det-photo__cnt { position: absolute; bottom: 10px; inset-inline-end: 10px;
+  background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 700;
+  border: 0; padding: 4px 10px; border-radius: 99px; display: flex; align-items: center; gap: 4px; }
+.gd-det-photo__cnt svg { width: 13px; height: 13px; }
+.gd-det-nophoto { margin: -8px -16px 14px; padding: 22px 16px; text-align: center;
+  color: var(--text-soft, #6B7280); background: rgba(17,24,39,.03); }
+.gd-det-nophoto svg { width: 20px; height: 20px; opacity: .5; }
+.gd-det-nophoto span { display: block; font-size: 12px; margin-top: 4px; }
+.gd-det-kicker { display: flex; align-items: center; gap: 7px; font-size: 12px;
+  font-weight: 700; color: var(--text-soft, #6B7280); margin-bottom: 4px; }
+.gd-det-dot { width: 6px; height: 6px; border-radius: 99px; flex: none; }
+.gd-det-title { margin: 0 0 3px; font-size: 18px; font-weight: 800; }
+.gd-det-sub { margin: 0 0 12px; font-size: 12.5px; color: var(--text-soft, #6B7280); }
+.gd-det-state { display: block; border-radius: 12px; padding: 9px 12px; font-size: 13px;
+  font-weight: 700; margin-bottom: 14px; background: rgba(17,24,39,.05); color: var(--text, #374151); }
+.gd-det-state.is-done { background: rgba(15,107,69,.10); color: #0F6B45; }
+.gd-det-state.is-wait { background: rgba(202,138,4,.12); color: #96560A; }
+.gd-det-state.is-warn { background: rgba(220,38,38,.10); color: #B42318; }
+.gd-det-state.is-plan { background: rgba(14,165,233,.10); color: #0369A1; }
+.gd-det-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-bottom: 14px; }
+.gd-det-f { display: flex; flex-direction: column; gap: 2px; }
+.gd-det-f .l { font-size: 10.5px; color: var(--text-soft, #6B7280); }
+.gd-det-f .v { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+.gd-det-f .v svg { width: 13px; height: 13px; opacity: .7; }
+.gd-det .gd-map { height: 150px; margin-bottom: 14px; }
+.gd-det-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 2px; }
+.gd-det-cta { grid-column: 1 / -1; background: var(--action, #111827); color: #fff; border: 0;
+  border-radius: 12px; padding: 12px; font-size: 13.5px; font-weight: 700; font-family: inherit;
+  display: flex; align-items: center; justify-content: center; gap: 6px; }
+.gd-det-cta.is-ghost { background: transparent; color: var(--text, #374151);
+  box-shadow: inset 0 0 0 1px rgba(17,24,39,.16); }
+.gd-det-cta svg { width: 15px; height: 15px; }
+.gd-det-b { border: 1px solid rgba(17,24,39,.10); background: #fff; border-radius: 11px;
+  padding: 10px; font-size: 12.5px; font-weight: 600; font-family: inherit; color: var(--text, #374151);
+  display: flex; align-items: center; justify-content: center; gap: 6px; }
+.gd-det-b svg { width: 14px; height: 14px; opacity: .75; }
+.gd-det-b.is-danger { color: var(--danger, #DC2626); border-color: rgba(220,38,38,.25); }
+@media (min-width: 901px) { .gt-sheet-wrap.is-detail .gt-sheet { max-height: 88vh; } }
+
 /* סגירה בלי ביצוע, בעיני התושב. ניטרלי ולא אדום: זו החלטה מנומקת ולא
    תקלה, ואדום היה קורא כאילו משהו השתבש אצלו. ההסבר הוא העיקר כאן —
    שם הסגירה לבדו ("בוטל") אינו תשובה לאדם ששאל שאלה. */
