@@ -1659,7 +1659,7 @@
             head: false, search: false, legend: false, hint: false, popup: false,
             pinAt: { x: t.x, y: t.y }
           });
-          if (mapApi && mapApi.fit) setTimeout(function () { mapApi.fit(); }, 60);
+          if (mapApi) setTimeout(function () { if (mapApi.centerOnPin) mapApi.centerOnPin(); else if (mapApi.fit) mapApi.fit(); }, 60);
           var recenterSmBtn = wrap.querySelector("#gd-det-map-recenter");
           if (recenterSmBtn) recenterSmBtn.addEventListener("click", function (e) {
             e.stopPropagation();
@@ -1742,7 +1742,7 @@
             head: false, search: false, legend: false, hint: false, popup: false,
             pinAt: { x: t.x, y: t.y }
           });
-          if (api && api.fit) setTimeout(function () { api.fit(); }, 60);
+          if (api) setTimeout(function () { if (api.centerOnPin) api.centerOnPin(); else if (api.fit) api.fit(); }, 60);
           var recenterBtn = wrap.querySelector("#gt-map-recenter");
           if (recenterBtn) recenterBtn.addEventListener("click", function () {
             if (api && api.centerOnPin) api.centerOnPin();
