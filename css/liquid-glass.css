@@ -301,19 +301,11 @@ input.lg, textarea.lg, select.lg {
 .up-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .up-tg { padding: 8px 6px; font-size: 12px; font-weight: 700; text-align: center; }
 
-/* "שנת צפייה" — תפריט החלקה (accordion). ראש באותו דפוס כמו up-pill
-   (עיגול+תווית), עם ערך השנה בקצה וחץ שמסתובב; הגוף נפתח ב-max-height,
-   לא ב-hidden, כדי שההחלקה תהיה אנימציה אמיתית ולא קפיצה. */
-.up-year__head {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 7px 9px; font-size: 12px; text-align: start; font-family: inherit;
-  border: none; background: none; cursor: pointer; color: inherit;
-}
-.up-year__val { margin-inline-start: auto; font-weight: 700; color: var(--text); font-size: 12px; }
-.up-year__head .lg-ico { transition: transform .18s ease; }
-.up-year__head[aria-expanded="true"] .lg-ico { transform: rotate(180deg); }
-.up-year__body { max-height: 0; overflow: hidden; transition: max-height .2s ease; padding: 0 9px; }
-.up-year__body.is-open { max-height: 220px; padding: 2px 9px 8px; }
+/* "שנת צפייה" (2026-09-15: הוסר האקורדיון שהיה כאן — יועד: "אין צורך
+   גם בחץ וגם בכפתורים, זה ממש לא iOS style". תווית פשוטה, ומתחתיה ישר
+   הקפסולה הגוללת-אופקית, תמיד גלויה. */
+.up-year__label { padding: 0 9px; margin-bottom: 6px; font-size: 11.5px; font-weight: 700;
+  color: var(--text-soft); }
 /* קפסולה בתוך קפסולה, בסגנון iOS (יועד, 15.9.26): מסלול אחד עגול-לגמרי
    שגוללים בתוכו אופקית, ובתוכו שבבים עגולים-לגמרי; הנבחר מלא וכהה,
    השאר שקופים. בלי .lg כאן בכוונה — "זכוכית בתוך זכוכית" היה מכפיל את
@@ -332,7 +324,7 @@ input.lg, textarea.lg, select.lg {
 }
 .up-year__chip:hover { color: var(--text); }
 .up-year__chip.is-on { background: var(--action, #111827); color: #fff; }
-.up-year__note { font-size: 11px; color: var(--text-soft); margin-top: 8px; }
+.up-year__note { font-size: 11px; color: var(--text-soft); margin-top: 8px; text-align: center; }
 .up-year__note b { color: var(--text); }
 .up-year__set { margin-top: 6px; width: 100%; font-size: 12px; padding: 7px; text-align: center; }
 

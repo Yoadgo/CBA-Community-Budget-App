@@ -62,7 +62,9 @@
     hist:   '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3 4v4h4"/>' +
             '<path d="M12 7.5V12l3 1.8"/>',
     help:   '<circle cx="12" cy="12" r="9"/>' +
-            '<path d="M9.6 9.2a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.8.7-.8 1.3v.4"/><path d="M12 17h.01"/>'
+            '<path d="M9.6 9.2a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.8.7-.8 1.3v.4"/><path d="M12 17h.01"/>',
+    x:      '<path d="M6 6l12 12M18 6 6 18"/>',
+    expand: '<path d="M9 3H4v5M15 21h5v-5M20 4l-6.5 6.5M4 20l6.5-6.5"/>'
   };
   function ico(n, cls) {
     return '<svg class="' + (cls || "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
@@ -1484,51 +1486,6 @@
          גלילה לגיטימית הייתה סוגרת את הגיליון על המשתמש. חצי שנייה של
          דחייה בהתחלה כדי שתנופת האנימציה של הפתיחה עצמה לא תיספר כבקשת
          סגירה. */
-      /* 2026-09-15, סבב ב': הגרסה הראשונה סגרה על כל תנועה כלשהי — יועד:
-         "כל תנועה על החלון סוגרת אותה". התיקון: רק גרירה/גלילה *למטה*
-         שעוברת כ-30% מגובה הגיליון סוגרת; גלילה למעלה תמיד מתאפסת ולא
-         סוגרת לעולם (משאירה אותה חופשית להזיז תוכן בתוך הגיליון, אם יש
-         לו על מה לגלול). גם עכשיו: רק גיליון בלי יכולת גלילה פנימית
-         אמיתית (scrollHeight<=clientHeight) נסגר ככה בכלל — גיליון ארוך
-         פשוט גולל את התוכן שלו כרגיל, בלי המנגנון הזה. */
-      function bindScrollClose(sheetEl, close) {
-        if (!sheetEl) return;
-        var ready = false;
-        setTimeout(function () { ready = true; }, 260);
-        var THRESHOLD = 0.3; // 30% מגובה הגיליון
-        function canClose() {
-          return sheetEl.scrollHeight <= sheetEl.clientHeight + 2;
-        }
-
-        var startY = null, dragDown = 0;
-        sheetEl.addEventListener("touchstart", function (e) {
-          startY = e.touches && e.touches[0] ? e.touches[0].clientY : null;
-          dragDown = 0;
-        }, { passive: true });
-        sheetEl.addEventListener("touchmove", function (e) {
-          if (!ready || startY == null) return;
-          var y = e.touches && e.touches[0] ? e.touches[0].clientY : null;
-          if (y == null) return;
-          var delta = y - startY; // חיובי = האצבע ירדה = מושכים את הגיליון למטה
-          if (delta <= 0) { dragDown = 0; return; } // גרירה למעלה — לעולם לא סוגרת
-          dragDown = delta;
-          if (canClose() && dragDown > sheetEl.clientHeight * THRESHOLD) close();
-        }, { passive: true });
-        sheetEl.addEventListener("touchend", function () {
-          startY = null; dragDown = 0;
-        }, { passive: true });
-
-        var wheelDown = 0, wheelTimer = null;
-        sheetEl.addEventListener("wheel", function (e) {
-          if (!ready) return;
-          if (e.deltaY < 0) { wheelDown = 0; return; } // גלילה למעלה — מתאפסת, לא סוגרת
-          wheelDown += e.deltaY;
-          clearTimeout(wheelTimer);
-          wheelTimer = setTimeout(function () { wheelDown = 0; }, 500);
-          if (canClose() && wheelDown > sheetEl.clientHeight * THRESHOLD) close();
-        }, { passive: true });
-      }
-
       /* ---------------------------------------------------------------------
          כרטיס פרטים לדיווח תושב (2026-09-15, עודכן לפי הערות יועד על הגרסה
          הראשונה). לחיצה על גוף השורה — לא על התיבה, לא על ⋮ — פותחת אותו.
@@ -1604,6 +1561,8 @@
           '<div class="gt-sheet-bd"></div>' +
           '<div class="gt-sheet gd-det" role="dialog" aria-label="' + esc(t.title || "משימה") + '">' +
             '<div class="gt-grip" aria-hidden="true"></div>' +
+            '<div class="gd-det-topbar"><button type="button" class="gd-sheet-close" data-close="1">' +
+              ico("x") + 'סגירה</button></div>' +
             /* הכותרת עוברת מעל התמונה, לפי יועד — כך שהעין פוגשת קודם מה
                התקלה ומאיפה, ורק אז את מה שהתושב צילם. "נפתח" זז מהרשת
                למטה לשורת התיאור, מיד אחרי מספר הפנייה. */
@@ -1631,7 +1590,7 @@
             '</div>' +
             (hasMap
               ? '<div class="gd-det-mapbox" data-m="fullmap"><div class="gd-map" id="gd-det-map"></div>' +
-                  '<span class="gd-det-mapbox__hint">' + ico("pin") + 'הקשה להגדלה</span></div>'
+                  '<span class="gd-det-mapbox__hint">' + ico("expand") + '</span></div>'
               : '') +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
             (closed
@@ -1663,7 +1622,7 @@
           setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
         }
         wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
-        bindScrollClose(wrap.querySelector(".gt-sheet"), close);
+        wrap.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) close(); });
 
         /* תמונה ראשונה בלבד, כתצוגה מקדימה — בדיוק כמו photos.js, דרך אותה
            קריאת שרת (getGardenPhoto) ואותו מטמון. הגלריה המלאה (כל התמונות,
@@ -1740,11 +1699,15 @@
           '<div class="gt-sheet-bd"></div>' +
           '<div class="gt-sheet"><div class="gt-grip" aria-hidden="true"></div>' +
             /* כפתור חזרה מפורש (יועד: "מפה... לחיצה עליה מגדילה למסך מלא
-               כולל כפתור חזרה") — בנוסף לרקע-לחיצה ולגלילה-סוגרת. */
-            '<div class="gd-map-head"><button type="button" class="gd-map-back" data-close="1">' +
+               כולל כפתור חזרה") — אותו רכיב חזותי בדיוק כמו כפתור הסגירה
+               בכרטיס הפרטים (gd-sheet-close), רק עם תווית/סמליל "חזרה". */
+            '<div class="gd-sheet-head"><button type="button" class="gd-sheet-close" data-close="1">' +
               ico("prev") + 'חזרה</button><h4>' + esc(t.title || "משימה") + '</h4></div>' +
             '<p class="sub">' + esc(t.area || "") + '</p>' +
-            '<div class="gd-map" id="gt-map"></div></div>';
+            '<div class="gd-map-wrap"><div class="gd-map" id="gt-map"></div>' +
+              '<button type="button" class="gd-map-recenter" id="gt-map-recenter" title="מרכז לנעיצה">' +
+                ico("pin") + '</button>' +
+            '</div></div>';
         document.body.appendChild(wrap);
         requestAnimationFrame(function () { wrap.classList.add("is-open"); });
         function close() {
@@ -1753,13 +1716,16 @@
         }
         wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
         wrap.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) close(); });
-        bindScrollClose(wrap.querySelector(".gt-sheet"), close);
         if (CBA.map) {
           var api = CBA.map.render(wrap.querySelector("#gt-map"), {
             head: false, search: false, legend: false, hint: false, popup: false,
             pinAt: { x: t.x, y: t.y }
           });
           if (api && api.fit) setTimeout(function () { api.fit(); }, 60);
+          var recenterBtn = wrap.querySelector("#gt-map-recenter");
+          if (recenterBtn) recenterBtn.addEventListener("click", function () {
+            if (api && api.centerOnPin) api.centerOnPin();
+          });
         }
       }
     }

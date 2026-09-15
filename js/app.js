@@ -1204,6 +1204,10 @@
     panel.hidden = false;
     btn.classList.add("is-open");
     positionUserPanel(panel, btn);
+    var onChip = panel.querySelector(".up-year__chip.is-on");
+    if (onChip && onChip.scrollIntoView) {
+      setTimeout(function () { onChip.scrollIntoView({ block: "nearest", inline: "center" }); }, 60);
+    }
   }
   function closeUserPanel(panel, btn) {
     if (panel) panel.hidden = true;
@@ -1266,30 +1270,13 @@
         if (target !== currentArea) setArea(target);
       });
     });
-    // "שנת צפייה" — תפריט החלקה: ראש פותח/סוגר, שבב מחליף שנה, "הגדר
-    // כשנת עבודה" פותח את דיאלוג האישור (אותה לוגיקה שהייתה בהדר).
-    const yearHead = panel.querySelector("[data-panel-year-toggle]");
-    if (yearHead) yearHead.addEventListener("click", function (e) {
-      e.stopPropagation();
-      var body = panel.querySelector("#up-year-body");
-      var open = !body.classList.contains("is-open");
-      body.classList.toggle("is-open", open);
-      yearHead.setAttribute("aria-expanded", open ? "true" : "false");
-      // מביא את שבב השנה הנבחרת אל תוך התצוגה כשהקפסולה נפתחת — כדי
-      // שברשימת שנים ארוכה המשתמש לא יצטרך לגלול ידנית כדי למצוא איפה הוא.
-      if (open) {
-        var track = panel.querySelector(".up-year__track");
-        var onChip = track && track.querySelector(".up-year__chip.is-on");
-        if (onChip && onChip.scrollIntoView) {
-          setTimeout(function () {
-            onChip.scrollIntoView({ block: "nearest", inline: "center" });
-          }, 210);
-        }
-      }
-    });
+    // "שנת צפייה" — שבב מחליף שנה, בלי לסגור את כל התפריט (2026-09-15):
+    // switchViewYear קורא ל-renderControls בעצמו אחרי ההחלפה, וזה כבר
+    // יודע לשמר תפריט פתוח (ר' wasOpen למעלה) — כך שבחירת שנה רק מעדכנת
+    // את התפריט במקום, בלי הבזק של סגירה+פתיחה מחדש. "הגדר כשנת עבודה"
+    // פותח את דיאלוג האישור (אותה לוגיקה שהייתה בהדר).
     panel.querySelectorAll("[data-year]").forEach(function (chip) {
       chip.addEventListener("click", function () {
-        closeUserPanel(panel, btn);
         switchViewYear(chip.dataset.year, panel, btn);
       });
     });
@@ -1844,26 +1831,20 @@
     const working = CBA.data.getWorkingYear ? CBA.data.getWorkingYear() : cur;
     return (
       '<div class="up-year">' +
-        '<button type="button" class="up-year__head" data-panel-year-toggle aria-expanded="false" aria-controls="up-year-body">' +
-          '<span class="up-row__ico lg-ico">' + ICON.chevron + '</span>' +
-          '<span class="up-pill__t">שנת צפייה</span>' +
-          '<span class="up-year__val">' + CBA.esc(cur) + '</span>' +
-        '</button>' +
-        '<div class="up-year__body" id="up-year-body">' +
-          '<div class="up-year__track">' +
-            years.map(function (y) {
-              return '<button type="button" class="up-year__chip' + (y === cur ? " is-on" : "") +
-                '" data-year="' + CBA.esc(y) + '">' + CBA.esc(y) + '</button>';
-            }).join("") +
-          '</div>' +
-          (working !== cur
-            ? '<div class="up-year__note">צופה בלבד · שנת העבודה היא <b>' + CBA.esc(working) + '</b></div>' +
-              (can(PERM.BUDGET)
-                ? '<button type="button" class="btn-ghost up-year__set" data-panel-year-set>הגדר את ' +
-                    CBA.esc(cur) + ' כשנת העבודה</button>'
-                : "")
-            : "") +
+        '<div class="up-year__label">שנת צפייה</div>' +
+        '<div class="up-year__track">' +
+          years.map(function (y) {
+            return '<button type="button" class="up-year__chip' + (y === cur ? " is-on" : "") +
+              '" data-year="' + CBA.esc(y) + '">' + CBA.esc(y) + '</button>';
+          }).join("") +
         '</div>' +
+        (working !== cur
+          ? '<div class="up-year__note">צופה בלבד · שנת העבודה היא <b>' + CBA.esc(working) + '</b></div>' +
+            (can(PERM.BUDGET)
+              ? '<button type="button" class="lg lg-pill up-year__set" data-panel-year-set>הגדר את ' +
+                  CBA.esc(cur) + ' כשנת העבודה</button>'
+              : "")
+          : "") +
       '</div>'
     );
   }
@@ -1877,6 +1858,7 @@
     function apply() {
       CBA.data.setCurrentYear(y);
       renderYearSwitch();
+      renderControls();   // מרענן את תפריט המשתמש (שבב נבחר, הערה) בלי לסגור אותו
       showScreen(currentScreen);
     }
     if (!CBA.sheets.yearLoaded || CBA.sheets.yearLoaded(y)) { apply(); return; }

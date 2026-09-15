@@ -592,14 +592,29 @@
 .gt-opt u svg { width: 15px; height: 15px; }
 .gt-opt span { display: block; font-size: 11.5px; color: #9CA3AF; font-weight: 400; margin-top: 1px; }
 .gt-sheet-wrap.is-map .gd-map { height: 62vh; margin-top: 4px; }
-.gd-map-head { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
-.gd-map-head h4 { margin: 0; font-size: 15px; font-weight: 700; flex: 1; min-width: 0;
+/* כותרת+כפתור-סגירה משותפים לכל גיליון "מסך מלא" בגינון (מפה, וכרטיס
+   הפרטים) — שפה חזותית אחת, כדי שלא יהיה מצב שבו רק לחלק יש כפתור
+   סגירה מפורש (יועד, 15.9.26). */
+.gd-sheet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
+.gd-sheet-head h4 { margin: 0; font-size: 15px; font-weight: 700; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gd-map-back { flex: none; border: 0; background: rgba(17,24,39,.05); color: var(--text, #374151);
+.gd-sheet-close { flex: none; border: 0; background: rgba(17,24,39,.05); color: var(--text, #374151);
   font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 99px; padding: 6px 12px 6px 10px;
   display: flex; align-items: center; gap: 3px; cursor: pointer; }
-.gd-map-back svg { width: 14px; height: 14px; }
-.gd-map-back:hover { background: rgba(17,24,39,.09); }
+.gd-sheet-close svg { width: 14px; height: 14px; }
+.gd-sheet-close:hover { background: rgba(17,24,39,.09); }
+/* בכרטיס הפרטים אין כותרת בשורה הזו (היא כבר למטה, מעל התמונה) —
+   רק כפתור הסגירה, דחוף לקצה. */
+.gd-det-topbar { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+/* כפתור "מרכז לנעיצה" — עגול וצף, בפינת המפה המלאה (יועד: "כפתור עם
+   נעץ שהמטרה שלו למרכז את המפה אל הנעץ ומעט להכניס בזום IN"). */
+.gd-map-wrap { position: relative; }
+.gd-map-recenter { position: absolute; bottom: 14px; inset-inline-end: 14px;
+  width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff;
+  box-shadow: 0 2px 10px rgba(16,24,40,.18); color: var(--action, #111827);
+  display: grid; place-items: center; cursor: pointer; }
+.gd-map-recenter svg { width: 18px; height: 18px; }
+.gd-map-recenter:active { transform: scale(.94); }
 
 /* ---------- כרטיס פרטים לדיווח תושב (2026-09-15) ----------
    נפתח בלחיצה על גוף השורה. אותם משתני צבע כמו שאר המודול (מוצהרים על
@@ -610,6 +625,9 @@
   display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; }
 .gd-det-photo.is-err { cursor: default; }
 .gd-det-photo .spinner { width: 30px; height: 30px; border-width: 3px; }
+/* יועד: "הקשה להגדלה" הייתה תג טקסט גדול מדי — צומצם לתג עגול
+   סמליל-בלבד, קטן משמעותית. */
+.gd-det-mapbox__hint { width: 26px; height: 26px; padding: 0; justify-content: center; }
 .gd-det-photo__cnt { position: absolute; bottom: 10px; inset-inline-end: 10px;
   background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 700;
   border: 0; padding: 4px 10px; border-radius: 99px; display: flex; align-items: center; gap: 4px; }
@@ -634,15 +652,15 @@
 .gd-det-f .l { font-size: 10.5px; color: var(--text-soft, #6B7280); }
 .gd-det-f .v { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
 .gd-det-f .v svg { width: 13px; height: 13px; opacity: .7; }
-.gd-det .gd-map { height: 150px; margin-bottom: 14px; }
+.gd-det .gd-map { height: 164px; margin-bottom: 14px; }
 .gd-det-mapbox { position: relative; cursor: pointer; border-radius: 14px; overflow: hidden;
   margin-bottom: 14px; }
 .gd-det-mapbox .gd-map { margin-bottom: 0; }
-.gd-det-mapbox__hint { position: absolute; bottom: 10px; inset-inline-end: 10px;
+.gd-det-mapbox__hint { position: absolute; bottom: 8px; inset-inline-end: 8px;
   background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 700;
-  padding: 4px 10px; border-radius: 99px; display: flex; align-items: center; gap: 4px;
+  border-radius: 50%; display: flex; align-items: center; gap: 4px;
   pointer-events: none; }
-.gd-det-mapbox__hint svg { width: 12px; height: 12px; }
+.gd-det-mapbox__hint svg { width: 13px; height: 13px; }
 .gd-det-journal { margin-bottom: 14px; padding: 11px 12px; border-radius: 12px;
   background: rgba(17,24,39,.03); }
 .gd-det-journal__h { display: flex; align-items: center; justify-content: space-between;

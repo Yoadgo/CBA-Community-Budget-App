@@ -3053,6 +3053,21 @@ CBA.screens = CBA.screens || {};
         return { x: parseFloat(pinEl.style.left) / MAP_WORLD_W,
                  y: parseFloat(pinEl.style.top) / MAP_WORLD_H };
       }
+      /* "מרכז לנעיצה" (2026-09-15) — כמו goToHouse, אבל לפי קואורדינטת
+         הנעיצה המנורמלת (0-1) במקום חיפוש בית ב-MAP_TILES; נעיצת דיווח
+         גינון לא בהכרח יושבת בדיוק על בית. זום עדין (MAP_T1) ולא אגרסיבי
+         כמו goToHouse (MAP_T2). */
+      function centerOnPin() {
+        var p = getPin();
+        if (!p) return;
+        var cx = p.x * MAP_WORLD_W, cy = p.y * MAP_WORLD_H;
+        var targetScale = Math.max(scale, fitScaleVal * MAP_T1);
+        scale = Math.max(minScale(), Math.min(maxScale(), targetScale));
+        tx = viewport.clientWidth / 2 - cx * scale; ty = viewport.clientHeight / 2 - cy * scale;
+        worldEl.style.transition = "transform .45s cubic-bezier(.2,.6,.2,1)";
+        setTimeout(function () { worldEl.style.transition = ""; }, 460);
+        apply();
+      }
       function setMarkers(list) {
         markerEls.forEach(function (e) { e.remove(); });
         markerEls = [];
@@ -3326,7 +3341,7 @@ CBA.screens = CBA.screens || {};
       // ידית לקורא — כדי שמסך הגינון יוכל לרענן סימונים בלי לצייר מפה מחדש
       return {
         setMarkers: setMarkers, setPin: setPin, getPin: getPin, areaAt: areaAt,
-        goToHouse: goToHouse, fit: function () { fitToScreen(true); }
+        goToHouse: goToHouse, centerOnPin: centerOnPin, fit: function () { fitToScreen(true); }
       };
     }
   };
