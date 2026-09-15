@@ -3060,6 +3060,7 @@ CBA.screens = CBA.screens || {};
       function centerOnPin() {
         var p = getPin();
         if (!p) return;
+        viewMode = "manual";
         var cx = p.x * MAP_WORLD_W, cy = p.y * MAP_WORLD_H;
         var targetScale = Math.max(scale, fitScaleVal * MAP_T1);
         scale = Math.max(minScale(), Math.min(maxScale(), targetScale));
