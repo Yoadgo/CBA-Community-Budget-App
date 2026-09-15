@@ -2627,7 +2627,7 @@ CBA.screens = CBA.screens || {};
 
       // ---- מנוע תנועה: pan / zoom / pinch, עם שתי דרגות פירוט (שם משפחה -> +ילדים) ----
       var scale = 1, tx = 0, ty = 0, fitScaleVal = 1;
-      var MAP_T1 = 1.5, MAP_T2 = 2.6;
+      var MAP_T1 = 1.8, MAP_T2 = 2.6;
       function minScale() { return fitScaleVal; }
       /* רצפה מוחלטת לזום המרבי: במסך צר fitScale קטן, ו-4.5 ממנו הגיע לבית של
          51 פיקסלים בלבד — כלומר במובייל אי-אפשר היה בכלל להגיע לדרגת הפירוט
