@@ -228,6 +228,7 @@ var GET_ACTION_PERMS = {
   gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
   /* גיבוי Firestore ← גיליון (2026-09-15, צעד 07א) — מנהל-על בלבד. */
   backupRun: PERM_SUPER,
+  backupVerify: PERM_SUPER, backupRestore: PERM_SUPER,
   /* סנכרון יזום של תוכנית העבודה אל Firestore (2026-09-14, צעד 03א).
      🔴 **PERM_SUPER ולא PERM_GARDEN.** הפעולה אינה נוגעת לעבודת
      הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
@@ -573,6 +574,12 @@ function doGet(e) {
        וגם אחרי שיהיה, כדי שאפשר יהיה לבקש גיבוי לפני שינוי גדול. */
     if (e && e.parameter && e.parameter.action === 'backupRun') {
       return handleBackupRun_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'backupVerify') {
+      return handleBackupVerify_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'backupRestore') {
+      return handleBackupRestore_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'gardenTasks') {
       return handleGardenTasks_(e.parameter);
@@ -7851,6 +7858,49 @@ function bkTabOk_(name) {
   return n.length > BK_PREFIX.length && n.indexOf(BK_PREFIX) === 0;
 }
 
+/* קידוד טיפוסי   (צעד 07ב, 2026-09-15)
+   🔴 **הבאג שצעד 07א היה מפרסם בלי זה:** `JSON.stringify` הופך כל
+   `Date` למחרוזת. שחזור היה כותב אותה בחזרה כ-`stringValue` ולא
+   כ-`timestampValue` (ר' fsVal_) — כלומר **הלוך-חזור לא היה זהה**,
+   ו-`updatedAt` היה מפסיק להיות ניתן להשוואה — והגיבוי המצטבר
+   (שכולו נשען על `where updatedAt > X`) היה נשבר בשקט.
+   ⚠️ **לא מנחשים לפי צורת המחרוזת** בשחזור — שדה טקסט שנראה כמו
+      תאריך היה הופך לתאריך. הסוג נרשם **בזמן הגיבוי**, מפורשות.
+   ⚠️ `__t` הוא סימן פנימי. מסמך אמיתי שיכיל שדה בשם הזה היה
+      מתנגש — ולכן `bkDecode_` מפענח רק אובייקט שיש בו **שתי
+      מפתחות בלבד**, `__t` ו-`v`. אחרת הוא עובר כמותשהוא. */
+function bkEncode_(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v.getTime === 'function' && !isNaN(v.getTime())) {
+    return { __t: 'date', v: v.toISOString() };
+  }
+  if (Object.prototype.toString.call(v) === '[object Array]') return v.map(bkEncode_);
+  if (typeof v === 'object') {
+    var o = {};
+    for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k)) o[k] = bkEncode_(v[k]);
+    return o;
+  }
+  return v;
+}
+
+function bkDecode_(v) {
+  if (v === null || v === undefined) return v;
+  if (Object.prototype.toString.call(v) === '[object Array]') return v.map(bkDecode_);
+  if (typeof v === 'object') {
+    var keys = [];
+    for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k)) keys.push(k);
+    if (keys.length === 2 && v.__t === 'date' && typeof v.v === 'string') {
+      var d = new Date(v.v);
+      if (!isNaN(d.getTime())) return d;
+      return v.v;                       /* תאריך פגום — מחזירים טקסט ולא Invalid Date */
+    }
+    var o = {};
+    for (var j = 0; j < keys.length; j++) o[keys[j]] = bkDecode_(v[keys[j]]);
+    return o;
+  }
+  return v;
+}
+
 /* שורה אחת למסמך. נקודת המרה אחת, כמו gardenPlanDoc_/svcDoc_.
    ה-JSON נשמר **כמו שהוא** ולא מסונן — גיבוי שמשמיט שדות אינו גיבוי. */
 function bkRow_(id, data) {
@@ -7861,8 +7911,167 @@ function bkRow_(id, data) {
     (upd && typeof upd.getTime === 'function') ? Utilities.formatDate(upd, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss')
                                                : String(upd == null ? '' : upd),
     d.schema == null ? '' : d.schema,
-    JSON.stringify(d)
+    JSON.stringify(bkEncode_(d))
   ];
+}
+
+/* קריאת טאב גיבוי חזרה למסמכים. מחזיר { docs, bad }.
+   ⚠️ שורה פגומה (JSON שבור, id ריק) **אינה מפילה את השאר** — אבל
+      היא נספרת ומדווחת. שחזור שמדלג בשקט על שורות גרוע משחזור
+      שנכשל: הראשון נראה כאילו הצליח. */
+function bkReadTab_(ss, tab) {
+  var out = { docs: [], bad: [] };
+  var sh = ss.getSheetByName(tab);
+  if (!sh) return out;
+  var v = sh.getDataRange().getValues();
+  for (var r = 1; r < v.length; r++) {
+    var id = String(v[r][0] == null ? '' : v[r][0]).trim();
+    var raw = String(v[r][3] == null ? '' : v[r][3]);
+    if (!id && !raw) continue;                       /* שורה ריקה — לא תקלה */
+    if (!id) { out.bad.push({ row: r + 1, why: 'id ריק' }); continue; }
+    try {
+      out.docs.push({ id: id, data: bkDecode_(JSON.parse(raw)) });
+    } catch (e) {
+      out.bad.push({ row: r + 1, id: id, why: 'JSON שבור' });
+    }
+  }
+  return out;
+}
+
+/* ----------------------------------------------------------------------------
+ *  אימות הלוך-חזור — **בלי לכתוב כלום**
+ * ----------------------------------------------------------------------------
+ *  🔴 גיבוי שמעולם לא שוחזר ממנו הוא קובץ, לא גיבוי. אבל שחזור
+ *  אמיתי כדי לבדוק הוא פעולה הרסנית. לכן הבדיקה השגרתית היא
+ *  **השוואה**: מפענחים את הגיבוי בדיוק כשרשחזור היה עושה, ומשווים
+ *  מול Firestore. אם ההשוואה עוברת — השחזור ייתן את אותו מצב.
+ *  ⚠️ ההשוואה על ה-JSON המקודד (`bkEncode_`) ולא על האובייקטים
+ *     החיים, כדי ש-`Date` מול `Date` ישווה לפי ערך ולא לפי זהות.
+ *     מפתחות ממוינות, אחרת סדר שדות שונה היה נראה כהפרש.
+ * -------------------------------------------------------------------------- */
+function bkCanon_(data) {
+  var enc = bkEncode_(data || {});
+  return JSON.stringify(bkSort_(enc));
+}
+function bkSort_(v) {
+  if (v === null || v === undefined) return v;
+  if (Object.prototype.toString.call(v) === '[object Array]') return v.map(bkSort_);
+  if (typeof v === 'object') {
+    var keys = [];
+    for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k)) keys.push(k);
+    keys.sort();
+    var o = {};
+    for (var i = 0; i < keys.length; i++) o[keys[i]] = bkSort_(v[keys[i]]);
+    return o;
+  }
+  return v;
+}
+
+function fsBackupVerify_(ss) {
+  var out = { ok: true, read: 0, collections: [], errors: [] };
+  for (var i = 0; i < BK_COLLECTIONS.length; i++) {
+    var c = BK_COLLECTIONS[i];
+    try {
+      var live = fsList_(c.collection);
+      out.read += live.length;
+      var back = bkReadTab_(ss, c.tab);
+      var byId = {};
+      for (var b = 0; b < back.docs.length; b++) byId[back.docs[b].id] = back.docs[b].data;
+      var same = 0, diff = [], missing = [];
+      for (var j = 0; j < live.length; j++) {
+        var id = live[j].id;
+        if (!(id in byId)) { missing.push(id); continue; }
+        if (bkCanon_(live[j].data) === bkCanon_(byId[id])) same++;
+        else diff.push(id);
+        delete byId[id];
+      }
+      var extra = [];
+      for (var k in byId) if (Object.prototype.hasOwnProperty.call(byId, k)) extra.push(k);
+      var res = { collection: c.collection, live: live.length, backed: back.docs.length,
+                  same: same, differ: diff, missingFromBackup: missing, onlyInBackup: extra,
+                  badRows: back.bad };
+      res.ok = diff.length === 0 && missing.length === 0 && extra.length === 0 && back.bad.length === 0;
+      if (!res.ok) out.ok = false;
+      out.collections.push(res);
+    } catch (e) {
+      out.ok = false;
+      out.errors.push(c.collection + ': ' + String(e));
+    }
+  }
+  return out;
+}
+
+/* ----------------------------------------------------------------------------
+ *  השחזור עצמו
+ * ----------------------------------------------------------------------------
+ *  ⚠️ **כותב בלבד, לעולם לא מוחק.** מסמך שקיים ב-Firestore ואינו
+ *     בגיבוי הוא בדרוך כלל **חדש יותר מהגיבוי**, לא זבל. מחיקה
+ *     אוטומטית שלו היא איבוד נתונים בזמן פעולת הצלה. השחזור
+ *     מדווח עליו (`onlyInFirestore`) ומשאיר את ההכרעה לאדם.
+ *  ⚠️ מגבלת בטיחות: אם הטאב ריק — **לא כותבים כלום**. טאב ריק הוא
+ *     כמעט תמיד גיבוי שנכשל, לא אוסף שבאמת ריק.
+ * -------------------------------------------------------------------------- */
+function fsRestoreCollection_(ss, collection) {
+  var entry = null;
+  for (var i = 0; i < BK_COLLECTIONS.length; i++) {
+    if (BK_COLLECTIONS[i].collection === collection) entry = BK_COLLECTIONS[i];
+  }
+  if (!entry) throw new Error('אוסף לא מוכר לגיבוי: ' + collection);
+  if (!bkTabOk_(entry.tab)) throw new Error('טאב גיבוי לא חוקי: ' + entry.tab);
+
+  var back = bkReadTab_(ss, entry.tab);
+  if (!back.docs.length) {
+    throw new Error('הגיבוי ריק (' + entry.tab + ') — לא משחזרים ממנו');
+  }
+  var out = { collection: collection, tab: entry.tab, wrote: 0,
+              badRows: back.bad, onlyInFirestore: [] };
+  var inBackup = {};
+  for (var d = 0; d < back.docs.length; d++) {
+    var doc = back.docs[d];
+    if (!fsIdOk_(doc.id)) { out.badRows.push({ id: doc.id, why: 'מזהה לא חוקי' }); continue; }
+    fsSet_(collection + '/' + doc.id, doc.data);
+    inBackup[doc.id] = 1;
+    out.wrote++;
+  }
+  var live = fsList_(collection);
+  for (var j = 0; j < live.length; j++) {
+    if (!inBackup[live[j].id]) out.onlyInFirestore.push(live[j].id);
+  }
+  out.ok = out.badRows.length === 0;
+  return out;
+}
+
+function handleBackupVerify_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var t0 = new Date().getTime();
+    var r = fsBackupVerify_(ss);
+    r.ms = new Date().getTime() - t0;
+    return json_(r);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ⚠️ שחזור דורש שם אוסף **מפורש** — אין "שחזר הכול". פעולה
+   הרסנית שרצה על הכל בלחיצה אחת היא בדיוק איך שחזור של אוסף אחד
+   הופך לדריסה של ארבעה. */
+function handleBackupRestore_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var col = String((p && p.collection) || '').trim();
+    if (!col) return json_({ ok: false, error: 'חסר שם אוסף (collection)' });
+    var t0 = new Date().getTime();
+    var r = fsRestoreCollection_(ss, col);
+    r.ms = new Date().getTime() - t0;
+    return json_(r);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
 }
 
 /* כתיבה מחדש של טאב גיבוי אחד.
