@@ -2239,10 +2239,77 @@
   var pulseStop = null;
   var lastCycleAt = 0;
 
+  /* ==========================================================================
+   *  🔴🔴 **רישום "איזה מסך צריך איזה תחום"**   (16.9.2026)
+   * --------------------------------------------------------------------------
+   *  הבאג שזה מתקן, כפי שיועד דיווח אותו: **מחק משימות גינון
+   *  בנייד, ובמחשב הן נשארו עד רענון ידני.** הסיבה: הסקר
+   *  (ועכשיו הפעימה) מרעננים את **המטען הראשי** בלבד, וכל
+   *  מסך שטוען לעצמו (גינון, מועדון, שירותים, תושבים, מכון)
+   *  החזיק את הנתונים אצלו בלי שאף אחד יאמר לו שהתיישנו.
+   *
+   *  עכשיו כל מסך מצהיר מאיזה תחום הוא ניזון, וכשהמונה של
+   *  התחום הזה זז — המסך מצויר מחדש, והציור מריץ את `load()`
+   *  שלו. זה בדיוק המנגנון מאפיון הביצועים שיועד אישר ב-8.9.
+   *
+   *  ⚠️ **שמות התחומים חייבים להתאים ל-`ACTION_DOMAIN` ב-Code.gs.**
+   *     שם שגוי כאן אינו שגיאה — המסך פשוט לא יתרענן, וזה
+   *     בדיוק הכשל השקט שתיקננו. יש בדיקה שמצליבה את השתיים.
+   *  ⚠️ מסך שאינו במפה מתנהג כמו קודם בדיוק — מתרענן רק עם
+   *     המטען הראשי. אין רגרסיה למסך ששכחתי לרשום.
+   * ======================================================================== */
+  var SCREEN_DOMAINS = {
+    /* תקציב — כבר מכוסה ע"י המטען הראשי, נרשם למען השלמות */
+    budget: ["budget"], planning: ["budget"], expenses: ["budget"],
+    reconcile: ["budget"], resSubmit: ["budget"], resRequests: ["budget"],
+    /* גינון — המסך שבו התגלה הבאג */
+    gardenTasks: ["garden"], gardenInbox: ["garden"], gardenPlan: ["garden"],
+    gardenStats: ["garden"], resGarden: ["garden"], resGardenNew: ["garden"],
+    resMap: ["garden"],
+    /* מועדון */
+    clubAdmin: ["club"], resReserve: ["club"],
+    /* ועד השיכון */
+    committeeAdmin: ["committee"], resCommittee: ["committee"],
+    /* תושבים */
+    residents: ["residents"], resDirectory: ["residents"], resMe: ["residents"],
+    /* שירותים */
+    servicesAdmin: ["services"], resServices: ["services"],
+    /* מכון כושר */
+    gymAdmin: ["gym"], resGym: ["gym"],
+    /* דיווחי תקלות על האפליקציה */
+    appReports: ["appReports"],
+    /* עמוד הבית מרכז מונים מכמה תחומים */
+    resHome: ["garden", "club", "services", "gym", "budget"]
+  };
+
+  function screenNeedsMovedDomain(screen, moved) {
+    if (!screen || !moved || !moved.length) return false;
+    var need = SCREEN_DOMAINS[screen];
+    if (!need) return false;
+    for (var i = 0; i < need.length; i++) {
+      if (moved.indexOf(need[i]) !== -1) return true;
+    }
+    return false;
+  }
+  /* חשיפה לבדיקות ולאבחון. */
+  window.CBA.screenDomains = SCREEN_DOMAINS;
+
   function applyRefreshResult(ok, info) {
       pollInFlight = false;
       if (!ok) return;
-      if (info && info.source === "unchanged") { refreshAlertsLocal(); return; }
+      var moved = info && info.moved;
+      if (info && info.source === "unchanged") {
+        /* 🔴 המטען לא השתנה — אבל אולי התחום של המסך הפתוח
+           כן. ציור מחדש מריץ את `load()` של המסך, וזה מה
+           שמביא מחיקה שנעשתה במכשיר אחר.
+           ⚠️ לא מציירים באמצע הקלדה — אותו שער כמו למטה. */
+        if (screenNeedsMovedDomain(currentScreen, moved)) {
+          if (userIsEditingMain()) pendingSilentRefresh = true;
+          else showScreen(currentScreen, { silent: true });
+        }
+        refreshAlertsLocal();
+        return;
+      }
       window.CBA.connected = CBA.sheets.isConnected();
       // מציירים את המסך מחדש רק אם הנתונים שהגיעו באמת שונים ממה שכבר על המסך —
       // קודם זה קרה בכל מחזור (כל 3 שניות) גם בלי שינוי, וזה מה שגרם ל"תזוזת עמוד".
@@ -2260,6 +2327,13 @@
           showScreen(currentScreen, { silent: true });   // עדכון רקע — פולס על מה שהשתנה, לא רענון מסך מלא
           if (info && info.source === "fresh") toastRefreshed();
         }
+      } else if (screenNeedsMovedDomain(currentScreen, moved)) {
+        /* ⚠️ המטען נמשך ולא השתנה בו כלום (טביעת האצבע זהה),
+           אבל תחום של מסך שטוען לעצמו כן זז — וזה לא
+           משתקף בטביעת האצבע של CBA.mock. בלי הענף הזה,
+           רשת הביטחון של FULL_EVERY_MS היתה "מבלעת" את השינוי. */
+        if (userIsEditingMain()) pendingSilentRefresh = true;
+        else showScreen(currentScreen, { silent: true });
       }
       refreshAlertsLocal();   // מקומי בלבד (זול) — שריוני מועדון מתעדכנים בקצב נמוך יותר, ראה מעלה
   }

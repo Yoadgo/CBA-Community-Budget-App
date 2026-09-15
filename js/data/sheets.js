@@ -759,13 +759,17 @@ CBA.sheets = (function () {
     var mySeq = ++seqCounter;   // נתפס כאן, ברגע השליחה — לא ברגע שהתשובה חוזרת
 
     function useIt(payload) {
+      /* 🔴 נגזר כאן, לפני ש-`lastDomains` נדרס למטה — אחרת משיכה
+         מלאה (רשת הביטחון של FULL_EVERY_MS) היתה מגיעה בלי רשימת
+         תחומים, ומסך תלוי-תחום לא היה מתרענן. */
+      var movedNow = domainsMovedList(payload.domains);
       /* תשובה "ישנה" שהגיעה באיחור (ר' ההסבר המלא ליד isDirty/writeFloor
          למעלה) — מתעלמים.
          ⚠️ **נבדק שוב כאן, אחרי הפער האסינכרוני של קריאת התנועות** —
             הקריאה מ-Firestore מוסיפה זמן שבו כתיבה יכולה להסתיים,
             ובדיקה שנעשתה רק לפני הפער היתה מפספסת אותה. */
       if (mySeq <= writeFloor || mySeq <= lastAppliedSeq) {
-        cb(true, { source: "stale-ignored", hadCache: hadCache });
+        cb(true, { source: "stale-ignored", hadCache: hadCache, moved: null });
         return;
       }
       var store = transform(payload);
@@ -797,7 +801,7 @@ CBA.sheets = (function () {
        *     מחדש של מה שכבר בזיכרון.
        * ==================================================================== */
       if (payload.txFromFirestore) fillBuyerNames(payload.currentYear);
-      cb(true, { source: "fresh", hadCache: hadCache });
+      cb(true, { source: "fresh", hadCache: hadCache, moved: movedNow });
     }
 
     function failed(err) {
@@ -881,6 +885,32 @@ CBA.sheets = (function () {
   var PAYLOAD_DOMAINS = ["budget", "other"];
   var lastDomains = null;      // null = השרת עוד לא דיווח מונים לפי תחום
 
+  /* ==========================================================================
+   *  🔴🔴 **איזה תחומים זזו** — ולא רק "האם המטען הראשי זז"
+   * --------------------------------------------------------------------------
+   *  עד היום הלקוח שאל **שאלה אחת**: האם זז תחום שהמטען
+   *  הראשי תלוי בו (`PAYLOAD_DOMAINS`). כל השאר — גינון, מועדון,
+   *  תושבים, שירותים, מכון — נענו ב"לא השתנה כלום".
+   *
+   *  🔴 **וזה היה באג אמיתי שיועד ראה במו עיניו** (16.9.2026):
+   *  מחק משימות גינון בנייד, ובמחשב הן נשארו עד רענון ידני.
+   *  מסך משימות הגינון טוען את עצמו כשנכנסים אליו ושומר את
+   *  השורות אצלו — ואף אחד לא אמר לו שהן התיישנו.
+   *  אותו באג היה בכל מסך שטוען לעצמו, לא רק בגינון.
+   *
+   *  ⚠️ `null` = **אין מידע**, וזה שונה מ-`[]` שהוא "לא זז כלום".
+   *     שרת ישן שאינו מחזיר `domains`, או נקודת ייחוס שעוד לא
+   *     נקבעה — אסור שייחשבו כ"שקט", כי אז מסך לעולם לא יתרענן.
+   * ======================================================================== */
+  function domainsMovedList(now) {
+    if (!now || typeof now !== "object" || !lastDomains) return null;
+    var out = [];
+    Object.keys(now).forEach(function (k) {
+      if ((now[k] || 0) !== (lastDomains[k] || 0)) out.push(k);
+    });
+    return out;
+  }
+
   function payloadDomainsMoved(now) {
     if (!lastDomains || !now) return true;        // אין מול מה להשוות — לא מנחשים
     for (var i = 0; i < PAYLOAD_DOMAINS.length; i++) {
@@ -896,14 +926,19 @@ CBA.sheets = (function () {
      היו נפרדות בשקט בשינוי הראשון — ר' "כלל הסטייה הגלויה". */
   function applyRev(data, cb) {
     if (!data || typeof data.rev !== "number") { revSupported = false; refresh(cb); return; }
-    if (data.rev === lastRev) { cb(true, { source: "unchanged" }); return; }
+    /* 🔴 נגזר **לפני** ש-`lastDomains` מתעדכן בכל אחד מהמסלולים. */
+    var moved = domainsMovedList(data.domains);
+    if (data.rev === lastRev) { cb(true, { source: "unchanged", moved: moved }); return; }
     /* המונה הגלובלי זז. השאלה היחידה שנשארה: האם זה נגע במטען הראשי?
        אם השרת החזיר מונים לפי תחום ואף תחום רלוונטי לא זז — מעדכנים
        את נקודת הייחוס ולא מושכים כלום. */
     if (data.domains && lastDomains && !payloadDomainsMoved(data.domains)) {
       lastRev = data.rev;
       lastDomains = data.domains;
-      cb(true, { source: "unchanged" });
+      /* 🔴 המטען הראשי לא השתנה — אבל **תחום אחר כן**,
+         והמסך שפתוח עלול להיות תלוי בו. זה הרגע שעד
+         היום נבלע בשקט. */
+      cb(true, { source: "unchanged", moved: moved });
       return;
     }
     refresh(cb);
