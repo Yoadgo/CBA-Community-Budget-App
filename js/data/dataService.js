@@ -348,17 +348,25 @@ CBA.data = (function () {
     CBA.mock.transactions.push(row);
     if (!pushConnected()) return row;
 
+    /* 🔴🔴 **הדגל עולה כאן, באותה שורה שבה המסך השתנה.**
+       עד ההיפוך הקריאה היתה מהגיליון ו-`push()` הרים דגל
+       בעצמו; כתיבה ישירה ל-Firestore אינה עוברת שם, ולכן
+       רענון רקע שנוחת בין התצוגה האופטימית לבין הכתיבה היה
+       **מוחק את השורה מהמסך ומחזיר אותה שנייה אחר כך** —
+       בדיוק הבהוב שתוקן בסטטוס ב-15.9, רק במסלול אחר. */
+    txDirtyUp();
+
     /* 🔴 מסלול Firestore: המזהה מגיע **מהמונה**, לא מ-max+1 מקומי.
        max+1 נכון רק כשיש כותב אחד; ברגע ששניים מזינים במקביל שניהם
        מקבלים את אותו מספר ואחד דורס את השני. */
     txWriteOn(function (on) {
-      if (!on) return txAddViaSheets(row);
+      if (!on) { txFellBack(); return txAddViaSheets(row); }
       CBA.fb.nextId("tx_" + row.year, function (err, n) {
-        if (err) return txAddViaSheets(row);
+        if (err) { txFellBack(); return txAddViaSheets(row); }
         /* המזהה שהוקצה מחליף את המקומי — גם על המסך, לפני הכתיבה. */
         row.id = n;
         CBA.fb.createDoc("budgetTx", txDocId(row), txToDoc(row), function (e2) {
-          if (e2) return txAddViaSheets(row);
+          if (e2) { txFellBack(); return txAddViaSheets(row); }
           txWrote("add");
         });
       });
@@ -405,8 +413,12 @@ CBA.data = (function () {
   function txWrote(op) {
     txNote(op, "firestore", "");
     try { CBA.sheets.dropTxCache(); } catch (e) {}
-    txNudgeApply(false);
+    txNudgeApply();   /* **מחזיקה** — הדגל משוחרר בקולבק של הדחיפה */
   }
+
+  /* נפילה לאחור למסלול הגיליון — משחררים את ההחזקה
+     שלנו, כי `push()` מחזיק דגל משלו (וגם מרים את writeFloor). */
+  function txFellBack() { txDirtyDown(); }
   /* ========================================================================
    *  החזרה לאחור כשהשרת דוחה  (PHASE 4.2, 2026-09-14)
    * ------------------------------------------------------------------------
@@ -503,13 +515,16 @@ CBA.data = (function () {
      הביטחון, ולכן כשל כאן אינו שגיאה למשתמש.
      השהיה קצרה מאחדת אישור גורף של 20 שורות לדחיפה אחת. */
   var txNudgeTimer = null, txNudgeHeld = 0;
-  /* 🔴 `holds === false` = דחיפה "רק כדי להרים את המונה בשרת",
-     בלי שום דגל עריכה תלוי בה. הבחנה הכרחית: ספירת
-     `txNudgeHeld` משוחררת `txDirtyDown` פעם לכל החזקה — ושחרור
-     שלא היתה לו החזקה היה משחרר את הדגל של **כתיבת סטטוס
-     מקבילה** מוקדם מדי — וזה בדיוק הבאג שתוקן ב-15.9 (הבהוב). */
-  function txNudgeApply(holds) {
-    if (holds !== false) txNudgeHeld++;
+  /* 🔴🔴 **לכל החזקה יש בדיוק שחרור אחד.** כל כותב מרים
+     `txDirtyUp()` ברגע שהמסך משתנה, ומשחרר או דרך `txFellBack()`
+     (כשל/נפילה לאחור) או דרך הדחיפה הזאת (הצלחה).
+     ⚠️ **החזקה שלא תשוחרר מקפיאה את כל רענוני הרקע לצמיתות**
+        (`isDirty` חוסם את `apply`). מה שמבטיח שזה לא יקרה הוא
+        שכל שלב בשרשרת הכתיבה מוגבל בזמן: `authReady` (4 שניות),
+        `ensureDb` (LOAD_TIMEOUT_MS) וכל פעולות הכתיבה ב-firebase.js
+        עוטפות את הקולבק ב-`withTimeout`. קולבק תמיד חוזר. */
+  function txNudgeApply() {
+    txNudgeHeld++;
     if (txNudgeTimer) clearTimeout(txNudgeTimer);
     txNudgeTimer = setTimeout(function () {
       txNudgeTimer = null;
@@ -520,7 +535,14 @@ CBA.data = (function () {
         fired = true;
         for (var i = 0; i < release; i++) txDirtyDown();
       }
-      try { CBA.sheets.get({ action: "budgetTxApply" }, done); }
+      /* 🔴🔴 **תושב דוחף בפעולה אחרת.** `budgetTxApply` דורש
+         הרשאת תקציב — ולתושב אין, ובצדק (הוא מחיל סטטוסים
+         על הגיליון). בלי הפיצול הזה, בקשת החזר של תושב
+         היתה נכתבת ל-Firestore ו**הדחיפה היתה נדחית בשקט**,
+         כלומר הגזבר לא היה רואה אותה — בדיוק החור שבגללו
+         הצעד הזה לא יכול היה לרוץ קודם. `txPing` רק מרים מונה. */
+      var seesBudget = !!(CBA.isSuper || (CBA.perms && CBA.perms.indexOf("תקציב") !== -1));
+      try { CBA.sheets.get({ action: seesBudget ? "budgetTxApply" : "txPing" }, done); }
       catch (e) { done(); }
     }, 800);
   }
@@ -681,10 +703,11 @@ CBA.data = (function () {
     /* 🔴 עריכת פרטים ל-Firestore — **`mergeDoc` ולא `updateDoc`**.
        שם העמודה "ספק/נמען" מכיל לוכסן, ו-`update` מפרש אותו כנתיב
        שדה ונכשל ב-`invalid-argument`. נתפס חי ב-15.9. */
+    txDirtyUp();   /* ר' ההערה ב-`addTransaction` */
     txWriteOn(function (on) {
-      if (!on) return txPushWhole(id, t, before);
+      if (!on) { txFellBack(); return txPushWhole(id, t, before); }
       CBA.fb.mergeDoc("budgetTx", txDocId(t), txDetailsPatch(t), function (err) {
-        if (err) return txPushWhole(id, t, before);
+        if (err) { txFellBack(); return txPushWhole(id, t, before); }
         txWrote("update");
       });
     });
@@ -709,10 +732,12 @@ CBA.data = (function () {
     const copy = t;
     CBA.mock.transactions = CBA.mock.transactions.filter(function (x) { return x.id !== id; });
     if (!pushConnected()) return;
+    txDirtyUp();   /* ר' ההערה ב-`addTransaction` — כאן הסכנה הפוכה:
+                      רענון שינחת באמצע מחזיר שורה שנמחקה. */
     txWriteOn(function (on) {
-      if (!on || !copy) return txDeleteViaSheets(id, yr, copy, at);
+      if (!on || !copy) { txFellBack(); return txDeleteViaSheets(id, yr, copy, at); }
       CBA.fb.deleteDoc("budgetTx", txDocId(copy), function (err) {
-        if (err) return txDeleteViaSheets(id, yr, copy, at);
+        if (err) { txFellBack(); return txDeleteViaSheets(id, yr, copy, at); }
         txWrote("delete");
       });
     });
@@ -991,6 +1016,7 @@ CBA.data = (function () {
         if (!up || !up.ok || !up.url) return fallback();
         CBA.fb.nextId("tx_" + year, function (err, n) {
           if (err) return fallback();
+          txDirtyUp();   /* ר' ההערה ב-`addTransaction` */
           const today = new Date().toISOString().slice(0, 10);
           const t = {
             id: n, year: year, month: today.slice(0, 7), date: today,
@@ -1005,7 +1031,7 @@ CBA.data = (function () {
           doc["הוגש בתאריך"] = String(up.submittedAt || new Date().toISOString());
           doc.mailPending = true;
           CBA.fb.createDoc("budgetTx", txDocId(t), doc, function (e2) {
-            if (e2) return fallback();
+            if (e2) { txFellBack(); return fallback(); }
             txWrote("receipt");
             CBA.mock.transactions.push(Object.assign({ buyer: fields.buyer || "", payType:
               fields.expenseType === "refund" ? "refund" : "supplier" }, t));

@@ -23,6 +23,7 @@ const ok = (n, c, x) => c ? (pass++, console.log('  ✓ ' + n))
 const section = t => console.log('\n' + t);
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'js', 'data', 'sheets.js'), 'utf8');
 const DS  = fs.readFileSync(path.join(__dirname, '..', 'js', 'data', 'dataService.js'), 'utf8');
+const GS  = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
 
 const CUR = 'תשפ"ז';
 const OLD = 'תשפ"ו';
@@ -129,9 +130,40 @@ ok('⚠️ ו-clearCache זורקת גם אותה', /function clearCache\(\) \{ 
 ok('🔴 כל כתיבת תנועה עוברת ב-txWrote', (DS.match(/txWrote\("/g) || []).length === 4,
    String((DS.match(/txWrote\("/g) || []).length));
 ok('ו-txWrote זורקת מטמון **וגם** דוחפת לשרת',
-   /function txWrote\(op\) \{[\s\S]{0,200}dropTxCache\(\)[\s\S]{0,120}txNudgeApply\(false\)/.test(DS));
-ok('⚠️ דחיפה שאינה מחזיקה דגל אינה משחררת דגל של אחר',
-   /function txNudgeApply\(holds\) \{\s*\n\s*if \(holds !== false\) txNudgeHeld\+\+;/.test(DS));
+   /function txWrote\(op\) \{[\s\S]{0,240}dropTxCache\(\)[\s\S]{0,160}txNudgeApply\(\)/.test(DS));
+
+/* 🔴🔴 החלק שאין לו שום סימן על המסך אם הוא נשבר: כל כתיבה
+   ישירה ל-Firestore חייבת להרים דגל עריכה. עד ההיפוך הקריאה
+   היתה מהגיליון ו-`push()` הרים דגל בעצמו; עכשיו רענון רקע
+   שנוחת בין התצוגה האופטימית לכתיבה מוחק את השורה מהמסך
+   ומחזיר אותה שנייה אחר כך — בדיוק הבהוב שתוקן בסטטוס. */
+ok('🔴 ארבע הכתיבות מרימות דגל עריכה (עם הסטטוס — חמש)',
+   (DS.match(/txDirtyUp\(\);/g) || []).length === 5,
+   String((DS.match(/txDirtyUp\(\);/g) || []).length));
+ok('⚠️ ולכל נפילה לאחור יש שחרור',
+   (DS.match(/txFellBack\(\);/g) || []).length === 8,
+   String((DS.match(/txFellBack\(\);/g) || []).length));
+ok('⚠️ והשחרור אכן מוריד את המונה',
+   /function txFellBack\(\) \{ txDirtyDown\(\); \}/.test(DS));
+ok('⚠️ ו-txNudgeApply חזרה לחתימה אחת — כל הדוחפים מחזיקים',
+   /function txNudgeApply\(\) \{\s*\n\s*txNudgeHeld\+\+;/.test(DS) &&
+   !/txNudgeApply\(false\)/.test(DS));
+/* 🔴🔴 החור שבגללו הצעד לא יכול היה לרוץ קודם:
+   לתושב אין הרשאת תקציב, ו-`budgetTxApply` דורש אותה. בלי
+   פיצול היתה הדחיפה נדחית בשקט, המונה לא היה זז,
+   ובקשת החזר של תושב לא היתה מופיעה לגזבר על המסך. */
+ok('🔴 תושב דוחף ב-txPing ובעל הרשאה ב-budgetTxApply',
+   /seesBudget \? "budgetTxApply" : "txPing"/.test(DS));
+ok('⚠️ ולשרת יש נתיב ל-txPing', /e\.parameter\.action === 'txPing'/.test(GS));
+ok('⚠️ שעובר בשער הרגיל (מושב תקין + תושב פעיל)',
+   /function handleTxPing_\(p\) \{[\s\S]{0,260}authorize_\(ss, p, null\)/.test(GS));
+ok('🔴 ומרים את מונה תחום התקציב',
+   /function handleTxPing_\(p\) \{[\s\S]{0,400}bumpRev_\('saveTransaction'\)/.test(GS));
+ok('⚠️ ואינו נוגע בשום נתון',
+   !/function handleTxPing_\(p\) \{[\s\S]{0,400}(getRange|setValue|budgetTxApplyPending_)/.test(GS));
+ok('🔴 והדחיפה מהדפדפן מרימה מונה ללא תנאי',
+   /function handleBudgetTxApply_\(p\) \{[\s\S]{0,2200}\n    bumpRev_\('saveTransaction'\);/.test(GS));
+
 ok('🔴 וכתיבת סטטוס זורקת אף היא את המטמון',
    /dropTxCache\(\); \} catch \(e\) \{\}\s*\n\s*txNudgeApply\(\);/.test(DS));
 

@@ -592,6 +592,9 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'budgetTxApply') {
       return handleBudgetTxApply_(e.parameter);
     }
+    if (e && e.parameter && e.parameter.action === 'txPing') {
+      return handleTxPing_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'txCountersSeed') {
       return handleTxCountersSeed_(e.parameter);
     }
@@ -8513,6 +8516,39 @@ function handleBudgetTxApply_(p) {
     bumpRev_('saveTransaction');
     r.ms = new Date().getTime() - t0;
     return json_(r);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* ============================================================================
+ *  txPing — "כתבתי תנועה, תעדכנו את המונה"   (צעד 09ב-5ג)
+ * ----------------------------------------------------------------------------
+ *  🔴🔴 **זה המסלול של התושב, והוא המקרה החשוב ביותר.**
+ *  אחרי ההיפוך, בקשת החזר של תושב נכתבת ישירות
+ *  ל-Firestore ואינה נוגעת בשרת — כלומר מונה התחום לא זז,
+ *  והדפדפן של הגזבר לא יודע שיש מה למשוך. הבקשה פשוט
+ *  **לא מופיעה לו על המסך** עד רשת הביטחון של 10 דקות.
+ *
+ *  ⚠️ **למה לא פשוט `budgetTxApply`:** הוא דורש PERM_BUDGET —
+ *     בדיוק מה שלתושב אין, ובצדק: הוא מחיל סטטוסים
+ *     על הגיליון. לתושב אין מה להחיל — רק להודיע.
+ *
+ *  ⚠️ **הפעולה אינה נוגעת בשום נתון** — היא מעלה מספר
+ *     ב-Script Properties וזהו. לכן אין לה שורה ב-GET_ACTION_PERMS:
+ *     ברירת המחדל (need=null) — מושב תקין ותושב פעיל — היא
+ *     בדיוק השער הנכון.
+ *  ⚠️ הנזק החמור ביותר משימוש לרעה הוא משיכה מלאה
+ *     מיותרת — בדיוק כמו כל כתיבה אחרת. הלקוח מאחד
+ *     דחיפות בחלון של 800ms (ר' `txNudgeApply`).
+ * ========================================================================== */
+function handleTxPing_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    bumpRev_('saveTransaction');
+    return json_({ ok: true });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }

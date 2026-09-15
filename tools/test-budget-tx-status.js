@@ -371,8 +371,11 @@ section('9. 🔴 הרענון התקופתי לא מחזיר את הסטטוס �
    נראה קופץ חזרה עד שההחלה מגיעה לגיליון. */
 ok('הכתיבה מחזיקה markDirty', /CBA\.sheets\.markDirty\("txStatus", false\)/.test(DS));
 ok('🔴 והשחרור הוא clearDirty באותה סיבה', /CBA\.sheets\.clearDirty\("txStatus"\)/.test(DS));
+/* 🔴 מ-15.9 הפעולה נבחרת לפי ההרשאה (budgetTxApply לבעל
+   הרשאת תקציב, txPing לתושב), אבל הדרישה לא השתנתה:
+   `done` — השחרור — הוא הקולבק של הדחיפה, לא שורה אחריה. */
 ok('🔴 והשחרור יושב בקולבק של הדחיפה, לא מיד אחרי הכתיבה',
-   /CBA\.sheets\.get\(\{ action: "budgetTxApply" \}, done\)/.test(DS));
+   /CBA\.sheets\.get\(\{ action: seesBudget \? "budgetTxApply" : "txPing" \}, done\)/.test(DS));
 ok('🔴 וכשל כתיבה משחרר גם הוא',
    /if \(err\) \{ txDirtyDown\(\); return done\(false/.test(DS));
 {
