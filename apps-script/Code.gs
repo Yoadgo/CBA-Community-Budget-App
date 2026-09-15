@@ -5755,6 +5755,42 @@ function fsIdOk_(id) {
   return !/^__.*__$/.test(id);
 }
 
+/* ============================================================================
+ *  שתי פרימיטיבות לסנכרון טבלה → אוסף   (איחוד, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  עד כאן כל תחום שעבר שיכפל את אותו לולאה: ולידציה של מזהה,
+ *  כתיבה, מפת החיים, ומחיקת יתומים. התחום השלישי היה משכפל פעם
+ *  שלישית — וזה בדיוק המקום שבו תיקון נכנס באחד ולא בשני.
+ *
+ *  ⚠️ **שתי פונקציות ולא אחת גדולה, בכוונה.** לכל תחום יש סדר פעולות
+ *  משלו — הגינון כותב גם מסמך רשימות לאוסף שני **לפני** סחיפת
+ *  היתומים. פונקציה אחת נוקשה היתה מכריחה אותו לשנות סדר, וזה
+ *  שינוי התנהגות במסווה של "רק איחוד".
+ *
+ *  שתיהן **זורקות** בכישלון; התחום הוא שתופס ומחליט מה להחזיר.
+ * ========================================================================== */
+
+/** כותב פריטים [{id, doc}] לאוסף, מסמן אותם ב-live וסופר ב-out.
+ *  מזהה פסול מדולג ונספר — ולא מפיל את כל הסנכרון. */
+function fsWriteAll_(collection, items, out, live) {
+  for (var i = 0; i < items.length; i++) {
+    var id = String(items[i].id == null ? '' : items[i].id).trim();
+    if (!fsIdOk_(id)) { out.skipped = (out.skipped || 0) + 1; continue; }
+    fsSet_(collection + '/' + id, items[i].doc);
+    live[id] = 1;
+    out.wrote++;
+  }
+}
+
+/** מוחק מהאוסף כל מה שאינו ב-live.
+ *  ⚠️ זו הרשת שתופסת עריכה ידנית בגיליון, שאינה עוברת דרך הקוד. */
+function fsSweepOrphans_(collection, live, out) {
+  var have = fsList_(collection);
+  for (var j = 0; j < have.length; j++) {
+    if (!live[have[j].id]) { fsDelete_(collection + '/' + have[j].id); out.deleted++; }
+  }
+}
+
 /** שורה → מפה נקייה, בלי העמודות החסומות ובלי תאים ריקים. */
 function svcClean_(row) {
   var out = {};
@@ -5796,18 +5832,12 @@ function servicesSyncAll_(ss) {
     });
 
     var live = {};
-    for (var i = 0; i < svcRows.length; i++) {
-      var id = String(svcRows[i]['מזהה שירות'] == null ? '' : svcRows[i]['מזהה שירות']).trim();
-      if (!fsIdOk_(id)) { out.skipped++; continue; }
-      fsSet_(FS_SERVICES + '/' + id, svcDoc_(svcRows[i], byService[id], i + 1));
-      live[id] = 1;
-      out.wrote++;
-    }
+    fsWriteAll_(FS_SERVICES, svcRows.map(function (row, i) {
+      var id = String(row['מזהה שירות'] == null ? '' : row['מזהה שירות']).trim();
+      return { id: id, doc: svcDoc_(row, byService[id], i + 1) };
+    }), out, live);
 
-    var have = fsList_(FS_SERVICES);
-    for (var j = 0; j < have.length; j++) {
-      if (!live[have[j].id]) { fsDelete_(FS_SERVICES + '/' + have[j].id); out.deleted++; }
-    }
+    fsSweepOrphans_(FS_SERVICES, live, out);
     out.ok = true;
   } catch (err) {
     out.error = String(err);
@@ -9717,15 +9747,16 @@ function gardenPlanDoc_(def) {
  *  מחזיר סיכום — ולעולם אינו זורק. */
 function gardenPlanSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
-  var out = { ok: false, wrote: 0, deleted: 0, error: '' };
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
   try {
     var defs = gardenPlanRows_(ss);
     var live = {};
-    for (var i = 0; i < defs.length; i++) {
-      fsSet_(FS_GARDEN_PLAN + '/' + defs[i].id, gardenPlanDoc_(defs[i]));
-      live[defs[i].id] = 1;
-      out.wrote++;
-    }
+    fsWriteAll_(FS_GARDEN_PLAN, defs.map(function (d) {
+      return { id: d.id, doc: gardenPlanDoc_(d) };
+    }), out, live);
+
+    /* ⚠️ מסמך הרשימות נכתב **לפני** סחיפת היתומים, כמו מאז ומעולם.
+       הוא באוסף אחר ולכן הסחיפה אינה נוגעת בו. */
     var lists = gardenLists_(ss);
     fsSet_(FS_GARDEN_META, {
       areas:      lists.areas,
@@ -9736,13 +9767,7 @@ function gardenPlanSyncAll_(ss) {
     });
     out.wrote++;
 
-    /* יתומים — מסמך שנשאר אחרי שהשורה ירדה מהגיליון. בדרך כלל
-       gardenPlanDelete_ כבר מחק אותו, אבל מחיקה ידנית בגיליון אינה
-       עוברת דרך הקוד, וזו הרשת שתופסת אותה. */
-    var have = fsList_(FS_GARDEN_PLAN);
-    for (var j = 0; j < have.length; j++) {
-      if (!live[have[j].id]) { fsDelete_(FS_GARDEN_PLAN + '/' + have[j].id); out.deleted++; }
-    }
+    fsSweepOrphans_(FS_GARDEN_PLAN, live, out);
     out.ok = true;
   } catch (err) {
     out.error = String(err);

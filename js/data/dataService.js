@@ -11,6 +11,63 @@ CBA.data = (function () {
   "use strict";
 
   /* ==========================================================================
+   *  קריאה "Firestore קודם, גיליון כגיבוי"   (איחוד, 2026-09-15)
+   * --------------------------------------------------------------------------
+   *  שני התחומים שעברו שיכפלו את אותו שלד: שעון, דגל, המתנה לזהות, נפילה
+   *  לאחור, ורישום מדידה. התחום השלישי היה משכפל פעם שלישית — וזה המקום
+   *  שבו תיקון נכנס באחד ולא בשני. כאן הוא יושב פעם אחת.
+   *
+   *  🔴 **נפילה לאחור היא התנהגות, לא טיפול בשגיאה.** כל כשל מחזיר את המסך
+   *  למסלול Apps Script בלי שהמשתמש ירגיש: אין SDK · אין משתמש מחובר · כלל
+   *  אבטחה דחה · רשת איטית · נתונים חסרים.
+   *
+   *  🔴 **`settled` הוא לא קישוט.** יש כאן שלושה מקורות אפשריים לקריאה ל-cb
+   *  (הצלחה, כשל, שעון עצר בתוך CBA.fb), ושניים מהם יכולים לקרות יחד.
+   *  קולבק כפול מצייר מסך פעמיים ומאפס גלילה.
+   *
+   *  📊 המדידה נרשמת ל-`CBA.perf[key]` עם דגל `warm`. ⚠️ בלי ההבחנה בין
+   *  SDK קר לחם המדידה משקרת: פתיחה ראשונה משלמת גם על ~550KB של SDK.
+   *
+   *  load(done)   — done(err, result). result הוא התשובה הסופית ללקוח.
+   *  sheets(done) — done(result). מסלול Apps Script, כולל המטמון שלו.
+   * ======================================================================== */
+  function fsFirstRead(key, enabled, load, sheets, cb) {
+    var t0 = Date.now();
+    var settled = false;
+    var warm = !!(CBA.fb && CBA.fb.isDbReady && CBA.fb.isDbReady());
+
+    function note(source, why) {
+      try {
+        CBA.perf = CBA.perf || {};
+        CBA.perf[key] = { source: source, ms: Date.now() - t0, why: why || "",
+                          warm: warm, at: new Date().toISOString() };
+        console.log("[CBA.perf] " + key + " " + source + " " + (Date.now() - t0) + "ms" +
+                    (warm ? " [SDK חם]" : " [SDK קר]") + (why ? " (" + why + ")" : ""));
+      } catch (e) {}
+    }
+
+    function viaSheets(why) {
+      if (settled) return;
+      settled = true;
+      sheets(function (res) { note("appsscript", why); if (cb) cb(res); });
+    }
+
+    if (!enabled || !CBA.fb || !CBA.fb.readCollection) return viaSheets("disabled");
+
+    CBA.fb.authReady(function (user) {
+      if (settled) return;
+      if (!user) return viaSheets("no-user");
+      load(function (err, result) {
+        if (settled) return;
+        if (err) return viaSheets("firestore:" + ((err && (err.code || err.message)) || "?"));
+        settled = true;
+        note("firestore", "");
+        if (cb) cb(result);
+      });
+    });
+  }
+
+  /* ==========================================================================
    *  תוכנית העבודה — קריאה ישירה מ-Firestore   (צעד 03ג, 2026-09-15)
    * --------------------------------------------------------------------------
    *  🔴 **מתג הביטול של הצעד הוא שורה אחת:** `GARDEN_PLAN_FROM_FIRESTORE = false`
@@ -32,23 +89,7 @@ CBA.data = (function () {
    * ======================================================================== */
   var GARDEN_PLAN_FROM_FIRESTORE = true;
 
-  /* ⚠️ **קר מול חם — בלי ההבחנה הזו המדידה משקרת.**
-     פתיחה ראשונה אחרי רענון עמוד משלמת גם על הורדת שלושה קבצי SDK
-     (כ-550KB), ולכן עלולה להיות **איטית יותר** מ-Apps Script. כל פתיחה
-     נוספת באותו עמוד משלמת רק על הרשת. שתי המדידות אמיתיות, וכל
-     השוואה שמערבבת ביניהן תוביל למסקנה הפוכה מהנכונה. */
-  function gardenPlanNotePerf(source, ms, why, warm) {
-    try {
-      CBA.perf = CBA.perf || {};
-      CBA.perf.gardenPlan = { source: source, ms: ms, why: why || "", warm: !!warm,
-                              at: new Date().toISOString() };
-      console.log("[CBA.perf] gardenPlan " + source + " " + ms + "ms" +
-                  (warm ? " [SDK חם]" : " [SDK קר]") +
-                  (why ? " (" + why + ")" : ""));
-    } catch (e) {}
-  }
-
-  function gardenPlanSort(rows) {
+    function gardenPlanSort(rows) {
     return (rows || []).slice().sort(function (a, b) {
       var ao = a.order || 0, bo = b.order || 0;
       if (ao !== bo) return ao - bo;
@@ -58,49 +99,21 @@ CBA.data = (function () {
   }
 
   function gardenPlanRead(cb) {
-    var t0 = Date.now();
-    var settled = false;
-    var warm = !!(CBA.fb && CBA.fb.isDbReady && CBA.fb.isDbReady());
-
-    function viaSheets(why) {
-      if (settled) return;
-      settled = true;
-      CBA.sheets.get({ action: "gardenPlan" }, function (res) {
-        gardenPlanNotePerf("appsscript", Date.now() - t0, why, warm);
-        cb(res);
-      });
-    }
-
-    if (!GARDEN_PLAN_FROM_FIRESTORE || !CBA.fb || !CBA.fb.readCollection) {
-      return viaSheets("disabled");
-    }
-
-    CBA.fb.authReady(function (user) {
-      if (settled) return;
-      if (!user) return viaSheets("no-user");
-
-      var defs = null, meta = null;
-
+    fsFirstRead("gardenPlan", GARDEN_PLAN_FROM_FIRESTORE, function (done) {
+      var defs = null, meta = null, failed = false;
       function maybeDone() {
-        if (settled || !defs || !meta) return;
-        settled = true;
-        gardenPlanNotePerf("firestore", Date.now() - t0, "", warm);
-        cb({
-          ok: true,
-          defs: gardenPlanSort(defs),
-          freqs: meta.freqs || [],
-          areas: meta.areas || [],
-          categories: meta.categories || []
-        });
+        if (failed || !defs || !meta) return;
+        done(null, { ok: true, defs: gardenPlanSort(defs), freqs: meta.freqs || [],
+                     areas: meta.areas || [], categories: meta.categories || [] });
       }
-
-      function fail(e) {
-        viaSheets("firestore:" + ((e && (e.code || e.message)) || "?"));
-      }
-
+      function fail(e) { if (failed) return; failed = true; done(e); }
       CBA.fb.readCollection("gardenPlan", function (err, rows) {
         if (err) return fail(err);
-        defs = rows || [];
+        /* \ud83d\udd34 אוסף ריק אינו הצלחה — כך נראה גם סנכרון שמעולם לא רץ.
+           "התוכנית עדיין ריקה" מזמין את המנהל להזין מחדש משימות
+           שכבר קיימות — ר' אותה הערה בראש gardenPlan.js. */
+        if (!rows || !rows.length) return fail(new Error("empty"));
+        defs = rows;
         maybeDone();
       });
       CBA.fb.readDoc("gardenMeta", "lists", function (err, doc) {
@@ -109,7 +122,9 @@ CBA.data = (function () {
         meta = doc;
         maybeDone();
       });
-    });
+    }, function (done) {
+      CBA.sheets.get({ action: "gardenPlan" }, done);
+    }, cb);
   }
 
 
@@ -892,49 +907,23 @@ CBA.data = (function () {
   }
 
   function servicesRead(cb) {
-    var t0 = Date.now();
-    var settled = false;
-    var warm = !!(CBA.fb && CBA.fb.isDbReady && CBA.fb.isDbReady());
-
-    function note(source, why) {
-      try {
-        CBA.perf = CBA.perf || {};
-        CBA.perf.services = { source: source, ms: Date.now() - t0, why: why || "",
-                              warm: warm, at: new Date().toISOString() };
-        console.log("[CBA.perf] services " + source + " " + (Date.now() - t0) + "ms" +
-                    (warm ? " [SDK חם]" : " [SDK קר]") + (why ? " (" + why + ")" : ""));
-      } catch (e) {}
-    }
-
-    function viaSheets(why) {
-      if (settled) return;
-      settled = true;
-      if (!pushConnected()) { note("appsscript", why + "/offline"); if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
-      CBA.sheets.get({ action: "services" }, function (res) {
-        note("appsscript", why);
-        if (res && res.ok) servicesCache = { services: res.services || [], sections: res.sections || [] };
-        if (cb) cb(res);
-      });
-    }
-
-    if (!SERVICES_FROM_FIRESTORE || !CBA.fb || !CBA.fb.readCollection) return viaSheets("disabled");
-
-    CBA.fb.authReady(function (user) {
-      if (settled) return;
-      if (!user) return viaSheets("no-user");
+    fsFirstRead("services", SERVICES_FROM_FIRESTORE, function (done) {
       CBA.fb.readCollection("services", function (err, rows) {
-        if (settled) return;
-        if (err) return viaSheets("firestore:" + ((err && (err.code || err.message)) || "?"));
-        /* ⚠️ אוסף ריק אינו הצלחה — כך נראה גם סנכרון שמעולם לא רץ. נופלים
-           אחורה, כי "אין שירותים" הוא מסך שקרי ולא מסך ריק. */
-        if (!rows || !rows.length) return viaSheets("firestore:empty");
-        settled = true;
+        if (err) return done(err);
+        /* \ud83d\udd34 אותו שיקול כמו בתוכנית הגינון. התרחיש קרה בייצור תוך
+           שעה מהכתיבה: הפצת כללים ומסמכים ב-Firestore אינה מיידית. */
+        if (!rows || !rows.length) return done(new Error("empty"));
         var out = servicesFromDocs(rows);
         servicesCache = out;
-        note("firestore", "");
-        if (cb) cb({ ok: true, services: out.services, sections: out.sections });
+        done(null, { ok: true, services: out.services, sections: out.sections });
       });
-    });
+    }, function (done) {
+      if (!pushConnected()) { done({ ok: false, error: "לא מחובר לגיליון" }); return; }
+      CBA.sheets.get({ action: "services" }, function (res) {
+        if (res && res.ok) servicesCache = { services: res.services || [], sections: res.sections || [] };
+        done(res);
+      });
+    }, cb);
   }
 
   /* שמירה מחליפה את שני הטאבים במלואם בשרת (ר' saveServices_) — העריכה במסך
