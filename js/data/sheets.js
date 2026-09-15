@@ -890,6 +890,46 @@ CBA.sheets = (function () {
     return false;
   }
 
+  /* 🔴 **ההכרעה שאחרי "מה מספר הגרסה?" — נקודה אחת.**
+     שני צרכנים: הסקר (ששואל את Apps Script) והפעימה החיה
+     (שמקבלת את אותם מונים מ-Firestore). שתי הכרעות מקבילות
+     היו נפרדות בשקט בשינוי הראשון — ר' "כלל הסטייה הגלויה". */
+  function applyRev(data, cb) {
+    if (!data || typeof data.rev !== "number") { revSupported = false; refresh(cb); return; }
+    if (data.rev === lastRev) { cb(true, { source: "unchanged" }); return; }
+    /* המונה הגלובלי זז. השאלה היחידה שנשארה: האם זה נגע במטען הראשי?
+       אם השרת החזיר מונים לפי תחום ואף תחום רלוונטי לא זז — מעדכנים
+       את נקודת הייחוס ולא מושכים כלום. */
+    if (data.domains && lastDomains && !payloadDomainsMoved(data.domains)) {
+      lastRev = data.rev;
+      lastDomains = data.domains;
+      cb(true, { source: "unchanged" });
+      return;
+    }
+    refresh(cb);
+  }
+
+  /* ==========================================================================
+   *  🔴 **הפעימה החיה** — אותה הכרעה, בלי הקריאה   (צעד 10)
+   * --------------------------------------------------------------------------
+   *  מקבלת את תוכן `appConfig/rev` מ-Firestore ומחליקה אותו לצורת
+   *  התשובה של `?action=rev`. כך המסלול שמכאן ואילך זהה
+   *  לחלוטין, והפעימה אינה מסלול שני אלא רק **מקור אחר
+   *  לאותם מונים**.
+   *
+   *  ⚠️ `lastRev === null` = הטעינה הראשונה עדיין באוויר — **מתעלמים.**
+   *     ההודעה הראשונה מ-`onSnapshot` מגיעה מיד עם המצב הנוכחי,
+   *     ובלי השער הזה היינו מושכים מטען מלא שני בכל טעינת עמוד.
+   *  ⚠️ מסמך חסר (הפעימה טרם נכתבה אף פעם) אינו שגיאה — פשוט
+   *     אין מה לעשות. הדופק האיטי מכסה את החלון הזה.
+   * ======================================================================== */
+  function applyPulse(doc, cb) {
+    cb = cb || function () {};
+    if (!doc || typeof doc.n !== "number") { cb(true, { source: "unchanged" }); return; }
+    if (lastRev === null) { cb(true, { source: "unchanged" }); return; }
+    applyRev({ rev: doc.n, domains: doc.domains }, cb);
+  }
+
   function refreshIfChanged(cb) {
     if (!revSupported || lastRev === null || (Date.now() - lastFullFetch) > FULL_EVERY_MS) {
       refresh(cb);
@@ -897,20 +937,7 @@ CBA.sheets = (function () {
     }
     fetch(API_URL + "?action=rev")
       .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data || typeof data.rev !== "number") { revSupported = false; refresh(cb); return; }
-        if (data.rev === lastRev) { cb(true, { source: "unchanged" }); return; }
-        /* המונה הגלובלי זז. השאלה היחידה שנשארה: האם זה נגע במטען הראשי?
-           אם השרת החזיר מונים לפי תחום ואף תחום רלוונטי לא זז — מעדכנים
-           את נקודת הייחוס ולא מושכים כלום. */
-        if (data.domains && lastDomains && !payloadDomainsMoved(data.domains)) {
-          lastRev = data.rev;
-          lastDomains = data.domains;
-          cb(true, { source: "unchanged" });
-          return;
-        }
-        refresh(cb);
-      })
+      .then(function (data) { applyRev(data, cb); })
       .catch(function () { cb(false, { source: "rev-failed" }); });
   }
 
@@ -1556,5 +1583,6 @@ CBA.sheets = (function () {
   }
 
   return { url: API_URL, load: load, refresh: refresh, refreshIfChanged: refreshIfChanged,
+    applyPulse: applyPulse,
     pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, yearLoaded: yearLoaded, dropTxCache: dropTxCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
 })();

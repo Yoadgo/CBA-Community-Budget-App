@@ -3019,6 +3019,53 @@ var ACTION_DOMAIN = {
   uploadReceiptOnly: 'receiptFile'
 };
 
+/* ============================================================================
+ *  🔴🔴 **הפעימה החיה** — צעד 10, 2026-09-15
+ * ----------------------------------------------------------------------------
+ *  עד היום כל דפדפן שאל את Apps Script "מה מספר הגרסה?"
+ *  כל 15 שניות — כ-240 קריאות בשעה לכל משתמש פעיל, כל אחת
+ *  ברצפת של ~0.5 שניות שרת גם כשהתשובה היא "לא השתנה כלום"
+ *  (נמדד 8.9.26). מעכשיו המונים יושבים גם במסמך אחד
+ *  ב-Firestore, והדפדפן **מאזין** לו ב-`onSnapshot`.
+ *
+ *  🔴 **התוצאה גדולה מהחיסכון:** העדכון הופך מיידי ל**כל
+ *  התחומים**, גם אלה שעדיין חיים בגיליון — בקשות הרשמה,
+ *  שריוני מועדון, תושבים. כל כתיבה עוברת ב-`bumpRev_`, ולכן
+ *  הפעימה מכסה את כולם בלי להעביר אף תחום נוסף.
+ *
+ *  ⚠️ **שגר ושכח (הכרעת יועד).** כשל בכתיבה אינו מפיל את
+ *     הפעולה ואינו מדווח למשתמש. המחיר: דפדפנים אחרים
+ *     יראו את השינוי רק בדופק האיטי הבא — בדיוק ההתנהגות
+ *     של היום, לא גרועה ממנה.
+ *  ⚠️ **המונה ב-Script Properties נשאר מקור האמת.** המסמך הוא
+ *     שיקוף להודעה בלבד, ו-`?action=rev` ממשיך לענות מהמקור.
+ *     לכן מסמך שנתקע או נמחק אינו משבש שום דבר — הוא רק
+ *     מאט את העדכון חזרה לקצב הדופק האיטי.
+ * ========================================================================== */
+var FS_PULSE_DOC = 'appConfig/rev';
+var PULSE_FLAG_TTL_SEC = 60;
+
+/* אותה תבנית מדויקת כמו `txJobsUseFirestore_`: הדגל נקרא במטמון
+   קצר, כי `bumpRev_` רץ בכל כתיבה וקריאת מסמך לכל אחת היתה
+   נוגסת במכסה בלי שום תועלת. 60 שניות הן גם זמן ההיענות
+   של מתג החירום. */
+function pulseUseFirestore_() {
+  var c = null;
+  try { c = CacheService.getScriptCache(); } catch (e) { c = null; }
+  if (c) {
+    try {
+      var hit = c.get('cba_flag_pulse');
+      if (hit === '1') return true;
+      if (hit === '0') return false;
+    } catch (e) { /* ערך פגום — נקרא מחדש */ }
+  }
+  var on = false;
+  try { on = (fsGet_(FS_FLAGS_DOC) || {}).pulseToFirestore === true; }
+  catch (e) { on = false; }   /* ספק — הסקר הרגיל */
+  if (c) { try { c.put('cba_flag_pulse', on ? '1' : '0', PULSE_FLAG_TTL_SEC); } catch (e) {} }
+  return on;
+}
+
 function bumpRev_(action) {
   try {
     var props = PropertiesService.getScriptProperties();
@@ -3035,6 +3082,15 @@ function bumpRev_(action) {
       map[doms[i]] = (parseInt(map[doms[i]], 10) || 0) + 1;
     }
     props.setProperty(REV_DOMAINS_KEY, JSON.stringify(map));
+
+    /* 🔴 הפעימה החיה — ר' ההערה הארוכה מעל.
+       הכתיבה בתוך ה-try החיצוני וגם ב-try משלה: כשל כאן
+       אסור לפגוע במונים שכבר נכתבו ב-Script Properties. */
+    if (pulseUseFirestore_()) {
+      try {
+        fsSet_(FS_PULSE_DOC, { n: n + 1, domains: map, schema: 1, updatedAt: new Date() });
+      } catch (e2) { /* שגר ושכח */ }
+    }
   } catch (err) { /* לא קריטי — במקרה הגרוע הלקוח פשוט ימשוך מלא */ }
 }
 
@@ -6004,7 +6060,14 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
      של תנועות יחד**. לא שניים: כתיבה בלי קריאה גורמת לתנועה להיעלם
      ברענון, וקריאה בלי כתיבה גורמת לאותו חור בכיוון ההפוך.
      ⚠️ ברירת המחדל בקוד הלקוח היא `false` — ההדלקה היא דרך `flagSet`. */
-  'budgetTxFromFirestore'];
+  'budgetTxFromFirestore',
+  /* 🔴 **המתג של צעד 10** (2026-09-15) — הפעימה החיה.
+     כשהוא דלוק, `bumpRev_` כותב את מוני התחומים גם
+     ל-`appConfig/rev`, והדפדפן מאזין למסמך הזה במקום
+     לשאול את Apps Script כל 15 שניות.
+     ⚠️ כיבוי מחזיר את הסקר המלא מיד — הלקוח רואה
+        שהמסמך הפסיק להתעדכן ונופל לאחור בעצמו. */
+  'pulseToFirestore'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {

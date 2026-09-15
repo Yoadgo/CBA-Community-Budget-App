@@ -2216,18 +2216,26 @@
   window.CBA.userIsEditingMain = userIsEditingMain;
   var pendingSilentRefresh = false;
 
-  function doPoll() {
-    if (document.hidden || !inited || !currentUser || pollInFlight) return;
-    // יש עריכה מקומית שטרם אושרה בשרת (למשל במסך התכנון) — מדלגים על המחזור
-    // הזה כדי לא לדרוס אותה; ר' ההסבר המלא ב-sheets.js (markDirty/apply).
-    if (CBA.sheets.isDirty && CBA.sheets.isDirty()) return;
-    if (Date.now() - lastActivity > IDLE_MS) { wasIdle = true; return; }   // לא פעילים — משהים רענון
-    pollInFlight = true;
-    // (2026-08-19, ממצא 2.3) refreshIfChanged במקום refresh: קודם שאלה זולה
-    // "האם משהו השתנה?", ומשיכה מלאה של הגיליון רק כשהתשובה חיובית. נופל
-    // אוטומטית חזרה למשיכה מלאה מול שרת שעוד לא פורסם — ר' sheets.js.
-    var poll = CBA.sheets.refreshIfChanged || CBA.sheets.refresh;
-    poll(function (ok, info) {
+  /* ==========================================================================
+   *  🔴🔴 **הפעימה החיה** — צעד 10, 2026-09-15
+   * --------------------------------------------------------------------------
+   *  כשהמאזין ל-`appConfig/rev` חי, **הסקר שותק**: הוא יורד
+   *  ממחזור כל 15 שניות לדופק איטי של שתי דקות, והעדכונים
+   *  מגיעים מיד במקום לחכות לטיק הבא.
+   *
+   *  ⚠️ **הדופק האיטי אינו קישוט.** שתי סיבות: (א) שינוי שנעשה
+   *     **ישירות בגיליון** אינו מרים שום מונה ולכן אינו מפיק
+   *     פעימה; (ב) כתיבת הפעימה היא "שגר ושכח" ועלולה
+   *     להיכשל בשקט. הדופק הוא מה שסוגר את שני החורים.
+   *  ⚠️ שגיאה במאזין מחזירה אותנו מיד לסקר המלא — זו הנפילה
+   *     לאחור, והיא אוטומטית.
+   * ======================================================================== */
+  var PULSE_SLOW_MS = 120000;      // הדופק האיטי כשהמאזין חי
+  var pulseOn = false;
+  var pulseStop = null;
+  var lastCycleAt = 0;
+
+  function applyRefreshResult(ok, info) {
       pollInFlight = false;
       if (!ok) return;
       if (info && info.source === "unchanged") { refreshAlertsLocal(); return; }
@@ -2250,8 +2258,29 @@
         }
       }
       refreshAlertsLocal();   // מקומי בלבד (זול) — שריוני מועדון מתעדכנים בקצב נמוך יותר, ראה מעלה
-    });
   }
+
+  /* מחזור אחד — מהסקר או מהפעימה. כל השערים זהים בכוונה:
+     שער שיתקיים רק באחד מהמסלולים הוא בדיוק הדרך שבה שניהם
+     מתחילים להתנהג שונה בלי שאף אחד ישים לב. */
+  function runCycle(force, pulseDoc) {
+    if (document.hidden || !inited || !currentUser || pollInFlight) return;
+    // יש עריכה מקומית שטרם אושרה בשרת (למשל במסך התכנון) — מדלגים על המחזור
+    // הזה כדי לא לדרוס אותה; ר' ההסבר המלא ב-sheets.js (markDirty/apply).
+    if (CBA.sheets.isDirty && CBA.sheets.isDirty()) return;
+    if (Date.now() - lastActivity > IDLE_MS) { wasIdle = true; return; }   // לא פעילים — משהים רענון
+    /* המאזין חי ⇒ הטיק התקופתי מדלג, חוץ מהדופק האיטי. */
+    if (!force && !pulseDoc && pulseOn && (Date.now() - lastCycleAt) < PULSE_SLOW_MS) return;
+    lastCycleAt = Date.now();
+    pollInFlight = true;
+    if (pulseDoc && CBA.sheets.applyPulse) { CBA.sheets.applyPulse(pulseDoc, applyRefreshResult); return; }
+    // (2026-08-19, ממצא 2.3) refreshIfChanged במקום refresh: קודם שאלה זולה
+    // "האם משהו השתנה?", ומשיכה מלאה של הגיליון רק כשהתשובה חיובית. נופל
+    // אוטומטית חזרה למשיכה מלאה מול שרת שעוד לא פורסם — ר' sheets.js.
+    (CBA.sheets.refreshIfChanged || CBA.sheets.refresh)(applyRefreshResult);
+  }
+
+  function doPoll(force) { runCycle(force === true, null); }
   // ברגע שעוזבים שדה (blur) ואין יותר עריכה פעילה במסך — אם היה רענון ממתין
   // שדילגנו עליו, מריצים אותו מיד, כדי שהנתונים לא יישארו מיושנים מיותר מדי
   // זמן (עקרון: עדכון מהיר ברגע שבטוח, לא רק יציבות). capture:true כי blur
@@ -2259,24 +2288,56 @@
   main.addEventListener("blur", function () {
     if (pendingSilentRefresh && !userIsEditingMain()) {
       pendingSilentRefresh = false;
-      doPoll();
+      doPoll(true);
     }
   }, true);
   function markActive() {
     lastActivity = Date.now();
-    if (wasIdle) { wasIdle = false; doPoll(); }   // חוזרים אחרי הפסקה — רענון מיידי, לא מחכים למחזור
+    if (wasIdle) { wasIdle = false; doPoll(true); }   // חוזרים אחרי הפסקה — רענון מיידי, לא מחכים למחזור
   }
   ["mousemove", "mousedown", "keydown", "touchstart", "scroll"].forEach(function (ev) {
     document.addEventListener(ev, markActive, { passive: true });
   });
   setInterval(doPoll, POLL_MS);
+
+  /* 🔴 הדלקת הפעימה (צעד 10). ר' ההערה הארוכה ליד PULSE_SLOW_MS.
+     ⚠️ **ברירת המחדל בקוד היא `false`, וזה מכוון:** הסקר הרגיל
+        עובד ואין שום דחיפות להחליף אותו לפני שהשרת באמת
+        כותב את המסמך. ואין כאן מלכודת הקיצור של `fsFirstRead`:
+        הקבוע הוא **ברירת המחדל שמועברת ל-`flag()`**, לא שער. */
+  var PULSE_DEFAULT = false;
+
+  function startPulse() {
+    if (pulseStop || !(CBA.fb && CBA.fb.watchDoc && CBA.fb.ensureDb)) return;
+    CBA.fb.authReady(function (user) {
+      if (!user) return;
+      CBA.fb.ensureDb(function (err) {
+        if (err) return;
+        if (CBA.fb.flag && !CBA.fb.flag("pulseToFirestore", PULSE_DEFAULT)) return;
+        pulseStop = CBA.fb.watchDoc("appConfig", "rev", function (err2, doc) {
+          if (err2) {
+            /* המאזין מת — חוזרים מיד לסקר המלא. */
+            pulseOn = false;
+            try { console.warn("[CBA] הפעימה נפלה, חוזרים לסקר:", err2 && (err2.code || err2.message)); } catch (e) {}
+            return;
+          }
+          pulseOn = true;
+          if (doc) runCycle(false, doc);
+        });
+        try { CBA.perf = CBA.perf || {}; CBA.perf.pulse = { on: true, at: new Date().toISOString() }; } catch (e) {}
+      });
+    });
+  }
+  startPulse();
+  /* חשיפה לאבחון בלבד — כדי שאפשר יהיה לראות בייצור מה באמת רץ. */
+  window.CBA.pulseState = function () { return { on: pulseOn, slowMs: PULSE_SLOW_MS, lastCycleAt: lastCycleAt }; };
   /* כתיבה שהסתיימה = רענון מיד, בלי לחכות לטיק הבא (2026-09-08). מריץ את
      doPoll עצמו ולא רענון משלו, כדי לרשת את כל ההגנות שכבר יש בו:
      isDirty, userIsEditingMain, טביעת האצבע ושמירת מצב המסך. האירוע נורה
      מ-sheets.js אחרי כתיבה מוצלחת, מקובץ ב-900ms. */
-  window.addEventListener("cba:write-settled", function () { markActive(); doPoll(); });
+  window.addEventListener("cba:write-settled", function () { markActive(); doPoll(true); });
   document.addEventListener("visibilitychange", function () {
-    if (!document.hidden) { markActive(); doPoll(); refreshAlertsClub(); }   // חזרה לטאב — רענון מיידי במקום לחכות למחזור הבא
+    if (!document.hidden) { markActive(); doPoll(true); refreshAlertsClub(); }   // חזרה לטאב — רענון מיידי במקום לחכות למחזור הבא
   });
 
   // שריוני מועדון ממתינים: קריאת רשת נפרדת (Calendar), בקצב נמוך בהרבה מרענון

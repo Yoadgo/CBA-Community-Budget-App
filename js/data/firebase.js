@@ -341,6 +341,47 @@ CBA.fb = (function () {
     });
   }
 
+  /* ============================================================================
+   *  watchDoc — **האזנה חיה למסמך בודד**   (צעד 10, 2026-09-15)
+   * ----------------------------------------------------------------------------
+   *  הפרימיטיב האחד שעליו נשענת הפעימה החיה. מחזיר
+   *  פונקציית ניתוק.
+   *
+   *  🔴 **מאזין בהמתנה עולה אפס.** העלות היא קריאה אחת
+   *  בהתחברות וקריאה אחת לכל שינוי בפועל — זול בסדרי גודל
+   *  מסקר ששואל כל 15 שניות "האם השתנה משהו?".
+   *
+   *  ⚠️ **אין כאן `withTimeout`, בכוונה.** מאזין אמור להמתין
+   *     ללא גבול — זו כל מהותו. פסק זמן היה מנתק אותו
+   *     אחרי ההודעה הראשונה. הקורא אחראי להחליט מה
+   *     עושים אם הודעה לא מגיעה.
+   *  ⚠️ שגיאה באמצע החיים (הרשאה שנשללה, ניתוק) מגיעה
+   *     לאותו `cb` עם `err` — וזו ההזדמנות של הקורא לחזור
+   *     למסלול הישן. Firestore מנסה להתחבר מחדש בעצמו.
+   * ========================================================================== */
+  function watchDoc(collection, id, cb) {
+    cb = cb || function () {};
+    var stopped = false, unsub = null;
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      if (stopped) return;
+      try {
+        unsub = window.firebase.firestore().collection(collection).doc(id)
+          .onSnapshot(function (d) {
+            if (stopped) return;
+            cb(null, d.exists ? (d.data() || {}) : null);
+          }, function (e) {
+            state.lastError = e;
+            if (!stopped) cb(e);
+          });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+    return function () {
+      stopped = true;
+      if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+    };
+  }
+
   /** קורא מסמך בודד. cb(err, data|null). */
   function readDoc(collection, id, cb) {
     cb = withTimeout(cb || function () {});
@@ -501,6 +542,7 @@ CBA.fb = (function () {
     readCollection: readCollection,
     queryCollection: queryCollection,
     readDoc:  readDoc,
+    watchDoc: watchDoc,
     updateDoc: updateDoc,
     nextId:   nextId,
     createDoc: createDoc,
