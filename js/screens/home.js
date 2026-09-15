@@ -157,7 +157,15 @@ CBA.screens = CBA.screens || {};
    *     ולכן `undefined` כאן הוא תשובה תקינה ולא כשל. */
   function primeHomeExtras(done) {
     if (!CBA.data || !CBA.data.getHomeExtras) { done(); return; }
-    if (cacheFresh() && resvFresh()) { done(); return; }   // הכול טרי — אין מה למשוך
+    /* ⚠️ (2026-09-15) `gardenFresh()` נוסף לתנאי כשספירת הגינון עברה
+       לקריאה המאוחדת. בלעדיו מטמון משותף טרי היה מדלג על הקריאה
+       והגינון היה נשלח שוב בנפרד — זו בדיוק המלכודת ההפוכה שבגללה
+       הופרדה `gardenTs` מ-`ts` ב-9.9 (ר' ההערה ליד lazyCache).
+       מי שאין לו הרשאת גינון: `gardenTs` לעולם לא יתעדכן והתנאי
+       ייכשל תמיד — אבל הקריאה המאוחדת זולה במיוחד עבורו (המקטעים
+       שהוא לא רשאי לראות פשוט לא חוזרים), והמטמון של דקה בלום
+       רצף ציורים. */
+    if (cacheFresh() && resvFresh() && (!can("גינון") || gardenFresh())) { done(); return; }
     CBA.data.getHomeExtras(function (res) {
       if (!res || !res.ok || !res.homeExtras) { done(); return; }   // שרת ישן/כשל -> המסלול הישן
       if (res.signups && res.signups.ok) lazyCache.signups = countPending(res.signups.rows);
@@ -170,6 +178,20 @@ CBA.screens = CBA.screens || {};
           return new Date(a.start) - new Date(b.start);
         });
         resvCache.ts = Date.now();
+      }
+      /* ספירת הגינון (2026-09-15, צעד 07) — הקריאה השלישית והאחרונה
+         שנשארה בתור העלייה (3.6–5.2ש' עבור מספר אחד).
+         ⚠️ **חובה לעדכן גם את `gardenTs`** — הוא החותמת הנפרדת
+            ש-`gardenFresh()` בודק. בלעדיו ההזרעה לא משנה כלום
+            והקריאה הנפרדת תצא בכל מקרה.
+         ⚠️ **שרת ישן לא מחזיר `garden` כלל** — ואז התנאי כאן לא
+            מתקיים, `gardenTs` נשאר 0, והמסלול הישן עובד בדיוק
+            כמו היום. אין תלות בסדר הדיפלוי.
+         ⚠️ `pending: 0` הוא תשובה תקפה — לכן הבדיקה היא על `ok`
+            ולא על המספר, אחרת "אפס ממתינות" היה מזמין קריאה נוספת. */
+      if (res.garden && res.garden.ok) {
+        lazyCache.garden = Number(res.garden.pending) || 0;
+        lazyCache.gardenTs = Date.now();
       }
       if (res.tour && window.CBA.tour && CBA.tour.seed) CBA.tour.seed(res.tour);
       if (res.club && window.CBA.seedClubAlerts) CBA.seedClubAlerts(res.club);

@@ -7766,10 +7766,39 @@ function handleHomeExtras_(p) {
     }
     if (has(PERM_GYM))  { out.gym  = sub(handleGymList_);  }
     if (has(PERM_CLUB)) { out.club = sub(handleClubList_); }
+    /* ספירת משימות הגינון הממתינות (2026-09-15, צעד 07).
+       📊 נמדד בייצור: `gardenTasks` לבדה עולה 3.6–5.2 שניות בעלייה,
+       ועמוד הבית משתמש ממנה ב**מספר אחד** — `rows.length`. הקריאה הזאת
+       הייתה השלישית והאחרונה שנשארה בתור אחרי צעד 06.
+       ⚠️ **מחזירים מספר, לא שורות** — בשונה מ-tour/club, שם הלקוח
+          צורך את התשובה המלאה. שורות המשימות כבדות (כולל דואות
+          כפילות וכיסוי תוכנית), והן היו מנפחות את מטען עמוד הבית
+          בלי שאיש יקרא אותן. מי שצריך את השורות עצמן — מסך תיבת
+          הדיווחים — ממשיך לקרוא `gardenTasks` כרגיל.
+       ⚠️ הספירה נגזרת מ-`handleGardenTasks_` עצמו ולא מתנאי מקביל כאן —
+          אחרת היו שתי הגדרות של "ממתין לאישור", וזה בדיוק איך נולד
+          "המספר במסך לא מסכים עם המספר בגיליון".
+       ⚠️ משתמש חיצוני (הגנן) לא מגיע לכאן בכלל: `authorize_` בראש
+          הפונקציה חוסם אותו (need=null). וגם אם היה מגיע — `pending`
+          חסום לו ב-handleGardenTasks_ עצמו. */
+    if (has(PERM_GARDEN)) {
+      var g = sub(function (pp) { return handleGardenTasks_(gardenPendingParams_(pp)); });
+      if (g && g.ok) out.garden = { ok: true, pending: (g.rows || []).length };
+    }
     return json_(out);
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
+}
+
+/* עותק של פרמטרי הבקשה עם `scope=pending` (2026-09-15). נפרד ולא שינוי
+   של `p` במקום, כדי ששאר המקטעים ב-handleHomeExtras_ ימשיכו לקבל את
+   הפרמטרים המקוריים. שינוי במקום היה מדליף `scope` למקטע הבא. */
+function gardenPendingParams_(p) {
+  var out = {};
+  for (var k in p) { if (Object.prototype.hasOwnProperty.call(p, k)) out[k] = p[k]; }
+  out.scope = 'pending';
+  return out;
 }
 
 function handleTour_(p) {
