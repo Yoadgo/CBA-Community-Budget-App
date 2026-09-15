@@ -4639,7 +4639,8 @@ var DEFAULT_EMAIL_SETTINGS = [
   /* מגיע **כבוי** בכוונה: לפני ההשקה הרחבה צפוי גל דיווחים, ומייל על כל אחד
      מהם מרעיל את התיבה של מנהל-העל דווקא בשבוע שבו הוא הכי צריך אותה. */
   ['ADMIN_NEW_APP_REPORT', 'דיווח חדש על האפליקציה',
-    "{{שם}} שלח {{סוג}} (מס' {{מזהה}}), ממסך {{מסך}}:\n\n{{תוכן}}",
+    "{{שם}} שלח {{סוג}} (מס' {{מזהה}}), ממסך {{מסך}}:\n\n{{תוכן}}\n\n" +
+    "— הקשר טכני —\n{{אבחון}}\n{{שגיאות}}",
     'למנהלי-על בלבד. מגיע כבוי — אפשר להדליק כאן אם רוצים התראה על כל דיווח', PERM_SUPER, 'לא'],
 
   ['ADMIN_NEW_GARDEN_REPORT', 'דיווח גינון חדש ממתין',
@@ -5394,28 +5395,23 @@ function staleNudgeJob_(ss) {
 
   // בקשות החזר ממתינות — שנת התקציב הנוכחית בלבד (ר' readSettings_)
   var curYear = readSettings_(ss)['שנה נוכחית'];
-  var tsh = curYear ? ss.getSheetByName('תנועות ' + curYear) : null;
-  if (tsh) {
-    var tvalues = tsh.getDataRange().getValues();
-    var theaders = tvalues[0].map(function (h) { return String(h).trim(); });
-    var idxOf = {}; theaders.forEach(function (h, i) { idxOf[h] = i; });
-    var subDateIdx = idxOf[SUBMIT_DATE_HEADER];
-    for (var i = 1; i < tvalues.length; i++) {
-      var row = tvalues[i];
-      var status = String(row[idxOf['סטטוס']] || '');
-      var source = String(row[idxOf['מקור']] || '');
-      if (source !== SOURCE_HE.resident) continue;
-      if (status !== STATUS_HE.submitted && status !== STATUS_HE.review) continue;
-      if (subDateIdx === undefined) continue; // שורות ישנות בלי התאריך המדויק — אין איך לחשב, מדלגים
-      var subVal = row[subDateIdx];
-      var subDate = subVal instanceof Date ? Utilities.formatDate(subVal, tz, 'yyyy-MM-dd') : String(subVal || '').slice(0, 10);
-      if (subDate !== thresholdStr) continue;
-      notifyAdmins_(ss, PERM_BUDGET, 'ADMIN_STALE_REIMBURSEMENT', {
-        'שם': row[idxOf['רוכש']] || '', 'סכום': Math.round(Number(row[idxOf['סכום']]) || 0),
-        'מזהה': row[idxOf['מזהה']], 'ימים': staleDays, 'קישור': CBA_APP_URL
-      });
-    }
-  }
+  /* צעד 09ב-4 — מקור אחד, שמחזיר שורות בצורת הגיליון בשני המקרים. */
+  txRowsForJob_(ss, curYear).forEach(function (row) {
+    var status = String(row['סטטוס'] || '');
+    var source = String(row['מקור'] || '');
+    if (source !== SOURCE_HE.resident) return;
+    if (status !== STATUS_HE.submitted && status !== STATUS_HE.review) return;
+    var subVal = row[SUBMIT_DATE_HEADER];
+    if (subVal === undefined || subVal === null || subVal === '') return;  /* שורה ישנה בלי התאריך */
+    var subDate = subVal instanceof Date
+      ? Utilities.formatDate(subVal, tz, 'yyyy-MM-dd')
+      : String(subVal).slice(0, 10);
+    if (subDate !== thresholdStr) return;
+    notifyAdmins_(ss, PERM_BUDGET, 'ADMIN_STALE_REIMBURSEMENT', {
+      'שם': row['רוכש'] || '', 'סכום': Math.round(Number(row['סכום']) || 0),
+      'מזהה': row['מזהה'], 'ימים': staleDays, 'קישור': CBA_APP_URL
+    });
+  });
 
   // שריוני מועדון ממתינים
   var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
@@ -5470,21 +5466,15 @@ function collectOpenItems_(ss) {
   }
 
   var curYear = readSettings_(ss)['שנה נוכחית'];
-  var tsh = curYear ? ss.getSheetByName('תנועות ' + curYear) : null;
-  if (tsh) {
-    var tvalues = tsh.getDataRange().getValues();
-    var theaders = tvalues[0].map(function (h) { return String(h).trim(); });
-    var idxOf = {}; theaders.forEach(function (h, i) { idxOf[h] = i; });
-    for (var i = 1; i < tvalues.length; i++) {
-      var row = tvalues[i];
-      var status = String(row[idxOf['סטטוס']] || '');
-      var source = String(row[idxOf['מקור']] || '');
-      if (source !== SOURCE_HE.resident) continue;
-      if (status === STATUS_HE.paid || status === STATUS_HE.rejected) continue;
-      out.budget.push('• ' + (row[idxOf['רוכש']] || '') + ' — ' + Math.round(Number(row[idxOf['סכום']]) || 0) +
-        " ₪ (מס' " + row[idxOf['מזהה']] + ', סטטוס: ' + status + ')');
-    }
-  }
+  /* צעד 09ב-4 — אותו מקור אחד. */
+  txRowsForJob_(ss, curYear).forEach(function (row) {
+    var status = String(row['סטטוס'] || '');
+    var source = String(row['מקור'] || '');
+    if (source !== SOURCE_HE.resident) return;
+    if (status === STATUS_HE.paid || status === STATUS_HE.rejected) return;
+    out.budget.push('• ' + (row['רוכש'] || '') + ' — ' + Math.round(Number(row['סכום']) || 0) +
+      " ₪ (מס' " + row['מזהה'] + ', סטטוס: ' + status + ')');
+  });
 
   var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
   if (cal) {
@@ -5937,7 +5927,12 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
      ב-FromFirestore. כיבוי מחזיר את שינויי הסטטוס למסלול Apps Script
      המלא בלי דיפלוי. הסטטוסים שכבר נכתבו וטרם הוחלו
      מוחלים בכל מקרה — הטריגר אינו תלוי בדגל. */
-  'budgetTxStatusToFirestore'];
+  'budgetTxStatusToFirestore',
+  /* 🔴 **המתג של צעד 09ב** (2026-09-15) — מכבה ומדליק **קריאה וכתיבה
+     של תנועות יחד**. לא שניים: כתיבה בלי קריאה גורמת לתנועה להיעלם
+     ברענון, וקריאה בלי כתיבה גורמת לאותו חור בכיוון ההפוך.
+     ⚠️ ברירת המחדל בקוד הלקוח היא `false` — ההדלקה היא דרך `flagSet`. */
+  'budgetTxFromFirestore'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {
@@ -8079,7 +8074,12 @@ var BTX_MAX_BYTES  = 900000;          /* מתחת ל-1MiB של Firestore, עם �
    לעולם בלי שמישהו יוסיף אותה לכאן במפורש. */
 var BTX_ALLOWED_COLS = ['מזהה', 'חודש הגשה', 'תאריך רכישה', 'ספק/נמען', 'בנק',
   'סכום', 'סעיף', 'תת-סעיף', 'סוג הוצאה', 'מקור', 'סטטוס', 'הערת בדיקה',
-  'תיאור', 'שם קובץ קבלה', 'קישור קבלה', 'מזהה משפחה'];
+  'תיאור', 'שם קובץ קבלה', 'קישור קבלה', 'מזהה משפחה',
+  /* 🔴 **נוסף בצעד 09ב-4** — `staleNudgeJob_` מחשבת ממנו כמה ימים
+     הבקשה תקועה. בלי השדה הזה, ברגע שהמשימות יקראו מ-Firestore
+     **הנדנוד היה מפסיק לעבוד בשקט** ואף אחד לא היה שם לב. זהו
+     תאריך, לא פרט אישי. */
+  SUBMIT_DATE_HEADER];
 
 /* מסנן שורה אחת לפי רשימת ההיתר. */
 function btxRow_(row) {
@@ -8467,6 +8467,107 @@ function handleBudgetTxSync_(p) {
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
+}
+
+/* ============================================================================
+ *  מקור השורות למשימות המתוזמנות   (צעד 09ב-4, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴 **שתי משימות קוראות את טאב התנועות ישירות:** `staleNudgeJob_`
+ *  (נדנוד על בקשה תקועה) ו-`collectOpenItems_` (הסיכום השבועי/חודשי).
+ *  ברגע שהתנועות יעברו ל-Firestore, שתיהן היו ממשיכות לרוץ **בלי
+ *  שגיאה, על נתון ישן** — וזה הכשל הגרוע: מייל שנשלח על סמך מציאות
+ *  שכבר לא קיימת.
+ *
+ *  🔑 נקודת קריאה אחת לשתיהן, שמחזירה **שורות בצורת הגיליון** בשני
+ *  המקרים — כך ששאר הקוד של המשימות לא משתנה בכלל.
+ *
+ *  ⚠️ **שם הרוכש מורכב כאן.** ב-Firestore אין שם למי שיש לו מזהה
+ *     משפחה (זה שם של אדם), אבל המייל למנהל מציג שם. לכן המפה
+ *     מהטאב "תושבים" — שנשאר בגיליון — נבנית פעם אחת ומצורפת.
+ * ========================================================================== */
+function txJobsUseFirestore_() {
+  try {
+    var f = fsGet_(FS_FLAGS_DOC) || {};
+    return f.budgetTxFromFirestore === true;
+  } catch (e) { return false; }   /* ספק — הגיליון */
+}
+
+/** מפה {מזהה משפחה: שם} מטאב "תושבים". */
+function txFamilyNames_(ss) {
+  var out = {};
+  try {
+    var sh = ss.getSheetByName('תושבים');
+    if (!sh) return out;
+    var v = sh.getDataRange().getValues();
+    if (v.length < 2) return out;
+    var h = v[0].map(function (x) { return String(x).trim(); });
+    var idIdx = h.indexOf(RESIDENT_ID_HEADER);
+    var famIdx = -1, firstIdx = -1;
+    for (var i = 0; i < h.length; i++) {
+      if (famIdx === -1 && h[i].indexOf('משפחה') !== -1) famIdx = i;
+      if (firstIdx === -1 && h[i].indexOf('שם פרטי') !== -1) firstIdx = i;
+    }
+    if (idIdx === -1) return out;
+    for (var r = 1; r < v.length; r++) {
+      var id = String(v[r][idIdx] || '').trim();
+      if (!id) continue;
+      var fam = famIdx === -1 ? '' : String(v[r][famIdx] || '').trim();
+      var first = firstIdx === -1 ? '' : String(v[r][firstIdx] || '').trim();
+      var name = (first + ' ' + fam).trim();
+      if (!name) continue;
+      /* שני בני זוג חולקים מזהה — מצרפים שמות פרטיים, כמו בלקוח. */
+      out[id] = out[id] ? (out[id] + ' / ' + name) : name;
+    }
+  } catch (e) { /* בלי שמות עדיין אפשר לשלוח */ }
+  return out;
+}
+
+/** שורות התנועות של השנה, בצורת הגיליון, מהמקור הנכון. */
+function txRowsForJob_(ss, year) {
+  if (!year) return [];
+  if (!txJobsUseFirestore_()) {
+    var sh = ss.getSheetByName('תנועות ' + year);
+    if (!sh) return [];
+    var v = sh.getDataRange().getValues();
+    if (v.length < 2) return [];
+    var h = v[0].map(function (x) { return String(x).trim(); });
+    var rows = [];
+    for (var r = 1; r < v.length; r++) {
+      var o = {};
+      h.forEach(function (k, i) { o[k] = v[r][i]; });
+      rows.push(o);
+    }
+    return rows;
+  }
+  /* 🔴 מ-Firestore: שאילתת שוויון על שדה אחד — בלי אינדקס מורכב. */
+  var docs = [];
+  try { docs = fsQuery_(FS_BUDGET_TX, 'year', 'EQUAL', String(year), 2000); }
+  catch (e) { Logger.log('txRowsForJob_ נכשל, נופל לגיליון: ' + e); return txRowsFromSheet_(ss, year); }
+  var names = txFamilyNames_(ss);
+  return docs.map(function (d) {
+    var o = d.data || {};
+    if (!String(o['רוכש'] || '').trim()) {
+      var n = names[String(o['מזהה משפחה'] || '').trim()];
+      if (n) o['רוכש'] = n;
+    }
+    return o;
+  });
+}
+
+/** קריאה ישירה מהגיליון — הנפילה לאחור של txRowsForJob_. */
+function txRowsFromSheet_(ss, year) {
+  var sh = ss.getSheetByName('תנועות ' + year);
+  if (!sh) return [];
+  var v = sh.getDataRange().getValues();
+  if (v.length < 2) return [];
+  var h = v[0].map(function (x) { return String(x).trim(); });
+  var rows = [];
+  for (var r = 1; r < v.length; r++) {
+    var o = {};
+    h.forEach(function (k, i) { o[k] = v[r][i]; });
+    rows.push(o);
+  }
+  return rows;
 }
 
 /* ============================================================================
@@ -12189,9 +12290,16 @@ function gardenTaskAction_(ss, body) {
  *     הגשת קבצים שני.
  * ========================================================================== */
 var APP_REPORTS_SHEET = 'דיווחי אפליקציה';
+/* ⚠️ עמודות האבחון (15.9.26) נוספו **באמצע** הרשימה, לפני 'טופל'. זה בטוח
+   כאן ורק כאן: ensureAppReportsSheet_ עובר דרך gardenAddMissingCols_, שמוסיף
+   עמודה חסרה **בסוף** הגיליון הקיים לפי שם, וכל הכתיבה והקריאה עוברות דרך
+   gardenCols_ (מיפוי שם→אינדקס). כלומר הסדר כאן קובע רק איך ייראה טאב חדש;
+   בטאב קיים העמודות יתווספו מימין והנתונים הקיימים לא יזוזו. */
 var APP_REPORT_HEADERS = [
   'מזהה', 'תאריך', 'מייל', 'שם', 'סוג', 'סעיפים',
-  'מסך', 'גרסת לקוח', 'דפדפן', 'תמונות',
+  'מסך', 'חלון פתוח', 'הרשאות', 'שנת עבודה',
+  'גרסת לקוח', 'גרסת שרת', 'דפדפן', 'רשת',
+  'שגיאות', 'שובל פעולות', 'מידע נוסף', 'תמונות',
   'טופל', 'תגובה', 'תאריך טיפול', 'טופל על ידי'
 ];
 var APP_REPORT_PHOTOS_FOLDER_NAME = 'דיווחי אפליקציה';
@@ -12205,7 +12313,11 @@ var APP_REPORT_LIST_MAX  = 300;   // כמה שורות אחרונות נשלחו
  *  אינה תלויה בו בכלום; שכפול שלה כאן היה שני עותקים של אותה לוגיקה.) */
 function ensureAppReportsSheet_(ss) {
   return gardenEnsureSheet_(ss, APP_REPORTS_SHEET, APP_REPORT_HEADERS,
-    [60, 140, 200, 130, 70, 430, 190, 100, 230, 210, 60, 320, 130, 140]);
+    [60, 140, 200, 130, 70, 430,
+     190, 190, 130, 90,
+     100, 90, 230, 110,
+     360, 360, 300, 210,
+     60, 320, 130, 140]);
 }
 
 function getAppReportPhotosFolder_() {
@@ -12256,6 +12368,18 @@ function submitAppReport_(ss, body) {
     row[c['מסך']]        = String(body.screen || '').substring(0, 120);
     row[c['גרסת לקוח']]  = String(body.ver || '').substring(0, 40);
     row[c['דפדפן']]      = String(body.ua || '').substring(0, 200);
+    /* ⚠️ כל שדות האבחון נכתבים דרך setDiagCell_ ולא ישירות: בטאב שכבר היה
+       בייצור לפני 15.9.26 העמודה עשויה שלא להתווסף עדיין (מטמון/כשל), ואז
+       c['שגיאות'] הוא undefined ו-row[undefined]=x היה מוסיף מאפיין למערך
+       בלי להפיל כלום — הדיווח היה נשמר חסר, בשקט. */
+    setDiagCell_(row, c, 'חלון פתוח',   body.dialog, 160);
+    setDiagCell_(row, c, 'הרשאות',      body.perms,  120);
+    setDiagCell_(row, c, 'שנת עבודה',   body.year,   40);
+    setDiagCell_(row, c, 'גרסת שרת',    body.srvVer, 40);
+    setDiagCell_(row, c, 'רשת',         body.net,    60);
+    setDiagCell_(row, c, 'שגיאות',      body.errors, 2000);
+    setDiagCell_(row, c, 'שובל פעולות', body.trail,  2000);
+    setDiagCell_(row, c, 'מידע נוסף',   body.extra,  400);
     row[c['תמונות']]     = ids.join(',');
     row[c['טופל']]       = '';
     sh.appendRow(row);
@@ -12263,12 +12387,28 @@ function submitAppReport_(ss, body) {
     try {
       notifyAdmins_(ss, PERM_SUPER, 'ADMIN_NEW_APP_REPORT', {
         'שם': name, 'סוג': kind === 'תקלה' ? 'דיווח על תקלה' : 'הצעת ייעול',
-        'מזהה': id, 'תוכן': items.join('\n'), 'מסך': String(body.screen || '')
+        'מזהה': id, 'תוכן': items.join('\n'), 'מסך': String(body.screen || ''),
+        'אבחון': [String(body.dialog || ''), String(body.ver || ''),
+                  String(body.ua || ''), String(body.net || '')]
+                 .filter(function (t) { return t; }).join(' · '),
+        'שגיאות': String(body.errors || '')
       });
     } catch (e) { /* כשל מייל לא מבטל דיווח שכבר נשמר */ }
 
     return { ok: true, id: id };
   } finally { lock.releaseLock(); }
+}
+
+/** כתיבה בטוחה לעמודת אבחון שאולי עדיין לא קיימת בטאב (ר' ההערה בכותב). */
+function setDiagCell_(row, c, header, value, max) {
+  var i = c[header];
+  if (i === undefined || i === null) return;
+  row[i] = String(value == null ? '' : value).substring(0, max || 300);
+}
+
+function appReportCell_(rowVals, c, header) {
+  var i = c[header];
+  return (i === undefined || i === null) ? '' : String(rowVals[i] || '');
 }
 
 /** doGet — מנהל-על בלבד (ר' GET_ACTION_PERMS.appReports). */
@@ -12295,6 +12435,16 @@ function handleAppReports_(p) {
       screen: String(v[r][c['מסך']] || ''),
       ver:    String(v[r][c['גרסת לקוח']] || ''),
       ua:     String(v[r][c['דפדפן']] || ''),
+      /* cell_ מחזיר '' לעמודה שעדיין אינה קיימת — שורות ישנות מלפני 15.9.26
+         פשוט יראו שדות ריקים במסך הניהול במקום להפיל את הקריאה. */
+      dialog: appReportCell_(v[r], c, 'חלון פתוח'),
+      perms:  appReportCell_(v[r], c, 'הרשאות'),
+      year:   appReportCell_(v[r], c, 'שנת עבודה'),
+      srvVer: appReportCell_(v[r], c, 'גרסת שרת'),
+      net:    appReportCell_(v[r], c, 'רשת'),
+      errors: appReportCell_(v[r], c, 'שגיאות'),
+      trail:  appReportCell_(v[r], c, 'שובל פעולות'),
+      extra:  appReportCell_(v[r], c, 'מידע נוסף'),
       photos: String(v[r][c['תמונות']] || '').split(',').filter(Boolean),
       done:   String(v[r][c['טופל']] || '').trim() === 'כן',
       reply:  String(v[r][c['תגובה']] || '')

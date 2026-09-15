@@ -35,7 +35,8 @@ const listIn = n => {
 section('1. 🔴 רשימת ההיתר מול השרת');
 {
   /* BTX_ALLOWED_COLS הוא מה שהשרת כותב; txAllowedFields הוא מה שהכלל מתיר. */
-  const sb = { console };
+  /* ⚠️ הרשימה מפנה לקבוע חיצוני (תאריך ההגשה) — צריך להזריע אותו. */
+  const sb = { console, SUBMIT_DATE_HEADER: 'הוגש בתאריך' };
   vm.createContext(sb);
   const a = CODE.indexOf('var BTX_ALLOWED_COLS');
   vm.runInContext(CODE.slice(a, CODE.indexOf('];', a) + 2), sb);

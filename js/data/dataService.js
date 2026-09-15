@@ -346,7 +346,29 @@ CBA.data = (function () {
        הצצה לשנה קודמת היא פעולת צפייה; הזנה היא פעולת עבודה. */
     const row = Object.assign({ id: seq, source: "admin", status: "submitted", year: getWorkingYear() }, tx);
     CBA.mock.transactions.push(row);
-    if (pushConnected()) {
+    if (!pushConnected()) return row;
+
+    /* 🔴 מסלול Firestore: המזהה מגיע **מהמונה**, לא מ-max+1 מקומי.
+       max+1 נכון רק כשיש כותב אחד; ברגע ששניים מזינים במקביל שניהם
+       מקבלים את אותו מספר ואחד דורס את השני. */
+    txWriteOn(function (on) {
+      if (!on) return txAddViaSheets(row);
+      CBA.fb.nextId("tx_" + row.year, function (err, n) {
+        if (err) return txAddViaSheets(row);
+        /* המזהה שהוקצה מחליף את המקומי — גם על המסך, לפני הכתיבה. */
+        row.id = n;
+        CBA.fb.createDoc("budgetTx", txDocId(row), txToDoc(row), function (e2) {
+          if (e2) return txAddViaSheets(row);
+          txNote("add", "firestore", "");
+        });
+      });
+    });
+    return row;
+  }
+
+  /* המסלול הישן — נשאר כפי שהיה, ומשמש גם כנפילה לאחור. */
+  function txAddViaSheets(row) {
+      txNote("add", "appsscript", "");
       const payload = Object.assign({}, row, { fileName: receiptFileName(row) });
       CBA.sheets.push("saveTransaction", { year: row.year || getCurrentYear(), tx: payload }, function (res) {
         if (res && res.ok === true) return;
@@ -355,8 +377,14 @@ CBA.data = (function () {
         CBA.mock.transactions = CBA.mock.transactions.filter(function (x) { return x !== row; });
         rollbackNote("התנועה לא נשמרה בגיליון והוסרה מהמסך", res);
       });
-    }
-    return row;
+  }
+
+  /* מדידה אחת לכל מסלול כתיבה — כדי שאפשר יהיה לראות בייצור מה באמת רץ. */
+  function txNote(op, source, why) {
+    try {
+      CBA.perf = CBA.perf || {};
+      CBA.perf["tx_" + op] = { source: source, why: why || "", at: new Date().toISOString() };
+    } catch (e) {}
   }
   /* ========================================================================
    *  החזרה לאחור כשהשרת דוחה  (PHASE 4.2, 2026-09-14)
@@ -510,6 +538,93 @@ CBA.data = (function () {
   var STATUS_COL = "סטטוס";
   var NOTE_COL = "הערת בדיקה";
 
+  /* ==========================================================================
+   *  כתיבת תנועות ישירות ל-Firestore   (צעד 09ב-3, 2026-09-15)
+   * --------------------------------------------------------------------------
+   *  🔴 **הדגל הזה מכבה קריאה וכתיבה יחד, ובכוונה.** אם הדפדפן יכתוב
+   *  תנועה ל-Firestore בזמן שהמטען עדיין מביא את השנה הנוכחית מהגיליון,
+   *  התנועה **תיעלם ברענון הבא** — היא לא בגיליון, והמסך נבנה מהגיליון.
+   *  והכיוון ההפוך יוצר בדיוק את אותו חור. לכן מתג אחד, לא שניים.
+   *
+   *  ⚠️ **ברירת המחדל בקוד היא `false`**, בניגוד לדגלי הקריאה. שם
+   *     `fsFirstRead` מקצרת לפני שהיא קוראת את הדגל החי, ולכן הברירה
+   *     חייבת להיות `true`. כאן אנחנו בודקים את הדגל בעצמנו אחרי
+   *     `ensureDb`, ולכן `false` עובד — וזה מה שמאפשר לשחרר את הקוד
+   *     לייצור **בלי לשנות התנהגות**, ולהפוך את המתג בנפרד.
+   * ======================================================================== */
+  var BUDGET_TX_FROM_FIRESTORE = false;
+
+  function txWriteOn(cb) {
+    /* 🔴🔴 **אין כאן קיצור על הקבוע.** זו בדיוק המלכודת שנתפסה ב-15.9
+       ב-`fsFirstRead`: קיצור על ברירת המחדל שבקוד הופך את הדגל החי
+       לחסר משמעות — כאן בכיוון ההפוך, `flagSet` לעולם לא היה מדליק.
+       הקבוע הוא **ברירת המחדל שמועברת ל-`flag()`**, לא שער. */
+    if (!(CBA.fb && CBA.fb.ensureDb && CBA.fb.createDoc)) return cb(false, "no-sdk");
+    CBA.fb.authReady(function (user) {
+      if (!user) return cb(false, "no-user");
+      CBA.fb.ensureDb(function (err) {
+        if (err) return cb(false, "db");
+        if (CBA.fb.flag && !CBA.fb.flag("budgetTxFromFirestore", BUDGET_TX_FROM_FIRESTORE)) {
+          return cb(false, "flag-off");
+        }
+        cb(true, "");
+      });
+    });
+  }
+
+  /* 🔴 **נקודת ההמרה היחידה** מתנועה של הלקוח למסמך Firestore.
+     היא מראה כפולה של `saveTransactionRow_` בשרת — ולכן יש בדיקה
+     שמצמידה את מפתחותיה לרשימת ההיתר שם. **`רוכש` אינו כאן**: זה
+     שם של אדם, והלקוח מרכיב אותו ממזהה המשפחה בקריאה. */
+  var TX_TYPE_HE = { refund: "החזר לדייר", supplier: "תשלום לספק", general: "הוצאה כללית" };
+  var TX_SOURCE_HE = { admin: "מנהל", resident: "תושב" };
+
+  function txToDoc(t) {
+    var fam = String(t.familyId == null ? "" : t.familyId).trim();
+    var doc = {
+      "מזהה": Number(t.id),
+      "חודש הגשה": String(t.month || ""),
+      "תאריך רכישה": String(t.date || ""),
+      "ספק/נמען": String(t.supplier || ""),
+      "בנק": String(t.bankName || ""),
+      "סכום": Number(t.amount) || 0,
+      "סעיף": String(t.categoryId || ""),
+      "תת-סעיף": String(t.subItemId || ""),
+      "סוג הוצאה": TX_TYPE_HE[t.expenseType] || String(t.expenseType || ""),
+      "מקור": TX_SOURCE_HE[t.source] || String(t.source || ""),
+      "סטטוס": statusMeta(t.status).label,
+      "הערת בדיקה": String(t.reviewNote || ""),
+      "תיאור": String(t.description || ""),
+      "שם קובץ קבלה": String(receiptFileName(t) || ""),
+      "קישור קבלה": String(t.receiptUrl || ""),
+      "מזהה משפחה": fam,
+      year: String(t.year || getWorkingYear()),
+      familyId: fam,
+      statusPending: false,
+      schema: 2,
+      updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+    };
+    /* ⚠️ שדה ריק אינו נכתב — בדיוק כמו `btxRow_` בשרת, כדי ששני
+       המסלולים ייצרו את אותו מסמך. */
+    Object.keys(doc).forEach(function (k) { if (doc[k] === "") delete doc[k]; });
+    return doc;
+  }
+
+  function txDocId(t) { return String(t.year || getWorkingYear()) + "__" + String(t.id); }
+
+  /* השדות שעריכת "פרטים" רשאית לגעת בהם — תאום מדויק של
+     `txDetailsUpdateOk` בכללי האבטחה. סטטוס אינו כאן. */
+  var TX_DETAIL_FIELDS = ["חודש הגשה", "תאריך רכישה", "ספק/נמען", "בנק", "סכום",
+                          "סעיף", "תת-סעיף", "סוג הוצאה", "תיאור",
+                          "שם קובץ קבלה", "קישור קבלה"];
+
+  function txDetailsPatch(t) {
+    var full = txToDoc(t), out = {};
+    TX_DETAIL_FIELDS.forEach(function (k) { out[k] = full[k] === undefined ? "" : full[k]; });
+    out.updatedAt = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+    return out;
+  }
+
   function updateTransaction(id, fields) {
     const t = CBA.mock.transactions.find(function (x) { return x.id === id; });
     if (!t) return t;
@@ -535,7 +650,16 @@ CBA.data = (function () {
       return t;
     }
 
-    txPushWhole(id, t, before);
+    /* 🔴 עריכת פרטים ל-Firestore — **`mergeDoc` ולא `updateDoc`**.
+       שם העמודה "ספק/נמען" מכיל לוכסן, ו-`update` מפרש אותו כנתיב
+       שדה ונכשל ב-`invalid-argument`. נתפס חי ב-15.9. */
+    txWriteOn(function (on) {
+      if (!on) return txPushWhole(id, t, before);
+      CBA.fb.mergeDoc("budgetTx", txDocId(t), txDetailsPatch(t), function (err) {
+        if (err) return txPushWhole(id, t, before);
+        txNote("update", "firestore", "");
+      });
+    });
     return t;
   }
 
@@ -554,8 +678,20 @@ CBA.data = (function () {
     const t = CBA.mock.transactions.find(function (x) { return x.id === id; });
     const yr = t && t.year;
     const at = CBA.mock.transactions.indexOf(t);
+    const copy = t;
     CBA.mock.transactions = CBA.mock.transactions.filter(function (x) { return x.id !== id; });
     if (!pushConnected()) return;
+    txWriteOn(function (on) {
+      if (!on || !copy) return txDeleteViaSheets(id, yr, copy, at);
+      CBA.fb.deleteDoc("budgetTx", txDocId(copy), function (err) {
+        if (err) return txDeleteViaSheets(id, yr, copy, at);
+        txNote("delete", "firestore", "");
+      });
+    });
+  }
+
+  function txDeleteViaSheets(id, yr, t, at) {
+    txNote("delete", "appsscript", "");
     CBA.sheets.push("deleteTransaction", { year: yr || getCurrentYear(), id: id }, function (res) {
       if (res && res.ok === true) return;
       // כבר הוחזרה איכשהו (רענון שהספיק לרוץ) — לא מכניסים כפילות

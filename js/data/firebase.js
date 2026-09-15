@@ -383,6 +383,60 @@ CBA.fb = (function () {
   }
 
   /* ============================================================================
+   *  createDoc / mergeDoc / deleteDoc   (צעד 09ב-3, 2026-09-15)
+   * ----------------------------------------------------------------------------
+   *  🔴🔴 **`mergeDoc` משתמש ב-`set(…, {merge:true})` ולא ב-`update`, וזה
+   *  לא עניין של טעם.** נתפס חי (15.9): `update({'ספק/נמען': x})` נכשל
+   *  ב-`invalid-argument`, כי ה-SDK מפרש כל מפתח כ**נתיב שדה** ולוכסן הוא
+   *  מפריד. שם העמודה בגיליון הוא "ספק/נמען" — ולכן כל עריכת פרטים דרך
+   *  `update` היתה נשברת. `set(merge:true)` אינו מפרש מפתחות כנתיב.
+   *
+   *  ⚠️ **ו-merge אינו דלת אחורית:** נבדק חי מול הכלל — `affectedKeys`
+   *     מחשב בדיוק את השדות שמוזגו, ולכן `set(merge:true)` על `סטטוס` או
+   *     על `רוכש` נדחה בדיוק כמו `update`.
+   *
+   *  ⚠️ `createDoc` משתמש ב-`set` מלא (בלי merge) — מסמך חדש נכתב במלואו,
+   *     וכלל היצירה בודק את הצורה השלמה.
+   * ========================================================================== */
+  function createDoc(collection, id, data, cb) {
+    cb = withTimeout(cb || function () {});
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      try {
+        window.firebase.firestore().collection(collection).doc(String(id))
+          .set(data || {})
+          .then(function () { cb(null, true); })
+          ["catch"](function (e) { state.lastError = e; cb(e); });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+  }
+
+  function mergeDoc(collection, id, fields, cb) {
+    cb = withTimeout(cb || function () {});
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      try {
+        window.firebase.firestore().collection(collection).doc(String(id))
+          .set(fields || {}, { merge: true })
+          .then(function () { cb(null, true); })
+          ["catch"](function (e) { state.lastError = e; cb(e); });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+  }
+
+  function deleteDoc(collection, id, cb) {
+    cb = withTimeout(cb || function () {});
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      try {
+        window.firebase.firestore().collection(collection).doc(String(id))["delete"]()
+          .then(function () { cb(null, true); })
+          ["catch"](function (e) { state.lastError = e; cb(e); });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+  }
+
+  /* ============================================================================
    *  nextId — מזהה רץ מתוך מסמך-מונה   (צעד 09ב-1, 2026-09-15)
    * ----------------------------------------------------------------------------
    *  🔴 **למה עסקה ולא קריאה-ואז-כתיבה:** בין הקריאה לכתיבה יכול לרוץ
@@ -449,6 +503,9 @@ CBA.fb = (function () {
     readDoc:  readDoc,
     updateDoc: updateDoc,
     nextId:   nextId,
+    createDoc: createDoc,
+    mergeDoc: mergeDoc,
+    deleteDoc: deleteDoc,
     serverNow: serverNow,
     signIn:   signIn,
     signOut:  signOut,
