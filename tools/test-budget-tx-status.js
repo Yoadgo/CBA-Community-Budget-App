@@ -328,5 +328,60 @@ ok('statusPending מורם בכתיבה', /statusPending: true/.test(DS));
   ok('🔴 והחזרה אחורה (תיקון ידני) גם היא', D.txLegalStep('paid', 'review') === false);
 }
 
-console.log('\n' + (fail ? '✗' : '✓') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
-process.exit(fail ? 1 : 0);
+
+section('9. 🔴 הרענון התקופתי לא מחזיר את הסטטוס אחורה');
+/* 🔴 **הבאג שהבדיקות האלה נולדו ממנו:** השנה הנוכחית מגיעה
+   מהמטען של Apps Script, ו-`apply()` דורס את CBA.mock.years כל
+   שלוש שניות. בלי החזקת הדגל, הסטטוס שנכתב ל-Firestore היה
+   נראה קופץ חזרה עד שההחלה מגיעה לגיליון. */
+ok('הכתיבה מחזיקה markDirty', /CBA\.sheets\.markDirty\("txStatus", false\)/.test(DS));
+ok('🔴 והשחרור הוא clearDirty באותה סיבה', /CBA\.sheets\.clearDirty\("txStatus"\)/.test(DS));
+ok('🔴 והשחרור יושב בקולבק של הדחיפה, לא מיד אחרי הכתיבה',
+   /CBA\.sheets\.get\(\{ action: "budgetTxApply" \}, done\)/.test(DS));
+ok('🔴 וכשל כתיבה משחרר גם הוא',
+   /if \(err\) \{ txDirtyDown\(\); return done\(false/.test(DS));
+{
+  /* מרוץ אמיתי: שתי כתיבות רצופות — הדגל יורד רק אחרי ששתיהן שוחררו. */
+  const sb = { console };
+  sb.window = sb;
+  let marks = [], clears = [], nudges = 0, nudgeCb = null;
+  sb.CBA = {
+    mock: { transactions: [{ id: 1, year: 'תשפ"ז', status: 'submitted' },
+                            { id: 2, year: 'תשפ"ז', status: 'submitted' }],
+            categories: [], years: {}, yearList: [], currentYear: 'תשפ"ז', _settings: {},
+            /* pushConnected() דורש את זה — אחרת כל הכתיבה מדולגת בשקט. */
+            _source: 'sheets' },
+    esc: s => String(s), isSuper: true, perms: ['תקציב'], user: { familyId: '3' },
+    sheets: { markDirty: (r) => marks.push(r), clearDirty: (r) => clears.push(r),
+              get: (p, cb) => { nudges++; nudgeCb = cb; },
+              push: () => {}, isConnected: () => true },
+    fb: { authReady: cb => cb({ uid: 'u' }), ensureDb: cb => cb(null),
+          flag: (k, d) => d, serverNow: () => 'T',
+          updateDoc: (c, id, f, cb) => cb(null) }
+  };
+  sb.setTimeout = setTimeout; sb.clearTimeout = clearTimeout;
+  sb.setInterval = () => 0; sb.clearInterval = () => {};
+  sb.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+  sb.document = { addEventListener() {}, querySelector: () => null, getElementById: () => null,
+                  createElement: () => ({ style: {}, addEventListener() {}, appendChild() {} }),
+                  head: { appendChild() {} }, body: { appendChild() {} }, hidden: false };
+  sb.navigator = { onLine: true }; sb.addEventListener = () => {}; sb.location = { href: 'https://x/' };
+  vm.createContext(sb);
+  vm.runInContext(DS, sb);
+  const D = sb.CBA.data;
+  D.updateTransaction(1, { status: 'ready' });
+  D.updateTransaction(2, { status: 'ready' });
+  ok('🔴 הדגל הורם פעם אחת לשתי כתיבות', marks.length === 1 && marks[0] === 'txStatus',
+     JSON.stringify(marks));
+  ok('🔴 ולא שוחרר לפני הדחיפה', clears.length === 0, JSON.stringify(clears));
+  setTimeout(function () {
+    ok('🔴 שתי כתיבות = דחיפה אחת', nudges === 1, String(nudges));
+    ok('🔴 והדגל עדיין מוחזק עד שהדחיפה חוזרת', clears.length === 0, JSON.stringify(clears));
+    if (nudgeCb) nudgeCb({ ok: true });
+    ok('🔴 ורק אז שוחרר', clears.length === 1 && clears[0] === 'txStatus', JSON.stringify(clears));
+    ok('הסטטוס עודכן מקומית מיד', sb.CBA.mock.transactions[0].status === 'ready');
+
+    console.log('\n' + (fail ? '✗' : '✓') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
+    process.exit(fail ? 1 : 0);
+  }, 1200);
+}

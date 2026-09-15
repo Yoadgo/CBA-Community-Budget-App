@@ -421,17 +421,54 @@ CBA.data = (function () {
     return true;
   }
 
-  /* דחיפה לשרת אחרי כתיבה — כדי שהמייל לתושב לא יחכה
-     עד לריצה השעתית. ⚠️ **איש אינו מחכה לתשובה וכשל
-     אינו מעניין** — הטריגר השעתי הוא רשת הביטחון.
+  /* ==========================================================================
+   *  🔴 **החור שהיה נפער כאן אלמלא שתי הפונקציות האלה**
+   * --------------------------------------------------------------------------
+   *  השנה הנוכחית **מגיעה מהמטען של Apps Script**, לא
+   *  מ-Firestore (דיאטת המטען מוציאה רק שנים קודמות),
+   *  ו-`apply()` דורס את `CBA.mock.years` **כל שלוש שניות**.
+   *  כלומר: הסטטוס שנכתב ל-Firestore היה **נראה קופץ חזרה**
+   *  תוך שלוש שניות, עד שההחלה תגיע לגיליון.
+   *
+   *  הפתרון משתמש במנגנון שכבר קיים: `markDirty` עוצר את
+   *  הרענון התקופתי (`apply` מדלג כש-`isDirty()`). אנחנו מחזיקים
+   *  את הדגל מרגע הכתיבה ל-Firestore ועד שהדחיפה מאשרת
+   *  שהגיליון הדביק.
+   *  ⚠️ **תווית שקט (`false`)** — זו אינה שמירה שהמשתמש צריך
+   *     לחכות לה, ובועת "שומר…" על לחיצה מיידית היא רעש.
+   *  ⚠️ **כל מסלול יציאה חייב לשחרר.** דגל שנתקע מרים
+   *     מקפיא את הרענון התקופתי לצמיתות — גרוע בהרבה
+   *     מהבעיה שהוא פותר. לכן השחרור יושב בקולבק של
+   *     `CBA.sheets.get`, שמובטח להיקרא גם בשעון עצר וגם בכשל.
+   * ======================================================================== */
+  var txDirtyN = 0;
+  function txDirtyUp() {
+    if (++txDirtyN === 1) { try { CBA.sheets.markDirty("txStatus", false); } catch (e) {} }
+  }
+  function txDirtyDown() {
+    if (txDirtyN > 0 && --txDirtyN === 0) { try { CBA.sheets.clearDirty("txStatus"); } catch (e) {} }
+  }
+
+  /* דחיפה לשרת אחרי כתיבה — כדי שהגיליון (והמייל לתושב)
+     לא יחכו עד לריצה השעתית. הטריגר השעתי נשאר רשת
+     הביטחון, ולכן כשל כאן אינו שגיאה למשתמש.
      השהיה קצרה מאחדת אישור גורף של 20 שורות לדחיפה אחת. */
-  var txNudgeTimer = null;
+  var txNudgeTimer = null, txNudgeHeld = 0;
   function txNudgeApply() {
+    txNudgeHeld++;
     if (txNudgeTimer) clearTimeout(txNudgeTimer);
     txNudgeTimer = setTimeout(function () {
       txNudgeTimer = null;
-      try { CBA.sheets.get({ action: "budgetTxApply" }, function () {}); } catch (e) {}
-    }, 1500);
+      var release = txNudgeHeld; txNudgeHeld = 0;
+      var fired = false;
+      function done() {
+        if (fired) return;
+        fired = true;
+        for (var i = 0; i < release; i++) txDirtyDown();
+      }
+      try { CBA.sheets.get({ action: "budgetTxApply" }, done); }
+      catch (e) { done(); }
+    }, 800);
   }
 
   /* מנסה לכתוב סטטוס ישירות. done(true) = נכתב,
@@ -459,9 +496,12 @@ CBA.data = (function () {
         if (Object.prototype.hasOwnProperty.call(fields, "reviewNote")) {
           patch[NOTE_COL] = String(fields.reviewNote == null ? "" : fields.reviewNote);
         }
+        /* 🔴 מרימים **לפני** הכתיבה: הרענון התקופתי יכול
+           לנחות בדיוק בין השליחה לתשובה. */
+        txDirtyUp();
         CBA.fb.updateDoc("budgetTx", year + "__" + t.id, patch, function (err) {
-          if (err) return done(false, (err && (err.code || err.message)) || "write");
-          txNudgeApply();
+          if (err) { txDirtyDown(); return done(false, (err && (err.code || err.message)) || "write"); }
+          txNudgeApply();     /* הדגל משוחרר בקולבק של הדחיפה */
           done(true, "");
         });
       });

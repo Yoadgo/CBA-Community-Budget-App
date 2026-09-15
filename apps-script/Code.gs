@@ -5928,7 +5928,17 @@ function flagsSet_(key, value) {
   if (FLAG_KEYS.indexOf(key) === -1) throw new Error('דגל לא מוכר: ' + key);
   var cur = fsGet_(FS_FLAGS_DOC) || {};
   var next = {};
-  FLAG_KEYS.forEach(function (k) { next[k] = (cur[k] === true); });
+  /* 🔴 **מפתח שאינו קיים במסמך נשאר לא-קיים** (2026-09-15).
+     קודם נכתב כאן `next[k] = (cur[k] === true)`, כלומר **כל דגל
+     שעדיין לא נכתב מעולם היה נקבע ל-false** ברגע שמישהו
+     משנה דגל אחר לגמרי. והמשמעות של "לא קיים" אינה
+     false אלא **"ברירת המחדל שבקוד"**, שהיא true בכל התחומים
+     שכבר עלו. כלומר הדלקת דגל אחד היתה **מכבה בשקט
+     תחום אחר שעובד**. מעתה מעתיקים רק ערכים שנקבעו
+     במפורש. */
+  FLAG_KEYS.forEach(function (k) {
+    if (cur[k] === true || cur[k] === false) next[k] = cur[k];
+  });
   next[key] = !!value;
   next.schema = 1;
   next.updatedAt = new Date();

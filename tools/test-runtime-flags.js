@@ -70,8 +70,24 @@ section('2. flagsSet_ — הכתיבה');
 reset();
 let r = sandbox.flagsSet_('servicesFromFirestore', true);
 ok('הדגל נדלק', r.servicesFromFirestore === true, JSON.stringify(r));
-/* ⚠️ מסמך חסר אינו "הכול דלוק" — כל מפתח שלא נכתב מפורשות הוא false. */
-ok('🔴 השני נשאר כבוי במפורש', r.gardenPlanFromFirestore === false, String(r.gardenPlanFromFirestore));
+/* 🔴 **הבדיקה הזאת התהפכה ב-15.9.2026, בכוונה.**
+   קודם היא דרשה שמפתח שלא נכתב ייקבע ל-false. אבל הלקוח
+   קורא את הדגל ב-`flag(key, dflt)` — כלומר **אצלו "לא קיים"
+   משמעו "ברירת המחדל שבקוד"**, והיא true בכל התחומים
+   שכבר עלו. שתי הסמנטיקות הסתורות הניבו מלכודת אמיתית:
+   **הדלקת דגל אחד כיבתה בשקט כל תחום שהדגל שלו מעולם
+   לא נכתב** — למשל קריאת השנה מ-Firestore. מעתה השרת
+   מעתיק רק ערכים שנקבעו במפורש, ושני הצדדים מסכימים. */
+ok('🔴 מפתח שמעולם לא נכתב נשאר לא-קיים (= ברירת המחדל שבקוד)',
+   !('gardenPlanFromFirestore' in r), JSON.stringify(r));
+{
+  /* וערך שנקבע במפורש — כן נשמר, גם כשהוא false. */
+  store = { gardenPlanFromFirestore: false, budgetYearFromFirestore: true };
+  const r2 = sandbox.flagsSet_('servicesFromFirestore', true);
+  ok('🔴 כיבוי מפורש נשמר', r2.gardenPlanFromFirestore === false, JSON.stringify(r2));
+  ok('🔴 והדלקה מפורשת של תחום אחר לא נכבית',
+     r2.budgetYearFromFirestore === true, JSON.stringify(r2));
+}
 ok('schema ו-updatedAt', r.schema === 1 && isDate(r.updatedAt));
 ok('נשמר', store.servicesFromFirestore === true);
 r = sandbox.flagsSet_('gardenPlanFromFirestore', true);
