@@ -712,7 +712,7 @@
 
         // ---- מפה במצב נעיצה ----
         var locEl = container.querySelector("#gd-loc");
-        CBA.map.render(container.querySelector("#gd-map"), {
+        var formMapApi = CBA.map.render(container.querySelector("#gd-map"), {
           head: false, search: false, legend: false, popup: false, pin: true,
           /* הפרמטר השני הוא אזור הגינון שהנעיצה נפלה בו. הוא נשלח עם הדיווח
              כדי שהתקלה תיפתח עם אזור במקום שמישהו יבחר אותו אחר כך — ואם אין
@@ -749,6 +749,10 @@
             state.x = pr.x; state.y = pr.y; state.area = pr.area || "";
             locEl.textContent = "המיקום שסימנת נשמר. אפשר ללחוץ על המפה כדי לסמן מחדש.";
             locEl.classList.add("is-ok");
+            /* המפה כעת יודעת לצייר נעיצה התחלתית ולמרכז עליה (2026-09-15) — קודם נשארה תמיד בתצוגה קבועה, בדיווח משוחזר.
+               יועד: "כרגע היא סתם מתעוררת בתצוגה קבועה". */
+            if (formMapApi && formMapApi.setPin) formMapApi.setPin({ x: pr.x, y: pr.y });
+            if (formMapApi && formMapApi.centerOnPin) formMapApi.centerOnPin();
           }
           (pr.photos || []).forEach(function (ph) {
             if (state.photos.length >= photoMax) return;

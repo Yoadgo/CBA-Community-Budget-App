@@ -79,23 +79,24 @@
 @media (max-width: 900px) { .gd-cols { grid-template-columns: 1fr; } }
 
 /* ---------- רשת הקטגוריות ---------- */
-.gd-cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
-@media (max-width: 520px) { .gd-cats { grid-template-columns: repeat(3, 1fr); } }
+/* שורת קפסולות אופקיות גולשת במקום רשת (2026-09-15) — אותו
+   מספר קטגוריות, פחות מאוד גובה: יועד, "חצי מסך הולך על 'מה הבעיה'". */
+.gd-cats { display: flex; flex-wrap: wrap; gap: 6px; }
 .gd-cat {
   font-family: inherit; cursor: pointer;
   border: 1px solid rgba(255,255,255,.8); background: rgba(255,255,255,.62);
   backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.85), 0 0 0 1px rgba(17,24,39,.04);
-  border-radius: 12px; padding: 11px 6px 9px;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  text-align: center; font-size: 11.5px; font-weight: 500;
-  color: var(--text, #374151); line-height: 1.25;
+  border-radius: 999px; padding: 6px 12px 6px 8px;
+  display: flex; flex-direction: row; align-items: center; gap: 6px;
+  text-align: start; font-size: 12px; font-weight: 500;
+  color: var(--text, #374151); line-height: 1.2;
   transition: transform .14s ease, box-shadow .14s ease;
 }
 .gd-cat:hover { transform: translateY(-1px); }
-.gd-cat u { text-decoration: none; width: 32px; height: 32px; border-radius: 10px;
+.gd-cat u { text-decoration: none; width: 22px; height: 22px; border-radius: 7px; flex: none;
   display: grid; place-items: center; }
-.gd-cat u svg { width: 17px; height: 17px; }
+.gd-cat u svg { width: 13px; height: 13px; }
 .gd-cat.on { border-color: transparent; color: #fff; font-weight: 600;
   box-shadow: 0 8px 20px -10px rgba(21,128,61,.8), inset 0 1px 0 rgba(255,255,255,.22); }
 .gd-cat.on u { background: rgba(255,255,255,.22) !important; color: #fff !important; }
