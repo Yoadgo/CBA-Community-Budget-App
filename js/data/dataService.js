@@ -858,12 +858,85 @@ CBA.data = (function () {
   var servicesCache = null;
   function getServices(cb) {
     if (servicesCache) { if (cb) cb({ ok: true, services: servicesCache.services, sections: servicesCache.sections }); return; }
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
-    CBA.sheets.get({ action: "services" }, function (res) {
-      if (res && res.ok) servicesCache = { services: res.services || [], sections: res.sections || [] };
-      if (cb) cb(res);
+    servicesRead(cb);
+  }
+
+  /* ==========================================================================
+   *  "שירותים לתושב" — קריאה ישירה מ-Firestore   (צעד 04ג, 2026-09-15)
+   * --------------------------------------------------------------------------
+   *  🔴 **מתג הביטול:** `SERVICES_FROM_FIRESTORE = false` מחזיר את המסך
+   *  למסלול Apps Script במלואו, בלי שום שינוי אחר.
+   *
+   *  🔑 **המסמך ב-Firestore מקנן את הסעיפים בתוך השירות; הלקוח משטח בחזרה**
+   *  ל-{services, sections}, כי זו הצורה שכל המסך מצפה לה. מסמך אחד לשירות
+   *  חוסך קריאה שנייה ומסמכים מיותמים — אבל אסור שזה ידלוף לצורת התשובה.
+   *
+   *  ⚠️ **`עודכן ע"י` אינו קיים ב-Firestore בכוונה** (אימייל של מנהל).
+   *  זה בטוח: `saveServices_` דורסת את העמודה מהמושב בכל שמירה, ולכן הערך
+   *  שהמסך שולח בחזרה נזרק ממילא.
+   * ======================================================================== */
+  var SERVICES_FROM_FIRESTORE = true;
+  var SVC_DOC_ONLY = { sections: 1, order: 1, schema: 1, updatedAt: 1 };
+
+  function servicesFromDocs(docs) {
+    var services = [], sections = [];
+    (docs || []).slice().sort(function (a, b) {
+      return (a.order || 0) - (b.order || 0);
+    }).forEach(function (d) {
+      var row = {};
+      Object.keys(d).forEach(function (k) { if (!SVC_DOC_ONLY[k]) row[k] = d[k]; });
+      services.push(row);
+      (d.sections || []).forEach(function (s) { sections.push(s); });
+    });
+    return { services: services, sections: sections };
+  }
+
+  function servicesRead(cb) {
+    var t0 = Date.now();
+    var settled = false;
+    var warm = !!(CBA.fb && CBA.fb.isDbReady && CBA.fb.isDbReady());
+
+    function note(source, why) {
+      try {
+        CBA.perf = CBA.perf || {};
+        CBA.perf.services = { source: source, ms: Date.now() - t0, why: why || "",
+                              warm: warm, at: new Date().toISOString() };
+        console.log("[CBA.perf] services " + source + " " + (Date.now() - t0) + "ms" +
+                    (warm ? " [SDK חם]" : " [SDK קר]") + (why ? " (" + why + ")" : ""));
+      } catch (e) {}
+    }
+
+    function viaSheets(why) {
+      if (settled) return;
+      settled = true;
+      if (!pushConnected()) { note("appsscript", why + "/offline"); if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+      CBA.sheets.get({ action: "services" }, function (res) {
+        note("appsscript", why);
+        if (res && res.ok) servicesCache = { services: res.services || [], sections: res.sections || [] };
+        if (cb) cb(res);
+      });
+    }
+
+    if (!SERVICES_FROM_FIRESTORE || !CBA.fb || !CBA.fb.readCollection) return viaSheets("disabled");
+
+    CBA.fb.authReady(function (user) {
+      if (settled) return;
+      if (!user) return viaSheets("no-user");
+      CBA.fb.readCollection("services", function (err, rows) {
+        if (settled) return;
+        if (err) return viaSheets("firestore:" + ((err && (err.code || err.message)) || "?"));
+        /* ⚠️ אוסף ריק אינו הצלחה — כך נראה גם סנכרון שמעולם לא רץ. נופלים
+           אחורה, כי "אין שירותים" הוא מסך שקרי ולא מסך ריק. */
+        if (!rows || !rows.length) return viaSheets("firestore:empty");
+        settled = true;
+        var out = servicesFromDocs(rows);
+        servicesCache = out;
+        note("firestore", "");
+        if (cb) cb({ ok: true, services: out.services, sections: out.sections });
+      });
     });
   }
+
   /* שמירה מחליפה את שני הטאבים במלואם בשרת (ר' saveServices_) — העריכה במסך
      היא על הכרטיס כמקשה אחת (הוספת/הסרת סעיף, שינוי סדר), לא שורה בודדת. */
   function saveServices(services, sections, cb) {

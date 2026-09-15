@@ -231,6 +231,9 @@ var GET_ACTION_PERMS = {
      הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
      מנהל גינון צריך לערוך משימות, לא לבנות מחדש מסד נתונים. */
   gardenPlanSync: PERM_SUPER,
+  /* סנכרון יזום של "שירותים לתושב" (2026-09-15, צעד 04א).
+     אותה סיבה כמו gardenPlanSync — פעולת תשתית שדורסת אוסף. */
+  servicesSync: PERM_SUPER,
   gymList: PERM_GYM,
   appReports: PERM_SUPER,
   /* שנת תקציב בודדת לפי דרישה (2026-09-14, דיאטת המטען שלב ב').
@@ -551,6 +554,9 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'gardenPlanSync') {
       return handleGardenPlanSync_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'servicesSync') {
+      return handleServicesSync_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'gardenTasks') {
       return handleGardenTasks_(e.parameter);
@@ -5707,10 +5713,118 @@ function saveServices_(ss, body) {
       secSheet.getRange(2, 1, secGrid.length, secHead.length).setValues(secGrid);
     }
 
+    /* עותק הקריאה — ר' בלוק הסנכרון. סנכרון מלא ולא שורה-שורה, כי
+       השמירה הזו מחליפה בלאו הכי את שני הטאבים במלואם. */
+    servicesSyncAll_(ss);
     return { ok: true, services: services.length, sections: sections.length };
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ============================================================================
+ *  שירותים לתושב → Firestore        (צעד 04א, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  אותה ארכיטקטורה כמו תוכנית הגינון: הגיליון מקור האמת, Firestore
+ *  עותק-קריאה, והדפדפן לעולם אינו כותב.
+ *
+ *  🔑 **מסמך אחד לשירות, עם הסעיפים בתוכו.** שתי הטבלאות בגיליון
+ *     מפוצלות כי גיליון הוא שטוח; ב-Firestore אין סיבה לשלם על כך
+ *     קריאה שנייה ומסמכים מיותמים. הלקוח משטח בחזרה ל-{services, sections}
+ *     כדי שהתשובה תיראה **זהה** למה ש-handleServices_ מחזיר.
+ *
+ *  🔴 **עמודת `עודכן ע"י` אינה עוברת.** היא מכילה אימייל של מנהל —
+ *     מידע אישי של תושב, והקו האדום הוא שמידע כזה נשאר בגיליון.
+ *     ⚠️ בטוח להשמיט אותה בלי לאבד נתונים: `saveServices_` דורסת אותה
+ *     בכל שמירה מהמושב (`row['עודכן ע"י'] = who`), ולכן מה שהלקוח
+ *     שולח שם נזרק בכל מקרה. העמודה `עודכן` (תאריך בלבד) **כן** עוברת,
+ *     כי המסך מציג אותה ("עודכן לאחרונה֠").
+ *
+ *  ⚠️ **מזהה שאינו תקין לנתיב מדולג ונספר.** מזהה שירות מגיע מהגיליון
+ *     ויכול להכיל כל תו. מזהה עם '/' היה שובר את נתיב המסמך בשקט.
+ * ========================================================================== */
+var FS_SERVICES = 'services';
+var SVC_SKIP_FIELDS = { 'עודכן ע"י': 1 };
+
+/** האם המזהה יכול לשמש כמזהה מסמך ב-Firestore. */
+function fsIdOk_(id) {
+  id = String(id == null ? '' : id).trim();
+  if (!id || id.length > 200) return false;
+  if (id.indexOf('/') !== -1) return false;
+  if (id === '.' || id === '..') return false;
+  return !/^__.*__$/.test(id);
+}
+
+/** שורה → מפה נקייה, בלי העמודות החסומות ובלי תאים ריקים. */
+function svcClean_(row) {
+  var out = {};
+  Object.keys(row || {}).forEach(function (k) {
+    if (SVC_SKIP_FIELDS[k]) return;
+    var v = row[k];
+    if (v instanceof Date) {
+      v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    }
+    out[k] = (v == null) ? '' : v;
+  });
+  return out;
+}
+
+/** מסמך שירות אחד, עם הסעיפים שלו בתוכו. */
+function svcDoc_(row, sections, order) {
+  var d = svcClean_(row);
+  d.sections = (sections || []).map(svcClean_);
+  d.order = order;
+  d.schema = 1;
+  d.updatedAt = new Date();
+  return d;
+}
+
+/** סנכרון מלא. מחזיר סיכום ולעולם אינו זורק — כישלון סנכרון
+ *  אינו רשאי לבטל שמירה שכבר הצליחה בגיליון. */
+function servicesSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  try {
+    var svcRows = readTable_(ss, SERVICES_SHEET);
+    var secRows = readTable_(ss, SERVICE_SECTIONS_SHEET);
+
+    var byService = {};
+    secRows.forEach(function (r) {
+      var sid = String(r['מזהה שירות'] == null ? '' : r['מזהה שירות']).trim();
+      if (!sid) return;
+      (byService[sid] = byService[sid] || []).push(r);
+    });
+
+    var live = {};
+    for (var i = 0; i < svcRows.length; i++) {
+      var id = String(svcRows[i]['מזהה שירות'] == null ? '' : svcRows[i]['מזהה שירות']).trim();
+      if (!fsIdOk_(id)) { out.skipped++; continue; }
+      fsSet_(FS_SERVICES + '/' + id, svcDoc_(svcRows[i], byService[id], i + 1));
+      live[id] = 1;
+      out.wrote++;
+    }
+
+    var have = fsList_(FS_SERVICES);
+    for (var j = 0; j < have.length; j++) {
+      if (!live[have[j].id]) { fsDelete_(FS_SERVICES + '/' + have[j].id); out.deleted++; }
+    }
+    out.ok = true;
+  } catch (err) {
+    out.error = String(err);
+  }
+  return out;
+}
+
+/* נקודת הרצה מפורשת — ולא הרצה ידנית מהעורך. ר' ההערה ב-handleGardenPlanSync_:
+   בורר הפונקציות נכשל בשקט ומריץ פונקציה בעלת שם דומה. */
+function handleServicesSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var r = servicesSyncAll_(ss);
+    return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, skipped: r.skipped, error: r.error });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
 /** עדכון תושבים על שינוי בשירות — **ידני בלבד**, נשלח רק כשמנהל-על לוחץ על
