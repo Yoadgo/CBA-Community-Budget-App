@@ -43,8 +43,13 @@ body[data-screen="planning"] .rep-fab-wrap { bottom: 104px; }
 
 /* התפריט — קופסה אחת ברוחב קבוע, מעוגנת לפינה ומרחפת מעל הכפתור.
    min-width זהה לשתי השורות כדי שהן לא ייראו כשתי גלולות באורך שונה. */
+/* ⚠️⚠️ `right: 0` **פיזי**, ולא `inset-inline-end` (תוקן 15.9.26, סבב שני).
+   העטיפה מקובעת ב-`right: 18px` פיזי, אבל בעמוד RTL `inset-inline-end`
+   הוא הצד ה**שמאלי** — ולכן התפריט נצמד בשמאלו לכפתור וגדל ימינה, היישר
+   אל מחוץ למסך. כשהעוגן של ההורה פיזי, גם העוגן של הילד חייב להיות פיזי.
+   שתי התכונות חייבות להשתנות יחד אם אי פעם מעבירים את הכפתור לצד שמאל. */
 .rep-menu {
-  position: absolute; inset-inline-end: 0; bottom: calc(100% + 10px);
+  position: absolute; right: 0; bottom: calc(100% + 10px);
   display: flex; flex-direction: column; align-items: stretch; gap: 8px;
   min-width: 230px;
 }
@@ -65,7 +70,7 @@ body[data-screen="planning"] .rep-fab-wrap { bottom: 104px; }
 .rep-menu__btn svg { width: 17px; height: 17px; color: var(--report); }
 /* הפתיחה היא הופעה מהפינה כלפי פנים המסך — לא "הידחפות" של הכפתור. */
 @keyframes rep-pop {
-  from { opacity: 0; transform: translateY(10px) scale(.92); transform-origin: bottom var(--rep-origin, right); }
+  from { opacity: 0; transform: translateY(10px) scale(.92); transform-origin: bottom right; }
   to   { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
