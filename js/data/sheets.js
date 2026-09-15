@@ -682,7 +682,10 @@ CBA.sheets = (function () {
     var key = txCacheKey(payload);
     if (fsTxCache && fsTxCache.y === y && fsTxCache.key === key &&
         (Date.now() - fsTxCache.at) < TX_REQUERY_MS) {
-      payload.data[y].transactions = fsTxCache.rows;
+      /* ⚠️ **המטמון מחזיק שורות גולמיות, בלי שמות.** כך
+         משיכה שבאה אחרי שהספרייה נטענה מרכיבה את השמות
+         מחדש בחינם, בלי שאילתה נוספת ובלי להקפיא שם ריק. */
+      payload.data[y].transactions = txWithNames(fsTxCache.rows);
       return ok(payload);
     }
 
@@ -716,9 +719,30 @@ CBA.sheets = (function () {
            שהניסיון הבא יחזור ל-Firestore ולא ינעל עצמו על הנפילה. */
         if (res.payload) return ok(res.payload);
         fsTxCache = { y: y, key: key, at: Date.now(), rows: res.rows };
-        payload.data[y].transactions = res.rows;
+        payload.data[y].transactions = txWithNames(res.rows);
         ok(payload);
       });
+  }
+
+  var buyerFillTried = false;
+  function fillBuyerNames(y) {
+    if (!y || !(CBA.data && CBA.data.ensureFamilyNames)) return;
+    var rec = CBA.mock && CBA.mock.years && CBA.mock.years[y];
+    var list = (rec && rec.transactions) || [];
+    var missing = list.filter(function (t) { return !String(t.buyer || "").trim() && t.familyId; });
+    if (!missing.length) { buyerFillTried = false; return; }
+    if (buyerFillTried) return;   /* לא מנסים שוב ושוב כל 3 שניות */
+    buyerFillTried = true;
+    CBA.data.ensureFamilyNames(function (okNames) {
+      if (!okNames) return;       /* ננסה שוב במשיכה הבאה */
+      buyerFillTried = false;
+      var cur = (CBA.mock.years[y] && CBA.mock.years[y].transactions) || [];
+      cur.forEach(function (t) {
+        if (String(t.buyer || "").trim() || !t.familyId) return;
+        var n = CBA.data.familyDisplayName(t.familyId);
+        if (n) t.buyer = n;
+      });
+    });
   }
 
   // שולפת מהגיליון, מחילה על CBA.mock ומעדכנת מטמון. משותף בין load() (רענון הרקע
@@ -750,6 +774,21 @@ CBA.sheets = (function () {
         lastFullFetch = Date.now();
         try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), store: store })); } catch (e) { /* מכסת אחסון מלאה — לא קריטי */ }
       }
+      /* ====================================================================
+       *  🔴 **השלמת שמות אחרי ה-apply, ולא לפניו**
+       * --------------------------------------------------------------------
+       *  עד כאן ההזרקה חיכתה לספריית התושבים — והיא נדחתה
+       *  בשקט, כי `getResidentDirectory` חסומה מאחורי `pushConnected()`
+       *  שבודק `_source === "sheets"`, והוא נקבע רק כאן, בתוך
+       *  `apply()`. עכשיו השורות מוצגות מיד והשם מושלם רגע
+       *  אחרי כך, במקום לחסום את כל הצביעה הראשונה.
+       *
+       *  ⚠️ **משלים בלבד, לעולם לא דורס.** שורה שיש לה שם
+       *     מהגיליון שומרת אותו — הגיליון הוא מקור האמת לשמות.
+       *  ⚠️ אין כאן שום קריאה נוספת ל-Firestore — רק הרכבה
+       *     מחדש של מה שכבר בזיכרון.
+       * ==================================================================== */
+      if (payload.txFromFirestore) fillBuyerNames(payload.currentYear);
       cb(true, { source: "fresh", hadCache: hadCache });
     }
 
@@ -1381,44 +1420,59 @@ CBA.sheets = (function () {
      שנראית אמיתית לחלוטין. זה בדיוק הכשל שאסור אצלנו.
      ⚠️ **מצב שנגזר מהמטען אינו זמין לפני שהמטען הוחל.**
         לכן ההרשאה חייבת להישלח פנימה, לא להיקרא מבפנים. */
+  /* ==========================================================================
+   *  🔴 **שם הרוכש — נקודת ההרכבה האחת**
+   * --------------------------------------------------------------------------
+   *  השם אינו יושב ב-Firestore ולעולם לא ישב שם (הכרעה
+   *  של יועד: נתונים אישיים נשארים בגיליון), ולכן הוא
+   *  מורכב ממזהה המשפחה בקריאה.
+   *
+   *  ⚠️ **ההרכבה נפרדת מהשליפה, וזה תיקון לבאג בייצור**
+   *     (15.9.2026): `ensureFamilyNames` חסומה מאחורי `pushConnected()`,
+   *     שבודק `CBA.mock._source === "sheets"` — והוא נקבע בתוך
+   *     `apply()`, כלומר **אחרי** ההזרקה למטען. לכן בטעינה
+   *     הראשונה הספרייה נדחתה בשקט וכל שש השורות הוצגו
+   *     **בלי שם רוכש**. שוב אותה משפחה: ההזרקה נשענה על
+   *     מצב שהמטען עצמו הוא זה שממלא.
+   *
+   *  🔴 **הכלל שנגזר משני הבאגים:** המסלול החוסם של
+   *  ההזרקה לא ייגע בשום מצב שנגזר מהמטען. ההרשאה מגיעה
+   *  מהמטען, והשמות מורכבים **אחרי** ה-`apply`.
+   * ======================================================================== */
+  function txWithNames(rows) {
+    return (rows || []).map(function (r) {
+      if (String(r["רוכש"] || "").trim()) return r;
+      var name = (CBA.data && CBA.data.familyDisplayName)
+        ? CBA.data.familyDisplayName(r["מזהה משפחה"]) : "";
+      if (!name) return r;
+      var out = {};
+      Object.keys(r).forEach(function (k) { out[k] = r[k]; });
+      out["רוכש"] = name;
+      return out;
+    });
+  }
+
   function fsTxRows(y, seesAll, done) {
-    var raw = null, namesOk = false, failed = false;
+    var failed = false;
     function fail(e) { if (failed) return; failed = true; done(e); }
-    function maybe() {
-      if (failed || raw === null || !namesOk) return;
-      done(null, fsPlainRows(raw).map(function (r) {
-        if (String(r["רוכש"] || "").trim()) return r;
-        var name = CBA.data.familyDisplayName ? CBA.data.familyDisplayName(r["מזהה משפחה"]) : "";
-        if (!name) return r;
-        var out = {};
-        Object.keys(r).forEach(function (k) { out[k] = r[k]; });
-        out["רוכש"] = name;
-        return out;
-      }));
-    }
+    function deliver(raw) { if (!failed) done(null, fsPlainRows(raw)); }
 
     var mine = (CBA.user && CBA.user.familyId) ? String(CBA.user.familyId).trim() : "";
     /* 🔴 **מסמך לכל תנועה** (צעד 09) — שאילתת שוויון, בלי אינדקס
        מורכב (קונסולת Google Cloud חסומה ב-2SV). תושב מסנן גם לפי
        משפחה — והכלל דוחה כל שאילתה רחבה יותר, אז הסינון אינו
        "הגנה" אלא מה שמאפשר לקריאה להצליח בכלל. */
-    if (!seesAll && !mine) { raw = []; maybe(); }
-    else {
-      var conds = [["year", String(y)]];
-      if (!seesAll) conds.push(["familyId", mine]);
-      CBA.fb.queryCollection("budgetTx", conds, function (err, all) {
-        if (err) return fail(err);
-        raw = (all || []).map(btxStrip);
-        maybe();
-      });
-    }
-
-    if (CBA.data.ensureFamilyNames) CBA.data.ensureFamilyNames(function () { namesOk = true; maybe(); });
-    else { namesOk = true; maybe(); }
+    if (!seesAll && !mine) return deliver([]);
+    var conds = [["year", String(y)]];
+    if (!seesAll) conds.push(["familyId", mine]);
+    CBA.fb.queryCollection("budgetTx", conds, function (err, all) {
+      if (err) return fail(err);
+      deliver((all || []).map(btxStrip));
+    });
   }
 
   function fsYearLoad(y, done) {
-    var doc = null, rows = null, failed = false;
+    var doc = null, rows = null, namesOk = false, failed = false;
     /* 🔴🔴 **מושכים רק את מה שלמשתמש הזה מותר ונדרש**
        (עקרון שיועד קבע, 15.9.2026). תוכנית התקציב פתוחה בכללי
        האבטחה **רק לבעלי הרשאת תקציב**. קריאה של תושב
@@ -1431,12 +1485,12 @@ CBA.sheets = (function () {
     var EMPTY_PLAN = { budget: [], income: [], groups: [], splits: [], items: [] };
     function fail(e) { if (failed) return; failed = true; done(e); }
     function maybe() {
-      if (failed || !doc || rows === null) return;
+      if (failed || !doc || rows === null || !namesOk) return;
       done(null, { ok: true, rev: lastRev, data: {
         budget: fsPlainRows(doc.budget), income: fsPlainRows(doc.income),
         groups: (doc.groups || []).map(fsPlain),
         splits: fsPlainRows(doc.splits), items: fsPlainRows(doc.items),
-        transactions: rows
+        transactions: txWithNames(rows)
       } });
     }
 
@@ -1452,6 +1506,13 @@ CBA.sheets = (function () {
 
     /* כאן `seesBudget` אמין: `loadYear` נקרא לפי דרישה, הרבה
        אחרי שהמטען הראשון מילא את `CBA.isSuper`/`CBA.perms`. */
+    /* כאן ההמתנה לספרייה לגיטימית: `loadYear` רץ לפי דרישה,
+       הרבה אחרי ש-`_source` נקבע, והמפה כמעט תמיד כבר במטמון.
+       ⚠️ **במקביל לשאילתות, לא אחריהן** — אחרת הפעם הראשונה
+          משלמת שתי המתנות סדרותיות במקום אחת. */
+    if (CBA.data && CBA.data.ensureFamilyNames) CBA.data.ensureFamilyNames(function () { namesOk = true; maybe(); });
+    else { namesOk = true; maybe(); }
+
     fsTxRows(y, seesBudget, function (err, rr) {
       if (err) return fail(err);
       rows = rr; maybe();

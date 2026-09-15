@@ -117,7 +117,12 @@ ok('🔴 ברירת המחדל בקוד היא true (אחרת fsFirstRead מקצ
    /var BUDGET_TX_FROM_FIRESTORE_READ = true;/.test(SRC));
 ok('⚠️ ואין קיצור על הקבוע', !/if \(!BUDGET_TX_FROM_FIRESTORE_READ\)/.test(SRC));
 ok('ההזרקה קורית לפני transform',
-   /payload\.data\[y\]\.transactions = res\.rows;[\s\S]{0,40}ok\(payload\)/.test(SRC));
+   /payload\.data\[y\]\.transactions = txWithNames\(res\.rows\);[\s\S]{0,40}ok\(payload\)/.test(SRC));
+/* 🔴 המטמון מחזיק שורות **גולמיות**, כדי שמשיכה שבאה אחרי
+   שהספרייה נטענה תרכיב שמות בלי שאילתה נוספת — וכדי ששם
+   ריק לא ייתקע במטמון לעשר דקות. */
+ok('🔴 המטמון מחזיק שורות גולמיות, והשמות מורכבים בשליפה',
+   /payload\.data\[y\]\.transactions = txWithNames\(fsTxCache\.rows\)/.test(SRC));
 ok('🔴 והלקוח פועל לפי הצהרת השרת, לא לפי הדגל שלו',
    /if \(!payload\.txFromFirestore\) return useIt\(payload\);/.test(SRC));
 ok('🔴 נקודת קריאה אחת לתנועות (fsTxRows), ושני צרכנים',
@@ -282,8 +287,20 @@ ok('🔴 וכתיבת סטטוס זורקת אף היא את המטמון',
      JSON.stringify(queryLog[0].conds));
   ok('\uD83D\uDD34 \u05D5\u05E9\u05EA\u05D9 \u05D4\u05EA\u05E0\u05D5\u05E2\u05D5\u05EA \u05D4\u05D2\u05D9\u05E2\u05D5 \u2014 \u05DC\u05D0 \u05E9\u05E0\u05D4 \u05E8\u05D9\u05E7\u05D4',
      st.years[CUR].transactions.length === 2, String(st.years[CUR].transactions.length));
+  /* \uD83D\uDD34 \u05DE\u05D1\u05D5\u05D3\u05D3 \u05D0\u05EA \u05D2\u05D5\u05E3 \u05D4\u05E4\u05D5\u05E0\u05E7\u05E6\u05D9\u05D4 \u05D1\u05D3\u05D9\u05D5\u05E7, \u05DC\u05D0 "\u05D7\u05DC\u05D5\u05DF \u05E9\u05DC N \u05EA\u05D5\u05D5\u05D9\u05DD"
+     \u05E9\u05D2\u05D5\u05DC\u05E9 \u05DC\u05E4\u05D5\u05E0\u05E7\u05E6\u05D9\u05D4 \u05D4\u05D1\u05D0\u05D4. \u05D4\u05D3\u05E8\u05D9\u05E9\u05D4 \u05D4\u05D9\u05D0 \u05D4\u05DC\u05E7\u05D7 \u05DE\u05E9\u05E0\u05D9 \u05D1\u05D0\u05D2\u05D9
+     \u05D4\u05D9\u05D9\u05E6\u05D5\u05E8: \u05D4\u05DE\u05E1\u05DC\u05D5\u05DC \u05D4\u05D7\u05D5\u05E1\u05DD \u05D0\u05D9\u05E0\u05D5 \u05E0\u05D5\u05D2\u05E2 \u05D1\u05E9\u05D5\u05DD \u05DE\u05E6\u05D1 \u05E9\u05D4\u05DE\u05D8\u05E2\u05DF \u05DE\u05DE\u05DC\u05D0. */
+  const FSTX = (SRC.split('function fsTxRows(y, seesAll, done) {')[1] || '').split('\n  function ')[0];
   ok('\u26A0\uFE0F \u05D5\u05D4\u05E7\u05D5\u05D3 \u05D0\u05D9\u05E0\u05D5 \u05D2\u05D5\u05D6\u05E8 \u05D4\u05E8\u05E9\u05D0\u05D4 \u05D1\u05EA\u05D5\u05DA fsTxRows',
-     !/function fsTxRows\(y, seesAll, done\) \{[\s\S]{0,1400}CBA\.isSuper/.test(SRC));
+     FSTX.length > 50 && FSTX.indexOf('CBA.isSuper') === -1 && FSTX.indexOf('CBA.perms') === -1,
+     String(FSTX.length));
+  ok('\uD83D\uDD34\uD83D\uDD34 \u05D5\u05D0\u05D9\u05E0\u05D5 \u05E0\u05D5\u05D2\u05E2 \u05D1\u05E1\u05E4\u05E8\u05D9\u05D9\u05EA \u05D4\u05E9\u05DE\u05D5\u05EA \u2014 \u05D4\u05D9\u05D0 \u05D7\u05E1\u05D5\u05DE\u05D4 \u05D1\u05D8\u05E2\u05D9\u05E0\u05D4 \u05D4\u05E8\u05D0\u05E9\u05D5\u05E0\u05D4',
+     FSTX.indexOf('ensureFamilyNames') === -1 && FSTX.indexOf('familyDisplayName') === -1);
+  ok('\uD83D\uDD34 \u05D5\u05D4\u05E9\u05DE\u05D5\u05EA \u05DE\u05D5\u05E9\u05DC\u05DE\u05D9\u05DD \u05D0\u05D7\u05E8\u05D9 \u05D4-apply',
+     /if \(payload\.txFromFirestore\) fillBuyerNames\(payload\.currentYear\);/.test(SRC) &&
+     /function fillBuyerNames\(y\)/.test(SRC));
+  ok('\u26A0\uFE0F \u05D5\u05D4\u05D4\u05E9\u05DC\u05DE\u05D4 \u05DE\u05E9\u05DC\u05D9\u05DE\u05D4 \u05D1\u05DC\u05D1\u05D3, \u05DC\u05E2\u05D5\u05DC\u05DD \u05DC\u05D0 \u05D3\u05D5\u05E8\u05E1\u05EA',
+     /if \(String\(t\.buyer \|\| ""\)\.trim\(\) \|\| !t\.familyId\) return;/.test(SRC));
   ok('\u26A0\uFE0F \u05D5\u05D4\u05D9\u05D0 \u05DE\u05E7\u05D1\u05DC\u05EA \u05D0\u05D5\u05EA\u05D4 \u05DE\u05D1\u05D7\u05D5\u05E5', /function fsTxRows\(y, seesAll, done\)/.test(SRC));
   ok('\u26A0\uFE0F \u05D5\u05D4\u05DE\u05D8\u05E2\u05DF \u05DE\u05E2\u05D1\u05D9\u05E8 true (\u05D4\u05E9\u05E8\u05EA \u05D4\u05E2\u05D9\u05D3)', /fsTxRows\(y, true, function/.test(SRC));
   ok('\u26A0\uFE0F \u05D5\u05D4\u05E9\u05E0\u05D4 \u05D4\u05D1\u05D5\u05D3\u05D3\u05EA \u05DE\u05E2\u05D1\u05D9\u05E8\u05D4 \u05D0\u05EA \u05E9\u05DC\u05D4', /fsTxRows\(y, seesBudget, function/.test(SRC));

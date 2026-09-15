@@ -284,8 +284,9 @@ section('1. הדגל כבוי — המסלול הישן');
      שגם המטען הראשי (צעד 09ב-5ג) ישתמש באותה אחת.
      הדרישה לא השתנתה: **כל ערך עובר דרך הנירוול.** */
   ok('🔴 וכל ערך מ-Firestore עובר דרך הנירוול',
-     /transactions: rows/.test(SH) && /budget: fsPlainRows\(doc\.budget\)/.test(SH) &&
-     /done\(null, fsPlainRows\(raw\)\.map/.test(SH));
+     /budget: fsPlainRows\(doc\.budget\)/.test(SH) &&
+     /function deliver\(raw\) \{ if \(!failed\) done\(null, fsPlainRows\(raw\)\); \}/.test(SH) &&
+     /transactions: txWithNames\(rows\)/.test(SH));
   ok('⚠️ והשנה הבודדת צורכת את אותה פונקציה',
      /fsTxRows\(y, seesBudget, function \(err, rr\)/.test(SH));
 
