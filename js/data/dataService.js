@@ -942,8 +942,65 @@ CBA.data = (function () {
   // cb(res) מקבל {ok:true} רק אם השרת אכן אישר הצלחה, או {ok:false, error}.
   // בהצלחה: מוסיפים גם עותק מקומי אופטימי לזיכרון, כדי שהבקשה תופיע מיד
   // ב"הבקשות שלי" בלי לחכות לרענון מהגיליון (מזהה זמני — יוחלף באמיתי ברענון הבא).
+  /* ==========================================================================
+   *  הגשת בקשת החזר — מפוצלת   (צעד 09ב-5ב, 2026-09-15)
+   * --------------------------------------------------------------------------
+   *  🔴 **סדר הפעולות הוא הכרעה, לא מקריות** (יועד, 15.9): **קודם
+   *  הקובץ, אחר כך המסמך.** אם ניפול באמצע, נשאר קובץ יתום ב-Drive —
+   *  בלתי נראה לאף אחד. הסדר ההפוך היה משאיר לתושב **בקשה בלי קבלה**
+   *  על המסך, והוא לא היה מבין למה.
+   *
+   *  🔴 **מזהה המשפחה מגיע מהשרת**, שגוזר אותו מהמייל המאומת — לא
+   *  מהטופס. זה הבאג של 9.9 שלא נחזור עליו.
+   *
+   *  ⚠️ **`mailPending:true`** — כלל אבטחה אינו יכול לשלוח מייל. הטריגר
+   *     סוחט וסולח, ותבנית המייל נגזרת ממצב המסמך ולא משדה של הלקוח.
+   * ======================================================================== */
+  function submitReceiptViaFirestore(fields, cb, onProgress, fallback) {
+    const year = getWorkingYear();
+    CBA.sheets.postReadProgress("uploadReceiptOnly",
+      Object.assign({ year: year }, fields), onProgress, function (up) {
+        if (!up || !up.ok || !up.url) return fallback();
+        CBA.fb.nextId("tx_" + year, function (err, n) {
+          if (err) return fallback();
+          const today = new Date().toISOString().slice(0, 10);
+          const t = {
+            id: n, year: year, month: today.slice(0, 7), date: today,
+            supplier: fields.supplier || "", bankName: fields.bankName || "",
+            amount: Number(fields.amount) || 0, categoryId: "", subItemId: "",
+            expenseType: fields.expenseType, source: "resident", status: "submitted",
+            description: fields.description || "", receiptUrl: up.url,
+            familyId: String(up.familyId || fields.familyId || "")
+          };
+          const doc = txToDoc(t);
+          doc["שם קובץ קבלה"] = String(up.fileName || "");
+          doc["הוגש בתאריך"] = String(up.submittedAt || new Date().toISOString());
+          doc.mailPending = true;
+          CBA.fb.createDoc("budgetTx", txDocId(t), doc, function (e2) {
+            if (e2) return fallback();
+            txNote("receipt", "firestore", "");
+            CBA.mock.transactions.push(Object.assign({ buyer: fields.buyer || "", payType:
+              fields.expenseType === "refund" ? "refund" : "supplier" }, t));
+            if (cb) cb({ ok: true, id: n });
+          });
+        });
+      });
+  }
+
   function submitReceipt(fields, cb, onProgress) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    var wentFs = false;
+    txWriteOn(function (on) {
+      if (!on || wentFs) return submitReceiptViaSheets(fields, cb, onProgress);
+      wentFs = true;
+      submitReceiptViaFirestore(fields, cb, onProgress, function () {
+        submitReceiptViaSheets(fields, cb, onProgress);
+      });
+    });
+  }
+
+  function submitReceiptViaSheets(fields, cb, onProgress) {
+    txNote("receipt", "appsscript", "");
     /* 🔴🔴 **שנת העבודה, לא השנה המוצגת** (2026-09-15).
        זה המסלול שבו תושב מגיש בקשת החזר, והוא זה שגרם
        לכך שהוצאות ספטמבר 2026 נרשמו לשנה הקודמת. */

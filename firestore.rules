@@ -280,19 +280,26 @@ service cloud.firestore {
              request.resource.data.statusPending == false;
     }
 
-    /* תושב פותח בקשת החזר על שם משפחתו בלבד, תמיד בסטטוס הפתיחה. */
+    /* תושב פותח בקשת החזר על שם משפחתו בלבד, תמיד בסטטוס הפתיחה.
+       ⚠️ `mailPending` מותר כאן — כלל אבטחה אינו יכול לשלוח מייל,
+          והטריגר הוא זה ששולח. אבל הוא **בוליאני בלבד**, והתבנית
+          נגזרת בשרת ממצב המסמך ולא משדה שהלקוח בוחר. */
     function txResidentCreateOk(docId) {
       return isMember() && txShapeOk(docId) &&
              request.resource.data.familyId == myFamilyId() &&
              request.resource.data['מקור'] == 'תושב' &&
              request.resource.data['סטטוס'] == 'הוגשה קבלה' &&
              request.resource.data['סכום'] > 0 &&
+             (!request.resource.data.keys().hasAny(['mailPending']) ||
+              request.resource.data.mailPending is bool) &&
              !request.resource.data.keys().hasAny(['הערת בדיקה']);
     }
 
     /* בעל הרשאת תקציב מזין הוצאה — כל מקור, אבל לא סטטוס סופי משלב אפס. */
     function txAdminCreateOk(docId) {
       return canSeeBudget() && txShapeOk(docId) &&
+             (!request.resource.data.keys().hasAny(['mailPending']) ||
+              request.resource.data.mailPending is bool) &&
              (request.resource.data['סטטוס'] == 'הוגשה קבלה' ||
               request.resource.data['סטטוס'] == 'הועבר להנה"ח');
     }

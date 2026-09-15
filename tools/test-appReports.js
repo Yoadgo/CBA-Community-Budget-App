@@ -40,6 +40,8 @@ window.CBA.data = {
 };
 
 function run(file) { window.eval(fs.readFileSync(APP + '/' + file, 'utf8')); }
+/* diag.js נטען **ראשון**, כמו ב-index.html — הוא מקור ההקשר של report.js. */
+run('js/ui/diag.js');
 run('js/ui/dialog.js');
 run('js/ui/report.js');
 run('js/screens/appReports.js');
@@ -96,6 +98,16 @@ const $$ = s => Array.from(document.querySelectorAll(s));
   ok('מספור מתוקן אחרי הסרה', $$('.rep-item__n').map(e => e.textContent).join('') === '1234');
   ok('כפתור ההוספה נפתח שוב', add.disabled === false);
 
+  /* --- הקשר שנצבר *לפני* הדיווח, בדיוק כמו אצל תושב אמיתי --- */
+  window.CBA.perms = ['תקציב', 'מועדון'];
+  window.CBA.mock.currentYear = 'תשפ"ו';
+  window.CBA.diag.error('שגיאה מזויפת לבדיקה', 'planning.js:412');
+  const probe = document.createElement('button');
+  probe.setAttribute('aria-label', 'כפתור בדיקה');
+  document.body.appendChild(probe);
+  probe.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  probe.remove();
+
   section('3. ולידציה ושליחה');
   const okBtn = $('[data-dlg="ok"]');
   okBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
@@ -114,7 +126,17 @@ const $$ = s => Array.from(document.querySelectorAll(s));
      JSON.stringify(lastSubmit.items) === JSON.stringify(['הכפתור לא נשמר', 'ובמובייל הוא נחתך']),
      JSON.stringify(lastSubmit && lastSubmit.items));
   ok('הקשר נשלח', lastSubmit && lastSubmit.screen.indexOf('budget') !== -1, lastSubmit && lastSubmit.screen);
-  ok('גרסת שרת נשלחת', lastSubmit && lastSubmit.srvVer === 'v42-app-reports');
+  ok('גרסת שרת נשלחת', lastSubmit && lastSubmit.srvVer === 'v42-app-reports', lastSubmit && lastSubmit.srvVer);
+  ok('הרשאות נשלחות', lastSubmit && lastSubmit.perms === 'תקציב, מועדון', lastSubmit && lastSubmit.perms);
+  ok('שנת עבודה נשלחת', lastSubmit && lastSubmit.year === 'תשפ"ו', lastSubmit && lastSubmit.year);
+  ok('מצב רשת נשלח', lastSubmit && /מקוון/.test(lastSubmit.net || ''), lastSubmit && lastSubmit.net);
+  ok('⚠️ שגיאת JS שקרתה לפני הדיווח נשלחת',
+     lastSubmit && /שגיאה מזויפת לבדיקה/.test(lastSubmit.errors || ''), lastSubmit && lastSubmit.errors);
+  ok('⚠️ השובל כולל את הלחיצה שקדמה לדיווח',
+     lastSubmit && /לחיצה: כפתור בדיקה/.test(lastSubmit.trail || ''), lastSubmit && lastSubmit.trail);
+  ok('⚠️ הדיווח אינו מדווח על עצמו (החלונית שלו אינה "חלון פתוח")',
+     lastSubmit && !/דיווח על תקלה/.test(lastSubmit.dialog || ''), lastSubmit && lastSubmit.dialog);
+  ok('מידע נוסף נשלח', lastSubmit && /בסשן:/.test(lastSubmit.extra || ''), lastSubmit && lastSubmit.extra);
   await wait(260);
   ok('החלונית נסגרה אחרי הצלחה', !$('.cba-dlg-backdrop'));
 

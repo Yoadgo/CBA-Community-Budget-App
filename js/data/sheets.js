@@ -319,6 +319,15 @@ CBA.sheets = (function () {
   // (ר' push למטה) אנחנו *יודעים* למה השמירה נכשלה, ואין סיבה להסתיר את זה
   // מאחורי הודעה גנרית. app.js מציג את זה כטקסט הסבר על חיווי השמירה.
   var lastWriteErrorMsg = "";
+
+  /* ⚠️ כל השמה ל-lastWriteErrorMsg עוברת דרך כאן (15.9.26): קריאת שרת
+     שנכשלה היא הרמז הכי שימושי בדיווח תקלה, והשובל ב-js/ui/diag.js הוא
+     המקום היחיד שרואה אותה אחרי שהטוסט נעלם. אין כאן שליחה לשום מקום —
+     רק רישום בזיכרון, שנשלח אם ורק אם המשתמש בוחר לדווח. */
+  function noteFail(action, msg) {
+    lastWriteErrorMsg = msg;
+    try { if (window.CBA && CBA.diag) CBA.diag.log("כשל בשרת (" + action + "): " + msg); } catch (e) {}
+  }
   function notifyDirtyChange() {
     var d = isBusyVisible();
     if (d === lastDirtyState) return;
@@ -805,7 +814,7 @@ CBA.sheets = (function () {
         // כשגיאה כדי שהחיווי בכותרת יציג "בעיית שמירה" ולא "נשמר ✓".
         if (!res || res.ok !== true) {
           lastWriteHadError = true;
-          lastWriteErrorMsg = (res && res.error) ? String(res.error) : "השרת דחה את השמירה";
+          noteFail(action, (res && res.error) ? String(res.error) : "השרת דחה את השמירה");
           console.error("[CBA] השרת דחה את השמירה:", action, res && res.error);
         }
         // הצליח (או לפחות הגיע לשרת וקיבל תשובה) — אין יותר מה לנסות שוב
@@ -823,9 +832,9 @@ CBA.sheets = (function () {
         lastWriteHadError = true;
         // כשל רשת (ולא דחייה של השרת) — זה בדיוק המקרה שבו ניסיון חוזר הגיוני.
         enqueueWrite(action, payload, _retryAttempt || 0);
-        lastWriteErrorMsg = RETRYABLE[action]
+        noteFail(action, RETRYABLE[action]
           ? "לא הצלחנו להגיע לשרת. השינוי נשמר אצלכם וננסה לשלוח אותו שוב אוטומטית."
-          : "לא הצלחנו להגיע לשרת. בדקו את החיבור לאינטרנט ונסו לשמור שוב.";
+          : "לא הצלחנו להגיע לשרת. בדקו את החיבור לאינטרנט ונסו לשמור שוב.");
         notifyDirtyChange();
         console.error("[CBA] כתיבה נכשלה:", err);
         if (cb) cb({ ok: false, error: String(err) });
@@ -959,7 +968,7 @@ CBA.sheets = (function () {
         var res = withAuthNote(data);
         if (!res || res.ok !== true) {
           lastWriteHadError = true;
-          lastWriteErrorMsg = (res && res.error) ? String(res.error) : "השרת דחה את הפעולה";
+          noteFail(action, (res && res.error) ? String(res.error) : "השרת דחה את הפעולה");
         }
         endBusy();
         if (cb) cb(res);
@@ -967,7 +976,7 @@ CBA.sheets = (function () {
       .catch(function (err) {
         bumpWriteFloor();
         lastWriteHadError = true;
-        lastWriteErrorMsg = "לא הצלחנו להגיע לשרת. בדקו את החיבור לאינטרנט ונסו שוב.";
+        noteFail(action, "לא הצלחנו להגיע לשרת");
         endBusy();
         if (cb) cb({ ok: false, error: String(err) });
       });
@@ -1038,7 +1047,7 @@ CBA.sheets = (function () {
      * ========================================================================== */
     function failBusy(msg) {
       lastWriteHadError = true;
-      lastWriteErrorMsg = msg;
+      noteFail(action, msg);
       endBusy();
     }
     xhr.onload = function () {

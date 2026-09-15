@@ -29,6 +29,19 @@ CBA.screens.appReports = (function () {
            " " + p(d.getHours()) + ":" + p(d.getMinutes());
   }
 
+  /* ההקשר הטכני — נאסף ב-js/ui/diag.js ונשלח יחד עם הדיווח. שורות מלפני
+     15.9.26 פשוט לא יכללו את זה, ואז אין <details> בכלל. */
+  function block(title, text) {
+    if (!text) return "";
+    return '<details class="rr-diag"><summary>' + esc(title) + '</summary><pre>' +
+           esc(text) + '</pre></details>';
+  }
+  function diagHTML(r) {
+    return block("שגיאות טכניות שנרשמו (" + String(r.errors || "").split("\n").filter(Boolean).length + ")", r.errors) +
+           block("מה המשתמש עשה לפני כן", r.trail) +
+           block("מידע נוסף", r.extra);
+  }
+
   function rowHTML(r) {
     var isBug = r.kind === "תקלה";
     var items = (r.items || []).filter(Boolean);
@@ -46,7 +59,13 @@ CBA.screens.appReports = (function () {
         (items.length
           ? '<ul class="rr-items">' + items.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + '</ul>'
           : "") +
-        '<div class="rr-meta">' + esc([r.screen, r.ver, r.ua].filter(Boolean).join(" · ")) + '</div>' +
+        '<div class="rr-meta">' +
+          esc([r.screen, r.dialog, r.perms, r.year, r.ver, r.srvVer, r.ua, r.net]
+              .filter(Boolean).join(" · ")) +
+        '</div>' +
+        /* ⚠️ השגיאות והשובל בתוך <details> סגור בכוונה: הם ארוכים, והרשימה
+           הזאת אמורה להיקרא כרשימת משימות. מי שצריך לאבחן פותח. */
+        diagHTML(r) +
         (r.reply ? '<div class="rr-reply">תגובה שנשלחה: ' + esc(r.reply) + "</div>" : "") +
         '<div class="rr-acts">' +
           ((r.photos || []).length

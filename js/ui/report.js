@@ -34,45 +34,26 @@ CBA.report = (function () {
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
 
   var ICO = {
-    plus:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    /* ⚠️ הסמליל של הכפתור הצף הוא **נורה** ולא "+" (הוכרע 15.9.26): "+" אומר
+       "הוספה" ואינו קשור לדיווח, והסיבוב ב-45° שנלווה אליו (כדי להפוך אותו
+       ל-✕) הוא מה שגרם לתחושת ההתרחבות המוזרה. הנורה יציבה ואינה מסתובבת. */
+    fab:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6a6.4 6.4 0 0 0-3.7 11.6c.55.42.9 1.05.9 1.75v.45h5.6v-.45c0-.7.35-1.33.9-1.75A6.4 6.4 0 0 0 12 2.6z"/><path d="M9.6 19.1h4.8M10.6 21.4h2.8"/><path d="M12 .8v1M3.6 4.1l.75.75M20.4 4.1l-.75.75M1.4 12.1h1M21.6 12.1h1"/></svg>',
     bulb:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.5.4.8 1 .8 1.6v.5h5.4v-.5c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3z"/></svg>',
     bug:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.5a4 4 0 0 1 4 4v3a4 4 0 0 1-8 0v-3a4 4 0 0 1 4-4z"/><path d="M9.5 8.5a2.5 2.5 0 0 1 5 0"/><path d="M4 12h4M16 12h4M4.8 7.5l2.6 1.6M19.2 7.5l-2.6 1.6M4.8 17.5l2.7-1.6M19.2 17.5l-2.7-1.6"/></svg>',
     photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2.5"/><circle cx="12" cy="13" r="3.2"/><path d="M8.5 6l1.2-2h4.6L15.5 6"/></svg>'
   };
 
-  /* --- גרסת הלקוח: נקראת מתגית ה-<script> עצמה ולא נכתבת כאן פעם שנייה.
-     קבוע כפול היה נשאר מאחור בדיוק בגרסה שבה מישהו מדווח על באג. --- */
-  function clientVersion() {
-    try {
-      var s = document.querySelector('script[src*="js/app.js"]');
-      var m = s && String(s.src).match(/[?&]v=([^&"]+)/);
-      return m ? m[1] : "";
-    } catch (e) { return ""; }
-  }
-
+  /* ⚠️ כל ההקשר נאסף ב-js/ui/diag.js ולא כאן. הסיבה: אוסף שנטען יחד עם
+     החלונית היה מתחיל להאזין רק כשהמשתמש פותח אותה — ואז שגיאת ה-JS
+     שבגללה הוא פותח אותה כבר קרתה ואבדה. diag.js נטען ראשון ומאזין תמיד.
+     כאן נשארת רק נפילה-לאחור למקרה שהקובץ לא נטען, כדי שהדיווח יישלח
+     גם אז (דיווח בלי הקשר עדיף על כפתור שנופל). */
   function context() {
-    var ua = "";
-    try {
-      var u = navigator.userAgent || "";
-      var name = /CriOS|Chrome/.test(u) ? "Chrome" : /Firefox/.test(u) ? "Firefox"
-               : /Edg/.test(u) ? "Edge" : /Safari/.test(u) ? "Safari" : "אחר";
-      var os = /iPhone|iPad|iPod/.test(u) ? "iOS" : /Android/.test(u) ? "Android"
-             : /Macintosh/.test(u) ? "Mac" : /Windows/.test(u) ? "Windows" : "";
-      var standalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
-      ua = [name, os, (window.innerWidth + "×" + window.innerHeight), standalone ? "מותקנת" : "דפדפן"]
-           .filter(Boolean).join(" · ");
-    } catch (e) {}
+    if (CBA.diag && CBA.diag.snapshot) return CBA.diag.snapshot();
     var key = (document.body && document.body.dataset.screen) || "";
     var label = (CBA.screenLabel && key) ? CBA.screenLabel(key) : key;
-    return {
-      /* מה שנרשם בגיליון: השם שהמשתמש רואה **ובסוגריים** המפתח הפנימי.
-         השם לבדו לא מאפשר לאתר את הקוד; המפתח לבדו לא אומר כלום לקורא. */
-      screen: key ? (label === key ? key : label + " (" + key + ")") : "",
-      screenLabel: label,
-      ver: clientVersion(),
-      srvVer: (CBA.mock && CBA.mock._serverVersion) || "",
-      ua: ua
-    };
+    return { screen: key, screenLabel: label, ver: "", srvVer: "", ua: "",
+             perms: "", year: "", net: "", dialog: "", errors: [], trail: [] };
   }
 
   /* --- כיווץ תמונה (ר' ההערה בראש הקובץ) --- */
@@ -133,8 +114,11 @@ CBA.report = (function () {
         '</div>' +
         '<p class="rep-hint">' +
           'אם צילמתם מסך — הוא נמצא בגלריה של הטלפון, וכפתור הצירוף פותח אותה.<br>' +
-          'נשלח אוטומטית יחד עם הדיווח: ' +
-          esc([ctx.screenLabel ? 'מסך "' + ctx.screenLabel + '"' : "", ctx.ver, ctx.ua].filter(Boolean).join(" · ")) +
+          'כדי שלא תצטרכו למלא פרטים, נשלח אוטומטית יחד עם הדיווח: ' +
+          esc([ctx.screenLabel ? 'מסך "' + ctx.screenLabel + '"' : "", ctx.dialog,
+               ctx.ver, ctx.ua, ctx.net].filter(Boolean).join(" · ")) +
+          (ctx.errors && ctx.errors.length
+            ? '<br>וכן ' + ctx.errors.length + ' הודעות שגיאה טכניות שנרשמו ברקע.' : "") +
         '</p>' +
         '<p class="rep-err" hidden></p>' +
       '</div>';
@@ -231,9 +215,18 @@ CBA.report = (function () {
            וקריאה לו כאן הייתה זורקת TypeError בדיוק במסלול הכישלון. */
         var release = CBA.ui.busy ? CBA.ui.busy(okBtn, "שולח…") : function () {};
 
+        /* ⚠️ ההקשר נלקח **מחדש** כאן ולא מ-ctx שנקרא בפתיחת החלונית: בין
+           הפתיחה לשליחה המשתמש עוד כותב, ולפעמים בדיוק אז נזרקת השגיאה
+           שהוא מנסה לתאר. שדות שחייבים להישאר מרגע הפתיחה — המסך והחלון
+           שהיו פתוחים מתחת — נלקחים מ-ctx, כי החלונית שלנו כבר מכסה אותם. */
+        var now = context();
         CBA.data.submitAppReport({
           kind: kind, items: items, photos: photos,
-          screen: ctx.screen, ver: ctx.ver, srvVer: ctx.srvVer, ua: ctx.ua
+          screen: ctx.screen, ver: now.ver, srvVer: now.srvVer, ua: now.ua,
+          perms: now.perms, year: now.year, net: now.net, dialog: ctx.dialog,
+          errors: (now.errors || []).join("\n"),
+          trail:  (now.trail  || []).join("\n"),
+          extra:  (CBA.diag && CBA.diag.extraLine) ? CBA.diag.extraLine(now) : ""
         }, function (res) {
           if (!res || !res.ok) {
             release();
@@ -261,7 +254,7 @@ CBA.report = (function () {
         '<button type="button" class="rep-menu__btn" data-rep="' + KIND_BUG  + '">' + ICO.bug  + ' דיווח על תקלה</button>' +
       '</div>' +
       '<button type="button" class="rep-fab" aria-label="דיווח על האפליקציה" title="דיווח על האפליקציה" aria-expanded="false">' +
-        ICO.plus + '</button>';
+        ICO.fab + '</button>';
     document.body.appendChild(wrapEl);
 
     var menu = wrapEl.querySelector(".rep-menu");

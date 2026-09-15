@@ -1161,6 +1161,8 @@ function doPostDispatch_(ss, body) {
       case 'addYear':           return json_(addYear_(ss, body));
       case 'setCurrentYear':    return json_(setCurrentYear_(ss, body));
       case 'submitReceipt':     return json_(submitReceipt_(ss, body));
+      /* צעד 09ב-5ב — Drive בלבד, בלי גיליון ובלי מייל. */
+      case 'uploadReceiptOnly': return json_(uploadReceiptOnly_(ss, body));
       case 'saveResidentNames': return json_(saveResidentNames_(ss, body));
       case 'formatResidents':   return json_(formatResidents_(ss, body));
       case 'saveFamilyIds':     return json_(saveFamilyIds_(ss, body));
@@ -2958,7 +2960,11 @@ var ACTION_DOMAIN = {
   /* קליטת קובץ החיובים אינה משנה שום נתון בגיליון — היא ממירה קובץ זמני
      וקוראת אותו. ברירת המחדל 'other' הייתה מבטלת את מטמון המטען הראשי
      של *כל* המשתמשים בכל העלאה, בלי שהשתנה דבר. */
-  parseChargeFile: 'charge'
+  parseChargeFile: 'charge',
+  /* צעד 09ב-5ב — מעלה קובץ ל-Drive ותו לא. אינה נוגעת בגיליון,
+     ולכן ברירת המחדל 'other' הייתה מבטלת את מטמון המטען הראשי
+     של כל המשתמשים בכל הגשת קבלה, בלי שהשתנה שום נתון. */
+  uploadReceiptOnly: 'receiptFile'
 };
 
 function bumpRev_(action) {
@@ -5105,6 +5111,7 @@ function dailyEmailJobs_() {
      הגיליון מפגר אחרי Firestore, היא תנדנד על בקשה שכבר
      טופלה. הסדר כאן הוא הפתרון — לא להזיז למטה. */
   try { budgetTxApplyPending_(ss); } catch (e) { Logger.log('budgetTxApplyPending_ נכשל: ' + e); }
+  try { budgetTxMailPending_(ss); } catch (e) { Logger.log('budgetTxMailPending_ נכשל: ' + e); }
   try { clubReminderJob_(ss); } catch (e) { Logger.log('clubReminderJob_ נכשל: ' + e); }
   try { staleNudgeJob_(ss); } catch (e) { Logger.log('staleNudgeJob_ נכשל: ' + e); }
   try { gymDailyJob_(ss); } catch (e) { Logger.log('gymDailyJob_ נכשל: ' + e); }
@@ -5153,6 +5160,19 @@ function hourlyJobs() {
     }
   } catch (e) {
     Logger.log('budgetTxApplyPending_ נכשל: ' + e);
+  }
+  /* תיבת הדואר (2026-09-15, צעד 09ב-5א) — מיילים על בקשות שנכתבו
+     ישירות מהדפדפן. אחרי החלת הסטטוסים, כדי שמייל על סטטוס שהוחל
+     זה עתה לא ייצא לפני שהגיליון יודע עליו. */
+  try {
+    var mp = budgetTxMailPending_(ss);
+    if (mp.found) {
+      Logger.log('תיבת דואר: נמצאו ' + mp.found + ', נשלחו ' + mp.sent +
+                 ', נכשלו ' + mp.failed +
+                 (mp.errors.length ? ' | ' + mp.errors.join(' ; ') : ''));
+    }
+  } catch (e) {
+    Logger.log('budgetTxMailPending_ נכשל: ' + e);
   }
   /* מונה המזהים (2026-09-15, צעד 09ב-1) — עוקב אחרי שורות שנוצרו
      במסלול הישן. לעולם אינו מוריד את המונה. */
@@ -8467,6 +8487,122 @@ function handleBudgetTxSync_(p) {
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
+}
+
+/* ============================================================================
+ *  העלאת קבלה בלבד   (צעד 09ב-5ב, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴 **הפיצול שיועד הכריע עליו:** "כל הנתונים עולים לפייר בייס והתמונה
+ *  היא משהו דרך האפסקריפט". `submitReceipt_` היא פעולה אטומית שעושה
+ *  שלושה דברים — Drive, גיליון, מיילים. כאן נשאר **רק Drive**.
+ *
+ *  🔴 **מזהה המשפחה נגזר בשרת מהמייל המאומת** (`body._email`), בדיוק
+ *  כמו ב-`submitReceipt_`. זה לא שכפול מיותר: הבאג של 9.9 היה בדיוק
+ *  קריאה ל-`body.email` במקום `body._email`, מה שאיפשר לתושב מחובר
+ *  לשייך בקשה למשפחה אחרת. הערך הזה חוזר ללקוח **כדי שיכתוב אותו
+ *  למסמך** — וכלל האבטחה מוודא שהוא שווה למשפחה של הכותב.
+ *
+ *  ⚠️ הקובץ נשאר **פרטי**. הצפייה עוברת דרך `handleReceiptFile_`.
+ *  ⚠️ הפעולה אינה כותבת לגיליון ואינה שולחת מייל — המייל דרך תיבת
+ *     הדואר, והשורה דרך המסמך שהדפדפן יוצר.
+ * ========================================================================== */
+function uploadReceiptOnly_(ss, body) {
+  if (!body.dataBase64) return { ok: false, error: 'לא צורפה קבלה' };
+  try {
+    var folder = getPendingReceiptsFolder_();
+    var blob = Utilities.newBlob(
+      Utilities.base64Decode(body.dataBase64),
+      body.mimeType || 'image/jpeg',
+      body.fileName || 'receipt'
+    );
+    var file = folder.createFile(blob);
+
+    var bankFull = String(body.bankName || '').trim();
+    var todayDMY = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MM-yyyy');
+    var payee = body.expenseType === 'refund' ? ('החזר לדייר ' + (body.buyer || ''))
+      : body.expenseType === 'supplier' ? ('תשלום לספק ' + (body.supplier || body.buyer || ''))
+      : (body.supplier || body.buyer || '');
+    var displayName = todayDMY + ' ' + payee + ' סך: ' + Math.round(Number(body.amount) || 0) +
+      '  מתקציב: טרם שויך' + ' פירוט: ' + (body.description || '') + (bankFull ? (' ' + bankFull) : '');
+    try { file.setName(displayName); } catch (e) { /* לא קריטי */ }
+
+    /* 🔴 מהמייל המאומת בלבד — ר' ההערה למעלה. */
+    var famId = '';
+    try {
+      var info = lookupResident_(String(body._email || ''));
+      famId = info && info.familyId ? String(info.familyId) : '';
+    } catch (e) { famId = ''; }
+
+    return { ok: true, url: file.getUrl(), fileName: displayName, familyId: famId,
+             submittedAt: new Date().toISOString() };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+/* ============================================================================
+ *  תיבת הדואר למיילים   (צעד 09ב-5א, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴 **המנגנון שהאפיון מגדיר כתנאי סף לכל כתיבה מהדפדפן, ושעד היום
+ *  לא נבנה.** בצעד 09א עקפנו אותו כי שינוי סטטוס ממילא עבר דרך
+ *  הגיליון, ושם `btxSideEffects_` שולחת. אבל הגשת בקשה של תושב
+ *  נכתבת ישירות ל-Firestore, ו**כלל אבטחה אינו יכול לשלוח מייל**.
+ *
+ *  🔑 הדפדפן מרים `mailPending:true`; הטריגר סוחט ושולח.
+ *
+ *  🔴🔴 **התבנית נגזרת ממצב המסמך, לא משדה שהלקוח בוחר.** אילו
+ *  הלקוח היה שולח שם תבנית, כל חבר היה יכול לגרום לשרת לשלוח כל
+ *  מייל שבמערכת לכל משפחה. כאן `mailPending` פירושו דבר אחד בלבד:
+ *  "זו בקשת החזר חדשה" — אישור לתושב והתראה למנהלי התקציב.
+ *
+ *  ⚠️ **תקרה של 50 מסמכים לריצה.** מכסת MailApp נספרת לפי נמענים
+ *     ונשרפת בשקט (ר' [[cba-email-queue-2026-09-08]]); שליחה בלי
+ *     תקרה היתה יכולה לשרוף אותה בריצה אחת ולהשתיק את כל המערכת.
+ *  ⚠️ **הדגל יורד רק אחרי שליחה מוצלחת.** כשל נשאר לריצה הבאה —
+ *     עדיף מייל כפול מאשר מייל שנעלם.
+ * ========================================================================== */
+var BTX_MAIL_MAX_PER_RUN = 50;
+
+function budgetTxMailPending_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: true, found: 0, sent: 0, failed: 0, errors: [] };
+  var pend;
+  try { pend = fsQuery_(FS_BUDGET_TX, 'mailPending', 'EQUAL', true, BTX_MAIL_MAX_PER_RUN); }
+  catch (e) { out.ok = false; out.errors.push('שאילתה: ' + String(e)); return out; }
+  out.found = pend.length;
+  if (!pend.length) return out;
+
+  for (var i = 0; i < pend.length; i++) {
+    var id = pend[i].id, d = pend[i].data || {};
+    try {
+      /* 🔴 רק בקשה של תושב בסטטוס פתיחה מזכה במייל. מסמך אחר עם
+         הדגל מורם הוא חריגה — מורידים את הדגל בלי לשלוח, כדי
+         שלא ייתקע בתור לנצח. */
+      var isNew = String(d['מקור'] || '') === SOURCE_HE.resident &&
+                  String(d['סטטוס'] || '') === STATUS_HE.submitted;
+      if (isNew) {
+        var fam = String(d['מזהה משפחה'] || '').trim();
+        var emails = emailsForFamilyId_(ss, fam);
+        var amount = Math.round(Number(d['סכום']) || 0);
+        var names = txFamilyNames_(ss);
+        var who = String(d['רוכש'] || '').trim() || names[fam] || '';
+        sendResidentTemplate_(ss, 'REIMBURSEMENT_RECEIVED', emails,
+          { 'שם': who, 'סכום': amount, 'מזהה': d['מזהה'] });
+        notifyAdmins_(ss, PERM_BUDGET, 'ADMIN_NEW_REIMBURSEMENT',
+          { 'שם': who, 'סכום': amount, 'מזהה': d['מזהה'], 'קישור': CBA_APP_URL });
+        out.sent++;
+      }
+      var doc = {};
+      for (var k in d) if (Object.prototype.hasOwnProperty.call(d, k)) doc[k] = d[k];
+      doc.mailPending = false;
+      doc.updatedAt = new Date();
+      fsSet_(fsDocPath_(FS_BUDGET_TX, id), doc);
+    } catch (e) {
+      out.failed++;
+      out.errors.push(id + ': ' + String(e));   /* הדגל נשאר — ננסה בריצה הבאה */
+    }
+  }
+  return out;
 }
 
 /* ============================================================================
