@@ -200,6 +200,7 @@ function build(opts) {
     readCollection: opts.readCollection || ((n, cb) => setTimeout(() => cb(null, [{ 'מזהה שירות': 'gas', order: 1, schema: 1, updatedAt: 'x', sections: [{ 'מזהה סעיף': 's1' }] }]), 1)),
     readDoc: (c, i, cb) => setTimeout(() => cb(null, {}), 1),
     authReady: opts.authReady || (cb => setTimeout(() => cb({ uid: 'U1' }), 1)),
+    ensureDb: opts.ensureDb || (cb => setTimeout(() => cb(null), 1)),
     isReady: () => true, isDbReady: () => !!opts.warm };
   vm.createContext(sb); vm.runInContext(DS, sb);
   return sb;

@@ -141,8 +141,16 @@ ok('⚠️ flags() מחזירה null כשלא נקרא', fb.flags() === null);
 
 section('7. הלקוח — המתג נבדק במקום הנכון');
 ok('fsFirstRead בודקת את הדגל החי', /CBA\.fb\.flag\(key \+ "FromFirestore", enabled\)/.test(DS));
-ok('🔑 אחרי authReady (כלומר אחרי ש-ensureDb קרא את הדגלים)',
+ok('🔑 אחרי authReady',
    DS.indexOf('CBA.fb.authReady(function (user)') < DS.indexOf('CBA.fb.flag(key + "FromFirestore"'));
+/* 🔴🔴 **הבאג שנתפס חי ב-15.9:** `authReady` אינו מחכה לטעינת
+   הדגלים, ולכן קריאה שיצאה בדקות הראשונות קיבלה את ברירת
+   המחדל שבקוד במקום את הדגל — כלומר **מתג הכיבוי לא עבד**.
+   הבדיקה הזאת מצמידה את התיקון: הדגל נבדק **בתוך** ensureDb. */
+ok('🔴🔴 והדגל נבדק רק אחרי ensureDb (שם הדגלים נקראים)',
+   DS.indexOf('CBA.fb.ensureDb(function (dbErr)') !== -1 &&
+   DS.indexOf('CBA.fb.ensureDb(function (dbErr)') < DS.indexOf('CBA.fb.flag(key + "FromFirestore"'));
+ok('🔴 וכשל ב-ensureDb הוא נפילה לאחור', /viaSheets\("db:"/.test(DS));
 ok('⚠️ ולפני הקריאה לנתונים',
    DS.indexOf('CBA.fb.flag(key + "FromFirestore"') < DS.indexOf('load(function (err, result)'));
 ok('הסיבה נרשמת כ-flag-off', /viaSheets\("flag-off"\)/.test(DS));

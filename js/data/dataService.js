@@ -60,16 +60,30 @@ CBA.data = (function () {
     CBA.fb.authReady(function (user) {
       if (settled) return;
       if (!user) return viaSheets("no-user");
-      /* המתג החי. מגיע לכאן רק אחרי ש-ensureDb קרא את הדגלים. */
-      if (CBA.fb.flag && !CBA.fb.flag(key + "FromFirestore", enabled)) {
-        return viaSheets("flag-off");
-      }
-      load(function (err, result) {
+      /* 🔴🔴 **ממתינים ל-`ensureDb` לפני שבודקים את הדגל** (2026-09-15).
+         עד כאן ההערה כאן טענה ש"מגיעים לכאן רק אחרי ש-ensureDb
+         קרא את הדגלים" — **וזה פשוט לא היה נכון.** `authReady`
+         אינו מחכה לטעינת הדגלים, וקריאה שיוצאת מוקדם קיבלה
+         מ-`flag()` את **ברירת המחדל שבקוד** במקום את הדגל.
+         נתפס חי ב-15.9: הדגל `budgetYearFromFirestore` היה `false`
+         והקריאה בכל זאת רצה מ-Firestore. כלומר **מתג הכיבוי לא
+         עבד בדיוק בחלון שבו צריכים אותו** — בדקות הראשונות אחרי
+         עלייה. הדבר לא התגלה עד עכשיו כי בגינון ובשירותים
+         ברירת המחדל והדגל שניהם `true`.
+         ⚠️ כשל ב-`ensureDb` הוא נפילה לאחור, לא המשך עיוור. */
+      CBA.fb.ensureDb(function (dbErr) {
         if (settled) return;
-        if (err) return viaSheets("firestore:" + ((err && (err.code || err.message)) || "?"));
-        settled = true;
-        note("firestore", "");
-        if (cb) cb(result);
+        if (dbErr) return viaSheets("db:" + ((dbErr && (dbErr.code || dbErr.message)) || "?"));
+        if (CBA.fb.flag && !CBA.fb.flag(key + "FromFirestore", enabled)) {
+          return viaSheets("flag-off");
+        }
+        load(function (err, result) {
+          if (settled) return;
+          if (err) return viaSheets("firestore:" + ((err && (err.code || err.message)) || "?"));
+          settled = true;
+          note("firestore", "");
+          if (cb) cb(result);
+        });
       });
     });
   }

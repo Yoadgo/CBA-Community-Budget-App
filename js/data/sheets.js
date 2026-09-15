@@ -1189,12 +1189,34 @@ CBA.sheets = (function () {
      אחרת הלקוח ינחת עם דגל חסר ⇒ ברירת המחדל ⇒ דלוק מיד. */
   var BUDGET_YEAR_FROM_FIRESTORE = true;
 
+  /* 🔴🔴 **Timestamp ≠ מחרוזת ISO.** ה-SDK מחזיר תאריך כאובייקט
+     `Timestamp` של Firestore, בעוד Apps Script מחזיר מחרוזת ISO
+     (כי `JSON.stringify` ממיר `Date`). `normDate` ב-`toTx` מצפה למחרוזת,
+     ועל אובייקט הוא מחזיר זבל — כלומר **כל התאריכים של
+     התנועות נשברים בשקט**, ואיתם הקיבוץ לחודשים וההתאמה
+     מול קובץ החיובים. נתפס בהשוואה חיה בין שני המסלולים.
+     🔴 **הכלל: כל ערך שחוזר מ-Firestore עובר דרך כאן**, כדי ששני
+     המסלולים ייראו ל-`buildYear` זהה לחלוטין. */
+  function fsPlain(v) {
+    if (v && typeof v.toDate === 'function') {
+      var d = v.toDate();
+      return (d && !isNaN(d.getTime())) ? d.toISOString() : '';
+    }
+    return v;
+  }
+  function fsPlainRow(r) {
+    var out = {};
+    Object.keys(r || {}).forEach(function (k) { out[k] = fsPlain(r[k]); });
+    return out;
+  }
+  function fsPlainRows(arr) { return (arr || []).map(fsPlainRow); }
+
   function fsYearLoad(y, done) {
     var doc = null, txRows = null, namesOk = false, failed = false;
     function fail(e) { if (failed) return; failed = true; done(e); }
     function maybe() {
       if (failed || !doc || txRows === null || !namesOk) return;
-      var rows = txRows.map(function (r) {
+      var rows = fsPlainRows(txRows).map(function (r) {
         if (String(r["רוכש"] || "").trim()) return r;
         var name = CBA.data.familyDisplayName ? CBA.data.familyDisplayName(r["מזהה משפחה"]) : "";
         if (!name) return r;
@@ -1204,8 +1226,10 @@ CBA.sheets = (function () {
         return out;
       });
       done(null, { ok: true, rev: lastRev, data: {
-        budget: doc.budget || [], income: doc.income || [], groups: doc.groups || [],
-        splits: doc.splits || [], items: doc.items || [], transactions: rows
+        budget: fsPlainRows(doc.budget), income: fsPlainRows(doc.income),
+        groups: (doc.groups || []).map(fsPlain),
+        splits: fsPlainRows(doc.splits), items: fsPlainRows(doc.items),
+        transactions: rows
       } });
     }
 

@@ -53,15 +53,18 @@ function env(opts) {
             currentYear: Y, _settings: {} },
     fb: {
       authReady: cb => cb(opts.noUser ? null : { uid: 'u1' }),
+      ensureDb: cb => { log.push('ensureDb'); setTimeout(() => cb(opts.dbErr || null), 0); },
       flag: (k, d) => (opts.flags && k in opts.flags) ? opts.flags[k] : d,
+      /* כל קריאה רושמת גם את ההפעלה וגם את הסיום ('!'),
+         כדי שאפשר יהיה להבחין בין "במקביל" לבין "בטור". */
       readDoc: (col, id, cb) => {
         log.push('readDoc:' + col + '/' + id);
-        setTimeout(() => cb(opts.docErr && opts.docErr[col] ? new Error('boom') : null,
-                            (opts.docs && opts.docs[col + '/' + id]) || null), 0);
+        setTimeout(() => { log.push('readDoc!' ); cb(opts.docErr && opts.docErr[col] ? new Error('boom') : null,
+                            (opts.docs && opts.docs[col + '/' + id]) || null); }, 0);
       },
       readCollection: (col, cb) => {
         log.push('readCollection:' + col);
-        setTimeout(() => cb(opts.colErr ? new Error('boom') : null, (opts.cols && opts.cols[col]) || []), 0);
+        setTimeout(() => { log.push('readCollection!'); cb(opts.colErr ? new Error('boom') : null, (opts.cols && opts.cols[col]) || []); }, 0);
       }
     }
   };
@@ -113,8 +116,12 @@ section('1. הדגל כבוי — המסלול הישן');
     ok('🔴 שם הרוכש הורכב ממזהה המשפחה',
        yr.transactions.some(t => t.buyer === '\u05de\u05e9\u05e4\u05d7\u05ea \u05db\u05d4\u05df'),
        JSON.stringify(yr.transactions.map(t => t.buyer)));
-    ok('🔴 וטעינת השמות התחילה במקביל ולא אחרי הקריאות',
-       e.log.indexOf('names') !== -1 && e.log.indexOf('names') <= 2, JSON.stringify(e.log));
+    /* 🔴 "במקביל" = טעינת השמות הופעלה **לפני שאף קריאה
+       הסתיימה**. אחרת היינו משלמים את סבב Apps Script אחרי Firestore. */
+    const firstDone = e.log.findIndex(x => x.slice(-1) === '!');
+    ok('🔴 וטעינת השמות הופעלה לפני שאף קריאה הסתיימה',
+       e.log.indexOf('names') !== -1 && firstDone !== -1 && e.log.indexOf('names') < firstDone,
+       JSON.stringify(e.log));
   }
 
   section('3. 🔴 תושב — מסמך בודד בלבד');
@@ -182,6 +189,26 @@ section('1. הדגל כבוי — המסלול הישן');
        e.sb.CBA.mock.years[Y].transactions[0].buyer);
   }
 
+  section('5ב. 🔴🔴 Timestamp מ-Firestore מומר למחרוזת ISO');
+  {
+    /* 🔴 ה-SDK מחזיר Timestamp; Apps Script מחזיר מחרוזת ISO.
+       `normDate` ב-`toTx` מצפה למחרוזת — אובייקט שובר את כל
+       התאריכים **בשקט**, ואיתם הקיבוץ לחודשים. */
+    const ISO = '2025-10-20T07:00:00.000Z';
+    const stamp = { toDate: () => new Date(ISO) };
+    const e = env({
+      flags: { budgetYearFromFirestore: true }, isSuper: true,
+      docs: { ['budgetYears/' + Y]: { year: Y, budget: [], income: [], groups: [], splits: [], items: [] } },
+      cols: { budgetTx: [{ id: Y + '__3', year: Y, familyId: '3',
+        rows: [{ '\u05de\u05d6\u05d4\u05d4': 1, '\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05e4\u05d7\u05d4': '3',
+                 '\u05ea\u05d0\u05e8\u05d9\u05da \u05e8\u05db\u05d9\u05e9\u05d4': stamp, '\u05d7\u05d5\u05d3\u05e9 \u05d4\u05d2\u05e9\u05d4': stamp }] }] }
+    });
+    await loadYear(e);
+    const t0 = e.sb.CBA.mock.years[Y].transactions[0];
+    ok('🔴 התאריך נורמל כמו במסלול הישן', t0.date === '2025-10-20', t0.date);
+    ok('🔴 וחודש ההגשה גם הוא', t0.month === '2025-10', t0.month);
+  }
+
   section('6. המבנה');
   /* 🔴 הברירה חייבת להיות true — אחרת `fsFirstRead` מקצרת
      לפני שהיא קוראת את הדגל החי, והדגל הופך לחסר-משמעות. */
@@ -189,6 +216,9 @@ section('1. הדגל כבוי — המסלול הישן');
      /var BUDGET_YEAR_FROM_FIRESTORE = true;/.test(SH));
   ok('משתמש ב-fsFirstRead המשותף ולא במנגנון משלו',
      /CBA\.data\.fsFirstRead\("budgetYear"/.test(SH));
+  ok('🔴 וכל ערך מ-Firestore עובר דרך הנירוול',
+     /transactions: rows/.test(SH) && /budget: fsPlainRows\(doc\.budget\)/.test(SH) &&
+     /var rows = fsPlainRows\(txRows\)/.test(SH));
 
   console.log('\n' + (fail ? '\u2717' : '\u2713') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);

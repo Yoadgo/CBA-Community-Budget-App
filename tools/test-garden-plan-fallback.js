@@ -52,6 +52,8 @@ function build(opts) {
     readCollection: opts.readCollection || ((n, cb) => setTimeout(() => cb(null, [{ id: 'T1', order: 1 }]), 1)),
       readDoc: opts.readDoc || ((c, i, cb) => setTimeout(() => cb(null, { areas: [], categories: [], freqs: [] }), 1)),
       authReady: opts.authReady || (cb => setTimeout(() => cb({ uid: 'U1' }), 1)),
+      /* הדגלים נקראים ב-ensureDb — הקוד ממתין לו לפני בדיקת הדגל. */
+      ensureDb: opts.ensureDb || (cb => setTimeout(() => cb(null), 1)),
       isReady: () => true,
       isDbReady: () => !!opts.warm
     };
