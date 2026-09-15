@@ -5298,6 +5298,22 @@ function hourlyJobs() {
   } catch (e) {
     Logger.log('seedTxCounters_ נכשל: ' + e);
   }
+  /* 🔴 סטטוס מנוי כושר (2026-09-16, צעד 10ב-1).
+     הגיליון מקור האמת, ולכן כל שינוי של מנהל (תשלום, חידוש,
+     הקפאה) מגיע ל-Firestore רק דרך הסנכרון הזה.
+     ⚠️ **חובה לפני שהלקוח יקרא משם** — אחרת התושב רואה
+        מנוי "פעיל" שפג לפני שבוע, וזה נתון שגוי שנראה אמיתי.
+     ⚠️ רץ **לפני הגיבוי המצטבר**, כדי שמה שנכתב עכשיו ייכנס
+        לגיבוי באותה ריצה ולא ימתין שעה. */
+  try {
+    var g = gymStatusSyncAll_(ss);
+    if (g.wrote || g.deleted || g.error) {
+      Logger.log('סטטוס מכון: נכתבו ' + g.wrote + ', נמחקו ' + g.deleted +
+                 ', דולגו ' + g.skipped + (g.error ? ' | ' + g.error : ''));
+    }
+  } catch (e) {
+    Logger.log('gymStatusSyncAll_ נכשל: ' + e);
+  }
   try {
     var r = fsBackupIncremental_(ss);
     Logger.log('גיבוי מצטבר: נקראו ' + r.read + ' מסמכים' +

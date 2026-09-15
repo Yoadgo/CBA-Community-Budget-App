@@ -1154,6 +1154,37 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymMy" }, cb);
   }
+
+  /* ==========================================================================
+   *  🔴 **סטטוס המנוי מ-Firestore** — מהיר, חלקי, לציור הראשון
+   * --------------------------------------------------------------------------
+   *  צעד 10ב-2. נמדד בייצור (16.9): קריאת Apps Script עולה 2.4–10
+   *  שניות, וקריאת Firestore 6–59 **אלפיות שנייה**. והמסך הזה
+   *  הוא הנפתח ביותר ע"י תושבים — "בדרך למכון, כדי לראות את
+   *  הקוד" (מתוך resGym.js עצמו).
+   *
+   *  ⚠️ **חלקי במכוון.** המסמך מכיל רק שדות סטטוס — אין בו
+   *     ת.ז., תאריך לידה, תשובות שאלון, ולא את קוד הכניסה.
+   *     לכן הוא משמש לציור הראשון בלבד, ו-`gymMy` משלים.
+   *  ⚠️ כל כשל — אין SDK, אין משתמש, אין מסמך — מחזיר `null`
+   *     והמסך מתנהג בדיוק כמו קודם. אין מסלול שמציג שגיאה.
+   * ======================================================================== */
+  function getGymStatusFast(cb) {
+    cb = cb || function () {};
+    if (!(CBA.fb && CBA.fb.readDoc && CBA.fb.ensureDb)) return cb(null);
+    CBA.fb.authReady(function (user) {
+      if (!user) return cb(null);
+      CBA.fb.ensureDb(function (err) {
+        if (err) return cb(null);
+        var uid = CBA.fb.uid && CBA.fb.uid();
+        if (!uid) return cb(null);
+        CBA.fb.readDoc("gymStatus", uid, function (e2, doc) {
+          if (e2 || !doc) return cb(null);
+          cb(doc);
+        });
+      });
+    });
+  }
   // כתיבות — עוברות ב-postRead כדי שנקבל את תשובת השרת בחזרה (הצלחה/שגיאה),
   // בדיוק כמו submitReceipt. שליחה "עיוורת" לא מתאימה כאן: התושב חייב לדעת
   // מיד אם הבקשה נקלטה, ומה הסטטוס שיצא לו.
@@ -2283,6 +2314,7 @@ CBA.data = (function () {
     getGymList: getGymList,
     getGymForm: getGymForm,
     getGymMy: getGymMy,
+    getGymStatusFast: getGymStatusFast,
     submitGymApplication: submitGymApplication,
     createGymMembership: createGymMembership,
     requestGymDeclaration: requestGymDeclaration,

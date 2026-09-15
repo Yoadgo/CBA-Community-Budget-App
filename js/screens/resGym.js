@@ -57,16 +57,45 @@ CBA.screens = CBA.screens || {};
   /* ------------------------------------------------------------------ *
    *  טעינה
    * ------------------------------------------------------------------ */
+  /* ==========================================================================
+   *  🔴 **שתי הקריאות במקביל, וציור מוקדם מ-Firestore** (צעד 10ב-2)
+   * --------------------------------------------------------------------------
+   *  עד היום `getGymMy` ו-`getGymForm` רצו **בטור** — שתי קריאות
+   *  Apps Script זו אחרי זו, כל אחת 2.4–10 שניות (נמדד 16.9).
+   *  אין שום תלות ביניהן, ולכן ההמתנה היתה כפולה לחינם.
+   *
+   *  ולפניהן — קריאה אחת מ-Firestore (עשרות אלפיות) שמציירת
+   *  את כרטיס הסטטוס מיד, במקום שלדים.
+   *
+   *  ⚠️ **הציור המוקדם הוא ללא כפתורי פעולה**, וזה קריטי:
+   *     מטפלי הלחיצה קוראים `st.my.membership`, `st.my.payboxUrl`
+   *     ו-`st.my.declarationValidUntil` — שאינם קיימים עדיין. כפתור
+   *     שנלחץ בשלב הזה היה שולח בקשה עם שדות ריקים.
+   *  ⚠️ וגם ללא קוד הכניסה — הוא אינו ב-Firestore בכלל.
+   * ======================================================================== */
   function load(container, cb) {
     if (!(CBA.data && CBA.data.getGymMy)) { if (cb) cb(); return; }
     st.loading = true;
+    st.fast = null;
+
+    if (CBA.data.getGymStatusFast) {
+      CBA.data.getGymStatusFast(function (doc) {
+        /* התשובה המלאה כבר הגיעה ⇒ אין טעם לצייר חלקי. */
+        if (!doc || !st.loading || st.my) return;
+        st.fast = doc;
+        try { draw(container); } catch (e) {}
+      });
+    }
+
+    var left = 2;
+    function done() { if (--left === 0) { st.loading = false; st.fast = null; if (cb) cb(); } }
     CBA.data.getGymMy(function (my) {
       st.my = my && my.ok ? my : { ok: false, error: (my && my.error) || "לא ניתן לטעון" };
-      CBA.data.getGymForm(function (form) {
-        st.form = form && form.ok ? form : { ok: false, error: (form && form.error) || "לא ניתן לטעון" };
-        st.loading = false;
-        if (cb) cb();
-      });
+      done();
+    });
+    CBA.data.getGymForm(function (form) {
+      st.form = form && form.ok ? form : { ok: false, error: (form && form.error) || "לא ניתן לטעון" };
+      done();
     });
   }
 
@@ -94,7 +123,7 @@ CBA.screens = CBA.screens || {};
       "</div>";
   }
 
-  function viewStatus(m) {
+  function viewStatus(m, partial) {
     var status = m["סטטוס"] || "";
     var flagged = m["שאלות שנענו בכן"] || "";
     var html = '' +
@@ -116,6 +145,13 @@ CBA.screens = CBA.screens || {};
     }
     if (m["תאריך חתימה"]) {
       html += '<div class="gym-kv"><span>הצהרת בריאות</span><span>נחתמה ב-' + esc(fmtDate(m["תאריך חתימה"])) + "</span></div>";
+    }
+
+    /* 🔴 ציור מוקדם מ-Firestore — עוצרים כאן. כל מה שמתחת
+       לשורה הזו תלוי בנתונים שאינם ב-Firestore. ר' load(). */
+    if (partial) {
+      html += '<div class="gym-hint gym-hint--tight">טוען את שאר הפרטים…</div>' + "</div>";
+      return html;
     }
 
     if (status === ST_DECLARATION) {
@@ -584,8 +620,8 @@ CBA.screens = CBA.screens || {};
       "</div>";
 
     if (st.loading || !st.my) {
-      container.innerHTML = head +
-        CBA.skel.cards(2);
+      /* 🔴 יש כבר סטטוס מ-Firestore ⇒ כרטיס אמיתי במקום שלדים. */
+      container.innerHTML = head + (st.fast ? viewStatus(st.fast, true) : CBA.skel.cards(2));
       return;
     }
     if (!st.my.ok) {
