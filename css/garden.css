@@ -609,6 +609,7 @@
   background: rgba(17,24,39,.06) center / cover no-repeat; position: relative;
   display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; }
 .gd-det-photo.is-err { cursor: default; }
+.gd-det-photo .spinner { width: 30px; height: 30px; border-width: 3px; }
 .gd-det-photo__cnt { position: absolute; bottom: 10px; inset-inline-end: 10px;
   background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 700;
   border: 0; padding: 4px 10px; border-radius: 99px; display: flex; align-items: center; gap: 4px; }

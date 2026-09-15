@@ -314,8 +314,24 @@ input.lg, textarea.lg, select.lg {
 .up-year__head[aria-expanded="true"] .lg-ico { transform: rotate(180deg); }
 .up-year__body { max-height: 0; overflow: hidden; transition: max-height .2s ease; padding: 0 9px; }
 .up-year__body.is-open { max-height: 220px; padding: 2px 9px 8px; }
-.up-year__chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.up-year__chip { padding: 6px 12px; font-size: 12px; font-weight: 700; }
+/* קפסולה בתוך קפסולה, בסגנון iOS (יועד, 15.9.26): מסלול אחד עגול-לגמרי
+   שגוללים בתוכו אופקית, ובתוכו שבבים עגולים-לגמרי; הנבחר מלא וכהה,
+   השאר שקופים. בלי .lg כאן בכוונה — "זכוכית בתוך זכוכית" היה מכפיל את
+   האפקט ומטשטש איזה שבב נבחר; קפסולה שטוחה קריאה יותר על-פני הפאנל. */
+.up-year__track {
+  display: flex; gap: 4px; overflow-x: auto; scroll-snap-type: x proximity;
+  padding: 4px; border-radius: 999px; background: rgba(17,24,39,.055);
+  -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none;
+}
+.up-year__track::-webkit-scrollbar { display: none; }
+.up-year__chip {
+  flex: none; scroll-snap-align: center; padding: 6px 15px; font-size: 12px;
+  font-weight: 700; font-family: inherit; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text-soft, #6B7280); cursor: pointer;
+  transition: background .16s ease, color .16s ease;
+}
+.up-year__chip:hover { color: var(--text); }
+.up-year__chip.is-on { background: var(--action, #111827); color: #fff; }
 .up-year__note { font-size: 11px; color: var(--text-soft); margin-top: 8px; }
 .up-year__note b { color: var(--text); }
 .up-year__set { margin-top: 6px; width: 100%; font-size: 12px; padding: 7px; text-align: center; }

@@ -1275,6 +1275,17 @@
       var open = !body.classList.contains("is-open");
       body.classList.toggle("is-open", open);
       yearHead.setAttribute("aria-expanded", open ? "true" : "false");
+      // מביא את שבב השנה הנבחרת אל תוך התצוגה כשהקפסולה נפתחת — כדי
+      // שברשימת שנים ארוכה המשתמש לא יצטרך לגלול ידנית כדי למצוא איפה הוא.
+      if (open) {
+        var track = panel.querySelector(".up-year__track");
+        var onChip = track && track.querySelector(".up-year__chip.is-on");
+        if (onChip && onChip.scrollIntoView) {
+          setTimeout(function () {
+            onChip.scrollIntoView({ block: "nearest", inline: "center" });
+          }, 210);
+        }
+      }
     });
     panel.querySelectorAll("[data-year]").forEach(function (chip) {
       chip.addEventListener("click", function () {
@@ -1839,9 +1850,9 @@
           '<span class="up-year__val">' + CBA.esc(cur) + '</span>' +
         '</button>' +
         '<div class="up-year__body" id="up-year-body">' +
-          '<div class="up-year__chips">' +
+          '<div class="up-year__track">' +
             years.map(function (y) {
-              return '<button type="button" class="lg lg-pill up-year__chip' + (y === cur ? " is-on" : "") +
+              return '<button type="button" class="up-year__chip' + (y === cur ? " is-on" : "") +
                 '" data-year="' + CBA.esc(y) + '">' + CBA.esc(y) + '</button>';
             }).join("") +
           '</div>' +

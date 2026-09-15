@@ -1484,24 +1484,48 @@
          גלילה לגיטימית הייתה סוגרת את הגיליון על המשתמש. חצי שנייה של
          דחייה בהתחלה כדי שתנופת האנימציה של הפתיחה עצמה לא תיספר כבקשת
          סגירה. */
+      /* 2026-09-15, סבב ב': הגרסה הראשונה סגרה על כל תנועה כלשהי — יועד:
+         "כל תנועה על החלון סוגרת אותה". התיקון: רק גרירה/גלילה *למטה*
+         שעוברת כ-30% מגובה הגיליון סוגרת; גלילה למעלה תמיד מתאפסת ולא
+         סוגרת לעולם (משאירה אותה חופשית להזיז תוכן בתוך הגיליון, אם יש
+         לו על מה לגלול). גם עכשיו: רק גיליון בלי יכולת גלילה פנימית
+         אמיתית (scrollHeight<=clientHeight) נסגר ככה בכלל — גיליון ארוך
+         פשוט גולל את התוכן שלו כרגיל, בלי המנגנון הזה. */
       function bindScrollClose(sheetEl, close) {
         if (!sheetEl) return;
         var ready = false;
         setTimeout(function () { ready = true; }, 260);
-        function maybeClose() {
-          if (!ready) return;
-          if (sheetEl.scrollHeight <= sheetEl.clientHeight + 2) close();
+        var THRESHOLD = 0.3; // 30% מגובה הגיליון
+        function canClose() {
+          return sheetEl.scrollHeight <= sheetEl.clientHeight + 2;
         }
-        sheetEl.addEventListener("wheel", maybeClose, { passive: true });
-        var startY = null;
+
+        var startY = null, dragDown = 0;
         sheetEl.addEventListener("touchstart", function (e) {
           startY = e.touches && e.touches[0] ? e.touches[0].clientY : null;
+          dragDown = 0;
         }, { passive: true });
         sheetEl.addEventListener("touchmove", function (e) {
-          if (startY == null) return;
+          if (!ready || startY == null) return;
           var y = e.touches && e.touches[0] ? e.touches[0].clientY : null;
           if (y == null) return;
-          if (Math.abs(y - startY) > 14) maybeClose();
+          var delta = y - startY; // חיובי = האצבע ירדה = מושכים את הגיליון למטה
+          if (delta <= 0) { dragDown = 0; return; } // גרירה למעלה — לעולם לא סוגרת
+          dragDown = delta;
+          if (canClose() && dragDown > sheetEl.clientHeight * THRESHOLD) close();
+        }, { passive: true });
+        sheetEl.addEventListener("touchend", function () {
+          startY = null; dragDown = 0;
+        }, { passive: true });
+
+        var wheelDown = 0, wheelTimer = null;
+        sheetEl.addEventListener("wheel", function (e) {
+          if (!ready) return;
+          if (e.deltaY < 0) { wheelDown = 0; return; } // גלילה למעלה — מתאפסת, לא סוגרת
+          wheelDown += e.deltaY;
+          clearTimeout(wheelTimer);
+          wheelTimer = setTimeout(function () { wheelDown = 0; }, 500);
+          if (canClose() && wheelDown > sheetEl.clientHeight * THRESHOLD) close();
         }, { passive: true });
       }
 
