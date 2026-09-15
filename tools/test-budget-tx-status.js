@@ -318,7 +318,14 @@ section('7. 🔴 כלל האבטחה');
   ok('🔴 ואין בה קפיצה מהוגשה לשולם',
      !/from == 'הוגשה קבלה' && \(to == 'שולם'/.test(step));
   const blk = (RULES.match(/match \/budgetTx\/\{[^}]+\}\s*\{([\s\S]*?)\n    \}/) || [])[1] || '';
-  ok('🔴 יצירה ומחיקה סגורות', /allow create, delete: if false;/.test(blk), blk);
+  /* 🔴 נפתח בצעד 09ב-2 — ר' ההסבר ב-test-budget-tx-firestore.js.
+     מה שחשוב כאן הוא שכלל **הסטטוס** לא נפרץ בדרך: `update` עדיין
+     מפריד בין מסלול הסטטוס למסלול הפרטים. */
+  ok('🔴 מסלול הסטטוס עדיין נפרד ממסלול הפרטים',
+     /allow update: if txStatusUpdateOk\(\) \|\| txDetailsUpdateOk\(\);/.test(blk), blk);
+  ok('🔴 ועריכת פרטים אינה יכולה לגעת בסטטוס',
+     RULES.slice(RULES.indexOf('function txDetailsUpdateOk'),
+                 RULES.indexOf('match /budgetTx')).indexOf("'סטטוס'") === -1);
 }
 
 section('8. צד הלקוח');

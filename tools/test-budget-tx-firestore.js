@@ -237,10 +237,18 @@ section('🔴 כלל האבטחה');
   const m = RULES.match(/match \/budgetTx\/\{[^}]+\}\s*\{([\s\S]*?)\n    \}/);
   ok('בלוק budgetTx קיים', !!m);
   const body = m ? m[1] : '';
-  ok('🔴 יצירה ומחיקה סגורות לגמרי',
-     /allow create, delete: if false;/.test(body), body.slice(0, 300));
-  ok('🔴 והעדכון היחיד עובר דרך txStatusUpdateOk',
-     /allow update: if txStatusUpdateOk\(\);/.test(body), body.slice(0, 300));
+  /* 🔴 **נפתח במכוון בצעד 09ב-2 (15.9.2026).** עד אז יצירה ומחיקה היו
+     סגורות לגמרי, כי הדפדפן לא כתב תנועות בכלל. עכשיו הן פתוחות —
+     ולכן הבדיקה עברה מ"סגור" ל"עובר דרך פונקציה בעלת שם", שזו ההגנה
+     שנשארה: תנאי פרוש בתוך הבלוק ייפול כאן. */
+  ok('🔴 יצירה עוברת דרך שתי פונקציות בעלות שם בלבד',
+     /allow create: if txResidentCreateOk\(docId\) \|\| txAdminCreateOk\(docId\);/.test(body),
+     body.slice(0, 300));
+  ok('🔴 והעדכון דרך שתיים בלבד — סטטוס או פרטים',
+     /allow update: if txStatusUpdateOk\(\) \|\| txDetailsUpdateOk\(\);/.test(body),
+     body.slice(0, 300));
+  ok('🔴 ומחיקה לבעל הרשאת תקציב בלבד',
+     /allow delete: if canSeeBudget\(\);/.test(body), body.slice(0, 300));
   ok('🔴 הקריאה נשענת על פונקציה אחת בעלת שם',
      /^\s*allow read: if canSeeFamilyTx\(resource\.data\.familyId\);\s*$/m.test(body), body.slice(0, 200));
   /* ושלושת התנאים עצמם — בפונקציה, ולא פרושים בכל בלוק. */

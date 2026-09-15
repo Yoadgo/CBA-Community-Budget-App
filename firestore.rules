@@ -225,10 +225,91 @@ service cloud.firestore {
              txLegalStep(resource.data['סטטוס'], request.resource.data['סטטוס']);
     }
 
+    /* ========================================================================
+     *  כתיבת תנועות מהדפדפן   (צעד 09ב-2, 2026-09-15)
+     * ------------------------------------------------------------------------
+     *  🔴 **רשימת היתר, לעולם לא רשימת חסימה.** טאב התנועות הוא מבנה
+     *  פתוח, והלקוח אוסף כל עמודה לא מוכרת. עם רשימת חסימה, שדה חדש
+     *  שמישהו יוסיף מחר (טלפון, הערה אישית) היה נכתב ל-Firestore בלי
+     *  ששורה אחת בכלל תשתנה. שדה שאינו ברשימה — הכתיבה נדחית כולה.
+     *
+     *  🔴 **`רוכש` אינו ברשימה, בכוונה.** זה שם של אדם. החריג היחיד
+     *  (שורה בלי מזהה משפחה) הוא של הסנכרון בצד השרת בלבד; הדפדפן
+     *  לעולם לא כותב שם, ומשפחה היא דרישה בכל תנועה חדשה.
+     *
+     *  🔴 **סטטוס ופרטים נפרדים לחלוטין.** `txStatusUpdateOk` מטפל
+     *  בסטטוס ואוכף מעבר חוקי; `txDetailsUpdateOk` מטפל בשאר ו**אוסר
+     *  לגעת בסטטוס**. בלי ההפרדה, "עריכת פרטים" היתה דלת אחורית
+     *  לקפוץ מ"הוגשה" ל"שולם" בלי לעבור באישור.
+     * ====================================================================== */
+    function txAllowedFields() {
+      return ['מזהה', 'חודש הגשה', 'תאריך רכישה', 'ספק/נמען', 'בנק', 'סכום',
+              'סעיף', 'תת-סעיף', 'סוג הוצאה', 'מקור', 'סטטוס', 'הערת בדיקה',
+              'תיאור', 'שם קובץ קבלה', 'קישור קבלה', 'מזהה משפחה',
+              'year', 'familyId', 'statusPending', 'mailPending',
+              'schema', 'updatedAt'];
+    }
+
+    /* השדות שחייבים להופיע בכל מסמך חדש. */
+    function txRequiredFields() {
+      return ['מזהה', 'סכום', 'סטטוס', 'מקור', 'מזהה משפחה',
+              'year', 'familyId', 'schema', 'updatedAt'];
+    }
+
+    /* 🔴 המזהה של המסמך נגזר מהתוכן — אחרת אפשר ליצור מסמך בשם של
+       שנה אחת ולשים בו שנה אחרת, והשאילתה לפי שנה תפספס אותו. */
+    function txIdMatches(docId) {
+      return docId == request.resource.data.year + '__' +
+                      string(request.resource.data['מזהה']);
+    }
+
+    function txShapeOk(docId) {
+      return request.resource.data.keys().hasOnly(txAllowedFields()) &&
+             request.resource.data.keys().hasAll(txRequiredFields()) &&
+             txIdMatches(docId) &&
+             request.resource.data['מזהה'] is int &&
+             request.resource.data['סכום'] is number &&
+             request.resource.data.year is string &&
+             request.resource.data.schema is int &&
+             request.resource.data.familyId is string &&
+             request.resource.data.familyId != '' &&
+             request.resource.data.familyId == request.resource.data['מזהה משפחה'] &&
+             request.resource.data.statusPending == false;
+    }
+
+    /* תושב פותח בקשת החזר על שם משפחתו בלבד, תמיד בסטטוס הפתיחה. */
+    function txResidentCreateOk(docId) {
+      return isMember() && txShapeOk(docId) &&
+             request.resource.data.familyId == myFamilyId() &&
+             request.resource.data['מקור'] == 'תושב' &&
+             request.resource.data['סטטוס'] == 'הוגשה קבלה' &&
+             request.resource.data['סכום'] > 0 &&
+             !request.resource.data.keys().hasAny(['הערת בדיקה']);
+    }
+
+    /* בעל הרשאת תקציב מזין הוצאה — כל מקור, אבל לא סטטוס סופי משלב אפס. */
+    function txAdminCreateOk(docId) {
+      return canSeeBudget() && txShapeOk(docId) &&
+             (request.resource.data['סטטוס'] == 'הוגשה קבלה' ||
+              request.resource.data['סטטוס'] == 'הועבר להנה"ח');
+    }
+
+    /* עריכת פרטים — כל מה שאינו סטטוס. */
+    function txDetailsUpdateOk() {
+      return canSeeBudget() &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['חודש הגשה', 'תאריך רכישה', 'ספק/נמען', 'בנק', 'סכום',
+                         'סעיף', 'תת-סעיף', 'סוג הוצאה', 'תיאור',
+                         'שם קובץ קבלה', 'קישור קבלה', 'updatedAt']) &&
+             request.resource.data['סכום'] is number &&
+             request.resource.data['סכום'] > 0;
+    }
+
     match /budgetTx/{docId} {
       allow read: if canSeeFamilyTx(resource.data.familyId);
-      allow update: if txStatusUpdateOk();
-      allow create, delete: if false;
+      allow create: if txResidentCreateOk(docId) || txAdminCreateOk(docId);
+      allow update: if txStatusUpdateOk() || txDetailsUpdateOk();
+      allow delete: if canSeeBudget();
     }
 
     /* ========================================================================

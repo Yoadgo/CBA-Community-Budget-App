@@ -50,13 +50,18 @@ const idxDeny = CODE.indexOf('match /{document=**}');
   ok('🔴 ' + nm + ' יושב מעל ברירת המחדל',
      CODE.indexOf('match ' + nm) !== -1 && CODE.indexOf('match ' + nm) < idxDeny);
 });
-ok('\ud83d\udd34 כל allow בקובץ הוא מהצורות המוכרות בלבד',
-   (CODE.match(/allow [^\n]*/g) || []).every(function (t) { t = t.trim();
-     return /^allow read: if (canSeePlan\(\)|canSeeServices\(\)|canSeeBudget\(\)|canSeeFamilyTx\(resource\.data\.familyId\)|isMember\(\)|signedIn\(\) && request\.auth\.uid == uid);$/.test(t) ||
-            /^allow write: if false;$/.test(t) || /^allow read, write: if false;$/.test(t) ||
-            /* \u05e6\u05e2\u05d3 09\u05d0 \u2014 \u05d4\u05db\u05ea\u05d9\u05d1\u05d4 \u05d4\u05d9\u05d7\u05d9\u05d3\u05d4 \u05d1\u05e7\u05d5\u05d1\u05e5, \u05d5\u05d4\u05d9\u05d0 \u05d3\u05e8\u05da \u05e4\u05d5\u05e0\u05e7\u05e6\u05d9\u05d4 \u05d1\u05e2\u05dc\u05ea \u05e9\u05dd. */
-            /^allow update: if (txStatusUpdateOk|counterBumpOk)\(\);$/.test(t) ||
-            /^allow create, delete: if false;$/.test(t);
+/* 🔴 **הכלל שהחליף את "אין כתיבה, נקודה" (15.9.2026).**
+   הקובץ גדל, וספירת כתיבות כבר לא אומרת דבר. מה שכן אומר:
+   **כל תנאי ב-allow חייב להיות קריאה לפונקציה בעלת שם** — לעולם
+   לא תנאי פרוש בתוך הבלוק. פונקציה בעלת שם נקראת, נבדקת ומתועדת;
+   תנאי שנדחף בשורה אחת בתוך `match` הוא בדיוק מה שמחליק פנימה
+   בלי שאיש יראה אותו. */
+const ALLOW_TERM = /^([a-zA-Z][A-Za-z0-9_]*\((docId)?\)|false|canSeeFamilyTx\(resource\.data\.familyId\)|signedIn\(\) && request\.auth\.uid == uid)$/;
+ok('🔴 כל תנאי ב-allow הוא קריאה לפונקציה בעלת שם',
+   (CODE.match(/allow [^\n]*/g) || []).every(function (t) {
+     const m = t.trim().match(/^allow [a-z, ]+: if (.+);$/);
+     if (!m) return false;
+     return m[1].split('||').every(function (term) { return ALLOW_TERM.test(term.trim()); });
    }), (CODE.match(/allow [^\n]*/g) || []).join(' | '));
 
 section('3. תוכנית הגינון — מה שנפתח');
@@ -74,19 +79,27 @@ ok('🔴 gardenMeta — כתיבה אסורה לכולם', /allow write: if fals
    במקום לוותר עליה: כל `allow update` חייב להיות זה של budgetTx,
    ו-`allow create`/`allow delete` חייבים להישאר סגורים. כל כתיבה
    עתידית תפיל את הבדיקה הזאת, וזו המטרה. */
-ok('🔴 כל כתיבה היא אחת מהשתיים המוכרות',
-   (CODE.match(/allow (create|update|delete)[^\n]*/g) || [])
-     .every(function (t) { t = t.trim();
-       return t === 'allow update: if txStatusUpdateOk();' ||
-              t === 'allow update: if counterBumpOk();' ||
-              t === 'allow create, delete: if false;'; }),
-   (CODE.match(/allow (create|update|delete)[^\n]*/g) || []).join(' | '));
-/* 🔴 **המספר הזה הוא הבדיקה.** כתיבה שלישית תפיל את השורה הזאת
-   ותחייב הכרעה מודעת — בדיוק כמו שהכתיבה השנייה (מונה המזהים,
-   צעד 09ב-1) חייבה לעדכן את השורה הזאת ביודעין. */
-ok('🔴 ויש בדיוק שתי כתיבות בכל הקובץ',
-   (CODE.match(/allow update:/g) || []).length === 2,
-   String((CODE.match(/allow update:/g) || []).length));
+/* 🔴 **הרשימה הזאת היא הבדיקה.** כל שער כתיבה חדש שייפתח בעתיד
+   יפיל את השורה הזאת, ויחייב מישהו להוסיף אותו לכאן **ביודעין**.
+   זו ההגנה שנשארה אחרי שספירת הכתיבות איבדה משמעות. */
+const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk',
+                     'txDetailsUpdateOk', 'counterBumpOk', 'canSeeBudget', 'false'];
+{
+  const used = [];
+  (CODE.match(/allow (create|update|delete)[^\n]*/g) || []).forEach(function (t) {
+    const m = t.trim().match(/^allow [a-z, ]+: if (.+);$/);
+    if (!m) { used.push('PARSE-FAIL:' + t.trim()); return; }
+    m[1].split('||').forEach(function (term) {
+      used.push(term.trim().replace(/\((docId)?\)$/, ''));
+    });
+  });
+  ok('🔴 כל שער כתיבה נמצא ברשימה המאושרת',
+     used.every(function (u) { return WRITE_GATES.indexOf(u) !== -1; }),
+     used.filter(function (u) { return WRITE_GATES.indexOf(u) === -1; }).join(' | '));
+  ok('🔴 ואין שער מאושר שכבר אינו בשימוש (רשימה שמתיישנת)',
+     WRITE_GATES.every(function (g) { return used.indexOf(g) !== -1; }),
+     WRITE_GATES.filter(function (g) { return used.indexOf(g) === -1; }).join(' | '));
+}
 
 
 section('3ב. שירותים לתושב (צעד 04ב)');
