@@ -145,9 +145,25 @@ ok('🔴 ו-canSeeFamilyTx חוסם את המחרוזת הריקה',
    /function canSeeFamilyTx\(fid\)[\s\S]*?fid is string && fid != '' && fid == myFamilyId\(\)/.test(CODE));
 ok('🔴 והוא לא נפתח לכל חבר אלא לבעלי הרשאת תקציב',
    /function canSeeBudget\(\)\s*\{\s*return hasPerm\('\u05ea\u05e7\u05e6\u05d9\u05d1'\)/.test(CODE));
-ok('🔴 שמונה בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
-   (CODE.match(/^\s*match \//gm) || []).length === 10,
+ok('🔴 תשעה בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
+   (CODE.match(/^\s*match \//gm) || []).length === 11,
    String((CODE.match(/^\s*match \//gm) || []).length));
+
+/* ======================================================================
+   🔴🔴 צעד 10ב-1 — מנוי כושר. הבדיקות הרגישות במארז הזה:
+   הטאב הזה מחזיק ת.ז., תאריך לידה ותשובות שאלון בריאות
+   באותה שורה עם הסטטוס. כל דליפה כאן היא דליפה של אלה.
+   ====================================================================== */
+section('5ב. 🔴 מנוי כושר — כל אחד את שלו בלבד');
+ok('gymStatus נפתח', CODE.indexOf('match /gymStatus/') !== -1);
+ok('🔴 והקריאה היא **מזהה המסמך מול ה-uid** בלבד',
+   /match \/gymStatus\/\{uid\}[\s\S]{0,200}allow read: if signedIn\(\) && request\.auth\.uid == uid;/.test(CODE));
+ok('🔴🔴 ואין שום מסלול לפי משפחה (בן/בת זוג חולקים familyId)',
+   !/match \/gymStatus\/\{uid\}[\s\S]{0,400}myFamilyId\(\)/.test(CODE));
+ok('🔴 ואין מסלול למנהל — מסך הניהול נשאר ב-Apps Script',
+   !/match \/gymStatus\/\{uid\}[\s\S]{0,400}(hasPerm|isSuper)/.test(CODE));
+ok('⚠️ והדפדפן לעולם אינו כותב',
+   /match \/gymStatus\/\{uid\}[\s\S]{0,400}allow write: if false;/.test(CODE));
 
 section('6. members — לא נשבר');
 const mb = blockOf('/members/{uid}');

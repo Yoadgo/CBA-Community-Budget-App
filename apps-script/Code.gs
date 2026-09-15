@@ -245,6 +245,8 @@ var GET_ACTION_PERMS = {
   /* סנכרון יזום של "שירותים לתושב" (2026-09-15, צעד 04א).
      אותה סיבה כמו gardenPlanSync — פעולת תשתית שדורסת אוסף. */
   servicesSync: PERM_SUPER,
+  /* צעד 10ב-1 — אותה סיבה: פעולת תשתית שדורסת אוסף שלם. */
+  gymStatusSync: PERM_SUPER,
   /* דגלי זמן ריצה (2026-09-15, צעד 05א) — מדליקים ומכבים תחום
      בלי דיפלוי. שינוי התנהגות לכל המשתמשים — מנהל-על בלבד. */
   flagSet: PERM_SUPER, flagsGet: PERM_SUPER,
@@ -591,6 +593,9 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'budgetTxApply') {
       return handleBudgetTxApply_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'gymStatusSync') {
+      return handleGymStatusSync_(e.parameter);
     }
     if (e && e.parameter && e.parameter.action === 'txPing') {
       return handleTxPing_(e.parameter);
@@ -6169,6 +6174,122 @@ function servicesSyncAll_(ss) {
     out.error = String(err);
   }
   return out;
+}
+
+/* ============================================================================
+ *  סטטוס מנוי כושר → Firestore        (צעד 10ב-1, 2026-09-15)
+ * ----------------------------------------------------------------------------
+ *  🔴🔴 **זה הגבול הרגיש ביותר בכל המיגרציה.** טאב "מכון כושר"
+ *  הוא היחיד שמחזיק באותה שורה **מספר תעודת זהות,
+ *  תאריך לידה, ותשובות שאלון בריאות** — ושלושתם אסורים
+ *  לעבור. לכן מה שעובר אינו "השורה" אלא **רשימת היתר
+ *  סגורה** של שדות סטטוס בלבד.
+ *
+ *  ⚠️ **הרשימה סגורה בכוונה, וזה העיקר.** עמודה חדשה שתיווסף
+ *     לטאב בעתיד **לא תזלוג לכאן מעצמה**. רשימת חסימה
+ *     ("הכל חוץ מ-X") היתה מעבירה אותה בשקט — ועמודה חדשה
+ *     בטאב הזה היא סביר להניח עוד נתון רפואי או מזהה.
+ *
+ *  🔴 **מסמך לפי `uid`, לא לפי משפחה.** מנוי הוא של **אדם**,
+ *  ובשורת תושבים אחת יושבים שני בני זוג עם אותו `familyId`.
+ *  מפתח לפי `uid` נותן את כלל האבטחה הפשוט ביותר שיש:
+ *  `request.auth.uid == uid` — אין מה להצליב ואין מה לטעות בו.
+ *
+ *  ⚠️ **קוד הכניסה אינו עובר כאן, וזו החלטה ולא שכחה.**
+ *     `handleGymMy_` משחרר אותו רק אחרי שהשרת בדק שהמנוי פעיל
+ *     ובתוקף. **כללי Firestore מגנים על מסמכים, לא על שדות** —
+ *     אי-אפשר לומר "מותר לקרוא את המסמך חוץ מהשדה הזה".
+ *     לכן קוד שהיה נוסע במסמך הסטטוס היה נקרא גם ע"י מי שהמנוי
+ *     שלו פג. הפתרון (צעד נפרד): מסמך שני לקוד, שהכלל שלו
+ *     בודק תאריך — ואז האכיפה עוברת מהמטפל למסד הנתונים עצמו.
+ * ========================================================================== */
+var FS_GYM_STATUS = 'gymStatus';
+
+/* 🔴 רשימת היתר — כל שדה שאינו כאן **לא עובר**.
+   מה שבמכוון איננו כאן, ולמה:
+     אימייל / שם פרטי / שם משפחה / טלפון / מספר בית — מידע מזהה.
+     ת.ז. / תאריך לידה — מספר תעודת זהות ותאריך לידה.
+     שאלות שנענו בכן / דגלים / הערת דגל — תשובות שאלון בריאות.
+     אישור רופא / תאריך הנפקת האישור / קישור אישור — גם עצם קיומם
+       מעיד על מצב בריאותי.
+     תאריך חתימה / קישור חתימה / גרסת שאלון — נספחי ההצהרה.
+     טופל ע"י / הערות מנהל — שם מנהל וטקסט חופשי שיכול להכיל הכל.
+     מזהה קבוע — מזהה המשפחה; המסמך ממופתח ב-uid ואינו צריך אותו.
+     מצב סנכרון — פנימי לגיליון. */
+var GYM_FS_FIELDS = ['\u05de\u05d6\u05d4\u05d4', '\u05de\u05e1\u05dc\u05d5\u05dc', '\u05de\u05d7\u05d9\u05e8 \u05de\u05d5\u05e1\u05db\u05dd',
+  '\u05ea\u05d0\u05e8\u05d9\u05da \u05d4\u05ea\u05d7\u05dc\u05d4', '\u05d1\u05ea\u05d5\u05e7\u05e3 \u05e2\u05d3', '\u05e1\u05d8\u05d8\u05d5\u05e1',
+  '\u05e1\u05d4"\u05db \u05e9\u05d5\u05dc\u05dd', '\u05ea\u05e9\u05dc\u05d5\u05dd \u05d0\u05d7\u05e8\u05d5\u05df', '\u05d7\u05d5\u05d3\u05e9\u05d9\u05dd \u05e9\u05e9\u05d5\u05dc\u05de\u05d5',
+  '\u05d0\u05d9\u05e9\u05d5\u05e8 \u05ea\u05e7\u05e0\u05d5\u05df', '\u05d4\u05d5\u05d2\u05e9 \u05d1\u05ea\u05d0\u05e8\u05d9\u05da', '\u05d8\u05d5\u05e4\u05dc \u05d1\u05ea\u05d0\u05e8\u05d9\u05da',
+  '\u05de\u05e0\u05d5\u05d9 \u05e7\u05d5\u05d3\u05dd', '\u05d3\u05d2\u05dc\u05d9 \u05ea\u05d6\u05db\u05d5\u05e8\u05ea'];
+
+/** מפה {אימייל מנורמל: uid} מטאב "תושבים" — כל משבצות האימייל. */
+function gymUidByEmail_(ss) {
+  var out = {};
+  var sh = ss.getSheetByName('\u05ea\u05d5\u05e9\u05d1\u05d9\u05dd');
+  if (!sh) return out;
+  var cols = residentSlotCols_(sh);
+  if (!cols.uid.length || !cols.email.length) return out;
+  var last = sh.getLastRow();
+  if (last < 2) return out;
+  var values = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();
+  var slots = Math.min(cols.email.length, cols.uid.length);
+  for (var r = 0; r < values.length; r++) {
+    for (var i = 0; i < slots; i++) {
+      var uid = String(values[r][cols.uid[i]] || '').trim();
+      var em = normalizeEmail_(String(values[r][cols.email[i]] || ''));
+      if (uid && em) out[em] = uid;
+    }
+  }
+  return out;
+}
+
+/** שורת מכון → מסמך סטטוס, רשימת היתר בלבד. */
+function gymStatusDoc_(row, uid) {
+  var doc = { uid: uid, schema: 1, updatedAt: new Date() };
+  GYM_FS_FIELDS.forEach(function (k) {
+    var v = row[k];
+    if (v instanceof Date) {
+      doc[k] = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    } else {
+      doc[k] = (v == null) ? '' : v;
+    }
+  });
+  return doc;
+}
+
+function gymStatusSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  try {
+    var byEmail = gymUidByEmail_(ss);
+    var rows = readTable_(ss, GYM_SHEET);
+    var live = {};
+    var items = [];
+    rows.forEach(function (row) {
+      var uid = byEmail[normalizeEmail_(String(row['\u05d0\u05d9\u05de\u05d9\u05d9\u05dc'] || ''))];
+      /* אין uid = האדם מעולם לא התחבר — אין למי לכתוב, וזה תקין. */
+      if (!uid) { out.skipped++; return; }
+      /* ⚠️ שתי שורות לאותו אדם (מנוי שפג + חדש): האחרונה
+         מנצחת, כמו ש-`gymFindRow_` מעדיףה שורה פתוחה. */
+      items.push({ id: uid, doc: gymStatusDoc_(row, uid) });
+    });
+    fsWriteAll_(FS_GYM_STATUS, items, out, live);
+    fsSweepOrphans_(FS_GYM_STATUS, live, out);
+    out.ok = true;
+  } catch (err) {
+    out.error = String(err);
+  }
+  return out;
+}
+
+function handleGymStatusSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var r = gymStatusSyncAll_(ss);
+    return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, skipped: r.skipped, error: r.error });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
 /* נקודת הרצה מפורשת — ולא הרצה ידנית מהעורך. ר' ההערה ב-handleGardenPlanSync_:
