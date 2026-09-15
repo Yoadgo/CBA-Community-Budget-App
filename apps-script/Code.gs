@@ -9750,7 +9750,11 @@ var GARDEN_KIND_LEGACY = { 'תקלה': GARDEN_KIND_REPORT };
 
 var GARDEN_REPORT_HEADERS = [
   'מזהה', 'תאריך דיווח', 'מזהה משפחה', 'שם מדווח', 'טלפון',
-  'קטגוריה', 'אזור', 'מיקום X', 'מיקום Y', 'מיקום מילולי', 'תיאור', 'תמונות',
+  'קטגוריה', 'אזור', 'מיקום X', 'מיקום Y', 'מיקום מילולי',
+  /* כותרת קצרה (2026-09-15) — נפרדת מהתיאור המלא: התושב בוחר מתוך 3-4
+     קפסולות שמותאמות לקטגוריה שנבחרה, או מקליד חופשי. ברשימות (כרטיס,
+     "הדיווחים שלי") מוצגת רק הכותרת — לא התיאור. */
+  'כותרת', 'תיאור', 'תמונות',
   'מזהה משימה', 'אוחד לדיווח', 'שנת תקציב',
   'משוב', 'תאריך משוב', 'הערת משוב',
   /* מזהה שהדפדפן מייצר פעם אחת לכל טופס (ולא לכל ניסיון שליחה), כדי שאותו
@@ -9886,8 +9890,10 @@ function gardenEnsureSheet_(ss, name, headers, widths) {
 /* 2 (2026-09-08): GARDEN_ROUTINE_HEADERS השתנו עם תוכנית העבודה — נוספו
    'שבוע ראשון' ו'סבב אזורים'. בלי ההעלאה הזאת המטמון היה מדלג על
    ensureGardenSheets_ עד שיפוג, והעמודות החדשות פשוט לא היו נוצרות. */
-/* 3 (2026-09-14): נוספה 'מזהה שליחה' ל-GARDEN_REPORT_HEADERS. */
-var GARDEN_SCHEMA_REV = 3;
+/* 3 (2026-09-14): נוספה 'מזהה שליחה' ל-GARDEN_REPORT_HEADERS.
+ * 4 (2026-09-15): נוספה 'כותרת' ל-GARDEN_REPORT_HEADERS (כותרת קצרה,
+ *   נפרדת מהתיאור המלא — ר' submitGardenReport_). */
+var GARDEN_SCHEMA_REV = 4;
 function ensureGardenSheetsCached_(ss) {
   var key = 'garden_schema_v' + GARDEN_SCHEMA_REV;
   try {
@@ -10304,6 +10310,7 @@ function handleMyGardenReports_(p) {
         date: d instanceof Date ? d.toISOString() : String(d || ''),
         category: String(rows[r][rc['קטגוריה']] || ''),
         area: String(rows[r][rc['אזור']] || ''),
+        title: String(rows[r][rc['כותרת']] || ''),
         x: parseFloat(rows[r][rc['מיקום X']]) || null,
         y: parseFloat(rows[r][rc['מיקום Y']]) || null,
         place: String(rows[r][rc['מיקום מילולי']] || ''),
@@ -10353,6 +10360,11 @@ function submitGardenReport_(ss, body) {
   }
   var desc = String(body.desc || '').trim();
   if (!cat) return { ok: false, error: 'לא נבחרה קטגוריה' };
+  /* כותרת קצרה (2026-09-15) — חובה, בדיוק כמו הקטגוריה: כרטיס בלי
+     כותרת קצרה ברשימה חוזר להיות תיאור מלא שנחתך, בדיוק הבעיה שהיא
+     נועדה לפתור. */
+  var reportTitle = String(body.title || '').trim().substring(0, 60);
+  if (!reportTitle) return { ok: false, error: 'צריך לבחור או לכתוב כותרת קצרה' };
   /* האזור מגיע מהלקוח — הוא נגזר מהנעיצה מול מצולעי אזורי הגינון
      (CBA.map.areaAt). ⚠️ הוא **מאומת מול הרשימה** ולא נכתב כמות שהוא: הוא
      נשלח מהדפדפן, ואזור שאינו קיים היה זורע בגיליון ערך שאף מסך לא יודע
@@ -10419,13 +10431,13 @@ function submitGardenReport_(ss, body) {
     var taskId = nextGardenId_(tsh);
     var repId  = nextGardenId_(rsh);
     var name = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email;
-    var title = cat + (body.place ? ' — ' + String(body.place).trim() : '');
+
 
     // 1. המשימה — מה שהצוות מטפל בו
     var trow = new Array(tsh.getLastColumn()).fill('');
     trow[tc['מזהה']] = taskId;
     trow[tc['סוג']] = GARDEN_KIND_REPORT;
-    trow[tc['כותרת']] = desc ? desc.substring(0, 120) : title;
+    trow[tc['כותרת']] = reportTitle;
     trow[tc['קטגוריה']] = cat;
     trow[tc['אזור']] = area;
     trow[tc['מיקום X']] = x; trow[tc['מיקום Y']] = y;
@@ -10447,6 +10459,7 @@ function submitGardenReport_(ss, body) {
     rrow[rc['אזור']] = area;
     rrow[rc['מיקום X']] = x; rrow[rc['מיקום Y']] = y;
     rrow[rc['מיקום מילולי']] = String(body.place || '');
+    rrow[rc['כותרת']] = reportTitle;
     rrow[rc['תיאור']] = desc;
     rrow[rc['תמונות']] = ids.join(',');
     rrow[rc['מזהה משימה']] = taskId;

@@ -44,6 +44,20 @@
      מחזירה את הדיווח הקיים במקום ליצור חדש.
      ⚠️ בלי זה, "נסה שוב" אחרי נפילת רשת מייצר דיווח כפול — וזה קרה בייצור
         ב-14.9: השרת כתב את הדיווח ורץ 15 שניות, והדפדפן הודיע "שגיאת רשת". */
+  /* קפסולות כותרת-מהירה לפי קטגוריה (2026-09-15) — יועד אישר את הרשימה.
+     המפתחות הם בדיוק המחרוזות מ-GARDEN_DEFAULT_SETTINGS ב-Code.gs; קטגוריה
+     שלא ברשימה (לא אמור לקרות, הרשימה סגורה) פשוט לא מציגה קפסולות ומשאירה
+     מילוי חופשי בלבד. */
+  var TITLE_PICKS = {
+    "מדשאות": ["מדשאה יבשה", "עשב גבוה מדי"],
+    "השקיה / ממטרות": ["ראש ממטרה שבור", "דליפת מים", "נראה שההשקייה לא עובדת"],
+    "עצים": ["ענף שבור/מסוכן", "עץ נוטה/מתנדנד", "עץ יבש"],
+    "שיחים / גיזום": ["שיח חוסם מעבר", "צריך גיזום", "ענפים פרוצים"],
+    "עשבייה / קרקע": ["עשביה שוטה", "קוצים"],
+    "ניקיון גינון / גזם": ["גזם לא פונה", "אשפה/לכלוך", "עלים נערמים"],
+    "ערוגות / שתילות": ["שתיל פגוע/יבש", "ערוגה מוזנחת", "חסר שתילים"]
+  };
+
   function newRef() {
     return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
   }
@@ -426,7 +440,7 @@
                עכשיו: תיאור, ואם אין — המיקום, ואם גם אין — מספר הדיווח.
                וכשהמיקום עלה לכותרת הוא יורד משורת המטא, כדי לא לחזור עליו. */
             '<div class="gd-rep__t">' +
-              esc(r.desc || r.place || r.area || ("דיווח #" + r.id)) + '</div>' +
+              esc(r.title || r.desc || r.place || r.area || ("דיווח #" + r.id)) + '</div>' +
             '<div class="gd-rep__m">' +
               (r.desc
                 ? (r.place ? esc(r.place) + " · " : (r.area ? esc(r.area) + " · " : ""))
@@ -589,6 +603,11 @@
                 '</div>' +
               '</div>' +
               '<div class="gd-card">' +
+                '<p class="gd-lbl">כותרת קצרה <s>*</s></p>' +
+                '<div class="gd-tpicks" id="gd-tpicks"><span class="gd-tpicks__hint">בחרו קטגוריה כדי לראות הצעות</span></div>' +
+                '<input class="gd-inp" id="gd-title" maxlength="60" placeholder="למשל: ראש ממטרה שבור">' +
+              '</div>' +
+              '<div class="gd-card">' +
                 '<p class="gd-lbl">תיאור <em id="gd-wc">0 / ' + WORD_MAX + ' מילים</em></p>' +
                 '<textarea class="gd-inp gd-ta" id="gd-desc" rows="3" ' +
                   'placeholder="מה קרה ואיפה בדיוק? כמה משפטים מספיקים."></textarea>' +
@@ -635,6 +654,16 @@
         });
 
         // ---- קטגוריה ----
+        var titleInput = container.querySelector("#gd-title");
+        var tpicksEl = container.querySelector("#gd-tpicks");
+        function renderTitlePicks() {
+          var picks = TITLE_PICKS[state.cat] || [];
+          tpicksEl.innerHTML = picks.length
+            ? picks.map(function (p) {
+                return '<button type="button" class="gd-tpick" data-t="' + esc(p) + '">' + esc(p) + '</button>';
+              }).join("")
+            : '<span class="gd-tpicks__hint">אפשר גם פשוט להקליד למטה</span>';
+        }
         container.querySelector("#gd-cats").addEventListener("click", function (e) {
           var b = e.target.closest(".gd-cat");
           if (!b) return;
@@ -642,6 +671,20 @@
             x.classList.toggle("on", x === b);
           });
           state.cat = b.dataset.c;
+          renderTitlePicks();
+        });
+        tpicksEl.addEventListener("click", function (e) {
+          var b = e.target.closest(".gd-tpick");
+          if (!b) return;
+          titleInput.value = b.dataset.t;
+          Array.prototype.forEach.call(tpicksEl.querySelectorAll(".gd-tpick"), function (x) {
+            x.classList.toggle("on", x === b);
+          });
+        });
+        titleInput.addEventListener("input", function () {
+          Array.prototype.forEach.call(tpicksEl.querySelectorAll(".gd-tpick"), function (x) {
+            x.classList.toggle("on", x.dataset.t === titleInput.value);
+          });
         });
 
         // ---- מונה מילים ----
@@ -741,6 +784,10 @@
           if (pr.clientRef) state.clientRef = pr.clientRef;
           var catBtn = container.querySelector('.gd-cat[data-c="' + esc(pr.category || "") + '"]');
           if (catBtn) catBtn.click();
+          if (pr.title) {
+            titleInput.value = pr.title;
+            titleInput.dispatchEvent(new Event("input"));
+          }
           descEl.value = pr.desc || "";
           descEl.dispatchEvent(new Event("input"));
           container.querySelector("#gd-place").value = pr.place || "";
@@ -766,12 +813,15 @@
         var sendBtn = container.querySelector("#gd-send");
         sendBtn.addEventListener("click", function () {
           if (!state.cat) return CBA.ui.alert("צריך לבחור קטגוריה");
+          var titleVal = titleInput.value.trim();
+          if (!titleVal) return CBA.ui.alert("צריך לבחור או לכתוב כותרת קצרה");
           var place = container.querySelector("#gd-place").value.trim();
           if (state.x === null && !place) {
             return CBA.ui.alert("צריך לסמן מיקום על המפה או לכתוב אותו במילים");
           }
           sendReport({
             category: state.cat,
+            title: titleVal,
             desc: descEl.value.trim(),
             place: place,
             phone: container.querySelector("#gd-phone").value.trim(),
