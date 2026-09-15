@@ -10,6 +10,109 @@ window.CBA = window.CBA || {};
 CBA.data = (function () {
   "use strict";
 
+  /* ==========================================================================
+   *  תוכנית העבודה — קריאה ישירה מ-Firestore   (צעד 03ג, 2026-09-15)
+   * --------------------------------------------------------------------------
+   *  🔴 **מתג הביטול של הצעד הוא שורה אחת:** `GARDEN_PLAN_FROM_FIRESTORE = false`
+   *  מחזיר את המסך למסלול Apps Script הישן במלואו, בלי שום שינוי אחר.
+   *
+   *  ⚠️ **נפילה לאחור היא התנהגות, לא טיפול בשגיאה.** כל אחד מהמקרים האלה
+   *  מחזיר את המסך ל-Apps Script **בלי שהמשתמש ירגיש דבר**: ה-SDK לא נטען ·
+   *  אין משתמש מחובר ל-Firebase · כלל אבטחה דחה · רשת איטית מ-6 שניות ·
+   *  מסמך הרשימות חסר. זה שער הבדיקה שנכשל עליו צעד שלם ב-9.9 (homeExtras),
+   *  ולכן הוא נבדק לפני העלייה לייצור ולא אחריה.
+   *
+   *  🔑 **שתי התשובות חייבות להיראות זהות** — אותם שדות, אותו סדר. לכן
+   *  ממיינים לפי `order` (רמז סדר מהגיליון) ואז לפי מספר המזהה. מסלול
+   *  נפילה-לאחור שמסדר אחרת נראה למשתמש כמו באג, לא כמו גיבוי.
+   *
+   *  📊 המדידה נרשמת ל-`CBA.perf.gardenPlan`. **זו כל הסיבה למעבר**: קריאה
+   *  ל-Apps Script עולה 1.5–3.5 שניות כרצפה, בלי קשר לגודל התשובה. אם המסלול
+   *  הישיר לא ירד משמעותית מתחת לזה — הנחת היסוד של כל המעבר טעונה בדיקה.
+   * ======================================================================== */
+  var GARDEN_PLAN_FROM_FIRESTORE = true;
+
+  /* ⚠️ **קר מול חם — בלי ההבחנה הזו המדידה משקרת.**
+     פתיחה ראשונה אחרי רענון עמוד משלמת גם על הורדת שלושה קבצי SDK
+     (כ-550KB), ולכן עלולה להיות **איטית יותר** מ-Apps Script. כל פתיחה
+     נוספת באותו עמוד משלמת רק על הרשת. שתי המדידות אמיתיות, וכל
+     השוואה שמערבבת ביניהן תוביל למסקנה הפוכה מהנכונה. */
+  function gardenPlanNotePerf(source, ms, why, warm) {
+    try {
+      CBA.perf = CBA.perf || {};
+      CBA.perf.gardenPlan = { source: source, ms: ms, why: why || "", warm: !!warm,
+                              at: new Date().toISOString() };
+      console.log("[CBA.perf] gardenPlan " + source + " " + ms + "ms" +
+                  (warm ? " [SDK חם]" : " [SDK קר]") +
+                  (why ? " (" + why + ")" : ""));
+    } catch (e) {}
+  }
+
+  function gardenPlanSort(rows) {
+    return (rows || []).slice().sort(function (a, b) {
+      var ao = a.order || 0, bo = b.order || 0;
+      if (ao !== bo) return ao - bo;
+      return (parseInt(String(a.id).replace(/\D/g, ""), 10) || 0) -
+             (parseInt(String(b.id).replace(/\D/g, ""), 10) || 0);
+    });
+  }
+
+  function gardenPlanRead(cb) {
+    var t0 = Date.now();
+    var settled = false;
+    var warm = !!(CBA.fb && CBA.fb.isDbReady && CBA.fb.isDbReady());
+
+    function viaSheets(why) {
+      if (settled) return;
+      settled = true;
+      CBA.sheets.get({ action: "gardenPlan" }, function (res) {
+        gardenPlanNotePerf("appsscript", Date.now() - t0, why, warm);
+        cb(res);
+      });
+    }
+
+    if (!GARDEN_PLAN_FROM_FIRESTORE || !CBA.fb || !CBA.fb.readCollection) {
+      return viaSheets("disabled");
+    }
+
+    CBA.fb.authReady(function (user) {
+      if (settled) return;
+      if (!user) return viaSheets("no-user");
+
+      var defs = null, meta = null;
+
+      function maybeDone() {
+        if (settled || !defs || !meta) return;
+        settled = true;
+        gardenPlanNotePerf("firestore", Date.now() - t0, "", warm);
+        cb({
+          ok: true,
+          defs: gardenPlanSort(defs),
+          freqs: meta.freqs || [],
+          areas: meta.areas || [],
+          categories: meta.categories || []
+        });
+      }
+
+      function fail(e) {
+        viaSheets("firestore:" + ((e && (e.code || e.message)) || "?"));
+      }
+
+      CBA.fb.readCollection("gardenPlan", function (err, rows) {
+        if (err) return fail(err);
+        defs = rows || [];
+        maybeDone();
+      });
+      CBA.fb.readDoc("gardenMeta", "lists", function (err, doc) {
+        if (err) return fail(err);
+        if (!doc) return fail(new Error("no-lists-doc"));
+        meta = doc;
+        maybeDone();
+      });
+    });
+  }
+
+
   // סטטוסים = רמזור תהליכי. "בוצע" (נספר בביצוע) = מוכן להעברה / שולם.
   // "הוגשה קבלה", "חסר פרטים" ו"נדחה" אינם נספרים.
   const SPENT_STATUSES = ["ready", "paid"];
@@ -1666,7 +1769,7 @@ CBA.data = (function () {
        אותה למשתמש חיצוני, ולכן הקריאה תיכשל אצל אחראי הגינון גם אם איכשהו
        יגיע למסך. ר' handleGardenPlan_. */
     getGardenPlan: function (cb) {
-      CBA.sheets.get({ action: "gardenPlan" }, cb);
+      gardenPlanRead(cb);
     },
     /* יצירה או עדכון של הגדרה. עם id — עדכון; בלי — חדשה. */
     gardenPlanSave: function (payload, cb) {

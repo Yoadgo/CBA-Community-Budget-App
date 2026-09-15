@@ -37,6 +37,10 @@ CBA.fb = (function () {
     "https://www.gstatic.com/firebasejs/" + SDK_VERSION + "/firebase-app-compat.js",
     "https://www.gstatic.com/firebasejs/" + SDK_VERSION + "/firebase-auth-compat.js"
   ];
+  /* ⚠️ **קובץ שלישי, ובכוונה לא ברשימה למעלה.** הוא מוזרק רק כשמסך
+     באמת צריך לקרוא מ-Firestore (צעד 03ג), כדי שהתחברות לבדה לא תשלם
+     עליו. ר' כלל 2 בראש הקובץ. */
+  var SDK_DB = "https://www.gstatic.com/firebasejs/" + SDK_VERSION + "/firebase-firestore-compat.js";
 
   /* מזהים ציבוריים של פרויקט AtmoSync — ר' הערה 3 למעלה. */
   var CONFIG = {
@@ -55,9 +59,15 @@ CBA.fb = (function () {
     loaded: false,
     initErr: null,
     lastError: null,
-    user: null          // { uid, email } אחרי התחברות מוצלחת
+    user: null,         // { uid, email } אחרי התחברות מוצלחת
+    authKnown: false,   // האם onAuthStateChanged כבר דיווח פעם אחת
+    dbLoading: false,
+    dbLoaded: false,
+    dbErr: null
   };
   var waiters = [];     // מי שביקש את ה-SDK בזמן שהוא עוד בדרך
+  var dbWaiters = [];
+  var authWaiters = [];
 
   function log(msg, extra) {
     try { console.log("[CBA.fb] " + msg, extra === undefined ? "" : extra); } catch (e) {}
@@ -120,6 +130,13 @@ CBA.fb = (function () {
            מחזיר null למשתמש מחובר לגמרי, וזה היה נראה כמו באג בצעד הבא. */
         window.firebase.auth().onAuthStateChanged(function (u) {
           state.user = u ? { uid: u.uid, email: u.email || "" } : null;
+          /* 🔑 **הדיווח הראשון הוא הרגע שבו מותר להסיק "אין משתמש".**
+             לפניו `uid()` מחזיר null גם למשתמש מחובר לגמרי, כי Firebase
+             עדיין משחזר את המושב מהאחסון המקומי. מי שיחליט לפי זה
+             על "נפילה לאחור" ייפול לאחור בכל רענון עמוד, בלי שישום דבר שבור. */
+          state.authKnown = true;
+          var list = authWaiters; authWaiters = [];
+          list.forEach(function (fn) { try { fn(state.user); } catch (e) {} });
         });
         log("SDK מוכן, גרסה " + SDK_VERSION);
         settle(null);
@@ -176,6 +193,115 @@ CBA.fb = (function () {
     u.getIdToken().then(function (t) { cb(null, t); })["catch"](function (e) { cb(e); });
   }
 
+  /* ---------- קריאה ישירה מ-Firestore   (צעד 03ג) ---------- */
+
+  /** מחכה עד שידוע **בוודאות** אם יש משתמש מחובר. cb(user|null).
+   *  ⚠️ בלי זה כל רענון עמוד היה נראה כמו "לא מחובר". */
+  function authReady(cb, timeoutMs) {
+    cb = cb || function () {};
+    ensure(function (err) {
+      if (err) return cb(null);
+      if (state.authKnown) return cb(state.user);
+      var done = false;
+      var t = setTimeout(function () {
+        if (done) return;
+        done = true;
+        cb(state.user);           // מה שידוע עד כה, ולא המתנה לנצח
+      }, timeoutMs || 4000);
+      authWaiters.push(function (u) {
+        if (done) return;
+        done = true; clearTimeout(t);
+        cb(u);
+      });
+    });
+  }
+
+  /** מוודא שמודול Firestore טעון. cb(err). */
+  function ensureDb(cb) {
+    cb = cb || function () {};
+    if (state.dbLoaded) return cb(null);
+    if (state.dbErr) return cb(state.dbErr);
+    dbWaiters.push(cb);
+    if (state.dbLoading) return;
+    state.dbLoading = true;
+
+    ensure(function (err) {
+      if (err) return settleDb(err);
+      var timer = setTimeout(function () {
+        timer = null;
+        settleDb(new Error("פסק זמן בטעינת Firestore"));
+      }, LOAD_TIMEOUT_MS);
+      injectScript(SDK_DB, function (e2) {
+        if (!timer) return;
+        clearTimeout(timer); timer = null;
+        if (e2) { log("Firestore לא נטען: " + e2.message); return settleDb(e2); }
+        try {
+          window.firebase.firestore();
+          log("Firestore מוכן");
+          settleDb(null);
+        } catch (e3) { log("אתחול Firestore נכשל: " + e3.message); settleDb(e3); }
+      });
+    });
+  }
+
+  function settleDb(err) {
+    state.dbLoading = false;
+    state.dbLoaded = !err;
+    state.dbErr = err || null;
+    var list = dbWaiters; dbWaiters = [];
+    list.forEach(function (fn) { try { fn(err); } catch (e) {} });
+  }
+
+  /* 🔴 **כל קריאה עוברת דרך שעון עצר.** רשת איטית או כלל אבטחה שתוקע
+     אינם רשאיים להשאיר מסך תלוי — אחרי הפסק נופלים חזרה ל-Apps Script. */
+  var READ_TIMEOUT_MS = 6000;
+
+  function withTimeout(cb, ms) {
+    var done = false;
+    var t = setTimeout(function () {
+      if (done) return;
+      done = true;
+      cb(new Error("פסק זמן בקריאה מ-Firestore"));
+    }, ms || READ_TIMEOUT_MS);
+    return function (err, data) {
+      if (done) return;
+      done = true; clearTimeout(t);
+      cb(err, data);
+    };
+  }
+
+  /** קורא אוסף שלם. cb(err, [{ id, ...data }]). */
+  function readCollection(name, cb) {
+    cb = withTimeout(cb || function () {});
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      try {
+        window.firebase.firestore().collection(name).get().then(function (snap) {
+          var out = [];
+          snap.forEach(function (d) {
+            var o = d.data() || {};
+            o.id = o.id || d.id;
+            out.push(o);
+          });
+          cb(null, out);
+        })["catch"](function (e) { state.lastError = e; cb(e); });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+  }
+
+  /** קורא מסמך בודד. cb(err, data|null). */
+  function readDoc(collection, id, cb) {
+    cb = withTimeout(cb || function () {});
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      try {
+        window.firebase.firestore().collection(collection).doc(id).get().then(function (d) {
+          cb(null, d.exists ? (d.data() || {}) : null);
+        })["catch"](function (e) { state.lastError = e; cb(e); });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+  }
+
   /* ---------- בדיקה עצמית ---------- */
 
   function selfTest() {
@@ -194,11 +320,16 @@ CBA.fb = (function () {
     config:   CONFIG,
     version:  SDK_VERSION,
     ensure:   ensure,
+    ensureDb: ensureDb,
+    authReady: authReady,
+    readCollection: readCollection,
+    readDoc:  readDoc,
     signIn:   signIn,
     signOut:  signOut,
     idToken:  idToken,
     uid:      function () { return state.user ? state.user.uid : null; },
     isReady:  function () { return state.loaded; },
+    isDbReady: function () { return state.dbLoaded; },
     state:    function () { return { loaded: state.loaded, user: state.user,
                                      initErr: state.initErr && state.initErr.message,
                                      lastError: state.lastError && (state.lastError.code || state.lastError.message) }; },
