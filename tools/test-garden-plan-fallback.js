@@ -82,7 +82,7 @@ ok('המדידה נרשמת ל-CBA.perf לפי מפתח התחום', /CBA\.perf\
    שאיש לא יכתוב שלד שני משלו במקום להשתמש בזה. 3 → 4 ב-16.9
    עם `gardenReports` (ההגדרה עצמה + שלושה תחומים). */
 ok('כל התחומים עוברים דרך אותו שלד, ואין שני',
-   (DS.match(/fsFirstRead\(/g) || []).length === 4, String((DS.match(/fsFirstRead\(/g) || []).length));
+   (DS.match(/fsFirstRead\(/g) || []).length === 6, String((DS.match(/fsFirstRead\(/g) || []).length));
 ok('והדגל מועבר אליו', /fsFirstRead\("gardenPlan", GARDEN_PLAN_FROM_FIRESTORE,/.test(DS));
 
 section('2. המסלול המהיר — Firestore');

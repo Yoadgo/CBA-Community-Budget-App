@@ -229,7 +229,9 @@ ok('budgetTx נמצא ברישום הגיבוי',
    sandbox.BK_COLLECTIONS.some(c => c.collection === 'budgetTx'));
 ok('והטאב שלו עובר את השער',
    sandbox.bkTabOk_((sandbox.BK_COLLECTIONS.find(c => c.collection === 'budgetTx') || {}).tab));
-ok('שישה אוספים מגובים', sandbox.BK_COLLECTIONS.length === 6,
+/* ⚠️ 6 → 9 ב-16.9: הגינון עבר ל-Firestore, ולכן שלושת האוספים שלו
+   נכנסו לגיבוי השעתי — הגיליון הוא הגיבוי שלהם. */
+ok('תשעה אוספים מגובים', sandbox.BK_COLLECTIONS.length === 9,
    String(sandbox.BK_COLLECTIONS.length));
 
 section('🔴 כלל האבטחה');

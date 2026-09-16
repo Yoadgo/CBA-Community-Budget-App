@@ -178,8 +178,8 @@ ok('⚠️ ושניהם נושאים את אותה גרסה כמו השאר',
   /* 🔴 וכמה מהם באמת דלוקים כברירת מחדל — הבדיקה הזאת קיימת כדי
      שהבדיקה שמעליה לא תהיה ריקה מתוכן אם כולם יהיו false.
      5 → 6 ב-16.9 עם `gardenReportsFromFirestore`. */
-  ok('⚠️ ושישה מהם דלוקים היום כברירת מחדל',
-     Object.keys(declared).filter(k => declared[k]).length === 6,
+  ok('⚠️ ושבעה מהם דלוקים היום כברירת מחדל',
+     Object.keys(declared).filter(k => declared[k]).length === 7,
      String(Object.keys(declared).filter(k => declared[k]).length));
 
   /* =============================================================== */

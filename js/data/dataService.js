@@ -1883,6 +1883,119 @@ CBA.data = (function () {
     });
   }
 
+
+  /* ==========================================================================
+   *  🔴🔴  מסך המשימות — קריאה ישירה מ-Firestore   (2026-09-16, ההיפוך)
+   * --------------------------------------------------------------------------
+   *  נמדד בייצור: **8,053ms**. אותו סיפור כמו בדיווחים — הזמן לא
+   *  הלך על נתונים אלא על סריקות גיליון ועל חישוב שנעשה מחדש בכל
+   *  קריאה של כל משתמש.
+   *
+   *  🔴 **`dupOf` מחושב כאן ולא בשרת, וזו החלטה ולא קיצור דרך.**
+   *  מועמד לאיחוד נגזר מהשוואה של משימה מול **כל** שאר המשימות
+   *  הפתוחות. בשרת זה היה חישוב שרץ מחדש בכל בקשה; כאן כל
+   *  המשימות ממילא כבר בזיכרון הדפדפן, ולכן זה חינם. חישוב
+   *  שהקלט שלו כבר מקומי אין סיבה לשלוח עליו בקשה.
+   *  ⚠️ **הכללים הועתקו אחד-לאחד מ-`gardenDupCandidate_`** ולא
+   *     נכתבו מחדש: רק דיווחי תושבים, אותה קטגוריה ואותו אזור,
+   *     בתוך 14 יום, ורק משימה ותיקה ממני. יש בדיקה שמצליבה.
+   *
+   *  ⚠️ **`isManager` נגזר מהמשתמש ולא מהשרת.** קודם השרת החזיר
+   *     אותו כשדה; כאן אין בקשה לשרת. זה בטוח **כי הוא אינו
+   *     הרשאה** — ההרשאה נאכפת בכללי האבטחה ובשרת, וזה רק מה
+   *     המסך מציג. ר' ההערה בראש gardenTasks.js.
+   * ======================================================================== */
+  var GARDEN_TASKS_FROM_FIRESTORE = true;
+  var GARDEN_DUP_DAYS = 14;
+  var GARDEN_KIND_REPORT = "דיווח תושב";
+
+  function gardenDateOf(v) {
+    if (!v) return 0;
+    var d = (v instanceof Date) ? v : new Date(v && v.toDate ? v.toDate() : v);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+
+  /* עותק מדויק של gardenDupCandidate_ בשרת. ר' ההערה מעל. */
+  function gardenDupCandidate(o, all) {
+    if (o.kind !== GARDEN_KIND_REPORT) return null;
+    var mine = gardenDateOf(o.createdAt);
+    if (!mine) return null;
+    var best = null;
+    for (var i = 0; i < all.length; i++) {
+      var c = all[i];
+      if (String(c.id) === String(o.id)) continue;
+      if (c.closure) continue;
+      if (c.kind !== GARDEN_KIND_REPORT) continue;
+      if (c.category !== o.category || c.area !== o.area) continue;
+      var his = gardenDateOf(c.createdAt);
+      if (!his) continue;
+      if (Math.abs(mine - his) > GARDEN_DUP_DAYS * 86400000) continue;
+      if (his > mine) continue;
+      if (!best || his < gardenDateOf(best.createdAt)) best = c;
+    }
+    return best ? { id: best.id, title: best.title, week: best.week,
+                    kind: best.kind, repId: best.repId } : null;
+  }
+
+  function gardenTasksRead(opts, cb) {
+    var scope = (opts && opts.scope) || "week";
+    var week = (opts && opts.week) || "";
+    fsFirstRead("gardenTasks", GARDEN_TASKS_FROM_FIRESTORE, function (done) {
+      CBA.fb.readCollection("gardenTasks", function (err, rows) {
+        if (err) return done(err);
+        /* ⚠️ אוסף ריק **כן** מפיל לאחור כאן — בניגוד לדיווחים.
+           לשיכון תמיד יש משימות גינון; ריק פירושו שמשהו השתבש
+           (הפצה, זריעה), ולא "אין עבודה השבוע". ההבדל מהדיווחים
+           מכוון: שם ריק הוא המקרה השכיח. */
+        if (!rows || !rows.length) return done(new Error("empty"));
+        var all = rows.filter(function (t) { return !t.closure; });
+        var out = rows.filter(function (t) {
+          if (scope === "all") return true;
+          if (scope === "unplanned") return !t.closure && !t.week;
+          if (scope === "pending") return t.flag === "ממתין לאישור";
+          return t.week === week;
+        });
+        if (scope === "unplanned" || scope === "all") {
+          out.forEach(function (t) {
+            if (t.closure || t.week) return;
+            t.dupOf = gardenDupCandidate(t, all);
+          });
+        }
+        out.sort(function (a, b) {
+          return (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0);
+        });
+        CBA.fb.readDoc("gardenMeta", "lists", function (e2, lists) {
+          var perm = (window.CBA && CBA.user) || {};
+          done(null, {
+            ok: true, rows: out, week: week, scope: scope,
+            isManager: !perm.isExternal,
+            areas: (lists && lists.areas) || [],
+            categories: (lists && lists.categories) || []
+          });
+        });
+      });
+    }, function (done) {
+      var q = { action: "gardenTasks" };
+      if (week) q.week = week;
+      if (scope) q.scope = scope;
+      CBA.sheets.get(q, done);
+    }, cb);
+  }
+
+  /* יומן משימה — אוסף הוספה-בלבד. שאילתת שוויון על שדה אחד,
+     בלי אינדקס מורכב; המיון בלקוח. */
+  function gardenTaskLogRead(id, cb) {
+    fsFirstRead("gardenLog", GARDEN_TASKS_FROM_FIRESTORE, function (done) {
+      CBA.fb.queryCollection("gardenLog", [["taskId", String(id)]], function (err, rows) {
+        if (err) return done(err);
+        (rows || []).sort(function (a, b) { return gardenDateOf(a.at) - gardenDateOf(b.at); });
+        done(null, { ok: true, rows: rows || [] });
+      });
+    }, function (done) {
+      CBA.sheets.get({ action: "gardenTaskLog", id: id }, done);
+    }, cb);
+  }
+
   function getServices(cb) {
     if (servicesCache) { if (cb) cb({ ok: true, services: servicesCache.services, sections: servicesCache.sections }); return; }
     servicesRead(cb);
@@ -2971,7 +3084,7 @@ CBA.data = (function () {
     /* יומן המשימה — קו הזמן המלא שלה (2026-09-08). הטאב נכתב מהיום הראשון
        ומעולם לא נקרא; זה מה שהופך "מי סגר את זה ומתי" לשאלה שאפשר לענות. */
     getGardenTaskLog: function (id, cb) {
-      CBA.sheets.get({ action: "gardenTaskLog", id: id }, cb);
+      gardenTaskLogRead(id, cb);
     },
     /* תוכנית העבודה (2026-09-08) — ההגדרות החוזרות, לא משימות. השרת חוסם
        אותה למשתמש חיצוני, ולכן הקריאה תיכשל אצל אחראי הגינון גם אם איכשהו
@@ -2997,12 +3110,7 @@ CBA.data = (function () {
     },
     /* שלב 4 — משימות הצוות. opts: { week, scope }. שתיהן אופציונליות: בלי week
        השרת מחזיר את השבוע הנוכחי, ו-scope='week' הוא ברירת המחדל. */
-    getGardenTasks: function (opts, cb) {
-      var q = { action: "gardenTasks" };
-      if (opts && opts.week) q.week = opts.week;
-      if (opts && opts.scope) q.scope = opts.scope;
-      CBA.sheets.get(q, cb);
-    },
+    getGardenTasks: function (opts, cb) { gardenTasksRead(opts, cb); },
     /* מחיקת משימה — מנהל בלבד, סיבה חובה. מוחקת גם את שורות הדיווח
        המקושרות ואת התמונות; היומן נשאר שלם. ר' gardenTaskDelete_ בשרת. */
     gardenTaskDelete: function (id, why, cb) {

@@ -6479,7 +6479,14 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
         *בנוסף* ל-`gardenReportsFromFirestore`, ולעולם לא לבדה.
         כתיבה ל-Firestore בזמן שהמסך נבנה מהגיליון = דיווח שנעלם
         ברענון — בדיוק החור שנתפס ב-15.9 בתנועות התקציב. */
-  'gardenWriteToFirestore'];
+  'gardenWriteToFirestore',
+  /* 🔴 **מסך הניהול** (2026-09-16) — משימות, רשימות ויומן נקראים
+     ישירות מ-Firestore. נמדד: 8,053ms.
+     ⚠️ הכתיבה ממשיכה לעבור דרך Apps Script (הכרעת יועד): עשר
+        פעולות הניהול מחזיקות לוגיקה עסקית שכלל אבטחה אינו יודע
+        לאכוף — "חובה לכתוב מה נעשה", "ביטול רק בתוך חלון
+        הערעור". הן כותבות לגיליון ומסנכרנות מיד. */
+  'gardenTasksFromFirestore'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {
@@ -10549,7 +10556,14 @@ var BK_COLLECTIONS = [
   { collection: 'services',   tab: BK_PREFIX + 'שירותים' },
   { collection: 'appConfig',  tab: BK_PREFIX + 'הגדרות אפליקציה' },
   { collection: 'budgetYears', tab: BK_PREFIX + 'תקציב לפי שנה' },
-  { collection: 'budgetTx',   tab: BK_PREFIX + 'תנועות לפי משפחה' }
+  { collection: 'budgetTx',   tab: BK_PREFIX + 'תנועות לפי משפחה' },
+  /* 🔴 ההיפוך (16.9) — מרגע שהגינון חי ב-Firestore, **הגיליון הוא
+     הגיבוי שלו**. שלושת האוספים נכתבים לטאבי גיבוי נפרדים, כיוון
+     אחד בלבד, פעם בשעה. זה מה שהופך את "הגיליון גיבוי" ממשפט
+     לנוהל שרץ. */
+  { collection: 'gardenReports', tab: BK_PREFIX + 'דיווחי גינון' },
+  { collection: 'gardenTasks',   tab: BK_PREFIX + 'משימות גינון' },
+  { collection: 'gardenLog',     tab: BK_PREFIX + 'יומן גינון' }
 ];
 var BK_HEADERS = ['id', 'עודכן', 'schema', 'json'];
 
@@ -13484,6 +13498,30 @@ function gardenWrite_(ss, action, body, fn) {
   return res;
 }
 
+/** כותב ל-Firestore את המשימות שברשימה. שקט, כמו אחותה לדיווחים. */
+function gardenTaskSyncSome_(ss, ids) {
+  try {
+    ids = (ids || []).map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+    if (!ids.length) return 0;
+    var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    if (!sh || sh.getLastRow() < 2) return 0;
+    var c = gardenCols_(sh), v = sh.getDataRange().getValues();
+    var want = {}; ids.forEach(function (i) { want[i] = 1; });
+    var refs = null, n = 0;
+    for (var r = 1; r < v.length; r++) {
+      var o = gardenTaskObj_(v[r], c);
+      if (!o.id || !want[o.id]) continue;
+      if (!refs) refs = gardenReportRefs_(ss);
+      var doc = gardenTaskDoc_(o, r);
+      if (refs.repOf[o.id]) doc.repId = refs.repOf[o.id];
+      if (refs.photoOf[o.id]) doc.photos = refs.photoOf[o.id];
+      fsSet_(fsDocPath_(FS_GARDEN_TASKS, o.id), doc);
+      n++;
+    }
+    return n;
+  } catch (e) { return 0; }
+}
+
 /** אחרי פעולת כתיבה בגינון: לסנכרן בדיוק את מה שהיא נגעה בו.
  *  ⚠️ **לעולם אינה זורקת** — היא רצה אחרי שהכתיבה לגיליון הצליחה. */
 function gardenAfterWrite_(ss, action, body, res) {
@@ -13513,6 +13551,15 @@ function gardenAfterWrite_(ss, action, body, res) {
     reportIds = reportIds.filter(function (x) {
       if (seen[x]) return false; seen[x] = 1; return true;
     });
+    var seenT = {};
+    taskIds = taskIds.filter(function (x) {
+      if (seenT[x]) return false; seenT[x] = 1; return true;
+    });
+    /* 🔴 **גם המשימות, מרגע שהמסך קורא אותן מ-Firestore** (16.9).
+       עד כאן סונכרנו רק הדיווחים, כי רק הם נקראו משם. ברגע שמסך
+       הניהול עבר, משימה שהמנהל שינה ולא סונכרנה היא משימה שהוא
+       רואה במצב הישן — כלומר הוא לוחץ "בוצע" ושום דבר לא זז. */
+    if (taskIds.length) gardenTaskSyncSome_(ss, taskIds);
     if (reportIds.length) gardenReportSyncSome_(ss, reportIds);
   } catch (e) { /* שגר ושכח — ר' הבלוק מעל */ }
 }
@@ -13656,6 +13703,37 @@ function gardenReportsSyncAll_(ss) {
   return out;
 }
 
+/* ============================================================================
+ *  מספר הפנייה והתמונות של כל משימה   (נקודת גזירה אחת, 2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  לתקלה של תושב יש **שני** מספרים רצים — אחד בטאב הדיווחים ואחד
+ *  בטאב המשימות. התושב מקבל את הראשון ("הדיווח נשלח · מספר 7"),
+ *  והצוות עבד לפי השני. מספר הפנייה הוא מה שמגשר, והוא היחיד
+ *  שמוצג. ר' הצוות האדום, 9.9.
+ *
+ *  ⚠️ **הראשון מנצח:** אחרי איחוד כמה דיווחים מצביעים לאותה משימה,
+ *     והמספר שמוצג הוא של הפנייה שפתחה אותה.
+ *  ⚠️ התמונות נאספות מ**כל** הדיווחים שמצביעים למשימה.
+ * ========================================================================== */
+function gardenReportRefs_(ss) {
+  var out = { repOf: {}, photoOf: {} };
+  var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+  if (!rsh || rsh.getLastRow() < 2) return out;
+  var rc = gardenCols_(rsh), v = rsh.getDataRange().getValues();
+  for (var r = 1; r < v.length; r++) {
+    var tk = String(v[r][rc['מזהה משימה']] || '').trim();
+    var rk = String(v[r][rc['מזהה']] || '').trim();
+    if (!tk) continue;
+    if (rk && !out.repOf[tk]) out.repOf[tk] = rk;
+    if (rc['תמונות'] !== undefined) {
+      var pid = String(v[r][rc['תמונות']] || '').split(',')
+        .map(function (x) { return x.trim(); }).filter(Boolean);
+      if (pid.length) out.photoOf[tk] = (out.photoOf[tk] || []).concat(pid);
+    }
+  }
+  return out;
+}
+
 /** סנכרון מלא של משימות השנה הנוכחית. מחזיר סיכום ולעולם אינו זורק. */
 function gardenTasksSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
@@ -13668,12 +13746,19 @@ function gardenTasksSyncAll_(ss) {
       var v = sh.getDataRange().getValues();
       var year = gardenCurrentYear_(ss);
       var yCol = c['שנת תקציב'];
+      var refs = gardenReportRefs_(ss);
       for (var i = 1; i < v.length; i++) {
         if (year && yCol !== undefined &&
             String(v[i][yCol] || '').trim() !== year) continue;
         var o = gardenTaskObj_(v[i], c);
         if (!o.id) { out.skipped++; continue; }
-        items.push({ id: o.id, doc: gardenTaskDoc_(o, i) });
+        var doc = gardenTaskDoc_(o, i);
+        /* 🔴 מספר הפנייה והתמונות — ר' gardenReportRefs_. בלעדיהם
+           המסך במסלול Firestore מציג "תושב" במקום מספר פנייה
+           ובלי אריח תמונות: רגרסיה שנראית כמו עיצוב ולא כמו באג. */
+        if (refs.repOf[o.id]) doc.repId = refs.repOf[o.id];
+        if (refs.photoOf[o.id]) doc.photos = refs.photoOf[o.id];
+        items.push({ id: o.id, doc: doc });
       }
     }
     fsWriteAll_(FS_GARDEN_TASKS, items, out, live);

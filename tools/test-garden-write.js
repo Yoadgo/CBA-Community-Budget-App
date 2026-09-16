@@ -110,6 +110,44 @@ ok('mailPending מותר ובוליאני',
 ok('🔴 והשלמת תמונות נוגעת ב-photos בלבד',
    /hasOnly\(\['photos', 'photosIncomplete', 'updatedAt'\]\)/.test(RULES));
 
+section('9. 🔴 מסך הניהול — קריאה מ-Firestore, כתיבה דרך Apps Script');
+ok('gardenTasksRead קיימת', /function gardenTasksRead\(opts, cb\)/.test(DS));
+ok('הקריאה עוברת דרך אותו שלד', /fsFirstRead\("gardenTasks", GARDEN_TASKS_FROM_FIRESTORE/.test(DS));
+ok('היומן נקרא בשאילתת שוויון על taskId',
+   /queryCollection\("gardenLog", \[\["taskId", String\(id\)\]\]/.test(DS));
+/* ⚠️ ריק **כן** מפיל לאחור כאן — הפוך מהדיווחים, ובמכוון:
+   לשיכון תמיד יש משימות, ולתושב לרוב אין דיווחים. */
+ok('🔴 אוסף משימות ריק מפיל לאחור',
+   /function gardenTasksRead[\s\S]{0,1200}rows\.length\) return done\(new Error\("empty"\)\)/.test(DS));
+ok('⚠️ ובדיווחים ההפך, וזה מתועד', /אוסף ריק הוא תשובה תקינה כאן/.test(DS));
+/* 🔴 dupOf מחושב בלקוח — הקלט כבר בזיכרון. הכללים חייבים להיות זהים. */
+const dupC = (DS.match(/function gardenDupCandidate\(o, all\)[\s\S]*?\n  \}/) || [''])[0];
+const dupS = (GS.match(/function gardenDupCandidate_\(o, all\)[\s\S]*?\n\}/) || [''])[0];
+[['רק דיווחי תושבים', /kind !== GARDEN_KIND_REPORT/],
+ ['אותה קטגוריה ואותו אזור', /category !== o\.category \|\| c\.area !== o\.area/],
+ ['חלון 14 יום', /GARDEN_DUP_DAYS \* 86400000/],
+ ['רק ותיקה ממני', /if \(his > mine\) continue;/],
+ ['ומדלג על סגורות', /if \(c\.closure\) continue;/]].forEach(function (t) {
+  ok('🔴 ' + t[0] + ' — זהה בשרת ובלקוח',
+     t[1].test(dupC) && t[1].test(dupS));
+});
+ok('⚠️ ו-GARDEN_DUP_DAYS זהה בשני הצדדים',
+   /var GARDEN_DUP_DAYS = 14;/.test(DS) && /var GARDEN_DUP_DAYS = 14;/.test(GS));
+/* 🔴 משימה שהמנהל שינה חייבת להגיע ל-Firestore מיד. */
+ok('🔴 כתיבה מסנכרנת גם את המשימות, לא רק את הדיווחים',
+   /if \(taskIds\.length\) gardenTaskSyncSome_\(ss, taskIds\);/.test(GS));
+ok('ומספר הפנייה והתמונות נכנסים למסמך',
+   /function gardenTaskSyncSome_[\s\S]{0,800}refs\.repOf\[o\.id\]/.test(GS));
+
+section('10. 🔴 הגיליון הוא הגיבוי');
+['gardenReports', 'gardenTasks', 'gardenLog'].forEach(function (c) {
+  ok('🔴 ' + c + ' בגיבוי השעתי',
+     new RegExp("collection: '" + c + "',\\s*tab: BK_PREFIX").test(GS));
+});
+/* ⚠️ כיוון אחד בלבד — טאב גיבוי נפרד, לא הטאב החי. */
+ok('⚠️ ולטאב גיבוי נפרד ולא לטאב החי',
+   !/collection: 'gardenReports',\s*tab: GARDEN_REPORTS_SHEET/.test(GS));
+
 console.log('\n' + '='.repeat(52));
 console.log('עברו: ' + pass + ' | נכשלו: ' + fail);
 process.exit(fail ? 1 : 0);

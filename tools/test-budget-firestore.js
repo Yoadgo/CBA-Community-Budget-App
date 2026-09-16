@@ -190,7 +190,9 @@ ok('budgetYears ברישום הגיבוי',
    sandbox.BK_COLLECTIONS.some(c => c.collection === 'budgetYears'));
 ok('והטאב שלו חוקי',
    sandbox.bkTabOk_((sandbox.BK_COLLECTIONS.find(c => c.collection === 'budgetYears') || {}).tab));
-ok('שישה אוספים מגובים', sandbox.BK_COLLECTIONS.length === 6, String(sandbox.BK_COLLECTIONS.length));
+/* ⚠️ 6 → 9 ב-16.9: הגינון עבר ל-Firestore, ולכן שלושת האוספים שלו
+   נכנסו לגיבוי השעתי — הגיליון הוא הגיבוי שלהם. */
+ok('תשעה אוספים מגובים', sandbox.BK_COLLECTIONS.length === 9, String(sandbox.BK_COLLECTIONS.length));
 
 console.log('\n' + (fail ? '✗' : '✓') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

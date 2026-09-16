@@ -59,6 +59,7 @@ CBA.screens = CBA.screens || {};
     /* ⚠️ ברירת המחדל false: הכתיבה נבדקת בקוד עצמו (לא דרך
        fsFirstRead), ולכן false כאן **כן** עובד — וזה מה שמאפשר
        לדחוף את הקוד לייצור בלי לשנות התנהגות. */
+    gardenTasksFromFirestore: ["מסך ניהול הגינון", "משימות, רשימות ויומן נקראים ישירות מ-Firestore במקום מ-Apps Script (נמדד: 8,053ms). הכתיבה ממשיכה דרך Apps Script.", true],
     gardenWriteToFirestore: ["כתיבת דיווח גינון", "הדפדפן כותב דיווח ישירות ל-Firestore; Apps Script נשאר לתמונות ולמיילים בלבד. נבדק יחד עם \"הדיווחים שלי\" — לעולם לא לבדו.", false],
     gardenReportsFromFirestore: ["הדיווחים שלי", "דיווחי הגינון של המשפחה נקראים ישירות מ-Firestore לפי מזהה משפחה, במקום מ-Apps Script (נמדד: 9,498ms ל-367 בתים).", true]
   };
