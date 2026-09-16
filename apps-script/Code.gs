@@ -1318,6 +1318,25 @@ function sendPush_(familyId, title, body, data) {
   } catch (e) { /* Push הוא ערוץ משני */ }
 }
 
+/** שולח Push לכל המנהלים שמחזיקים permKey (או מנהל-על) — נוסף 16.9.26.
+ *  ⚠️ לא לוגיקה חדשה: משתמש באותה adminEmailsByPerm_ שכבר קובעת מי
+ *  מקבל את המייל המקביל, וממפה כל מייל ל-familyId (permissionsFor_)
+ *  כדי לעבוד עם sendPush_ הקיים, בדיוק כמו hook-י המועדון. ייחוד לפי
+ *  משפחה — מנהל-על לא מקבל את אותה התראה פעמיים אם הוא גם בעל תחום. */
+function sendPushToAdmins_(ss, permKey, title, body, data) {
+  try {
+    var emails = adminEmailsByPerm_(ss, permKey);
+    var seenFam = {};
+    emails.forEach(function (email) {
+      var perm = permissionsFor_(email);
+      var fam = perm && perm.familyId;
+      if (!fam || seenFam[fam]) return;
+      seenFam[fam] = true;
+      sendPush_(fam, title, body, data);
+    });
+  } catch (e) { /* Push הוא ערוץ משני */ }
+}
+
 function handleFirebaseLink_(p) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var gate = authorize_(ss, p, null);
@@ -5465,7 +5484,12 @@ function notifyAdmins_(ss, permKey, key, vars) {
   var plain = renderTemplate_(t.body, vars);
   var linkUrl = (vars && vars['קישור']) || CBA_APP_URL;
   var html = buildEmailHtml_(plain, linkUrl, 'לטיפול באפליקציה', 'neutral');
-  sendMail_(emails, renderTemplate_(t.subject, vars), plain + '\n\n' + CBA_APP_URL, html);
+  var subject = renderTemplate_(t.subject, vars);
+  sendMail_(emails, subject, plain + '\n\n' + CBA_APP_URL, html);
+  /* 16.9.26 — Push למנהלים, כרוך לגמרי בהגדרת המייל הזו: אם התבנית
+     כבויה למעלה כבר יצאנו לפני שהגענו לכאן. בכוונה בלי תבנית טקסט
+     נפרדת — כותרת/גוף נגזרים מאותו subject/body שכבר קיים בגיליון. */
+  sendPushToAdmins_(ss, permKey, subject, plain.length > 100 ? plain.slice(0, 100) + '…' : plain, { type: 'admin', key: key });
 }
 
 /* ============================================================================
