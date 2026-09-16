@@ -1186,7 +1186,11 @@
     inbox: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h4l1.6 2.5h4.8L16 13h4"/><path d="M5.6 5.6h12.8L21 13v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/></svg>',
     // מצב המערכת (2026-09-16) — מד, לא גלגל שיניים: "הגדרות" כבר תפוס,
     // וזה מסך שמסתכלים בו כדי לראות מדידה, לא כדי לכוון העדפות.
-    gauge: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 14l4-3.5"/><circle cx="12" cy="14" r="1.2"/></svg>'
+    gauge: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 14l4-3.5"/><circle cx="12" cy="14" r="1.2"/></svg>',
+    // בדיקת עדכון גרסה (2026-09-16) — שני חצים במעגל, מוסכמת "רענון/עדכון"
+    // חוצת-אפליקציות. אריח לכולם, לא רק למנהל-על: עיכוב עדכון PWA פוגע
+    // בכל תושב, לא רק בניהול.
+    refresh: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"/><path d="M3 21v-5h5"/></svg>'
   };
 
   function initials(name) {
@@ -1363,6 +1367,11 @@
     });
     const outBtn = panel.querySelector("[data-panel-logout]");
     if (outBtn) outBtn.addEventListener("click", logout);
+    const updBtn = panel.querySelector("[data-panel-update]");
+    if (updBtn) updBtn.addEventListener("click", function () {
+      closeUserPanel(panel, btn);
+      checkForAppUpdate();
+    });
 
     /* הכפתור הצף של הדיווחים. renderControls נקרא בכניסה, ביציאה ובכל
        החלפת אזור — ולכן זה המקום היחיד שצריך לדעת על קיומו. */
@@ -1474,6 +1483,10 @@
          כבר עכשיו ולא "אחר כך": התוכנית היא להסיר את הכפתור הצף אחרי
          שהאפליקציה נקלטת, ואז האריח הזה הוא מה שנשאר. */
       tiles.push(['data-panel-report', ICON.report, 'דיווח', 'דיווח על האפליקציה']);
+      /* בדיקת עדכון גרסה (2026-09-16, יועד) — לתושבים ב-PWA לפעמים לוקח
+         שעות עד שהדפדפן בעצמו שם לב שיש גרסה חדשה. אריח לכולם, לא רק
+         מנהל-על: זו בעיה שפוגעת בכל מי שמתקין את האפליקציה למסך הבית. */
+      tiles.push(['data-panel-update', ICON.refresh, 'עדכון גרסה', 'בדיקת עדכון גרסה']);
     }
     if (currentArea === "admin" && canScreen("emailSettings")) {
       tiles.push(['data-panel-goto="emailSettings"', ICON.mail, 'מיילים', 'ניהול מיילים']);
@@ -1837,6 +1850,55 @@
     currentUser = null; loginError = null;
     renderControls();
     showLoginGate();
+  }
+
+  /* בדיקת עדכון גרסה יזומה (2026-09-16, יועד: "אני מרגיש שבאפליקציה PWA
+     זה תמיד עובד בדיליי גדול"). אומת חי: ל-service worker אצל יועד עצמו
+     היה פער של כשלושה שבועות בין ה-VERSION בקובץ לבין מה שהדפדפן שלו
+     בפועל הריץ — אז אי אפשר לסמוך על שהדפדפן ישים לב לבד. הכפתור הזה
+     לא "מנחש" שיש עדכון: הוא תמיד מבקש מה-service worker לבדוק מול
+     השרת עכשיו (reg.update), מפעיל אותו אם נמצא (SKIP_WAITING — התהליך
+     שכבר קיים ב-service-worker.js), ומרענן. גם מנקה את מטמון הנתונים
+     המקומי (cba_data_v2) כדי שהרענון יביא גם תוכן טרי, לא רק קוד טרי. */
+  function checkForAppUpdate() {
+    if (!("serviceWorker" in navigator)) {
+      CBA.ui.toast("בודק עדכון…");
+      if (CBA.sheets.clearCache) CBA.sheets.clearCache();
+      location.reload();
+      return;
+    }
+    CBA.ui.toast("בודק עדכון גרסה…");
+    navigator.serviceWorker.getRegistration().then(function (reg) {
+      if (!reg) {
+        if (CBA.sheets.clearCache) CBA.sheets.clearCache();
+        location.reload();
+        return;
+      }
+      var reloaded = false;
+      function doReload() {
+        if (reloaded) return;
+        reloaded = true;
+        if (CBA.sheets.clearCache) CBA.sheets.clearCache();
+        CBA.ui.toast("מעדכן…");
+        location.reload();
+      }
+      navigator.serviceWorker.addEventListener("controllerchange", doReload);
+      reg.update().then(function () {
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        } else if (!reg.installing) {
+          // אין גרסה חדשה ממתינה — כבר מעודכן. עדיין מרעננים כדי לוודא
+          // שגם הנתונים (לא רק הקוד) טריים.
+          CBA.ui.toast("האפליקציה כבר מעודכנת");
+          setTimeout(doReload, 600);
+        }
+      }).catch(function () { setTimeout(doReload, 300); });
+      // רשת איטית/שרת ישן שלא עונה — לא משאירים את המשתמש תקוע על "בודק".
+      setTimeout(doReload, 5000);
+    }).catch(function () {
+      if (CBA.sheets.clearCache) CBA.sheets.clearCache();
+      location.reload();
+    });
   }
 
   /* --- מתג השנה --- */

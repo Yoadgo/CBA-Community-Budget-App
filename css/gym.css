@@ -42,7 +42,8 @@
 .gym-check__row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   padding: 11px 2px;
   border-bottom: 1px solid var(--border);
   font-size: 14px;
@@ -216,6 +217,9 @@
   .gym-wiz__head, .gym-wiz__foot { padding-inline: 16px; }
   .gym-row { flex-direction: column; gap: 8px; }
   .gym-row__side { margin-inline-start: 0; }
+  /* מצב המודול → הגדרות מכון (2026-09-16): ברוחב צר, ערך+כפתור עוברים לשורה
+     משלהם, מיושרים אל התחלה כמו התווית — אחרת מהאוטו-מירגון היה דוחף אותם לקצה עם רווח ריק משמאל. */
+  .gym-check__val { margin-inline-start: 0; }
 }
 
 /* ============================================================================

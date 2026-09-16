@@ -31,12 +31,15 @@ CBA.screens = CBA.screens || {};
            '</div>';
   }
 
-  function checkRow(isOn, label, value) {
+  /* "מצב המודול" (2026-09-16) — יועד: היה רשימת-קריאה עם מלא פריטים שלא עוזרים בשוטף (כמה טאבים נוצרו, כמה מקטעי תקנון…). הוחלף בכרטיס פעולה: רק הגדרות שמנהל/ת המכון באמת עורך/ת שוטף — כל שורה נותנת ללחוץ "עדכון" שפותח מגירה עם שדה אחד (openFormDrawer, אותו דפוס שכבר משמש להארכה/לרישום תשלום). קוד הכניסה לעולם אף פעם לא מוצג כאן — השרת מסתיר אותו מהמסך הזה בכוונה (ראו handleGymList_), אז השדה נשאר ריק. */
+  function settingRowHTML(o) {
     return '<div class="gym-check__row">' +
-             '<span class="gym-check__mark gym-check__mark--' + (isOn ? 'on' : 'off') + '">' +
-               (isOn ? '✓' : '!') + '</span>' +
-             '<span class="gym-check__label">' + CBA.esc(label) + '</span>' +
-             '<span class="gym-check__val">' + CBA.esc(value) + '</span>' +
+             '<span class="gym-check__mark gym-check__mark--' + (o.hasValue ? 'on' : 'off') + '">' +
+               (o.hasValue ? '✓' : '!') + '</span>' +
+             '<span class="gym-check__label">' + CBA.esc(o.label) + '</span>' +
+             '<span class="gym-check__val">' + CBA.esc(o.valueText) + '</span>' +
+             '<button type="button" class="btn-ghost" data-ga-setting="' + CBA.esc(o.key) +
+               '" data-ga-setting-value="' + CBA.esc(o.rawValue || "") + '">עדכון</button>' +
            '</div>';
   }
 
@@ -335,6 +338,55 @@ CBA.screens = CBA.screens || {};
       }
     });
     return ui;
+  }
+
+  /* ---------- עדכון הגדרה מ"מצב המודול" (2026-09-16) ----------
+     שדה אחד, בלי צידוד, בדיוק openFormDrawer. עבור "קוד כניסה"
+     השדה נשאר ריק בכוונה (הערך הנוכחי לא מגיע למסך הזה מלכתחילה,
+     ראו handleGymList_) — הזנה מחליפה את הקיים, לא מעדכנת אותו. עבור "קישור פייבוקס"
+     אין בעיה כזו, אז השדה מוצג מלא לעריכה. */
+  var GA_SETTING_FIELD = {
+    "קוד כניסה": { title: "עדכון קוד כניסה",
+      hint: "הקוד הנוכחי לא מוצג כאן מטעמי אבטחה — הוא מוצג רק למנוי פעיל באפליקציה. מילוי כאן מחליף אותו מיד.",
+      label: "קוד כניסה חדש", placeholder: "למשל 0606", prefill: false },
+    "קישור פייבוקס": { title: "עדכון קישור פייבוקס",
+      hint: "הקישור שאליו נשלח תושב שצריך לשלם את דמי המנוי.",
+      label: "קישור לתשלום", placeholder: "https://payboxapp.com/...", prefill: true }
+  };
+
+  function openSettingEdit(key, currentValue, reload) {
+    var conf = GA_SETTING_FIELD[key];
+    if (!conf) return;
+    var ui = openFormDrawer({
+      title: conf.title,
+      subtitle: conf.hint,
+      okText: "שמירה",
+      fields: [
+        { key: "value", label: conf.label, type: "text",
+          value: conf.prefill ? (currentValue || "") : "", placeholder: conf.placeholder }
+      ],
+      onSave: function (v, dlg) {
+        var value = String(v.value || "").trim();
+        if (!value) { dlg.error("צריך למלא ערך."); return; }
+        dlg.busy("שומר…");
+        CBA.data.updateGymSetting({ key: key, value: value }, function (res) {
+          dlg.done();
+          if (!res || !res.ok) { dlg.error((res && res.error) || "השמירה נכשלה."); return; }
+          dlg.close();
+          CBA.ui.toast("עודכן");
+          reload();
+        });
+      }
+    });
+    return ui;
+  }
+
+  function bindSettingActions(root, reload) {
+    root.querySelectorAll("[data-ga-setting]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        openSettingEdit(btn.dataset.gaSetting, btn.dataset.gaSettingValue || "", reload);
+      });
+    });
   }
 
   /* ---------- צפייה בהצהרת הבריאות ----------
@@ -728,7 +780,7 @@ CBA.screens = CBA.screens || {};
           '<div id="ga-members">' + gaLoadingHTML() + '</div>' +
         '</div>' +
         '<div class="card club-card">' +
-          '<div class="club-sec__title">מצב המודול</div>' +
+          '<div class="club-sec__title">הגדרות מכון</div>' +
           '<div id="ga-status" class="gym-check">' + gaLoadingHTML() + '</div>' +
         '</div>';
 
@@ -800,19 +852,14 @@ CBA.screens = CBA.screens || {};
               'תושבים יכולים להירשם לבד במסך "מתקנים ← מכון כושר", ואפשר גם להקים מנוי ידנית מהכפתור למעלה.</div>';
           bindMemberActions(membersEl, load);
 
-          var plan = plans[0];
-          var planTxt = plan
-            ? plan.name + " · " + plan.months + " חודשים · " + plan.total + " ₪ (" + plan.monthlyPrice + " ₪ לחודש)"
-            : "לא הוגדר מסלול";
-          var payboxSet = !!String(settings["קישור פייבוקס"] || "").trim();
+          var payboxValue = String(settings["קישור פייבוקס"] || "").trim();
 
           statusEl.innerHTML =
-            checkRow(true, "טאבי המכון נוצרו בגיליון", "3 טאבים") +
-            checkRow(!!plan, "מסלול מנוי", planTxt) +
-            checkRow(questions.length > 0, "שאלון בריאות", questions.length + " שאלות") +
-            checkRow(rules.length > 0, "מקטעי תקנון", rules.length + " מקטעים") +
-            checkRow(!!res.hasEntryCode, "קוד כניסה למכון", res.hasEntryCode ? "מוגדר בגיליון" : "לא הוגדר") +
-            checkRow(payboxSet, "קישור פייבוקס", payboxSet ? "מוגדר" : "עדיין לא הוגדר — יידרש בשלב 3");
+            settingRowHTML({ key: "קוד כניסה", label: "קוד כניסה למכון",
+                              hasValue: !!res.hasEntryCode, valueText: res.hasEntryCode ? "מוגדר" : "לא הוגדר" }) +
+            settingRowHTML({ key: "קישור פייבוקס", label: "קישור לתשלום בפייבוקס",
+                              hasValue: !!payboxValue, valueText: payboxValue || "לא הוגדר", rawValue: payboxValue });
+          bindSettingActions(statusEl, load);
 
           if (gaWinScrollY) window.scrollTo(0, gaWinScrollY);
           gaWinScrollY = 0;

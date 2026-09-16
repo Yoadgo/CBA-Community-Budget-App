@@ -1538,6 +1538,12 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.postRead("updateGymMembership", data || {}, cb);
   }
+  /* מצב המודול → עדכון הגדרה בודדת (2026-09-16), למשל {key:"קוד כניסה", value:"0606"}.
+     רשימת המפתחות המותרים נאכפת בשרת (GYM_EDITABLE_SETTING_KEYS), לא כאן. */
+  function updateGymSetting(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("updateGymSetting", data || {}, cb);
+  }
   function approveClubReservation(id, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "approveClubReservation", id: id }, cb);
@@ -2624,6 +2630,7 @@ CBA.data = (function () {
     extendGymMembership: extendGymMembership,
     renewGymMembership: renewGymMembership,
     updateGymMembership: updateGymMembership,
+    updateGymSetting: updateGymSetting,
     approveClubReservation: approveClubReservation,
     /* אישור מרובה (2026-08-28) — מזהים מופרדים בפסיק בקריאה אחת, במקום N
        קריאות רשת. השרת נועל פעם אחת ומדווח בנפרד על כל שריון שנכשל. */

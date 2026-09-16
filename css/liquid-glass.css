@@ -274,7 +274,9 @@ input.lg, textarea.lg, select.lg {
 .up-mbtn { width: 30px; height: 30px; color: var(--text-soft); padding: 0; }
 .up-mbtn svg { width: 14px; height: 14px; display: block; }
 .up-mbtn:hover { color: var(--text); }
-.up-mbtn--quit:hover { color: var(--danger); }
+/* כפתור "יציאה" בבורדו קבוע, לא רק בהובר (יועד, 16.9.2026) — כדי שיהיה מובחן חזותית משאר כפתורי המיני (סיור, הגדרות) בלי לגעת בטון האדום הכללי של --danger, שכבר תפוס לחריגות/שגיאות. */
+.up-mbtn--quit { color: #9F1239; }
+.up-mbtn--quit:hover { color: #7F1D1D; background: rgba(159,18,57,.10); }
 
 /* פרטי האבחון — מוסתרים כשהכול תקין, נפתחים מעצמם כשלא */
 .up-conn { padding: 6px 8px 2px; }

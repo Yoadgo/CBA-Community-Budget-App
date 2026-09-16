@@ -157,6 +157,10 @@ var ACTION_PERMS = {
   recordGymPayment: PERM_GYM,
   extendGymMembership: PERM_GYM,
   updateGymMembership: PERM_GYM,
+  // מצב המודול (2026-09-16) — עדכון ישיר של הגדרה בודדת (קוד כניסה /
+  // קישור פייבוקס) ממסך הניהול, בלי לפתוח את הגיליון. רשימת ההיתר
+  // עצמה יושבת ב-GYM_EDITABLE_SETTING_KEYS, לא כאן.
+  updateGymSetting: PERM_GYM,
   /* גינון (2026-09-07, שלב א') — כל פעולות הניהול. הפעולות של התושב עצמו
    * (submitGardenReport, myGardenReports, gardenFeedback) **אינן** ברשימה
    * בכוונה: הן פתוחות לכל תושב מחובר ופעיל, בדיוק כמו הגשת קבלה ושריון
@@ -1373,6 +1377,7 @@ function doPostDispatch_(ss, body) {
       case 'extendGymMembership':   return json_(extendGymMembership_(ss, body));
       case 'renewGymMembership':    return json_(renewGymMembership_(ss, body));
       case 'updateGymMembership':   return json_(updateGymMembership_(ss, body));
+      case 'updateGymSetting':       return json_(updateGymSetting_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
 }
@@ -4847,7 +4852,7 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['RULE_WEEKLY_DAY', '', '0', 'יום השבוע לסיכום המנהל השבועי: 0=ראשון, 1=שני ... 6=שבת', PERM_SUPER, 'כן'],
   ['RULE_MONTHLY_DAY', '', '17', 'יום בחודש לסיכום בקשות ההחזר הפתוחות (לפני סגירת החלון ב-19)', PERM_SUPER, 'כן'],
   ['RULE_CLUB_REMINDER_DAYS_BEFORE', '', '2', 'כמה ימים לפני מועד השריון נשלחת תזכורת חוקים+תשלום לתושב', PERM_SUPER, 'כן'],
-  ['RULE_GYM_RENEW_DAYS_BEFORE', '', '14', 'כמה ימים לפני שמנוי המכון פג נשלחת לתושב תזכורת חידוש', PERM_SUPER, 'כן'],
+  ['RULE_GYM_RENEW_DAYS_BEFORE', '', '30', 'כמה ימים לפני שמנוי המכון פג נשלחת לתושב תזכורת חידוש', PERM_SUPER, 'כן'],
   ['RULE_GYM_PAYMENT_NUDGE_DAYS', '', '5', 'אחרי כמה ימים בסטטוס "ממתין לתשלום" נשלחת לתושב תזכורת עדינה', PERM_SUPER, 'כן'],
   ['RULE_GYM_DECL_WARN_DAYS', '', '30', 'כמה ימים לפני שהצהרת הבריאות פגה (שנתיים) נשלחת התרעה לתושב', PERM_SUPER, 'כן'],
 
@@ -5643,7 +5648,7 @@ function gymDailyJob_(ss) {
   if (!sh || sh.getLastRow() < 2) return;
 
   var settings = getEmailSettings_(ss);
-  var renewDays = emailRule_(settings, 'RULE_GYM_RENEW_DAYS_BEFORE', 14);
+  var renewDays = emailRule_(settings, 'RULE_GYM_RENEW_DAYS_BEFORE', 30);
   var nudgeDays = emailRule_(settings, 'RULE_GYM_PAYMENT_NUDGE_DAYS', 5);
   var declWarn  = emailRule_(settings, 'RULE_GYM_DECL_WARN_DAYS', 30);
   var staleDays = emailRule_(settings, 'RULE_STALE_DAYS', 3);
@@ -7604,7 +7609,7 @@ function handleGymMy_(p) {
       plans: cfg.plans.filter(function (pl) { return pl.active; }),
       declarationMonths: declMonths,
       declarationValidUntil: declValidUntil,
-      renewDaysBefore: Number(cfg.settings['ימים לתזכורת חידוש']) || 14,
+      renewDaysBefore: Number(cfg.settings['ימים לתזכורת חידוש']) || 30,
       entryCode: entryCode,
       hasEntryCode: !!String(cfg.settings['קוד כניסה'] || '').trim(),
       payboxUrl: String(cfg.settings['קישור פייבוקס'] || '').trim()
@@ -8467,6 +8472,55 @@ function updateGymMembership_(ss, body) {
     }
 
     return { ok: true, id: id, status: newStatus, changes: changes, sync: sync };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================================
+ *  מצב המודול → עדכון הגדרה בודדת (2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  יועד: "מצב המודול" היה רשימת-קריאה בלבד (כמה טאבים נוצרו, כמה שאלות...) —
+ *  מיותר ברוב הימים. הוחלף בכרטיס פעולה: רק מה שמנהל/ת המכון באמת עורך/ת
+ *  שוטף — קוד כניסה וקישור פייבוקס — עם עריכה ישירה מהמסך, בלי לפתוח גיליון.
+ *
+ *  GYM_EDITABLE_SETTING_KEYS היא רשימת היתר **סגורה בכוונה**: הפעולה כותבת
+ *  רק לשורת "הגדרה" עם אחד מהמזהים האלה בטאב "הגדרות מכון" — לא לכל שורה.
+ *  זה מונע מהפעולה להפוך בטעות לדרך לגעת בשורות "מסלול"/"שאלה"/"תקנון".
+ *
+ *  אם השורה עוד לא קיימת בגיליון (מסלול שמעולם לא נגעו בו) — נוצרת עכשיו,
+ *  בדיוק כמו gymRowWriter_: מחשבים את השורה בעצמנו ולא סומכים על
+ *  appendRow (ר' המלכודת המתועדת ב-gymRepairHeaders_). */
+var GYM_EDITABLE_SETTING_KEYS = ['קוד כניסה', 'קישור פייבוקס'];
+
+function updateGymSetting_(ss, body) {
+  var key = String(body.key || '').trim();
+  if (GYM_EDITABLE_SETTING_KEYS.indexOf(key) === -1) {
+    return { ok: false, error: 'הגדרה לא מוכרת: ' + key };
+  }
+  var value = String(body.value == null ? '' : body.value).trim();
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var cfg = ss.getSheetByName(GYM_SETTINGS_SHEET);
+    var rows = cfg.getDataRange().getValues();
+    var rowIndex = -1;
+    for (var r = 1; r < rows.length; r++) {
+      if (String(rows[r][0]).trim() === 'הגדרה' && String(rows[r][1]).trim() === key) { rowIndex = r + 1; break; }
+    }
+    if (rowIndex === -1) {
+      var t = Math.max(cfg.getLastRow(), 1) + 1;
+      if (cfg.getMaxRows() < t) cfg.insertRowsAfter(cfg.getMaxRows(), t - cfg.getMaxRows());
+      cfg.getRange(t, 1, 1, GYM_SETTINGS_HEADERS.length).setValues([
+        ['הגדרה', key, '', key, value, '', '', '', 'כן', '']
+      ]);
+    } else {
+      cfg.getRange(rowIndex, 5).setValue(value); // עמודה E = תוכן
+    }
+    return { ok: true, key: key, value: value };
   } catch (err) {
     return { ok: false, error: String(err) };
   } finally {
