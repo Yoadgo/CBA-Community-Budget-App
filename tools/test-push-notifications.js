@@ -131,5 +131,72 @@ try { sandbox.sendPush_('', 'x', 'y', {}); } catch (e) { threw = true; }
 ok('⚠️ יוצא מוקדם בלי לשאול את Firestore', !threw);
 
 /* ================================================================= */
+
+/* ================================================================= */
+section('8. sendPushToAdmins_ — ממפה מיילים ל-familyId וממען ייחודית');
+reset();
+let pushCalls;
+sandbox.fsQuery_ = (coll, field, op, value, limit) => {
+  pushCalls = pushCalls || [];
+  pushCalls.push(value);
+  return [{ id: 'UID-' + value, data: { token: 'TOK-' + value } }];
+};
+sandbox.UrlFetchApp.fetch = (url, opt) => {
+  if (String(url).indexOf('oauth2.googleapis.com') !== -1) {
+    return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ access_token: 'FAKE-TOK' }) };
+  }
+  return { getResponseCode: () => 200, getContentText: () => '{}' };
+};
+sandbox.adminEmailsByPerm_ = () => ['gan1@x.com', 'gan2@x.com', 'super@x.com'];
+sandbox.permissionsFor_ = (email) => {
+  if (email === 'gan1@x.com') return { familyId: '10' };
+  if (email === 'gan2@x.com') return { familyId: '10' };        // ⚠️ אותה משפחה — לא אמורה לקבל פעמיים
+  if (email === 'super@x.com') return { familyId: '20' };
+  return {};
+};
+sandbox.sendPushToAdmins_({}, 'גינון', 'כותרת', 'גוף', { type: 'test' });
+ok('שתי משפחות בלבד נשאלו (10 פעם אחת, 20 פעם אחת) — לא כפילות',
+   pushCalls && pushCalls.length === 2 && pushCalls.indexOf('10') !== -1 && pushCalls.indexOf('20') !== -1,
+   JSON.stringify(pushCalls));
+
+section('9. 🔴 sendPushToAdmins_ לעולם לא זורק');
+reset();
+sandbox.adminEmailsByPerm_ = () => { throw new Error('הגיליון נפל'); };
+threw = false;
+try { sandbox.sendPushToAdmins_({}, 'גינון', 'x', 'y', {}); } catch (e) { threw = true; }
+ok('⚠️ לא זורק גם כשקריאת רשימת המנהלים נכשלת', !threw);
+
+section('10. notifyAdmins_ — Push כרוך לגמרי בהגדרת המייל הקיימת');
+reset();
+let sentMail = null, pushArgs = null;
+sandbox.getEmailSettings_ = () => ({
+  'ADMIN_NEW_GARDEN_REPORT': { subject: 'דיווח גינון חדש מ-{{שם}}', body: 'תושב {{שם}} דיווח: ' + 'א'.repeat(150) }
+});
+sandbox.emailEnabled_ = (settings, key) => !!settings[key];
+sandbox.sendMail_ = (emails, subject, text, html) => { sentMail = { emails, subject }; };
+sandbox.buildEmailHtml_ = (plain) => '<html>' + plain + '</html>';
+sandbox.renderTemplate_ = (tpl, vars) => tpl.replace('{{שם}}', (vars && vars['שם']) || '');
+sandbox.adminEmailsByPerm_ = () => ['gan1@x.com'];
+sandbox.permissionsFor_ = () => ({ familyId: '10' });
+let sendPushToAdminsCalled = null;
+sandbox.sendPushToAdmins_ = (ss, permKey, title, body, data) => { sendPushToAdminsCalled = { permKey, title, body, data }; };
+sandbox.notifyAdmins_({}, 'גינון', 'ADMIN_NEW_GARDEN_REPORT', { 'שם': 'יועד' });
+ok('המייל נשלח כרגיל (לא נשבר)', sentMail && sentMail.subject === 'דיווח גינון חדש מ-יועד', JSON.stringify(sentMail));
+ok('Push נשלח עם אותו permKey (גינון)', sendPushToAdminsCalled && sendPushToAdminsCalled.permKey === 'גינון', JSON.stringify(sendPushToAdminsCalled));
+ok('כותרת ה-Push = נושא המייל המתוקנן', sendPushToAdminsCalled && sendPushToAdminsCalled.title === 'דיווח גינון חדש מ-יועד', JSON.stringify(sendPushToAdminsCalled));
+ok('⚠️ גוף ה-Push מקוצר ל-100 תווים + …', sendPushToAdminsCalled && sendPushToAdminsCalled.body.length === 101 && sendPushToAdminsCalled.body.slice(-1) === '…', JSON.stringify(sendPushToAdminsCalled && sendPushToAdminsCalled.body.length));
+
+section('11. notifyAdmins_ — תבנית כבויה: לא מייל ולא Push (אותו מתג בדיוק)');
+reset();
+sentMail = null; sendPushToAdminsCalled = null;
+sandbox.getEmailSettings_ = () => ({});
+sandbox.emailEnabled_ = () => false;
+sandbox.notifyAdmins_({}, 'גינון', 'ADMIN_NEW_GARDEN_REPORT', {});
+ok('⚠️ לא נשלח מייל', sentMail === null);
+ok('⚠️ ולא נשלח Push — אין מתג נפרד', sendPushToAdminsCalled === null);
+
+/* ================================================================= */
+
+/* ================================================================= */
 console.log('\n' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);
