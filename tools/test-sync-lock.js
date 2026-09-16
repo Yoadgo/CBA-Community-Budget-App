@@ -154,9 +154,13 @@ ok('🔴 והעבודה השעתית מדלגת ומתעדת במקום לנסו
    /if \(r && r\.busy\) Logger\.log\('hourlyJobs דילגה/.test(GS));
 ok('⚠️ וגוף העבודה עבר לפונקציה נפרדת', /function hourlyJobsRun_\(\) \{/.test(GS));
 ok('⚠️ והטריגר עדיין מצביע על hourlyJobs', /'hourlyJobs'/.test(GS));
-/* 🔴 מטפל שמחזיר busy חייב להחזיר אותו ללקוח ולא "להצליח" בשקט. */
+/* 🔴 מטפל שמחזיר busy חייב להחזיר אותו ללקוח ולא "להצליח" בשקט.
+   ⚠️ **המספר הזה אמור לעלות** עם כל מטפל סנכרון חדש — וזה בדיוק
+      מה שהבדיקה הזאת שומרת עליו: מטפל שנוסף בלי השורה הזאת
+      היה "מצליח" בשקט בזמן שהסנכרון כלל לא רץ.
+      6 → 7 ב-16.9 עם handleGardenDataSync_. */
 ok('🔴 וכל מטפל מחזיר את ה-busy ללקוח',
-   (GS.match(/if \(r\.busy\) return json_\(r\);/g) || []).length === 6,
+   (GS.match(/if \(r\.busy\) return json_\(r\);/g) || []).length === 7,
    String((GS.match(/if \(r\.busy\) return json_\(r\);/g) || []).length));
 /* bootSync מחזיר את r כמו שהוא, ולכן busy עובר ממילא. */
 ok('⚠️ ו-bootSync מחזיר את התוצאה כמו שהיא, כך ש-busy עובר גם שם',

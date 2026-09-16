@@ -598,6 +598,11 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'gardenPlanSync') {
       return handleGardenPlanSync_(e.parameter);
     }
+    /* דיווחי ומשימות הגינון -> Firestore (2026-09-16). זריעה ואימות.
+       ר' הבלוק שמעל gardenDataSyncAll_. */
+    if (e && e.parameter && e.parameter.action === 'gardenDataSync') {
+      return handleGardenDataSync_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'servicesSync') {
       return handleServicesSync_(e.parameter);
     }
@@ -5517,6 +5522,20 @@ function hourlyJobsRun_() {
     if (hc.errors.length) Logger.log('מוני עמוד הבית: ' + hc.errors.join(' ; '));
   } catch (e) {
     Logger.log('homeCountsSyncAll_ נכשל: ' + e);
+  }
+  /* 🔴 נתוני הגינון (2026-09-16) — דיווחים ומשימות של השנה הנוכחית.
+     ⚠️ **רץ לפני הגיבוי המצטבר**, כמו כל השאר, כדי שמה שנכתב עכשיו
+        ייכנס לגיבוי באותה ריצה ולא ימתין שעה.
+     ⚠️ שעה היא **לא** קצב מספיק כשהדפדפן יקרא מכאן — תושב שמגיש
+        דיווח חייב לראות אותו מיד. הצעד הבא (רעננות בכתיבה) חייב
+        לנחות **לפני** שהדגל נדלק. עד אז הכתיבה הזאת בלתי-נראית. */
+  try {
+    var gd = gardenDataSyncAll_(ss);
+    if (gd.error) Logger.log('נתוני גינון: ' + gd.error);
+    else Logger.log('נתוני גינון: משימות ' + gd.tasks.wrote + '/' + gd.tasks.deleted +
+                    ', דיווחים ' + gd.reports.wrote + '/' + gd.reports.deleted);
+  } catch (e) {
+    Logger.log('gardenDataSyncAll_ נכשל: ' + e);
   }
   try {
     var r = fsBackupIncremental_(ss);
@@ -11306,6 +11325,128 @@ function handleGardenMeta_(p) {
 }
 
 /* ---------- הדיווחים של הקורא (doGet) ---------- */
+/* ============================================================================
+ *  שורת דיווח אחת — נקודת גזירה אחת   (צעד 12, 2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  🔴 שני צרכנים: `handleMyGardenReports_` (המסלול הישן, שנשאר
+ *  כנפילה לאחור) ו-`gardenReportsSyncAll_` (שכותב ל-Firestore).
+ *  שתי גזירות מקבילות היו נפרדות בשקט — ואז המסך היה מראה
+ *  שלב אחד לפני הדלקת הדגל ושלב אחר אחריה.
+ *
+ *  ⚠️ **הפלט נקי ממידע אישי מלכתחילה** — אין בו `שם מדווח`
+ *     ואין בו `טלפון`. זו הסיבה שהמעבר ל-Firestore אינו דורש
+ *     רשימת היתר חדשה: הסינון כבר קיים כאן.
+ *     **אל תוסיף כאן שדה שמזהה אדם** — הוא ייכתב ל-Firestore.
+ *  ⚠️ כל החישוב היקר (שלב, הסבר סגירה, חלון משוב) נעשה כאן
+ *     פעם אחת בסנכרון, ולא בכל קריאה של כל תושב. זה העיקר:
+ *     המסמך נושא את מה שהמסך מציג, לא את מה שהגיליון מכיל.
+ * ========================================================================== */
+function gardenReportRow_(row, rc, tasks, closeWhy, fbDays, now) {
+      var taskId = String(row[rc['\u05de\u05d6\u05d4\u05d4 \u05de\u05e9\u05d9\u05de\u05d4']] || '').trim();
+      var t = tasks[taskId] || { stage: '\u05d4\u05ea\u05e7\u05d1\u05dc', flag: '', closure: '', approvedAt: '' };
+      var d = row[rc['\u05ea\u05d0\u05e8\u05d9\u05da \u05d3\u05d9\u05d5\u05d5\u05d7']];
+      var already = String(row[rc['\u05de\u05e9\u05d5\u05d1']] || '').trim();
+      /* חלון המשוב (F-11): שבוע מרגע **האישור**, לא מרגע הדיווח. עד 7.9 לא
+         הייתה חותמת אישור בטאב המשימות והחלון לא נאכף בכלל; מאז שנוספה
+         "תאריך אישור" אפשר לחשב אותו נכון. משימה שאושרה לפני יותר משבוע
+         כבר לא פתוחה למשוב — וזו בדיוק ההגבלה שהאפיון ביקש. */
+      var appr = t.approvedAt instanceof Date ? t.approvedAt.getTime() : 0;
+      var until = appr ? appr + fbDays * 86400000 : 0;
+      var inWindow = !until || now <= until;
+      var canFb = (t.stage === 'הושלם') && !already && inWindow &&
+                  t.closure !== GARDEN_CLOSURE_MERGED;
+      return {
+        closeWhy: closeWhy[taskId] || '',
+        id: String(row[rc['מזהה']]),
+        date: d instanceof Date ? d.toISOString() : String(d || ''),
+        category: String(row[rc['קטגוריה']] || ''),
+        area: String(row[rc['אזור']] || ''),
+        title: String(row[rc['כותרת']] || ''),
+        x: parseFloat(row[rc['מיקום X']]) || null,
+        y: parseFloat(row[rc['מיקום Y']]) || null,
+        place: String(row[rc['מיקום מילולי']] || ''),
+        desc: String(row[rc['תיאור']] || ''),
+        photos: String(row[rc['תמונות']] || '').split(',')
+                  .map(function (x) { return x.trim(); }).filter(Boolean),
+        stage: t.stage, flag: t.flag, closure: t.closure,
+        mergedInto: String(row[rc['אוחד לדיווח']] || ''),
+        feedback: already,
+        canFeedback: canFb,
+        /* 🔴 **מועד סיום חלון המשוב, כערך מוחלט** (2026-09-16).
+           `canFeedback` נכון לרגע החישוב בלבד. במסלול Apps Script זה
+           תמיד "עכשיו", אבל מסמך ב-Firestore מחושב פעם אחת בסנכרון
+           ויכול לשבת שעה — ואז "אפשר להגיב" היה נשאר דלוק אחרי
+           שהחלון נסגר. לכן המסמך נושא גם את **התאריך**, והלקוח
+           מקפל אותו מחדש מול השעון שלו:
+               canFeedback && (!feedbackUntil || Date.now() <= feedbackUntil)
+           ⚠️ הקיפול הזה **נכון גם במסלול הישן** — שם הוא פשוט
+              לא משנה דבר, כי הערך כבר טרי. שורה אחת בלקוח,
+              שנכונה בשני המסלולים, במקום שני ענפים.
+           0 = אין חלון (המשימה מעולם לא אושרה) — ואז אין הגבלה. */
+        feedbackUntil: until
+      };
+}
+
+/* ============================================================================
+ *  ההקשר שכל דיווח נגזר מולו — נבנה פעם אחת
+ * ----------------------------------------------------------------------------
+ *  שלושת המקורות שמחוץ לשורת הדיווח עצמה: מפת המשימות (שלב/דגל/
+ *  סגירה/תאריך אישור), הסבר הסגירה מהיומן, וחלון המשוב מהגדרות
+ *  המיילים. שלושתם סריקת-טאב מלאה, ושלושתם זהים לכל הדיווחים.
+ *
+ *  🔴 **למה זה פונקציה ולא קוד בתוך ההנדלר:** מרגע שיש גם סנכרון
+ *  ל-Firestore, שני נתיבים בונים את אותם שלושה מקורות. העתק שני
+ *  של הלוגיקה הזאת היה סוטה בשקט בתיקון הראשון — התושב היה רואה
+ *  הסבר סגירה אחד במסלול Firestore ואחר בנפילה לאחור, ואיש לא
+ *  היה מזהה את זה כבאג אלא כ"מוזרות".
+ * ========================================================================== */
+function gardenReportCtx_(ss) {
+  var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+
+  // מפת משימות לפי מזהה — כדי לא לסרוק את הטאב מחדש לכל דיווח
+  var tasks = {};
+  if (tsh && tsh.getLastRow() > 1) {
+    var tc = gardenCols_(tsh), tv = tsh.getDataRange().getValues();
+    for (var i = 1; i < tv.length; i++) {
+      var tid = String(tv[i][tc['מזהה']]).trim();
+      if (tid) tasks[tid] = {
+        stage:   String(tv[i][tc['שלב']] || '').trim(),
+        flag:    String(tv[i][tc['דגל']] || '').trim(),
+        closure: String(tv[i][tc['סגירה']] || '').trim(),
+        approvedAt: tv[i][tc['תאריך אישור']] || ''
+      };
+    }
+  }
+
+  /* ההסבר שהמנהל כתב בסגירה — נשלף מהיומן ולא מעמודה חדשה, כי הוא כבר
+     נשמר שם (gardenLog_ עם סוג רשומה "סגירה"). כך התושב רואה באפליקציה
+     בדיוק את מה שקיבל במייל, ולא רק את המילה "בוטל".
+     🔴 **זו הסיבה שטאב היומן אינו הופך לאוסף** (החלטת 16.9): הצרכן
+        היחיד שלו בצד התושב הוא המשפט הזה, והוא מחושב לתוך מסמך
+        הדיווח בזמן הסנכרון. אוסף שלם בשביל שדה אחד היה מעביר
+        ל-Firestore גם את "מבצע" — כלומר שם של אדם. */
+  var closeWhy = {};
+  try {
+    var lsh = ss.getSheetByName(GARDEN_LOG_SHEET);
+    if (lsh && lsh.getLastRow() > 1) {
+      var lc = gardenCols_(lsh), lv = lsh.getDataRange().getValues();
+      for (var li = 1; li < lv.length; li++) {
+        if (String(lv[li][lc['סוג רשומה']]).trim() !== 'סגירה') continue;
+        var note = String(lv[li][lc['הערה']] || '').trim();
+        if (note) closeWhy[String(lv[li][lc['מזהה משימה']]).trim()] = note;
+      }
+    }
+  } catch (e) { /* בלי היומן פשוט אין הסבר — הסטטוס עצמו עדיין מוצג */ }
+
+  var settings = getEmailSettings_(ss);
+  return {
+    tasks: tasks,
+    closeWhy: closeWhy,
+    fbDays: parseInt(emailRule_(settings, 'RULE_GARDEN_FEEDBACK_DAYS', 7), 10) || 7,
+    now: new Date().getTime()
+  };
+}
+
 function handleMyGardenReports_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -11313,80 +11454,16 @@ function handleMyGardenReports_(p) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var famId = String(gate.perm.familyId || '');
     var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
-    var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
     if (!rsh || rsh.getLastRow() < 2) return json_({ ok: true, rows: [] });
 
     var rc = gardenCols_(rsh);
     var rows = rsh.getDataRange().getValues();
+    var ctx = gardenReportCtx_(ss);
 
-    // מפת משימות לפי מזהה — כדי לא לסרוק את הטאב מחדש לכל דיווח
-    var tasks = {};
-    if (tsh && tsh.getLastRow() > 1) {
-      var tc = gardenCols_(tsh), tv = tsh.getDataRange().getValues();
-      for (var i = 1; i < tv.length; i++) {
-        var tid = String(tv[i][tc['מזהה']]).trim();
-        if (tid) tasks[tid] = {
-          stage:   String(tv[i][tc['שלב']] || '').trim(),
-          flag:    String(tv[i][tc['דגל']] || '').trim(),
-          closure: String(tv[i][tc['סגירה']] || '').trim(),
-          approvedAt: tv[i][tc['תאריך אישור']] || ''
-        };
-      }
-    }
-
-    /* ההסבר שהמנהל כתב בסגירה — נשלף מהיומן ולא מעמודה חדשה, כי הוא כבר
-       נשמר שם (gardenLog_ עם סוג רשומה "סגירה"). כך התושב רואה באפליקציה
-       בדיוק את מה שקיבל במייל, ולא רק את המילה "בוטל". */
-    var closeWhy = {};
-    try {
-      var lsh = ss.getSheetByName(GARDEN_LOG_SHEET);
-      if (lsh && lsh.getLastRow() > 1) {
-        var lc = gardenCols_(lsh), lv = lsh.getDataRange().getValues();
-        for (var li = 1; li < lv.length; li++) {
-          if (String(lv[li][lc['סוג רשומה']]).trim() !== 'סגירה') continue;
-          var note = String(lv[li][lc['הערה']] || '').trim();
-          if (note) closeWhy[String(lv[li][lc['מזהה משימה']]).trim()] = note;
-        }
-      }
-    } catch (e) { /* בלי היומן פשוט אין הסבר — הסטטוס עצמו עדיין מוצג */ }
-
-    var settings = getEmailSettings_(ss);
-    var fbDays = parseInt(emailRule_(settings, 'RULE_GARDEN_FEEDBACK_DAYS', 7), 10) || 7;
-    var now = new Date().getTime();
     var out = [];
     for (var r = 1; r < rows.length; r++) {
       if (String(rows[r][rc['מזהה משפחה']]).trim() !== famId) continue;
-      var taskId = String(rows[r][rc['מזהה משימה']] || '').trim();
-      var t = tasks[taskId] || { stage: 'התקבל', flag: '', closure: '', approvedAt: '' };
-      var closedAt = rows[r][rc['תאריך משוב']];
-      var d = rows[r][rc['תאריך דיווח']];
-      var already = String(rows[r][rc['משוב']] || '').trim();
-      /* חלון המשוב (F-11): שבוע מרגע **האישור**, לא מרגע הדיווח. עד 7.9 לא
-         הייתה חותמת אישור בטאב המשימות והחלון לא נאכף בכלל; מאז שנוספה
-         "תאריך אישור" אפשר לחשב אותו נכון. משימה שאושרה לפני יותר משבוע
-         כבר לא פתוחה למשוב — וזו בדיוק ההגבלה שהאפיון ביקש. */
-      var appr = t.approvedAt instanceof Date ? t.approvedAt.getTime() : 0;
-      var inWindow = !appr || (now - appr) <= fbDays * 86400000;
-      var canFb = (t.stage === 'הושלם') && !already && inWindow &&
-                  t.closure !== GARDEN_CLOSURE_MERGED;
-      out.push({
-        closeWhy: closeWhy[taskId] || '',
-        id: String(rows[r][rc['מזהה']]),
-        date: d instanceof Date ? d.toISOString() : String(d || ''),
-        category: String(rows[r][rc['קטגוריה']] || ''),
-        area: String(rows[r][rc['אזור']] || ''),
-        title: String(rows[r][rc['כותרת']] || ''),
-        x: parseFloat(rows[r][rc['מיקום X']]) || null,
-        y: parseFloat(rows[r][rc['מיקום Y']]) || null,
-        place: String(rows[r][rc['מיקום מילולי']] || ''),
-        desc: String(rows[r][rc['תיאור']] || ''),
-        photos: String(rows[r][rc['תמונות']] || '').split(',')
-                  .map(function (x) { return x.trim(); }).filter(Boolean),
-        stage: t.stage, flag: t.flag, closure: t.closure,
-        mergedInto: String(rows[r][rc['אוחד לדיווח']] || ''),
-        feedback: already,
-        canFeedback: canFb
-      });
+      out.push(gardenReportRow_(rows[r], rc, ctx.tasks, ctx.closeWhy, ctx.fbDays, ctx.now));
     }
     out.reverse();   // החדש למעלה
     return json_({ ok: true, rows: out });
@@ -12445,6 +12522,199 @@ function handleGardenPlanSync_(p) {
     var r = withSyncLock_('gardenPlanSync', function () { return gardenPlanSyncAll_(ss); });
     if (r.busy) return json_(r);
     return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, error: r.error });
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+/* ============================================================================
+ *  🔴🔴  נתוני הגינון — דיווחים ומשימות ל-Firestore   (2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  **מה שהיה חסר.** בצעד 03 עברה *תוכנית העבודה* (`gardenPlan`) — טאב
+ *  ההגדרות. הדיווחים והמשימות נשארו בגיליון, וזה השאיר את שני המסכים
+ *  הכבדים של התחום על Apps Script: `myGardenReports` נמדד **9,498ms
+ *  עבור 367 בתים**, ו-`gardenTasks` 8,053ms. שני המספרים האלה אינם
+ *  על גודל הנתונים — הם על מספר הפניות לגיליון.
+ *
+ *  ──────────────────────────────────────────────────────────────────────
+ *  🔴 **שלוש הכרעות פרטיות, וכל אחת מהן היא החלטה של יועד ולא אופטימיזציה**
+ *  ──────────────────────────────────────────────────────────────────────
+ *
+ *  1. **`gardenReports` אינו נושא שם ואינו נושא טלפון.** טאב הדיווחים
+ *     מכיל 'שם מדווח' ו'טלפון'; המסמך מכיל `familyId` בלבד. זה אינו
+ *     צמצום נוח — זה הקו האדום: מידע אישי נשאר בגיליון. המסך של
+ *     התושב ממילא לא מציג את שמו לעצמו.
+ *     ⚠️ **נגזר מ-`gardenReportRow_` ולא נבנה מחדש** — אותה פונקציה
+ *        בדיוק שההנדלר הישן דוחף ממנה. זה מה שמבטיח שהמסמך והנפילה
+ *        לאחור זהים, ולא "אמורים להיות זהים".
+ *
+ *  2. **`gardenTasks` מאבד את `updatedBy`.** `gardenTaskObj_` מחזיר
+ *     'עודכן על ידי' — **שם של אדם**. בדקתי את כל הלקוח: אף מסך אינו
+ *     מציג אותו. שדה שאיש אינו קורא ושנושא שם אדם אינו עולה לאוסף.
+ *     `approvedBy` **כן** נשאר, כי הוא מוצג בפועל (gardenTasks.js:663,
+ *     :1606) — והאוסף כולו סגור למנהלים ולאחראי הגינון.
+ *     🔴 יועד ביקש UID במקום שם. בדקתי — **זה לא היה עוזר**:
+ *        `residentDirectory` מסיר uid בכוונה, ו-`members/{uid}` קריא
+ *        לבעליו בלבד. הדפדפן היה מקבל מחרוזת שאי אפשר לתרגם לשם,
+ *        כלומר המסך היה מציג זבל. השם נשאר, והשמירה היא בגבול האוסף.
+ *
+ *  3. **טאב היומן אינו הופך לאוסף.** הצרכן היחיד שלו בצד התושב הוא
+ *     הסבר הסגירה, והוא מחושב לתוך מסמך הדיווח ב-`gardenReportCtx_`.
+ *     אוסף שלם היה מעלה גם את עמודת 'מבצע' — שם של אדם, שוב.
+ *
+ *  ──────────────────────────────────────────────────────────────────────
+ *  🔑 **העיקרון שמחזיק את כל הבלוק:** *המסמך נושא את מה שהמסך מציג,
+ *  לא את מה שהגיליון מכיל.* כל החישוב היקר — שלב המשימה, הסבר
+ *  הסגירה, חלון המשוב — קורה **פעם אחת בסנכרון** ולא בכל קריאה של
+ *  כל תושב. זה, ולא Firestore עצמו, מקור הפער בין 9.5 שניות למאיות.
+ *
+ *  ⚠️ **השנה הנוכחית בלבד** (הכרעת יועד): שתי הטבלאות נושאות עמודת
+ *     'שנת תקציב', והסנכרון מסנן לפיה. שנה שעברה נשארת בגיליון
+ *     ונקראת במסלול Apps Script. זה גם מה שמחזיק את האוסף קטן
+ *     מספיק לסריקה שלמה בלי אינדקס מורכב (הקונסולה חסומה).
+ *
+ *  ⚠️ **אין כאן עדיין קריאה מהדפדפן ואין דגל.** הצעד הזה **כותב
+ *     בלבד** — כלומר הוא בלתי-נראה לחלוטין לכל משתמש. הביטול שלו:
+ *     להוריד את שתי השורות מ-`hourlyJobsRun_`. אין מה להחזיר.
+ * ========================================================================== */
+var FS_GARDEN_REPORTS = 'gardenReports';
+var FS_GARDEN_TASKS   = 'gardenTasks';
+
+/** שנת התקציב הנוכחית כפי שההגדרות מכריזות עליה. מחרוזת ריקה = אין
+ *  הגדרה, ואז הסנכרון **אינו מסנן** — עדיף אוסף מלא מאוסף ריק. */
+function gardenCurrentYear_(ss) {
+  try { return String(readSettings_(ss)['שנה נוכחית'] || '').trim(); }
+  catch (e) { return ''; }
+}
+
+/* מסמך דיווח = בדיוק פלט `gardenReportRow_`, ועוד `familyId`.
+   ⚠️ **אין כאן בנייה מחדש של שדות**, וזה מכוון: שדה חדש שייכנס
+      למסך ייכנס ל-`gardenReportRow_` ויגיע לכאן מעצמו. רשימת
+      שדות שנייה כאן היתה נשכחת בפיצ'ר הראשון. */
+function gardenReportDoc_(o, famId) {
+  var d = {};
+  Object.keys(o).forEach(function (k) { d[k] = o[k]; });
+  d.familyId  = String(famId || '');
+  d.schema    = 1;
+  d.updatedAt = new Date();
+  return d;
+}
+
+/* מסמך משימה = פלט `gardenTaskObj_` פחות `updatedBy`. ר' הכרעה 2 למעלה. */
+var GARDEN_TASK_SKIP_FIELDS = { updatedBy: 1 };
+
+/* 🔴🔴 **חותמת הסנכרון כאן נקראת `syncedAt` ולא `updatedAt` — ובכוונה.**
+ * ----------------------------------------------------------------------------
+ *  בכל שאר האוספים (gardenPlan, services, budgetYears) חותמת הסנכרון
+ *  היא `updatedAt`, ואין בעיה. כאן **יש**: `gardenTaskObj_` כבר מחזיר
+ *  שדה בשם `updatedAt` — הוא 'עודכן בתאריך' מהגיליון, כלומר **מתי
+ *  המשימה עודכנה**.
+ *
+ *  כתיבת חותמת הסנכרון לאותו שם דרסה אותו בשקט. ⚠️ **ובכוונה אני
+ *  מדייק:** נכון להיום אף מסך אינו מציג את `updatedAt` (בדקתי —
+ *  `approvedBy`/`approvedAt` כן, ב-gardenTasks.js:663 ו-:1606,
+ *  `updatedAt` לא). כלומר זה **לא** היה באג חי אלא **מוקש**: ברגע
+ *  שמישהו היה מוסיף "עודכן לאחרונה" למסך, הוא היה מקבל את שעת
+ *  *הסנכרון* לכל משימה — ערך שנראה לגמרי סביר, ושאיש לא היה חושד
+ *  בו. זה בדיוק סוג התקלה שאי אפשר לתפוס אחר כך.
+ *  הבדיקה בסעיף 7 של test-garden-data-firestore היא זו שתפסה.
+ *
+ *  ⚠️ **הכלל הכללי:** שדה מעטפת לעולם אינו רשאי לדרוס שדה מטען.
+ *     לפני הוספת שדה מעטפת חדש — לבדוק שהשם פנוי במטען. */
+function gardenTaskDoc_(o, order) {
+  var d = {};
+  Object.keys(o).forEach(function (k) {
+    if (GARDEN_TASK_SKIP_FIELDS[k]) return;
+    d[k] = o[k];
+  });
+  /* רמז לסדר תצוגה בלבד — לעולם לא מזהה. אותה הבחנה בדיוק
+     כמו ב-`gardenPlanDoc_.order`; ר' ההערה שם. */
+  d.order    = order || 0;
+  d.schema   = 1;
+  d.syncedAt = new Date();   /* ולא updatedAt — ר' ההערה מעל */
+  return d;
+}
+
+/** סנכרון מלא של דיווחי השנה הנוכחית. מחזיר סיכום ולעולם אינו זורק. */
+function gardenReportsSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  try {
+    var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+    var live = {}, items = [];
+    if (rsh && rsh.getLastRow() > 1) {
+      var rc = gardenCols_(rsh);
+      var rows = rsh.getDataRange().getValues();
+      var ctx = gardenReportCtx_(ss);
+      var year = gardenCurrentYear_(ss);
+      var yCol = rc['שנת תקציב'];
+      for (var r = 1; r < rows.length; r++) {
+        var famId = String(rows[r][rc['מזהה משפחה']] || '').trim();
+        /* דיווח בלי מזהה משפחה אינו שייך לאיש — ואי אפשר לאבטח אותו
+           בכלל. מדולג ונספר, ולא נכתב "ליתר ביטחון". */
+        if (!famId) { out.skipped++; continue; }
+        if (year && yCol !== undefined &&
+            String(rows[r][yCol] || '').trim() !== year) continue;
+        var o = gardenReportRow_(rows[r], rc, ctx.tasks, ctx.closeWhy, ctx.fbDays, ctx.now);
+        items.push({ id: o.id, doc: gardenReportDoc_(o, famId) });
+      }
+    }
+    fsWriteAll_(FS_GARDEN_REPORTS, items, out, live);
+    fsSweepOrphans_(FS_GARDEN_REPORTS, live, out);
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+/** סנכרון מלא של משימות השנה הנוכחית. מחזיר סיכום ולעולם אינו זורק. */
+function gardenTasksSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  try {
+    var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    var live = {}, items = [];
+    if (sh && sh.getLastRow() > 1) {
+      var c = gardenCols_(sh);
+      var v = sh.getDataRange().getValues();
+      var year = gardenCurrentYear_(ss);
+      var yCol = c['שנת תקציב'];
+      for (var i = 1; i < v.length; i++) {
+        if (year && yCol !== undefined &&
+            String(v[i][yCol] || '').trim() !== year) continue;
+        var o = gardenTaskObj_(v[i], c);
+        if (!o.id) { out.skipped++; continue; }
+        items.push({ id: o.id, doc: gardenTaskDoc_(o, i) });
+      }
+    }
+    fsWriteAll_(FS_GARDEN_TASKS, items, out, live);
+    fsSweepOrphans_(FS_GARDEN_TASKS, live, out);
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+/** שני האוספים יחד. ⚠️ **המשימות קודם**, בכוונה: מסמך הדיווח נושא
+ *  את שלב המשימה שלו (`stage`), ולכן סדר הפוך היה יוצר חלון שבו
+ *  הדיווח מצביע על שלב שהמשימה טרם הגיעה אליו. */
+function gardenDataSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var t = gardenTasksSyncAll_(ss);
+  var r = gardenReportsSyncAll_(ss);
+  return {
+    ok: t.ok && r.ok,
+    tasks: t, reports: r,
+    error: [t.error, r.error].filter(Boolean).join(' ; ')
+  };
+}
+
+/* פעולה מפורשת (מנהל-על) — לזריעה ולאימות. ר' ההערה ב-handleGardenPlanSync_
+   על למה זו פעולה עם כתובת ולא הרצה ידנית מבורר הפונקציות. */
+function handleGardenDataSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var r = withSyncLock_('gardenDataSync', function () { return gardenDataSyncAll_(ss); });
+    if (r.busy) return json_(r);
+    return json_(r);
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
