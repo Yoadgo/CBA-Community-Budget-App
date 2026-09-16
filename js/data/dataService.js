@@ -1225,6 +1225,62 @@ CBA.data = (function () {
     });
   }
 
+  /* ==========================================================================
+   *  🔴 **מוני עמוד הבית מ-Firestore** — הציור הראשון
+   *     (2026-09-16, פעולה 3)
+   * --------------------------------------------------------------------------
+   *  📊 נמדד בייצור (16.9): `homeExtras` — 6,486 אלפיות;
+   *  קריאת Firestore — 24 עד 163. חמש תגיות הספירה של עמוד
+   *  הבית הן חמישה מספרים, והם חיכו שש שניות.
+   *
+   *  ⚠️ **זה לא מחליף את `homeExtras`** — הוא נדרש בכל מקרה
+   *     לכרטיס "יש משהו חדש" ולשריון הקרוב, והתשובה
+   *     שלו היא **הקובעת**. המסמכים כאן הם הציור הראשון
+   *     בלבד, ולכן אפילו מסמך מיושן מתקן תוך שניות.
+   *  ⚠️ **מבקשים רק את מה שמותר.** מסמך לכל הרשאה, והקורא
+   *     מעביר את הרשימה — קריאה למסמך שאינו שלו נדחית
+   *     בכלל האבטחה, ואין שום סיבה לשלוח אותה.
+   *  ⚠️ כל כשל — אין SDK, אין משתמש, הדגל כבוי, כלל דחה —
+   *     מחזיר `null`, והמסך מתנהג בדיוק כמו אתמול.
+   *  🔴 **הדגל נבדק אחרי `ensureDb`** ולא לפניו — לפני כן
+   *     `CBA.fb.flag` מחזיר את ברירת המחדל שבקוד במקום את
+   *     הדגל החי. זה נתפס חי ב-15.9 ומתועד ב-`fsFirstRead`.
+   * ======================================================================== */
+  var HOME_COUNTS_FROM_FIRESTORE = false;
+  function getHomeCountsFast(domains, cb) {
+    cb = cb || function () {};
+    var want = (domains || []).slice();
+    if (!want.length) return cb(null);
+    if (!(CBA.fb && CBA.fb.readDoc && CBA.fb.ensureDb)) return cb(null);
+    var t0 = Date.now();
+    CBA.fb.authReady(function (user) {
+      if (!user) return cb(null);
+      CBA.fb.ensureDb(function (err) {
+        if (err) return cb(null);
+        if (CBA.fb.flag && !CBA.fb.flag("homeCountsFromFirestore", HOME_COUNTS_FROM_FIRESTORE)) {
+          return cb(null);
+        }
+        var out = {}, left = want.length, settled = false;
+        function settle() {
+          if (settled) return;
+          settled = true;
+          try {
+            CBA.perf = CBA.perf || {};
+            CBA.perf.homeCounts = { source: "firestore", ms: Date.now() - t0,
+                                    got: Object.keys(out).join(","), at: new Date().toISOString() };
+          } catch (e) {}
+          cb(out);
+        }
+        want.forEach(function (d) {
+          CBA.fb.readDoc("homeCounts", d, function (e2, doc) {
+            if (!e2 && doc) out[d] = doc;
+            if (--left <= 0) settle();
+          });
+        });
+      });
+    });
+  }
+
   function getGymList(cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymList" }, cb);
@@ -2610,6 +2666,7 @@ CBA.data = (function () {
     saveNotesToSheet: saveNotesToSheet,
     getNotesLog: getNotesLog,
     ensureBudgetLogs: ensureBudgetLogs,
+    getHomeCountsFast: getHomeCountsFast,
     statusMeta: statusMeta,
     statusNext: statusNext,
     statusList: statusList,

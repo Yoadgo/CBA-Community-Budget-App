@@ -155,6 +155,62 @@ CBA.screens = CBA.screens || {};
    *     היום. אין תלות בסדר הדיפלוי בין הלקוח לשרת.
    *  ⚠️ מקטע שהמשתמש לא רשאי לראות פשוט **לא חוזר** מהשרת (ר' handleHomeExtras_),
    *     ולכן `undefined` כאן הוא תשובה תקינה ולא כשל. */
+  function signupRow(n) { return n ? taskRow("בקשות הרשמה לקהילה", n, "residents", "warn") : ""; }
+  function profileRow(n) { return n ? taskRow("בקשות שינוי פרטים", n, "residents", "warn") : ""; }
+  function gymRow(n) { return n ? taskRow("תשלומי מכון כושר לאימות", n, "gymAdmin", "warn") : ""; }
+  /* ⚠️ התווית חייבת לתאר בדיוק את מה שנספר. `scope:"pending"` בשרת
+     מחזיר **רק** משימות עם דגל "ממתין לאישור" — לא "דורש בדיקה
+     בשטח" ולא משוב שלילי, שגם הם ברשימת "להחלטתך" של מסך
+     המשימות. "שמחכות לך" היה מבטיח את הרשימה הרחבה ומראה
+     את המספר הצר, וזה בדיוק "שני מספרים שלא מסכימים"
+     שאנחנו מנקים מהמודול. היעד נשאר gardenInbox — הוא נוחת על
+     הרשימה הרחבה, שמכילה תמיד את מה שנספר כאן. */
+  function gardenRow(n) { return n ? taskRow("משימות גינון לאישורך", n, "gardenInbox", "warn") : ""; }
+
+  /* ============================================================================
+   *  🔴 התגיות מ-Firestore — הציור הראשון   (2026-09-16, פעולה 3)
+   * ----------------------------------------------------------------------------
+   *  📊 `homeExtras` עולה 6,486 אלפיות וקריאת Firestore 24–163.
+   *  עד היום כל חמש התגיות המתינו לאותה קריאה אחת.
+   *
+   *  ⚠️ **מחליף תוכן, לא את המכל.** `loadLazyCounts` מחליףה
+   *     את ה-div עצמו (`outerHTML`) כשהתשובה הקובעת מגיעה.
+   *     לו המסלול המהיר היה עושה את אותו דבר, המזהה היה
+   *     נעלם והתשובה האמיתית לא היתה מוצאת לאן לצייר —
+   *     כלומר מספר מ-Firestore שלעולם לא מתקן את עצמו.
+   *  ⚠️ ולכן גם `hm-lazy` נשאר: הספירה עדיין בדרך, ו"הכול
+   *     מטופל" אסור שיופיע על סמך מסמך שעוד לא אומת.
+   * ========================================================================== */
+  function fastPaint(container, sel, html) {
+    var slot = container.querySelector(sel);
+    if (!slot || !slot.isConnected) return;   /* התשובה הקובעת הקדימה */
+    slot.innerHTML = html || "";
+  }
+
+  function seedCountsFast(container) {
+    if (!(CBA.data && CBA.data.getHomeCountsFast)) return;
+    var want = [];
+    if (can("תושבים")) want.push("residents");
+    if (can("מכון"))   want.push("gym");
+    if (can("גינון"))  want.push("garden");
+    if (can("מועדון")) want.push("club");
+    if (!want.length) return;
+    CBA.data.getHomeCountsFast(want, function (c) {
+      if (!c) return;
+      if (c.residents) {
+        fastPaint(container, "#hm-signups", signupRow(Number(c.residents.signups) || 0));
+        fastPaint(container, "#hm-profile", profileRow(Number(c.residents.profile) || 0));
+      }
+      if (c.gym)    fastPaint(container, "#hm-gym",    gymRow(Number(c.gym.pending) || 0));
+      if (c.garden) fastPaint(container, "#hm-garden", gardenRow(Number(c.garden.pending) || 0));
+      /* תגית המועדון יושבת בניווט, ולכן עוברת באותה דלת
+         שהתשובה האמיתית עוברת בה. נקודת כניסה אחת. */
+      if (c.club && window.CBA.seedClubAlerts) {
+        CBA.seedClubAlerts({ ok: true, pending: Number(c.club.pending) || 0 });
+      }
+    });
+  }
+
   function primeHomeExtras(done) {
     if (!CBA.data || !CBA.data.getHomeExtras) { done(); return; }
     /* ⚠️ (2026-09-15) `gardenFresh()` נוסף לתנאי כשספירת הגינון עברה
@@ -230,17 +286,15 @@ CBA.screens = CBA.screens || {};
       bindAdminJumps(container);
     }
 
-    function signupRow(n) { return n ? taskRow("בקשות הרשמה לקהילה", n, "residents", "warn") : ""; }
-    function profileRow(n) { return n ? taskRow("בקשות שינוי פרטים", n, "residents", "warn") : ""; }
-    function gymRow(n) { return n ? taskRow("תשלומי מכון כושר לאימות", n, "gymAdmin", "warn") : ""; }
+    /* ⚠️ ארבעת בוני השורות יושבים מעל (16.9) — גם הציור
+       המהיר מ-Firestore מצייר אותן שורות בדיוק. שתי גרסאות
+       של אותה תווית הן בדיוק "המסך התחליף טקסט באמצע". */
     /* ⚠️ התווית חייבת לתאר בדיוק את מה שנספר. `scope:"pending"` בשרת מחזיר
        **רק** משימות עם דגל "ממתין לאישור" — לא "דורש בדיקה בשטח" ולא משוב
        שלילי, שגם הם ברשימת "להחלטתך" של מסך המשימות. "שמחכות לך" היה מבטיח
        את הרשימה הרחבה ומראה את המספר הצר, וזה בדיוק "שני מספרים שלא מסכימים"
        שאנחנו מנקים מהמודול. היעד נשאר gardenInbox — הוא נוחת על הרשימה
        הרחבה, שמכילה תמיד את מה שנספר כאן. */
-    function gardenRow(n) { return n ? taskRow("משימות גינון לאישורך", n, "gardenInbox", "warn") : ""; }
-
     /* הגינון נטען לפי החותמת שלו ולא לפי המשותפת — ר' ההערה ליד lazyCache. */
     if (slotN) {
       if (gardenFresh()) {
@@ -461,6 +515,11 @@ CBA.screens = CBA.screens || {};
       syncClearState(container);
       /* קריאה אחת מזינה את כל המטמונים, ואז שלוש הפונקציות רצות בדיוק כמו
          קודם — רק בלי לפנות לרשת. ר' primeHomeExtras. */
+      /* 🔴 קודם המסלול המהיר (~75 אלפיות), ומיד אחריו הקריאה
+         הקובעת. שניהם יוצאים במקביל ובכוונה — המהיר מצייר
+         תגיות, והקובע מביא גם את כרטיס "יש משהו חדש"
+         ואת השריון הקרוב, שאינם ב-Firestore. */
+      seedCountsFast(container);
       primeHomeExtras(function () {
         loadLazyCounts(container);
         loadNextReservation(container);

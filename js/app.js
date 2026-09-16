@@ -2314,7 +2314,10 @@
     /* דיווחי תקלות על האפליקציה */
     appReports: ["appReports"],
     /* עמוד הבית מרכז מונים מכמה תחומים */
-    resHome: ["garden", "club", "services", "gym", "budget"]
+    /* ⚠️ "תושבים" נוסף 16.9 — עמוד הבית מציג שתי תגיות
+       מהתחום הזה (בקשות הרשמה, בקשות שינוי פרטים) והוא
+       לא היה רשום — אישור במכשיר אחר לא ריענן את המסך הפתוח. */
+    resHome: ["garden", "club", "services", "gym", "budget", "residents"]
   };
 
   function screenNeedsMovedDomain(screen, moved) {

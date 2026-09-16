@@ -49,7 +49,8 @@ CBA.screens = CBA.screens || {};
     budgetTxStatusToFirestore: ["שינוי סטטוס תנועה", "כתיבה: שינוי סטטוס נכתב ישירות ל-Firestore, וטריגר מחיל אותו על הגיליון.", true],
     budgetTxFromFirestore:    ["תנועות התקציב", "התנועות של השנה הנוכחית נקראות מ-Firestore ולא נשלחות במטען.", true],
     pulseToFirestore:         ["הפעימה החיה", "השרת כותב מסמך פעימה, והלקוח מאזין לו במקום לסקור כל 3 שניות.", false],
-    bootFromFirestore:        ["טעינה קרה", "כשאין מטמון מקומי — השנה הנוכחית נבנית מ-Firestore ומצוירת מיד.", false]
+    bootFromFirestore:        ["טעינה קרה", "כשאין מטמון מקומי — השנה הנוכחית נבנית מ-Firestore ומצוירת מיד.", false],
+    homeCountsFromFirestore:  ["מוני עמוד הבית", "תגיות הספירה בעמוד הבית נקראות ישירות מ-Firestore ומצוירות מיד, בלי לחכות ל-homeExtras.", false]
   };
 
   /* המצב **האפקטיבי**: מה שכתוב במסמך, ואם אינו כתוב — ברירת המחדל
@@ -85,6 +86,10 @@ CBA.screens = CBA.screens || {};
       /* 🔴 היחיד שדחייה שלו היא **התנהגות תקינה** — ר' הכותרת. */
       list.push({ key: "code", label: "קוד הכניסה למכון", c: "gymCode", id: uid, expect: "any" });
     }
+    /* 🔴 מוני עמוד הבית (16.9, פעולה 3) — `any`, כי דחייה
+       כאן היא הכלל עובד: מסמך `residents` נקרא **רק**
+       לבעלי הרשאת תושבים, ומנהל המכון אמור להידחות ממנו. */
+    list.push({ key: "counts", label: "מוני עמוד הבית", c: "homeCounts", id: "residents", expect: "any" });
     return list;
   }
 

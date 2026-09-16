@@ -155,7 +155,8 @@ ok('⚠️ ושניהם נושאים את אותה גרסה כמו השאר',
     budgetTxFromFirestore:     ['js/data/sheets.js',      'BUDGET_TX_FROM_FIRESTORE_READ'],
     budgetYearFromFirestore:   ['js/data/sheets.js',      'BUDGET_YEAR_FROM_FIRESTORE'],
     bootFromFirestore:         ['js/data/sheets.js',      'BOOT_FROM_FIRESTORE'],
-    pulseToFirestore:          ['js/app.js',              'PULSE_DEFAULT']
+    pulseToFirestore:          ['js/app.js',              'PULSE_DEFAULT'],
+    homeCountsFromFirestore:   ['js/data/dataService.js', 'HOME_COUNTS_FROM_FIRESTORE']
   };
   const declared = {};
   (SRC.match(/^    ([a-zA-Z]+):\s*\[[\s\S]*?\],?$/gm) || []).forEach(function (line) {

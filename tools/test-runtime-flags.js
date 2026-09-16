@@ -53,7 +53,10 @@ reset();
 ok('FS_FLAGS_DOC = appConfig/flags', sandbox.FS_FLAGS_DOC === 'appConfig/flags', sandbox.FS_FLAGS_DOC);
 /* 🔴 המספר עולה עם כל תחום שעובר. מה שחשוב הוא שהרשימה **סגורה** —
    דגל שאינו בה נדחה, ולכן שם שגוי ב-flagSet לא מדליק כלום בשקט. */
-ok('שבעה דגלים ברשימה', sandbox.FLAG_KEYS.length === 7, JSON.stringify(sandbox.FLAG_KEYS));
+ok('שמונה דגלים ברשימה', sandbox.FLAG_KEYS.length === 8, JSON.stringify(sandbox.FLAG_KEYS));
+/* 🔴 פעולה 3 (16.9) — מוני עמוד הבית. */
+ok('homeCountsFromFirestore — המתג של פעולה 3',
+   sandbox.FLAG_KEYS.indexOf('homeCountsFromFirestore') !== -1);
 /* 🔴 צעד 10 — הפעימה החיה. כיבוי מחזיר את הסקר המלא. */
 ok('pulseToFirestore — המתג של צעד 10',
    sandbox.FLAG_KEYS.indexOf('pulseToFirestore') !== -1);
@@ -136,7 +139,7 @@ ok('כישלון כתיבה נתפס', g.ok === false && /503/.test(g.error), JS
 reset(); sandbox.authorize_ = () => ({ ok: true, perm: { isSuper: true } });
 store = { servicesFromFirestore: true, gardenPlanFromFirestore: false };
 g = sandbox.handleFlagsGet_({});
-ok('flagsGet מחזירה מצב ורשימה', g.ok === true && g.keys.length === 7 && g.flags.servicesFromFirestore === true,
+ok('flagsGet מחזירה מצב ורשימה', g.ok === true && g.keys.length === 8 && g.flags.servicesFromFirestore === true,
    JSON.stringify(g));
 sandbox.authorize_ = realAuth;
 

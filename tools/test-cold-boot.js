@@ -59,7 +59,8 @@ ok('🔴 מספר הגרסה הוא קבוע אחד — לא שתי מחרוזו
    (GS.match(/'v43-charge-photos'/g) || []).length === 1,
    String((GS.match(/'v43-charge-photos'/g) || []).length));
 ok('⚠️ ושני המקומות קוראים ממנו', (GS.match(/version: APP_VERSION,/g) || []).length === 2);
-ok('bootFromFirestore ברשימת הדגלים הסגורה', /'bootFromFirestore'\];/.test(GS));
+ok('bootFromFirestore ברשימת הדגלים הסגורה', /'bootFromFirestore',/.test(GS) &&
+   /var FLAG_KEYS = \[[\s\S]*?'bootFromFirestore'/.test(GS));
 
 /* ================================================================= */
 section('2. 🔴🔴 הפרטיות — מה שאסור שיגיע ל-appConfig');

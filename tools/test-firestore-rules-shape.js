@@ -147,9 +147,32 @@ ok('🔴 ו-canSeeFamilyTx חוסם את המחרוזת הריקה',
    /function canSeeFamilyTx\(fid\)[\s\S]*?fid is string && fid != '' && fid == myFamilyId\(\)/.test(CODE));
 ok('🔴 והוא לא נפתח לכל חבר אלא לבעלי הרשאת תקציב',
    /function canSeeBudget\(\)\s*\{\s*return hasPerm\('\u05ea\u05e7\u05e6\u05d9\u05d1'\)/.test(CODE));
-ok('🔴 אחד-עשר בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
-   (CODE.match(/^\s*match \//gm) || []).length === 12,
+ok('🔴 שנים-עשר בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
+   (CODE.match(/^\s*match \//gm) || []).length === 13,
    String((CODE.match(/^\s*match \//gm) || []).length));
+
+/* ======================================================================
+   🔴🔴 פעולה 3 (16.9) — מוני עמוד הבית.
+   הסכנה היחידה כאן היא **הרחבה שקטה**: מסמך אחד
+   שהיה נותן לכל מנהל את כל חמש הספירות, בעוד
+   ש-`handleHomeExtras_` בודק כל מקטע בנפרד.
+   ====================================================================== */
+section('5ג. 🔴 מוני עמוד הבית — מסמך לכל הרשאה');
+ok('הבלוק קיים ועובר דרך פונקציה בעלת שם',
+   /match \/homeCounts\/\{id\}\s*\{\s*allow read: if canSeeHomeCount\(id\);/.test(CODE));
+ok('🔴 וכתיבה אסורה לחלוטין',
+   /match \/homeCounts\/\{id\}[\s\S]{0,160}allow write: if false;/.test(CODE));
+ok('🔴🔴 וכל מזהה נבדק מול ההרשאה שלו בלבד',
+   /id == 'residents' && hasPerm\('תושבים'\)/.test(CODE) &&
+   /id == 'gym'\s*&& hasPerm\('מכון'\)/.test(CODE) &&
+   /id == 'club'\s*&& hasPerm\('מועדון'\)/.test(CODE) &&
+   /id == 'garden'\s*&& hasPerm\('גינון'\)/.test(CODE));
+ok('🔴 ו-isMember ולא signedIn — מי שעזב מאבד את הגישה',
+   /function canSeeHomeCount\(id\)\s*\{\s*return isMember\(\)/.test(CODE));
+ok('🔴 ו-isExternal == false (נכשל-סגור)',
+   /function canSeeHomeCount\(id\)[\s\S]{0,120}m\(\)\.isExternal == false/.test(CODE));
+ok('⚠️ ומזהה המסמך הוא ASCII (נתיב, לא ערך)',
+   !/id == '[\u0590-\u05ff]/.test(CODE));
 
 /* ======================================================================
    🔴🔴 צעד 10ב-1 — מנוי כושר. הבדיקות הרגישות במארז הזה:

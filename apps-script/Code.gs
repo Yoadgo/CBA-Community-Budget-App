@@ -256,6 +256,8 @@ var GET_ACTION_PERMS = {
   gymStatusSync: PERM_SUPER,
   /* צעד 11 — מסמך הפתיחה. פעולת תשתית. */
   bootSync: PERM_SUPER,
+  /* פעולה 3 (16.9) — זריעת מוני עמוד הבית. אותה סיבה. */
+  homeCountsSync: PERM_SUPER,
   /* דגלי זמן ריצה (2026-09-15, צעד 05א) — מדליקים ומכבים תחום
      בלי דיפלוי. שינוי התנהגות לכל המשתמשים — מנהל-על בלבד. */
   flagSet: PERM_SUPER, flagsGet: PERM_SUPER,
@@ -511,6 +513,10 @@ function doGet(e) {
     /* שני היומנים לפי דרישה (2026-09-16, פעולה 4). ר' handleBudgetLogs_. */
     if (e && e.parameter && e.parameter.action === 'budgetLogs') {
       return handleBudgetLogs_(e.parameter);
+    }
+    /* זריעת מוני עמוד הבית (2026-09-16, פעולה 3). */
+    if (e && e.parameter && e.parameter.action === 'homeCountsSync') {
+      return handleHomeCountsSync_(e.parameter);
     }
     /* גשר הזהות ל-Firestore (2026-09-14). ר' handleFirebaseLink_. */
     if (e && e.parameter && e.parameter.action === 'firebaseLink') {
@@ -3237,6 +3243,13 @@ function bumpRev_(action) {
         fsSet_(FS_PULSE_DOC, { n: n + 1, domains: map, schema: 1, updatedAt: new Date() });
       } catch (e2) { /* שגר ושכח */ }
     }
+
+    /* 🔴 מוני עמוד הבית (2026-09-16, פעולה 3) — התחום שזז
+       מתרענן מיד. **הוויטור יושב כאן ולא בכל נתיב כתיבה
+       בנפרד**: `bumpRev_` כבר יודעת איזה תחום השתנה, וכל
+       פעולה עתידית שתירשם ב-ACTION_DOMAIN תקבל את זה מעצמה.
+       רשימת קריאות מפוזרת היתה מתיישנת בפיצ'ר הראשון. */
+    homeCountsBump_(doms);
   } catch (err) { /* לא קריטי — במקרה הגרוע הלקוח פשוט ימשוך מלא */ }
 }
 
@@ -5495,6 +5508,16 @@ function hourlyJobsRun_() {
   } catch (e) {
     Logger.log('gymStatusSyncAll_ נכשל: ' + e);
   }
+  /* 🔴 מוני עמוד הבית (2026-09-16, פעולה 3) — חישוב מחדש של
+     הכול. זו רשת הביטחון שתופסת את מה ש-`bumpRev_` לא
+     רואה: **עריכה ידנית בגיליון** ואת ספירת המועדון,
+     שבמכוון אינה רצה בכתיבה (ר' הבלוק מעל `homeCountsDoc_`). */
+  try {
+    var hc = homeCountsSyncAll_(ss);
+    if (hc.errors.length) Logger.log('מוני עמוד הבית: ' + hc.errors.join(' ; '));
+  } catch (e) {
+    Logger.log('homeCountsSyncAll_ נכשל: ' + e);
+  }
   try {
     var r = fsBackupIncremental_(ss);
     Logger.log('גיבוי מצטבר: נקראו ' + r.read + ' מסמכים' +
@@ -6291,7 +6314,14 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
      הנוכחית מ-Firestore ומצייר מיד, במקום לחכות 10 שניות
      ל-Apps Script. המטען ממשיך ברקע ודורס כשהוא מגיע.
      ⚠️ כיבוי מחזיר בדיוק את ההתנהגות של היום. */
-  'bootFromFirestore'];
+  'bootFromFirestore',
+  /* 🔴 **המתג של פעולה 3** (2026-09-16) — מוני עמוד הבית.
+     כשהוא דלוק, הדפדפן קורא את התגיות ישירות
+     מ-Firestore ומצייר אותן מיד, במקום לחכות ל-`homeExtras`.
+     ⚠️ **הכתיבה בשרת אינה תלויה בדגל** — בדיוק כמו
+        בגינון ובשירותים: המסמכים מתעדכנים גם כשהדגל
+        כבוי, כך שהדלקה מוצאת נתונים טריים ולא ריק. */
+  'homeCountsFromFirestore'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {
@@ -8584,6 +8614,144 @@ function countStatus_(ss, sheetName, statusHeader, wanted) {
     }
     return n;
   } catch (e) { return 0; }
+}
+
+/* ============================================================================
+ *  מוני עמוד הבית כמסמכי Firestore   (2026-09-16, פעולה 3)
+ * ----------------------------------------------------------------------------
+ *  📊 **המדידה שמצדיקה את זה (16.9):** `homeExtras` עולה 6,486
+ *  אלפיות, וקריאת Firestore עולה **75**. חמש התגיות
+ *  של עמוד הבית — בקשות הרשמה, בקשות שינוי פרטים,
+ *  תשלומי מכון, שריונים ומשימות גינון — הן **חמישה
+ *  מספרים**, והם חיכו שש שניות.
+ *
+ *  🔴🔴 **מסמך נפרד לכל הרשאה, וזה לא עיצוב אלא אבטחה.**
+ *  כלל ב-Firestore פועל על **מסמך שלם ולא על שדה**. מסמך
+ *  אחד עם חמש הספירות היה אומר שמנהל המכון קורא גם את
+ *  מספר בקשות ההרשמה הממתינות — הרחבה שקטה מעבר למה
+ *  ש-`handleHomeExtras_` נותן לו היום (שם כל מקטע נבדק בנפרד).
+ *
+ *  🔴 **ולמה זה לא "עוד אחד / פחות אחד".** התוכנית המקורית
+ *  היתה עדכון אינקרמנטלי, כדי לא לסרוק גיליון. אבל מהבוקר
+ *  הספירה **אינה סריקת גיליון** — `countStatus_` קוראת עמודה
+ *  אחת. כלומר העלות שהאינקרמנטליות באה לחסוך כבר לא
+ *  קיימת, ומה שנשאר ממנה הוא רק החסרון: מונה שסופר
+ *  בעצמו **סוטה** — מכתיבה שנכשלה, מריצה כפולה, או עריכה
+ *  ידנית בגיליון — והסטייה שקטה. לכן: **חישוב מחדש מאותה
+ *  עמודה בדיוק**, ומאותה פונקציה שהמסך סופר בה.
+ *
+ *  **שלושה מסלולים שמרעננים, וכולם מחשבים מחדש:**
+ *    1. `bumpRev_` — מיד אחרי כל כתיבה, לתחום שזז בלבד.
+ *    2. `hourlyJobs` — הכול, כרשת ביטחון שתופסת גם עריכה
+ *       ידנית בגיליון — המסלול שאיש אינו עובר בו דרך הקוד.
+ *    3. `homeExtras` עצמו — ממשיך להחזיר את המספרים והוא הקובע.
+ *       כלומר המסמכים הם **הציור הראשון בלבד**, וכל
+ *       אי-דיוק נסגר תוך שניות ספורות.
+ *
+ *  ⚠️ **המועדון במכוון אינו מרענן בכתיבה.** הספירה שלו
+ *     מגיעה מיומן Google — 187 ימים, ~1.5 שניות. להוסיף אותן
+ *     לכל שריון שתושב שולח זה להאיט פעולה של משתמש
+ *     כדי להאיץ תגית צד. הוא מתרענן כל שעה, והתשובה של
+ *     `homeExtras` מתקנת אותו תוך שניות בכל מקרה.
+ *  ⚠️ **אין גיבוי לאוסף הזה, במכוון** — כמו `gymStatus`: כל מסמך
+ *     נגזר מהגיליון ונבנה מחדש כל שעה. גיבוי של מספר
+ *     שאפשר לחשב מחדש הוא עוד מקור אמת שיכול לסתור.
+ * ========================================================================== */
+var FS_HOME_COUNTS = 'homeCounts';
+
+/* 🔴 נקודת הגזירה האחת ל"משימת גינון שממתינה לאישור".
+   `handleGardenTasks_` (המסך) ו-`gardenPendingCount_` (המונה) קוראים
+   שניהם מכאן. שתי הגדרות מקבילות הן בדיוק "המספר בתגית
+   לא מסכים עם המסך". */
+function gardenTaskIsPending_(o) {
+  return !o.closure && o.flag === 'ממתין לאישור';
+}
+
+/* ספירת משימות הגינון הממתינות — בלי מושב ובלי לבנות שורות.
+   ⚠️ טאב חסר או ריק ⇒ 0, לא חריגה. תגית ספירה לעולם
+      אינה סיבה להפיל עבודה מתוזמנת. */
+function gardenPendingCount_(ss) {
+  try {
+    var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    if (!sh || sh.getLastRow() < 2) return 0;
+    var c = gardenCols_(sh);
+    var vals = sh.getDataRange().getValues();
+    var n = 0;
+    for (var r = 1; r < vals.length; r++) {
+      if (!gardenCell_(vals[r][c['מזהה']])) continue;
+      if (gardenTaskIsPending_(gardenTaskObj_(vals[r], c))) n++;
+    }
+    return n;
+  } catch (e) { return 0; }
+}
+
+/* מסמך אחד לפי תחום. מחזיר null לתחום שאין לו מונה. */
+function homeCountsDoc_(ss, domain) {
+  if (domain === 'residents') {
+    return { signups: countStatus_(ss, SIGNUPS_SHEET, 'סטטוס', 'ממתין'),
+             profile:  countStatus_(ss, PROFILE_SHEET, 'סטטוס', 'ממתין'),
+             schema: 1, updatedAt: new Date() };
+  }
+  if (domain === 'gym') {
+    return { pending: countStatus_(ss, GYM_SHEET, 'סטטוס', GYM_ST_VERIFY),
+             schema: 1, updatedAt: new Date() };
+  }
+  if (domain === 'garden') {
+    return { pending: gardenPendingCount_(ss), schema: 1, updatedAt: new Date() };
+  }
+  if (domain === 'club') {
+    return { pending: clubPendingCount_(), schema: 1, updatedAt: new Date() };
+  }
+  return null;
+}
+
+/* התחומים שמתרעננים מיד אחרי כתיבה (ר' ההערה על המועדון). */
+var HOME_COUNT_LIVE_DOMAINS = ['residents', 'gym', 'garden'];
+var HOME_COUNT_ALL_DOMAINS  = ['residents', 'gym', 'garden', 'club'];
+
+function homeCountsWrite_(ss, domains) {
+  var out = { wrote: 0, errors: [] };
+  for (var i = 0; i < domains.length; i++) {
+    try {
+      var doc = homeCountsDoc_(ss, domains[i]);
+      if (!doc) continue;
+      fsSet_(FS_HOME_COUNTS + '/' + domains[i], doc);
+      out.wrote++;
+    } catch (e) { out.errors.push(domains[i] + ': ' + e); }
+  }
+  return out;
+}
+
+function homeCountsSyncAll_(ss) {
+  return homeCountsWrite_(ss || SpreadsheetApp.getActiveSpreadsheet(), HOME_COUNT_ALL_DOMAINS);
+}
+
+/* נקראת מ-`bumpRev_` עם התחומים שזזו.
+   ⚠️ **לעולם אינה זורקת.** היא רצה בתוך נתיב כתיבה
+      שכבר הצליח; כשל ברענון תגית צד אסור שיהפוך
+      לכשל של השמירה עצמה. */
+function homeCountsBump_(domains) {
+  try {
+    var want = [];
+    for (var i = 0; i < domains.length; i++) {
+      if (HOME_COUNT_LIVE_DOMAINS.indexOf(domains[i]) !== -1) want.push(domains[i]);
+    }
+    if (!want.length) return;
+    homeCountsWrite_(SpreadsheetApp.getActiveSpreadsheet(), want);
+  } catch (e) { /* שגר ושכח */ }
+}
+
+/* סנכרון יזום — לזריעה ולאימות. מנהל-על בלבד (פעולת תשתית). */
+function handleHomeCountsSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var r = homeCountsSyncAll_(ss);
+    return json_({ ok: true, wrote: r.wrote, errors: r.errors });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
 }
 
 function handleHomeExtras_(p) {
@@ -11599,7 +11767,7 @@ function handleGardenTasks_(p) {
          באמת לא רלוונטית, ו"אוחד" הוא סגירה בפני עצמה. */
       if (scope === 'all') rows.push(o);
       else if (scope === 'unplanned') { if (!o.closure && !o.week) rows.push(o); }
-      else if (scope === 'pending') { if (!o.closure && o.flag === 'ממתין לאישור') rows.push(o); }
+      else if (scope === 'pending') { if (gardenTaskIsPending_(o)) rows.push(o); }
       else if (o.week === week) rows.push(o);
       if (o.closure) continue;
       /* all נאסף תמיד ובלי תלות ב-scope: מועמד לאיחוד יכול להיות דווקא משימה
