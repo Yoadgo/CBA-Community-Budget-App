@@ -149,7 +149,18 @@ const fnGym = (RULES.match(/function canSeeGymCode\(uid\) \{[\s\S]*?\n    \}/) |
 ok('יש בלוק gymCode', !!block);
 ok('⚠️ והוא מאציל לפונקציה בעלת שם ולא לתנאי פרוש',
    /allow read: if canSeeGymCode\(uid\);/.test(block) && !!fnGym);
-ok('🔴 והיא דורשת שהמסמך יהיה שלך', /request\.auth\.uid == uid/.test(fnGym));
+const fnSt = (RULES.match(/function canSeeGymStatus\(uid\) \{[\s\S]*?\n    \}/) || [''])[0];
+ok('🔴 והיא דורשת שהמסמך יהיה שלך', /canSeeGymStatus\(uid\)/.test(fnGym) &&
+   /request\.auth\.uid == uid/.test(fnSt));
+/* 🔴🔴 **מתג הכיבוי.** תושב שעזב מקבל active:false מיד, ו-authorize_
+   דוחה אותו באותו רגע. אבל gymUidByEmail_ בונה את מפת האימיילים
+   מטאב התושבים בלי להסתכל בסטטוס — ולכן הסנכרון השעתי היה ממשיך
+   לכתוב לו קוד עד תום המנוי. בלי הבדיקה הזאת, מי שעזב את השיכון
+   שומר את קוד הדלת לחודשים. */
+ok('🔴🔴 ו**חברות פעילה** — אחרת מי שעזב שומר את קוד הדלת',
+   /isMember\(\)/.test(fnSt));
+ok('🔴 ומשתמש חיצוני חסום, בדיוק כמו ב-authorize_',
+   /m\(\)\.isExternal == false/.test(fnSt));
 ok('🔴🔴 **וגם שהתוקף לא עבר** — זה מה שסוגר את פער השעה',
    /request\.time < resource\.data\.validUntil/.test(fnGym));
 ok('⚠️ ו-is timestamp — שדה חסר נכשל-סגור במפורש',
@@ -159,7 +170,8 @@ ok('🔴 והדפדפן לעולם אינו כותב', /allow write: if false;/.
 ok('⚠️ ואין allow גורף שנשאר בטעות', !/allow read, write/.test(block));
 /* 🔴 הכלל של gymStatus נשאר צר כשהיה, ובלי קוד. */
 ok('⚠️ מסמך הסטטוס נשאר בלי תנאי זמן — אין בו מה שפוקע',
-   /match \/gymStatus\/\{uid\} \{\s*\n\s*allow read: if signedIn\(\) && request\.auth\.uid == uid;/.test(RULES));
+   /match \/gymStatus\/\{uid\} \{\s*\n\s*allow read: if canSeeGymStatus\(uid\);/.test(RULES) &&
+   !/validUntil/.test(fnSt));
 ok('🔴 וברירת המחדל "הכול אסור" עדיין אחרונה',
    RULES.lastIndexOf('match /{document=**}') > RULES.indexOf('match /gymCode/'));
 

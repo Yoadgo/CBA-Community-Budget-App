@@ -158,8 +158,13 @@ ok('🔴 אחד-עשר בלוקים פתוחים בלבד (ועוד ברירת �
    ====================================================================== */
 section('5ב. 🔴 מנוי כושר — כל אחד את שלו בלבד');
 ok('gymStatus נפתח', CODE.indexOf('match /gymStatus/') !== -1);
-ok('🔴 והקריאה היא **מזהה המסמך מול ה-uid** בלבד',
-   /match \/gymStatus\/\{uid\}[\s\S]{0,200}allow read: if signedIn\(\) && request\.auth\.uid == uid;/.test(CODE));
+/* 🔴 **לא "בלבד" יותר** (16.9): התנאי עבר ל-`canSeeGymStatus`, שמוסיף
+   את מתג הכיבוי (`isMember()` דורש `active == true`) ואת חסימת
+   המשתמש החיצוני. הכלל המקורי היה **רחב מהשרת**: מי שסומן "עזב"
+   נדחה ב-`authorize_` באותו רגע, והמשיך לקרוא כאן. */
+ok('🔴 והקריאה היא מזהה המסמך מול ה-uid — **וגם חברות פעילה**',
+   /match \/gymStatus\/\{uid\}[\s\S]{0,200}allow read: if canSeeGymStatus\(uid\);/.test(CODE) &&
+   /function canSeeGymStatus\(uid\) \{[\s\S]{0,200}isMember\(\) && m\(\)\.isExternal == false && request\.auth\.uid == uid;/.test(CODE));
 ok('🔴🔴 ואין שום מסלול לפי משפחה (בן/בת זוג חולקים familyId)',
    !/match \/gymStatus\/\{uid\}[\s\S]{0,400}myFamilyId\(\)/.test(CODE));
 ok('🔴 ואין מסלול למנהל — מסך הניהול נשאר ב-Apps Script',

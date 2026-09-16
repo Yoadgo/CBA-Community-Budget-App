@@ -141,6 +141,65 @@ ok('⚠️ ושניהם נושאים את אותה גרסה כמו השאר',
   const missing = serverKeys.map(s => s.replace(/'/g, '')).filter(k => described.indexOf(k) === -1);
   ok('🔴 ולכל דגל שקיים בשרת יש תיאור בעברית במסך', missing.length === 0, missing.join(','));
 
+  /* ==================================================================
+     🔴🔴 **ברירת המחדל שהמסך מצהיר עליה מול הקבוע האמיתי בקוד.**
+     `flagsSet_` שומר רק מפתחות שמישהו שינה; מפתח חסר פירושו
+     "ברירת המחדל שבקוד", ו-`CBA.fb.flag(key, dflt)` מכבד את זה.
+     מסך שמצהיר ברירת מחדל שגויה מציג תחום דלוק ככבוי — ומציע
+     "הדלק" במקום "כבה" בדיוק ברגע שבו רוצים לכבות בחירום.
+     ⚠️ שתי הרשימות חייבות להישאר צמודות; זו הבדיקה שמחזיקה אותן. */
+  const REAL_CONST = {
+    gardenPlanFromFirestore:   ['js/data/dataService.js', 'GARDEN_PLAN_FROM_FIRESTORE'],
+    servicesFromFirestore:     ['js/data/dataService.js', 'SERVICES_FROM_FIRESTORE'],
+    budgetTxStatusToFirestore: ['js/data/dataService.js', 'BUDGET_TX_STATUS_TO_FIRESTORE'],
+    budgetTxFromFirestore:     ['js/data/sheets.js',      'BUDGET_TX_FROM_FIRESTORE_READ'],
+    budgetYearFromFirestore:   ['js/data/sheets.js',      'BUDGET_YEAR_FROM_FIRESTORE'],
+    bootFromFirestore:         ['js/data/sheets.js',      'BOOT_FROM_FIRESTORE'],
+    pulseToFirestore:          ['js/app.js',              'PULSE_DEFAULT']
+  };
+  const declared = {};
+  (SRC.match(/^    ([a-zA-Z]+):\s*\[[\s\S]*?\],?$/gm) || []).forEach(function (line) {
+    const k = line.trim().split(':')[0];
+    const m2 = line.match(/,\s*(true|false)\]/);
+    if (m2) declared[k] = m2[1] === 'true';
+  });
+  ok('⚠️ לכל דגל מוצהרת ברירת מחדל במסך',
+     Object.keys(REAL_CONST).every(k => k in declared),
+     Object.keys(REAL_CONST).filter(k => !(k in declared)).join(','));
+  const wrong = Object.keys(REAL_CONST).filter(function (k) {
+    const src = R(REAL_CONST[k][0]);
+    const m3 = src.match(new RegExp('var ' + REAL_CONST[k][1] + ' = (true|false);'));
+    return !m3 || (m3[1] === 'true') !== declared[k];
+  });
+  ok('🔴🔴 וכל אחת מהן זהה לקבוע האמיתי בקוד הלקוח', wrong.length === 0, wrong.join(','));
+  /* 🔴 וארבעה מהם באמת דלוקים כברירת מחדל — הבדיקה הזאת קיימת כדי
+     שהבדיקה שמעליה לא תהיה ריקה מתוכן אם כולם יהיו false. */
+  ok('⚠️ וחמישה מהם דלוקים היום כברירת מחדל',
+     Object.keys(declared).filter(k => declared[k]).length === 5,
+     String(Object.keys(declared).filter(k => declared[k]).length));
+
+  /* =============================================================== */
+  section('2ב. 🔴🔴 דגל שלא נכתב מעולם מוצג לפי ברירת המחדל שבקוד');
+  env = makeEnv({ flagsRes: { ok: true,
+    keys: ['gardenPlanFromFirestore', 'bootFromFirestore'],
+    flags: { bootFromFirestore: true } } });   /* גינון לא נכתב מעולם */
+  c = makeEl();
+  env.CBA.screens.sysStatus.render(c);
+  await tick();
+  ok('🔴 תוכנית הגינון מוצגת כ**דלוקה** (ברירת המחדל בקוד היא true)',
+     (c.innerHTML.match(/sys-flag--on/g) || []).length === 2,
+     String((c.innerHTML.match(/sys-flag--on/g) || []).length));
+  ok('🔴 והכפתור שלה מציע "כבה" — זה כל מה שהמסך הזה קיים בשבילו',
+     (c.innerHTML.match(/כבה/g) || []).length === 2,
+     String((c.innerHTML.match(/כבה/g) || []).length));
+  ok('⚠️ ומסומן שזו ברירת מחדל ולא כתיבה מפורשת',
+     /ברירת מחדל/.test(c.innerHTML));
+  setCalls = [];
+  c.listeners['gardenPlanFromFirestore']();
+  await tick(); await tick();
+  ok('🔴🔴 ולחיצה אחת **מכבה** אותה — לא "מדליקה" את מה שכבר דלוק',
+     setCalls.length === 1 && setCalls[0].value === false, JSON.stringify(setCalls));
+
   /* =============================================================== */
   section('3. 🔴🔴 "נדחה" אינו בהכרח תקלה');
   env = makeEnv({ probeRes: (col) => (col === 'gymCode' ? { state: 'denied', ms: 30 }
@@ -241,6 +300,17 @@ ok('⚠️ ושניהם נושאים את אותה גרסה כמו השאר',
      probeCalls.every(x => !/\/$/.test(x)), JSON.stringify(probeCalls));
   ok('⚠️ ומסמכי התחומים עדיין נבדקים',
      probeCalls.indexOf('appConfig/flags') !== -1);
+  /* 🔴🔴 **ואין שורה שאיש לא התחיל.** `probeList()` תלויה ב-uid,
+     שמתמלא שנייה אחרי הפתיחה. חישוב הרשימה מחדש בכל ציור היה
+     מוסיף שלוש שורות ש-`load()` כבר לא ירוץ עבורן — והן היו
+     נשארות על "בודק…" לנצח. הרשימה נקבעת פעם אחת. */
+  env.CBA.fb.uid = () => 'u1';          /* הזהות הגיעה באיחור */
+  env.CBA.screens.sysStatus.render.call(null, c);   /* ציור מחדש בלבד */
+  const started = probeCalls.length;
+  await tick();
+  ok('🔴 שורה שלא הותחלה אינה נוספת לתצוגה בציור מאוחר',
+     (c.innerHTML.match(/בודק…/g) || []).length === 0,
+     String((c.innerHTML.match(/בודק…/g) || []).length));
 
   /* =============================================================== */
   section('6. כשלים — המסך לא נשבר');

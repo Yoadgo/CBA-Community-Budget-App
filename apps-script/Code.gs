@@ -5250,7 +5250,13 @@ function dailyEmailJobs_() {
         משמעות כשהמלא עולה 24 קריאות מתוך 50,000.
      ⚠️ **המלא הוא המתאם:** המצטבר לעולם לא רואה מחיקות, ולכן
         הריצה הזאת היא מה שמנקה מסמכים שנמחקו מ-Firestore. לא לבטל. */
-  try { fsBackupAll_(ss); } catch (e) { Logger.log('fsBackupAll_ נכשל: ' + e); }
+  /* 🔴 גם הגיבוי היומי לוקח את הנעילה: הוא קורא את כל האוספים,
+     ובלעדיה הוא יכול לרוץ במקביל לסנכרון שמוחק יתומים — ואז
+     הצילום נתפס באמצע ואינו עקבי. 08:00 של שתי העבודות חופף. */
+  try {
+    var bk = withSyncLock_('dailyBackup', function () { fsBackupAll_(ss); return { ok: true }; });
+    if (bk && bk.busy) Logger.log('גיבוי יומי דילג: ' + bk.error);
+  } catch (e) { Logger.log('fsBackupAll_ נכשל: ' + e); }
 }
 
 /* ============================================================================
@@ -5335,6 +5341,19 @@ function hourlyJobsRun_() {
     if (b.error) Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + b.error);
   } catch (e) {
     Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + e);
+  }
+  /* 🔴 **מסמך השנה הנוכחית — רק הוא, וכל שעה.** מצעד 11 הוא נושא גם
+     `closed`/`baseline`/`notes`, והטעינה הקרה בונה מהם את מצב התקציב.
+     עד היום הוא נכתב **אך ורק** ב-`budgetSync` הידני — כלומר מנהל
+     שסוגר תקציב ולא מריץ סנכרון היה משאיר את Firestore על "טיוטה"
+     לנצח, והמסך היה מציג "סגור תקציב" על שנה שכבר סגורה.
+     ⚠️ השנה הנוכחית בלבד: היא היחידה שהטעינה הקרה בונה, והיא
+        היחידה שמשתנה. סנכרון כל השנים נשאר פעולה ידנית. */
+  try {
+    var cy = currentBudgetYearSync_(ss);
+    if (cy.error) Logger.log('\u05e9\u05e0\u05d4 \u05e0\u05d5\u05db\u05d7\u05d9\u05ea: ' + cy.error);
+  } catch (e) {
+    Logger.log('currentBudgetYearSync_ \u05e0\u05db\u05e9\u05dc: ' + e);
   }
   try {
     var g = gymStatusSyncAll_(ss);
@@ -5944,7 +5963,23 @@ function handleServices_(p) {
  * ולידציה לפני כתיבה (ולא אחריה): שירות בלי שם או בלי מזהה, מזהה כפול, או
  * סעיף עם "סוג" לא מוכר — כולם נדחים עם הודעה ברורה, כדי שלא ניכתב לגיליון
  * מצב שהמסך לא יידע לצייר. */
+/* 🔴🔴 **הנעילה המייעצת נלקחת כאן, מחוץ לנעילת הסקריפט** (16.9.2026,
+   נתפס בסקירה). השמירה הזאת אינה "עוד כתיבה": היא מריצה
+   `servicesSyncAll_` — כתיבה מלאה **ואז סחיפת יתומים**. כלומר היא
+   בדיוק אותו דפוס הרסני שבגללו הסנכרונים הידניים ננעלו, והיא נשארה
+   בחוץ. תרחיש: מנהל א' מריץ "סנכרון שירותים" ידני; רגע אחריו מנהל ב'
+   שומר שירות חדש X. הסנכרון של א' כבר קרא את הטאב לפני X, ולכן
+   הסחיפה שלו מוחקת את `services/X` מ-Firestore — ו-`servicesFromFirestore`
+   דלוק כברירת מחדל, כך שהתושבים פשוט מפסיקים לראות את השירות.
+   ⚠️ **מחוץ ל-`LockService` ולא בתוכו:** הגוף כבר לוקח את נעילת
+      הסקריפט בעצמו, ותפיסה מקוננת של אותה נעילה באותה ריצה היא
+      בדיוק הדרך להיתקע. `syncLockTake_` תופסת ומשחררת אותה לרגע,
+      והגוף לוקח אותה אחריה. */
 function saveServices_(ss, body) {
+  return withSyncLock_('saveServices', function () { return saveServicesRun_(ss, body); });
+}
+
+function saveServicesRun_(ss, body) {
   var services = Array.isArray(body.services) ? body.services : [];
   var sections = Array.isArray(body.sections) ? body.sections : [];
 
@@ -8486,37 +8521,33 @@ function budgetYearDoc_(ss, y, settings, notesMap) {
  *  Script אחת. זה קורה בשימוש ראשון, ובאיפון — שמפנה את
  *  ה-localStorage של אתר שלא נפתח שבוע. זה המסך שיועד צילם.
  *
- *  🔴🔴 **מה אסור שיהיה כאן, ולמה זה העיקר.**
- *  המסמך הזה יושב ב-`appConfig`, שנקרא ע"י **כל חבר** (`isMember()`).
- *  ב-`doGet` יש סינון מפורש — `RESIDENT_SETTINGS_ALLOW` — שנותן לתושב
- *  רגיל **מפתח אחד בלבד** מתוך ההגדרות. זה לא קישוט: מפתח
- *  כמו `בסיס תקציב <שנה>` הוא JSON של כל התכנון המאושר לכל
- *  סעיף, והסרתו מהתושב היתה תיקון פרטיות מכוון.
+ *  🔴🔴 **אין כאן הגדרות בכלל, וזה העיקר.**
+ *  המסמך יושב ב-`appConfig`, ושם `allow read: if isMember()` — **כל**
+ *  חבר פעיל, כולל אחראי הגינון **החיצוני**. ב-`doGet`, לעומת זאת,
+ *  משתמש חיצוני נדחה לגמרי (`authorize_` חוסם כל פעולה שאינה גינון)
+ *  ותושב רגיל מקבל מפתח הגדרות אחד בלבד (`RESIDENT_SETTINGS_ALLOW`).
  *
- *  ⚠️ לכן **המסמך הזה נושא את אותה רשימת היתר בדיוק**, ולא
- *     את מפת ההגדרות. כל מה שבעל הרשאת תקציב צריך מעבר לזה
- *     עבר לתוך `budgetYears/{year}`, שמוגן ב-`canSeeBudget()`.
- *  ⚠️ אין כאן שום נתון אישי ואין שום סוד — רשימת שנים, השנה
- *     הנוכחית, מספר גרסה.
+ *  🔴 **הגרסה הראשונה של הצעד הזה העתיקה לכאן את אותה רשימת היתר
+ *  — כלומר את סיסמת רשת המועדון — ונתפסה בסקירה לפני הפרסום.**
+ *  התוצאה היתה שהקבלן החיצוני, שהשרת אינו נותן לו שום הגדרה,
+ *  היה קורא את הסיסמה ישירות מ-Firestore. כלל רחב מהשרת.
+ *
+ *  ⚠️ **התיקון אינו כלל חדש אלא הסרה.** אפשר היה להצר את הכלל
+ *     על `appConfig`, אבל ב-Firestore כל `match` שמתאים מעניק
+ *     גישה — `match /appConfig/boot` צר יותר **לא** היה מבטל את
+ *     ה-wildcard מעליו. מסמך בלי סוד הוא הגנה שאי-אפשר לעקוף.
+ *  ⚠️ מה שכן כאן: רשימת שנים, השנה הנוכחית, מספר גרסה. אין נתון
+ *     אישי, אין סוד, ואין מה לסנן לפי הרשאה.
  * ========================================================================== */
 var FS_BOOT_DOC = 'appConfig/boot';
-
-/* 🔴 העתק מדויק של רשימת ההיתר ב-doGet. אם מוסיפים שם מפתח —
-   יש להוסיף גם כאן, והפוך. יש בדיקה שמצליבה את השתיים. */
-var BOOT_SETTINGS_ALLOW = ['\u05e1\u05d9\u05e1\u05de\u05ea \u05e8\u05e9\u05ea \u05d4\u05de\u05d5\u05e2\u05d3\u05d5\u05df'];
 
 function bootDoc_(ss, settings) {
   settings = settings || readSettings_(ss);
   var years = String(settings['\u05e9\u05e0\u05d9\u05dd'] || '').split(',')
                 .map(function (x) { return x.trim(); }).filter(Boolean);
-  var safe = {};
-  BOOT_SETTINGS_ALLOW.forEach(function (k) {
-    if (settings[k] !== undefined) safe[k] = settings[k];
-  });
   return {
     years: years,
     currentYear: settings['\u05e9\u05e0\u05d4 \u05e0\u05d5\u05db\u05d7\u05d9\u05ea'] || years[0] || '',
-    settings: safe,
     version: APP_VERSION,
     schema: 1,
     updatedAt: new Date()
@@ -8528,6 +8559,28 @@ function bootSync_(ss) {
   var out = { ok: false, error: '' };
   try {
     fsSet_(FS_BOOT_DOC, bootDoc_(ss));
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+/** כותב מחדש את מסמך השנה הנוכחית בלבד. ר' ההערה בעבודה השעתית. */
+function currentBudgetYearSync_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, year: '', error: '' };
+  try {
+    var settings = readSettings_(ss);
+    var years = String(settings['\u05e9\u05e0\u05d9\u05dd'] || '').split(',')
+                  .map(function (x) { return x.trim(); }).filter(Boolean);
+    var y = settings['\u05e9\u05e0\u05d4 \u05e0\u05d5\u05db\u05d7\u05d9\u05ea'] || years[0] || '';
+    out.year = y;
+    if (!y || !fsIdOk_(budgetYearId_(y))) { out.ok = true; return out; }
+    if (!ss.getSheetByName('\u05ea\u05e7\u05e6\u05d9\u05d1 ' + y)) { out.ok = true; return out; }
+    var notesMap = {};
+    try { notesMap = cached_('cba_notes_' + budgetStamp_(), function () { return readNotesMap_(ss); }) || {}; } catch (e) { notesMap = {}; }
+    var doc = budgetYearDoc_(ss, y, settings, notesMap);
+    if (JSON.stringify(doc).length > BY_MAX_BYTES) { out.error = '\u05d2\u05d3\u05d5\u05dc \u05de\u05d3\u05d9'; return out; }
+    fsSet_(fsDocPath_(FS_BUDGET_YEARS, budgetYearId_(y)), doc);
     out.ok = true;
   } catch (err) { out.error = String(err); }
   return out;

@@ -386,8 +386,21 @@ service cloud.firestore {
      *     מסמכים ולא על שדות, ולכן קוד שהיה נוסע כאן היה נקרא
      *     גם ע"י מי שהמנוי שלו פג. ר' ההערה ב-`gymStatusSyncAll_`.
      * ==================================================================== */
+    /* 🔴🔴 **`isMember()` ולא `signedIn()` — תוקן 16.9.2026.**
+       הכלל המקורי הסתפק ב"המסמך שלך", והחמיץ את **מתג הכיבוי**:
+       תושב שסומן "עזב" מקבל `members/{uid}.active = false` מיד
+       (`fbSyncRow_`), ו-`authorize_` בשרת דוחה אותו באותו רגע. הכלל
+       כאן המשיך לתת לו את המסמך — כלומר **רחב מהשרת**, וזה בדיוק
+       מה שאסור. מי שעזב את השיכון היה ממשיך לראות את מנוי הכושר
+       שלו כל עוד הוא מחובר.
+       ⚠️ `isExternal == false` מאותה סיבה כמו בכל שאר הכללים:
+          `authorize_` חוסם משתמש חיצוני מכל פעולה שאינה גינון. */
+    function canSeeGymStatus(uid) {
+      return isMember() && m().isExternal == false && request.auth.uid == uid;
+    }
+
     match /gymStatus/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
+      allow read: if canSeeGymStatus(uid);
       /* הגיליון מקור האמת; Apps Script כותב דרך OAuth ועוקף
          את הכללים. הדפדפן לעולם אינו כותב כאן. */
       allow write: if false;
@@ -421,7 +434,17 @@ service cloud.firestore {
        הקובץ מ-15.9: תנאי שנדחף בשורה אחת בתוך `match` הוא בדיוק מה
        שמחליק פנימה בלי שאיש יראה אותו. יש בדיקה שאוכפת את זה. */
     function canSeeGymCode(uid) {
-      return signedIn() && request.auth.uid == uid &&
+      /* 🔴🔴 **`canSeeGymStatus` ולא `signedIn()` — תוקן 16.9.2026, לפני
+         הפרסום הראשון.** התנאי המקורי בדק רק "המסמך שלך" + תוקף, והחמיץ
+         את מתג הכיבוי: תושב שעזב מקבל `active:false` מיד, `authorize_`
+         דוחה אותו באותו רגע — אבל `gymUidByEmail_` בונה את מפת
+         האימיילים מטאב התושבים **בלי להסתכל בסטטוס**, ולכן הסנכרון
+         השעתי היה ממשיך לכתוב לו קוד עד תום תקופת המנוי.
+         מי שעזב את השיכון היה שומר את **קוד הדלת** של המכון לחודשים.
+         ⚠️ שני התנאים אינם עודפים זה לזה: `validUntil` סוגר את פער
+            השעה מול פקיעת המנוי, ו-`isMember()` סוגר את פער העזיבה.
+            כל אחד מהם לבדו משאיר דלת פתוחה. */
+      return canSeeGymStatus(uid) &&
              resource.data.validUntil is timestamp &&
              request.time < resource.data.validUntil;
     }

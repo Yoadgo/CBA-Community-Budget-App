@@ -557,6 +557,21 @@ CBA.sheets = (function () {
       CBA.mock.currentYear = store.currentYear;
     }
     CBA.mock._source = "sheets";
+    /* 🔴🔴 **חלקי = אסור לכתוב** (16.9.2026, נתפס בסקירה לפני הפרסום).
+       הטעינה הקרה בונה **שנה אחת** מ-Firestore, בלי ההגדרות, בלי
+       `budgetUpdates` ובלי `notesLog` — ומיד אחריה `inited` הופך
+       ל-true והמסכים נעשים לחיצים. עד כאן זה בסדר: להציג מוקדם זה
+       כל הרעיון. **לכתוב** על בסיס מה שלא נטען זה כבר משהו אחר:
+         · `saveColumnConfig` נגזר מ-`_settings` — מפה חלקית היתה
+           דורסת את תצורת העמודות **הגלובלית** של כל המשתמשים.
+         · שינוי סכום בתכנון רושם שורת "עדכוני תקציב" רק כשהשנה
+           `locked`; שנה חלקית נראית `draft`, והשורה — שהיא דרישת
+           ביקורת — פשוט לא היתה נרשמת. בשקט, ולתמיד.
+       לכן הדגל הזה, ו-`pushConnected()` שנשען עליו, חוסמים **כל**
+       כתיבה עד שהמטען האמיתי נוחת. חלון של שניות ספורות.
+       ⚠️ נמחק (ולא נשאר false) כדי שמטען אמיתי ינקה אותו תמיד. */
+    if (store.partial) CBA.mock._partial = true;
+    else delete CBA.mock._partial;
     CBA.mock._settings = store.settings || {};
     // גרסת השרת שעונה בפועל — כדי שאפשר יהיה לראות מיד אם ה-Apps Script עודכן
     CBA.mock._serverVersion = store.version || "";
@@ -861,6 +876,15 @@ CBA.sheets = (function () {
              הוא גוזר בעצמו — **נקודת הגזירה אחת**. */
           fsYearLoad(y, function (e3, res) {
             if (e3 || !res || !res.data) return done(false);
+            /* 🔴🔴 **מסמך שנה בסכמה ישנה אינו נושא `closed`, וזה מסוכן
+               דווקא בגלל שהוא נראה תקין.** `doc.closed === true` על
+               מסמך schema 1 מחזיר `false` — כלומר שנה **סגורה** היתה
+               נצבעת "טיוטה", עם כפתור "סגור תקציב" על מה שכבר סגור.
+               ⚠️ זה בדיוק מצב הייצור ברגע הדלקת הדגל, לפני שרץ
+                  `budgetSync` הראשון. מוטב לא לצייר מוקדם מאשר
+                  לצייר מצב שגוי. מהעדכון הזה השנה הנוכחית נכתבת
+                  גם בעבודה השעתית, ולכן זה חלון של דקות. */
+            if (res.data.schema !== undefined && Number(res.data.schema) < 2) return done(false);
             /* 🔴 אותו `buildYear` בדיוק כמו כל מסלול אחר. */
             var d = res.data;
             var notesMap = {};
@@ -876,11 +900,17 @@ CBA.sheets = (function () {
               years: years,
               yearList: (boot.years || [y]).slice(),
               currentYear: y,
-              settings: boot.settings || {},
+              /* 🔴 **בלי הגדרות, בכוונה.** מסמך הפתיחה אינו נושא אותן
+                 (ר' `bootDoc_` — הן היו דולפות לקבלן החיצוני), ומפה
+                 חלקית כאן היתה גרועה יותר מריקה: היא נראית אמיתית.
+                 ⚠️ המחיר: סיסמת רשת המועדון אינה מוצגת בשניות
+                    הראשונות. המטען ממלא אותה רגע אחר כך. */
+              settings: {},
               version: boot.version || "",
               budgetUpdates: [],
               notesLog: [],
-              txFsOn: null
+              txFsOn: null,
+              partial: true
             };
             /* 🔴🔴 **המטען תמיד מנצח — גם כשהוא מקדים אותנו.**
                `apply()` דורס את `CBA.mock.years` במלואו. אם המטען
@@ -1651,7 +1681,11 @@ CBA.sheets = (function () {
               בדיוק ההתנהגות של DATA_MIN היום. */
         closed:   doc.closed === true,
         baseline: doc.baseline || null,
-        notes:    doc.notes || null
+        notes:    doc.notes || null,
+        /* 🔴 מועבר הלאה כדי שהטעינה הקרה תוכל לסרב למסמך ישן
+           שאין בו `closed`. `undefined` = תושב שקיבל EMPTY_PLAN
+           ולא קרא מסמך כלל — ר' השער שם. */
+        schema:   doc.schema
       } });
     }
 

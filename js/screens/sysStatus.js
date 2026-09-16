@@ -26,20 +26,42 @@ CBA.screens = CBA.screens || {};
 (function () {
   function esc(s) { return CBA.esc(String(s == null ? "" : s)); }
 
-  var st = { flags: null, keys: [], error: "", busy: "", probes: {} };
+  var st = { flags: null, keys: [], error: "", busy: "", probes: {}, rows: [] };
 
   /* 🔴 **התיאור הוא חלק מהדגל, לא קישוט.** דגל בשם `budgetTxFromFirestore`
      אומר לי מה הוא עושה כי כתבתי אותו; בעוד חצי שנה, בשתיים בלילה, הוא
      לא יאמר את זה לאיש. השורה הזאת היא מה שיישאר. */
+  /* 🔴🔴 **הערך השלישי הוא ברירת המחדל שבקוד, והוא לא אופציונלי**
+     (16.9.2026, נתפס בסקירה לפני שהמסך שימש בפעם הראשונה).
+     `flagsSet_` בשרת שומר **רק** מפתחות שמישהו שינה אי-פעם; מפתח
+     שאינו במסמך פירושו "ברירת המחדל שבקוד", ו-`CBA.fb.flag(key, dflt)`
+     מכבד את זה. חמישה מהדגלים דלוקים כברירת מחדל.
+     ⚠️ מסך שהיה קורא `flags[key] === true` בלבד היה מציג אותם
+        כ**כבויים** — ומציע כפתור "הדלק" על תחום שכבר חי. כלומר
+        המסך שכל תכליתו כיבוי חירום לא היה מציע לכבות בדיוק את
+        חמשת התחומים שדולקים היום, והלחיצה הראשונה לא הייתה
+        עושה כלום. צריך היה ללחוץ פעמיים.
+     ⚠️ יש בדיקה שמצליבה כל ערך כאן מול הקבוע האמיתי בקוד הלקוח. */
   var FLAG_INFO = {
-    gardenPlanFromFirestore:  ["תוכנית הגינון", "מסכי הגינון קוראים את התוכנית ישירות מ-Firestore במקום מ-Apps Script."],
-    servicesFromFirestore:    ["שירותים לתושב", "כרטיסי השירותים נקראים ישירות מ-Firestore."],
-    budgetYearFromFirestore:  ["תקציב לפי שנה", "שנה שנמשכת לפי דרישה נקראת מ-Firestore במקום מהגיליון."],
-    budgetTxStatusToFirestore: ["שינוי סטטוס תנועה", "כתיבה: שינוי סטטוס נכתב ישירות ל-Firestore, וטריגר מחיל אותו על הגיליון."],
-    budgetTxFromFirestore:    ["תנועות התקציב", "התנועות של השנה הנוכחית נקראות מ-Firestore ולא נשלחות במטען."],
-    pulseToFirestore:         ["הפעימה החיה", "השרת כותב מסמך פעימה, והלקוח מאזין לו במקום לסקור כל 3 שניות."],
-    bootFromFirestore:        ["טעינה קרה", "כשאין מטמון מקומי — השנה הנוכחית נבנית מ-Firestore ומצוירת מיד."]
+    gardenPlanFromFirestore:  ["תוכנית הגינון", "מסכי הגינון קוראים את התוכנית ישירות מ-Firestore במקום מ-Apps Script.", true],
+    servicesFromFirestore:    ["שירותים לתושב", "כרטיסי השירותים נקראים ישירות מ-Firestore.", true],
+    budgetYearFromFirestore:  ["תקציב לפי שנה", "שנה שנמשכת לפי דרישה נקראת מ-Firestore במקום מהגיליון.", true],
+    budgetTxStatusToFirestore: ["שינוי סטטוס תנועה", "כתיבה: שינוי סטטוס נכתב ישירות ל-Firestore, וטריגר מחיל אותו על הגיליון.", true],
+    budgetTxFromFirestore:    ["תנועות התקציב", "התנועות של השנה הנוכחית נקראות מ-Firestore ולא נשלחות במטען.", true],
+    pulseToFirestore:         ["הפעימה החיה", "השרת כותב מסמך פעימה, והלקוח מאזין לו במקום לסקור כל 3 שניות.", false],
+    bootFromFirestore:        ["טעינה קרה", "כשאין מטמון מקומי — השנה הנוכחית נבנית מ-Firestore ומצוירת מיד.", false]
   };
+
+  /* המצב **האפקטיבי**: מה שכתוב במסמך, ואם אינו כתוב — ברירת המחדל
+     שבקוד. זו בדיוק הנוסחה של `CBA.fb.flag`, ולכן המסך אומר את מה
+     שהאפליקציה באמת עושה. דגל שאין לו תיאור (נוסף בשרת ואינו מוכר
+     כאן) מוצג לפי המסמך בלבד — זה כל מה שידוע עליו. */
+  function effective(key) {
+    if (st.flags && st.flags[key] === true) return true;
+    if (st.flags && st.flags[key] === false) return false;
+    var info = FLAG_INFO[key];
+    return !!(info && info[2]);
+  }
 
   /* מה נבדק, ומה התשובה הצפויה. `expect` הוא מה שאומר לנו אם "נדחה"
      הוא הכלל עובד או הכלל שבור. */
@@ -94,13 +116,18 @@ CBA.screens = CBA.screens || {};
 
   function flagRow(key) {
     var info = FLAG_INFO[key] || [key, ""];
-    var on = st.flags && st.flags[key] === true;
+    var on = effective(key);
+    /* ⚠️ מפתח שאינו במסמך = ברירת המחדל שבקוד. אומרים את זה בפירוש,
+       כי "דלוק" שלא נכתב מעולם ו"דלוק" שמישהו הדליק אינם אותו דבר:
+       הראשון נעלם ברגע שמישהו יכבה וידליק מחדש. */
+    var implicit = !(st.flags && (st.flags[key] === true || st.flags[key] === false));
     var busy = st.busy === key;
     return '<div class="sys-flag' + (on ? " sys-flag--on" : "") + '">' +
              '<div class="sys-flag__text">' +
                '<div class="sys-flag__name">' + esc(info[0]) + "</div>" +
                '<div class="sys-flag__desc">' + esc(info[1]) + "</div>" +
-               '<div class="sys-flag__key">' + esc(key) + "</div>" +
+               '<div class="sys-flag__key">' + esc(key) +
+                 (implicit ? ' · ברירת מחדל' : "") + "</div>" +
              "</div>" +
              '<button type="button" class="btn-ghost sys-flag__btn" data-flag="' + esc(key) + '"' +
                (busy ? " disabled" : "") + ">" +
@@ -132,7 +159,12 @@ CBA.screens = CBA.screens || {};
       "</div>";
     }
 
-    var probes = probeList();
+    /* 🔴 **הרשימה נקבעת פעם אחת, בטעינה** (16.9, נתפס בסקירה).
+       `probeList()` תלויה ב-`CBA.fb.uid()`, שעדיין ריק בשנייה
+       הראשונה. חישוב מחדש בכל ציור היה מוסיף שלוש שורות אחרי
+       ש-`load()` כבר החליט מה להריץ — והן היו תקועות על "בודק…"
+       לנצח, כי אף אחד לא התחיל אותן. */
+    var probes = st.rows;
     var probeHTML = '<div class="card">' +
       '<div class="sys-sec">קריאה אמיתית מהדפדפן הזה</div>' +
       probes.map(probeRow).join("") +
@@ -150,7 +182,8 @@ CBA.screens = CBA.screens || {};
 
   function toggle(container, key) {
     if (st.busy || !st.flags) return;
-    var next = !(st.flags[key] === true);
+    /* 🔴 ההפך של המצב **האפקטיבי**, לא של מה שכתוב במסמך. */
+    var next = !effective(key);
     var info = FLAG_INFO[key] || [key, ""];
     CBA.ui.confirm(
       (info[1] || "") + " השינוי חל על כל המשתמשים.",
@@ -171,6 +204,7 @@ CBA.screens = CBA.screens || {};
 
   function load(container) {
     st.error = ""; st.flags = null; st.keys = []; st.probes = {};
+    st.rows = probeList();
     CBA.data.getFlags(function (res) {
       if (res && res.ok) { st.flags = res.flags || {}; st.keys = res.keys || []; }
       else { st.error = (res && res.error) || "לא ניתן לטעון את הדגלים."; }
@@ -179,7 +213,7 @@ CBA.screens = CBA.screens || {};
     /* ⚠️ הבדיקות רצות **במקביל** ולא בטור: כל אחת היא קריאת Firestore
        של עשרות אלפיות, ושרשור שמונה כאלה היה הופך אותן לשנייה שלמה
        בלי שום סיבה. כל תשובה מציירת מחדש בעצמה. */
-    probeList().forEach(function (item) {
+    st.rows.forEach(function (item) {
       if (!CBA.data.probeDoc) return;
       CBA.data.probeDoc(item.c, item.id, function (p) {
         st.probes[item.key] = p;

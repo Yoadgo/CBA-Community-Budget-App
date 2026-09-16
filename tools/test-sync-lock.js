@@ -121,6 +121,25 @@ section('4. כל הסנכרונים עטופים — כולל העבודה הש�
  'backupRun', 'gardenPlanSync', 'hourlyJobs'].forEach(function (n) {
   ok("🔴 " + n + " עטוף", new RegExp("withSyncLock_\\('" + n + "'").test(GS));
 });
+/* ================================================================= */
+section('4ב. 🔴🔴 גם מי שסוחף בלי להיות "סנכרון"');
+/* `saveServices_` אינה "עוד כתיבה": היא מריצה servicesSyncAll_, כלומר
+   כתיבה מלאה **ואז סחיפת יתומים** — אותו דפוס הרסני בדיוק. היא נשארה
+   מחוץ לנעילה בגל הראשון ונתפסה בסקירה. */
+ok('🔴 שמירת שירותים לוקחת את הנעילה',
+   /withSyncLock_\('saveServices', function \(\) \{ return saveServicesRun_\(ss, body\); \}\)/.test(GS));
+/* 🔴🔴 ומחוץ לנעילת הסקריפט שהגוף לוקח בעצמו: תפיסה מקוננת של אותה
+   נעילה באותה ריצה היא הדרך להיתקע. */
+ok('🔴🔴 ו**מחוץ** ל-LockService שהגוף לוקח — לא מקונן',
+   GS.indexOf("withSyncLock_('saveServices'") < GS.indexOf('function saveServicesRun_') &&
+   !/function saveServices_\(ss, body\) \{[\s\S]{0,300}LockService/.test(GS));
+ok('⚠️ והגוף עצמו עדיין לוקח אותה כרגיל',
+   /function saveServicesRun_\(ss, body\) \{[\s\S]{0,2000}var lock = LockService\.getScriptLock\(\);/.test(GS));
+ok('🔴 והגיבוי היומי גם הוא — 08:00 של שתי העבודות חופף',
+   /withSyncLock_\('dailyBackup'/.test(GS));
+ok('⚠️ והוא מדלג ומתעד כשתפוס, במקום לייצר צילום קרוע',
+   /if \(bk && bk\.busy\) Logger\.log\('\u05d2\u05d9\u05d1\u05d5\u05d9 \u05d9\u05d5\u05de\u05d9 \u05d3\u05d9\u05dc\u05d2/.test(GS));
+
 /* 🔴 העבודה השעתית **מדלגת** כשתפוס ולא מנסה שוב — יש עוד אחת בעוד שעה. */
 ok('🔴 והעבודה השעתית מדלגת ומתעדת במקום לנסות שוב',
    /if \(r && r\.busy\) Logger\.log\('hourlyJobs דילגה/.test(GS));

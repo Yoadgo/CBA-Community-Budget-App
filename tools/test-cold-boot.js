@@ -40,6 +40,7 @@ const SRC = R('js/data/sheets.js');
 const APP = R('js/app.js');
 const GS  = R('apps-script/Code.gs');
 const RULES = R('firestore.rules');
+const DS  = R('js/data/dataService.js');
 
 const CUR = 'תשפ"ז';
 
@@ -62,29 +63,21 @@ ok('bootFromFirestore ברשימת הדגלים הסגורה', /'bootFromFiresto
 
 /* ================================================================= */
 section('2. 🔴🔴 הפרטיות — מה שאסור שיגיע ל-appConfig');
-ok('רשימת ההיתר קיימת כקבוע', /var BOOT_SETTINGS_ALLOW = \[/.test(GS));
-/* 🔴 הצלבה טקסטואלית: RESIDENT_SETTINGS_ALLOW הוא משתנה מקומי
-   בתוך doGet ולכן אי-אפשר להשוות אותו בזמן ריצה. שתי הרשימות
-   חייבות להכיל בדיוק את אותם מפתחות. */
-const listOf = re => { const m = GS.match(re); return m ? m[1].split(',').map(s => s.trim()) : null; };
-const resAllow  = listOf(/var RESIDENT_SETTINGS_ALLOW = \[([^\]]*)\]/);
-const bootAllow = listOf(/var BOOT_SETTINGS_ALLOW = \[([^\]]*)\]/);
-const unesc = a => (a || []).map(s => s.replace(/\\u([0-9a-fA-F]{4})/g,
-                    (_, h) => String.fromCharCode(parseInt(h, 16))));
-ok('🔴 והיא זהה בדיוק לרשימת ההיתר של doGet',
-   resAllow && bootAllow && JSON.stringify(unesc(resAllow)) === JSON.stringify(unesc(bootAllow)),
-   JSON.stringify(unesc(resAllow)) + ' ≠ ' + JSON.stringify(unesc(bootAllow)));
-ok('🔴 והמסמך מעתיק **רק** מפתחות מהרשימה, לא את המפה',
-   /BOOT_SETTINGS_ALLOW\.forEach\(function \(k\) \{\s*\n\s*if \(settings\[k\] !== undefined\) safe\[k\] = settings\[k\];/.test(GS));
-ok('⚠️ ו-settings: safe, לא settings: settings', /return \{\s*\n\s*years: years,[\s\S]{0,200}settings: safe,/.test(GS));
-/* 🔴 הבדיקה הישירה ביותר: הרצת bootDoc_ על מפת הגדרות שיש בה
-   "בסיס תקציב" — והוא לא נמצא בפלט. */
+/* 🔴🔴 **הגרסה הראשונה של הצעד הזה העתיקה לכאן את רשימת ההיתר של
+   `doGet` — כלומר את סיסמת רשת המועדון — ונתפסה בסקירה לפני הפרסום.**
+   `appConfig` נקרא ע"י **כל** חבר פעיל, כולל הקבלן החיצוני, שב-doGet
+   נדחה לגמרי ואינו מקבל שום הגדרה. הוא היה קורא את הסיסמה ישירות.
+   התיקון אינו כלל חדש אלא **הסרה**: מסמך בלי סוד הוא הגנה שאי-אפשר
+   לעקוף. (ולא במקרה: ב-Firestore כל `match` שמתאים מעניק גישה, ולכן
+   `match /appConfig/boot` צר יותר **לא** היה מבטל את ה-wildcard מעליו.) */
+ok('🔴🔴 אין במסמך שדה settings בכלל', !/settings: safe,/.test(GS) &&
+   !/var BOOT_SETTINGS_ALLOW/.test(GS));
+ok('🔴 ובוודאי לא מפת ההגדרות כולה', !/settings: settings,/.test(GS));
 (function () {
   const box = { Logger: { log() {} }, Date: Date, JSON: JSON, String: String };
   vm.createContext(box);
-  const src = GS.match(/var BOOT_SETTINGS_ALLOW = \[[\s\S]*?\n\}/)[0] +
-              "\nvar APP_VERSION = 'x';";
-  try { vm.runInContext(src, box); } catch (e) { /* נבדק למטה */ }
+  try { vm.runInContext("var APP_VERSION = 'x';\n" +
+        GS.match(/function bootDoc_\(ss, settings\) \{[\s\S]*?\n\}/)[0], box); } catch (e) {}
   const settings = {};
   settings['שנים'] = 'תשפ"ו, תשפ"ז';
   settings['שנה נוכחית'] = CUR;
@@ -93,15 +86,21 @@ ok('⚠️ ו-settings: safe, לא settings: settings', /return \{\s*\n\s*years:
   settings['סוד כלשהו'] = 'x';
   let doc = null;
   try { doc = box.bootDoc_(null, settings); } catch (e) {}
-  ok('🔴 בפועל: bootDoc_ אינו מחזיר "בסיס תקציב"',
-     doc && !JSON.stringify(doc).includes('בסיס תקציב'), doc ? 'דלף' : 'לא רץ');
-  ok('🔴 ולא שום מפתח אחר שאינו ברשימה',
-     doc && Object.keys(doc.settings || {}).length === 1 &&
-     doc.settings['סיסמת רשת המועדון'] === '1234',
-     doc ? JSON.stringify(Object.keys(doc.settings || {})) : 'לא רץ');
+  const json = doc ? JSON.stringify(doc) : '';
+  ok('🔴 בפועל: אין "בסיס תקציב"', doc && !json.includes('בסיס תקציב'), doc ? 'דלף' : 'לא רץ');
+  ok('🔴🔴 ואין סיסמת רשת המועדון — זו התקלה שנתפסה',
+     doc && !json.includes('1234'), doc ? 'דלף' : 'לא רץ');
+  ok('🔴 ולא שום ערך אחר מההגדרות', doc && !json.includes('סוד כלשהו'));
+  ok('⚠️ ארבעה שדות בלבד',
+     doc && JSON.stringify(Object.keys(doc).sort()) ===
+       JSON.stringify(['currentYear', 'schema', 'updatedAt', 'version', 'years']),
+     doc ? JSON.stringify(Object.keys(doc)) : 'לא רץ');
   ok('⚠️ ובכל זאת נושא את מה שצריך — שנים ושנה נוכחית',
      doc && doc.currentYear === CUR && doc.years.length === 2);
 })();
+/* ⚠️ והלקוח אינו ממציא מפת הגדרות משלו במקום. */
+ok('🔴 והלקוח מחיל settings ריק, לא מפה חלקית שנראית אמיתית',
+   /settings: \{\},\n\s*version: boot\.version/.test(SRC));
 ok('🔴 והערכים שכן פרטיים עברו למסמך השנה, המוגן ב-canSeeBudget',
    /match \/budgetYears\/\{year\}[\s\S]{0,200}allow read: if canSeeBudget\(\);/.test(RULES));
 ok('⚠️ בעוד appConfig נשאר קריא לכל חבר', /match \/appConfig\/\{doc\}[\s\S]{0,120}allow read: if isMember\(\);/.test(RULES));
@@ -113,11 +112,33 @@ ok('closed נגזר ממצב התקציב', /closed: settings\['\\u05de\\u05e6\\
 ok('baseline מפורש מ-JSON, וכשל פרסור אינו מפיל', /try \{ baseline = JSON\.parse\(braw\); \} catch \(e\) \{ baseline = null; \}/.test(GS));
 ok('notes מועתק בשדות מפורשים בלבד', /notes: note \? \{ content: String\(note\.content \|\| ''\)/.test(GS));
 ok('🔴 והמסמך סומן schema: 2 (הקוראים הישנים לא מצפים לשדות האלה)', /schema: 2,/.test(GS));
-/* הצהרה אחת + קריאה אחת = שתי הופעות. שלוש היו אומרות שנולד קורא שני. */
-ok('⚠️ הקורא היחיד מעביר את שניהם',
-   (GS.match(/budgetYearDoc_\(ss, y, settings, notesMap\)/g) || []).length === 2 &&
-   (GS.match(/budgetYearDoc_\(/g) || []).length === 2,
+/* הצהרה + שני קוראים: `budgetYearsSyncAll_` (כל השנים, ידני)
+   ו-`currentBudgetYearSync_` (השנה הנוכחית, כל שעה). שניהם מעבירים
+   את אותם ארבעה ארגומנטים — קורא שיעביר פחות יכתוב מסמך בלי
+   `closed`, וזו בדיוק הסכמה הישנה שהטעינה הקרה מסרבת לה. */
+ok('⚠️ שני הקוראים מעבירים את ארבעתם',
+   (GS.match(/budgetYearDoc_\(ss, y, settings, notesMap\)/g) || []).length === 3 &&
+   (GS.match(/budgetYearDoc_\(/g) || []).length === 3,
    String((GS.match(/budgetYearDoc_\(/g) || []).length));
+
+/* ================================================================= */
+section('3ב. 🔴🔴 טריות — מסמך שנה שלא מתעדכן משקר על "סגור"');
+/* עד התיקון, `budgetYears/{year}` נכתב **רק** ב-budgetSync הידני.
+   מנהל שסוגר תקציב ולא מריץ סנכרון היה משאיר את Firestore על
+   "טיוטה" לנצח — והטעינה הקרה הייתה מציירת כפתור "סגור תקציב"
+   על שנה שכבר סגורה, ורושמת שינויי תכנון בלי שורת "עדכוני תקציב". */
+ok('🔴 השנה הנוכחית נכתבת בעבודה השעתית', /var cy = currentBudgetYearSync_\(ss\);/.test(GS));
+ok('⚠️ והיא שנה אחת בלבד — לא סנכרון מלא כל שעה',
+   /function currentBudgetYearSync_\(ss\)[\s\S]{0,1200}fsSet_\(fsDocPath_\(FS_BUDGET_YEARS, budgetYearId_\(y\)\), doc\);/.test(GS) &&
+   !/function currentBudgetYearSync_\(ss\)[\s\S]{0,1200}fsSweepOrphans_/.test(GS));
+ok('⚠️ וכשל שלה אינו מפיל את שאר העבודה השעתית',
+   /var cy = currentBudgetYearSync_\(ss\);[\s\S]{0,200}\} catch \(e\) \{/.test(GS));
+/* 🔴 ובצד הלקוח — שער סכמה. מסמך ישן אין בו `closed`, ו-`doc.closed === true`
+   עליו מחזיר false: שנה **סגורה** הייתה נצבעת "טיוטה". */
+ok('🔴🔴 והלקוח מסרב לצייר מוקדם ממסמך בסכמה ישנה',
+   /if \(res\.data\.schema !== undefined && Number\(res\.data\.schema\) < 2\) return done\(false\);/.test(SRC));
+ok('⚠️ והסכמה מועברת מ-fsYearLoad כדי שאפשר יהיה לבדוק אותה',
+   /schema:   doc\.schema/.test(SRC));
 ok('⚠️ ומפת ההערות נקראת מהמטמון, לא בקריאה שנייה מהגיליון',
    /notesMap = cached_\('cba_notes_' \+ budgetStamp_\(\)/.test(GS));
 
@@ -207,11 +228,18 @@ function makeEnv(opts) {
                               version: 'v43', schema: 1 });
           }
           if (c === 'budgetYears') {
-            return cb(null, { year: id, budget: [{ 'סעיף': 'גינון', 'קבוצה': 'ג' }],
-                              income: [], groups: ['ג'], splits: [], items: [],
-                              closed: true, baseline: { גינון: 5 },
-                              notes: { content: 'הערה', editedBy: 'י', editedAt: '' },
-                              schema: 2 });
+            var yd = { year: id, budget: [{ 'סעיף': 'גינון', 'קבוצה': 'ג' }],
+                       income: [], groups: ['ג'], splits: [], items: [],
+                       closed: true, baseline: { גינון: 5 },
+                       notes: { content: 'הערה', editedBy: 'י', editedAt: '' },
+                       schema: 2 };
+            /* מסמך בסכמה 1 — מצב הייצור לפני budgetSync הראשון:
+               אין בו closed/baseline/notes בכלל. */
+            if (opts.oldSchema) {
+              yd = { year: id, budget: yd.budget, income: [], groups: ['ג'],
+                     splits: [], items: [], schema: 1 };
+            }
+            return cb(null, yd);
           }
           cb(null, null);
         }, docDelay);
@@ -237,7 +265,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 function payload() {
   const yr = { budget: [], income: [], groups: [], splits: [], items: [], transactions: [] };
   return { ok: true, rev: 100, domains: { budget: 1 }, years: ['תשפ"ו', CUR],
-           currentYear: CUR, settings: {}, notes: {}, groups: [],
+           currentYear: CUR, settings: { 'סיסמת רשת המועדון': '1234' }, notes: {}, groups: [],
            updates: [{ 'מזהה': 'U1' }], notesLog: [{ 'מזהה': 'N1' }],
            data: { [CUR]: yr } };
 }
@@ -328,6 +356,45 @@ function payload() {
      env.CBA.mock.years[CUR] && env.CBA.mock.years[CUR].categories.length === 0 &&
      env.CBA.mock.years[CUR].transactions.length === 1,
      JSON.stringify(Object.keys(env.CBA.mock.years || {})));
+
+  /* =============================================================== */
+  section('11. 🔴🔴 חנות חלקית אינה חנות שאפשר לכתוב ממנה');
+  env = makeEnv({ payloadDelay: 300 });
+  calls = [];
+  env.CBA.sheets.load((okv, info) => calls.push(info && info.source));
+  await wait(60);
+  ok('הציור המוקדם קרה', calls[0] === 'firestore-boot', JSON.stringify(calls));
+  /* 🔴 מיד אחרי הציור המוקדם `inited` הופך ל-true והמסכים לחיצים.
+     כתיבה בחלון הזה נגזרת ממה שלא נטען: תצורת עמודות **גלובלית**
+     שנדרסת בריק, ושורת "עדכוני תקציב" שלא נרשמת כי השנה נראית
+     טיוטה. שתיהן שקטות ובלתי הפיכות. */
+  ok('🔴🔴 והחנות מסומנת חלקית', env.CBA.mock._partial === true,
+     String(env.CBA.mock._partial));
+  ok('🔴 והסימון הזה הוא מה ש-pushConnected בודק',
+     /CBA\.mock\._source === "sheets" && !CBA\.mock\._partial/.test(DS));
+  ok('🔴 ואין מפת הגדרות חלקית שנראית אמיתית',
+     JSON.stringify(env.CBA.mock._settings) === '{}',
+     JSON.stringify(env.CBA.mock._settings));
+  await wait(400);
+  ok('🔴🔴 והמטען מנקה את הסימון — החלון נסגר מעצמו',
+     env.CBA.mock._partial === undefined, String(env.CBA.mock._partial));
+  ok('⚠️ ואז ההגדרות האמיתיות במקומן',
+     env.CBA.mock._settings && env.CBA.mock._settings['סיסמת רשת המועדון'] === '1234',
+     JSON.stringify(env.CBA.mock._settings));
+
+  /* =============================================================== */
+  section('12. 🔴 מסמך שנה בסכמה ישנה — לא מציירים מוקדם בכלל');
+  env = makeEnv({ oldSchema: true, payloadDelay: 200 });
+  calls = [];
+  env.CBA.sheets.load((okv, info) => calls.push(info && info.source));
+  await wait(80);
+  ok('🔴 אין ציור מוקדם', calls.length === 0, JSON.stringify(calls));
+  ok('🔴 ובוודאי לא שנה סגורה שמוצגת כטיוטה',
+     !(env.CBA.mock.years && env.CBA.mock.years[CUR]),
+     JSON.stringify(Object.keys(env.CBA.mock.years || {})));
+  ok('⚠️ והחנות אינה מסומנת חלקית', env.CBA.mock._partial === undefined);
+  await wait(250);
+  ok('⚠️ והמטען מצייר כרגיל', calls[0] === 'fresh', JSON.stringify(calls));
 
   console.log('\n' + (fail ? '❌' : '✅') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);
