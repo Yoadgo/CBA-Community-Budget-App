@@ -258,6 +258,8 @@ var GET_ACTION_PERMS = {
   bootSync: PERM_SUPER,
   /* פעולה 3 (16.9) — זריעת מוני עמוד הבית. אותה סיבה. */
   homeCountsSync: PERM_SUPER,
+  /* צעד 12 (16.9) — זריעת הסיור והשריונים. אותה סיבה. */
+  homeSync: PERM_SUPER,
   /* דגלי זמן ריצה (2026-09-15, צעד 05א) — מדליקים ומכבים תחום
      בלי דיפלוי. שינוי התנהגות לכל המשתמשים — מנהל-על בלבד. */
   flagSet: PERM_SUPER, flagsGet: PERM_SUPER,
@@ -517,6 +519,10 @@ function doGet(e) {
     /* זריעת מוני עמוד הבית (2026-09-16, פעולה 3). */
     if (e && e.parameter && e.parameter.action === 'homeCountsSync') {
       return handleHomeCountsSync_(e.parameter);
+    }
+    /* זריעת הסיור והשריונים (2026-09-16, צעד 12). */
+    if (e && e.parameter && e.parameter.action === 'homeSync') {
+      return handleHomeSync_(e.parameter);
     }
     /* גשר הזהות ל-Firestore (2026-09-14). ר' handleFirebaseLink_. */
     if (e && e.parameter && e.parameter.action === 'firebaseLink') {
@@ -1715,6 +1721,9 @@ function handleReserveClub_(p) {
         'שעה': p.start + '–' + p.end, 'קישור': CBA_APP_URL
       });
     } catch (mailErr) { Logger.log('מייל שריון חדש נכשל: ' + mailErr); }
+    /* 🔴 עותק הקריאה של המשפחה מתרענן **מיד** (צעד 12א) — אחרת התושב
+       שזה עתה שרין היה חוזר לעמוד הבית ולא רואה את השריון שלו. */
+    clubResvBumpFamily_(SpreadsheetApp.getActiveSpreadsheet(), clubResvActorFamily_(p));
     return json_({ ok: true, id: ev.getId(), start: startDt.toISOString(), end: endDt.toISOString(), status: 'pending' });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -1840,6 +1849,8 @@ function handleCancelClubReservation_(p) {
       return json_({ ok: false, error: 'אין הרשאה לבטל שריון זה' });
     }
     ev.deleteEvent();
+    /* 🔴 ואותו רענון גם בביטול — זה בדיוק המקרה של "ביטלתי וזה עדיין שם". */
+    clubResvBumpFamily_(SpreadsheetApp.getActiveSpreadsheet(), clubResvActorFamily_(p));
     return json_({ ok: true });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -1893,7 +1904,10 @@ function handleClubList_(p) {
         family: ev.getTag('family') || '',
         email: ev.getTag('email') || '',
         note: ev.getTag('note') || '',
-        status: ev.getTag('status') || 'approved'
+        /* ⚠️ נקודת הגזירה האחת (16.9) — כאן נשארה הגדרה מקבילה
+           אחרי הניקוי הקודם, והיא בדיוק "המספר בתגית לא מסכים
+           עם המסך" מהכיוון ההפוך. */
+        status: clubStatusOf_(ev)
       };
     }).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
     return json_({ ok: true, reservations: list });
@@ -1939,6 +1953,9 @@ function approveOneClubEvent_(ss, cal, id) {
       'שעה': Utilities.formatDate(ev.getStartTime(), tz1, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz1, 'HH:mm')
     });
   } catch (mailErr) { Logger.log('מייל אישור שריון נכשל: ' + mailErr); }
+  /* 🔴 הליבה המשותפת לאישור בודד ולאישור מרובה — ולכן הרענון כאן
+     מכסה את שני המסלולים בלי לשכפל. */
+  clubResvBumpEvent_(ss, ev.getTag('email'), ev.getTag('family'));
   return { ok: true };
 }
 
@@ -1989,6 +2006,8 @@ function handleRejectClubReservation_(p) {
     var rejStartStr = Utilities.formatDate(ev.getStartTime(), tz2, 'dd/MM/yyyy');
     var rejTimeStr = Utilities.formatDate(ev.getStartTime(), tz2, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz2, 'HH:mm');
     ev.deleteEvent();
+    /* 🔴 התגיות נתפסו למעלה, לפני המחיקה — ר' ההערה שם. */
+    clubResvBumpEvent_(ss, rejEmail, rejFamily);
     try {
       sendResidentTemplate_(ss, 'CLUB_REJECTED', rejEmail ? [rejEmail] : [], {
         'שם': rejFamily, 'תאריך': rejStartStr, 'שעה': rejTimeStr
@@ -5513,6 +5532,23 @@ function hourlyJobsRun_() {
   } catch (e) {
     Logger.log('gymStatusSyncAll_ נכשל: ' + e);
   }
+  /* 🔴 שריוני המועדון וצעדי הסיור (צעד 12) — שלושת האוספים שמוציאים
+     את עמוד הבית מהתלות ב-Apps Script. רצים כאן, בתוך נעילת הסנכרון,
+     כי כולם עושים כתיבה **וסחיפת יתומים**. */
+  try {
+    var tr = tourSyncAll_(ss);
+    if (tr.error) Logger.log('tourSyncAll_ נכשל: ' + tr.error);
+    var ts = tourSeenSyncAll_(ss);
+    if (ts.error) Logger.log('tourSeenSyncAll_ נכשל: ' + ts.error);
+    var cr = clubResvSyncAll_(ss);
+    if (cr.error) Logger.log('clubResvSyncAll_ נכשל: ' + cr.error);
+    else if (cr.wrote || cr.deleted || cr.skipped) {
+      Logger.log('שריונים: נכתבו ' + cr.wrote + ', נמחקו ' + cr.deleted +
+                 ', דולגו ' + cr.skipped);
+    }
+  } catch (e) {
+    Logger.log('סנכרון עמוד הבית נכשל: ' + e);
+  }
   /* 🔴 מוני עמוד הבית (2026-09-16, פעולה 3) — חישוב מחדש של
      הכול. זו רשת הביטחון שתופסת את מה ש-`bumpRev_` לא
      רואה: **עריכה ידנית בגיליון** ואת ספירת המועדון,
@@ -6340,7 +6376,14 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
      ⚠️ **הכתיבה בשרת אינה תלויה בדגל** — בדיוק כמו
         בגינון ובשירותים: המסמכים מתעדכנים גם כשהדגל
         כבוי, כך שהדלקה מוצאת נתונים טריים ולא ריק. */
-  'homeCountsFromFirestore'];
+  'homeCountsFromFirestore',
+  /* 🔴 **שני המתגים של צעד 12** (2026-09-16) — כרטיס הסיור והשריון
+     הקרוב. כשהשניים דלוקים יחד עם `homeCountsFromFirestore`, עמוד
+     הבית **אינו קורא ל-Apps Script בכלל** בטעינה.
+     ⚠️ שני דגלים ולא אחד: הם שני תחומים נפרדים עם שני כללי אבטחה
+        שונים, וכיבוי של אחד אמור להשאיר את השני עובד. */
+  'tourFromFirestore',
+  'clubResvFromFirestore'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {
@@ -6975,8 +7018,8 @@ var GYM_DEFAULT_SETTINGS = [
   ['הגדרה', 'אישור אוטומטי ללא דגלים', '', 'לאשר בקשה נקייה בלי מנהל', 'כן', '', '', '', 'כן',
    'בקשה שכל תשובותיה "לא" עוברת ישר ל"ממתין לתשלום". אימות התשלום נשאר ידני תמיד'],
 
-  ['מסלול', 'PLAN-6M', '1', 'מנוי חצי שנתי', 'רישום לחצי שנה מראש', '6', '30', '', 'כן',
-   '30 ₪ לחודש × 6 חודשים = 180 ₪. המחיר החודשי הוא הבסיס לחישוב סנכרון התשלומים'],
+  ['מסלול', 'PLAN-12M', '1', 'מנוי שנתי', 'רישום לשנה מראש', '12', '30', '', 'כן',
+   '30 ₪ לחודש × 12 חודשים = 360 ₪. המחיר החודשי הוא הבסיס לחישוב סנכרון התשלומים'],
 
   ['תקנון', 'R1', '1', 'תנאי כניסה ושימוש',
    'הכניסה לחדר הכושר מותרת רק למנויים ששילמו דמי רצינות לחדר הכושר וחתמו על הצהרת בריאות.\n' +
@@ -8222,7 +8265,7 @@ function extendGymMembership_(ss, body) {
  *  מכון כושר — שלב 4: חידוש מנוי (2026-08-19)
  * ----------------------------------------------------------------------------
  *  כאן משתלמת ההחלטה שההצהרה תקפה לשנתיים (כך כתוב בטופס שלכם): מכיוון
- *  שנרשמים לחצי שנה, **שלושה חידושים מתוך ארבעה לא דורשים שאלון בכלל** —
+ *  שנרשמים לשנה, **חידוש מתוך שניים לא דורש שאלון בכלל** —
  *  רק בחירת מסלול ותשלום.
  *
  *  החידוש פותח **שורה חדשה** ולא דורס את הישנה, כדי שההיסטוריה תישמר: מי היה
@@ -8633,6 +8676,313 @@ function countStatus_(ss, sheetName, statusHeader, wanted) {
     }
     return n;
   } catch (e) { return 0; }
+}
+
+/* ============================================================================
+ *  מפת הזהות של טאב התושבים   (2026-09-16, צעד 12)
+ * ----------------------------------------------------------------------------
+ *  קריאה **אחת** של הטאב, שממנה נגזרות שלוש המפות ששני
+ *  הסנכרונים החדשים צריכים: אימייל←מזהה משפחה, אימייל←uid,
+ *  ושם משפחה←מזהה. שלוש קריאות נפרדות של אותו טאב הן שלוש
+ *  נסיעות לגיליון באותה ריצה.
+ *
+ *  🔴🔴 **שם משפחה כפול אינו מזהה.** שתי משפחות "כהן" בשיכון
+ *  הן שני משקי בית שונים. לכן שם שחוזר ביותר משורה אחת
+ *  עם מזהה אחר מסומן כ**מעורפל** ומוחזר כריק. מיזוג של
+ *  שתי משפחות למסמך אחד הוא דליפה, לא אי-דיוק.
+ * ========================================================================== */
+function residentIdentityIndex_(ss) {
+  var out = { byEmail: {}, uidByEmail: {}, byFamName: {}, seenByUid: {} };
+  var sh = ss.getSheetByName('\u05ea\u05d5\u05e9\u05d1\u05d9\u05dd');
+  if (!sh) return out;
+  var last = sh.getLastRow();
+  if (last < 2) return out;
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+                  .map(function (h) { return String(h).trim(); });
+  var cols = residentSlotCols_(sh);
+  var idCol = -1, famCol = -1, houseCol = -1, seenCol = -1;
+  headers.forEach(function (h, k) {
+    if (h.indexOf(RESIDENT_ID_HEADER) !== -1) idCol = k;
+    else if (h === TOUR_SEEN_HEADER) seenCol = k;
+    else if (h.indexOf(PERM_HEADER) !== -1 || h.indexOf(FB_UID_HEADER) !== -1) { /* נתפס ב-cols */ }
+    else if (h.indexOf('\u05de\u05e9\u05e4\u05d7\u05d4') !== -1 && famCol === -1) famCol = k;
+    else if (h.indexOf('\u05d1\u05d9\u05ea') !== -1 && houseCol === -1) houseCol = k;
+  });
+  var vals = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();
+  var ambiguous = {};
+  for (var r = 0; r < vals.length; r++) {
+    var row = vals[r];
+    var house = houseCol > -1 ? String(row[houseCol]).trim() : '';
+    var fid = idCol > -1 ? String(row[idCol]).trim() : '';
+    if (!fid) fid = house;
+    if (!fid) continue;
+    var fam = famCol > -1 ? String(row[famCol]).trim() : '';
+    if (fam) {
+      if (out.byFamName[fam] === undefined) out.byFamName[fam] = fid;
+      else if (out.byFamName[fam] !== fid) ambiguous[fam] = true;
+    }
+    for (var i = 0; i < cols.email.length; i++) {
+      var em = normalizeEmail_(String(row[cols.email[i]] || ''));
+      if (!em) continue;
+      out.byEmail[em] = fid;
+      var uid = (cols.uid[i] !== undefined) ? String(row[cols.uid[i]] || '').trim() : '';
+      if (uid) {
+        out.uidByEmail[em] = uid;
+        if (seenCol > -1) {
+          var n = parseInt(row[seenCol], 10);
+          out.seenByUid[uid] = isNaN(n) ? 0 : n;
+        }
+      }
+    }
+  }
+  Object.keys(ambiguous).forEach(function (k) { delete out.byFamName[k]; });
+  return out;
+}
+
+/* ============================================================================
+ *  שריוני המועדון → Firestore, מסמך למשפחה   (צעד 12א, 2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  📊 נמדד בייצור (16.9, פריסה 132): קריאה ליומן Google עולה
+ *  ~1.5 שניות, וקריאת Firestore 40–57 אלפיות. שורת "השריון
+ *  הקרוב" בעמוד הבית היא הדבר האחרון שמחזיק שם קריאה
+ *  ליומן.
+ *
+ *  🔴🔴 **מה לא נוסע, וזו רשימת היתר ולא רשימת חסימה.**
+ *  מסמך שריון נושא שלושה שדות בלבד: התחלה, סיום, סטטוס.
+ *  **האימייל אינו נוסע, וגם ההערה לא** — ההערה היא טקסט
+ *  חופשי שהתושב כתב על עצמו ("ברית לבן של..."), וטקסט
+ *  חופשי אינו ברשימת ההיתר כברירת מחדל. מסך "השריונים
+ *  שלי", שבאמת מציג את ההערה, ממשיך לקרוא מ-Apps Script.
+ *
+ *  🔑 **מסמך למשפחה ולא לשריון.** שלוש סיבות: קריאה
+ *  אחת לעמוד הבית במקום שאילתה (ואין לנו אינדקסים מורכבים);
+ *  הכלל נבדק על **מזהה המסמך** ולא על שדה, ולכן אי-אפשר
+ *  לעקוף אותו; ומחיקת שריון היא כתיבה מחדש של אותו מסמך
+ *  ולא מחיקה שצריך לצוד.
+ *
+ *  ⚠️ **השיוך נעשה לפי תגית האימייל קודם.** תגית `family` מחזיקה
+ *     את **שם** המשפחה (`who.famName`) ולא את המזהה, ושם אינו
+ *     מזהה. הנפילה לשם קיימת רק לאירועים ישנים שנוצרו לפני
+ *     שהתגיות הוכנסו, והיא מדלגת על שם מעורפל.
+ *  ⚠️ **אירוע שלא זוהה מדולג ונספר** — ולא נכתב לשום
+ *     משפחה. שריון שנכתב למשפחה הלא נכונה הוא דליפה.
+ * ========================================================================== */
+var FS_CLUB_RESV = 'clubReservations';
+
+function clubResvItem_(ev) {
+  return { start: ev.getStartTime().toISOString(),
+           end:   ev.getEndTime().toISOString(),
+           status: clubStatusOf_(ev) };
+}
+
+/** מזהה המשפחה של אירוע — אימייל קודם, שם כנפילה לאחור. */
+function clubResvFamilyOf_(idx, ev) {
+  var em = String(ev.getTag('email') || '').trim().toLowerCase();
+  if (em && idx.byEmail[em]) return idx.byEmail[em];
+  var fam = String(ev.getTag('family') || '').trim();
+  if (fam && idx.byFamName[fam]) return idx.byFamName[fam];
+  return '';
+}
+
+/** מקבץ את האירועים לפי משפחה, בחלון שהתושב רואה. */
+function clubResvGroup_(idx, evs, out) {
+  var byFam = {};
+  var pool = clubClipEvents_(evs, CLUB_BACK_DAYS_MINE);
+  for (var i = 0; i < pool.length; i++) {
+    var fid = clubResvFamilyOf_(idx, pool[i]);
+    if (!fid) { if (out) out.skipped++; continue; }
+    (byFam[fid] = byFam[fid] || []).push(clubResvItem_(pool[i]));
+  }
+  Object.keys(byFam).forEach(function (k) {
+    byFam[k].sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+  });
+  return byFam;
+}
+
+function clubResvDoc_(items) {
+  return { items: items || [], schema: 1, updatedAt: new Date() };
+}
+
+/** סנכרון מלא — כתיבה לכל משפחה וסחיפת יתומים.
+ *  🔴 **חובה לרוץ בתוך `withSyncLock_`** — יש כאן סחיפה. */
+function clubResvSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  try {
+    var evs = clubWindowEvents_(CLUB_BACK_DAYS_ALL);
+    if (!evs) { out.error = '\u05dc\u05d0 \u05e0\u05de\u05e6\u05d0 \u05d9\u05d5\u05de\u05df \u05d4\u05de\u05d5\u05e2\u05d3\u05d5\u05df'; return out; }
+    var idx = residentIdentityIndex_(ss);
+    var byFam = clubResvGroup_(idx, evs, out);
+    var live = {};
+    fsWriteAll_(FS_CLUB_RESV, Object.keys(byFam).map(function (fid) {
+      return { id: fid, doc: clubResvDoc_(byFam[fid]) };
+    }), out, live);
+    fsSweepOrphans_(FS_CLUB_RESV, live, out);
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+/** רענון משפחה אחת מיד אחרי כתיבה.
+ *  ⚠️ **בלי סחיפה, ולכן בלי נעילה** — היא רצה בתוך נתיב
+ *     כתיבה שכבר מחזיק את נעילת ה-LockService שלו.
+ *  ⚠️ **משפחה בלי שריונים מקבלת מסמך ריק**, ולא נשארת עם
+ *     הישן — זה בדיוק מקרה הביטול: "ביטלתי וזה עדיין שם".
+ *  ⚠️ לעולם אינה זורקת: כשל ברענון אסור שיהפוך שריון
+ *     שהצליח לשגיאה על המסך. */
+function clubResvBumpFamily_(ss, familyId) {
+  try {
+    var fid = String(familyId || '').trim();
+    if (!fid) return;
+    var evs = clubWindowEvents_(CLUB_BACK_DAYS_ALL);
+    if (!evs) return;
+    var idx = residentIdentityIndex_(ss || SpreadsheetApp.getActiveSpreadsheet());
+    var byFam = clubResvGroup_(idx, evs, null);
+    fsSet_(FS_CLUB_RESV + '/' + fid, clubResvDoc_(byFam[fid] || []));
+  } catch (e) { /* שגר ושכח */ }
+}
+
+/** רענון לפי **תגיות האירוע** — למסלול המנהל, שמאשר או דוחה שריון של
+ *  מישהו אחר. ⚠️ לקרוא את התגיות **לפני** מחיקת האירוע. */
+function clubResvBumpEvent_(ss, tagEmail, tagFamily) {
+  try {
+    ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+    var idx = residentIdentityIndex_(ss);
+    var em = String(tagEmail || '').trim().toLowerCase();
+    var fid = (em && idx.byEmail[em]) || idx.byFamName[String(tagFamily || '').trim()] || '';
+    if (!fid) return;
+    var evs = clubWindowEvents_(CLUB_BACK_DAYS_ALL);
+    if (!evs) return;
+    var byFam = clubResvGroup_(idx, evs, null);
+    fsSet_(FS_CLUB_RESV + '/' + fid, clubResvDoc_(byFam[fid] || []));
+  } catch (e) { /* שגר ושכח */ }
+}
+
+/** מזהה המשפחה של הפונה, מהמושב החתום בלבד. */
+function clubResvActorFamily_(p) {
+  var perm = (p && p._perm) || {};
+  return String(perm.familyId || perm.house || '').trim();
+}
+
+/* ============================================================================
+ *  צעדי הסיור → Firestore   (צעד 12ב, 2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  📊 **המדידה שהולידה את הצעד הזה (16.9, אחרי פריסה 132):**
+ *  `tour` עולה 2,900–3,500 אלפיות גם אחרי שהטבלה עברה למטמון.
+ *  🔴 **והסיבה הפתיעה:** `rev` — המדידה שממנה גזרנו "רצפה
+ *  של שתי שניות" — חוזרת **לפני שער ההרשאות**, ולכן אינה
+ *  קוראת את טאב התושבים בכלל. כל פעולה **מאומת** משלמת
+ *  קריאה מלאה של הטאב הזה, וזה מה שנשאר ב-`tour`. אי-אפשר
+ *  להוריד אותה — אפשר רק לא לקרוא ל-Apps Script.
+ *
+ *  🔴🔴 **מסמך לכל קהל, וזו הסיבה היחידה לפיצול.**
+ *  כלל ב-Firestore נאכף על מסמך, ו**קריאת אוסף שלם נדחית אם
+ *  מסמך אחד בו אסור לקורא** — Firestore אינו מסנן, הוא דוחה.
+ *  לכן אי-אפשר "מסמך לכל צעד + שדה קהל", והלקוח קורא במפורש
+ *  רק את המסמכים שמותרים לו — בדיוק כמו `homeCounts`.
+ *
+ *  ⚠️ **קהל "תושבים" אינו נכתב בכלל, וזה משחזר את השרת.**
+ *     ב-`handleTour_` קהל כזה נופל פעמיים: מנהל נחסם בשורה
+ *     `aud === 'תושבים' && isAdmin`, ולא-מנהל נופל אחריה בבדיקת
+ *     `ALL_PERMS` (שמכילה "תושבים" כשם הרשאה). כלומר **אף
+ *     אחד אינו רואה אותו היום.** לא שיכפלתי את ההתנהגות
+ *     הזאת לכללי האבטחה — פשוט אין מסמך. (יועד: אם הכוונה
+ *     היתה "רק לתושבים שאינם מנהלים" — זה תיקון נפרד.)
+ *  ⚠️ צעד שמסומן פעיל="לא" אינו נכתב כלל.
+ * ========================================================================== */
+var FS_TOUR = 'tourSteps';
+var FS_TOUR_SEEN = 'tourSeen';
+var TOUR_PERM_DOC = {};
+TOUR_PERM_DOC[PERM_SUPER]     = 'perm-super';
+TOUR_PERM_DOC[PERM_BUDGET]    = 'perm-budget';
+TOUR_PERM_DOC[PERM_CLUB]      = 'perm-club';
+TOUR_PERM_DOC[PERM_GYM]       = 'perm-gym';
+TOUR_PERM_DOC[PERM_GARDEN]    = 'perm-garden';
+
+/** קהל → מזהה מסמך ASCII. מחזיר '' לקהל שאינו נכתב. */
+function tourAudDocId_(aud) {
+  var a = String(aud == null ? '' : aud).trim() || '\u05db\u05d5\u05dc\u05dd';
+  if (a === '\u05db\u05d5\u05dc\u05dd') return 'all';
+  if (a === '\u05de\u05e0\u05d4\u05dc\u05d9\u05dd') return 'admins';
+  return TOUR_PERM_DOC[a] || '';
+}
+
+function tourSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  try {
+    ensureTourSheet_(ss);
+    var rows = readTable_(ss, TOUR_SHEET);
+    var byAud = {};
+    rows.forEach(function (r) {
+      if (String(r['\u05e4\u05e2\u05d9\u05dc'] || '').trim() === '\u05dc\u05d0') { out.skipped++; return; }
+      var id = tourAudDocId_(r['\u05e7\u05d4\u05dc']);
+      if (!id) { out.skipped++; return; }
+      (byAud[id] = byAud[id] || []).push(r);
+    });
+    Object.keys(byAud).forEach(function (id) {
+      byAud[id].sort(tourStepCompare_);
+    });
+    var live = {};
+    fsWriteAll_(FS_TOUR, Object.keys(byAud).map(function (id) {
+      return { id: id, doc: { steps: byAud[id], schema: 1, updatedAt: new Date() } };
+    }), out, live);
+    fsSweepOrphans_(FS_TOUR, live, out);
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+/* 🔴 נקודת הסדר האחת. `handleTour_` ממיין באותה צורה, והלקוח
+   ממזג את המסמכים לפיה. שלושה ממיינים שונים היו "הצעדים
+   מופיעים בסדר אחר בכל מסלול". */
+function tourStepCompare_(a, b) {
+  var va = parseInt(a['\u05d2\u05e8\u05e1\u05d4'], 10) || 1, vb = parseInt(b['\u05d2\u05e8\u05e1\u05d4'], 10) || 1;
+  if (va !== vb) return va - vb;
+  return (parseInt(a['\u05e1\u05d3\u05e8'], 10) || 0) - (parseInt(b['\u05e1\u05d3\u05e8'], 10) || 0);
+}
+
+/** "מה כבר ראיתי" — מסמך לכל uid. */
+function tourSeenSyncAll_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  try {
+    var idx = residentIdentityIndex_(ss);
+    var live = {};
+    var items = Object.keys(idx.seenByUid).map(function (uid) {
+      return { id: uid, doc: { v: idx.seenByUid[uid], schema: 1, updatedAt: new Date() } };
+    });
+    fsWriteAll_(FS_TOUR_SEEN, items, out, live);
+    fsSweepOrphans_(FS_TOUR_SEEN, live, out);
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+/** כתיבה מיידית אחרי שהמשתמש סיים את הסיור.
+ *  ⚠️ בלעדיה הכרטיס "יש משהו חדש" היה חוזר עד הסנכרון השעתי. */
+function tourSeenBump_(ss, email, version) {
+  try {
+    var idx = residentIdentityIndex_(ss || SpreadsheetApp.getActiveSpreadsheet());
+    var uid = idx.uidByEmail[normalizeEmail_(email)];
+    if (!uid) return;
+    fsSet_(FS_TOUR_SEEN + '/' + uid, { v: parseInt(version, 10) || 0, schema: 1, updatedAt: new Date() });
+  } catch (e) { /* שגר ושכח */ }
+}
+
+/** סנכרון יזום לשלושת האוספים החדשים — לזריעה ולאימות. */
+function handleHomeSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    return json_(withSyncLock_('homeSync', function () {
+      var t = tourSyncAll_(ss), sn = tourSeenSyncAll_(ss), c = clubResvSyncAll_(ss);
+      return { ok: true, tour: t, seen: sn, club: c };
+    }));
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
 }
 
 /* ============================================================================
@@ -10378,6 +10728,9 @@ function markTourSeen_(ss, body) {
   var cur = parseInt(sh.getRange(r.rowIndex, col).getValue(), 10);
   if (!isNaN(cur) && cur >= n) return { ok: true, seen: cur };   // לא יורדים אחורה
   sh.getRange(r.rowIndex, col).setValue(n);
+  /* 🔴 ומיד גם ל-Firestore (צעד 12ב) — אחרת כרטיס "יש משהו חדש" היה
+     חוזר בטעינה הבאה עד הסנכרון השעתי, וזה נראה כמו תקלה. */
+  tourSeenBump_(ss, body._email, n);
   return { ok: true, seen: n };
 }
 

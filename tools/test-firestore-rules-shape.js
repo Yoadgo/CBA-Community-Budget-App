@@ -58,7 +58,11 @@ const idxDeny = CODE.indexOf('match /{document=**}');
    בלי שאיש יראה אותו. */
 /* ⚠️ הארגומנט המותר הוא **משתנה ה-`match`** (`docId`, `uid`) — לא ביטוי.
    `f(uid)` הוא בדיוק מה שהכלל דורש: פונקציה בעלת שם. `f(a && b)` אינו. */
-const ALLOW_TERM = /^([a-zA-Z][A-Za-z0-9_]*\(([a-z][A-Za-z0-9_]*)?\)|false|canSeeFamilyTx\(resource\.data\.familyId\)|signedIn\(\) && request\.auth\.uid == uid)$/;
+/* ⚠️ הצורה `f(resource.data.<שדה>)` מותרת גם היא — פונקציה בעלת שם
+   שמקבלת שדה של המסמך עצמו. היתה כאן חריגה קשיחה ל-`canSeeFamilyTx`
+   בלבד; היא הוכללה ב-16.9 כשנוספה `canSeeGardenReport` באותה צורה
+   בדיוק. חריגה קשיחה לשם אחד מתיישנת בשימוש השני. */
+const ALLOW_TERM = /^([a-zA-Z][A-Za-z0-9_]*\(([a-z][A-Za-z0-9_]*)?\)|false|[a-zA-Z][A-Za-z0-9_]*\(resource\.data\.[A-Za-z0-9_]+\)|signedIn\(\) && request\.auth\.uid == uid)$/;
 ok('🔴 כל תנאי ב-allow הוא קריאה לפונקציה בעלת שם',
    (CODE.match(/allow [^\n]*/g) || []).every(function (t) {
      const m = t.trim().match(/^allow [a-z, ]+: if (.+);$/);
@@ -134,7 +138,9 @@ section('5. מה שלא נפתח');
    `match /budget` התאים גם ל-`match /budgetYears` שנפתח במכוון
    בצעד 08א, ולכן דיווח על "התקציב נפתח" שלא היה נכון.
    עכשיו ההתאמה היא על שם האוסף המלא (`match /<שם>/`). */
-['gardenTasks', 'residents', 'budget', 'families', 'gardenReports', 'emails',
+/* ⚠️ `gardenTasks` ו-`gardenReports` ירדו מהרשימה ב-16.9 — הם נפתחו
+   **במכוון** במיגרציה המלאה של הגינון, ונבדקים בסעיף נפרד למטה. */
+['residents', 'budget', 'families', 'emails',
  'transactions', 'tx'].forEach(function (c) {
   ok('🔴 ' + c + ' לא נפתח', CODE.indexOf('match /' + c + '/') === -1);
 });
@@ -147,9 +153,24 @@ ok('🔴 ו-canSeeFamilyTx חוסם את המחרוזת הריקה',
    /function canSeeFamilyTx\(fid\)[\s\S]*?fid is string && fid != '' && fid == myFamilyId\(\)/.test(CODE));
 ok('🔴 והוא לא נפתח לכל חבר אלא לבעלי הרשאת תקציב',
    /function canSeeBudget\(\)\s*\{\s*return hasPerm\('\u05ea\u05e7\u05e6\u05d9\u05d1'\)/.test(CODE));
-ok('🔴 שנים-עשר בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
-   (CODE.match(/^\s*match \//gm) || []).length === 13,
-   String((CODE.match(/^\s*match \//gm) || []).length));
+/* 🔴🔴 **היתה כאן ספירה** ("שנים-עשר בלוקים בלבד"), והיא החזיקה עד
+   שני סשנים מקבילים פתחו אוספים באותו יום: המספר התנגש, ומי
+   שעדכן אותו עשה זאת בלי לדעת מה הצד השני הוסיף. ספירה גם
+   אינה אומרת **מה** נפתח.
+   מ-16.9 זו **רשימת היתר מפורשת**. היא עדיין מכריחה החלטה
+   אנושית לכל אוסף חדש — אבל היא גם מתעדת אותה, ושני סשנים
+   שמוסיפים שורות שונות אינם דורסים זה את זה. */
+const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks',
+                'services', 'budgetYears', 'budgetTx', 'counters', 'appConfig',
+                'gymStatus', 'gymCode', 'homeCounts', 'clubReservations',
+                'tourSteps', 'tourSeen', 'members'];
+const found = (CODE.match(/^\s*match \/([A-Za-z0-9_]+)\//gm) || [])
+                .map(function (x) { return x.trim().replace(/^match \//, '').replace(/\/$/, ''); })
+                .filter(function (x) { return x !== 'databases'; });
+const unexpected = found.filter(function (c) { return OPENED.indexOf(c) === -1; });
+ok('🔴 אף אוסף לא נפתח מחוץ לרשימת ההיתר', unexpected.length === 0, unexpected.join(','));
+const missing = OPENED.filter(function (c) { return found.indexOf(c) === -1; });
+ok('⚠️ וכל מה שברשימה אכן קיים (רשימה שהתיישנה = שקר)', missing.length === 0, missing.join(','));
 
 /* ======================================================================
    🔴🔴 פעולה 3 (16.9) — מוני עמוד הבית.
@@ -195,13 +216,59 @@ ok('🔴 ואין מסלול למנהל — מסך הניהול נשאר ב-Apps
 ok('⚠️ והדפדפן לעולם אינו כותב',
    /match \/gymStatus\/\{uid\}[\s\S]{0,400}allow write: if false;/.test(CODE));
 
+/* ======================================================================
+   🔴🔴 מיגרציית הגינון המלאה (16.9) — שני אוספים, שני סיכונים שונים.
+
+   ב-gardenReports הסיכון הוא **דליפה בין שכנים** — התקלה שיועד
+   דיווח עליה במפורש. ב-gardenTasks הסיכון הפוך: כלל **צר מדי**
+   ישבור לאחראי החיצוני את המסך במסלול Firestore בלבד, וזו תקלה
+   שתתגלה רק אצלו ורק אחרי שהדגל נדלק.
+   ====================================================================== */
+section('5ג. גינון — דיווחים');
+const gr = blockOf('/gardenReports/{id}');
+ok('הבלוק קיים', !!gr);
+ok('🔴 הקריאה עוברת דרך familyId של המסמך',
+   /allow read: if canSeeGardenReport\(resource\.data\.familyId\);/.test(gr || ''), gr);
+const grFn = (CODE.match(/function canSeeGardenReport\(fid\) \{[\s\S]*?\n    \}/) || [''])[0];
+ok('🔴 is string — שדה חסר מפיל סגור', /fid is string/.test(grFn), grFn.trim());
+/* 🔴 המלכודת שכבר נתפסה פעם: myFamilyId() מחזירה '' למי שאין לו משפחה. */
+ok("🔴🔴 != '' — אחרת '' == '' פותח כל מסמך חסר-משפחה",
+   /fid != ''/.test(grFn), grFn.trim());
+ok('🔴 וההשוואה היא למשפחה שלו', /fid == myFamilyId\(\)/.test(grFn), grFn.trim());
+/* ⚠️ לא uid — הכרעת יועד: שני בני המשפחה רואים את אותם דיווחים. */
+ok('⚠️ ולא לפי uid — שני בני המשפחה רואים את אותם דיווחים',
+   !/request\.auth\.uid/.test(grFn), grFn.trim());
+/* 🔴 מסך הניהול עדיין ב-Apps Script; פתיחה למנהל עכשיו = גישה שאיש
+   אינו משתמש בה, כלומר בדיוק החשיפה השקטה שהצוות האדום תפס. */
+ok('🔴 ואין מסלול למנהל — מסך הניהול נשאר ב-Apps Script',
+   !/(hasPerm|isSuper|canSeeBudget)/.test(grFn), grFn.trim());
+ok('⚠️ והדפדפן לעולם אינו כותב', /allow write: if false;/.test(gr || ''));
+
+section('5ד. גינון — משימות');
+const gt = blockOf('/gardenTasks/{id}');
+ok('הבלוק קיים', !!gt);
+ok('הקריאה דרך שער בעל שם', /allow read: if canSeeGardenTasks\(\);/.test(gt || ''), gt);
+const gtFn = (CODE.match(/function canSeeGardenTasks\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+ok("דורש hasPerm('גינון')", /hasPerm\('\u05d2\u05d9\u05e0\u05d5\u05df'\)/.test(gtFn), gtFn.trim());
+/* 🔴🔴 **הבדיקה שנראית הפוכה, ואינה.** ב-gardenPlan החיצוני חסום
+   במפורש; כאן הוא **חייב** להיכלל, כי handleGardenTasks_ עם
+   scope='all' מחזיר לו הכול מאז 9.9. כלל צר יותר כאן הוא
+   סטייה מהשרת — לא הידוק. אימת מול הקוד, לא הונח. */
+ok('🔴🔴 ובמכוון **בלי** isExternal — השרת אינו חוסם אותו במשימות',
+   !/isExternal/.test(gtFn), gtFn.trim());
+/* ...וההפך: בתוכנית העבודה הוא כן חסום. שני הכללים חייבים להישאר שונים. */
+ok('🔴 בעוד canSeePlan **כן** חוסם אותו — שני הכללים שונים בכוונה',
+   /function canSeePlan\(\)[\s\S]{0,160}isExternal == false/.test(CODE));
+ok('⚠️ והדפדפן לעולם אינו כותב', /allow write: if false;/.test(gt || ''));
+
 section('6. members — לא נשבר');
 const mb = blockOf('/members/{uid}');
 ok('קריאה: רק את שלי', /allow read: if signedIn\(\) && request\.auth\.uid == uid;/.test(mb || ''));
 ok('🔴 כתיבה אסורה לחלוטין', /allow write: if false;/.test(mb || ''));
 
 section('7. פונקציות העזר קיימות');
-['signedIn', 'memberExists', 'm', 'isMember', 'isSuper', 'hasPerm', 'canSeePlan'].forEach(function (f) {
+['signedIn', 'memberExists', 'm', 'isMember', 'isSuper', 'hasPerm', 'canSeePlan',
+ 'canSeeGardenReport', 'canSeeGardenTasks'].forEach(function (f) {
   ok('function ' + f, new RegExp('function ' + f + '\\(').test(CODE));
 });
 ok('isMember דורש active == true', /function isMember\(\)[\s\S]{0,120}active == true/.test(CODE));

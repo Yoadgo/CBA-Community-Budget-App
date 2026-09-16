@@ -50,7 +50,9 @@ CBA.screens = CBA.screens || {};
     budgetTxFromFirestore:    ["תנועות התקציב", "התנועות של השנה הנוכחית נקראות מ-Firestore ולא נשלחות במטען.", true],
     pulseToFirestore:         ["הפעימה החיה", "השרת כותב מסמך פעימה, והלקוח מאזין לו במקום לסקור כל 3 שניות.", false],
     bootFromFirestore:        ["טעינה קרה", "כשאין מטמון מקומי — השנה הנוכחית נבנית מ-Firestore ומצוירת מיד.", false],
-    homeCountsFromFirestore:  ["מוני עמוד הבית", "תגיות הספירה בעמוד הבית נקראות ישירות מ-Firestore ומצוירות מיד, בלי לחכות ל-homeExtras.", false]
+    homeCountsFromFirestore:  ["מוני עמוד הבית", "תגיות הספירה בעמוד הבית נקראות ישירות מ-Firestore ומצוירות מיד, בלי לחכות ל-homeExtras.", false],
+    tourFromFirestore:        ["כרטיס הסיור", "צעדי הסיור ו\"מה כבר ראיתי\" נקראים מ-Firestore במקום מ-Apps Script.", false],
+    clubResvFromFirestore:    ["השריון הקרוב", "שורת השריון הקרוב בעמוד הבית נקראת מהמסמך של המשפחה ב-Firestore.", false]
   };
 
   /* המצב **האפקטיבי**: מה שכתוב במסמך, ואם אינו כתוב — ברירת המחדל
@@ -90,6 +92,12 @@ CBA.screens = CBA.screens || {};
        כאן היא הכלל עובד: מסמך `residents` נקרא **רק**
        לבעלי הרשאת תושבים, ומנהל המכון אמור להידחות ממנו. */
     list.push({ key: "counts", label: "מוני עמוד הבית", c: "homeCounts", id: "residents", expect: "any" });
+    /* צעד 12 — שני האחרונים שמוציאים את עמוד הבית מ-Apps Script.
+       `all` פתוח לכל חבר פעיל ולכן `ok`; השריון תלוי במזהה משפחה
+       ובכך שיש למשפחה בכלל שריון, ולכן `any`. */
+    list.push({ key: "tour", label: "צעדי הסיור", c: "tourSteps", id: "all", expect: "ok" });
+    var fam = String(((window.CBA && CBA.user) || {}).familyId || "").trim();
+    if (fam) list.push({ key: "resv", label: "השריון הקרוב שלי", c: "clubReservations", id: fam, expect: "any" });
     return list;
   }
 

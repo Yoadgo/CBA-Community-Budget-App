@@ -187,16 +187,23 @@ CBA.screens = CBA.screens || {};
     slot.innerHTML = html || "";
   }
 
-  function seedCountsFast(container) {
-    if (!(CBA.data && CBA.data.getHomeCountsFast)) return;
+  function seedCountsFast(container, done) {
+    done = done || function () {};
+    if (!(CBA.data && CBA.data.getHomeCountsFast)) return done();
     var want = [];
     if (can("תושבים")) want.push("residents");
     if (can("מכון"))   want.push("gym");
     if (can("גינון"))  want.push("garden");
     if (can("מועדון")) want.push("club");
-    if (!want.length) return;
+    /* ⚠️ תושב בלי הרשאות ניהול: אין תגיות ואין מה לקרוא — אבל **כן**
+       מסמנים את המטמון כטרי, אחרת `primeHomeExtras` היה יוצא לרשת
+       בשבילו בדיוק כמו קודם, למרות שאין לו מה לקבל משם. */
+    if (!want.length) { lazyCache.ts = Date.now(); return done(); }
     CBA.data.getHomeCountsFast(want, function (c) {
-      if (!c) return;
+      if (!c) return done();
+      /* 🔴 **מסמנים טרי רק כשכל מה שביקשנו באמת הגיע.** מסמך אחד
+         שנדחה או חסר ⇒ `primeHomeExtras` יוצא כרגיל ומשלים. */
+      var all = want.every(function (d) { return !!c[d]; });
       if (c.residents) {
         fastPaint(container, "#hm-signups", signupRow(Number(c.residents.signups) || 0));
         fastPaint(container, "#hm-profile", profileRow(Number(c.residents.profile) || 0));
@@ -208,7 +215,71 @@ CBA.screens = CBA.screens || {};
       if (c.club && window.CBA.seedClubAlerts) {
         CBA.seedClubAlerts({ ok: true, pending: Number(c.club.pending) || 0 });
       }
+      if (all) {
+        if (c.residents) { lazyCache.signups = Number(c.residents.signups) || 0;
+                           lazyCache.profile = Number(c.residents.profile) || 0; }
+        if (c.gym)    lazyCache.gym = Number(c.gym.pending) || 0;
+        if (c.garden) { lazyCache.garden = Number(c.garden.pending) || 0;
+                        lazyCache.gardenTs = Date.now(); }
+        lazyCache.ts = Date.now();
+      }
+      done();
     });
+  }
+
+  /* ============================================================================
+   *  🔴 הסיור והשריון הקרוב — שני האחרונים שעוד החזיקו את Apps Script
+   *     (2026-09-16, צעד 12)
+   * ----------------------------------------------------------------------------
+   *  אחרי שהמונים עברו, `homeExtras` נשארה בחיים בשביל שני דברים בלבד:
+   *  כרטיס "יש משהו חדש" ושורת השריון הקרוב. שניהם יושבים עכשיו
+   *  ב-Firestore, וכשכל השלושה מגיעים — `primeHomeExtras` **מוצא את כל
+   *  המטמונים טריים ואינו יוצא לרשת בכלל**. לא הוספתי מסלול דילוג חדש:
+   *  התנאי שכבר קיים שם הוא זה שסוגר את הקריאה.
+   *
+   *  ⚠️ **כל אחד מהם עצמאי.** מסמך שנדחה או חסר משאיר את המטמון שלו
+   *     ריק, ואז הקריאה יוצאת ומשלימה בדיוק כמו אתמול. אין מסלול שבו
+   *     כישלון של אחד מסתיר את השני.
+   * ========================================================================== */
+  function seedTourFast(done) {
+    done = done || function () {};
+    if (!(CBA.data && CBA.data.getTourFast && window.CBA.tour && CBA.tour.seed)) return done();
+    CBA.data.getTourFast(function (res) {
+      if (res && res.ok) CBA.tour.seed(res);
+      done();
+    });
+  }
+
+  function seedResvFast(container, done) {
+    done = done || function () {};
+    if (!(CBA.data && CBA.data.getClubResvFast)) return done();
+    CBA.data.getClubResvFast(function (res) {
+      if (!res || !res.ok) return done();
+      resvCache.list = (res.reservations || []).slice().sort(function (a, b) {
+        return new Date(a.start) - new Date(b.start);
+      });
+      resvCache.ts = Date.now();
+      var slot = container.querySelector("#hm-next");
+      if (slot && slot.isConnected) paintNext(slot, resvCache.list);
+      done();
+    });
+  }
+
+  /* 🔴🔴 **הקריאה הקובעת מחכה לשלושת המהירים — עד גג.**
+     בלי ההמתנה הזאת `primeHomeExtras` היה נבדק **לפני** שהמסמכים
+     חזרו, מוצא מטמון ריק, ויוצא לרשת תמיד — כלומר כל הצעד הזה לא
+     היה עושה דבר. ⚠️ ועם גג, כי קריאת Firestore שנתקעת אסור שתשאיר
+     את עמוד הבית בלי המסלול הישן. 1,200 אלפיות מול 4,500–8,100 של
+     `homeExtras` — עסקה טובה גם במקרה הגרוע. */
+  var FAST_WAIT_MS = 1200;
+  function seedHomeFast(container, done) {
+    var left = 3, fired = false;
+    function settle() { if (fired) return; fired = true; done(); }
+    function one() { if (--left <= 0) settle(); }
+    setTimeout(settle, FAST_WAIT_MS);
+    seedCountsFast(container, one);
+    seedTourFast(one);
+    seedResvFast(container, one);
   }
 
   function primeHomeExtras(done) {
@@ -519,11 +590,12 @@ CBA.screens = CBA.screens || {};
          הקובעת. שניהם יוצאים במקביל ובכוונה — המהיר מצייר
          תגיות, והקובע מביא גם את כרטיס "יש משהו חדש"
          ואת השריון הקרוב, שאינם ב-Firestore. */
-      seedCountsFast(container);
-      primeHomeExtras(function () {
-        loadLazyCounts(container);
-        loadNextReservation(container);
-        loadNewCard(container);
+      seedHomeFast(container, function () {
+        primeHomeExtras(function () {
+          loadLazyCounts(container);
+          loadNextReservation(container);
+          loadNewCard(container);
+        });
       });
     }
   };

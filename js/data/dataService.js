@@ -1281,6 +1281,126 @@ CBA.data = (function () {
     });
   }
 
+  /* ==========================================================================
+   *  🔴 **כרטיס הסיור והשריון הקרוב מ-Firestore**   (צעד 12, 2026-09-16)
+   * --------------------------------------------------------------------------
+   *  📊 נמדד בייצור אחרי פריסה 132: `homeExtras` 4,500–8,100 אלפיות,
+   *  קריאת Firestore 40–57. ואחרי שהמונים כבר עברו, **שני אלה הם כל מה
+   *  שנשאר** שמחזיק את עמוד הבית תלוי ב-Apps Script.
+   *
+   *  🔴 **ולמה הרצפה לא נעלמת בלי זה:** `rev` — המדידה שממנה גזרנו
+   *  "רצפה של שתי שניות" — חוזרת **לפני שער ההרשאות**, ולכן אינה קוראת
+   *  את טאב התושבים בכלל. כל פעולה מאומתת משלמת קריאה מלאה של הטאב
+   *  הזה, וזה מה שנשאר ב-`tour` גם אחרי שהטבלה עברה למטמון.
+   *
+   *  ⚠️ **התשובה בנויה בדיוק כמו זו של `action=tour`** — `{ok, steps, seen}` —
+   *     כדי ש-`CBA.tour.seed` יקבל אותה בלי פענוח שני של הפורמט.
+   *  ⚠️ **הקהל נבחר בלקוח, אבל נאכף בשרת.** הלקוח מבקש רק את המסמכים
+   *     שמותרים לו; מי שיבקש אחר — כלל האבטחה ידחה. הבחירה כאן היא
+   *     חיסכון בקריאות, לא שער.
+   * ======================================================================== */
+  var TOUR_FROM_FIRESTORE = false;
+  var CLUB_RESV_FROM_FIRESTORE = false;
+
+  /* הרשאה → מזהה מסמך. ⚠️ חייב להתאים ל-TOUR_PERM_DOC ב-Code.gs;
+     יש בדיקה שמצליבה את שתי הרשימות. "תושבים" אינו כאן בכוונה — ר' שם. */
+  var TOUR_PERM_DOC = { "על": "perm-super", "תקציב": "perm-budget",
+                        "מועדון": "perm-club", "מכון": "perm-gym", "גינון": "perm-garden" };
+
+  function tourDocIdsForMe() {
+    var ids = ["all"];
+    var perms = (window.CBA && CBA.perms) || [];
+    var isSuper = !!(window.CBA && CBA.isSuper);
+    if (isSuper || perms.length > 0) ids.push("admins");
+    Object.keys(TOUR_PERM_DOC).forEach(function (k) {
+      if (isSuper || perms.indexOf(k) !== -1) ids.push(TOUR_PERM_DOC[k]);
+    });
+    return ids;
+  }
+
+  /* 🔴 אותו מיון בדיוק כמו `tourStepCompare_` בשרת. שני סדרים שונים =
+     "הצעדים מופיעים בסדר אחר בכל מסלול", וזו תקלה שנראית אקראית. */
+  function tourStepCompare(a, b) {
+    var va = parseInt(a["גרסה"], 10) || 1, vb = parseInt(b["גרסה"], 10) || 1;
+    if (va !== vb) return va - vb;
+    return (parseInt(a["סדר"], 10) || 0) - (parseInt(b["סדר"], 10) || 0);
+  }
+
+  function fsReady(cb) {
+    if (!(CBA.fb && CBA.fb.readDoc && CBA.fb.ensureDb)) return cb(false);
+    CBA.fb.authReady(function (user) {
+      if (!user) return cb(false);
+      CBA.fb.ensureDb(function (err) { cb(!err); });
+    });
+  }
+
+  function getTourFast(cb) {
+    cb = cb || function () {};
+    var t0 = Date.now();
+    fsReady(function (ready) {
+      if (!ready) return cb(null);
+      if (CBA.fb.flag && !CBA.fb.flag("tourFromFirestore", TOUR_FROM_FIRESTORE)) return cb(null);
+      var ids = tourDocIdsForMe();
+      var uid = CBA.fb.uid && CBA.fb.uid();
+      var steps = [], seen = 0, left = ids.length + (uid ? 1 : 0), got = 0, settled = false;
+      function done() {
+        if (settled) return;
+        settled = true;
+        /* 🔴 אף מסמך לא נקרא ⇒ null, כלומר **נפילה לאחור ל-homeExtras**.
+           רשימת צעדים ריקה היא תשובה תקפה רק אם משהו באמת נקרא. */
+        if (!got) return cb(null);
+        steps.sort(tourStepCompare);
+        try {
+          CBA.perf = CBA.perf || {};
+          CBA.perf.tour = { source: "firestore", ms: Date.now() - t0, docs: got,
+                            at: new Date().toISOString() };
+        } catch (e) {}
+        cb({ ok: true, steps: steps, seen: seen });
+      }
+      ids.forEach(function (id) {
+        CBA.fb.readDoc("tourSteps", id, function (e, d) {
+          if (!e && d) { got++; steps = steps.concat(d.steps || []); }
+          if (--left <= 0) done();
+        });
+      });
+      if (uid) {
+        CBA.fb.readDoc("tourSeen", uid, function (e, d) {
+          /* ⚠️ אין מסמך = לא ראה כלום = 0. זו תשובה תקפה ולא כשל. */
+          if (!e && d) { got++; seen = parseInt(d.v, 10) || 0; }
+          if (--left <= 0) done();
+        });
+      }
+    });
+  }
+
+  /* השריון הקרוב — מסמך אחד, לפי מזהה המשפחה של הקורא.
+     ⚠️ **בלי הערה ובלי אימייל** (ר' `clubResvSyncAll_`), ולכן זה מזין
+        את שורת עמוד הבית בלבד. מסך "השריונים שלי" ממשיך כרגיל. */
+  function getClubResvFast(cb) {
+    cb = cb || function () {};
+    var t0 = Date.now();
+    /* ⚠️ אותו מקור בדיוק שממנו `sheets.js` גוזר את תנועות המשפחה
+       (`CBA.user.familyId`) — שני מקורות היו נפרדים בשקט. */
+    var fid = String(((window.CBA && CBA.user) || {}).familyId || "").trim();
+    if (!fid) return cb(null);
+    fsReady(function (ready) {
+      if (!ready) return cb(null);
+      if (CBA.fb.flag && !CBA.fb.flag("clubResvFromFirestore", CLUB_RESV_FROM_FIRESTORE)) return cb(null);
+      CBA.fb.readDoc("clubReservations", fid, function (e, d) {
+        if (e) return cb(null);
+        try {
+          CBA.perf = CBA.perf || {};
+          CBA.perf.clubResv = { source: "firestore", ms: Date.now() - t0,
+                                n: d ? (d.items || []).length : 0, at: new Date().toISOString() };
+        } catch (er) {}
+        /* 🔴 **אין מסמך = אין שריונים**, ולא כשל: משפחה בלי שריונים
+           כלל לא מקבלת מסמך. החזרת null כאן היתה מפילה את עמוד
+           הבית בחזרה ל-homeExtras עבור רוב המשפחות, תמיד. */
+        cb({ ok: true, reservations: (d && d.items) || [] });
+      });
+    });
+  }
+
   function getGymList(cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymList" }, cb);
@@ -2667,6 +2787,8 @@ CBA.data = (function () {
     getNotesLog: getNotesLog,
     ensureBudgetLogs: ensureBudgetLogs,
     getHomeCountsFast: getHomeCountsFast,
+    getTourFast: getTourFast,
+    getClubResvFast: getClubResvFast,
     statusMeta: statusMeta,
     statusNext: statusNext,
     statusList: statusList,

@@ -30,7 +30,17 @@
 ### עבר ל-Firestore
 `gardenPlan` + `gardenMeta` · `services` · `budgetYears` · `budgetTx` ·
 `counters` · `appConfig` (flags / rev / boot) · `gymStatus` · `gymCode` · `members` ·
-`homeCounts`
+`homeCounts` · `clubReservations` · `tourSteps` · `tourSeen`
+
+> **צעד 12 (16.9) — עמוד הבית יוצא מ-Apps Script.** אחרי המונים נשארו שני
+> דברים שהחזיקו את הקריאה: כרטיס הסיור והשריון הקרוב. `clubReservations`
+> הוא **מסמך למשפחה** ונושא שלושה שדות בלבד (התחלה, סיום, סטטוס) —
+> בלי אימייל ובלי ההערה החופשית של התושב; `tourSteps` הוא **מסמך לכל
+> קהל** (`all` / `admins` / `perm-…`), כי קריאת אוסף שלם נדחית אם מסמך
+> אחד בו אסור לקורא — Firestore אינו מסנן, הוא דוחה. ⚠️ **המדידה
+> שהסבירה למה זה נדרש:** `rev` חוזרת *לפני* שער ההרשאות ולכן אינה
+> קוראת את טאב התושבים; כל פעולה מאומתת משלמת קריאה מלאה שלו, ואי-אפשר
+> להוריד אותה — רק לא לקרוא ל-Apps Script.
 
 > **`homeCounts` (16.9)** — חמש תגיות הספירה של עמוד הבית, **מסמך
 > לכל הרשאה** (`residents` / `gym` / `club` / `garden`). אין בו שום מידע

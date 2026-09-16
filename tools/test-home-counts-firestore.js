@@ -171,7 +171,8 @@ ok('פעולת זריעה ידנית קיימת ומוגנת במנהל-על',
    /function handleHomeCountsSync_[\s\S]{0,300}authorize_\(ss, p, PERM_SUPER\)/.test(GS) &&
    /homeCountsSync: PERM_SUPER/.test(GS));
 ok('ומנותבת ב-doGet', /action === 'homeCountsSync'\) \{\n      return handleHomeCountsSync_\(e\.parameter\);/.test(GS));
-ok('🔴 הדגל ברשימה הסגורה', /'homeCountsFromFirestore'\];/.test(GS));
+ok('🔴 הדגל ברשימה הסגורה',
+   /var FLAG_KEYS = \[[\s\S]*?'homeCountsFromFirestore'/.test(GS));
 /* ⚠️ אין גיבוי לאוסף הזה — כמו gymStatus, הכול נגזר מהגיליון. */
 ok('⚠️ ובמכוון אינו ברשימת הגיבוי (נגזר, לא מקור)',
    !/{ collection: 'homeCounts'/.test(GS));
@@ -229,15 +230,21 @@ section('6. הלקוח — הקריאה המהירה');
 section('7. 🔴 עמוד הבית — הציור המהיר לא מבטל את הקריאה הקובעת');
 ok('seedCountsFast רצה לפני primeHomeExtras',
    HOME.indexOf('seedCountsFast(container);') < HOME.indexOf('primeHomeExtras(function ()'));
-ok('🔴🔴 והיא **אינה** נוגעת ב-lazyCache.ts — אחרת homeExtras לא היה יוצא כלל',
-   !/function seedCountsFast[\s\S]{0,1400}lazyCache\./.test(HOME));
+/* 🔴🔴 **הכלל השתנה בצעד 12 ונעשה חד יותר.** עכשיו הציור המהיר כן
+   מסמן את המטמון כטרי — זה בדיוק מה שמונע את הקריאה ל-Apps Script —
+   אבל **רק כשכל מה שהתבקש באמת הגיע**. מסמך אחד שחסר או נדחה חייב
+   להחזיר את המסלול הישן, אחרת תגית תישאר ריקה לנצח. */
+ok('🔴🔴 מסמנת מטמון טרי **רק** כשכל התחומים שהתבקשו הגיעו',
+   /var all = want\.every\(function \(d\) \{ return !!c\[d\]; \}\);/.test(HOME) &&
+   /if \(all\) \{[\s\S]{0,420}lazyCache\.ts = Date\.now\(\);/.test(HOME));
+ok('⚠️ ותשובה ריקה לגמרי אינה מסמנת כלום', /if \(!c\) return done\(\);/.test(HOME));
 ok('🔴 והציור המהיר מחליף תוכן ולא את המכל (המזהה חייב לשרוד)',
    /function fastPaint[\s\S]{0,260}slot\.innerHTML = html \|\| "";/.test(HOME) &&
    !/function fastPaint[\s\S]{0,260}outerHTML/.test(HOME));
 ok('⚠️ ואינה מציירת למסך שכבר הוחלף', /if \(!slot \|\| !slot\.isConnected\) return;/.test(HOME));
 ok('🔴 מבקשת רק את התחומים שיש לה הרשאה אליהם',
    /if \(can\("תושבים"\)\) want\.push\("residents"\);/.test(HOME) &&
-   /if \(!want\.length\) return;/.test(HOME));
+   /if \(!want\.length\) \{ lazyCache\.ts = Date\.now\(\); return done\(\); \}/.test(HOME));
 ok('⚠️ ובוני השורות משותפים למסלול המהיר ולקובע — לא שתי תוויות',
    (HOME.match(/function signupRow\(n\)/g) || []).length === 1 &&
    /fastPaint\(container, "#hm-signups", signupRow\(/.test(HOME) &&
