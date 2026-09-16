@@ -161,6 +161,10 @@ var ACTION_PERMS = {
   // קישור פייבוקס) ממסך הניהול, בלי לפתוח את הגיליון. רשימת ההיתר
   // עצמה יושבת ב-GYM_EDITABLE_SETTING_KEYS, לא כאן.
   updateGymSetting: PERM_GYM,
+  // שאלון בריאות ומחיקת מנוי — עריכה מלאה ממסך הניהול (2026-09-16).
+  saveGymQuestion: PERM_GYM,
+  deleteGymQuestion: PERM_GYM,
+  deleteGymMembership: PERM_GYM,
   /* גינון (2026-09-07, שלב א') — כל פעולות הניהול. הפעולות של התושב עצמו
    * (submitGardenReport, myGardenReports, gardenFeedback) **אינן** ברשימה
    * בכוונה: הן פתוחות לכל תושב מחובר ופעיל, בדיוק כמו הגשת קבלה ושריון
@@ -1378,6 +1382,9 @@ function doPostDispatch_(ss, body) {
       case 'renewGymMembership':    return json_(renewGymMembership_(ss, body));
       case 'updateGymMembership':   return json_(updateGymMembership_(ss, body));
       case 'updateGymSetting':       return json_(updateGymSetting_(ss, body));
+      case 'saveGymQuestion':        return json_(saveGymQuestion_(ss, body));
+      case 'deleteGymQuestion':      return json_(deleteGymQuestion_(ss, body));
+      case 'deleteGymMembership':    return json_(deleteGymMembership_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
 }

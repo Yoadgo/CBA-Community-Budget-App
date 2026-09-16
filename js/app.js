@@ -2469,9 +2469,20 @@
       doPoll(true);
     }
   }, true);
+  /* 🔴 רשת ביטחון נגד "הקפאה" של iOS/Safari ב-PWA (יועד, 16.9.2026 — מקרה
+     מורן: היא עברה לוואטסאפ ו-11 דקות אח"כ עדיין ראתה נתונים ישנים).
+     wasIdle (למטה) תלוי בכך ש-runCycle *ירוץ* ויבחין שעבר זמן רב — אבל אם
+     iOS הקפיא את כל הטיימרים של הדף (setInterval כולל), runCycle לא רץ
+     בכלל ו-wasIdle נשאר false. STALE_RESUME_MS הוא בדיקה ישירה בזמן החזרה
+     עצמה — לא תלויה בשום טיימר שיכול היה לקפוא: ברגע שיש אינטראקציה כלשהי
+     (מגע/קליק/פוקוס), משווים ישירות מול lastCycleAt. */
+  var STALE_RESUME_MS = 60000;   // דקה בלי מחזור מוצלח = לרענן עכשיו, לא לחכות
   function markActive() {
     lastActivity = Date.now();
-    if (wasIdle) { wasIdle = false; doPoll(true); }   // חוזרים אחרי הפסקה — רענון מיידי, לא מחכים למחזור
+    if (wasIdle || (lastCycleAt && Date.now() - lastCycleAt > STALE_RESUME_MS)) {
+      wasIdle = false;
+      doPoll(true);   // חוזרים אחרי הפסקה (או אחרי הקפאה) — רענון מיידי, לא מחכים למחזור
+    }
   }
   ["mousemove", "mousedown", "keydown", "touchstart", "scroll"].forEach(function (ev) {
     document.addEventListener(ev, markActive, { passive: true });
@@ -2525,6 +2536,21 @@
   window.addEventListener("cba:write-settled", function () { markActive(); doPoll(true); });
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden) { markActive(); doPoll(true); refreshAlertsClub(); }   // חזרה לטאב — רענון מיידי במקום לחכות למחזור הבא
+  });
+  /* 🔴 שכבה נוספת מעל visibilitychange, לא תחתיה (16.9.2026, מקרה מורן).
+     ב-iOS, אפליקציית PWA שהודחקה לרקע לפעמים לא מיידעת את visibilitychange
+     בכלל כשחוזרים אליה — המערכת "מקפיאה" את התהליך ומעירה אותו בלי אירוע
+     תקין. שני מאזינים משלימים, כל אחד תופס מקרה שהשני מפספס:
+     - "focus" בחלון: כמה גרסאות iOS/Safari כן מיידעות focus גם כשה-
+       visibilitychange לא נורה כראוי.
+     - "pageshow": iOS משתמש הרבה ב-bfcache (שחזור עמוד "קפוא" מהזיכרון
+       במקום טעינה מחדש אמיתית). event.persisted===true אומר שה-JS שרץ כרגע
+       הוא בדיוק אותו מצב-זיכרון מלפני ההשהיה — עדיף רענון מלא (כמו כפתור
+       "עדכון גרסה") מאשר לסמוך על טיימרים/מאזינים שאולי גם הם "קפואים". */
+  window.addEventListener("focus", function () { markActive(); doPoll(true); });
+  window.addEventListener("pageshow", function (e) {
+    if (e && e.persisted) { location.reload(); return; }
+    markActive(); doPoll(true);
   });
 
   // שריוני מועדון ממתינים: קריאת רשת נפרדת (Calendar), בקצב נמוך בהרבה מרענון
