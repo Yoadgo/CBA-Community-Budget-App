@@ -12769,6 +12769,19 @@ function gardenMaterializeWeek_(ss, weekKey) {
   var want = gardenPlanForWeek_(ss, weekKey, defs);
   if (!want.length) return 0;
 
+  /* 🔴🔴 **נעילה — מכאן ועד הכתיבה** (16.9). `nextGardenId_` נקראת
+     פעם אחת והמונה מתקדם מקומית, ולכן **שתי הרצות חופפות
+     מקצות את אותו מזהה**. זה לא תאורטי: נמצאו בייצור שתי
+     שורות עם מזהה 12 ושתיים עם 37.
+     🔑 **והנזק אינו "שתי שורות מכוערות":** ב-Firestore המזהה
+        הוא שם המסמך, ולכן השנייה דורסת את הראשונה ומשימה
+        אמיתית נעלמת מהמסך בלי שום שגיאה.
+     ⚠️ **מדלגים במקום לחכות** כשהנעילה תפוסה: הפעולה
+        אידמפוטנטית ורצה גם כל שעה, ועדיף לדלג מלהשהות
+        טעינת מסך ב-20 שניות. */
+  var mLock = LockService.getScriptLock();
+  if (!mLock.tryLock(10000)) return 0;
+  try {
   var sh = gardenEnsureSheet_(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_HEADERS);
   var c = gardenCols_(sh);
   var v = sh.getLastRow() > 1 ? sh.getDataRange().getValues() : [];
@@ -12816,6 +12829,7 @@ function gardenMaterializeWeek_(ss, weekKey) {
   if (!add.length) return 0;
   sh.getRange(sh.getLastRow() + 1, 1, add.length, add[0].length).setValues(add);
   return add.length;
+  } finally { mLock.releaseLock(); }
 }
 
 /* ---------- תוכנית העבודה: קריאה (doGet) ---------- */
@@ -13593,6 +13607,15 @@ function gardenAfterWrite_(ss, action, body, res) {
     addReport(res.id && action === 'submitGardenReport' ? res.id : '');
     addReport(action === 'gardenFeedback' ? body.id : '');
     addTask(res.taskId);
+    /* 🔴 **יצירה: המזהה החדש חוזר ב-`res.id`** (נתפס חי 16.9).
+       `gardenCreateTask_` מחזירה `{ok:true, id:<חדש>}` — לא `taskId`,
+       ובבקשת יצירה אין `body.id` בכלל. בלי השורה הזאת משימה
+       שמנהל פותח ידנית נכתבת לגיליון, שולחת מייל,
+       ו**אינה מופיעה במסך** עד הסנכרון השעתי. אותה משפחה
+       בדיוק כמו המחיקה, רק בצד היצירה.
+       ⚠️ התנאי על הפעולה ולא על `res.id` לבדו: ב-`submitGardenReport`
+          `res.id` הוא מזהה **דיווח**, ושני המונים נפרדים. */
+    addTask(action === 'gardenCreateTask' ? res.id : '');
     /* ⚠️ ב-`gardenReportDelete` ‏`body.id` הוא מזהה **דיווח**, לא משימה —
        ושני המונים נפרדים ויכולים להתנגש. בלי ההחרגה הזאת
        מחיקת דיווח #7 הייתה מסנכרנת את משימה #7 שאין ביניהן קשר. */

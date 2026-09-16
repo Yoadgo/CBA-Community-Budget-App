@@ -228,5 +228,42 @@ ok('ולכן הלקוח קורא אותו מ-Apps Script',
    /fsFirstRead\("gardenLog", false/.test(DS));
 
 /* ================================================================= */
+section('10. יצירת משימה מגיעה ל-Firestore מיד');
+/* 🔴 נתפס חי 16.9: `gardenCreateTask_` מחזירה את המזהה החדש
+   ב-`res.id`, והגשר חיפש אותו ב-`res.taskId` או ב-`body.id`. שניהם
+   אינם קיימים בבקשת יצירה — ולכן המשימה לא הופיעה במסך. */
+reset();
+sandbox.gardenAfterWrite_(FAKE_SS, 'gardenCreateTask', { title: 'משימה' }, { ok: true, id: 'T2' });
+ok('🔴 משימה שנפתחה נכתבת ל-Firestore', hit(writes, 'gardenTasks', 'T2'), JSON.stringify(writes));
+ok('ולא נמחק שום מסמך', deletes.length === 0);
+reset();
+sandbox.gardenAfterWrite_(FAKE_SS, 'submitGardenReport', { }, { ok: true, id: 'R1', taskId: 'T1' });
+ok('⚠️ בדיווח תושב `res.id` נשאר מזהה דיווח',
+   hit(writes, 'gardenReports', 'R1') && hit(writes, 'gardenTasks', 'T1'), JSON.stringify(writes));
+
+/* ================================================================= */
+section('11. מימוש השבוע לא מקצה מזהה פעמיים');
+/* ⚠️ הפונקציה ארוכה מ-4,000 תווים עם ההערות — חיתוך קצר מדי
+   החזיר כאן ‎-1 על `nextGardenId_` והפיל בדיקה תקינה. */
+const MAT_I = CODE.indexOf('function gardenMaterializeWeek_');
+const MAT = CODE.slice(MAT_I, CODE.indexOf('\nfunction ', MAT_I + 10));
+ok('🔴 הפונקציה לוקחת נעילה', /LockService\.getScriptLock\(\)/.test(MAT));
+/* ⚠️ מחפשים את **קריאת הקוד** ולא את השם — השם מופיע גם
+   בהערה שמעל הנעילה, והבדיקה נכשלה על קוד תקין לגמרי. */
+ok('⚠️ הנעילה נלקחת לפני הקצאת המזהה',
+   MAT.indexOf('tryLock') !== -1 &&
+   MAT.indexOf('tryLock') < MAT.indexOf('var nextId = nextGardenId_'));
+ok('ומשוחררת ב-finally', /finally \{ mLock\.releaseLock\(\); \}/.test(MAT));
+/* נעילה תפוסה — מדלגים בשקט ולא מתרסקים ולא כותבים. */
+reset();
+const realLock = sandbox.LockService;
+sandbox.LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {}, tryLock: () => false }) };
+let matRes;
+try { matRes = sandbox.gardenMaterializeWeek_(FAKE_SS, '2999-01-03'); }
+catch (e) { matRes = 'threw:' + e; }
+sandbox.LockService = realLock;
+ok('⚠️ נעילה תפוסה = דילוג שקט, בלי שגיאה', matRes === 0, String(matRes));
+
+/* ================================================================= */
 console.log('\n' + (fail ? '✗ ' : '✓ ') + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);
