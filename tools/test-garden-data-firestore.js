@@ -385,6 +385,77 @@ ok('gardenReportDoc_ מעתיק את כל המפתחות ולא רושם רשי�
    /function gardenReportDoc_[\s\S]{0,400}Object\.keys\(o\)\.forEach/.test(CODE));
 
 /* ================================================================= */
+section('12. 🔴🔴 רעננות בכתיבה — הפער שהסנכרון השעתי משאיר');
+/* Firestore נותן זמן אמת; מה שחסר היה **מי כותב למסמך**. תושב מגיש
+   דיווח → נכתבת שורה בגיליון → ואיש לא מספר ל-Firestore. עם הדגל
+   דלוק התושב היה רואה רשימה ריקה עד הסנכרון הבא. */
+ok('gardenWrite_ קיימת', typeof sandbox.gardenWrite_ === 'function');
+ok('gardenAfterWrite_ קיימת', typeof sandbox.gardenAfterWrite_ === 'function');
+ok('gardenReportSyncSome_ קיימת', typeof sandbox.gardenReportSyncSome_ === 'function');
+ok('gardenReportIdsForTask_ קיימת', typeof sandbox.gardenReportIdsForTask_ === 'function');
+/* 🔴 ההוק בנתב ולא בשש הפונקציות — רשימה מפוזרת מתיישנת. */
+['submitGardenReport', 'gardenFeedback', 'gardenTask',
+ 'gardenApproveBatch', 'gardenMerge', 'gardenCreateTask'].forEach(function (a) {
+  ok('🔴 ' + a + ' עוברת דרך gardenWrite_',
+     new RegExp("case '" + a + "':\\s*return json_\\(gardenWrite_\\(").test(CODE));
+});
+ok('⚠️ ואין יותר קריאה ישירה למטפל מהנתב',
+   !/case 'submitGardenReport':\s*return json_\(submitGardenReport_/.test(CODE));
+
+/* --- התנהגות --- */
+reset();
+let n = sandbox.gardenReportSyncSome_(FAKE_SS, ['R1']);
+ok('דיווח בודד נכתב', n === 1 && !!byId(writes, 'R1'), String(n));
+ok('⚠️ ורק הוא — לא כל האוסף', writes.length === 1, String(writes.length));
+ok('⚠️ ובלי סחיפת יתומים (הכתיבה הממוקדת אינה מוחקת)', deletes.length === 0);
+reset();
+ok('שורה בלי מזהה משפחה מדולגת גם כאן',
+   sandbox.gardenReportSyncSome_(FAKE_SS, ['R9']) === 0 && !byId(writes, 'R9'));
+reset();
+ok('רשימה ריקה לא עושה דבר', sandbox.gardenReportSyncSome_(FAKE_SS, []) === 0 && writes.length === 0);
+reset();
+ok('מזהי הדיווחים של משימה', JSON.stringify(sandbox.gardenReportIdsForTask_(FAKE_SS, 'T1')) === '["R1"]',
+   JSON.stringify(sandbox.gardenReportIdsForTask_(FAKE_SS, 'T1')));
+ok('משימה בלי דיווחים → ריק',
+   sandbox.gardenReportIdsForTask_(FAKE_SS, 'T404').length === 0);
+
+/* 🔴🔴 הלב: שינוי **משימה** חייב לרענן את מסמך ה**דיווח**, כי הוא
+   נושא את stage/closeWhy/canFeedback שלה. */
+reset();
+sandbox.gardenAfterWrite_(FAKE_SS, 'gardenTask', { id: 'T1' }, { ok: true });
+ok('🔴🔴 שינוי משימה מסנכרן את הדיווח הקשור אליה', !!byId(writes, 'R1'),
+   JSON.stringify(writes.map(w => w.path)));
+reset();
+sandbox.gardenAfterWrite_(FAKE_SS, 'gardenApproveBatch', { ids: ['T1', 'T2'] }, { ok: true });
+ok('אישור מרובה מכסה את כל המשימות שברשימה',
+   !!byId(writes, 'R1') && !!byId(writes, 'R2'), JSON.stringify(writes.map(w => w.path)));
+reset();
+sandbox.gardenAfterWrite_(FAKE_SS, 'submitGardenReport', {}, { ok: true, id: 'R1', taskId: 'T1' });
+ok('הגשת דיווח מסנכרנת אותו מיד', !!byId(writes, 'R1'));
+reset();
+sandbox.gardenAfterWrite_(FAKE_SS, 'gardenFeedback', { id: 'R2' }, { ok: true });
+ok('משוב מסנכרן את הדיווח שקיבל אותו', !!byId(writes, 'R2'));
+/* ⚠️ פעולה שנכשלה לא שינתה דבר — ואסור לה לכתוב. */
+reset();
+sandbox.gardenAfterWrite_(FAKE_SS, 'gardenTask', { id: 'T1' }, { ok: false, error: 'x' });
+ok('⚠️ פעולה שנכשלה אינה מסנכרנת כלום', writes.length === 0, String(writes.length));
+/* ⚠️ שגר ושכח: כישלון כתיבה ל-Firestore אינו מפיל את הפעולה. */
+reset(); failOn = 'set';
+let threw = false;
+try { sandbox.gardenAfterWrite_(FAKE_SS, 'gardenTask', { id: 'T1' }, { ok: true }); }
+catch (e) { threw = true; }
+ok('🔴 כישלון סנכרון אינו זורק — הגיליון הוא המקור', !threw);
+
+/* 🔴 gardenWrite_ מחזירה את תשובת המטפל כמו שהיא. */
+reset();
+const handlerRes = { ok: true, id: 'R1', extra: 'שמור' };
+const back = sandbox.gardenWrite_(FAKE_SS, 'submitGardenReport', {}, function () { return handlerRes; });
+ok('🔴 התשובה למשתמש עוברת ללא שינוי', back === handlerRes && back.extra === 'שמור');
+reset(); failOn = 'set';
+const back2 = sandbox.gardenWrite_(FAKE_SS, 'submitGardenReport', {}, function () { return { ok: true, id: 'R1' }; });
+ok('🔴 וגם כשהסנכרון נכשל', back2 && back2.ok === true);
+
+/* ================================================================= */
 console.log('\n' + '='.repeat(52));
 console.log('עברו: ' + pass + ' | נכשלו: ' + fail);
 process.exit(fail ? 1 : 0);

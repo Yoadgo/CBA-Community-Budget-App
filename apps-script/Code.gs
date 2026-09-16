@@ -1364,12 +1364,16 @@ function doPostDispatch_(ss, body) {
       case 'parseChargeFile':     return json_(parseChargeFile_(ss, body));
       case 'submitAppReport':     return json_(submitAppReport_(ss, body));
       case 'setAppReportDone':    return json_(setAppReportDone_(ss, body));
-      case 'submitGardenReport':  return json_(submitGardenReport_(ss, body));
-      case 'gardenFeedback':      return json_(gardenFeedback_(ss, body));
-      case 'gardenTask':          return json_(gardenTaskAction_(ss, body));
-      case 'gardenApproveBatch':  return json_(gardenApproveBatch_(ss, body));
-      case 'gardenMerge':         return json_(gardenMerge_(ss, body));
-      case 'gardenCreateTask':    return json_(gardenCreateTask_(ss, body));
+      /* 🔴 שש פעולות הכתיבה של הגינון עוברות דרך `gardenWrite_`, שמריצה
+         את המטפל ואז מסנכרן ל-Firestore **רק את המסמכים שהוא נגע בהם**.
+         ר' הבלוק הארוך מעל `gardenAfterWrite_` — ובמיוחד למה ההוק
+         יושב כאן ולא בשש הפונקציות בנפרד. */
+      case 'submitGardenReport':  return json_(gardenWrite_(ss, body.action, body, submitGardenReport_));
+      case 'gardenFeedback':      return json_(gardenWrite_(ss, body.action, body, gardenFeedback_));
+      case 'gardenTask':          return json_(gardenWrite_(ss, body.action, body, gardenTaskAction_));
+      case 'gardenApproveBatch':  return json_(gardenWrite_(ss, body.action, body, gardenApproveBatch_));
+      case 'gardenMerge':         return json_(gardenWrite_(ss, body.action, body, gardenMerge_));
+      case 'gardenCreateTask':    return json_(gardenWrite_(ss, body.action, body, gardenCreateTask_));
       /* 🔴🔴 **שלוש הפעולות שכותבות מסמך בודד לאוסף `gardenPlan`**
          (2026-09-16, הפער שנשאר פתוח מסקירת הצוות האדום).
          `gardenPlanSyncOne_` כותבת מסמך אחד ואינה סוחפת — ולכן היא
@@ -13108,6 +13112,120 @@ function handleGardenPlanSync_(p) {
     if (r.busy) return json_(r);
     return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, error: r.error });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+
+/* ============================================================================
+ *  🔴🔴  רעננות בכתיבה — הפער שהסנכרון השעתי משאיר   (2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  **הבהרה שחשוב שתישאר כתובה, כי היא מבלבלת:** Firestore **כן** נותן
+ *  זמן אמת. הבעיה מעולם לא הייתה הקצב שלו — אלא **מי כותב למסמך**.
+ *
+ *  הגיליון הוא מקור האמת בגינון. תושב מגיש דיווח → Apps Script כותב
+ *  **שורה בגיליון** → ואיש אינו מספר ל-Firestore. דחיפה מיידית של
+ *  מסמך שאף אחד לא עדכן דוחפת כלום. לכן התיקון אינו "לרענן מהר
+ *  יותר" אלא **לכתוב ל-Firestore באותו רגע שהשורה נכתבת**.
+ *
+ *  ⚠️ **למה כאן, בנתב, ולא בכל מטפל בנפרד:** שש פעולות כותבות גינון,
+ *     וכולן עוברות דרך ה-`case` הזה. רשימת קריאות מפוזרת בשש
+ *     פונקציות מתיישנת בפיצ'ר הראשון — בדיוק השיקול שכתוב ליד
+ *     `homeCountsBump_`, ומאותה סיבה.
+ *
+ *  ⚠️ **סנכרון ממוקד ולא מלא.** `gardenDataSyncAll_` נמדד ב-26 שניות
+ *     על 11 מסמכים; לתלות אותו בכל כתיבה זה להכפיל את זמן ההגשה פי
+ *     שניים. כאן מסנכרנים **רק את המסמכים שהפעולה נגעה בהם**.
+ *
+ *  🔴 **ומשימה משנה גם דיווח.** מסמך הדיווח נושא את `stage`, `closeWhy`
+ *     ו-`canFeedback` של המשימה שלו — כלומר אישור משימה משנה מסמך
+ *     של תושב שלא נגעו בו. לכן כל שינוי משימה מסנכרן גם את הדיווחים
+ *     הקשורים אליה. בלי זה התושב היה רואה "בטיפול" על תקלה שנסגרה.
+ *
+ *  ⚠️ **שגר ושכח, תמיד.** כישלון סנכרון אסור לו לבטל כתיבה שכבר
+ *     הצליחה בגיליון — הגיליון הוא המקור, Firestore הוא העותק.
+ * ========================================================================== */
+
+/** מזהי הדיווחים שמצביעים על משימה. מערך ריק כשאין. */
+function gardenReportIdsForTask_(ss, taskId) {
+  taskId = String(taskId || '').trim();
+  if (!taskId) return [];
+  var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+  if (!rsh || rsh.getLastRow() < 2) return [];
+  var rc = gardenCols_(rsh), v = rsh.getDataRange().getValues(), out = [];
+  for (var r = 1; r < v.length; r++) {
+    if (String(v[r][rc['מזהה משימה']] || '').trim() !== taskId) continue;
+    var id = String(v[r][rc['מזהה']] || '').trim();
+    if (id) out.push(id);
+  }
+  return out;
+}
+
+/** כותב ל-Firestore את הדיווחים שברשימה. שקט בכוונה — ר' הבלוק מעל. */
+function gardenReportSyncSome_(ss, ids) {
+  try {
+    ids = (ids || []).map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+    if (!ids.length) return 0;
+    var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+    if (!rsh || rsh.getLastRow() < 2) return 0;
+    var rc = gardenCols_(rsh), rows = rsh.getDataRange().getValues();
+    var want = {}; ids.forEach(function (i) { want[i] = 1; });
+    /* ההקשר נבנה **פעם אחת** לכל הקריאה ולא לכל דיווח — הוא שלוש
+       סריקות טאב, וזה ההבדל בין חצי שנייה לשלוש. */
+    var ctx = null, n = 0;
+    for (var r = 1; r < rows.length; r++) {
+      var id = String(rows[r][rc['מזהה']] || '').trim();
+      if (!id || !want[id]) continue;
+      var famId = String(rows[r][rc['מזהה משפחה']] || '').trim();
+      /* בלי מזהה משפחה אין מה לאבטח — מדולג, בדיוק כמו בסנכרון המלא. */
+      if (!famId) continue;
+      if (!ctx) ctx = gardenReportCtx_(ss);
+      var o = gardenReportRow_(rows[r], rc, ctx.tasks, ctx.closeWhy, ctx.fbDays, ctx.now);
+      fsSet_(fsDocPath_(FS_GARDEN_REPORTS, id), gardenReportDoc_(o, famId));
+      n++;
+    }
+    return n;
+  } catch (e) { return 0; }
+}
+
+/** מריץ מטפל כתיבה של הגינון ואז מסנכרן את מה שהוא נגע בו.
+ *  ⚠️ מחזיר את תשובת המטפל **כמו שהיא** — הסנכרון אינו רשאי לשנות
+ *     את מה שהמשתמש מקבל, גם לא כשהוא נכשל. */
+function gardenWrite_(ss, action, body, fn) {
+  var res = fn(ss, body);
+  gardenAfterWrite_(ss, action, body, res);
+  return res;
+}
+
+/** אחרי פעולת כתיבה בגינון: לסנכרן בדיוק את מה שהיא נגעה בו.
+ *  ⚠️ **לעולם אינה זורקת** — היא רצה אחרי שהכתיבה לגיליון הצליחה. */
+function gardenAfterWrite_(ss, action, body, res) {
+  try {
+    if (!res || res.ok !== true) return;          /* פעולה שנכשלה לא שינתה דבר */
+    body = body || {};
+    var reportIds = [], taskIds = [];
+
+    function addTask(t) { t = String(t || '').trim(); if (t) taskIds.push(t); }
+    function addReport(r) { r = String(r || '').trim(); if (r) reportIds.push(r); }
+
+    addReport(res.id && action === 'submitGardenReport' ? res.id : '');
+    addReport(action === 'gardenFeedback' ? body.id : '');
+    addTask(res.taskId);
+    if (action !== 'submitGardenReport' && action !== 'gardenFeedback') addTask(body.id);
+    /* אישור מרובה שולח מערך מזהים. */
+    (body.ids || []).forEach(addTask);
+    /* איחוד נוגע בשתי משימות — זו שנסגרה וזו שקלטה. */
+    addTask(body.into); addTask(body.intoId); addTask(body.targetId);
+
+    /* משימה שזזה משנה גם את מסמכי הדיווחים שלה — ר' ההערה בבלוק. */
+    taskIds.forEach(function (t) {
+      gardenReportIdsForTask_(ss, t).forEach(addReport);
+    });
+
+    var seen = {};
+    reportIds = reportIds.filter(function (x) {
+      if (seen[x]) return false; seen[x] = 1; return true;
+    });
+    if (reportIds.length) gardenReportSyncSome_(ss, reportIds);
+  } catch (e) { /* שגר ושכח — ר' הבלוק מעל */ }
 }
 
 /* ============================================================================
