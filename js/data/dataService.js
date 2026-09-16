@@ -1311,7 +1311,11 @@ CBA.data = (function () {
     var ids = ["all"];
     var perms = (window.CBA && CBA.perms) || [];
     var isSuper = !!(window.CBA && CBA.isSuper);
-    if (isSuper || perms.length > 0) ids.push("admins");
+    var isAdmin = isSuper || perms.length > 0;
+    /* 🔴 אותה הגדרת "מנהל" בדיוק כמו `handleTour_`: מנהל-על, או מי
+       שיש לו ולו הרשאה אחת. שתי הגדרות היו "הצעד מופיע במסלול אחד
+       ולא בשני". */
+    ids.push(isAdmin ? "admins" : "residents");
     Object.keys(TOUR_PERM_DOC).forEach(function (k) {
       if (isSuper || perms.indexOf(k) !== -1) ids.push(TOUR_PERM_DOC[k]);
     });
@@ -1543,6 +1547,23 @@ CBA.data = (function () {
   function updateGymSetting(data, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.postRead("updateGymSetting", data || {}, cb);
+  }
+  /* שאלון בריאות → עריכה מלאה (2026-09-16). saveGymQuestion: upsert
+     ({id?, label, text, flag, active, order}); deleteGymQuestion: מחיקה
+     לגמרי ({id}). */
+  function saveGymQuestion(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("saveGymQuestion", data || {}, cb);
+  }
+  function deleteGymQuestion(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("deleteGymQuestion", data || {}, cb);
+  }
+  /* מחיקת מנוי לצמיתות (2026-09-16) — שונה מ-updateGymMembership עם
+     status="בוטל": זו מחיקה בלתי הפיכה של השורה כולה + ניקוי Firestore. */
+  function deleteGymMembership(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("deleteGymMembership", data || {}, cb);
   }
   function approveClubReservation(id, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
@@ -2631,6 +2652,9 @@ CBA.data = (function () {
     renewGymMembership: renewGymMembership,
     updateGymMembership: updateGymMembership,
     updateGymSetting: updateGymSetting,
+    saveGymQuestion: saveGymQuestion,
+    deleteGymQuestion: deleteGymQuestion,
+    deleteGymMembership: deleteGymMembership,
     approveClubReservation: approveClubReservation,
     /* אישור מרובה (2026-08-28) — מזהים מופרדים בפסיק בקריאה אחת, במקום N
        קריאות רשת. השרת נועל פעם אחת ומדווח בנפרד על כל שריון שנכשל. */

@@ -95,6 +95,8 @@ CBA.screens = CBA.screens || {};
                  : "") +
                '<button type="button" class="btn-ghost" data-ga-edit="' +
                  CBA.esc(m["מזהה"] || "") + '">עריכה</button>' +
+               '<button type="button" class="btn-ghost btn-danger" data-ga-delete="' +
+                 CBA.esc(m["מזהה"] || "") + '">מחיקה</button>' +
                (m["מצב סנכרון"] && m["מצב סנכרון"] !== "מסונכרן"
                  ? '<span class="gym-pill gym-pill--warn">' + CBA.esc(m["מצב סנכרון"]) + "</span>"
                  : "") +
@@ -389,6 +391,134 @@ CBA.screens = CBA.screens || {};
     });
   }
 
+  /* ---------- ניהול שאלון בריאות (2026-09-16) ----------
+     רשימה שנפתחת מעל "הגדרות מכון", עם הוספה/עריכה/מחיקה של שאלה. אין
+     כאן מיגרציה לתשובות קיימות בכוונה — יועד מוחק את המנויים הקיימים
+     ומתחיל מחדש (ר' saveGymQuestion_/deleteGymQuestion_ ב-Code.gs).
+     reload הוא load() ממסך הניהול, שעכשיו מקבל cb ומעדכן את gaLast —
+     כך שהרשימה כאן תמיד מציגה את הנתון האחרון בלי בקשת רשת כפולה. */
+  function openQuestionsManager(reload) {
+    var el = document.createElement("div");
+    el.id = "gym-questions";
+    el.className = "gym-wiz";
+    document.body.appendChild(el);
+
+    function questionRowHTML(q) {
+      var isOff = q.active === false;
+      return '<div class="gym-row">' +
+               '<div class="gym-row__main">' +
+                 '<div class="gym-row__name">' + CBA.esc(q.order) + '. ' + CBA.esc(q.label) + '</div>' +
+                 '<div class="gym-row__meta">' + CBA.esc(q.text) + '</div>' +
+               '</div>' +
+               '<div class="gym-row__side">' +
+                 '<span class="gym-pill gym-pill--' + (q.flag === "התראה" ? "warn" : "danger") + '">' +
+                   CBA.esc(q.flag || "חוסם") + '</span>' +
+                 (isOff ? '<span class="gym-pill gym-pill--muted">כבויה</span>' : "") +
+                 '<button type="button" class="btn-ghost" data-gq-edit="' + CBA.esc(q.id) + '">עריכה</button>' +
+                 '<button type="button" class="btn-ghost btn-danger" data-gq-del="' + CBA.esc(q.id) + '">מחיקה</button>' +
+               '</div>' +
+             '</div>';
+    }
+
+    function renderList() {
+      var qs = ((gaLast && gaLast.questions) || []).slice().sort(function (a, b) { return a.order - b.order; });
+      el.innerHTML =
+        '<div class="gym-wiz__backdrop" data-gq-close></div>' +
+        '<aside class="gym-wiz__panel" role="dialog" aria-label="ניהול שאלון בריאות">' +
+          '<div class="gym-wiz__head">' +
+            '<div class="gym-wiz__title">שאלון בריאות</div>' +
+            '<button type="button" class="gym-wiz__x" data-gq-close aria-label="סגירה">×</button>' +
+          '</div>' +
+          '<div class="gym-wiz__body">' +
+            '<div class="gym-hint">"חוסם" = תשובת "כן" עוצרת הרשמה אוטומטית ומחייבת תעודה רפואית. ' +
+              '"התראה" רק מסמנת לתשומת לב מנהל/ת המכון. שינוי כאן משפיע רק על הרשמות חדשות.</div>' +
+            (qs.length ? qs.map(questionRowHTML).join("") :
+              '<div class="gym-note">אין עדיין שאלות בשאלון.</div>') +
+          '</div>' +
+          '<div class="gym-wiz__foot">' +
+            '<button type="button" class="btn-ghost" data-gq-close>סגירה</button>' +
+            '<button type="button" class="btn-primary" data-gq-add>הוספת שאלה</button>' +
+          '</div>' +
+        '</aside>';
+      bindList();
+    }
+
+    function refreshAndRender() {
+      reload(function () { renderList(); });
+    }
+
+    function openQuestionForm(existing) {
+      var qs = (gaLast && gaLast.questions) || [];
+      openFormDrawer({
+        title: existing ? "עריכת שאלה" : "הוספת שאלה",
+        subtitle: "הכותרת הקצרה משמשת כשם עמודה פנימי בטאב \"מכון כושר\" — כדאי קצרה, בלי תווים מיוחדים, ושונה מכל שאלה אחרת.",
+        okText: "שמירה",
+        fields: [
+          { key: "label", label: "כותרת קצרה", type: "text", value: existing ? existing.label : "" },
+          { key: "text", label: "נוסח השאלה המלא", type: "textarea",
+            value: existing ? existing.text : "" },
+          { key: "flag", label: "סוג דגל", type: "select",
+            value: existing ? (existing.flag || "חוסם") : "חוסם", options: ["חוסם", "התראה"],
+            hint: '"חוסם" עוצר הרשמה אוטומטית ומחייב תעודה רפואית. "התראה" רק מסמנת.' },
+          { key: "active", label: "פעילה", type: "select",
+            value: existing && existing.active === false ? "לא" : "כן", options: ["כן", "לא"] },
+          { key: "order", label: "מיקום בסדר", type: "number",
+            value: existing ? existing.order : (qs.length + 1) }
+        ],
+        onSave: function (v, dlg) {
+          if (!String(v.label || "").trim()) { dlg.error("צריך למלא כותרת קצרה."); return; }
+          if (!String(v.text || "").trim()) { dlg.error("צריך למלא את נוסח השאלה."); return; }
+          dlg.busy("שומר…");
+          CBA.data.saveGymQuestion({
+            id: existing ? existing.id : "",
+            label: v.label, text: v.text, flag: v.flag, active: v.active, order: v.order
+          }, function (res) {
+            dlg.done();
+            if (!res || !res.ok) { dlg.error((res && res.error) || "השמירה נכשלה."); return; }
+            dlg.close();
+            CBA.ui.toast("נשמר");
+            refreshAndRender();
+          });
+        }
+      });
+    }
+
+    function questionById(id) {
+      var qs = (gaLast && gaLast.questions) || [];
+      for (var i = 0; i < qs.length; i++) if (qs[i].id === id) return qs[i];
+      return null;
+    }
+
+    function bindList() {
+      el.querySelectorAll("[data-gq-close]").forEach(function (n) { n.addEventListener("click", close); });
+      el.querySelector("[data-gq-add]").addEventListener("click", function () { openQuestionForm(null); });
+      el.querySelectorAll("[data-gq-edit]").forEach(function (btn) {
+        btn.addEventListener("click", function () { openQuestionForm(questionById(btn.dataset.gqEdit)); });
+      });
+      el.querySelectorAll("[data-gq-del]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var q = questionById(btn.dataset.gqDel);
+          CBA.ui.confirm(
+            'למחוק את השאלה "' + ((q && q.label) || "") + '"?\n\n' +
+            "הרשמות חדשות לא יראו אותה יותר. זו פעולה בלתי הפיכה.",
+            { title: "מחיקת שאלה", okText: "מחיקה", danger: true }
+          ).then(function (ok) {
+            if (!ok) return;
+            CBA.data.deleteGymQuestion({ id: btn.dataset.gqDel }, function (res) {
+              if (!res || !res.ok) { CBA.ui.alert((res && res.error) || "המחיקה נכשלה."); return; }
+              CBA.ui.toast("השאלה נמחקה");
+              refreshAndRender();
+            });
+          });
+        });
+      });
+    }
+
+    function close() { if (el.parentNode) el.parentNode.removeChild(el); }
+
+    renderList();
+  }
+
   /* ---------- צפייה בהצהרת הבריאות ----------
      כל מה שצריך כבר נמצא בתשובת gymList: השאלות (עם ה"כותרת" הקצרה שהיא גם
      שם העמודה) והשורה של המנוי. אין קריאת שרת נוספת. */
@@ -559,6 +689,32 @@ CBA.screens = CBA.screens || {};
     // עריכה מלאה — מסלול, מחיר, תאריכים, סטטוס והערה במקום אחד
     root.querySelectorAll("[data-ga-edit]").forEach(function (btn) {
       btn.addEventListener("click", function () { openEdit(btn.dataset.gaEdit, reload); });
+    });
+
+    // מחיקה לצמיתות (2026-09-16, בקשת יועד: "כפתור אדום... אם צריך
+    // למחוק אז למחוק באופן מלא") — שונה מ"עריכה" → סטטוס "בוטל", שרק
+    // מסמן את המנוי כלא-פעיל ומשאיר את ההיסטוריה. אזהרה מפורשת בדיאלוג
+    // כי הפעולה בלתי הפיכה.
+    root.querySelectorAll("[data-ga-delete]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.gaDelete;
+        var m = memberById(id) || {};
+        CBA.ui.confirm(
+          "למחוק את " + memberName(m) + " לצמיתות ממכון הכושר?\n\n" +
+          "זו מחיקה מלאה — כל ההיסטוריה של המנוי הזה (תשלומים, הצהרת בריאות, קוד כניסה) " +
+          "תימחק ולא ניתן לשחזר אותה. אם רק רוצים לסמן שהמנוי לא פעיל, עדיף \"עריכה\" → סטטוס \"בוטל\".",
+          { title: "מחיקת מנוי לצמיתות", okText: "מחיקה לצמיתות", danger: true }
+        ).then(function (ok) {
+          if (!ok) return;
+          var release = CBA.ui.busy(btn, "מוחק…");
+          CBA.data.deleteGymMembership({ id: id }, function (res) {
+            release();
+            if (!res || !res.ok) { CBA.ui.alert((res && res.error) || "המחיקה נכשלה."); return; }
+            CBA.ui.toast("המנוי נמחק");
+            reload();
+          });
+        });
+      });
     });
   }
 
@@ -793,10 +949,14 @@ CBA.screens = CBA.screens || {};
       var statusEl  = container.querySelector("#ga-status");
 
       // הצהרת פונקציה (לא ביטוי) — ולכן היא מורמת ונגישה גם לכפתור שנקשר למעלה.
-      function load() {
+      // cb אופציונלי (2026-09-16) — נקרא אחרי שה-DOM עודכן, כדי שמסכי משנה
+      // (כמו ניהול שאלון הבריאות) יוכלו לרענן את עצמם מ-gaLast בלי
+      // לנחש מתי הבקשה האסינכרונית הסתיימה.
+      function load(cb) {
         if (!(CBA.data && CBA.data.getGymList)) {
           membersEl.innerHTML = '<div class="club-empty">המודול עדיין לא מחובר לגיליון.</div>';
           statusEl.innerHTML = '';
+          if (cb) cb();
           return;
         }
         CBA.data.getGymList(function (res) {
@@ -807,6 +967,7 @@ CBA.screens = CBA.screens || {};
               CBA.esc((res && res.error) || "לא ניתן לטעון כרגע.") + '</div>';
             statusEl.innerHTML = '';
             kpisEl.innerHTML = '';
+            if (cb) cb();
             return;
           }
 
@@ -858,11 +1019,22 @@ CBA.screens = CBA.screens || {};
             settingRowHTML({ key: "קוד כניסה", label: "קוד כניסה למכון",
                               hasValue: !!res.hasEntryCode, valueText: res.hasEntryCode ? "מוגדר" : "לא הוגדר" }) +
             settingRowHTML({ key: "קישור פייבוקס", label: "קישור לתשלום בפייבוקס",
-                              hasValue: !!payboxValue, valueText: payboxValue || "לא הוגדר", rawValue: payboxValue });
+                              hasValue: !!payboxValue, valueText: payboxValue || "לא הוגדר", rawValue: payboxValue }) +
+            '<div class="gym-check__row">' +
+              '<span class="gym-check__mark gym-check__mark--' + (questions.length ? "on" : "off") + '">' +
+                (questions.length ? "✓" : "!") + '</span>' +
+              '<span class="gym-check__label">שאלון בריאות</span>' +
+              '<span class="gym-check__val">' + questions.length + ' שאלות (' +
+                questions.filter(function (q) { return q.active !== false; }).length + ' פעילות)</span>' +
+              '<button type="button" class="btn-ghost" data-ga-questions>ניהול שאלות</button>' +
+            '</div>';
           bindSettingActions(statusEl, load);
+          var qBtn = statusEl.querySelector("[data-ga-questions]");
+          if (qBtn) qBtn.addEventListener("click", function () { openQuestionsManager(load); });
 
           if (gaWinScrollY) window.scrollTo(0, gaWinScrollY);
           gaWinScrollY = 0;
+          if (cb) cb();
         });
       }
 

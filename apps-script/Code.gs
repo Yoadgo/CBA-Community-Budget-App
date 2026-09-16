@@ -975,6 +975,28 @@ function doGet(e) {
  *     לשלוח משהו שהלקוח צריך, ולכן לקוח ישן מול שרת
  *     חדש היה מציג יומן ריק בלי שום שגיאה. ר' נוהל הדיפלוי.
  * ========================================================================== */
+/* שורות "יומן הערות", עם השעה כמחרוזת.   (תיקון 2026-09-16)
+ *
+ * 🔴 **הבאג:** תא שעה בגיליון הוא **תאריך**, לא טקסט. `readTable_`
+ * מחזיר אותו כ-Date, `JSON.stringify` הופך אותו למחרוזת ISO מלאה,
+ * והמסך הציג `1899-12-31T07:45:00.000Z` במקום `07:45`. זה היה כך גם
+ * כשהיומן נסע במטען הראשי — הוא רק לא נראה עד שבדקנו אותו חי.
+ *
+ * ⚠️ **התיקון כאן ולא בלקוח, ובכוונה.** רק השרת יודע מהו אזור הזמן
+ *    של הגיליון; הלקוח היה צריך לנחש אותו מתוך המחרוזת, וניחוש כזה
+ *    נשבר בשקט פעמיים בשנה כשהשעון זז.
+ * ⚠️ ערך שכבר טקסט (שעה שהוקלדה ידנית) עובר כמו שהוא. */
+function notesLogRows_(ss) {
+  var tz = Session.getScriptTimeZone();
+  return readTable_(ss, 'יומן הערות').map(function (r) {
+    var v = r['שעה'];
+    if (v instanceof Date) {
+      r['שעה'] = Utilities.formatDate(v, tz, 'HH:mm');
+    }
+    return r;
+  });
+}
+
 function handleBudgetLogs_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -984,7 +1006,7 @@ function handleBudgetLogs_(p) {
     return json_({
       ok: true,
       updates:  cached_('cba_updates_' + stamp,  function () { return readTable_(ss, 'עדכוני תקציב'); }),
-      notesLog: cached_('cba_noteslog_' + stamp, function () { return readTable_(ss, 'יומן הערות'); })
+      notesLog: cached_('cba_noteslog_' + stamp, function () { return notesLogRows_(ss); })
     });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -8536,6 +8558,135 @@ function updateGymSetting_(ss, body) {
 }
 
 /* ============================================================================
+ *  שאלון בריאות → עריכה מלאה מהמסך (2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  יועד: "יכולת עריכה מלאה, גם הוספה ושינוי של שאלות וגם כיבוי או מחיקה
+ *  של שאלה." הוחלט: אין מיגרציה לתשובות קיימות (יועד מוחק את המנויים
+ *  הקיימים ומתחיל מחדש). saveGymQuestion_ הוא upsert: בלי id = הוספת
+ *  שאלה חדשה (מזהה נוצר אוטומטית); עם id = עדכון שורה קיימת. הכותרת
+ *  חייבת להיות ייחודית בין השאלות — אחרת, שתי שאלות יצביעו לאותה עמודה
+ *  בטאב הראשי דרך ensureGymQuestionCols_. deleteGymQuestion_ מוחקת את
+ *  השורה לגמרי מטאב ההגדרות — בלי מיגרציה של תשובות קיימות (בהחלטת
+ *  יועד, ראו ההערה למעלה). שתיהן כותבות רק לשורות "סוג"="שאלה" —
+ *  לא נוגעות במסלול/הגדרה/תקנון. */
+function gymNextQuestionId_(cfg) {
+  var max = 0;
+  for (var i = 0; i < cfg.questions.length; i++) {
+    var m = /^Q(\d+)$/.exec(cfg.questions[i].id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return 'Q' + (max + 1);
+}
+
+function saveGymQuestion_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var cfg = readGymSettings_(ss);
+    var label = String(body.label || '').trim();
+    var text  = String(body.text || '').trim();
+    if (!label) return { ok: false, error: 'צריך למלא כותרת קצרה לשאלה' };
+    if (!text)  return { ok: false, error: 'צריך למלא את נוסח השאלה' };
+    var flag = (String(body.flag || '').trim() === 'התראה') ? 'התראה' : 'חוסם';
+    var active = (String(body.active || 'כן').trim() === 'לא') ? 'לא' : 'כן';
+    var order = Number(body.order) || (cfg.questions.length + 1);
+    var id = String(body.id || '').trim();
+
+    var cfgSh = ss.getSheetByName(GYM_SETTINGS_SHEET);
+    var rows = cfgSh.getDataRange().getValues();
+    var rowIndex = -1;
+    for (var r = 1; r < rows.length; r++) {
+      if (String(rows[r][0]).trim() !== 'שאלה') continue;
+      if (id && String(rows[r][1]).trim() === id) { rowIndex = r + 1; continue; }
+      if (String(rows[r][3]).trim() === label && String(rows[r][1]).trim() !== id) {
+        return { ok: false, error: 'כבר קיימת שאלה עם הכותרת "' + label + '"' };
+      }
+    }
+    if (!id) id = gymNextQuestionId_(cfg);
+
+    var rowValues = ['שאלה', id, order, label, text, '', '', flag, active, ''];
+    if (rowIndex === -1) {
+      var t = Math.max(cfgSh.getLastRow(), 1) + 1;
+      if (cfgSh.getMaxRows() < t) cfgSh.insertRowsAfter(cfgSh.getMaxRows(), t - cfgSh.getMaxRows());
+      cfgSh.getRange(t, 1, 1, GYM_SETTINGS_HEADERS.length).setValues([rowValues]);
+    } else {
+      cfgSh.getRange(rowIndex, 1, 1, GYM_SETTINGS_HEADERS.length).setValues([rowValues]);
+    }
+    return { ok: true, id: id };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteGymQuestion_(ss, body) {
+  var id = String(body.id || '').trim();
+  if (!id) return { ok: false, error: 'חסר מזהה שאלה' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var cfgSh = ss.getSheetByName(GYM_SETTINGS_SHEET);
+    if (!cfgSh) return { ok: false, error: 'טאב ההגדרות חסר' };
+    var rows = cfgSh.getDataRange().getValues();
+    for (var r = rows.length - 1; r >= 1; r--) {
+      if (String(rows[r][0]).trim() === 'שאלה' && String(rows[r][1]).trim() === id) {
+        cfgSh.deleteRow(r + 1);
+        return { ok: true, id: id };
+      }
+    }
+    return { ok: false, error: 'השאלה לא נמצאה' };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================================
+ *  מחיקת מנוי לצמיתות (2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  שונה מ-updateGymMembership_ עם status="בוטל" (שמשאיר את השורה לצרכי
+ *  היסטוריה/סנכרון תשלום): זה מוחק את השורה לגמרי — יועד ביקש במפורש
+ *  "כפתור אדום למחיקת כרטיס המשתמש... ואם צריך למחוק אז למחוק באופן
+ *  מלא". עם זאת מנקה גם את Firestore מיד ולא מחכה לסחיפת היתומים
+ *  השעתית — קוד כניסה וסטטוס פעיל לא אמורים להישאר רגע אחד אחרי
+ *  שהמנוי נמחק. היומן נשאר משום שהוא מציג מה נמחק, לא נעלמת מי. */
+function deleteGymMembership_(ss, body) {
+  var id = String(body.id || '').trim();
+  if (!id) return { ok: false, error: 'חסר מזהה מנוי' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ss.getSheetByName(GYM_SHEET);
+    if (!sh) return { ok: false, error: 'טאב המכון חסר' };
+    var cols = gymCols_(sh);
+    var row = gymRowById_(sh, cols, id);
+    if (!row) return { ok: false, error: 'המנוי לא נמצא' };
+    var email = String(sh.getRange(row, cols['אימייל']).getValue()).trim();
+    var name = (String(sh.getRange(row, cols['שם פרטי']).getValue()).trim() + ' ' +
+                String(sh.getRange(row, cols['שם משפחה']).getValue()).trim()).trim();
+    sh.deleteRow(row);
+
+    try {
+      var uid = gymUidByEmail_(ss)[normalizeEmail_(email)];
+      if (uid) {
+        fsDelete_(fsDocPath_(FS_GYM_STATUS, uid));
+        fsDelete_(fsDocPath_(FS_GYM_CODE, uid));
+      }
+    } catch (fsErr) { Logger.log('ניקוי Firestore אחרי מחיקת מנוי נכשל: ' + fsErr); }
+
+    gymLog_(ss, id, 'מחיקת מנוי', { by: body._email || '', note: (name || email) + (body.reason ? (' | ' + body.reason) : '') });
+    return { ok: true, id: id };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================================
  *  סיור היכרות (2026-08-28)
  * ----------------------------------------------------------------------------
  *  חפיסת מסכים שנפתחת בכניסה הראשונה, בסגנון הפעלה של מכשיר חדש. התוכן כולו
@@ -8965,6 +9116,9 @@ function tourAudDocId_(aud) {
   var a = String(aud == null ? '' : aud).trim() || '\u05db\u05d5\u05dc\u05dd';
   if (a === '\u05db\u05d5\u05dc\u05dd') return 'all';
   if (a === '\u05de\u05e0\u05d4\u05dc\u05d9\u05dd') return 'admins';
+  /* ⚠️ **לפני TOUR_PERM_DOC, כי "תושבים" הוא גם שם הרשאה.** מאז
+     התיקון של 16.9 הוא מציין קהל — תושב שאינו מנהל — ולא הרשאה. */
+  if (a === '\u05ea\u05d5\u05e9\u05d1\u05d9\u05dd') return 'residents';
   return TOUR_PERM_DOC[a] || '';
 }
 
@@ -10752,8 +10906,16 @@ function handleTour_(p) {
     var rows = tourRowsCached_(ss).filter(function (r) {
       if (String(r['פעיל'] || '').trim() === 'לא') return false;
       var aud = String(r['קהל'] || 'כולם').trim();
-      if (aud === 'מנהלים' && !isAdmin) return false;
-      if (aud === 'תושבים' && isAdmin) return false;
+      /* 🔴 **תיקון 16.9: `return` ולא `return false` בלבד.**
+         עד כאן קהל "תושבים" נפל **פעמיים**: מנהל נחסם בשורה הזאת,
+         ולא-מנהל המשיך לבדיקת `ALL_PERMS` שמכילה "תושבים" כשם
+         הרשאה — ונכשל בה, כי אין לו אותה. כלומר צעד שסומן "תושבים"
+         לא הוצג **לאף אחד**, בלי שום שגיאה.
+         ⚠️ ולכן גם: "תושבים" בעמודת הקהל פירושו **תושב שאינו מנהל**,
+            ואי-אפשר לכוון בעזרתו לבעלי הרשאת "תושבים". זו ההתנהגות
+            שהכותרת של המודול תיארה מלכתחילה. */
+      if (aud === 'מנהלים') return isAdmin;
+      if (aud === 'תושבים') return !isAdmin;
       /* קהל שהוא **שם הרשאה** ("גינון", "מועדון"...) — צעד שמוצג רק לבעלי
        * אותה הרשאה. נוסף 7.9.26 עם מודול הגינון: "מנהלים" היה מציג את צעד
        * הגינון גם למנהל תקציב שאין לו שום קשר אליו, ורעש בסיור הוא הדרך
