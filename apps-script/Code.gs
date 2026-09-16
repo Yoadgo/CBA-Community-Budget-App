@@ -128,6 +128,8 @@ var ACTION_PERMS = {
   // ניהול מיילים (שלב 1, 2026-08-18) — פתוח לכל מנהל (הרשאה כלשהי), הבדיקה
   // המדויקת של "תחום" השורה הספציפית נעשית בתוך saveEmailSetting_ עצמה.
   saveEmailSetting: PERM_ANY_ADMIN,
+  // Push notifications (16.9.26) — כל תושב מחובר יכול לנהל את המנוי שלו.
+  savePushSubscription: null, removePushSubscription: null,
   // "שירותים לתושב" (2026-08-18) — אותו היגיון בדיוק כמו עץ הוועד: הקריאה
   // (action=services ב-doGet) פתוחה לכל תושב ולכן אינה מופיעה כאן; כל שינוי
   // בכרטיסי השירות, שליחת מייל העדכון לכל השיכון, וסריקת מסמך ב-Gemini —
@@ -1226,6 +1228,54 @@ function fbUidForSlot_(sh, rowIndex, slot) {
   return String(sh.getRange(rowIndex, cols.uid[slot - 1] + 1).getValue() || '').trim();
 }
 
+/** שומר טוקן FCM עבור המשתמש המחובר. ⚠️ לא סומכים על uid שהלקוח שולח —
+ *  בדיוק כמו handleFirebaseLink_, מאמתים idToken מול גוגל ומשווים
+ *  את המייל שחוזר למייל של המושב החתום. */
+function savePushSubscription_(ss, body) {
+  var v = fsVerifyIdToken_(body && body.idToken);
+  if (!v.ok) return { ok: false, error: v.error };
+  if (normalizeEmail_(v.email) !== normalizeEmail_(body._email)) {
+    return { ok: false, error: 'הזהות ב-Firebase אינה תואמת למשתמש המחובר' };
+  }
+  var token = String((body && body.token) || '').trim();
+  if (!token) return { ok: false, error: 'חסר טוקן' };
+  var perm = body._perm || {};
+  try {
+    fsSet_('pushSubscriptions/' + v.uid, {
+      token: token,
+      familyId: String(perm.familyId || ''),
+      updatedAt: new Date(),
+      schema: 1
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: 'שמירת המנוי נכשלה: ' + String(err) };
+  }
+}
+
+function removePushSubscription_(ss, body) {
+  var v = fsVerifyIdToken_(body && body.idToken);
+  if (!v.ok) return { ok: false, error: v.error };
+  try { fsDelete_('pushSubscriptions/' + v.uid); } catch (err) { /* לא קריטי */ }
+  return { ok: true };
+}
+
+/** שולח Push לכל המנויים של משפחה נתונה. שקט לגמרי אם FCM לא מוגדר —
+ *  ערוץ משני, כשל בו לא עוצר את הפעולה שקראה לו (מייל/כתיבה). שאילתת
+ *  שוויון-יחיד על familyId — לא דורשת אינדקס מורכב, ר' cba-hybrid-architecture. */
+function sendPush_(familyId, title, body, data) {
+  try {
+    if (!familyId) return;
+    var subs = fsQuery_('pushSubscriptions', 'familyId', 'EQUAL', String(familyId), 20);
+    (subs || []).forEach(function (doc) {
+      var token = doc && doc.data && doc.data.token;
+      if (!token) return;
+      var ok = fcmSendToToken_(token, title, body, data || {});
+      if (!ok) { try { fsDelete_('pushSubscriptions/' + doc.id); } catch (e2) {} } // טוקן מת — ניקוי
+    });
+  } catch (e) { /* Push הוא ערוץ משני */ }
+}
+
 function handleFirebaseLink_(p) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var gate = authorize_(ss, p, null);
@@ -1322,6 +1372,8 @@ function doPostDispatch_(ss, body) {
     switch (body.action) {
       case 'auth':              return json_({ ok: true });
       case 'savePermissions':   return json_(savePermissions_(ss, body));
+      case 'savePushSubscription': return json_(savePushSubscription_(ss, body));
+      case 'removePushSubscription': return json_(removePushSubscription_(ss, body));
       case 'ensurePermissionCols': return json_(ensurePermissionCols_(ss, body));
       case 'saveTransaction':   return json_(saveTransaction_(ss, body));
       case 'deleteTransaction': return json_(deleteTransaction_(ss, body));
@@ -1531,6 +1583,7 @@ function saveTransactionRow_(ss, body) {
           'שם': rowObj['רוכש'] || '', 'סכום': Math.round(Number(rowObj['סכום']) || 0),
           'מזהה': rowObj['מזהה'], 'הערה': rowObj['הערת בדיקה'] ? ('\nהערה: ' + rowObj['הערת בדיקה']) : ''
         });
+        sendPush_(rowObj['מזהה משפחה'], 'עדכון בקשת החזר', 'הסטטוס של הבקשה שלך השתנה', { type: 'reimbursement' });
       }
     } catch (mailErr) { Logger.log('מייל עדכון סטטוס נכשל: ' + mailErr); }
   } else {
@@ -2002,6 +2055,7 @@ function approveOneClubEvent_(ss, cal, id) {
       'תאריך': Utilities.formatDate(ev.getStartTime(), tz1, 'dd/MM/yyyy'),
       'שעה': Utilities.formatDate(ev.getStartTime(), tz1, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz1, 'HH:mm')
     });
+    sendPush_((permissionsFor_(evEmail) || {}).familyId, 'השריון אושר', 'שריון המועדון שלך אושר', { type: 'club' });
   } catch (mailErr) { Logger.log('מייל אישור שריון נכשל: ' + mailErr); }
   /* 🔴 הליבה המשותפת לאישור בודד ולאישור מרובה — ולכן הרענון כאן
      מכסה את שני המסלולים בלי לשכפל. */
@@ -2062,6 +2116,7 @@ function handleRejectClubReservation_(p) {
       sendResidentTemplate_(ss, 'CLUB_REJECTED', rejEmail ? [rejEmail] : [], {
         'שם': rejFamily, 'תאריך': rejStartStr, 'שעה': rejTimeStr
       });
+      sendPush_((permissionsFor_(rejEmail) || {}).familyId, 'השריון נדחה', 'שריון המועדון שלך נדחה', { type: 'club' });
     } catch (mailErr) { Logger.log('מייל דחיית שריון נכשל: ' + mailErr); }
     return json_({ ok: true });
   } catch (err) {

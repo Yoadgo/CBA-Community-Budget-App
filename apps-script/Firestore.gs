@@ -24,7 +24,7 @@ var FS_PROP = 'FIREBASE_SA_JSON';
    שום הרשאה בפני עצמו — כאן הוא משמש רק כדי לבקש מגוגל לאמת טוקן זהות.
    **לא לבלבל עם מפתח חשבון השירות**, שהוא כן סוד ויושב רק ב-Script Properties. */
 var FS_WEB_API_KEY = 'AIzaSyC548H-lJj3p7ppYfD_ekcMwJ-g7qOoyPw';
-var FS_SCOPE = 'https://www.googleapis.com/auth/datastore';
+var FS_SCOPE = 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging';
 var FS_TOKEN_CACHE_KEY = 'fs_access_token_v1';
 
 /** קורא את פרטי חשבון השירות. זורק שגיאה ברורה אם המאפיין חסר. */
@@ -361,4 +361,30 @@ function firebaseSelfTest() {
   say('');
   say('אם כל השורות מסומנות ✓ — צעד 01 הושלם.');
   return log.join('\n');
+}
+/** שולח Push דרך FCM HTTP v1, עם אותו טוקן OAuth של חשבון השירות
+ *  (דורש את ה-scope שהורחב למעלה + הרשאת IAM על הפרויקט — ניתנה בפועל
+ *  16.9.26: "Firebase Cloud Messaging API Admin" לחשבון השירות).
+ *  מחזיר true/false; אף פעם לא זורק — קריאה ל-Push לא אמורה להפיל
+ *  את הפעולה שממנה היא נקראת (בדיוק כמו מיילים). */
+function fcmSendToToken_(token, title, body, data) {
+  try {
+    var url = 'https://fcm.googleapis.com/v1/projects/' + fsProjectId_() + '/messages:send';
+    var payload = {
+      message: {
+        token: token,
+        notification: { title: title, body: body },
+        data: data || {},
+        webpush: { fcm_options: { link: CBA_APP_URL } }
+      }
+    };
+    var res = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + fsToken_() },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    return res.getResponseCode() === 200;
+  } catch (e) { return false; }
 }

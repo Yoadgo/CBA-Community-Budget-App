@@ -1164,6 +1164,10 @@
     // התקנת האפליקציה (2026-08-20, PWA) — טלפון עם חץ פנימה. אותו גודל/עובי
     // קו כמו שאר אייקוני התפריט, אחרת הוא בולט כזר בשורה.
     install: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M12 7.5v7M9 11.5l3 3 3-3"/></svg>',
+    // התראות Push (16.9.26) — פעמון פשוט, קו זהה לשאר אייקוני התפריט.
+    // טיוטה ראשונה, לא מוקדש עדיין — יועד יכול לבקש עיצוב אחר.
+    bell: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a4 4 0 0 0-4 4c0 4.2-1.8 5.6-1.8 6.8h11.6c0-1.2-1.8-2.6-1.8-6.8a4 4 0 0 0-4-4z"/><path d="M10 17.5a2 2 0 0 0 4 0"/></svg>',
+    bellOff: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a4 4 0 0 0-4 4c0 4.2-1.8 5.6-1.8 6.8h11.6c0-1.2-1.8-2.6-1.8-6.8a4 4 0 0 0-4-4z"/><path d="M10 17.5a2 2 0 0 0 4 0"/><line x1="3.5" y1="3.5" x2="20.5" y2="20.5"/></svg>',
     // מגן — "אבטחת המידע שלי" (2026-08-24). אותו גודל/עובי קו כמו השאר.
     shield: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 4.8 5.6v5.9c0 4.3 2.9 8.3 7.2 9.7 4.3-1.4 7.2-5.4 7.2-9.7V5.6z"/><path d="m9 12 2.1 2.1L15.2 10"/></svg>',
     // זכוכית מגדלת — כפתור החיפוש הגלובלי בכותרת (2026-08-25). שים לב: זו מפת
@@ -1279,6 +1283,13 @@
     if (instBtn) instBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn);
       if (window.CBA.pwa) CBA.pwa.promptInstall();
+    });
+    const pushBtn = panel.querySelector("[data-panel-push]");
+    if (pushBtn) pushBtn.addEventListener("click", function () {
+      closeUserPanel(panel, btn);
+      var action = CBA.push.isSubscribed() ? CBA.push.unsubscribe() : CBA.push.subscribe();
+      action.catch(function (err) { if (window.CBA.toast) CBA.toast(String((err && err.message) || err), "error"); })
+            .then(function () { renderControls(); });
     });
     // שתי גלולות ולא כפתור אחד (2026-09-07) — querySelectorAll, לא querySelector.
     panel.querySelectorAll("[data-panel-switch]").forEach(function (sw) {
@@ -1503,6 +1514,11 @@
     // נעלם מעצמו ברגע שהאפליקציה כבר מותקנת (ר' מסמך אפיון PWA, סעיפים 6-7)
     if (window.CBA.pwa && CBA.pwa.canInstall()) {
       tiles.push(['data-panel-install', ICON.install, 'התקנה', 'התקנת האפליקציה']);
+    }
+    // התראות Push (16.9.26) — רק כשהדפדפן/המכשיר תומכים בכלל (ר' CBA.push.canOffer).
+    if (window.CBA.push && CBA.push.canOffer().ok) {
+      var pushOn = CBA.push.isSubscribed();
+      tiles.push(['data-panel-push', pushOn ? ICON.bell : ICON.bellOff, pushOn ? 'התראות פעילות' : 'הפעלת התראות', pushOn ? 'ביטול התראות' : 'הפעלת התראות']);
     }
     var tilesItem = tiles.length
       ? '<div class="up-tiles">' + tiles.map(function (t) {

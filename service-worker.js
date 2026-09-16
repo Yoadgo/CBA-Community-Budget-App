@@ -23,7 +23,7 @@
    ⚠️ בכל דיפלוי שמשנה JS/CSS: לעדכן את VERSION כאן *ואת* כל ה-?v=
       ב-index.html לאותו ערך בדיוק. שני המספרים חייבים להיות זהים.  */
 
-var VERSION = "20260916u";
+var VERSION = "20260916v";
 var CACHE   = "cba-app";
 
 /* הערה על השיטה: בכוונה *אין* כאן רשימת קבצים לשמירה מראש (precache).
@@ -115,4 +115,30 @@ self.addEventListener("fetch", function (e) {
     }
     return res;
   })());
+});
+/* Push notifications (16.9.26) — הודעה שמגיעה כש-האפליקציה/הטאב סגורים.
+   בכוונה בלי firebase-messaging-sw.js נפרד — אותו service worker קיים,
+   אותו scope, מטפל גם בזה. */
+self.addEventListener("push", function (e) {
+  var data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (err) {}
+  var n = data.notification || {};
+  var title = n.title || "ניהול קהילה";
+  var opts = {
+    body: n.body || "",
+    icon: "icons/icon-192.png",
+    badge: "icons/icon-192.png",
+    data: data.data || {}
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+
+self.addEventListener("notificationclick", function (e) {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({ type: "window" }).then(function (list) {
+    for (var i = 0; i < list.length; i++) {
+      if ("focus" in list[i]) return list[i].focus();
+    }
+    if (clients.openWindow) return clients.openWindow("/CBA-Community-Budget-App/");
+  }));
 });
