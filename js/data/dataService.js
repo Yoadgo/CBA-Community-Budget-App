@@ -1985,7 +1985,19 @@ CBA.data = (function () {
   /* יומן משימה — אוסף הוספה-בלבד. שאילתת שוויון על שדה אחד,
      בלי אינדקס מורכב; המיון בלקוח. */
   function gardenTaskLogRead(id, cb) {
-    fsFirstRead("gardenLog", GARDEN_TASKS_FROM_FIRESTORE, function (done) {
+    /* 🔴🔴 **`false` ולא הדגל, ובכוונה** (16.9). אוסף `gardenLog`
+       ב-Firestore **ריק** — אף אחד בשרת אינו כותב אליו. `gardenLog_`
+       כותבת שורה בטאב בלבד, ואין `gardenLogSyncAll_`. הכותב היחיד
+       הוא `gardenLogAppend` כאן בלקוח, והוא מאחורי `GARDEN_WRITE_TO_FIRESTORE`
+       שכבוי. ורשימה ריקה אינה שגיאה — ולכן **אין נפילה לאחור**
+       והמסך הציג היסטוריה ריקה בלי שום סימן.
+       ⚠️ **וגם לא היה אפשר לכבות את זה:** `fsFirstRead` בונה את שם
+          הדגל מהמפתח (`gardenLogFromFirestore`), והוא אינו ב-`FLAG_KEYS`.
+          `flag()` על מפתח לא מוכר מחזיר את ברירת המחדל — true.
+       ⏭ התיקון האמיתי הוא לסנכרן את היומן ולהוסיף דגל אמיתי.
+          עד אז היומן נקרא מ-Apps Script, וזו קריאה אחת שנשלחת
+          רק כשמישהו פותח היסטוריה — נדיר. */
+    fsFirstRead("gardenLog", false, function (done) {
       CBA.fb.queryCollection("gardenLog", [["taskId", String(id)]], function (err, rows) {
         if (err) return done(err);
         (rows || []).sort(function (a, b) { return gardenDateOf(a.at) - gardenDateOf(b.at); });

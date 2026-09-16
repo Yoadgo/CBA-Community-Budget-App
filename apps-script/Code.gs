@@ -1396,8 +1396,13 @@ function doPostDispatch_(ss, body) {
       case 'gardenPlanSave':      return json_(withSyncLock_('gardenPlanSave', function () { return gardenPlanSave_(ss, body); }));
       case 'gardenPlanActive':    return json_(withSyncLock_('gardenPlanActive', function () { return gardenPlanSetActive_(ss, body); }));
       case 'gardenPlanDelete':    return json_(withSyncLock_('gardenPlanDelete', function () { return gardenPlanDelete_(ss, body); }));
-      case 'gardenTaskDelete':    return json_(gardenTaskDelete_(ss, body));
-      case 'gardenReportDelete':  return json_(gardenReportDelete_(ss, body));
+      /* 🔴🔴 **גם שתי המחיקות עוברות דרך `gardenWrite_`** (16.9).
+         הן נשמטו כשההוק נכתב — שש פעולות עטופות ושתיים לא.
+         זה בדיוק מה שהפך משימה שנמחקה למסמך רפאים:
+         הגיליון נקי, Firestore לא, והמסך נבנה מ-Firestore.
+         המשתמש רואה "נמחקה" ואז רואה אותה חוזרת. */
+      case 'gardenTaskDelete':    return json_(gardenWrite_(ss, body.action, body, gardenTaskDelete_));
+      case 'gardenReportDelete':  return json_(gardenWrite_(ss, body.action, body, gardenReportDelete_));
       case 'gardenCoverByPlan':   return json_(gardenCoverByPlan_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
@@ -5638,6 +5643,20 @@ function hourlyJobsRun_() {
     if (hc.errors.length) Logger.log('מוני עמוד הבית: ' + hc.errors.join(' ; '));
   } catch (e) {
     Logger.log('homeCountsSyncAll_ נכשל: ' + e);
+  }
+  /* 🔴🔴 **מימוש שבוע השגרה** (16.9). עד היום זה רץ במקום אחד
+     בלבד — בתוך `handleGardenTasks_`, כלומר **רק כשמישהו פתח
+     את מסך הניהול דרך Apps Script**. מרגע שהמסך קורא מ-Firestore
+     אף אחד לא קורא לו יותר, ו**משימות השגרה של השבוע החדש
+     פשוט לא נוצרות** — בלי שגיאה, בלי הודעה, עד שיועד שם לב
+     ביום ראשון שהתוכנית ריקה.
+     הפעולה אידמפוטנטית ואינה נוגעת בשבועות שעברו, ולכן בטוחה כל שעה.
+     ⚠️ חייבת לרוץ **לפני** `gardenDataSyncAll_`, אחרת מה שנוצר עכשיו
+        ימתין שעה נוספת עד שיגיע ל-Firestore. */
+  try {
+    gardenMaterializeWeek_(ss, gardenWeekKey_());
+  } catch (e) {
+    Logger.log('gardenMaterializeWeek_ נכשל: ' + e);
   }
   /* 🔴 נתוני הגינון (2026-09-16) — דיווחים ומשימות של השנה הנוכחית.
      ⚠️ **רץ לפני הגיבוי המצטבר**, כמו כל השאר, כדי שמה שנכתב עכשיו
@@ -11846,7 +11865,8 @@ function gardenLog_(ss, taskId, kind, field, from, to, who, note) {
  * ========================================================================== */
 
 /** מוחק את שורות הדיווח שמצביעות על משימה, ואת התמונות שלהן.
- *  מחזיר כמה נמחקו. מוחק מלמטה למעלה כדי שהאינדקסים לא יזוזו תוך כדי. */
+ *  ⚠️ **מחזיר את המזהים ולא את הספירה** (16.9) — הקורא חייב
+ *  אותם כדי למחוק את המסמכים המקבילים ב-Firestore. הספירה נגזרת באורך. מוחק מלמטה למעלה כדי שהאינדקסים לא יזוזו תוך כדי. */
 function gardenDeleteReportsFor_(ss, taskId, who) {
   var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
   if (!rsh || rsh.getLastRow() < 2) return 0;
@@ -11862,7 +11882,7 @@ function gardenDeleteReportsFor_(ss, taskId, who) {
     rsh.deleteRow(kill[k].row);
     gardenLog_(ss, taskId, 'מחיקה', 'דיווח', kill[k].id, '', who, 'שורת הדיווח נמחקה');
   }
-  return kill.length;
+  return kill.map(function (k) { return k.id; }).filter(Boolean);
 }
 
 /** התמונות בדרייב. כישלון על קובץ אחד לא עוצר את המחיקה — קובץ שכבר אינו
@@ -11899,7 +11919,12 @@ function gardenTaskDelete_(ss, body) {
          מחיקה מאשר מחיקה בלי שום עקבה. */
       gardenLog_(ss, id, 'מחיקה', 'משימה', title, '', who, why);
       sh.deleteRow(r + 1);
-      return { ok: true, id: id, title: title, kind: kind, reports: reps };
+      /* `deletedTaskIds` / `deletedReportIds` ולא `id` — ר' ההערה
+         ב-`gardenAfterWrite_`. `reports` נשאר ספירה, כי זו הצורה
+         שהייתה כאן תמיד (בדקתי — אף מסך אינו קורא אותו). */
+      return { ok: true, id: id, title: title, kind: kind,
+               reports: reps.length,
+               deletedTaskIds: [id], deletedReportIds: reps };
     }
     return { ok: false, error: 'המשימה לא נמצאה' };
   } finally { lock.releaseLock(); }
@@ -11952,7 +11977,11 @@ function gardenReportDelete_(ss, body) {
       gardenLog_(ss, taskId || id, 'מחיקה', 'דיווח', id, '', who, 'נמחק על ידי המדווח');
       rsh.deleteRow(r + 1);
       if (trow > 0) tsh.deleteRow(trow);
-      return { ok: true, id: id, title: ttl };
+      /* ⚠️ הפעולה הזאת מוחקת **שתי** שורות — דיווח ומשימה —
+         ולכן היא יוצרת שני מסמכי רפאים ולא אחד. שניהם מדווחים. */
+      return { ok: true, id: id, title: ttl,
+               deletedReportIds: [id],
+               deletedTaskIds: (trow > 0 && taskId) ? [taskId] : [] };
     }
     return { ok: false, error: 'הדיווח לא נמצא' };
   } finally { lock.releaseLock(); }
@@ -13498,7 +13527,15 @@ function gardenWrite_(ss, action, body, fn) {
   return res;
 }
 
-/** כותב ל-Firestore את המשימות שברשימה. שקט, כמו אחותה לדיווחים. */
+/** כותב ל-Firestore את המשימות שברשימה. שקט, כמו אחותה לדיווחים.
+ *
+ *  🔴🔴 **upsert בלבד — היא אינה יודעת למחוק, ולעולם לא תדע.**
+ *  היא סורקת את הטאב ומעתיקה את מה שמצאה. שורה שנמחקה אינה שם,
+ *  ולכן היא פשוט לא נוגעת במסמך — והמסמך נשאר חי ב-Firestore.
+ *  ⚠️ **כל פעולה עתידית שמוחקת שורה חייבת להחזיר `deletedTaskIds`
+ *     או `deletedReportIds`.** בלי זה היא "עובדת" בגיליון,
+ *     מחזירה `ok:true`, והמשתמש רואה את מה שמחק חוזר אליו.
+ *     זה קרה ב-16.9 והתגלה רק כי יועד ניסה שלוש פעמים. */
 function gardenTaskSyncSome_(ss, ids) {
   try {
     ids = (ids || []).map(function (x) { return String(x || '').trim(); }).filter(Boolean);
@@ -13528,6 +13565,26 @@ function gardenAfterWrite_(ss, action, body, res) {
   try {
     if (!res || res.ok !== true) return;          /* פעולה שנכשלה לא שינתה דבר */
     body = body || {};
+
+    /* 🔴🔴 **מחיקה אינה upsert** (16.9). `gardenTaskSyncSome_` סורקת את
+       הטאב ומעתיקה שורות; אחרי מחיקה אין שורה, ולכן היא מחזירה 0
+       ו**המסמך ב-Firestore נשאר לשבת**. זו הייתה המשימה שנמחקה
+       ולא נעלמה מהמסך — שלוש פעמים ברצף.
+       🔑 לכן פעולה מוחקת מחזירה את מה שנעלם בשדות ייעודיים,
+          ולא ב-`res.id` — שמשמעותו הפוכה, "לכתוב מחדש".
+       ⚠️ המחיקה רצה **לפני** הסנכרון, והמזהים שנמחקו מוחרגים
+          ממנו — אחרת הסנכרון היה מנסה לכתוב שורה שאינה קיימת. */
+    var goneT = {}, goneR = {};
+    (res.deletedTaskIds || []).forEach(function (dt) {
+      dt = String(dt || '').trim(); if (!dt) return;
+      goneT[dt] = 1;
+      try { fsDelete_(fsDocPath_(FS_GARDEN_TASKS, dt)); } catch (e) {}
+    });
+    (res.deletedReportIds || []).forEach(function (dr) {
+      dr = String(dr || '').trim(); if (!dr) return;
+      goneR[dr] = 1;
+      try { fsDelete_(fsDocPath_(FS_GARDEN_REPORTS, dr)); } catch (e) {}
+    });
     var reportIds = [], taskIds = [];
 
     function addTask(t) { t = String(t || '').trim(); if (t) taskIds.push(t); }
@@ -13536,7 +13593,11 @@ function gardenAfterWrite_(ss, action, body, res) {
     addReport(res.id && action === 'submitGardenReport' ? res.id : '');
     addReport(action === 'gardenFeedback' ? body.id : '');
     addTask(res.taskId);
-    if (action !== 'submitGardenReport' && action !== 'gardenFeedback') addTask(body.id);
+    /* ⚠️ ב-`gardenReportDelete` ‏`body.id` הוא מזהה **דיווח**, לא משימה —
+       ושני המונים נפרדים ויכולים להתנגש. בלי ההחרגה הזאת
+       מחיקת דיווח #7 הייתה מסנכרנת את משימה #7 שאין ביניהן קשר. */
+    if (action !== 'submitGardenReport' && action !== 'gardenFeedback' &&
+        action !== 'gardenReportDelete') addTask(body.id);
     /* אישור מרובה שולח מערך מזהים. */
     (body.ids || []).forEach(addTask);
     /* איחוד נוגע בשתי משימות — זו שנסגרה וזו שקלטה. */
@@ -13549,10 +13610,12 @@ function gardenAfterWrite_(ss, action, body, res) {
 
     var seen = {};
     reportIds = reportIds.filter(function (x) {
+      if (goneR[x]) return false;          /* נמחק — אין מה לכתוב מחדש */
       if (seen[x]) return false; seen[x] = 1; return true;
     });
     var seenT = {};
     taskIds = taskIds.filter(function (x) {
+      if (goneT[x]) return false;
       if (seenT[x]) return false; seenT[x] = 1; return true;
     });
     /* 🔴 **גם המשימות, מרגע שהמסך קורא אותן מ-Firestore** (16.9).
@@ -13784,6 +13847,17 @@ function gardenDataSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var t = gardenTasksSyncAll_(ss);
   var r = gardenReportsSyncAll_(ss);
+  /* רשימות האזורים והקטגוריות. עד 16.9 הן נכתבו רק בתוך
+     `gardenPlanSyncAll_`, שרצה **ידנית בלבד** — כלומר אזור חדש
+     שנוסף בגיליון לא הגיע לאפליקציה עד שמישהו זכר להריץ סנכרון.
+     ⚠️ אוסף אחר, ולכן `fsSweepOrphans_` של התוכנית אינה נוגעת בו. */
+  try {
+    var mLists = gardenLists_(ss);
+    fsSet_(FS_GARDEN_META, {
+      areas: mLists.areas, categories: mLists.categories,
+      freqs: GARDEN_FREQS, schema: 1, updatedAt: new Date()
+    });
+  } catch (e) { /* שגר ושכח — לא מפיל את הסנכרון */ }
   return {
     ok: t.ok && r.ok,
     tasks: t, reports: r,
