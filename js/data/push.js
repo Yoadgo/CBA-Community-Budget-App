@@ -30,20 +30,42 @@ window.CBA = window.CBA || {};
   var SDK_VERSION = "11.10.0";
   var MSG_SDK = "https://www.gstatic.com/firebasejs/" + SDK_VERSION + "/firebase-messaging-compat.js";
   var msgSdkPromise = null;
+
+  /* 🔴🔴 תוקן 16.9.26 — הבאג האמיתי שמנע מהכפתור להופיע *בכל מכשיר*,
+     לא רק באייפון: window.firebase לא קיים בעליית העמוד — firebase.js
+     טוען אותו דינמית רק אחרי התחברות מוצלחת (ר' firebase.js, כלל 2).
+     כאן היה תלוי בזה var שנבדק פעם אחת, בטעינת הקובץ — ולכן היה
+     קבוע ל-false תמיד, בכל דפדפן, לפני שהיה לו בכלל סיכוי להיות true.
+     הפתרון: קודם מוודאים בפועל ש-CBA.fb (app+auth) כבר טעון ומאותחל,
+     ורק אחר כך טוענים גם את ספריית ההתראות. */
+  function ensureFirebaseCore() {
+    return new Promise(function (resolve, reject) {
+      if (!window.CBA || !CBA.fb || !CBA.fb.ensure) return reject(new Error("Firebase לא זמין"));
+      CBA.fb.ensure(function (err) { if (err) reject(err); else resolve(); });
+    });
+  }
+
   function loadMessagingSdk() {
     if (window.firebase && firebase.messaging) return Promise.resolve();
     if (msgSdkPromise) return msgSdkPromise;
-    msgSdkPromise = new Promise(function (resolve, reject) {
-      var s = document.createElement("script");
-      s.src = MSG_SDK;
-      s.onload = function () { resolve(); };
-      s.onerror = function () { reject(new Error("טעינת ספריית ההתראות נכשלה")); };
-      document.head.appendChild(s);
+    msgSdkPromise = ensureFirebaseCore().then(function () {
+      return new Promise(function (resolve, reject) {
+        var s = document.createElement("script");
+        s.src = MSG_SDK;
+        s.onload = function () { resolve(); };
+        s.onerror = function () { reject(new Error("טעינת ספריית ההתראות נכשלה")); };
+        document.head.appendChild(s);
+      });
     });
     return msgSdkPromise;
   }
 
-  var SUPPORTED = !!(window.Notification && navigator.serviceWorker && window.firebase);
+  /* 🔴 תוקן 16.9.26 — במקום var קבוע (ר' ההערה למעלה), בדיקה חיה
+     בכל קריאה ל-canOffer(), ובלי תלות ב-window.firebase — הוא נטען
+     בהמשך, רק כשבאמת מבקשים להירשם (ר' ensureFirebaseCore). */
+  function browserSupported() {
+    return !!(window.Notification && navigator.serviceWorker);
+  }
 
   function isIOS() {
     return window.CBA.pwa && CBA.pwa.isIOS ? CBA.pwa.isIOS() : /iP(hone|od|ad)/.test(navigator.userAgent);
@@ -56,7 +78,7 @@ window.CBA = window.CBA || {};
      בכל מקרה אחר (טאב ספארי רגיל) הבקשה תיכשל בשקט ותיראה כמו תקלה —
      לכן בודקים כאן ומחזירים סיבה ברורה, לפני שנוגעים ב-Notification API. */
   function canOffer() {
-    if (!SUPPORTED) return { ok: false, reason: "הדפדפן הזה לא תומך בהתראות" };
+    if (!browserSupported()) return { ok: false, reason: "הדפדפן הזה לא תומך בהתראות" };
     if (isIOS() && !isStandalone()) return { ok: false, reason: "באייפון צריך קודם להתקין את האפליקציה (תפריט המשתמש ← התקנת האפליקציה)" };
     if (Notification.permission === "denied") return { ok: false, reason: "ההתראות חסומות בהגדרות הדפדפן/המכשיר — אי אפשר לבקש שוב מכאן" };
     return { ok: true };
