@@ -166,6 +166,10 @@
        לכל משתמש מחובר (הכפתור הצף), אבל הקריאה של כולם היא ניהול המוצר.
        השרת אוכף את זה בעצמו ב-GET_ACTION_PERMS.appReports — כאן רק מסתירים. */
     appReports: PERM.SUPER,
+    /* מצב המערכת (2026-09-16) — דגלי זמן ריצה ובדיקת קריאה מ-Firestore.
+       מנהל-על בלבד. השרת אוכף את זה בעצמו (flagsGet/flagSet ב-GET_ACTION_PERMS);
+       כאן רק מסתירים, בדיוק כמו ב-appReports. */
+    sysStatus: PERM.SUPER,
     /* בדיקת החזרים (PHASE 4.2) — אותה הרשאה כמו שאר מסכי הכסף. */
     reconcile: PERM.BUDGET
   };
@@ -210,7 +214,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "reconcile"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "reconcile"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -1172,7 +1176,10 @@
     report: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3 1.2-4.4A8 8 0 1 1 21 12z"/><path d="M12 8.5v3.2M12 15h.01"/></svg>',
     // תיבת הדיווחים שהתקבלו (מנהל-על) — סל נכנס, מובחן בכוונה מבועת השיחה
     // של *שליחת* דיווח. שני אריחים דומים בשם ובאייקון היו נקראים כאותו דבר.
-    inbox: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h4l1.6 2.5h4.8L16 13h4"/><path d="M5.6 5.6h12.8L21 13v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/></svg>'
+    inbox: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h4l1.6 2.5h4.8L16 13h4"/><path d="M5.6 5.6h12.8L21 13v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5z"/></svg>',
+    // מצב המערכת (2026-09-16) — מד, לא גלגל שיניים: "הגדרות" כבר תפוס,
+    // וזה מסך שמסתכלים בו כדי לראות מדידה, לא כדי לכוון העדפות.
+    gauge: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 14l4-3.5"/><circle cx="12" cy="14" r="1.2"/></svg>'
   };
 
   function initials(name) {
@@ -1469,6 +1476,9 @@
        התחתון במובייל כבר מחלק את רוחבו בין היעדים הקיימים. */
     if (isSuper()) {
       tiles.push(['data-panel-goto="appReports"', ICON.inbox, 'תיבת דיווחים', 'ניהול הדיווחים שהתקבלו']);
+      /* מצב המערכת — אותו נימוק בדיוק כמו "תיבת דיווחים": נכנסים אליו
+         כשמשהו לא מסתדר או כשמדליקים תחום, לא כיעד יומיומי. */
+      tiles.push(['data-panel-goto="sysStatus"', ICON.gauge, 'מצב המערכת', 'דגלים ובדיקת קריאה מ-Firestore']);
     }
     // נעלם מעצמו ברגע שהאפליקציה כבר מותקנת (ר' מסמך אפיון PWA, סעיפים 6-7)
     if (window.CBA.pwa && CBA.pwa.canInstall()) {

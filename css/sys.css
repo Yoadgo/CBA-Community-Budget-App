@@ -1,0 +1,92 @@
+/* ============================================================================
+ *  css/sys.css — מסך "מצב המערכת" (2026-09-16). כל המחלקות בתחילית sys-
+ * ----------------------------------------------------------------------------
+ *  מסך אבחון, לא מסך יומיומי: מה שנמדד חשוב יותר ממה שיפה. לכן הנתיב
+ *  והמספרים בפונט חד-רווחי — עמודה שאפשר לסרוק בעין בלי לקרוא שורה שורה.
+ *  ⚠️ הצבעים נגזרים מהטוקנים הקיימים ואינם מגדירים פלטה חדשה.
+ * ========================================================================== */
+
+.sys-sec {
+  font-weight: 600;
+  font-size: .95rem;
+  margin: 0 0 .6rem;
+  color: var(--text, #1b1b1b);
+}
+
+.sys-note {
+  margin-top: .75rem;
+  font-size: .8rem;
+  line-height: 1.5;
+  color: var(--muted, #6b6b6b);
+}
+
+/* ---------- דגלים ---------- */
+.sys-flag {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .7rem 0;
+  border-top: 1px solid var(--line, #e6e6e6);
+}
+.sys-flag:first-of-type { border-top: 0; }
+
+.sys-flag__text { flex: 1 1 auto; min-width: 0; }
+.sys-flag__name { font-weight: 600; font-size: .92rem; }
+.sys-flag__desc { font-size: .8rem; color: var(--muted, #6b6b6b); line-height: 1.45; margin-top: .1rem; }
+.sys-flag__key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .72rem;
+  color: var(--muted, #6b6b6b);
+  opacity: .75;
+  margin-top: .2rem;
+  direction: ltr;
+  text-align: right;
+}
+
+/* דגל דלוק — פס צד, לא מילוי: המסך כולו הוא רשימה, ומילוי היה צועק. */
+.sys-flag--on { box-shadow: inset 3px 0 0 var(--ok, #1c8a4a); }
+.sys-flag--on .sys-flag__name { color: var(--ok, #1c8a4a); }
+
+.sys-flag__btn { flex: 0 0 auto; min-width: 4.5rem; }
+
+/* ---------- בדיקות ---------- */
+.sys-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .5rem 0;
+  border-top: 1px solid var(--line, #e6e6e6);
+  font-size: .86rem;
+}
+.sys-row:first-of-type { border-top: 0; }
+
+.sys-row__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-row__path {
+  flex: 0 1 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .74rem;
+  color: var(--muted, #6b6b6b);
+  direction: ltr;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sys-row__val {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .76rem;
+  color: var(--muted, #6b6b6b);
+}
+
+.sys-dot { flex: 0 0 auto; width: .55rem; height: .55rem; border-radius: 50%; background: var(--muted, #9a9a9a); }
+.sys-dot--ok     { background: var(--ok, #1c8a4a); }
+.sys-dot--warn   { background: var(--warn, #c98a00); }
+.sys-dot--danger { background: var(--danger, #c0392b); }
+.sys-dot--muted  { background: var(--line, #c8c8c8); }
+
+/* צר — הנתיב יורד לשורה שנייה במקום לדחוס את השם לאין-כלום. */
+@media (max-width: 520px) {
+  .sys-row { flex-wrap: wrap; }
+  .sys-row__name { flex: 1 1 60%; }
+  .sys-row__path { flex: 1 1 100%; order: 3; padding-inline-start: 1.15rem; }
+}

@@ -1140,6 +1140,52 @@ CBA.data = (function () {
   }
   // --- מכון כושר (שלב 1, 2026-08-18) — קריאת מסך הניהול. מוגנת ב-PERM_GYM
   // בשרת, ולכן מחזירה שגיאה מסודרת למי שאין לו את המידור, ולא מסך ריק.
+  /* ==========================================================================
+   *  🔴 **דגלי זמן ריצה — סוף-סוף עם פנים**  (2026-09-16)
+   * --------------------------------------------------------------------------
+   *  הדגלים קיימים מ-05א, אבל עד היום אפשר היה להדליק ולכבות אותם רק
+   *  בהקלדת כתובת Apps Script ידנית. כלומר: בשעת חירום, מי שצריך לכבות
+   *  תחום הוא היחיד שאינו יכול — ואין שום מקום שמראה **מה בכלל דלוק**.
+   *  ⚠️ שתי הפעולות מוגנות ב-PERM_SUPER בשרת (`GET_ACTION_PERMS`).
+   *     ההסתרה בלקוח היא נוחות; המידור הוא שם.
+   * ======================================================================== */
+  function getFlags(cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "flagsGet" }, cb);
+  }
+  function setFlag(key, value, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "flagSet", key: String(key), value: value ? "true" : "false" }, cb);
+  }
+
+  /* ==========================================================================
+   *  🔴 **בדיקת בריאות של תחום ב-Firestore** (2026-09-16)
+   * --------------------------------------------------------------------------
+   *  שואלת שאלה אחת ומחזירה תשובה אחת: **האם הדפדפן הזה, עם המשתמש הזה,
+   *  באמת מצליח לקרוא את המסמך — וכמה זמן זה לקח.** זו השאלה שאי-אפשר
+   *  לענות עליה מהשרת: הכללים נאכפים על **הקורא**, ומנהל-על בשרת עוקף
+   *  אותם דרך חשבון השירות. בדיקה שרצה בשרת הייתה תמיד מצליחה.
+   *  ⚠️ שגיאה אינה תקלה בהכרח — `gymCode` **אמור** להידחות כשהמנוי פג.
+   *     לכן מוחזר גם הטקסט, והמסך הוא זה שמחליט מה להגיד עליו.
+   * ======================================================================== */
+  function probeDoc(collection, id, cb) {
+    cb = cb || function () {};
+    var t0 = Date.now();
+    function out(state, note) { cb({ state: state, ms: Date.now() - t0, note: note || "" }); }
+    if (!(CBA.fb && CBA.fb.readDoc && CBA.fb.ensureDb)) return out("no-sdk");
+    CBA.fb.authReady(function (user) {
+      if (!user) return out("no-user");
+      CBA.fb.ensureDb(function (err) {
+        if (err) return out("no-db", String(err && err.message || err));
+        CBA.fb.readDoc(collection, id, function (e2, doc) {
+          if (e2) return out("denied", String((e2 && e2.code) || (e2 && e2.message) || e2));
+          if (!doc) return out("missing");
+          out("ok");
+        });
+      });
+    });
+  }
+
   function getGymList(cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymList" }, cb);
@@ -2347,6 +2393,9 @@ CBA.data = (function () {
     getGymList: getGymList,
     getGymForm: getGymForm,
     getGymMy: getGymMy,
+    getFlags: getFlags,
+    setFlag: setFlag,
+    probeDoc: probeDoc,
     getGymStatusFast: getGymStatusFast,
     getGymCodeFast: getGymCodeFast,
     submitGymApplication: submitGymApplication,

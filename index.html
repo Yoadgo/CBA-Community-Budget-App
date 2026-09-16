@@ -51,6 +51,8 @@
 
   <!-- כפתור הדיווחים על האפליקציה (2026-09-09) -->
   <link rel="stylesheet" href="css/report.css?v=20260916c" />
+  <!-- מסך "מצב המערכת" (2026-09-16) — דגלים ובדיקות. מחלקות sys- -->
+  <link rel="stylesheet" href="css/sys.css?v=20260916c" />
 
   <!-- כניסת Google (Google Identity Services) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -156,6 +158,9 @@
   <!-- ניהול מיילים (שלב 1, 2026-08-18) — עריכת נוסח/תזמונים/הדלקה-כיבוי מהאפליקציה -->
   <script src="js/screens/emailSettings.js?v=20260916c"></script>
   <script src="js/screens/appReports.js?v=20260916c"></script>
+  <!-- "מצב המערכת" (2026-09-16) — דגלי זמן ריצה + בדיקת קריאה אמיתית
+       מ-Firestore. מנהל-על בלבד; אין לו תלות בשום מסך אחר. -->
+  <script src="js/screens/sysStatus.js?v=20260916c"></script>
   <script src="js/screens/reconcile.js?v=20260916c"></script>
   <!-- "שירותים לתושב" (2026-08-18). services.js קודם — הוא מגדיר את
        CBA.serviceUtils (פענוח הפורמט + ציור סעיף) ש-servicesAdmin.js תלוי בו. -->
