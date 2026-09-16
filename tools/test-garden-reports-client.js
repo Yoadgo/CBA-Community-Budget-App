@@ -81,8 +81,11 @@ ok('יורד לפי מזהה — החדש למעלה, כמו reverse() בשרת'
 ok('⚠️ ונופל למחרוזת כשהמזהה אינו מספרי', /localeCompare/.test(srt), srt);
 
 section('5. הדגל — רשום, מוצג, וברירת המחדל נכונה');
+/* ⚠️ בלי תלות במיקום ברשימה — הדגל הבא שייווסף היה מפיל את זה. */
 ok('🔴 רשום ב-FLAG_KEYS בשרת — אחרת flagSet ידחה אותו',
-   /'gardenReportsFromFirestore'\]/.test(GS));
+   /var FLAG_KEYS = \[[\s\S]*?'gardenReportsFromFirestore'[\s\S]*?\];/.test(GS));
+ok('🔴 וגם דגל הכתיבה רשום',
+   /var FLAG_KEYS = \[[\s\S]*?'gardenWriteToFirestore'[\s\S]*?\];/.test(GS));
 ok('מוצג במסך "מצב המערכת"', /gardenReportsFromFirestore: \[/.test(SS));
 /* 🔴🔴 המלכודת: fsFirstRead מקצרת על ברירת המחדל שבקוד **לפני**
    שהיא קוראת את הדגל החי. ברירת מחדל false = מתג שלא עושה כלום. */
@@ -97,7 +100,13 @@ ok('⚠️ וסדר ההעלאה מתועד בשרת (זריעה לפני דחי
 section('6. 🔴 המסך עצמו לא נגע — הגבול הוא שכבת הנתונים');
 ok('resGarden עדיין קורא ל-CBA.data.getMyGardenReports',
    /CBA\.data\.getMyGardenReports\(function \(res\)/.test(RG));
-ok('🔴 ואינו נוגע ב-Firestore ישירות', !/CBA\.fb\./.test(RG));
+/* 🔴🔴 **השתנה ב-16.9 ובמכוון.** המסך קורא מסמך אחד ישירות —
+   מסך השלמת התמונות מציג את פרטי הדיווח שכבר הוגש, והמקור
+   היחיד להם הוא המסמך עצמו. כל שאר הנתונים עדיין דרך CBA.data. */
+ok('⚠️ הקריאה הישירה היחידה היא מסמך הדיווח להשלמת תמונות',
+   (RG.match(/CBA\.fb\.[a-zA-Z]+\(/g) || []).join(',') === 'CBA.fb.readDoc(',
+   (RG.match(/CBA\.fb\.[a-zA-Z]+\(/g) || []).join(','));
+ok('🔴 והכתיבה עוברת תמיד דרך שכבת הנתונים', !/CBA\.fb\.(createDoc|mergeDoc|nextId)/.test(RG));
 ok('⚠️ וכשל עדיין אינו "אין דיווחים"', /loadErr = !\(res && res\.ok\);/.test(RG));
 
 section('7. ⚠️ שער הגרסה — קוד לקוח שלא מגיע לדפדפן');

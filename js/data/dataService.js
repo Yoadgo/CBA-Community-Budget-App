@@ -1733,6 +1733,156 @@ CBA.data = (function () {
     }, cb);
   }
 
+
+  /* ==========================================================================
+   *  🔴🔴  הגשת דיווח גינון — הדפדפן כותב ל-Firestore   (2026-09-16)
+   * --------------------------------------------------------------------------
+   *  **ההיפוך.** עד היום: הדפדפן שלח הכול ל-Apps Script, שכתב שורה
+   *  בגיליון, ועבודה שעתית העתיקה ל-Firestore. מהיום: הדפדפן כותב
+   *  את המסמך, ו-Apps Script נשאר לשני דברים שהוא היחיד שיודע
+   *  לעשות — **להעלות ל-Drive** ו**לשלוח מייל**. שניהם שגר-ושכח.
+   *
+   *  🔴 **התמונות עולות אחת-אחת, וזו החלטה ולא מימוש עצלן:**
+   *    1. **אחוז אמיתי בלי המלכודת.** אחוזי העלאה אמיתיים דורשים
+   *       מאזין על `xhr.upload` — וזה בדיוק מה ששבר את הבקשה מול
+   *       Apps Script (ר' sheets.js; יש בדיקה שמונעת את חזרתו).
+   *       תמונה-תמונה נותנת "2 מתוך 3" — אחוז נכון, בלי המאזין.
+   *    2. **כישלון חלקי הופך לנתון.** בקריאה אחת תמונה שנפלה
+   *       נבלעה, והתושב קיבל "נשלח" כרגיל. עכשיו יודעים בדיוק מה
+   *       נחת, המסמך נושא את הפער, והתושב מופנה להשלים.
+   *
+   *  ⚠️ **סדר הפעולות אינו שרירותי:** המסמך נכתב **לפני** התמונות.
+   *     דיווח בלי תמונה הוא דיווח; תמונה בלי דיווח היא כלום. אם
+   *     האפליקציה תיסגר באמצע, מה ששרד הוא הדבר הנכון.
+   * ======================================================================== */
+  var GARDEN_WRITE_TO_FIRESTORE = false;
+
+  /** מעלה תמונה אחת דרך Apps Script. מחזיר מזהה Drive או שגיאה. */
+  function gardenUploadPhoto(photo, cb) {
+    CBA.sheets.postRead("gardenPhotoOne", { photo: photo }, function (res) {
+      cb(res && res.ok ? null : ((res && res.error) || "העלאה נכשלה"), res && res.id);
+    });
+  }
+
+  /** מעלה בזו אחר זו ומדווח התקדמות אמיתית. לעולם אינו נעצר
+   *  בגלל תמונה אחת שנפלה — ר' ההחלטה 2 בבלוק מעל. */
+  function gardenUploadPhotos(photos, onStep, done) {
+    var ids = [], failed = 0, i = 0;
+    function next() {
+      if (i >= photos.length) return done(ids, failed);
+      var n = i + 1;
+      if (onStep) onStep(n, photos.length);
+      gardenUploadPhoto(photos[i], function (err, id) {
+        if (err || !id) failed++; else ids.push(id);
+        i++; next();
+      });
+    }
+    next();
+  }
+
+  function gardenReportFsWrite(payload, cb, onProgress) {
+    var user = (window.CBA && CBA.user) || {};
+    var fid = String(user.familyId || "").trim();
+    var photos = payload.photos || [];
+
+    CBA.fb.nextId("gardenReport", function (e1, repId) {
+      if (e1) return cb({ ok: false, error: "לא הצלחנו להקצות מספר לדיווח" });
+      CBA.fb.nextId("gardenTask", function (e2, taskId) {
+        if (e2) return cb({ ok: false, error: "לא הצלחנו להקצות מספר למשימה" });
+
+        var now = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+        var year = (CBA.mock && CBA.mock.currentYear) || "";
+        var task = {
+          id: String(taskId), kind: "תקלה", title: payload.title,
+          category: payload.category, area: payload.area || "",
+          x: (payload.x === null || payload.x === undefined) ? null : Number(payload.x),
+          y: (payload.y === null || payload.y === undefined) ? null : Number(payload.y),
+          stage: "התקבל", repId: String(repId), photos: [],
+          createdAt: now, updatedAt: now, order: 0,
+          year: String(year), schema: 1
+        };
+        var report = {
+          id: String(repId), familyId: fid, date: new Date().toISOString(),
+          category: payload.category, area: payload.area || "",
+          title: payload.title, desc: payload.desc || "",
+          place: payload.place || "", x: task.x, y: task.y,
+          photos: [], photosExpected: photos.length,
+          taskId: String(taskId), clientRef: String(payload.clientRef || ""),
+          /* 🔴 הדגל שגורם למייל לצאת — גם אם הקריאה מיד אחריו תיפול,
+             הסריקה השעתית תתפוס אותו. ר' gardenMailPending_. */
+          mailPending: true,
+          year: String(year), schema: 1, updatedAt: now
+        };
+
+        /* המשימה קודם: מסמך הדיווח מצביע עליה, ותושב שיראה דיווח
+           שמצביע למשימה שאינה קיימת יראה שלב ריק. */
+        CBA.fb.createDoc("gardenTasks", String(taskId), task, function (e3) {
+          if (e3) return cb({ ok: false, error: "לא הצלחנו לפתוח את המשימה" });
+          CBA.fb.createDoc("gardenReports", String(repId), report, function (e4) {
+            if (e4) return cb({ ok: false, error: "לא הצלחנו לשמור את הדיווח" });
+
+            /* מכאן הדיווח **קיים**. כל מה שנכשל אחרי זה אינו מבטל אותו. */
+            gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId);
+            CBA.sheets.postRead("gardenNotifyReport", { id: String(repId) }, function () {});
+
+            if (!photos.length) {
+              return cb({ ok: true, id: repId, taskId: taskId, photos: [], photosFailed: 0 });
+            }
+            gardenUploadPhotos(photos, function (n, total) {
+              if (onProgress) onProgress(Math.round((n - 1) / total * 100), n, total);
+            }, function (ids, failed) {
+              var patch = { photos: ids, updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date() };
+              if (failed > 0) patch.photosIncomplete = true;
+              CBA.fb.mergeDoc("gardenReports", String(repId), patch, function () {
+                if (ids.length) {
+                  CBA.fb.mergeDoc("gardenTasks", String(taskId), { photos: ids }, function () {});
+                }
+                if (onProgress) onProgress(100, photos.length, photos.length);
+                cb({ ok: true, id: repId, taskId: taskId, photos: ids,
+                     photosFailed: failed, photosExpected: photos.length });
+              });
+            });
+          });
+        });
+      });
+    });
+  }
+
+  /** שורת יומן. שגר ושכח — יומן שנכשל אינו מבטל פעולה שהצליחה. */
+  function gardenLogAppend(taskId, kind, note) {
+    try {
+      var uid = (CBA.fb && CBA.fb.uid && CBA.fb.uid()) || "";
+      if (!uid) return;
+      var id = String(taskId) + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+      CBA.fb.createDoc("gardenLog", id, {
+        taskId: String(taskId), kind: String(kind || ""),
+        actorUid: uid, note: String(note || ""),
+        at: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date(), schema: 1
+      }, function () {});
+    } catch (e) {}
+  }
+
+  /** 🔴 השלמת תמונות לדיווח שכבר הוגש. ר' מסך resGardenPhotos. */
+  function gardenCompletePhotos(repId, taskId, photos, cb, onProgress) {
+    gardenUploadPhotos(photos, function (n, total) {
+      if (onProgress) onProgress(Math.round((n - 1) / total * 100), n, total);
+    }, function (ids, failed) {
+      CBA.fb.readDoc("gardenReports", String(repId), function (e, doc) {
+        var have = (doc && doc.photos) || [];
+        var all = have.concat(ids);
+        var patch = { photos: all, photosIncomplete: failed > 0,
+                      updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date() };
+        CBA.fb.mergeDoc("gardenReports", String(repId), patch, function (e2) {
+          if (taskId && all.length) {
+            CBA.fb.mergeDoc("gardenTasks", String(taskId), { photos: all }, function () {});
+          }
+          if (onProgress) onProgress(100, photos.length, photos.length);
+          cb({ ok: !e2, added: ids.length, failed: failed });
+        });
+      });
+    });
+  }
+
   function getServices(cb) {
     if (servicesCache) { if (cb) cb({ ok: true, services: servicesCache.services, sections: servicesCache.sections }); return; }
     servicesRead(cb);
@@ -2797,9 +2947,18 @@ CBA.data = (function () {
        onProgress הוא פרמטר שלישי אופציונלי; קריאות קיימות עם cb בלבד
        ממשיכות לעבוד כמו שהן. */
     submitGardenReport: function (payload, cb, onProgress) {
+      /* 🔴 ההיפוך (16.9) — ר' הבלוק מעל `gardenReportFsWrite`.
+         הדגל מכבה **כתיבה וקריאה יחד** דרך אותו מתג של הדיווחים:
+         כתיבה ל-Firestore בזמן שהמסך נבנה מהגיליון = דיווח שנעלם. */
+      var on = CBA.fb && CBA.fb.flag &&
+               CBA.fb.flag("gardenReportsFromFirestore", GARDEN_REPORTS_FROM_FIRESTORE) &&
+               CBA.fb.flag("gardenWriteToFirestore", GARDEN_WRITE_TO_FIRESTORE) &&
+               CBA.fb.uid && CBA.fb.uid();
+      if (on) return gardenReportFsWrite(payload, cb, onProgress);
       CBA.sheets.postReadProgress("submitGardenReport", payload,
         onProgress || function () {}, cb);
     },
+    gardenCompletePhotos: gardenCompletePhotos,
     gardenFeedback: function (id, positive, note, cb) {
       CBA.sheets.postRead("gardenFeedback", { id: id, positive: positive, note: note }, cb);
     },

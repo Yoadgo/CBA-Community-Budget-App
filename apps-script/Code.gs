@@ -1377,6 +1377,10 @@ function doPostDispatch_(ss, body) {
       case 'gardenApproveBatch':  return json_(gardenWrite_(ss, body.action, body, gardenApproveBatch_));
       case 'gardenMerge':         return json_(gardenWrite_(ss, body.action, body, gardenMerge_));
       case 'gardenCreateTask':    return json_(gardenWrite_(ss, body.action, body, gardenCreateTask_));
+      /* ההיפוך (16.9): שתי קריאות שגר-ושכח שאינן נוגעות בגיליון —
+         העלאת תמונה בודדת, ושליחת המיילים על דיווח שנכתב מהדפדפן. */
+      case 'gardenPhotoOne':      return json_(gardenPhotoOne_(ss, body));
+      case 'gardenNotifyReport':  return json_(gardenNotifyReport_(ss, body));
       /* 🔴🔴 **שלוש הפעולות שכותבות מסמך בודד לאוסף `gardenPlan`**
          (2026-09-16, הפער שנשאר פתוח מסקירת הצוות האדום).
          `gardenPlanSyncOne_` כותבת מסמך אחד ואינה סוחפת — ולכן היא
@@ -3233,7 +3237,10 @@ var ACTION_DOMAIN = {
   /* צעד 09ב-5ב — מעלה קובץ ל-Drive ותו לא. אינה נוגעת בגיליון,
      ולכן ברירת המחדל 'other' הייתה מבטלת את מטמון המטען הראשי
      של כל המשתמשים בכל הגשת קבלה, בלי שהשתנה שום נתון. */
-  uploadReceiptOnly: 'receiptFile'
+  uploadReceiptOnly: 'receiptFile',
+  /* ההיפוך (16.9) — שתיהן אינן נוגעות בגיליון: 'other' היה מבטל
+     את מטמון המטען של כל המשתמשים בכל תמונה ובכל מייל. */
+  gardenPhotoOne: 'gardenPhoto', gardenNotifyReport: 'gardenMail'
 };
 
 /* ============================================================================
@@ -4983,6 +4990,13 @@ var DEFAULT_EMAIL_SETTINGS = [
 
   ['ADMIN_NEW_GARDEN_REPORT', 'דיווח גינון חדש ממתין',
     'התקבל דיווח גינון חדש מ-{{שם}}: {{כותרת}} ({{קטגוריה}}, {{מיקום}}) (מס\' {{מזהה}}).', 'למנהלי גינון + מנהל-על', PERM_GARDEN, 'כן'],
+  /* 🔴 ההיפוך (16.9) — הרשת שתופסת תמונות שלא עלו ואיש לא חזר
+     להשלים. נשלחת **פעם אחת לכל דיווח**: התראה שחוזרת כל שעה
+     היא התראה שמפסיקים לקרוא. */
+  ['ADMIN_GARDEN_PHOTOS_MISSING', 'דיווחי גינון שחסרות בהם תמונות',
+    "בדיווחים הבאים התושב צירף תמונות שלא הועלו במלואן: {{רשימה}}.\n\n" +
+    "המספר בסוגריים הוא כמה נחתו מתוך כמה נשלחו. שווה לבדוק מול התושב אם התמונה חשובה לטיפול.",
+    'למנהלי גינון + מנהל-על. נשלח פעם אחת לכל דיווח', PERM_GARDEN, 'כן'],
   ['ADMIN_GARDEN_NEGATIVE_FEEDBACK', 'תושב סימן שהטיפול לא הושלם כראוי',
     "{{שם}} נתן משוב שלילי על דיווח מס' {{מזהה}} ({{קטגוריה}}, {{מיקום}}).\n\nהערתו: {{הערה}}\n\nהמשימה סומנה \"דורש בדיקה חוזרת\" וממתינה להחלטתך.",
     'למנהלי גינון + מנהל-על. משוב שלילי לא פותח את התקלה מחדש אוטומטית — הוא מרים דגל וההחלטה נשארת אנושית', PERM_GARDEN, 'כן'],
@@ -5534,6 +5548,20 @@ function hourlyJobsRun_() {
   } catch (e) {
     Logger.log('seedTxCounters_ נכשל: ' + e);
   }
+  /* 🔴 שתי רשתות הביטחון של הגינון — ר' הבלוק שלהן.
+     מיילים קודם, כדי שדיווח שנכתב זה עתה יקבל את המייל שלו
+     לפני שמתריעים על התמונות שחסרות בו. */
+  try {
+    var gm = gardenMailPending_(ss);
+    if (gm.found) {
+      Logger.log('מיילי גינון ממתינים: נמצאו ' + gm.found + ', נשלחו ' + gm.sent +
+                 (gm.errors.length ? ' | ' + gm.errors.join(' ; ') : ''));
+    }
+  } catch (e) { Logger.log('gardenMailPending_ נכשל: ' + e); }
+  try {
+    var gp = gardenPhotosIncomplete_(ss);
+    if (gp.notified) Logger.log('דיווחים עם תמונות חסרות: ' + gp.notified);
+  } catch (e) { Logger.log('gardenPhotosIncomplete_ נכשל: ' + e); }
   /* מוני הגינון (2026-09-16, ההיפוך) — עוקבים אחרי מה שעדיין
      נוצר במסלול הישן. לעולם אינם יורדים. */
   try {
@@ -6444,7 +6472,14 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
         על ברירת המחדל שבקוד **לפני** שהיא קוראת את הדגל החי.
         ולכן סדר ההעלאה אינו שרירותי: **זריעה, ורק אחריה דחיפת
         הלקוח.** דגל שנדלק לפני שהמסמכים קיימים = רשימה ריקה. */
-  'gardenReportsFromFirestore'];
+  'gardenReportsFromFirestore',
+  /* 🔴 **ההיפוך** (2026-09-16) — הדפדפן כותב דיווח ישירות ל-Firestore,
+     ו-Apps Script נשאר רק לתמונות ולמיילים.
+     ⚠️ **שני דגלים ולא אחד, ובכוונה הפוכה מהרגיל:** הכתיבה נבדקת
+        *בנוסף* ל-`gardenReportsFromFirestore`, ולעולם לא לבדה.
+        כתיבה ל-Firestore בזמן שהמסך נבנה מהגיליון = דיווח שנעלם
+        ברענון — בדיוק החור שנתפס ב-15.9 בתנועות התקציב. */
+  'gardenWriteToFirestore'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {
@@ -13129,6 +13164,171 @@ function handleGardenPlanSync_(p) {
 }
 
 
+
+
+/* ============================================================================
+ *  🔴🔴  העלאת תמונה **אחת**   (2026-09-16, ההיפוך)
+ * ----------------------------------------------------------------------------
+ *  **למה אחת ולא כולן בקריאה אחת, ולמה זה דווקא שיפור:**
+ *
+ *  1. 🔴 **אחוזי התקדמות אמיתיים, בלי המלכודת.** אחוזי העלאה
+ *     אמיתיים דורשים מאזין על `xhr.upload` — וזה **בדיוק מה ששבר
+ *     את הבקשה מול Apps Script** (ר' ההערה הארוכה ב-sheets.js;
+ *     יש בדיקה שמונעת את חזרתו). תמונה-תמונה נותנת אחוז אמיתי
+ *     ברזולוציה של קובץ — "2 מתוך 3" — בלי לגעת במאזין האסור.
+ *
+ *  2. 🔴 **כישלון חלקי הופך לנתון במקום להיעלם.** בקריאה אחת
+ *     שמעלה שמונה תמונות, תמונה שנפלה נבלעה ב-`catch` והתושב
+ *     קיבל "נשלח" כרגיל. עכשיו כל תמונה היא תשובה נפרדת, והלקוח
+ *     יודע בדיוק מה נחת ומה לא.
+ *
+ *  3. קריאה קצרה אינה מתקרבת לתקרת שש הדקות של Apps Script,
+ *     ושמונה תמונות בבקשה אחת כן יכולות.
+ *
+ *  ⚠️ **אינה נוגעת בגיליון ואינה כותבת ל-Firestore.** היא מעלה
+ *     קובץ ומחזירה מזהה, וזהו — הדפדפן הוא שמצרף אותו למסמך.
+ *     לכן גם `ACTION_DOMAIN` שלה הוא תחום משלה: ברירת המחדל
+ *     'other' הייתה מבטלת את מטמון המטען של כל המשתמשים בכל
+ *     תמונה, בלי ששום נתון השתנה.
+ * ========================================================================== */
+function gardenPhotoOne_(ss, body) {
+  var gate = authorize_(ss, body, null);
+  if (!gate.ok) return { ok: false, error: gate.error };
+  var p = body.photo;
+  if (!p || !p.data) return { ok: false, error: 'לא נשלחה תמונה' };
+  try {
+    var blob = Utilities.newBlob(
+      Utilities.base64Decode(p.data),
+      p.mime || 'image/jpeg',
+      p.name || ('garden-' + Date.now() + '.jpg'));
+    var id = getGardenPhotosFolder_().createFile(blob).getId();
+    return { ok: true, id: id };
+  } catch (e) {
+    /* ⚠️ **מחזיר שגיאה ולא בולע.** זה כל ההבדל מול הקוד הישן. */
+    return { ok: false, error: 'העלאת התמונה נכשלה: ' + String(e) };
+  }
+}
+
+/* ============================================================================
+ *  🔴  מיילים על דיווח שנכתב מהדפדפן   (2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  Firestore אינו יודע לשלוח מייל, ואין Cloud Functions בתוכנית
+ *  החינמית. לכן הדפדפן כותב את המסמך ואז **קורא לכאן שגר-ושכח**.
+ *
+ *  🔑 **הפרטים האישיים לעולם אינם עוברים בדפדפן.** הפונקציה קוראת
+ *  את המסמך מ-Firestore, ומתוך `familyId` שולפת **בשרת** את השם
+ *  ואת כתובות המייל מגיליון התושבים. כלומר שם המדווח נשאר בגיליון
+ *  — בדיוק הקו האדום — והדפדפן אינו צריך להכיר אותו בכלל.
+ *
+ *  ⚠️ **אידמפוטנטית.** מורידה `mailPending` בסיום; קריאה שנייה על
+ *     אותו דיווח לא תשלח שוב. זה מה שמאפשר לעבודה השעתית לסרוק
+ *     `mailPending == true` ולתפוס מה שלא יצא — בלי לשלוח כפול.
+ * ========================================================================== */
+function gardenNotifyReport_(ss, body) {
+  var gate = authorize_(ss, body, null);
+  if (!gate.ok) return { ok: false, error: gate.error };
+  var id = String((body && body.id) || '').trim();
+  if (!id) return { ok: false, error: 'חסר מזהה דיווח' };
+  return gardenSendReportMail_(ss, id);
+}
+
+/** השליחה עצמה. משותפת לקריאה מהדפדפן ולסריקה השעתית. */
+function gardenSendReportMail_(ss, id) {
+  var out = { ok: false, sent: 0, error: '' };
+  try {
+    var doc = fsGet_(fsDocPath_(FS_GARDEN_REPORTS, id));
+    if (!doc) { out.error = 'הדיווח לא נמצא'; return out; }
+    if (doc.mailPending !== true) { out.ok = true; return out; }   /* כבר נשלח */
+
+    var famId = String(doc.familyId || '').trim();
+    /* 🔑 השם והמיילים נשלפים **כאן**, מהגיליון, לפי מזהה המשפחה. */
+    /* 🔑 אותה מפה בדיוק שהתנועות משתמשות בה — מקור אחד לשם
+       משפחה מתוך מזהה, ולא עוד עותק שיסטה. */
+    var names = txFamilyNames_(ss);
+    var name = String(names[famId] || '').trim() || 'תושב';
+    var emails = emailsForFamilyId_(ss, famId);
+    var place = String(doc.place || doc.area || '').trim() || 'השיכון';
+    var vars = { 'שם': name, 'מזהה': String(doc.id || id),
+                 'כותרת': String(doc.title || ''),
+                 'קטגוריה': String(doc.category || ''), 'מיקום': place };
+    try {
+      sendResidentTemplate_(ss, 'GARDEN_REPORT_RECEIVED', emails, vars);
+      notifyAdmins_(ss, PERM_GARDEN, 'ADMIN_NEW_GARDEN_REPORT', vars);
+      out.sent = 1;
+    } catch (e) { out.error = String(e); }
+
+    /* ⚠️ מורידים את הדגל גם כששליחה אחת נכשלה: ניסיון חוזר שעתי
+       על תבנית שבורה היה הופך לנודניק אינסופי. השגיאה מתועדת. */
+    fsSet_(fsDocPath_(FS_GARDEN_REPORTS, id),
+           { mailPending: false, mailedAt: new Date() });
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+
+/* ============================================================================
+ *  🔴🔴  שתי רשתות הביטחון של הגינון   (2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  שתיהן עונות על אותה שאלה של יועד: *"שלא ייווצר מצב שדברים לא
+ *  עולים ואף אחד לא מבין למה."*
+ *
+ *  כשהדפדפן הוא הכותב, הוא גם היחיד שיודע שמשהו לא הושלם — ואם
+ *  התושב סגר את האפליקציה באמצע, הידיעה הזאת נעלמת איתו. לכן
+ *  **הסריקה כאן היא היחידה שתופסת את המקרה הזה.**
+ *
+ *  ⚠️ שתיהן שאילתות **שוויון על שדה בודד** — בלי אינדקס מורכב,
+ *     כי קונסולת Google Cloud חסומה.
+ * ========================================================================== */
+
+/** מיילים שלא יצאו (הדפדפן כתב ולא הספיק לקרוא, או שהקריאה נפלה). */
+function gardenMailPending_(ss) {
+  var out = { found: 0, sent: 0, errors: [] };
+  try {
+    var docs = fsQuery_(FS_GARDEN_REPORTS, 'mailPending', 'EQUAL', true, 200);
+    out.found = docs.length;
+    for (var i = 0; i < docs.length; i++) {
+      var r = gardenSendReportMail_(ss, docs[i].id);
+      if (r.sent) out.sent++;
+      if (r.error) out.errors.push(docs[i].id + ': ' + r.error);
+    }
+  } catch (e) { out.errors.push(String(e)); }
+  return out;
+}
+
+/** 🔴 דיווחים שחסרות בהם תמונות — ואיש לא חזר להשלים.
+ *  ⚠️ **מתריעה פעם אחת לכל דיווח** (`photosNudged`), ולא בכל שעה:
+ *     התראה שחוזרת כל שעה היא התראה שמפסיקים לקרוא. */
+function gardenPhotosIncomplete_(ss) {
+  var out = { found: 0, notified: 0, errors: [] };
+  try {
+    var docs = fsQuery_(FS_GARDEN_REPORTS, 'photosIncomplete', 'EQUAL', true, 200);
+    out.found = docs.length;
+    var stale = [];
+    for (var i = 0; i < docs.length; i++) {
+      var d = docs[i].data || {};
+      if (d.photosNudged === true) continue;
+      var got = (d.photos || []).length;
+      var want = parseInt(d.photosExpected, 10) || 0;
+      stale.push('#' + (d.id || docs[i].id) + ' (' + got + '/' + want + ')');
+      try {
+        fsSet_(fsDocPath_(FS_GARDEN_REPORTS, docs[i].id), { photosNudged: true });
+      } catch (e) { out.errors.push(docs[i].id + ': ' + String(e)); }
+    }
+    if (stale.length) {
+      out.notified = stale.length;
+      try {
+        notifyAdmins_(ss, PERM_GARDEN, 'ADMIN_GARDEN_PHOTOS_MISSING',
+          { 'רשימה': stale.join(', '), 'מספר': String(stale.length) });
+      } catch (e) {
+        /* ⚠️ תבנית חסרה אינה מפילה את הסריקה — הרישום ביומן ההפעלות
+           הוא הרשת האחרונה, וממנו אפשר לראות מה קרה. */
+        Logger.log('דיווחים עם תמונות חסרות: ' + stale.join(', '));
+      }
+    }
+  } catch (e) { out.errors.push(String(e)); }
+  return out;
+}
 
 /* ============================================================================
  *  🔴🔴  מוני המזהים של הגינון   (2026-09-16, ההיפוך)

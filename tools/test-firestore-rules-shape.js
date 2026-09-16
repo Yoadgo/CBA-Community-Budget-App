@@ -98,7 +98,7 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                      /* 🔴 ההיפוך של הגינון (16.9): Firestore הוא המסד החי
                         והדפדפן כותב. שלושה שערים, ושלושתם מפורטים
                         בקובץ הכללים ובמסמך התוצאות הצפויות. */
-                     'grCreateOk', 'grFeedbackOk', 'grTeamUpdateOk',
+                     'grCreateOk', 'grFeedbackOk', 'grPhotosOk', 'grTeamUpdateOk',
                      'gtTeamCreateOk', 'gtFromReportOk', 'gtTeamUpdateOk', 'gtDeleteOk',
                      'glCreateOk', 'glResidentCreateOk'];
 {
@@ -282,6 +282,14 @@ ok('🔴🔴 משוב נוגע בשדות המשוב בלבד',
    /affectedKeys\(\)\s*\n?\s*\.hasOnly\(\['feedback'/.test(grF), grF.trim());
 ok('🔴 ורק על מסמך של המשפחה שלו',
    /resource\.data\.familyId == myFamilyId\(\)/.test(grF), grF.trim());
+/* 🔴 השלמת תמונות — הפתח היחיד שנפתח לתושב אחרי ההגשה. */
+const grP = (CODE.match(/function grPhotosOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+ok('🔴 השלמת תמונות נוגעת ב-photos בלבד',
+   /hasOnly\(\['photos', 'photosIncomplete', 'updatedAt'\]\)/.test(grP), grP.trim());
+ok('🔴🔴 ואינה פתח לערוך תיאור/כותרת/מיקום אחרי ההגשה',
+   !/'desc'|'title'|'place'|'category'/.test(grP), grP.trim());
+ok('🔴 ורק על דיווח של המשפחה שלו',
+   /resource\.data\.familyId == myFamilyId\(\)/.test(grP), grP.trim());
 const grT = (CODE.match(/function grTeamUpdateOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
 /* 🔴🔴 גם מנהל אינו מעביר בעלות על דיווח. */
 ok('🔴🔴 familyId אינו ברשימת השדות שהצוות רשאי לשנות',

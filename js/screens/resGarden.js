@@ -113,7 +113,27 @@
         pendingReport = null;
         /* duplicate=true — השרת מצא שהדיווח כבר נכתב עם אותו מזהה שליחה.
            אומרים את האמת ולא "נשלח", כדי שהתושב לא יחפש דיווח שני. */
-        CBA.ui.toast((res.duplicate ? "הדיווח כבר נשמר · מספר " : "הדיווח נשלח · מספר ") + res.id);
+        var base = (res.duplicate ? "הדיווח כבר נשמר · מספר " : "הדיווח נשלח · מספר ") + res.id;
+
+        /* 🔴🔴 **תמונה שנכשלה מפסיקה להיבלע** (2026-09-16).
+           עד היום השרת בלע כישלון העלאה ב-`catch` שקט, והתושב קיבל
+           "נשלח" בדיוק כמו תמיד — שלח שלוש, נחתה אחת, ואיש לא ידע.
+           עכשיו אומרים את האמת, **ומפנים אותו להשלים**: התמונות
+           עדיין בזיכרון, ולכן ההשלמה היא לחיצה אחת ולא צילום מחדש. */
+        if (res.photosFailed > 0) {
+          var miss = res.photosFailed;
+          CBA.ui.toast(base + " — " + (miss === 1 ? "תמונה אחת לא עלתה" : miss + " תמונות לא עלו"));
+          var keep = (data.photos || []).slice(-miss);
+          if (onForm) {
+            return CBA.navigate("resGardenNew", {
+              completeFor: res.id, taskId: res.taskId, photos: keep
+            });
+          }
+          /* לא בטופס — לא גוררים אותו. הבאנר ב"הדיווחים שלי" ימתין לו. */
+          return;
+        }
+
+        CBA.ui.toast(base);
         /* ⚠️ לנווט רק אם הוא עדיין בטופס. אם הוא כבר עבר למסך אחר, גרירה
            חזרה לרשימת הדיווחים היא בדיוק מה שהיציאה-ברקע באה למנוע. */
         if (onForm) CBA.navigate("resGarden");
@@ -127,10 +147,23 @@
       }).then(function (yes) {
         if (yes) sendReport(pendingReport, null);
       });
-    }, function (pct) {
-      /* מגיע רק כ-100, כשהתשובה כבר חזרה (ר' sheets.js). משאירים אותו
-         כדי שהרגע האחרון לפני הסגירה לא ייראה תקוע. */
-      if (pct >= 100 && prog) prog.textContent = "התקבל, מסיים…";
+    }, function (pct, n, total) {
+      /* 🔴 **אחוז אמיתי, ברזולוציה של קובץ** (2026-09-16). אחוזי
+         העלאה אמיתיים דורשים מאזין על `xhr.upload`, וזה בדיוק מה
+         ששבר את הבקשה מול Apps Script — יש בדיקה שמונעת את
+         חזרתו. העלאה תמונה-תמונה נותנת מספר נכון בלי המאזין.
+         ⚠️ במסלול הישן מגיע רק pct=100 ובלי n/total, ואז נשארת
+            ההתנהגות הקודמת בדיוק. */
+      if (!prog) return;
+      if (total > 0 && n) {
+        prog.textContent = "מעלה תמונה " + n + " מתוך " + total +
+                           " · " + Math.max(pct, 1) + "%";
+        if (btn && btn.isConnected && CBA.ui.busyText) {
+          CBA.ui.busyText(btn, "מעלה… " + Math.max(pct, 1) + "%");
+        }
+        return;
+      }
+      if (pct >= 100) prog.textContent = "התקבל, מסיים…";
     });
   }
 
@@ -365,6 +398,15 @@
             if (rep && CBA.photos) CBA.photos.open(rep.photos, "התמונות שצירפת לדיווח #" + rep.id);
           });
         });
+        /* 🔴 השלמת תמונות — ר' renderCompletePhotos. התמונות עצמן
+           כבר לא בזיכרון בשלב הזה, ולכן המסך יבקש לבחור אותן שוב. */
+        Array.prototype.forEach.call(listEl.querySelectorAll("[data-complete]"), function (b) {
+          b.addEventListener("click", function () {
+            CBA.navigate("resGardenNew", {
+              completeFor: b.dataset.complete, taskId: b.dataset.task, photos: []
+            });
+          });
+        });
       }
 
       function statTile(kind, iconName, num, label) {
@@ -422,6 +464,15 @@
               '</button>'
             : '<span class="gd-rep__th">' + ico(c.ico) + '</span>') +
           '<div class="gd-rep__b">' +
+            /* 🔴 **תמונה שלא עלתה מקבלת שורה משלה, לא היעלמות**
+               (2026-09-16). זו הדרך של מי שסגר את האפליקציה באמצע
+               לגלות שחסר משהו — ולחזור להשלים בלחיצה. */
+            (r.photosIncomplete
+              ? '<button type="button" class="gd-rep__warn" data-complete="' + esc(r.id) +
+                  '" data-task="' + esc(r.taskId || "") + '">' +
+                  'חסרות תמונות בדיווח הזה · להשלמה' +
+                '</button>'
+              : '') +
             '<div class="gd-rep__top">' +
               '<span class="gd-rep__id">#' + esc(r.id) + '</span>' +
               '<span class="gd-kchip">' + ico(c.ico) + esc(r.category) + '</span>' +
@@ -548,8 +599,129 @@
   /* ==========================================================================
    *  מסך 2 — דיווח חדש
    * ======================================================================== */
+  /* ==========================================================================
+   *  🔴 השלמת תמונות לדיווח שכבר הוגש   (2026-09-16)
+   * --------------------------------------------------------------------------
+   *  בקשת יועד, במילים שלו: *"כאשר זה נכשל אני רוצה שזה יפנה את
+   *  האדם לטופס עצמו שכבר הגיש עם הפרטים שמולאו כדי להשלים את
+   *  החלק שנכשל של התמונות."*
+   *
+   *  ⚠️ **הפרטים מוצגים ואינם ניתנים לעריכה, וזה מכוון.** הדיווח
+   *     כבר הוגש והצוות אולי כבר ראה אותו; "טופס מלא" שאפשר לשנות
+   *     בו את התיאור היה עריכה רטרואקטיבית במסווה של השלמה.
+   *     כלל האבטחה אוכף בדיוק את זה (`grPhotosOk` — photos בלבד),
+   *     כך שגם אם המסך היה מאפשר, השרת היה מסרב.
+   *
+   *  ⚠️ **התמונות שנכשלו עדיין בזיכרון** כשמגיעים לכאן מיד אחרי
+   *     ההגשה — ואז ההשלמה היא לחיצה אחת. מי שהגיע מהבאנר אחרי
+   *     שסגר את האפליקציה יבחר אותן מחדש; אין דרך לשמור אותן,
+   *     ור' ההסבר על Background Sync.
+   * ======================================================================== */
+  function renderCompletePhotos(container, opts) {
+    var repId = String(opts.completeFor);
+    var taskId = opts.taskId ? String(opts.taskId) : "";
+    var pending = (opts.photos || []).slice();
+    var busy = false;
+
+    function draw(rep) {
+      var det = rep ? ('<div class="gd-card">' +
+            '<p class="gd-lbl">הדיווח שהוגש</p>' +
+            '<p><b>' + esc(rep.title || "") + '</b></p>' +
+            '<p class="gd-muted">' + esc(rep.category || "") +
+              (rep.place ? " · " + esc(rep.place) : "") + '</p>' +
+            (rep.desc ? '<p>' + esc(rep.desc) + '</p>' : '') +
+          '</div>') : '';
+      container.innerHTML = '<div class="gd-screen">' +
+        moduleHead("השלמת תמונות · דיווח " + esc(repId),
+          "הדיווח נשמר. חסרות בו תמונות שלא הצליחו לעלות.",
+          '<button type="button" class="gd-backbtn" id="gd-back">' + ico("back") +
+          ' לדיווחים שלי</button>') +
+        det +
+        '<div class="gd-card">' +
+          '<p class="gd-lbl">התמונות שלא עלו</p>' +
+          '<div id="gd-thumbs2" class="gd-thumbs"></div>' +
+          '<input type="file" id="gd-file2" accept="image/*" multiple hidden>' +
+          '<button type="button" class="gd-btn2" id="gd-add2">הוספת תמונה</button>' +
+          '<div id="gd-prog2" class="gd-progress" hidden></div>' +
+          '<button type="button" class="gd-send" id="gd-up2">העלאת התמונות</button>' +
+        '</div></div>';
+
+      container.querySelector("#gd-back")
+        .addEventListener("click", function () { CBA.navigate("resGarden"); });
+
+      var thumbs = container.querySelector("#gd-thumbs2");
+      function paint() {
+        thumbs.innerHTML = "";
+        pending.forEach(function (p, i) {
+          var el = document.createElement("span");
+          el.className = "gd-th";
+          el.style.backgroundImage = "url(data:" + p.mime + ";base64," + p.data + ")";
+          el.innerHTML = '<x aria-hidden="true">✕</x>';
+          el.querySelector("x").addEventListener("click", function () {
+            pending.splice(i, 1); paint();
+          });
+          thumbs.appendChild(el);
+        });
+        container.querySelector("#gd-up2").disabled = !pending.length || busy;
+      }
+      paint();
+
+      var fileEl = container.querySelector("#gd-file2");
+      container.querySelector("#gd-add2")
+        .addEventListener("click", function () { fileEl.click(); });
+      fileEl.addEventListener("change", function () {
+        Array.prototype.slice.call(fileEl.files || []).forEach(function (f) {
+          compressImage(f, function (dataUrl) {
+            if (!dataUrl) return;
+            var comma = dataUrl.indexOf(",");
+            if (comma < 0) return;
+            var mime = (dataUrl.substring(0, comma).match(/data:([^;]+)/) || [])[1] ||
+                       f.type || "image/jpeg";
+            pending.push({ name: String(f.name || "photo"), mime: mime,
+                           data: dataUrl.substring(comma + 1) });
+            paint();
+          });
+        });
+        fileEl.value = "";
+      });
+
+      container.querySelector("#gd-up2").addEventListener("click", function () {
+        if (!pending.length || busy) return;
+        busy = true; paint();
+        var prog = container.querySelector("#gd-prog2");
+        prog.hidden = false;
+        prog.textContent = "מעלה…";
+        CBA.data.gardenCompletePhotos(repId, taskId, pending, function (res) {
+          busy = false;
+          if (res && res.ok && !res.failed) {
+            CBA.ui.toast("התמונות הועלו");
+            return CBA.navigate("resGarden");
+          }
+          prog.textContent = "";
+          prog.hidden = true;
+          paint();
+          CBA.ui.alert(res && res.failed
+            ? "חלק מהתמונות עדיין לא עלו. אפשר לנסות שוב."
+            : "ההעלאה נכשלה. אפשר לנסות שוב.");
+        }, function (pct, n, total) {
+          prog.textContent = "מעלה תמונה " + n + " מתוך " + total +
+                             " · " + Math.max(pct, 1) + "%";
+        });
+      });
+    }
+
+    /* הפרטים נקראים מהמסמך עצמו ולא נשמרים בלקוח — מקור אחד. */
+    if (CBA.fb && CBA.fb.readDoc) {
+      CBA.fb.readDoc("gardenReports", repId, function (e, doc) { draw(doc || null); });
+    } else {
+      draw(null);
+    }
+  }
+
   CBA.screens.resGardenNew = {
-    render: function (container) {
+    render: function (container, opts) {
+      /* 🔴 מצב השלמת תמונות — ר' הבלוק מעל renderCompletePhotos. */
+      if (opts && opts.completeFor) return renderCompletePhotos(container, opts);
       var WORD_MAX = 75;
       var state = { cat: "", x: null, y: null, area: "", photos: [], clientRef: newRef() };
       var user = (window.CBA && CBA.user) || {};

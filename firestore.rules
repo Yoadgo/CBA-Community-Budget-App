@@ -206,6 +206,15 @@ service cloud.firestore {
                  המנגנון. בוליאני בלבד: **התבנית והנמענים נגזרים
                  בשרת מתוכן המסמך**, לא משדה שהלקוח בוחר. */
               'mailPending',
+              /* 🔴 **כמה תמונות נשלחו מול כמה נחתו.** עד היום תמונה
+                 שנכשלה נבלעה בשקט בשרת והתושב קיבל "נשלח" כרגיל —
+                 כלומר שלח שלוש, נחתה אחת, ואיש לא ידע. השדות האלה
+                 הופכים את הפער לנתון: התושב רואה אותו, המנהל רואה
+                 אותו, והעבודה השעתית סורקת `photosIncomplete == true`
+                 ומתריעה על מה שאיש לא השלים.
+                 ⚠️ שוויון בלבד — השוואה בין שני שדות הייתה דורשת
+                    אינדקס, והקונסולה חסומה. */
+              'photosExpected', 'photosIncomplete',
               'year', 'schema', 'updatedAt'];
     }
 
@@ -270,13 +279,27 @@ service cloud.firestore {
               request.time.toMillis() <= resource.data.get('feedbackUntil', 0));
     }
 
+    /* 🔴 **השלמת תמונות לדיווח שכבר הוגש.** ההעלאה היא תמונה-תמונה,
+       ולכן דיווח יכול להיוולד עם חלק מהתמונות — והתושב חוזר להשלים.
+       ⚠️ **`photos` בלבד**, ולא תיאור/כותרת/מיקום: דיווח אינו נערך
+          אחרי ההגשה, וזה לא פתח לערוך אותו בדלת האחורית.
+       ⚠️ מזהי Drive שנכתבים כאן אינם מסוכנים: הצפייה עוברת דרך
+          `gardenPhoto` ב-Apps Script, שבודק הרשאה בעצמו. */
+    function grPhotosOk() {
+      return isMember() && m().isExternal == false &&
+             resource.data.familyId == myFamilyId() &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['photos', 'photosIncomplete', 'updatedAt']);
+    }
+
     /* הצוות מזיז את הדיווח בתהליך. ⚠️ **`familyId` אינו ברשימה —
        גם לא למנהל.** שינוי בעלות על דיווח אינו פעולה שקיימת. */
     function grTeamUpdateOk() {
       return hasPerm('גינון') &&
              request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['stage', 'flag', 'closure', 'closeWhy', 'mergedInto',
-                         'taskId', 'canFeedback', 'feedbackUntil', 'updatedAt']);
+                         'taskId', 'canFeedback', 'feedbackUntil',
+                         'photos', 'photosIncomplete', 'updatedAt']);
     }
 
     match /gardenReports/{id} {
@@ -284,7 +307,7 @@ service cloud.firestore {
       /* ⚠️ `create` ולא `write`: מסמך קיים נכשל מעצמו, ולכן תושב
          אינו יכול לדרוס דיווח של שכן בכך שינחש מזהה. */
       allow create: if grCreateOk();
-      allow update: if grFeedbackOk() || grTeamUpdateOk();
+      allow update: if grFeedbackOk() || grPhotosOk() || grTeamUpdateOk();
       /* 🔴 אין מחיקה, לאיש. דיווח שנסגר מקבל `closure`, לא היעלמות. */
       allow delete: if false;
     }
