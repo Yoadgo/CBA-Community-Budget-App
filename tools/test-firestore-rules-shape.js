@@ -56,7 +56,9 @@ const idxDeny = CODE.indexOf('match /{document=**}');
    לא תנאי פרוש בתוך הבלוק. פונקציה בעלת שם נקראת, נבדקת ומתועדת;
    תנאי שנדחף בשורה אחת בתוך `match` הוא בדיוק מה שמחליק פנימה
    בלי שאיש יראה אותו. */
-const ALLOW_TERM = /^([a-zA-Z][A-Za-z0-9_]*\((docId)?\)|false|canSeeFamilyTx\(resource\.data\.familyId\)|signedIn\(\) && request\.auth\.uid == uid)$/;
+/* ⚠️ הארגומנט המותר הוא **משתנה ה-`match`** (`docId`, `uid`) — לא ביטוי.
+   `f(uid)` הוא בדיוק מה שהכלל דורש: פונקציה בעלת שם. `f(a && b)` אינו. */
+const ALLOW_TERM = /^([a-zA-Z][A-Za-z0-9_]*\(([a-z][A-Za-z0-9_]*)?\)|false|canSeeFamilyTx\(resource\.data\.familyId\)|signedIn\(\) && request\.auth\.uid == uid)$/;
 ok('🔴 כל תנאי ב-allow הוא קריאה לפונקציה בעלת שם',
    (CODE.match(/allow [^\n]*/g) || []).every(function (t) {
      const m = t.trim().match(/^allow [a-z, ]+: if (.+);$/);
@@ -145,8 +147,8 @@ ok('🔴 ו-canSeeFamilyTx חוסם את המחרוזת הריקה',
    /function canSeeFamilyTx\(fid\)[\s\S]*?fid is string && fid != '' && fid == myFamilyId\(\)/.test(CODE));
 ok('🔴 והוא לא נפתח לכל חבר אלא לבעלי הרשאת תקציב',
    /function canSeeBudget\(\)\s*\{\s*return hasPerm\('\u05ea\u05e7\u05e6\u05d9\u05d1'\)/.test(CODE));
-ok('🔴 תשעה בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
-   (CODE.match(/^\s*match \//gm) || []).length === 11,
+ok('🔴 אחד-עשר בלוקים פתוחים בלבד (ועוד ברירת המחדל)',
+   (CODE.match(/^\s*match \//gm) || []).length === 12,
    String((CODE.match(/^\s*match \//gm) || []).length));
 
 /* ======================================================================

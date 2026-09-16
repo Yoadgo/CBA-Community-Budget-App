@@ -1185,6 +1185,39 @@ CBA.data = (function () {
       });
     });
   }
+  /* ==========================================================================
+   *  🔴 **קוד הכניסה למכון — הדבר היחיד שבשבילו פותחים את המסך**
+   *     (צעד 10ב-3, 2026-09-16)
+   * --------------------------------------------------------------------------
+   *  התושב פותח את מסך המכון בדרך לחדר הכושר, בשביל שורה אחת:
+   *  הקוד. עד היום הוא חיכה 2.4–10 שניות לתשובת Apps Script.
+   *
+   *  ⚠️ **כישלון כאן הוא חסר-קוד, לעולם לא שגיאה.** כלל האבטחה
+   *     דוחה את הקריאה ברגע שהמנוי פג — וזו תשובה תקינה
+   *     ומצופה, לא תקלה. התשובה מ-Apps Script היא הקובעת בכל
+   *     מקרה, והיא תמיד מגיעה.
+   *  ⚠️ **אין כאן שום בדיקת תוקף בלקוח.** לא בגלל אמון בלקוח
+   *     אלא להפך: השער היחיד הוא הכלל בשרת. בדיקה שנייה כאן
+   *     היתה מזמינה את השתיים להיפרד.
+   * ======================================================================== */
+  function getGymCodeFast(cb) {
+    cb = cb || function () {};
+    if (!(CBA.fb && CBA.fb.readDoc && CBA.fb.ensureDb)) return cb("");
+    CBA.fb.authReady(function (user) {
+      if (!user) return cb("");
+      CBA.fb.ensureDb(function (err) {
+        if (err) return cb("");
+        var uid = CBA.fb.uid && CBA.fb.uid();
+        if (!uid) return cb("");
+        CBA.fb.readDoc("gymCode", uid, function (e2, doc) {
+          /* דחיית הרשאה = המנוי פג. אין קוד, ואין מה לומר. */
+          if (e2 || !doc || !doc.code) return cb("");
+          cb(String(doc.code));
+        });
+      });
+    });
+  }
+
   // כתיבות — עוברות ב-postRead כדי שנקבל את תשובת השרת בחזרה (הצלחה/שגיאה),
   // בדיוק כמו submitReceipt. שליחה "עיוורת" לא מתאימה כאן: התושב חייב לדעת
   // מיד אם הבקשה נקלטה, ומה הסטטוס שיצא לו.
@@ -2315,6 +2348,7 @@ CBA.data = (function () {
     getGymForm: getGymForm,
     getGymMy: getGymMy,
     getGymStatusFast: getGymStatusFast,
+    getGymCodeFast: getGymCodeFast,
     submitGymApplication: submitGymApplication,
     createGymMembership: createGymMembership,
     requestGymDeclaration: requestGymDeclaration,

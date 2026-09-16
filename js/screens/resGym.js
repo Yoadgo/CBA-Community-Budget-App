@@ -27,7 +27,7 @@ CBA.screens = CBA.screens || {};
 
   // מצב המסך נשמר בין ציורים — render() נקרא שוב גם ברענון רקע שקט, ובלי זה
   // האשף היה נסגר באמצע מילוי (אותו לקח כמו persistent-state בשאר המסכים).
-  var st = { form: null, my: null, loading: false, wizard: null };
+  var st = { form: null, my: null, loading: false, wizard: null, fastCode: "" };
 
   function esc(s) { return CBA.esc(String(s == null ? "" : s)); }
 
@@ -71,12 +71,18 @@ CBA.screens = CBA.screens || {};
    *     מטפלי הלחיצה קוראים `st.my.membership`, `st.my.payboxUrl`
    *     ו-`st.my.declarationValidUntil` — שאינם קיימים עדיין. כפתור
    *     שנלחץ בשלב הזה היה שולח בקשה עם שדות ריקים.
-   *  ⚠️ וגם ללא קוד הכניסה — הוא אינו ב-Firestore בכלל.
+   *  ✅ **וגם הקוד עצמו** (צעד 10ב-3): הוא במסמך `gymCode/{uid}`
+   *     נפרד, שכלל האבטחה שלו פוקע לפי `validUntil` — ולכן הוא
+   *     מגיע באותן עשרות אלפיות. זה הדבר היחיד שבשבילו
+   *     התושב פותח את המסך הזה.
+   *  ⚠️ **שלוש הקריאות מקבילות.** הקוד אינו ממתין לסטטוס: הכלל
+   *     לא יימסור אותו למי שאינו זכאי, ולכן אין מה "לאמת" לפניו.
    * ======================================================================== */
   function load(container, cb) {
     if (!(CBA.data && CBA.data.getGymMy)) { if (cb) cb(); return; }
     st.loading = true;
     st.fast = null;
+    st.fastCode = "";
 
     if (CBA.data.getGymStatusFast) {
       CBA.data.getGymStatusFast(function (doc) {
@@ -84,6 +90,16 @@ CBA.screens = CBA.screens || {};
         if (!doc || !st.loading || st.my) return;
         st.fast = doc;
         try { draw(container); } catch (e) {}
+      });
+    }
+
+    if (CBA.data.getGymCodeFast) {
+      CBA.data.getGymCodeFast(function (code) {
+        if (!code || !st.loading || st.my) return;
+        st.fastCode = code;
+        /* ⚠️ מצייר רק אם יש כבר כרטיס — אחרת אין לאן לתלות
+           את הקוד, והציור יחזור ממילא כשהסטטוס יגיע. */
+        if (st.fast) { try { draw(container); } catch (e) {} }
       });
     }
 
@@ -148,8 +164,14 @@ CBA.screens = CBA.screens || {};
     }
 
     /* 🔴 ציור מוקדם מ-Firestore — עוצרים כאן. כל מה שמתחת
-       לשורה הזו תלוי בנתונים שאינם ב-Firestore. ר' load(). */
+       לשורה הזו תלוי בנתונים שאינם ב-Firestore. ר' load().
+       ✅ **חוץ מהקוד** (צעד 10ב-3): הוא מגיע ממסמך משלו,
+          וכלל האבטחה שלו כבר אכף גם "פעיל" וגם "בתוקף".
+          אין כאן שום בדיקה נוספת בלקוח — רק הצגה.
+       ⚠️ ואין כאן את הענף "עדיין באמצעות מפתח": היעדר קוד
+          בשלב הזה פירושו "עוד לא יודעים", לא "אין קוד". */
     if (partial) {
+      if (st.fastCode) html += codeCardHTML(st.fastCode);
       html += '<div class="gym-hint gym-hint--tight">טוען את שאר הפרטים…</div>' + "</div>";
       return html;
     }
@@ -216,6 +238,20 @@ CBA.screens = CBA.screens || {};
     return !isNaN(d.getTime()) && d.getTime() >= new Date().setHours(0, 0, 0, 0);
   }
 
+  /* 🔴 **נקודת הרכבה אחת לכרטיס הקוד.** שני מסלולים מציגים אותו —
+     הציור המוקדם מ-Firestore והציור המלא מ-Apps Script — ושניהם
+     חייבים להיראות זהים לגמרי, אחרת הכרטיס "יקפוץ" מתחת לאצבע
+     של מי שכבר הושיט יד לדלת. כולל `data-gym-copy`, שמחווט
+     בשניהם (ר' draw). */
+  function codeCardHTML(code) {
+    return '<div class="gym-code">' +
+             '<div class="gym-code__label">קוד הכניסה למכון</div>' +
+             '<div class="gym-code__value" id="gym-code-value">' + esc(code) + "</div>" +
+             '<button type="button" class="btn-ghost" data-gym-copy>העתקת הקוד</button>' +
+             '<div class="gym-code__note">לפי התקנון — אין להעביר את הקוד לאחרים.</div>' +
+           "</div>";
+  }
+
   function activeCardHTML(m) {
     var code = (st.my && st.my.entryCode) || "";
     var hasCode = !!(st.my && st.my.hasEntryCode);
@@ -239,12 +275,7 @@ CBA.screens = CBA.screens || {};
 
     // קוד הכניסה
     if (code) {
-      html += '<div class="gym-code">' +
-                '<div class="gym-code__label">קוד הכניסה למכון</div>' +
-                '<div class="gym-code__value" id="gym-code-value">' + esc(code) + "</div>" +
-                '<button type="button" class="btn-ghost" data-gym-copy>העתקת הקוד</button>' +
-                '<div class="gym-code__note">לפי התקנון — אין להעביר את הקוד לאחרים.</div>' +
-              "</div>";
+      html += codeCardHTML(code);
     } else if (!hasCode) {
       html += '<div class="gym-code gym-code--none">' +
                 "<div>הכניסה למכון עדיין באמצעות מפתח.</div>" +
@@ -622,6 +653,10 @@ CBA.screens = CBA.screens || {};
     if (st.loading || !st.my) {
       /* 🔴 יש כבר סטטוס מ-Firestore ⇒ כרטיס אמיתי במקום שלדים. */
       container.innerHTML = head + (st.fast ? viewStatus(st.fast, true) : CBA.skel.cards(2));
+      /* ⚠️ **גם כאן מחווטים את ההעתקה.** הקוד כבר על המסך; כפתור
+         שלא עושה כלום בשתי השניות שהמשתמש באמת מסתכל בו הוא
+         בדיוק החוויה שהצעד הזה בא לתקן. */
+      wireCopy(container);
       return;
     }
     if (!st.my.ok) {
@@ -639,6 +674,10 @@ CBA.screens = CBA.screens || {};
     if (payBtn) payBtn.addEventListener("click", function () { openPayReport(container); });
     var renewBtn = container.querySelector("[data-gym-renew]");
     if (renewBtn) renewBtn.addEventListener("click", function () { doRenew(container, renewBtn); });
+    wireCopy(container);
+  }
+
+  function wireCopy(container) {
     var copyBtn = container.querySelector("[data-gym-copy]");
     if (copyBtn) copyBtn.addEventListener("click", function () { copyCode(copyBtn); });
   }

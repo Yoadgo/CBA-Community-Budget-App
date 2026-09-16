@@ -5327,9 +5327,11 @@ function hourlyJobs() {
   }
   try {
     var g = gymStatusSyncAll_(ss);
-    if (g.wrote || g.deleted || g.error) {
+    if (g.wrote || g.deleted || g.codes || g.codesDeleted || g.error) {
       Logger.log('סטטוס מכון: נכתבו ' + g.wrote + ', נמחקו ' + g.deleted +
-                 ', דולגו ' + g.skipped + (g.error ? ' | ' + g.error : ''));
+                 ', דולגו ' + g.skipped +
+                 ' | קודי כניסה: נכתבו ' + g.codes + ', נמחקו ' + g.codesDeleted +
+                 (g.error ? ' | ' + g.error : ''));
     }
   } catch (e) {
     Logger.log('gymStatusSyncAll_ נכשל: ' + e);
@@ -6299,24 +6301,108 @@ function gymStatusDoc_(row, uid) {
   return doc;
 }
 
+/* ============================================================================
+ *  קוד הכניסה למכון  `gymCode/{uid}`      (צעד 10ב-3, 2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  🔴 **למה מסמך נפרד, ולא שדה בתוך `gymStatus`.** שתי סיבות, ושתיהן
+ *  מספיקות בפני עצמן:
+ *
+ *  1. **כללי Firestore מגנים על מסמכים, לא על שדות.** אי-אפשר לכתוב
+ *     "קרא את המסמך הזה חוץ מהשדה ההוא". קוד שהיה נוסע בתוך
+ *     `gymStatus` היה נקרא ע"י בעל המסמך תמיד — גם אחרי שהמנוי פג.
+ *
+ *  2. 🔴🔴 **ובעיקר — הזמן.** הסנכרון רץ פעם בשעה. מנוי שפג בחצות
+ *     היה נשאר "עם קוד" עד הריצה הבאה, כלומר עד שעה של גישה
+ *     שהשרת כבר שולל. `handleGymMy_` בודק `until >= היום` בכל
+ *     קריאה, ולכן הוא מדויק לשנייה. **הכלל שלנו הוא שכללי
+ *     Firestore לעולם לא רחבים מהשרת** — ולכן המסמך הזה נושא
+ *     `validUntil` כחותמת זמן אמיתית, והכלל משווה אליה
+ *     `request.time`. הפקיעה מדויקת לשנייה גם כאן, בלי שום
+ *     תלות בקצב הסנכרון.
+ *
+ *  🔴 **שני שערים בלתי תלויים, בכוונה.** (א) המסמך נכתב **רק** למי
+ *  שזכאי ברגע הסנכרון, ונמחק ממי שאינו; (ב) הכלל בודק את
+ *  `validUntil` בכל קריאה. טעות באחד מהם אינה מספיקה כדי לדלוף.
+ *
+ *  ⚠️ הקוד עצמו אינו סוד קריפטוגרפי אלא קוד דלת משותף, אבל התקנון
+ *     אוסר במפורש להעביר אותו — ולכן הוא לא נכנס לשום מייל, ולא
+ *     למסמך שמישהו שאינו זכאי יכול לקרוא.
+ * ========================================================================== */
+var FS_GYM_CODE = 'gymCode';
+
+/** חותמת הזמן שבה הקוד מפסיק להיות תקף: תחילת היום **שאחרי** 'בתוקף עד'.
+ *  🔴 יום שלם ולא רגע אחד: `handleGymMy_` מתיר כל עוד
+ *     `until >= היום בחצות`, כלומר היום האחרון נחשב במלואו.
+ *     חותמת שהיתה מצביעה על חצות של אותו יום היתה מקדימה את
+ *     השרת ביממה — צר יותר מהשרת זו לא בעיית אבטחה, אבל זו
+ *     בעיית אמת: הקוד היה נעלם למי שעדיין זכאי. */
+function gymCodeExpiry_(until) {
+  var d = new Date(until.getTime());
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  return d;
+}
+
+function gymCodeDoc_(uid, code, until) {
+  return { uid: uid, code: String(code), validUntil: gymCodeExpiry_(until),
+           schema: 1, updatedAt: new Date() };
+}
+
+/** האם השורה הזאת מזכה בקוד — **אותה בדיקה בדיוק** כמו ב-`handleGymMy_`. */
+function gymRowEntitled_(row) {
+  if (String(row['\u05e1\u05d8\u05d8\u05d5\u05e1'] || '').trim() !== GYM_ST_ACTIVE) return null;
+  var until = gymToDate_(row['\u05d1\u05ea\u05d5\u05e7\u05e3 \u05e2\u05d3']);
+  if (!until) return null;
+  return (until.getTime() >= new Date().setHours(0, 0, 0, 0)) ? until : null;
+}
+
 function gymStatusSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
-  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0,
+              codes: 0, codesDeleted: 0, error: '' };
   try {
     var byEmail = gymUidByEmail_(ss);
     var rows = readTable_(ss, GYM_SHEET);
-    var live = {};
-    var items = [];
+    var code = String((readGymSettings_(ss).settings['\u05e7\u05d5\u05d3 \u05db\u05e0\u05d9\u05e1\u05d4'] || '')).trim();
+    var live = {}, codeLive = {};
+    /* 🔴🔴 **שורה אחרונה לאדם, ולא שתי כתיבות.** בגיליון יכולות
+       לשבת שתי שורות לאותו אדם (מנוי שפג + חדש), והקוד הקודם
+       דחף את שתיהן — ונשען על כך ש-`fsWriteAll_` כותב לפי סדר
+       והאחרונה מנצחת. זה עבד למסמך אחד, אבל **עכשיו יש שניים**:
+       הסטטוס והקוד היו יכולים להיגזר משורות שונות, למשל סטטוס
+       "פג תוקף" ובכל זאת קוד — כלומר בדיוק הדליפה שהמסמך
+       הנפרד בא למנוע. ההכרעה עברה לכאן, לנקודה אחת, והכתיבה
+       היא אחת לאדם. */
+    var byUid = {}, order = [];
     rows.forEach(function (row) {
       var uid = byEmail[normalizeEmail_(String(row['\u05d0\u05d9\u05de\u05d9\u05d9\u05dc'] || ''))];
       /* אין uid = האדם מעולם לא התחבר — אין למי לכתוב, וזה תקין. */
       if (!uid) { out.skipped++; return; }
-      /* ⚠️ שתי שורות לאותו אדם (מנוי שפג + חדש): האחרונה
-         מנצחת, כמו ש-`gymFindRow_` מעדיףה שורה פתוחה. */
-      items.push({ id: uid, doc: gymStatusDoc_(row, uid) });
+      if (!byUid[uid]) order.push(uid);
+      byUid[uid] = row;
     });
+
+    var items = [], codeItems = [];
+    order.forEach(function (uid) {
+      var row = byUid[uid];
+      items.push({ id: uid, doc: gymStatusDoc_(row, uid) });
+      /* ⚠️ אין קוד בהגדרות ⇒ אין אוסף. הסחיפה למטה תנקה את
+         מה שנכתב בעבר, ולכן כיבוי הוא פעולה אחת בגיליון. */
+      if (!code) return;
+      var until = gymRowEntitled_(row);
+      if (until) codeItems.push({ id: uid, doc: gymCodeDoc_(uid, code, until) });
+    });
+
     fsWriteAll_(FS_GYM_STATUS, items, out, live);
     fsSweepOrphans_(FS_GYM_STATUS, live, out);
+
+    /* מונים נפרדים — אחרת "נכתבו 40" לא היה אומר כמה סטטוסים
+       וכמה קודים, ותקלה באחד מהם היתה מסתתרת בתוך השני. */
+    var cOut = { wrote: 0, deleted: 0, skipped: 0 };
+    fsWriteAll_(FS_GYM_CODE, codeItems, cOut, codeLive);
+    fsSweepOrphans_(FS_GYM_CODE, codeLive, cOut);
+    out.codes = cOut.wrote;
+    out.codesDeleted = cOut.deleted;
     out.ok = true;
   } catch (err) {
     out.error = String(err);
@@ -6330,7 +6416,8 @@ function handleGymStatusSync_(p) {
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var r = gymStatusSyncAll_(ss);
-    return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, skipped: r.skipped, error: r.error });
+    return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, skipped: r.skipped,
+                   codes: r.codes, codesDeleted: r.codesDeleted, error: r.error });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
