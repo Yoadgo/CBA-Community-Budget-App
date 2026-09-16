@@ -997,7 +997,35 @@ CBA.data = (function () {
     n.editedAt = fmtNowStamp();
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     year = year || getCurrentYear();
-    CBA.sheets.push("saveNotes", { year: year, content: content, editedBy: editedBy || "" }, cb);
+    CBA.sheets.push("saveNotes", { year: year, content: content, editedBy: editedBy || "" }, function (res) {
+      /* 🔴 השמירה מוסיפה שורה ל"יומן הערות" בשרת. מאז שהיומן
+         יורד לפי דרישה (16.9, פעולה 4) ולא עם כל רענון, צריך
+         לסמן אותו כלא-טעון — אחרת "יומן עריכות" היה מציג את
+         המצב מלפני העריכה עד רענון הדף. */
+      if (res && res.ok === true) CBA.mock._logsLoaded = false;
+      if (cb) cb(res);
+    });
+  }
+  /* ==========================================================================
+   *  שני היומנים לפי דרישה   (2026-09-16, פעולה 4)
+   * --------------------------------------------------------------------------
+   *  נקראת מהמסכים שבאמת מציגים את היומנים (בניית תקציב,
+   *  פנקס הערות). cb(changed) — `true` רק כשהגיעו נתונים חדשים,
+   *  כלומר רק אז צריך לצייר מחדש. ⚠️ **חובה לבדוק את הדגל הזה**
+   *  לפני ציור מחדש — ציור ללא תנאי מתוך רינדור הוא לולאה אין-סופית.
+   *  ⚠️ כישלון אינו נועל: הניסיון הבא ייצא בפעם הבאה שהמסך נפתח.
+   * ========================================================================== */
+  var logsInFlight = false;
+  function ensureBudgetLogs(cb) {
+    cb = cb || function () {};
+    if (CBA.mock._logsLoaded) return cb(false);
+    if (logsInFlight) return cb(false);
+    if (!(CBA.sheets && CBA.sheets.loadBudgetLogs && CBA.sheets.isConnected && CBA.sheets.isConnected())) return cb(false);
+    logsInFlight = true;
+    CBA.sheets.loadBudgetLogs(function (ok) {
+      logsInFlight = false;
+      cb(ok === true);
+    });
   }
   // יומן העריכות של הפנקס לשנה הנוכחית — כרונולוגי, החדש למעלה
   function getNotesLog() {
@@ -2581,6 +2609,7 @@ CBA.data = (function () {
     getNotes: getNotes,
     saveNotesToSheet: saveNotesToSheet,
     getNotesLog: getNotesLog,
+    ensureBudgetLogs: ensureBudgetLogs,
     statusMeta: statusMeta,
     statusNext: statusNext,
     statusList: statusList,

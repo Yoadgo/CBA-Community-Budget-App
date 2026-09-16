@@ -206,14 +206,15 @@ CBA.sheets = (function () {
      שבתוך buildYear (שרת שעוד לא פורסם). ר' ההערה שם. */
   var LAST_FLAT_GROUPS = null;
 
-  function transform(payload) {
-    var years = {};
-    LAST_FLAT_GROUPS = payload.groups || [];
-    (payload.years || []).forEach(function (y) {
-      years[y] = buildYear(y, payload.data[y], payload.settings,
-                           payload.notes, payload.data[y] !== undefined);
-    });
-    var updates = (payload.updates || []).map(function (r) {
+  /* ==========================================================================
+   *  שני היומנים — קוד המרה אחד   (2026-09-16, פעולה 4)
+   * --------------------------------------------------------------------------
+   *  היו בתוך `transform` בלבד. מעכשיו הם מגיעים גם מ-`loadBudgetLogs`
+   *  לפי דרישה — ושני קודי המרה מקבילים לאותן שורות היו נפרדים
+   *  בשקט בשינוי העמודות הראשון. נקודת גזירה אחת, כמו ב-`buildYear`.
+   * ========================================================================== */
+  function mapUpdates(rows) {
+    return (rows || []).map(function (r) {
       return {
         date: normDate(r["תאריך"]),
         year: String(r["שנה"] || "").trim(),
@@ -222,8 +223,9 @@ CBA.sheets = (function () {
         reason: String(r["סיבה"] || "")
       };
     });
-    // יומן עריכות פנקס ההערות (סעיף 1) — כרונולוגי, אותו רעיון כמו "updates" למעלה
-    var notesLog = (payload.notesLog || []).map(function (r) {
+  }
+  function mapNotesLog(rows) {
+    return (rows || []).map(function (r) {
       return {
         date: normDate(r["תאריך"]),
         time: String(r["שעה"] || "").trim(),
@@ -231,6 +233,17 @@ CBA.sheets = (function () {
         editedBy: String(r['נערך ע"י'] || "").trim()
       };
     });
+  }
+
+  function transform(payload) {
+    var years = {};
+    LAST_FLAT_GROUPS = payload.groups || [];
+    (payload.years || []).forEach(function (y) {
+      years[y] = buildYear(y, payload.data[y], payload.settings,
+                           payload.notes, payload.data[y] !== undefined);
+    });
+    var updates = mapUpdates(payload.updates);
+    var notesLog = mapNotesLog(payload.notesLog);
     return {
       years: years,
       yearList: (payload.years || []).slice(),
@@ -243,7 +256,13 @@ CBA.sheets = (function () {
             שנקרא בטעינה, כלומר בדיוק ההתנהגות של אתמול. */
       txFsOn: (typeof payload.txFsOn === "boolean") ? payload.txFsOn : null,
       budgetUpdates: updates,
-      notesLog: notesLog
+      notesLog: notesLog,
+      /* 🔴 האם המטען הזה בכלל נשא את היומנים (16.9, פעולה 4).
+         שרת חדש לא שולח אותם כלל, ואז אסור שרענון ברקע
+         ימחק את מה שנמשך לפי דרישה. שרת ישן שולח מערך (גם
+         ריק), ואז המטען הוא מקור האמת — בדיוק כמו אתמול.
+         ⚠️ `undefined` ולא "ריק": לתקציב בלי עדכונים יש יומן ריק. */
+      hasLogs: (payload.updates !== undefined || payload.notesLog !== undefined)
     };
   }
 
@@ -578,8 +597,14 @@ CBA.sheets = (function () {
     /* 🔴 שער הכתיבה של התנועות קורא מכאן (dataService:txWriteOn),
        כדי שהקריאה והכתיבה יתהפכו מאותו אות בדיוק. */
     CBA.mock._txFsOn = (store.txFsOn === true || store.txFsOn === false) ? store.txFsOn : null;
-    CBA.mock.budgetUpdates = store.budgetUpdates || [];
-    CBA.mock.notesLog = store.notesLog || [];
+    /* 🔴 ר' `hasLogs` ב-transform. שרת שלא שלח יומנים לא מוחק את
+       מה שכבר נמשך — אחרת כל רענון ברקע היה מרוקן את מסך
+       התכנון מהעדכונים שלו באמצע העבודה. */
+    if (store.hasLogs) {
+      CBA.mock.budgetUpdates = store.budgetUpdates || [];
+      CBA.mock.notesLog = store.notesLog || [];
+      CBA.mock._logsLoaded = true;
+    }
     return true;
   }
 
@@ -1447,6 +1472,28 @@ CBA.sheets = (function () {
    *
    *  cb(ok, err). כישלון אינו זורק — הקורא מחליט מה להציג.
    * ========================================================================== */
+  /* ==========================================================================
+   *  שני היומנים לפי דרישה   (2026-09-16, פעולה 4)
+   * --------------------------------------------------------------------------
+   *  "עדכוני תקציב" ו"יומן הערות" ירדו מהמטען הראשי — שני
+   *  מסכים צורכים אותם, והם גדלים לנצח. נמשכים פעם אחת לכל
+   *  טעינה, כשהמסך שמציג אותם נפתח.
+   *
+   *  cb(ok). כישלון אינו זורק — המסך פשוט מציג את מה שיש לו
+   *  וינסה שוב בפעם הבאה.
+   *  ⚠️ **המיפוי הוא אותן שתי הפונקציות שהמטען הראשי משתמש בהן.**
+   * ========================================================================== */
+  function loadBudgetLogs(cb) {
+    cb = cb || function () {};
+    get({ action: "budgetLogs" }, function (res) {
+      if (!res || res.ok !== true) return cb(false, (res && res.error) || "");
+      CBA.mock.budgetUpdates = mapUpdates(res.updates);
+      CBA.mock.notesLog = mapNotesLog(res.notesLog);
+      CBA.mock._logsLoaded = true;
+      cb(true);
+    });
+  }
+
   function yearLoaded(y) {
     var rec = CBA.mock && CBA.mock.years && CBA.mock.years[y];
     return !!(rec && rec._loaded !== false);
@@ -1744,5 +1791,5 @@ CBA.sheets = (function () {
 
   return { url: API_URL, load: load, refresh: refresh, refreshIfChanged: refreshIfChanged,
     applyPulse: applyPulse,
-    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, yearLoaded: yearLoaded, dropTxCache: dropTxCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
+    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, loadBudgetLogs: loadBudgetLogs, yearLoaded: yearLoaded, dropTxCache: dropTxCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
 })();

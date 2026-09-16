@@ -266,6 +266,10 @@ var GET_ACTION_PERMS = {
      התנועות של כל המשפחות בשום מסלול — DATA_MIN במטען הראשי היה מסונן
      והפעולה הזו הייתה עוקפת אותו. */
   budgetYear: PERM_BUDGET,
+  /* שני היומנים לפי דרישה (2026-09-16, פעולה 4).
+     PERM_BUDGET — בדיוק ההרשאה ששלטה עליהם במטען הראשי (`seesBudget`).
+     ⚠️ היומנים נושאים שם של עורך וטקסט חופשי — לא להוריד ל-null. */
+  budgetLogs: PERM_BUDGET,
   /* גשר הזהות ל-Firestore (2026-09-14, צעד 02ג).
      need=null בכוונה: **כל** תושב פעיל צריך רשומת חבר, לא רק מנהל — היא
      מה שיאפשר לו לקרוא את מה ששלו. ההגנה האמיתית אינה בהרשאה אלא בכך
@@ -503,6 +507,10 @@ function doGet(e) {
     /* שנת תקציב בודדת (2026-09-14). ר' handleBudgetYear_ להסבר המלא. */
     if (e && e.parameter && e.parameter.action === 'budgetYear') {
       return handleBudgetYear_(e.parameter);
+    }
+    /* שני היומנים לפי דרישה (2026-09-16, פעולה 4). ר' handleBudgetLogs_. */
+    if (e && e.parameter && e.parameter.action === 'budgetLogs') {
+      return handleBudgetLogs_(e.parameter);
     }
     /* גשר הזהות ל-Firestore (2026-09-14). ר' handleFirebaseLink_. */
     if (e && e.parameter && e.parameter.action === 'firebaseLink') {
@@ -772,12 +780,12 @@ function doGet(e) {
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
       // הלקוח החדשה מדברת עם השרת הישן; לא בשימוש יותר ע"י לקוח מעודכן.
       groups: seesBudget ? cached_('cba_groups_' + budgetStamp_(), function () { return readColumn_(ss, 'קבוצות'); }) : [],
-      updates: seesBudget ? cached_('cba_updates_' + budgetStamp_(), function () { return readTable_(ss, 'עדכוני תקציב'); }) : [],
-      // פנקס הערות כלליות (סעיף 1, 2026-08-09) — טאב "הערות" (שורה אחת לכל
-      // שנה) + טאב "יומן הערות" (כרונולוגי, מי ערך ומתי). שני הטאבים נוצרים
-      // אוטומטית ע"י saveNotes_ בשמירה הראשונה, כמו "עדכוני תקציב".
+      /* פנקס הערות כלליות (סעיף 1, 2026-08-09) — טאב "הערות", שורה אחת
+         לכל שנה. התוכן עצמו נשאר במטען: `buildYear` בלקוח מרכיב
+         ממנו את `year.notes`, והוא מוצג מיד כשנפתח מסך הפנקס.
+         שני **היומנים** — "עדכוני תקציב" ו"יומן הערות" — ירדו מכאן
+         (16.9, פעולה 4) ונמשכים לפי דרישה. ר' `handleBudgetLogs_`. */
       notes: seesBudget ? cached_('cba_notes_' + budgetStamp_(), function () { return readNotesMap_(ss); }) : {},
-      notesLog: seesBudget ? cached_('cba_noteslog_' + budgetStamp_(), function () { return readTable_(ss, 'יומן הערות'); }) : [],
       settings: publicSettings, data: {}
     };
     /* ====================================================================
@@ -917,6 +925,47 @@ function doGet(e) {
  *     משפחה; פעולה שהייתה פתוחה ל-need=null הייתה דלת אחורית שעוקפת אותו
  *     לגמרי. ההרשאה נאכפת גם בשער העליון (GET_ACTION_PERMS) וגם כאן.
  * ========================================================================== */
+/* ============================================================================
+ *  שני היומנים לפי דרישה   (2026-09-16, פעולה 4)
+ * ----------------------------------------------------------------------------
+ *  📊 **נמדד בייצור (16.9):** המטען הראשי הוא 18.7KB
+ *  ו-4,711 אלפיות, והוא מה שקובע מתי המסך **מתייצב**.
+ *  שני היומנים שבתוכו — "עדכוני תקציב" ו"יומן הערות" —
+ *  נצרכים בשני מסכים בלבד (בניית תקציב, פנקס הערות),
+ *  והם גדלים לנצח — שתיהם טבלאות append-only שאף פעם
+ *  לא נמחקות.
+ *
+ *  🔴 **ולמה הם לא עברו ל-Firestore.** החלטת יועד (16.9):
+ *  "יומן הערות" נושא עמודת `נערך ע"י` — שם של אדם —
+ *  ו"עדכוני תקציב" נושא `סיבה` בטקסט חופשי, שעלול
+ *  לנקוב בשם אדם. טקסט חופשי אינו ברשימת ההיתר כברירת
+ *  מחדל (ר' שיטת העבודה מ-14.9), ולכן הם נשארים בגיליון
+ *  ורק **מפסיקים לנסוע בכל נחיתה**.
+ *
+ *  ⚠️ **אותם מפתחות מטמון בדיוק** כמו שהיו במטען הראשי
+ *     (`cba_updates_` / `cba_noteslog_` + חותם התקציב). מפתח
+ *     שני היה אומר שהמטמון נבנה פעמיים ושהשניים עלולים
+ *     להיפרד זה מזה.
+ *  🔴 **וסדר הדיפלוי כאן הוא לקוח קודם.** השרת מפסיק
+ *     לשלוח משהו שהלקוח צריך, ולכן לקוח ישן מול שרת
+ *     חדש היה מציג יומן ריק בלי שום שגיאה. ר' נוהל הדיפלוי.
+ * ========================================================================== */
+function handleBudgetLogs_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_BUDGET);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var stamp = budgetStamp_();
+    return json_({
+      ok: true,
+      updates:  cached_('cba_updates_' + stamp,  function () { return readTable_(ss, 'עדכוני תקציב'); }),
+      notesLog: cached_('cba_noteslog_' + stamp, function () { return readTable_(ss, 'יומן הערות'); })
+    });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
 function handleBudgetYear_(p) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var gate = authorize_(ss, p, PERM_BUDGET);   // הגנה כפולה, כמו handleAppReports_

@@ -40,6 +40,17 @@ CBA.screens.planning = {
   title: "בניית תקציב",
 
   render(container) {
+    /* 🔴 **שני היומנים יורדים לפי דרישה** (16.9, פעולה 4) — המסך הזה
+       צורך את "עדכוני תקציב" בשלושה מקומות: קו הבסיס של כל
+       סעיף, תגית "עודכן", ומונה העדכונים ליד "סגור".
+       ⚠️ מצייר מחדש **רק** כשהגיעו נתונים חדשים, ורק אם המסך
+          עדיין על הדף — אחרת זו לולאה אין-סופית, או ציור לתוך
+          מסך שהמשתמש כבר עזב. */
+    if (CBA.data.ensureBudgetLogs) {
+      CBA.data.ensureBudgetLogs(function (changed) {
+        if (changed && container && container.isConnected) CBA.screens.planning.render(container);
+      });
+    }
     const years = CBA.data.getComparisonYears();
     if (planShowCompare && (!planCompareYear || years.indexOf(planCompareYear) === -1)) {
       planCompareYear = years[0] || null;

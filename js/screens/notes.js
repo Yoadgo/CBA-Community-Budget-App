@@ -67,12 +67,18 @@ CBA.notesPanel = (function () {
 
   /* חלון "יומן עריכות" — מי ערך את הפנקס ומתי, לשנה הנוכחית (כרונולוגי,
      החדש למעלה) — אותו רעיון בדיוק כמו planOpenUpdatesModal ב-planning.js. */
-  function openLog() {
+  /* שורות היומן — נקודה אחת, כדי שהציור הראשון והציור מחדש
+     אחרי שהיומן נמשך לא ייפרדו בשקט. */
+  function logRowsHTML() {
     var log = CBA.data.getNotesLog();
-    var rows = log.length ? log.map(function (u) {
+    return log.length ? log.map(function (u) {
       var when = CBA.esc(CBA.data.hebrewDate(u.date)) + (u.time ? " · " + CBA.esc(u.time) : "");
       return '<tr><td class="dt__date">' + when + '</td><td>' + (u.editedBy ? CBA.esc(u.editedBy) : "—") + '</td></tr>';
     }).join("") : '<tr><td colspan="2" style="color:var(--text-muted); padding:16px 4px;">אין עדיין עריכות רשומות לשנה הזו.</td></tr>';
+  }
+
+  function openLog() {
+    var rows = logRowsHTML();
 
     var overlay = document.createElement("div");
     overlay.id = "cba-notes-log";
@@ -92,6 +98,16 @@ CBA.notesPanel = (function () {
         </div>
       </div>`;
     document.body.appendChild(overlay);
+    /* 🔴 היומן יורד לפי דרישה (16.9, פעולה 4). פותחים מיד עם מה
+       שיש, ומחליפים את השורות כשהנתונים מגיעים — במקום להשאיר
+       את המשתמש מול מסך ריק בזמן הקריאה. */
+    if (CBA.data.ensureBudgetLogs) {
+      CBA.data.ensureBudgetLogs(function (changed) {
+        if (!changed) return;
+        var tbl = overlay.querySelector("table.dt");
+        if (tbl) tbl.innerHTML = logRowsHTML();
+      });
+    }
     function closeLog() {
       overlay.remove();
       document.removeEventListener("keydown", escLog);
