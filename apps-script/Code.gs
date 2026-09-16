@@ -13690,8 +13690,12 @@ function gardenReportsSyncAll_(ss) {
         /* דיווח בלי מזהה משפחה אינו שייך לאיש — ואי אפשר לאבטח אותו
            בכלל. מדולג ונספר, ולא נכתב "ליתר ביטחון". */
         if (!famId) { out.skipped++; continue; }
-        if (year && yCol !== undefined &&
-            String(rows[r][yCol] || '').trim() !== year) continue;
+        /* ⚠️ **תא ריק נחשב לשנה הנוכחית** (תוקן 16.9 באימות בייצור).
+           השוואה נוקשה הוציאה שורות שנכתבו לפני שהעמודה נוספה —
+           כלומר דיווחים חיים נעלמו מהתושב בלי שגיאה. שנה ישנה
+           ומפורשת כן מסוננת, וזו הכוונה המקורית. */
+        var ry = (yCol === undefined) ? '' : String(rows[r][yCol] || '').trim();
+        if (year && ry && ry !== year) continue;
         var o = gardenReportRow_(rows[r], rc, ctx.tasks, ctx.closeWhy, ctx.fbDays, ctx.now);
         items.push({ id: o.id, doc: gardenReportDoc_(o, famId) });
       }
@@ -13744,12 +13748,17 @@ function gardenTasksSyncAll_(ss) {
     if (sh && sh.getLastRow() > 1) {
       var c = gardenCols_(sh);
       var v = sh.getDataRange().getValues();
-      var year = gardenCurrentYear_(ss);
-      var yCol = c['שנת תקציב'];
       var refs = gardenReportRefs_(ss);
+      /* 🔴🔴 **אין כאן סינון לפי שנת תקציב, ובמכוון — זה היה באג.**
+         תחילה סיננתי לפי 'שנת תקציב' כמו בדיווחים, ובאימות בייצור
+         (16.9) התברר שזה מוריד **31 משימות מתוך 41**: שנת התקציב
+         התחלפה לתשפ"ז, והמשימות הפתוחות נושאות עדיין תשפ"ו או
+         תא ריק. כלומר המנהל היה מאבד את רוב תור העבודה שלו
+         בלי שום שגיאה — בדיוק "האפליקציה איבדה לי משימות".
+         🔑 **הרלוונטיות של משימה היא השבוע והסגירה שלה, לא
+            תווית שנת התקציב.** משימות חסומות ממילא בכמות
+            (עשרות), ולכן אין מה לחסוך כאן. */
       for (var i = 1; i < v.length; i++) {
-        if (year && yCol !== undefined &&
-            String(v[i][yCol] || '').trim() !== year) continue;
         var o = gardenTaskObj_(v[i], c);
         if (!o.id) { out.skipped++; continue; }
         var doc = gardenTaskDoc_(o, i);
