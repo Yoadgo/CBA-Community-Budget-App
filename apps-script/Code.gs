@@ -6348,6 +6348,20 @@ function gymCodeDoc_(uid, code, until) {
            schema: 1, updatedAt: new Date() };
 }
 
+/* 🔴🔴 **אותה בחירה בדיוק כמו `gymFindRow_`** — וזה לא ניואנס.
+   `handleGymMy_` מוצא את שורת המנוי דרך `gymFindRow_`, שמעדיפה את
+   השורה הראשונה בסטטוס **פתוח** ורק בהיעדרה נופלת לאחרונה. סנכרון
+   שהיה בוחר "האחרונה תמיד" היה מציג ב-Firestore מנוי אחר ממה
+   שה-Apps Script מציג לאותו אדם באותו רגע — למשל שורת מנוי שפג
+   שנכתבה מתחת לשורה החדשה והפעילה. מי שחידש היה רואה "פג תוקף"
+   ומאבד את הקוד, והמסך היה "מתקן את עצמו" רק כשהתשובה האיטית
+   מגיעה. **שני מקורות שמסכימים כמעט תמיד הם הגרוע מכול.** */
+function gymPickRow_(chosen, row) {
+  if (!chosen) return row;
+  if (GYM_OPEN_STATUSES.indexOf(String(chosen['\u05e1\u05d8\u05d8\u05d5\u05e1'] || '').trim()) !== -1) return chosen;
+  return row;
+}
+
 /** האם השורה הזאת מזכה בקוד — **אותה בדיקה בדיוק** כמו ב-`handleGymMy_`. */
 function gymRowEntitled_(row) {
   if (String(row['\u05e1\u05d8\u05d8\u05d5\u05e1'] || '').trim() !== GYM_ST_ACTIVE) return null;
@@ -6365,21 +6379,23 @@ function gymStatusSyncAll_(ss) {
     var rows = readTable_(ss, GYM_SHEET);
     var code = String((readGymSettings_(ss).settings['\u05e7\u05d5\u05d3 \u05db\u05e0\u05d9\u05e1\u05d4'] || '')).trim();
     var live = {}, codeLive = {};
-    /* 🔴🔴 **שורה אחרונה לאדם, ולא שתי כתיבות.** בגיליון יכולות
-       לשבת שתי שורות לאותו אדם (מנוי שפג + חדש), והקוד הקודם
-       דחף את שתיהן — ונשען על כך ש-`fsWriteAll_` כותב לפי סדר
-       והאחרונה מנצחת. זה עבד למסמך אחד, אבל **עכשיו יש שניים**:
-       הסטטוס והקוד היו יכולים להיגזר משורות שונות, למשל סטטוס
-       "פג תוקף" ובכל זאת קוד — כלומר בדיוק הדליפה שהמסמך
-       הנפרד בא למנוע. ההכרעה עברה לכאן, לנקודה אחת, והכתיבה
-       היא אחת לאדם. */
+    /* 🔴🔴 **שורה אחת לאדם, ובחירה אחת.** בגיליון יכולות לשבת שתי
+       שורות לאותו אדם (מנוי שפג + חדש), והקוד הקודם דחף את שתיהן
+       ונשען על כך ש-`fsWriteAll_` כותב לפי סדר והאחרונה מנצחת.
+       שתי בעיות בזה, וכל אחת מספיקה:
+         1. **עכשיו יש שני אוספים.** הסטטוס והקוד היו יכולים
+            להיגזר משורות שונות — למשל "פג תוקף" ובכל זאת קוד,
+            כלומר בדיוק הדליפה שהמסמך הנפרד בא למנוע.
+         2. **"האחרונה מנצחת" גם לא היה נכון מלכתחילה.** `gymFindRow_`,
+            שדרכה `handleGymMy_` מוצא את המנוי, מעדיפה את השורה
+            הפתוחה. ר' `gymPickRow_`. */
     var byUid = {}, order = [];
     rows.forEach(function (row) {
       var uid = byEmail[normalizeEmail_(String(row['\u05d0\u05d9\u05de\u05d9\u05d9\u05dc'] || ''))];
       /* אין uid = האדם מעולם לא התחבר — אין למי לכתוב, וזה תקין. */
       if (!uid) { out.skipped++; return; }
       if (!byUid[uid]) order.push(uid);
-      byUid[uid] = row;
+      byUid[uid] = gymPickRow_(byUid[uid], row);
     });
 
     var items = [], codeItems = [];

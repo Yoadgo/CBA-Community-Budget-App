@@ -47,7 +47,10 @@ vm.runInContext(
   grab(/function gymToDate_\(v\) \{[\s\S]*?\n\}/) + '\n' +
   grab(/function gymCodeExpiry_\(until\) \{[\s\S]*?\n\}/) + '\n' +
   grab(/function gymCodeDoc_\(uid, code, until\) \{[\s\S]*?\n\}/) + '\n' +
-  grab(/function gymRowEntitled_\(row\) \{[\s\S]*?\n\}/), box);
+  grab(/function gymRowEntitled_\(row\) \{[\s\S]*?\n\}/) + '\n' +
+  "var GYM_OPEN_STATUSES = ['ממתין להצהרה','ממתין לאישור רופא','ממתין לאישור'," +
+  "'ממתין לתשלום','ממתין לאימות','פעיל','מוקפא'];\n" +
+  grab(/function gymPickRow_\(chosen, row\) \{[\s\S]*?\n\}/), box);
 
 const iso = d => d.getFullYear() + '-' +
   String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -105,6 +108,27 @@ ok('🔴 והשרת ב-handleGymMy_ בודק בדיוק את אותם שניים
 /* ================================================================= */
 section('3. 🔴🔴 שורה אחת לאדם — הסטטוס והקוד לא יכולים להיגזר משורות שונות');
 ok('ההכרעה עברה למפה לפי uid', /var byUid = \{\}, order = \[\];/.test(GS));
+/* 🔴🔴 והבחירה עצמה חייבת להיות זהה ל-`gymFindRow_`, שדרכה
+   `handleGymMy_` מוצא את המנוי. סנכרון שבוחר שורה אחרת מציג
+   ב-Firestore מנוי אחר ממה שהשרת מציג — הגרוע מכול, כי הם
+   מסכימים כמעט תמיד. */
+(function () {
+  const active  = row('פעיל', 30);
+  const expired = row('פג תוקף', -100);
+  const pick = rows => rows.reduce((c, r) => box.gymPickRow_(c, r), null);
+  ok('🔴 שורה פתוחה מנצחת גם כשהיא ראשונה', pick([active, expired]) === active);
+  ok('🔴 וגם כשהיא אחרונה', pick([expired, active]) === active);
+  ok('⚠️ שתי סגורות ⇒ האחרונה, כמו ה-fallback של gymFindRow_',
+     pick([row('נדחה', -200), expired]) === expired);
+  ok('⚠️ שתי פתוחות ⇒ הראשונה, כמו gymFindRow_',
+     pick([active, row('ממתין לתשלום', 5)]) === active);
+  ok('🔴 ולכן "פג תוקף + מנוי חדש פעיל" נותן סטטוס פעיל **וגם** קוד',
+     pick([expired, active])['סטטוס'] === 'פעיל' && !!box.gymRowEntitled_(pick([expired, active])));
+})();
+ok('⚠️ והבחירה היא נקודה אחת שקוראת ל-gymPickRow_',
+   /byUid\[uid\] = gymPickRow_\(byUid\[uid\], row\);/.test(GS) &&
+   (GS.match(/gymPickRow_\(/g) || []).length === 2,
+   String((GS.match(/gymPickRow_\(/g) || []).length));
 ok('🔴 והכתיבה נגזרת ממנה, לא מהמעבר על השורות',
    /order\.forEach\(function \(uid\) \{\s*\n\s*var row = byUid\[uid\];[\s\S]{0,400}gymStatusDoc_\(row, uid\)[\s\S]{0,400}gymRowEntitled_\(row\)/.test(GS));
 ok('⚠️ ולכן יש כתיבה אחת לאדם, לא שתיים', /if \(!byUid\[uid\]\) order\.push\(uid\);/.test(GS));
