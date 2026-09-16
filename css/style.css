@@ -115,7 +115,7 @@ body {
 
 /* כפתור משתמש — ריבוע מעוגל באופי הטאבים; חלונית בסגנון "מגש" iOS */
 .user-btn {
-  width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border);
+  width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
   background: var(--surface); cursor: pointer; display: grid; place-items: center;
   font-size: 14px; line-height: 1; flex: none;
   transition: border-color var(--t), background var(--t), box-shadow var(--t);
@@ -272,8 +272,10 @@ body.is-gated { overflow: hidden; }
    יותר עוגן ב-DOM (renderYearSwitch ב-app.js כבר לא מצייר אותם). */
 .year-switch { display: flex; align-items: center; }
 .year-switch__chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 32px; box-sizing: border-box;
   font-size: 12px; font-weight: 600; color: var(--text-soft);
-  background: var(--hover); border-radius: 20px; padding: 4px 12px; white-space: nowrap;
+  background: var(--hover); border-radius: 999px; padding: 0 14px; white-space: nowrap;
 }
 
 /* עוגן חיווי "שומר…/נשמר ✓" בכותרת — ר' .save-indicator ב-loading.css.

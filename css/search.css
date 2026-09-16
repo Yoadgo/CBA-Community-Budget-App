@@ -6,7 +6,7 @@
 
 /* --- הכפתור בכותרת --- */
 .search-btn {
-  width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border);
+  width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
   background: var(--surface); cursor: pointer; display: grid; place-items: center;
   color: var(--text-soft); flex: none;
   transition: border-color var(--t), background var(--t), color var(--t);
