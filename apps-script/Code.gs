@@ -356,7 +356,11 @@ function permissionsFor_(email) {
     found: true, active: active, perms: perms,
     isSuper: perms.indexOf(PERM_SUPER) !== -1,
     isExternal: !!r.isExternal,
-    familyId: r.familyId, family: r.family, house: r.house, firstName: r.firstName
+    familyId: r.familyId, family: r.family, house: r.house, firstName: r.firstName,
+    /* 🔴 מספר השורה נוסע יחד עם ההרשאות (16.9, פעולה 2) — כך פונקציה
+       שצריכה תא בודד מהשורה של המשתמש **לא קוראת שוב את כל טאב
+       התושבים**. `tourSeenFor_` עשתה בדיוק את זה, ר' שם. */
+    rowIndex: r.rowIndex
   };
   if (memoKey) PERMS_MEMO_[memoKey] = out;
   return out;
@@ -1690,17 +1694,57 @@ function handleClubMonth_(p) {
   }
 }
 
+/* ============================================================================
+ *  חלון היומן — הגדרה אחת, קריאה אחת לבקשה   (2026-09-16, פעולה 1)
+ * ----------------------------------------------------------------------------
+ *  📊 **נמדד בייצור (16.9, אחרי פריסה 131):** `homeExtras` עולה 6,486
+ *  אלפיות, מהן ~1.5 שניות לכל קריאה ליומן Google. הבקשה הזאת קראה את
+ *  אותו יומן **פעמיים**: `handleMyClubReservations_` בשביל השריון הקרוב
+ *  של התושב, ו-`clubPendingCount_` בשביל תגית הממתינים.
+ *
+ *  🔴 **קריאה אחת, שתי גזירות.** הקריאה הרחבה (7 ימים אחורה) היא
+ *  **מכילה** את הצרה (יום אחד אחורה), ולכן אפשר לקרוא פעם אחת ולצמצם
+ *  בזיכרון. `clubClipEvents_` משחזרת בדיוק את מה ש-`getEvents` היה
+ *  מחזיר לחלון הקצר: אירוע נכלל אם הוא **חופף** לחלון — כלומר מסתיים
+ *  אחריו — ולא אם הוא מתחיל בתוכו. אירוע שנמשך יומיים ומסתיים היום
+ *  נכלל בשתי הצורות, בדיוק כמו היום.
+ *
+ *  ⚠️ **החלונות עצמם לא השתנו, ואסור לשנות אותם כדי "להאיץ".**
+ *     שריון ממתין מלפני שלושה ימים עדיין דורש טיפול; צמצום החלון היה
+ *     משנה את המשמעות של התגית ולא רק את המהירות.
+ *  ⚠️ **מי שקורא ישירות (doGet) ממשיך לקרוא בעצמו.** הפרמטר
+ *     `evs` הוא אופציונלי — בלעדיו כל פונקציה מתנהגת בדיוק כמו קודם,
+ *     ולכן אין כאן תלות בסדר הדיפלוי ואין נתיב שנשבר אם מישהו
+ *     יקרא לה ממקום חדש.
+ * ========================================================================== */
+var CLUB_BACK_DAYS_ALL  = 7;    // ספירת הממתינים ורשימת הניהול
+var CLUB_BACK_DAYS_MINE = 1;    // הרשימה של התושב עצמו
+var CLUB_FWD_DAYS       = 180;
+
+function clubWindowEvents_(backDays) {
+  var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
+  if (!cal) return null;
+  return cal.getEvents(new Date(Date.now() - backDays * 24 * 3600 * 1000),
+                       new Date(Date.now() + CLUB_FWD_DAYS * 24 * 3600 * 1000));
+}
+
+function clubClipEvents_(evs, backDays) {
+  var from = Date.now() - backDays * 24 * 3600 * 1000;
+  return evs.filter(function (ev) { return ev.getEndTime().getTime() > from; });
+}
+
 /* רשימת השריונים העתידיים (וקרוב-עבר, יום אחד אחורה) של התושב המחובר — לפי
  * המייל/שם המשפחה שסופקו, מוצלב מול התגיות שנשמרו על האירוע ביצירה. */
-function handleMyClubReservations_(p) {
+function handleMyClubReservations_(p, evs) {
   try {
     var who = clubIdentity_(p);
     if (!who.email && !who.keys.length) return json_({ ok: false, error: 'חסרים פרטי משתמש' });
-    var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
-    if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
-    var from = new Date(Date.now() - 24 * 3600 * 1000);
-    var to = new Date(Date.now() + 180 * 24 * 3600 * 1000);
-    var mine = cal.getEvents(from, to).filter(function (ev) {
+    /* 🔴 אם המטען הראשי כבר קרא את היומן — נגזרים ממנו, בלי קריאה
+       שנייה. ר' `clubWindowEvents_` למעלה. */
+    var pool = evs ? clubClipEvents_(evs, CLUB_BACK_DAYS_MINE)
+                   : clubWindowEvents_(CLUB_BACK_DAYS_MINE);
+    if (!pool) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
+    var mine = pool.filter(function (ev) {
       return who.matches(ev.getTag('email'), ev.getTag('family'));
     }).map(function (ev) {
       return {
@@ -1764,14 +1808,12 @@ function clubStatusOf_(ev) {
    הרשאת מועדון רק כדי להיספר.
    ⚠️ אותו חלון זמן כמו ברשימה המלאה: שריון ממתין מלפני שלושה ימים
       עדיין דורש טיפול, ולכן צמצום החלון היה משנה את המשמעות. */
-function clubPendingCount_() {
+function clubPendingCount_(evs) {
   try {
-    var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
-    if (!cal) return 0;
-    var evs = cal.getEvents(new Date(Date.now() - 7 * 24 * 3600 * 1000),
-                            new Date(Date.now() + 180 * 24 * 3600 * 1000));
+    var pool = evs || clubWindowEvents_(CLUB_BACK_DAYS_ALL);
+    if (!pool) return 0;
     var n = 0;
-    for (var i = 0; i < evs.length; i++) if (clubStatusOf_(evs[i]) === 'pending') n++;
+    for (var i = 0; i < pool.length; i++) if (clubStatusOf_(pool[i]) === 'pending') n++;
     return n;
   } catch (e) { return 0; }
 }
@@ -1781,11 +1823,9 @@ function handleClubList_(p) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var gate = authorize_(ss, p, PERM_CLUB);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
-    var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
-    if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
-    var from = new Date(Date.now() - 7 * 24 * 3600 * 1000);
-    var to = new Date(Date.now() + 180 * 24 * 3600 * 1000);
-    var list = cal.getEvents(from, to).map(function (ev) {
+    var pool = clubWindowEvents_(CLUB_BACK_DAYS_ALL);
+    if (!pool) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
+    var list = pool.map(function (ev) {
       return {
         id: ev.getId(),
         start: ev.getStartTime().toISOString(),
@@ -8378,13 +8418,52 @@ function ensureTourSeenCol_(ss) {
   return lastCol + 1;
 }
 
-function tourSeenFor_(ss, email) {
+/* ============================================================================
+ *  למה `tour` עלתה 3.4 שניות   (2026-09-16, פעולה 2)
+ * ----------------------------------------------------------------------------
+ *  📊 **נמדד בייצור (16.9, פריסה 131):** `tour` מחזירה 2.4KB
+ *  ולוקחת 3,384 אלפיות — כלומר **1.4 שניות מעל רצפת Apps Script**.
+ *  נבדק בקוד ולא הונח: היא עשתה **ארבע** נסיעות לגיליון:
+ *
+ *    1. `readTable_` על טאב הסיור — 7 שורות שזהות לכל המשתמשים.
+ *    2. `ensureTourSeenCol_` — שורת הכותרות של טאב התושבים (נשארת — ר' למטה).
+ *    3. `lookupResident_` בתוך `tourSeenFor_` — **קריאה מלאה שנייה
+ *       של כל טאב התושבים**, אחרי ש-`authorize_` כבר קרא אותו.
+ *    4. `getValue` על תא בודד.
+ *
+ *  🔴 **הראשונה והשלישית מיותרות לגמרי.** צעדי הסיור נערכים
+ *  בגיליון פעם בכמה שבועות ולכן נכנסים ל-`cached_` (90 שניות, אותו
+ *  מנגנון כמו התקציב) — עריכה בגיליון מופיעה בתוך דקה וחצי, בלי
+ *  שום פעולה. ומספר השורה כבר ידוע מ-`permissionsFor_`, שקרא את
+ *  אותו טאב בדיוק בתחילת הבקשה.
+ *
+ *  ⚠️ **הפילטר לפי קהל נשאר בשרת ולא עבר ללקוח.** מה שמתמטמן
+ *     הוא הטבלה הגולמית; הסינון רץ אחריה, לכל משתמש בנפרד. צעד
+ *     שמיועד למנהלים לא יוצא מהשרת למי שאינו מנהל, כמו קודם.
+ *  ⚠️ **`rowIndex` אופציונלי.** בלעדיו הפונקציה מתנהגת בדיוק
+ *     כמו קודם — ולכן שום נתיב קיים לא נשבר.
+ * ========================================================================== */
+/* ⚠️ **מספר העמודה במכוון לא ממוטמן.** הוא נקרא בכל פעם
+   משורת הכותרות (נסיעה אחת, זולה). מטמון על מיקום עמודה הוא
+   בדיוק המלכודת שהפרויקט הזה כבר נפל בה: עמודה שנוספה לטאב שכבר
+   בייצור הייתה מזיזה את המספר, והקוד היה קורא תא אחר לגמרי — בלי
+   שום שגיאה, רק מספר לא נכון. שתי הנסיעות היקרות ירדו, וזה מספיק. */
+function tourRowsCached_(ss) {
+  return cached_('cba_tour_rows', function () { return readTable_(ss, TOUR_SHEET); });
+}
+
+function tourSeenFor_(ss, email, rowIndex) {
   var col = ensureTourSeenCol_(ss);
   if (col === -1) return 0;
-  var r = lookupResident_(email);
-  if (!r.found) return 0;
+  var row = parseInt(rowIndex, 10) || 0;
+  if (!row) {
+    var r = lookupResident_(email);
+    if (!r.found) return 0;
+    row = r.rowIndex;
+  }
   var sh = ss.getSheetByName('תושבים');
-  var v = sh.getRange(r.rowIndex, col).getValue();
+  if (!sh) return 0;
+  var v = sh.getRange(row, col).getValue();
   var n = parseInt(v, 10);
   return isNaN(n) ? 0 : n;
 }
@@ -8476,8 +8555,13 @@ function handleHomeExtras_(p) {
     };
 
     var out = { ok: true, homeExtras: true };
+    /* 🔴 **קריאה אחת מהיומן לשני הצרכנים** (16.9, פעולה 1) — ר'
+       `clubWindowEvents_`. נכשלה? `null`, וכל אחד מהם קורא בעצמו
+       בדיוק כמו קודם. */
+    var clubEvents = null;
+    try { clubEvents = clubWindowEvents_(CLUB_BACK_DAYS_ALL); } catch (e) { clubEvents = null; }
     out.tour         = sub(handleTour_);                  // כרטיס "יש משהו חדש"
-    out.reservations = sub(handleMyClubReservations_);     // השריון הקרוב
+    out.reservations = sub(function (pp) { return handleMyClubReservations_(pp, clubEvents); });
     /* 🔴 **מספר, לא שורות** — ר' `countStatus_` למעלה. שלוש התשובות
        האלה נצרכו בלקוח כספירה בלבד, ועלו יחד כשלוש שניות של קריאת
        גיליונות **ו-9KB של שורות על החוט**, מהן שורות מכון עם ת.ז.
@@ -8490,7 +8574,7 @@ function handleHomeExtras_(p) {
     if (has(PERM_GYM))  { out.gym = { ok: true, pending: countStatus_(ss, GYM_SHEET, '\u05e1\u05d8\u05d8\u05d5\u05e1', GYM_ST_VERIFY) }; }
     /* 🔴 מספר, לא רשימה — ר' `clubPendingCount_`. הרשימה המלאה
        נשלחת רק למסך "שריון מועדון — ניהול", שבאמת מציג אותה. */
-    if (has(PERM_CLUB)) { out.club = { ok: true, pending: clubPendingCount_() }; }
+    if (has(PERM_CLUB)) { out.club = { ok: true, pending: clubPendingCount_(clubEvents) }; }
     /* ספירת משימות הגינון הממתינות (2026-09-15, צעד 07).
        📊 נמדד בייצור: `gardenTasks` לבדה עולה 3.6–5.2 שניות בעלייה,
        ועמוד הבית משתמש ממנה ב**מספר אחד** — `rows.length`. הקריאה הזאת
@@ -10016,7 +10100,9 @@ function handleTour_(p) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     ensureTourSheet_(ss);
     var isAdmin = gate.perm.isSuper || (gate.perm.perms && gate.perm.perms.length > 0);
-    var rows = readTable_(ss, TOUR_SHEET).filter(function (r) {
+    /* 🔴 הטבלה הגולמית ממוטמנת; הסינון לפי קהל רץ אחריה, לכל
+       משתמש בנפרד. ר' הבלוק מעל `tourSeenFor_`. */
+    var rows = tourRowsCached_(ss).filter(function (r) {
       if (String(r['פעיל'] || '').trim() === 'לא') return false;
       var aud = String(r['קהל'] || 'כולם').trim();
       if (aud === 'מנהלים' && !isAdmin) return false;
@@ -10035,7 +10121,7 @@ function handleTour_(p) {
       if (va !== vb) return va - vb;
       return (parseInt(a['סדר'], 10) || 0) - (parseInt(b['סדר'], 10) || 0);
     });
-    return json_({ ok: true, steps: rows, seen: tourSeenFor_(ss, gate.email) });
+    return json_({ ok: true, steps: rows, seen: tourSeenFor_(ss, gate.email, gate.perm && gate.perm.rowIndex) });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }

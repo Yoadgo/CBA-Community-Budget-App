@@ -131,9 +131,9 @@ ok('⚠️ ושתי הצורות מגיעות לאותו מספר על אותם 
 
 section('4. 🔴 שריון המועדון — 187 ימים של יומן בשביל מספר אחד');
 const APP = R('js/app.js');
-ok('יש מונה ייעודי', /function clubPendingCount_\(\)/.test(GS));
+ok('יש מונה ייעודי', /function clubPendingCount_\(evs\)/.test(GS));
 ok('🔴 ו-homeExtras מחזיר ממנו מספר, לא רשימה',
-   /out\.club = \{ ok: true, pending: clubPendingCount_\(\) \}/.test(GS) &&
+   /out\.club = \{ ok: true, pending: clubPendingCount_\(clubEvents\) \}/.test(GS) &&
    !/out\.club = sub\(handleClubList_\)/.test(GS));
 /* 🔴🔴 נקודת גזירה אחת: אירוע בלי תגית = מאושר. שתי הגדרות מקבילות
    הן בדיוק "המספר בתגית לא מסכים עם המסך". */
@@ -142,8 +142,11 @@ ok('🔴🔴 והסטטוס נגזר בנקודה אחת', /function clubStatusO
    String((GS.match(/clubStatusOf_\(/g) || []).length));
 ok('⚠️ והרשימה המלאה משתמשת באותה פונקציה', /status: clubStatusOf_\(ev\)/.test(GS));
 ok("⚠️ ואירוע בלי תגית נחשב מאושר, כמו קודם", /ev\.getTag\('status'\) \|\| 'approved'/.test(GS));
+/* ⚠️ החלון עבר לקבועים (16.9, פעולה 1) — המשמעות זהה,
+   והבדיקה המלאה שלה ב-tools/test-club-one-read.js */
 ok('⚠️ ואותו חלון זמן כמו ברשימה המלאה — ממתין מלפני יומיים עדיין נספר',
-   /clubPendingCount_[\s\S]{0,400}7 \* 24 \* 3600 \* 1000[\s\S]{0,120}180 \* 24 \* 3600 \* 1000/.test(GS));
+   /var CLUB_BACK_DAYS_ALL\s*=\s*7;/.test(GS) && /var CLUB_FWD_DAYS\s*=\s*180;/.test(GS) &&
+   /clubPendingCount_\(evs\)[\s\S]{0,200}clubWindowEvents_\(CLUB_BACK_DAYS_ALL\)/.test(GS));
 ok('🔴 והרשימה המלאה נשארת למסך הניהול שבאמת מציג אותה',
    /function handleClubList_\(p\)/.test(GS) && /reservations: list/.test(GS));
 
