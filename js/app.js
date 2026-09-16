@@ -1861,44 +1861,32 @@
      שכבר קיים ב-service-worker.js), ומרענן. גם מנקה את מטמון הנתונים
      המקומי (cba_data_v2) כדי שהרענון יביא גם תוכן טרי, לא רק קוד טרי. */
   function checkForAppUpdate() {
-    if (!("serviceWorker" in navigator)) {
-      CBA.ui.toast("בודק עדכון…");
-      if (CBA.sheets.clearCache) CBA.sheets.clearCache();
-      location.reload();
-      return;
-    }
-    CBA.ui.toast("בודק עדכון גרסה…");
-    navigator.serviceWorker.getRegistration().then(function (reg) {
-      if (!reg) {
-        if (CBA.sheets.clearCache) CBA.sheets.clearCache();
-        location.reload();
-        return;
-      }
-      var reloaded = false;
-      function doReload() {
-        if (reloaded) return;
-        reloaded = true;
-        if (CBA.sheets.clearCache) CBA.sheets.clearCache();
-        CBA.ui.toast("מעדכן…");
-        location.reload();
-      }
-      navigator.serviceWorker.addEventListener("controllerchange", doReload);
-      reg.update().then(function () {
-        if (reg.waiting) {
-          reg.waiting.postMessage({ type: "SKIP_WAITING" });
-        } else if (!reg.installing) {
-          // אין גרסה חדשה ממתינה — כבר מעודכן. עדיין מרעננים כדי לוודא
-          // שגם הנתונים (לא רק הקוד) טריים.
-          CBA.ui.toast("האפליקציה כבר מעודכנת");
-          setTimeout(doReload, 600);
-        }
-      }).catch(function () { setTimeout(doReload, 300); });
-      // רשת איטית/שרת ישן שלא עונה — לא משאירים את המשתמש תקוע על "בודק".
-      setTimeout(doReload, 5000);
-    }).catch(function () {
-      if (CBA.sheets.clearCache) CBA.sheets.clearCache();
-      location.reload();
-    });
+    /* 🔴 גרסה שנייה (16.9.2026) — הראשונה נשענה על reg.update(), ונבדקה
+       חיה בייצור: **לא עובדת על GitHub Pages**. הסיבה: GH Pages מגיש את
+       service-worker.js עם Cache-Control: max-age=600 קבוע (אי אפשר
+       לשנות בלי שרת משלנו), ו-reg.update() לפי הספרייה התקנית של
+       הדפדפן רשאי להסתפק בעותק הזה מהמטמון בתוך חלון עשר הדקות — כך
+       שהוא "בודק" ותמיד עונה "אין חדש", גם כשיש. אומת ישירות: fetch
+       ידני עם cache:'no-store' + פרמטר אקראי כן מביא את הקובץ העדכני,
+       אבל reg.update() לא.
+       הפתרון האמין: לא "לבדוק אם יש עדכון" — פשוט לבטל את כל הרישום
+       (unregister) ולרענן. אחרי ביטול, אין יותר service worker שמיירט
+       בקשות; הרענון הבא הוא בקשת רשת רגילה לגמרי (לא כפופה לבאג
+       העדכון), הדפדפן מביא index.html/app.js טריים ישירות מהשרת, ורק
+       *אז* נרשם ה-service worker החדש מחדש מאפס. פחות "אלגנטי" מ-
+       SKIP_WAITING, אבל זה היחיד שבאמת נבדק ועבד. */
+    CBA.ui.toast("מעדכן…");
+    if (CBA.sheets.clearCache) CBA.sheets.clearCache();
+    if (!("serviceWorker" in navigator)) { location.reload(); return; }
+    var reloaded = false;
+    function doReload() { if (reloaded) return; reloaded = true; location.reload(); }
+    navigator.serviceWorker.getRegistrations().then(function (regs) {
+      if (!regs.length) { doReload(); return; }
+      Promise.all(regs.map(function (r) { return r.unregister().catch(function () {}); }))
+        .then(doReload).catch(doReload);
+    }).catch(doReload);
+    // רשת איטית שלא עונה — לא משאירים את המשתמש תקוע על "מעדכן".
+    setTimeout(doReload, 5000);
   }
 
   /* --- מתג השנה --- */
