@@ -68,10 +68,18 @@ ok('transform קורא לה', /years\[y\] = buildYear\(y, payload\.data\[y\]/.te
    היא שיש **נקודת הרכבה אחת** — `applyYearData` — וששניהם
    עוברים דרכה. שתי קריאות נפרדות ל-buildYear = שני מסלולים. */
 ok('⚠️ ו-loadYear קורא לאותה פונקציה', /var built = buildYear\(y, data,/.test(SRC));
-ok('🔴 ויש נקודת הרכבה אחת בלבד',
-   /* רק קריאות (`= buildYear(`), לא ההגדרה */
-   (SRC.match(/= buildYear\(y, /g) || []).length === 2,
+/* 🔴 **שלושה קוראים מצעד 11**: המטען המלא, שנה לפי דרישה,
+   והטעינה הקרה מ-Firestore. הדרישה מעולם לא היתה "שני
+   קוראים" אלא **פונקצית המרה אחת** — שני מיפויים מקבילים
+   הם הסכנה, לא קריאה נוספת לאותה פונקציה. הסעיף הבא
+   הוא שאוכף את זה בפועל. */
+ok('🔴 וכל הקוראים עוברים באותה buildYear',
+   (SRC.match(/= buildYear\(y, /g) || []).length === 3,
    String((SRC.match(/= buildYear\(y, /g) || []).length));
+ok('🔴🔴 ואין שום מיפוי שני — toTx/toCategory נקראים רק בתוכה',
+   (SRC.match(/\.map\(toTx\)|\.map\(function \(r\) \{ return toTx\(/g) || []).length <= 1 &&
+   (SRC.match(/toCategory\(/g) || []).length === 2,
+   'toCategory=' + String((SRC.match(/toCategory\(/g) || []).length));
 ok('🔴 ושני המסלולים עוברים דרכה',
    /function finish\(res\)[\s\S]{0,200}applyYearData\(res\.data, res\.rev\)/.test(SRC) &&
    (SRC.match(/applyYearData\(/g) || []).length === 2);

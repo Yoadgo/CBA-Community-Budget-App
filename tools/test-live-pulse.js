@@ -87,7 +87,7 @@ ok('⚠️ שגר ושכח — כשל בכתיבה אינו מפיל את הפע
 ok('🔴 ומאחורי דגל שאפשר לכבות בלי דיפלוי', /if \(pulseUseFirestore_\(\)\) \{/.test(GS));
 ok('⚠️ והדגל נקרא במטמון קצר (bumpRev_ רץ בכל כתיבה)',
    /function pulseUseFirestore_\(\)[\s\S]{0,900}c\.put\('cba_flag_pulse'/.test(GS));
-ok('pulseToFirestore ברשימת הדגלים הסגורה', /'pulseToFirestore'\]/.test(GS));
+ok('pulseToFirestore ברשימת הדגלים הסגורה', /'pulseToFirestore',/.test(GS));
 
 section('2. הלקוח — מאזין');
 ok('watchDoc קיים ומיוצא', /function watchDoc\(collection, id, cb\)/.test(FB) && /watchDoc: watchDoc,/.test(FB));

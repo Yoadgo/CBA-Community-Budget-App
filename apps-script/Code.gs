@@ -10,6 +10,13 @@
  *       (Execute as: Me · Who has access: Anyone — הכתובת נשארת אותו דבר.)
  */
 
+/* 🔴 מספר הגרסה של השרת — **מחרוזת אחת בלבד**. הלקוח קורא ממנה
+   (`CBA.mock._serverVersion`) כדי לדעת אם ה-Apps Script פורסם, והיא
+   נשלחת גם במטען הראשי וגם במסמך הפתיחה `appConfig/boot`. עד צעד 11
+   היא הופיעה פעמיים כטקסט — שתי גרסאות שיכולות להיפרד זו מזו,
+   ואז מסך שנטען קר היה מדווח גרסה אחרת ממסך שנטען חם. */
+var APP_VERSION = 'v43-charge-photos';
+
 // מיפוי מפתחות פנימיים (מהאפליקציה) -> עברית (בגיליון)
 var STATUS_HE = { submitted: 'הוגשה קבלה', review: 'בבדיקה', ready: 'הועבר להנה"ח', paid: 'שולם', rejected: 'נדחה' };
 var TYPE_HE   = { refund: 'החזר לדייר', supplier: 'תשלום לספק', general: 'הוצאה כללית' };
@@ -247,6 +254,8 @@ var GET_ACTION_PERMS = {
   servicesSync: PERM_SUPER,
   /* צעד 10ב-1 — אותה סיבה: פעולת תשתית שדורסת אוסף שלם. */
   gymStatusSync: PERM_SUPER,
+  /* צעד 11 — מסמך הפתיחה. פעולת תשתית. */
+  bootSync: PERM_SUPER,
   /* דגלי זמן ריצה (2026-09-15, צעד 05א) — מדליקים ומכבים תחום
      בלי דיפלוי. שינוי התנהגות לכל המשתמשים — מנהל-על בלבד. */
   flagSet: PERM_SUPER, flagsGet: PERM_SUPER,
@@ -594,6 +603,9 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'budgetTxApply') {
       return handleBudgetTxApply_(e.parameter);
     }
+    if (e && e.parameter && e.parameter.action === 'bootSync') {
+      return handleBootSync_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'gymStatusSync') {
       return handleGymStatusSync_(e.parameter);
     }
@@ -750,7 +762,7 @@ function doGet(e) {
          יידע מול מה להשוות בבדיקות הזולות שאחריו. בלי זה, אחרי משיכה מלאה
          אין לו נקודת ייחוס והוא היה מושך שוב בבדיקה הבאה. ר' bumpRev_. */
       domains: currentDomains_(),
-      ok: true, version: 'v43-charge-photos', years: years,
+      ok: true, version: APP_VERSION, years: years,
       currentYear: settings['שנה נוכחית'] || years[0] || '',
       // תאימות לאחור בלבד (סעיף 3, 2026-08-09): קבוצות עברו להיות פר-שנה
       // (ר' data[y].groups למטה) — שדה זה נשאר כרשת ביטחון למקרה שגרסת
@@ -5305,6 +5317,14 @@ function hourlyJobs() {
         מנוי "פעיל" שפג לפני שבוע, וזה נתון שגוי שנראה אמיתי.
      ⚠️ רץ **לפני הגיבוי המצטבר**, כדי שמה שנכתב עכשיו ייכנס
         לגיבוי באותה ריצה ולא ימתין שעה. */
+  /* 🔴 מסמך הפתיחה (צעד 11) — רשימת השנים והשנה הנוכחית.
+     משתנה נדיר, אבל אם יתיישן הטעינה הקרה תציג שנה שגויה. */
+  try {
+    var b = bootSync_(ss);
+    if (b.error) Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + b.error);
+  } catch (e) {
+    Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + e);
+  }
   try {
     var g = gymStatusSyncAll_(ss);
     if (g.wrote || g.deleted || g.error) {
@@ -6088,7 +6108,13 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
      לשאול את Apps Script כל 15 שניות.
      ⚠️ כיבוי מחזיר את הסקר המלא מיד — הלקוח רואה
         שהמסמך הפסיק להתעדכן ונופל לאחור בעצמו. */
-  'pulseToFirestore'];
+  'pulseToFirestore',
+  /* 🔴 **המתג של צעד 11** (2026-09-16) — טעינה קרה מ-Firestore.
+     כשהוא דלוק ואין מטמון מקומי, הלקוח בונה את השנה
+     הנוכחית מ-Firestore ומצייר מיד, במקום לחכות 10 שניות
+     ל-Apps Script. המטען ממשיך ברקע ודורס כשהוא מגיע.
+     ⚠️ כיבוי מחזיר בדיוק את ההתנהגות של היום. */
+  'bootFromFirestore'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {
@@ -8226,7 +8252,20 @@ var BY_MAX_BYTES = 900000;          /* מתחת ל-1MiB של Firestore, עם מ�
 function budgetYearId_(year) { return String(year == null ? '' : year).trim(); }
 
 /* נקודת המרה אחת, כמו gardenPlanDoc_/svcDoc_. */
-function budgetYearDoc_(ss, y) {
+/* 🔴🔴 **שלושה שדות שהגיעו עד היום מההגדרות** (צעד 11, 2026-09-16)
+   `buildYear` בלקוח גוזר את מצב התקציב ואת הבסיס מתוך
+   `settings['מצב תקציב <שנה>']` ו-`settings['בסיס תקציב <שנה>']`,
+   ואת ההערות ממפת ההערות. כל שלושתם מגיעים היום רק
+   במטען הראשי — ולכן טעינה מ-Firestore בלבד לא יכלה להרכיב
+   שנה שלמה.
+
+   🔴 **והם חייבים לשבת דווקא כאן, ולא ב-`appConfig`.** `appConfig`
+   נקרא ע"י **כל חבר**, ו-`בסיס תקציב` הוא JSON של כל התכנון
+   המאושר לכל סעיף. ב-doGet יש סינון מפורש
+   (`RESIDENT_SETTINGS_ALLOW`) שמונע את זה מתושב — תיקון פרטיות
+   מכוון. מסמך השנה מוגן ב-`canSeeBudget()`, ולכן הוא המקום
+   היחיד ששומר על אותו גבול בדיוק. */
+function budgetYearDoc_(ss, y, settings, notesMap) {
   var stamp = budgetStamp_();
   var yd = cached_('cba_year_' + stamp + '_' + y, function () {
     return {
@@ -8237,6 +8276,11 @@ function budgetYearDoc_(ss, y) {
       items:  readTable_(ss, 'פירוט סעיפים ' + y)
     };
   });
+  settings = settings || {};
+  var braw = settings['\u05d1\u05e1\u05d9\u05e1 \u05ea\u05e7\u05e6\u05d9\u05d1 ' + y];
+  var baseline = null;
+  if (braw) { try { baseline = JSON.parse(braw); } catch (e) { baseline = null; } }
+  var note = (notesMap && notesMap[y]) || null;
   return {
     year:   String(y),
     budget: yd.budget || [],
@@ -8244,14 +8288,90 @@ function budgetYearDoc_(ss, y) {
     groups: yd.groups || [],
     splits: yd.splits || [],
     items:  yd.items  || [],
+    /* שלושת השדות שהפכו את המסמך למספיק לעצמו — ר' למעלה.
+       ⚠️ `closed` ולא `phase`: הלקוח גוזר ממנו draft/locked בעצמו,
+          וכך נשארת נקודת הגזירה האחת ב-`buildYear`. */
+    closed: settings['\u05de\u05e6\u05d1 \u05ea\u05e7\u05e6\u05d9\u05d1 ' + y] === '\u05e1\u05d2\u05d5\u05e8',
+    baseline: baseline,
+    notes: note ? { content: String(note.content || ''), editedBy: String(note.editedBy || ''),
+                    editedAt: String(note.editedAt || '') } : null,
+    schema: 2,
+    updatedAt: new Date()
+  };
+}
+
+/* ============================================================================
+ *  מסמך הפתיחה  `appConfig/boot`        (צעד 11, 2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  🔴 **מה הבעיה שזה פותר.** נמדד בייצור (16.9): טעינה **חמה**
+ *  (עם מטמון localStorage) מציגה נתונים תוך **270 אלפיות** — כבר
+ *  מהיר. אבל טעינה **קרה** מחכה **עשר שניות** לקריאת Apps
+ *  Script אחת. זה קורה בשימוש ראשון, ובאיפון — שמפנה את
+ *  ה-localStorage של אתר שלא נפתח שבוע. זה המסך שיועד צילם.
+ *
+ *  🔴🔴 **מה אסור שיהיה כאן, ולמה זה העיקר.**
+ *  המסמך הזה יושב ב-`appConfig`, שנקרא ע"י **כל חבר** (`isMember()`).
+ *  ב-`doGet` יש סינון מפורש — `RESIDENT_SETTINGS_ALLOW` — שנותן לתושב
+ *  רגיל **מפתח אחד בלבד** מתוך ההגדרות. זה לא קישוט: מפתח
+ *  כמו `בסיס תקציב <שנה>` הוא JSON של כל התכנון המאושר לכל
+ *  סעיף, והסרתו מהתושב היתה תיקון פרטיות מכוון.
+ *
+ *  ⚠️ לכן **המסמך הזה נושא את אותה רשימת היתר בדיוק**, ולא
+ *     את מפת ההגדרות. כל מה שבעל הרשאת תקציב צריך מעבר לזה
+ *     עבר לתוך `budgetYears/{year}`, שמוגן ב-`canSeeBudget()`.
+ *  ⚠️ אין כאן שום נתון אישי ואין שום סוד — רשימת שנים, השנה
+ *     הנוכחית, מספר גרסה.
+ * ========================================================================== */
+var FS_BOOT_DOC = 'appConfig/boot';
+
+/* 🔴 העתק מדויק של רשימת ההיתר ב-doGet. אם מוסיפים שם מפתח —
+   יש להוסיף גם כאן, והפוך. יש בדיקה שמצליבה את השתיים. */
+var BOOT_SETTINGS_ALLOW = ['\u05e1\u05d9\u05e1\u05de\u05ea \u05e8\u05e9\u05ea \u05d4\u05de\u05d5\u05e2\u05d3\u05d5\u05df'];
+
+function bootDoc_(ss, settings) {
+  settings = settings || readSettings_(ss);
+  var years = String(settings['\u05e9\u05e0\u05d9\u05dd'] || '').split(',')
+                .map(function (x) { return x.trim(); }).filter(Boolean);
+  var safe = {};
+  BOOT_SETTINGS_ALLOW.forEach(function (k) {
+    if (settings[k] !== undefined) safe[k] = settings[k];
+  });
+  return {
+    years: years,
+    currentYear: settings['\u05e9\u05e0\u05d4 \u05e0\u05d5\u05db\u05d7\u05d9\u05ea'] || years[0] || '',
+    settings: safe,
+    version: APP_VERSION,
     schema: 1,
     updatedAt: new Date()
   };
 }
 
+function bootSync_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: false, error: '' };
+  try {
+    fsSet_(FS_BOOT_DOC, bootDoc_(ss));
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+function handleBootSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var r = bootSync_(ss);
+    return json_(r);
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
 function budgetYearsSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var settings = readSettings_(ss);
+  var notesMap = {};
+  /* אותו מטמון שה-doGet משתמש בו — לא קריאה שנייה מהגיליון. */
+  try { notesMap = cached_('cba_notes_' + budgetStamp_(), function () { return readNotesMap_(ss); }) || {}; } catch (e) { notesMap = {}; }
   var years = String(settings['שנים'] || '').split(',')
                 .map(function (x) { return x.trim(); }).filter(Boolean);
   var out = { ok: true, wrote: 0, deleted: 0, skipped: 0, years: [], errors: [] };
@@ -8264,7 +8384,7 @@ function budgetYearsSyncAll_(ss) {
       if (!ss.getSheetByName('תקציב ' + y)) { out.skipped++; continue; }
       var id = budgetYearId_(y);
       if (!fsIdOk_(id)) { out.skipped++; continue; }
-      var doc = budgetYearDoc_(ss, y);
+      var doc = budgetYearDoc_(ss, y, settings, notesMap);
       var size = JSON.stringify(doc).length;
       if (size > BY_MAX_BYTES) {
         throw new Error('שנה גדולה מדי למסמך אחד (' + size + ' תווים)');

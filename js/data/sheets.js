@@ -822,6 +822,80 @@ CBA.sheets = (function () {
      1) אם יש מטמון מקומי — מציגים אותו מיידית (cb "cache"), האפליקציה נראית מיד.
      2) במקביל מרעננים ברקע מהגיליון; כשמגיע — מעדכנים מטמון וקוראים ל-cb שוב ("fresh").
      כך רענון הופך ממתנה של 2-3 שניות לתצוגה מיידית. cb עשוי להיקרא עד פעמיים. */
+  /* ==========================================================================
+   *  🔴🔴 **הטעינה הקרה** — צעד 11, 2026-09-16
+   * --------------------------------------------------------------------------
+   *  📊 נמדד בייצור: טעינה **חמה** (עם מטמון) — נתונים על המסך
+   *  תוך **270 אלפיות**. טעינה **קרה** — שלדים למשך **10 שניות**,
+   *  כלן המתנה לקריאת Apps Script אחת. זה קורה בשימוש ראשון
+   *  ובאיפון, שמפנה localStorage של אתר שלא נפתח שבוע.
+   *
+   *  מעכשיו, כשאין מטמון: שתי קריאות Firestore (עשרות אלפיות)
+   *  בונות את השנה הנוכחית ומציירות מיד. המטען ממשיך ברקע
+   *  ודורס כשהוא מגיע — בדיוק כמו שהמטמון עושה היום.
+   *
+   *  ⚠️ **המטען תמיד מנצח.** הטעינה הקרה אינה מחליפה אותו
+   *     אלא רק מקדימה אותו. היא גם **אינה נכנסת למטמון
+   *     המקומי** — היא חלקית לפי הגדרה (אין בה updates/notesLog),
+   *     ומטמון חלקי היה משתקע לנצח.
+   *  ⚠️ **הדגל נקרא מהמסמך החי, וברירת המחדל בקוד היא false.**
+   *     כאן זה בטוח בניגוד לקריאות אחרות, כי אין כאן
+   *     `fsFirstRead` שמקצרת — הקבוע הוא הערך שמועבר ל-`flag()`.
+   *  ⚠️ כל כשל — אין SDK, אין משתמש, אין מסמך, אין הרשאה —
+   *     פשוט לא מצייר מוקדם. אין מסלול שמציג שגיאה בגלל זה.
+   * ======================================================================== */
+  var BOOT_FROM_FIRESTORE = false;
+
+  function bootFromFirestore(done) {
+    done = done || function () {};
+    if (!(CBA.fb && CBA.fb.readDoc && CBA.fb.ensureDb && CBA.data)) return done(false);
+    CBA.fb.authReady(function (user) {
+      if (!user) return done(false);
+      CBA.fb.ensureDb(function (err) {
+        if (err) return done(false);
+        if (CBA.fb.flag && !CBA.fb.flag("bootFromFirestore", BOOT_FROM_FIRESTORE)) return done(false);
+        CBA.fb.readDoc("appConfig", "boot", function (e2, boot) {
+          if (e2 || !boot || !boot.currentYear) return done(false);
+          var y = String(boot.currentYear);
+          /* 🔴 `fsYearLoad` מקבל שני ארגומנטים בלבד. את ההרשאה
+             הוא גוזר בעצמו — **נקודת הגזירה אחת**. */
+          fsYearLoad(y, function (e3, res) {
+            if (e3 || !res || !res.data) return done(false);
+            /* 🔴 אותו `buildYear` בדיוק כמו כל מסלול אחר. */
+            var d = res.data;
+            var notesMap = {};
+            if (d.notes) notesMap[y] = d.notes;
+            var fakeSettings = {};
+            fakeSettings["\u05de\u05e6\u05d1 \u05ea\u05e7\u05e6\u05d9\u05d1 " + y] = d.closed ? "\u05e1\u05d2\u05d5\u05e8" : "";
+            if (d.baseline) {
+              try { fakeSettings["\u05d1\u05e1\u05d9\u05e1 \u05ea\u05e7\u05e6\u05d9\u05d1 " + y] = JSON.stringify(d.baseline); } catch (e4) {}
+            }
+            var years = {};
+            years[y] = buildYear(y, d, fakeSettings, notesMap, true);
+            var store = {
+              years: years,
+              yearList: (boot.years || [y]).slice(),
+              currentYear: y,
+              settings: boot.settings || {},
+              version: boot.version || "",
+              budgetUpdates: [],
+              notesLog: [],
+              txFsOn: null
+            };
+            /* 🔴🔴 **המטען תמיד מנצח — גם כשהוא מקדים אותנו.**
+               `apply()` דורס את `CBA.mock.years` במלואו. אם המטען
+               כבר חזר בזמן ששתי קריאות Firestore היו באוויר, השמה
+               כאן הייתה **מחליפה נתונים מלאים בחלקיים** — העדכונים
+               ויומן ההערות היו נמחקים מהמסך. הבדיקה חייבת להיות
+               **לפני** `apply`, לא לפני ה-`cb`. */
+            if (lastAppliedSeq) return done(false);
+            done(apply(store));
+          });
+        });
+      });
+    });
+  }
+
   function load(cb) {
     var hadCache = false;
 
@@ -837,6 +911,16 @@ CBA.sheets = (function () {
         }
       }
     } catch (e) { /* מטמון פגום/לא זמין — פשוט מתעלמים וממשיכים לרשת */ }
+
+    /* 1ב) אין מטמון ⇒ הטעינה הקרה מ-Firestore, **במקביל** למטען.
+       ⚠️ רץ רק כשאין מטמון: כשיש מטמון המסך כבר מלא תוך
+          270 אלפיות, וקריאה נוספת היתה עולה מכסה בלי לתת כלום. */
+    if (!hadCache) {
+      bootFromFirestore(function (okFast) {
+        /* ⚠️ false = או שלא הצלחנו, או שהמטען הקדים אותנו. */
+        if (okFast) cb(true, { source: "firestore-boot" });
+      });
+    }
 
     // 2) רענון ברקע מהגיליון
     fetchAndApply(hadCache, cb);
@@ -1560,7 +1644,14 @@ CBA.sheets = (function () {
         budget: fsPlainRows(doc.budget), income: fsPlainRows(doc.income),
         groups: (doc.groups || []).map(fsPlain),
         splits: fsPlainRows(doc.splits), items: fsPlainRows(doc.items),
-        transactions: txWithNames(rows)
+        transactions: txWithNames(rows),
+        /* 🔴 שלושה שדות שהגיעו עד צעד 11 רק מההגדרות במטען.
+           בלעדיהם אי-אפשר להרכיב שנה שלמה מ-Firestore לבד.
+           ⚠️ לתושב הם פשוט אינם — הוא מקבל EMPTY_PLAN, וזו
+              בדיוק ההתנהגות של DATA_MIN היום. */
+        closed:   doc.closed === true,
+        baseline: doc.baseline || null,
+        notes:    doc.notes || null
       } });
     }
 

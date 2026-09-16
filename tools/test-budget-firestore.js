@@ -91,7 +91,7 @@ section('2. המסמך');
   ok('🔴 השנה נשמרת כשדה ולא רק כמזהה', d.year === 'תשפ"ז', d.year);
   ok('חמש הטבלאות', ['budget','income','groups','splits','items'].every(k => Array.isArray(d[k])));
   ok('🔴 אין תנועות במסמך', d.transactions === undefined && !JSON.stringify(d).includes('שם רוכש'));
-  ok('schema ו-updatedAt (כלל ההיברידיות 3)', d.schema === 1 && typeof d.updatedAt.getTime === 'function');
+  ok('schema ו-updatedAt (כלל ההיברידיות 3)', d.schema === 2 && typeof d.updatedAt.getTime === 'function');
   ok('🔴 אותו מפתח מטמון כמו doGet/handleBudgetYear_',
      cacheKeys.indexOf('cba_year_ST_תשפ"ז') > -1, cacheKeys.join(','));
   ok('🔴 ולא מפתח משלו', cacheKeys.every(k => /^cba_year_/.test(k)), cacheKeys.join(','));
