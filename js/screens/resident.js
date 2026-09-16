@@ -1636,6 +1636,19 @@ CBA.screens = CBA.screens || {};
   function dirVal(row, key) { return key ? String(row[key] == null ? "" : row[key]).trim() : ""; }
   function dirIsActive(row, c) { var s = dirVal(row, c.status); return !s || s.indexOf("פעיל") !== -1; }
 
+  /* קיבוץ המדריך לפי אות ראשונה של שם המשפחה (2026-09-16, לבקשת יועד —
+     בסגנון "אנשי קשר" באייפון). כ/ם/ן/ף/ץ (אותיות סופיות) לא אמורות להופיע
+     כאות ראשונה בשם, אבל אם בכל זאת מופיעות ממופות לצורתן הרגילה כדי שלא
+     תיפתח קבוצה נפרדת של אות אחת. שם משפחה ריק/לא-עברי נופל לקבוצת "#"
+     בסוף הרשימה — לא נעלם, רק לא מקבל אות. */
+  var DIR_ALPHABET = ["א","ב","ג","ד","ה","ו","ז","ח","ט","י","כ","ל","מ","נ","ס","ע","פ","צ","ק","ר","ש","ת"];
+  var DIR_FINAL_LETTERS = { "ך": "כ", "ם": "מ", "ן": "נ", "ף": "פ", "ץ": "צ" };
+  function dirLetterOf(name) {
+    var ch = String(name || "").trim().charAt(0);
+    if (DIR_FINAL_LETTERS[ch]) ch = DIR_FINAL_LETTERS[ch];
+    return DIR_ALPHABET.indexOf(ch) !== -1 ? ch : "#";
+  }
+
   function dirHouseHTML(row, c) {
     var house = dirVal(row, c.house) || "—";
     var fam = dirVal(row, c.family) || "משק בית";
@@ -1739,18 +1752,17 @@ CBA.screens = CBA.screens || {};
       });
     }
     rows.sort(function (a, b) {
-      var ha = parseFloat(dirVal(a, c.house)), hb = parseFloat(dirVal(b, c.house));
-      if (isNaN(ha)) ha = Infinity;
-      if (isNaN(hb)) hb = Infinity;
-      return ha - hb;
+      return dirVal(a, c.family).localeCompare(dirVal(b, c.family), "he") ||
+        (parseFloat(dirVal(a, c.house)) || Infinity) - (parseFloat(dirVal(b, c.house)) || Infinity);
     });
     /* (2026-08-19, ממצא 2.7 בדו"ח הבדיקה) קודם זו הייתה רשימה אחת רצופה —
        נמדד: 6,000 פיקסלים בדסקטופ ו-11,250 במובייל, 71 כרטיסים ברצף, בלי
-       קיבוץ, בלי אינדקס ובלי שום נקודת התמצאות חוץ משדה חיפוש אחד. עכשיו
-       הכרטיסים מקובצים לפי "מאה" של מספר הבית — שזה בדיוק החלוקה לשורות
-       הבתים בשיכון (101-107, 201-207 וכו') — עם כותרת דביקה לכל קבוצה
-       ושורת קיצור למעלה שקופצת ישירות לכל אחת. בזמן חיפוש אין קיבוץ:
-       התוצאות ממילא מעטות, וקבוצה עם כרטיס אחד היא רעש. */
+       קיבוץ, בלי אינדקס ובלי שום נקודת התמצאות חוץ משדה חיפוש אחד. קודם
+       הכרטיסים קובצו לפי "מאה" של מספר הבית; עודכן ל-2026-09-16 לבקשת
+       יועד — קיבוץ לפי אות ראשונה של שם המשפחה (א'-ב'), עם כותרת-אות
+       גדולה ודביקה לכל קבוצה (בסגנון אנשי קשר באייפון) וסרגל אותיות קבוע
+       בצד המסך לניווט/גרירה ישירה לכל אות. בזמן חיפוש אין קיבוץ ואין
+       סרגל: התוצאות ממילא מעטות, וקבוצה עם כרטיס אחד היא רעש. */
     if (!rows.length) {
       listEl.innerHTML = CBA.ui.emptyState({ icon: "search", title: "לא נמצאו שכנים",
         sub: "אפשר לחפש לפי שם משפחה, שם פרטי, מספר בית או טלפון.",
@@ -1773,36 +1785,72 @@ CBA.screens = CBA.screens || {};
     }
     var groups = [], byKey = {};
     rows.forEach(function (r) {
-      var h = parseInt(String(dirVal(r, c.house)).replace(/\D/g, ""), 10);
-      var key = isNaN(h) ? "אחר" : String(Math.floor(h / 100) * 100);
+      var key = dirLetterOf(dirVal(r, c.family));
       if (!byKey[key]) { byKey[key] = { key: key, rows: [] }; groups.push(byKey[key]); }
       byKey[key].rows.push(r);
     });
     groups.sort(function (a, b) {
-      if (a.key === "אחר") return 1;
-      if (b.key === "אחר") return -1;
-      return parseInt(a.key, 10) - parseInt(b.key, 10);
+      if (a.key === "#") return 1;
+      if (b.key === "#") return -1;
+      return DIR_ALPHABET.indexOf(a.key) - DIR_ALPHABET.indexOf(b.key);
     });
-    var jump = '<div class="dir-jump">' + groups.map(function (g) {
-      return '<button type="button" class="dir-jump__btn" data-dir-jump="' + CBA.esc(g.key) + '">' +
-        (g.key === "אחר" ? "אחר" : g.key.slice(0, 1)) + '</button>';
-    }).join("") + '</div>';
-    listEl.innerHTML = jump + groups.map(function (g) {
-      var label = g.key === "אחר" ? "ללא מספר בית" : ("בתים " + g.key + "–" + (parseInt(g.key, 10) + 99));
+    // סרגל האותיות מציג את כל האלפבית תמיד (גם אותיות בלי אף משפחה, מואפרות
+    // ובלי אירוע לחיצה) — כך שהמקום של כל אות קבוע ולא "קופץ" בין רענונים.
+    var rail = '<div class="dir-rail" id="dir-rail">' + DIR_ALPHABET.map(function (L) {
+      var has = !!byKey[L];
+      return '<div class="dir-rail__letter' + (has ? '' : ' is-empty') + '"' +
+        (has ? ' data-dir-rail="' + CBA.esc(L) + '"' : '') + '>' + CBA.esc(L) + '</div>';
+    }).join("") +
+      (byKey["#"] ? '<div class="dir-rail__letter" data-dir-rail="#">#</div>' : '') +
+    '</div><div class="dir-rail__bubble" id="dir-rail-bubble"></div>';
+    listEl.innerHTML = rail + groups.map(function (g) {
       return '<div class="dir-group" id="dir-g-' + CBA.esc(g.key) + '">' +
-        '<div class="dir-group__head">' + CBA.esc(label) +
+        '<div class="dir-group__head"><span class="dir-group__letter">' + CBA.esc(g.key) + '</span>' +
           '<span class="dir-group__n">' + g.rows.length + '</span></div>' +
         '<div class="dir-grid">' + g.rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>' +
       '</div>';
     }).join("");
-    listEl.querySelectorAll("[data-dir-jump]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        var t = listEl.querySelector("#dir-g-" + CSS.escape(b.dataset.dirJump));
-        if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    });
     if (dirScrollY) { window.scrollTo(0, dirScrollY); dirScrollY = 0; }
   }
+
+  /* ---- סרגל האותיות — לחיצה בודדת וגם גרירה לאורך הסרגל, בדיוק כמו האינדקס
+     של "אנשי קשר" באייפון. מאזינים ברמת document (delegation), לא ברמת
+     האלמנט שנוצר מחדש בכל dirRenderList — כך שלא נצטרך לחבר/לנתק כל רענון,
+     והמנגנון לא תלוי במבנה ה-DOM הפנימי של המסך (ר' מלכודת "לא לעגן
+     מנגנון למבנה המסך" — feature-spec-first). דגל הגרירה הוא global-יחיד
+     לכל המסך, לא state של resDirectory, כי pointerup/pointermove מאזינים
+     ל-document ולא נכנסים/יוצאים עם render(). */
+  var dirRailDragging = false;
+  function dirJumpToLetter(L) {
+    var t = dirContainer && dirContainer.querySelector("#dir-g-" + CSS.escape(L));
+    if (t) t.scrollIntoView({ block: "start" });
+  }
+  function dirShowRailBubble(L) {
+    var b = dirContainer && dirContainer.querySelector("#dir-rail-bubble");
+    if (!b) return;
+    b.textContent = L;
+    b.style.display = "flex";
+    clearTimeout(dirShowRailBubble._t);
+    dirShowRailBubble._t = setTimeout(function () { if (b) b.style.display = "none"; }, 500);
+  }
+  function dirRailLetterAt(x, y) {
+    var el = document.elementFromPoint(x, y);
+    return (el && el.dataset && el.dataset.dirRail) ? el.dataset.dirRail : null;
+  }
+  document.addEventListener("pointerdown", function (e) {
+    var el = e.target.closest && e.target.closest("[data-dir-rail]");
+    if (!el) return;
+    dirRailDragging = true;
+    dirJumpToLetter(el.dataset.dirRail);
+    dirShowRailBubble(el.dataset.dirRail);
+  });
+  document.addEventListener("pointermove", function (e) {
+    if (!dirRailDragging) return;
+    var L = dirRailLetterAt(e.clientX, e.clientY);
+    if (L) { dirJumpToLetter(L); dirShowRailBubble(L); }
+  });
+  document.addEventListener("pointerup", function () { dirRailDragging = false; });
+  document.addEventListener("pointercancel", function () { dirRailDragging = false; });
 
   CBA.screens.resDirectory = {
     render: function (container, opts) {
