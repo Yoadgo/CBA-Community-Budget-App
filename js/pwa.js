@@ -13,7 +13,29 @@ window.CBA = window.CBA || {};
 CBA.pwa = (function () {
   "use strict";
 
-  var SW_URL   = "service-worker.js?v=20260824c";
+  /* 🔴🔴 נמצא חי (16.9.2026, מקרה מורן+יועד): המחרוזת הזאת הייתה קבועה
+     (hardcoded) ולא זזה מ-24.8, למרות שכל שאר ה-?v= בדף כן עודכנו בכל
+     דיפלוי. התוצאה: גם אחרי unregister() ידני, register() הבא חזר ונרשם
+     תחת אותה כתובת ישנה בדיוק — ולכן אף רענון, קשיח או רגיל, לא עזר.
+     כלל הגרסה (code-delivery-checklist) דרש "להעלות ?v= בכל תג script"
+     — וזה נעשה, על התג של pwa.js *עצמו* (רואים את זה למטה, ?v= בתג
+     ה-script בפועל) — אבל אף אחד לא חשב לכלול את המחרוזת הפנימית הזאת
+     בבדיקה, כי היא לא תג HTML אלא קבוע בתוך הקובץ. הפתרון: לגזור את
+     הגרסה **מאותו מקור בדיוק** שכבר מתעדכן נכון בכל דיפלוי — ה-?v=
+     שעל תג ה-script של pwa.js עצמו — כך שאין יותר שני מקורות אמת
+     שיכולים להתפצל. */
+  function currentClientVersion_() {
+    try {
+      var src = (document.currentScript && document.currentScript.src) || "";
+      if (!src) {
+        var tags = document.querySelectorAll('script[src*="js/pwa.js"]');
+        if (tags.length) src = tags[tags.length - 1].src;
+      }
+      var m = src.match(/[?&]v=([^&]+)/);
+      return m ? m[1] : "";
+    } catch (e) { return ""; }
+  }
+  var SW_URL   = "service-worker.js" + (currentClientVersion_() ? ("?v=" + currentClientVersion_()) : "");
   var HINT_KEY = "cba_install_hint_v1";
 
   var deferredPrompt = null;   // אנדרואיד/כרום: חלון ההתקנה שנתפס מראש
