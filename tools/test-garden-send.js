@@ -90,6 +90,12 @@ const px = (n) => ({ name: 'p' + n + '.jpg', mime: 'image/jpeg', data: window.bt
 async function fillAndSend(c, opts) {
   opts = opts || {};
   q(c, '.gd-cat[data-c="דשא"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  /* ⚠️ **כותרת קצרה היא שדה חובה מאז 15.9** (resGarden.js:817 — וגם
+     בשרת, submitGardenReport_). בלעדיה הלחיצה על "שלח" נעצרת
+     ב-alert ו-sendReport כלל אינו רץ — ואז אין שורת חיווי ואין
+     markDirty, כלומר המארז נצבע אדום על פיצ'ר תקין לגמרי.
+     זה מה שקרה כאן: הבדיקה התיישנה, המוצר לא נשבר. */
+  q(c, '#gd-title').value = opts.title || 'ראש ממטרה שבור';
   q(c, '#gd-desc').value = opts.desc || 'הדשא יבש';
   q(c, '#gd-place').value = opts.place || 'ליד הכניסה';
   q(c, '#gd-phone').value = '050-1234567';

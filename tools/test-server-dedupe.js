@@ -100,7 +100,10 @@ sandbox.notifyAdmins_ = (ss, p, t) => emails.push(t);
 
 const PERM = { familyId: '1', firstName: 'יועד', family: 'גולן' };
 const baseBody = () => ({
-  _perm: PERM, _email: 'y@x.com', category: 'מדשאות', desc: 'בדיקה בדיקה',
+  /* ⚠️ `title` חובה מאז 15.9 — בלעדיו submitGardenReport_ מחזיר
+     שגיאה, לא נכתבת שורה, וכל המארז קורס על `rows[1]` שאינו קיים. */
+  _perm: PERM, _email: 'y@x.com', category: 'מדשאות', title: 'ראש ממטרה שבור',
+  desc: 'בדיקה בדיקה',
   place: 'ליד הכניסה', phone: '050', x: 0.5, y: 0.5, area: 'אזור 1',
   photos: [{ name: 'a.jpg', mime: 'image/jpeg', data: 'AAAA' }]
 });
@@ -112,7 +115,10 @@ section('1. הסכמה — העמודה קיימת ומספר הגרסה הוע�
 ok('נוספה עמודת "מזהה שליחה"', refCol() !== -1);
 ok('היא בסוף ולא באמצע (לא מזיזה עמודות קיימות)',
    refCol() === sandbox.GARDEN_REPORT_HEADERS.length - 1, String(refCol()));
-ok('GARDEN_SCHEMA_REV הועלה ל-3', sandbox.GARDEN_SCHEMA_REV === 3, String(sandbox.GARDEN_SCHEMA_REV));
+/* ⚠️ המספר המדויק הוא **הנקודה** של הבדיקה, לא מטרד: שינוי סכימה
+   בטאב חייב להיות החלטה מודעת שמישהו מעלה את המונה עבורה.
+   3 → 4 ב-15.9 עם עמודת 'כותרת'. */
+ok('GARDEN_SCHEMA_REV הועלה ל-4', sandbox.GARDEN_SCHEMA_REV === 4, String(sandbox.GARDEN_SCHEMA_REV));
 
 /* ================================================================= */
 section('2. דיווח ראשון — נכתב, והמזהה נשמר בעמודה');
