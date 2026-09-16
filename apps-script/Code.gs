@@ -1708,7 +1708,7 @@ function handleMyClubReservations_(p) {
         start: ev.getStartTime().toISOString(),
         end: ev.getEndTime().toISOString(),
         note: ev.getTag('note') || '',
-        status: ev.getTag('status') || 'approved'   // אירועים ישנים/ידניים בלי תג — נחשבים מאושרים
+        status: clubStatusOf_(ev)   // אירועים ישנים/ידניים בלי תג — נחשבים מאושרים
       };
     }).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
     return json_({ ok: true, reservations: mine });
@@ -1748,6 +1748,34 @@ function handleCancelClubReservation_(p) {
 /* רשימת כל השריונים הקרובים (ממתינים + מאושרים) — למסך הניהול אצל המנהל.
  * לא מסננת לפי משתמש (בניגוד ל-myClubReservations) ולכן דורשת הרשאת מועדון
  * (PERM_CLUB) דרך authorize_. (2026-08-24: מסלול "סיסמת מנהל" בוטל לגמרי.) */
+/* 🔴 **נקודת גזירה אחת לסטטוס שריון.** אירוע ללא תגית נחשב מאושר
+   (כך נוצרו שריונים לפני שהתגית הוכנסה). שתי הגדרות מקבילות כאן היו
+   נותנות "המספר בתגית לא מסכים עם המסך", וזו התקלה החוזרת שהפרויקט
+   הזה מנקה שיטתית. */
+function clubStatusOf_(ev) {
+  return String(ev.getTag('status') || 'approved');
+}
+
+/* ספירת השריונים הממתינים — **בלי לבנות את הרשימה**.
+   📊 `handleClubList_` קוראת 187 ימים מיומן Google וממפה כל אירוע
+   לאובייקט הכולל **אימייל ומזהה משפחה**. עמוד הבית צורך ממנה
+   מספר אחד בלבד (`seedClubAlerts`). אותו נימוק בדיוק כמו
+   `countStatus_`, ובתוספת: כאן מדובר במידע אישי שנשלח לכל בעל
+   הרשאת מועדון רק כדי להיספר.
+   ⚠️ אותו חלון זמן כמו ברשימה המלאה: שריון ממתין מלפני שלושה ימים
+      עדיין דורש טיפול, ולכן צמצום החלון היה משנה את המשמעות. */
+function clubPendingCount_() {
+  try {
+    var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
+    if (!cal) return 0;
+    var evs = cal.getEvents(new Date(Date.now() - 7 * 24 * 3600 * 1000),
+                            new Date(Date.now() + 180 * 24 * 3600 * 1000));
+    var n = 0;
+    for (var i = 0; i < evs.length; i++) if (clubStatusOf_(evs[i]) === 'pending') n++;
+    return n;
+  } catch (e) { return 0; }
+}
+
 function handleClubList_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -8460,7 +8488,9 @@ function handleHomeExtras_(p) {
       out.profile = { ok: true, pending: countStatus_(ss, PROFILE_SHEET, '\u05e1\u05d8\u05d8\u05d5\u05e1', '\u05de\u05de\u05ea\u05d9\u05df') };
     }
     if (has(PERM_GYM))  { out.gym = { ok: true, pending: countStatus_(ss, GYM_SHEET, '\u05e1\u05d8\u05d8\u05d5\u05e1', GYM_ST_VERIFY) }; }
-    if (has(PERM_CLUB)) { out.club = sub(handleClubList_); }
+    /* 🔴 מספר, לא רשימה — ר' `clubPendingCount_`. הרשימה המלאה
+       נשלחת רק למסך "שריון מועדון — ניהול", שבאמת מציג אותה. */
+    if (has(PERM_CLUB)) { out.club = { ok: true, pending: clubPendingCount_() }; }
     /* ספירת משימות הגינון הממתינות (2026-09-15, צעד 07).
        📊 נמדד בייצור: `gardenTasks` לבדה עולה 3.6–5.2 שניות בעלייה,
        ועמוד הבית משתמש ממנה ב**מספר אחד** — `rows.length`. הקריאה הזאת

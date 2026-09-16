@@ -129,5 +129,39 @@ ok('⚠️ ושתי הצורות מגיעות לאותו מספר על אותם 
    run({ ok:true, homeExtras:true, signups:{ ok:true, pending:1 } }).signups ===
    run({ ok:true, homeExtras:true, signups:{ ok:true, rows:[{status:'ממתין'},{status:'אושר'}] } }).signups);
 
+section('4. 🔴 שריון המועדון — 187 ימים של יומן בשביל מספר אחד');
+const APP = R('js/app.js');
+ok('יש מונה ייעודי', /function clubPendingCount_\(\)/.test(GS));
+ok('🔴 ו-homeExtras מחזיר ממנו מספר, לא רשימה',
+   /out\.club = \{ ok: true, pending: clubPendingCount_\(\) \}/.test(GS) &&
+   !/out\.club = sub\(handleClubList_\)/.test(GS));
+/* 🔴🔴 נקודת גזירה אחת: אירוע בלי תגית = מאושר. שתי הגדרות מקבילות
+   הן בדיוק "המספר בתגית לא מסכים עם המסך". */
+ok('🔴🔴 והסטטוס נגזר בנקודה אחת', /function clubStatusOf_\(ev\)/.test(GS) &&
+   (GS.match(/clubStatusOf_\(/g) || []).length === 3,
+   String((GS.match(/clubStatusOf_\(/g) || []).length));
+ok('⚠️ והרשימה המלאה משתמשת באותה פונקציה', /status: clubStatusOf_\(ev\)/.test(GS));
+ok("⚠️ ואירוע בלי תגית נחשב מאושר, כמו קודם", /ev\.getTag\('status'\) \|\| 'approved'/.test(GS));
+ok('⚠️ ואותו חלון זמן כמו ברשימה המלאה — ממתין מלפני יומיים עדיין נספר',
+   /clubPendingCount_[\s\S]{0,400}7 \* 24 \* 3600 \* 1000[\s\S]{0,120}180 \* 24 \* 3600 \* 1000/.test(GS));
+ok('🔴 והרשימה המלאה נשארת למסך הניהול שבאמת מציג אותה',
+   /function handleClubList_\(p\)/.test(GS) && /reservations: list/.test(GS));
+
+/* הלקוח — seedClubAlerts קורא את שתי הצורות */
+(function () {
+  const src = APP.match(/window\.CBA\.seedClubAlerts = function \(res\) \{[\s\S]*?\n  \};/)[0];
+  function run(res) {
+    const sb = { notif: {}, inited: false, renderNav(){}, renderControls(){}, console:{log(){}} };
+    sb.window = sb; sb.CBA = {};
+    vm.createContext(sb);
+    vm.runInContext(src + '\nwindow.CBA.seedClubAlerts(' + JSON.stringify(res) + ');', sb);
+    return sb.notif.pendingClub;
+  }
+  ok('הצורה החדשה נקראת', run({ ok:true, pending:4 }) === 4, String(run({ ok:true, pending:4 })));
+  ok('🔴🔴 ואפס ממתינים נשמר כאפס', run({ ok:true, pending:0 }) === 0, String(run({ ok:true, pending:0 })));
+  ok('🔴 והצורה הישנה עדיין עובדת',
+     run({ ok:true, reservations:[{status:'pending'},{status:'approved'},{status:'pending'}] }) === 2);
+})();
+
 console.log('\n' + (fail ? '❌' : '✅') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

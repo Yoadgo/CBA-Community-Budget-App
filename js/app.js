@@ -699,7 +699,14 @@
         "בודק התראות…" לנצח, בדיוק התקלה שתוקנה ב-18.8. */
   window.CBA.seedClubAlerts = function (res) {
     if (!res || !res.ok) return false;
-    notif.pendingClub = (res.reservations || []).filter(function (r) { return r.status === "pending"; }).length;
+    /* 🔴 שתי הצורות (2026-09-16). מהיום השרת מחזיר `pending` — מספר —
+       במקום 187 ימים של שריונים, שכללו אימייל ומזהה משפחה ונשלחו
+       רק כדי להיספר. הצורה הישנה נשארת נתמכת כדי שלא תיווצר תלות
+       בסדר הדיפלוי.
+       ⚠️ `typeof === "number"`: אפס ממתינים הוא תשובה תקפה. */
+    notif.pendingClub = (typeof res.pending === "number")
+      ? res.pending
+      : (res.reservations || []).filter(function (r) { return r.status === "pending"; }).length;
     notif.clubChecked = true;
     if (inited) { renderNav(currentArea); renderControls(); }
     return true;
