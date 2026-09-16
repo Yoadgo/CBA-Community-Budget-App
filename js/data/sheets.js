@@ -742,15 +742,19 @@ CBA.sheets = (function () {
     }
     CBA.data.fsFirstRead("budgetTx", BUDGET_TX_FROM_FIRESTORE_READ,
       function (done) {
-        /* 🔴 **`true` כי השרת כבר העיד.** הגענו לכאן רק מפני
-           ש-`payload.txFromFirestore === true`, והשרת מדליק אותו רק
-           כש-`seesBudget` אמת (ר' `var txFs = seesBudget && ...` ב-doGet).
-           כלומר זו ההרשאה שהשרת חישב מהגיליון באותה
-           בקשה עצמה — טרייה וסמכותית יותר מכל מצב לקוח.
-           ⚠️ ואם בכל זאת אין הרשאה ב-Firestore — הכלל **דוחה** את
-              השאילתה, ואנחנו נופלים לאחור ל-slim=1. כשל רועש,
-              לא שנה ריקה. */
-        fsTxRows(y, true, function (err, rows) {
+        /* 🔴🔴 **ההיקף מגיע מהשרת, ולעולם לא נגזר כאן**
+           (16.9.2026 — תיקון הפיצול בקריאה של תושב).
+           עד התאריך הזה עמד כאן `true` קבוע, וזה היה נכון כל עוד
+           השרת הדליק את `txFromFirestore` **רק** לבעלי הרשאת
+           תקציב. מעכשיו גם תושב קורא מ-Firestore — ולו שאילתה
+           רחבה היא שאילתה ש**כלל האבטחה דוחה**, והתוצאה היא
+           נפילה לאחור ל-slim=1 — כלומר בדיוק השורות הישנות
+           מהגיליון שהתיקון הזה בא להיפטר מהן, **בשקט**.
+           ⚠️ **ברירת המחדל היא היקף מלא** ולא מצומצם: שרת
+              שעדיין לא פרס את השדה מדליק `txFromFirestore` רק
+              לבעלי הרשאה, וצמצום למשפחה היה מרוקן לגזבר
+              את התקציב — בדיוק הבאג שנתפס בהדלקה ב-15.9. */
+        fsTxRows(y, payload.txFsScope !== "family", function (err, rows) {
           if (err) return done(err);
           done(null, { ok: true, rows: rows });
         });
@@ -773,12 +777,32 @@ CBA.sheets = (function () {
   }
 
   var buyerFillTried = false;
-  function fillBuyerNames(y) {
-    if (!y || !(CBA.data && CBA.data.ensureFamilyNames)) return;
+  function fillBuyerNames(y, payload) {
+    if (!y) return;
     var rec = CBA.mock && CBA.mock.years && CBA.mock.years[y];
     var list = (rec && rec.transactions) || [];
     var missing = list.filter(function (t) { return !String(t.buyer || "").trim() && t.familyId; });
     if (!missing.length) { buyerFillTried = false; return; }
+    /* ======================================================================
+     *  🔴🔴 **לתושב השם מגיע מהמטען, לא מהספרייה** (16.9.2026)
+     * ----------------------------------------------------------------------
+     *  `residentDirectory` חסומה מאחורי `PERM_ANY_ADMIN` — תושב
+     *  **אינו רשאי לקרוא לה**. בלי הענף הזה כל תושב היה
+     *  משלם קריאה נדחית ל-Apps Script בכל טעינה (רצפה של
+     *  ~0.5ש') והשם היה נשאר ריק בכל מקרה.
+     *  🔑 המשפחה היחידה שתושב רואה היא שלו, ולכן שם אחד
+     *     מהמטען מכסה את כל השורות — והוא מגיע מאותה
+     *     בקשה שחישבה את ההיקף. אותו כלל בדיוק: מצב שהמטען
+     *     ממלא מגיע מהמטען.
+     *  ⚠️ משלים בלבד — שורה שיש לה שם שומרת אותו.
+     * ==================================================================== */
+    if (payload && payload.txFsScope === "family") {
+      var famName = String(payload.txFsFamilyName || "").trim();
+      if (!famName) return;
+      missing.forEach(function (t) { t.buyer = famName; });
+      return;
+    }
+    if (!(CBA.data && CBA.data.ensureFamilyNames)) return;
     if (buyerFillTried) return;   /* לא מנסים שוב ושוב כל 3 שניות */
     buyerFillTried = true;
     CBA.data.ensureFamilyNames(function (okNames) {
@@ -840,7 +864,7 @@ CBA.sheets = (function () {
        *  ⚠️ אין כאן שום קריאה נוספת ל-Firestore — רק הרכבה
        *     מחדש של מה שכבר בזיכרון.
        * ==================================================================== */
-      if (payload.txFromFirestore) fillBuyerNames(payload.currentYear);
+      if (payload.txFromFirestore) fillBuyerNames(payload.currentYear, payload);
       cb(true, { source: "fresh", hadCache: hadCache, moved: movedNow });
     }
 

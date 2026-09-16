@@ -29,10 +29,10 @@ const CUR = 'תשפ"ז';
 const OLD = 'תשפ"ו';
 
 /* ---------- סביבה ---------- */
-let fetchLog, queryLog, fsRows, fsErr, flagOn, fsFirstLog, nowShift;
+let fetchLog, queryLog, fsRows, fsErr, flagOn, fsFirstLog, nowShift, ensureNamesN;
 function makeEnv(opts) {
   opts = opts || {};
-  fetchLog = []; queryLog = []; fsFirstLog = []; fsErr = null; nowShift = 0;
+  fetchLog = []; queryLog = []; fsFirstLog = []; fsErr = null; nowShift = 0; ensureNamesN = 0;
   flagOn = opts.flagOn !== false;
   fsRows = opts.rows || [];
   const store = { _source: 'mock', years: {}, yearList: [], currentYear: '' };
@@ -78,7 +78,7 @@ function makeEnv(opts) {
     },
     data: {
       familyDisplayName: id => (String(id) === '401' ? 'משפחת בדיקה' : ''),
-      ensureFamilyNames: cb => cb(),
+      ensureFamilyNames: cb => { ensureNamesN++; cb(); },
       /* חיקוי נאמן ל-fsFirstRead האמיתי: ברירת המחדל שבקוד מקצרת,
          והדגל החי נבדק אחריה. (המקור עצמו נבדק ב-test-runtime-flags.) */
       fsFirstRead: (key, enabled, load, sheets, cb) => {
@@ -98,6 +98,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 /* מונה התחום — מה שמחליט אם המטמון עדיין תקף */
 let budgetCounter = 1;
 let txFromFirestore = true;
+/* \u05D4\u05D9\u05E7\u05E3 \u05D4\u05E7\u05E8\u05D9\u05D0\u05D4 \u05E9\u05D4\u05E9\u05E8\u05EA \u05DE\u05E6\u05D4\u05D9\u05E8 \u05E2\u05DC\u05D9\u05D5 (16.9.2026): 'all' \u05DC\u05D1\u05E2\u05DC \u05D4\u05E8\u05E9\u05D0\u05D4, 'family' \u05DC\u05EA\u05D5\u05E9\u05D1. */
+let txScope = 'all';
 function payload(slim) {
   const sheetTx = [{ 'מזהה': 1, 'סכום': 10, 'מזהה משפחה': '401' },
                    { 'מזהה': 2, 'סכום': 20, 'מזהה משפחה': '777' }];
@@ -108,6 +110,9 @@ function payload(slim) {
            domains: { budget: budgetCounter, other: 1 },
            txFromFirestore: (slim === '2' && txFromFirestore),
            txFsOn: txFromFirestore,
+           txFsScope: txScope,
+           txFsFamily: txScope === 'family' ? '401' : '',
+           txFsFamilyName: txScope === 'family' ? '\u05DE\u05E9\u05E4\u05D7\u05EA \u05D1\u05D3\u05D9\u05E7\u05D4' : '',
            data: { [CUR]: yr(empty ? [] : sheetTx) } };
 }
 
@@ -127,8 +132,8 @@ ok('🔴 המטמון מחזיק שורות גולמיות, והשמות מור�
 ok('🔴 והלקוח פועל לפי הצהרת השרת, לא לפי הדגל שלו',
    /if \(!payload\.txFromFirestore\) return useIt\(payload\);/.test(SRC));
 ok('🔴 נקודת קריאה אחת לתנועות (fsTxRows), ושני צרכנים',
-   (SRC.match(/fsTxRows\(y, (true|seesBudget), function/g) || []).length === 2,
-   String((SRC.match(/fsTxRows\(y, (true|seesBudget), function/g) || []).length));
+   (SRC.match(/fsTxRows\(y, (payload\.txFsScope !== "family"|seesBudget), function/g) || []).length === 2,
+   String((SRC.match(/fsTxRows\(y, (payload\.txFsScope !== "family"|seesBudget), function/g) || []).length));
 ok('⚠️ אין שאילתת budgetTx שנייה מקבילה',
    (SRC.match(/queryCollection\("budgetTx"/g) || []).length === 1);
 ok('הנפילה לאחור מושכת מטען slim=1', (SRC.match(/fetchPayload\("1",/g) || []).length === 2);
@@ -298,12 +303,16 @@ ok('🔴 וכתיבת סטטוס זורקת אף היא את המטמון',
   ok('\uD83D\uDD34\uD83D\uDD34 \u05D5\u05D0\u05D9\u05E0\u05D5 \u05E0\u05D5\u05D2\u05E2 \u05D1\u05E1\u05E4\u05E8\u05D9\u05D9\u05EA \u05D4\u05E9\u05DE\u05D5\u05EA \u2014 \u05D4\u05D9\u05D0 \u05D7\u05E1\u05D5\u05DE\u05D4 \u05D1\u05D8\u05E2\u05D9\u05E0\u05D4 \u05D4\u05E8\u05D0\u05E9\u05D5\u05E0\u05D4',
      FSTX.indexOf('ensureFamilyNames') === -1 && FSTX.indexOf('familyDisplayName') === -1);
   ok('\uD83D\uDD34 \u05D5\u05D4\u05E9\u05DE\u05D5\u05EA \u05DE\u05D5\u05E9\u05DC\u05DE\u05D9\u05DD \u05D0\u05D7\u05E8\u05D9 \u05D4-apply',
-     /if \(payload\.txFromFirestore\) fillBuyerNames\(payload\.currentYear\);/.test(SRC) &&
-     /function fillBuyerNames\(y\)/.test(SRC));
+     /if \(payload\.txFromFirestore\) fillBuyerNames\(payload\.currentYear, payload\);/.test(SRC) &&
+     /function fillBuyerNames\(y, payload\)/.test(SRC));
   ok('\u26A0\uFE0F \u05D5\u05D4\u05D4\u05E9\u05DC\u05DE\u05D4 \u05DE\u05E9\u05DC\u05D9\u05DE\u05D4 \u05D1\u05DC\u05D1\u05D3, \u05DC\u05E2\u05D5\u05DC\u05DD \u05DC\u05D0 \u05D3\u05D5\u05E8\u05E1\u05EA',
      /if \(String\(t\.buyer \|\| ""\)\.trim\(\) \|\| !t\.familyId\) return;/.test(SRC));
   ok('\u26A0\uFE0F \u05D5\u05D4\u05D9\u05D0 \u05DE\u05E7\u05D1\u05DC\u05EA \u05D0\u05D5\u05EA\u05D4 \u05DE\u05D1\u05D7\u05D5\u05E5', /function fsTxRows\(y, seesAll, done\)/.test(SRC));
-  ok('\u26A0\uFE0F \u05D5\u05D4\u05DE\u05D8\u05E2\u05DF \u05DE\u05E2\u05D1\u05D9\u05E8 true (\u05D4\u05E9\u05E8\u05EA \u05D4\u05E2\u05D9\u05D3)', /fsTxRows\(y, true, function/.test(SRC));
+  ok('\uD83D\uDD34\uD83D\uDD34 \u05D5\u05D4\u05D4\u05D9\u05E7\u05E3 \u05DE\u05D2\u05D9\u05E2 \u05DE\u05D4\u05DE\u05D8\u05E2\u05DF, \u05DC\u05D0 \u05E7\u05D1\u05D5\u05E2 \u05D1\u05E7\u05D5\u05D3',
+     /fsTxRows\(y, payload\.txFsScope !== "family", function/.test(SRC) &&
+     !/fsTxRows\(y, true, function/.test(SRC));
+  ok('\u26A0\uFE0F \u05D5\u05D1\u05E8\u05D9\u05E8\u05EA \u05D4\u05DE\u05D7\u05D3\u05DC \u05D4\u05D9\u05D0 \u05D4\u05D9\u05E7\u05E3 \u05DE\u05DC\u05D0 \u2014 \u05E9\u05E8\u05EA \u05D9\u05E9\u05DF \u05DC\u05D0 \u05DE\u05E6\u05DE\u05E6\u05DD \u05DC\u05D2\u05D6\u05D1\u05E8',
+     /txFsScope !== "family"/.test(SRC) && !/txFsScope === "all"/.test(SRC));
   ok('\u26A0\uFE0F \u05D5\u05D4\u05E9\u05E0\u05D4 \u05D4\u05D1\u05D5\u05D3\u05D3\u05EA \u05DE\u05E2\u05D1\u05D9\u05E8\u05D4 \u05D0\u05EA \u05E9\u05DC\u05D4', /fsTxRows\(y, seesBudget, function/.test(SRC));
 
 
@@ -334,6 +343,50 @@ ok('🔴 וכתיבת סטטוס זורקת אף היא את המטמון',
   await new Promise(r => S.refresh(() => r())); await wait(20);
   ok('\uD83D\uDD34 \u05D5\u05D4\u05EA\u05D4\u05E4\u05DA \u05D1\u05DC\u05D9 \u05E8\u05E2\u05E0\u05D5\u05DF \u05E2\u05DE\u05D5\u05D3 \u2014 \u05D6\u05D4 \u05DE\u05D4 \u05E9\u05DE\u05D5\u05E0\u05E2 \u05D0\u05EA \u05D4\u05E4\u05D9\u05E6\u05D5\u05DC',
      st._txFsOn === true, String(st._txFsOn));
+
+
+  /* =============================================================== */
+  /*  🔴🔴 סעיף 10 — **הבאג שמורן ממן דיווחה עליו** (16.9.2026)   */
+  /*  עד התאריך הזה תושב **כתב** ל-Firestore ו**קרא** מהגיליון:      */
+  /*  שער הכתיבה (`txFsOn`) נשלח לכולם, אבל שער הקריאה       */
+  /*  היה `seesBudget && ...`. התוצאה: הבקשות שלה קיימות       */
+  /*  במקום אחד שהמסך שלה לא קורא ממנו — והן נעלמו.      */
+  section('10. \uD83D\uDD34 \u05EA\u05D5\u05E9\u05D1 \u05E7\u05D5\u05E8\u05D0 \u05D0\u05EA \u05D4\u05D1\u05E7\u05E9\u05D5\u05EA \u05E9\u05DC\u05D5 \u05DE-Firestore');
+  txFromFirestore = true; txScope = 'family'; budgetCounter++;
+  env = makeEnv({ resident: true, rows: [
+    { '\u05DE\u05D6\u05D4\u05D4': 21, '\u05E1\u05DB\u05D5\u05DD': 630, '\u05DE\u05D6\u05D4\u05D4 \u05DE\u05E9\u05E4\u05D7\u05D4': '401' },
+    { '\u05DE\u05D6\u05D4\u05D4': 22, '\u05E1\u05DB\u05D5\u05DD': 400, '\u05DE\u05D6\u05D4\u05D4 \u05DE\u05E9\u05E4\u05D7\u05D4': '401' }
+  ] });
+  S = env.CBA.sheets; st = env.CBA.mock;
+  await new Promise(r => S.load(() => r())); await wait(30);
+  ok('\u05D9\u05E6\u05D0\u05D4 \u05E9\u05D0\u05D9\u05DC\u05EA\u05D4 \u05D0\u05D7\u05EA', queryLog.length === 1, String(queryLog.length));
+  if (queryLog.length) {
+    ok('\uD83D\uDD34\uD83D\uDD34 **\u05D5\u05D4\u05D9\u05D0 \u05DE\u05E1\u05D5\u05E0\u05E0\u05EA \u05DC\u05DE\u05E9\u05E4\u05D7\u05D4** \u2014 \u05E9\u05D0\u05D9\u05DC\u05EA\u05D4 \u05E8\u05D7\u05D1\u05D4 \u05E0\u05D3\u05D7\u05D9\u05EA \u05D1\u05DB\u05DC\u05DC \u05D4\u05D0\u05D1\u05D8\u05D7\u05D4',
+       queryLog[0].conds.length === 2 && queryLog[0].conds[1][0] === 'familyId' &&
+       queryLog[0].conds[1][1] === '401', JSON.stringify(queryLog[0].conds));
+  }
+  ok('\uD83D\uDD34 \u05D5\u05E9\u05EA\u05D9 \u05D4\u05D1\u05E7\u05E9\u05D5\u05EA \u05D4\u05D2\u05D9\u05E2\u05D5 \u2014 \u05DC\u05D0 \u05D4\u05E9\u05D5\u05E8\u05D5\u05EA \u05D4\u05D9\u05E9\u05E0\u05D5\u05EA \u05DE\u05D4\u05D2\u05D9\u05DC\u05D9\u05D5\u05DF',
+     (st.years[CUR].transactions || []).length === 2,
+     String((st.years[CUR].transactions || []).length));
+  ok('\u26A0\uFE0F \u05D5\u05E9\u05DD \u05D4\u05E8\u05D5\u05DB\u05E9 \u05D4\u05D5\u05E9\u05DC\u05DD \u05DE\u05D4\u05DE\u05D8\u05E2\u05DF',
+     (st.years[CUR].transactions || []).every(t => t.buyer === '\u05DE\u05E9\u05E4\u05D7\u05EA \u05D1\u05D3\u05D9\u05E7\u05D4'),
+     JSON.stringify((st.years[CUR].transactions || []).map(t => t.buyer)));
+  ok('\uD83D\uDD34\uD83D\uDD34 \u05D5\u05D4\u05E1\u05E4\u05E8\u05D9\u05D9\u05D4 \u05DC\u05D0 \u05E0\u05E7\u05E8\u05D0\u05D4 \u2014 \u05EA\u05D5\u05E9\u05D1 \u05D0\u05D9\u05E0\u05D5 \u05E8\u05E9\u05D0\u05D9 \u05DC\u05E7\u05E8\u05D5\u05D0 \u05DC\u05D4',
+     ensureNamesN === 0, String(ensureNamesN));
+  ok('\u26A0\uFE0F \u05D5\u05DC\u05D0 \u05D9\u05E6\u05D0\u05D4 \u05DE\u05E9\u05D9\u05DB\u05D4 \u05E0\u05D5\u05E1\u05E4\u05EA \u05E9\u05DC \u05D4\u05DE\u05D8\u05E2\u05DF',
+     fetchLog.filter(u => u.indexOf('slim=1') > -1).length === 0, JSON.stringify(fetchLog));
+
+  /* \uD83D\uDD34 \u05E0\u05E4\u05D9\u05DC\u05D4 \u05DC\u05D0\u05D7\u05D5\u05E8 \u2014 \u05EA\u05D5\u05E9\u05D1 \u05D7\u05D9\u05D9\u05D1 \u05DC\u05E7\u05D1\u05DC \u05D0\u05EA \u05E9\u05D5\u05E8\u05D5\u05EA \u05D4\u05D2\u05D9\u05DC\u05D9\u05D5\u05DF, \u05DC\u05D0 \u05E9\u05E0\u05D4 \u05E8\u05D9\u05E7\u05D4 */
+  budgetCounter++;
+  env = makeEnv({ resident: true, rows: [] }); S = env.CBA.sheets; st = env.CBA.mock;
+  fsErr = new Error('permission-denied');
+  await new Promise(r => S.load(() => r())); await wait(30);
+  ok('\uD83D\uDD34 \u05DB\u05E9\u05DC \u05D1-Firestore \u05DE\u05D5\u05E9\u05DA \u05DE\u05D8\u05E2\u05DF slim=1',
+     fetchLog.filter(u => u.indexOf('slim=1') > -1).length === 1, JSON.stringify(fetchLog));
+  ok('\u26A0\uFE0F \u05D5\u05D4\u05EA\u05E0\u05D5\u05E2\u05D5\u05EA \u05DE\u05D4\u05D2\u05D9\u05DC\u05D9\u05D5\u05DF \u05D4\u05D2\u05D9\u05E2\u05D5 \u2014 \u05DC\u05D0 \u05E9\u05E0\u05D4 \u05E8\u05D9\u05E7\u05D4',
+     (st.years[CUR].transactions || []).length === 2,
+     String((st.years[CUR].transactions || []).length));
+  txScope = 'all';
 
   console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);

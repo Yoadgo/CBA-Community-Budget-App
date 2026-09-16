@@ -865,8 +865,45 @@ function doGet(e) {
      *  ⚠️ **רק לבעלי הרשאת תקציב.** תושב מקבל דרך DATA_MIN את שורות
      *     משפחתו בלבד, וזה מסלול נפרד שטרם הופך.
      * ====================================================================== */
-    var txFs = seesBudget && slimRaw === '2' && txJobsUseFirestore_();
+    /* ========================================================================
+     *  🔴🔴 **תיקון הפיצול בקריאה של תושב** (16.9.2026)
+     * ------------------------------------------------------------------------
+     *  עד התאריך הזה עמד כאן `seesBudget &&`, וזה יצר את
+     *  החור שכל צעד 09ב בא למנוע: **שער הכתיבה (`txFsOn`)
+     *  נשלח לכולם בלי תנאי הרשאה, ושער הקריאה היה מותנה
+     *  בהרשאה.** כלומר תושב כתב את בקשת ההחזר שלו
+     *  ל-Firestore וקרא את המסך מהגיליון — והבקשה פשוט
+     *  **נעלמה לו ברענון הבא**. נמדד חי (משפחה 7, 16.9):
+     *  ארבע בקשות ב-Firestore מול שתיים בגיליון.
+     *
+     *  🔑 **מתג אחד לשני הכיוונים.** מעכשיו כל מי שכותב
+     *  ל-Firestore גם קורא ממנו. מה שמשתנה הוא **היקף
+     *  השאילתה**, והשרת מצהיר עליו ב-`txFsScope`.
+     *
+     *  ⚠️ **בלי מזהה משפחה לא מרוקנים.** כלל האבטחה דוחה
+     *     שאילתה שאינה מסוננת למשפחה, ולכן תושב בלי מזהה
+     *     היה מקבל שנה ריקה ונופל לאחור סתם. המסלול
+     *     הישן מחזיר לו במילא רשימה ריקה — אותה תוצאה,
+     *     בלי נסיעת רשת מיותרת.
+     * ====================================================================== */
+    var txFs = slimRaw === '2' && txJobsUseFirestore_() && (seesBudget || !!myFamilyId);
     out.txFromFirestore = txFs;
+    out.txFsScope = seesBudget ? 'all' : 'family';
+    out.txFsFamily = myFamilyId;
+    /* 🔴 **שם הרוכש לתושב מגיע מהמטען**, כי `residentDirectory`
+       חסומה מאחורי `PERM_ANY_ADMIN` והלקוח שלו אינו רשאי
+       לקרוא לה. ב-Firestore אין שם — זו הכרעת יועד.
+       ⚠️ המפה נקראת דרך `cached_` לפי מונה תחום התושבים,
+          אחרת כל משיכה של כל תושב היתה קוראת את כל
+          טאב "תושבים" מחדש. */
+    out.txFsFamilyName = '';
+    if (txFs && !seesBudget && myFamilyId) {
+      try {
+        var famMap = cached_('cba_famnames_' + (currentDomains_().residents || 0),
+                             function () { return txFamilyNames_(ss); });
+        out.txFsFamilyName = String((famMap && famMap[myFamilyId]) || '');
+      } catch (eFam) { out.txFsFamilyName = ''; }
+    }
 
     /* ========================================================================
      *  🔴🔴 **מתג אחד לתחום, והשרת הוא שמחזיק בו** (09ב-5ג)
@@ -892,13 +929,18 @@ function doGet(e) {
 
     years.forEach(function (y) {
       if (slimYears && y !== currentY) return;   // נמשכת לפי דרישה
-      var tx = cached_('cba_tx_' + budgetStamp_() + '_' + y, function () { return readTable_(ss, 'תנועות ' + y); });
+      /* 🔴 **השנה שהלקוח ימלא בעצמו אינה נקראת מהגיליון בכלל.**
+         זו אינה רק חסיכה — קריאה שתוצאתה נזרקת היא
+         המקום הטבעי שבו נתון ישן מתגנב בחזרה. */
+      var txEmpty = txFs && y === currentY;
+      var tx = txEmpty ? []
+        : cached_('cba_tx_' + budgetStamp_() + '_' + y, function () { return readTable_(ss, 'תנועות ' + y); });
       if (!seesBudget) {
         // בלי מזהה משפחה אין למי לשייך — מחזירים ריק, לא הכול. שגיאת נתונים
         // בטאב "תושבים" לא תהפוך כאן להדלפה של כל התנועות.
-        tx = myFamilyId
-          ? tx.filter(function (r) { return String(r['מזהה משפחה'] || '').trim() === myFamilyId; })
-          : [];
+        tx = (txEmpty || !myFamilyId)
+          ? []
+          : tx.filter(function (r) { return String(r['מזהה משפחה'] || '').trim() === myFamilyId; });
         out.data[y] = { budget: [], income: [], transactions: tx, groups: [], splits: [], items: [] };
         return;
       }
@@ -922,7 +964,7 @@ function doGet(e) {
               כבוי (למשל כשהשנה הנוכחית אינה ברשימה) נשלחות **כל**
               השנים — והלקוח יודע למלא רק אחת. בלעדיו כל השאר
               היו מגיעות ריקות ונראות כמו שנה בלי תנועות — אפס שקרי. */
-        transactions: (txFs && y === currentY) ? [] : tx,
+        transactions: txEmpty ? [] : tx,
         groups: yd.groups,
         splits: yd.splits,
         items:  yd.items
@@ -1379,7 +1421,7 @@ function doPostDispatch_(ss, body) {
       case 'deleteTransaction': return json_(deleteTransaction_(ss, body));
       case 'saveBudget':        return json_(saveBudget_(ss, body));
       case 'setBudgetMeta':     return json_(setBudgetMeta_(ss, body));
-      case 'renameCategory':    return json_(renameCategory_(ss, body));
+      case 'renameCategory':    return json_(btxAfterWrite_(ss, body, renameCategory_(ss, body)));
       case 'logBudgetUpdate':   return json_(logBudgetUpdate_(ss, body));
       case 'saveNotes':         return json_(saveNotes_(ss, body));
       case 'addYear':           return json_(addYear_(ss, body));
@@ -1389,10 +1431,10 @@ function doPostDispatch_(ss, body) {
       case 'uploadReceiptOnly': return json_(uploadReceiptOnly_(ss, body));
       case 'saveResidentNames': return json_(saveResidentNames_(ss, body));
       case 'formatResidents':   return json_(formatResidents_(ss, body));
-      case 'saveFamilyIds':     return json_(saveFamilyIds_(ss, body));
-      case 'saveColumnValues':  return json_(saveColumnValues_(ss, body));
-      case 'deleteReceiptFile': return json_(deleteReceiptFile_(ss, body));
-      case 'uploadReceiptFile': return json_(uploadReceiptFile_(ss, body));
+      case 'saveFamilyIds':     return json_(btxAfterWrite_(ss, body, saveFamilyIds_(ss, body)));
+      case 'saveColumnValues':  return json_(btxAfterWrite_(ss, body, saveColumnValues_(ss, body)));
+      case 'deleteReceiptFile': return json_(btxAfterWrite_(ss, body, deleteReceiptFile_(ss, body)));
+      case 'uploadReceiptFile': return json_(btxAfterWrite_(ss, body, uploadReceiptFile_(ss, body)));
       case 'ensureColumns':     return json_(ensureColumns_(ss, body));
       case 'saveColumnConfig':  return json_(saveColumnConfig_(ss, body));
       case 'saveCommitteeTree': return json_(saveCommitteeTree_(ss, body));
@@ -1590,6 +1632,8 @@ function saveTransactionRow_(ss, body) {
     var newRow = headers.map(function (h) { return rowObj.hasOwnProperty(h) ? rowObj[h] : ''; });
     sh.appendRow(newRow);
   }
+  /* 🔴 השורה בגיליון — ועכשיו גם ב-Firestore. ר' `btxPushRows_`. */
+  btxPushRows_(ss, body.year, [t.id]);
   return { ok: true, id: t.id };
 }
 
@@ -1606,7 +1650,11 @@ function deleteTransactionRow_(ss, body) {
   var n = Math.max(sh.getLastRow() - 1, 0);
   var ids = n ? sh.getRange(2, 1, n, 1).getValues() : [];
   for (var i = 0; i < ids.length; i++) {
-    if (String(ids[i][0]) === String(body.id)) { sh.deleteRow(i + 2); return { ok: true }; }
+    if (String(ids[i][0]) === String(body.id)) {
+      sh.deleteRow(i + 2);
+      btxDropDoc_(body.year, body.id);   /* אחרת המראה תחזיר את השורה */
+      return { ok: true };
+    }
   }
   return { ok: false, error: 'לא נמצא' };
 }
@@ -2243,6 +2291,7 @@ function submitReceipt_(ss, body) {
       });
     } catch (mailErr) { Logger.log('מייל בקשת החזר חדשה נכשל: ' + mailErr); }
 
+    btxPushRows_(ss, year, [newId]);
     return { ok: true, id: newId, url: file.getUrl() };
   } finally {
     lock.releaseLock();
@@ -5574,6 +5623,20 @@ function hourlyJobsRun_() {
      כתב ל-Firestore וטרם הוחלו על הגיליון.
      ⚠️ **לפני הגיבוי המצטבר** — אחרת הגיבוי מעתיק מסמכים
         עם דגל פתוח ושחזור מגיבוי יחזיר אותו לחיים. */
+  /* 🔴🔴 **המראה רצה ראשונה** (16.9.2026) — היא מביאה לגיליון
+     שורות שנכתבו ישירות ל-Firestore. בלעדיה `budgetTxApplyPending_`
+     מחפשת שורה שאינה קיימת, סופרת `missing`, ו**התושב לא
+     מקבל מייל**. נמדד חי: שתי בקשות במצב הזה. */
+  try {
+    var mr = btxMirrorToSheet_(ss);
+    if (mr.added || mr.updated || mr.archived || mr.mailed || mr.errors.length) {
+      Logger.log('מראת התנועות: נוספו ' + mr.added + ', עודכנו ' + mr.updated +
+                 ', אורכבו ' + mr.archived + ', מיילים ' + mr.mailed +
+                 (mr.errors.length ? ' | שגיאות: ' + mr.errors.join(' ; ') : ''));
+    }
+  } catch (e) {
+    Logger.log('btxMirrorToSheet_ נכשל: ' + e);
+  }
   try {
     var a = budgetTxApplyPending_(ss);
     if (a.found) {
@@ -9897,8 +9960,39 @@ function btxYearDocs_(ss, y) {
   return out;
 }
 
-function budgetTxSyncAll_(ss) {
+/* ============================================================================
+ *  🔴🔴 **הכיוון ההפוך — ולכן הוא חסום** (16.9.2026)
+ * ----------------------------------------------------------------------------
+ *  יועד הכריע (16.9): **הבעלים של שורת תנועה הוא
+ *  תמיד Firestore.** הפונקציה הזאת כותבת את Firestore
+ *  **מהגיליון**, ובסופה מוחקת כל מסמך שאין לו שורה.
+ *
+ *  🔴 **זה מוקש.** כל בקשת החזר שתושב הגיש מהדפדפן
+ *  נכתבת ישירות ל-Firestore ואין לה שורה בגיליון — כלומר
+ *  ריצה אחת של הפונקציה הזאת מוחקת את כולן לצמיתות.
+ *  נמדד חי ב-16.9: שתי בקשות של משפחה 7 היו במצב הזה.
+ *
+ *  לכן: **כשהדגל דלוק היא מסרבת לרוץ.** לזריעה
+ *  ראשונית (או לאחרי שהדגל כובה) יש `budgetTxSyncForce`.
+ *  ⚠️ וגם בכפייה — **סחיפת היתומים לא רצה כשהדגל דלוק**.
+ *     כתיבה מחדש היא הפיכה; מחיקה אינה.
+ * ========================================================================== */
+function budgetTxSyncForce() {
+  var r = budgetTxSyncAll_(SpreadsheetApp.getActiveSpreadsheet(), { force: true });
+  Logger.log(JSON.stringify(r));
+  return r;
+}
+
+function budgetTxSyncAll_(ss, opts) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var fsOwns = false;
+  try { fsOwns = txJobsUseFirestore_(); } catch (eF) { fsOwns = false; }
+  if (fsOwns && !(opts && opts.force === true)) {
+    return { ok: false, refused: true, wrote: 0, deleted: 0, skipped: 0, kept: 0, years: [],
+             errors: ['הסנכרון הזה כותב את Firestore מהגיליון, ומאז שהתנועות עברו ' +
+                      'ל-Firestore הכיוון הזה מוחק בקשות שנכתבו מהדפדפן. ' +
+                      'אם באמת צריך — budgetTxSyncForce מעורך הסקריפט.'] };
+  }
   var settings = readSettings_(ss);
   var years = String(settings['שנים'] || '').split(',')
                 .map(function (x) { return x.trim(); }).filter(Boolean);
@@ -9948,7 +10042,7 @@ function budgetTxSyncAll_(ss) {
   /* סחיפת יתומים — רק אם כל השנים נכתבו בהצלחה,
      ומתוך הרשימה שכבר קראנו (בלי fsList_ נוסף).
      ⚠️ המזהה גולמי, בדיוק כמו ש-`fsList_` מחזיר — ר׳ הבאג ב-08א. */
-  if (out.ok) {
+  if (out.ok && !fsOwns) {
     try {
       Object.keys(have).forEach(function (id) {
         if (!live[id]) { fsDelete_(fsDocPath_(FS_BUDGET_TX, id)); out.deleted++; }
@@ -10128,6 +10222,338 @@ function btxApplyYear_(ss, y, items, out) {
   return changed;
 }
 
+/* ============================================================================
+ *  btxMirrorToSheet_ — הכיוון היחיד: Firestore ⇐ גיליון   (16.9.2026)
+ * ----------------------------------------------------------------------------
+ *  🔴🔴 **ההכרעה שנשארה פתוחה מצעד 09, ויועד סגר ב-16.9:** הבעלים של
+ *  שורת תנועה הוא **תמיד Firestore**, והזיהוי הוא מזהה משפחה.
+ *  מכאן נגזר שהטאב "תנועות <שנה>" הוא **מראה מיוצרת** — כמו `_נתוני_`.
+ *
+ *  ⚠️⚠️ **עריכה ידנית של הטאב תימחק בריצה הבאה.** זה מחיר מודע, והוא
+ *     נאמר ליועד במפורש לפני המימוש.
+ *
+ *  🔴 **למה זה קיים בכלל:** עד היום `budgetTxApplyPending_` ידעה רק
+ *  לעדכן **עמודת סטטוס בשורה שכבר קיימת**. בקשה שנכתבה מהדפדפן
+ *  ישירות ל-Firestore לא הגיעה לגיליון **לעולם** — ונספרה כ-`missing`.
+ *  נמדד חי (16.9): שמונה מסמכים ב-Firestore מול שש שורות בגיליון.
+ *
+ *  🔴 **וגם המיילים תלויים בזה.** `btxSideEffects_` — שהיא ששולחת
+ *  "אושר לתשלום"/"שולם"/"נדחה" — רצה רק כשהשורה בגיליון עודכנה.
+ *  לכן על בקשה שלא הגיעה לגיליון התושב **לא קיבל שום מייל**.
+ *  כאן ההחלטה עוברת לשדה `mailedStatus` שהסקריפט עצמו מתחזק:
+ *  "מה הסטטוס האחרון שעליו כבר יצא מייל".
+ *
+ *  ⚠️ **הריצה הראשונה אינה שולחת דבר על שורות ותיקות.** מסמך בלי
+ *     `mailedStatus` שכבר יש לו שורה = מסמך מלפני השדה; מקבעים
+ *     בשקט. אחרת כל תנועה במערכת היתה מפיקה מייל בבת אחת.
+ *     שורה ש**נוספת עכשיו** היא המקרה ההפוך: הגיליון מעולם לא ידע
+ *     עליה, כלומר המייל באמת לא יצא — ולכן שם כן שולחים.
+ *
+ *  ⚠️ **בלי רשימת המסמכים לא נוגעים בטאב.** שאילתה שנכשלה או שנה
+ *     שחזרה ריקה בעוד יש בה שורות — מדלגים. מחיקה בגיליון היא
+ *     לתמיד, וכבר נשרפנו על "גיבוי שדורס".
+ * ========================================================================== */
+var BTX_ARCHIVE_TAB = 'תנועות שנמחקו';
+var BTX_MIRROR_MAX_DOCS = 2000;
+
+/** ערכי שורה לפי סדר הכותרות של הטאב, מתוך מסמך Firestore. */
+/* ============================================================================
+ *  🔴🔴 **כל כתיבה של Apps Script לטאב התנועות מסתיימת כאן**
+ *  (16.9.2026)
+ * ----------------------------------------------------------------------------
+ *  מרגע ש-`btxMirrorToSheet_` מיישרת את הטאב לפי Firestore,
+ *  שורה שנכתבה **רק** בגיליון היא שורה שתאורכב
+ *  בריצה הבאה. זה נוגע בדיוק למסלול החשוב ביותר:
+ *  **הנפילה לאחור של הכתיבה** — כשהדפדפן נכשל מול
+ *  Firestore ונופל ל-`saveTransaction`.
+ *
+ *  🔑 לכן כל כתיבה כזאת דוחפת את השורות שהיא נגעה
+ *  בהן ל-Firestore. **לפי מזהה, ולעולם לא "כל השנה"** —
+ *  דחיפה גורפת היתה דורסת שורות שהדפדפן כתב
+ *  והמראה עוד לא הספיקה להוריד.
+ *
+ *  ⚠️ מסמן `mailedStatus` על הסטטוס שנכתב: Apps Script כבר
+ *     שלח את המייל בעצמו (`saveTransactionRow_`), ובלי זה
+     המראה היתה שולחת אותו שוב.
+ *  ⚠️ כשל כאן אינו מפיל את הפעולה — השורה כבר בגיליון,
+ *     והמראה השעתית היא רשת הביטחון.
+ * ========================================================================== */
+/** דוחפת את כל שורות השנה מהגיליון — **בלי סחיפת יתומים**.
+ *  לפעולות גורפות שאין להן רשימת מזהים (למשל שינוי שם סעיף).
+ *  ⚠️ שורה שקיימת רק ב-Firestore אינה נגעת — הלולאה רצה
+ *     על שורות הגיליון בלבד. */
+function btxPushYear_(ss, y) {
+  var on = false;
+  try { on = txJobsUseFirestore_(); } catch (e) { return; }
+  if (!on) return;
+  try {
+    var sh = ss.getSheetByName('תנועות ' + y);
+    if (!sh) return;
+    var n = Math.max(sh.getLastRow() - 1, 0);
+    if (!n) return;
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+                    .map(function (h) { return String(h).trim(); });
+    var cId = headers.indexOf('מזהה');
+    if (cId === -1) return;
+    var col = sh.getRange(2, cId + 1, n, 1).getValues();
+    var ids = [];
+    for (var i = 0; i < n; i++) {
+      var id = String(col[i][0] == null ? '' : col[i][0]).trim();
+      if (id) ids.push(id);
+    }
+    btxPushRows_(ss, y, ids);
+  } catch (err) { Logger.log('btxPushYear_ נכשל: ' + err); }
+}
+
+/** עוטפת פעולת כתיבה של Apps Script על טאב התנועות ודוחפת
+ *  את מה שהשתנה ל-Firestore. **נקודה אחת** לכל הפעולות
+ *  הגורפות — שבע קריאות מפוזרות היו מתיישנות בפיצ׳ר הבא. */
+function btxAfterWrite_(ss, body, res) {
+  try {
+    if (!res || res.ok !== true || !body || !body.year) return res;
+    var ids = [];
+    if (body.items && body.items.length) {
+      for (var i = 0; i < body.items.length; i++) {
+        if (body.items[i] && body.items[i].id != null) ids.push(body.items[i].id);
+      }
+    } else if (body.id != null) {
+      ids.push(body.id);
+    }
+    if (ids.length) btxPushRows_(ss, body.year, ids);
+    else btxPushYear_(ss, body.year);
+  } catch (e) { Logger.log('btxAfterWrite_ נכשל: ' + e); }
+  return res;
+}
+
+function btxPushRows_(ss, y, ids) {
+  var on = false;
+  try { on = txJobsUseFirestore_(); } catch (e) { return; }
+  if (!on || !ids || !ids.length) return;
+  try {
+    var sh = ss.getSheetByName('תנועות ' + y);
+    if (!sh) return;
+    var lastCol = sh.getLastColumn();
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+                    .map(function (h) { return String(h).trim(); });
+    var cId = headers.indexOf('מזהה');
+    if (cId === -1) return;
+    var n = Math.max(sh.getLastRow() - 1, 0);
+    if (!n) return;
+    var values = sh.getRange(2, 1, n, lastCol).getValues();
+    var want = {};
+    for (var w = 0; w < ids.length; w++) want[String(ids[w] == null ? '' : ids[w]).trim()] = 1;
+    for (var i = 0; i < n; i++) {
+      var id = String(values[i][cId] == null ? '' : values[i][cId]).trim();
+      if (!id || !want[id]) continue;
+      var rowObj = {};
+      for (var c = 0; c < headers.length; c++) rowObj[headers[c]] = values[i][c];
+      var fam = String(rowObj['מזהה משפחה'] == null ? '' : rowObj['מזהה משפחה']).trim();
+      var doc = btxRow_(rowObj);
+      doc.year = String(y);
+      doc.familyId = fam;
+      doc.statusPending = false;
+      doc.mailedStatus = String(rowObj['סטטוס'] == null ? '' : rowObj['סטטוס']).trim();
+      doc.schema = 2;
+      doc.updatedAt = new Date();
+      fsSet_(fsDocPath_(FS_BUDGET_TX, btxDocId_(y, id)), doc);
+    }
+  } catch (err) { Logger.log('btxPushRows_ נכשל: ' + err); }
+}
+
+/** מוחקת מסמך תנועה אחד, כשהמחיקה נעשתה דרך Apps Script. */
+function btxDropDoc_(y, id) {
+  var on = false;
+  try { on = txJobsUseFirestore_(); } catch (e) { return; }
+  if (!on) return;
+  try { fsDelete_(fsDocPath_(FS_BUDGET_TX, btxDocId_(y, id))); }
+  catch (err) { Logger.log('btxDropDoc_ נכשל: ' + err); }
+}
+
+function btxMirrorRow_(headers, d, famNames) {
+  var fam = String(d['מזהה משפחה'] == null ? '' : d['מזהה משפחה']).trim();
+  var out = [];
+  for (var i = 0; i < headers.length; i++) {
+    var h = headers[i], v = d[h];
+    /* 🔴 שם הרוכש אינו יושב ב-Firestore (הכרעת יועד) — מרכיבים אותו
+       כאן ממזהה המשפחה, בדיוק כמו שהלקוח עושה בקריאה. בלעדיו
+       המייל לתושב היה יוצא בלי שם. */
+    if (h === 'רוכש' && (v === undefined || v === null || v === '') && fam) {
+      v = famNames[fam] || '';
+    }
+    out.push(v === undefined || v === null ? '' : v);
+  }
+  return out;
+}
+
+/** כותב את `mailedStatus` על המסמך, בלי לגעת בשאר השדות. */
+function btxMarkMailed_(docId, data, status) {
+  var doc = {};
+  for (var k in data) if (Object.prototype.hasOwnProperty.call(data, k)) doc[k] = data[k];
+  doc.mailedStatus = String(status == null ? '' : status);
+  doc.updatedAt = new Date();
+  fsSet_(fsDocPath_(FS_BUDGET_TX, docId), doc);
+}
+
+/** מעביר שורה שנמחקה ב-Firestore לטאב הארכיון. */
+function btxArchiveRow_(ss, headers, rowArr, year) {
+  var sh = ss.getSheetByName(BTX_ARCHIVE_TAB);
+  if (!sh) {
+    sh = ss.insertSheet(BTX_ARCHIVE_TAB);
+    sh.getRange(1, 1, 1, headers.length + 2)
+      .setValues([['שנה', 'הועבר בתאריך'].concat(headers)]);
+    try { sh.setFrozenRows(1); } catch (e) {}
+  }
+  var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+               .map(function (h) { return String(h).trim(); });
+  var line = [];
+  for (var i = 0; i < head.length; i++) {
+    if (head[i] === 'שנה') { line.push(String(year)); continue; }
+    if (head[i] === 'הועבר בתאריך') { line.push(new Date()); continue; }
+    var idx = headers.indexOf(head[i]);
+    line.push(idx === -1 ? '' : rowArr[idx]);
+  }
+  sh.appendRow(line);
+}
+
+function btxMirrorYear_(ss, y, famNames, out) {
+  var sh = ss.getSheetByName('תנועות ' + y);
+  if (!sh) return false;
+
+  var docs;
+  try { docs = fsQuery_(FS_BUDGET_TX, 'year', 'EQUAL', String(y), BTX_MIRROR_MAX_DOCS); }
+  catch (e) { out.ok = false; out.errors.push(y + ' — שאילתה: ' + String(e)); return false; }
+
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+                  .map(function (h) { return String(h).trim(); });
+  var cId = headers.indexOf('מזהה');
+  if (cId === -1) { out.errors.push('אין עמודת מזהה בתנועות ' + y); return false; }
+
+  var n = Math.max(sh.getLastRow() - 1, 0);
+  var values = n ? sh.getRange(2, 1, n, lastCol).getValues() : [];
+  var rowOf = {};
+  for (var i = 0; i < n; i++) {
+    var rid = String(values[i][cId] == null ? '' : values[i][cId]).trim();
+    if (rid) rowOf[rid] = i;
+  }
+
+  /* ⚠️ שנה ריקה ב-Firestore מול טאב מלא = חשד לשאילתה חלקית.
+     לא נוגעים בכלל — ר' ההערה על "גיבוי שדורס". */
+  if (!docs.length && n) {
+    out.errors.push(y + ' — אפס מסמכים מול ' + n + ' שורות; דילגתי');
+    return false;
+  }
+
+  var seen = {}, appends = [], touched = false;
+
+  for (var k = 0; k < docs.length; k++) {
+    var docId = docs[k].id, d = docs[k].data || {};
+    var txId = String(d['מזהה'] == null ? '' : d['מזהה']).trim();
+    if (!txId) { out.errors.push(docId + ' — מסמך בלי מזהה'); continue; }
+    seen[txId] = 1;
+
+    var want = btxMirrorRow_(headers, d, famNames);
+    var isNew = !Object.prototype.hasOwnProperty.call(rowOf, txId);
+
+    if (isNew) {
+      appends.push(want);
+      out.added++;
+      touched = true;
+    } else {
+      var idx = rowOf[txId], diffs = 0;
+      for (var c = 0; c < headers.length; c++) {
+        /* עמודה שאינה ברשימת ההיתר (למשל "רוכש" של שורה עם משפחה)
+           אינה חלק מהמראה — לא נוגעים בה. */
+        if (BTX_ALLOWED_COLS.indexOf(headers[c]) === -1) continue;
+        var cur = values[idx][c], nxt = want[c];
+        if (String(cur == null ? '' : cur) === String(nxt == null ? '' : nxt)) continue;
+        sh.getRange(idx + 2, c + 1).setValue(nxt);
+        values[idx][c] = nxt;
+        diffs++;
+      }
+      if (diffs) { out.updated++; touched = true; }
+      want = values[idx];
+    }
+
+    /* המיילים — ההחלטה היחידה, לפי `mailedStatus`. */
+    try {
+      var cur2 = String(d['סטטוס'] == null ? '' : d['סטטוס']).trim();
+      var prev = (d.mailedStatus === undefined || d.mailedStatus === null)
+                   ? null : String(d.mailedStatus).trim();
+      if (prev !== cur2) {
+        if (prev !== null || isNew) {
+          btxSideEffects_(ss, headers, want, prev === null ? '' : prev, cur2);
+          out.mailed++;
+        }
+        btxMarkMailed_(docId, d, cur2);
+      }
+    } catch (e2) { out.errors.push(docId + ' — מייל: ' + String(e2)); }
+  }
+
+  if (appends.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, appends.length, lastCol).setValues(appends);
+  }
+
+  /* ארכוב — מהסוף להתחלה, אחרת כל מחיקה מזיזה את האינדקסים. */
+  for (var r = n - 1; r >= 0; r--) {
+    var rid2 = String(values[r][cId] == null ? '' : values[r][cId]).trim();
+    if (!rid2 || seen[rid2]) continue;
+    try {
+      btxArchiveRow_(ss, headers, values[r], y);
+      sh.deleteRow(r + 2);
+      out.archived++;
+      touched = true;
+    } catch (e3) { out.errors.push(y + '/' + rid2 + ' — ארכוב: ' + String(e3)); }
+  }
+
+  out.years.push({ year: y, docs: docs.length, rows: n });
+  return touched;
+}
+
+function btxMirrorToSheet_(ss, opts) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: true, years: [], added: 0, updated: 0, archived: 0, mailed: 0, errors: [] };
+  if (!txJobsUseFirestore_()) { out.skipped = 'flag-off'; return out; }
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); }
+  catch (e) { out.ok = false; out.errors.push('המערכת עסוקה — לא סונכרן'); return out; }
+
+  try {
+    var settings = readSettings_(ss);
+    var years = String(settings['שנים'] || '').split(',')
+                  .map(function (x) { return x.trim(); }).filter(Boolean);
+    /* 🔴 **מכסה.** כל ריצה עולה קריאה לכל מסמך בכל שנה —
+       כ-150 היום. הדחיפה מהדפדפן רצה אחרי **כל** שינוי סטטוס,
+       ושנה שעברה אינה זזה שם. לכן שם — השנה הנוכחית בלבד;
+       העבודה השעתית עוברת על הכול והיא רשת הביטחון. */
+    if (opts && opts.currentOnly) {
+      var cur = String(settings['שנה נוכחית'] || '').trim();
+      if (cur && years.indexOf(cur) !== -1) years = [cur];
+    }
+    var famNames = {};
+    try { famNames = txFamilyNames_(ss); } catch (e0) { famNames = {}; }
+
+    var touched = false;
+    for (var i = 0; i < years.length; i++) {
+      try { if (btxMirrorYear_(ss, years[i], famNames, out)) touched = true; }
+      catch (e1) { out.ok = false; out.errors.push(years[i] + ': ' + String(e1)); }
+    }
+    /* הגיליון זז ⇒ להעלות מונה, אחרת המטמון יגיש נתון ישן. */
+    if (touched) bumpRev_('saveTransaction');
+  } finally {
+    lock.releaseLock();
+  }
+  return out;
+}
+
+/** נקודת הרצה ידנית מעורך הסקריפט (בלי קו תחתון — מופיעה בבורר). */
+function budgetTxMirror() {
+  var r = btxMirrorToSheet_(SpreadsheetApp.getActiveSpreadsheet());
+  Logger.log(JSON.stringify(r));
+  return r;
+}
+
 function budgetTxApplyPending_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var out = { ok: true, found: 0, applied: 0, rejected: 0, missing: 0, errors: [] };
@@ -10189,7 +10615,14 @@ function handleBudgetTxApply_(p) {
     var gate = authorize_(ss, p, PERM_BUDGET);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var t0 = new Date().getTime();
+    /* 🔴 המראה לפני ההחלה — אחרת שורה שנכתבה זה עתה
+       ישירות ל-Firestore אינה קיימת בגיליון והסטטוס
+       שלה נבלע כ-`missing`. כשל כאן אינו עוצר את ההחלה. */
+    var mirrored = null;
+    try { mirrored = btxMirrorToSheet_(ss, { currentOnly: true }); }
+    catch (eM) { mirrored = { errors: [String(eM)] }; }
     var r = budgetTxApplyPending_(ss);
+    r.mirror = mirrored;
     /* ========================================================================
      *  🔴🔴 **הרמה ללא תנאי — וזו כל מטרת הדחיפה** (09ב-5ג)
      * ------------------------------------------------------------------------
@@ -10252,7 +10685,13 @@ function handleBudgetTxSync_(p) {
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var t0 = new Date().getTime();
-    var r = withSyncLock_('budgetTxSync', function () { return budgetTxSyncAll_(ss); });
+    /* 🔴 **הכפתור עובר לכיוון הנכון** (16.9.2026). כשהדגל
+       דלוק, Firestore הוא הבעלים — ולכן "סנכרון תנועות"
+       מרענן את **הגיליון**, לא את Firestore. אותו כפתור,
+       אותה כוונה, כיוון הפוך — ובלי מוקש שמוחק בקשות. */
+    var r = withSyncLock_('budgetTxSync', function () {
+      return txJobsUseFirestore_() ? btxMirrorToSheet_(ss) : budgetTxSyncAll_(ss);
+    });
     if (r.busy) return json_(r);
     r.ms = new Date().getTime() - t0;
     return json_(r);

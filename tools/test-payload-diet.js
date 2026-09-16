@@ -158,9 +158,15 @@ ok('\u05D5\u05D4\u05D3\u05D9\u05D0\u05D8\u05D4 \u05E2\u05D3\u05D9\u05D9\u05DF \u
 
 reset({ isSuper: false, perms: [], familyId: '401' });
 r = run2();
-ok('\uD83D\uDD34 \u05EA\u05D5\u05E9\u05D1 \u05D1\u05DC\u05D9 \u05D4\u05E8\u05E9\u05D0\u05EA \u05EA\u05E7\u05E6\u05D9\u05D1 \u05DC\u05D0 \u05DE\u05D5\u05E9\u05E4\u05E2', r.txFromFirestore === false);
-YEARS.forEach(y => ok(y + ': \u05E9\u05D5\u05E8\u05EA \u05DE\u05E9\u05E4\u05D7\u05EA\u05D5 \u05E2\u05D3\u05D9\u05D9\u05DF \u05E9\u05DD',
-                      r.data[y].transactions.length === 1, String(r.data[y].transactions.length)));
+/* 🔴🔴 **השתנה ב-16.9.2026 — וזה כל התיקון.** עד אז תושב
+   **כתב** ל-Firestore ו**קרא** מהגיליון — והבקשות שלו נעלמו לו
+   מהמסך. מעכשיו גם השנה הנוכחית שלו מתרוקנת והוא ממלא
+   אותה מ-Firestore, בדיוק כמו הגזבר — רק מסוננת למשפחה. */
+ok('\uD83D\uDD34\uD83D\uDD34 \u05EA\u05D5\u05E9\u05D1 \u05E2\u05DD \u05DE\u05D6\u05D4\u05D4 \u05DE\u05E9\u05E4\u05D7\u05D4 \u05E7\u05D5\u05E8\u05D0 \u05D4\u05D5\u05D0 \u05D2\u05DD \u05DE-Firestore', r.txFromFirestore === true);
+ok('\u05D5\u05D4\u05E9\u05E8\u05EA \u05DE\u05E6\u05D4\u05D9\u05E8 \u05E2\u05DC \u05D4\u05D9\u05E7\u05E3 \u05DE\u05E6\u05D5\u05DE\u05E6\u05DD', r.txFsScope === 'family', String(r.txFsScope));
+YEARS.forEach(y => ok(y + ': \u05D4\u05E9\u05E0\u05D4 \u05D4\u05E0\u05D5\u05DB\u05D7\u05D9\u05EA \u05E8\u05D9\u05E7\u05D4, \u05D4\u05D0\u05D7\u05E8\u05D5\u05EA \u05E2\u05DD \u05E9\u05D5\u05E8\u05EA \u05D4\u05DE\u05E9\u05E4\u05D7\u05D4',
+                      r.data[y].transactions.length === (y === r.currentYear ? 0 : 1),
+                      String(r.data[y].transactions.length)));
 
 sandbox.readSettings_ = () => ({ '\u05E9\u05E0\u05D4 \u05E0\u05D5\u05DB\u05D7\u05D9\u05EA': '\u05EA\u05E9\u05E4"\u05D8' });
 reset({ isSuper: true, familyId: '401' });
@@ -171,10 +177,10 @@ ok('\uD83D\uDD34\uD83D\uDD34 \u05E9\u05E0\u05D4 \u05E0\u05D5\u05DB\u05D7\u05D9\u
 sandbox.readSettings_ = () => ({ '\u05E9\u05E0\u05D4 \u05E0\u05D5\u05DB\u05D7\u05D9\u05EA': '\u05EA\u05E9\u05E4"\u05D6' });
 sandbox.txJobsUseFirestore_ = realFlag;
 
-ok('\u05D4\u05EA\u05E0\u05D0\u05D9 \u05D3\u05D5\u05E8\u05E9 \u05D4\u05E8\u05E9\u05D0\u05EA \u05EA\u05E7\u05E6\u05D9\u05D1 + slim=2 + \u05D4\u05D3\u05D2\u05DC \u05D4\u05D7\u05D9',
-   /var txFs = seesBudget && slimRaw === '2' && txJobsUseFirestore_\(\)/.test(CODE));
+ok('\u05D4\u05EA\u05E0\u05D0\u05D9 \u05D3\u05D5\u05E8\u05E9 slim=2 + \u05D4\u05D3\u05D2\u05DC \u05D4\u05D7\u05D9 + \u05D4\u05E8\u05E9\u05D0\u05D4 \u05D0\u05D5 \u05DE\u05D6\u05D4\u05D4 \u05DE\u05E9\u05E4\u05D7\u05D4',
+   /var txFs = slimRaw === '2' && txJobsUseFirestore_\(\) && \(seesBudget \|\| !!myFamilyId\)/.test(CODE));
 ok('\uD83D\uDD34 \u05D4\u05E8\u05D9\u05E7\u05D5\u05DF \u05DE\u05D5\u05D2\u05D1\u05DC \u05DC\u05E9\u05E0\u05D4 \u05D4\u05E0\u05D5\u05DB\u05D7\u05D9\u05EA \u05D1\u05DC\u05D1\u05D3',
-   /transactions: \(txFs && y === currentY\) \? \[\] : tx,/.test(CODE));
+   /var txEmpty = txFs && y === currentY;/.test(CODE) && /transactions: txEmpty \? \[\] : tx,/.test(CODE));
 ok('\u05D5\u05D4\u05E9\u05E8\u05EA \u05DE\u05E6\u05D4\u05D9\u05E8 \u05E2\u05DC \u05DB\u05DA \u05DC\u05DC\u05E7\u05D5\u05D7', /out\.txFromFirestore = txFs;/.test(CODE));
 
 console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');

@@ -164,7 +164,11 @@ ok('🔴 bumpRev_ מרענן את התחום שזז', /function bumpRev_[\s\S]{0
 ok('⚠️ והוא נקרא אחרי שמפת התחומים כבר נכתבה',
    GS.indexOf('props.setProperty(REV_DOMAINS_KEY') < GS.indexOf('homeCountsBump_(doms)'));
 ok('🔴 והעבודה השעתית מחשבת הכול מחדש',
-   /function hourlyJobsRun_[\s\S]{0,6000}homeCountsSyncAll_\(ss\)/.test(GS));
+   /* ⚠️ בודקים את **גוף הפונקציה**, לא חלון של N תווים —
+      משימה שמתווספת לעבודה השעתית דחפה את החלון והבדיקה
+      נכשלה בלי שההתנהגות השתנתה (16.9.2026). */
+   ((GS.split('function hourlyJobsRun_')[1] || '').split('\nfunction ')[0] || '')
+     .indexOf('homeCountsSyncAll_(ss)') > -1);
 ok('⚠️ ולפני הגיבוי המצטבר — מה שנכתב נכנס לגיבוי באותה ריצה',
    GS.indexOf('homeCountsSyncAll_(ss)') < GS.indexOf('fsBackupIncremental_(ss)'));
 ok('פעולת זריעה ידנית קיימת ומוגנת במנהל-על',
