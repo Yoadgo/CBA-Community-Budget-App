@@ -516,14 +516,14 @@ CBA.screens = CBA.screens || {};
      מפורשת של יועד. המערכת מודדת ומתריעה, לא חוסמת. */
   function defaultValidUntil(months) {
     var d = new Date();
-    d.setMonth(d.getMonth() + (Number(months) || 6) - 1);
+    d.setMonth(d.getMonth() + (Number(months) || 12) - 1);
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
   }
 
   function planMonthsFor(planName) {
     var plans = (gaLast && gaLast.plans) || [];
     for (var i = 0; i < plans.length; i++) if (plans[i].name === planName) return plans[i].months;
-    return (plans[0] && plans[0].months) || 6;
+    return (plans[0] && plans[0].months) || 12;
   }
 
   function verifyRowHTML(m) {

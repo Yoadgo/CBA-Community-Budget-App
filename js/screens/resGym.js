@@ -125,6 +125,22 @@ CBA.screens = CBA.screens || {};
            '<span class="gym-muted">(' + plan.monthlyPrice + " ₪ לחודש)</span>";
   }
 
+  /* מד התוקף (activeCardHTML) צריך לדעת כמה ימים המסלול כולו אורך, כדי
+     לחשב אחוז שנשאר — לא רק מספר ימים מוחלט. מחפשים לפי שם המסלול
+     ("מסלול" בגיליון) ברשימת המסלולים שחזרה מהשרת; קודם ב-st.my (המסלולים
+     הפעילים כפי שראה אותם gymMy), ואז נופלים חזרה ל-st.form. ברירת המחדל
+     12 חודשים (ולא 6) — כך שאם שם המסלול לא נמצא, המד לא יראה כאילו
+     המנוי כבר עבר את אמצע הדרך. */
+  function planMonthsByName(name) {
+    var lists = [(st.my && st.my.plans) || [], (st.form && st.form.plans) || []];
+    for (var i = 0; i < lists.length; i++) {
+      for (var j = 0; j < lists[i].length; j++) {
+        if (lists[i][j].name === name) return Number(lists[i][j].months) || 12;
+      }
+    }
+    return 12;
+  }
+
   function viewNoMembership() {
     var plans = (st.form && st.form.plans) || [];
     var plan = plans[0];
@@ -262,7 +278,9 @@ CBA.screens = CBA.screens || {};
 
     // מד תוקף — עדין, בלי לצעוק. הופך לכתום כשמתקרב הסוף.
     if (left !== null) {
-      var total = 180;
+      // 🔧 היה קבוע ל-180 (6 חודשים) — עכשיו נגזר מאורך המסלול בפועל של
+      // המנוי הזה, כדי שהמד יהיה נכון גם למנוי שנתי וגם לכל אורך עתידי.
+      var total = planMonthsByName(m["מסלול"]) * 30;
       var pct = Math.max(0, Math.min(100, Math.round((left / total) * 100)));
       var tone = left <= 7 ? "danger" : (left <= 30 ? "warn" : "ok");
       html += '<div class="gym-meter">' +
