@@ -1270,9 +1270,21 @@ function doPostDispatch_(ss, body) {
       case 'gardenApproveBatch':  return json_(gardenApproveBatch_(ss, body));
       case 'gardenMerge':         return json_(gardenMerge_(ss, body));
       case 'gardenCreateTask':    return json_(gardenCreateTask_(ss, body));
-      case 'gardenPlanSave':      return json_(gardenPlanSave_(ss, body));
-      case 'gardenPlanActive':    return json_(gardenPlanSetActive_(ss, body));
-      case 'gardenPlanDelete':    return json_(gardenPlanDelete_(ss, body));
+      /* 🔴🔴 **שלוש הפעולות שכותבות מסמך בודד לאוסף `gardenPlan`**
+         (2026-09-16, הפער שנשאר פתוח מסקירת הצוות האדום).
+         `gardenPlanSyncOne_` כותבת מסמך אחד ואינה סוחפת — ולכן היא
+         אינה המזיקה אלא **הקורבן**: סנכרון `gardenPlanSync` ידני
+         שרץ במקביל קרא את הטאב לפני השורה החדשה, ולכן
+         `fsSweepOrphans_` שלו רואה מסמך שאינו ברשימה *שלו* ומוחק
+         אותו. משימה שנשמרה זה עתה נעלמת מהמסכים בלי שום שגיאה.
+         ⚠️ הנעילה כאן ולא בתוך `gardenPlanSyncOne_`: שלוש הפונקציות
+            האלה אינן לוקחות את נעילת הסקריפט בעצמן, ולכן אין סכנת
+            תפיסה מקוננת — בשונה מ-`saveServices_`, שם נדרשה מעטפת.
+         ⚠️ המחיר: שמירה שנופלת על העבודה השעתית מקבלת "נסו שוב בעוד
+            דקה" במקום להצליח-ואז-להימחק. */
+      case 'gardenPlanSave':      return json_(withSyncLock_('gardenPlanSave', function () { return gardenPlanSave_(ss, body); }));
+      case 'gardenPlanActive':    return json_(withSyncLock_('gardenPlanActive', function () { return gardenPlanSetActive_(ss, body); }));
+      case 'gardenPlanDelete':    return json_(withSyncLock_('gardenPlanDelete', function () { return gardenPlanDelete_(ss, body); }));
       case 'gardenTaskDelete':    return json_(gardenTaskDelete_(ss, body));
       case 'gardenReportDelete':  return json_(gardenReportDelete_(ss, body));
       case 'gardenCoverByPlan':   return json_(gardenCoverByPlan_(ss, body));

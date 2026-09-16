@@ -1,0 +1,8 @@
+{
+  "name": "cba-tools",
+  "private": true,
+  "description": "תלויות של מארז הבדיקות בלבד. שלושה קבצים (test-appReports, test-phase42, test-reconcile) מריצים את המסכים מול DOM אמיתי ולכן צריכים jsdom; כל השאר רצים על vm בלבד. הקובץ הזה קיים כדי ש-npm install יחזיר אותם לחיים בכל מכונה — לפניו node_modules היה קישור סמלי לתיקייה זמנית של סשן שכבר לא קיים, והבדיקות פשוט לא רצו לאיש.",
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}

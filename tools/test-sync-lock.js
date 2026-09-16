@@ -135,6 +135,15 @@ ok('🔴🔴 ו**מחוץ** ל-LockService שהגוף לוקח — לא מקונ
    !/function saveServices_\(ss, body\) \{[\s\S]{0,300}LockService/.test(GS));
 ok('⚠️ והגוף עצמו עדיין לוקח אותה כרגיל',
    /function saveServicesRun_\(ss, body\) \{[\s\S]{0,2000}var lock = LockService\.getScriptLock\(\);/.test(GS));
+/* 🔴 שלוש פעולות תוכנית הגינון — הפער שנשאר פתוח בגל הקודם.
+   gardenPlanSyncOne_ כותבת מסמך בודד ואינה סוחפת, ולכן היא הקורבן
+   ולא המזיקה: סנכרון ידני מקביל מוחק את מה שהיא בדיוק כתבה. */
+['gardenPlanSave', 'gardenPlanActive', 'gardenPlanDelete'].forEach(function (n) {
+  ok('🔴 ' + n + ' עטוף', new RegExp("withSyncLock_\\('" + n + "', function").test(GS));
+});
+ok('⚠️ ושלושתן אינן לוקחות נעילת סקריפט בעצמן — אין תפיסה מקוננת',
+   !/function gardenPlanSetActive_\(ss, body\) \{[\s\S]{0,600}LockService/.test(GS) &&
+   !/function gardenPlanDelete_\(ss, body\) \{[\s\S]{0,600}LockService/.test(GS));
 ok('🔴 והגיבוי היומי גם הוא — 08:00 של שתי העבודות חופף',
    /withSyncLock_\('dailyBackup'/.test(GS));
 ok('⚠️ והוא מדלג ומתעד כשתפוס, במקום לייצר צילום קרוע',
