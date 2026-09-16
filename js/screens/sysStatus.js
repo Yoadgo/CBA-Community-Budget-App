@@ -52,7 +52,11 @@ CBA.screens = CBA.screens || {};
     bootFromFirestore:        ["טעינה קרה", "כשאין מטמון מקומי — השנה הנוכחית נבנית מ-Firestore ומצוירת מיד.", false],
     homeCountsFromFirestore:  ["מוני עמוד הבית", "תגיות הספירה בעמוד הבית נקראות ישירות מ-Firestore ומצוירות מיד, בלי לחכות ל-homeExtras.", false],
     tourFromFirestore:        ["כרטיס הסיור", "צעדי הסיור ו\"מה כבר ראיתי\" נקראים מ-Firestore במקום מ-Apps Script.", false],
-    clubResvFromFirestore:    ["השריון הקרוב", "שורת השריון הקרוב בעמוד הבית נקראת מהמסמך של המשפחה ב-Firestore.", false]
+    clubResvFromFirestore:    ["השריון הקרוב", "שורת השריון הקרוב בעמוד הבית נקראת מהמסמך של המשפחה ב-Firestore.", false],
+    /* ⚠️ ברירת המחדל כאן היא `true` ולא בגלל אופטימיות: `fsFirstRead`
+       מקצרת על ברירת המחדל שבקוד לפני שהיא קוראת את הדגל החי,
+       ולכן `false` היה הופך את המתג הזה לחסר השפעה לחלוטין. */
+    gardenReportsFromFirestore: ["הדיווחים שלי", "דיווחי הגינון של המשפחה נקראים ישירות מ-Firestore לפי מזהה משפחה, במקום מ-Apps Script (נמדד: 9,498ms ל-367 בתים).", true]
   };
 
   /* המצב **האפקטיבי**: מה שכתוב במסמך, ואם אינו כתוב — ברירת המחדל

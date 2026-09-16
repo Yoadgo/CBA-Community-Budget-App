@@ -1664,6 +1664,75 @@ CBA.data = (function () {
      פתוחה לכל תושב מחובר; שמירה מוגבלת למנהל-על בשרת (ACTION_PERMS), בלי
      קשר למטמון כאן. אותו דפוס בדיוק כמו getCommitteeTree/saveCommitteeTree. */
   var servicesCache = null;
+
+  /* ==========================================================================
+   *  "הדיווחים שלי" — קריאה ישירה מ-Firestore   (2026-09-16)
+   * --------------------------------------------------------------------------
+   *  🔴 **המסך היקר ביותר במערכת, וההפרש הכי אבסורדי:** נמדד בייצור
+   *  **9,498ms עבור 367 בתים.** הזמן לא הלך על נתונים — הוא הלך על
+   *  שלוש סריקות גיליון (דיווחים, משימות, יומן) ועל חישוב מחדש של
+   *  שלב, הסבר סגירה וחלון משוב, **בכל קריאה של כל תושב**. עכשיו
+   *  הכול מחושב פעם אחת בסנכרון, והדפדפן קורא מסמכים מוכנים.
+   *
+   *  🔴 **שאילתה לפי `familyId`, ולא קריאת האוסף.** לא רק כדי לקרוא
+   *  פחות: כלל האבטחה **ידחה** שאילתה בלי המסנן הזה, לפני שנקרא
+   *  מסמך אחד. אין מסלול של "לקרוא הכול ולסנן כאן", וזה מכוון.
+   *
+   *  ⚠️⚠️ **אוסף ריק הוא תשובה תקינה כאן — ולא נפילה לאחור.**
+   *  בשירותים ובתוכנית הגינון "ריק" פירושו שמשהו השתבש (תמיד יש
+   *  שירותים), ולכן שם הוא מפיל למסלול Apps Script. כאן ההפך:
+   *  **תושב שמעולם לא דיווח הוא המקרה השכיח.** נפילה לאחור על ריק
+   *  היתה מענישה בדיוק אותו — 9.5 שניות כדי לגלות שאין מה להציג.
+   *  המחיר: בחלון ההפצה של דקה אחרי הזריעה תושב עם דיווחים עלול
+   *  לראות רשימה ריקה. זה אירוע חד-פעמי בהעלאה, לא מצב מתמשך —
+   *  ולכן הדגל נדלק רק אחרי אימות ידני שהמסמכים נקראים מהדפדפן.
+   *
+   *  ⚠️ **המיון בלקוח, ובלי `orderBy`.** מיון בשאילתה היה דורש
+   *  אינדקס, וקונסולת Google Cloud חסומה. `handleMyGardenReports_`
+   *  עושה `reverse()` על סדר השורות — כלומר החדש למעלה — ומזהה
+   *  דיווח הוא מספר רץ, ולכן מיון יורד לפי מזהה משחזר אותו בדיוק.
+   * ======================================================================== */
+  var GARDEN_REPORTS_FROM_FIRESTORE = true;
+
+  /* 🔴 **קיפול חלון המשוב מול השעון של הלקוח.** המסמך נושא גם
+     `canFeedback` (נכון לרגע הסנכרון) וגם `feedbackUntil` (מועד
+     מוחלט). מסמך בן שעה היה מציג "אפשר להגיב" אחרי שהחלון נסגר.
+     ⚠️ השורה הזאת נכונה **גם במסלול Apps Script** — שם הערך כבר
+        טרי והקיפול אינו משנה דבר. לכן היא כאן ולא בענף. */
+  function gardenFoldFeedback(r) {
+    if (r && r.canFeedback && r.feedbackUntil && Date.now() > r.feedbackUntil) {
+      r.canFeedback = false;
+    }
+    return r;
+  }
+
+  /* מזהה דיווח הוא מספר רץ. נופל למחרוזת אם אינו מספרי — לא כדי
+     להיות יסודי, אלא כי מזהה שנערך ידנית בגיליון לא אמור להפיל
+     את כל המסך. */
+  function gardenReportNewestFirst(a, b) {
+    var na = parseInt(a && a.id, 10), nb = parseInt(b && b.id, 10);
+    if (!isNaN(na) && !isNaN(nb) && na !== nb) return nb - na;
+    return String((b && b.id) || "").localeCompare(String((a && a.id) || ""));
+  }
+
+  function myGardenReportsRead(cb) {
+    var fid = String(((window.CBA && CBA.user) || {}).familyId || "").trim();
+    fsFirstRead("gardenReports", GARDEN_REPORTS_FROM_FIRESTORE, function (done) {
+      /* בלי מזהה משפחה אין שאילתה חוקית — והכלל היה דוחה אותה ממילא. */
+      if (!fid) return done(new Error("no-family"));
+      CBA.fb.queryCollection("gardenReports", [["familyId", fid]], function (err, rows) {
+        if (err) return done(err);
+        var out = (rows || []).map(gardenFoldFeedback).sort(gardenReportNewestFirst);
+        done(null, { ok: true, rows: out });
+      });
+    }, function (done) {
+      CBA.sheets.get({ action: "myGardenReports" }, function (res) {
+        if (res && res.ok && res.rows) res.rows = res.rows.map(gardenFoldFeedback);
+        done(res);
+      });
+    }, cb);
+  }
+
   function getServices(cb) {
     if (servicesCache) { if (cb) cb({ ok: true, services: servicesCache.services, sections: servicesCache.sections }); return; }
     servicesRead(cb);
@@ -2717,7 +2786,7 @@ CBA.data = (function () {
        שלוש הפעולות פתוחות לכל תושב מחובר ופעיל ומחזירות רק את הנתונים שלו —
        הסינון נעשה בשרת לפי המושב החתום, לא כאן. ר' handleMyGardenReports_. */
     getGardenMeta: function (cb) { CBA.sheets.get({ action: "gardenMeta" }, cb); },
-    getMyGardenReports: function (cb) { CBA.sheets.get({ action: "myGardenReports" }, cb); },
+    getMyGardenReports: myGardenReportsRead,
     /* ⚠️ postReadProgress ולא postRead, משתי סיבות (2026-09-14):
        (א) **הגנת beforeunload.** ל-postRead אין אחת, ולכן תושב שסגר/רענן את
            הדף באמצע שליחה איבד את הדיווח **בשקט** — בלי שורה בגיליון ובלי

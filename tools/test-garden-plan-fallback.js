@@ -77,9 +77,12 @@ ok('🔴 אין יותר קריאה ישירה ל-action gardenPlan מחוץ ל-
    (DS.match(/action: "gardenPlan"/g) || []).length === 1,
    String((DS.match(/action: "gardenPlan"/g) || []).length));
 ok('המדידה נרשמת ל-CBA.perf לפי מפתח התחום', /CBA\.perf\[key\] = \{/.test(DS));
-/* אחרי האיחוד (15.9) השלד המשותף יושב ב-fsFirstRead — שני התחומים קוראים לו. */
-ok('שני התחומים עוברים דרך אותו שלד',
-   (DS.match(/fsFirstRead\(/g) || []).length === 3, String((DS.match(/fsFirstRead\(/g) || []).length));
+/* אחרי האיחוד (15.9) השלד המשותף יושב ב-fsFirstRead, וכל תחום שעובר
+   קורא לו. ⚠️ **המספר אמור לעלות** — מה שהבדיקה שומרת עליו הוא
+   שאיש לא יכתוב שלד שני משלו במקום להשתמש בזה. 3 → 4 ב-16.9
+   עם `gardenReports` (ההגדרה עצמה + שלושה תחומים). */
+ok('כל התחומים עוברים דרך אותו שלד, ואין שני',
+   (DS.match(/fsFirstRead\(/g) || []).length === 4, String((DS.match(/fsFirstRead\(/g) || []).length));
 ok('והדגל מועבר אליו', /fsFirstRead\("gardenPlan", GARDEN_PLAN_FROM_FIRESTORE,/.test(DS));
 
 section('2. המסלול המהיר — Firestore');
