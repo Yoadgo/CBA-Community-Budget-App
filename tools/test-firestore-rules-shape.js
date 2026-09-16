@@ -76,7 +76,12 @@ const gm = blockOf('/gardenMeta/{doc}');
 ok('gardenPlan נפתח', !!gp);
 ok('gardenMeta נפתח', !!gm);
 ok('gardenPlan — קריאה לפי canSeePlan', /allow read: if canSeePlan\(\);/.test(gp || ''));
-ok('gardenMeta — קריאה לפי canSeePlan', /allow read: if canSeePlan\(\);/.test(gm || ''));
+/* 🔑 **נפתח לגנן החיצוני ב-16.9** (הכרעת יועד) — ר' ההערה בקובץ
+   הכללים. תוכנית העבודה עצמה נשארת חסומה לו, וזה ההבדל. */
+ok('gardenMeta — קריאה לפי canSeeGardenTasks (נפתח לגנן)',
+   /match \/gardenMeta\/\{doc\} \{[\s\S]{0,120}allow read: if canSeeGardenTasks\(\);/.test(CODE));
+ok('🔴 ותוכנית העבודה עדיין חסומה לחיצוני',
+   /match \/gardenPlan\/\{id\} \{[\s\S]{0,120}allow read: if canSeePlan\(\);/.test(CODE));
 ok('🔴 gardenPlan — כתיבה אסורה לכולם', /allow write: if false;/.test(gp || ''));
 ok('🔴 gardenMeta — כתיבה אסורה לכולם', /allow write: if false;/.test(gm || ''));
 /* 🔴 **הגובה הזה נפתח במכוון בצעד 09א (15.9.2026)** — עד אז
@@ -89,7 +94,13 @@ ok('🔴 gardenMeta — כתיבה אסורה לכולם', /allow write: if fals
    יפיל את השורה הזאת, ויחייב מישהו להוסיף אותו לכאן **ביודעין**.
    זו ההגנה שנשארה אחרי שספירת הכתיבות איבדה משמעות. */
 const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk',
-                     'txDetailsUpdateOk', 'counterBumpOk', 'canSeeBudget', 'false'];
+                     'txDetailsUpdateOk', 'counterBumpOk', 'canSeeBudget', 'false',
+                     /* 🔴 ההיפוך של הגינון (16.9): Firestore הוא המסד החי
+                        והדפדפן כותב. שלושה שערים, ושלושתם מפורטים
+                        בקובץ הכללים ובמסמך התוצאות הצפויות. */
+                     'grCreateOk', 'grFeedbackOk', 'grTeamUpdateOk',
+                     'gtTeamCreateOk', 'gtFromReportOk', 'gtTeamUpdateOk', 'gtDeleteOk',
+                     'glCreateOk', 'glResidentCreateOk'];
 {
   const used = [];
   (CODE.match(/allow (create|update|delete)[^\n]*/g) || []).forEach(function (t) {
@@ -160,7 +171,7 @@ ok('🔴 והוא לא נפתח לכל חבר אלא לבעלי הרשאת תק�
    מ-16.9 זו **רשימת היתר מפורשת**. היא עדיין מכריחה החלטה
    אנושית לכל אוסף חדש — אבל היא גם מתעדת אותה, ושני סשנים
    שמוסיפים שורות שונות אינם דורסים זה את זה. */
-const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks',
+const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks', 'gardenLog',
                 'services', 'budgetYears', 'budgetTx', 'counters', 'appConfig',
                 'gymStatus', 'gymCode', 'homeCounts', 'clubReservations',
                 'tourSteps', 'tourSeen', 'members'];
@@ -249,9 +260,34 @@ ok('🔴 ובצורת == false (נכשל-סגור) ולא != true',
 ok('⚠️ ודורש חברות פעילה', /isMember\(\)/.test(grFn), grFn.trim());
 /* 🔴 מסך הניהול עדיין ב-Apps Script; פתיחה למנהל עכשיו = גישה שאיש
    אינו משתמש בה, כלומר בדיוק החשיפה השקטה שהצוות האדום תפס. */
-ok('🔴 ואין מסלול למנהל — מסך הניהול נשאר ב-Apps Script',
+ok('🔴 ואין מסלול למנהל בקריאה — מסך הניהול נשאר ב-Apps Script',
    !/(hasPerm|isSuper|canSeeBudget)/.test(grFn), grFn.trim());
-ok('⚠️ והדפדפן לעולם אינו כותב', /allow write: if false;/.test(gr || ''));
+/* 🔴🔴 **מ-16.9 הדפדפן כן כותב כאן** — Firestore הוא המסד החי.
+   הבדיקות הבאות הן מה שהחליף את "לעולם אינו כותב". */
+ok('🔴 יצירה היא create ולא write — מסמך קיים נכשל מעצמו',
+   /allow create: if grCreateOk\(\);/.test(gr || ''), gr);
+ok('🔴🔴 ואין מחיקה, לאיש', /allow delete: if false;/.test(gr || ''), gr);
+const grC = (CODE.match(/function grCreateOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+ok('🔴 יצירה רק למשפחה שלו', /familyId == myFamilyId\(\)/.test(grC), grC.trim());
+ok('🔴 ורק לתושב פעיל שאינו חיצוני',
+   /isMember\(\) && m\(\)\.isExternal == false/.test(grC), grC.trim());
+const grShape = (CODE.match(/function grShapeOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+/* 🔴🔴 ההפרדה שמחזיקה הכול: תושב אינו שולח שדות של הצוות. */
+ok('🔴🔴 תושב אינו יכול לשלוח stage/closure/canFeedback ביצירה',
+   /!request\.resource\.data\.keys\(\)\.hasAny\(grTeamFields\(\)\)/.test(grShape), grShape.trim());
+ok('🔴 ורשימת השדות סגורה (hasOnly)',
+   /keys\(\)\.hasOnly\(grCreateFields\(\)\)/.test(grShape), grShape.trim());
+const grF = (CODE.match(/function grFeedbackOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+ok('🔴🔴 משוב נוגע בשדות המשוב בלבד',
+   /affectedKeys\(\)\s*\n?\s*\.hasOnly\(\['feedback'/.test(grF), grF.trim());
+ok('🔴 ורק על מסמך של המשפחה שלו',
+   /resource\.data\.familyId == myFamilyId\(\)/.test(grF), grF.trim());
+const grT = (CODE.match(/function grTeamUpdateOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+/* 🔴🔴 גם מנהל אינו מעביר בעלות על דיווח. */
+ok('🔴🔴 familyId אינו ברשימת השדות שהצוות רשאי לשנות',
+   !/'familyId'/.test(grT), grT.trim());
+ok('⚠️ והצוות אינו נוגע בתיאור או בכותרת של התושב',
+   !/'desc'|'title'/.test(grT), grT.trim());
 
 section('5ד. גינון — משימות');
 const gt = blockOf('/gardenTasks/{id}');
@@ -268,7 +304,38 @@ ok('🔴🔴 ובמכוון **בלי** isExternal — השרת אינו חוסם
 /* ...וההפך: בתוכנית העבודה הוא כן חסום. שני הכללים חייבים להישאר שונים. */
 ok('🔴 בעוד canSeePlan **כן** חוסם אותו — שני הכללים שונים בכוונה',
    /function canSeePlan\(\)[\s\S]{0,160}isExternal == false/.test(CODE));
-ok('⚠️ והדפדפן לעולם אינו כותב', /allow write: if false;/.test(gt || ''));
+/* 🔴🔴 מ-16.9 הדפדפן כותב גם כאן. */
+ok('🔴 שני שערי יצירה — הצוות, והתושב שמגיש דיווח',
+   /allow create: if gtTeamCreateOk\(\) \|\| gtFromReportOk\(\);/.test(gt || ''), gt);
+const gtR = (CODE.match(/function gtFromReportOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+/* 🔴🔴 החריג המסוכן: תושב יוצר מסמך באוסף של הצוות. שני תנאים
+   מחזיקים אותו סגור — נקודת פתיחה קבועה, ובלי שדות של הצוות. */
+ok('🔴🔴 תושב יוצר משימה בשלב "התקבל" בלבד',
+   /stage == 'התקבל'/.test(gtR), gtR.trim());
+ok('🔴🔴 ואינו יכול לשלוח דגל/סגירה/שבוע/אישור',
+   /!request\.resource\.data\.keys\(\)\.hasAny\(gtTeamOnly\(\)\)/.test(gtR), gtR.trim());
+const gtU = (CODE.match(/function gtTeamUpdateOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+ok('🔴 מזהה המשימה אינו ניתן לשינוי אחרי היצירה',
+   !/'id'/.test(gtU), gtU.trim());
+ok('🔴 מחיקה למנהל בלבד — לא לקבלן החיצוני',
+   /function gtDeleteOk\(\) \{[\s\S]{0,120}isExternal == false/.test(CODE));
+
+section('5ה. 🔴 יומן הגינון — הוספה בלבד');
+const gl = blockOf('/gardenLog/{id}');
+ok('הבלוק קיים', !!gl);
+ok('🔴🔴 אין עדכון ואין מחיקה — היסטוריה אינה משתכתבת',
+   /allow update, delete: if false;/.test(gl || ''), gl);
+const glC = (CODE.match(/function glCreateOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+/* 🔴🔴 בלי זה כל אחד רושם פעולה בשם מישהו אחר — וזה ההבדל
+   בין יומן לבין רשימת טענות. */
+ok('🔴🔴 actorUid נאכף להיות הכותב עצמו',
+   /actorUid == request\.auth\.uid/.test(glC), glC.trim());
+const glR = (CODE.match(/function glResidentCreateOk\(\) \{[\s\S]*?\n    \}/) || [''])[0];
+ok('🔴 וגם לתושב — ורק לשני סוגי רשומה',
+   /actorUid == request\.auth\.uid/.test(glR) &&
+   /kind == 'נפתח'/.test(glR) && /kind == 'משוב'/.test(glR), glR.trim());
+ok('⚠️ ושם של אדם אינו נשמר ביומן — uid בלבד',
+   !/'actor'|'name'|'מבצע'/.test(glC), glC.trim());
 
 section('6. members — לא נשבר');
 const mb = blockOf('/members/{uid}');

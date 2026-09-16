@@ -101,8 +101,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    /* 🔑 **נפתח לאחראי הגינון החיצוני** (הכרעת יועד, 16.9). הרשימות
+       האלה הן שמות האזורים והקטגוריות — והוא כבר רואה אותם על כל
+       משימה שהוא מבצע. להסתיר ממנו את הרשימה בזמן שמציגים לו את
+       הערכים אינה הגנה, והיא שוברת את קיבוץ המסך במסלול Firestore.
+       ⚠️ **תוכנית העבודה עצמה נשארת חסומה לו** (`canSeePlan`) — שם
+          המידור אמיתי, וזה בדיוק ההבדל. */
     match /gardenMeta/{doc} {
-      allow read: if canSeePlan();
+      allow read: if canSeeGardenTasks();
       allow write: if false;
     }
 
@@ -172,11 +178,115 @@ service cloud.firestore {
              fid is string && fid != '' && fid == myFamilyId();
     }
 
+    /* ========================================================================
+     *  🔴🔴  כתיבת דיווחי גינון מהדפדפן   (2026-09-16, ההיפוך)
+     * ------------------------------------------------------------------------
+     *  ⚠️⚠️ **זה שינוי באופי של הקובץ.** עד כאן כמעט כל אוסף הוא
+     *  קריאה-בלבד, והמשפט "הדפדפן לעולם אינו כותב" חוזר בכל בלוק.
+     *  כאן הוא מפסיק להיות נכון לגינון, כי Firestore הופך למסד החי
+     *  והגיליון לגיבוי. כלל קריאה שגוי **חושף**; כלל כתיבה שגוי נותן
+     *  לשנות נתונים של אחרים. זו קטגוריית סיכון אחרת, ולכן הבלוק
+     *  הזה מפורט יותר מכל מה שמעליו.
+     *
+     *  🔴 **ההפרדה שמחזיקה הכול:** מסמך הדיווח נושא שני סוגי מידע —
+     *  מה ש**התושב אמר** (כותרת, תיאור, מיקום, משוב) ומה ש**הצוות
+     *  עשה** (שלב, סגירה, קישור למשימה, חלון משוב). ברגע שהתושב הוא
+     *  הכותב, שניהם יושבים באותו מסמך והכלל הוא הדבר היחיד שמפריד.
+     *  בלי ההפרדה תושב פותח תקלה ומיד מסמן אותה "הושלם", או פותח
+     *  לעצמו חלון משוב אינסופי.
+     * ====================================================================== */
+
+    /* השדות שתושב רשאי לשלוח ביצירה — רשימה סגורה. */
+    function grCreateFields() {
+      return ['id', 'familyId', 'date', 'category', 'area', 'title', 'desc',
+              'place', 'x', 'y', 'photos', 'taskId', 'clientRef',
+              /* 🔴 תיבת הדואר — הדפדפן מרים דגל, והעבודה השעתית
+                 שולחת ומורידה אותו. כלל אבטחה אינו יכול לשלוח מייל
+                 (אין Cloud Functions בתוכנית החינמית), ולכן זה
+                 המנגנון. בוליאני בלבד: **התבנית והנמענים נגזרים
+                 בשרת מתוכן המסמך**, לא משדה שהלקוח בוחר. */
+              'mailPending',
+              'year', 'schema', 'updatedAt'];
+    }
+
+    /* השדות שהצוות מחזיק — תושב לעולם אינו שולח אותם ביצירה.
+       ⚠️ הם נוצרים כברירת מחדל בקריאה (שדה חסר = ריק), ולא
+          כערכים שהלקוח בוחר. */
+    function grTeamFields() {
+      return ['stage', 'flag', 'closure', 'closeWhy', 'mergedInto',
+              'feedback', 'feedbackUntil', 'canFeedback'];
+    }
+
+    function grShapeOk() {
+      return request.resource.data.keys().hasOnly(grCreateFields()) &&
+             request.resource.data.keys().hasAll(
+               ['id', 'familyId', 'title', 'category', 'schema']) &&
+             /* 🔴 אף שדה של הצוות — ר' ההפרדה בראש הבלוק. */
+             !request.resource.data.keys().hasAny(grTeamFields()) &&
+             request.resource.data.familyId is string &&
+             request.resource.data.familyId != '' &&
+             request.resource.data.title is string &&
+             request.resource.data.title.size() > 0 &&
+             request.resource.data.title.size() <= 60 &&
+             request.resource.data.category is string &&
+             request.resource.data.category != '' &&
+             request.resource.data.schema is int &&
+             (!request.resource.data.keys().hasAny(['mailPending']) ||
+              request.resource.data.mailPending is bool);
+    }
+
+    /* מיקום: או נעיצה מנורמלת 0–1, או מיקום מילולי. בדיוק התנאי
+       שהשרת אכף עד היום ב-`submitGardenReport_`. */
+    function grPlaceOk() {
+      return (request.resource.data.get('x', null) == null &&
+              request.resource.data.get('y', null) == null &&
+              request.resource.data.get('place', '') != '') ||
+             (request.resource.data.get('x', null) is number &&
+              request.resource.data.get('y', null) is number &&
+              request.resource.data.x >= 0 && request.resource.data.x <= 1 &&
+              request.resource.data.y >= 0 && request.resource.data.y <= 1);
+    }
+
+    /* 🔴 יצירה בלבד למשפחה שלו, ורק כשהוא תושב פעיל שאינו חיצוני —
+       בדיוק כמו `canSeeGardenReport`, כי אותו שער בדיוק חל בשרת. */
+    function grCreateOk() {
+      return isMember() && m().isExternal == false &&
+             request.resource.data.familyId == myFamilyId() &&
+             grShapeOk() && grPlaceOk();
+    }
+
+    /* התושב רשאי לכתוב **משוב בלבד**, ורק על מסמך קיים שלו.
+       ⚠️ `affectedKeys().hasOnly` הוא הלב: הוא מונע ממנו לגעת
+          ב-`stage`, ב-`familyId` או בתיאור אחרי ההגשה. */
+    function grFeedbackOk() {
+      return isMember() && m().isExternal == false &&
+             resource.data.familyId == myFamilyId() &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['feedback', 'feedbackNote', 'feedbackAt', 'updatedAt']) &&
+             /* חלון המשוב נאכף כאן ולא רק במסך — המסך הוא נוחות,
+                הכלל הוא ההגבלה. 0 = משימה שלא אושרה, ואז אין חלון. */
+             resource.data.canFeedback == true &&
+             (resource.data.get('feedbackUntil', 0) == 0 ||
+              request.time.toMillis() <= resource.data.get('feedbackUntil', 0));
+    }
+
+    /* הצוות מזיז את הדיווח בתהליך. ⚠️ **`familyId` אינו ברשימה —
+       גם לא למנהל.** שינוי בעלות על דיווח אינו פעולה שקיימת. */
+    function grTeamUpdateOk() {
+      return hasPerm('גינון') &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['stage', 'flag', 'closure', 'closeWhy', 'mergedInto',
+                         'taskId', 'canFeedback', 'feedbackUntil', 'updatedAt']);
+    }
+
     match /gardenReports/{id} {
       allow read: if canSeeGardenReport(resource.data.familyId);
-      /* 🔴 כמו בכל האוספים: הדפדפן לעולם אינו כותב. הגשת דיווח
-         ממשיכה לעבור דרך Apps Script אל הגיליון, ומשם לכאן. */
-      allow write: if false;
+      /* ⚠️ `create` ולא `write`: מסמך קיים נכשל מעצמו, ולכן תושב
+         אינו יכול לדרוס דיווח של שכן בכך שינחש מזהה. */
+      allow create: if grCreateOk();
+      allow update: if grFeedbackOk() || grTeamUpdateOk();
+      /* 🔴 אין מחיקה, לאיש. דיווח שנסגר מקבל `closure`, לא היעלמות. */
+      allow delete: if false;
     }
 
     /* ========================================================================
@@ -207,9 +317,119 @@ service cloud.firestore {
       return hasPerm('גינון');
     }
 
+    /* ========================================================================
+     *  🔴🔴  כתיבת משימות גינון מהדפדפן   (2026-09-16, ההיפוך)
+     * ------------------------------------------------------------------------
+     *  משימה נוצרת בשני מצבים: תושב מגיש דיווח (ואז נולדת משימה
+     *  נלווית), או שהצוות פותח משימה בעצמו. **שני המצבים כותבים את
+     *  אותו מסמך**, ולכן שני שערי יצירה.
+     *
+     *  🔴 **`gtFromReportOk` הוא החריג המסוכן**, וצריך לקרוא אותו
+     *  לאט: הוא נותן ל**תושב** ליצור מסמך באוסף שכולו של הצוות.
+     *  מה שמחזיק אותו סגור: השלב חייב להיות 'התקבל' — נקודת
+     *  הפתיחה ותו לא — ואסור לו לשלוח דגל, סגירה, שבוע או אישור.
+     *  כלומר הוא יכול ליצור עבודה, ולעולם לא לסמן אותה כנעשתה.
+     * ====================================================================== */
+    function gtFields() {
+      return ['id', 'kind', 'templateId', 'title', 'category', 'area', 'x', 'y',
+              'stage', 'flag', 'closure', 'week', 'due', 'note', 'drags',
+              'firstWeek', 'createdAt', 'updatedAt', 'approvedBy', 'approvedAt',
+              'repId', 'photos', 'order', 'year', 'schema', 'syncedAt'];
+    }
+
+    /* השדות שרק הצוות קובע — תושב אינו שולח אותם כלל. */
+    function gtTeamOnly() {
+      return ['flag', 'closure', 'week', 'due', 'note', 'drags',
+              'approvedBy', 'approvedAt'];
+    }
+
+    function gtShapeOk() {
+      return request.resource.data.keys().hasOnly(gtFields()) &&
+             request.resource.data.keys().hasAll(['id', 'title', 'stage', 'schema']) &&
+             request.resource.data.title is string &&
+             request.resource.data.title.size() > 0 &&
+             request.resource.data.schema is int;
+    }
+
+    /* 🔴 תושב פותח משימה נלווית לדיווח — בנקודת הפתיחה בלבד. */
+    function gtFromReportOk() {
+      return isMember() && m().isExternal == false &&
+             gtShapeOk() &&
+             request.resource.data.stage == 'התקבל' &&
+             !request.resource.data.keys().hasAny(gtTeamOnly());
+    }
+
+    /* הצוות פותח משימה בעצמו — בלי ההגבלה על השלב. */
+    function gtTeamCreateOk() {
+      return hasPerm('גינון') && gtShapeOk();
+    }
+
+    /* ⚠️ `id` אינו ברשימה: מזהה שנקבע ביצירה אינו משתנה לעולם.
+       שינוי שלו היה מנתק את הדיווח שמצביע על המשימה. */
+    function gtTeamUpdateOk() {
+      return hasPerm('גינון') &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['stage', 'flag', 'closure', 'week', 'due', 'note',
+                         'drags', 'firstWeek', 'title', 'category', 'area',
+                         'x', 'y', 'approvedBy', 'approvedAt',
+                         'repId', 'photos', 'order', 'updatedAt', 'syncedAt']);
+    }
+
+    /* 🔴 מחיקה למנהל בלבד — לא לקבלן החיצוני. משימה שנסגרה מקבלת
+       `closure`; מחיקה שמורה לטעות הזנה, והיא הפעולה היחידה בגינון
+       שאי אפשר לבטל. */
+    function gtDeleteOk() {
+      return hasPerm('גינון') && m().isExternal == false;
+    }
+
     match /gardenTasks/{id} {
       allow read: if canSeeGardenTasks();
-      allow write: if false;
+      allow create: if gtTeamCreateOk() || gtFromReportOk();
+      allow update: if gtTeamUpdateOk();
+      allow delete: if gtDeleteOk();
+    }
+
+    /* ========================================================================
+     *  🔴  יומן הגינון — הוספה בלבד   (2026-09-16)
+     * ------------------------------------------------------------------------
+     *  היסטוריה שאינה משתכתבת. זה היה עקרון באפיון כשהיומן היה טאב
+     *  בגיליון, והוא נשמר כאן **באכיפה ולא בנוהג**: אין `update`,
+     *  אין `delete`, לאיש, אף פעם.
+     *
+     *  🔴 **`actorUid` נאכף להיות הכותב עצמו.** כשהדפדפן כותב את
+     *  היומן, "מי עשה את זה" הופך לשדה שהכותב ממלא — כלומר בלי
+     *  הכלל הזה כל אחד יכול לרשום פעולה בשם מישהו אחר. זה ההבדל
+     *  בין יומן לבין רשימת טענות.
+     *  ⚠️ **uid ולא שם** — ר' ההחלטה על `residentDirectory`: השם
+     *     נפתר בשרת בעת הצורך, ולא נשמר כאן.
+     * ====================================================================== */
+    function glCreateOk() {
+      return hasPerm('גינון') &&
+             request.resource.data.keys().hasOnly(
+               ['taskId', 'kind', 'field', 'from', 'to', 'actorUid',
+                'note', 'at', 'schema']) &&
+             request.resource.data.keys().hasAll(['taskId', 'actorUid', 'at']) &&
+             request.resource.data.actorUid == request.auth.uid;
+    }
+
+    /* 🔴 גם התושב רושם ביומן — הגשת דיווח ומשוב הן אירועים בהיסטוריה.
+       אותה אכיפה על `actorUid`, ובלי אפשרות לגעת בשלב. */
+    function glResidentCreateOk() {
+      return isMember() && m().isExternal == false &&
+             request.resource.data.keys().hasOnly(
+               ['taskId', 'kind', 'field', 'from', 'to', 'actorUid',
+                'note', 'at', 'schema']) &&
+             request.resource.data.keys().hasAll(['taskId', 'actorUid', 'at']) &&
+             request.resource.data.actorUid == request.auth.uid &&
+             (request.resource.data.kind == 'נפתח' ||
+              request.resource.data.kind == 'משוב');
+    }
+
+    match /gardenLog/{id} {
+      allow read: if canSeeGardenTasks();
+      allow create: if glCreateOk() || glResidentCreateOk();
+      /* 🔴🔴 היסטוריה אינה משתכתבת. */
+      allow update, delete: if false;
     }
 
     /* ---------- שירותים לתושב (צעד 04ב) ---------- */

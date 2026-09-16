@@ -617,6 +617,9 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'gardenDataSync') {
       return handleGardenDataSync_(e.parameter);
     }
+    if (e && e.parameter && e.parameter.action === 'gardenCountersSeed') {
+      return handleGardenCountersSeed_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'servicesSync') {
       return handleServicesSync_(e.parameter);
     }
@@ -5530,6 +5533,17 @@ function hourlyJobsRun_() {
     }
   } catch (e) {
     Logger.log('seedTxCounters_ נכשל: ' + e);
+  }
+  /* מוני הגינון (2026-09-16, ההיפוך) — עוקבים אחרי מה שעדיין
+     נוצר במסלול הישן. לעולם אינם יורדים. */
+  try {
+    var gc = seedGardenCounters_(ss);
+    if (gc.seeded || gc.errors.length) {
+      Logger.log('מוני גינון: נזרעו ' + gc.seeded + ', נשמרו ' + gc.kept +
+                 (gc.errors.length ? ' | ' + gc.errors.join(' ; ') : ''));
+    }
+  } catch (e) {
+    Logger.log('seedGardenCounters_ נכשל: ' + e);
   }
   /* 🔴 סטטוס מנוי כושר (2026-09-16, צעד 10ב-1).
      הגיליון מקור האמת, ולכן כל שינוי של מנהל (תשלום, חידוש,
@@ -13114,6 +13128,81 @@ function handleGardenPlanSync_(p) {
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
+
+
+/* ============================================================================
+ *  🔴🔴  מוני המזהים של הגינון   (2026-09-16, ההיפוך)
+ * ----------------------------------------------------------------------------
+ *  **למה זה הצעד הראשון בהיפוך:** לדיווח ולמשימה יש מזהה קצר ורץ
+ *  (1, 2, 3…) שהתושב רואה ומזכיר בטלפון ("הדיווח נשלח · מספר 7").
+ *  עד היום Apps Script ספר אותו מהגיליון. כשהדפדפן יכתוב ישירות —
+ *  אין מי שיספור, **ושני אנשים שמדווחים באותו רגע יקבלו את אותו
+ *  מספר ואחד ידרוס את השני.**
+ *
+ *  🔑 הפתרון קיים כבר ועובד: `counters/{id}` עם שדה `n`, והדפדפן
+ *  מקדם אותו ב-`runTransaction` — אטומי, גם כששני דפדפנים מנסים
+ *  יחד. אותה תבנית בדיוק כמו `counters/tx_<שנה>` בתנועות התקציב,
+ *  ואותו כלל אבטחה (`counterBumpOk`) שכבר מגן עליה: **אפשר לקדם
+ *  באחד בלבד, לעולם לא להוריד ולא לקפוץ.**
+ *
+ *  ⚠️ **הזריעה לעולם אינה מורידה את המונה.** אם הגיליון מראה 7
+ *     והמונה כבר 9 — משאירים 9. הורדה הייתה גורמת לדיווח הבא
+ *     לדרוס דיווח קיים, וזה הנזק היחיד שאי אפשר לתקן אחר כך.
+ *  ⚠️ הזריעה רצה גם בעבודה השעתית: כל עוד קיים גם המסלול הישן
+ *     (השרת מקצה מזהים), המונה חייב לעקוב אחרי מה שנוצר שם.
+ * ========================================================================== */
+var GARDEN_REPORT_COUNTER = 'gardenReport';
+var GARDEN_TASK_COUNTER   = 'gardenTask';
+
+/** המזהה המספרי הגבוה בטאב. 0 כשאין טאב או אין שורות. */
+function gardenMaxIdInSheet_(ss, sheetName) {
+  var sh = ss.getSheetByName(sheetName);
+  if (!sh || sh.getLastRow() < 2) return 0;
+  /* `nextGardenId_` מחזירה max+1; כאן רוצים את ה-max עצמו, כי
+     המונה מחזיק את **המזהה האחרון שניתן** ולא את הבא בתור —
+     בדיוק כמו במוני התנועות. */
+  return Math.max(nextGardenId_(sh) - 1, 0);
+}
+
+/** זריעה/עדכון של שני המונים. מחזירה סיכום ולעולם אינה זורקת. */
+function seedGardenCounters_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: true, seeded: 0, kept: 0, counters: [], errors: [] };
+  var pairs = [
+    { id: GARDEN_REPORT_COUNTER, sheet: GARDEN_REPORTS_SHEET },
+    { id: GARDEN_TASK_COUNTER,   sheet: GARDEN_TASKS_SHEET }
+  ];
+  for (var i = 0; i < pairs.length; i++) {
+    try {
+      var max = gardenMaxIdInSheet_(ss, pairs[i].sheet);
+      var cur = fsGet_(fsDocPath_(FS_COUNTERS, pairs[i].id));
+      var have = (cur && !isNaN(parseInt(cur.n, 10))) ? parseInt(cur.n, 10) : -1;
+      if (have >= max) {
+        out.kept++;
+        out.counters.push({ id: pairs[i].id, n: have, sheetMax: max, action: 'kept' });
+        continue;
+      }
+      fsSet_(fsDocPath_(FS_COUNTERS, pairs[i].id),
+             { n: max, schema: 1, updatedAt: new Date() });
+      out.seeded++;
+      out.counters.push({ id: pairs[i].id, n: max, from: have, action: 'seeded' });
+    } catch (e) {
+      out.ok = false;
+      out.errors.push(pairs[i].id + ': ' + String(e));
+    }
+  }
+  return out;
+}
+
+/* פעולה מפורשת (מנהל-על) — לזריעה ולאימות. */
+function handleGardenCountersSeed_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    return json_(seedGardenCounters_(ss));
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
 
 /* ============================================================================
  *  🔴🔴  רעננות בכתיבה — הפער שהסנכרון השעתי משאיר   (2026-09-16)
