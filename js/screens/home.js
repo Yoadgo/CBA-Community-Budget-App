@@ -168,9 +168,25 @@ CBA.screens = CBA.screens || {};
     if (cacheFresh() && resvFresh() && (!can("גינון") || gardenFresh())) { done(); return; }
     CBA.data.getHomeExtras(function (res) {
       if (!res || !res.ok || !res.homeExtras) { done(); return; }   // שרת ישן/כשל -> המסלול הישן
-      if (res.signups && res.signups.ok) lazyCache.signups = countPending(res.signups.rows);
-      if (res.profile && res.profile.ok) lazyCache.profile = countPending(res.profile.rows);
-      if (res.gym && res.gym.ok) lazyCache.gym = countGymPending(res.gym);
+      /* 🔴 **שתי הצורות, ובכוונה** (2026-09-16). מהיום השרת מחזיר
+         `pending` — מספר שנספר בעמודה אחת — במקום את כל השורות.
+         הצורה הישנה נשארת נתמכת כאן כדי שלא תיווצר תלות בסדר
+         הדיפלוי: לקוח חדש מול שרת שטרם פורסם ממשיך לעבוד בדיוק
+         כמו אתמול, וכך גם ההפך.
+         ⚠️ `typeof === "number"` ולא `||`: `pending: 0` הוא תשובה
+            תקפה, ו-`0 || count(...)` היה מפיל אותה בחזרה לספירה. */
+      if (res.signups && res.signups.ok) {
+        lazyCache.signups = (typeof res.signups.pending === "number")
+          ? res.signups.pending : countPending(res.signups.rows);
+      }
+      if (res.profile && res.profile.ok) {
+        lazyCache.profile = (typeof res.profile.pending === "number")
+          ? res.profile.pending : countPending(res.profile.rows);
+      }
+      if (res.gym && res.gym.ok) {
+        lazyCache.gym = (typeof res.gym.pending === "number")
+          ? res.gym.pending : countGymPending(res.gym);
+      }
       lazyCache.ts = Date.now();
 
       if (res.reservations && res.reservations.ok) {

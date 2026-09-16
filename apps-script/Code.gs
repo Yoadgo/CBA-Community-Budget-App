@@ -8374,6 +8374,50 @@ function tourSeenFor_(ss, email) {
  *  ⚠️ כישלון של מקטע אחד לא מפיל את השאר — כל אחד עטוף בנפרד, בדיוק כמו
  *     שהלקוח היום סופג כישלון של קריאה בודדת בלי לשבור את העמוד.
  * ========================================================================== */
+/* ============================================================================
+ *  ספירת סטטוס בעמודה אחת  (2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  📊 **נמדד בייצור היום, אחרי שכל שאר התחומים כבר עברו ל-Firestore:**
+ *  קריאה ל-Apps Script עולה **~1,970 אלפיות מינימום** (מדידת `rev`,
+ *  שמחזירה 120 בתים). ו-`homeExtras` עולה **8,100** — כלומר כשש שניות
+ *  של קריאת גיליונות מעל הרצפה.
+ *
+ *  🔴 **ולמה זה מבוזבז:** שלוש מתוך שש התשובות ש-`homeExtras` מרכיבה
+ *  נצרכות בלקוח **כמספר אחד בלבד** — תגית ספירה על עמוד הבית.
+ *  `handleGymList_` לבדה עולה ~1,850 אלפיות ומחזירה 7.4KB של שורות
+ *  מכון — **כולל ת.ז. ותשובות שאלון בריאות** — כדי שהלקוח יספור
+ *  כמה מהן "ממתין לאימות".
+ *
+ *  הפונקציה הזאת קוראת **עמודה אחת** ומחזירה מספר. אותה תבנית
+ *  בדיוק שכבר הוחלה על ספירת הגינון בצעד 07, ומאותו נימוק.
+ *
+ *  ⚠️ **הסטטוס המבוקש מגיע מבחוץ ולא נגזר כאן**, כדי שלא תיווצר
+ *     הגדרה שנייה של "ממתין" לצד זו שבמסך הניהול. שני מקורות
+ *     לאותה הגדרה = "המספר בתגית לא מסכים עם המסך".
+ *  ⚠️ גיליון חסר או עמודה חסרה ⇒ 0, לא חריגה. תגית ספירה לעולם
+ *     אינה סיבה להפיל את עמוד הבית.
+ * ========================================================================== */
+function countStatus_(ss, sheetName, statusHeader, wanted) {
+  try {
+    var sh = ss.getSheetByName(sheetName);
+    if (!sh) return 0;
+    var last = sh.getLastRow();
+    if (last < 2) return 0;
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    var col = -1;
+    for (var i = 0; i < headers.length; i++) {
+      if (String(headers[i]).trim() === statusHeader) { col = i + 1; break; }
+    }
+    if (col === -1) return 0;
+    var vals = sh.getRange(2, col, last - 1, 1).getValues();
+    var n = 0;
+    for (var r = 0; r < vals.length; r++) {
+      if (String(vals[r][0]).trim() === wanted) n++;
+    }
+    return n;
+  } catch (e) { return 0; }
+}
+
 function handleHomeExtras_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -8394,11 +8438,16 @@ function handleHomeExtras_(p) {
     var out = { ok: true, homeExtras: true };
     out.tour         = sub(handleTour_);                  // כרטיס "יש משהו חדש"
     out.reservations = sub(handleMyClubReservations_);     // השריון הקרוב
+    /* 🔴 **מספר, לא שורות** — ר' `countStatus_` למעלה. שלוש התשובות
+       האלה נצרכו בלקוח כספירה בלבד, ועלו יחד כשלוש שניות של קריאת
+       גיליונות **ו-9KB של שורות על החוט**, מהן שורות מכון עם ת.ז.
+       ותשובות שאלון בריאות. הלקוח יודע לקרוא את שתי הצורות, ולכן
+       אין כאן תלות בסדר הדיפלוי. */
     if (has(PERM_RESIDENTS)) {
-      out.signups = sub(handleListSignups_);
-      out.profile = sub(handleProfileChanges_);
+      out.signups = { ok: true, pending: countStatus_(ss, SIGNUPS_SHEET, '\u05e1\u05d8\u05d8\u05d5\u05e1', '\u05de\u05de\u05ea\u05d9\u05df') };
+      out.profile = { ok: true, pending: countStatus_(ss, PROFILE_SHEET, '\u05e1\u05d8\u05d8\u05d5\u05e1', '\u05de\u05de\u05ea\u05d9\u05df') };
     }
-    if (has(PERM_GYM))  { out.gym  = sub(handleGymList_);  }
+    if (has(PERM_GYM))  { out.gym = { ok: true, pending: countStatus_(ss, GYM_SHEET, '\u05e1\u05d8\u05d8\u05d5\u05e1', GYM_ST_VERIFY) }; }
     if (has(PERM_CLUB)) { out.club = sub(handleClubList_); }
     /* ספירת משימות הגינון הממתינות (2026-09-15, צעד 07).
        📊 נמדד בייצור: `gardenTasks` לבדה עולה 3.6–5.2 שניות בעלייה,
