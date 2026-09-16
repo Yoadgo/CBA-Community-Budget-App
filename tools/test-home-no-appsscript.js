@@ -185,7 +185,9 @@ section('6. 🔴 הסיור — מסמך לכל קהל, ו"תושבים" שאי�
   ok('ריק → all (ברירת מחדל כמו בשרת)', s.box.tourAudDocId_('') === 'all');
   ok('מנהלים → admins', s.box.tourAudDocId_('מנהלים') === 'admins');
   ok('גינון → perm-garden', s.box.tourAudDocId_('גינון') === 'perm-garden');
-  ok('🔴🔴 "תושבים" → אין מסמך בכלל', s.box.tourAudDocId_('תושבים') === '');
+  /* 🔴 תוקן 16.9: עד אז קהל "תושבים" נפל פעמיים בשרת ואיש לא ראה
+     צעד כזה. מעכשיו הוא **תושב שאינו מנהל**, ויש לו מסמך משלו. */
+  ok('🔴 "תושבים" → residents (תוקן)', s.box.tourAudDocId_('תושבים') === 'residents');
   ok('⚠️ וקהל לא מוכר → אין מסמך', s.box.tourAudDocId_('משהו') === '');
 }
 
@@ -196,16 +198,18 @@ section('7. סנכרון הסיור — סינון, קיבוץ ומיון');
     { 'מזהה': 'b', 'קהל': 'כולם', 'פעיל': 'כן', 'גרסה': 1, 'סדר': 9 },
     { 'מזהה': 'c', 'קהל': 'מנהלים', 'פעיל': 'כן', 'גרסה': 1, 'סדר': 1 },
     { 'מזהה': 'd', 'קהל': 'כולם', 'פעיל': 'לא', 'גרסה': 1, 'סדר': 2 },
-    { 'מזהה': 'e', 'קהל': 'תושבים', 'פעיל': 'כן', 'גרסה': 1, 'סדר': 1 }
+    { 'מזהה': 'e', 'קהל': 'תושבים', 'פעיל': 'כן', 'גרסה': 1, 'סדר': 1 },
+    { 'מזהה': 'f', 'קהל': 'משהו אחר', 'פעיל': 'כן', 'גרסה': 1, 'סדר': 1 }
   ];
   const s = serverBox({ tourRows: rows, existing: ['all', 'admins', 'perm-club'] });
   const out = s.box.tourSyncAll_({});
   const all = s.log.writes.find(w => w.path === 'tourSteps/all');
-  ok('שני מסמכים נכתבו', out.wrote === 2, JSON.stringify(out));
+  ok('שלושה מסמכים נכתבו — all, admins, residents', out.wrote === 3, JSON.stringify(out));
   ok('🔴 צעד לא-פעיל לא נכתב', all.doc.steps.every(x => x['מזהה'] !== 'd'));
-  ok('🔴🔴 וקהל "תושבים" לא נכתב לשום מסמך',
-     !s.log.writes.some(w => JSON.stringify(w.doc).indexOf('"e"') !== -1));
-  ok('שניהם נספרו כמדולגים', out.skipped === 2, String(out.skipped));
+  ok('🔴 וקהל "תושבים" נכתב למסמך שלו בלבד',
+     JSON.stringify((s.log.writes.find(w => w.path === 'tourSteps/residents')||{doc:{}}).doc).indexOf('"e"') !== -1 &&
+     JSON.stringify(all.doc).indexOf('"e"') === -1);
+  ok('הלא-פעיל והקהל הלא-מוכר נספרו כמדולגים', out.skipped === 2, String(out.skipped));
   ok('🔴 והמיון הוא גרסה ואז סדר',
      all.doc.steps[0]['מזהה'] === 'b' && all.doc.steps[1]['מזהה'] === 'a',
      all.doc.steps.map(x => x['מזהה']).join(','));
@@ -251,8 +255,9 @@ section('9. הלקוח — getTourFast');
   }
   const plain = run({ flag: true, docs: { 'tourSteps/all': { steps: [{ 'גרסה': 1, 'סדר': 1, 'מזהה': 'x' }] },
                                           'tourSeen/u1': { v: 2 } } });
-  ok('תושב רגיל מבקש רק את all (ואת "מה ראיתי")',
-     JSON.stringify(plain.reads.slice().sort()) === JSON.stringify(['tourSeen/u1', 'tourSteps/all']),
+  ok('🔴 תושב רגיל מבקש all ו-residents (ואת "מה ראיתי") — ולא admins',
+     JSON.stringify(plain.reads.slice().sort()) ===
+       JSON.stringify(['tourSeen/u1', 'tourSteps/all', 'tourSteps/residents']),
      JSON.stringify(plain.reads));
   ok('והתשובה בצורת action=tour',
      plain.r && plain.r.ok === true && plain.r.seen === 2 && plain.r.steps.length === 1,
@@ -261,7 +266,8 @@ section('9. הלקוח — getTourFast');
   ok('🔴 בעל הרשאת גינון מבקש גם admins וגם perm-garden, ולא perm-club',
      gard.reads.indexOf('tourSteps/admins') !== -1 &&
      gard.reads.indexOf('tourSteps/perm-garden') !== -1 &&
-     gard.reads.indexOf('tourSteps/perm-club') === -1, JSON.stringify(gard.reads));
+     gard.reads.indexOf('tourSteps/perm-club') === -1 &&
+     gard.reads.indexOf('tourSteps/residents') === -1, JSON.stringify(gard.reads));
   const sup = run({ flag: true, isSuper: true, docs: { 'tourSteps/all': { steps: [] } } });
   ok('🔴 ומנהל-על מבקש את כל מסמכי ההרשאות — כמו hasPerm בשרת',
      sup.reads.filter(x => x.indexOf('perm-') !== -1).length === 5, JSON.stringify(sup.reads));
@@ -329,8 +335,10 @@ ok('🔴🔴 והמחרוזת הריקה חסומה',
    /function canSeeClubResv\(fid\)[\s\S]{0,220}fid != '' && fid == myFamilyId\(\)/.test(RULES));
 ok('tourSteps לפי מזהה קהל',
    /match \/tourSteps\/\{id\}\s*\{\s*allow read: if canSeeTourDoc\(id\);/.test(RULES));
-ok('🔴🔴 ואין כלל ל-perm-residents — הקהל שאיש אינו רואה',
+ok('🔴🔴 אין כלל ל-perm-residents — "תושבים" הוא קהל, לא הרשאה',
    !/id == 'perm-residents'/.test(RULES));
+ok('🔴 ויש כלל ל-residents, שהוא היחיד ששולל הרשאה במקום לדרוש',
+   /\(id == 'residents'\s*&& !isAdminUser\(\)\)/.test(RULES));
 ok('🔴 "מנהלים" נבדק מול הרשאה אמיתית ולא מול signedIn',
    /function isAdminUser\(\)[\s\S]{0,160}isSuper\(\) \|\| m\(\)\.perms\.size\(\) > 0/.test(RULES));
 ok('tourSeen — כל אחד את שלו',

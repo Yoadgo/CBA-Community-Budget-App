@@ -107,7 +107,11 @@ section('5. handleTour_ — מה באמת השתנה שם');
   ok('🔴🔴 והסינון לפי קהל רץ **אחרי** המטמון, בשרת',
      /tourRowsCached_\(ss\)\.filter\(function \(r\) \{/.test(ht));
   ok('⚠️ וצעד "מנהלים" עדיין לא יוצא לתושב רגיל',
-     /aud === 'מנהלים' && !isAdmin\) return false/.test(ht));
+     /if \(aud === 'מנהלים'\) return isAdmin;/.test(ht));
+  /* 🔴 תוקן 16.9 — ר' ההערה בקוד: קהל "תושבים" נפל פעמיים ואיש לא ראה
+     צעד כזה. עכשיו הוא מוצג לתושב שאינו מנהל, ורק לו. */
+  ok('🔴 וצעד "תושבים" מוצג לתושב שאינו מנהל — ולא למנהל',
+     /if \(aud === 'תושבים'\) return !isAdmin;/.test(ht));
   ok('⚠️ וקהל שהוא שם הרשאה עדיין נבדק מול ההרשאות של הקורא',
      /ALL_PERMS\.indexOf\(aud\)/.test(ht));
   ok('🔴 ומספר השורה מועבר מההרשאות', /tourSeenFor_\(ss, gate\.email, gate\.perm && gate\.perm\.rowIndex\)/.test(ht));
