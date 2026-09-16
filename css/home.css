@@ -44,54 +44,116 @@
 .hm-task__c { color: var(--text-muted); display: inline-flex; flex: none; }
 .hm-lazy { min-height: 0; }
 
-/* --- "אצלנו בבית" --- */
-.hm-mine { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.hm-stat {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
-  padding: 14px; border: 1px solid var(--border); border-radius: 12px;
-  background: var(--surface); cursor: pointer; font: inherit; text-align: start;
-  transition: border-color var(--t), background var(--t);
-}
-.hm-stat:hover { border-color: var(--action); background: var(--hover); }
-.hm-stat__v { font-size: 24px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.1; }
-.hm-stat__v--money { font-size: 19px; color: var(--ok); }
-.hm-stat__l { font-size: 12.5px; color: var(--text-muted); font-weight: 600; }
+/* --- פריסה: עמודה אחת רחבה, ושנייה רק כשיש בה משהו (2026-09-16) --- */
+.hm-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; max-width: 1040px; }
+.hm-cols--two { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); max-width: none; }
+.hm-main { display: flex; flex-direction: column; gap: 16px; }
+.hm-main > .hm-card { margin-bottom: 0; }
+.hm-side { display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 1023px) { .hm-cols--two { grid-template-columns: minmax(0, 1fr); } }
 
-/* --- השריון הקרוב --- */
-.hm-next { margin-top: 12px; }
-.hm-next__row, .hm-next__empty {
+/* --- "אצלנו בבית" — ארבע שורות מצב באותה שפה --- */
+.hm-mine { display: flex; flex-direction: column; gap: 8px; }
+.hm-slot:empty { display: none; }
+.hm-row {
   display: flex; align-items: center; gap: 11px; width: 100%;
-  padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px;
+  padding: 11px 13px; border: 1px solid var(--border); border-radius: 12px;
   background: var(--surface); cursor: pointer; font: inherit; text-align: start; color: var(--text);
   transition: border-color var(--t), background var(--t);
 }
-.hm-next__row:hover, .hm-next__empty:hover { border-color: var(--action); background: var(--hover); }
-.hm-next__ico { color: var(--text-soft); display: inline-flex; flex: none; }
-.hm-next__txt { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.hm-next__txt b { font-size: 14px; font-weight: 700; }
-.hm-next__txt small { font-size: 12.5px; color: var(--text-muted); }
-.hm-next__empty { color: var(--text-soft); font-size: 13.5px; }
-.hm-next__empty span { flex: 1; }
+.hm-row:hover { border-color: var(--action); background: var(--hover); }
+.hm-row:active { transform: scale(.995); }
+.hm-row__ico { color: var(--text-soft); display: inline-flex; flex: none; }
+.hm-row__txt { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.hm-row__txt b { font-size: 14px; font-weight: 700; }
+.hm-row__txt small {
+  font-size: 12.5px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hm-row__c { color: var(--text-muted); display: inline-flex; flex: none; }
+.hm-row .badge { flex: none; }
 
-/* --- פעולות מהירות --- */
-.hm-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 12px; margin-top: 4px; }
+/* --- "תפקיד ועד" — עולם ויזואלי נפרד (2026-09-16) ---------------------
+   צפחה רכה ולא שחור: `--action` (#111827) שמור ל-CTA הראשי, וכרטיס
+   שלם באותו צבע היה גוזל ממנו את הבלעדיות. ר' cba-core-standards. */
+.hm-vaad {
+  --vaad-line: rgba(255,255,255,.16);
+  background: linear-gradient(168deg, #42505F, #33404F);
+  border: 1px solid #2C3846; border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(51,64,79,.18);
+  color: #fff; padding: 16px 16px 14px;
+}
+.hm-vaad__head { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; flex-wrap: wrap; }
+.hm-vaad__ico {
+  width: 26px; height: 26px; border-radius: 9px; flex: none;
+  background: rgba(255,255,255,.12); display: grid; place-items: center;
+}
+.hm-vaad__t { margin: 0; font-size: 14.5px; font-weight: 800; letter-spacing: -.01em; color: #fff; }
+.hm-vaad__sub { font-size: 11.5px; color: rgba(255,255,255,.62); }
+.hm-vaad .hm-tasks { gap: 7px; }
+.hm-vaad .hm-task {
+  background: rgba(255,255,255,.055); border-color: var(--vaad-line); color: #fff;
+}
+.hm-vaad .hm-task:hover { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.3); }
+.hm-vaad .hm-task__n { background: rgba(255,255,255,.14); color: rgba(255,255,255,.82); }
+.hm-vaad .hm-task--warn .hm-task__n { background: #F7D9A6; color: #5A3A08; }
+.hm-vaad .hm-task__c { color: rgba(255,255,255,.5); }
+/* השלד והמצב-הריק חייבים להתהפך גם הם — אחרת אפור על צפחה. */
+.hm-vaad .empty { padding: 22px 16px; }
+.hm-vaad .empty__ico { color: rgba(255,255,255,.22); }
+.hm-vaad .empty__title { color: rgba(255,255,255,.86); }
+.hm-vaad .empty__sub { color: rgba(255,255,255,.55); }
+.hm-vaad .skeleton { background-color: rgba(255,255,255,.10); }
+
+/* --- פעולות מהירות — גלולות בראש העמוד (2026-09-16) ------------------
+   ⚠️ הרמזים לגלילה (דהייה, מקפים) מודלקים מ-JS לפי
+      `scrollWidth > clientWidth` בלבד. ר' wireActionsHint. */
+.hm-actions { margin: 0 0 18px; }
+.hm-actions__edge { position: relative; }
+.hm-actions__row { display: flex; flex-wrap: wrap; gap: 8px; }
 .hm-act {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-  padding: 20px 12px; border: 1px solid var(--border); border-radius: 16px;
-  background: var(--surface); cursor: pointer; font: inherit; color: var(--text);
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  padding: 8px 13px 8px 11px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); cursor: pointer; font: inherit;
+  font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap;
   transition: border-color var(--t), background var(--t), transform var(--t);
 }
+.hm-act svg { color: var(--text-soft); flex: none; }
 .hm-act:hover { border-color: var(--action); background: var(--hover); }
-.hm-act:active { transform: scale(.98); }
-.hm-act__ico { color: var(--text-soft); display: inline-flex; }
-.hm-act:hover .hm-act__ico { color: var(--action); }
-.hm-act__l { font-size: 13px; font-weight: 700; text-align: center; }
+.hm-act:hover svg { color: var(--action); }
+.hm-act:active { transform: scale(.97); }
+.hm-act--cta { background: var(--action); border-color: var(--action); color: #fff; }
+.hm-act--cta svg { color: #fff; }
+.hm-act--cta:hover { background: var(--action-hover); border-color: var(--action-hover); }
+.hm-act--cta:hover svg { color: #fff; }
+.hm-actions__dots[hidden] { display: none; }   /* ⚠️ display:flex גובר על [hidden] */
+.hm-actions__dots { display: flex; gap: 4px; justify-content: center; margin-top: 8px; }
+.hm-actions__dots i { width: 14px; height: 3px; border-radius: 2px; background: var(--border); transition: width var(--t), background var(--t); }
+.hm-actions__dots i.on { width: 20px; background: var(--text-muted); }
 
 @media (max-width: 720px) {
-  .hm-actions { grid-template-columns: repeat(2, 1fr); }
-  .hm-mine { grid-template-columns: 1fr 1fr; }
-  .hm-mine .hm-stat:last-child { grid-column: 1 / -1; }
   .hm-card { padding: 16px; }
+  .hm-actions { margin-bottom: 14px; }
+  /* מובייל: שורה נגללת במקום עטיפה. הריפוד הצדדי מוחזר לתוך השורה
+     כדי שהכפתור הראשון יתחיל בקו של הכרטיסים ולא בקצה המסך. */
+  .hm-actions__row {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin-inline: -16px;              /* = ריפוד ה-app-main במובייל */
+    padding-inline: 16px 44px;
+    padding-bottom: 2px;
+  }
+  .hm-actions__row::-webkit-scrollbar { display: none; }
+  /* ⚠️ `inset-inline-start` ב-RTL הוא הקצה **הימני** — שם השורה מתחילה,
+     ושם הדהייה כיסתה דווקא את כפתור ה-CTA. הקצה שאליו התוכן נעלם הוא
+     השמאלי, כלומר `inline-end`. נתפס בצילום מסך, לא בקריאת הקוד. */
+  .hm-actions__edge.is-more::after {
+    content: ""; position: absolute; inset-block: 0; inset-inline-end: 0;
+    width: 44px; pointer-events: none;
+    background: linear-gradient(to right, var(--bg) 22%, rgba(249,250,251,0));
+    transition: opacity var(--t);
+  }
+  .hm-actions__edge.is-more.is-end::after { opacity: 0; }
+  .hm-row__txt small { white-space: normal; }
 }
 
 /* ==========================================================================

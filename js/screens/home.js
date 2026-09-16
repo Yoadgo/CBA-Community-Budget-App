@@ -39,7 +39,12 @@ CBA.screens = CBA.screens || {};
     users:   '<circle cx="9" cy="9" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><path d="M16 6.2a3.2 3.2 0 0 1 0 5.6M17.5 19a6 6 0 0 0-2-4.5"/>',
     chev:    '<path d="m14 6-6 6 6 6"/>',
     spark:   '<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m6.3 6.3 2.8 2.8M14.9 14.9l2.8 2.8M17.7 6.3l-2.8 2.8M9.1 14.9l-2.8 2.8"/>',
-    person:  '<circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/>'
+    person:  '<circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/>',
+    /* שלושת החדשים (2026-09-16) — עלה הגינון וההרמה זהים ל-NAV_ICONS
+       ב-app.js במכוון: אותו נושא, אותו סמליל, בכל מקום באפליקציה. */
+    leaf:    '<path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/>',
+    gym:     '<path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/>',
+    badge:   '<path d="M12 3 2.5 8 12 13l9.5-5z"/><path d="M6 10.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.5"/>'
   };
   function svg(d, size) {
     var n = size || 20;
@@ -98,9 +103,18 @@ CBA.screens = CBA.screens || {};
     if (can("מכון"))   lazy += '<div id="hm-gym" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
     if (can("גינון"))  lazy += '<div id="hm-garden" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
 
-    return '<section class="card hm-card">' +
-      '<div class="hm-card__head"><h2 class="hm-card__t">מה מחכה לאישורך</h2>' +
-        '<span class="hm-card__sub">רק מה ששייך לתחומי הניהול שלך</span></div>' +
+    /* 🔴 "תפקיד ועד" (2026-09-16) — שם וכרטיס נפרדים, לבקשת יועד.
+       הרקע: הכרטיס הזה והכרטיס המשפחתי שמתחתיו ענו על שתי שאלות
+       שונות לגמרי — "מה מחכה לי כגזבר" מול "מה פתוח למשפחה שלי" —
+       ושניהם היו לבנים, זה מעל זה, בלי שום סימן שמפריד ביניהם.
+       ⚠️ **המחלקות `hm-tasks`/`hm-clear` והמזהים לא השתנו** במכוון:
+          `loadLazyCounts`, `fastPaint` ו-`syncClearState` בוחרות לפיהם,
+          וכל שינוי שם היה מנתק את התגיות מהשלד שמחכה להן. */
+    return '<section class="hm-card hm-vaad">' +
+      '<div class="hm-vaad__head">' +
+        '<span class="hm-vaad__ico">' + svg(ICO.badge, 15) + '</span>' +
+        '<h2 class="hm-vaad__t">תפקיד ועד</h2>' +
+        '<span class="hm-vaad__sub">רק מה ששייך לתחומי הניהול שלך</span></div>' +
       '<div class="hm-tasks" id="hm-tasks">' + rows + lazy + '</div>' +
       '<div class="hm-clear" id="hm-clear"' + (rows ? " hidden" : "") + '>' +
         CBA.ui.emptyState({ icon: "check", title: "הכול מטופל",
@@ -445,16 +459,57 @@ CBA.screens = CBA.screens || {};
       });
     }
     var money = CBA.formatILS ? CBA.formatILS(counts.paid) : String(counts.paid);
+    /* 🔴 שלושת הכרטיסים הפכו לשורה אחת (2026-09-16, החלטת יועד).
+       שלושה מספרים גדולים תפסו את כל הכרטיס וענו על שאלה אחת;
+       עכשיו ההחזרים מדברים באותה שפה בדיוק של המועדון, הגינון
+       והמכון — אייקון, מצב, תגית, ולחיצה למסך המלא. */
     return '<section class="card hm-card">' +
       '<div class="hm-card__head"><h2 class="hm-card__t">אצלנו בבית</h2>' +
+        '<span class="hm-card__sub">מה פתוח למשפחה שלי</span>' +
         '<button type="button" class="hm-link" data-goto="resRequests">לכל הבקשות</button></div>' +
       '<div class="hm-mine">' +
-        '<button type="button" class="hm-stat" data-goto="resRequests"><span class="hm-stat__v">' + counts.pending + '</span><span class="hm-stat__l">ממתינות</span></button>' +
-        '<button type="button" class="hm-stat" data-goto="resRequests"><span class="hm-stat__v">' + counts.ready + '</span><span class="hm-stat__l">אושרו</span></button>' +
-        '<button type="button" class="hm-stat" data-goto="resRequests"><span class="hm-stat__v hm-stat__v--money">' + money + '</span><span class="hm-stat__l">שולמו השנה</span></button>' +
+        refundRowHTML(counts, money) +
+        '<div id="hm-next" class="hm-slot">' + CBA.skel.rows(1, { avatar: false }) + '</div>' +
+        '<div id="hm-mygarden" class="hm-slot"></div>' +
+        '<div id="hm-mygym" class="hm-slot"></div>' +
       '</div>' +
-      '<div id="hm-next" class="hm-next">' + CBA.skel.rows(1, { avatar: false }) + '</div>' +
       '</section>';
+  }
+
+  /* ------------------------------------------------- שורת מצב משותפת ----
+     ארבע השורות של "אצלנו בבית" נבנות כולן מכאן. שורה אחת לכל תחום,
+     ותמיד באותו סדר פנימי: אייקון · כותרת · שורת פירוט · תגית · חץ.
+     ⚠️ אותה פונקציה בונה גם את שורת "אין" (המועדון הריק, הגינון הריק),
+        כדי ששתי הצורות לא ייפרדו ויתחילו להיראות אחרת. */
+  function stateRow(o) {
+    return '<button type="button" class="hm-row" data-goto="' + esc(o.goto) + '">' +
+      '<span class="hm-row__ico">' + svg(o.ico, 17) + '</span>' +
+      '<span class="hm-row__txt"><b>' + esc(o.title) + '</b>' +
+        (o.sub ? '<small>' + esc(o.sub) + '</small>' : '') + '</span>' +
+      /* ⚠️ `badge` הוא רכיב התגית הכלל-מערכתי (css/style.css), ולא
+         מחלקה חדשה של עמוד הבית: תגית "מאושר" כאן חייבת להיראות
+         בדיוק כמו "מאושר" בטבלת ההוצאות. */
+      (o.pill ? '<span class="badge badge--' + (o.tone || "info") + '">' + esc(o.pill) + '</span>' : '') +
+      '<span class="hm-row__c">' + svg(ICO.chev, 16) + '</span>' +
+      '</button>';
+  }
+
+  /* ההחזרים — השורה היחידה שאינה עולה דבר: היא נגזרת מהתנועות
+     שכבר בזיכרון (`CBA.residentUtils.myRequests`), בלי שום קריאה. */
+  function refundRowHTML(c, money) {
+    var title, pill = "", tone = "", sub = "";
+    if (c.pending) {
+      title = c.pending === 1 ? "בקשת החזר אחת ממתינה" : c.pending + " בקשות החזר ממתינות";
+      pill = "בבדיקה"; tone = "warn";
+      if (c.ready) sub = c.ready === 1 ? "אחת אושרה לתשלום · " : c.ready + " אושרו לתשלום · ";
+    } else if (c.ready) {
+      title = c.ready === 1 ? "בקשה אחת אושרה לתשלום" : c.ready + " בקשות אושרו לתשלום";
+      pill = "אושר"; tone = "ok";
+    } else {
+      title = "אין בקשות החזר פתוחות";
+    }
+    sub += money + " שולמו השנה";
+    return stateRow({ goto: "resRequests", ico: ICO.receipt, title: title, sub: sub, pill: pill, tone: tone });
   }
 
   /* מטמון נפרד לשריון הקרוב (2026-09-09).
@@ -494,25 +549,89 @@ CBA.screens = CBA.screens || {};
   /* ציור השורה — חולץ מתוך ה-callback כדי שגם המסלול מהמטמון וגם המסלול
      מהרשת יציירו בדיוק אותו דבר. */
   function paintNext(slot, list) {
-    {
-      var next = list[0];
-      if (!next) {
-        slot.innerHTML = '<button type="button" class="hm-next__empty" data-goto="resReserve">' +
-          svg(ICO.key, 18) + '<span>אין שריון קרוב — אפשר לשרין את המועדון</span>' + svg(ICO.chev, 16) + '</button>';
-        return;
-      }
-      var s = new Date(next.start), e = new Date(next.end);
-      var day = s.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "numeric" });
-      var time = pad(s.getHours()) + ":" + pad(s.getMinutes()) + "–" + pad(e.getHours()) + ":" + pad(e.getMinutes());
-      var pend = next.status === "pending";
-      slot.innerHTML = '<button type="button" class="hm-next__row" data-goto="resReserve">' +
-        '<span class="hm-next__ico">' + svg(ICO.key, 18) + '</span>' +
-        '<span class="hm-next__txt"><b>המועדון ' + esc(day) + '</b><small>' + esc(time) +
-          (pend ? " · ממתין לאישור" : " · מאושר") + '</small></span>' +
-        svg(ICO.chev, 16) + '</button>';
+    var next = (list || [])[0];
+    if (!next) {
+      slot.innerHTML = stateRow({ goto: "resReserve", ico: ICO.key,
+        title: "אין שריון קרוב", sub: "אפשר לשריין את המועדון" });
+      return;
     }
+    var a = new Date(next.start), b = new Date(next.end);
+    var day = a.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "numeric" });
+    var time = pad(a.getHours()) + ":" + pad(a.getMinutes()) + "–" + pad(b.getHours()) + ":" + pad(b.getMinutes());
+    var pend = next.status === "pending";
+    slot.innerHTML = stateRow({ goto: "resReserve", ico: ICO.key,
+      title: "המועדון " + day, sub: time,
+      pill: pend ? "ממתין" : "מאושר", tone: pend ? "warn" : "ok" });
   }
   function pad(n) { return n < 10 ? "0" + n : String(n); }
+
+  /* ============================================================================
+   *  🔴 שתי השורות החדשות — גינון ומכון   (2026-09-16)
+   * ----------------------------------------------------------------------------
+   *  שתיהן נקראות **מ-Firestore בלבד** ולכן מותר להן להיות כאן:
+   *    · `getMyGardenReports` עובר ב-`fsFirstRead("gardenReports")` —
+   *      נמדד בייצור היום 30ms (היה 30,002 — timeout).
+   *    · `getGymStatusFast` קורא `gymStatus/{uid}` — 6–59ms.
+   *  לו אחת מהן היתה קריאת Apps Script היא לא היתה נכנסת לעמוד הזה:
+   *  שם המחיר הוא ~2,000ms מינימום, וכל דיאטת הפתיחה נועדה למחוק אותו.
+   *
+   *  ⚠️ **שתיהן מתחילות ריקות ולא בשלד.** שלד מבטיח שורה שתגיע, ואצל
+   *     רוב התושבים אין כאן שורה בכלל (לא דיווחו, לא מנויים) — שלד
+   *     שנעלם הוא הבטחה שנשברת. הן פשוט נכנסות כשיש מה להראות.
+   *  ⚠️ **כשל אינו "אין".** שתיהן משאירות את המקום ריק בשקט; מסך
+   *     הגינון עצמו הוא שמבחין בין "אין דיווחים" ל"לא הצלחנו לטעון".
+   * ========================================================================== */
+  function loadMyGarden(container) {
+    var slot = container.querySelector("#hm-mygarden");
+    if (!slot || !(CBA.data && CBA.data.getMyGardenReports)) return;
+    CBA.data.getMyGardenReports(function (res) {
+      if (!slot.isConnected) return;
+      if (!res || !res.ok) return;                 /* כשל — לא ממציאים "אין" */
+      var rows = res.rows || [];
+      /* פתוח = עדיין לא נסגר ולא אוחד לתוך דיווח אחר. זו בדיוק ההגדרה
+         שמסך "הדיווחים שלי" מצייר לפיה את מסלול הנקודות. */
+      var open = rows.filter(function (r) { return r && !r.closure && !r.mergedInto; });
+      if (!rows.length) {
+        slot.innerHTML = stateRow({ goto: "resGardenNew", ico: ICO.leaf,
+          title: "לא דיווחת על כלום", sub: "ראית מפגע בשיכון? אפשר לדווח" });
+        return;
+      }
+      if (!open.length) {
+        slot.innerHTML = stateRow({ goto: "resGarden", ico: ICO.leaf,
+          title: "כל הדיווחים שלך טופלו", sub: rows.length + " דיווחים בסך הכול",
+          pill: "הושלם", tone: "ok" });
+        return;
+      }
+      slot.innerHTML = stateRow({ goto: "resGarden", ico: ICO.leaf,
+        title: open.length === 1 ? "דיווח אחד שלי בטיפול" : open.length + " דיווחים שלי בטיפול",
+        sub: open.map(function (r) { return r.title || r.category || ""; })
+               .filter(Boolean).slice(0, 2).join(" · "),
+        pill: "בטיפול", tone: "warn" });
+    });
+  }
+
+  /* המכון — שורה רק למי שבאמת מנוי. תושב שאינו מנוי לא מקבל
+     כאן "אין מנוי": זו לא משימה פתוחה שלו, וזה הכרטיס של מה
+     שפתוח. מי שרוצה להצטרף מגיע דרך הפעולות המהירות. */
+  function loadMyGym(container) {
+    var slot = container.querySelector("#hm-mygym");
+    if (!slot || !(CBA.data && CBA.data.getGymStatusFast)) return;
+    CBA.data.getGymStatusFast(function (doc) {
+      if (!slot.isConnected || !doc) return;
+      var st = String(doc["סטטוס"] || "").trim();
+      if (!st) return;
+      var until = String(doc["בתוקף עד"] || "").trim();
+      var tone = st === "פעיל" ? "ok" : (st === "פג תוקף" ? "danger" : "warn");
+      var sub = "";
+      if (st === "פעיל" && until) {
+        var d = new Date(until);
+        sub = isNaN(d) ? "" : "בתוקף עד " + d.toLocaleDateString("he-IL",
+          { day: "numeric", month: "numeric", year: "numeric" });
+      }
+      slot.innerHTML = stateRow({ goto: "resGym", ico: ICO.gym,
+        title: "מנוי מכון כושר", sub: sub, pill: st, tone: tone });
+    });
+  }
 
   /* ------------------------------------------------- "יש משהו חדש" ------
      כשמוסיפים צעד לסיור עם מספר גרסה חדש, תושב ותיק לא מקבל השתלטות על
@@ -522,8 +641,14 @@ CBA.screens = CBA.screens || {};
   function loadNewCard(container) {
     var slot = container.querySelector("#hm-new");
     if (!slot || !window.CBA.tour) return;
+    /* הדלקת העמודה השנייה — ר' ההערה ליד `hm-side` ב-render. */
+    function cols(on) {
+      var c = container.querySelector("#hm-cols");
+      if (c) c.classList.toggle("hm-cols--two", !!on);
+    }
     CBA.tour.newCount(function (n) {
       if (!slot.isConnected) return;
+      cols(n);
       if (!n) { slot.innerHTML = ""; return; }
       slot.innerHTML =
         '<button type="button" class="tr-new" data-tour-new>' +
@@ -537,19 +662,65 @@ CBA.screens = CBA.screens || {};
   }
 
   /* ------------------------------------------------------- פעולות מהירות */
+  /* 🔴 גלולות בראש העמוד במקום ריבועים מתחתיו (2026-09-16).
+     חמישה ריבועים בגובה ~120px ישבו **מתחת** לשני הכרטיסים, כלומר
+     הדבר שהתושב הכי מרבה לעשות היה הדבר האחרון שהוא הגיע אליו.
+     עכשיו: שורת גלולות בגובה ~36px מיד מתחת לברכה. השטח ירד בערך
+     ב-60%, ודווקא בגלל זה היה מקום להוסיף שתי פעולות ולא להוריד. */
   function actionsHTML() {
     var items = [
-      ["resSubmit",  ICO.receipt, "הגשת קבלה"],
-      ["resReserve", ICO.key,     "שריון מועדון"],
-      ["resMap",     ICO.map,     "מפת השיכון"],
-      ["resDirectory", ICO.users, "שכנים"],
-      ["resMe",        ICO.person, "הפרטים שלי"]
+      ["resSubmit",    ICO.receipt, "הגשת קבלה", 1],
+      ["resGardenNew", ICO.leaf,    "דיווח למראה שיכון"],
+      ["resReserve",   ICO.key,     "שריון מועדון"],
+      ["resGym",       ICO.gym,     "מכון כושר"],
+      ["resMap",       ICO.map,     "מפת השיכון"],
+      ["resDirectory", ICO.users,   "שכנים"],
+      ["resMe",        ICO.person,  "הפרטים שלי"]
     ];
-    return '<section class="hm-actions">' + items.map(function (it) {
-      return '<button type="button" class="hm-act" data-goto="' + it[0] + '">' +
-        '<span class="hm-act__ico">' + svg(it[1], 22) + '</span>' +
-        '<span class="hm-act__l">' + esc(it[2]) + '</span></button>';
-    }).join("") + '</section>';
+    return '<section class="hm-actions">' +
+      '<div class="hm-actions__edge" id="hm-acts-edge">' +
+        '<div class="hm-actions__row" id="hm-acts">' + items.map(function (it) {
+          return '<button type="button" class="hm-act' + (it[3] ? " hm-act--cta" : "") +
+            '" data-goto="' + it[0] + '">' + svg(it[1], 15) +
+            '<span>' + esc(it[2]) + '</span></button>';
+        }).join("") + '</div>' +
+      '</div>' +
+      '<div class="hm-actions__dots" id="hm-acts-dots" hidden aria-hidden="true">' +
+        '<i></i><i></i></div>' +
+      '</section>';
+  }
+
+  /* ------------------------------------------------- רמז הגלילה במובייל ----
+     במסך צר השורה נגללת, ובלי רמז היא נראית כמו שלושה כפתורים ותו לא.
+     שלושה רמזים יחד: הכפתור הבא **נחתך** בקצה (זה החזק מביניהם), דהייה
+     מעל הקצה, ושני מקפים שמראים איפה אנחנו.
+     ⚠️ **הכול מותנה ב-`scrollWidth > clientWidth`** — בדסקטופ, או אצל
+        תושב שרואה פחות פעולות, השורה נכנסת שלמה ואז אין מה לרמוז:
+        דהייה מעל שורה שאינה נגללת היא בדיוק סוג הרעש שאנחנו מנקים. */
+  function wireActionsHint(container) {
+    var edge = container.querySelector("#hm-acts-edge");
+    var row  = container.querySelector("#hm-acts");
+    var dots = container.querySelector("#hm-acts-dots");
+    if (!edge || !row) return;
+    function sync() {
+      var more = row.scrollWidth - row.clientWidth > 4;
+      edge.classList.toggle("is-more", more);
+      if (dots) dots.hidden = !more;
+      if (!more) return;
+      /* RTL: scrollLeft שלילי או אפס, תלוי בדפדפן. הערך המוחלט הוא
+         המרחק שנגלל, וזה מה שמעניין כאן. */
+      var at = Math.abs(row.scrollLeft);
+      var end = at > (row.scrollWidth - row.clientWidth) / 2;
+      edge.classList.toggle("is-end", end);
+      var d = dots ? dots.children : null;
+      if (d && d.length === 2) {
+        d[0].className = end ? "" : "on";
+        d[1].className = end ? "on" : "";
+      }
+    }
+    row.addEventListener("scroll", sync, { passive: true });
+    window.addEventListener("resize", sync);
+    sync();
   }
 
   /* ------------------------------------------------------------- חיווט ----
@@ -569,18 +740,30 @@ CBA.screens = CBA.screens || {};
 
   CBA.screens.resHome = {
     render: function (container) {
+      /* 🔴 סדר העמוד (2026-09-16): ברכה · פעולות · אצלנו בבית · תפקיד ועד.
+         העולם המשפחתי קודם והניהולי אחריו — גם למנהל־על. מי שנכנס
+         נכנס קודם כל כתושב, והכובע השני הוא תוספת ולא הכותרת. */
       container.innerHTML =
         '<header class="hm-hero">' +
           '<div class="hm-hero__hi">' + esc(greeting()) + ', ' + esc(displayName()) + '</div>' +
           '<div class="hm-hero__sub">' + esc(todayLabel()) +
             (u().house ? ' · בית ' + esc(u().house) : "") + '</div>' +
         '</header>' +
-        '<div id="hm-new"></div>' +
-        adminSectionHTML() +
-        mineSectionHTML() +
-        actionsHTML();
+        actionsHTML() +
+        '<div class="hm-cols" id="hm-cols">' +
+          '<div class="hm-main">' +
+            mineSectionHTML() +
+            adminSectionHTML() +
+          '</div>' +
+          /* ⚠️ העמודה השנייה נולדת ריקה, והפריסה נשארת עמודה אחת רחבה
+             עד ש-`loadNewCard` מוצא משהו להראות ומדליק `hm-cols--two`.
+             עמודה ריקה קבועה היתה מכווצת את הכרטיס המרכזי אצל **כל**
+             התושבים בשביל כרטיס שמופיע פעם בחודש. */
+          '<aside class="hm-side"><div id="hm-new"></div></aside>' +
+        '</div>';
 
       bindClicks(container);
+      wireActionsHint(container);
       // כפתור "נסה שוב" של הפאנל, אם הכרטיס הכספי הוחלף בו
       if (window.CBA && CBA.wireDataRetry) CBA.wireDataRetry(container);
       syncClearState(container);
@@ -590,6 +773,12 @@ CBA.screens = CBA.screens || {};
          הקובעת. שניהם יוצאים במקביל ובכוונה — המהיר מצייר
          תגיות, והקובע מביא גם את כרטיס "יש משהו חדש"
          ואת השריון הקרוב, שאינם ב-Firestore. */
+      /* שתי השורות מ-Firestore יוצאות **מיד ובמקביל**, לא בתוך
+         ההמתנה של `seedHomeFast`: הן לא מזינות שום מטמון שהקריאה
+         הקובעת נשענת עליו, ואין שום סיבה שיחכו לה. */
+      loadMyGarden(container);
+      loadMyGym(container);
+
       seedHomeFast(container, function () {
         primeHomeExtras(function () {
           loadLazyCounts(container);
