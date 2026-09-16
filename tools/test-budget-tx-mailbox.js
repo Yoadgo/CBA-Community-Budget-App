@@ -113,7 +113,10 @@ section('3. עמידות');
 
 section('4. תזמון');
 {
-  const h = CODE.slice(CODE.indexOf('function hourlyJobs()'));
+  /* ⚠️ גוף העבודה השעתית עבר ל-`hourlyJobsRun_` (16.9) כש-`hourlyJobs`
+     הפכה למעטפת נעילה — ר' `withSyncLock_`. הסדר הנבדק כאן הוא הסדר
+     בתוך הגוף, והוא לא השתנה. */
+  const h = CODE.slice(CODE.indexOf('function hourlyJobsRun_()'));
   const body = h.slice(0, h.indexOf('\n}\n'));
   ok('תיבת הדואר רצה כל שעה', body.indexOf('budgetTxMailPending_') !== -1);
   ok('🔴 ואחרי החלת הסטטוסים',

@@ -277,7 +277,10 @@ section('5. 🔴 סדר הפעולות');
      iApply < body.indexOf('try { clubReminderJob_') && iApply < body.indexOf('try { weeklyDigestJob_'));
 }
 {
-  const h = CODE.slice(CODE.indexOf('function hourlyJobs()'));
+  /* ⚠️ גוף העבודה השעתית עבר ל-`hourlyJobsRun_` (16.9) כש-`hourlyJobs`
+     הפכה למעטפת נעילה — ר' `withSyncLock_`. הסדר הנבדק כאן הוא הסדר
+     בתוך הגוף, והוא לא השתנה. */
+  const h = CODE.slice(CODE.indexOf('function hourlyJobsRun_()'));
   const body = h.slice(0, h.indexOf('\n}\n'));
   ok('ההחלה רצה גם כל שעה', body.indexOf('budgetTxApplyPending_') !== -1);
   ok('🔴 ולפני הגיבוי המצטבר — אחרת הגיבוי מנציח דגל פתוח',

@@ -5270,7 +5270,18 @@ function dailyEmailJobs_() {
  *  ⚠️ כל משימה ב-try משלה: כשל באחת לא מונע מהשנייה לרוץ ולא
  *     מפיל את הטריגר כולו. אותו דפוס כמו ב-dailyEmailJobs_.
  * ========================================================================== */
+/* 🔴 העבודה השעתית לוקחת את אותה נעילה מייעצת כמו הסנכרונים הידניים
+   (ר' `withSyncLock_`) — היא מריצה כמה מהם ברצף, וקריאה ידנית שנופלת
+   עליה הייתה מריצה סחיפת יתומים במקביל לכתיבה. אם היא תפוסה, הריצה
+   הזאת פשוט מדלגת: העבודה הבאה בעוד שעה, ואין מה למהר.
+   ⚠️ **במכוון לא `LockService` לבדה** — היא גלובלית, ואותה נעילה
+      עוברת בכל שמירת תנועה. ר' ההסבר המלא ליד `withSyncLock_`. */
 function hourlyJobs() {
+  var r = withSyncLock_('hourlyJobs', function () { hourlyJobsRun_(); return { ok: true }; });
+  if (r && r.busy) Logger.log('hourlyJobs דילגה: ' + r.error);
+}
+
+function hourlyJobsRun_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   /* תיבת הדואר (2026-09-15, צעד 09א) — סטטוסים שהדפדפן
      כתב ל-Firestore וטרם הוחלו על הגיליון.
@@ -6426,12 +6437,74 @@ function gymStatusSyncAll_(ss) {
   return out;
 }
 
+/* ============================================================================
+ *  נעילת הסנכרונים  (2026-09-16)
+ * ----------------------------------------------------------------------------
+ *  🔴🔴 **הסכנה שזה סוגר, והיא קיימת מהיום הראשון.** כל סנכרון תשתית
+ *  עושה שני דברים ברצף: `fsWriteAll_` כותב את מה שיש בגיליון, ואז
+ *  `fsSweepOrphans_` **מוחק מ-Firestore כל מה שלא נכתב בריצה הזאת**.
+ *  שתי ריצות שחופפות הורסות זו את זו: הסחיפה של הריצה הראשונה רצה
+ *  אחרי שהשנייה כבר כתבה, רואה מסמכים שלא היו ברשימה *שלה*, ומוחקת
+ *  אותם. התוצאה היא לא שגיאה אלא **מסמכים שנעלמו**, ומי שקורא אותם
+ *  מקבל "אין נתונים" בלי שום סימן שמשהו קרה.
+ *
+ *  זה לא תרחיש תיאורטי: העבודה השעתית מריצה כמה סנכרונים ברצף, וכל
+ *  קריאה ידנית ל-`gymStatusSync`/`bootSync` יכולה ליפול בדיוק עליה.
+ *
+ *  🔴 **למה לא `LockService` לבדו.** נעילת הסקריפט היא **גלובלית** —
+ *  אותה נעילה שדרכה עוברת כל שמירת תנועה. עבודה שעתית שמחזיקה אותה
+ *  דקה שלמה הייתה מחזירה לתושב "המערכת עסוקה" באמצע שליחת קבלה.
+ *  לכן הנעילה כאן היא **מייעצת** ושייכת לסנכרונים בלבד; `LockService`
+ *  משמשת רק לרגע התפיסה עצמו (מילישניות), כדי ששתי בקשות לא יראו
+ *  "פנוי" באותה שנייה.
+ *
+ *  ⚠️ **חסם עליון על נעילה נטושה.** ריצה שנפלה באמצע (או חריגה ממכסת
+ *     הזמן של Apps Script) הייתה נועלת לנצח. תקרת הריצה היא 6 דקות,
+ *     ולכן נעילה בת יותר מ-10 נחשבת נטושה ונדרסת.
+ * ========================================================================== */
+var SYNC_LOCK_KEY = 'cba_sync_lock';
+var SYNC_LOCK_MS  = 10 * 60 * 1000;
+
+function syncLockTake_(name) {
+  var lock = LockService.getScriptLock();
+  /* המתנה קצרה בכוונה: התפיסה עצמה היא שתי פעולות על Properties. */
+  try { lock.waitLock(5000); } catch (e) { return { ok: false, holder: '' }; }
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var raw = String(props.getProperty(SYNC_LOCK_KEY) || '');
+    if (raw) {
+      var parts = raw.split('|');
+      var at = Number(parts[1]) || 0;
+      if (new Date().getTime() - at < SYNC_LOCK_MS) return { ok: false, holder: parts[0] || '' };
+    }
+    props.setProperty(SYNC_LOCK_KEY, name + '|' + new Date().getTime());
+    return { ok: true, holder: '' };
+  } finally { lock.releaseLock(); }
+}
+
+function syncLockFree_() {
+  try { PropertiesService.getScriptProperties().deleteProperty(SYNC_LOCK_KEY); } catch (e) {}
+}
+
+/** מריץ `fn` רק אם אין סנכרון אחר באוויר. מחזיר את התוצאה של `fn`,
+ *  או אובייקט `{ok:false, busy:true}` כשתפוס. */
+function withSyncLock_(name, fn) {
+  var got = syncLockTake_(name);
+  if (!got.ok) {
+    return { ok: false, busy: true,
+             error: 'סנכרון אחר רץ כרגע' + (got.holder ? ' (' + got.holder + ')' : '') +
+                    '. נסו שוב בעוד דקה.' };
+  }
+  try { return fn(); } finally { syncLockFree_(); }
+}
+
 function handleGymStatusSync_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
-    var r = gymStatusSyncAll_(ss);
+    var r = withSyncLock_('gymStatusSync', function () { return gymStatusSyncAll_(ss); });
+    if (r.busy) return json_(r);
     return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, skipped: r.skipped,
                    codes: r.codes, codesDeleted: r.codesDeleted, error: r.error });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
@@ -6444,7 +6517,8 @@ function handleServicesSync_(p) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
-    var r = servicesSyncAll_(ss);
+    var r = withSyncLock_('servicesSync', function () { return servicesSyncAll_(ss); });
+    if (r.busy) return json_(r);
     return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, skipped: r.skipped, error: r.error });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
@@ -8464,7 +8538,7 @@ function handleBootSync_(p) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
-    var r = bootSync_(ss);
+    var r = withSyncLock_('bootSync', function () { return bootSync_(ss); });
     return json_(r);
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
@@ -8517,7 +8591,8 @@ function handleBudgetSync_(p) {
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var t0 = new Date().getTime();
-    var r = budgetYearsSyncAll_(ss);
+    var r = withSyncLock_('budgetSync', function () { return budgetYearsSyncAll_(ss); });
+    if (r.busy) return json_(r);
     r.ms = new Date().getTime() - t0;
     return json_(r);
   } catch (err) {
@@ -9005,7 +9080,8 @@ function handleBudgetTxSync_(p) {
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var t0 = new Date().getTime();
-    var r = budgetTxSyncAll_(ss);
+    var r = withSyncLock_('budgetTxSync', function () { return budgetTxSyncAll_(ss); });
+    if (r.busy) return json_(r);
     r.ms = new Date().getTime() - t0;
     return json_(r);
   } catch (err) {
@@ -9770,7 +9846,8 @@ function handleBackupRun_(p) {
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var t0 = new Date().getTime();
-    var r = fsBackupAll_(ss);
+    var r = withSyncLock_('backupRun', function () { return fsBackupAll_(ss); });
+    if (r.busy) return json_(r);
     r.ms = new Date().getTime() - t0;
     return json_(r);
   } catch (err) {
@@ -11918,7 +11995,8 @@ function handleGardenPlanSync_(p) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
-    var r = gardenPlanSyncAll_(ss);
+    var r = withSyncLock_('gardenPlanSync', function () { return gardenPlanSyncAll_(ss); });
+    if (r.busy) return json_(r);
     return json_({ ok: r.ok, wrote: r.wrote, deleted: r.deleted, error: r.error });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
