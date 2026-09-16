@@ -1810,6 +1810,15 @@ CBA.screens = CBA.screens || {};
         '<div class="dir-grid">' + g.rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>' +
       '</div>';
     }).join("");
+    // הסרגל מתרווח (is-touching) רק כשבאמת עובדים איתו — נגיעה/ריחוף — ומתכווץ
+    // חזרה במנוחה (2026-09-16, לבקשת יועד). pointerenter/pointerleave נבחרו
+    // כאן (במקום document-level) כי הם צריכים את הגבול המדויק של אלמנט הסרגל,
+    // וממילא מחוברים מחדש בכל render כמו שאר האזנות המסך.
+    var railEl = listEl.querySelector("#dir-rail");
+    if (railEl) {
+      railEl.addEventListener("pointerenter", function () { dirRailSetActive(true); });
+      railEl.addEventListener("pointerleave", function () { dirRailScheduleInactive(); });
+    }
     if (dirScrollY) { window.scrollTo(0, dirScrollY); dirScrollY = 0; }
   }
 
@@ -1821,6 +1830,17 @@ CBA.screens = CBA.screens || {};
      לכל המסך, לא state של resDirectory, כי pointerup/pointermove מאזינים
      ל-document ולא נכנסים/יוצאים עם render(). */
   var dirRailDragging = false;
+  var dirRailInactiveTimer = null;
+  function dirRailSetActive(on) {
+    var railEl = dirContainer && dirContainer.querySelector("#dir-rail");
+    if (!railEl) return;
+    clearTimeout(dirRailInactiveTimer);
+    railEl.classList.toggle("is-touching", !!on);
+  }
+  function dirRailScheduleInactive() {
+    clearTimeout(dirRailInactiveTimer);
+    dirRailInactiveTimer = setTimeout(function () { dirRailSetActive(false); }, 350);
+  }
   function dirJumpToLetter(L) {
     var t = dirContainer && dirContainer.querySelector("#dir-g-" + CSS.escape(L));
     if (t) t.scrollIntoView({ block: "start" });
@@ -1841,6 +1861,7 @@ CBA.screens = CBA.screens || {};
     var el = e.target.closest && e.target.closest("[data-dir-rail]");
     if (!el) return;
     dirRailDragging = true;
+    dirRailSetActive(true);
     dirJumpToLetter(el.dataset.dirRail);
     dirShowRailBubble(el.dataset.dirRail);
   });
@@ -1849,8 +1870,8 @@ CBA.screens = CBA.screens || {};
     var L = dirRailLetterAt(e.clientX, e.clientY);
     if (L) { dirJumpToLetter(L); dirShowRailBubble(L); }
   });
-  document.addEventListener("pointerup", function () { dirRailDragging = false; });
-  document.addEventListener("pointercancel", function () { dirRailDragging = false; });
+  document.addEventListener("pointerup", function () { dirRailDragging = false; dirRailScheduleInactive(); });
+  document.addEventListener("pointercancel", function () { dirRailDragging = false; dirRailScheduleInactive(); });
 
   CBA.screens.resDirectory = {
     render: function (container, opts) {

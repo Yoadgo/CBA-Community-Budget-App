@@ -18,6 +18,7 @@ const { window } = dom;
 global.window = window; global.document = window.document;
 global.navigator = window.navigator;
 window.matchMedia = window.matchMedia || (() => ({ matches: false }));
+window.Element.prototype.scrollIntoView = window.Element.prototype.scrollIntoView || function () {};
 
 window.CBA = {
   esc: s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
@@ -112,6 +113,21 @@ const $$ = s => Array.from(document.querySelectorAll(s));
   qEl.value = '';
   qEl.dispatchEvent(new window.Event('input', { bubbles: true }));
   ok('ניקוי החיפוש מחזיר את הסרגל', !!$('#dir-rail'));
+
+  section('6. הסרגל מתרווח רק כשנוגעים בו ומתכווץ במנוחה (2026-09-16)');
+  ok('בברירת מחדל הסרגל אינו במצב מורחב', !$('#dir-rail').classList.contains('is-touching'));
+  $('#dir-rail').dispatchEvent(new window.PointerEvent('pointerenter', { bubbles: true }));
+  ok('ריחוף/נגיעה בסרגל מוסיף is-touching (מתרווח)', $('#dir-rail').classList.contains('is-touching'));
+  $('#dir-rail').dispatchEvent(new window.PointerEvent('pointerleave', { bubbles: true }));
+  await wait(400);
+  ok('אחרי שעוזבים את הסרגל הוא חוזר להתכווץ (לאחר השהיה קצרה)',
+    !$('#dir-rail').classList.contains('is-touching'));
+  $('.dir-rail__letter[data-dir-rail="ב"]').dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
+  ok('pointerdown על אות מרחיב את הסרגל גם בלי pointerenter קודם (מגע ישיר)',
+    $('#dir-rail').classList.contains('is-touching'));
+  document.dispatchEvent(new window.PointerEvent('pointerup', { bubbles: true }));
+  await wait(400);
+  ok('אחרי שחרור האצבע הסרגל חוזר להתכווץ', !$('#dir-rail').classList.contains('is-touching'));
 
   console.log('\n' + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);
