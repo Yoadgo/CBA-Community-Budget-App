@@ -91,5 +91,27 @@ ok('הדיאלוג קיים', /m === "reopen"/.test(GT));
 ok('🔴 והסיבה נשלחת כ-note ל-undo', /run\("undo", t\.id, \{ note: why \}\)/.test(GT));
 ok('⚠️ והשרת באמת שומר אותה', /String\(body\.note \|\| ''\)\.trim\(\)\.substring\(0, 500\)\);/.test(GS));
 
+section('10. 🔴 מייל לתושב כשדיווח נפתח מחדש');
+ok('התבנית GARDEN_REOPENED קיימת בברירות המחדל', /'GARDEN_REOPENED',/.test(GS));
+ok('⚠️ והיא נכנסת לגיליון לבד — ensureEmailSettingsSheet_ מוסיף רק מפתחות חסרים',
+   /var toAdd = DEFAULT_EMAIL_SETTINGS\.filter/.test(GS));
+ok('היא בתחום הגינון ופעילה', /'GARDEN_REOPENED',[\s\S]{0,900}PERM_GARDEN, 'כן'\]/.test(GS));
+const nf = (GS.match(/function gardenNotifyReopened_[\s\S]*?\n\}/) || [''])[0];
+ok('gardenNotifyReopened_ קיימת', !!nf);
+ok('🔴 היא עוברת דרך sendResidentTemplate_ הקיים ולא דרך מנגנון חדש',
+   /sendResidentTemplate_\(ss, 'GARDEN_REOPENED'/.test(nf), nf);
+ok('⚠️ ומשימה בלי דיווח היא no-op טבעי — אין תנאי kind',
+   /gardenReportsForTask_\(ss, taskId\)/.test(nf) && !/kind/.test(nf), nf);
+ok('כשל מייל אינו מבטל את הפעולה', /catch \(e\)/.test(nf), nf);
+ok('⚠️ סיבה ריקה לא משאירה שורה כפולה', /\+ '\\n\\n' : ''/.test(nf), nf);
+
+section('11. השליחה — רק כשבאמת בוטלה סגירה');
+ok('🔴 ב-undo היא אחרי הכתיבה לגיליון, לא לפניה',
+   /'תאריך אישור', ''\);[\s\S]{0,260}gardenNotifyReopened_/.test(GS));
+ok('🔴 ב-return היא מותנית ב-wasClosed', /if \(wasClosed\) gardenNotifyReopened_\(ss, id, wasClosed, why\);/.test(GS));
+ok('⚠️ wasClosed נלקח לפני ניקוי הסגירה', GS.indexOf('var wasClosed = cur.closure;') < GS.indexOf("if (wasClosed) gardenNotifyReopened_"));
+ok('⚠️ "החזרה להשלמה" על משימה פתוחה אינה שולחת כלום',
+   !/gardenSet_\(sh, row, c, 'דגל', 'הוחזר להשלמה'\);[\s\S]{0,120}gardenNotifyReopened_\(ss, id, cur/.test(GS));
+
 console.log('\n' + (fail ? '✗ ' : '✓ ') + pass + ' עברו · ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

@@ -5131,6 +5131,18 @@ var DEFAULT_EMAIL_SETTINGS = [
     'נשלח לתושב כשמנהל הגינון סוגר דיווח בלי לבצע (בוטל / לא רלוונטי / הועבר לבינוי). ' +
     '{{סיבה}} הוא ההסבר שהמנהל כתב — הוא חובה, כי "בוטל" לבדו אינו תשובה',
     PERM_GARDEN, 'כן'],
+  /* ⚠️ 2026-09-17, גל 2 — **פתיחה מחדש.** עד היום מנהל שפתח מחדש דיווח סגור
+     עשה זאת בשקט מוחלט מבחינת התושב: הוא כבר קיבל "הטיפול הושלם" (או
+     "לא ייפתח עליו טיפול"), והמייל הזה נשאר התשובה האחרונה שלו — גם כשהיא
+     כבר לא נכונה. {{סיבה}} הוא מה שהמנהל כתב; הוא **אינו חובה** כאן, כי
+     פתיחה מחדש היא לעתים קרובות תיקון טעות ולא החלטה שצריך להסביר. */
+  ['GARDEN_REOPENED', "הדיווח שלך נפתח מחדש (מס' {{מזהה}})",
+    "שלום {{שם}},\n\nהדיווח שלך על {{קטגוריה}} ב{{מיקום}} (מס' {{מזהה}}) נפתח מחדש " +
+    "וחזר לטיפול צוות הגינון.\n\n{{סיבה}}נעדכן אותך כשהטיפול יסתיים.\n\nבברכה,\nועד הקהילה",
+    'נשלח לתושב כשמנהל הגינון מבטל סגירה של דיווח — בין אם נסגר כ"בוצע" ובין אם נסגר בסיבה. ' +
+    '{{סיבה}} מתמלא במה שהמנהל כתב, ונשאר ריק כשלא כתב כלום',
+    PERM_GARDEN, 'כן'],
+
   /* דיווחים על האפליקציה (2026-09-09). ⚠️ אין תבנית "קיבלנו את הדיווח" —
      האישור מוצג באפליקציה, ומייל אוטומטי על כל הצעת ניסוח היה רעש.
      APP_REPORT_REPLY נשלח רק כשמנהל-על כותב תגובה ידנית במסך הדיווחים. */
@@ -12814,8 +12826,9 @@ function submitGardenReport_(ss, body) {
     }
 
     var year = readSettings_(ss)['שנה נוכחית'] || '';
-    var taskId = nextGardenId_(tsh);
-    var repId  = nextGardenId_(rsh);
+    /* ⚠️ מהמונה ולא מהגיליון (ממצא 21) — ר' gardenAllocId_. */
+    var taskId = gardenAllocId_(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER);
+    var repId  = gardenAllocId_(ss, GARDEN_REPORTS_SHEET, GARDEN_REPORT_COUNTER);
     var name = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email;
 
 
@@ -13370,7 +13383,10 @@ function gardenMaterializeWeek_(ss, weekKey) {
      ישירה מההגדרות (ר' gardenCreateTask_), וזה מה שנעשה כאן. שם פונקציה
      שאינו קיים היה נופל ב-ReferenceError בזמן ריצה ולא בבדיקת התחביר. */
   var year = readSettings_(ss)['שנה נוכחית'] || '';
-  var nextId = nextGardenId_(sh, 'מזהה');
+  /* ⚠️ מהמונה (ממצא 21). היא נקראת **פעם אחת** לכל הריצה והמזהים
+     נגזרים ממנה בהמשכים — זו ההתנהגות הקיימת, והנעילה שנוספה ב-16.9
+     היא מה שמגן עליה משתי ריצות חופפות. */
+  var nextId = gardenAllocId_(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER);
   var add = [];
   want.forEach(function (w) {
     if (seen[w.def.id + '|' + weekKey + '|' + w.area]) return;
@@ -13995,6 +14011,57 @@ function gardenMaxIdInSheet_(ss, sheetName) {
      המונה מחזיק את **המזהה האחרון שניתן** ולא את הבא בתור —
      בדיוק כמו במוני התנועות. */
   return Math.max(nextGardenId_(sh) - 1, 0);
+}
+
+/* ============================================================================
+ *  gardenAllocId_ — מקצה מזהים אחד לשני הצדדים   (2026-09-17, ממצא 21)
+ * ----------------------------------------------------------------------------
+ *  🔴🔴 **`nextGardenId_` היא `max(מזהה בגיליון) + 1`, והיא יורדת אחורה
+ *  אחרי מחיקת שורה.** שלוש משימות שונות קיבלו #50, ושבע שורות יומן
+ *  נדבקו למשימה שלא קרה לה כלום ממה שכתוב בהן. זה המחיר **היום**,
+ *  כשהגיליון הוא הבעלים.
+ *
+ *  🔴🔴 **וזה המחיר מחר:** ברגע ש-`gardenWriteToFirestore` נדלק, הדפדפן
+ *  כותב `createDoc(id)` ישירות. מזהה ממוחזר אינו "יומן מבלבל" אלא
+ *  **כתיבה לתוך מסמך קיים.** לכן הממצא הזה הוא תנאי סף לממצא 05 ולא
+ *  פריט שאפשר לדחות לצידו.
+ *
+ *  🔑 **המונה כבר קיים ועובד** — `counters/gardenTask` ו-
+ *  `counters/gardenReport`, מונוטוניים, נזרעים מהגיליון בכל ריצה שעתית
+ *  (`seedGardenCounters_`), והדפדפן מקדם אותם ב-`runTransaction`.
+ *  מה שחסר היה שהשרת עצמו **יקצה מהם** במקום מהגיליון. כלומר: לא נבנה
+ *  כאן מנגנון שני — נסגר ההבדל בין שני מקצים שכבר היו.
+ *
+ *  ⚠️ **`Math.max(המונה, הגיליון) + 1` ולא `המונה + 1`:** מונה שלא נזרע,
+ *     או שורה שנוספה ידנית בגיליון בין שתי ריצות שעתיות, היו מייצרים
+ *     מזהה שכבר תפוס. הגיליון עדיין משתתף — כרצפה, לא כמקור.
+ *  ⚠️ **אימות חוזר אחרי הכתיבה:** אין עסקאות ב-REST. אם דפדפן קידם את
+ *     המונה בדיוק בינתיים, הקריאה החוזרת תראה מספר אחר ואנחנו מנסים שוב
+ *     עם הערך החדש. שלושה ניסיונות, ואז נפילה לאחור.
+ *  ⚠️ **נפילה לאחור מתועדת ברעש.** Firestore לא זמין ⇒ חוזרים לגיליון,
+ *     כלומר חוזרים לסכנת המיחזור — ולכן זה נרשם ללוג ההפעלות תחת
+ *     `CBA-ID-FALLBACK` ולא קורה בשקט.
+ * ========================================================================== */
+function gardenAllocId_(ss, sheetName, counterId) {
+  var sh = ss.getSheetByName(sheetName);
+  var sheetMax = sh ? Math.max(nextGardenId_(sh) - 1, 0) : 0;
+  var path = fsDocPath_(FS_COUNTERS, counterId);
+  for (var attempt = 0; attempt < 3; attempt++) {
+    try {
+      var cur = fsGet_(path);
+      var have = (cur && !isNaN(parseInt(cur.n, 10))) ? parseInt(cur.n, 10) : -1;
+      var n = Math.max(have, sheetMax) + 1;
+      fsSet_(path, { n: n, schema: 1, updatedAt: new Date() });
+      var back = fsGet_(path);
+      if (back && parseInt(back.n, 10) === n) return n;
+    } catch (e) {
+      Logger.log('CBA-ID-FALLBACK ' + counterId + ' — Firestore לא זמין: ' + e);
+      break;
+    }
+  }
+  var fb = sh ? nextGardenId_(sh) : 1;
+  Logger.log('CBA-ID-FALLBACK ' + counterId + ' — חזרה לגיליון, הוקצה ' + fb);
+  return fb;
 }
 
 /** זריעה/עדכון של שני המונים. מחזירה סיכום ולעולם אינה זורקת. */
@@ -15050,6 +15117,33 @@ function gardenNotifyPlanned_(ss, taskId, week) {
   } catch (e) { /* מייל שנכשל לא מבטל שיבוץ שכבר נרשם */ }
 }
 
+/** "הדיווח שלך נפתח מחדש" — לכל מי שדיווח על המשימה (2026-09-17, ממצא 22).
+ *  ⚠️ נקראת **רק כשבאמת בוטלה סגירה**, ולא בכל `undo`/`return`: ביטול סימון
+ *  של משימה שעדיין פתוחה אינו משנה דבר מבחינת התושב, ומייל עליו הוא רעש.
+ *  ⚠️ ולמשימת שגרה או יזומה זה no-op טבעי — `gardenReportsForTask_` מחזירה
+ *     רשימה ריקה כשאין דיווח מאחורי המשימה. אין כאן תנאי על `kind`.
+ *  `prevClosure` נכנס לתיעוד בלבד; התושב לא צריך לדעת באיזו סיבה זה נסגר
+ *  קודם — הוא כבר קיבל מייל עליה בזמנו. */
+function gardenNotifyReopened_(ss, taskId, prevClosure, why) {
+  try {
+    var reps = gardenReportsForTask_(ss, taskId);
+    for (var i = 0; i < reps.length; i++) {
+      var rep = reps[i];
+      if (!rep.familyId) continue;
+      sendResidentTemplate_(ss, 'GARDEN_REOPENED', emailsForFamilyId_(ss, rep.familyId), {
+        'שם': rep.name || '',
+        'מזהה': rep.id,
+        'קטגוריה': rep.category || '',
+        'מיקום': rep.place || 'השיכון',
+        /* אותה צורה בדיוק כמו {{מה נעשה}} ב-GARDEN_COMPLETED: הטקסט נושא
+           איתו את שורת הרווח שאחריו, כך שתבנית בלי סיבה אינה משאירה
+           שורה ריקה כפולה באמצע המייל. */
+        'סיבה': String(why || '').trim() ? String(why).trim() + '\n\n' : ''
+      });
+    }
+  } catch (e) { /* כשל מייל לא מבטל פתיחה מחדש שכבר נרשמה */ }
+}
+
 /** מייל "הטיפול הושלם" לכל מי שדיווח על המשימה, בסגירה "בוצע" בלבד —
  *  סגירה מסוג אחר יוצאת דרך gardenNotifyDeclined_.
  *  ⚠️ 2026-09-09 — כבר **לא** מותנה באישור מנהל: הסימון של הצוות סוגר.
@@ -15162,7 +15256,8 @@ function gardenCreateTask_(ss, body) {
     ensureGardenSheetsCached_(ss);   // ר' ההערה ליד ensureGardenSheetsCached_
     var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
     var tc = gardenCols_(sh);
-    var id = nextGardenId_(sh);
+    /* ⚠️ מהמונה ולא מהגיליון (ממצא 21). */
+    var id = gardenAllocId_(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER);
     var row = new Array(sh.getLastColumn()).fill('');
     row[tc['מזהה']] = id;
     row[tc['סוג']] = GARDEN_KIND_MANUAL;
@@ -15441,6 +15536,10 @@ function gardenTaskAction_(ss, body) {
         gardenSet_(sh, row, c, 'דגל', '');
         gardenSet_(sh, row, c, 'אושר על ידי', '');
         gardenSet_(sh, row, c, 'תאריך אישור', '');
+        /* ⚠️ אחרי הכתיבה ולא לפניה — מייל שיוצא על פעולה שלא נשמרה גרוע
+           מפעולה שנשמרה בלי מייל. */
+        gardenNotifyReopened_(ss, id, cur.closure,
+                              String(body.note || '').trim());
         /* ⚠️ ערך הסגירה האמיתי ולא 'בוצע' קבוע: מאז שמנהל יכול לפתוח
            מחדש כל סגירה, שורת יומן קבועה הייתה מדווחת "בוצע" על משימה
            שנסגרה כ"בוטל". היומן הוא הזיכרון היחיד כאן. */
@@ -15492,6 +15591,7 @@ function gardenTaskAction_(ss, body) {
       var why = String(body.note || '').trim().substring(0, 500);
       if (!why) return { ok: false, error: 'צריך לכתוב מה חסר' };
       /* זהו גם **הערעור**: משימה שהגנן סגר בעצמו נפתחת כאן מחדש. */
+      var wasClosed = cur.closure;
       if (cur.closure) {
         gardenSet_(sh, row, c, 'סגירה', '');
         gardenSet_(sh, row, c, 'אושר על ידי', '');
@@ -15501,6 +15601,10 @@ function gardenTaskAction_(ss, body) {
       gardenSet_(sh, row, c, 'דגל', 'הוחזר להשלמה');
       gardenSet_(sh, row, c, 'הערת ביצוע', why);
       gardenLog_(ss, id, 'החזרה', 'דגל', cur.flag, 'הוחזר להשלמה', who, why);
+      /* ⚠️ רק כשבאמת הייתה סגירה. "החזרה להשלמה" על משימה שממתינה לאישור
+         היא תנועה פנימית בין הצוות למנהל — התושב לא קיבל עליה שום מייל
+         ולכן אין מה לתקן אצלו. */
+      if (wasClosed) gardenNotifyReopened_(ss, id, wasClosed, why);
 
     } else if (act === 'plan') {
       /* שיבוץ לשבוע — החוליה שהייתה חסרה. דיווח תושב נשמר עם שלב "התקבל"

@@ -250,9 +250,13 @@ const MAT = CODE.slice(MAT_I, CODE.indexOf('\nfunction ', MAT_I + 10));
 ok('🔴 הפונקציה לוקחת נעילה', /LockService\.getScriptLock\(\)/.test(MAT));
 /* ⚠️ מחפשים את **קריאת הקוד** ולא את השם — השם מופיע גם
    בהערה שמעל הנעילה, והבדיקה נכשלה על קוד תקין לגמרי. */
+/* ⚠️ 17.9 — ההקצאה עברה ל-`gardenAllocId_` (ממצא 21: המונה ולא הגיליון).
+   הכלל שנבדק כאן לא השתנה — הנעילה עדיין חייבת להיסגר **לפני** ההקצאה —
+   ורק שם הקריאה התעדכן. */
 ok('⚠️ הנעילה נלקחת לפני הקצאת המזהה',
    MAT.indexOf('tryLock') !== -1 &&
-   MAT.indexOf('tryLock') < MAT.indexOf('var nextId = nextGardenId_'));
+   MAT.indexOf('tryLock') < MAT.indexOf('var nextId = gardenAllocId_'));
+ok('🔴 וההקצאה עצמה היא מהמונה', /var nextId = gardenAllocId_\(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER\);/.test(MAT));
 ok('ומשוחררת ב-finally', /finally \{ mLock\.releaseLock\(\); \}/.test(MAT));
 /* נעילה תפוסה — מדלגים בשקט ולא מתרסקים ולא כותבים. */
 reset();
