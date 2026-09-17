@@ -661,13 +661,25 @@
                   : '') +
                 (t.approvedAt ? '<i>·</i>' + esc(ago(t.approvedAt)) : '') +
                 (t.approvedBy ? '<i>·</i>' + esc(t.approvedBy) : '') +
+                /* ⚠️ דגל על כרטיס סגור (17.9, ממצא 20). "דורש בדיקה חוזרת"
+                   נכתב על משימה סגורה אחרי משוב שלילי של תושב, והכרטיס
+                   הסגור לא צייר שום דגל — כך שהסיבה שבגללה הוא יושב בתור
+                   "דורש החלטה" לא הופיעה עליו בשום מקום. */
+                (t.flag && t.flag !== "ממתין לאישור"
+                  ? '<i>·</i><span class="gt-age' +
+                    (FLAG_HOT[t.flag] ? " is-hot" : "") + '">' + esc(t.flag) + '</span>'
+                  : '') +
               '</div>' +
               (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
             '</div>' +
-            /* ⚠️ כרטיס סגור אינו בהכרח נעול. משימת שגרה שהגנן סגר בעצמו
-               נשארת פתוחה לערעור למשך שבועיים, ולכן היא מקבלת את תפריט
-               הפעולות המלא ולא רק קיצור להיסטוריה. */
-            (canDispute(t)
+            /* ⚠️ כרטיס סגור אינו נעול.
+               · הגנן: משימת שגרה שהוא סגר בעצמו פתוחה לערעור שבועיים.
+               · **המנהל: תמיד** (17.9, ממצא 22+20). קודם התנאי היה
+                 `canDispute` לשניהם, ולכן כרטיס שיושב בתור "דורש החלטה"
+                 בגלל משוב שלילי של תושב חשף כפתור אחד — היסטוריה — ומנהל
+                 שראה "דורש החלטה · 1" לא יכול היה להחליט דבר. אותו תנאי גם
+                 מנע מחיקה של משימה סגורה, למרות שהשרת מעולם לא חסם אותה. */
+            (canDispute(t) || isManager
               ? '<button type="button" class="gt-more" data-act="menu" aria-label="עוד פעולות">' +
                 ico("dots") + '</button>'
               : '<button type="button" class="gt-more" data-act="hist" aria-label="היסטוריה">' +
@@ -884,9 +896,15 @@
                    t.stage = "הושלם"; t.flag = ""; t.closure = "בוצע";
                    t.approvedAt = new Date().toISOString();
                  },
+        /* ⚠️ 17.9 — **כל** סגירה, לא רק "בוצע" (ממצא 22). מאז שמנהל יכול
+           לפתוח מחדש סגירה בכל סיבה, התנאי הישן השאיר את הכרטיס סגור על
+           המסך עד רענון מלא — בדיוק הפער בין מה שנשמר למה שנראה. */
         undo:    function (t) {
                    t.flag = "";
-                   if (t.closure === "בוצע") { t.closure = ""; t.stage = "בטיפול"; t.approvedAt = ""; }
+                   if (t.closure) {
+                     t.closure = ""; t.stage = "בטיפול";
+                     t.approvedAt = ""; t.approvedBy = "";
+                   }
                  },
         approve: function (t) { t.stage = "הושלם"; t.flag = ""; t.closure = "בוצע";
                                 t.approvedAt = new Date().toISOString(); }
@@ -933,6 +951,9 @@
            ההודעה אחרי סימון הייתה קבועה — "ממתין לאישור" — גם למשימות
            שגרה ויזום, שנסגרות מיד. הגנן חיכה לאישור שכבר לא יגיע. */
         var wasReport = !!(t && t.kind === GK_REPORT);
+        /* ⚠️ גם הוא לפני ה-OPTIMISTIC: הטוסט של undo היה קבוע ("הסימון
+           בוטל"), וזה ניסוח שגוי לפתיחה מחדש של משימה שנסגרה כ"בוטל". */
+        var wasClosure = (t && t.closure) || "";
         var snapshot = t ? JSON.parse(JSON.stringify(t)) : null;
         var applied = false;
         if (t && OPTIMISTIC[op]) {
@@ -960,7 +981,11 @@
             return;
           }
           if (op === "done") CBA.ui.toast(wasReport ? "נסגר · נשלח עדכון למדווח" : "סומן כבוצע");
-          if (op === "undo") CBA.ui.toast("הסימון בוטל");
+          if (op === "undo") {
+            CBA.ui.toast(wasClosure && wasClosure !== "בוצע"
+              ? 'נפתחה מחדש · הסגירה ("' + wasClosure + '") בוטלה'
+              : "הסימון בוטל");
+          }
           if (op === "defer") CBA.ui.toast("נדחה לשבוע הבא");
           if (op === "note") CBA.ui.toast("ההערה נשמרה");
           if (op === "block") CBA.ui.toast("נשלח למנהל הגינון");
@@ -1304,7 +1329,7 @@
                   '<div>לא ניתן לביצוע<span>עובר למנהל הגינון עם הסיבה</span></div></button>')) +
             /* פעולות המנהל. "החזרה להשלמה" מוצעת רק כשיש מה להחזיר — כלומר
                כשהצוות כבר סימן ביצוע וזה ממתין לאישור. */
-            (isManager && (t.flag === "ממתין לאישור" || canDispute(t))
+            (isManager && (t.flag === "ממתין לאישור" || canDispute(t) || t.closure)
               ? '<button type="button" class="gt-opt" data-m="return"><u>' + ico("undo") + '</u>' +
                 '<div>' + (t.closure ? "לא בוצע כמו שצריך" : "החזרה להשלמה") +
                 '<span>' + (t.closure
@@ -1315,6 +1340,13 @@
             (canDispute(t)
               ? '<button type="button" class="gt-opt" data-m="undo"><u>' + ico("undo") + '</u>' +
                 '<div>ביטול סימון<span>המשימה חוזרת להיות פתוחה</span></div></button>'
+              : '') +
+            /* ⚠️ "פתיחה מחדש" — סמכות מנהל, בלי הגבלת זמן (17.9, ממצא 22).
+               זו הפעולה שהופכת סגירה בסיבה שגויה להפיכה. היא מוצגת רק כשאין
+               כבר "ביטול סימון" למעלה, כדי לא להציע שתי דרכים לאותו דבר. */
+            (isManager && t.closure && !canDispute(t)
+              ? '<button type="button" class="gt-opt" data-m="reopen"><u>' + ico("undo") + '</u>' +
+                '<div>פתיחה מחדש<span>מבטלת את הסגירה — המשימה חוזרת לעבודה</span></div></button>'
               : '') +
             (isManager && !t.closure
               ? '<button type="button" class="gt-opt" data-m="close"><u>' + ico("check") + '</u>' +
@@ -1368,6 +1400,21 @@
         }
         if (m === "clearflag") return run("clearflag", t.id, {});
         if (m === "undo") return run("undo", t.id, {});
+        if (m === "reopen") {
+          /* אישור, ולא לחיצה אחת: זו פעולה שמבטלת החלטה שכבר נשלחה לתושב
+             במייל. הסיבה נשמרת ביומן — היא כל מה שיסביר בעוד חודש למה
+             משימה שנסגרה כ"בוטל" פתוחה שוב. */
+          CBA.ui.prompt(
+            'הסגירה ("' + (t.closure || "") + '") תבוטל והמשימה תחזור לרשימת ' +
+            'הפתוחות. מה שנרשם ביומן יישאר, ותיווסף שורת פתיחה מחדש.', {
+              title: "פתיחה מחדש", placeholder: "למשל: נסגר בטעות בסיבה לא נכונה",
+              okText: "פתיחה מחדש"
+            }).then(function (why) {
+              if (why === null) return;
+              run("undo", t.id, { note: why });
+            });
+          return;
+        }
         if (m === "del") {
           CBA.ui.prompt(
             "המשימה תרד מהגיליון ומהנתונים, יחד עם הדיווח והתמונות שלה. " +
@@ -1547,6 +1594,18 @@
         if (isManager && t.flag === "דורש בדיקה חוזרת") {
           secHtml += '<button type="button" class="gd-det-b" data-m="clearflag">' +
             ico("check") + 'טופל</button>';
+        }
+        /* ⚠️ 17.9, ממצא 20 — כרטיס הפרטים של דיווח סגור הציע למנהל מחיקה
+           בלבד. זה בדיוק הכרטיס שיושב בתור "דורש החלטה" אחרי משוב שלילי,
+           ושתי ההחלטות האמיתיות שם — להחזיר לצוות או לפתוח מחדש — לא היו
+           קיימות בו. "פתיחה מחדש" מדלגת כשהערעור כבר מציע ביטול סימון. */
+        if (isManager && closed) {
+          secHtml += '<button type="button" class="gd-det-b" data-m="return">' +
+            ico("undo") + 'לא בוצע כמו שצריך</button>';
+          if (!canDispute(t)) {
+            secHtml += '<button type="button" class="gd-det-b" data-m="reopen">' +
+              ico("undo") + 'פתיחה מחדש</button>';
+          }
         }
         if (isManager) {
           secHtml += '<button type="button" class="gd-det-b is-danger" data-m="del">' +

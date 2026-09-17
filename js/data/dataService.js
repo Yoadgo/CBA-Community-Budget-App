@@ -1396,11 +1396,17 @@ CBA.data = (function () {
       var ids = tourDocIdsForMe();
       var uid = CBA.fb.uid && CBA.fb.uid();
       var steps = [], seen = 0, left = ids.length + (uid ? 1 : 0), got = 0, settled = false;
+      var missed = [];
       function done() {
         if (settled) return;
         settled = true;
         /* 🔴 אף מסמך לא נקרא ⇒ null, כלומר **נפילה לאחור ל-homeExtras**.
            רשימת צעדים ריקה היא תשובה תקפה רק אם משהו באמת נקרא. */
+        try {
+          if (missed.length && CBA.diag && CBA.diag.log) {
+            CBA.diag.log("צעדי סיור שלא נטענו: " + missed.join(", "));
+          }
+        } catch (x) {}
         if (!got) return cb(null);
         steps.sort(tourStepCompare);
         try {
@@ -1410,9 +1416,17 @@ CBA.data = (function () {
         } catch (e) {}
         cb({ ok: true, steps: steps, seen: seen });
       }
+      /* ⚠️ 17.9, גל 2 · ממצא 13 — **מסמך סיור חסר נבלע בשקט.**
+         המסלול עצמו תקין מאז 16.9 (השרת ממפה "תושבים"→`residents`, הלקוח
+         מבקש אותו, והכלל מתיר אותו), ולכן מה שנשאר מהממצא אינו באג במסלול
+         אלא היעדר עקבה: אם המסמך לא קיים — כי אין שורה כזו בגיליון, כי
+         `fsSweepOrphans_` מחק אותו, או כי כלל האבטחה דחה — התוצאה זהה
+         לחלוטין לרשימת צעדים ריקה, והצעד פשוט לא מופיע לאיש.
+         נרשם ל-`CBA.diag` בלבד, בלי מנגנון חדש ובלי הודעה למשתמש. */
       ids.forEach(function (id) {
         CBA.fb.readDoc("tourSteps", id, function (e, d) {
           if (!e && d) { got++; steps = steps.concat(d.steps || []); }
+          else missed.push(id + (e ? " (שגיאה)" : " (אין מסמך)"));
           if (--left <= 0) done();
         });
       });
