@@ -49,7 +49,10 @@ ok('שני המזהים מגיעים מהמונים', (fn.match(/CBA\.fb\.nextId
 section('3. 🔴 תמונות — אחת-אחת, אחוז אמיתי, וכישלון שנספר');
 ok('gardenUploadPhotos קיימת', /function gardenUploadPhotos\(/.test(DS));
 const up = (DS.match(/function gardenUploadPhotos[\s\S]*?\n  \}\n/) || [''])[0];
-ok('🔴 תמונה שנפלה אינה עוצרת את השאר', /if \(err \|\| !id\) failed\+\+; else ids\.push\(id\)/.test(up), up);
+/* ⚠️ 17.9 — ההעלאה עברה **למקביל** (החלטת יועד), ולכן התוצאה נכתבת
+   למקום שלה לפי אינדקס במקום להידחף לסוף. הכלל שנבדק כאן לא השתנה:
+   תמונה שנפלה נספרת ואינה עוצרת את השאר. ר' test-garden-photos-bg.js. */
+ok('🔴 תמונה שנפלה אינה עוצרת את השאר', /if \(err \|\| !id\) failed\+\+; else slot\[idx\] = id;/.test(up), up);
 ok('🔴 והכישלונות נספרים ומוחזרים', /done\(ids, failed\)/.test(up), up);
 /* 🔴🔴 המלכודת שאסור שתחזור: אחוזים אמיתיים דורשים מאזין על
    xhr.upload, וזה מה ששבר את הבקשה מול Apps Script. */
@@ -58,8 +61,14 @@ ok('🔴 והכישלונות נספרים ומוחזרים', /done\(ids, failed
    והבדיקה נכשלה על התיעוד של עצמה. */
 ok('🔴🔴 ואין שימוש ב-xhr.upload בשכבת הנתונים',
    !/xhr\.upload\s*\.|\.upload\.addEventListener|upload\.onprogress/.test(DS));
-ok('🔴 הפער נרשם במסמך כ-photosIncomplete',
-   /if \(failed > 0\) patch\.photosIncomplete = true;/.test(fn), fn);
+/* 🔴🔴 17.9 — **הדגל הפוך מכפי שהיה כאן.** עד אז הוא נכתב בסוף
+   ההעלאה ורק כשהיה כשל, כלומר דפדפן שנסגר באמצע לא הגיע לכתיבה
+   בכלל והסריקה השעתית לא ראתה את הדיווח לעולם. מאז שההעלאה ברקע
+   זה המסלול הרגיל, ולכן הדגל נכתב **מראש** ויורד רק כשהכול נחת. */
+ok('🔴 הדגל נכתב מראש לפי מספר התמונות',
+   /photosIncomplete: photos\.length > 0,/.test(fn), fn);
+ok('🔴 ויורד רק כשכולן נחתו',
+   /photosIncomplete: ids\.length < photos\.length,/.test(DS));
 ok('⚠️ וכמה נשלחו נרשם מראש', /photosExpected: photos\.length/.test(fn), fn);
 ok('השרת מחזיר שגיאה על תמונה ולא בולע אותה',
    /function gardenPhotoOne_[\s\S]{0,900}return \{ ok: false, error: 'העלאת התמונה נכשלה/.test(GS));

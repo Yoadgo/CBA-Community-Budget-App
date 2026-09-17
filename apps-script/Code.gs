@@ -14097,9 +14097,16 @@ function gardenAllocId_(ss, sheetName, counterId, count) {
   var k = Math.max(1, parseInt(count, 10) || 1);
   var sh = ss.getSheetByName(sheetName);
   var sheetMax = sh ? Math.max(nextGardenId_(sh) - 1, 0) : 0;
-  var path = fsDocPath_(FS_COUNTERS, counterId);
   for (var attempt = 0; attempt < 3; attempt++) {
     try {
+      /* 🔴 **`fsDocPath_` בתוך ה-try, לא לפניו** (נתפס 17.9 במארז
+         `test-server-dedupe`). הוא חי ב-`Firestore.gs`, שהוא קובץ
+         **שני** בפרויקט — ודיפלוי שעדכן רק את `Code.gs` הוא מלכודת
+         מתועדת. מחוץ ל-try, `X is not defined` היה מפיל את כל הגשת
+         הדיווח במקום ליפול לאחור לגיליון.
+         🔑 הכלל: כל קריאה חוצה-קובץ יושבת בתוך ההגנה, גם כשהיא
+            "רק" בניית מחרוזת. */
+      var path = fsDocPath_(FS_COUNTERS, counterId);
       var cur = fsGet_(path);
       var have = (cur && !isNaN(parseInt(cur.n, 10))) ? parseInt(cur.n, 10) : -1;
       var first = Math.max(have, sheetMax) + 1;

@@ -398,6 +398,41 @@ service cloud.firestore {
                          'repId', 'photos', 'order', 'updatedAt', 'syncedAt']);
     }
 
+    /* ========================================================================
+     *  🔴🔴  התמונות של התושב אל מסמך המשימה   (2026-09-17)
+     * ------------------------------------------------------------------------
+     *  **התקלה שזה פותר, ולמה היא לא נראתה עד היום.** כשתושב מגיש
+     *  דיווח, הדפדפן כותב את התמונות לשני מסמכים: הדיווח שלו
+     *  (מותר לו, `grPhotosOk`) והמשימה הנלווית — ושם `gtTeamUpdateOk`
+     *  דורש `hasPerm('גינון')`. כלומר הכתיבה הזאת **נדחית לכל תושב
+     *  רגיל, תמיד**, והיא נבלעה ב-callback ריק.
+     *
+     *  ⚠️ **היום זה לא שובר כלום**, כי הסנכרון השעתי ממלא את
+     *     `photos` למשימה מתוך הגיליון (`gardenReportRefs_`).
+     *     ברגע ש-`gardenWriteToFirestore` יידלק, הגיליון מפסיק להיות
+     *     המקור — ואז זו משימה שהגנן פותח ורואה בלי תמונות.
+     *
+     *  🔒 **הגבול צר במכוון, בשלושה מימדים:**
+     *    1. **רק `photos` ו-`updatedAt`.** לא שלב, לא סגירה, לא כותרת.
+     *    2. **רק על המשימה של הדיווח שלו** — `repId` של המשימה חייב
+     *       להצביע על דיווח שה-`familyId` שלו הוא שלו. זה `get()`
+     *       נוסף, ובכוונה: בלעדיו כל תושב היה יכול לכתוב תמונות לכל
+     *       משימה בשיכון בכך שינחש מזהה.
+     *    3. **לא לחיצוני**, כמו בכל שאר כללי התושב כאן.
+     *
+     *  ⚠️ `repId` חייב להתקיים ולהיות מחרוזת — משימת שגרה אין לה
+     *     דיווח מאחוריה, ובלי התנאי הזה הנתיב ל-`get()` היה נבנה
+     *     ממחרוזת ריקה.
+     * ====================================================================== */
+    function gtReportPhotosOk() {
+      return isMember() && m().isExternal == false &&
+             resource.data.repId is string && resource.data.repId != '' &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['photos', 'updatedAt']) &&
+             get(/databases/$(database)/documents/gardenReports/$(resource.data.repId))
+               .data.familyId == myFamilyId();
+    }
+
     /* 🔴 מחיקה למנהל בלבד — לא לקבלן החיצוני. משימה שנסגרה מקבלת
        `closure`; מחיקה שמורה לטעות הזנה, והיא הפעולה היחידה בגינון
        שאי אפשר לבטל. */
@@ -408,7 +443,7 @@ service cloud.firestore {
     match /gardenTasks/{id} {
       allow read: if canSeeGardenTasks();
       allow create: if gtTeamCreateOk() || gtFromReportOk();
-      allow update: if gtTeamUpdateOk();
+      allow update: if gtTeamUpdateOk() || gtReportPhotosOk();
       allow delete: if gtDeleteOk();
     }
 

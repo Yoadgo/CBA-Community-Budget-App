@@ -100,6 +100,11 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                         בקובץ הכללים ובמסמך התוצאות הצפויות. */
                      'grCreateOk', 'grFeedbackOk', 'grPhotosOk', 'grTeamUpdateOk',
                      'gtTeamCreateOk', 'gtFromReportOk', 'gtTeamUpdateOk', 'gtDeleteOk',
+                     /* 🔴 נוסף ביודעין 17.9 — התושב כותב את מזהי התמונות
+                        גם למסמך המשימה של הדיווח שלו. צר לשני שדות,
+                        ומאומת מול `repId`→`familyId`. ר' סעיף 8 למטה
+                        ושורות 40–49 ב-firestore-rules-expectations.md. */
+                     'gtReportPhotosOk',
                      'glCreateOk', 'glResidentCreateOk'];
 {
   const used = [];
@@ -359,6 +364,22 @@ ok('isMember דורש active == true', /function isMember\(\)[\s\S]{0,120}active
 /* ⚠️ פונקציה בכללי Firestore אינה מחזירה נתיב — הנתיב נבנה בתוך get()/exists(). */
 ok('⚠️ אין פונקציה שמחזירה נתיב',
    !/function \w+\(\)\s*\{\s*return \/databases/.test(CODE));
+
+section('8. 🔴 תמונות התושב אל מסמך המשימה (17.9)');
+const gtp = (CODE.match(/function gtReportPhotosOk\(\)[\s\S]*?\n    \}/) || [''])[0];
+ok('gtReportPhotosOk קיימת', !!gtp);
+ok('🔴 רק photos ו-updatedAt — לא שלב, לא סגירה',
+   /hasOnly\(\['photos', 'updatedAt'\]\)/.test(gtp), gtp);
+ok('🔴🔴 והמשימה חייבת להצביע על דיווח של המשפחה שלו',
+   /get\(\/databases\/\$\(database\)\/documents\/gardenReports\/\$\(resource\.data\.repId\)\)[\s\S]{0,60}\.data\.familyId == myFamilyId\(\)/.test(gtp), gtp);
+ok('⚠️ repId חייב להתקיים ולהיות מחרוזת — אחרת הנתיב נבנה מריק',
+   /resource\.data\.repId is string && resource\.data\.repId != ''/.test(gtp), gtp);
+ok('⚠️ ולא למשתמש חיצוני', /isMember\(\) && m\(\)\.isExternal == false/.test(gtp), gtp);
+ok('הכלל צורף ל-update של gardenTasks',
+   /allow update: if gtTeamUpdateOk\(\) \|\| gtReportPhotosOk\(\);/.test(CODE));
+ok('🔴 והמחיקה **לא** נפתחה לתושב',
+   /function gtDeleteOk\(\)[\s\S]{0,120}hasPerm\('גינון'\)/.test(CODE));
+ok('🔴 וגם gtTeamUpdateOk לא נגעה', /function gtTeamUpdateOk\(\)\s*\{\s*\n\s*return hasPerm\('גינון'\)/.test(CODE));
 
 console.log('\n' + '='.repeat(52));
 console.log('עברו: ' + pass + '   נכשלו: ' + fail);

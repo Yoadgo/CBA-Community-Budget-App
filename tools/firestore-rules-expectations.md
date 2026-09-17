@@ -560,3 +560,37 @@ Apps Script החזיר **41 משימות**, Firestore **10**.
 שבו כל שורה נושאת שנה. מה שתפס היה השוואת ספירות מול המסלול
 הישן לפני ההדלקה. זה הסעיף "התאמת נתונים" בנוהל, והוא הצדיק
 את עצמו.
+
+## תמונות התושב אל מסמך המשימה — `gtReportPhotosOk` (נרשם 17.9.2026, **לפני** ההרצה)
+
+⚠️ נכתב לפני שהכללים פורסמו ולפני ולו בדיקה אחת ב-Playground.
+
+**מה שנסגר:** עד היום `gardenTasks` התיר `update` רק ל-`hasPerm('גינון')`.
+הדפדפן של תושב כותב את מזהי התמונות גם למסמך המשימה — והכתיבה **נדחתה
+לכל תושב רגיל, תמיד**, בשקט. היום הסנכרון השעתי מכסה על זה; אחרי הדלקת
+`gardenWriteToFirestore` זו משימה שהגנן פותח ורואה בלי תמונות.
+
+מזהים לדוגמה: `UID_A` = תושב, משפחה `74`. `TASK_9` משימה עם
+`repId: '9'`. `REP_9` דיווח של משפחה `74`. `REP_7` דיווח של משפחה `3`.
+`TASK_R` משימת שגרה בלי `repId`.
+
+| # | מי | פעולה | נתיב | שדות | צפוי |
+|---|---|---|---|---|---|
+| 40 | UID_A (משפחה 74) | update | `gardenTasks/TASK_9` | `photos`, `updatedAt` | ✅ מותר |
+| 41 | UID_A | update | `gardenTasks/TASK_9` | `photos` בלבד | ✅ מותר |
+| 42 | 🔴 UID_A | update | `gardenTasks/TASK_9` | `photos` + `stage` | ❌ נדחה |
+| 43 | 🔴 UID_A | update | `gardenTasks/TASK_9` | `closure` | ❌ נדחה |
+| 44 | 🔴 UID_A | update | `gardenTasks/TASK_7` (repId→REP_7, משפחה 3) | `photos` | ❌ נדחה |
+| 45 | 🔴 UID_A | update | `gardenTasks/TASK_R` (בלי repId) | `photos` | ❌ נדחה |
+| 46 | 🔴 משתמש חיצוני | update | `gardenTasks/TASK_9` | `photos` | ❌ נדחה |
+| 47 | לא מחובר | update | `gardenTasks/TASK_9` | `photos` | ❌ נדחה |
+| 48 | UID_A | create | `gardenTasks/TASK_NEW` | כרגיל | ✅ מותר (gtFromReportOk, לא השתנה) |
+| 49 | 🔴 UID_A | delete | `gardenTasks/TASK_9` | — | ❌ נדחה (gtDeleteOk דורש הרשאה) |
+
+🔑 **44 ו-45 הם הלב.** בלי בדיקת ה-`repId` מול `familyId`, כל תושב היה
+יכול לכתוב תמונות לכל משימה בשיכון בכך שינחש מזהה. זה `get()` נוסף על
+כל כתיבה כזאת — קריאה אחת ששווה את המחיר.
+
+⚠️ **מה שאי אפשר יהיה לאמת מהחשבון של יועד:** הוא מנהל-על, ולכן
+`gtTeamUpdateOk` מתקיים לו ממילא וכל הכתיבות יעברו אצלו בכל מקרה.
+שורות 42–47 דורשות חשבון תושב אמיתי או Rules Playground.

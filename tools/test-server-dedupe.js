@@ -61,7 +61,16 @@ const sandbox = {
   SpreadsheetApp: { getActiveSpreadsheet: () => SS, flush() {} },
   DriveApp: {}, CalendarApp: {}, MailApp: { sendEmail() {} },
   ContentService: { createTextOutput: t => ({ setMimeType: () => t }), MimeType: {} },
-  ScriptApp: {}
+  ScriptApp: {},
+  /* ⚠️ נוסף 17.9. `gardenAllocId_` מקצה מזהים מהמונה ב-Firestore, ובענף
+     הנפילה-לאחור היא כותבת `CBA-ID-FALLBACK` ללוג ההפעלות. בלי הסטאב
+     הזה הבדיקה קרסה ב-`Logger is not defined` — כלומר על המנגנון
+     שמדווח על התקלה, ולא על התקלה עצמה.
+     🔑 וזה בדיוק מה שהסביבה הזאת אמורה לייצר: `Firestore.gs` הוא קובץ
+        שני ואינו נטען כאן, ולכן ההקצאה **חייבת** ליפול לאחור לגיליון
+        במקום לזרוק. אם השורה הזאת תתחיל להיכשל שוב — הסתכל על
+        `gardenAllocId_`, לא על הסטאב. */
+  Logger: { log() {} }
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../apps-script/Code.gs'), 'utf8'), sandbox);

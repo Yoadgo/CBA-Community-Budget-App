@@ -145,7 +145,10 @@ async function fillAndSend(c, opts) {
   ok('סומן dirty לחסימת רענון רקע', dirtyKeys.indexOf('+gardenReport') !== -1,
      JSON.stringify(dirtyKeys));
 
-  ok('החיווי אומר מה קורה', /מעלה את הדיווח/.test(prog.textContent), prog.textContent);
+  /* ⚠️ 17.9 — הניסוח השתנה מ"מעלה את הדיווח" ל"שולח את הדיווח":
+     התמונות כבר לא עולות בתוך ההגשה אלא ברקע אחריה, ו"מעלה" היה
+     מתאר משהו שכבר לא קורה שם. */
+  ok('החיווי אומר מה קורה', /שולח את הדיווח/.test(prog.textContent), prog.textContent);
   /* ⚠️ הבדיקה שמגנה מפני חזרת התקלה: אחוזים דורשים מאזין על xhr.upload,
      והוא מה ששבר את הבקשה מול Apps Script. אסור שיחזרו. */
   ok('⚠️ אין אחוזים מומצאים בחיווי', prog.textContent.indexOf('%') === -1, prog.textContent);
