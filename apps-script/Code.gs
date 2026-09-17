@@ -657,6 +657,12 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'gardenCountersSeed') {
       return handleGardenCountersSeed_(e.parameter);
     }
+    /* מראת הגינון (2026-09-17) — הרצה יזומה לאימות. פעולה עם כתובת
+       ולא הרצה ידנית מבורר הפונקציות, מאותה סיבה כמו כל השאר כאן:
+       בורר הפונקציות בעורך הוא מלכודת מתועדת. */
+    if (e && e.parameter && e.parameter.action === 'gardenMirror') {
+      return handleGardenMirror_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'servicesSync') {
       return handleServicesSync_(e.parameter);
     }
@@ -5835,6 +5841,24 @@ function hourlyJobsRun_() {
      הפעולה אידמפוטנטית ואינה נוגעת בשבועות שעברו, ולכן בטוחה כל שעה.
      ⚠️ חייבת לרוץ **לפני** `gardenDataSyncAll_`, אחרת מה שנוצר עכשיו
         ימתין שעה נוספת עד שיגיע ל-Firestore. */
+  /* 🔴🔴 **המראה רצה ראשונה** (17.9, ממצא 05) — היא מביאה לגיליון
+     שורות שנכתבו ישירות ל-Firestore מהדפדפן. בדיוק אותו סדר כמו
+     `btxMirrorToSheet_` בתנועות, ומאותה סיבה: כל מה שרץ אחריה
+     קורא את הגיליון, ובלעדיה הוא קורא גיליון שחסרות בו שורות.
+     ⚠️ וספציפית לפני `gardenMaterializeWeek_`, שמקצה מזהים —
+        מזהה חדש חייב להיגזר מגיליון שכבר מעודכן.
+     ⚠️ כשהדגל כבוי היא יוצאת מיד עם `skipped: 'flag-off'`, ולכן
+        השורה הזאת חסרת-השפעה לחלוטין עד שנדליק אותו. */
+  try {
+    var gmr = gardenMirrorToSheet_(ss);
+    if (gmr.added || gmr.updated || gmr.orphanRows || gmr.errors.length) {
+      Logger.log('מראת הגינון: נוספו ' + gmr.added + ', עודכנו ' + gmr.updated +
+                 ', שורות בלי מסמך ' + gmr.orphanRows +
+                 (gmr.errors.length ? ' | שגיאות: ' + gmr.errors.join(' ; ') : ''));
+    }
+  } catch (e) {
+    Logger.log('gardenMirrorToSheet_ נכשל: ' + e);
+  }
   try {
     gardenMaterializeWeek_(ss, gardenWeekKey_());
   } catch (e) {
@@ -13425,6 +13449,21 @@ function gardenMaterializeWeek_(ss, weekKey) {
   });
   if (!add.length) return 0;
   sh.getRange(sh.getLastRow() + 1, 1, add.length, add[0].length).setValues(add);
+  /* 🔴🔴 **חור נפילה-לאחור שנפתח ברגע ש-Firestore הוא הבעלים** (17.9).
+     עד היום השורות האלה הגיעו ל-Firestore דרך `gardenDataSyncAll_`,
+     שרצה מיד אחרי בפעולה השעתית. מהרגע ש-`gardenFsOwns_()` אמת,
+     הסנכרון ההוא **מסרב לרוץ** (מנעול 1) — ומשימות השגרה של השבוע
+     החדש היו נכתבות לגיליון ולא מופיעות בשום מסך, בלי שום שגיאה.
+     זו בדיוק המחלקה של "משימות שגרה שלא ייווצרו" מ-16.9, רק בשלב
+     אחד מאוחר יותר בצינור.
+     ⚠️ הדחיפה היא של המזהים החדשים בלבד, ולא סנכרון מלא. */
+  try {
+    var newIds = add.map(function (r) { return String(r[c['מזהה']] || '').trim(); })
+                    .filter(Boolean);
+    if (newIds.length) gardenTaskSyncSome_(ss, newIds);
+  } catch (e) {
+    Logger.log('gardenMaterializeWeek_ — דחיפה ל-Firestore נכשלה: ' + e);
+  }
   return add.length;
   } finally { mLock.releaseLock(); }
 }
@@ -14447,10 +14486,206 @@ function gardenTaskDoc_(o, order) {
   return d;
 }
 
+/* ============================================================================
+ *  🔴🔴  מראת הגינון — Firestore ⇐ הגיליון   (2026-09-17, ממצא 05)
+ * ----------------------------------------------------------------------------
+ *  **ההכרעה שמאחורי הקובץ הזה (יועד, 17.9): הבעלים של נתוני הגינון הוא
+ *  Firestore, והטאבים "משימות גינון" ו"דיווחי גינון" הופכים למראה.**
+ *  ⚠️ **נגזרת מחייבת: עריכה ידנית בטאבים האלה תידרס.** בדיוק כמו שקרה
+ *     לטאב "תנועות <שנה>" ב-16.9. נאמר במפורש ואושר.
+ *
+ *  🔴 **מה זה בא למנוע, ולא בתיאוריה.** ב-16.9 הודלק `gardenWriteToFirestore`
+ *  לבדיקה. הדפדפן כתב דיווח ישירות ל-Firestore — **בלי שורה בגיליון** —
+ *  ואז `gardenDataSyncAll_` השעתי בנה את המפה מהגיליון ו-`fsSweepOrphans_`
+ *  **מחק כל מסמך שאין לו שורה**. כלומר כל דיווח שנכתב מהדפדפן נמחק תוך
+ *  שעה. הדגל כובה באותו ערב. ר' [[cba-ghost-docs-garden-2026-09-16]].
+ *  🔑 **הכלל שנולד שם: סחיפת יתומים מניחה כותב אחד ויחיד.**
+ *
+ *  ⚠️⚠️ **ולכן שלושה מנעולים, לא אחד:**
+ *    1. `gardenTasksSyncAll_`/`gardenReportsSyncAll_` **מסרבות לרוץ** כשהדגל דלוק.
+ *    2. גם אם ירוצו בכוח — `fsSweepOrphans_` **אינה נקראת** כש-Firestore הבעלים.
+ *    3. והמראה הזאת רצה **לפני** כולן בעבודה השעתית, כך שהגיליון מדביק.
+ *
+ *  🔴 **המראה אינה מוחקת שורות. לעולם.** בתנועות יש ארכוב, כי שם מסמך
+ *     שנמחק הוא פעולה שגרתית. בגינון המחיקה כבר מטופלת בשני הצדדים יחד
+ *     (`gardenTaskDelete_` מוחקת שורה **ומסמך**), ולכן "שורה בלי מסמך"
+ *     כאן פירושה **תקלה** ולא מחיקה — ומחיקה אוטומטית על סמך תקלה היא
+ *     בדיוק "הגיבוי שדורס". שורה כזו נשארת, ונספרת ב-`orphanRows`.
+ *
+ *  ⚠️ **רשימת היתר לעמודות, לא רשימת חסימה.** עמודה שאינה במפה — 'שם
+ *     מדווח', 'טלפון', 'משוב', 'הערת משוב', 'עודכן על ידי' — אינה חלק
+ *     מהמראה ואינה נגעת. שם וטלפון **אינם במסמך כלל** (הם נשארים
+ *     בגיליון לפי האפיון), ולכן בלי הכלל הזה המראה הייתה מוחקת אותם.
+ * ========================================================================== */
+
+/* משימות: עמודה בגיליון ⇄ שדה במסמך. **ערך ריק נכתב** — ניקוי 'סגירה'
+   הוא בדיוק מה שפתיחה מחדש עושה, ודילוג עליו היה משאיר משימה סגורה. */
+var GARDEN_TASK_MIRROR_COLS = {
+  'מזהה': 'id', 'סוג': 'kind', 'מזהה תבנית': 'templateId', 'כותרת': 'title',
+  'קטגוריה': 'category', 'אזור': 'area', 'מיקום X': 'x', 'מיקום Y': 'y',
+  'שלב': 'stage', 'דגל': 'flag', 'סגירה': 'closure', 'שבוע': 'week',
+  'תאריך יעד': 'due', 'הערת ביצוע': 'note', 'מונה גרירות': 'drags',
+  'שבוע מקורי': 'firstWeek', 'נוצר בתאריך': 'createdAt',
+  'עודכן בתאריך': 'updatedAt', 'אושר על ידי': 'approvedBy',
+  'תאריך אישור': 'approvedAt', 'שנת תקציב': 'year'
+};
+
+/* דיווחים: **רק מה שהתושב עצמו שלח.**
+   ⚠️ 'שלב'/'דגל'/'סגירה' במסמך הדיווח נגזרים מהמשימה ואינם עמודות
+      בטאב הזה; 'משוב' ו'אוחד לדיווח' נכתבים ב-Apps Script והגיליון
+      הוא מקורם. שלושתם מחוץ למפה בכוונה.
+   ⚠️ ובניגוד למשימות — **ערך ריק אינו נכתב כאן.** אין מסלול שבו תיאור
+      או קטגוריה של דיווח שהוגש הופכים לריקים, ולכן ריק פירושו מסמך
+      חלקי, ודריסה בריק היא איבוד נתון. */
+var GARDEN_REPORT_MIRROR_COLS = {
+  'מזהה': 'id', 'תאריך דיווח': 'date', 'מזהה משפחה': 'familyId',
+  'קטגוריה': 'category', 'אזור': 'area', 'מיקום X': 'x', 'מיקום Y': 'y',
+  'מיקום מילולי': 'place', 'כותרת': 'title', 'תיאור': 'desc',
+  'תמונות': 'photos', 'מזהה משימה': 'taskId', 'שנת תקציב': 'year'
+};
+
+/** האם Firestore הוא הבעלים של הגינון. אותו דפוס בדיוק כמו
+ *  `txJobsUseFirestore_`, כולל "בספק — הגיליון". */
+function gardenFsOwns_() {
+  try { return (fsGet_(FS_FLAGS_DOC) || {}).gardenWriteToFirestore === true; }
+  catch (e) { return false; }
+}
+
+/** ערך מהמסמך בצורה שמתאימה לתא בגיליון. */
+function gardenMirrorCell_(v) {
+  if (v === null || v === undefined) return '';
+  if (Object.prototype.toString.call(v) === '[object Array]') return v.join(',');
+  return v;
+}
+
+/** מראה של טאב אחד. מחזירה סיכום ולעולם אינה זורקת. */
+function gardenMirrorOne_(ss, sheetName, collection, map, opts, out) {
+  opts = opts || {};
+  var sh = ss.getSheetByName(sheetName);
+  if (!sh) { out.errors.push(sheetName + ' — הטאב חסר'); return; }
+
+  var docs;
+  try { docs = fsList_(collection); }
+  catch (e) {
+    /* שאילתה שנכשלה אינה "אין נתונים" — לא נוגעים בכלום. */
+    out.ok = false;
+    out.errors.push(sheetName + ' — רשימה נכשלה: ' + String(e));
+    return;
+  }
+
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+                  .map(function (h) { return String(h).trim(); });
+  var cId = headers.indexOf('מזהה');
+  if (cId === -1) { out.errors.push(sheetName + ' — אין עמודת מזהה'); return; }
+
+  var n = Math.max(sh.getLastRow() - 1, 0);
+  var values = n ? sh.getRange(2, 1, n, lastCol).getValues() : [];
+  var rowOf = {};
+  for (var i = 0; i < n; i++) {
+    var rid = String(values[i][cId] == null ? '' : values[i][cId]).trim();
+    /* ⚠️ ההתאמה **הראשונה** בלבד, ומזהה כפול נרשם — אותו לקח בדיוק
+       מממצא 28, שם הסנכרון כתב את האחרונה ודרס את הראשונה. */
+    if (!rid) continue;
+    if (rowOf[rid] === undefined) rowOf[rid] = i;
+    else out.errors.push('CBA-DUP-ROW ' + sheetName + '/' + rid);
+  }
+
+  /* 🔴 אוסף ריק מול טאב מלא = חשד לתקלה, לא לניקוי. */
+  if (!docs.length && n) {
+    out.ok = false;
+    out.errors.push(sheetName + ' — אפס מסמכים מול ' + n + ' שורות; דילגתי');
+    return;
+  }
+
+  var appends = [], seen = {};
+  for (var k = 0; k < docs.length; k++) {
+    var d = docs[k].data || {};
+    var did = String(d.id == null ? '' : d.id).trim() || String(docs[k].id).trim();
+    if (!did) { out.errors.push(sheetName + ' — מסמך בלי מזהה'); continue; }
+    seen[did] = 1;
+    var isNew = !Object.prototype.hasOwnProperty.call(rowOf, did);
+
+    if (isNew) {
+      var row = new Array(lastCol).fill('');
+      for (var h = 0; h < headers.length; h++) {
+        var f = map[headers[h]];
+        if (f === undefined) continue;
+        row[h] = gardenMirrorCell_(d[f]);
+      }
+      row[cId] = did;
+      appends.push(row);
+      out.added++;
+      continue;
+    }
+
+    var idx = rowOf[did], diffs = 0;
+    for (var c = 0; c < headers.length; c++) {
+      var fld = map[headers[c]];
+      if (fld === undefined) continue;          /* מחוץ לרשימת ההיתר */
+      var nxt = gardenMirrorCell_(d[fld]);
+      if (opts.skipBlank && String(nxt) === '') continue;
+      var cur = values[idx][c];
+      if (String(cur == null ? '' : cur) === String(nxt)) continue;
+      sh.getRange(idx + 2, c + 1).setValue(nxt);
+      values[idx][c] = nxt;
+      diffs++;
+    }
+    if (diffs) out.updated++;
+  }
+
+  if (appends.length) {
+    sh.getRange(sh.getLastRow() + 1, 1, appends.length, lastCol).setValues(appends);
+  }
+
+  /* 🔴 שורה בלי מסמך — **נספרת ולא נמחקת.** ר' ההסבר בראש הבלוק. */
+  for (var r2 = 0; r2 < n; r2++) {
+    var rid2 = String(values[r2][cId] == null ? '' : values[r2][cId]).trim();
+    if (rid2 && !seen[rid2]) out.orphanRows++;
+  }
+}
+
+/** המראה המלאה — שני הטאבים. רצה בעבודה השעתית, **לפני** כל השאר. */
+function gardenMirrorToSheet_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: true, added: 0, updated: 0, orphanRows: 0, errors: [] };
+  if (!gardenFsOwns_()) { out.skipped = 'flag-off'; return out; }
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); }
+  catch (e) { out.ok = false; out.skipped = 'busy'; return out; }
+  try {
+    ensureGardenSheetsCached_(ss);
+    /* ⚠️ **המשימות קודם**, מאותה סיבה בדיוק כמו ב-`gardenDataSyncAll_`:
+       שורת הדיווח מצביעה על מזהה משימה, ודיווח שינחת לפני המשימה שלו
+       פותח חלון שבו הוא מצביע לשום מקום. */
+    gardenMirrorOne_(ss, GARDEN_TASKS_SHEET, FS_GARDEN_TASKS,
+                     GARDEN_TASK_MIRROR_COLS, {}, out);
+    gardenMirrorOne_(ss, GARDEN_REPORTS_SHEET, FS_GARDEN_REPORTS,
+                     GARDEN_REPORT_MIRROR_COLS, { skipBlank: true }, out);
+  } catch (err) {
+    out.ok = false;
+    out.errors.push(String(err));
+  } finally { lock.releaseLock(); }
+  return out;
+}
+
+/* פעולה מפורשת (מנהל-על) — לאימות ולהרצה יזומה. */
+function handleGardenMirror_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    return json_(gardenMirrorToSheet_(ss));
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
 /** סנכרון מלא של דיווחי השנה הנוכחית. מחזיר סיכום ולעולם אינו זורק. */
 function gardenReportsSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  /* 🔴🔴 **מנעול 1** — ר' ההסבר המלא ב-`gardenTasksSyncAll_`. */
+  if (gardenFsOwns_()) { out.ok = true; out.skipped = 'fs-owns'; return out; }
   try {
     var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
     var live = {}, items = [];
@@ -14476,7 +14711,11 @@ function gardenReportsSyncAll_(ss) {
       }
     }
     fsWriteAll_(FS_GARDEN_REPORTS, items, out, live);
-    fsSweepOrphans_(FS_GARDEN_REPORTS, live, out);
+    /* 🔴🔴 **מנעול 2 — חגורה שנייה.** מנעול 1 כבר עצר את הפונקציה
+       למעלה, וזה כאן למקרה שמישהו יוסיף בעתיד מסלול שעוקף אותו.
+       סחיפת יתומים מניחה **כותב אחד ויחיד**, וההנחה הזאת נשברת
+       ברגע שהדפדפן כותב. זו השורה שמחקה נתונים ב-16.9. */
+    if (!gardenFsOwns_()) fsSweepOrphans_(FS_GARDEN_REPORTS, live, out);
     out.ok = true;
   } catch (err) { out.error = String(err); }
   return out;
@@ -14517,6 +14756,13 @@ function gardenReportRefs_(ss) {
 function gardenTasksSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  /* 🔴🔴 **מנעול 1 — הכיוון הזה מת ברגע ש-Firestore הוא הבעלים.**
+     הפונקציה בונה את Firestore **מהגיליון**, ואז סוחפת יתומים. עם
+     כתיבה מהדפדפן זה בדיוק מה שמחק דיווחים ב-16.9: מסמך שנכתב לפני
+     חמש דקות אין לו שורה, ולכן הוא "יתום", ולכן הוא נמחק.
+     ⚠️ יציאה מוקדמת ולא `throw` — היא נקראת ממקומות שסופרים על
+        `out.ok`, ונפילה שם הייתה מפילה פעולות שאין להן קשר. */
+  if (gardenFsOwns_()) { out.ok = true; out.skipped = 'fs-owns'; return out; }
   try {
     var sh = ss.getSheetByName(GARDEN_TASKS_SHEET);
     var live = {}, items = [];
@@ -14546,7 +14792,8 @@ function gardenTasksSyncAll_(ss) {
       }
     }
     fsWriteAll_(FS_GARDEN_TASKS, items, out, live);
-    fsSweepOrphans_(FS_GARDEN_TASKS, live, out);
+    /* 🔴🔴 **מנעול 2** — ר' ההסבר אצל הדיווחים. */
+    if (!gardenFsOwns_()) fsSweepOrphans_(FS_GARDEN_TASKS, live, out);
     out.ok = true;
   } catch (err) { out.error = String(err); }
   return out;
