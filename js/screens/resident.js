@@ -336,9 +336,17 @@ CBA.screens = CBA.screens || {};
       ? ((allPaid ? "נכנס ב־1 בחודש" : "אמור להיכנס ב־1 בחודש") +
          ", בהעברה אחת · " + nSettled + (nSettled === 1 ? " החזר" : " החזרים"))
       : (nPending + (nPending === 1 ? " בקשה עדיין בבדיקה" : " בקשות עדיין בבדיקה"));
+    /* ⚠️ 17.9, ממצא 12 — **החוצץ אומר עכשיו מה החודש הזה.** הוא מקבץ לפי
+       **חודש ההחזר הצפוי**, אבל הציג רק "אוקטובר 2026" מעל בקשה שהוגשה
+       ב-16 בספטמבר — וכל תושב קרא את זה כחודש ההגשה. מילה אחת מפרידה
+       בין מצב תקין לבאג לכאורה.
+       ⚠️ והניסוח נגזר מהסטטוס ולא מהתאריך, בדיוק כמו השורה שמתחתיו:
+          חודש שכולו שולם אומר "שולם ב", וכל השאר "צפוי ב". */
+    var monthWord = (nSettled && allPaid) ? "שולם ב" : "צפוי ב";
     return '<div class="rq-mo' + (muted ? " rq-mo--muted" : "") + '">' +
         '<div class="rq-mo__top">' +
-          '<span class="rq-mo__m">' + CBA.esc(CBA.data.hebrewMonth(monthIso)) + '</span>' +
+          '<span class="rq-mo__m">' + monthWord +
+            CBA.esc(CBA.data.hebrewMonth(monthIso)) + '</span>' +
           '<span class="rq-mo__a">' + CBA.formatILS(headAmount) + '</span>' +
         '</div>' +
         '<div class="rq-mo__sub">' + when + '</div>' +
@@ -983,23 +991,41 @@ CBA.screens = CBA.screens || {};
     closeAnyModal();
     var overlay = document.createElement("div");
     overlay.id = "cba-modal";
+    /* ============================================================================
+     *  🔴 היררכיה הפוכה — תוקן 17.9 (ממצא 07)
+     * ----------------------------------------------------------------------------
+     *  הכפתור הגדול והצבעוני כאן היה **תשלום**, על שריון שעוד לא אושר
+     *  ועלול להידחות. הפעולה שבאמת מסיימת את המשימה — "המשך לשליחת
+     *  הבקשה" — הייתה כפתור משני מתחתיו. כלומר העין הובלה לפעולה הלא
+     *  נכונה, והאותיות הקטנות עצמן הודו בזה ("אפשר לשלם גם מאוחר יותר").
+     *
+     *  מהיום: **שליחת הבקשה היא ה-CTA השחור** (`btn-primary`, לפי שפת
+     *  העיצוב), והתשלום יורד לפעולה משנית — אבל **נשאר ברור לגמרי
+     *  שזה PayBox**: אותו סמליל, אותו שם, ואותו סכום. יועד: "אתה יכול
+     *  לשנות את העיצוב. אבל שיהיה ברור שזה פייבוקס."
+     *  ⚠️ הכותרת שונתה גם היא: "לפני שממשיכים — תשלום" הציג את התשלום
+     *     כתנאי מעבר, וזה פשוט לא נכון.
+     * ========================================================================== */
     overlay.innerHTML =
       '<div class="modal-backdrop" data-modal-close>' +
         '<div class="modal" role="dialog">' +
           '<div class="modal__head">' +
-            '<div><div class="modal__title">לפני שממשיכים — תשלום</div>' +
+            '<div><div class="modal__title">הבקשה מוכנה לשליחה</div>' +
               '<div class="modal__sub">עלות השימוש במועדון היא 200₪</div></div>' +
             '<button class="drawer__close" data-modal-close aria-label="סגור">×</button>' +
           '</div>' +
           '<div class="modal__body">' +
-            '<div style="text-align:center;">' +
-              '<a class="club-pay__btn" href="' + PAYBOX_URL + '" target="_blank" rel="noopener">' +
-                payboxIcon + '<span>מעבר לתשלום ב-PayBox</span>' +
-              '</a>' +
-            '</div>' +
-            '<p class="club-rules__more" style="text-align:center;margin-top:14px;">אפשר לשלם גם מאוחר יותר, מיד לאחר שהשריון יאושר ע"י הוועד.</p>' +
             '<div class="club-rules__modal-actions">' +
-              '<button type="button" class="btn-primary" id="rc-pay-continue">המשך לשליחת הבקשה</button>' +
+              '<button type="button" class="btn-primary" id="rc-pay-continue">שליחת הבקשה</button>' +
+            '</div>' +
+            '<p class="club-rules__more" style="text-align:center;margin-top:14px;">' +
+              'אחרי שהוועד יאשר את השריון אפשר לשלם — כאן, או מהכרטיס במסך המועדון.' +
+            '</p>' +
+            '<div style="text-align:center;margin-top:10px;">' +
+              '<a class="club-pay__btn club-pay__btn--ghost" href="' + PAYBOX_URL + '" ' +
+                 'target="_blank" rel="noopener">' +
+                payboxIcon + '<span>תשלום ב-PayBox · 200₪</span>' +
+              '</a>' +
             '</div>' +
           '</div>' +
         '</div>' +

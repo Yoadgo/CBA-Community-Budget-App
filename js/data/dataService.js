@@ -3157,6 +3157,11 @@ CBA.data = (function () {
     listSignups: function (cb) { CBA.sheets.get({ action: "listSignups" }, cb); },
     approveSignup: function (payload, cb) { CBA.sheets.postRead("approveSignup", payload, cb); },
     rejectSignup: function (id, cb) { CBA.sheets.postRead("rejectSignup", { id: id }, cb); },
+    /* ⚠️ 17.9, ממצא 14 — מחיקת משק בית. השומרים (היסטוריה כספית, שלילת
+       גישה לפני מחיקת השורה) יושבים **בשרת** ולא כאן; הלקוח רק שואל. */
+    deleteResidentRow: function (rowIndex, cb) {
+      CBA.sheets.postRead("deleteResidentRow", { rowIndex: rowIndex }, cb);
+    },
     saveResidentRow: function (rowIndex, fields, cb) {
       CBA.sheets.postRead("saveResidentRow", { rowIndex: rowIndex, fields: fields }, cb);
     },

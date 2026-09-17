@@ -1459,6 +1459,17 @@ function resOpenDrawer(container, idx, rowIndex, c) {
             '<button type="button" class="btn-ghost btn-sm" data-replace>החלפת משפחה — דיירים חדשים נכנסו</button>' +
             '<span class="res-dim">מסמן את הנוכחיים כ"עזבו" ופותח משק בית חדש עם מזהה משלו, כך שההיסטוריה לא עוברת</span>' +
           '</div>' +
+          /* ⚠️ 17.9, ממצא 14 — מחיקה אמיתית, **לשורה שנוצרה בטעות בלבד**.
+             עד היום אפשר היה רק לסמן "עזב", ושורה שגויה נשארה בגיליון
+             לנצח (בדיוק מה שקרה לשורת הבדיקה "בית 999").
+             ⚠️ היא יושבת **מתחת** ל"החלפת משפחה" ובניסוח שמפנה אליו,
+                כי ברוב המקרים זו התשובה הנכונה: משפחה שעזבה אינה טעות
+                הזנה, וההיסטוריה שלה צריכה להישאר. השרת חוסם מחיקה של
+                משק בית שיש לו תנועות כספיות. */
+          '<div class="res-replace">' +
+            '<button type="button" class="btn-ghost btn-sm is-danger" data-rdelete>מחיקת משק הבית</button>' +
+            '<span class="res-dim">רק לשורה שנוצרה בטעות. משק בית עם היסטוריה כספית לא יימחק — שם סמנו "עזב"</span>' +
+          '</div>' +
         '</div>' +
 
       '</div>' +
@@ -1472,6 +1483,35 @@ function resOpenDrawer(container, idx, rowIndex, c) {
   document.body.appendChild(overlay);
   overlay.querySelectorAll("[data-rclose]").forEach(function (el) { el.addEventListener("click", resCloseDrawer); });
   document.addEventListener("keydown", resEsc);
+
+  /* מחיקת משק בית — ר' ההערה ליד הכפתור. */
+  var delBtn = overlay.querySelector("[data-rdelete]");
+  if (delBtn) delBtn.addEventListener("click", function () {
+    var famName = (resVal(r, c.family) || "משק הבית").trim();
+    CBA.ui.confirm(
+      'השורה של "' + famName + '" תרד מהגיליון, וכל מי שרשום בה יאבד גישה ' +
+      'לאפליקציה מיד. אי אפשר לשחזר מכאן.\n\n' +
+      'אם המשפחה פשוט עזבה — בטלו וסמנו "עזב" במקום, כדי שההיסטוריה שלה תישאר.',
+      { title: "למחוק את משק הבית?", okText: "מחק", danger: true }
+    ).then(function (yes) {
+      if (!yes) return;
+      var release = CBA.ui.busy ? CBA.ui.busy(delBtn, "מוחק…") : function () {};
+      CBA.data.deleteResidentRow(rowIndex, function (res) {
+        release();
+        if (!res || !res.ok) {
+          /* ⚠️ שומר הסף של ההיסטוריה מחזיר הודעה שמסבירה **למה** ומה
+             לעשות במקום — ולכן מציגים אותה כמות שהיא ולא "המחיקה נכשלה". */
+          return CBA.ui.alert((res && res.error) || "המחיקה נכשלה");
+        }
+        resCloseDrawer();
+        CBA.ui.toast("משק הבית נמחק");
+        /* ⚠️ טעינה מחדש מהשרת ולא רק ציור מחדש: השורה ירדה מהגיליון,
+           וכל אינדקס שמור אחריה זז. בדיוק מה שכפתור "רענן" עושה. */
+        resState.loaded = false;
+        CBA.data.refreshResidents(function () { resLoad(container); });
+      });
+    });
+  });
 
   /* שמירת הרשאות היא פעולה נפרדת מ"שמור" של פרטי משק הבית — בכוונה. שינוי הרשאה
      הוא מעשה בעל משמעות (הוא פותח למישהו גישה לכסף או לפרטי כל התושבים), ולא נכון

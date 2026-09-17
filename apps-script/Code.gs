@@ -113,6 +113,9 @@ var ACTION_PERMS = {
   // השלמת שם הרוכש בטופס ההוצאה. לכן: כל הרשאת ניהול, ולא "תושבים" דווקא.
   residentDirectory: PERM_ANY_ADMIN,
   approveSignup: PERM_RESIDENTS, rejectSignup: PERM_RESIDENTS, saveResidentRow: PERM_RESIDENTS,
+  /* ⚠️ מחיקת משק בית — אותה הרשאה כמו עריכת שורה, ולא הרשאה חדשה
+     משלה: זו אותה סמכות על אותו טאב. השומרים יושבים בפונקציה. */
+  deleteResidentRow: PERM_RESIDENTS,
   ensureResidentCols: PERM_RESIDENTS, replaceFamily: PERM_RESIDENTS, exportResidents: PERM_RESIDENTS,
   createResidents: PERM_RESIDENTS,
   saveResidentNames: PERM_RESIDENTS, formatResidents: PERM_RESIDENTS, saveFamilyIds: PERM_RESIDENTS,
@@ -1499,6 +1502,7 @@ function doPostDispatch_(ss, body) {
       case 'approveSignup':     return json_(approveSignup_(ss, body));
       case 'rejectSignup':      return json_(rejectSignup_(ss, body));
       case 'saveResidentRow':   return json_(saveResidentRow_(ss, body));
+      case 'deleteResidentRow': return json_(deleteResidentRow_(ss, body));
       case 'ensureResidentCols':return json_(ensureResidentCols_(ss, body));
       case 'replaceFamily':     return json_(replaceFamily_(ss, body));
       case 'exportResidents':   return json_(exportResidents_(ss, body));
@@ -1704,13 +1708,32 @@ function deleteTransaction_(ss, body) {
 function deleteTransactionRow_(ss, body) {
   var sh = ss.getSheetByName('תנועות ' + body.year);
   if (!sh) return { ok: false, error: 'אין טאב' };
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+                  .map(function (h) { return String(h).trim(); });
+  var cLink = headers.indexOf('קישור קבלה');
   var n = Math.max(sh.getLastRow() - 1, 0);
   var ids = n ? sh.getRange(2, 1, n, 1).getValues() : [];
   for (var i = 0; i < ids.length; i++) {
     if (String(ids[i][0]) === String(body.id)) {
+      /* 🔴 **הקובץ נקרא לפני מחיקת השורה** (17.9, ממצא 09).
+         עד היום `deleteTransaction` לא נגע ב-Drive בכלל: השורה ירדה
+         מהגיליון ומ-Firestore, וקובץ הקבלה נשאר יושב בתיקיית "ממתין
+         לאישור" בלי בעלים ובלי דרך להגיע אליו. עם הזמן זו תיקייה
+         שמתמלאת בקבלות של תושבים שאיש לא יודע למי הן שייכות.
+         ⚠️ אחרי `deleteRow` אי אפשר לקרוא את הקישור — ולכן כאן. */
+      /* ⚠️ `getValues()[0][0]` ולא `getValue()` — זו הצורה שכל שאר הקובץ
+         משתמש בה, וגם זו שמארז הבדיקות יודע לחקות. שתיהן חוקיות. */
+      var link = (cLink === -1) ? '' :
+                 String(sh.getRange(i + 2, cLink + 1, 1, 1).getValues()[0][0] || '').trim();
       sh.deleteRow(i + 2);
       btxDropDoc_(body.year, body.id);   /* אחרת המראה תחזיר את השורה */
-      return { ok: true };
+      /* ⚠️ `trashDriveFile_` הוא **סל מיחזור ולא מחיקה סופית**, וזה
+         מכוון: מחיקת תנועה בטעות היא דבר שקורה, וקבלה שאפשר לשחזר
+         מסל המיחזור עדיפה על קבלה שנעלמה. הוא גם לא-קריטי בעצמו —
+         קובץ שכבר נמחק או שאין אליו הרשאה לא מפיל את המחיקה. */
+      if (link) trashDriveFile_(link);
+      return { ok: true, receiptTrashed: !!link };
     }
   }
   return { ok: false, error: 'לא נמצא' };
@@ -3367,6 +3390,7 @@ var ACTION_DOMAIN = {
   savePermissions: 'residents', ensurePermissionCols: 'residents',
   saveResidentNames: 'residents', formatResidents: 'residents',
   approveSignup: 'residents', rejectSignup: 'residents', saveResidentRow: 'residents',
+  deleteResidentRow: 'residents',
   ensureResidentCols: 'residents', replaceFamily: 'residents', exportResidents: 'residents',
   createResidents: 'residents', submitSignup: 'residents', assignResidentIds: 'residents',
   /* ⚠️ saveFamilyIds כותב לעמודת "מזהה משפחה" בטאב **תנועות** — כלומר הוא
@@ -4367,6 +4391,123 @@ function saveResidentRow_(ss, body) {
   } catch (mailErr) { Logger.log('מייל ברוכים הבאים נכשל: ' + mailErr); }
 
   return { ok: true, written: written };
+}
+
+/* ============================================================================
+ *  🔴🔴  מחיקת משק בית   (2026-09-17, ממצא 14)
+ * ----------------------------------------------------------------------------
+ *  **הפער:** במגירת עריכת תושב היו "שמור", "ביטול" ו"החלפת משפחה" — ולא
+ *  מחיקה. שורה שנוצרה בטעות אפשר היה רק לסמן "עזב", כלומר להשאיר אותה
+ *  בגיליון לנצח. זה סתר את הכלל שכל פעולה עוברת באפליקציה, וחייב עריכה
+ *  ידנית בגיליון. (זו גם הסיבה ששורת הבדיקה "בית 999" נשארה תלויה.)
+ *
+ *  🔒 **שלושה שומרי סף, ואף אחד מהם אינו קוסמטי:**
+ *    1. **היסטוריה כספית חוסמת.** משק בית שיש לו ולו תנועה אחת בכל שנה
+ *       אינו נמחק — מחיקתו הייתה מייתמת שורות כסף שאי אפשר לשייך בחזרה.
+ *       שם התשובה היא "עזב", וזה בדיוק מה שהמצב הזה נועד לו.
+ *    2. **ההרשאה נשללת לפני שהשורה יורדת.** לכל uid בשורה נכתב
+ *       `active:false` ב-`members/{uid}` **קודם**, ורק אחר כך נמחקת השורה.
+ *       ⚠️ הסדר הזה הוא הלב: אם השלב השני ייפול, התוצאה היא "נשללה גישה
+ *       אבל השורה נשארה" — מצב בטוח. הסדר ההפוך היה משאיר אדם עם גישה
+ *       מלאה ובלי שורה שמסבירה למה.
+ *    3. **מחיקת המסמך היא מאמץ-מיטבי בלבד**, אחרי השלילה — מסמך שנשאר
+ *       עם `active:false` כבר אינו מקנה דבר (`isMember()` דורש `true`).
+ * ========================================================================== */
+function deleteResidentRow_(ss, body) {
+  var rsh = ss.getSheetByName('תושבים');
+  if (!rsh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var rowIdx = parseInt(body.rowIndex, 10);
+  if (!rowIdx || rowIdx < 2 || rowIdx > rsh.getLastRow()) {
+    return { ok: false, error: 'שורה לא תקינה' };
+  }
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var headers = rsh.getRange(1, 1, 1, rsh.getLastColumn()).getValues()[0]
+                     .map(function (h) { return String(h).trim(); });
+    var row = rsh.getRange(rowIdx, 1, 1, headers.length).getValues()[0];
+    var cId = headers.indexOf(RESIDENT_ID_HEADER);
+    var famId = (cId === -1) ? '' : String(row[cId] || '').trim();
+    var cFam = headers.indexOf('משפחה');
+    var famName = (cFam === -1) ? '' : String(row[cFam] || '').trim();
+
+    /* שומר 1 — היסטוריה כספית. */
+    if (famId) {
+      var used = txRowsForFamily_(ss, famId);
+      if (used.count) {
+        return { ok: false, blocked: 'history', count: used.count, years: used.years,
+                 error: 'למשק הבית הזה יש ' + used.count + ' תנועות כספיות (' +
+                        used.years.join(', ') + '). מחיקה הייתה מייתמת אותן — ' +
+                        'סמנו "עזב" במקום.' };
+      }
+    }
+
+    /* שומר 2 — שלילת גישה לפני מחיקת השורה. */
+    var cols = residentSlotCols_(rsh);
+    var uids = [];
+    for (var i = 0; i < cols.uid.length; i++) {
+      var u = String(row[cols.uid[i]] || '').trim();
+      if (u) uids.push(u);
+    }
+    var revoked = 0, revokeErrors = [];
+    uids.forEach(function (u) {
+      try {
+        fsSet_('members/' + u, { familyId: '', perms: [], isExternal: false,
+                                 active: false, updatedAt: new Date(), schema: 1 });
+        revoked++;
+      } catch (e) { revokeErrors.push(u + ': ' + String(e)); }
+    });
+    /* 🔴 שלילה שנכשלה עוצרת הכול. אדם עם גישה ובלי שורה הוא בדיוק
+       המצב שאסור לייצר. */
+    if (revokeErrors.length) {
+      return { ok: false, error: 'לא הצלחתי לשלול גישה — השורה לא נמחקה. ' +
+               revokeErrors.join(' ; ') };
+    }
+
+    /* ניקוי המטמון של ההרשאות לפי מייל, כמו בכל עריכת שורה. */
+    try {
+      headers.forEach(function (h, c) {
+        if (h.indexOf('אימייל') === -1) return;
+        var key = normalizeEmail_(String(row[c] || '').trim());
+        if (key && PERMS_MEMO_[key]) delete PERMS_MEMO_[key];
+      });
+    } catch (e) {}
+
+    rsh.deleteRow(rowIdx);
+
+    /* שומר 3 — מחיקת המסמך, מאמץ-מיטבי. */
+    uids.forEach(function (u) {
+      try { fsDelete_('members/' + u); } catch (e) {}
+    });
+
+    return { ok: true, familyId: famId, family: famName, revoked: revoked };
+  } finally { lock.releaseLock(); }
+}
+
+/** כמה תנועות משויכות למשק בית, בכל השנים. משמש את שומר הסף של המחיקה. */
+function txRowsForFamily_(ss, famId) {
+  var out = { count: 0, years: [] };
+  var want = String(famId || '').trim();
+  if (!want) return out;
+  ss.getSheets().forEach(function (sh) {
+    var name = String(sh.getName() || '');
+    if (name.indexOf('תנועות ') !== 0) return;
+    if (name === BTX_ARCHIVE_TAB) return;          /* הארכיון אינו היסטוריה חיה */
+    var last = sh.getLastRow();
+    if (last < 2) return;
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+                    .map(function (h) { return String(h).trim(); });
+    var c = headers.indexOf('מזהה משפחה');
+    if (c === -1) return;
+    var vals = sh.getRange(2, c + 1, last - 1, 1).getValues();
+    var n = 0;
+    for (var i = 0; i < vals.length; i++) {
+      if (String(vals[i][0] || '').trim() === want) n++;
+    }
+    if (n) { out.count += n; out.years.push(name.substring('תנועות '.length)); }
+  });
+  return out;
 }
 
 /* ---------- עמודות נוספות בטאב "תושבים" (2026-08-07) ----------

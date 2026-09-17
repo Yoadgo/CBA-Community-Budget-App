@@ -587,15 +587,27 @@ function txBindRows(container) {
       if (!t) return;
       const n = CBA.data.statusNext(t.status);
       if (!n) return;
-      // אישור ("הוגשה קבלה"/"בבדיקה" -> "הועבר להנה"ח") מחייב פרטים מלאים — בעיקר
-      // בקשות מתושבים שמגיעות בלי סעיף תקציבי. אם משהו חסר: לא מאשרים, פותחים עריכה להשלמה.
+      /* ============================================================================
+       *  🔴 אישור = סיווג בתקציב, ותו לא   (2026-09-17, ממצא 08 — החלטת יועד)
+       * ----------------------------------------------------------------------------
+       *  **מה היה:** "אשר → הנה"ח" היא הפעולה התכופה ביותר של הגזבר, והיא
+       *  נוסחה ככפתור ישיר — אבל בפועל, אם חסר ולו שדה אחד, היא פתחה
+       *  **מגירת עריכה מלאה**: סעיף, תת-סעיף, מקור, סטטוס, מועד החזר,
+       *  פעולות קבלה ו"אפשרויות מתקדמות". בקשת תושב מגיעה תמיד בלי סעיף,
+       *  ולכן זה קרה כמעט תמיד.
+       *
+       *  **מה יועד ביקש, מילה במילה:** "אשר אמור להעביר להנהלת חשבונות,
+       *  מבחינתי שפשוט יפתח רק חלון של סיווג בתקציב אבל בכל מקרה שאחריו
+       *  יעבור לסטטוס עבר להנהלת חשבונות."
+       *
+       *  ולכן: חלון אחד, שדה אחד (ותת-סעיף רשות), והסטטוס מתקדם **תמיד**.
+       *  ⚠️ **שדות חסרים אחרים אינם חוסמים יותר** — הם מוצגים כהערה בתוך
+       *     החלון ולא כשער. זו הכרעה של יועד ולא השמטה: הגזבר משלים אותם
+       *     בהנהלת החשבונות, והחסימה כאן רק דחפה אותו למגירה שלמה.
+       * ========================================================================== */
       if (t.status === "submitted" || t.status === "review") {
-        const missing = CBA.data.missingApprovalFields(t);
-        if (missing.length) {
-          CBA.ui.alert('לא ניתן לאשר להנה"ח — חסרים פרטים: ' + missing.join(", ") + ".\nנפתח טופס עריכה להשלמה.");
-          txOpenDrawer(container, t.id);
-          return;
-        }
+        txOpenClassifyModal(container, t);
+        return;
       }
       // יציאה מ"בבדיקה" מוחקת את הערת הבדיקה — היא שייכת לסטטוס הזה בלבד
       CBA.data.updateTransaction(t.id, n === "review" ? { status: n } : { status: n, reviewNote: "" });
@@ -961,6 +973,73 @@ function txSubItemOptions(categoryId, selectedId) {
   }).join("");
   return `<option value=""${(!selectedId || !known) ? " selected" : ""}>— ללא —</option>` + opts +
     `<option value="__new__">+ צור תת-סעיף חדש</option>`;
+}
+
+/* חלון הסיווג. ר' הבלוק הארוך ליד [data-advance].
+   ⚠️ מבוסס על `CBA.ui.dialog` הקיים ולא על מודל חדש — אותו מנעול מיקוד,
+      אותו Escape, אותו עיצוב. */
+function txOpenClassifyModal(container, t) {
+  var cats = CBA.data.getCategories();
+  var curCat = t.categoryId || (cats[0] || {}).id;
+  var catOpts = cats.map(function (c) {
+    return '<option value="' + CBA.esc(c.id) + '"' +
+      (c.id === curCat ? " selected" : "") + '>' + CBA.esc(c.name) + '</option>';
+  }).join("");
+  /* ⚠️ **בלי "+ צור תת-סעיף חדש"** (בניגוד ל-`txSubItemOptions` שבמגירה):
+     יצירת תת-סעיף היא זרימה משלה, וחלון שכל תפקידו להיות קצר אינו
+     המקום לפתוח אותה. מי שצריך תת-סעיף חדש עושה זאת במגירת העריכה. */
+  function subOpts(catId, sel) {
+    var items = CBA.data.getCategoryItems(catId) || [];
+    var known = items.some(function (it) { return it.id === sel; });
+    return '<option value=""' + ((!sel || !known) ? " selected" : "") + '>— ללא —</option>' +
+      items.map(function (it) {
+        return '<option value="' + CBA.esc(it.id) + '"' +
+          (it.id === sel ? " selected" : "") + '>' + CBA.esc(it.name) + '</option>';
+      }).join("");
+  }
+  /* הערה ולא שער — ר' ההסבר למעלה. "סעיף תקציבי" מוחרג כי הוא בדיוק
+     מה שהחלון הזה בא למלא, והצגתו כחסר הייתה רעש. */
+  var missing = (CBA.data.missingApprovalFields(t) || [])
+                  .filter(function (m) { return m !== "סעיף תקציבי"; });
+  var who = CBA.esc(t.supplier || t.buyer || ("#" + t.id));
+  var amount = (Number(t.amount) > 0) ? CBA.formatILS(t.amount) : "בלי סכום";
+
+  CBA.ui.dialog({
+    title: "סיווג בתקציב",
+    message: who + " · " + amount,
+    sticky: true,
+    okText: 'אישור והעברה להנה"ח',
+    cancelText: "ביטול",
+    html:
+      '<div class="form-grid">' +
+        '<div class="form-field form-field--wide"><label>סעיף תקציבי</label>' +
+          '<select class="field-input" id="txc-cat">' + catOpts + '</select></div>' +
+        '<div class="form-field form-field--wide"><label>תת-סעיף (רשות)</label>' +
+          '<select class="field-input" id="txc-sub">' + subOpts(curCat, t.subItemId) + '</select></div>' +
+      '</div>' +
+      (missing.length
+        ? '<div class="form-block__warn" style="margin-top:10px">חסר עדיין: ' +
+            CBA.esc(missing.join(", ")) + ' — אפשר להשלים אחר כך בעריכה.</div>'
+        : ""),
+    onMount: function (wrap) {
+      var cat = wrap.querySelector("#txc-cat"), sub = wrap.querySelector("#txc-sub");
+      /* תת-הסעיפים תלויים בסעיף — בלי זה נשארת רשימה של הסעיף הקודם. */
+      cat.addEventListener("change", function () { sub.innerHTML = subOpts(cat.value, ""); });
+    },
+    onOk: function (wrap, close) {
+      var cat = wrap.querySelector("#txc-cat").value;
+      var sub = wrap.querySelector("#txc-sub").value;
+      if (!cat) return;                       /* אין סעיף — אין אישור */
+      close(true);
+      /* ⚠️ `reviewNote` מתנקה כאן בדיוק כמו במסלול הרגיל: הערת הבדיקה
+         שייכת לסטטוס "בבדיקה" ואין לה משמעות אחריו. */
+      CBA.data.updateTransaction(t.id, {
+        categoryId: cat, subItemId: sub || "", status: "ready", reviewNote: ""
+      });
+      CBA.ui.toast('הועבר להנה"ח');
+      CBA.screens.expenses.render(container);
+    }
+  });
 }
 
 function txOpenDrawer(container, id) {

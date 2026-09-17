@@ -663,6 +663,11 @@ body.is-gated { overflow: hidden; }
   transition: border-color var(--t), color var(--t), background var(--t);
 }
 .btn-ghost:hover { border-color: var(--action); color: var(--text); background: var(--hover); }
+/* ⚠️ 17.9 — גרסה הרסנית של כפתור הרפאים, למחיקת משק בית (ממצא 14).
+   אדום **במסגרת ובטקסט בלבד** ולא כמילוי: זו פעולה נדירה שצריכה
+   להיראות מסוכנת בלי להתחרות ב-CTA הראשי של המסך. */
+.btn-ghost.is-danger { color: #B3261E; border-color: rgba(179,38,30,.35); }
+.btn-ghost.is-danger:hover { color: #8C1D18; border-color: #B3261E; background: rgba(179,38,30,.06); }
 .btn-primary {
   border: none; background: var(--action); color: #fff; font-family: inherit;
   font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 9px; cursor: pointer;
