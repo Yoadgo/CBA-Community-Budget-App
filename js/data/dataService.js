@@ -1827,20 +1827,43 @@ CBA.data = (function () {
     });
   }
 
-  /** מעלה בזו אחר זו ומדווח התקדמות אמיתית. לעולם אינו נעצר
-   *  בגלל תמונה אחת שנפלה — ר' ההחלטה 2 בבלוק מעל. */
+  /* ============================================================================
+   *  העלאה **במקביל**  (2026-09-17, החלטת יועד)
+   * ----------------------------------------------------------------------------
+   *  🔴 **מה השתנה ולמה.** עד היום התמונות עלו בזו אחר זו, וכל אחת היא
+   *  קריאה שלמה ל-Apps Script. עם החציון המדוד של 3.2 שניות (וזנב עד
+   *  14.7), דיווח עם שלוש תמונות היה **ארבע קריאות סדרתיות** — וזה,
+   *  ולא הכתיבה לגיליון, היה רוב 70 השניות שנמדדו ב-16.9.
+   *
+   *  ⚠️ **מד ההתקדמות ירד בכוונה.** הוא היה הסיבה היחידה לסדרתיות
+   *     ("2 מתוך 3" דורש סדר). יועד: "מד ההתקדמות לא מעניין... התמונות
+   *     ממשיכות לעלות ואפשר להמשיך לגלוש, זה החלק החשוב."
+   *
+   *  ⚠️ **הסדר נשמר למרות המקביליות.** כל תוצאה נכתבת למקום שלה לפי
+   *     אינדקס ורק בסוף מסוננת — אחרת סדר התמונות אצל התושב היה נקבע
+   *     לפי מי סיים ראשון, כלומר לפי גודל הקובץ.
+   *
+   *  ⚠️ **תמונה שנפלה אינה מפילה את האחרות**, וזה נשאר כפי שהיה: אין
+   *     כאן `Promise.all` שנכשל על הראשונה. כל קריאה מדווחת לעצמה.
+   * ========================================================================== */
   function gardenUploadPhotos(photos, onStep, done) {
-    var ids = [], failed = 0, i = 0;
-    function next() {
-      if (i >= photos.length) return done(ids, failed);
-      var n = i + 1;
-      if (onStep) onStep(n, photos.length);
-      gardenUploadPhoto(photos[i], function (err, id) {
-        if (err || !id) failed++; else ids.push(id);
-        i++; next();
-      });
+    var n = photos.length;
+    if (!n) return done([], 0);
+    var slot = new Array(n), left = n, failed = 0, settled = false;
+    if (onStep) onStep(1, n);          /* פעם אחת, רק כדי לומר "התחיל" */
+    function finish() {
+      if (settled) return;
+      settled = true;
+      var ids = [];
+      for (var k = 0; k < n; k++) if (slot[k]) ids.push(slot[k]);
+      done(ids, failed);
     }
-    next();
+    photos.forEach(function (ph, idx) {
+      gardenUploadPhoto(ph, function (err, id) {
+        if (err || !id) failed++; else slot[idx] = id;
+        if (--left <= 0) finish();
+      });
+    });
   }
 
   function gardenReportFsWrite(payload, cb, onProgress) {
@@ -1870,6 +1893,15 @@ CBA.data = (function () {
           title: payload.title, desc: payload.desc || "",
           place: payload.place || "", x: task.x, y: task.y,
           photos: [], photosExpected: photos.length,
+          /* 🔴🔴 **הדגל נכתב מראש ויורד בסוף — לא נכתב בסוף.**
+             עד היום `photosIncomplete` נכתב יחד עם התוצאה, כלומר הוא
+             סימן "העלאה שהסתיימה עם כשלים". דפדפן שנסגר באמצע לא הגיע
+             לכתיבה הזאת בכלל, המסמך נשאר עם `photos: []` ובלי דגל,
+             והסריקה השעתית — ששואלת `photosIncomplete == true` —
+             **לא ראתה אותו לעולם**. מאז שההעלאה עברה לרקע והתושב ממשיך
+             לגלוש, זה הפסיק להיות מקרה קצה.
+             זה בדיוק הדפוס של `mailPending`: מסמן ממתין, ומי שמסיים מכבה. */
+          photosIncomplete: photos.length > 0,
           taskId: String(taskId), clientRef: String(payload.clientRef || ""),
           /* 🔴 הדגל שגורם למייל לצאת — גם אם הקריאה מיד אחריו תיפול,
              הסריקה השעתית תתפוס אותו. ר' gardenMailPending_. */
@@ -1888,27 +1920,56 @@ CBA.data = (function () {
             gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId);
             CBA.sheets.postRead("gardenNotifyReport", { id: String(repId) }, function () {});
 
-            if (!photos.length) {
-              return cb({ ok: true, id: repId, taskId: taskId, photos: [], photosFailed: 0 });
-            }
-            gardenUploadPhotos(photos, function (n, total) {
-              if (onProgress) onProgress(Math.round((n - 1) / total * 100), n, total);
-            }, function (ids, failed) {
-              var patch = { photos: ids, updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date() };
-              if (failed > 0) patch.photosIncomplete = true;
-              CBA.fb.mergeDoc("gardenReports", String(repId), patch, function () {
-                if (ids.length) {
-                  CBA.fb.mergeDoc("gardenTasks", String(taskId), { photos: ids }, function () {});
-                }
-                if (onProgress) onProgress(100, photos.length, photos.length);
-                cb({ ok: true, id: repId, taskId: taskId, photos: ids,
-                     photosFailed: failed, photosExpected: photos.length });
+            /* 🔴🔴 **ההגשה נסגרת כאן, לפני התמונות** (17.9, החלטת יועד).
+               מרגע שהמסמך נכתב הדיווח קיים, יש לו מספר, והתושב חופשי
+               ללכת. התמונות ממשיכות לעלות ברקע — ואם הוא ייסגר באמצע,
+               `photosIncomplete` שכבר דלוק הוא מה שיביא את הסריקה
+               השעתית להתריע ואת הבאנר ב"הדיווחים שלי" להופיע.
+               ⚠️ **אין כאן `beforeunload`.** זו הנקודה: חסימה של סגירת
+                  הדף הייתה מבטלת בדיוק את מה שהשינוי הזה בא לתת. */
+            cb({ ok: true, id: repId, taskId: taskId,
+                 photos: [], photosFailed: 0,
+                 photosExpected: photos.length, photosPending: photos.length });
+
+            if (!photos.length) return;
+
+            gardenUploadPhotos(photos, null, function (ids, failed) {
+              var patch = {
+                photos: ids,
+                /* ⚠️ מכבים **רק** כשהכול נחת. `failed > 0` משאיר דלוק. */
+                photosIncomplete: ids.length < photos.length,
+                updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+              };
+              CBA.fb.mergeDoc("gardenReports", String(repId), patch, function (eM) {
+                /* ⚠️ אם הכתיבה הזאת נכשלה — הדגל נשאר דלוק מהיצירה, וזה
+                   בדיוק מה שצריך לקרות. נרשם, כי כשל שקט כאן פירושו
+                   תמונות ב-Drive שאף אחד לא יודע עליהן. */
+                if (eM) gardenPhotoWarn("מסמך הדיווח לא עודכן בתמונות", repId, eM);
+                if (!ids.length) return;
+                /* ⚠️ כלל `gtTeamUpdateOk` דורש הרשאת גינון, ולכן אצל תושב
+                   רגיל הכתיבה הזאת **נדחית**. עד היום היא נבלעה ב-callback
+                   ריק. היום היא נרשמת, ומסמך המשימה מקבל את התמונות
+                   מהסנכרון. ⏭ נסגר סופית בשלב המראה. */
+                CBA.fb.mergeDoc("gardenTasks", String(taskId), { photos: ids },
+                  function (eT) {
+                    if (eT) gardenPhotoWarn("מסמך המשימה לא עודכן בתמונות", taskId, eT);
+                  });
               });
             });
           });
         });
       });
     });
+  }
+
+  /** כשל בכתיבת התמונות — רועש ולא שקט. אותו `CBA.diag` שכבר נוסע
+   *  עם כל דיווח תקלה של תושב; בלי מנגנון שני. */
+  function gardenPhotoWarn(what, id, err) {
+    try {
+      var line = "תמונות גינון · " + what + " · #" + String(id) + " — " + String(err);
+      if (window.CBA && CBA.diag && CBA.diag.error) CBA.diag.error(line, "dataService.js");
+      if (window.console && console.warn) console.warn("[CBA] " + line);
+    } catch (e) {}
   }
 
   /** שורת יומן. שגר ושכח — יומן שנכשל אינו מבטל פעולה שהצליחה. */
@@ -1927,12 +1988,16 @@ CBA.data = (function () {
 
   /** 🔴 השלמת תמונות לדיווח שכבר הוגש. ר' מסך resGardenPhotos. */
   function gardenCompletePhotos(repId, taskId, photos, cb, onProgress) {
-    gardenUploadPhotos(photos, function (n, total) {
-      if (onProgress) onProgress(Math.round((n - 1) / total * 100), n, total);
-    }, function (ids, failed) {
+    /* ⚠️ כאן התושב **כן** ממתין מול המסך — זו פעולה שהוא יזם כדי לסגור
+       פינה — ולכן הקריאה חוזרת רק בסוף. מה שירד הוא האחוזים בלבד. */
+    if (onProgress) onProgress(1, 1, photos.length);
+    gardenUploadPhotos(photos, null, function (ids, failed) {
       CBA.fb.readDoc("gardenReports", String(repId), function (e, doc) {
         var have = (doc && doc.photos) || [];
         var all = have.concat(ids);
+        /* ⚠️ `failed > 0` ולא `all.length < photosExpected`: השלמה חלקית
+           שהצליחה במלואה מכבה את הדגל גם אם התושב בחר פחות קבצים ממה
+           שחסר — הוא זה שמחליט מתי סיים. */
         var patch = { photos: all, photosIncomplete: failed > 0,
                       updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date() };
         CBA.fb.mergeDoc("gardenReports", String(repId), patch, function (e2) {
