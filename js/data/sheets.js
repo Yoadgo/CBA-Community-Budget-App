@@ -306,6 +306,7 @@ CBA.sheets = (function () {
      בלי פרמטר (קוד ישן שלא עודכן) משתמשת במפתח משותף "_default" — תואם לאחור,
      אבל עדיין כדאי שכל קריאה חדשה תעביר מחרוזת-סיבה ייחודית משלה. */
   var dirtyReasons = Object.create(null);
+  var dirtySince = Object.create(null);   // מפתח → מתי סומן (לשומר, ממצא 01)
   var seqCounter = 0;      // מספר סידורי עולה, אחד לכל בקשת GET (טעינה/רענון)
   var lastAppliedSeq = 0;  // ה-seq הגבוה ביותר שבאמת יושם על CBA.mock עד כה
   var writeFloor = 0;      // תשובת GET עם seq <= זה נחשבת "עלולה להיות מלפני שמירה" - נדחית
@@ -319,6 +320,85 @@ CBA.sheets = (function () {
      ש-clearDirty רץ, תשובה ישנה שכזו עדיין יכולה לנחות ולדרוס את התוצאה.
      פונקציה אחת משותפת, נקראת מכל סוגי הכתיבה. */
   function bumpWriteFloor() { if (seqCounter > writeFloor) writeFloor = seqCounter; }
+
+  /* ============================================================================
+   *  שומר הכתיבות — להפוך כשל שקט לכשל רועש     (2026-09-17, ממצא 01)
+   * ----------------------------------------------------------------------------
+   *  כל המצבים כאן נראים למשתמש בדיוק אותו דבר: "קצת נתקע". בפועל הם עוצרים
+   *  את קליטת הנתונים לגמרי, ולכן הם צריכים להירפא מעצמם ולהשאיר עקבות.
+   *
+   *  שלוש הדליפות שהשומר סוגר:
+   *    1. מונה כתיבות שנשאר גבוה בלי שום בקשה באוויר (השורש של ממצא 01).
+   *    2. סיבת "עסוק" גלויה שלא נוקתה — טופס שנסגר באמצע, callback שזרק.
+   *    3. מאזין beforeunload יתום, שחוסם כל ניווט בדיאלוג "Leave site?".
+   *
+   *  ⚠️ סיבות שקטות (markDirty עם label===false — טופס פתוח, בורר פתוח) לא
+   *  נסחפות: הן לגיטימיות לאורך זמן בלתי מוגבל, וזה בדיוק מה שהן נועדו לעשות.
+   *
+   *  הספים: התקרה לכתיבה היא 60 שניות, ולכן הסף לסחיפה הוא 120 — כפול ממנה,
+   *  וגם מעל xhr.timeout=90000 של postReadProgress. שום מסלול תקין לא מגיע לשם.
+   * ========================================================================== */
+  var PUSH_TIMEOUT_MS  = 60000;    // תקרת זמן לכתיבה בודדת (push)
+  var STALE_BUSY_MS    = 120000;   // מעבר לזה — "עסוק" הוא תקוע, לא איטי
+  var WATCHDOG_TICK_MS = 15000;
+  var lastWriteStartedAt = 0;
+  var unloadGuards = [];           // {fn, at} — ר' סעיף 3 למעלה
+
+  /* דגל זמן ריצה. ברירת המחדל דלוקה; כיבוי ממסך "מצב המערכת" מחזיר בדיוק
+     את ההתנהגות שהייתה לפני 17.9, בלי דיפלוי. */
+  function watchdogOn() {
+    try {
+      if (window.CBA && CBA.fb && CBA.fb.flag) return CBA.fb.flag("writeWatchdog", true);
+    } catch (e) {}
+    return true;
+  }
+
+  function addUnloadGuard(fn) {
+    window.addEventListener("beforeunload", fn);
+    unloadGuards.push({ fn: fn, at: Date.now() });
+  }
+  function removeUnloadGuard(fn) {
+    window.removeEventListener("beforeunload", fn);
+    for (var i = unloadGuards.length - 1; i >= 0; i--) {
+      if (unloadGuards[i].fn === fn) unloadGuards.splice(i, 1);
+    }
+  }
+
+  function watchdogSweep() {
+    if (!watchdogOn()) return;
+    var now = Date.now();
+    var freed = [];
+
+    Object.keys(dirtyReasons).forEach(function (k) {
+      if (dirtyReasons[k] === "\u0000silent") return;
+      var since = dirtySince[k] || now;
+      if (now - since < STALE_BUSY_MS) return;
+      delete dirtyReasons[k];
+      delete dirtySince[k];
+      freed.push(k);
+    });
+
+    if (inFlightWrites > 0 && (now - lastWriteStartedAt) > STALE_BUSY_MS) {
+      freed.push("inFlightWrites=" + inFlightWrites);
+      inFlightWrites = 0;
+    }
+
+    for (var i = unloadGuards.length - 1; i >= 0; i--) {
+      if ((now - unloadGuards[i].at) <= STALE_BUSY_MS) continue;
+      window.removeEventListener("beforeunload", unloadGuards[i].fn);
+      unloadGuards.splice(i, 1);
+      freed.push("beforeunload");
+    }
+
+    if (!freed.length) return;
+    lastWriteHadError = true;
+    /* דרך noteFail ולא השמה ישירה — ר' ההערה שם: כל השמה ל-lastWriteErrorMsg
+       חייבת להשאיר שובל ב-js/ui/diag.js. */
+    noteFail("watchdog", "פעולה נתקעה ושוחררה אוטומטית (" + freed.join(", ") + "). אם השינוי לא נשמר — בצעו אותו שוב.");
+    console.warn("[CBA] שומר הכתיבות שחרר מצב תקוע:", freed.join(", "));
+    notifyDirtyChange();
+  }
+  setInterval(watchdogSweep, WATCHDOG_TICK_MS);
 
   /* --- חיווי "שומר…/נשמר ✓" גלובלי (2026-08-09) ---
      יועד ביקש שתמיד יהיה ברור אם משהו עדיין נשמר או שהשמירה הסתיימה — לכל
@@ -370,10 +450,21 @@ CBA.sheets = (function () {
                   הנכון ל"יש טופס פתוח עם עריכה שלא נשלחה" — עד היום מגירה
                   פתוחה גרמה לכותרת להכריז "שומר…" בזמן שלא נשמר כלום. */
   function markDirty(reason, label) {
-    dirtyReasons[reason || "_default"] = (label === false) ? "\u0000silent" : (label || true);
+    var key = reason || "_default";
+    dirtyReasons[key] = (label === false) ? "\u0000silent" : (label || true);
+    /* (2026-09-17, ממצא 01) חותמת זמן לכל סיבה — השומר למטה צריך אותה
+       כדי לדעת מה תקוע וממתי. לא מעדכנים בקריאה חוזרת על אותו מפתח:
+       markDirty אידמפוטנטי ונקרא שוב ושוב תוך כדי הקלדה, ועדכון היה דוחף את
+       השעון קדימה לנצח ומנטרל את השומר בדיוק במקרה שהוא נועד לו. */
+    if (!dirtySince[key]) dirtySince[key] = Date.now();
     notifyDirtyChange();
   }
-  function clearDirty(reason) { delete dirtyReasons[reason || "_default"]; notifyDirtyChange(); }
+  function clearDirty(reason) {
+    var key = reason || "_default";
+    delete dirtyReasons[key];
+    delete dirtySince[key];
+    notifyDirtyChange();
+  }
 
   /* (2026-08-20) תווית החיווי. עד היום app.js כתב "שומר…" קשיח, וזה היה לא
      מדויק לפעולות שאינן שמירה — שליחת בקשת מנוי, סריקת אישור תשלום בבינה
@@ -1190,7 +1281,54 @@ CBA.sheets = (function () {
     // כתיבה, מכל מסך, תחסום רענון רקע אוטומטית עד שהיא תיגמר (ר' isDirty למעלה),
     // ותפעיל את חיווי "שומר…" הגלובלי מיד (notifyDirtyChange).
     inFlightWrites++;
+    lastWriteStartedAt = Date.now();
     notifyDirtyChange();
+
+    /* ========================================================================
+     *  תקרת זמן לכתיבה        (2026-09-17, ממצא 01 בצוות האדום)
+     * ------------------------------------------------------------------------
+     *  🔴 הבאג החמור ביותר שנמצא בסבב של 17.9. ל-fetch של GET יש
+     *  GET_TIMEOUT_MS=30000, ול-postReadProgress יש xhr.timeout=90000 —
+     *  ולמסלול הכתיבה המרכזי **לא היה שום גבול**.
+     *
+     *  כש-Apps Script בהתעוררות קרה, הלשונית מושהית, או הרשת נופלת באמצע —
+     *  ה-Promise פשוט לא נפתר לעולם. inFlightWrites לא יורד, isDirty() נשאר
+     *  אמת לנצח, ו-apply() מסרב להחיל **כל רענון רקע**. מאותו רגע האפליקציה
+     *  מפסיקה לקלוט נתונים חדשים לגמרי, עד רענון עמוד — וזה מה שגרם לכך
+     *  שהגזבר לא ראה בקשת החזר שהוגשה דקות קודם.
+     *
+     *  העדות בשטח: isDirty()===true בזמן ש-pendingCount()===0 — כי תור
+     *  הניסיונות החוזרים מתמלא רק ב-catch, וה-catch לא רץ.
+     *
+     *  60 שניות ולא פחות: doPost נמדד בייצור עד 13.6 שניות, ושליחת דיווח
+     *  גינון עד ~38. תקרה נמוכה מדי תנפץ שמירות אמיתיות.
+     *
+     *  נפילה לאחור: הדגל writeWatchdog מכבה את התקרה ואת השומר בלי דיפלוי,
+     *  ממסך "מצב המערכת".
+     * ====================================================================== */
+    var released = false;
+    var pushTimer = null;
+    function releaseWrite() {
+      if (released) return false;
+      released = true;
+      if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+      inFlightWrites = Math.max(0, inFlightWrites - 1);
+      return true;
+    }
+    if (watchdogOn()) {
+      pushTimer = setTimeout(function () {
+        if (!releaseWrite()) return;
+        if (seqCounter > writeFloor) writeFloor = seqCounter;
+        lastWriteHadError = true;
+        /* לתור ולא לפח: אנחנו לא יודעים אם השרת כתב או לא. אם התשובה
+           תגיע באיחור, dequeueWrite למטה יסיר את הרשומה מעצמו. */
+        enqueueWrite(action, payload, _retryAttempt || 0);
+        noteFail(action, "השמירה לא קיבלה תשובה מהשרת בתוך דקה. השינוי נשמר אצלכם וננסה שוב.");
+        notifyDirtyChange();
+        try { if (window.CBA && CBA.diag) CBA.diag.log("כתיבה עברה את תקרת הזמן (" + action + ")"); } catch (e) {}
+      }, PUSH_TIMEOUT_MS);
+    }
+
     var body = Object.assign({ action: action, session: authSession() }, payload || {});
     var opts = {
       method: "POST",
@@ -1202,7 +1340,7 @@ CBA.sheets = (function () {
     fetch(API_URL, opts)
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        inFlightWrites = Math.max(0, inFlightWrites - 1);
+        releaseWrite();
         // ברגע שכתיבה הסתיימה — כל בקשת GET שנשלחה *לפני* הרגע הזה עלולה
         // לשקף מצב ישן מלפני השמירה, גם אם התשובה שלה עוד לא חזרה. מסמנים
         // את הרף הזה כדי שתשובה כזו, כשתחזור, תידחה כ"ישנה" (ר' fetchAndApply).
@@ -1225,7 +1363,7 @@ CBA.sheets = (function () {
         if (cb) cb(res && typeof res === "object" ? res : { ok: false, error: "תשובה לא תקינה מהשרת" });
       })
       .catch(function (err) {
-        inFlightWrites = Math.max(0, inFlightWrites - 1);
+        releaseWrite();
         if (seqCounter > writeFloor) writeFloor = seqCounter;
         lastWriteHadError = true;
         // כשל רשת (ולא דחייה של השרת) — זה בדיוק המקרה שבו ניסיון חוזר הגיוני.
@@ -1413,8 +1551,11 @@ CBA.sheets = (function () {
       e.returnValue = "";
       return "";
     }
-    window.addEventListener("beforeunload", onBeforeUnload);
-    function clearUnloadGuard() { window.removeEventListener("beforeunload", onBeforeUnload); }
+    /* (2026-09-17, ממצא 01) נרשם דרך addUnloadGuard כדי שהשומר יוכל להסיר
+       אותו אם משום מה אף אחד ממטפלי ה-XHR לא רץ. מאזין יתום כזה חוסם כל
+       ניווט ורענון בדיאלוג "Leave site?" של הדפדפן, בלי שום דרך להבין למה. */
+    addUnloadGuard(onBeforeUnload);
+    function clearUnloadGuard() { removeUnloadGuard(onBeforeUnload); }
 
     /* ============================================================================
      *  ⛔ אסור לרשום מאזין על xhr.upload — הוא שובר את הבקשה לגמרי
@@ -1815,5 +1956,7 @@ CBA.sheets = (function () {
 
   return { url: API_URL, load: load, refresh: refresh, refreshIfChanged: refreshIfChanged,
     applyPulse: applyPulse,
-    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, loadBudgetLogs: loadBudgetLogs, yearLoaded: yearLoaded, dropTxCache: dropTxCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending };
+    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, loadBudgetLogs: loadBudgetLogs, yearLoaded: yearLoaded, dropTxCache: dropTxCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending,
+    /* (2026-09-17, ממצא 01) חשופות לבדיקות ולמסך "מצב המערכת" — לא לשימוש ממסכים. */
+    _watchdogSweep: watchdogSweep, _busyDebug: function () { return { inFlight: inFlightWrites, reasons: Object.keys(dirtyReasons), guards: unloadGuards.length }; } };
 })();

@@ -917,6 +917,19 @@
      לעוגן קבוע בכותרת (#save-indicator-slot ב-index.html), עם fallback ל-body
      אם משום מה העוגן לא קיים (למשל דף ישן שלא רוענן עדיין). */
   var saveIndicatorHideTimer = null;
+  /* ============================================================================
+   *  חיווי שנתקע — הופך לאזהרה, לא נשאר טוען לנצח   (2026-09-17, ממצא 01)
+   * ----------------------------------------------------------------------------
+   *  בצוות האדום החיווי נתקע על "שומר…" לנצח, והמשתמש לא היה יכול לדעת שזו
+   *  תקלה ולא איטיות. sheets.js מטפל בשורש (תקרת זמן של 60 שניות + שומר),
+   *  וכאן מטפלים במה שהעין רואה.
+   *
+   *  45 שניות ולא פחות: שליחת דיווח גינון נמדדה ב-38, ואסור להבהיל על פעולה
+   *  שבאמת עובדת. הניסוח הוא אזהרה ולא כישלון — ברגע הזה עוד לא יודעים אם
+   *  השרת כתב או לא; הכישלון האמיתי מגיע מ-sheets.js בשנייה ה-60.
+   * ========================================================================== */
+  var SAVE_STUCK_MS = 45000;
+  var saveStuckTimer = null;
   function saveIndicatorEl() {
     var el = document.getElementById("cba-save-indicator");
     if (!el) {
@@ -959,12 +972,19 @@
     setTimeout(function () { if (window.CBA.measureHeader) CBA.measureHeader(); }, 0);
     var textEl = el.querySelector(".save-indicator__text");
     clearTimeout(saveIndicatorHideTimer);
+    clearTimeout(saveStuckTimer);
     if (d && d.dirty) {
       el.className = "save-indicator is-show";
       // (2026-08-20) התווית מגיעה עכשיו מ-sheets.js ולא קשיחה כאן — כדי
       // ש"סורק…"/"שולח בקשה…"/"מעלה קובץ…" יגידו את מה שבאמת קורה.
       if (textEl) textEl.textContent = (d.label || "שומר…");
       el.removeAttribute("title");
+      saveStuckTimer = setTimeout(function () {
+        if (!CBA.sheets.isDirty || !CBA.sheets.isDirty()) return;
+        el.className = "save-indicator is-show is-error";
+        if (textEl) textEl.textContent = "הפעולה מתעכבת";
+        el.title = "השרת עוד לא ענה. אל תסגרו את הדף — אם זה לא נגמר בעוד כמה שניות, נסו שוב.";
+      }, SAVE_STUCK_MS);
     } else if (d && d.error && CBA.sheets.pendingCount && CBA.sheets.pendingCount() > 0) {
       // כשל רשת שנכנס לתור הניסיונות החוזרים — החיווי "ממתין לשליחה" כבר
       // הוצג ע"י cba:pending-writes, והוא המדויק יותר מבין השניים ("נכשל"
@@ -1857,6 +1877,68 @@
       .catch(function () { loginError = "שגיאת תקשורת מול השרת."; showLoginGate(); });
   }
 
+  /* ============================================================================
+   *  ניקוי הנתונים מהזיכרון ומהמסך       (2026-09-17, ממצא 03 בצוות האדום)
+   * ----------------------------------------------------------------------------
+   *  🔴 עד היום "יציאה" מחקה את **המושב** בלבד. הנתונים נשארו ב-CBA.mock
+   *  והמסך המצויר נשאר במקומו מאחורי שער הכניסה: טבלת התושבים המלאה על 73
+   *  משקי הבית — שמות, מספרי בתים ומיילים — הייתה עדיין ב-DOM ובעץ הנגישות,
+   *  והניווט בין המסכים המשיך לעבוד ולצייר נתונים.
+   *
+   *  שער הכניסה הוא position:fixed עם רקע אטום, ולכן העין לא רואה את זה —
+   *  אבל קורא מסך כן, ו-CBA.mock בקונסולה בוודאי. במכשיר משפחתי משותף זו
+   *  בדיוק הפעולה שאנשים סומכים עליה.
+   *
+   *  ⚠️ לא delete על CBA.mock: ל-categories/income/transactions/budget/notes/
+   *  groups יש accessors שקוראים years[currentYear][k], וכל מסך שירוץ אחרי
+   *  המחיקה היה זורק. במקום זה — שלד ריק שכל ה-accessors מחזירים ממנו כלום.
+   * ========================================================================== */
+  function wipeMemoryData() {
+    try {
+      var m = window.CBA && CBA.mock;
+      if (!m) return;
+      m.years = { "": {
+        categories: [], income: [], transactions: [],
+        budget: { phase: "draft", lockedAt: null, baseline: null },
+        notes: { content: "", editedBy: "", editedAt: "" },
+        groups: []
+      } };
+      m.currentYear = "";
+      m.yearList = [];
+      m.budgetUpdates = [];
+      m.notesLog = [];
+      /* כל המטא שנכתב ע"י sheets.js (_source, _settings, _serverVersion,
+         _partial, _txFsOn, _logsLoaded…) — אחת אחת, לפי התחילית. */
+      Object.keys(m).forEach(function (k) {
+        if (k.charAt(0) === "_") { try { delete m[k]; } catch (e) {} }
+      });
+    } catch (e) {}
+  }
+
+  function wipeScreen() {
+    ["app-main", "app-nav", "app-controls", "year-switch"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = "";
+    });
+    /* חיווי השמירה יושב בכותרת ונוצר על פי דרישה — מסירים אותו לגמרי, כדי
+       שלא יישאר "נשמר ✓" מרחף מעל מסך הכניסה. */
+    var ind = document.getElementById("cba-save-indicator");
+    if (ind && ind.parentNode) ind.parentNode.removeChild(ind);
+    /* כל שכבה צפה שנפתחה מעל האפליקציה — מודל, מגירה, גיליון פעולות, טוסט.
+       ⚠️ לא רשימת מחלקות: מדדתי 20+ שמות שונים ברחבי המסכים (cba-modal,
+       drawer-backdrop, gt-sheet, gym-wiz__backdrop, tx-peek-overlay…), ורשימה
+       כזאת תתיישן במסך הבא שייבנה. הכלל היציב הוא הפוך — שומרים את שלד
+       האפליקציה, ומסירים כל ילד ישיר אחר של body. */
+    var SHELL = { "login-gate": 1 };
+    var KEEP_TAGS = { SCRIPT: 1, NOSCRIPT: 1, TEMPLATE: 1, LINK: 1, STYLE: 1 };
+    Array.prototype.slice.call(document.body.children).forEach(function (el) {
+      if (KEEP_TAGS[el.tagName]) return;
+      if (el.tagName === "HEADER" || el.tagName === "MAIN") return;
+      if (el.id && SHELL[el.id]) return;
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+  }
+
   function logout() {
     if (googleReady && google.accounts.id.disableAutoSelect) google.accounts.id.disableAutoSelect();
     if (window.CBA && CBA.fb) { try { CBA.fb.signOut(); } catch (e) {} }   // יציאה = יציאה משתי המערכות
@@ -1864,6 +1946,10 @@
     clearRoute();
     if (CBA.sheets.clearCache) CBA.sheets.clearCache();
     currentUser = null; loginError = null;
+    /* הסדר חשוב: קודם מנקים את המסך ואת הזיכרון, ורק אז מציירים את השער.
+       הפוך — וצייר מחדש כלשהו שירוץ באמצע עוד רואה נתונים. */
+    wipeScreen();
+    wipeMemoryData();
     renderControls();
     showLoginGate();
   }

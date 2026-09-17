@@ -476,6 +476,41 @@ function diagnosePermissions() {
 var GET_WRITE_ACTIONS = ['submitSignup', 'reserveClub', 'cancelClubReservation',
   'approveClubReservation', 'approveClubReservations', 'rejectClubReservation', 'assignResidentIds'];
 
+/* ============================================================================
+ *  listYears_ — מקור אחד לרשימת שנות התקציב        (2026-09-17, ממצא 18+09)
+ * ----------------------------------------------------------------------------
+ *  🔴 עד היום היו **שתי גזירות** לאותה רשימה:
+ *     doGet סרק את שמות הטאבים ולקח כל טאב שמתחיל ב-"תנועות ",
+ *     בעוד המראה, הסנכרון והתזכורת השנתית גזרו מהגדרת "שנים" בטאב ההגדרות.
+ *
+ *  זה התפוצץ ב-16.9: טאב הארכיון שנוסף למראת התנועות נקרא "תנועות שנמחקו",
+ *  ולכן doGet החזיר שנה בשם **"שנמחקו"** — והיא הופיעה בבורר השנים של *כל*
+ *  המשתמשים. מי שהיה בוחר אותה היה מקבל מסך תקציב הבנוי מהשורות המחוקות.
+ *
+ *  מהיום הגדרת "שנים" היא מקור האמת היחיד, וכל גזירה עוברת כאן.
+ *  נפילה לאחור: אם ההגדרה ריקה או חסרה (גיליון חדש / הגדרה שנמחקה בטעות),
+ *  חוזרים לסריקת הטאבים — כי בורר שנים ריק שובר את המסך לגמרי — אבל גם שם
+ *  מסננים במפורש את טאב הארכיון, כדי ששום מסלול לא יחזיר שנת רפאים.
+ * ========================================================================== */
+function listYears_(ss, settings) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  settings = settings || readSettings_(ss);
+  var years = String(settings['שנים'] || '').split(',')
+                .map(function (x) { return String(x).trim(); })
+                .filter(Boolean);
+  if (years.length) return years;
+
+  /* נפילה לאחור בלבד — ר' ההסבר למעלה. */
+  var PREFIX = 'תנועות ';
+  var fallback = [];
+  ss.getSheets().forEach(function (sh) {
+    var n = sh.getName();
+    if (n === BTX_ARCHIVE_TAB) return;
+    if (n.indexOf(PREFIX) === 0) fallback.push(n.substring(PREFIX.length));
+  });
+  return fallback;
+}
+
 function doGet(e) {
   try {
     // "מה מספר הגרסה?" (2026-08-19) — התשובה הזולה ביותר בקובץ: קריאת ערך
@@ -738,12 +773,9 @@ function doGet(e) {
      * בטאב תושבים, בלי צורך בהרשאת ניהול כלשהי. */
     var gate = authorize_(ss, e && e.parameter, null);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
-    var years = [];
-    ss.getSheets().forEach(function (sh) {
-      var n = sh.getName();
-      if (n.indexOf('תנועות ') === 0) years.push(n.substring('תנועות '.length));
-    });
+    /* (2026-09-17, ממצא 18) הרשימה נגזרת מ-listYears_ ולא משמות טאבים. */
     var settings = readSettings_(ss);
+    var years = listYears_(ss, settings);
     /* כל הגדרה ששמה מכיל "סיסמ" לא נשלחת ללקוח (2026-08-07) — רשת ביטחון
      * גורפת, כדי שסוד שיתווסף בעתיד לטאב ההגדרות לא ידלוף בטעות.
      * (2026-08-24) חריג מפורש אחד: קוד הרשת האלחוטית של המועדון. הוא לא סוד
@@ -3945,11 +3977,7 @@ function testClubReserve() {
  * עצמה היא "שגר ושכח" (no-cors) והדפדפן לא יכול לקרוא את השגיאה בחזרה. */
 function testSubmitReceipt() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var years = [];
-  ss.getSheets().forEach(function (sh) {
-    var n = sh.getName();
-    if (n.indexOf('תנועות ') === 0) years.push(n.substring('תנועות '.length));
-  });
+  var years = listYears_(ss);   /* (2026-09-17) מקור אחד לרשימה — ר' listYears_ */
   var tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
   var result = submitReceipt_(ss, {
     year: years[0], expenseType: 'refund', amount: 10,
@@ -6647,7 +6675,16 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
         פעולות הניהול מחזיקות לוגיקה עסקית שכלל אבטחה אינו יודע
         לאכוף — "חובה לכתוב מה נעשה", "ביטול רק בתוך חלון
         הערעור". הן כותבות לגיליון ומסנכרנות מיד. */
-  'gardenTasksFromFirestore'];
+  'gardenTasksFromFirestore',
+  /* 🔴 **שומר הכתיבות** (2026-09-17, ממצא 01 בצוות האדום) — הדגל היחיד
+     ברשימה שאינו מתג מיגרציה אלא **מתג ביטול לרשת ביטחון**.
+     כשהוא דלוק (ברירת המחדל), כתיבה שלא קיבלה תשובה תוך 60 שניות
+     משוחררת אוטומטית ונכנסת לתור הניסיונות החוזרים, ושומר שרץ כל 15
+     שניות משחרר מצב "עסוק" שנתקע מעל שתי דקות.
+     ⚠️ כיבוי מחזיר בדיוק את ההתנהגות שלפני 17.9 — כולל הבאג שבגללו
+        האפליקציה מפסיקה לקלוט נתונים חדשים עד רענון עמוד. מכבים רק אם
+        מתברר שהשומר עצמו מנתק שמירות אמיתיות. */
+  'writeWatchdog'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {
