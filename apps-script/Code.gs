@@ -13383,13 +13383,21 @@ function gardenMaterializeWeek_(ss, weekKey) {
      ישירה מההגדרות (ר' gardenCreateTask_), וזה מה שנעשה כאן. שם פונקציה
      שאינו קיים היה נופל ב-ReferenceError בזמן ריצה ולא בבדיקת התחביר. */
   var year = readSettings_(ss)['שנה נוכחית'] || '';
-  /* ⚠️ מהמונה (ממצא 21). היא נקראת **פעם אחת** לכל הריצה והמזהים
-     נגזרים ממנה בהמשכים — זו ההתנהגות הקיימת, והנעילה שנוספה ב-16.9
-     היא מה שמגן עליה משתי ריצות חופפות. */
-  var nextId = gardenAllocId_(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER);
+  /* 🔴 **מסננים לפני שמקצים** (תוקן 17.9 אחרי אימות חי של גרסה 149).
+     הגרסה הראשונה של התיקון הקצתה מזהה בראש הפונקציה, לפני הסינון —
+     והיא רצה **כל שעה** גם כשאין מה ליצור. נמדד בייצור: המונה עמד על
+     51 בזמן שהמזהה הגבוה בפועל הוא 50, כלומר מזהה נשרף על לא כלום.
+     מה שגרוע יותר: היא הקצתה **אחד** והמשיכה ב-`nextId++`, כך שיצירת
+     חמש שגרות הייתה מקדמת את המונה באחד ולוקחת חמישה מזהים — וההקצאה
+     הבאה הייתה מתנגשת בהן. שתי התקלות נסגרות באותו שינוי: קודם יודעים
+     כמה שורות באמת ייווצרו, ואז מקצים בלוק בגודל הזה. */
+  var todo = want.filter(function (w) {
+    return !seen[w.def.id + '|' + weekKey + '|' + w.area];
+  });
+  if (!todo.length) return 0;
+  var nextId = gardenAllocId_(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER, todo.length);
   var add = [];
-  want.forEach(function (w) {
-    if (seen[w.def.id + '|' + weekKey + '|' + w.area]) return;
+  todo.forEach(function (w) {
     var row = new Array(sh.getLastColumn()).fill('');
     function set(k, val) { if (c[k] !== undefined) row[c[k]] = val; }
     set('מזהה', nextId++);
@@ -14042,7 +14050,12 @@ function gardenMaxIdInSheet_(ss, sheetName) {
  *     כלומר חוזרים לסכנת המיחזור — ולכן זה נרשם ללוג ההפעלות תחת
  *     `CBA-ID-FALLBACK` ולא קורה בשקט.
  * ========================================================================== */
-function gardenAllocId_(ss, sheetName, counterId) {
+function gardenAllocId_(ss, sheetName, counterId, count) {
+  /* ⚠️ **בלוק ולא מזהה בודד, ומחזירה את הראשון בבלוק.** מי שיוצר כמה
+     שורות בבת אחת (תוכנית העבודה) לא יכול להקצות אחד ולהמשיך ב-++:
+     המונה היה עולה באחד בזמן שחמישה מזהים נלקחו, וההקצאה הבאה הייתה
+     מתנגשת. זה נתפס באימות החי של גרסה 149 ולא בבדיקות. */
+  var k = Math.max(1, parseInt(count, 10) || 1);
   var sh = ss.getSheetByName(sheetName);
   var sheetMax = sh ? Math.max(nextGardenId_(sh) - 1, 0) : 0;
   var path = fsDocPath_(FS_COUNTERS, counterId);
@@ -14050,17 +14063,19 @@ function gardenAllocId_(ss, sheetName, counterId) {
     try {
       var cur = fsGet_(path);
       var have = (cur && !isNaN(parseInt(cur.n, 10))) ? parseInt(cur.n, 10) : -1;
-      var n = Math.max(have, sheetMax) + 1;
-      fsSet_(path, { n: n, schema: 1, updatedAt: new Date() });
+      var first = Math.max(have, sheetMax) + 1;
+      var last = first + k - 1;
+      fsSet_(path, { n: last, schema: 1, updatedAt: new Date() });
       var back = fsGet_(path);
-      if (back && parseInt(back.n, 10) === n) return n;
+      if (back && parseInt(back.n, 10) === last) return first;
     } catch (e) {
       Logger.log('CBA-ID-FALLBACK ' + counterId + ' — Firestore לא זמין: ' + e);
       break;
     }
   }
   var fb = sh ? nextGardenId_(sh) : 1;
-  Logger.log('CBA-ID-FALLBACK ' + counterId + ' — חזרה לגיליון, הוקצה ' + fb);
+  Logger.log('CBA-ID-FALLBACK ' + counterId + ' — חזרה לגיליון, הוקצה ' + fb +
+             ' (בלוק של ' + k + ')');
   return fb;
 }
 

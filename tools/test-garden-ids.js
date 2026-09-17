@@ -28,7 +28,7 @@ ok('🔴 Math.max(מונה, גיליון) + 1 — ולא מונה+1 ולא גי�
 ok('היא קוראת מהמונה הקיים ולא בונה מנגנון שני',
    /fsDocPath_\(FS_COUNTERS, counterId\)/.test(fn), fn);
 ok('⚠️ אימות חוזר אחרי הכתיבה — אין עסקאות ב-REST',
-   /var back = fsGet_\(path\);[\s\S]{0,120}parseInt\(back\.n, 10\) === n/.test(fn), fn);
+   /var back = fsGet_\(path\);[\s\S]{0,120}parseInt\(back\.n, 10\) === last/.test(fn), fn);
 ok('🔴 שלושה ניסיונות, לא אחד', /attempt < 3/.test(fn), fn);
 ok('מונה חסר נקרא כ--1 ולכן לא מוריד כלום', /: -1;/.test(fn), fn);
 
@@ -40,8 +40,8 @@ ok('⚠️ ולא return שקט', !/return nextGardenId_\(sh\);\s*\n\}/.test(fn)
 section('3. שלוש נקודות ההקצאה של מרחב הגינון עברו');
 ok('🔴 דיווח תושב — משימה ודיווח, שניהם מהמונה',
    /var taskId = gardenAllocId_\(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER\);[\s\S]{0,80}var repId  = gardenAllocId_\(ss, GARDEN_REPORTS_SHEET, GARDEN_REPORT_COUNTER\);/.test(GS));
-ok('🔴 משימת שגרה (gardenMaterializeWeek_) — מהמונה',
-   /var nextId = gardenAllocId_\(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER\);/.test(GS));
+ok('🔴 משימת שגרה (gardenMaterializeWeek_) — מהמונה, ובבלוק',
+   /var nextId = gardenAllocId_\(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER, todo\.length\);/.test(GS));
 ok('🔴 משימה שמנהל פותח ידנית — מהמונה',
    /var id = gardenAllocId_\(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER\);/.test(GS));
 
@@ -63,6 +63,21 @@ ok('שני שמות המונים מוגדרים במקום אחד',
    /var GARDEN_TASK_COUNTER   = 'gardenTask';/.test(GS));
 ok('⚠️ gardenMaterializeWeek_ לוקחת נעילה — שתי ריצות חופפות כבר הקצו אותו מזהה',
    /tryLock\(10000\)/.test(GS));
+
+section('6. 🔴 בלוק, לא מזהה בודד — שתי התקלות שנתפסו באימות החי של 149');
+ok('gardenAllocId_ מקבלת גודל בלוק', /function gardenAllocId_\(ss, sheetName, counterId, count\)/.test(GS));
+ok('🔴 והיא מקדמת את המונה בגודל הבלוק, לא באחד',
+   /var last = first \+ k - 1;[\s\S]{0,120}fsSet_\(path, \{ n: last,/.test(fn), fn);
+ok('🔴 ומחזירה את הראשון בבלוק', /return first;/.test(fn), fn);
+ok('⚠️ גודל לא תקין נופל ל-1', /Math\.max\(1, parseInt\(count, 10\) \|\| 1\)/.test(fn), fn);
+const mat = (GS.match(/var todo = want\.filter[\s\S]*?var add = \[\];/) || [''])[0];
+ok('🔴 תוכנית העבודה מסננת לפני שהיא מקצה', !!mat && /if \(!todo\.length\) return 0;/.test(mat), mat);
+ok('🔴 ההקצאה היא בגודל todo.length',
+   /gardenAllocId_\(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER, todo\.length\)/.test(GS));
+ok('⚠️ הסינון קרה פעם אחת — הלולאה כבר לא בודקת seen',
+   /todo\.forEach\(function \(w\) \{\s*\n\s*var row = new Array/.test(GS));
+ok('⚠️ ושריפת מזהה על ריצה ריקה אינה אפשרית יותר',
+   GS.indexOf('if (!todo.length) return 0;') < GS.indexOf('var nextId = gardenAllocId_'));
 
 console.log('\n' + (fail ? '✗ ' : '✓ ') + pass + ' עברו · ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

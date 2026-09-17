@@ -256,7 +256,8 @@ ok('🔴 הפונקציה לוקחת נעילה', /LockService\.getScriptLock\(\
 ok('⚠️ הנעילה נלקחת לפני הקצאת המזהה',
    MAT.indexOf('tryLock') !== -1 &&
    MAT.indexOf('tryLock') < MAT.indexOf('var nextId = gardenAllocId_'));
-ok('🔴 וההקצאה עצמה היא מהמונה', /var nextId = gardenAllocId_\(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER\);/.test(MAT));
+ok('🔴 וההקצאה עצמה היא מהמונה, בבלוק בגודל מה שייווצר',
+   /var nextId = gardenAllocId_\(ss, GARDEN_TASKS_SHEET, GARDEN_TASK_COUNTER, todo\.length\);/.test(MAT));
 ok('ומשוחררת ב-finally', /finally \{ mLock\.releaseLock\(\); \}/.test(MAT));
 /* נעילה תפוסה — מדלגים בשקט ולא מתרסקים ולא כותבים. */
 reset();
