@@ -6684,7 +6684,15 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
      ⚠️ כיבוי מחזיר בדיוק את ההתנהגות שלפני 17.9 — כולל הבאג שבגללו
         האפליקציה מפסיקה לקלוט נתונים חדשים עד רענון עמוד. מכבים רק אם
         מתברר שהשומר עצמו מנתק שמירות אמיתיות. */
-  'writeWatchdog'];
+  'writeWatchdog',
+  /* 🔴🔴 **מתג החירום של הנפילה לאחור** (2026-09-17, ממצא 02 — הכרעת יועד).
+     כבוי כברירת מחדל, ובכוונה: מאז 17.9 כשל Firestore **אינו** מחזיר את
+     המסך ל-Apps Script בשקט, אלא מציג "לא הצלחנו לטעון" עם "נסה שוב".
+     הדלקה מחזירה את ההתנהגות הישנה **לכל התחומים בבת אחת** — זה הכלי
+     לתקלה רוחבית ב-Firestore, ולכן הוא אחד וגורף ולא אחד לכל תחום.
+     ⚠️ אינו נוגע ב-`disabled`/`flag-off`: תחום שלא עבר, או שדגל המיגרציה
+        שלו כבוי, ממשיך ב-Apps Script כרגיל בלי קשר למתג הזה. */
+  'appsScriptFallback'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
 function flagsSet_(key, value) {
@@ -12909,7 +12917,17 @@ function gardenFeedback_(ss, body) {
         });
       } catch (e) { /* לא קריטי */ }
     }
-    return { ok: true };
+    /* 🔴🔴 **`taskId` חוזר — וזה השורש של ממצא 20** (2026-09-17).
+       הפונקציה כותבת `דגל = 'דורש בדיקה חוזרת'` לשורת ה**משימה**, אבל
+       `gardenAfterWrite_` מחריגה במפורש את `gardenFeedback` מ-`addTask(body.id)`
+       — ובצדק, כי שם `body.id` הוא מזהה **דיווח**. בלי החזרת `taskId`
+       מסמך המשימה ב-Firestore לא סונכרן **לעולם**, ולכן הדגל נכתב לגיליון
+       ומעולם לא הגיע למסך המנהל.
+       זה מה שגרם לכך שכרטיס בתור "דורש החלטה" הציג כפתור אחד — היסטוריה —
+       בלי תג "דורש בדיקה חוזרת" ובלי שום פעולה להחליט בה.
+       ⚠️ `taskId` ריק (דיווח שעוד לא שובץ) פשוט לא מוסיף כלום: `addTask`
+          מסנן מחרוזת ריקה. */
+    return { ok: true, taskId: taskId };
   }
   return { ok: false, error: 'הדיווח לא נמצא' };
 }
@@ -13871,8 +13889,10 @@ function gardenSendReportMail_(ss, id) {
 
     /* ⚠️ מורידים את הדגל גם כששליחה אחת נכשלה: ניסיון חוזר שעתי
        על תבנית שבורה היה הופך לנודניק אינסופי. השגיאה מתועדת. */
-    fsSet_(fsDocPath_(FS_GARDEN_REPORTS, id),
-           { mailPending: false, mailedAt: new Date() });
+    /* (2026-09-17) fsMerge_ ולא fsSet_ — אובייקט חלקי. fsSet_ היה מוחק כאן
+       את כל שאר שדות מסמך הדיווח. ר' ההסבר המלא ליד fsMerge_ ב-Firestore.gs. */
+    fsMerge_(fsDocPath_(FS_GARDEN_REPORTS, id),
+             { mailPending: false, mailedAt: new Date() });
     out.ok = true;
   } catch (err) { out.error = String(err); }
   return out;
@@ -13924,7 +13944,8 @@ function gardenPhotosIncomplete_(ss) {
       var want = parseInt(d.photosExpected, 10) || 0;
       stale.push('#' + (d.id || docs[i].id) + ' (' + got + '/' + want + ')');
       try {
-        fsSet_(fsDocPath_(FS_GARDEN_REPORTS, docs[i].id), { photosNudged: true });
+        /* (2026-09-17) fsMerge_ ולא fsSet_ — שדה בודד, ר' Firestore.gs. */
+        fsMerge_(fsDocPath_(FS_GARDEN_REPORTS, docs[i].id), { photosNudged: true });
       } catch (e) { out.errors.push(docs[i].id + ': ' + String(e)); }
     }
     if (stale.length) {
@@ -14081,6 +14102,9 @@ function gardenReportSyncSome_(ss, ids) {
       if (!ctx) ctx = gardenReportCtx_(ss);
       var o = gardenReportRow_(rows[r], rc, ctx.tasks, ctx.closeWhy, ctx.fbDays, ctx.now);
       fsSet_(fsDocPath_(FS_GARDEN_REPORTS, id), gardenReportDoc_(o, famId));
+      /* התאמה ראשונה בלבד — אותו נימוק בדיוק כמו במשימות (ממצא 28).
+         מזהי דיווחים ממוחזרים גם הם: הדיווח שנפתח ב-17.9 קיבל שוב #8. */
+      delete want[id];
       n++;
     }
     return n;
@@ -14113,19 +14137,47 @@ function gardenTaskSyncSome_(ss, ids) {
     if (!sh || sh.getLastRow() < 2) return 0;
     var c = gardenCols_(sh), v = sh.getDataRange().getValues();
     var want = {}; ids.forEach(function (i) { want[i] = 1; });
+    /* 🔎 מזהה כפול הוא ממצא, לא רעש. אחרי `delete want[o.id]` השורה השנייה
+       פשוט מדולגת — וזה בדיוק המצב שאסור שיישאר שקט, כי הוא אומר שהגיליון
+       מחזיק שתי משימות שונות עם אותו מספר. נרשם ללוג ההפעלות עם תחילית
+       קבועה כדי שיהיה אפשר לחפש אותו. */
+    var wanted = {}; ids.forEach(function (i) { wanted[i] = 1; });
+    var dupes = [];
     var refs = null, n = 0;
     for (var r = 1; r < v.length; r++) {
       var o = gardenTaskObj_(v[r], c);
+      if (o.id && wanted[o.id] && !want[o.id]) dupes.push(o.id + '@' + (r + 1));
       if (!o.id || !want[o.id]) continue;
       if (!refs) refs = gardenReportRefs_(ss);
       var doc = gardenTaskDoc_(o, r);
       if (refs.repOf[o.id]) doc.repId = refs.repOf[o.id];
       if (refs.photoOf[o.id]) doc.photos = refs.photoOf[o.id];
       fsSet_(fsDocPath_(FS_GARDEN_TASKS, o.id), doc);
+      /* 🔴🔴 **התאמה ראשונה בלבד** (2026-09-17, ממצא 28 בצוות האדום).
+         עד היום הלולאה סרקה את **כל** השורות וכתבה כל התאמה לאותו נתיב
+         מסמך — כלומר כשיש שתי שורות עם אותו מזהה, **האחרונה מנצחת**.
+         `gardenFindTask_` לעומתה סוגרת את ה**ראשונה**. התוצאה: המנהל
+         לוחץ "סימון כבוצע", השורה הראשונה נסגרת בגיליון, היומן מראה
+         `ביצוע · בוצע` — ואז הסנכרון דורס את המסמך בשורה השנייה,
+         הפתוחה. אחרי רענון המשימה חוזרת ל"פתוחות".
+         ⚠️ מזהים כפולים אינם תיאוריה: תועדו בייצור שתי שורות עם מזהה
+            12 ושתיים עם 37, וממצא 21 מתעד שלוש משימות עם #50 — כי
+            המזהה הוא "השורה הפנויה הבאה" וממוחזר אחרי מחיקה.
+         🔑 הסנכרון חייב לכתוב מ**אותה שורה** שהכתיבה נגעה בה, ולכן
+            "ראשונה מנצחת" בשני המקומות. */
+      delete want[o.id];
       n++;
     }
+    if (dupes.length) {
+      Logger.log('CBA-DUP-TASK: מזהי משימות כפולים בטאב — ' + dupes.join(', '));
+    }
     return n;
-  } catch (e) { return 0; }
+  } catch (e) {
+    /* ⚠️ עד 17.9 היה כאן `return 0` שקט לחלוטין, וכשל כתיבה ל-Firestore היה
+       בלתי נראה — זה מה שהפך את אבחון ממצא 28 לארוך. */
+    Logger.log('CBA-SYNC-FAIL gardenTaskSyncSome_: ' + String(e));
+    return 0;
+  }
 }
 
 /** אחרי פעולת כתיבה בגינון: לסנכרן בדיוק את מה שהיא נגעה בו.

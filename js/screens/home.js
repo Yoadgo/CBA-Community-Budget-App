@@ -387,7 +387,13 @@ CBA.screens = CBA.screens || {};
       } else if (CBA.data.getGardenTasks) {
         lazyCache.gardenTs = Date.now();
         CBA.data.getGardenTasks({ scope: "pending" }, function (res) {
-          var n = (res && res.ok) ? (res.rows || []).length : 0;
+          /* 🔴 **כשל אינו אפס** (2026-09-17, ממצא 02). קודם כל כשל הפך כאן
+             ל-0 והוצג כמו "אין מה לאשר" — ועוד נשמר ל-lazyCache, כך שהאפס
+             השקרי נדבק גם לרענונים הבאים בחלון הטריות.
+             מהיום: לא טוענים, לא זוכרים, ולא מציירים שורה. בדיוק כמו
+             ש-loadMyGarden כבר עושה שתי שורות למטה. */
+          if (!res || !res.ok) { lazyCache.gardenTs = 0; return done(slotN, ""); }
+          var n = (res.rows || []).length;
           lazyCache.garden = n;
           done(slotN, gardenRow(n));
         });

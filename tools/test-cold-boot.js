@@ -166,7 +166,7 @@ section('5. 🔴🔴 app.js — הזהות נקבעת לפני המשיכה');
 ok('נתיב עליית העמוד קורא ל-applyUser לפני load',
    /if \(currentUser\) \{ applyUser\(\); CBA\.sheets\.load\(sheetsLoadHandler\); \}/.test(APP));
 ok('🔴 וגם נתיב ההתחברות',
-   /currentUser = data;[\s\S]{0,800}applyUser\(\);[\s\S]{0,1200}CBA\.sheets\.load\(/.test(APP));
+   /currentUser = data;[\s\S]{0,800}applyUser\(\);[\s\S]{0,2400}CBA\.sheets\.load\(/.test(APP));
 /* 🔴 שלוש נקודות כניסה בלבד, ושתיהן שמתחילות טעינה **מאפס** קובעות
    זהות קודם. השלישית היא כפתור "נסה שוב" שבתוך פאנל השגיאה —
    הוא מופיע רק אחרי ש-`sheetsLoadHandler` כבר רץ, כלומר

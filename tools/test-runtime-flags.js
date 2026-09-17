@@ -53,7 +53,7 @@ reset();
 ok('FS_FLAGS_DOC = appConfig/flags', sandbox.FS_FLAGS_DOC === 'appConfig/flags', sandbox.FS_FLAGS_DOC);
 /* 🔴 המספר עולה עם כל תחום שעובר. מה שחשוב הוא שהרשימה **סגורה** —
    דגל שאינו בה נדחה, ולכן שם שגוי ב-flagSet לא מדליק כלום בשקט. */
-ok('ארבעה-עשר דגלים ברשימה', sandbox.FLAG_KEYS.length === 14, JSON.stringify(sandbox.FLAG_KEYS));
+ok('חמישה-עשר דגלים ברשימה', sandbox.FLAG_KEYS.length === 15, JSON.stringify(sandbox.FLAG_KEYS));
 /* 🔴 צעד 12 — הסיור והשריון הקרוב. שני דגלים ולא אחד: שני תחומים,
    שני כללי אבטחה, וכיבוי של אחד חייב להשאיר את השני עובד. */
 ok('tourFromFirestore ו-clubResvFromFirestore — שני המתגים של צעד 12',
@@ -144,7 +144,7 @@ ok('כישלון כתיבה נתפס', g.ok === false && /503/.test(g.error), JS
 reset(); sandbox.authorize_ = () => ({ ok: true, perm: { isSuper: true } });
 store = { servicesFromFirestore: true, gardenPlanFromFirestore: false };
 g = sandbox.handleFlagsGet_({});
-ok('flagsGet מחזירה מצב ורשימה', g.ok === true && g.keys.length === 14 && g.flags.servicesFromFirestore === true,
+ok('flagsGet מחזירה מצב ורשימה', g.ok === true && g.keys.length === 15 && g.flags.servicesFromFirestore === true,
    JSON.stringify(g));
 sandbox.authorize_ = realAuth;
 
@@ -175,8 +175,10 @@ ok('⚠️ flags() מחזירה null כשלא נקרא', fb.flags() === null);
 
 section('7. הלקוח — המתג נבדק במקום הנכון');
 ok('fsFirstRead בודקת את הדגל החי', /CBA\.fb\.flag\(key \+ "FromFirestore", enabled\)/.test(DS));
-ok('🔑 אחרי authReady',
-   DS.indexOf('CBA.fb.authReady(function (user)') < DS.indexOf('CBA.fb.flag(key + "FromFirestore"'));
+/* (2026-09-17, ממצא 02) authReady הוחלף ב-userReady — ר' pendingSignIn
+   ב-firebase.js. הסדר שנבדק כאן לא השתנה: קודם המתנה למשתמש, אחר כך הדגל. */
+ok('🔑 אחרי ההמתנה למשתמש',
+   DS.indexOf('CBA.fb.userReady || CBA.fb.authReady') < DS.indexOf('CBA.fb.flag(key + "FromFirestore"'));
 /* 🔴🔴 **הבאג שנתפס חי ב-15.9:** `authReady` אינו מחכה לטעינת
    הדגלים, ולכן קריאה שיצאה בדקות הראשונות קיבלה את ברירת
    המחדל שבקוד במקום את הדגל — כלומר **מתג הכיבוי לא עבד**.
@@ -184,7 +186,19 @@ ok('🔑 אחרי authReady',
 ok('🔴🔴 והדגל נבדק רק אחרי ensureDb (שם הדגלים נקראים)',
    DS.indexOf('CBA.fb.ensureDb(function (dbErr)') !== -1 &&
    DS.indexOf('CBA.fb.ensureDb(function (dbErr)') < DS.indexOf('CBA.fb.flag(key + "FromFirestore"'));
-ok('🔴 וכשל ב-ensureDb הוא נפילה לאחור', /viaSheets\("db:"/.test(DS));
+/* 🔴🔴 **המדיניות התהפכה ב-17.9 (ממצא 02, הכרעת יועד):** כשל ב-ensureDb
+   הוא **כשל**, לא נפילה לאחור שקטה. הנפילה נשארת רק למצבים שהם החלטה —
+   תחום שלא עבר (`disabled`) או דגל מיגרציה שכובה (`flag-off`) — ולמתג
+   החירום `appsScriptFallback`, שכבוי כברירת מחדל. */
+ok('🔴 וכשל ב-ensureDb הוא כשל, לא נפילה שקטה', /viaFailure\("db:"/.test(DS) && !/viaSheets\("db:"/.test(DS));
+ok('🔴 וגם no-user וגם כשל הקריאה עצמה',
+   /viaFailure\("no-user"\)/.test(DS) && /viaFailure\("firestore:"/.test(DS));
+ok('⚠️ אבל disabled ו-flag-off נשארים נפילה לאחור — הם החלטה ולא תקלה',
+   /viaSheets\("disabled"\)/.test(DS) && /viaSheets\("flag-off"\)/.test(DS));
+ok('🔑 ומתג החירום גורף, כבוי כברירת מחדל',
+   /CBA\.fb\.flag\("appsScriptFallback", false\)/.test(DS) &&
+   /if \(fallbackOn\(\)\) return viaSheets\("fallback:" \+ why\);/.test(DS));
+ok('⚠️ והוא ברשימת הדגלים הסגורה', sandbox.FLAG_KEYS.indexOf('appsScriptFallback') !== -1);
 ok('⚠️ ולפני הקריאה לנתונים',
    DS.indexOf('CBA.fb.flag(key + "FromFirestore"') < DS.indexOf('load(function (err, result)'));
 ok('הסיבה נרשמת כ-flag-off', /viaSheets\("flag-off"\)/.test(DS));

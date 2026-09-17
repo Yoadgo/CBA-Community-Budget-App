@@ -69,6 +69,30 @@ CBA.fb = (function () {
   var waiters = [];     // מי שביקש את ה-SDK בזמן שהוא עוד בדרך
   var dbWaiters = [];
   var authWaiters = [];
+  /* ============================================================================
+   *  "התחברות בדרך"   (2026-09-17, ממצא 02 בצוות האדום)
+   * ----------------------------------------------------------------------------
+   *  🔴 `authKnown` עונה על שאלה אחת: **האם onAuthStateChanged דיווח פעם**.
+   *  הוא אינו עונה על "האם יהיה משתמש" — ובדפדפן חדש, בלי persistence,
+   *  הדיווח הראשון מגיע מיד עם `null`, הרבה לפני שההתחברות בכלל התחילה
+   *  (היא נדחית בכוונה ב-5 שניות ב-app.js, כדי לא להתחרות במטען).
+   *
+   *  התוצאה שנמדדה בייצור: `budgetTx appsscript 3111ms (no-user)` —
+   *  **בכניסה הראשונה לסשן**. כל קריאה בשניות הראשונות ראתה "אין משתמש",
+   *  נפלה ל-Apps Script, וקראה מהגיליון שמתעדכן רק בעבודה השעתית.
+   *  תושב שהגיש בקשה לפני חמש דקות פשוט לא ראה אותה.
+   *
+   *  `pendingSignIn` מפריד בין "אין משתמש" לבין "עוד לא". `expectUser()`
+   *  נקראת ברגע שידוע שיש טוקן גוגל, **לפני** שההתחברות יוצאת לדרך.
+   * ========================================================================== */
+  var pendingSignIn = false;
+  var userWaiters = [];
+
+  function settleUser(u) {
+    pendingSignIn = false;
+    var list = userWaiters; userWaiters = [];
+    list.forEach(function (fn) { try { fn(u); } catch (e) {} });
+  }
 
   function log(msg, extra) {
     try { console.log("[CBA.fb] " + msg, extra === undefined ? "" : extra); } catch (e) {}
@@ -138,6 +162,9 @@ CBA.fb = (function () {
           state.authKnown = true;
           var list = authWaiters; authWaiters = [];
           list.forEach(function (fn) { try { fn(state.user); } catch (e) {} });
+          /* ⚠️ רק משתמש **אמיתי** משחרר את הממתינים. דיווח `null` הוא בדיוק
+             המצב שבגללו הם מחכים — ר' ההסבר ליד pendingSignIn. */
+          if (state.user) settleUser(state.user);
         });
         log("SDK מוכן, גרסה " + SDK_VERSION);
         settle(null);
@@ -156,7 +183,7 @@ CBA.fb = (function () {
     cb = cb || function () {};
     if (!googleIdToken) return cb(new Error("אין טוקן גוגל"));
     ensure(function (err) {
-      if (err) { state.lastError = err; return cb(err); }
+      if (err) { state.lastError = err; settleUser(null); return cb(err); }
       try {
         var auth = window.firebase.auth();
         var cred = window.firebase.auth.GoogleAuthProvider.credential(googleIdToken);
@@ -170,14 +197,16 @@ CBA.fb = (function () {
           /* השגיאה הצפויה אם משהו בקונסולה לא הוגדר היא
              auth/invalid-credential או audience mismatch. רושמים ומשחררים. */
           log("התחברות נכשלה: " + (e && (e.code || e.message)));
+          settleUser(null);   /* לא לתקוע מחכים 12 שניות על התחברות שכבר נכשלה */
           cb(e);
         });
-      } catch (e) { state.lastError = e; log("חריגה: " + e.message); cb(e); }
+      } catch (e) { state.lastError = e; log("חריגה: " + e.message); settleUser(null); cb(e); }
     });
   }
 
   function signOut() {
     state.user = null;
+    settleUser(null);
     try {
       if (state.loaded && window.firebase && window.firebase.apps.length) {
         window.firebase.auth().signOut()["catch"](function () {});
@@ -210,6 +239,40 @@ CBA.fb = (function () {
         cb(state.user);           // מה שידוע עד כה, ולא המתנה לנצח
       }, timeoutMs || 4000);
       authWaiters.push(function (u) {
+        if (done) return;
+        done = true; clearTimeout(t);
+        cb(u);
+      });
+    });
+  }
+
+  /** מסמנת שהתחברות ל-Firebase מתוכננת ועוד לא יצאה לדרך.
+   *  נקראת ברגע שיש טוקן גוגל ביד — ר' ההסבר ליד pendingSignIn. */
+  function expectUser() {
+    if (state.user) return;
+    pendingSignIn = true;
+  }
+
+  /** כמו authReady, אבל מחכה ל**משתמש** ולא רק ל"ידוע".
+   *  cb(user|null). לעולם לא מחכה יותר מ-timeoutMs (ברירת מחדל 12ש').
+   *
+   *  🔑 ההבדל היחיד מ-authReady: כשידוע שהתחברות בדרך, `null` אינו תשובה.
+   *  כשאין התחברות בדרך — ההתנהגות זהה לחלוטין לאתמול, ולכן רענון עמוד
+   *  של משתמש מחובר (persistence) אינו משלם שום המתנה. */
+  function userReady(cb, timeoutMs) {
+    cb = cb || function () {};
+    ensure(function (err) {
+      if (err) return cb(null);
+      if (state.user) return cb(state.user);
+      if (!pendingSignIn) return authReady(cb, timeoutMs);
+      var done = false;
+      var t = setTimeout(function () {
+        if (done) return;
+        done = true;
+        log("userReady: פסק זמן בהמתנה להתחברות");
+        cb(state.user);
+      }, timeoutMs || 12000);
+      userWaiters.push(function (u) {
         if (done) return;
         done = true; clearTimeout(t);
         cb(u);
@@ -557,6 +620,8 @@ CBA.fb = (function () {
     isDbReady: function () { return state.dbLoaded; },
     flag:     flag,
     flags:    function () { return state.flags; },
+    expectUser: expectUser,
+    userReady: userReady,
     state:    function () { return { loaded: state.loaded, user: state.user,
                                      initErr: state.initErr && state.initErr.message,
                                      lastError: state.lastError && (state.lastError.code || state.lastError.message) }; },

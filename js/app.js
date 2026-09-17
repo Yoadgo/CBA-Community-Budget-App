@@ -1848,6 +1848,12 @@
           if (!inited) main.innerHTML = skeletonScreen();
           var routedAfterLogin = false;
           firebaseSignInDone = false;
+          /* 🔴 **מסמנים "התחברות בדרך" לפני שהמשיכה מתחילה** (2026-09-17, ממצא 02).
+             ההתחברות עצמה עדיין נדחית (ר' FIREBASE_SIGNIN_DELAY_MS), אבל
+             `CBA.fb.userReady` צריך לדעת **עכשיו** שיהיה משתמש — אחרת כל
+             קריאה בשניות הראשונות רואה "אין משתמש" ונופלת לגיליון.
+             זה הרגע המוקדם ביותר שבו הטוקן ביד. */
+          try { if (window.CBA && CBA.fb && CBA.fb.expectUser) CBA.fb.expectUser(); } catch (e) {}
           CBA.sheets.load(function (ok, info) {
             var wasInited = inited;
             sheetsLoadHandler(ok, info);

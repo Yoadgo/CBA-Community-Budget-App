@@ -227,9 +227,23 @@ let sb = build({ readCollection: (n, cb) => setTimeout(() => cb(null, [
      Object.keys(res.services[0]).join(','));
   ok('המדידה נרשמה', sb.CBA.perf.services.source === 'firestore', sb.CBA.perf.services.source);
 
-  section('10. הלקוח — נפילה לאחור');
-  const cases = [
-    ['אין CBA.fb', { noFb: true }, 'disabled'],
+  section('10. הלקוח — החלטה מול תקלה');
+  /* 🔴🔴 **המדיניות התהפכה ב-17.9.2026** (ממצא 02, הכרעת יועד). ר' ההסבר
+     המלא ב-tools/test-garden-plan-fallback.js סעיף 3. בקצרה: תחום שלא עבר
+     (`disabled`) ממשיך ליפול ל-Apps Script; **תקלה** מחזירה `{ok:false}`
+     והמסך אומר "לא ניתן לטעון את השירותים כרגע" (services.js:679-681). */
+  const decisions = [
+    ['אין CBA.fb', { noFb: true }, 'disabled']
+  ];
+  for (const [name, opts, why] of decisions) {
+    const s2 = build(opts);
+    const r2 = await read(s2);
+    ok(name + ' → נפל ל-Apps Script', sheetCalls.join(',') === 'services', JSON.stringify(sheetCalls));
+    ok('   …ותשובה תקינה', r2 && r2.ok === true && r2.services.length === 1);
+    ok('   …והסיבה נרשמה', (s2.CBA.perf.services.why || '').indexOf(why) !== -1, s2.CBA.perf.services.why);
+  }
+
+  const failures = [
     ['אין משתמש', { authReady: cb => setTimeout(() => cb(null), 1) }, 'no-user'],
     ['כלל דחה', { readCollection: (n, cb) => setTimeout(() => cb({ code: 'permission-denied' }), 1) }, 'permission-denied'],
     ['שגיאת רשת', { readCollection: (n, cb) => setTimeout(() => cb(new Error('boom')), 1) }, 'boom'],
@@ -237,12 +251,23 @@ let sb = build({ readCollection: (n, cb) => setTimeout(() => cb(null, [
        הוא מסך שקרי ולא מסך ריק. */
     ['אוסף ריק', { readCollection: (n, cb) => setTimeout(() => cb(null, []), 1) }, 'empty']
   ];
-  for (const [name, opts, why] of cases) {
+  for (const [name, opts, why] of failures) {
     const s2 = build(opts);
     const r2 = await read(s2);
-    ok(name + ' → נפל ל-Apps Script', sheetCalls.join(',') === 'services', JSON.stringify(sheetCalls));
-    ok('   …ותשובה תקינה', r2 && r2.ok === true && r2.services.length === 1);
+    ok('🔴 ' + name + ' → לא נגע ב-Apps Script', sheetCalls.length === 0, JSON.stringify(sheetCalls));
+    ok('   …והמסך מקבל כשל מפורש', !!r2 && r2.ok === false && r2.cbaLoadFailed === true, JSON.stringify(r2));
     ok('   …והסיבה נרשמה', (s2.CBA.perf.services.why || '').indexOf(why) !== -1, s2.CBA.perf.services.why);
+    ok('   …והמקור מסומן failed', s2.CBA.perf.services.source === 'failed', s2.CBA.perf.services.source);
+  }
+
+  section('10ב. מתג החירום מחזיר את ההתנהגות הישנה');
+  for (const [name, opts] of failures) {
+    const s2 = build(opts);
+    s2.CBA.fb.flag = (k, d) => (k === 'appsScriptFallback' ? true : d);
+    const r2 = await read(s2);
+    ok('🔑 ' + name + ' + מתג חירום → נפל ל-Apps Script',
+       sheetCalls.join(',') === 'services' && r2 && r2.ok === true,
+       JSON.stringify({ calls: sheetCalls, ok: r2 && r2.ok }));
   }
 
   section('11. מטמון וקולבק');

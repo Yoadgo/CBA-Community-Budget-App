@@ -55,11 +55,56 @@ CBA.data = (function () {
       sheets(function (res) { note("appsscript", why); if (cb) cb(res); });
     }
 
+    /* ==========================================================================
+     *  🔴🔴 נפילה לאחור היא החלטה של מנהל-על, לא ברירת מחדל שקטה
+     * --------------------------------------------------------------------------
+     *  (2026-09-17 — הכרעת יועד אחרי ממצא 02 בצוות האדום.)
+     *
+     *  עד היום **כל** כשל החזיר את המסך ל-Apps Script בשקט. בתחומים שרובם
+     *  קריאה-בלבד זה עבד יפה ונמדד כעובד. בתנועות התקציב זה היה הרסני:
+     *  מקור הנפילה הוא הגיליון, והגיליון מתעדכן רק בעבודה השעתית — כלומר
+     *  בקשה שהוגשה לפני חמש דקות **לא קיימת שם**. נמדד חי: רשימת הבקשות של
+     *  התושב ירדה מ-1 ל-0, בשקט, בלי שום הודעה, בזמן ש-Firestore החזיק אותה.
+     *
+     *  🔑 **ההפרדה שמכריעה כאן:**
+     *    · `disabled` / `flag-off` = **החלטה**. התחום עוד לא עבר, או שמנהל-על
+     *      כיבה אותו. ממשיכים ל-Apps Script כרגיל — זה מתג המיגרציה, לא כשל.
+     *    · `no-user` / `db` / `firestore` = **כשל**. מכאן אין נפילה שקטה:
+     *      המסך מקבל `{ok:false}` ואומר "לא הצלחנו לטעון", עם "נסה שוב".
+     *
+     *  ⚠️ **מתג החירום:** הדגל `appsScriptFallback` (כבוי כברירת מחדל) מחזיר
+     *     את ההתנהגות הישנה **לכל התחומים בבת אחת**, בלי דיפלוי, ממסך
+     *     "מצב המערכת". זה הכלי לתקלה רוחבית ב-Firestore — פעולה יזומה,
+     *     לא התאוששות אוטומטית שאיש לא רואה.
+     * ======================================================================== */
+    function fallbackOn() {
+      try {
+        if (CBA.fb && CBA.fb.flag) return CBA.fb.flag("appsScriptFallback", false);
+      } catch (e) {}
+      return false;
+    }
+
+    function viaFailure(why) {
+      if (settled) return;
+      if (fallbackOn()) return viaSheets("fallback:" + why);
+      settled = true;
+      note("failed", why);
+      /* ⚠️ הודעה בעברית ולא קוד: ארבעה מתוך חמשת המסכים מציגים את
+         `res.error` **כמו שהוא** למשתמש. `cbaLoadFailed` הוא הסימן
+         המכונתי, והטקסט הוא מה שקוראים. */
+      if (cb) cb({ ok: false, cbaLoadFailed: true, why: why,
+                   error: "לא הצלחנו לטעון את הנתונים מהשרת." });
+    }
+
     if (!enabled || !CBA.fb || !CBA.fb.readCollection) return viaSheets("disabled");
 
-    CBA.fb.authReady(function (user) {
+    /* `userReady` ולא `authReady` — ר' ההסבר ליד pendingSignIn ב-firebase.js.
+       בכניסה ראשונה לסשן ההתחברות ל-Firebase עוד לא יצאה לדרך, ו-`authReady`
+       החזיר `null` מיד. זה מה שהפיל את הקריאה הראשונה של כל משתמש חדש. */
+    var ready = (CBA.fb.userReady || CBA.fb.authReady);
+    ready.call(CBA.fb, function (user) {
       if (settled) return;
-      if (!user) return viaSheets("no-user");
+      if (!user) return viaFailure("no-user");
       /* 🔴🔴 **ממתינים ל-`ensureDb` לפני שבודקים את הדגל** (2026-09-15).
          עד כאן ההערה כאן טענה ש"מגיעים לכאן רק אחרי ש-ensureDb
          קרא את הדגלים" — **וזה פשוט לא היה נכון.** `authReady`
@@ -73,13 +118,13 @@ CBA.data = (function () {
          ⚠️ כשל ב-`ensureDb` הוא נפילה לאחור, לא המשך עיוור. */
       CBA.fb.ensureDb(function (dbErr) {
         if (settled) return;
-        if (dbErr) return viaSheets("db:" + ((dbErr && (dbErr.code || dbErr.message)) || "?"));
+        if (dbErr) return viaFailure("db:" + ((dbErr && (dbErr.code || dbErr.message)) || "?"));
         if (CBA.fb.flag && !CBA.fb.flag(key + "FromFirestore", enabled)) {
           return viaSheets("flag-off");
         }
         load(function (err, result) {
           if (settled) return;
-          if (err) return viaSheets("firestore:" + ((err && (err.code || err.message)) || "?"));
+          if (err) return viaFailure("firestore:" + ((err && (err.code || err.message)) || "?"));
           settled = true;
           note("firestore", "");
           if (cb) cb(result);
@@ -621,7 +666,11 @@ CBA.data = (function () {
        לחסר משמעות — כאן בכיוון ההפוך, `flagSet` לעולם לא היה מדליק.
        הקבוע הוא **ברירת המחדל שמועברת ל-`flag()`**, לא שער. */
     if (!(CBA.fb && CBA.fb.ensureDb && CBA.fb.createDoc)) return cb(false, "no-sdk");
-    CBA.fb.authReady(function (user) {
+    /* 🔴 `userReady` ולא `authReady` (2026-09-17, ממצא 02) — **גם בצד הכתיבה.**
+       בשניות הראשונות של סשן חדש `authReady` החזיר `null`, ולכן תנועה נכתבה
+       ל-Apps Script בזמן שהקריאה כבר באה מ-Firestore. זה בדיוק החור שמייצר
+       "הגשתי בקשה והיא לא מופיעה" — אותה משפחה כמו הבאג של מורן. */
+    (CBA.fb.userReady || CBA.fb.authReady).call(CBA.fb, function (user) {
       if (!user) return cb(false, "no-user");
       CBA.fb.ensureDb(function (err) {
         if (err) return cb(false, "db");

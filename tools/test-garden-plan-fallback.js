@@ -125,10 +125,36 @@ r = await read(sb);
 ok('בלי order — ממוין לפי המזהה המספרי ולא לקסיקלית',
    r.defs.map(d => d.id).join(',') === 'T3,T9,T10', r.defs.map(d => d.id).join(','));
 
-section('3. נפילה לאחור — כל מצב בנפרד');
-const cases = [
+section('3. \u05d4\u05de\u05d3\u05d9\u05e0\u05d9\u05d5\u05ea \u05d4\u05d7\u05d3\u05e9\u05d4 \u2014 \u05d4\u05d7\u05dc\u05d8\u05d4 \u05de\u05d5\u05dc \u05ea\u05e7\u05dc\u05d4');
+/* 🔴🔴 **המדיניות התהפכה ב-17.9.2026 (ממצא 02, הכרעת יועד).**
+   עד אז כל מצב כאן נפל ל-Apps Script בשקט. זה נמדד כעובד יפה בתחומים
+   שרובם קריאה — אבל בתנועות התקציב מקור הנפילה הוא הגיליון, שמתעדכן רק
+   בעבודה השעתית, ולכן בקשה שהוגשה לפני חמש דקות פשוט לא קיימת שם.
+   מהיום ההפרדה היא לפי **סיבה**, לא לפי תחום:
+     · החלטה (`disabled` / `flag-off`) → נופלים ל-Apps Script כרגיל.
+     · תקלה (`no-user` / `db` / `firestore`) → `{ok:false}`, והמסך אומר
+       "לא הצלחנו לטעון". מסך תוכנית העבודה כבר יודע לצייר את זה
+       עם כפתור "נסה שוב" (gardenPlan.js:159-168).
+   ⚠️ הכיסוי לא ירד: כל תרחיש נבדק **פעמיים** — פעם בלי מתג החירום
+      (המדיניות החדשה) ופעם איתו דלוק (בדיוק ההתנהגות של אתמול). */
+
+section('3\u05d0. \u05d4\u05d7\u05dc\u05d8\u05d4 \u2014 \u05e2\u05d3\u05d9\u05d9\u05df \u05e0\u05d5\u05e4\u05dc\u05d9\u05dd \u05dc-Apps Script');
+const decisions = [
   ['אין CBA.fb כלל', { noFb: true }, 'disabled'],
-  ['CBA.fb בלי readCollection', { stripReadCollection: true }, 'disabled'],
+  ['CBA.fb בלי readCollection', { stripReadCollection: true }, 'disabled']
+];
+for (const [name, opts, why] of decisions) {
+  const s2 = build(opts);
+  const res = await read(s2);
+  ok(name + ' → נפל ל-Apps Script', sheetCalls.length === 1, JSON.stringify(sheetCalls));
+  ok('   …והתשובה תקינה', res && res.ok === true && res.defs.length === 1);
+  ok('   …והסיבה נרשמה', (s2.CBA.perf.gardenPlan.why || '').indexOf(why) !== -1,
+     s2.CBA.perf.gardenPlan.why);
+  ok('   …והמקור מסומן appsscript', s2.CBA.perf.gardenPlan.source === 'appsscript');
+}
+
+section('3\u05d1. \u05ea\u05e7\u05dc\u05d4 \u2014 \u05db\u05e9\u05dc \u05d2\u05dc\u05d5\u05d9, \u05d1\u05dc\u05d9 \u05e0\u05e4\u05d9\u05dc\u05d4 \u05e9\u05e7\u05d8\u05d4');
+const failures = [
   ['אין משתמש מחובר', { authReady: cb => setTimeout(() => cb(null), 1) }, 'no-user'],
   ['כלל אבטחה דחה', { readCollection: (n, cb) => setTimeout(() => cb({ code: 'permission-denied' }), 1) }, 'permission-denied'],
   ['קריאת האוסף נכשלה', { readCollection: (n, cb) => setTimeout(() => cb(new Error('boom')), 1) }, 'boom'],
@@ -138,14 +164,33 @@ const cases = [
      משימות שכבר קיימות. נוסף באיחוד 15.9, אחרי מקרה אמיתי בשירותים. */
   ['אוסף ריק', { readCollection: (n, cb) => setTimeout(() => cb(null, []), 1) }, 'empty']
 ];
-for (const [name, opts, why] of cases) {
+for (const [name, opts, why] of failures) {
   const s2 = build(opts);
   const res = await read(s2);
-  ok(name + ' → נפל ל-Apps Script', sheetCalls.length === 1, JSON.stringify(sheetCalls));
-  ok('   …והתשובה תקינה', res && res.ok === true && res.defs.length === 1);
+  ok('🔴 ' + name + ' → לא נגע ב-Apps Script', sheetCalls.length === 0, JSON.stringify(sheetCalls));
+  ok('   …והמסך מקבל כשל מפורש',
+     !!res && res.ok === false && res.cbaLoadFailed === true, JSON.stringify(res));
+  ok('   …וההודעה בעברית ולא קוד', /[\u0590-\u05FF]/.test(String(res && res.error)),
+     String(res && res.error));
   ok('   …והסיבה נרשמה', (s2.CBA.perf.gardenPlan.why || '').indexOf(why) !== -1,
      s2.CBA.perf.gardenPlan.why);
-  ok('   …והמקור מסומן appsscript', s2.CBA.perf.gardenPlan.source === 'appsscript');
+  ok('   …והמקור מסומן failed', s2.CBA.perf.gardenPlan.source === 'failed',
+     s2.CBA.perf.gardenPlan.source);
+}
+
+section('3\u05d2. \u05de\u05ea\u05d2 \u05d4\u05d7\u05d9\u05e8\u05d5\u05dd \u2014 \u05de\u05d7\u05d6\u05d9\u05e8 \u05d1\u05d3\u05d9\u05d5\u05e7 \u05d0\u05ea \u05d4\u05d4\u05ea\u05e0\u05d4\u05d2\u05d5\u05ea \u05d4\u05d9\u05e9\u05e0\u05d4');
+/* 🔑 זו הבדיקה שמצדיקה את השינוי: מנהל-על מדליק דגל אחד, וכל התחומים
+   חוזרים לקרוא מהגיליון — בלי דיפלוי ובלי שינוי קוד. */
+for (const [name, opts] of failures) {
+  const s2 = build(opts);
+  s2.CBA.fb.flag = (k, d) => (k === 'appsScriptFallback' ? true : d);
+  const res = await read(s2);
+  ok('🔑 ' + name + ' + מתג חירום → נפל ל-Apps Script כמו אתמול',
+     sheetCalls.length === 1 && res && res.ok === true,
+     JSON.stringify({ calls: sheetCalls.length, ok: res && res.ok }));
+  ok('   …והסיבה מסומנת כנפילה יזומה',
+     (s2.CBA.perf.gardenPlan.why || '').indexOf('fallback:') === 0,
+     s2.CBA.perf.gardenPlan.why);
 }
 
 section('3ב. הדגל מכבה את הצעד כולו');
@@ -169,7 +214,10 @@ sb = build({
 sb.CBA.data.getGardenPlan(() => { n++; });
 await wait(60);
 ok('🔴 שני כישלונות → קולבק אחד בלבד', n === 1, String(n));
-ok('🔴 ורק קריאה אחת ל-Apps Script', sheetCalls.length === 1, String(sheetCalls.length));
+/* (2026-09-17) שני הכישלונות הם עכשיו מסלול כשל ולא נפילה לאחור, ולכן
+   הציפייה היא **אפס** קריאות ל-Apps Script. הנקודה שהבדיקה שומרת עליה
+   לא השתנתה: שני כישלונות מקבילים אינם מייצרים שתי פעולות. */
+ok('🔴 ואפס קריאות ל-Apps Script (מסלול כשל)', sheetCalls.length === 0, String(sheetCalls.length));
 
 n = 0;
 sb = build({

@@ -215,26 +215,57 @@ section('1. הדגל כבוי — המסלול הישן');
     ok('והתנועות שלו הגיעו', (yr.transactions || []).length === 1);
   }
 
-  section('4. 🔴 נפילה לאחור');
+  section('4. 🔴 מסמך שנה חסר');
+  /* 🔴🔴 **המדיניות התהפכה ב-17.9.2026** (ממצא 02, הכרעת יועד). הכלל
+     "תקציב ריק שנראה אמיתי גרוע מנפילה לאחור" לא השתנה — מה שהשתנה הוא
+     מה עושים במקומו: לא קריאה שקטה מהגיליון, אלא כשל מפורש שהמסך מציג.
+     `loadYear` כבר מטפל בזה (`if (!res || !res.ok) return settle(false, ...)`). */
   {
     const e = env({ flags: { budgetYearFromFirestore: true }, isSuper: true, docs: {} });
     const r = await loadYear(e);
-    ok('🔴 מסמך שנה חסר → Apps Script, לא תקציב ריק',
+    ok('🔴 מסמך שנה חסר → כשל מפורש, לא תקציב ריק ולא קריאה שקטה מהגיליון',
+       r.ok === false && e.log.indexOf('appsscript') === -1, JSON.stringify({ ok: r.ok, log: e.log }));
+    ok('⚠️ והשנה לא נדרסה בנתונים חלקיים',
+       !(e.sb.CBA.mock.years[Y] && e.sb.CBA.mock.years[Y]._loaded === true));
+  }
+  {
+    /* 🔑 מתג החירום מחזיר בדיוק את ההתנהגות שהייתה כאן עד 17.9. */
+    const e = env({ flags: { budgetYearFromFirestore: true, appsScriptFallback: true },
+                    isSuper: true, docs: {} });
+    const r = await loadYear(e);
+    ok('🔑 ועם מתג החירום — נפילה לאחור ל-Apps Script כמו אתמול',
        r.ok === true && e.log.indexOf('appsscript') !== -1, JSON.stringify(e.log));
-    ok('והנתונים הגיעו מהמסלול הישן',
+    ok('   …והנתונים הגיעו מהמסלול הישן',
        e.sb.CBA.mock.years[Y].transactions.length === 1);
   }
   {
     const e = env({ flags: { budgetYearFromFirestore: true }, isSuper: true, colErr: true,
                     docs: { ['budgetYears/' + Y]: { year: Y, budget: [], income: [], groups: [], splits: [], items: [] } } });
     const r = await loadYear(e);
-    ok('🔴 כשל בקריאת התנועות → נפילה לאחור',
+    ok('🔴 כשל בקריאת התנועות → כשל מפורש',
+       r.ok === false && e.log.indexOf('appsscript') === -1, JSON.stringify({ ok: r.ok, log: e.log }));
+  }
+  {
+    const e = env({ flags: { budgetYearFromFirestore: true, appsScriptFallback: true },
+                    isSuper: true, colErr: true,
+                    docs: { ['budgetYears/' + Y]: { year: Y, budget: [], income: [], groups: [], splits: [], items: [] } } });
+    const r = await loadYear(e);
+    ok('🔑 ועם מתג החירום — נפילה לאחור',
        r.ok === true && e.log.indexOf('appsscript') !== -1, JSON.stringify(e.log));
   }
   {
     const e = env({ flags: { budgetYearFromFirestore: true }, noUser: true, isSuper: true });
     const r = await loadYear(e);
-    ok('אין משתמש מחובר → נפילה לאחור',
+    /* ⚠️ "אין משתמש" הוא היום כשל ולא נפילה — ר' ההסבר ליד pendingSignIn
+       ב-firebase.js: זה בדיוק המצב שבו הגיליון מפגר אחרי Firestore. */
+    ok('אין משתמש מחובר → כשל מפורש',
+       r.ok === false && e.log.indexOf('appsscript') === -1, JSON.stringify({ ok: r.ok, log: e.log }));
+  }
+  {
+    const e = env({ flags: { budgetYearFromFirestore: true, appsScriptFallback: true },
+                    noUser: true, isSuper: true });
+    const r = await loadYear(e);
+    ok('🔑 ועם מתג החירום — נפילה לאחור',
        r.ok === true && e.log.indexOf('appsscript') !== -1, JSON.stringify(e.log));
   }
 

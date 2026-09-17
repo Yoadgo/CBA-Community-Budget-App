@@ -137,7 +137,7 @@ ok('⚠️ ו-GARDEN_DUP_DAYS זהה בשני הצדדים',
 ok('🔴 כתיבה מסנכרנת גם את המשימות, לא רק את הדיווחים',
    /if \(taskIds\.length\) gardenTaskSyncSome_\(ss, taskIds\);/.test(GS));
 ok('ומספר הפנייה והתמונות נכנסים למסמך',
-   /function gardenTaskSyncSome_[\s\S]{0,800}refs\.repOf\[o\.id\]/.test(GS));
+   /function gardenTaskSyncSome_[\s\S]{0,1600}refs\.repOf\[o\.id\]/.test(GS));
 
 section('10. 🔴 הגיליון הוא הגיבוי');
 ['gardenReports', 'gardenTasks', 'gardenLog'].forEach(function (c) {

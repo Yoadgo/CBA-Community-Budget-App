@@ -1679,7 +1679,15 @@
         CBA.data.getGardenTaskLog(id, function (res) {
           var jEl = wrap.querySelector("#gd-det-j-list");
           if (!jEl || !jEl.parentNode) return;
-          if (!res || !res.ok || !res.rows || !res.rows.length) {
+          /* 🔴 **כשל וריק הם שני דברים** (2026-09-17, ממצא 02). עד היום שניהם
+             הציגו "אין עדיין רשומות" — כלומר יומן שלא נטען נראה בדיוק כמו
+             משימה שבאמת אין לה היסטוריה. זה מה שהפך את אבחון ממצא 28 לארוך:
+             היומן "היה ריק" ואיש לא ידע אם זו האמת. */
+          if (!res || !res.ok) {
+            jEl.innerHTML = '<p class="gd-det-journal__none">לא הצלחנו לטעון את היומן.</p>';
+            return;
+          }
+          if (!res.rows || !res.rows.length) {
             jEl.innerHTML = '<p class="gd-det-journal__none">אין עדיין רשומות למשימה הזאת.</p>';
             return;
           }

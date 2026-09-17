@@ -178,6 +178,40 @@ function fsSet_(path, obj) {
   return JSON.parse(r.text);
 }
 
+/* ============================================================================
+ *  fsMerge_ — לעדכן שדות בודדים בלי למחוק את השאר   (2026-09-17, צוות אדום)
+ * ----------------------------------------------------------------------------
+ *  🔴🔴 **`fsSet_` אינו merge — הוא מחליף מסמך שלם.** PATCH ל-Firestore בלי
+ *  `updateMask` מוחק כל שדה שאינו בגוף הבקשה. זה תקין לכל הקוראים שבונים את
+ *  המסמך מחדש מהגיליון (גם `gardenTaskSyncSome_` וגם `btxMirrorToSheet_`),
+ *  אבל **הרסני** לקורא שמעביר אובייקט חלקי.
+ *
+ *  שתי קריאות כאלה היו בקוד: `{mailPending:false, mailedAt}` אחרי שליחת מייל,
+ *  ו-`{photosNudged:true}` בתזכורת התמונות. כל אחת מהן מחקה את **כל** שאר שדות
+ *  מסמך הדיווח — הכותרת, הקטגוריה, מזהה המשפחה, השלב, התמונות.
+ *
+ *  ⚠️ **למה זה לא התפוצץ עד היום:** מסך "הדיווחים שלי" קורא מ-Firestore, אבל
+ *  הכתיבה עדיין עוברת ב-Apps Script והסנכרון השעתי בנה את המסמך מחדש מהגיליון
+ *  בתוך שעה. ברגע ש-`gardenWriteToFirestore` יידלק, הגיליון יפסיק להיות המקור
+ *  והמחיקה תהיה **סופית**. זה מוקש שהיה מתפוצץ בצעד הבא של המיגרציה.
+ *
+ *  🔑 הכלל מכאן: **אובייקט מלא → `fsSet_`. אובייקט חלקי → `fsMerge_`.**
+ * ========================================================================== */
+function fsMerge_(path, obj) {
+  var keys = Object.keys(obj || {});
+  if (!keys.length) return null;
+  /* שם שדה שאינו מזהה פשוט חייב גרשיים אחוריים ב-fieldPaths — אחרת
+     Firestore מפרש נקודה או לוכסן כנתיב. (`ספק/נמען` כבר שבר קריאה פעם אחת.) */
+  var mask = keys.map(function (k) {
+    var safe = /^[A-Za-z_][A-Za-z0-9_]*$/.test(k) ? k : '`' + k.replace(/`/g, '\\`') + '`';
+    return 'updateMask.fieldPaths=' + encodeURIComponent(safe);
+  }).join('&');
+  var full = path + (path.indexOf('?') === -1 ? '?' : '&') + mask;
+  var r = fsFetch_(full, 'patch', { fields: fsFields_(obj) });
+  if (r.code !== 200) throw new Error('עדכון חלקי נכשל (' + r.code + '): ' + r.text.substring(0, 300));
+  return JSON.parse(r.text);
+}
+
 /** קורא מסמך. מחזיר null אם אינו קיים. */
 function fsGet_(path) {
   var r = fsFetch_(path, 'get');

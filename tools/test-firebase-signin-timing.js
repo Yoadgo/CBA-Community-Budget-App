@@ -40,7 +40,11 @@ ok('⚠️ הירי מותנה בכך שהתשובה **אינה** מהמטמון
 ok('⚠️ והוא יושב **אחרי** sheetsLoadHandler, לא לפניו',
    SRC.indexOf('sheetsLoadHandler(ok, info);') <
    SRC.indexOf('firebaseSignInAfterLoad(resp.credential)'));
-ok('הדגל מאופס לפני כל התחברות', /firebaseSignInDone = false;\s*\n\s*CBA\.sheets\.load/.test(SRC));
+/* (2026-09-17) בין האיפוס ל-load נוספה קריאת CBA.fb.expectUser — ר' ממצא 02.
+   הבדיקה נשארת "האיפוס קודם ל-load", עם חלון לשורות שביניהן. */
+ok('הדגל מאופס לפני כל התחברות', /firebaseSignInDone = false;[\s\S]{0,900}CBA\.sheets\.load/.test(SRC));
+ok('🔴 ו-expectUser נקראת לפני המשיכה, לא אחריה (ממצא 02)',
+   /firebaseSignInDone = false;[\s\S]{0,900}CBA\.fb\.expectUser\(\)[\s\S]{0,400}CBA\.sheets\.load/.test(SRC));
 ok('יציאה מנתקת גם מ-Firebase', /CBA\.fb\.signOut\(\)/.test(SRC));
 /* ⚠️ בדיקה לפי מבנה ולא לפי מחרוזת מדויקת: הבדיקה הזו נכשלה בצדק כשהקולבק
    של signIn השתנה (נוסף אליו הקישור ל-members/{uid} בצעד 02ג), אף שהעטיפה
