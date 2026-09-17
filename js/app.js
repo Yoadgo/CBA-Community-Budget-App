@@ -1630,12 +1630,34 @@
         '<div class="login-logo">' + CBA.logoSVG(28) + '</div>' +
         '<h1 class="login-title">ניהול קהילה</h1>' +
         '<p class="login-sub">התחברות לחברי הקהילה</p>' +
-        (loginError ? '<div class="up-err">' + CBA.esc(loginError) + '</div>' : '') +
-        '<div class="login-btn" id="gate-signin"></div>' +
-        // מוצג רק אחרי התחברות מוצלחת לגוגל שהמייל שלה אינו ברשימת התושבים
-        (signupToken
-          ? '<button type="button" class="login-signup" id="gate-signup">בקשת הרשמה לקהילה</button>'
+        /* 🔴 **הודעה ולא שגיאה כשיש המשך** (2026-09-17, ממצא 04). "האימייל שלך
+           לא נמצא ברשימת התושבים" בתיבה אדומה נקרא כסוף פסוק — גם כשמיד מתחתיו
+           יש כפתור בקשת הרשמה. חסימה אמיתית ("עזב") נשארת אדומה. */
+        (loginError
+          ? '<div class="' + (signupToken ? 'login-note' : 'up-err') + '">' +
+              CBA.esc(loginError) + '</div>'
           : '') +
+        '<div class="login-btn" id="gate-signin"></div>' +
+        /* ============================================================================
+         *  🔴 מסלול ההרשמה — קיים במלואו, ופשוט לא היה גלוי  (2026-09-17, ממצא 04)
+         * ----------------------------------------------------------------------------
+         *  בסריקת צוות אדום נמצא ש**המילה "הרשמה" אינה מופיעה בדף כלל** — לא
+         *  ככפתור, לא בטקסט ולא בעץ הנגישות — והמסקנה הייתה שאין מסלול הצטרפות.
+         *  בפועל המנגנון בנוי ותקין מ-7.8: טופס, אימות טוקן גוגל בשרת,
+         *  זיהוי כפילות ומייל לוועד. הוא פשוט מופיע **רק אחרי** שמישהו התחבר
+         *  עם Google ונדחה — ותושב חדש שרואה "התחברות לחברי הקהילה" מעל כפתור
+         *  Google לא מנחש שהכפתור הזה הוא גם הדרך שלו להירשם.
+         *
+         *  🔑 לכן התיקון אינו מנגנון חדש אלא **שורת טקסט אחת לפני הלחיצה**.
+         *     לקראת השקה לקהילה שרובה עוד לא רשומה, זה ההבדל בין "אין דרך
+         *     להצטרף" לבין "יש, והיא ברורה".
+         *  ⚠️ מוצגת רק במצב הפתיחה: אחרי שהכפתור עצמו כבר מופיע היא מיותרת.
+         * ========================================================================== */
+        /* 🔑 הכפתור מוצג **תמיד**, גם לפני שיש טוקן (יועד, 17.9). הוא אותו
+           כפתור בדיוק; מה שמשתנה הוא מה נפתח בלחיצה — ר' openSignupForm. */
+        '<button type="button" class="login-signup" id="gate-signup">בקשת הרשמה לקהילה</button>' +
+        (signupToken ? '' :
+          '<p class="login-hint">ההרשמה מתחילה בהתחברות עם Google, כדי שנדע שהמייל באמת שלכם.</p>') +
       '</div>';
     renderGateButton();
     const su = document.getElementById("gate-signup");
@@ -1668,7 +1690,56 @@
   let signupToken = null;
   let signupPrefill = null;
 
+  /* ============================================================================
+   *  שני מצבים לאותו כפתור       (2026-09-17, ממצא 04)
+   * ----------------------------------------------------------------------------
+   *  בקשת הרשמה **חייבת** טוקן גוגל מאומת — זה מה שמבטיח שהמייל בבקשה אמיתי
+   *  ולא מה שמישהו הקליד. לכן אי-אפשר לפתוח את הטופס לפני התחברות.
+   *
+   *  ⚠️ **ואי-אפשר גם ללחוץ על כפתור Google בשבילו:** GIS מצייר אותו בתוך
+   *     iframe, וקליק מסונתז עליו לא עושה כלום. לכן הכפתור שלנו פותח כרטיס
+   *     הסבר קצר שמפנה לכפתור Google ומדגיש אותו — ולא מנסה לרמות.
+   *
+   *  🔑 המשתמש רואה את המילה "הרשמה" **לפני** שהוא לוחץ על משהו, וזה כל
+   *     מה שהיה חסר: המנגנון עצמו בנוי ותקין מ-7.8.
+   * ========================================================================== */
+  function openSignupIntro() {
+    const old = document.getElementById("signup-modal");
+    if (old) old.remove();
+    const wrap = document.createElement("div");
+    wrap.id = "signup-modal";
+    wrap.className = "peek-backdrop";
+    wrap.innerHTML =
+      '<div class="peek signup-card" role="dialog" aria-label="בקשת הרשמה לקהילה">' +
+        '<div class="peek__head"><span class="peek__title">בקשת הרשמה לקהילה</span>' +
+          '<button class="peek__x" aria-label="סגור">×</button></div>' +
+        '<div class="signup-body">' +
+          '<p class="signup-note">כדי לשלוח בקשה צריך קודם להתחבר עם חשבון Google — כך אנחנו יודעים שכתובת המייל באמת שלכם, ולא צריך סיסמה חדשה.</p>' +
+          '<ol class="signup-steps">' +
+            '<li>לוחצים על <b>כניסה עם Google</b> במסך שמאחורי החלון הזה.</li>' +
+            '<li>אם המייל עדיין לא ברשימת התושבים — ייפתח כאן טופס קצר.</li>' +
+            '<li>הבקשה נשלחת לוועד, ואנחנו מעדכנים אתכם במייל לאחר האישור.</li>' +
+          '</ol>' +
+          '<button type="button" class="btn-primary signup-send" id="su-got">הבנתי, נתחבר</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(wrap);
+    const close = function () {
+      wrap.remove();
+      /* הדגשה קצרה של כפתור Google — הפעולה שהמשתמש אמור לעשות עכשיו. */
+      const btn = document.getElementById("gate-signin");
+      if (!btn) return;
+      btn.classList.add("is-pulse");
+      setTimeout(function () { btn.classList.remove("is-pulse"); }, 2400);
+    };
+    wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
+    wrap.querySelector(".peek__x").addEventListener("click", close);
+    wrap.querySelector("#su-got").addEventListener("click", close);
+  }
+
   function openSignupForm() {
+    /* בלי טוקן אין בקשה — ר' הבלוק מעל. */
+    if (!signupToken) return openSignupIntro();
     const guess = (signupPrefill && signupPrefill.name || "").trim().split(/\s+/);
     const old = document.getElementById("signup-modal");
     if (old) old.remove();
@@ -1874,7 +1945,8 @@
           loginError = (data && data.ok && data.authorized === false)
             ? (data.reason === "inactive"
                 ? "המשתמש מסומן כ'עזב' — הגישה חסומה."
-                : "האימייל שלך לא נמצא ברשימת התושבים.")
+                /* ר' ממצא 04 — ניסוח שמוביל לצעד הבא ולא לקיר. */
+                : "האימייל שלך עדיין לא ברשימת התושבים. אפשר לשלוח בקשת הרשמה לוועד:")
             : ((data && data.error) || "ההתחברות נכשלה.");
           currentUser = null;
           showLoginGate();

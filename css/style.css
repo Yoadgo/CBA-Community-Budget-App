@@ -1816,6 +1816,18 @@ body[data-nav-single="1"] .app-nav__viewport { display: none; }
 .tx-c--actions { min-height: 26px; }
 
 /* ---------- טופס בקשת הרשמה במסך הכניסה (2026-08-07) ---------- */
+/* רמז ההרשמה במצב הפתיחה + הודעה שאינה שגיאה (2026-09-17, ממצא 04).
+   מכוון: שניהם משניים ושקטים — כפתור Google נשאר הפעולה הראשית במסך. */
+.login-hint {
+  font-size: 12.5px; color: var(--text-soft); line-height: 1.55;
+  margin: 14px 0 0; text-align: center;
+}
+.login-note {
+  font-size: 12.5px; color: var(--text); background: var(--hover);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 10px; margin: 4px; line-height: 1.5;
+}
+
 .login-signup {
   margin-top: 14px; width: 100%;
   border: 1px solid var(--border); background: var(--surface);
@@ -1824,6 +1836,24 @@ body[data-nav-single="1"] .app-nav__viewport { display: none; }
   transition: border-color var(--t), background var(--t);
 }
 .login-signup:hover { border-color: var(--action); background: var(--hover); }
+
+/* שלושת הצעדים בכרטיס ההסבר, וההדגשה על כפתור Google אחרי סגירתו
+   (2026-09-17, ממצא 04). ההדגשה קצרה ומרוסנת — מפנה את העין, לא צועקת. */
+.signup-steps {
+  margin: 0; padding-inline-start: 1.15em;
+  font-size: 12.5px; color: var(--text-soft); line-height: 1.6;
+}
+.signup-steps li { margin-bottom: 6px; }
+.signup-steps li:last-child { margin-bottom: 0; }
+.signup-steps b { color: var(--text); font-weight: 600; }
+#gate-signin.is-pulse { animation: gatePulse 800ms ease-in-out 3; border-radius: 999px; }
+@keyframes gatePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(17,24,39,0); }
+  50%      { box-shadow: 0 0 0 6px rgba(17,24,39,.10); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #gate-signin.is-pulse { animation: none; box-shadow: 0 0 0 4px rgba(17,24,39,.12); }
+}
 
 .signup-card { width: min(400px, 94vw); }
 .signup-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
