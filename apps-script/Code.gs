@@ -14730,17 +14730,54 @@ function gardenMirrorIsDate_(v) {
   return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
 }
 
+/* 🔴🔴 **מה שהמדידה החיה חשפה אחרי הניסיון הראשון** (18.9).
+   התיקון הראשון הניח "תאריך מול תאריך, הפרש מילישניות".
+   `diffCols` — החיווי שנוסף באותו דיפלוי — הראה שזה לא נכון:
+   העמודות שמתחזרות הן 'שבוע' (39), 'שבוע מקורי' (37), 'נוצר בתאריך' (41)
+   ו-'תאריך אישור' (9) — ובמסמכים הערכים האלה הם **מחרוזות**
+   כמו `"2026-09-13"`, לא אובייקטי Date (נמדד חי: 39 מתוך 43 משימות).
+
+   🔑 **המנגנון האמיתי: הגיליון ממיר את מה שכותבים בו.**
+   `setValue("2026-09-13")` נכנס לתא ויוצא בקריאה הבאה כ-`Date`.
+   משם ואילך כל השוואה היא Date מול מחרוזת, לעולם לא שווה — ואפילו
+   העריכה המקלה של "ננתח את המחרוזת ונשווה רגעים" נכשלת:
+   `new Date("2026-09-13")` הוא חצות **UTC**, והתא בגיליון הוא חצות
+   **מקומי** — שלוש שעות הפרש, הרבה מעל כל סבילות של שנייה.
+
+   ⚠️ לכן **תאריך-בלבד מושווה כיום קלנדרי באזור הזמן של הגיליון**,
+      ולא כרגע בציר הזמן. זה גם נכון מהותית: "שבוע שמתחיל
+      ב-13.9" הוא יום, לא רגע.
+   ⚠️ מה שכן התכנס בניסיון הראשון ('סוג', 'מונה גרירות', 'שנת תקציב' —
+      הופיעו בהרצה 1 ונעלמו בהרצה 2) מוכיח שהמנגנון עצמו עובד,
+      ושהשארית היא בדיוק המרה של תאריכים. */
+var GARDEN_MIRROR_TZ_ = null;
+function gardenMirrorTz_() {
+  if (!GARDEN_MIRROR_TZ_) {
+    try { GARDEN_MIRROR_TZ_ = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(); }
+    catch (e) { GARDEN_MIRROR_TZ_ = Session.getScriptTimeZone(); }
+  }
+  return GARDEN_MIRROR_TZ_;
+}
+
 /** האם תא בגיליון כבר מחזיק את מה שהמסמך אומר. */
 function gardenMirrorSame_(cur, nxt) {
   var ad = gardenMirrorIsDate_(cur), bd = gardenMirrorIsDate_(nxt);
   if (ad && bd) return Math.abs(cur.getTime() - nxt.getTime()) < 1000;
-  if (ad || bd) {
-    var other = ad ? nxt : cur;
+  if (ad !== bd) {
+    var d = ad ? cur : nxt;
+    var s = String(ad ? nxt : cur).trim();
     /* צד אחד תאריך והשני ריק = שינוי אמיתי. */
-    if (other === '' || other === null || other === undefined) return false;
-    var t = new Date(other).getTime();
-    if (isNaN(t)) return false;
-    return Math.abs((ad ? cur.getTime() : nxt.getTime()) - t) < 1000;
+    if (!s) return false;
+    var tz = gardenMirrorTz_();
+    /* 🔴 תאריך-בלבד — יום קלנדרי, לא רגע. זה המסלול של
+       'שבוע', 'שבוע מקורי', 'נוצר בתאריך' ו-'תאריך אישור'. */
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      try { return Utilities.formatDate(d, tz, 'yyyy-MM-dd') === s; }
+      catch (e) { return false; }
+    }
+    var p = new Date(s);
+    if (isNaN(p.getTime())) return false;
+    return Math.abs(d.getTime() - p.getTime()) < 1000;
   }
   return String(cur == null ? '' : cur) === String(nxt == null ? '' : nxt);
 }
@@ -14763,7 +14800,13 @@ function gardenMirrorRow_(headers, map, d, did, cId, lastCol, opts) {
     var cName = headers.indexOf('שם מדווח');
     var fam = String(d.familyId == null ? '' : d.familyId).trim();
     if (cName !== -1 && fam && !String(row[cName] || '').trim()) {
-      row[cName] = String(opts.names[fam] || '').trim();
+      /* 🔴 18.9 — **נפתר עצלנית.** `txFamilyNames_` קוראת את כל טאב
+         התושבים, ובגרסה הראשונה היא רצה **בכל פעולת גינון**,
+         גם כשהשורות כבר היו קיימות ולא היה מה למלא.
+         נמדד חי: "בוצע" לקחה 28.9 שניות. מעכשיו המפה נפתרת
+         רק כשבאמת נכתבת שורת דיווח חדשה עם מזהה משפחה. */
+      var nm = (typeof opts.names === 'function') ? opts.names() : opts.names;
+      row[cName] = String((nm && nm[fam]) || '').trim();
     }
   }
   return row;
@@ -14828,13 +14871,15 @@ function gardenEnsureRows_(ss, action, body) {
       body.ids.forEach(push);
     }
     if (!ids.length) return;
+    /* 🔴 עצלנית ופעם אחת — ר' ההסבר ב-`gardenMirrorRow_`. */
     var names = null;
+    var namesFn = function () { if (!names) names = txFamilyNames_(ss); return names; };
+    var opts = { names: namesFn };
     for (var i = 0; i < ids.length && i < 50; i++) {
       var addedTask = gardenMirrorEnsureOne_(ss, GARDEN_TASKS_SHEET, FS_GARDEN_TASKS,
                                              GARDEN_TASK_MIRROR_COLS, ids[i], {});
-      if (!names) names = txFamilyNames_(ss);
       gardenMirrorEnsureOne_(ss, GARDEN_REPORTS_SHEET, FS_GARDEN_REPORTS,
-                             GARDEN_REPORT_MIRROR_COLS, ids[i], { names: names });
+                             GARDEN_REPORT_MIRROR_COLS, ids[i], opts);
       if (addedTask) {
         /* המשימה מצביעה על הדיווח שמאחוריה — בלעדיו אין מייל לתושב. */
         try {
@@ -14842,7 +14887,7 @@ function gardenEnsureRows_(ss, action, body) {
           var rep = t && String(t.repId || '').trim();
           if (rep) {
             gardenMirrorEnsureOne_(ss, GARDEN_REPORTS_SHEET, FS_GARDEN_REPORTS,
-                                   GARDEN_REPORT_MIRROR_COLS, rep, { names: names });
+                                   GARDEN_REPORT_MIRROR_COLS, rep, opts);
           }
         } catch (e2) { Logger.log('gardenEnsureRows_ — דיווח של משימה: ' + e2); }
       }
@@ -14955,9 +15000,14 @@ function gardenMirrorToSheet_(ss) {
     /* 🔑 `names` — שם המדווח נכתב **רק בשורה חדשה** ומהגיליון,
        לפי מזהה המשפחה. העמודה נשארת מחוץ למפת העדכון,
        ולכן שורה קיימת לעולם אינה נדרסת. */
+    var mirNames = null;
     gardenMirrorOne_(ss, GARDEN_REPORTS_SHEET, FS_GARDEN_REPORTS,
                      GARDEN_REPORT_MIRROR_COLS,
-                     { skipBlank: true, names: txFamilyNames_(ss) }, out);
+                     { skipBlank: true,
+                       names: function () {
+                         if (!mirNames) mirNames = txFamilyNames_(ss);
+                         return mirNames;
+                       } }, out);
   } catch (err) {
     out.ok = false;
     out.errors.push(String(err));

@@ -59,7 +59,20 @@ ok('\🔑 שני תאריכים מושווים לפי getTime ולא לפי מח
 ok('⚠️ סבילות של שנייה — המספר הסידורי בגיליון מעגל',
    (same.match(/< 1000/g) || []).length >= 2, same);
 ok('צד אחד תאריך והשני ריק = שינוי אמיתי',
-   /if \(other === '' \|\| other === null \|\| other === undefined\) return false;/.test(same), same);
+   /if \(!s\) return false;/.test(same), same);
+/* 🔴🔴 18.9 — מה שהמדידה החיה חשפה אחרי הניסיון הראשון.
+   הערכים במסמכים הם **מחרוזות** `"2026-09-13"`, הגיליון ממיר אותן
+   ל-Date בכתיבה, ו-`new Date("2026-09-13")` הוא חצות UTC מול חצות מקומי
+   — שלוש שעות הפרש. השוואה של רגעים לא יכולה להתכנס כאן. */
+ok('🔴🔴 תאריך-בלבד מושווה כיום קלנדרי, לא כרגע',
+   /\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$/.test(same) &&
+   /Utilities\.formatDate\(d, tz, 'yyyy-MM-dd'\) === s/.test(same), same);
+ok('🔑 ובאזור הזמן של הגיליון, לא של השרת',
+   /getSpreadsheetTimeZone\(\)/.test((GS.match(/function gardenMirrorTz_[\s\S]*?\n\}/)||[''])[0]));
+ok('⚠️ והוא נשמר במטמון — לא קריאת API לכל תא',
+   /if \(!GARDEN_MIRROR_TZ_\)/.test(GS));
+ok('מחרוזת תאריך-ושעה עדיין מושווה כרגע',
+   /var p = new Date\(s\);/.test(same) && /Math\.abs\(d\.getTime\(\) - p\.getTime\(\)\) < 1000/.test(same), same);
 ok('לא-תאריך — ההתנהגות הישנה נשמרת',
    /return String\(cur == null \? '' : cur\) === String\(nxt == null \? '' : nxt\);/.test(same), same);
 ok('⚠️ תאריך לא תקין אינו נחשב תאריך',
@@ -113,13 +126,20 @@ ok('⚠️ והמפה נטענת עצלנית — לא בכל שורה',
 ok('\🔑 וזה הצוואר היחיד — חמשת המיילים עוברים דרכו',
    (GS.match(/gardenReportsForTask_\(ss, taskId\)/g) || []).length >= 4);
 ok("והמראה ממלאת 'שם מדווח' בשורה חדשה",
-   /opts\.names\[fam\]/.test((GS.match(/function gardenMirrorRow_[\s\S]*?\n\}/)||[''])[0]));
+   /nm && nm\[fam\]/.test((GS.match(/function gardenMirrorRow_[\s\S]*?\n\}/)||[''])[0]));
+/* 🔴 18.9 — נמדד חי: "בוצע" לקחה 28.9 שניות כש-`txFamilyNames_`
+   (קריאת כל טאב התושבים) רצה בכל פעולת גינון גם כשלא היה מה למלא. */
+ok('🔴🔴 ומפת השמות נפתרת **עצלנית** — רק כשנכתבת שורה',
+   /typeof opts\.names === 'function'/.test(GS) &&
+   !/names: txFamilyNames_\(ss\)/.test(GS));
+ok('⚠️ והיא נפתרת פעם אחת לכל בקשה, לא לכל שורה',
+   /if \(!names\) names = txFamilyNames_\(ss\); return names;/.test(GS));
 ok('\🔴\🔴 אבל **לעולם לא דורסת שם קיים**',
    /!String\(row\[cName\] \|\| ''\)\.trim\(\)/.test((GS.match(/function gardenMirrorRow_[\s\S]*?\n\}/)||[''])[0]));
 ok("⚠️ ו'שם מדווח' עדיין אינו במפת העדכון — שורה קיימת אינה נגעת",
    !/'שם מדווח':/.test(GS));
 ok('המראה המלאה מעבירה את המפה לטאב הדיווחים בלבד',
-   /\{ skipBlank: true, names: txFamilyNames_\(ss\) \}/.test(GS) &&
+   /\{ skipBlank: true,\s*\n\s*names: function \(\)/.test(GS) &&
    /GARDEN_TASK_MIRROR_COLS, \{\}, out\)/.test(GS));
 
 section('5. מה שאסור היה להישבר בדרך');

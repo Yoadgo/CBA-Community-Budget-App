@@ -65,7 +65,7 @@ ok("'עודכן על ידי' אינו במפה — הוא הוחרג מהמסמ�
 ok('🔴 במשימות ערך ריק **כן** נכתב — אחרת פתיחה מחדש לא הייתה מנקה סגירה',
    /GARDEN_TASK_MIRROR_COLS, \{\}, out\)/.test(GS));
 ok('🔴 ובדיווחים ריק **אינו** נכתב — אין מסלול שבו תיאור הופך לריק',
-   /GARDEN_REPORT_MIRROR_COLS,\s*\n?\s*\{ skipBlank: true, names: txFamilyNames_\(ss\) \}, out\)/.test(GS) &&
+   /GARDEN_REPORT_MIRROR_COLS,\s*\n?\s*\{ skipBlank: true,/.test(GS) &&
    /if \(opts\.skipBlank && String\(nxt\) === ''\) continue;/.test(GS));
 /* 🔴 18.9, ממצא ד' — `names` נוסף לאותה קריאה, והוא נוגע
    **רק בשורה חדשה**: 'שם מדווח' עדיין מחוץ למפת העדכון. */
