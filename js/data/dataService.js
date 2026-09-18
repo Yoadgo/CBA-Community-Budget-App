@@ -1871,6 +1871,24 @@ CBA.data = (function () {
     var fid = String(user.familyId || "").trim();
     var photos = payload.photos || [];
 
+    /* 🔴🔴 **הבדיקה לפני ההקצאה** (18.9, ממצא ג').
+       הכתיבה היא שני מסמכים: קודם המשימה, אחר כך הדיווח.
+       כשהדיווח נדחה — המשימה **נשארת**, מצביעה ל-`repId`
+       שאינו קיים, וצפה במסך הצוות כמשימה בלי מדווח ובלי מדווחן.
+       נצפה חי ב-18.9: משימה #55 ← דיווח 11 שאינו קיים.
+       התנאי הזה הוא העתק מדויק של `grPlaceOk` בכללי האבטחה:
+       או נעיצה מנורמלת 0–1, או מיקום מילולי. בלי אחד מהם
+       הכתיבה נדחית בוודאות — ועדיף לא לפתוח כלום מאשר להשאיר חצי. */
+    var hasPin = typeof payload.x === "number" && typeof payload.y === "number" &&
+                 payload.x >= 0 && payload.x <= 1 && payload.y >= 0 && payload.y <= 1;
+    var hasPlace = String(payload.place || "").trim() !== "";
+    if (!hasPin && !hasPlace) {
+      return cb({ ok: false, error: "צריך לסמן מיקום על המפה או לכתוב אותו" });
+    }
+    if (!fid) {
+      return cb({ ok: false, error: "חסר מזהה משפחה — רענן ונסה שוב" });
+    }
+
     CBA.fb.nextId("gardenReport", function (e1, repId) {
       if (e1) return cb({ ok: false, error: "לא הצלחנו להקצות מספר לדיווח" });
       CBA.fb.nextId("gardenTask", function (e2, taskId) {
@@ -1914,7 +1932,18 @@ CBA.data = (function () {
         CBA.fb.createDoc("gardenTasks", String(taskId), task, function (e3) {
           if (e3) return cb({ ok: false, error: "לא הצלחנו לפתוח את המשימה" });
           CBA.fb.createDoc("gardenReports", String(repId), report, function (e4) {
-            if (e4) return cb({ ok: false, error: "לא הצלחנו לשמור את הדיווח" });
+            if (e4) {
+              /* 🔴 **גלגול אחורה** (18.9, ממצא ג'). המשימה כבר נכתבה,
+                 ובלי המחיקה הזאת היא נשארת לנצח כמשימה יתומה.
+                 כלל האבטחה `gtOrphanCleanupOk` מתיר את המחיקה **רק**
+                 כל עוד אין מסמך דיווח שמצביע עליה — כלומר בדיוק
+                 במצב הזה, ולעולם לא על משימה חיה.
+                 ⚠️ שגר ושכח: כשל במחיקה אינו משנה את מה שהתושב רואה. */
+              CBA.fb.deleteDoc("gardenTasks", String(taskId), function (eD) {
+                if (eD) gardenPhotoWarn("משימה יתומה לא נמחקה", taskId, eD);
+              });
+              return cb({ ok: false, error: "לא הצלחנו לשמור את הדיווח" });
+            }
 
             /* מכאן הדיווח **קיים**. כל מה שנכשל אחרי זה אינו מבטל אותו. */
             gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId);

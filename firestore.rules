@@ -440,11 +440,30 @@ service cloud.firestore {
       return hasPerm('גינון') && m().isExternal == false;
     }
 
+    /* 🔴 **גלגול אחורה של משימה יתומה** (2026-09-18, ממצא ג').
+       הדפדפן כותב שני מסמכים: קודם המשימה, אחר כך הדיווח
+       (ובסדר הזה בכוונה — דיווח שמצביע למשימה שאינה קיימת
+       מראה לתושב שלב ריק). כשהכתיבה השנייה נדחית, הראשונה
+       נשארת כאשפה — משימה בלי מדווח ובלי מדווחן.
+
+       ⚠️ **שלושה שומרים, והמרכזי בהם הוא `!exists`:** המחיקה
+          מותרת רק כל עוד אין מסמך דיווח שמצביע על המשימה.
+          ברגע שהדיווח נכתב — השער נסגר, ותושב לעולם אינו
+          יכול למחוק משימה חיה של הצוות. בנוסף: רק שלב 'התקבל'
+          (משימה שאיש לא נגע בה), ורק `repId` מלא — משימת
+          שגרה או יזומה של הצוות אינה נכנסת לכאן כלל. */
+    function gtOrphanCleanupOk() {
+      return isMember() && m().isExternal == false &&
+             resource.data.stage == 'התקבל' &&
+             resource.data.get('repId', '') != '' &&
+             !exists(/databases/$(database)/documents/gardenReports/$(resource.data.repId));
+    }
+
     match /gardenTasks/{id} {
       allow read: if canSeeGardenTasks();
       allow create: if gtTeamCreateOk() || gtFromReportOk();
       allow update: if gtTeamUpdateOk() || gtReportPhotosOk();
-      allow delete: if gtDeleteOk();
+      allow delete: if gtDeleteOk() || gtOrphanCleanupOk();
     }
 
     /* ========================================================================

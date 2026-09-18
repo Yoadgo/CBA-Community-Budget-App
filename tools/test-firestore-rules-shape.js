@@ -105,6 +105,10 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                         ומאומת מול `repId`→`familyId`. ר' סעיף 8 למטה
                         ושורות 40–49 ב-firestore-rules-expectations.md. */
                      'gtReportPhotosOk',
+                     /* 🔴 נוסף 18.9 — גלגול אחורה של משימה יתומה.
+                        השער נפתח רק כל עוד אין מסמך דיווח שמצביע
+                        על המשימה — ר' סעיף 3 ב-test-wave2-live-fixes.js. */
+                     'gtOrphanCleanupOk',
                      'glCreateOk', 'glResidentCreateOk'];
 {
   const used = [];

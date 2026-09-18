@@ -586,6 +586,15 @@ Apps Script החזיר **41 משימות**, Firestore **10**.
 | 47 | לא מחובר | update | `gardenTasks/TASK_9` | `photos` | ❌ נדחה |
 | 48 | UID_A | create | `gardenTasks/TASK_NEW` | כרגיל | ✅ מותר (gtFromReportOk, לא השתנה) |
 | 49 | 🔴 UID_A | delete | `gardenTasks/TASK_9` | — | ❌ נדחה (gtDeleteOk דורש הרשאה) |
+| 50 | UID_A | delete | `gardenTasks/TASK_ORPH` (repId→REP_X שאינו קיים, שלב 'התקבל') | — | ✅ מותר (gtOrphanCleanupOk) |
+| 51 | 🔴 UID_A | delete | `gardenTasks/TASK_ORPH` אחרי ש-REP_X נכתב | — | ❌ נדחה — השער נסגר ברגע שהדיווח קיים |
+| 52 | 🔴 UID_A | delete | `gardenTasks/TASK_ORPH` בשלב 'בטיפול' | — | ❌ נדחה — הצוות כבר נגע בה |
+| 53 | 🔴 UID_A | delete | `gardenTasks/TASK_R` (בלי repId — משימת שגרה) | — | ❌ נדחה |
+
+🔑 **50–53 הן הגלגול אחורה של ממצא ג' (18.9).** הדפדפן כותב קודם
+את המשימה ואז את הדיווח; כשהשנייה נדחית הראשונה נשארת כאשפה.
+`!exists(gardenReports/repId)` הוא מה שהופך את הניקוי לאפשרי בלי
+לפתוח מחיקת משימות לתושבים — השער נסגר מעצמו שנייה אחרי כן.
 
 🔑 **44 ו-45 הם הלב.** בלי בדיקת ה-`repId` מול `familyId`, כל תושב היה
 יכול לכתוב תמונות לכל משימה בשיכון בכך שינחש מזהה. זה `get()` נוסף על

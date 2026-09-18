@@ -1558,7 +1558,9 @@ function doPostDispatch_(ss, body) {
          המשתמש רואה "נמחקה" ואז רואה אותה חוזרת. */
       case 'gardenTaskDelete':    return json_(gardenWrite_(ss, body.action, body, gardenTaskDelete_));
       case 'gardenReportDelete':  return json_(gardenWrite_(ss, body.action, body, gardenReportDelete_));
-      case 'gardenCoverByPlan':   return json_(gardenCoverByPlan_(ss, body));
+      /* אינה עוברת ב-`gardenWrite_`, ולכן ההשלמה נקראת כאן במפורש. */
+      case 'gardenCoverByPlan':   gardenEnsureRows_(ss, body.action, body);
+                                  return json_(gardenCoverByPlan_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
@@ -14384,6 +14386,10 @@ function gardenReportSyncSome_(ss, ids) {
  *  ⚠️ מחזיר את תשובת המטפל **כמו שהיא** — הסנכרון אינו רשאי לשנות
  *     את מה שהמשתמש מקבל, גם לא כשהוא נכשל. */
 function gardenWrite_(ss, action, body, fn) {
+  /* 🔴 18.9, ממצא א' — **לפני המטפל, לא אחריו.** המטפלים
+     מחפשים שורה בגיליון, ומשימה שנולדה בדפדפן עדיין אינה שם.
+     זה השער היחיד שכל שש פעולות הכתיבה עוברות דרכו. */
+  gardenEnsureRows_(ss, action, body);
   var res = fn(ss, body);
   gardenAfterWrite_(ss, action, body, res);
   return res;
@@ -14706,9 +14712,148 @@ function gardenMirrorCell_(v) {
   return v;
 }
 
+/* ============================================================================
+ *  🔴🔴  למה המראה לא התכנסה   (2026-09-18, ממצא ב' בסימולציה החיה)
+ * ----------------------------------------------------------------------------
+ *  שלוש הרצות רצופות החזירו **בדיוק `updated: 40`** בכל פעם —
+ *  כלומר המראה כתבה מחדש אותם 40 תאים, שעה אחר שעה, לנצח.
+ *
+ *  🔑 **השורש:** שדות הזמן (`createdAt`, `updatedAt`, `approvedAt`, `due`)
+ *  חוזרים מ-`fsUnval_` כ-`new Date(timestampValue)` ברזולוציית
+ *  מילישניות, בעוד תא בגיליון שומר תאריך כמספר סידורי.
+ *  השוואה `String(cur) === String(nxt)` לעולם אינה מתלכדת עליהם.
+ *
+ *  ⚠️ **שנייה ולא אפס** — המספר הסידורי מעגל, והפרש של שבריר
+ *     שנייה אינו שינוי שמישהו יכול לראות. דקיקה הייתה מפסידה עדכון אמיתי.
+ * ========================================================================== */
+function gardenMirrorIsDate_(v) {
+  return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
+}
+
+/** האם תא בגיליון כבר מחזיק את מה שהמסמך אומר. */
+function gardenMirrorSame_(cur, nxt) {
+  var ad = gardenMirrorIsDate_(cur), bd = gardenMirrorIsDate_(nxt);
+  if (ad && bd) return Math.abs(cur.getTime() - nxt.getTime()) < 1000;
+  if (ad || bd) {
+    var other = ad ? nxt : cur;
+    /* צד אחד תאריך והשני ריק = שינוי אמיתי. */
+    if (other === '' || other === null || other === undefined) return false;
+    var t = new Date(other).getTime();
+    if (isNaN(t)) return false;
+    return Math.abs((ad ? cur.getTime() : nxt.getTime()) - t) < 1000;
+  }
+  return String(cur == null ? '' : cur) === String(nxt == null ? '' : nxt);
+}
+
+/** שורת גיליון שלמה מתוך מסמך. משותפת למראה המלאה ולהשלמת
+ *  שורה בודדה — מקור אחד למיפוי העמודות, כדי שלא יסטו זו מזו.
+ *  🔑 `opts.names` — מפת מזהה-משפחה ← שם. המסמך **אינו מכיל שם**
+ *  (הקו האדום: פרטים אישיים נשארים בגיליון), ולכן שורה שנולדה
+ *  בדפדפן הגיעה לגיליון עם 'שם מדווח' ריק — ומשם הגיע "שלום ,"
+ *  במיילים (ממצא ד', 18.9). השם נשלף **כאן, בשרת**, מתוך מזהה המשפחה. */
+function gardenMirrorRow_(headers, map, d, did, cId, lastCol, opts) {
+  var row = new Array(lastCol).fill('');
+  for (var h = 0; h < headers.length; h++) {
+    var f = map[headers[h]];
+    if (f === undefined) continue;
+    row[h] = gardenMirrorCell_(d[f]);
+  }
+  row[cId] = did;
+  if (opts && opts.names) {
+    var cName = headers.indexOf('שם מדווח');
+    var fam = String(d.familyId == null ? '' : d.familyId).trim();
+    if (cName !== -1 && fam && !String(row[cName] || '').trim()) {
+      row[cName] = String(opts.names[fam] || '').trim();
+    }
+  }
+  return row;
+}
+
+/* ============================================================================
+ *  🔴🔴  השלמת שורה לפני פעולת מנהל   (2026-09-18, ממצא א' — חוסם)
+ * ----------------------------------------------------------------------------
+ *  כל פעולות המנהל על משימה (בוצע/החזרה/אישור/הערה/מחיקה)
+ *  עובדות מול **הגיליון**. משימה שנולדה בדפדפן קיימת רק
+ *  ב-Firestore עד שהמראה השעתית מוסיפה לה שורה.
+ *
+ *  נמדד בייצור (18.9): `gardenTask('done', 57)` החזירה **"המשימה לא
+ *  נמצאה"**, ומיד אחרי הרצת המראה אותה קריאה החזירה `ok: true`.
+ *  בפועל: תושב מדווח, המנהל רואה את המשימה מיד (קורא מ-Firestore),
+ *  לוחץ "בוצע" — ומקבל שגיאה, עד שעה.
+ *
+ *  ⚠️ **הוספה בלבד, לעולם לא עדכון.** שורה שכבר קיימת אינה נגעת
+ *     כאן — אחרת היינו מריצים מראה מלאה לפני כל לחיצה.
+ *  ⚠️ **שגר ושכח.** כשל כאן אינו מבטל את הפעולה; המטפל יחזיר
+ *     "המשימה לא נמצאה" כמקודם, וזה בדיוק המצב שהיה לפני התיקון.
+ * ========================================================================== */
+function gardenMirrorEnsureOne_(ss, sheetName, collection, map, id, opts) {
+  var sh = ss.getSheetByName(sheetName);
+  if (!sh) return false;
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+                  .map(function (h) { return String(h).trim(); });
+  var cId = headers.indexOf('מזהה');
+  if (cId === -1) return false;
+
+  var n = Math.max(sh.getLastRow() - 1, 0);
+  if (n) {
+    var ids = sh.getRange(2, cId + 1, n, 1).getValues();
+    for (var i = 0; i < n; i++) {
+      if (String(ids[i][0] == null ? '' : ids[i][0]).trim() === String(id).trim()) return false;
+    }
+  }
+  var d = fsGet_(fsDocPath_(collection, id));
+  if (!d) return false;                       /* אין מסמך — אין מה להשלים */
+  var row = gardenMirrorRow_(headers, map, d, String(id), cId, lastCol, opts);
+  sh.getRange(sh.getLastRow() + 1, 1, 1, lastCol).setValues([row]);
+  Logger.log('CBA-ENSURE-ROW ' + sheetName + '/' + id);
+  return true;
+}
+
+/** משלימה את שורות המשימה **והדיווח שלה** לכל מזהה שבבקשה.
+ *  ⚠️ מרחבי המזהים שונים, ולכן אותו מספר יכול להיות גם משימה
+ *     וגם דיווח — בדיקת שניהם נכונה ואינה מזיקה: שורה נוספת
+ *     נכתבת רק כשהמסמך באמת קיים באותו אוסף. */
+function gardenEnsureRows_(ss, action, body) {
+  try {
+    if (!gardenFsOwns_()) return;
+    var ids = [];
+    function push(x) {
+      var v = String(x == null ? '' : x).trim();
+      if (v && ids.indexOf(v) === -1) ids.push(v);
+    }
+    push(body && body.id);
+    push(body && body.into);
+    if (body && Object.prototype.toString.call(body.ids) === '[object Array]') {
+      body.ids.forEach(push);
+    }
+    if (!ids.length) return;
+    var names = null;
+    for (var i = 0; i < ids.length && i < 50; i++) {
+      var addedTask = gardenMirrorEnsureOne_(ss, GARDEN_TASKS_SHEET, FS_GARDEN_TASKS,
+                                             GARDEN_TASK_MIRROR_COLS, ids[i], {});
+      if (!names) names = txFamilyNames_(ss);
+      gardenMirrorEnsureOne_(ss, GARDEN_REPORTS_SHEET, FS_GARDEN_REPORTS,
+                             GARDEN_REPORT_MIRROR_COLS, ids[i], { names: names });
+      if (addedTask) {
+        /* המשימה מצביעה על הדיווח שמאחוריה — בלעדיו אין מייל לתושב. */
+        try {
+          var t = fsGet_(fsDocPath_(FS_GARDEN_TASKS, ids[i]));
+          var rep = t && String(t.repId || '').trim();
+          if (rep) {
+            gardenMirrorEnsureOne_(ss, GARDEN_REPORTS_SHEET, FS_GARDEN_REPORTS,
+                                   GARDEN_REPORT_MIRROR_COLS, rep, { names: names });
+          }
+        } catch (e2) { Logger.log('gardenEnsureRows_ — דיווח של משימה: ' + e2); }
+      }
+    }
+  } catch (e) { Logger.log('gardenEnsureRows_ נכשלה (לא חוסם): ' + e); }
+}
+
 /** מראה של טאב אחד. מחזירה סיכום ולעולם אינה זורקת. */
 function gardenMirrorOne_(ss, sheetName, collection, map, opts, out) {
   opts = opts || {};
+  if (!out.diffCols) out.diffCols = {};
   var sh = ss.getSheetByName(sheetName);
   if (!sh) { out.errors.push(sheetName + ' — הטאב חסר'); return; }
 
@@ -14755,14 +14900,7 @@ function gardenMirrorOne_(ss, sheetName, collection, map, opts, out) {
     var isNew = !Object.prototype.hasOwnProperty.call(rowOf, did);
 
     if (isNew) {
-      var row = new Array(lastCol).fill('');
-      for (var h = 0; h < headers.length; h++) {
-        var f = map[headers[h]];
-        if (f === undefined) continue;
-        row[h] = gardenMirrorCell_(d[f]);
-      }
-      row[cId] = did;
-      appends.push(row);
+      appends.push(gardenMirrorRow_(headers, map, d, did, cId, lastCol, opts));
       out.added++;
       continue;
     }
@@ -14774,9 +14912,14 @@ function gardenMirrorOne_(ss, sheetName, collection, map, opts, out) {
       var nxt = gardenMirrorCell_(d[fld]);
       if (opts.skipBlank && String(nxt) === '') continue;
       var cur = values[idx][c];
-      if (String(cur == null ? '' : cur) === String(nxt)) continue;
+      /* 🔴 18.9 — ר' `gardenMirrorSame_`. השוואת מחרוזות כאן גרמה
+         למראה לכתוב מחדש אותם ~40 תאים **בכל הרצה, לנצח**. */
+      if (gardenMirrorSame_(cur, nxt)) continue;
       sh.getRange(idx + 2, c + 1).setValue(nxt);
       values[idx][c] = nxt;
+      /* 🔎 איזו עמודה באמת זזה. רשימה שאינה מתרוקנת בהרצה
+         שנייה רצופה היא בדיוק החיווי שחסר כדי לתפוס את ממצא ב'. */
+      out.diffCols[headers[c]] = (out.diffCols[headers[c]] || 0) + 1;
       diffs++;
     }
     if (diffs) out.updated++;
@@ -14796,7 +14939,7 @@ function gardenMirrorOne_(ss, sheetName, collection, map, opts, out) {
 /** המראה המלאה — שני הטאבים. רצה בעבודה השעתית, **לפני** כל השאר. */
 function gardenMirrorToSheet_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
-  var out = { ok: true, added: 0, updated: 0, orphanRows: 0, errors: [] };
+  var out = { ok: true, added: 0, updated: 0, orphanRows: 0, diffCols: {}, errors: [] };
   if (!gardenFsOwns_()) { out.skipped = 'flag-off'; return out; }
 
   var lock = LockService.getScriptLock();
@@ -14809,8 +14952,12 @@ function gardenMirrorToSheet_(ss) {
        פותח חלון שבו הוא מצביע לשום מקום. */
     gardenMirrorOne_(ss, GARDEN_TASKS_SHEET, FS_GARDEN_TASKS,
                      GARDEN_TASK_MIRROR_COLS, {}, out);
+    /* 🔑 `names` — שם המדווח נכתב **רק בשורה חדשה** ומהגיליון,
+       לפי מזהה המשפחה. העמודה נשארת מחוץ למפת העדכון,
+       ולכן שורה קיימת לעולם אינה נדרסת. */
     gardenMirrorOne_(ss, GARDEN_REPORTS_SHEET, FS_GARDEN_REPORTS,
-                     GARDEN_REPORT_MIRROR_COLS, { skipBlank: true }, out);
+                     GARDEN_REPORT_MIRROR_COLS,
+                     { skipBlank: true, names: txFamilyNames_(ss) }, out);
   } catch (err) {
     out.ok = false;
     out.errors.push(String(err));
@@ -15473,12 +15620,24 @@ function gardenReportsForTask_(ss, taskId) {
   if (!rsh || rsh.getLastRow() < 2) return out;
   var rc = gardenCols_(rsh);
   var v = rsh.getDataRange().getValues();
+  /* 🔴 18.9, ממצא ד' — **נפילה לאחור לשם מתוך מזהה המשפחה.**
+     שורה שהמראה הוסיפה ממסמך אינה מכילה 'שם מדווח' — השם
+     אינו במסמך בכוונה — ולכן כל חמשת המיילים שנשענים על
+     הפונקציה הזו נפתחו ב-"שלום ,". התיקון כאן מכסה גם שורות
+     שכבר נכתבו ריקות, ולא רק את הבאות. */
+  var names = null;
   for (var r = 1; r < v.length; r++) {
     if (String(v[r][rc['מזהה משימה']] || '').trim() !== String(taskId).trim()) continue;
+    var fam = String(v[r][rc['מזהה משפחה']] || '').trim();
+    var nm = String(v[r][rc['שם מדווח']] || '').trim();
+    if (!nm && fam) {
+      if (!names) names = txFamilyNames_(ss);
+      nm = String(names[fam] || '').trim();
+    }
     out.push({
       id:       String(v[r][rc['מזהה']] || ''),
-      familyId: String(v[r][rc['מזהה משפחה']] || ''),
-      name:     String(v[r][rc['שם מדווח']] || ''),
+      familyId: fam,
+      name:     nm,
       category: String(v[r][rc['קטגוריה']] || ''),
       place:    String(v[r][rc['מיקום מילולי']] || v[r][rc['אזור']] || ''),
       mergedInto: String(v[r][rc['אוחד לדיווח']] || '')
