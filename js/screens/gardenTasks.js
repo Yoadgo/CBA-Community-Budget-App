@@ -451,12 +451,25 @@
           /* ⚠️ בלי חיצי שבוע (9.9). המסך כבר לא ממוסגר בשבוע אחד — הוא מחזיק
              את כל המשימות, והשבוע הוא קיבוץ בתוך הרשימה. הכותרת נשארה כדי
              לענות על "איך אנחנו עומדים השבוע", וזה כל מה שהיא אומרת. */
-          '<div class="gt-week is-static">' +
-            '<div class="gt-week__c"><b>' + esc(weekLabel(week)) + '</b>' +
+          /* 🔴 **החצים חזרו** (2026-09-21, בקשת יועד). הנימוק לביטולם
+             ב-9.9 — "המסך מחזיק את כל המשימות" — נכון, אבל כל מה שמעבר
+             לשבוע הנוכחי נדחס ללהקה אחת בשם "בהמשך", בלי חלוקה
+             לשבועות ובלי דרך לשאול "מה יש לי בשבוע הבא".
+             ⚠️ החצים מזיזים את **חלון הקיבוץ** ולא טוענים מחדש. */
+          '<div class="gt-week">' +
+            '<button type="button" class="gt-wnav" data-wk="-1" aria-label="שבוע קודם">' +
+              ico("prev") + '</button>' +
+            '<div class="gt-week__c"><b>' + esc(weekLabel(week)) +
+              (week !== todayKey()
+                ? ' <button type="button" class="gt-wnow" data-wk="0" ' +
+                  'aria-label="חזרה לשבוע הנוכחי">היום</button>'
+                : '') + '</b>' +
               '<span>' + (c.weekTotal
                 ? c.weekDone + " מתוך " + c.weekTotal + " הושלמו השבוע"
                 : "אין משימות משובצות לשבוע הזה") + '</span>' +
               '<div class="gt-bar"><i style="width:' + pct + '%"></i></div></div>' +
+            '<button type="button" class="gt-wnav" data-wk="1" aria-label="השבוע הבא">' +
+              ico("next") + '</button>' +
           '</div>' +
           '<div class="gt-ctl">' +
             '<div class="gt-ctl__f">' +
@@ -549,15 +562,22 @@
       }
       function openBody(list) {
         var byUrg = function (a, b) { return urgency(b) - urgency(a); };
+        var weekIsNow = week === todayKey();
         var reports = [], thisWeek = [], toPlan = [], later = [];
         list.forEach(function (t) {
           if (t.kind === GK_REPORT) return reports.push(t);
           if (!t.week) return toPlan.push(t);
           /* שבוע שעבר נכנס ל"עבודת השבוע" ולא לקבוצה משלו: מבחינת הגנן זו
              עבודה שצריך לעשות עכשיו. האיחור עצמו כבר כתוב על הכרטיס (תג
-             "נגררה" ומונה הגרירות), ולכן הוא לא צריך כותרת נפרדת. */
-          if (t.week <= week) return thisWeek.push(t);
-          later.push(t);
+             "נגררה" ומונה הגרירות), ולכן הוא לא צריך כותרת נפרדת.
+
+             🔴🔴 **אבל רק כשצופים בשבוע הנוכחי** (2026-09-21). עם החצים,
+             `<=` הפך למלכודת: דפדוף לשבוע הבא היה גורר אליו **גם את כל
+             הפיגור מהעבר**, תחת כותרת שאומרת "עבודת השבוע" — כותרת
+             שמשקרת. בשבוע עתידי מציגים בדיוק את מה שמשובץ אליו.
+             ⚠️ מה שמוקדם יותר אינו נעלם — כפתור "היום" יושב בכותרת. */
+          if (weekIsNow ? (t.week <= week) : (t.week === week)) return thisWeek.push(t);
+          if (t.week > week) later.push(t);
         });
         reports.sort(byUrg); toPlan.sort(byUrg); later.sort(byUrg);
 
@@ -566,7 +586,19 @@
             ? '<div class="gd-reps">' + reports.map(card).join("") + '</div>'
             : '<div class="gt-none">אין תקלות פתוחות מהתושבים.</div>');
 
-        html += lane("עבודת השבוע", thisWeek.length);
+        /* 🔴 **"לשיבוץ" עלה לראש המסך** (2026-09-21, הכרעת יועד).
+           קודם הוא ישב **אחרי** עבודת השבוע — כלומר משימה שאיש עוד
+           לא החליט עליה היתה מתחת לכל העבודה שכבר מסודרת.
+           החלטה שממתינה קודמת לעבודה שכבר יש לה שבוע. */
+        if (toPlan.length) {
+          html += lane("לשיבוץ", toPlan.length) +
+            '<div class="gd-reps">' + toPlan.map(card).join("") + '</div>';
+        }
+
+        /* ⚠️ הכותרת אומרת את האמת: "עבודת השבוע" רק כשזה באמת
+           השבוע הזה. אחרת — שם השבוע שצופים בו. */
+        html += lane(weekIsNow ? "עבודת השבוע" : ("עבודת " + weekLabel(week)),
+                     thisWeek.length);
         if (!thisWeek.length) {
           html += '<div class="gt-none">אין עבודה משובצת לשבוע הזה.</div>';
         } else {
@@ -591,10 +623,6 @@
           }).join("");
         }
 
-        if (toPlan.length) {
-          html += lane("לשיבוץ", toPlan.length) +
-            '<div class="gd-reps">' + toPlan.map(card).join("") + '</div>';
-        }
         if (later.length) {
           html += lane("בהמשך", later.length) +
             '<div class="gd-reps">' + later.map(card).join("") + '</div>';
@@ -799,8 +827,13 @@
       function wire() {
         Array.prototype.forEach.call(root.querySelectorAll("[data-wk]"), function (b) {
           b.addEventListener("click", function () {
-            week = shiftKey(week, parseInt(b.dataset.wk, 10));
-            draw(true); load();
+            var d = parseInt(b.dataset.wk, 10);
+            /* 0 = "היום" — חזרה לשבוע הנוכחי, לא הזזה באפס. */
+            week = d ? shiftKey(week, d) : todayKey();
+            /* ⚠️ `draw()` בלבד: `rowsAll` מחזיק כבר את כל המשימות (`scope:"all"`)
+               ו-`counts()` רץ בתוך draw. טעינה מחדש היתה הופכת לחיצה על חץ
+               להמתנה של שנייה, בלי שום נתון חדש. */
+            draw();
           });
         });
         Array.prototype.forEach.call(root.querySelectorAll("[data-f]"), function (b) {
@@ -838,7 +871,12 @@
           var detRow = e.target.closest(".gt-row");
           if (detRow && detRow.dataset.id) {
             var detT = byId(detRow.dataset.id);
-            if (detT && detT.kind === GK_REPORT) openDetails(detRow.dataset.id);
+            /* 🔴 **פתיחת פרטים לכל משימה** (2026-09-21, דיווח יועד).
+               עד היום התנאי היה `kind === GK_REPORT`, ולכן משימה שממתינה
+               לשיבוץ לא הגיבה ללחיצה בכלל — בדסקטופ זה נראה כמו מסך תקוע.
+               ⚠️ `openDetails` כבר גנרי: הוא גוזר את שורת הפעולה ממצב
+                  המשימה (`planning`/`closed`) ומגן על `repId`. בדקתי, לא הנחתי. */
+            if (detT) openDetails(detRow.dataset.id);
           }
           return;
         }

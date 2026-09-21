@@ -202,7 +202,10 @@ ok('🔴 והוא לא נפתח לכל חבר אלא לבעלי הרשאת תק�
 const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks', 'gardenLog',
                 'services', 'budgetYears', 'budgetTx', 'counters', 'appConfig',
                 'gymStatus', 'gymCode', 'homeCounts', 'clubReservations',
-                'tourSteps', 'tourSeen', 'members'];
+                'tourSteps', 'tourSeen', 'members',
+                /* 🔴 21.9, דיווח #6 — מצב ההתראות נקרא מהשרת
+                   ולא מ-localStorage. קריאה בלבד, ורק של עצמך. */
+                'pushSubscriptions'];
 const found = (CODE.match(/^\s*match \/([A-Za-z0-9_]+)\//gm) || [])
                 .map(function (x) { return x.trim().replace(/^match \//, '').replace(/\/$/, ''); })
                 .filter(function (x) { return x !== 'databases'; });

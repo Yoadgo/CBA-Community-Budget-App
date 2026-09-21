@@ -2374,7 +2374,14 @@ CBA.data = (function () {
         var now = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
         var year = (CBA.mock && CBA.mock.currentYear) || "";
         var task = {
-          id: String(taskId), kind: "תקלה", title: payload.title,
+          /* 🔴🔴 **הערך הקנוני, לא הישן** (21.9). עד היום נכתב כאן
+             `"תקלה"` — הערך הישן — בעוד מסך הניהול משווה מול
+             `GK_REPORT = "דיווח תושב"`. השרת ממפה ביניהם
+             (`GARDEN_KIND_LEGACY`) — **הלקוח לא.**
+             התוצאה: כל דיווח של תושב מאז שהדגל נדלק נראה
+             למנהל כמשימה רגילה של השבוע, בלי הטיפול של דיווח
+             תושב. נצפה ע"י יועד על תקלות 21 ו-22. */
+          id: String(taskId), kind: GARDEN_KIND_REPORT, title: payload.title,
           category: payload.category, area: payload.area || "",
           x: (payload.x === null || payload.x === undefined) ? null : Number(payload.x),
           y: (payload.y === null || payload.y === undefined) ? null : Number(payload.y),
@@ -2542,6 +2549,8 @@ CBA.data = (function () {
   var GARDEN_TASKS_FROM_FIRESTORE = true;
   var GARDEN_DUP_DAYS = 14;
   var GARDEN_KIND_REPORT = "דיווח תושב";
+  /* העתק של `GARDEN_KIND_LEGACY` מ-Code.gs — ר' ההסבר ב-`gardenTasksRead`. */
+  var GARDEN_KIND_LEGACY = { "תקלה": GARDEN_KIND_REPORT };
 
   function gardenDateOf(v) {
     if (!v) return 0;
@@ -2582,6 +2591,15 @@ CBA.data = (function () {
            (הפצה, זריעה), ולא "אין עבודה השבוע". ההבדל מהדיווחים
            מכוון: שם ריק הוא המקרה השכיח. */
         if (!rows || !rows.length) return done(new Error("empty"));
+        /* 🔴🔴 **מפת התאימות של `kind`** (21.9) — העתק של
+           `GARDEN_KIND_LEGACY` מהשרת. מסמכים שנכתבו בדפדפן לפני
+           התיקון מחזיקים `"תקלה"`, והמסך משווה מול `"דיווח תושב"`.
+           ⚠️ **ממפים בקריאה ולא מהגרים את הנתונים** — כך תקלות
+              21 ו-22 (וכל שאר הדיווחים מאז 18.9) חוזרות להיראות
+              כדיווחי תושב מיד, בלי לגעת באף מסמך. */
+        rows.forEach(function (t) {
+          if (GARDEN_KIND_LEGACY[t.kind]) t.kind = GARDEN_KIND_LEGACY[t.kind];
+        });
         var all = rows.filter(function (t) { return !t.closure; });
         var out = rows.filter(function (t) {
           if (scope === "all") return true;

@@ -40,5 +40,35 @@ ok('⚠️ ויש נפילה לאחור אם המבנה משתנה', /catch \(e\
 ok('🔑 התיעוד של השורש — accessor לשנה הנוכחית',
    /return CBA\.mock\.years\[CBA\.mock\.currentYear\]\[k\];/.test(R('js/data/mock.js')));
 
+section('3. 🔴🔴 תקלות 21 ו-22 — דיווח תושב שנראה כמשימת שגרה');
+/* הדפדפן כתב `kind: "תקלה"` (הערך הישן) והמסך משווה מול
+   `"דיווח תושב"`. השרת ממפה ביניהם, הלקוח לא — ולכן כל
+   דיווח מאז 18.9 נראה למנהל כמשימה רגילה של השבוע. */
+ok('🔴 הדפדפן כותב את הערך הקנוני',
+   /id: String\(taskId\), kind: GARDEN_KIND_REPORT,/.test(DS));
+ok('⚠️ והערך הישן לא נשאר בכתיבה', !/kind: "תקלה"/.test(DS));
+ok('🔑 והקריאה ממפה מסמכים קיימים — בלי לגעת בנתונים',
+   /if \(GARDEN_KIND_LEGACY\[t\.kind\]\) t\.kind = GARDEN_KIND_LEGACY\[t\.kind\];/.test(DS));
+ok('והמפה זהה לשרת',
+   /GARDEN_KIND_LEGACY = \{ "תקלה": GARDEN_KIND_REPORT \}/.test(DS) &&
+   /GARDEN_KIND_LEGACY = \{ 'תקלה': GARDEN_KIND_REPORT \}/.test(R('apps-script/Code.gs')));
+ok('והמסך עדיין משווה מול הערך הקנוני',
+   /var GK_REPORT\s*=\s*"דיווח תושב";/.test(R('js/screens/gardenTasks.js')));
+
+section('4. דיווח #6 — מצב ההתראות מהשרת');
+const PU = R('js/data/push.js');
+const sy = (PU.match(/function syncFromServer[\s\S]*?\n  \}/) || [''])[0];
+ok('syncFromServer קיימת ומיוצאת', !!sy && /syncFromServer: syncFromServer,/.test(PU));
+ok('🔴 הרשאת הדפדפן מנצחת — בלי granted המצב כבוי',
+   /Notification\.permission !== "granted"/.test(sy) && /markSubscribed\(false\)/.test(sy), sy);
+ok('ואחרת נקרא המנוי של המשתמש מ-Firestore',
+   /readDoc\("pushSubscriptions", uid/.test(sy), sy);
+ok('⚠️ וכשל קריאה משאיר את המצב כמו שהוא',
+   /if \(err\) return cb\(isSubscribed\(\)\);/.test(sy), sy);
+const pr = (RU.match(/match \/pushSubscriptions\/\{uid\}[\s\S]*?\n    \}/) || [''])[0];
+ok('🔴 והכלל מתיר לכל אחד את שלו בלבד',
+   /allow read: if signedIn\(\) && request\.auth\.uid == uid;/.test(pr), pr);
+ok('🔑 והכתיבה נשארה בשרת', /allow write: if false;/.test(pr), pr);
+
 console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

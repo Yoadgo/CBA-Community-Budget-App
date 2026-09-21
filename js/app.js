@@ -1898,6 +1898,23 @@
         CBA.fb.signIn(googleIdToken, function (err) {
           if (err) return;               // ר' כלל 1 — כישלון שקט
           firebaseLinkMember();
+          /* 🔴 דיווח #6 (21.9) — מצב ההתראות מסתנכרן מהשרת.
+             עד היום הכפתור הסתמך רק על `localStorage`, שנמחק
+             באיפון מדי פעם. שגר ושכח: אם המצב השתנה,
+             מציירים מחדש כדי שהכפתור יאמר את האמת. */
+          try {
+            if (window.CBA && CBA.push && CBA.push.syncFromServer) {
+              var wasOn = CBA.push.isSubscribed();
+              CBA.push.syncFromServer(function (on) {
+                /* ⚠️ מציירים מחדש רק כשהמצב באמת התהפך. */
+                if (on === wasOn) return;
+                try {
+                  var p = document.getElementById("user-panel");
+                  if (p) p.innerHTML = userPanelHTML();
+                } catch (e2) {}
+              });
+            }
+          } catch (e) {}
         });
       } catch (e) {}
     }, FIREBASE_SIGNIN_DELAY_MS);

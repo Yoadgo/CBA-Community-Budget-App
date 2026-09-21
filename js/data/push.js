@@ -87,6 +87,40 @@ window.CBA = window.CBA || {};
   function isSubscribed() {
     try { return localStorage.getItem("cba_push_subscribed_v1") === "1"; } catch (e) { return false; }
   }
+
+  /* 🔴🔴 **סנכרון מהשרת** (2026-09-21, דיווח #6).
+   *  הבעיה: מצב הכפתור נקבע אך ורק לפי `localStorage`, והוא נמחק
+   *  באיפון מדי פעם, בניקוי נתונים ובהתקנה מחדש. השרת שומר
+   *  את המנוי ב-`pushSubscriptions/{uid}` — אבל אף אחד לא קרא משם.
+   *
+   *  🔑 **שתי תקלות הפוכות, ושתיהן מתוקנות כאן:**
+   *    · האחסון נמחק אבל המנוי חי → הכפתור אמר "הפעלה" בטעות.
+   *    · ההרשאה נשללה בדפדפן אבל האחסון אומר "פעיל" → הכפתור
+   *      משקר למשתמש שהוא מקבל התראות.
+   *
+   *  ⚠️ **ההרשאה בדפדפן מנצחת על השרת.** בלי `granted` המכשיר הזה
+   *     לא יקבל התראה גם אם בשרת רשום טוקן — ולהציג "פעיל"
+   *     במצב הזה זה הדבר הגרוע משניהם.
+   *  ⚠️ שגר ושכח: כשל קריאה משאיר את המצב המקומי כמו שהוא. */
+  function syncFromServer(cb) {
+    cb = cb || function () {};
+    try {
+      if (!browserSupported() || typeof Notification === "undefined") return cb(isSubscribed());
+      /* הדפדפן הוא הקובע כשהוא שולל. */
+      if (Notification.permission !== "granted") {
+        if (isSubscribed()) markSubscribed(false);
+        return cb(false);
+      }
+      var uid = (window.CBA && CBA.fb && CBA.fb.uid && CBA.fb.uid()) || "";
+      if (!uid || !CBA.fb.readDoc) return cb(isSubscribed());
+      CBA.fb.readDoc("pushSubscriptions", uid, function (err, doc) {
+        if (err) return cb(isSubscribed());          /* שגר ושכח */
+        var on = !!(doc && String(doc.token || "").trim());
+        if (on !== isSubscribed()) markSubscribed(on);
+        cb(on);
+      });
+    } catch (e) { cb(isSubscribed()); }
+  }
   function markSubscribed(v) {
     try { localStorage.setItem("cba_push_subscribed_v1", v ? "1" : "0"); } catch (e) { /* לא קריטי */ }
   }
@@ -146,6 +180,7 @@ window.CBA = window.CBA || {};
   window.CBA.push = {
     canOffer: canOffer,
     isSubscribed: isSubscribed,
+    syncFromServer: syncFromServer,
     subscribe: subscribe,
     unsubscribe: unsubscribe
   };

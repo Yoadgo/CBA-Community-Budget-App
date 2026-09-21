@@ -144,6 +144,17 @@ service cloud.firestore {
        ⚠️ מה שיש כאן הוא שמות קטגוריות ואזורים — אפשרויות
           בתפריט גלילה. אין בהן נתון על אף אדם, וכל תושב
           רואה אותן ממילא בטופס הדיווח. הכתיבה נשארת סגורה. */
+    /* 🔴 דיווח #6 (2026-09-21) — **מצב ההתראות נקרא מהשרת.**
+       עד היום הכפתור הסתמך אך ורק על `localStorage`, והוא נמחק
+       באיפון מדי פעם — ואז הכפתור אמר "הפעלה" למרות שהמנוי
+       חי בשרת. כל אחד קורא **את שלו בלבד**.
+       ⚠️ הכתיבה נשארת בשרת — הוא מאמת את ה-idToken מול גוגל
+          ואינו סומך על מה שהלקוח טוען שה-uid שלו. */
+    match /pushSubscriptions/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
     match /gardenMeta/{doc} {
       allow read: if isMember();
       allow write: if false;

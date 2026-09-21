@@ -50,7 +50,7 @@ ok('יציאה מנתקת גם מ-Firebase', /CBA\.fb\.signOut\(\)/.test(SRC));
    של signIn השתנה (נוסף אליו הקישור ל-members/{uid} בצעד 02ג), אף שהעטיפה
    עצמה נשארה במקומה. **בדיקה שנשברת על שינוי לגיטימי מאבדת את האמון בה.** */
 ok('הקריאה ל-signIn עטופה ב-try/catch',
-   /try \{[\s\S]{0,400}?CBA\.fb\.signIn\(googleIdToken[\s\S]{0,400}?\} catch \(e\) \{\}/.test(SRC));
+   /try \{[\s\S]{0,400}?CBA\.fb\.signIn\(googleIdToken[\s\S]{0,1400}?\} catch \(e\) \{\}/.test(SRC));
 ok('⚠️ והקישור ל-members קורה רק כשההתחברות הצליחה',
    /CBA\.fb\.signIn\(googleIdToken, function \(err\) \{\s*\n\s*if \(err\) return;/.test(SRC));
 
