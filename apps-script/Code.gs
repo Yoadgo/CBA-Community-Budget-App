@@ -1539,6 +1539,8 @@ function doPostDispatch_(ss, body) {
       /* 🔴 18.9, גל 3 — המייל על פעולת מנהל שנכתבה בדפדפן.
          שגר-ושכח: המסך אינו ממתין לתשובה. */
       case 'gardenNotifyTask':    return json_(gardenNotifyTask_(ss, body));
+      /* 🔴 21.9, סעיף 5 — המשוב נכתב בדפדפן; כאן רק המייל. */
+      case 'gardenFeedbackNotify': return json_(gardenFeedbackNotify_(ss, body));
       /* 🔴🔴 **שלוש הפעולות שכותבות מסמך בודד לאוסף `gardenPlan`**
          (2026-09-16, הפער שנשאר פתוח מסקירת הצוות האדום).
          `gardenPlanSyncOne_` כותבת מסמך אחד ואינה סוחפת — ולכן היא
@@ -3436,7 +3438,7 @@ var ACTION_DOMAIN = {
   /* ההיפוך (16.9) — שתיהן אינן נוגעות בגיליון: 'other' היה מבטל
      את מטמון המטען של כל המשתמשים בכל תמונה ובכל מייל. */
   gardenPhotoOne: 'gardenPhoto', gardenNotifyReport: 'gardenMail',
-  gardenNotifyTask: 'gardenMail'
+  gardenNotifyTask: 'gardenMail', gardenFeedbackNotify: 'gardenMail'
 };
 
 /* ============================================================================
@@ -14220,6 +14222,34 @@ function gardenSendTaskMail_(ss, taskId) {
     out.ok = true;
   } catch (err) { out.error = String(err); }
   return out;
+}
+
+/** 🔴 משוב שלילי — התראה למנהלי הגינון  (2026-09-21, סעיף 5).
+ *  המשוב עצמו נכתב בדפדפן ישירות ל-Firestore; כאן **רק המייל**.
+ *  ⚠️ שגר-ושכח: התושב כבר קיבל "נשמר", וכשל כאן אינו נוגע בו.
+ *  🔑 השם נשלף כאן מטאב התושבים לפי `familyId` — הקו האדום. */
+function gardenFeedbackNotify_(ss, body) {
+  var gate = authorize_(ss, body, null);
+  if (!gate.ok) return { ok: false, error: gate.error };
+  var id = String((body && body.id) || '').trim();
+  if (!id) return { ok: false, error: 'חסר מזהה דיווח' };
+  try {
+    var rep = fsGet_(fsDocPath_(FS_GARDEN_REPORTS, id));
+    if (!rep) return { ok: false, error: 'הדיווח לא נמצא' };
+    /* ⚠️ רק על משוב שלילי — קריאה על חיובי אינה שולחת כלום. */
+    if (String(rep.feedback || '').trim() !== 'שלילי') return { ok: true, sent: 0 };
+    var famId = String(rep.familyId || '').trim();
+    var names = txFamilyNames_(ss);
+    var name = String(names[famId] || '').trim() || 'תושב';
+    notifyAdmins_(ss, PERM_GARDEN, 'ADMIN_GARDEN_NEGATIVE_FEEDBACK', {
+      'שם': name,
+      'מזהה': String(rep.id || id),
+      'קטגוריה': String(rep.category || ''),
+      'מיקום': String(rep.place || rep.area || ''),
+      'הערה': String(rep.feedbackNote || '') || '(לא נכתבה הערה)'
+    });
+    return { ok: true, sent: 1 };
+  } catch (err) { return { ok: false, error: String(err) }; }
 }
 
 /** קריאת השגר-ושכח מהדפדפן. איש אינו ממתין לתשובה שלה. */

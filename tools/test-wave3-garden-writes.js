@@ -59,7 +59,8 @@ const nt = (RU.match(/function gtNotifyOk[\s\S]*?\n    \}/) || [''])[0];
 ok('שם התבנית מרשימה סגורה', /GARDEN_COMPLETED', 'GARDEN_REPORT_DECLINED'/.test(nt), nt);
 ok('🔴 וכל השומרים מחוברים לשער אחד',
    /function gtUpdateOk\(\) \{[\s\S]*?gtTeamUpdateOk\(\) && gtClosureValueOk\(\) && gtClosureAuthOk\(\) &&[\s\S]*?gtCloseNoteOk\(\) && gtClosedOk\(\) && gtNotifyOk\(\)/.test(RU));
-ok('והשער הוא מה שמחווט ל-allow update', /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\);/.test(RU));
+ok('והשער הוא מה שמחווט ל-allow update',
+   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\);/.test(RU));
 ok('⚠️ ומסלול התמונות של התושב נשאר עצמאי — לא נבלע בשער הצוות',
    /gtReportPhotosOk\(\)/.test(RU));
 
@@ -106,7 +107,20 @@ ok('⚠️ ונבדק יחד עם קריאת המשימות — לעולם לא 
 ok('🔴 וכל מסלול כתיבה עובר דרכו',
    (DS.match(/if \(gardenWritesOn\(\)\) return garden/g) || []).length >= 3, DS);
 
-section('5. מה שאסור היה להישבר');
+section('5. רשימות הגינון — מ-Firestore (סעיף 2)');
+const meta = (RU.match(/match \/gardenMeta\/\{doc\}[\s\S]*?\n    \}/) || [''])[0];
+ok('\U0001f534 הקריאה נפתחה לכל חבר פעיל', /allow read: if isMember\(\);/.test(meta), meta);
+/* ⚠️ זה היה החסם האמיתי: `canSeeGardenTasks` דורש הרשאת גינון,
+   ולכן **מסך הדיווח של התושב** לא יכול לקרוא את הרשימות
+   מ-Firestore ונאלץ ללכת ל-Apps Script. */
+ok('\U0001f511 והכתיבה נשארה סגורה', /allow write: if false;/.test(meta), meta);
+ok('והלקוח קורא אותן מ-Firestore עם נפילה לאחור',
+   /fsFirstRead\("gardenMeta", true,/.test(DS) &&
+   /CBA\.fb\.readDoc\("gardenMeta", "lists"/.test(DS));
+ok('⚠️ והנפילה לאחור עדיין קיימת — לא מחקנו את המסלול הישן',
+   /CBA\.sheets\.get\(\{ action: "gardenMeta" \}, done\);/.test(DS));
+
+section('6. מה שאסור היה להישבר');
 ok('🔴 מחיקת דיווח עדיין אסורה לכל דפדפן — החלטה מכוונת',
    /allow delete: if false;/.test((RU.match(/match \/gardenReports\/\{id\}[\s\S]*?\n    \}/) || [''])[0]));
 ok('🔴 והמחיקות נשארו ב-Apps Script',

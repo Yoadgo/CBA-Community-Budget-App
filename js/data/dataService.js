@@ -2142,6 +2142,184 @@ CBA.data = (function () {
     });
   }
 
+  /* ==========================================================================
+   *  סעיפים 3–5 — תוכנית העבודה, איחוד ומשוב   (2026-09-21)
+   * ========================================================================== */
+
+  /** מזהה חדש להגדרה בתוכנית, בצורת `T<מספר>` כמו בשרת.
+   *  ⚠️ **נבדק שהוא פנוי לפני כתיבה**, ואם לא — מנסים את הבא.
+   *     `createDoc` משתמש ב-`set`, שדורס; בלי הבדיקה שני מנהלים
+   *     שמוסיפים באותה דקה היו מוחקים זה את ההגדרה של זה, בשקט. */
+  function gardenPlanNewId(rows, attempt) {
+    var max = 0;
+    (rows || []).forEach(function (r) {
+      var m = /^T(\d+)$/.exec(String(r.id || "").trim());
+      if (m) { var n = parseInt(m[1], 10); if (n > max) max = n; }
+    });
+    return "T" + (max + 1 + (attempt || 0));
+  }
+
+  function gardenPlanFsSave(payload, cb) {
+    payload = payload || {};
+    var title = String(payload.title || "").trim();
+    if (!title) return cb({ ok: false, error: "צריך שם למשימה" });
+    var freq = String(payload.freq || "").trim();
+    if (["שבועי", "דו-שבועי", "חודשי", "שנתי"].indexOf(freq) === -1) {
+      return cb({ ok: false, error: "תדירות לא מוכרת" });
+    }
+    /* ⚠️ אותה בדיקה בדיוק כמו בשרת ובכללי האבטחה. */
+    if (freq === "דו-שבועי" && !/^\d{4}-\d{2}-\d{2}$/.test(String(payload.firstWeek || ""))) {
+      return cb({ ok: false, error: "למחזור דו-שבועי צריך לבחור את השבוע הראשון" });
+    }
+
+    function docOf(id, order) {
+      return {
+        id: String(id), title: title,
+        category: String(payload.category || "").trim(),
+        areas: payload.areas || [],
+        freq: freq,
+        firstWeek: String(payload.firstWeek || "").trim(),
+        weekOfMonth: Math.min(Math.max(parseInt(payload.weekOfMonth, 10) || 1, 1), 4),
+        months: String(payload.months || "").trim(),
+        rotate: !!payload.rotate,
+        clause: String(payload.clause || "").trim(),
+        active: payload.active === false ? false : true,
+        note: String(payload.note || "").trim().substring(0, 500),
+        order: order || 0, schema: 1,
+        updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+      };
+    }
+
+    var id = String(payload.id || "").trim();
+    if (id) {
+      /* עדכון — `mergeDoc` ולא `createDoc`, כדי ש-`order` הקיים לא יאופס. */
+      var patch = docOf(id, undefined);
+      delete patch.order;
+      return CBA.fb.mergeDoc("gardenPlan", id, patch, function (e) {
+        cb(e ? { ok: false, error: gardenFsErr(e, "השמירה נכשלה") } : { ok: true, id: id });
+      });
+    }
+
+    CBA.fb.readCollection("gardenPlan", function (e1, rows) {
+      if (e1) return cb({ ok: false, error: gardenFsErr(e1, "לא הצלחנו לקרוא את התוכנית") });
+      var order = (rows || []).length + 1;
+      function tryId(attempt) {
+        if (attempt > 4) return cb({ ok: false, error: "לא הצלחנו להקצות מזהה" });
+        var nid = gardenPlanNewId(rows, attempt);
+        CBA.fb.readDoc("gardenPlan", nid, function (e2, existing) {
+          if (!e2 && existing) return tryId(attempt + 1);
+          CBA.fb.createDoc("gardenPlan", nid, docOf(nid, order), function (e3) {
+            cb(e3 ? { ok: false, error: gardenFsErr(e3, "השמירה נכשלה") } : { ok: true, id: nid });
+          });
+        });
+      }
+      tryId(0);
+    });
+  }
+
+  function gardenPlanFsActive(id, active, cb) {
+    CBA.fb.mergeDoc("gardenPlan", String(id), {
+      active: !!active,
+      updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+    }, function (e) {
+      cb(e ? { ok: false, error: gardenFsErr(e) } : { ok: true });
+    });
+  }
+
+  function gardenPlanFsDelete(id, cb) {
+    CBA.fb.deleteDoc("gardenPlan", String(id), function (e) {
+      cb(e ? { ok: false, error: gardenFsErr(e, "המחיקה נכשלה") } : { ok: true });
+    });
+  }
+
+  /** איחוד כפילות — משימה `id` נבלעת לתוך `into`.
+   *  ⚠️ **אינו חסום לגנן** — זיהוי ששתי פניות הן אותה תקלה הוא
+   *     שיפוט שטח. הכלל `gtClosureAuthOk` מתיר 'אוחד' במפורש. */
+  function gardenFsMerge(childId, parentId, cb) {
+    childId = String(childId || "").trim();
+    parentId = String(parentId || "").trim();
+    if (!childId || !parentId) return cb({ ok: false, error: "חסרה משימה לאיחוד" });
+    if (childId === parentId) return cb({ ok: false, error: "אי אפשר לאחד משימה עם עצמה" });
+
+    CBA.fb.readDoc("gardenTasks", childId, function (e1, child) {
+      if (e1 || !child) return cb({ ok: false, error: "אחת המשימות לא נמצאה" });
+      CBA.fb.readDoc("gardenTasks", parentId, function (e2, parent) {
+        if (e2 || !parent) return cb({ ok: false, error: "אחת המשימות לא נמצאה" });
+        if (String(child.closure || "")) return cb({ ok: false, error: "המשימה כבר סגורה" });
+        if (String(parent.closure || "")) {
+          return cb({ ok: false, error: "אי אפשר לאחד לתוך משימה סגורה" });
+        }
+        var parentRep = String(parent.repId || "").trim() || parentId;
+        /* הדיווחים של הנבלעת מופנים אל הבולעת. */
+        CBA.fb.queryCollection("gardenReports", [["taskId", childId]], function (e3, reps) {
+          var list = (reps || []);
+          var left = list.length, failed = 0;
+          function closeChild() {
+            var now = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+            CBA.fb.updateDoc("gardenTasks", childId, {
+              stage: "הושלם", flag: "", closure: "אוחד",
+              updatedAt: now, notify: "GARDEN_REPORT_MERGED", notifyPending: true,
+              notifyNote: "אוחד עם פנייה מס' " + parentRep
+            }, function (e4) {
+              if (e4) return cb({ ok: false, error: gardenFsErr(e4, "האיחוד נכשל") });
+              gardenLogAppend(childId, "איחוד", "אוחדה לתוך משימה #" + parentId);
+              gardenLogAppend(parentId, "איחוד", "נבלעה משימה #" + childId +
+                              " עם " + list.length + " דיווחים");
+              gardenNotifyFire(childId);
+              cb({ ok: true, moved: list.length, failed: failed });
+            });
+          }
+          if (!left) return closeChild();
+          list.forEach(function (rep) {
+            CBA.fb.mergeDoc("gardenReports", String(rep.id), {
+              taskId: parentId, mergedInto: parentRep,
+              updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+            }, function (eR) {
+              if (eR) { failed++; gardenPhotoWarn("דיווח לא הופנה באיחוד", rep.id, eR); }
+              if (--left <= 0) closeChild();
+            });
+          });
+        });
+      });
+    });
+  }
+
+  /** משוב התושב. הכלל `grFeedbackOk` כבר היה קיים — מה שחסר היה
+   *  הדגל על המשימה (`gtReportFlagOk`) והמייל למנהלים.
+   *  ⚠️ משוב שלילי **אינו פותח מחדש** — הוא מרים דגל
+   *     וההחלטה נשארת אנושית. ר' §18.3 באפיון. */
+  function gardenFsFeedback(id, positive, note, cb) {
+    var now = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+    CBA.fb.readDoc("gardenReports", String(id), function (e0, rep) {
+      if (e0 || !rep) return cb({ ok: false, error: "הדיווח לא נמצא" });
+      if (String(rep.feedback || "").trim()) {
+        return cb({ ok: false, error: "כבר נתת משוב על הדיווח הזה" });
+      }
+      CBA.fb.mergeDoc("gardenReports", String(id), {
+        feedback: positive ? "חיובי" : "שלילי",
+        feedbackNote: String(note || "").substring(0, 500),
+        feedbackAt: now, updatedAt: now
+      }, function (e1) {
+        if (e1) return cb({ ok: false, error: gardenFsErr(e1, "המשוב לא נשמר") });
+        var taskId = String(rep.taskId || "").trim();
+        gardenLogAppend(taskId, "משוב", (positive ? "חיובי" : "שלילי") +
+                        (note ? " — " + note : ""));
+        if (positive || !taskId) return cb({ ok: true });
+        /* משוב שלילי — דגל ומייל למנהלים. שניהם שגר-ושכח:
+           המשוב של התושב כבר נשמר, ואין סיבה להחזיר לו שגיאה. */
+        CBA.fb.updateDoc("gardenTasks", taskId, {
+          flag: "דורש בדיקה חוזרת", updatedAt: now
+        }, function (e2) {
+          if (e2) gardenPhotoWarn("הדגל לא הורם אחרי משוב שלילי", taskId, e2);
+          try {
+            CBA.sheets.postRead("gardenFeedbackNotify", { id: String(id) }, function () {});
+          } catch (e3) { /* שגר ושכח */ }
+          cb({ ok: true });
+        });
+      });
+    });
+  }
+
   function gardenReportFsWrite(payload, cb, onProgress) {
     var user = (window.CBA && CBA.user) || {};
     var fid = String(user.familyId || "").trim();
@@ -3498,7 +3676,21 @@ CBA.data = (function () {
     /* ---- מראה שיכון / גינון (2026-09-07) ----
        שלוש הפעולות פתוחות לכל תושב מחובר ופעיל ומחזירות רק את הנתונים שלו —
        הסינון נעשה בשרת לפי המושב החתום, לא כאן. ר' handleMyGardenReports_. */
-    getGardenMeta: function (cb) { CBA.sheets.get({ action: "gardenMeta" }, cb); },
+    /* 🔴 18.9, גל 3 — הרשימות מ-Firestore. אותו מסמך בדיוק
+       שמסך הניהול כבר קורא — חיבור של חוט שכבר מתוח. */
+    getGardenMeta: function (cb) {
+      fsFirstRead("gardenMeta", true, function (done) {
+        CBA.fb.readDoc("gardenMeta", "lists", function (err, doc) {
+          if (err) return done(err);
+          if (!doc) return done(new Error("no-lists-doc"));
+          done(null, { ok: true,
+                       areas: doc.areas || [],
+                       categories: doc.categories || [] });
+        });
+      }, function (done) {
+        CBA.sheets.get({ action: "gardenMeta" }, done);
+      }, cb);
+    },
     getMyGardenReports: myGardenReportsRead,
     /* ⚠️ postReadProgress ולא postRead, משתי סיבות (2026-09-14):
        (א) **הגנת beforeunload.** ל-postRead אין אחת, ולכן תושב שסגר/רענן את
@@ -3523,6 +3715,7 @@ CBA.data = (function () {
     },
     gardenCompletePhotos: gardenCompletePhotos,
     gardenFeedback: function (id, positive, note, cb) {
+      if (gardenWritesOn()) return gardenFsFeedback(id, positive, note, cb);
       CBA.sheets.postRead("gardenFeedback", { id: id, positive: positive, note: note }, cb);
     },
     /* מסך הנתונים. weeks הוא חלון הזמן; השרת חוסם אותו ל-2..26.
@@ -3544,6 +3737,7 @@ CBA.data = (function () {
     },
     /* יצירה או עדכון של הגדרה. עם id — עדכון; בלי — חדשה. */
     gardenPlanSave: function (payload, cb) {
+      if (gardenWritesOn()) return gardenPlanFsSave(payload, cb);
       CBA.sheets.postRead("gardenPlanSave", payload, cb);
     },
     /* "כבר בתוכנית" — קושר דיווח למשימת שגרה שכבר מתוזמנת, במקום לפתוח
@@ -3553,9 +3747,11 @@ CBA.data = (function () {
     },
     /* מחיקה מהתוכנית. משימות שכבר נוצרו ממנה נשארות — ר' gardenPlanDelete_. */
     gardenPlanDelete: function (id, cb) {
+      if (gardenWritesOn()) return gardenPlanFsDelete(id, cb);
       CBA.sheets.postRead("gardenPlanDelete", { id: id }, cb);
     },
     gardenPlanActive: function (id, active, cb) {
+      if (gardenWritesOn()) return gardenPlanFsActive(id, active, cb);
       CBA.sheets.postRead("gardenPlanActive", { id: id, active: !!active }, cb);
     },
     /* שלב 4 — משימות הצוות. opts: { week, scope }. שתיהן אופציונליות: בלי week
@@ -3588,6 +3784,7 @@ CBA.data = (function () {
     },
     /* איחוד כפילות: משימה id נבלעת לתוך משימה into. */
     gardenMerge: function (id, into, cb) {
+      if (gardenWritesOn()) return gardenFsMerge(id, into, cb);
       CBA.sheets.postRead("gardenMerge", { id: id, into: into }, cb);
     },
     /* אישור מרוכז — רק שגרה מאותה תבנית ואותו שבוע. השרת אוכף (ר' החלטה 3). */

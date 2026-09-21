@@ -344,7 +344,9 @@ ok('🔴 "מנהלים" נבדק מול הרשאה אמיתית ולא מול si
 ok('tourSeen — כל אחד את שלו',
    /function canSeeTourSeen\(uid\)[\s\S]{0,160}request\.auth\.uid == uid/.test(RULES));
 ok('🔴 ושלושתם אסורים בכתיבה מהדפדפן',
-   (RULES.match(/allow write: if false;/g) || []).length >= 12);
+   /* ⚠️ 21.9 — המספר ירד באחד: gardenPlan עברה לכתיבה מהדפדפן (סעיף 3).
+      מה שהבדיקה שומרת עליו הוא שלא ייפתחו עוד אוספים בשקט. */
+   (RULES.match(/allow write: if false;/g) || []).length >= 11);
 
 section('13. החיווט בשרת');
 ok('שלושת הסנכרונים בעבודה השעתית',

@@ -93,12 +93,43 @@ service cloud.firestore {
       return hasPerm('גינון') && m().isExternal == false;
     }
 
+    /* 🔴🔴 **ההפיכה** (2026-09-21, סעיף 3). עד היום כתוב היה כאן
+       "הדפדפן לעולם אינו כותב... שני מקורות כתיבה = שני מקורות אמת".
+       הנימוק הזה היה נכון כל עוד **הגיליון** היה מקור האמת.
+       מרגע ש-Firestore הוא המקור, הכתיבה מהדפדפן היא המקור
+       **היחיד**, והגיליון הוא מראה. אותה היפוך בדיוק כמו במשימות.
+       ⚠️ מנהל בלבד — תוכנית העבודה חסומה לגנן החיצוני גם לקריאה. */
+    function gpFields() {
+      return ['id', 'title', 'category', 'areas', 'freq', 'firstWeek',
+              'weekOfMonth', 'months', 'rotate', 'clause', 'active', 'note',
+              'order', 'schema', 'updatedAt'];
+    }
+
+    function gpShapeOk() {
+      return request.resource.data.keys().hasOnly(gpFields()) &&
+             request.resource.data.keys().hasAll(['id', 'title', 'freq', 'schema']) &&
+             request.resource.data.title is string &&
+             request.resource.data.title.size() > 0 &&
+             request.resource.data.title.size() <= 80 &&
+             /* תדירות מהרשימה הסגורה — `GARDEN_FREQS` בשרת. */
+             ['שבועי', 'דו-שבועי', 'חודשי', 'שנתי']
+               .hasAny([request.resource.data.freq]) &&
+             /* ⚠️ מחזור דו-שבועי חייב עוגן, אחרת השבוע נקבע במקרה
+                והצוות מגיע בשבוע הלא נכון. אותה בדיקה שבשרת. */
+             (request.resource.data.freq != 'דו-שבועי' ||
+              request.resource.data.get('firstWeek', '') != '') &&
+             request.resource.data.schema is int;
+    }
+
+    function gpWriteOk() {
+      return hasPerm('גינון') && m().isExternal == false;
+    }
+
     match /gardenPlan/{id} {
       allow read: if canSeePlan();
-      /* 🔴 הדפדפן לעולם אינו כותב. כל שינוי עובר דרך Apps Script אל
-         הגיליון, ומשם מסונכרן לכאן ע"י חשבון השירות (שעוקף כללים).
-         שני מקורות כתיבה = שני מקורות אמת שיסתרו זה את זה בשקט. */
-      allow write: if false;
+      allow create, update: if gpWriteOk() && gpShapeOk();
+      /* מחיקת הגדרה — משימות שכבר נוצרו ממנה נשארות. */
+      allow delete: if gpWriteOk();
     }
 
     /* 🔑 **נפתח לאחראי הגינון החיצוני** (הכרעת יועד, 16.9). הרשימות
@@ -107,8 +138,14 @@ service cloud.firestore {
        הערכים אינה הגנה, והיא שוברת את קיבוץ המסך במסלול Firestore.
        ⚠️ **תוכנית העבודה עצמה נשארת חסומה לו** (`canSeePlan`) — שם
           המידור אמיתי, וזה בדיוק ההבדל. */
+    /* 🔴 18.9, גל 3 — **נפתח לכל חבר פעיל.**
+       עד היום הקריאה דרשה הרשאת גינון, ולכן **מסך הדיווח
+       של התושב** נאלץ לקרוא את אותן רשימות מ-Apps Script.
+       ⚠️ מה שיש כאן הוא שמות קטגוריות ואזורים — אפשרויות
+          בתפריט גלילה. אין בהן נתון על אף אדם, וכל תושב
+          רואה אותן ממילא בטופס הדיווח. הכתיבה נשארת סגורה. */
     match /gardenMeta/{doc} {
-      allow read: if canSeeGardenTasks();
+      allow read: if isMember();
       allow write: if false;
     }
 
@@ -439,6 +476,12 @@ service cloud.firestore {
       return gtNext('closure') == gtCur('closure') ||
              gtNext('closure') == '' ||
              gtNext('closure') == 'בוצע' ||
+             /* 🔴 21.9 — **'אוחד' גם הוא פתוח לגנן החיצוני.** זו היתה
+                רגרסיה שלי: הכלל הראשון התיר רק 'בוצע', ובשרת
+                כתוב במפורש (8.9): "איחוד **אינו** חסום לגנן — זיהוי
+                ששתי פניות הן אותה תקלה הוא שיפוט שטח, לא החלטת ועד".
+                בלי זה הגנן היה נוסע פעמיים לאותה ממטרה. */
+             gtNext('closure') == 'אוחד' ||
              gtMgr();
     }
 
@@ -551,10 +594,28 @@ service cloud.firestore {
              !exists(/databases/$(database)/documents/gardenReports/$(resource.data.repId));
     }
 
+    /* 🔴🔴 **משוב שלילי מרים דגל** (2026-09-21, סעיף 5).
+       כשתושב לוחץ "לא הושלם", המשימה מקבלת 'דורש בדיקה חוזרת'
+       וההחלטה נשארת אנושית — המשוב אינו פותח מחדש אוטומטית.
+
+       ⚠️ הכלל הזה הוא **העתק מדויק של `gtReportPhotosOk`** על שדה אחר:
+          שני שדות בלבד, **ערך יחיד אפשרי אחד**, והצלבה מול
+          `repId`→`familyId`. בלי ההצלבה כל תושב היה יכול להרים
+          דגל על כל משימה בשיכון בכך שינחש מזהה. */
+    function gtReportFlagOk() {
+      return isMember() && m().isExternal == false &&
+             resource.data.get('repId', '') != '' &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['flag', 'updatedAt']) &&
+             request.resource.data.flag == 'דורש בדיקה חוזרת' &&
+             get(/databases/$(database)/documents/gardenReports/$(resource.data.repId))
+               .data.familyId == myFamilyId();
+    }
+
     match /gardenTasks/{id} {
       allow read: if canSeeGardenTasks();
       allow create: if gtTeamCreateOk() || gtFromReportOk();
-      allow update: if gtUpdateOk() || gtReportPhotosOk();
+      allow update: if gtUpdateOk() || gtReportPhotosOk() || gtReportFlagOk();
       allow delete: if gtDeleteOk() || gtOrphanCleanupOk();
     }
 

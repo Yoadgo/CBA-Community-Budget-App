@@ -62,12 +62,14 @@ const idxDeny = CODE.indexOf('match /{document=**}');
    שמקבלת שדה של המסמך עצמו. היתה כאן חריגה קשיחה ל-`canSeeFamilyTx`
    בלבד; היא הוכללה ב-16.9 כשנוספה `canSeeGardenReport` באותה צורה
    בדיוק. חריגה קשיחה לשם אחד מתיישנת בשימוש השני. */
-const ALLOW_TERM = /^([a-zA-Z][A-Za-z0-9_]*\(([a-z][A-Za-z0-9_]*)?\)|false|[a-zA-Z][A-Za-z0-9_]*\(resource\.data\.[A-Za-z0-9_]+\)|signedIn\(\) && request\.auth\.uid == uid)$/;
+const ALLOW_TERM = /^([a-zA-Z][A-Za-z0-9_]*\(([a-z][A-Za-z0-9_]*)?\)|false|[a-zA-Z][A-Za-z0-9_]*\(resource\.data\.[A-Za-z0-9_]+\)|request\.auth\.uid == uid)$/;
 ok('🔴 כל תנאי ב-allow הוא קריאה לפונקציה בעלת שם',
    (CODE.match(/allow [^\n]*/g) || []).every(function (t) {
      const m = t.trim().match(/^allow [a-z, ]+: if (.+);$/);
      if (!m) return false;
-     return m[1].split('||').every(function (term) { return ALLOW_TERM.test(term.trim()); });
+     /* \u26a0\ufe0f 21.9 \u2014 \u05e4\u05d9\u05e6\u05d5\u05dc \u05d2\u05dd \u05e2\u05dc && : \u05de\u05e9\u05e2\u05d1\u05e8 \u05e9\u05e2\u05e8 \u05de\u05d5\u05e8\u05db\u05d1 \u05de\u05e9\u05e0\u05d9 \u05ea\u05e0\u05d0\u05d9\u05dd
+        (`gpWriteOk() && gpShapeOk()`) \u05d4\u05e4\u05d9\u05e6\u05d5\u05dc \u05dc\u05e4\u05d9 || \u05d1\u05dc\u05d1\u05d3 \u05d4\u05d7\u05d6\u05d9\u05e8 \u05de\u05d7\u05e8\u05d5\u05d6\u05ea \u05d0\u05d7\u05ea. */
+     return m[1].split(/\|\||&&/).every(function (term) { return ALLOW_TERM.test(term.trim()); });
    }), (CODE.match(/allow [^\n]*/g) || []).join(' | '));
 
 section('3. תוכנית הגינון — מה שנפתח');
@@ -76,13 +78,23 @@ const gm = blockOf('/gardenMeta/{doc}');
 ok('gardenPlan נפתח', !!gp);
 ok('gardenMeta נפתח', !!gm);
 ok('gardenPlan — קריאה לפי canSeePlan', /allow read: if canSeePlan\(\);/.test(gp || ''));
-/* 🔑 **נפתח לגנן החיצוני ב-16.9** (הכרעת יועד) — ר' ההערה בקובץ
-   הכללים. תוכנית העבודה עצמה נשארת חסומה לו, וזה ההבדל. */
-ok('gardenMeta — קריאה לפי canSeeGardenTasks (נפתח לגנן)',
-   /match \/gardenMeta\/\{doc\} \{[\s\S]{0,120}allow read: if canSeeGardenTasks\(\);/.test(CODE));
+/* 🔑 **נפתח לגנן החיצוני ב-16.9**, וב-18.9 (גל 3) **לכל חבר פעיל** —
+   כי מסך הדיווח של התושב צריך את אותן רשימות, והן שמות
+   קטגוריות ואזורים ולא נתון על אף אדם.
+   תוכנית העבודה עצמה נשארת חסומה לחיצוני, וזה ההבדל. */
+ok('gardenMeta — קריאה לכל חבר פעיל',
+   /match \/gardenMeta\/\{doc\} \{[\s\S]{0,120}allow read: if isMember\(\);/.test(CODE));
+ok('⚠️ והכתיבה עדיין סגורה לאיש',
+   /match \/gardenMeta\/\{doc\} \{[\s\S]{0,160}allow write: if false;/.test(CODE));
 ok('🔴 ותוכנית העבודה עדיין חסומה לחיצוני',
    /match \/gardenPlan\/\{id\} \{[\s\S]{0,120}allow read: if canSeePlan\(\);/.test(CODE));
-ok('🔴 gardenPlan — כתיבה אסורה לכולם', /allow write: if false;/.test(gp || ''));
+/* 🔴 21.9, סעיף 3 — **ההיפוך.** עד היום הדפדפן לא כתב לתוכנית
+   כלל, כי הגיליון היה מקור האמת. מרגע ש-Firestore הוא המקור,
+   הכתיבה מהדפדפן היא המקור היחיד — והגיליון הוא מראה. */
+ok('🔴 gardenPlan — כתיבה למנהל בלבד, ועם בדיקת צורה',
+   /allow create, update: if gpWriteOk\(\) && gpShapeOk\(\);/.test(gp || ''), gp);
+ok('⚠️ והמחיקה גם היא למנהל בלבד',
+   /allow delete: if gpWriteOk\(\);/.test(gp || ''), gp);
 ok('🔴 gardenMeta — כתיבה אסורה לכולם', /allow write: if false;/.test(gm || ''));
 /* 🔴 **הגובה הזה נפתח במכוון בצעד 09א (15.9.2026)** — עד אז
    הדפדפן לא כתב ל-Firestore כלל, והבדיקה היתה "אין כתיבה,
@@ -109,6 +121,9 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                         השער נפתח רק כל עוד אין מסמך דיווח שמצביע
                         על המשימה — ר' סעיף 3 ב-test-wave2-live-fixes.js. */
                      'gtOrphanCleanupOk',
+                     /* 21.9 — סעיפים 3 ו-5: כתיבה לתוכנית העבודה, והדגל
+                        שתושב מרים על המשימה שלו אחרי משוב שלילי. */
+                     'gpWriteOk', 'gpShapeOk', 'gtReportFlagOk',
                      /* 🔴 גל 3 (18.9) — `gtTeamUpdateOk` אינו מחווט עוד ישירות:
                         הוא עבר להיות רכיב בתוך `gtUpdateOk`, שמאחד את כל
                         השומרים שעברו מ-Apps Script. ר' test-wave3-garden-writes.js. */
@@ -119,7 +134,7 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
   (CODE.match(/allow (create|update|delete)[^\n]*/g) || []).forEach(function (t) {
     const m = t.trim().match(/^allow [a-z, ]+: if (.+);$/);
     if (!m) { used.push('PARSE-FAIL:' + t.trim()); return; }
-    m[1].split('||').forEach(function (term) {
+    m[1].split(/\|\||&&/).forEach(function (term) {
       used.push(term.trim().replace(/\((docId)?\)$/, ''));
     });
   });
@@ -386,7 +401,7 @@ ok('⚠️ ולא למשתמש חיצוני', /isMember\(\) && m\(\)\.isExternal
 /* 🔴 18.9, גל 3 — השער הוחלף ב-`gtUpdateOk`, שמוסיף על `gtTeamUpdateOk`
    את השומרים שעברו מ-Apps Script. מסלול התמונות של התושב נשאר עצמאי. */
 ok('הכלל צורף ל-update של gardenTasks',
-   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\);/.test(CODE));
+   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\);/.test(CODE));
 ok('⚠️ ו-gtTeamUpdateOk עדיין בפנים, כרכיב ולא כשער',
    /gtUpdateOk\(\) \{[\s\S]{0,200}gtTeamUpdateOk\(\)/.test(CODE));
 ok('🔴 והמחיקה **לא** נפתחה לתושב',
