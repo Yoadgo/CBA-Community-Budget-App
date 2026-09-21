@@ -1031,11 +1031,19 @@ function txOpenClassifyModal(container, t) {
       var sub = wrap.querySelector("#txc-sub").value;
       if (!cat) return;                       /* אין סעיף — אין אישור */
       close(true);
-      /* ⚠️ `reviewNote` מתנקה כאן בדיוק כמו במסלול הרגיל: הערת הבדיקה
-         שייכת לסטטוס "בבדיקה" ואין לה משמעות אחריו. */
-      CBA.data.updateTransaction(t.id, {
-        categoryId: cat, subItemId: sub || "", status: "ready", reviewNote: ""
-      });
+      /* 🔴🔴 **שתי כתיבות ולא אחת** (21.9, דיווח #10 — באג שלי מגל 2).
+         `updateTransaction` בוחר מסלול לפי השדות: `txStatusOnly` מתיר **רק**
+         `status` ו-`reviewNote`, וכל השאר נופל למסלול הפרטים —
+         **שאינו כותב סטטוס בכלל**, כי `txDetailsUpdateOk` בכללי האבטחה
+         אוסר לשנות 'סטטוס' בעדכון פרטים. ארבעה שדות ביחד גרמו
+         לסטטוס להשתנות על המסך בלבד ולחזור ברענון הבא.
+         ⚠️ **הסדר אינו שרירותי: קודם הסיווג, אז הסטטוס.** אם השנייה
+            תיפול, ההוצאה נשארת "ממתינה" עם סעיף — מצב שאפשר
+            לתקן. ההפך היה מעביר להנה"ח בלי סעיף תקציבי.
+         ⚠️ `reviewNote` מתנקה עם הסטטוס ולא לפניו — הערת הבדיקה
+            שייכת לסטטוס "בבדיקה", ושניהם נעים באותה כתיבה. */
+      CBA.data.updateTransaction(t.id, { categoryId: cat, subItemId: sub || "" });
+      CBA.data.updateTransaction(t.id, { status: "ready", reviewNote: "" });
       CBA.ui.toast('הועבר להנה"ח');
       CBA.screens.expenses.render(container);
     }

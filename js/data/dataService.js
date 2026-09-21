@@ -235,12 +235,35 @@ CBA.data = (function () {
   // וסעיפי תקציב בחריגה בשנה הנוכחית. שריונים ממתינים למועדון נספרים בנפרד
   // (getClubList) כי זו קריאה א-סינכרונית ל-Apps Script/Calendar.
   function getAlertCounts() {
-    const all = getTransactions();
+    /* 🔴🔴 **ספירה על כל השנים שנטענו, לא על המוצגת** (21.9, דיווחים #8/#9).
+       `getTransactions()` מחזירה את `CBA.mock.transactions`, שהיא **תכונת גישה**
+       ל-`CBA.mock.years[currentYear].transactions` — כלומר השנה שעל המסך בלבד.
+       ההערה כאן אמרה "מכל השנים" והקוד עשה הפך.
+       נצפה בפועל: קבלה נרשמה לשנת העבודה תשפ"ז, המנהל צפה
+       בתשפ"ו, והפעמון הראה אפס — כלומר בקשה של תושב נעלמה מהעין.
+       ⚠️ **מה שזה עדיין לא פותר:** שנה שטרם נטענה כלל (הטעינה
+          היא לפי דרישה) עדיין אינה נספרת. ספירה מלאה חוצה-שנים
+          דורשת ספירה בשרת, וזה שינוי גדול יותר. */
     let pendingExpenses = 0, reviewExpenses = 0;
-    all.forEach(function (t) {
-      if (t.status === "submitted") pendingExpenses++;
-      else if (t.status === "review") reviewExpenses++;
-    });
+    var seen = {};
+    try {
+      var years = (CBA.mock && CBA.mock.years) || {};
+      Object.keys(years).forEach(function (y) {
+        ((years[y] && years[y].transactions) || []).forEach(function (t) {
+          /* ⚠️ מזהה יכול לחזור בשתי שנים (העברת שנה) — לא סופרים פעמיים. */
+          var k = String(y) + "|" + String(t.id);
+          if (seen[k]) return;
+          seen[k] = 1;
+          if (t.status === "submitted") pendingExpenses++;
+          else if (t.status === "review") reviewExpenses++;
+        });
+      });
+    } catch (e) {
+      getTransactions().forEach(function (t) {
+        if (t.status === "submitted") pendingExpenses++;
+        else if (t.status === "review") reviewExpenses++;
+      });
+    }
     const overBudget = getBudgetRows().filter(function (r) { return r.remaining < 0; }).length;
     return { pendingExpenses: pendingExpenses, reviewExpenses: reviewExpenses, overBudget: overBudget };
   }
