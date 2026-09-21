@@ -53,7 +53,11 @@ reset();
 ok('FS_FLAGS_DOC = appConfig/flags', sandbox.FS_FLAGS_DOC === 'appConfig/flags', sandbox.FS_FLAGS_DOC);
 /* 🔴 המספר עולה עם כל תחום שעובר. מה שחשוב הוא שהרשימה **סגורה** —
    דגל שאינו בה נדחה, ולכן שם שגוי ב-flagSet לא מדליק כלום בשקט. */
-ok('חמישה-עשר דגלים ברשימה', sandbox.FLAG_KEYS.length === 15, JSON.stringify(sandbox.FLAG_KEYS));
+ok('שישה-עשר דגלים ברשימה', sandbox.FLAG_KEYS.length === 16, JSON.stringify(sandbox.FLAG_KEYS));
+/* 🔴 גל 3 (18.9) — הדגל שמחזיר את כל פעולות המנהל ל-Apps Script
+   בלי דיפלוי. זה התנאי שאפשר להעביר את כולן בסבב אחד. */
+ok('ו-gardenWritesFromBrowser ביניהם',
+   sandbox.FLAG_KEYS.indexOf('gardenWritesFromBrowser') !== -1, JSON.stringify(sandbox.FLAG_KEYS));
 /* 🔴 צעד 12 — הסיור והשריון הקרוב. שני דגלים ולא אחד: שני תחומים,
    שני כללי אבטחה, וכיבוי של אחד חייב להשאיר את השני עובד. */
 ok('tourFromFirestore ו-clubResvFromFirestore — שני המתגים של צעד 12',
@@ -144,7 +148,7 @@ ok('כישלון כתיבה נתפס', g.ok === false && /503/.test(g.error), JS
 reset(); sandbox.authorize_ = () => ({ ok: true, perm: { isSuper: true } });
 store = { servicesFromFirestore: true, gardenPlanFromFirestore: false };
 g = sandbox.handleFlagsGet_({});
-ok('flagsGet מחזירה מצב ורשימה', g.ok === true && g.keys.length === 15 && g.flags.servicesFromFirestore === true,
+ok('flagsGet מחזירה מצב ורשימה', g.ok === true && g.keys.length === 16 && g.flags.servicesFromFirestore === true,
    JSON.stringify(g));
 sandbox.authorize_ = realAuth;
 

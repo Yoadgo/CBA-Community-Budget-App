@@ -1536,6 +1536,9 @@ function doPostDispatch_(ss, body) {
          העלאת תמונה בודדת, ושליחת המיילים על דיווח שנכתב מהדפדפן. */
       case 'gardenPhotoOne':      return json_(gardenPhotoOne_(ss, body));
       case 'gardenNotifyReport':  return json_(gardenNotifyReport_(ss, body));
+      /* 🔴 18.9, גל 3 — המייל על פעולת מנהל שנכתבה בדפדפן.
+         שגר-ושכח: המסך אינו ממתין לתשובה. */
+      case 'gardenNotifyTask':    return json_(gardenNotifyTask_(ss, body));
       /* 🔴🔴 **שלוש הפעולות שכותבות מסמך בודד לאוסף `gardenPlan`**
          (2026-09-16, הפער שנשאר פתוח מסקירת הצוות האדום).
          `gardenPlanSyncOne_` כותבת מסמך אחד ואינה סוחפת — ולכן היא
@@ -3432,7 +3435,8 @@ var ACTION_DOMAIN = {
   uploadReceiptOnly: 'receiptFile',
   /* ההיפוך (16.9) — שתיהן אינן נוגעות בגיליון: 'other' היה מבטל
      את מטמון המטען של כל המשתמשים בכל תמונה ובכל מייל. */
-  gardenPhotoOne: 'gardenPhoto', gardenNotifyReport: 'gardenMail'
+  gardenPhotoOne: 'gardenPhoto', gardenNotifyReport: 'gardenMail',
+  gardenNotifyTask: 'gardenMail'
 };
 
 /* ============================================================================
@@ -5889,6 +5893,13 @@ function hourlyJobsRun_() {
      לפני שמתריעים על התמונות שחסרות בו. */
   try {
     var gm = gardenMailPending_(ss);
+    /* 🔴 18.9 — אותה רשת למיילים של פעולות מנהל. */
+    var gtn = gardenTaskNotifyPending_(ss);
+    if (gtn && (gtn.sent || (gtn.errors && gtn.errors.length))) {
+      Logger.log('gardenTaskNotifyPending_ — נמצאו ' + gtn.found +
+                 ', נשלחו ' + gtn.sent +
+                 (gtn.errors.length ? ', שגיאות: ' + gtn.errors.join(' | ') : ''));
+    }
     if (gm.found) {
       Logger.log('מיילי גינון ממתינים: נמצאו ' + gm.found + ', נשלחו ' + gm.sent +
                  (gm.errors.length ? ' | ' + gm.errors.join(' ; ') : ''));
@@ -6855,6 +6866,16 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
         לאכוף — "חובה לכתוב מה נעשה", "ביטול רק בתוך חלון
         הערעור". הן כותבות לגיליון ומסנכרנות מיד. */
   'gardenTasksFromFirestore',
+  /* 🔴🔴 **גל 3** (2026-09-18) — עשר פעולות המנהל נכתבות
+     ישירות מהדפדפן ל-Firestore. הכרעת יועד: "תעביר הכול
+     מהכול ל-Firestore."
+     ⚠️ **הלוגיקה העסקית שהייתה הנימוק להשאיר את הכתיבה
+        ב-Apps Script (ר' ההערה מעל) עברה לכללי האבטחה:
+        `gtClosureAuthOk`, `gtCloseNoteOk`, `gtClosedOk`. שומר שיושב
+        רק בדפדפן הוא לא שומר.
+     ⚠️ **כבוי = הכול חוזר ל-Apps Script בלי דיפלוי.** זה התנאי
+        שאפשר להעביר את כל מסלולי הכתיבה בסבב אחד. */
+  'gardenWritesFromBrowser',
   /* 🔴 **שומר הכתיבות** (2026-09-17, ממצא 01 בצוות האדום) — הדגל היחיד
      ברשימה שאינו מתג מיגרציה אלא **מתג ביטול לרשת ביטחון**.
      כשהוא דלוק (ברירת המחדל), כתיבה שלא קיבלה תשובה תוך 60 שניות
@@ -14118,6 +14139,112 @@ function gardenSendReportMail_(ss, id) {
  *  ⚠️ שתיהן שאילתות **שוויון על שדה בודד** — בלי אינדקס מורכב,
  *     כי קונסולת Google Cloud חסומה.
  * ========================================================================== */
+
+/* ============================================================================
+ *  🔴🔴  מיילים על פעולות מנהל שנכתבו מהדפדפן   (2026-09-18, גל 3)
+ * ----------------------------------------------------------------------------
+ *  מרגע שעשר פעולות המנהל עברו ל-Firestore, **אף אחת מהן לא
+ *  עוברת דרך כאן יותר** — ולכן אף אחת מהן אינה שולחת מייל בעצמה.
+ *  Firestore אינו יודע לשלוח מייל, ואין Cloud Functions בתוכנית
+ *  החינמית — ולכן זה נשאר כאן, כעבודת רקע שאיש אינו מחכה לה.
+ *
+ *  🔑 **אותו דפוס של `mailPending`, לא מנגנון שני.** הדפדפן מרים
+ *  `notifyPending` על מסמך המשימה ומפעיל קריאת שגר-ושכח; אם היא
+ *  נפלה, הסריקה השעתית תופסת את אותו דגל. אידמפוטנטי.
+ *
+ *  🔑 **הפרטים האישיים לעולם אינם עוברים בדפדפן.** הדפדפן שולח
+ *  שם תבנית מרשימה סגורה (נאכף ב-`gtNotifyOk`), וכל השאר — שם התושב
+ *  וכתובות המייל — נשלף **כאן**, מטאב התושבים לפי `familyId`.
+ * ========================================================================== */
+var GARDEN_TASK_TEMPLATES = ['GARDEN_COMPLETED', 'GARDEN_REPORT_DECLINED',
+                             'GARDEN_PLANNED', 'GARDEN_REOPENED',
+                             'GARDEN_REPORT_MERGED'];
+
+/** שליחת המייל של משימה אחת. משותף לקריאה מהדפדפן ולסריקה. */
+function gardenSendTaskMail_(ss, taskId) {
+  var out = { ok: false, sent: 0, error: '' };
+  try {
+    var path = fsDocPath_(FS_GARDEN_TASKS, taskId);
+    var t = fsGet_(path);
+    if (!t) { out.error = 'המשימה לא נמצאה'; return out; }
+    if (t.notifyPending !== true) { out.ok = true; return out; }   /* כבר נשלח */
+
+    var tpl = String(t.notify || '').trim();
+    var repId = String(t.repId || '').trim();
+    /* ⚠️ משימת שגרה או יזומה — אין מדווח ואין למי לכתוב.
+       מורידים את הדגל כדי שהסריקה לא תחזור עליו כל שעה. */
+    if (GARDEN_TASK_TEMPLATES.indexOf(tpl) === -1 || !repId) {
+      fsMerge_(path, { notifyPending: false, notifiedAt: new Date() });
+      out.ok = true;
+      return out;
+    }
+
+    var rep = fsGet_(fsDocPath_(FS_GARDEN_REPORTS, repId));
+    if (!rep) {
+      fsMerge_(path, { notifyPending: false, notifiedAt: new Date() });
+      out.ok = true;
+      return out;
+    }
+
+    var famId = String(rep.familyId || '').trim();
+    var names = txFamilyNames_(ss);
+    var name = String(names[famId] || '').trim() || 'תושב';
+    var emails = emailsForFamilyId_(ss, famId);
+    var place = String(rep.place || rep.area || '').trim() || 'השיכון';
+    var note = String(t.notifyNote || t.note || '').trim();
+
+    var vars = {
+      'שם': name,
+      'מזהה': String(rep.id || repId),
+      'קטגוריה': String(rep.category || ''),
+      'מיקום': place,
+      'מה נעשה': note,
+      'שבוע': String(t.week || '')
+    };
+    /* ⚠️ אותה צורה בדיוק כמו ב-`gardenNotifyReopened_`: הטקסט נושא
+       איתו את שורת הרווח שאחריו, כך שתבנית בלי סיבה אינה
+       משאירה שורה ריקה כפולה באמצע המייל. */
+    vars['סיבה'] = (tpl === 'GARDEN_REOPENED')
+      ? (note ? note + '\n\n' : '')
+      : note;
+
+    try {
+      sendResidentTemplate_(ss, tpl, emails, vars);
+      out.sent = 1;
+    } catch (e) { out.error = String(e); }
+
+    /* ⚠️ מורידים את הדגל גם כשהשליחה נכשלה — ניסיון חוזר
+       שעתי על תבנית שבורה הופך לנודניק אינסופי. אותה הכרעה
+       בדיוק כמו ב-`gardenSendReportMail_`. השגיאה מתועדת. */
+    fsMerge_(path, { notifyPending: false, notifiedAt: new Date() });
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+/** קריאת השגר-ושכח מהדפדפן. איש אינו ממתין לתשובה שלה. */
+function gardenNotifyTask_(ss, body) {
+  var gate = authorize_(ss, body, null);
+  if (!gate.ok) return { ok: false, error: gate.error };
+  var id = String((body && body.id) || '').trim();
+  if (!id) return { ok: false, error: 'חסר מזהה משימה' };
+  return gardenSendTaskMail_(ss, id);
+}
+
+/** הרשת: משימות שהמייל שלהן לא יצא. שאילתת שוויון על שדה בודד. */
+function gardenTaskNotifyPending_(ss) {
+  var out = { found: 0, sent: 0, errors: [] };
+  try {
+    var docs = fsQuery_(FS_GARDEN_TASKS, 'notifyPending', 'EQUAL', true, 200);
+    out.found = docs.length;
+    for (var i = 0; i < docs.length; i++) {
+      var r = gardenSendTaskMail_(ss, docs[i].id);
+      if (r.sent) out.sent++;
+      if (r.error) out.errors.push(docs[i].id + ': ' + r.error);
+    }
+  } catch (e) { out.errors.push(String(e)); }
+  return out;
+}
 
 /** מיילים שלא יצאו (הדפדפן כתב ולא הספיק לקרוא, או שהקריאה נפלה). */
 function gardenMailPending_(ss) {

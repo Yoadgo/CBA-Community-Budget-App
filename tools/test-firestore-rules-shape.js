@@ -99,7 +99,7 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                         והדפדפן כותב. שלושה שערים, ושלושתם מפורטים
                         בקובץ הכללים ובמסמך התוצאות הצפויות. */
                      'grCreateOk', 'grFeedbackOk', 'grPhotosOk', 'grTeamUpdateOk',
-                     'gtTeamCreateOk', 'gtFromReportOk', 'gtTeamUpdateOk', 'gtDeleteOk',
+                     'gtTeamCreateOk', 'gtFromReportOk', 'gtDeleteOk',
                      /* 🔴 נוסף ביודעין 17.9 — התושב כותב את מזהי התמונות
                         גם למסמך המשימה של הדיווח שלו. צר לשני שדות,
                         ומאומת מול `repId`→`familyId`. ר' סעיף 8 למטה
@@ -109,6 +109,10 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                         השער נפתח רק כל עוד אין מסמך דיווח שמצביע
                         על המשימה — ר' סעיף 3 ב-test-wave2-live-fixes.js. */
                      'gtOrphanCleanupOk',
+                     /* 🔴 גל 3 (18.9) — `gtTeamUpdateOk` אינו מחווט עוד ישירות:
+                        הוא עבר להיות רכיב בתוך `gtUpdateOk`, שמאחד את כל
+                        השומרים שעברו מ-Apps Script. ר' test-wave3-garden-writes.js. */
+                     'gtUpdateOk',
                      'glCreateOk', 'glResidentCreateOk'];
 {
   const used = [];
@@ -379,8 +383,12 @@ ok('🔴🔴 והמשימה חייבת להצביע על דיווח של המש�
 ok('⚠️ repId חייב להתקיים ולהיות מחרוזת — אחרת הנתיב נבנה מריק',
    /resource\.data\.repId is string && resource\.data\.repId != ''/.test(gtp), gtp);
 ok('⚠️ ולא למשתמש חיצוני', /isMember\(\) && m\(\)\.isExternal == false/.test(gtp), gtp);
+/* 🔴 18.9, גל 3 — השער הוחלף ב-`gtUpdateOk`, שמוסיף על `gtTeamUpdateOk`
+   את השומרים שעברו מ-Apps Script. מסלול התמונות של התושב נשאר עצמאי. */
 ok('הכלל צורף ל-update של gardenTasks',
-   /allow update: if gtTeamUpdateOk\(\) \|\| gtReportPhotosOk\(\);/.test(CODE));
+   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\);/.test(CODE));
+ok('⚠️ ו-gtTeamUpdateOk עדיין בפנים, כרכיב ולא כשער',
+   /gtUpdateOk\(\) \{[\s\S]{0,200}gtTeamUpdateOk\(\)/.test(CODE));
 ok('🔴 והמחיקה **לא** נפתחה לתושב',
    /function gtDeleteOk\(\)[\s\S]{0,120}hasPerm\('גינון'\)/.test(CODE));
 ok('🔴 וגם gtTeamUpdateOk לא נגעה', /function gtTeamUpdateOk\(\)\s*\{\s*\n\s*return hasPerm\('גינון'\)/.test(CODE));

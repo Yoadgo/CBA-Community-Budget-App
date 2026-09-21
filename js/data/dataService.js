@@ -1866,6 +1866,282 @@ CBA.data = (function () {
     });
   }
 
+  /* ==========================================================================
+   *  🔴🔴  פעולות המנהל נכתבות מהדפדפן   (2026-09-18, גל 3)
+   * --------------------------------------------------------------------------
+   *  ההכרעה של יועד: "תעביר הכול מהכול ל-Firestore. אני לא רוצה
+   *  יותר שימוש ב-Apps Script מלבד העלאת התמונות."
+   *
+   *  עד היום כל לחיצה הייתה קריאה ל-Apps Script שעבדה מול הגיליון
+   *  ושלחה מייל באותה נשימה. נמדד בייצור (18.9): "בוצע" = **28.9 שניות**.
+   *  מעכשיו הדפדפן כותב ישירות ל-Firestore, והמייל יוצא ברקע.
+   *
+   *  🔴 **השומרים אינם כאן.** מי רשאי לסגור, מה מותר על משימה
+   *  סגורה, ומתי חובה לכתוב לתושב — כל אלה יושבים **בכללי
+   *  האבטחה** (`gtUpdateOk`). מה שכתוב כאן הוא העתק לנוחות המשתמש
+   *  בלבד, כדי שהוא יקבל משפט בעברית ולא "permission-denied".
+   *  ⚠️ **שומר שיושב רק כאן הוא לא שומר** — אם תוסיף בדיקה
+   *     חדשה כאן, הוסף אותה גם לכללים.
+   *
+   *  🔑 **המייל — הרחבה של `mailPending`, בלי מנגנון חדש.** הדפדפן מרים
+   *  `notifyPending` על אותו מסמך ומפעיל קריאת שגר-ושכח שאיש אינו
+   *  ממתין לה. הסריקה השעתית היא הרשת אם הקריאה נפלה.
+   *  **הנמענים נשלפים בשרת** מטאב התושבים — הקו האדום נשמר.
+   * ========================================================================== */
+
+  var GARDEN_STAGES_C   = ["התקבל", "נבדק", "מתוכנן", "בטיפול", "הושלם"];
+  var GARDEN_CLOSURES_C = ["בוצע", "הועבר לבינוי", "בוטל", "לא רלוונטי", "אוחד"];
+
+  /** הדגל שמחליף את כל מסלולי הכתיבה של הגינון.
+   *  ⚠️ כבוי = הכול חוזר ל-Apps Script בלי דיפלוי. אחרי 16.9, העברה
+   *     של כל מסלולי הכתיבה בבת אחת בלי מתג כזה אינה אפשרות. */
+  function gardenWritesOn() {
+    return !!(CBA.fb && CBA.fb.flag &&
+              CBA.fb.flag("gardenWritesFromBrowser", false) &&
+              CBA.fb.flag("gardenTasksFromFirestore", GARDEN_TASKS_FROM_FIRESTORE) &&
+              CBA.fb.uid && CBA.fb.uid());
+  }
+
+  /** מי עושה את הפעולה — אותה צורה שהשרת בנה ב-`who`. */
+  function gardenWho() {
+    var u = (window.CBA && CBA.user) || {};
+    return ((u.firstName || "") + " " + (u.family || "")).trim() || (u.email || "");
+  }
+
+  function gardenIsMgr() {
+    var u = (window.CBA && CBA.user) || {};
+    return !u.isExternal;
+  }
+
+  /** שבוע + n — העתק של `gardenWeekShift_`. מפתח השבוע הוא YYYY-MM-DD. */
+  function gardenWeekShift(week, n) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(week || "").trim());
+    if (!m) return "";
+    var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    d.setDate(d.getDate() + 7 * n);
+    var p = function (x) { return (x < 10 ? "0" : "") + x; };
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+  }
+
+  /** קריאת שגר-ושכח שמוציאה את המייל תוך שניות במקום לחכות לשעה.
+   *  ⚠️ **אין כאן קולבק ואין מה לחכות לו.** המסמך כבר נכתב,
+   *     הדגל עליו דלוק, ואם הקריאה הזאת תיפול — הסריקה
+   *     השעתית תשלח אותו. זה בדיוק הדפוס של `gardenNotifyReport`. */
+  function gardenNotifyFire(taskId) {
+    try {
+      CBA.sheets.postRead("gardenNotifyTask", { id: String(taskId) }, function () {});
+    } catch (e) { /* שגר ושכח */ }
+  }
+
+  /** שגיאה מ-Firestore — למשפט בעברית. `permission-denied` כאן פירושו
+   *  שהשומר בכללי האבטחה עצר את הפעולה — לא תקלה. */
+  function gardenFsErr(e, fallback) {
+    var code = String((e && e.code) || "");
+    if (code.indexOf("permission-denied") !== -1) {
+      return "הפעולה לא אושרה — ייתכן שהמשימה כבר נסגרה או שאין לך הרשאה";
+    }
+    return fallback || "הפעולה נכשלה";
+  }
+
+  /** המנוע — עשר הפעולות בפונקציה אחת, כמו בשרת.
+   *  קורא את המסמך, מחשב פאצ', כותב, רושם ביומן ומפעיל מייל. */
+  function gardenFsTask(op, id, extra, cb) {
+    extra = extra || {};
+    var who = gardenWho();
+    CBA.fb.readDoc("gardenTasks", String(id), function (e, cur) {
+      if (e || !cur) return cb({ ok: false, error: "המשימה לא נמצאה" });
+
+      var closure = String(cur.closure || "").trim();
+      var isReport = String(cur.repId || "").trim() !== "";
+      var note = String(extra.note || "").trim().substring(0, 600);
+      var patch = {}, log = null, notify = "";
+
+      /* ⚠️ העתק לנוחות בלבד — האכיפה האמיתית ב-`gtClosedOk`. */
+      if (closure) {
+        var reopenAct = (op === "undo" || op === "return");
+        var reopenable = reopenAct && (gardenIsMgr() || closure === "בוצע");
+        if (op !== "clearflag" && !reopenable) {
+          return cb({ ok: false, error: "המשימה כבר נסגרה" });
+        }
+      }
+
+      function close(reason, why) {
+        patch.stage = "הושלם";
+        patch.flag = "";
+        patch.closure = reason;
+        patch.approvedBy = who;
+        /* 🔴 **חותמת זמן ולא מחרוזת** — בלעדיה `gtWithinDispute`
+           בכללי האבטחה לא יכול לאכוף את חלון הערעור בכלל. */
+        patch.approvedAt = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+        if (why) patch.note = why;
+        log = { kind: "סגירה", note: reason + (why ? " — " + why : "") };
+        if (reason === "בוצע") notify = "GARDEN_COMPLETED";
+        else if (reason !== "אוחד") notify = "GARDEN_REPORT_DECLINED";
+      }
+
+      if (op === "done") {
+        if (isReport && !note) {
+          return cb({ ok: false,
+                      error: "צריך לכתוב מה נעשה — המשפט הזה נשלח לתושב שדיווח." });
+        }
+        close("בוצע", note || String(cur.note || ""));
+
+      } else if (op === "undo") {
+        if (closure) {
+          patch.closure = "";
+          patch.stage = "בטיפול";
+          patch.flag = "";
+          patch.approvedBy = "";
+          patch.approvedAt = "";
+          notify = "GARDEN_REOPENED";
+          log = { kind: "ביטול ביצוע", note: closure + (note ? " — " + note : "") };
+        } else {
+          patch.flag = "";
+          log = { kind: "ביטול ביצוע", note: "" };
+        }
+
+      } else if (op === "note") {
+        patch.note = note;
+        log = { kind: "הערה", note: note };
+
+      } else if (op === "defer") {
+        if (!cur.week) return cb({ ok: false, error: "למשימה אין שבוע משובץ" });
+        var nxt = gardenWeekShift(cur.week, 1);
+        if (!nxt) return cb({ ok: false, error: "שבוע לא תקין" });
+        patch.week = nxt;
+        patch.flag = "נגררה";
+        patch.drags = (Number(cur.drags) || 0) + 1;
+        /* "שבוע מקורי" נכתב פעם אחת — זה מה שמראה מה נגרר שוב ושוב. */
+        if (!cur.firstWeek) patch.firstWeek = cur.week;
+        log = { kind: "גרירה", note: cur.week + " ← " + nxt + (note ? " — " + note : "") };
+
+      } else if (op === "approve" || op === "close") {
+        if (!gardenIsMgr()) {
+          return cb({ ok: false, error: "אישור הוא בסמכות מנהל הגינון" });
+        }
+        var reason = op === "approve" ? "בוצע" : String(extra.closure || "").trim();
+        if (GARDEN_CLOSURES_C.indexOf(reason) === -1) {
+          return cb({ ok: false, error: "סיבת סגירה לא מוכרת" });
+        }
+        if (reason !== "בוצע" && isReport && !note) {
+          return cb({ ok: false, error: "צריך לכתוב לתושב מה הסיבה" });
+        }
+        close(reason, note);
+
+      } else if (op === "return") {
+        if (!note) return cb({ ok: false, error: "צריך לכתוב מה חסר" });
+        if (closure) {
+          patch.closure = "";
+          patch.approvedBy = "";
+          patch.approvedAt = "";
+          notify = "GARDEN_REOPENED";
+        }
+        patch.stage = "בטיפול";
+        patch.flag = "הוחזר להשלמה";
+        patch.note = note;
+        log = { kind: "החזרה", note: note };
+
+      } else if (op === "plan") {
+        var wk = String(extra.week || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) {
+          return cb({ ok: false, error: "שבוע לא תקין" });
+        }
+        patch.week = wk;
+        if (GARDEN_STAGES_C.indexOf(String(cur.stage || "")) <
+            GARDEN_STAGES_C.indexOf("מתוכנן")) {
+          patch.stage = "מתוכנן";
+        }
+        if (String(cur.flag || "") === "נגררה") patch.flag = "";
+        log = { kind: "שיבוץ", note: (cur.week || "—") + " ← " + wk };
+        /* ⚠️ שיבוץ **ראשון** בלבד — גרירה ושינוי שבוע אינם מייל נוסף. */
+        if (!cur.week && isReport) notify = "GARDEN_PLANNED";
+
+      } else if (op === "clearflag") {
+        patch.flag = "";
+        log = { kind: "דגל", note: note || "" };
+
+      } else if (op === "block") {
+        if (!note) return cb({ ok: false, error: "צריך לכתוב מה חוסם" });
+        patch.flag = "דורש בדיקה בשטח";
+        patch.note = note;
+        log = { kind: "חסימה", note: note };
+
+      } else {
+        return cb({ ok: false, error: "פעולה לא מוכרת" });
+      }
+
+      patch.updatedAt = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+      if (notify) {
+        patch.notify = notify;
+        patch.notifyPending = true;
+        patch.notifyNote = note || String(patch.note || cur.note || "");
+      }
+
+      CBA.fb.updateDoc("gardenTasks", String(id), patch, function (e2) {
+        if (e2) return cb({ ok: false, error: gardenFsErr(e2) });
+        /* מכאן הפעולה **קיימת**. כל מה שנכשל אחריה אינו מבטל אותה. */
+        if (log) gardenLogAppend(String(id), log.kind, log.note);
+        if (notify) gardenNotifyFire(id);
+        cb({ ok: true });
+      });
+    });
+  }
+
+  /** אישור מרוכז — לולאה על אותה פעולה בדיוק.
+   *  ⚠️ **סדרתי ולא מקבילי**, כדי שכשל באמצע ישאיר מצב שניתן
+   *     להסבר ("אושרו 3 מתוך 5") ולא קבוצה אקראית שעברה. */
+  function gardenFsApproveBatch(ids, cb) {
+    var list = (ids || []).map(function (x) { return String(x || "").trim(); })
+                          .filter(Boolean);
+    if (!list.length) return cb({ ok: false, error: "לא נבחרו משימות" });
+    var done = 0, failed = [];
+    function step(i) {
+      if (i >= list.length) {
+        return cb(failed.length
+          ? { ok: false, error: "אושרו " + done + " מתוך " + list.length +
+                                " — נכשלו: " + failed.join(", ") }
+          : { ok: true, count: done });
+      }
+      gardenFsTask("approve", list[i], {}, function (r) {
+        if (r && r.ok) done++; else failed.push(list[i]);
+        step(i + 1);
+      });
+    }
+    step(0);
+  }
+
+  /** פתיחת משימה יזומה ע"י הצוות. payload: {title, category, area, week}.
+   *  ⚠️ אין כאן `repId` ואין מייל — אין תושב שמחכה לתשובה. */
+  function gardenFsCreateTask(payload, cb) {
+    payload = payload || {};
+    var title = String(payload.title || "").trim().substring(0, 60);
+    if (!title) return cb({ ok: false, error: "צריך כותרת" });
+    var cat = String(payload.category || "").trim();
+    if (!cat) return cb({ ok: false, error: "צריך קטגוריה" });
+    var wk = String(payload.week || "").trim();
+    if (wk && !/^\d{4}-\d{2}-\d{2}$/.test(wk)) {
+      return cb({ ok: false, error: "שבוע לא תקין" });
+    }
+    CBA.fb.nextId("gardenTask", function (e1, taskId) {
+      if (e1) return cb({ ok: false, error: "לא הצלחנו להקצות מספר למשימה" });
+      var now = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+      var doc = {
+        id: String(taskId), kind: "יזום", title: title,
+        category: cat, area: String(payload.area || ""),
+        x: null, y: null,
+        stage: wk ? "מתוכנן" : "התקבל",
+        week: wk, repId: "", photos: [],
+        createdAt: now, updatedAt: now, order: 0,
+        year: String((CBA.mock && CBA.mock.currentYear) || ""), schema: 1
+      };
+      CBA.fb.createDoc("gardenTasks", String(taskId), doc, function (e2) {
+        if (e2) return cb({ ok: false, error: gardenFsErr(e2, "לא הצלחנו לפתוח את המשימה") });
+        gardenLogAppend(String(taskId), "נפתח", "משימה יזומה");
+        cb({ ok: true, id: taskId });
+      });
+    });
+  }
+
   function gardenReportFsWrite(payload, cb, onProgress) {
     var user = (window.CBA && CBA.user) || {};
     var fid = String(user.familyId || "").trim();
@@ -3297,6 +3573,8 @@ CBA.data = (function () {
     /* פעולה בודדת על משימה. op: done | undo | note | defer | block | plan |
        return | approve | close | clearflag */
     gardenTask: function (op, id, extra, cb) {
+      /* 🔴 18.9, גל 3 — המסלול החדש. הדגל כבוי → הכול כמקודם. */
+      if (gardenWritesOn()) return gardenFsTask(op, id, extra || {}, cb);
       var payload = { op: op, id: id };
       if (extra && extra.note !== undefined) payload.note = extra.note;
       if (extra && extra.week !== undefined) payload.week = extra.week;
@@ -3305,6 +3583,7 @@ CBA.data = (function () {
     },
     /* פתיחת משימה יזומה ע"י המנהל. payload: {title, category, area, week}. */
     gardenCreateTask: function (payload, cb) {
+      if (gardenWritesOn()) return gardenFsCreateTask(payload, cb);
       CBA.sheets.postRead("gardenCreateTask", payload, cb);
     },
     /* איחוד כפילות: משימה id נבלעת לתוך משימה into. */
@@ -3313,6 +3592,7 @@ CBA.data = (function () {
     },
     /* אישור מרוכז — רק שגרה מאותה תבנית ואותו שבוע. השרת אוכף (ר' החלטה 3). */
     gardenApproveBatch: function (ids, cb) {
+      if (gardenWritesOn()) return gardenFsApproveBatch(ids, cb);
       CBA.sheets.postRead("gardenApproveBatch", { ids: ids }, cb);
     },
     // ייצוא לגיליון חדש (2026-08-07). payload: { columns, rowIndexes, name, subtitle }

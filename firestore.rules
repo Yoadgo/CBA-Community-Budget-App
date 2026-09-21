@@ -388,14 +388,106 @@ service cloud.firestore {
     }
 
     /* ⚠️ `id` אינו ברשימה: מזהה שנקבע ביצירה אינו משתנה לעולם.
-       שינוי שלו היה מנתק את הדיווח שמצביע על המשימה. */
+       שינוי שלו היה מנתק את הדיווח שמצביע על המשימה.
+       🔴 18.9 — שלושת שדות הדואר נוספו כאן **ולא** ב-`gtFields`:
+       הם ניתנים לעדכון ע"י הצוות בלבד, ולעולם לא נשלחים ביצירה —
+       אחרת תושב היה יכול ליצור משימה ששולחת מייל בשם הועד. */
     function gtTeamUpdateOk() {
       return hasPerm('גינון') &&
              request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['stage', 'flag', 'closure', 'week', 'due', 'note',
                          'drags', 'firstWeek', 'title', 'category', 'area',
                          'x', 'y', 'approvedBy', 'approvedAt',
-                         'repId', 'photos', 'order', 'updatedAt', 'syncedAt']);
+                         'repId', 'photos', 'order', 'updatedAt', 'syncedAt',
+                         'notify', 'notifyPending', 'notifyNote']);
+    }
+
+    /* ========================================================================
+     *  🔴🔴  השומרים שעברו מ-Apps Script לכאן   (2026-09-18, גל 3)
+     * ------------------------------------------------------------------------
+     *  עד היום עשר פעולות המנהל עברו דרך `gardenTaskAction_`, ושם
+     *  ישבו ההחלטות: מי רשאי לסגור, מה מותר על משימה סגורה,
+     *  ומתי חובה לכתוב לתושב. מרגע שהדפדפן כותב ישירות,
+     *  **שומר שיושב רק בדפדפן הוא לא שומר** — ולכן הם כאן.
+     *
+     *  🔑 **הבחנה שחוזרת בכולם: `repId` ולא `kind`.** הלקוח כותב
+     *  `kind: 'תקלה'` (הערך הישן) בעוד השרת מכיר 'דיווח תושב'
+     *  וממפה ביניהם ב-`GARDEN_KIND_LEGACY`. כלל שנשען על `kind` היה
+     *  נשבר בשקט באחד הצדדים. `repId` אינו משתמע לשתי פנים:
+     *  יש דיווח מאחוריה, ולכן יש אדם שמחכה לתשובה.
+     * ====================================================================== */
+
+    /* מנהל גינון — לא הגנן החיצוני. זה `perm.isExternal` שבשרת. */
+    function gtMgr() {
+      return hasPerm('גינון') && m().isExternal == false;
+    }
+
+    function gtNext(f) { return request.resource.data.get(f, ''); }
+    function gtCur(f)  { return resource.data.get(f, ''); }
+
+    /* סיבת סגירה מהרשימה בלבד — `GARDEN_CLOSURES` בשרת. */
+    function gtClosureValueOk() {
+      return gtNext('closure') == '' ||
+             ['בוצע', 'הועבר לבינוי', 'בוטל', 'לא רלוונטי', 'אוחד']
+               .hasAny([gtNext('closure')]);
+    }
+
+    /* 🔴 **מי סוגר.** 'בוצע' פתוח לכל בעל הרשאת גינון, כולל הגנן
+       החיצוני — זו הייתה הכרעת יועד ב-9.9 ("הסימון סוגר").
+       כל סיבה אחרת היא **החלטה**, ולכן מנהל בלבד. */
+    function gtClosureAuthOk() {
+      return gtNext('closure') == gtCur('closure') ||
+             gtNext('closure') == '' ||
+             gtNext('closure') == 'בוצע' ||
+             gtMgr();
+    }
+
+    /* 🔴 סגירת פנייה של תושב מחייבת טקסט — המייל בנוי סביבו.
+       זה מה שהופך את "הושלם" למשהו שאפשר לערער עליו. */
+    function gtCloseNoteOk() {
+      return gtNext('closure') == '' ||
+             gtNext('closure') == gtCur('closure') ||
+             gtCur('repId') == '' ||
+             gtNext('note') != '';
+    }
+
+    /* חלון הערעור של הגנן — `GARDEN_DISPUTE_DAYS` = 14.
+       ⚠️ אם `approvedAt` אינו חותמת זמן, החלון **פתוח** — בדיוק כמו
+          `gardenWithinDispute_` שמחזיר true כשאין תאריך. נעילה במקרה הזה
+          הייתה הופכת כל משימה ישנה לבלתי הפיכה לגנן. */
+    function gtWithinDispute() {
+      return !(resource.data.get('approvedAt', null) is timestamp) ||
+             request.time < resource.data.approvedAt + duration.value(14, 'd');
+    }
+
+    /* 🔴🔴 **משימה סגורה** — ממצא 22, עכשיו באכיפה ולא בנוהג.
+       מנהל — הכול, בלי הגבלת זמן.
+       גנן חיצוני — או ניקוי דגל בלבד (המסלול שמונע מבוי סתום
+       כשמשוב שלילי מרים דגל על משימה סגורה), או פתיחה מחדש
+       של סגירת 'בוצע' בתוך חלון הערעור. */
+    function gtClosedOk() {
+      return gtCur('closure') == '' ||
+             gtMgr() ||
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['flag', 'updatedAt']) ||
+             (gtCur('closure') == 'בוצע' && gtNext('closure') == '' &&
+              gtWithinDispute());
+    }
+
+    /* 🔴 שם התבנית מרשימה סגורה בלבד.
+       ⚠️ **הנמענים אינם נשלחים מהדפדפן ולעולם לא יישלחו** — השרת
+          שולף אותם מטאב התושבים לפי `familyId` של הדיווח. זה הקו
+          האדום: פרטים אישיים לעולם אינם עוברים בדפדפן. */
+    function gtNotifyOk() {
+      return gtNext('notify') == '' ||
+             ['GARDEN_COMPLETED', 'GARDEN_REPORT_DECLINED', 'GARDEN_PLANNED',
+              'GARDEN_REOPENED', 'GARDEN_REPORT_MERGED'].hasAny([gtNext('notify')]);
+    }
+
+    /* השער המלא לעדכון של הצוות — כל השומרים ביחד. */
+    function gtUpdateOk() {
+      return gtTeamUpdateOk() && gtClosureValueOk() && gtClosureAuthOk() &&
+             gtCloseNoteOk() && gtClosedOk() && gtNotifyOk();
     }
 
     /* ========================================================================
@@ -462,7 +554,7 @@ service cloud.firestore {
     match /gardenTasks/{id} {
       allow read: if canSeeGardenTasks();
       allow create: if gtTeamCreateOk() || gtFromReportOk();
-      allow update: if gtTeamUpdateOk() || gtReportPhotosOk();
+      allow update: if gtUpdateOk() || gtReportPhotosOk();
       allow delete: if gtDeleteOk() || gtOrphanCleanupOk();
     }
 
