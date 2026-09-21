@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>כלי כיול — מפת השיכון</title>
+<style>
+:root{
+  --bg:#11141a; --panel:rgba(24,28,36,.94); --line:#333b4a; --ink:#eaecf1; --muted:#98a1b2;
+  --accent:#F2A65A; --ok:#5BBB7B; --warn:#E4B04A; --danger:#F4737F;
+  --gzone:#C86FD6; --street:#6FD3BC; --plaza:#D9CFC0; --shelter:#EFE3CC; --bin:#5BB36E; --bus:#3A73B8; --house:#F2A65A; --public:#7FB3E8; --parking:#B9A8E8; --green:#7FCB94; --road:#EFE7D8; --path:#DAD3C6; --road-edge:#DCD4C4; --path-edge:#CFC8BB;
+  --shadow:0 6px 24px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,"Segoe UI",Arial,sans-serif}
+#stage{position:absolute;inset:0;overflow:hidden;background:#0b0d11;cursor:grab}
+#stage.panning{cursor:grabbing} #stage.drawing{cursor:crosshair}
+#world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+#world img{position:absolute;top:0;left:0;display:block;-webkit-user-drag:none;user-select:none}
+#imgOld{opacity:0}
+#svg{position:absolute;top:0;left:0;overflow:visible}
+
+.float{position:absolute;background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow);z-index:20}
+#tools{top:14px;inset-inline-start:14px;padding:8px;display:flex;gap:6px;flex-wrap:wrap;max-width:60vw}
+#topright{top:14px;inset-inline-end:14px;padding:8px;display:flex;gap:6px;align-items:center}
+#drawbar{display:none}#drawbar.on{display:flex}
+#insp{bottom:14px;inset-inline-start:50%;transform:translateX(50%);padding:12px 14px;display:none;
+  gap:16px;align-items:flex-end;max-width:min(1080px,94vw);flex-wrap:wrap}
+#insp.on{display:flex}
+#side{position:absolute;top:76px;inset-inline-end:14px;width:250px;padding:12px 14px;display:flex;
+  flex-direction:column;gap:12px;max-height:calc(100vh - 160px);overflow:auto}
+#side.hidden{display:none}
+#hint{bottom:14px;inset-inline-start:14px;padding:8px 12px;font-size:12px;color:var(--muted);max-width:330px}
+#scalebar{bottom:14px;inset-inline-end:14px;padding:7px 12px;font-size:12px;display:flex;align-items:center;gap:9px}
+#scalebar i{display:block;height:4px;background:var(--ink);border-radius:2px}
+
+button{font:inherit;color:var(--ink);background:#252c39;border:1px solid var(--line);border-radius:9px;
+  padding:7px 11px;cursor:pointer;white-space:nowrap}
+button:hover{background:#303a4b}
+button.on{background:var(--accent);border-color:var(--accent);color:#1c1206;font-weight:700}
+button.pri{background:#EFE9E1;color:#14171c;border-color:#EFE9E1;font-weight:700}
+button.dang{border-color:#5c2c33;color:var(--danger)}
+button.sm{padding:5px 9px;font-size:12.5px}
+.tool{display:flex;align-items:center;gap:7px}
+.tool b{width:11px;height:11px;border-radius:3px;display:block}
+input[type=text],input[type=number],select{font:inherit;color:var(--ink);background:#12161d;
+  border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%}
+input[type=range]{width:100%}
+input[type=file]{font-size:11px;color:var(--muted);width:100%}
+label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px;letter-spacing:.02em}
+.fld{display:flex;flex-direction:column;min-width:0}
+.fld.w90{width:90px}.fld.w120{width:120px}.fld.w150{width:150px}.fld.w200{width:200px}
+.grp{display:flex;flex-direction:column;gap:5px}
+.grp .row{display:flex;gap:5px}
+.tip{font-size:11px;color:var(--muted);margin:0}
+h2{margin:0;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700}
+#stats{font-size:12px;color:var(--muted);line-height:1.75}
+#stats b{color:var(--ink);font-variant-numeric:tabular-nums}
+hr{border:0;border-top:1px solid var(--line);margin:0}
+
+.shape{fill:rgba(242,166,90,.14);stroke:var(--house);cursor:move}
+.shape.t-public{fill:rgba(127,179,232,.15);stroke:var(--public)}
+.shape.t-parking{fill:rgba(185,168,232,.15);stroke:var(--parking)}
+.shape.t-green{fill:rgba(127,203,148,.15);stroke:var(--green)}
+/* אזור גינון: שכבת ניהול, לא אובייקט פיזי. קו מקווקו ומילוי כמעט שקוף
+   כדי שאפשר יהיה לראות דרכו את הבתים שהוא אמור לכסות. */
+.shape.t-gzone{fill:rgba(200,111,214,.10);stroke:var(--gzone);stroke-dasharray:26 16}
+.shape.t-gzone.sel{fill:rgba(200,111,214,.20)}
+#svg.prev .shape.t-gzone{display:none}   /* בתצוגה מקדימה זו לא חלק מהמפה */
+.shape.t-roundabout{fill:rgba(239,231,216,.22);stroke:var(--road)}
+.island{fill:rgba(127,203,148,.35);stroke:none;pointer-events:none}
+.shape.sel{fill-opacity:.3}
+.paved{opacity:.9}
+.line{fill:none;stroke:var(--road);stroke-linecap:butt;stroke-linejoin:round;cursor:move}
+.casings{opacity:1}
+.line.casing,.cap.casing{stroke:var(--road-edge);fill:var(--road-edge);pointer-events:none}
+.line.casing{fill:none;stroke-linecap:butt;stroke-linejoin:round}
+.line.casing.t-path{stroke:var(--path-edge)} .cap.casing.t-path{fill:var(--path-edge)}
+.line.t-path{stroke:var(--path)}
+.shape.t-plaza{fill:var(--path);stroke:var(--path-edge)}
+#svg.prev .shape.t-plaza{fill:#EDE8DE;stroke:#D8D1C4}
+.line.sel{stroke:var(--accent);opacity:1}
+.mk{cursor:move}
+.mk.shelter{fill:#F6EFE0;stroke:#C7BCA4}
+.mk.bus{fill:#3A73B8;stroke:#27578F}
+.busg{fill:#FFFFFF;stroke:none;pointer-events:none}
+.busg .win{fill:#3A73B8}
+.mk.shelter.sel{stroke:var(--accent)}
+.mkin.shelterin{fill:#C0564C;stroke:none;pointer-events:none}
+.mk.bin.sel{stroke:var(--accent)!important}
+.mk.dash{stroke-dasharray:6 5}
+#svg.prev .mk.shelter{fill:#F7F1E4;stroke:#CFC5B0}
+.stdash{fill:none;stroke:var(--street);stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.stdash.sel{stroke:var(--accent)}
+.stchip{fill:#141A21;stroke:var(--street);pointer-events:none}
+.stchip.sel{stroke:var(--accent)}
+.sttext{fill:#EAF6F3;font-weight:700;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+#svg.prev .stdash{stroke:#8B857B} #svg.prev .stchip{fill:#FBFAF7;stroke:#B7B0A4}
+#svg.prev .sttext{fill:#4A473F}
+.cap{fill:var(--road);stroke:none;cursor:move}
+.cap.t-path{fill:var(--path)}
+.cap.sel{fill:var(--accent);opacity:1}
+.hit{fill:none;stroke:transparent;cursor:move}
+.divider{stroke:#fff;stroke-opacity:.75;stroke-dasharray:6 5;pointer-events:none}
+.lbl{fill:#fff;font-weight:700;paint-order:stroke;stroke:#000;stroke-width:4px;pointer-events:none;text-anchor:middle}
+.hnd{fill:#fff;stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke;cursor:pointer}
+.hrot{fill:var(--ok);stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke;cursor:grab}
+.vtx{fill:var(--accent);stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke;cursor:pointer}
+/* תצוגה מקדימה — כמו שתושב יראה */
+#svg.prev .shape{stroke:none}
+#svg.prev .shape.t-parking{fill:#9A968F;fill-opacity:1}
+#svg.prev .shape.t-roundabout{fill:#9A968F;fill-opacity:1}
+#svg.prev .island{fill:#5E8C52;fill-opacity:.9}
+#svg.prev .shape.t-green{fill:#5E8C52;fill-opacity:.55}
+#svg.prev .shape.t-house{fill:#C8734C;fill-opacity:1}
+#svg.prev .shape.t-public{fill:#9C6E58;fill-opacity:1}
+#svg.prev .paved{opacity:1}
+#svg.prev .line{stroke:#9A968F}
+#svg.prev .line.casing{stroke:#8A867F} #svg.prev .cap.casing{fill:#8A867F}
+#svg.prev .line.casing.t-path{stroke:#ADA79D} #svg.prev .cap.casing.t-path{fill:#ADA79D}
+#svg.prev .line.t-path{stroke:#C6BFB3}
+#svg.prev .cap{fill:#9A968F}
+#svg.prev .cap.t-path{fill:#C6BFB3}
+#svg.prev .divider{stroke:#8a4a2c;stroke-opacity:.55;stroke-dasharray:none}
+#svg.prev #gHandles{display:none}
+.vwrap{margin-top:8px;border-top:1px solid var(--line,#2a2f38);padding-top:8px;line-height:1.9}
+.vchip{display:inline-block;font:600 11px/1 inherit;padding:5px 9px;margin:2px 3px 2px 0;border-radius:8px;
+  cursor:pointer;border:1px solid transparent;background:#2A2F38;color:#E8EAEF}
+.vchip.bad{background:rgba(244,63,94,.16);border-color:rgba(244,63,94,.4);color:#FF97A5}
+.vchip.warn{background:rgba(217,119,6,.16);border-color:rgba(217,119,6,.4);color:#F0B458}
+.vchip.ok{background:rgba(5,150,105,.16);border-color:rgba(5,150,105,.4);color:#5FD3A6}
+.vchip:hover{filter:brightness(1.25)}
+.vlbl{opacity:.65;font-size:11px}
+.snapdot{fill:none;stroke:var(--ok);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none}
+.snapdot.weak{stroke:var(--warn);stroke-dasharray:5 4}
+#loadfail{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#0b0d11;
+  text-align:center;padding:30px;z-index:40}
+</style></head>
+<body>
+
+<div id="stage">
+  <div id="world">
+    <img id="imgNew" alt=""><img id="imgOld" alt="">
+    <svg id="svg"><g id="gShapes"></g><g id="gHandles"></g></svg>
+  </div>
+
+  <div class="float" id="tools"></div>
+
+  <div class="float" id="topright">
+    <button id="bNew" class="on sm">2023</button>
+    <button id="bOld" class="sm">2011</button>
+    <input type="range" id="mix" min="0" max="100" value="0" style="width:90px">
+    <button id="bFit" class="sm">התאמה</button>
+    <button id="b11" class="sm">1:1</button>
+    <span style="font-size:12px;color:var(--muted)">זום <b id="zv">—</b></span>
+    <button id="bPrev" class="sm" title="מציג את המפה כמו שתושב יראה אותה — בלי ידיות ובלי צבעי עריכה">תצוגה</button>
+    <button id="bSide" class="sm">פאנל</button>
+  </div>
+
+  <div class="float" id="side">
+    <div class="grp"><h2>קובץ</h2>
+      <p class="tip" id="srcState">—</p>
+      <div class="row"><button id="bExport" class="sm">ייצוא JSON (כיול מלא)</button><button id="bImport" class="sm">טעינה</button><button id="bUndo" class="sm">בטל</button></div>
+      <div class="row"><button id="bExportProd" class="pri sm" title="מייצא ישירות לפורמט הקומפקטי שהאפליקציה קוראת — מוכן להחלפת js/data/mapGeo.js. שומר על canopy/trees כמו שהם.">ייצוא ⇢ mapGeo.js</button></div>
+      <div class="row"><button id="bReloadProd" class="sm dang" title="זורק את העריכה הנוכחית בכלי וטוען מחדש את הגיאומטריה כמו שהיא חיה כרגע באפליקציה">טען מחדש מהמפה החיה</button></div>
+      <div class="row"><button id="bSnapMode" class="sm on" title="כשההצמדה פעילה, קצה שאתה מצייר נתפס לנקודות אמיתיות בלבד — קצה קו, פינת קו או פינת חניון. שפה של חניון תופסת רק ממטר וחצי. אפשר גם להחזיק ⌘ או Ctrl כדי לבטל הצמדה לרגע, או מקש H">הצמדה: פעילה</button></div>
+      <div class="row"><button id="bRectAll" class="sm" title="מריץ יישור צלעות על כל הצורות החופשיות והקווים בבת אחת. אפשר לבטל">יישר את הכול</button><button id="bStdAll" class="sm" title="מעגל את כל הבתים למידות הנפוצות שכבר סימנת">מידות תקן לכל הבתים</button></div>
+      <input type="file" id="fImport" accept=".json" style="display:none">
+      <p class="tip" id="saveState">נשמר אוטומטית בדפדפן.</p>
+      <p class="tip">אפשר לבטל כמה צעדים אחורה ברצף · גם ⌘Z</p>
+    </div>
+    <hr>
+    <div class="grp"><h2>אזורי גינון</h2>
+      <div id="zoneList" style="font-size:12px;line-height:1.7"></div>
+      <p class="tip" id="zoneQA" style="margin-top:6px"></p>
+      <div class="row" style="margin-top:6px">
+        <button id="bZoneExport" class="pri sm" title="מייצא רק את אזורי הגינון, כבר בקואורדינטות של מפת האפליקציה">ייצוא אזורי גינון</button>
+      </div>
+      <p class="tip">הקובץ יורד בשם gardenAreas.js — הוא נכנס ל-js/data/ בריפו.</p>
+    </div>
+    <hr>
+    <div class="grp"><h2>מצב</h2><div id="stats"></div></div>
+    <hr>
+    <div class="grp"><h2>מספור בתים</h2>
+      <div class="row"><button id="bSeq" class="sm">מספור רציף: כבוי</button><button id="bSeqReset" class="sm">אפס</button></div>
+      <p class="tip">הבא בתור: <b id="nextNum" style="color:var(--accent)">—</b></p>
+      <p class="tip" id="missing" style="max-height:70px;overflow:auto"></p>
+    </div>
+    <hr>
+    <div class="grp"><h2>טעינת תמונות ידנית</h2>
+      <label>2023 <span id="okNew">—</span></label><input type="file" id="pickNew" accept="image/*">
+      <label style="margin-top:6px">2011 <span id="okOld">—</span></label><input type="file" id="pickOld" accept="image/*">
+    </div>
+  </div>
+
+  <div class="float" id="drawbar" style="bottom:14px;inset-inline-start:50%;transform:translateX(50%);padding:10px 14px;gap:10px;align-items:center">
+    <span id="drawmsg" style="font-size:13px"></span>
+    <button id="bDone" class="pri">סיום ✓</button>
+    <button id="bCancel" class="sm">ביטול</button>
+  </div>
+  <div class="float" id="insp"></div>
+  <div class="float" id="hint">גרירה על הרקע = הזזה · גלגלת = זום · לחיצה על אובייקט = בחירה · Delete = מחיקה · Esc = ביטול</div>
+  <div class="float" id="scalebar"><i id="sbBar"></i><span id="sbTxt">—</span></div>
+
+  <div id="loadfail"><div>
+    <h2 style="font-size:18px;text-transform:none;letter-spacing:0;color:var(--ink)">לא נמצאו קבצי התצ״א</h2>
+    <p style="color:var(--muted)">הכלי מחפש את Base-New.jpg ו-Base-Old.png באותה תיקייה.<br>אפשר לבחור אותן ידנית בפאנל — שתיהן, אחת אחרי השנייה.</p>
+    <p><button id="ovClose">הבנתי</button></p>
+  </div></div>
+</div>
+
+<datalist id="dlNums"></datalist><datalist id="dlPub"></datalist><datalist id="dlSt"></datalist><datalist id="dlZone"></datalist>
+
+<!-- מיזוג 21.9.26: טוען את הגיאומטריה החיה מהאפליקציה (world-px) אם היא יושבת
+     ליד הכלי — עובד כשהקובץ הזה נמצא תחת tools/ בריפו. אם לא נמצא (למשל
+     כשפותחים עותק מבודד), window.CBA.mapGeo פשוט לא יוגדר והכלי נופל
+     לברירת המחדל הישנה (localStorage / SEED) בלי שום שגיאה. -->
+<script src="../js/data/mapGeo.js"></script>
+
+<script>
+"use strict";
+var SEED = {"imgW":8192,"imgH":5288,"mpp":0.1719,"axes":[23.5,113.5],"rotate":23.5,"objects":[{"id":"o1","type":"house","cls":"single","cx":5249.0,"cy":4770.5,"w":72.5,"h":53.5,"rot":113.5,"label":""},{"id":"o2","type":"public","cls":"big","cx":5088.9,"cy":4799.0,"w":244.4,"h":102.2,"rot":23.5,"label":""},{"id":"o3","type":"house","cls":"single","cx":4997.0,"cy":4737.0,"w":72.5,"h":53.5,"rot":113.5,"label":""},{"id":"o4","type":"house","cls":"single","cx":5225.0,"cy":4688.0,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o5","type":"house","cls":"single","cx":5275.9,"cy":4666.5,"w":72.5,"h":53.5,"rot":113.5,"label":""},{"id":"o6","type":"house","cls":"duo","cx":4567.5,"cy":4612.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o7","type":"public","cls":"big","cx":4528.2,"cy":4674.5,"w":425.0,"h":179.3,"rot":23.5,"label":""},{"id":"o8","type":"house","cls":"single","cx":4357.0,"cy":4550.5,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o9","type":"house","cls":"duo","cx":3956.0,"cy":4417.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o10","type":"public","cls":"big","cx":4921.0,"cy":4463.9,"w":207.1,"h":134.9,"rot":23.5,"label":""},{"id":"o11","type":"public","cls":"big","cx":4552.5,"cy":4402.3,"w":272.5,"h":136.5,"rot":23.5,"label":""},{"id":"o12","type":"house","cls":"single","cx":4778.8,"cy":4338.8,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o13","type":"public","cls":"big","cx":4143.1,"cy":4425.2,"w":248.2,"h":230.3,"rot":113.5,"label":""},{"id":"o14","type":"house","cls":"duo","cx":5412.5,"cy":4279.2,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o15","type":"house","cls":"duo","cx":4138.1,"cy":4220.8,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o16","type":"house","cls":"duo","cx":4986.1,"cy":4218.2,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o17","type":"house","cls":"single","cx":4001.1,"cy":4161.5,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o18","type":"house","cls":"duo","cx":5301.7,"cy":4110.9,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o19","type":"public","cls":"big","cx":4650.0,"cy":4163.0,"w":281.9,"h":156.1,"rot":23.5,"label":""},{"id":"o20","type":"house","cls":"duo","cx":5483.5,"cy":4084.1,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o21","type":"house","cls":"duo","cx":4952.4,"cy":3979.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o22","type":"public","cls":"big","cx":4306.1,"cy":4011.4,"w":274.0,"h":138.2,"rot":23.5,"label":""},{"id":"o23","type":"house","cls":"duo","cx":5387.2,"cy":3899.5,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o24","type":"house","cls":"duo","cx":4720.8,"cy":3900.3,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o25","type":"house","cls":"duo","cx":5569.5,"cy":3868.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o26","type":"house","cls":"duo","cx":5048.3,"cy":3766.5,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o27","type":"house","cls":"duo","cx":4493.8,"cy":3773.8,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o28","type":"house","cls":"duo","cx":5473.4,"cy":3696.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o29","type":"house","cls":"duo","cx":6021.5,"cy":3661.8,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o30","type":"house","cls":"duo","cx":4826.1,"cy":3667.2,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o31","type":"house","cls":"duo","cx":5140.2,"cy":3561.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o32","type":"house","cls":"duo","cx":4591.6,"cy":3552.4,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o33","type":"house","cls":"duo","cx":4910.1,"cy":3476.4,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o34","type":"public","cls":"big","cx":6107.7,"cy":3424.0,"w":204.3,"h":81.0,"rot":113.5,"label":""},{"id":"o35","type":"house","cls":"other","cx":3934.0,"cy":3331.5,"w":112.0,"h":47.0,"rot":23.5,"label":""},{"id":"o36","type":"house","cls":"duo","cx":5618.0,"cy":3357.1,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o37","type":"house","cls":"duo","cx":4669.5,"cy":3352.0,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o38","type":"house","cls":"duo","cx":5825.1,"cy":3314.6,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o39","type":"house","cls":"single","cx":6185.5,"cy":3280.0,"w":72.5,"h":53.5,"rot":113.5,"label":""},{"id":"o40","type":"house","cls":"duo","cx":5296.0,"cy":3212.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o41","type":"house","cls":"single","cx":6219.6,"cy":3161.2,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o42","type":"house","cls":"duo","cx":5700.0,"cy":3153.4,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o43","type":"house","cls":"duo","cx":5057.5,"cy":3128.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o44","type":"house","cls":"duo","cx":5919.2,"cy":3107.1,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o45","type":"house","cls":"single","cx":6273.7,"cy":3018.9,"w":72.5,"h":53.5,"rot":113.5,"label":""},{"id":"o46","type":"house","cls":"duo","cx":5383.2,"cy":3014.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o47","type":"house","cls":"duo","cx":5133.3,"cy":2926.7,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o48","type":"public","cls":"big","cx":5823.4,"cy":2954.5,"w":216.5,"h":135.0,"rot":23.5,"label":""},{"id":"o49","type":"house","cls":"duo","cx":6330.5,"cy":2940.2,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o50","type":"house","cls":"duo","cx":5991.7,"cy":2907.3,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o51","type":"house","cls":"duo","cx":4914.2,"cy":2820.2,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o52","type":"house","cls":"duo","cx":5480.2,"cy":2791.6,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o53","type":"house","cls":"duo","cx":5245.3,"cy":2687.9,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o54","type":"house","cls":"duo","cx":5669.4,"cy":2652.7,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o55","type":"house","cls":"other","cx":4037.6,"cy":2605.9,"w":112.8,"h":111.4,"rot":113.5,"label":""},{"id":"o56","type":"house","cls":"duo","cx":5008.5,"cy":2586.0,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o57","type":"house","cls":"duo","cx":5446.5,"cy":2562.1,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o58","type":"public","cls":"big","cx":4718.3,"cy":2559.3,"w":201.6,"h":108.1,"rot":23.5,"label":""},{"id":"o59","type":"house","cls":"duo","cx":6174.1,"cy":2496.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o60","type":"house","cls":"duo","cx":5764.6,"cy":2454.7,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o61","type":"public","cls":"big","cx":4757.8,"cy":2448.4,"w":244.5,"h":88.0,"rot":23.5,"label":""},{"id":"o62","type":"house","cls":"duo","cx":4238.7,"cy":2356.0,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o63","type":"house","cls":"duo","cx":5565.9,"cy":2356.3,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o64","type":"house","cls":"duo","cx":6042.8,"cy":2338.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o65","type":"house","cls":"duo","cx":6248.6,"cy":2304.9,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o66","type":"house","cls":"duo","cx":5715.7,"cy":2219.8,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o67","type":"house","cls":"single","cx":4257.5,"cy":2130.0,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o68","type":"house","cls":"duo","cx":6148.0,"cy":2127.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o69","type":"house","cls":"duo","cx":6346.1,"cy":2098.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o70","type":"house","cls":"single","cx":4758.6,"cy":2063.9,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o71","type":"house","cls":"duo","cx":5478.9,"cy":2115.5,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o72","type":"house","cls":"duo","cx":5819.4,"cy":2012.7,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o73","type":"house","cls":"duo","cx":5239.2,"cy":2019.5,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o74","type":"public","cls":"big","cx":4951.0,"cy":2036.0,"w":201.7,"h":125.8,"rot":113.5,"label":""},{"id":"o75","type":"house","cls":"single","cx":4856.5,"cy":1950.1,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o76","type":"house","cls":"duo","cx":6223.5,"cy":1924.3,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o77","type":"house","cls":"duo","cx":5582.1,"cy":1887.5,"w":152.1,"h":58.2,"rot":113.5,"label":""},{"id":"o78","type":"house","cls":"other","cx":5306.9,"cy":1779.1,"w":106.7,"h":59.3,"rot":113.5,"label":""},{"id":"o79","type":"house","cls":"other","cx":5898.7,"cy":1770.7,"w":112.8,"h":84.8,"rot":113.5,"label":""},{"id":"o80","type":"public","cls":"big","cx":5120.0,"cy":1821.9,"w":227.0,"h":98.8,"rot":113.5,"label":""},{"id":"o81","type":"house","cls":"single","cx":4176.0,"cy":1685.1,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o82","type":"house","cls":"duo","cx":5661.7,"cy":1689.3,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o83","type":"public","cls":"big","cx":4457.5,"cy":1647.0,"w":347.0,"h":188.0,"rot":23.5,"label":""},{"id":"o84","type":"house","cls":"duo","cx":5426.6,"cy":1599.3,"w":152.1,"h":58.2,"rot":23.5,"label":""},{"id":"o85","type":"public","cls":"big","cx":6419.4,"cy":1584.5,"w":255.9,"h":110.5,"rot":23.5,"label":""},{"id":"o86","type":"public","cls":"big","cx":5980.2,"cy":1397.6,"w":270.4,"h":99.2,"rot":23.5,"label":""},{"id":"o87","type":"public","cls":"big","cx":5627.2,"cy":1243.0,"w":266.3,"h":113.2,"rot":23.5,"label":""},{"id":"o88","type":"public","cls":"big","cx":6108.3,"cy":1110.7,"w":276.2,"h":163.6,"rot":23.5,"label":""},{"id":"o89","type":"public","cls":"big","cx":5166.5,"cy":1061.7,"w":197.4,"h":96.4,"rot":113.5,"label":""},{"id":"o90","type":"public","cls":"big","cx":6389.4,"cy":864.6,"w":232.4,"h":117.7,"rot":23.5,"label":""},{"id":"o91","type":"house","cls":"single","cx":5742.2,"cy":761.5,"w":72.5,"h":53.5,"rot":23.5,"label":""},{"id":"o92","type":"public","cls":"big","cx":5490.3,"cy":853.6,"w":439.8,"h":330.2,"rot":23.5,"label":""},{"id":"o93","type":"public","cls":"big","cx":5985.0,"cy":686.5,"w":252.4,"h":97.2,"rot":23.5,"label":""}]};
+var HOUSE_NUMS = ["101", "103", "105", "107", "201", "203", "205", "207", "301", "303", "305", "307", "309", "311", "302", "304", "306", "308", "310", "401", "403", "405", "407", "409", "402", "404", "406", "505", "507", "501", "503", "502", "504", "601", "603", "605", "607", "506", "508", "602", "604", "606", "608", "610", "701", "703", "705", "707", "702", "704", "706", "708", "710", "801", "803", "805", "807", "809", "802", "804", "806", "808", "810", "901", "903", "905", "907", "909", "902", "904", "906"];
+var PUBLIC_NAMES = ["מועדון ילדים", "גני ילדים", "שקמ\"ם", "איטלקיה", "בריכה", "מועדון משפחות", "דואר", "גינת כלבים", "חדר חוגים", "WeWork", "חדר כושר", "גן שעשועים", "פארק נינג'ה", "מגרש כדור-סל", "מגרש טניס", "מגרש כדורגל - סינתטי", "אולם ספורט"];
+var STREET_NAMES = [];
+/* 12 אזורי הגינון — חייבים להיות זהים **מילה במילה** לעמודת "אזור"
+   בטאב ההגדרות (GARDEN_DEFAULT_SETTINGS ב-Code.gs). שם שלא תואם פשוט
+   לא יימצא כשהאפליקציה תחפש את האזור של נעיצה. */
+var GARDEN_ZONES = ["שכונה צפונית","שכונה מרכזית צפונית","שכונה מרכזית דרומית",
+  "שכונה דרומית","מתחמים משותפים","ציר מזרחי","ציר מערבי","פארק משחקים",
+  "גני ילדים","מועדון ילדים","גינת כלבים","מועדון משפחות"];
+var IMG_DIR = "";
+
+var IMGW=SEED.imgW, IMGH=SEED.imgH, MPP=SEED.mpp, AXES=SEED.axes;
+/* הצמדה מדורגת: נקודה אמיתית תופסת מרחוק, צלע תופסת רק ממש מקרוב.
+   כך אפשר ללכת צמוד לחניון בלי שהקו ייבלע בו. */
+var SNAP = { vertex:4.0, corner:3.0, cross:4.0, edge:1.2 };
+var SNAP_M = SNAP.vertex;             /* לשמירת תאימות */
+var snapOn = true;                    /* מתג בסרגל · מקש H */
+var snapHeld = false;                 /* Ctrl / ⌘ מכבה זמנית */
+var SNAPINFO = null;                  /* מה נתפס לאחרונה, לצורך המשוב */
+var TYPES = {
+  house:  {he:"בית",         geo:"area", col:"var(--house)",   dw:26.14, dh:10},
+  public: {he:"מבנה ציבור",  geo:"area", col:"var(--public)",  dw:20,    dh:14},
+  parking:{he:"חניון",       geo:"area", col:"var(--parking)", dw:30,    dh:14},
+  green:  {he:"שטח ירוק",    geo:"area", col:"var(--green)",   dw:30,    dh:20},
+  roundabout:{he:"כיכר",     geo:"circle", col:"var(--road)",  dr:9, island:0.45},
+  road:   {he:"כביש",        geo:"line", col:"var(--road)",    wm:9},
+  path:   {he:"שביל",        geo:"line", col:"var(--path)",    wm:1.5},
+  street: {he:"רחוב",        geo:"line", col:"var(--street)",  wm:0.55},
+  shelter:{he:"מיגונית",     geo:"area", col:"var(--shelter)", dw:6.0, dh:4.8},
+  bin:    {he:"פח / מיכל",   geo:"area", col:"var(--bin)",     dw:2.4, dh:2.4},
+  bus:    {he:"תחנת אוטובוס", geo:"area", col:"var(--bus)",     dw:4.0, dh:4.0},
+  plaza:  {he:"רחבה מרוצפת",  geo:"area", col:"var(--plaza)",   dw:20, dh:14},
+  /* אזור גינון (2026-09-08). לא מבנה ולא שטח — חלוקה ניהולית של השיכון
+     ל-12 אזורי אחריות. היא מה שמאפשר לתקלה שדייר נעץ על המפה לדעת לבד
+     באיזה אזור היא נמצאה, במקום שהגנן יבחר מרשימה. */
+  gzone:  {he:"אזור גינון",   geo:"area", col:"var(--gzone)",   dw:160, dh:120}
+};
+/* סמל האוטובוס, בתיבת 24×24 — אותו סמל בדיוק עובר לרנדרר של המפה */
+var BUS_G=[
+  ['rect',{x:5,y:3.6,width:14,height:13.4,rx:2.6,class:''}],
+  ['rect',{x:6.6,y:5.6,width:10.8,height:4.6,rx:1,class:'win'}],
+  ['rect',{x:6.6,y:12.2,width:3.2,height:2.2,rx:.8,class:'win'}],
+  ['rect',{x:14.2,y:12.2,width:3.2,height:2.2,rx:.8,class:'win'}],
+  ['circle',{cx:8.4,cy:18.6,r:1.7,class:''}],
+  ['circle',{cx:15.6,cy:18.6,r:1.7,class:''}]
+];
+/* טבלת המיכלים — צורה, צבע ומידה אמיתית במטרים.
+   אותה טבלה בדיוק תעבור לרנדרר של המפה, כדי שהכלי והמפה ייראו זהים. */
+var BIN_KINDS = {
+  trash:   {he:'פח זבל',                 shape:'circle', fill:'#3E9B54', dw:2.4, dh:2.4},
+  recycle: {he:'פח מחזור',               shape:'circle', fill:'#E08A2B', dw:2.4, dh:2.4},
+  bulky:   {he:'מיכלית פסולת בניין/גדולה',shape:'rect',   fill:'#2F7D46', dw:10.0, dh:4.4},
+  garden:  {he:'מתחם פינוי גזם',          shape:'rect',   fill:'#D8C24F', dw:12.0, dh:8.0, dash:true},
+  carton:  {he:'כלוב קרטונים',            shape:'square', fill:'#C9463D', dw:3.6, dh:3.6},
+  glass:   {he:'מיכל זכוכית',             shape:'oval',   fill:'#7A5AA8', dw:3.8, dh:2.4},
+  ewaste:  {he:'מיכל אלקטרוניקה',         shape:'rect',   fill:'#E3CE63', dw:2.8, dh:2.0}
+};
+function isMarker(o){ return o.type==='bin' || o.type==='shelter' || o.type==='bus'; }
+var STREET_DASH=[3.6,3.0];      /* מ׳: קו, רווח */
+
+/* ============================================================================
+ *  גשר לפורמט הקומפקטי של js/data/mapGeo.js (מיזוג 21.9.26 — "כלי אחד")
+ * ----------------------------------------------------------------------------
+ *  W2 הוא טרנספורם דמיון (סיבוב + קנה מידה אחיד, בלי עיוות) שממפה פיקסל-תצ״א
+ *  (המרחב הפנימי של הכלי) ישירות לפיקסל-עולם של mapGeo.js. הותאם בזמנו
+ *  (least squares, 95 בתים, שארית מקסימלית 0.07px) לצורך ייצוא אזורי הגינון
+ *  (ר' הערה נוספת למטה ליד zoneReport) — כאן הוא משמש גם לייבוא וגם לייצוא
+ *  של כל הגיאומטריה, בשני הכיוונים. **אל תשנה את הקבועים בלי להתאים מחדש.**
+ * ========================================================================== */
+var W2 = {a:0.25223151, b:-0.10967208, tx:-868.30027973, ty:570.90853988, W:1061.2, H:1297.2};
+function toWorld(x,y){ return [W2.a*x - W2.b*y + W2.tx, W2.b*x + W2.a*y + W2.ty]; }
+function toNorm(x,y){ var w=toWorld(x,y); return [w[0]/W2.W, w[1]/W2.H]; }
+var W2_CHECK = {label:'810', nx:0.901620, ny:0.817226};   /* מתוך mapGeo.js, לבדיקה עצמית לפני ייצוא */
+var W2_S = Math.sqrt(W2.a*W2.a + W2.b*W2.b);               /* קנה מידה אחיד: image-px ⇄ world-px */
+var W2_ROT = Math.atan2(W2.b, W2.a) * 180 / Math.PI;       /* מעלות: world_r = image_rot + W2_ROT */
+function fromWorld(wx,wy){
+  var dx=wx-W2.tx, dy=wy-W2.ty, den=W2.a*W2.a+W2.b*W2.b;
+  return [(W2.a*dx + W2.b*dy)/den, (W2.a*dy - W2.b*dx)/den];
+}
+/* סוגים שקיימים בכלי אבל לא בסכימת הייצור — שכבות ניהול של הכלי בלבד,
+   לא חלק ממבנה הנתונים שהאפליקציה מרנדרת. */
+var PROD_SKIP_EXPORT = {gzone:1, bus:1};
+/* טוען את js/data/mapGeo.js (אם window.CBA.mapGeo קיים — ר' תגית ה-script
+   בראש הדף) וממיר אותו למרחב הפנימי של הכלי, כדי שהעריכה תמיד תוכל להתחיל
+   מהגיאומטריה האמיתית ולא מדוגמה קפואה (SEED). */
+function productionToInternal(){
+  var G = (window.CBA && CBA.mapGeo) ? CBA.mapGeo : null;
+  if(!G || !G.objects || !G.objects.length) return null;
+  var objs = G.objects.map(function(o,i){
+    var n = {id:'p'+i, type:o.t, label:o.l||'', duo:!!o.duo, label2:o.l2||''};
+    n.cls = o.duo ? 'duo' : (o.t==='house' ? 'single' : 'other');
+    if(o.s==='rect'){
+      var c = fromWorld(o.x,o.y);
+      n.cx=c[0]; n.cy=c[1]; n.w=(o.w||0)/W2_S; n.h=(o.h||0)/W2_S;
+      n.rot = ((((o.r||0) - W2_ROT) % 360) + 360) % 360;
+    } else if(o.s==='circle'){
+      var cc = fromWorld(o.x,o.y);
+      n.cx=cc[0]; n.cy=cc[1]; n.r=(o.rad||0)/W2_S; n.island=(o.isl===undefined?0.45:o.isl);
+    } else if(o.s==='line'){
+      n.pts=(o.p||[]).map(function(pt){ return fromWorld(pt[0],pt[1]); });
+      n.wm=(o.w||0)/(G.ppm||1.6); n.curve=!!o.c; n.cx=0; n.cy=0;
+    } else { /* poly */
+      n.pts=(o.p||[]).map(function(pt){ return fromWorld(pt[0],pt[1]); });
+      n.shape='poly'; n.curve=!!o.c;
+      n.cx=n.pts.length?n.pts[0][0]:0; n.cy=n.pts.length?n.pts[0][1]:0;
+    }
+    return n;
+  });
+  return { objects: objs, canopy: G.canopy||[], trees: G.trees||[],
+    meta: { v:G.v||1, src:G.src||'map-calibrator-v2', ppm:G.ppm||1.6, mpp:G.mpp||MPP, rot:G.rot||SEED.rotate, w:G.w||W2.W, h:G.h||W2.H } };
+}
+var PROD = productionToInternal();
+
+var LOADED_FROM = 'seed';
+var state = load();
+if(state){ LOADED_FROM='local'; }
+else if(PROD){ state = {objects: PROD.objects}; LOADED_FROM='prod'; }
+else { state = {objects: JSON.parse(JSON.stringify(SEED.objects))}; }
+state.objects.forEach(function(o){ if(o.type==='house' && o.duo===undefined) o.duo = (o.cls==='duo'); });
+var sel=null, drawing=null, drag=null, undoStack=[], seqMode=false, tool='select';
+var view={x:0,y:0,k:0.12};
+
+var stage=q('stage'), world=q('world'), svg=q('svg'), gS=q('gShapes'), gH=q('gHandles');
+var imgNew=q('imgNew'), imgOld=q('imgOld');
+function q(id){ return document.getElementById(id); }
+svg.setAttribute('width',IMGW); svg.setAttribute('height',IMGH);
+imgNew.width=IMGW; imgNew.height=IMGH; imgOld.width=IMGW; imgOld.height=IMGH;
+
+/* ---------- datalists ---------- */
+function fillDL(id,arr){ q(id).innerHTML=arr.map(function(v){return '<option value="'+v.replace(/"/g,'&quot;')+'">'}).join(''); }
+fillDL('dlNums',HOUSE_NUMS); fillDL('dlPub',PUBLIC_NAMES); fillDL('dlSt',STREET_NAMES);
+fillDL('dlZone',GARDEN_ZONES);
+
+/* ---------- images ---------- */
+q('ovClose').onclick=function(){ q('loadfail').style.display='none'; };
+imgNew.onerror=function(){ q('loadfail').style.display='flex'; };
+imgNew.onload=function(){ q('okNew').textContent='✓'; };
+imgOld.onload=function(){ q('okOld').textContent='✓'; };
+q('pickNew').onchange=function(e){ if(e.target.files[0]){ imgNew.src=URL.createObjectURL(e.target.files[0]); q('loadfail').style.display='none'; } };
+q('pickOld').onchange=function(e){ if(e.target.files[0]) imgOld.src=URL.createObjectURL(e.target.files[0]); };
+imgNew.src=IMG_DIR+"Base-New.jpg"; imgOld.src=IMG_DIR+"Base-Old.png";
+
+/* ---------- storage ---------- */
+var storageOK=true, savedT=null;
+function save(){ try{ localStorage.setItem('cba-map-cal',JSON.stringify(state)); flash('נשמר ✓ '+new Date().toLocaleTimeString('he-IL'),'var(--ok)'); }
+  catch(e){ storageOK=false; flash('⚠ הדפדפן לא שומר מהקובץ הזה — ייצא JSON לעיתים קרובות','var(--warn)',true); } }
+function load(){ try{ var s=localStorage.getItem('cba-map-cal'); return s?JSON.parse(s):null; }catch(e){ return null; } }
+function flash(t,c,sticky){ var el=q('saveState'); if(!el) return; el.textContent=t; el.style.color=c;
+  clearTimeout(savedT); if(!sticky) savedT=setTimeout(function(){ el.style.color='var(--muted)'; },1600); }
+function pushUndo(){
+  var snap=JSON.stringify(state.objects);
+  if(undoStack.length && undoStack[undoStack.length-1]===snap) return;   /* בלי צעדים ריקים */
+  undoStack.push(snap); if(undoStack.length>120) undoStack.shift(); updateUndo();
+}
+function updateUndo(){ var b=q('bUndo'); if(b) b.textContent = undoStack.length? ('בטל ('+undoStack.length+')') : 'בטל'; }
+
+/* ---------- helpers ---------- */
+function m2px(m){ return m/MPP; } function px2m(p){ return p*MPP; }
+function byId(id){ for(var i=0;i<state.objects.length;i++) if(state.objects[i].id===id) return state.objects[i]; return null; }
+function geo(o){ var g=TYPES[o.type].geo;
+  return g==='line' ? 'line' : g==='circle' ? 'circle' : (o.shape==='poly' ? 'poly' : 'rect'); }
+function circlePts(o,n){ n=n||28; var a=[];
+  for(var i=0;i<n;i++){ var t=i/n*Math.PI*2; a.push([o.cx+Math.cos(t)*o.r, o.cy+Math.sin(t)*o.r]); }
+  return a; }
+function rectPts(o){
+  var a=o.rot*Math.PI/180,c=Math.cos(a),s=Math.sin(a),w=o.w/2,h=o.h/2;
+  return [[-w,-h],[w,-h],[w,h],[-w,h]].map(function(p){ return [o.cx+p[0]*c-p[1]*s, o.cy+p[0]*s+p[1]*c]; });
+}
+function snapAngle(a){ var best=a,bd=999;
+  AXES.forEach(function(ax){ [ax,ax+90,ax+180,ax+270].forEach(function(t){
+    var d=Math.abs(((a-t+180)%360+360)%360-180); if(d<bd){bd=d;best=t;} }); });
+  return ((best%360)+360)%360;
+}
+/* יישור צלעות: מפשט, מצמיד כל צלע קרובה לציר אל הציר המדויק, ומחשב פינות מחדש מחיתוך הישרים */
+function rectifyPts(pts,closed,tolDeg,epsM){
+  if(!pts||pts.length<3) return pts;
+  var P=simplifyPts(pts,epsM===undefined?0.7:epsM);
+  var n=P.length; if(n<3) return P;
+  var m=closed?n:n-1, L=[], tol=(tolDeg===undefined?9:tolDeg);
+  /* ציר הצורה עצמה: הזווית הנפוצה ביותר בין הצלעות, משוקללת באורך.
+     כך גם מבנה שיושב בזווית משלו (חניון משופע) יוצא ישר, ולא רק מה שמקביל לשיכון. */
+  var H=new Array(90).fill(0), i, seg=[];
+  for(i=0;i<m;i++){
+    var A=P[i], B=P[(i+1)%n];
+    var g=Math.atan2(B[1]-A[1],B[0]-A[0])*180/Math.PI, len=Math.hypot(B[0]-A[0],B[1]-A[1]);
+    seg.push({a:g,l:len,mid:[(A[0]+B[0])/2,(A[1]+B[1])/2]});
+    H[Math.round((((g%90)+90)%90))%90]+=len;
+  }
+  var Hs=new Array(90), peak=0;
+  for(i=0;i<90;i++) Hs[i]=H[i]+0.5*(H[(i+1)%90]+H[(i+89)%90]);
+  for(i=1;i<90;i++) if(Hs[i]>Hs[peak]) peak=i;
+  var bases=[AXES[0], peak];
+  for(i=0;i<m;i++){
+    var ang=seg[i].a, use=ang, bd=1e9;
+    bases.forEach(function(bs){
+      var rel=(((ang-bs)%90)+90)%90, d=Math.min(rel,90-rel);
+      if(d<bd && d<=tol){ bd=d; use=ang-(rel<=45?rel:rel-90); }
+    });
+    var r=use*Math.PI/180;
+    L.push({p:seg[i].mid,d:[Math.cos(r),Math.sin(r)]});
+  }
+  function proj(l,q){ var t=(q[0]-l.p[0])*l.d[0]+(q[1]-l.p[1])*l.d[1];
+    return [l.p[0]+l.d[0]*t, l.p[1]+l.d[1]*t]; }
+  function isec(A,B){ var den=A.d[0]*B.d[1]-A.d[1]*B.d[0];
+    if(Math.abs(den)<1e-9) return null;
+    var t=((B.p[0]-A.p[0])*B.d[1]-(B.p[1]-A.p[1])*B.d[0])/den;
+    return [A.p[0]+A.d[0]*t, A.p[1]+A.d[1]*t]; }
+  var out=[], lim=m2px(7);
+  for(var i=0;i<n;i++){
+    if(!closed && i===0){ out.push(proj(L[0],P[0])); continue; }
+    if(!closed && i===n-1){ out.push(proj(L[m-1],P[n-1])); continue; }
+    var X=isec(L[closed?(i-1+m)%m:i-1], L[closed?i%m:i]);
+    out.push(X && Math.hypot(X[0]-P[i][0],X[1]-P[i][1])<lim ? [+X[0].toFixed(1),+X[1].toFixed(1)] : P[i]);
+  }
+  /* חגורת ביטחון: אף פינה לא זזה יותר מ־2.5 מ׳ מהקו שציירת בפועל */
+  var cap=m2px(2.5), on=pts.length;
+  function dOrig(q){ var best=1e18, mm=closed?on:on-1;
+    for(var k=0;k<mm;k++){ var A=pts[k],B=pts[(k+1)%on];
+      var vx=B[0]-A[0],vy=B[1]-A[1],LL=vx*vx+vy*vy||1;
+      var tt=Math.max(0,Math.min(1,((q[0]-A[0])*vx+(q[1]-A[1])*vy)/LL));
+      best=Math.min(best,Math.hypot(q[0]-A[0]-vx*tt,q[1]-A[1]-vy*tt)); }
+    return best; }
+  for(i=0;i<out.length;i++) if(dOrig(out[i])>cap) out[i]=P[i];
+  return out;
+}
+/* מידות תקן: לא ממציא מספרים — לוקח את המידות הנפוצות בפועל מתוך הבתים שכבר סימנת */
+function commonDims(type,key){
+  var c={};
+  state.objects.forEach(function(o){ if(o.type!==type||geo(o)!=='rect') return;
+    var v=Math.round(px2m(o[key])*2)/2; c[v]=(c[v]||0)+1; });
+  return Object.keys(c).filter(function(k){return c[k]>=3}).map(Number).sort(function(a,b){return a-b});
+}
+function snapDim(v,list,maxD){
+  var best=v, bd=maxD===undefined?3:maxD;
+  list.forEach(function(x){ var d=Math.abs(x-v); if(d<bd){bd=d;best=x;} });
+  return best;
+}
+function simplifyPts(pts,tolM){
+  var tol=tolM/MPP;
+  function rdp(a,b){ if(b-a<2) return [];
+    var A=pts[a],B=pts[b],dx=B[0]-A[0],dy=B[1]-A[1],L=Math.hypot(dx,dy)||1,best=-1,bd=-1;
+    for(var i=a+1;i<b;i++){ var d=Math.abs((pts[i][0]-A[0])*dy-(pts[i][1]-A[1])*dx)/L; if(d>bd){bd=d;best=i;} }
+    if(bd<=tol) return []; return rdp(a,best).concat([best]).concat(rdp(best,b)); }
+  if(pts.length<3) return pts.slice();
+  return [0].concat(rdp(0,pts.length-1)).concat([pts.length-1]).map(function(i){return pts[i]});
+}
+function smoothPts(pts,passes){ var p=pts.map(function(q){return q.slice()});
+  for(var k=0;k<(passes||2);k++){ var n=[p[0]];
+    for(var i=1;i<p.length-1;i++) n.push([(p[i-1][0]+2*p[i][0]+p[i+1][0])/4,(p[i-1][1]+2*p[i][1]+p[i+1][1])/4]);
+    n.push(p[p.length-1]); p=n; } return p; }
+/* מחליק רק אשכולות נקודות צפופים — כלומר פינות מעוגלות — ומשאיר קטעים ישרים כמו שהם */
+function smoothCorners(pts,denseM,passes,closed){
+  var d=m2px(denseM||14), p=pts.map(function(q){return q.slice()});
+  for(var k=0;k<(passes||2);k++){
+    var n=p.length, out=[];
+    for(var i=0;i<n;i++){
+      if(!closed && (i===0||i===n-1)){ out.push(p[i]); continue; }
+      var a=p[(i-1+n)%n], b=p[i], c=p[(i+1)%n];
+      var d1=Math.hypot(b[0]-a[0],b[1]-a[1]), d2=Math.hypot(c[0]-b[0],c[1]-b[1]);
+      if(d1<d && d2<d) out.push([(a[0]+2*b[0]+c[0])/4,(a[1]+2*b[1]+c[1])/4]);
+      else out.push(b);
+    }
+    p=out;
+  }
+  return p;
+}
+function tidyLine(pts){ var p=smoothPts(pts,3), len=0;
+  for(var i=1;i<p.length;i++) len+=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);
+  p=simplifyPts(p,Math.max(2.5,len*MPP/40)); if(p.length>2) p=smoothPts(p,1); return p; }
+var lastClick=null;
+function insertVertex(o,wx,wy){
+  var n=o.pts.length, closed=(geo(o)==='poly'), best=-1, bd=1e18;
+  for(var i=0;i<(closed?n:n-1);i++){
+    var a=o.pts[i], b=o.pts[(i+1)%n], vx=b[0]-a[0], vy=b[1]-a[1], L=vx*vx+vy*vy||1;
+    var t=Math.max(0,Math.min(1,((wx-a[0])*vx+(wy-a[1])*vy)/L));
+    var px=a[0]+vx*t, py=a[1]+vy*t, d=(wx-px)*(wx-px)+(wy-py)*(wy-py);
+    if(d<bd){ bd=d; best=i; }
+  }
+  if(best>=0) o.pts.splice(best+1,0,[wx,wy]);
+}
+function catmullClosed(pts){
+  var n=pts.length; if(n<3) return catmull(pts);
+  var d='M'+pts[0][0]+','+pts[0][1];
+  for(var i=0;i<n;i++){
+    var p0=pts[(i-1+n)%n], p1=pts[i], p2=pts[(i+1)%n], p3=pts[(i+2)%n];
+    d+=' C'+(p1[0]+(p2[0]-p0[0])/6)+','+(p1[1]+(p2[1]-p0[1])/6)+' '+(p2[0]-(p3[0]-p1[0])/6)+','+(p2[1]-(p3[1]-p1[1])/6)+' '+p2[0]+','+p2[1];
+  }
+  return d+' Z';
+}
+function catmull(pts){
+  if(pts.length<3) return 'M'+pts.map(function(p){return p[0]+','+p[1]}).join(' L');
+  var d='M'+pts[0][0]+','+pts[0][1];
+  for(var i=0;i<pts.length-1;i++){ var p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||pts[i+1];
+    d+=' C'+(p1[0]+(p2[0]-p0[0])/6)+','+(p1[1]+(p2[1]-p0[1])/6)+' '+(p2[0]-(p3[0]-p1[0])/6)+','+(p2[1]-(p3[1]-p1[1])/6)+' '+p2[0]+','+p2[1]; }
+  return d;
+}
+/* צומת: מחזיר נקודה על קו אחר בטווח ההצמדה, או null */
+function outlineOf(o){ var g=geo(o);
+  return g==='rect' ? rectPts(o) : g==='circle' ? circlePts(o) : (o.pts||[]); }
+function pointInPoly(p,pts){ var c=false;
+  for(var i=0,j=pts.length-1;i<pts.length;j=i++){
+    if(((pts[i][1]>p[1])!==(pts[j][1]>p[1])) &&
+       (p[0] < (pts[j][0]-pts[i][0])*(p[1]-pts[i][1])/((pts[j][1]-pts[i][1])||1e-9)+pts[i][0])) c=!c; }
+  return c; }
+function distToOutline(p,pts){ var bd=1e18;
+  for(var i=0,n=pts.length;i<n;i++){
+    var A=pts[i],B=pts[(i+1)%n],vx=B[0]-A[0],vy=B[1]-A[1],L=vx*vx+vy*vy||1;
+    var u=Math.max(0,Math.min(1,((p[0]-A[0])*vx+(p[1]-A[1])*vy)/L));
+    var d=Math.hypot(p[0]-(A[0]+vx*u), p[1]-(A[1]+vy*u)); if(d<bd) bd=d; }
+  return bd; }
+/* שטחים שהם אספלט — כביש שנוגע בהם נחשב מחובר */
+/* רשת הריצוף: כל מה שקצה של קו נכנס אליו ונחשב מחובר, ומצטרף לאותו איחוד אספלט. */
+function isPaved(o){ return o.type==='parking' || o.type==='roundabout' || o.type==='plaza'; }
+
+/* האם קצה הקו יושב על קו אחר */
+function endIsConnected(o,idx){
+  var p=o.pts[idx], tol=m2px(1.2), hit=false;
+  state.objects.forEach(function(t){
+    if(hit||t.id===o.id||t.type==='street') return;
+    if(isPaved(t)){ var op=outlineOf(t);
+      if(op.length>2 && (pointInPoly(p,op) || distToOutline(p,op)<tol)) hit=true;
+      return; }
+    if(geo(t)!=='line'||!t.pts) return;
+    for(var k=0;k<t.pts.length-1;k++){
+      var A=t.pts[k],B=t.pts[k+1],vx=B[0]-A[0],vy=B[1]-A[1],L=vx*vx+vy*vy||1;
+      var u=Math.max(0,Math.min(1,((p[0]-A[0])*vx+(p[1]-A[1])*vy)/L));
+      if(Math.hypot(p[0]-(A[0]+vx*u), p[1]-(A[1]+vy*u))<tol){ hit=true; return; }
+    }
+  });
+  return hit;
+}
+function snapRadius(){ return Math.max(m2px(SNAP_M), 16/view.k); }
+function segRayHit(P,d,A,B){
+  var ex=B[0]-A[0], ey=B[1]-A[1];
+  var den=d[0]*ey - d[1]*ex; if(Math.abs(den)<1e-9) return null;
+  var t=((A[0]-P[0])*ey - (A[1]-P[1])*ex)/den;
+  var u=((A[0]-P[0])*d[1] - (A[1]-P[1])*d[0])/den;
+  if(u<0||u>1) return null; return t;
+}
+/* מאריך את קצה הקו לאורך כיוונו עד שהוא פוגש קו אחר */
+function extendToNetwork(o,endIndex,maxM){
+  if(!o.pts||o.pts.length<2) return false;
+  var n=o.pts.length, i=endIndex, j=(i===0?1:n-2);
+  var P=o.pts[i], Q=o.pts[j];
+  var dx=P[0]-Q[0], dy=P[1]-Q[1], L=Math.hypot(dx,dy)||1; dx/=L; dy/=L;
+  var maxT=m2px(maxM||25), back=-m2px(6), bestT=null;
+  state.objects.forEach(function(t){
+    if(t.id===o.id) return;
+    var segs=[];
+    if(geo(t)==='line' && t.pts){ for(var k=0;k<t.pts.length-1;k++) segs.push([t.pts[k],t.pts[k+1]]); }
+    else if(isPaved(t)){ var op=outlineOf(t); for(var m=0,nn=op.length;m<nn;m++) segs.push([op[m],op[(m+1)%nn]]); }
+    else return;
+    segs.forEach(function(sg){
+      var r=segRayHit(P,[dx,dy],sg[0],sg[1]);
+      if(r!==null && r>=back && r<=maxT && (bestT===null||Math.abs(r)<Math.abs(bestT))) bestT=r;
+    });
+  });
+  if(bestT===null) return false;
+  o.pts[i]=[P[0]+dx*bestT, P[1]+dy*bestT]; return true;
+}
+function snapEnabled(){ return snapOn && !snapHeld; }
+function segInt(A,B,C,D){
+  var r=[B[0]-A[0],B[1]-A[1]], s=[D[0]-C[0],D[1]-C[1]];
+  var den=r[0]*s[1]-r[1]*s[0]; if(Math.abs(den)<1e-9) return null;
+  var t=((C[0]-A[0])*s[1]-(C[1]-A[1])*s[0])/den;
+  var u=((C[0]-A[0])*r[1]-(C[1]-A[1])*r[0])/den;
+  if(t<0||t>1.6||u<0||u>1) return null;
+  return [A[0]+r[0]*t, A[1]+r[1]*t];
+}
+/* fromPt (אופציונלי) = הנקודה הקודמת בקו שמצייירים, לזיהוי חיתוך אמיתי */
+function snapToNetwork(x,y,skipId,fromPt){
+  SNAPINFO=null;
+  if(!snapEnabled()) return null;
+  /* רצפת פיקסלים כדי שאפשר יהיה לתפוס גם בזום רחוק, אבל עם תקרה במטרים
+     כדי שהזום לא יהפוך את ההצמדה לרשת דייגים */
+  function rad(m,floorPx){ return Math.min(m2px(m*1.8), Math.max(m2px(m), (floorPx||10)/view.k)); }
+  var rv=rad(SNAP.vertex), rc=rad(SNAP.corner), rx=rad(SNAP.cross), re=rad(SNAP.edge,6);
+  var best=null, bd=Infinity, kind=null;
+  function take(p,d,k,r){ if(d<r*r && d<bd){ bd=d; best=[p[0],p[1]]; kind=k; } }
+
+  /* מעבר ראשון — נקודות אמיתיות בלבד: קצוות ופינות של קווים, פינות חניון, וחיתוך */
+  state.objects.forEach(function(o){
+    if(o.id===skipId||o.type==='street') return;
+    if(isPaved(o)){
+      outlineOf(o).forEach(function(p){
+        take(p,(x-p[0])*(x-p[0])+(y-p[1])*(y-p[1]),'פינת '+TYPES[o.type].he,rc); });
+      return;
+    }
+    if(geo(o)!=='line'||!o.pts) return;
+    o.pts.forEach(function(p,i){
+      var lastI=o.pts.length-1, k=(i===0||i===lastI)?('קצה '+TYPES[o.type].he):('פינת '+TYPES[o.type].he);
+      take(p,(x-p[0])*(x-p[0])+(y-p[1])*(y-p[1]),k,rv); });
+    if(fromPt) for(var j=0;j<o.pts.length-1;j++){
+      var X=segInt(fromPt,[x,y],o.pts[j],o.pts[j+1]);
+      if(X) take(X,(x-X[0])*(x-X[0])+(y-X[1])*(y-X[1]),'חיתוך עם '+TYPES[o.type].he,rx);
+    }
+  });
+  if(best){ SNAPINFO=kind; return best; }
+
+  /* מעבר שני — צלעות. רדיוס זעיר, ולכן אפשר ללכת לידן בלי להיתפס */
+  state.objects.forEach(function(o){
+    if(o.id===skipId||o.type==='street') return;
+    var segs=null;
+    if(isPaved(o)){ var op=outlineOf(o); segs=op.map(function(p,i){return [p,op[(i+1)%op.length]]}); }
+    else if(geo(o)==='line'&&o.pts){ segs=[]; for(var j=0;j<o.pts.length-1;j++) segs.push([o.pts[j],o.pts[j+1]]); }
+    if(!segs) return;
+    var nm = isPaved(o) ? ('שפת '+TYPES[o.type].he) : ('גוף '+TYPES[o.type].he);
+    segs.forEach(function(s){
+      var A=s[0],B=s[1],vx=B[0]-A[0],vy=B[1]-A[1],L=vx*vx+vy*vy||1;
+      var tt=Math.max(0,Math.min(1,((x-A[0])*vx+(y-A[1])*vy)/L));
+      var px=A[0]+vx*tt, py=A[1]+vy*tt;
+      take([px,py],(x-px)*(x-px)+(y-py)*(y-py),nm,re);
+    });
+  });
+  SNAPINFO=kind;
+  return best;
+}
+
+/* ---------- view ---------- */
+function applyView(){
+  world.style.transform='translate('+view.x+'px,'+view.y+'px) scale('+view.k+')';
+  q('zv').textContent=(view.k*100).toFixed(0)+'%';
+  var nice=[5,10,20,25,50,100,200,500], target=100/view.k*MPP, pick=nice[0];
+  for(var i=0;i<nice.length;i++) if(nice[i]<=target*1.4) pick=nice[i];
+  q('sbBar').style.width=(pick/MPP*view.k)+'px'; q('sbTxt').textContent=pick+' מ׳';
+  redrawHandles();
+}
+function fit(){ var r=stage.getBoundingClientRect();
+  view.k=Math.min(r.width/IMGW,r.height/IMGH)*0.95;
+  view.x=(r.width-IMGW*view.k)/2; view.y=(r.height-IMGH*view.k)/2; applyView(); }
+function zoomAt(px,py,f){ var k2=Math.max(0.03,Math.min(8,view.k*f));
+  view.x=px-(px-view.x)*(k2/view.k); view.y=py-(py-view.y)*(k2/view.k); view.k=k2; applyView(); }
+stage.addEventListener('wheel',function(e){ e.preventDefault(); var r=stage.getBoundingClientRect();
+  zoomAt(e.clientX-r.left,e.clientY-r.top, e.deltaY<0?1.15:1/1.15); },{passive:false});
+function toWorld(ev){ var r=stage.getBoundingClientRect();
+  return {x:(ev.clientX-r.left-view.x)/view.k, y:(ev.clientY-r.top-view.y)/view.k}; }
+
+/* ---------- background ---------- */
+function setMix(v){ q('mix').value=v; imgOld.style.opacity=v/100;
+  q('bNew').classList.toggle('on',v<50); q('bOld').classList.toggle('on',v>=50); }
+q('bNew').onclick=function(){setMix(0)}; q('bOld').onclick=function(){setMix(100)};
+q('mix').oninput=function(){setMix(+q('mix').value)};
+q('bFit').onclick=fit;
+q('b11').onclick=function(){ var r=stage.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,1/view.k); };
+q('bPrev').onclick=function(){ svg.classList.toggle('prev'); this.classList.toggle('on', svg.classList.contains('prev')); };
+q('bSide').onclick=function(){ q('side').classList.toggle('hidden'); this.classList.toggle('on'); };
+
+/* ---------- toolbar ---------- */
+var TOOLBAR=[['select','בחירה ועריכה','#ffffff']];
+/* plaza לא מקבל כפתור משלו — הוא נוצר תמיד כצורה חופשית ("רחבה חופשית"),
+   והוא קיים ב-TYPES רק כדי שיופיע ברשימת שינוי הטיפוס באינספקטור. */
+Object.keys(TYPES).forEach(function(t){ if(t==='plaza'||t==='gzone') return; TOOLBAR.push([t,TYPES[t].he,TYPES[t].col]); });
+TOOLBAR.push(['polyplaza','רחבה חופשית','var(--plaza)']);
+/* אזור גינון נמשך תמיד כצורה חופשית — שכונה איננה מלבן. */
+TOOLBAR.push(['polygzone','אזור גינון','var(--gzone)']);
+TOOLBAR.push(['poly','מבנה חופשי','var(--public)']);
+q('tools').innerHTML=TOOLBAR.map(function(t){
+  return '<button class="tool sm" data-tool="'+t[0]+'"><b style="background:'+t[2]+'"></b>'+t[1]+'</button>';
+}).join('');
+function setTool(t){
+  tool=t;
+  Array.prototype.forEach.call(q('tools').children,function(b){ b.classList.toggle('on', b.dataset.tool===t); });
+  stage.classList.toggle('drawing', t!=='select');
+  var db=q('drawbar'); db.className='float'+(drawing?' on':'');
+  if(drawing) q('drawmsg').textContent = (TYPES[drawing.type]&&TYPES[drawing.type].geo==='line'?'מצייר '+TYPES[drawing.type].he:'מצייר צורה חופשית')+' · '+drawing.pts.length+' נקודות';
+  q('hint').innerHTML = t==='select'
+    ? 'גרירה על הרקע = הזזה · גלגלת = זום · לחיצה על אובייקט = בחירה · Delete = מחיקה'
+    : (t==='polygzone' ? 'אזור גינון — לחיצות = פינות · גרירה = ציור חופשי · <b>Enter</b> לסיום · אחר כך בוחרים את שם האזור מהרשימה'
+      : t==='polyplaza' ? 'רחבה מרוצפת — לחיצות = פינות · גרירה = ציור חופשי · הפינה הראשונה נצמדת לרשת · <b>Enter</b> לסיום'
+      : t==='poly' ? 'לחיצות = פינות (בלי הגבלה) · גרירה = ציור חופשי · <b>Enter</b> או כפתור "סיום" לסיום'
+      : TYPES[t] && TYPES[t].geo==='area'
+        ? 'לחיצה על המפה מוסיפה '+TYPES[t].he+' · Esc חוזר לבחירה'
+        : 'לחיצות = נקודות · גרירה = ציור חופשי · <b>Enter</b> או כפתור "סיום" לסיום · הקצוות נצמדים לקווים קרובים');
+}
+Array.prototype.forEach.call(q('tools').children,function(b){ b.onclick=function(){ setTool(b.dataset.tool); }; });
+
+/* ---------- render ---------- */
+function el(tag,attrs){ var e=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(var k in attrs) e.setAttribute(k,attrs[k]); return e; }
+function shapeD(o){
+  if(geo(o)==='rect') return rectPts(o);
+  return o.pts||[];
+}
+function render(){ renderShapes(); inspector(); }
+function renderShapes(){
+  gS.innerHTML='';
+  /* שכבות: ירוק -> אספלט (כקבוצה אחת שקופה, כדי שהצמתים יתמזגו) -> מבנים -> טקסט */
+  /* אזורי הגינון הם השכבה התחתונה מכולן — הם רקע לכל השאר, לא אובייקט עליו. */
+  var gZone=el('g',{}), gGreen=el('g',{}), gPaved=el('g',{class:'paved'}), gBuild=el('g',{}), gInk=el('g',{});
+  gS.appendChild(gZone); gS.appendChild(gGreen); gS.appendChild(gPaved); gS.appendChild(gBuild); gS.appendChild(gInk);
+  var areaFill=el('g',{}), lineCase=el('g',{class:'casings'}), lineFill=el('g',{}), islands=el('g',{});
+  gPaved.appendChild(areaFill); gPaved.appendChild(lineCase); gPaved.appendChild(lineFill); gPaved.appendChild(islands);
+  function caseM(o){ return o.type==='path' ? 0.35 : 0.9; }   /* אבן שפה עדינה, ודקה עוד יותר בשבילים */
+
+  function areaEl(o,g){
+    var n;
+    if(g==='circle') n=el('circle',{cx:o.cx,cy:o.cy,r:o.r});
+    else if(g==='poly' && o.curve && o.pts.length>2) n=el('path',{d:catmullClosed(o.pts)});
+    else n=el('polygon',{points: shapeD(o).map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1)}).join(' ')});
+    n.setAttribute('class','shape t-'+(g==='circle'?'roundabout':o.type)+(sel===o.id?' sel':'')+(o.type==='house'?' t-house':''));
+    n.style.strokeWidth=(sel===o.id?3.5:2)/view.k+'px';
+    n.dataset.id=o.id; return n;
+  }
+  /* מיגוניות ומיכלים: מידה אמיתית במטרים, אבל אף פעם לא קטנים מ־15 פיקסלים על המסך,
+     אחרת בזום כללי אי אפשר לראות אותם וגם לא ללחוץ עליהם */
+  function markerEl(o){
+    var g=el('g',{transform:'translate('+o.cx+' '+o.cy+') rotate('+(o.rot||0)+')'});
+    var mn=15/view.k, w=Math.max(o.w,mn), h=Math.max(o.h,mn), body;
+    if(o.type==='shelter'){
+      body=el('rect',{x:(-w/2).toFixed(1),y:(-h/2).toFixed(1),width:w.toFixed(1),height:h.toFixed(1),
+        rx:(Math.min(w,h)*0.12).toFixed(1)});
+      body.setAttribute('class','mk shelter'+(sel===o.id?' sel':''));
+      g.appendChild(body);
+      var iw=w*0.56, ih=h*0.56;
+      var mk=el('rect',{x:(-iw/2).toFixed(1),y:(-ih/2).toFixed(1),width:iw.toFixed(1),height:ih.toFixed(1),
+        rx:(Math.min(iw,ih)*0.2).toFixed(1)});
+      mk.setAttribute('class','mkin shelterin'); g.appendChild(mk);
+    } else if(o.type==='bus'){
+      var sq=Math.min(w,h);
+      body=el('rect',{x:(-sq/2).toFixed(1),y:(-sq/2).toFixed(1),width:sq.toFixed(1),height:sq.toFixed(1),
+        rx:(sq*0.22).toFixed(1)});
+      body.setAttribute('class','mk bus'+(sel===o.id?' sel':''));
+      g.appendChild(body);
+      var gs=sq*0.62/24, gg=el('g',{transform:'translate('+(-sq*0.31).toFixed(1)+' '+(-sq*0.31).toFixed(1)+') scale('+gs.toFixed(4)+')'});
+      gg.setAttribute('class','busg');
+      BUS_G.forEach(function(p){ var n=el(p[0],p[1]); if(p[1].class) n.setAttribute('class',p[1].class); gg.appendChild(n); });
+      g.appendChild(gg);
+    } else {
+      var K=BIN_KINDS[o.kind]||BIN_KINDS.trash, s=K.shape;
+      if(s==='circle') body=el('circle',{cx:0,cy:0,r:(Math.min(w,h)/2).toFixed(1)});
+      else if(s==='oval') body=el('ellipse',{cx:0,cy:0,rx:(w/2).toFixed(1),ry:(h/2).toFixed(1)});
+      else body=el('rect',{x:(-w/2).toFixed(1),y:(-h/2).toFixed(1),width:w.toFixed(1),height:h.toFixed(1),
+        rx:(Math.min(w,h)*(s==='square'?0.14:0.22)).toFixed(1)});
+      body.setAttribute('class','mk bin'+(K.dash?' dash':'')+(sel===o.id?' sel':''));
+      body.style.fill=K.fill; body.style.stroke='rgba(0,0,0,.34)';
+      g.appendChild(body);
+    }
+    Array.prototype.forEach.call(g.children,function(c){
+      c.dataset.id=o.id;
+      if(!c.classList.contains('busg')) c.style.strokeWidth=((sel===o.id?3.2:1.6)/view.k)+'px'; });
+    return g;
+  }
+  function lineGeom(o){
+    var pts=o.pts||[], n;
+    if(pts.length>2&&o.curve){ n=el('path',{}); n.setAttribute('d',catmull(pts)); }
+    else { n=el('polyline',{}); n.setAttribute('points',pts.map(function(p){return p[0]+','+p[1]}).join(' ')); }
+    return n;
+  }
+  function labelFor(o,g,parent){
+    if(o.type==='house' && o.duo && g==='rect'){
+      var a=o.rot*Math.PI/180, ux=Math.cos(a), uy=Math.sin(a), vx=-Math.sin(a), vy=Math.cos(a);
+      var dv=el('line',{x1:o.cx+vx*o.h/2,y1:o.cy+vy*o.h/2,x2:o.cx-vx*o.h/2,y2:o.cy-vy*o.h/2});
+      dv.setAttribute('class','divider'); dv.style.strokeWidth=(2/view.k)+'px'; parent.appendChild(dv);
+      [[o.label,1],[o.label2,-1]].forEach(function(pr){ if(!pr[0]) return;
+        var t=el('text',{x:o.cx+ux*o.w/4*pr[1], y:o.cy+uy*o.w/4*pr[1]+11,'font-size':30});
+        t.setAttribute('class','lbl'); t.textContent=pr[0]; parent.appendChild(t); });
+      return;
+    }
+    if(!o.label) return;
+    var c=[o.cx,o.cy];
+    if(g==='line'&&o.pts&&o.pts.length) c=o.pts[Math.floor(o.pts.length/2)];
+    if(g==='poly'&&o.pts&&o.pts.length){ var sx=0,sy=0; o.pts.forEach(function(q){sx+=q[0];sy+=q[1]}); c=[sx/o.pts.length,sy/o.pts.length]; }
+    var t=el('text',{x:c[0],y:c[1]+11,'font-size':34}); t.setAttribute('class','lbl'); t.textContent=o.label; parent.appendChild(t);
+  }
+
+  var lines=[], streets=[];
+  state.objects.forEach(function(o){
+    var g=geo(o);
+    if(g==='line'){ (o.type==='street'?streets:lines).push(o); return; }
+    if(isMarker(o)){ gInk.appendChild(markerEl(o)); labelFor(o,g,gInk); return; }
+    if(o.type==='gzone'){ gZone.appendChild(areaEl(o,g)); labelFor(o,g,gInk); return; }
+    if(o.type==='green'){ gGreen.appendChild(areaEl(o,g)); labelFor(o,g,gInk); return; }
+    if(isPaved(o)){
+      areaFill.appendChild(areaEl(o,g));
+      if(g==='circle') islands.appendChild(el('circle',{cx:o.cx,cy:o.cy,r:o.r*(o.island||0.45),class:'island'}));
+      labelFor(o,g,gInk); return;
+    }
+    gBuild.appendChild(areaEl(o,g)); labelFor(o,g,gInk);
+  });
+
+  /* מעבר ראשון: כל אבני השפה. מעבר שני: כל פני הכביש. כך צמתים נסגרים חלק. */
+  lines.forEach(function(o){
+    var wpx=m2px(o.wm||TYPES[o.type].wm), pts=o.pts||[];
+    var cm=m2px(caseM(o));
+    var cs=lineGeom(o); cs.setAttribute('class','line casing t-'+o.type);
+    cs.style.strokeWidth=(wpx+cm*2)+'px'; lineCase.appendChild(cs);
+    if(pts.length>1) [0,pts.length-1].forEach(function(ei){ if(endIsConnected(o,ei)) return;
+      lineCase.appendChild(el('circle',{cx:pts[ei][0],cy:pts[ei][1],r:wpx/2+cm,class:'cap casing t-'+o.type})); });
+  });
+  lines.forEach(function(o){
+    var wpx=m2px(o.wm||TYPES[o.type].wm), pts=o.pts||[];
+    var n=lineGeom(o); n.setAttribute('class','line t-'+o.type+(sel===o.id?' sel':''));
+    n.style.strokeWidth=wpx+'px'; n.dataset.id=o.id; lineFill.appendChild(n);
+    if(pts.length>1) [0,pts.length-1].forEach(function(ei){ if(endIsConnected(o,ei)) return;
+      var cap=el('circle',{cx:pts[ei][0],cy:pts[ei][1],r:wpx/2});
+      cap.setAttribute('class','cap t-'+o.type+(sel===o.id?' sel':'')); cap.dataset.id=o.id; lineFill.appendChild(cap); });
+    labelFor(o,'line',gInk);
+  });
+
+  /* רחובות: קו מקווקו + שלט מעוגל עם השם באמצע */
+  streets.forEach(function(o){
+    var pts=o.pts||[]; if(pts.length<2) return;
+    var hit=lineGeom(o); hit.setAttribute('class','line t-street');
+    hit.style.stroke='transparent'; hit.style.strokeWidth=m2px(4.5)+'px';
+    hit.dataset.id=o.id; lineFill.appendChild(hit);
+    var d=lineGeom(o); d.setAttribute('class','stdash'+(sel===o.id?' sel':''));
+    d.style.strokeWidth=m2px(o.wm||0.55)+'px';
+    d.style.strokeDasharray=m2px(STREET_DASH[0])+' '+m2px(STREET_DASH[1]);
+    gInk.appendChild(d);
+    var mid=midOfPolyline(pts), ang=mid.ang;
+    if(ang>90||ang<-90) ang+=180;
+    var txt=o.label||'שם הרחוב';
+    var w=Math.max(120,txt.length*20+52), h=58, tr='translate('+mid.p[0].toFixed(1)+' '+mid.p[1].toFixed(1)+') rotate('+ang.toFixed(1)+')';
+    var r=el('rect',{x:-w/2,y:-h/2,width:w,height:h,rx:h/2,transform:tr});
+    r.setAttribute('class','stchip'+(sel===o.id?' sel':''));
+    r.style.strokeWidth=(3/view.k)+'px'; gInk.appendChild(r);
+    var tx=el('text',{'font-size':32,transform:tr}); tx.setAttribute('class','sttext');
+    tx.textContent=txt; gInk.appendChild(tx);
+  });
+  redrawHandles(); drawStats(); drawZones();
+}
+function midOfPolyline(pts){
+  var tot=0,seg=[],i;
+  for(i=0;i<pts.length-1;i++){ var L=Math.hypot(pts[i+1][0]-pts[i][0],pts[i+1][1]-pts[i][1]); seg.push(L); tot+=L; }
+  var half=tot/2, acc=0;
+  for(i=0;i<seg.length;i++){
+    if(acc+seg[i]>=half){
+      var t=(half-acc)/(seg[i]||1), A=pts[i], B=pts[i+1];
+      return {p:[A[0]+(B[0]-A[0])*t, A[1]+(B[1]-A[1])*t],
+              ang:Math.atan2(B[1]-A[1],B[0]-A[0])*180/Math.PI};
+    }
+    acc+=seg[i];
+  }
+  return {p:pts[0],ang:0};
+}
+function redrawHandles(){
+  gH.innerHTML='';
+  var o=byId(sel); if(!o) return;
+  var g=geo(o), R=8/view.k;
+  if(g==='rect'){
+    rectPts(o).forEach(function(p,i){ gH.appendChild(el('circle',{cx:p[0],cy:p[1],r:R,class:'hnd','data-role':'res'+i})); });
+    var a=o.rot*Math.PI/180;
+    gH.appendChild(el('circle',{cx:o.cx+Math.sin(a)*(o.h/2+m2px(7)),cy:o.cy-Math.cos(a)*(o.h/2+m2px(7)),r:R*1.15,class:'hrot','data-role':'rot'}));
+  } else if(g==='circle'){
+    gH.appendChild(el('circle',{cx:o.cx+o.r,cy:o.cy,r:R,class:'hnd','data-role':'rad'}));
+  } else if(o.pts){
+    o.pts.forEach(function(p,i){ gH.appendChild(el('circle',{cx:p[0],cy:p[1],r:R,class:'vtx','data-role':'vtx'+i})); });
+  }
+  // עדכון עובי מסגרת לפי הזום
+  Array.prototype.forEach.call(gS.querySelectorAll('.shape'),function(s){
+    s.style.strokeWidth=(s.classList.contains('sel')?3.5:2)/view.k+'px'; });
+}
+function drawStats(){
+  var c={}; state.objects.forEach(function(o){ c[o.type]=(c[o.type]||0)+1; });
+  var h=''; Object.keys(TYPES).forEach(function(t){ if(c[t]) h+=TYPES[t].he+': <b>'+c[t]+'</b><br>'; });
+  if(c.bin){ var bk={};
+    state.objects.forEach(function(o){ if(o.type==='bin'){ var k=o.kind||'trash'; bk[k]=(bk[k]||0)+1; } });
+    h+='<span style="opacity:.75">'+Object.keys(bk).map(function(k){
+      return BIN_KINDS[k].he+' '+bk[k]; }).join(' · ')+'</span><br>'; }
+  var u={},n=0; state.objects.forEach(function(o){ if(o.type!=='house') return;
+    if(o.label){u[o.label]=1;n++;} if(o.duo&&o.label2){u[o.label2]=1;n++;} });
+  var duos=state.objects.filter(function(o){return o.type==='house'&&o.duo}).length;
+  h+='מהם דו: <b>'+duos+'</b><br>מספרים משויכים: <b>'+n+'</b> / '+HOUSE_NUMS.length;
+  q('stats').innerHTML=h+auditHTML();
+  var miss=HOUSE_NUMS.filter(function(x){return !u[x]});
+  q('nextNum').textContent=miss.length?miss[0]:'הכול משויך ✓';
+  q('missing').textContent=miss.length? ('נותרו '+miss.length+': '+miss.join(' · ')) : '';
+}
+function focusObj(id){
+  var o=byId(id); if(!o) return;
+  var c;
+  if(o.pts&&o.pts.length){ var sx=0,sy=0; o.pts.forEach(function(p){sx+=p[0];sy+=p[1]});
+    c=[sx/o.pts.length, sy/o.pts.length]; }
+  else c=[o.cx,o.cy];
+  var r=stage.getBoundingClientRect();
+  if(view.k<0.45) view.k=0.45;
+  view.x=r.width/2-c[0]*view.k; view.y=r.height/2-c[1]*view.k;
+  sel=id; render(); applyView();
+}
+window.focusObj=focusObj;
+/* בדיקת מספור: כפילויות, משבצות ריקות ומספרים שחסרים מהתשריט */
+function numberAudit(){
+  var slots=[], dup={}, seen={};
+  state.objects.forEach(function(o){
+    if(o.type!=='house') return;
+    var ls=[['label',(o.label||'').trim()]];
+    if(o.duo) ls.push(['label2',(o.label2||'').trim()]);
+    ls.forEach(function(pr){
+      slots.push({id:o.id,field:pr[0],val:pr[1]});
+      if(pr[1]){ if(seen[pr[1]]) dup[pr[1]]=(dup[pr[1]]||1)+1; seen[pr[1]]=1; }
+    });
+  });
+  var empty=slots.filter(function(s){return !s.val});
+  var missing=HOUSE_NUMS.filter(function(n){return !seen[n]});
+  var extra=Object.keys(seen).filter(function(n){return HOUSE_NUMS.indexOf(n)<0});
+  return {slots:slots, empty:empty, missing:missing, dup:dup, extra:extra};
+}
+function auditHTML(){
+  var a=numberAudit(), h='<div class="vwrap">';
+  var ok = !a.empty.length && !Object.keys(a.dup).length && !a.missing.length && !a.extra.length;
+  h+='<div class="vlbl">בדיקת מספור · '+a.slots.length+' משבצות מול '+HOUSE_NUMS.length+' מספרים בתשריט</div>';
+  if(ok){ h+='<span class="vchip ok">הכול תקין ✓</span></div>'; return h; }
+  if(Object.keys(a.dup).length){
+    h+='<div class="vlbl">מספר שמופיע פעמיים — לחיצה קופצת ביניהם:</div>';
+    Object.keys(a.dup).forEach(function(n){
+      h+='<span class="vchip bad" onclick="jumpDup(\''+n+'\')">'+n+' ×'+a.dup[n]+'</span>'; });
+  }
+  if(a.empty.length){
+    h+='<div class="vlbl">משבצות ריקות — לחיצה מקפיצה לבית:</div>';
+    a.empty.forEach(function(s,i){
+      h+='<span class="vchip warn" onclick="focusObj(\''+s.id+'\')">ריק '+(i+1)+'</span>'; });
+  }
+  if(a.extra.length) h+='<div class="vlbl">לא קיים בתשריט:</div>'+a.extra.map(function(n){
+      return '<span class="vchip bad">'+n+'</span>'; }).join('');
+  if(a.missing.length){
+    h+='<div class="vlbl">חסרים מהתשריט ('+a.missing.length+'):</div>';
+    h+=a.missing.map(function(n){ return '<span class="vchip">'+n+'</span>'; }).join('');
+  }
+  return h+'</div>';
+}
+var dupIdx={};
+function jumpDup(n){
+  var hits=[];
+  state.objects.forEach(function(o){ if(o.type!=='house') return;
+    if((o.label||'').trim()===n) hits.push(o.id);
+    if(o.duo&&(o.label2||'').trim()===n) hits.push(o.id); });
+  if(!hits.length) return;
+  dupIdx[n]=((dupIdx[n]||0)+1)%hits.length;
+  focusObj(hits[dupIdx[n]]);
+}
+window.jumpDup=jumpDup;
+function nextNumber(){ var u={}; state.objects.forEach(function(o){ if(o.type!=='house') return;
+    if(o.label) u[o.label]=1; if(o.label2) u[o.label2]=1; });
+  for(var i=0;i<HOUSE_NUMS.length;i++) if(!u[HOUSE_NUMS[i]]) return HOUSE_NUMS[i]; return null; }
+
+/* ---------- inspector (floating, horizontal) ---------- */
+function inspector(){
+  var box=q('insp'), o=byId(sel);
+  if(!o || drawing){ box.className='float'; box.innerHTML=''; return; }
+  box.className='float on';
+  var g=geo(o), dl = o.type==='house'?'dlNums':(o.type==='gzone'?'dlZone':(g==='line'?'dlSt':'dlPub'));
+  var h='';
+  h+='<div class="fld w120"><label>סוג</label><select id="iType">'+Object.keys(TYPES).map(function(t){
+      return '<option value="'+t+'"'+(t===o.type?' selected':'')+'>'+TYPES[t].he+'</option>'; }).join('')+'</select></div>';
+  h+='<div class="fld w'+(o.type==='gzone'?'170':'120')+'"><label>'+(o.type==='house'?(o.duo?'מספר יחידה א׳':'מספר בית'):(o.type==='gzone'?'שם האזור':'שם'))+'</label><input type="text" list="'+dl+'" id="iLabel" value="'+(o.label||'').replace(/"/g,'&quot;')+'"></div>';
+  if(o.type==='bin'){
+    h+='<div class="fld w170"><label>סוג המיכל</label><select id="iKind">'
+      +Object.keys(BIN_KINDS).map(function(k){
+        return '<option value="'+k+'"'+((o.kind||'trash')===k?' selected':'')+'>'+BIN_KINDS[k].he+'</option>'; }).join('')
+      +'</select></div>';
+    h+='<p class="tip" style="align-self:center">שינוי סוג מחזיר גם את המידה והצורה לברירת המחדל של אותו סוג</p>';
+  }
+  if(o.type==='house'){
+    h+='<div class="grp"><label>מבנה</label><div class="row"><button class="sm '+(o.duo?'on':'')+'" id="bDuo" title="מבנה אחד שמכיל שתי יחידות דיור עם שני מספרי בית">בית דו</button></div></div>';
+    if(o.duo) h+='<div class="fld w120"><label>מספר יחידה ב׳</label><input type="text" list="dlNums" id="iLabel2" value="'+(o.label2||'').replace(/"/g,'&quot;')+'"></div>';
+  }
+  if(g==='rect'){
+    h+='<div class="fld w90"><label>אורך מ׳</label><input type="number" step="0.1" id="iW" value="'+px2m(o.w).toFixed(1)+'"></div>';
+    h+='<div class="fld w90"><label>רוחב מ׳</label><input type="number" step="0.1" id="iH" value="'+px2m(o.h).toFixed(1)+'"></div>';
+    h+='<div class="fld w150"><label>סיבוב <b id="rotv">'+o.rot.toFixed(1)+'°</b></label><input type="range" id="iRot" min="0" max="359.5" step="0.5" value="'+o.rot+'"></div>';
+    h+='<div class="grp"><label>יישור</label><div class="row"><button class="sm" id="bSnap" title="מסובב לזווית האמיתית של השכונה">הצמד לציר</button>'
+      +'<button class="sm" id="bRot90" title="מחליף בין אורך לרוחב">90°</button>'
+      +'<button class="sm" id="bNudgeM">−½°</button><button class="sm" id="bNudgeP">+½°</button></div></div>';
+    h+='<div class="grp"><label>פעולות</label><div class="row">'
+      +'<button class="sm" id="bApplyAll" title="מעתיק את המידה והזווית לכל האובייקטים מאותו טיפוס">החל על כל הדומים</button>'
+      +'<button class="sm" id="bStd" title="מעגל את האורך והרוחב למידה הנפוצה ביותר מבין הסימונים שכבר עשית מאותו טיפוס. לא ממציא מספרים">מידת תקן</button>'
+      +'<button class="sm" id="bToPoly" title="הופך את המלבן לצורה חופשית עם 4 פינות שאפשר לגרור">צורה חופשית</button></div></div>';
+  } else if(g==='circle'){
+    h+='<div class="fld w120"><label>קוטר (מ׳)</label><input type="number" step="0.5" id="iR" value="'+(px2m(o.r)*2).toFixed(1)+'"></div>';
+    h+='<div class="fld w150"><label>גודל האי במרכז <b id="isv">'+Math.round((o.island||0.45)*100)+'%</b></label><input type="range" id="iIsl" min="0" max="80" step="5" value="'+Math.round((o.island||0.45)*100)+'"></div>';
+    h+='<p class="tip" style="align-self:center">גרור את הידית להגדלה · גרור את הכיכר להזזה<br>כבישים נצמדים לשפה שלה כמו לחניון</p>';
+  } else if(g==='poly'){
+    h+='<div class="grp"><label>קווי המתאר</label><div class="row">'
+      +'<button class="sm '+(o.curve?'on':'')+'" id="bPCurve" title="מעביר בין פינות חדות לקווים עגולים">'+(o.curve?'עגול':'פינות')+'</button>'
+      +'<button class="sm" id="bPSmooth" title="מעגל רק את הפינות הצפופות. אפשר ללחוץ שוב ושוב">עגל פינות</button>'
+      +'<button class="sm" id="bRect" title="מפשט את המתאר ומצמיד כל צלע שקרובה לזווית השיכון אל הזווית המדויקת. הכי מתאים למבנים ולחניונים">יישר צלעות</button>'
+      +'<button class="sm" id="bCont" title="ממשיך להוסיף פינות">המשך ציור</button></div></div>';
+    h+='<p class="tip" style="align-self:center">'+o.pts.length+' פינות · אין הגבלה<br>לחיצה כפולה על המתאר מוסיפה פינה · Alt+לחיצה מוחקת · גרירת פינה משנה צורה</p>';
+  } else {
+    h+='<div class="fld w90"><label>רוחב מ׳</label><input type="number" step="0.5" id="iWm" value="'+(o.wm||TYPES[o.type].wm)+'"></div>';
+    h+='<div class="grp"><label>צורת הקו</label><div class="row">'
+      +'<button class="sm '+(o.curve?'on':'')+'" id="bCurve" title="מעביר בין קו שבור לקו מעוגל">'+(o.curve?'מעוגל':'שבור')+'</button>'
+      +'<button class="sm" id="bSmooth" title="מעגל רק את הפינות — מקומות שבהם לחצת הרבה נקודות קרובות. קטעים ישרים נשארים ישרים. אפשר ללחוץ שוב ושוב">עגל פינות</button>'
+      +'<button class="sm" id="bStraight" title="הופך לקו ישר בין הנקודה הראשונה לאחרונה">ישר</button>'
+      +'<button class="sm" id="bAxis" title="מיישר לזווית האמיתית של רחובות השיכון">לציר</button>'
+      +'<button class="sm" id="bRect" title="מפשט את הקו ומצמיד כל קטע שקרוב לזווית השיכון אל הזווית המדויקת">יישר קטעים</button></div></div>';
+    h+='<div class="grp"><label>פעולות</label><div class="row"><button class="sm" id="bCont" title="ממשיך להוסיף נקודות בסוף הקו">המשך ציור</button>'
+      +'<button class="sm" id="bJoin" title="מצמיד את שני הקצוות לקווים הקרובים כדי לסגור צומת">חבר לצמתים</button>'
+      +'<button class="sm" id="bWAll" title="מעתיק את הרוחב שקבעת כאן לכל ה'+TYPES[o.type].he+'ים האחרים">החל רוחב על כל ה'+TYPES[o.type].he+'ים</button></div></div>';
+    h+='<p class="tip" style="align-self:center">'+o.pts.length+' נקודות</p>';
+  }
+  h+='<div class="grp"><label>&nbsp;</label><div class="row"><button class="sm" id="bDup">שכפל</button>'
+    +'<button class="sm dang" id="bDel">מחק</button><button class="pri sm" id="bDoneEdit" title="שומר וסוגר את חלון העריכה">סיום עריכה ✓</button></div></div>';
+  box.innerHTML=h;
+
+  q('iType').onchange=function(e){ pushUndo(); var nt=e.target.value, ng=TYPES[nt].geo;
+    if(ng==='circle'){ var oc=outlineOf(o); var sx=0,sy=0; oc.forEach(function(pp){sx+=pp[0];sy+=pp[1]});
+      o.cx=sx/oc.length; o.cy=sy/oc.length; o.r=o.r||m2px(TYPES[nt].dr); o.island=o.island||TYPES[nt].island;
+      delete o.pts; delete o.shape; o.type=nt; commit(); return; }
+    if(g==='circle'){ o.w=o.r*2; o.h=o.r*2; o.rot=AXES[0]; delete o.r; delete o.island; }
+    if(ng==='line' && g!=='line'){ var p=shapeD(o); o.pts=[p[0].slice(),p[2]?p[2].slice():p[1].slice()]; o.wm=TYPES[nt].wm; delete o.shape; }
+    if(ng==='area' && g==='line'){ var a=o.pts[0], b=o.pts[o.pts.length-1];
+      o.cx=(a[0]+b[0])/2; o.cy=(a[1]+b[1])/2; o.w=m2px(TYPES[nt].dw); o.h=m2px(TYPES[nt].dh); o.rot=AXES[0]; delete o.pts; delete o.shape; }
+    o.type=nt; commit(); };
+  if(q('bRect')) q('bRect').onclick=function(){ pushUndo();
+    o.pts=rectifyPts(o.pts, geo(o)==='poly', 9, 0.7); o.curve=false; commit();
+    flash('יושר · '+o.pts.length+' פינות','var(--ok)'); };
+  if(q('bStd')) q('bStd').onclick=function(){ pushUndo();
+    var lw=commonDims(o.type,'w'), lh=commonDims(o.type,'h');
+    if(!lw.length&&!lh.length){ flash('אין עדיין מספיק סימונים כדי לזהות מידה נפוצה','var(--warn)'); return; }
+    var nw=snapDim(px2m(o.w),lw), nh=snapDim(px2m(o.h),lh);
+    o.w=m2px(nw); o.h=m2px(nh); commit();
+    flash('עוגל ל־'+nw+'×'+nh+' מ׳','var(--ok)'); };
+  if(q('iKind')) q('iKind').onchange=function(e){ pushUndo();
+    o.kind=e.target.value; var K=BIN_KINDS[o.kind];
+    o.w=m2px(K.dw); o.h=m2px(K.dh); commit(); flash(K.he,'var(--ok)'); };
+  q('iLabel').oninput=function(e){ o.label=e.target.value; save(); renderShapes(); };
+  if(o.type==='house'){
+    q('bDuo').onclick=function(){ pushUndo(); o.duo=!o.duo; if(!o.duo) o.label2=''; commit(); };
+    if(o.duo && q('iLabel2')) q('iLabel2').oninput=function(e){ o.label2=e.target.value; save(); renderShapes(); };
+  }
+  if(g==='rect'){
+    q('iW').oninput=function(e){ o.w=m2px(parseFloat(e.target.value)||1); save(); renderShapes(); };
+    q('iH').oninput=function(e){ o.h=m2px(parseFloat(e.target.value)||1); save(); renderShapes(); };
+    q('iRot').oninput=function(e){ o.rot=parseFloat(e.target.value); q('rotv').textContent=o.rot.toFixed(1)+'°'; save(); renderShapes(); };
+    q('bSnap').onclick=function(){ pushUndo(); o.rot=snapAngle(o.rot); commit(); };
+    q('bRot90').onclick=function(){ pushUndo(); o.rot=(o.rot+90)%360; commit(); };
+    q('bNudgeM').onclick=function(){ pushUndo(); o.rot=(o.rot-0.5+360)%360; commit(); };
+    q('bNudgeP').onclick=function(){ pushUndo(); o.rot=(o.rot+0.5)%360; commit(); };
+    q('bApplyAll').onclick=function(){ pushUndo(); var n=0;
+      state.objects.forEach(function(x){ if(x!==o && x.type===o.type && x.cls===o.cls && geo(x)==='rect'){ x.w=o.w; x.h=o.h; x.rot=snapAngle(x.rot); n++; } });
+      commit(); flash('הוחל על '+n+' אובייקטים','var(--ok)'); };
+    q('bToPoly').onclick=function(){ pushUndo(); o.pts=rectPts(o).map(function(p){return [p[0],p[1]]}); o.shape='poly'; commit(); };
+  } else if(g==='circle'){
+    q('iR').oninput=function(e){ o.r=Math.max(m2px(1),m2px((parseFloat(e.target.value)||2)/2)); save(); renderShapes(); };
+    q('iIsl').oninput=function(e){ o.island=(parseFloat(e.target.value)||0)/100; q('isv').textContent=e.target.value+'%'; save(); renderShapes(); };
+  } else if(g==='poly'){
+    q('bPCurve').onclick=function(){ pushUndo(); o.curve=!o.curve; commit(); };
+    q('bPSmooth').onclick=function(){ pushUndo();
+      o.pts=smoothCorners(o.pts,14,2,true); o.curve=true; commit(); };
+    q('bCont').onclick=function(){ drawing=o; setTool('poly'); };
+  } else {
+    q('iWm').oninput=function(e){ o.wm=parseFloat(e.target.value)||1; save(); renderShapes(); };
+    q('bCurve').onclick=function(){ pushUndo(); o.curve=!o.curve; commit(); };
+    q('bSmooth').onclick=function(){ pushUndo();
+      o.pts=smoothCorners(o.pts,14,2,false); o.curve=true; commit(); };
+    q('bStraight').onclick=function(){ pushUndo(); o.pts=[o.pts[0],o.pts[o.pts.length-1]]; o.curve=false; commit(); };
+    q('bAxis').onclick=function(){ pushUndo(); var A=o.pts[0],B=o.pts[o.pts.length-1];
+      var ang=Math.atan2(B[1]-A[1],B[0]-A[0])*180/Math.PI, L=Math.hypot(B[0]-A[0],B[1]-A[1]);
+      var r=(snapAngle(ang+90)-90)*Math.PI/180;
+      o.pts=[A,[A[0]+Math.cos(r)*L,A[1]+Math.sin(r)*L]]; o.curve=false; commit(); };
+    q('bCont').onclick=function(){ drawing=o; setTool(o.type); };
+    q('bJoin').onclick=function(){ pushUndo(); var n=0;
+      [0,o.pts.length-1].forEach(function(i){
+        var sp=snapToNetwork(o.pts[i][0],o.pts[i][1],o.id);
+        if(sp){ o.pts[i]=sp; n++; } else if(extendToNetwork(o,i,40)) n++; });
+      commit(); flash(n? 'חובר ב-'+n+' קצוות' : 'לא נמצא קו קרוב', n?'var(--ok)':'var(--warn)'); };
+    q('bWAll').onclick=function(){ pushUndo();
+      var wv=o.wm||TYPES[o.type].wm, n=0;
+      state.objects.forEach(function(x){ if(x!==o && x.type===o.type && geo(x)==='line'){ x.wm=wv; n++; } });
+      commit(); flash('רוחב '+wv+' מ׳ הוחל על '+n+' '+TYPES[o.type].he+'ים','var(--ok)'); };
+  }
+  q('bDoneEdit').onclick=function(){ save(); sel=null; setTool('select'); render(); };
+  q('bDel').onclick=function(){ pushUndo(); state.objects=state.objects.filter(function(x){return x!==o}); sel=null; commit(); };
+  q('bDup').onclick=function(){ pushUndo(); var n=JSON.parse(JSON.stringify(o)); n.id='o'+Date.now(); n.label='';
+    if(n.pts) n.pts=n.pts.map(function(p){return [p[0]+m2px(15),p[1]+m2px(15)]}); else { n.cx+=m2px(15); n.cy+=m2px(15); }
+    state.objects.push(n); sel=n.id; commit(); };
+}
+function commit(){ save(); render(); refreshDrawBar(); }
+function refreshDrawBar(){ var db=q('drawbar'); db.className='float'+(drawing?' on':'');
+  if(drawing) q('drawmsg').textContent=(TYPES[drawing.type]&&TYPES[drawing.type].geo==='line'?'מצייר '+TYPES[drawing.type].he:'מצייר צורה חופשית')+' · '+drawing.pts.length+' נקודות'; }
+q('bDone').onclick=function(){ endDraw(true); };
+q('bCancel').onclick=function(){ endDraw(false); };
+
+/* ---------- interaction ---------- */
+stage.addEventListener('mousedown',function(e){
+  if(e.target.closest('.float')) return;
+  var w=toWorld(e);
+  if(tool!=='select'){
+    if(drawing){ var pt=[w.x,w.y];
+      if(TYPES[drawing.type]&&TYPES[drawing.type].geo==='line'){
+        var s=snapToNetwork(w.x,w.y,drawing.id,drawing.pts[drawing.pts.length-1]); if(s) pt=s; }
+      drawing.pts.push(pt); drag={mode:'free'}; render(); refreshDrawBar(); e.preventDefault(); return; }
+    startTool(w); e.preventDefault(); return;
+  }
+  var role=e.target.dataset&&e.target.dataset.role;
+  if(role){ var so=byId(sel);
+    if(e.altKey && so && so.pts && role.indexOf('vtx')===0 && so.pts.length>(geo(so)==='poly'?4:3)){
+      pushUndo(); so.pts.splice(+role.slice(3),1); commit(); e.preventDefault(); return; }
+    drag={mode:role,o:so,start:w};
+    if(so && role.indexOf('res')===0 && geo(so)==='rect'){ drag.opp = rectPts(so)[(+role.slice(3)+2)%4]; }
+    e.preventDefault(); return; }
+  var id=e.target.dataset&&e.target.dataset.id;
+  if(id){
+    var now=Date.now();
+    if(lastClick && lastClick.id===id && now-lastClick.t<400 &&
+       Math.hypot(w.x-lastClick.x,w.y-lastClick.y) < 14/view.k){
+      var po=byId(id);
+      if(po && po.pts){ lastClick=null; pushUndo(); insertVertex(po,w.x,w.y); sel=id; commit(); e.preventDefault(); return; }
+    }
+    lastClick={id:id,t:now,x:w.x,y:w.y};
+    sel=id; var o=byId(id); pushUndo();
+    if(seqMode && o.type==='house'){
+      if(!o.label){ var nx=nextNumber(); if(nx) o.label=nx; }
+      else if(o.duo && !o.label2){ var n2=nextNumber(); if(n2) o.label2=n2; }
+    }
+    drag={mode:'move',o:o,start:w,o0:JSON.parse(JSON.stringify(o))}; save(); render(); e.preventDefault(); return; }
+  sel=null; render();
+  drag={mode:'pan',sx:e.clientX,sy:e.clientY,vx:view.x,vy:view.y}; stage.classList.add('panning');
+});
+function startTool(w){
+  pushUndo();
+  if(tool==='poly'||tool==='polyplaza'||tool==='polygzone'){
+    var pt0=[w.x,w.y];
+    if(tool==='polyplaza'){ var s0=snapToNetwork(w.x,w.y,null); if(s0) pt0=s0; }
+    /* ⚠️ אזור גינון **אינו** נצמד לרשת הכבישים. גבול אחריות עובר איפה
+       שהוחלט שהוא עובר, ולא בהכרח על שפת כביש; הצמדה הייתה מזיזה אותו. */
+    var zt = tool==='polygzone' ? 'gzone' : (tool==='polyplaza'?'plaza':'public');
+    drawing={id:'o'+Date.now(),type:zt,cls:'manual',shape:'poly',
+             pts:[pt0],label:'',cx:w.x,cy:w.y};
+    state.objects.push(drawing); sel=drawing.id; drag={mode:'free'}; render(); return;
+  }
+  var T=TYPES[tool];
+  if(T.geo==='circle'){
+    var ro={id:'o'+Date.now(),type:'roundabout',cls:'manual',cx:w.x,cy:w.y,r:m2px(T.dr),island:T.island,label:''};
+    state.objects.push(ro); sel=ro.id; setTool('select'); commit(); return;
+  }
+  if(T.geo==='area'){
+    var o={id:'o'+Date.now(),type:tool,cls:'manual',cx:w.x,cy:w.y,w:m2px(T.dw),h:m2px(T.dh),rot:AXES[0],label:''};
+    if(tool==='bin'){ o.kind='trash'; o.w=m2px(BIN_KINDS.trash.dw); o.h=m2px(BIN_KINDS.trash.dh); }
+    state.objects.push(o); sel=o.id; setTool('select'); commit();
+  } else {
+    var st=snapToNetwork(w.x,w.y,null)||[w.x,w.y];
+    drawing={id:'o'+Date.now(),type:tool,cls:'manual',pts:[st],wm:T.wm,label:'',cx:0,cy:0};
+    state.objects.push(drawing); sel=drawing.id; drag={mode:'free'}; render();
+  }
+}
+stage.addEventListener('mousemove',function(e){
+  snapHeld = !!(e.ctrlKey||e.metaKey);
+  if(drag||!drawing||geo(drawing)!=='line'){ var old=gH.querySelector('.snapdot'); if(old&&!drawing) old.remove(); return; }
+  var w=toWorld(e), prev=drawing.pts[drawing.pts.length-1];
+  var sp=snapToNetwork(w.x,w.y,drawing.id,prev);
+  var dot=gH.querySelector('.snapdot');
+  if(sp){ if(!dot){ dot=el('circle',{class:'snapdot',r:0}); gH.appendChild(dot); }
+    dot.setAttribute('cx',sp[0]); dot.setAttribute('cy',sp[1]);
+    var weak = SNAPINFO && (SNAPINFO.indexOf('שפת')===0 || SNAPINFO.indexOf('גוף')===0);
+    dot.setAttribute('r',(weak?8:12)/view.k);
+    dot.setAttribute('class','snapdot'+(weak?' weak':''));
+    dot.style.strokeWidth=(3/view.k)+'px';
+    if(q('drawmsg')) q('drawmsg').textContent='יתחבר אל: '+SNAPINFO+' · ⌘/Ctrl מבטל';
+  }
+  else { if(dot) dot.remove();
+    if(q('drawmsg')&&drawing) q('drawmsg').textContent='מצייר '+(TYPES[drawing.type]?TYPES[drawing.type].he:'')+' · '+drawing.pts.length+' נקודות'+(snapEnabled()?'':' · הצמדה כבויה'); }
+});
+window.addEventListener('mousemove',function(e){
+  if(!drag) return;
+  if(drag.mode==='free'){ if(!drawing) return; var wf=toWorld(e), last=drawing.pts[drawing.pts.length-1];
+    if(Math.hypot(wf.x-last[0],wf.y-last[1])>6/view.k){ drawing.pts.push([wf.x,wf.y]); render(); refreshDrawBar(); } return; }
+  if(drag.mode==='pan'){ view.x=drag.vx+(e.clientX-drag.sx); view.y=drag.vy+(e.clientY-drag.sy); applyView(); return; }
+  var w=toWorld(e), o=drag.o; if(!o) return;
+  if(drag.mode==='move'){ var dx=w.x-drag.start.x, dy=w.y-drag.start.y;
+    if(o.pts) o.pts=drag.o0.pts.map(function(p){return [p[0]+dx,p[1]+dy]});
+    else { o.cx=drag.o0.cx+dx; o.cy=drag.o0.cy+dy; } renderShapes(); }
+  else if(drag.mode==='rot'){ var a=Math.atan2(w.y-o.cy,w.x-o.cx)*180/Math.PI+90;
+    o.rot=e.shiftKey? ((a%360)+360)%360 : snapAngle(a); renderShapes(); }
+  else if(drag.mode==='rad'){ o.r=Math.max(m2px(2),Math.hypot(w.x-o.cx,w.y-o.cy)); renderShapes(); }
+  else if(drag.mode.indexOf('res')===0){
+    /* הפינה הנגדית נשארת נעוצה, והפינה הנגררת עוקבת אחרי העכבר */
+    var a2=o.rot*Math.PI/180, ca=Math.cos(a2), sa=Math.sin(a2);
+    var O=drag.opp||[2*o.cx-w.x,2*o.cy-w.y];
+    var dx2=w.x-O[0], dy2=w.y-O[1];
+    var lx=dx2*ca+dy2*sa, ly=-dx2*sa+dy2*ca;
+    o.w=Math.max(m2px(0.5),Math.abs(lx)); o.h=Math.max(m2px(0.5),Math.abs(ly));
+    o.cx=(O[0]+w.x)/2; o.cy=(O[1]+w.y)/2; renderShapes(); }
+  else if(drag.mode.indexOf('vtx')===0){ var i=+drag.mode.slice(3);
+    var p=[w.x,w.y];
+    if(geo(o)==='line' && (i===0||i===o.pts.length-1)){ var s=snapToNetwork(w.x,w.y,o.id); if(s) p=s; }
+    o.pts[i]=p; renderShapes(); }
+});
+window.addEventListener('mouseup',function(){ if(!drag) return;
+  if(drag.mode!=='pan'&&drag.mode!=='free'){ save(); render(); }
+  drag=null; stage.classList.remove('panning'); });
+stage.addEventListener('dblclick',function(e){
+  var id=(e.target.dataset&&e.target.dataset.id)||sel; if(!id) return;
+  var o=byId(id); if(!o||!o.pts) return;
+  var w=toWorld(e); pushUndo(); insertVertex(o,w.x,w.y); sel=id; commit(); e.preventDefault();
+});
+function endDraw(keep){
+  if(!drawing) return;
+  var min = geo(drawing)==='poly' ? 3 : 2;
+  if(!keep || drawing.pts.length<min){ state.objects=state.objects.filter(function(x){return x!==drawing}); sel=null; }
+  else if(geo(drawing)==='line'){
+    [0,drawing.pts.length-1].forEach(function(i){
+      var sp=snapEnabled()?snapToNetwork(drawing.pts[i][0],drawing.pts[i][1],drawing.id):null;
+      if(sp) drawing.pts[i]=sp;
+      else if(snapEnabled()) extendToNetwork(drawing,i,25);
+    }); }
+  drawing=null; setTool('select'); commit();
+}
+window.addEventListener('keyup',function(e){ if(!e.ctrlKey&&!e.metaKey) snapHeld=false; });
+window.addEventListener('blur',function(){ snapHeld=false; });
+window.addEventListener('keydown',function(e){
+  if(e.ctrlKey||e.metaKey) snapHeld=true;
+  if((e.metaKey||e.ctrlKey) && (e.key==='z'||e.key==='Z')){ doUndo(); e.preventDefault(); return; }
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+  if(e.key==='h'||e.key==='H'){ setSnapMode(!snapOn);
+    flash(snapOn?'הצמדה פעילה':'הצמדה כבויה', snapOn?'var(--ok)':'var(--warn)'); return; }
+  if(e.key==='Enter'&&drawing){ endDraw(true); e.preventDefault(); }
+  else if(e.key==='Escape'){ if(drawing) endDraw(false); else { sel=null; setTool('select'); render(); } }
+  else if((e.key==='Delete'||e.key==='Backspace')&&sel){ pushUndo(); state.objects=state.objects.filter(function(x){return x.id!==sel}); sel=null; commit(); e.preventDefault(); }
+  else if(e.key.indexOf('Arrow')===0){ var o=byId(sel); if(!o) return;
+    var d=e.shiftKey?m2px(1):m2px(0.2);
+    var dx=(e.key==='ArrowRight'?d:e.key==='ArrowLeft'?-d:0), dy=(e.key==='ArrowDown'?d:e.key==='ArrowUp'?-d:0);
+    if(o.pts) o.pts=o.pts.map(function(p){return [p[0]+dx,p[1]+dy]}); else { o.cx+=dx; o.cy+=dy; }
+    save(); render(); e.preventDefault(); }
+});
+
+/* ---------- numbering / file ---------- */
+q('bSeq').onclick=function(){ seqMode=!seqMode; this.classList.toggle('on',seqMode);
+  this.textContent='מספור רציף: '+(seqMode?'פועל':'כבוי'); };
+q('bSeqReset').onclick=function(){ if(!confirm('לנקות את כל מספרי הבתים?')) return;
+  pushUndo(); state.objects.forEach(function(o){ if(o.type==='house') o.label=''; }); commit(); };
+function doUndo(){ if(!undoStack.length){ flash('אין עוד מה לבטל','var(--warn)'); return; }
+  state.objects=JSON.parse(undoStack.pop()); sel=null; drawing=null; setTool('select'); save(); render(); updateUndo();
+  flash('בוטל · נותרו '+undoStack.length+' צעדים','var(--ok)'); }
+q('bUndo').onclick=doUndo;
+function setSnapMode(v){ snapOn=v;
+  var b=q('bSnapMode'); if(b){ b.textContent='הצמדה: '+(v?'פעילה':'כבויה'); b.classList.toggle('on',v); } }
+q('bSnapMode').onclick=function(){ setSnapMode(!snapOn);
+  flash(snapOn?'הצמדה פעילה · נקודות אמיתיות בלבד':'הצמדה כבויה · הקו נשאר בדיוק איפה שלחצת', snapOn?'var(--ok)':'var(--warn)'); };
+q('bRectAll').onclick=function(){ pushUndo(); var n=0;
+  state.objects.forEach(function(o){
+    if(!o.pts||o.pts.length<3) return;
+    var g=geo(o); if(g!=='poly'&&g!=='line') return;
+    var before=o.pts.length;
+    o.pts=rectifyPts(o.pts, g==='poly', 9, 0.7); o.curve=false; n++;
+  });
+  commit(); flash('יושרו '+n+' צורות · אפשר לבטל','var(--ok)'); };
+q('bStdAll').onclick=function(){ pushUndo();
+  var lw=commonDims('house','w'), lh=commonDims('house','h'), n=0;
+  if(!lw.length&&!lh.length){ flash('אין עדיין מספיק בתים כדי לזהות מידה נפוצה','var(--warn)'); return; }
+  state.objects.forEach(function(o){ if(o.type!=='house'||geo(o)!=='rect') return;
+    var a=snapDim(px2m(o.w),lw), b=snapDim(px2m(o.h),lh);
+    if(Math.abs(a-px2m(o.w))>0.05||Math.abs(b-px2m(o.h))>0.05) n++;
+    o.w=m2px(a); o.h=m2px(b); });
+  commit(); flash(n+' בתים עוגלו למידות '+lw.join('/')+' × '+lh.join('/')+' מ׳','var(--ok)',true); };
+q('bExport').onclick=function(){
+  var out={version:3, source:'Base-New.jpg / Base-Old.png', imgW:IMGW, imgH:IMGH, mpp:MPP, axes:AXES,
+    rotate:SEED.rotate, generated:new Date().toISOString(),
+    objects: state.objects.map(function(o){
+      var g=geo(o), n={id:o.id,type:o.type,shape:g,cls:o.cls,label:o.label||''};
+      if(o.type==='bin') n.kind=o.kind||'trash';
+      if(o.type==='house'&&o.duo){ n.duo=true; n.label2=o.label2||''; n.units=[o.label||'',o.label2||'']; }
+      if(g==='circle'){ n.cx=+(o.cx/IMGW).toFixed(6); n.cy=+(o.cy/IMGH).toFixed(6);
+        n.rm=+px2m(o.r).toFixed(2); n.island=+(o.island||0.45).toFixed(2); }
+      else if(g==='rect'){ n.cx=+(o.cx/IMGW).toFixed(6); n.cy=+(o.cy/IMGH).toFixed(6);
+        n.wm=+px2m(o.w).toFixed(2); n.hm=+px2m(o.h).toFixed(2); n.rot=+o.rot.toFixed(1); }
+      else { n.pts=o.pts.map(function(p){return [+(p[0]/IMGW).toFixed(6),+(p[1]/IMGH).toFixed(6)]});
+        if(g==='line'){ n.wm=o.wm||TYPES[o.type].wm; n.curve=!!o.curve; } else n.curve=!!o.curve; }
+      return n; })};
+  var b=new Blob([JSON.stringify(out,null,1)],{type:'application/json'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='map-geo.json'; a.click();
+  flash('יוצא ✓ map-geo.json ירד לתיקיית ההורדות — העבר אותו לתיקיית "כיול מפה"','var(--ok)',true);
+};
+
+/* ============================================================================
+ *  ייצוא ישיר לפורמט הקומפקטי של mapGeo.js (מיזוג 21.9.26 — "כלי אחד")
+ * ----------------------------------------------------------------------------
+ *  זה מה שמייתר את הצורך בכלי נפרד בתוך הריפו: במקום לייצא JSON (0–1,
+ *  פיקסל-תצ״א) ואז להריץ המרה חיצונית, הכפתור הזה בונה ישירות את מה
+ *  שהאפליקציה קוראת — כולל canopy/trees, שהכלי הזה לא עורך ומעביר כמו שהם.
+ *  אותו שער בדיקה כמו ייצוא אזורי הגינון: מסרב לייצא אם ההמרה לא מאמתת
+ *  מול בית 810, כשהוא קיים במפה הנוכחית. */
+function toCompactObjects(){
+  var skipped=0, out=[];
+  state.objects.forEach(function(o){
+    if(PROD_SKIP_EXPORT[o.type]){ skipped++; return; }
+    var g=geo(o), n={t:o.type, s:g};
+    if(o.label) n.l=o.label;
+    if(o.type==='house' && o.duo){ n.duo=1; if(o.label2) n.l2=o.label2; }
+    if(g==='rect'){
+      var w=toWorld(o.cx,o.cy);
+      n.x=+w[0].toFixed(1); n.y=+w[1].toFixed(1);
+      n.w=+(o.w*W2_S).toFixed(1); n.h=+(o.h*W2_S).toFixed(1);
+      n.r=+((((o.rot||0)+W2_ROT)%360+360)%360).toFixed(1);
+    } else if(g==='circle'){
+      var wc=toWorld(o.cx,o.cy);
+      n.x=+wc[0].toFixed(1); n.y=+wc[1].toFixed(1);
+      n.rad=+(o.r*W2_S).toFixed(1); n.isl=+((o.island===undefined?0.45:o.island)).toFixed(2);
+    } else {
+      n.p=(o.pts||[]).map(function(p){ var wp=toWorld(p[0],p[1]); return [+wp[0].toFixed(1),+wp[1].toFixed(1)]; });
+      if(g==='line'){ n.w=+((o.wm||TYPES[o.type].wm||1)*(PROD?PROD.meta.ppm:1.6)).toFixed(1); n.c=o.curve?1:0; }
+    }
+    out.push(n);
+  });
+  return {objects:out, skipped:skipped};
+}
+q('bExportProd').onclick=function(){
+  var h=state.objects.filter(function(o){ return o.type==='house' && o.label===W2_CHECK.label && geo(o)==='rect'; })[0];
+  if(h){
+    var n=toNorm(h.cx,h.cy);
+    if(Math.abs(n[0]-W2_CHECK.nx)>0.002 || Math.abs(n[1]-W2_CHECK.ny)>0.002){
+      flash('⚠ ההמרה לקואורדינטות האפליקציה לא תואמת — לא מייצא. ר\' W2 בקוד','var(--warn)',true);
+      return;
+    }
+  }
+  var comp=toCompactObjects();
+  var meta = PROD ? PROD.meta : {v:1, src:'map-calibrator-v2', ppm:1.6, mpp:MPP, rot:SEED.rotate, w:W2.W, h:W2.H};
+  var out = {v:meta.v, src:'map-calibrator-v2 (' + new Date().toISOString().slice(0,10) + ')',
+    ppm:meta.ppm, mpp:meta.mpp, rot:meta.rot, w:meta.w, h:meta.h,
+    objects:comp.objects, canopy:(PROD?PROD.canopy:[]), trees:(PROD?PROD.trees:[])};
+  var head='/* נוצר ע"י tools/map-calibrator.html ב-'+new Date().toISOString().slice(0,10)+
+    ' · אל תערוך ידנית — לעריכה נוספת פתחו את הכלי מחדש */\n';
+  var body='window.CBA=window.CBA||{};CBA.mapGeo='+JSON.stringify(out)+';\n';
+  var b2=new Blob([head+body],{type:'text/javascript'});
+  var a2=document.createElement('a'); a2.href=URL.createObjectURL(b2); a2.download='mapGeo.js'; a2.click();
+  var msg='יוצא ✓ '+comp.objects.length+' אובייקטים → mapGeo.js';
+  if(comp.skipped) msg+=' · '+comp.skipped+' דולגו (גינון/אוטובוס — לא חלק ממבנה הנתונים)';
+  if(!(PROD||h)) msg+=' · ⚠ לא נמצא בית 810 לאימות — לבדוק ידנית לפני החלפה';
+  flash(msg,'var(--ok)',true);
+};
+q('bReloadProd').onclick=function(){
+  if(!PROD){ flash('לא נמצאה מפה חיה ליד הכלי (js/data/mapGeo.js) — לוודא שהכלי יושב תחת tools/ בריפו','var(--warn)',true); return; }
+  if(!confirm('לזרוק את העריכה הנוכחית בכלי ולטעון מחדש את הגיאומטריה כמו שהיא חיה כרגע באפליקציה?')) return;
+  pushUndo();
+  state.objects = JSON.parse(JSON.stringify(PROD.objects));
+  sel=null; LOADED_FROM='prod'; updateSrcState(); commit();
+  flash('נטען מחדש מהמפה החיה ✓ '+state.objects.length+' אובייקטים','var(--ok)',true);
+};
+function updateSrcState(){
+  var el=q('srcState'); if(!el) return;
+  el.textContent = LOADED_FROM==='prod' ? 'מקור: הגיאומטריה החיה (mapGeo.js) · ' + state.objects.length + ' אובייקטים'
+    : LOADED_FROM==='local' ? 'ממשיך עריכה שמורה מהדפדפן · ' + state.objects.length + ' אובייקטים'
+    : 'מקור: דוגמה מקורית (SEED) — לא הגיאומטריה החיה';
+}
+updateSrcState();
+/* ============================================================================
+ *  אזורי גינון — בקרה וייצוא (2026-09-08)
+ * ----------------------------------------------------------------------------
+ *  ⚠️ **המרת הקואורדינטות.** האפליקציה לא עובדת בפיקסלים של התצ״א אלא ב"עולם"
+ *  מסובב ב-23.5° שנוצר בזמנו מ-map-geo.json, ונעיצה של תקלה נשמרת כשבר 0–1
+ *  של אותו עולם (ר' getPin ב-resident.js). לכן ייצוא בפיקסלי תצ״א היה נותן
+ *  מצולעים שיושבים במקום אחר לגמרי מהסיכה.
+ *  הקבועים למטה **לא נוחשו** — הם הותאמו (least squares) מ-95 בתים שמופיעים
+ *  גם בקובץ הכיול וגם ב-js/data/mapGeo.js, עם שארית מקסימלית של 0.07 פיקסל.
+ *  אם mapGeo.js ייווצר מחדש אי פעם — צריך להתאים אותם מחדש. כפתור הייצוא
+ *  בודק את עצמו מול בית 810 ומסרב לייצא אם ההמרה זזה.
+ *  W2/toWorld/toNorm/W2_CHECK עצמם עברו למעלה (ליד AXES) ב-21.9.26 — גם
+ *  ייצוא mapGeo.js וגם טעינת המפה החיה זקוקים להם לפני שהאובייקטים נבנים. */
+
+function zonePolys(){
+  return state.objects.filter(function(o){ return o.type==='gzone' && o.pts && o.pts.length>2; });
+}
+/* ray casting. גבול משותף בין שתי שכונות תמיד ייפול לאחת מהן ולא לשתיהן. */
+function inPoly(x,y,pts){
+  var inside=false;
+  for(var i=0,j=pts.length-1;i<pts.length;j=i++){
+    var xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];
+    if(((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/((yj-yi)||1e-9)+xi)) inside=!inside;
+  }
+  return inside;
+}
+function zoneReport(){
+  var zs=zonePolys();
+  var named={}; zs.forEach(function(z){ if(z.label) named[z.label]=(named[z.label]||0)+1; });
+  var missing=GARDEN_ZONES.filter(function(n){ return !named[n]; });
+  var unnamed=zs.filter(function(z){ return !z.label; }).length;
+  var bad=zs.filter(function(z){ return z.label && GARDEN_ZONES.indexOf(z.label)<0; })
+            .map(function(z){ return z.label; });
+  /* כיסוי: כל בית חייב ליפול בדיוק באזור אחד. אפס = נעיצה שם לא תדע אזור,
+     שניים = היא תדע שני אזורים, וזה גרוע יותר מאפס כי זה נראה תקין. */
+  var none=[], many=[];
+  state.objects.forEach(function(o){
+    if(o.type!=='house') return;
+    var c = (geo(o)==='rect') ? [o.cx,o.cy] : null;
+    if(!c && o.pts && o.pts.length){ var sx=0,sy=0; o.pts.forEach(function(q){sx+=q[0];sy+=q[1];});
+      c=[sx/o.pts.length, sy/o.pts.length]; }
+    if(!c) return;
+    var hit=zs.filter(function(z){ return inPoly(c[0],c[1],z.pts); });
+    if(!hit.length) none.push(o.label||o.id);
+    else if(hit.length>1) many.push((o.label||o.id));
+  });
+  return {zs:zs, named:named, missing:missing, unnamed:unnamed, bad:bad, none:none, many:many};
+}
+function drawZones(){
+  var el1=q('zoneList'), el2=q('zoneQA'); if(!el1) return;
+  var r=zoneReport();
+  el1.innerHTML = GARDEN_ZONES.map(function(n){
+    var c=r.named[n]||0;
+    return '<div style="display:flex;gap:6px;align-items:center">'
+      + '<span style="color:'+(c===1?'var(--ok)':(c>1?'var(--warn)':'var(--muted)'))+'">'
+      + (c===1?'✓':(c>1?'⚠':'○'))+'</span><span'+(c?'':' style="color:var(--muted)"')+'>'+n+'</span>'
+      + (c>1?'<b style="color:var(--warn)"> ×'+c+'</b>':'') + '</div>';
+  }).join('');
+  var msg=[];
+  if(r.unnamed) msg.push('<b style="color:var(--warn)">'
+    + (r.unnamed===1 ? 'אזור אחד בלי שם' : r.unnamed+' אזורים בלי שם') + '</b>');
+  if(r.bad.length) msg.push('<b style="color:var(--warn)">שם לא מוכר: '+r.bad.join(', ')+'</b>');
+  if(r.none.length) msg.push(r.none.length===1 ? 'בית אחד לא נמצא באף אזור'
+                                                : r.none.length+' בתים לא נמצאים באף אזור');
+  if(r.many.length) msg.push('<b style="color:var(--warn)">'
+    + (r.many.length===1 ? 'בית אחד בשני אזורים' : r.many.length+' בתים בשני אזורים') + '</b>');
+  if(!msg.length) msg.push(r.zs.length ? '<span style="color:var(--ok)">כל בית נמצא באזור אחד בדיוק ✓</span>'
+                                       : 'עוד לא סומן אף אזור.');
+  el2.innerHTML=msg.join(' · ');
+}
+q('bZoneExport').onclick=function(){
+  var r=zoneReport();
+  if(!r.zs.length){ flash('אין עדיין אזורי גינון לייצא','var(--warn)'); return; }
+  /* בדיקת ההמרה מול בית ידוע — לפני שמייצרים קובץ שייכנס לאפליקציה. */
+  var h=state.objects.filter(function(o){ return o.type==='house' && o.label===W2_CHECK.label
+                                           && geo(o)==='rect'; })[0];
+  if(h){
+    var n=toNorm(h.cx,h.cy);
+    if(Math.abs(n[0]-W2_CHECK.nx)>0.002 || Math.abs(n[1]-W2_CHECK.ny)>0.002){
+      flash('⚠ ההמרה לקואורדינטות האפליקציה לא תואמת — לא מייצא. ר\' W2 בקוד','var(--warn)',true);
+      return;
+    }
+  }
+  if(r.unnamed || r.bad.length){
+    if(!confirm('יש אזורים בלי שם או עם שם לא מוכר — הם לא ייכללו. להמשיך?')) return;
+  }
+  var areas=r.zs.filter(function(z){ return z.label && GARDEN_ZONES.indexOf(z.label)>=0; })
+    .map(function(z){ return { n:z.label,
+      p:z.pts.map(function(pt){ var v=toNorm(pt[0],pt[1]);
+        return [+v[0].toFixed(5), +v[1].toFixed(5)]; }) }; });
+  var js = '/* נוצר אוטומטית מ־"כיול מפה" · אל תערוך ידנית · '
+    + new Date().toISOString().slice(0,10) + '\n'
+    + '   מצולעי אזורי הגינון, בשבר 0–1 של עולם המפה — אותן יחידות בדיוק\n'
+    + '   שבהן נשמרת נעיצת תקלה (getPin ב-resident.js). */\n'
+    + 'window.CBA=window.CBA||{};CBA.gardenAreas='
+    + JSON.stringify({v:1, src:'map-calibrator-v2', areas:areas}) + ';\n';
+  var b=new Blob([js],{type:'text/javascript'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='gardenAreas.js'; a.click();
+  flash('יוצא ✓ '+areas.length+' אזורים · gardenAreas.js → js/data/','var(--ok)',true);
+};
+
+q('bImport').onclick=function(){ q('fImport').click(); };
+q('fImport').onchange=function(e){ var f=e.target.files[0]; if(!f) return; var r=new FileReader();
+  r.onload=function(){ try{ var d=JSON.parse(r.result);
+    state.objects=d.objects.map(function(n){
+      var o={id:n.id,type:n.type,cls:n.cls,label:n.label||'',duo:!!n.duo,label2:n.label2||''};
+      if(n.shape==='circle'){ o.cx=n.cx*IMGW; o.cy=n.cy*IMGH; o.r=m2px(n.rm); o.island=n.island||0.45; }
+      else if(n.shape==='rect'||(!n.shape&&n.cx!==undefined&&n.wm!==undefined)){ o.cx=n.cx*IMGW; o.cy=n.cy*IMGH; o.w=m2px(n.wm); o.h=m2px(n.hm); o.rot=n.rot; }
+      else { o.pts=n.pts.map(function(p){return [p[0]*IMGW,p[1]*IMGH]});
+        if(n.shape==='poly'){ o.shape='poly'; o.curve=!!n.curve; o.cx=o.pts[0][0]; o.cy=o.pts[0][1]; }
+        else { o.wm=n.wm; o.curve=!!n.curve; o.cx=0; o.cy=0; } }
+      return o; });
+    sel=null; commit(); flash('נטען ✓ '+state.objects.length+' אובייקטים','var(--ok)');
+  }catch(err){ alert('קובץ לא תקין: '+err.message); } };
+  r.readAsText(f); };
+
+setTool('select'); fit(); render(); setMix(0); updateUndo();
+window.addEventListener('resize',applyView);
+</script>
+</body></html>
