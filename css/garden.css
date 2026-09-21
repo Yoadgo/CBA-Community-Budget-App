@@ -768,6 +768,42 @@
   width: 4px;
 }
 
+/* ---- פינת הבורדו (2026-09-21, בקשת יועד) ----
+   הפס המקוטע עובד כשסורקים עמודה של כרטיסים זהים. מהרגע שדיווח משובץ יורד
+   לתוך "עבודת השבוע" ויושב בין משימות שגרה, צריך סימן שנקרא **במבט אחד
+   ובלי להשוות** לשכן. משולש, לא תווית: אין בו טקסט לקרוא, הוא לא גוזל
+   רוחב משורת המטא, והוא לא מוסיף תג צבעוני שיתחרה בתג החריגה.
+   ⚠️ `left` ולא `inset-inline-start`: המסך RTL, והבקשה הייתה **שמאל
+   למעלה** פיזית. inset-inline-start היה שם אותו מימין.
+   ⚠️ עובד רק בזכות `overflow:hidden` + `position:relative` של .gd-rep. */
+.gt-row.is-report::after {
+  content: ""; position: absolute; top: 0; left: 0; pointer-events: none;
+  border-top: 13px solid var(--gt-res, #7A1F3D);
+  border-right: 13px solid transparent;
+}
+/* בארכיון הכרטיס כולו שקט (opacity .72) — הפינה יורדת איתו ולא מעליו. */
+.gt-closed.is-report::after { opacity: .6; }
+/* דגימת המקרא — אותו משולש, בתוך ריבוע קטן עם פינות מעוגלות. */
+.gt-lgf { display: block; width: 22px; height: 22px; border-radius: 6px;
+  position: relative; overflow: hidden; background: rgba(17,24,39,.05); }
+.gt-lgf::after { content: ""; position: absolute; top: 0; left: 0;
+  border-top: 11px solid var(--gt-res, #7A1F3D);
+  border-right: 11px solid transparent; }
+
+/* ---- "ממתין להחלטה" — כרטיס רקע בראש העמוד (2026-09-21) ----
+   בקשת יועד: "אולי לראש העמוד ונפריד בכרטיסית רקע אחרת? שיהיה קצת יותר
+   בולט.. בדומה לדף נחיתה של דייר". הרקע הוא מה שמפריד — לא קו, לא צבע
+   חדש ולא הצללה: זה לא אלמנט צף אלא אזור בעמוד, ולכן מסגרת דקה ורקע
+   אפור-בהיר בלבד. */
+.gt-decide { margin-top: 6px; padding: 10px 12px 12px; border-radius: 18px;
+  background: rgba(17,24,39,.028); border: 1px solid rgba(17,24,39,.07); }
+.gt-decide .gt-grp--lane { margin-top: 2px; }
+.gt-decide .gt-grp--lane hr { background: rgba(17,24,39,.10); }
+/* הכרטיסים בפנים יושבים על הרקע האפור, ולכן הם לבנים מלאים — אחרת הם
+   נבלעים בו והאזור נקרא כמלבן אחד. */
+.gt-decide .gd-rep { background: #fff; }
+.gt-decide .gt-none { background: rgba(255,255,255,.7); }
+
 /* ---- חיווי ברמת השורה + מצב שגיאה (2026-09-08) ----
    החיווי הגלובלי בכותרת אומר "משהו נשמר"; הוא לא אומר **מה**. כשהאצבע על
    כרטיס אחד מתוך תשעה זו לא אותה שאלה. הפעימה עדינה בכוונה: הפעולה כבר
