@@ -31,6 +31,23 @@
    *     שהאפליקציה מוכנה) אינו תקלה שלו, והודעה עליו הייתה רעש. מה שחסר
    *     היה **עקבה למי שמתחקר**, לא הודעה למי שלוחץ.
    * ========================================================================== */
+  /* 🔴 ממצא 16 (2026-09-22) — **תפריט הניהול נטען מאחורי שער הכניסה.**
+     שלושת כפתורי הניווט הקבועים ב-index.html ("תכנון מול ביצוע", "ניהול
+     הוצאות", "בניית תקציב") יושבים ב-header, שנשאר ב-DOM כשהשער עולה. הם
+     מוסתרים ויזואלית — אבל נמצאים בעץ הנגישות **וניתנים להגעה ב-Tab**.
+     ⚠️ נבדק ואין מאחוריהם נתונים, ולכן זו אינה דליפה. היא כן המחלקה שכבר
+        ייצרה באג אמיתי בעבר, ולכן היא נסגרת.
+     🔑 `inert` ולא `tabindex="-1"`: הוא מוציא את כל תת-העץ גם
+        ממסלול המקלדת וגם מעץ הנגישות, בלי לתחזק רשימת אלמנטים שתתיישן. */
+  function shellInert(on) {
+    ["header", "main"].forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (!el) return;
+      if (on) el.setAttribute("inert", "");
+      else el.removeAttribute("inert");
+    });
+  }
+
   function quietFail(kind, name, why, trailOnly) {
     try {
       var line = "ניווט נחסם · " + kind + " · " + String(name) + " — " + why;
@@ -661,7 +678,11 @@
       var badge = n ? '<span class="nav-badge">' + (n > 9 ? "9+" : n) + '</span>' : '';
       // מסמנים "פעיל" לפי המסך הנוכחי (לא תמיד הראשון ברשימה) — כדי שרענון תגיות
       // ההתרעות (שקורה כל כמה שניות, ראה refreshAlerts) לא "יקפיץ" את הטאב הפעיל.
-      html += '<button type="button" class="app-nav__tab' + (t[0] === currentScreen ? " is-active" : "") + '" data-screen="' + t[0] + '">' + ico + CBA.esc(t[1]) + badge + '</button>';
+      /* 🔴 ממצא 17 — `is-active` היא מחלקה ויזואלית בלבד: קורא מסך לא
+         ידע באיזו לשונית המשתמש נמצא. `aria-current` הוא מה שאומר זאת. */
+      html += '<button type="button" class="app-nav__tab' + (t[0] === currentScreen ? " is-active" : "") + '"' +
+        (t[0] === currentScreen ? ' aria-current="page"' : '') +
+        ' data-screen="' + t[0] + '">' + ico + CBA.esc(t[1]) + badge + '</button>';
     });
     nav.innerHTML = html;
     /* יעד יחיד שאינו כפתור-קבוצה = אין ניווט: הוא נצבע כטאב פעיל על כל רוחב
@@ -1663,6 +1684,7 @@
       document.body.appendChild(gate);
     }
     gate.hidden = false;
+    shellInert(true);
     document.body.classList.add("is-gated");
     gate.innerHTML =
       '<div class="login-card">' +
@@ -1715,6 +1737,7 @@
       document.body.appendChild(gate);
     }
     gate.hidden = false;
+    shellInert(true);
     document.body.classList.add("is-gated");
     gate.innerHTML =
       '<div class="login-card">' +
@@ -1865,6 +1888,7 @@
   function hideLoginGate() {
     const gate = document.getElementById("login-gate");
     if (gate) gate.hidden = true;
+    shellInert(false);
     document.body.classList.remove("is-gated");
   }
 

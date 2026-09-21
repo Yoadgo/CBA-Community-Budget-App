@@ -978,7 +978,13 @@ function resOpenAdd(container, c) {
       return '<div class="res-grid__row' + cls + '" data-ra-row="' + ri + '">' +
           '<div class="res-grid__n">' + (ri + 1) + '</div>' +
           cols.map(function (x, ci) {
+            /* 🔴 ממצא 17 (2026-09-22) — שבעת השדות היו `input` בלי
+               `placeholder`, בלי `aria-label` ובלי קישור לכותרת
+               העמודה: קורא מסך הקריא שבע תיבות זהות ללא שם. הכותרת כבר קיימת
+               כטקסט — כאן היא נקשרת לשדה עצמו, יחד עם מספר השורה, כי בגריד
+               "שם משפחה" לבדו אינו אומר איזו משפחה. */
             return '<input class="res-grid__c" data-ra-r="' + ri + '" data-ra-c="' + ci + '" ' +
+              'aria-label="' + CBA.esc(x.label + " · שורה " + (ri + 1)) + '" ' +
               'value="' + CBA.esc(row[ci] || "") + '" autocomplete="off">';
           }).join("") +
           '<button type="button" class="res-grid__del" data-ra-del="' + ri + '" aria-label="מחק שורה">×</button>' +

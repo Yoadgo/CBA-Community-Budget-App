@@ -28,14 +28,23 @@
    הכי הרבה. אותו טיפול חוזר בגרסת המובייל למטה, עם --bottomline-h. */
 body[data-screen="budget"] .rep-fab-wrap,
 body[data-screen="planning"] .rep-fab-wrap { bottom: 104px; }
+/* 🔴 ממצא 10 (2026-09-22) — **היה עיגול ורוד זוהר, והאלמנט הדומיננטי
+   ביותר במסך הבית של התושב** — חזק יותר מ"הגשת קבלה", שהוא ה-CTA האמיתי.
+   האפיון אומר: CTA שחור, ירוק חיובי, אדום/כתום חריגה, בשימוש מדוד — וורוד
+   אינו בשפה בכלל.
+   🔑 **והכיוון הנכון אינו "לצבוע אותו שחור"**: שחור מלא היה הופך אותו
+   לפעולה ראשית, וזו בדיוק התקלה. כפתור משוב צריך להיות **זמין ולא צועק**,
+   ולכן הוא משטח ניטרלי עם סמליל כהה — נוכח בפינה, ולא מתחרה על העין. */
 .rep-fab {
-  width: 54px; height: 54px; border-radius: 50%; border: none; cursor: pointer;
-  display: grid; place-items: center; color: #fff;
-  background: linear-gradient(140deg, #F472B6 0%, #DB2777 100%);
-  box-shadow: 0 6px 18px rgba(219,39,119,.34), 0 2px 6px rgba(16,24,40,.12);
+  width: 54px; height: 54px; border-radius: 50%; cursor: pointer;
+  display: grid; place-items: center;
+  color: var(--text, #374151);
+  background: var(--surface, #fff);
+  border: 1px solid rgba(17,24,39,.10);
+  box-shadow: 0 6px 18px rgba(16,24,40,.12), 0 2px 6px rgba(16,24,40,.06);
   transition: transform var(--t), box-shadow var(--t);
 }
-.rep-fab:hover  { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(219,39,119,.42); }
+.rep-fab:hover  { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(16,24,40,.18); }
 .rep-fab:active { transform: scale(.94); }
 .rep-fab svg { width: 25px; height: 25px; }
 /* בפתיחה הכפתור רק "נלחץ" קלות פנימה — בלי סיבוב ובלי תזוזה. */
