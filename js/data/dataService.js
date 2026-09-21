@@ -2026,6 +2026,9 @@ CBA.data = (function () {
       } else if (op === "note") {
         patch.note = note;
         log = { kind: "הערה", note: note };
+        /* 🔴 ממצא 32 — הערת ביצוע על דיווח תושב היא אינטראקציה איתו,
+           ולכן מייל. ⚠️ רק כשנכתב משהו: הערה ריקה אינה עדכון. */
+        if (isReport && note) notify = "GARDEN_STATUS_NOTE";
 
       } else if (op === "defer") {
         if (!cur.week) return cb({ ok: false, error: "למשימה אין שבוע משובץ" });
@@ -2037,6 +2040,9 @@ CBA.data = (function () {
         /* "שבוע מקורי" נכתב פעם אחת — זה מה שמראה מה נגרר שוב ושוב. */
         if (!cur.firstWeek) patch.firstWeek = cur.week;
         log = { kind: "גרירה", note: cur.week + " ← " + nxt + (note ? " — " + note : "") };
+        /* 🔴 ממצא 32 — דחייה לשבוע אחר היא בדיוק מה שהתושב ממתין לו.
+           עד היום היא נרשמה ביומן ולא נאמרה לו בשום מקום. */
+        if (isReport) notify = "GARDEN_RESCHEDULED";
 
       } else if (op === "approve" || op === "close") {
         if (!gardenIsMgr()) {
@@ -2076,8 +2082,13 @@ CBA.data = (function () {
         }
         if (String(cur.flag || "") === "נגררה") patch.flag = "";
         log = { kind: "שיבוץ", note: (cur.week || "—") + " ← " + wk };
-        /* ⚠️ שיבוץ **ראשון** בלבד — גרירה ושינוי שבוע אינם מייל נוסף. */
-        if (!cur.week && isReport) notify = "GARDEN_PLANNED";
+        /* ⚠️ שיבוץ **ראשון** הוא "הדיווח שלך נכנס לתוכנית העבודה".
+           🔴 ממצא 32 — ושיבוץ מחדש לשבוע אחר הוא שינוי מועד ולא שתיקה.
+              שיבוץ חוזר **לאותו שבוע** אינו שולח כלום: אין מה לבשר. */
+        if (isReport) {
+          if (!cur.week) notify = "GARDEN_PLANNED";
+          else if (String(cur.week) !== wk) notify = "GARDEN_RESCHEDULED";
+        }
 
       } else if (op === "clearflag") {
         patch.flag = "";
@@ -2103,7 +2114,7 @@ CBA.data = (function () {
       CBA.fb.updateDoc("gardenTasks", String(id), patch, function (e2) {
         if (e2) return cb({ ok: false, error: gardenFsErr(e2) });
         /* מכאן הפעולה **קיימת**. כל מה שנכשל אחריה אינו מבטל אותה. */
-        if (log) gardenLogAppend(String(id), log.kind, log.note);
+        if (log) gardenLogAppend(String(id), log.kind, log.note, { repId: cur.repId });
         if (notify) gardenNotifyFire(id);
         cb({ ok: true });
       });
@@ -2326,7 +2337,8 @@ CBA.data = (function () {
         if (e1) return cb({ ok: false, error: gardenFsErr(e1, "המשוב לא נשמר") });
         var taskId = String(rep.taskId || "").trim();
         gardenLogAppend(taskId, "משוב", (positive ? "חיובי" : "שלילי") +
-                        (note ? " — " + note : ""));
+                        (note ? " — " + note : ""),
+                        { familyId: (((window.CBA && CBA.user) || {}).familyId || "") });
         if (positive || !taskId) return cb({ ok: true });
         /* משוב שלילי — דגל ומייל למנהלים. שניהם שגר-ושכח:
            המשוב של התושב כבר נשמר, ואין סיבה להחזיר לו שגיאה. */
@@ -2430,7 +2442,7 @@ CBA.data = (function () {
             }
 
             /* מכאן הדיווח **קיים**. כל מה שנכשל אחרי זה אינו מבטל אותו. */
-            gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId);
+            gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId, { familyId: fid });
             CBA.sheets.postRead("gardenNotifyReport", { id: String(repId) }, function () {});
 
             /* 🔴🔴 **ההגשה נסגרת כאן, לפני התמונות** (17.9, החלטת יועד).
@@ -2485,18 +2497,107 @@ CBA.data = (function () {
     } catch (e) {}
   }
 
-  /** שורת יומן. שגר ושכח — יומן שנכשל אינו מבטל פעולה שהצליחה. */
-  function gardenLogAppend(taskId, kind, note) {
+  /* 🔴 **אילו סוגי אירוע נושאים `familyId`** (2026-09-22, ממצא 32).
+     זה אינו עניין של תצוגה אלא של גבול: שורה בלי `familyId` אינה
+     נקראת ע"י תושב לעולם, ולכן "חסימה", "דגל" ו"איחוד" — פעולות
+     פנימיות של הצוות — פשוט אינן מגיעות אליו.
+     ⚠️ **הרשימה הזאת חייבת להיות זהה ל-`glResidentKinds()` בכללי
+        האבטחה.** שם היא נאכפת; כאן היא נמנעת מלכתחילה.
+        `tools/test-finding32-timeline.js` משווה ביניהן. */
+  var GARDEN_LOG_RESIDENT_KINDS = {
+    "נפתח": 1, "שיבוץ": 1, "גרירה": 1, "הערה": 1, "החזרה": 1,
+    "ביטול ביצוע": 1, "ביצוע": 1, "סגירה": 1, "משוב": 1
+  };
+
+  /** שורת יומן. שגר ושכח — יומן שנכשל אינו מבטל פעולה שהצליחה.
+   *
+   *  🔴 **`familyId` על השורה — ממצא 32** (2026-09-22). כלל אבטחה
+   *  פועל על מסמך שלם ואינו יודע להצטלב לאוסף אחר, ולכן הדרך היחידה
+   *  לפתוח לתושב את ההיסטוריה של הדיווח שלו היא ששורת היומן תישא
+   *  בעצמה את מזהה המשפחה. שורה בלי `familyId` (משימת שגרה, איחוד)
+   *  לעולם אינה מגיעה לתושב — וזה הגבול, לא תופעת לוואי.
+   *
+   *  `opts`: `{familyId}` כשהכותב הוא התושב עצמו, או `{repId}`
+   *  כשהכותב הוא הצוות וצריך לשלוף את המשפחה מהדיווח. */
+  function gardenLogAppend(taskId, kind, note, opts) {
     try {
       var uid = (CBA.fb && CBA.fb.uid && CBA.fb.uid()) || "";
       if (!uid) return;
-      var id = String(taskId) + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-      CBA.fb.createDoc("gardenLog", id, {
-        taskId: String(taskId), kind: String(kind || ""),
-        actorUid: uid, note: String(note || ""),
-        at: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date(), schema: 1
-      }, function () {});
+      opts = opts || {};
+      var fid = String(opts.familyId == null ? "" : opts.familyId).trim();
+      var repId = String(opts.repId == null ? "" : opts.repId).trim();
+
+      function write(familyId) {
+        var id = String(taskId) + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+        var doc = {
+          taskId: String(taskId), kind: String(kind || ""),
+          actorUid: uid, note: String(note || ""),
+          at: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date(), schema: 1
+        };
+        /* ⚠️ שדה ריק אינו נכתב בכלל. `myFamilyId()` מחזירה `''` למי
+           שאינו חבר, ושורה עם `familyId: ""` היתה נקראת ע"י הכלל
+           כ-`'' == ''` — כלומר נפתחת לכולם. אותה מלכודת בדיוק
+           כמו ב-`canSeeFamilyTx`.
+           🔴 **וסוג פנימי אינו נחתם כלל** — ר' GARDEN_LOG_RESIDENT_KINDS. */
+        if (familyId && GARDEN_LOG_RESIDENT_KINDS[String(kind || "")]) {
+          doc.familyId = String(familyId);
+        }
+        CBA.fb.createDoc("gardenLog", id, doc, function () {});
+      }
+
+      if (fid) return write(fid);
+      /* 🔑 **הקריאה הזאת אינה מאטה שום פעולה.** `gardenLogAppend` היא
+         שגר-ושכח מלכתחילה: המסמך כבר נכתב, הפעולה כבר קיימת, ואיש
+         אינו ממתין ליומן. לכן שליפת המשפחה מהדיווח יושבת דווקא כאן
+         ולא במסלול הפעולה עצמה. */
+      if (repId) {
+        return CBA.fb.readDoc("gardenReports", repId, function (e, rep) {
+          write((rep && rep.familyId) || "");
+        });
+      }
+      write("");
     } catch (e) {}
+  }
+
+  /* ==========================================================================
+   *  🔴 ממצא 32 — קו הזמן של התושב   (2026-09-22)
+   * --------------------------------------------------------------------------
+   *  **שאילתה לפי `familyId` ולא לפי `taskId`, ובכוונה.** הכלל
+   *  שפותח את היומן לתושב מותנה במזהה המשפחה שעל השורה — שאילתה
+   *  בלי המסנן הזה נדחית לפני שנקרא מסמך אחד. היתרון הנלווה: קריאה
+   *  אחת לכל המסך במקום קריאה לכל דיווח.
+   *
+   *  ⚠️ **אין נפילה לאחור ל-Apps Script**, וזו החלטה. אין שם פעולה
+   *     שמחזירה יומן לתושב — `gardenTaskLog` דורשת הרשאת גינון —
+   *     ולכן כשל מחזיר `ok:false`, והמסך אומר "לא הצלחנו לטעון את
+   *     העדכונים" במקום כרטיס שנראה כאילו לא קרה בו כלום.
+   * ======================================================================== */
+  function gardenMyLogRead(cb) {
+    var fid = String(((window.CBA && CBA.user) || {}).familyId || "").trim();
+    /* בלי מזהה משפחה אין שאילתה חוקית — והכלל היה דוחה אותה ממילא.
+       ⚠️ `ok:true` ולא שגיאה: "אין לי משפחה" אינו כשל טעינה. */
+    if (!fid) return cb({ ok: true, rows: [] });
+    if (!CBA.fb || !CBA.fb.queryCollection) return cb({ ok: false, error: "no-sdk" });
+    try {
+      /* 🔴 **`userReady` ולא קריאה מיידית** — אותה מלכודת של ממצא 02:
+         ההתחברות ל-Firebase נדחית בכוונה חמש שניות אחרי המטען, ולכן
+         בדפדפן חדש שאילתה מיידית נדחית ב-`permission-denied` והתושב
+         היה רואה "לא הצלחנו לטעון" בדיוק בכניסה הראשונה שלו. */
+      var ready = (CBA.fb.userReady || CBA.fb.authReady);
+      ready.call(CBA.fb, function (user) {
+        if (!user) return cb({ ok: false, error: "no-user" });
+        CBA.fb.ensureDb(function (dbErr) {
+          if (dbErr) return cb({ ok: false, error: "db" });
+          CBA.fb.queryCollection("gardenLog", [["familyId", fid]], function (err, rows) {
+            if (err) return cb({ ok: false, error: "firestore" });
+            var out = (rows || []).slice().sort(function (a, b) {
+              return gardenDateOf(a.at) - gardenDateOf(b.at);
+            });
+            cb({ ok: true, rows: out });
+          });
+        });
+      });
+    } catch (e) { cb({ ok: false, error: "no-log" }); }
   }
 
   /** 🔴 השלמת תמונות לדיווח שכבר הוגש. ר' מסך resGardenPhotos. */
@@ -3733,6 +3834,7 @@ CBA.data = (function () {
       }, cb);
     },
     getMyGardenReports: myGardenReportsRead,
+    getMyGardenLog: gardenMyLogRead,
     /* ⚠️ postReadProgress ולא postRead, משתי סיבות (2026-09-14):
        (א) **הגנת beforeunload.** ל-postRead אין אחת, ולכן תושב שסגר/רענן את
            הדף באמצע שליחה איבד את הדיווח **בשקט** — בלי שורה בגיליון ובלי

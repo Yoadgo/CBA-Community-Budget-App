@@ -73,7 +73,14 @@ ok('gardenFsTask קיימת', !!eng);
 ok('🔴 סגירה כותבת חותמת זמן ולא מחרוזת — בלעדיה חלון הערעור לא ניתן לאכיפה',
    /patch\.approvedAt = CBA\.fb\.serverNow/.test(eng), eng);
 ok('⚠️ "שבוע מקורי" נכתב פעם אחת בלבד', /if \(!cur\.firstWeek\) patch\.firstWeek = cur\.week;/.test(eng), eng);
-ok('⚠️ ושיבוץ ראשון בלבד שולח מייל', /if \(!cur\.week && isReport\) notify = "GARDEN_PLANNED";/.test(eng), eng);
+/* 🔴 **עודכן 22.9 — ממצא 32.** עד כאן שיבוץ ראשון היה האירוע
+   היחיד שהגיע לתושב, ושיבוץ מחדש קרה בשקט. הבדיקה נשארת בגל 3
+   כי היא זו שתתפוס אם מישהו יחזיר את הענף הבודד. */
+ok('⚠️ שיבוץ ראשון — "נכנס לתוכנית העבודה"',
+   /if \(!cur\.week\) notify = "GARDEN_PLANNED";/.test(eng), eng);
+ok('🔴 ושיבוץ מחדש לשבוע אחר — "שינוי מועד" (ממצא 32)',
+   /else if \(String\(cur\.week\) !== wk\) notify = "GARDEN_RESCHEDULED";/.test(eng), eng);
+ok('⚠️ ושניהם רק על דיווח תושב', /if \(isReport\) \{\n          if \(!cur\.week\)/.test(eng), eng);
 ok('🔴 permission-denied מתורגם למשפט בעברית ולא נזרק כמו שהוא',
    /permission-denied/.test((DS.match(/function gardenFsErr[\s\S]*?\n  \}/) || [''])[0]));
 ok('היומן נרשם אחרי שהכתיבה הצליחה, לא לפניה',

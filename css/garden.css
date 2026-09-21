@@ -1177,3 +1177,34 @@
   color: var(--text-soft);
   text-align: center;
 }
+
+/* ==========================================================================
+   🔴 ממצא 32 — "מה קרה עם הדיווח"   (2026-09-22)
+   --------------------------------------------------------------------------
+   קו הזמן של התושב. ⚠️ **מקופל כברירת מחדל ובכוונה**: הכרטיס נשאר
+   באותו גובה, והשורה הפתוחה מראה את האירוע האחרון — כלומר גם מי
+   שלא פותח רואה שמשהו קרה, וזה בדיוק מה שחסר היה.
+   ⚠️ <details> ולא מודאל: נגיש מהמקלדת, נפתח בלי שורת JS אחת, ואין
+      בו את מלכודת המודאל הכפול של ממצא 23.
+   ========================================================================== */
+.gd-tl { margin-top: 8px; border-top: 1px dashed rgba(17,24,39,.08); padding-top: 7px; }
+.gd-tl > summary { list-style: none; cursor: pointer; display: flex; gap: 6px;
+  align-items: baseline; flex-wrap: wrap; font-size: 12px; }
+.gd-tl > summary::-webkit-details-marker { display: none; }
+.gd-tl > summary span { color: var(--text-soft, #6B7280); }
+.gd-tl > summary b { font-weight: 600; color: #374151; }
+/* החץ בקצה הלוגי — RTL מטפל בכיוון לבד. */
+.gd-tl > summary::after { content: "⌄"; margin-inline-start: auto;
+  color: var(--text-soft, #9CA3AF); transition: transform .18s ease; }
+.gd-tl[open] > summary::after { transform: rotate(180deg); }
+.gd-tl__r { display: flex; gap: 8px; margin-top: 9px; }
+.gd-tl__r:first-of-type { margin-top: 10px; }
+.gd-tl__r > svg { width: 13px; height: 13px; flex: none; margin-top: 3px;
+  color: var(--text-soft, #9CA3AF); }
+.gd-tl__r > div { min-width: 0; }
+.gd-tl__r b { display: block; font-size: 12.5px; font-weight: 600; color: #374151; }
+.gd-tl__r span { display: block; font-size: 12.5px; color: #4B5563; line-height: 1.5;
+  margin-top: 2px; overflow-wrap: anywhere; }
+.gd-tl__r em { display: block; font-style: normal; font-size: 11px;
+  color: var(--text-soft, #9CA3AF); margin-top: 2px; }
+.gd-tl--err { font-size: 12px; color: var(--text-soft, #6B7280); }

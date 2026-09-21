@@ -282,6 +282,64 @@
     return d.getDate() + "." + (d.getMonth() + 1);
   }
 
+  /* ==========================================================================
+   *  🔴 ממצא 32 — "מה קרה עם הדיווח"   (2026-09-22)
+   * --------------------------------------------------------------------------
+   *  עד היום התושב ראה שני אירועים בלבד — פתיחה וסגירה — וכל מה
+   *  שביניהם (שיבוץ, דחייה לשבוע אחר, ביטול, עדכון מהצוות) קרה
+   *  בשקט מוחלט. מבחינת מי שדיווח לפני שבועיים, המסך אמר בדיוק
+   *  מה שהוא אמר ביום הראשון.
+   *
+   *  🔑 **המילון הזה הוא הגבול, לא עיצוב.** מה שאינו כאן אינו מוצג
+   *  לתושב: "חסימה" ו"דגל" הן פעולות פנימיות של הצוות (הכרעת יועד,
+   *  22.9), ו"איחוד" נושאת מזהי משימות פנימיים ויש לה כרטיס ומייל
+   *  משלה.
+   *
+   *  ⚠️ **ההערה הגולמית אינה מוצגת כמות שהיא.** שורת "שיבוץ" נכתבת
+   *     כ-`2026-09-20 ← 2026-09-27` — מחרוזת פנימית. מוציאים ממנה
+   *     את השבוע, ומה שנשאר אחרי הסרת התאריכים הוא הטקסט החופשי.
+   * ======================================================================== */
+  var TL_KINDS = {
+    "נפתח":        { t: "הדיווח התקבל",         i: "plus" },
+    "שיבוץ":       { t: "נכנס לתוכנית העבודה",  i: "clock", w: 1, n: 1 },
+    "גרירה":       { t: "הטיפול נדחה",           i: "clock", w: 1, n: 1 },
+    "הערה":        { t: "עדכון מהצוות",          i: "list",  n: 1 },
+    "החזרה":       { t: "הוחזר לצוות להשלמה",    i: "back",  n: 1 },
+    "ביטול ביצוע": { t: "הטיפול נפתח מחדש",      i: "back" },
+    "ביצוע":       { t: "סומן כבוצע",            i: "check" },
+    "סגירה":       { t: "הטיפול הסתיים",         i: "check" },
+    "משוב":        { t: "שלחת משוב",             i: "send",  n: 1 }
+  };
+
+  /* השבוע החדש הוא מה שאחרי החץ. נפילה לאחור לתאריך הראשון
+     שנמצא — שורה שנכתבה ידנית בגיליון לא אמורה לרוקן את השורה. */
+  function tlWeek(note) {
+    var t = String(note || "");
+    var after = t.indexOf("←") >= 0 ? t.slice(t.indexOf("←") + 1) : t;
+    var m = after.match(/(\d{4})-(\d{2})-(\d{2})/) || t.match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (Number(m[3]) + "." + Number(m[2])) : "";
+  }
+
+  function tlText(row, k) {
+    var note = String(row.note || "").trim();
+    var out = [];
+    if (k.w) {
+      var wk = tlWeek(note);
+      if (wk) out.push("שבוע " + wk);
+      note = note.replace(/(\d{4})-(\d{2})-(\d{2})/g, "").replace(/←/g, "")
+                 .replace(/^[\s—–-]+/, "").replace(/[\s—–-]+$/, "").trim();
+    }
+    if (k.n && note) out.push(note);
+    return out.join(" · ");
+  }
+
+  function tlDate(v) {
+    if (!v) return "";
+    var d = (v && typeof v.toDate === "function") ? v.toDate() : new Date(v);
+    if (!d || isNaN(d.getTime())) return "";
+    return d.getDate() + "." + (d.getMonth() + 1);
+  }
+
   /* מטא (קטגוריות/אזורים) נטען פעם אחת ונשמר — הוא כמעט לא משתנה, ואין
      סיבה לבקש אותו מהשרת בכל מעבר בין שני המסכים. */
   var META = null;
@@ -315,6 +373,10 @@
 
       var listEl = container.querySelector("#gd-list");
       var all = [], filter = "all", loadErr = false;
+      /* ממצא 32 — קו הזמן. `logErr` נפרד מ-`loadErr`: כשל בטעינת
+         היומן אינו מוחק את הדיווחים מהמסך, הוא רק מחליף את הבלוק
+         בשורה שאומרת שלא הצלחנו. */
+      var logRows = [], logErr = false;
 
       function counts() {
         var open = 0, wait = 0, done = 0;
@@ -529,6 +591,7 @@
                       ? '<div class="gd-rep__closed"><span>' +
                         esc(r.closeWhy) + '</span></div>' : '')
                   : ''))) +
+            timeline(r) +
             /* ⚠️ 2026-09-09 — קודם השאלה הוצגה גם על דיווח שנסגר בלי טיפול
                ("לא נפתח טיפול · בוטל"), כלומר ביקשנו מהתושב לדרג עבודה שלא
                נעשתה. משוב הוא על ביצוע; סגירה בלי ביצוע היא החלטה, ואם היא
@@ -539,6 +602,35 @@
                 '<button type="button" class="n" data-fb="n" data-id="' + esc(r.id) + '">לא הושלם</button></div>'
               : (r.feedback ? '<div class="gd-rep__merged">המשוב שלך: ' + esc(r.feedback) + '</div>' : '')) +
           '</div></article>';
+      }
+
+      /* 🔴 ממצא 32 — קו הזמן של הדיווח, בשפה של מי שדיווח.
+         ⚠️ **מתחת לשתי שורות לא מציגים כלום.** שורה אחת היא תמיד
+            "הדיווח התקבל", וזה כבר כתוב בכרטיס ("דווח ב-..."). קו
+            זמן של פריט אחד הוא רעש, לא מידע. */
+      function timeline(r) {
+        var tid = String(r.taskId || "").trim();
+        if (!tid) return "";
+        if (logErr) {
+          return '<div class="gd-tl gd-tl--err">לא הצלחנו לטעון את העדכונים.</div>';
+        }
+        var rows = logRows.filter(function (x) {
+          return String(x.taskId || "") === tid && TL_KINDS[String(x.kind || "")];
+        });
+        if (rows.length < 2) return "";
+        var last = TL_KINDS[String(rows[rows.length - 1].kind || "")];
+        return '<details class="gd-tl"><summary>' +
+            '<span>מה קרה עם הדיווח</span><b>' + esc(last.t) + '</b>' +
+          '</summary>' +
+          rows.map(function (x) {
+            var k = TL_KINDS[String(x.kind || "")];
+            var extra = tlText(x, k);
+            return '<div class="gd-tl__r">' + ico(k.i) +
+              '<div><b>' + esc(k.t) + '</b>' +
+              (extra ? '<span>' + esc(extra) + '</span>' : '') +
+              '<em>' + esc(tlDate(x.at)) + '</em></div></div>';
+          }).join("") +
+        '</details>';
       }
 
       /* מחיקת דיווח על ידי מי שכתב אותו. הטקסט אומר במפורש מה יורד ומה
@@ -580,14 +672,33 @@
       }
 
       function load() {
+        /* 🔴 **שתי השאילתות יוצאות יחד ולא בזו אחר זו** (ממצא 32).
+           שתיהן שאילתות שוויון ל-Firestore באותו חיבור; סדרתי היה
+           מכפיל את זמן הנחיתה של המסך בשביל בלוק משני. */
+        var gotReports = false, gotLog = false;
+        function maybeDraw() { if (gotReports && gotLog) draw(); }
+
         CBA.data.getMyGardenReports(function (res) {
           /* ⚠️ כשל רשת אינו "אין דיווחים" (2026-09-09). קודם שניהם הובילו
              לאותו מסך — "עדיין לא דיווחת על כלום" — ותושב שדיווח אתמול על
              עץ שנפל ראה שהמערכת שכחה אותו. */
           loadErr = !(res && res.ok);
           all = loadErr ? [] : (res.rows || []);
-          draw();
+          gotReports = true;
+          maybeDraw();
         });
+
+        if (CBA.data.getMyGardenLog) {
+          CBA.data.getMyGardenLog(function (res) {
+            logErr = !(res && res.ok);
+            logRows = (res && res.rows) || [];
+            gotLog = true;
+            maybeDraw();
+          });
+        } else {
+          /* לקוח ישן במטמון — הכרטיס פשוט לא מציג קו זמן. */
+          logErr = false; logRows = []; gotLog = true;
+        }
       }
       withMeta(function () { load(); });
     }

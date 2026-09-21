@@ -532,10 +532,17 @@ service cloud.firestore {
        ⚠️ **הנמענים אינם נשלחים מהדפדפן ולעולם לא יישלחו** — השרת
           שולף אותם מטאב התושבים לפי `familyId` של הדיווח. זה הקו
           האדום: פרטים אישיים לעולם אינם עוברים בדפדפן. */
+    /* ⚠️ **הרשימה הזאת היא השומר האמיתי** — הדפדפן בוחר שם תבנית
+       והשרת שולח לפיה, ולכן שם שאינו ברשימה הוא הדרך לגרום לשרת
+       לשלוח לתושב תבנית שרירותית. `GARDEN_RESCHEDULED` ו-
+       `GARDEN_STATUS_NOTE` נוספו ב-22.9 (ממצא 32) וחייבות להופיע
+       גם ב-`GARDEN_TASK_TEMPLATES` ב-Code.gs — אחרת הדגל יירד
+       בשקט בלי שיצא מייל. */
     function gtNotifyOk() {
       return gtNext('notify') == '' ||
              ['GARDEN_COMPLETED', 'GARDEN_REPORT_DECLINED', 'GARDEN_PLANNED',
-              'GARDEN_REOPENED', 'GARDEN_REPORT_MERGED'].hasAny([gtNext('notify')]);
+              'GARDEN_REOPENED', 'GARDEN_REPORT_MERGED',
+              'GARDEN_RESCHEDULED', 'GARDEN_STATUS_NOTE'].hasAny([gtNext('notify')]);
     }
 
     /* השער המלא לעדכון של הצוות — כל השומרים ביחד. */
@@ -648,26 +655,79 @@ service cloud.firestore {
       return hasPerm('גינון') &&
              request.resource.data.keys().hasOnly(
                ['taskId', 'kind', 'field', 'from', 'to', 'actorUid',
-                'note', 'at', 'schema']) &&
+                'note', 'at', 'schema', 'familyId']) &&
              request.resource.data.keys().hasAll(['taskId', 'actorUid', 'at']) &&
              request.resource.data.actorUid == request.auth.uid;
     }
 
     /* 🔴 גם התושב רושם ביומן — הגשת דיווח ומשוב הן אירועים בהיסטוריה.
        אותה אכיפה על `actorUid`, ובלי אפשרות לגעת בשלב. */
+    function glNext(f) { return request.resource.data.get(f, ''); }
+
+    /* 🔴🔴 **הסוגים שתושב רשאי לראות — ברמת הכלל ולא ברמת המסך.**
+       (2026-09-22, ממצא 32.) המסך מסנן "חסימה" ו"דגל" החוצה, אבל
+       **מסך שמסנן אינו שומר**: מי שיפתח קונסולה ויריץ את השאילתה
+       בעצמו יראה כל שורה שהכלל מתיר. הצוות כותב "חסימה — צריך
+       קבלן" מתוך הנחה שזה פנימי, ולכן הגבול חייב לשבת כאן.
+       🔑 **שתי הגנות בלתי תלויות:** `gardenLogAppend` בלקוח אינו
+          חותם `familyId` על סוג פנימי מלכתחילה, והכלל הזה מסרב לו
+          גם אם מישהו יחתום בעתיד. אחת מהן מספיקה; שתיהן הן
+          האינווריאנטה.
+       ⚠️ "איחוד" אינו כאן — הטקסט שלו נושא מזהי משימות פנימיים,
+          ולתושב יש עליו כרטיס ומייל משלו. */
+    function glResidentKinds() {
+      return ['נפתח', 'שיבוץ', 'גרירה', 'הערה', 'החזרה',
+              'ביטול ביצוע', 'ביצוע', 'סגירה', 'משוב'];
+    }
+
     function glResidentCreateOk() {
       return isMember() && m().isExternal == false &&
              request.resource.data.keys().hasOnly(
                ['taskId', 'kind', 'field', 'from', 'to', 'actorUid',
-                'note', 'at', 'schema']) &&
+                'note', 'at', 'schema', 'familyId']) &&
              request.resource.data.keys().hasAll(['taskId', 'actorUid', 'at']) &&
              request.resource.data.actorUid == request.auth.uid &&
+             /* 🔴 **ורק המשפחה שלו** (2026-09-22, ממצא 32). בלי השורה
+                הזאת תושב יכול לחתום שורת יומן על המשפחה של השכן —
+                לא דליפה של נתוני אחרים, אבל הזרקת טקסט לקו הזמן שלהם.
+                ⚠️ ריק עדיין מותר: שורה בלי `familyId` אינה מגיעה
+                   לאיש, ולכן היא לא פרצה — והחלופה היתה לאבד שורת
+                   יומן בשקט בכל רגע שבו המשפחה עוד לא נטענה. */
+             (glNext('familyId') == '' ||
+              glNext('familyId') == myFamilyId()) &&
              (request.resource.data.kind == 'נפתח' ||
               request.resource.data.kind == 'משוב');
     }
 
+    /* ========================================================================
+     *  🔴 **התושב קורא את ההיסטוריה של הדיווח שלו**   (2026-09-22, ממצא 32)
+     * ------------------------------------------------------------------------
+     *  עד היום היומן היה כולו פנימי, ולתושב לא היה שום חיווי על מה
+     *  שקרה לדיווח שלו בין הפתיחה לסגירה — שיבוץ, דחייה וביטול קרו
+     *  בשקט מוחלט.
+     *
+     *  🔑 **הגבול הוא `familyId` שעל השורה עצמה, ולא הצטלבות לאוסף
+     *  אחר.** כלל פועל על מסמך שלם; `get()` על מסמך הדיווח היה עובד
+     *  על מסמך בודד אבל **נשבר בשאילתה** — מכסת קריאות הכלל היא
+     *  עשר, וקו זמן ארוך מזה היה מוחזר כשגיאה. לכן השורה נושאת את
+     *  המזהה בעצמה.
+     *
+     *  ⚠️ **`myFamilyId() != ''` הוא התנאי שמחזיק את כל השאר.** היא
+     *     מחזירה `''` למי שאינו חבר, ואז `'' == ''` היה פותח את כל
+     *     שורות היומן שאין להן משפחה. אותה מלכודת בדיוק כמו
+     *     ב-`canSeeFamilyTx`.
+     *
+     *  ⚠️ שורה בלי `familyId` — משימת שגרה, איחוד, פעולה פנימית —
+     *     אינה נקראת לעולם ע"י תושב. זה הגבול, לא תופעת לוואי.
+     * ====================================================================== */
+    function glResidentReadOk() {
+      return isMember() && myFamilyId() != '' &&
+             resource.data.get('familyId', '') == myFamilyId() &&
+             glResidentKinds().hasAny([resource.data.get('kind', '')]);
+    }
+
     match /gardenLog/{id} {
-      allow read: if canSeeGardenTasks();
+      allow read: if canSeeGardenTasks() || glResidentReadOk();
       allow create: if glCreateOk() || glResidentCreateOk();
       /* 🔴🔴 היסטוריה אינה משתכתבת. */
       allow update, delete: if false;
