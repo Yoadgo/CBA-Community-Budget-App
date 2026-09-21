@@ -256,6 +256,21 @@
         });
       }
 
+      /* 🔴 ממצא 26 — **שני מסלולי עדכון שלא הסכימו ביניהם.** השורה
+         התעדכנה נקודתית, אבל הכותרת ("19 משימות שגרה פעילות · 1 כבויות")
+         נבנית רק ב-`draw()` — ולכן המסך הראה שורה כבויה ומונה שאומר
+         שהכול פעיל, עד הרינדור המלא הבא.
+         ⚠️ **מעדכנים את הכותרת בלבד ולא קוראים ל-`draw()`**: רינדור
+            מלא היה בונה מחדש את כל השורות ובולע את הנפשת המתג שהמשתמש
+            הרגע לחץ עליו. */
+      function syncSummary() {
+        var el = root.querySelector(".gp-sum");
+        if (!el || !defs.length) return;
+        var on = defs.filter(function (x) { return x.active; }).length;
+        el.innerHTML = '<b>' + on + '</b> משימות שגרה פעילות' +
+          (defs.length - on ? ' <em>· ' + (defs.length - on) + ' כבויות</em>' : '');
+      }
+
       function toggle(d, btn) {
         if (busy) return;
         busy = true;
@@ -263,7 +278,13 @@
         d.active = next;
         btn.classList.toggle("off", !next);
         btn.setAttribute("aria-checked", next ? "true" : "false");
+        /* 🔴 ממצא 26 (2026-09-22) — **התווית לקורא המסך נשארה מאחור.**
+           היא נכתבת ברינדור לפי `d.active`, ולכן אחרי כיבוי היא עדיין
+           אמרה "כיבוי" עד הרינדור המלא הבא: קורא מסך הקריא את ההפך
+           ממה שקרה בפועל. */
+        btn.setAttribute("aria-label", next ? "כיבוי" : "הפעלה");
         btn.closest(".gp-row").classList.toggle("is-off", !next);
+        syncSummary();
         CBA.data.gardenPlanActive(d.id, next, function (res) {
           busy = false;
           if (res && res.ok) {

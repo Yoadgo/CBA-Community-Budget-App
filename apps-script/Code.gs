@@ -15695,7 +15695,14 @@ function handleGardenStats_(p) {
     var now = { open: 0, waiting: 0, dragged: 0, attention: 0, blocked: 0, closedThisWeek: 0 };
     tasks.forEach(function (t) {
       if (t.closure) {
-        if (t.week === thisWeek && t.closure === 'בוצע') now.closedThisWeek++;
+        /* 🔴 ממצא 25 (2026-09-22) — **כל סגירה, לא רק "בוצע".** התווית
+           אומרת "נסגרו" והמדידה אמרה "בוצעו": מנהל שסגר שתי משימות
+           כ"בוטל" ראה את המונה עומד על אפס, והסיק שלא נסגר כלום.
+           ⚠️ הבסיס הוא **השבוע של המשימה** ולא תאריך הסגירה — כלומר
+              "כמה מעבודת השבוע כבר ירדה מהשולחן", וזו גם השאלה שהאריח
+              יושב לידה ("פתוחות"). משימה משבוע שעבר שנסגרה היום אינה
+              נספרת כאן, וזה מכוון. */
+        if (t.week === thisWeek) now.closedThisWeek++;
         return;
       }
       now.open++;
