@@ -177,23 +177,10 @@
   var WEEK_ORDER = ["לשיבוץ · אין שבוע", "שבועות שעברו", "השבוע",
                     "שבוע הבא", "בהמשך"];
 
-  var SORTS = [
-    /* ⚠️ "שבוע" ראשון וברירת מחדל (9.9). הקיבוץ הזה הוא מה שהופך את ההבחנה
-       בין "יש שבוע" ל"אין שבוע" לגלויה במבט אחד — היא הייתה מוסתרת מאחורי
-       מסנן שהמשתמש היה צריך לדעת שהוא קיים. group מוגדר ב-render, כי הוא
-       תלוי בשבוע הנוכחי. */
-    { k: "week",  label: "שבוע",   group: "byWeek" },
-    { k: "area",  label: "אזור",   group: function (t) { return t.area || "ללא אזור"; } },
-    { k: "urgent", label: "דחיפות", group: null },
-    /* התווית היא "קטגוריה" ולא "סוג" בכוונה: מאז 7.9 העמודה "סוג" בגיליון
-       מחזיקה את *מקור* המשימה (שגרה / דיווח תושב / יזום), וכפתור סידור בשם
-       "סוג" שמקבץ לפי מדשאות-עצים-השקיה היה מתנגש בדיוק במונח הזה. */
-    { k: "type",  label: "קטגוריה", group: function (t) { return t.category || "ללא קטגוריה"; } }
-  ];
-  function sortDef(k) {
-    for (var i = 0; i < SORTS.length; i++) if (SORTS[i].k === k) return SORTS[i];
-    return SORTS[0];
-  }
+  /* ⚠️ 2026-09-21 — טבלת SORTS ו-sortDef() הוסרו. הבורר בוטל ב-9.9 ונעל
+     את הסידור על "שבוע", וארבע ההגדרות נשארו כאן שנתיים-חיים בלי קורא:
+     שלוש מהן לא היו נגישות מאף מסך, והרביעית הייתה קבוע. הקיבוץ היחיד
+     שנותר הוא weekGroup(), והוא משרת רק את הארכיון. */
 
   /* ============================================================================
    *  שני מסכים, קובץ אחד (2026-09-08)
@@ -226,12 +213,6 @@
       /* הסידור הוא גם הקיבוץ. ברירת המחדל היא שבוע, כי זו השאלה שהמסך הזה
          נכשל בה: "לא ברור שיש דברים לשבוע ויש דברים שצריך להכניס לשיבוץ".
          כשהקבוצה "לשיבוץ · אין שבוע" יושבת בראש אותה רשימה, אין מה להסביר. */
-      /* ⚠️ 2026-09-09 — הבורר בוטל ו-sortBy נעול על "week". הוא עדיין מקבץ
-         את "סגורות" (ארכיון לפי שבוע); תצוגת העבודה קיבלה מבנה קבוע משלה
-         (openBody), ו"להחלטתך" מקובץ לפי סוג ההחלטה. ארבע דרכים לסדר את אותה
-         רשימה היו שאלה שאיש לא שאל, והן גם גרמו לשדות להיעלם מהכרטיס לפי
-         הסידור — כך שאותה משימה נראתה אחרת בכל מיון. */
-      var sortBy = "week";
       var isManager = false, busy = false;
       /* ⚠️ `busy` הוא נעילה **גלובלית** למסך, והיא נכונה רק לפעולות שנפתחות
          מדיאלוג (איחוד, סגירה, אישור מרוכז) — שם ממילא אי אפשר להתחיל שנייה
@@ -317,9 +298,13 @@
       }
 
       function counts() {
-        var c = { mine: 0, open: 0, closed: 0, weekTotal: 0, weekDone: 0 };
+        var c = { mine: 0, open: 0, closed: 0, faults: 0, weekTotal: 0, weekDone: 0 };
         rowsAll.forEach(function (t) {
           if (isMine(t)) c.mine++;
+          /* ⚠️ המונה הזה סופר **את כל** דיווחי התושבים — פתוחים, משובצים
+             וסגורים, מכל השבועות. זו כל הנקודה של המסנן: מקום אחד שבו
+             אפשר לענות "מה קרה עם התקלה שדיווחתי" בלי לדפדף בשבועות. */
+          if (t.kind === GK_REPORT) c.faults++;
           if (t.closure) c.closed++; else c.open++;
           /* פס ההתקדמות נשאר של **השבוע הנוכחי** — הוא עונה על "איך אנחנו
              עומדים השבוע", ולא על "כמה משימות יש בעולם". נמדד בסגורות ולא
@@ -333,6 +318,7 @@
         return rowsAll.filter(function (t) {
           if (justActed[t.id]) return true;      // ר' ההערה ליד justActed
           if (filter === "mine") return isMine(t);
+          if (filter === "faults") return t.kind === GK_REPORT;
           if (filter === "closed") return !!t.closure;
           return !t.closure;
         });
@@ -372,14 +358,15 @@
            הצוות, ורק האישור סוגר. עד 8.9 הפס מדד את ההצהרות, כלומר קפץ
            קדימה ברגע שהגנן סימן — וחזר אחורה ברגע שהמנהל אישר. */
         var pct = c.weekTotal ? Math.round((c.weekDone / c.weekTotal) * 100) : 0;
-        var s = sortDef(sortBy);
-        var grp = s.group === "byWeek" ? weekGroup : s.group;
+        /* ⚠️ 2026-09-21 — בורר הסידור ירד לגמרי. הוא היה נעול על "שבוע"
+           מאז 9.9, ושלושת המסלולים האחרים (דחיפות / אזור / קטגוריה) נשארו
+           בקוד כענפים שאיש לא יכול היה להגיע אליהם — כולל תנאים בתוך
+           הכרטיס עצמו שהסתירו שדות "לפי הסידור". קיבוץ אחד, קבוע. */
+        var grp = weekGroup;
         var list = visible().slice();
 
         list.sort(function (a, b) {
-          if (sortBy === "urgent") return urgency(b) - urgency(a);
-          if (sortBy === "date") return String(a.due || a.week).localeCompare(String(b.due || b.week));
-          var ga = grp ? grp(a) : "", gb = grp ? grp(b) : "";
+          var ga = grp(a), gb = grp(b);
           if (ga !== gb) return groupRank(ga) - groupRank(gb) || ga.localeCompare(gb, "he");
           return urgency(b) - urgency(a);
         });
@@ -390,7 +377,10 @@
             '<div class="skeleton" style="height:86px;border-radius:16px"></div>'.repeat(3) + '</div>';
         } else if (!list.length) {
           body = CBA.ui.emptyState(
-            filter === "mine"
+            filter === "faults"
+              ? { title: "אין תקלות מתושבים",
+                  sub: "כשתושב ידווח על משהו — הדיווח יופיע כאן, ויישאר כאן גם אחרי שיטופל." }
+            : filter === "mine"
               ? { title: "אין מה לטפל",
                   sub: isManager
                     ? "כשהצוות יסמן משימה כבוצעה, או כשתושב יגיב על טיפול — זה יופיע כאן."
@@ -419,7 +409,10 @@
         } else if (filter === "open") {
           /* תצוגת העבודה — מבנה קבוע. ר' openBody(). */
           body = openBody(list);
-        } else if (grp) {
+        } else if (filter === "faults") {
+          /* כל תקלות התושבים, לפי מצב ולא לפי שבוע. ר' faultsBody(). */
+          body = faultsBody(list);
+        } else {
           var groups = [], seen = {};
           list.forEach(function (t) {
             var g = grp(t);
@@ -428,17 +421,10 @@
           });
           body = groups.map(function (g) {
             var n = seen[g].length;
-            /* בסידור לפי קטגוריה השבב ירד מהכרטיסים, אז הכותרת נושאת את
-               הצבע במקומם — נקודה קטנה בצבע הקטגוריה. בסידור לפי אזור אין
-               לכותרת צבע, כי לאזור אין צבע בשום מקום אחר במסך. */
-            var dot = sortBy === "type"
-              ? '<span class="gt-grp__d k-' + catOf(g).key + '"></span>' : '';
-            return '<div class="gt-grp">' + dot + esc(g) +
+            return '<div class="gt-grp">' + esc(g) +
               ' <em>· ' + (n === 1 ? "משימה אחת" : n + " משימות") + '</em><hr></div>' +
               '<div class="gd-reps">' + seen[g].map(card).join("") + '</div>';
           }).join("");
-        } else {
-          body = '<div class="gd-reps" style="margin-top:10px">' + list.map(card).join("") + '</div>';
         }
 
         /* אין כותרת מסך (2026-09-08). הסמליל והכותרת "משימות השבוע" החזיקו
@@ -481,6 +467,10 @@
                  שממתין להחלטתו, ואצל הגנן מה שלא שובץ ומה שהוחזר אליו. */
               seg("mine", GL.mineLabel(isManager), c.mine) +
               seg("open", "פתוחות", c.open) +
+              /* 🔴 מסנן רביעי (2026-09-21, בקשת יועד): "מקום שיהיה אפשר
+                 לראות בו את כל התקלות דייר — לא שובצו, משובצות, טופלו
+                 ומכל השבועות". זה אותו מנגנון מסנן ולא מסך חדש. */
+              seg("faults", "תקלות דיירים", c.faults) +
               seg("closed", "סגורות", c.closed) +
             '</div>' +
             (isManager
@@ -532,28 +522,35 @@
          כי "כבר בתוכנית" הייתה הקוראת האחרונה שלה. */
 
       /* ==========================================================================
-       *  תצוגת העבודה — שני מסלולים (2026-09-09, גל 2)
+       *  תצוגת העבודה — שלוש שכבות (2026-09-21, הכרעת יועד)
        * --------------------------------------------------------------------------
-       *  מה היה: רשימה אחת עם 31 משימות, מהן 27 שגרה ו-4 דיווחי תושבים, וההבדל
-       *  ביניהן היה כיתוב "דיווח 3" בגודל 11px ופס צבע בשפת הכרטיס. מי שסורק את
-       *  הרשימה בשטח פשוט לא רואה את התקלות. (נמדד בייצור 9.9.)
+       *  ההיררכיה: **החלטות ← השבוע ← בהמשך**. שלוש שכבות, כרונולוגיות.
        *
-       *  מה יש עכשיו — מבנה קבוע, לא העדפת תצוגה:
-       *   1. "תקלות שדווחו" — **תמיד ראשון ותמיד מוצג, גם כשהוא ריק**. מאחורי כל
-       *      שורה כאן עומד תושב שמחכה. אפס כאן הוא תשובה טובה, לא רעש.
-       *   2. "עבודת השבוע" — שגרה ויזום, **מקובצות לפי אזור**. הגנן לא עובד לפי
-       *      סוג עבודה אלא לפי מקום: הוא נוסע לשכונה ועושה בה את הכול. ברשימה
-       *      לפי שבוע "כיסוח מדשאות" הופיע חמש פעמים ברצף עם חמישה אזורים
-       *      שונים בטקסט אפור — קיר של שורות זהות.
-       *   3. "לשיבוץ" ו"בהמשך" — רק כשיש בהן משהו, ותמיד בסוף.
+       *   1. "ממתין להחלטה" — כרטיס רקע נפרד בראש העמוד, **תמיד מוצג גם כשהוא
+       *      ריק**. בתוכו כל מה שאין לו שבוע: דיווחי תושבים שטרם שובצו, ואחריהם
+       *      שגרה. עד 20.9 אלה היו שני מסלולים — "תקלות שדווחו" ו"לשיבוץ" —
+       *      ששאלו בדיוק את אותה שאלה ונקראו כשתי רשימות נפרדות.
+       *   2. "עבודת השבוע" — כל מה שמשובץ לשבוע שצופים בו, **מקובץ לפי אזור**.
+       *      הגנן לא עובד לפי סוג עבודה אלא לפי מקום: הוא נוסע לשכונה ועושה בה
+       *      את הכול.
+       *      ⚠️ **דיווח תושב ששובץ יושב כאן ולא למעלה** — זו כל הנקודה של
+       *      השיבוץ. עד 20.9 הוא נשלף החוצה לפי `kind` בלי קשר לשבוע, ולכן
+       *      השיבוץ כתב נתון ולא הזיז דבר על המסך.
+       *      הזיהוי שלו נשאר מיידי: דגל בורדו בפינה + תג "תושב" + פס מקוטע.
+       *   3. "בהמשך" — מה שמשובץ לשבועות הבאים. רק כשיש בו משהו.
        *
-       *  ⚠️ המבנה אינו תלוי בבורר סידור, כי הבורר בוטל: כשהמבנה עצמו עונה על
-       *     "מה עכשיו ואיפה", ארבע דרכים לסדר את אותה רשימה הן שאלה שאיש לא שאל.
        *  ⚠️ חל על מסנן "פתוחות" בלבד. "להחלטתך" מקובץ לפי סוג ההחלטה
-       *     (approvalBody), ו"סגורות" הוא ארכיון — לשניהם מבנה משלהם.
+       *     (approvalBody), "תקלות דיירים" לפי מצב (faultsBody), ו"סגורות"
+       *     הוא ארכיון לפי שבוע — לשלושתם מבנה משלהם.
        * ======================================================================== */
       function areaRank(name) {
         var i = (order.area || []).indexOf(name);
+        return i === -1 ? 9999 : i;
+      }
+      /* אותו כלל לקטגוריות: הסדר שבטאב ההגדרות, לא א"ב. משמש את כרטיס
+         "ממתין להחלטה" — שם הקיבוץ הפנימי הוא לפי קטגוריה. */
+      function catRank(name) {
+        var i = (order.type || []).indexOf(name);
         return i === -1 ? 9999 : i;
       }
       function lane(label, n) {
@@ -563,40 +560,47 @@
       function openBody(list) {
         var byUrg = function (a, b) { return urgency(b) - urgency(a); };
         var weekIsNow = week === todayKey();
-        var reports = [], thisWeek = [], toPlan = [], later = [];
+        var decide = [], thisWeek = [], later = [];
         list.forEach(function (t) {
-          if (t.kind === GK_REPORT) return reports.push(t);
-          if (!t.week) return toPlan.push(t);
+          /* 🔴 **אין שבוע = ממתין להחלטה** (2026-09-21). קודם דיווח תושב
+             נשלף החוצה לפי `kind` בלי קשר לשבוע — ולכן דיווח **ששובץ**
+             נשאר בראש המסך במקום לרדת לעבודת השבוע, והשיבוץ לא הזיז דבר
+             על המסך. זו הייתה הסתירה שיועד זיהה: "אין שום סיבה לשבץ".
+             מהיום השיבוץ הוא מה שמעביר את הכרטיס מלמעלה לשבוע שלו. */
+          if (!t.week) return decide.push(t);
           /* שבוע שעבר נכנס ל"עבודת השבוע" ולא לקבוצה משלו: מבחינת הגנן זו
-             עבודה שצריך לעשות עכשיו. האיחור עצמו כבר כתוב על הכרטיס (תג
-             "נגררה" ומונה הגרירות), ולכן הוא לא צריך כותרת נפרדת.
-
-             🔴🔴 **אבל רק כשצופים בשבוע הנוכחי** (2026-09-21). עם החצים,
-             `<=` הפך למלכודת: דפדוף לשבוע הבא היה גורר אליו **גם את כל
-             הפיגור מהעבר**, תחת כותרת שאומרת "עבודת השבוע" — כותרת
-             שמשקרת. בשבוע עתידי מציגים בדיוק את מה שמשובץ אליו.
-             ⚠️ מה שמוקדם יותר אינו נעלם — כפתור "היום" יושב בכותרת. */
+             עבודה שצריך לעשות עכשיו. האיחור עצמו כבר כתוב על הכרטיס.
+             ⚠️ **אבל רק כשצופים בשבוע הנוכחי** — בשבוע עתידי מציגים בדיוק
+             את מה שמשובץ אליו, אחרת הכותרת משקרת. */
           if (weekIsNow ? (t.week <= week) : (t.week === week)) return thisWeek.push(t);
           if (t.week > week) later.push(t);
         });
-        reports.sort(byUrg); toPlan.sort(byUrg); later.sort(byUrg);
+        /* בתוך "ממתין להחלטה": דיווחי תושבים ראשונים — מאחורי כל אחד מהם
+           עומד אדם שמחכה — ואחריהם שגרה. בכל קבוצה לפי סדר הקטגוריות
+           שבהגדרות, ובתוך קטגוריה לפי דחיפות. */
+        decide.sort(function (a, b) {
+          var ra = a.kind === GK_REPORT ? 0 : 1, rb = b.kind === GK_REPORT ? 0 : 1;
+          if (ra !== rb) return ra - rb;
+          var ca = a.category || "", cb = b.category || "";
+          if (ca !== cb) return catRank(ca) - catRank(cb) || ca.localeCompare(cb, "he");
+          return urgency(b) - urgency(a);
+        });
+        later.sort(byUrg);
 
-        var html = lane("תקלות שדווחו", reports.length) +
-          (reports.length
-            ? '<div class="gd-reps">' + reports.map(card).join("") + '</div>'
-            : '<div class="gt-none">אין תקלות פתוחות מהתושבים.</div>');
+        /* 🔴 **כרטיס רקע אחד בראש העמוד** (2026-09-21, הכרעת יועד).
+           קודם ישבו כאן שני מסלולים — "תקלות שדווחו" ו"לשיבוץ" — ששאלו
+           בדיוק את אותה שאלה ("מה צריך החלטה") ונקראו כשתי רשימות נפרדות.
+           תמיד מוצג, גם ריק: מסלול שנעלם כשהוא מתרוקן מלמד לא להסתכל. */
+        var html = '<section class="gt-decide">' +
+          lane("ממתין להחלטה", decide.length) +
+          (decide.length
+            ? '<div class="gd-reps">' +
+                decide.map(function (t) { return card(t); }).join("") + '</div>'
+            : '<div class="gt-none">אין מה להחליט — כל מה שפתוח כבר משובץ לשבוע.</div>') +
+          '</section>';
 
-        /* 🔴 **"לשיבוץ" עלה לראש המסך** (2026-09-21, הכרעת יועד).
-           קודם הוא ישב **אחרי** עבודת השבוע — כלומר משימה שאיש עוד
-           לא החליט עליה היתה מתחת לכל העבודה שכבר מסודרת.
-           החלטה שממתינה קודמת לעבודה שכבר יש לה שבוע. */
-        if (toPlan.length) {
-          html += lane("לשיבוץ", toPlan.length) +
-            '<div class="gd-reps">' + toPlan.map(card).join("") + '</div>';
-        }
-
-        /* ⚠️ הכותרת אומרת את האמת: "עבודת השבוע" רק כשזה באמת
-           השבוע הזה. אחרת — שם השבוע שצופים בו. */
+        /* ⚠️ הכותרת אומרת את האמת: "עבודת השבוע" רק כשזה באמת השבוע הזה.
+           אחרת — שם השבוע שצופים בו. */
         html += lane(weekIsNow ? "עבודת השבוע" : ("עבודת " + weekLabel(week)),
                      thisWeek.length);
         if (!thisWeek.length) {
@@ -614,7 +618,11 @@
             return areaRank(a) - areaRank(b) || a.localeCompare(b, "he");
           });
           html += areas.map(function (a) {
-            seen[a].sort(byUrg);
+            /* דיווח תושב ראשון גם כאן, מאותו נימוק. */
+            seen[a].sort(function (x, y) {
+              var rx = x.kind === GK_REPORT ? 0 : 1, ry = y.kind === GK_REPORT ? 0 : 1;
+              return (rx - ry) || urgency(y) - urgency(x);
+            });
             return '<div class="gt-grp gt-grp--sub">' + esc(a) +
               ' <em>· ' + seen[a].length + '</em><hr></div>' +
               '<div class="gd-reps">' +
@@ -625,21 +633,70 @@
 
         if (later.length) {
           html += lane("בהמשך", later.length) +
-            '<div class="gd-reps">' + later.map(card).join("") + '</div>';
+            '<div class="gd-reps">' + later.map(function (t) { return card(t); }).join("") + '</div>';
         }
         return html;
       }
 
-      /* מיקום קבוצה בסדר שהוגדר בהגדרות. לא נמצא -> לסוף הרשימה. */
-      function groupRank(name) {
-        /* קיבוץ לפי שבוע הוא סדר קבוע ומשמעותי, לא סדר הגדרה בגיליון. */
-        if (sortBy === "week") {
-          var w = WEEK_ORDER.indexOf(name);
-          return w === -1 ? 9999 : w;
+      /* ==========================================================================
+       *  "תקלות דיירים" — הכול, מכל השבועות (2026-09-21, בקשת יועד)
+       * --------------------------------------------------------------------------
+       *  המסנן הזה הוא **לא** מסך נוסף: אותו rowsAll, אותו card(), אותו wire().
+       *  ההבדל היחיד הוא שהקיבוץ כאן הוא לפי **מצב** ולא לפי שבוע — כי
+       *  השאלה שהוא עונה עליה היא "מה קרה עם הדיווח", ולא "מה לעשות היום".
+       * ======================================================================== */
+      function faultsBody(list) {
+        var byUrg = function (a, b) { return urgency(b) - urgency(a); };
+        var waiting = [], sched = [], handled = [];
+        list.forEach(function (t) {
+          if (t.closure) return handled.push(t);
+          if (!t.week) return waiting.push(t);
+          sched.push(t);
+        });
+        waiting.sort(byUrg);
+        handled.sort(byUrg);
+        /* המשובצות לפי שבוע — כרונולוגיה, לא דחיפות: כאן השאלה היא "מתי",
+           והדחיפות כבר כתובה על הכרטיס עצמו. */
+        sched.sort(function (a, b) {
+          return String(a.week).localeCompare(String(b.week)) || urgency(b) - urgency(a);
+        });
+
+        var html = lane("ממתינות לשיבוץ", waiting.length) +
+          (waiting.length
+            ? '<div class="gd-reps">' +
+                waiting.map(function (t) { return card(t); }).join("") + '</div>'
+            : '<div class="gt-none">אין תקלות שממתינות לשיבוץ.</div>');
+
+        html += lane("משובצות", sched.length);
+        if (!sched.length) {
+          html += '<div class="gt-none">אין תקלות משובצות לשבוע כלשהו.</div>';
+        } else {
+          var weeks = [], seenW = {};
+          sched.forEach(function (t) {
+            if (!seenW[t.week]) { seenW[t.week] = []; weeks.push(t.week); }
+            seenW[t.week].push(t);
+          });
+          html += weeks.map(function (w) {
+            return '<div class="gt-grp gt-grp--sub">' + esc(weekLabel(w)) +
+              ' <em>· ' + seenW[w].length + '</em><hr></div>' +
+              '<div class="gd-reps">' +
+                seenW[w].map(function (t) { return card(t); }).join("") + '</div>';
+          }).join("");
         }
-        var list = order[sortBy] || [];
-        var i = list.indexOf(name);
-        return i === -1 ? 9999 : i;
+
+        html += lane("טופלו", handled.length) +
+          (handled.length
+            ? '<div class="gd-reps">' +
+                handled.map(function (t) { return card(t); }).join("") + '</div>'
+            : '<div class="gt-none">עוד לא נסגרה אף תקלה.</div>');
+        return html;
+      }
+
+      /* קיבוץ לפי שבוע הוא סדר קבוע ומשמעותי, לא סדר הגדרה בגיליון.
+         משמש רק את הארכיון ("סגורות") — לשאר המסננים יש מבנה משלהם. */
+      function groupRank(name) {
+        var w = WEEK_ORDER.indexOf(name);
+        return w === -1 ? 9999 : w;
       }
 
       function seg(k, label, n) {
@@ -681,11 +738,9 @@
               '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
               '<div class="gt-meta">' +
                 '<span class="gt-cls">' + esc(t.closure) + '</span><i>·</i>' +
-                (sortBy === "type" ? "" :
-                  '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>') +
-                (t.area && sortBy !== "area"
-                  ? (sortBy === "type" ? "" : '<i>·</i>') +
-                    '<span class="gt-nb">' + ico("pin") + esc(t.area) + '</span>'
+                '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
+                (t.area
+                  ? '<i>·</i><span class="gt-nb">' + ico("pin") + esc(t.area) + '</span>'
                   : '') +
                 (t.approvedAt ? '<i>·</i>' + esc(ago(t.approvedAt)) : '') +
                 (t.approvedBy ? '<i>·</i>' + esc(t.approvedBy) : '') +
@@ -778,11 +833,9 @@
                  לפי אזור, האזור נכתב פעם אחת מעל הקבוצה ואז שוב על כל אחת
                  מתשע המשימות שמתחתיו — וכשהשם ארוך ("שכונה מרכזית צפונית")
                  הוא גם שובר את שורת המטא לשתיים. אותו כלל לקטגוריה. */
-              (sortBy === "type" ? "" :
-                '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>') +
+              '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
               (where && !hideArea
-                ? (sortBy === "type" ? "" : '<i>·</i>') +
-                  '<span class="gt-nb">' + ico("pin") + esc(where) + '</span>'
+                ? '<i>·</i><span class="gt-nb">' + ico("pin") + esc(where) + '</span>'
                 : '') +
               (tags ? '<i>·</i>' + tags : '') +
             '</div>' +
@@ -1113,8 +1166,9 @@
         return close;
       }
 
-      /* openSort() הוסרה (2026-09-09, גל 2) יחד עם כפתור הסידור.
-         SORTS/sortDef נשארו — הם עדיין מקבצים את "סגורות" לפי שבוע. */
+      /* openSort() הוסרה (2026-09-09, גל 2) יחד עם כפתור הסידור;
+         SORTS/sortDef הוסרו אחריה (2026-09-21) אחרי שהתברר שאיש לא הגיע
+         אליהם. הקיבוץ היחיד שנשאר הוא weekGroup(), והוא משרת את "סגורות". */
 
       /* המקרא. הוא הכתובת היחידה שבה מסבירים סמלילים — ברגע שהמסך עצמו צריך
          תווית טקסט ליד כל סמליל הוא חוזר להיות עמוס, וזו בדיוק הבעיה שממנה
@@ -1131,6 +1185,12 @@
           '<div class="gt-lg">מאיפה המשימה הגיעה</div>' +
           '<div class="gt-lgi"><u>' + ico("person") + '</u><div><b>תושב</b>' +
             '<span>מישהו דיווח על זה מהאפליקציה. יש לו מספר דיווח, והוא מקבל עדכון בסיום.</span></div></div>' +
+          /* 🔴 הדגל החדש (2026-09-21). הוא נכנס למקרא באותה נשימה שבה הוא
+             נכנס לכרטיס — זה הכלל בראש openLegend, וסימן בלי הסבר הוא בדיוק
+             מה שהמקרא קיים כדי למנוע. */
+          '<div class="gt-lgi"><u><span class="gt-lgf"></span></u><div><b>פינה בורדו</b>' +
+            '<span>אותו דבר, רק גלוי ממרחק: כרטיס עם פינה בורדו משמאל־למעלה הגיע מתושב, ' +
+            'גם כשהוא כבר משובץ לשבוע בתוך רשימת העבודה.</span></div></div>' +
           '<div class="gt-lgi"><u>' + ico("repeat") + '</u><div><b>' + esc(GL.T.routine) + '</b>' +
             '<span>מגיעה מתוכנית העבודה וחוזרת לפי התדירות שהוגדרה לה.</span></div></div>' +
           '<div class="gt-lgi"><u style="color:#C4CBC8">—</u><div><b>בלי סימון</b>' +
