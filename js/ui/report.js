@@ -178,8 +178,8 @@ CBA.report = (function () {
               var th = document.createElement("span");
               th.className = "rep-th";
               th.style.backgroundImage = "url(" + dataUrl + ")";
-              th.innerHTML = '<x aria-hidden="true">✕</x>';
-              th.querySelector("x").addEventListener("click", function () {
+              th.innerHTML = '<button type="button" class="th-x" aria-label="הסרת התמונה">✕</button>';
+              th.querySelector(".th-x").addEventListener("click", function () {
                 var i = Array.prototype.indexOf.call(photosEl.querySelectorAll(".rep-th"), th);
                 if (i >= 0) photos.splice(i, 1);
                 th.remove();

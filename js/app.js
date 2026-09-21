@@ -511,8 +511,12 @@
         itemsHTML +
       '</div>';
     document.body.appendChild(wrap);
-    // rAF — האלמנט חייב להיות ב-DOM ומצויר פעם אחת לפני שמוסיפים is-open, אחרת אין טרנזיציה
-    requestAnimationFrame(function () { wrap.classList.add("is-open"); });
+    /* 🔴 ממצא 27 (2026-09-22) — ההערה הקודמת כאן הייתה נכונה לגבי
+       הטרנזיציה ושגויה לגבי המחיר: **בלשונית שאינה גלויה rAF אינו רץ**,
+       והגיליון נשאר מתחת לקצה המסך — בלתי נראה אבל חוסם. קריאת
+       offsetWidth מאלצת את אותו חישוב סגנון בלי התלות הזאת. */
+    void wrap.offsetWidth;
+    wrap.classList.add("is-open");
 
     wrap.querySelector(".nav-sheet__backdrop").addEventListener("click", closeNavSheet);
     wrap.addEventListener("click", function (e) {

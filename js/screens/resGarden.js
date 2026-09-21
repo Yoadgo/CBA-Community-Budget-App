@@ -764,8 +764,8 @@
           var el = document.createElement("span");
           el.className = "gd-th";
           el.style.backgroundImage = "url(data:" + p.mime + ";base64," + p.data + ")";
-          el.innerHTML = '<x aria-hidden="true">✕</x>';
-          el.querySelector("x").addEventListener("click", function () {
+          el.innerHTML = '<button type="button" class="th-x" aria-label="הסרת התמונה">✕</button>';
+          el.querySelector(".th-x").addEventListener("click", function () {
             pending.splice(i, 1); paint();
           });
           thumbs.appendChild(el);
@@ -1014,9 +1014,9 @@
             var el = document.createElement("span");
             el.className = "gd-th";
             el.style.backgroundImage = "url(" + lastUrl + ")";
-            el.innerHTML = '<x aria-hidden="true">✕</x>';
+            el.innerHTML = '<button type="button" class="th-x" aria-label="הסרת התמונה">✕</button>';
             el.dataset.i = String(state.photos.length - 1);
-            el.querySelector("x").addEventListener("click", function () {
+            el.querySelector(".th-x").addEventListener("click", function () {
               var i = parseInt(el.dataset.i, 10);
               state.photos.splice(i, 1);
               el.remove();

@@ -152,7 +152,12 @@
 .gd-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
 .gd-th { width: 60px; height: 60px; border-radius: 11px; position: relative;
   border: 1px solid rgba(17,24,39,.08); background-size: cover; background-position: center; }
-.gd-th x { position: absolute; top: -5px; inset-inline-end: -5px; width: 18px; height: 18px;
+/* 🔴 ממצא 29 (2026-09-22) — היה `<x>`, תגית שאינה קיימת ב-HTML: בלי
+   `button`, בלי `aria-label` ובלי דרך להגיע אליה במקלדת. היא עבדה יפה
+   בעכבר, וזה כל מה שנבדק עד היום. המראה זהה; מה שהשתנה הוא שאפשר
+   להגיע אליה ב-Tab ולהפעיל ברווח/Enter. */
+.gd-th .th-x { position: absolute; top: -5px; inset-inline-end: -5px; width: 18px; height: 18px;
+  border: 0; padding: 0; font: inherit;
   border-radius: 50%; background: var(--action, #111827); color: #fff; font-size: 9px;
   display: grid; place-items: center; font-style: normal; cursor: pointer; }
 .gd-th.add { background: rgba(255,255,255,.6); border: 1.5px dashed rgba(17,24,39,.18);

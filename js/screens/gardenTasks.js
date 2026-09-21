@@ -1129,13 +1129,10 @@
                 '<span>' + esc(weekLabel(o.k)) + '</span></div></button>';
             }).join("") +
           '</div>';
-        document.body.appendChild(wrap);
-        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
-        function close() {
-          wrap.classList.remove("is-open");
-          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
-        }
-        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
+           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-week" });
+        function close() { sheetClose(); }
         wrap.addEventListener("click", function (e) {
           var b = e.target.closest("[data-wk]");
           if (!b) return;
@@ -1155,13 +1152,10 @@
           '<div class="gt-sheet" role="dialog" aria-label="' + esc(label) + '">' +
             '<div class="gt-grip" aria-hidden="true"></div>' + html +
           '</div>';
-        document.body.appendChild(wrap);
-        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
-        function close() {
-          wrap.classList.remove("is-open");
-          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
-        }
-        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
+           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-sheet:" + label });
+        function close() { sheetClose(); }
         if (onPick) wrap.addEventListener("click", function (e) { onPick(e, close); });
         return close;
       }
@@ -1366,13 +1360,10 @@
             '<button type="button" class="gd-cta" id="nt-go" style="margin-top:14px">' +
               ico("plus") + 'פתיחת המשימה</button>' +
           '</div>';
-        document.body.appendChild(wrap);
-        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
-        function close() {
-          wrap.classList.remove("is-open");
-          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
-        }
-        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
+           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-new", sticky: true });
+        function close() { sheetClose(); }
         var titleEl = wrap.querySelector("#nt-title");
         setTimeout(function () { titleEl.focus(); }, 120);
         wrap.querySelector("#nt-go").addEventListener("click", function () {
@@ -1466,14 +1457,10 @@
                 '<span>יורדת מהגיליון ומהנתונים · נרשמת ביומן</span></div></button>'
               : '') +
           '</div>';
-        document.body.appendChild(wrap);
-        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
-
-        function close() {
-          wrap.classList.remove("is-open");
-          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
-        }
-        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
+           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-menu" });
+        function close() { sheetClose(); }
         wrap.addEventListener("click", function (e) {
           var b = e.target.closest("[data-m]");
           if (!b) return;
@@ -1606,13 +1593,10 @@
                 '</div>'
               : '') +
           '</div>';
-        document.body.appendChild(wrap);
-        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
-        function close() {
-          wrap.classList.remove("is-open");
-          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
-        }
-        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
+           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-closure", sticky: true });
+        function close() { sheetClose(); }
         var picked = "";
         wrap.addEventListener("click", function (e) {
           var b = e.target.closest("[data-cl]");
@@ -1789,14 +1773,10 @@
               (secHtml ? '<div class="gd-det-secrow">' + secHtml + '</div>' : '') +
             '</div>' +
           '</div>';
-        document.body.appendChild(wrap);
-        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
-
-        function close() {
-          wrap.classList.remove("is-open");
-          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
-        }
-        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
+           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-details" });
+        function close() { sheetClose(); }
         wrap.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) close(); });
 
         /* תמונה ראשונה בלבד, כתצוגה מקדימה — בדיוק כמו photos.js, דרך אותה
@@ -1903,13 +1883,10 @@
               '<button type="button" class="gd-map-recenter" id="gt-map-recenter" title="מרכז לנעיצה">' +
                 ico("pin") + '</button>' +
             '</div></div>';
-        document.body.appendChild(wrap);
-        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
-        function close() {
-          wrap.classList.remove("is-open");
-          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
-        }
-        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
+           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-map" });
+        function close() { sheetClose(); }
         wrap.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) close(); });
         if (CBA.map) {
           var api = CBA.map.render(wrap.querySelector("#gt-map"), {

@@ -203,7 +203,9 @@ CBA.pwa = (function () {
       '</div>';
 
     document.body.appendChild(wrap);
-    requestAnimationFrame(function () { wrap.classList.add("is-open"); });
+    /* 🔴 ממצא 27 — ר' ההסבר ב-js/ui/dialog.js (openNow). */
+    void wrap.offsetWidth;
+    wrap.classList.add("is-open");
 
     function close() {
       wrap.classList.remove("is-open");

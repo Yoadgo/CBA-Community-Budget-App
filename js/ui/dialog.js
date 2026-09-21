@@ -21,6 +21,28 @@ CBA.ui = (function () {
   "use strict";
 
   var openCount = 0;
+  /* חלונות פתוחים לפי חתימה — שומר הכפילות של ממצא 23. */
+  var openDlgs = {};
+  var openSheets = {};
+
+  /* ==========================================================================
+   *  🔴🔴 `is-open` לא נכנס ב-requestAnimationFrame   (2026-09-22, ממצא 27)
+   * --------------------------------------------------------------------------
+   *  בלשונית שאינה גלויה **rAF אינו רץ כלל**, ולכן המחלקה לא נוספה:
+   *  החלון נשאר `opacity:0` ומוזז מתחת לקצה המסך — **בלתי נראה אבל
+   *  חוסם את כל המסך**.
+   *
+   *  🔑 **וזה גם השורש של ממצא 23**, שנראה בדוח כבאג נפרד: המשתמש לא
+   *  רואה שנפתח משהו, לוחץ שוב על אותו כפתור, ונפתח עותק שני. שני
+   *  ה"מודאלים הכפולים" שנמדדו הם התסמין, לא המחלה.
+   *
+   *  קריאת `offsetWidth` מאלצת חישוב סגנון, ולכן המעבר עדיין מונפש
+   *  כשהלשונית גלויה — בלי שום תלות בפריים אנימציה.
+   * ======================================================================== */
+  function openNow(el) {
+    void el.offsetWidth;
+    el.classList.add("is-open");
+  }
 
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
 
@@ -56,13 +78,19 @@ CBA.ui = (function () {
   }
 
   function open(opts) {
-    return new Promise(function (resolve) {
+    /* 🔴 ממצא 23 — חלון זהה שכבר פתוח אינו נפתח פעם שנייה, ומי שלחץ
+       שוב מקבל את אותה הבטחה. התיקון של ממצא 27 מסיר את הסיבה השכיחה
+       ללחיצה הכפולה; זה מה שתופס הקלקה כפולה מהירה של משתמש אמיתי. */
+    var sig = [opts.title || "", opts.message || "", opts.okText || "",
+               opts.input ? "i" : "", opts.html ? "h" : ""].join("\u0001");
+    if (openDlgs[sig]) return openDlgs[sig];
+    var p = new Promise(function (resolve) {
       var prevFocus = document.activeElement;
       var wrap = build(opts);
       document.body.appendChild(wrap);
       openCount++;
       document.body.classList.add("has-cba-dlg");
-      requestAnimationFrame(function () { wrap.classList.add("is-open"); });
+      openNow(wrap);
 
       var inputEl = wrap.querySelector(".cba-dlg__input");
       var okBtn = wrap.querySelector('[data-dlg="ok"]');
@@ -84,6 +112,7 @@ CBA.ui = (function () {
           if (!openCount) document.body.classList.remove("has-cba-dlg");
           try { if (prevFocus && prevFocus.focus) prevFocus.focus(); } catch (e) {}
         }, 180);
+        delete openDlgs[sig];
         resolve(result);
       }
       function onKey(e) {
@@ -121,6 +150,94 @@ CBA.ui = (function () {
         else close(opts.input ? null : false);
       });
     });
+    openDlgs[sig] = p;
+    return p;
+  }
+
+  /* ==========================================================================
+   *  גיליון תחתון — רכיב אחד לכל המסכים  (2026-09-22, ממצאים 23 · 24 · 27)
+   * --------------------------------------------------------------------------
+   *  עד היום היו באפליקציה **שמונה** גיליונות מגולפים ביד, כל אחד עם אותן
+   *  שש שורות של יצירה-הנפשה-סגירה — ובאף אחד מהם לא היו Esc, מלכודת
+   *  מיקוד, נעילת גלילה או שומר כפילות. הדיאלוג הכללי שמעל מחזיק את כל
+   *  אלה מאז 19.8. זו בדיוק הכפילות שהכלל אוסר: **אין מנגנון שני היכן
+   *  שיש אחד**.
+   *
+   *  `mountSheet` **מאמץ עוטף שכבר נבנה**, ולכן אתר קיים מחליף שש שורות
+   *  בשתיים בלי לגעת ב-HTML שלו. `sheet` בונה גם את העוטף — וזה מה
+   *  שגיליון חדש צריך.
+   *
+   *  ⚠️ `sticky` כאן מגן על טקסט שהוקלד מפני **Escape בלבד**. לחיצה
+   *     ברקע ממשיכה לסגור בכל הגיליונות, כי כך הם התנהגו עד היום
+   *     והמשתמשים כבר סומכים על זה.
+   * ======================================================================== */
+  function mountSheet(wrap, opts) {
+    opts = opts || {};
+    var dlg = wrap.querySelector('[role="dialog"]');
+    var key = String(opts.key || (dlg && dlg.getAttribute("aria-label")) || "");
+    /* 🔴 שומר הכפילות (ממצא 23) — אותו גיליון אינו נפתח פעמיים. */
+    if (key && openSheets[key]) {
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      return openSheets[key];
+    }
+    if (dlg && !dlg.getAttribute("aria-modal")) dlg.setAttribute("aria-modal", "true");
+
+    var prevFocus = document.activeElement;
+    if (!wrap.parentNode) document.body.appendChild(wrap);
+    openCount++;
+    document.body.classList.add("has-cba-dlg");
+    openNow(wrap);
+
+    var done = false;
+    function close() {
+      if (done) return;
+      done = true;
+      if (key) delete openSheets[key];
+      wrap.classList.remove("is-open");
+      document.removeEventListener("keydown", onKey, true);
+      setTimeout(function () {
+        if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+        openCount = Math.max(0, openCount - 1);
+        if (!openCount) document.body.classList.remove("has-cba-dlg");
+        try { if (prevFocus && prevFocus.focus) prevFocus.focus(); } catch (e) {}
+      }, 240);
+    }
+    /* 🔴 ממצא 24 — Escape סוגר. היציאה היחידה עד היום הייתה לחיצה על
+       רקע שקוף לגמרי, שאינו נראה כמשטח לחיץ. */
+    function onKey(e) {
+      if (e.key === "Escape") {
+        if (opts.sticky) return;
+        e.preventDefault(); e.stopPropagation(); close();
+      } else if (e.key === "Tab") {
+        var f = wrap.querySelectorAll("input, textarea, select, button, [tabindex]");
+        if (!f.length) return;
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+    document.addEventListener("keydown", onKey, true);
+    var bd = wrap.querySelector(".gt-sheet-bd");
+    if (bd) bd.addEventListener("click", close);
+    if (key) openSheets[key] = close;
+    return close;
+  }
+
+  /* בונה גיליון חדש ומרכיב אותו. מחזיר {wrap, close}. */
+  function sheet(opts) {
+    opts = opts || {};
+    var wrap = document.createElement("div");
+    wrap.className = "gt-sheet-wrap" + (opts.cls ? " " + opts.cls : "");
+    wrap.innerHTML =
+      '<div class="gt-sheet-bd"></div>' +
+      '<div class="gt-sheet' + (opts.sheetCls ? " " + opts.sheetCls : "") + '" role="dialog"' +
+        (opts.label ? ' aria-label="' + esc(opts.label) + '"' : "") + '>' +
+        '<div class="gt-grip" aria-hidden="true"></div>' + (opts.html || "") +
+      '</div>';
+    var close = mountSheet(wrap, opts);
+    if (opts.onPick) wrap.addEventListener("click", function (e) { opts.onPick(e, close); });
+    if (opts.onMount) { try { opts.onMount(wrap, close); } catch (e) {} }
+    return { wrap: wrap, close: close };
   }
 
   /* alert — הודעה עם כפתור אחד. מחזירה Promise שנפתרת בסגירה. */
@@ -314,5 +431,7 @@ CBA.ui = (function () {
   return { alert: alertBox, confirm: confirmBox, prompt: promptBox, toast: toast,
            /* dialog — המודל הגולמי, לטפסים (ר' opts.html/onMount/onOk/sticky) */
            dialog: open,
+           /* גיליון תחתון — ר' הרכיב למעלה. sheet בונה, mountSheet מאמץ. */
+           sheet: sheet, mountSheet: mountSheet,
            busy: busy, busyText: busyText, emptyState: emptyState };
 })();

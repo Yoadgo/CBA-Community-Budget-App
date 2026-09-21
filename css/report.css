@@ -117,8 +117,10 @@ body[data-screen="planning"] .rep-fab-wrap { bottom: 104px; }
   position: relative; width: 46px; height: 46px; border-radius: 10px;
   background-size: cover; background-position: center; border: 1px solid var(--border);
 }
-.rep-th x {
+/* 🔴 ממצא 29 (2026-09-22) — ר' ההערה המקבילה ב-garden.css. */
+.rep-th .th-x {
   position: absolute; top: -6px; inset-inline-end: -6px; width: 19px; height: 19px;
+  border: 0; padding: 0; font: inherit;
   border-radius: 50%; background: var(--danger); color: #fff; font-size: 11px;
   display: grid; place-items: center; cursor: pointer;
 }

@@ -363,13 +363,10 @@
                 ico("trash", 14) + 'מחיקה מהתוכנית</button>') +
           '</div>';
 
-        document.body.appendChild(wrap);
-        requestAnimationFrame(function () { wrap.classList.add("is-open"); });
-        function close() {
-          wrap.classList.remove("is-open");
-          setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 240);
-        }
-        wrap.querySelector(".gt-sheet-bd").addEventListener("click", close);
+        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
+           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gp-form", sticky: true });
+        function close() { sheetClose(); }
 
         var freqEl = wrap.querySelector("#gp-freq");
         function syncFreq() {
