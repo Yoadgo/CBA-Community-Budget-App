@@ -2788,3 +2788,11 @@ button.is-busy,
 .login-inapp__actions .login-inapp__go { flex: 1.3; margin: 0; }
 .login-inapp__actions .login-inapp__copy { flex: 1; margin: 0; width: auto; white-space: nowrap; padding-inline: 10px; }
 .login-inapp__how { font-size: 11.5px; color: var(--text-soft); line-height: 1.5; margin: 8px 0 0; }
+
+/* ---------- הגדלת גופנים קלה בדסקטופ (23.9.2026) ----------
+   בדיקה מול יועד: הטקסט נראה קטן מדי על מסך רחב. zoom מגדיל הכל
+   (טקסט + ריווח) באופן אחיד ב-5%, בלי לגעת במאות ה-font-size הבודדים
+   בקובץ. גובל באותה נקודת שבירה שמשמשת לדסקטופ בכל הקובץ (721px). */
+@media (min-width: 721px) {
+  body { zoom: 1.05; }
+}
