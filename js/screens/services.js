@@ -32,6 +32,14 @@ CBA.serviceUtils = (function () {
   var KIND_INFRA = "תשתית ציבורית", KIND_VENDOR = "ספק חיצוני";
   var KINDS = [KIND_VENDOR, KIND_INFRA];
 
+  /* ערוץ טלפון (2026-09-22) — יועד ביקש להבדיל בין טלפון רגיל, מוקד עסקי
+     וואטסאפ, ושניהם. חל גם על "טלפון ראשי" (חדש — עד היום היה שם רק חיוג)
+     וגם על מספרי "אנשי קשר" (עד היום שניהם תמיד, בלי אפשרות בחירה). ברירת
+     המחדל שונה בכוונה בין השניים — ר' build()/toContacts() למטה — כדי
+     שהתנהגות קיימת לא תשתנה בשקט. */
+  var CH_PHONE = "טלפון", CH_WA = "וואטסאפ עסקי", CH_BOTH = "טלפון + וואטסאפ";
+  var PHONE_CHANNELS = [CH_PHONE, CH_WA, CH_BOTH];
+
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
 
   /* ממזג את שני הטאבים לרשימת אובייקטים נוחה: כל שירות עם מערך הסעיפים שלו
@@ -48,6 +56,9 @@ CBA.serviceUtils = (function () {
         kind: String(r["סוג שירות"] || "").trim() === KIND_INFRA ? KIND_INFRA : KIND_VENDOR,
         provider: String(r["ספק"] || "").trim(),
         phone: String(r["טלפון ראשי"] || "").trim(),
+        // ריק = CH_PHONE (חיוג בלבד) — ההתנהגות שהייתה קיימת לפני שהתווסף
+        // כפתור וואטסאפ ל"טלפון ראשי".
+        phoneChannel: String(r["ערוץ טלפון"] || "").trim() || CH_PHONE,
         doc: String(r["קישור למסמך"] || "").trim(),
         order: Number(r["סדר"] || 0) || 0,
         active: String(r["פעיל"] == null ? "כן" : r["פעיל"]).trim() !== "לא",
@@ -96,7 +107,7 @@ CBA.serviceUtils = (function () {
       svcRows.push({
         "מזהה שירות": s.id, "שם": s.name, "תיאור קצר": s.desc,
         "אייקון": s.icon, "סוג שירות": s.kind || KIND_VENDOR,
-        "ספק": s.provider, "טלפון ראשי": s.phone,
+        "ספק": s.provider, "טלפון ראשי": s.phone, "ערוץ טלפון": s.phoneChannel || CH_PHONE,
         "קישור למסמך": s.doc, "סדר": i + 1, "פעיל": s.active ? "כן" : "לא",
         "עודכן": s.updated || "", 'עודכן ע"י': s.updatedBy || ""
       });
@@ -129,7 +140,13 @@ CBA.serviceUtils = (function () {
   function toContacts(content) {
     return toLines(content).map(function (l) {
       var p = l.split("|");
-      return { name: (p[0] || "").trim(), role: (p[1] || "").trim(), phone: (p[2] || "").trim() };
+      // ריק = CH_BOTH — עד היום כל מספר איש-קשר הציג תמיד גם חיוג וגם
+      // וואטסאפ, ולכן ברירת המחדל שומרת על ההתנהגות הקיימת בכל השורות
+      // שכבר בגיליון.
+      return {
+        name: (p[0] || "").trim(), role: (p[1] || "").trim(), phone: (p[2] || "").trim(),
+        channel: (p[3] || "").trim() || CH_BOTH
+      };
     });
   }
 
@@ -525,11 +542,18 @@ CBA.serviceUtils = (function () {
       return toContacts(c).map(function (p) {
         if (!p.name && !p.phone) return "";
         var acts = "";
-        if (p.phone) {
-          acts =
+        // ערוץ הטלפון קובע אילו כפתורים מוצגים — ר' PHONE_CHANNELS למעלה.
+        // ברירת מחדל (אין ערוץ בתוכן) היא CH_BOTH, ולכן שורה ישנה מציגה
+        // בדיוק את שני הכפתורים שהיא הציגה עד היום.
+        var ch = p.channel || CH_BOTH;
+        if (p.phone && ch !== CH_WA) {
+          acts +=
             '<button type="button" class="svc-icb" data-call="' + esc(p.phone) + '" title="חיוג" aria-label="חיוג ל' + esc(p.name) + '">' +
               '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>' +
-            "</button>" +
+            "</button>";
+        }
+        if (p.phone && ch !== CH_PHONE) {
+          acts +=
             '<a class="svc-icb svc-icb--wa" href="https://wa.me/' + esc(waDigits(p.phone)) + '" target="_blank" rel="noopener" title="וואטסאפ" aria-label="וואטסאפ ל' + esc(p.name) + '">' +
               '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm5.6 14.2c-.2.7-1.4 1.3-2 1.4-.5.1-1.1.1-1.8-.1-.4-.1-1-.3-1.7-.6-3-1.3-4.9-4.3-5-4.5-.2-.2-1.2-1.6-1.2-3s.8-2.1 1-2.4c.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5l.9 2c.1.2.1.4 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.1.3.6 1.1 1.4 1.8 1 .9 1.8 1.1 2 1.2.3.1.4.1.6-.1l.8-1c.2-.2.4-.2.6-.1l2 1c.3.1.4.2.5.3v1.4z"/></svg>' +
             "</a>";
@@ -781,16 +805,4 @@ function svcOpenDrawer(id) {
     "</aside>";
   document.body.appendChild(overlay);
 
-  overlay.querySelectorAll("[data-sclose]").forEach(function (el) {
-    el.addEventListener("click", svcCloseDrawer);
-  });
-  overlay.querySelectorAll(".svc-acc__btn").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var acc = btn.parentNode;
-      var open = acc.classList.toggle("is-open");
-      btn.setAttribute("aria-expanded", open ? "true" : "false");
-    });
-  });
-  svcBindCallButtons(overlay);
-  document.addEventListener("keydown", svcDrawerKey);
-}
+  overlay.querySelectorAll("[data-sclose]").forEach

@@ -129,5 +129,22 @@ ok('ממצא 14 — יש פעולת מחיקת משק בית בשרת',
 ok('ממצא 14 — עם הרשאה ייעודית', /deleteResidentRow: PERM_RESIDENTS/.test(GS));
 ok('ממצא 14 — והיא מחוברת למסך התושבים', /CBA\.data\.deleteResidentRow\(rowIndex/.test(RSD));
 
+section('5. 🔴 `repId` תמיד קיים — שדה חסר אינו "ריק"');
+/* נצפה בייצור: משימות 60 ו-64, שדין ארגיל פתח בעצמו, יצאו מהסנכרון
+   **בלי השדה בכלל**. הדפדפן כותב `repId: ""`, והשרת השמיט — שתי
+   צורות לאותה משמעות. בכללי האבטחה `resource.data.repId is string`
+   על שדה חסר הוא **שגיאה**, לא `false`; וכל קוד שנוגע בשדה היה צריך
+   להכיר את שני המקרים. מהיום צורה אחת. */
+ok('🔴 gardenTaskDoc_ ממלא repId ריק כשאין דיווח',
+   /if \(d\.repId === undefined \|\| d\.repId === null\) d\.repId = '';/.test(GS));
+ok('🔴 ושתי נקודות הסנכרון כותבות אותו תמיד',
+   (GS.match(/doc\.repId = refs\.repOf\[o\.id\] \|\| '';/g) || []).length === 2);
+ok('⚠️ ולא נשארה השמה מותנית שמשמיטה את השדה',
+   !/if \(refs\.repOf\[o\.id\]\) doc\.repId/.test(GS));
+ok('⚠️ הדפדפן כבר כתב אותו תמיד — שתי הצורות התלכדו',
+   /repId: ""/.test(R('js/data/dataService.js')));
+ok('🔑 והמסך גוזר "תקלת צוות" מהיעדר ערך, כך שגם ריק וגם חסר נקראים נכון',
+   /!t\.repId/.test(GT));
+
 console.log('\n' + (fail ? '✗' : '✓') + '  עברו ' + pass + ' · נכשלו ' + fail);
 process.exit(fail ? 1 : 0);

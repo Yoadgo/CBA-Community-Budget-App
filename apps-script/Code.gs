@@ -6598,7 +6598,12 @@ var SERVICES_HEADERS = ['מזהה שירות', 'שם', 'תיאור קצר', 'א�
   /* 2026-09-08 — ההבחנה בין ספק חיצוני (דורגז, אינטרנט) לתשתית ציבורית של
      השיכון (בריכה, מכון כושר, מגרשים). ריק = ספק חיצוני, כדי שכל השורות
      שכבר בגיליון ימשיכו להתנהג בדיוק כמו קודם. */
-  'סוג שירות'];
+  'סוג שירות',
+  /* 2026-09-22 — ערוץ "טלפון ראשי": טלפון בלבד / וואטסאפ עסקי בלבד / שניהם.
+     ריק = "טלפון" (חיוג בלבד) — כי עד היום לא היה כלל כפתור וואטסאפ ל"טלפון
+     ראשי" (רק לאנשי קשר בתוך סעיף "אנשי קשר"), אז ברירת המחדל שומרת על
+     ההתנהגות הקיימת בכל השורות שכבר בגיליון. */
+  'ערוץ טלפון'];
 
 var SERVICE_SECTIONS_SHEET = 'סעיפי שירותים';
 var SERVICE_SECTIONS_HEADERS = ['מזהה שירות', 'מזהה סעיף', 'סדר', 'סוג', 'כותרת', 'תוכן'];
@@ -14667,7 +14672,7 @@ function gardenTaskSyncSome_(ss, ids) {
       if (!o.id || !want[o.id]) continue;
       if (!refs) refs = gardenReportRefs_(ss);
       var doc = gardenTaskDoc_(o, r);
-      if (refs.repOf[o.id]) doc.repId = refs.repOf[o.id];
+      doc.repId = refs.repOf[o.id] || '';
       if (refs.photoOf[o.id]) doc.photos = refs.photoOf[o.id];
       fsSet_(fsDocPath_(FS_GARDEN_TASKS, o.id), doc);
       /* 🔴🔴 **התאמה ראשונה בלבד** (2026-09-17, ממצא 28 בצוות האדום).
@@ -14879,6 +14884,20 @@ function gardenTaskDoc_(o, order) {
   d.order    = order || 0;
   d.schema   = 1;
   d.syncedAt = new Date();   /* ולא updatedAt — ר' ההערה מעל */
+  /* 🔴🔴 **`repId` תמיד קיים, גם כשאין דיווח**   (2026-09-22).
+     ------------------------------------------------------------------
+     עד היום שתי נקודות הסנכרון כתבו `doc.repId` **רק** כשקיים דיווח
+     שמצביע על המשימה (`if (refs.repOf[o.id])`). כלומר משימה שמנהל
+     פתח בעצמו יצאה מכאן **בלי השדה בכלל** — לא ריק, פשוט חסר.
+     נצפה בייצור: משימות 60 ו-64, שדין ארגיל פתח.
+
+     זה יצר שתי צורות לאותה משמעות: הדפדפן כותב `repId: ""`, והשרת
+     משמיט. כל קוד שנוגע בשדה צריך היה לדעת את שתיהן —
+     ובכללי האבטחה `resource.data.repId is string` על שדה חסר הוא
+     **שגיאה**, לא `false`. שדה חסר אינו "ריק": הוא מקרה קצה נוסף
+     שאיש לא התכוון אליו.
+     🔑 מהיום צורה אחת: `''` כשאין דיווח. */
+  if (d.repId === undefined || d.repId === null) d.repId = '';
   return d;
 }
 
@@ -15373,7 +15392,7 @@ function gardenTasksSyncAll_(ss) {
         /* 🔴 מספר הפנייה והתמונות — ר' gardenReportRefs_. בלעדיהם
            המסך במסלול Firestore מציג "תושב" במקום מספר פנייה
            ובלי אריח תמונות: רגרסיה שנראית כמו עיצוב ולא כמו באג. */
-        if (refs.repOf[o.id]) doc.repId = refs.repOf[o.id];
+        doc.repId = refs.repOf[o.id] || '';
         if (refs.photoOf[o.id]) doc.photos = refs.photoOf[o.id];
         items.push({ id: o.id, doc: doc });
       }
