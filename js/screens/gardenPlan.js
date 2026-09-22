@@ -252,9 +252,8 @@
             if (onDone) onDone();
             /* ההודעה אומרת מה באמת קרה ולא הבטחה כללית: אם נוצרו ממנה
                משימות, זה הרגע היחיד שבו נכון להזכיר שהן נשארו. */
-            CBA.ui.toast(res.made
-              ? "הוסרה מהתוכנית · " + res.made + " משימות שכבר נוצרו נשארו"
-              : "הוסרה מהתוכנית");
+            var what = CBA.data.gardenHorizonSummary ? CBA.data.gardenHorizonSummary(res.horizon) : "";
+            CBA.ui.toast("הוסרה מהתוכנית" + (what ? " · " + what : ""));
             load();
           });
         });
@@ -292,7 +291,8 @@
         CBA.data.gardenPlanActive(d.id, next, function (res) {
           busy = false;
           if (res && res.ok) {
-            CBA.ui.toast(next ? "הופעלה" : "כובתה — לא תייצר משימות חדשות");
+            var what = CBA.data.gardenHorizonSummary ? CBA.data.gardenHorizonSummary(res.horizon) : "";
+            CBA.ui.toast((next ? "הופעלה" : "כובתה") + (what ? " · " + what : ""));
             return;
           }
           d.active = !next;

@@ -2432,6 +2432,9 @@ CBA.data = (function () {
         clause: String(payload.clause || "").trim(),
         active: payload.active === false ? false : true,
         note: String(payload.note || "").trim().substring(0, 500),
+        /* 🔑 מאיזה שבוע השינוי בתוקף (מפתח שבוע). המנוע מקפיא מופעים
+           קודמים לו. ריק = מאז ומעולם. */
+        effectiveFrom: String(payload.effectiveFrom || "").trim(),
         order: order || 0, schema: 1,
         updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
       };
@@ -2443,7 +2446,8 @@ CBA.data = (function () {
       var patch = docOf(id, undefined);
       delete patch.order;
       return CBA.fb.mergeDoc("gardenPlan", id, patch, function (e) {
-        cb(e ? { ok: false, error: gardenFsErr(e, "השמירה נכשלה") } : { ok: true, id: id });
+        if (e) return cb({ ok: false, error: gardenFsErr(e, "השמירה נכשלה") });
+        gardenHorizonApply(function (h) { cb({ ok: true, id: id, horizon: h }); });
       });
     }
 
@@ -2456,7 +2460,8 @@ CBA.data = (function () {
         CBA.fb.readDoc("gardenPlan", nid, function (e2, existing) {
           if (!e2 && existing) return tryId(attempt + 1);
           CBA.fb.createDoc("gardenPlan", nid, docOf(nid, order), function (e3) {
-            cb(e3 ? { ok: false, error: gardenFsErr(e3, "השמירה נכשלה") } : { ok: true, id: nid });
+            if (e3) return cb({ ok: false, error: gardenFsErr(e3, "השמירה נכשלה") });
+            gardenHorizonApply(function (h) { cb({ ok: true, id: nid, horizon: h }); });
           });
         });
       }
@@ -2469,15 +2474,98 @@ CBA.data = (function () {
       active: !!active,
       updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
     }, function (e) {
-      cb(e ? { ok: false, error: gardenFsErr(e) } : { ok: true });
+      if (e) return cb({ ok: false, error: gardenFsErr(e) });
+      /* כיבוי = המופעים העתידיים שלא נגעו בהם יורדים; הפעלה = חוזרים. מיידי. */
+      gardenHorizonApply(function (h) { cb({ ok: true, horizon: h }); });
     });
   }
 
   function gardenPlanFsDelete(id, cb) {
     CBA.fb.deleteDoc("gardenPlan", String(id), function (e) {
-      cb(e ? { ok: false, error: gardenFsErr(e, "המחיקה נכשלה") } : { ok: true });
+      if (e) return cb({ ok: false, error: gardenFsErr(e, "המחיקה נכשלה") });
+      /* 🔑 מחיקה מהתוכנית = המופעים העתידיים שלא נגעו בהם יורדים מיד.
+         מה שנגעו בו נשאר — זו ההיסטוריה שהמסך מבטיח שתישאר. */
+      gardenHorizonApply(function (h) {
+        cb({ ok: true, horizon: h, made: (h && h.frozen) || 0 });
+      });
     });
   }
+  /* ==========================================================================
+   *  מנוע האופק בדפדפן   (22.9.2026 — הגינון ל-Firestore מלא)
+   * --------------------------------------------------------------------------
+   *  🔑 **אותו מנוע בדיוק כמו בטריגר השעתי** — `GardenRules.horizon` מקובץ
+   *  אחד שנטען בשני הצדדים. הדפדפן מריץ אותו מיד אחרי שמירה/כיבוי/מחיקה
+   *  בתוכנית, כדי ש"מהשבוע הנוכחי" ייראה על המסך בשנייה ולא בעוד שעה.
+   *  השרת מריץ אותו כל שעה כרשת ביטחון שמגלגלת את האופק קדימה.
+   *
+   *  🔴 **אידמפוטנטי בין שני כותבים** בזכות מזהה מופע דטרמיניסטי:
+   *     שני דפדפנים (או דפדפן ושרת) שמייצרים את אותו מופע כותבים לאותו
+   *     מסמך. הכלל `gtTeamUpdateOk` דוחה דריסה שמשנה `createdAt`, ולכן
+   *     ה-create השני נופל ב-permission-denied — ואנחנו סופרים אותו
+   *     כ"כבר קיים", לא ככשל.
+   *  ⚠️ **סדרתי ולא מקבילי** — אותו נימוק כמו ב-`gardenFsApproveBatch`:
+   *     כשל באמצע משאיר "נוצרו 12 מתוך 16" ולא קבוצה אקראית.
+   *  ⚠️ **אין רשומת יומן על יצירת מופע** — כמו במנוע הישן. המופע לא
+   *     "קרה", הוא רק קיים. היומן מתחיל כשמישהו נוגע.
+   * ======================================================================== */
+  function gardenHorizonApply(cb) {
+    cb = cb || function () {};
+    var G = (typeof GardenRules !== "undefined" && GardenRules) || CBA.gardenRules;
+    if (!G) return cb({ ok: false, error: "gardenRules.js לא נטען" });
+    CBA.fb.readCollection("gardenPlan", function (e1, defs) {
+      if (e1) return cb({ ok: false, error: gardenFsErr(e1, "לא הצלחנו לקרוא את התוכנית") });
+      CBA.fb.readCollection("gardenTasks", function (e2, tasks) {
+        if (e2) return cb({ ok: false, error: gardenFsErr(e2, "לא הצלחנו לקרוא את המשימות") });
+        var now = new Date();
+        var diff = G.horizon(defs || [], tasks || [], G.weekKey(now), {
+          now: now, year: String((CBA.mock && CBA.mock.currentYear) || "")
+        });
+        var out = { ok: true, created: 0, existed: 0, removed: 0,
+                    kept: diff.kept, frozen: diff.frozen, errors: [] };
+        var creates = diff.create.slice(), removes = diff.remove.slice();
+
+        function nextCreate() {
+          var doc = creates.shift();
+          if (!doc) return nextRemove();
+          var d = {};
+          Object.keys(doc).forEach(function (k) { d[k] = doc[k]; });
+          d.createdAt = CBA.fb.serverNow ? CBA.fb.serverNow() : now;
+          d.updatedAt = d.createdAt;
+          CBA.fb.createDoc("gardenTasks", doc.id, d, function (e) {
+            if (!e) out.created++;
+            else if (/permission-denied|already-exists/.test(String((e && e.code) || ""))) out.existed++;
+            else out.errors.push(doc.id + ": " + ((e && e.message) || e));
+            nextCreate();
+          });
+        }
+        function nextRemove() {
+          var id = removes.shift();
+          if (!id) return finish();
+          CBA.fb.deleteDoc("gardenTasks", id, function (e) {
+            if (!e) out.removed++;
+            else out.errors.push(id + ": " + ((e && e.message) || e));
+            nextRemove();
+          });
+        }
+        function finish() {
+          if (out.errors.length) out.ok = false;
+          cb(out);
+        }
+        nextCreate();
+      });
+    });
+  }
+
+  /** משפט אחד למסך: מה המנוע עשה. ריק כשלא עשה כלום. */
+  function gardenHorizonSummary(h) {
+    if (!h || !h.ok) return "";
+    var parts = [];
+    if (h.created) parts.push("נוצרו " + h.created + " משימות");
+    if (h.removed) parts.push("הוסרו " + h.removed);
+    if (h.frozen)  parts.push(h.frozen + " נשארו כי כבר נגעו בהן");
+    return parts.join(" · ");
+  }
+
 
   /** איחוד כפילות — משימה `id` נבלעת לתוך `into`.
    *  ⚠️ **אינו חסום לגנן** — זיהוי ששתי פניות הן אותה תקלה הוא
@@ -2923,7 +3011,7 @@ CBA.data = (function () {
            זה נכון כשיש היסטוריה; זה לא נכון בשיכון שמתחיל מאפס, ולא
            נכון בשבוע שבו התוכנית עוד ריקה. ר' ההסבר המלא ב-gardenPlanRead.
            ⚠️ `rows || []` — השורה הבאה עושה `forEach`. */
-        rows = rows || [];
+        rows = (rows || []).filter(function (t) { return !(t && t.pendingDelete); });
         /* 🔴🔴 **מפת התאימות של `kind`** (21.9) — העתק של
            `GARDEN_KIND_LEGACY` מהשרת. מסמכים שנכתבו בדפדפן לפני
            התיקון מחזיקים `"תקלה"`, והמסך משווה מול `"דיווח תושב"`.
@@ -2982,7 +3070,12 @@ CBA.data = (function () {
        ⏭ התיקון האמיתי הוא לסנכרן את היומן ולהוסיף דגל אמיתי.
           עד אז היומן נקרא מ-Apps Script, וזו קריאה אחת שנשלחת
           רק כשמישהו פותח היסטוריה — נדיר. */
-    fsFirstRead("gardenLog", false, function (done) {
+    /* 🔴 22.9 — `true`: היומן נקרא מ-Firestore, כמו אצל התושב (ממצא 32).
+       עד היום מסך המנהל קרא את הטאב בגיליון ופספס כל מה שהדפדפן כתב מאז
+       גל 3 — "שני מסכים, שני מקורות, שתי אמיתות". התנאי שהיה כאן —
+       "לאמת שיש רשומות למשימות ותיקות" — מתקיים מעצם הניקוי של 22.9:
+       אין משימות ותיקות. */
+    fsFirstRead("gardenLog", true, function (done) {
       CBA.fb.queryCollection("gardenLog", [["taskId", String(id)]], function (err, rows) {
         if (err) return done(err);
         (rows || []).sort(function (a, b) { return gardenDateOf(a.at) - gardenDateOf(b.at); });
@@ -4170,8 +4263,30 @@ CBA.data = (function () {
     /* מחיקת משימה — מנהל בלבד, סיבה חובה. מוחקת גם את שורות הדיווח
        המקושרות ואת התמונות; היומן נשאר שלם. ר' gardenTaskDelete_ בשרת. */
     gardenTaskDelete: function (id, why, cb) {
+      /* 🔴 "בדרך למחיקה" (22.9) — הדפדפן מרים דגל והכרטיס נעלם מיד;
+         הטריגר השעתי מסיים (תמונות לסל, מסמכי יומן, המסמך עצמו).
+         אותו דפוס בדיוק כמו תיבת הדואר של המיילים. המחיקה הסופית
+         נשארת ב-Apps Script — היא היחידה שיכולה לגעת ב-Drive. */
+      if (gardenWritesOn()) {
+        var reason = String(why || "").trim().substring(0, 300);
+        if (!reason) return cb({ ok: false, error: "צריך לכתוב למה מוחקים — זה נשמר ביומן" });
+        /* ⚠️ בוליאני ולא הסיבה: השרת מוצא אותן בשאילתת **שוויון**
+           (`pendingDelete == true`) — אין אי-שוויון ואין "קיים" ב-Spark.
+           הסיבה עצמה נרשמת ביומן. */
+        return CBA.fb.mergeDoc("gardenTasks", String(id), {
+          pendingDelete: true,
+          updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+        }, function (e) {
+          if (e) return cb({ ok: false, error: gardenFsErr(e, "המחיקה נכשלה") });
+          gardenLogAppend(String(id), "מחיקה", reason);
+          cb({ ok: true, id: id, pending: true });
+        });
+      }
       CBA.sheets.postRead("gardenTaskDelete", { id: id, why: why }, cb);
     },
+    /** מנוע האופק — הרצה יזומה (מסך התוכנית / מצב המערכת). */
+    gardenHorizonApply: function (cb) { gardenHorizonApply(cb); },
+    gardenHorizonSummary: gardenHorizonSummary,
     /* מחיקת דיווח ע"י התושב שכתב אותו — רק כל עוד איש לא נגע בו. */
     /* ==========================================================================
      *  מחיקת דיווח ע"י המדווח — ורק כל עוד איש לא נגע בו

@@ -123,7 +123,7 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                      'gtOrphanCleanupOk',
                      /* 21.9 — סעיפים 3 ו-5: כתיבה לתוכנית העבודה, והדגל
                         שתושב מרים על המשימה שלו אחרי משוב שלילי. */
-                     'gpWriteOk', 'gpShapeOk', 'gtReportFlagOk',
+                     'gpWriteOk', 'gpShapeOk', 'gtReportFlagOk', 'gtPendingDeleteOk',
                      /* 🔴 גל 3 (18.9) — `gtTeamUpdateOk` אינו מחווט עוד ישירות:
                         הוא עבר להיות רכיב בתוך `gtUpdateOk`, שמאחד את כל
                         השומרים שעברו מ-Apps Script. ר' test-wave3-garden-writes.js. */
@@ -407,7 +407,7 @@ ok('⚠️ ולא למשתמש חיצוני', /isMember\(\) && m\(\)\.isExternal
 /* 🔴 18.9, גל 3 — השער הוחלף ב-`gtUpdateOk`, שמוסיף על `gtTeamUpdateOk`
    את השומרים שעברו מ-Apps Script. מסלול התמונות של התושב נשאר עצמאי. */
 ok('הכלל צורף ל-update של gardenTasks',
-   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\);/.test(CODE));
+   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\) \|\| gtPendingDeleteOk\(\);/.test(CODE));
 ok('⚠️ ו-gtTeamUpdateOk עדיין בפנים, כרכיב ולא כשער',
    /gtUpdateOk\(\) \{[\s\S]{0,200}gtTeamUpdateOk\(\)/.test(CODE));
 ok('🔴 והמחיקה **לא** נפתחה לתושב',

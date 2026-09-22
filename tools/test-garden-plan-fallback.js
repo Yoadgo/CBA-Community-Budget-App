@@ -159,11 +159,18 @@ const failures = [
   ['כלל אבטחה דחה', { readCollection: (n, cb) => setTimeout(() => cb({ code: 'permission-denied' }), 1) }, 'permission-denied'],
   ['קריאת האוסף נכשלה', { readCollection: (n, cb) => setTimeout(() => cb(new Error('boom')), 1) }, 'boom'],
   ['מסמך הרשימות נכשל', { readDoc: (c, i, cb) => setTimeout(() => cb(new Error('bang')), 1) }, 'bang'],
-  ['מסמך הרשימות חסר', { readDoc: (c, i, cb) => setTimeout(() => cb(null, null), 1) }, 'no-lists-doc'],
-  /* 🔴 אוסף ריק — "התוכנית עדיין ריקה" מזמין את המנהל להזין מחדש
-     משימות שכבר קיימות. נוסף באיחוד 15.9, אחרי מקרה אמיתי בשירותים. */
-  ['אוסף ריק', { readCollection: (n, cb) => setTimeout(() => cb(null, []), 1) }, 'empty']
+  ['מסמך הרשימות חסר', { readDoc: (c, i, cb) => setTimeout(() => cb(null, null), 1) }, 'no-lists-doc']
+  /* 🔴 22.9 — "אוסף ריק" **ירד מרשימת הכשלים**. ההנחה "ריק = הסנכרון לא
+     רץ" הייתה נכונה כש-Firestore היה מראה; מרגע שהוא המקור, ריק הוא
+     האמת, והמסך שבו מזינים את השורה הראשונה חייב להיטען כשאין שורות.
+     ר' tools/test-garden-empty-is-legit-2026-09-22.js. */
 ];
+{
+  const s2 = build({ readCollection: (n, cb) => setTimeout(() => cb(null, []), 1) });
+  const res = await read(s2);
+  ok('🔴 אוסף ריק → ok:true עם תוכנית ריקה (22.9)', !!res && res.ok === true && Array.isArray(res.defs) && res.defs.length === 0, JSON.stringify(res));
+  ok('   …ולא נגע ב-Apps Script', sheetCalls.length === 0);
+}
 for (const [name, opts, why] of failures) {
   const s2 = build(opts);
   const res = await read(s2);

@@ -202,6 +202,19 @@ CBA.gardenForm = (function () {
           '<label class="gd-lbl" style="margin-top:12px">סעיף בתוכנית</label>' +
           '<input class="gd-inp" id="gf-clause" maxlength="60" autocomplete="off" ' +
             'value="' + esc((d && d.clause) || "") + '" placeholder="לא חובה">' +
+
+          /* 🔑 "מאיזה שבוע" יושב בטופס ולא במודל אחרי השמירה: רואים את
+             הבחירה לפני שלוחצים, ואין קליק נוסף. הגדרה חדשה — מהשבוע
+             הנוכחי (זה מה שמצפים); עריכה — מהשבוע הבא (הבטוח: השבוע
+             שכבר מתוכנן לא זז). המנוע מקפיא מופעים שקודמים לבחירה. */
+          '<label class="gd-lbl" style="margin-top:12px">בתוקף החל מ־</label>' +
+          '<div class="gp-areas" id="gf-from">' +
+            chips([{ v: "now",  label: "השבוע הנוכחי" },
+                   { v: "next", label: "השבוע הבא" }], isEdit ? "next" : "now", "data-from") +
+          '</div>' +
+          '<p class="gp-note">' + (isEdit
+            ? "משימות שכבר נוצרו לשבוע הנוכחי נשארות; מהשבוע שתבחר — לפי ההגדרה החדשה."
+            : "המשימות ייווצרו מיד, 8 שבועות קדימה.") + '</p>' +
         '</div>' +
 
         '<button type="button" class="gd-cta" id="gf-go" style="margin-top:16px">' +
@@ -251,6 +264,7 @@ CBA.gardenForm = (function () {
     pick("#gf-areas", "data-a", true);
     pick("#gf-womc", "data-wom", false);
     pick("#gf-freq", "data-f", false, syncFreq);
+    pick("#gf-from", "data-from", false);
 
     /* ---- המתג ---- */
     var goT = q("#gf-go-t"), subEl = q("#gf-sub");
@@ -373,12 +387,21 @@ CBA.gardenForm = (function () {
           areas: picked("#gf-areas", "data-a"),
           rotate: q("#gf-rot").getAttribute("aria-checked") === "true",
           clause: q("#gf-clause").value.trim(),
-          active: isEdit ? (d.active !== false) : true
+          active: isEdit ? (d.active !== false) : true,
+          /* מפתח שבוע, לא "now"/"next" — המנוע משווה מחרוזות תאריך. */
+          effectiveFrom: (function () {
+            var G = (typeof GardenRules !== "undefined" && GardenRules) || CBA.gardenRules;
+            var wk = G ? G.weekKey(new Date()) : "";
+            return ((picked("#gf-from", "data-from")[0]) === "next" && G) ? G.weekShift(wk, 1) : wk;
+          })()
         }, function (res) {
           st.busy = false;
           if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "השמירה לא הצליחה");
           close();
-          CBA.ui.toast(isEdit ? "נשמר" : "נוספה לתוכנית העבודה");
+          /* הטוסט אומר מה באמת קרה — "נוצרו 16 משימות · הוסרו 2" —
+             ולא הבטחה כללית. ר' gardenHorizonSummary. */
+          var what = CBA.data.gardenHorizonSummary ? CBA.data.gardenHorizonSummary(res.horizon) : "";
+          CBA.ui.toast((isEdit ? "נשמר" : "נוספה לתוכנית העבודה") + (what ? " · " + what : ""));
           if (opts.onSaved) opts.onSaved();
         });
       }

@@ -102,6 +102,9 @@ service cloud.firestore {
     function gpFields() {
       return ['id', 'title', 'category', 'areas', 'freq', 'firstWeek',
               'weekOfMonth', 'months', 'rotate', 'clause', 'active', 'note',
+              /* 🔑 22.9 — מאיזה שבוע השינוי בתוקף (מפתח שבוע). מנוע האופק
+                 מקפיא מופעים שקודמים לו. ר' GardenRules.applies. */
+              'effectiveFrom',
               'order', 'schema', 'updatedAt'];
     }
 
@@ -405,7 +408,9 @@ service cloud.firestore {
       return ['id', 'kind', 'templateId', 'title', 'category', 'area', 'x', 'y',
               'stage', 'flag', 'closure', 'week', 'due', 'note', 'drags',
               'firstWeek', 'createdAt', 'updatedAt', 'approvedBy', 'approvedAt',
-              'repId', 'photos', 'order', 'year', 'schema', 'syncedAt'];
+              'repId', 'photos', 'order', 'year', 'schema', 'syncedAt',
+              /* 🔴 22.9 — "בדרך למחיקה". הדפדפן מרים, השרת מסיים. ר' gtPendingDeleteOk. */
+              'pendingDelete'];
     }
 
     /* השדות שרק הצוות קובע — תושב אינו שולח אותם כלל. */
@@ -551,6 +556,17 @@ service cloud.firestore {
              gtCloseNoteOk() && gtClosedOk() && gtNotifyOk();
     }
 
+    /* 🔴 "בדרך למחיקה" (22.9.2026) — מנהל בלבד, כמו `gtDeleteOk`.
+       הדגל הוא true בלבד ומגיע לבדו (עם updatedAt): כתיבה שמשנה גם
+       שדות אחרים באותה בקשה נדחית — מחיקה אינה מסווה לעריכה.
+       ⚠️ הגנן החיצוני אינו מוחק — לא ישירות ולא דרך הדגל. */
+    function gtPendingDeleteOk() {
+      return gtMgr() &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['pendingDelete', 'updatedAt']) &&
+             request.resource.data.pendingDelete == true;
+    }
+
     /* ========================================================================
      *  🔴🔴  התמונות של התושב אל מסמך המשימה   (2026-09-17)
      * ------------------------------------------------------------------------
@@ -633,7 +649,7 @@ service cloud.firestore {
     match /gardenTasks/{id} {
       allow read: if canSeeGardenTasks();
       allow create: if gtTeamCreateOk() || gtFromReportOk();
-      allow update: if gtUpdateOk() || gtReportPhotosOk() || gtReportFlagOk();
+      allow update: if gtUpdateOk() || gtReportPhotosOk() || gtReportFlagOk() || gtPendingDeleteOk();
       allow delete: if gtDeleteOk() || gtOrphanCleanupOk();
     }
 

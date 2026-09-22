@@ -1516,7 +1516,7 @@
                 if (!res || !res.ok) {
                   return CBA.ui.alert((res && res.error) || "המשימה לא נמחקה");
                 }
-                CBA.ui.toast("נמחקה");
+                CBA.ui.toast(res.pending ? "נמחקה — התמונות והיומן ינוקו ברקע" : "נמחקה");
                 load();
               });
             });

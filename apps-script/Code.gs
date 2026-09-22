@@ -5869,6 +5869,12 @@ function dailyEmailJobs_() {
   try { gymDailyJob_(ss); } catch (e) { Logger.log('gymDailyJob_ נכשל: ' + e); }
   try { weeklyDigestJob_(ss); } catch (e) { Logger.log('weeklyDigestJob_ נכשל: ' + e); }
   try { monthlyDigestJob_(ss); } catch (e) { Logger.log('monthlyDigestJob_ נכשל: ' + e); }
+  /* ריטנשן יומן הגינון (22.9) — מעל 12 חודשים לטאב ארכיון ומחיקה מ-Firestore. */
+  try {
+    var glr = gardenLogRetention_(ss);
+    if (glr.moved || glr.errors.length) Logger.log('ריטנשן יומן גינון: הועברו ' + glr.moved +
+      (glr.errors.length ? ' | ' + glr.errors.join(' ; ') : ''));
+  } catch (e) { Logger.log('gardenLogRetention_ נכשל: ' + e); }
   try { yearRolloverJob_(ss); } catch (e) { Logger.log('yearRolloverJob_ נכשל: ' + e); }
   /* הגיבוי המלא (2026-09-15, צעד 07ד).
      ⚠️ **נתלה על הטריגר היומי הקיים ולא על טריגר נפרד** — אותו
@@ -6093,10 +6099,29 @@ function hourlyJobsRun_() {
   } catch (e) {
     Logger.log('gardenMirrorToSheet_ נכשל: ' + e);
   }
+  /* 🔴🔴 **הגינון ב-Firestore — 22.9.2026.** כש-Firestore הבעלים,
+     מנוע האופק (GardenHorizon.gs) מחליף את `gardenMaterializeWeek_`:
+     8 שבועות קדימה, קורא את התוכנית מ-Firestore ולא מהטאב, ומסיים
+     מחיקות שהדפדפן סימן. הישן נשאר רדום — כלל גל 5 (מכבים, מחכים
+     שבוע, מוחקים). כיבוי `gardenWriteToFirestore` מחזיר אותו בלי דיפלוי. */
   try {
-    gardenMaterializeWeek_(ss, gardenWeekKey_());
+    if (gardenFsOwns_()) {
+      var gh = gardenHorizonRun_(ss);
+      if (gh.created || gh.removed || gh.errors.length) {
+        Logger.log('אופק הגינון: נוצרו ' + gh.created + ', הוסרו ' + gh.removed +
+                   ', קפואים ' + gh.frozen + (gh.errors.length ? ' | ' + gh.errors.join(' ; ') : ''));
+      }
+      var gpd = gardenPendingDeleteRun_(ss);
+      if (gpd.found || gpd.errors.length) {
+        Logger.log('מחיקות גינון: נמצאו ' + gpd.found + ', נמחקו ' + gpd.deleted +
+                   ', דיווחים ' + gpd.reports + ', תמונות ' + gpd.photos +
+                   (gpd.errors.length ? ' | ' + gpd.errors.join(' ; ') : ''));
+      }
+    } else {
+      gardenMaterializeWeek_(ss, gardenWeekKey_());
+    }
   } catch (e) {
-    Logger.log('gardenMaterializeWeek_ נכשל: ' + e);
+    Logger.log('אופק הגינון נכשל: ' + e);
   }
   /* 🔴 נתוני הגינון (2026-09-16) — דיווחים ומשימות של השנה הנוכחית.
      ⚠️ **רץ לפני הגיבוי המצטבר**, כמו כל השאר, כדי שמה שנכתב עכשיו
