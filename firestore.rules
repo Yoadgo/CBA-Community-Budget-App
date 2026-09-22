@@ -766,6 +766,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    /* מסמך מטא נפרד לקטגוריות השירותים (2026-09-22) — אותו דפוס בדיוק
+       כמו gardenMeta/lists: קטן, בלי מידע אישי, נקרא תמיד יחד עם
+       השירותים. אותו שער בדיוק כמו services/{id} — לא הומצא כלל חדש. */
+    match /servicesMeta/{doc} {
+      allow read: if canSeeServices();
+      allow write: if false;
+    }
+
     /* ---------- מטא-התקציב לפי שנה (צעד 08א) ---------- */
 
     /* 🔑 **הכלל הזה מעתיק בדיוק את `seesBudget` שב-doGet.**

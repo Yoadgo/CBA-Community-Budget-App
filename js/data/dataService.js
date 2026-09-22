@@ -3056,7 +3056,10 @@ CBA.data = (function () {
         maybeDone();
       });
       CBA.fb.readDoc("servicesMeta", "categories", function (err, doc) {
-        if (err) return fail(err);
+        /* 🔴 HOTFIX 2026-09-22: כשל כאן (כלל אבטחה, רשת, מסמך חסר) אינו
+           מפיל את מסך השירותים כולו — קטגוריות הן שיפור, לא תנאי סף.
+           נצפה בייצור: permission-denied על המסמך הזה החזיר "לא ניתן
+           לטעון" גם למסך שהשירותים עצמם נטענו בהצלחה. */
         catsOut = (doc && doc.categories) || [];
         maybeDone();
       });
