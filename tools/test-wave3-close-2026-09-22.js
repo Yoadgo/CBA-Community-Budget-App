@@ -30,7 +30,34 @@ const media = (CSS.match(/@media \(min-width: 860px\) \{[\s\S]*?\n\}/) || [''])[
 ok('יש בלוק @media ל-860px', media.length > 100);
 ok('🔴 הגיליון הופך לחלון צד מלא-גובה',
    /\.gt-sheet \{[\s\S]*?inset-block: 0;[\s\S]*?height: 100%;/.test(media));
-ok('ורחב משמעותית', /width: min\(620px, 46vw\)/.test(media));
+ok('ורחב משמעותית', /width: min\(680px, 58vw\)/.test(media));
+/* 🔴🔴 **הבדיקה שהייתה חסרה, וזה מה שעלה לנו סיבוב שלם.**
+   בגרסה הראשונה הוספתי בלוק media חדש ל-860px — ולא שמתי לב שכבר
+   היה בקובץ בלוק ל-901px שהופך את הגיליון לכרטיס צף וממורכז.
+   אותה ספציפיות, מוגדר **אחרי** שלי, ולכן ניצח: בין 860 ל-900
+   נפתח חלון צד, ומ-901 ומעלה חזר הכרטיס הממורכז — כלומר בפועל
+   שום דבר לא השתנה אצל המשתמש. יועד תפס את זה במסך.
+   מהיום: **בדיוק בלוק media אחד שולט בגיאומטריה של .gt-sheet**. */
+/* נקודות השבירה שבהן `.gt-sheet` מקבל גיאומטריה. הסריקה היא לפי
+   בלוק, כדי ששכן תמים (prefers-reduced-motion) לא ייספר. */
+const brk = [];
+{
+  const re = /@media \(min-width: (\d+)px\)\s*\{/g;
+  let m;
+  while ((m = re.exec(CSS))) {
+    let i = CSS.indexOf('{', m.index), d = 0, k = i;
+    for (; k < CSS.length; k++) {
+      if (CSS[k] === '{') d++;
+      else if (CSS[k] === '}' && --d === 0) break;
+    }
+    const body = CSS.slice(i, k);
+    if (/\.gt-sheet\s*\{[^}]*(width|inset|bottom|left|margin-inline)/.test(body)) brk.push(+m[1]);
+  }
+}
+ok('🔴 בדיוק שתי נקודות שבירה שולטות בגיליון — 860 ו-1400',
+   brk.length === 2 && brk[0] === 860 && brk[1] === 1400, brk.join(','));
+ok('⚠️ ובלוק הכרטיס הממורכז הישן הוסר לגמרי',
+   !/inset-inline: 0; margin-inline: auto; width: min\(460px/.test(CSS));
 ok('ההנפשה עוברת מלמטה לצד',
    /transform: translateX\(-100%\)/.test(media) &&
    /\.gt-sheet-wrap\.is-open \.gt-sheet \{ transform: translateX\(0\); \}/.test(media));
