@@ -3868,6 +3868,39 @@ CBA.data = (function () {
       function (err) { cb(err ? { ok: false, error: "מחיקה נכשלה" } : { ok: true }); });
   }
 
+  /* סיכום לייקים/דיסלייקים/תגובות לכל הכרטיסים בבת אחת (2026-09-23) —
+     לתצוגת המספרים על גבי הקוביות ברשת הראשית. שתי קריאות readCollection
+     שלמות (לא query לפי cardId) בטעינת המסך, במקום קריאה נפרדת לכל כרטיס —
+     כדי לא להכפיל את מספר הבקשות ל-Firestore לפי כמות השירותים. */
+  function getServiceEngagementSummary(cb) {
+    if (!(CBA.fb && CBA.fb.readCollection)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    var reactions = {}, comments = {}, pending = 2, failed = false;
+    function done() {
+      pending--;
+      if (pending === 0) cb({ ok: !failed, reactions: reactions, comments: comments });
+    }
+    CBA.fb.readCollection("serviceReactions", function (err, rows) {
+      if (err) { failed = true; done(); return; }
+      (rows || []).forEach(function (r) {
+        var id = String(r.cardId || "");
+        if (!id) return;
+        var o = reactions[id] || (reactions[id] = { like: 0, dislike: 0 });
+        if (r.value === "like") o.like++;
+        else if (r.value === "dislike") o.dislike++;
+      });
+      done();
+    });
+    CBA.fb.readCollection("serviceComments", function (err, rows) {
+      if (err) { failed = true; done(); return; }
+      (rows || []).forEach(function (r) {
+        var id = String(r.cardId || "");
+        if (!id) return;
+        comments[id] = (comments[id] || 0) + 1;
+      });
+      done();
+    });
+  }
+
   // סכום הביצוע לכל סעיף (רק הוצאות שנספרות)
   function actualByCategory() {
     const sums = {};
@@ -5162,6 +5195,7 @@ CBA.data = (function () {
     getServiceComments: getServiceComments,
     addServiceComment: addServiceComment,
     deleteServiceComment: deleteServiceComment,
+    getServiceEngagementSummary: getServiceEngagementSummary,
     /* עדכון תושבים במייל — ידני בלבד, נשלח רק בלחיצה מפורשת של מנהל-על
        (ר' notifyServiceUpdate_ ב-Code.gs). לא מנקה מטמון: הוא לא משנה נתונים. */
     notifyServiceUpdate: function (payload, cb) {

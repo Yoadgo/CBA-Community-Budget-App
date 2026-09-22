@@ -653,7 +653,7 @@ CBA.serviceUtils = (function () {
 /* ============================================================================
  *  מסך התושב
  * ========================================================================== */
-var svcState = { list: [], loaded: false, query: "", residentCards: [], residentSvcMap: {}, recCatId: null };
+var svcState = { list: [], loaded: false, query: "", residentCards: [], residentSvcMap: {}, recCatId: null, reactionCounts: {}, commentCounts: {} };
 var svcRepaint = null;
 
 function svcEsc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
@@ -751,6 +751,7 @@ CBA.screens.resServices = {
             (s.isResident
               ? '<p class="svc-card__desc">' + svcEsc((s.body || "").slice(0, 110)) + ((s.body || "").length > 110 ? "…" : "") + "</p>"
               : (s.desc ? '<p class="svc-card__desc">' + svcEsc(s.desc) + "</p>" : '<p class="svc-card__desc"></p>')) +
+            svcCardReactsHtml(s.id) +
             '<div class="svc-card__acts">' +
               '<button type="button" class="btn-primary btn-sm" data-open="' + svcEsc(s.id) + '">כל הפרטים</button>' +
               (s.isResident ? "" : svcPhoneBtns(s, "btn-ghost btn-sm")) +
@@ -807,8 +808,10 @@ CBA.screens.resServices = {
       // זמין) — לא נופלים בשקט: מסך השירותים הרשמי עדיין עולה, רק בלי
       // ההמלצות באותו רגע (בדיוק כמו תגובות גינון).
       svcLoadResidentExtras(function () {
-        svcState.loaded = true;
-        paint();
+        svcLoadEngagementSummary(function () {
+          svcState.loaded = true;
+          paint();
+        });
       });
     });
   }
@@ -1264,12 +1267,47 @@ function svcPaintReactions(cardId) {
 
   CBA.data.getServiceReactions(cardId, function (rres) {
     CBA.data.getServiceComments(cardId, function (cres) {
-      var zone = document.querySelector('#svc-react-zone[data-cardid]');
-      if (!zone || zone.dataset.cardid !== cardId) return;
       var reacts = (rres && rres.ok) ? rres : { like: 0, dislike: 0, mine: null };
       var comments = (cres && cres.ok && cres.comments) || [];
+
+      // מעדכן גם את מטמון הספירה של הרשת הראשית (בלי בקשה נוספת ל-
+      // Firestore) — כדי שמספר הלייקים על הקוביה יישאר תואם למה שקורה
+      // בתוך המגירה, בלי לחכות לרענון מלא של המסך.
+      svcState.reactionCounts[cardId] = { like: reacts.like || 0, dislike: reacts.dislike || 0 };
+      svcState.commentCounts[cardId] = comments.length;
+      if (typeof svcRepaint === "function") svcRepaint();
+
+      var zone = document.querySelector('#svc-react-zone[data-cardid]');
+      if (!zone || zone.dataset.cardid !== cardId) return;
       zone.innerHTML = svcReactionsHtml(cardId, cardType, reacts, comments);
       svcBindReactionZone(zone, cardId, cardType);
     });
   });
+}
+
+/* שורת מספרים על גבי הקוביה עצמה ברשת הראשית (2026-09-23, ר' בקשת יועד) —
+   נטענת פעם אחת לכל המסך (svcLoadEngagementSummary), לא לכל כרטיס בנפרד. */
+function svcLoadEngagementSummary(cb) {
+  CBA.data.getServiceEngagementSummary(function (res) {
+    svcState.reactionCounts = (res && res.ok && res.reactions) || {};
+    svcState.commentCounts = {};
+    var c = (res && res.ok && res.comments) || {};
+    Object.keys(c).forEach(function (id) { svcState.commentCounts[id] = c[id]; });
+    if (cb) cb();
+  });
+}
+
+function svcCommentIcon() {
+  return '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+}
+
+function svcCardReactsHtml(cardId) {
+  var r = svcState.reactionCounts[cardId] || { like: 0, dislike: 0 };
+  var cc = svcState.commentCounts[cardId] || 0;
+  return '<div class="svc-card__reacts">' +
+      '<span class="svc-card__react svc-card__react--like">' + svcThumbIcon(true) + r.like + "</span>" +
+      '<span class="svc-card__react svc-card__react--dislike">' + svcThumbIcon(false) + r.dislike + "</span>" +
+      '<span class="svc-card__react svc-card__react--comments">' + svcCommentIcon() + cc + "</span>" +
+    "</div>";
 }
