@@ -69,6 +69,82 @@
   L.TITLE_PICKS["מדשאות"] = L.TITLE_PICKS[L.CAT_LAWN_WATER];
   L.TITLE_PICKS["השקיה / ממטרות"] = L.TITLE_PICKS[L.CAT_LAWN_WATER];
 
+  /* ==========================================================================
+   *  🔴 "נגררה" בשתי רמות — הגדרה אחת לכל האפליקציה   (22.9.2026)
+   * --------------------------------------------------------------------------
+   *  הכרעת יועד (אפיון מסך הנתונים, סעיף 4 + סעיף 8):
+   *  · **מושג אחד.** "נגררה" מחליף את "בעיכוב" — מה שכתוב על הכרטיס
+   *    ומה שנספר במסך הנתונים הם אותו דבר, כי שניהם קוראים לפונקציה הזאת.
+   *  · **נמדד בשבועות, לא בפעמים.** המרחק בין השבוע המקורי
+   *    (`firstWeek || week`) לבין הגדול מבין השבוע הנוכחי והשבוע שאליו
+   *    המשימה נדחתה. כך גם משימה שהשבוע שלה פשוט עבר נחשבת — עד היום
+   *    היא לא קיבלה שום תג, למרות שזה בדיוק עיכוב.
+   *  · **שבוע אחד = ורוד (level 1), שבועיים ומעלה = אדום (level 2).**
+   *  · דחייה ידנית לשבוע הבא הופכת לוורוד **מיד** — המשימה כבר לא בשבוע שלה.
+   *  🔑 אין שדה חדש בנתונים. `firstWeek` נכתב כבר בכל דחייה (gardenFsTask).
+   *  ⚠️ בלי תג: משימה סגורה, משימה בלי שבוע (נמדדת בגיל ולא בתג), ומשימה
+   *     שהגנן סימן ומחכה לאישור — העבודה נעשתה, והיא נספרת ב"ממתינות
+   *     לאישורך" ולא כגרירה.
+   * ======================================================================== */
+  function wkDate(key) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || "").trim());
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0) : null;
+  }
+  function pad2(x) { return (x < 10 ? "0" : "") + x; }
+  /** מפתח השבוע (יום ראשון, YYYY-MM-DD) של תאריך. בלי ארגומנט — השבוע הנוכחי. */
+  L.weekOf = function (d) {
+    var x = d ? new Date(d.getTime ? d.getTime() : d) : new Date();
+    if (isNaN(x.getTime())) return "";
+    x.setHours(12, 0, 0, 0);
+    x.setDate(x.getDate() - x.getDay());
+    return x.getFullYear() + "-" + pad2(x.getMonth() + 1) + "-" + pad2(x.getDate());
+  };
+  /** כמה שבועות מ-a עד b (שני מפתחות שבוע). */
+  L.weeksBetween = function (a, b) {
+    var da = wkDate(a), db = wkDate(b);
+    if (!da || !db) return 0;
+    return Math.round((db.getTime() - da.getTime()) / (7 * 86400000));
+  };
+  /** "שבועיים" / "3 שבועות". */
+  L.weeksText = function (n) {
+    return n === 1 ? "שבוע" : n === 2 ? "שבועיים" : n + " שבועות";
+  };
+  /** drag(t, curWeek) -> { weeks, level: 0|1|2, text } */
+  L.drag = function (t, curWeek) {
+    var none = { weeks: 0, level: 0, text: "" };
+    t = t || {};
+    if (String(t.closure || "").trim()) return none;
+    if (String(t.flag || "").trim() === "ממתין לאישור") return none;
+    var week = String(t.week || "").trim();
+    if (!week) return none;
+    var orig = String(t.firstWeek || "").trim() || week;
+    var cur = curWeek || L.weekOf();
+    var end = week > cur ? week : cur;
+    var n = L.weeksBetween(orig, end);
+    if (n <= 0) return none;
+    return { weeks: n, level: n >= 2 ? 2 : 1,
+             text: n >= 2 ? "נגררה " + L.weeksText(n) : "נגררה" };
+  };
+
+  /* ---------------------------------------------- קטגוריה -> סמליל וצבע
+     🔑 **העתק מרכזי** של הטבלה ב-gardenTasks.js וב-resGarden.js
+     (22.9.2026, מסך הנתונים). מסך המשימות קורא מכאן כשהקובץ טעון; הצבעים
+     הם המשתנים --c-<key> ב-garden.css. ההתאמה לפי מילת מפתח ולא מחרוזת
+     מדויקת, כדי ששם קטגוריה ישן ("מדשאות") ימשיך להיצבע נכון. */
+  L.CATS = [
+    { key: "lawn",  match: /דשא|מדשא/,   ico: "lawn"  },
+    { key: "water", match: /השקי|ממטר/,  ico: "water" },
+    { key: "tree",  match: /^עצים|עץ/,    ico: "tree"  },
+    { key: "prune", match: /גיזום|שיח/,  ico: "prune" },
+    { key: "weed",  match: /עשבי|קרקע/,  ico: "weed"  },
+    { key: "clean", match: /ניקיון|גזם/, ico: "clean" },
+    { key: "bed",   match: /ערוג|שתיל/,  ico: "bed"   }
+  ];
+  L.catOf = function (name) {
+    for (var i = 0; i < L.CATS.length; i++) if (L.CATS[i].match.test(name || "")) return L.CATS[i];
+    return { key: "lawn", ico: "lawn" };
+  };
+
   /* "דיווח 7" — ההפניה הקנונית לדיווח של תושב. בלי מספר: "דיווח". */
   L.reportRef = function (repId) {
     return repId ? (L.T.report + " " + repId) : L.T.report;

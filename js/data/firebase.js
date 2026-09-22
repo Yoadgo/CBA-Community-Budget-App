@@ -394,7 +394,13 @@ CBA.fb = (function () {
       if (err) return cb(err);
       try {
         var q = window.firebase.firestore().collection(name);
-        (conds || []).forEach(function (c) { q = q.where(c[0], '==', c[1]); });
+        /* [שדה, ערך] = שוויון (כל הקוראים הוותיקים). [שדה, אופרטור, ערך] =
+           טווח על שדה אחד (22.9, יומן הגינון לתקופה) — אינדקס שדה-בודד
+           קיים אוטומטית, ולכן אין צורך באינדקס מורכב. ⚠️ לא לשלב טווח עם
+           תנאי נוסף על שדה אחר: זה כבר דורש אינדקס מורכב, ונופל בייצור. */
+        (conds || []).forEach(function (c) {
+          q = (c.length === 3) ? q.where(c[0], c[1], c[2]) : q.where(c[0], '==', c[1]);
+        });
         q.get().then(function (snap) {
           var out = [];
           snap.forEach(function (d) { var o = d.data() || {}; o.id = o.id || d.id; out.push(o); });

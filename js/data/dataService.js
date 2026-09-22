@@ -3424,6 +3424,71 @@ CBA.data = (function () {
     }, cb);
   }
 
+  /* ==========================================================================
+   *  מסך "נתוני גינון" — שלוש קריאות, חישוב בדפדפן   (22.9.2026, אפיון גרסה 3)
+   * --------------------------------------------------------------------------
+   *  🔑 **אין קריאה ל-Apps Script.** המסך הקודם (getGardenStats) חושב בשרת
+   *     מטאבים שהאפליקציה כבר לא כותבת אליהם מאז 21.9. כאן:
+   *       1. המשימות — אותה קריאה בדיוק כמו במסך המשימות (gardenTasksRead).
+   *       2. ההגדרות — המתג "אישור מנהל" (gardenMeta/settings).
+   *       3. היומן — **שאילתה אחת לתקופה** (`at >= ...`). טווח על שדה
+   *          אחד משתמש באינדקס שדה-בודד שקיים אוטומטית — אין צורך באינדקס
+   *          מורכב. הכלל `gtMgr()` אינו תלוי בתוכן המסמך, ולכן השאילתה
+   *          מותרת למנהל כפי שהיא.
+   *  ⚠️ היומן נטען עם 4 שבועות מרווח לאחור: "פתיחה מחדש" נגזרת ממצב
+   *     הסגירה שלפניה, והסגירה יכולה להיות לפני תחילת התקופה.
+   *  ⚠️ **יומן שנכשל אינו יומן ריק.** `logOk:false` עובר למסך, והמספרים
+   *     שנשענים עליו מוצגים כ"—" עם הסבר — לא כאפס שנראה כמו נתון.
+   *  ⚠️ מנהל ומנהל-על בלבד (SCREEN_PERM "MANAGER"). לגנן החיצוני אין
+   *     גישה ליומן ב-Firestore בכוונה, והמסך אינו מוצג לו.
+   * ======================================================================== */
+  function gardenStatsLiveRead(weeks, cb) {
+    var W = [4, 8, 12].indexOf(+weeks) >= 0 ? +weeks : 8;
+    var L = CBA.gardenLang;
+    var cur = L.weekOf();
+    var back = W - 1 + 4;   // התקופה + מרווח ליומן
+    var since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - since.getDay() - back * 7);
+    var out = { tasks: null, err: "", categories: [], areas: [],
+                requireApproval: GARDEN_SETTINGS_DEFAULT.requireApproval, log: [], logOk: false };
+    var pending = 3;
+    function step() {
+      if (--pending) return;
+      if (!out.tasks) return cb({ ok: false, error: out.err || "לא הצלחתי לטעון את המשימות" });
+      cb({ ok: true, rows: out.tasks, categories: out.categories, areas: out.areas,
+           requireApproval: out.requireApproval, log: out.log, logOk: out.logOk, since: since });
+    }
+    gardenTasksRead({ scope: "all", week: cur }, function (res) {
+      if (res && res.ok) {
+        out.tasks = res.rows || [];
+        out.categories = res.categories || [];
+        out.areas = res.areas || [];
+      } else {
+        out.err = (res && res.error) || "";
+      }
+      step();
+    });
+    gardenSettingsRead(function (s) {
+      out.requireApproval = !!(s && s.requireApproval);
+      step();
+    });
+    try {
+      if (!CBA.fb || !CBA.fb.queryCollection) { step(); return; }
+      var ready = (CBA.fb.userReady || CBA.fb.authReady);
+      ready.call(CBA.fb, function (user) {
+        if (!user) return step();
+        CBA.fb.ensureDb(function (dbErr) {
+          if (dbErr) return step();
+          CBA.fb.queryCollection("gardenLog", [["at", ">=", since]], function (err, rows) {
+            if (!err) { out.log = rows || []; out.logOk = true; }
+            step();
+          });
+        });
+      });
+    } catch (e) { step(); }
+  }
+
   /* יומן משימה — אוסף הוספה-בלבד. שאילתת שוויון על שדה אחד,
      בלי אינדקס מורכב; המיון בלקוח. */
   function gardenTaskLogRead(id, cb) {
@@ -4603,6 +4668,9 @@ CBA.data = (function () {
     getGardenStats: function (weeks, cb) {
       CBA.sheets.get({ action: "gardenStats", weeks: weeks || 8 }, cb);
     },
+    /* מסך "נתוני גינון" (22.9) — משימות + הגדרות + יומן התקופה, מ-Firestore.
+       החישוב עצמו ב-CBA.gardenStatsCalc. ר' gardenStatsLiveRead. */
+    getGardenStatsLive: function (weeks, cb) { gardenStatsLiveRead(weeks, cb); },
     /* יומן המשימה — קו הזמן המלא שלה (2026-09-08). הטאב נכתב מהיום הראשון
        ומעולם לא נקרא; זה מה שהופך "מי סגר את זה ומתי" לשאלה שאפשר לענות. */
     getGardenTaskLog: function (id, cb) {

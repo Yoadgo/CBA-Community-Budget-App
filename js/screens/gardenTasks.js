@@ -87,8 +87,38 @@
     { key: "bed",   match: /ערוג|שתיל/,  ico: "bed"   }
   ];
   function catOf(name) {
+    /* 22.9 — הטבלה המרכזית ב-gardenLang (גם מסך הנתונים קורא ממנה).
+       ההעתק למעלה נשאר רק כנפילה לאחור לקובץ חסר. */
+    if (window.CBA && CBA.gardenLang && CBA.gardenLang.catOf) return CBA.gardenLang.catOf(name);
     for (var i = 0; i < CATS.length; i++) if (CATS[i].match.test(name || "")) return CATS[i];
     return { key: "lawn", ico: "lawn" };
+  }
+
+  /* ==========================================================================
+   *  🔴 "נגררה" בשתי רמות   (22.9.2026 — אפיון מסך הנתונים, סעיף 4)
+   * --------------------------------------------------------------------------
+   *  עד היום: תג בענבר שספר **כמה פעמים** דחו ("נגררה 3 פעמים"), ורק
+   *  כשמישהו דחה ידנית. משימה שהשבוע שלה פשוט עבר לא קיבלה שום תג.
+   *  מהיום: **כמה שבועות** המשימה רחוקה מהשבוע המקורי שלה —
+   *  ורוד לשבוע אחד, אדום לשבועיים ומעלה. ההגדרה עצמה ב-gardenLang.drag,
+   *  ואותה פונקציה בדיוק סופרת "נגררות" במסך הנתונים.
+   *  ⚠️ הדגל "נגררה" שנשמר בנתונים כבר לא מוצג כטקסט — התג נגזר.
+   *  ⚠️ תג אחד לכרטיס לכל היותר: דגל "חם" (אדום) גובר על גרירה. */
+  function dragOf(t) {
+    var GLx = window.CBA && CBA.gardenLang;
+    return (GLx && GLx.drag) ? GLx.drag(t, todayKey()) : { weeks: 0, level: 0, text: "" };
+  }
+  function tagHtml(t) {
+    var f = String(t.flag || "");
+    if (f && f !== "ממתין לאישור" && f !== "נגררה") {
+      /* דגל שאינו גרירה — אותו תג כמו תמיד. "חם" = אדום. */
+      if (FLAG_HOT[f]) return '<span class="gt-age is-hot">' + esc(f) + '</span>';
+      var d0 = dragOf(t);
+      if (d0.level) return '<span class="gt-age is-l' + d0.level + '">' + esc(d0.text) + '</span>';
+      return '<span class="gt-age">' + esc(f) + '</span>';
+    }
+    var d = dragOf(t);
+    return d.level ? '<span class="gt-age is-l' + d.level + '">' + esc(d.text) + '</span>' : "";
   }
 
   /* חומרת הדגל — סדר יורד, זהה לסדר ב-GARDEN_FLAGS בשרת. משמש גם לצביעה
@@ -174,7 +204,12 @@
      הפתיחה), ולכן: חומרת הדגל דוחפת הכי חזק, אחריה כמה פעמים המשימה כבר
      נגררה, ולבסוף הוותק — משימה ישנה עולה מעל חדשה באותה חומרה. */
   function urgency(t) {
-    return (FLAG_RANK[t.flag] || 0) * 1000 + Math.min(t.drags || 0, 20) * 40 + ageDays(t);
+    /* 22.9 — גרירה נמדדת בשבועות (dragOf) ולא בפעמים. הדרגה של "נגררה"
+       נשמרת (2) גם כשהדגל בנתונים ריק — השבוע פשוט עבר. */
+    var d = dragOf(t);
+    var rank = (t.flag === "נגררה") ? 0 : (FLAG_RANK[t.flag] || 0);
+    if (d.level && rank < FLAG_RANK["נגררה"]) rank = FLAG_RANK["נגררה"];
+    return rank * 1000 + Math.min(d.weeks, 20) * 40 + ageDays(t);
   }
   function ageDays(t) {
     var d = parseKey(t.firstWeek || t.week);
@@ -223,7 +258,11 @@
   };
 
   CBA.screens.gardenTasks = {
-    render: function (container, mode) {
+    /* opts (22.9, מסך הנתונים): { openId, onChange } — פתיחת כרטיס הפרטים
+       של משימה אחת מתוך מסך אחר. ר' CBA.gardenOpenCard בסוף הקובץ. */
+    render: function (container, mode, opts) {
+      opts = opts || {};
+      var cardOpened = false;
       var week = todayKey();
       /* ⚠️ שלושה מסננים (2026-09-09), אחרי הצוות האדום. קודם היו שישה,
          ושניים מהם שינו משמעות לפי מי מסתכל — "בוצעו" הופיע פעמיים ברצועה
@@ -300,6 +339,15 @@
           isManager = (sim && sim.isRoleSim) ? !sim.isExternal : !!res.isManager;
           if (res.week) week = res.week;
           draw();
+          /* מסך הנתונים ביקש כרטיס — נפתח פעם אחת, אחרי הטעינה הראשונה.
+             כל טעינה אחריה היא תוצאה של פעולה בכרטיס, ומסך הנתונים מתרענן. */
+          if (opts.openId && !cardOpened) {
+            cardOpened = true;
+            if (byId(opts.openId)) openDetails(opts.openId);
+            else if (CBA.ui && CBA.ui.toast) CBA.ui.toast("המשימה לא נמצאה — ייתכן שנמחקה", "error");
+          } else if (opts.onChange) {
+            try { opts.onChange(); } catch (e) {}
+          }
         });
       }
 
@@ -817,12 +865,7 @@
                 ico("hist") + '</button>') +
           '</article>';
         }
-        var tags = "";
-        if (t.flag && t.flag !== "ממתין לאישור") {
-          tags += '<span class="gt-age' + (FLAG_HOT[t.flag] ? " is-hot" : "") + '">' +
-            esc(t.flag === "נגררה" && (t.drags || 0) > 1 ? "נגררה " + t.drags + " פעמים" : t.flag) +
-            '</span>';
-        }
+        var tags = tagHtml(t);
         var where = t.area || "";
         /* בתצוגת "לשיבוץ" תיבת הסימון מוחלפת בכפתור שיבוץ: אי אפשר לסמן
            כבוצעה משימה שעוד לא נכנסה לשום שבוע, והפעולה הנכונה שם היא אחת. */
@@ -1275,8 +1318,11 @@
             }).join("") + '</div></div></div>' +
 
           '<div class="gt-lg">תג צבעוני</div>' +
-          '<div class="gt-lgi"><u style="width:auto"><span class="gt-age">נגררה</span></u>' +
-            '<div><b>משהו חורג</b><span>זה הדבר הצבעוני היחיד בכרטיס. אין תג — הכול כרגיל.</span></div></div>' +
+          '<div class="gt-lgi"><u style="width:auto"><span class="gt-age is-l1">נגררה</span></u>' +
+            '<div><b>שבוע אחד מעבר לשבוע שלה</b><span>השבוע שלה נגמר והיא לא סומנה, או שנדחתה לשבוע הבא. ' +
+            'זה הדבר הצבעוני היחיד בכרטיס. אין תג — הכול כרגיל.</span></div></div>' +
+          '<div class="gt-lgi"><u style="width:auto"><span class="gt-age is-l2">נגררה 3 שבועות</span></u>' +
+            '<div><b>שבועיים ומעלה</b><span>כמה שבועות עברו מהשבוע המקורי שלה. ככל שרחוק יותר — גבוה יותר ברשימה.</span></div></div>' +
           '<div class="gt-lgi"><u style="width:auto"><span class="gt-age is-hot">דורש בדיקה חוזרת</span></u>' +
             '<div><b>דורש תשומת לב</b><span>תושב אמר שהטיפול לא הושלם, או שהעבודה נחסמה בשטח.</span></div></div>' +
 
@@ -1846,6 +1892,8 @@
             '<div class="gd-det-staterow">' +
               '<span class="gd-det-chip is-' + esc(st.tone || "plan") + '">' + esc(st.text) + '</span>' +
               '<span class="gd-det-week">' + (t.week ? esc(weekLabel(t.week)) : 'לשיבוץ') + '</span>' +
+              /* 22.9 — "בכרטיס הפרטים התג זהה" (אפיון סעיף 4). */
+              (closed ? '' : tagHtml(t)) +
             '</div>' +
             /* 🔴 22.9 (הכרעת יועד: "מוצג לכולם") — התיאור ומיקום במילים,
                של תושב או של הצוות. עד היום הם לא הגיעו לכרטיס בכלל. */
@@ -2016,5 +2064,20 @@
         }
       }
     }
+  };
+
+  /* ==========================================================================
+   *  שיתוף עם מסך הנתונים   (22.9.2026)
+   * --------------------------------------------------------------------------
+   *  gardenKit — אותם סמלילים בדיוק, כדי שנעץ במפה ושורה ברשימה ייראו
+   *  כמו הכרטיס כאן. gardenOpenCard — "כל שורה ברשימה פותחת את כרטיס
+   *  התקלה המלא": המסך הזה מצויר לתוך מכל מנותק, והכרטיס עצמו נפתח
+   *  כגיליון על document.body — כלומר **אותו כרטיס, אותן פעולות**, בלי
+   *  עותק שני שיסטה. onChange נקרא אחרי כל פעולה שבוצעה בו.
+   * ======================================================================== */
+  CBA.gardenKit = { ico: ico, ICONS: ICONS, catOf: catOf, tagHtml: tagHtml };
+  CBA.gardenOpenCard = function (id, onChange) {
+    var host = document.createElement("div");
+    CBA.screens.gardenTasks.render(host, "open", { openId: String(id), onChange: onChange });
   };
 })();

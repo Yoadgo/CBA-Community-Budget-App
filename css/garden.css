@@ -513,6 +513,11 @@
   clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%);
   background: #FDEBD0; color: #96560A; }
 .gt-age.is-hot { background: #FBE0E1; color: #A32F3E; }
+/* 🔴 "נגררה" בשתי רמות (22.9, אפיון מסך הנתונים סעיף 4): ורוד = שבוע אחד
+   מעבר לשבוע המקורי, אדום = שבועיים ומעלה. האדום זהה ל-is-hot בכוונה —
+   שני המצבים הם "דורש תשומת לב עכשיו". */
+.gt-age.is-l1 { background: #FCE7F3; color: #9D174D; }
+.gt-age.is-l2 { background: #FBE0E1; color: #A32F3E; }
 
 /* ==========================================================================
    תוכנית העבודה — קידומת gp- (2026-09-08)
@@ -1339,3 +1344,321 @@
 /* 22.9 (הכרעת יועד: "מוצג לכולם") — התיאור בכרטיס הפרטים של המשימה. */
 .gd-det-desc { margin: 10px 0 2px; font-size: 13.5px; line-height: 1.6;
   color: var(--text, #374151); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+
+/* ==========================================================================
+   "נתוני גינון" — קידומת gn- (22.9.2026, אפיון גרסה 3)
+   --------------------------------------------------------------------------
+   מחליף את מסך הנתונים הקודם (gs-, שנשאר למטה כקוד מת עד הניקוי הבא).
+   🔑 פריסה אחת, שני סדרים: במחשב שתי עמודות 2fr/3fr ("עכשיו" מימין, "בתקופה"
+      משמאל); בטלפון אותם בלוקים בעמודה אחת, והסדר נקבע כאן ב-order.
+   🔑 צבעי המצב (--st-*) הם הצבעים של הנעצים במפה ושל התגים בכרטיס — מקור אחד.
+   ========================================================================== */
+.gn-vars {
+  --c-lawn: #16A34A;  --c-lawn-s: #E7F7EC;
+  --c-water: #0EA5E9; --c-water-s: #E4F4FD;
+  --c-tree: #15803D;  --c-tree-s: #E6F4EA;
+  --c-prune: #0D9488; --c-prune-s: #E2F5F3;
+  --c-weed: #CA8A04;  --c-weed-s: #FCF3DC;
+  --c-clean: #64748B; --c-clean-s: #EEF1F5;
+  --c-bed: #DB2777;   --c-bed-s: #FCE8F1;
+  --st-wait: #D97706; --st-plan: #2563EB; --st-appr: #7C3AED;
+  --st-l1: #DB2777;   --st-l2: #B42318;   --st-done: #9AA39E;
+  --age1: #C9D6CF; --age2: #E9B872; --age3: #E68AB4; --age4: #C8413A;
+  --gn-accent: #2F6B4F; --gn-accent-s: #E6F0EA;
+  --gn-bar: #2F6B4F; --gn-bar2: #9CC7B0;
+  --gn-src1: #2F6B4F; --gn-src2: #9CC7B0; --gn-src3: #D97706;
+  --gn-line: #DDE3DF; --gn-line2: #EEF2EF;
+  --gn-ink: #1C2621; --gn-soft: #5E6A64; --gn-faint: #8A958F;
+}
+.gn .s-wait, .gn-vars .s-wait { background: var(--st-wait); }
+.gn-vars .s-plan { background: var(--st-plan); }
+.gn-vars .s-appr { background: var(--st-appr); }
+.gn-vars .s-l1   { background: var(--st-l1); }
+.gn-vars .s-l2   { background: var(--st-l2); }
+.gn-vars .s-done { background: var(--st-done); }
+
+/* ---------- כותרת + בורר תקופה ---------- */
+.gn-head { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap; margin-bottom: 16px; }
+.gn-head h3 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; color: var(--gn-ink); }
+.gn-up { font-size: 11.5px; color: var(--gn-faint); }
+.gn-seg { display: inline-flex; border: 1px solid var(--gn-line); border-radius: 999px; overflow: hidden;
+  background: #fff; }
+.gn-seg button { font: inherit; font-size: 12px; border: 0; background: none; color: var(--gn-soft);
+  padding: 5px 13px; cursor: pointer; white-space: nowrap; }
+.gn-seg button.on { background: var(--gn-ink); color: #fff; font-weight: 600; }
+.gn-seg button:focus-visible { outline: 2px solid var(--gn-accent); outline-offset: -2px; }
+.gn-seg__s { display: none; }
+
+.gn-grp { font-size: 11.5px; font-weight: 700; color: var(--gn-soft); letter-spacing: .02em; margin: 0 2px 6px; }
+/* שתי עמודות שמיושרות זו מתחת לזו: הימנית (2fr, ראשונה ב-RTL) היא "עכשיו",
+   השמאלית (3fr) היא "בתקופה" — והמפה מקבלת את הצד הרחב. */
+.gn-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 14px; align-items: start; }
+.gn-grid--2 { margin-top: 14px; }
+.gn-now, .gn-per { min-width: 0; }
+.gn-stack { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.gn-sk { display: grid; grid-template-columns: 2fr 3fr; gap: 14px; }
+
+/* ---------- אריחים ---------- */
+.gn-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.gn-o2:not(.has-act) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.gn-tile, .gn-box {
+  background: rgba(255,255,255,.8);
+  -webkit-backdrop-filter: blur(14px) saturate(1.28); backdrop-filter: blur(14px) saturate(1.28);
+  border: 1px solid rgba(255,255,255,.85);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(17,24,39,.05);
+  border-radius: 12px; min-width: 0;
+}
+.gn-tile { font: inherit; color: var(--gn-ink); text-align: start; padding: 12px 13px; cursor: pointer;
+  display: block; width: 100%; transition: transform .14s ease, box-shadow .14s ease; }
+.gn-tile:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(17,24,39,.09); }
+.gn-tile:focus-visible, .gn-box button:focus-visible { outline: 2px solid var(--gn-accent); outline-offset: 2px; }
+.gn-n { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.gn-n small { font-size: 15px; font-weight: 500; color: var(--gn-soft); }
+.gn-l { font-size: 12.5px; font-weight: 600; margin-top: 7px; }
+.gn-s { font-size: 11.5px; color: var(--gn-soft); margin-top: 3px; display: flex; gap: 4px 10px; flex-wrap: wrap; }
+.gn-s b { font-weight: 700; color: var(--gn-ink); }
+.gn-go { display: block; font-size: 11.5px; font-weight: 700; color: var(--gn-accent); margin-top: 6px; }
+.gn-tile.is-act { border-color: var(--gn-accent); box-shadow: inset 0 0 0 1px var(--gn-accent); }
+.gn-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 4px; vertical-align: 0; }
+.gn-split { display: flex; height: 5px; border-radius: 3px; overflow: hidden; margin-top: 9px; gap: 2px; }
+.gn-split.is-empty { background: var(--gn-line2); }
+.gn-pair { display: flex; gap: 18px; align-items: flex-end; }
+.gn-pair .gn-n { font-size: 26px; }
+.gn-pair em { display: block; font-style: normal; font-size: 11px; color: var(--gn-soft); margin-top: 4px; }
+
+/* ---------- תיבות פירוט ---------- */
+.gn-box { padding: 12px 14px; }
+.gn-box h5 { margin: 0; font-size: 13px; font-weight: 700; color: var(--gn-ink);
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.gn-lnk { font: inherit; font-size: 11.5px; font-weight: 600; color: var(--gn-accent); background: none;
+  border: 0; padding: 0; cursor: pointer; white-space: nowrap; }
+.gn-lnk.is-static { cursor: default; color: var(--gn-soft); font-weight: 500; }
+.gn-none { font-size: 12.5px; color: var(--gn-soft); margin: 10px 0 2px; }
+
+.gn-age { display: flex; height: 12px; border-radius: 4px; overflow: hidden; gap: 2px; margin-top: 10px; }
+.gn-age.is-empty, .gn-cat.is-empty { background: var(--gn-line2); }
+.gn-age .a1, .gn-age-k .a1 { background: var(--age1); }
+.gn-age .a2, .gn-age-k .a2 { background: var(--age2); }
+.gn-age .a3, .gn-age-k .a3 { background: var(--age3); }
+.gn-age .a4, .gn-age-k .a4 { background: var(--age4); }
+.gn-age-k { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 7px; }
+.gn-age-k button { font: inherit; text-align: start; background: none; border: 0; padding: 3px 4px;
+  border-radius: 6px; cursor: pointer; color: var(--gn-soft); font-size: 11px; min-width: 0; }
+.gn-age-k button:hover:not(:disabled) { background: rgba(17,24,39,.04); }
+.gn-age-k button:disabled { cursor: default; }
+.gn-age-k i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-inline-end: 4px; }
+.gn-age-k b { font-size: 14px; color: var(--gn-ink); }
+.gn-age-k .gn-l2, .gn-age-k .gn-s2 { display: block; }
+.gn-age-k .gn-s2 { display: none; }
+
+.gn-drg { list-style: none; padding: 0; margin: 8px 0 0; }
+.gn-drg li + li { border-top: 1px solid var(--gn-line2); }
+.gn-drg button, .gn-li__main { font: inherit; color: inherit; background: none; border: 0; width: 100%;
+  display: flex; align-items: center; gap: 9px; padding: 8px 0; text-align: start; cursor: pointer; }
+.gn-drg button:hover .gn-rt b, .gn-li__main:hover .gn-rt b { text-decoration: underline; text-underline-offset: 3px; }
+.gn-ci { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; flex: none;
+  background: var(--gn-line2); color: var(--gn-soft); }
+.gn-ci svg { width: 16px; height: 16px; }
+.gn-ci.k-lawn  { background: var(--c-lawn-s);  color: var(--c-lawn); }
+.gn-ci.k-water { background: var(--c-water-s); color: var(--c-water); }
+.gn-ci.k-tree  { background: var(--c-tree-s);  color: var(--c-tree); }
+.gn-ci.k-prune { background: var(--c-prune-s); color: var(--c-prune); }
+.gn-ci.k-weed  { background: var(--c-weed-s);  color: var(--c-weed); }
+.gn-ci.k-clean { background: var(--c-clean-s); color: var(--c-clean); }
+.gn-ci.k-bed   { background: var(--c-bed-s);   color: var(--c-bed); }
+.gn-rt { flex: 1; min-width: 0; }
+.gn-rt b { display: block; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gn-rt > span { display: block; font-size: 11.5px; color: var(--gn-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gn-vars .gt-age { flex: none; white-space: nowrap; }
+
+/* ---------- לפי סוג ---------- */
+.gn-cat { display: flex; height: 10px; border-radius: 4px; overflow: hidden; gap: 2px; margin-top: 10px; }
+.gn-cat-k { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
+.gn-cat-k button { font: inherit; background: none; border: 0; border-radius: 8px; padding: 5px 5px 4px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; cursor: pointer;
+  color: var(--gn-soft); font-size: 11px; text-align: start; }
+.gn-cat-k button:hover { background: rgba(17,24,39,.04); }
+.gn-cat-k button.on { background: var(--gn-accent-s); box-shadow: inset 0 0 0 1px var(--gn-accent); }
+.gn-cat-k b { font-size: 14px; color: var(--gn-ink); line-height: 1.2; }
+.gn-cat-k em { font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.gn-cat-i { display: grid; }
+
+/* ---------- המפה ---------- */
+.gn-mapbox { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid rgba(17,24,39,.08); min-width: 0; }
+.gn-map.gd-map { height: 380px; border-radius: 12px; }
+.gn-map-tools { position: absolute; top: 10px; inset-inline: 10px; display: flex; justify-content: space-between;
+  gap: 8px; flex-wrap: wrap; pointer-events: none; z-index: 12; }
+.gn-map-tools > * { pointer-events: auto; }
+.gn-map-tools .gn-chip--n { margin-inline-start: auto; }
+.gn-chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 11.5px; color: var(--gn-ink);
+  background: #fff; border: 1px solid var(--gn-line); border-radius: 999px; padding: 4px 11px;
+  box-shadow: 0 6px 18px rgba(16,24,20,.12); cursor: pointer; white-space: nowrap; }
+.gn-chip--n { cursor: default; }
+.gn-chip.is-f { background: var(--gn-accent-s); border-color: var(--gn-accent); color: var(--gn-accent); font-weight: 600; }
+.gn-chip svg { width: 12px; height: 12px; }
+.gn-sw { width: 22px; height: 12px; border-radius: 999px; background: var(--gn-line); position: relative; display: inline-block; flex: none; }
+.gn-sw::after { content: ""; position: absolute; top: 2px; inset-inline-start: 2px; width: 8px; height: 8px; border-radius: 50%; background: #fff; transition: inset-inline-start .15s ease; }
+.gn-sw.on { background: var(--gn-accent); }
+.gn-sw.on::after { inset-inline-start: 12px; }
+.gn-map-cover { display: none; }
+
+/* הנעץ: צבע = מצב, סמליל לבן = סוג. גודל קבוע על המסך (--gn-inv). */
+.map-marker.gn-pin { width: 24px; height: 30px; background: none; border: 0; border-radius: 0; box-shadow: none;
+  transform: translate(-50%, -100%) scale(var(--gn-inv, 1)); transform-origin: 50% 100%; z-index: 8; }
+.map-marker.gn-pin:hover, .map-marker.gn-pin:focus-visible {
+  transform: translate(-50%, -100%) scale(calc(var(--gn-inv, 1) * 1.18)); z-index: 9; outline: none; }
+.map-marker.gn-pin svg { display: block; width: 100%; height: 100%; overflow: visible;
+  filter: drop-shadow(0 2px 3px rgba(16,24,20,.28)); }
+.gn-pin__b { stroke: #fff; stroke-width: 1.6; }
+.gn-pin__b.s-wait { fill: var(--st-wait); } .gn-pin__b.s-plan { fill: var(--st-plan); }
+.gn-pin__b.s-appr { fill: var(--st-appr); } .gn-pin__b.s-l1 { fill: var(--st-l1); }
+.gn-pin__b.s-l2 { fill: var(--st-l2); }     .gn-pin__b.s-done { fill: var(--st-done); }
+.gn-vars .gn-pin__b { background: none; }
+.map-marker.gn-pin--c { width: 26px; height: 26px; transform: translate(-50%, -50%) scale(var(--gn-inv, 1)); transform-origin: 50% 50%; }
+.map-marker.gn-pin--c:hover { transform: translate(-50%, -50%) scale(calc(var(--gn-inv, 1) * 1.12)); }
+.gn-clu { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; border: 2px solid #fff;
+  color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 2px 7px rgba(16,24,20,.3); }
+
+/* תקציר נעץ (מחשב) */
+.gn-pop { position: absolute; z-index: 20; width: 244px; background: #fff; border: 1px solid var(--gn-line);
+  border-radius: 10px; padding: 11px 13px; box-shadow: 0 10px 28px rgba(16,24,20,.16); font-size: 12px; color: var(--gn-ink); }
+.gn-pop::after { content: ""; position: absolute; bottom: -7px; left: calc(var(--ax, 50%) - 6px); width: 12px; height: 12px;
+  background: #fff; border-right: 1px solid var(--gn-line); border-bottom: 1px solid var(--gn-line); transform: rotate(45deg); }
+.gn-pop.is-below::after { bottom: auto; top: -7px; transform: rotate(225deg); }
+.gn-pop__t { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: 13.5px; }
+.gn-pop__t span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gn-pop__t u { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; color: #fff; flex: none; text-decoration: none; }
+.gn-pop__t u svg { width: 14px; height: 14px; }
+.gn-pop__m { color: var(--gn-soft); margin-top: 4px; }
+.gn-pop__r { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
+.gn-pop__go { font: inherit; font-weight: 700; color: var(--gn-accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.gn-pop__a { color: var(--gn-soft); }
+.gn-stt { display: inline-flex; align-items: center; font-size: 11.5px; color: var(--gn-soft); }
+
+/* ---------- מגמות ---------- */
+.gn-trends { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.gn-tabs { display: none; }
+.gn-tr p { font-size: 11.5px; color: var(--gn-soft); margin: 2px 0 6px; }
+/* ⚠️ direction:ltr — ב-RTL הדפדפן הופך את text-anchor ו"עד 9 ימים" נחתך
+   מחוץ לגרף. הציר עצמו מצויר ידנית (השבוע הנוכחי מימין), אז ה-SVG ב-LTR. */
+.gn-chart { display: block; width: 100%; height: auto; overflow: visible; direction: ltr; }
+.gn-chart text { font-family: inherit; font-size: 7.5px; fill: var(--gn-faint); }
+.gn-chart .gn-cv { font-size: 7px; }
+.gn-chart .gn-cn { font-size: 8px; fill: var(--gn-soft); }
+.gn-chart .gn-cb { font-size: 9px; font-weight: 700; fill: var(--gn-ink); }
+.gn-chart .gn-leg text { font-size: 7px; }
+
+/* ---------- שגיאה / יומן חסר ---------- */
+.gn-err { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 26px 18px; }
+.gn-err u { color: var(--gn-soft); text-decoration: none; }
+.gn-err .gd-cta { width: auto; }
+.gn-warn { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: #7A4A06;
+  background: #FDF1DD; border-radius: 10px; padding: 9px 12px; margin-bottom: 12px; }
+.gn-warn svg { flex: none; margin-top: 2px; }
+.gn-warn button { font: inherit; font-weight: 700; color: inherit; background: none; border: 0; padding: 0;
+  text-decoration: underline; cursor: pointer; }
+
+/* ---------- רשימות (גיליון / חלון צד) ---------- */
+.gn-sheet .sub { color: var(--gn-soft); }
+.gn-list { margin-top: 6px; }
+.gn-lh { font-size: 11.5px; font-weight: 700; color: var(--gn-soft); letter-spacing: .02em; margin: 14px 0 2px; }
+.gn-li { border-top: 1px solid var(--gn-line2); transition: opacity .2s ease; }
+.gn-li:first-child, .gn-lh + .gn-li { border-top: 0; }
+.gn-li.is-gone { opacity: .35; pointer-events: none; }
+.gn-li__note { white-space: normal !important; color: var(--gn-soft) !important; font-size: 12px !important; margin-top: 2px; }
+.gn-li__acts { display: flex; gap: 6px; padding: 0 37px 9px 0; }
+.gn-btn { font: inherit; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;
+  border-radius: 999px; padding: 6px 13px; border: 1px solid var(--gn-line); background: #fff; color: var(--gn-ink); cursor: pointer; }
+.gn-btn.is-ok { background: #0F6B45; border-color: #0F6B45; color: #fff; }
+.gn-btn:disabled { opacity: .5; cursor: default; }
+.gn-fb { font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: 3px; background: var(--gn-accent-s); color: var(--gn-accent); flex: none; }
+.gn-fb.is-neg { background: #FBE0E1; color: #A32F3E; }
+
+/* הצצה בריחוף (מחשב) — אינה חוסמת את העכבר */
+.gn-peek { position: fixed; z-index: 80; display: none; width: 320px; max-width: calc(100vw - 16px);
+  background: #fff; border: 1px solid var(--gn-line); border-radius: 12px; padding: 10px 12px;
+  box-shadow: 0 14px 34px rgba(16,24,20,.18); pointer-events: none; color: var(--gn-ink); }
+.gn-peek__h { font-size: 12px; font-weight: 700; color: var(--gn-soft); margin-bottom: 2px; }
+.gn-peek__f { font-size: 11px; color: var(--gn-accent); font-weight: 600; margin-top: 6px; }
+.gn-peek .gn-li__acts { display: none; }
+
+/* ---------- מפה במסך מלא (טלפון) ---------- */
+.gn-full__in { position: absolute; inset: 0; background: #EEF2EC; opacity: 0; transition: opacity .2s ease; }
+.gn-full.is-open .gn-full__in { opacity: 1; }
+.gn-full__map.gd-map { position: absolute; inset: 0; height: 100%; border-radius: 0; }
+.gn-full__map .map-viewport { border-radius: 0; }
+.gn-full__tools { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); inset-inline: 10px;
+  display: flex; gap: 6px; flex-wrap: wrap; z-index: 14; }
+.gn-full__tools .gn-chip { padding: 6px 12px; font-size: 12.5px; }
+.gn-chip--sel { position: relative; padding-inline-end: 10px; }
+.gn-chip--sel select { font: inherit; border: 0; background: none; color: inherit; appearance: none; -webkit-appearance: none;
+  padding: 0; padding-inline-end: 4px; cursor: pointer; max-width: 46vw; text-overflow: ellipsis; }
+.gn-full__body { font-size: 12.5px; }
+/* ⚠️ z-index מעל סרגל הזום של המפה — אחרת כפתורי +/− יושבים על "פתיחת הכרטיס". */
+.gn-full__sheet { position: absolute; inset-inline: 0; bottom: 0; z-index: 60; background: #fff;
+  border-radius: 16px 16px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,.18);
+  padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px)); max-height: 60%; overflow-y: auto; }
+.gn-full__sheet .gn-pop__t { font-size: 15px; }
+.gn-full__sheet .gn-pop__t u { width: 30px; height: 30px; border-radius: 8px; }
+.gn-full__sheet .gn-pop__cta { margin-top: 14px; }
+
+/* ================================ טלפון ================================
+   עמודה אחת, באותו סדר: עכשיו → הפירוט שלו → התקופה → לפי סוג → המפה →
+   המגמות. הבלוקים עצמם לא זזים ב-DOM; רק ה-order. */
+@media (max-width: 899px) {
+  .gn-head { position: sticky; top: calc(var(--header-h, 56px) + 2px); z-index: 15; margin: 0 -4px 10px;
+    padding: 8px 4px; background: rgba(250,251,250,.9);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-radius: 12px; }
+  .gn-head h3 { font-size: 17px; }
+  .gn-up { display: none; }
+  .gn-seg__l { display: none; }
+  .gn-seg__s { display: inline; }
+  .gn-seg button { padding: 4px 11px; }
+  .gn-sk { grid-template-columns: 1fr; }
+
+  .gn-body { display: flex; flex-direction: column; gap: 10px; }
+  .gn-grid, .gn-now, .gn-per, .gn-stack { display: contents; }
+  .gn-o1 { order: 1; } .gn-o2 { order: 2; } .gn-o3 { order: 3; } .gn-o4 { order: 4; }
+  .gn-o5 { order: 5; } .gn-o6 { order: 6; } .gn-o7 { order: 7; } .gn-o8 { order: 8; } .gn-o9 { order: 9; }
+  .gn-grp { margin: 6px 2px -4px; }
+
+  .gn-tiles, .gn-o2:not(.has-act) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gn-tile.is-act { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
+  .gn-tile.is-act .gn-n { font-size: 24px; }
+  .gn-tile.is-act .gn-tx { flex: 1; min-width: 0; }
+  .gn-tile.is-act .gn-l, .gn-tile.is-act .gn-s, .gn-tile.is-act .gn-go { margin: 0; }
+  .gn-tile--pair { grid-column: 1 / -1; }
+  .gn-n { font-size: 25px; }
+
+  .gn-age-k .gn-l2 { display: none; }
+  .gn-age-k .gn-s2 { display: block; }
+  .gn-cat-k { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 8px; }
+
+  .gn-map.gd-map { height: 210px; }
+  .gn-map-tools { display: none; }
+  .gn-pop { display: none; }
+  .gn-map-cover { display: flex; align-items: flex-start; justify-content: flex-end; position: absolute; inset: 0;
+    z-index: 12; background: none; border: 0; padding: 10px; cursor: pointer; }
+  .gn-map-cover .gn-chip { pointer-events: none; }
+  .gn-mapbox .map-toolbar { display: none; }
+
+  .gn-trends { display: block; margin-top: 0; padding: 10px 12px 12px;
+    background: rgba(255,255,255,.8); border-radius: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(17,24,39,.05); }
+  .gn-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--gn-line); margin-bottom: 8px; overflow-x: auto; }
+  .gn-tabs button { font: inherit; font-size: 12px; border: 0; background: none; color: var(--gn-soft);
+    padding: 5px 8px 7px; cursor: pointer; white-space: nowrap; }
+  .gn-tabs button.on { color: var(--gn-ink); font-weight: 700; box-shadow: inset 0 -2px 0 var(--gn-ink); }
+  .gn-trends .gn-tr { background: none; box-shadow: none; border: 0; padding: 0;
+    -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .gn-trends[data-tab="0"] .gn-tr:not([data-i="0"]),
+  .gn-trends[data-tab="1"] .gn-tr:not([data-i="1"]),
+  .gn-trends[data-tab="2"] .gn-tr:not([data-i="2"]),
+  .gn-trends[data-tab="3"] .gn-tr:not([data-i="3"]) { display: none; }
+  .gn-li__acts { padding-inline-start: 37px; padding-inline-end: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gn-tile, .gn-sw::after, .gn-full__in { transition: none; }
+}

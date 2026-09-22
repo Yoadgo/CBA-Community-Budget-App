@@ -3169,6 +3169,22 @@ CBA.screens = CBA.screens || {};
         setTimeout(function () { worldEl.style.transition = ""; }, 460);
         apply();
       }
+      /* 22.9 — מסך "נתוני גינון": התאמת התצוגה לתיבה מנורמלת (0–1), כדי
+         שכל הנעצים ייכנסו לפריים. השיכון מצויר לגובה, והתצוגה הראשונית
+         ממלאת רוחב — במסגרת נמוכה רוב הנעצים היו נשארים מתחת לקצה.
+         ⚠️ תקרת זום: נעץ בודד היה "מתאים" לזום המרבי. */
+      function fitBox(x0, y0, x1, y1, pad) {
+        pad = (pad == null) ? 40 : pad;
+        computeFit();
+        var vw = viewport.clientWidth, vh = viewport.clientHeight;
+        var bw = Math.max((x1 - x0) * MAP_WORLD_W, 1), bh = Math.max((y1 - y0) * MAP_WORLD_H, 1);
+        var s = Math.min((vw - pad * 2) / bw, (vh - pad * 2) / bh);
+        viewMode = "manual";
+        scale = Math.max(minScale(), Math.min(maxScale(), fitScaleVal * MAP_T2, s));
+        var cx = (x0 + x1) / 2 * MAP_WORLD_W, cy = (y0 + y1) / 2 * MAP_WORLD_H;
+        tx = vw / 2 - cx * scale; ty = vh / 2 - cy * scale;
+        apply();
+      }
       function setMarkers(list) {
         markerEls.forEach(function (e) { e.remove(); });
         markerEls = [];
@@ -3442,7 +3458,8 @@ CBA.screens = CBA.screens || {};
       // ידית לקורא — כדי שמסך הגינון יוכל לרענן סימונים בלי לצייר מפה מחדש
       return {
         setMarkers: setMarkers, setPin: setPin, getPin: getPin, areaAt: areaAt,
-        goToHouse: goToHouse, centerOnPin: centerOnPin, fit: function () { fitToScreen(true); }
+        goToHouse: goToHouse, centerOnPin: centerOnPin, fit: function () { fitToScreen(true); },
+        fitBox: fitBox
       };
     }
   };

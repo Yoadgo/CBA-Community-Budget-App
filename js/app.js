@@ -210,10 +210,11 @@
     /* gardenInbox נשאר רשום כמסך (מי ששמר קישור ישן לא ייפול), אבל אין לו
        יותר טאב — ר' ההערה בקבוצת הניווט. */
     gardenInbox: PERM.GARDEN,
-    /* מסך הנתונים פתוח גם לגנן — אבל הוא רואה בו מסך אחר לגמרי:
-       מה עשה ומה פתוח אצלו, בלי ציון ובלי חתך מול התוכנית. השרת
-       פשוט לא שולח לו את השדות האלה. ר' F-13 ו-handleGardenStats_. */
-    gardenStats: PERM.GARDEN,
+    /* 🔴 22.9 — מסך הנתונים החדש: **מנהל הגינון ומנהל-על בלבד** (אפיון סעיף 7).
+       הוא נקרא ישירות מ-Firestore, כולל יומן הפעולות — ולגנן החיצוני אין גישה
+       ליומן בכוונה (הכלל gtMgr() ב-firestore.rules). והמסך הוא כלי ניהול ולא
+       כלי עבודה. קודם היה כאן PERM.GARDEN עם גרסה מצומצמת לגנן מהשרת. */
+    gardenStats: "MANAGER",
     /* דיווחים על האפליקציה (2026-09-09) — מנהל-על בלבד. *שליחת* דיווח פתוחה
        לכל משתמש מחובר (הכפתור הצף), אבל הקריאה של כולם היא ניהול המוצר.
        השרת אוכף את זה בעצמו ב-GET_ACTION_PERMS.appReports — כאן רק מסתירים. */
@@ -304,10 +305,14 @@
            שהכיל, לפי התפקיד, או דיווחים חדשים או תור אישורים — אף פעם לא את
            שניהם. אותה מילה אמרה שני דברים, וחצי מהתשובה תמיד ישב בטאב השני.
            מהיום הוא החלק העליון של "משימות", שמחזיק את **כל** המשימות. */
-        { group: "ginun", label: "גינון", items: [
+        /* 🔴 22.9 (הכרעת יועד) — **"נתונים" הוא המסך הראשי של מנהל הגינון.**
+           לחיצה על "גינון" פותחת אותו ישר (landing, ר' toggleGroup), ולכן
+           הוא גם הראשון בקבוצה. לגנן החיצוני הוא מסונן (SCREEN_PERM "MANAGER"),
+           והקבוצה שלו מתקפלת ל"משימות" בלבד — בדיוק כמו עד היום. */
+        { group: "ginun", label: "גינון", landing: "gardenStats", items: [
+            ["gardenStats", "נתונים"],
             ["gardenPlan",  "תוכנית העבודה"],
-            ["gardenTasks", "משימות"],
-            ["gardenStats", "נתונים"]
+            ["gardenTasks", "משימות"]
           ] }
       ]
     },
@@ -376,7 +381,7 @@
            התווית הנשארת היא של *הקבוצה* ולא של הפריט: "גינון" אומר לו איפה
            הוא, בעוד "מעקב" לבדו בבר הניווט לא אומר על מה. */
         if (items.length === 1) return [items[0][0], t.label];
-        return { group: t.group, label: t.label, items: items };
+        return { group: t.group, label: t.label, items: items, landing: t.landing || "" };
       }
       return canScreen(t[0]) ? t : null;
     }).filter(Boolean);
@@ -547,6 +552,18 @@
   if (navMQ.addEventListener) navMQ.addEventListener("change", function () { if (!navMQ.matches) closeNavSheet(); });
 
   function toggleGroup(g) {
+    /* 🔴 22.9 — קבוצה עם "landing" (גינון → נתונים): כשהמשתמש עוד לא
+       בתוך הקבוצה, הלחיצה **מנווטת** ישר למסך הראשי שלה. showScreen כבר
+       פותח את הקבוצה שמכילה את המסך, ולכן תתי-הכפתורים נחשפים איתו.
+       מתוך הקבוצה — ההתנהגות הרגילה (פתיחה/סגירה, או הגיליון בטלפון). */
+    var a = AREAS[currentArea], grp = null;
+    if (a) a.tabs.forEach(function (t) { if (t && t.group === g) grp = t; });
+    if (grp && grp.landing &&
+        grp.items.some(function (it) { return it[0] === grp.landing; }) &&
+        !grp.items.some(function (it) { return it[0] === currentScreen; })) {
+      showScreen(grp.landing);
+      return;
+    }
     if (isMobileNav()) { openNavSheet(g); return; }
     openGroup = (openGroup === g) ? null : g;
     applyNavGroupState();
