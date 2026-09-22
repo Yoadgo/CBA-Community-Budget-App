@@ -88,13 +88,13 @@ const logsOf = (store, id) => Object.values(store.gardenLog).filter(r => String(
   section('7. המסך — שפה אחידה (סטטי)');
   const GT = R('js/screens/gardenTasks.js');
   const det = GT.slice(GT.indexOf('function openDetails('), GT.indexOf('function showOnMap('));
-  ok('🔴 מנהל, ממתין לאישור → "אישור ביצוע" (approve)', /isManager && done\)[\s\S]{0,700}data-m="approve"[\s\S]{0,120}אישור ביצוע/.test(det));
-  ok('🔴 מנהל, פתוח → "בוצע" (markdone) ולא "סגירה"', /else if \(isManager\) \{[\s\S]{0,400}data-m="markdone"[\s\S]{0,80}'בוצע<\/button>'/.test(det));
+  ok('🔴 23.9 — מנהל, ממתין לאישור → "סגירה" (ובחלון "בוצע" = approve)', /isManager && done\)[\s\S]{0,900}data-m="close"[\s\S]{0,80}'סגירה<\/button>'/.test(det) && /data-cl-done[\s\S]{0,200}ממתין לאישור"\) \? run\("approve"/.test(GT));
+  ok('🔴 23.9 — מנהל, פתוח → "סגירה" אחת, "בוצע" ראשון בחלון', /else if \(isManager\) \{[\s\S]{0,400}data-m="close"[\s\S]{0,80}'סגירה<\/button>'/.test(det) && /data-cl-done="1"/.test(GT));
   ok('גנן → "בוצע"', !/סימון כבוצע<\/button>/.test(GT));
-  ok('"סגירה עם סיבה" בשורה המשנית למנהל', /isManager && !closed\) \{[\s\S]{0,200}data-m="close"[\s\S]{0,80}סגירה עם סיבה/.test(det));
+  ok('23.9 — "סגירה" בשורה המשנית רק למשימה בלי שבוע', /isManager && planning\) \{[\s\S]{0,200}data-m="close"/.test(det));
   ok('הכרטיס מציג "נפתח ע"י" + שם', /t\.reporter \? 'נפתח ע"י ' \+ esc\(t\.reporter\)/.test(det));
   ok('היומן בכרטיס מציג מי', /<time>' \+ esc\(ago\(r\.at\)\) \+ \(whoOf\(r\)/.test(det));
-  ok('תווית השורה: "בוצע" / "אישור ביצוע"', /approving \? "אישור ביצוע" : \(done \? "ביטול סימון" : "בוצע"\)/.test(GT));
+  ok('23.9 — קוביות: "בוצע" לגנן, "סגירה" למנהל, "שיבוץ" בלי שבוע', /\["markdone", "check", "בוצע", "pri"\]/.test(GT) && /\["close", "closeok", "סגירה", "pri"\]/.test(GT) && /\["plan", "cal", "שיבוץ", "pri"\]/.test(GT));
   const RG = R('js/screens/resGarden.js');
   ok('קו הזמן של התושב מציג מי מהצוות', /tlDate\(x\.at\)\) \+ tlWho\(x\)/.test(RG) && /x\.role === "תושב"/.test(RG));
 

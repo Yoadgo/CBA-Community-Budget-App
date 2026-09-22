@@ -127,7 +127,7 @@ const residentLog = (W, taskId) => Object.values(W.store.gardenLog).filter(l => 
     const h = W.S.gardenHorizonRun_(null);
     ok('המנוע לא יצר אותו מחדש', h.created === 0 && !!W.store.gardenTasks[W.ids.routine]);
     const GT = fs.readFileSync(path.join(__dirname, '..', 'js', 'screens', 'gardenTasks.js'), 'utf8');
-    ok('המסך: "ביטול המופע הזה" לשגרה', /t\.kind === "שגרה" \? "ביטול המופע הזה" : "מחיקה"/.test(GT));
+    ok('המסך: "ביטול המופע הזה" לשגרה', /\(t\.kind === GK_ROUTINE && !closed\) \? "ביטול מופע" : "מחיקה"/.test(GT) /* 23.9: קוביות */);
     ok('ומגירה סגורה ב"סגורות"', /<details class="gt-drawer">[\s\S]*?מופעי שגרה שבוטלו/.test(GT));
   }
 

@@ -62,9 +62,9 @@ ok('🔴 והדגל מצויר על הכרטיס הסגור', /t\.flag && t\.fla
 section('5. תפריט ⋯ — פתיחה מחדש והחזרה לצוות');
 ok('כפתור "פתיחה מחדש" קיים', /data-m="reopen"/.test(GT));
 ok('⚠️ והוא מוצג רק כשאין כבר "ביטול סימון" — לא שתי דרכים לאותו דבר',
-   /isManager && t\.closure && !canDispute\(t\)/.test(GT), 'התנאי לא נמצא');
+   /isManager && closed && !canDispute\(t\)/.test(GT) /* 23.9: tileList */, 'התנאי לא נמצא');
 ok('🔴 "לא בוצע כמו שצריך" נפתח גם על סגורה מחוץ לחלון הערעור',
-   /isManager && \(t\.flag === "ממתין לאישור" \|\| canDispute\(t\) \|\| t\.closure\)/.test(GT));
+   /isManager && \(done \|\| canDispute\(t\) \|\| closed\)\) L\.push\(\["return"/.test(GT) /* 23.9: tileList */);
 ok('מחיקה נשארת ללא תנאי סגירה', /data-m="del"/.test(GT));
 
 section('6. כרטיס הפרטים — בדיוק הכרטיס שיושב בתור "דורש החלטה"');

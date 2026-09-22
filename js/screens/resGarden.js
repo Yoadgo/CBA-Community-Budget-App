@@ -208,7 +208,7 @@
   /* קטגוריה -> סמליל וצבע. ההתאמה לפי מילת מפתח ולא לפי מחרוזת מדויקת,
      כדי שעריכה קלה של השם בטאב ההגדרות לא תשבור את התצוגה. */
   var CATS = [
-    { key: "lawn",  match: /דשא|מדשא/,        ico: "lawn"  },
+    { key: "lawn",  match: /דשא|מדשא/,        ico: "lawnwater" },
     { key: "water", match: /השקי|ממטר/,        ico: "water" },
     { key: "tree",  match: /^עצים|עץ/,          ico: "tree"  },
     { key: "prune", match: /גיזום|שיח/,        ico: "prune" },
@@ -220,24 +220,33 @@
     for (var i = 0; i < CATS.length; i++) if (CATS[i].match.test(name)) return CATS[i];
     return { key: "clean", ico: "clean" };
   }
+  /* 23.9 — דיווח קיים: בקטגוריה המאוחדת הכותרת מכריעה בין דשא לטיפה. */
+  function catOfR(r) {
+    var c = catOf(r && r.category);
+    if ((c.key === "lawn" || c.key === "water") && CBA.gardenLang && CBA.gardenLang.lawnOrWater) {
+      return CBA.gardenLang.lawnOrWater(r && r.title);
+    }
+    return c;
+  }
 
+  /* 23.9 — אותו סט Lucide כמו gardenTasks.js (הדשא נשאר המקורי). */
   var ICONS = {
-    leaf:  '<path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/>',
-    lawn:  '<path d="M3 20h18"/><path d="M6 20c0-4 1-6 2-8M11 20c0-5 1-8 1-11M16 20c0-4 1-6 2-8"/>',
-    water: '<path d="M12 3c3.5 4.5 5.5 7.4 5.5 10a5.5 5.5 0 0 1-11 0C6.5 10.4 8.5 7.5 12 3Z"/>',
-    tree:  '<path d="M12 21v-5"/><path d="M12 16a5.5 5.5 0 0 0 1.6-10.8A4.4 4.4 0 0 0 7 5.6 4.2 4.2 0 0 0 8.6 14 5.4 5.4 0 0 0 12 16Z"/>',
-    prune: '<circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M7.7 16.3 18 4M16.3 16.3 6 4"/>',
-    weed:  '<path d="M12 21v-8"/><path d="M12 13c0-3-2.2-5-5-5 0 3 2.2 5 5 5Z"/><path d="M12 13c0-3.4 2.5-5.6 5.6-5.6 0 3.4-2.5 5.6-5.6 5.6Z"/>',
-    clean: '<path d="M5 7h14"/><path d="M10 7V4.6h4V7"/><path d="M6.6 7 8 20h8l1.4-13"/>',
-    bed:   '<circle cx="12" cy="8.4" r="2.4"/><path d="M12 6c0-2.2-3.6-2.2-3.6 0S12 10.6 12 8.4ZM12 6c0-2.2 3.6-2.2 3.6 0S12 10.6 12 8.4ZM12 21v-8"/>',
-    plus:  '<path d="M12 5v14M5 12h14"/>',
-    trash: '<path d="M4.5 7h15"/><path d="M9.5 7V4.6h5V7"/>' +
-           '<path d="M6.8 7 8 20.4h8L17.2 7"/><path d="M10.3 10.6v6M13.7 10.6v6"/>',
-    send:  '<path d="M21 3 10.5 13.5"/><path d="M21 3 14.5 21l-4-7.5L3 9.5Z"/>',
-    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>',
-    check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
-    list:  '<path d="M11 6h9M11 12h9M11 18h9"/><path d="m4 6 1.3 1.3L7 4.7M4 12l1.3 1.3L7 10.7M4 18l1.3 1.3L7 16.7"/>',
-    back:  '<path d="M15 18l-6-6 6-6"/>'
+    leaf: '<path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20"/><path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13"/>',
+    lawn: '<path d="M3 20h18"/><path d="M6 20c0-4 1-6 2-8M11 20c0-5 1-8 1-11M16 20c0-4 1-6 2-8"/>',
+    lawnwater: '<g transform="translate(0 2) scale(.86)"><path d="M3 20h18"/><path d="M6 20c0-4 1-6 2-8M11 20c0-5 1-8 1-11M16 20c0-4 1-6 2-8"/></g><path transform="translate(14.2 .4) scale(.42)" stroke-width="2" style="fill:var(--c-water,#52AED6);stroke:var(--c-water,#52AED6)" d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+    water: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+    tree: '<path d="M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z"/><path d="M12 19v3"/>',
+    prune: '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>',
+    weed: '<path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3"/><path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4"/><path d="M5 21h14"/>',
+    clean: '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    bed: '<path d="M12 5a3 3 0 1 1 3 3m-3-3a3 3 0 1 0-3 3m3-3v1M9 8a3 3 0 1 0 3 3M9 8h1m5 0a3 3 0 1 1-3 3m3-3h-1m-2 3v-1"/><circle cx="12" cy="8" r="2"/><path d="M12 10v12"/><path d="M12 22c4.2 0 7-1.667 7-5-4.2 0-7 1.667-7 5Z"/><path d="M12 22c-4.2 0-7-1.667-7-5 4.2 0 7 1.667 7 5Z"/>',
+    plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    trash: '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    send: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    list: '<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>',
+    back: '<path d="M15 18l-6-6 6-6"/>'
   };
   function ico(n, cls) {
     return '<svg class="' + (cls || "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
@@ -457,7 +466,7 @@
       }
 
       function card(r) {
-        var c = catOf(r.category);
+        var c = catOfR(r);
         var idx = stageIdx(r.stage);
         var done = r.stage === "הושלם";
         /* 🔴 2026-09-14 — שני תיקונים, ושניהם נמדדו בהרמס.
@@ -927,7 +936,11 @@
           var picks = TITLE_PICKS[state.cat] || [];
           tpicksEl.innerHTML = picks.length
             ? picks.map(function (p) {
-                return '<button type="button" class="gd-tpick" data-t="' + esc(p) + '">' + esc(p) + '</button>';
+                /* 23.9 — בקטגוריה המאוחדת כל הצעה מראה אם היא דשא או השקיה. */
+                var lw = (catOf(state.cat).key === "lawn" && CBA.gardenLang && CBA.gardenLang.lawnOrWater)
+                  ? CBA.gardenLang.lawnOrWater(p) : null;
+                return '<button type="button" class="gd-tpick' + (lw ? " k-" + lw.key : "") + '" data-t="' + esc(p) + '">' +
+                  (lw ? ico(lw.ico) : "") + esc(p) + '</button>';
               }).join("")
             : '<span class="gd-tpicks__hint">אפשר גם פשוט להקליד למטה</span>';
         }

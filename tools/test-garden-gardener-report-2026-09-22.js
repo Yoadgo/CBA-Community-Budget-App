@@ -83,7 +83,7 @@ const section = s => console.log('\n' + s);
   ok('⚠️ והגנן לא רואה את המתג "משימה חוזרת"', /noRepeat: !isManager/.test(GT) && /hideRep \? '' : swRow\("gf-rep"/.test(GF));
   ok('פינה ירוקה לגנן', /\.gt-row\.is-gard::after \{ border-top-color: var\(--gt-gard, #15803D\)/.test(CSS) && /" is-gard" : isTeamFault/.test(GT));
   ok('🔴 הדגל פי שניים — 26px', /border-top: 26px solid var\(--gt-res/.test(CSS) && /border-right: 26px solid transparent/.test(CSS));
-  ok('פעולת "עריכה" בתפריט, לפי gardenCanEditTask', /gardenCanEditTask\(t\)[\s\S]{0,120}data-m="edit"/.test(GT) && /if \(m === "edit"\) return openEditTask\(t\);/.test(GT));
+  ok('פעולת "עריכה" בתפריט, לפי gardenCanEditTask', /gardenCanEditTask\(t\)\) L\.push\(\["edit", "pencil", "עריכה"\]\)/.test(GT) && /if \(m === "edit"\) return openEditTask\(t\);/.test(GT));
   ok('🔑 פריסטים בטופס הצוות מאותו מילון', /id="gf-tpicks"/.test(GF) && /CBA\.gardenLang\.TITLE_PICKS/.test(GF));
   ok('ו-resGarden קורא מאותו מקום (אין עותק)', /CBA\.gardenLang\.TITLE_PICKS/.test(RG) && !/"מדשאות": \["מדשאה יבשה"/.test(RG));
 

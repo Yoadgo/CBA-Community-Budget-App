@@ -51,6 +51,8 @@
   }
   function GL() { return CBA.gardenLang; }
   function catOf(name) { return GL().catOf(name); }
+  /* 23.9 — קטגוריה של משימה: דשא או טיפה לפי הכותרת (gardenLang.catOfTask). */
+  function catT(t) { var g = GL(); return g.catOfTask ? g.catOfTask(t) : g.catOf(t && t.category); }
 
   /* מצב הנעץ -> שם בעברית (מקרא ותקציר). הצבעים: --st-* ב-garden.css. */
   var ST_LABEL = { wait: "ממתינה להחלטה", plan: "משובצת", appr: "ממתינה לאישורך",
@@ -273,7 +275,7 @@
           (top.length
             ? '<ul class="gn-drg">' + top.map(function (d) {
                 var t = byId[d.id] || {};
-                var c = catOf(t.category);
+                var c = catT(t);
                 return '<li><button type="button" data-open="' + esc(d.id) + '">' +
                   '<span class="gn-ci k-' + c.key + '">' + ico(c.ico) + '</span>' +
                   '<span class="gn-rt"><b>' + esc(t.title || t.category || "משימה") + '</b>' +
@@ -334,7 +336,7 @@
       var popHideT = null;
       function popHtml(p, big) {
         var t = byId[p.id] || {};
-        var c = catOf(t.category);
+        var c = catT(t);
         var d = GL().drag(t, M.cur);
         var tag = (p.state === "l1" || p.state === "l2")
           ? '<span class="gt-age is-' + p.state + '">' +
@@ -535,7 +537,7 @@
       function row(id, opt) {
         opt = opt || {};
         var t = byId[id] || {};
-        var c = catOf(t.category);
+        var c = catT(t);
         var d = GL().drag(t, M.cur);
         var meta = [t.area, opt.meta].filter(Boolean).join(" · ");
         var tag = opt.tag !== undefined ? opt.tag

@@ -10,13 +10,17 @@
 .gd-screen,
 .gt-sheet {
   --g: #0F6B45;
-  --c-lawn: #16A34A;  --c-lawn-s: #E7F7EC;
-  --c-water: #0EA5E9; --c-water-s: #E4F4FD;
-  --c-tree: #15803D;  --c-tree-s: #E6F4EA;
-  --c-prune: #0D9488; --c-prune-s: #E2F5F3;
-  --c-weed: #CA8A04;  --c-weed-s: #FCF3DC;
-  --c-clean: #64748B; --c-clean-s: #EEF1F5;
-  --c-bed: #DB2777;   --c-bed-s: #FCE8F1;
+  /* 🔴 23.9 (יועד: "המון צבעים צועקים") — פלטה רכה: אותם גוונים, פחות רוויה. */
+  --c-lawn: #5DB77C;  --c-lawn-s: #EAF6EE;
+  --c-water: #52AED6; --c-water-s: #E7F4FA;
+  --c-tree: #3D8058;  --c-tree-s: #E7F1EA;
+  --c-prune: #4B9C91; --c-prune-s: #E6F3F1;
+  --c-weed: #C39B4B;  --c-weed-s: #F7F0E1;
+  --c-clean: #7E8995; --c-clean-s: #EFF1F4;
+  --c-bed: #C77FA0;   --c-bed-s: #F8EDF2;
+  --u1: #D98AAE; --u1-t: #A24B75; --u2: #D46A6A; --u2-t: #A83D3D;
+  --gt-res: #8C4A63; --gt-team: #5B7BC8; --gt-gard: #4E9A6C;
+  --ok-soft: #3E9A6A;
   position: relative;
 }
 /* הרקע האמביינטי — הוא מה שהזכוכית מראה. בלי הגוונים האלה שקיפות על כרטיס
@@ -59,7 +63,8 @@
    76% לובן מול 62% בכותרת העליונה, טשטוש 14 מול 20, ובלי הצללה צפה.
    המטרה: שהרקע יורגש מבעד לכרטיס, לא שייקרא דרכו. */
 .gd-card, .gd-rep, .gd-stat {
-  background: rgba(255,255,255,.76);
+  /* 23.9 (יועד: "הכרטיסייה מעט שרופה") — .76 אחיד → גרדיאנט .68→.52 */
+  background: linear-gradient(165deg, rgba(255,255,255,.68), rgba(255,255,255,.52));
   backdrop-filter: blur(14px) saturate(1.28);
   -webkit-backdrop-filter: blur(14px) saturate(1.28);
   border: 1px solid rgba(255,255,255,.85);
@@ -94,9 +99,9 @@
   transition: transform .14s ease, box-shadow .14s ease;
 }
 .gd-cat:hover { transform: translateY(-1px); }
-.gd-cat u { text-decoration: none; width: 22px; height: 22px; border-radius: 7px; flex: none;
+.gd-cat u { text-decoration: none; width: 26px; height: 26px; border-radius: 7px; flex: none;
   display: grid; place-items: center; }
-.gd-cat u svg { width: 13px; height: 13px; }
+.gd-cat u svg { width: 17px; height: 17px; }
 .gd-cat.on { border-color: transparent; color: #fff; font-weight: 600;
   box-shadow: 0 8px 20px -10px rgba(21,128,61,.8), inset 0 1px 0 rgba(255,255,255,.22); }
 .gd-cat.on u { background: rgba(255,255,255,.22) !important; color: #fff !important; }
@@ -914,7 +919,7 @@
 .gt-decide .gt-grp--lane hr { background: rgba(17,24,39,.10); }
 /* הכרטיסים בפנים יושבים על הרקע האפור, ולכן הם לבנים מלאים — אחרת הם
    נבלעים בו והאזור נקרא כמלבן אחד. */
-.gt-decide .gd-rep { background: #fff; }
+.gt-decide .gd-rep { background: linear-gradient(165deg, rgba(255,255,255,.84), rgba(255,255,255,.7)); }
 .gt-decide .gt-none { background: rgba(255,255,255,.7); }
 
 /* ---- חיווי ברמת השורה + מצב שגיאה (2026-09-08) ----
@@ -1370,15 +1375,19 @@
    🔑 צבעי המצב (--st-*) הם הצבעים של הנעצים במפה ושל התגים בכרטיס — מקור אחד.
    ========================================================================== */
 .gn-vars {
-  --c-lawn: #16A34A;  --c-lawn-s: #E7F7EC;
-  --c-water: #0EA5E9; --c-water-s: #E4F4FD;
-  --c-tree: #15803D;  --c-tree-s: #E6F4EA;
-  --c-prune: #0D9488; --c-prune-s: #E2F5F3;
-  --c-weed: #CA8A04;  --c-weed-s: #FCF3DC;
-  --c-clean: #64748B; --c-clean-s: #EEF1F5;
-  --c-bed: #DB2777;   --c-bed-s: #FCE8F1;
-  --st-wait: #D97706; --st-plan: #2563EB; --st-appr: #7C3AED;
-  --st-l1: #DB2777;   --st-l2: #B42318;   --st-done: #9AA39E;
+  /* 🔴 23.9 (יועד: "המון צבעים צועקים") — פלטה רכה: אותם גוונים, פחות רוויה. */
+  --c-lawn: #5DB77C;  --c-lawn-s: #EAF6EE;
+  --c-water: #52AED6; --c-water-s: #E7F4FA;
+  --c-tree: #3D8058;  --c-tree-s: #E7F1EA;
+  --c-prune: #4B9C91; --c-prune-s: #E6F3F1;
+  --c-weed: #C39B4B;  --c-weed-s: #F7F0E1;
+  --c-clean: #7E8995; --c-clean-s: #EFF1F4;
+  --c-bed: #C77FA0;   --c-bed-s: #F8EDF2;
+  --u1: #D98AAE; --u1-t: #A24B75; --u2: #D46A6A; --u2-t: #A83D3D;
+  --gt-res: #8C4A63; --gt-team: #5B7BC8; --gt-gard: #4E9A6C;
+  --ok-soft: #3E9A6A;
+  --st-wait: #D19A4A; --st-plan: #5B7BC8; --st-appr: #8E7CC3;
+  --st-l1: #D98AAE;   --st-l2: #C75B5B;   --st-done: #9AA39E;
   --age1: #C9D6CF; --age2: #E9B872; --age3: #E68AB4; --age4: #C8413A;
   --gn-accent: #2F6B4F; --gn-accent-s: #E6F0EA;
   --gn-bar: #2F6B4F; --gn-bar2: #9CC7B0;
@@ -1676,4 +1685,120 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .gn-tile, .gn-sw::after, .gn-full__in { transition: none; }
+}
+
+
+/* ==========================================================================
+   🔴 כרטיס המשימה החדש   (23.9.2026, סקיצה גרסה 3 — אושרה ע"י יועד)
+   --------------------------------------------------------------------------
+   · קוביית קטגוריה (זכוכית צבועה) במקום תיבת הסימון.
+   · הפס בקצה = דחיפות בלבד (ורוד = נגררה שבוע, אדום = 2+ או דגל "חם").
+     עד היום הוא היה צבע הקטגוריה — עכשיו הקטגוריה בקובייה.
+   · מקור התקלה = נקודה (20px) מימין ל-⋯, במקום המשולש בפינה.
+   · הדגל = נקודה + מילה, בלי המדבקה בצורת חץ.
+   · ה-⋯ פורס קוביות על הכרטיס עצמו, בשורה אחת גם בנייד.
+   ⚠️ זכוכית בתוך זכוכית יוצאת שטוחה — לקוביות אין backdrop-filter משלהן,
+      רק מילוי שקוף, קו אור עליון וכיווץ בלחיצה.
+   ========================================================================== */
+.gd-rep.gt-row::before { background: transparent; -webkit-mask-image: none; mask-image: none; width: 4px; }
+.gd-rep.gt-row.is-u1::before { background: var(--u1, #D98AAE); }
+.gd-rep.gt-row.is-u2::before { background: var(--u2, #D46A6A); }
+.gt-row.is-report::after, .gt-row.is-team::after, .gt-row.is-gard::after { content: none; }
+
+.gt-cube { width: 36px; height: 36px; flex: none; border-radius: 11px; display: grid; place-items: center;
+  background-color: rgba(17,24,39,.05); color: var(--text-soft, #6B7280);
+  background-image: linear-gradient(160deg, rgba(255,255,255,.62), rgba(255,255,255,0) 72%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), inset 0 0 0 1px rgba(255,255,255,.45); }
+.gt-cube svg { width: 19px; height: 19px; }
+.gt-row.k-lawn  .gt-cube { background-color: var(--c-lawn-s);  color: var(--c-lawn); }
+.gt-row.k-water .gt-cube { background-color: var(--c-water-s); color: var(--c-water); }
+.gt-row.k-tree  .gt-cube { background-color: var(--c-tree-s);  color: var(--c-tree); }
+.gt-row.k-prune .gt-cube { background-color: var(--c-prune-s); color: var(--c-prune); }
+.gt-row.k-weed  .gt-cube { background-color: var(--c-weed-s);  color: var(--c-weed); }
+.gt-row.k-clean .gt-cube { background-color: var(--c-clean-s); color: var(--c-clean); }
+.gt-row.k-bed   .gt-cube { background-color: var(--c-bed-s);   color: var(--c-bed); }
+.gt-closed .gt-cube { filter: saturate(.45); }
+
+.gt-src { width: 20px; height: 20px; flex: none; border-radius: 50%; display: inline-block; align-self: center;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.72), 0 2px 6px rgba(16,24,40,.14); }
+.gt-src.is-res  { background: var(--gt-res, #8C4A63); }
+.gt-src.is-team { background: var(--gt-team, #5B7BC8); }
+.gt-src.is-gard { background: var(--gt-gard, #4E9A6C); }
+.gt-lgi .gt-src { width: 14px; height: 14px; }
+.gt-res.is-gard { color: var(--gt-gard, #4E9A6C); }
+.gt-res.is-team { color: var(--gt-team, #5B7BC8); }
+
+.gt-age { display: inline-flex; align-items: center; gap: 4px; padding: 0; border-radius: 0;
+  clip-path: none; background: none !important; font-size: 11px; font-weight: 700; color: #A26A1E; }
+.gt-age::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.gt-age.is-l1 { color: var(--u1-t, #A24B75); }
+.gt-age.is-hot, .gt-age.is-l2 { color: var(--u2-t, #A83D3D); }
+
+/* ---- קוביות הפעולה על הכרטיס ---- */
+.gt-row.is-tiles { padding-block: 7px; align-items: center; }
+.gt-row.is-tiles > .gt-cube, .gt-row.is-tiles > .gt-body, .gt-row.is-tiles > .gt-src { display: none; }
+.gt-tiles { flex: 1; min-width: 0; display: grid; grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr); gap: 5px; }
+.gt-tile { position: relative; border: 0; border-radius: 11px; min-height: 48px; padding: 6px 2px 5px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font: inherit; font-size: 10.5px; font-weight: 600; line-height: 1.1; color: #1F2937; text-align: center;
+  cursor: pointer; min-width: 0;
+  background: linear-gradient(165deg, rgba(255,255,255,.52), rgba(255,255,255,.26));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px rgba(17,24,39,.05), 0 3px 8px -4px rgba(16,24,40,.16);
+  transition: transform .15s ease, background .15s ease;
+  animation: gtTileIn .3s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 35ms); }
+.gt-tile span { overflow-wrap: anywhere; }
+.gt-tile svg { width: 16px; height: 16px; flex: none; }
+.gt-tile:hover { background: rgba(255,255,255,.72); }
+.gt-tile:active { transform: scale(.955); }
+.gt-tile:focus-visible { outline: 2px solid var(--g, #0F6B45); outline-offset: 1px; }
+.gt-tile.is-pri { color: #fff;
+  background: linear-gradient(165deg, rgba(62,154,106,.86), rgba(47,125,87,.82));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 10px -5px rgba(47,125,87,.6); }
+.gt-tile.is-dng { color: #A8434E; background: linear-gradient(165deg, rgba(255,232,236,.62), rgba(251,233,235,.32)); }
+@keyframes gtTileIn { from { opacity: 0; transform: translateX(-36px); } }
+@media (prefers-reduced-motion: reduce) { .gt-tile { animation: none; } }
+@media (max-width: 600px) {
+  .gt-tiles { gap: 4px; }
+  .gt-tile { min-height: 40px; padding: 5px 1px 4px; border-radius: 9px; font-size: 8.5px; gap: 2px; }
+  .gt-tile svg { width: 13px; height: 13px; }
+  .gt-row.is-tiles { padding-inline: 8px 4px; gap: 6px; }
+  .gt-row.is-tiles .gt-more { width: 34px; height: 34px; }
+  .gt-cube { width: 34px; height: 34px; border-radius: 10px; }
+  .gt-cube svg { width: 18px; height: 18px; }
+}
+
+/* ---- "בוצעו" מקופלות בסוף עבודת השבוע ---- */
+.gt-fold { margin-top: 10px; }
+.gt-fold > summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 9px 14px;
+  border-radius: 999px; font-size: 12.5px; font-weight: 700; color: #2F7D57; cursor: pointer;
+  background: linear-gradient(165deg, rgba(255,255,255,.62), rgba(255,255,255,.4));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(17,24,39,.05); }
+.gt-fold > summary::-webkit-details-marker { display: none; }
+.gt-fold > summary svg { width: 15px; height: 15px; }
+.gt-fold > summary::after { content: ""; margin-inline-start: auto; width: 7px; height: 7px;
+  border-inline-end: 1.8px solid #9AA39E; border-bottom: 1.8px solid #9AA39E;
+  transform: rotate(45deg); transition: transform .2s ease; }
+.gt-fold[open] > summary::after { transform: rotate(-135deg); }
+.gt-fold > .gd-reps { margin-top: 8px; }
+
+/* ---- פס ההתקדמות — קפסולת זכוכית ---- */
+.gt-bar { height: 6px; margin-top: 6px; background: rgba(255,255,255,.55);
+  box-shadow: inset 0 1px 2px rgba(16,24,40,.12), 0 0 0 1px rgba(255,255,255,.7); }
+.gt-bar i { background: linear-gradient(180deg, #6CC495, #2F7D57); }
+
+/* ---- חלון הסגירה: "בוצע" ראשון ---- */
+.gt-opt.is-ok { background: rgba(62,154,106,.13); color: #236B47; font-weight: 700; }
+.gt-opt.is-ok u { background: var(--ok-soft, #3E9A6A); color: #fff; }
+.gt-opt.is-ok span { color: #4F7F66; }
+
+/* ---- הצעות הכותרת: דשא או טיפה ---- */
+.gd-tpick svg { width: 13px; height: 13px; vertical-align: -2px; margin-inline-end: 4px; }
+.gd-tpick.k-lawn svg  { color: var(--c-lawn, #5DB77C); }
+.gd-tpick.k-water svg { color: var(--c-water, #52AED6); }
+
+/* ---- חלונות הגינון: מתכון הזכוכית המלא (ברק אלכסוני + קו אור בקצה) ---- */
+.gt-sheet { background: linear-gradient(158deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 42%), rgba(255,255,255,.88); }
+@media (min-width: 860px) {
+  .gt-sheet { box-shadow: inset -1px 0 0 rgba(255,255,255,.9), 0 0 40px rgba(16,24,40,.18); }
 }

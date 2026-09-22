@@ -22,53 +22,46 @@
   CBA.screens = CBA.screens || {};
   var esc = CBA.esc;
 
+  /* 🔴 23.9 (בקשת יועד: "הסמלילים צוירו לבד") — הסט הוחלף ל-Lucide (רישיון ISC),
+     אותו רשת 24 ואותו קו, מוטמע כאן ולא נטען מבחוץ. נשארו מקוריים: הדשא
+     (יועד: "אהבתי את הסמל הישן"), שלוש הנקודות, והחצים prev/next —
+     ⚠️ ב-RTL prev מצייר "›" ו-next מצייר "‹", לפי המיקום ולא לפי השם.
+     lawnwater = דשא + טיפה, רק לבחירת הקטגוריה המאוחדת. */
   var ICONS = {
-    leaf:  '<path d="M4 20c0-8 5-14 16-15 1 11-5 16-13 16"/><path d="M4 20c3-5 6-8 11-10"/>',
-    lawn:  '<path d="M3 20h18"/><path d="M6 20c0-4 1-6 2-8M11 20c0-5 1-8 1-11M16 20c0-4 1-6 2-8"/>',
-    water: '<path d="M12 3c3.5 4.5 5.5 7.4 5.5 10a5.5 5.5 0 0 1-11 0C6.5 10.4 8.5 7.5 12 3Z"/>',
-    tree:  '<path d="M12 21v-5"/><path d="M12 16a5.5 5.5 0 0 0 1.6-10.8A4.4 4.4 0 0 0 7 5.6 4.2 4.2 0 0 0 8.6 14 5.4 5.4 0 0 0 12 16Z"/>',
-    prune: '<circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M7.7 16.3 18 4M16.3 16.3 6 4"/>',
-    weed:  '<path d="M12 21v-8"/><path d="M12 13c0-3-2.2-5-5-5 0 3 2.2 5 5 5Z"/><path d="M12 13c0-3.4 2.5-5.6 5.6-5.6 0 3.4-2.5 5.6-5.6 5.6Z"/>',
-    clean: '<path d="M5 7h14"/><path d="M10 7V4.6h4V7"/><path d="M6.6 7 8 20h8l1.4-13"/>',
-    bed:   '<circle cx="12" cy="8.4" r="2.4"/><path d="M12 6c0-2.2-3.6-2.2-3.6 0S12 10.6 12 8.4ZM12 6c0-2.2 3.6-2.2 3.6 0S12 10.6 12 8.4ZM12 21v-8"/>',
-    plus:  '<path d="M12 5v14M5 12h14"/>',
-    check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
-    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>',
-    /* בממשק RTL "שבוע קודם" יושב מימין ו"שבוע הבא" משמאל, ולכן החץ של כל
-       אחד מהם מצביע **החוצה** — ימינה מימין, שמאלה משמאל. הגדרות ה-SVG
-       האלה תואמות את המיקום ולא את השם הלועזי: prev מצייר "›" ו-next מצייר
-       "‹". קודם היה הפוך, ושני החצים הצביעו זה אל זה. */
-    prev:  '<path d="M9 18l6-6-6-6"/>',
-    next:  '<path d="M15 18l-6-6 6-6"/>',
-    dots:  '<circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/>',
-    trash: '<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/>' +
-           '<path d="M6.5 7l1 12.5h9L17.5 7"/><path d="M10 11v5M14 11v5"/>',
-    undo:  '<path d="M3 8h11a5 5 0 0 1 0 10H8"/><path d="m6.5 4.5-3 3.5 3 3.5"/>',
-    pin:   '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/>',
-    cal:   '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
-    note:  '<path d="M4 5h16v11l-4 4H4z"/><path d="M20 16h-4v4"/><path d="M8 9h8M8 13h5"/>',
-    merge: '<path d="M7 4v5a4 4 0 0 0 4 4h6"/><path d="M7 20v-5a4 4 0 0 1 4-4h6"/><path d="m14 9 3 2.5-3 2.5"/>',
-    /* שלושת אלה נוספו ב-8.9 עם הכרטיס השקט: person מסמן דיווח תושב (החריג
-       היחיד שנשאר מסומן במפורש), repeat מסמן משימה חוזרת מתוכנית העבודה,
-       ו-filter/help הם שני הלחצנים בשורת הבקרה. */
-    person: '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/>',
-    /* תקלה שהצוות פתח — שתי דמויות מול דמות אחת של `person`. ההבדל
-       נקרא גם בגודל 13px, וזה כל מה שסמליל בשורת מטא צריך לעשות. */
-    team:   '<circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/>' +
-            '<path d="M16.5 5.2a3.2 3.2 0 0 1 0 5.6"/><path d="M18 14.4A6 6 0 0 1 21 20"/>',
-    // מצלמה — תמונות שצירף התושב לדיווח (PHASE 4.2)
-    camera: '<rect x="3" y="6.5" width="18" height="13" rx="2.5"/><circle cx="12" cy="13" r="3.2"/><path d="M8.5 6.5 9.6 4.5h4.8l1.1 2"/>',
-    repeat: '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14"/>' +
-            '<path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v2a3 3 0 0 1-3 3h-14"/>',
-    filter: '<path d="M3 5h18M6.5 12h11M10 19h4"/>',
-    cloud:  '<path d="M6.5 19a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 11.2-1.6A4.2 4.2 0 0 1 21 12.6"/>' +
-            '<path d="m15 15 6 6M21 15l-6 6"/>',
-    hist:   '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3 4v4h4"/>' +
-            '<path d="M12 7.5V12l3 1.8"/>',
-    help:   '<circle cx="12" cy="12" r="9"/>' +
-            '<path d="M9.6 9.2a2.5 2.5 0 1 1 3.2 2.4c-.6.2-.8.7-.8 1.3v.4"/><path d="M12 17h.01"/>',
-    x:      '<path d="M6 6l12 12M18 6 6 18"/>',
-    expand: '<path d="M9 3H4v5M15 21h5v-5M20 4l-6.5 6.5M4 20l6.5-6.5"/>'
+    leaf: '<path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20"/><path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13"/>',
+    lawn: '<path d="M3 20h18"/><path d="M6 20c0-4 1-6 2-8M11 20c0-5 1-8 1-11M16 20c0-4 1-6 2-8"/>',
+    lawnwater: '<g transform="translate(0 2) scale(.86)"><path d="M3 20h18"/><path d="M6 20c0-4 1-6 2-8M11 20c0-5 1-8 1-11M16 20c0-4 1-6 2-8"/></g><path transform="translate(14.2 .4) scale(.42)" stroke-width="2" style="fill:var(--c-water,#52AED6);stroke:var(--c-water,#52AED6)" d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+    water: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+    tree: '<path d="M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z"/><path d="M12 19v3"/>',
+    prune: '<circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>',
+    weed: '<path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3"/><path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4"/><path d="M5 21h14"/>',
+    clean: '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    bed: '<path d="M12 5a3 3 0 1 1 3 3m-3-3a3 3 0 1 0-3 3m3-3v1M9 8a3 3 0 1 0 3 3M9 8h1m5 0a3 3 0 1 1-3 3m3-3h-1m-2 3v-1"/><circle cx="12" cy="8" r="2"/><path d="M12 10v12"/><path d="M12 22c4.2 0 7-1.667 7-5-4.2 0-7 1.667-7 5Z"/><path d="M12 22c-4.2 0-7-1.667-7-5 4.2 0 7 1.667 7 5Z"/>',
+    plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    prev: '<path d="M9 18l6-6-6-6"/>',
+    next: '<path d="M15 18l-6-6 6-6"/>',
+    dots: '<circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/>',
+    trash: '<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+    pin: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+    cal: '<path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>',
+    calnext: '<path d="M16 14v2.2l1.6 1"/><path d="M16 2v3"/><path d="M21 7.338V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h2.338"/><path d="M3 9h5.859"/><path d="M8 2v3"/><circle cx="16" cy="16" r="6"/>',
+    note: '<path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/>',
+    pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+    merge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+    person: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    team: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>',
+    camera: '<path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/><circle cx="12" cy="13" r="3"/>',
+    repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+    filter: '<path d="M2 5h20"/><path d="M6 12h12"/><path d="M9 19h6"/>',
+    cloud: '<path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"/><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"/><path d="m2 2 20 20"/>',
+    hist: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+    help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    expand: '<path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>',
+    closeok: '<circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/>'
   };
   function ico(n, cls) {
     return '<svg class="' + (cls || "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
@@ -78,7 +71,7 @@
   /* קטגוריה -> סמליל וצבע, בהתאמה לפי מילת מפתח (לא מחרוזת מדויקת) — אותה
      טבלה בדיוק כמו ב-resGarden.js, כדי שאותה תקלה תיראה זהה בשני הצדדים. */
   var CATS = [
-    { key: "lawn",  match: /דשא|מדשא/,   ico: "lawn"  },
+    { key: "lawn",  match: /דשא|מדשא/,   ico: "lawnwater" },
     { key: "water", match: /השקי|ממטר/,  ico: "water" },
     { key: "tree",  match: /^עצים|עץ/,    ico: "tree"  },
     { key: "prune", match: /גיזום|שיח/,  ico: "prune" },
@@ -92,6 +85,12 @@
     if (window.CBA && CBA.gardenLang && CBA.gardenLang.catOf) return CBA.gardenLang.catOf(name);
     for (var i = 0; i < CATS.length; i++) if (CATS[i].match.test(name || "")) return CATS[i];
     return { key: "lawn", ico: "lawn" };
+  }
+  /* 23.9 — קטגוריה של **משימה** (לא של בחירה): בקטגוריה המאוחדת הכותרת
+     מכריעה בין דשא לטיפה. ר' gardenLang.catOfTask. */
+  function catT(t) {
+    if (window.CBA && CBA.gardenLang && CBA.gardenLang.catOfTask) return CBA.gardenLang.catOfTask(t);
+    return catOf(t && t.category);
   }
 
   /* ==========================================================================
@@ -119,6 +118,13 @@
     }
     var d = dragOf(t);
     return d.level ? '<span class="gt-age is-l' + d.level + '">' + esc(d.text) + '</span>' : "";
+  }
+
+  /* 23.9 — רמת הדחיפות של הכרטיס: 2 = אדום (דגל "חם" או נגררה 2+),
+     1 = ורוד (נגררה שבוע). מציירת את הפס בקצה הכרטיס. */
+  function urgLevel(t) {
+    if (FLAG_HOT[String(t.flag || "")]) return 2;
+    return dragOf(t).level || 0;
   }
 
   /* חומרת הדגל — סדר יורד, זהה לסדר ב-GARDEN_FLAGS בשרת. משמש גם לצביעה
@@ -164,6 +170,16 @@
     return isGardenerFault(t)
       ? '<span class="gt-res is-gard">' + ico("team") + esc(GL.T.gardener || "גנן") + '</span>'
       : '<span class="gt-res is-team">' + ico("team") + 'מנהל</span>';
+  }
+
+  /* 🔴 23.9 (בקשת יועד) — מקור התקלה כנקודה מימין ל-⋯, במקום המשולש
+     בפינה. אותם שלושה צבעים: בורדו = תושב, כחול = מנהל, ירוק = גנן. */
+  function srcDot(t) {
+    if (!t || t.kind !== GK_REPORT) return "";
+    var k = isGardenerFault(t) ? "gard" : isTeamFault(t) ? "team" : "res";
+    var lbl = k === "gard" ? "תקלה · " + (GL.T && GL.T.gardener || "גנן")
+            : k === "team" ? "תקלה · מנהל" : "דיווח תושב";
+    return '<span class="gt-src is-' + k + '" title="' + esc(lbl) + '" aria-label="' + esc(lbl) + '"></span>';
   }
 
   var MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני",
@@ -705,8 +721,12 @@
         if (!thisWeek.length) {
           html += '<div class="gt-none">אין עבודה משובצת לשבוע הזה.</div>';
         } else {
+          /* 🔴 23.9 (בקשת יועד) — מה שכבר בוצע (ממתין לאישור) מתקפל לשורה
+             אחת בסוף, והרשימה מציגה רק את מה שעוד פתוח. למנהל הקיפול פתוח
+             כברירת מחדל — אלה המשימות שממתינות לו. */
+          var doneW = thisWeek.filter(function (t) { return t.flag === "ממתין לאישור"; });
           var areas = [], seen = {};
-          thisWeek.forEach(function (t) {
+          thisWeek.filter(function (t) { return t.flag !== "ממתין לאישור"; }).forEach(function (t) {
             var a = t.area || "ללא אזור";
             if (!seen[a]) { seen[a] = []; areas.push(a); }
             seen[a].push(t);
@@ -728,6 +748,12 @@
                 seen[a].map(function (t) { return card(t, { hideArea: true }); }).join("") +
               '</div>';
           }).join("");
+          if (doneW.length) {
+            html += '<details class="gt-fold"' + (isManager ? ' open' : '') + '><summary>' + ico("check") +
+              esc(doneW.length === 1 ? "משימה אחת בוצעה" : doneW.length + " בוצעו") +
+              (isManager ? " · ממתינות לאישורך" : " השבוע") + '</summary>' +
+              '<div class="gd-reps">' + doneW.map(function (t) { return card(t); }).join("") + '</div></details>';
+          }
         }
 
         return html;
@@ -819,7 +845,7 @@
          מפורשת — ר' [[cba-resident-refund-summary-2026-09-07]]. */
       function card(t, opt) {
         var hideArea = !!(opt && opt.hideArea);
-        var cat = catOf(t.category);
+        var cat = catT(t);
         var done = t.flag === "ממתין לאישור";
         /* כרטיס סגור. הוא **לא** מנוסח כמשימה שאפשר לפעול עליה: אין תיבת
            סימון, אין תפריט פעולות — רק מה נסגר, על ידי מי, ומתי, וכפתור
@@ -829,12 +855,11 @@
               (t.kind === GK_REPORT ? " is-report" : "") +
               (isGardenerFault(t) ? " is-gard" : isTeamFault(t) ? " is-team" : "") +
               '" data-id="' + esc(t.id) + '">' +
-            '<span class="gt-cbox">' + ico("check") + '</span>' +
+            '<span class="gt-cube" title="' + esc(t.category || "") + '">' + ico(cat.ico) + '</span>' +
             '<div class="gt-body">' +
               '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
               '<div class="gt-meta">' +
-                '<span class="gt-cls">' + esc(t.closure) + '</span><i>·</i>' +
-                '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
+                '<span class="gt-cls">' + esc(t.closure) + '</span>' +
                 (t.area
                   ? '<i>·</i><span class="gt-nb">' + ico("pin") + esc(t.area) + '</span>'
                   : '') +
@@ -850,7 +875,7 @@
                   : '') +
               '</div>' +
               (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
-            '</div>' +
+            '</div>' + srcDot(t) +
             /* ⚠️ כרטיס סגור אינו נעול.
                · הגנן: משימת שגרה שהוא סגר בעצמו פתוחה לערעור שבועיים.
                · **המנהל: תמיד** (17.9, ממצא 22+20). קודם התנאי היה
@@ -866,6 +891,7 @@
           '</article>';
         }
         var tags = tagHtml(t);
+        var urg = urgLevel(t);
         var where = t.area || "";
         /* בתצוגת "לשיבוץ" תיבת הסימון מוחלפת בכפתור שיבוץ: אי אפשר לסמן
            כבוצעה משימה שעוד לא נכנסה לשום שבוע, והפעולה הנכונה שם היא אחת. */
@@ -878,18 +904,14 @@
            הסימון שלו, ולמנהל היא **האישור** — הפעולה שבאמת סוגרת. שאר
            ההחלטות של המנהל (החזרה, סגירה עם סיבה) יושבות בתפריט ה-⋯. */
         var approving = done && isManager;
-        return '<article class="gd-rep gt-row k-' + cat.key +
+        return '<article class="gd-rep gt-row k-' + cat.key + (urg ? " is-u" + urg : "") +
             (t.kind === GK_REPORT ? " is-report" : "") +
             (isGardenerFault(t) ? " is-gard" : isTeamFault(t) ? " is-team" : "") +
             (done ? (approving ? " is-await" : " is-done") : "") +
             '" data-id="' + esc(t.id) + '">' +
-          (planning
-            ? '<button type="button" class="gt-plan" data-act="plan" aria-label="שיבוץ לשבוע">' +
-                ico("cal") + '</button>'
-            : '<button type="button" class="gt-box' + (approving ? " is-approve" : "") +
-                '" data-act="' + (approving ? "approve" : (done ? "undo" : "done")) + '"' +
-                ' aria-label="' + (approving ? "אישור ביצוע" : (done ? "ביטול סימון" : "בוצע")) +
-                '">' + ico("check") + '</button>') +
+          /* 🔴 23.9 (בקשת יועד) — **קוביית קטגוריה במקום תיבת הסימון.**
+             "בוצע" / "שיבוץ" / "סגירה" עברו לקוביות שנפרסות מה-⋯. */
+          '<span class="gt-cube" title="' + esc(t.category || "") + '">' + ico(cat.ico) + '</span>' +
           '<div class="gt-body">' +
             /* הכותרת ראשונה ולבדה. מתחתיה שורת מטא אחת שבה כל שדה הוא
                סמליל + טקסט אפור, מופרדים בנקודה. הסדר קבוע ואינו תלוי
@@ -899,41 +921,22 @@
                אדם שמחכה), שגרה מקבלת סמליל ↻ בלבד, ומשימה יזומה — כלום.
                אין מה לסמן במשימה שהמנהל פתח בעצמו והוא זה שמסתכל. */
             '<div class="gt-t">' + esc(t.title || t.category || "משימה") + '</div>' +
-            '<div class="gt-meta">' +
-              /* ⚠️ **מספר הפנייה חוזר לכרטיס** (9.9), ורק הוא. עד היום היה
-                 כאן מזהה המשימה — מספר שהתושב מעולם לא ראה — ולכן ב-8.9
-                 הורדנו אותו לגמרי. אבל אז נוצר המצב שיועד נתקל בו: הוא קיבל
-                 "הדיווח נשלח · מספר 7", חיפש 7, ומצא משימה אחרת לגמרי, כי
-                 המספר שהוא קיבל הוא של טאב הדיווחים והצוות עבד לפי טאב
-                 המשימות. מהיום מוצג המספר שהתושב מחזיק ביד, והוא היחיד.
-                 משימת שגרה ומשימה יזומה נשארות בלי מספר — אין להן פנייה
-                 ואין מי שמצטט אותן. */
-              (t.kind === GK_REPORT
-                ? (isTeamFault(t)
-                    ? teamTag(t) + '<i>·</i>'
-                    : '<span class="gt-res">' + ico("person") +
-                      esc(GL.reportRef(t.repId)) +
-                      /* 22.9 (בקשת יועד) — שם המדווח המלא ליד מספר הפנייה. */
-                      (t.reporter ? ' · ' + esc(t.reporter) : '') + '</span><i>·</i>')
-                : (t.kind === GK_ROUTINE ? ico("repeat") + '<i>·</i>' : '')) +
-              /* ---- תמונות הדיווח (PHASE 4.2, 2026-09-14) ----
-                 עד היום התושב צילם, התמונה נשמרה ב-Drive, ומי שיצא לשטח
-                 לא ראה אותה מעולם. זה מה שהופך "יש רטיבות ליד השביל"
-                 לביקור אחד במקום שניים. מוצג רק כשיש תמונות בפועל. */
+            /* 23.9 — שורת המטא נבנית כרשימה ומחוברת בנקודה, כדי שהסרת שדה
+               (הקטגוריה עברה לקובייה, המקור לנקודה) לא תשאיר מפריד תלוי.
+               הסדר קבוע: תושב · שגרה · תמונות · מיקום · דגל. */
+            '<div class="gt-meta">' + [
+              (t.kind === GK_REPORT && !isTeamFault(t)
+                ? '<span class="gt-res">' + ico("person") + esc(GL.reportRef(t.repId)) +
+                  (t.reporter ? ' · ' + esc(t.reporter) : '') + '</span>'
+                : ''),
+              (t.kind === GK_ROUTINE ? ico("repeat") : ''),
               ((t.photos && t.photos.length)
                 ? '<button type="button" class="gt-nb gt-ph" data-act="photos" ' +
-                    'title="צפייה בתמונות שצירף התושב">' + ico("camera") +
-                    t.photos.length + '</button><i>·</i>'
-                : '') +
-              /* שדה שכבר מופיע בכותרת הקבוצה אינו חוזר על הכרטיס. בסידור
-                 לפי אזור, האזור נכתב פעם אחת מעל הקבוצה ואז שוב על כל אחת
-                 מתשע המשימות שמתחתיו — וכשהשם ארוך ("שכונה מרכזית צפונית")
-                 הוא גם שובר את שורת המטא לשתיים. אותו כלל לקטגוריה. */
-              '<span class="gd-kchip">' + ico(cat.ico) + esc(t.category || "") + '</span>' +
-              (where && !hideArea
-                ? '<i>·</i><span class="gt-nb">' + ico("pin") + esc(where) + '</span>'
-                : '') +
-              (tags ? '<i>·</i>' + tags : '') +
+                    'title="צפייה בתמונות שצירף התושב">' + ico("camera") + t.photos.length + '</button>'
+                : ''),
+              (where && !hideArea ? '<span class="gt-nb">' + ico("pin") + esc(where) + '</span>' : ''),
+              tags
+            ].filter(Boolean).join('<i>·</i>') +
             '</div>' +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
             /* רמז הכפילות מופיע רק ב"לשיבוץ" — הרגע שבו המנהל פוגש דיווח
@@ -963,12 +966,13 @@
             /* שורת "ממתין לאישור" נשארת רק לצוות (2026-09-08). אצל המנהל
                היא הופיעה על כל כרטיס בתור האישורים — כלומר על מסך שכולו
                ממתין לאישורו — לצד תיבת אישור ירוקה שאומרת בדיוק את זה. */
-            (done && !isManager
+            /* 23.9 — בלי תיבת הסימון, גם המנהל צריך לראות שזה בוצע וממתין לו. */
+            (done
               ? '<div class="gt-wait">' + ico("clock") +
-                esc('ממתין לאישור ' + GL.T.manager) + '</div>'
+                esc(isManager ? 'בוצע · ממתין לאישורך' : 'ממתין לאישור ' + GL.T.manager) + '</div>'
               : '') +
-          '</div>' +
-          '<button type="button" class="gt-more" data-act="menu" aria-label="עוד פעולות">' +
+          '</div>' + srcDot(t) +
+          '<button type="button" class="gt-more" data-act="menu" aria-label="עוד פעולות" aria-expanded="false">' +
             ico("dots") + '</button>' +
         '</article>';
       }
@@ -1012,6 +1016,17 @@
       }
 
       function onCardClick(e) {
+        /* 23.9 — קובייה מתוך ה-⋯ שנפרס על הכרטיס. נבדק ראשון: הקוביות
+           יושבות בתוך .gt-row, ולחיצה עליהן אסור שתפתח את כרטיס הפרטים. */
+        var tb = e.target.closest("[data-tile]");
+        if (tb) {
+          var ta = tb.closest(".gt-row");
+          var tm = tb.dataset.tile;
+          closeTiles();
+          if (ta) tileAction(ta.dataset.id, tm);
+          return;
+        }
+        if (e.target.closest(".gt-tiles")) return;
         var btn = e.target.closest("[data-act]");
         if (!btn) {
           /* לחיצה על גוף השורה עצמה (לא על תיבה/שיבוץ/⋯, שכולם נושאים
@@ -1047,7 +1062,8 @@
           return;
         }
         if (act === "hist") return openHistory(id);
-        if (act === "menu") return openMenu(id);
+        if (act === "menu") return openTiles(art, id);
+        if (act === "tiles-close") return closeTiles();
         if (act === "plan") return askWeek(id);
         if (act === "approve") return run("approve", id, {});
         if (act === "done") return markDone(id);
@@ -1295,24 +1311,24 @@
           /* 🔴 הדגל החדש (2026-09-21). הוא נכנס למקרא באותה נשימה שבה הוא
              נכנס לכרטיס — זה הכלל בראש openLegend, וסימן בלי הסבר הוא בדיוק
              מה שהמקרא קיים כדי למנוע. */
-          '<div class="gt-lgi"><u><span class="gt-lgf"></span></u><div><b>פינה בורדו</b>' +
-            '<span>אותו דבר, רק גלוי ממרחק: כרטיס עם פינה בורדו משמאל־למעלה הגיע מתושב, ' +
+          '<div class="gt-lgi"><u><span class="gt-src is-res"></span></u><div><b>נקודה בורדו</b>' +
+            '<span>הנקודה ליד ה-⋯: הכרטיס הגיע מתושב, ' +
             'גם כשהוא כבר משובץ לשבוע בתוך רשימת העבודה.</span></div></div>' +
           /* ⚠️ נכנס למקרא באותה נשימה שבה הוא נכנס לכרטיס — זה הכלל
              בראש openLegend, וסימן בלי הסבר הוא מה שהמקרא בא למנוע. */
-          '<div class="gt-lgi"><u><span class="gt-lgf is-team"></span></u><div><b>פינה כחולה</b>' +
+          '<div class="gt-lgi"><u><span class="gt-src is-team"></span></u><div><b>נקודה כחולה</b>' +
             '<span>תקלה שהצוות פתח בעצמו, לא דייר. מטופלת בדיוק כמו תקלת דייר — ' +
             'רק שאין מי שמחכה לתשובה, ולכן אין מייל ואין שאלת מעקב.</span></div></div>' +
-          '<div class="gt-lgi"><u><span class="gt-lgf is-gard"></span></u><div><b>פינה ירוקה</b>' +
+          '<div class="gt-lgi"><u><span class="gt-src is-gard"></span></u><div><b>נקודה ירוקה</b>' +
             '<span>תקלה שהגנן פתח מהשטח. מטופלת כמו תקלה שהמנהל פתח.</span></div></div>' +
           '<div class="gt-lgi"><u>' + ico("repeat") + '</u><div><b>' + esc(GL.T.routine) + '</b>' +
             '<span>מגיעה מתוכנית העבודה וחוזרת לפי התדירות שהוגדרה לה.</span></div></div>' +
           '<div class="gt-lgi"><u style="color:#C4CBC8">—</u><div><b>בלי סימון</b>' +
             '<span>משימה שנפתחה כאן ידנית, פעם אחת.</span></div></div>' +
 
-          '<div class="gt-lg">הפס בשפת הכרטיס</div>' +
+          '<div class="gt-lg">הקובייה בתחילת הכרטיס</div>' +
           '<div class="gt-lgi"><u><span class="gt-lgs" style="background:var(--c-lawn)"></span></u>' +
-            '<div><b>קטגוריה</b><span>מאפשר לסרוק את הרשימה לפי סוג עבודה בלי לקרוא.</span>' +
+            '<div><b>קטגוריה</b><span>סוג העבודה בצבע ובסמליל. במדשאות: דשא ירוק, ובהשקיה: טיפה בתכלת.</span>' +
             '<div class="gt-lgc">' + cats.map(function (c) {
               return '<div><i style="background:var(--c-' + c[0] + ')"></i>' + esc(c[1]) + '</div>';
             }).join("") + '</div></div></div>' +
@@ -1320,30 +1336,18 @@
           '<div class="gt-lg">תג צבעוני</div>' +
           '<div class="gt-lgi"><u style="width:auto"><span class="gt-age is-l1">נגררה</span></u>' +
             '<div><b>שבוע אחד מעבר לשבוע שלה</b><span>השבוע שלה נגמר והיא לא סומנה, או שנדחתה לשבוע הבא. ' +
-            'זה הדבר הצבעוני היחיד בכרטיס. אין תג — הכול כרגיל.</span></div></div>' +
+            'יחד איתו מופיע פס צבעוני בקצה הכרטיס. אין תג — הכול כרגיל.</span></div></div>' +
           '<div class="gt-lgi"><u style="width:auto"><span class="gt-age is-l2">נגררה 3 שבועות</span></u>' +
             '<div><b>שבועיים ומעלה</b><span>כמה שבועות עברו מהשבוע המקורי שלה. ככל שרחוק יותר — גבוה יותר ברשימה.</span></div></div>' +
           '<div class="gt-lgi"><u style="width:auto"><span class="gt-age is-hot">דורש בדיקה חוזרת</span></u>' +
             '<div><b>דורש תשומת לב</b><span>תושב אמר שהטיפול לא הושלם, או שהעבודה נחסמה בשטח.</span></div></div>' +
 
-          '<div class="gt-lg">תיבת הסימון</div>' +
-          '<div class="gt-lgi"><u><span class="gt-box" style="width:22px;height:22px;margin:0"></span></u>' +
-            '<div><b>ריקה</b><span>' +
-            /* ⚠️ 2026-09-09, גל 3 — הסימון סוגר הכול. מה שנשאר להסביר הוא
-               ההבדל היחיד שנותר: דיווח תושב דורש משפט על מה נעשה. */
+          '<div class="gt-lg">הכפתור ⋯</div>' +
+          '<div class="gt-lgi"><u>' + ico("dots") + '</u><div><b>כל הפעולות</b><span>' +
             esc(isManager
-              ? "סימון ביצוע — הוא גם סוגר. בדיווח של תושב תתבקש לכתוב מה נעשה, והמשפט נשלח אליו."
-              : "לחיצה מסמנת שביצעת וסוגרת. בדיווח של תושב תתבקש לכתוב מה נעשה, והמשפט נשלח אליו.") +
+              ? "לחיצה פורסת את הפעולות על הכרטיס. \"סגירה\" — בוצע, או סגירה עם סיבה. בדיווח של תושב תתבקש לכתוב מה נעשה, והמשפט נשלח אליו."
+              : "לחיצה פורסת את הפעולות על הכרטיס. \"בוצע\" מסמן שסיימת. בדיווח של תושב תתבקש לכתוב מה נעשה, והמשפט נשלח אליו.") +
             '</span></div></div>' +
-          (isManager
-            ? '<div class="gt-lgi"><u><span class="gt-box is-approve" style="width:22px;height:22px;margin:0">' +
-              ico("check") + '</span></u><div><b>ירוקה</b>' +
-              '<span>אישור, ורק בדיווח של תושב. הלחיצה סוגרת ושולחת לו עדכון.</span></div></div>' +
-              '<div class="gt-lgi"><u><span class="gt-cbox" style="width:22px;height:22px;margin:0">' +
-              ico("check") + '</span></u><div><b>אפורה</b>' +
-              '<span>נסגרה. משימת שגרה נשארת פתוחה לערעור שבועיים — «לא בוצע כמו שצריך» ' +
-              'בתפריט פותחת אותה מחדש.</span></div></div>'
-            : '') +
           /* כפתור סגירה מפורש. שאר הגיליונות נסגרים בלחיצה על הרקע, אבל
              המקרא גבוה ~700px ובטלפון הוא כמעט ממלא את המסך — הרקע שנשאר
              הוא רצועה דקה שקשה לפגוע בה. */
@@ -1496,105 +1500,104 @@
         });
       }
 
-      function openMenu(id) {
+      /* ==========================================================================
+       *  🔴 ה-⋯ פורס קוביות על הכרטיס עצמו   (23.9.2026, בקשת יועד)
+       * --------------------------------------------------------------------------
+       *  במקום חלון צד עם שורות ארוכות: הקוביות נגררות ימינה מה-⋯, בשורה אחת
+       *  גם בנייד, וה-⋯ הופך ל-X. אותן פעולות בדיוק כמו התפריט הקודם, באותם
+       *  תנאים (ר' tileList), ואותה menuAction — אין מסלול שני.
+       *  🔑 "בוצע" ו"סגירה" הם כפתור אחד: למנהל "סגירה" פותחת את חלון
+       *     הסגירה ששם "בוצע" (ירוק) ראשון; לגנן, שאין לו סגירה עם סיבה, הכפתור
+       *     נקרא "בוצע". משימה בלי שבוע מקבלת "שיבוץ".
+       * ======================================================================== */
+      var tilesOpen = null;
+      function tileList(t) {
+        var L = [], closed = !!t.closure, done = t.flag === "ממתין לאישור";
+        var planning = !closed && !t.week;
+        L.push(["hist", "hist", "היסטוריה"]);
+        if (CBA.data.gardenCanEditTask && CBA.data.gardenCanEditTask(t)) L.push(["edit", "pencil", "עריכה"]);
+        /* ⚠️ על משימה סגורה השרת דוחה הכול חוץ מערעור, "טופל" ומחיקה. */
+        if (!closed) {
+          L.push(["note", "note", "הערה/\u200Bדיווח"]);
+          L.push(["defer", "calnext", "דחייה"]);
+          if (!isManager) L.push(["block", "clock", "לא ניתן"]);
+        }
+        if (isManager && (done || canDispute(t) || closed)) L.push(["return", "undo", closed ? "לא בוצע" : "החזרה"]);
+        if (canDispute(t)) L.push(["undo", "undo", "ביטול סימון"]);
+        if (isManager && closed && !canDispute(t)) L.push(["reopen", "undo", "פתיחה מחדש"]);
+        if (isManager && t.flag === "דורש בדיקה חוזרת") L.push(["clearflag", "check", "טופל"]);
+        if (!closed) {
+          if (planning) {
+            if (isManager) L.push(["close", "closeok", "סגירה"]);
+            L.push(["plan", "cal", "שיבוץ", "pri"]);
+          } else if (isManager) {
+            L.push(["close", "closeok", "סגירה", "pri"]);
+          } else if (!done) {
+            L.push(["markdone", "check", "בוצע", "pri"]);
+          }
+        }
+        /* מופע שגרה מבוטל ולא נמחק (22.9, ממצא E) — ר' gardenTaskDelete. */
+        if (isManager) L.push(["del", "trash", (t.kind === GK_ROUTINE && !closed) ? "ביטול מופע" : "מחיקה", "dng"]);
+        return L;
+      }
+      function onDocTiles(e) { if (tilesOpen && !tilesOpen.contains(e.target)) closeTiles(); }
+      function onKeyTiles(e) { if (e.key === "Escape") closeTiles(); }
+      function closeTiles() {
+        document.removeEventListener("click", onDocTiles, true);
+        document.removeEventListener("keydown", onKeyTiles);
+        if (!tilesOpen) return;
+        var a = tilesOpen;
+        tilesOpen = null;
+        a.classList.remove("is-tiles");
+        var box = a.querySelector(".gt-tiles");
+        if (box && box.parentNode) box.parentNode.removeChild(box);
+        var mb = a.querySelector('.gt-more[data-act="tiles-close"]');
+        if (mb) {
+          mb.dataset.act = "menu";
+          mb.setAttribute("aria-label", "עוד פעולות");
+          mb.setAttribute("aria-expanded", "false");
+          mb.innerHTML = ico("dots");
+        }
+      }
+      function openTiles(art, id) {
+        var t = byId(id);
+        if (!t || !art) return;
+        if (tilesOpen === art) return closeTiles();
+        closeTiles();
+        var list = tileList(t), n = list.length;
+        var box = document.createElement("div");
+        box.className = "gt-tiles";
+        box.setAttribute("role", "menu");
+        box.setAttribute("aria-label", t.title || "פעולות");
+        /* --i = המרחק מה-⋯, כדי שהקובייה הקרובה אליו תופיע ראשונה והשאר
+           "יגררו" ימינה אחריה. */
+        box.innerHTML = list.map(function (x, i) {
+          return '<button type="button" role="menuitem" class="gt-tile' + (x[3] ? " is-" + x[3] : "") +
+            '" data-tile="' + x[0] + '" style="--i:' + (n - 1 - i) + '">' + ico(x[1]) +
+            '<span>' + esc(x[2]).replace(/\u200B/g, "&#8203;") + '</span></button>';
+        }).join("");
+        var mb = art.querySelector(".gt-more");
+        art.insertBefore(box, mb);
+        art.classList.add("is-tiles");
+        if (mb) {
+          mb.dataset.act = "tiles-close";
+          mb.setAttribute("aria-label", "סגירת הפעולות");
+          mb.setAttribute("aria-expanded", "true");
+          mb.innerHTML = ico("x");
+        }
+        tilesOpen = art;
+        setTimeout(function () {
+          if (tilesOpen !== art) return;
+          document.addEventListener("click", onDocTiles, true);
+          document.addEventListener("keydown", onKeyTiles);
+        }, 0);
+      }
+      function tileAction(id, m) {
         var t = byId(id);
         if (!t) return;
-        var cat = catOf(t.category);
-        var wrap = document.createElement("div");
-        wrap.className = "gt-sheet-wrap";
-        wrap.innerHTML =
-          '<div class="gt-sheet-bd"></div>' +
-          '<div class="gt-sheet" role="dialog" aria-label="' + esc(t.title || "משימה") + '">' +
-            '<div class="gt-grip" aria-hidden="true"></div>' +
-            '<h4>' + esc(t.title || t.category || "משימה") + '</h4>' +
-            '<p class="sub">' +
-              (t.repId ? esc(GL.reportRef(t.repId)) + ' · ' : '') + esc(t.category || "") +
-              (t.area ? ' · ' + esc(t.area) : '') + '</p>' +
-            '<button type="button" class="gt-opt" data-m="hist"><u>' + ico("hist") + '</u>' +
-              '<div>היסטוריה<span>כל מה שקרה למשימה, לפי הסדר</span></div></button>' +
-            /* 🔴 22.9 — עריכה: לפותח ולמנהל; המנהל גם על תקלת דייר (בלי הודעה לדייר). */
-            (CBA.data.gardenCanEditTask && CBA.data.gardenCanEditTask(t)
-              ? '<button type="button" class="gt-opt" data-m="edit"><u>' + ico("note") + '</u>' +
-                '<div>עריכה<span>' + (t.repId
-                  ? 'כותרת, קטגוריה, אזור, שבוע ומיקום · התושב לא מקבל הודעה'
-                  : 'כותרת, קטגוריה, אזור, שבוע ומיקום') + '</span></div></button>'
-              : '') +
-            /* ⚠️ על משימה סגורה השרת דוחה כל פעולה חוץ מערעור, "טופל" ומחיקה
-               (ר' המשמר ב-gardenTaskAction_). כפתור שמחזיר "המשימה כבר נסגרה"
-               הוא כפתור מת, ולכן שלוש הפעולות האלה פשוט לא מוצגות שם. */
-            (t.closure ? '' :
-              '<button type="button" class="gt-opt" data-m="note"><u>' + ico("note") + '</u>' +
-                '<div>הערת ביצוע<span>מה נעשה בפועל — נשמר ביומן</span></div></button>' +
-              '<button type="button" class="gt-opt" data-m="defer"><u>' + ico("cal") + '</u>' +
-                '<div>דחייה לשבוע הבא<span>תסומן "נגררה" ותעלה בראש הרשימה</span></div></button>' +
-              (isManager ? ''
-                : '<button type="button" class="gt-opt" data-m="block"><u>' + ico("clock") + '</u>' +
-                  '<div>לא ניתן לביצוע<span>עובר למנהל הגינון עם הסיבה</span></div></button>')) +
-            /* פעולות המנהל. "החזרה להשלמה" מוצעת רק כשיש מה להחזיר — כלומר
-               כשהצוות כבר סימן ביצוע וזה ממתין לאישור. */
-            (isManager && (t.flag === "ממתין לאישור" || canDispute(t) || t.closure)
-              ? '<button type="button" class="gt-opt" data-m="return"><u>' + ico("undo") + '</u>' +
-                '<div>' + (t.closure ? "לא בוצע כמו שצריך" : "החזרה להשלמה") +
-                '<span>' + (t.closure
-                  ? "פותחת מחדש וחוזרת לצוות עם מה שחסר"
-                  : "חוזרת לצוות עם מה שחסר") + '</span></div></button>'
-              : '') +
-            /* "סימנתי בטעות" — למי שסימן, בתוך אותו חלון. */
-            (canDispute(t)
-              ? '<button type="button" class="gt-opt" data-m="undo"><u>' + ico("undo") + '</u>' +
-                '<div>ביטול סימון<span>המשימה חוזרת להיות פתוחה</span></div></button>'
-              : '') +
-            /* ⚠️ "פתיחה מחדש" — סמכות מנהל, בלי הגבלת זמן (17.9, ממצא 22).
-               זו הפעולה שהופכת סגירה בסיבה שגויה להפיכה. היא מוצגת רק כשאין
-               כבר "ביטול סימון" למעלה, כדי לא להציע שתי דרכים לאותו דבר. */
-            (isManager && t.closure && !canDispute(t)
-              ? '<button type="button" class="gt-opt" data-m="reopen"><u>' + ico("undo") + '</u>' +
-                '<div>פתיחה מחדש<span>מבטלת את הסגירה — המשימה חוזרת לעבודה</span></div></button>'
-              : '') +
-            (isManager && !t.closure
-              ? '<button type="button" class="gt-opt" data-m="close"><u>' + ico("check") + '</u>' +
-                '<div>סגירה עם סיבה<span>הועבר לבינוי · בוטל · לא רלוונטי</span></div></button>'
-              : '') +
-            /* ⚠️ הפעולה היחידה שמותרת גם על משימה סגורה. משוב שלילי של תושב
-               מרים "דורש בדיקה חוזרת" גם על משימה שכבר נסגרה, ובלי הכפתור
-               הזה הדגל נשאר דלוק לנצח וכל פעולה אחרת נענית "כבר נסגרה". */
-            (isManager && t.flag === "דורש בדיקה חוזרת"
-              ? '<button type="button" class="gt-opt" data-m="clearflag"><u>' + ico("check") + '</u>' +
-                '<div>טופל<span>מוריד את סימון הבדיקה החוזרת</span></div></button>'
-              : '') +
-            /* ⚠️ מחיקה **אינה** סגירה. סגירה אומרת שהטיפול הסתיים והשורה
-               נשארת ונספרת; מחיקה אומרת שהשורה לא הייתה צריכה להיווצר, והיא
-               יורדת מהגיליון ומהנתונים. היומן נשאר שלם. ר' gardenTaskDelete_. */
-            /* 🔴 22.9 (סימולציה, ממצא E) — **מופע שגרה מבוטל, לא נמחק.** מסמך
-               שנמחק משאיר סלוט ריק והמנוע יוצר אותו מחדש תוך שעה; ביטול הוא
-               מצבה שהמנוע מכבד והמסך מסתיר ב"סגורות". ר' gardenTaskDelete. */
-            (isManager && !t.closure
-              ? '<button type="button" class="gt-opt is-danger" data-m="del"><u>' +
-                ico("trash") + '</u><div>' +
-                (t.kind === "שגרה" ? "ביטול המופע הזה" : "מחיקה") +
-                '<span>' + (t.kind === "שגרה"
-                  ? "נסגר כ\"בוטל\" ויורד מהרשימה · התבנית ממשיכה כרגיל"
-                  : t.repId
-                    ? "התושב יראה \"נסגר\" ויקבל מייל עם הסיבה · יורדת מהנתונים"
-                    : "יורדת מהנתונים · נרשמת ביומן") +
-                '</span></div></button>'
-              : isManager
-                ? '<button type="button" class="gt-opt is-danger" data-m="del"><u>' +
-                  ico("trash") + '</u><div>מחיקה' +
-                  '<span>יורדת מהנתונים · נרשמת ביומן</span></div></button>'
-                : '') +
-          '</div>';
-        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
-           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
-        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-menu" });
-        function close() { sheetClose(); }
-        wrap.addEventListener("click", function (e) {
-          var b = e.target.closest("[data-m]");
-          if (!b) return;
-          var m = b.dataset.m;
-          close();
-          menuAction(t, cat, m);
-        });
+        if (m === "plan") return askWeek(id);
+        if (m === "markdone") return markDone(id);
+        menuAction(t, catT(t), m);
       }
 
       /* פעולות ה-⋯ ושל כרטיס הפרטים חולקות את אותה פונקציה ממש. עד עכשיו היא
@@ -1708,8 +1711,15 @@
           '<div class="gt-sheet-bd"></div>' +
           '<div class="gt-sheet" role="dialog" aria-label="סגירה עם סיבה">' +
             '<div class="gt-grip" aria-hidden="true"></div>' +
-            '<h4>סגירה עם סיבה</h4>' +
+            '<h4>סגירה</h4>' +
             '<p class="sub">' + esc(t.title || t.category || "משימה") + '</p>' +
+            /* 🔴 23.9 (בקשת יועד) — "בוצע" ו"סגירה" הם כפתור אחד. "בוצע" הוא
+               האפשרות הראשונה כאן: אישור של מה שהצוות סימן, או סגירה כבוצעה.
+               הסיבות האחרות — סגירה **בלי** ביצוע — מתחתיו. */
+            (t.closure ? '' :
+              '<button type="button" class="gt-opt is-ok" data-cl-done="1"><u>' + ico("check") + '</u>' +
+                '<div>בוצע<span>' + (t.flag === "ממתין לאישור" ? "אישור הביצוע של הצוות" : "הטיפול הסתיים") +
+                (t.repId ? " · התושב מקבל עדכון" : "") + '</span></div></button>') +
             reasons.map(function (o) {
               return '<button type="button" class="gt-opt" data-cl="' + esc(o.k) + '"><u>' +
                 ico("check") + '</u><div>' + esc(o.k) +
@@ -1736,6 +1746,10 @@
         function close() { sheetClose(); }
         var picked = "";
         wrap.addEventListener("click", function (e) {
+          if (e.target.closest("[data-cl-done]")) {
+            close();
+            return (t.flag === "ממתין לאישור") ? run("approve", t.id, {}) : markDone(t.id);
+          }
           var b = e.target.closest("[data-cl]");
           if (b) {
             if (!isReport) { close(); return run("close", t.id, { closure: b.dataset.cl }); }
@@ -1771,7 +1785,7 @@
       function openDetails(id) {
         var t = byId(id);
         if (!t) return;
-        var cat = catOf(t.category);
+        var cat = catT(t);
         var closed = !!t.closure;
         var st = GL.state(t, isManager ? "manager" : "gardener");
         var hasMap = (t.x !== null && t.x !== undefined && t.y !== null && t.y !== undefined);
@@ -1796,13 +1810,14 @@
                המנהל מאשר. עד היום הכפתור כאן היה "סגירה", והוא פתח את
                "סגירה עם סיבה" — שלוש סיבות **בלי "בוצע"**. כלומר המנהל
                לא יכול היה לסגור כבוצעה משימה שהגנן כבר סיים. */
-            slotHtml = '<button type="button" class="gd-det-cta is-positive" data-m="approve">' +
-              ico("check") + 'אישור ביצוע</button>';
+            slotHtml = '<button type="button" class="gd-det-cta is-positive" data-m="close">' +
+              ico("check") + 'סגירה</button>';
           } else if (isManager) {
             /* המנהל: "בוצע" סוגר מיד (אותה מילה כמו אצל הגנן). סגירה בלי
                ביצוע — "סגירה עם סיבה" — בשורה המשנית. */
-            slotHtml = '<button type="button" class="gd-det-cta is-positive" data-m="markdone">' +
-              ico("check") + 'בוצע</button>';
+            /* 23.9 — "סגירה" אחת: בחלון שנפתח "בוצע" ראשון. */
+            slotHtml = '<button type="button" class="gd-det-cta is-positive" data-m="close">' +
+              ico("check") + 'סגירה</button>';
           } else if (done) {
             slotHtml = '<button type="button" class="gd-det-cta is-ghost" data-m="undo">' +
               ico("undo") + 'ביטול סימון</button>';
@@ -1813,7 +1828,7 @@
         }
         var quickHtml = !closed
           ? '<div class="gd-det-quickrow">' + slotHtml +
-              '<button type="button" class="gd-det-b" data-m="note">' + ico("note") + 'דווח סטטוס</button>' +
+              '<button type="button" class="gd-det-b" data-m="note">' + ico("note") + 'הערה/דיווח</button>' +
               '<button type="button" class="gd-det-b" data-m="defer">' + ico("cal") + 'דחייה</button>' +
             '</div>'
           : "";
@@ -1828,9 +1843,9 @@
           secHtml += '<button type="button" class="gd-det-b" data-m="return">' +
             ico("undo") + 'החזרה להשלמה</button>';
         }
-        if (isManager && !closed) {
+        if (isManager && planning) {
           secHtml += '<button type="button" class="gd-det-b" data-m="close">' +
-            ico("check") + 'סגירה עם סיבה</button>';
+            ico("check") + 'סגירה</button>';
         }
         if (isManager && t.flag === "דורש בדיקה חוזרת") {
           secHtml += '<button type="button" class="gd-det-b" data-m="clearflag">' +
@@ -2075,7 +2090,7 @@
    *  כגיליון על document.body — כלומר **אותו כרטיס, אותן פעולות**, בלי
    *  עותק שני שיסטה. onChange נקרא אחרי כל פעולה שבוצעה בו.
    * ======================================================================== */
-  CBA.gardenKit = { ico: ico, ICONS: ICONS, catOf: catOf, tagHtml: tagHtml };
+  CBA.gardenKit = { ico: ico, ICONS: ICONS, catOf: catOf, catOfTask: catT, tagHtml: tagHtml };
   CBA.gardenOpenCard = function (id, onChange) {
     var host = document.createElement("div");
     CBA.screens.gardenTasks.render(host, "open", { openId: String(id), onChange: onChange });

@@ -132,7 +132,7 @@
      הם המשתנים --c-<key> ב-garden.css. ההתאמה לפי מילת מפתח ולא מחרוזת
      מדויקת, כדי ששם קטגוריה ישן ("מדשאות") ימשיך להיצבע נכון. */
   L.CATS = [
-    { key: "lawn",  match: /דשא|מדשא/,   ico: "lawn"  },
+    { key: "lawn",  match: /דשא|מדשא/,   ico: "lawnwater" },
     { key: "water", match: /השקי|ממטר/,  ico: "water" },
     { key: "tree",  match: /^עצים|עץ/,    ico: "tree"  },
     { key: "prune", match: /גיזום|שיח/,  ico: "prune" },
@@ -143,6 +143,19 @@
   L.catOf = function (name) {
     for (var i = 0; i < L.CATS.length; i++) if (L.CATS[i].match.test(name || "")) return L.CATS[i];
     return { key: "lawn", ico: "lawn" };
+  };
+  /* 🔴 23.9 (בקשת יועד) — **דשא או השקיה לפי הכותרת.** הקטגוריה המאוחדת
+     "מדשאות, השקיה וממטרות" מציגה בבחירה סמל משולב (דשא + טיפה). משימה
+     עצמה כבר יודעת על מה היא: כותרת של השקיה → טיפה בתכלת, כל השאר →
+     דשא בירוק. אותה בדיקה בכרטיס, בפרטים, במסך הנתונים ובצד התושב. */
+  L.WATER_WORDS = /השקי|ממטר|טפטו|דליפ|מים|צינור|ברז/;
+  L.lawnOrWater = function (title) {
+    return L.WATER_WORDS.test(String(title || "")) ? { key: "water", ico: "water" } : { key: "lawn", ico: "lawn" };
+  };
+  L.catOfTask = function (t) {
+    var c = L.catOf(t && t.category);
+    if (c.key === "lawn" || c.key === "water") return L.lawnOrWater(t && t.title);
+    return c;
   };
 
   /* "דיווח 7" — ההפניה הקנונית לדיווח של תושב. בלי מספר: "דיווח". */
