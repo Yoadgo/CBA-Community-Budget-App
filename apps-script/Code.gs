@@ -138,6 +138,7 @@ var ACTION_PERMS = {
   // בכרטיסי השירות, שליחת מייל העדכון לכל השיכון, וסריקת מסמך ב-Gemini —
   // מנהל-על בלבד.
   saveServices: PERM_SUPER,
+  saveServiceCategories: PERM_SUPER,
   notifyServiceUpdate: PERM_SUPER,
   scanServiceDoc: PERM_SUPER,
   // מכון כושר (שלב 1, 2026-08-18) — קריאת רשימת המנויים לניהול. פעולות התושב
@@ -1616,6 +1617,7 @@ function doPostDispatch_(ss, body) {
       case 'gardenCoverByPlan':   gardenEnsureRows_(ss, body.action, body);
                                   return json_(gardenCoverByPlan_(ss, body));
       case 'saveServices':      return json_(saveServices_(ss, body));
+      case 'saveServiceCategories': return json_(saveServiceCategories_(ss, body));
       case 'notifyServiceUpdate': return json_(notifyServiceUpdate_(ss, body));
       case 'scanServiceDoc':    return json_(handleScanServiceDoc_(ss, body));
       // מכון כושר, שלב 2 (2026-08-19)
@@ -3472,7 +3474,7 @@ var ACTION_DOMAIN = {
   updateGymMembership: 'gym',
   // ועד השיכון ושירותים
   saveCommitteeTree: 'committee', saveCommitteeCategories: 'committee',
-  saveServices: 'services', notifyServiceUpdate: 'services',
+  saveServices: 'services', saveServiceCategories: 'services', notifyServiceUpdate: 'services',
   /* תחום משלו ולא ברירת המחדל 'other': 'other' נכלל במפתח המטמון של המטען
      הראשי, כלומר כל דיווח על האפליקציה היה מבטל את המטמון של *כולם*. */
   submitAppReport: 'appReports', setAppReportDone: 'appReports',
@@ -6619,13 +6621,21 @@ var SERVICES_HEADERS = ['מזהה שירות', 'שם', 'תיאור קצר', 'א�
   'טלפון ראשי', 'קישור למסמך', 'סדר', 'פעיל', 'עודכן', 'עודכן ע"י',
   /* 2026-09-08 — ההבחנה בין ספק חיצוני (דורגז, אינטרנט) לתשתית ציבורית של
      השיכון (בריכה, מכון כושר, מגרשים). ריק = ספק חיצוני, כדי שכל השורות
-     שכבר בגיליון ימשיכו להתנהג בדיוק כמו קודם. */
+     שכבר בגיליון ימשיכו להתנהג בדיוק כמו קודם. מאז 2026-09-22 זו כבר לא
+     הרשימה הסגורה שקובעת — ר' 'מזהה קטגוריה' למטה — והעמודה הזו נשארת רק
+     כטקסט ידידותי-לעין בגיליון, לא נקראת יותר בלקוח. */
   'סוג שירות',
   /* 2026-09-22 — ערוץ "טלפון ראשי": טלפון בלבד / וואטסאפ עסקי בלבד / שניהם.
      ריק = "טלפון" (חיוג בלבד) — כי עד היום לא היה כלל כפתור וואטסאפ ל"טלפון
      ראשי" (רק לאנשי קשר בתוך סעיף "אנשי קשר"), אז ברירת המחדל שומרת על
      ההתנהגות הקיימת בכל השורות שכבר בגיליון. */
-  'ערוץ טלפון'];
+  'ערוץ טלפון',
+  /* 2026-09-22 — קטגוריות שירותים הפכו מרשימה קשיחה בקוד (2 ערכים) לרשימה
+     פתוחה שמנהל-על מנהל בעצמו (ר' SERVICE_CATEGORIES_SHEET למטה). זו עמודה
+     חדשה ולכן ריקה בכל השורות הקיימות — הלקוח יודע לגזור את הקטגוריה
+     הנכונה גם משורה ריקה, לפי הערך הישן ב'סוג שירות' (ר' build() ב-
+     services.js), כך שאין צורך במיגרציה חד-פעמית של הגיליון. */
+  'מזהה קטגוריה'];
 
 var SERVICE_SECTIONS_SHEET = 'סעיפי שירותים';
 var SERVICE_SECTIONS_HEADERS = ['מזהה שירות', 'מזהה סעיף', 'סדר', 'סוג', 'כותרת', 'תוכן'];
@@ -6633,6 +6643,31 @@ var SERVICE_SECTIONS_HEADERS = ['מזהה שירות', 'מזהה סעיף', 'ס�
 /** סוגי הסעיפים המותרים. שמירה עם סוג שאינו ברשימה נדחית — עדיף להיכשל
  * בבירור מאשר לכתוב לגיליון ערך שהמסך לא ידע לצייר. */
 var SERVICE_SECTION_TYPES = ['טקסט', 'רשימה', 'טבלה', 'אנשי קשר', 'הדגשה', 'שעות'];
+
+/* ============================================================================
+ *  קטגוריות שירותים (2026-09-22)
+ * ----------------------------------------------------------------------------
+ *  עד היום "סוג שירות" היה 2 ערכים קשיחים בקוד (KIND_INFRA/KIND_VENDOR),
+ *  שקבעו גם את שתי כותרות הקיבוץ הקבועות במסך התושב. יועד ביקש רשימה
+ *  פתוחה שהוא מנהל בעצמו (הוספה/שינוי שם/סדר/הסתרה) — כולל דוגמה ראשונה:
+ *  "הטבות" (הנחות מעסקים לתושבים).
+ *
+ *  🔑 **מזהה קבוע, שם ניתן לשינוי.** שירות מצביע ל'מזהה קטגוריה' (למשל
+ *  "infra"), לא לשם התצוגה — כך ששינוי שם קטגוריה לא "שובר" את כל
+ *  השירותים ששייכים אליה (בדיוק כמו ששירות מצביע למזהה סעיף ולא לכותרתו).
+ *  שתי הקטגוריות הקיימות נזרעות עם המזהים 'infra'/'vendor' כדי שההתנהגות
+ *  הקיימת (כולל רמז ההתאמה למפה שתלוי במזהה 'infra', ר' sadmMapNote
+ *  ב-servicesAdmin.js) תמשיך לעבוד בלי שינוי גם אם מישהו ישנה את השם.
+ * ========================================================================== */
+var SERVICE_CATEGORIES_SHEET = 'קטגוריות שירותים';
+var SERVICE_CATEGORIES_HEADERS = ['מזהה', 'שם', 'אייקון', 'סדר', 'פעיל'];
+
+/** שתי הקטגוריות שהיו קשיחות בקוד עד 2026-09-22, כרשומות זריעה — כך שמסך
+ *  התושב נראה **זהה** בפעם הראשונה שהטאב החדש נוצר. */
+var SERVICE_CATEGORIES_SEED = [
+  { 'מזהה': 'infra',  'שם': 'תשתיות השיכון',   'אייקון': '🏗️', 'סדר': 1, 'פעיל': 'כן' },
+  { 'מזהה': 'vendor', 'שם': 'ספקים ושירותים',  'אייקון': '🧰', 'סדר': 2, 'פעיל': 'כן' }
+];
 
 /** משלים כותרות חסרות בטאב קיים ומחזיר את שורת הכותרות בפועל.
  *
@@ -6682,6 +6717,33 @@ function ensureServiceSectionsSheet_(ss) {
   return sh;
 }
 
+/** יוצר את טאב הקטגוריות בפעם הראשונה, וזורע את שתי הקטגוריות שהיו קשיחות
+ *  בקוד עד היום — כדי שמסך התושב לא ישתנה ברגע הפריסה. אידמפוטנטי: זריעה
+ *  רק כשהטאב ריק לגמרי (0 שורות נתונים), אף פעם לא דורס שורה קיימת. */
+function ensureServiceCategoriesSheet_(ss) {
+  var sh = ss.getSheetByName(SERVICE_CATEGORIES_SHEET);
+  if (sh) {
+    ensureHeaders_(sh, SERVICE_CATEGORIES_HEADERS);
+    if (sh.getLastRow() < 2) seedServiceCategories_(sh);
+    return sh;
+  }
+  sh = ss.insertSheet(SERVICE_CATEGORIES_SHEET);
+  sh.getRange(1, 1, 1, SERVICE_CATEGORIES_HEADERS.length).setValues([SERVICE_CATEGORIES_HEADERS]);
+  sh.getRange(1, 1, 1, SERVICE_CATEGORIES_HEADERS.length).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  sh.setColumnWidth(1, 100); sh.setColumnWidth(2, 200); sh.setColumnWidth(3, 70);
+  sh.setColumnWidth(4, 60); sh.setColumnWidth(5, 70);
+  seedServiceCategories_(sh);
+  return sh;
+}
+
+function seedServiceCategories_(sh) {
+  var rows = SERVICE_CATEGORIES_SEED.map(function (r) {
+    return SERVICE_CATEGORIES_HEADERS.map(function (h) { return r[h]; });
+  });
+  sh.getRange(2, 1, rows.length, SERVICE_CATEGORIES_HEADERS.length).setValues(rows);
+}
+
 /** קריאה — פתוחה לכל תושב מחובר ופעיל (need=null), בדיוק כמו handleCommitteeTree_.
  * יוצרת את שני הטאבים אוטומטית בפעם הראשונה כדי שיועד לא יצטרך להכין כלום ידנית.
  * מחזירה את שני הטאבים בקריאה אחת — המסך צריך את שניהם תמיד, ואין טעם בשתי
@@ -6694,10 +6756,12 @@ function handleServices_(p) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     ensureServicesSheet_(ss);
     ensureServiceSectionsSheet_(ss);
+    ensureServiceCategoriesSheet_(ss);
     return json_({
       ok: true,
       services: readTable_(ss, SERVICES_SHEET),
-      sections: readTable_(ss, SERVICE_SECTIONS_SHEET)
+      sections: readTable_(ss, SERVICE_SECTIONS_SHEET),
+      categories: readTable_(ss, SERVICE_CATEGORIES_SHEET)
     });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -6801,6 +6865,79 @@ function saveServicesRun_(ss, body) {
   }
 }
 
+/** שמירה — מנהל-על בלבד (ACTION_PERMS). מחליפה את כל טאב הקטגוריות,
+ *  באותה תבנית בדיוק כמו saveServices_/saveCommitteeCategories_.
+ *
+ *  ולידציה: שם חובה, מזהה חובה וייחודי, וחסימת מחיקת קטגוריה ששירות
+ *  פעיל עדיין מצביע אליה — אחרת שירות היה נשאר "תלוי" בלי קבוצה, ולא
+ *  היה מוצג לתושב בלי שום הסבר. (קטגוריה מוסתרת/לא-פעילה כן אפשר למחוק —
+ *  זה בדיוק המקרה של קטגוריה שסיימו להשתמש בה.) */
+function saveServiceCategories_(ss, body) {
+  return withSyncLock_('saveServiceCategories', function () { return saveServiceCategoriesRun_(ss, body); });
+}
+
+function saveServiceCategoriesRun_(ss, body) {
+  var categories = Array.isArray(body.categories) ? body.categories : [];
+
+  var seenIds = {};
+  for (var i = 0; i < categories.length; i++) {
+    var c = categories[i] || {};
+    var id = String(c['מזהה'] || '').trim();
+    var name = String(c['שם'] || '').trim();
+    if (!id) return { ok: false, error: 'קטגוריה ללא מזהה (שורה ' + (i + 1) + ')' };
+    if (!name) return { ok: false, error: 'קטגוריה ללא שם (מזהה ' + id + ')' };
+    if (seenIds[id]) return { ok: false, error: 'מזהה קטגוריה כפול: ' + id };
+    seenIds[id] = true;
+  }
+
+  // חסימת מחיקה: כל מזהה שהיה בגיליון ואינו ברשימה החדשה, ושירות פעיל
+  // עדיין מצביע אליו — נדחה כאן, לפני שנכתב דבר.
+  var existingIds = {};
+  var existingSh = ss.getSheetByName(SERVICE_CATEGORIES_SHEET);
+  if (existingSh) {
+    readTable_(ss, SERVICE_CATEGORIES_SHEET).forEach(function (r) {
+      var eid = String(r['מזהה'] || '').trim();
+      if (eid) existingIds[eid] = true;
+    });
+  }
+  var removedIds = Object.keys(existingIds).filter(function (id) { return !seenIds[id]; });
+  if (removedIds.length) {
+    var inUse = {};
+    readTable_(ss, SERVICES_SHEET).forEach(function (r) {
+      var active = String(r['פעיל'] == null ? 'כן' : r['פעיל']).trim() !== 'לא';
+      if (!active) return;
+      var cid = String(r['מזהה קטגוריה'] || '').trim();
+      if (cid) inUse[cid] = true;
+    });
+    var blocked = removedIds.filter(function (id) { return inUse[id]; });
+    if (blocked.length) {
+      return { ok: false, error: 'אי אפשר למחוק קטגוריה שיש בה שירותים פעילים — קודם העבירו את השירותים לקטגוריה אחרת (' + blocked.join(', ') + ')' };
+    }
+  }
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var sh = ensureServiceCategoriesSheet_(ss);
+    var head = ensureHeaders_(sh, SERVICE_CATEGORIES_HEADERS);
+    var last = sh.getLastRow();
+    if (last > 1) sh.getRange(2, 1, last - 1, head.length).clearContent();
+    if (categories.length) {
+      var grid = categories.map(function (r, idx) {
+        var row = {};
+        head.forEach(function (h) { row[h] = (r[h] == null) ? '' : r[h]; });
+        row['סדר'] = idx + 1;
+        return head.map(function (h) { return row[h]; });
+      });
+      sh.getRange(2, 1, grid.length, head.length).setValues(grid);
+    }
+    servicesSyncAll_(ss);
+    return { ok: true, categories: categories.length };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /* ============================================================================
  *  שירותים לתושב → Firestore        (צעד 04א, 2026-09-15)
  * ----------------------------------------------------------------------------
@@ -6823,6 +6960,7 @@ function saveServicesRun_(ss, body) {
  *     ויכול להכיל כל תו. מזהה עם '/' היה שובר את נתיב המסמך בשקט.
  * ========================================================================== */
 var FS_SERVICES = 'services';
+var FS_SERVICES_META = 'servicesMeta/categories';
 var SVC_SKIP_FIELDS = { 'עודכן ע"י': 1 };
 
 /** האם המזהה יכול לשמש כמזהה מסמך ב-Firestore. */
@@ -7055,8 +7193,10 @@ function servicesSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
   try {
+    ensureServiceCategoriesSheet_(ss);
     var svcRows = readTable_(ss, SERVICES_SHEET);
     var secRows = readTable_(ss, SERVICE_SECTIONS_SHEET);
+    var catRows = readTable_(ss, SERVICE_CATEGORIES_SHEET);
 
     var byService = {};
     secRows.forEach(function (r) {
@@ -7072,6 +7212,17 @@ function servicesSyncAll_(ss) {
     }), out, live);
 
     fsSweepOrphans_(FS_SERVICES, live, out);
+
+    /* מסמך הקטגוריות נכתב לאוסף/מסמך נפרד (appConfig-style, כמו
+       gardenMeta/lists) — קטן, נקרא תמיד יחד עם השירותים, ולא שייך
+       לסחיפת יתומים כי הוא לא אוסף לפי-מזהה. */
+    fsSet_(FS_SERVICES_META, {
+      categories: catRows,
+      schema: 1,
+      updatedAt: new Date()
+    });
+    out.wrote++;
+
     out.ok = true;
   } catch (err) {
     out.error = String(err);

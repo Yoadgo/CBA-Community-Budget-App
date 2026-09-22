@@ -18,6 +18,7 @@ CBA.screens = CBA.screens || {};
 
 var sadmState = {
   list: [],        // מצב שמור (מה שנמצא בשרת נכון לטעינה האחרונה)
+  categories: [],  // קטגוריות שירותים (מנוהלות עצמאית — ר' servicesCategoriesAdmin.js)
   loaded: false,
   draft: null,     // הכרטיס שנערך כרגע (עותק עמוק)
   editIndex: null, // -1 = שירות חדש
@@ -86,12 +87,16 @@ CBA.screens.servicesAdmin = {
       '<div class="screen-head screen-head--row">' +
         '<div><div class="screen-head__title">ניהול שירותים</div>' +
         '<div class="screen-head__sub">הכרטיסים שהתושבים רואים במסך "שירותים" — הוספה, עריכה, סידור והסתרה</div></div>' +
-        '<button type="button" class="btn-primary" id="sadm-new">שירות חדש +</button>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button type="button" class="btn-ghost" id="sadm-cats">ניהול קטגוריות</button>' +
+          '<button type="button" class="btn-primary" id="sadm-new">שירות חדש +</button>' +
+        "</div>" +
       "</div>" +
       '<div id="sadm-body"></div>';
 
     var body = container.querySelector("#sadm-body");
     container.querySelector("#sadm-new").addEventListener("click", function () { sadmOpenEditor(-1); });
+    container.querySelector("#sadm-cats").addEventListener("click", sadmOpenCategories);
 
     body.innerHTML = CBA.skel.tiles(6);
 
@@ -102,11 +107,32 @@ CBA.screens.servicesAdmin = {
         return;
       }
       sadmState.list = CBA.serviceUtils.build(res.services, res.sections);
+      sadmState.categories = CBA.serviceUtils.buildCategories(res.categories);
       sadmState.loaded = true;
       sadmPaintList();
     });
   }
 };
+
+/* דרואר "ניהול קטגוריות" — קובץ נפרד (servicesCategoriesAdmin.js), נפתח עם
+   עותק נוכחי של הרשימה + כמה שירותים פעילים משתמשים בכל מזהה, כדי שאפשר
+   יהיה לחסום מחיקה של קטגוריה בשימוש בלי לשאול את השרת. בסגירה עם שמירה —
+   טעינה מחדש מהשרת, כדי שהמסך והמזהים יהיו תואמים למה שבאמת נשמר. */
+function sadmOpenCategories() {
+  var usage = {};
+  sadmState.list.forEach(function (s) {
+    if (!s.active) return;
+    usage[s.categoryId] = (usage[s.categoryId] || 0) + 1;
+  });
+  CBA.svcCategoriesAdmin.open(sadmState.categories, usage, function () {
+    CBA.data.getServices(function (res) {
+      if (!res || !res.ok) return;
+      sadmState.list = CBA.serviceUtils.build(res.services, res.sections);
+      sadmState.categories = CBA.serviceUtils.buildCategories(res.categories);
+      sadmPaintList();
+    });
+  });
+}
 
 function sadmPaintList() {
   var body = document.getElementById("sadm-body");
@@ -232,7 +258,7 @@ function sadmApplyPreset(key) {
   /* פריסט לא דורס שם שכבר הוקלד — מי שכתב משהו התכוון אליו. */
   if (!String(d.name || "").trim()) d.name = p.name;
   d.icon = p.icon; d.desc = d.desc || p.desc;
-  d.kind = p.infra ? CBA.serviceUtils.KIND_INFRA : CBA.serviceUtils.KIND_VENDOR;
+  d.categoryId = p.infra ? CBA.serviceUtils.CATEGORY_INFRA_ID : CBA.serviceUtils.CATEGORY_VENDOR_ID;
   d.sections = p.secs.map(function (sec, j) {
     return { secId: d.id + "_s" + (j + 1), order: j + 1, type: sec[0], title: sec[1], content: sec[2] };
   });
@@ -244,7 +270,7 @@ function sadmOpenEditor(index) {
   sadmState.editIndex = index;
   sadmState.draft = index === -1
     ? { id: sadmNewId(), name: "", desc: "", icon: "", provider: "", phone: "", doc: "",
-        kind: CBA.serviceUtils.KIND_VENDOR, phoneChannel: CBA.serviceUtils.CH_PHONE, isNew: true,
+        categoryId: CBA.serviceUtils.CATEGORY_VENDOR_ID, phoneChannel: CBA.serviceUtils.CH_PHONE, isNew: true,
         active: true, updated: "", updatedBy: "", sections: [] }
     : sadmClone(sadmState.list[index]);
 
@@ -313,16 +339,18 @@ function sadmPaintEditor() {
         '<div class="form-field"><label>ספק</label>' +
           '<input class="field-input" data-f="provider" value="' + sadmEsc(d.provider) + '"></div>' +
       "</div>" +
-      /* סוג השירות קובע איך התושב רואה אותו: תשתית ציבורית מוצגת בקבוצה
-         נפרדת ומקבלת חיווי פתיחה מסעיף "שעות". ספק חיצוני נשאר כמו שהיה. */
-      '<div class="form-field form-field--wide"><label>סוג השירות</label>' +
-        '<select class="field-input" data-f="kind">' +
-          CBA.serviceUtils.KINDS.map(function (k) {
-            return '<option value="' + sadmEsc(k) + '"' +
-              ((d.kind || CBA.serviceUtils.KIND_VENDOR) === k ? " selected" : "") + ">" + sadmEsc(k) + "</option>";
+      /* הקטגוריה קובעת תחת איזו כותרת התושב רואה את הכרטיס — כולל חיווי
+         פתיחה מסעיף "שעות" לקטגוריית "תשתיות השיכון" (מזהה יציב: infra).
+         הרשימה עצמה מנוהלת בדרואר נפרד ("ניהול קטגוריות"), לא כאן. */
+      '<div class="form-field form-field--wide"><label>קטגוריה</label>' +
+        '<select class="field-input" data-f="categoryId">' +
+          (sadmState.categories || []).map(function (c) {
+            return '<option value="' + sadmEsc(c.id) + '"' +
+              ((d.categoryId || CBA.serviceUtils.CATEGORY_VENDOR_ID) === c.id ? " selected" : "") +
+              ">" + sadmEsc(c.name) + "</option>";
           }).join("") +
         "</select>" +
-        '<div class="sadm-hint">תשתית ציבורית = בריכה, מכון כושר, מגרשים — מה שיש לו שעות ואין לו ספק לחייג אליו.</div>' +
+        '<div class="sadm-hint">חיווי פתיחה על המפה מוצג רק לקטגוריית "תשתיות השיכון". קטגוריות חדשות — דרך "ניהול קטגוריות" למעלה.</div>' +
         '<div id="sadm-mapnote">' + sadmMapNote(d) + "</div></div>" +
       '<div class="form-field form-field--wide"><label>תיאור קצר (שורה אחת בכרטיס)</label>' +
         '<input class="field-input" data-f="desc" value="' + sadmEsc(d.desc) + '"></div>' +
@@ -369,7 +397,7 @@ function sadmPaintEditor() {
    החיווי הזה, שינוי שם באחד הצדדים היה מנתק את הנקודה מהמפה בשקט מוחלט.
    אז במקום "אוטומטי" שנשבר — הפער צועק כאן, במסך שבו עורכים את השם. */
 function sadmMapNote(d) {
-  if ((d.kind || CBA.serviceUtils.KIND_VENDOR) !== CBA.serviceUtils.KIND_INFRA) return "";
+  if ((d.categoryId || CBA.serviceUtils.CATEGORY_VENDOR_ID) !== CBA.serviceUtils.CATEGORY_INFRA_ID) return "";
   var geo = (window.CBA && CBA.mapGeo && CBA.mapGeo.objects) || null;
   if (!geo) return "";
   var name = String(d.name || "").trim();
@@ -537,7 +565,7 @@ function sadmBindEditor(body) {
   body.querySelectorAll("[data-f]").forEach(function (inp) {
     inp.addEventListener("input", function () {
       d[inp.dataset.f] = inp.value; sadmTouch();
-      if (inp.dataset.f === "name" || inp.dataset.f === "kind") {
+      if (inp.dataset.f === "name" || inp.dataset.f === "categoryId") {
         var note = document.getElementById("sadm-mapnote");
         if (note) note.innerHTML = sadmMapNote(d);
       }

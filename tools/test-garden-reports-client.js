@@ -51,7 +51,7 @@ ok('🔴 אין כאן בדיקת "empty" שמפילה לאחור',
    !/rows\.length\) return done\(new Error\("empty"\)\)/.test(fn), fn);
 /* ...ובשירותים היא **כן** קיימת — כדי שההבדל יהיה מכוון ולא שכחה. */
 ok('⚠️ ובשירותים הבדיקה כן קיימת — ההבדל מכוון',
-   /function servicesRead[\s\S]{0,700}rows\.length\) return done\(new Error\("empty"\)\)/.test(DS));
+   /function servicesRead[\s\S]{0,1300}rows\.length\) return fail\(new Error\("empty"\)\)/.test(DS));
 ok('⚠️ וההבדל מתועד בקוד',
    /אוסף ריק הוא תשובה תקינה כאן/.test(DS));
 

@@ -2976,7 +2976,11 @@ CBA.data = (function () {
   }
 
   function getServices(cb) {
-    if (servicesCache) { if (cb) cb({ ok: true, services: servicesCache.services, sections: servicesCache.sections }); return; }
+    if (servicesCache) {
+      if (cb) cb({ ok: true, services: servicesCache.services, sections: servicesCache.sections,
+                   categories: servicesCache.categories || [] });
+      return;
+    }
     servicesRead(cb);
   }
 
@@ -3012,19 +3016,36 @@ CBA.data = (function () {
 
   function servicesRead(cb) {
     fsFirstRead("services", SERVICES_FROM_FIRESTORE, function (done) {
+      /* קטגוריות שירותים (2026-09-22) — מסמך "מטא" נפרד (servicesMeta/categories),
+         באותו דפוס בדיוק כמו gardenMeta/lists: נקרא במקביל לאוסף הראשי ומצטרף
+         אליו רק כששניהם חזרו. מסמך חסר לא מפיל את הקריאה כולה — שירותים
+         בלי קבוצות עדיין מוצגים (רשימה שטוחה), רק בלי כותרות קיבוץ. */
+      var rowsOut = null, catsOut = null, failed = false;
+      function maybeDone() {
+        if (failed || rowsOut === null || catsOut === null) return;
+        var out = servicesFromDocs(rowsOut);
+        out.categories = catsOut;
+        servicesCache = out;
+        done(null, { ok: true, services: out.services, sections: out.sections, categories: out.categories });
+      }
+      function fail(e) { if (failed) return; failed = true; done(e); }
       CBA.fb.readCollection("services", function (err, rows) {
-        if (err) return done(err);
+        if (err) return fail(err);
         /* \ud83d\udd34 אותו שיקול כמו בתוכנית הגינון. התרחיש קרה בייצור תוך
            שעה מהכתיבה: הפצת כללים ומסמכים ב-Firestore אינה מיידית. */
-        if (!rows || !rows.length) return done(new Error("empty"));
-        var out = servicesFromDocs(rows);
-        servicesCache = out;
-        done(null, { ok: true, services: out.services, sections: out.sections });
+        if (!rows || !rows.length) return fail(new Error("empty"));
+        rowsOut = rows;
+        maybeDone();
+      });
+      CBA.fb.readDoc("servicesMeta", "categories", function (err, doc) {
+        if (err) return fail(err);
+        catsOut = (doc && doc.categories) || [];
+        maybeDone();
       });
     }, function (done) {
       if (!pushConnected()) { done({ ok: false, error: "לא מחובר לגיליון" }); return; }
       CBA.sheets.get({ action: "services" }, function (res) {
-        if (res && res.ok) servicesCache = { services: res.services || [], sections: res.sections || [] };
+        if (res && res.ok) servicesCache = { services: res.services || [], sections: res.sections || [], categories: res.categories || [] };
         done(res);
       });
     }, cb);
@@ -3034,6 +3055,17 @@ CBA.data = (function () {
      היא על הכרטיס כמקשה אחת (הוספת/הסרת סעיף, שינוי סדר), לא שורה בודדת. */
   function saveServices(services, sections, cb) {
     CBA.sheets.postRead("saveServices", { services: services, sections: sections }, function (res) {
+      if (res && res.ok) servicesCache = null;
+      if (cb) cb(res);
+    });
+  }
+
+  /* שמירת קטגוריות שירותים (servicesCategoriesAdmin.js) — מחליפה את הטאב
+     בשלמותו בשרת (ר' saveServiceCategories_), שם גם נאכפת חסימת מחיקה של
+     קטגוריה עם שירות פעיל. מבטלת את מטמון השירותים כי servicesFromDocs
+     והמסלול השטוח כאן לא מכירים "קטגוריה" בלי לקרוא מחדש. */
+  function saveServiceCategories(list, cb) {
+    CBA.sheets.postRead("saveServiceCategories", { categories: list }, function (res) {
       if (res && res.ok) servicesCache = null;
       if (cb) cb(res);
     });
@@ -4329,6 +4361,7 @@ CBA.data = (function () {
        מחזיק את שניהם — אין מצב שבו הכרטיסים טריים והסעיפים ישנים. */
     getServices: getServices,
     saveServices: saveServices,
+    saveServiceCategories: saveServiceCategories,
     /* עדכון תושבים במייל — ידני בלבד, נשלח רק בלחיצה מפורשת של מנהל-על
        (ר' notifyServiceUpdate_ ב-Code.gs). לא מנקה מטמון: הוא לא משנה נתונים. */
     notifyServiceUpdate: function (payload, cb) {

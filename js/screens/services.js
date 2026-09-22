@@ -53,7 +53,15 @@ CBA.serviceUtils = (function () {
         name: String(r["שם"] || "").trim(),
         desc: String(r["תיאור קצר"] || "").trim(),
         icon: String(r["אייקון"] || "").trim(),
-        kind: String(r["סוג שירות"] || "").trim() === KIND_INFRA ? KIND_INFRA : KIND_VENDOR,
+        // מזהה קטגוריה (2026-09-22) — הקישור העיקרי לקבוצה במסך התושב.
+        // שורה ישנה שעדיין לא נערכה מאז שהתווסף העמודה: נגזר מהערך הישן
+        // ב"סוג שירות" (KIND_INFRA/KIND_VENDOR), כך שאין צורך במיגרציה
+        // חד-פעמית לגיליון — ר' הערה מקבילה ב-Code.gs.
+        categoryId: String(r["מזהה קטגוריה"] || "").trim() ||
+          (String(r["סוג שירות"] || "").trim() === KIND_INFRA ? "infra" : "vendor"),
+        // נשאר לצורך תאימות-לאחור בלבד (טקסט ידידותי בגיליון) — לא נקרא
+        // יותר בלקוח, רק מועבר הלאה כמו שהוא ב-flatten() כדי לא לאבד אותו.
+        legacyKind: String(r["סוג שירות"] || "").trim(),
         provider: String(r["ספק"] || "").trim(),
         phone: String(r["טלפון ראשי"] || "").trim(),
         // ריק = CH_PHONE (חיוג בלבד) — ההתנהגות שהייתה קיימת לפני שהתווסף
@@ -106,7 +114,8 @@ CBA.serviceUtils = (function () {
     (services || []).forEach(function (s, i) {
       svcRows.push({
         "מזהה שירות": s.id, "שם": s.name, "תיאור קצר": s.desc,
-        "אייקון": s.icon, "סוג שירות": s.kind || KIND_VENDOR,
+        "אייקון": s.icon, "סוג שירות": s.legacyKind || "",
+        "מזהה קטגוריה": s.categoryId || "vendor",
         "ספק": s.provider, "טלפון ראשי": s.phone, "ערוץ טלפון": s.phoneChannel || CH_PHONE,
         "קישור למסמך": s.doc, "סדר": i + 1, "פעיל": s.active ? "כן" : "לא",
         "עודכן": s.updated || "", 'עודכן ע"י': s.updatedBy || ""
@@ -121,6 +130,31 @@ CBA.serviceUtils = (function () {
       });
     });
     return { services: svcRows, sections: secRows };
+  }
+
+  /* קטגוריות שירותים (2026-09-22) — אותו רעיון בדיוק כמו build()/flatten()
+     למעלה, אבל לטבלה הקטנה הנפרדת: ממיר שורות גיליון גולמיות (מפתחות
+     בעברית) לאובייקטים נוחים {id,name,icon,order,active}, וחזרה. גם מסך
+     התושב (קיבוץ כרטיסים) וגם מסך הניהול (ניהול קטגוריות) עובדים על
+     הצורה הנוחה, אף אחד לא נוגע בשורות הגולמיות. */
+  function buildCategories(rows) {
+    return (rows || []).map(function (r) {
+      return {
+        id: String(r["מזהה"] || "").trim(),
+        name: String(r["שם"] || "").trim(),
+        icon: String(r["אייקון"] || "").trim(),
+        order: Number(r["סדר"] || 0) || 0,
+        active: String(r["פעיל"] == null ? "כן" : r["פעיל"]).trim() !== "לא"
+      };
+    }).sort(function (a, b) { return a.order - b.order; });
+  }
+  function flattenCategories(list) {
+    return (list || []).map(function (c, i) {
+      return {
+        "מזהה": c.id, "שם": c.name, "אייקון": c.icon || "",
+        "סדר": i + 1, "פעיל": c.active ? "כן" : "לא"
+      };
+    });
   }
 
   /* פענוח "תוכן" לפי סוג — פונקציות טהורות, בלי DOM, כדי שגם עורך הסעיפים
@@ -505,32 +539,44 @@ CBA.serviceUtils = (function () {
     return html;
   }
 
+  /* קישור בתוך שורה → כפתור לחיץ (2026-09-22). helper משותף לכל סוגי
+     הסעיפים החופשיים-טקסט (טקסט/הדגשה/רשימה) — במקום להגביל את הזיהוי
+     ל"רשימה" בלבד, מה שהחמיץ קישורים בסעיפים שהוגדרו כ"טקסט". מחזיר null
+     אם השורה לא מכילה קישור, כדי שקורא יידע להישאר עם הטקסט הרגיל. */
+  var svcUrlRe = /(https?:\/\/\S+)/;
+  function linkifyLine(l) {
+    var m = l.match(svcUrlRe);
+    if (!m) return null;
+    var url = m[1].replace(/[),.;]+$/, "");
+    var label = l.slice(0, m.index).replace(/[:\-–]\s*$/, "").trim();
+    return '<a class="svc-linkbtn" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+      '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.5-1.5"/></svg>' +
+      '<span>' + esc(label || url) + "</span></a>";
+  }
+
   /* ציור סעיף בודד ל-HTML. משמש גם את מסך התושב וגם את התצוגה-המקדימה
      שבמסך הניהול, כדי שמה שהמנהל רואה בעריכה יהיה מה שהתושב יראה בפועל. */
   function renderSection(sec) {
     var c = sec.content || "";
     if (sec.type === "טקסט") {
       return c.split(/\n\s*\n/).filter(function (p) { return p.trim() !== ""; })
-        .map(function (p) { return '<p class="svc-p">' + esc(p).replace(/\n/g, "<br>") + "</p>"; }).join("");
+        .map(function (p) {
+          var html = p.split("\n").map(function (l) { return linkifyLine(l) || esc(l); }).join("<br>");
+          return '<p class="svc-p">' + html + "</p>";
+        }).join("");
     }
     if (sec.type === "הדגשה") {
-      return '<div class="svc-hilite"><span class="svc-hilite__ico">!</span><div>' +
-        esc(c).replace(/\n/g, "<br>") + "</div></div>";
+      var hHtml = c.split("\n").map(function (l) { return linkifyLine(l) || esc(l); }).join("<br>");
+      return '<div class="svc-hilite"><span class="svc-hilite__ico">!</span><div>' + hHtml + "</div></div>";
     }
     if (sec.type === "רשימה") {
       // 2026-09-22 — שורה שמכילה קישור (http/https) מוצגת ככפתור לחיץ במקום
       // כטקסט רגיל. חל על כל סעיף מסוג "רשימה" (למשל "קישורים"), לא רק על
       // סעיף עם כותרת מסוימת — כך שגם סעיפים קיימים אחרים עם קישורים
       // מתעדכנים אוטומטית, בלי לגעת בנתונים בגיליון.
-      var urlRe = /(https?:\/\/\S+)/;
       return '<ul class="svc-ul">' + toLines(c).map(function (l) {
-        var m = l.match(urlRe);
-        if (!m) return "<li>" + esc(l) + "</li>";
-        var url = m[1].replace(/[),.;]+$/, "");
-        var label = l.slice(0, m.index).replace(/[:\-–]\s*$/, "").trim();
-        return '<li class="svc-ul__link"><a class="svc-linkbtn" href="' + esc(url) + '" target="_blank" rel="noopener">' +
-          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.5-1.5"/></svg>' +
-          '<span>' + esc(label || url) + "</span></a></li>";
+        var btn = linkifyLine(l);
+        return btn ? '<li class="svc-ul__link">' + btn + "</li>" : "<li>" + esc(l) + "</li>";
       }).join("") + "</ul>";
     }
     if (sec.type === "טבלה") {
@@ -591,6 +637,10 @@ CBA.serviceUtils = (function () {
   return {
     TYPES: TYPES, KINDS: KINDS, KIND_INFRA: KIND_INFRA, KIND_VENDOR: KIND_VENDOR,
     PHONE_CHANNELS: PHONE_CHANNELS, CH_PHONE: CH_PHONE, CH_WA: CH_WA, CH_BOTH: CH_BOTH,
+    // מזהי הקטגוריות הקבועים שנזרעו ב-Code.gs (SERVICE_CATEGORIES_SEED) —
+    // מזהה יציב שלא משתנה גם אם המנהל משנה את שם הקטגוריה, ר' הערה ב-build().
+    CATEGORY_INFRA_ID: "infra", CATEGORY_VENDOR_ID: "vendor",
+    buildCategories: buildCategories, flattenCategories: flattenCategories,
     build: build, flatten: flatten,
     parseHours: parseHours, hoursStatus: hoursStatus, hoursToday: hoursToday,
     serviceHours: serviceHours, serviceStatus: serviceStatus, renderHours: renderHours,
@@ -689,16 +739,29 @@ CBA.screens.resServices = {
           "</article>";
       }
 
-      /* פיצול לשתי קבוצות — אבל רק כשבאמת יש שתיים. כותרת קבוצה מעל רשימה
-         שהיא ממילא הכול היא רעש, ולכן בשיכון שבו הוגדרו רק ספקים המסך נראה
-         בדיוק כמו קודם. */
-      var infra = list.filter(function (s) { return s.kind === CBA.serviceUtils.KIND_INFRA; });
-      var vend = list.filter(function (s) { return s.kind !== CBA.serviceUtils.KIND_INFRA; });
-      grid.innerHTML = (infra.length && vend.length)
-        ? '<h2 class="svc-group">תשתיות השיכון</h2><div class="svc-grid__in">' +
-            infra.map(card).join("") + "</div>" +
-          '<h2 class="svc-group">ספקים ושירותים</h2><div class="svc-grid__in">' +
-            vend.map(card).join("") + "</div>"
+      /* קיבוץ דינמי לפי קטגוריות (2026-09-22) — הרשימה שמנהל-על מנהל
+         (ניהול קטגוריות במסך הניהול), לא עוד שתי כותרות קשיחות בקוד.
+         קטגוריה בלי אף שירות (אחרי הסינון) לא מוצגת בכלל — כותרת קבוצה
+         מעל רשימה ריקה היא רעש. סדר הקבוצות = "סדר" בטאב הקטגוריות.
+         כשיש בפועל רק קבוצה אחת (או שהקטגוריות לא נטענו) — בלי כותרות,
+         בדיוק כמו ההתנהגות הקודמת. */
+      var cats = (svcState.categories || []).filter(function (c) { return c.active; });
+      var groups = cats.map(function (c) {
+        return { cat: c, items: list.filter(function (s) { return s.categoryId === c.id; }) };
+      }).filter(function (g) { return g.items.length; });
+
+      // שירותים בלי קטגוריה תקפה (קטגוריה נמחקה בגיליון ידנית) — לא נעלמים,
+      // מוצגים בקבוצה "ללא קטגוריה" בסוף כדי שאף שירות לא ייעלם בשקט.
+      var grouped = {};
+      groups.forEach(function (g) { g.items.forEach(function (s) { grouped[s.id] = 1; }); });
+      var orphans = list.filter(function (s) { return !grouped[s.id]; });
+      if (orphans.length) groups.push({ cat: { name: "ללא קטגוריה" }, items: orphans });
+
+      grid.innerHTML = groups.length > 1
+        ? groups.map(function (g) {
+            return '<h2 class="svc-group">' + svcEsc(g.cat.name) + '</h2><div class="svc-grid__in">' +
+              g.items.map(card).join("") + "</div>";
+          }).join("")
         : '<div class="svc-grid__in">' + list.map(card).join("") + "</div>";
 
       grid.querySelectorAll("[data-open]").forEach(function (btn) {
@@ -717,6 +780,7 @@ CBA.screens.resServices = {
         return;
       }
       svcState.list = CBA.serviceUtils.build(res.services, res.sections);
+      svcState.categories = CBA.serviceUtils.buildCategories(res.categories);
       svcState.loaded = true;
       paint();
     });

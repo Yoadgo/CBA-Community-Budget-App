@@ -55,17 +55,27 @@ const SEC_1 = ['gas', 's1', 1, 'טקסט', 'איך מזמינים', 'מתקשר�
 const SEC_2 = ['gas', 's2', 2, 'קישור', 'טופס', 'http://x'];
 const SEC_3 = ['pool', 's3', 1, 'טקסט', 'שעות', '07:00-21:00'];
 
-function setSheets(svc, sec) {
+const CAT_H = ['מזהה', 'שם', 'אייקון', 'סדר', 'פעיל'];
+const CAT_1 = ['infra', 'תשתיות השיכון', '🏗️', 1, 'כן'];
+const CAT_2 = ['vendor', 'ספקים ושירותים', '🧰', 2, 'כן'];
+
+function setSheets(svc, sec, cats) {
   const a = tbl(SVC_H, svc === undefined ? [SVC_A, SVC_B] : svc);
   const b = tbl(SEC_H, sec === undefined ? [SEC_1, SEC_2, SEC_3] : sec);
+  const c = tbl(CAT_H, cats === undefined ? [CAT_1, CAT_2] : cats);
   FAKE_SS = { getSheetByName: n => n === sandbox.SERVICES_SHEET ? a
-                               : n === sandbox.SERVICE_SECTIONS_SHEET ? b : null };
+                               : n === sandbox.SERVICE_SECTIONS_SHEET ? b
+                               : n === sandbox.SERVICE_CATEGORIES_SHEET ? c : null,
+              insertSheet: n => { throw new Error('insertSheet לא ממומש במוק — ' + n); } };
 }
-function reset(svc, sec) {
+function reset(svc, sec, cats) {
   writes = []; deletes = []; listReply = []; failOn = null;
-  setSheets(svc, sec);
+  setSheets(svc, sec, cats);
   sandbox.ensureServicesSheet_ = () => FAKE_SS.getSheetByName(sandbox.SERVICES_SHEET);
   sandbox.ensureServiceSectionsSheet_ = () => FAKE_SS.getSheetByName(sandbox.SERVICE_SECTIONS_SHEET);
+  // הטאב תמיד "קיים" במוק (כמו שני האחרים) — הבדיקה שהוא נוצר בפעם הראשונה
+  // אמיתית שייכת ל-Apps Script עצמו, לא לפה.
+  sandbox.ensureServiceCategoriesSheet_ = () => FAKE_SS.getSheetByName(sandbox.SERVICE_CATEGORIES_SHEET);
   sandbox.fsSet_ = (p, o) => { if (failOn === 'set') throw new Error('כתיבה נכשלה (503)'); writes.push({ path: p, obj: o }); return {}; };
   sandbox.fsDelete_ = p => { if (failOn === 'delete') throw new Error('מחיקה נכשלה (503)'); deletes.push(p); return true; };
   sandbox.fsList_ = () => { if (failOn === 'list') throw new Error('רשימה נכשלה (503)'); return listReply; };
@@ -107,9 +117,13 @@ section('4. סנכרון מלא');
 reset();
 let r = sandbox.servicesSyncAll_(FAKE_SS);
 ok('הצליח', r.ok === true, r.error);
-ok('נכתבו שני מסמכים', r.wrote === 2, String(r.wrote));
+ok('נכתבו שני מסמכים + מסמך הקטגוריות', r.wrote === 3, String(r.wrote));
 ok('נתיב לפי מזהה השירות', writes[0].path === 'services/gas', writes[0].path);
 ok('גם השני', writes[1].path === 'services/pool', writes[1].path);
+ok('🔑 מסמך המטא נכתב למקום הנכון', writes[2].path === 'servicesMeta/categories', writes[2].path);
+ok('⚠️ ומכיל את שתי הקטגוריות מהטאב', writes[2].obj.categories.length === 2,
+   JSON.stringify(writes[2].obj.categories));
+ok('schema ו-updatedAt גם על מסמך המטא', writes[2].obj.schema === 1 && isDate(writes[2].obj.updatedAt));
 ok('🔑 הסעיפים מקוננים בתוך השירות', writes[0].obj.sections.length === 2, String(writes[0].obj.sections.length));
 ok('⚠️ וכל סעיף הולך לשירות שלו', writes[1].obj.sections.length === 1, String(writes[1].obj.sections.length));
 ok('order נשמר לפי הסדר בגיליון', writes[0].obj.order === 1 && writes[1].obj.order === 2);
@@ -125,7 +139,7 @@ ok('יתום נמחק', r.deleted === 1 && deletes[0] === 'services/old', JSON.s
 reset([SVC_A, ['a/b', 'רע', '', '', '', '', '', 3, 'כן', '', '', '']], []);
 r = sandbox.servicesSyncAll_(FAKE_SS);
 ok('🔴 מזהה פסול מדולג ולא מפיל', r.ok === true && r.skipped === 1, JSON.stringify(r));
-ok('⚠️ והשורה התקינה כן נכתבה', r.wrote === 1 && writes[0].path === 'services/gas', String(r.wrote));
+ok('⚠️ והשורה התקינה כן נכתבה (+ מסמך הקטגוריות)', r.wrote === 2 && writes[0].path === 'services/gas', String(r.wrote));
 
 section('4ג. אידמפוטנטיות וטאב ריק');
 reset(); listReply = [{ id: 'gas' }, { id: 'pool' }];
@@ -137,7 +151,69 @@ sandbox.servicesSyncAll_(FAKE_SS);
 ok('הרצה חוזרת — אותם נתיבים', writes.map(w => w.path).join('|') === a1, a1);
 reset([], []);
 r = sandbox.servicesSyncAll_(FAKE_SS);
-ok('טאב ריק לא נופל', r.ok === true && r.wrote === 0, JSON.stringify(r));
+// מסמך הקטגוריות נכתב תמיד, גם כשאין שום שירות — לכן 1 ולא 0.
+ok('טאב שירותים ריק לא נופל', r.ok === true && r.wrote === 1, JSON.stringify(r));
+
+section('4ד. שמירת קטגוריות (saveServiceCategories_)');
+reset();
+ok('saveServiceCategories_ קיימת', typeof sandbox.saveServiceCategories_ === 'function');
+ok('🔴 דורשת PERM_SUPER', sandbox.ACTION_PERMS.saveServiceCategories === sandbox.PERM_SUPER);
+ok('מחווטת ל-doPost', /case 'saveServiceCategories': return json_\(saveServiceCategories_\(ss, body\)\)/.test(CODE));
+ok('משתמשת באותו תחום \'services\' ולא ממציאה בדיקה חדשה',
+   sandbox.ACTION_DOMAIN.saveServiceCategories === 'services');
+
+reset();
+let rc = sandbox.saveServiceCategoriesRun_(FAKE_SS, { categories: [{ 'מזהה': '', 'שם': 'א' }] });
+ok('🔴 מזהה ריק נדחה', rc.ok === false && /מזהה/.test(rc.error), JSON.stringify(rc));
+rc = sandbox.saveServiceCategoriesRun_(FAKE_SS, { categories: [{ 'מזהה': 'x', 'שם': '' }] });
+ok('🔴 שם ריק נדחה', rc.ok === false && /שם/.test(rc.error), JSON.stringify(rc));
+rc = sandbox.saveServiceCategoriesRun_(FAKE_SS, { categories: [
+  { 'מזהה': 'x', 'שם': 'א' }, { 'מזהה': 'x', 'שם': 'ב' }
+] });
+ok('🔴 מזהה כפול נדחה', rc.ok === false && /כפול/.test(rc.error), JSON.stringify(rc));
+
+// חסימת מחיקה: SVC_H/SVC_A/SVC_B (הפיקסצ'ר הגלובלי של הקובץ) לא כוללים
+// עמודת 'מזהה קטגוריה' — היא נוספה לגיליון האמיתי אחרי שהקובץ הזה נכתב.
+// כדי לבדוק את החסימה בלי לגעת בפיקסצ'ר המשותף (שאר הבדיקות תלויות
+// בצורתו המדויקת) — בונים כאן גיליון-מוק ייעודי לתת-הבדיקה הזו בלבד,
+// עם שורת שירות אחת, פעילה, שמצביעה במפורש על 'infra'.
+{
+  const svcHeadWithCat = SVC_H.concat(['מזהה קטגוריה']);
+  const activePoolRow = SVC_B.concat(['infra']);
+  const svcTbl = tbl(svcHeadWithCat, [activePoolRow]);
+  const secTbl = tbl(SEC_H, []);
+  const catTbl = tbl(CAT_H, [CAT_1, CAT_2]);
+  FAKE_SS = {
+    getSheetByName: n => n === sandbox.SERVICES_SHEET ? svcTbl
+                     : n === sandbox.SERVICE_SECTIONS_SHEET ? secTbl
+                     : n === sandbox.SERVICE_CATEGORIES_SHEET ? catTbl : null,
+    insertSheet: n => { throw new Error('insertSheet לא ממומש במוק — ' + n); }
+  };
+  writes = []; deletes = []; listReply = []; failOn = null;
+  sandbox.ensureServicesSheet_ = () => FAKE_SS.getSheetByName(sandbox.SERVICES_SHEET);
+  sandbox.ensureServiceSectionsSheet_ = () => FAKE_SS.getSheetByName(sandbox.SERVICE_SECTIONS_SHEET);
+  sandbox.ensureServiceCategoriesSheet_ = () => FAKE_SS.getSheetByName(sandbox.SERVICE_CATEGORIES_SHEET);
+  sandbox.fsSet_ = (p, o) => { writes.push({ path: p, obj: o }); return {}; };
+  sandbox.fsDelete_ = p => { deletes.push(p); return true; };
+  sandbox.fsList_ = () => listReply;
+
+  // רשימה חדשה בלי 'infra' — מנסה למחוק קטגוריה שעדיין יש לה שירות פעיל.
+  rc = sandbox.saveServiceCategoriesRun_(FAKE_SS, { categories: [
+    { 'מזהה': 'vendor', 'שם': 'ספקים ושירותים', 'אייקון': '', 'סדר': 2, 'פעיל': 'כן' }
+  ] });
+  ok('🔴 אי אפשר למחוק קטגוריה עם שירות פעיל שמצביע אליה',
+     rc.ok === false && /שירותים פעילים/.test(rc.error), JSON.stringify(rc));
+  ok('⚠️ ולא נכתב כלום', writes.length === 0, JSON.stringify(writes));
+}
+
+reset();
+rc = sandbox.saveServiceCategoriesRun_(FAKE_SS, { categories: [
+  { 'מזהה': 'infra', 'שם': 'תשתיות', 'אייקון': '', 'פעיל': 'כן' },
+  { 'מזהה': 'perks', 'שם': 'הטבות', 'אייקון': '', 'פעיל': 'כן' }
+] });
+ok('שמירה תקינה מצליחה', rc.ok === true && rc.categories === 2, JSON.stringify(rc));
+ok('🔑 גם מפעילה סנכרון ל-Firestore (מסמך המטא נכתב)',
+   writes.some(w => w.path === 'servicesMeta/categories'), JSON.stringify(writes.map(w => w.path)));
 
 section('5. כישלון אינו מפיל');
 reset(); failOn = 'set';
@@ -167,7 +243,7 @@ ok('🔴 ולא נכתב כלום', writes.length === 0);
 reset(); sandbox.authorize_ = () => ({ ok: true, perm: { isSuper: true } });
 listReply = [{ id: 'zz' }];
 g = sandbox.handleServicesSync_({ session: 's' });
-ok('עם הרשאה הצליח', g.ok === true && g.wrote === 2 && g.deleted === 1, JSON.stringify(g));
+ok('עם הרשאה הצליח', g.ok === true && g.wrote === 3 && g.deleted === 1, JSON.stringify(g));
 reset(); sandbox.authorize_ = () => { throw new Error('קרס'); };
 ok('חריגה נתפסת', sandbox.handleServicesSync_({}).ok === false);
 sandbox.authorize_ = realAuth; sandbox.json_ = realJson;
@@ -198,7 +274,7 @@ function build(opts) {
               push() {}, postRead() {}, isConnected: () => opts.connected !== false, load() {} } };
   if (!opts.noFb) sb.CBA.fb = {
     readCollection: opts.readCollection || ((n, cb) => setTimeout(() => cb(null, [{ 'מזהה שירות': 'gas', order: 1, schema: 1, updatedAt: 'x', sections: [{ 'מזהה סעיף': 's1' }] }]), 1)),
-    readDoc: (c, i, cb) => setTimeout(() => cb(null, {}), 1),
+    readDoc: opts.readDoc || ((c, i, cb) => setTimeout(() => cb(null, {}), 1)),
     authReady: opts.authReady || (cb => setTimeout(() => cb({ uid: 'U1' }), 1)),
     ensureDb: opts.ensureDb || (cb => setTimeout(() => cb(null), 1)),
     isReady: () => true, isDbReady: () => !!opts.warm };
@@ -207,10 +283,13 @@ function build(opts) {
 }
 const read = sb => new Promise(r => sb.CBA.data.getServices(r));
 
-let sb = build({ readCollection: (n, cb) => setTimeout(() => cb(null, [
-  { 'מזהה שירות': 'pool', 'שם': 'בריכה', order: 2, schema: 1, updatedAt: 'x', sections: [{ 'מזהה סעיף': 's3' }] },
-  { 'מזהה שירות': 'gas', 'שם': 'גז', order: 1, schema: 1, updatedAt: 'x', sections: [{ 'מזהה סעיף': 's1' }, { 'מזהה סעיף': 's2' }] }
-]), 1) });
+let sb = build({
+  readCollection: (n, cb) => setTimeout(() => cb(null, [
+    { 'מזהה שירות': 'pool', 'שם': 'בריכה', order: 2, schema: 1, updatedAt: 'x', sections: [{ 'מזהה סעיף': 's3' }] },
+    { 'מזהה שירות': 'gas', 'שם': 'גז', order: 1, schema: 1, updatedAt: 'x', sections: [{ 'מזהה סעיף': 's1' }, { 'מזהה סעיף': 's2' }] }
+  ]), 1),
+  readDoc: (c, i, cb) => setTimeout(() => cb(null, { categories: [{ 'מזהה': 'infra', 'שם': 'תשתיות השיכון' }] }), 1)
+});
 (async function () {
   const res = await read(sb);
   ok('הצליח מ-Firestore', res.ok === true);
@@ -226,6 +305,9 @@ let sb = build({ readCollection: (n, cb) => setTimeout(() => cb(null, [
      !('schema' in res.services[0]) && !('updatedAt' in res.services[0]),
      Object.keys(res.services[0]).join(','));
   ok('המדידה נרשמה', sb.CBA.perf.services.source === 'firestore', sb.CBA.perf.services.source);
+  ok('🔑 מסמך הקטגוריות (servicesMeta/categories) הצטרף במקביל',
+     res.categories && res.categories.length === 1 && res.categories[0]['מזהה'] === 'infra',
+     JSON.stringify(res.categories));
 
   section('10. הלקוח — החלטה מול תקלה');
   /* 🔴🔴 **המדיניות התהפכה ב-17.9.2026** (ממצא 02, הכרעת יועד). ר' ההסבר
@@ -303,7 +385,7 @@ section('12. מתג הביטול');
      /fsFirstRead\("services", SERVICES_FROM_FIRESTORE,/.test(DS));
   ok('והשלד בודק אותו לפני המתנה לזהות',
      DS.indexOf('if (!enabled || !CBA.fb') < DS.indexOf('CBA.fb.authReady(function (user)'));
-  ok('getServices עובר דרך servicesRead', /function getServices\(cb\) \{[\s\S]{0,200}servicesRead\(cb\);/.test(DS));
+  ok('getServices עובר דרך servicesRead', /function getServices\(cb\) \{[\s\S]{0,320}servicesRead\(cb\);/.test(DS));
   ok('🔴 קריאה אחת בלבד ל-action services', (DS.match(/action: "services"/g) || []).length === 1);
 
   console.log('\n' + '='.repeat(52));
