@@ -1,12 +1,4 @@
-/* מצולעי אזורי הגינון — 12 אזורי האחריות של השיכון.
- * ----------------------------------------------------------------------------
- * ⚠️ **נוצר אוטומטית** בכלי "כיול מפה" (כפתור "ייצוא אזורי גינון"). אל תערוך
- * ביד: הקואורדינטות הן שבר 0–1 של עולם המפה, אותן יחידות בדיוק שבהן נשמרת
- * נעיצת תקלה (getPin ב-resident.js), והן הותאמו מול mapGeo.js.
- *
- * הקובץ הזה ריק עד שיצוירו האזורים בכלי. ריק = הכל ממשיך לעבוד בדיוק כמו
- * קודם, פשוט בלי זיהוי אזור אוטומטי: שדה האזור נשאר ריק והמנהל בוחר ידנית.
- * ר' CBA.map.areaAt.
- */
-window.CBA = window.CBA || {};
-CBA.gardenAreas = { v: 1, src: "", areas: [] };
+/* נוצר אוטומטית מ־"כיול מפה" · אל תערוך ידנית · 2026-09-22
+   מצולעי אזורי הגינון, בשבר 0–1 של עולם המפה — אותן יחידות בדיוק
+   שבהן נשמרת נעיצת תקלה (getPin ב-resident.js). */
+window.CBA=window.CBA||{};CBA.gardenAreas={"v":1,"src":"map-calibrator-v2","areas":[{"n":"שכונה צפונית","p":[[null,null],[null,null],[null,null],[null,null],[null,null],[null,null]]},{"n":"גני ילדים","p":[[null,null],[null,null],[null,null],[null,null],[null,null],[null,null]]},{"n":"שכונה מרכזית צפונית","p":[[null,null],[null,null],[null,null],[null,null],[null,null],[null,null],[null,null],[null,null]]},{"n":"פארק משחקים","p":[[null,null],[null,null],[null,null],[null,null]]},{"n":"מועדון ילדים","p":[[null,null],[null,null],[null,null],[null,null],[null,null]]},{"n":"שכונה מרכזית דרומית","p":[[null,null],[null,null],[null,null],[null,null]]},{"n":"פארק משחקים","p":[[null,null],[null,null],[null,null],[null,null]]},{"n":"גינת כלבים","p":[[null,null],[null,null],[null,null],[null,null]]}]};
