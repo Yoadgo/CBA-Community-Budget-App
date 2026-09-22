@@ -1,11 +1,12 @@
-/* מארז בדיקות ל-GardenPurge.gs — 22.9.2026
+/* מארז בדיקות ל-GardenPurge.gs — ניקוי מלא + איפוס מונים (22.9.2026)
  *
- * מה נבדק כאן הוא מה שיכול להישבר **בשקט**:
- *   1. מחיקת שורות מלמטה למעלה — הבאג הקלאסי שבו כל מחיקה מזיזה
- *      את האינדקסים ומדלגים על שורה.
- *   2. שער הזהות — שהפעולה באמת נעצרת כשהנתונים השתנו.
- *   3. שער Firestore — שכישלון קריאה לא משאיר גיליון מחוק בלי מסמכים.
- *   4. שלמות: אחרי הניקוי לא נשאר אף רפאים באף אחד מארבעת המחסנים.
+ * מה נבדק כאן הוא מה שיכול להישבר בשקט:
+ *   1. שהניקוי משאיר את שורת הכותרות ומוחק רק נתונים.
+ *   2. שטאב ההגדרות (אזורים/קטגוריות) שורד.
+ *   3. ששני השערים (Firestore, נעילה) עוצרים בלי לגעת בכלום.
+ *   4. ש-gardenPurgeResetCounters **מסרב** כל עוד שרד ולו פריט אחד —
+ *      כולל בטאבי הגיבוי, שזה בדיוק התנאי שיועד התנה בו את האיפוס.
+ *   5. שטאב ארכיון אינו חוסם אבל כן מדווח.
  *
  * מריצים: node tools/test-garden-purge-2026-09-22.js
  */
@@ -19,252 +20,253 @@ function ok(name, cond, extra) {
   if (cond) { pass++; console.log('  ✔ ' + name); }
   else { fail++; console.log('  ✘ ' + name + (extra ? '  → ' + extra : '')); }
 }
-function eq(name, a, b) { ok(name, JSON.stringify(a) === JSON.stringify(b), 'קיבלתי ' + JSON.stringify(a) + ' במקום ' + JSON.stringify(b)); }
+function eq(name, a, b) {
+  ok(name, JSON.stringify(a) === JSON.stringify(b),
+     'קיבלתי ' + JSON.stringify(a) + ' במקום ' + JSON.stringify(b));
+}
 
-/* ---------- גיליון מדומה שבאמת מזיז אינדקסים ---------- */
-function makeSheet(headers, rows) {
+function makeSheet(name, headers, rows) {
   const data = [headers.slice()].concat(rows.map(r => r.slice()));
   return {
-    _data: data,
-    getLastRow() { return this._data.length; },
-    getLastColumn() { return headers.length; },
-    getDataRange() { const self = this; return { getValues() { return self._data.map(r => r.slice()); } }; },
-    getRange() { return { getValues: () => [], setValues: () => {} }; },
-    deleteRow(n) {
-      if (n < 1 || n > this._data.length) throw new Error('deleteRow מחוץ לטווח: ' + n);
-      this._data.splice(n - 1, 1);
-    },
+    name, _data: data,
+    getName() { return this.name; },
     setName(n) { this.name = n; return this; },
-    hideSheet() { return this; },
-    copyTo() { return makeSheet(headers, this._data.slice(1)); },
-    ids(col) { return this._data.slice(1).map(r => String(r[col])); }
+    getLastRow() { return this._data.length; },
+    getLastColumn() { return this._data[0] ? this._data[0].length : 0; },
+    getDataRange() { const s = this; return { getValues: () => s._data.map(r => r.slice()) }; },
+    getRange(r, c, nr, nc) {
+      const s = this;
+      return { getValues() {
+        const out = [];
+        for (let i = r - 1; i < r - 1 + nr; i++) out.push((s._data[i] || []).slice(c - 1, c - 1 + nc));
+        return out;
+      }, setValues() {} };
+    },
+    deleteRows(start, count) {
+      if (start < 2) throw new Error('ניסיון למחוק את שורת הכותרות!');
+      if (start + count - 1 > this._data.length) throw new Error('deleteRows מחוץ לטווח');
+      this._data.splice(start - 1, count);
+    },
+    deleteRow(n) { this.deleteRows(n, 1); },
+    hideSheet() { this.hidden = true; return this; },
+    clear() { this._data = []; },
+    setFrozenRows() {},
+    rows() { return this._data.length - 1; }
   };
 }
 
-/* ---------- העולם המדומה ---------- */
 function buildWorld(opts) {
   opts = opts || {};
-  const TASK_H = ['מזהה', 'סוג', 'כותרת', 'שלב', 'דגל', 'סגירה', 'שבוע'];
+  const TASK_H = ['מזהה', 'סוג', 'כותרת', 'שלב', 'סגירה', 'שבוע'];
   const REP_H  = ['מזהה', 'מזהה משימה', 'תמונות', 'כותרת'];
   const LOG_H  = ['חותמת זמן', 'מזהה משימה', 'סוג רשומה'];
+  const RUT_H  = ['מזהה', 'שם משימה', 'קטגוריה', 'אזורים', 'תדירות'];
+  const SET_H  = ['סוג', 'מזהה', 'סדר', 'ערך', 'פעיל'];
 
-  const KEEP = ['60','61','62','63','64','65','66','67','68','69','70'];
-  const KILL = ['4','5','6','7','8','9','12','15','16','17','18','19','20',
-                '21','22','24','25','26','27','28','29','33','34','38','39',
-                '40','41','43','44','45','53','55','59','73','74'];
-
-  let taskIds = KILL.concat(KEEP);
-  if (opts.extraTaskId) taskIds = taskIds.concat([opts.extraTaskId]);
-  if (opts.dropKeepId) taskIds = taskIds.filter(x => x !== opts.dropKeepId);
-  taskIds.sort((a, b) => Number(a) - Number(b));
-
-  const tasks = taskIds.map(id => [id, 'שגרה', 'כותרת ' + id, 'מתוכנן', '', '', '2026-09-13']);
-
-  /* דיווחים: 15-20 על משימות 60-65 (לשימור), 4/21/22 על 4/73/74 (למחיקה) */
+  const tasks = [];
+  for (let i = 1; i <= 46; i++) tasks.push([String(i), 'שגרה', 'כותרת', 'מתוכנן', '', '2026-09-13']);
   const reps = [
-    ['4',  '4',  'PHOTO-A,PHOTO-B', 'בדיקה'],
+    ['4', '4', 'PHOTO-A,PHOTO-B', 'בדיקה'],
     ['15', '60', '', 'השקייה'],
-    ['16', '61', '', 'השקייה'],
-    ['17', '62', '', 'השקייה'],
-    ['18', '63', '', 'דשא'],
-    ['19', '64', '', 'שיח'],
-    ['20', '65', '', 'מדשאה'],
-    ['21', '73', '', 'בדיקה'],
     ['22', '74', 'PHOTO-C', 'בדיקה']
   ];
-
-  /* יומן: 3 שורות לכל משימה קיימת + 131 שורות יתומות על מזהים מתים */
   const logRows = [];
-  taskIds.forEach(id => { for (let i = 0; i < 3; i++) logRows.push(['t', id, 'שיבוץ']); });
-  const deadIds = ['1','2','3','10','11','13','14','23','30','31','32','35','36','37','42',
-                   '46','47','48','49','50','51','52','54','56','57','58','71','72','75'];
-  deadIds.forEach(id => { for (let i = 0; i < 4; i++) logRows.push(['t', id, 'מחיקה']); });
-  logRows.push(['t', '', 'שורה בלי מזהה']);
+  for (let i = 0; i < 206; i++) logRows.push(['t', String((i % 70) + 1), 'שיבוץ']);
+  const rut = [['P1', 'כיסוח', 'גינון', 'צפון', 'שבועי'], ['P2', 'גיזום', 'גינון', 'דרום', 'חודשי']];
+  const settings = [['אזור', 'A1', '1', 'צפון', 'כן'], ['קטגוריה', 'C1', '1', 'השקיה', 'כן']];
 
-  const sheets = {
-    'גינון — משימות': makeSheet(TASK_H, tasks),
-    'גינון — דיווחים': makeSheet(REP_H, reps),
-    'גינון — יומן': makeSheet(LOG_H, logRows)
-  };
+  const sheetList = [
+    makeSheet('גינון — משימות', TASK_H, tasks),
+    makeSheet('גינון — דיווחים', REP_H, reps),
+    makeSheet('גינון — יומן', LOG_H, logRows),
+    makeSheet('גינון — שגרה', RUT_H, rut),
+    makeSheet('גינון — הגדרות', SET_H, settings),
+    makeSheet('_נתוני_משימות גינון', ['id', 'עודכן', 'schema', 'json'], [['1', '', '1', '{}']]),
+    makeSheet('_נתוני_דיווחי גינון', ['id', 'עודכן', 'schema', 'json'], []),
+    makeSheet('_נתוני_יומן גינון', ['id', 'עודכן', 'schema', 'json'], []),
+    makeSheet('_נתוני_תוכנית גינון', ['id', 'עודכן', 'schema', 'json'], []),
+    makeSheet('תושבים', ['שם', 'טלפון'], [['דן', '050']])
+  ];
+  if (opts.archiveTab) {
+    sheetList.push(makeSheet('ארכיון 22-09 — משימות', REP_H, [['9', '9', '', 'ישן']]));
+  }
+  const byName = {};
+  sheetList.forEach(s => { byName[s.name] = s; });
 
-  /* Firestore מדומה — כולל שני מסמכי רפאים שאין להם שורה */
-  const fsDocs = {
-    gardenTasks: {},
-    gardenReports: {},
-    gardenLog: {}
-  };
-  taskIds.forEach(id => { fsDocs.gardenTasks[id] = { id: id }; });
-  fsDocs.gardenTasks['999'] = { id: '999' };              /* רפאים */
-  reps.forEach(r => { fsDocs.gardenReports[r[0]] = { id: r[0] }; });
-  fsDocs.gardenReports['888'] = { id: '888' };            /* רפאים */
-  let n = 0;
-  taskIds.concat(deadIds).forEach(id => {
-    fsDocs.gardenLog[id + '_' + (n++)] = { taskId: id };
-  });
+  const fsDocs = { gardenTasks: {}, gardenReports: {}, gardenLog: {}, gardenPlan: {},
+                   services: { a: {} }, budgetTx: { b: {} }, counters: {},
+                   gymStatus: {}, gymCode: {}, clubReservations: {}, tourSteps: {},
+                   tourSeen: {}, homeCounts: {}, budgetYears: {}, pushSubscriptions: {}, members: {} };
+  for (let i = 1; i <= 46; i++) fsDocs.gardenTasks[String(i)] = {};
+  reps.forEach(r => { fsDocs.gardenReports[r[0]] = {}; });
+  for (let i = 0; i < 31; i++) fsDocs.gardenLog['L' + i] = { taskId: String(i + 1) };
+  fsDocs.gardenPlan['P1'] = {}; fsDocs.gardenPlan['P2'] = {};
+  const counters = { gardenTask: { n: 75 }, gardenReport: { n: 22 } };
+  fsDocs.counters = counters;
 
   const trashed = [];
-  const counters = { gardenTask: { n: 75 }, gardenReport: { n: 22 } };
-
   const ctx = {
-    console,
-    JSON, Math, String, Number, Array, Object, Date, parseInt, isNaN,
+    console, JSON, Math, String, Number, Array, Object, Date, parseInt, isNaN,
     Logger: { log() {} },
     Session: { getScriptTimeZone: () => 'Asia/Jerusalem' },
-    Utilities: { formatDate: () => '09-22 12:00' },
-    LockService: {
-      getScriptLock: () => ({
-        tryLock: () => opts.lockBusy !== true,
-        releaseLock: () => {}
-      })
-    },
-    SpreadsheetApp: {
-      getActiveSpreadsheet: () => ({
-        getSheetByName: (nm) => sheets[nm] || null,
-        insertSheet: () => makeSheet([], [])
-      })
-    },
+    Utilities: { formatDate: () => '22-09 15:00' },
+    LockService: { getScriptLock: () => ({ tryLock: () => opts.lockBusy !== true, releaseLock() {} }) },
+    SpreadsheetApp: { getActiveSpreadsheet: () => ({
+      getSheetByName: (n) => byName[n] || null,
+      getSheets: () => sheetList.slice(),
+      insertSheet: () => makeSheet('חדש', [], [])
+    }) },
     GARDEN_TASKS_SHEET: 'גינון — משימות',
     GARDEN_REPORTS_SHEET: 'גינון — דיווחים',
     GARDEN_LOG_SHEET: 'גינון — יומן',
-    GARDEN_KIND_LEGACY: {},
-    GARDEN_KIND_ROUTINE: 'שגרה',
-    GARDEN_KIND_REPORT: 'דיווח תושב',
-    FS_GARDEN_TASKS: 'gardenTasks',
-    FS_GARDEN_REPORTS: 'gardenReports',
-    FS_COUNTERS: 'counters',
-    FS_FLAGS_DOC: 'appConfig/flags',
-    GARDEN_TASK_COUNTER: 'gardenTask',
-    GARDEN_REPORT_COUNTER: 'gardenReport',
-    BK_COLLECTIONS: [],
+    GARDEN_ROUTINE_SHEET: 'גינון — שגרה',
+    GARDEN_KIND_LEGACY: {}, GARDEN_KIND_ROUTINE: 'שגרה', GARDEN_KIND_REPORT: 'דיווח תושב',
+    FS_GARDEN_TASKS: 'gardenTasks', FS_GARDEN_REPORTS: 'gardenReports',
+    FS_GARDEN_PLAN: 'gardenPlan', FS_COUNTERS: 'counters', FS_FLAGS_DOC: 'appConfig/flags',
+    GARDEN_TASK_COUNTER: 'gardenTask', GARDEN_REPORT_COUNTER: 'gardenReport',
+    BK_COLLECTIONS: [
+      { collection: 'gardenTasks', tab: '_נתוני_משימות גינון' },
+      { collection: 'gardenReports', tab: '_נתוני_דיווחי גינון' },
+      { collection: 'gardenLog', tab: '_נתוני_יומן גינון' },
+      { collection: 'gardenPlan', tab: '_נתוני_תוכנית גינון' },
+      { collection: 'services', tab: '_נתוני_שירותים' }
+    ],
     gardenCell_: (v) => (v === null || v === undefined) ? '' : String(v).trim(),
-    gardenCols_: (sh) => {
-      const m = {};
-      sh._data[0].forEach((h, i) => { m[String(h).trim()] = i; });
-      return m;
-    },
+    gardenCols_: (sh) => { const m = {}; sh._data[0].forEach((h, i) => { m[String(h).trim()] = i; }); return m; },
     gardenWeekKey_: () => '2026-09-20',
-    gardenDeletePhotos_: (csv) => {
-      String(csv || '').split(',').forEach(x => { if (x.trim()) trashed.push(x.trim()); });
-    },
-    fsDocPath_: (col, id) => col + '/' + id,
+    gardenDeletePhotos_: (csv) => String(csv || '').split(',').forEach(x => { if (x.trim()) trashed.push(x.trim()); }),
+    fsDocPath_: (c, id) => c + '/' + id,
     fsGet_: (p) => {
       if (opts.fsDown) throw new Error('Firestore לא זמין (בדיקה)');
-      const [col, id] = p.split('/');
-      if (col === 'counters') return counters[id] || null;
-      return (fsDocs[col] && fsDocs[col][id]) || null;
+      const i = p.indexOf('/'); const c = p.slice(0, i), id = p.slice(i + 1);
+      return (fsDocs[c] && fsDocs[c][id]) || null;
     },
-    fsList_: (col) => {
+    fsSet_: (p, obj) => {
+      const i = p.indexOf('/'); const c = p.slice(0, i), id = p.slice(i + 1);
+      fsDocs[c] = fsDocs[c] || {}; fsDocs[c][id] = obj; return true;
+    },
+    fsList_: (c) => {
       if (opts.fsDown) throw new Error('Firestore לא זמין (בדיקה)');
-      return Object.keys(fsDocs[col] || {}).map(id => ({ id, data: fsDocs[col][id] }));
+      return Object.keys(fsDocs[c] || {}).map(id => ({ id, data: fsDocs[c][id] }));
     },
     fsDelete_: (p) => {
-      const i = p.indexOf('/');
-      const col = p.slice(0, i), id = p.slice(i + 1);
-      if (fsDocs[col]) delete fsDocs[col][id];
+      const i = p.indexOf('/'); const c = p.slice(0, i), id = p.slice(i + 1);
+      if (fsDocs[c]) delete fsDocs[c][id];
       return true;
     },
-    fsBackupAll_: () => ({ read: 0, tabs: [], errors: [] })
+    fsBackupAll_: (ss) => {
+      /* מדמה את ההתנהגות האמיתית: כותב כל טאב גיבוי מחדש מהאוסף. */
+      const tabs = [];
+      ctx.BK_COLLECTIONS.forEach(c => {
+        const sh = byName[c.tab];
+        const docs = Object.keys(fsDocs[c.collection] || {});
+        if (sh) sh._data = [sh._data[0]].concat(docs.map(id => [id, '', '1', '{}']));
+        tabs.push({ collection: c.collection, tab: c.tab, docs: docs.length });
+      });
+      return { read: 0, tabs, errors: [] };
+    }
   };
   ctx.globalThis = ctx;
   vm.createContext(ctx);
-  const src = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'GardenPurge.gs'), 'utf8');
-  vm.runInContext(src, ctx);
-  return { ctx, sheets, fsDocs, trashed, counters, KEEP, KILL, deadIds };
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'GardenPurge.gs'), 'utf8'), ctx);
+  return { ctx, byName, fsDocs, trashed, counters };
 }
 
-/* ======================= הבדיקות ======================= */
-
-console.log('\n── 1. ריצה תקינה מקצה לקצה ──');
+console.log('\n── 1. ניקוי מלא ──');
 {
   const w = buildWorld();
-  const out = w.ctx.gardenPurgeExecute();
-
-  const left = w.sheets['גינון — משימות'].ids(0);
-  eq('נשארו בדיוק 11 משימות', left.length, 11);
-  eq('ואלה בדיוק מזהי השימור', left.slice().sort(), w.KEEP.slice().sort());
-
-  const repsLeft = w.sheets['גינון — דיווחים'].ids(0);
-  eq('נשארו 6 דיווחים', repsLeft.slice().sort(), ['15','16','17','18','19','20']);
-
-  const logLeft = w.sheets['גינון — יומן']._data.slice(1).map(r => String(r[1]));
-  ok('ביומן נשארו רק מזהי שימור',
-     logLeft.every(id => w.KEEP.indexOf(id) >= 0), 'נמצא ' + JSON.stringify(logLeft.filter(id => w.KEEP.indexOf(id) < 0).slice(0, 5)));
-  eq('ובדיוק 3 שורות לכל אחת מ-11', logLeft.length, 33);
-
-  eq('Firestore — 11 מסמכי משימה', Object.keys(w.fsDocs.gardenTasks).sort(), w.KEEP.slice().sort());
-  eq('Firestore — 6 מסמכי דיווח', Object.keys(w.fsDocs.gardenReports).sort(), ['15','16','17','18','19','20']);
-  ok('Firestore — מסמך הרפאים 999 נמחק', !w.fsDocs.gardenTasks['999']);
-  ok('Firestore — מסמך הרפאים 888 נמחק', !w.fsDocs.gardenReports['888']);
-  const logTaskIds = Object.keys(w.fsDocs.gardenLog).map(k => w.fsDocs.gardenLog[k].taskId);
-  ok('Firestore — יומן רק למזהי שימור',
-     logTaskIds.every(id => w.KEEP.indexOf(id) >= 0), JSON.stringify(logTaskIds.slice(0, 5)));
-
-  eq('שלוש תמונות הועברו לסל', w.trashed.slice().sort(), ['PHOTO-A','PHOTO-B','PHOTO-C']);
-  eq('המונים לא זזו', [w.counters.gardenTask.n, w.counters.gardenReport.n], [75, 22]);
-  ok('הדוח מדווח שהמונים לא ירדו', out.indexOf('המונים לא זזו אחורה') >= 0);
-  ok('המזהה הבא הוא 76', out.indexOf('תקבל 76') >= 0);
+  w.ctx.gardenPurgeWipe();
+  eq('טאב המשימות ריק', w.byName['גינון — משימות'].rows(), 0);
+  eq('טאב הדיווחים ריק', w.byName['גינון — דיווחים'].rows(), 0);
+  eq('טאב היומן ריק', w.byName['גינון — יומן'].rows(), 0);
+  eq('טאב השגרה ריק', w.byName['גינון — שגרה'].rows(), 0);
+  ok('שורת הכותרות נשארה בכל ארבעתם',
+     ['גינון — משימות','גינון — דיווחים','גינון — יומן','גינון — שגרה']
+       .every(n => w.byName[n]._data.length === 1 && w.byName[n]._data[0].length > 0));
+  eq('טאב ההגדרות לא נגעו בו', w.byName['גינון — הגדרות'].rows(), 2);
+  eq('טאב תושבים לא נגעו בו', w.byName['תושבים'].rows(), 1);
+  eq('gardenTasks ריק', Object.keys(w.fsDocs.gardenTasks).length, 0);
+  eq('gardenReports ריק', Object.keys(w.fsDocs.gardenReports).length, 0);
+  eq('gardenLog ריק', Object.keys(w.fsDocs.gardenLog).length, 0);
+  eq('gardenPlan ריק', Object.keys(w.fsDocs.gardenPlan).length, 0);
+  eq('services לא נגעו בו', Object.keys(w.fsDocs.services).length, 1);
+  eq('budgetTx לא נגעו בו', Object.keys(w.fsDocs.budgetTx).length, 1);
+  eq('המונים עדיין לא אופסו', [w.counters.gardenTask.n, w.counters.gardenReport.n], [75, 22]);
+  eq('שלוש תמונות לסל', w.trashed.slice().sort(), ['PHOTO-A', 'PHOTO-B', 'PHOTO-C']);
 }
 
-console.log('\n── 2. שער הזהות: מזהה חדש שלא היה באישור ──');
-{
-  const w = buildWorld({ extraTaskId: '80' });
-  const out = w.ctx.gardenPurgeExecute();
-  ok('נעצר', out.indexOf('עצירה') >= 0);
-  ok('ומצביע על המזהה', out.indexOf('80') >= 0);
-  eq('לא נמחקה אף שורה', w.sheets['גינון — משימות'].getLastRow() - 1, 47);
-  eq('ולא אף מסמך', Object.keys(w.fsDocs.gardenTasks).length, 48);
-  eq('ולא אף תמונה', w.trashed.length, 0);
-}
-
-console.log('\n── 3. שער הזהות: משימת שימור נעלמה ──');
-{
-  const w = buildWorld({ dropKeepId: '66' });
-  const out = w.ctx.gardenPurgeExecute();
-  ok('נעצר', out.indexOf('עצירה') >= 0);
-  ok('ומצביע על 66', out.indexOf('66') >= 0);
-  eq('לא נמחקה אף שורה', w.sheets['גינון — משימות'].getLastRow() - 1, 45);
-  eq('ולא אף תמונה', w.trashed.length, 0);
-}
-
-console.log('\n── 4. שער Firestore: לא זמין ──');
+console.log('\n── 2. שער Firestore ──');
 {
   const w = buildWorld({ fsDown: true });
-  const out = w.ctx.gardenPurgeExecute();
+  const out = w.ctx.gardenPurgeWipe();
   ok('נעצר', out.indexOf('עצירה') >= 0);
-  ok('ומסביר למה', out.indexOf('רפאים') >= 0);
-  eq('הגיליון שלם', w.sheets['גינון — משימות'].getLastRow() - 1, 46);
-  eq('היומן שלם', w.sheets['גינון — יומן'].getLastRow() - 1, 46 * 3 + 29 * 4 + 1);
-  eq('ולא נגענו בתמונות', w.trashed.length, 0);
+  eq('הגיליון שלם', w.byName['גינון — משימות'].rows(), 46);
+  eq('לא נגענו בתמונות', w.trashed.length, 0);
 }
 
-console.log('\n── 5. נעילה תפוסה ──');
+console.log('\n── 3. נעילה תפוסה ──');
 {
   const w = buildWorld({ lockBusy: true });
-  const out = w.ctx.gardenPurgeExecute();
+  const out = w.ctx.gardenPurgeWipe();
   ok('נעצר', out.indexOf('תפוסה') >= 0);
-  eq('לא נמחק כלום', w.sheets['גינון — משימות'].getLastRow() - 1, 46);
+  eq('הגיליון שלם', w.byName['גינון — משימות'].rows(), 46);
 }
 
-console.log('\n── 6. הרצה שנייה על מצב נקי (אידמפוטנטיות) ──');
+console.log('\n── 4. איפוס מונים מסרב כשיש נתונים ──');
 {
   const w = buildWorld();
-  w.ctx.gardenPurgeExecute();
-  const out2 = w.ctx.gardenPurgeExecute();
-  ok('ההרצה השנייה אינה נעצרת אלא פשוט לא מוחקת כלום', out2.indexOf('עצירה') < 0);
-  ok('ולא נגעה בתמונות נוספות', w.trashed.length === 3, 'סל: ' + w.trashed.length);
-  ok('ולא נמחק מסמך נוסף', Object.keys(w.fsDocs.gardenTasks).length === 11);
-  eq('ועדיין 11 משימות', w.sheets['גינון — משימות'].ids(0).length, 11);
-  eq('ועדיין 6 דיווחים', w.sheets['גינון — דיווחים'].ids(0).length, 6);
+  const out = w.ctx.gardenPurgeResetCounters();
+  ok('נעצר', out.indexOf('עצירה') >= 0);
+  eq('המונים לא זזו', [w.counters.gardenTask.n, w.counters.gardenReport.n], [75, 22]);
 }
 
-console.log('\n── 7. רשימות הקוד תואמות את מה שאושר ──');
+console.log('\n── 5. איפוס מסרב גם כשרק טאב גיבוי שרד ──');
 {
   const w = buildWorld();
-  eq('11 מזהי שימור', w.ctx.GP_KEEP.length, 11);
-  eq('35 מזהי מחיקה', w.ctx.GP_KILL.length, 35);
-  const both = w.ctx.GP_KEEP.filter(x => w.ctx.GP_KILL.indexOf(x) >= 0);
-  eq('אין חפיפה בין הרשימות', both, []);
-  eq('סך הכול 46', w.ctx.GP_KEEP.length + w.ctx.GP_KILL.length, 46);
+  w.ctx.gardenPurgeWipe();
+  /* הגיליון ו-Firestore נקיים, אבל טאב הגיבוי עדיין מחזיק שורה ישנה */
+  eq('טאב הגיבוי עדיין מלא', w.byName['_נתוני_משימות גינון'].rows(), 1);
+  const out = w.ctx.gardenPurgeResetCounters();
+  ok('האיפוס נעצר בגלל טאב הגיבוי', out.indexOf('עצירה') >= 0);
+  ok('ומצביע עליו', out.indexOf('_נתוני_משימות גינון') >= 0);
+  eq('המונים לא זזו', [w.counters.gardenTask.n, w.counters.gardenReport.n], [75, 22]);
+}
+
+console.log('\n── 6. הרצף המלא: ניקוי → גיבוי → איפוס ──');
+{
+  const w = buildWorld();
+  w.ctx.gardenPurgeWipe();
+  w.ctx.gardenPurgeBackupRun();
+  eq('טאב הגיבוי התרוקן', w.byName['_נתוני_משימות גינון'].rows(), 0);
+  const ver = w.ctx.gardenPurgeVerify();
+  ok('האימות אומר נקי', ver.indexOf('✅ נקי') >= 0);
+  const out = w.ctx.gardenPurgeResetCounters();
+  ok('האיפוס רץ', out.indexOf('עצירה') < 0);
+  eq('המונים על 0', [w.counters.gardenTask.n, w.counters.gardenReport.n], [0, 0]);
+  ok('מסמכי המונים עדיין קיימים', !!w.fsDocs.counters.gardenTask && !!w.fsDocs.counters.gardenReport);
+}
+
+console.log('\n── 7. טאב ארכיון לא חוסם אבל מדווח ──');
+{
+  const w = buildWorld({ archiveTab: true });
+  w.ctx.gardenPurgeWipe();
+  w.ctx.gardenPurgeBackupRun();
+  const ver = w.ctx.gardenPurgeVerify();
+  ok('האימות עדיין אומר נקי', ver.indexOf('✅ נקי') >= 0);
+  ok('אבל מזכיר את הארכיון', ver.indexOf('ארכיון 22-09') >= 0);
+  const out = w.ctx.gardenPurgeResetCounters();
+  eq('והאיפוס עבר', [w.counters.gardenTask.n, w.counters.gardenReport.n], [0, 0]);
+}
+
+console.log('\n── 8. הרצה שנייה של הניקוי ──');
+{
+  const w = buildWorld();
+  w.ctx.gardenPurgeWipe();
+  const t1 = w.trashed.length;
+  const out = w.ctx.gardenPurgeWipe();
+  ok('לא נשברת', out.indexOf('🔴') < 0 || out.indexOf('עצירה') < 0);
+  eq('לא נמחקו תמונות נוספות', w.trashed.length, t1);
+  eq('הכותרות עדיין שם', w.byName['גינון — משימות']._data.length, 1);
 }
 
 console.log('\n════════════════════════════════');

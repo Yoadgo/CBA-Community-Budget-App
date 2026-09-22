@@ -14042,7 +14042,16 @@ function gardenPlanSyncAll_(ss) {
     });
     out.wrote++;
 
-    fsSweepOrphans_(FS_GARDEN_PLAN, live, out);
+    /* 🔴🔴 **תנאי המגן — נוסף 22.9.2026.** שתי האחיות של הפונקציה הזאת
+       (`gardenReportsSyncAll_` ו-`gardenTasksSyncAll_`) מוגנות בו מאז 16.9,
+       והוא נשכח כאן — ר' ההערה "זו השורה שמחקה נתונים ב-16.9".
+       🔑 **למה זה לא תיאורטי:** כש-`gardenWritesFromBrowser` דלוק,
+          `gardenPlanFsSave` בלקוח כותבת שורת תוכנית **רק ל-Firestore**,
+          בלי שורה בגיליון — ואילו `live` כאן נבנה מהגיליון בלבד.
+          בלי התנאי, סנכרון תוכנית אחד מוחק בשקט את כל תוכנית העבודה
+          שהוזנה מהאפליקציה. הפונקציה אינה בעבודה השעתית, ולכן זו
+          פצצה רדומה ולא נזק מתמשך — אבל היא נורית בכל `gardenPlanSync`. */
+    if (!gardenFsOwns_()) fsSweepOrphans_(FS_GARDEN_PLAN, live, out);
     out.ok = true;
   } catch (err) {
     out.error = String(err);

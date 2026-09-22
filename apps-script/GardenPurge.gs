@@ -349,176 +349,128 @@ function gardenPurgeDetail() {
   return text;
 }
 
+
 /* ============================================================================
- *  הניקוי עצמו   (מאושר ע"י יועד, 22.9.2026)
+ *  ניקוי מלא — "הכול הכול"   (הכרעת יועד, 22.9.2026)
  * ----------------------------------------------------------------------------
- *  🔑 **הכלל היחיד שמנהל את הכול: רשימת השימור.** כל מה שאינו ברשימה
- *     הזאת נמחק — בגיליון, ב-Firestore, ביומן ובדרייב. הגדרה חיובית
- *     ולא שלילית: אי אפשר "לשכוח" למחוק רפאים, ואי אפשר למחוק בטעות
- *     משהו שנמצא ברשימה.
+ *  🔑 **הכלל: לא נשאר כלום.** ארבעה טאבים בגיליון (שורות בלבד — הכותרות
+ *     נשארות כדי לא לשבור את מבנה העמודות), ארבעה אוספים ב-Firestore,
+ *     וכל תמונות הדיווחים בדרייב.
  *
- *  🔴 **שער הזהות** — לפני מחיקה אחת, קבוצת המזהים בגיליון חייבת
- *     להיות **בדיוק** GP_KEEP ∪ GP_KILL. נכנסה משימה חדשה מאז הריצה
- *     היבשה? הפעולה נעצרת ולא מוחקת כלום. זה מה שמונע מהרשימה
- *     שאושרה ב-22.9 לפעול על נתונים אחרים.
+ *  ✋ **מה לא נוגעים בו:** טאב "גינון — הגדרות" (7 אזורים + 7 קטגוריות)
+ *     ו-`gardenMeta/lists` — מקור האמת היחיד לטופס הדיווח של התושב
+ *     ולתבניות השגרה. בלעדיו אין לתושב מה לבחור.
  *
- *  🔴 **שער Firestore** — אם המונים אינם נקראים, עוצרים. מחיקת שורה
- *     בלי מחיקת המסמך היא בדיוק הבאג של 16.9 ("מחקתי שלוש פעמים
- *     והיא חזרה"), ומאז שהדגלים דלוקים אין יותר סחיפת יתומים שתתקן.
+ *  🔴 **למה Firestore קודם והגיליון אחריו:** `gardenMirrorToSheet_` רצה
+ *     כל שעה, קוראת מ-Firestore וכותבת לגיליון — והיא **רק מוסיפה**.
+ *     ניקוי הגיליון לבדו היה מוחזר תוך שעה.
  *
- *  ⚠️ הסדר: Firestore קודם, גיליון אחריו. כישלון באמצע משאיר שורה
- *     בלי מסמך — מצב גלוי שהריצה היבשה מדווחת עליו — ולא מסמך בלי
- *     שורה, שהוא בדיוק הרפאים שאיש לא רואה.
+ *  🔴 **למה אין כאן שער זהות כמו בגרסה הסלקטיבית:** אין רשימת שימור.
+ *     "הכול" הוא הגדרה שאינה יכולה להתיישן, ולכן ריצה על נתונים
+ *     שהשתנו מאז האישור אינה מסוכנת — היא פשוט מוחקת גם אותם.
+ *     זה מה שהופך את הניקוי המלא לבטוח **יותר** מהסלקטיבי.
  * ========================================================================== */
 
-/** 11 המשימות שנשארות. זו הרשימה שקובעת. */
-var GP_KEEP = ['60','61','62','63','64','65','66','67','68','69','70'];
-
-/** 35 המזהים שאושרו למחיקה. משמש **לשער בלבד** — לא הוא שמוחק. */
-var GP_KILL = ['4','5','6','7','8','9','12','15','16','17','18','19','20',
-               '21','22','24','25','26','27','28','29','33','34','38','39',
-               '40','41','43','44','45','53','55','59','73','74'];
-
-function gpSet_(arr) { var m = {}; arr.forEach(function (x) { m[String(x)] = 1; }); return m; }
+var GP_TABS = null;   /* מאותחל בזמן ריצה — הקבועים חיים ב-Code.gs */
+function gpTabs_() {
+  return [GARDEN_TASKS_SHEET, GARDEN_REPORTS_SHEET, GARDEN_LOG_SHEET, GARDEN_ROUTINE_SHEET];
+}
+function gpCollections_() {
+  return [FS_GARDEN_TASKS, FS_GARDEN_REPORTS, 'gardenLog', FS_GARDEN_PLAN];
+}
+/** טאבי הגיבוי של הגינון — גם הם מחזיקים מזהים ישנים. */
+function gpBackupTabs_() {
+  var out = [];
+  var mine = gpCollections_();
+  for (var i = 0; i < BK_COLLECTIONS.length; i++) {
+    if (mine.indexOf(BK_COLLECTIONS[i].collection) >= 0) out.push(BK_COLLECTIONS[i].tab);
+  }
+  return out;
+}
 
 /** ============================================================================
- *  צעד 1 — צילום מצב. גיבוי מלא + עותק מתוארך של שלושת הטאבים החיים.
- *  זו נקודת השחזור, והיא חייבת לרוץ לפני הניקוי.
+ *  צעד 1 — ארכיון. עותק מוסתר של ארבעת הטאבים החיים, לפני שנוגעים בכלום.
+ *  ⚠️ הארכיון מחזיק מזהים ישנים. הוא אינרטי — אף קוד אינו קורא אותו —
+ *     אבל **אין להדביק אותו בחזרה אחרי איפוס המונים** בלי להרים אותם קודם.
  * ========================================================================== */
 function gardenPurgeSnapshot() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var lines = [];
   function L(s) { lines.push(String(s)); }
-  var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MM-dd HH:mm');
+  var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MM HH:mm');
 
-  L('════════ צילום מצב לפני ניקוי · ' + stamp + ' ════════');
-
-  /* גיבוי מלא — כותב את טאבי _נתוני_ מחדש מ-Firestore, כך שהגיבוי
-     מייצג את המצב **הנוכחי** ולא מצב חלקי מצטבר. */
-  try {
-    var bk = fsBackupAll_(ss);
-    L('גיבוי מלא: ' + bk.read + ' מסמכים');
-    bk.tabs.forEach(function (t) { L('   ' + t.tab + ': ' + t.docs); });
-    if (bk.errors.length) L('⚠️ שגיאות: ' + bk.errors.join(' | '));
-  } catch (e) { L('🔴 הגיבוי נכשל: ' + e + ' — אין לרוץ הלאה.'); }
-
-  /* עותק של הטאבים החיים. הגיבוי המלא שיירוץ **אחרי** הניקוי ידרוס
-     את טאבי _נתוני_, ולכן צריך עותק שאינו תלוי בהם. */
-  [GARDEN_TASKS_SHEET, GARDEN_REPORTS_SHEET, GARDEN_LOG_SHEET].forEach(function (name) {
+  L('════════ ארכיון לפני ניקוי · ' + stamp + ' ════════');
+  gpTabs_().forEach(function (name) {
     try {
       var sh = ss.getSheetByName(name);
       if (!sh) { L('⚠️ אין טאב ' + name); return; }
       var copy = sh.copyTo(ss);
-      copy.setName('גיבוי ' + stamp + ' — ' + name.replace('גינון — ', ''));
+      copy.setName('ארכיון ' + stamp + ' — ' + name.replace('גינון — ', ''));
       copy.hideSheet();
-      L('עותק: ' + copy.getName() + ' (' + Math.max(sh.getLastRow() - 1, 0) + ' שורות)');
+      L('  ' + copy.getName() + ' (' + Math.max(sh.getLastRow() - 1, 0) + ' שורות)');
     } catch (e) { L('⚠️ העתקת ' + name + ' נכשלה: ' + e); }
   });
-
-  L('════════ אפשר להריץ את gardenPurgeExecute ════════');
+  L('');
+  L('⚠️ הארכיון מחזיק מזהים ישנים ואינו מנוקה ע"י הניקוי.');
+  L('   הוא אינרטי — אף קוד אינו קורא אותו. אל תדביק אותו בחזרה אחרי');
+  L('   איפוס המונים בלי להרים את המונים קודם.');
+  L('════════ הצעד הבא: gardenPurgeWipe ════════');
   var text = lines.join('\n');
   Logger.log(text);
   return text;
 }
 
 /** ============================================================================
- *  צעד 2 — הניקוי.
+ *  צעד 2 — הניקוי המלא.
  * ========================================================================== */
-function gardenPurgeExecute() {
+function gardenPurgeWipe() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var lines = [];
   function L(s) { lines.push(String(s)); }
   function done() { var t = lines.join('\n'); Logger.log(t); return t; }
 
-  var keep = gpSet_(GP_KEEP), kill = gpSet_(GP_KILL);
-  L('════════ ניקוי גינון · ' + GP_VER + ' ════════');
+  L('════════ ניקוי מלא של הגינון · ' + GP_VER + ' ════════');
 
-  /* ---------- שער Firestore ---------- */
-  var ctBefore, crBefore;
+  /* ---------- שער Firestore: בלי מחיקת מסמכים אין טעם להתחיל ---------- */
   try {
-    ctBefore = parseInt((fsGet_(fsDocPath_(FS_COUNTERS, GARDEN_TASK_COUNTER)) || {}).n, 10);
-    crBefore = parseInt((fsGet_(fsDocPath_(FS_COUNTERS, GARDEN_REPORT_COUNTER)) || {}).n, 10);
+    fsGet_(fsDocPath_(FS_COUNTERS, GARDEN_TASK_COUNTER));
   } catch (e) {
     L('🔴 עצירה — Firestore אינו זמין: ' + e);
-    L('   בלי מחיקת המסמכים היינו יוצרים רפאים. לא נמחק כלום.');
+    L('   המראה השעתית הייתה מחזירה לגיליון כל שורה שהיינו מוחקים.');
     return done();
   }
-  if (!(ctBefore > 0) || !(crBefore > 0)) {
-    L('🔴 עצירה — המונים לא נקראו (משימות=' + ctBefore + ' דיווחים=' + crBefore + ').');
-    return done();
-  }
-  L('מונים לפני: משימות=' + ctBefore + ' · דיווחים=' + crBefore);
 
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) { L('🔴 עצירה — המערכת תפוסה. לנסות שוב.'); return done(); }
 
   try {
-    var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+    /* ---------- אוספים את מזהי התמונות לפני שמוחקים את השורות ---------- */
+    var photoCells = [];
     var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
-    var lsh = ss.getSheetByName(GARDEN_LOG_SHEET);
-    if (!tsh || !rsh || !lsh) { L('🔴 עצירה — טאב גינון חסר.'); return done(); }
-
-    /* ---------- שער הזהות ---------- */
-    var tc = gardenCols_(tsh), tv = tsh.getDataRange().getValues();
-    var present = {}, unexpected = [];
-    for (var i = 1; i < tv.length; i++) {
-      var id = gardenCell_(tv[i][tc['מזהה']]);
-      present[id] = 1;
-      if (!keep[id] && !kill[id]) unexpected.push(id);
+    if (rsh && rsh.getLastRow() > 1) {
+      var rc = gardenCols_(rsh), rv = rsh.getDataRange().getValues();
+      for (var j = 1; j < rv.length; j++) {
+        var ph = gardenCell_(rv[j][rc['תמונות']]);
+        if (ph) photoCells.push(ph);
+      }
     }
-    var missing = GP_KEEP.filter(function (id) { return !present[id]; });
-    if (unexpected.length) {
-      L('🔴 עצירה — מזהים שאינם באף רשימה: ' + unexpected.join(', '));
-      L('   הנתונים השתנו מאז האישור. להריץ gardenPurgeDryRun ולאשר מחדש.');
-      return done();
-    }
-    if (missing.length) {
-      L('🔴 עצירה — משימות שימור חסרות מהגיליון: ' + missing.join(', '));
-      return done();
-    }
-    L('שער הזהות עבר: ' + (tv.length - 1) + ' משימות, מתוכן ' + GP_KEEP.length + ' לשימור.');
-
-    /* ---------- מה נמחק בטאב הדיווחים, ואילו תמונות ---------- */
-    var rc = gardenCols_(rsh), rv = rsh.getDataRange().getValues();
-    var keepReps = {}, killRepRows = [], killRepIds = [], photoCells = [];
-    for (var j = 1; j < rv.length; j++) {
-      var rid = gardenCell_(rv[j][rc['מזהה']]);
-      var rtid = gardenCell_(rv[j][rc['מזהה משימה']]);
-      if (rtid && keep[rtid]) { keepReps[rid] = 1; continue; }
-      killRepRows.push(j + 1);
-      killRepIds.push(rid);
-      var ph = gardenCell_(rv[j][rc['תמונות']]);
-      if (ph) photoCells.push(ph);
-    }
-    L('דיווחים: ' + Object.keys(keepReps).length + ' לשימור, ' +
-      killRepIds.length + ' למחיקה (' + killRepIds.join(', ') + ')');
 
     /* ---------- Firestore קודם ---------- */
-    var fsT = 0, fsR = 0, fsL = 0, errs = [];
-    try {
-      fsList_(FS_GARDEN_TASKS).forEach(function (d) {
-        if (keep[d.id]) return;
-        try { fsDelete_(fsDocPath_(FS_GARDEN_TASKS, d.id)); fsT++; }
-        catch (e) { errs.push('משימה ' + d.id + ': ' + e); }
-      });
-    } catch (e) { errs.push('רשימת משימות: ' + e); }
-    try {
-      fsList_(FS_GARDEN_REPORTS).forEach(function (d) {
-        if (keepReps[d.id]) return;
-        try { fsDelete_(fsDocPath_(FS_GARDEN_REPORTS, d.id)); fsR++; }
-        catch (e) { errs.push('דיווח ' + d.id + ': ' + e); }
-      });
-    } catch (e) { errs.push('רשימת דיווחים: ' + e); }
-    try {
-      fsList_('gardenLog').forEach(function (d) {
-        var tid = String((d.data && d.data.taskId) || '').trim();
-        if (tid && keep[tid]) return;
-        try { fsDelete_(fsDocPath_('gardenLog', d.id)); fsL++; }
-        catch (e) { errs.push('יומן ' + d.id + ': ' + e); }
-      });
-    } catch (e) { errs.push('רשימת יומן: ' + e); }
-    L('Firestore: נמחקו ' + fsT + ' משימות, ' + fsR + ' דיווחים, ' + fsL + ' שורות יומן');
-    if (errs.length) L('⚠️ שגיאות Firestore: ' + errs.slice(0, 5).join(' | '));
+    var errs = [];
+    gpCollections_().forEach(function (col) {
+      var n = 0;
+      try {
+        fsList_(col).forEach(function (d) {
+          try { fsDelete_(fsDocPath_(col, d.id)); n++; }
+          catch (e) { errs.push(col + '/' + d.id + ': ' + e); }
+        });
+        L('Firestore · ' + col + ': נמחקו ' + n + ' מסמכים');
+      } catch (e) {
+        errs.push(col + ' (רשימה): ' + e);
+        L('Firestore · ' + col + ': 🔴 ' + e);
+      }
+    });
+    if (errs.length) L('⚠️ שגיאות: ' + errs.slice(0, 6).join(' | '));
 
     /* ---------- תמונות בדרייב ---------- */
     var photoN = 0;
@@ -528,43 +480,24 @@ function gardenPurgeExecute() {
     });
     L('דרייב: ' + photoN + ' קבצי תמונה הועברו לסל המיחזור');
 
-    /* ---------- שורות הגיליון, מלמטה למעלה ---------- */
-    for (var k = killRepRows.length - 1; k >= 0; k--) rsh.deleteRow(killRepRows[k]);
+    /* ---------- שורות הגיליון ----------
+       ⚠️ `deleteRows(2, n)` בקריאה אחת ולא לולאה — אין כאן בכלל בעיית
+          הזזת אינדקסים, וזה גם מהיר בסדר גודל. שורה 1 (הכותרות) נשארת. */
+    gpTabs_().forEach(function (name) {
+      try {
+        var sh = ss.getSheetByName(name);
+        if (!sh) { L('גיליון · ' + name + ': אין טאב'); return; }
+        var n = sh.getLastRow() - 1;
+        if (n > 0) sh.deleteRows(2, n);
+        L('גיליון · ' + name + ': נמחקו ' + Math.max(n, 0) + ' שורות, נשארו ' +
+          Math.max(sh.getLastRow() - 1, 0));
+      } catch (e) { L('גיליון · ' + name + ': 🔴 ' + e); }
+    });
 
-    var killTaskRows = [];
-    for (var i2 = 1; i2 < tv.length; i2++) {
-      if (!keep[gardenCell_(tv[i2][tc['מזהה']])]) killTaskRows.push(i2 + 1);
-    }
-    for (var k2 = killTaskRows.length - 1; k2 >= 0; k2--) tsh.deleteRow(killTaskRows[k2]);
-    L('גיליון: נמחקו ' + killTaskRows.length + ' שורות משימה ו-' +
-      killRepRows.length + ' שורות דיווח');
-
-    var lc = gardenCols_(lsh), lv = lsh.getDataRange().getValues();
-    var killLogRows = [];
-    for (var m = 1; m < lv.length; m++) {
-      var ltid = gardenCell_(lv[m][lc['מזהה משימה']]);
-      if (!ltid || !keep[ltid]) killLogRows.push(m + 1);
-    }
-    for (var k3 = killLogRows.length - 1; k3 >= 0; k3--) lsh.deleteRow(killLogRows[k3]);
-    L('יומן בגיליון: נמחקו ' + killLogRows.length + ' שורות, נשארו ' +
-      Math.max(lsh.getLastRow() - 1, 0));
-
-    /* ---------- אימות המונים ---------- */
-    var ctAfter = null, crAfter = null;
-    try {
-      ctAfter = parseInt((fsGet_(fsDocPath_(FS_COUNTERS, GARDEN_TASK_COUNTER)) || {}).n, 10);
-      crAfter = parseInt((fsGet_(fsDocPath_(FS_COUNTERS, GARDEN_REPORT_COUNTER)) || {}).n, 10);
-    } catch (e) { L('⚠️ המונים לא נקראו אחרי: ' + e); }
-    L('מונים אחרי: משימות=' + ctAfter + ' · דיווחים=' + crAfter);
-    if (ctAfter < ctBefore || crAfter < crBefore) {
-      L('🔴🔴 המונה ירד! המשימה הבאה עלולה לקבל מזהה תפוס. לא להמשיך בלי לתקן.');
-    } else {
-      L('✅ המונים לא זזו אחורה — המשימה הבאה תקבל ' + (ctAfter + 1) +
-        ', הדיווח הבא ' + (crAfter + 1) + '.');
-    }
-
+    L('');
     L('════════ הניקוי הסתיים ════════');
-    L('הצעד הבא: gardenPurgeBackupRun, ואז gardenPurgeDryRun לאימות.');
+    L('הצעד הבא: gardenPurgeBackupRun (מנקה את טאבי הגיבוי),');
+    L('ואז gardenPurgeVerify — ורק אם הוא אומר "נקי", gardenPurgeResetCounters.');
     return done();
   } finally {
     lock.releaseLock();
@@ -572,22 +505,194 @@ function gardenPurgeExecute() {
 }
 
 /** ============================================================================
- *  צעד 3 — גיבוי מלא אחרי הניקוי. בלעדיו הזבל ממשיך לשבת בטאבי
- *  _נתוני_, והגיבוי המצטבר לעולם לא יסיר אותו (upsert בלבד).
+ *  צעד 3 — גיבוי מלא. כותב את טאבי _נתוני_ מחדש מ-Firestore הריק,
+ *  ובכך מנקה מהם את המזהים הישנים. בלעדיו הגיבוי המצטבר (upsert בלבד)
+ *  לא היה מסיר אותם לעולם, ושחזור עתידי היה מחזיר את כל הזבל.
  * ========================================================================== */
 function gardenPurgeBackupRun() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var lines = [];
   function L(s) { lines.push(String(s)); }
-  L('════════ גיבוי מלא אחרי הניקוי ════════');
+  L('════════ גיבוי מלא ════════');
   try {
     var bk = fsBackupAll_(ss);
     L('נקראו ' + bk.read + ' מסמכים');
-    bk.tabs.forEach(function (t) { L('   ' + t.tab + ': ' + t.docs + ' מסמכים'); });
+    bk.tabs.forEach(function (t) { L('   ' + t.tab + ': ' + t.docs); });
     if (bk.errors.length) L('⚠️ ' + bk.errors.join(' | '));
     else L('✅ ללא שגיאות');
   } catch (e) { L('🔴 נכשל: ' + e); }
   var text = lines.join('\n');
   Logger.log(text);
   return text;
+}
+
+/** ============================================================================
+ *  צעד 4 — אימות. קריאה בלבד.
+ *  סורק **כל** טאב בגיליון ו**כל** אוסף ב-Firestore, ומחזיר פסק דין אחד:
+ *  האם מותר לאפס את המונים.
+ *
+ *  🔑 זה השער שיועד התנה בו את האיפוס (22.9): "בתנאי שממש כל הנתונים
+ *     הישנים מתנקים ולא תהיה התנגשות".
+ * ========================================================================== */
+function gpAllCollections_() {
+  /* כל האוספים שהקוד מכיר. מסמכים בודדים (appConfig/*, gardenMeta/lists)
+     אינם אוספים ואינם נסרקים — אין בהם מזהי גינון. */
+  return ['gardenTasks', 'gardenReports', 'gardenLog', 'gardenPlan',
+          'services', 'gymStatus', 'gymCode', 'clubReservations',
+          'tourSteps', 'tourSeen', 'homeCounts', 'budgetYears',
+          'budgetTx', 'counters', 'pushSubscriptions', 'members'];
+}
+
+function gardenPurgeVerify() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var lines = [];
+  function L(s) { lines.push(String(s)); }
+  var blockers = [], archives = [];
+
+  L('════════ אימות לפני איפוס מונים · ' + GP_VER + ' ════════');
+
+  /* ---------- א. כל טאב בגיליון ---------- */
+  L('');
+  L('── כל הטאבים בגיליון ──');
+  var liveTabs = gpTabs_(), bkTabs = gpBackupTabs_();
+  ss.getSheets().forEach(function (sh) {
+    var name = sh.getName();
+    var rows = Math.max(sh.getLastRow() - 1, 0);
+    var isLive = liveTabs.indexOf(name) >= 0;
+    var isBk = bkTabs.indexOf(name) >= 0;
+    /* טאב שאינו מוכר אך נושא עמודת "מזהה משימה" מחזיק מזהי גינון. */
+    var hasCol = false;
+    try {
+      if (!isLive && !isBk && sh.getLastColumn() > 0) {
+        var hdr = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+        hasCol = hdr.some(function (h) { return String(h).trim() === 'מזהה משימה'; });
+      }
+    } catch (e) {}
+
+    if (isLive || isBk) {
+      L('  [' + (isLive ? 'חי' : 'גיבוי') + '] ' + name + ': ' + rows + ' שורות' +
+        (rows > 0 ? '   🔴' : '   ✅'));
+      if (rows > 0) blockers.push(name + ' (' + rows + ' שורות)');
+    } else if (hasCol) {
+      L('  [ארכיון] ' + name + ': ' + rows + ' שורות — מחזיק מזהי גינון');
+      if (rows > 0) archives.push(name + ' (' + rows + ')');
+    }
+  });
+  L('  (טאבים אחרים בגיליון אינם מחזיקים מזהי גינון ולא נספרו)');
+
+  /* ---------- ב. כל אוסף ב-Firestore ---------- */
+  L('');
+  L('── כל האוספים ב-Firestore ──');
+  var mine = gpCollections_();
+  gpAllCollections_().forEach(function (col) {
+    try {
+      var n = fsList_(col).length;
+      var isMine = mine.indexOf(col) >= 0;
+      L('  ' + (isMine ? '[גינון] ' : '        ') + col + ': ' + n + ' מסמכים' +
+        (isMine ? (n > 0 ? '   🔴' : '   ✅') : ''));
+      if (isMine && n > 0) blockers.push('Firestore/' + col + ' (' + n + ' מסמכים)');
+    } catch (e) {
+      L('  ' + col + ': ⚠️ ' + e);
+    }
+  });
+
+  /* ---------- ג. המונים ---------- */
+  L('');
+  L('── מונים ──');
+  try {
+    var ct = fsGet_(fsDocPath_(FS_COUNTERS, GARDEN_TASK_COUNTER)) || {};
+    var cr = fsGet_(fsDocPath_(FS_COUNTERS, GARDEN_REPORT_COUNTER)) || {};
+    L('  counters/gardenTask   n = ' + ct.n);
+    L('  counters/gardenReport n = ' + cr.n);
+  } catch (e) { L('  ⚠️ ' + e); }
+
+  /* ---------- ד. פסק דין ---------- */
+  L('');
+  if (blockers.length) {
+    L('🔴 לא נקי. איפוס המונים חסום. מה שנשאר:');
+    blockers.forEach(function (b) { L('   · ' + b); });
+  } else {
+    L('✅ נקי — אפס מזהי גינון חיים בגיליון וב-Firestore.');
+    L('   מותר להריץ gardenPurgeResetCounters.');
+  }
+  if (archives.length) {
+    L('');
+    L('ℹ️ טאבי ארכיון (אינרטיים, אף קוד אינו קורא אותם): ' + archives.join(', '));
+    L('   אינם חוסמים את האיפוס — אבל אין להדביק מהם בחזרה אחרי האיפוס.');
+  }
+  L('════════════════════════════════');
+  var text = lines.join('\n');
+  Logger.log(text);
+  return text;
+}
+
+/** ============================================================================
+ *  צעד 5 — איפוס המונים ל-0, כך שהמשימה הבאה תהיה #1.
+ *
+ *  🔴 **הפונקציה בודקת בעצמה ומסרבת אם לא נקי.** היא אינה סומכת על כך
+ *     שמישהו הריץ `gardenPurgeVerify` קודם — אותן בדיקות רצות כאן שוב.
+ *     מונה שיורד בזמן שקיים ולו מסמך אחד הוא הנזק היחיד שאי אפשר
+ *     לתקן אחר כך: הדיווח הבא היה **דורס** מסמך קיים.
+ *
+ *  ⚠️ מסמך המונה נשאר קיים עם n=0 ולא נמחק — `nextId` בדפדפן זורק
+ *     "no-counter" על מסמך חסר, ובכוונה: מונה חסר הוא שגיאה, לא
+ *     התחלה מאפס.
+ * ========================================================================== */
+function gardenPurgeResetCounters() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var lines = [];
+  function L(s) { lines.push(String(s)); }
+  function done() { var t = lines.join('\n'); Logger.log(t); return t; }
+
+  L('════════ איפוס מונים ════════');
+
+  var blockers = [];
+
+  /* אותן בדיקות בדיוק כמו ב-gardenPurgeVerify — כאן הן תנאי, לא דוח. */
+  var liveTabs = gpTabs_(), bkTabs = gpBackupTabs_();
+  liveTabs.concat(bkTabs).forEach(function (name) {
+    var sh = ss.getSheetByName(name);
+    if (!sh) return;
+    var rows = Math.max(sh.getLastRow() - 1, 0);
+    if (rows > 0) blockers.push(name + ' (' + rows + ' שורות)');
+  });
+
+  try {
+    gpCollections_().forEach(function (col) {
+      var n = fsList_(col).length;
+      if (n > 0) blockers.push('Firestore/' + col + ' (' + n + ' מסמכים)');
+    });
+  } catch (e) {
+    L('🔴 עצירה — לא הצלחתי לקרוא את Firestore: ' + e);
+    L('   בלי ספירה ודאית אסור להוריד מונה.');
+    return done();
+  }
+
+  if (blockers.length) {
+    L('🔴 עצירה — עדיין קיימים נתוני גינון:');
+    blockers.forEach(function (b) { L('   · ' + b); });
+    L('   המונים לא שונו. להריץ gardenPurgeWipe ו-gardenPurgeBackupRun ולנסות שוב.');
+    return done();
+  }
+
+  L('✅ אפס מזהי גינון חיים. מאפס.');
+  var pairs = [
+    { id: GARDEN_TASK_COUNTER,   label: 'משימות' },
+    { id: GARDEN_REPORT_COUNTER, label: 'דיווחים' }
+  ];
+  pairs.forEach(function (p) {
+    try {
+      var before = (fsGet_(fsDocPath_(FS_COUNTERS, p.id)) || {}).n;
+      fsSet_(fsDocPath_(FS_COUNTERS, p.id), { n: 0, schema: 1, updatedAt: new Date() });
+      var after = (fsGet_(fsDocPath_(FS_COUNTERS, p.id)) || {}).n;
+      L('  ' + p.label + ': ' + before + ' → ' + after +
+        (String(after) === '0' ? '   ✅' : '   🔴 לא נכתב!'));
+    } catch (e) { L('  ' + p.label + ': 🔴 ' + e); }
+  });
+
+  L('');
+  L('המשימה הבאה תקבל #1 והדיווח הבא #1.');
+  L('⚠️ seedGardenCounters_ השעתית לוקחת max(מונה, גיליון) ולעולם אינה מורידה —');
+  L('   עם שניהם על 0 היא תשאיר 0. אין צורך בפעולה נוספת.');
+  return done();
 }
