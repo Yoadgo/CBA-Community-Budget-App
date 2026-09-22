@@ -434,7 +434,19 @@ service cloud.firestore {
               /* 🔴 22.9 (בקשת יועד) — מי פתח תקלת צוות: 'מנהל' / 'גנן',
                  וה-uid של הפותח (הרשאת העריכה במסך). נכתבים ביצירה בלבד —
                  **אינם** ב-gtTeamUpdateOk, ולכן לעולם לא משתנים. ר' gtOpenedOk. */
-              'openedBy', 'openedUid'];
+              'openedBy', 'openedUid',
+              /* 🔴 22.9 (הכרעת יועד: "מוצג לכולם") — תיאור ומיקום במילים.
+                 התושב כותב אותם ביצירה (gtFromReportOk), הצוות ביצירה
+                 ובעריכה. ר' gtTextOk לגבולות. */
+              'desc', 'place'];
+    }
+
+    /* טקסט חופשי — מחרוזת, בגבול. שדה חסר עובר (משימות ישנות, שגרה). */
+    function gtTextOk() {
+      return request.resource.data.get('desc', '') is string &&
+             request.resource.data.get('desc', '').size() <= 1000 &&
+             request.resource.data.get('place', '') is string &&
+             request.resource.data.get('place', '').size() <= 120;
     }
 
     /* השדות שרק הצוות קובע — תושב אינו שולח אותם כלל. */
@@ -448,7 +460,8 @@ service cloud.firestore {
              request.resource.data.keys().hasAll(['id', 'title', 'stage', 'schema']) &&
              request.resource.data.title is string &&
              request.resource.data.title.size() > 0 &&
-             request.resource.data.schema is int;
+             request.resource.data.schema is int &&
+             gtTextOk();
     }
 
     /* 🔴 תושב פותח משימה נלווית לדיווח — בנקודת הפתיחה בלבד. */
@@ -489,7 +502,9 @@ service cloud.firestore {
                          'drags', 'firstWeek', 'title', 'category', 'area',
                          'x', 'y', 'approvedBy', 'approvedAt',
                          'repId', 'photos', 'order', 'updatedAt', 'syncedAt',
-                         'notify', 'notifyPending', 'notifyNote', 'mergedReps']);
+                         'notify', 'notifyPending', 'notifyNote', 'mergedReps',
+                         'desc', 'place']) &&
+             gtTextOk();
     }
 
     /* ========================================================================

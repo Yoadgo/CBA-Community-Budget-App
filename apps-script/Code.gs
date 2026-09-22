@@ -276,6 +276,8 @@ var GET_ACTION_PERMS = {
   /* 22.9 — איחוד "מדשאות" + "השקיה / ממטרות". פעולה חד-פעמית שמשכתבת
      קטגוריה בכל אוספי הגינון, כולל היסטוריה — לכן מנהל-על בלבד. */
   gardenMergeCats: PERM_SUPER,
+  /* 22.9 — השלמה לאחור של תיאור/מיקום במילים מהדיווח אל המשימה. חד-פעמי. */
+  gardenBackfillText: PERM_SUPER,
   /* סנכרון יזום של "שירותים לתושב" (2026-09-15, צעד 04א).
      אותה סיבה כמו gardenPlanSync — פעולת תשתית שדורסת אוסף. */
   servicesSync: PERM_SUPER,
@@ -703,6 +705,9 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'gardenMergeCats') {
       return handleGardenMergeCats_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'gardenBackfillText') {
+      return handleGardenBackfillText_(e.parameter);
     }
     /* דיווחי ומשימות הגינון -> Firestore (2026-09-16). זריעה ואימות.
        ר' הבלוק שמעל gardenDataSyncAll_. */
@@ -12967,6 +12972,45 @@ function handleGardenMergeCats_(p) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var r = withSyncLock_('gardenMergeCats', function () { return gardenMergeLawnWater_(ss); });
     return json_(r);
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
+}
+
+/* ============================================================================
+ *  השלמה לאחור: תיאור ומיקום במילים מהדיווח → המשימה   (2026-09-22)
+ * ----------------------------------------------------------------------------
+ *  הכרעת יועד: התיאור "צריך להיות מוצג לכולם". מהיום הדפדפן כותב אותו גם
+ *  על המשימה; כאן משלימים את הדיווחים שנשלחו לפני כן. חשבון השירות קורא
+ *  את הדיווחים (הצוות אינו רשאי). אידמפוטנטית: משימה שכבר מחזיקה את אותו
+ *  טקסט לא נכתבת שוב.
+ * ========================================================================== */
+function gardenBackfillText_() {
+  var out = { ok: true, reports: 0, updated: 0, missingTask: 0, errors: [] };
+  try {
+    fsList_(FS_GARDEN_REPORTS).forEach(function (r) {
+      var d = r.data || {};
+      var desc = String(d.desc || '').substring(0, 1000);
+      var place = String(d.place || '').substring(0, 120);
+      var tid = String(d.taskId || '').trim();
+      if (!tid || (!desc && !place)) return;
+      out.reports++;
+      try {
+        var t = fsGet_(fsDocPath_(FS_GARDEN_TASKS, tid));
+        if (!t) { out.missingTask++; return; }
+        if (String(t.desc || '') === desc && String(t.place || '') === place) return;
+        fsMerge_(fsDocPath_(FS_GARDEN_TASKS, tid), { desc: desc, place: place });
+        out.updated++;
+      } catch (e1) { out.ok = false; out.errors.push(tid + ': ' + e1); }
+    });
+  } catch (e) { out.ok = false; out.errors.push(String(e)); }
+  return out;
+}
+
+function handleGardenBackfillText_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    return json_(gardenBackfillText_());
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 

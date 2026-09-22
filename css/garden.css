@@ -1335,3 +1335,7 @@
 .gt-drawer[open] > summary::before { transform: rotate(90deg); }
 .gt-drawer > summary em { font-style: normal; font-weight: 500; color: #9ca3af; }
 .gt-drawer > .gd-reps { margin-top: 8px; opacity: .85; }
+
+/* 22.9 (הכרעת יועד: "מוצג לכולם") — התיאור בכרטיס הפרטים של המשימה. */
+.gd-det-desc { margin: 10px 0 2px; font-size: 13.5px; line-height: 1.6;
+  color: var(--text, #374151); white-space: pre-wrap; overflow-wrap: anywhere; }

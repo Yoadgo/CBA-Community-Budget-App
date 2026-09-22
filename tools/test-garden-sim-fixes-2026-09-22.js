@@ -56,7 +56,7 @@ const residentLog = (W, taskId) => Object.values(W.store.gardenLog).filter(l => 
     const PORT = fs.readFileSync(path.join(__dirname, 'garden-sim', 'rules.js'), 'utf8');
     const gt = (RULES.match(/function gtFields\(\) \{[\s\S]*?\];/) || [''])[0];
     ['familyId', 'mergedReps', 'pendingDelete'].forEach(f => ok('gtFields מכיל ' + f + ' בשני המקומות', gt.includes("'" + f + "'") && /GT_FIELDS = \[[^\]]*'familyId'/.test(PORT) === (f !== 'x') && PORT.includes("'" + f + "'")));
-    ok('mergedReps ב-gtTeamUpdateOk', /gtTeamUpdateOk\(\) \{[\s\S]*?'mergedReps'\]\)/.test(RULES));
+    ok('mergedReps ב-gtTeamUpdateOk', /gtTeamUpdateOk\(\) \{[\s\S]*?'mergedReps'[^\]]{0,120}\]\)/.test(RULES));
     ok('gardenMeta/settings — שער כתיבה בשם', /match \/gardenMeta\/settings \{\s*allow write: if gsSettingsWriteOk\(\);/.test(RULES));
     ok('ושמור למנהל פנימי עם שלושה שדות', /function gsSettingsWriteOk\(\) \{\s*return canSeePlan\(\) &&[\s\S]*?hasOnly\(\['requireApproval', 'updatedAt', 'updatedBy'\]\)/.test(RULES));
   }

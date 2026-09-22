@@ -144,6 +144,22 @@ const section = s => console.log('\n' + s);
   ok('ואותן הנחיות', /בחרו קטגוריה כדי לראות הצעות/.test(GF) && /אפשר גם פשוט להקליד למטה/.test(GF));
   ok('⚠️ 60 תווים בתקלה (כמו השרת), 80 בתוכנית', /maxlength="' \+ \(isPlan \? 80 : 60\)/.test(GF) && /ti\.maxLength = st\.repeat \? 80 : 60/.test(GF));
 
+  section('8. תיאור ומיקום במילים — גלויים לכולם');
+  const r9 = await H.call(cb => B('res2').CBA.data.submitGardenReport({ title: 'עץ נוטה', category: 'עצים', desc: 'העץ השלישי משמאל נוטה על הגדר', place: 'מאחורי 608', photos: [] }, cb));
+  const t9 = store.gardenTasks[String(r9.taskId)] || {};
+  ok('🔴 התיאור של התושב מגיע למשימה', r9.ok && t9.desc === 'העץ השלישי משמאל נוטה על הגדר', JSON.stringify(r9));
+  ok('וגם המיקום במילים', t9.place === 'מאחורי 608');
+  const m9 = await H.call(cb => B('mgr').CBA.data.gardenCreateTask({ title: 'גזם', category: 'עצים', desc: 'ערימה ליד המחסן', place: 'ליד המחסן', asReport: true, photos: [] }, cb));
+  const mt9 = store.gardenTasks[String(m9.id)] || {};
+  ok('🔑 גם בתקלה שהצוות פותח', m9.ok && mt9.desc === 'ערימה ליד המחסן' && mt9.place === 'ליד המחסן');
+  const e9 = await H.call(cb => B('mgr').CBA.data.gardenEditTask(String(m9.id), { title: 'גזם', category: 'עצים', desc: 'פונה חלקית', place: '' }, cb));
+  ok('ונערך', e9.ok && store.gardenTasks[String(m9.id)].desc === 'פונה חלקית' && store.gardenTasks[String(m9.id)].place === '');
+  const RULES = R('firestore.rules');
+  ok('🔴 כללים: desc/place ב-gtFields וב-gtTeamUpdateOk, עם גבול אורך', /'desc', 'place'\];/.test(RULES) && /'mergedReps',\s*'desc', 'place'\]\) &&\s*gtTextOk\(\);/.test(RULES) && /function gtTextOk\(\)[\s\S]{0,300}size\(\) <= 1000/.test(RULES));
+  ok('כרטיס הפרטים מציג תיאור ו"איפה"', /t\.desc \? '<p class="gd-det-desc">'/.test(GT) && /<span class="l">איפה<\/span>/.test(GT));
+  ok('🔑 טופס הצוות: תיאור עם מונה 75 מילים, כמו אצל התושב', /id="gf-desc"/.test(GF) && /var WORD_MAX = 75;/.test(GF) && /id="gf-place"/.test(GF));
+  ok('השלמה לאחור בשרת: פעולה למנהל-על', /action === 'gardenBackfillText'/.test(CODE) && /gardenBackfillText: PERM_SUPER/.test(CODE) && /fsList_\(FS_GARDEN_REPORTS\)/.test(fnSrc('gardenBackfillText_')));
+
   console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);
 })();

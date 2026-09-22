@@ -161,6 +161,17 @@ CBA.gardenForm = (function () {
         '<input class="gd-inp" id="gf-title" maxlength="' + (isPlan ? 80 : 60) + '" autocomplete="off" ' +
           'value="' + esc((d && d.title) || (tk && tk.title) || "") + '" ' +
           'placeholder="' + (isPlan ? 'למשל: כיסוח דשא' : 'למשל: ראש ממטרה שבור') + '">' +
+        /* 🔴 22.9 (הכרעת יועד: "מוצג לכולם") — **תיאור, כמו אצל התושב.**
+           אותה תווית, אותו מונה של 75 מילים ואותו פס. הוא נשמר על המשימה
+           ומוצג בכרטיס הפרטים למנהל ולגנן. בתוכנית העבודה אין תיאור. */
+        (isPlan ? '' :
+          '<div id="gf-descbox">' +
+            '<label class="gd-lbl" style="margin-top:12px">תיאור <em id="gf-wc"></em></label>' +
+            '<textarea class="gd-inp gd-ta" id="gf-desc" rows="3" ' +
+              'placeholder="מה קרה ואיפה בדיוק? כמה משפטים מספיקים.">' +
+              esc((tk && tk.desc) || "") + '</textarea>' +
+            '<div class="gd-meter"><i id="gf-meter"></i></div>' +
+          '</div>') +
 
         (hideRep ? '' : swRow("gf-rep", "משימה חוזרת",
               "תיכנס לתוכנית העבודה ותיפתח מחדש בכל מחזור",
@@ -181,6 +192,10 @@ CBA.gardenForm = (function () {
               '<p class="gp-note" id="gf-loc">' + (st.x !== null
                 ? "המיקום שסומן מוצג על המפה. אפשר ללחוץ כדי להזיז."
                 : "סימון המיקום עוזר לצוות למצוא את זה בשטח.") + '</p>' +
+              '<label class="gd-lbl" style="margin-top:12px">מיקום במילים <em>לא חובה</em></label>' +
+              '<input class="gd-inp" id="gf-place" maxlength="120" autocomplete="off" ' +
+                'value="' + esc((tk && tk.place) || "") + '" ' +
+                'placeholder="למשל: על השביל בין 341 ל-343">' +
               (isTaskEdit ? '' :
               '<label class="gd-lbl" style="margin-top:12px">תמונות ' +
                 '<em><span id="gf-pc">0</span> / ' + PHOTO_MAX + '</em></label>' +
@@ -288,6 +303,22 @@ CBA.gardenForm = (function () {
 
     pick("#gf-cats", "data-c", false, function (v) { st.cat = v; renderPicks(); });
 
+    /* ---- תיאור: מונה מילים, בדיוק כמו אצל התושב (75) ---- */
+    var WORD_MAX = 75;
+    var descEl = q("#gf-desc");
+    function words(t) { return String(t).trim().split(/\s+/).filter(Boolean); }
+    function syncWords() {
+      if (!descEl) return;
+      var w = words(descEl.value);
+      if (w.length > WORD_MAX) {            // חיתוך רך — כמו בטופס התושב
+        descEl.value = w.slice(0, WORD_MAX).join(" ");
+        w = words(descEl.value);
+      }
+      q("#gf-wc").textContent = w.length + " / " + WORD_MAX + " מילים";
+      q("#gf-meter").style.width = Math.min(100, (w.length / WORD_MAX) * 100) + "%";
+    }
+    if (descEl) { descEl.addEventListener("input", syncWords); syncWords(); }
+
     /* ---- הצעות לכותרת (22.9) ---- */
     var tpicksEl = q("#gf-tpicks"), titleIn = q("#gf-title");
     function renderPicks() {
@@ -340,6 +371,8 @@ CBA.gardenForm = (function () {
         ti.placeholder = st.repeat ? "למשל: כיסוח דשא" : "למשל: ראש ממטרה שבור";
       }
       if (typeof renderPicks === "function") renderPicks();
+      var db = q("#gf-descbox");
+      if (db) db.hidden = !!st.repeat;
       if (st.repeat) syncFreq();
     }
     if (!isEdit && q("#gf-rep")) {
@@ -480,6 +513,8 @@ CBA.gardenForm = (function () {
           title: title, category: cat,
           area: (picked("#gf-area", "data-a1")[0]) || "",
           week: (picked("#gf-weeks", "data-w")[0]) || "",
+          desc: descEl ? descEl.value.trim() : "",
+          place: q("#gf-place") ? q("#gf-place").value.trim() : "",
           x: st.x, y: st.y
         }, function (res) {
           st.busy = false;
@@ -494,6 +529,8 @@ CBA.gardenForm = (function () {
         area: (picked("#gf-area", "data-a1")[0]) || st.pinArea || "",
         week: (picked("#gf-weeks", "data-w")[0]) || "",
         asReport: true,
+        desc: descEl ? descEl.value.trim() : "",
+        place: q("#gf-place") ? q("#gf-place").value.trim() : "",
         x: st.x, y: st.y, photos: st.photos
       }, function (res) {
         st.busy = false;

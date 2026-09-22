@@ -1812,8 +1812,14 @@
               '<span class="gd-det-chip is-' + esc(st.tone || "plan") + '">' + esc(st.text) + '</span>' +
               '<span class="gd-det-week">' + (t.week ? esc(weekLabel(t.week)) : 'לשיבוץ') + '</span>' +
             '</div>' +
-            (t.area
-              ? '<div class="gd-det-fields"><div class="gd-det-f"><span class="l">אזור</span><span class="v">' + esc(t.area) + '</span></div></div>'
+            /* 🔴 22.9 (הכרעת יועד: "מוצג לכולם") — התיאור ומיקום במילים,
+               של תושב או של הצוות. עד היום הם לא הגיעו לכרטיס בכלל. */
+            (t.desc ? '<p class="gd-det-desc">' + esc(t.desc) + '</p>' : '') +
+            ((t.area || t.place)
+              ? '<div class="gd-det-fields">' +
+                  (t.area ? '<div class="gd-det-f"><span class="l">אזור</span><span class="v">' + esc(t.area) + '</span></div>' : '') +
+                  (t.place ? '<div class="gd-det-f"><span class="l">איפה</span><span class="v">' + esc(t.place) + '</span></div>' : '') +
+                '</div>'
               : '') +
             (hasMap
               ? '<div class="gd-det-mapbox" data-m="fullmap"><div class="gd-map" id="gd-det-map"></div>' +

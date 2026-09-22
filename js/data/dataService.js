@@ -2432,6 +2432,9 @@ CBA.data = (function () {
         y: hasPin ? Number(payload.y) : null,
         stage: wk ? "מתוכנן" : "התקבל",
         week: wk, repId: "", photos: [],
+        /* 22.9 — תיאור ומיקום במילים, כמו בדיווח של תושב. */
+        desc: String(payload.desc || "").trim().substring(0, 1000),
+        place: String(payload.place || "").trim().substring(0, 120),
         createdAt: now, updatedAt: now, order: 0,
         year: String((CBA.mock && CBA.mock.currentYear) || ""), schema: 1
       };
@@ -2515,6 +2518,8 @@ CBA.data = (function () {
       var patch = {
         title: title, category: cat, area: String(payload.area || ""),
         week: wk,
+        desc: String(payload.desc || "").trim().substring(0, 1000),
+        place: String(payload.place || "").trim().substring(0, 120),
         updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
       };
       /* השלב נגזר מהשבוע, כמו ביצירה ובשיבוץ — אבל רק כשהוא עדיין בנקודת
@@ -2528,6 +2533,8 @@ CBA.data = (function () {
         if (cur.category !== cat) what.push("קטגוריה");
         if (String(cur.area || "") !== patch.area) what.push("אזור");
         if (String(cur.week || "") !== wk) what.push("שבוע");
+        if (String(cur.desc || "") !== patch.desc) what.push("תיאור");
+        if (String(cur.place || "") !== patch.place) what.push("מיקום במילים");
         if (hasPin && (cur.x !== patch.x || cur.y !== patch.y)) what.push("מיקום");
         gardenLogAppend(String(id), "עריכה", what.length ? "עודכנו: " + what.join(", ") : "נשמר בלי שינוי");
         cb({ ok: true, id: id });
@@ -2939,6 +2946,12 @@ CBA.data = (function () {
              לקרוא דיווחים) יוכל לחתום שורות יומן שהתושב יראה. מזהה אטום,
              לא שם ולא מייל. ר' `gardenLogAppend`. */
           familyId: fid,
+          /* 🔴 22.9 (הכרעת יועד: "זה צריך להיות מוצג לכולם") — **התיאור
+             והמיקום במילים עוברים גם למשימה.** עד היום הם ישבו רק במסמך
+             הדיווח, שהצוות אינו רשאי לקרוא — הגנן יצא לשטח בלי "הממטרה
+             השלישית משמאל" (G-21 בבחינת 22.9). */
+          desc: String(payload.desc || "").substring(0, 1000),
+          place: String(payload.place || "").substring(0, 120),
           createdAt: now, updatedAt: now, order: 0,
           year: String(year), schema: 1
         };
