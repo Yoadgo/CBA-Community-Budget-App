@@ -238,6 +238,16 @@ var GET_PUBLIC_ACTIONS = [
   'submitSignup'    // מגיע ממי שעדיין אינו תושב; מאומת מול טוקן גוגל בתוך ההנדלר
 ];
 
+/* שתי הפעולות שמשתמש **חיצוני** חייב כדי שהאפליקציה תעלה לו בכלל.
+   הן אינן נותנות לו נתונים:
+   '' (המטען הראשי) — DATA_MIN מרוקן אותו עבורו (אין לו PERM_BUDGET):
+       סעיפים/הכנסות/קבוצות/הערות ריקים, תנועות מסוננות למזהה שלו,
+       וההגדרות ריקות לגמרי (ר' RESIDENT_SETTINGS_ALLOW).
+   'firebaseLink' — כותב את רשומת החבר שלו ב-Firestore **כולל
+       isExternal:true**, כלומר היא עצמה מה שמפעיל את ההגבלה שם.
+   ⚠️ אינן ב-GET_PUBLIC_ACTIONS — מושב חתום עדיין נדרש לשתיהן. */
+var EXTERNAL_BOOT_ACTIONS = ['', 'firebaseLink'];
+
 var GET_ACTION_PERMS = {
   listSignups: PERM_RESIDENTS, getResidents: PERM_RESIDENTS,
   assignResidentIds: PERM_RESIDENTS, profileChanges: PERM_RESIDENTS,
@@ -427,7 +437,7 @@ function permissionsFor_(email) {
  * רשת החירום האמיתית היא grantMeSuperAdmin/diagnosePermissions — שרצות
  * מעורך ה-Apps Script תחת חשבון הבעלים, ולכן אי אפשר לגנוב אותן.
  */
-function authorize_(ss, p, need) {
+function authorize_(ss, p, need, allowExternal) {
   var sess = verifySession_(p && p.session);
   if (sess) {
     var perm = permissionsFor_(sess.email);
@@ -435,7 +445,14 @@ function authorize_(ss, p, need) {
     if (!perm.active) return { ok: false, error: 'המשתמש מסומן כלא פעיל' };
     /* משתמש חיצוני: הכול חסום חוץ מגינון. שורה אחת, ולכן גם פעולה שתיווסף
      * בעתיד חסומה לו מעצמה. רצה לפני בדיקת isSuper בכוונה. */
-    if (perm.isExternal && need !== PERM_GARDEN) {
+    /* 🔴 22.9.2026 — `allowExternal` לשתי פעולות העלייה בלבד (ר'
+     * EXTERNAL_BOOT_ACTIONS). בלעדיו משתמש חיצוני נחסם מ**מטען הפתיחה**
+     * (action ריק ⇒ need undefined) ומ-`firebaseLink`, כלומר האפליקציה
+     * אינה עולה לו כלל ורשומת `members/{uid}` שכללי Firestore נשענים
+     * עליה לעולם אינה נוצרת. נתפס חי על הקבלן הראשון; עד אז התפקיד
+     * נבדק רק בסימולציית לקוח (isRoleSim), שאינה מגיעה לשער הזה.
+     * ⚠️ ברירת המחדל נשארת "הכול חסום" — פעולה חדשה עדיין חסומה מעצמה. */
+    if (perm.isExternal && need !== PERM_GARDEN && !allowExternal) {
       return { ok: false, error: 'הפעולה אינה זמינה למשתמש חיצוני' };
     }
     if (!need || perm.isSuper ||
@@ -569,7 +586,8 @@ function doGet(e) {
     var getAction = (e && e.parameter && e.parameter.action) || '';
     if (GET_PUBLIC_ACTIONS.indexOf(getAction) === -1) {
       var ssGate = SpreadsheetApp.getActiveSpreadsheet();
-      var topGate = authorize_(ssGate, e && e.parameter, GET_ACTION_PERMS[getAction]);
+      var topGate = authorize_(ssGate, e && e.parameter, GET_ACTION_PERMS[getAction],
+                               EXTERNAL_BOOT_ACTIONS.indexOf(getAction) !== -1);
       if (!topGate.ok) return json_({ ok: false, error: topGate.error });
       /* ההרשאות המאומתות זמינות להנדלרים דרך הפרמטרים, כדי שפעולות שגוזרות
          זהות (שריון המועדון) לא ייקחו אותה מהלקוח. שם עם קו תחתון מוביל
@@ -855,7 +873,9 @@ function doGet(e) {
      * הלקוח יש 4 קריאות בלבד ל-CBA.mock._settings, ומהן רק "סיסמת רשת
      * המועדון" שייכת לאזור התושב. כך "בסיס תקציב <שנה>" — שהוא JSON של
      * התכנון המאושר לכל סעיף — מפסיק להגיע לתושב דרך ההגדרות. */
-    var RESIDENT_SETTINGS_ALLOW = ['סיסמת רשת המועדון'];
+    /* 🔴 22.9.2026 — למשתמש חיצוני **אפס** הגדרות. סיסמת רשת המועדון
+       אינה נחוצה לקבלן, והמטען הוא המקום היחיד שהיה מוסר לו אותה. */
+    var RESIDENT_SETTINGS_ALLOW = perm.isExternal ? [] : ['סיסמת רשת המועדון'];
     if (!seesBudget) {
       var slimSettings = {};
       RESIDENT_SETTINGS_ALLOW.forEach(function (k) {
@@ -1407,7 +1427,9 @@ function sendPushToAdmins_(ss, permKey, title, body, data) {
 
 function handleFirebaseLink_(p) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var gate = authorize_(ss, p, null);
+  /* allowExternal=true — ר' ההערה ב-authorize_. זו פעולת **זהות**, לא גישה
+     לנתונים, והיא זו שכותבת isExternal:true שמגביל אותו ב-Firestore. */
+  var gate = authorize_(ss, p, null, true);
   if (!gate.ok) return json_({ ok: false, error: gate.error });
 
   var v = fsVerifyIdToken_(p && p.idToken);

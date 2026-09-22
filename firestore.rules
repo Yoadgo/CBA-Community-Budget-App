@@ -727,7 +727,19 @@ service cloud.firestore {
     }
 
     match /gardenLog/{id} {
-      allow read: if canSeeGardenTasks() || glResidentReadOk();
+      /* 🔴 22.9.2026 — `gtMgr()` ולא `canSeeGardenTasks()`.
+         שתיהן דורשות הרשאת 'גינון', אבל רק `gtMgr()` מוסיפה
+         `isExternal == false`. רשימת השדות המותרת ביומן כוללת
+         `familyId` (ר' glCreateOk), ולכן הקבלן החיצוני קרא את יומן
+         הגינון של **כל** המשפחות בשיכון.
+         ⚠️ קריאת המשימות (gardenTasks, למעלה) נשארה
+            `canSeeGardenTasks()` בכוונה — הקבלן חייב לראות משימות.
+         ⚠️ המשמעות: לקבלן אין גישה ליומן ב-Firestore כלל.
+            מסך הניהול קורא את היומן דרך Apps Script
+            (`fsFirstRead("gardenLog", false, ...)`), ולכן שום דבר לא
+            נשבר היום. אם היומן יעבור ל-Firestore — הפתרון הוא
+            להוציא את `familyId` מהמסמך, לא להחזיר את הכלל. */
+      allow read: if gtMgr() || glResidentReadOk();
       allow create: if glCreateOk() || glResidentCreateOk();
       /* 🔴🔴 היסטוריה אינה משתכתבת. */
       allow update, delete: if false;
