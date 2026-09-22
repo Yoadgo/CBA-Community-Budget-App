@@ -112,7 +112,9 @@ const residentLog = (W, taskId) => Object.values(W.store.gardenLog).filter(l => 
     ok('המנהל — ישירות מ-Firestore', m.ok === true && m.rows.length === 1 && !W.B('mgr').__sheets.some(c => c.action === 'gardenTaskLog'));
     const GS = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
     ok("השרת קורא את היומן מ-Firestore כשהוא הבעלים", /function handleGardenTaskLog_[\s\S]*?gardenFsOwns_\(\)\) \{\s*var docs = fsQuery_\('gardenLog', 'taskId', 'EQUAL', id, 300\)/.test(GS));
-    ok('ומסנן לגנן כמו קודם', /function handleGardenTaskLog_[\s\S]*?if \(isExtLog\) \{\s*if \(k === 'משוב'\) \{ who = 'תושב'; note = ''; \}/.test(GS));
+    /* 22.9 (הכרעת יועד: "גם הגנן" רואה את שם המדווח) — השם כבר לא מוסתר
+       מהגנן; תוכן המשוב כן. */
+    ok('ומסנן לגנן את תוכן המשוב', /function handleGardenTaskLog_[\s\S]*?if \(isExtLog\) \{[\s\S]{0,120}if \(k === 'משוב'\) \{ note = '';/.test(GS));
   }
 
   section('E. מחיקת שגרה = ביטול, והמנוע לא מחזיר');

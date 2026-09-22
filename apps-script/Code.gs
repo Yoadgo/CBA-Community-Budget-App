@@ -16258,6 +16258,41 @@ function gardenStat_(arr) {
    כל משימה — נפתח · שיבוץ · ביצוע · סגירה · החזרה · גרירה · חסימה · איחוד ·
    משוב — עם חותמת זמן ומבצע לכל מעבר. זה גם מה שעונה על "מי עשה מה ומתי",
    וגם הבסיס לחישוב זמני הטיפול בלוח הנתונים. */
+/* ============================================================================
+ *  🔧 השלמה חד-פעמית — שם המדווח על תקלות דיירים   (2026-09-22)
+ * ----------------------------------------------------------------------------
+ *  מ-22.9 הדפדפן כותב `reporter` (שם פרטי + משפחה) על כל משימה של תקלת
+ *  דייר חדשה. משימות שנפתחו לפני כן — בלי שם. כאן, בחשבון השירות, השם
+ *  נשלף מטאב התושבים לפי `familyId` (או מהדיווח, למשימות ותיקות).
+ *  ⚠️ נוגע **רק** במשימות בלי `reporter`, וכותב את השדה הזה בלבד (merge).
+ *     הרצה חוזרת בטוחה — אין לה מה לעשות.
+ *  להריץ פעם אחת מהעורך: gardenBackfillReporters
+ * ========================================================================== */
+function gardenBackfillReporters() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var names = txFamilyNames_(ss);
+  var docs = fsList_('gardenTasks');
+  var done = 0, skipped = 0, missing = [];
+  docs.forEach(function (d) {
+    var x = d.data || {};
+    var repId = String(x.repId || '').trim();
+    if (!repId || String(x.reporter || '').trim()) { skipped++; return; }
+    var fam = String(x.familyId || '').trim();
+    if (!fam) {
+      try { fam = String(((fsGet_('gardenReports/' + repId) || {}).familyId) || '').trim(); }
+      catch (e) { fam = ''; }
+    }
+    var nm = fam ? String(names[fam] || '').trim() : '';
+    if (!nm) { missing.push(d.id); return; }
+    fsMerge_('gardenTasks/' + d.id, { reporter: nm.substring(0, 60) });
+    done++;
+  });
+  var msg = 'שם מדווח הושלם ל-' + done + ' משימות · דולגו ' + skipped +
+            (missing.length ? ' · בלי שם: ' + missing.join(', ') : '');
+  Logger.log(msg);
+  return msg;
+}
+
 function handleGardenTaskLog_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -16275,10 +16310,19 @@ function handleGardenTaskLog_(p) {
       var docs = fsQuery_('gardenLog', 'taskId', 'EQUAL', id, 300);
       var rowsFs = docs.map(function (d) {
         var x = d.data || {};
-        var k = String(x.kind || ''), who = '', note = String(x.note || '');
+        var k = String(x.kind || ''), note = String(x.note || '');
+        /* 🔴 22.9 (הכרעת יועד) — החותם שהדפדפן כותב (`role`+`who`, נאכף
+           בכללים). מנהל ← "מנהל גינון", גנן ← "<שם> · גנן", תושב ← שמו —
+           **גם לגנן** (הוכרע: "גם הגנן" רואה את שם המדווח). */
+        var lgRole = String(x.role || ''), lgName = String(x.who || '').trim();
+        var who = lgRole === 'מנהל' ? 'מנהל גינון'
+                : lgRole === 'גנן' ? (lgName ? lgName + ' · גנן' : 'גנן')
+                : lgRole === 'תושב' ? (lgName || 'תושב')
+                : lgName;
         if (isExtLog) {
-          if (k === 'משוב') { who = 'תושב'; note = ''; }
-          else if (k === 'נפתח' && note.indexOf('דיווח תושב') === 0) { who = 'תושב'; }
+          /* תוכן המשוב נשאר בין התושב לוועד — השם כבר לא מוסתר. */
+          if (k === 'משוב') { note = ''; if (!who) who = 'תושב'; }
+          else if (k === 'נפתח' && note.indexOf('דיווח תושב') === 0 && !who) { who = 'תושב'; }
         }
         return {
           at: (x.at instanceof Date) ? x.at.toISOString() : String(x.at || ''),

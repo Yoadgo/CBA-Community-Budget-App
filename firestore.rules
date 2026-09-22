@@ -438,7 +438,10 @@ service cloud.firestore {
               /* 🔴 22.9 (הכרעת יועד: "מוצג לכולם") — תיאור ומיקום במילים.
                  התושב כותב אותם ביצירה (gtFromReportOk), הצוות ביצירה
                  ובעריכה. ר' gtTextOk לגבולות. */
-              'desc', 'place'];
+              'desc', 'place',
+              /* 🔴 22.9 (הכרעת יועד) — שם המדווח (פרטי + משפחה), גלוי לצוות
+                 **כולל הגנן**. נכתב ביצירה בלבד — אינו ב-gtTeamUpdateOk. */
+              'reporter'];
     }
 
     /* טקסט חופשי — מחרוזת, בגבול. שדה חסר עובר (משימות ישנות, שגרה). */
@@ -446,7 +449,9 @@ service cloud.firestore {
       return request.resource.data.get('desc', '') is string &&
              request.resource.data.get('desc', '').size() <= 1000 &&
              request.resource.data.get('place', '') is string &&
-             request.resource.data.get('place', '').size() <= 120;
+             request.resource.data.get('place', '').size() <= 120 &&
+             request.resource.data.get('reporter', '') is string &&
+             request.resource.data.get('reporter', '').size() <= 60;
     }
 
     /* השדות שרק הצוות קובע — תושב אינו שולח אותם כלל. */
@@ -719,11 +724,26 @@ service cloud.firestore {
      *  ⚠️ **uid ולא שם** — ר' ההחלטה על `residentDirectory`: השם
      *     נפתר בשרת בעת הצורך, ולא נשמר כאן.
      * ====================================================================== */
+    /* 🔴 22.9 (בקשת יועד) — **חותם על שורת היומן.** `who` הוא שם התצוגה
+       של הכותב; `role` הוא מה שקובע איך הוא מוצג ("מנהל גינון" / "<שם> ·
+       גנן" / שם התושב) — ולכן **הוא** נאכף מול מסמך החבר: תושב אינו יכול
+       לחתום "מנהל", ומשתמש פנימי אינו יכול לחתום "גנן". שני השדות
+       אופציונליים — שורות ישנות ודפדפן ישן עוברים כמו עד היום. */
+    function glRoleOk() {
+      return request.resource.data.get('who', '') is string &&
+             request.resource.data.get('who', '').size() <= 60 &&
+             (request.resource.data.get('role', '') == '' ||
+              request.resource.data.get('role', '') == 'תושב' ||
+              (request.resource.data.get('role', '') == 'גנן' && m().isExternal == true) ||
+              (request.resource.data.get('role', '') == 'מנהל' && m().isExternal == false &&
+               hasPerm('גינון')));
+    }
+
     function glCreateOk() {
-      return hasPerm('גינון') &&
+      return hasPerm('גינון') && glRoleOk() &&
              request.resource.data.keys().hasOnly(
                ['taskId', 'kind', 'field', 'from', 'to', 'actorUid',
-                'note', 'at', 'schema', 'familyId']) &&
+                'note', 'at', 'schema', 'familyId', 'who', 'role']) &&
              request.resource.data.keys().hasAll(['taskId', 'actorUid', 'at']) &&
              request.resource.data.actorUid == request.auth.uid;
     }
@@ -749,10 +769,10 @@ service cloud.firestore {
     }
 
     function glResidentCreateOk() {
-      return isMember() && m().isExternal == false &&
+      return isMember() && m().isExternal == false && glRoleOk() &&
              request.resource.data.keys().hasOnly(
                ['taskId', 'kind', 'field', 'from', 'to', 'actorUid',
-                'note', 'at', 'schema', 'familyId']) &&
+                'note', 'at', 'schema', 'familyId', 'who', 'role']) &&
              request.resource.data.keys().hasAll(['taskId', 'actorUid', 'at']) &&
              request.resource.data.actorUid == request.auth.uid &&
              /* 🔴 **ורק המשפחה שלו** (2026-09-22, ממצא 32). בלי השורה

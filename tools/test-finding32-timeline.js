@@ -48,8 +48,8 @@ const glCreate = (RULES.match(/function glCreateOk\(\)[\s\S]*?\n    \}/) || ['']
 const glRes = (RULES.match(/function glResidentCreateOk\(\)[\s\S]*?\n    \}/) || [''])[0];
 const glRead = (RULES.match(/function glResidentReadOk\(\)[\s\S]*?\n    \}/) || [''])[0];
 const glMatch = (RULES.match(/match \/gardenLog\/\{id\} \{[\s\S]*?\n    \}/) || [''])[0];
-ok('familyId ברשימת השדות של הצוות', /'familyId'\]/.test(glCreate), glCreate);
-ok('familyId ברשימת השדות של התושב', /'familyId'\]/.test(glRes), glRes);
+ok('familyId ברשימת השדות של הצוות', /'familyId',\s*'who',\s*'role'\]/.test(glCreate), glCreate);
+ok('familyId ברשימת השדות של התושב', /'familyId',\s*'who',\s*'role'\]/.test(glRes), glRes);
 ok('🔴 התושב יכול לחתום רק על המשפחה שלו',
    /glNext\('familyId'\) == myFamilyId\(\)/.test(glRes), glRes);
 ok('⚠️ וריק עדיין מותר — שורה בלי משפחה אינה מגיעה לאיש',
@@ -77,8 +77,8 @@ ok('⚠️ וזה קורה בתוך השגר-ושכח, לא במסלול הפע�
 ok('עשר פעולות המנהל מעבירות repId',
    /gardenLogAppend\(String\(id\), log\.kind, log\.note, \{ repId: cur\.repId, familyId: cur\.familyId \}\)/.test(DS));
 ok('הגשת דיווח מעבירה את המשפחה של המגיש',
-   /gardenLogAppend\(String\(taskId\), "נפתח", "דיווח תושב #" \+ repId, \{ familyId: fid \}\)/.test(DS));
-ok('משוב מעביר את המשפחה של המגיב', /\{ familyId: \(\(\(window\.CBA && CBA\.user\) \|\| \{\}\)\.familyId \|\| ""\) \}/.test(DS));
+   /gardenLogAppend\(String\(taskId\), "נפתח", "דיווח תושב #" \+ repId, \{ familyId: fid, asResident: true \}\)/.test(DS));
+ok('משוב מעביר את המשפחה של המגיב', /\{ familyId: \(\(\(window\.CBA && CBA\.user\) \|\| \{\}\)\.familyId \|\| ""\), asResident: true \}/.test(DS));
 ok('⚠️ ואיחוד **לא** מעביר משפחה — בכוונה, הטקסט שלו נושא מזהים פנימיים',
    /gardenLogAppend\(childId, "איחוד", "אוחדה לתוך משימה #" \+ parentId\);/.test(DS));
 

@@ -1944,6 +1944,21 @@ CBA.data = (function () {
     return ((u.firstName || "") + " " + (u.family || "")).trim() || (u.email || "");
   }
 
+  /** התפקיד שנחתם על שורת יומן. ר' `glRoleOk` בכללים. */
+  function gardenLogRole(opts) {
+    if (opts && opts.asResident) return "תושב";
+    return gardenIsMgr() ? "מנהל" : "גנן";
+  }
+  /** איך מציגים את מי שעשה שורת יומן. שורות ישנות (לפני 22.9) — בלי חותם. */
+  function gardenLogWho(r) {
+    r = r || {};
+    var role = String(r.role || ""), who = String(r.who || "").trim();
+    if (role === "מנהל") return "מנהל גינון";
+    if (role === "גנן") return who ? who + " · גנן" : "גנן";
+    if (role === "תושב") return who || "תושב";
+    return who;
+  }
+
   function gardenIsMgr() {
     var u = (window.CBA && CBA.user) || {};
     return !u.isExternal;
@@ -2282,7 +2297,9 @@ CBA.data = (function () {
             }
           });
         }
-        cb({ ok: true });
+        /* `awaiting` — הסימון לא סגר אלא עלה לאישור המנהל. המסך צריך
+           לדעת כדי לומר לגנן את האמת ("נשלח לאישור") ולא "נסגר". */
+        cb({ ok: true, awaiting: patch.flag === "ממתין לאישור" && !patch.closure });
       });
     }
     });
@@ -2445,6 +2462,7 @@ CBA.data = (function () {
          כמו `actorUid` ביומן. הכלל אוכף ש-openedUid הוא של הכותב. */
       if (asReport) {
         doc.openedBy = gardenIsMgr() ? "מנהל" : "גנן";
+        doc.reporter = gardenWho().substring(0, 60);
         var myUid = CBA.fb.uid ? CBA.fb.uid() : "";
         if (myUid) doc.openedUid = myUid;
       }
@@ -2963,7 +2981,7 @@ CBA.data = (function () {
         var taskId = String(rep.taskId || "").trim();
         gardenLogAppend(taskId, "משוב", (positive ? "חיובי" : "שלילי") +
                         (note ? " — " + note : ""),
-                        { familyId: (((window.CBA && CBA.user) || {}).familyId || "") });
+                        { familyId: (((window.CBA && CBA.user) || {}).familyId || ""), asResident: true });
         if (positive || !taskId) return cb({ ok: true });
         /* משוב שלילי — דגל ומייל למנהלים. שניהם שגר-ושכח:
            המשוב של התושב כבר נשמר, ואין סיבה להחזיר לו שגיאה. */
@@ -3036,6 +3054,10 @@ CBA.data = (function () {
              לקרוא דיווחים) יוכל לחתום שורות יומן שהתושב יראה. מזהה אטום,
              לא שם ולא מייל. ר' `gardenLogAppend`. */
           familyId: fid,
+          /* 🔴 22.9 (הכרעת יועד) — **שם המדווח, פרטי + משפחה, על המשימה.**
+             גלוי למנהל ולגנן (הוכרע במפורש: "גם הגנן"). שם ולא מזהה —
+             הצוות אינו רשאי לקרוא דיווחים או את טאב התושבים. */
+          reporter: gardenWho().substring(0, 60),
           /* 🔴 22.9 (הכרעת יועד: "זה צריך להיות מוצג לכולם") — **התיאור
              והמיקום במילים עוברים גם למשימה.** עד היום הם ישבו רק במסמך
              הדיווח, שהצוות אינו רשאי לקרוא — הגנן יצא לשטח בלי "הממטרה
@@ -3086,7 +3108,7 @@ CBA.data = (function () {
             }
 
             /* מכאן הדיווח **קיים**. כל מה שנכשל אחרי זה אינו מבטל אותו. */
-            gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId, { familyId: fid });
+            gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId, { familyId: fid, asResident: true });
             CBA.sheets.postRead("gardenNotifyReport", { id: String(repId) }, function () {});
 
             /* 🔴🔴 **ההגשה נסגרת כאן, לפני התמונות** (17.9, החלטת יועד).
@@ -3178,6 +3200,14 @@ CBA.data = (function () {
           actorUid: uid, note: String(note || ""),
           at: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date(), schema: 1
         };
+        /* 🔴 22.9 (בקשת יועד) — **מי עשה את זה, בשורה עצמה.** עד היום
+           השורה נשאה uid בלבד ואף מסך לא פתר אותו לשם — ההיסטוריה של
+           המנהל, קו הזמן של התושב וגם הגנן ראו פעולות בלי חותם.
+           `role` נאכף בכללים מול מסמך החבר (glRoleOk) — תושב אינו יכול
+           לחתום "מנהל" — ו-`who` הוא שם התצוגה של הכותב. התצוגה:
+           מנהל ← "מנהל גינון", גנן ← "<שם> · גנן", תושב ← שמו. */
+        doc.role = gardenLogRole(opts);
+        doc.who = gardenWho().substring(0, 60);
         /* ⚠️ שדה ריק אינו נכתב בכלל. `myFamilyId()` מחזירה `''` למי
            שאינו חבר, ושורה עם `familyId: ""` היתה נקראת ע"י הכלל
            כ-`'' == ''` — כלומר נפתחת לכולם. אותה מלכודת בדיוק
@@ -4718,6 +4748,8 @@ CBA.data = (function () {
     },
     /* עריכת תקלה שהצוות פתח — הפותח או מנהל. במסלול הישיר בלבד. */
     gardenCanEditTask: function (t) { return gardenCanEditTask(t); },
+    /* מי עשה שורת יומן, בשפת התצוגה. ר' gardenLogWho. */
+    gardenLogWho: function (r) { return gardenLogWho(r); },
     gardenPlanWeekImpact: function (payload, cb) { gardenPlanWeekImpact(payload, cb); },
     gardenEditTask: function (id, payload, cb) {
       if (!gardenWritesOn()) return cb({ ok: false, error: "עריכה זמינה רק במסלול הישיר" });

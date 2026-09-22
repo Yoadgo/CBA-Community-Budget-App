@@ -845,7 +845,7 @@
                 ico("cal") + '</button>'
             : '<button type="button" class="gt-box' + (approving ? " is-approve" : "") +
                 '" data-act="' + (approving ? "approve" : (done ? "undo" : "done")) + '"' +
-                ' aria-label="' + (approving ? "אישור" : (done ? "ביטול סימון" : "סימון כבוצע")) +
+                ' aria-label="' + (approving ? "אישור ביצוע" : (done ? "ביטול סימון" : "בוצע")) +
                 '">' + ico("check") + '</button>') +
           '<div class="gt-body">' +
             /* הכותרת ראשונה ולבדה. מתחתיה שורת מטא אחת שבה כל שדה הוא
@@ -869,7 +869,9 @@
                 ? (isTeamFault(t)
                     ? teamTag(t) + '<i>·</i>'
                     : '<span class="gt-res">' + ico("person") +
-                      esc(GL.reportRef(t.repId)) + '</span><i>·</i>')
+                      esc(GL.reportRef(t.repId)) +
+                      /* 22.9 (בקשת יועד) — שם המדווח המלא ליד מספר הפנייה. */
+                      (t.reporter ? ' · ' + esc(t.reporter) : '') + '</span><i>·</i>')
                 : (t.kind === GK_ROUTINE ? ico("repeat") + '<i>·</i>' : '')) +
               /* ---- תמונות הדיווח (PHASE 4.2, 2026-09-14) ----
                  עד היום התושב צילם, התמונה נשמרה ב-Drive, ומי שיצא לשטח
@@ -1035,6 +1037,14 @@
         /* ⚠️ 2026-09-09 — גם דיווח תושב נסגר בסימון (גל 3). קודם הוא קיבל
            כאן דגל "ממתין לאישור"; זה כבר לא מה שהשרת כותב. */
         done:    function (t) {
+                   /* 🔴 22.9 — גנן על תקלת דייר: עולה לאישור, לא נסגר
+                      (ברירת המחדל של המתג requireApproval). התשובה מהשרת
+                      והרענון מיישרים אם המנהל כיבה את המתג. */
+                   if (!isManager && t.repId) {
+                     t.flag = "ממתין לאישור";
+                     if (t.stage === "התקבל" || t.stage === "מתוכנן") t.stage = "בטיפול";
+                     return;
+                   }
                    t.stage = "הושלם"; t.flag = ""; t.closure = "בוצע";
                    t.approvedAt = new Date().toISOString();
                  },
@@ -1130,7 +1140,8 @@
             CBA.ui.alert((res && res.error) || "הפעולה לא הצליחה");
             return;
           }
-          if (op === "done") CBA.ui.toast(wasReport ? "נסגר · נשלח עדכון למדווח" : "סומן כבוצע");
+          if (op === "done") CBA.ui.toast(res.awaiting ? "בוצע · נשלח לאישור מנהל הגינון"
+                       : wasReport ? "בוצע · נשלח עדכון למדווח" : "בוצע · המשימה נסגרה");
           if (op === "undo") {
             CBA.ui.toast(wasClosure && wasClosure !== "בוצע"
               ? 'נפתחה מחדש · הסגירה ("' + wasClosure + '") בוטלה'
@@ -1139,7 +1150,7 @@
           if (op === "defer") CBA.ui.toast("נדחה לשבוע הבא");
           if (op === "note") CBA.ui.toast("ההערה נשמרה");
           if (op === "block") CBA.ui.toast("נשלח למנהל הגינון");
-          if (op === "approve") CBA.ui.toast("אושר · נשלח עדכון למדווח");
+          if (op === "approve") CBA.ui.toast(wasReport ? "הביצוע אושר · נשלח עדכון למדווח" : "הביצוע אושר");
           if (op === "close") CBA.ui.toast("נסגר · " + extra.closure);
           if (op === "return") CBA.ui.toast("הוחזר לצוות להשלמה");
           if (op === "plan") {
@@ -1303,6 +1314,11 @@
         "סגירה": "check", "החזרה": "undo", "גרירה": "cal", "חסימה": "clock",
         "הערה": "note", "איחוד": "merge", "משוב": "person"
       };
+      /* 🔴 22.9 (בקשת יועד) — מי עשה כל שורה: "<שם> · גנן", "מנהל גינון",
+         או שם התושב. שורות ישנות — השם שהגיע מהשרת, אם הגיע. */
+      function whoOf(r) {
+        return (CBA.data.gardenLogWho ? CBA.data.gardenLogWho(r) : (r && r.who)) || "";
+      }
       function openHistory(id) {
         var t = byId(id);
         var close = sheet("היסטוריה",
@@ -1339,7 +1355,7 @@
               '<div><b>' + esc(r.kind || "שינוי") + '</b>' +
               (change ? '<span>' + change + '</span>' : '') +
               (r.note ? '<span>' + esc(r.note) + '</span>' : '') +
-              '<em>' + esc(ago(r.at)) + (r.who ? " · " + esc(r.who) : "") + '</em></div></div>';
+              '<em>' + esc(ago(r.at)) + (whoOf(r) ? " · " + esc(whoOf(r)) : "") + '</em></div></div>';
           }).join("");
         });
         return close;
@@ -1729,15 +1745,24 @@
           if (planning) {
             slotHtml = '<button type="button" class="gd-det-cta" data-m="plan">' +
               ico("cal") + 'שיבוץ</button>';
+          } else if (isManager && done) {
+            /* 🔴 22.9 (בקשת יועד: "אחידות בשפה") — הגנן סימן "בוצע",
+               המנהל מאשר. עד היום הכפתור כאן היה "סגירה", והוא פתח את
+               "סגירה עם סיבה" — שלוש סיבות **בלי "בוצע"**. כלומר המנהל
+               לא יכול היה לסגור כבוצעה משימה שהגנן כבר סיים. */
+            slotHtml = '<button type="button" class="gd-det-cta is-positive" data-m="approve">' +
+              ico("check") + 'אישור ביצוע</button>';
           } else if (isManager) {
-            slotHtml = '<button type="button" class="gd-det-cta is-positive" data-m="close">' +
-              ico("check") + 'סגירה</button>';
+            /* המנהל: "בוצע" סוגר מיד (אותה מילה כמו אצל הגנן). סגירה בלי
+               ביצוע — "סגירה עם סיבה" — בשורה המשנית. */
+            slotHtml = '<button type="button" class="gd-det-cta is-positive" data-m="markdone">' +
+              ico("check") + 'בוצע</button>';
           } else if (done) {
             slotHtml = '<button type="button" class="gd-det-cta is-ghost" data-m="undo">' +
               ico("undo") + 'ביטול סימון</button>';
           } else {
             slotHtml = '<button type="button" class="gd-det-cta" data-m="markdone">' +
-              ico("check") + 'סימון כבוצע</button>';
+              ico("check") + 'בוצע</button>';
           }
         }
         var quickHtml = !closed
@@ -1756,6 +1781,10 @@
         if (isManager && t.flag === "ממתין לאישור") {
           secHtml += '<button type="button" class="gd-det-b" data-m="return">' +
             ico("undo") + 'החזרה להשלמה</button>';
+        }
+        if (isManager && !closed) {
+          secHtml += '<button type="button" class="gd-det-b" data-m="close">' +
+            ico("check") + 'סגירה עם סיבה</button>';
         }
         if (isManager && t.flag === "דורש בדיקה חוזרת") {
           secHtml += '<button type="button" class="gd-det-b" data-m="clearflag">' +
@@ -1799,6 +1828,10 @@
               '<button type="button" class="gd-sheet-close" data-close="1">' + ico("x") + 'סגירה</button>' +
             '</div>' +
             '<p class="gd-det-sub">' +
+              /* 🔴 22.9 (בקשת יועד) — מי פתח: שם פרטי ושם משפחה. */
+              (t.reporter ? 'נפתח ע"י ' + esc(t.reporter) +
+                (t.openedBy === "גנן" ? " · גנן" : t.openedBy === "מנהל" ? " · מנהל גינון" : "") +
+                ((t.repId || t.createdAt) ? ' · ' : '') : "") +
               (t.repId ? esc(GL.reportRef(t.repId)) : "") +
               (t.createdAt ? (t.repId ? ' · ' : '') + esc(ago(t.createdAt)) : '') +
             '</p>' +
@@ -1924,7 +1957,7 @@
             return '<div class="gd-det-j"><u>' + ico(LOG_ICON[r.kind] || "note") + '</u>' +
               '<b>' + esc(r.kind || "שינוי") + '</b>' +
               (r.note ? '<span>' + esc(r.note) + '</span>' : (change ? '<span>' + change + '</span>' : '')) +
-              '<time>' + esc(ago(r.at)) + '</time></div>';
+              '<time>' + esc(ago(r.at)) + (whoOf(r) ? ' · ' + esc(whoOf(r)) : '') + '</time></div>';
           }).join("");
         });
 

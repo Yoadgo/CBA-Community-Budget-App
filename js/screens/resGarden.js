@@ -587,6 +587,13 @@
          ⚠️ **מתחת לשתי שורות לא מציגים כלום.** שורה אחת היא תמיד
             "הדיווח התקבל", וזה כבר כתוב בכרטיס ("דווח ב-..."). קו
             זמן של פריט אחד הוא רעש, לא מידע. */
+      /* 🔴 22.9 (בקשת יועד) — מי מהצוות עשה את זה: "<שם> · גנן" או
+         "מנהל גינון". שורות של התושב עצמו — בלי חותם (זה הוא). */
+      function tlWho(x) {
+        if (!x || x.role === "תושב" || !CBA.data.gardenLogWho) return "";
+        var w = CBA.data.gardenLogWho(x);
+        return w ? " · " + esc(w) : "";
+      }
       function timeline(r) {
         var tid = String(r.taskId || "").trim();
         if (!tid) return "";
@@ -607,7 +614,7 @@
             return '<div class="gd-tl__r">' + ico(k.i) +
               '<div><b>' + esc(k.t) + '</b>' +
               (extra ? '<span>' + esc(extra) + '</span>' : '') +
-              '<em>' + esc(tlDate(x.at)) + '</em></div></div>';
+              '<em>' + esc(tlDate(x.at)) + tlWho(x) + '</em></div></div>';
           }).join("") +
         '</details>';
       }
