@@ -22,49 +22,27 @@
   CBA.screens = CBA.screens || {};
   var esc = CBA.esc;
 
-  var ICONS = {
-    lawn:  '<path d="M3 20h18"/><path d="M6 20c0-4 1-6 2-8M11 20c0-5 1-8 1-11M16 20c0-4 1-6 2-8"/>',
-    water: '<path d="M12 3c3.5 4.5 5.5 7.4 5.5 10a5.5 5.5 0 0 1-11 0C6.5 10.4 8.5 7.5 12 3Z"/>',
-    tree:  '<path d="M12 21v-5"/><path d="M12 16a5.5 5.5 0 0 0 1.6-10.8A4.4 4.4 0 0 0 7 5.6 4.2 4.2 0 0 0 8.6 14 5.4 5.4 0 0 0 12 16Z"/>',
-    prune: '<circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M7.7 16.3 18 4M16.3 16.3 6 4"/>',
-    weed:  '<path d="M12 21v-8"/><path d="M12 13c0-3-2.2-5-5-5 0 3 2.2 5 5 5Z"/><path d="M12 13c0-3.4 2.5-5.6 5.6-5.6 0 3.4-2.5 5.6-5.6 5.6Z"/>',
-    clean: '<path d="M5 7h14"/><path d="M10 7V4.6h4V7"/><path d="M6.6 7 8 20h8l1.4-13"/>',
-    bed:   '<circle cx="12" cy="8.4" r="2.4"/><path d="M12 6c0-2.2-3.6-2.2-3.6 0S12 10.6 12 8.4ZM12 6c0-2.2 3.6-2.2 3.6 0S12 10.6 12 8.4ZM12 21v-8"/>',
-    pin:   '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/>',
-    cal:   '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
-    plus:  '<path d="M12 5v14M5 12h14"/>',
-    trash: '<path d="M5 7h14"/><path d="M10 7V4.6h4V7"/><path d="M6.6 7 8 20h8l1.4-13"/>' +
-           '<path d="M10 11v5M14 11v5"/>',
-    edit:  '<path d="M4 20h4L19 9a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5 4 20Z"/>',
-    cloud: '<path d="M6.5 19a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 11.2-1.6A4.2 4.2 0 0 1 21 12.6"/>' +
-           '<path d="m15 15 6 6M21 15l-6 6"/>',
-    rot:   '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14"/><path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v2a3 3 0 0 1-3 3h-14"/>',
-    /* נוסף 22.9: הטופס המאוחד מבקש `x` לכפתור הסגירה, והטבלה כאן לא
-       החזיקה אותו — כלומר במסך תוכנית העבודה הכפתור היה יוצא בלי
-       סמליל. אותו path בדיוק כמו ב-gardenTasks.js. */
-    x:     '<path d="M6 6l12 12M18 6 6 18"/>'
-  };
+  /* 🔴 23.9 — יישור קו: הסמלילים מגיעים מ-CBA.gardenKit (סט Lucide של
+     gardenTasks.js, הדשא המקורי נשאר). עד היום היה כאן סט ישן שצויר ביד,
+     ולכן תוכנית העבודה — וגם הטופס המשותף כשנפתח מכאן — נראו אחרת ממסך
+     המשימות. שמות ישנים ממופים לשמות של הערכה. */
+  var ALIAS = { edit: "pencil", rot: "repeat" };
+  function kitIcon(n) {
+    var K = CBA.gardenKit, I = (K && K.ICONS) || {};
+    return I[ALIAS[n] || n] || "";
+  }
   function ico(n, w) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
       'stroke-linecap="round" stroke-linejoin="round"' +
-      (w ? ' style="width:' + w + 'px;height:' + w + 'px"' : '') + '>' + (ICONS[n] || "") + '</svg>';
+      (w ? ' style="width:' + w + 'px;height:' + w + 'px"' : '') + '>' + kitIcon(n) + '</svg>';
   }
 
   /* אותה טבלה בדיוק כמו ב-gardenTasks.js ו-resGarden.js — אותה קטגוריה
      חייבת להיראות זהה בשלושת המסכים, אחרת הצבע מפסיק להיות שפה. */
-  var CATS = [
-    { key: "lawn",  match: /דשא|מדשא/,   ico: "lawn"  },
-    { key: "water", match: /השקי|ממטר/,  ico: "water" },
-    { key: "tree",  match: /^עצים|עץ/,    ico: "tree"  },
-    { key: "prune", match: /גיזום|שיח/,  ico: "prune" },
-    { key: "weed",  match: /עשבי|קרקע/,  ico: "weed"  },
-    { key: "clean", match: /ניקיון|גזם/, ico: "clean" },
-    { key: "bed",   match: /ערוג|שתיל/,  ico: "bed"   }
-  ];
-  function catOf(name) {
-    for (var i = 0; i < CATS.length; i++) if (CATS[i].match.test(name || "")) return CATS[i];
-    return { key: "lawn", ico: "lawn" };
-  }
+  /* 23.9 — אותה טבלה בדיוק: gardenLang.CATS (דשא+טיפה לקטגוריה המאוחדת
+     בבחירה; בשורה של משימה הכותרת מכריעה בין דשא לטיפה — catOfTask). */
+  function catOf(name) { return CBA.gardenLang.catOf(name); }
+  function catOfRow(d) { var g = CBA.gardenLang; return g.catOfTask ? g.catOfTask(d) : g.catOf(d && d.category); }
 
   /* סדר התצוגה של הקבוצות. הוא לא א"ב ולא סדר הגדרה — הוא מהתכוף לנדיר,
      כי ככה גם נראית שנת עבודה: מה שקורה כל שבוע הוא העיקר. */
@@ -130,7 +108,7 @@
       }
 
       function row(d) {
-        var cat = catOf(d.category);
+        var cat = catOfRow(d);
         var win = windowLabel(d.months);
         var bits = [];
         if (d.category) bits.push('<span class="gp-cat">' + ico(cat.ico, 12) + esc(d.category) + '</span>');
