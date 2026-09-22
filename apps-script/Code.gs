@@ -30,6 +30,15 @@ var MONTH_KEYS = ['תכנון ספט','תכנון אוק','תכנון נוב','�
 // והסקריפט רץ "כמוני" (Execute as: Me) — אז CalendarApp.getCalendarById עובד ישירות.
 var CLUB_CALENDAR_ID = 'c_8878c4353341b9211ce8db109c74c713ed8ffcf4813fe8a1aa4e60199264edc9@group.calendar.google.com';
 
+// לוח אירועים קהילתי (2026-09-23) — ארבעה יומנים עצמאיים, אומתו מול יועד
+// דרך listMyCalendars(). קריאה-בלבד, אין כאן ממשק עריכה ליומן המועדון של מועדון.
+var EVENTS_CALENDARS = {
+  holidays:  { id: 'iw.jewish#holiday@group.v.calendar.google.com', he: 'חגי ישראל' },
+  community: { id: 'c_20d29a7fa14e37df7736aba870ea77a4a2cc171823e0d9f8dae9f91d8494e808@group.calendar.google.com', he: 'אירועי קהילה' },
+  culture:   { id: 'c_b8f2bbdbd2c302d5f7e7752775ff98b46a30bdeec052a7273132e9e84580f2ad@group.calendar.google.com', he: 'אירועי תרבות' },
+  breaks:    { id: 'c_5e5ef982e72a5534b748717ee597f06cfb5b9782e2f8fd0bbb3526ce68b11a7e@group.calendar.google.com', he: 'חופשות גנים' }
+};
+
 // כותרת עמודת "מזהה קבוע" בטאב "תושבים" (2026-08-06). זהו המזהה היציב של המשפחה —
 // לא מספר הבית (שיכול להשתנות כשדיירים עוברים בין בתים) ולא שם המשפחה (יכול להיות
 // לא-ייחודי/להשתנות). נוצר ומתמלא פעם אחת ע"י assignResidentIds_ ולא משתנה לעולם.
@@ -254,7 +263,7 @@ var GET_ACTION_PERMS = {
   assignResidentIds: PERM_RESIDENTS, profileChanges: PERM_RESIDENTS,
   clubList: PERM_CLUB, approveClubReservation: PERM_CLUB,
   rejectClubReservation: PERM_CLUB, approveClubReservations: PERM_CLUB,
-  residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN,
+  residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN, rsvpFamilyNames: PERM_ANY_ADMIN,
   gardenStats: PERM_GARDEN, gardenTaskLog: PERM_GARDEN,
   gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
   /* גיבוי Firestore ← גיליון (2026-09-15, צעד 07א) — מנהל-על בלבד. */
@@ -642,6 +651,11 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'myClubReservations') {
       return handleMyClubReservations_(e.parameter);
     }
+    // לוח אירועים קהילתי (2026-09-23) — פתוח לכל תושב פעיל מחובר ולא-חיצוני כמו
+    // myClubReservations מעלה (לא ניתן ACTION_PERMS, authorize_ עם need=undefined מאשר).
+    if (e && e.parameter && e.parameter.action === 'eventsList') {
+      return handleGetEventsList_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'cancelClubReservation') {
       return handleCancelClubReservation_(e.parameter);
     }
@@ -671,6 +685,10 @@ function doGet(e) {
     // פתוחה לכל מי שיש לו הרשאת ניהול כלשהי ולא רק למנהל התושבים.
     if (e && e.parameter && e.parameter.action === 'residentDirectory') {
       return handleResidentDirectory_(e.parameter);
+    }
+    // RSVP לאירועי לוח הקהילה (2026-09-23) — גשר familyId->שם לטבלת המנהל, PERM_ANY_ADMIN בלבד.
+    if (e && e.parameter && e.parameter.action === 'rsvpFamilyNames') {
+      return handleRsvpFamilyNames_(e.parameter);
     }
     // ספריית קהילה ציבורית (2026-08-07): בית/משפחה/שם פרטי/טלפון/שמות ילדים —
     // בלי אימייל/הרשאות/מקצוע/הערות. בניגוד ל-residentDirectory (שם+בית בלבד,
@@ -2104,6 +2122,35 @@ function clubClipEvents_(evs, backDays) {
 
 /* רשימת השריונים העתידיים (וקרוב-עבר, יום אחד אחורה) של התושב המחובר — לפי
  * המייל/שם המשפחה שסופקו, מוצלב מול התגיות שנשמרו על האירוע ביצירה. */
+/* לוח אירועים קהילתי (2026-09-23) — קורא מארבעת היומנים ב-EVENTS_CALENDARS לשנה
+ * נתונה ומאחד אותם למערך אחד. פתוח לכל תושב פעיל ולא-חיצוני (לא ב-ACTION_PERMS). */
+function handleGetEventsList_(p) {
+  try {
+    var year = parseInt(p && p.year, 10) || new Date().getFullYear();
+    var from = new Date(year, 0, 1);
+    var to = new Date(year, 11, 31, 23, 59, 59);
+    var events = [];
+    Object.keys(EVENTS_CALENDARS).forEach(function (catKey) {
+      var meta = EVENTS_CALENDARS[catKey];
+      var cal = CalendarApp.getCalendarById(meta.id);
+      if (!cal) return;
+      cal.getEvents(from, to).forEach(function (ev) {
+        events.push({
+          id: ev.getId(),
+          title: ev.getTitle(),
+          date: ev.getStartTime().toISOString(),
+          allDay: ev.isAllDayEvent(),
+          category: catKey,
+          description: ev.getDescription() || ''
+        });
+      });
+    });
+    return json_({ ok: true, events: events });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
 function handleMyClubReservations_(p, evs) {
   try {
     var who = clubIdentity_(p);
@@ -11423,6 +11470,25 @@ function txFamilyNames_(ss) {
     }
   } catch (e) { /* בלי שמות עדיין אפשר לשלוח */ }
   return out;
+}
+
+/* RSVP לאירועי לוח הקהילה (2026-09-23) — גשר familyId->שם לטבלת המנהל על גבי הרשמות ב-Firestore.
+ * עוטף את txFamilyNames_ הקיים במקום להמציא מחדש. שם משפחה/אימייל לא נשמרים ב-Firestore בכלל —
+ * זהו הגשר היחיד שמחזיר שם למנהל, ו-PERM_ANY_ADMIN בלבד (GET_ACTION_PERMS). */
+function handleRsvpFamilyNames_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_ANY_ADMIN);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var all = txFamilyNames_(ss);
+    if (!p || !p.ids) return json_({ ok: true, names: all });
+    var wanted = String(p.ids).split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    var names = {};
+    wanted.forEach(function (id) { if (all[id]) names[id] = all[id]; });
+    return json_({ ok: true, names: names });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
 }
 
 /** שורות התנועות של השנה, בצורת הגיליון, מהמקור הנכון. */

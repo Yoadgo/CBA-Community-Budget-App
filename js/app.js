@@ -322,7 +322,7 @@
       def: "resHome",
       // resMe ("הפרטים שלי") רשום כמסך אבל **לא כטאב** — מגיעים אליו מתפריט
       // המשתמש ומעמוד הבית. הוא על *אותי*, לא יעד ניווט, ושורת הניווט כבר בת 5.
-      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices", "resGarden", "resGardenNew"],
+      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices", "resGarden", "resGardenNew", "events"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
       // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
@@ -350,7 +350,8 @@
         // לבקשת יועד: למודול יש זהות משלו באפליקציה. resGardenNew (טופס
         // הדיווח) רשום כמסך אבל **לא כטאב** — מגיעים אליו מכפתור "דיווח חדש"
         // בתוך המסך, בדיוק כמו resMe.
-        ["resGarden", "מראה שיכון"]
+        ["resGarden", "מראה שיכון"],
+        ["events", "לוח אירועים"]
       ]
     }
   };
@@ -441,6 +442,8 @@
     resMap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3.5 5v16L9 19l6 2 5.5-2V3L15 5 9 3Z"/><path d="M9 3v16M15 5v16"/></svg>',
     // "מראה שיכון" — עלה. הסמליל של המודול, מופיע גם בכותרת המסך ובבר המובייל.
     resGarden:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20"/><path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13"/></svg>',
+    // לוח אירועים קהילתי (2026-09-23) — לוח שנה
+    events: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/><path d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01"/></svg>',
     /* הקבוצה יורשת את העלה — הוא כבר מזוהה עם הגינון בשני האזורים. */
     ginun:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20"/><path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13"/></svg>',
     gardenInbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5.5 3 13v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5l-2.5-7.5A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.9 1.5Z"/></svg>',

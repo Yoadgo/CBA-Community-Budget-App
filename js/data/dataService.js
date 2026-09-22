@@ -1253,6 +1253,19 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get(Object.assign({ action: "myClubReservations" }, fields), cb);
   }
+  // לוח אירועים קהילתי (2026-09-23) — קורא מארבעת יומני Google Calendar
+  // (חגים/קהילה/תרבות/גנים) דרך handleGetEventsList_ ב-Code.gs.
+  function getEventsList(year, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "eventsList", year: year }, cb);
+  }
+  // גשר שם משפחה לטבלת ה-RSVP של מנהל (לא נשמר ב-Firestore בכלל, רק familyId).
+  function getRsvpFamilyNames(ids, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    var params = { action: "rsvpFamilyNames" };
+    if (ids && ids.length) params.ids = ids.join(",");
+    CBA.sheets.get(params, cb);
+  }
   function cancelClubReservation(fields, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get(Object.assign({ action: "cancelClubReservation" }, fields), cb);
@@ -4728,6 +4741,8 @@ CBA.data = (function () {
     reserveClub: reserveClub,
     getClubMonth: getClubMonth,
     getMyClubReservations: getMyClubReservations,
+    getEventsList: getEventsList,
+    getRsvpFamilyNames: getRsvpFamilyNames,
     cancelClubReservation: cancelClubReservation,
     getClubList: getClubList,
     getGymList: getGymList,

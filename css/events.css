@@ -1,0 +1,979 @@
+/* ============================================================================
+ *  events.css — לוח אירועים קהילתי
+ * ============================================================================
+ *  סגנונות לתצוגות: חודשית, שנתית, מובייל
+ *  עקביות עם עיצוב Liquid Glass של CBA
+ * ========================================================================== */
+
+/* ============================================================================
+ *  מצבי טעינה ושגיאה
+ * ========================================================================== */
+
+.events-loading,
+.events-error {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.95rem;
+}
+
+.events-error {
+  color: var(--error-text, #DC2626);
+  background-color: var(--error-bg, rgba(220, 38, 38, 0.1));
+  border-radius: 0.5rem;
+}
+
+/* הערה אינפורמטיבית (לא אזהרה) — למשל "ימי הולדת עדיין לא זמינים" */
+.events-info-banner {
+  margin: 0.75rem;
+  padding: 0.6rem 1rem;
+  background-color: var(--bg-surface, #F9FAFB);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  border-radius: 0.5rem;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  text-align: right;
+}
+
+/* ============================================================================
+ *  תצוגה חודשית (דסקטופ)
+ * ========================================================================== */
+
+.events-container {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1rem;
+}
+
+.events-grid {
+  flex: 1;
+  min-width: 0;
+}
+
+.month-header {
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.month-header h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--text-primary, #1F2937);
+  margin: 0;
+}
+
+.btn-prev-month,
+.btn-next-month {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  background-color: var(--bg-surface, #F9FAFB);
+  color: var(--text-primary, #1F2937);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 200ms ease-in-out;
+}
+
+.btn-prev-month:hover,
+.btn-next-month:hover {
+  background-color: var(--bg-hover, #F3F4F6);
+  border-color: var(--primary, #6366F1);
+  color: var(--primary, #6366F1);
+}
+
+/* טאב תצוגה חודשית/שנתית (דסקטופ) */
+.events-view-toggle {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 0;
+}
+
+.view-toggle-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  background-color: var(--bg-surface, #F9FAFB);
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.view-toggle-btn:hover {
+  background-color: var(--bg-hover, #F3F4F6);
+}
+
+.view-toggle-btn.is-active {
+  background-color: var(--primary, #6366F1);
+  border-color: var(--primary, #6366F1);
+  color: white;
+}
+
+/* שורת ימי השבוע */
+.weekday-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.weekday-name {
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #6B7280);
+  padding: 0.5rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* גריד הלוח */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.day-cell {
+  aspect-ratio: 1;
+  background-color: var(--bg-surface, #F9FAFB);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 200ms ease-in-out;
+}
+
+.day-cell:hover {
+  background-color: var(--bg-hover, #F3F4F6);
+  border-color: var(--border-hover, rgba(0, 0, 0, 0.2));
+}
+
+.day-cell.is-today {
+  background-color: var(--primary-light, rgba(99, 102, 241, 0.05));
+  border-color: var(--primary, #6366F1);
+}
+
+.day-cell.is-selected {
+  background: linear-gradient(135deg, var(--primary-light, rgba(99, 102, 241, 0.1)), var(--primary-lighter, rgba(99, 102, 241, 0.05)));
+  border-color: var(--primary, #6366F1);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.day-cell.is-other-month {
+  opacity: 0.5;
+  background-color: var(--bg-disabled, #F3F4F6);
+}
+
+.day-cell.is-other-month .day-number {
+  color: var(--text-disabled, #9CA3AF);
+}
+
+.day-number {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary, #1F2937);
+  line-height: 1.2;
+}
+
+.day-events {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+  overflow: hidden;
+}
+
+/* כרטיסיות אירועים בתוך היום */
+.event-chip {
+  font-size: 0.625rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  color: white;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.event-overflow {
+  font-size: 0.625rem;
+  color: var(--text-secondary, #6B7280);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  padding-top: 0.1rem;
+}
+
+.event-overflow:hover {
+  color: var(--primary, #6366F1);
+}
+
+.today-marker {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--text-primary, #1F2937);
+}
+
+/* סרגל צד לבחירת יום */
+.events-sidebar {
+  width: 280px;
+  background-color: var(--bg-surface, #F9FAFB);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.sidebar-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #1F2937);
+  margin: 0;
+  text-align: right;
+}
+
+.sidebar-header {
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  padding-bottom: 0.75rem;
+}
+
+.sidebar-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sidebar-events li {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background-color: white;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.05));
+}
+
+.event-icon {
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.event-info {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.event-info strong {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--text-primary, #1F2937);
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.event-info small {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #6B7280);
+}
+
+.empty-day {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.875rem;
+  background-color: white;
+  border-radius: 0.5rem;
+}
+
+.sidebar-action {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+}
+
+.btn-add-calendar {
+  width: 100%;
+  padding: 0.75rem;
+  background-color: var(--primary, #6366F1);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.btn-add-calendar:hover {
+  background-color: var(--primary-hover, #4F46E5);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.btn-add-calendar:active {
+  transform: scale(0.98);
+}
+
+/* ============================================================================
+ *  תצוגה שנתית
+ * ========================================================================== */
+
+.events-annual {
+  padding: 1rem;
+}
+
+.annual-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.annual-header h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary, #1F2937);
+  margin: 0;
+}
+
+.months-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.month-cube {
+  background-color: var(--bg-surface, #F9FAFB);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 280px;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.month-cube:hover {
+  border-color: var(--primary, #6366F1);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+  transform: translateY(-2px);
+}
+
+.month-cube.is-current {
+  background: linear-gradient(135deg, var(--primary-light, rgba(99, 102, 241, 0.05)), white);
+  border-color: var(--primary, #6366F1);
+}
+
+.cube-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+}
+
+.cube-header h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #1F2937);
+  margin: 0;
+  text-align: right;
+  flex: 1;
+}
+
+.current-tag {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--text-inverse, white);
+  background-color: var(--primary, #6366F1);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.cube-events {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-y: auto;
+}
+
+.cube-event {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  text-align: right;
+}
+
+.event-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.event-name {
+  flex: 1;
+  color: var(--text-primary, #1F2937);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.event-day {
+  flex-shrink: 0;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.cube-overflow {
+  font-size: 0.75rem;
+  color: var(--primary, #6366F1);
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+
+.cube-overflow:hover {
+  text-decoration: underline;
+}
+
+.no-events {
+  color: var(--text-disabled, #9CA3AF);
+  font-size: 0.8125rem;
+  text-align: center;
+  padding: 1rem 0;
+}
+
+/* ============================================================================
+ *  תצוגה מובייל
+ * ========================================================================== */
+
+.events-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.75rem;
+}
+
+/* פאנל אירועים פרטיים */
+.private-events-panel {
+  background: linear-gradient(135deg, var(--primary-light, rgba(99, 102, 241, 0.05)), white);
+  border: 1px solid var(--primary-light, rgba(99, 102, 241, 0.2));
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+}
+
+.panel-header {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary, #1F2937);
+  text-align: right;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  margin-bottom: 0.5rem;
+}
+
+.private-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.private-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background-color: white;
+  border-radius: 0.4rem;
+  font-size: 0.8125rem;
+}
+
+.private-list .event-icon {
+  font-size: 1rem;
+}
+
+.event-title {
+  flex: 1;
+  color: var(--text-primary, #1F2937);
+  font-weight: 500;
+  text-align: right;
+}
+
+.event-date {
+  flex-shrink: 0;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.75rem;
+  text-align: left;
+}
+
+.empty-private {
+  padding: 0.75rem;
+  text-align: center;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.8125rem;
+  background-color: white;
+  border-radius: 0.4rem;
+}
+
+/* בורר חודשים */
+.month-selector-strip {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.5rem;
+  margin: -0.5rem -0.75rem 0 -0.75rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.month-pill {
+  flex-shrink: 0;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--bg-surface, #F9FAFB);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  border-radius: 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary, #6B7280);
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+  white-space: nowrap;
+}
+
+.month-pill:hover {
+  background-color: var(--bg-hover, #F3F4F6);
+  border-color: var(--border-hover, rgba(0, 0, 0, 0.2));
+}
+
+.month-pill.is-active {
+  background-color: var(--primary, #6366F1);
+  color: white;
+  border-color: var(--primary, #6366F1);
+}
+
+/* רשימת סדר יומי */
+.agenda-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.agenda-day {
+  background-color: var(--bg-surface, #F9FAFB);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+}
+
+.agenda-day.is-today {
+  background: linear-gradient(135deg, var(--primary-light, rgba(99, 102, 241, 0.05)), white);
+  border-color: var(--primary, #6366F1);
+}
+
+.agenda-day-header {
+  background-color: var(--bg-secondary, #F3F4F6);
+  padding: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+}
+
+.agenda-day.is-today .agenda-day-header {
+  background-color: var(--primary-light, rgba(99, 102, 241, 0.05));
+}
+
+.agenda-day-header strong {
+  font-size: 0.875rem;
+  color: var(--text-primary, #1F2937);
+  text-align: right;
+  flex: 1;
+}
+
+.today-label {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: white;
+  background-color: var(--primary, #6366F1);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.agenda-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.agenda-events li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.05));
+}
+
+.agenda-events li:last-child {
+  border-bottom: none;
+}
+
+.agenda-events .event-icon {
+  font-size: 1.25rem;
+  line-height: 1.2;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.event-details {
+  flex: 1;
+  text-align: right;
+}
+
+.event-details strong {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--text-primary, #1F2937);
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+}
+
+.event-details small {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary, #6B7280);
+}
+
+.empty-agenda {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.875rem;
+}
+
+/* ============================================================================
+ *  תגובות למוביל
+ * ========================================================================== */
+
+@media (max-width: 768px) {
+  .events-container {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .events-sidebar {
+    width: 100%;
+    max-height: 400px;
+  }
+
+  .months-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+
+  .month-cube {
+    min-height: 200px;
+    padding: 0.75rem;
+  }
+
+  .cube-header h3 {
+    font-size: 0.9375rem;
+  }
+
+  .cube-event {
+    font-size: 0.75rem;
+  }
+
+  .annual-header h2 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .events-container,
+  .events-grid,
+  .events-annual,
+  .events-mobile {
+    padding: 0.5rem;
+  }
+
+  .calendar-grid {
+    gap: 0.25rem;
+  }
+
+  .day-cell {
+    padding: 0.25rem;
+  }
+
+  .day-number {
+    font-size: 0.75rem;
+  }
+
+  .event-chip {
+    font-size: 0.5rem;
+    padding: 0.1rem 0.3rem;
+  }
+
+  .event-overflow {
+    font-size: 0.5rem;
+  }
+
+  .months-grid {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .month-cube {
+    min-height: 160px;
+    padding: 0.5rem;
+  }
+
+  .cube-header h3 {
+    font-size: 0.8rem;
+  }
+
+  .current-tag {
+    font-size: 0.5rem;
+    padding: 0.2rem 0.4rem;
+  }
+
+  .cube-event {
+    font-size: 0.7rem;
+  }
+
+  .month-selector-strip {
+    gap: 0.25rem;
+  }
+
+  .month-pill {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
+  .agenda-day-header {
+    padding: 0.5rem;
+  }
+
+  .agenda-day-header strong {
+    font-size: 0.8rem;
+  }
+
+  .agenda-events li {
+    padding: 0.5rem;
+  }
+
+  .event-details strong {
+    font-size: 0.8rem;
+  }
+
+  .event-details small {
+    font-size: 0.7rem;
+  }
+}
+
+/* ============================================================================
+ *  תמיכה ב-Liquid Glass (מתוך motion.css)
+ * ========================================================================== */
+
+.events-sidebar,
+.month-cube,
+.private-events-panel,
+.agenda-day {
+  /* placeholder לשכבות blur כשהן מחוברות */
+}
+
+/* ============================================================================
+ *  RSVP — "אישור הגעה"   (2026-09-23, אפיון events-rsvp-spec)
+ * ----------------------------------------------------------------------------
+ *  כפתור אחד ברשימת האירועים (סרגל צד דסקטופ + סדר יומי מובייל) שפותח את
+ *  CBA.ui.dialog הגנרי; כל מה שבתוך תוכן הדיאלוג עצמו (rsvp-*) חי בתוך
+ *  cba-dlg__body ולכן ממשיך את סגנון הדיאלוג הקיים בלי לשכפל אותו.
+ * ========================================================================== */
+
+.btn-rsvp {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 0.4rem 0.75rem;
+  background-color: white;
+  color: var(--text-primary, #1F2937);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.15));
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 150ms ease-in-out;
+}
+
+.btn-rsvp:hover {
+  border-color: var(--primary, #6366F1);
+  color: var(--primary, #6366F1);
+}
+
+.rsvp-loading {
+  padding: 1rem 0;
+  text-align: center;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.875rem;
+}
+
+.rsvp-admin-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  background-color: #F9FAFB;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.rsvp-closed-note {
+  padding: 0.75rem;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.rsvp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.rsvp-form label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.rsvp-form select,
+.rsvp-form input[type="number"] {
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.15));
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  width: 7rem;
+}
+
+.rsvp-form .btn-rsvp-save {
+  align-self: flex-start;
+}
+
+.rsvp-save-status {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #6B7280);
+}
+
+.rsvp-stats {
+  border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  padding-top: 1rem;
+}
+
+.rsvp-stats-cube {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.rsvp-stat {
+  flex: 1;
+  text-align: center;
+  padding: 0.75rem 0.5rem;
+  background-color: #F9FAFB;
+  border-radius: 0.5rem;
+}
+
+.rsvp-stat strong {
+  display: block;
+  font-size: 1.25rem;
+  color: var(--text-primary, #1F2937);
+}
+
+.rsvp-stat span {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-secondary, #6B7280);
+  margin-top: 0.15rem;
+}
+
+.rsvp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.rsvp-table th,
+.rsvp-table td {
+  padding: 0.4rem 0.5rem;
+  text-align: right;
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+}
+
+.rsvp-table th {
+  color: var(--text-secondary, #6B7280);
+  font-weight: 600;
+}
+
+.rsvp-table-empty {
+  padding: 0.75rem;
+  text-align: center;
+  color: var(--text-secondary, #6B7280);
+  font-size: 0.85rem;
+}
