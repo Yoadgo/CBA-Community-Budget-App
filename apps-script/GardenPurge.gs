@@ -257,3 +257,94 @@ function gardenPurgeDryRun() {
   Logger.log(text);
   return text;
 }
+
+/** ============================================================================
+ *  פירוט — שורה לכל משימה ולכל דיווח, כדי להכריע מה זבל ומה אמיתי.
+ *  🔴 קריאה בלבד, בדיוק כמו gardenPurgeDryRun.
+ * ========================================================================== */
+function gardenPurgeDetail() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var lines = [];
+  function L(s) { lines.push(String(s)); }
+  function pad(s, n) {
+    s = String(s == null ? '' : s);
+    while (s.length < n) s += ' ';
+    return s.length > n ? s.substring(0, n) : s;
+  }
+
+  var thisWeek = gardenWeekKey_();
+  L('════════ פירוט · ' + GP_VER + ' · השבוע ' + thisWeek + ' ════════');
+
+  /* מפת repId מ-Firestore — זה השדה שהאפליקציה מסווגת לפיו
+     "תקלה שמנהל פתח" (repId ריק) מול "דיווח תושב". */
+  var fsRep = {};
+  try {
+    fsList_(FS_GARDEN_TASKS).forEach(function (d) {
+      var v = (d.data && d.data.repId);
+      fsRep[d.id] = (v === undefined) ? 'חסר' : (String(v).trim() || 'ריק');
+    });
+  } catch (e) { L('⚠️ Firestore לא נקרא: ' + e); }
+
+  var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
+  var repByTask = {};
+  var repRows = [];
+  if (rsh && rsh.getLastRow() > 1) {
+    var rc = gardenCols_(rsh), rv = rsh.getDataRange().getValues();
+    for (var j = 1; j < rv.length; j++) {
+      var o = {
+        id: gardenCell_(rv[j][rc['מזהה']]),
+        taskId: gardenCell_(rv[j][rc['מזהה משימה']]),
+        fam: gardenCell_(rv[j][rc['מזהה משפחה']]),
+        who: gardenCell_(rv[j][rc['שם מדווח']]),
+        when: gardenCell_(rv[j][rc['תאריך דיווח']]),
+        title: gardenCell_(rv[j][rc['כותרת']]) || gardenCell_(rv[j][rc['תיאור']]),
+        photos: gardenCell_(rv[j][rc['תמונות']])
+      };
+      repRows.push(o);
+      if (o.taskId) repByTask[o.taskId] = o;
+    }
+  }
+
+  var tsh = ss.getSheetByName(GARDEN_TASKS_SHEET);
+  L('');
+  L('מזהה | סוג | מצב | שבוע | נוצר | ע"י | repId | כותרת');
+  L('------------------------------------------------------------');
+  if (tsh && tsh.getLastRow() > 1) {
+    var tc = gardenCols_(tsh), tv = tsh.getDataRange().getValues();
+    var rows = [];
+    for (var i = 1; i < tv.length; i++) rows.push(tv[i]);
+    rows.sort(function (a, b) {
+      return (parseInt(a[tc['מזהה']], 10) || 0) - (parseInt(b[tc['מזהה']], 10) || 0);
+    });
+    rows.forEach(function (r) {
+      var id = gardenCell_(r[tc['מזהה']]);
+      var raw = gardenCell_(r[tc['סוג']]);
+      var kind = GARDEN_KIND_LEGACY[raw] || raw;
+      var closure = gardenCell_(r[tc['סגירה']]);
+      var stage = gardenCell_(r[tc['שלב']]);
+      var st = closure ? closure : (stage === 'הושלם' ? 'הושלם' : 'פעילה');
+      var rep = repByTask[id];
+      L(pad(id, 4) + '| ' + pad(kind, 11) + '| ' + pad(st, 12) + '| ' +
+        pad(gardenCell_(r[tc['שבוע']]), 11) + '| ' +
+        pad(gardenCell_(r[tc['נוצר בתאריך']]), 11) + '| ' +
+        pad(gardenCell_(r[tc['עודכן על ידי']]), 14) + '| ' +
+        pad(fsRep[id] || '?', 6) + '| ' +
+        gardenCell_(r[tc['כותרת']]).substring(0, 34) +
+        (rep ? '   ←דיווח#' + rep.id + ' (' + rep.who + ')' : ''));
+    });
+  }
+
+  L('');
+  L('── הדיווחים (טאב גינון — דיווחים) ──');
+  repRows.forEach(function (o) {
+    L('דיווח#' + pad(o.id, 4) + '| משימה#' + pad(o.taskId, 4) + '| ' +
+      pad(o.when, 11) + '| ' + pad(o.who, 16) + '| משפחה ' + pad(o.fam, 8) +
+      '| ' + (o.photos ? 'תמונה' : '     ') + '| ' + o.title.substring(0, 34));
+  });
+
+  L('');
+  L('════════ סוף · לא נכתב כלום ════════');
+  var text = lines.join('\n');
+  Logger.log(text);
+  return text;
+}
