@@ -358,6 +358,12 @@
   padding: 2.5px 5px;
   margin-top: 4px;
   overflow: hidden;
+}
+
+.day .ev .t {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   unicode-bidi: plaintext;
