@@ -383,8 +383,11 @@
   .gx-tile { padding: 10px 10px 11px; }
   .gx-n { font-size: 24px; }
   .gx-s { white-space: normal; }
-  .gx-mapbox { min-height: 0; height: 230px; flex: none; }
-  .gx-map-tools, .gx-pop, .gx-leg-slot:not(.gx-leg-slot--full), .gx-mapbox .map-toolbar { display: none; }
+  /* 🔴 23.9 (יועד: "במובייל — מפה לאורך גם במחיר של המשך גלילה").
+     לחיצה עדיין פותחת מסך מלא (אין פאן בתוך גלילה); המקרא גלוי מעליה. */
+  .gx-mapbox { min-height: 0; height: min(76vh, 640px); flex: none; }
+  .gx-map-tools, .gx-pop, .gx-mapbox .map-toolbar { display: none; }
+  .gx-leg-slot:not(.gx-leg-slot--full) { z-index: 13; }
   .gx-map-cover { display: flex; align-items: flex-start; justify-content: flex-end; position: absolute; inset: 0;
     z-index: 12; background: none; border: 0; padding: 10px; cursor: pointer; }
   .gx-map-cover .gx-chip { pointer-events: none; }

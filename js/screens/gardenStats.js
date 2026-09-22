@@ -317,7 +317,7 @@
                         ["l1", "נגררה"], ["l2", "נגררה 2+"], ["done", "נסגרה"]];
       var LEG_CATS = [["lawn", "דשא"], ["water", "השקיה"], ["tree", "עצים"], ["prune", "גיזום"],
                       ["weed", "עשבייה"], ["clean", "ניקיון/גזם"], ["bed", "ערוגות"]];
-      function legOpen() { try { return localStorage.getItem("cba.gx.leg") !== "0"; } catch (e) { return true; } }
+      function legOpen() { var def = !(window.matchMedia && window.matchMedia("(max-width: 899px)").matches); try { var v = localStorage.getItem("cba.gx.leg"); return v === null ? def : v !== "0"; } catch (e) { return def; } }
       function legSet(v) { try { localStorage.setItem("cba.gx.leg", v ? "1" : "0"); } catch (e) {} }
       function legendHtml() {
         if (!legOpen()) {
@@ -1083,7 +1083,15 @@
         x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
         y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
       });
-      api.fitBox(x0, y0 - 0.02, x1, y1, 46);
+      /* 🔴 23.9 (יועד: "המפה נפתחת מאוד בפנים") — התיבה של הנעצים לבדה
+         הייתה צמודה מדי: שני נעצים קרובים = זום עמוק, בלי הקשר של השכונה.
+         עכשיו: מרווח של 10% סביב הנעצים, והתיבה לעולם לא קטנה מ-55% מרוחב
+         וגובה השכונה. כך רואים איפה הנעצים ביחס לשאר השיכון. */
+      var MIN = 0.55, PAD = 0.10;
+      var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      var w = Math.max(MIN, (x1 - x0) + 2 * PAD), h = Math.max(MIN, (y1 - y0) + 2 * PAD);
+      var bx0 = Math.max(0, Math.min(1 - w, cx - w / 2)), by0 = Math.max(0, Math.min(1 - h, cy - h / 2));
+      api.fitBox(bx0, by0, Math.min(1, bx0 + w), Math.min(1, by0 + h), 24);
     }
     return {
       set: function (pins) {
