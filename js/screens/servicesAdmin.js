@@ -244,7 +244,7 @@ function sadmOpenEditor(index) {
   sadmState.editIndex = index;
   sadmState.draft = index === -1
     ? { id: sadmNewId(), name: "", desc: "", icon: "", provider: "", phone: "", doc: "",
-        kind: CBA.serviceUtils.KIND_VENDOR, isNew: true,
+        kind: CBA.serviceUtils.KIND_VENDOR, phoneChannel: CBA.serviceUtils.CH_PHONE, isNew: true,
         active: true, updated: "", updatedBy: "", sections: [] }
     : sadmClone(sadmState.list[index]);
 
@@ -336,6 +336,14 @@ function sadmPaintEditor() {
         '<div class="form-field"><label>טלפון ראשי</label>' +
           '<input class="field-input" data-f="phone" dir="ltr" value="' + sadmEsc(d.phone) + '"></div>' +
       "</div>" +
+      '<div class="form-field form-field--wide"><label>ערוץ הטלפון</label>' +
+        '<select class="field-input" data-f="phoneChannel">' +
+          CBA.serviceUtils.PHONE_CHANNELS.map(function (c) {
+            return '<option value="' + sadmEsc(c) + '"' +
+              ((d.phoneChannel || CBA.serviceUtils.CH_PHONE) === c ? " selected" : "") + ">" + sadmEsc(c) + "</option>";
+          }).join("") +
+        "</select>" +
+        '<div class="sadm-hint">קובע אם כפתור "חיוג" ו/או כפתור "וואטסאפ" יופיעו לתושבים על "טלפון ראשי".</div></div>' +
       '<div class="form-field form-field--wide"><label>קישור למסמך המקורי (לא חובה)</label>' +
         '<input class="field-input" data-f="doc" dir="ltr" placeholder="https://…" value="' + sadmEsc(d.doc) + '"></div>' +
     "</div>" +
@@ -475,8 +483,8 @@ function sadmSectionEditorHTML(sec, k) {
 
   if (t === "אנשי קשר") {
     var people = CBA.serviceUtils.toContacts(sec.content);
-    if (!people.length) people = [{ name: "", role: "", phone: "" }];
-    return '<div class="sadm-contact sadm-contact--head"><span>שם</span><span>תפקיד</span><span>טלפון</span><span></span></div>' +
+    if (!people.length) people = [{ name: "", role: "", phone: "", channel: CBA.serviceUtils.CH_BOTH }];
+    return '<div class="sadm-contact sadm-contact--head"><span>שם</span><span>תפקיד</span><span>טלפון</span><span>ערוץ</span><span></span></div>' +
       people.map(function (p, j) {
         return '<div class="sadm-contact">' +
             // placeholder על כל שדה, לא רק שורת כותרות למעלה — בנייד שורת
@@ -484,6 +492,12 @@ function sadmSectionEditorHTML(sec, k) {
             '<input data-c="' + k + "_" + j + '_0" placeholder="שם" value="' + sadmEsc(p.name) + '">' +
             '<input data-c="' + k + "_" + j + '_1" placeholder="תפקיד" value="' + sadmEsc(p.role) + '">' +
             '<input data-c="' + k + "_" + j + '_2" placeholder="טלפון" dir="ltr" value="' + sadmEsc(p.phone) + '">' +
+            '<select data-c="' + k + "_" + j + '_3">' +
+              CBA.serviceUtils.PHONE_CHANNELS.map(function (c) {
+                return '<option value="' + sadmEsc(c) + '"' +
+                  ((p.channel || CBA.serviceUtils.CH_BOTH) === c ? " selected" : "") + ">" + sadmEsc(c) + "</option>";
+              }).join("") +
+            "</select>" +
             '<button type="button" class="sadm-x" data-c-del="' + k + "_" + j + '" title="מחיקה">×</button>' +
           "</div>";
       }).join("") +
@@ -507,11 +521,11 @@ function sadmSetGrid(k, g) {
 }
 function sadmGetContacts(k) {
   var p = CBA.serviceUtils.toContacts(sadmState.draft.sections[k].content);
-  return p.length ? p : [{ name: "", role: "", phone: "" }];
+  return p.length ? p : [{ name: "", role: "", phone: "", channel: CBA.serviceUtils.CH_BOTH }];
 }
 function sadmSetContacts(k, arr) {
   sadmState.draft.sections[k].content = arr.map(function (p) {
-    return [p.name || "", p.role || "", p.phone || ""].join("|");
+    return [p.name || "", p.role || "", p.phone || "", p.channel || ""].join("|");
   }).join("\n");
 }
 
@@ -622,14 +636,17 @@ function sadmBindEditor(body) {
     });
   });
 
-  // אנשי קשר
+  // אנשי קשר. השדה הרביעי (ערוץ) הוא <select>, ולכן גם "change" ולא רק
+  // "input" — בחירה מתפריט לא תמיד מדליקה "input" בכל דפדפן.
   body.querySelectorAll("[data-c]").forEach(function (inp) {
-    inp.addEventListener("input", function () {
+    var handler = function () {
       var p = inp.dataset.c.split("_"), k = Number(p[0]), j = Number(p[1]), f = Number(p[2]);
       var arr = sadmGetContacts(k);
-      arr[j][["name", "role", "phone"][f]] = inp.value;
+      arr[j][["name", "role", "phone", "channel"][f]] = inp.value;
       sadmSetContacts(k, arr); sadmTouch();
-    });
+    };
+    inp.addEventListener("input", handler);
+    if (inp.tagName === "SELECT") inp.addEventListener("change", handler);
   });
   body.querySelectorAll("[data-c-del]").forEach(function (b) {
     b.addEventListener("click", function () {
@@ -640,7 +657,7 @@ function sadmBindEditor(body) {
   body.querySelectorAll("[data-c-add]").forEach(function (b) {
     b.addEventListener("click", function () {
       var k = Number(b.dataset.cAdd), arr = sadmGetContacts(k);
-      arr.push({ name: "", role: "", phone: "" }); sadmSetContacts(k, arr); sadmTouch(); sadmPaintEditor();
+      arr.push({ name: "", role: "", phone: "", channel: CBA.serviceUtils.CH_BOTH }); sadmSetContacts(k, arr); sadmTouch(); sadmPaintEditor();
     });
   });
 

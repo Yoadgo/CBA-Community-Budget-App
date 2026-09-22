@@ -518,8 +518,19 @@ CBA.serviceUtils = (function () {
         esc(c).replace(/\n/g, "<br>") + "</div></div>";
     }
     if (sec.type === "רשימה") {
+      // 2026-09-22 — שורה שמכילה קישור (http/https) מוצגת ככפתור לחיץ במקום
+      // כטקסט רגיל. חל על כל סעיף מסוג "רשימה" (למשל "קישורים"), לא רק על
+      // סעיף עם כותרת מסוימת — כך שגם סעיפים קיימים אחרים עם קישורים
+      // מתעדכנים אוטומטית, בלי לגעת בנתונים בגיליון.
+      var urlRe = /(https?:\/\/\S+)/;
       return '<ul class="svc-ul">' + toLines(c).map(function (l) {
-        return "<li>" + esc(l) + "</li>";
+        var m = l.match(urlRe);
+        if (!m) return "<li>" + esc(l) + "</li>";
+        var url = m[1].replace(/[),.;]+$/, "");
+        var label = l.slice(0, m.index).replace(/[:\-–]\s*$/, "").trim();
+        return '<li class="svc-ul__link"><a class="svc-linkbtn" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.5-1.5"/></svg>' +
+          '<span>' + esc(label || url) + "</span></a></li>";
       }).join("") + "</ul>";
     }
     if (sec.type === "טבלה") {
@@ -579,6 +590,7 @@ CBA.serviceUtils = (function () {
 
   return {
     TYPES: TYPES, KINDS: KINDS, KIND_INFRA: KIND_INFRA, KIND_VENDOR: KIND_VENDOR,
+    PHONE_CHANNELS: PHONE_CHANNELS, CH_PHONE: CH_PHONE, CH_WA: CH_WA, CH_BOTH: CH_BOTH,
     build: build, flatten: flatten,
     parseHours: parseHours, hoursStatus: hoursStatus, hoursToday: hoursToday,
     serviceHours: serviceHours, serviceStatus: serviceStatus, renderHours: renderHours,
@@ -672,7 +684,7 @@ CBA.screens.resServices = {
             (s.desc ? '<p class="svc-card__desc">' + svcEsc(s.desc) + "</p>" : '<p class="svc-card__desc"></p>') +
             '<div class="svc-card__acts">' +
               '<button type="button" class="btn-primary btn-sm" data-open="' + svcEsc(s.id) + '">כל הפרטים</button>' +
-              (s.phone ? '<button type="button" class="btn-ghost btn-sm" data-call="' + svcEsc(s.phone) + '">חיוג</button>' : "") +
+              svcPhoneBtns(s, "btn-ghost btn-sm") +
             "</div>" +
           "</article>";
       }
@@ -710,6 +722,28 @@ CBA.screens.resServices = {
     });
   }
 };
+
+/* כפתור/י הטלפון של "טלפון ראשי" — כרטיס ומגירה משתמשים באותה פונקציה כדי
+   שערוץ הטלפון (חיוג בלבד / וואטסאפ עסקי בלבד / שניהם) יתנהג אותו דבר בשני
+   המקומות. mainCls הוא הכפתור העיקרי (חיוג, או וואטסאפ כשאין חיוג בכלל);
+   secondaryCls הוא כפתור וואטסאפ נוסף כשיש גם וגם (לא חובה — בכרטיס אין
+   הבדל בין ראשי למשני, אז אותו class לשניהם). suffix הוא " לפלוני" ליד
+   "חיוג"/"וואטסאפ", בדיוק כמו שהיה בכפתור החיוג הישן במגירה. */
+function svcPhoneBtns(svc, mainCls, secondaryCls, suffix) {
+  if (!svc.phone) return "";
+  suffix = suffix || "";
+  var U = CBA.serviceUtils;
+  var ch = svc.phoneChannel || U.CH_PHONE;
+  var html = "";
+  if (ch !== U.CH_WA) {
+    html += '<button type="button" class="' + mainCls + '" data-call="' + svcEsc(svc.phone) + '">חיוג' + svcEsc(suffix) + "</button>";
+  }
+  if (ch !== U.CH_PHONE) {
+    var cls = (ch === U.CH_BOTH && secondaryCls) ? secondaryCls : mainCls;
+    html += '<a class="' + cls + '" href="https://wa.me/' + svcEsc(U.waDigits(svc.phone)) + '" target="_blank" rel="noopener">וואטסאפ' + svcEsc(suffix) + "</a>";
+  }
+  return html;
+}
 
 /* חיוג: בנייד פותח את המחייגן (tel:), בדסקטופ מעתיק את המספר ומראה טוסט.
    הסיבה: בדסקטופ לחיצה על tel: לרוב לא עושה כלום ונראית כמו כפתור שבור —
@@ -796,8 +830,7 @@ function svcOpenDrawer(id) {
       "</div>" +
       '<div class="drawer__actions drawer__actions--sticky">' +
         '<div class="drawer__actions-main">' +
-          (svc.phone ? '<button type="button" class="btn-primary" data-call="' + svcEsc(svc.phone) + '">חיוג' +
-            (svc.provider ? " ל" + svcEsc(svc.provider) : "") + "</button>" : "") +
+          svcPhoneBtns(svc, "btn-primary", "btn-ghost", svc.provider ? " ל" + svcEsc(svc.provider) : "") +
           (svc.doc ? '<a class="btn-ghost" href="' + svcEsc(svc.doc) + '" target="_blank" rel="noopener">המסמך המקורי</a>' : "") +
           '<button type="button" class="btn-ghost" data-sclose>סגירה</button>' +
         "</div>" +
@@ -805,4 +838,16 @@ function svcOpenDrawer(id) {
     "</aside>";
   document.body.appendChild(overlay);
 
-  overlay.querySelectorAll("[data-sclose]").forEach
+  overlay.querySelectorAll("[data-sclose]").forEach(function (el) {
+    el.addEventListener("click", svcCloseDrawer);
+  });
+  overlay.querySelectorAll(".svc-acc__btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var acc = btn.parentNode;
+      var open = acc.classList.toggle("is-open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  });
+  svcBindCallButtons(overlay);
+  document.addEventListener("keydown", svcDrawerKey);
+}
