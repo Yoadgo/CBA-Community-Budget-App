@@ -749,3 +749,39 @@ function gardenPurgeArchiveDrop() {
   Logger.log(text);
   return text;
 }
+
+/** ============================================================================
+ *  מנצח — ארבעת הצעדים הראשונים בהרצה אחת, בסדר קבוע.
+ *
+ *  🔑 **למה לא כולל את איפוס המונים:** האיפוס הוא הפעולה היחידה כאן
+ *     שאי אפשר לתקן אחריה, והתנאי שיועד הציב הוא שרואים קודם שהכול
+ *     נקי. לכן הוא נשאר הרצה נפרדת ומכוונת, אחרי שקוראים את פסק הדין
+ *     של `gardenPurgeVerify` שמודפס בסוף כאן.
+ *
+ *  ⚠️ כל שער של כל צעד נשאר במקומו — המנצח אינו עוקף דבר, הוא רק
+ *     חוסך בחירה ידנית בבורר הפונקציות, שהיא מלכודת מתועדת בפרויקט.
+ * ========================================================================== */
+function gardenPurgeRunAll() {
+  var parts = [];
+  function step(name, fn) {
+    parts.push('\n\n█████ ' + name + ' █████\n');
+    try { parts.push(fn()); }
+    catch (e) { parts.push('🔴 ' + name + ' נכשל: ' + e); }
+  }
+
+  step('1/4 · תמונת לפני', gardenPurgeDryRun);
+  step('2/4 · ארכיון', gardenPurgeSnapshot);
+  step('3/4 · ניקוי', gardenPurgeWipe);
+  step('3.5/4 · גיבוי מלא', gardenPurgeBackupRun);
+  step('4/4 · אימות', gardenPurgeVerify);
+
+  parts.push('\n\n═══════════════════════════════════');
+  parts.push('אם האימות למעלה אומר "✅ נקי" — להריץ עכשיו');
+  parts.push('gardenPurgeResetCounters (הרצה נפרדת, בכוונה).');
+  parts.push('אם הוא אומר "🔴 לא נקי" — לא לאפס, ולשלוח לי את הפלט.');
+  parts.push('═══════════════════════════════════');
+
+  var text = parts.join('\n');
+  Logger.log(text);
+  return text;
+}

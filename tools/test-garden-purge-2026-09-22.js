@@ -49,6 +49,13 @@ function makeSheet(name, headers, rows) {
     },
     deleteRow(n) { this.deleteRows(n, 1); },
     hideSheet() { this.hidden = true; return this; },
+    /* copyTo אמיתי: יוצר גיליון חדש **ורושם אותו**, אחרת שלב הארכיון
+       נבלע ב-try/catch ולא נבדק כלל — בדיוק מה שקרה בגרסה הקודמת. */
+    copyTo(ss) {
+      const c = makeSheet('עותק של ' + this.name, this._data[0], this._data.slice(1));
+      if (this._register) this._register(c);
+      return c;
+    },
     clear() { this._data = []; },
     setFrozenRows() {},
     rows() { return this._data.length - 1; }
@@ -92,7 +99,15 @@ function buildWorld(opts) {
     sheetList.push(makeSheet('ארכיון 22-09 15:00 — יומן', LOG_H, [['t', '9', 'שיבוץ']]));
   }
   const byName = {};
+  const register = (sh) => { sheetList.push(sh); byName[sh.name] = sh; };
   sheetList.forEach(s => { byName[s.name] = s; });
+  /* setName אחרי copyTo משנה את המפתח — מחברים מחדש */
+  sheetList.forEach(s => { s._register = (c) => {
+    c._register = s._register;
+    const origSetName = c.setName.bind(c);
+    c.setName = (n) => { delete byName[c.name]; origSetName(n); byName[n] = c; return c; };
+    register(c);
+  }; });
 
   const fsDocs = { gardenTasks: {}, gardenReports: {}, gardenLog: {}, gardenPlan: {},
                    services: { a: {} }, budgetTx: { b: {} }, counters: {},
@@ -304,6 +319,42 @@ console.log('\n── 10. מחיקת ארכיון כשאין ארכיון ──
   const out = w.ctx.gardenPurgeArchiveDrop();
   ok('אומרת שאין מה למחוק', out.indexOf('אין טאבי ארכיון') >= 0);
   eq('ולא מחקה כלום', w.ctx.SpreadsheetApp.getActiveSpreadsheet().getSheets().length, n);
+}
+
+console.log('\n── 11. המנצח gardenPurgeRunAll ──');
+{
+  const w = buildWorld({ archiveTab: false });
+  const out = w.ctx.gardenPurgeRunAll();
+  ok('רץ את כל ארבעת הצעדים', ['1/4','2/4','3/4','4/4'].every(x => out.indexOf(x) >= 0));
+  eq('הטאבים החיים התרוקנו', w.byName['גינון — משימות'].rows(), 0);
+  eq('גם היומן', w.byName['גינון — יומן'].rows(), 0);
+  eq('gardenTasks ריק', Object.keys(w.fsDocs.gardenTasks).length, 0);
+  eq('טאב הגיבוי התרוקן', w.byName['_נתוני_משימות גינון'].rows(), 0);
+  ok('נוצרו טאבי ארכיון', Object.keys(w.byName).filter(n => n.indexOf('ארכיון ') === 0).length === 4);
+  ok('האימות בסוף אומר נקי', out.indexOf('✅ נקי') >= 0);
+  ok('ומפנה לאיפוס כהרצה נפרדת', out.indexOf('gardenPurgeResetCounters') >= 0);
+  eq('המונים לא אופסו מאליהם', [w.counters.gardenTask.n, w.counters.gardenReport.n], [75, 22]);
+}
+
+console.log('\n── 12. סגירת הלולאה: הארכיון שנוצר הוא הארכיון שנמחק ──');
+{
+  /* הסיכון השקט: אם שמות הטאבים ש-gardenPurgeSnapshot יוצרת יפסיקו
+     להתאים לתבנית ש-gardenPurgeArchiveDrop מחפשת, המחיקה "תצליח"
+     ולא תמחק כלום — וטאבי הארכיון יישארו לנצח בלי שאיש ישים לב. */
+  const w = buildWorld();
+  w.ctx.gardenPurgeRunAll();
+  const created = Object.keys(w.byName).filter(n => n.indexOf('ארכיון ') === 0);
+  eq('נוצרו ארבעה טאבי ארכיון', created.length, 4);
+  ok('ושמם נגזר משמות טאבי הגינון',
+     ['משימות','דיווחים','יומן','שגרה'].every(sfx => created.some(n => n.endsWith(sfx))),
+     JSON.stringify(created));
+  w.ctx.gardenPurgeResetCounters();
+  const out = w.ctx.gardenPurgeArchiveDrop();
+  eq('כל הארבעה נמחקו', Object.keys(w.byName).filter(n => n.indexOf('ארכיון ') === 0).length, 0);
+  ok('והדוח מונה אותם', (out.match(/נמחק:/g) || []).length === 4);
+  ok('הטאבים החיים שרדו', !!w.byName['גינון — משימות'] && !!w.byName['גינון — הגדרות']);
+  const ver = w.ctx.gardenPurgeVerify();
+  ok('אימות אחרון: נקי, בלי ארכיון', ver.indexOf('✅ נקי') >= 0 && ver.indexOf('טאבי ארכיון') < 0);
 }
 
 console.log('\n════════════════════════════════');
