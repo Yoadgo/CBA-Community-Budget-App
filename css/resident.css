@@ -1631,6 +1631,18 @@ body[data-screen="resDirectory"] .app-main { padding-left: 40px; }
   background: none; border: none; box-shadow: none;
   backdrop-filter: none; -webkit-backdrop-filter: none; }
 .map-shell .map-hint.lg    { position: absolute; bottom: 18px; right: 18px; }
+/* 🔴 22.9 (דיווח יועד: "בתצוגה מוקטנת מתחילים להיעלם פריטים") —
+   **ההנחיה כיסתה את פקדי המפה.** היא הוסתרה רק לפי רוחב *החלון*
+   (720px), אבל מפה משובצת — בטופס הדיווח, בחלון הצד של "משימה חדשה" —
+   צרה גם במחשב. שם ההנחיה נשברה לשתי שורות ונחה על כפתורי הזום
+   וההתאמה. עכשיו: (1) לפי רוחב *המפה* (container query), (2) לעולם לא
+   רחבה מהמקום שנשאר ליד סרגל הכלים, בשורה אחת, (3) יורדת אחרי שנבחר
+   נעץ — אז היא כבר לא נכונה. */
+.map-shell { container-type: inline-size; }
+.map-shell .map-hint { max-width: calc(100% - 96px); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
+.map-shell.has-pin .map-hint { display: none; }
+@container (max-width: 620px) { .map-hint { display: none; } }
 @media (max-width: 720px) {
   .map-shell .map-toolbar { bottom: 14px; left: 10px; }
   .map-shell .map-legend.lg  { position: absolute; top: 40px; inset-inline-start: 0; }

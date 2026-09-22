@@ -73,6 +73,9 @@ CBA.gardenForm = (function () {
    *   weeks     [{v, label}] — אפשרויות "מתי" במסלול החד-פעמי
    *   onSaved   () => void
    *   onDelete  (data, close) => void   (עריכה בלבד)
+   *   task      תקלה קיימת לעריכה (mode "task") — 22.9, בקשת יועד
+   *   noRepeat  true = בלי המתג "משימה חוזרת" (הגנן אינו מוסיף לתוכנית)
+   *   weekLabel (key) => string — לשבוע שנקבע ואינו בין האפשרויות
    */
   function open(opts) {
     opts = opts || {};
@@ -85,15 +88,28 @@ CBA.gardenForm = (function () {
     var isPlan = opts.mode === "plan";
     var d = opts.data || null;
     var isEdit = !!d;
+    /* 🔴 22.9 — **עריכת תקלה** (בקשת יועד: "מי שפתח דיווח / תקלה יכול
+       לפתוח אותה לעריכה"). אותו טופס בדיוק, ממולא מראש. המתג והתמונות
+       יורדים: תקלה לא הופכת לשגרה, ותמונות שצורפו נשארות כפי שהן. */
+    var tk = (!isPlan && opts.task) || null;
+    var isTaskEdit = !!tk;
+    var hideRep = isTaskEdit || !!opts.noRepeat;
+    if (tk && tk.week && !weeks.some(function (w) { return w.v === tk.week; })) {
+      weeks = weeks.concat([{ v: tk.week,
+        label: opts.weekLabel ? opts.weekLabel(tk.week) : tk.week }]);
+    }
+    var picksMap = (CBA.gardenLang && CBA.gardenLang.TITLE_PICKS) || {};
     var direct = !!(CBA.data.gardenDirectWrites && CBA.data.gardenDirectWrites());
 
     var st = {
       repeat: isPlan,
-      cat: (d && d.category) || "",
-      area: "",
+      cat: (d && d.category) || (tk && tk.category) || "",
+      area: (tk && tk.area) || "",
       areas: (d && d.areas) || [],
-      week: weeks.length ? weeks[0].v : "",
-      x: null, y: null, pinArea: "",
+      week: tk ? String(tk.week || "") : (weeks.length ? weeks[0].v : ""),
+      x: (tk && typeof tk.x === "number") ? tk.x : null,
+      y: (tk && typeof tk.y === "number") ? tk.y : null,
+      pinArea: "",
       photos: [],
       busy: false
     };
@@ -103,7 +119,7 @@ CBA.gardenForm = (function () {
     wrap.innerHTML =
       '<div class="gt-sheet-bd"></div>' +
       '<div class="gt-sheet" role="dialog" aria-label="' +
-          (isEdit ? "עריכת משימה" : "משימה חדשה") + '">' +
+          (isEdit ? "עריכת משימה" : isTaskEdit ? "עריכת תקלה" : "משימה חדשה") + '">' +
         '<div class="gt-grip" aria-hidden="true"></div>' +
         /* 🔴 **כפתור סגירה מפורש** (2026-09-22, מסימולציה חיה).
            הטופס הוא `sticky` — Escape אינו סוגר אותו בכוונה, כי יש בו
@@ -112,7 +128,7 @@ CBA.gardenForm = (function () {
            ("היציאה היחידה היא לחיצה על הרקע, שאינו נראה כמשטח לחיץ").
            כרטיס הפרטים כבר מחזיק את הדפוס הזה; הטופס לא, וזה היה פער. */
         '<div class="gd-sheet-head">' +
-          '<h4>' + (isEdit ? "עריכת משימה" : "משימה חדשה") + '</h4>' +
+          '<h4>' + (isEdit ? "עריכת משימה" : isTaskEdit ? "עריכת תקלה" : "משימה חדשה") + '</h4>' +
           '<button type="button" class="gd-sheet-close" id="gf-x">' +
             ico("x") + 'סגירה</button>' +
         '</div>' +
@@ -120,7 +136,7 @@ CBA.gardenForm = (function () {
 
         '<label class="gd-lbl">מה צריך לעשות <s>*</s></label>' +
         '<input class="gd-inp" id="gf-title" maxlength="120" autocomplete="off" ' +
-          'value="' + esc((d && d.title) || "") + '" ' +
+          'value="' + esc((d && d.title) || (tk && tk.title) || "") + '" ' +
           'placeholder="למשל: לגזום את העץ שחוסם את התמרור">' +
 
         /* קטגוריה — צ'יפים עם סמליל וצבע, בדיוק כמו בטופס הדיווח של
@@ -131,15 +147,20 @@ CBA.gardenForm = (function () {
           cats.map(function (c) {
             var k = catOf(c);
             return '<button type="button" class="gd-cat k-' + k.key +
-              ((d && d.category === c) ? " on" : "") + '" data-c="' + esc(c) + '" ' +
-              'aria-pressed="' + ((d && d.category === c) ? "true" : "false") + '">' +
+              (st.cat === c ? " on" : "") + '" data-c="' + esc(c) + '" ' +
+              'aria-pressed="' + (st.cat === c ? "true" : "false") + '">' +
               '<u>' + ico(k.ico) + '</u>' + esc(c) + '</button>';
           }).join("") +
         '</div>' +
+        /* 🔴 22.9 (בקשת יועד) — **הצעות לכותרת, כמו בדיווח התושב.** אותה
+           רשימה בדיוק (gardenLang.TITLE_PICKS) ואותן קפסולות `.gd-tpick`.
+           לחיצה ממלאת את "מה צריך לעשות"; הקלדה חופשית נשארת פתוחה.
+           בתוכנית העבודה הן לא מוצגות — שם הכותרת היא שם של שגרה. */
+        (isPlan ? '' : '<div class="gd-tpicks" id="gf-tpicks" style="margin-top:8px"></div>') +
 
-        swRow("gf-rep", "משימה חוזרת",
+        (hideRep ? '' : swRow("gf-rep", "משימה חוזרת",
               "תיכנס לתוכנית העבודה ותיפתח מחדש בכל מחזור",
-              st.repeat, isEdit) +
+              st.repeat, isEdit)) +
 
         /* ---------------- מסלול חד-פעמי ---------------- */
         '<div id="gf-once"' + (st.repeat ? " hidden" : "") + '>' +
@@ -147,19 +168,22 @@ CBA.gardenForm = (function () {
           '<div class="gp-areas" id="gf-weeks">' + chips(weeks, st.week, "data-w") + '</div>' +
 
           '<label class="gd-lbl" style="margin-top:12px">אזור <em>לא חובה</em></label>' +
-          '<div class="gp-areas" id="gf-area">' + chips(areas, "", "data-a1") + '</div>' +
+          '<div class="gp-areas" id="gf-area">' + chips(areas, st.area, "data-a1") + '</div>' +
 
           (direct
             ? '<label class="gd-lbl" style="margin-top:12px">איפה זה? ' +
                 '<em>לא חובה — לחצו על המפה</em></label>' +
               '<div class="gd-map nt-map" id="gf-map"></div>' +
-              '<p class="gp-note" id="gf-loc">סימון המיקום עוזר לצוות למצוא את זה בשטח.</p>' +
+              '<p class="gp-note" id="gf-loc">' + (st.x !== null
+                ? "המיקום שסומן מוצג על המפה. אפשר ללחוץ כדי להזיז."
+                : "סימון המיקום עוזר לצוות למצוא את זה בשטח.") + '</p>' +
+              (isTaskEdit ? '' :
               '<label class="gd-lbl" style="margin-top:12px">תמונות ' +
                 '<em><span id="gf-pc">0</span> / ' + PHOTO_MAX + '</em></label>' +
               '<div class="gd-thumbs" id="gf-thumbs">' +
                 '<button type="button" class="gd-th add" id="gf-add" aria-label="הוספת תמונה">+</button>' +
               '</div>' +
-              '<input type="file" id="gf-file" accept="image/*" multiple hidden>'
+              '<input type="file" id="gf-file" accept="image/*" multiple hidden>')
             : '') +
         '</div>' +
 
@@ -258,7 +282,30 @@ CBA.gardenForm = (function () {
         function (b) { return b.getAttribute(attr); });
     }
 
-    pick("#gf-cats", "data-c", false, function (v) { st.cat = v; });
+    pick("#gf-cats", "data-c", false, function (v) { st.cat = v; renderPicks(); });
+
+    /* ---- הצעות לכותרת (22.9) ---- */
+    var tpicksEl = q("#gf-tpicks"), titleIn = q("#gf-title");
+    function renderPicks() {
+      if (!tpicksEl) return;
+      var list = picksMap[st.cat] || [];
+      tpicksEl.hidden = !list.length;
+      tpicksEl.innerHTML = list.map(function (t) {
+        return '<button type="button" class="gd-tpick' +
+          (titleIn.value.trim() === t ? " on" : "") + '" data-t="' + esc(t) + '">' +
+          esc(t) + '</button>';
+      }).join("");
+    }
+    if (tpicksEl) {
+      tpicksEl.addEventListener("click", function (e) {
+        var b = e.target.closest(".gd-tpick");
+        if (!b) return;
+        titleIn.value = b.getAttribute("data-t");
+        renderPicks();
+      });
+      titleIn.addEventListener("input", renderPicks);
+      renderPicks();
+    }
     pick("#gf-weeks", "data-w", false, function (v) { st.week = v; });
     pick("#gf-area", "data-a1", false, function (v) { st.area = v; });
     pick("#gf-areas", "data-a", true);
@@ -271,13 +318,15 @@ CBA.gardenForm = (function () {
     function syncMode() {
       q("#gf-once").hidden = st.repeat;
       q("#gf-every").hidden = !st.repeat;
-      subEl.textContent = st.repeat
+      subEl.textContent = isTaskEdit
+        ? "השינויים נרשמים ביומן המשימה. תמונות שכבר צורפו נשארות."
+        : st.repeat
         ? "שגרה שחוזרת מעצמה. אין לה מיקום או תמונות — היא לא תקלה בנקודה אחת."
         : "תקלה שאתה פותח בעצמך — מטופלת כמו תקלה שדייר דיווח עליה, רק בלי דייר שמחכה לתשובה.";
-      goT.textContent = isEdit ? "שמירה" : (st.repeat ? "הוספה לתוכנית" : "פתיחת התקלה");
+      goT.textContent = (isEdit || isTaskEdit) ? "שמירה" : (st.repeat ? "הוספה לתוכנית" : "פתיחת התקלה");
       if (st.repeat) syncFreq();
     }
-    if (!isEdit) {
+    if (!isEdit && q("#gf-rep")) {
       q("#gf-rep").addEventListener("click", function () {
         st.repeat = !st.repeat;
         this.setAttribute("aria-checked", st.repeat ? "true" : "false");
@@ -306,6 +355,7 @@ CBA.gardenForm = (function () {
         if (!mapEl || !CBA.map) return;
         CBA.map.render(mapEl, {
           head: false, search: false, legend: false, popup: false, pin: true,
+          pinAt: st.x !== null ? { x: st.x, y: st.y } : null,
           onPin: function (n, area) {
             st.x = n.x; st.y = n.y; st.pinArea = area || "";
             var loc = q("#gf-loc");
@@ -324,8 +374,8 @@ CBA.gardenForm = (function () {
       }, 180);
 
       var fileEl = q("#gf-file"), thumbsEl = q("#gf-thumbs"), addBtn = q("#gf-add");
-      addBtn.addEventListener("click", function () { fileEl.click(); });
-      fileEl.addEventListener("change", function () {
+      if (addBtn) addBtn.addEventListener("click", function () { fileEl.click(); });
+      if (fileEl) fileEl.addEventListener("change", function () {
         Array.prototype.slice.call(fileEl.files || []).forEach(function (f) {
           if (st.photos.length >= PHOTO_MAX) return;
           /* הכיווץ אסינכרוני וכמה קבצים מסיימים בסדר לא צפוי — ולכן
@@ -409,6 +459,20 @@ CBA.gardenForm = (function () {
       var cat = (picked("#gf-cats", "data-c")[0]) || "";
       if (!cat) return CBA.ui.alert("צריך לבחור קטגוריה");
       st.busy = true;
+      if (isTaskEdit) {
+        return CBA.data.gardenEditTask(tk.id, {
+          title: title, category: cat,
+          area: (picked("#gf-area", "data-a1")[0]) || "",
+          week: (picked("#gf-weeks", "data-w")[0]) || "",
+          x: st.x, y: st.y
+        }, function (res) {
+          st.busy = false;
+          if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "העריכה לא נשמרה");
+          close();
+          CBA.ui.toast("התקלה עודכנה");
+          if (opts.onSaved) opts.onSaved();
+        });
+      }
       CBA.data.gardenCreateTask({
         title: title, category: cat,
         area: (picked("#gf-area", "data-a1")[0]) || st.pinArea || "",

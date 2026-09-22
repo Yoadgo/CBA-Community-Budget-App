@@ -58,7 +58,8 @@ ok('בלי נעיצה תקינה נכתב null ולא ערך חלקי',
    /x: hasPin \? Number\(payload\.x\) : null/.test(create) &&
    /y: hasPin \? Number\(payload\.y\) : null/.test(create));
 ok('שורת היומן מבחינה בין תקלה שפתח הצוות למשימה יזומה',
-   /asReport \? "תקלה שפתח הצוות" : "משימה יזומה"/.test(create));
+   /* 22.9 — ועכשיו גם בין מנהל לגנן ("תקלה שפתח הגנן"). */
+   /asReport \? \(doc\.openedBy === "גנן" \? "תקלה שפתח הגנן" : "תקלה שפתח הצוות"\)\s*: "משימה יזומה"/.test(create));
 
 section('3. ⚠️ אין שדה תיאור — ולכן אין שינוי בכללי האבטחה');
 const gtFields = (RULES.match(/function gtFields\(\)[\s\S]*?\}/) || [''])[0];

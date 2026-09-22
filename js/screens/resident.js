@@ -3134,6 +3134,11 @@ CBA.screens = CBA.screens || {};
          קואורדינטות **מנורמלות 0–1** בלבד. ר' ההערה בראש הרכיב. */
       var pinEl = null, markerEls = [];
       function setPin(n) {
+        /* 🔴 22.9 (דיווח יועד: "אחרי לחיצה לבחירת נעץ הוא תקוע על בחירת
+           נעץ") — אחרי שהנעיצה קיימת, ההנחיה "לחצו על המקום" כבר לא
+           נכונה, והיא ישבה מעל פקדי המפה. `has-pin` מוריד אותה. */
+        var shEl = container.querySelector(".map-shell");
+        if (shEl) shEl.classList.toggle("has-pin", !!n);
         if (!n) { if (pinEl) { pinEl.remove(); pinEl = null; } return; }
         if (!pinEl) {
           pinEl = document.createElement("div");

@@ -5,8 +5,8 @@
 'use strict';
 
 const GP_FIELDS = ['id','title','category','areas','freq','firstWeek','weekOfMonth','months','rotate','clause','active','note','effectiveFrom','order','schema','updatedAt'];
-const GT_FIELDS = ['id','kind','templateId','title','category','area','x','y','stage','flag','closure','week','due','note','drags','firstWeek','createdAt','updatedAt','approvedBy','approvedAt','repId','photos','order','year','schema','syncedAt','pendingDelete','familyId','mergedReps'];
-const GT_TEAM_ONLY = ['flag','closure','week','due','note','drags','approvedBy','approvedAt'];
+const GT_FIELDS = ['id','kind','templateId','title','category','area','x','y','stage','flag','closure','week','due','note','drags','firstWeek','createdAt','updatedAt','approvedBy','approvedAt','repId','photos','order','year','schema','syncedAt','pendingDelete','familyId','mergedReps','openedBy','openedUid'];
+const GT_TEAM_ONLY = ['flag','closure','week','due','note','drags','approvedBy','approvedAt','openedBy','openedUid'];
 const GT_TEAM_UPDATE = ['stage','flag','closure','week','due','note','drags','firstWeek','title','category','area','x','y','approvedBy','approvedAt','repId','photos','order','updatedAt','syncedAt','notify','notifyPending','notifyNote','mergedReps'];
 const GR_CREATE_FIELDS = ['id','familyId','date','category','area','title','desc','place','x','y','photos','taskId','clientRef','mailPending','photosExpected','photosIncomplete','year','schema','updatedAt'];
 const GR_TEAM_FIELDS = ['stage','flag','closure','closeWhy','mergedInto','feedback','feedbackUntil','canFeedback'];
@@ -61,7 +61,8 @@ function make(ctx) {
     canSeeGardenTasks: () => hasPerm('גינון'),
     gtShapeOk: () => hasOnly(keysA, GT_FIELDS) && hasAll(keysA, ['id','title','stage','schema']) && isStr(A.title) && A.title.length > 0 && isInt(A.schema),
     gtFromReportOk: () => notExt() && rules.gtShapeOk() && A.stage === 'התקבל' && !hasAny(keysA, GT_TEAM_ONLY),
-    gtTeamCreateOk: () => hasPerm('גינון') && rules.gtShapeOk(),
+    gtOpenedOk: () => (get(A, 'openedUid', '') === '' || get(A, 'openedUid', '') === ctx.uid) && ['', 'מנהל', 'גנן'].includes(get(A, 'openedBy', '')),
+    gtTeamCreateOk: () => hasPerm('גינון') && rules.gtShapeOk() && rules.gtOpenedOk(),
     gtTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GT_TEAM_UPDATE),
     gtMgr: () => hasPerm('גינון') && m().isExternal === false,
     gtClosureValueOk: () => nx('closure') === '' || CLOSURES.includes(nx('closure')),

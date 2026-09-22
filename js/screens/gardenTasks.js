@@ -126,6 +126,15 @@
      ⚠️ הפס המקוטע נשאר על שתיהן — הוא אומר "תקלה", לא "תושב". מה
         שמשתנה הוא **צבע הפינה** והתווית. */
   function isTeamFault(t) { return !!t && t.kind === GK_REPORT && !t.repId; }
+  /* 🔴 22.9 (בקשת יועד) — **תקלה שהגנן פתח מהשטח.** אותה תקלת צוות,
+     עם `openedBy: "גנן"` שנכתב ביצירה. פינה ירוקה ותווית "גנן" במקום
+     הכחול של המנהל. תקלה ישנה בלי השדה נקראת כתקלת מנהל — כמו עד היום. */
+  function isGardenerFault(t) { return isTeamFault(t) && t.openedBy === "גנן"; }
+  function teamTag(t) {
+    return isGardenerFault(t)
+      ? '<span class="gt-res is-gard">' + ico("team") + esc(GL.T.gardener || "גנן") + '</span>'
+      : '<span class="gt-res is-team">' + ico("team") + 'מנהל</span>';
+  }
 
   var MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני",
                 "יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -312,6 +321,17 @@
         return t.flag === "הוחזר להשלמה";
       }
 
+      /* 🔴 22.9 (בקשת יועד) — **"פתוחות" סופר את מה שמוצג.** אחרי שלהקת
+         "בהמשך" ירדה, המונה עדיין ספר את כל 8 שבועות האופק (160) בזמן
+         שהמסך מציג שבוע אחד. עכשיו שניהם שואלים את אותה פונקציה:
+         מה שממתין להחלטה + העבודה של השבוע שצופים בו (ובשבוע הנוכחי —
+         גם מה שנשאר משבועות קודמים, בדיוק כמו ב-openBody). */
+      function inOpenView(t) {
+        if (t.closure) return false;
+        if (!t.week) return true;
+        return (week === todayKey()) ? (t.week <= week) : (t.week === week);
+      }
+
       function counts() {
         var c = { mine: 0, open: 0, closed: 0, faults: 0, weekTotal: 0, weekDone: 0 };
         rowsAll.forEach(function (t) {
@@ -320,7 +340,7 @@
              וסגורים, מכל השבועות. זו כל הנקודה של המסנן: מקום אחד שבו
              אפשר לענות "מה קרה עם התקלה שדיווחתי" בלי לדפדף בשבועות. */
           if (t.kind === GK_REPORT) c.faults++;
-          if (t.closure) c.closed++; else c.open++;
+          if (t.closure) c.closed++; else if (inOpenView(t)) c.open++;
           /* פס ההתקדמות נשאר של **השבוע הנוכחי** — הוא עונה על "איך אנחנו
              עומדים השבוע", ולא על "כמה משימות יש בעולם". נמדד בסגורות ולא
              ב"סומן כבוצע": סימון הוא הצהרה של הצוות, ורק האישור סוגר. */
@@ -501,7 +521,10 @@
               seg("faults", "תקלות", c.faults) +
               seg("closed", "סגורות", c.closed) +
             '</div>' +
-            (isManager
+            /* 🔴 22.9 (בקשת יועד) — **גם הגנן פותח תקלות.** במסלול הישיר
+               בלבד: המסלול הישן בשרת חוסם אותו, וכפתור שמוביל לשגיאה גרוע
+               מהיעדר כפתור. הוא בוחר שבוע בעצמו, כמו המנהל. */
+            (isManager || (CBA.data.gardenDirectWrites && CBA.data.gardenDirectWrites())
               ? '<button type="button" class="gt-tool is-primary" id="gt-new" ' +
                 'aria-label="משימה חדשה">' + ico("plus") + '</button>'
               : '') +
@@ -756,7 +779,7 @@
         if (t.closure) {
           return '<article class="gd-rep gt-row gt-closed k-' + cat.key +
               (t.kind === GK_REPORT ? " is-report" : "") +
-              (isTeamFault(t) ? " is-team" : "") +
+              (isGardenerFault(t) ? " is-gard" : isTeamFault(t) ? " is-team" : "") +
               '" data-id="' + esc(t.id) + '">' +
             '<span class="gt-cbox">' + ico("check") + '</span>' +
             '<div class="gt-body">' +
@@ -814,7 +837,7 @@
         var approving = done && isManager;
         return '<article class="gd-rep gt-row k-' + cat.key +
             (t.kind === GK_REPORT ? " is-report" : "") +
-            (isTeamFault(t) ? " is-team" : "") +
+            (isGardenerFault(t) ? " is-gard" : isTeamFault(t) ? " is-team" : "") +
             (done ? (approving ? " is-await" : " is-done") : "") +
             '" data-id="' + esc(t.id) + '">' +
           (planning
@@ -844,7 +867,7 @@
                  ואין מי שמצטט אותן. */
               (t.kind === GK_REPORT
                 ? (isTeamFault(t)
-                    ? '<span class="gt-res is-team">' + ico("team") + 'מנהל</span><i>·</i>'
+                    ? teamTag(t) + '<i>·</i>'
                     : '<span class="gt-res">' + ico("person") +
                       esc(GL.reportRef(t.repId)) + '</span><i>·</i>')
                 : (t.kind === GK_ROUTINE ? ico("repeat") + '<i>·</i>' : '')) +
@@ -1206,7 +1229,7 @@
          לכרטיס, מקומו כאן. */
       function openLegend() {
         var cats = [
-          ["lawn", "מדשאות"], ["water", "השקיה / ממטרות"], ["tree", "עצים"],
+          ["lawn", "מדשאות, השקיה וממטרות"], ["tree", "עצים"],
           ["prune", "שיחים / גיזום"], ["weed", "עשבייה / קרקע"],
           ["clean", "ניקיון / גזם"], ["bed", "ערוגות / שתילה"]
         ];
@@ -1226,6 +1249,8 @@
           '<div class="gt-lgi"><u><span class="gt-lgf is-team"></span></u><div><b>פינה כחולה</b>' +
             '<span>תקלה שהצוות פתח בעצמו, לא דייר. מטופלת בדיוק כמו תקלת דייר — ' +
             'רק שאין מי שמחכה לתשובה, ולכן אין מייל ואין שאלת מעקב.</span></div></div>' +
+          '<div class="gt-lgi"><u><span class="gt-lgf is-gard"></span></u><div><b>פינה ירוקה</b>' +
+            '<span>תקלה שהגנן פתח מהשטח. מטופלת כמו תקלה שהמנהל פתח.</span></div></div>' +
           '<div class="gt-lgi"><u>' + ico("repeat") + '</u><div><b>' + esc(GL.T.routine) + '</b>' +
             '<span>מגיעה מתוכנית העבודה וחוזרת לפי התדירות שהוגדרה לה.</span></div></div>' +
           '<div class="gt-lgi"><u style="color:#C4CBC8">—</u><div><b>בלי סימון</b>' +
@@ -1374,6 +1399,8 @@
       function openNewTask() {
         CBA.gardenForm.open({
           mode: "task",
+          /* הגנן אינו מוסיף לתוכנית העבודה — היא סמכות המנהל (והכלל חוסם). */
+          noRepeat: !isManager,
           cats: order.type.length ? order.type : [],
           areas: order.area.length ? order.area : [],
           ico: ico, catOf: catOf, esc: esc,
@@ -1387,6 +1414,23 @@
             filter = "open";
             load();
           }
+        });
+      }
+
+      /* עריכת תקלה (22.9) — אותו טופס, ממולא מראש. ר' gardenCanEditTask. */
+      function openEditTask(t) {
+        CBA.gardenForm.open({
+          mode: "task", task: t,
+          cats: order.type.length ? order.type : [],
+          areas: order.area.length ? order.area : [],
+          ico: ico, catOf: catOf, esc: esc,
+          weekLabel: weekLabel,
+          weeks: [
+            { v: shiftKey(todayKey(), 0), label: "השבוע · " + weekLabel(shiftKey(todayKey(), 0)) },
+            { v: shiftKey(todayKey(), 1), label: "שבוע הבא" },
+            { v: "", label: "בלי שבוע — לשיבוץ" }
+          ],
+          onSaved: function () { load(); }
         });
       }
 
@@ -1406,6 +1450,11 @@
               (t.area ? ' · ' + esc(t.area) : '') + '</p>' +
             '<button type="button" class="gt-opt" data-m="hist"><u>' + ico("hist") + '</u>' +
               '<div>היסטוריה<span>כל מה שקרה למשימה, לפי הסדר</span></div></button>' +
+            /* 🔴 22.9 — עריכה: לפותח ולמנהל, על תקלת צוות פתוחה בלבד. */
+            (CBA.data.gardenCanEditTask && CBA.data.gardenCanEditTask(t)
+              ? '<button type="button" class="gt-opt" data-m="edit"><u>' + ico("note") + '</u>' +
+                '<div>עריכה<span>כותרת, קטגוריה, אזור, שבוע ומיקום</span></div></button>'
+              : '') +
             /* ⚠️ על משימה סגורה השרת דוחה כל פעולה חוץ מערעור, "טופל" ומחיקה
                (ר' המשמר ב-gardenTaskAction_). כפתור שמחזיר "המשימה כבר נסגרה"
                הוא כפתור מת, ולכן שלוש הפעולות האלה פשוט לא מוצגות שם. */
@@ -1490,6 +1539,7 @@
          בין מקורות הקריאה השונים. */
       function menuAction(t, cat, m) {
         if (m === "hist") return openHistory(t.id);
+        if (m === "edit") return openEditTask(t);
         if (m === "note") {
           // CBA.ui.prompt מחזירה Promise (null בביטול), לא מקבלת callback
           CBA.ui.prompt("ההערה נשמרת ביומן המשימה ונשארת גלויה למנהל.", {
@@ -1741,7 +1791,7 @@
                למטה לשורת התיאור, מיד אחרי מספר הפנייה. */
             '<div class="gd-det-kicker"><span class="gd-det-dot" style="background:var(--c-' +
               esc(cat.key) + ')"></span>' + esc(t.category || "") + ' · ' +
-              esc(isTeamFault(t) ? "תקלה · מנהל" : GL.T.report) + '</div>' +
+              esc(isGardenerFault(t) ? "תקלה · גנן" : isTeamFault(t) ? "תקלה · מנהל" : GL.T.report) + '</div>' +
             '<div class="gd-sheet-head gd-det-head">' +
               '<h4 class="gd-det-title" data-title-toggle="1">' + esc(t.title || t.category || "משימה") + '</h4>' +
               '<button type="button" class="gd-sheet-close" data-close="1">' + ico("x") + 'סגירה</button>' +

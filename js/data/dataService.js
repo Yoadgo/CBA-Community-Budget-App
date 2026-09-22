@@ -2435,10 +2435,21 @@ CBA.data = (function () {
         createdAt: now, updatedAt: now, order: 0,
         year: String((CBA.mock && CBA.mock.currentYear) || ""), schema: 1
       };
+      /* 🔴 22.9 (בקשת יועד) — **מי פתח.** הגנן פותח עכשיו תקלות מהשטח
+         (פינה ירוקה), והפותח רשאי לערוך את מה שפתח. שני שדות, שניהם
+         נכתבים פעם אחת ביצירה ולעולם לא מתעדכנים (אינם ב-gtTeamUpdateOk):
+         `openedBy` לתצוגה, `openedUid` להרשאת העריכה — uid ולא שם,
+         כמו `actorUid` ביומן. הכלל אוכף ש-openedUid הוא של הכותב. */
+      if (asReport) {
+        doc.openedBy = gardenIsMgr() ? "מנהל" : "גנן";
+        var myUid = CBA.fb.uid ? CBA.fb.uid() : "";
+        if (myUid) doc.openedUid = myUid;
+      }
       CBA.fb.createDoc("gardenTasks", String(taskId), doc, function (e2) {
         if (e2) return cb({ ok: false, error: gardenFsErr(e2, "לא הצלחנו לפתוח את המשימה") });
         gardenLogAppend(String(taskId), "נפתח",
-          asReport ? "תקלה שפתח הצוות" : "משימה יזומה");
+          asReport ? (doc.openedBy === "גנן" ? "תקלה שפתח הגנן" : "תקלה שפתח הצוות")
+                   : "משימה יזומה");
 
         /* ⚠️ **התשובה חוזרת כאן, לפני התמונות** — אותה הכרעה בדיוק כמו
            בדיווח של תושב (17.9): מרגע שהמסמך נכתב המשימה קיימת, יש לה
@@ -2461,6 +2472,65 @@ CBA.data = (function () {
             if (eM) gardenPhotoWarn("מסמך המשימה לא עודכן בתמונות", taskId, eM);
           });
         });
+      });
+    });
+  }
+
+  /* ==========================================================================
+   *  עריכת תקלה שהצוות פתח   (2026-09-22, בקשת יועד)
+   * --------------------------------------------------------------------------
+   *  "מי שפתח דיווח / תקלה (מנהל / גנן) — יכול לפתוח אותה לעריכה."
+   *  🔑 **מי רשאי:** הפותח (openedUid), ומנהל תמיד. דיווח של תושב אינו
+   *     נערך — הוא דבריו של התושב (repId), והמסך אינו מציע את הפעולה.
+   *  ⚠️ **משימה סגורה אינה נערכת** — סגירה היא החלטה שכבר נשלחה.
+   *  ⚠️ השדות כאן הם בדיוק אלה שב-gtTeamUpdateOk (title, category, area,
+   *     week, stage, x, y, updatedAt) — אפס שינוי בכללי העדכון.
+   *  ⚠️ תמונות אינן נערכות כאן: הן נשארות כפי שהן.
+   * ========================================================================== */
+  function gardenCanEditTask(t) {
+    if (!t || t.closure) return false;
+    if (String(t.repId || "").trim()) return false;          // תושב — לא נערך
+    if (t.kind !== GARDEN_KIND_REPORT) return false;          // שגרה/יזום — לא כאן
+    if (!gardenWritesOn()) return false;                      // רק במסלול הישיר
+    if (gardenIsMgr()) return true;
+    var me = (CBA.fb && CBA.fb.uid) ? CBA.fb.uid() : "";
+    return !!me && String(t.openedUid || "") === me;
+  }
+
+  function gardenFsEditTask(id, payload, cb) {
+    payload = payload || {};
+    var title = String(payload.title || "").trim().substring(0, 60);
+    if (!title) return cb({ ok: false, error: "צריך כותרת" });
+    var cat = String(payload.category || "").trim();
+    if (!cat) return cb({ ok: false, error: "צריך קטגוריה" });
+    var wk = String(payload.week || "").trim();
+    if (wk && !/^\d{4}-\d{2}-\d{2}$/.test(wk)) return cb({ ok: false, error: "שבוע לא תקין" });
+    CBA.fb.readDoc("gardenTasks", String(id), function (e0, cur) {
+      if (e0 || !cur) return cb({ ok: false, error: "המשימה לא נמצאה" });
+      if (!gardenCanEditTask(cur)) {
+        return cb({ ok: false, error: "אפשר לערוך רק תקלה פתוחה שפתחת בעצמך" });
+      }
+      var hasPin = typeof payload.x === "number" && typeof payload.y === "number" &&
+                   payload.x >= 0 && payload.x <= 1 && payload.y >= 0 && payload.y <= 1;
+      var patch = {
+        title: title, category: cat, area: String(payload.area || ""),
+        week: wk,
+        updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+      };
+      /* השלב נגזר מהשבוע, כמו ביצירה ובשיבוץ — אבל רק כשהוא עדיין בנקודת
+         הפתיחה: 'בטיפול' (אחרי שהגנן התחיל) אינו חוזר ל'מתוכנן' בגלל עריכה. */
+      if (cur.stage === "התקבל" || cur.stage === "מתוכנן") patch.stage = wk ? "מתוכנן" : "התקבל";
+      if (hasPin) { patch.x = Number(payload.x); patch.y = Number(payload.y); }
+      CBA.fb.updateDoc("gardenTasks", String(id), patch, function (e1) {
+        if (e1) return cb({ ok: false, error: gardenFsErr(e1, "העריכה לא נשמרה") });
+        var what = [];
+        if (cur.title !== title) what.push("כותרת");
+        if (cur.category !== cat) what.push("קטגוריה");
+        if (String(cur.area || "") !== patch.area) what.push("אזור");
+        if (String(cur.week || "") !== wk) what.push("שבוע");
+        if (hasPin && (cur.x !== patch.x || cur.y !== patch.y)) what.push("מיקום");
+        gardenLogAppend(String(id), "עריכה", what.length ? "עודכנו: " + what.join(", ") : "נשמר בלי שינוי");
+        cb({ ok: true, id: id });
       });
     });
   }
@@ -4542,6 +4612,12 @@ CBA.data = (function () {
     gardenCreateTask: function (payload, cb) {
       if (gardenWritesOn()) return gardenFsCreateTask(payload, cb);
       CBA.sheets.postRead("gardenCreateTask", payload, cb);
+    },
+    /* עריכת תקלה שהצוות פתח — הפותח או מנהל. במסלול הישיר בלבד. */
+    gardenCanEditTask: function (t) { return gardenCanEditTask(t); },
+    gardenEditTask: function (id, payload, cb) {
+      if (!gardenWritesOn()) return cb({ ok: false, error: "עריכה זמינה רק במסלול הישיר" });
+      gardenFsEditTask(id, payload, cb);
     },
     /* איחוד כפילות: משימה id נבלעת לתוך משימה into. */
     gardenMerge: function (id, into, cb) {

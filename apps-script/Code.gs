@@ -273,6 +273,9 @@ var GET_ACTION_PERMS = {
      הגינון אלא לתשתית — היא דורסת אוסף שלם ומוחקת ממנו יתומים.
      מנהל גינון צריך לערוך משימות, לא לבנות מחדש מסד נתונים. */
   gardenPlanSync: PERM_SUPER,
+  /* 22.9 — איחוד "מדשאות" + "השקיה / ממטרות". פעולה חד-פעמית שמשכתבת
+     קטגוריה בכל אוספי הגינון, כולל היסטוריה — לכן מנהל-על בלבד. */
+  gardenMergeCats: PERM_SUPER,
   /* סנכרון יזום של "שירותים לתושב" (2026-09-15, צעד 04א).
      אותה סיבה כמו gardenPlanSync — פעולת תשתית שדורסת אוסף. */
   servicesSync: PERM_SUPER,
@@ -697,6 +700,9 @@ function doGet(e) {
     }
     if (e && e.parameter && e.parameter.action === 'gardenPlanSync') {
       return handleGardenPlanSync_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'gardenMergeCats') {
+      return handleGardenMergeCats_(e.parameter);
     }
     /* דיווחי ומשימות הגינון -> Firestore (2026-09-16). זריעה ואימות.
        ר' הבלוק שמעל gardenDataSyncAll_. */
@@ -12617,8 +12623,9 @@ var GARDEN_DEFAULT_SETTINGS = [
   ['אזור', 'A10', '10', 'מועדון ילדים',   'כן', ''],
   ['אזור', 'A11', '11', 'גינת כלבים',     'כן', ''],
   ['אזור', 'A12', '12', 'מועדון משפחות',  'כן', ''],
-  ['קטגוריה', 'C1', '1', 'מדשאות', 'כן', ''],
-  ['קטגוריה', 'C2', '2', 'השקיה / ממטרות', 'כן', ''],
+  /* 22.9 (בקשת יועד) — "מדשאות" ו"השקיה / ממטרות" אוחדו לקטגוריה אחת.
+     C2 ירד. ר' gardenMergeLawnWater_ למיגרציה של הנתונים הקיימים. */
+  ['קטגוריה', 'C1', '1', 'מדשאות, השקיה וממטרות', 'כן', ''],
   ['קטגוריה', 'C3', '3', 'עצים', 'כן', ''],
   ['קטגוריה', 'C4', '4', 'שיחים / גיזום', 'כן', ''],
   ['קטגוריה', 'C5', '5', 'עשבייה / קרקע', 'כן', ''],
@@ -12854,6 +12861,113 @@ function gardenLists_(ss) {
     else if (kind === 'קטגוריה') out.categories.push(val);
   }
   return out;
+}
+
+/* ============================================================================
+ *  איחוד קטגוריות — "מדשאות" + "השקיה / ממטרות"   (2026-09-22, בקשת יועד)
+ * ----------------------------------------------------------------------------
+ *  "לאחד את הקטגוריה מדשאות עם השקיה וממטרות ל-'מדשאות, השקיה וממטרות'".
+ *  הכרעה: **הכול, כולל היסטוריה** — כדי שהנתונים (מסך "נתונים") יספרו
+ *  קטגוריה אחת ולא שלוש.
+ *
+ *  🔑 **אידמפוטנטית.** ריצה שנייה לא מוצאת שום דבר להחליף ומחזירה אפסים.
+ *  מה היא נוגעת:
+ *   1. טאב ההגדרות — "מדשאות" מקבל את השם החדש; "השקיה / ממטרות" מסומן
+ *      'לא פעיל' (לא נמחק — השורה נשארת לתיעוד).
+ *   2. עמודת הקטגוריה בטאבי השגרה/המשימות/הדיווחים — **בעמודה בלבד**,
+ *      התאמה מלאה לתא. כותרת של תושב שהיא במקרה "מדשאות" לא נוגעת.
+ *   3. Firestore — gardenPlan / gardenTasks / gardenReports, שאילתת שוויון
+ *      לכל שם ישן ועדכון חלקי (fsMerge_) של `category` בלבד.
+ *   4. gardenMeta/lists — נכתב מחדש מטאב ההגדרות, כך שהטופס רואה מיד
+ *      את הרשימה החדשה (ולא עד הסנכרון השעתי).
+ *  ⚠️ היומן לא נוגע: הוא היסטוריה שאינה משתכתבת.
+ *  ⚠️ הצבע והסמליל נגזרים בלקוח לפי מילת מפתח (catOf: /דשא|מדשא/ ראשון),
+ *     ולכן השם החדש יוצא ירוק בלי שינוי בטבלאות.
+ * ========================================================================== */
+var GARDEN_CAT_MERGED = 'מדשאות, השקיה וממטרות';
+var GARDEN_CAT_MERGED_FROM = ['מדשאות', 'השקיה / ממטרות'];
+
+function gardenMergeLawnWater_(ss) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var NEW = GARDEN_CAT_MERGED, OLD = GARDEN_CAT_MERGED_FROM;
+  var out = { ok: true, settings: 0, sheet: {}, fs: {}, errors: [] };
+
+  // 1. טאב ההגדרות
+  try {
+    var sh = ss.getSheetByName(GARDEN_SETTINGS_SHEET);
+    if (sh && sh.getLastRow() >= 2) {
+      var v = sh.getDataRange().getValues();
+      var hasNew = false;
+      for (var r = 1; r < v.length; r++) {
+        if (String(v[r][0]).trim() === 'קטגוריה' && String(v[r][3]).trim() === NEW) hasNew = true;
+      }
+      for (var r2 = 1; r2 < v.length; r2++) {
+        if (String(v[r2][0]).trim() !== 'קטגוריה') continue;
+        var val = String(v[r2][3]).trim();
+        if (OLD.indexOf(val) === -1) continue;
+        if (!hasNew && val === OLD[0]) {
+          sh.getRange(r2 + 1, 4).setValue(NEW);
+          sh.getRange(r2 + 1, 5).setValue('כן');
+          hasNew = true; out.settings++;
+        } else if (String(v[r2][4]).trim() !== 'לא') {
+          sh.getRange(r2 + 1, 5).setValue('לא');
+          out.settings++;
+        }
+      }
+    }
+  } catch (e1) { out.ok = false; out.errors.push('הגדרות: ' + e1); }
+
+  // 2. עמודת הקטגוריה בטאבים
+  [GARDEN_ROUTINE_SHEET, GARDEN_TASKS_SHEET, GARDEN_REPORTS_SHEET].forEach(function (name) {
+    try {
+      var t = ss.getSheetByName(name);
+      if (!t || t.getLastRow() < 2) { out.sheet[name] = 0; return; }
+      var head = t.getRange(1, 1, 1, t.getLastColumn()).getValues()[0];
+      var col = head.map(function (h) { return String(h).trim(); }).indexOf('קטגוריה');
+      if (col === -1) { out.sheet[name] = 0; return; }
+      var rng = t.getRange(2, col + 1, t.getLastRow() - 1, 1);
+      var n = 0;
+      OLD.forEach(function (old) {
+        n += rng.createTextFinder(old).matchEntireCell(true).replaceAllWith(NEW);
+      });
+      out.sheet[name] = n;
+    } catch (e2) { out.ok = false; out.errors.push(name + ': ' + e2); }
+  });
+
+  // 3. Firestore
+  [FS_GARDEN_PLAN, FS_GARDEN_TASKS, FS_GARDEN_REPORTS].forEach(function (coll) {
+    var n = 0;
+    try {
+      OLD.forEach(function (old) {
+        fsQuery_(coll, 'category', 'EQUAL', old, 2000).forEach(function (d) {
+          fsMerge_(fsDocPath_(coll, d.id), { category: NEW, updatedAt: new Date() });
+          n++;
+        });
+      });
+    } catch (e3) { out.ok = false; out.errors.push(coll + ': ' + e3); }
+    out.fs[coll] = n;
+  });
+
+  // 4. הרשימות
+  try {
+    var lists = gardenLists_(ss);
+    fsSet_(FS_GARDEN_META, {
+      areas: lists.areas, categories: lists.categories,
+      freqs: GARDEN_FREQS, schema: 1, updatedAt: new Date()
+    });
+    out.categories = lists.categories;
+  } catch (e4) { out.ok = false; out.errors.push('lists: ' + e4); }
+  return out;
+}
+
+function handleGardenMergeCats_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var r = withSyncLock_('gardenMergeCats', function () { return gardenMergeLawnWater_(ss); });
+    return json_(r);
+  } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
 /** שורה ליומן. היסטוריה שאינה משתכתבת — רק הוספה, לעולם לא עדכון. */
@@ -14003,20 +14117,20 @@ var GARDEN_PLAN_ANCHOR_B = '2026-01-11';   // מחזור דרומי — שבוע
 
 var GARDEN_PLAN_SEED = [
   // שם, קטגוריה, אזורים, תדירות, שבוע ראשון, שבוע בחודש, חודשים, סבב
-  ['כיסוח דשא', 'מדשאות', 'שכונה צפונית, שכונה מרכזית צפונית',
+  ['כיסוח דשא', 'מדשאות, השקיה וממטרות', 'שכונה צפונית, שכונה מרכזית צפונית',
    'דו-שבועי', GARDEN_PLAN_ANCHOR_A, 1, '', false],
-  ['כיסוח דשא', 'מדשאות', 'שכונה מרכזית דרומית, שכונה דרומית',
+  ['כיסוח דשא', 'מדשאות, השקיה וממטרות', 'שכונה מרכזית דרומית, שכונה דרומית',
    'דו-שבועי', GARDEN_PLAN_ANCHOR_B, 1, '', false],
   ['חרמש', 'עשבייה / קרקע', 'שכונה צפונית, שכונה מרכזית צפונית',
    'דו-שבועי', GARDEN_PLAN_ANCHOR_A, 1, '', false],
   ['חרמש', 'עשבייה / קרקע', 'שכונה מרכזית דרומית, שכונה דרומית',
    'דו-שבועי', GARDEN_PLAN_ANCHOR_B, 1, '', false],
   // קיץ: נצמד למחזורים. חורף: אזור אחד בשבוע, בסבב.
-  ['בדיקת מערכת השקיה וטיפול באזורים צהובים', 'השקיה / ממטרות',
+  ['בדיקת מערכת השקיה וטיפול באזורים צהובים', 'מדשאות, השקיה וממטרות',
    'שכונה צפונית, שכונה מרכזית צפונית', 'דו-שבועי', GARDEN_PLAN_ANCHOR_A, 1, '4-10', false],
-  ['בדיקת מערכת השקיה וטיפול באזורים צהובים', 'השקיה / ממטרות',
+  ['בדיקת מערכת השקיה וטיפול באזורים צהובים', 'מדשאות, השקיה וממטרות',
    'שכונה מרכזית דרומית, שכונה דרומית', 'דו-שבועי', GARDEN_PLAN_ANCHOR_B, 1, '4-10', false],
-  ['בדיקת מערכת השקיה וטיפול באזורים צהובים', 'השקיה / ממטרות',
+  ['בדיקת מערכת השקיה וטיפול באזורים צהובים', 'מדשאות, השקיה וממטרות',
    'שכונה צפונית, שכונה מרכזית צפונית, שכונה מרכזית דרומית, שכונה דרומית',
    'שבועי', '', 1, '11-3', true],
   ['ניקיון שבילים', 'ניקיון גינון / גזם',
@@ -14318,6 +14432,11 @@ function handleGardenPlanSync_(p) {
  * ========================================================================== */
 function gardenPhotoOne_(ss, body) {
   var gate = authorize_(ss, body, null);
+  /* 🔴 22.9 (בקשת יועד: "דיווח גנן") — הגנן החיצוני פותח עכשיו תקלות עם
+     תמונות. השער הכללי (need=null) חוסם חיצוני מכל פעולה שאינה גינון,
+     ולכן ניסיון שני עם PERM_GARDEN — שמתיר חיצוני **רק** אם יש לו הרשאת
+     גינון. תושב רגיל עובר כבר בניסיון הראשון, כמו עד היום. */
+  if (!gate.ok) gate = authorize_(ss, body, PERM_GARDEN);
   if (!gate.ok) return { ok: false, error: gate.error };
   var p = body.photo;
   if (!p || !p.data) return { ok: false, error: 'לא נשלחה תמונה' };

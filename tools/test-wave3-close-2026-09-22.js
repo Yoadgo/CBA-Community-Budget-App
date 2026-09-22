@@ -73,7 +73,8 @@ ok('הכפתור הראשי נצמד לתחתית כמו .drawer__actions--stick
 section('2. תקלת מנהל — פינה כחולה ותווית, בלי שדה חדש');
 ok('🔑 ההבחנה נגזרת מ-repId ולא משדה חדש',
    /function isTeamFault\(t\) \{ return !!t && t\.kind === GK_REPORT && !t\.repId; \}/.test(GT));
-ok('הכרטיס הפתוח מקבל is-team', /\(isTeamFault\(t\) \? " is-team" : ""\)/.test(GT));
+/* 22.9 — תקלה שהגנן פתח מקבלת is-gard (ירוק) לפני is-team. */
+ok('הכרטיס הפתוח מקבל is-team', /\(isGardenerFault\(t\) \? " is-gard" : isTeamFault\(t\) \? " is-team" : ""\)/.test(GT));
 ok('וגם הכרטיס הסגור', (GT.match(/isTeamFault\(t\) \? " is-team"/g) || []).length === 2);
 ok('התווית אומרת "מנהל" ולא מספר דיווח',
    /class="gt-res is-team">' \+ ico\("team"\) \+ 'מנהל/.test(GT));

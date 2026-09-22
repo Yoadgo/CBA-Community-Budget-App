@@ -430,13 +430,17 @@ service cloud.firestore {
               'familyId',
               /* 22.9 (ממצא B) — הדיווחים שאוחדו לתוך המשימה, כדי שהשלב שלה
                  יגיע גם אליהם. הצוות בלבד (gtTeamUpdateOk). */
-              'mergedReps'];
+              'mergedReps',
+              /* 🔴 22.9 (בקשת יועד) — מי פתח תקלת צוות: 'מנהל' / 'גנן',
+                 וה-uid של הפותח (הרשאת העריכה במסך). נכתבים ביצירה בלבד —
+                 **אינם** ב-gtTeamUpdateOk, ולכן לעולם לא משתנים. ר' gtOpenedOk. */
+              'openedBy', 'openedUid'];
     }
 
     /* השדות שרק הצוות קובע — תושב אינו שולח אותם כלל. */
     function gtTeamOnly() {
       return ['flag', 'closure', 'week', 'due', 'note', 'drags',
-              'approvedBy', 'approvedAt'];
+              'approvedBy', 'approvedAt', 'openedBy', 'openedUid'];
     }
 
     function gtShapeOk() {
@@ -455,9 +459,22 @@ service cloud.firestore {
              !request.resource.data.keys().hasAny(gtTeamOnly());
     }
 
-    /* הצוות פותח משימה בעצמו — בלי ההגבלה על השלב. */
+    /* 🔴 22.9 — **הפותח הוא הכותב.** `openedUid` הוא מה שמתיר עריכה במסך,
+       ולכן אסור שיהיה ה-uid של מישהו אחר. `openedBy` מרשימה סגורה.
+       שני השדות אופציונליים: משימה בלעדיהם (שגרה, יזומה, תקלה ישנה)
+       עוברת כמו עד היום. */
+    function gtOpenedOk() {
+      return (request.resource.data.get('openedUid', '') == '' ||
+              request.resource.data.get('openedUid', '') == request.auth.uid) &&
+             ['', 'מנהל', 'גנן'].hasAny([request.resource.data.get('openedBy', '')]);
+    }
+
+    /* הצוות פותח משימה בעצמו — בלי ההגבלה על השלב.
+       ⚠️ 22.9 (הכרעת יועד): **גם הגנן החיצוני פותח תקלות** ("דיווח גנן").
+          זה מה שהכלל התיר ממילא; השרת הישן חוסם, והמסך מציג את הכפתור
+          לגנן רק במסלול הישיר. ר' G-06 בבחינת 22.9 — ההכרעה הפוכה. */
     function gtTeamCreateOk() {
-      return hasPerm('גינון') && gtShapeOk();
+      return hasPerm('גינון') && gtShapeOk() && gtOpenedOk();
     }
 
     /* ⚠️ `id` אינו ברשימה: מזהה שנקבע ביצירה אינו משתנה לעולם.
