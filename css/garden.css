@@ -11,13 +11,16 @@
 .gt-sheet {
   --g: #0F6B45;
   /* 🔴 23.9 (יועד: "המון צבעים צועקים") — פלטה רכה: אותם גוונים, פחות רוויה. */
-  --c-lawn: #5DB77C;  --c-lawn-s: #EAF6EE;
-  --c-water: #52AED6; --c-water-s: #E7F4FA;
-  --c-tree: #3D8058;  --c-tree-s: #E7F1EA;
-  --c-prune: #4B9C91; --c-prune-s: #E6F3F1;
-  --c-weed: #C39B4B;  --c-weed-s: #F7F0E1;
-  --c-clean: #7E8995; --c-clean-s: #EFF1F4;
-  --c-bed: #C77FA0;   --c-bed-s: #F8EDF2;
+  /* 🔴 23.9, סבב שני (מסך הנתונים, ארטיפקט "מסך נתוני הגינון" פרק 11 — יועד:
+     "להחליף בכל המודול אבל לשמור על ההבדלים"): גוונים מושתקים. ההבדלים נשמרו
+     בכוונה — דשא בהיר מול עצים כהה, גיזום טורקיז מול דשא ירוק, השקיה כחלחלה. */
+  --c-lawn: #6E9F80;  --c-lawn-s: #EDF4EF;
+  --c-water: #79A9C6; --c-water-s: #EAF2F7;
+  --c-tree: #4F7F63;  --c-tree-s: #E9F0EB;
+  --c-prune: #5E9C98; --c-prune-s: #E9F3F2;
+  --c-weed: #C4A463;  --c-weed-s: #F6F0E2;
+  --c-clean: #8795A6; --c-clean-s: #EFF1F4;
+  --c-bed: #C98AA6;   --c-bed-s: #F7EEF2;
   --u1: #D98AAE; --u1-t: #A24B75; --u2: #D46A6A; --u2-t: #A83D3D;
   --gt-res: #8C4A63; --gt-team: #5B7BC8; --gt-gard: #4E9A6C;
   --ok-soft: #3E9A6A;
@@ -28,11 +31,12 @@
    כדי שהגוונים לא "יזוזו" עם הגלילה ויעשו רעש. */
 .gd-screen::before {
   content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  /* 23.9 — מרווה, ערפל כחלחל וחול במקום ירוק/תכלת/ענבר רוויים. */
   background:
-    radial-gradient(720px 330px at 92% 4%, rgba(22,163,74,.18), transparent 68%),
-    radial-gradient(560px 300px at 4% 10%, rgba(14,165,233,.13), transparent 68%),
-    radial-gradient(680px 380px at 60% 96%, rgba(202,138,4,.10), transparent 66%),
-    radial-gradient(420px 260px at 18% 60%, rgba(13,148,136,.09), transparent 70%);
+    radial-gradient(720px 330px at 92% 4%, rgba(134,170,146,.26), transparent 68%),
+    radial-gradient(560px 300px at 4% 10%, rgba(150,180,205,.22), transparent 68%),
+    radial-gradient(680px 380px at 60% 96%, rgba(226,204,168,.26), transparent 66%),
+    radial-gradient(420px 260px at 18% 60%, rgba(160,190,178,.16), transparent 70%);
 }
 .gd-screen > * { position: relative; z-index: 1; }
 

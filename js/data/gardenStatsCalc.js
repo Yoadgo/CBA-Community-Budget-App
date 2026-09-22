@@ -263,8 +263,14 @@
     var order = (opts.categories || []).slice();
     var catMap = {};
     order.forEach(function (c) { catMap[c] = []; });
+    /* 🔴 23.9 — שמות ישנים ("מדשאות", "השקיה / ממטרות") נספרים תחת
+       הקטגוריה המאוחדת כשהיא בהגדרות. בלי זה נוצר פס שביעי עם תקלה אחת
+       (נצפה בצילום של יועד) — מסמך שלא עבר את מיגרציית 22.9. */
+    var UNI = L().CAT_LAWN_WATER;
+    var LEGACY = { "מדשאות": 1, "השקיה / ממטרות": 1 };
+    function normCat(c) { return (UNI && LEGACY[c] && order.indexOf(UNI) >= 0) ? UNI : c; }
     periodF.forEach(function (t) {
-      var c = String(t.category || "") || "אחר";
+      var c = normCat(String(t.category || "")) || "אחר";
       if (!catMap[c]) { catMap[c] = []; order.push(c); }
       catMap[c].push(String(t.id));
     });
@@ -287,8 +293,11 @@
       var open = !t.closure || t.flag === "דורש בדיקה חוזרת";
       var closedIn = !open && t.closure !== "אוחד" && inPeriod(ms(t.approvedAt));
       if (!open && !closedIn) return;
+      /* סמליל הנעץ לפי המשימה עצמה (דשא או טיפה לפי הכותרת — catOfTask, 23.9);
+         הסינון לפי הקטגוריה המנורמלת, כמו בפס "לפי סוג". */
+      var ct = L().catOfTask ? L().catOfTask(t) : L().catOf(t.category);
       pins.push({ id: String(t.id), x: +t.x, y: +t.y, state: pinState(t, cur),
-                  cat: L().catOf(t.category).key, category: String(t.category || ""), closed: !open });
+                  cat: ct.key, ico: ct.ico, category: normCat(String(t.category || "")), closed: !open });
     });
     var openWithLoc = openF.filter(hasLoc).length;
 

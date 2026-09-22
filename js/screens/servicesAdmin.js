@@ -89,6 +89,10 @@ CBA.screens.servicesAdmin = {
         '<div class="screen-head__sub">הכרטיסים שהתושבים רואים במסך "שירותים" — הוספה, עריכה, סידור והסתרה</div></div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
           '<button type="button" class="btn-ghost" id="sadm-cats">ניהול קטגוריות</button>' +
+          // ניהול "המלצות תושבים" (WAVE 4, 2026-09-23) — הסתרה/מחיקה של
+          // כרטיסים שתושבים יצרו בעצמם (ר' services.js/dataService.js).
+          // לא עורכים תוכן כאן — עריכה עצמית היא רק אצל היוצר, במגירה.
+          '<button type="button" class="btn-ghost" id="sadm-recs">ניהול המלצות תושבים</button>' +
           '<button type="button" class="btn-primary" id="sadm-new">שירות חדש +</button>' +
         "</div>" +
       "</div>" +
@@ -97,6 +101,7 @@ CBA.screens.servicesAdmin = {
     var body = container.querySelector("#sadm-body");
     container.querySelector("#sadm-new").addEventListener("click", function () { sadmOpenEditor(-1); });
     container.querySelector("#sadm-cats").addEventListener("click", sadmOpenCategories);
+    container.querySelector("#sadm-recs").addEventListener("click", sadmOpenRecommendations);
 
     body.innerHTML = CBA.skel.tiles(6);
 
@@ -982,4 +987,85 @@ function sadmApplyAI(f) {
   CBA.ui.alert(added
     ? "נוספו " + added + " סעיפים מוצעים. עברו עליהם, תקנו מה שצריך — ורק אז לחצו שמירה."
     : "לא זוהו סעיפים מתאימים במסמך.");
+}
+
+/* ============================================================================
+ *  ניהול "המלצות תושבים" (2026-09-23, WAVE 4)
+ * ----------------------------------------------------------------------------
+ *  דיאלוג גנרי (CBA.ui.dialog) ולא מסך/דרואר נפרד — הרשימה קטנה מטבעה
+ *  (המלצות תושבים, לא עשרות שירותים), ואין כאן טופס עריכה בכלל: עריכת
+ *  תוכן היא פררוגטיבה של היוצר בלבד (ר' updateResidentServiceCard —
+ *  הכלל דוחה עדכון ע"י מישהו אחר). מנהל-על יכול רק להסתיר/להציג ולמחוק.
+ * ========================================================================== */
+function sadmOpenRecommendations() {
+  CBA.data.ensureFamilyNames(function () {
+    CBA.data.getResidentServiceCards(false, function (res) {
+      var cards = (res && res.ok && res.cards) || [];
+      var html = sadmRecListHtml(cards);
+      var wrapRef = null;
+      CBA.ui.dialog({
+        title: "ניהול המלצות תושבים", html: html, wide: true, okText: "סגירה",
+        onMount: function (wrap) { wrapRef = wrap; sadmBindRecRows(wrap); }
+      });
+    });
+  });
+}
+
+function sadmRecListHtml(cards) {
+  if (!cards.length) return '<div class="club-empty">אין עדיין המלצות תושבים.</div>';
+  return '<div class="sadm-list" id="sadm-recs-list">' + cards.map(sadmRecRowHtml).join("") + "</div>";
+}
+
+function sadmRecRowHtml(c) {
+  var fam = CBA.data.familyDisplayName(c.familyId) || "תושב";
+  var isActive = c.active !== false;
+  return '<div class="sadm-line">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600">' + sadmEsc(c.title) +
+          (isActive ? "" : ' <span style="color:var(--text-muted);font-weight:400">(מוסתר)</span>') + "</div>" +
+        '<div style="font-size:12px;color:var(--text-muted)">' + sadmEsc(fam) + "</div>" +
+      "</div>" +
+      '<button type="button" class="btn-ghost btn-sm" data-rec-toggle="' + sadmEsc(c.id) +
+        '" data-active="' + (isActive ? "1" : "0") + '">' + (isActive ? "הסתרה" : "הצגה") + "</button>" +
+      '<button type="button" class="btn-ghost btn-sm" data-rec-del="' + sadmEsc(c.id) +
+        '" style="color:#F43F5E">מחיקה</button>' +
+    "</div>";
+}
+
+function sadmBindRecRows(wrap) {
+  function reload() {
+    CBA.data.getResidentServiceCards(false, function (res) {
+      var host = wrap.querySelector(".cba-dlg__body");
+      if (!host) return;   // הדיאלוג נסגר בינתיים
+      host.innerHTML = sadmRecListHtml((res && res.ok && res.cards) || []);
+      bind();
+    });
+  }
+  function bind() {
+    wrap.querySelectorAll("[data-rec-toggle]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.recToggle;
+        var nowActive = btn.dataset.active === "1";
+        var done = CBA.ui.busy(btn, "");
+        CBA.data.setResidentServiceCardActive(id, !nowActive, function (res) {
+          done();
+          if (!res || !res.ok) { CBA.ui.toast((res && res.error) || "עדכון נכשל"); return; }
+          reload();
+        });
+      });
+    });
+    wrap.querySelectorAll("[data-rec-del]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        CBA.ui.confirm("למחוק את ההמלצה לצמיתות? הפעולה לא הפיכה.",
+          { title: "מחיקת המלצה", okText: "מחיקה", danger: true }).then(function (ok) {
+          if (!ok) return;
+          CBA.data.deleteResidentServiceCard(btn.dataset.recDel, function (res) {
+            if (!res || !res.ok) { CBA.ui.toast((res && res.error) || "מחיקה נכשלה"); return; }
+            reload();
+          });
+        });
+      });
+    });
+  }
+  bind();
 }

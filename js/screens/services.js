@@ -982,3 +982,294 @@ function svcOpenDrawer(id) {
   svcPaintReactions(svc.id);
   document.addEventListener("keydown", svcDrawerKey);
 }
+
+/* ============================================================================
+ *  המלצות תושבים + לייק/דיסלייק/תגובות (2026-09-23, WAVE 3)
+ * ----------------------------------------------------------------------------
+ *  כרטיסי המלצה נטענים מ-Firestore (residentServiceCards) ומתמזגים לתוך
+ *  svcState.list כ"שירות" רגיל לכל דבר — אותו card()/svcOpenDrawer, אותו
+ *  קיבוץ-לפי-קטגוריה. הקטגוריה עצמה ("המלצות תושבים") כבר קיימת בפועל
+ *  (מזהה cat_mud7r57ebu, נוצרה ידנית ע"י יועד) — לא נזרעת כאן בקוד, רק
+ *  מזוהה לפי שם. לייק/דיסלייק/תגובות חלים על **כל** כרטיס, רשמי או תושב
+ *  (ר' [[cba-service-reactions-recommendations-spec-2026-09-22]]).
+ * ========================================================================== */
+
+function svcRecommendCategoryId() {
+  var list = svcState.categories || [];
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].name === "המלצות תושבים") return list[i].id;
+  }
+  return null;
+}
+
+/* כרטיס המלצה -> אותו מבנה "שירות" שהקוד הקיים יודע לצייר. גוף הטקסט נכנס
+   כסעיף "טקסט" רגיל, וקישור המפות (אם יש) כסעיף "רשימה" עם שורה שמכילה
+   URL — linkifyLine הקיים כבר יודע להפוך אותה לכפתור "פתח במפות", בלי
+   מנגנון ציור נפרד. */
+function svcResidentToService(card) {
+  var sections = [{ secId: "body", order: 1, type: "טקסט", title: "על ההמלצה", content: card.body || "" }];
+  if (card.mapsUrl) {
+    sections.push({ secId: "maps", order: 2, type: "רשימה", title: "קישורים", content: "פתח במפות: " + card.mapsUrl });
+  }
+  return {
+    id: card.id, name: card.title, desc: "", icon: "",
+    categoryId: svcState.recCatId || "", legacyKind: "", provider: "",
+    phone: "", phoneChannel: "", doc: "", order: 9999,
+    active: card.active !== false,
+    updated: String(card.updatedAt || "").trim().slice(0, 10), updatedBy: "",
+    sections: sections,
+    isResident: true, familyId: card.familyId, mapsUrl: card.mapsUrl || "", body: card.body || ""
+  };
+}
+
+/* טעינה נפרדת מ-getServices (מודל ב', ר' הערה ב-dataService.js) — אם היא
+   נכשלת, מסך השירותים הרשמי עדיין עולה, רק בלי ההמלצות באותו רגע. */
+function svcLoadResidentExtras(cb) {
+  CBA.data.ensureFamilyNames(function () {
+    CBA.data.getResidentServiceCards(true, function (res) {
+      svcState.residentCards = (res && res.ok && res.cards) || [];
+      svcState.residentSvcMap = {};
+      svcState.residentCards.forEach(function (c) {
+        var svc = svcResidentToService(c);
+        svcState.residentSvcMap[svc.id] = c;
+        svcState.list.push(svc);
+      });
+      if (cb) cb();
+    });
+  });
+}
+
+/* אחרי יצירה/עריכה/מחיקה/הסתרה של המלצה — מסיר את הפסאודו-שירותים
+   הישנים, טוען מחדש רק אותם (בלי לבזבז קריאה נוספת ל-getServices), ומרענן
+   את הרשת דרך svcRepaint (ר' ההערה ליד ההגדרה שלו). */
+function svcReloadAfterRecommend() {
+  svcState.list = svcState.list.filter(function (s) { return !s.isResident; });
+  svcLoadResidentExtras(function () {
+    if (typeof svcRepaint === "function") svcRepaint();
+  });
+}
+
+/* חיפוש כפילות פשוט בצד הלקוח (בלי שירות חיצוני, ר' האפיון) — התאמת
+   טקסט בין הכותרת המוקלדת לכותרות ההמלצות הקיימות. */
+function svcFindDuplicateTitle(title, excludeId) {
+  var t = String(title || "").trim().toLowerCase();
+  if (t.length < 2) return null;
+  for (var i = 0; i < svcState.residentCards.length; i++) {
+    var c = svcState.residentCards[i];
+    if (excludeId && c.id === excludeId) continue;
+    var n = String(c.title || "").trim().toLowerCase();
+    if (!n) continue;
+    if (n === t || n.indexOf(t) !== -1 || t.indexOf(n) !== -1) return c;
+  }
+  return null;
+}
+
+/* ---------- טופס יצירה/עריכה של המלצה ---------- */
+
+function svcOpenRecommendForm(existing) {
+  var isEdit = !!existing;
+  var html =
+    '<div class="form-field form-field--wide"><label>כותרת ההמלצה</label>' +
+      '<input class="field-input" id="rsvc-title" maxlength="80" value="' + svcEsc(isEdit ? existing.title : "") +
+      '" placeholder="למשל: ירקן דוד — פינת הירקות"></div>' +
+    '<div class="svc-dup-suggest" id="rsvc-dup"></div>' +
+    '<div class="form-field form-field--wide"><label>על ההמלצה</label>' +
+      '<textarea class="field-input" id="rsvc-body" rows="5" maxlength="1500" placeholder="למה כדאי, איך מזמינים, וכל מה שיעזור לשכנים">' +
+      svcEsc(isEdit ? existing.body : "") + '</textarea></div>' +
+    '<div class="form-field form-field--wide"><label>קישור ב-Google Maps (לא חובה)</label>' +
+      '<input class="field-input" id="rsvc-maps" dir="ltr" value="' + svcEsc(isEdit ? (existing.mapsUrl || "") : "") +
+      '" placeholder="https://maps.app.goo.gl/…"></div>';
+
+  CBA.ui.dialog({
+    title: isEdit ? "עריכת ההמלצה" : "המלצה חדשה",
+    html: html, wide: true, sticky: true,
+    okText: isEdit ? "שמירה" : "פרסום", cancelText: "ביטול",
+    onMount: function (wrap, close) {
+      var titleEl = wrap.querySelector("#rsvc-title");
+      var dupEl = wrap.querySelector("#rsvc-dup");
+      titleEl.addEventListener("input", function () {
+        var dup = svcFindDuplicateTitle(titleEl.value, isEdit ? existing.id : null);
+        if (!dup) { dupEl.style.display = "none"; return; }
+        dupEl.style.display = "block";
+        dupEl.innerHTML = 'כבר יש המלצה בשם "' + svcEsc(dup.title) +
+          '" — אולי כדאי <a href="#" id="rsvc-dup-open">להצטרף אליה</a> (לייק/תגובה) במקום ליצור כפולה.';
+        var openLink = dupEl.querySelector("#rsvc-dup-open");
+        if (openLink) openLink.addEventListener("click", function (e) {
+          e.preventDefault();
+          close(false);
+          svcOpenDrawer(dup.id);
+        });
+      });
+    },
+    onOk: function (wrap, close) {
+      var title = wrap.querySelector("#rsvc-title").value;
+      var body = wrap.querySelector("#rsvc-body").value;
+      var mapsUrl = wrap.querySelector("#rsvc-maps").value;
+      if (!String(title || "").trim()) { CBA.ui.toast("צריך כותרת"); return; }
+      var okBtn = wrap.querySelector('[data-dlg="ok"]');
+      var done = CBA.ui.busy(okBtn, isEdit ? "שומר…" : "מפרסם…");
+      var fields = { title: title, body: body, mapsUrl: mapsUrl };
+      var after = function (res) {
+        done();
+        if (!res || !res.ok) { CBA.ui.toast((res && res.error) || "השמירה נכשלה"); return; }
+        close(true);
+        CBA.ui.toast(isEdit ? "ההמלצה עודכנה" : "ההמלצה פורסמה");
+        svcReloadAfterRecommend();
+      };
+      if (isEdit) CBA.data.updateResidentServiceCard(existing.id, fields, after);
+      else CBA.data.createResidentServiceCard(fields, after);
+    }
+  });
+}
+
+/* hideOnly=true — מנהל-על מסתיר (setResidentServiceCardActive), הכרטיס
+   נשאר בגיליון/Firestore ואפשר להציג בחזרה ממסך הניהול. hideOnly=false —
+   היוצר מוחק לצמיתות (ר' ההערה ב-dataService.js על לייקים/תגובות יתומים). */
+function svcDeleteRecommend(cardId, hideOnly) {
+  var msg = hideOnly
+    ? "להסתיר את הכרטיס מהתושבים? אפשר להציג אותו בחזרה דרך מסך ניהול השירותים."
+    : "למחוק את ההמלצה לצמיתות? הפעולה לא הפיכה.";
+  CBA.ui.confirm(msg, {
+    title: hideOnly ? "הסתרת כרטיס" : "מחיקת המלצה",
+    okText: hideOnly ? "הסתרה" : "מחיקה", danger: true
+  }).then(function (ok) {
+    if (!ok) return;
+    var after = function (res) {
+      if (!res || !res.ok) { CBA.ui.toast((res && res.error) || "הפעולה נכשלה"); return; }
+      svcCloseDrawer();
+      CBA.ui.toast(hideOnly ? "הכרטיס הוסתר" : "ההמלצה נמחקה");
+      svcReloadAfterRecommend();
+    };
+    if (hideOnly) CBA.data.setResidentServiceCardActive(cardId, false, after);
+    else CBA.data.deleteResidentServiceCard(cardId, after);
+  });
+}
+
+/* ---------- לייק/דיסלייק + תגובות (בתוך מגירת הכרטיס, כל סוגי הכרטיסים) ---------- */
+
+function svcThumbIcon(up) {
+  var d = up
+    ? "M7 10v11M2 10h5v11H2zM7 10l4.5-7a1.5 1.5 0 0 1 2.6.9v4.6H19a2 2 0 0 1 2 2.4l-1.4 6a2 2 0 0 1-2 1.6H7"
+    : "M17 14V3M22 14h-5V3h5zM17 14l-4.5 7a1.5 1.5 0 0 1-2.6-.9v-4.6H5a2 2 0 0 1-2-2.4l1.4-6a2 2 0 0 1 2-1.6H17";
+  return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
+}
+function svcTrashIcon() {
+  return '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
+}
+
+function svcSkeletonReactions() {
+  return CBA.skel.rows(2, { avatar: true, actions: false });
+}
+
+function svcReactionsHtml(cardId, cardType, reacts, comments) {
+  var myFid = String(((window.CBA && CBA.user) || {}).familyId || "").trim();
+  var isSuperAdmin = window.CBA && CBA.isSuper === true;
+  var mine = reacts.mine;
+
+  var reactHtml =
+    '<div class="svc-reactions">' +
+      '<button type="button" class="svc-react-btn svc-react-btn--like' + (mine === "like" ? " is-on" : "") + '" data-react="like">' +
+        svcThumbIcon(true) + " לייק · " + (reacts.like || 0) +
+      "</button>" +
+      '<button type="button" class="svc-react-btn svc-react-btn--dislike' + (mine === "dislike" ? " is-on" : "") + '" data-react="dislike">' +
+        svcThumbIcon(false) + " דיסלייק · " + (reacts.dislike || 0) +
+      "</button>" +
+      (mine ? '<span class="svc-react-mine">ההצבעה שלך — אפשר לשנות בכל עת</span>' : "") +
+    "</div>";
+
+  var commentsHtml =
+    '<div class="svc-comments-title">תגובות (' + comments.length + ")</div>" +
+    '<div class="svc-comments">' +
+      (comments.length ? comments.map(function (c) {
+        var mineC = !!(myFid && c.familyId === myFid);
+        var canDel = mineC || isSuperAdmin;
+        var fam = CBA.data.familyDisplayName(c.familyId) || "תושב";
+        var initial = fam.trim().charAt(0) || "?";
+        return '<div class="svc-comment' + (mineC ? " svc-comment--mine" : "") + '">' +
+            '<div class="svc-comment__ava">' + svcEsc(initial) + "</div>" +
+            '<div class="svc-comment__t">' +
+              '<div class="svc-comment__head">' +
+                '<div class="svc-comment__name">' + svcEsc(fam) +
+                  (mineC ? ' <span class="svc-comment__mine-tag">(אתה)</span>' : "") + "</div>" +
+                (canDel ? '<button type="button" class="svc-comment__del" data-del-comment="' + svcEsc(c.id) +
+                  '" aria-label="מחיקת תגובה">' + svcTrashIcon() + "</button>" : "") +
+              "</div>" +
+              '<div class="svc-comment__body">' + svcEsc(c.text) + "</div>" +
+            "</div>" +
+          "</div>";
+      }).join("") : '<div class="svc-comment-empty">היו הראשונים להגיב.</div>') +
+    "</div>" +
+    (myFid
+      ? '<div class="svc-comment-form"><input type="text" class="field-input" id="svc-comment-input" maxlength="500" placeholder="הוסיפו תגובה…">' +
+          '<button type="button" class="btn-primary btn-sm" id="svc-comment-send">שלח</button></div>'
+      : "");
+
+  return reactHtml + commentsHtml;
+}
+
+function svcBindReactionZone(zone, cardId, cardType) {
+  zone.querySelectorAll("[data-react]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var val = btn.dataset.react;
+      var isOn = btn.classList.contains("is-on");
+      var done = CBA.ui.busy(btn, "");
+      if (isOn) {
+        CBA.data.clearServiceReaction(cardId, function () { done(); svcPaintReactions(cardId); });
+      } else {
+        CBA.data.setServiceReaction(cardId, cardType, val, function () { done(); svcPaintReactions(cardId); });
+      }
+    });
+  });
+
+  var sendBtn = zone.querySelector("#svc-comment-send");
+  var input = zone.querySelector("#svc-comment-input");
+  if (sendBtn && input) {
+    var send = function () {
+      var text = input.value;
+      if (!text || !text.trim()) return;
+      var done = CBA.ui.busy(sendBtn, "שולח…");
+      CBA.data.addServiceComment(cardId, cardType, text, function (res) {
+        done();
+        if (!res || !res.ok) { CBA.ui.toast((res && res.error) || "שליחה נכשלה"); return; }
+        svcPaintReactions(cardId);
+      });
+    };
+    sendBtn.addEventListener("click", send);
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") send(); });
+  }
+
+  zone.querySelectorAll("[data-del-comment]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      CBA.ui.confirm("למחוק את התגובה?", { title: "מחיקת תגובה", okText: "מחיקה", danger: true }).then(function (ok) {
+        if (!ok) return;
+        CBA.data.deleteServiceComment(btn.dataset.delComment, function (res) {
+          if (!res || !res.ok) { CBA.ui.toast((res && res.error) || "מחיקה נכשלה"); return; }
+          svcPaintReactions(cardId);
+        });
+      });
+    });
+  });
+}
+
+/* טוען לייקים/דיסלייקים/תגובות ומצייר אותם בתוך #svc-react-zone שבמגירה
+   הפתוחה. אם המגירה נסגרה בינתיים (משתמש לחץ Escape בזמן שהבקשה עדיין
+   באוויר) — הבדיקה על קיום הרכיב מונעת ציור על תוכן שכבר לא במסך. */
+function svcPaintReactions(cardId) {
+  var svc = null;
+  for (var i = 0; i < svcState.list.length; i++) if (svcState.list[i].id === cardId) svc = svcState.list[i];
+  if (!svc) return;
+  var cardType = svc.isResident ? "resident" : "official";
+
+  CBA.data.getServiceReactions(cardId, function (rres) {
+    CBA.data.getServiceComments(cardId, function (cres) {
+      var zone = document.querySelector('#svc-react-zone[data-cardid]');
+      if (!zone || zone.dataset.cardid !== cardId) return;
+      var reacts = (rres && rres.ok) ? rres : { like: 0, dislike: 0, mine: null };
+      var comments = (cres && cres.ok && cres.comments) || [];
+      zone.innerHTML = svcReactionsHtml(cardId, cardType, reacts, comments);
+      svcBindReactionZone(zone, cardId, cardType);
+    });
+  });
+}

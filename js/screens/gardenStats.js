@@ -16,10 +16,11 @@
  *  🔑 **הנתונים:** Firestore בלבד, בדפדפן (dataService.gardenStatsLiveRead),
  *     והחישוב ב-CBA.gardenStatsCalc. היומן נקרא פעם אחת ל-12 שבועות +
  *     מרווח, ולכן מעבר בין 4/8/12 שבועות הוא **חישוב מקומי** — מיידי.
- *  🔑 **פריסה אחת, שני סדרים.** במחשב: שתי עמודות 2fr/3fr שמיושרות זו
- *     מתחת לזו ("עכשיו" מימין, "בתקופה" משמאל). בטלפון: אותם בלוקים
- *     בעמודה אחת, והסדר נקבע ב-CSS (`order` + `display:contents`) — אין
- *     שני עצי DOM שצריך לזכור לסנכרן.
+ *  🔑 **שלוש עמודות, שלוש שאלות** (סבב עיצוב 4, 23.9 — "זכוכית"):
+ *     עכשיו · בתקופה · איפה, ביחס 0.7 · 1.3 · 1, כל אחת על לוח זכוכית משלה.
+ *     בלי שורת כותרת — בורר התקופה יושב בכותרת "בתקופה". המפה לאורך
+ *     בשליש השמאלי, "לפי סוג" כפס מעליה, ומקרא צף מצומצם. בטלפון העמודות
+ *     נערמות באותו סדר. העיצוב כולו ב-css/gardenStats.css (קידומת gx-).
  *  ⚠️ מנהל הגינון ומנהל-על בלבד (SCREEN_PERM "MANAGER"). הגנן החיצוני אינו
  *     רשאי לקרוא את היומן, בכוונה — והמסך הוא כלי ניהול ולא כלי עבודה.
  *  ⚠️ לעולם לא נתון מומצא: יומן שלא נטען מוצג "—" עם הסבר, ומגמה בלי
@@ -40,7 +41,11 @@
     check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
     back:  '<path d="M3 8h11a5 5 0 0 1 0 10H8"/><path d="m6.5 4.5-3 3.5 3 3.5"/>',
     cloud: '<path d="M6.5 19a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 11.2-1.6A4.2 4.2 0 0 1 21 12.6"/><path d="m15 15 6 6M21 15l-6 6"/>',
-    chev:  '<path d="m6 9 6 6 6-6"/>'
+    chev:  '<path d="m6 9 6 6 6-6"/>',
+    /* 23.9 — סמלילי האריחים (Lucide: sprout · hourglass · star) */
+    sprout2: '<path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>',
+    clock2: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+    star:  '<path d="M11.5 2.9a.5.5 0 0 1 .9 0l2.3 4.7a2 2 0 0 0 1.5 1.1l5.2.8a.5.5 0 0 1 .3.9l-3.8 3.7a2 2 0 0 0-.6 1.8l.9 5.2a.5.5 0 0 1-.7.5l-4.6-2.5a2 2 0 0 0-1.9 0l-4.6 2.5a.5.5 0 0 1-.7-.5l.9-5.2a2 2 0 0 0-.6-1.8L2.4 10.4a.5.5 0 0 1 .3-.9l5.2-.8a2 2 0 0 0 1.5-1.1z"/>'
   };
   function ico(n, w) {
     var K = CBA.gardenKit;
@@ -54,7 +59,7 @@
   /* 23.9 — קטגוריה של משימה: דשא או טיפה לפי הכותרת (gardenLang.catOfTask). */
   function catT(t) { var g = GL(); return g.catOfTask ? g.catOfTask(t) : g.catOf(t && t.category); }
 
-  /* מצב הנעץ -> שם בעברית (מקרא ותקציר). הצבעים: --st-* ב-garden.css. */
+  /* מצב הנעץ -> שם בעברית (מקרא ותקציר). הצבעים: --s-* ב-gardenStats.css. */
   var ST_LABEL = { wait: "ממתינה להחלטה", plan: "משובצת", appr: "ממתינה לאישורך",
                    l1: "נגררה", l2: "נגררה יותר משבוע", done: "נסגרה" };
 
@@ -92,8 +97,8 @@
       var mapHost = null, mapCtl = null;
       var peekTimer = null;
 
-      container.innerHTML = '<div class="gd-screen gn gn-vars" id="gn-root"></div>';
-      var root = container.querySelector("#gn-root");
+      container.innerHTML = '<div class="gd-screen gx gx-vars" id="gx-root"></div>';
+      var root = container.querySelector("#gx-root");
       skeleton();
       load();
 
@@ -127,140 +132,156 @@
 
       /* ============================ שלד ============================ */
       function skeleton() {
-        root.innerHTML = head(true) +
-          '<div class="gn-sk">' +
-            '<div class="skeleton" style="height:112px;border-radius:12px"></div>' +
-            '<div class="skeleton" style="height:112px;border-radius:12px"></div>' +
-            '<div class="skeleton" style="height:260px;border-radius:12px"></div>' +
-            '<div class="skeleton" style="height:260px;border-radius:12px"></div>' +
-          '</div>';
+        root.innerHTML = '<div class="gx-grid">' +
+          ['', '', ''].map(function () {
+            return '<div class="gx-pane"><div class="skeleton" style="height:30px;border-radius:10px;width:40%"></div>' +
+              '<div class="skeleton" style="height:110px;border-radius:18px"></div>' +
+              '<div class="skeleton" style="height:220px;border-radius:18px"></div></div>';
+          }).join("") + '</div>';
       }
 
-      function head(sk) {
-        return '<div class="gn-head">' +
-          '<div class="gn-head__t"><h3>נתוני גינון</h3>' +
-            '<div class="gn-up">' + (sk ? "טוען…" : "מחושב עכשיו מהנתונים החיים") + '</div></div>' +
-          '<div class="gn-seg" role="radiogroup" aria-label="תקופה">' +
-            [4, 8, 12].map(function (w) {
-              return '<button type="button" role="radio" aria-checked="' + (w === weeks) + '"' +
-                (w === weeks ? ' class="on"' : '') + ' data-weeks="' + w + '">' +
-                '<span class="gn-seg__l">' + w + ' שבועות</span><span class="gn-seg__s">' +
-                (w === weeks ? w + " שב׳" : w) + '</span></button>';
-            }).join("") +
-          '</div></div>';
+      /* 🔴 23.9 (סבב עיצוב 4) — אין שורת כותרת. בורר התקופה יושב בתוך
+         הכותרת של "בתקופה", כי הוא משנה רק את העמודה הזאת. */
+      function seg() {
+        return '<div class="gx-seg lgx" role="radiogroup" aria-label="תקופה">' +
+          [4, 8, 12].map(function (w) {
+            return '<button type="button" role="radio" aria-checked="' + (w === weeks) + '"' +
+              (w === weeks ? ' class="on"' : '') + ' data-weeks="' + w + '">' +
+              (w === weeks ? w + ' שבועות' : w) + '</button>';
+          }).join("") + '</div>';
+      }
+      function paneHead(title, side) {
+        return '<div class="gx-ph"><h3>' + esc(title) + '</h3>' + (side || '') + '</div>';
       }
 
       /* ============================ ציור ============================ */
       function draw() {
         hidePeek();
         if (loadErr) {
-          root.innerHTML = head() +
-            '<div class="gn-err gd-card"><u>' + ico("cloud", 22) + '</u><b>לא הצלחתי לטעון</b>' +
+          root.innerHTML =
+            '<div class="gx-err lgx"><u>' + ico("cloud", 22) + '</u><b>לא הצלחתי לטעון</b>' +
             '<span>' + esc(loadErr) + '</span>' +
             '<button type="button" class="gd-cta" data-act="retry">נסה שוב</button></div>';
           wire();
           return;
         }
         if (!M) { skeleton(); return; }
-        var perLbl = "ב-" + weeks + " השבועות האחרונים";
-        root.innerHTML = head() +
+        var mp = M.map;
+        root.innerHTML =
           (M.logOk ? '' :
-            '<div class="gn-warn">' + ico("cloud", 16) + '<span>יומן הפעולות לא נטען, ולכן "חזרו לטיפול", ' +
+            '<div class="gx-warn">' + ico("cloud", 16) + '<span>יומן הפעולות לא נטען, ולכן "חזרו לטיפול", ' +
             '"משוב שלילי" וזמן השיבוץ מסומנים "—". שאר המספרים מעודכנים. ' +
             '<button type="button" data-act="retry">לנסות שוב</button></span></div>') +
-          '<div class="gn-body">' +
-            '<div class="gn-grid">' +
-              '<section class="gn-now" aria-label="עכשיו">' +
-                '<div class="gn-grp gn-o1">עכשיו</div>' + nowTiles() + '</section>' +
-              '<section class="gn-per" aria-label="' + esc(perLbl) + '">' +
-                '<div class="gn-grp gn-o5">' + esc(perLbl) + '</div>' + perTiles() + '</section>' +
-            '</div>' +
-            '<div class="gn-grid gn-grid--2">' +
-              '<div class="gn-stack">' + ageBox() + topBox() + '</div>' +
-              '<div class="gn-stack">' + mapBox() + catBox() + '</div>' +
-            '</div>' +
-            trendsBox() +
+          /* שלוש עמודות, שלוש שאלות: עכשיו · בתקופה · איפה. כל אחת על לוח
+             זכוכית משלה — זו ההפרדה בין השלישים (בלי קווים). */
+          '<div class="gx-grid">' +
+            '<section class="gx-pane gx-pane--now" aria-label="עכשיו">' +
+              paneHead("עכשיו", '<small class="gx-live">חי</small>') +
+              approvalCard() + nowTiles() + ageBox() + topBox() +
+            '</section>' +
+            '<section class="gx-pane gx-pane--per" aria-label="בתקופה">' +
+              paneHead("בתקופה", seg()) +
+              perTiles() + trendsBox() +
+            '</section>' +
+            '<section class="gx-pane gx-pane--map" aria-label="איפה">' +
+              paneHead("איפה", '<small>' + mp.openWithLoc + ' מתוך ' + mp.openTotal + ' עם מיקום</small>') +
+              catBox() + mapBox() +
+            '</section>' +
           '</div>';
         wire();
         placeMap();
+        sizeCharts();
       }
+      /* מודד כל קופסת מגמה ומצייר את הגרף שלה מחדש בגובה שממלא אותה. */
+      function sizeCharts() {
+        root.querySelectorAll(".gx-tr").forEach(function (box) {
+          var svg = box.querySelector(".gx-chart");
+          if (!svg || !box.offsetParent) return;
+          var w = svg.clientWidth || box.clientWidth;
+          var used = 0;
+          Array.prototype.forEach.call(box.children, function (c) { if (c !== svg) used += c.offsetHeight; });
+          var avail = box.clientHeight - used - 26;
+          if (w < 50 || avail < 40) return;
+          var k = TR[+box.dataset.i].k;
+          svg.outerHTML = chart(k, 200 * avail / w);
+        });
+      }
+      var rsT = null;
+      function onResize() {
+        if (!alive()) { window.removeEventListener("resize", onResize); return; }
+        clearTimeout(rsT);
+        rsT = setTimeout(function () { if (alive() && M) sizeCharts(); }, 180);
+      }
+      window.addEventListener("resize", onResize);
 
       /* ---------------------------- עכשיו ---------------------------- */
-      function nowTiles() {
-        var a = M.now.approval, o = M.now.open, d = M.now.dragged;
-        var tiles = "";
-        /* ממתינות לאישורך — ראשונה, במסגרת ירוקה: זה הדבר היחיד במסך
-           שהמנהל עצמו צריך לעשות. מופיעה רק כשהמתג "אישור מנהל" דלוק. */
-        if (a.on) {
-          tiles += '<button type="button" class="gn-tile is-act" data-list="approval">' +
-            '<div class="gn-n">' + a.count + '</div>' +
-            '<div class="gn-tx"><div class="gn-l">ממתינות לאישורך</div>' +
-            '<div class="gn-s">' + (a.count ? '<span>הוותיקה ' + esc(daysText(a.oldestDays)) + '</span>'
-                                             : '<span>אין מה לאשר</span>') + '</div></div>' +
-            (a.count ? '<span class="gn-go">לאישור ←</span>' : '') +
-          '</button>';
+      /* 🔴 "ממתינות לאישורך" מובלטת (יועד, 23.9): כרטיס ברוחב מלא בראש
+         העמודה, בזכוכית מרווה עם הילה וכפתור. כשאין מה לאשר — שקטה.
+         מופיעה רק כשהמתג "אישור מנהל" דלוק (אפיון סעיף 2). */
+      function approvalCard() {
+        var a = M.now.approval;
+        if (!a.on) return '';
+        if (!a.count) {
+          return '<button type="button" class="gx-ap is-calm" data-list="approval">' +
+            '<span class="gx-ap__n">0</span><span class="gx-ap__l">ממתינות לאישורך</span>' +
+            '<span class="gx-ap__s">אין מה לאשר</span></button>';
         }
-        tiles += '<button type="button" class="gn-tile" data-list="open">' +
-          '<div class="gn-n">' + o.count + '</div>' +
-          '<div class="gn-l">תקלות פתוחות</div>' +
-          '<div class="gn-s"><span><b>' + o.undecided + '</b> להחלטה</span><span><b>' + o.planned +
-          '</b> משובצות</span></div></button>';
-        tiles += '<button type="button" class="gn-tile" data-list="dragged">' +
-          '<div class="gn-n">' + d.count + '</div>' +
-          '<div class="gn-l">נגררות</div>' +
-          '<div class="gn-s"><span><i class="gn-dot s-l1"></i><b>' + d.l1 + '</b> שבוע</span>' +
-          '<span><i class="gn-dot s-l2"></i><b>' + d.l2 + '</b> יותר</span></div>' +
-          (d.count ? '<div class="gn-split"><i class="s-l1" style="flex:' + d.l1 + '"></i>' +
-                     '<i class="s-l2" style="flex:' + d.l2 + '"></i></div>'
-                   : '<div class="gn-split is-empty"></div>') +
-          '</button>';
-        return '<div class="gn-tiles gn-o2' + (a.on ? ' has-act' : '') + '">' + tiles + '</div>';
+        return '<button type="button" class="gx-ap is-hot" data-list="approval">' +
+          '<span class="gx-ap__n">' + a.count + '</span><span class="gx-ap__l">ממתינות לאישורך</span>' +
+          '<span class="gx-ap__s">הוותיקה מחכה ' + esc(daysText(a.oldestDays)) + '</span>' +
+          '<span class="gx-ap__go">לאישור ←</span></button>';
+      }
+      function nowTiles() {
+        var o = M.now.open, d = M.now.dragged;
+        return '<div class="gx-two">' +
+          '<button type="button" class="gx-tile lgx" data-list="open" style="--k:var(--k-open)">' +
+            '<span class="gx-k">' + ico("sprout2") + 'פתוחות</span>' +
+            '<span class="gx-n">' + o.count + '</span>' +
+            '<span class="gx-s"><b>' + o.undecided + '</b> להחלטה · <b>' + o.planned + '</b> משובצות</span></button>' +
+          '<button type="button" class="gx-tile lgx" data-list="dragged" style="--k:var(--k-drag)">' +
+            '<span class="gx-k">' + ico("clock2") + 'נגררות</span>' +
+            '<span class="gx-n">' + d.count + '</span>' +
+            '<span class="gx-s"><i class="gx-dot s-l1"></i><b>' + d.l1 + '</b> שבוע · <i class="gx-dot s-l2"></i><b>' + d.l2 + '</b> יותר</span>' +
+          '</button></div>';
       }
 
       /* ---------------------------- בתקופה ---------------------------- */
       function perTiles() {
         var r = M.period.returned, n = M.period.negative, rt = M.period.routine;
         var dash = !M.logOk;
-        var t = '<button type="button" class="gn-tile gn-tile--pair" data-list="returned">' +
-          '<div class="gn-pair">' +
-            '<div><div class="gn-n">' + (dash ? "—" : r.feedback.length) + '</div><em>משוב תושב</em></div>' +
-            '<div><div class="gn-n">' + (dash ? "—" : r.reopen.length) + '</div><em>פתיחה מחדש</em></div>' +
-          '</div><div class="gn-l">חזרו לטיפול</div></button>';
-        t += '<button type="button" class="gn-tile" data-list="negative">' +
-          '<div class="gn-n">' + (dash || n.pct === null ? "—" : n.pct + '<small>%</small>') + '</div>' +
-          '<div class="gn-l">משוב שלילי</div>' +
-          '<div class="gn-s"><span>' +
-            (dash ? "היומן לא נטען"
+        return '<div class="gx-tiles">' +
+          '<button type="button" class="gx-tile lgx" data-list="returned" style="--k:var(--k-back)">' +
+            '<span class="gx-k">' + ico("back") + 'חזרו לטיפול</span>' +
+            '<span class="gx-pair"><span><span class="gx-n">' + (dash ? "—" : r.feedback.length) + '</span><em>משוב תושב</em></span>' +
+            '<span><span class="gx-n">' + (dash ? "—" : r.reopen.length) + '</span><em>פתיחה מחדש</em></span></span></button>' +
+          '<button type="button" class="gx-tile lgx" data-list="negative" style="--k:var(--k-neg)">' +
+            '<span class="gx-k">' + ico("star") + 'משוב שלילי</span>' +
+            '<span class="gx-n">' + (dash || n.pct === null ? "—" : n.pct + '<small>%</small>') + '</span>' +
+            '<span class="gx-s">' + (dash ? "היומן לא נטען"
                   : n.answered ? n.negative + " מתוך " + n.answered + " תושבים שענו"
-                               : "אף תושב עוד לא ענה בתקופה") +
-          '</span></div></button>';
-        t += '<button type="button" class="gn-tile" data-list="routine">' +
-          '<div class="gn-n">' + rt.deferred.length + '</div>' +
-          '<div class="gn-l">שגרה שנדחתה</div>' +
-          '<div class="gn-s"><span>' + (rt.cancelled.length ? 'ועוד <b>' + rt.cancelled.length + '</b> שבוטלו'
-                                                             : 'אף מופע לא בוטל') + '</span></div></button>';
-        return '<div class="gn-tiles gn-tiles--per gn-o6">' + t + '</div>';
+                               : "אף תושב עוד לא ענה") + '</span></button>' +
+          '<button type="button" class="gx-tile lgx" data-list="routine" style="--k:var(--k-rout)">' +
+            '<span class="gx-k">' + ico("repeat") + 'שגרה שנדחתה</span>' +
+            '<span class="gx-n">' + rt.deferred.length + '</span>' +
+            '<span class="gx-s">' + (rt.cancelled.length ? 'ועוד <b>' + rt.cancelled.length + '</b> שבוטלו'
+                                                          : 'אף מופע לא בוטל') + '</span></button>' +
+        '</div>';
       }
 
       /* ------------------------- גיל התקלות ------------------------- */
       function ageBox() {
         var total = M.now.open.count;
-        var bar = total
-          ? M.now.age.map(function (b, i) {
-              return b.ids.length ? '<i class="a' + (i + 1) + '" style="flex:' + b.ids.length + '"></i>' : '';
-            }).join("")
-          : '';
-        return '<div class="gn-box gn-o3">' +
-          '<h5>גיל התקלות הפתוחות' +
-            (total ? '<button type="button" class="gn-lnk" data-list="open">כל ה-' + total + ' ←</button>' : '') +
-          '</h5>' +
-          '<div class="gn-age' + (total ? '' : ' is-empty') + '">' + bar + '</div>' +
-          '<div class="gn-age-k">' + M.now.age.map(function (b, i) {
-            return '<button type="button" data-list="age" data-i="' + i + '"' + (b.ids.length ? '' : ' disabled') + '>' +
-              '<i class="a' + (i + 1) + '"></i><b>' + b.ids.length + '</b><span class="gn-l2">' + esc(b.label) +
-              '</span><span class="gn-s2">' + esc(b.short) + '</span></button>';
+        return '<div class="gx-box lgx">' +
+          '<h5>גיל התקלות' +
+            (total ? '<button type="button" class="gx-lnk" data-list="age">הכול ←</button>' : '') + '</h5>' +
+          '<div class="gx-age' + (total ? '' : ' is-empty') + '">' + (total
+            ? M.now.age.map(function (b, i) {
+                return b.ids.length ? '<i class="a' + (i + 1) + '" style="flex:' + b.ids.length + '"></i>' : '';
+              }).join("") : '') + '</div>' +
+          '<div class="gx-age-k">' + M.now.age.map(function (b, i) {
+            return '<button type="button" data-list="age" data-i="' + i + '"' + (b.ids.length ? '' : ' disabled') +
+              ' title="' + esc(b.label) + '"><b>' + b.ids.length + '</b><span>' + esc(b.short) + '</span></button>';
           }).join("") + '</div>' +
-          (total ? '' : '<p class="gn-none">אין תקלות פתוחות.</p>') +
         '</div>';
       }
 
@@ -268,41 +289,63 @@
       /* "רשימה קצרה, בלי מספר בכותרת. עד חמש שורות." */
       function topBox() {
         var top = M.now.top;
-        return '<div class="gn-box gn-o4">' +
+        return '<div class="gx-box lgx gx-grow">' +
           '<h5>הכי נגררות' +
-            (M.now.dragged.count ? '<button type="button" class="gn-lnk" data-list="dragged">כל הנגררות ←</button>' : '') +
+            (M.now.dragged.count ? '<button type="button" class="gx-lnk" data-list="dragged">הכול ←</button>' : '') +
           '</h5>' +
           (top.length
-            ? '<ul class="gn-drg">' + top.map(function (d) {
+            ? '<ul class="gx-drg">' + top.map(function (d) {
                 var t = byId[d.id] || {};
                 var c = catT(t);
                 return '<li><button type="button" data-open="' + esc(d.id) + '">' +
-                  '<span class="gn-ci k-' + c.key + '">' + ico(c.ico) + '</span>' +
-                  '<span class="gn-rt"><b>' + esc(t.title || t.category || "משימה") + '</b>' +
-                  '<span>' + esc([t.area, t.kind === "שגרה" ? "שגרה" : ""].filter(Boolean).join(" · ") || "—") +
-                  '</span></span>' +
-                  '<span class="gt-age is-l' + d.level + '">' + esc(d.text) + '</span></button></li>';
+                  '<span class="gx-ci k-' + c.key + '">' + ico(c.ico) + '</span>' +
+                  /* התג בשורה השנייה ולא בעמודה משלו — העמודה צרה, והכותרת
+                     חייבת את כל הרוחב (אחרת "ראש מ..."). */
+                  '<span class="gx-rt"><b>' + esc(t.title || t.category || "משימה") + '</b>' +
+                  '<span class="gx-rt__m"><span class="gt-age is-l' + d.level + '">' + esc(d.text) + '</span>' +
+                  '<span>' + esc([t.area, t.kind === "שגרה" ? "שגרה" : ""].filter(Boolean).join(" · ")) + '</span>' +
+                  '</span></span></button></li>';
               }).join("") + '</ul>'
-            : '<p class="gn-none">אין נגררות.</p>') +
+            : '<p class="gx-none">אין נגררות.</p>') +
         '</div>';
       }
 
       /* ---------------------------- המפה ---------------------------- */
+      /* 🔴 המקרא צף ומצומצם (23.9): שתי שורות מצבים, ושורות סוגים עם
+         סמליל ושם קצר. ✕ מקפל אותו לגלולה "מקרא" — ונזכר לפי הדפדפן. */
+      var LEG_STATES = [["wait", "להחלטה"], ["plan", "משובצת"], ["appr", "לאישורך"],
+                        ["l1", "נגררה"], ["l2", "נגררה 2+"], ["done", "נסגרה"]];
+      var LEG_CATS = [["lawn", "דשא"], ["water", "השקיה"], ["tree", "עצים"], ["prune", "גיזום"],
+                      ["weed", "עשבייה"], ["clean", "ניקיון/גזם"], ["bed", "ערוגות"]];
+      function legOpen() { try { return localStorage.getItem("cba.gx.leg") !== "0"; } catch (e) { return true; } }
+      function legSet(v) { try { localStorage.setItem("cba.gx.leg", v ? "1" : "0"); } catch (e) {} }
+      function legendHtml() {
+        if (!legOpen()) {
+          return '<button type="button" class="gx-chip lgx gx-leg-btn" data-act="leg">מקרא</button>';
+        }
+        return '<div class="gx-leg lgx"><div class="gx-leg__h"><span>מקרא</span>' +
+            '<button type="button" data-act="leg" aria-label="סגירת המקרא">' + ico("x", 12) + '</button></div>' +
+          '<div class="gx-leg__g">' + LEG_STATES.map(function (r) {
+            return '<span><i class="s-' + r[0] + '"></i>' + esc(r[1]) + '</span>';
+          }).join("") + '</div><div class="gx-leg__sep"></div><div class="gx-leg__g">' +
+          LEG_CATS.map(function (r) {
+            return '<span style="color:var(--c-' + r[0] + ')">' + ico(r[0]) + '<em>' + esc(r[1]) + '</em></span>';
+          }).join("") + '</div></div>';
+      }
       function mapBox() {
-        var mp = M.map;
-        return '<div class="gn-mapbox gn-o8" id="gn-mapslot">' +
-          '<div class="gn-map-tools">' +
-            '<button type="button" class="gn-chip gn-chip--sw" data-act="closed" aria-pressed="' + showClosed + '">' +
-              '<i class="gn-sw' + (showClosed ? ' on' : '') + '"></i>הצגת סגורות</button>' +
+        return '<div class="gx-mapbox" id="gx-mapslot">' +
+          '<div class="gx-map-tools">' +
+            '<button type="button" class="gx-chip lgx" data-act="closed" aria-pressed="' + showClosed + '">' +
+              '<i class="gx-sw' + (showClosed ? ' on' : '') + '"></i>סגורות</button>' +
             (catFilter
-              ? '<button type="button" class="gn-chip is-f" data-act="clearcat">' +
+              ? '<button type="button" class="gx-chip lgx is-f" data-act="clearcat">' +
                   esc(catFilter) + ' ' + ico("x", 12) + '</button>'
               : '') +
-            '<span class="gn-chip gn-chip--n">תקלות עם מיקום · ' + mp.openWithLoc + ' מתוך ' + mp.openTotal + '</span>' +
           '</div>' +
-          '<button type="button" class="gn-map-cover" data-act="fullmap" aria-label="פתיחת המפה במסך מלא">' +
-            '<span class="gn-chip">' + ico("full", 12) + 'מסך מלא</span></button>' +
-          '<div class="gn-pop" id="gn-pop" hidden></div>' +
+          '<div class="gx-leg-slot">' + legendHtml() + '</div>' +
+          '<button type="button" class="gx-map-cover" data-act="fullmap" aria-label="פתיחת המפה במסך מלא">' +
+            '<span class="gx-chip lgx">' + ico("full", 12) + 'מסך מלא</span></button>' +
+          '<div class="gx-pop lgx" id="gx-pop" hidden></div>' +
         '</div>';
       }
       function visiblePins(closed, cat) {
@@ -315,11 +358,11 @@
       /* המפה נבנית **פעם אחת** ועוברת בין ציורים — ציור מחדש שלה
          (בסיס SVG של כל השכונה) היה מאט כל לחיצה על תקופה או מסנן. */
       function placeMap() {
-        var slot = root.querySelector("#gn-mapslot");
+        var slot = root.querySelector("#gx-mapslot");
         if (!slot || !CBA.map) return;
         if (!mapHost) {
           mapHost = document.createElement("div");
-          mapHost.className = "gd-map gn-map";
+          mapHost.className = "gd-map gx-map";
           slot.insertBefore(mapHost, slot.firstChild);
           mapCtl = mountPins(mapHost, {
             onPin: function (p, el) { showPop(p, el, true); },
@@ -341,24 +384,24 @@
         var tag = (p.state === "l1" || p.state === "l2")
           ? '<span class="gt-age is-' + p.state + '">' +
               esc(t.flag === "דורש בדיקה חוזרת" ? "תושב אמר שלא הושלמה" : (d.text || ST_LABEL[p.state])) + '</span>'
-          : '<span class="gn-stt"><i class="gn-dot s-' + p.state + '"></i>' +
+          : '<span class="gx-stt"><i class="gx-dot s-' + p.state + '"></i>' +
               esc(p.state === "done" ? "נסגרה · " + (t.closure || "") :
                   p.state === "plan" ? "משובצת · " + weekLabel(t.week) : ST_LABEL[p.state]) + '</span>';
         var opened = CBA.gardenStatsCalc.ms(t.createdAt);
         var src = String(t.repId || "").trim() ? "נפתח על ידי תושב" : (t.openedBy === "גנן" ? "נפתח על ידי הגנן" : "נפתח על ידי המנהל");
-        return '<div class="gn-pop__t"><u class="s-' + p.state + '">' + ico(c.ico) + '</u>' +
+        return '<div class="gx-pop__t"><u class="s-' + p.state + '">' + ico(c.ico) + '</u>' +
             '<span>' + esc(t.title || t.category || "תקלה") + '</span></div>' +
-          '<div class="gn-pop__m">' + esc([t.category, t.area, t.place].filter(Boolean).join(" · ")) + '</div>' +
+          '<div class="gx-pop__m">' + esc([t.category, t.area, t.place].filter(Boolean).join(" · ")) + '</div>' +
           (big
-            ? '<div class="gn-pop__r">' + tag + (opened ? '<span class="gn-pop__a">נפתחה ' + esc(ago(opened)) + '</span>' : '') + '</div>' +
-              '<div class="gn-pop__m">' + esc((t.repId ? GL().reportRef(t.repId) + " · " : "") + src) + '</div>' +
-              '<button type="button" class="gd-cta gn-pop__cta" data-open="' + esc(p.id) + '">פתיחת הכרטיס</button>'
-            : '<div class="gn-pop__r">' + tag +
-              '<button type="button" class="gn-pop__go" data-open="' + esc(p.id) + '">פתיחה ←</button></div>');
+            ? '<div class="gx-pop__r">' + tag + (opened ? '<span class="gx-pop__a">נפתחה ' + esc(ago(opened)) + '</span>' : '') + '</div>' +
+              '<div class="gx-pop__m">' + esc((t.repId ? GL().reportRef(t.repId) + " · " : "") + src) + '</div>' +
+              '<button type="button" class="gd-cta gx-pop__cta" data-open="' + esc(p.id) + '">פתיחת הכרטיס</button>'
+            : '<div class="gx-pop__r">' + tag +
+              '<button type="button" class="gx-pop__go" data-open="' + esc(p.id) + '">פתיחה ←</button></div>');
       }
       function showPop(p, el, pinned) {
-        var pop = root.querySelector("#gn-pop");
-        var box = root.querySelector("#gn-mapslot");
+        var pop = root.querySelector("#gx-pop");
+        var box = root.querySelector("#gx-mapslot");
         if (!pop || !box || !el) return;
         clearTimeout(popHideT);
         pop.innerHTML = popHtml(p, false);
@@ -378,31 +421,32 @@
       function hidePopSoon() {
         clearTimeout(popHideT);
         popHideT = setTimeout(function () {
-          var pop = root.querySelector("#gn-pop");
+          var pop = root.querySelector("#gx-pop");
           if (pop && !pop.matches(":hover") && pop.dataset.pinned !== "1") pop.hidden = true;
         }, 260);
       }
       function hidePop() {
-        var pop = root && root.querySelector("#gn-pop");
+        var pop = root && root.querySelector("#gx-pop");
         if (pop) { pop.hidden = true; pop.dataset.pinned = ""; }
       }
 
       /* -------------------------- לפי סוג -------------------------- */
+      /* 🔴 23.9 (יועד): פס, והסמליל והמספר **בתוך** כל מקטע. לכל מקטע רוחב
+         מינימלי כדי שגם תקלה אחת תיקרא; סוג בלי תקלות לא נכנס לפס (הוא
+         במקרא). לחיצה על מקטע מסננת את המפה ופותחת את הרשימה. */
       function catBox() {
-        var cats = M.period.byCat;
+        var cats = M.period.byCat.filter(function (c) { return c.ids.length; });
         var total = M.period.faultsInPeriod;
-        return '<div class="gn-box gn-o7">' +
-          '<h5>תקלות לפי סוג<span class="gn-lnk is-static">' + total + ' תקלות בתקופה</span></h5>' +
-          '<div class="gn-cat' + (total ? '' : ' is-empty') + '">' + cats.map(function (c) {
-            return c.ids.length ? '<i style="flex:' + c.ids.length + ';background:var(--c-' + c.key + ')"></i>' : '';
-          }).join("") + '</div>' +
-          '<div class="gn-cat-k">' + cats.map(function (c) {
-            return '<button type="button" data-cat="' + esc(c.name) + '" title="' + esc(c.name) + '"' +
-              (catFilter === c.name ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' +
-              '<span class="gn-cat-i" style="color:var(--c-' + c.key + ')">' + ico(c.ico, 16) + '</span>' +
-              '<b>' + c.ids.length + '</b><em>' + esc(c.name) + '</em></button>';
-          }).join("") + '</div>' +
-          (total ? '' : '<p class="gn-none">לא נפתחו תקלות בתקופה.</p>') +
+        return '<div class="gx-box lgx gx-catbox">' +
+          '<h5>תקלות לפי סוג<small>' + total + ' בתקופה</small></h5>' +
+          (total
+            ? '<div class="gx-cbar' + (catFilter ? ' has-f' : '') + '">' + cats.map(function (c) {
+                return '<button type="button" data-cat="' + esc(c.name) + '" title="' + esc(c.name) + ' · ' + c.ids.length + '"' +
+                  ' aria-pressed="' + (catFilter === c.name) + '"' + (catFilter === c.name ? ' class="on"' : '') +
+                  ' style="flex:' + c.ids.length + ';--cc:var(--c-' + c.key + ')">' + ico(c.ico) +
+                  '<b>' + c.ids.length + '</b></button>';
+              }).join("") + '</div>'
+            : '<div class="gx-cbar is-empty"></div><p class="gx-none">לא נפתחו תקלות בתקופה.</p>') +
         '</div>';
       }
 
@@ -413,14 +457,15 @@
         { k: "pct",   t: "עמידה בתוכנית",        p: "שגרה שבוצעה בשבוע שלה",       tab: "תוכנית" },
         { k: "src",   t: "מי פתח את התקלות",     p: "תושב · מנהל · גנן",            tab: "מי פתח" }
       ];
+      /* במחשב 2×2; בטלפון לשוניות על גרף אחד (CSS לפי data-tab). */
       function trendsBox() {
-        return '<div class="gn-trends gn-o9" data-tab="' + trendTab + '">' +
-          '<div class="gn-tabs" role="tablist">' + TR.map(function (x, i) {
+        return '<div class="gx-trends" data-tab="' + trendTab + '">' +
+          '<div class="gx-tabs lgx" role="tablist">' + TR.map(function (x, i) {
             return '<button type="button" role="tab" aria-selected="' + (i === trendTab) + '" data-tab="' + i + '"' +
               (i === trendTab ? ' class="on"' : '') + '>' + esc(x.tab) + '</button>';
           }).join("") + '</div>' +
           TR.map(function (x, i) {
-            return '<div class="gn-box gn-tr" data-i="' + i + '"><h5>' + esc(x.t) + '</h5><p>' + esc(x.p) + '</p>' +
+            return '<div class="gx-box lgx gx-tr" data-i="' + i + '"><h5>' + esc(x.t) + '</h5><p>' + esc(x.p) + '</p>' +
               chart(x.k) + '</div>';
           }).join("") +
         '</div>';
@@ -430,12 +475,16 @@
          viewBox 200×72. עמודה לשבוע, השבוע הנוכחי מימין ובגוון בהיר (הוא
          עוד לא נגמר) — בדיוק כמו במוקאפ. ציר אחד לכל גרף, מהאפס. */
       var CW = 200, CH = 72, BASE = 56, TOP = 10;
+      /* 23.9 — הגרף ממלא את הקופסה שלו: גובה ה-viewBox נגזר מהיחס
+         רוחב/גובה של המקום הפנוי (במחשב הקופסאות גבוהות, 2×2). הטקסט
+         נשאר בגודלו כי הרוחב (200) קבוע. */
+      function setCH(h) { CH = Math.max(72, Math.min(190, Math.round(h))); BASE = CH - 16; }
       function xAt(i, n) {        // i=0 הישן ביותר, n-1 הנוכחי
         var slot = 188 / n;
         return 6 + (i + 0.5) * slot;
       }
       function axis(n) {
-        return '<line x1="4" y1="' + BASE + '" x2="196" y2="' + BASE + '" stroke="var(--gn-line)"/>' +
+        return '<line x1="4" y1="' + BASE + '" x2="196" y2="' + BASE + '" stroke="var(--gx-line)"/>' +
           '<text x="' + xAt(n - 1, n) + '" y="' + (BASE + 11) + '" text-anchor="middle">השבוע</text>' +
           '<text x="' + xAt(0, n) + '" y="' + (BASE + 11) + '" text-anchor="middle">−' + (n - 1) + '</text>';
       }
@@ -443,21 +492,22 @@
          שהוא LTR נקראת הפוך ("ימים 9 עד") — לכן הטקסט עצמו RTL, והעוגן
          "end" (שב-RTL הוא הקצה השמאלי) מצמיד אותו ל-x=6. */
       function scaleLbl(str) {
-        return '<text x="6" y="' + (TOP - 1) + '" class="gn-cv" direction="rtl" text-anchor="end" ' +
+        return '<text x="6" y="' + (TOP - 1) + '" class="gx-cv" direction="rtl" text-anchor="end" ' +
           'style="direction:rtl;unicode-bidi:embed">' + esc(str) + '</text>';
       }
       function emptyNote(msg) {
-        return '<text x="100" y="30" text-anchor="middle" class="gn-cn">' + esc(msg) + '</text>';
+        return '<text x="100" y="30" text-anchor="middle" class="gx-cn">' + esc(msg) + '</text>';
       }
       function wkTitle(i) { return weekLabel(M.weekKeys[i]); }
-      function chart(k) {
+      function chart(k, h) {
+        if (h) setCH(h); else setCH(72);
         var n = M.weekKeys.length, T = M.trends, o = "", slot = 188 / n, bw = Math.min(16, slot * 0.62);
         if (k === "bars") {
           var v = T.dragged, mx = Math.max.apply(null, v.concat([1]));
           v.forEach(function (c, i) {
             var h = c ? Math.max(2, (BASE - TOP) * c / mx) : 0;
             o += '<rect x="' + (xAt(i, n) - bw / 2) + '" y="' + (BASE - h) + '" width="' + bw + '" height="' + h +
-              '" rx="2" fill="' + (i === n - 1 ? "var(--gn-bar2)" : "var(--gn-bar)") + '"><title>' +
+              '" rx="2" fill="' + (i === n - 1 ? "var(--gx-bar2)" : "var(--gx-bar)") + '"><title>' +
               esc(wkTitle(i) + ": " + c) + '</title></rect>';
           });
           if (v.some(Boolean)) o += scaleLbl("עד " + mx);
@@ -480,40 +530,41 @@
               return (pts.length > 1 ? '<polyline fill="none" stroke="' + col + '" stroke-width="2"' +
                 (dash ? ' stroke-dasharray="4 3"' : '') + ' points="' + pts.join(" ") + '"/>' : '') + s;
             };
-            o += line(T.close, "var(--gn-bar)", false, "עד סגירה") + line(T.sched, "var(--st-wait)", true, "עד שיבוץ");
+            o += line(T.close, "var(--gx-bar)", false, "עד סגירה") + line(T.sched, "var(--s-wait)", true, "עד שיבוץ");
             if (all.length) o += scaleLbl("עד " + mx2 + " ימים");
             else o += emptyNote("עוד אין תקלות ששובצו או נסגרו בתקופה");
           }
-          o += '<g class="gn-leg"><line x1="146" y1="' + (TOP - 4) + '" x2="156" y2="' + (TOP - 4) + '" stroke="var(--gn-bar)" stroke-width="2"/>' +
+          o += '<g class="gx-leg"><line x1="146" y1="' + (TOP - 4) + '" x2="156" y2="' + (TOP - 4) + '" stroke="var(--gx-bar)" stroke-width="2"/>' +
             '<text x="144" y="' + (TOP - 1) + '" text-anchor="end">סגירה</text>' +
-            '<line x1="186" y1="' + (TOP - 4) + '" x2="196" y2="' + (TOP - 4) + '" stroke="var(--st-wait)" stroke-width="2" stroke-dasharray="4 3"/>' +
+            '<line x1="186" y1="' + (TOP - 4) + '" x2="196" y2="' + (TOP - 4) + '" stroke="var(--s-wait)" stroke-width="2" stroke-dasharray="4 3"/>' +
             '<text x="184" y="' + (TOP - 1) + '" text-anchor="end">שיבוץ</text></g>';
         } else if (k === "pct") {
           var a = T.adherence, pts = [], dots = "", last = null;
-          o += '<line x1="4" y1="' + TOP + '" x2="196" y2="' + TOP + '" stroke="var(--gn-line2)" stroke-dasharray="3 3"/>' +
-            '<text x="6" y="' + (TOP - 2) + '" class="gn-cv">100%</text>';
+          o += '<line x1="4" y1="' + TOP + '" x2="196" y2="' + TOP + '" stroke="var(--gx-line2)" stroke-dasharray="3 3"/>' +
+            '<text x="6" y="' + (TOP - 2) + '" class="gx-cv">100%</text>';
           a.forEach(function (x, i) {
             if (x === null) return;
             var y = BASE - (BASE - TOP) * x / 100;
-            pts.push(xAt(i, n).toFixed(1) + "," + y.toFixed(1));
+            /* השבוע הנוכחי — נקודה בהירה בלבד, בלי קו: האחוז שלו חלקי. */
+            if (i < n - 1) pts.push(xAt(i, n).toFixed(1) + "," + y.toFixed(1));
             dots += '<circle cx="' + xAt(i, n).toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (i === n - 1 ? 3 : 2.2) +
-              '" fill="' + (i === n - 1 ? "var(--gn-bar2)" : "var(--gn-bar)") + '"><title>' +
+              '" fill="' + (i === n - 1 ? "var(--gx-bar2)" : "var(--gx-bar)") + '"><title>' +
               esc(wkTitle(i) + ": " + x + "% (" + T.adhDen[i] + " מופעים)") + '</title></circle>';
             /* השבוע הנוכחי עוד לא נגמר — הנקודה שלו בהירה, והתווית
                היא של השבוע האחרון שנסגר, לא של אחוז חלקי. */
             if (i < n - 1) last = { x: xAt(i, n), y: y, v: x };
           });
-          if (pts.length > 1) o += '<polyline fill="none" stroke="var(--gn-bar)" stroke-width="2" points="' + pts.join(" ") + '"/>';
+          if (pts.length > 1) o += '<polyline fill="none" stroke="var(--gx-bar)" stroke-width="2" points="' + pts.join(" ") + '"/>';
           o += dots;
           if (last) o += '<text x="' + Math.min(188, last.x) + '" y="' + Math.max(TOP + 9, last.y - 5) +
-            '" text-anchor="middle" class="gn-cb">' + last.v + '%</text>';
-          else if (!pts.length) o += emptyNote("עוד אין שגרה מתוכננת בתקופה");
+            '" text-anchor="middle" class="gx-cb">' + last.v + '%</text>';
+          else if (!a.some(function (x) { return x !== null; })) o += emptyNote("עוד אין שגרה מתוכננת בתקופה");
         } else if (k === "src") {
           var S = T.src, mx3 = 1;
           S.forEach(function (s) { mx3 = Math.max(mx3, s.res + s.mgr + s.gard); });
           S.forEach(function (s, i) {
             var y = BASE;
-            [["res", "var(--gn-src1)", "תושב"], ["mgr", "var(--gn-src2)", "מנהל"], ["gard", "var(--gn-src3)", "גנן"]].forEach(function (c) {
+            [["res", "var(--gx-src1)", "תושב"], ["mgr", "var(--gx-src2)", "מנהל"], ["gard", "var(--gx-src3)", "גנן"]].forEach(function (c) {
               var h = (BASE - TOP) * s[c[0]] / mx3;
               if (!h) return;
               y -= h;
@@ -521,13 +572,13 @@
                 '"' + (i === n - 1 ? ' opacity=".7"' : '') + '><title>' + esc(wkTitle(i) + " · " + c[2] + ": " + s[c[0]]) + '</title></rect>';
             });
           });
-          o += '<g class="gn-leg">' +
-            '<rect x="186" y="' + (TOP - 8) + '" width="8" height="6" fill="var(--gn-src1)"/><text x="183" y="' + (TOP - 2) + '" text-anchor="end">תושב</text>' +
-            '<rect x="152" y="' + (TOP - 8) + '" width="8" height="6" fill="var(--gn-src2)"/><text x="149" y="' + (TOP - 2) + '" text-anchor="end">מנהל</text>' +
-            '<rect x="120" y="' + (TOP - 8) + '" width="8" height="6" fill="var(--gn-src3)"/><text x="117" y="' + (TOP - 2) + '" text-anchor="end">גנן</text></g>';
+          o += '<g class="gx-leg">' +
+            '<rect x="186" y="' + (TOP - 8) + '" width="8" height="6" fill="var(--gx-src1)"/><text x="183" y="' + (TOP - 2) + '" text-anchor="end">תושב</text>' +
+            '<rect x="152" y="' + (TOP - 8) + '" width="8" height="6" fill="var(--gx-src2)"/><text x="149" y="' + (TOP - 2) + '" text-anchor="end">מנהל</text>' +
+            '<rect x="120" y="' + (TOP - 8) + '" width="8" height="6" fill="var(--gx-src3)"/><text x="117" y="' + (TOP - 2) + '" text-anchor="end">גנן</text></g>';
           if (!S.some(function (s) { return s.res + s.mgr + s.gard; })) o += emptyNote("לא נפתחו תקלות בתקופה");
         }
-        return '<svg class="gn-chart" viewBox="0 0 ' + CW + ' ' + CH + '" role="img" aria-label="' +
+        return '<svg class="gx-chart" viewBox="0 0 ' + CW + ' ' + CH + '" role="img" aria-label="' +
           esc((TR.filter(function (x) { return x.k === k; })[0] || {}).t) + '">' + axis(n) + o + '</svg>';
       }
 
@@ -542,12 +593,12 @@
         var meta = [t.area, opt.meta].filter(Boolean).join(" · ");
         var tag = opt.tag !== undefined ? opt.tag
                 : d.level ? '<span class="gt-age is-l' + d.level + '">' + esc(d.text) + '</span>' : '';
-        return '<div class="gn-li' + (opt.cls ? " " + opt.cls : "") + '" data-row="' + esc(id) + '">' +
-          '<button type="button" class="gn-li__main" data-open="' + esc(id) + '">' +
-            '<span class="gn-ci k-' + c.key + '">' + ico(c.ico) + '</span>' +
-            '<span class="gn-rt"><b>' + esc(t.title || t.category || "משימה") + '</b>' +
+        return '<div class="gx-li' + (opt.cls ? " " + opt.cls : "") + '" data-row="' + esc(id) + '">' +
+          '<button type="button" class="gx-li__main" data-open="' + esc(id) + '">' +
+            '<span class="gx-ci k-' + c.key + '">' + ico(c.ico) + '</span>' +
+            '<span class="gx-rt"><b>' + esc(t.title || t.category || "משימה") + '</b>' +
             '<span>' + esc(meta || "—") + '</span>' +
-            (opt.note ? '<span class="gn-li__note">' + esc(opt.note) + '</span>' : '') + '</span>' +
+            (opt.note ? '<span class="gx-li__note">' + esc(opt.note) + '</span>' : '') + '</span>' +
             tag + '</button>' +
           (opt.actions || '') +
         '</div>';
@@ -569,28 +620,38 @@
             sections: [{ rows: A.map(function (a) {
               return row(a.id, { meta: "מחכה " + daysText(a.days) + " · " + srcOf(byId[a.id] || {}),
                 note: (byId[a.id] || {}).note || "", tag: "",
-                actions: '<div class="gn-li__acts">' +
-                  '<button type="button" class="gn-btn is-ok" data-approve="' + esc(a.id) + '">' + ico("check", 14) + 'אישור</button>' +
-                  '<button type="button" class="gn-btn" data-return="' + esc(a.id) + '">' + ico("back", 14) + 'החזרה לגנן</button></div>' });
+                actions: '<div class="gx-li__acts">' +
+                  '<button type="button" class="gx-btn is-ok" data-approve="' + esc(a.id) + '">' + ico("check", 14) + 'אישור</button>' +
+                  '<button type="button" class="gx-btn" data-return="' + esc(a.id) + '">' + ico("back", 14) + 'החזרה לגנן</button></div>' });
             }) }] };
         }
         if (key === "open") {
           return { title: "תקלות פתוחות", key: key, sub: "מהוותיקה לחדשה.", empty: "אין תקלות פתוחות.",
+            big: { n: M.now.open.count, label: M.now.open.undecided + " להחלטה · " + M.now.open.planned + " משובצות" },
             sections: [{ rows: M.now.open.ids.map(function (id) {
               var t = byId[id] || {};
               return row(id, { meta: (t.week ? weekLabel(t.week) : "ממתינה להחלטה") + " · נפתחה " + ago(ms(t.createdAt)) });
             }) }] };
         }
         if (key === "age") {
-          var b = M.now.age[arg];
-          return { title: "תקלות פתוחות · " + b.label, key: key, empty: "אין תקלות בקבוצה הזאת.",
-            sections: [{ rows: b.ids.map(function (id) {
-              var t = byId[id] || {};
-              return row(id, { meta: "נפתחה " + ago(ms(t.createdAt)) });
-            }) }] };
+          /* 🔴 23.9 — הכרטיסייה מראה את **כל** הגילים, עם בורר קבוצה בראשה:
+             לחיצה על קבוצה מסננת את הרשימה בלי לסגור (סבב עיצוב 4). */
+          var tot = M.now.open.count;
+          return { title: "גיל התקלות הפתוחות", key: key,
+            big: { n: tot, label: tot ? "תקלות פתוחות · מהוותיקה לחדשה" : "אין תקלות פתוחות" },
+            chips: M.now.age.map(function (b, i) { return { i: i, n: b.ids.length, label: b.short }; }),
+            pick: arg === undefined ? null : arg,
+            empty: "אין תקלות פתוחות.",
+            sections: M.now.age.map(function (b, i) {
+              return { b: i, h: b.label + " · " + b.ids.length, rows: b.ids.map(function (id) {
+                var t = byId[id] || {};
+                return row(id, { meta: (t.week ? weekLabel(t.week) : "ממתינה להחלטה") + " · נפתחה " + ago(ms(t.createdAt)) });
+              }) };
+            }).filter(function (s) { return s.rows.length; }) };
         }
         if (key === "dragged") {
           return { title: "נגררות", key: key, sub: "מהרחוקה ביותר מהשבוע המקורי שלה.", empty: "אין נגררות.",
+            big: { n: M.now.dragged.count, label: M.now.dragged.l1 + " שבוע · " + M.now.dragged.l2 + " יותר משבוע" },
             sections: [{ rows: M.now.dragged.items.map(function (d) {
               var t = byId[d.id] || {};
               return row(d.id, { meta: srcOf(t) + " · שבוע מקורי " + weekLabel(d.orig).replace("שבוע ", "") });
@@ -616,7 +677,7 @@
             empty: M.logOk ? "אף תושב עוד לא ענה בתקופה." : "היומן לא נטען.",
             sections: [{ rows: N.items.map(function (r) {
               return row(r.id, { meta: (whoOf(r) || "תושב") + " · " + ago(r.at), note: r.note,
-                tag: '<span class="gn-fb' + (r.negative ? ' is-neg">לא הושלם' : '">הושלם') + '</span>' });
+                tag: '<span class="gx-fb' + (r.negative ? ' is-neg">לא הושלם' : '">הושלם') + '</span>' });
             }) }] };
         }
         if (key === "routine") {
@@ -656,21 +717,41 @@
       function listBody(L) {
         var any = L.sections.some(function (s) { return s.rows.length; });
         return any ? L.sections.map(function (s) {
-          return (s.h ? '<div class="gn-lh">' + esc(s.h) + '</div>' : '') + s.rows.join("");
-        }).join("") : '<p class="gn-none">' + esc(L.empty || "אין מה להציג.") + '</p>';
+          return '<div class="gx-sec"' + (s.b !== undefined ? ' data-b="' + s.b + '"' : '') + '>' +
+            (s.h ? '<div class="gx-lh">' + esc(s.h) + '</div>' : '') + s.rows.join("") + '</div>';
+        }).join("") : '<p class="gx-none">' + esc(L.empty || "אין מה להציג.") + '</p>';
       }
 
       function openList(L) {
         if (!L) return;
         hidePeek();
+        /* 🔴 23.9 — הכרטיסייה בזכוכית (סבב עיצוב 4): חלון צד במחשב, גיליון
+           בטלפון — אותו רכיב (CBA.ui.sheet), רק שכבת עיצוב gx-sheet. */
+        var pick = (L.pick === null || L.pick === undefined) ? "" : String(L.pick);
         var sh = CBA.ui.sheet({
-          key: "gn-list", label: L.title, cls: "gn-vars gn-sheet",
-          html: '<div class="gd-sheet-head"><button type="button" class="gd-sheet-close" data-close="1">' +
-                  ico("x", 14) + 'סגירה</button><h4>' + esc(L.title) + '</h4></div>' +
+          key: "gx-list", label: L.title, cls: "gx-vars gx-sheet",
+          html: '<div class="gd-sheet-head"><h4>' + esc(L.title) + '</h4>' +
+                  '<button type="button" class="gd-sheet-close" data-close="1">' + ico("x", 14) + 'סגירה</button></div>' +
+                (L.big ? '<div class="gx-big"><b>' + L.big.n + '</b><span>' + esc(L.big.label) + '</span></div>' : '') +
+                (L.chips ? '<div class="gx-fchips">' + L.chips.map(function (c) {
+                  return '<button type="button" data-f="' + c.i + '"' + (String(c.i) === pick ? ' class="on"' : '') +
+                    (c.n ? '' : ' disabled') + '><b>' + c.n + '</b><span>' + esc(c.label) + '</span></button>';
+                }).join("") + '</div>' : '') +
                 (L.sub ? '<p class="sub">' + esc(L.sub) + '</p>' : '') +
-                '<div class="gn-list">' + listBody(L) + '</div>',
+                '<div class="gx-list"' + (pick ? ' data-f="' + pick + '"' : '') + '>' + listBody(L) + '</div>',
           onPick: function (e, close) {
             if (e.target.closest("[data-close]")) return close();
+            var fc = e.target.closest("[data-f]");
+            if (fc && fc.tagName === "BUTTON") {
+              /* סינון בתוך הכרטיסייה, בלי לסגור. לחיצה שנייה — הכול. */
+              var box = sh.wrap.querySelector(".gx-list");
+              var on = box.dataset.f === fc.dataset.f;
+              if (on) delete box.dataset.f; else box.dataset.f = fc.dataset.f;
+              sh.wrap.querySelectorAll(".gx-fchips button").forEach(function (b) {
+                b.classList.toggle("on", !on && b === fc);
+              });
+              return;
+            }
             var ap = e.target.closest("[data-approve]");
             if (ap) return approve(ap.dataset.approve, ap);
             var rt = e.target.closest("[data-return]");
@@ -684,7 +765,7 @@
 
       /* ---- אישור / החזרה לגנן, ישר מהשורה ---- */
       function approve(id, btn) {
-        var li = btn.closest(".gn-li");
+        var li = btn.closest(".gx-li");
         btn.disabled = true;
         CBA.data.gardenTask("approve", id, {}, function (res) {
           if (!res || !res.ok) {
@@ -703,7 +784,7 @@
           .then(function (note) {
             note = String(note || "").trim();
             if (!note) return;
-            var li = btn.closest(".gn-li");
+            var li = btn.closest(".gx-li");
             btn.disabled = true;
             CBA.data.gardenTask("return", id, { note: note }, function (res) {
               if (!res || !res.ok) {
@@ -731,13 +812,13 @@
         L.sections.forEach(function (s) { rows = rows.concat(s.rows); });
         if (!peekEl) {
           peekEl = document.createElement("div");
-          peekEl.className = "gn-peek gn-vars";
+          peekEl.className = "gx-peek gx-vars";
           document.body.appendChild(peekEl);
         }
-        peekEl.innerHTML = '<div class="gn-peek__h">' + esc(L.title) + '</div>' +
-          (rows.length ? rows.slice(0, 5).join("") : '<p class="gn-none">' + esc(L.empty || "") + '</p>') +
-          (rows.length > 5 ? '<div class="gn-peek__f">ועוד ' + (rows.length - 5) + ' · לחיצה לרשימה המלאה</div>'
-                           : (rows.length ? '<div class="gn-peek__f">לחיצה לרשימה המלאה</div>' : ''));
+        peekEl.innerHTML = '<div class="gx-peek__h">' + esc(L.title) + '</div>' +
+          (rows.length ? rows.slice(0, 5).join("") : '<p class="gx-none">' + esc(L.empty || "") + '</p>') +
+          (rows.length > 5 ? '<div class="gx-peek__f">ועוד ' + (rows.length - 5) + ' · לחיצה לרשימה המלאה</div>'
+                           : (rows.length ? '<div class="gx-peek__f">לחיצה לרשימה המלאה</div>' : ''));
         var r = tile.getBoundingClientRect();
         peekEl.style.display = "block";
         var w = peekEl.offsetWidth, h = peekEl.offsetHeight;
@@ -766,12 +847,18 @@
             showClosed = !showClosed;
             var sw = root.querySelector('[data-act="closed"]');
             sw.setAttribute("aria-pressed", showClosed);
-            sw.querySelector(".gn-sw").classList.toggle("on", showClosed);
+            sw.querySelector(".gx-sw").classList.toggle("on", showClosed);
             hidePop();
             if (mapCtl) mapCtl.set(visiblePins(showClosed, catFilter));
             return;
           }
           if (e.target.closest('[data-act="clearcat"]')) { catFilter = ""; hidePop(); draw(); return; }
+          if (e.target.closest('[data-act="leg"]')) {
+            legSet(!legOpen());
+            var ls = root.querySelector(".gx-leg-slot");
+            if (ls) ls.innerHTML = legendHtml();
+            return;
+          }
           if (e.target.closest('[data-act="fullmap"]')) { openFullMap(); return; }
           if ((b = e.target.closest("[data-cat]"))) {
             var name = b.dataset.cat;
@@ -782,11 +869,11 @@
             openList(lists("cat", name));
             return;
           }
-          if ((b = e.target.closest("[data-tab]")) && b.closest(".gn-tabs")) {
+          if ((b = e.target.closest("[data-tab]")) && b.closest(".gx-tabs")) {
             trendTab = +b.dataset.tab;
-            var tr = root.querySelector(".gn-trends");
+            var tr = root.querySelector(".gx-trends");
             tr.dataset.tab = trendTab;
-            tr.querySelectorAll(".gn-tabs button").forEach(function (x, i) {
+            tr.querySelectorAll(".gx-tabs button").forEach(function (x, i) {
               x.classList.toggle("on", i === trendTab);
               x.setAttribute("aria-selected", i === trendTab);
             });
@@ -798,20 +885,20 @@
             return;
           }
           /* לחיצה במפה מחוץ לנעץ סוגרת תקציר נעוץ */
-          if (!e.target.closest("#gn-pop") && !e.target.closest(".map-marker")) hidePop();
+          if (!e.target.closest("#gx-pop") && !e.target.closest(".map-marker")) hidePop();
         };
         if (FINE.matches) {
           root.onmouseover = function (e) {
-            var t = e.target.closest(".gn-tile[data-list], .gn-age-k [data-list]");
+            var t = e.target.closest(".gx-tile[data-list], .gx-ap[data-list], .gx-age-k [data-list]");
             if (!t || t.disabled) return;
             if (t.contains(e.relatedTarget)) return;
             clearTimeout(peekTimer);
             peekTimer = setTimeout(function () { if (alive() && t.matches(":hover")) showPeek(t); }, 380);
           };
           root.onmouseout = function (e) {
-            var t = e.target.closest(".gn-tile[data-list], .gn-age-k [data-list]");
+            var t = e.target.closest(".gx-tile[data-list], .gx-ap[data-list], .gx-age-k [data-list]");
             if (t && !t.contains(e.relatedTarget)) hidePeek();
-            var pop = e.target.closest("#gn-pop");
+            var pop = e.target.closest("#gx-pop");
             if (pop && !pop.contains(e.relatedTarget)) hidePopSoon();
           };
         }
@@ -825,32 +912,33 @@
         var cats = M.period.byCat.map(function (c) { return c.name; });
         M.map.pins.forEach(function (p) { if (p.category && cats.indexOf(p.category) < 0) cats.push(p.category); });
         var wrap = document.createElement("div");
-        wrap.className = "gt-sheet-wrap gn-full gn-vars";
+        wrap.className = "gt-sheet-wrap gx-full gx-vars";
         wrap.innerHTML =
-          '<div class="gn-full__in" role="dialog" aria-label="מפת התקלות">' +
-            '<div class="gd-map gn-full__map"></div>' +
-            '<div class="gn-full__tools">' +
-              '<button type="button" class="gn-chip" data-close="1" aria-label="סגירה">' + ico("x", 14) + '</button>' +
-              '<button type="button" class="gn-chip gn-chip--sw" data-fclosed="1" aria-pressed="' + fClosed + '">' +
-                '<i class="gn-sw' + (fClosed ? ' on' : '') + '"></i>סגורות</button>' +
-              '<label class="gn-chip gn-chip--sel"><select id="gn-fcat" aria-label="סוג תקלה">' +
+          '<div class="gx-full__in" role="dialog" aria-label="מפת התקלות">' +
+            '<div class="gd-map gx-full__map"></div>' +
+            '<div class="gx-full__tools">' +
+              '<button type="button" class="gx-chip lgx" data-close="1" aria-label="סגירה">' + ico("x", 14) + '</button>' +
+              '<button type="button" class="gx-chip lgx gx-chip--sw" data-fclosed="1" aria-pressed="' + fClosed + '">' +
+                '<i class="gx-sw' + (fClosed ? ' on' : '') + '"></i>סגורות</button>' +
+              '<label class="gx-chip lgx gx-chip--sel"><select id="gx-fcat" aria-label="סוג תקלה">' +
                 '<option value="">כל הסוגים</option>' +
                 cats.map(function (c) { return '<option' + (c === fCat ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join("") +
               '</select>' + ico("chev", 12) + '</label>' +
             '</div>' +
-            '<div class="gn-full__sheet" hidden><div class="gt-grip" aria-hidden="true"></div><div class="gn-full__body"></div></div>' +
+            '<div class="gx-leg-slot gx-leg-slot--full">' + legendHtml() + '</div>' +
+            '<div class="gx-full__sheet lgx" hidden><div class="gt-grip" aria-hidden="true"></div><div class="gx-full__body"></div></div>' +
           '</div>';
-        var close = CBA.ui.mountSheet(wrap, { key: "gn-fullmap" });
-        var host = wrap.querySelector(".gn-full__map");
-        var panel = wrap.querySelector(".gn-full__sheet");
+        var close = CBA.ui.mountSheet(wrap, { key: "gx-fullmap" });
+        var host = wrap.querySelector(".gx-full__map");
+        var panel = wrap.querySelector(".gx-full__sheet");
         var ctl = mountPins(host, {
           onPin: function (p) {
-            panel.querySelector(".gn-full__body").innerHTML = popHtml(p, true);
+            panel.querySelector(".gx-full__body").innerHTML = popHtml(p, true);
             panel.hidden = false;
           },
           onCluster: function (list) {
-            panel.querySelector(".gn-full__body").innerHTML =
-              '<div class="gn-list">' + listBody(clusterList(list)) + '</div>';
+            panel.querySelector(".gx-full__body").innerHTML =
+              '<div class="gx-list">' + listBody(clusterList(list)) + '</div>';
             panel.hidden = false;
           }
         });
@@ -858,19 +946,24 @@
         set();
         wrap.addEventListener("click", function (e) {
           if (e.target.closest("[data-close]")) return close();
+          if (e.target.closest('[data-act="leg"]')) {
+            legSet(!legOpen());
+            wrap.querySelector(".gx-leg-slot").innerHTML = legendHtml();
+            return;
+          }
           var sw = e.target.closest("[data-fclosed]");
           if (sw) {
             fClosed = !fClosed;
             sw.setAttribute("aria-pressed", fClosed);
-            sw.querySelector(".gn-sw").classList.toggle("on", fClosed);
+            sw.querySelector(".gx-sw").classList.toggle("on", fClosed);
             return set();
           }
           var op = e.target.closest("[data-open]");
           if (op) { close(); openCard(op.dataset.open); return; }
-          if (!e.target.closest(".gn-full__sheet") && !e.target.closest(".map-marker") &&
-              !e.target.closest(".gn-full__tools")) panel.hidden = true;
+          if (!e.target.closest(".gx-full__sheet") && !e.target.closest(".map-marker") &&
+              !e.target.closest(".gx-full__tools")) panel.hidden = true;
         });
-        wrap.querySelector("#gn-fcat").addEventListener("change", function (e) { fCat = e.target.value; set(); });
+        wrap.querySelector("#gx-fcat").addEventListener("change", function (e) { fCat = e.target.value; set(); });
       }
     }
   };
@@ -915,7 +1008,7 @@
     }
     function pinSvg(state, catIco) {
       var K = CBA.gardenKit, body = (K && K.ICONS && K.ICONS[catIco]) || "";
-      return '<svg viewBox="0 0 24 30" aria-hidden="true"><path class="gn-pin__b s-' + state + '" ' +
+      return '<svg viewBox="0 0 24 30" aria-hidden="true"><path class="gx-pin__b s-' + state + '" ' +
         'd="M12 .8C5.8.8.8 5.7.8 11.8.8 19.6 12 29.2 12 29.2s11.2-9.6 11.2-17.4C23.2 5.7 18.2.8 12 .8Z"/>' +
         '<g transform="translate(5 4.6) scale(.5833)" fill="none" stroke="#fff" stroke-width="2.6" ' +
         'stroke-linecap="round" stroke-linejoin="round">' + body + '</g></svg>';
@@ -923,7 +1016,7 @@
     function build() {
       var s = scale(), WH = worldWH();
       lastScale = s;
-      host.style.setProperty("--gn-inv", (1 / s).toFixed(4));
+      host.style.setProperty("--gx-inv", (1 / s).toFixed(4));
       var R = 22 / s;                         // 22 פיקסלי מסך
       var sorted = list.slice().sort(function (a, b) {
         return CBA.gardenStatsCalc.SEVERITY[b.state] - CBA.gardenStatsCalc.SEVERITY[a.state];
@@ -939,13 +1032,13 @@
       groups = gs.map(function (g) {
         var top = g.pins[0];   // החמור ביותר — המיון למעלה
         if (g.pins.length === 1) {
-          return { id: top.id, x: top.x, y: top.y, pin: top, cls: "gn-pin",
+          return { id: top.id, x: top.x, y: top.y, pin: top, cls: "gx-pin",
                    title: ST_LABEL[top.state] + " · " + (top.category || "") };
         }
         var sx = 0, sy = 0;
         g.pins.forEach(function (p) { sx += p.x; sy += p.y; });
         return { id: "c" + top.id, x: sx / g.pins.length, y: sy / g.pins.length, cluster: true,
-                 pins: g.pins, state: top.state, cls: "gn-pin gn-pin--c",
+                 pins: g.pins, state: top.state, cls: "gx-pin gx-pin--c",
                  title: g.pins.length + " תקלות באותה נקודה" };
       });
       api.setMarkers(groups);
@@ -954,9 +1047,9 @@
         var el = els[i];
         if (!el) return;
         if (g.cluster) {
-          el.innerHTML = '<span class="gn-clu s-' + g.state + '">' + g.pins.length + '</span>';
+          el.innerHTML = '<span class="gx-clu s-' + g.state + '">' + g.pins.length + '</span>';
         } else {
-          el.innerHTML = pinSvg(g.pin.state, catIcoOf(g.pin.category));
+          el.innerHTML = pinSvg(g.pin.state, g.pin.ico || catIcoOf(g.pin.category));
           if (o.onHover) {
             el.addEventListener("mouseenter", function () { o.onHover(g.pin, el, true); });
             el.addEventListener("mouseleave", function () { o.onHover(g.pin, el, false); });
@@ -972,7 +1065,7 @@
           raf = 0;
           var s = scale();
           /* על המכל ולא על העולם — כתיבה לעולם הייתה מפעילה את המשקיף הזה שוב. */
-          host.style.setProperty("--gn-inv", (1 / s).toFixed(4));
+          host.style.setProperty("--gx-inv", (1 / s).toFixed(4));
           if (lastScale && Math.abs(s - lastScale) / lastScale > 0.12) build();
         });
       }).observe(world, { attributes: true, attributeFilter: ["style"] });

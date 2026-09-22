@@ -149,6 +149,13 @@ ok('סמליל וצבע מהטבלה המשותפת', bc[0].key === 'lawn' && bc
 ok('קטגוריה שאינה בהגדרות — בסוף, לא נעלמת',
    (x => x[x.length - 1].name === 'חדשה')(C.compute([{ id: 'z', kind: REP, category: 'חדשה', createdAt: d(2026, 9, 20) }], [], { now: NOW, categories: CATS }).period.byCat));
 ok('סך בתקופה = 7', M.period.faultsInPeriod === 7, M.period.faultsInPeriod);
+const UNI = L.CAT_LAWN_WATER;
+const ML = C.compute([{ id: 'a', kind: REP, category: UNI, title: 'מדשאה יבשה', createdAt: d(2026, 9, 20), x: .5, y: .5 },
+                      { id: 'b', kind: REP, category: 'השקיה / ממטרות', title: 'דליפת מים', createdAt: d(2026, 9, 20), x: .6, y: .6 }],
+                     [], { now: NOW, categories: [UNI, 'עצים'] });
+ok('🔴 23.9 — שם ישן ("השקיה / ממטרות") נספר תחת הקטגוריה המאוחדת', ML.period.byCat[0].ids.length === 2 && ML.period.byCat.length === 2, ML.period.byCat.map(c => c.name + ':' + c.ids.length));
+ok('סמליל הנעץ לפי המשימה — דליפה = טיפה, מדשאה = דשא', ML.map.pins.filter(p => p.id === 'b')[0].ico === 'water' && ML.map.pins.filter(p => p.id === 'a')[0].ico === 'lawn');
+ok('וסינון המפה לפי הקטגוריה המנורמלת', ML.map.pins.every(p => p.category === UNI));
 
 section('6. המפה');
 const P = id => M.map.pins.filter(p => p.id === id)[0];
@@ -161,7 +168,7 @@ ok('🔴 נסגרה ותושב אמר שלא הושלמה — אדום, ונשא
 ok('נסגרה בתקופה — אפורה, רק כשהמתג דלוק (closed:true)', P('6').state === 'done' && P('6').closed === true);
 ok('נסגרה מחוץ לתקופה — לא על המפה', !P('8'));
 ok('בלי מיקום — לא על המפה', !P('3'));
-ok('הסמליל שבנעץ = הקטגוריה', P('1').cat === 'lawn' && P('4').cat === 'prune');
+ok('הסמליל שבנעץ = הקטגוריה (23.9: "ראש ממטרה" → טיפה, לפי catOfTask)', P('1').cat === 'water' && P('4').cat === 'prune', [P('1').cat, P('4').cat]);
 
 section('7. מגמות — עמודה לשבוע');
 const W = M.weekKeys, idx = k => W.indexOf(k);
@@ -214,7 +221,16 @@ ok('firebase.js — טווח בשלושה איברים, שוויון נשאר', 
 ok('יומן שנכשל → "—" ולא אפס', /\(dash \? "—" : r\.feedback\.length\)/.test(ST));
 ok('אישור והחזרה לגנן ישר מהשורה', /gardenTask\("approve", id/.test(ST) && /gardenTask\("return", id, \{ note: note \}/.test(ST));
 ok('ריחוף רק במחשב', /\(hover: hover\) and \(pointer: fine\)/.test(ST));
-ok('טלפון: בלוקים בעמודה אחת לפי order', /\.gn-grid, \.gn-now, \.gn-per, \.gn-stack \{ display: contents; \}/.test(CSS));
+const GX = R('css/gardenStats.css');
+ok('🔴 23.9 — שלוש עמודות 0.7 · 1.3 · 1', /grid-template-columns: minmax\(0, \.7fr\) minmax\(0, 1\.3fr\) minmax\(0, 1fr\)/.test(GX));
+ok('בלי שורת כותרת — בורר התקופה בכותרת "בתקופה"', /paneHead\("בתקופה", seg\(\)\)/.test(ST) && !/<h3>נתוני גינון<\/h3>/.test(ST));
+ok('"ממתינות לאישורך" מובלטת, ושקטה כשאין', /gx-ap is-hot/.test(ST) && /gx-ap is-calm/.test(ST) && /לאישור ←/.test(ST));
+ok('"לפי סוג" — פס, הסמליל והמספר בתוך המקטע, רוחב מינימלי', /gx-cbar/.test(ST) && /\.gx-cbar button \{[^}]*min-width: 48px/.test(GX));
+ok('מקרא צף מצומצם עם שמות הסוגים, מתקפל', /LEG_CATS = \[\["lawn", "דשא"\]/.test(ST) && /cba\.gx\.leg/.test(ST));
+ok('הכרטיסייה שנפתחת — זכוכית', /cls: "gx-vars gx-sheet"/.test(ST) && /\.gx-sheet \.gt-sheet \{[^}]*backdrop-filter: blur\(26px\)/.test(GX));
+ok('גיל התקלות: סינון בתוך הכרטיסייה, בלי לסגור', /box\.dataset\.f = fc\.dataset\.f/.test(ST));
+ok('הקובץ נטען אחרי garden.css', IDX.indexOf('css/gardenStats.css') > IDX.indexOf('css/garden.css'));
+ok('טלפון: עמודה אחת ולשוניות מגמות', /@media \(max-width: 899px\)[\s\S]*\.gx-grid \{ grid-template-columns: 1fr;/.test(GX) && /\.gx-trends\[data-tab="0"\] \.gx-tr:not/.test(GX));
 
 console.log('\n' + (fail ? '✗ ' : '✓ ') + pass + ' עברו · ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);
