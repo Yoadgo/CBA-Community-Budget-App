@@ -182,7 +182,10 @@ CBA.gardenForm = (function () {
           '<label class="gd-lbl" style="margin-top:12px">מתי</label>' +
           '<div class="gp-areas" id="gf-weeks">' + chips(weeks, st.week, "data-w") + '</div>' +
 
-          '<label class="gd-lbl" style="margin-top:12px">אזור <em>לא חובה</em></label>' +
+          /* 🔴 22.9 (הכרעת יועד) — **כמה אזורים = תקלה לכל אזור.** בעריכה
+             — אזור אחד, כי העריכה היא של תקלה אחת. */
+          '<label class="gd-lbl" style="margin-top:12px">אזור <em>' +
+            (isTaskEdit ? 'לא חובה' : 'לא חובה · אפשר כמה — תיפתח תקלה לכל אזור') + '</em></label>' +
           '<div class="gp-areas" id="gf-area">' + chips(areas, st.area, "data-a1") + '</div>' +
 
           (direct
@@ -246,18 +249,12 @@ CBA.gardenForm = (function () {
           '<input class="gd-inp" id="gf-clause" maxlength="60" autocomplete="off" ' +
             'value="' + esc((d && d.clause) || "") + '" placeholder="לא חובה">' +
 
-          /* 🔑 "מאיזה שבוע" יושב בטופס ולא במודל אחרי השמירה: רואים את
-             הבחירה לפני שלוחצים, ואין קליק נוסף. הגדרה חדשה — מהשבוע
-             הנוכחי (זה מה שמצפים); עריכה — מהשבוע הבא (הבטוח: השבוע
-             שכבר מתוכנן לא זז). המנוע מקפיא מופעים שקודמים לבחירה. */
-          '<label class="gd-lbl" style="margin-top:12px">בתוקף החל מ־</label>' +
-          '<div class="gp-areas" id="gf-from">' +
-            chips([{ v: "now",  label: "השבוע הנוכחי" },
-                   { v: "next", label: "השבוע הבא" }], isEdit ? "next" : "now", "data-from") +
-          '</div>' +
-          '<p class="gp-note">' + (isEdit
-            ? "משימות שכבר נוצרו לשבוע הנוכחי נשארות; מהשבוע שתבחר — לפי ההגדרה החדשה."
-            : "המשימות ייווצרו מיד, 8 שבועות קדימה.") + '</p>' +
+          /* 🔴 22.9 (הכרעת יועד) — **הבורר "בתוקף החל מ־" ירד.** הוא
+             התפספס: T10 "תחזוקת ציר מזרחי" — החודשים שונו, ברירת המחדל
+             "השבוע הבא" הקפיאה את מופע השבוע והוא נשאר. מהיום: הגדרה חדשה
+             חלה מיד; בעריכה — אם השינוי נוגע במופע של השבוע הנוכחי, קופץ
+             חלון שואל. אם לא — אין מה לשאול. ר' gardenPlanWeekImpact. */
+          (isEdit ? '' : '<p class="gp-note" style="margin-top:12px">המשימות ייווצרו מיד, 8 שבועות קדימה.</p>') +
         '</div>' +
 
         '<button type="button" class="gd-cta" id="gf-go" style="margin-top:16px">' +
@@ -347,11 +344,12 @@ CBA.gardenForm = (function () {
       renderPicks();
     }
     pick("#gf-weeks", "data-w", false, function (v) { st.week = v; });
-    pick("#gf-area", "data-a1", false, function (v) { st.area = v; });
+    pick("#gf-area", "data-a1", !isTaskEdit, function () {
+      st.area = (picked("#gf-area", "data-a1")[0]) || "";
+    });
     pick("#gf-areas", "data-a", true);
     pick("#gf-womc", "data-wom", false);
     pick("#gf-freq", "data-f", false, syncFreq);
-    pick("#gf-from", "data-from", false);
 
     /* ---- המתג ---- */
     var goT = q("#gf-go-t"), subEl = q("#gf-sub");
@@ -414,7 +412,7 @@ CBA.gardenForm = (function () {
             loc.classList.add("is-ok");
             /* הנעיצה יודעת באיזה אזור היא נפלה — וממלאת אותו רק אם
                המשתמש לא בחר אזור בעצמו. */
-            if (st.pinArea && !st.area) {
+            if (st.pinArea && !picked("#gf-area", "data-a1").length) {
               var b = q('#gf-area [data-a1="' + st.pinArea.replace(/"/g, "&quot;") + '"]');
               if (b) b.click();
             }
@@ -475,7 +473,7 @@ CBA.gardenForm = (function () {
           return CBA.ui.alert("למחזור דו-שבועי צריך לבחור את השבוע הראשון");
         }
         st.busy = true;
-        return CBA.data.gardenPlanSave({
+        var planPayload = {
           id: isEdit ? d.id : "",
           title: title,
           category: (picked("#gf-cats", "data-c")[0]) || "",
@@ -486,22 +484,41 @@ CBA.gardenForm = (function () {
           areas: picked("#gf-areas", "data-a"),
           rotate: q("#gf-rot").getAttribute("aria-checked") === "true",
           clause: q("#gf-clause").value.trim(),
-          active: isEdit ? (d.active !== false) : true,
+          active: isEdit ? (d.active !== false) : true
+        };
+        var G = (typeof GardenRules !== "undefined" && GardenRules) || CBA.gardenRules;
+        var thisWk = G ? G.weekKey(new Date()) : "";
+        var doSave = function (fromNext) {
           /* מפתח שבוע, לא "now"/"next" — המנוע משווה מחרוזות תאריך. */
-          effectiveFrom: (function () {
-            var G = (typeof GardenRules !== "undefined" && GardenRules) || CBA.gardenRules;
-            var wk = G ? G.weekKey(new Date()) : "";
-            return ((picked("#gf-from", "data-from")[0]) === "next" && G) ? G.weekShift(wk, 1) : wk;
-          })()
-        }, function (res) {
-          st.busy = false;
-          if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "השמירה לא הצליחה");
-          close();
-          /* הטוסט אומר מה באמת קרה — "נוצרו 16 משימות · הוסרו 2" —
-             ולא הבטחה כללית. ר' gardenHorizonSummary. */
-          var what = CBA.data.gardenHorizonSummary ? CBA.data.gardenHorizonSummary(res.horizon) : "";
-          CBA.ui.toast((isEdit ? "נשמר" : "נוספה לתוכנית העבודה") + (what ? " · " + what : ""));
-          if (opts.onSaved) opts.onSaved();
+          planPayload.effectiveFrom = (fromNext && G) ? G.weekShift(thisWk, 1) : thisWk;
+          CBA.data.gardenPlanSave(planPayload, function (res) {
+            st.busy = false;
+            if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "השמירה לא הצליחה");
+            close();
+            /* הטוסט אומר מה באמת קרה — "נוצרו 16 משימות · הוסרו 2" —
+               ולא הבטחה כללית. ר' gardenHorizonSummary. */
+            var what = CBA.data.gardenHorizonSummary ? CBA.data.gardenHorizonSummary(res.horizon) : "";
+            CBA.ui.toast((isEdit ? "נשמר" : "נוספה לתוכנית העבודה") +
+              (fromNext ? " · השבוע הנוכחי נשאר כמו שהיה" : "") + (what ? " · " + what : ""));
+            if (opts.onSaved) opts.onSaved();
+          });
+        };
+        if (!isEdit || !CBA.data.gardenPlanWeekImpact) return doSave(false);
+        return CBA.data.gardenPlanWeekImpact(planPayload, function (imp) {
+          if (!imp || !imp.ok || !imp.affected) return doSave(false);
+          /* 🔑 שואלים רק כשיש מה לשאול — מופע של השבוע שהשינוי יוצר,
+             מוחק או משנה. ביטול/סגירה של החלון = "להשאיר" (הבטוח). */
+          var parts = [];
+          if (imp.removed) parts.push("יוסר השבוע" + (imp.removedAreas.length ? " (" + imp.removedAreas.join(", ") + ")" : ""));
+          if (imp.added) parts.push("ייווסף השבוע" + (imp.addedAreas.length ? " (" + imp.addedAreas.join(", ") + ")" : ""));
+          if (imp.renamed) parts.push("יעודכן השבוע (שם/קטגוריה)");
+          CBA.ui.confirm(
+            "לשינוי יש השפעה על השבוע הנוכחי: " + parts.join(" · ") + ". " +
+            "לעדכן כבר מהשבוע, או להשאיר את השבוע כמו שהוא ולהחיל מהשבוע הבא?", {
+              title: "גם השבוע?",
+              okText: "לעדכן גם השבוע",
+              cancelText: "להשאיר את השבוע"
+            }).then(function (yes) { doSave(!yes); });
         });
       }
 
@@ -524,9 +541,12 @@ CBA.gardenForm = (function () {
           if (opts.onSaved) opts.onSaved();
         });
       }
+      var areasSel = picked("#gf-area", "data-a1");
+      if (!areasSel.length && st.pinArea) areasSel = [st.pinArea];
       CBA.data.gardenCreateTask({
         title: title, category: cat,
-        area: (picked("#gf-area", "data-a1")[0]) || st.pinArea || "",
+        area: areasSel[0] || "",
+        areas: areasSel,
         week: (picked("#gf-weeks", "data-w")[0]) || "",
         asReport: true,
         desc: descEl ? descEl.value.trim() : "",
@@ -536,7 +556,9 @@ CBA.gardenForm = (function () {
         st.busy = false;
         if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "המשימה לא נפתחה");
         close();
-        CBA.ui.toast("נפתחה תקלה #" + res.id +
+        CBA.ui.toast(((res.ids && res.ids.length > 1)
+            ? "נפתחו " + res.ids.length + " תקלות · #" + res.ids.join(", #")
+            : "נפתחה תקלה #" + res.id) +
           (res.photosPending ? " · התמונות עולות ברקע" : ""));
         if (opts.onSaved) opts.onSaved();
       });

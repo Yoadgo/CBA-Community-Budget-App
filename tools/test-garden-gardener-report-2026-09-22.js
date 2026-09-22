@@ -53,7 +53,8 @@ const section = s => console.log('\n' + s);
   ok('⛔ הגנן אינו עורך תקלה של המנהל', !can('gard', m1.id));
   ok('🔑 המנהל עורך גם את של הגנן', can('mgr', g1.id));
   const r1 = await H.call(cb => B('res1').CBA.data.submitGardenReport({ title: 'דשא יבש', category: 'מדשאות', area: 'ציר מזרחי', x: 0.4, y: 0.5, photos: [] }, cb));
-  ok('⛔ דיווח של תושב אינו נערך — גם לא למנהל', r1.ok && !can('mgr', r1.taskId));
+  ok('🔴 המנהל עורך תקלת דייר (22.9, סבב 3)', r1.ok && can('mgr', r1.taskId));
+  ok('⛔ הגנן — לא', !can('gard', r1.taskId));
   const routineish = { kind: 'שגרה', repId: '', title: 'x' };
   ok('⛔ שגרה אינה נערכת כאן', !B('mgr').CBA.data.gardenCanEditTask(routineish));
   ok('⛔ תקלה סגורה אינה נערכת', !B('mgr').CBA.data.gardenCanEditTask(Object.assign({}, gd, { closure: 'בוצע' })));
@@ -159,6 +160,34 @@ const section = s => console.log('\n' + s);
   ok('כרטיס הפרטים מציג תיאור ו"איפה"', /t\.desc \? '<p class="gd-det-desc">'/.test(GT) && /<span class="l">איפה<\/span>/.test(GT));
   ok('🔑 טופס הצוות: תיאור עם מונה 75 מילים, כמו אצל התושב', /id="gf-desc"/.test(GF) && /var WORD_MAX = 75;/.test(GF) && /id="gf-place"/.test(GF));
   ok('השלמה לאחור בשרת: פעולה למנהל-על', /action === 'gardenBackfillText'/.test(CODE) && /gardenBackfillText: PERM_SUPER/.test(CODE) && /fsList_\(FS_GARDEN_REPORTS\)/.test(fnSrc('gardenBackfillText_')));
+
+  section('9. סבב 3 — כמה אזורים, עריכת תקלת דייר, "גם השבוע?"');
+  const mm = await H.call(cb => B('gard').CBA.data.gardenCreateTask({ title: 'ממטרות שבורות', category: 'עצים', areas: ['ציר מזרחי', 'ציר מערבי'], asReport: true, week: THIS, photos: [{ data: 'x', mime: 'image/jpeg' }] }, cb));
+  ok('🔴 שני אזורים → שתי תקלות', mm.ok && mm.ids && mm.ids.length === 2, JSON.stringify(mm));
+  const a1 = store.gardenTasks[String(mm.ids[0])] || {}, a2 = store.gardenTasks[String(mm.ids[1])] || {};
+  ok('כל אחת באזור שלה, אותה כותרת', a1.area === 'ציר מזרחי' && a2.area === 'ציר מערבי' && a1.title === a2.title);
+  await new Promise(r => setTimeout(r, 50));
+  const upl = B('gard').__sheets.filter(c => c.action === 'gardenPhotoOne').length;
+  ok('🔑 התמונה עלתה פעם אחת, מוצמדת לשתיהן', upl === 1 && (a1.photos || []).length === 1 && JSON.stringify(a1.photos) === JSON.stringify(a2.photos), upl + ' / ' + JSON.stringify([a1.photos, a2.photos]));
+
+  const beforeMail = Object.values(store.gardenTasks[String(r1.taskId)]);
+  const eR = await H.call(cb => B('mgr').CBA.data.gardenEditTask(String(r1.taskId), { title: 'דשא יבש — מול 608', category: 'עצים', week: THIS }, cb));
+  const tR = store.gardenTasks[String(r1.taskId)];
+  ok('המנהל ערך תקלת דייר', eR.ok && tR.title === 'דשא יבש — מול 608');
+  ok('🔴 בלי התראה לתושב (אין notify)', !tR.notify && !tR.notifyPending);
+  ok('🔑 השלב שזז משתקף בדיווח (מסך התושב)', store.gardenReports[String(r1.id)].stage === 'מתוכנן', store.gardenReports[String(r1.id)].stage);
+  ok('⚠️ הכותרת של התושב בדיווח לא נגעה', store.gardenReports[String(r1.id)].title === 'דשא יבש');
+
+  /* "גם השבוע?" — המקרה של T10: חודש 9 → 1,4,7,10 */
+  const wm = B('mgr').GardenRules.weekMeta(THIS);
+  const p10 = await H.call(cb => B('mgr').CBA.data.gardenPlanSave({ title: 'תחזוקת ציר מזרחי', category: 'עצים', freq: 'חודשי', months: String(wm.month), weekOfMonth: wm.n, areas: ['ציר מזרחי'], effectiveFrom: THIS }, cb));
+  const imp1 = await H.call(cb => B('mgr').CBA.data.gardenPlanWeekImpact({ id: p10.id, title: 'תחזוקת ציר מזרחי', category: 'עצים', freq: 'חודשי', months: '1,4,7,10', weekOfMonth: 3, areas: ['ציר מזרחי'] }, cb));
+  ok('🔴 שינוי החודשים מוחק את מופע השבוע → שואלים', imp1.ok && imp1.affected === 1 && imp1.removed === 1 && imp1.removedAreas[0] === 'ציר מזרחי', JSON.stringify(imp1));
+  const imp2 = await H.call(cb => B('mgr').CBA.data.gardenPlanWeekImpact({ id: p10.id, title: 'תחזוקת ציר מזרחי', category: 'עצים', freq: 'חודשי', months: String(wm.month), weekOfMonth: wm.n, areas: ['ציר מזרחי'], clause: 'x' }, cb));
+  ok('🔑 שינוי שלא נוגע בשבוע → לא שואלים', imp2.ok && imp2.affected === 0, JSON.stringify(imp2));
+  const imp3 = await H.call(cb => B('mgr').CBA.data.gardenPlanWeekImpact({ id: p10.id, title: 'תחזוקה — ציר מזרחי', category: 'עצים', freq: 'חודשי', months: String(wm.month), weekOfMonth: wm.n, areas: ['ציר מזרחי'] }, cb));
+  ok('שינוי שם → מופע השבוע יתעדכן → שואלים', imp3.ok && imp3.renamed === 1);
+  ok('הבורר "בתוקף החל מ" ירד מהטופס', !/id="gf-from"/.test(R('js/ui/gardenForm.js')) && /gardenPlanWeekImpact\(planPayload/.test(R('js/ui/gardenForm.js')));
 
   console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);

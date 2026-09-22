@@ -2480,6 +2480,87 @@ CBA.data = (function () {
   }
 
   /* ==========================================================================
+   *  כמה אזורים בתקלה אחת → תקלה לכל אזור   (2026-09-22, הכרעת יועד)
+   * --------------------------------------------------------------------------
+   *  אותה כותרת, תיאור ומיקום — משימה נפרדת לכל אזור, כמו שגרה מרובת
+   *  אזורים. כל אחת נכנסת לקבוצת האזור שלה בעבודת השבוע ונסגרת לחוד.
+   *  🔑 **התמונות עולות פעם אחת** ומוצמדות לכל המשימות — לא N העלאות.
+   * ========================================================================== */
+  function gardenFsCreateMulti(payload, cb) {
+    var areas = (payload.areas || []).filter(Boolean);
+    if (areas.length <= 1) {
+      return gardenFsCreateTask(Object.assign({}, payload, { area: areas[0] || payload.area || "" }), cb);
+    }
+    var ids = [], photos = payload.photos || [];
+    (function next(i) {
+      if (i >= areas.length) {
+        cb({ ok: true, id: ids[0], ids: ids, photosPending: photos.length });
+        if (!photos.length) return;
+        return gardenUploadPhotos(photos, null, function (pids, failed) {
+          if (!pids.length) return gardenPhotoWarn("אף תמונה לא עלתה לתקלות", ids.join(","), failed);
+          ids.forEach(function (tid) {
+            CBA.fb.mergeDoc("gardenTasks", String(tid), {
+              photos: pids, updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+            }, function (eM) { if (eM) gardenPhotoWarn("מסמך המשימה לא עודכן בתמונות", tid, eM); });
+          });
+        });
+      }
+      var one = Object.assign({}, payload, { area: areas[i], photos: [] });
+      gardenFsCreateTask(one, function (res) {
+        if (!res || !res.ok) {
+          return cb({ ok: false, error: (ids.length ? "נפתחו " + ids.length + " מתוך " + areas.length + ". " : "") +
+                                        ((res && res.error) || "התקלה לא נפתחה"), ids: ids });
+        }
+        ids.push(res.id);
+        next(i + 1);
+      });
+    })(0);
+  }
+
+  /* ==========================================================================
+   *  "האם השינוי נוגע בשבוע הנוכחי?"   (2026-09-22, הכרעת יועד)
+   * --------------------------------------------------------------------------
+   *  הבורר "בתוקף החל מ" ירד מהטופס — הוא התפספס (T10 "תחזוקת ציר מזרחי":
+   *  החודשים שונו, ברירת המחדל "השבוע הבא" הקפיאה את מופע השבוע והוא נשאר).
+   *  במקומו: לפני השמירה מריצים את **אותו מנוע** על מופעי השבוע של התבנית,
+   *  ורק אם השינוי היה יוצר / מוחק / משנה מופע השבוע — שואלים.
+   *  ⚠️ מופע שהצוות כבר נגע בו (סומן, שובץ ידנית) ממילא לא זז — המנוע מקפיא
+   *     אותו, ולכן הוא אינו נספר כאן.
+   * ========================================================================== */
+  function gardenPlanWeekImpact(payload, cb) {
+    var G = (typeof GardenRules !== "undefined" && GardenRules) || CBA.gardenRules;
+    var id = String((payload && payload.id) || "").trim();
+    if (!G || !id || !gardenWritesOn()) return cb({ ok: true, affected: 0 });
+    var wk = G.weekKey(new Date());
+    CBA.fb.queryCollection("gardenTasks", [["templateId", id]], function (e, rows) {
+      if (e) return cb({ ok: false, affected: 0 });
+      var cur = (rows || []).filter(function (t) { return t.week === wk; });
+      var def = {
+        id: id, title: String(payload.title || "").trim(),
+        category: String(payload.category || "").trim(), areas: payload.areas || [],
+        freq: payload.freq, firstWeek: gardenWeekKeyOf(payload.firstWeek),
+        weekOfMonth: Math.min(Math.max(parseInt(payload.weekOfMonth, 10) || 1, 1), 4),
+        months: String(payload.months || "").trim(), rotate: !!payload.rotate,
+        active: payload.active === false ? false : true, effectiveFrom: wk
+      };
+      var d;
+      try { d = G.horizon([def], cur, wk); } catch (e2) { return cb({ ok: false, affected: 0 }); }
+      var add = (d.create || []).filter(function (c) { return c.week === wk; });
+      var del = d.remove || [], ren = d.rename || [];
+      var areasOf = function (list) {
+        return list.map(function (x) { return x.area || ""; }).filter(Boolean);
+      };
+      cb({
+        ok: true, week: wk,
+        affected: add.length + del.length + ren.length,
+        added: add.length, removed: del.length, renamed: ren.length,
+        removedAreas: areasOf(cur.filter(function (t) { return del.indexOf(String(t.id)) !== -1; })),
+        addedAreas: areasOf(add)
+      });
+    });
+  }
+
+  /* ==========================================================================
    *  עריכת תקלה שהצוות פתח   (2026-09-22, בקשת יועד)
    * --------------------------------------------------------------------------
    *  "מי שפתח דיווח / תקלה (מנהל / גנן) — יכול לפתוח אותה לעריכה."
@@ -2492,10 +2573,12 @@ CBA.data = (function () {
    * ========================================================================== */
   function gardenCanEditTask(t) {
     if (!t || t.closure) return false;
-    if (String(t.repId || "").trim()) return false;          // תושב — לא נערך
     if (t.kind !== GARDEN_KIND_REPORT) return false;          // שגרה/יזום — לא כאן
     if (!gardenWritesOn()) return false;                      // רק במסלול הישיר
+    /* 🔴 22.9 (בקשת יועד) — **המנהל עורך גם תקלת דייר**, בלי התראה לדייר.
+       הגנן — לא: דיווח של תושב נערך רק ע"י מנהל. */
     if (gardenIsMgr()) return true;
+    if (String(t.repId || "").trim()) return false;
     var me = (CBA.fb && CBA.fb.uid) ? CBA.fb.uid() : "";
     return !!me && String(t.openedUid || "") === me;
   }
@@ -2528,6 +2611,13 @@ CBA.data = (function () {
       if (hasPin) { patch.x = Number(payload.x); patch.y = Number(payload.y); }
       CBA.fb.updateDoc("gardenTasks", String(id), patch, function (e1) {
         if (e1) return cb({ ok: false, error: gardenFsErr(e1, "העריכה לא נשמרה") });
+        /* תקלת דייר: השלב (אם זז בגלל שינוי שבוע) משתקף בדיווח, כדי שמסך
+           "הדיווחים שלי" יראה את האמת. **בלי notify** — עריכה אינה שולחת
+           לתושב דבר (הכרעת יועד). כותרת/תיאור של התושב בדיווח לא נוגעים. */
+        var rid = String(cur.repId || "").trim();
+        if (rid && patch.stage && patch.stage !== cur.stage) {
+          CBA.fb.updateDoc("gardenReports", rid, { stage: patch.stage, updatedAt: patch.updatedAt }, function () {});
+        }
         var what = [];
         if (cur.title !== title) what.push("כותרת");
         if (cur.category !== cat) what.push("קטגוריה");
@@ -4623,11 +4713,12 @@ CBA.data = (function () {
     /* פתיחת משימה יזומה ע"י המנהל.
        payload: {title, category, area, week, asReport, x, y, photos}. */
     gardenCreateTask: function (payload, cb) {
-      if (gardenWritesOn()) return gardenFsCreateTask(payload, cb);
+      if (gardenWritesOn()) return gardenFsCreateMulti(payload, cb);
       CBA.sheets.postRead("gardenCreateTask", payload, cb);
     },
     /* עריכת תקלה שהצוות פתח — הפותח או מנהל. במסלול הישיר בלבד. */
     gardenCanEditTask: function (t) { return gardenCanEditTask(t); },
+    gardenPlanWeekImpact: function (payload, cb) { gardenPlanWeekImpact(payload, cb); },
     gardenEditTask: function (id, payload, cb) {
       if (!gardenWritesOn()) return cb({ ok: false, error: "עריכה זמינה רק במסלול הישיר" });
       gardenFsEditTask(id, payload, cb);

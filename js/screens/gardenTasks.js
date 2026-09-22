@@ -1450,10 +1450,12 @@
               (t.area ? ' · ' + esc(t.area) : '') + '</p>' +
             '<button type="button" class="gt-opt" data-m="hist"><u>' + ico("hist") + '</u>' +
               '<div>היסטוריה<span>כל מה שקרה למשימה, לפי הסדר</span></div></button>' +
-            /* 🔴 22.9 — עריכה: לפותח ולמנהל, על תקלת צוות פתוחה בלבד. */
+            /* 🔴 22.9 — עריכה: לפותח ולמנהל; המנהל גם על תקלת דייר (בלי הודעה לדייר). */
             (CBA.data.gardenCanEditTask && CBA.data.gardenCanEditTask(t)
               ? '<button type="button" class="gt-opt" data-m="edit"><u>' + ico("note") + '</u>' +
-                '<div>עריכה<span>כותרת, קטגוריה, אזור, שבוע ומיקום</span></div></button>'
+                '<div>עריכה<span>' + (t.repId
+                  ? 'כותרת, קטגוריה, אזור, שבוע ומיקום · התושב לא מקבל הודעה'
+                  : 'כותרת, קטגוריה, אזור, שבוע ומיקום') + '</span></div></button>'
               : '') +
             /* ⚠️ על משימה סגורה השרת דוחה כל פעולה חוץ מערעור, "טופל" ומחיקה
                (ר' המשמר ב-gardenTaskAction_). כפתור שמחזיר "המשימה כבר נסגרה"

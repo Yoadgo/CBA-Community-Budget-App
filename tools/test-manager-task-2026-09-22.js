@@ -120,7 +120,7 @@ ok('המתג קיים כ-role="switch" עם aria-checked',
    NEW_TASK.indexOf('role="switch" ') >= 0 && NEW_TASK.indexOf('aria-checked="') >= 0);
 ok('aria-checked מתעדכן בלחיצה',
    /this\.setAttribute\("aria-checked", st\.repeat \? "true" : "false"\)/.test(NEW_TASK));
-ok('דלוק → gardenPlanSave הקיים', /CBA\.data\.gardenPlanSave\(\{/.test(NEW_TASK));
+ok('דלוק → gardenPlanSave הקיים', /CBA\.data\.gardenPlanSave\(planPayload/.test(NEW_TASK));
 ok('🔴 והוא משרת גם את תוכנית העבודה — mode:"plan"', /mode: "plan"/.test(GP));
 ok('🔴 ואת מסך המשימות — mode:"task"', /mode: "task"/.test(GT));
 ok('⚠️ בעריכה המתג נעול', /swRow\("gf-rep"[\s\S]{0,120}isEdit\)/.test(GF));
@@ -171,7 +171,8 @@ ok('הגיליון עובר ב-mountSheet (Esc, מלכודת מיקוד, שומ�
 ok('תווית המסנן כבר לא משקרת — תקלה יכולה להיפתח משני הצדדים',
    /seg\("faults", "תקלות", c\.faults\)/.test(GT) && !/"תקלות דיירים", c\.faults/.test(GT));
 ok('הנעיצה ממלאת אזור רק כשהמנהל לא בחר אחד',
-   /if \(st\.pinArea && !st\.area\)/.test(NEW_TASK));
+   /* 22.9 — בחירה מרובה: "לא בחר" = אף צ'יפ אזור דלוק. */
+   /if \(st\.pinArea && !picked\("#gf-area", "data-a1"\)\.length\)/.test(NEW_TASK));
 
 section('10. גרסה ומטמון');
 const VER = (SW.match(/var VERSION = "(\d+\w?)"/) || [])[1];
