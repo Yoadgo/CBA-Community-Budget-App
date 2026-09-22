@@ -60,7 +60,7 @@
 html, body { height: 100%; }
 
 body {
-  font-family: "Heebo", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  font-family: "Assistant", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   background: var(--bg); color: var(--text); line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
