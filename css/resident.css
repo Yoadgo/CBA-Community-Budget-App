@@ -430,7 +430,11 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
   body[data-area="resident"][data-screen="resCommittee"] .app-main { max-width: min(1900px, 97vw); }
   /* לוח אירועים קהילתי (2026-09-23, לבקשת יועד: "תנצל בדסקטופ את כל רוחב
      המסך") — אותו דפוס הרחבה כמו resReserve/resMap/resCommittee. */
-  body[data-area="resident"][data-screen="events"] .app-main { max-width: min(1600px, 97vw); }
+  body[data-area="resident"][data-screen="events"] .app-main {
+    max-width: min(2000px, 99vw);
+    padding-inline: 14px;
+    padding-bottom: 24px;
+  }
 
   /* 2 טורים: ימין (~65%) = לוח/שריון; שמאל (~35%) = תשלום + תקנון + השריונים שלי,
      נערמים זה מתחת לזה לפי grid-template-areas (סדר זהה לסדר ה-DOM במובייל). */
