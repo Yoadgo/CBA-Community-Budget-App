@@ -205,7 +205,10 @@ const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks', 'gar
                 'tourSteps', 'tourSeen', 'members',
                 /* 🔴 21.9, דיווח #6 — מצב ההתראות נקרא מהשרת
                    ולא מ-localStorage. קריאה בלבד, ורק של עצמך. */
-                'pushSubscriptions'];
+                'pushSubscriptions',
+                /* 22.9 — מסמך מטא לקטגוריות השירותים, אותו דפוס בדיוק
+                   כמו gardenMeta/lists. קריאה בלבד, אותו שער כמו services. */
+                'servicesMeta'];
 const found = (CODE.match(/^\s*match \/([A-Za-z0-9_]+)\//gm) || [])
                 .map(function (x) { return x.trim().replace(/^match \//, '').replace(/\/$/, ''); })
                 .filter(function (x) { return x !== 'databases'; });
