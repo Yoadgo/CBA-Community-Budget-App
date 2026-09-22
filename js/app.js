@@ -1111,6 +1111,31 @@
   const GOOGLE_CLIENT_ID = "312365638466-l1tug16dd953t08khr9f8qrh76iro46i.apps.googleusercontent.com";
   let panelOutsideBound = false;
   let googleReady = false;
+  /* ============================================================================
+   *  🔴 לולאת ההתחברות של תושב לא-רשום  (22.9.2026)
+   * ----------------------------------------------------------------------------
+   *  תושב חדש לחץ "כניסה עם Google" → השרת ענה "לא ברשימה" → מסך הכניסה
+   *  צויר מחדש → renderGateButton קרא ל-prompt() עם auto_select:true →
+   *  גוגל חיברה **שוב אוטומטית את אותו חשבון** → שוב "לא ברשימה" → וחוזר.
+   *  בעין זה נראה כמו "רענון כל שנייה" (הקצב = זמן התשובה של Apps Script),
+   *  וכפתור "בקשת הרשמה" נמחק ונוצר מחדש בכל סבב — אי אפשר להספיק ללחוץ.
+   *  הבאג קיים מ-6.8, והופיע רק בהשקה, כשלראשונה הגיעו תושבים לא-רשומים.
+   *
+   *  ✅ התיקון: אחרי כל תשובה שאינה "מחובר" — לא מפעילים עוד את ההתחברות
+   *     האוטומטית בביקור הזה, מכבים את auto-select אצל גוגל, ומתעלמים
+   *     מתשובה אוטומטית שמגיעה בכל זאת. כפתור Google הרגיל נשאר (החלפת
+   *     חשבון). לתושב רשום לא משתנה כלום — הוא לא מגיע לענף הזה.
+   * ========================================================================== */
+  let gisAutoBlocked = false;
+  function blockGisAuto() {
+    gisAutoBlocked = true;
+    try {
+      if (window.google && google.accounts && google.accounts.id) {
+        google.accounts.id.cancel();
+        google.accounts.id.disableAutoSelect();
+      }
+    } catch (e) {}
+  }
   let currentUser = null;   // {name,email,picture,role,family,house} אחרי התחברות מאומתת
   let loginError = null;
 
@@ -1882,7 +1907,8 @@
       type: "standard", theme: "outline", size: "large",
       shape: "pill", text: "signin_with", locale: "he", width: 260
     });
-    google.accounts.id.prompt();   // ניסיון התחברות אוטומטי/One-Tap לחוזרים
+    /* ר' gisAutoBlocked — אחרי דחייה, prompt() היה מחבר שוב את אותו חשבון ללא סוף. */
+    if (!gisAutoBlocked) google.accounts.id.prompt();   // ניסיון התחברות אוטומטי/One-Tap לחוזרים
   }
 
   function hideLoginGate() {
@@ -1972,6 +1998,8 @@
   }
 
   function onGoogleLogin(resp) {
+    /* 🔴 תשובה אוטומטית אחרי שכבר נדחינו = עוד סבב בלולאה. מתעלמים. */
+    if (gisAutoBlocked && resp && /^auto/.test(String(resp.select_by || ""))) return;
     loginError = null;
     showLoginConnecting();   // גוגל כבר סיימה; עכשיו מחכים לשרת שלנו — תראו את זה, לא מסך ריק
     fetch(CBA.sheets.url + "?action=login&token=" + encodeURIComponent(resp.credential))
@@ -2029,10 +2057,11 @@
                 : "האימייל שלך עדיין לא ברשימת התושבים. אפשר לשלוח בקשת הרשמה לוועד:")
             : ((data && data.error) || "ההתחברות נכשלה.");
           currentUser = null;
+          blockGisAuto();   // 🔴 ר' gisAutoBlocked — עוצר את לולאת ההתחברות
           showLoginGate();
         }
       })
-      .catch(function () { loginError = "שגיאת תקשורת מול השרת."; showLoginGate(); });
+      .catch(function () { loginError = "שגיאת תקשורת מול השרת."; blockGisAuto(); showLoginGate(); });
   }
 
   /* ============================================================================
