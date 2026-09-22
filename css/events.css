@@ -259,6 +259,7 @@
 .digest-item .t {
   color: var(--ev-text-soft);
   font-weight: 500;
+  unicode-bidi: plaintext;
 }
 
 /* לוח + סרגל צד */
@@ -359,6 +360,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  unicode-bidi: plaintext;
 }
 
 .day .ev i {
@@ -430,6 +432,7 @@
   font-weight: 700;
   margin-bottom: 2px;
   color: var(--ev-text);
+  unicode-bidi: plaintext;
 }
 
 .ev-row .meta {
@@ -616,6 +619,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  unicode-bidi: plaintext;
 }
 
 .cube li .dd {
@@ -786,6 +790,7 @@
   font-size: 12.5px;
   font-weight: 700;
   color: var(--ev-text);
+  unicode-bidi: plaintext;
 }
 
 .m-ev .meta {
