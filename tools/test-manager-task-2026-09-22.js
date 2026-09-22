@@ -154,5 +154,115 @@ ok('index.html ו-service-worker על אותה גרסה',
    HTML.indexOf('?v=20260922e') > 0);
 ok('לא נשארה גרסה ישנה ב-index.html', !/20260922d/.test(HTML));
 
-console.log('\n' + (fail ? '✗' : '✓') + '  עברו ' + pass + ' · נכשלו ' + fail);
+
+/* ==========================================================================
+ *  11. התנהגות אמיתית ב-DOM — לא רק regex
+ * --------------------------------------------------------------------------
+ *  `openNewTask` היא פונקציה פנימית במסך, ולכן היא נשלפת מהמקור ומורצת
+ *  עם המשתנים החופשיים שלה כסטאבים. זה לא "כמעט הקוד" — זו בדיוק אותה
+ *  מחרוזת שרצה בייצור.
+ *  🔑 מה שבאמת נבדק כאן ואי אפשר לבדוק ב-regex: שהמתג **באמת** מחליף
+ *     את שני המסלולים, ושכל מסלול שולח את המטען הנכון לפונקציה הנכונה.
+ * ======================================================================== */
+section('11. התנהגות אמיתית ב-DOM (jsdom)');
+try {
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM('<!doctype html><html dir="rtl"><body></body></html>',
+    { runScripts: 'outside-only', pretendToBeVisual: true });
+  const w = dom.window;
+  global.FileReader = w.FileReader; global.Image = w.Image;
+
+  const src = GT.slice(GT.indexOf('var NT_FREQS'), GT.indexOf('function openMenu'));
+  let created = null, planned = null, mounted = null;
+  const CBA = {
+    ui: {
+      mountSheet: (wrap) => { mounted = wrap; w.document.body.appendChild(wrap); return () => wrap.remove(); },
+      alert: (m) => { CBA._alert = m; },
+      toast: (m) => { CBA._toast = m; }
+    },
+    data: {
+      gardenDirectWrites: () => true,
+      gardenCreateTask: (p, cb) => { created = p; cb({ ok: true, id: 77, photosPending: 0 }); },
+      gardenPlanSave: (p, cb) => { planned = p; cb({ ok: true, id: 'T9' }); }
+    },
+    photos: { toUpload: () => {} },
+    map: { render: () => ({}) }
+  };
+  const fn = new w.Function(
+    'CBA', 'esc', 'ico', 'order', 'shiftKey', 'todayKey', 'weekLabel',
+    'busy', 'filter', 'load', 'document', 'setTimeout', 'Array',
+    src + '; return openNewTask;'
+  )(CBA,
+    (s) => String(s == null ? '' : s),
+    () => '<svg></svg>',
+    { type: ['עצים', 'דשא'], area: ['צפון', 'דרום'] },
+    (k, n) => '2026-09-2' + (7 + n),
+    () => '2026-09-27',
+    (k) => 'שבוע ' + k,
+    false, 'open', () => {},
+    w.document, (f) => f(), w.Array);
+
+  fn();
+  const q = (s) => mounted.querySelector(s);
+  ok('הגיליון נבנה ונכנס ל-DOM', !!mounted && !!q('#nt-title'));
+  ok('ברירת המחדל היא תקלה חד-פעמית — לא חוזרת',
+     q('#nt-rep').getAttribute('aria-checked') === 'false' &&
+     q('#nt-once').hidden === false && q('#nt-every').hidden === true);
+  ok('המפה והתמונות מוצגות במסלול הישיר', !!q('#nt-map') && !!q('#nt-thumbs'));
+  ok('הכפתור הראשי אומר מה הוא עושה', q('#nt-go-t').textContent === 'פתיחת התקלה');
+
+  /* --- כותרת ריקה לא פותחת כלום --- */
+  q('#nt-go').click();
+  ok('בלי כותרת אין כתיבה, ויש הסבר', created === null && /צריך לכתוב/.test(CBA._alert || ''));
+
+  /* --- מסלול חד-פעמי --- */
+  q('#nt-title').value = 'ראש ממטרה שבור';
+  q('#nt-cat').value = 'דשא';
+  q('#nt-go').click();
+  ok('נשלח asReport:true — המשימה תטופל כתקלה', !!created && created.asReport === true);
+  ok('הכותרת והקטגוריה עברו', created.title === 'ראש ממטרה שבור' && created.category === 'דשא');
+  ok('בלי נעיצה נשלח null ולא ערך חלקי', created.x === null && created.y === null);
+  ok('הטוסט נוקב במספר התקלה', /נפתחה תקלה #77/.test(CBA._toast || ''));
+
+  /* --- המתג --- */
+  fn();
+  const q2 = (s) => mounted.querySelector(s);
+  q2('#nt-rep').click();
+  ok('🔴 המתג מחליף את שני המסלולים',
+     q2('#nt-once').hidden === true && q2('#nt-every').hidden === false);
+  ok('aria-checked עקבי עם המצב', q2('#nt-rep').getAttribute('aria-checked') === 'true');
+  ok('המתג הוויזואלי (.gp-sw) איבד את off', !q2('.gp-sw').classList.contains('off'));
+  ok('הכפתור הראשי שינה ניסוח', q2('#nt-go-t').textContent === 'הוספה לתוכנית');
+  ok('⚠️ והטקסט מסביר למה אין מפה ותמונות', /לא תקלה בנקודה אחת/.test(q2('#nt-sub').textContent));
+
+  /* --- דו-שבועי בלי עוגן נחסם --- */
+  q2('#nt-title').value = 'גיזום שיחים';
+  q2('#nt-freq').value = 'דו-שבועי';
+  q2('#nt-freq').dispatchEvent(new w.Event('change'));
+  ok('שדה השבוע הראשון נחשף בדו-שבועי', q2('#nt-anchor').hidden === false);
+  CBA._alert = '';
+  q2('#nt-go').click();
+  ok('🔴 דו-שבועי בלי שבוע ראשון נחסם', planned === null && /שבוע הראשון/.test(CBA._alert));
+
+  q2('#nt-first').value = '2026-10-04';
+  q2('#nt-go').click();
+  ok('עם עוגן — נשמר לתוכנית העבודה', !!planned && planned.freq === 'דו-שבועי');
+  ok('ונשלח ל-gardenPlan ולא נפתחה משימה', planned.firstWeek === '2026-10-04' && planned.id === '');
+  ok('האזור עובר כמערך, כמו ש-gardenPlan מצפה', Array.isArray(planned.areas));
+  ok('ההגדרה נוצרת פעילה', planned.active === true);
+  ok('🔴 שום מפה ושום תמונה לא נשלחו במסלול החוזר',
+     planned.x === undefined && planned.photos === undefined);
+
+  /* --- חודשי חושף "שבוע בחודש" --- */
+  q2('#nt-freq').value = 'חודשי';
+  q2('#nt-freq').dispatchEvent(new w.Event('change'));
+  ok('חודשי חושף "שבוע בחודש" ומסתיר את העוגן',
+     q2('#nt-wom').hidden === false && q2('#nt-anchor').hidden === true);
+  ok('⚠️ והשדה המוסתר עדיין קיים — ערך שהוקלד לא נעלם',
+     q2('#nt-first').value === '2026-10-04');
+} catch (e) {
+  ok('jsdom רץ', false, e && e.message);
+}
+
+console.log('\n' + (fail ? '✗' : '✓') + '  סה"כ עברו ' + pass + ' · נכשלו ' + fail);
 process.exit(fail ? 1 : 0);
