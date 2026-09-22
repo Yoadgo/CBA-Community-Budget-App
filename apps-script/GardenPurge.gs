@@ -696,3 +696,56 @@ function gardenPurgeResetCounters() {
   L('   עם שניהם על 0 היא תשאיר 0. אין צורך בפעולה נוספת.');
   return done();
 }
+
+/** ============================================================================
+ *  צעד אחרון (רשות) — מחיקת טאבי הארכיון.
+ *
+ *  🔑 **למה הם קיימים בכלל אם מוחקים אותם:** הם רשת הביטחון לחלון הקצר
+ *     שבין המחיקה לבין הרגע שבו ראינו באפליקציה שהכול תקין. אחרי הרגע
+ *     הזה הם רק מחזיקים מזהים ישנים בלי תועלת — ולכן יועד ביקש להסיר.
+ *
+ *  🔴 **אחרי הפונקציה הזאת אין דרך חזרה לנתוני הגינון הישנים.** טאבי
+ *     `_נתוני_` כבר נכתבו מחדש מ-Firestore הריק בצעד הגיבוי, והארכיון
+ *     היה העותק האחרון. התמונות נשארות בסל המיחזור של דרייב כ-30 יום.
+ *
+ *  ⚠️ מוחקת **רק** טאב ששמו מתחיל ב-"ארכיון " ומסתיים באחד מארבעת
+ *     שמות הטאבים של הגינון. כל טאב אחר בגיליון אינו נגע.
+ * ========================================================================== */
+function gardenPurgeArchiveDrop() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var lines = [];
+  function L(s) { lines.push(String(s)); }
+
+  L('════════ מחיקת טאבי הארכיון ════════');
+
+  var suffixes = gpTabs_().map(function (n) { return n.replace('גינון — ', ''); });
+  var targets = [];
+  ss.getSheets().forEach(function (sh) {
+    var name = sh.getName();
+    if (name.indexOf('ארכיון ') !== 0) return;
+    var hit = suffixes.some(function (s) {
+      return name.length >= s.length && name.substring(name.length - s.length) === s;
+    });
+    if (hit) targets.push(sh);
+  });
+
+  if (!targets.length) {
+    L('אין טאבי ארכיון למחיקה.');
+    var t0 = lines.join('\n'); Logger.log(t0); return t0;
+  }
+
+  targets.forEach(function (sh) {
+    var name = sh.getName();
+    var rows = Math.max(sh.getLastRow() - 1, 0);
+    try { ss.deleteSheet(sh); L('  נמחק: ' + name + ' (' + rows + ' שורות)'); }
+    catch (e) { L('  🔴 ' + name + ': ' + e); }
+  });
+
+  L('');
+  L('🔴 מכאן אין דרך חזרה לנתוני הגינון הישנים.');
+  L('   התמונות נשארות בסל המיחזור של דרייב כ-30 יום.');
+  L('הצעד הבא: gardenPurgeVerify — אימות אחרון.');
+  var text = lines.join('\n');
+  Logger.log(text);
+  return text;
+}
