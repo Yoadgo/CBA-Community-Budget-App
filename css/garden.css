@@ -1213,3 +1213,25 @@
 .gd-tl__r em { display: block; font-style: normal; font-size: 11px;
   color: var(--text-soft, #9CA3AF); margin-top: 2px; }
 .gd-tl--err { font-size: 12px; color: var(--text-soft, #6B7280); }
+
+/* ===========================================================================
+ *  טופס "משימה חדשה" — המתג ושדות התקלה   (2026-09-22)
+ * ---------------------------------------------------------------------------
+ *  המתג משתמש ב-.gp-sw של תוכנית העבודה ולא במתג שני משלו; כאן רק השורה
+ *  שמחזיקה אותו. המפה נמוכה מ-.gd-map הרגילה כי היא יושבת בתוך גיליון
+ *  תחתון שכבר מוגבל בגובה — מפה של 340px הייתה דוחפת את כפתור השמירה
+ *  מתחת לקצה המסך, וזו בדיוק התקלה שכבר נתקלנו בה בממצא 27.
+ * ======================================================================== */
+.nt-rep { display: flex; align-items: center; gap: 12px; width: 100%;
+  margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid rgba(17,24,39,.12); background: #fff; text-align: start;
+  cursor: pointer; }
+.nt-rep:hover { border-color: rgba(17,24,39,.22); }
+.nt-rep__t { flex: 1; min-width: 0; display: block; }
+.nt-rep__t b { display: block; font-size: .95rem; color: #111827; }
+.nt-rep__t span { display: block; font-size: .8rem; color: #6B7280; margin-top: 2px; }
+.nt-rep .gp-sw { flex: none; }
+
+.nt-opt { font-weight: 400; color: #6B7280; }
+.nt-map { height: 240px; margin-top: 4px; }
+@media (max-width: 720px) { .nt-map { height: 210px; } }

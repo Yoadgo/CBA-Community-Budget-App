@@ -20,6 +20,67 @@ CBA.photos = (function () {
      בכל פעם, על אותם בייטים בדיוק. */
   var cache = {};
 
+  /* ------------------------------------------------------------------------
+   *  כיווץ תמונה לפני העלאה   (2026-09-22)
+   * ------------------------------------------------------------------------
+   *  ישב עד היום ב-resGarden.js בלבד, ולכן היה זמין רק לתושב. מרגע שגם
+   *  המנהל יכול לצרף תמונה למשימה שהוא פותח, שני מסכים צריכים אותו —
+   *  ומימוש שני היה סוטה מהראשון בעדכון הראשון. אותו כלל בדיוק שבגללו
+   *  `open` יושב כאן ולא פעמיים.
+   *  הקטנה לצלע ארוכה MAX_EDGE ודחיסת JPEG: תמונה של 4MB יורדת לרבע MB.
+   *  ⚠️ אם הכיווץ לא הרוויח כלום (תמונה קטנה, PNG שקוף) חוזרים לקובץ
+   *     המקורי — עדיף מקור מאשר "כיווץ" שהגדיל.
+   * --------------------------------------------------------------------- */
+  var MAX_EDGE = 1600;
+  var JPEG_Q   = 0.72;
+
+  function readAsDataURL(file, cb) {
+    var rd = new FileReader();
+    rd.onload  = function () { cb(String(rd.result)); };
+    rd.onerror = function () { cb(null); };
+    rd.readAsDataURL(file);
+  }
+
+  function compress(file, cb) {
+    function fallback() { readAsDataURL(file, cb); }
+    if (!file || !/^image\//.test(file.type || "")) return fallback();
+    var objUrl = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      var out = null;
+      try {
+        var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+        var scale = Math.min(1, MAX_EDGE / Math.max(w || 1, h || 1));
+        var cv = document.createElement("canvas");
+        cv.width  = Math.max(1, Math.round(w * scale));
+        cv.height = Math.max(1, Math.round(h * scale));
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        out = cv.toDataURL("image/jpeg", JPEG_Q);
+      } catch (e) { out = null; }
+      URL.revokeObjectURL(objUrl);
+      if (!out) return fallback();
+      if (file.size && (out.length * 0.75) >= file.size) return fallback();
+      cb(out);
+    };
+    img.onerror = function () { URL.revokeObjectURL(objUrl); fallback(); };
+    img.src = objUrl;
+  }
+
+  /* קובץ -> האובייקט שהשרת מצפה לו: {name, mime, data(base64 בלי הקידומת)}.
+     מחזיר null כשהקריאה נכשלה — הקורא פשוט מדלג על הקובץ הזה. */
+  function toUpload(file, cb) {
+    compress(file, function (dataUrl) {
+      if (!dataUrl) return cb(null);
+      var comma = dataUrl.indexOf(",");
+      if (comma < 0) return cb(null);
+      var mime = (dataUrl.substring(0, comma).match(/data:([^;]+)/) || [])[1] ||
+                 file.type || "image/jpeg";
+      var name = String(file.name || "photo");
+      if (/jpeg/.test(mime)) name = name.replace(/\.[^.]+$/, "") + ".jpg";
+      cb({ name: name, mime: mime, data: dataUrl.substring(comma + 1) }, dataUrl);
+    });
+  }
+
   function fetchOne(id, cb) {
     if (cache[id]) return cb(cache[id]);
     CBA.data.getGardenPhoto(id, function (res) {
@@ -63,5 +124,5 @@ CBA.photos = (function () {
     });
   }
 
-  return { open: open };
+  return { open: open, compress: compress, toUpload: toUpload };
 })();

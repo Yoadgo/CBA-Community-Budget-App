@@ -164,56 +164,11 @@
     });
   }
 
-  /* ============================================================================
-   *  כיווץ תמונות לפני שליחה (2026-09-08 — תיקון ביצועים)
-   * ----------------------------------------------------------------------------
-   *  עד היום התמונה נשלחה כמו שהיא: FileReader -> base64, שמנפח בעוד שליש.
-   *  תמונת טלפון היא 3-5MB, כלומר 4-7MB על החוט, כפול עד 8 תמונות — וזה היה
-   *  רוב זמן ההמתנה בשליחת דיווח (נמדד 8.9.26 בלוח ההפעלות של Apps Script).
-   *  עכשיו: הקטנה לצלע ארוכה MAX_EDGE ודחיסת JPEG. תמונה של 4MB יורדת לרבע MB.
-   *  יועד אישר (8.9.26) שהעותק המכווץ הוא מה שנשמר בארכיון.
-   *
-   *  ⚠️ בכל נפילה חוזרים לקובץ המקורי ולא מפילים את הדיווח: פורמט שהדפדפן לא
-   *     יודע לפענח (HEIC במחשב), canvas חסום, או תוצאה שיצאה גדולה מהמקור
-   *     (קורה בתמונה זעירה שכבר דחוסה היטב).
-   *  ⚠️ בכוונה דרך <img> ולא createImageBitmap: הדפדפנים מיישמים סיבוב EXIF
-   *     על <img> אוטומטית, ואילו ל-createImageBitmap ברירת המחדל השתנתה בין
-   *     גרסאות — ובלי זה תמונות מהאייפון יוצאות מסובבות.
-   * ========================================================================== */
-  var MAX_EDGE = 1600;
-  var JPEG_Q   = 0.72;
-
-  function readAsDataURL(file, cb) {
-    var rd = new FileReader();
-    rd.onload  = function () { cb(String(rd.result)); };
-    rd.onerror = function () { cb(null); };
-    rd.readAsDataURL(file);
-  }
-
-  function compressImage(file, cb) {
-    function fallback() { readAsDataURL(file, cb); }
-    if (!file || !/^image\//.test(file.type || "")) return fallback();
-    var objUrl = URL.createObjectURL(file);
-    var img = new Image();
-    img.onload = function () {
-      var out = null;
-      try {
-        var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-        var scale = Math.min(1, MAX_EDGE / Math.max(w || 1, h || 1));
-        var cv = document.createElement("canvas");
-        cv.width  = Math.max(1, Math.round(w * scale));
-        cv.height = Math.max(1, Math.round(h * scale));
-        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
-        out = cv.toDataURL("image/jpeg", JPEG_Q);
-      } catch (e) { out = null; }
-      URL.revokeObjectURL(objUrl);
-      if (!out) return fallback();
-      if (file.size && (out.length * 0.75) >= file.size) return fallback();
-      cb(out);
-    };
-    img.onerror = function () { URL.revokeObjectURL(objUrl); fallback(); };
-    img.src = objUrl;
-  }
+  /* כיווץ תמונה לפני שליחה — המימוש, הנימוקים והמלכודות (EXIF, HEIC,
+     נפילה חזרה לקובץ המקורי) עברו ל-js/ui/photos.js ב-22.9.2026, כדי
+     שגם מסך המשימות יוכל לצרף תמונה מאותו קוד. כאן נשאר רק השם המקומי
+     ששמונה הקריאות בקובץ הזה משתמשות בו. */
+  function compressImage(file, cb) { CBA.photos.compress(file, cb); }
 
   var STAGES = ["התקבל", "נבדק", "מתוכנן", "בטיפול", "הושלם"];
   function stageIdx(s) { var i = STAGES.indexOf(String(s || "").trim()); return i < 0 ? 0 : i; }

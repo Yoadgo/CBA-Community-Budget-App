@@ -2156,13 +2156,45 @@ CBA.data = (function () {
     if (wk && !/^\d{4}-\d{2}-\d{2}$/.test(wk)) {
       return cb({ ok: false, error: "שבוע לא תקין" });
     }
+
+    /* 🔴🔴 **`asReport` — משימה שהמנהל פותח והיא מטופלת כתקלת תושב**
+       (2026-09-22, בקשת יועד: "משימה שהיא כמו דיווח דייר").
+
+       🔑 **שני שדות, שתי משמעויות נפרדות — וזו כל התשתית של הפיצ'ר:**
+       - `kind: "דיווח תושב"` קובע איך המשימה **נראית ומטופלת**: היא
+         עולה לראש הרשימה, נכנסת למסנן "תקלות דיירים", מקבלת פינת
+         בורדו, כרטיס פירוט עם מפה ותמונות, ואת תפריט הפעולות של
+         דיווח. אף אחד מאלה לא נכתב מחדש — הם כבר מותנים ב-`kind`.
+       - `repId: ""` קובע ש**אין תושב שמחכה לתשובה**: בלי מייל, בלי
+         "מה נעשה?" בסגירה, בלי קו זמן לתושב.
+
+       זה אינו תפר שהומצא כאן. `gardenFsTask` כבר גוזר
+       `isReport = String(cur.repId || "").trim() !== ""` (ר' למעלה),
+       וכללי האבטחה כתבו את ההחלטה במפורש ב-18.9: "`repId` ולא `kind`
+       — `repId` אינו משתמע לשתי פנים". כל עשרת המקומות במסך שנוגעים
+       ב-`repId` כבר כתובים `t.repId ? … : …`.
+
+       ⚠️ **אין שדה תיאור, ובכוונה.** בדקתי את כרטיס הפירוט של המנהל
+          שורה-שורה: הוא מצייר כותרת, קטגוריה, אזור, תמונות, מפה,
+          `note` ויומן — ואת `desc` של התושב הוא **אינו מציג בשום
+          מקום**. שדה שאיש לא מצייר הוא שדה שאסור להוסיף, והוא גם
+          היחיד שהיה דורש שינוי בכללי האבטחה. אפס שינוי בכללים.
+       ⚠️ `gtShapeOk` דורש `hasOnly(gtFields())` — כל שדה כאן נמצא שם. */
+    var asReport = !!payload.asReport;
+    var hasPin = typeof payload.x === "number" && typeof payload.y === "number" &&
+                 payload.x >= 0 && payload.x <= 1 && payload.y >= 0 && payload.y <= 1;
+    var photos = payload.photos || [];
+
     CBA.fb.nextId("gardenTask", function (e1, taskId) {
       if (e1) return cb({ ok: false, error: "לא הצלחנו להקצות מספר למשימה" });
       var now = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
       var doc = {
-        id: String(taskId), kind: "יזום", title: title,
+        id: String(taskId),
+        kind: asReport ? GARDEN_KIND_REPORT : "יזום",
+        title: title,
         category: cat, area: String(payload.area || ""),
-        x: null, y: null,
+        x: hasPin ? Number(payload.x) : null,
+        y: hasPin ? Number(payload.y) : null,
         stage: wk ? "מתוכנן" : "התקבל",
         week: wk, repId: "", photos: [],
         createdAt: now, updatedAt: now, order: 0,
@@ -2170,8 +2202,30 @@ CBA.data = (function () {
       };
       CBA.fb.createDoc("gardenTasks", String(taskId), doc, function (e2) {
         if (e2) return cb({ ok: false, error: gardenFsErr(e2, "לא הצלחנו לפתוח את המשימה") });
-        gardenLogAppend(String(taskId), "נפתח", "משימה יזומה");
-        cb({ ok: true, id: taskId });
+        gardenLogAppend(String(taskId), "נפתח",
+          asReport ? "תקלה שפתח הצוות" : "משימה יזומה");
+
+        /* ⚠️ **התשובה חוזרת כאן, לפני התמונות** — אותה הכרעה בדיוק כמו
+           בדיווח של תושב (17.9): מרגע שהמסמך נכתב המשימה קיימת, יש לה
+           מספר, והמנהל חופשי להמשיך. ההעלאה ל-Drive ממשיכה ברקע.
+           ⚠️ ואין כאן `beforeunload`: חסימת סגירת הדף הייתה מבטלת בדיוק
+              את מה שהמבנה הזה בא לתת. */
+        cb({ ok: true, id: taskId, photosPending: photos.length });
+
+        if (!photos.length) return;
+        gardenUploadPhotos(photos, null, function (ids, failed) {
+          if (!ids.length) {
+            return gardenPhotoWarn("אף תמונה לא עלתה למשימה", taskId, failed);
+          }
+          /* `photos` נמצא ב-gtTeamUpdateOk, ולמנהל יש הרשאת גינון —
+             כלומר הכתיבה הזאת מותרת. כשל כאן אינו מבטל את המשימה. */
+          CBA.fb.mergeDoc("gardenTasks", String(taskId), {
+            photos: ids,
+            updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+          }, function (eM) {
+            if (eM) gardenPhotoWarn("מסמך המשימה לא עודכן בתמונות", taskId, eM);
+          });
+        });
       });
     });
   }
@@ -3920,7 +3974,11 @@ CBA.data = (function () {
       if (extra && extra.closure !== undefined) payload.closure = extra.closure;
       CBA.sheets.postRead("gardenTask", payload, cb);
     },
-    /* פתיחת משימה יזומה ע"י המנהל. payload: {title, category, area, week}. */
+    /* האם הדפדפן כותב ישירות. מסך שצריך לדעת אם להציג שדות שרק המסלול
+       הישיר יודע לשמור (מפה, תמונות) שואל כאן, ולא גוזר את הביטוי מחדש. */
+    gardenDirectWrites: function () { return gardenWritesOn(); },
+    /* פתיחת משימה יזומה ע"י המנהל.
+       payload: {title, category, area, week, asReport, x, y, photos}. */
     gardenCreateTask: function (payload, cb) {
       if (gardenWritesOn()) return gardenFsCreateTask(payload, cb);
       CBA.sheets.postRead("gardenCreateTask", payload, cb);

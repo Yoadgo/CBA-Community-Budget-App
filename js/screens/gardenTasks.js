@@ -470,7 +470,7 @@
               /* 🔴 מסנן רביעי (2026-09-21, בקשת יועד): "מקום שיהיה אפשר
                  לראות בו את כל התקלות דייר — לא שובצו, משובצות, טופלו
                  ומכל השבועות". זה אותו מנגנון מסנן ולא מסך חדש. */
-              seg("faults", "תקלות דיירים", c.faults) +
+              seg("faults", "תקלות", c.faults) +
               seg("closed", "סגורות", c.closed) +
             '</div>' +
             (isManager
@@ -1010,7 +1010,13 @@
       function markDone(id) {
         var t = byId(id);
         if (!t) return;
-        if (t.kind !== GK_REPORT) return run("done", id, {});
+        /* 🔴 **`repId` ולא `kind`** (2026-09-22). התנאי שאל עד היום "האם זה
+           דיווח", אבל מה שקובע כאן הוא "האם יש תושב שיקרא את המשפט".
+           מרגע שהמנהל יכול לפתוח תקלה בעצמו (`asReport`), משימה יכולה
+           להיות `GK_REPORT` **בלי** תושב מאחוריה — והדיאלוג היה מבקש
+           לכתוב הודעה לאיש. זה גם התפר שכבר קיים בשכבת הכתיבה
+           (`isReport` ב-dataService) ובכללי האבטחה. */
+        if (!t.repId) return run("done", id, {});
         CBA.ui.prompt("המשפט הזה נשלח לתושב שדיווח, ונשמר ביומן המשימה.", {
           title: "מה נעשה?", value: t.note || "",
           placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
@@ -1041,7 +1047,9 @@
         /* ⚠️ נקרא **לפני** ה-OPTIMISTIC, שמשנה את השורה במקום (2026-09-09).
            ההודעה אחרי סימון הייתה קבועה — "ממתין לאישור" — גם למשימות
            שגרה ויזום, שנסגרות מיד. הגנן חיכה לאישור שכבר לא יגיע. */
-        var wasReport = !!(t && t.kind === GK_REPORT);
+        /* אותו תפר בדיוק: ההודעה "ממתין לאישור" נכונה רק כשיש תושב
+           שהסגירה מחכה לו. ר' ההערה ב-markDone. */
+        var wasReport = !!(t && t.repId);
         /* ⚠️ גם הוא לפני ה-OPTIMISTIC: הטוסט של undo היה קבוע ("הסימון
            בוטל"), וזה ניסוח שגוי לפתיחה מחדש של משימה שנסגרה כ"בוטל". */
         var wasClosure = (t && t.closure) || "";
@@ -1326,9 +1334,41 @@
       /* טופס פתיחת משימה. גיליון תחתון ולא מסך נפרד: הוא נפתח מעל הרשימה,
          נסגר אליה, והמנהל רואה מיד את המשימה נכנסת. הקטגוריות והאזורים מגיעים
          מאותה תשובת שרת שבנתה את הרשימה — מקור אמת אחד, בלי קריאה נוספת. */
+      /* ------------------------------------------------------------------
+       *  טופס פתיחת משימה — חד-פעמית או חוזרת   (נכתב מחדש 22.9.2026)
+       * ------------------------------------------------------------------
+       *  בקשת יועד: "משימה שהיא כמו דיווח דייר אבל היא לא מהמשימות
+       *  החוזרות, עם אותו תפריט של דיווח דייר. אם יבחר שתהיה משימה
+       *  חוזרת אז יתווספו לה הכפתורים של משימה חזרתית."
+       *
+       *  🔑 **טופס אחד, שני מסלולים — ולא שני מנגנונים:**
+       *  - מתג כבוי  → `gardenCreateTask({asReport:true, …})`, כלומר
+       *    משימה אחת ב-`gardenTasks` שנראית ומטופלת כתקלת תושב.
+       *  - מתג דלוק → `gardenPlanSave({freq, …})`, כלומר **הגדרה
+       *    בתוכנית העבודה**. זה בדיוק מה שמשימה חוזרת כבר היא היום,
+       *    עם המנוע שמייצר ממנה משימות לכל שבוע. לא נבנה כאן שום
+       *    מנגנון חזרתיות חדש.
+       *
+       *  ⚠️ **להגדרה חוזרת אין נעיצה ואין תמונות** — `gardenPlan` אינו
+       *     מחזיק אותן, ובכוונה: שגרה אינה תקלה בנקודה אחת. לכן שני
+       *     השדות האלה מוסתרים כשהמתג דלוק. הכרעת יועד (22.9).
+       *  ⚠️ המפה והתמונות מוצגות רק כשהדפדפן כותב ישירות. במסלול
+       *     Apps Script (`appsScriptFallback`) הן לא היו נשמרות —
+       *     ושדה שנראה נשמר ואינו נשמר גרוע משדה שאינו קיים.
+       *  ⚠️ הקטגוריות והאזורים מגיעים מאותה תשובת שרת שבנתה את הרשימה —
+       *     מקור אמת אחד, בלי קריאה נוספת.
+       * --------------------------------------------------------------- */
+      var NT_FREQS = ["שבועי", "דו-שבועי", "חודשי", "שנתי"];
+      var NT_FREQ_LABEL = { "שבועי": "כל שבוע", "דו-שבועי": "כל שבועיים",
+                            "חודשי": "כל חודש", "שנתי": "פעם בשנה" };
+      var NT_PHOTO_MAX = 8;
+
       function openNewTask() {
         var cats = order.type.length ? order.type : [];
         var areas = order.area.length ? order.area : [];
+        var direct = !!(CBA.data.gardenDirectWrites && CBA.data.gardenDirectWrites());
+        var state = { x: null, y: null, pinArea: "", photos: [], repeat: false };
+
         var wrap = document.createElement("div");
         wrap.className = "gt-sheet-wrap";
         wrap.innerHTML =
@@ -1336,11 +1376,13 @@
           '<div class="gt-sheet" role="dialog" aria-label="משימה חדשה">' +
             '<div class="gt-grip" aria-hidden="true"></div>' +
             '<h4>משימה חדשה</h4>' +
-            '<p class="sub">משימה שאתה פותח בעצמך — לא דיווח של תושב ולא משימה חוזרת ' +
-              'מתוכנית העבודה.</p>' +
+            '<p class="sub" id="nt-sub">תקלה שאתה פותח בעצמך — מטופלת בדיוק ' +
+              'כמו תקלה שדייר דיווח עליה.</p>' +
+
             '<label class="gd-lbl">מה צריך לעשות <s>*</s></label>' +
             '<input class="gd-inp" id="nt-title" maxlength="120" autocomplete="off" ' +
               'placeholder="למשל: לגזום את העץ שחוסם את התמרור">' +
+
             '<div class="gd-row2" style="margin-top:10px">' +
               '<div><label class="gd-lbl">קטגוריה <s>*</s></label>' +
                 '<select class="gd-inp" id="nt-cat">' +
@@ -1351,37 +1393,216 @@
                   areas.map(function (a) { return '<option>' + esc(a) + '</option>'; }).join("") +
                 '</select></div>' +
             '</div>' +
-            '<label class="gd-lbl" style="margin-top:10px">מתי</label>' +
-            '<select class="gd-inp" id="nt-week">' +
-              '<option value="' + shiftKey(todayKey(), 0) + '">השבוע · ' + esc(weekLabel(shiftKey(todayKey(), 0))) + '</option>' +
-              '<option value="' + shiftKey(todayKey(), 1) + '">שבוע הבא</option>' +
-              '<option value="">בלי שבוע — לרשימת השיבוץ</option>' +
-            '</select>' +
+
+            /* המתג. Switch ולא checkbox — זו החלטה שמשנה את כל חצי הטופס
+               שמתחתיה, ולכן היא צריכה להיראות כמו החלטה.
+               ⚠️ אותו `.gp-sw` של תוכנית העבודה, לא מתג שני משלנו. */
+            '<button type="button" class="nt-rep" id="nt-rep" ' +
+                'role="switch" aria-checked="false">' +
+              '<span class="nt-rep__t"><b>משימה חוזרת</b>' +
+                '<span>תיכנס לתוכנית העבודה ותיפתח מחדש בכל מחזור</span></span>' +
+              '<i class="gp-sw off" aria-hidden="true"></i>' +
+            '</button>' +
+
+            /* ---- מסלול א: חד-פעמית ---- */
+            '<div id="nt-once">' +
+              '<label class="gd-lbl" style="margin-top:10px">מתי</label>' +
+              '<select class="gd-inp" id="nt-week">' +
+                '<option value="' + shiftKey(todayKey(), 0) + '">השבוע · ' + esc(weekLabel(shiftKey(todayKey(), 0))) + '</option>' +
+                '<option value="' + shiftKey(todayKey(), 1) + '">שבוע הבא</option>' +
+                '<option value="">בלי שבוע — לרשימת השיבוץ</option>' +
+              '</select>' +
+              (direct
+                ? '<label class="gd-lbl" style="margin-top:12px">איפה זה? ' +
+                    '<em class="nt-opt">לא חובה — לחצו על המפה</em></label>' +
+                  '<div class="gd-map nt-map" id="nt-map"></div>' +
+                  '<p class="gd-hint" id="nt-loc">סימון המיקום עוזר לצוות למצוא את זה בשטח.</p>' +
+                  '<label class="gd-lbl" style="margin-top:12px">תמונות ' +
+                    '<em class="nt-opt"><span id="nt-pc">0</span> / ' + NT_PHOTO_MAX + '</em></label>' +
+                  '<div class="gd-thumbs" id="nt-thumbs">' +
+                    '<button type="button" class="gd-th add" id="nt-add">+</button>' +
+                  '</div>' +
+                  '<input type="file" id="nt-file" accept="image/*" multiple hidden>'
+                : '') +
+            '</div>' +
+
+            /* ---- מסלול ב: חוזרת ---- */
+            '<div id="nt-every" hidden>' +
+              '<label class="gd-lbl" style="margin-top:10px">תדירות <s>*</s></label>' +
+              '<select class="gd-inp" id="nt-freq">' +
+                NT_FREQS.map(function (f) {
+                  return '<option value="' + esc(f) + '">' + esc(NT_FREQ_LABEL[f]) + '</option>';
+                }).join("") +
+              '</select>' +
+              '<div id="nt-anchor" hidden style="margin-top:10px">' +
+                '<label class="gd-lbl">השבוע הראשון <s>*</s></label>' +
+                '<input class="gd-inp" id="nt-first" type="date">' +
+                '<p class="gd-hint">ממנו נספרים המחזורים. בחרו יום ראשון.</p>' +
+              '</div>' +
+              '<div id="nt-wom" hidden style="margin-top:10px">' +
+                '<label class="gd-lbl">שבוע בחודש</label>' +
+                '<select class="gd-inp" id="nt-wk">' +
+                  [1,2,3,4].map(function (n) {
+                    return '<option value="' + n + '">שבוע ' + n + '</option>';
+                  }).join("") + '</select>' +
+                '<p class="gd-hint">אין שבוע 5 — החודש הוא ארבעה שבועות.</p>' +
+              '</div>' +
+            '</div>' +
+
             '<button type="button" class="gd-cta" id="nt-go" style="margin-top:14px">' +
-              ico("plus") + 'פתיחת המשימה</button>' +
+              ico("plus") + '<span id="nt-go-t">פתיחת התקלה</span></button>' +
           '</div>';
-        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
-           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+
         var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-new", sticky: true });
         function close() { sheetClose(); }
         var titleEl = wrap.querySelector("#nt-title");
         setTimeout(function () { titleEl.focus(); }, 120);
+
+        /* ---- המתג ---- */
+        var repBtn  = wrap.querySelector("#nt-rep");
+        var onceEl  = wrap.querySelector("#nt-once");
+        var everyEl = wrap.querySelector("#nt-every");
+        var subEl   = wrap.querySelector("#nt-sub");
+        var goT     = wrap.querySelector("#nt-go-t");
+        repBtn.addEventListener("click", function () {
+          state.repeat = !state.repeat;
+          repBtn.setAttribute("aria-checked", state.repeat ? "true" : "false");
+          repBtn.querySelector(".gp-sw").classList.toggle("off", !state.repeat);
+          onceEl.hidden  = state.repeat;
+          everyEl.hidden = !state.repeat;
+          subEl.textContent = state.repeat
+            ? "שגרה שחוזרת מעצמה. אין לה מיקום או תמונות — היא לא תקלה בנקודה אחת."
+            : "תקלה שאתה פותח בעצמך — מטופלת בדיוק כמו תקלה שדייר דיווח עליה.";
+          goT.textContent = state.repeat ? "הוספה לתוכנית" : "פתיחת התקלה";
+          if (state.repeat) syncFreq();
+        });
+
+        /* ---- שדות התדירות. אותה לוגיקה בדיוק כמו בטופס תוכנית העבודה:
+               השדות מוסתרים ולא מוסרים, כדי שערך שהוקלד לא ייעלם. ---- */
+        var freqEl = wrap.querySelector("#nt-freq");
+        function syncFreq() {
+          var f = freqEl.value;
+          wrap.querySelector("#nt-anchor").hidden = (f !== "דו-שבועי");
+          wrap.querySelector("#nt-wom").hidden    = (f !== "חודשי" && f !== "שנתי");
+        }
+        freqEl.addEventListener("change", syncFreq);
+
+        /* ---- מפה ותמונות. קיימות רק במסלול הכתיבה הישירה. ---- */
+        if (direct) {
+          var locEl = wrap.querySelector("#nt-loc");
+          /* ⚠️ אחרי mountSheet: CBA.map מודד את המכל, ומכל ברוחב אפס
+             מצייר מפה ריקה. setTimeout נותן לגיליון לסיים את הפריסה. */
+          setTimeout(function () {
+            var mapEl = wrap.querySelector("#nt-map");
+            if (!mapEl || !CBA.map) return;
+            CBA.map.render(mapEl, {
+              head: false, search: false, legend: false, popup: false, pin: true,
+              onPin: function (n, area) {
+                state.x = n.x; state.y = n.y; state.pinArea = area || "";
+                locEl.textContent = state.pinArea
+                  ? ("המיקום סומן · " + state.pinArea + ". אפשר ללחוץ שוב כדי להזיז.")
+                  : "המיקום סומן. אפשר ללחוץ שוב כדי להזיז.";
+                locEl.classList.add("is-ok");
+                /* הנעיצה יודעת באיזה אזור גינון היא נפלה — ואם המנהל
+                   עוד לא בחר אזור ידנית, היא ממלאת אותו במקומו. */
+                var sel = wrap.querySelector("#nt-area");
+                if (state.pinArea && sel && !sel.value) {
+                  var has = Array.prototype.some.call(sel.options, function (o) {
+                    return o.value === state.pinArea;
+                  });
+                  if (has) sel.value = state.pinArea;
+                }
+              }
+            });
+          }, 180);
+
+          var fileEl  = wrap.querySelector("#nt-file");
+          var thumbsEl = wrap.querySelector("#nt-thumbs");
+          var addBtn  = wrap.querySelector("#nt-add");
+          addBtn.addEventListener("click", function () { fileEl.click(); });
+          fileEl.addEventListener("change", function () {
+            Array.prototype.slice.call(fileEl.files || []).forEach(function (f) {
+              if (state.photos.length >= NT_PHOTO_MAX) return;
+              /* הכיווץ אסינכרוני וכמה קבצים מסיימים בסדר לא צפוי — ולכן
+                 המכסה נבדקת **שוב** בתוך ה-callback. */
+              CBA.photos.toUpload(f, function (item, dataUrl) {
+                if (!item) return;
+                if (state.photos.length >= NT_PHOTO_MAX) return;
+                state.photos.push(item);
+                addThumb(dataUrl);
+              });
+            });
+            fileEl.value = "";
+          });
+          function addThumb(url) {
+            var el = document.createElement("span");
+            el.className = "gd-th";
+            el.style.backgroundImage = "url(" + url + ")";
+            el.innerHTML = '<button type="button" class="th-x" aria-label="הסרת התמונה">✕</button>';
+            el.dataset.i = String(state.photos.length - 1);
+            el.querySelector(".th-x").addEventListener("click", function () {
+              state.photos.splice(parseInt(el.dataset.i, 10), 1);
+              el.remove();
+              Array.prototype.forEach.call(thumbsEl.querySelectorAll(".gd-th:not(.add)"),
+                function (t, k) { t.dataset.i = String(k); });
+              syncPhotos();
+            });
+            thumbsEl.insertBefore(el, addBtn);
+            syncPhotos();
+          }
+          function syncPhotos() {
+            wrap.querySelector("#nt-pc").textContent = state.photos.length;
+            addBtn.style.display = state.photos.length >= NT_PHOTO_MAX ? "none" : "grid";
+          }
+        }
+
+        /* ---- שליחה ---- */
         wrap.querySelector("#nt-go").addEventListener("click", function () {
           var title = titleEl.value.trim();
           if (!title) { titleEl.focus(); return CBA.ui.alert("צריך לכתוב מה צריך לעשות"); }
           if (busy) return;
+          var cat  = wrap.querySelector("#nt-cat").value;
+          var area = wrap.querySelector("#nt-area").value;
+
+          if (state.repeat) {
+            var freq  = freqEl.value;
+            var first = wrap.querySelector("#nt-first").value;
+            /* אותה בדיקה בדיוק רצה בשרת ובכללי האבטחה (gpShapeOk). היא
+               כאן רק כדי לא לשלוח בקשה שתידחה. */
+            if (freq === "דו-שבועי" && !first) {
+              return CBA.ui.alert("למחזור דו-שבועי צריך לבחור את השבוע הראשון");
+            }
+            busy = true;
+            return CBA.data.gardenPlanSave({
+              id: "", title: title, category: cat, freq: freq,
+              firstWeek: first,
+              weekOfMonth: wrap.querySelector("#nt-wk").value,
+              months: "", areas: area ? [area] : [],
+              rotate: false, clause: "", active: true
+            }, function (res) {
+              busy = false;
+              if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "ההוספה לא הצליחה");
+              close();
+              CBA.ui.toast("נוספה לתוכנית העבודה");
+              load();
+            });
+          }
+
           busy = true;
-          var wk = wrap.querySelector("#nt-week").value;
           CBA.data.gardenCreateTask({
-            title: title,
-            category: wrap.querySelector("#nt-cat").value,
-            area: wrap.querySelector("#nt-area").value,
-            week: wk
+            title: title, category: cat,
+            /* הנעיצה מנצחת רק כשהמנהל לא בחר אזור בעצמו. */
+            area: area || state.pinArea || "",
+            week: wrap.querySelector("#nt-week").value,
+            asReport: true,
+            x: state.x, y: state.y,
+            photos: state.photos
           }, function (res) {
             busy = false;
             if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "המשימה לא נפתחה");
             close();
-            CBA.ui.toast("נפתחה משימה #" + res.id);
+            CBA.ui.toast("נפתחה תקלה #" + res.id +
+              (res.photosPending ? " · התמונות עולות ברקע" : ""));
             // קופצים לרשימה שבה היא באמת נחתה, אחרת היא "נעלמת" מול העיניים
             filter = "open";
             load();
