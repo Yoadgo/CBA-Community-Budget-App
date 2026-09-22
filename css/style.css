@@ -2583,6 +2583,58 @@ button.is-busy,
 }
 .svc-hrs__bad b { display: block; margin-bottom: 3px; }
 
+/* --- לייק/דיסלייק + תגובות + כרטיסי המלצות תושבים (2026-09-23, WAVE 3) --- */
+.svc-badge {
+  display: inline-flex; align-items: center; width: fit-content;
+  font-size: 11px; font-weight: 700; color: #059669; background: #ECFDF5;
+  border: 1px solid #A7F3D0; border-radius: 999px; padding: 3px 10px; margin-bottom: 10px;
+}
+.svc-card--rec .svc-card__ico { display: none; }
+
+.svc-reactions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+.svc-react-btn {
+  display: flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 999px;
+  font-size: 13.5px; font-weight: 700; color: var(--text-soft); background: var(--bg);
+  border: 1px solid var(--border); cursor: pointer; transition: var(--t);
+}
+.svc-react-btn:hover { border-color: var(--action); color: var(--text); }
+.svc-react-btn--like.is-on  { color: #fff; background: #1B7A3E; border-color: #1B7A3E; }
+.svc-react-btn--dislike.is-on { color: #fff; background: #111827; border-color: #111827; }
+.svc-react-mine { font-size: 12px; color: var(--text-muted); }
+
+.svc-comments-title { font-size: 14px; font-weight: 700; margin: 4px 0 2px; }
+.svc-comments { display: flex; flex-direction: column; gap: 14px; margin: 10px 0; }
+.svc-comment { display: flex; gap: 10px; }
+.svc-comment--mine { background: var(--bg); border-radius: 12px; padding: 9px 10px; margin: -9px -10px; }
+.svc-comment__ava {
+  width: 32px; height: 32px; border-radius: 999px; background: #111827; color: #fff;
+  font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none;
+}
+.svc-comment__t { flex: 1; min-width: 0; }
+.svc-comment__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.svc-comment__name { font-size: 13px; font-weight: 700; }
+.svc-comment__when { font-weight: 400; color: var(--text-muted); }
+.svc-comment__mine-tag { font-size: 11px; color: #1B7A3E; }
+.svc-comment__body { font-size: 13px; color: #374151; line-height: 1.6; margin-top: 2px; }
+.svc-comment__del { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px; }
+.svc-comment__del:hover { color: #9A3B32; }
+.svc-comment-empty { font-size: 13px; color: var(--text-muted); }
+
+.svc-comment-form { display: flex; gap: 9px; margin-top: 6px; }
+.svc-comment-form .field-input { flex: 1; }
+
+.svc-admin-zone {
+  margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.svc-admin-zone__label { font-size: 11px; font-weight: 700; letter-spacing: .03em; color: var(--text-muted); }
+
+.svc-dup-suggest {
+  margin-top: 8px; font-size: 12.5px; color: #7A5AA8; background: rgba(122,90,168,.08);
+  border-radius: 10px; padding: 9px 11px; display: none;
+}
+.svc-dup-suggest a { color: inherit; font-weight: 700; text-decoration: underline; }
+
 /* --- מסך הניהול --- */
 .sadm-hrs-prev {
   margin-top: 10px; padding: 11px 13px; border-radius: 12px;

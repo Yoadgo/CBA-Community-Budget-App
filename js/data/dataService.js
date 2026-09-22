@@ -3701,6 +3701,173 @@ CBA.data = (function () {
     });
   }
 
+  /* ========================================================================
+   *  המלצות תושבים על שירותים + לייק/דיסלייק/תגובות
+   *  (אפיון 22.9.26, [[cba-service-reactions-recommendations-spec-2026-09-22]]
+   *  — WAVE 2: שכבת הנתונים. כללי האבטחה התואמים כבר ב-firestore.rules
+   *  (WAVE 1, קומיט 468c6d6). המסכים עצמם (WAVE 3) עדיין לא משתמשים בזה.)
+   * ------------------------------------------------------------------------
+   *  🔴 שלושה אוספי Firestore, קריאה/כתיבה ישירות מהדפדפן (מודל ב') —
+   *  אין כאן שכבת שרת (Apps Script) כלל, ולכן אין fsFirstRead/נפילה-לאחור
+   *  כמו services: אם Firestore לא זמין, הפיצ'ר פשוט לא עובד באותו רגע
+   *  (בדומה לתגובות גינון). זה מקובל — אין לזה מקבילה בגיליון.
+   * ====================================================================== */
+
+  function currentFamilyId() {
+    return String(((window.CBA && CBA.user) || {}).familyId || "").trim();
+  }
+
+  function newLocalId(prefix) {
+    return prefix + "_" + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
+  }
+
+  /* ---------- כרטיסי המלצה של תושבים ---------- */
+
+  /* activeOnly=true (ברירת מחדל) למסך התושב; false למסך הניהול, שצריך
+     לראות גם כרטיסים מוסתרים כדי לאפשר "הצג בחזרה". */
+  function getResidentServiceCards(activeOnly, cb) {
+    if (typeof activeOnly === "function") { cb = activeOnly; activeOnly = true; }
+    if (!(CBA.fb && CBA.fb.readCollection)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    CBA.fb.readCollection("residentServiceCards", function (err, rows) {
+      if (err) { cb({ ok: false, error: "שגיאת טעינה" }); return; }
+      var out = (rows || []).filter(function (r) { return activeOnly ? r.active !== false : true; });
+      out.sort(function (a, b) { return (b.createdAt || "") < (a.createdAt || "") ? -1 : 1; });
+      cb({ ok: true, cards: out });
+    });
+  }
+
+  function createResidentServiceCard(fields, cb) {
+    var fid = currentFamilyId();
+    if (!fid) { cb({ ok: false, error: "לא משויך למשפחה" }); return; }
+    if (!(CBA.fb && CBA.fb.createDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    var now = new Date().toISOString();
+    var id = newLocalId("rsvc");
+    var doc = {
+      id: id, familyId: fid,
+      title: String((fields || {}).title || "").trim().slice(0, 80),
+      body: String((fields || {}).body || "").trim().slice(0, 1500),
+      active: true, createdAt: now, updatedAt: now, schema: 1
+    };
+    var mapsUrl = String((fields || {}).mapsUrl || "").trim().slice(0, 300);
+    if (mapsUrl) doc.mapsUrl = mapsUrl;
+    if (!doc.title) { cb({ ok: false, error: "צריך כותרת" }); return; }
+    CBA.fb.createDoc("residentServiceCards", id, doc, function (err) {
+      if (err) { cb({ ok: false, error: "שמירה נכשלה" }); return; }
+      cb({ ok: true, card: doc });
+    });
+  }
+
+  /* עריכה עצמית — רק תוכן. הכלל דוחה כל ניסיון לגעת ב-familyId/active/id. */
+  function updateResidentServiceCard(id, fields, cb) {
+    if (!(CBA.fb && CBA.fb.updateDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    var patch = { updatedAt: new Date().toISOString() };
+    fields = fields || {};
+    if (fields.title != null) patch.title = String(fields.title).trim().slice(0, 80);
+    if (fields.body != null) patch.body = String(fields.body).trim().slice(0, 1500);
+    if (fields.mapsUrl != null) patch.mapsUrl = String(fields.mapsUrl).trim().slice(0, 300);
+    CBA.fb.updateDoc("residentServiceCards", String(id), patch, function (err) {
+      cb(err ? { ok: false, error: "עדכון נכשל" } : { ok: true });
+    });
+  }
+
+  /* היוצר מוחק את שלו לגמרי. ⚠️ לא מוחק בעצמו לייקים/תגובות שהצטברו על
+     הכרטיס — הכלל אינו תומך במחיקת-מפל (ר' ההערה ב-firestore.rules).
+     best-effort: לא קריטי אם משהו נשאר יתום, הוא לא מוצג בלי הכרטיס. */
+  function deleteResidentServiceCard(id, cb) {
+    if (!(CBA.fb && CBA.fb.deleteDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    CBA.fb.deleteDoc("residentServiceCards", String(id), function (err) {
+      cb(err ? { ok: false, error: "מחיקה נכשלה" } : { ok: true });
+    });
+  }
+
+  /* מנהל-על בלבד ברמת המסך (הכלל אוכף את זה גם בשרת) — הסתרה/הצגה
+     מחדש, בלי לגעת בתוכן. */
+  function setResidentServiceCardActive(id, active, cb) {
+    if (!(CBA.fb && CBA.fb.updateDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    CBA.fb.updateDoc("residentServiceCards", String(id),
+      { active: !!active, updatedAt: new Date().toISOString() },
+      function (err) { cb(err ? { ok: false, error: "עדכון נכשל" } : { ok: true }); });
+  }
+
+  /* ---------- לייק/דיסלייק ---------- */
+
+  /* מזהה המסמך תמיד "<cardId>_<familyId>" (ר' firestore.rules) — כך
+     שאלת "מה ההצבעה שלי?" נגזרת מאותה שאילתה, בלי קריאה נוספת. */
+  function reactionDocId(cardId, familyId) { return String(cardId) + "_" + String(familyId); }
+
+  /* טוען את כל ההצבעות על כרטיס אחד ומחשב לייק/דיסלייק + מה שלי.
+     🔴 שוויון בלבד (cardId==) — תואם את המגבלה על אינדקסים מורכבים. */
+  function getServiceReactions(cardId, cb) {
+    if (!(CBA.fb && CBA.fb.queryCollection)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    CBA.fb.queryCollection("serviceReactions", [["cardId", String(cardId)]], function (err, rows) {
+      if (err) { cb({ ok: false, error: "שגיאת טעינה" }); return; }
+      var fid = currentFamilyId(), like = 0, dislike = 0, mine = null;
+      (rows || []).forEach(function (r) {
+        if (r.value === "like") like++;
+        else if (r.value === "dislike") dislike++;
+        if (fid && r.familyId === fid) mine = r.value;
+      });
+      cb({ ok: true, like: like, dislike: dislike, mine: mine });
+    });
+  }
+
+  /* value: "like" | "dislike". כתיבה חוזרת על אותו מסמך (upsert) —
+     שינוי כיוון ההצבעה, לא הצבעה נוספת. */
+  function setServiceReaction(cardId, cardType, value, cb) {
+    var fid = currentFamilyId();
+    if (!fid) { cb({ ok: false, error: "לא משויך למשפחה" }); return; }
+    if (!(CBA.fb && CBA.fb.createDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    var id = reactionDocId(cardId, fid);
+    CBA.fb.createDoc("serviceReactions", id, {
+      cardId: String(cardId), cardType: cardType, familyId: fid,
+      value: value, updatedAt: new Date().toISOString()
+    }, function (err) { cb(err ? { ok: false, error: "שמירה נכשלה" } : { ok: true }); });
+  }
+
+  /* ביטול הצבעה קיימת. */
+  function clearServiceReaction(cardId, cb) {
+    var fid = currentFamilyId();
+    if (!fid || !(CBA.fb && CBA.fb.deleteDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    CBA.fb.deleteDoc("serviceReactions", reactionDocId(cardId, fid),
+      function (err) { cb(err ? { ok: false, error: "מחיקה נכשלה" } : { ok: true }); });
+  }
+
+  /* ---------- תגובות ---------- */
+
+  function getServiceComments(cardId, cb) {
+    if (!(CBA.fb && CBA.fb.queryCollection)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    CBA.fb.queryCollection("serviceComments", [["cardId", String(cardId)]], function (err, rows) {
+      if (err) { cb({ ok: false, error: "שגיאת טעינה" }); return; }
+      var out = (rows || []).slice().sort(function (a, b) {
+        return String(a.createdAt || "") < String(b.createdAt || "") ? -1 : 1;
+      });
+      cb({ ok: true, comments: out });
+    });
+  }
+
+  function addServiceComment(cardId, cardType, text, cb) {
+    var fid = currentFamilyId();
+    var body = String(text || "").trim().slice(0, 500);
+    if (!fid) { cb({ ok: false, error: "לא משויך למשפחה" }); return; }
+    if (!body) { cb({ ok: false, error: "התגובה ריקה" }); return; }
+    if (!(CBA.fb && CBA.fb.createDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    var id = newLocalId("cm");
+    var now = new Date().toISOString();
+    var doc = { id: id, cardId: String(cardId), cardType: cardType, familyId: fid,
+                text: body, createdAt: now, updatedAt: now };
+    CBA.fb.createDoc("serviceComments", id, doc, function (err) {
+      cb(err ? { ok: false, error: "שליחה נכשלה" } : { ok: true, comment: doc });
+    });
+  }
+
+  /* מנהל-על יכול למחוק כל תגובה (הכלל אוכף), תושב רק את שלו — המסך
+     צריך להסתיר את הכפתור בהתאם, אבל הכלל הוא מה שבאמת עוצר. */
+  function deleteServiceComment(id, cb) {
+    if (!(CBA.fb && CBA.fb.deleteDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    CBA.fb.deleteDoc("serviceComments", String(id),
+      function (err) { cb(err ? { ok: false, error: "מחיקה נכשלה" } : { ok: true }); });
+  }
+
   // סכום הביצוע לכל סעיף (רק הוצאות שנספרות)
   function actualByCategory() {
     const sums = {};
@@ -4982,6 +5149,19 @@ CBA.data = (function () {
     getServices: getServices,
     saveServices: saveServices,
     saveServiceCategories: saveServiceCategories,
+    /* המלצות תושבים על שירותים + לייק/דיסלייק/תגובות (WAVE 2, ר' ההערה
+       למעלה ב-residentServiceCards / serviceReactions / serviceComments). */
+    getResidentServiceCards: getResidentServiceCards,
+    createResidentServiceCard: createResidentServiceCard,
+    updateResidentServiceCard: updateResidentServiceCard,
+    deleteResidentServiceCard: deleteResidentServiceCard,
+    setResidentServiceCardActive: setResidentServiceCardActive,
+    getServiceReactions: getServiceReactions,
+    setServiceReaction: setServiceReaction,
+    clearServiceReaction: clearServiceReaction,
+    getServiceComments: getServiceComments,
+    addServiceComment: addServiceComment,
+    deleteServiceComment: deleteServiceComment,
     /* עדכון תושבים במייל — ידני בלבד, נשלח רק בלחיצה מפורשת של מנהל-על
        (ר' notifyServiceUpdate_ ב-Code.gs). לא מנקה מטמון: הוא לא משנה נתונים. */
     notifyServiceUpdate: function (payload, cb) {

@@ -653,7 +653,8 @@ CBA.serviceUtils = (function () {
 /* ============================================================================
  *  מסך התושב
  * ========================================================================== */
-var svcState = { list: [], loaded: false, query: "" };
+var svcState = { list: [], loaded: false, query: "", residentCards: [], residentSvcMap: {}, recCatId: null };
+var svcRepaint = null;
 
 function svcEsc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
 
@@ -693,6 +694,8 @@ CBA.screens.resServices = {
     var body = container.querySelector("#svc-body");
 
     function paint() {
+      // כל תושב מחובר יכול להוסיף המלצה — לא רק מנהל-על (ר' האפיון).
+      var canRecommend = !!(window.CBA && CBA.user && CBA.user.familyId);
       body.innerHTML =
         '<div class="svc-toolbar">' +
           '<div class="svc-search">' +
@@ -700,13 +703,18 @@ CBA.screens.resServices = {
             '<input id="svc-q" class="field-input" placeholder="חיפוש שירות, ספק או תוכן…" value="' + svcEsc(svcState.query) + '">' +
           "</div>" +
           '<span class="svc-count" id="svc-count"></span>' +
+          (canRecommend ? '<button type="button" class="btn-primary btn-sm" id="svc-add-rec">+ הוספת המלצה</button>' : "") +
         "</div>" +
         '<div class="svc-grid" id="svc-grid"></div>';
       paintGrid();
 
       var q = body.querySelector("#svc-q");
       q.addEventListener("input", function () { svcState.query = q.value; paintGrid(); });
+
+      var addBtn = body.querySelector("#svc-add-rec");
+      if (addBtn) addBtn.addEventListener("click", function () { svcOpenRecommendForm(); });
     }
+    svcRepaint = paint;
 
     function paintGrid() {
       var q = String(svcState.query || "").trim();
@@ -726,15 +734,26 @@ CBA.screens.resServices = {
       }
 
       function card(s) {
-        return '<article class="svc-card" data-svc="' + svcEsc(s.id) + '">' +
-            (s.icon ? '<div class="svc-card__ico">' + svcEsc(s.icon) + "</div>" : "") +
+        // כרטיס המלצת תושב (2026-09-23) — אותו שלד כרטיס בדיוק, רק תג
+        // "המלצת תושב" במקום אייקון, שם משפחה במקום ספק, ותקציר הטקסט
+        // החופשי במקום "תיאור קצר". בלי כפתורי טלפון — אין שדה טלפון
+        // בכרטיס המלצה (ר' האפיון).
+        var recFam = s.isResident ? (CBA.data.familyDisplayName(s.familyId) || "תושב") : "";
+        return '<article class="svc-card' + (s.isResident ? ' svc-card--rec' : '') + '" data-svc="' + svcEsc(s.id) + '">' +
+            (s.isResident
+              ? '<div class="svc-badge">המלצת תושב</div>'
+              : (s.icon ? '<div class="svc-card__ico">' + svcEsc(s.icon) + "</div>" : "")) +
             '<h3 class="svc-card__name">' + svcEsc(s.name) + "</h3>" +
             svcStatusTag(s) +
-            (s.provider ? '<div class="svc-card__prov">' + svcEsc(s.provider) + "</div>" : "") +
-            (s.desc ? '<p class="svc-card__desc">' + svcEsc(s.desc) + "</p>" : '<p class="svc-card__desc"></p>') +
+            (s.isResident
+              ? (recFam ? '<div class="svc-card__prov">' + svcEsc(recFam) + "</div>" : "")
+              : (s.provider ? '<div class="svc-card__prov">' + svcEsc(s.provider) + "</div>" : "")) +
+            (s.isResident
+              ? '<p class="svc-card__desc">' + svcEsc((s.body || "").slice(0, 110)) + ((s.body || "").length > 110 ? "…" : "") + "</p>"
+              : (s.desc ? '<p class="svc-card__desc">' + svcEsc(s.desc) + "</p>" : '<p class="svc-card__desc"></p>')) +
             '<div class="svc-card__acts">' +
               '<button type="button" class="btn-primary btn-sm" data-open="' + svcEsc(s.id) + '">כל הפרטים</button>' +
-              svcPhoneBtns(s, "btn-ghost btn-sm") +
+              (s.isResident ? "" : svcPhoneBtns(s, "btn-ghost btn-sm")) +
             "</div>" +
           "</article>";
       }
@@ -781,8 +800,16 @@ CBA.screens.resServices = {
       }
       svcState.list = CBA.serviceUtils.build(res.services, res.sections);
       svcState.categories = CBA.serviceUtils.buildCategories(res.categories);
-      svcState.loaded = true;
-      paint();
+      svcState.recCatId = svcRecommendCategoryId();
+      // כרטיסי המלצות תושבים (WAVE 3) — נטענים בנפרד מ-Firestore ומתמזגים
+      // לתוך אותה רשימה, ככה שהם עוברים באותו קיבוץ-לפי-קטגוריה, אותו
+      // חיפוש ואותה מגירה כמו כרטיסי מנהל. אם הטעינה נכשלת (Firestore לא
+      // זמין) — לא נופלים בשקט: מסך השירותים הרשמי עדיין עולה, רק בלי
+      // ההמלצות באותו רגע (בדיוק כמו תגובות גינון).
+      svcLoadResidentExtras(function () {
+        svcState.loaded = true;
+        paint();
+      });
     });
   }
 };
@@ -874,6 +901,13 @@ function svcOpenDrawer(id) {
       "</div>";
   }).join("");
 
+  // בעל הכרטיס (לעריכה/מחיקה עצמית) ומנהל-על (להסתרה) — ר' האפיון: כל
+  // כרטיס גלוי לכולם, אבל רק היוצר או מנהל-על יכולים לגעת בו.
+  var myFid = String(((window.CBA && CBA.user) || {}).familyId || "").trim();
+  var isOwner = svc.isResident && myFid && svc.familyId === myFid;
+  var isSuperAdmin = window.CBA && CBA.isSuper === true;
+  var recFamName = svc.isResident ? (CBA.data.familyDisplayName(svc.familyId) || "תושב") : "";
+
   var overlay = document.createElement("div");
   overlay.id = "svc-drawer";
   overlay.innerHTML =
@@ -881,9 +915,15 @@ function svcOpenDrawer(id) {
     '<aside class="drawer" role="dialog" aria-label="פרטי שירות">' +
       '<div class="drawer__head">' +
         '<div class="svc-drawer__head">' +
-          (svc.icon ? '<span class="svc-drawer__ico">' + svcEsc(svc.icon) + "</span>" : "") +
-          "<div><div class=\"drawer__title\">" + svcEsc(svc.name) + "</div>" +
-          (svc.provider ? '<div class="drawer__sub">' + svcEsc(svc.provider) + "</div>" : "") +
+          (svc.isResident
+            ? ""
+            : (svc.icon ? '<span class="svc-drawer__ico">' + svcEsc(svc.icon) + "</span>" : "")) +
+          "<div>" +
+          (svc.isResident ? '<div class="svc-badge">המלצת תושב</div>' : "") +
+          "<div class=\"drawer__title\">" + svcEsc(svc.name) + "</div>" +
+          (svc.isResident
+            ? (recFamName ? '<div class="drawer__sub">' + svcEsc(recFamName) + "</div>" : "")
+            : (svc.provider ? '<div class="drawer__sub">' + svcEsc(svc.provider) + "</div>" : "")) +
           svcStatusTag(svc) + "</div>" +
         "</div>" +
         '<button class="drawer__close" data-sclose aria-label="סגור">×</button>' +
@@ -891,10 +931,26 @@ function svcOpenDrawer(id) {
       '<div class="drawer__body svc-drawer__body">' +
         (sectionsHtml || '<div class="club-empty">אין עדיין פרטים לשירות הזה.</div>') +
         (svc.updated ? '<div class="svc-updated">עודכן לאחרונה: ' + svcEsc(svc.updated) + "</div>" : "") +
+        '<div class="hairline-sep" style="height:1px;background:var(--hairline);margin:16px 0"></div>' +
+        '<div id="svc-react-zone" data-cardid="' + svcEsc(svc.id) + '">' + svcSkeletonReactions() + "</div>" +
+        (isOwner || isSuperAdmin
+          ? '<div class="svc-admin-zone">' +
+              '<div class="svc-admin-zone__label">' + (isOwner ? "הכרטיס שלך" : "פעולות ניהול") + "</div>" +
+              (isOwner
+                ? '<button type="button" class="btn-ghost btn-sm" id="svc-rec-edit">עריכת הכרטיס</button>' +
+                  '<button type="button" class="btn-ghost btn-sm" id="svc-rec-del" style="color:#F43F5E">מחיקת הכרטיס</button>'
+                : "") +
+              (isSuperAdmin && !isOwner && svc.isResident
+                ? '<button type="button" class="btn-ghost btn-sm" id="svc-rec-hide" style="color:#F43F5E">הסתרת כרטיס</button>'
+                : "") +
+            "</div>"
+          : "") +
       "</div>" +
       '<div class="drawer__actions drawer__actions--sticky">' +
         '<div class="drawer__actions-main">' +
-          svcPhoneBtns(svc, "btn-primary", "btn-ghost", svc.provider ? " ל" + svcEsc(svc.provider) : "") +
+          (svc.isResident
+            ? (svc.mapsUrl ? '<a class="btn-ghost" href="' + svcEsc(svc.mapsUrl) + '" target="_blank" rel="noopener">פתח במפות</a>' : "")
+            : svcPhoneBtns(svc, "btn-primary", "btn-ghost", svc.provider ? " ל" + svcEsc(svc.provider) : "")) +
           (svc.doc ? '<a class="btn-ghost" href="' + svcEsc(svc.doc) + '" target="_blank" rel="noopener">המסמך המקורי</a>' : "") +
           '<button type="button" class="btn-ghost" data-sclose>סגירה</button>' +
         "</div>" +
@@ -913,5 +969,16 @@ function svcOpenDrawer(id) {
     });
   });
   svcBindCallButtons(overlay);
+
+  var editBtn = overlay.querySelector("#svc-rec-edit");
+  if (editBtn) editBtn.addEventListener("click", function () {
+    svcOpenRecommendForm(svcState.residentSvcMap[svc.id]);
+  });
+  var delBtn = overlay.querySelector("#svc-rec-del");
+  if (delBtn) delBtn.addEventListener("click", function () { svcDeleteRecommend(svc.id, false); });
+  var hideBtn = overlay.querySelector("#svc-rec-hide");
+  if (hideBtn) hideBtn.addEventListener("click", function () { svcDeleteRecommend(svc.id, true); });
+
+  svcPaintReactions(svc.id);
   document.addEventListener("keydown", svcDrawerKey);
 }
