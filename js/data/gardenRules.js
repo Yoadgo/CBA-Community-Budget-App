@@ -222,10 +222,25 @@ var GardenRules = (function () {
       (existing[k] = existing[k] || []).push(t);
     });
 
-    var create = [], remove = [], kept = 0, frozen = 0;
+    var create = [], remove = [], rename = [], kept = 0, frozen = 0;
     Object.keys(desired).forEach(function (k) {
-      if (existing[k] && existing[k].length) { kept++; return; }
       var o = desired[k];
+      if (existing[k] && existing[k].length) {
+        kept++;
+        /* 🔴 22.9 (סימולציה, ממצא F) — **שם/קטגוריה חדשים מגיעים לכרטיסים
+           שכבר נוצרו.** בלי זה שינוי שם בתבנית הופיע רק במופעים שייווצרו
+           בעתיד, ו-8 שבועות של כרטיסים נשארו עם השם הישן. רק מופעים שלא
+           נגעו בהם ורק אם ההגדרה בתוקף לשבוע (effectiveFrom) — נגוע
+           הוא היסטוריה, וההיסטוריה לא משתנה. */
+        existing[k].forEach(function (t) {
+          if (touched(t)) return;
+          if (o.def.effectiveFrom && String(t.week) < String(o.def.effectiveFrom)) return;
+          var title = String(o.def.title || ''), cat = String(o.def.category || '');
+          if (String(t.title || '') === title && String(t.category || '') === cat) return;
+          rename.push({ id: String(t.id), title: title, category: cat });
+        });
+        return;
+      }
       create.push(newOccDoc(o.def, o.week, o.area, now, year));
     });
     Object.keys(existing).forEach(function (k) {
@@ -238,7 +253,7 @@ var GardenRules = (function () {
       });
     });
 
-    return { create: create, remove: remove, kept: kept, frozen: frozen,
+    return { create: create, remove: remove, rename: rename, kept: kept, frozen: frozen,
              weeks: weeks, from: from, horizonWeeks: H };
   }
 

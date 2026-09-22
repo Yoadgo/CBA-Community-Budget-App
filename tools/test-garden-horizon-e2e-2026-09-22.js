@@ -43,7 +43,8 @@ function browser() {
       queryCollection: (c, q, cb) => cb(null, Object.keys(store[c] || {}).map(id => Object.assign({ id }, clone(store[c][id]))).filter(d => q.every(([f, v]) => String(d[f]) === String(v)))),
       readDoc: (c, id, cb) => cb(null, store[c] && store[c][id] ? clone(store[c][id]) : null),
       createDoc: (c, id, data, cb) => { if (store[c][id]) return cb({ code: 'permission-denied' }); store[c][id] = clone(data); cb(null); },
-      mergeDoc: (c, id, f, cb) => { if (!store[c][id]) return cb({ code: 'not-found' }); Object.assign(store[c][id], clone(f)); cb(null); },
+      mergeDoc: (c, id, f, cb) => { store[c] = store[c] || {}; store[c][id] = Object.assign(store[c][id] || {}, clone(f)); cb(null); },
+      updateDoc: (c, id, f, cb) => { if (!store[c][id]) return cb({ code: 'not-found' }); Object.assign(store[c][id], clone(f)); cb(null); },
       deleteDoc: (c, id, cb) => { delete store[c][id]; cb(null); },
       nextId: (k, cb) => { store.counters[k].n++; cb(null, store.counters[k].n); }
     }
@@ -151,27 +152,43 @@ const routine = () => Object.values(store.gardenTasks).filter(t => t.kind === '�
     eq('והמסך יגיד כמה נשארו', r.made, 1);
   }
 
-  section('7. מחיקת משימה — דגל בדפדפן, השרת מסיים');
+  section('7. מחיקה — שגרה מבוטלת, דיווח תושב נסגר ונשאר, יזום נמחק (הכרעות 22.9 ערב)');
   {
+    /* שגרה: "מחיקה" = סגירה ב'בוטל'. המנוע לא יוצר מחדש (סלוט תפוס). */
     const t = routine()[0];
-    store.gardenReports['5'] = { id: '5', taskId: t.id, photos: ['PHOTO-X'] };
-    t.photos = ['PHOTO-T'];
-    const r = await call(cb => B.CBA.data.gardenTaskDelete(t.id, 'בדיקה', cb));
-    ok('הדגל הורם', r.ok === true && r.pending === true, JSON.stringify(r));
-    ok('pendingDelete בוליאני', store.gardenTasks[t.id].pendingDelete === true);
-    ok('נרשם ביומן עם הסיבה', Object.values(store.gardenLog).some(l => l.taskId === t.id && l.kind === 'מחיקה' && l.note === 'בדיקה'));
-    const list = await call(cb => B.CBA.data.getGardenTasks({ scope: 'all' }, cb));
-    ok('הכרטיס כבר לא בקריאה', list.ok && !list.rows.some(x => x.id === t.id));
+    const r = await call(cb => B.CBA.data.gardenTaskDelete(t.id, 'הגשם עשה את העבודה', cb));
+    ok('שגרה: בוטלה ולא נמחקה', r.ok === true && r.cancelled === true, JSON.stringify(r));
+    ok('המסמך נשאר, סגור בוטל', !!store.gardenTasks[t.id] && store.gardenTasks[t.id].closure === 'בוטל');
+    ok('ואין דגל מחיקה', !store.gardenTasks[t.id].pendingDelete);
+    const h = server().gardenHorizonRun_(null);
+    eq('המנוע לא יוצר את המופע מחדש', h.created, 0);
     const r2 = await call(cb => B.CBA.data.gardenTaskDelete(t.id, '', cb));
     ok('בלי סיבה — נדחה', r2.ok === false);
 
-    const S = server();
-    const d = S.gardenPendingDeleteRun_(null);
+    /* דיווח תושב: נסגר ב'בוטל' עם הסיבה (המראה + מייל), ואז המשימה יורדת — הדיווח נשאר. */
+    store.gardenTasks['77'] = { id: '77', kind: 'דיווח תושב', title: 'ממטרה', category: 'השקיה', stage: 'התקבל', repId: '5', familyId: 'F1', photos: ['PHOTO-X'], schema: 1 };
+    store.gardenReports['5'] = { id: '5', taskId: '77', familyId: 'F1', photos: ['PHOTO-X'] };
+    const r3 = await call(cb => B.CBA.data.gardenTaskDelete('77', 'שורת בדיקה', cb));
+    ok('דיווח: הדגל הורם', r3.ok === true && r3.pending === true, JSON.stringify(r3));
+    ok('המשימה נסגרה בוטל לפני המחיקה', store.gardenTasks['77'].closure === 'בוטל' && store.gardenTasks['77'].pendingDelete === true);
+    ok('הדיווח של התושב מציג "נסגר"', store.gardenReports['5'].closure === 'בוטל' && store.gardenReports['5'].closeWhy === 'שורת בדיקה');
+    ok('שורת היומן נושאת את המשפחה — התושב יראה אותה', Object.values(store.gardenLog).some(l => l.taskId === '77' && l.kind === 'סגירה' && l.familyId === 'F1'));
+    const list = await call(cb => B.CBA.data.getGardenTasks({ scope: 'all' }, cb));
+    ok('הכרטיס כבר לא בקריאה', list.ok && !list.rows.some(x => x.id === '77'));
+    const d = server().gardenPendingDeleteRun_(null);
     eq('השרת מצא אחת', d.found, 1);
-    ok('המסמך נמחק', !store.gardenTasks[t.id]);
-    ok('הדיווח המקושר נמחק', !store.gardenReports['5']);
-    eq('שתי תמונות לסל', trashed.slice().sort(), ['PHOTO-T', 'PHOTO-X']);
-    ok('היומן נשאר', Object.values(store.gardenLog).some(l => l.taskId === t.id));
+    ok('המשימה נמחקה', !store.gardenTasks['77']);
+    ok('🔴 הדיווח נשאר', !!store.gardenReports['5']);
+    eq('ותמונות הדיווח לא נזרקו', trashed.slice(), []);
+    ok('היומן נשאר', Object.values(store.gardenLog).some(l => l.taskId === '77'));
+
+    /* יזום (בלי דיווח): נמחק עם התמונות. */
+    store.gardenTasks['78'] = { id: '78', kind: 'יזום', title: 'x', category: 'עצים', stage: 'מתוכנן', photos: ['PHOTO-T'], schema: 1 };
+    const r4 = await call(cb => B.CBA.data.gardenTaskDelete('78', 'טעות', cb));
+    ok('יזום: דגל', r4.ok === true && r4.pending === true);
+    const d2 = server().gardenPendingDeleteRun_(null);
+    ok('נמחק', !store.gardenTasks['78'] && d2.deleted === 1);
+    eq('התמונה שלו לסל', trashed.slice(), ['PHOTO-T']);
   }
 
   section('8. היומן נקרא מ-Firestore');

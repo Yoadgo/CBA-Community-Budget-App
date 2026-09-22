@@ -56,7 +56,9 @@ ok('⚠️ וריק עדיין מותר — שורה בלי משפחה אינה 
    /glNext\('familyId'\) == '' \|\|/.test(glRes), glRes);
 ok('התושב עדיין מוגבל ל"נפתח" ו"משוב" בלבד',
    /kind == 'נפתח'/.test(glRes) && /kind == 'משוב'/.test(glRes), glRes);
-ok('🔴 הקריאה נפתחה לתושב', /allow read: if canSeeGardenTasks\(\) \|\| glResidentReadOk\(\)/.test(glMatch), glMatch);
+/* 22.9 — `gtMgr()` ולא `canSeeGardenTasks()`: הקבלן החיצוני אינו קורא יומן של
+   משפחות (9eedb71). ההיסטוריה שלו מגיעה דרך Apps Script — ר' gardenTaskLogRead. */
+ok('🔴 הקריאה נפתחה לתושב', /allow read: if gtMgr\(\) \|\| glResidentReadOk\(\)/.test(glMatch), glMatch);
 ok('🔴🔴 ועם המשמר של המשפחה הריקה — המלכודת של canSeeFamilyTx',
    /myFamilyId\(\) != ''/.test(glRead), glRead);
 ok('ההתאמה היא על השדה שעל המסמך עצמו, לא get() לאוסף אחר',
@@ -73,7 +75,7 @@ ok('opts.repId נפתר מול מסמך הדיווח', /readDoc\("gardenReports"
 ok('⚠️ וזה קורה בתוך השגר-ושכח, לא במסלול הפעולה',
    append.indexOf('readDoc("gardenReports"') > append.indexOf('function write('), append);
 ok('עשר פעולות המנהל מעבירות repId',
-   /gardenLogAppend\(String\(id\), log\.kind, log\.note, \{ repId: cur\.repId \}\)/.test(DS));
+   /gardenLogAppend\(String\(id\), log\.kind, log\.note, \{ repId: cur\.repId, familyId: cur\.familyId \}\)/.test(DS));
 ok('הגשת דיווח מעבירה את המשפחה של המגיש',
    /gardenLogAppend\(String\(taskId\), "נפתח", "דיווח תושב #" \+ repId, \{ familyId: fid \}\)/.test(DS));
 ok('משוב מעביר את המשפחה של המגיב', /\{ familyId: \(\(\(window\.CBA && CBA\.user\) \|\| \{\}\)\.familyId \|\| ""\) \}/.test(DS));

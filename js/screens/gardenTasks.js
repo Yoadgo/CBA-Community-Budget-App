@@ -428,8 +428,14 @@
           /* כל תקלות התושבים, לפי מצב ולא לפי שבוע. ר' faultsBody(). */
           body = faultsBody(list);
         } else {
+          /* 22.9 (הכרעת יועד, ממצא E) — מופעי שגרה שבוטלו אינם "עבודה
+             שנעשתה"; הם יושבים במגירה סגורה בתחתית "סגורות", לא ברשימה. */
+          var cancelled = [];
           var groups = [], seen = {};
           list.forEach(function (t) {
+            if (filter === "closed" && t.kind === "שגרה" && t.closure && t.closure !== "בוצע") {
+              return cancelled.push(t);
+            }
             var g = grp(t);
             if (!seen[g]) { seen[g] = []; groups.push(g); }
             seen[g].push(t);
@@ -440,6 +446,13 @@
               ' <em>· ' + (n === 1 ? "משימה אחת" : n + " משימות") + '</em><hr></div>' +
               '<div class="gd-reps">' + seen[g].map(card).join("") + '</div>';
           }).join("");
+          if (cancelled.length) {
+            cancelled.sort(function (a, b) { return String(b.week || "").localeCompare(String(a.week || "")); });
+            body += '<details class="gt-drawer">' +
+              '<summary>מופעי שגרה שבוטלו <em>· ' + cancelled.length + '</em></summary>' +
+              '<div class="gd-reps">' + cancelled.map(card).join("") + '</div>' +
+            '</details>';
+          }
         }
 
         /* אין כותרת מסך (2026-09-08). הסמליל והכותרת "משימות השבוע" החזיקו
@@ -1443,11 +1456,24 @@
             /* ⚠️ מחיקה **אינה** סגירה. סגירה אומרת שהטיפול הסתיים והשורה
                נשארת ונספרת; מחיקה אומרת שהשורה לא הייתה צריכה להיווצר, והיא
                יורדת מהגיליון ומהנתונים. היומן נשאר שלם. ר' gardenTaskDelete_. */
-            (isManager
+            /* 🔴 22.9 (סימולציה, ממצא E) — **מופע שגרה מבוטל, לא נמחק.** מסמך
+               שנמחק משאיר סלוט ריק והמנוע יוצר אותו מחדש תוך שעה; ביטול הוא
+               מצבה שהמנוע מכבד והמסך מסתיר ב"סגורות". ר' gardenTaskDelete. */
+            (isManager && !t.closure
               ? '<button type="button" class="gt-opt is-danger" data-m="del"><u>' +
-                ico("trash") + '</u><div>מחיקה' +
-                '<span>יורדת מהגיליון ומהנתונים · נרשמת ביומן</span></div></button>'
-              : '') +
+                ico("trash") + '</u><div>' +
+                (t.kind === "שגרה" ? "ביטול המופע הזה" : "מחיקה") +
+                '<span>' + (t.kind === "שגרה"
+                  ? "נסגר כ\"בוטל\" ויורד מהרשימה · התבנית ממשיכה כרגיל"
+                  : t.repId
+                    ? "התושב יראה \"נסגר\" ויקבל מייל עם הסיבה · יורדת מהנתונים"
+                    : "יורדת מהנתונים · נרשמת ביומן") +
+                '</span></div></button>'
+              : isManager
+                ? '<button type="button" class="gt-opt is-danger" data-m="del"><u>' +
+                  ico("trash") + '</u><div>מחיקה' +
+                  '<span>יורדת מהנתונים · נרשמת ביומן</span></div></button>'
+                : '') +
           '</div>';
         /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
            כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
@@ -1502,11 +1528,19 @@
           return;
         }
         if (m === "del") {
+          var isRoutine = t.kind === "שגרה" && !t.closure;
           CBA.ui.prompt(
-            "המשימה תרד מהגיליון ומהנתונים, יחד עם הדיווח והתמונות שלה. " +
-            "מה שכבר נרשם ביומן יישאר, ותיווסף שורת מחיקה עם הסיבה שתכתוב.", {
-              title: "מחיקת משימה", placeholder: "למשל: שורת בדיקה",
-              okText: "מחיקה", danger: true
+            isRoutine
+              ? "המופע הזה ייסגר כ\"בוטל\" ויעבור ל\"סגורות\". התבנית בתוכנית העבודה " +
+                "ממשיכה לייצר את המופעים הבאים כרגיל. הסיבה נרשמת ביומן."
+              : t.repId && !t.closure
+                ? "הדיווח של התושב ייסגר (\"בוטל\") עם הסיבה שתכתוב — הוא יראה את זה " +
+                  "באפליקציה ויקבל מייל. המשימה עצמה תרד מהנתונים; היומן יישאר."
+                : "המשימה תרד מהנתונים. מה שכבר נרשם ביומן יישאר, " +
+                  "ותיווסף שורת מחיקה עם הסיבה שתכתוב.", {
+              title: isRoutine ? "ביטול מופע שגרה" : "מחיקת משימה",
+              placeholder: isRoutine ? "למשל: הגשם עשה את העבודה" : "למשל: שורת בדיקה",
+              okText: isRoutine ? "ביטול המופע" : "מחיקה", danger: true
             }).then(function (why) {
               if (!why) return;
               if (busy) return;
@@ -1516,7 +1550,8 @@
                 if (!res || !res.ok) {
                   return CBA.ui.alert((res && res.error) || "המשימה לא נמחקה");
                 }
-                CBA.ui.toast(res.pending ? "נמחקה — התמונות והיומן ינוקו ברקע" : "נמחקה");
+                CBA.ui.toast(res.cancelled ? "המופע בוטל"
+                           : res.pending ? "נמחקה — התמונות ינוקו ברקע" : "נמחקה");
                 load();
               });
             });

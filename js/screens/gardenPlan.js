@@ -209,11 +209,53 @@
               ico("plus", 16) + '</button>' +
           '</div>' +
           '<p class="gp-hint">שינוי כאן משפיע קדימה בלבד. משימות שכבר נכנסו לשבוע לא זזות.</p>' +
+          /* 🔴 22.9 (הכרעת יועד) — מתג "אישור מנהל לתקלות דיירים". יושב כאן,
+             במסך שרק מנהל הגינון רואה, ולא במסך המשימות שגם הגנן רואה. */
+          '<div class="gd-reps" id="gp-settings" style="margin-bottom:16px">' +
+            '<button type="button" class="nt-rep" id="gp-approval" role="switch" aria-checked="true" disabled>' +
+              '<span class="nt-rep__t"><b>אישור מנהל לתקלות דיירים</b>' +
+              '<span>כשהגנן מסמן תקלת דייר כבוצעה — היא ממתינה לאישורך, ורק אז התושב מקבל "בוצע". ' +
+              'משימות שגרה נסגרות מיד בכל מקרה.</span></span>' +
+              '<i class="gp-sw" aria-hidden="true"></i>' +
+            '</button>' +
+          '</div>' +
           body;
 
         var nb = root.querySelector("#gp-new");
         if (nb) nb.addEventListener("click", function () { openForm(null); });
         root.addEventListener("click", onClick);
+        wireSettings();
+      }
+
+      /* המתג נטען אחרי הרינדור (קריאה אחת, מסמך אחד) ומתהפך מיד; אם
+         השמירה נכשלה — חוזר, כמו מתג ההפעלה של שורה. */
+      function wireSettings() {
+        var sw = root.querySelector("#gp-approval");
+        if (!sw || !CBA.data.getGardenSettings) return;
+        function paint(on) {
+          sw.setAttribute("aria-checked", on ? "true" : "false");
+          var i = sw.querySelector(".gp-sw");
+          if (i) i.classList.toggle("off", !on);
+        }
+        CBA.data.getGardenSettings(function (s) {
+          paint(!!(s && s.requireApproval));
+          sw.disabled = false;
+        });
+        sw.addEventListener("click", function () {
+          if (sw.disabled) return;
+          var next = sw.getAttribute("aria-checked") !== "true";
+          paint(next);
+          sw.disabled = true;
+          CBA.data.setGardenSettings({ requireApproval: next }, function (res) {
+            sw.disabled = false;
+            if (res && res.ok) {
+              CBA.ui.toast(next ? "תקלות דיירים ימתינו לאישורך" : "הגנן סוגר תקלות דיירים בעצמו");
+              return;
+            }
+            paint(!next);
+            CBA.ui.alert((res && res.error) || "ההגדרה לא נשמרה");
+          });
+        });
       }
 
       function byId(id) {

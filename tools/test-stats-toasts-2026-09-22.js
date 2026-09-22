@@ -57,7 +57,7 @@ const run = (GT.match(/if \(op === "done"\) CBA\.ui\.toast[\s\S]*?scheduleReload
 ['done', 'undo', 'defer', 'note', 'block', 'approve', 'close', 'return', 'plan']
   .forEach(op => ok('טוסט לפעולה ' + op, new RegExp('op === "' + op + '"').test(run), 'חסר'));
 ok('כיבוי **והפעלה** של שגרה — שניהם מודיעים',
-   /CBA\.ui\.toast\(next \? "הופעלה" : "כובתה/.test(GP), 'חסר');
+   /CBA\.ui\.toast\(\(?next \? "הופעלה" : "כובתה/.test(GP), 'חסר');
 ok('משוב התושב מודיע', /CBA\.ui\.toast\(positive \? "תודה!" : "המשוב נשלח לוועד"\)/.test(RG));
 ok('🔴 בורר הטווח מצויר רק כשהוא משנה משהו',
    /d\.isManager && weeksWithData\(\) > 1/.test(ST), 'חסר');

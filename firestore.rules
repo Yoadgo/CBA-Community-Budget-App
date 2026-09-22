@@ -162,6 +162,18 @@ service cloud.firestore {
       allow read: if isMember();
       allow write: if false;
     }
+    /* 🔴 22.9 (הכרעת יועד) — הגדרות הגינון של המנהל. מסמך אחד, שלושה שדות,
+       מנהל גינון פנימי בלבד. `requireApproval`: סימון גנן על תקלת דייר
+       ממתין לאישור מנהל. ⚠️ שני match חופפים — Firestore מתיר אם אחד מתיר,
+       ולכן ה-`write: false` למעלה אינו חוסם את המסמך הזה בלבד. */
+    function gsSettingsWriteOk() {
+      return canSeePlan() &&
+             request.resource.data.keys().hasOnly(['requireApproval', 'updatedAt', 'updatedBy']) &&
+             request.resource.data.requireApproval is bool;
+    }
+    match /gardenMeta/settings {
+      allow write: if gsSettingsWriteOk();
+    }
 
     /* ========================================================================
      *  🔴🔴  דיווחי הגינון של התושב   (2026-09-16)
@@ -410,7 +422,15 @@ service cloud.firestore {
               'firstWeek', 'createdAt', 'updatedAt', 'approvedBy', 'approvedAt',
               'repId', 'photos', 'order', 'year', 'schema', 'syncedAt',
               /* 🔴 22.9 — "בדרך למחיקה". הדפדפן מרים, השרת מסיים. ר' gtPendingDeleteOk. */
-              'pendingDelete'];
+              'pendingDelete',
+              /* 🔴 22.9 (סימולציה, ממצא C) — המשפחה על המשימה. התושב כותב אותה
+                 ביצירה (gtFromReportOk), והצוות — שאינו רשאי לקרוא דיווחים —
+                 קורא אותה מכאן כדי לחתום שורות יומן שהתושב יראה. מזהה אטום.
+                 ⚠️ אינה ב-gtTeamUpdateOk: הצוות לעולם אינו משנה בעלות. */
+              'familyId',
+              /* 22.9 (ממצא B) — הדיווחים שאוחדו לתוך המשימה, כדי שהשלב שלה
+                 יגיע גם אליהם. הצוות בלבד (gtTeamUpdateOk). */
+              'mergedReps'];
     }
 
     /* השדות שרק הצוות קובע — תושב אינו שולח אותם כלל. */
@@ -452,7 +472,7 @@ service cloud.firestore {
                          'drags', 'firstWeek', 'title', 'category', 'area',
                          'x', 'y', 'approvedBy', 'approvedAt',
                          'repId', 'photos', 'order', 'updatedAt', 'syncedAt',
-                         'notify', 'notifyPending', 'notifyNote']);
+                         'notify', 'notifyPending', 'notifyNote', 'mergedReps']);
     }
 
     /* ========================================================================

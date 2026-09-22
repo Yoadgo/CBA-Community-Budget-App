@@ -60,7 +60,7 @@ ok('שם התבנית מרשימה סגורה', /GARDEN_COMPLETED', 'GARDEN_REPO
 ok('🔴 וכל השומרים מחוברים לשער אחד',
    /function gtUpdateOk\(\) \{[\s\S]*?gtTeamUpdateOk\(\) && gtClosureValueOk\(\) && gtClosureAuthOk\(\) &&[\s\S]*?gtCloseNoteOk\(\) && gtClosedOk\(\) && gtNotifyOk\(\)/.test(RU));
 ok('והשער הוא מה שמחווט ל-allow update',
-   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\);/.test(RU));
+   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\)( \|\| gtPendingDeleteOk\(\))?;/.test(RU));
 ok('⚠️ ומסלול התמונות של התושב נשאר עצמאי — לא נבלע בשער הצוות',
    /gtReportPhotosOk\(\)/.test(RU));
 

@@ -1316,3 +1316,15 @@
 .nt-opt { font-weight: 400; color: #6B7280; }
 .nt-map { height: 240px; margin-top: 4px; }
 @media (max-width: 720px) { .nt-map { height: 210px; } }
+
+/* 22.9 — מגירת "מופעי שגרה שבוטלו" בתחתית "סגורות" (ממצא E). סגורה כברירת
+   מחדל: ביטול אינו עבודה שנעשתה, ואין סיבה שיתפוס מקום ברשימה. */
+.gt-drawer { margin: 18px 2px 8px; }
+.gt-drawer > summary { display: flex; align-items: center; gap: 8px; cursor: pointer;
+  list-style: none; font-size: 13px; font-weight: 600; color: #6b7280; padding: 6px 0; }
+.gt-drawer > summary::-webkit-details-marker { display: none; }
+.gt-drawer > summary::before { content: "›"; display: inline-block; transition: transform .15s;
+  font-size: 16px; line-height: 1; color: #9ca3af; }
+.gt-drawer[open] > summary::before { transform: rotate(90deg); }
+.gt-drawer > summary em { font-style: normal; font-weight: 500; color: #9ca3af; }
+.gt-drawer > .gd-reps { margin-top: 8px; opacity: .85; }

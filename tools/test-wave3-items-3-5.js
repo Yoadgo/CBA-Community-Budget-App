@@ -62,7 +62,7 @@ ok('🔴 שני שדות בלבד', /hasOnly\(\['flag', 'updatedAt'\]\)/.test(rf
 ok('🔴 וערך יחיד אפשרי — לא כל דגל', /flag == 'דורש בדיקה חוזרת'/.test(rf), rf);
 ok('🔴🔴 וההצלבה repId→familyId — בלעדיה כל תושב מרים דגל על כל משימה',
    /gardenReports\/\$\(resource\.data\.repId\)\)\s*\n\s*\.data\.familyId == myFamilyId\(\)/.test(rf), rf);
-ok('והוא מחווט ל-allow update', /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\);/.test(RU));
+ok('והוא מחווט ל-allow update', /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\)( \|\| gtPendingDeleteOk\(\))?;/.test(RU));
 ok('המייל למנהלים עבר לשרת כקריאת מייל בלבד',
    /function gardenFeedbackNotify_/.test(GS) && /notifyAdmins_\(ss, PERM_GARDEN, 'ADMIN_GARDEN_NEGATIVE_FEEDBACK'/.test(GS));
 ok('🔑 והשם נשלף בשרת מטאב התושבים',

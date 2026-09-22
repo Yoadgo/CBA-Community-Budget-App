@@ -16104,6 +16104,29 @@ function handleGardenTaskLog_(p) {
     var id = String(p.id || '').trim();
     if (!id) return json_({ ok: false, error: 'חסר מזהה משימה' });
 
+    /* 🔴 22.9 (סימולציה, ממצא D) — **מ-Firestore כשהוא הבעלים.** היומן
+       נכתב מהדפדפן ל-`gardenLog` בלבד; הטאב בגיליון לא מתעדכן יותר.
+       הקורא כאן הוא הגנן החיצוני (כלל הקריאה בדפדפן הוא פנימי בלבד) —
+       אותו סינון בדיוק: משוב ופתיחה ע"י תושב מוצגים כ"תושב" בלי טקסט. */
+    if (typeof gardenFsOwns_ === 'function' && gardenFsOwns_()) {
+      var docs = fsQuery_('gardenLog', 'taskId', 'EQUAL', id, 300);
+      var rowsFs = docs.map(function (d) {
+        var x = d.data || {};
+        var k = String(x.kind || ''), who = '', note = String(x.note || '');
+        if (isExtLog) {
+          if (k === 'משוב') { who = 'תושב'; note = ''; }
+          else if (k === 'נפתח' && note.indexOf('דיווח תושב') === 0) { who = 'תושב'; }
+        }
+        return {
+          at: (x.at instanceof Date) ? x.at.toISOString() : String(x.at || ''),
+          kind: k, field: String(x.field || ''), from: String(x.from || ''),
+          to: String(x.to || ''), who: who, note: note
+        };
+      });
+      rowsFs.sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
+      return json_({ ok: true, rows: rowsFs });
+    }
+
     var sh = ss.getSheetByName(GARDEN_LOG_SHEET);
     if (!sh || sh.getLastRow() < 2) return json_({ ok: true, rows: [] });
     var c = gardenCols_(sh);

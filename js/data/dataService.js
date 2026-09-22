@@ -2033,12 +2033,53 @@ CBA.data = (function () {
 
   /** המנוע — עשר הפעולות בפונקציה אחת, כמו בשרת.
    *  קורא את המסמך, מחשב פאצ', כותב, רושם ביומן ומפעיל מייל. */
+  /* ==========================================================================
+   *  הגדרות הגינון של המנהל   (22.9.2026 — הכרעת יועד: אישור מנהל לתקלות)
+   * --------------------------------------------------------------------------
+   *  מסמך אחד, `gardenMeta/settings`, שמנהל גינון (פנימי) כותב מהאפליקציה
+   *  וכל חבר קורא. כרגע שדה אחד:
+   *    requireApproval — סימון "בוצע" של הגנן על **תקלת דייר** אינו סוגר
+   *                      אלא מרים "ממתין לאישור"; המנהל מאשר (וזה מה ששולח
+   *                      לתושב "בוצע"). משימות שגרה ויזומות נסגרות מיד תמיד.
+   *  ⚠️ ברירת המחדל כשהמסמך חסר — **דלוק** (כך הוכרע), ולכן קריאה שנכשלת
+   *     מתנהגת כמו "דלוק": עדיף אישור מיותר על סגירה בלי מנהל.
+   * ======================================================================== */
+  var GARDEN_SETTINGS_DEFAULT = { requireApproval: true };
+  /* ⚠️ בלי מטמון, בכוונה: הקריאה קורית רק כשגנן מסמן תקלת דייר (נדיר,
+     מסמך אחד), ומתג שהמנהל הפך חייב לתפוס גם בלשונית שכבר פתוחה אצל הגנן. */
+  function gardenSettingsRead(cb) {
+    if (!CBA.fb || !CBA.fb.readDoc) return cb(GARDEN_SETTINGS_DEFAULT);
+    CBA.fb.readDoc("gardenMeta", "settings", function (e, doc) {
+      var s = {};
+      Object.keys(GARDEN_SETTINGS_DEFAULT).forEach(function (k) { s[k] = GARDEN_SETTINGS_DEFAULT[k]; });
+      if (!e && doc && typeof doc.requireApproval === "boolean") s.requireApproval = doc.requireApproval;
+      cb(s);
+    });
+  }
+  function gardenSettingsWrite(patch, cb) {
+    var d = {};
+    Object.keys(patch || {}).forEach(function (k) {
+      if (k in GARDEN_SETTINGS_DEFAULT) d[k] = !!patch[k];
+    });
+    d.updatedAt = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+    d.updatedBy = gardenWho();
+    CBA.fb.mergeDoc("gardenMeta", "settings", d, function (e) {
+      if (e) return cb({ ok: false, error: gardenFsErr(e, "ההגדרה לא נשמרה") });
+      gardenSettingsRead(function (s) { cb({ ok: true, settings: s }); });
+    });
+  }
+
   function gardenFsTask(op, id, extra, cb) {
     extra = extra || {};
     var who = gardenWho();
     CBA.fb.readDoc("gardenTasks", String(id), function (e, cur) {
       if (e || !cur) return cb({ ok: false, error: "המשימה לא נמצאה" });
+      /* ההגדרה נקראת רק כשהיא משנה משהו — סימון של גנן על תקלת דייר. */
+      var needsSetting = (op === "done") && !gardenIsMgr() && String(cur.repId || "").trim() !== "";
+      if (!needsSetting) return run(GARDEN_SETTINGS_DEFAULT);
+      gardenSettingsRead(run);
 
+    function run(settings) {
       var closure = String(cur.closure || "").trim();
       var isReport = String(cur.repId || "").trim() !== "";
       var note = String(extra.note || "").trim().substring(0, 600);
@@ -2047,11 +2088,15 @@ CBA.data = (function () {
          הזאת אינה נוגעת בסגירה, ולכן אין מה להעתיק מעבר לשלב ולדגל. */
       var mirrorWhy = null;
 
-      /* ⚠️ העתק לנוחות בלבד — האכיפה האמיתית ב-`gtClosedOk`. */
+      /* ⚠️ העתק לנוחות בלבד — האכיפה האמיתית ב-`gtClosedOk`.
+         🔴 22.9 (סימולציה, ממצא N) — מנהל רשאי גם **לשנות סיבת סגירה**
+         של משימה סגורה ("סגירה עם סיבה" על כרטיס סגור) בלי לפתוח קודם;
+         הכללים (`gtClosedOk` → `gtMgr()`) התירו זאת מאז ומעולם. */
       if (closure) {
         var reopenAct = (op === "undo" || op === "return");
         var reopenable = reopenAct && (gardenIsMgr() || closure === "בוצע");
-        if (op !== "clearflag" && !reopenable) {
+        var reclose = gardenIsMgr() && (op === "close" || op === "approve");
+        if (op !== "clearflag" && !reopenable && !reclose) {
           return cb({ ok: false, error: "המשימה כבר נסגרה" });
         }
       }
@@ -2076,7 +2121,24 @@ CBA.data = (function () {
           return cb({ ok: false,
                       error: "צריך לכתוב מה נעשה — המשפט הזה נשלח לתושב שדיווח." });
         }
-        close("בוצע", note || String(cur.note || ""));
+        /* 🔴 22.9 — **אישור מנהל לתקלות דיירים** (הכרעת יועד, עם מתג).
+           גנן שמסמן תקלת דייר כשהמתג דלוק: המשימה לא נסגרת — עולה
+           "ממתין לאישור", ההערה נשמרת, והמנהל הוא שסוגר (approve) ושולח
+           לתושב "בוצע". שגרה/יזום — וגם סימון של המנהל עצמו — נסגרים מיד. */
+        if (isReport && !gardenIsMgr() && settings && settings.requireApproval) {
+          patch.flag = "ממתין לאישור";
+          patch.note = note;
+          if (String(cur.stage || "") !== "בטיפול" &&
+              GARDEN_STAGES_C.indexOf(String(cur.stage || "")) < GARDEN_STAGES_C.indexOf("בטיפול")) {
+            patch.stage = "בטיפול";
+          }
+          log = { kind: "ביצוע", note: note };
+          /* לתושב: "הצוות סיים, ממתין לאישור המנהל" — אותה תבנית של הערת
+             סטטוס; "בוצע" הסופי יוצא באישור. */
+          notify = "GARDEN_STATUS_NOTE";
+        } else {
+          close("בוצע", note || String(cur.note || ""));
+        }
 
       } else if (op === "undo") {
         if (closure) {
@@ -2125,7 +2187,13 @@ CBA.data = (function () {
         if (reason !== "בוצע" && isReport && !note) {
           return cb({ ok: false, error: "צריך לכתוב לתושב מה הסיבה" });
         }
-        close(reason, note);
+        /* אישור בלי הערה חדשה: מה שהגנן כתב ב"בוצע" הוא מה שהתושב מקבל.
+           ⚠️ אותה דרישה כמו ב-`gtCloseNoteOk`: סגירת "בוצע" של דיווח תושב
+           בלי שום הערה נדחית בכללים — עדיף לומר למה כאן. */
+        if (reason === "בוצע" && isReport && !note && !String(cur.note || "").trim()) {
+          return cb({ ok: false, error: "צריך לכתוב מה נעשה — המשפט הזה נשלח לתושב שדיווח." });
+        }
+        close(reason, note || (op === "approve" ? String(cur.note || "") : ""));
 
       } else if (op === "return") {
         if (!note) return cb({ ok: false, error: "צריך לכתוב מה חסר" });
@@ -2185,7 +2253,7 @@ CBA.data = (function () {
       CBA.fb.updateDoc("gardenTasks", String(id), patch, function (e2) {
         if (e2) return cb({ ok: false, error: gardenFsErr(e2) });
         /* מכאן הפעולה **קיימת**. כל מה שנכשל אחריה אינו מבטל אותה. */
-        if (log) gardenLogAppend(String(id), log.kind, log.note, { repId: cur.repId });
+        if (log) gardenLogAppend(String(id), log.kind, log.note, { repId: cur.repId, familyId: cur.familyId });
         if (notify) gardenNotifyFire(id);
         /* 🔴 המראה לדיווח — ר' `gardenMirrorToReport`. בלי השורות האלה
            התושב רואה את הדיווח שלו קפוא על "התקבל" לנצח. */
@@ -2206,9 +2274,17 @@ CBA.data = (function () {
               : 0;
           }
           gardenMirrorToReport(cur.repId, mir);
+          /* 🔴 22.9 — גם הדיווחים שאוחדו לתוך המשימה הזאת עוקבים אחריה
+             (ר' `mergedReps` ב-`gardenFsMerge`). `mergedInto` שלהם נשאר. */
+          (cur.mergedReps || []).forEach(function (r) {
+            if (String(r || "").trim() && String(r) !== String(cur.repId || "")) {
+              gardenMirrorToReport(String(r), mir);
+            }
+          });
         }
         cb({ ok: true });
       });
+    }
     });
   }
 
@@ -2397,6 +2473,19 @@ CBA.data = (function () {
    *  ⚠️ **נבדק שהוא פנוי לפני כתיבה**, ואם לא — מנסים את הבא.
    *     `createDoc` משתמש ב-`set`, שדורס; בלי הבדיקה שני מנהלים
    *     שמוסיפים באותה דקה היו מוחקים זה את ההגדרה של זה, בשקט. */
+  /** תאריך חופשי (YYYY-MM-DD) → מפתח השבוע שלו (יום ראשון). ריק/לא תקין → "". */
+  function gardenWeekKeyOf(v) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || "").trim());
+    if (!m) return "";
+    var G = (typeof GardenRules !== "undefined" && GardenRules) || CBA.gardenRules;
+    var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+    if (isNaN(d.getTime())) return "";
+    if (G && G.weekKey) return G.weekKey(d);
+    d.setDate(d.getDate() - d.getDay());
+    var p = function (x) { return (x < 10 ? "0" : "") + x; };
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+  }
+
   function gardenPlanNewId(rows, attempt) {
     var max = 0;
     (rows || []).forEach(function (r) {
@@ -2425,7 +2514,11 @@ CBA.data = (function () {
         category: String(payload.category || "").trim(),
         areas: payload.areas || [],
         freq: freq,
-        firstWeek: String(payload.firstWeek || "").trim(),
+        /* 🔴 22.9 (סימולציה, ממצא G) — **מוצמד ליום ראשון.** בורר התאריך
+           מקבל כל יום, והמנוע משווה מפתחות שבוע (יום ראשון): "שבוע ראשון"
+           ביום רביעי גרם לדו-שבועי לא לירות לעולם ולשבועי להתחיל שבוע
+           מאוחר. גם השרת הישן לא נרמל — קדם-קיים. */
+        firstWeek: gardenWeekKeyOf(payload.firstWeek),
         weekOfMonth: Math.min(Math.max(parseInt(payload.weekOfMonth, 10) || 1, 1), 4),
         months: String(payload.months || "").trim(),
         rotate: !!payload.rotate,
@@ -2459,7 +2552,12 @@ CBA.data = (function () {
         var nid = gardenPlanNewId(rows, attempt);
         CBA.fb.readDoc("gardenPlan", nid, function (e2, existing) {
           if (!e2 && existing) return tryId(attempt + 1);
-          CBA.fb.createDoc("gardenPlan", nid, docOf(nid, order), function (e3) {
+          /* 22.9 (ממצא M) — יצירה אטומית: שני מנהלים שמקצים "T7" באותה
+             שנייה — השני נכשל ב-already-exists ומנסה מזהה הבא, במקום
+             ש-`set()` ידרוס בשקט את התבנית של הראשון. */
+          var mk = CBA.fb.createIfAbsent || CBA.fb.createDoc;
+          mk.call(CBA.fb, "gardenPlan", nid, docOf(nid, order), function (e3) {
+            if (e3 && /already-exists/.test(String(e3.code || e3.message || ""))) return tryId(attempt + 1);
             if (e3) return cb({ ok: false, error: gardenFsErr(e3, "השמירה נכשלה") });
             gardenHorizonApply(function (h) { cb({ ok: true, id: nid, horizon: h }); });
           });
@@ -2520,9 +2618,10 @@ CBA.data = (function () {
         var diff = G.horizon(defs || [], tasks || [], G.weekKey(now), {
           now: now, year: String((CBA.mock && CBA.mock.currentYear) || "")
         });
-        var out = { ok: true, created: 0, existed: 0, removed: 0,
+        var out = { ok: true, created: 0, existed: 0, removed: 0, renamed: 0,
                     kept: diff.kept, frozen: diff.frozen, errors: [] };
-        var creates = diff.create.slice(), removes = diff.remove.slice();
+        var creates = diff.create.slice(), removes = diff.remove.slice(),
+            renames = (diff.rename || []).slice();
 
         function nextCreate() {
           var doc = creates.shift();
@@ -2540,11 +2639,24 @@ CBA.data = (function () {
         }
         function nextRemove() {
           var id = removes.shift();
-          if (!id) return finish();
+          if (!id) return nextRename();
           CBA.fb.deleteDoc("gardenTasks", id, function (e) {
             if (!e) out.removed++;
             else out.errors.push(id + ": " + ((e && e.message) || e));
             nextRemove();
+          });
+        }
+        /* 22.9 (ממצא F) — שם/קטגוריה חדשים לכרטיסים שלא נגעו בהם. */
+        function nextRename() {
+          var r = renames.shift();
+          if (!r) return finish();
+          CBA.fb.updateDoc("gardenTasks", r.id, {
+            title: r.title, category: r.category,
+            updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : now
+          }, function (e) {
+            if (!e) out.renamed++;
+            else out.errors.push(r.id + ": " + ((e && e.message) || e));
+            nextRename();
           });
         }
         function finish() {
@@ -2562,6 +2674,7 @@ CBA.data = (function () {
     var parts = [];
     if (h.created) parts.push("נוצרו " + h.created + " משימות");
     if (h.removed) parts.push("הוסרו " + h.removed);
+    if (h.renamed) parts.push("עודכנו " + h.renamed);
     if (h.frozen)  parts.push(h.frozen + " נשארו כי כבר נגעו בהן");
     return parts.join(" · ");
   }
@@ -2585,14 +2698,35 @@ CBA.data = (function () {
           return cb({ ok: false, error: "אי אפשר לאחד לתוך משימה סגורה" });
         }
         var parentRep = String(parent.repId || "").trim() || parentId;
-        /* הדיווחים של הנבלעת מופנים אל הבולעת. */
-        CBA.fb.queryCollection("gardenReports", [["taskId", childId]], function (e3, reps) {
-          var list = (reps || []);
+        /* 🔴🔴 22.9 (סימולציה, ממצא B) — **בלי שאילתה על הדיווחים.**
+           עד היום הדיווחים של הנבלעת נמצאו ב-`queryCollection("gardenReports",
+           taskId==child)` — והמנהל **אינו רשאי לקרוא דיווחים** (ציפייה #6
+           בכללים, בכוונה: פרטי התושב אינם עוברים בדפדפן). השאילתה נדחתה
+           תמיד, `moved` היה 0 תמיד, והדיווח של התושב נשאר מצביע למשימה
+           שנסגרה 'אוחד' עם שלב 'התקבל' לנצח. מזהי הדיווחים כבר **על
+           המשימה**: `repId` של הנבלעת, ו-`mergedReps` — דיווחים שאוחדו
+           אליה בעבר. כתיבה לדיווח מותרת (`grTeamUpdateOk`); רק קריאה לא. */
+        var childReps = [];
+        if (String(child.repId || "").trim()) childReps.push(String(child.repId).trim());
+        (child.mergedReps || []).forEach(function (r) {
+          r = String(r || "").trim();
+          if (r && childReps.indexOf(r) === -1) childReps.push(r);
+        });
+        var parentReps = (parent.mergedReps || []).map(String);
+        childReps.forEach(function (r) { if (parentReps.indexOf(r) === -1) parentReps.push(r); });
+        (function () {
+          var list = childReps.map(function (r) { return { id: r }; });
           var left = list.length, failed = 0;
           function closeChild() {
             var now = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+            /* 🔴 22.9 (סימולציה, ממצא A) — **הערה חובה.** `gtCloseNoteOk`
+               דורש `note` לא ריק בכל סגירה של משימה עם `repId`, ולכן
+               איחוד של דיווח תושב בלי הערה נדחה ב-permission-denied —
+               בדיוק המקרה שהאיחוד קיים בשבילו. ההערה היא גם מה שהתושב
+               רואה כ"סיבה". */
             CBA.fb.updateDoc("gardenTasks", childId, {
               stage: "הושלם", flag: "", closure: "אוחד",
+              note: "אוחד עם פנייה מס' " + parentRep,
               updatedAt: now, notify: "GARDEN_REPORT_MERGED", notifyPending: true,
               notifyNote: "אוחד עם פנייה מס' " + parentRep
             }, function (e4) {
@@ -2601,6 +2735,15 @@ CBA.data = (function () {
               gardenLogAppend(parentId, "איחוד", "נבלעה משימה #" + childId +
                               " עם " + list.length + " דיווחים");
               gardenNotifyFire(childId);
+              /* הבולעת זוכרת אילו דיווחים מצביעים אליה — כדי שכל שינוי
+                 שלב עתידי שלה יגיע גם אליהם (ר' `gardenFsTask`). */
+              if (parentReps.length) {
+                CBA.fb.updateDoc("gardenTasks", parentId, {
+                  mergedReps: parentReps, updatedAt: now
+                }, function (eP) {
+                  if (eP) gardenPhotoWarn("רשימת הדיווחים המאוחדים לא נשמרה", parentId, eP);
+                });
+              }
               cb({ ok: true, moved: list.length, failed: failed });
             });
           }
@@ -2628,7 +2771,7 @@ CBA.data = (function () {
               if (--left <= 0) closeChild();
             });
           });
-        });
+        })();
       });
     });
   }
@@ -2689,6 +2832,15 @@ CBA.data = (function () {
     if (!hasPin && !hasPlace) {
       return cb({ ok: false, error: "צריך לסמן מיקום על המפה או לכתוב אותו" });
     }
+    /* 22.9 (ממצא L) — אותן בדיקות בדיוק כמו `grShapeOk` בכללים, כאן כדי
+       שהתושב יקבל סיבה ברורה ולא "לא הצלחנו לשמור", ובלי לשרוף מזהים. */
+    payload.title = String(payload.title || "").trim();
+    payload.category = String(payload.category || "").trim();
+    if (!payload.title) return cb({ ok: false, error: "צריך לכתוב כותרת קצרה לדיווח" });
+    if (payload.title.length > 60) {
+      return cb({ ok: false, error: "הכותרת ארוכה מדי — עד 60 תווים. הפירוט נכנס בתיאור." });
+    }
+    if (!payload.category) return cb({ ok: false, error: "צריך לבחור קטגוריה" });
     if (!fid) {
       return cb({ ok: false, error: "חסר מזהה משפחה — רענן ונסה שוב" });
     }
@@ -2713,6 +2865,10 @@ CBA.data = (function () {
           x: (payload.x === null || payload.x === undefined) ? null : Number(payload.x),
           y: (payload.y === null || payload.y === undefined) ? null : Number(payload.y),
           stage: "התקבל", repId: String(repId), photos: [],
+          /* 🔴 22.9 (ממצא C) — המשפחה על המשימה, כדי שהצוות (שאינו רשאי
+             לקרוא דיווחים) יוכל לחתום שורות יומן שהתושב יראה. מזהה אטום,
+             לא שם ולא מייל. ר' `gardenLogAppend`. */
+          familyId: fid,
           createdAt: now, updatedAt: now, order: 0,
           year: String(year), schema: 1
         };
@@ -2863,11 +3019,21 @@ CBA.data = (function () {
       if (fid) return write(fid);
       /* 🔑 **הקריאה הזאת אינה מאטה שום פעולה.** `gardenLogAppend` היא
          שגר-ושכח מלכתחילה: המסמך כבר נכתב, הפעולה כבר קיימת, ואיש
-         אינו ממתין ליומן. לכן שליפת המשפחה מהדיווח יושבת דווקא כאן
-         ולא במסלול הפעולה עצמה. */
+         אינו ממתין ליומן. לכן שליפת המשפחה יושבת דווקא כאן
+         ולא במסלול הפעולה עצמה.
+         🔴🔴 22.9 (סימולציה, ממצא C) — **מהמשימה, לא מהדיווח.** עד היום
+         נקרא כאן מסמך הדיווח — ומנהל/גנן **אינם רשאים לקרוא דיווחים**
+         (ציפייה #6 בכללים). הקריאה נדחתה תמיד, `familyId` נשאר ריק,
+         והתושב ראה בקו הזמן שלו רק "נפתח" ו"משוב" — אף פעולה של הצוות.
+         מאז 22.9 המשימה נושאת `familyId` בעצמה (נכתב ע"י התושב ביצירה,
+         ר' `gardenReportFsWrite`), והצוות תמיד רשאי לקרוא משימות.
+         הדיווח נשאר כנפילה לאחור למשימות ותיקות בלבד. */
       if (repId) {
-        return CBA.fb.readDoc("gardenReports", repId, function (e, rep) {
-          write((rep && rep.familyId) || "");
+        return CBA.fb.readDoc("gardenTasks", String(taskId), function (eT, t) {
+          if (!eT && t && String(t.familyId || "").trim()) return write(String(t.familyId).trim());
+          CBA.fb.readDoc("gardenReports", repId, function (e, rep) {
+            write((rep && rep.familyId) || "");
+          });
         });
       }
       write("");
@@ -3075,6 +3241,13 @@ CBA.data = (function () {
        גל 3 — "שני מסכים, שני מקורות, שתי אמיתות". התנאי שהיה כאן —
        "לאמת שיש רשומות למשימות ותיקות" — מתקיים מעצם הניקוי של 22.9:
        אין משימות ותיקות. */
+    /* 🔴 22.9 (סימולציה, ממצא D) — **הגנן החיצוני דרך Apps Script.**
+       כלל הקריאה של היומן הוא `gtMgr()` (פנימי בלבד, מאז 9eedb71 — נכון:
+       הקבלן אינו קורא יומן של משפחות), ולכן שאילתה ישירה שלו נדחית
+       ו"היסטוריה" הציגה "לא הצלחנו לטעון". השרת קורא את היומן מ-Firestore
+       בחשבון השירות, מסנן מה שאינו לגנן (`handleGardenTaskLog_`), ומחזיר. */
+    var ext = !!(((window.CBA && CBA.user) || {}).isExternal);
+    if (ext) return CBA.sheets.get({ action: "gardenTaskLog", id: id }, cb);
     fsFirstRead("gardenLog", true, function (done) {
       CBA.fb.queryCollection("gardenLog", [["taskId", String(id)]], function (err, rows) {
         if (err) return done(err);
@@ -4270,16 +4443,43 @@ CBA.data = (function () {
       if (gardenWritesOn()) {
         var reason = String(why || "").trim().substring(0, 300);
         if (!reason) return cb({ ok: false, error: "צריך לכתוב למה מוחקים — זה נשמר ביומן" });
-        /* ⚠️ בוליאני ולא הסיבה: השרת מוצא אותן בשאילתת **שוויון**
-           (`pendingDelete == true`) — אין אי-שוויון ואין "קיים" ב-Spark.
-           הסיבה עצמה נרשמת ביומן. */
-        return CBA.fb.mergeDoc("gardenTasks", String(id), {
-          pendingDelete: true,
-          updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
-        }, function (e) {
-          if (e) return cb({ ok: false, error: gardenFsErr(e, "המחיקה נכשלה") });
-          gardenLogAppend(String(id), "מחיקה", reason);
-          cb({ ok: true, id: id, pending: true });
+        return CBA.fb.readDoc("gardenTasks", String(id), function (e0, cur) {
+          if (e0 || !cur) return cb({ ok: false, error: "המשימה לא נמצאה" });
+          /* 🔴 22.9 (סימולציה, ממצא E) — **מופע שגרה אינו נמחק, הוא מבוטל.**
+             מסמך שנמחק משאיר סלוט "רצוי וריק", והמנוע יוצר אותו מחדש תוך
+             שעה. סגירה ב'בוטל' היא מצבה: המנוע רואה מופע (שנגעו בו) ומניח
+             לו, המסך מסתיר אותו ב"סגורות", והיומן מסביר למה. */
+          if (String(cur.kind || "") === "שגרה" && !String(cur.closure || "").trim()) {
+            return gardenFsTask("close", String(id), { closure: "בוטל", note: reason }, function (r) {
+              if (!r || !r.ok) return cb(r);
+              cb({ ok: true, id: id, cancelled: true });
+            });
+          }
+          /* 🔴 22.9 (הכרעת יועד, ממצא K) — **התושב רואה "הדיווח שלך נסגר".**
+             משימה של דיווח תושב נסגרת קודם ב'בוטל' עם הסיבה — זה מה שמעדכן
+             את הדיווח (המראה) ושולח לתושב את המייל הרגיל — ורק אז יורדת.
+             השרת מוחק את המשימה והתמונות ו**משאיר את הדיווח** (ר'
+             `gardenPendingDeleteRun_`). */
+          function flag() {
+            /* ⚠️ בוליאני ולא הסיבה: השרת מוצא אותן בשאילתת **שוויון**
+               (`pendingDelete == true`) — אין אי-שוויון ואין "קיים" ב-Spark.
+               הסיבה עצמה נרשמת ביומן. */
+            CBA.fb.mergeDoc("gardenTasks", String(id), {
+              pendingDelete: true,
+              updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+            }, function (e) {
+              if (e) return cb({ ok: false, error: gardenFsErr(e, "המחיקה נכשלה") });
+              gardenLogAppend(String(id), "מחיקה", reason, { familyId: cur.familyId });
+              cb({ ok: true, id: id, pending: true });
+            });
+          }
+          if (String(cur.repId || "").trim() && !String(cur.closure || "").trim()) {
+            return gardenFsTask("close", String(id), { closure: "בוטל", note: reason }, function (r) {
+              if (!r || !r.ok) return cb(r);
+              flag();
+            });
+          }
+          flag();
         });
       }
       CBA.sheets.postRead("gardenTaskDelete", { id: id, why: why }, cb);
@@ -4287,6 +4487,10 @@ CBA.data = (function () {
     /** מנוע האופק — הרצה יזומה (מסך התוכנית / מצב המערכת). */
     gardenHorizonApply: function (cb) { gardenHorizonApply(cb); },
     gardenHorizonSummary: gardenHorizonSummary,
+    /** הגדרות הגינון של המנהל (22.9): `{requireApproval}`. קריאה לכל חבר,
+     *  כתיבה למנהל גינון פנימי בלבד (הכלל `gardenMeta/settings`). */
+    getGardenSettings: function (cb) { gardenSettingsRead(cb); },
+    setGardenSettings: function (patch, cb) { gardenSettingsWrite(patch, cb); },
     /* מחיקת דיווח ע"י התושב שכתב אותו — רק כל עוד איש לא נגע בו. */
     /* ==========================================================================
      *  מחיקת דיווח ע"י המדווח — ורק כל עוד איש לא נגע בו

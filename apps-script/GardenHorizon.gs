@@ -53,6 +53,14 @@ function gardenHorizonRun_(ss) {
       try { fsDelete_(fsDocPath_(FS_GARDEN_TASKS, id)); out.removed++; }
       catch (e) { out.errors.push('remove ' + id + ': ' + e); }
     });
+    /* 22.9 (ממצא F) — שם/קטגוריה חדשים לכרטיסים שלא נגעו בהם. ר' GardenRules.horizon. */
+    out.renamed = 0;
+    (diff.rename || []).forEach(function (r) {
+      try {
+        fsMerge_(fsDocPath_(FS_GARDEN_TASKS, r.id), { title: r.title, category: r.category, updatedAt: now });
+        out.renamed++;
+      } catch (e) { out.errors.push('rename ' + r.id + ': ' + e); }
+    });
     out.ok = out.errors.length === 0;
   } catch (e) {
     out.errors.push(String(e));
@@ -81,21 +89,18 @@ function gardenPendingDeleteRun_(ss) {
     pending.forEach(function (d) {
       var id = d.id;
       try {
+        /* 🔴 22.9 (הכרעת יועד, ממצא K) — **הדיווח של התושב נשאר.**
+           הדפדפן סגר את המשימה ב'בוטל' עם הסיבה לפני שהרים את הדגל, ולכן
+           הדיווח כבר מציג "נסגר" והמייל כבר יצא. מוחקים רק את המשימה;
+           התמונות של דיווח תושב שייכות לדיווח ואינן נזרקות. */
+        var isReport = String(d.data.repId || '').trim() !== '';
         var photos = [];
-        (d.data.photos || []).forEach(function (p) { if (p) photos.push(String(p)); });
-        /* דיווחים שמצביעים על המשימה — הולכים איתה, כמו במחיקה הישנה. */
-        var reps = fsQuery_(FS_GARDEN_REPORTS, 'taskId', 'EQUAL', String(id), 50);
-        reps.forEach(function (r) {
-          (r.data.photos || []).forEach(function (p) { if (p) photos.push(String(p)); });
-          fsDelete_(fsDocPath_(FS_GARDEN_REPORTS, r.id));
-          out.reports++;
-        });
+        if (!isReport) (d.data.photos || []).forEach(function (p) { if (p) photos.push(String(p)); });
         if (photos.length) { gardenDeletePhotos_(photos.join(',')); out.photos += photos.length; }
         fsDelete_(fsDocPath_(FS_GARDEN_TASKS, id));
         out.deleted++;
         /* שורת המראה בגיליון — כדי שלא תישאר כיתומה. */
         try { ghDeleteMirrorRow_(ss, GARDEN_TASKS_SHEET, id); } catch (e2) {}
-        reps.forEach(function (r) { try { ghDeleteMirrorRow_(ss, GARDEN_REPORTS_SHEET, r.id); } catch (e3) {} });
       } catch (e) { out.errors.push(id + ': ' + e); }
     });
     out.ok = out.errors.length === 0;

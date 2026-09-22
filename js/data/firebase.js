@@ -515,6 +515,27 @@ CBA.fb = (function () {
     });
   }
 
+  /** יצירה **רק אם המסמך אינו קיים** — טרנזקציה (22.9, ממצא M).
+   *  `set()` על מזהה תפוס דורס בשקט; כאן המסמך הקיים מפיל את הכתיבה
+   *  ב-`already-exists`, והקורא בוחר מזהה אחר. דורש הרשאת קריאה למסמך. */
+  function createIfAbsent(collection, id, data, cb) {
+    cb = withTimeout(cb || function () {});
+    ensureDb(function (err) {
+      if (err) return cb(err);
+      try {
+        var db = window.firebase.firestore();
+        var ref = db.collection(collection).doc(String(id));
+        db.runTransaction(function (tr) {
+          return tr.get(ref).then(function (d) {
+            if (d.exists) { var e = new Error("already-exists"); e.code = "already-exists"; throw e; }
+            tr.set(ref, data || {});
+          });
+        }).then(function () { cb(null, true); })
+          ["catch"](function (e) { state.lastError = e; cb(e); });
+      } catch (e) { state.lastError = e; cb(e); }
+    });
+  }
+
   function mergeDoc(collection, id, fields, cb) {
     cb = withTimeout(cb || function () {});
     ensureDb(function (err) {
@@ -609,6 +630,7 @@ CBA.fb = (function () {
     updateDoc: updateDoc,
     nextId:   nextId,
     createDoc: createDoc,
+    createIfAbsent: createIfAbsent,
     mergeDoc: mergeDoc,
     deleteDoc: deleteDoc,
     serverNow: serverNow,
