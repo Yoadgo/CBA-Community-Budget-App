@@ -2203,11 +2203,30 @@ body[data-nav-single="1"] .app-nav__viewport { display: none; }
   transition: box-shadow var(--t), transform var(--t);
 }
 .svc-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
-.svc-card__ico { font-size: 26px; line-height: 1; margin-bottom: 12px; }
+/* 2026-09-23 — האייקון עבר לשורת הכותרת (ר' card() ב-services.js), כדי
+   שלא יוסיף גובה לקוביה; משמאל לשם כי כך יוצא ב-DOM לפני ה-RTL. */
+.svc-card__head { display: flex; align-items: center; gap: 7px; }
+.svc-card__ico { font-size: 18px; line-height: 1; flex: none; }
 .svc-card__name { font-size: 16px; font-weight: 700; margin: 0; }
 .svc-card__prov { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .svc-card__desc { font-size: 13px; color: var(--text-soft); margin: 9px 0 16px; flex: 1; }
-.svc-card__acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.svc-card__acts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+
+/* כפתור "כל הפרטים" (2026-09-23, בקשת יועד) — פס מלא לאורך תחתית הקוביה
+   במקום כפתור בשורת הפעולות, בצבע רך שמשתלב עם הקוביה (לא ה-CTA השחור
+   הרגיל — זו הרחבה של אותה קוביה, לא פעולה חדשה), עם סימן + שמסמן
+   שמדובר בהרחבה. טקסט/גובה קצת יותר קטנים מכפתור btn-sm רגיל. */
+.svc-card__more {
+  margin: 14px -20px -20px -20px; padding: 7px 12px;
+  border: none; border-top: 1px solid var(--hairline);
+  background: var(--bg); color: var(--text-soft);
+  font-family: inherit; font-size: 11.5px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: 0 0 var(--radius) var(--radius);
+  cursor: pointer; transition: background var(--t), color var(--t);
+}
+.svc-card__more:hover { background: var(--hover); color: var(--text); }
+.svc-card__more svg { flex: none; }
 
 /* מספרי לייק/דיסלייק/תגובות על גבי הקוביה עצמה (2026-09-23) */
 .svc-card__reacts {

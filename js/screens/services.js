@@ -739,11 +739,22 @@ CBA.screens.resServices = {
         // החופשי במקום "תיאור קצר". בלי כפתורי טלפון — אין שדה טלפון
         // בכרטיס המלצה (ר' האפיון).
         var recFam = s.isResident ? (CBA.data.familyDisplayName(s.familyId) || "תושב") : "";
+
+        // 2026-09-23 (בקשת יועד) — האייקון עובר לשורת הכותרת (לא מעליה),
+        // כדי שלא יוסיף גובה לקוביה. סדר ה-DOM הוא כותרת ואז אייקון: ב-RTL
+        // הילד הראשון יושב מימין וה"שני" משמאלו — כך שהאייקון נופל בדיוק
+        // משמאל לכותרת, לא מימינה. כרטיס המלצת-תושב ממשיך עם תג הבד'ג'
+        // הקיים (לא אייקון) — לא שונה כאן.
+        var headHtml = s.isResident
+          ? '<div class="svc-badge">המלצת תושב</div><h3 class="svc-card__name">' + svcEsc(s.name) + "</h3>"
+          : '<div class="svc-card__head"><h3 class="svc-card__name">' + svcEsc(s.name) + "</h3>" +
+              (s.icon ? '<span class="svc-card__ico">' + svcEsc(s.icon) + "</span>" : "") +
+            "</div>";
+
+        var phoneHtml = s.isResident ? "" : svcPhoneBtns(s, "btn-ghost btn-sm");
+
         return '<article class="svc-card' + (s.isResident ? ' svc-card--rec' : '') + '" data-svc="' + svcEsc(s.id) + '">' +
-            (s.isResident
-              ? '<div class="svc-badge">המלצת תושב</div>'
-              : (s.icon ? '<div class="svc-card__ico">' + svcEsc(s.icon) + "</div>" : "")) +
-            '<h3 class="svc-card__name">' + svcEsc(s.name) + "</h3>" +
+            headHtml +
             svcStatusTag(s) +
             (s.isResident
               ? (recFam ? '<div class="svc-card__prov">' + svcEsc(recFam) + "</div>" : "")
@@ -752,10 +763,12 @@ CBA.screens.resServices = {
               ? '<p class="svc-card__desc">' + svcEsc((s.body || "").slice(0, 110)) + ((s.body || "").length > 110 ? "…" : "") + "</p>"
               : (s.desc ? '<p class="svc-card__desc">' + svcEsc(s.desc) + "</p>" : '<p class="svc-card__desc"></p>')) +
             svcCardReactsHtml(s.id) +
-            '<div class="svc-card__acts">' +
-              '<button type="button" class="btn-primary btn-sm" data-open="' + svcEsc(s.id) + '">כל הפרטים</button>' +
-              (s.isResident ? "" : svcPhoneBtns(s, "btn-ghost btn-sm")) +
-            "</div>" +
+            (phoneHtml ? '<div class="svc-card__acts">' + phoneHtml + "</div>" : "") +
+            // כפתור הרחבה — פס מלא לרוחב תחתית הקוביה, לא עוד כפתור בשורת
+            // הפעולות (2026-09-23, בקשת יועד).
+            '<button type="button" class="svc-card__more" data-open="' + svcEsc(s.id) + '">' +
+              svcPlusIcon() + "כל הפרטים" +
+            "</button>" +
           "</article>";
       }
 
@@ -1295,6 +1308,11 @@ function svcLoadEngagementSummary(cb) {
     Object.keys(c).forEach(function (id) { svcState.commentCounts[id] = c[id]; });
     if (cb) cb();
   });
+}
+
+function svcPlusIcon() {
+  return '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" ' +
+    'stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
 }
 
 function svcCommentIcon() {
