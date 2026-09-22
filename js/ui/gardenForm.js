@@ -134,15 +134,14 @@ CBA.gardenForm = (function () {
         '</div>' +
         '<p class="sub" id="gf-sub"></p>' +
 
-        '<label class="gd-lbl">מה צריך לעשות <s>*</s></label>' +
-        '<input class="gd-inp" id="gf-title" maxlength="120" autocomplete="off" ' +
-          'value="' + esc((d && d.title) || (tk && tk.title) || "") + '" ' +
-          'placeholder="למשל: לגזום את העץ שחוסם את התמרור">' +
-
         /* קטגוריה — צ'יפים עם סמליל וצבע, בדיוק כמו בטופס הדיווח של
            התושב. זו הרשימה שהמשתמש מכיר ויזואלית מהכרטיסים עצמם. */
-        '<label class="gd-lbl" style="margin-top:12px">קטגוריה' +
-          (isPlan ? ' <em>לא חובה</em>' : ' <s>*</s>') + '</label>' +
+        /* 🔴 22.9 (יועד: "זה צריך להיות אותו ממשק כמו דיווח תושב") —
+           **אותו סדר כמו בטופס התושב:** קודם "מה הבעיה?" (קטגוריה), אחר כך
+           "כותרת קצרה" עם הקפסולות מעליה ושדה הקלדה מתחתיה. במסלול החוזר
+           (תוכנית העבודה) התווית חוזרת ל"מה צריך לעשות" והקפסולות יורדות. */
+        '<label class="gd-lbl">' + (isPlan ? 'קטגוריה <em>לא חובה</em>' : 'מה הבעיה? <s>*</s>') +
+          '</label>' +
         '<div class="gd-cats" id="gf-cats">' +
           cats.map(function (c) {
             var k = catOf(c);
@@ -156,7 +155,12 @@ CBA.gardenForm = (function () {
            רשימה בדיוק (gardenLang.TITLE_PICKS) ואותן קפסולות `.gd-tpick`.
            לחיצה ממלאת את "מה צריך לעשות"; הקלדה חופשית נשארת פתוחה.
            בתוכנית העבודה הן לא מוצגות — שם הכותרת היא שם של שגרה. */
-        (isPlan ? '' : '<div class="gd-tpicks" id="gf-tpicks" style="margin-top:8px"></div>') +
+        '<label class="gd-lbl" id="gf-tlbl" style="margin-top:12px">' +
+          (isPlan ? 'מה צריך לעשות' : 'כותרת קצרה') + ' <s>*</s></label>' +
+        (isPlan ? '' : '<div class="gd-tpicks" id="gf-tpicks"></div>') +
+        '<input class="gd-inp" id="gf-title" maxlength="' + (isPlan ? 80 : 60) + '" autocomplete="off" ' +
+          'value="' + esc((d && d.title) || (tk && tk.title) || "") + '" ' +
+          'placeholder="' + (isPlan ? 'למשל: כיסוח דשא' : 'למשל: ראש ממטרה שבור') + '">' +
 
         (hideRep ? '' : swRow("gf-rep", "משימה חוזרת",
               "תיכנס לתוכנית העבודה ותיפתח מחדש בכל מחזור",
@@ -289,12 +293,17 @@ CBA.gardenForm = (function () {
     function renderPicks() {
       if (!tpicksEl) return;
       var list = picksMap[st.cat] || [];
-      tpicksEl.hidden = !list.length;
-      tpicksEl.innerHTML = list.map(function (t) {
-        return '<button type="button" class="gd-tpick' +
-          (titleIn.value.trim() === t ? " on" : "") + '" data-t="' + esc(t) + '">' +
-          esc(t) + '</button>';
-      }).join("");
+      tpicksEl.hidden = !!st.repeat;
+      /* אותן הנחיות בדיוק כמו בטופס התושב. */
+      tpicksEl.innerHTML = !st.cat
+        ? '<span class="gd-tpicks__hint">בחרו קטגוריה כדי לראות הצעות</span>'
+        : !list.length
+        ? '<span class="gd-tpicks__hint">אפשר גם פשוט להקליד למטה</span>'
+        : list.map(function (t) {
+            return '<button type="button" class="gd-tpick' +
+              (titleIn.value.trim() === t ? " on" : "") + '" data-t="' + esc(t) + '">' +
+              esc(t) + '</button>';
+          }).join("");
     }
     if (tpicksEl) {
       tpicksEl.addEventListener("click", function (e) {
@@ -324,6 +333,13 @@ CBA.gardenForm = (function () {
         ? "שגרה שחוזרת מעצמה. אין לה מיקום או תמונות — היא לא תקלה בנקודה אחת."
         : "תקלה שאתה פותח בעצמך — מטופלת כמו תקלה שדייר דיווח עליה, רק בלי דייר שמחכה לתשובה.";
       goT.textContent = (isEdit || isTaskEdit) ? "שמירה" : (st.repeat ? "הוספה לתוכנית" : "פתיחת התקלה");
+      var tl = q("#gf-tlbl"), ti = q("#gf-title");
+      if (tl) tl.innerHTML = (st.repeat ? "מה צריך לעשות" : "כותרת קצרה") + " <s>*</s>";
+      if (ti) {
+        ti.maxLength = st.repeat ? 80 : 60;
+        ti.placeholder = st.repeat ? "למשל: כיסוח דשא" : "למשל: ראש ממטרה שבור";
+      }
+      if (typeof renderPicks === "function") renderPicks();
       if (st.repeat) syncFreq();
     }
     if (!isEdit && q("#gf-rep")) {
@@ -414,7 +430,7 @@ CBA.gardenForm = (function () {
     q("#gf-go").addEventListener("click", function () {
       var titleEl = q("#gf-title");
       var title = titleEl.value.trim();
-      if (!title) { titleEl.focus(); return CBA.ui.alert("צריך לכתוב מה צריך לעשות"); }
+      if (!title) { titleEl.focus(); return CBA.ui.alert(st.repeat ? "צריך לכתוב מה צריך לעשות" : "צריך כותרת קצרה"); }
       if (st.busy) return;
 
       if (st.repeat) {

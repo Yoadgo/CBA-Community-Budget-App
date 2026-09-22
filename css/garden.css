@@ -852,9 +852,9 @@
    ⚠️ עובד רק בזכות `overflow:hidden` + `position:relative` של .gd-rep. */
 .gt-row.is-report::after {
   content: ""; position: absolute; top: 0; left: 0; pointer-events: none;
-  /* 22.9 (בקשת יועד) — גדול ב-25%: 13px → 16px. */
-  border-top: 16px solid var(--gt-res, #7A1F3D);
-  border-right: 16px solid transparent;
+  /* 22.9 (בקשת יועד) — פי שניים מהמקור: 13px → 26px. */
+  border-top: 26px solid var(--gt-res, #7A1F3D);
+  border-right: 26px solid transparent;
 }
 /* בארכיון הכרטיס כולו שקט (opacity .72) — הפינה יורדת איתו ולא מעליו. */
 .gt-closed.is-report::after { opacity: .6; }
@@ -877,11 +877,11 @@
 /* התווית בשורת המטא — אותו .gt-res, בגוון הכחול. */
 .gt-res.is-team { color: var(--gt-team, #1D4ED8); }
 /* דגימת המקרא — אותו משולש, בתוך ריבוע קטן עם פינות מעוגלות. */
-.gt-lgf { display: block; width: 22px; height: 22px; border-radius: 6px;
+.gt-lgf { display: block; width: 28px; height: 28px; border-radius: 7px;
   position: relative; overflow: hidden; background: rgba(17,24,39,.05); }
 .gt-lgf::after { content: ""; position: absolute; top: 0; left: 0;
-  border-top: 14px solid var(--gt-res, #7A1F3D);
-  border-right: 14px solid transparent; }
+  border-top: 20px solid var(--gt-res, #7A1F3D);
+  border-right: 20px solid transparent; }
 
 /* ---- "ממתין להחלטה" — כרטיס רקע בראש העמוד (2026-09-21) ----
    בקשת יועד: "אולי לראש העמוד ונפריד בכרטיסית רקע אחרת? שיהיה קצת יותר

@@ -81,7 +81,7 @@ const section = s => console.log('\n' + s);
   ok('כפתור "משימה חדשה" גם לגנן במסלול הישיר', /isManager \|\| \(CBA\.data\.gardenDirectWrites && CBA\.data\.gardenDirectWrites\(\)\)/.test(GT));
   ok('⚠️ והגנן לא רואה את המתג "משימה חוזרת"', /noRepeat: !isManager/.test(GT) && /hideRep \? '' : swRow\("gf-rep"/.test(GF));
   ok('פינה ירוקה לגנן', /\.gt-row\.is-gard::after \{ border-top-color: var\(--gt-gard, #15803D\)/.test(CSS) && /" is-gard" : isTeamFault/.test(GT));
-  ok('🔴 הדגל גדל ל-16px (+25%)', /border-top: 16px solid var\(--gt-res/.test(CSS) && /border-right: 16px solid transparent/.test(CSS));
+  ok('🔴 הדגל פי שניים — 26px', /border-top: 26px solid var\(--gt-res/.test(CSS) && /border-right: 26px solid transparent/.test(CSS));
   ok('פעולת "עריכה" בתפריט, לפי gardenCanEditTask', /gardenCanEditTask\(t\)[\s\S]{0,120}data-m="edit"/.test(GT) && /if \(m === "edit"\) return openEditTask\(t\);/.test(GT));
   ok('🔑 פריסטים בטופס הצוות מאותו מילון', /id="gf-tpicks"/.test(GF) && /CBA\.gardenLang\.TITLE_PICKS/.test(GF));
   ok('ו-resGarden קורא מאותו מקום (אין עותק)', /CBA\.gardenLang\.TITLE_PICKS/.test(RG) && !/"מדשאות": \["מדשאה יבשה"/.test(RG));
@@ -137,6 +137,12 @@ const section = s => console.log('\n' + s);
   ok('הפעולה רשומה: מסלול + מנהל-על', /action === 'gardenMergeCats'\) \{\s*return handleGardenMergeCats_/.test(CODE) && /gardenMergeCats: PERM_SUPER/.test(CODE) && /authorize_\(ss, p, PERM_SUPER\);[\s\S]{0,200}gardenMergeLawnWater_/.test(CODE));
   ok('ברירות המחדל בקוד — בלי "השקיה / ממטרות" פעילה', !/\['קטגוריה', 'C2', '2', 'השקיה \/ ממטרות'/.test(CODE) && /\['קטגוריה', 'C1', '1', 'מדשאות, השקיה וממטרות'/.test(CODE));
   ok('🔴 הגנן מעלה תמונות (שער שני עם PERM_GARDEN)', /if \(!gate\.ok\) gate = authorize_\(ss, body, PERM_GARDEN\);/.test(fnSrc('gardenPhotoOne_')));
+
+  section('7. טופס הצוות = טופס התושב (22.9, סבב 2)');
+  ok('🔴 "מה הבעיה?" ראשון, "כותרת קצרה" אחריו', GF.indexOf("'מה הבעיה? <s>*</s>'") !== -1 && GF.indexOf("'כותרת קצרה'") > GF.indexOf("'מה הבעיה? <s>*</s>'") && GF.indexOf('id="gf-cats"') < GF.indexOf('id="gf-title"'));
+  ok('🔑 הקפסולות מעל שדה ההקלדה, כמו אצל התושב', GF.indexOf('id="gf-tpicks"') < GF.indexOf('id="gf-title"'));
+  ok('ואותן הנחיות', /בחרו קטגוריה כדי לראות הצעות/.test(GF) && /אפשר גם פשוט להקליד למטה/.test(GF));
+  ok('⚠️ 60 תווים בתקלה (כמו השרת), 80 בתוכנית', /maxlength="' \+ \(isPlan \? 80 : 60\)/.test(GF) && /ti\.maxLength = st\.repeat \? 80 : 60/.test(GF));
 
   console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);
