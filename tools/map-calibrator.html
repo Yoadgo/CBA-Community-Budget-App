@@ -301,8 +301,12 @@ var STREET_DASH=[3.6,3.0];      /* מ׳: קו, רווח */
  *  של כל הגיאומטריה, בשני הכיוונים. **אל תשנה את הקבועים בלי להתאים מחדש.**
  * ========================================================================== */
 var W2 = {a:0.25223151, b:-0.10967208, tx:-868.30027973, ty:570.90853988, W:1061.2, H:1297.2};
-function toWorld(x,y){ return [W2.a*x - W2.b*y + W2.tx, W2.b*x + W2.a*y + W2.ty]; }
-function toNorm(x,y){ var w=toWorld(x,y); return [w[0]/W2.W, w[1]/W2.H]; }
+/* שם ייחודי בכוונה — לכלי כבר יש toWorld(ev) קיים (ממיר קליק עכבר לקנבס),
+   פונקציה שנייה עם אותו שם הייתה דורסת אותה בשקט (הצהרת function מאוחרת
+   יותר בקובץ גוברת) וגרמה לכל הייצוא (אזורי גינון + mapGeo) לצאת NaN/null.
+   נתפס 22.9.26 אחרי שאזורי גינון יוצאו עם קואורדינטות null. */
+function w2ToWorld(x,y){ return [W2.a*x - W2.b*y + W2.tx, W2.b*x + W2.a*y + W2.ty]; }
+function toNorm(x,y){ var w=w2ToWorld(x,y); return [w[0]/W2.W, w[1]/W2.H]; }
 var W2_CHECK = {label:'810', nx:0.901620, ny:0.817226};   /* מתוך mapGeo.js, לבדיקה עצמית לפני ייצוא */
 var W2_S = Math.sqrt(W2.a*W2.a + W2.b*W2.b);               /* קנה מידה אחיד: image-px ⇄ world-px */
 var W2_ROT = Math.atan2(W2.b, W2.a) * 180 / Math.PI;       /* מעלות: world_r = image_rot + W2_ROT */
@@ -1318,16 +1322,16 @@ function toCompactObjects(){
     if(o.label) n.l=o.label;
     if(o.type==='house' && o.duo){ n.duo=1; if(o.label2) n.l2=o.label2; }
     if(g==='rect'){
-      var w=toWorld(o.cx,o.cy);
+      var w=w2ToWorld(o.cx,o.cy);
       n.x=+w[0].toFixed(1); n.y=+w[1].toFixed(1);
       n.w=+(o.w*W2_S).toFixed(1); n.h=+(o.h*W2_S).toFixed(1);
       n.r=+((((o.rot||0)+W2_ROT)%360+360)%360).toFixed(1);
     } else if(g==='circle'){
-      var wc=toWorld(o.cx,o.cy);
+      var wc=w2ToWorld(o.cx,o.cy);
       n.x=+wc[0].toFixed(1); n.y=+wc[1].toFixed(1);
       n.rad=+(o.r*W2_S).toFixed(1); n.isl=+((o.island===undefined?0.45:o.island)).toFixed(2);
     } else {
-      n.p=(o.pts||[]).map(function(p){ var wp=toWorld(p[0],p[1]); return [+wp[0].toFixed(1),+wp[1].toFixed(1)]; });
+      n.p=(o.pts||[]).map(function(p){ var wp=w2ToWorld(p[0],p[1]); return [+wp[0].toFixed(1),+wp[1].toFixed(1)]; });
       if(g==='line'){ n.w=+((o.wm||TYPES[o.type].wm||1)*(PROD?PROD.meta.ppm:1.6)).toFixed(1); n.c=o.curve?1:0; }
     }
     out.push(n);
@@ -1338,12 +1342,16 @@ q('bExportProd').onclick=function(){
   var h=state.objects.filter(function(o){ return o.type==='house' && o.label===W2_CHECK.label && geo(o)==='rect'; })[0];
   if(h){
     var n=toNorm(h.cx,h.cy);
-    if(Math.abs(n[0]-W2_CHECK.nx)>0.002 || Math.abs(n[1]-W2_CHECK.ny)>0.002){
+    if(!isFinite(n[0]) || !isFinite(n[1]) || Math.abs(n[0]-W2_CHECK.nx)>0.002 || Math.abs(n[1]-W2_CHECK.ny)>0.002){
       flash('⚠ ההמרה לקואורדינטות האפליקציה לא תואמת — לא מייצא. ר\' W2 בקוד','var(--warn)',true);
       return;
     }
   }
   var comp=toCompactObjects();
+  var badNum=comp.objects.some(function(o){
+    return ['x','y','w','h','rad'].some(function(k){ return o[k]!==undefined && !isFinite(o[k]); });
+  });
+  if(badNum){ flash('⚠ נמצאו קואורדינטות לא תקינות (NaN) בייצוא — לא מוריד קובץ. תדווח לי על זה','var(--warn)',true); return; }
   var meta = PROD ? PROD.meta : {v:1, src:'map-calibrator-v2', ppm:1.6, mpp:MPP, rot:SEED.rotate, w:W2.W, h:W2.H};
   var out = {v:meta.v, src:'map-calibrator-v2 (' + new Date().toISOString().slice(0,10) + ')',
     ppm:meta.ppm, mpp:meta.mpp, rot:meta.rot, w:meta.w, h:meta.h,
@@ -1507,11 +1515,14 @@ function drawZones(){
   var el1=q('zoneList'), el2=q('zoneQA'); if(!el1) return;
   var r=zoneReport();
   el1.innerHTML = GARDEN_ZONES.map(function(n){
+    /* אזור אחד יכול להיות מיוצג ע"י כמה מצולעים נפרדים עם אותו שם — למשל
+       שטח שמפוצל ע"י כביש. זה תקין ולא אמור להיראות כשגיאה: c>=1 = ✓,
+       עם ספירה קטנה אם יש יותר ממצולע אחד. רק c===0 (עדיין לא סומן) חסר. */
     var c=r.named[n]||0;
     return '<div style="display:flex;gap:6px;align-items:center">'
-      + '<span style="color:'+(c===1?'var(--ok)':(c>1?'var(--warn)':'var(--muted)'))+'">'
-      + (c===1?'✓':(c>1?'⚠':'○'))+'</span><span'+(c?'':' style="color:var(--muted)"')+'>'+n+'</span>'
-      + (c>1?'<b style="color:var(--warn)"> ×'+c+'</b>':'') + '</div>';
+      + '<span style="color:'+(c?'var(--ok)':'var(--muted)')+'">'
+      + (c?'✓':'○')+'</span><span'+(c?'':' style="color:var(--muted)"')+'>'+n+'</span>'
+      + (c>1?'<span style="opacity:.6"> ×'+c+'</span>':'') + '</div>';
   }).join('');
   var msg=[];
   if(r.unnamed) msg.push('<b style="color:var(--warn)">'
@@ -1533,7 +1544,7 @@ q('bZoneExport').onclick=function(){
                                            && geo(o)==='rect'; })[0];
   if(h){
     var n=toNorm(h.cx,h.cy);
-    if(Math.abs(n[0]-W2_CHECK.nx)>0.002 || Math.abs(n[1]-W2_CHECK.ny)>0.002){
+    if(!isFinite(n[0]) || !isFinite(n[1]) || Math.abs(n[0]-W2_CHECK.nx)>0.002 || Math.abs(n[1]-W2_CHECK.ny)>0.002){
       flash('⚠ ההמרה לקואורדינטות האפליקציה לא תואמת — לא מייצא. ר\' W2 בקוד','var(--warn)',true);
       return;
     }
@@ -1541,10 +1552,18 @@ q('bZoneExport').onclick=function(){
   if(r.unnamed || r.bad.length){
     if(!confirm('יש אזורים בלי שם או עם שם לא מוכר — הם לא ייכללו. להמשיך?')) return;
   }
+  /* אזור אחד יכול להיות כמה מצולעים נפרדים עם אותו שם בכוונה (שטח שמפוצל
+     ע"י כביש, למשל) — זה תקין ולא עוצר את הייצוא. שניהם ייכנסו לקובץ תחת
+     אותו שם, וזה בדיוק הרצוי: נקודה בתוך אחד מהם תזהה נכון את השם. */
   var areas=r.zs.filter(function(z){ return z.label && GARDEN_ZONES.indexOf(z.label)>=0; })
     .map(function(z){ return { n:z.label,
       p:z.pts.map(function(pt){ var v=toNorm(pt[0],pt[1]);
         return [+v[0].toFixed(5), +v[1].toFixed(5)]; }) }; });
+  var badPts=areas.some(function(z){ return z.p.some(function(pt){ return !isFinite(pt[0])||!isFinite(pt[1]); }); });
+  if(badPts){
+    flash('⚠ נמצאו קואורדינטות לא תקינות בייצוא — לא מוריד קובץ. תדווח לי על זה','var(--warn)',true);
+    return;
+  }
   var js = '/* נוצר אוטומטית מ־"כיול מפה" · אל תערוך ידנית · '
     + new Date().toISOString().slice(0,10) + '\n'
     + '   מצולעי אזורי הגינון, בשבר 0–1 של עולם המפה — אותן יחידות בדיוק\n'
