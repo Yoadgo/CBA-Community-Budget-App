@@ -54,6 +54,10 @@
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude;
 }
+/* ⚠️ `.lgx` קובע position:relative (בשביל שכבות ה-::before/::after), והוא
+   ספציפי יותר מ-.gx-pop ומ-.gx-full__sheet — שחייבים להישאר absolute.
+   בלי השורה הזאת חלונית הנעץ בטלפון קפצה לראש המסך במקום לתחתיתו. */
+.gx-vars .gx-pop.lgx, .gx-vars .gx-full__sheet.lgx { position: absolute; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .gx-vars .lgx { background: rgba(255,255,255,.94); }
 }
@@ -218,21 +222,35 @@
 .gx-leg__sep { height: 1px; background: var(--gx-line); margin: 5px 0; }
 .gx-map-cover { display: none; }
 
+/* 🔴 23.9 (יועד: "להבליט את הנעצים — גם המפה צבעונית ואנחנו באותה פלטה").
+   שני צעדים: (1) **המפה עצמה נסוגה** — רק במסך הזה, רק שכבת הבסיס ושבבי
+   מבני הציבור: פחות צבע, קצת יותר בהיר. הנעצים לא עוברים את הפילטר, כי הם
+   אחים של השכבות ולא ילדים שלהן. (2) **הנעץ עצמו** גדול יותר, עם מסגרת לבנה
+   עבה, צל ממשי וצל קרקע קטן מתחת לחוד. */
+.gx-map .map-base, .gx-map .map-aerial, .gx-full__map .map-base, .gx-full__map .map-aerial {
+  filter: saturate(.32) brightness(1.07) contrast(.9); }
+.gx-map .map-grain, .gx-full__map .map-grain { opacity: .5; }
+.gx-map .map-poi, .gx-map .map-amenity__label, .gx-full__map .map-poi, .gx-full__map .map-amenity__label {
+  filter: saturate(.15); opacity: .5; }
+.gx-map .map-house, .gx-full__map .map-house { opacity: .8; }
+
 /* הנעץ: צבע = מצב, סמליל לבן = סוג. גודל קבוע על המסך (--gx-inv). */
-.map-marker.gx-pin { width: 24px; height: 30px; background: none; border: 0; border-radius: 0; box-shadow: none;
+.map-marker.gx-pin { width: 28px; height: 35px; background: none; border: 0; border-radius: 0; box-shadow: none;
   transform: translate(-50%, -100%) scale(var(--gx-inv, 1)); transform-origin: 50% 100%; z-index: 8; }
 .map-marker.gx-pin:hover, .map-marker.gx-pin:focus-visible {
   transform: translate(-50%, -100%) scale(calc(var(--gx-inv, 1) * 1.18)); z-index: 9; outline: none; }
-.map-marker.gx-pin svg { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 2px 3px rgba(16,24,20,.26)); }
-.gx-pin__b { stroke: #fff; stroke-width: 1.6; }
+.map-marker.gx-pin svg { display: block; width: 100%; height: 100%; overflow: visible;
+  filter: drop-shadow(0 3px 4px rgba(16,24,20,.34)) drop-shadow(0 0 1px rgba(16,24,20,.35)); }
+.gx-pin__b { stroke: #fff; stroke-width: 2.1; }
+.gx-pin__g { fill: rgba(16,24,20,.3); }
 .gx-pin__b.s-wait { fill: var(--s-wait); } .gx-pin__b.s-plan { fill: var(--s-plan); }
 .gx-pin__b.s-appr { fill: var(--s-appr); } .gx-pin__b.s-l1 { fill: var(--s-l1); }
 .gx-pin__b.s-l2 { fill: var(--s-l2); }     .gx-pin__b.s-done { fill: var(--s-done); }
 .gx-vars .gx-pin__b { background: none; }
-.map-marker.gx-pin--c { width: 26px; height: 26px; transform: translate(-50%, -50%) scale(var(--gx-inv, 1)); transform-origin: 50% 50%; }
+.map-marker.gx-pin--c { width: 30px; height: 30px; transform: translate(-50%, -50%) scale(var(--gx-inv, 1)); transform-origin: 50% 50%; }
 .map-marker.gx-pin--c:hover { transform: translate(-50%, -50%) scale(calc(var(--gx-inv, 1) * 1.12)); }
-.gx-clu { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; border: 2px solid #fff;
-  color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 2px 7px rgba(16,24,20,.3); }
+.gx-clu { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; border: 2.5px solid #fff;
+  color: #fff; font-size: 13px; font-weight: 800; box-shadow: 0 3px 8px rgba(16,24,20,.38), 0 0 0 1px rgba(16,24,20,.2); }
 
 /* תקציר נעץ (מחשב) */
 .gx-pop { position: absolute; z-index: 20; width: 248px; border-radius: 16px; padding: 11px 13px; font-size: 12px;

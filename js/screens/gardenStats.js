@@ -1008,7 +1008,10 @@
     }
     function pinSvg(state, catIco) {
       var K = CBA.gardenKit, body = (K && K.ICONS && K.ICONS[catIco]) || "";
-      return '<svg viewBox="0 0 24 30" aria-hidden="true"><path class="gx-pin__b s-' + state + '" ' +
+      /* 23.9 — צל קרקע קטן מתחת לחוד: הנעץ "עומד" על המפה ולא מודבק עליה. */
+      return '<svg viewBox="0 0 24 30" aria-hidden="true">' +
+        '<ellipse class="gx-pin__g" cx="12" cy="29" rx="4.2" ry="1.5"/>' +
+        '<path class="gx-pin__b s-' + state + '" ' +
         'd="M12 .8C5.8.8.8 5.7.8 11.8.8 19.6 12 29.2 12 29.2s11.2-9.6 11.2-17.4C23.2 5.7 18.2.8 12 .8Z"/>' +
         '<g transform="translate(5 4.6) scale(.5833)" fill="none" stroke="#fff" stroke-width="2.6" ' +
         'stroke-linecap="round" stroke-linejoin="round">' + body + '</g></svg>';
