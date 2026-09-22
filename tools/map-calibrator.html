@@ -167,6 +167,8 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
       <p class="tip" style="margin-top:10px;margin-bottom:2px;font-weight:700;color:var(--accent)">המפה החיה — מה שהאפליקציה מציגה בפועל (mapGeo.js)</p>
       <div class="row"><button id="bExportProd" class="pri sm" title="מייצא ישירות לפורמט הקומפקטי שהאפליקציה קוראת — מוכן להחלפת js/data/mapGeo.js. שומר על canopy/trees כמו שהם.">ייצוא ⇢ mapGeo.js</button></div>
       <div class="row"><button id="bReloadProd" class="sm dang" title="זורק את העריכה הנוכחית בכלי וטוען מחדש את הגיאומטריה כמו שהיא חיה כרגע באפליקציה">טען מחדש מהמפה החיה</button></div>
+      <div class="row"><button id="bFsPick" class="sm" title="בחירה חד-פעמית של תיקיית js/data בריפו — אחרי זה 'ייצוא ⇢ mapGeo.js' כותב ישירות לשם, בלי הורדה+גרירה">בחר תיקיית שמירה (js/data)</button></div>
+      <p class="tip" id="fsState">—</p>
 
       <p class="tip" style="margin-top:14px;margin-bottom:2px;font-weight:700;opacity:.7">קובץ כיול ישן (JSON) — לגיבוי/המשך עריכה בכלי הזה בלבד, לא מה שהאפליקציה קוראת</p>
       <div class="row"><button id="bExport" class="sm">ייצוא JSON (כיול מלא)</button><button id="bImport" class="sm">טעינה</button><button id="bUndo" class="sm">בטל</button></div>
@@ -1349,12 +1351,25 @@ q('bExportProd').onclick=function(){
   var head='/* נוצר ע"י tools/map-calibrator.html ב-'+new Date().toISOString().slice(0,10)+
     ' · אל תערוך ידנית — לעריכה נוספת פתחו את הכלי מחדש */\n';
   var body='window.CBA=window.CBA||{};CBA.mapGeo='+JSON.stringify(out)+';\n';
-  var b2=new Blob([head+body],{type:'text/javascript'});
-  var a2=document.createElement('a'); a2.href=URL.createObjectURL(b2); a2.download='mapGeo.js'; a2.click();
+  var fullText=head+body;
   var msg='יוצא ✓ '+comp.objects.length+' אובייקטים → mapGeo.js';
   if(comp.skipped) msg+=' · '+comp.skipped+' דולגו (גינון/אוטובוס — לא חלק ממבנה הנתונים)';
   if(!(PROD||h)) msg+=' · ⚠ לא נמצא בית 810 לאימות — לבדוק ידנית לפני החלפה';
-  flash(msg,'var(--ok)',true);
+  function downloadMapGeoJs(){
+    var b2=new Blob([fullText],{type:'text/javascript'});
+    var a2=document.createElement('a'); a2.href=URL.createObjectURL(b2); a2.download='mapGeo.js'; a2.click();
+    flash(msg,'var(--ok)',true);
+  }
+  if(fsDirHandle){
+    fsWriteFile('mapGeo.js', fullText).then(function(){
+      flash(msg+' · נשמר ישירות לתיקייה שנבחרה ✓','var(--ok)',true);
+    }).catch(function(e){
+      console.warn('שמירה ישירה נכשלה, יורד כקובץ רגיל במקום', e);
+      downloadMapGeoJs();
+    });
+  } else {
+    downloadMapGeoJs();
+  }
 };
 q('bReloadProd').onclick=function(){
   if(!PROD){ flash('לא נמצאה מפה חיה ליד הכלי (js/data/mapGeo.js) — לוודא שהכלי יושב תחת tools/ בריפו','var(--warn)',true); return; }
@@ -1371,6 +1386,75 @@ function updateSrcState(){
     : 'מקור: דוגמה מקורית (SEED) — לא הגיאומטריה החיה';
 }
 updateSrcState();
+
+/* ============================================================================
+ *  שמירה ישירה לתיקייה (File System Access API, 22.9.26)
+ * ----------------------------------------------------------------------------
+ *  במקום שכל "ייצוא ⇢ mapGeo.js" יוריד קובץ לתיקיית ההורדות שצריך לגרור
+ *  ידנית ל-js/data/ בריפו — בחירה חד-פעמית של אותה תיקייה נותנת לכלי
+ *  לכתוב ישירות לתוכה. נתמך רק ב-Chrome/Edge; בדפדפן שלא תומך (כמו Safari)
+ *  ממשיכים כרגיל עם הורדה. הבחירה נשמרת ב-IndexedDB של הדף הזה, כך שאין
+ *  צורך לבחור מחדש בכל פתיחה — רק לאשר הרשאה אם הדפדפן מבקש שוב. */
+var FS_DB='cbaMapCalibratorFS', FS_STORE='handles', FS_KEY='saveDir';
+var FS_SUPPORTED = (typeof window.showDirectoryPicker === 'function');
+var fsDirHandle = null;
+
+function fsIdbOpen(){
+  return new Promise(function(res,rej){
+    var r=indexedDB.open(FS_DB,1);
+    r.onupgradeneeded=function(){ r.result.createObjectStore(FS_STORE); };
+    r.onsuccess=function(){ res(r.result); };
+    r.onerror=function(){ rej(r.error); };
+  });
+}
+function fsIdbGet(key){
+  return fsIdbOpen().then(function(db){ return new Promise(function(res,rej){
+    var rq=db.transaction(FS_STORE,'readonly').objectStore(FS_STORE).get(key);
+    rq.onsuccess=function(){ res(rq.result); }; rq.onerror=function(){ rej(rq.error); };
+  }); });
+}
+function fsIdbSet(key,val){
+  return fsIdbOpen().then(function(db){ return new Promise(function(res,rej){
+    var rq=db.transaction(FS_STORE,'readwrite').objectStore(FS_STORE).put(val,key);
+    rq.onsuccess=function(){ res(); }; rq.onerror=function(){ rej(rq.error); };
+  }); });
+}
+function updateFsState(){
+  var el=q('fsState'); if(!el) return;
+  if(!FS_SUPPORTED){ el.textContent='שמירה ישירה נתמכת רק ב-Chrome/Edge — כאן ימשיך לרדת כקובץ רגיל.'; return; }
+  el.textContent = fsDirHandle
+    ? ('מחובר לתיקייה: "'+fsDirHandle.name+'" — ייצוא mapGeo.js יכתוב ישירות לשם.')
+    : 'לא נבחרה תיקייה — ייצוא mapGeo.js ימשיך לרדת כקובץ רגיל להורדות.';
+}
+function fsWriteFile(filename, contentStr){
+  if(!fsDirHandle) return Promise.reject(new Error('no-handle'));
+  return fsDirHandle.queryPermission({mode:'readwrite'}).then(function(perm){
+    if(perm==='granted') return true;
+    return fsDirHandle.requestPermission({mode:'readwrite'});
+  }).then(function(perm){
+    if(perm!=='granted') throw new Error('הרשאת כתיבה לתיקייה לא אושרה');
+    return fsDirHandle.getFileHandle(filename, {create:true});
+  }).then(function(fh){ return fh.createWritable(); })
+    .then(function(w){ return w.write(contentStr).then(function(){ return w.close(); }); });
+}
+q('bFsPick').onclick=function(){
+  if(!FS_SUPPORTED){ alert('הדפדפן הזה לא תומך בשמירה ישירה לתיקייה (זמין ב-Chrome/Edge). ממשיכים עם הורדה רגילה.'); return; }
+  window.showDirectoryPicker({mode:'readwrite'}).then(function(handle){
+    fsDirHandle = handle;
+    updateFsState();
+    return fsIdbSet(FS_KEY, handle);
+  }).catch(function(e){ if(e && e.name!=='AbortError') alert('לא הצלחתי לשמור את הגישה לתיקייה: '+e.message); });
+};
+if(FS_SUPPORTED){
+  fsIdbGet(FS_KEY).then(function(handle){
+    if(!handle) { updateFsState(); return; }
+    return handle.queryPermission({mode:'readwrite'}).then(function(perm){
+      fsDirHandle = handle; // נשמר גם אם ההרשאה תיבדק שוב בזמן השמירה עצמה
+      updateFsState();
+    });
+  }).catch(function(){ updateFsState(); });
+} else { updateFsState(); }
+
 /* ============================================================================
  *  אזורי גינון — בקרה וייצוא (2026-09-08)
  * ----------------------------------------------------------------------------
