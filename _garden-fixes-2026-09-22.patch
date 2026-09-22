@@ -1,0 +1,1847 @@
+diff --git a/apps-script/Code.gs b/apps-script/Code.gs
+index aa2b72f..897d9c5 100644
+--- a/apps-script/Code.gs
++++ b/apps-script/Code.gs
+@@ -16104,6 +16104,29 @@ function handleGardenTaskLog_(p) {
+     var id = String(p.id || '').trim();
+     if (!id) return json_({ ok: false, error: 'חסר מזהה משימה' });
+ 
++    /* 🔴 22.9 (סימולציה, ממצא D) — **מ-Firestore כשהוא הבעלים.** היומן
++       נכתב מהדפדפן ל-`gardenLog` בלבד; הטאב בגיליון לא מתעדכן יותר.
++       הקורא כאן הוא הגנן החיצוני (כלל הקריאה בדפדפן הוא פנימי בלבד) —
++       אותו סינון בדיוק: משוב ופתיחה ע"י תושב מוצגים כ"תושב" בלי טקסט. */
++    if (typeof gardenFsOwns_ === 'function' && gardenFsOwns_()) {
++      var docs = fsQuery_('gardenLog', 'taskId', 'EQUAL', id, 300);
++      var rowsFs = docs.map(function (d) {
++        var x = d.data || {};
++        var k = String(x.kind || ''), who = '', note = String(x.note || '');
++        if (isExtLog) {
++          if (k === 'משוב') { who = 'תושב'; note = ''; }
++          else if (k === 'נפתח' && note.indexOf('דיווח תושב') === 0) { who = 'תושב'; }
++        }
++        return {
++          at: (x.at instanceof Date) ? x.at.toISOString() : String(x.at || ''),
++          kind: k, field: String(x.field || ''), from: String(x.from || ''),
++          to: String(x.to || ''), who: who, note: note
++        };
++      });
++      rowsFs.sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
++      return json_({ ok: true, rows: rowsFs });
++    }
++
+     var sh = ss.getSheetByName(GARDEN_LOG_SHEET);
+     if (!sh || sh.getLastRow() < 2) return json_({ ok: true, rows: [] });
+     var c = gardenCols_(sh);
+diff --git a/apps-script/GardenHorizon.gs b/apps-script/GardenHorizon.gs
+index c9c4b3e..4d9b1b7 100644
+--- a/apps-script/GardenHorizon.gs
++++ b/apps-script/GardenHorizon.gs
+@@ -53,6 +53,14 @@ function gardenHorizonRun_(ss) {
+       try { fsDelete_(fsDocPath_(FS_GARDEN_TASKS, id)); out.removed++; }
+       catch (e) { out.errors.push('remove ' + id + ': ' + e); }
+     });
++    /* 22.9 (ממצא F) — שם/קטגוריה חדשים לכרטיסים שלא נגעו בהם. ר' GardenRules.horizon. */
++    out.renamed = 0;
++    (diff.rename || []).forEach(function (r) {
++      try {
++        fsMerge_(fsDocPath_(FS_GARDEN_TASKS, r.id), { title: r.title, category: r.category, updatedAt: now });
++        out.renamed++;
++      } catch (e) { out.errors.push('rename ' + r.id + ': ' + e); }
++    });
+     out.ok = out.errors.length === 0;
+   } catch (e) {
+     out.errors.push(String(e));
+@@ -81,21 +89,18 @@ function gardenPendingDeleteRun_(ss) {
+     pending.forEach(function (d) {
+       var id = d.id;
+       try {
++        /* 🔴 22.9 (הכרעת יועד, ממצא K) — **הדיווח של התושב נשאר.**
++           הדפדפן סגר את המשימה ב'בוטל' עם הסיבה לפני שהרים את הדגל, ולכן
++           הדיווח כבר מציג "נסגר" והמייל כבר יצא. מוחקים רק את המשימה;
++           התמונות של דיווח תושב שייכות לדיווח ואינן נזרקות. */
++        var isReport = String(d.data.repId || '').trim() !== '';
+         var photos = [];
+-        (d.data.photos || []).forEach(function (p) { if (p) photos.push(String(p)); });
+-        /* דיווחים שמצביעים על המשימה — הולכים איתה, כמו במחיקה הישנה. */
+-        var reps = fsQuery_(FS_GARDEN_REPORTS, 'taskId', 'EQUAL', String(id), 50);
+-        reps.forEach(function (r) {
+-          (r.data.photos || []).forEach(function (p) { if (p) photos.push(String(p)); });
+-          fsDelete_(fsDocPath_(FS_GARDEN_REPORTS, r.id));
+-          out.reports++;
+-        });
++        if (!isReport) (d.data.photos || []).forEach(function (p) { if (p) photos.push(String(p)); });
+         if (photos.length) { gardenDeletePhotos_(photos.join(',')); out.photos += photos.length; }
+         fsDelete_(fsDocPath_(FS_GARDEN_TASKS, id));
+         out.deleted++;
+         /* שורת המראה בגיליון — כדי שלא תישאר כיתומה. */
+         try { ghDeleteMirrorRow_(ss, GARDEN_TASKS_SHEET, id); } catch (e2) {}
+-        reps.forEach(function (r) { try { ghDeleteMirrorRow_(ss, GARDEN_REPORTS_SHEET, r.id); } catch (e3) {} });
+       } catch (e) { out.errors.push(id + ': ' + e); }
+     });
+     out.ok = out.errors.length === 0;
+diff --git a/apps-script/GardenRules.gs b/apps-script/GardenRules.gs
+index 5d9c57b..15f8009 100644
+--- a/apps-script/GardenRules.gs
++++ b/apps-script/GardenRules.gs
+@@ -222,10 +222,25 @@ var GardenRules = (function () {
+       (existing[k] = existing[k] || []).push(t);
+     });
+ 
+-    var create = [], remove = [], kept = 0, frozen = 0;
++    var create = [], remove = [], rename = [], kept = 0, frozen = 0;
+     Object.keys(desired).forEach(function (k) {
+-      if (existing[k] && existing[k].length) { kept++; return; }
+       var o = desired[k];
++      if (existing[k] && existing[k].length) {
++        kept++;
++        /* 🔴 22.9 (סימולציה, ממצא F) — **שם/קטגוריה חדשים מגיעים לכרטיסים
++           שכבר נוצרו.** בלי זה שינוי שם בתבנית הופיע רק במופעים שייווצרו
++           בעתיד, ו-8 שבועות של כרטיסים נשארו עם השם הישן. רק מופעים שלא
++           נגעו בהם ורק אם ההגדרה בתוקף לשבוע (effectiveFrom) — נגוע
++           הוא היסטוריה, וההיסטוריה לא משתנה. */
++        existing[k].forEach(function (t) {
++          if (touched(t)) return;
++          if (o.def.effectiveFrom && String(t.week) < String(o.def.effectiveFrom)) return;
++          var title = String(o.def.title || ''), cat = String(o.def.category || '');
++          if (String(t.title || '') === title && String(t.category || '') === cat) return;
++          rename.push({ id: String(t.id), title: title, category: cat });
++        });
++        return;
++      }
+       create.push(newOccDoc(o.def, o.week, o.area, now, year));
+     });
+     Object.keys(existing).forEach(function (k) {
+@@ -238,7 +253,7 @@ var GardenRules = (function () {
+       });
+     });
+ 
+-    return { create: create, remove: remove, kept: kept, frozen: frozen,
++    return { create: create, remove: remove, rename: rename, kept: kept, frozen: frozen,
+              weeks: weeks, from: from, horizonWeeks: H };
+   }
+ 
+diff --git a/css/garden.css b/css/garden.css
+index d501105..f36067d 100644
+--- a/css/garden.css
++++ b/css/garden.css
+@@ -1316,3 +1316,15 @@
+ .nt-opt { font-weight: 400; color: #6B7280; }
+ .nt-map { height: 240px; margin-top: 4px; }
+ @media (max-width: 720px) { .nt-map { height: 210px; } }
++
++/* 22.9 — מגירת "מופעי שגרה שבוטלו" בתחתית "סגורות" (ממצא E). סגורה כברירת
++   מחדל: ביטול אינו עבודה שנעשתה, ואין סיבה שיתפוס מקום ברשימה. */
++.gt-drawer { margin: 18px 2px 8px; }
++.gt-drawer > summary { display: flex; align-items: center; gap: 8px; cursor: pointer;
++  list-style: none; font-size: 13px; font-weight: 600; color: #6b7280; padding: 6px 0; }
++.gt-drawer > summary::-webkit-details-marker { display: none; }
++.gt-drawer > summary::before { content: "›"; display: inline-block; transition: transform .15s;
++  font-size: 16px; line-height: 1; color: #9ca3af; }
++.gt-drawer[open] > summary::before { transform: rotate(90deg); }
++.gt-drawer > summary em { font-style: normal; font-weight: 500; color: #9ca3af; }
++.gt-drawer > .gd-reps { margin-top: 8px; opacity: .85; }
+diff --git a/firestore.rules b/firestore.rules
+index 55ae15c..ea4d00c 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -162,6 +162,18 @@ service cloud.firestore {
+       allow read: if isMember();
+       allow write: if false;
+     }
++    /* 🔴 22.9 (הכרעת יועד) — הגדרות הגינון של המנהל. מסמך אחד, שלושה שדות,
++       מנהל גינון פנימי בלבד. `requireApproval`: סימון גנן על תקלת דייר
++       ממתין לאישור מנהל. ⚠️ שני match חופפים — Firestore מתיר אם אחד מתיר,
++       ולכן ה-`write: false` למעלה אינו חוסם את המסמך הזה בלבד. */
++    function gsSettingsWriteOk() {
++      return canSeePlan() &&
++             request.resource.data.keys().hasOnly(['requireApproval', 'updatedAt', 'updatedBy']) &&
++             request.resource.data.requireApproval is bool;
++    }
++    match /gardenMeta/settings {
++      allow write: if gsSettingsWriteOk();
++    }
+ 
+     /* ========================================================================
+      *  🔴🔴  דיווחי הגינון של התושב   (2026-09-16)
+@@ -410,7 +422,15 @@ service cloud.firestore {
+               'firstWeek', 'createdAt', 'updatedAt', 'approvedBy', 'approvedAt',
+               'repId', 'photos', 'order', 'year', 'schema', 'syncedAt',
+               /* 🔴 22.9 — "בדרך למחיקה". הדפדפן מרים, השרת מסיים. ר' gtPendingDeleteOk. */
+-              'pendingDelete'];
++              'pendingDelete',
++              /* 🔴 22.9 (סימולציה, ממצא C) — המשפחה על המשימה. התושב כותב אותה
++                 ביצירה (gtFromReportOk), והצוות — שאינו רשאי לקרוא דיווחים —
++                 קורא אותה מכאן כדי לחתום שורות יומן שהתושב יראה. מזהה אטום.
++                 ⚠️ אינה ב-gtTeamUpdateOk: הצוות לעולם אינו משנה בעלות. */
++              'familyId',
++              /* 22.9 (ממצא B) — הדיווחים שאוחדו לתוך המשימה, כדי שהשלב שלה
++                 יגיע גם אליהם. הצוות בלבד (gtTeamUpdateOk). */
++              'mergedReps'];
+     }
+ 
+     /* השדות שרק הצוות קובע — תושב אינו שולח אותם כלל. */
+@@ -452,7 +472,7 @@ service cloud.firestore {
+                          'drags', 'firstWeek', 'title', 'category', 'area',
+                          'x', 'y', 'approvedBy', 'approvedAt',
+                          'repId', 'photos', 'order', 'updatedAt', 'syncedAt',
+-                         'notify', 'notifyPending', 'notifyNote']);
++                         'notify', 'notifyPending', 'notifyNote', 'mergedReps']);
+     }
+ 
+     /* ========================================================================
+diff --git a/index.html b/index.html
+index 4b90fd4..0ef7ea2 100644
+--- a/index.html
++++ b/index.html
+@@ -8,13 +8,13 @@
+        manifest = תעודת הזהות של האפליקציה (שם, אייקון, מסך מלא).
+        theme-color = צבע סרגל המערכת; זהה ל-CTA השחור של האפליקציה.
+        apple-* = אייפון מתעלם מחלק מה-manifest וצריך את התגיות שלו. -->
+-  <link rel="manifest" href="manifest.webmanifest?v=20260922l" />
++  <link rel="manifest" href="manifest.webmanifest?v=20260922m" />
+   <meta name="theme-color" content="#111827" />
+   <meta name="apple-mobile-web-app-capable" content="yes" />
+   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+   <meta name="apple-mobile-web-app-title" content="קהילה" />
+-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20260922l" />
+-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=20260922l" />
++  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20260922m" />
++  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=20260922m" />
+   <title>ניהול קהילה</title>
+ 
+   <!-- גופן עברי נקי (Heebo) -->
+@@ -23,36 +23,36 @@
+   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+ 
+   <!-- העיצוב שלנו -->
+-  <link rel="stylesheet" href="css/style.css?v=20260922l" />
++  <link rel="stylesheet" href="css/style.css?v=20260922m" />
+   <!-- שכבת מובייל — נטענת אחרי הבסיס כדי לעדכן היכן שצריך -->
+-  <link rel="stylesheet" href="css/mobile.css?v=20260922l" />
++  <link rel="stylesheet" href="css/mobile.css?v=20260922m" />
+   <!-- שכבת טעינה — שלדי shimmer, כניסת מסך רכה, טוסט "מעודכן" -->
+-  <link rel="stylesheet" href="css/loading.css?v=20260922l" />
++  <link rel="stylesheet" href="css/loading.css?v=20260922m" />
+   <!-- אזור התושב — נגזר מהעיצוב, פונקציות מצומצמות -->
+-  <link rel="stylesheet" href="css/resident.css?v=20260922l" />
++  <link rel="stylesheet" href="css/resident.css?v=20260922m" />
+   <!-- זכוכית נוזלית + תנועה (iOS 26) — שכבת עיצוב תוספתית, לא נוגעת במסכים -->
+-  <link rel="stylesheet" href="css/motion.css?v=20260922l" />
++  <link rel="stylesheet" href="css/motion.css?v=20260922m" />
+   <!-- מכון כושר (2026-08-18) — שכבה ייעודית, כל המחלקות בתחילית gym- -->
+-  <link rel="stylesheet" href="css/gym.css?v=20260922l" />
++  <link rel="stylesheet" href="css/gym.css?v=20260922m" />
+   <!-- PWA (2026-08-20) — שכבת ההסבר "הוספה למסך הבית" בלבד. כל המחלקות בתחילית pwa- -->
+-  <link rel="stylesheet" href="css/pwa.css?v=20260922l" />
++  <link rel="stylesheet" href="css/pwa.css?v=20260922m" />
+   <!-- חיפוש גלובלי (2026-08-25) — כפתור הכותרת ושכבת החיפוש. כל המחלקות בתחילית gs- -->
+-  <link rel="stylesheet" href="css/search.css?v=20260922l" />
++  <link rel="stylesheet" href="css/search.css?v=20260922m" />
+   <!-- עמוד הקבלה + רכיב מצב-ריק כלל-מערכתי (2026-08-27). מחלקות hm- ו-.empty -->
+-  <link rel="stylesheet" href="css/home.css?v=20260922l" />
++  <link rel="stylesheet" href="css/home.css?v=20260922m" />
+   <!-- סיור היכרות (2026-08-28) — שכבה עצמאית, כל המחלקות בתחילית tr- -->
+-  <link rel="stylesheet" href="css/tour.css?v=20260922l" />
++  <link rel="stylesheet" href="css/tour.css?v=20260922m" />
+   <!-- "הפרטים שלי" (2026-08-28) — מחלקות pf- + כרטיס בקשות השינוי במסך התושבים -->
+-  <link rel="stylesheet" href="css/profile.css?v=20260922l" />
++  <link rel="stylesheet" href="css/profile.css?v=20260922m" />
+   <!-- "מראה שיכון" (2026-09-07) — מודול הגינון. כל המחלקות בתחילית gd- -->
+-  <link rel="stylesheet" href="css/garden.css?v=20260922l" />
++  <link rel="stylesheet" href="css/garden.css?v=20260922m" />
+   <!-- שכבת ה-Liquid Glass (2026-09-07). טוקנים + .lg + הרקע האמביינטי. -->
+-  <link rel="stylesheet" href="css/liquid-glass.css?v=20260922l" />
++  <link rel="stylesheet" href="css/liquid-glass.css?v=20260922m" />
+ 
+   <!-- כפתור הדיווחים על האפליקציה (2026-09-09) -->
+-  <link rel="stylesheet" href="css/report.css?v=20260922l" />
++  <link rel="stylesheet" href="css/report.css?v=20260922m" />
+   <!-- מסך "מצב המערכת" (2026-09-16) — דגלים ובדיקות. מחלקות sys- -->
+-  <link rel="stylesheet" href="css/sys.css?v=20260922l" />
++  <link rel="stylesheet" href="css/sys.css?v=20260922m" />
+ 
+   <!-- כניסת Google (Google Identity Services) -->
+   <script src="https://accounts.google.com/gsi/client" async defer></script>
+@@ -119,89 +119,89 @@
+   <!-- לוגו — פונקציה עצמאית קטנה, נטענת מוקדם כי מסך הכניסה משתמש בה -->
+   <!-- ⚠️ ראשון מכל קבצי ה-JS. אוסף ההקשר לדיווחי תקלות (js/ui/report.js):
+        מאזין שגיאות שנרשם אחרי הקוד ששובר לא יתפוס את השגיאה שקרתה בטעינה. -->
+-  <script src="js/ui/diag.js?v=20260922l"></script>
+-  <script src="js/ui/logo.js?v=20260922l"></script>
++  <script src="js/ui/diag.js?v=20260922m"></script>
++  <script src="js/ui/logo.js?v=20260922m"></script>
+   <!-- חלונות האפליקציה (2026-08-19) — מחליף את window.alert/confirm/prompt.
+        נטען לפני המסכים כי הם משתמשים ב-CBA.ui. -->
+-  <script src="js/ui/dialog.js?v=20260922l"></script>
+-  <script src="js/ui/security.js?v=20260922l"></script>
++  <script src="js/ui/dialog.js?v=20260922m"></script>
++  <script src="js/ui/security.js?v=20260922m"></script>
+   <!-- הכפתור הצף "דיווח על האפליקציה". חייב להיטען לפני app.js, שקורא ל-CBA.report.mount -->
+-  <script src="js/ui/report.js?v=20260922l"></script>
++  <script src="js/ui/report.js?v=20260922m"></script>
+   <!-- צפייה בתמונות דיווח (גינון). חייב להיטען לפני מסכי הגינון -->
+-  <script src="js/ui/photos.js?v=20260922l"></script>
++  <script src="js/ui/photos.js?v=20260922m"></script>
+   <!-- טופס משימה אחד — משרת גם את מסך המשימות וגם את תוכנית העבודה.
+        חייב להיטען אחרי dialog.js (mountSheet) ואחרי photos.js (toUpload). -->
+-  <script src="js/ui/gardenForm.js?v=20260922l"></script>
++  <script src="js/ui/gardenForm.js?v=20260922m"></script>
+   <!-- שלדי טעינה (2026-08-25) — נטען לפני המסכים, כולם קוראים ל-CBA.skel -->
+-  <script src="js/ui/skeleton.js?v=20260922l"></script>
++  <script src="js/ui/skeleton.js?v=20260922m"></script>
+   <!-- חיפוש גלובלי (2026-08-25) — נשען על CBA.navTargets/CBA.data בזמן ריצה בלבד -->
+-  <script src="js/ui/search.js?v=20260922l"></script>
+-  <script src="js/data/mock.js?v=20260922l"></script>
++  <script src="js/ui/search.js?v=20260922m"></script>
++  <script src="js/data/mock.js?v=20260922m"></script>
+   <!-- כללי החזרתיות ומנוע האופק — אותו קובץ נטען גם ב-Apps Script (GardenRules.gs) -->
+-  <script src="js/data/gardenRules.js?v=20260922l"></script>
+-  <script src="js/data/dataService.js?v=20260922l"></script>
++  <script src="js/data/gardenRules.js?v=20260922m"></script>
++  <script src="js/data/dataService.js?v=20260922m"></script>
+   <!-- מנוע ההשוואה של בדיקת ההחזרים. חייב להיטען לפני המסך שמשתמש בו -->
+-  <script src="js/data/reconcile.js?v=20260922l"></script>
++  <script src="js/data/reconcile.js?v=20260922m"></script>
+   <!-- חיבור ל-Google Sheets (קריאה). אם נכשל — נשארים על נתוני mock -->
+-  <script src="js/data/sheets.js?v=20260922l"></script>
++  <script src="js/data/sheets.js?v=20260922m"></script>
+   <!-- גשר Firebase (צעד 02, 2026-09-14). ה-SDK עצמו אינו נטען כאן אלא
+        דינמית אחרי התחברות — ר' ההערות בראש הקובץ. תוספת בלבד: אם ייכשל,
+        האפליקציה ממשיכה לעבוד על המושב החתום של Apps Script -->
+-  <script src="js/data/firebase.js?v=20260922l"></script>
+-  <script src="js/data/push.js?v=20260922l"></script>
+-  <script src="js/screens/budget.js?v=20260922l"></script>
+-  <script src="js/screens/expenses.js?v=20260922l"></script>
++  <script src="js/data/firebase.js?v=20260922m"></script>
++  <script src="js/data/push.js?v=20260922m"></script>
++  <script src="js/screens/budget.js?v=20260922m"></script>
++  <script src="js/screens/expenses.js?v=20260922m"></script>
+   <!-- פנקס הערות (סעיף 1) — נטען לפני planning.js כי הלשונית שפותחת אותו יושבת שם -->
+-  <script src="js/screens/notes.js?v=20260922l"></script>
+-  <script src="js/screens/planning.js?v=20260922l"></script>
+-  <script src="js/screens/clubAdmin.js?v=20260922l"></script>
++  <script src="js/screens/notes.js?v=20260922m"></script>
++  <script src="js/screens/planning.js?v=20260922m"></script>
++  <script src="js/screens/clubAdmin.js?v=20260922m"></script>
+   <!-- מכון כושר — ניהול (2026-08-18). יושב ליד clubAdmin כי שניהם
+        "מתקנים", אבל כל אחד עם מידור ההרשאות שלו. -->
+-  <script src="js/screens/gymAdmin.js?v=20260922l"></script>
++  <script src="js/screens/gymAdmin.js?v=20260922m"></script>
+   <!-- מכון כושר — מסך התושב והאשף (2026-08-19). אחרי gymAdmin, לפני המנוע. -->
+-  <script src="js/screens/resGym.js?v=20260922l"></script>
+-  <script src="js/screens/residents.js?v=20260922l"></script>
++  <script src="js/screens/resGym.js?v=20260922m"></script>
++  <script src="js/screens/residents.js?v=20260922m"></script>
+   <!-- ניהול מיילים (שלב 1, 2026-08-18) — עריכת נוסח/תזמונים/הדלקה-כיבוי מהאפליקציה -->
+-  <script src="js/screens/emailSettings.js?v=20260922l"></script>
+-  <script src="js/screens/appReports.js?v=20260922l"></script>
++  <script src="js/screens/emailSettings.js?v=20260922m"></script>
++  <script src="js/screens/appReports.js?v=20260922m"></script>
+   <!-- "מצב המערכת" (2026-09-16) — דגלי זמן ריצה + בדיקת קריאה אמיתית
+        מ-Firestore. מנהל-על בלבד; אין לו תלות בשום מסך אחר. -->
+-  <script src="js/screens/sysStatus.js?v=20260922l"></script>
+-  <script src="js/screens/reconcile.js?v=20260922l"></script>
++  <script src="js/screens/sysStatus.js?v=20260922m"></script>
++  <script src="js/screens/reconcile.js?v=20260922m"></script>
+   <!-- "שירותים לתושב" (2026-08-18). services.js קודם — הוא מגדיר את
+        CBA.serviceUtils (פענוח הפורמט + ציור סעיף) ש-servicesAdmin.js תלוי בו. -->
+-  <script src="js/screens/services.js?v=20260922l"></script>
+-  <script src="js/screens/servicesAdmin.js?v=20260922l"></script>
+-  <script src="js/screens/servicesCategoriesAdmin.js?v=20260922l"></script>
++  <script src="js/screens/services.js?v=20260922m"></script>
++  <script src="js/screens/servicesAdmin.js?v=20260922m"></script>
++  <script src="js/screens/servicesCategoriesAdmin.js?v=20260922m"></script>
+   <!-- אזור התושב (מסכי הפורטל) — לפני המנוע -->
+   <!-- גיאומטריית מפת השיכון — נוצר אוטומטית מקובץ הכיול, אל תערוך ידנית -->
+-  <script src="js/data/mapGeo.js?v=20260922l"></script>
+-  <script src="js/data/gardenAreas.js?v=20260922l"></script>
++  <script src="js/data/mapGeo.js?v=20260922m"></script>
++  <script src="js/data/gardenAreas.js?v=20260922m"></script>
+   <!-- מילון הגינון (2026-09-09) — שם אחד לכל מושג ומשפט מצב יחיד.
+        נטען לפני כל מסכי הגינון; הם קוראים אותו בזמן ריצה. -->
+-  <script src="js/data/gardenLang.js?v=20260922l"></script>
+-  <script src="js/screens/resident.js?v=20260922l"></script>
++  <script src="js/data/gardenLang.js?v=20260922m"></script>
++  <script src="js/screens/resident.js?v=20260922m"></script>
+   <!-- עמוד הקבלה (2026-08-27) — אחרי resident.js: הוא נשען על CBA.residentUtils
+        שמוגדר שם, ועל CBA.skel/CBA.ui שנטענו קודם. -->
+-  <script src="js/screens/home.js?v=20260922l"></script>
++  <script src="js/screens/home.js?v=20260922m"></script>
+   <!-- "הפרטים שלי" (2026-08-28) — נשען על CBA.skel ו-CBA.ui שנטענו קודם -->
+-  <script src="js/screens/myProfile.js?v=20260922l"></script>
++  <script src="js/screens/myProfile.js?v=20260922m"></script>
+   <!-- "מראה שיכון" (2026-09-07) — נטען **אחרי** resident.js: הוא נשען על
+        CBA.map שמוגדר שם. ר' ההערה בראש הרכיב. -->
+-  <script src="js/screens/resGarden.js?v=20260922l"></script>
+-  <script src="js/screens/gardenPlan.js?v=20260922l"></script>
+-  <script src="js/screens/gardenStats.js?v=20260922l"></script>
+-  <script src="js/screens/gardenTasks.js?v=20260922l"></script>
++  <script src="js/screens/resGarden.js?v=20260922m"></script>
++  <script src="js/screens/gardenPlan.js?v=20260922m"></script>
++  <script src="js/screens/gardenStats.js?v=20260922m"></script>
++  <script src="js/screens/gardenTasks.js?v=20260922m"></script>
+   <!-- סיור היכרות (2026-08-28) — אחרי home.js (הכרטיס "יש חדש" קורא ל-CBA.tour)
+        ולפני app.js, שמחווט את פריט התפריט ואת הפתיחה האוטומטית. -->
+-  <script src="js/ui/tour.js?v=20260922l"></script>
+-  <script src="js/app.js?v=20260922l"></script>
++  <script src="js/ui/tour.js?v=20260922m"></script>
++  <script src="js/app.js?v=20260922m"></script>
+   <!-- התנהגויות מובייל (בר תחתון, כותרת נעלמת) — אחרי המנוע -->
+-  <script src="js/ui/mobile.js?v=20260922l"></script>
++  <script src="js/ui/mobile.js?v=20260922m"></script>
+   <!-- זכוכית נוזלית + תנועה (iOS 26) — אפקטים בלבד, לא נוגע בנתונים/לוגיקה -->
+-  <script src="js/ui/motion.js?v=20260922l"></script>
++  <script src="js/ui/motion.js?v=20260922m"></script>
+   <!-- PWA (2026-08-20) — רישום Service Worker, רענון גרסה, וכפתור ההתקנה.
+        נטען אחרון: הוא נשען על CBA.ui, CBA.sheets ו-CBA.userIsEditingMain. -->
+-  <script src="js/pwa.js?v=20260922l"></script>
++  <script src="js/pwa.js?v=20260922m"></script>
+ </body>
+ </html>
+diff --git a/js/data/dataService.js b/js/data/dataService.js
+index 963f882..aaf4737 100644
+--- a/js/data/dataService.js
++++ b/js/data/dataService.js
+@@ -2033,12 +2033,53 @@ CBA.data = (function () {
+ 
+   /** המנוע — עשר הפעולות בפונקציה אחת, כמו בשרת.
+    *  קורא את המסמך, מחשב פאצ', כותב, רושם ביומן ומפעיל מייל. */
++  /* ==========================================================================
++   *  הגדרות הגינון של המנהל   (22.9.2026 — הכרעת יועד: אישור מנהל לתקלות)
++   * --------------------------------------------------------------------------
++   *  מסמך אחד, `gardenMeta/settings`, שמנהל גינון (פנימי) כותב מהאפליקציה
++   *  וכל חבר קורא. כרגע שדה אחד:
++   *    requireApproval — סימון "בוצע" של הגנן על **תקלת דייר** אינו סוגר
++   *                      אלא מרים "ממתין לאישור"; המנהל מאשר (וזה מה ששולח
++   *                      לתושב "בוצע"). משימות שגרה ויזומות נסגרות מיד תמיד.
++   *  ⚠️ ברירת המחדל כשהמסמך חסר — **דלוק** (כך הוכרע), ולכן קריאה שנכשלת
++   *     מתנהגת כמו "דלוק": עדיף אישור מיותר על סגירה בלי מנהל.
++   * ======================================================================== */
++  var GARDEN_SETTINGS_DEFAULT = { requireApproval: true };
++  /* ⚠️ בלי מטמון, בכוונה: הקריאה קורית רק כשגנן מסמן תקלת דייר (נדיר,
++     מסמך אחד), ומתג שהמנהל הפך חייב לתפוס גם בלשונית שכבר פתוחה אצל הגנן. */
++  function gardenSettingsRead(cb) {
++    if (!CBA.fb || !CBA.fb.readDoc) return cb(GARDEN_SETTINGS_DEFAULT);
++    CBA.fb.readDoc("gardenMeta", "settings", function (e, doc) {
++      var s = {};
++      Object.keys(GARDEN_SETTINGS_DEFAULT).forEach(function (k) { s[k] = GARDEN_SETTINGS_DEFAULT[k]; });
++      if (!e && doc && typeof doc.requireApproval === "boolean") s.requireApproval = doc.requireApproval;
++      cb(s);
++    });
++  }
++  function gardenSettingsWrite(patch, cb) {
++    var d = {};
++    Object.keys(patch || {}).forEach(function (k) {
++      if (k in GARDEN_SETTINGS_DEFAULT) d[k] = !!patch[k];
++    });
++    d.updatedAt = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
++    d.updatedBy = gardenWho();
++    CBA.fb.mergeDoc("gardenMeta", "settings", d, function (e) {
++      if (e) return cb({ ok: false, error: gardenFsErr(e, "ההגדרה לא נשמרה") });
++      gardenSettingsRead(function (s) { cb({ ok: true, settings: s }); });
++    });
++  }
++
+   function gardenFsTask(op, id, extra, cb) {
+     extra = extra || {};
+     var who = gardenWho();
+     CBA.fb.readDoc("gardenTasks", String(id), function (e, cur) {
+       if (e || !cur) return cb({ ok: false, error: "המשימה לא נמצאה" });
++      /* ההגדרה נקראת רק כשהיא משנה משהו — סימון של גנן על תקלת דייר. */
++      var needsSetting = (op === "done") && !gardenIsMgr() && String(cur.repId || "").trim() !== "";
++      if (!needsSetting) return run(GARDEN_SETTINGS_DEFAULT);
++      gardenSettingsRead(run);
+ 
++    function run(settings) {
+       var closure = String(cur.closure || "").trim();
+       var isReport = String(cur.repId || "").trim() !== "";
+       var note = String(extra.note || "").trim().substring(0, 600);
+@@ -2047,11 +2088,15 @@ CBA.data = (function () {
+          הזאת אינה נוגעת בסגירה, ולכן אין מה להעתיק מעבר לשלב ולדגל. */
+       var mirrorWhy = null;
+ 
+-      /* ⚠️ העתק לנוחות בלבד — האכיפה האמיתית ב-`gtClosedOk`. */
++      /* ⚠️ העתק לנוחות בלבד — האכיפה האמיתית ב-`gtClosedOk`.
++         🔴 22.9 (סימולציה, ממצא N) — מנהל רשאי גם **לשנות סיבת סגירה**
++         של משימה סגורה ("סגירה עם סיבה" על כרטיס סגור) בלי לפתוח קודם;
++         הכללים (`gtClosedOk` → `gtMgr()`) התירו זאת מאז ומעולם. */
+       if (closure) {
+         var reopenAct = (op === "undo" || op === "return");
+         var reopenable = reopenAct && (gardenIsMgr() || closure === "בוצע");
+-        if (op !== "clearflag" && !reopenable) {
++        var reclose = gardenIsMgr() && (op === "close" || op === "approve");
++        if (op !== "clearflag" && !reopenable && !reclose) {
+           return cb({ ok: false, error: "המשימה כבר נסגרה" });
+         }
+       }
+@@ -2076,7 +2121,24 @@ CBA.data = (function () {
+           return cb({ ok: false,
+                       error: "צריך לכתוב מה נעשה — המשפט הזה נשלח לתושב שדיווח." });
+         }
+-        close("בוצע", note || String(cur.note || ""));
++        /* 🔴 22.9 — **אישור מנהל לתקלות דיירים** (הכרעת יועד, עם מתג).
++           גנן שמסמן תקלת דייר כשהמתג דלוק: המשימה לא נסגרת — עולה
++           "ממתין לאישור", ההערה נשמרת, והמנהל הוא שסוגר (approve) ושולח
++           לתושב "בוצע". שגרה/יזום — וגם סימון של המנהל עצמו — נסגרים מיד. */
++        if (isReport && !gardenIsMgr() && settings && settings.requireApproval) {
++          patch.flag = "ממתין לאישור";
++          patch.note = note;
++          if (String(cur.stage || "") !== "בטיפול" &&
++              GARDEN_STAGES_C.indexOf(String(cur.stage || "")) < GARDEN_STAGES_C.indexOf("בטיפול")) {
++            patch.stage = "בטיפול";
++          }
++          log = { kind: "ביצוע", note: note };
++          /* לתושב: "הצוות סיים, ממתין לאישור המנהל" — אותה תבנית של הערת
++             סטטוס; "בוצע" הסופי יוצא באישור. */
++          notify = "GARDEN_STATUS_NOTE";
++        } else {
++          close("בוצע", note || String(cur.note || ""));
++        }
+ 
+       } else if (op === "undo") {
+         if (closure) {
+@@ -2125,7 +2187,13 @@ CBA.data = (function () {
+         if (reason !== "בוצע" && isReport && !note) {
+           return cb({ ok: false, error: "צריך לכתוב לתושב מה הסיבה" });
+         }
+-        close(reason, note);
++        /* אישור בלי הערה חדשה: מה שהגנן כתב ב"בוצע" הוא מה שהתושב מקבל.
++           ⚠️ אותה דרישה כמו ב-`gtCloseNoteOk`: סגירת "בוצע" של דיווח תושב
++           בלי שום הערה נדחית בכללים — עדיף לומר למה כאן. */
++        if (reason === "בוצע" && isReport && !note && !String(cur.note || "").trim()) {
++          return cb({ ok: false, error: "צריך לכתוב מה נעשה — המשפט הזה נשלח לתושב שדיווח." });
++        }
++        close(reason, note || (op === "approve" ? String(cur.note || "") : ""));
+ 
+       } else if (op === "return") {
+         if (!note) return cb({ ok: false, error: "צריך לכתוב מה חסר" });
+@@ -2185,7 +2253,7 @@ CBA.data = (function () {
+       CBA.fb.updateDoc("gardenTasks", String(id), patch, function (e2) {
+         if (e2) return cb({ ok: false, error: gardenFsErr(e2) });
+         /* מכאן הפעולה **קיימת**. כל מה שנכשל אחריה אינו מבטל אותה. */
+-        if (log) gardenLogAppend(String(id), log.kind, log.note, { repId: cur.repId });
++        if (log) gardenLogAppend(String(id), log.kind, log.note, { repId: cur.repId, familyId: cur.familyId });
+         if (notify) gardenNotifyFire(id);
+         /* 🔴 המראה לדיווח — ר' `gardenMirrorToReport`. בלי השורות האלה
+            התושב רואה את הדיווח שלו קפוא על "התקבל" לנצח. */
+@@ -2206,9 +2274,17 @@ CBA.data = (function () {
+               : 0;
+           }
+           gardenMirrorToReport(cur.repId, mir);
++          /* 🔴 22.9 — גם הדיווחים שאוחדו לתוך המשימה הזאת עוקבים אחריה
++             (ר' `mergedReps` ב-`gardenFsMerge`). `mergedInto` שלהם נשאר. */
++          (cur.mergedReps || []).forEach(function (r) {
++            if (String(r || "").trim() && String(r) !== String(cur.repId || "")) {
++              gardenMirrorToReport(String(r), mir);
++            }
++          });
+         }
+         cb({ ok: true });
+       });
++    }
+     });
+   }
+ 
+@@ -2397,6 +2473,19 @@ CBA.data = (function () {
+    *  ⚠️ **נבדק שהוא פנוי לפני כתיבה**, ואם לא — מנסים את הבא.
+    *     `createDoc` משתמש ב-`set`, שדורס; בלי הבדיקה שני מנהלים
+    *     שמוסיפים באותה דקה היו מוחקים זה את ההגדרה של זה, בשקט. */
++  /** תאריך חופשי (YYYY-MM-DD) → מפתח השבוע שלו (יום ראשון). ריק/לא תקין → "". */
++  function gardenWeekKeyOf(v) {
++    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || "").trim());
++    if (!m) return "";
++    var G = (typeof GardenRules !== "undefined" && GardenRules) || CBA.gardenRules;
++    var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
++    if (isNaN(d.getTime())) return "";
++    if (G && G.weekKey) return G.weekKey(d);
++    d.setDate(d.getDate() - d.getDay());
++    var p = function (x) { return (x < 10 ? "0" : "") + x; };
++    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
++  }
++
+   function gardenPlanNewId(rows, attempt) {
+     var max = 0;
+     (rows || []).forEach(function (r) {
+@@ -2425,7 +2514,11 @@ CBA.data = (function () {
+         category: String(payload.category || "").trim(),
+         areas: payload.areas || [],
+         freq: freq,
+-        firstWeek: String(payload.firstWeek || "").trim(),
++        /* 🔴 22.9 (סימולציה, ממצא G) — **מוצמד ליום ראשון.** בורר התאריך
++           מקבל כל יום, והמנוע משווה מפתחות שבוע (יום ראשון): "שבוע ראשון"
++           ביום רביעי גרם לדו-שבועי לא לירות לעולם ולשבועי להתחיל שבוע
++           מאוחר. גם השרת הישן לא נרמל — קדם-קיים. */
++        firstWeek: gardenWeekKeyOf(payload.firstWeek),
+         weekOfMonth: Math.min(Math.max(parseInt(payload.weekOfMonth, 10) || 1, 1), 4),
+         months: String(payload.months || "").trim(),
+         rotate: !!payload.rotate,
+@@ -2459,7 +2552,12 @@ CBA.data = (function () {
+         var nid = gardenPlanNewId(rows, attempt);
+         CBA.fb.readDoc("gardenPlan", nid, function (e2, existing) {
+           if (!e2 && existing) return tryId(attempt + 1);
+-          CBA.fb.createDoc("gardenPlan", nid, docOf(nid, order), function (e3) {
++          /* 22.9 (ממצא M) — יצירה אטומית: שני מנהלים שמקצים "T7" באותה
++             שנייה — השני נכשל ב-already-exists ומנסה מזהה הבא, במקום
++             ש-`set()` ידרוס בשקט את התבנית של הראשון. */
++          var mk = CBA.fb.createIfAbsent || CBA.fb.createDoc;
++          mk.call(CBA.fb, "gardenPlan", nid, docOf(nid, order), function (e3) {
++            if (e3 && /already-exists/.test(String(e3.code || e3.message || ""))) return tryId(attempt + 1);
+             if (e3) return cb({ ok: false, error: gardenFsErr(e3, "השמירה נכשלה") });
+             gardenHorizonApply(function (h) { cb({ ok: true, id: nid, horizon: h }); });
+           });
+@@ -2520,9 +2618,10 @@ CBA.data = (function () {
+         var diff = G.horizon(defs || [], tasks || [], G.weekKey(now), {
+           now: now, year: String((CBA.mock && CBA.mock.currentYear) || "")
+         });
+-        var out = { ok: true, created: 0, existed: 0, removed: 0,
++        var out = { ok: true, created: 0, existed: 0, removed: 0, renamed: 0,
+                     kept: diff.kept, frozen: diff.frozen, errors: [] };
+-        var creates = diff.create.slice(), removes = diff.remove.slice();
++        var creates = diff.create.slice(), removes = diff.remove.slice(),
++            renames = (diff.rename || []).slice();
+ 
+         function nextCreate() {
+           var doc = creates.shift();
+@@ -2540,13 +2639,26 @@ CBA.data = (function () {
+         }
+         function nextRemove() {
+           var id = removes.shift();
+-          if (!id) return finish();
++          if (!id) return nextRename();
+           CBA.fb.deleteDoc("gardenTasks", id, function (e) {
+             if (!e) out.removed++;
+             else out.errors.push(id + ": " + ((e && e.message) || e));
+             nextRemove();
+           });
+         }
++        /* 22.9 (ממצא F) — שם/קטגוריה חדשים לכרטיסים שלא נגעו בהם. */
++        function nextRename() {
++          var r = renames.shift();
++          if (!r) return finish();
++          CBA.fb.updateDoc("gardenTasks", r.id, {
++            title: r.title, category: r.category,
++            updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : now
++          }, function (e) {
++            if (!e) out.renamed++;
++            else out.errors.push(r.id + ": " + ((e && e.message) || e));
++            nextRename();
++          });
++        }
+         function finish() {
+           if (out.errors.length) out.ok = false;
+           cb(out);
+@@ -2562,6 +2674,7 @@ CBA.data = (function () {
+     var parts = [];
+     if (h.created) parts.push("נוצרו " + h.created + " משימות");
+     if (h.removed) parts.push("הוסרו " + h.removed);
++    if (h.renamed) parts.push("עודכנו " + h.renamed);
+     if (h.frozen)  parts.push(h.frozen + " נשארו כי כבר נגעו בהן");
+     return parts.join(" · ");
+   }
+@@ -2585,14 +2698,35 @@ CBA.data = (function () {
+           return cb({ ok: false, error: "אי אפשר לאחד לתוך משימה סגורה" });
+         }
+         var parentRep = String(parent.repId || "").trim() || parentId;
+-        /* הדיווחים של הנבלעת מופנים אל הבולעת. */
+-        CBA.fb.queryCollection("gardenReports", [["taskId", childId]], function (e3, reps) {
+-          var list = (reps || []);
++        /* 🔴🔴 22.9 (סימולציה, ממצא B) — **בלי שאילתה על הדיווחים.**
++           עד היום הדיווחים של הנבלעת נמצאו ב-`queryCollection("gardenReports",
++           taskId==child)` — והמנהל **אינו רשאי לקרוא דיווחים** (ציפייה #6
++           בכללים, בכוונה: פרטי התושב אינם עוברים בדפדפן). השאילתה נדחתה
++           תמיד, `moved` היה 0 תמיד, והדיווח של התושב נשאר מצביע למשימה
++           שנסגרה 'אוחד' עם שלב 'התקבל' לנצח. מזהי הדיווחים כבר **על
++           המשימה**: `repId` של הנבלעת, ו-`mergedReps` — דיווחים שאוחדו
++           אליה בעבר. כתיבה לדיווח מותרת (`grTeamUpdateOk`); רק קריאה לא. */
++        var childReps = [];
++        if (String(child.repId || "").trim()) childReps.push(String(child.repId).trim());
++        (child.mergedReps || []).forEach(function (r) {
++          r = String(r || "").trim();
++          if (r && childReps.indexOf(r) === -1) childReps.push(r);
++        });
++        var parentReps = (parent.mergedReps || []).map(String);
++        childReps.forEach(function (r) { if (parentReps.indexOf(r) === -1) parentReps.push(r); });
++        (function () {
++          var list = childReps.map(function (r) { return { id: r }; });
+           var left = list.length, failed = 0;
+           function closeChild() {
+             var now = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
++            /* 🔴 22.9 (סימולציה, ממצא A) — **הערה חובה.** `gtCloseNoteOk`
++               דורש `note` לא ריק בכל סגירה של משימה עם `repId`, ולכן
++               איחוד של דיווח תושב בלי הערה נדחה ב-permission-denied —
++               בדיוק המקרה שהאיחוד קיים בשבילו. ההערה היא גם מה שהתושב
++               רואה כ"סיבה". */
+             CBA.fb.updateDoc("gardenTasks", childId, {
+               stage: "הושלם", flag: "", closure: "אוחד",
++              note: "אוחד עם פנייה מס' " + parentRep,
+               updatedAt: now, notify: "GARDEN_REPORT_MERGED", notifyPending: true,
+               notifyNote: "אוחד עם פנייה מס' " + parentRep
+             }, function (e4) {
+@@ -2601,6 +2735,15 @@ CBA.data = (function () {
+               gardenLogAppend(parentId, "איחוד", "נבלעה משימה #" + childId +
+                               " עם " + list.length + " דיווחים");
+               gardenNotifyFire(childId);
++              /* הבולעת זוכרת אילו דיווחים מצביעים אליה — כדי שכל שינוי
++                 שלב עתידי שלה יגיע גם אליהם (ר' `gardenFsTask`). */
++              if (parentReps.length) {
++                CBA.fb.updateDoc("gardenTasks", parentId, {
++                  mergedReps: parentReps, updatedAt: now
++                }, function (eP) {
++                  if (eP) gardenPhotoWarn("רשימת הדיווחים המאוחדים לא נשמרה", parentId, eP);
++                });
++              }
+               cb({ ok: true, moved: list.length, failed: failed });
+             });
+           }
+@@ -2628,7 +2771,7 @@ CBA.data = (function () {
+               if (--left <= 0) closeChild();
+             });
+           });
+-        });
++        })();
+       });
+     });
+   }
+@@ -2689,6 +2832,15 @@ CBA.data = (function () {
+     if (!hasPin && !hasPlace) {
+       return cb({ ok: false, error: "צריך לסמן מיקום על המפה או לכתוב אותו" });
+     }
++    /* 22.9 (ממצא L) — אותן בדיקות בדיוק כמו `grShapeOk` בכללים, כאן כדי
++       שהתושב יקבל סיבה ברורה ולא "לא הצלחנו לשמור", ובלי לשרוף מזהים. */
++    payload.title = String(payload.title || "").trim();
++    payload.category = String(payload.category || "").trim();
++    if (!payload.title) return cb({ ok: false, error: "צריך לכתוב כותרת קצרה לדיווח" });
++    if (payload.title.length > 60) {
++      return cb({ ok: false, error: "הכותרת ארוכה מדי — עד 60 תווים. הפירוט נכנס בתיאור." });
++    }
++    if (!payload.category) return cb({ ok: false, error: "צריך לבחור קטגוריה" });
+     if (!fid) {
+       return cb({ ok: false, error: "חסר מזהה משפחה — רענן ונסה שוב" });
+     }
+@@ -2713,6 +2865,10 @@ CBA.data = (function () {
+           x: (payload.x === null || payload.x === undefined) ? null : Number(payload.x),
+           y: (payload.y === null || payload.y === undefined) ? null : Number(payload.y),
+           stage: "התקבל", repId: String(repId), photos: [],
++          /* 🔴 22.9 (ממצא C) — המשפחה על המשימה, כדי שהצוות (שאינו רשאי
++             לקרוא דיווחים) יוכל לחתום שורות יומן שהתושב יראה. מזהה אטום,
++             לא שם ולא מייל. ר' `gardenLogAppend`. */
++          familyId: fid,
+           createdAt: now, updatedAt: now, order: 0,
+           year: String(year), schema: 1
+         };
+@@ -2863,11 +3019,21 @@ CBA.data = (function () {
+       if (fid) return write(fid);
+       /* 🔑 **הקריאה הזאת אינה מאטה שום פעולה.** `gardenLogAppend` היא
+          שגר-ושכח מלכתחילה: המסמך כבר נכתב, הפעולה כבר קיימת, ואיש
+-         אינו ממתין ליומן. לכן שליפת המשפחה מהדיווח יושבת דווקא כאן
+-         ולא במסלול הפעולה עצמה. */
++         אינו ממתין ליומן. לכן שליפת המשפחה יושבת דווקא כאן
++         ולא במסלול הפעולה עצמה.
++         🔴🔴 22.9 (סימולציה, ממצא C) — **מהמשימה, לא מהדיווח.** עד היום
++         נקרא כאן מסמך הדיווח — ומנהל/גנן **אינם רשאים לקרוא דיווחים**
++         (ציפייה #6 בכללים). הקריאה נדחתה תמיד, `familyId` נשאר ריק,
++         והתושב ראה בקו הזמן שלו רק "נפתח" ו"משוב" — אף פעולה של הצוות.
++         מאז 22.9 המשימה נושאת `familyId` בעצמה (נכתב ע"י התושב ביצירה,
++         ר' `gardenReportFsWrite`), והצוות תמיד רשאי לקרוא משימות.
++         הדיווח נשאר כנפילה לאחור למשימות ותיקות בלבד. */
+       if (repId) {
+-        return CBA.fb.readDoc("gardenReports", repId, function (e, rep) {
+-          write((rep && rep.familyId) || "");
++        return CBA.fb.readDoc("gardenTasks", String(taskId), function (eT, t) {
++          if (!eT && t && String(t.familyId || "").trim()) return write(String(t.familyId).trim());
++          CBA.fb.readDoc("gardenReports", repId, function (e, rep) {
++            write((rep && rep.familyId) || "");
++          });
+         });
+       }
+       write("");
+@@ -3075,6 +3241,13 @@ CBA.data = (function () {
+        גל 3 — "שני מסכים, שני מקורות, שתי אמיתות". התנאי שהיה כאן —
+        "לאמת שיש רשומות למשימות ותיקות" — מתקיים מעצם הניקוי של 22.9:
+        אין משימות ותיקות. */
++    /* 🔴 22.9 (סימולציה, ממצא D) — **הגנן החיצוני דרך Apps Script.**
++       כלל הקריאה של היומן הוא `gtMgr()` (פנימי בלבד, מאז 9eedb71 — נכון:
++       הקבלן אינו קורא יומן של משפחות), ולכן שאילתה ישירה שלו נדחית
++       ו"היסטוריה" הציגה "לא הצלחנו לטעון". השרת קורא את היומן מ-Firestore
++       בחשבון השירות, מסנן מה שאינו לגנן (`handleGardenTaskLog_`), ומחזיר. */
++    var ext = !!(((window.CBA && CBA.user) || {}).isExternal);
++    if (ext) return CBA.sheets.get({ action: "gardenTaskLog", id: id }, cb);
+     fsFirstRead("gardenLog", true, function (done) {
+       CBA.fb.queryCollection("gardenLog", [["taskId", String(id)]], function (err, rows) {
+         if (err) return done(err);
+@@ -4270,16 +4443,43 @@ CBA.data = (function () {
+       if (gardenWritesOn()) {
+         var reason = String(why || "").trim().substring(0, 300);
+         if (!reason) return cb({ ok: false, error: "צריך לכתוב למה מוחקים — זה נשמר ביומן" });
+-        /* ⚠️ בוליאני ולא הסיבה: השרת מוצא אותן בשאילתת **שוויון**
+-           (`pendingDelete == true`) — אין אי-שוויון ואין "קיים" ב-Spark.
+-           הסיבה עצמה נרשמת ביומן. */
+-        return CBA.fb.mergeDoc("gardenTasks", String(id), {
+-          pendingDelete: true,
+-          updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
+-        }, function (e) {
+-          if (e) return cb({ ok: false, error: gardenFsErr(e, "המחיקה נכשלה") });
+-          gardenLogAppend(String(id), "מחיקה", reason);
+-          cb({ ok: true, id: id, pending: true });
++        return CBA.fb.readDoc("gardenTasks", String(id), function (e0, cur) {
++          if (e0 || !cur) return cb({ ok: false, error: "המשימה לא נמצאה" });
++          /* 🔴 22.9 (סימולציה, ממצא E) — **מופע שגרה אינו נמחק, הוא מבוטל.**
++             מסמך שנמחק משאיר סלוט "רצוי וריק", והמנוע יוצר אותו מחדש תוך
++             שעה. סגירה ב'בוטל' היא מצבה: המנוע רואה מופע (שנגעו בו) ומניח
++             לו, המסך מסתיר אותו ב"סגורות", והיומן מסביר למה. */
++          if (String(cur.kind || "") === "שגרה" && !String(cur.closure || "").trim()) {
++            return gardenFsTask("close", String(id), { closure: "בוטל", note: reason }, function (r) {
++              if (!r || !r.ok) return cb(r);
++              cb({ ok: true, id: id, cancelled: true });
++            });
++          }
++          /* 🔴 22.9 (הכרעת יועד, ממצא K) — **התושב רואה "הדיווח שלך נסגר".**
++             משימה של דיווח תושב נסגרת קודם ב'בוטל' עם הסיבה — זה מה שמעדכן
++             את הדיווח (המראה) ושולח לתושב את המייל הרגיל — ורק אז יורדת.
++             השרת מוחק את המשימה והתמונות ו**משאיר את הדיווח** (ר'
++             `gardenPendingDeleteRun_`). */
++          function flag() {
++            /* ⚠️ בוליאני ולא הסיבה: השרת מוצא אותן בשאילתת **שוויון**
++               (`pendingDelete == true`) — אין אי-שוויון ואין "קיים" ב-Spark.
++               הסיבה עצמה נרשמת ביומן. */
++            CBA.fb.mergeDoc("gardenTasks", String(id), {
++              pendingDelete: true,
++              updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
++            }, function (e) {
++              if (e) return cb({ ok: false, error: gardenFsErr(e, "המחיקה נכשלה") });
++              gardenLogAppend(String(id), "מחיקה", reason, { familyId: cur.familyId });
++              cb({ ok: true, id: id, pending: true });
++            });
++          }
++          if (String(cur.repId || "").trim() && !String(cur.closure || "").trim()) {
++            return gardenFsTask("close", String(id), { closure: "בוטל", note: reason }, function (r) {
++              if (!r || !r.ok) return cb(r);
++              flag();
++            });
++          }
++          flag();
+         });
+       }
+       CBA.sheets.postRead("gardenTaskDelete", { id: id, why: why }, cb);
+@@ -4287,6 +4487,10 @@ CBA.data = (function () {
+     /** מנוע האופק — הרצה יזומה (מסך התוכנית / מצב המערכת). */
+     gardenHorizonApply: function (cb) { gardenHorizonApply(cb); },
+     gardenHorizonSummary: gardenHorizonSummary,
++    /** הגדרות הגינון של המנהל (22.9): `{requireApproval}`. קריאה לכל חבר,
++     *  כתיבה למנהל גינון פנימי בלבד (הכלל `gardenMeta/settings`). */
++    getGardenSettings: function (cb) { gardenSettingsRead(cb); },
++    setGardenSettings: function (patch, cb) { gardenSettingsWrite(patch, cb); },
+     /* מחיקת דיווח ע"י התושב שכתב אותו — רק כל עוד איש לא נגע בו. */
+     /* ==========================================================================
+      *  מחיקת דיווח ע"י המדווח — ורק כל עוד איש לא נגע בו
+diff --git a/js/data/firebase.js b/js/data/firebase.js
+index a73be8c..d44459f 100644
+--- a/js/data/firebase.js
++++ b/js/data/firebase.js
+@@ -515,6 +515,27 @@ CBA.fb = (function () {
+     });
+   }
+ 
++  /** יצירה **רק אם המסמך אינו קיים** — טרנזקציה (22.9, ממצא M).
++   *  `set()` על מזהה תפוס דורס בשקט; כאן המסמך הקיים מפיל את הכתיבה
++   *  ב-`already-exists`, והקורא בוחר מזהה אחר. דורש הרשאת קריאה למסמך. */
++  function createIfAbsent(collection, id, data, cb) {
++    cb = withTimeout(cb || function () {});
++    ensureDb(function (err) {
++      if (err) return cb(err);
++      try {
++        var db = window.firebase.firestore();
++        var ref = db.collection(collection).doc(String(id));
++        db.runTransaction(function (tr) {
++          return tr.get(ref).then(function (d) {
++            if (d.exists) { var e = new Error("already-exists"); e.code = "already-exists"; throw e; }
++            tr.set(ref, data || {});
++          });
++        }).then(function () { cb(null, true); })
++          ["catch"](function (e) { state.lastError = e; cb(e); });
++      } catch (e) { state.lastError = e; cb(e); }
++    });
++  }
++
+   function mergeDoc(collection, id, fields, cb) {
+     cb = withTimeout(cb || function () {});
+     ensureDb(function (err) {
+@@ -609,6 +630,7 @@ CBA.fb = (function () {
+     updateDoc: updateDoc,
+     nextId:   nextId,
+     createDoc: createDoc,
++    createIfAbsent: createIfAbsent,
+     mergeDoc: mergeDoc,
+     deleteDoc: deleteDoc,
+     serverNow: serverNow,
+diff --git a/js/data/gardenRules.js b/js/data/gardenRules.js
+index 5d9c57b..15f8009 100644
+--- a/js/data/gardenRules.js
++++ b/js/data/gardenRules.js
+@@ -222,10 +222,25 @@ var GardenRules = (function () {
+       (existing[k] = existing[k] || []).push(t);
+     });
+ 
+-    var create = [], remove = [], kept = 0, frozen = 0;
++    var create = [], remove = [], rename = [], kept = 0, frozen = 0;
+     Object.keys(desired).forEach(function (k) {
+-      if (existing[k] && existing[k].length) { kept++; return; }
+       var o = desired[k];
++      if (existing[k] && existing[k].length) {
++        kept++;
++        /* 🔴 22.9 (סימולציה, ממצא F) — **שם/קטגוריה חדשים מגיעים לכרטיסים
++           שכבר נוצרו.** בלי זה שינוי שם בתבנית הופיע רק במופעים שייווצרו
++           בעתיד, ו-8 שבועות של כרטיסים נשארו עם השם הישן. רק מופעים שלא
++           נגעו בהם ורק אם ההגדרה בתוקף לשבוע (effectiveFrom) — נגוע
++           הוא היסטוריה, וההיסטוריה לא משתנה. */
++        existing[k].forEach(function (t) {
++          if (touched(t)) return;
++          if (o.def.effectiveFrom && String(t.week) < String(o.def.effectiveFrom)) return;
++          var title = String(o.def.title || ''), cat = String(o.def.category || '');
++          if (String(t.title || '') === title && String(t.category || '') === cat) return;
++          rename.push({ id: String(t.id), title: title, category: cat });
++        });
++        return;
++      }
+       create.push(newOccDoc(o.def, o.week, o.area, now, year));
+     });
+     Object.keys(existing).forEach(function (k) {
+@@ -238,7 +253,7 @@ var GardenRules = (function () {
+       });
+     });
+ 
+-    return { create: create, remove: remove, kept: kept, frozen: frozen,
++    return { create: create, remove: remove, rename: rename, kept: kept, frozen: frozen,
+              weeks: weeks, from: from, horizonWeeks: H };
+   }
+ 
+diff --git a/js/screens/gardenPlan.js b/js/screens/gardenPlan.js
+index aafc83c..ee3d39f 100644
+--- a/js/screens/gardenPlan.js
++++ b/js/screens/gardenPlan.js
+@@ -209,11 +209,53 @@
+               ico("plus", 16) + '</button>' +
+           '</div>' +
+           '<p class="gp-hint">שינוי כאן משפיע קדימה בלבד. משימות שכבר נכנסו לשבוע לא זזות.</p>' +
++          /* 🔴 22.9 (הכרעת יועד) — מתג "אישור מנהל לתקלות דיירים". יושב כאן,
++             במסך שרק מנהל הגינון רואה, ולא במסך המשימות שגם הגנן רואה. */
++          '<div class="gd-reps" id="gp-settings" style="margin-bottom:16px">' +
++            '<button type="button" class="nt-rep" id="gp-approval" role="switch" aria-checked="true" disabled>' +
++              '<span class="nt-rep__t"><b>אישור מנהל לתקלות דיירים</b>' +
++              '<span>כשהגנן מסמן תקלת דייר כבוצעה — היא ממתינה לאישורך, ורק אז התושב מקבל "בוצע". ' +
++              'משימות שגרה נסגרות מיד בכל מקרה.</span></span>' +
++              '<i class="gp-sw" aria-hidden="true"></i>' +
++            '</button>' +
++          '</div>' +
+           body;
+ 
+         var nb = root.querySelector("#gp-new");
+         if (nb) nb.addEventListener("click", function () { openForm(null); });
+         root.addEventListener("click", onClick);
++        wireSettings();
++      }
++
++      /* המתג נטען אחרי הרינדור (קריאה אחת, מסמך אחד) ומתהפך מיד; אם
++         השמירה נכשלה — חוזר, כמו מתג ההפעלה של שורה. */
++      function wireSettings() {
++        var sw = root.querySelector("#gp-approval");
++        if (!sw || !CBA.data.getGardenSettings) return;
++        function paint(on) {
++          sw.setAttribute("aria-checked", on ? "true" : "false");
++          var i = sw.querySelector(".gp-sw");
++          if (i) i.classList.toggle("off", !on);
++        }
++        CBA.data.getGardenSettings(function (s) {
++          paint(!!(s && s.requireApproval));
++          sw.disabled = false;
++        });
++        sw.addEventListener("click", function () {
++          if (sw.disabled) return;
++          var next = sw.getAttribute("aria-checked") !== "true";
++          paint(next);
++          sw.disabled = true;
++          CBA.data.setGardenSettings({ requireApproval: next }, function (res) {
++            sw.disabled = false;
++            if (res && res.ok) {
++              CBA.ui.toast(next ? "תקלות דיירים ימתינו לאישורך" : "הגנן סוגר תקלות דיירים בעצמו");
++              return;
++            }
++            paint(!next);
++            CBA.ui.alert((res && res.error) || "ההגדרה לא נשמרה");
++          });
++        });
+       }
+ 
+       function byId(id) {
+diff --git a/js/screens/gardenTasks.js b/js/screens/gardenTasks.js
+index 9a337ab..2078c20 100644
+--- a/js/screens/gardenTasks.js
++++ b/js/screens/gardenTasks.js
+@@ -428,8 +428,14 @@
+           /* כל תקלות התושבים, לפי מצב ולא לפי שבוע. ר' faultsBody(). */
+           body = faultsBody(list);
+         } else {
++          /* 22.9 (הכרעת יועד, ממצא E) — מופעי שגרה שבוטלו אינם "עבודה
++             שנעשתה"; הם יושבים במגירה סגורה בתחתית "סגורות", לא ברשימה. */
++          var cancelled = [];
+           var groups = [], seen = {};
+           list.forEach(function (t) {
++            if (filter === "closed" && t.kind === "שגרה" && t.closure && t.closure !== "בוצע") {
++              return cancelled.push(t);
++            }
+             var g = grp(t);
+             if (!seen[g]) { seen[g] = []; groups.push(g); }
+             seen[g].push(t);
+@@ -440,6 +446,13 @@
+               ' <em>· ' + (n === 1 ? "משימה אחת" : n + " משימות") + '</em><hr></div>' +
+               '<div class="gd-reps">' + seen[g].map(card).join("") + '</div>';
+           }).join("");
++          if (cancelled.length) {
++            cancelled.sort(function (a, b) { return String(b.week || "").localeCompare(String(a.week || "")); });
++            body += '<details class="gt-drawer">' +
++              '<summary>מופעי שגרה שבוטלו <em>· ' + cancelled.length + '</em></summary>' +
++              '<div class="gd-reps">' + cancelled.map(card).join("") + '</div>' +
++            '</details>';
++          }
+         }
+ 
+         /* אין כותרת מסך (2026-09-08). הסמליל והכותרת "משימות השבוע" החזיקו
+@@ -1443,11 +1456,24 @@
+             /* ⚠️ מחיקה **אינה** סגירה. סגירה אומרת שהטיפול הסתיים והשורה
+                נשארת ונספרת; מחיקה אומרת שהשורה לא הייתה צריכה להיווצר, והיא
+                יורדת מהגיליון ומהנתונים. היומן נשאר שלם. ר' gardenTaskDelete_. */
+-            (isManager
++            /* 🔴 22.9 (סימולציה, ממצא E) — **מופע שגרה מבוטל, לא נמחק.** מסמך
++               שנמחק משאיר סלוט ריק והמנוע יוצר אותו מחדש תוך שעה; ביטול הוא
++               מצבה שהמנוע מכבד והמסך מסתיר ב"סגורות". ר' gardenTaskDelete. */
++            (isManager && !t.closure
+               ? '<button type="button" class="gt-opt is-danger" data-m="del"><u>' +
+-                ico("trash") + '</u><div>מחיקה' +
+-                '<span>יורדת מהגיליון ומהנתונים · נרשמת ביומן</span></div></button>'
+-              : '') +
++                ico("trash") + '</u><div>' +
++                (t.kind === "שגרה" ? "ביטול המופע הזה" : "מחיקה") +
++                '<span>' + (t.kind === "שגרה"
++                  ? "נסגר כ\"בוטל\" ויורד מהרשימה · התבנית ממשיכה כרגיל"
++                  : t.repId
++                    ? "התושב יראה \"נסגר\" ויקבל מייל עם הסיבה · יורדת מהנתונים"
++                    : "יורדת מהנתונים · נרשמת ביומן") +
++                '</span></div></button>'
++              : isManager
++                ? '<button type="button" class="gt-opt is-danger" data-m="del"><u>' +
++                  ico("trash") + '</u><div>מחיקה' +
++                  '<span>יורדת מהנתונים · נרשמת ביומן</span></div></button>'
++                : '') +
+           '</div>';
+         /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
+            כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
+@@ -1502,11 +1528,19 @@
+           return;
+         }
+         if (m === "del") {
++          var isRoutine = t.kind === "שגרה" && !t.closure;
+           CBA.ui.prompt(
+-            "המשימה תרד מהגיליון ומהנתונים, יחד עם הדיווח והתמונות שלה. " +
+-            "מה שכבר נרשם ביומן יישאר, ותיווסף שורת מחיקה עם הסיבה שתכתוב.", {
+-              title: "מחיקת משימה", placeholder: "למשל: שורת בדיקה",
+-              okText: "מחיקה", danger: true
++            isRoutine
++              ? "המופע הזה ייסגר כ\"בוטל\" ויעבור ל\"סגורות\". התבנית בתוכנית העבודה " +
++                "ממשיכה לייצר את המופעים הבאים כרגיל. הסיבה נרשמת ביומן."
++              : t.repId && !t.closure
++                ? "הדיווח של התושב ייסגר (\"בוטל\") עם הסיבה שתכתוב — הוא יראה את זה " +
++                  "באפליקציה ויקבל מייל. המשימה עצמה תרד מהנתונים; היומן יישאר."
++                : "המשימה תרד מהנתונים. מה שכבר נרשם ביומן יישאר, " +
++                  "ותיווסף שורת מחיקה עם הסיבה שתכתוב.", {
++              title: isRoutine ? "ביטול מופע שגרה" : "מחיקת משימה",
++              placeholder: isRoutine ? "למשל: הגשם עשה את העבודה" : "למשל: שורת בדיקה",
++              okText: isRoutine ? "ביטול המופע" : "מחיקה", danger: true
+             }).then(function (why) {
+               if (!why) return;
+               if (busy) return;
+@@ -1516,7 +1550,8 @@
+                 if (!res || !res.ok) {
+                   return CBA.ui.alert((res && res.error) || "המשימה לא נמחקה");
+                 }
+-                CBA.ui.toast(res.pending ? "נמחקה — התמונות והיומן ינוקו ברקע" : "נמחקה");
++                CBA.ui.toast(res.cancelled ? "המופע בוטל"
++                           : res.pending ? "נמחקה — התמונות ינוקו ברקע" : "נמחקה");
+                 load();
+               });
+             });
+diff --git a/service-worker.js b/service-worker.js
+index 278bf61..1fb1a68 100644
+--- a/service-worker.js
++++ b/service-worker.js
+@@ -23,7 +23,7 @@
+    ⚠️ בכל דיפלוי שמשנה JS/CSS: לעדכן את VERSION כאן *ואת* כל ה-?v=
+       ב-index.html לאותו ערך בדיוק. שני המספרים חייבים להיות זהים.  */
+ 
+-var VERSION = "20260922l";
++var VERSION = "20260922m";
+ var CACHE   = "cba-app";
+ 
+ /* הערה על השיטה: בכוונה *אין* כאן רשימת קבצים לשמירה מראש (precache).
+diff --git a/tools/garden-sim/harness.js b/tools/garden-sim/harness.js
+new file mode 100644
+index 0000000..1106c70
+--- /dev/null
++++ b/tools/garden-sim/harness.js
+@@ -0,0 +1,185 @@
++'use strict';
++const fs = require('fs'), path = require('path'), vm = require('vm');
++const rules = require('./rules');
++const REPO = path.join(__dirname, '..', '..');
++const R = f => fs.readFileSync(path.join(REPO, f), 'utf8');
++const clone = o => o === undefined ? undefined : JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^__DATE__/.test(v)) ? new Date(v.slice(8)) : v);
++const ser = o => JSON.stringify(o, (k, v) => (v instanceof Date) ? '__DATE__' + v.toISOString() : (this && this[k] instanceof Date ? '__DATE__' + this[k].toISOString() : v));
++function deep(o) { // clone that keeps Dates
++  if (o instanceof Date) return new Date(o.getTime());
++  if (Array.isArray(o)) return o.map(deep);
++  if (o && typeof o === 'object') { const r = {}; for (const k of Object.keys(o)) r[k] = deep(o[k]); return r; }
++  return o;
++}
++
++const MEMBERS = {
++  res1: { active: true, perms: [], familyId: 'F1', isExternal: false, name: 'דין ארגיל' },
++  res2: { active: true, perms: [], familyId: 'F2', isExternal: false, name: 'אורטל כהן' },
++  mgr:  { active: true, perms: ['גינון'], familyId: 'F9', isExternal: false, name: 'מנהל גינון' },
++  gard: { active: true, perms: ['גינון'], familyId: '', isExternal: true, name: 'גנן' },
++  sup:  { active: true, perms: ['על'], familyId: 'F8', isExternal: false, name: 'מנהל על' },
++  off:  { active: false, perms: [], familyId: 'F3', isExternal: false, name: 'עזב' },
++  other:{ active: true, perms: ['תקציב'], familyId: 'F4', isExternal: false, name: 'מנהל תקציב' },
++  nofam:{ active: true, perms: [], familyId: '', isExternal: false, name: 'בלי משפחה' }
++};
++
++function newStore() {
++  return {
++    gardenPlan: {}, gardenTasks: {}, gardenReports: {}, gardenLog: {},
++    gardenMeta: { lists: { areas: ['שכונה צפונית', 'שכונה מרכזית צפונית', 'שכונה מרכזית דרומית', 'שכונה דרומית', 'פארק משחקים', 'ציר מזרחי', 'ציר מערבי', 'גני ילדים', 'מועדון ילדים', 'גינת כלבים', 'מועדון משפחות'], categories: ['מדשאות', 'השקיה / ממטרות', 'שיחים / גיזום', 'עשבייה / קרקע', 'ניקיון גינון / גזם', 'ערוגות / שתילות', 'עצים'], freqs: [] } },
++    counters: { gardenTask: { n: 0 }, gardenReport: { n: 0 } },
++    appConfig: { flags: { gardenTasksFromFirestore: true, gardenReportsFromFirestore: true, gardenWriteToFirestore: true, gardenWritesFromBrowser: true } },
++    members: MEMBERS
++  };
++}
++
++/* ---------- Firestore מדומה עם אכיפת כללים ---------- */
++function makeFb(store, uid, clock, audit) {
++  const denied = (why) => ({ code: 'permission-denied', message: why });
++  function ctx(op, coll, id, before, after, extra) {
++    return Object.assign({ uid, members: store.members, store, now: clock.now(), op, coll, id, before, after }, extra || {});
++  }
++  function log(kind, coll, id, res, why) { audit.push({ uid, kind, coll, id, ok: res, why }); }
++  const fb = {
++    isDbReady: () => true, userReady: cb => cb(uid ? { uid } : null), authReady: cb => cb(uid ? { uid } : null), ensureDb: cb => cb(null),
++    flag: (k, d) => (k in store.appConfig.flags ? store.appConfig.flags[k] : (k === 'appsScriptFallback' ? false : d)),
++    uid: () => uid, serverNow: () => { clock.__t = (clock.__t || 0) + 1; return new Date(clock.now().getTime() + clock.__t); },
++    readCollection: (c, cb) => {
++      const r = rules.check(ctx('list', c, null, {}, null));
++      log('list', c, '*', r.ok, r.why);
++      if (!r.ok) return cb(denied(r.why));
++      cb(null, Object.keys(store[c] || {}).map(id => Object.assign({ id }, deep(store[c][id]))));
++    },
++    queryCollection: (c, q, cb) => {
++      const rows = Object.keys(store[c] || {}).map(id => Object.assign({ id }, deep(store[c][id]))).filter(d => q.every(([f, v]) => String(d[f]) === String(v)));
++      const r = rules.check(ctx('list', c, null, {}, null, { query: q, rows }));
++      log('query', c, JSON.stringify(q), r.ok, r.why);
++      if (!r.ok) return cb(denied(r.why));
++      cb(null, rows);
++    },
++    readDoc: (c, id, cb) => {
++      const before = store[c] && store[c][id];
++      const r = rules.check(ctx('get', c, id, before || {}, null));
++      log('get', c, id, r.ok, r.why);
++      if (!r.ok) return cb(denied(r.why));
++      cb(null, before ? deep(before) : null);
++    },
++    createDoc: (c, id, data, cb) => { /* set() — יצירה או דריסה מלאה */
++      const before = store[c] && store[c][id];
++      const after = deep(data || {});
++      const r = rules.check(ctx(before ? 'update' : 'create', c, id, before || {}, after));
++      log(before ? 'set-over' : 'create', c, id, r.ok, r.why);
++      if (!r.ok) return cb(denied(r.why));
++      store[c] = store[c] || {}; store[c][id] = after; cb(null, true);
++    },
++    createIfAbsent: (c, id, data, cb) => {
++      if (store[c] && store[c][id]) return cb({ code: 'already-exists', message: 'already-exists' });
++      fb.createDoc(c, id, data, cb);
++    },
++    mergeDoc: (c, id, fields, cb) => { /* set(merge) */
++      const before = store[c] && store[c][id];
++      const after = Object.assign(deep(before || {}), deep(fields || {}));
++      const r = rules.check(ctx(before ? 'update' : 'create', c, id, before || {}, after));
++      log(before ? 'merge' : 'merge-create', c, id, r.ok, r.why);
++      if (!r.ok) return cb(denied(r.why));
++      store[c] = store[c] || {}; store[c][id] = after; cb(null, true);
++    },
++    updateDoc: (c, id, fields, cb) => {
++      const before = store[c] && store[c][id];
++      if (!before) { log('update', c, id, false, 'not-found'); return cb({ code: 'not-found', message: 'not-found' }); }
++      const after = Object.assign(deep(before), deep(fields || {}));
++      const r = rules.check(ctx('update', c, id, before, after));
++      log('update', c, id, r.ok, r.why);
++      if (!r.ok) return cb(denied(r.why));
++      store[c][id] = after; cb(null, true);
++    },
++    deleteDoc: (c, id, cb) => {
++      const before = store[c] && store[c][id];
++      const r = rules.check(ctx('delete', c, id, before || {}, null));
++      log('delete', c, id, r.ok, r.why);
++      if (!r.ok) return cb(denied(r.why));
++      if (store[c]) delete store[c][id]; cb(null, true);
++    },
++    nextId: (k, cb) => {
++      const before = store.counters[k];
++      if (!before) return cb(new Error('no-counter'));
++      const r0 = rules.check(ctx('get', 'counters', k, before, null));
++      if (!r0.ok) return cb(denied(r0.why));
++      const after = Object.assign(deep(before), { n: before.n + 1, updatedAt: clock.now() });
++      const r = rules.check(ctx('update', 'counters', k, before, after));
++      log('counter', 'counters', k, r.ok, r.why);
++      if (!r.ok) return cb(denied(r.why));
++      store.counters[k] = after; cb(null, after.n);
++    }
++  };
++  return fb;
++}
++
++/* ---------- דפדפן של תפקיד ---------- */
++function browser(store, uid, clock, opts) {
++  opts = opts || {};
++  const audit = [], sheetsCalls = [];
++  const mem = store.members[uid] || {};
++  const sb = {
++    console: { log() {}, error() {}, warn() {} }, setTimeout, clearTimeout, Date, JSON, Math, String, Number, Array, Object, parseInt, parseFloat, isNaN, isFinite, RegExp, Error,
++    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
++    document: { addEventListener() {}, querySelector: () => null, getElementById: () => null, createElement: () => ({ style: {}, addEventListener() {}, appendChild() {} }), head: { appendChild() {} }, body: { appendChild() {} }, hidden: false },
++    navigator: { onLine: true }, addEventListener() {}, removeEventListener() {}, location: { href: 'https://x/' }
++  };
++  sb.window = sb;
++  const fb = makeFb(store, uid, clock, audit);
++  sb.CBA = {
++    esc: s => String(s), authSession: 'S', mock: { currentYear: 'תשפ"ז' },
++    user: { firstName: mem.name || '', family: '', email: uid + '@x', familyId: mem.familyId || '', isExternal: !!mem.isExternal },
++    diag: { error() {} },
++    sheets: {
++      get: (p, cb) => { sheetsCalls.push({ kind: 'get', action: p.action }); cb({ ok: false, error: 'APPS_SCRIPT:' + p.action }); },
++      postRead: (a, b, cb) => {
++        sheetsCalls.push({ kind: 'post', action: a, payload: b });
++        if (a === 'gardenPhotoOne') return cb({ ok: true, id: 'ph_' + Math.random().toString(36).slice(2, 6) });
++        if (/^gardenNotify|gardenFeedbackNotify/.test(a)) return cb({ ok: true });
++        if (opts.appsScript && opts.appsScript[a]) return cb(opts.appsScript[a](b, store));
++        cb({ ok: false, error: 'APPS_SCRIPT:' + a });
++      },
++      postReadProgress: (a, b, prog, cb) => sb.CBA.sheets.postRead(a, b, cb)
++    },
++    fb
++  };
++  vm.createContext(sb);
++  vm.runInContext(R('js/data/gardenRules.js'), sb);
++  vm.runInContext(R('js/data/dataService.js'), sb);
++  sb.__audit = audit; sb.__sheets = sheetsCalls; sb.__uid = uid;
++  return sb;
++}
++
++/* ---------- השרת (Apps Script, חשבון שירות — בלי כללים) ---------- */
++function server(store, clock, trashed) {
++  const sheetRows = { tasks: [] };
++  const sb = {
++    console: { log() {} }, Date, JSON, Math, String, Number, Array, Object, parseInt, isNaN,
++    Logger: { log() {} },
++    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
++    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: () => null, insertSheet: () => ({ getRange: () => ({ setValues() {} }), setFrozenRows() {}, hideSheet() {}, getLastRow: () => 1 }) }) },
++    FS_GARDEN_PLAN: 'gardenPlan', FS_GARDEN_TASKS: 'gardenTasks', FS_GARDEN_REPORTS: 'gardenReports',
++    GARDEN_TASKS_SHEET: 'x', GARDEN_REPORTS_SHEET: 'y',
++    readSettings_: () => ({ 'שנה נוכחית': 'תשפ"ז' }),
++    gardenCols_: () => ({}),
++    fsDocPath_: (c, id) => c + '/' + id,
++    fsList_: c => Object.keys(store[c] || {}).map(id => ({ id, data: deep(store[c][id]) })),
++    fsGet_: p => { const [c, id] = p.split('/'); return store[c] && store[c][id] ? deep(store[c][id]) : null; },
++    fsSet_: (p, d) => { const [c, id] = p.split('/'); store[c][id] = deep(d); },
++    fsDelete_: p => { const [c, id] = p.split('/'); delete store[c][id]; },
++    fsQuery_: (c, f, op, v) => Object.keys(store[c] || {}).map(id => ({ id, data: deep(store[c][id]) })).filter(d => op === 'EQUAL' ? String(d.data[f]) === String(v) : op === 'LESS_THAN' ? new Date(d.data[f]) < v : false),
++    gardenDeletePhotos_: csv => { trashed.push(...String(csv).split(',').filter(Boolean)); }
++  };
++  /* השרת משתמש ב-new Date() — מחליפים לשעון הסימולציה */
++  sb.Date = new Proxy(Date, { construct(T, args) { return args.length ? new T(...args) : new T(clock.now().getTime()); }, get(T, k) { return k === 'now' ? () => clock.now().getTime() : T[k]; } });
++  vm.createContext(sb);
++  vm.runInContext(R('apps-script/GardenRules.gs'), sb);
++  vm.runInContext(R('apps-script/GardenHorizon.gs'), sb);
++  return sb;
++}
++
++const call = (fn, ms) => new Promise(res => { let done = false; fn(r => { if (!done) { done = true; res(r); } }); setTimeout(() => { if (!done) { done = true; res({ ok: false, TIMEOUT: true }); } }, ms || 1500); });
++
++module.exports = { newStore, browser, server, call, MEMBERS, deep, R };
+diff --git a/tools/garden-sim/rules.js b/tools/garden-sim/rules.js
+new file mode 100644
+index 0000000..659f077
+--- /dev/null
++++ b/tools/garden-sim/rules.js
+@@ -0,0 +1,173 @@
++/* פורט 1:1 של כללי האבטחה של הגינון (firestore.rules, 22.9 ערב) ל-JS,
++ * כדי שהסימולציה תיכשל בדיוק היכן ש-Firestore האמיתי היה נכשל.
++ * ctx = { uid, members, store, now, before, after, coll, id, query }
++ */
++'use strict';
++
++const GP_FIELDS = ['id','title','category','areas','freq','firstWeek','weekOfMonth','months','rotate','clause','active','note','effectiveFrom','order','schema','updatedAt'];
++const GT_FIELDS = ['id','kind','templateId','title','category','area','x','y','stage','flag','closure','week','due','note','drags','firstWeek','createdAt','updatedAt','approvedBy','approvedAt','repId','photos','order','year','schema','syncedAt','pendingDelete','familyId','mergedReps'];
++const GT_TEAM_ONLY = ['flag','closure','week','due','note','drags','approvedBy','approvedAt'];
++const GT_TEAM_UPDATE = ['stage','flag','closure','week','due','note','drags','firstWeek','title','category','area','x','y','approvedBy','approvedAt','repId','photos','order','updatedAt','syncedAt','notify','notifyPending','notifyNote','mergedReps'];
++const GR_CREATE_FIELDS = ['id','familyId','date','category','area','title','desc','place','x','y','photos','taskId','clientRef','mailPending','photosExpected','photosIncomplete','year','schema','updatedAt'];
++const GR_TEAM_FIELDS = ['stage','flag','closure','closeWhy','mergedInto','feedback','feedbackUntil','canFeedback'];
++const GR_TEAM_UPDATE = ['stage','flag','closure','closeWhy','mergedInto','taskId','canFeedback','feedbackUntil','photos','photosIncomplete','updatedAt'];
++const GL_FIELDS = ['taskId','kind','field','from','to','actorUid','note','at','schema','familyId'];
++const GL_RESIDENT_KINDS = ['נפתח','שיבוץ','גרירה','הערה','החזרה','ביטול ביצוע','ביצוע','סגירה','משוב'];
++const CLOSURES = ['בוצע','הועבר לבינוי','בוטל','לא רלוונטי','אוחד'];
++const NOTIFY = ['GARDEN_COMPLETED','GARDEN_REPORT_DECLINED','GARDEN_PLANNED','GARDEN_REOPENED','GARDEN_REPORT_MERGED','GARDEN_RESCHEDULED','GARDEN_STATUS_NOTE'];
++
++const isInt = v => typeof v === 'number' && Number.isInteger(v);
++const isStr = v => typeof v === 'string';
++const isNum = v => typeof v === 'number' && isFinite(v);
++const isTs  = v => v instanceof Date;
++const hasOnly = (keys, allowed) => keys.every(k => allowed.includes(k));
++const hasAll  = (keys, need) => need.every(k => keys.includes(k));
++const hasAny  = (keys, some) => some.some(k => keys.includes(k));
++const get = (d, f, dflt) => (d && Object.prototype.hasOwnProperty.call(d, f)) ? d[f] : dflt;
++
++function affectedKeys(before, after) {
++  const ks = new Set();
++  Object.keys(after || {}).forEach(k => { if (!(k in before) || JSON.stringify(before[k]) !== JSON.stringify(after[k])) ks.add(k); });
++  Object.keys(before || {}).forEach(k => { if (!(k in after)) ks.add(k); });
++  return [...ks];
++}
++
++function make(ctx) {
++  const m = () => ctx.members[ctx.uid];
++  const signedIn = () => !!ctx.uid;
++  const memberExists = () => signedIn() && !!m();
++  const isMember = () => memberExists() && m().active === true;
++  const isSuper = () => isMember() && (m().perms || []).includes('על');
++  const hasPerm = p => isMember() && (isSuper() || (m().perms || []).includes(p));
++  const myFamilyId = () => isMember() ? m().familyId : '';
++  const notExt = () => isMember() && m().isExternal === false;
++  const exists = (coll, id) => !!(ctx.store[coll] && ctx.store[coll][id]);
++  const getDoc = (coll, id) => { const d = ctx.store[coll] && ctx.store[coll][id]; if (!d) throw new Error('get(): missing ' + coll + '/' + id); return d; };
++  const B = ctx.before || {}, A = ctx.after || {};
++  const keysA = Object.keys(A);
++  const aff = () => affectedKeys(B, A);
++  const nx = f => get(A, f, ''), cu = f => get(B, f, '');
++
++  const rules = {
++    /* ---- תוכנית ---- */
++    canSeePlan: () => hasPerm('גינון') && m().isExternal === false,
++    gpShapeOk: () => hasOnly(keysA, GP_FIELDS) && hasAll(keysA, ['id','title','freq','schema']) &&
++      isStr(A.title) && A.title.length > 0 && A.title.length <= 80 &&
++      ['שבועי','דו-שבועי','חודשי','שנתי'].includes(A.freq) &&
++      (A.freq !== 'דו-שבועי' || get(A, 'firstWeek', '') !== '') && isInt(A.schema),
++    gpWriteOk: () => hasPerm('גינון') && m().isExternal === false,
++
++    /* ---- משימות ---- */
++    canSeeGardenTasks: () => hasPerm('גינון'),
++    gtShapeOk: () => hasOnly(keysA, GT_FIELDS) && hasAll(keysA, ['id','title','stage','schema']) && isStr(A.title) && A.title.length > 0 && isInt(A.schema),
++    gtFromReportOk: () => notExt() && rules.gtShapeOk() && A.stage === 'התקבל' && !hasAny(keysA, GT_TEAM_ONLY),
++    gtTeamCreateOk: () => hasPerm('גינון') && rules.gtShapeOk(),
++    gtTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GT_TEAM_UPDATE),
++    gtMgr: () => hasPerm('גינון') && m().isExternal === false,
++    gtClosureValueOk: () => nx('closure') === '' || CLOSURES.includes(nx('closure')),
++    gtClosureAuthOk: () => nx('closure') === cu('closure') || nx('closure') === '' || nx('closure') === 'בוצע' || nx('closure') === 'אוחד' || rules.gtMgr(),
++    gtCloseNoteOk: () => nx('closure') === '' || nx('closure') === cu('closure') || cu('repId') === '' || nx('note') !== '',
++    gtWithinDispute: () => !isTs(get(B, 'approvedAt', null)) || ctx.now < new Date(B.approvedAt.getTime() + 14 * 86400000),
++    gtClosedOk: () => cu('closure') === '' || rules.gtMgr() || hasOnly(aff(), ['flag','updatedAt']) || (cu('closure') === 'בוצע' && nx('closure') === '' && rules.gtWithinDispute()),
++    gtNotifyOk: () => nx('notify') === '' || NOTIFY.includes(nx('notify')),
++    gtUpdateOk: () => rules.gtTeamUpdateOk() && rules.gtClosureValueOk() && rules.gtClosureAuthOk() && rules.gtCloseNoteOk() && rules.gtClosedOk() && rules.gtNotifyOk(),
++    gtPendingDeleteOk: () => rules.gtMgr() && hasOnly(aff(), ['pendingDelete','updatedAt']) && A.pendingDelete === true,
++    gtReportPhotosOk: () => notExt() && isStr(B.repId) && B.repId !== '' && hasOnly(aff(), ['photos','updatedAt']) && getDoc('gardenReports', B.repId).familyId === myFamilyId(),
++    gtDeleteOk: () => hasPerm('גינון') && m().isExternal === false,
++    gtOrphanCleanupOk: () => notExt() && B.stage === 'התקבל' && get(B, 'repId', '') !== '' && !exists('gardenReports', B.repId),
++    gtReportFlagOk: () => notExt() && get(B, 'repId', '') !== '' && hasOnly(aff(), ['flag','updatedAt']) && A.flag === 'דורש בדיקה חוזרת' && getDoc('gardenReports', B.repId).familyId === myFamilyId(),
++
++    /* ---- דיווחים ---- */
++    canSeeGardenReport: fid => notExt() && isStr(fid) && fid !== '' && fid === myFamilyId(),
++    grShapeOk: () => hasOnly(keysA, GR_CREATE_FIELDS) && hasAll(keysA, ['id','familyId','title','category','schema']) && !hasAny(keysA, GR_TEAM_FIELDS) &&
++      isStr(A.familyId) && A.familyId !== '' && isStr(A.title) && A.title.length > 0 && A.title.length <= 60 && isStr(A.category) && A.category !== '' && isInt(A.schema) &&
++      (!keysA.includes('mailPending') || typeof A.mailPending === 'boolean'),
++    grPlaceOk: () => (get(A,'x',null) == null && get(A,'y',null) == null && get(A,'place','') !== '') || (isNum(get(A,'x',null)) && isNum(get(A,'y',null)) && A.x >= 0 && A.x <= 1 && A.y >= 0 && A.y <= 1),
++    grCreateOk: () => notExt() && A.familyId === myFamilyId() && rules.grShapeOk() && rules.grPlaceOk(),
++    grFeedbackOk: () => notExt() && B.familyId === myFamilyId() && hasOnly(aff(), ['feedback','feedbackNote','feedbackAt','updatedAt']) && B.canFeedback === true && (get(B,'feedbackUntil',0) === 0 || ctx.now.getTime() <= get(B,'feedbackUntil',0)),
++    grPhotosOk: () => notExt() && B.familyId === myFamilyId() && hasOnly(aff(), ['photos','photosIncomplete','updatedAt']),
++    grTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GR_TEAM_UPDATE),
++
++    /* ---- יומן ---- */
++    glCreateOk: () => hasPerm('גינון') && hasOnly(keysA, GL_FIELDS) && hasAll(keysA, ['taskId','actorUid','at']) && A.actorUid === ctx.uid,
++    glResidentCreateOk: () => notExt() && hasOnly(keysA, GL_FIELDS) && hasAll(keysA, ['taskId','actorUid','at']) && A.actorUid === ctx.uid && (nx('familyId') === '' || nx('familyId') === myFamilyId()) && (A.kind === 'נפתח' || A.kind === 'משוב'),
++    glResidentReadOk: d => isMember() && myFamilyId() !== '' && get(d,'familyId','') === myFamilyId() && GL_RESIDENT_KINDS.includes(get(d,'kind','')),
++
++    counterBumpOk: () => isMember() && hasOnly(aff(), ['n','updatedAt']) && isInt(A.n) && A.n === B.n + 1,
++    isMember, hasPerm, myFamilyId
++  };
++  return rules;
++}
++
++/* op: 'get' | 'list' | 'create' | 'update' | 'delete'. מחזיר {ok, why}. */
++function check(ctx) {
++  const r = make(ctx);
++  const c = ctx.coll, op = ctx.op, B = ctx.before || {};
++  const T = (cond, why) => ({ ok: !!cond, why });
++  try {
++    if (c === 'gardenPlan') {
++      if (op === 'get' || op === 'list') return T(r.canSeePlan(), 'canSeePlan');
++      if (op === 'create' || op === 'update') return T(r.gpWriteOk() && r.gpShapeOk(), 'gpWriteOk&&gpShapeOk');
++      if (op === 'delete') return T(r.gpWriteOk(), 'gpWriteOk');
++    }
++    if (c === 'gardenTasks') {
++      if (op === 'get' || op === 'list') return T(r.canSeeGardenTasks(), 'canSeeGardenTasks');
++      if (op === 'create') return T(r.gtTeamCreateOk() || r.gtFromReportOk(), 'gtTeamCreateOk||gtFromReportOk');
++      if (op === 'update') {
++        const parts = { gtUpdateOk: r.gtUpdateOk(), gtReportPhotosOk: safe(r.gtReportPhotosOk), gtReportFlagOk: safe(r.gtReportFlagOk), gtPendingDeleteOk: r.gtPendingDeleteOk() };
++        const ok = Object.values(parts).some(Boolean);
++        const why = ok ? Object.keys(parts).find(k => parts[k]) : 'update denied: ' + JSON.stringify({ team: r.gtTeamUpdateOk(), closureValue: r.gtClosureValueOk(), closureAuth: r.gtClosureAuthOk(), closeNote: r.gtCloseNoteOk(), closed: r.gtClosedOk(), notify: r.gtNotifyOk(), aff: affectedKeys(B, ctx.after) });
++        return { ok, why };
++      }
++      if (op === 'delete') return T(r.gtDeleteOk() || r.gtOrphanCleanupOk(), 'gtDeleteOk||gtOrphanCleanupOk');
++    }
++    if (c === 'gardenReports') {
++      if (op === 'get') return T(r.canSeeGardenReport(B.familyId), 'canSeeGardenReport');
++      if (op === 'list') {
++        /* שאילתה חייבת להיות מוכחת מהמסנן: familyId == שלי. */
++        const q = ctx.query || [];
++        const f = q.find(([k]) => k === 'familyId');
++        return T(f && r.canSeeGardenReport(f[1]), 'query must filter familyId==mine');
++      }
++      if (op === 'create') return T(r.grCreateOk(), 'grCreateOk');
++      if (op === 'update') return T(r.grFeedbackOk() || r.grPhotosOk() || r.grTeamUpdateOk(), 'grFeedbackOk||grPhotosOk||grTeamUpdateOk aff=' + JSON.stringify(affectedKeys(B, ctx.after)));
++      if (op === 'delete') return T(false, 'delete:false');
++    }
++    if (c === 'gardenLog') {
++      if (op === 'get') return T(r.gtMgr() || r.glResidentReadOk(B), 'gtMgr||glResidentReadOk');
++      if (op === 'list') {
++        if (r.gtMgr()) return T(true, 'gtMgr');
++        const q = ctx.query || [];
++        const f = q.find(([k]) => k === 'familyId');
++        /* תושב: המסנן מוכיח familyId; אבל kind אינו במסנן — Firestore דוחה שאילתה
++           שהכלל שלה תלוי בשדה שאינו מסונן. מדגמנים: מותר רק אם כל התוצאות עוברות. */
++        if (!(f && f[1] === r.myFamilyId() && r.myFamilyId() !== '')) return T(false, 'query must filter familyId==mine');
++        const rows = ctx.rows || [];
++        return T(rows.every(d => r.glResidentReadOk(d)), 'row with non-resident kind in result');
++      }
++      if (op === 'create') return T(r.glCreateOk() || r.glResidentCreateOk(), 'glCreateOk||glResidentCreateOk');
++      return T(false, 'update/delete:false');
++    }
++    if (c === 'counters') {
++      if (op === 'get' || op === 'list') return T(r.isMember(), 'isMember');
++      if (op === 'update') return T(r.counterBumpOk(), 'counterBumpOk');
++      return T(false, 'create/delete:false');
++    }
++    if (c === 'gardenMeta' || c === 'appConfig') {
++      if (op === 'get' || op === 'list') return T(r.isMember(), 'isMember');
++      if (c === 'gardenMeta' && ctx.id === 'settings') {
++        const keys = Object.keys(ctx.after || {});
++        return T(r.canSeePlan() && hasOnly(keys, ['requireApproval','updatedAt','updatedBy']) && typeof (ctx.after || {}).requireApproval === 'boolean', 'gsSettingsWriteOk');
++      }
++      return T(false, 'write:false');
++    }
++    if (c === 'members') {
++      if (op === 'get') return T(ctx.uid === ctx.id, 'own doc');
++      return T(false, 'write:false');
++    }
++    return T(false, 'default deny');
++  } catch (e) { return { ok: false, why: 'rule error: ' + e.message }; }
++  function safe(fn) { try { return fn(); } catch (e) { return false; } }
++}
++
++module.exports = { check, affectedKeys, GL_RESIDENT_KINDS };
+diff --git a/tools/test-finding32-timeline.js b/tools/test-finding32-timeline.js
+index d0e62d9..90e1c31 100644
+--- a/tools/test-finding32-timeline.js
++++ b/tools/test-finding32-timeline.js
+@@ -56,7 +56,9 @@ ok('⚠️ וריק עדיין מותר — שורה בלי משפחה אינה
+    /glNext\('familyId'\) == '' \|\|/.test(glRes), glRes);
+ ok('התושב עדיין מוגבל ל"נפתח" ו"משוב" בלבד',
+    /kind == 'נפתח'/.test(glRes) && /kind == 'משוב'/.test(glRes), glRes);
+-ok('🔴 הקריאה נפתחה לתושב', /allow read: if canSeeGardenTasks\(\) \|\| glResidentReadOk\(\)/.test(glMatch), glMatch);
++/* 22.9 — `gtMgr()` ולא `canSeeGardenTasks()`: הקבלן החיצוני אינו קורא יומן של
++   משפחות (9eedb71). ההיסטוריה שלו מגיעה דרך Apps Script — ר' gardenTaskLogRead. */
++ok('🔴 הקריאה נפתחה לתושב', /allow read: if gtMgr\(\) \|\| glResidentReadOk\(\)/.test(glMatch), glMatch);
+ ok('🔴🔴 ועם המשמר של המשפחה הריקה — המלכודת של canSeeFamilyTx',
+    /myFamilyId\(\) != ''/.test(glRead), glRead);
+ ok('ההתאמה היא על השדה שעל המסמך עצמו, לא get() לאוסף אחר',
+@@ -73,7 +75,7 @@ ok('opts.repId נפתר מול מסמך הדיווח', /readDoc\("gardenReports"
+ ok('⚠️ וזה קורה בתוך השגר-ושכח, לא במסלול הפעולה',
+    append.indexOf('readDoc("gardenReports"') > append.indexOf('function write('), append);
+ ok('עשר פעולות המנהל מעבירות repId',
+-   /gardenLogAppend\(String\(id\), log\.kind, log\.note, \{ repId: cur\.repId \}\)/.test(DS));
++   /gardenLogAppend\(String\(id\), log\.kind, log\.note, \{ repId: cur\.repId, familyId: cur\.familyId \}\)/.test(DS));
+ ok('הגשת דיווח מעבירה את המשפחה של המגיש',
+    /gardenLogAppend\(String\(taskId\), "נפתח", "דיווח תושב #" \+ repId, \{ familyId: fid \}\)/.test(DS));
+ ok('משוב מעביר את המשפחה של המגיב', /\{ familyId: \(\(\(window\.CBA && CBA\.user\) \|\| \{\}\)\.familyId \|\| ""\) \}/.test(DS));
+diff --git a/tools/test-garden-horizon-e2e-2026-09-22.js b/tools/test-garden-horizon-e2e-2026-09-22.js
+index ae195bd..a86a4a0 100644
+--- a/tools/test-garden-horizon-e2e-2026-09-22.js
++++ b/tools/test-garden-horizon-e2e-2026-09-22.js
+@@ -43,7 +43,8 @@ function browser() {
+       queryCollection: (c, q, cb) => cb(null, Object.keys(store[c] || {}).map(id => Object.assign({ id }, clone(store[c][id]))).filter(d => q.every(([f, v]) => String(d[f]) === String(v)))),
+       readDoc: (c, id, cb) => cb(null, store[c] && store[c][id] ? clone(store[c][id]) : null),
+       createDoc: (c, id, data, cb) => { if (store[c][id]) return cb({ code: 'permission-denied' }); store[c][id] = clone(data); cb(null); },
+-      mergeDoc: (c, id, f, cb) => { if (!store[c][id]) return cb({ code: 'not-found' }); Object.assign(store[c][id], clone(f)); cb(null); },
++      mergeDoc: (c, id, f, cb) => { store[c] = store[c] || {}; store[c][id] = Object.assign(store[c][id] || {}, clone(f)); cb(null); },
++      updateDoc: (c, id, f, cb) => { if (!store[c][id]) return cb({ code: 'not-found' }); Object.assign(store[c][id], clone(f)); cb(null); },
+       deleteDoc: (c, id, cb) => { delete store[c][id]; cb(null); },
+       nextId: (k, cb) => { store.counters[k].n++; cb(null, store.counters[k].n); }
+     }
+@@ -151,27 +152,43 @@ const routine = () => Object.values(store.gardenTasks).filter(t => t.kind === '
+     eq('והמסך יגיד כמה נשארו', r.made, 1);
+   }
+ 
+-  section('7. מחיקת משימה — דגל בדפדפן, השרת מסיים');
++  section('7. מחיקה — שגרה מבוטלת, דיווח תושב נסגר ונשאר, יזום נמחק (הכרעות 22.9 ערב)');
+   {
++    /* שגרה: "מחיקה" = סגירה ב'בוטל'. המנוע לא יוצר מחדש (סלוט תפוס). */
+     const t = routine()[0];
+-    store.gardenReports['5'] = { id: '5', taskId: t.id, photos: ['PHOTO-X'] };
+-    t.photos = ['PHOTO-T'];
+-    const r = await call(cb => B.CBA.data.gardenTaskDelete(t.id, 'בדיקה', cb));
+-    ok('הדגל הורם', r.ok === true && r.pending === true, JSON.stringify(r));
+-    ok('pendingDelete בוליאני', store.gardenTasks[t.id].pendingDelete === true);
+-    ok('נרשם ביומן עם הסיבה', Object.values(store.gardenLog).some(l => l.taskId === t.id && l.kind === 'מחיקה' && l.note === 'בדיקה'));
+-    const list = await call(cb => B.CBA.data.getGardenTasks({ scope: 'all' }, cb));
+-    ok('הכרטיס כבר לא בקריאה', list.ok && !list.rows.some(x => x.id === t.id));
++    const r = await call(cb => B.CBA.data.gardenTaskDelete(t.id, 'הגשם עשה את העבודה', cb));
++    ok('שגרה: בוטלה ולא נמחקה', r.ok === true && r.cancelled === true, JSON.stringify(r));
++    ok('המסמך נשאר, סגור בוטל', !!store.gardenTasks[t.id] && store.gardenTasks[t.id].closure === 'בוטל');
++    ok('ואין דגל מחיקה', !store.gardenTasks[t.id].pendingDelete);
++    const h = server().gardenHorizonRun_(null);
++    eq('המנוע לא יוצר את המופע מחדש', h.created, 0);
+     const r2 = await call(cb => B.CBA.data.gardenTaskDelete(t.id, '', cb));
+     ok('בלי סיבה — נדחה', r2.ok === false);
+ 
+-    const S = server();
+-    const d = S.gardenPendingDeleteRun_(null);
++    /* דיווח תושב: נסגר ב'בוטל' עם הסיבה (המראה + מייל), ואז המשימה יורדת — הדיווח נשאר. */
++    store.gardenTasks['77'] = { id: '77', kind: 'דיווח תושב', title: 'ממטרה', category: 'השקיה', stage: 'התקבל', repId: '5', familyId: 'F1', photos: ['PHOTO-X'], schema: 1 };
++    store.gardenReports['5'] = { id: '5', taskId: '77', familyId: 'F1', photos: ['PHOTO-X'] };
++    const r3 = await call(cb => B.CBA.data.gardenTaskDelete('77', 'שורת בדיקה', cb));
++    ok('דיווח: הדגל הורם', r3.ok === true && r3.pending === true, JSON.stringify(r3));
++    ok('המשימה נסגרה בוטל לפני המחיקה', store.gardenTasks['77'].closure === 'בוטל' && store.gardenTasks['77'].pendingDelete === true);
++    ok('הדיווח של התושב מציג "נסגר"', store.gardenReports['5'].closure === 'בוטל' && store.gardenReports['5'].closeWhy === 'שורת בדיקה');
++    ok('שורת היומן נושאת את המשפחה — התושב יראה אותה', Object.values(store.gardenLog).some(l => l.taskId === '77' && l.kind === 'סגירה' && l.familyId === 'F1'));
++    const list = await call(cb => B.CBA.data.getGardenTasks({ scope: 'all' }, cb));
++    ok('הכרטיס כבר לא בקריאה', list.ok && !list.rows.some(x => x.id === '77'));
++    const d = server().gardenPendingDeleteRun_(null);
+     eq('השרת מצא אחת', d.found, 1);
+-    ok('המסמך נמחק', !store.gardenTasks[t.id]);
+-    ok('הדיווח המקושר נמחק', !store.gardenReports['5']);
+-    eq('שתי תמונות לסל', trashed.slice().sort(), ['PHOTO-T', 'PHOTO-X']);
+-    ok('היומן נשאר', Object.values(store.gardenLog).some(l => l.taskId === t.id));
++    ok('המשימה נמחקה', !store.gardenTasks['77']);
++    ok('🔴 הדיווח נשאר', !!store.gardenReports['5']);
++    eq('ותמונות הדיווח לא נזרקו', trashed.slice(), []);
++    ok('היומן נשאר', Object.values(store.gardenLog).some(l => l.taskId === '77'));
++
++    /* יזום (בלי דיווח): נמחק עם התמונות. */
++    store.gardenTasks['78'] = { id: '78', kind: 'יזום', title: 'x', category: 'עצים', stage: 'מתוכנן', photos: ['PHOTO-T'], schema: 1 };
++    const r4 = await call(cb => B.CBA.data.gardenTaskDelete('78', 'טעות', cb));
++    ok('יזום: דגל', r4.ok === true && r4.pending === true);
++    const d2 = server().gardenPendingDeleteRun_(null);
++    ok('נמחק', !store.gardenTasks['78'] && d2.deleted === 1);
++    eq('התמונה שלו לסל', trashed.slice(), ['PHOTO-T']);
+   }
+ 
+   section('8. היומן נקרא מ-Firestore');
+diff --git a/tools/test-garden-sim-fixes-2026-09-22.js b/tools/test-garden-sim-fixes-2026-09-22.js
+new file mode 100644
+index 0000000..b7b5c76
+--- /dev/null
++++ b/tools/test-garden-sim-fixes-2026-09-22.js
+@@ -0,0 +1,251 @@
++/* הגינון — תיקוני הסימולציה (22.9.2026, ערב)
++ * הרצה:  node tools/test-garden-sim-fixes-2026-09-22.js
++ *
++ * מריץ את **הקוד האמיתי** (dataService.js, gardenRules.js, GardenHorizon.gs) מול
++ * Firestore מדומה שאוכף **פורט 1:1 של כללי האבטחה** (tools/garden-sim/rules.js)
++ * לפי תפקיד — כלומר כל תרחיש כאן נכשל בדיוק היכן ש-Firestore האמיתי היה נכשל.
++ * ⚠️ הפורט חייב להתעדכן עם firestore.rules; בדיקה 0 משווה את רשימות השדות.
++ *
++ * מה שנבדק — ממצא לממצא מתוך claude/garden-simulation-findings-2026-09-22.md:
++ *   A/B  איחוד דיווח בלי הערה עובר, והדיווח של התושב מופנה ועוקב אחרי הבולעת
++ *   C    פעולות הצוות על דיווח תושב נרשמות עם familyId — התושב רואה אותן
++ *   D    הגנן קורא היסטוריה דרך Apps Script
++ *   E    מחיקת שגרה = ביטול; המנוע לא מחזיר
++ *   F    שינוי שם/קטגוריה מגיע לכרטיסים שלא נגעו בהם
++ *   G    "שבוע ראשון" מוצמד ליום ראשון
++ *   10   אישור מנהל לתקלות דיירים — עם מתג
++ *   11   מחיקת משימת דיווח: התושב רואה "נסגר", הדיווח נשאר
++ *   L/M/N כותרת ארוכה, מזהה תבנית תפוס, שינוי סיבת סגירה
++ */
++'use strict';
++const fs = require('fs'), path = require('path');
++const H = require('./garden-sim/harness');
++const { GL_RESIDENT_KINDS } = require('./garden-sim/rules');
++let pass = 0, fail = 0;
++const ok = (n, c, x) => c ? (pass++, console.log('  ✓ ' + n)) : (fail++, console.log('  ✗ ' + n + (x ? '  → ' + x : '')));
++const eq = (n, a, b) => ok(n, JSON.stringify(a) === JSON.stringify(b), JSON.stringify(a) + ' ≠ ' + JSON.stringify(b));
++const section = t => console.log('\n' + t);
++const T0 = new Date(2026, 8, 22, 10, 0, 0), DAY = 86400000;
++
++async function world() {
++  const store = H.newStore();
++  let now = new Date(T0.getTime());
++  const clock = { now: () => now, add: ms => { now = new Date(now.getTime() + ms); } };
++  const trashed = [];
++  const S = H.server(store, clock, trashed);
++  const Bs = {};
++  const B = uid => (Bs[uid] = Bs[uid] || H.browser(store, uid, clock));
++  const G = B('mgr').GardenRules;
++  const THIS = G.weekKey(now);
++  const W = { store, clock, S, B, G, THIS, trashed, ids: {} };
++  const p1 = await H.call(cb => B('mgr').CBA.data.gardenPlanSave({ title: 'בדיקת השקיה', category: 'השקיה / ממטרות', freq: 'שבועי', areas: ['ציר מזרחי'], effectiveFrom: THIS }, cb));
++  W.ids.plan1 = p1.id;
++  W.ids.routine = G.occId(p1.id, THIS, 'ציר מזרחי');
++  const r1 = await H.call(cb => B('res1').CBA.data.submitGardenReport({ title: 'ההשקיה לא עובדת', category: 'השקיה / ממטרות', area: 'ציר מזרחי', desc: 'ליד 608', x: 0.4, y: 0.5, photos: [] }, cb));
++  const r2 = await H.call(cb => B('res2').CBA.data.submitGardenReport({ title: 'גם אצלנו', category: 'השקיה / ממטרות', place: 'מאחורי המרפסת', photos: [] }, cb));
++  W.ids.rep1 = String(r1.id); W.ids.task1 = String(r1.taskId);
++  W.ids.rep2 = String(r2.id); W.ids.task2 = String(r2.taskId);
++  return W;
++}
++const residentLog = (W, taskId) => Object.values(W.store.gardenLog).filter(l => l.taskId === taskId && l.familyId && GL_RESIDENT_KINDS.includes(l.kind)).map(l => l.kind);
++
++(async () => {
++  section('0. הפורט של הכללים תואם ל-firestore.rules');
++  {
++    const RULES = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
++    const PORT = fs.readFileSync(path.join(__dirname, 'garden-sim', 'rules.js'), 'utf8');
++    const gt = (RULES.match(/function gtFields\(\) \{[\s\S]*?\];/) || [''])[0];
++    ['familyId', 'mergedReps', 'pendingDelete'].forEach(f => ok('gtFields מכיל ' + f + ' בשני המקומות', gt.includes("'" + f + "'") && /GT_FIELDS = \[[^\]]*'familyId'/.test(PORT) === (f !== 'x') && PORT.includes("'" + f + "'")));
++    ok('mergedReps ב-gtTeamUpdateOk', /gtTeamUpdateOk\(\) \{[\s\S]*?'mergedReps'\]\)/.test(RULES));
++    ok('gardenMeta/settings — שער כתיבה בשם', /match \/gardenMeta\/settings \{\s*allow write: if gsSettingsWriteOk\(\);/.test(RULES));
++    ok('ושמור למנהל פנימי עם שלושה שדות', /function gsSettingsWriteOk\(\) \{\s*return canSeePlan\(\) &&[\s\S]*?hasOnly\(\['requireApproval', 'updatedAt', 'updatedBy'\]\)/.test(RULES));
++  }
++
++  section('A+B. איחוד דיווח תושב בלי הערה — עובר, והדיווח עוקב אחרי הבולעת');
++  {
++    const W = await world();
++    const r = await H.call(cb => W.B('mgr').CBA.data.gardenMerge(W.ids.task2, W.ids.task1, cb));
++    ok('האיחוד עבר בכללים (בלי הערה מוקדמת)', r.ok === true, JSON.stringify(r));
++    eq('דיווח אחד הופנה', r.moved, 1);
++    const child = W.store.gardenTasks[W.ids.task2], rep2 = W.store.gardenReports[W.ids.rep2], parent = W.store.gardenTasks[W.ids.task1];
++    ok('הנבלעת סגורה אוחד עם הערה', child.closure === 'אוחד' && /אוחד עם פנייה/.test(child.note));
++    ok('הדיווח של תושב 2 מצביע לבולעת', rep2.taskId === W.ids.task1 && rep2.mergedInto === W.ids.rep1);
++    eq('הבולעת זוכרת אותו', parent.mergedReps, [W.ids.rep2]);
++    /* הבולעת מתקדמת — הדיווח המאוחד עוקב */
++    const d = await H.call(cb => W.B('gard').CBA.data.gardenTask('note', W.ids.task1, { note: 'בדרך' }, cb));
++    ok('הערה על הבולעת', d.ok === true, JSON.stringify(d));
++    await H.call(cb => W.B('mgr').CBA.data.gardenTask('done', W.ids.task1, { note: 'תוקן' }, cb));
++    ok('הדיווח המאוחד רואה "בוצע" של הבולעת', W.store.gardenReports[W.ids.rep2].closure === 'בוצע' && W.store.gardenReports[W.ids.rep2].mergedInto === W.ids.rep1);
++    ok('וגם הדיווח של הבולעת', W.store.gardenReports[W.ids.rep1].closure === 'בוצע');
++    /* גם הגנן מאחד (שיפוט שטח) */
++    const W2 = await world();
++    const g = await H.call(cb => W2.B('gard').CBA.data.gardenMerge(W2.ids.task2, W2.ids.task1, cb));
++    ok('גם הגנן מאחד', g.ok === true, JSON.stringify(g));
++    const W3 = await world();
++    const x = await H.call(cb => W3.B('res1').CBA.data.gardenMerge(W3.ids.task2, W3.ids.task1, cb));
++    ok('תושב — לא', x.ok === false);
++  }
++
++  section('C. קו הזמן של התושב — פעולות הצוות נושאות familyId');
++  {
++    const W = await world();
++    ok('המשימה נושאת familyId מהיצירה', W.store.gardenTasks[W.ids.task1].familyId === 'F1');
++    await H.call(cb => W.B('mgr').CBA.data.gardenTask('plan', W.ids.task1, { week: W.THIS }, cb));
++    await H.call(cb => W.B('gard').CBA.data.gardenTask('defer', W.ids.task1, {}, cb));
++    await H.call(cb => W.B('gard').CBA.data.gardenTask('note', W.ids.task1, { note: 'הגעתי' }, cb));
++    await H.call(cb => W.B('mgr').CBA.data.gardenTask('done', W.ids.task1, { note: 'תוקן' }, cb));
++    eq('התושב רואה: נפתח, שיבוץ, גרירה, הערה, סגירה', residentLog(W, W.ids.task1), ['נפתח', 'שיבוץ', 'גרירה', 'הערה', 'סגירה']);
++    const my = await H.call(cb => W.B('res1').CBA.data.getMyGardenLog(cb));
++    eq('ודרך הקריאה שלו — עם הכללים', my.ok && my.rows.length, 5);
++    const other = await H.call(cb => W.B('res2').CBA.data.getMyGardenLog(cb));
++    eq('השכן לא רואה כלום מזה', other.ok && other.rows.filter(l => l.taskId === W.ids.task1).length, 0);
++    const audit = W.B('mgr').__audit.filter(a => a.coll === 'gardenReports' && a.kind === 'get');
++    eq('המנהל לא ניסה לקרוא דיווח', audit.length, 0);
++  }
++
++  section('D. הגנן — היסטוריה דרך Apps Script');
++  {
++    const W = await world();
++    const g = await H.call(cb => W.B('gard').CBA.data.getGardenTaskLog(W.ids.task1, cb));
++    ok('הגנן פונה לשרת (gardenTaskLog)', W.B('gard').__sheets.some(c => c.action === 'gardenTaskLog') && /APPS_SCRIPT:gardenTaskLog/.test(g.error || ''));
++    const m = await H.call(cb => W.B('mgr').CBA.data.getGardenTaskLog(W.ids.task1, cb));
++    ok('המנהל — ישירות מ-Firestore', m.ok === true && m.rows.length === 1 && !W.B('mgr').__sheets.some(c => c.action === 'gardenTaskLog'));
++    const GS = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8');
++    ok("השרת קורא את היומן מ-Firestore כשהוא הבעלים", /function handleGardenTaskLog_[\s\S]*?gardenFsOwns_\(\)\) \{\s*var docs = fsQuery_\('gardenLog', 'taskId', 'EQUAL', id, 300\)/.test(GS));
++    ok('ומסנן לגנן כמו קודם', /function handleGardenTaskLog_[\s\S]*?if \(isExtLog\) \{\s*if \(k === 'משוב'\) \{ who = 'תושב'; note = ''; \}/.test(GS));
++  }
++
++  section('E. מחיקת שגרה = ביטול, והמנוע לא מחזיר');
++  {
++    const W = await world();
++    const r = await H.call(cb => W.B('mgr').CBA.data.gardenTaskDelete(W.ids.routine, 'הגשם', cb));
++    ok('בוטל', r.ok && r.cancelled === true, JSON.stringify(r));
++    ok('סגור בוטל, לא נמחק, לא מסומן למחיקה', W.store.gardenTasks[W.ids.routine].closure === 'בוטל' && !W.store.gardenTasks[W.ids.routine].pendingDelete);
++    W.S.gardenPendingDeleteRun_(null);
++    const h = W.S.gardenHorizonRun_(null);
++    ok('המנוע לא יצר אותו מחדש', h.created === 0 && !!W.store.gardenTasks[W.ids.routine]);
++    const GT = fs.readFileSync(path.join(__dirname, '..', 'js', 'screens', 'gardenTasks.js'), 'utf8');
++    ok('המסך: "ביטול המופע הזה" לשגרה', /t\.kind === "שגרה" \? "ביטול המופע הזה" : "מחיקה"/.test(GT));
++    ok('ומגירה סגורה ב"סגורות"', /<details class="gt-drawer">[\s\S]*?מופעי שגרה שבוטלו/.test(GT));
++  }
++
++  section('F. שינוי שם/קטגוריה מגיע לכרטיסים');
++  {
++    const W = await world();
++    await H.call(cb => W.B('gard').CBA.data.gardenTask('done', W.ids.routine, {}, cb));
++    const r = await H.call(cb => W.B('mgr').CBA.data.gardenPlanSave({ id: W.ids.plan1, title: 'בדיקת השקיה + ממטרות', category: 'מדשאות', freq: 'שבועי', areas: ['ציר מזרחי'], effectiveFrom: W.THIS }, cb));
++    ok('נשמר', r.ok === true, JSON.stringify(r));
++    eq('7 עודכנו (8 פחות זה שבוצע)', r.horizon.renamed, 7);
++    const titles = Object.values(W.store.gardenTasks).filter(t => t.kind === 'שגרה').map(t => t.title);
++    eq('הישן נשאר רק על זה שבוצע', titles.filter(t => t === 'בדיקת השקיה').length, 1);
++    eq('והקטגוריה עודכנה', Object.values(W.store.gardenTasks).filter(t => t.category === 'מדשאות').length, 7);
++    ok('הטוסט אומר', /עודכנו 7/.test(W.B('mgr').CBA.data.gardenHorizonSummary(r.horizon)));
++    const s2 = W.S.gardenHorizonRun_(null);
++    eq('השרת מסכים — אפס עבודה', [s2.created, s2.removed, s2.renamed], [0, 0, 0]);
++  }
++
++  section('G. "שבוע ראשון" מוצמד ליום ראשון');
++  {
++    const W = await world();
++    const r = await H.call(cb => W.B('mgr').CBA.data.gardenPlanSave({ title: 'כיסוח', category: 'מדשאות', freq: 'דו-שבועי', firstWeek: '2026-09-23', areas: [], effectiveFrom: W.THIS }, cb));
++    ok('נשמר', r.ok === true, JSON.stringify(r));
++    eq('יום רביעי → יום ראשון של אותו שבוע', W.store.gardenPlan[r.id].firstWeek, '2026-09-20');
++    eq('ודו-שבועי מייצר 4 מופעים באופק', r.horizon.created, 4);
++  }
++
++  section('10. אישור מנהל לתקלות דיירים — מתג');
++  {
++    const W = await world();
++    /* ברירת מחדל: דלוק */
++    const s0 = await H.call(cb => W.B('gard').CBA.data.getGardenSettings(cb));
++    ok('ברירת מחדל דלוק', s0.requireApproval === true);
++    const d = await H.call(cb => W.B('gard').CBA.data.gardenTask('done', W.ids.task1, { note: 'תוקן' }, cb));
++    ok('גנן מסמן תקלת דייר', d.ok === true, JSON.stringify(d));
++    const t = W.store.gardenTasks[W.ids.task1];
++    ok('לא נסגרה — ממתינה לאישור', !t.closure && t.flag === 'ממתין לאישור' && t.note === 'תוקן');
++    ok('התושב רואה "ממתין לאישור" בדיווח', W.store.gardenReports[W.ids.rep1].flag === 'ממתין לאישור' && !W.store.gardenReports[W.ids.rep1].closure);
++    const tasks = await H.call(cb => W.B('mgr').CBA.data.getGardenTasks({ scope: 'pending' }, cb));
++    ok('ובתור האישורים של המנהל', tasks.ok && tasks.rows.some(x => x.id === W.ids.task1));
++    const g2 = await H.call(cb => W.B('gard').CBA.data.gardenTask('approve', W.ids.task1, {}, cb));
++    ok('הגנן לא מאשר', g2.ok === false);
++    const a = await H.call(cb => W.B('mgr').CBA.data.gardenTask('approve', W.ids.task1, {}, cb));
++    ok('המנהל מאשר — בלי לכתוב הערה נוספת', a.ok === true, JSON.stringify(a));
++    ok('נסגרה בוצע, לתושב "בוצע" עם ההערה של הגנן', W.store.gardenTasks[W.ids.task1].closure === 'בוצע' && W.store.gardenReports[W.ids.rep1].closure === 'בוצע' && W.store.gardenReports[W.ids.rep1].closeWhy === 'תוקן');
++    /* שגרה — נסגרת מיד גם כשהמתג דלוק */
++    const rr = await H.call(cb => W.B('gard').CBA.data.gardenTask('done', W.ids.routine, {}, cb));
++    ok('שגרה נסגרת מיד', rr.ok && W.store.gardenTasks[W.ids.routine].closure === 'בוצע');
++    /* המנהל מכבה */
++    const off = await H.call(cb => W.B('mgr').CBA.data.setGardenSettings({ requireApproval: false }, cb));
++    ok('המנהל כיבה', off.ok === true && off.settings.requireApproval === false, JSON.stringify(off));
++    const d2 = await H.call(cb => W.B('gard').CBA.data.gardenTask('done', W.ids.task2, { note: 'תוקן' }, cb));
++    ok('עכשיו הגנן סוגר תקלת דייר בעצמו', d2.ok && W.store.gardenTasks[W.ids.task2].closure === 'בוצע');
++    const gx = await H.call(cb => W.B('gard').CBA.data.setGardenSettings({ requireApproval: true }, cb));
++    ok('הגנן לא נוגע במתג', gx.ok === false);
++    const rx = await H.call(cb => W.B('res1').CBA.data.setGardenSettings({ requireApproval: true }, cb));
++    ok('וגם לא תושב', rx.ok === false);
++    /* ביטול סימון של הגנן בזמן ההמתנה */
++    const W2 = await world();
++    await H.call(cb => W2.B('gard').CBA.data.gardenTask('done', W2.ids.task1, { note: 'תוקן' }, cb));
++    const u = await H.call(cb => W2.B('gard').CBA.data.gardenTask('undo', W2.ids.task1, {}, cb));
++    ok('הגנן מבטל סימון בזמן ההמתנה', u.ok && W2.store.gardenTasks[W2.ids.task1].flag === '');
++    const GP = fs.readFileSync(path.join(__dirname, '..', 'js', 'screens', 'gardenPlan.js'), 'utf8');
++    ok('המתג במסך תוכנית העבודה (מנהל בלבד)', /id="gp-approval" role="switch"/.test(GP) && /setGardenSettings\(\{ requireApproval: next \}/.test(GP));
++  }
++
++  section('11. מחיקת משימת דיווח — התושב רואה "נסגר", הדיווח נשאר');
++  {
++    const W = await world();
++    const r = await H.call(cb => W.B('mgr').CBA.data.gardenTaskDelete(W.ids.task1, 'שורת בדיקה', cb));
++    ok('דגל', r.ok && r.pending === true, JSON.stringify(r));
++    const rep = W.store.gardenReports[W.ids.rep1];
++    ok('הדיווח: נסגר בוטל עם הסיבה', rep.closure === 'בוטל' && rep.closeWhy === 'שורת בדיקה' && rep.canFeedback === false);
++    ok('המייל לתושב סומן על המשימה', W.store.gardenTasks[W.ids.task1].notify === 'GARDEN_REPORT_DECLINED');
++    ok('התושב יראה את הסגירה בקו הזמן', residentLog(W, W.ids.task1).includes('סגירה'));
++    W.S.gardenPendingDeleteRun_(null);
++    ok('המשימה ירדה, הדיווח נשאר', !W.store.gardenTasks[W.ids.task1] && !!W.store.gardenReports[W.ids.rep1]);
++    const my = await H.call(cb => W.B('res1').CBA.data.getMyGardenReports(cb));
++    ok('והתושב עדיין רואה את הדיווח שלו כסגור', my.ok && my.rows.some(x => x.id === W.ids.rep1 && x.closure === 'בוטל'));
++  }
++
++  section('L/M/N. שוליים');
++  {
++    const W = await world();
++    const long = await H.call(cb => W.B('res1').CBA.data.submitGardenReport({ title: 'א'.repeat(61), category: 'עצים', place: 'פה', photos: [] }, cb));
++    ok('כותרת >60 — הודעה ברורה, בלי שריפת מזהה', long.ok === false && /60/.test(long.error) && W.store.counters.gardenTask.n === 2);
++    /* M: מזהה תפוס */
++    W.store.gardenPlan['T2'] = { id: 'T2', title: 'זר', freq: 'שנתי', months: '1', schema: 1, active: true };
++    const p = await H.call(cb => W.B('mgr').CBA.data.gardenPlanSave({ title: 'חדש', category: 'עצים', freq: 'שנתי', months: '2', areas: [], effectiveFrom: W.THIS }, cb));
++    ok('מזהה תפוס → מדלג ולא דורס', p.ok && p.id === 'T3' && W.store.gardenPlan['T2'].title === 'זר', JSON.stringify(p));
++    const FB = fs.readFileSync(path.join(__dirname, '..', 'js', 'data', 'firebase.js'), 'utf8');
++    ok('createIfAbsent בטרנזקציה', /function createIfAbsent[\s\S]*?runTransaction[\s\S]*?already-exists/.test(FB) && /createIfAbsent: createIfAbsent,/.test(FB));
++    /* N: מנהל משנה סיבת סגירה בלי לפתוח */
++    await H.call(cb => W.B('mgr').CBA.data.gardenTask('close', W.ids.task1, { closure: 'בוטל', note: 'טעות' }, cb));
++    const n = await H.call(cb => W.B('mgr').CBA.data.gardenTask('close', W.ids.task1, { closure: 'לא רלוונטי', note: 'לא שלנו' }, cb));
++    ok('מנהל: סיבה חדשה על משימה סגורה', n.ok === true && W.store.gardenTasks[W.ids.task1].closure === 'לא רלוונטי', JSON.stringify(n));
++    ok('והדיווח עודכן', W.store.gardenReports[W.ids.rep1].closure === 'לא רלוונטי' && W.store.gardenReports[W.ids.rep1].closeWhy === 'לא שלנו');
++    const gn = await H.call(cb => W.B('gard').CBA.data.gardenTask('close', W.ids.task1, { closure: 'בוטל', note: 'x' }, cb));
++    ok('הגנן — לא', gn.ok === false);
++  }
++
++  section('שומרי רגרסיה — מה שהסימולציה מצאה נקי ואסור שייפתח');
++  {
++    const W = await world();
++    for (const who of ['res1', 'other', 'off', 'nofam']) {
++      const rs = await Promise.all(['done', 'note', 'plan', 'close'].map(op => H.call(cb => W.B(who).CBA.data.gardenTask(op, W.ids.task1, { note: 'x', week: W.THIS, closure: 'בוטל' }, cb))));
++      ok(who + ' — אף פעולת צוות לא עוברת', rs.every(r => !r.ok));
++    }
++    const rd = await H.call(cb => W.B('res1').CBA.data.getGardenTasks({ week: W.THIS }, cb));
++    ok('תושב לא קורא משימות', rd.ok === false);
++    const gp = await H.call(cb => W.B('gard').CBA.data.getGardenPlan(cb));
++    ok('גנן לא קורא תוכנית', gp.ok === false);
++    const twin = fs.readFileSync(path.join(__dirname, '..', 'js', 'data', 'gardenRules.js'), 'utf8') === fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'GardenRules.gs'), 'utf8');
++    ok('🔴 gardenRules.js ≡ GardenRules.gs', twin);
++    const HTML = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'), SW = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf8');
++    const v = [...new Set((HTML.match(/\?v=[0-9a-z]+/g) || []).map(x => x.slice(3)))];
++    ok('גרסה אחת ב-index.html והיא ב-service-worker', v.length === 1 && SW.includes('VERSION = "' + v[0] + '"') && v[0] > '20260922l', v.join(','));
++  }
++
++  console.log('\n════════════════════════════════');
++  console.log(pass + ' עברו, ' + fail + ' נכשלו');
++  process.exit(fail ? 1 : 0);
++})();
+diff --git a/tools/test-stats-toasts-2026-09-22.js b/tools/test-stats-toasts-2026-09-22.js
+index c9f9000..77a43ab 100644
+--- a/tools/test-stats-toasts-2026-09-22.js
++++ b/tools/test-stats-toasts-2026-09-22.js
+@@ -57,7 +57,7 @@ const run = (GT.match(/if \(op === "done"\) CBA\.ui\.toast[\s\S]*?scheduleReload
+ ['done', 'undo', 'defer', 'note', 'block', 'approve', 'close', 'return', 'plan']
+   .forEach(op => ok('טוסט לפעולה ' + op, new RegExp('op === "' + op + '"').test(run), 'חסר'));
+ ok('כיבוי **והפעלה** של שגרה — שניהם מודיעים',
+-   /CBA\.ui\.toast\(next \? "הופעלה" : "כובתה/.test(GP), 'חסר');
++   /CBA\.ui\.toast\(\(?next \? "הופעלה" : "כובתה/.test(GP), 'חסר');
+ ok('משוב התושב מודיע', /CBA\.ui\.toast\(positive \? "תודה!" : "המשוב נשלח לוועד"\)/.test(RG));
+ ok('🔴 בורר הטווח מצויר רק כשהוא משנה משהו',
+    /d\.isManager && weeksWithData\(\) > 1/.test(ST), 'חסר');
+diff --git a/tools/test-wave3-garden-writes.js b/tools/test-wave3-garden-writes.js
+index 74cc578..d8be452 100644
+--- a/tools/test-wave3-garden-writes.js
++++ b/tools/test-wave3-garden-writes.js
+@@ -60,7 +60,7 @@ ok('שם התבנית מרשימה סגורה', /GARDEN_COMPLETED', 'GARDEN_REPO
+ ok('🔴 וכל השומרים מחוברים לשער אחד',
+    /function gtUpdateOk\(\) \{[\s\S]*?gtTeamUpdateOk\(\) && gtClosureValueOk\(\) && gtClosureAuthOk\(\) &&[\s\S]*?gtCloseNoteOk\(\) && gtClosedOk\(\) && gtNotifyOk\(\)/.test(RU));
+ ok('והשער הוא מה שמחווט ל-allow update',
+-   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\);/.test(RU));
++   /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\)( \|\| gtPendingDeleteOk\(\))?;/.test(RU));
+ ok('⚠️ ומסלול התמונות של התושב נשאר עצמאי — לא נבלע בשער הצוות',
+    /gtReportPhotosOk\(\)/.test(RU));
+ 
+diff --git a/tools/test-wave3-items-3-5.js b/tools/test-wave3-items-3-5.js
+index c998613..9258cb6 100644
+--- a/tools/test-wave3-items-3-5.js
++++ b/tools/test-wave3-items-3-5.js
+@@ -62,7 +62,7 @@ ok('🔴 שני שדות בלבד', /hasOnly\(\['flag', 'updatedAt'\]\)/.test(rf
+ ok('🔴 וערך יחיד אפשרי — לא כל דגל', /flag == 'דורש בדיקה חוזרת'/.test(rf), rf);
+ ok('🔴🔴 וההצלבה repId→familyId — בלעדיה כל תושב מרים דגל על כל משימה',
+    /gardenReports\/\$\(resource\.data\.repId\)\)\s*\n\s*\.data\.familyId == myFamilyId\(\)/.test(rf), rf);
+-ok('והוא מחווט ל-allow update', /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\);/.test(RU));
++ok('והוא מחווט ל-allow update', /allow update: if gtUpdateOk\(\) \|\| gtReportPhotosOk\(\) \|\| gtReportFlagOk\(\)( \|\| gtPendingDeleteOk\(\))?;/.test(RU));
+ ok('המייל למנהלים עבר לשרת כקריאת מייל בלבד',
+    /function gardenFeedbackNotify_/.test(GS) && /notifyAdmins_\(ss, PERM_GARDEN, 'ADMIN_GARDEN_NEGATIVE_FEEDBACK'/.test(GS));
+ ok('🔑 והשם נשלף בשרת מטאב התושבים',
