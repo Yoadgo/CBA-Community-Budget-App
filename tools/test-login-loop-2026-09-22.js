@@ -17,7 +17,12 @@ let pass = 0, fail = 0;
 const ok = (n, c, x) => c ? (pass++, console.log('  ✓ ' + n)) : (fail++, console.log('  ✗ ' + n + (x ? '  → ' + x : '')));
 const APP = fs.readFileSync(path.join(__dirname, '..', 'js/app.js'), 'utf8');
 let HEAD_APP = null;
-try { HEAD_APP = cp.execSync('git show HEAD~0:js/app.js', { cwd: path.join(__dirname, '..'), encoding: 'utf8', maxBuffer: 1e8 }); } catch (e) {}
+/* העותק שלפני התיקון: ההורה של הקומיט הראשון שהכניס את gisAutoBlocked. */
+try {
+  const cwd = path.join(__dirname, '..');
+  const first = cp.execSync('git log -S gisAutoBlocked --format=%h -- js/app.js', { cwd, encoding: 'utf8' }).trim().split('\n').pop();
+  HEAD_APP = cp.execSync('git show ' + (first ? first + '^' : 'HEAD') + ':js/app.js', { cwd, encoding: 'utf8', maxBuffer: 1e8 });
+} catch (e) {}
 
 function grab(src, re) { const m = src.match(re); return m ? m[0] : ''; }
 
@@ -48,7 +53,7 @@ function run(src, serverMode, firstSelectBy) {
   vm.runInContext(
     'var googleReady = true, loginError = null, currentUser = null, signupToken = null, signupPrefill = null, inited = false;\n' +
     'function initGoogle() {}\n' +
-    'function showLoginConnecting() {}\n' +
+    'function showLoginConnecting() {}\nfunction gisDisarm() {}\n' +
     'function showLoginGate() { gateEl.childElementCount = 0; renderGateButton(); }\n' +
     (fnBlock || '') + fnGate + fnLogin +
     'this.onGoogleLogin = onGoogleLogin;', box);
@@ -76,6 +81,22 @@ ok('⚠️ התחברות ראשונה אוטומטית (לפני דחייה) ע
 ok('⚠️ prompt() עדיין נקרא בכניסה רגילה (One-Tap לחוזרים נשמר)',
    /if \(!gisAutoBlocked\) google\.accounts\.id\.prompt\(\);/.test(APP));
 ok('⚠️ ענף "מחובר" לא נוגע בחסימה', !/data\.authorized\) \{[\s\S]{0,300}blockGisAuto/.test(APP));
+
+console.log('\n3. מסך לבן באייפון (וואטסאפ) — כרטיס "פתחו בספארי"');
+/* הבדיקה החזותית/התנהגותית המלאה (Playwright, 390px) רצה ב-22.9 מול הקוד הזה:
+   UA של וואטסאפ → כרטיס מיד; ספארי → אין כרטיס, לחיצה על Google בלי
+   תשובה → כרטיס "נתקעתם?" אחרי 15ש' (לא אחרי 5); תשובה מ-Google מנטרלת. */
+ok('הכרטיס נבנה במסך הכניסה כשמזוהה דפדפן פנימי',
+   /'<div id="gate-help">' \+ \(inAppBrowser\(\) \? gateHelpHTML\("inapp"\) : ""\) \+ '<\/div>'/.test(APP));
+ok('וואטסאפ מזוהה', /\/WhatsApp\/i\.test\(ua\)/.test(APP));
+ok('🔴 onGoogleLogin מנטרל את רשת הביטחון', /gisDisarm\(\);   \/\/ התשובה הגיעה/.test(APP));
+ok('רשת הביטחון: 15 שניות', /var GIS_STUCK_MS = 15000;/.test(APP));
+ok('⚠️ "העמוד הוסתר" מסמן לחיצה רק באייפון', /if \(!gisArmedAt && isIOSDevice\(\)\) gisArm\(\);/.test(APP));
+ok('⚠️ הכרטיס לא מוצג אם יש משתמש או שהשער סגור', /return !!\(g && !g\.hidden && !currentUser/.test(APP));
+ok('פתיחה בספארי דרך x-safari-, עם גיבוי של העתקת קישור',
+   /location\.href = "x-safari-" \+ url;/.test(APP) && /if \(!left\) copySiteUrl\(\);/.test(APP));
+const CSS = fs.readFileSync(path.join(__dirname, '..', 'css/style.css'), 'utf8');
+ok('העיצוב קיים', /\.login-inapp \{/.test(CSS));
 
 console.log('\n' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

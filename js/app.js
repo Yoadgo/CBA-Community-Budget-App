@@ -1724,6 +1724,8 @@
               CBA.esc(loginError) + '</div>'
           : '') +
         '<div class="login-btn" id="gate-signin"></div>' +
+        /* 🔴 כרטיס "פתחו בספארי" — ר' gateHelpHTML (22.9.2026) */
+        '<div id="gate-help">' + (inAppBrowser() ? gateHelpHTML("inapp") : "") + '</div>' +
         /* ============================================================================
          *  🔴 מסלול ההרשמה — קיים במלואו, ופשוט לא היה גלוי  (2026-09-17, ממצא 04)
          * ----------------------------------------------------------------------------
@@ -1746,6 +1748,7 @@
           '<p class="login-hint">ההרשמה מתחילה בהתחברות עם Google, כדי שנדע שהמייל באמת שלכם.</p>') +
       '</div>';
     renderGateButton();
+    wireGateHelp();
     const su = document.getElementById("gate-signup");
     if (su) su.addEventListener("click", openSignupForm);
   }
@@ -1911,6 +1914,167 @@
     if (!gisAutoBlocked) google.accounts.id.prompt();   // ניסיון התחברות אוטומטי/One-Tap לחוזרים
   }
 
+  /* ============================================================================
+   *  🔴 מסך לבן באייפון כשנכנסים מקישור בוואטסאפ   (22.9.2026)
+   * ----------------------------------------------------------------------------
+   *  וואטסאפ/פייסבוק/אינסטגרם פותחים קישורים בדפדפן **פנימי** שלהם. כפתור
+   *  Google פותח חלון התחברות נפרד (popup), והדפדפן הפנימי לא יודע להחזיר
+   *  ממנו את התשובה — החלון נשאר לבן והתושב תקוע.
+   *
+   *  שתי שכבות משלימות:
+   *  1. **זיהוי מראש** — כשהדפדפן מזדהה כפנימי, מוצג מיד כרטיס "פתחו בספארי".
+   *  2. **רשת ביטחון** — ⚠️ לא כל דפדפן פנימי מזדהה (באייפון חלקם נראים
+   *     בדיוק כמו ספארי). לכן: אם התושב לחץ על Google ולא חזרה תשובה תוך
+   *     זמן סביר — מוצג אותו כרטיס בנוסח "נתקעתם?". תופס כל גרסה של התקלה.
+   *
+   *  🔑 הכפתור "פתיחה בספארי" משתמש ב-x-safari-https:// (אייפון, iOS 17+).
+   *     אם לא קרה כלום — הקישור מועתק ומוסבר איך להדביק. באנדרואיד: intent לכרום.
+   * ========================================================================== */
+  function isIOSDevice() {
+    var ua = navigator.userAgent || "";
+    if (/iPad|iPhone|iPod/.test(ua)) return true;
+    return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  }
+  function inAppBrowser() {
+    var ua = navigator.userAgent || "";
+    if (/WhatsApp/i.test(ua)) return "וואטסאפ";
+    if (/FBAN|FBAV|FB_IAB|FBIOS/i.test(ua)) return "פייסבוק";
+    if (/Instagram/i.test(ua)) return "אינסטגרם";
+    if (/\bLine\//.test(ua)) return "Line";
+    if (/Telegram/i.test(ua)) return "טלגרם";
+    if (/Android/.test(ua) && /; wv\)/.test(ua)) return "האפליקציה";
+    return "";
+  }
+  function realBrowserName() { return isIOSDevice() ? "ספארי" : "כרום"; }
+
+  function gateHelpHTML(mode) {
+    var br = realBrowserName();
+    var app = inAppBrowser();
+    var title = mode === "stuck"
+      ? "נתקעתם במסך לבן?"
+      : "כדאי לפתוח את האתר ב" + br;
+    var body = mode === "stuck"
+      ? "זה קורה כשהאתר נפתח מתוך וואטסאפ או אפליקציה אחרת. סגרו את המסך הלבן ופתחו את האתר ב" + br + " — שם ההתחברות עובדת."
+      : "נראה שהאתר נפתח מתוך " + (app || "אפליקציה") + ". שם ההתחברות עם Google נתקעת לפעמים במסך לבן.";
+    var how = isIOSDevice()
+      ? "או: לחצו על ⋯ או על סמל המצפן בפינת המסך ← \"פתיחה בספארי\"."
+      : "או: לחצו על ⋮ בפינת המסך ← \"פתיחה בדפדפן\".";
+    return '<div class="login-inapp" role="note">' +
+        '<div class="login-inapp__title">' + CBA.esc(title) + '</div>' +
+        '<p class="login-inapp__body">' + CBA.esc(body) + '</p>' +
+        '<div class="login-inapp__actions">' +
+          '<button type="button" class="btn-primary login-inapp__go" data-gh="open">פתיחה ב' + CBA.esc(br) + '</button>' +
+          '<button type="button" class="login-signup login-inapp__copy" data-gh="copy">העתקת קישור</button>' +
+        '</div>' +
+        '<p class="login-inapp__how">' + CBA.esc(how) + '</p>' +
+      '</div>';
+  }
+
+  function siteUrl() { return location.origin + location.pathname; }
+
+  function copySiteUrl() {
+    var url = siteUrl();
+    var done = function () { try { CBA.ui.toast("הקישור הועתק — הדביקו אותו ב" + realBrowserName()); } catch (e) {} };
+    var fallback = function () {
+      try {
+        var t = document.createElement("textarea");
+        t.value = url; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0";
+        document.body.appendChild(t); t.select(); t.setSelectionRange(0, url.length);
+        var okc = document.execCommand("copy"); t.remove();
+        if (okc) return done();
+      } catch (e) {}
+      try { window.prompt("העתיקו את הקישור:", url); } catch (e) {}
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, fallback); return;
+      }
+    } catch (e) {}
+    fallback();
+  }
+
+  function openInRealBrowser() {
+    var url = siteUrl();
+    if (isIOSDevice()) {
+      /* אם ספארי נפתח — העמוד הזה מוסתר. אם אחרי שנייה וחצי הוא עדיין
+         גלוי, הסכמה לא נתמכה (iOS ישן) → מעתיקים ומסבירים. */
+      var left = false;
+      var onHide = function () { if (document.hidden) left = true; };
+      document.addEventListener("visibilitychange", onHide);
+      setTimeout(function () {
+        document.removeEventListener("visibilitychange", onHide);
+        if (!left) copySiteUrl();
+      }, 1500);
+      location.href = "x-safari-" + url;          // x-safari-https://…
+      return;
+    }
+    if (/Android/.test(navigator.userAgent || "")) {
+      location.href = "intent://" + url.replace(/^https?:\/\//, "") +
+        "#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=" +
+        encodeURIComponent(url) + ";end";
+      return;
+    }
+    copySiteUrl();
+  }
+
+  function wireGateHelp() {
+    var box = document.getElementById("gate-help");
+    if (!box || box._wired) return;
+    box._wired = true;
+    box.addEventListener("click", function (e) {
+      var b = e.target && e.target.closest ? e.target.closest("[data-gh]") : null;
+      if (!b) return;
+      if (b.getAttribute("data-gh") === "open") openInRealBrowser();
+      else copySiteUrl();
+    });
+  }
+
+  function showGateHelp(mode) {
+    var box = document.getElementById("gate-help");
+    if (!box) return;
+    if (box.querySelector(".login-inapp")) return;   // כבר מוצג — לא מקפיצים
+    box.innerHTML = gateHelpHTML(mode);
+    wireGateHelp();
+  }
+
+  /* --- רשת הביטחון: לחצו על Google ולא חזרה תשובה ---
+     כפתור Google יושב בתוך iframe, ולכן אי אפשר להאזין ללחיצה עליו
+     ישירות. שני סימנים עקיפים: החלון מאבד פוקוס לטובת ה-iframe, או
+     שהעמוד מוסתר (חלון ההתחברות נפתח מעליו). מכאן סופרים 15 שניות;
+     onGoogleLogin מנטרל. ⚠️ מוצג רק כששער הכניסה עדיין פתוח ואין משתמש. */
+  var GIS_STUCK_MS = 15000;
+  var gisArmedAt = 0, gisStuckTimer = null;
+  function gateOpen() {
+    var g = document.getElementById("login-gate");
+    return !!(g && !g.hidden && !currentUser && document.getElementById("gate-signin"));
+  }
+  function gisDisarm() { gisArmedAt = 0; if (gisStuckTimer) { clearTimeout(gisStuckTimer); gisStuckTimer = null; } }
+  function gisCheckStuck() {
+    if (!gisArmedAt || !gateOpen()) return;
+    if (Date.now() - gisArmedAt < GIS_STUCK_MS) return;
+    gisDisarm();
+    showGateHelp("stuck");
+  }
+  function gisArm() {
+    if (!gateOpen()) return;
+    gisArmedAt = Date.now();
+    if (gisStuckTimer) clearTimeout(gisStuckTimer);
+    gisStuckTimer = setTimeout(gisCheckStuck, GIS_STUCK_MS + 50);
+  }
+  window.addEventListener("blur", function () {
+    setTimeout(function () {
+      var a = document.activeElement;
+      if (a && a.tagName === "IFRAME" && a.closest && a.closest("#gate-signin")) gisArm();
+    }, 0);
+  });
+  document.addEventListener("visibilitychange", function () {
+    /* ⚠️ "העמוד הוסתר" כסימן ללחיצה — רק באייפון, שם ה-popup נפתח מעל העמוד
+       ושם התקלה. במחשב זה היה מסמן גם סתם מעבר לחלון אחר. */
+    if (document.hidden) { if (!gisArmedAt && isIOSDevice()) gisArm(); return; }
+    /* חזרה לעמוד — טיימרים ברקע מוקפאים באייפון, אז בודקים שוב בחזרה. */
+    if (gisArmedAt) setTimeout(gisCheckStuck, 400);
+  });
+
   function hideLoginGate() {
     const gate = document.getElementById("login-gate");
     if (gate) gate.hidden = true;
@@ -2000,6 +2164,7 @@
   function onGoogleLogin(resp) {
     /* 🔴 תשובה אוטומטית אחרי שכבר נדחינו = עוד סבב בלולאה. מתעלמים. */
     if (gisAutoBlocked && resp && /^auto/.test(String(resp.select_by || ""))) return;
+    gisDisarm();   // התשובה הגיעה — אין "תקיעה" (ר' רשת הביטחון מעל hideLoginGate)
     loginError = null;
     showLoginConnecting();   // גוגל כבר סיימה; עכשיו מחכים לשרת שלנו — תראו את זה, לא מסך ריק
     fetch(CBA.sheets.url + "?action=login&token=" + encodeURIComponent(resp.credential))

@@ -2690,3 +2690,19 @@ button.is-busy,
 .present-util__pct { font-weight: 700; text-align: end; font-variant-numeric: tabular-nums; color: var(--text-soft); }
 .present-util__pct.is-over { color: var(--badge-danger); }
 .present-util__nums { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- כרטיס "פתחו בספארי" במסך הכניסה (22.9.2026) ----------
+   דפדפן פנימי של וואטסאפ/פייסבוק תוקע את חלון ההתחברות של Google במסך לבן.
+   הכרטיס מופיע מיד כשהדפדפן מזוהה, או אחרי 15ש' בלי תשובה מ-Google.
+   מכוון: אזהרה רכה (כתום מדוד), לא שגיאה — יש צעד ברור להמשך. */
+.login-inapp {
+  margin-top: 16px; text-align: start;
+  background: var(--warn-soft, #FFF7ED); border: 1px solid rgba(217,119,6,.28);
+  border-radius: 14px; padding: 14px 14px 12px;
+}
+.login-inapp__title { font-size: 14px; font-weight: 800; color: var(--text); }
+.login-inapp__body { font-size: 12.5px; color: var(--text); line-height: 1.55; margin: 4px 0 10px; }
+.login-inapp__actions { display: flex; gap: 8px; }
+.login-inapp__actions .login-inapp__go { flex: 1.3; margin: 0; }
+.login-inapp__actions .login-inapp__copy { flex: 1; margin: 0; width: auto; white-space: nowrap; padding-inline: 10px; }
+.login-inapp__how { font-size: 11.5px; color: var(--text-soft); line-height: 1.5; margin: 8px 0 0; }
