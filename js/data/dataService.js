@@ -1956,6 +1956,58 @@ CBA.data = (function () {
     } catch (e) { /* שגר ושכח */ }
   }
 
+  /* ==========================================================================
+   *  🔴🔴  המראה משימה ← דיווח   (2026-09-22)
+   * --------------------------------------------------------------------------
+   *  **הבאג שזה סוגר** (נצפה ע"י יועד על דיווחים 21 ו-22): מנהל סגר
+   *  "בוטל" / "לא רלוונטי", ובצד התושב לא זז כלום — הבר נשאר בנקודה
+   *  הראשונה, משפט המצב היה ריק, וההסבר שנשלח במייל לא הופיע באפליקציה.
+   *
+   *  **למה:** מסך התושב קורא את `gardenReports/<id>`, לא את המשימה.
+   *  עד המעבר ל-Firestore מילא את שדות התצוגה שם הסנכרון השעתי
+   *  `gardenReportsSyncAll_`, שגזר אותם מטאב המשימות. הוא **מסרב לרוץ**
+   *  מרגע ש-Firestore הוא הבעלים (`gardenFsOwns_`), ובצדק — הוא גם
+   *  סוחף יתומים, וזה מה שמחק נתונים ב-16.9. ו-`gardenFsTask` כותבת
+   *  אך ורק ל-`gardenTasks`. כלומר אף אחד לא עדכן את הדיווח.
+   *
+   *  🔑 **אין כאן כלל אבטחה חדש ואין דיפלוי.** `grTeamUpdateOk` כבר
+   *     מתיר לבעל הרשאת גינון בדיוק את השדות האלה — זה היה חצי מנגנון
+   *     שנכתב ולא חובר.
+   *
+   *  ⚠️ **שגר ושכח, במכוון.** המשימה כבר נכתבה והפעולה קיימת; מראה
+   *     שנכשלה לא מבטלת אותה. היא כן נרשמת, כי כשל שקט כאן הוא בדיוק
+   *     הבאג הזה מחדש.
+   *  🔴🔴 **כתיבה למסמך ידוע, ולא שאילתה.** מפתה היה לשאול "אילו
+   *     דיווחים מצביעים למשימה הזאת" ולעדכן את כולם — וזה **נדחה**:
+   *     `canSeeGardenReport` מתיר קריאה רק למשפחה של הדיווח עצמו,
+   *     גם למנהל-על. זה קו אדום מכוון ולא פער. כלל ה**כתיבה**
+   *     (`grTeamUpdateOk`) כן פתוח לצוות, וכלל אבטחה רשאי לקרוא
+   *     מסמך שהלקוח אינו רשאי לקרוא — ולכן `set(merge)` על
+   *     `gardenTasks.repId` עובד בלי שום קריאה.
+   *  ⚠️ **ולכן: הדיווח הראשון בלבד.** אחרי איחוד, דיווחים נוספים
+   *     מצביעים לאותה משימה ומזהיהם אינם על המשימה. הם מקבלים את
+   *     השלב בכתיבת האיחוד עצמה (ר' `gardenFsMerge`).
+   *  ⚠️ נקראת רק ממסלולי הצוות. לתושב אין `hasPerm('גינון')` והכתיבה
+   *     הייתה נדחית ממילא — ולכן משוב שלילי אינו קורא לה. */
+  function gardenMirrorToReport(repId, fields, cb) {
+    repId = String(repId || "").trim();
+    if (!repId || !fields) return cb && cb(null);
+    var patch = {};
+    Object.keys(fields).forEach(function (k) { patch[k] = fields[k]; });
+    patch.updatedAt = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+    CBA.fb.mergeDoc("gardenReports", repId, patch, function (e) {
+      if (e) gardenPhotoWarn("סטטוס לא הועתק לדיווח", repId, e);
+      if (cb) cb(e || null);
+    });
+  }
+
+  /* חלון המשוב בימים. 🔴 **העתק לנוחות** — מקור האמת הוא
+     `RULE_GARDEN_FEEDBACK_DAYS` בטאב "הגדרות מיילים", והשרת
+     גוזר ממנו את `feedbackUntil` במסלול Apps Script. כאן צריך ערך
+     כדי לחשב את החלון ברגע הסגירה, ו-7 הוא ברירת המחדל שבשרת
+     (`handleGardenMeta_`). ⚠️ שינוי הכלל בגיליון דורש עדכון כאן. */
+  var GARDEN_FEEDBACK_DAYS_C = 7;
+
   /** שגיאה מ-Firestore — למשפט בעברית. `permission-denied` כאן פירושו
    *  שהשומר בכללי האבטחה עצר את הפעולה — לא תקלה. */
   function gardenFsErr(e, fallback) {
@@ -1978,6 +2030,9 @@ CBA.data = (function () {
       var isReport = String(cur.repId || "").trim() !== "";
       var note = String(extra.note || "").trim().substring(0, 600);
       var patch = {}, log = null, notify = "";
+      /* המראה לדיווח — ר' `gardenMirrorToReport`. `null` = הפעולה
+         הזאת אינה נוגעת בסגירה, ולכן אין מה להעתיק מעבר לשלב ולדגל. */
+      var mirrorWhy = null;
 
       /* ⚠️ העתק לנוחות בלבד — האכיפה האמיתית ב-`gtClosedOk`. */
       if (closure) {
@@ -1998,6 +2053,7 @@ CBA.data = (function () {
         patch.approvedAt = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
         if (why) patch.note = why;
         log = { kind: "סגירה", note: reason + (why ? " — " + why : "") };
+        mirrorWhy = String(why || "");
         if (reason === "בוצע") notify = "GARDEN_COMPLETED";
         else if (reason !== "אוחד") notify = "GARDEN_REPORT_DECLINED";
       }
@@ -2018,6 +2074,7 @@ CBA.data = (function () {
           patch.approvedAt = "";
           notify = "GARDEN_REOPENED";
           log = { kind: "ביטול ביצוע", note: closure + (note ? " — " + note : "") };
+          mirrorWhy = "";
         } else {
           patch.flag = "";
           log = { kind: "ביטול ביצוע", note: "" };
@@ -2064,6 +2121,7 @@ CBA.data = (function () {
           patch.approvedBy = "";
           patch.approvedAt = "";
           notify = "GARDEN_REOPENED";
+          mirrorWhy = "";
         }
         patch.stage = "בטיפול";
         patch.flag = "הוחזר להשלמה";
@@ -2116,8 +2174,96 @@ CBA.data = (function () {
         /* מכאן הפעולה **קיימת**. כל מה שנכשל אחריה אינו מבטל אותה. */
         if (log) gardenLogAppend(String(id), log.kind, log.note, { repId: cur.repId });
         if (notify) gardenNotifyFire(id);
+        /* 🔴 המראה לדיווח — ר' `gardenMirrorToReport`. בלי השורות האלה
+           התושב רואה את הדיווח שלו קפוא על "התקבל" לנצח. */
+        if (isReport) {
+          var mir = {
+            stage:   patch.stage   !== undefined ? patch.stage   : String(cur.stage || "התקבל"),
+            flag:    patch.flag    !== undefined ? patch.flag    : String(cur.flag  || ""),
+            closure: patch.closure !== undefined ? patch.closure : String(cur.closure || "")
+          };
+          if (mirrorWhy !== null) {
+            mir.closeWhy = mirrorWhy;
+            /* חלון המשוב נפתח **רק** על סגירה "בוצע": אין מה לדרג
+               בעבודה שלא נעשתה. ר' `canFb` ב-`gardenReportRow_`. */
+            var didWork = mir.closure === "בוצע";
+            mir.canFeedback = didWork;
+            mir.feedbackUntil = didWork
+              ? Date.now() + GARDEN_FEEDBACK_DAYS_C * 86400000
+              : 0;
+          }
+          gardenMirrorToReport(cur.repId, mir);
+        }
         cb({ ok: true });
       });
+    });
+  }
+
+  /* ==========================================================================
+   *  🔧  תיקון חד-פעמי — הדיווחים שקפאו   (2026-09-22)
+   * --------------------------------------------------------------------------
+   *  כל דיווח שנפתח מאז ש-`gardenWriteToFirestore` נדלק (16.9) נולד בלי
+   *  שדות התצוגה, ואף פעולה לא כתבה אותם — ר' `gardenMirrorToReport`.
+   *  התיקון בקוד מטפל בכל מה שיקרה מכאן; הפונקציה הזאת מטפלת במה שכבר
+   *  קרה, כולל דיווחים 21 ו-22.
+   *
+   *  🔑 **רצה בדפדפן של מנהל, ולא בשרת.** כלל הכתיבה `grTeamUpdateOk`
+   *     כבר מתיר לבעל הרשאת גינון בדיוק את השדות האלה — כלומר אפס
+   *     שינוי בכללי האבטחה ואפס דיפלוי ל-Apps Script.
+   *
+   *  ⚠️ **`closeWhy` נלקח מ-`note` של המשימה** ולא מהיומן. `close()`
+   *     כותבת את ההסבר לשני המקומות, ולכן זה אותו טקסט; היומן היה
+   *     דורש שאילתה נוספת לכל משימה.
+   *  ⚠️ **סדרתי ולא מקבילי** — אותו נימוק כמו ב-`gardenFsApproveBatch`:
+   *     כשל באמצע משאיר "תוקנו 12 מתוך 19" ולא קבוצה אקראית.
+   *  ⚠️ **אידמפוטנטית.** הרצה שנייה כותבת בדיוק את אותם ערכים.
+   *  ↩️ **ביטול:** אין מה לבטל — היא רק מיישרת את הדיווח למשימה.
+   * ========================================================================== */
+  function gardenRepairReportStatus(cb) {
+    if (!gardenWritesOn()) {
+      return cb({ ok: false, error: "התיקון רץ רק כשכתיבת הגינון מהדפדפן דלוקה" });
+    }
+    CBA.fb.readCollection("gardenTasks", function (err, rows) {
+      if (err) return cb({ ok: false, error: gardenFsErr(err, "לא הצלחנו לקרוא את המשימות") });
+      var list = (rows || []).filter(function (t) {
+        return String((t && t.repId) || "").trim() !== "";
+      });
+      if (!list.length) return cb({ ok: true, count: 0, failed: 0, total: 0 });
+
+      var done = 0, failed = 0;
+      function step(i) {
+        if (i >= list.length) {
+          return cb({ ok: failed === 0, count: done, failed: failed, total: list.length,
+                      error: failed ? ("תוקנו " + done + " מתוך " + list.length) : "" });
+        }
+        var t = list[i];
+        var closure = String(t.closure || "").trim();
+        var didWork = closure === "בוצע";
+        /* חותמת האישור יכולה להיות Timestamp של Firestore, Date או ריק. */
+        var appr = 0;
+        try {
+          if (t.approvedAt && typeof t.approvedAt.toMillis === "function") {
+            appr = t.approvedAt.toMillis();
+          } else if (t.approvedAt instanceof Date) {
+            appr = t.approvedAt.getTime();
+          }
+        } catch (e) { appr = 0; }
+        gardenMirrorToReport(String(t.repId), {
+          stage:   String(t.stage || "התקבל"),
+          flag:    String(t.flag || ""),
+          closure: closure,
+          closeWhy: closure ? String(t.note || "") : "",
+          canFeedback: didWork,
+          /* 0 = אין חלון, וזו בדיוק הסמנטיקה בשרת. משימה שאושרה
+             ואין לה חותמת לא תיחסם מהמשוב בגלל התיקון הזה. */
+          feedbackUntil: (didWork && appr)
+            ? appr + GARDEN_FEEDBACK_DAYS_C * 86400000 : 0
+        }, function (e) {
+          if (e) failed++; else done++;
+          step(i + 1);
+        });
+      }
+      step(0);
     });
   }
 
@@ -2361,6 +2507,20 @@ CBA.data = (function () {
           list.forEach(function (rep) {
             CBA.fb.mergeDoc("gardenReports", String(rep.id), {
               taskId: parentId, mergedInto: parentRep,
+              /* 🔴 2026-09-22 — **שלב הבולעת, לא של הנבלעת.** הדיווח
+                 מצביע מעכשיו למשימה האחרת, וזה בדיוק מה ש-
+                 `gardenReportRow_` גזר בשרת: השלב נלקח מהמשימה
+                 שהדיווח מצביע עליה. בלי זה הוא היה תקוע על "התקבל"
+                 עד לסגירה הבאה. ⚠️ `closure` ריק במכוון — העבודה
+                 עדיין פתוחה; "אוחד" יושב על המשימה הנבלעת, ומה
+                 שהתושב רואה הוא "אוחד עם דיווח N" מ-`mergedInto`.
+                 ⚠️ באותה כתיבה ולא במראה נפרדת — הדיווח כבר לא
+                 נמצא בשאילתה של המשימה הנבלעת, ושאילתה על הבולעת
+                 מיד אחרי הכתיבה עלולה לא לראות אותו עדיין. */
+              stage: String(parent.stage || "התקבל"),
+              flag: String(parent.flag || ""),
+              closure: "", closeWhy: "",
+              canFeedback: false, feedbackUntil: 0,
               updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date()
             }, function (eR) {
               if (eR) { failed++; gardenPhotoWarn("דיווח לא הופנה באיחוד", rep.id, eR); }
@@ -3960,8 +4120,36 @@ CBA.data = (function () {
       CBA.sheets.postRead("gardenTaskDelete", { id: id, why: why }, cb);
     },
     /* מחיקת דיווח ע"י התושב שכתב אותו — רק כל עוד איש לא נגע בו. */
-    gardenReportDelete: function (id, cb) {
-      CBA.sheets.postRead("gardenReportDelete", { id: id }, cb);
+    /* ==========================================================================
+     *  מחיקת דיווח ע"י המדווח — ורק כל עוד איש לא נגע בו
+     * --------------------------------------------------------------------------
+     *  🔴 **המחיקה עצמה נשארת ב-Apps Script**, ובמכוון: היא צריכה למחוק
+     *     גם את התמונות מ-Drive, וזה בלתי אפשרי מהדפדפן.
+     *
+     *  🔴🔴 **החור שנסגר כאן** (22.9): `gardenReportDelete_` מוחקת שתי
+     *     שורות — הדיווח **והמשימה שמאחוריו** — ומדווחת את שתיהן ב-
+     *     `deletedTaskIds`, ומשם `gardenAfterWrite_` מוחקת את שני
+     *     המסמכים. אבל היא מוצאת את שורת המשימה **רק אם היא בגיליון**,
+     *     ו-`gardenEnsureRows_` משלימה שורת דיווח בלי שורת המשימה שלה.
+     *     כלומר דיווח שנמחק בשעה הראשונה שלו משאיר **משימה יתומה
+     *     ב-Firestore** — בדיוק "משימה בלי מדווח" שצפה אצל הצוות.
+     *
+     *  🔑 הכלל `gtOrphanCleanupOk` נכתב בדיוק למצב הזה ומתיר את הניקוי:
+     *     שלב 'התקבל', `repId` מלא, ו**אין** מסמך דיווח — התנאי האחרון
+     *     מתקיים רק אחרי שהמחיקה הצליחה. ⚠️ שגר ושכח: הדיווח כבר נמחק
+     *     וזה מה שהתושב ביקש; כשל כאן אינו שגיאה שלו. */
+    gardenReportDelete: function (id, taskId, cb) {
+      /* תאימות לאחור לקריאה בת שני ארגומנטים. */
+      if (typeof taskId === "function") { cb = taskId; taskId = ""; }
+      CBA.sheets.postRead("gardenReportDelete", { id: id }, function (res) {
+        var gone = (res && res.deletedTaskIds) || [];
+        if (res && res.ok && gardenWritesOn() && taskId && gone.length === 0) {
+          CBA.fb.deleteDoc("gardenTasks", String(taskId), function (e) {
+            if (e) gardenPhotoWarn("משימה יתומה נשארה אחרי מחיקת דיווח", taskId, e);
+          });
+        }
+        cb(res);
+      });
     },
     /* פעולה בודדת על משימה. op: done | undo | note | defer | block | plan |
        return | approve | close | clearflag */
@@ -3988,6 +4176,9 @@ CBA.data = (function () {
       if (gardenWritesOn()) return gardenFsMerge(id, into, cb);
       CBA.sheets.postRead("gardenMerge", { id: id, into: into }, cb);
     },
+    /* 🔧 תיקון חד-פעמי לדיווחים שקפאו (22.9) — ר' `gardenRepairReportStatus`.
+       מופעל ידנית ממסך "מצב המערכת". בטוח להרצה חוזרת. */
+    gardenRepairReportStatus: gardenRepairReportStatus,
     /* אישור מרוכז — רק שגרה מאותה תבנית ואותו שבוע. השרת אוכף (ר' החלטה 3). */
     gardenApproveBatch: function (ids, cb) {
       if (gardenWritesOn()) return gardenFsApproveBatch(ids, cb);

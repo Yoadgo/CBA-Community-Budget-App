@@ -297,146 +297,19 @@
         });
       }
 
+      /* טופס ההגדרה. מאז 22.9 זה **אותו רכיב** שמשרת גם את "משימה
+         חדשה" במסך המשימות (js/ui/gardenForm.js): אותו מראה, אותם
+         צ'יפים, אותו מתג — ההבדל היחיד הוא שכאן המתג מתעורר דלוק,
+         ובעריכה הוא נעול. שני טפסים לאותו דבר כבר הספיקו לסטות זה
+         מזה בכותרות, בסדר השדות ובניסוח של אותה תדירות. */
       function openForm(d) {
-        var isNew = !d;
-        d = d || { freq: "שבועי", weekOfMonth: 1, areas: [], active: true };
-        var wrap = document.createElement("div");
-        wrap.className = "gt-sheet-wrap";
-
-        function opt(v, sel) {
-          return '<option value="' + esc(v) + '"' + (String(sel) === String(v) ? " selected" : "") +
-            '>' + esc(v) + '</option>';
-        }
-        wrap.innerHTML =
-          '<div class="gt-sheet-bd"></div>' +
-          '<div class="gt-sheet" role="dialog" aria-label="' +
-            (isNew ? "משימה חדשה בתוכנית" : "עריכת משימה בתוכנית") + '">' +
-            '<div class="gt-grip" aria-hidden="true"></div>' +
-            '<h4>' + (isNew ? "משימה חדשה בתוכנית" : "עריכה") + '</h4>' +
-            '<p class="sub">מה אמור לקרות, וכל כמה זמן.</p>' +
-
-            '<label class="gd-lbl">מה צריך לעשות <s>*</s></label>' +
-            '<input class="gd-inp" id="gp-title" maxlength="120" autocomplete="off" ' +
-              'value="' + esc(d.title || "") + '" placeholder="למשל: כיסוח מדשאות">' +
-
-            '<div class="gd-row2" style="margin-top:10px">' +
-              '<div><label class="gd-lbl">קטגוריה</label>' +
-                '<select class="gd-inp" id="gp-cat"><option value=""></option>' +
-                cats.map(function (x) { return opt(x, d.category); }).join("") + '</select></div>' +
-              '<div><label class="gd-lbl">תדירות <s>*</s></label>' +
-                '<select class="gd-inp" id="gp-freq">' +
-                FREQS.map(function (f) {
-                  return '<option value="' + esc(f) + '"' +
-                    ((d.freq || "שבועי") === f ? " selected" : "") + '>' +
-                    esc(FREQ_LABEL[f]) + '</option>';
-                }).join("") + '</select></div>' +
-            '</div>' +
-
-            /* שני השדות התלויים בתדירות. הם מוצגים/מוסתרים ב-syncFreq ולא
-               מוסרים מה-DOM, כדי שערך שהוקלד לא ייעלם כשמשנים תדירות ומחזירים. */
-            '<div id="gp-anchor" hidden style="margin-top:10px">' +
-              '<label class="gd-lbl">השבוע הראשון <s>*</s></label>' +
-              '<input class="gd-inp" id="gp-first" type="date" value="' +
-                esc(d.firstWeek || "") + '">' +
-              '<p class="gp-note">ממנו נספרים המחזורים. בחרו יום ראשון.</p>' +
-            '</div>' +
-            '<div id="gp-wom" hidden style="margin-top:10px">' +
-              '<label class="gd-lbl">שבוע בחודש</label>' +
-              '<select class="gd-inp" id="gp-week">' +
-                [1,2,3,4].map(function (n) {
-                  return '<option value="' + n + '"' +
-                    ((d.weekOfMonth || 1) === n ? " selected" : "") + '>שבוע ' + n + '</option>';
-                }).join("") + '</select>' +
-              '<p class="gp-note">אין שבוע 5 — החודש הוא ארבעה שבועות.</p>' +
-            '</div>' +
-
-            '<label class="gd-lbl" style="margin-top:10px">חודשים פעילים</label>' +
-            '<input class="gd-inp" id="gp-months" maxlength="40" autocomplete="off" ' +
-              'value="' + esc(d.months || "") + '" placeholder="3-11 · 10 · 11,12,1,2">' +
-            '<p class="gp-note">ריק = כל השנה.</p>' +
-
-            '<label class="gd-lbl" style="margin-top:10px">אזורים</label>' +
-            '<div class="gp-areas" id="gp-areas">' +
-              areas.map(function (a) {
-                var on = (d.areas || []).indexOf(a) !== -1;
-                return '<button type="button" class="gp-chip' + (on ? " on" : "") +
-                  '" data-area="' + esc(a) + '">' + esc(a) + '</button>';
-              }).join("") +
-            '</div>' +
-            '<p class="gp-note">בלי בחירה — משימה כללית אחת, בלי חלוקה לאזורים.</p>' +
-
-            '<label class="gp-check" style="margin-top:10px">' +
-              '<input type="checkbox" id="gp-rot"' + (d.rotate ? " checked" : "") + '>' +
-              '<span>' + ico("rot", 13) + ' סבב — אזור אחד בכל מופע, לפי הסדר</span>' +
-            '</label>' +
-
-            '<label class="gd-lbl" style="margin-top:10px">סעיף בתוכנית</label>' +
-            '<input class="gd-inp" id="gp-clause" maxlength="60" autocomplete="off" ' +
-              'value="' + esc(d.clause || "") + '" placeholder="לא חובה">' +
-
-            '<button type="button" class="gd-cta" id="gp-save" style="margin-top:16px">' +
-              (isNew ? "הוספה לתוכנית" : "שמירה") + '</button>' +
-            /* מחיקה יושבת בתוך טופס העריכה ולא כפעולה על השורה: היא בלתי
-               הפיכה, וכפתור פח ליד מתג בשורה צפופה הוא הזמנה ללחיצה בטעות.
-               כאן צריך לפתוח, לקרוא, ולבחור אותה במפורש. */
-            (isNew ? '' :
-              '<button type="button" class="gp-del" id="gp-delete">' +
-                ico("trash", 14) + 'מחיקה מהתוכנית</button>') +
-          '</div>';
-
-        /* גיליון אחד משותף — Escape, מלכודת מיקוד, נעילת גלילה ושומר
-           כפילות יושבים ב-CBA.ui.mountSheet (ממצאים 23 · 24 · 27). */
-        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gp-form", sticky: true });
-        function close() { sheetClose(); }
-
-        var freqEl = wrap.querySelector("#gp-freq");
-        function syncFreq() {
-          var f = freqEl.value;
-          wrap.querySelector("#gp-anchor").hidden = f !== "דו-שבועי";
-          wrap.querySelector("#gp-wom").hidden = (f !== "חודשי" && f !== "שנתי");
-        }
-        freqEl.addEventListener("change", syncFreq);
-        syncFreq();
-
-        wrap.querySelector("#gp-areas").addEventListener("click", function (e) {
-          var b = e.target.closest("[data-area]");
-          if (b) b.classList.toggle("on");
-        });
-
-        var delBtn = wrap.querySelector("#gp-delete");
-        if (delBtn) delBtn.addEventListener("click", function () { askDelete(d, close); });
-
-        wrap.querySelector("#gp-save").addEventListener("click", function () {
-          if (busy) return;
-          var picked = Array.prototype.map.call(
-            wrap.querySelectorAll(".gp-chip.on"), function (b) { return b.dataset.area; });
-          var payload = {
-            id: isNew ? "" : d.id,
-            title: wrap.querySelector("#gp-title").value.trim(),
-            category: wrap.querySelector("#gp-cat").value,
-            freq: freqEl.value,
-            firstWeek: wrap.querySelector("#gp-first").value,
-            weekOfMonth: wrap.querySelector("#gp-week").value,
-            months: wrap.querySelector("#gp-months").value.trim(),
-            areas: picked,
-            rotate: wrap.querySelector("#gp-rot").checked,
-            clause: wrap.querySelector("#gp-clause").value.trim(),
-            active: d.active !== false
-          };
-          if (!payload.title) return CBA.ui.alert("צריך שם למשימה");
-          /* אותה בדיקה בדיוק רצה גם בשרת. היא כאן כדי לא לשלוח בקשה שתידחה,
-             ושם כי לקוח אינו גבול אבטחה. ר' gardenPlanSave_. */
-          if (payload.freq === "דו-שבועי" && !payload.firstWeek) {
-            return CBA.ui.alert("למחזור דו-שבועי צריך לבחור את השבוע הראשון");
-          }
-          busy = true;
-          CBA.data.gardenPlanSave(payload, function (res) {
-            busy = false;
-            if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "השמירה לא הצליחה");
-            close();
-            CBA.ui.toast(isNew ? "נוספה לתוכנית" : "נשמר");
-            load();
-          });
+        CBA.gardenForm.open({
+          mode: "plan",
+          data: d || null,
+          cats: cats, areas: areas,
+          ico: ico, catOf: catOf, esc: esc,
+          onSaved: load,
+          onDelete: d ? function (row, close) { askDelete(row, close); } : null
         });
       }
     }

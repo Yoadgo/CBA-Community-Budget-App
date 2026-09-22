@@ -26,7 +26,8 @@ CBA.screens = CBA.screens || {};
 (function () {
   function esc(s) { return CBA.esc(String(s == null ? "" : s)); }
 
-  var st = { flags: null, keys: [], error: "", busy: "", probes: {}, rows: [] };
+  var st = { flags: null, keys: [], error: "", busy: "", probes: {}, rows: [],
+             fixBusy: false, fixMsg: "" };
 
   /* 🔴 **התיאור הוא חלק מהדגל, לא קישוט.** דגל בשם `budgetTxFromFirestore`
      אומר לי מה הוא עושה כי כתבתי אותו; בעוד חצי שנה, בשתיים בלילה, הוא
@@ -200,10 +201,59 @@ CBA.screens = CBA.screens || {};
         'התנהגות תקינה כשאין מנוי פעיל.</div>' +
     "</div>";
 
-    container.innerHTML = head + flagsHTML + probeHTML;
+    /* ==========================================================================
+     *  🔧 תחזוקה — פעולות חד-פעמיות   (2026-09-22)
+     * --------------------------------------------------------------------------
+     *  ⚠️ **זה לא דגל.** דגל משנה התנהגות מכאן והלאה; מה שיושב כאן מתקן
+     *     נתונים שכבר נכתבו. ההפרדה מכוונת — כפתור שמריץ כתיבה על עשרות
+     *     מסמכים לא צריך להיראות כמו מתג הפעלה.
+     * ======================================================================== */
+    var fixHTML = '<div class="card">' +
+      '<div class="sys-sec">תחזוקה</div>' +
+      '<div class="sys-flag">' +
+        '<div class="sys-flag__text">' +
+          '<div class="sys-flag__name">יישור סטטוס לדיווחי תושבים</div>' +
+          '<div class="sys-flag__desc">מעתיק שלב, דגל וסיבת סגירה מכל משימה אל הדיווח ' +
+            'שמאחוריה. נדרש פעם אחת לדיווחים שנפתחו מאז 16.9 ונשארו תקועים על ' +
+            '"התקבל". בטוח להרצה חוזרת.</div>' +
+          (st.fixMsg ? '<div class="sys-flag__key">' + esc(st.fixMsg) + '</div>' : '') +
+        '</div>' +
+        '<button type="button" class="btn-ghost sys-flag__btn" id="sys-fix-reports"' +
+          (st.fixBusy ? " disabled" : "") + '>' +
+          (st.fixBusy ? "רגע…" : "הרץ") +
+        '</button>' +
+      '</div>' +
+    '</div>';
+
+    container.innerHTML = head + flagsHTML + probeHTML + fixHTML;
 
     Array.prototype.forEach.call(container.querySelectorAll("[data-flag]"), function (btn) {
       btn.addEventListener("click", function () { toggle(container, btn.getAttribute("data-flag")); });
+    });
+
+    var fixBtn = container.querySelector("#sys-fix-reports");
+    if (fixBtn) fixBtn.addEventListener("click", function () { repairReports(container); });
+  }
+
+  function repairReports(container) {
+    if (st.fixBusy || !CBA.data.gardenRepairReportStatus) return;
+    CBA.ui.confirm(
+      "כל דיווח תושב יקבל את השלב והסגירה של המשימה שלו. הפעולה אינה מוחקת דבר " +
+      "ואפשר להריץ אותה שוב.",
+      { title: "יישור סטטוס לדיווחי תושבים", okText: "הרץ" }
+    ).then(function (yes) {
+      if (!yes) return;
+      st.fixBusy = true; st.fixMsg = "";
+      draw(container);
+      CBA.data.gardenRepairReportStatus(function (res) {
+        st.fixBusy = false;
+        if (res && res.ok) {
+          st.fixMsg = "יושרו " + (res.count || 0) + " דיווחים מתוך " + (res.total || 0) + ".";
+        } else {
+          st.fixMsg = (res && res.error) || "הפעולה נכשלה.";
+        }
+        draw(container);
+      });
     });
   }
 

@@ -27,6 +27,8 @@ const RG = R('js/screens/resGarden.js');
 const PH = R('js/ui/photos.js');
 const RULES = R('firestore.rules');
 const CSS = R('css/garden.css');
+const GF = R('js/ui/gardenForm.js');
+const GP = R('js/screens/gardenPlan.js');
 const HTML = R('index.html');
 const SW = R('service-worker.js');
 
@@ -65,8 +67,9 @@ ok('gtFields אינו מכיל desc', !/['"]desc['"]/.test(gtFields));
    הבדיקה מסתכלת על המסמך שנכתב, לא על טקסט הקובץ. */
 const docLiteral = create.slice(create.indexOf('var doc = {'), create.indexOf('CBA.fb.createDoc'));
 ok('המסמך שנכתב אינו כולל desc', !/(^|[^\w])desc\s*:/.test(docLiteral));
-ok('הטופס אינו אוסף תיאור', !/nt-desc/.test(GT));
-const NEW_TASK = GT.slice(GT.indexOf('function openNewTask'), GT.indexOf('function openMenu'));
+ok('הטופס אינו אוסף תיאור', !/gf-desc/.test(GF));
+/* ⚠️ מאז 22.9 הטופס אינו ב-gardenTasks.js אלא במודול המשותף. */
+const NEW_TASK = GF;
 /* כל שם שדה במסמך, לא רק אלה שבהזחה מסוימת — אחרת שדה שנוסף בעתיד
    בשורה משותפת היה חומק מהבדיקה בשקט. */
 const written = [...new Set((docLiteral.match(/(?:^|[{,])\s*([a-zA-Z]\w*)\s*:/gm) || [])
@@ -83,7 +86,8 @@ ok('המפה והתמונות מוצגות רק כשהדפדפן כותב ישי
    /var direct = !!\(CBA\.data\.gardenDirectWrites && CBA\.data\.gardenDirectWrites\(\)\);/.test(NEW_TASK));
 ok('gardenDirectWrites מיוצא — המסך אינו גוזר את הדגל מחדש',
    /gardenDirectWrites: function \(\) \{ return gardenWritesOn\(\); \}/.test(DS));
-ok('המסך אינו קורא ל-CBA.fb.flag בעצמו', !/CBA\.fb\.flag\(/.test(GT));
+ok('המסך אינו קורא ל-CBA.fb.flag בעצמו',
+   !/CBA\.fb\.flag\(/.test(GT) && !/CBA\.fb\.flag\(/.test(GF));
 
 section('5. התמונות — מנגנון אחד, לא שניים');
 ok('הכיווץ עבר ל-js/ui/photos.js', /function compress\(file, cb\)/.test(PH));
@@ -101,7 +105,7 @@ section('6. התמונות עולות ברקע — התשובה חוזרת לפ�
 ok('cb נקרא לפני gardenUploadPhotos',
    create.indexOf('cb({ ok: true, id: taskId') < create.indexOf('gardenUploadPhotos('));
 ok('המכסה נבדקת שוב בתוך ה-callback של הכיווץ',
-   (NEW_TASK.match(/state\.photos\.length >= NT_PHOTO_MAX/g) || []).length >= 3);
+   (NEW_TASK.match(/st\.photos\.length >= PHOTO_MAX/g) || []).length >= 3);
 ok('אין beforeunload בטופס — סגירת הדף אינה נחסמת', !/beforeunload/.test(NEW_TASK));
 ok('כשל בהעלאה נרשם ואינו מבטל את המשימה',
    /gardenPhotoWarn\("אף תמונה לא עלתה למשימה"/.test(create) &&
@@ -110,49 +114,55 @@ ok('photos מותר ב-gtTeamUpdateOk (המיזוג שאחרי ההעלאה)',
    /gtTeamUpdateOk[\s\S]{0,600}'photos'/.test(RULES));
 
 section('7. ⚠️ המתג מנתב — הוא אינו מנגנון חזרתיות חדש');
-ok('המתג קיים כ-role="switch" עם aria-checked', /role="switch" aria-checked="false"/.test(NEW_TASK));
+ok('המתג קיים כ-role="switch" עם aria-checked',
+   NEW_TASK.indexOf('role="switch" ') >= 0 && NEW_TASK.indexOf('aria-checked="') >= 0);
 ok('aria-checked מתעדכן בלחיצה',
-   /repBtn\.setAttribute\("aria-checked", state\.repeat \? "true" : "false"\)/.test(NEW_TASK));
+   /this\.setAttribute\("aria-checked", st\.repeat \? "true" : "false"\)/.test(NEW_TASK));
 ok('דלוק → gardenPlanSave הקיים', /CBA\.data\.gardenPlanSave\(\{/.test(NEW_TASK));
+ok('🔴 והוא משרת גם את תוכנית העבודה — mode:"plan"', /mode: "plan"/.test(GP));
+ok('🔴 ואת מסך המשימות — mode:"task"', /mode: "task"/.test(GT));
+ok('⚠️ בעריכה המתג נעול', /swRow\("gf-rep"[\s\S]{0,120}isEdit\)/.test(GF));
 ok('כבוי → gardenCreateTask עם asReport', /asReport: true/.test(NEW_TASK));
 ok('אין אוסף חדש ואין כתיבה ישירה לאוסף אחר מהטופס',
    !/createDoc\(/.test(NEW_TASK));
 ok('מתג דלוק מסתיר את המפה ואת התמונות (אין להן מקום ב-gardenPlan)',
-   /onceEl\.hidden {2}= state\.repeat;/.test(NEW_TASK));
+   /q\("#gf-once"\)\.hidden = st\.repeat;/.test(NEW_TASK) &&
+   /q\("#gf-every"\)\.hidden = !st\.repeat;/.test(NEW_TASK));
 const gpFields = (RULES.match(/function gpFields\(\)[\s\S]*?\}/) || [''])[0];
 ok('gardenPlan באמת אינו מחזיק x/y/photos — ההסתרה נכונה ולא שרירותית',
    !/'x'/.test(gpFields) && !/'y'/.test(gpFields) && !/'photos'/.test(gpFields));
 
 section('8. בדיקת דו-שבועי — אותה בדיקה בלקוח, בשרת ובכללים');
-ok('הטופס חוסם דו-שבועי בלי שבוע ראשון',
-   /freq === "דו-שבועי" && !first/.test(NEW_TASK));
+ok('הטופס חוסם דו-שבועי בלי שבוע ראשון', /freq === "דו-שבועי" && !first/.test(NEW_TASK));
 ok('אותה בדיקה בשכבת הכתיבה',
    /freq === "דו-שבועי" && !\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(String\(payload\.firstWeek/.test(DS));
 ok('ואותה בדיקה בכללי האבטחה',
    /freq != 'דו-שבועי' \|\|[\s\S]{0,120}firstWeek/.test(RULES));
 ok('שדות התדירות מוסתרים ולא מוסרים מה-DOM',
-   /wrap\.querySelector\("#nt-anchor"\)\.hidden/.test(NEW_TASK) &&
-   !/#nt-anchor"\)\.remove\(\)/.test(NEW_TASK));
+   /q\("#gf-anchor"\)\.hidden/.test(NEW_TASK) && !/#gf-anchor"\)\.remove\(\)/.test(NEW_TASK));
 
 section('9. נגישות, עיצוב וניסוח');
 ok('כפתור הסרת תמונה הוא button עם aria-label (ממצא 29 לא נסוג)',
    /<button type="button" class="th-x" aria-label="הסרת התמונה">/.test(NEW_TASK));
-ok('המתג משתמש ב-.gp-sw הקיים ולא במתג שני', /class="gp-sw off"/.test(NEW_TASK));
+ok('המתג משתמש ב-.gp-sw הקיים ולא במתג שני', /'<i class="gp-sw'/.test(NEW_TASK));
 ok('אין הגדרת מתג חדשה ב-CSS', !/\.nt-rep__sw/.test(CSS));
+ok('הכפתורים הם צ\'יפים ולא רשימות נגללות — אין select בטופס',
+   !/<select/.test(GF) && !/<select/.test(GT) && !/<select/.test(GP));
 ok('המפה בגיליון נמוכה מ-.gd-map הרגילה', /\.nt-map \{ height: 240px/.test(CSS));
-ok('הכפתור הראשי הוא .gd-cta — CTA שחור לפי האפיון', /class="gd-cta" id="nt-go"/.test(NEW_TASK));
+ok('הכפתור הראשי הוא .gd-cta — CTA שחור לפי האפיון', /class="gd-cta" id="gf-go"/.test(NEW_TASK));
 ok('הגיליון עובר ב-mountSheet (Esc, מלכודת מיקוד, שומר כפילות)',
-   /CBA\.ui\.mountSheet\(wrap, \{ key: "gt-new", sticky: true \}\)/.test(NEW_TASK));
+   /CBA\.ui\.mountSheet\(wrap, \{ key: "gf-form", sticky: true \}\)/.test(NEW_TASK));
 ok('תווית המסנן כבר לא משקרת — תקלה יכולה להיפתח משני הצדדים',
    /seg\("faults", "תקלות", c\.faults\)/.test(GT) && !/"תקלות דיירים", c\.faults/.test(GT));
 ok('הנעיצה ממלאת אזור רק כשהמנהל לא בחר אחד',
-   /if \(state\.pinArea && sel && !sel\.value\)/.test(NEW_TASK));
+   /if \(st\.pinArea && !st\.area\)/.test(NEW_TASK));
 
 section('10. גרסה ומטמון');
-ok('index.html ו-service-worker על אותה גרסה',
-   (SW.match(/var VERSION = "(\d+\w?)"/) || [])[1] === '20260922e' &&
-   HTML.indexOf('?v=20260922e') > 0);
-ok('לא נשארה גרסה ישנה ב-index.html', !/20260922d/.test(HTML));
+const VER = (SW.match(/var VERSION = "(\d+\w?)"/) || [])[1];
+ok('index.html ו-service-worker על אותה גרסה', !!VER && HTML.indexOf('?v=' + VER) > 0, VER);
+ok('לא נשארה גרסה ישנה ב-index.html',
+   (HTML.match(/\?v=\d+[a-z]?/g) || []).every(v => v === '?v=' + VER));
+ok('המודול המשותף רשום ב-index.html', HTML.indexOf('js/ui/gardenForm.js') > 0);
 
 
 /* ==========================================================================
@@ -170,15 +180,13 @@ try {
   const dom = new JSDOM('<!doctype html><html dir="rtl"><body></body></html>',
     { runScripts: 'outside-only', pretendToBeVisual: true });
   const w = dom.window;
-  global.FileReader = w.FileReader; global.Image = w.Image;
 
-  const src = GT.slice(GT.indexOf('var NT_FREQS'), GT.indexOf('function openMenu'));
-  let created = null, planned = null, mounted = null;
-  const CBA = {
+  let created = null, planned = null, mounted = null, deleted = null;
+  w.CBA = {
     ui: {
       mountSheet: (wrap) => { mounted = wrap; w.document.body.appendChild(wrap); return () => wrap.remove(); },
-      alert: (m) => { CBA._alert = m; },
-      toast: (m) => { CBA._toast = m; }
+      alert: (m) => { w.CBA._alert = m; },
+      toast: (m) => { w.CBA._toast = m; }
     },
     data: {
       gardenDirectWrites: () => true,
@@ -188,80 +196,113 @@ try {
     photos: { toUpload: () => {} },
     map: { render: () => ({}) }
   };
-  const fn = new w.Function(
-    'CBA', 'esc', 'ico', 'order', 'shiftKey', 'todayKey', 'weekLabel',
-    'busy', 'filter', 'load', 'document', 'setTimeout', 'Array',
-    src + '; return openNewTask;'
-  )(CBA,
-    (s) => String(s == null ? '' : s),
-    () => '<svg></svg>',
-    { type: ['עצים', 'דשא'], area: ['צפון', 'דרום'] },
-    (k, n) => '2026-09-2' + (7 + n),
-    () => '2026-09-27',
-    (k) => 'שבוע ' + k,
-    false, 'open', () => {},
-    w.document, (f) => f(), w.Array);
+  /* המודול האמיתי, לא שכפול שלו. */
+  w.eval(GF);
+  const common = {
+    cats: ['דשא', 'עצים'], areas: ['צפון', 'דרום'],
+    ico: () => '<svg></svg>',
+    catOf: (c) => ({ key: c === 'דשא' ? 'lawn' : 'tree', ico: 'lawn' }),
+    esc: (x) => String(x == null ? '' : x)
+  };
+  const WEEKS = [{ v: '2026-09-27', label: 'השבוע' }, { v: '2026-10-04', label: 'שבוע הבא' },
+                 { v: '', label: 'בלי שבוע' }];
 
-  fn();
-  const q = (s) => mounted.querySelector(s);
-  ok('הגיליון נבנה ונכנס ל-DOM', !!mounted && !!q('#nt-title'));
-  ok('ברירת המחדל היא תקלה חד-פעמית — לא חוזרת',
-     q('#nt-rep').getAttribute('aria-checked') === 'false' &&
-     q('#nt-once').hidden === false && q('#nt-every').hidden === true);
-  ok('המפה והתמונות מוצגות במסלול הישיר', !!q('#nt-map') && !!q('#nt-thumbs'));
-  ok('הכפתור הראשי אומר מה הוא עושה', q('#nt-go-t').textContent === 'פתיחת התקלה');
+  /* ---------- פריסט "משימה" ---------- */
+  w.CBA.gardenForm.open(Object.assign({ mode: 'task', weeks: WEEKS }, common));
+  let q = (sel) => mounted.querySelector(sel);
+  ok('הטופס נבנה ונכנס ל-DOM', !!mounted && !!q('#gf-title'));
+  ok('🔴 פריסט "משימה" — המתג כבוי', q('#gf-rep').getAttribute('aria-checked') === 'false');
+  ok('ולכן המסלול החד-פעמי גלוי והחוזר מוסתר',
+     q('#gf-once').hidden === false && q('#gf-every').hidden === true);
+  ok('הקטגוריות הן צ\'יפים עם סמליל, לא רשימה נגללת',
+     q('#gf-cats').querySelectorAll('.gd-cat[data-c]').length === 2 && !mounted.querySelector('select'));
+  ok('"מתי" הוא צ\'יפים', q('#gf-weeks').querySelectorAll('[data-w]').length === 3);
+  ok('המפה והתמונות מוצגות במסלול הישיר', !!q('#gf-map') && !!q('#gf-thumbs'));
 
-  /* --- כותרת ריקה לא פותחת כלום --- */
-  q('#nt-go').click();
-  ok('בלי כותרת אין כתיבה, ויש הסבר', created === null && /צריך לכתוב/.test(CBA._alert || ''));
+  q('#gf-title').value = 'ראש ממטרה שבור';
+  q('#gf-go').click();
+  ok('🔴 בלי קטגוריה אין כתיבה, ויש הסבר',
+     created === null && /קטגוריה/.test(w.CBA._alert || ''));
 
-  /* --- מסלול חד-פעמי --- */
-  q('#nt-title').value = 'ראש ממטרה שבור';
-  q('#nt-cat').value = 'דשא';
-  q('#nt-go').click();
-  ok('נשלח asReport:true — המשימה תטופל כתקלה', !!created && created.asReport === true);
-  ok('הכותרת והקטגוריה עברו', created.title === 'ראש ממטרה שבור' && created.category === 'דשא');
+  q('#gf-cats').querySelector('[data-c="דשא"]').click();
+  ok('בחירת צ\'יפ מסמנת aria-pressed',
+     q('#gf-cats').querySelector('[data-c="דשא"]').getAttribute('aria-pressed') === 'true');
+  q('#gf-weeks').querySelector('[data-w="2026-10-04"]').click();
+  q('#gf-area').querySelector('[data-a1="צפון"]').click();
+  q('#gf-go').click();
+  ok('נשלח asReport:true', !!created && created.asReport === true);
+  ok('הכותרת, הקטגוריה, האזור והשבוע עברו',
+     created.title === 'ראש ממטרה שבור' && created.category === 'דשא' &&
+     created.area === 'צפון' && created.week === '2026-10-04');
   ok('בלי נעיצה נשלח null ולא ערך חלקי', created.x === null && created.y === null);
-  ok('הטוסט נוקב במספר התקלה', /נפתחה תקלה #77/.test(CBA._toast || ''));
+  ok('הטוסט נוקב במספר התקלה', /נפתחה תקלה #77/.test(w.CBA._toast || ''));
 
-  /* --- המתג --- */
-  fn();
-  const q2 = (s) => mounted.querySelector(s);
-  q2('#nt-rep').click();
+  /* ---------- המתג ---------- */
+  w.CBA.gardenForm.open(Object.assign({ mode: 'task', weeks: WEEKS }, common));
+  q = (sel) => mounted.querySelector(sel);
+  q('#gf-rep').click();
   ok('🔴 המתג מחליף את שני המסלולים',
-     q2('#nt-once').hidden === true && q2('#nt-every').hidden === false);
-  ok('aria-checked עקבי עם המצב', q2('#nt-rep').getAttribute('aria-checked') === 'true');
-  ok('המתג הוויזואלי (.gp-sw) איבד את off', !q2('.gp-sw').classList.contains('off'));
-  ok('הכפתור הראשי שינה ניסוח', q2('#nt-go-t').textContent === 'הוספה לתוכנית');
-  ok('⚠️ והטקסט מסביר למה אין מפה ותמונות', /לא תקלה בנקודה אחת/.test(q2('#nt-sub').textContent));
+     q('#gf-once').hidden === true && q('#gf-every').hidden === false);
+  ok('aria-checked עקבי', q('#gf-rep').getAttribute('aria-checked') === 'true');
+  ok('המתג הוויזואלי איבד את off', !q('#gf-rep .gp-sw').classList.contains('off'));
+  ok('הכפתור הראשי שינה ניסוח', q('#gf-go-t').textContent === 'הוספה לתוכנית');
+  ok('⚠️ והטקסט מסביר למה אין מפה ותמונות', /לא תקלה בנקודה אחת/.test(q('#gf-sub').textContent));
 
-  /* --- דו-שבועי בלי עוגן נחסם --- */
-  q2('#nt-title').value = 'גיזום שיחים';
-  q2('#nt-freq').value = 'דו-שבועי';
-  q2('#nt-freq').dispatchEvent(new w.Event('change'));
-  ok('שדה השבוע הראשון נחשף בדו-שבועי', q2('#nt-anchor').hidden === false);
-  CBA._alert = '';
-  q2('#nt-go').click();
-  ok('🔴 דו-שבועי בלי שבוע ראשון נחסם', planned === null && /שבוע הראשון/.test(CBA._alert));
-
-  q2('#nt-first').value = '2026-10-04';
-  q2('#nt-go').click();
+  q('#gf-title').value = 'גיזום שיחים';
+  q('#gf-freq').querySelector('[data-f="דו-שבועי"]').click();
+  ok('שדה השבוע הראשון נחשף בדו-שבועי', q('#gf-anchor').hidden === false);
+  w.CBA._alert = '';
+  q('#gf-go').click();
+  ok('🔴 דו-שבועי בלי שבוע ראשון נחסם', planned === null && /שבוע הראשון/.test(w.CBA._alert));
+  q('#gf-first').value = '2026-10-04';
+  q('#gf-areas').querySelector('[data-a="צפון"]').click();
+  q('#gf-areas').querySelector('[data-a="דרום"]').click();
+  q('#gf-go').click();
   ok('עם עוגן — נשמר לתוכנית העבודה', !!planned && planned.freq === 'דו-שבועי');
-  ok('ונשלח ל-gardenPlan ולא נפתחה משימה', planned.firstWeek === '2026-10-04' && planned.id === '');
-  ok('האזור עובר כמערך, כמו ש-gardenPlan מצפה', Array.isArray(planned.areas));
-  ok('ההגדרה נוצרת פעילה', planned.active === true);
+  ok('אזורים מרובים עוברים כמערך',
+     Array.isArray(planned.areas) && planned.areas.length === 2);
   ok('🔴 שום מפה ושום תמונה לא נשלחו במסלול החוזר',
      planned.x === undefined && planned.photos === undefined);
+  ok('ההגדרה נוצרת פעילה, ובלי מזהה (חדשה)', planned.active === true && planned.id === '');
 
-  /* --- חודשי חושף "שבוע בחודש" --- */
-  q2('#nt-freq').value = 'חודשי';
-  q2('#nt-freq').dispatchEvent(new w.Event('change'));
+  q('#gf-freq').querySelector('[data-f="חודשי"]').click();
   ok('חודשי חושף "שבוע בחודש" ומסתיר את העוגן',
-     q2('#nt-wom').hidden === false && q2('#nt-anchor').hidden === true);
-  ok('⚠️ והשדה המוסתר עדיין קיים — ערך שהוקלד לא נעלם',
-     q2('#nt-first').value === '2026-10-04');
+     q('#gf-wom').hidden === false && q('#gf-anchor').hidden === true);
+  ok('⚠️ והשדה המוסתר שומר את ערכו', q('#gf-first').value === '2026-10-04');
+
+  /* ---------- פריסט "תוכנית", ועריכה ---------- */
+  w.CBA.gardenForm.open(Object.assign({ mode: 'plan', weeks: WEEKS }, common));
+  q = (sel) => mounted.querySelector(sel);
+  ok('🔴 פריסט "תוכנית" — המתג מתעורר דלוק',
+     q('#gf-rep').getAttribute('aria-checked') === 'true' && q('#gf-every').hidden === false);
+
+  planned = null;
+  w.CBA.gardenForm.open(Object.assign({
+    mode: 'plan', weeks: WEEKS,
+    data: { id: 'T3', title: 'כיסוח', category: 'דשא', freq: 'חודשי',
+            weekOfMonth: 3, areas: ['דרום'], months: '3-11', rotate: true,
+            clause: 'ס-4', active: true },
+    onDelete: () => { deleted = true; }
+  }, common));
+  q = (sel) => mounted.querySelector(sel);
+  ok('עריכה — הערכים נטענים לטופס',
+     q('#gf-title').value === 'כיסוח' &&
+     q('#gf-cats').querySelector('[data-c="דשא"]').classList.contains('on') &&
+     q('#gf-freq').querySelector('[data-f="חודשי"]').classList.contains('on') &&
+     q('#gf-womc').querySelector('[data-wom="3"]').classList.contains('on') &&
+     q('#gf-areas').querySelector('[data-a="דרום"]').classList.contains('on') &&
+     q('#gf-months').value === '3-11' && q('#gf-clause').value === 'ס-4');
+  ok('⚠️ בעריכה המתג נעול דלוק', q('#gf-rep').disabled === true);
+  ok('סבב האזורים נטען כמתג דלוק', q('#gf-rot').getAttribute('aria-checked') === 'true');
+  ok('הכפתור אומר "שמירה"', q('#gf-go-t').textContent === 'שמירה');
+  q('#gf-go').click();
+  ok('שמירה מעבירה את המזהה — עדכון ולא יצירה', !!planned && planned.id === 'T3');
+  ok('ושומרת את הסבב ואת הסעיף', planned.rotate === true && planned.clause === 'ס-4');
+  ok('כפתור המחיקה קיים בעריכה בלבד', !!q('#gf-del'));
+  q('#gf-del').click();
+  ok('והוא מפעיל את onDelete של המסך', deleted === true);
 } catch (e) {
-  ok('jsdom רץ', false, e && e.message);
+  ok('jsdom רץ', false, (e && e.message) + ' | ' + (e && e.stack || '').split('\n')[1]);
 }
 
 console.log('\n' + (fail ? '✗' : '✓') + '  סה"כ עברו ' + pass + ' · נכשלו ' + fail);

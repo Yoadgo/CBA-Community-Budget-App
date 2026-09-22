@@ -52,6 +52,10 @@
        היחיד שנשאר מסומן במפורש), repeat מסמן משימה חוזרת מתוכנית העבודה,
        ו-filter/help הם שני הלחצנים בשורת הבקרה. */
     person: '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/>',
+    /* תקלה שהצוות פתח — שתי דמויות מול דמות אחת של `person`. ההבדל
+       נקרא גם בגודל 13px, וזה כל מה שסמליל בשורת מטא צריך לעשות. */
+    team:   '<circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/>' +
+            '<path d="M16.5 5.2a3.2 3.2 0 0 1 0 5.6"/><path d="M18 14.4A6 6 0 0 1 21 20"/>',
     // מצלמה — תמונות שצירף התושב לדיווח (PHASE 4.2)
     camera: '<rect x="3" y="6.5" width="18" height="13" rx="2.5"/><circle cx="12" cy="13" r="3.2"/><path d="M8.5 6.5 9.6 4.5h4.8l1.1 2"/>',
     repeat: '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14"/>' +
@@ -111,6 +115,17 @@
   };
   var GK_ROUTINE = "שגרה";
   var GK_REPORT  = "דיווח תושב";
+  /* 🔴🔴 **תקלת צוות — תקלה בלי תושב מאחוריה**   (2026-09-22, בקשת יועד:
+     "היא צריכה להיות מסווגת שונה, לא כתקלת דייר אלא תקלה שמנהל / אחראי
+     גינון פתח. אפשר דגל כחול במקום אדום ותווית מנהל.")
+     🔑 **ההבחנה נגזרת מ-`repId` ולא משדה חדש.** `kind` כבר אומר "זו
+        תקלה", ו-`repId` כבר אומר "יש תושב שמחכה לתשובה" — ולכן
+        `GK_REPORT` בלי `repId` הוא, בהגדרה, תקלה שהצוות פתח. אפס
+        שדות חדשים, אפס שינוי בכללי האבטחה, וכל הדיווחים הישנים
+        ממשיכים להיקרא נכון בלי מיגרציה.
+     ⚠️ הפס המקוטע נשאר על שתיהן — הוא אומר "תקלה", לא "תושב". מה
+        שמשתנה הוא **צבע הפינה** והתווית. */
+  function isTeamFault(t) { return !!t && t.kind === GK_REPORT && !t.repId; }
 
   var MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני",
                 "יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -732,6 +747,7 @@
         if (t.closure) {
           return '<article class="gd-rep gt-row gt-closed k-' + cat.key +
               (t.kind === GK_REPORT ? " is-report" : "") +
+              (isTeamFault(t) ? " is-team" : "") +
               '" data-id="' + esc(t.id) + '">' +
             '<span class="gt-cbox">' + ico("check") + '</span>' +
             '<div class="gt-body">' +
@@ -789,6 +805,7 @@
         var approving = done && isManager;
         return '<article class="gd-rep gt-row k-' + cat.key +
             (t.kind === GK_REPORT ? " is-report" : "") +
+            (isTeamFault(t) ? " is-team" : "") +
             (done ? (approving ? " is-await" : " is-done") : "") +
             '" data-id="' + esc(t.id) + '">' +
           (planning
@@ -817,8 +834,10 @@
                  משימת שגרה ומשימה יזומה נשארות בלי מספר — אין להן פנייה
                  ואין מי שמצטט אותן. */
               (t.kind === GK_REPORT
-                ? '<span class="gt-res">' + ico("person") +
-                  (t.repId ? esc(GL.reportRef(t.repId)) : 'תושב') + '</span><i>·</i>'
+                ? (isTeamFault(t)
+                    ? '<span class="gt-res is-team">' + ico("team") + 'מנהל</span><i>·</i>'
+                    : '<span class="gt-res">' + ico("person") +
+                      esc(GL.reportRef(t.repId)) + '</span><i>·</i>')
                 : (t.kind === GK_ROUTINE ? ico("repeat") + '<i>·</i>' : '')) +
               /* ---- תמונות הדיווח (PHASE 4.2, 2026-09-14) ----
                  עד היום התושב צילם, התמונה נשמרה ב-Drive, ומי שיצא לשטח
@@ -1193,6 +1212,11 @@
           '<div class="gt-lgi"><u><span class="gt-lgf"></span></u><div><b>פינה בורדו</b>' +
             '<span>אותו דבר, רק גלוי ממרחק: כרטיס עם פינה בורדו משמאל־למעלה הגיע מתושב, ' +
             'גם כשהוא כבר משובץ לשבוע בתוך רשימת העבודה.</span></div></div>' +
+          /* ⚠️ נכנס למקרא באותה נשימה שבה הוא נכנס לכרטיס — זה הכלל
+             בראש openLegend, וסימן בלי הסבר הוא מה שהמקרא בא למנוע. */
+          '<div class="gt-lgi"><u><span class="gt-lgf is-team"></span></u><div><b>פינה כחולה</b>' +
+            '<span>תקלה שהצוות פתח בעצמו, לא דייר. מטופלת בדיוק כמו תקלת דייר — ' +
+            'רק שאין מי שמחכה לתשובה, ולכן אין מייל ואין שאלת מעקב.</span></div></div>' +
           '<div class="gt-lgi"><u>' + ico("repeat") + '</u><div><b>' + esc(GL.T.routine) + '</b>' +
             '<span>מגיעה מתוכנית העבודה וחוזרת לפי התדירות שהוגדרה לה.</span></div></div>' +
           '<div class="gt-lgi"><u style="color:#C4CBC8">—</u><div><b>בלי סימון</b>' +
@@ -1334,279 +1358,26 @@
       /* טופס פתיחת משימה. גיליון תחתון ולא מסך נפרד: הוא נפתח מעל הרשימה,
          נסגר אליה, והמנהל רואה מיד את המשימה נכנסת. הקטגוריות והאזורים מגיעים
          מאותה תשובת שרת שבנתה את הרשימה — מקור אמת אחד, בלי קריאה נוספת. */
-      /* ------------------------------------------------------------------
-       *  טופס פתיחת משימה — חד-פעמית או חוזרת   (נכתב מחדש 22.9.2026)
-       * ------------------------------------------------------------------
-       *  בקשת יועד: "משימה שהיא כמו דיווח דייר אבל היא לא מהמשימות
-       *  החוזרות, עם אותו תפריט של דיווח דייר. אם יבחר שתהיה משימה
-       *  חוזרת אז יתווספו לה הכפתורים של משימה חזרתית."
-       *
-       *  🔑 **טופס אחד, שני מסלולים — ולא שני מנגנונים:**
-       *  - מתג כבוי  → `gardenCreateTask({asReport:true, …})`, כלומר
-       *    משימה אחת ב-`gardenTasks` שנראית ומטופלת כתקלת תושב.
-       *  - מתג דלוק → `gardenPlanSave({freq, …})`, כלומר **הגדרה
-       *    בתוכנית העבודה**. זה בדיוק מה שמשימה חוזרת כבר היא היום,
-       *    עם המנוע שמייצר ממנה משימות לכל שבוע. לא נבנה כאן שום
-       *    מנגנון חזרתיות חדש.
-       *
-       *  ⚠️ **להגדרה חוזרת אין נעיצה ואין תמונות** — `gardenPlan` אינו
-       *     מחזיק אותן, ובכוונה: שגרה אינה תקלה בנקודה אחת. לכן שני
-       *     השדות האלה מוסתרים כשהמתג דלוק. הכרעת יועד (22.9).
-       *  ⚠️ המפה והתמונות מוצגות רק כשהדפדפן כותב ישירות. במסלול
-       *     Apps Script (`appsScriptFallback`) הן לא היו נשמרות —
-       *     ושדה שנראה נשמר ואינו נשמר גרוע משדה שאינו קיים.
-       *  ⚠️ הקטגוריות והאזורים מגיעים מאותה תשובת שרת שבנתה את הרשימה —
-       *     מקור אמת אחד, בלי קריאה נוספת.
-       * --------------------------------------------------------------- */
-      var NT_FREQS = ["שבועי", "דו-שבועי", "חודשי", "שנתי"];
-      var NT_FREQ_LABEL = { "שבועי": "כל שבוע", "דו-שבועי": "כל שבועיים",
-                            "חודשי": "כל חודש", "שנתי": "פעם בשנה" };
-      var NT_PHOTO_MAX = 8;
-
+      /* טופס פתיחת משימה. מאז 22.9 זה **אותו רכיב** שמשרת גם את תוכנית
+         העבודה (js/ui/gardenForm.js) — היו כאן שני טפסים לאותו דבר,
+         והם כבר הספיקו לסטות זה מזה בכותרות, בסדר השדות ובניסוח.
+         ההבדל היחיד בין שני המסכים הוא הפריסט של המתג. */
       function openNewTask() {
-        var cats = order.type.length ? order.type : [];
-        var areas = order.area.length ? order.area : [];
-        var direct = !!(CBA.data.gardenDirectWrites && CBA.data.gardenDirectWrites());
-        var state = { x: null, y: null, pinArea: "", photos: [], repeat: false };
-
-        var wrap = document.createElement("div");
-        wrap.className = "gt-sheet-wrap";
-        wrap.innerHTML =
-          '<div class="gt-sheet-bd"></div>' +
-          '<div class="gt-sheet" role="dialog" aria-label="משימה חדשה">' +
-            '<div class="gt-grip" aria-hidden="true"></div>' +
-            '<h4>משימה חדשה</h4>' +
-            '<p class="sub" id="nt-sub">תקלה שאתה פותח בעצמך — מטופלת בדיוק ' +
-              'כמו תקלה שדייר דיווח עליה.</p>' +
-
-            '<label class="gd-lbl">מה צריך לעשות <s>*</s></label>' +
-            '<input class="gd-inp" id="nt-title" maxlength="120" autocomplete="off" ' +
-              'placeholder="למשל: לגזום את העץ שחוסם את התמרור">' +
-
-            '<div class="gd-row2" style="margin-top:10px">' +
-              '<div><label class="gd-lbl">קטגוריה <s>*</s></label>' +
-                '<select class="gd-inp" id="nt-cat">' +
-                  cats.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join("") +
-                '</select></div>' +
-              '<div><label class="gd-lbl">אזור</label>' +
-                '<select class="gd-inp" id="nt-area"><option value="">ללא</option>' +
-                  areas.map(function (a) { return '<option>' + esc(a) + '</option>'; }).join("") +
-                '</select></div>' +
-            '</div>' +
-
-            /* המתג. Switch ולא checkbox — זו החלטה שמשנה את כל חצי הטופס
-               שמתחתיה, ולכן היא צריכה להיראות כמו החלטה.
-               ⚠️ אותו `.gp-sw` של תוכנית העבודה, לא מתג שני משלנו. */
-            '<button type="button" class="nt-rep" id="nt-rep" ' +
-                'role="switch" aria-checked="false">' +
-              '<span class="nt-rep__t"><b>משימה חוזרת</b>' +
-                '<span>תיכנס לתוכנית העבודה ותיפתח מחדש בכל מחזור</span></span>' +
-              '<i class="gp-sw off" aria-hidden="true"></i>' +
-            '</button>' +
-
-            /* ---- מסלול א: חד-פעמית ---- */
-            '<div id="nt-once">' +
-              '<label class="gd-lbl" style="margin-top:10px">מתי</label>' +
-              '<select class="gd-inp" id="nt-week">' +
-                '<option value="' + shiftKey(todayKey(), 0) + '">השבוע · ' + esc(weekLabel(shiftKey(todayKey(), 0))) + '</option>' +
-                '<option value="' + shiftKey(todayKey(), 1) + '">שבוע הבא</option>' +
-                '<option value="">בלי שבוע — לרשימת השיבוץ</option>' +
-              '</select>' +
-              (direct
-                ? '<label class="gd-lbl" style="margin-top:12px">איפה זה? ' +
-                    '<em class="nt-opt">לא חובה — לחצו על המפה</em></label>' +
-                  '<div class="gd-map nt-map" id="nt-map"></div>' +
-                  '<p class="gd-hint" id="nt-loc">סימון המיקום עוזר לצוות למצוא את זה בשטח.</p>' +
-                  '<label class="gd-lbl" style="margin-top:12px">תמונות ' +
-                    '<em class="nt-opt"><span id="nt-pc">0</span> / ' + NT_PHOTO_MAX + '</em></label>' +
-                  '<div class="gd-thumbs" id="nt-thumbs">' +
-                    '<button type="button" class="gd-th add" id="nt-add">+</button>' +
-                  '</div>' +
-                  '<input type="file" id="nt-file" accept="image/*" multiple hidden>'
-                : '') +
-            '</div>' +
-
-            /* ---- מסלול ב: חוזרת ---- */
-            '<div id="nt-every" hidden>' +
-              '<label class="gd-lbl" style="margin-top:10px">תדירות <s>*</s></label>' +
-              '<select class="gd-inp" id="nt-freq">' +
-                NT_FREQS.map(function (f) {
-                  return '<option value="' + esc(f) + '">' + esc(NT_FREQ_LABEL[f]) + '</option>';
-                }).join("") +
-              '</select>' +
-              '<div id="nt-anchor" hidden style="margin-top:10px">' +
-                '<label class="gd-lbl">השבוע הראשון <s>*</s></label>' +
-                '<input class="gd-inp" id="nt-first" type="date">' +
-                '<p class="gd-hint">ממנו נספרים המחזורים. בחרו יום ראשון.</p>' +
-              '</div>' +
-              '<div id="nt-wom" hidden style="margin-top:10px">' +
-                '<label class="gd-lbl">שבוע בחודש</label>' +
-                '<select class="gd-inp" id="nt-wk">' +
-                  [1,2,3,4].map(function (n) {
-                    return '<option value="' + n + '">שבוע ' + n + '</option>';
-                  }).join("") + '</select>' +
-                '<p class="gd-hint">אין שבוע 5 — החודש הוא ארבעה שבועות.</p>' +
-              '</div>' +
-            '</div>' +
-
-            '<button type="button" class="gd-cta" id="nt-go" style="margin-top:14px">' +
-              ico("plus") + '<span id="nt-go-t">פתיחת התקלה</span></button>' +
-          '</div>';
-
-        var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-new", sticky: true });
-        function close() { sheetClose(); }
-        var titleEl = wrap.querySelector("#nt-title");
-        setTimeout(function () { titleEl.focus(); }, 120);
-
-        /* ---- המתג ---- */
-        var repBtn  = wrap.querySelector("#nt-rep");
-        var onceEl  = wrap.querySelector("#nt-once");
-        var everyEl = wrap.querySelector("#nt-every");
-        var subEl   = wrap.querySelector("#nt-sub");
-        var goT     = wrap.querySelector("#nt-go-t");
-        repBtn.addEventListener("click", function () {
-          state.repeat = !state.repeat;
-          repBtn.setAttribute("aria-checked", state.repeat ? "true" : "false");
-          repBtn.querySelector(".gp-sw").classList.toggle("off", !state.repeat);
-          onceEl.hidden  = state.repeat;
-          everyEl.hidden = !state.repeat;
-          subEl.textContent = state.repeat
-            ? "שגרה שחוזרת מעצמה. אין לה מיקום או תמונות — היא לא תקלה בנקודה אחת."
-            : "תקלה שאתה פותח בעצמך — מטופלת בדיוק כמו תקלה שדייר דיווח עליה.";
-          goT.textContent = state.repeat ? "הוספה לתוכנית" : "פתיחת התקלה";
-          if (state.repeat) syncFreq();
-        });
-
-        /* ---- שדות התדירות. אותה לוגיקה בדיוק כמו בטופס תוכנית העבודה:
-               השדות מוסתרים ולא מוסרים, כדי שערך שהוקלד לא ייעלם. ---- */
-        var freqEl = wrap.querySelector("#nt-freq");
-        function syncFreq() {
-          var f = freqEl.value;
-          wrap.querySelector("#nt-anchor").hidden = (f !== "דו-שבועי");
-          wrap.querySelector("#nt-wom").hidden    = (f !== "חודשי" && f !== "שנתי");
-        }
-        freqEl.addEventListener("change", syncFreq);
-
-        /* ---- מפה ותמונות. קיימות רק במסלול הכתיבה הישירה. ---- */
-        if (direct) {
-          var locEl = wrap.querySelector("#nt-loc");
-          /* ⚠️ אחרי mountSheet: CBA.map מודד את המכל, ומכל ברוחב אפס
-             מצייר מפה ריקה. setTimeout נותן לגיליון לסיים את הפריסה. */
-          setTimeout(function () {
-            var mapEl = wrap.querySelector("#nt-map");
-            if (!mapEl || !CBA.map) return;
-            CBA.map.render(mapEl, {
-              head: false, search: false, legend: false, popup: false, pin: true,
-              onPin: function (n, area) {
-                state.x = n.x; state.y = n.y; state.pinArea = area || "";
-                locEl.textContent = state.pinArea
-                  ? ("המיקום סומן · " + state.pinArea + ". אפשר ללחוץ שוב כדי להזיז.")
-                  : "המיקום סומן. אפשר ללחוץ שוב כדי להזיז.";
-                locEl.classList.add("is-ok");
-                /* הנעיצה יודעת באיזה אזור גינון היא נפלה — ואם המנהל
-                   עוד לא בחר אזור ידנית, היא ממלאת אותו במקומו. */
-                var sel = wrap.querySelector("#nt-area");
-                if (state.pinArea && sel && !sel.value) {
-                  var has = Array.prototype.some.call(sel.options, function (o) {
-                    return o.value === state.pinArea;
-                  });
-                  if (has) sel.value = state.pinArea;
-                }
-              }
-            });
-          }, 180);
-
-          var fileEl  = wrap.querySelector("#nt-file");
-          var thumbsEl = wrap.querySelector("#nt-thumbs");
-          var addBtn  = wrap.querySelector("#nt-add");
-          addBtn.addEventListener("click", function () { fileEl.click(); });
-          fileEl.addEventListener("change", function () {
-            Array.prototype.slice.call(fileEl.files || []).forEach(function (f) {
-              if (state.photos.length >= NT_PHOTO_MAX) return;
-              /* הכיווץ אסינכרוני וכמה קבצים מסיימים בסדר לא צפוי — ולכן
-                 המכסה נבדקת **שוב** בתוך ה-callback. */
-              CBA.photos.toUpload(f, function (item, dataUrl) {
-                if (!item) return;
-                if (state.photos.length >= NT_PHOTO_MAX) return;
-                state.photos.push(item);
-                addThumb(dataUrl);
-              });
-            });
-            fileEl.value = "";
-          });
-          function addThumb(url) {
-            var el = document.createElement("span");
-            el.className = "gd-th";
-            el.style.backgroundImage = "url(" + url + ")";
-            el.innerHTML = '<button type="button" class="th-x" aria-label="הסרת התמונה">✕</button>';
-            el.dataset.i = String(state.photos.length - 1);
-            el.querySelector(".th-x").addEventListener("click", function () {
-              state.photos.splice(parseInt(el.dataset.i, 10), 1);
-              el.remove();
-              Array.prototype.forEach.call(thumbsEl.querySelectorAll(".gd-th:not(.add)"),
-                function (t, k) { t.dataset.i = String(k); });
-              syncPhotos();
-            });
-            thumbsEl.insertBefore(el, addBtn);
-            syncPhotos();
-          }
-          function syncPhotos() {
-            wrap.querySelector("#nt-pc").textContent = state.photos.length;
-            addBtn.style.display = state.photos.length >= NT_PHOTO_MAX ? "none" : "grid";
-          }
-        }
-
-        /* ---- שליחה ---- */
-        wrap.querySelector("#nt-go").addEventListener("click", function () {
-          var title = titleEl.value.trim();
-          if (!title) { titleEl.focus(); return CBA.ui.alert("צריך לכתוב מה צריך לעשות"); }
-          if (busy) return;
-          var cat  = wrap.querySelector("#nt-cat").value;
-          var area = wrap.querySelector("#nt-area").value;
-
-          if (state.repeat) {
-            var freq  = freqEl.value;
-            var first = wrap.querySelector("#nt-first").value;
-            /* אותה בדיקה בדיוק רצה בשרת ובכללי האבטחה (gpShapeOk). היא
-               כאן רק כדי לא לשלוח בקשה שתידחה. */
-            if (freq === "דו-שבועי" && !first) {
-              return CBA.ui.alert("למחזור דו-שבועי צריך לבחור את השבוע הראשון");
-            }
-            busy = true;
-            return CBA.data.gardenPlanSave({
-              id: "", title: title, category: cat, freq: freq,
-              firstWeek: first,
-              weekOfMonth: wrap.querySelector("#nt-wk").value,
-              months: "", areas: area ? [area] : [],
-              rotate: false, clause: "", active: true
-            }, function (res) {
-              busy = false;
-              if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "ההוספה לא הצליחה");
-              close();
-              CBA.ui.toast("נוספה לתוכנית העבודה");
-              load();
-            });
-          }
-
-          busy = true;
-          CBA.data.gardenCreateTask({
-            title: title, category: cat,
-            /* הנעיצה מנצחת רק כשהמנהל לא בחר אזור בעצמו. */
-            area: area || state.pinArea || "",
-            week: wrap.querySelector("#nt-week").value,
-            asReport: true,
-            x: state.x, y: state.y,
-            photos: state.photos
-          }, function (res) {
-            busy = false;
-            if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "המשימה לא נפתחה");
-            close();
-            CBA.ui.toast("נפתחה תקלה #" + res.id +
-              (res.photosPending ? " · התמונות עולות ברקע" : ""));
+        CBA.gardenForm.open({
+          mode: "task",
+          cats: order.type.length ? order.type : [],
+          areas: order.area.length ? order.area : [],
+          ico: ico, catOf: catOf, esc: esc,
+          weeks: [
+            { v: shiftKey(todayKey(), 0), label: "השבוע · " + weekLabel(shiftKey(todayKey(), 0)) },
+            { v: shiftKey(todayKey(), 1), label: "שבוע הבא" },
+            { v: "", label: "בלי שבוע — לשיבוץ" }
+          ],
+          onSaved: function () {
             // קופצים לרשימה שבה היא באמת נחתה, אחרת היא "נעלמת" מול העיניים
             filter = "open";
             load();
-          });
+          }
         });
       }
 
@@ -1938,7 +1709,8 @@
                התקלה ומאיפה, ורק אז את מה שהתושב צילם. "נפתח" זז מהרשת
                למטה לשורת התיאור, מיד אחרי מספר הפנייה. */
             '<div class="gd-det-kicker"><span class="gd-det-dot" style="background:var(--c-' +
-              esc(cat.key) + ')"></span>' + esc(t.category || "") + ' · ' + esc(GL.T.report) + '</div>' +
+              esc(cat.key) + ')"></span>' + esc(t.category || "") + ' · ' +
+              esc(isTeamFault(t) ? "תקלה · מנהל" : GL.T.report) + '</div>' +
             '<div class="gd-sheet-head gd-det-head">' +
               '<h4 class="gd-det-title" data-title-toggle="1">' + esc(t.title || t.category || "משימה") + '</h4>' +
               '<button type="button" class="gd-sheet-close" data-close="1">' + ico("x") + 'סגירה</button>' +

@@ -173,6 +173,32 @@
   var STAGES = ["התקבל", "נבדק", "מתוכנן", "בטיפול", "הושלם"];
   function stageIdx(s) { var i = STAGES.indexOf(String(s || "").trim()); return i < 0 ? 0 : i; }
 
+  /* ==========================================================================
+   *  🔴🔴  שדות הצוות חסרים במסמך — "התקבל", לא ריק   (2026-09-22)
+   * --------------------------------------------------------------------------
+   *  מאז שהדפדפן כותב ישירות ל-Firestore, מסמך הדיווח **נולד בלי**
+   *  `stage`/`flag`/`closure`: כלל היצירה `grShapeOk` אוסר על התושב
+   *  לשלוח אותם (`grTeamFields`), והסנכרון השעתי שמילא אותם בעבר
+   *  (`gardenReportsSyncAll_`) מסרב לרוץ מרגע ש-Firestore הוא הבעלים.
+   *
+   *  התוצאה שנצפתה על דיווחים 21 ו-22: `stageIdx(undefined)` הוא 0
+   *  ולכן הבר תקוע בנקודה הראשונה; משפט המצב הציג `undefined`;
+   *  ו**כפתור המחיקה נעלם**, כי התנאי שלו הוא `stage === "התקבל"`.
+   *
+   *  🔑 שדה חסר פירושו **איש עוד לא נגע** — וזה בדיוק "התקבל".
+   *     נפילה-לאחור כאן נכונה בשני המסלולים: במסלול Apps Script
+   *     השדות תמיד מלאים, ולכן הפונקציה הזאת לא משנה שם דבר.
+   *  ⚠️ זו חצי מהתשובה. החצי השני הוא המראה `gardenMirrorToReports`
+   *     ב-dataService.js, שמעדכנת את המסמך בכל פעולה של הצוות.
+   * ========================================================================== */
+  function normRep(r) {
+    r = r || {};
+    if (!String(r.stage || "").trim()) r.stage = "התקבל";
+    if (r.flag == null) r.flag = "";
+    if (r.closure == null) r.closure = "";
+    return r;
+  }
+
   /* ניסוח הדגל לתושב. השם הפנימי ("ממתין לאישור") הוא שפה של הצוות —
      התושב מקבל משפט שמסביר לו מה קורה ולמה עוד לא סגור.
      ⚠️ 2026-09-09 — הטבלה עברה ל-js/data/gardenLang.js. היא ישבה כאן,
@@ -403,7 +429,10 @@
           b.addEventListener("click", function () { sendFeedback(b.dataset.id, b.dataset.fb === "y"); });
         });
         Array.prototype.forEach.call(listEl.querySelectorAll("[data-del]"), function (b) {
-          b.addEventListener("click", function () { askDelete(b.dataset.del); });
+          b.addEventListener("click", function () {
+            var rep = all.filter(function (x) { return String(x.id) === String(b.dataset.del); })[0];
+            askDelete(b.dataset.del, rep && rep.taskId);
+          });
         });
         // התמונות שהתושב עצמו צירף (PHASE 4.2) — ר' js/ui/photos.js
         Array.prototype.forEach.call(listEl.querySelectorAll("[data-photos]"), function (b) {
@@ -590,13 +619,13 @@
 
       /* מחיקת דיווח על ידי מי שכתב אותו. הטקסט אומר במפורש מה יורד ומה
          נשאר — התמונות יורדות איתו, וזה לא מובן מאליו. */
-      function askDelete(id) {
+      function askDelete(id, taskId) {
         CBA.ui.confirm(
           "הדיווח והתמונות שצירפת יימחקו, ולא נטפל בו. אי אפשר לבטל את זה.",
           { title: "מחיקת דיווח #" + id, okText: "מחיקה", danger: true }
         ).then(function (yes) {
           if (!yes) return;
-          CBA.data.gardenReportDelete(id, function (res) {
+          CBA.data.gardenReportDelete(id, taskId, function (res) {
             if (!res || !res.ok) {
               return CBA.ui.alert((res && res.error) || "הדיווח לא נמחק");
             }
@@ -638,7 +667,7 @@
              לאותו מסך — "עדיין לא דיווחת על כלום" — ותושב שדיווח אתמול על
              עץ שנפל ראה שהמערכת שכחה אותו. */
           loadErr = !(res && res.ok);
-          all = loadErr ? [] : (res.rows || []);
+          all = loadErr ? [] : (res.rows || []).map(normRep);
           gotReports = true;
           maybeDraw();
         });

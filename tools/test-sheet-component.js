@@ -29,6 +29,7 @@ const REP = R('js/ui/report.js');
 const APP = R('js/app.js');
 const PWA = R('js/pwa.js');
 const CSS_G = R('css/garden.css');
+const GF = R('js/ui/gardenForm.js');
 const CSS_R = R('css/report.css');
 const HTML = R('index.html');
 const SW = R('service-worker.js');
@@ -62,21 +63,28 @@ ok('mountSheet ו-sheet מיוצאים', /sheet: sheet, mountSheet: mountSheet,/
 section('3. 🔴 שמונת האתרים — כולם עברו, ואף אחד לא נשאר מאחור');
 const sites = [...GT.matchAll(/CBA\.ui\.mountSheet\(wrap, \{ key: ([^}]+)\}\)/g)].map(m => m[1].trim());
 const sitesGP = [...GP.matchAll(/CBA\.ui\.mountSheet\(wrap, \{ key: ([^}]+)\}\)/g)].map(m => m[1].trim());
-ok('שבעה גיליונות ב-gardenTasks', sites.length === 7, sites.join(' | '));
-ok('ואחד ב-gardenPlan', sitesGP.length === 1, sitesGP.join(' | '));
+const sitesGF = [...GF.matchAll(/CBA\.ui\.mountSheet\(wrap, \{ key: ([^}]+)\}\)/g)].map(m => m[1].trim());
+/* ⚠️ **המספר ירד מ-7 ל-6 ב-22.9, ולא בטעות.** "משימה חדשה" ו"הוספה
+   לתוכנית" היו שני טפסים לאותו דבר והתאחדו ל-js/ui/gardenForm.js —
+   ולכן `gt-new` ו-`gp-form` נעלמו, ובמקומם `gf-form` אחד במודול
+   המשותף. פחות אתרי mountSheet זה בדיוק הכיוון הנכון. */
+ok('שישה גיליונות ב-gardenTasks', sites.length === 6, sites.join(' | '));
+ok('ותוכנית העבודה כבר לא בונה טופס משלה', sitesGP.length === 0, sitesGP.join(' | '));
+ok('🔴 הטופס המאוחד הוא אתר mountSheet אחד', sitesGF.length === 1, sitesGF.join(' | '));
+ok('⚠️ ושני המסכים קוראים לאותו רכיב',
+   /CBA\.gardenForm\.open\(\{/.test(GT) && /CBA\.gardenForm\.open\(\{/.test(GP));
 ok('לא נשאר אף בונה ידני (gt-sheet-bd עם מאזין מחוץ לרכיב)',
    !/gt-sheet-bd"\)\.addEventListener/.test(GT) && !/gt-sheet-bd"\)\.addEventListener/.test(GP));
 /* 🔑 הבדיקה החשובה — מפתח כפול = גיליון שלא נפתח, בשקט. */
-const keys = sites.concat(sitesGP).map(x => (x.match(/"([^"]+)"/) || [, x])[1]);
+const keys = sites.concat(sitesGP, sitesGF).map(x => (x.match(/"([^"]+)"/) || [, x])[1]);
 ok('🔴🔴 כל המפתחות ייחודיים', new Set(keys).size === keys.length, keys.join(', '));
 ok('⚠️ ושני הגיליונות של אותה משימה אינם חולקים מפתח',
    keys.indexOf('gt-menu') !== -1 && keys.indexOf('gt-details') !== -1, keys.join(', '));
 ok('ה-helper גוזר מפתח מהתווית שלו', /key: "gt-sheet:" \+ label/.test(GT));
 
 section('4. sticky — רק היכן שיש טקסט שהוקלד');
-['gt-new', 'gt-closure'].forEach(k => ok('sticky על ' + k,
-   new RegExp('key: "' + k + '", sticky: true').test(GT), 'חסר'));
-ok('sticky על טופס תוכנית העבודה', /key: "gp-form", sticky: true/.test(GP));
+ok('sticky על gt-closure', /key: "gt-closure", sticky: true/.test(GT), 'חסר');
+ok('sticky על הטופס המאוחד — יש בו טקסט שהוקלד', /key: "gf-form", sticky: true/.test(GF));
 ok('⚠️ ו**לא** על גיליונות שאין בהם קלט', !/key: "gt-menu", sticky/.test(GT) &&
    !/key: "gt-map", sticky/.test(GT) && !/key: "gt-week", sticky/.test(GT));
 
