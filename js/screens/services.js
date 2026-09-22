@@ -653,7 +653,7 @@ CBA.serviceUtils = (function () {
 /* ============================================================================
  *  מסך התושב
  * ========================================================================== */
-var svcState = { list: [], loaded: false, query: "", residentCards: [], residentSvcMap: {}, recCatId: null, reactionCounts: {}, commentCounts: {} };
+var svcState = { list: [], loaded: false, query: "", residentCards: [], residentSvcMap: {}, recCatId: null, reactionCounts: {}, commentCounts: {}, mineReactions: {} };
 var svcRepaint = null;
 
 function svcEsc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
@@ -801,6 +801,15 @@ CBA.screens.resServices = {
         btn.addEventListener("click", function () { svcOpenDrawer(btn.dataset.open); });
       });
       svcBindCallButtons(grid);
+
+      // לייק/דיסלייק ישירות מהקוביה (23.9.26) — לכל כרטיס מוצג, לפי
+      // סוגו (המלצת תושב / שירות רשמי), כדי ש-CBA.data.setServiceReaction
+      // ישמור את ה-cardType הנכון.
+      list.forEach(function (s) {
+        var cardEl = grid.querySelector('.svc-card[data-svc="' + s.id.replace(/"/g, '\\"') + '"]');
+        var reactsEl = cardEl && cardEl.querySelector(".svc-card__reacts");
+        if (reactsEl) svcBindCardReacts(reactsEl, s.id, s.isResident ? "resident" : "official");
+      });
     }
 
     // סקלטון עד שהנתונים חוזרים — עקבי עם שאר המסכים (ר' app.js)
@@ -1288,7 +1297,20 @@ function svcPaintReactions(cardId) {
       // בתוך המגירה, בלי לחכות לרענון מלא של המסך.
       svcState.reactionCounts[cardId] = { like: reacts.like || 0, dislike: reacts.dislike || 0 };
       svcState.commentCounts[cardId] = comments.length;
-      if (typeof svcRepaint === "function") svcRepaint();
+      svcState.mineReactions[cardId] = reacts.mine || null;
+
+      // מעדכן רק את קוביית הכרטיס ברשת (אם היא כרגע על המסך) — בלי
+      // לצייר את כל הרשת מחדש, כדי לא לאבד מיקום גלילה/חיפוש כשמצביעים
+      // ישירות מהקוביה (23.9.26, בקשת יועד).
+      var cardEl = document.querySelector('.svc-card[data-svc="' + cardId.replace(/"/g, '\\"') + '"]');
+      var reactsEl = cardEl && cardEl.querySelector(".svc-card__reacts");
+      if (reactsEl) {
+        var wrap = document.createElement("div");
+        wrap.innerHTML = svcCardReactsHtml(cardId);
+        var fresh = wrap.firstElementChild;
+        reactsEl.replaceWith(fresh);
+        svcBindCardReacts(fresh, cardId, cardType);
+      }
 
       var zone = document.querySelector('#svc-react-zone[data-cardid]');
       if (!zone || zone.dataset.cardid !== cardId) return;
@@ -1303,6 +1325,7 @@ function svcPaintReactions(cardId) {
 function svcLoadEngagementSummary(cb) {
   CBA.data.getServiceEngagementSummary(function (res) {
     svcState.reactionCounts = (res && res.ok && res.reactions) || {};
+    svcState.mineReactions = (res && res.ok && res.mine) || {};
     svcState.commentCounts = {};
     var c = (res && res.ok && res.comments) || {};
     Object.keys(c).forEach(function (id) { svcState.commentCounts[id] = c[id]; });
@@ -1323,9 +1346,39 @@ function svcCommentIcon() {
 function svcCardReactsHtml(cardId) {
   var r = svcState.reactionCounts[cardId] || { like: 0, dislike: 0 };
   var cc = svcState.commentCounts[cardId] || 0;
+  var mine = svcState.mineReactions[cardId];
+  // לייק/דיסלייק ניתנים ללחיצה ישירות מהקוביה ברשת (23.9.26, בקשת
+  // יועד: "אפשר ללחוץ לייק גם בכרטיס ולא רק בפירוט שלו") — לא רק תוך
+  // כדי פתיחת המגירה. תגובות נשארות ספירה בלבד (הלחיצה על הקוביה כולה
+  // פותחת את הפירוט המלא לצורך כתיבת תגובה).
   return '<div class="svc-card__reacts">' +
-      '<span class="svc-card__react svc-card__react--like">' + svcThumbIcon(true) + r.like + "</span>" +
-      '<span class="svc-card__react svc-card__react--dislike">' + svcThumbIcon(false) + r.dislike + "</span>" +
+      '<button type="button" class="svc-card__react svc-card__react--like' + (mine === "like" ? " is-on" : "") + '" data-react="like">' + svcThumbIcon(true) + r.like + "</button>" +
+      '<button type="button" class="svc-card__react svc-card__react--dislike' + (mine === "dislike" ? " is-on" : "") + '" data-react="dislike">' + svcThumbIcon(false) + r.dislike + "</button>" +
       '<span class="svc-card__react svc-card__react--comments">' + svcCommentIcon() + cc + "</span>" +
     "</div>";
+}
+
+/* מאזין הלחיצה על כפתורי לייק/דיסלייק בקוביה עצמה ברשת הראשית. עוצר
+   את התפשטות האירוע כדי שלחיצה על הכפתור לא תיפתח בטעות את המגירה
+   (הכפתור יושב בתוך <article> שיש בו גם data-open נפרד). מי שלא
+   משויך למשפחה (למשל תצוגת אדמין-על בלי חשבון תושב) מקבל טוסט במקום
+   קריאה לשרת. */
+function svcBindCardReacts(el, cardId, cardType) {
+  if (!el) return;
+  el.querySelectorAll("[data-react]").forEach(function (btn) {
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      if (!(window.CBA && CBA.user && CBA.user.familyId)) {
+        CBA.ui.toast("צריך להיות תושב מחובר כדי להצביע");
+        return;
+      }
+      var val = btn.dataset.react;
+      var isOn = btn.classList.contains("is-on");
+      btn.disabled = true;
+      var after = function () { svcPaintReactions(cardId); };
+      if (isOn) CBA.data.clearServiceReaction(cardId, after);
+      else CBA.data.setServiceReaction(cardId, cardType, val, after);
+    });
+  });
 }

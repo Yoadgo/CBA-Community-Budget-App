@@ -3887,10 +3887,11 @@ CBA.data = (function () {
      כדי לא להכפיל את מספר הבקשות ל-Firestore לפי כמות השירותים. */
   function getServiceEngagementSummary(cb) {
     if (!(CBA.fb && CBA.fb.readCollection)) { cb({ ok: false, error: "לא מחובר" }); return; }
-    var reactions = {}, comments = {}, pending = 2, failed = false;
+    var fid = currentFamilyId();
+    var reactions = {}, mine = {}, comments = {}, pending = 2, failed = false;
     function done() {
       pending--;
-      if (pending === 0) cb({ ok: !failed, reactions: reactions, comments: comments });
+      if (pending === 0) cb({ ok: !failed, reactions: reactions, mine: mine, comments: comments });
     }
     CBA.fb.readCollection("serviceReactions", function (err, rows) {
       if (err) { failed = true; done(); return; }
@@ -3900,6 +3901,9 @@ CBA.data = (function () {
         var o = reactions[id] || (reactions[id] = { like: 0, dislike: 0 });
         if (r.value === "like") o.like++;
         else if (r.value === "dislike") o.dislike++;
+        // מה שלי — כדי שכפתורי הלייק/דיסלייק על גבי הקוביה ברשת הראשית
+        // יידעו להראות "is-on" בלי שאילתה נפרדת לכל כרטיס (23.9.26).
+        if (fid && r.familyId === fid) mine[id] = r.value;
       });
       done();
     });
