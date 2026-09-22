@@ -1483,6 +1483,60 @@ service cloud.firestore {
           בלקוח לפני השימוש בו במסכים החדשים (dataService.js:~2851).
     */
 
+    /* ========================================================================
+     *  RSVP לאירועי לוח הקהילתי   (2026-09-23, אפיון events-rsvp-spec)
+     * ------------------------------------------------------------------------
+     *  שני אוספים: eventRSVP/{eventId} — מסמך הגדרה, נכתב רק ע"י מנהל;
+     *  eventRSVPResponses/{eventId_familyId} — מסמך תגובה לכל משפחה,
+     *  נכתב ע"י המשפחה עצמה בלבד. שם משפחה/אימייל אינם נשמרים כאן.
+     * ==================================================================== */
+    function rsvpConfigShapeOk() {
+      return request.resource.data.keys().hasOnly(['enabled', 'openedByUid', 'openedAt', 'category']) &&
+             request.resource.data.enabled is bool &&
+             request.resource.data.openedByUid is string &&
+             request.resource.data.category is string;
+    }
+
+    match /eventRSVP/{eventId} {
+      allow read: if isMember() && m().isExternal == false;
+      allow create, update: if isAdminUser() && rsvpConfigShapeOk();
+      allow delete: if false;
+    }
+
+    function rsvpEventOpen(eventId) {
+      return exists(/databases/$(database)/documents/eventRSVP/$(eventId)) &&
+             get(/databases/$(database)/documents/eventRSVP/$(eventId)).data.enabled == true;
+    }
+
+    function rsvpResponseFields() {
+      return ['eventId', 'familyId', 'status', 'adults', 'children', 'updatedAt'];
+    }
+
+    function rsvpResponseShapeOk() {
+      return request.resource.data.keys().hasOnly(rsvpResponseFields()) &&
+             request.resource.data.keys().hasAll(['eventId', 'familyId', 'status', 'adults', 'children']) &&
+             request.resource.data.status in ['attending', 'not_attending'] &&
+             request.resource.data.adults is int && request.resource.data.adults >= 0 &&
+             request.resource.data.children is int && request.resource.data.children >= 0 &&
+             docId == request.resource.data.eventId + '_' + request.resource.data.familyId;
+    }
+
+    match /eventRSVPResponses/{docId} {
+      allow read: if isAdminUser() ||
+                     (isMember() && resource.data.familyId == myFamilyId());
+      allow create: if isMember() && m().isExternal == false &&
+                       request.resource.data.familyId == myFamilyId() &&
+                       rsvpEventOpen(request.resource.data.eventId) &&
+                       rsvpResponseShapeOk();
+      allow update: if isMember() && m().isExternal == false &&
+                       resource.data.familyId == myFamilyId() &&
+                       request.resource.data.eventId == resource.data.eventId &&
+                       request.resource.data.familyId == resource.data.familyId &&
+                       rsvpEventOpen(resource.data.eventId) &&
+                       rsvpResponseShapeOk();
+      allow delete: if false;
+    }
+
     /* ---------- ברירת המחדל ---------- */
 
     /* 🔴 **הכול אסור, אלא אם נפתח במפורש למעלה.**
