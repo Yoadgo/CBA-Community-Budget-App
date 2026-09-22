@@ -577,6 +577,13 @@
   padding: 10px; border-radius: 10px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .gp-del:hover { background: rgba(163,47,62,.07); }
+/* 🔴 **גודל לסמליל** (2026-09-22, מסימולציה חיה). `ico` של תוכנית
+   העבודה מקבל רוחב כפרמטר, והטופס המאוחד קורא לו בלי פרמטר — כי הוא
+   משותף לשני מסכים עם שתי חתימות `ico` שונות. בלי הגבלה ב-CSS ה-SVG
+   נמתח לכל רוחב החלון, וכפתור המחיקה הופיע כפח ענק בתחתית המגירה.
+   ⚠️ הגודל נקבע כאן ולא בקריאה: כך הוא נכון **לכל** קורא, בלי להניח
+      איזו חתימת `ico` הוזרקה. */
+.gp-del svg { width: 14px; height: 14px; flex: none; }
 .gp-check { display: flex; align-items: center; gap: 8px; font-size: 13px;
   color: var(--text, #374151); cursor: pointer; }
 .gp-check span { display: inline-flex; align-items: center; gap: 6px; }

@@ -105,7 +105,17 @@ CBA.gardenForm = (function () {
       '<div class="gt-sheet" role="dialog" aria-label="' +
           (isEdit ? "עריכת משימה" : "משימה חדשה") + '">' +
         '<div class="gt-grip" aria-hidden="true"></div>' +
-        '<h4>' + (isEdit ? "עריכת משימה" : "משימה חדשה") + '</h4>' +
+        /* 🔴 **כפתור סגירה מפורש** (2026-09-22, מסימולציה חיה).
+           הטופס הוא `sticky` — Escape אינו סוגר אותו בכוונה, כי יש בו
+           טקסט שהוקלד. היציאה היחידה שנשארה הייתה לחיצה על הרקע, ובחלון
+           צד הרקע הוא רצועה שקופה בצד — בדיוק התלונה של ממצא 24
+           ("היציאה היחידה היא לחיצה על הרקע, שאינו נראה כמשטח לחיץ").
+           כרטיס הפרטים כבר מחזיק את הדפוס הזה; הטופס לא, וזה היה פער. */
+        '<div class="gd-sheet-head">' +
+          '<h4>' + (isEdit ? "עריכת משימה" : "משימה חדשה") + '</h4>' +
+          '<button type="button" class="gd-sheet-close" id="gf-x">' +
+            ico("x") + 'סגירה</button>' +
+        '</div>' +
         '<p class="sub" id="gf-sub"></p>' +
 
         '<label class="gd-lbl">מה צריך לעשות <s>*</s></label>' +
@@ -206,6 +216,7 @@ CBA.gardenForm = (function () {
 
     var sheetClose = CBA.ui.mountSheet(wrap, { key: "gf-form", sticky: true });
     function close() { sheetClose(); }
+    wrap.querySelector("#gf-x").addEventListener("click", close);
     var q = function (s) { return wrap.querySelector(s); };
 
     /* ---- בורר צ'יפים גנרי. יחיד או מרובה, אותו קוד. ---- */
