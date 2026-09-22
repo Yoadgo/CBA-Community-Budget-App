@@ -2210,23 +2210,31 @@ body[data-nav-single="1"] .app-nav__viewport { display: none; }
 .svc-card__name { font-size: 16px; font-weight: 700; margin: 0; }
 .svc-card__prov { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .svc-card__desc { font-size: 13px; color: var(--text-soft); margin: 9px 0 16px; flex: 1; }
-.svc-card__acts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 
-/* כפתור "כל הפרטים" (2026-09-23, בקשת יועד) — פס מלא לאורך תחתית הקוביה
-   במקום כפתור בשורת הפעולות, בצבע רך שמשתלב עם הקוביה (לא ה-CTA השחור
-   הרגיל — זו הרחבה של אותה קוביה, לא פעולה חדשה), עם סימן + שמסמן
-   שמדובר בהרחבה. טקסט/גובה קצת יותר קטנים מכפתור btn-sm רגיל. */
-.svc-card__more {
-  margin: 14px -20px -20px -20px; padding: 7px 12px;
-  border: none; border-top: 1px solid var(--hairline);
-  background: var(--bg); color: var(--text-soft);
-  font-family: inherit; font-size: 11.5px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center; gap: 6px;
+/* פס תחתון מאוחד (23.9.26, בקשת יועד) — חיוג/וואטסאפ (אם יש) + "כל
+   הפרטים" באותה שורה אחת, במקום שורת פעולות נפרדת מעל פס "כל הפרטים"
+   בודד כמו קודם. אותו רקע משתלב/קו הפרדה עליון/פינות מעוגלות למטה
+   שהיו ל"כל הפרטים" — עכשיו מחולק ל-1-3 מקטעים שווים לפי כמה כפתורים
+   יש בפועל, עם מפריד דק בין מקטע למקטע. גובה מעט גדול יותר מקודם כדי
+   שיהיה נוח ללחוץ גם כשיש כמה כפתורים בשורה אחת. */
+.svc-card__footer {
+  display: flex; margin: 14px -20px -20px -20px;
+  border-top: 1px solid var(--hairline);
   border-radius: 0 0 var(--radius) var(--radius);
-  cursor: pointer; transition: background var(--t), color var(--t);
+  overflow: hidden;
 }
-.svc-card__more:hover { background: var(--hover); color: var(--text); }
-.svc-card__more svg { flex: none; }
+.svc-card__fbtn {
+  flex: 1; min-width: 0; padding: 10px 8px; border: none;
+  background: var(--bg); color: var(--text-soft);
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; transition: background var(--t), color var(--t);
+  text-decoration: none;
+}
+.svc-card__fbtn + .svc-card__fbtn { border-inline-start: 1px solid var(--hairline); }
+.svc-card__fbtn:hover { background: var(--hover); color: var(--text); }
+.svc-card__fbtn svg { flex: none; }
+.svc-card__fbtn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* מספרי לייק/דיסלייק/תגובות על גבי הקוביה עצמה (2026-09-23) */
 .svc-card__reacts {

@@ -751,8 +751,6 @@ CBA.screens.resServices = {
               (s.icon ? '<span class="svc-card__ico">' + svcEsc(s.icon) + "</span>" : "") +
             "</div>";
 
-        var phoneHtml = s.isResident ? "" : svcPhoneBtns(s, "btn-ghost btn-sm");
-
         return '<article class="svc-card' + (s.isResident ? ' svc-card--rec' : '') + '" data-svc="' + svcEsc(s.id) + '">' +
             headHtml +
             svcStatusTag(s) +
@@ -763,12 +761,10 @@ CBA.screens.resServices = {
               ? '<p class="svc-card__desc">' + svcEsc((s.body || "").slice(0, 110)) + ((s.body || "").length > 110 ? "…" : "") + "</p>"
               : (s.desc ? '<p class="svc-card__desc">' + svcEsc(s.desc) + "</p>" : '<p class="svc-card__desc"></p>')) +
             svcCardReactsHtml(s.id) +
-            (phoneHtml ? '<div class="svc-card__acts">' + phoneHtml + "</div>" : "") +
-            // כפתור הרחבה — פס מלא לרוחב תחתית הקוביה, לא עוד כפתור בשורת
-            // הפעולות (2026-09-23, בקשת יועד).
-            '<button type="button" class="svc-card__more" data-open="' + svcEsc(s.id) + '">' +
-              svcPlusIcon() + "כל הפרטים" +
-            "</button>" +
+            // פס תחתון אחד מאוחד — חיוג/וואטסאפ (אם יש) + "כל הפרטים",
+            // כל הכפתורים באותה שורה במקום שתי שורות נפרדות כמו קודם
+            // (23.9.26, בקשת יועד).
+            svcCardFooterHtml(s) +
           "</article>";
       }
 
@@ -859,6 +855,31 @@ function svcPhoneBtns(svc, mainCls, secondaryCls, suffix) {
     html += '<a class="' + cls + '" href="https://wa.me/' + svcEsc(U.waDigits(svc.phone)) + '" target="_blank" rel="noopener">וואטסאפ' + svcEsc(suffix) + "</a>";
   }
   return html;
+}
+
+/* פס תחתון אחד מאוחד לקוביה ברשת הראשית: חיוג / וואטסאפ (לפי הערוץ,
+   0-2 כפתורים) + "כל הפרטים" (תמיד) — כולם באותה שורה, חלוקה שווה
+   ברוחב, בדיוק כמו שהיה פס "כל הפרטים" הבודד עד היום (רקע משתלב, קו
+   הפרדה דק למעלה, פינות מעוגלות למטה) — רק עם עוד מקטעים ומפרידים דקים
+   ביניהם כשיש יותר מכפתור אחד (23.9.26, בקשת יועד). כרטיס המלצת תושב
+   (s.isResident) אין לו טלפון בכלל — נשאר מקטע יחיד בדיוק כמו קודם. */
+function svcCardFooterHtml(s) {
+  var segs = [];
+  if (!s.isResident && s.phone) {
+    var U = CBA.serviceUtils;
+    var ch = s.phoneChannel || U.CH_PHONE;
+    if (ch !== U.CH_WA) {
+      segs.push('<button type="button" class="svc-card__fbtn" data-call="' + svcEsc(s.phone) + '">' +
+        svcPhoneIcon() + "<span>חיוג</span></button>");
+    }
+    if (ch !== U.CH_PHONE) {
+      segs.push('<a class="svc-card__fbtn" href="https://wa.me/' + svcEsc(U.waDigits(s.phone)) + '" target="_blank" rel="noopener">' +
+        svcWaIcon() + "<span>וואטסאפ</span></a>");
+    }
+  }
+  segs.push('<button type="button" class="svc-card__fbtn" data-open="' + svcEsc(s.id) + '">' +
+    svcPlusIcon() + "<span>כל הפרטים</span></button>");
+  return '<div class="svc-card__footer">' + segs.join("") + "</div>";
 }
 
 /* חיוג: בנייד פותח את המחייגן (tel:), בדסקטופ מעתיק את המספר ומראה טוסט.
@@ -1331,6 +1352,16 @@ function svcLoadEngagementSummary(cb) {
     Object.keys(c).forEach(function (id) { svcState.commentCounts[id] = c[id]; });
     if (cb) cb();
   });
+}
+
+/* אותם שני SVG בדיוק שכבר בשימוש ב"אנשי קשר" בתוך המגירה (ר' toContacts
+   למעלה בקובץ) — לא ממציאים אייקון חדש לאותה פעולה. */
+function svcPhoneIcon() {
+  return '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>';
+}
+function svcWaIcon() {
+  return '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm5.6 14.2c-.2.7-1.4 1.3-2 1.4-.5.1-1.1.1-1.8-.1-.4-.1-1-.3-1.7-.6-3-1.3-4.9-4.3-5-4.5-.2-.2-1.2-1.6-1.2-3s.8-2.1 1-2.4c.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5l.9 2c.1.2.1.4 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.1.3.6 1.1 1.4 1.8 1 .9 1.8 1.1 2 1.2.3.1.4.1.6-.1l.8-1c.2-.2.4-.2.6-.1l2 1c.3.1.4.2.5.3v1.4z"/></svg>';
 }
 
 function svcPlusIcon() {
