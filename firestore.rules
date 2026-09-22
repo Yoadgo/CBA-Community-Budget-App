@@ -1220,6 +1220,161 @@ service cloud.firestore {
       allow write: if false;
     }
 
+
+    /* ========================================================================
+     *  המלצות תושבים על שירותים + לייק/דיסלייק/תגובות   (אפיון 22.9.26,
+     *  [[cba-service-reactions-recommendations-spec-2026-09-22]] — WAVE 1,
+     *  טרם קומיט/Publish)
+     * ------------------------------------------------------------------------
+     *  🔴 שלושה אוספים חדשים, כל אחד עומד בפני עצמו — מודל ב' (Firestore
+     *  הוא המסד החי, הדפדפן כותב ישירות), לא עותק-קריאה מהגיליון:
+     *  - residentServiceCards — כרטיס שנוצר ע"י תושב (מקביל לכרטיס שירות
+     *    רשמי, אבל נכתב ישירות מהדפדפן — לא דרך saveServices_/הגיליון).
+     *  - serviceReactions — לייק/דיסלייק, מסמך אחד למשפחה לכל כרטיס
+     *    (מזהה המסמך = "<cardId>_<familyId>", כתיבה שנייה דורסת ולא
+     *    משכפלת קול — ואי אפשר "לגנוב" קול תחת מזהה חדש).
+     *  - serviceComments — תגובת טקסט חופשי, מסמך לכל תגובה.
+     *  שני האחרונים חלים גם על כרטיסי שירות **רשמיים**
+     *  (cardType:"official", cardId = "מזהה שירות" מהגיליון) וגם על
+     *  כרטיסי תושבים (cardType:"resident") — אותו אוסף, אין צורך
+     *  להכיר את סוג הכרטיס כדי לאכוף הרשאה, רק את זהות הכותב.
+     *  🔒 אין שם/טלפון/אימייל באף מסמך כאן — רק familyId. שם המשפחה
+     *  המוצג נגזר בלקוח מ-`familyDisplayName()` הקיים (dataService.js).
+     * ====================================================================== */
+
+    /* ---------- כרטיסי המלצה של תושבים ---------- */
+
+    function rsvcCreateFields() {
+      return ['id', 'familyId', 'title', 'body', 'mapsUrl',
+              'createdAt', 'updatedAt', 'active', 'schema'];
+    }
+
+    function rsvcShapeOk() {
+      return request.resource.data.keys().hasOnly(rsvcCreateFields()) &&
+             request.resource.data.keys().hasAll(
+               ['id', 'familyId', 'title', 'body', 'active', 'schema']) &&
+             request.resource.data.familyId is string &&
+             request.resource.data.familyId != '' &&
+             request.resource.data.title is string &&
+             request.resource.data.title.size() > 0 &&
+             request.resource.data.title.size() <= 80 &&
+             request.resource.data.body is string &&
+             request.resource.data.body.size() <= 1500 &&
+             (!request.resource.data.keys().hasAny(['mapsUrl']) ||
+              (request.resource.data.mapsUrl is string &&
+               request.resource.data.mapsUrl.size() <= 300)) &&
+             request.resource.data.active is bool &&
+             request.resource.data.schema is int;
+    }
+
+    /* יצירה: רק בשם המשפחה שלו, ותמיד פעיל — מתפרסם מיד, אין אישור מנהל
+       מראש (הוחלט 22.9.26). */
+    function rsvcCreateOk() {
+      return isMember() && m().isExternal == false &&
+             request.resource.data.familyId == myFamilyId() &&
+             request.resource.data.active == true &&
+             rsvcShapeOk();
+    }
+
+    /* עריכה עצמית: היוצר יכול לגעת רק בתוכן, לעולם לא בבעלות. */
+    function rsvcOwnerUpdateOk() {
+      return isMember() && m().isExternal == false &&
+             resource.data.familyId == myFamilyId() &&
+             request.resource.data.familyId == resource.data.familyId &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['title', 'body', 'mapsUrl', 'updatedAt']) &&
+             rsvcShapeOk();
+    }
+
+    /* מנהל-על נוגע רק ב-active — זה כפתור "הסתרה", לא עריכת תוכן תושב. */
+    function rsvcAdminHideOk() {
+      return isSuper() &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['active', 'updatedAt']) &&
+             request.resource.data.familyId == resource.data.familyId;
+    }
+
+    match /residentServiceCards/{id} {
+      allow read: if canSeeServices();
+      allow create: if rsvcCreateOk();
+      allow update: if rsvcOwnerUpdateOk() || rsvcAdminHideOk();
+      /* מחיקה אמיתית רק ליוצר (אפיון: "תושב יכול למחוק את שלו"). מנהל
+         מסתיר (active:false), לא מוחק — כרטיס שנעלם לגמרי אינו ניתן
+         לשחזור אם תתעורר מחלוקת. ⚠️ פתוח: מחיקה עצמית משאירה יתומות
+         את התגובות/הלייקים על הכרטיס — ר' הערת "פתוח" בסוף הבלוק. */
+      allow delete: if isMember() && m().isExternal == false &&
+                       resource.data.familyId == myFamilyId();
+    }
+
+    /* ---------- לייק/דיסלייק ---------- */
+
+    function ssrShapeOk(docId) {
+      return request.resource.data.keys().hasOnly(
+               ['cardId', 'cardType', 'familyId', 'value', 'updatedAt']) &&
+             request.resource.data.keys().hasAll(
+               ['cardId', 'cardType', 'familyId', 'value']) &&
+             request.resource.data.cardId is string &&
+             request.resource.data.cardId != '' &&
+             request.resource.data.cardType in ['official', 'resident'] &&
+             request.resource.data.familyId == myFamilyId() &&
+             request.resource.data.value in ['like', 'dislike'] &&
+             docId == (request.resource.data.cardId + '_' + request.resource.data.familyId);
+    }
+
+    match /serviceReactions/{id} {
+      allow read: if canSeeServices();
+      /* create ו-update יחד: תושב שמשנה לייק↔דיסלייק כותב לאותו מזהה
+         מסמך (upsert), לא יוצר שני. */
+      allow create, update: if isMember() && m().isExternal == false && ssrShapeOk(id);
+      /* ביטול הצבעה לגמרי — הוחלט שניתן לשנות/לבטל בכל עת. */
+      allow delete: if isMember() && m().isExternal == false &&
+                       resource.data.familyId == myFamilyId();
+    }
+
+    /* ---------- תגובות ---------- */
+
+    function sscCreateFields() {
+      return ['id', 'cardId', 'cardType', 'familyId', 'text', 'createdAt', 'updatedAt'];
+    }
+
+    function sscShapeOk() {
+      return request.resource.data.keys().hasOnly(sscCreateFields()) &&
+             request.resource.data.keys().hasAll(
+               ['id', 'cardId', 'cardType', 'familyId', 'text', 'createdAt']) &&
+             request.resource.data.cardId is string &&
+             request.resource.data.cardId != '' &&
+             request.resource.data.cardType in ['official', 'resident'] &&
+             request.resource.data.familyId == myFamilyId() &&
+             request.resource.data.text is string &&
+             request.resource.data.text.size() > 0 &&
+             request.resource.data.text.size() <= 500;
+    }
+
+    function sscCreateOk() {
+      return isMember() && m().isExternal == false && sscShapeOk();
+    }
+
+    match /serviceComments/{id} {
+      allow read: if canSeeServices();
+      allow create: if sscCreateOk();
+      /* אין עריכה — מוחקים ומקלידים מחדש (עדיף על אפשרות ל"שיפוץ בדיעבד"
+         של מה שנאמר). תושב מוחק את שלו, מנהל-על יכול למחוק כל תגובה
+         (הוחלט 22.9.26 — "אין מדיניות תוכן", כלומר בלי כלי אכיפה
+         ייעודיים, אבל מנהל עדיין יכול לפעול ביוזמתו). */
+      allow update: if false;
+      allow delete: if isMember() && m().isExternal == false &&
+                       (resource.data.familyId == myFamilyId() || isSuper());
+    }
+
+    /* ⏭ פתוח (לא חוסם WAVE 1, לטפל ב-WAVE הבא):
+       1. מחיקת כרטיס המלצה משאירה יתומות את תגובותיו ולייקיו — אין
+          מחיקת-מפל בכללי Firestore. תיקון סביר: הלקוח מוחק אותן
+          בבאטש לפני מחיקת הכרטיס (best-effort, לא קריטי — הן ממילא
+          לא מוצגות בלי הכרטיס). לא לבנות Cloud Function בשביל זה.
+       2. אין עדיין בדיקה בקוד היכן `familyDisplayName()` כבר קיים
+          בלקוח לפני השימוש בו במסכים החדשים (dataService.js:~2851).
+    */
+
     /* ---------- ברירת המחדל ---------- */
 
     /* 🔴 **הכול אסור, אלא אם נפתח במפורש למעלה.**
