@@ -1043,6 +1043,10 @@ CBA.screens.events = (function () {
       var year = focusDate ? focusDate.getFullYear() : new Date().getFullYear();
       loadEvents(year, function () {
         if (activeContainer !== container || !container.isConnected) return; // המשתמש כבר עבר מסך
+        /* 🔴 23.9 — container הוא #app-main, **אותו אלמנט לכל המסכים**, ולכן
+           הבדיקה שמעל תמיד עוברת. נתפס חי: האפליקציה נפתחה על "לוח אירועים",
+           עברתי לבית, ו-eventsList (~5 שניות) חזר וצייר את הלוח מעל עמוד הבית. */
+        if (document.body.dataset.screen && document.body.dataset.screen !== "events") return;
         state.selectedDate = focusDate;
         state.currentMonth = focusDate ? new Date(focusDate) : new Date();
         state.year = year;

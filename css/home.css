@@ -99,7 +99,9 @@
   .hm-cols--res .hm-sch { order: -1; }
 }
 @media (min-width: 1200px) {
-  .hm-cols--adm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr); align-items: stretch; }
+  /* align-items:start ולא stretch — נצפה חי: כשיש בכרטיס הוועד שורה אחת, stretch
+     מתח אותו לגובה הלו"ז והשאיר גוש כהה ריק. */
+  .hm-cols--adm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr); align-items: start; }
   .hm-cols--adm .hm-main { display: contents; }
   .hm-cols--adm .hm-side { grid-column: 1 / 2; }
 }
