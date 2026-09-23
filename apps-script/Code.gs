@@ -153,9 +153,13 @@ var ACTION_PERMS = {
   // ניהול מיילים (שלב 1, 2026-08-18) — פתוח לכל מנהל (הרשאה כלשהי), הבדיקה
   // המדויקת של "תחום" השורה הספציפית נעשית בתוך saveEmailSetting_ עצמה.
   saveEmailSetting: PERM_ANY_ADMIN,
-  // מרכז ההתראות (23.9) — תא בטבלה: כל מנהל, והבדיקה לפי התחום בתוך
-  // saveNotifyCell_. הגדרות כלליות — מנהל-על בלבד.
-  saveNotifyCell: PERM_ANY_ADMIN, saveNotifyGlobal: PERM_SUPER,
+  // מרכז ההתראות (23.9) — סבב 3 (יועד): עריכת הטבלה וההגדרות — מנהל-על
+  // בלבד. מנהל תחום רואה את התחום שלו (listNotifySettings) ומציע טריגרים
+  // חדשים (saveCustomTrigger — נכנסים "ממתין לאישור"; הבדיקות בפנים).
+  saveNotifyCell: PERM_SUPER, saveNotifyGlobal: PERM_SUPER,
+  saveCustomTrigger: PERM_ANY_ADMIN, customTriggerAction: PERM_ANY_ADMIN,
+  notifyAiRewrite: PERM_ANY_ADMIN, notifyAiBuild: PERM_ANY_ADMIN, notifyAiSummary: PERM_ANY_ADMIN,
+  notifyTestSend: PERM_ANY_ADMIN,
   notifyRsvpOpened: PERM_ANY_ADMIN,
   /* 🔴 23.9 — תיקון דחוף 3: המייל על פעולת הגנן. בלי השורה הזו
      `authorize_` דחה את הגנן החיצוני, וכל מייל על פעולה שלו חיכה
@@ -1678,6 +1682,12 @@ function doPostDispatch_(ss, body) {
       case 'saveEmailSetting':  return json_(saveEmailSetting_(ss, body));
       case 'saveNotifyCell':    return json_(saveNotifyCell_(ss, body));
       case 'saveNotifyGlobal':  return json_(saveNotifyGlobal_(ss, body));
+      case 'saveCustomTrigger': return json_(saveCustomTrigger_(ss, body));
+      case 'customTriggerAction': return json_(customTriggerAction_(ss, body));
+      case 'notifyAiRewrite':   return json_(notifyAiRewrite_(ss, body));
+      case 'notifyAiBuild':     return json_(notifyAiBuild_(ss, body));
+      case 'notifyAiSummary':   return json_(notifyAiSummary_(ss, body));
+      case 'notifyTestSend':    return json_(notifyTestSend_(ss, body));
       case 'notifyRsvpOpened':  return json_(notifyRsvpOpened_(ss, body));
       case 'notifyServiceRecommend': return json_(notifyServiceRecommend_(ss, body));
       case 'markTourSeen':      return json_(markTourSeen_(ss, body));
@@ -3768,7 +3778,10 @@ var ACTION_DOMAIN = {
   gardenNotifyTask: 'gardenMail', gardenFeedbackNotify: 'gardenMail',
   /* 23.9 — מרכז ההתראות: אינן נוגעות בנתוני המטען הראשי. */
   saveNotifyCell: 'notifySettings', saveNotifyGlobal: 'notifySettings',
-  notifyRsvpOpened: 'notifySettings', notifyServiceRecommend: 'notifySettings'
+  notifyRsvpOpened: 'notifySettings', notifyServiceRecommend: 'notifySettings',
+  saveCustomTrigger: 'notifySettings', customTriggerAction: 'notifySettings',
+  notifyAiRewrite: 'notifySettings', notifyAiBuild: 'notifySettings', notifyAiSummary: 'notifySettings',
+  notifyTestSend: 'notifySettings'
 };
 
 /* ============================================================================
@@ -6259,6 +6272,13 @@ function hourlyJobsRun_() {
       if (ew && ew.events) Logger.log('השבוע בשיכון: ' + ew.events + ' אירועים, פוש ' + ew.push);
     }
   } catch (e) { Logger.log('eventsWeekJob_ נכשל: ' + e); }
+  /* 23.9 סבב 3 — טריגרים וסיכומים שנבנו במרכז ההתראות. */
+  try {
+    if (typeof customTriggersJob_ === 'function') {
+      var cj = customTriggersJob_(ss);
+      if (cj && cj.fired) Logger.log('טריגרים מותאמים: יצאו ' + cj.fired + ' (פוש ' + cj.push + ', מייל ' + cj.mail + ')');
+    }
+  } catch (e) { Logger.log('customTriggersJob_ נכשל: ' + e); }
   /* תיבת הדואר (2026-09-15, צעד 09א) — סטטוסים שהדפדפן
      כתב ל-Firestore וטרם הוחלו על הגיליון.
      ⚠️ **לפני הגיבוי המצטבר** — אחרת הגיבוי מעתיק מסמכים

@@ -137,3 +137,56 @@ td.nt-rc { text-align: center; }
   .nt-grp-t { position: sticky; right: 10px; }
   .nt-meta span + span { display: none; }
 }
+
+/* ===== סבב 3 (23.9): הרשאות, טריגרים וסיכומים מותאמים, AI ===== */
+.nt-screen, #nt-drawer { --nt-ai: #A4540A; --nt-ai-bg: #FDF3E3; --nt-ai-line: #F2D7AE; }
+.nt-perm { background: var(--nt-line2); border-radius: 12px; padding: 10px 14px; font-size: 14px; color: var(--nt-ink2); display: flex; flex-direction: column; gap: 4px; }
+.nt-perm b { color: var(--text, #111827); }
+.nt-perm-hot { color: var(--nt-warn); font-weight: 600; }
+.nt-perm-more summary { cursor: pointer; font-size: 13px; color: var(--nt-mute); width: max-content; }
+.nt-perm-more ul { margin: 6px 0 2px; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
+.nt-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--nt-warn); color: #fff; font-size: 11px; font-weight: 700; margin-inline-start: 4px; }
+.nt-new { display: flex; gap: 8px; flex-wrap: wrap; }
+.nt-newbtn { white-space: nowrap; }
+.nt-st { display: inline-flex; align-items: center; border-radius: 999px; padding: 0 8px; font-size: 11.5px; font-weight: 600; line-height: 18px; }
+.nt-st--ok { background: var(--nt-push-bg); color: var(--nt-push); }
+.nt-st--wait { background: #FEF3C7; color: var(--nt-warn); }
+.nt-st--bad { background: #FDECEC; color: var(--danger, #B91C1C); }
+.nt-st--mute { background: var(--nt-line2); color: var(--nt-ink2); }
+.nt-kind { font-size: 11.5px; color: var(--nt-dg); font-weight: 600; }
+.nt-cell--ro { cursor: default; background: transparent !important; }
+.nt-cell--ro .nt-tg { cursor: default; }
+.nt-off--ro { display: inline !important; color: #C9CDD3; }
+.nt-cxbox { border: 1px solid var(--nt-line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.nt-cxrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; }
+.nt-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.nt-sm { padding: 5px 12px !important; font-size: 13px !important; min-height: 0 !important; }
+.nt-danger { color: var(--danger, #B91C1C) !important; }
+.nt-aibtn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--nt-ai-line); background: var(--nt-ai-bg); color: var(--nt-ai); border-radius: 10px; padding: 5px 12px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.nt-aibtn:focus-visible { outline: 2px solid var(--nt-ai); outline-offset: 2px; }
+.nt-ai-ico { width: 15px; height: 15px; flex: none; vertical-align: -2px; }
+.btn-primary .nt-ai-ico { margin-inline-end: 4px; }
+.nt-aibox { background: var(--nt-ai-bg); border: 1px solid var(--nt-ai-line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.nt-aitag { font-size: 12px; font-weight: 700; color: var(--nt-ai); }
+.nt-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.nt-diff > div { background: var(--surface, #fff); border-radius: 10px; padding: 8px 10px; font-size: 13.5px; display: flex; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.nt-diff small { font-size: 11px; color: var(--nt-mute); }
+.nt-was { border: 1px solid var(--nt-line); color: var(--nt-mute); }
+.nt-now { border: 1px solid var(--nt-ai-line); }
+.nt-codebox { border: 1px dashed var(--danger, #B91C1C); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; background: #FFF7F7; }
+.nt-bgrid { display: grid; grid-template-columns: 70px 1fr; gap: 10px 12px; align-items: center; }
+.nt-bgrid > .nt-lbl { margin: 0; }
+.nt-when { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; font-size: 14px; }
+.nt-when label { display: inline-flex; gap: 6px; align-items: center; }
+.nt-inl { width: auto !important; min-width: 0; padding-block: 4px !important; }
+.nt-mets { display: flex; flex-direction: column; gap: 2px; }
+.nt-met { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--nt-line2); font-size: 14px; cursor: pointer; }
+.nt-met:last-child { border-bottom: 0; }
+.nt-ta--s { min-height: 80px; }
+.nt-builder .nt-vars .nt-var { text-align: start; }
+@media (max-width: 600px) {
+  .nt-bgrid { grid-template-columns: 1fr; gap: 4px; }
+  .nt-bgrid > .nt-lbl { margin-top: 6px; }
+  .nt-diff { grid-template-columns: 1fr; }
+  .nt-new { width: 100%; }
+}

@@ -42,13 +42,13 @@ var NOTIFY_SCREENS = {
   'הבקשות שלי (החזרים)': 'resRequests', 'הוצאות': 'expenses', 'מועדון': 'resReserve',
   'ניהול מועדון': 'clubAdmin', 'מכון כושר': 'resGym', 'ניהול מכון': 'gymAdmin',
   'תושבים': 'residents', 'שירותים': 'resServices', 'לוח אירועים': 'events',
-  'דיווחים על האפליקציה': 'appReports'
+  'דיווחים על האפליקציה': 'appReports', 'מרכז התראות': 'emailSettings'
 };
 
 /* זיכרון לריצה אחת בלבד (כמו PERMS_MEMO_) — שינוי במסך נכנס לתוקף
    בבקשה הבאה. ⚠️ לעולם לא CacheService: הגדרה שכובתה חייבת לחול מיד. */
 var NOTIFY_MEMO_ = null;
-function notifyResetMemo_() { NOTIFY_MEMO_ = null; }
+function notifyResetMemo_() { NOTIFY_MEMO_ = null; NOTIFY_INDEX_ = null; NOTIFY_CAT_ = null; CX_MEMO_ = null; }
 
 function notifyMemo_(ss) {
   if (!NOTIFY_MEMO_) NOTIFY_MEMO_ = {};
@@ -64,7 +64,7 @@ var NOTIFY_INDEX_ = null;
 function notifyIndex_() {
   if (NOTIFY_INDEX_) return NOTIFY_INDEX_;
   var byId = {}, byKey = {};
-  NOTIFY_DOMAINS.forEach(function (d) {
+  notifyCatalog_().forEach(function (d) {
     d.rows.forEach(function (r) {
       if (!r.id) return;
       byId[r.id] = { dom: d, row: r };
@@ -120,7 +120,7 @@ function ensureNotifySheet_(ss) {
   var settings = null;
   try { settings = getEmailSettings_(ss); } catch (e) { settings = {}; }
   var add = [];
-  NOTIFY_DOMAINS.forEach(function (d) {
+  notifyCatalog_().forEach(function (d) {
     d.rows.forEach(function (row) {
       if (!row.id) return;
       Object.keys(row.cells).forEach(function (role) {
@@ -143,7 +143,7 @@ function ensureNotifySheet_(ss) {
 /** מפה "טריגר|נמען" ← התא בפועל (ברירת המחדל מהקטלוג + מה שבגיליון). */
 function notifyReadCells_(ss) {
   var map = {};
-  NOTIFY_DOMAINS.forEach(function (d) {
+  notifyCatalog_().forEach(function (d) {
     d.rows.forEach(function (row) {
       if (!row.id) return;
       Object.keys(row.cells).forEach(function (role) {
@@ -658,7 +658,10 @@ function handleListNotifySettings_(p) {
     notifyResetMemo_();
     var memo = notifyMemo_(ss);
     var settings = memo.settings;
-    var domains = NOTIFY_DOMAINS.filter(function (d) { return notifyCanDomain_(gate.perm, d); })
+    var cxById = {};
+    cxReadAll_(ss).forEach(function (x) { cxById[x.id] = x; });
+    var myKey = normalizeEmail_(gate.email);
+    var domains = notifyCatalog_().filter(function (d) { return notifyCanDomain_(gate.perm, d); })
       .map(function (d) {
         return {
           id: d.id, name: d.name, cols: d.cols,
@@ -672,12 +675,22 @@ function handleListNotifySettings_(p) {
                               app: c.app, badge: c.badge, nopush: c.nopush, noapp: c.noapp, n: c.n,
                               su: t ? t.subject : '', bo: t ? t.body : '', hasMail: !!t };
             });
-            return { id: r.id, ev: r.ev, w: r.w, why: r.why || '', vars: r.vars || [], cells: cells };
+            var o = { id: r.id, ev: r.ev, w: r.w, why: r.why || '', vars: r.vars || [], cells: cells };
+            var x = cxById[r.id];
+            if (x) o.cx = cxPublic_(x, myKey);
+            return o;
           })
         };
       });
-    var out = { ok: true, domains: domains, isSuper: !!gate.perm.isSuper, screens: Object.keys(NOTIFY_SCREENS) };
+    var out = { ok: true, domains: domains, isSuper: !!gate.perm.isSuper, screens: Object.keys(NOTIFY_SCREENS),
+                /* 23.9 סבב 3 (יועד): עריכת הטבלה — מנהל-על בלבד. מנהל תחום
+                   רואה את התחום שלו ומציע טריגרים חדשים לאישור. */
+                canEdit: !!gate.perm.isSuper,
+                builder: cxBuilderInfo_(gate.perm),
+                aiReady: !!geminiApiKey_() };
     if (gate.perm.isSuper) {
+      out.devRequests = cxReadAll_(ss).filter(function (x) { return x.status === CX_ST.dev; })
+        .map(function (x) { return cxPublic_(x, myKey); });
       out.globals = NOTIFY_GLOBALS;
       out.globalValues = notifyGlobals_(settings);
       out.rules = Object.keys(settings).filter(function (k) { return k.indexOf('RULE_') === 0; })
@@ -695,7 +708,9 @@ function saveNotifyCell_(ss, body) {
   var role = String(body.role || '').trim();
   var hit = notifyIndex_().byId[trig];
   if (!hit || !hit.row.cells[role]) return { ok: false, error: 'טריגר לא מוכר' };
-  if (!notifyCanDomain_(body._perm, hit.dom)) return { ok: false, error: 'אין לך הרשאה לתחום הזה' };
+  /* 23.9 סבב 3 (יועד): "הרשאות עריכה למרכז ההתראות — רק למנהלי על".
+     גם ACTION_PERMS דורש PERM_SUPER; כאן זו שכבה שנייה. */
+  if (!body._perm || !body._perm.isSuper) return { ok: false, error: 'עריכת מרכז ההתראות — מנהל-על בלבד' };
   var f = body.fields || {};
   var sh = ensureNotifySheet_(ss);
   var values = sh.getDataRange().getValues();
@@ -1183,6 +1198,8 @@ var NOTIFY_DOMAINS = [
  {"id":"oth","name":"כללי","perm":"*","cols":{"r":"מי שפנה","s":"מנהל-על","a":"כל מנהל"},"rows":[
   {"id":"app-report","ev":"דיווח על תקלה באפליקציה","w":"מיידי","vars":["שם","סוג","מסך","מזהה","תוכן"],"cells":{"s":{"m":0,"p":1,"d":0,"k":"ADMIN_NEW_APP_REPORT","pt":"דיווח חדש על האפליקציה","pb":"{{שם}} · {{סוג}} · מסך {{מסך}}","link":"דיווחים על האפליקציה","app":"","badge":0}}},
   {"id":"app-reply","ev":"תשובה לדיווח על האפליקציה","w":"ידני","vars":["שם","מזהה","תגובה"],"cells":{"r":{"m":1,"p":1,"d":0,"k":"APP_REPORT_REPLY","pt":"תשובה לדיווח שלך","pb":"{{תגובה}}","link":"דף הבית","app":"","badge":0}}},
+  {"id":"cx-proposed","ev":"מנהל תחום הציע טריגר חדש","w":"מיידי","vars":["שם","שם הטריגר","תחום","מתי"],"cells":{"s":{"m":1,"p":1,"d":0,"k":"ADMIN_CUSTOM_PROPOSED","pt":"טריגר חדש ממתין לאישורך","pb":"{{שם הטריגר}} · {{תחום}} · הציע/ה {{שם}}","link":"מרכז התראות","app":"","badge":0}},"why":"מנהל תחום בנה טריגר או סיכום חדש במרכז ההתראות — הוא לא יוצא עד שמנהל-על מאשר."},
+  {"id":"cx-decided","ev":"ההצעה לטריגר אושרה / נדחתה","w":"מיידי","vars":["שם הטריגר","החלטה","הערה"],"cells":{"r":{"m":1,"p":1,"d":0,"k":"CUSTOM_DECIDED","pt":"הטריגר שהצעת {{החלטה}}","pb":"{{שם הטריגר}}","link":"מרכז התראות","app":"","badge":0}},"why":"למנהל שהציע — כשמנהל-על מאשר או דוחה."},
   {"id":"digest","ev":"סיכום שבועי — מה ממתין לטיפול","w":"ראשון","vars":[],"cells":{"a":{"m":1,"p":0,"d":0,"k":"ADMIN_WEEKLY_DIGEST","pt":"הסיכום השבועי","pb":"מה ממתין לטיפול שלך השבוע — במייל.","link":"דף הבית","app":"","badge":0},"s":{"m":1,"p":0,"d":0,"k":"ADMIN_WEEKLY_DIGEST","pt":"הסיכום השבועי","pb":"מה ממתין לטיפול שלך השבוע — במייל.","link":"דיווחים על האפליקציה","app":"","badge":0}},"why":"כל מנהל מקבל רק את התחומים שלו."}
  ]}
 ];
@@ -1270,13 +1287,15 @@ var NOTIFY_MAIL_TEXTS = {
  ADMIN_GARDEN_DAILY: {"su":"סיכום גינון יומי","bo":"שלום,\n\nמה מחכה היום בגינון:\n\n• לא שובצו: {{לא שובצו}}\n• ממתינות לאישורך: {{לאישורך}}\n• חסומות: {{חסומות}}\n• פתוחות מעל 7 ימים: {{מעל 7 ימים}}\n\n{{עדכונים}}הפירוט המלא במסך המשימות.\n\nאפליקציית הוועד"},
  EVENT_RSVP_OPEN: {"su":"נפתח אישור הגעה: {{שם האירוע}}","bo":"שלום,\n\nנפתח אישור הגעה לאירוע {{שם האירוע}} ({{תאריך}}).\n\nאפשר לאשר הגעה בלוח האירועים באפליקציה.\n\nבברכה,\nועד הקהילה"},
  EVENT_REMINDER: {"su":"תזכורת: {{שם האירוע}} מחר","bo":"שלום,\n\nתזכורת — מחר ({{תאריך}}) מתקיים {{שם האירוע}}, ב{{מיקום}}. אישרת הגעה.\n\nנתראה,\nועד הקהילה"},
+ ADMIN_CUSTOM_PROPOSED: {"su":"טריגר חדש ממתין לאישורך: {{שם הטריגר}}","bo":"שלום,\n\n{{שם}} הציע/ה טריגר חדש במרכז ההתראות:\n\n• שם: {{שם הטריגר}}\n• תחום: {{תחום}}\n• מתי: {{מתי}}\n\nהוא לא יוצא לאף אחד עד שתאשר/י אותו במרכז ההתראות.\n\nבברכה,\nמערכת הוועד"},
+ CUSTOM_DECIDED: {"su":"הטריגר שהצעת {{החלטה}}: {{שם הטריגר}}","bo":"שלום,\n\nהטריגר שהצעת במרכז ההתראות — {{שם הטריגר}} — {{החלטה}}.\n\n{{הערה}}\n\nבברכה,\nועד הקהילה"},
  EVENTS_WEEKLY: {"su":"השבוע בשיכון · {{שבוע}}","bo":"שלום,\n\nמה מחכה לנו השבוע בשיכון:\n\n{{רשימה}}\n\nכל הפרטים בלוח האירועים באפליקציה.\n\nשבוע טוב,\nועד הקהילה"}
 };
 
 /* תבניות חדשות שלא היו ב-DEFAULT_EMAIL_SETTINGS — [מפתח, תחום]. */
 function notifyExtraEmailRows_() {
   var out = [];
-  var NEW = {CLUB_RECEIVED: PERM_CLUB, GARDENER_WEEKLY_PLAN: PERM_GARDEN, ADMIN_GARDEN_DAILY: PERM_GARDEN, GARDENER_TASK_ADDED: PERM_GARDEN, GARDEN_FINAL_CHECK: PERM_GARDEN, ADMIN_GARDEN_AWAITING_APPROVAL: PERM_GARDEN, GARDENER_TASK_RETURNED: PERM_GARDEN, GARDEN_PENDING_REVIEW: PERM_GARDEN, GARDEN_RECHECK_DONE: PERM_GARDEN, EVENT_RSVP_OPEN: PERM_SUPER, EVENT_REMINDER: PERM_SUPER, EVENTS_WEEKLY: PERM_SUPER};
+  var NEW = {CLUB_RECEIVED: PERM_CLUB, GARDENER_WEEKLY_PLAN: PERM_GARDEN, ADMIN_GARDEN_DAILY: PERM_GARDEN, GARDENER_TASK_ADDED: PERM_GARDEN, GARDEN_FINAL_CHECK: PERM_GARDEN, ADMIN_GARDEN_AWAITING_APPROVAL: PERM_GARDEN, GARDENER_TASK_RETURNED: PERM_GARDEN, GARDEN_PENDING_REVIEW: PERM_GARDEN, GARDEN_RECHECK_DONE: PERM_GARDEN, EVENT_RSVP_OPEN: PERM_SUPER, EVENT_REMINDER: PERM_SUPER, EVENTS_WEEKLY: PERM_SUPER, ADMIN_CUSTOM_PROPOSED: PERM_SUPER, CUSTOM_DECIDED: PERM_ANY_ADMIN};
   Object.keys(NEW).forEach(function (k) {
     var t = NOTIFY_MAIL_TEXTS[k] || {};
     out.push([k, t.su || '', t.bo || '', 'מרכז ההתראות (23.9) — נשלח לפי הטבלה במסך "ניהול התראות"', NEW[k], 'כן']);
@@ -1287,4 +1306,752 @@ function notifyExtraEmailRows_() {
     out.push([k, '', G[k], 'הגדרה כללית של מרכז ההתראות — נערכת במסך "ניהול התראות" (לשונית הגדרות כלליות)', PERM_SUPER, 'כן']);
   });
   return out;
+}
+
+/* ===========================================================================
+ *  טריגרים מותאמים — נבנים במרכז ההתראות   (23.9.2026, סבב 3, יועד)
+ * ---------------------------------------------------------------------------
+ *  מנהל מתאר במילים ("כל חמישי ב-18:00 תזכורת לפח הכתום") → Gemini מפרק
+ *  לחלקים → המנהל עורך → נשמר כשורה חדשה בלשונית של התחום, ומשם הוא
+ *  טריגר רגיל לגמרי: אותם תאים, אותם נוסחים, אותו notify_.
+ *
+ *  🔑 הרשאות (הכרעת יועד):
+ *     • עריכת מרכז ההתראות — מנהל-על בלבד.
+ *     • מנהל תחום רואה את התחום שלו, ויכול **להציע** טריגר חדש בתחום שלו.
+ *       ההצעה נכנסת "ממתין לאישור" ולא יוצאת לאף אחד עד שמנהל-על מאשר.
+ *     • מנהל-על יוצר בכל תחום; נכנס "מושהה" (או "פעיל" אם ביקש).
+ *  🔑 מה נבנה לבד: רק תזמון — יומי / שבועי / חודשי / פעם אחת / יחסית
+ *     ליומן האירועים. "כשמישהו עושה X" דורש קוד — נשמר כבקשת פיתוח.
+ *  🔑 פלט ה-AI לעולם לא נשמר לבד: הוא חוזר לדפדפן לעריכה.
+ *
+ *  איפה: טאב "טריגרים מותאמים" (הגדרה + תזמון + סטטוס). התאים — בטאב
+ *  "הגדרות התראות" כמו כל שורה; המייל — שורה CX_… ב"הגדרות מיילים".
+ * ========================================================================= */
+var CX_SHEET = 'טריגרים מותאמים';
+var CX_HEADERS = ['מזהה', 'תחום', 'סוג', 'שם', 'תזמון', 'נמענים', 'מדדים', 'סטטוס',
+                  'נוצר ע"י', 'שם היוצר', 'נוצר', 'אושר ע"י', 'נשלח', 'הבקשה המקורית'];
+var CX_ST = { live: 'פעיל', paused: 'מושהה', pending: 'ממתין לאישור', dev: 'בקשת פיתוח', rejected: 'נדחה' };
+var CX_ROLE_LABEL = { all: 'כל התושבים', a: 'מנהל התחום', g: 'הגנן', s: 'מנהל-על' };
+var CX_TYPES = ['daily', 'weekly', 'monthly', 'once', 'cal'];
+var CX_CAL_CATS = { any: 'כל היומנים', community: 'אירועי קהילה', culture: 'אירועי תרבות',
+                    holidays: 'חגים', breaks: 'חופשות גנים' };
+var CX_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+var CX_VARS = { base: ['תאריך', 'יום'], cal: ['שם האירוע', 'תאריך', 'מיקום', 'ימים'] };
+/* "סיכום חדש" — מה אפשר לספור בכל תחום. [מזהה, שם (= שם המשתנה בנוסח), רשימה?]
+   ⚠️ רשימות המועדון/תקציב/מכון/תושבים כוללות שמות — ולכן סיכום נשלח
+      למנהלים בלבד (a/s, ובגינון גם הגנן — שם אין שמות בכלל). */
+var CX_METRICS = {
+  gar: [['unplanned', 'לא שובצו'], ['awaiting', 'ממתינות לאישור'], ['blocked', 'חסומות'],
+        ['old', 'פתוחות מעל 7 ימים'], ['done7', 'בוצעו ב-7 ימים'], ['opened7', 'נפתחו ב-7 ימים'],
+        ['dragged', 'נגררות'], ['weekList', 'משימות השבוע לפי אזור', 1]],
+  club: [['pending', 'ממתינים לאישור'], ['next7', 'שריונים ב-7 הימים הקרובים'], ['pendingList', 'רשימת הממתינים', 1]],
+  bud: [['open', 'בקשות החזר פתוחות'], ['openSum', 'סכום פתוח'], ['openList', 'רשימת הבקשות', 1]],
+  gym: [['pending', 'בקשות מכון לטיפול'], ['pendingList', 'רשימת בקשות המכון', 1]],
+  res: [['signups', 'בקשות הרשמה ממתינות'], ['changes', 'בקשות שינוי פרטים'], ['signupList', 'רשימת בקשות ההרשמה', 1]],
+  evt: [['next7', 'אירועים ב-7 הימים הקרובים'], ['next7List', 'רשימת האירועים', 1]]
+};
+var CX_SUM_TYPES = ['daily', 'weekly', 'monthly'];
+var CX_HOUR_MIN = 7, CX_HOUR_MAX = 21;          // מחוץ לזה — שעות שקט ממילא
+var CX_MEMO_ = null, NOTIFY_CAT_ = null;
+
+function cxSheet_(ss) {
+  var sh = ss.getSheetByName(CX_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(CX_SHEET);
+    sh.getRange(1, 1, 1, CX_HEADERS.length).setValues([CX_HEADERS]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function cxParseJson_(v, dflt) {
+  try { var o = JSON.parse(String(v || '')); return (o && typeof o === 'object') ? o : dflt; } catch (e) { return dflt; }
+}
+
+/** כל הטריגרים המותאמים (זיכרון לריצה). בלי הטאב — רשימה ריקה, בלי ליצור אותו. */
+function cxReadAll_(ss) {
+  if (CX_MEMO_) return CX_MEMO_;
+  var out = [];
+  var sh = ss && ss.getSheetByName(CX_SHEET);
+  if (sh) {
+    var values = sh.getDataRange().getValues();
+    for (var r = 1; r < values.length; r++) {
+      var v = values[r];
+      var id = String(v[0] || '').trim();
+      if (!/^cx-[a-z0-9]{4,16}$/.test(id)) continue;
+      out.push({ row: r + 1, id: id, dom: String(v[1] || '').trim(), kind: String(v[2] || 'תזכורת').trim(),
+                 name: String(v[3] || '').trim() || 'טריגר', sched: cxParseJson_(v[4], {}),
+                 roles: String(v[5] || '').split(',').map(function (x) { return x.trim(); })
+                          .filter(function (x) { return CX_ROLE_LABEL[x]; }),
+                 metrics: cxParseJson_(v[6], {}), status: String(v[7] || '').trim(),
+                 by: normalizeEmail_(String(v[8] || '')), byName: String(v[9] || '').trim(),
+                 at: v[10], approvedBy: String(v[11] || ''), fired: String(v[12] || ''),
+                 prompt: String(v[13] || '') });
+    }
+  }
+  CX_MEMO_ = out;
+  return out;
+}
+
+function cxKey_(id) { return 'CX_' + String(id).replace(/^cx-/, '').toUpperCase(); }
+
+function cxVarsFor_(sched, x) {
+  if (x && x.kind === 'סיכום') return CX_VARS.base.concat(cxMetricLabels_(x.dom, (x.metrics || {}).ids));
+  return (sched && sched.type === 'cal') ? CX_VARS.cal : CX_VARS.base;
+}
+function cxMetricLabels_(dom, ids) {
+  return (CX_METRICS[dom] || []).filter(function (m) { return (ids || []).indexOf(m[0]) !== -1; })
+    .map(function (m) { return m[1]; });
+}
+
+function cxSchedLabel_(s) {
+  s = s || {};
+  var hh = (s.hour < 10 ? '0' : '') + s.hour + ':00';
+  if (s.type === 'daily') return 'כל יום ב-' + hh;
+  if (s.type === 'weekly') return 'כל יום ' + CX_DAYS[s.dow] + ' ב-' + hh;
+  if (s.type === 'monthly') return 'ב-' + s.mday + ' בכל חודש, ' + hh;
+  if (s.type === 'once') {
+    var p = String(s.date || '').split('-');
+    return 'פעם אחת: ' + (p.length === 3 ? Number(p[2]) + '.' + Number(p[1]) + '.' + p[0] : s.date) + ' ב-' + hh;
+  }
+  if (s.type === 'cal') {
+    var n = Math.abs(s.offset || 0);
+    var rel = !s.offset ? 'ביום של' : (s.offset > 0 ? n + ' ימים לפני' : n + ' ימים אחרי');
+    return rel + ' כל אירוע ב' + (CX_CAL_CATS[s.cat] || 'יומן') + ', ' + hh;
+  }
+  return '';
+}
+
+/** השורה בקטלוג — כמו כל שורה ב-NOTIFY_DOMAINS. התאים עצמם בגיליון. */
+function cxToRow_(x) {
+  var cells = {};
+  x.roles.forEach(function (role) {
+    cells[role] = { m: 0, p: 0, d: 0, k: cxKey_(x.id), pt: '', pb: '', link: 'דף הבית', app: '', badge: 0,
+                    noapp: 1 };
+  });
+  var st = x.status === CX_ST.live ? '' : ' · ' + x.status;
+  return { id: x.id, ev: x.name, w: cxSchedLabel_(x.sched) + st, vars: cxVarsFor_(x.sched, x), cells: cells,
+           why: (x.kind === 'סיכום' ? 'סיכום' : 'טריגר') + ' שנוסף במרכז ההתראות' +
+                (x.byName ? ' · ' + x.byName : '') };
+}
+
+/** הקטלוג = NOTIFY_DOMAINS + הטריגרים המותאמים, כל אחד בלשונית התחום שלו. */
+function notifyCatalog_() {
+  if (NOTIFY_CAT_) return NOTIFY_CAT_;
+  var cx = [];
+  try { cx = cxReadAll_(SpreadsheetApp.getActiveSpreadsheet()); } catch (e) { cx = []; }
+  cx = cx.filter(function (x) { return x.status !== CX_ST.dev && x.status !== CX_ST.rejected && x.roles.length; });
+  if (!cx.length) { NOTIFY_CAT_ = NOTIFY_DOMAINS; return NOTIFY_CAT_; }
+  NOTIFY_CAT_ = NOTIFY_DOMAINS.map(function (d) {
+    var mine = cx.filter(function (x) { return x.dom === d.id; });
+    if (!mine.length) return d;
+    var cols = {};
+    Object.keys(d.cols).forEach(function (k) { cols[k] = d.cols[k]; });
+    mine.forEach(function (x) { x.roles.forEach(function (r) { if (!cols[r]) cols[r] = CX_ROLE_LABEL[r]; }); });
+    return { id: d.id, name: d.name, perm: d.perm, cols: cols,
+             rows: d.rows.concat([{ grp: 'נוספו במרכז ההתראות' }], mine.map(cxToRow_)) };
+  });
+  return NOTIFY_CAT_;
+}
+
+/** מה הדפדפן מקבל על טריגר מותאם. */
+function cxPublic_(x, myKey) {
+  return { id: x.id, dom: x.dom, kind: x.kind, name: x.name, sched: x.sched, schedLabel: cxSchedLabel_(x.sched),
+           roles: x.roles, status: x.status, byName: x.byName, mine: !!myKey && x.by === myKey,
+           prompt: x.prompt, metrics: x.metrics || {} };
+}
+
+/** באילו תחומים המשתמש רשאי לבנות, ולאילו נמענים בכל אחד. */
+function cxBuilderInfo_(perm) {
+  var doms = NOTIFY_DOMAINS.filter(function (d) { return notifyCanDomain_(perm, d); }).map(function (d) {
+    var roles = { all: CX_ROLE_LABEL.all, a: d.cols.a || CX_ROLE_LABEL.a, s: CX_ROLE_LABEL.s };
+    if (d.id === 'gar') roles.g = CX_ROLE_LABEL.g;
+    if (d.perm === PERM_SUPER) delete roles.a;    // אין "מנהל תחום" לתחום של מנהל-על
+    return { id: d.id, name: d.name, roles: roles };
+  });
+  return { domains: doms, days: CX_DAYS, cats: CX_CAL_CATS, vars: CX_VARS, metrics: CX_METRICS,
+           hours: [CX_HOUR_MIN, CX_HOUR_MAX], isSuper: !!(perm && perm.isSuper) };
+}
+
+/** ניקוי וולידציה של טיוטה (מה-AI או מהטופס). מחזיר { ok, x } או { ok:false, error }. */
+function cxNormalize_(d, perm) {
+  d = d || {};
+  var info = cxBuilderInfo_(perm);
+  var dom = info.domains.filter(function (z) { return z.id === String(d.dom || ''); })[0];
+  if (!dom) return { ok: false, error: 'אין לך הרשאה לתחום הזה' };
+  var clip = function (v, n) { return String(v == null ? '' : v).replace(/[\u0000-\u0008\u000B-\u001F]/g, '').substring(0, n).trim(); };
+  var name = clip(d.name, 60);
+  if (!name) return { ok: false, error: 'חסר שם לטריגר' };
+  var isSum = d.kind === 'סיכום';
+  var roles = (d.roles || []).map(String).filter(function (r, i, a) {
+    return dom.roles[r] && a.indexOf(r) === i && (!isSum || r !== 'all');
+  });
+  if (!roles.length) return { ok: false, error: isSum ? 'סיכום נשלח למנהלים — צריך לבחור מנהל התחום או מנהל-על' : 'צריך לבחור למי זה נשלח' };
+  var metrics = {};
+  if (isSum) {
+    var cat = CX_METRICS[dom.id] || [];
+    var ids = (d.metrics && d.metrics.ids || []).map(String).filter(function (id, i, a) {
+      return a.indexOf(id) === i && cat.some(function (m) { return m[0] === id; });
+    });
+    if (!ids.length) return { ok: false, error: 'צריך לבחור לפחות דבר אחד לספור' };
+    metrics = { ids: ids, only: !(d.metrics && d.metrics.only === false) };
+  }
+  var sc = d.sched || {};
+  var type = CX_TYPES.indexOf(sc.type) !== -1 ? sc.type : '';
+  if (isSum && CX_SUM_TYPES.indexOf(type) === -1) type = '';
+  if (!type) return { ok: false, error: 'צריך לבחור מתי זה יוצא' };
+  var num = function (v, lo, hi, df) { v = parseInt(v, 10); return isNaN(v) ? df : Math.max(lo, Math.min(hi, v)); };
+  var sched = { type: type, hour: num(sc.hour, CX_HOUR_MIN, CX_HOUR_MAX, 9) };
+  if (type === 'weekly') sched.dow = num(sc.dow, 0, 6, 0);
+  if (type === 'monthly') sched.mday = num(sc.mday, 1, 28, 1);
+  if (type === 'once') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(sc.date || ''))) return { ok: false, error: 'צריך תאריך' };
+    var today = Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'yyyy-MM-dd');
+    if (String(sc.date) < today) return { ok: false, error: 'התאריך כבר עבר' };
+    sched.date = String(sc.date);
+  }
+  if (type === 'cal') {
+    sched.cat = CX_CAL_CATS[sc.cat] ? sc.cat : 'any';
+    sched.offset = num(sc.offset, -30, 30, 1);
+  }
+  var ch = d.channels || {};
+  var m = !!ch.m, p = !!ch.p;
+  if (!m && !p) return { ok: false, error: 'צריך לבחור מייל, פוש או שניהם' };
+  var t = { pt: clip(d.pt, 80), pb: clip(d.pb, 200), su: clip(d.su, 200), bo: clip(d.bo, 5000) };
+  if (p && !t.pt) return { ok: false, error: 'לפוש צריך כותרת' };
+  if (m && (!t.su || !t.bo)) return { ok: false, error: 'למייל צריך נושא וגוף' };
+  /* משתנים שאינם קיימים לסוג התזמון הזה — היו יוצאים ריקים. */
+  var allowed = cxVarsFor_(sched, isSum ? { kind: 'סיכום', dom: dom.id, metrics: metrics } : null);
+  var bad = [];
+  [t.pt, t.pb, t.su, t.bo].join(' ').replace(/\{\{([^}]+)\}\}/g, function (_, k) {
+    k = k.trim(); if (allowed.indexOf(k) === -1 && bad.indexOf(k) === -1) bad.push(k); return '';
+  });
+  if (bad.length) return { ok: false, error: 'פרטים שלא קיימים בטריגר הזה: ' + bad.join(', ') };
+  return { ok: true, x: { dom: dom.id, name: name, roles: roles, sched: sched, channels: { m: m, p: p }, texts: t,
+                          kind: isSum ? 'סיכום' : 'תזכורת', metrics: metrics, prompt: clip(d.prompt, 500) } };
+}
+
+function cxCanTouch_(perm, email, x) {
+  if (perm && perm.isSuper) return true;
+  return x.status === CX_ST.pending && x.by === normalizeEmail_(email);
+}
+
+/** יצירה או עדכון. body: { id?, draft:{...}, activate?, dev? } */
+function saveCustomTrigger_(ss, body) {
+  var perm = body._perm || {};
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    notifyResetMemo_();
+    var sh = cxSheet_(ss);
+    /* בקשת פיתוח — רק תיאור, בלי תזמון ובלי נמענים. */
+    if (body.dev) {
+      var txt = String((body.draft && body.draft.prompt) || '').trim().substring(0, 500);
+      if (!txt) return { ok: false, error: 'חסר תיאור' };
+      var dom0 = cxBuilderInfo_(perm).domains.filter(function (z) { return z.id === String((body.draft || {}).dom || ''); })[0];
+      var id0 = 'cx-' + Utilities.getUuid().replace(/[^a-z0-9]/gi, '').substring(0, 8).toLowerCase();
+      sh.appendRow([id0, dom0 ? dom0.id : '', 'בקשת פיתוח', String((body.draft || {}).name || 'בקשת פיתוח').substring(0, 60),
+                    '{}', '', '{}', CX_ST.dev, normalizeEmail_(body._email), cxNameOf_(perm), new Date(), '', '', txt]);
+      notifyResetMemo_();
+      return { ok: true, id: id0, status: CX_ST.dev };
+    }
+    var n = cxNormalize_(body.draft, perm);
+    if (!n.ok) return n;
+    var x = n.x;
+    var existing = null;
+    if (body.id) {
+      existing = cxReadAll_(ss).filter(function (z) { return z.id === String(body.id); })[0];
+      if (!existing) return { ok: false, error: 'הטריגר לא נמצא' };
+      if (!cxCanTouch_(perm, body._email, existing)) return { ok: false, error: 'אחרי אישור — רק מנהל-על עורך' };
+    }
+    var id = existing ? existing.id
+      : 'cx-' + Utilities.getUuid().replace(/[^a-z0-9]/gi, '').substring(0, 8).toLowerCase();
+    var status = existing ? existing.status
+      : (perm.isSuper ? (body.activate ? CX_ST.live : CX_ST.paused) : CX_ST.pending);
+    var rowVals = [id, x.dom, x.kind, x.name, JSON.stringify(x.sched), x.roles.join(','), JSON.stringify(x.metrics || {}), status,
+                   existing ? existing.by : normalizeEmail_(body._email),
+                   existing ? existing.byName : cxNameOf_(perm),
+                   existing ? existing.at : new Date(), existing ? existing.approvedBy : '',
+                   existing ? existing.fired : '', x.prompt || (existing ? existing.prompt : '')];
+    if (existing) sh.getRange(existing.row, 1, 1, rowVals.length).setValues([rowVals]);
+    else sh.appendRow(rowVals);
+    /* התאים — שורה לכל נמען בטאב "הגדרות התראות". */
+    var nsh = ensureNotifySheet_(ss);
+    var nv = nsh.getDataRange().getValues();
+    var yes = function (b) { return b ? 'כן' : 'לא'; };
+    x.roles.forEach(function (role) {
+      var vals = [id, role, x.name, CX_ROLE_LABEL[role], yes(x.channels.m), yes(x.channels.p), 'לא',
+                  x.texts.pt, x.texts.pb, 'דף הבית', '', 'לא'];
+      var found = false;
+      for (var r = 1; r < nv.length; r++) {
+        if (String(nv[r][0]).trim() === id && String(nv[r][1]).trim() === role) {
+          nsh.getRange(r + 1, 1, 1, vals.length).setValues([vals]); found = true;
+        }
+      }
+      if (!found) nsh.appendRow(vals);
+    });
+    /* המייל — תבנית משלו. תמיד נוצרת, כדי שאפשר יהיה להדליק מייל אחר כך. */
+    var key = cxKey_(id);
+    var su = x.texts.su || x.texts.pt || x.name;
+    var bo = x.texts.bo || [x.texts.pt, x.texts.pb].filter(Boolean).join('\n\n') || x.name;
+    var es = ensureEmailSettingsSheet_(ss);
+    var ev = es.getDataRange().getValues();
+    var hit = false;
+    for (var e = 1; e < ev.length; e++) {
+      if (String(ev[e][0]).trim() === key) { es.getRange(e + 1, 2, 1, 2).setValues([[su, bo]]); hit = true; }
+    }
+    if (!hit) es.appendRow([key, su, bo, 'טריגר מותאם "' + x.name + '" — נערך במרכז ההתראות', PERM_SUPER, 'כן']);
+    notifyResetMemo_();
+    /* הצעה של מנהל תחום — מנהל-על מקבל הודעה. */
+    if (!existing && status === CX_ST.pending) {
+      var domName = (NOTIFY_DOMAINS.filter(function (d) { return d.id === x.dom; })[0] || {}).name || '';
+      notify_(ss, 'cx-proposed', { vars: { 'שם': cxNameOf_(perm), 'שם הטריגר': x.name, 'תחום': domName,
+                                           'מתי': cxSchedLabel_(x.sched) } }, ['s']);
+    }
+    return { ok: true, id: id, status: status };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function cxNameOf_(perm) {
+  return ((perm && perm.firstName) || '') + ((perm && perm.family) ? ' ' + perm.family : '');
+}
+
+/** אישור / דחייה / השהיה / הפעלה / מחיקה. body: { id, op, note? } */
+function customTriggerAction_(ss, body) {
+  var perm = body._perm || {};
+  var op = String(body.op || '');
+  notifyResetMemo_();
+  var x = cxReadAll_(ss).filter(function (z) { return z.id === String(body.id || ''); })[0];
+  if (!x) return { ok: false, error: 'הטריגר לא נמצא' };
+  var sh = cxSheet_(ss);
+  var setStatus = function (st, extra) {
+    sh.getRange(x.row, 8).setValue(st);
+    if (extra) sh.getRange(x.row, 12).setValue(extra);
+    notifyResetMemo_();
+  };
+  if (op === 'delete') {
+    if (!cxCanTouch_(perm, body._email, x) && !(x.status === CX_ST.dev && x.by === normalizeEmail_(body._email))) {
+      return { ok: false, error: 'רק מנהל-על מוחק' };
+    }
+    sh.deleteRow(x.row);
+    var nsh = ss.getSheetByName(NOTIFY_SHEET);
+    if (nsh) {
+      var nv = nsh.getDataRange().getValues();
+      for (var r = nv.length - 1; r >= 1; r--) if (String(nv[r][0]).trim() === x.id) nsh.deleteRow(r + 1);
+    }
+    notifyResetMemo_();
+    return { ok: true };
+  }
+  if (!perm.isSuper) return { ok: false, error: 'רק מנהל-על מאשר, משהה או מפעיל' };
+  var who = normalizeEmail_(body._email);
+  if (op === 'approve' || op === 'reject') {
+    if (x.status !== CX_ST.pending) return { ok: false, error: 'הטריגר אינו ממתין לאישור' };
+    var ok = op === 'approve';
+    setStatus(ok ? CX_ST.live : CX_ST.rejected, who);
+    if (x.by && x.by !== who) {
+      notify_(ss, 'cx-decided', { vars: { 'שם הטריגר': x.name, 'החלטה': ok ? 'אושר ופעיל' : 'לא אושר',
+                                          'הערה': String(body.note || '').substring(0, 300) },
+                                  r: { emails: [x.by] } }, ['r']);
+    }
+    return { ok: true, status: ok ? CX_ST.live : CX_ST.rejected };
+  }
+  if (op === 'pause' || op === 'activate') {
+    if (x.status !== CX_ST.live && x.status !== CX_ST.paused) return { ok: false, error: 'אפשר רק לטריגר מאושר' };
+    setStatus(op === 'activate' ? CX_ST.live : CX_ST.paused);
+    return { ok: true, status: op === 'activate' ? CX_ST.live : CX_ST.paused };
+  }
+  return { ok: false, error: 'פעולה לא מוכרת' };
+}
+
+/* ---------------------------------------------------------------------------
+ *  התזמון — רץ מהעבודה השעתית
+ * ------------------------------------------------------------------------- */
+/** האם הגיע הזמן, ובאילו מופעים. מחזיר [{ key, vars }]. חלון של 3 שעות
+ *  מהשעה שנבחרה — אם ריצה שעתית אחת נפלה, הבאה משלימה. הדגל (עמודת
+ *  "נשלח") מבטיח פעם אחת לכל מופע. */
+function cxDue_(x, now, calEvents) {
+  var tz = 'Asia/Jerusalem';
+  var s = x.sched || {};
+  var h = Number(Utilities.formatDate(now, tz, 'H'));
+  if (!(h >= s.hour && h < s.hour + 3)) return [];
+  var today = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+  var dow = Number(Utilities.formatDate(now, tz, 'u')) % 7;      // 0 = ראשון
+  var mday = Number(today.substring(8, 10));
+  var base = { 'תאריך': Utilities.formatDate(now, tz, 'd.M'), 'יום': CX_DAYS[dow] };
+  if (s.type === 'daily') return [{ key: today, vars: base }];
+  if (s.type === 'weekly') return dow === s.dow ? [{ key: today, vars: base }] : [];
+  if (s.type === 'monthly') return mday === s.mday ? [{ key: today, vars: base }] : [];
+  if (s.type === 'once') return s.date === today ? [{ key: today, vars: base }] : [];
+  if (s.type === 'cal') {
+    var target = Utilities.formatDate(new Date(now.getTime() + (s.offset || 0) * 86400000), tz, 'yyyy-MM-dd');
+    return (calEvents || []).filter(function (e) {
+      return e.day === target && (s.cat === 'any' || e.category === s.cat);
+    }).map(function (e) {
+      return { key: today + '|' + e.id, vars: { 'שם האירוע': e.title, 'תאריך': e.label, 'מיקום': e.place || 'השיכון',
+                                               'ימים': String(Math.abs(s.offset || 0)) } };
+    });
+  }
+  return [];
+}
+
+/** אירועי היומן לחלון של ±31 יום — לטריגרים שתלויים ביומן. */
+function cxCalEvents_(now) {
+  var tz = 'Asia/Jerusalem', out = [], years = {};
+  [-31, 0, 31].forEach(function (d) { years[Utilities.formatDate(new Date(now.getTime() + d * 86400000), tz, 'yyyy')] = true; });
+  Object.keys(years).forEach(function (yy) {
+    var doc = null;
+    try { doc = fsGet_(fsDocPath_('eventsCal', yy)); } catch (e) { Logger.log('cxCalEvents_: ' + e); }
+    ((doc && doc.events) || []).forEach(function (e) {
+      if (!e || !e.id || !e.title) return;
+      var when = new Date(String(e.date || ''));
+      if (isNaN(when.getTime())) return;
+      out.push({ id: String(e.id), title: String(e.title).substring(0, 80), category: String(e.category || ''),
+                 place: String(e.location || '').substring(0, 60), day: Utilities.formatDate(when, tz, 'yyyy-MM-dd'),
+                 label: Utilities.formatDate(when, tz, 'd.M') + (e.allDay ? '' : ' · ' + Utilities.formatDate(when, tz, 'HH:mm')) });
+    });
+  });
+  return out;
+}
+
+function customTriggersJob_(ss, now) {
+  now = now || new Date();
+  var out = { checked: 0, fired: 0, push: 0, mail: 0 };
+  notifyResetMemo_();
+  var live = cxReadAll_(ss).filter(function (x) { return x.status === CX_ST.live && x.roles.length; });
+  if (!live.length) return out;
+  var cal = null, memo = {};
+  var sh = cxSheet_(ss);
+  live.forEach(function (x) {
+    out.checked++;
+    if (x.sched.type === 'cal' && !cal) cal = cxCalEvents_(now);
+    var due = cxDue_(x, now, cal);
+    if (!due.length) return;
+    var fired = x.fired ? x.fired.split(',') : [];
+    due.forEach(function (o) {
+      if (fired.indexOf(o.key) !== -1) return;
+      /* הדגל לפני השליחה — כשל באמצע עדיף על כפילות לכל השיכון. */
+      fired.push(o.key);
+      sh.getRange(x.row, 13).setValue(fired.slice(-12).join(','));
+      if (x.kind === 'סיכום') {
+        var mv = cxMetricValues_(ss, x.dom, (x.metrics || {}).ids, memo, now);
+        if ((x.metrics || {}).only !== false && !mv.any) { out.skipped = (out.skipped || 0) + 1; return; }
+        Object.keys(mv.vars).forEach(function (k) { o.vars[k] = mv.vars[k]; });
+      }
+      var rep = notify_(ss, x.id, { vars: o.vars }, x.roles);
+      out.fired++; out.push += rep.push; out.mail += rep.mail;
+    });
+  });
+  return out;
+}
+
+/* ---------------------------------------------------------------------------
+ *  AI — Gemini (המפתח ב-Script Properties, כמו סריקת הקבלות)
+ * ------------------------------------------------------------------------- */
+/** מגבלה: 40 בקשות AI לשעה לכל מנהל — שלחיצות חוזרות לא ישרפו מכסה. */
+function cxAiThrottle_(email) {
+  try {
+    var c = CacheService.getScriptCache();
+    var k = 'ntai_' + normalizeEmail_(email);
+    var n = Number(c.get(k) || 0);
+    if (n >= 40) return false;
+    c.put(k, String(n + 1), 3600);
+  } catch (e) { /* בלי מטמון — ממשיכים */ }
+  return true;
+}
+
+function cxGemini_(prompt, schema) {
+  var key = geminiApiKey_();
+  if (!key) return { ok: false, error: 'ה-AI לא מוגדר (חסר GEMINI_API_KEY)' };
+  var payload = { contents: [{ parts: [{ text: prompt }] }],
+                  generationConfig: { temperature: 0.7, response_mime_type: 'application/json', response_schema: schema } };
+  try {
+    var resp = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
+      ':generateContent?key=' + encodeURIComponent(key),
+      { method: 'post', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) return { ok: false, error: 'ה-AI לא זמין כרגע (' + resp.getResponseCode() + ')' };
+    var data = JSON.parse(resp.getContentText());
+    var text = data.candidates && data.candidates[0] && data.candidates[0].content &&
+               data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+               data.candidates[0].content.parts[0].text;
+    if (!text) return { ok: false, error: 'ה-AI לא החזיר תשובה' };
+    return { ok: true, data: JSON.parse(text) };
+  } catch (e) {
+    return { ok: false, error: 'שגיאה בפנייה ל-AI' };
+  }
+}
+
+function cxVarsIn_(t) {
+  var out = [];
+  String(t || '').replace(/\{\{([^}]+)\}\}/g, function (_, k) { k = k.trim(); if (out.indexOf(k) === -1) out.push(k); return ''; });
+  return out;
+}
+
+var CX_AI_DIRS = {
+  warm: 'חם, אישי וידידותי יותר — כמו שכן שכותב לשכנים',
+  short: 'קצר ותמציתי יותר — רק מה שחשוב',
+  formal: 'רשמי ומכובד יותר, בלי להיות קר',
+  fix: 'רק לתקן שגיאות כתיב, דקדוק ופיסוק. לא לשנות תוכן, סגנון או אורך'
+};
+
+/** ניסוח מחדש של זוג שדות (כותרת+טקסט פוש, או נושא+גוף מייל).
+ *  body: { sec:'push'|'mail', title, text, dir, free, vars[], ctx:{ev, role, dom} } */
+function notifyAiRewrite_(ss, body) {
+  if (!cxAiThrottle_(body._email)) return { ok: false, error: 'הרבה בקשות AI בשעה האחרונה — נסה שוב מאוחר יותר' };
+  var sec = body.sec === 'mail' ? 'mail' : 'push';
+  var title = String(body.title || '').substring(0, 200), text = String(body.text || '').substring(0, 5000);
+  if (!title && !text) return { ok: false, error: 'אין נוסח לשפר' };
+  var dir = CX_AI_DIRS[body.dir] || '';
+  var free = String(body.free || '').trim().substring(0, 300);
+  if (!dir && !free) dir = CX_AI_DIRS.warm;
+  var allowed = (body.vars || []).map(function (v) { return String(v).trim(); }).filter(Boolean).slice(0, 40);
+  var must = cxVarsIn_(title + ' ' + text);
+  var ctx = body.ctx || {};
+  var lim = sec === 'push' ? 'כותרת עד 45 תווים, טקסט עד 110 תווים, שורה אחת כל אחד'
+                           : 'נושא עד 80 תווים; גוף מייל קצר וברור, עם שורות ריקות בין פסקאות, פתיחה "שלום" וחתימה "ועד הקהילה"';
+  var prompt = 'אתה עורך נוסחים של אפליקציית ועד קהילה בשיכון בישראל. כתוב מחדש ' +
+    (sec === 'push' ? 'התראת פוש' : 'מייל') + ' לפי ההנחיה.\n' +
+    'ההקשר: "' + String(ctx.ev || '').substring(0, 80) + '" · נמען: ' + String(ctx.role || '').substring(0, 40) +
+    ' · תחום: ' + String(ctx.dom || '').substring(0, 40) + '.\n' +
+    'ההנחיה: ' + [dir, free].filter(Boolean).join(' · ') + '\n' +
+    'כללים: עברית טבעית ופשוטה; בלי אימוג\'ים; לא להמציא עובדות, מספרים, תאריכים או שמות. ' +
+    'ביטויים בצורה {{…}} הם משתנים שמוחלפים אוטומטית — חובה לשמור כל אחד מהם בדיוק כפי שהוא (' +
+    (must.length ? must.map(function (v) { return '{{' + v + '}}'; }).join(' ') : 'אין כרגע') + '), ' +
+    'ואסור להוסיף משתנים שאינם ברשימה: ' + (allowed.length ? allowed.join(', ') : 'אין') + '. ' + lim + '.\n' +
+    'הנוסח הנוכחי:\n' + (sec === 'push' ? 'כותרת' : 'נושא') + ': ' + title + '\n' + (sec === 'push' ? 'טקסט' : 'גוף') + ':\n' + text;
+  var schema = { type: 'OBJECT', properties: { title: { type: 'STRING' }, text: { type: 'STRING' } }, required: ['title', 'text'] };
+  var res = null, missing = [], unknown = [];
+  for (var attempt = 0; attempt < 2; attempt++) {
+    res = cxGemini_(prompt + (attempt ? '\n\nשים לב: בניסיון הקודם חסרו או נוספו משתנים. שמור את כולם בדיוק.' : ''), schema);
+    if (!res.ok) return res;
+    var got = String(res.data.title || '') + ' ' + String(res.data.text || '');
+    var have = cxVarsIn_(got);
+    missing = must.filter(function (v) { return have.indexOf(v) === -1; });
+    unknown = have.filter(function (v) { return allowed.indexOf(v) === -1 && must.indexOf(v) === -1; });
+    if (!missing.length && !unknown.length) break;
+  }
+  var maxT = sec === 'push' ? 80 : 200, maxB = sec === 'push' ? 200 : 5000;
+  return { ok: true, title: String(res.data.title || '').replace(/\s+/g, ' ').trim().substring(0, maxT),
+           text: (sec === 'push' ? String(res.data.text || '').replace(/\s+/g, ' ') : String(res.data.text || '')).trim().substring(0, maxB),
+           missing: missing, unknown: unknown };
+}
+
+/** מתיאור חופשי לטיוטת טריגר. לא שומר כלום — הטיוטה חוזרת לעריכה. */
+function notifyAiBuild_(ss, body) {
+  if (!cxAiThrottle_(body._email)) return { ok: false, error: 'הרבה בקשות AI בשעה האחרונה — נסה שוב מאוחר יותר' };
+  var ask = String(body.prompt || '').trim().substring(0, 500);
+  if (ask.length < 6) return { ok: false, error: 'צריך לתאר במשפט מה ההתראה' };
+  var info = cxBuilderInfo_(body._perm);
+  if (!info.domains.length) return { ok: false, error: 'אין לך תחום לבנות בו' };
+  var tz = 'Asia/Jerusalem', now = new Date();
+  var domTxt = info.domains.map(function (d) {
+    return d.id + ' = ' + d.name + ' (נמענים אפשריים: ' + Object.keys(d.roles).map(function (r) { return r + '=' + d.roles[r]; }).join(', ') + ')';
+  }).join('\n');
+  var prompt = 'אתה עוזר למנהל באפליקציית ועד קהילה בשיכון בישראל לבנות התראה אוטומטית מתוזמנת.\n' +
+    'היום ' + Utilities.formatDate(now, tz, 'yyyy-MM-dd') + ' (יום ' + CX_DAYS[Number(Utilities.formatDate(now, tz, 'u')) % 7] + ').\n' +
+    'הבקשה: "' + ask + '"\n\n' +
+    'תחומים (dom) ונמענים (roles):\n' + domTxt + '\n\n' +
+    'סוגי תזמון (type): daily = כל יום; weekly = כל שבוע (dow: 0=ראשון … 6=שבת); monthly = כל חודש (mday 1-28); ' +
+    'once = פעם אחת (date בפורמט YYYY-MM-DD); cal = יחסית לאירועים ביומן האירועים (cat: ' +
+    Object.keys(CX_CAL_CATS).map(function (k) { return k + '=' + CX_CAL_CATS[k]; }).join(', ') +
+    '; offset = כמה ימים לפני האירוע, 0 = ביום עצמו, מספר שלילי = אחרי). hour = שעה עגולה בין ' + CX_HOUR_MIN + ' ל-' + CX_HOUR_MAX + '.\n' +
+    'משתנים שמותר לשלב בטקסט: בכל סוג — {{תאריך}} {{יום}}; ב-cal במקומם — {{שם האירוע}} {{תאריך}} {{מיקום}} {{ימים}}. אסור אחרים.\n' +
+    'ערוצים: mail / push. אם לא צוין — push בלבד. לפוש: כותרת עד 45 תווים וטקסט עד 110. אם יש mail — נושא וגוף קצר שמתחיל ב"שלום," ונחתם "ועד הקהילה".\n' +
+    'עברית טבעית, בלי אימוג\'ים, בלי להמציא פרטים שלא נאמרו.\n' +
+    '🔴 אם הבקשה תלויה בפעולה שמישהו עושה באפליקציה ("כשמישהו משריין", "כשמגיע דיווח", "כשמשלמים") ולא בזמן או ביומן — ' +
+    'feasible=false, ובשדה reason הסבר קצר ופשוט למה זה דורש פיתוח. עדיין מלא name ו-dom.';
+  var schema = { type: 'OBJECT', properties: {
+    feasible: { type: 'BOOLEAN' }, reason: { type: 'STRING' }, name: { type: 'STRING' },
+    dom: { type: 'STRING', enum: info.domains.map(function (d) { return d.id; }) },
+    roles: { type: 'ARRAY', items: { type: 'STRING', enum: ['all', 'a', 'g', 's'] } },
+    type: { type: 'STRING', enum: CX_TYPES }, hour: { type: 'INTEGER' }, dow: { type: 'INTEGER' },
+    mday: { type: 'INTEGER' }, date: { type: 'STRING' },
+    cat: { type: 'STRING', enum: Object.keys(CX_CAL_CATS) }, offset: { type: 'INTEGER' },
+    mail: { type: 'BOOLEAN' }, push: { type: 'BOOLEAN' },
+    pt: { type: 'STRING' }, pb: { type: 'STRING' }, su: { type: 'STRING' }, bo: { type: 'STRING' } },
+    required: ['feasible', 'name', 'dom', 'roles', 'type', 'hour', 'mail', 'push', 'pt', 'pb'] };
+  var res = cxGemini_(prompt, schema);
+  if (!res.ok) return res;
+  var a = res.data || {};
+  var dom = info.domains.filter(function (d) { return d.id === a.dom; })[0] || info.domains[0];
+  var draft = {
+    name: String(a.name || '').substring(0, 60), dom: dom.id,
+    roles: (a.roles || []).filter(function (r) { return dom.roles[r]; }),
+    sched: { type: CX_TYPES.indexOf(a.type) !== -1 ? a.type : 'weekly', hour: a.hour, dow: a.dow, mday: a.mday,
+             date: a.date, cat: a.cat, offset: a.offset },
+    channels: { m: !!a.mail, p: a.push !== false || !a.mail },
+    pt: String(a.pt || '').substring(0, 80), pb: String(a.pb || '').substring(0, 200),
+    su: String(a.su || '').substring(0, 200), bo: String(a.bo || '').substring(0, 5000), prompt: ask
+  };
+  if (!draft.roles.length) draft.roles = [Object.keys(dom.roles)[0]];
+  var hr = parseInt(draft.sched.hour, 10);
+  draft.sched.hour = isNaN(hr) ? 9 : Math.max(CX_HOUR_MIN, Math.min(CX_HOUR_MAX, hr));
+  return { ok: true, feasible: a.feasible !== false, reason: String(a.reason || '').substring(0, 300), draft: draft };
+}
+
+/** שליחת בדיקה — רק למי שלחץ, עם ערכים לדוגמה. body: { draft:{pt,pb,su,bo,channels,sched} } */
+function notifyTestSend_(ss, body) {
+  if (!cxAiThrottle_(body._email)) return { ok: false, error: 'יותר מדי בדיקות — נסה שוב מאוחר יותר' };
+  var d = body.draft || {};
+  var tz = 'Asia/Jerusalem', now = new Date();
+  var sample = { 'תאריך': Utilities.formatDate(now, tz, 'd.M'), 'יום': CX_DAYS[Number(Utilities.formatDate(now, tz, 'u')) % 7],
+                 'שם האירוע': 'אירוע לדוגמה', 'מיקום': 'המועדון', 'ימים': '3' };
+  (body.vars || []).forEach(function (v) { v = String(v); if (!(v in sample)) sample[v] = '‹' + v + '›'; });
+  /* סיכום — המספרים האמיתיים (רק למי שרשאי לתחום, והבדיקה נשלחת רק אליו). */
+  if (d.kind === 'סיכום') {
+    var dom = cxBuilderInfo_(body._perm).domains.filter(function (z) { return z.id === String(d.dom || ''); })[0];
+    if (!dom) return { ok: false, error: 'אין לך הרשאה לתחום הזה' };
+    var mv = cxMetricValues_(ss, dom.id, (d.metrics || {}).ids, {}, now);
+    Object.keys(mv.vars).forEach(function (k) { sample[k] = mv.vars[k]; });
+  }
+  var r = function (t) { return renderTemplate_(String(t || ''), sample); };
+  var ch = d.channels || {};
+  var out = { ok: true, push: false, mail: false, noDevice: false };
+  var me = normalizeEmail_(body._email);
+  if (ch.p && d.pt) {
+    var ent = notifyDirectory_(ss).filter(function (p) { return p.key === me; })[0];
+    if (ent && ent.uid && pushSubForUid_(ent.uid)) {
+      out.push = sendPushUid_(ent.uid, '[בדיקה] ' + r(d.pt).substring(0, 50), r(d.pb).substring(0, 140),
+                              { screen: 'emailSettings', trig: 'test' }) > 0;
+    } else out.noDevice = true;
+  }
+  if (ch.m && d.su) {
+    var plain = r(d.bo);
+    sendMail_([body._email], '[בדיקה] ' + r(d.su), plain, buildEmailHtml_(plain, CBA_APP_URL, 'פתיחת האפליקציה', 'neutral'));
+    out.mail = true;
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------------------------
+ *  "סיכום חדש" — חישוב המדדים (רק כשסיכום באמת יוצא)
+ * ------------------------------------------------------------------------- */
+/** מחזיר { vars: {שם המדד: ערך}, any } — any = יש משהו לדווח (מספר > 0 / רשימה). */
+function cxMetricValues_(ss, dom, ids, memo, now) {
+  memo = memo || {};
+  now = now || new Date();
+  ids = ids || [];
+  var cat = CX_METRICS[dom] || [];
+  var want = function (id) { return ids.indexOf(id) !== -1; };
+  var val = {};
+  try {
+    if (dom === 'gar') {
+      if (!('gar' in memo)) memo.gar = gardenOpenTasksForDigest_() || [];
+      var tasks = memo.gar, t0 = now.getTime(), weekAgo = t0 - 7 * 86400000;
+      var open = tasks.filter(function (t) { return !String(t.closure || '').trim() && t.pendingDelete !== true; });
+      val.unplanned = open.filter(function (t) { return !String(t.week || '').trim(); }).length;
+      val.awaiting = open.filter(function (t) { return String(t.flag || '') === 'ממתין לאישור'; }).length;
+      val.blocked = open.filter(function (t) { return String(t.flag || '') === 'דורש בדיקה בשטח'; }).length;
+      val.old = open.filter(function (t) { var c = gardenTsMs_(t.createdAt); return c && c < weekAgo; }).length;
+      val.done7 = tasks.filter(function (t) { return String(t.closure || '') === 'בוצע' && gardenTsMs_(t.approvedAt) >= weekAgo; }).length;
+      val.opened7 = tasks.filter(function (t) { return gardenTsMs_(t.createdAt) >= weekAgo; }).length;
+      val.dragged = open.filter(function (t) { return String(t.flag || '') === 'נגררה'; }).length;
+      if (want('weekList')) {
+        var wk = gardenWeekKey_(), byArea = {};
+        open.filter(function (t) { return String(t.week || '') === wk; }).forEach(function (t) {
+          var a = String(t.area || t.place || 'כללי').trim() || 'כללי';
+          (byArea[a] = byArea[a] || []).push('  – ' + String(t.title || t.category || 'משימה'));
+        });
+        val.weekList = Object.keys(byArea).sort().map(function (a) { return '• ' + a + ':\n' + byArea[a].join('\n'); }).join('\n');
+      }
+    } else if (dom === 'evt') {
+      var tz = 'Asia/Jerusalem';
+      var from = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+      var to = Utilities.formatDate(new Date(now.getTime() + 7 * 86400000), tz, 'yyyy-MM-dd');
+      if (!memo.cal) memo.cal = cxCalEvents_(now);
+      var evs = memo.cal.filter(function (e) { return e.day >= from && e.day < to; })
+        .sort(function (a, b) { return a.day < b.day ? -1 : a.day > b.day ? 1 : 0; });
+      val.next7 = evs.length;
+      val.next7List = evs.map(function (e) { return '• ' + e.label + ' — ' + e.title + (e.place ? ' (' + e.place + ')' : ''); }).join('\n');
+    } else {
+      if (!memo.open) memo.open = collectOpenItems_(ss);
+      var O = memo.open;
+      if (dom === 'club') {
+        val.pending = O.club.length;
+        val.pendingList = O.club.join('\n');
+        if (want('next7')) {
+          var evs2 = clubWindowEvents_(0) || [];
+          var lim = now.getTime() + 7 * 86400000;
+          val.next7 = evs2.filter(function (ev) {
+            var st = ev.getStartTime().getTime();
+            return st >= now.getTime() && st < lim && clubStatusOf_(ev) !== 'rejected';
+          }).length;
+        }
+      } else if (dom === 'bud') {
+        val.open = O.budget.length;
+        val.openList = O.budget.join('\n');
+        if (want('openSum')) {
+          var sum = 0;
+          O.budget.forEach(function (l) { var m = /—\s*(\d+)\s*₪/.exec(l); if (m) sum += Number(m[1]); });
+          val.openSum = sum.toLocaleString('he-IL') + ' ₪';
+          val._openSumN = sum;
+        }
+      } else if (dom === 'gym') {
+        val.pending = O.gym.length;
+        val.pendingList = O.gym.join('\n');
+      } else if (dom === 'res') {
+        val.signups = O.residents.length;
+        val.signupList = O.residents.join('\n');
+        if (want('changes')) {
+          var n = 0;
+          try {
+            var psh = ensureProfileSheet_(ss);
+            psh.getDataRange().getValues().slice(1).forEach(function (r) { if (String(r[7] || '').trim() === 'ממתין') n++; });
+          } catch (e) { Logger.log('cx changes: ' + e); }
+          val.changes = n;
+        }
+      }
+    }
+  } catch (err) {
+    Logger.log('cxMetricValues_ ' + dom + ': ' + err);
+  }
+  var out = { vars: {}, any: false };
+  cat.forEach(function (m) {
+    if (!want(m[0])) return;
+    var v = val[m[0]];
+    if (m[0] === 'openSum') { out.vars[m[1]] = v || '0 ₪'; if (val._openSumN > 0) out.any = true; return; }
+    if (m[2]) { out.vars[m[1]] = v ? String(v) : '(אין)'; if (v) out.any = true; return; }
+    v = Number(v) || 0;
+    out.vars[m[1]] = v;
+    if (v > 0) out.any = true;
+  });
+  return out;
+}
+
+/** "כתיבה עם AI" לסיכום: נוסח פוש + מייל לפי המדדים שנבחרו. לא שומר. */
+function notifyAiSummary_(ss, body) {
+  if (!cxAiThrottle_(body._email)) return { ok: false, error: 'הרבה בקשות AI בשעה האחרונה — נסה שוב מאוחר יותר' };
+  var d = body.draft || {};
+  var info = cxBuilderInfo_(body._perm);
+  var dom = info.domains.filter(function (z) { return z.id === String(d.dom || ''); })[0];
+  if (!dom) return { ok: false, error: 'אין לך הרשאה לתחום הזה' };
+  var labels = cxMetricLabels_(dom.id, (d.metrics || {}).ids);
+  if (!labels.length) return { ok: false, error: 'צריך לבחור לפחות דבר אחד לספור' };
+  var lists = (CX_METRICS[dom.id] || []).filter(function (m) { return m[2] && labels.indexOf(m[1]) !== -1; }).map(function (m) { return m[1]; });
+  var nums = labels.filter(function (l) { return lists.indexOf(l) === -1; });
+  var allowed = CX_VARS.base.concat(labels);
+  var roleTxt = (d.roles || []).map(function (r) { return dom.roles[r]; }).filter(Boolean).join(' ו') || 'המנהל';
+  var sched = d.sched || {};
+  var prompt = 'כתוב נוסח לסיכום תקופתי אוטומטי באפליקציית ועד קהילה בשיכון בישראל.\n' +
+    'שם הסיכום: "' + String(d.name || '').substring(0, 60) + '" · תחום: ' + dom.name + ' · נשלח אל: ' + roleTxt +
+    ' · מתי: ' + (CX_SUM_TYPES.indexOf(sched.type) !== -1 ? cxSchedLabel_({ type: sched.type, hour: Number(sched.hour) || 9,
+                   dow: Number(sched.dow) || 0, mday: Number(sched.mday) || 1 }) : 'תקופתי') + '.\n' +
+    'המספרים מוחלפים אוטומטית בכל שליחה. משתנים (חובה לשמור בדיוק בצורה {{…}}): ' +
+    nums.map(function (l) { return '{{' + l + '}}'; }).join(' ') +
+    (lists.length ? ' · רשימות (כמה שורות כל אחת — רק במייל, בשורה משלה): ' + lists.map(function (l) { return '{{' + l + '}}'; }).join(' ') : '') +
+    ' · אפשר גם {{תאריך}} {{יום}}. אסור משתנים אחרים.\n' +
+    'פוש: pt = כותרת עד 40 תווים; pb = שורה עד 110 תווים שמציגה את המספרים החשובים (בלי רשימות). ' +
+    'מייל: su = נושא עד 70 תווים; bo = גוף קצר: "שלום," · שורה לכל מספר בתבליט • · הרשימות אם יש · חתימה "ועד הקהילה".\n' +
+    'עברית טבעית, ענייני ונעים, בלי אימוג\'ים, בלי להמציא עובדות.';
+  var schema = { type: 'OBJECT', properties: { pt: { type: 'STRING' }, pb: { type: 'STRING' }, su: { type: 'STRING' }, bo: { type: 'STRING' } },
+                 required: ['pt', 'pb', 'su', 'bo'] };
+  var res = cxGemini_(prompt, schema);
+  if (!res.ok) return res;
+  var a = res.data || {};
+  var all = [a.pt, a.pb, a.su, a.bo].join(' ');
+  var unknown = cxVarsIn_(all).filter(function (v) { return allowed.indexOf(v) === -1; });
+  var missing = nums.filter(function (l) { return all.indexOf('{{' + l + '}}') === -1; });
+  return { ok: true, pt: String(a.pt || '').substring(0, 80), pb: String(a.pb || '').replace(/\s+/g, ' ').substring(0, 200),
+           su: String(a.su || '').substring(0, 200), bo: String(a.bo || '').substring(0, 5000), unknown: unknown, missing: missing };
 }

@@ -4970,6 +4970,16 @@ CBA.data = (function () {
     saveNotifyGlobal: function (id, value, cb) {
       CBA.sheets.postRead("saveNotifyGlobal", { id: id, value: value }, cb);
     },
+    /* סבב 3 (23.9) — טריגרים וסיכומים מותאמים, ו-AI. שום פלט AI לא נשמר
+       בשרת: הוא חוזר לכאן, נכנס לשדות, ורק "שמירה" כותבת. */
+    saveCustomTrigger: function (payload, cb) { CBA.sheets.postRead("saveCustomTrigger", payload, cb); },
+    customTriggerAction: function (id, op, note, cb) {
+      CBA.sheets.postRead("customTriggerAction", { id: id, op: op, note: note || "" }, cb);
+    },
+    notifyAiRewrite: function (payload, cb) { CBA.sheets.postRead("notifyAiRewrite", payload, cb); },
+    notifyAiBuild: function (prompt, cb) { CBA.sheets.postRead("notifyAiBuild", { prompt: prompt }, cb); },
+    notifyAiSummary: function (draft, cb) { CBA.sheets.postRead("notifyAiSummary", { draft: draft }, cb); },
+    notifyTestSend: function (draft, vars, cb) { CBA.sheets.postRead("notifyTestSend", { draft: draft, vars: vars || [] }, cb); },
     /* "עדכון חדש" — המסמך של המשפחה ב-notifyInbox. null כשאין/נכשל. */
     readNotifyInbox: function (cb) {
       var fid = String(((window.CBA && CBA.user) || {}).familyId || "").trim();

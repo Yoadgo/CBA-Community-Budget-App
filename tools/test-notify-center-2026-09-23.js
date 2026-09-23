@@ -500,8 +500,11 @@ section('9. מסך הניהול — מידור');
   ok('התא מגיע עם נושא וגוף המייל', cell.hasMail && /דיווח גינון חדש/.test(cell.su));
   const deny = sb.saveNotifyCell_(ss, { trig: 'gar-new', role: 'a', fields: { m: true }, _perm: { perms: ['תקציב'] } });
   ok('🔴 מנהל תקציב לא יכול לשמור תא של גינון', deny.ok === false);
-  const allow = sb.saveNotifyCell_(ss, { trig: 'gar-new', role: 'a', fields: { m: true, pt: 'כותרת חדשה' }, _perm: { perms: ['גינון'] } });
-  ok('מנהלת גינון שומרת תא של גינון', allow.ok === true);
+  /* סבב 3 (יועד): עריכה — מנהל-על בלבד. מנהלת גינון רק צופה. */
+  const mgr = sb.saveNotifyCell_(ss, { trig: 'gar-new', role: 'a', fields: { m: true }, _perm: { perms: ['גינון'] } });
+  ok('🔴 סבב 3: גם מנהלת גינון לא שומרת — עריכה למנהל-על בלבד', mgr.ok === false, JSON.stringify(mgr));
+  const allow = sb.saveNotifyCell_(ss, { trig: 'gar-new', role: 'a', fields: { m: true, pt: 'כותרת חדשה' }, _perm: { isSuper: true, perms: ['על'] } });
+  ok('מנהל-על שומר תא של גינון', allow.ok === true);
   sb.notifyResetMemo_();
   const c2 = sb.notifyReadCells_(ss)['gar-new|a'];
   ok('והשמירה נקראת חזרה', c2.m === true && c2.pt === 'כותרת חדשה');
@@ -514,7 +517,8 @@ section('9. מסך הניהול — מידור');
   const g2 = sb.saveNotifyGlobal_(ss, { id: 'quiet', value: 'hack' });
   const g3 = sb.saveNotifyGlobal_(ss, { id: 'RULE_STALE_DAYS', value: '5' });
   ok('הגדרה כללית נשמרת; ערך לא מוכר נדחה; כלל מספרי נשמר', g1.ok && !g2.ok && g3.ok);
-  ok('ACTION_PERMS: saveNotifyGlobal למנהל-על בלבד', sb.ACTION_PERMS.saveNotifyGlobal === 'על' && sb.ACTION_PERMS.saveNotifyCell === '*');
+  ok('ACTION_PERMS: saveNotifyGlobal ו-saveNotifyCell למנהל-על בלבד', sb.ACTION_PERMS.saveNotifyGlobal === 'על' && sb.ACTION_PERMS.saveNotifyCell === 'על');
+  ok('מנהל-על: canEdit; מנהל תקציב: צפייה בלבד', sup.canEdit === true && bud.canEdit === false);
 }
 
 section('10. עדכון שירות לכל התושבים');
