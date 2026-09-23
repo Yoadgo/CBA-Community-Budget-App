@@ -288,7 +288,7 @@ function render(container) {
     ok('focus נקרא עם התאריך', calls.indexOf('focus:' + dayKey(0)) !== -1, calls.join(','));
     ok('וניווט ל-events', calls.indexOf('nav:events') !== -1);
     ok('⚠️ events.js מייצא focus / openRsvp / calendarLinks',
-       /focus: function \(d\)/.test(EVENTS) && /openRsvp: function \(ev\)/.test(EVENTS) && /calendarLinks: \{ google: googleAddUrl, apple: appleIcsDataUri \}/.test(EVENTS));
+       /focus: function \(d\)/.test(EVENTS) && /openRsvp: function \(ev\)/.test(EVENTS) && /calendarLinks: \{ google: googleAddUrl, apple: appleIcsDataUri/.test(EVENTS) && /openApple: openApple/.test(EVENTS));
     ok('🔴 ו-render של events משתמש בתאריך ומאפס אותו',
        /var focusDate = pendingFocus;\s*pendingFocus = null;/.test(EVENTS));
   }

@@ -506,12 +506,8 @@ CBA.homeSchedule = (function () {
     if (a) {
       var ae = findEvent(a.getAttribute("data-hm-apple"));
       var cal = CBA.screens && CBA.screens.events && CBA.screens.events.calendarLinks;
-      if (ae && cal && cal.apple) {
-        var link = document.createElement("a");
-        link.href = cal.apple(ae);
-        link.download = (ae.title || "event").replace(/[^\w֐-׿ -]/g, "").slice(0, 60) + ".ics";
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-      }
+      /* 23.9 — פתיחה דרך events.js: ב-iOS פותח את יומן המערכת במקום להוריד קובץ */
+      if (ae && cal && cal.openApple) cal.openApple(ae);
       return;
     }
     if (t.closest("[data-hm-retry]")) { st.err = ""; paint(); load(); return; }

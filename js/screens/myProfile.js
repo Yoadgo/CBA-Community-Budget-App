@@ -81,6 +81,21 @@ CBA.screens = CBA.screens || {};
 
   /* גיל מחושב מתאריך לידה, לתצוגה בלבד — לא נשמר בשום מקום, כדי שלא ידרוש
      עדכון ידני עם הזמן (בדיוק העיקרון של "לא לשכפל נתון לשני מקומות"). */
+  /* 🔴 תיקון 23.9.26 — "הגיל מחושב אבל התאריך לא נשמר": הוא כן נשמר. הגיליון
+     ממיר "2020-05-01" לתא-תאריך אמיתי, והשרת מחזיר אותו כמחרוזת ארוכה
+     ("Fri May 01 2020 00:00:00 GMT+0300 ..."). new Date() מפענח אותה (ולכן הגיל
+     הופיע), אבל <input type="date"> מקבל **רק** YYYY-MM-DD ומציג שדה ריק.
+     הפונקציה הזאת מנרמלת כל צורה לצורה שהשדה מבין. */
+  function isoDate_(raw) {
+    var s = String(raw == null ? "" : raw).trim();
+    if (!s) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return "";
+    var mm = String(d.getMonth() + 1).padStart(2, "0"), dd = String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + mm + "-" + dd;
+  }
+
   function ageFromDob_(dob) {
     var d = new Date(dob);
     if (isNaN(d.getTime())) return "";
@@ -200,7 +215,7 @@ CBA.screens = CBA.screens || {};
             var age = (f.key === "birthDate" && v.birthDate) ? ageFromDob_(v.birthDate) : "";
             return '<label class="pf-field">' +
               '<span class="pf-label">' + esc(f.label) + '</span>' +
-              '<input class="field-input" type="' + f.type + '" data-f="' + f.key + '" value="' + esc(v[f.key] || "") + '">' +
+              '<input class="field-input" type="' + f.type + '" data-f="' + f.key + '" value="' + esc(f.type === "date" ? isoDate_(v[f.key]) : (v[f.key] || "")) + '">' +
               (f.hint ? '<span class="pf-hint">' + esc(f.hint) + '</span>' : '') +
               (age !== "" ? '<span class="pf-hint">גיל מחושב: ' + esc(age) + '</span>' : '') +
               '</label>';
@@ -241,7 +256,7 @@ CBA.screens = CBA.screens || {};
       var age = ageFromDob_(k.dob);
       return '<div class="pf-kidrow" data-kidrow="' + i + '">' +
         '<input class="field-input" type="text" data-kid-name="' + i + '" placeholder="שם" value="' + esc(k.name) + '">' +
-        '<input class="field-input" type="date" data-kid-dob="' + i + '" value="' + esc(k.dob) + '">' +
+        '<input class="field-input" type="date" data-kid-dob="' + i + '" value="' + esc(isoDate_(k.dob)) + '">' +
         '<span class="pf-kidrow__age">' + (age !== "" ? esc(age) : "") + '</span>' +
         '<button type="button" class="pf-kidrow__remove" data-kid-remove="' + i + '" aria-label="הסרת ילד/ה">✕</button>' +
       '</div>';

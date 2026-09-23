@@ -50,6 +50,8 @@ CBA.screens.events = (function () {
     allEvents: [],
     eventsById: {}, // אינדקס מהיר לפי id, לצורך כפתור "אישור הגעה" (RSVP) והוספה ליומן
     rsvpEnabledIds: {}, // מפת eventId -> true, לאירועים שמעקב ההגעה שלהם פתוח כרגע
+    rsvpCounts: {}, // 23.9 — eventId -> {families, people} · ספירה חיה, גלויה לכל תושב (הכרעת יועד)
+    highlightEventId: null, // 23.9 — קישור ישיר (#event=ID): האירוע שיודגש אחרי הציור
     privateEvents: [],
     activeCategories: null, // Set (מיוצג כאובייקט) של קטגוריות פעילות בצ'יפבר; null = הכול פעיל
     showAllMonth: false, // מובייל בלבד: להציג גם ימים שעברו החודש
@@ -162,8 +164,39 @@ CBA.screens.events = (function () {
       if (!err && rows) {
         rows.forEach(function (r) { if (r && r.id) state.rsvpEnabledIds[r.id] = true; });
       }
-      callback();
+      loadRsvpCounts(callback);
     });
+  }
+
+  /* ספירה חיה לכל אירוע שמעקב ההגעה שלו פתוח (23.9.26, הכרעת יועד: גלוי
+     לכולם). שאילתת שוויון אחת לכל אירוע פתוח — בדרך כלל 0-3 בחודש. אם כללי
+     Firestore עדיין לא מתירים לתושב לקרוא (לפני פרסום הכללים), השאילתה
+     נכשלת בשקט והתג פשוט לא מוצג — שום דבר אחר לא נשבר. */
+  function loadRsvpCounts(callback) {
+    state.rsvpCounts = {};
+    var ids = Object.keys(state.rsvpEnabledIds);
+    if (!ids.length || !CBA.fb || !CBA.fb.queryCollection) return callback();
+    var left = ids.length;
+    ids.forEach(function (id) {
+      CBA.fb.queryCollection("eventRSVPResponses", [["eventId", id]], function (err, rows) {
+        if (!err && rows) state.rsvpCounts[id] = countRsvpRows(rows);
+        if (--left === 0) callback();
+      });
+    });
+  }
+
+  function countRsvpRows(rows) {
+    var att = rows.filter(function (r) { return r && r.status === "attending"; });
+    var people = att.reduce(function (n, r) { return n + (Number(r.adults) || 0) + (Number(r.children) || 0); }, 0);
+    return { families: att.length, people: people };
+  }
+
+  // תג "✓ 14 משפחות · 31 איש" — ריק אם אין ספירה או שאיש עוד לא אישר.
+  function rsvpCountHTML(eventId) {
+    var c = state.rsvpCounts[eventId];
+    if (!c || !c.families) return "";
+    return '<span class="rsvp-count-pill" title="אישרו הגעה">✓ ' + c.families +
+      (c.families === 1 ? " משפחה" : " משפחות") + ' · ' + c.people + ' איש</span>';
   }
 
   /**
@@ -240,6 +273,65 @@ CBA.screens.events = (function () {
       '</span>';
   }
 
+  /* iOS (23.9.26, דיווח יועד): קישור עם download מוריד קובץ .ics ל"קבצים"
+     במקום לפתוח את יומן iOS. בספארי ב-iPhone/iPad פתיחת data:text/calendar
+     כעמוד (בלי download) מעלה את גיליון "הוספה ליומן" של המערכת. בכל שאר
+     המכשירים נשארת ההורדה הרגילה. פונקציה אחת לכל האפליקציה — גם עמוד הבית
+     (homeSchedule.js) קורא לה דרך calendarLinks.openApple. */
+  function isIOS() {
+    var ua = navigator.userAgent || "";
+    return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+  function openApple(ev) {
+    var uri = appleIcsDataUri(ev);
+    if (isIOS()) {
+      var w = null;
+      try { w = window.open(uri, "_blank"); } catch (e) { w = null; }
+      if (!w) window.location.href = uri;
+      return;
+    }
+    var link = document.createElement("a");
+    link.href = uri;
+    link.download = (ev.title || "event").replace(/[^\w\u0590-\u05FF -]/g, "").slice(0, 60) + ".ics";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  /* קישור ישיר לאירוע (23.9.26): כתובת האתר + #event=<מזהה>. app.js קורא את
+     ה-hash בעלייה ומנתב לכאן דרך focusEvent. */
+  function eventLink(ev) {
+    var base = window.location.origin + window.location.pathname;
+    return base + "#event=" + encodeURIComponent(ev.id);
+  }
+  function shareEvent(ev) {
+    var url = eventLink(ev);
+    var text = ev.title + " · " + ev.date.getDate() + "." + (ev.date.getMonth() + 1) + "." + ev.date.getFullYear();
+    if (navigator.share) {
+      navigator.share({ title: ev.title, text: text, url: url }).catch(function () {});
+      return;
+    }
+    function done() { if (CBA.ui && CBA.ui.toast) CBA.ui.toast("הקישור לאירוע הועתק", "ok"); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, function () { window.prompt("העתקת קישור לאירוע:", url); });
+    } else {
+      window.prompt("העתקת קישור לאירוע:", url);
+    }
+  }
+  function shareBtnHTML(eventId) {
+    return '<button type="button" class="addcal btn-share-event" data-event-id="' + esc(eventId) + '" title="שיתוף קישור לאירוע">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>שיתוף</button>';
+  }
+  function wireShareButtons(container) {
+    container.querySelectorAll(".btn-share-event").forEach(function (b) {
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var ev = state.eventsById[b.dataset.eventId];
+        if (ev) shareEvent(ev);
+      });
+    });
+  }
+
   function wireAddCalButtons(container) {
     container.querySelectorAll('.addcal[data-cal="google"]').forEach(function (a) {
       var ev = state.eventsById[a.dataset.eventId];
@@ -249,13 +341,7 @@ CBA.screens.events = (function () {
       a.addEventListener("click", function (e) {
         e.preventDefault();
         var ev = state.eventsById[a.dataset.eventId];
-        if (!ev) return;
-        var link = document.createElement("a");
-        link.href = appleIcsDataUri(ev);
-        link.download = (ev.title || "event").replace(/[^\w\u0590-\u05FF -]/g, "").slice(0, 60) + ".ics";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        if (ev) openApple(ev);
       });
     });
   }
@@ -351,6 +437,8 @@ CBA.screens.events = (function () {
     wireMonthlyListeners(container, monthEvents);
     wireChipbar(container);
     wireAddCalButtons(container);
+    wireShareButtons(container);
+    applyHighlight(container);
   }
 
   function renderMonthlyCalendar(month, year, monthEvents) {
@@ -445,14 +533,14 @@ CBA.screens.events = (function () {
       dayEvents.forEach(function (e) {
         var cat = CATEGORIES[e.category] || CATEGORIES.personal;
         var rsvpOpen = !!state.rsvpEnabledIds[e.id];
-        html += '<div class="ev-row">' +
+        html += '<div class="ev-row" data-event-id="' + esc(e.id) + '">' +
           '<div class="bar" style="background:var(' + cat.cssVar + ')"></div>' +
           '<div class="time">כל היום</div>' +
           '<div class="body">' +
           '<div class="ttl2">' + esc(e.title) + '</div>' +
-          '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + '</div>' +
+          '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
           '<div class="ev-actions">' +
-          addCalHTML(e.id) +
+          addCalHTML(e.id) + shareBtnHTML(e.id) +
           (rsvpOpen ? '<button type="button" class="btn-rsvp" data-event-id="' + esc(e.id) + '">אישור הגעה</button>' : "") +
           '</div>' +
           '</div></div>';
@@ -681,13 +769,16 @@ CBA.screens.events = (function () {
         grouped[key].forEach(function (e) {
           var cat = CATEGORIES[e.category] || CATEGORIES.personal;
           var rsvpOpen = !!state.rsvpEnabledIds[e.id];
-          html += '<div class="ev-row lg m-ev">' +
+          html += '<div class="ev-row lg m-ev" data-event-id="' + esc(e.id) + '">' +
             '<div class="bar" style="background:var(' + cat.cssVar + ')"></div>' +
             '<div class="time">' + cat.icon + '</div>' +
             '<div class="body">' +
             '<div class="ttl2">' + esc(e.title) + '</div>' +
-            '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + '</div>' +
+            '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
+            '<div class="ev-actions">' +
+            (e.category !== "personal" ? addCalHTML(e.id) + shareBtnHTML(e.id) : "") +
             (rsvpOpen ? '<button type="button" class="btn-rsvp" data-event-id="' + esc(e.id) + '">אישור הגעה</button>' : "") +
+            '</div>' +
             '</div></div>';
         });
 
@@ -725,6 +816,22 @@ CBA.screens.events = (function () {
 
     wireChipbar(container);
     wireRsvpButtons(container);
+    wireAddCalButtons(container);
+    wireShareButtons(container);
+    applyHighlight(container);
+  }
+
+  /* קישור ישיר: אחרי הציור מגלגלים לשורת האירוע ומהבהבים אותה פעם אחת.
+     מנקים את המזהה אחרי הפעם הראשונה, כדי שניווט רגיל בלוח לא יחזור אליו. */
+  function applyHighlight(container) {
+    var id = state.highlightEventId;
+    if (!id) return;
+    var row = container.querySelector('.ev-row[data-event-id="' + id.replace(/"/g, '\\"') + '"]');
+    if (!row) return;
+    state.highlightEventId = null;
+    row.classList.add("is-linked");
+    try { row.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+    setTimeout(function () { row.classList.remove("is-linked"); }, 4000);
   }
 
   /* ============================================================================
@@ -743,10 +850,17 @@ CBA.screens.events = (function () {
    *  מכבה את המעקב תוך כדי שהדיאלוג פתוח.
    * ========================================================================== */
 
-  // האם הצופה הנוכחי הוא בעל הרשאת ניהול כלשהי (כל תחום) — תואם PERM_ANY_ADMIN
-  // בשרת. CBA.perms מתמלא ב-app.js (myPerms()) ונחשף גלובלית.
+  /* מי מנהל את לוח האירועים (פתיחה/סגירה של מעקב הגעה, רשימת המאשרים):
+     הרשאת "תרבות" (23.9.26, הכרעת יועד — התחום של לוח האירועים והסקרים) או
+     מנהל-על. עד היום זה היה "כל הרשאת ניהול שהיא". חייב להתאים ל-PERM_CULTURE
+     ב-Code.gs ולכלל eventRSVP ב-firestore.rules — ההסתרה כאן היא נוחות בלבד,
+     המידור האמיתי הוא בכללי Firestore. CBA.perms מתמלא ב-app.js. */
+  var PERM_CULTURE = "תרבות";
   function viewerIsAdmin() {
-    return !!(window.CBA && Array.isArray(CBA.perms) && CBA.perms.length > 0);
+    if (!window.CBA) return false;
+    if (CBA.isSuper) return true;
+    var ps = Array.isArray(CBA.perms) ? CBA.perms : [];
+    return ps.indexOf(PERM_CULTURE) !== -1 || ps.indexOf("על") !== -1;
   }
 
   // מזהה המשפחה של הצופה הנוכחי — אותו דפוס כמו gardenReports/sysStatus.
@@ -1034,6 +1148,7 @@ CBA.screens.events = (function () {
        • calendarLinks — אותם קישורי Google / Apple של "הוספה ליומן".
      ⚠️ openRsvp מצפה ל-ev עם id, title ו-category (מפתח הקטגוריה, "community"). */
   var pendingFocus = null;
+  var pendingEventId = null;
 
   return {
     title: "לוח אירועים",
@@ -1042,14 +1157,32 @@ CBA.screens.events = (function () {
       pendingFocus = (x && !isNaN(x.getTime())) ? startOfDay(x) : null;
     },
     openRsvp: function (ev) { if (ev && ev.id) openRsvpDialog(ev); },
-    calendarLinks: { google: googleAddUrl, apple: appleIcsDataUri },
+    calendarLinks: { google: googleAddUrl, apple: appleIcsDataUri, openApple: openApple, link: eventLink },
+    /* קישור ישיר (23.9.26): app.js קורא לזה לפני showScreen("events") כשהכתובת
+       מכילה #event=ID. האירוע נפתר אחרי הטעינה — התאריך שלו הופך ל"יום נבחר"
+       והשורה שלו מודגשת. מזהה שלא נמצא (אירוע ישן/נמחק) פשוט פותח את הלוח. */
+    focusEvent: function (id) { pendingEventId = id ? String(id) : null; },
     render: function (container) {
       activeContainer = container;
       ensureResizeListener();
       var focusDate = pendingFocus;
       pendingFocus = null;
+      var wantEventId = pendingEventId;
+      pendingEventId = null;
       var year = focusDate ? focusDate.getFullYear() : new Date().getFullYear();
       loadEvents(year, function () {
+        /* קישור ישיר: האירוע יכול לשבת בשנה אחרת מזו שנטענה. אם הוא לא נמצא
+           בשנה הנוכחית — לא טוענים שנה שנייה (איטי), פשוט פותחים את הלוח. */
+        if (wantEventId) {
+          var target = state.eventsById[wantEventId];
+          if (target && target.date) {
+            focusDate = startOfDay(new Date(target.date));
+            state.highlightEventId = wantEventId;
+            state.showAllMonth = true; // במובייל: גם אם היום כבר עבר, שיהיה גלוי
+          } else if (CBA.ui && CBA.ui.toast) {
+            CBA.ui.toast("האירוע מהקישור לא נמצא בלוח", "warn");
+          }
+        }
         if (activeContainer !== container || !container.isConnected) return; // המשתמש כבר עבר מסך
         /* 🔴 23.9 — container הוא #app-main, **אותו אלמנט לכל המסכים**, ולכן
            הבדיקה שמעל תמיד עוברת. נתפס חי: האפליקציה נפתחה על "לוח אירועים",

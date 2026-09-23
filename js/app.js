@@ -168,15 +168,20 @@
   // "מכון" (2026-08-18) — מידור מכון הכושר. **נפרד ממידור המועדון בכוונה**:
   // שני המתקנים יושבים באותה קבוצת ניווט ("מתקנים") אבל מנוהלים ע"י אנשים
   // שונים, ולכן כל אחד דורש את ההרשאה שלו. חייב להיות זהה ל-PERM_GYM בשרת.
+  // "תרבות" (23.9.26) — לוח האירועים והסקרים. ⚠️ בניגוד לשאר: **לא פותחת אזור
+  // ניהול** (ר' hasAnyAdmin) — הלוח יושב באזור התושב, וההרשאה רק מוסיפה שם
+  // כלי ניהול (פתיחת מעקב הגעה, רשימת המאשרים). חייב להיות זהה ל-PERM_CULTURE
+  // ב-Code.gs ולכלל eventRSVP ב-firestore.rules.
   const PERM = { SUPER: "על", BUDGET: "תקציב", CLUB: "מועדון", RESIDENTS: "תושבים",
-                 GYM: "מכון", GARDEN: "גינון" };
+                 GYM: "מכון", GARDEN: "גינון", CULTURE: "תרבות" };
   const PERM_LABEL = {
     "על": "מנהל על", "תקציב": "ניהול תקציב ותשלומים",
     "מועדון": "ניהול מועדון", "תושבים": "ניהול תושבים",
     "מכון": "ניהול מכון כושר",
     // "גינון" (2026-09-07) — הרשאת אזור-ניהול לכל דבר, בדיוק כמו "תקציב":
     // היא פותחת טאב ניהול משלה, וניתן להעניק אותה לתושב ממסך התושבים.
-    "גינון": "ניהול גינון"
+    "גינון": "ניהול גינון",
+    "תרבות": "ניהול אירועים וסקרים"
   };
   // איזו הרשאה נדרשת לכל מסך ניהול
   const SCREEN_PERM = {
@@ -246,6 +251,7 @@
   function can(perm) { return !perm || isSuper() || myPerms().indexOf(perm) !== -1; }
   // האם יש למשתמש בכלל דריסת רגל באזור הניהול
   function hasAnyAdmin() {
+    // PERM.CULTURE אינה כאן בכוונה — אין לה מסכי ניהול, היא פועלת בתוך אזור התושב
     return isSuper() || [PERM.BUDGET, PERM.CLUB, PERM.RESIDENTS, PERM.GYM, PERM.GARDEN]
       .some(function (p) { return myPerms().indexOf(p) !== -1; });
   }
@@ -1255,11 +1261,54 @@
   }
   function clearRoute() { try { localStorage.removeItem(ROUTE_KEY); } catch (e) {} }
   // כניסה ראשונית לאזור: משחזר את המסך השמור אם הוא שייך לאזור הזה, אחרת ברירת המחדל
+  /* ==========================================================================
+   *  קישור ישיר לאירוע (23.9.26): https://.../#event=<מזהה>
+   * --------------------------------------------------------------------------
+   *  הניתוב של CBA נשמר ב-localStorage ולא בכתובת, ולכן ה-hash הוא ערוץ נפרד:
+   *  נקרא פעם אחת בעליית העמוד (עוד לפני ההתחברות — ולכן נשמר ב-sessionStorage,
+   *  כדי לשרוד את מסך הכניסה), נמחק מהכתובת מיד (שרענון לא יחזור אליו), ונצרך
+   *  ב-initialRoute: דורס את המסך השמור ופותח את לוח האירועים על האירוע.
+   *  hashchange מטפל במקרה שהאפליקציה כבר פתוחה ומישהו לוחץ על קישור נוסף.
+   * ========================================================================== */
+  var DEEP_LINK_KEY = "cba.deepLink";
+  function readEventHash() {
+    var m = /^#event=(.+)$/.exec(window.location.hash || "");
+    if (!m) return null;
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  }
+  function captureDeepLink() {
+    var id = readEventHash();
+    if (!id) return null;
+    try { sessionStorage.setItem(DEEP_LINK_KEY, JSON.stringify({ event: id })); } catch (e) {}
+    try { history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e) {}
+    return id;
+  }
+  function takeDeepLink() {
+    try {
+      var raw = sessionStorage.getItem(DEEP_LINK_KEY);
+      if (!raw) return null;
+      sessionStorage.removeItem(DEEP_LINK_KEY);
+      var o = JSON.parse(raw);
+      return (o && o.event) ? String(o.event) : null;
+    } catch (e) { return null; }
+  }
+  captureDeepLink();
+  window.addEventListener("hashchange", function () {
+    var id = captureDeepLink();
+    if (!id || !inited || !currentUser || isExternalUser()) return;
+    takeDeepLink();
+    if (CBA.screens.events && CBA.screens.events.focusEvent) CBA.screens.events.focusEvent(id);
+    showScreen("events");
+  });
+
   function initialRoute(area) {
     var saved = loadRoute();
     var fresh = routeIsFresh(saved);
     // רענון בתוך רצף עבודה — חוזרים בדיוק לאזור ולמסך שהיינו בהם
     if (fresh && saved && AREAS[saved.area]) area = saved.area;
+    // קישור ישיר לאירוע גובר על המסך השמור — תמיד באזור התושב (שם יושב הלוח)
+    var deepEvent = (currentUser && !isExternalUser()) ? takeDeepLink() : null;
+    if (deepEvent) area = "resident";
     if (area === "admin" && !hasAnyAdmin() && currentUser) area = "resident";
     // משתמש חיצוני נעול על אזור הניהול: אין לו אזור תושב, וגם מסלול שמור
     // מלפני שינוי הרשאה לא יכניס אותו לשם (2026-09-07).
@@ -1275,6 +1324,10 @@
     renderControls();
     var target = (fresh && saved && saved.area === area && AREAS[area].screens.indexOf(saved.screen) !== -1)
       ? saved.screen : AREAS[area].def;
+    if (deepEvent && AREAS[area].screens.indexOf("events") !== -1) {
+      target = "events";
+      if (CBA.screens.events && CBA.screens.events.focusEvent) CBA.screens.events.focusEvent(deepEvent);
+    }
     showScreen(target);
   }
 
