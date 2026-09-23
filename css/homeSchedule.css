@@ -90,8 +90,10 @@
 
 /* ---- רשימת ימים (בעל תפקיד; ובמובייל גם תושב) ---- */
 .hm-ag { display: flex; flex-direction: column; }
+/* 23.9 (לילה) — center ולא flex-start: יועד — "התיאור והזמן לא ממורכזים".
+   עם flex-start שם האירוע ישב בגובה של יום-השבוע הקטן, מעל התאריך. */
 .hm-ag__d {
-  display: flex; gap: 12px; align-items: flex-start; width: 100%;
+  display: flex; gap: 12px; align-items: center; width: 100%;
   padding: 6px 2px; border: none; border-top: 1px solid rgba(17,24,39,.07);
   background: none; font: inherit; color: var(--text); text-align: start; cursor: pointer;
 }
@@ -101,7 +103,7 @@
 .hm-ag__w small { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); }
 .hm-ag__w b { display: block; font-size: 15px; font-weight: 800; line-height: 1.35; font-variant-numeric: tabular-nums; }
 .hm-ag__d.is-today .hm-ag__w b { background: var(--action); color: #fff; border-radius: 8px; }
-.hm-ag__l { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; padding-top: 2px; }
+.hm-ag__l { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .hm-ag__i { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13.5px; font-weight: 600; }
 .hm-ag__i.is-muted { color: var(--text-muted); }
 .hm-ag__t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
@@ -115,7 +117,7 @@
   border-radius: 12px; background: linear-gradient(160deg, rgba(94,187,178,.22), rgba(255,255,255,.55) 70%);
 }
 .hm-ag__open {
-  display: flex; gap: 12px; align-items: flex-start; flex: 1; min-width: 0; padding: 0;
+  display: flex; gap: 12px; align-items: center; flex: 1; min-width: 0; padding: 0;
   border: none; background: none; font: inherit; color: inherit; text-align: start; cursor: pointer;
 }
 .hm-ag__d--feat .hm-ag__m { margin-inline-start: 0; }
