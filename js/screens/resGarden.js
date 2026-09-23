@@ -231,6 +231,7 @@
 
   /* 23.9 — אותו סט Lucide כמו gardenTasks.js (הדשא נשאר המקורי). */
   var ICONS = {
+    camera: '<path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/><circle cx="12" cy="13" r="3"/>',
     leaf: '<path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20"/><path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13"/>',
     lawn: '<path d="M3 20h18"/><path d="M6 20c0-4 1-6 2-8M11 20c0-5 1-8 1-11M16 20c0-4 1-6 2-8"/>',
     lawnwater: '<g transform="translate(0 2) scale(.86)"><path d="M3 20h18"/><path d="M6 20c0-4 1-6 2-8M11 20c0-5 1-8 1-11M16 20c0-4 1-6 2-8"/></g><path transform="translate(14.2 .4) scale(.42)" stroke-width="2" style="fill:var(--c-water,#52AED6);stroke:var(--c-water,#52AED6)" d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
@@ -445,6 +446,13 @@
             if (rep && CBA.photos) CBA.photos.open(rep.photos, "התמונות שצירפת לדיווח #" + rep.id);
           });
         });
+        // 📷 23.9 — תמונות הצוות מהסגירה ("אחרי")
+        Array.prototype.forEach.call(listEl.querySelectorAll("[data-wphotos]"), function (b) {
+          b.addEventListener("click", function () {
+            var rep = all.filter(function (x) { return String(x.id) === String(b.dataset.wphotos); })[0];
+            if (rep && CBA.photos) CBA.photos.open(rep.workPhotos, "תמונות מהצוות · דיווח #" + rep.id);
+          });
+        });
         /* 🔴 השלמת תמונות — ר' renderCompletePhotos. התמונות עצמן
            כבר לא בזיכרון בשלב הזה, ולכן המסך יבקש לבחור אותן שוב. */
         Array.prototype.forEach.call(listEl.querySelectorAll("[data-complete]"), function (b) {
@@ -566,10 +574,15 @@
                  כלומר רק על סגירה בלי טיפול. התוצאה: התושב נשאל "הטיפול היה
                  בסדר?" מעל המילה "הושלם" ותו לא — מתבקש לשפוט עבודה בלי
                  שנאמר לו מה נעשה בה. */
-              : (done && r.closure === "בוצע" && r.closeWhy
+              /* 📷 23.9 (הכרעת יועד) — תמונת ה"אחרי" שהצוות צירף בסגירה. */
+              : (done && r.closure === "בוצע" && (r.closeWhy || (r.workPhotos && r.workPhotos.length))
                   ? '<div class="gd-rep__done">' +
                     '<b>מה נעשה</b>' +
-                    '<span>' + esc(r.closeWhy) + '</span>' +
+                    (r.closeWhy ? '<span>' + esc(r.closeWhy) + '</span>' : '') +
+                    ((r.workPhotos && r.workPhotos.length)
+                      ? '<button type="button" class="gd-rep__wph" data-wphotos="' + esc(r.id) + '">' +
+                          ico("camera") + ' תמונות מהצוות · ' + r.workPhotos.length + '</button>'
+                      : '') +
                     '</div>'
               : (done && r.closure && r.closure !== "בוצע"
                   /* ⚠️ הכותרת ירדה מכאן: מאז שהציר מציג את משפט המצב

@@ -88,7 +88,7 @@ const logsOf = (store, id) => Object.values(store.gardenLog).filter(r => String(
   section('7. המסך — שפה אחידה (סטטי)');
   const GT = R('js/screens/gardenTasks.js');
   const det = GT.slice(GT.indexOf('function openDetails('), GT.indexOf('function showOnMap('));
-  ok('🔴 23.9 — מנהל, ממתין לאישור → "סגירה" (ובחלון "בוצע" = approve)', /isManager && done\)[\s\S]{0,900}data-m="close"[\s\S]{0,80}'סגירה<\/button>'/.test(det) && /data-cl-done[\s\S]{0,200}ממתין לאישור"\) \? run\("approve"/.test(GT));
+  ok('🔴 23.9 — מנהל, ממתין לאישור → "סגירה" (ובחלון "בוצע" = approve)', /isManager && done\)[\s\S]{0,900}data-m="close"[\s\S]{0,80}'סגירה<\/button>'/.test(det) && /data-cl-done[\s\S]{0,200}ממתין לאישור"\) \? approveDone\(/.test(GT) && /function approveDone\(id\)[\s\S]{0,300}run\("approve", id/.test(GT));
   ok('🔴 23.9 — מנהל, פתוח → "סגירה" אחת, "בוצע" ראשון בחלון', /else if \(isManager\) \{[\s\S]{0,400}data-m="close"[\s\S]{0,80}'סגירה<\/button>'/.test(det) && /data-cl-done="1"/.test(GT));
   ok('גנן → "בוצע"', !/סימון כבוצע<\/button>/.test(GT));
   ok('23.9 — "סגירה" בשורה המשנית רק למשימה בלי שבוע', /isManager && planning\) \{[\s\S]{0,200}data-m="close"/.test(det));
@@ -101,7 +101,7 @@ const logsOf = (store, id) => Object.values(store.gardenLog).filter(r => String(
   section('8. השרת והכללים');
   const RULES = R('firestore.rules');
   ok('glRoleOk בשני שערי היומן', (RULES.match(/glRoleOk\(\) &&/g) || []).length === 2);
-  ok('reporter ב-gtFields ולא ב-gtTeamUpdateOk', /'reporter'\];/.test(RULES) && !/gtTeamUpdateOk\(\)[\s\S]{0,600}'reporter'/.test(RULES));
+  ok('reporter ב-gtFields ולא ב-gtTeamUpdateOk', /'reporter',[\s\S]{0,300}'workPhotos'\];/.test(RULES) && !/gtTeamUpdateOk\(\)[\s\S]{0,600}'reporter'/.test(RULES));
   const CODE = R('apps-script/Code.gs');
   ok('השרת מתרגם חותם לגנן', /lgRole === 'מנהל' \? 'מנהל גינון'/.test(CODE));
   ok('השלמה חד-פעמית קיימת', /function gardenBackfillReporters\(\)/.test(CODE));

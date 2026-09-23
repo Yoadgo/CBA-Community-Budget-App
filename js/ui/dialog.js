@@ -120,8 +120,17 @@ CBA.ui = (function () {
           if (opts.sticky) return;   // טופס — Escape לא זורק לפח טקסט שהוקלד
           e.preventDefault(); e.stopPropagation(); close(opts.input ? null : false);
         }
+        /* 🔴 23.9 — Enter בתוך textarea הוא ירידת שורה, לא אישור. וטופס
+           עם onOk עובר דרכו גם ב-Enter — אחרת Enter עקף את הבדיקה שלו
+           (שדה חובה) וסגר את החלון בלי נתונים. */
+        else if (e.key === "Enter" && document.activeElement &&
+                 document.activeElement.tagName === "TEXTAREA") {
+          return;
+        }
         else if (e.key === "Enter" && (!inputEl || document.activeElement === inputEl)) {
-          e.preventDefault(); e.stopPropagation(); close(opts.input ? inputEl.value : true);
+          e.preventDefault(); e.stopPropagation();
+          if (opts.onOk) { opts.onOk(wrap, close); return; }
+          close(opts.input ? inputEl.value : true);
         }
         // מלכודת מיקוד — Tab לא יוצא מהמודל
         else if (e.key === "Tab") {

@@ -286,7 +286,9 @@ service cloud.firestore {
           כערכים שהלקוח בוחר. */
     function grTeamFields() {
       return ['stage', 'flag', 'closure', 'closeWhy', 'mergedInto',
-              'feedback', 'feedbackUntil', 'canFeedback'];
+              'feedback', 'feedbackUntil', 'canFeedback',
+              /* 📷 23.9 — תמונות הצוות ("אחרי"). ר' gtWorkPhotosOk. */
+              'workPhotos'];
     }
 
     function grShapeOk() {
@@ -362,7 +364,9 @@ service cloud.firestore {
              request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['stage', 'flag', 'closure', 'closeWhy', 'mergedInto',
                          'taskId', 'canFeedback', 'feedbackUntil',
-                         'photos', 'photosIncomplete', 'updatedAt']);
+                         'photos', 'photosIncomplete', 'updatedAt',
+                         'workPhotos']) &&
+             gtWorkPhotosOk();
     }
 
     match /gardenReports/{id} {
@@ -441,7 +445,19 @@ service cloud.firestore {
               'desc', 'place',
               /* 🔴 22.9 (הכרעת יועד) — שם המדווח (פרטי + משפחה), גלוי לצוות
                  **כולל הגנן**. נכתב ביצירה בלבד — אינו ב-gtTeamUpdateOk. */
-              'reporter'];
+              'reporter',
+              /* 📷 23.9 (בקשת יועד) — תמונות שהצוות צילם בסגירה או
+                 ב"הערה/דיווח". נפרד מ-`photos` (של התושב). הצוות בלבד. */
+              'workPhotos'];
+    }
+
+    /* 📷 23.9 — רשימת מזהי Drive, בגבול. 2 לפעולה; 40 הם תקרה נדיבה
+       למשימה שנפתחת ונסגרת כמה פעמים. שדה חסר עובר.
+       ⚠️ מזהה Drive אינו סוד: הצפייה עוברת דרך `gardenPhoto` בשרת,
+          שבודק הרשאה בעצמו. */
+    function gtWorkPhotosOk() {
+      return request.resource.data.get('workPhotos', []) is list &&
+             request.resource.data.get('workPhotos', []).size() <= 40;
     }
 
     /* טקסט חופשי — מחרוזת, בגבול. שדה חסר עובר (משימות ישנות, שגרה). */
@@ -457,7 +473,7 @@ service cloud.firestore {
     /* השדות שרק הצוות קובע — תושב אינו שולח אותם כלל. */
     function gtTeamOnly() {
       return ['flag', 'closure', 'week', 'due', 'note', 'drags',
-              'approvedBy', 'approvedAt', 'openedBy', 'openedUid'];
+              'approvedBy', 'approvedAt', 'openedBy', 'openedUid', 'workPhotos'];
     }
 
     function gtShapeOk() {
@@ -466,7 +482,7 @@ service cloud.firestore {
              request.resource.data.title is string &&
              request.resource.data.title.size() > 0 &&
              request.resource.data.schema is int &&
-             gtTextOk();
+             gtTextOk() && gtWorkPhotosOk();
     }
 
     /* 🔴 תושב פותח משימה נלווית לדיווח — בנקודת הפתיחה בלבד. */
@@ -508,8 +524,8 @@ service cloud.firestore {
                          'x', 'y', 'approvedBy', 'approvedAt',
                          'repId', 'photos', 'order', 'updatedAt', 'syncedAt',
                          'notify', 'notifyPending', 'notifyNote', 'mergedReps',
-                         'desc', 'place']) &&
-             gtTextOk();
+                         'desc', 'place', 'workPhotos']) &&
+             gtTextOk() && gtWorkPhotosOk();
     }
 
     /* ========================================================================
@@ -586,6 +602,11 @@ service cloud.firestore {
              gtMgr() ||
              request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['flag', 'updatedAt']) ||
+             /* 📷 23.9 — התמונה עולה **אחרי** הסגירה (שגר-ושכח), ולכן הגנן
+                חייב להיות רשאי להוסיף אותה למשימה שכבר נסגרה. רק שני
+                השדות האלה — שום שינוי אחר במשימה סגורה. */
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['workPhotos', 'updatedAt']) ||
              (gtCur('closure') == 'בוצע' && gtNext('closure') == '' &&
               gtWithinDispute());
     }

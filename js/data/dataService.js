@@ -2174,6 +2174,61 @@ CBA.data = (function () {
     });
   }
 
+  /* ==========================================================================
+   *  📷 תמונות מהצוות — "workPhotos"   (2026-09-23, בקשת יועד)
+   * --------------------------------------------------------------------------
+   *  הגנן/המנהל מצרף עד שתי תמונות בסגירה (כל סוג) או ב"הערה/דיווח".
+   *  **שדה נפרד מ-`photos`** — `photos` הן של התושב שדיווח, ו-`workPhotos`
+   *  הן מה שהצוות צילם ("אחרי"). ערבוב היה מציג לתושב את התמונות שלו כאילו
+   *  הן תשובה.
+   *
+   *  🔑 **המהירות:** הפעולה עצמה (סגירה/הערה) כבר נכתבה כשזה רץ; ההעלאה
+   *  ל-Drive היא שגר-ושכח, במקביל, בדיוק כמו בדיווח (gardenUploadPhotos).
+   *  🔑 **`arrayUnion`** ולא קריאה-וכתיבה: שתי פעולות עם תמונות שנגמרות
+   *  יחד לא דורסות זו את זו.
+   *  🔒 **משימה סגורה:** הכלל `gtClosedOk` מתיר לצוות להוסיף רק
+   *  `workPhotos`+`updatedAt` — אחרת גנן שסגר שגרה/תקלה לא היה יכול לצרף
+   *  את התמונה שעולה אחרי הסגירה.
+   *  ↩️ ביטול: להסיר את כפתור התמונות במסך — השדה פשוט לא נכתב.
+   * ======================================================================== */
+  var GARDEN_WORK_PHOTO_MAX = 2;
+  function gardenArrayUnion(ids) {
+    try {
+      var FV = window.firebase.firestore.FieldValue;
+      return FV.arrayUnion.apply(FV, ids);
+    } catch (e) { return null; }
+  }
+  function gardenAddWorkPhotos(taskId, repIds, photos) {
+    gardenUploadPhotos(photos, null, function (ids, failed) {
+      if (!ids.length) return gardenPhotoWarn("אף תמונה של הצוות לא עלתה", taskId, failed);
+      if (failed) gardenPhotoWarn("חלק מתמונות הצוות לא עלו", taskId, failed);
+      function merge(coll, docId) {
+        var u = gardenArrayUnion(ids);
+        var now = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
+        if (u) {
+          return CBA.fb.mergeDoc(coll, docId, { workPhotos: u, updatedAt: now }, function (e) {
+            if (e) gardenPhotoWarn("תמונות הצוות לא נשמרו ב-" + coll, docId, e);
+          });
+        }
+        /* נפילה לאחור (SDK בלי FieldValue): קריאה ואז כתיבה. */
+        CBA.fb.readDoc(coll, docId, function (eR, d) {
+          var have = (d && d.workPhotos) || [];
+          var all = have.concat(ids.filter(function (x) { return have.indexOf(x) === -1; }));
+          CBA.fb.mergeDoc(coll, docId, { workPhotos: all, updatedAt: now }, function (e) {
+            if (e) gardenPhotoWarn("תמונות הצוות לא נשמרו ב-" + coll, docId, e);
+          });
+        });
+      }
+      merge("gardenTasks", String(taskId));
+      /* התושב רואה את תמונת ה"אחרי" על הדיווח שלו (הכרעת יועד 23.9).
+         אותו דפוס של gardenMirrorToReport: set(merge) על מזהה ידוע. */
+      (repIds || []).forEach(function (r) {
+        r = String(r || "").trim();
+        if (r) merge("gardenReports", r);
+      });
+    });
+  }
+
   function gardenFsTask(op, id, extra, cb) {
     extra = extra || {};
     var who = gardenWho();
@@ -2387,9 +2442,18 @@ CBA.data = (function () {
             }
           });
         }
+        /* 🔴 23.9 — תמונות מהצוות (סגירה / הערה-דיווח). אותו מנגנון של
+           הדיווח: הפעולה כבר קיימת, והתמונות עולות ברקע. ר' gardenAddWorkPhotos. */
+        var wp = (extra.photos || []).slice(0, GARDEN_WORK_PHOTO_MAX);
+        if (wp.length) {
+          var reps = isReport ? [String(cur.repId)].concat((cur.mergedReps || []).map(String))
+            .filter(function (r, i, a) { return r && a.indexOf(r) === i; }) : [];
+          gardenAddWorkPhotos(String(id), reps, wp);
+        }
         /* `awaiting` — הסימון לא סגר אלא עלה לאישור המנהל. המסך צריך
            לדעת כדי לומר לגנן את האמת ("נשלח לאישור") ולא "נסגר". */
-        cb({ ok: true, awaiting: patch.flag === "ממתין לאישור" && !patch.closure });
+        cb({ ok: true, awaiting: patch.flag === "ממתין לאישור" && !patch.closure,
+             photosPending: wp.length });
       });
     }
     });

@@ -855,6 +855,12 @@
   color: var(--gs-ok, #0F6B45); }
 .gd-rep__done span { display: block; font-size: 12.5px; color: #4B5563;
   line-height: 1.5; margin-top: 4px; }
+/* 📷 23.9 — תמונות הצוות מהסגירה ("אחרי"). כפתור שקט, בשפת הבלוק. */
+.gd-rep__wph { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+  min-height: 36px; padding: 6px 12px; border-radius: 999px; font: inherit;
+  font-size: 12.5px; font-weight: 600; color: var(--gs-ok, #0F6B45);
+  background: #fff; border: 1px solid rgba(15,107,69,.28); cursor: pointer; }
+.gd-rep__wph svg { width: 15px; height: 15px; }
 
 /* ---- דיווח תושב נראה אחרת, לא רק מסונן אחרת (2026-09-08) ----
    בקשת יועד. הפתרון הוא **מרקם ולא צבע**: הפס בשפת הכרטיס נשאר בצבע

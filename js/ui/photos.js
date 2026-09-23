@@ -124,5 +124,60 @@ CBA.photos = (function () {
     });
   }
 
-  return { open: open, compress: compress, toUpload: toUpload };
+  /* ==========================================================================
+   *  picker — בורר תמונות קטן לשימוש חוזר   (2026-09-23, בקשת יועד)
+   * --------------------------------------------------------------------------
+   *  אותו מנגנון בדיוק כמו בטופס הדיווח (gardenForm.js): כיווץ בדפדפן
+   *  (toUpload), תצוגה מקדימה מקומית, והעלאה רק אחרי השמירה — ברקע.
+   *  נולד בשביל סגירת תקלה ו"הערה/דיווח" של הצוות, עד שתי תמונות.
+   *  משתמש בעיצוב הקיים gd-thumbs / gd-th — אין CSS חדש.
+   *
+   *  picker(host, max) → { items() }   items = [{name, mime, data}]
+   * ========================================================================== */
+  function picker(host, max) {
+    max = max || 2;
+    var items = [];
+    host.innerHTML =
+      '<label class="gd-lbl" style="margin-top:12px">תמונות ' +
+        '<em><span data-pk="n">0</span> / ' + max + ' · לא חובה</em></label>' +
+      '<div class="gd-thumbs" data-pk="thumbs">' +
+        '<button type="button" class="gd-th add" data-pk="add" aria-label="הוספת תמונה">+</button>' +
+      '</div>' +
+      '<input type="file" data-pk="file" accept="image/*" multiple hidden>';
+    var fileEl = host.querySelector('[data-pk="file"]');
+    var thumbs = host.querySelector('[data-pk="thumbs"]');
+    var addBtn = host.querySelector('[data-pk="add"]');
+    function sync() {
+      host.querySelector('[data-pk="n"]').textContent = items.length;
+      addBtn.style.display = items.length >= max ? "none" : "grid";
+    }
+    addBtn.addEventListener("click", function () { fileEl.click(); });
+    fileEl.addEventListener("change", function () {
+      Array.prototype.slice.call(fileEl.files || []).forEach(function (f) {
+        if (items.length >= max) return;
+        /* הכיווץ אסינכרוני — המכסה נבדקת שוב בתוך ה-callback. */
+        toUpload(f, function (item, dataUrl) {
+          if (!item || items.length >= max) return;
+          items.push(item);
+          var el = document.createElement("span");
+          el.className = "gd-th";
+          el.style.backgroundImage = "url(" + dataUrl + ")";
+          el.innerHTML = '<button type="button" class="th-x" aria-label="הסרת התמונה">✕</button>';
+          el.querySelector(".th-x").addEventListener("click", function () {
+            var k = items.indexOf(item);
+            if (k !== -1) items.splice(k, 1);
+            el.remove();
+            sync();
+          });
+          thumbs.insertBefore(el, addBtn);
+          sync();
+        });
+      });
+      fileEl.value = "";
+    });
+    sync();
+    return { items: function () { return items.slice(); } };
+  }
+
+  return { open: open, compress: compress, toUpload: toUpload, picker: picker };
 })();

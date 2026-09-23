@@ -33,8 +33,10 @@ const HTML = R('index.html');
 const SW = R('service-worker.js');
 
 section('1. 🔴🔴 התפר — repId ולא kind');
+/* 23.9 — "בוצע" על תקלה פותח חלון (הערה+תמונות); ההערה חובה לפי repId. */
 ok('סגירה מבקשת "מה נעשה?" לפי repId, לא לפי kind',
-   /if \(!t\.repId\) return run\("done", id, \{\}\);/.test(GT));
+   /if \(!isFault\(t\)\) return run\("done", id, \{\}\);/.test(GT) &&
+   /title: "מה נעשה\?"[\s\S]{0,400}required: !!t\.repId/.test(GT));
 ok('לא נשאר התנאי הישן kind !== GK_REPORT בסגירה',
    !/if \(t\.kind !== GK_REPORT\) return run\("done"/.test(GT));
 ok('הטוסט שאחרי פעולה נגזר מ-repId',
@@ -94,7 +96,7 @@ ok('המסך אינו קורא ל-CBA.fb.flag בעצמו',
 section('5. התמונות — מנגנון אחד, לא שניים');
 ok('הכיווץ עבר ל-js/ui/photos.js', /function compress\(file, cb\)/.test(PH));
 ok('photos.js מייצא compress ו-toUpload',
-   /return \{ open: open, compress: compress, toUpload: toUpload \};/.test(PH));
+   /return \{ open: open, compress: compress, toUpload: toUpload(, picker: picker)? \};/.test(PH));
 ok('resGarden כבר אינו מממש כיווץ בעצמו',
    !/var MAX_EDGE/.test(RG) && !/cv\.toDataURL\("image\/jpeg"/.test(RG));
 ok('resGarden מאציל ל-CBA.photos.compress',

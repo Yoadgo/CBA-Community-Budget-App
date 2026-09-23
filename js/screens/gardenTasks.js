@@ -930,9 +930,10 @@
                   (t.reporter ? ' · ' + esc(t.reporter) : '') + '</span>'
                 : ''),
               (t.kind === GK_ROUTINE ? ico("repeat") : ''),
-              ((t.photos && t.photos.length)
+              /* 📷 23.9 — המונה כולל גם את תמונות הצוות (workPhotos). */
+              (allPhotos(t).length
                 ? '<button type="button" class="gt-nb gt-ph" data-act="photos" ' +
-                    'title="צפייה בתמונות שצירף התושב">' + ico("camera") + t.photos.length + '</button>'
+                    'title="צפייה בתמונות">' + ico("camera") + allPhotos(t).length + '</button>'
                 : ''),
               (where && !hideArea ? '<span class="gt-nb">' + ico("pin") + esc(where) + '</span>' : ''),
               tags
@@ -1058,14 +1059,14 @@
         var act = btn.dataset.act;
         if (act === "photos") {
           var pt = byId(id);
-          if (pt && CBA.photos) CBA.photos.open(pt.photos, "תמונות " + (pt.repId ? GL.reportRef(pt.repId) : "הדיווח"));
+          if (pt && CBA.photos) CBA.photos.open(allPhotos(pt), "תמונות " + (pt.repId ? GL.reportRef(pt.repId) : "הדיווח"));
           return;
         }
         if (act === "hist") return openHistory(id);
         if (act === "menu") return openTiles(art, id);
         if (act === "tiles-close") return closeTiles();
         if (act === "plan") return askWeek(id);
-        if (act === "approve") return run("approve", id, {});
+        if (act === "approve") return approveDone(id);
         if (act === "done") return markDone(id);
         if (act === "undo") return run("undo", id, {});
       }
@@ -1136,22 +1137,94 @@
            להיות `GK_REPORT` **בלי** תושב מאחוריה — והדיאלוג היה מבקש
            לכתוב הודעה לאיש. זה גם התפר שכבר קיים בשכבת הכתיבה
            (`isReport` ב-dataService) ובכללי האבטחה. */
-        if (!t.repId) return run("done", id, {});
-        CBA.ui.prompt("המשפט הזה נשלח לתושב שדיווח, ונשמר ביומן המשימה.", {
-          title: "מה נעשה?", value: t.note || "",
-          placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
-          okText: "סיום וסגירה"
-        }).then(function (txt) {
-          if (txt === null) return;                 // ביטול — לא סוגרים
-          var note = String(txt).trim();
-          if (!note) {
-            /* ריק אינו ביטול: הגנן התכוון לסמן. מסבירים ומחזירים אותו לשדה,
-               במקום להשאיר אותו מול כרטיס לא מסומן ובלי לדעת למה. */
-            return CBA.ui.alert("צריך לכתוב מה נעשה — המשפט נשלח לתושב.")
-              .then(function () { markDone(id); });
-          }
-          run("done", id, { note: note });
+        /* 🔴 23.9 (הכרעת יועד) — שגרה ומשימה יזומה: לחיצה אחת, בלי חלון
+           ובלי תמונה. תקלה (של תושב, מנהל או גנן): "בוצע" פותח חלון עם
+           הערה ועד שתי תמונות. ההערה חובה רק כשיש תושב שמחכה לתשובה. */
+        if (!isFault(t)) return run("done", id, {});
+        askWithPhotos({
+          title: "מה נעשה?",
+          message: t.repId ? "המשפט הזה נשלח לתושב שדיווח, ונשמר ביומן המשימה."
+                           : "ההערה נשמרת ביומן המשימה.",
+          value: t.note || "", placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
+          okText: "סיום וסגירה", required: !!t.repId,
+          requiredMsg: "צריך לכתוב מה נעשה — המשפט נשלח לתושב."
+        }).then(function (r) {
+          if (!r) return;                           // ביטול — לא סוגרים
+          run("done", id, { note: r.text, photos: r.photos });
         });
+      }
+
+      /* 🔴 23.9 — תקלה = משימה שיש מאחוריה דיווח (של תושב, מנהל או גנן).
+         `repId` תופס גם דיווח ישן ששמו kind אחר. */
+      function isFault(t) { return !!t && (t.kind === GK_REPORT || !!t.repId); }
+      /* תמונות הדיווח + תמונות הצוות, בלי כפילויות. */
+      function allPhotos(t) {
+        var a = (t && t.photos) || [], b = (t && t.workPhotos) || [];
+        return a.concat(b.filter(function (x) { return a.indexOf(x) === -1; }));
+      }
+
+      /* אישור "בוצע" של המנהל. בתקלה — אותו חלון (ההערה של הגנן כבר
+         בשדה, אפשר להשאיר), כדי שגם המנהל יוכל לצרף תמונה. */
+      function approveDone(id) {
+        var t = byId(id);
+        if (!t) return;
+        if (!isFault(t)) return run("approve", id, {});
+        askWithPhotos({
+          title: "אישור הביצוע",
+          message: t.repId ? "מה שכתוב כאן נשלח לתושב. אפשר להשאיר את מה שהצוות כתב."
+                           : "ההערה נשמרת ביומן המשימה.",
+          value: t.note || "", placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
+          okText: "אישור וסגירה", required: !!t.repId,
+          requiredMsg: "צריך לכתוב מה נעשה — המשפט נשלח לתושב."
+        }).then(function (r) {
+          if (!r) return;
+          run("approve", id, { note: r.text, photos: r.photos });
+        });
+      }
+
+      /* ==========================================================================
+       *  📷 חלון "הערה + תמונות"   (2026-09-23, בקשת יועד)
+       * --------------------------------------------------------------------------
+       *  חלון אחד לכל מקום שבו הצוות כותב על תקלה: "בוצע", אישור, ו"הערה/דיווח".
+       *  התמונות: עד 2, לא חובה, אותו מנגנון כמו בדיווח (CBA.photos.picker →
+       *  כיווץ בדפדפן → העלאה ברקע אחרי השמירה). הפעולה עצמה לא מחכה לתמונות.
+       *  ⚠️ התמונות מוצגות רק במסלול הכתיבה הישיר (Firestore) — במסלול הישן
+       *     אין להן לאן להישמר, ולכן הבורר פשוט לא מופיע.
+       *  מחזיר Promise: {text, photos} או null בביטול.
+       * ======================================================================== */
+      function askWithPhotos(o) {
+        var result = null, pk = null;
+        var canPh = !!(CBA.photos && CBA.photos.picker &&
+                       CBA.data.gardenDirectWrites && CBA.data.gardenDirectWrites());
+        return CBA.ui.dialog({
+          title: o.title, message: o.message || "",
+          html: '<textarea class="gd-inp" data-aw="t" rows="3" maxlength="600" placeholder="' +
+                  esc(o.placeholder || "") + '"></textarea>' +
+                '<p class="gp-note" data-aw="err" hidden style="color:#B91C1C"></p>' +
+                (canPh ? '<div data-aw="ph"></div>' : ''),
+          okText: o.okText || "שמירה", cancelText: "ביטול", sticky: true,
+          onMount: function (wrap) {
+            var ta = wrap.querySelector('[data-aw="t"]');
+            if (ta) ta.value = o.value || "";
+            var host = wrap.querySelector('[data-aw="ph"]');
+            if (host) pk = CBA.photos.picker(host, 2);
+          },
+          onOk: function (wrap, close) {
+            var txt = String(wrap.querySelector('[data-aw="t"]').value || "").trim();
+            var photos = pk ? pk.items() : [];
+            var need = o.required || (o.textWithPhotos && photos.length);
+            if (need && !txt) {
+              var er = wrap.querySelector('[data-aw="err"]');
+              er.textContent = (o.textWithPhotos && photos.length && !o.required)
+                ? "כתוב משפט קצר על מה שבתמונה" : (o.requiredMsg || "צריך לכתוב משהו");
+              er.hidden = false;
+              wrap.querySelector('[data-aw="t"]').focus();
+              return;
+            }
+            result = { text: txt, photos: photos };
+            close(true);
+          }
+        }).then(function (ok) { return ok ? result : null; });
       }
 
       /* פעולה על משימה. הכרטיס משתנה מיד ומתגלגל אחורה אם השרת סירב.
@@ -1199,18 +1272,20 @@
             CBA.ui.alert((res && res.error) || "הפעולה לא הצליחה");
             return;
           }
-          if (op === "done") CBA.ui.toast(res.awaiting ? "בוצע · נשלח לאישור מנהל הגינון"
-                       : wasReport ? "בוצע · נשלח עדכון למדווח" : "בוצע · המשימה נסגרה");
+          /* 📷 23.9 — התמונות עולות אחרי שהפעולה כבר נשמרה. */
+          var phs = res.photosPending ? " · התמונות עולות ברקע" : "";
+          if (op === "done") CBA.ui.toast((res.awaiting ? "בוצע · נשלח לאישור מנהל הגינון"
+                       : wasReport ? "בוצע · נשלח עדכון למדווח" : "בוצע · המשימה נסגרה") + phs);
           if (op === "undo") {
             CBA.ui.toast(wasClosure && wasClosure !== "בוצע"
               ? 'נפתחה מחדש · הסגירה ("' + wasClosure + '") בוטלה'
               : "הסימון בוטל");
           }
           if (op === "defer") CBA.ui.toast("נדחה לשבוע הבא");
-          if (op === "note") CBA.ui.toast("ההערה נשמרה");
+          if (op === "note") CBA.ui.toast("ההערה נשמרה" + phs);
           if (op === "block") CBA.ui.toast("נשלח למנהל הגינון");
-          if (op === "approve") CBA.ui.toast(wasReport ? "הביצוע אושר · נשלח עדכון למדווח" : "הביצוע אושר");
-          if (op === "close") CBA.ui.toast("נסגר · " + extra.closure);
+          if (op === "approve") CBA.ui.toast((wasReport ? "הביצוע אושר · נשלח עדכון למדווח" : "הביצוע אושר") + phs);
+          if (op === "close") CBA.ui.toast("נסגר · " + extra.closure + phs);
           if (op === "return") CBA.ui.toast("הוחזר לצוות להשלמה");
           if (op === "plan") {
             CBA.ui.toast("שובץ · " + weekLabel(extra.week));
@@ -1607,6 +1682,19 @@
       function menuAction(t, cat, m) {
         if (m === "hist") return openHistory(t.id);
         if (m === "edit") return openEditTask(t);
+        if (m === "note" && isFault(t)) {
+          /* 🔴 23.9 — "הערה/דיווח" על תקלה: אותו חלון עם תמונות. תמונה בלי
+             משפט אינה עוברת — אחרת ההערה הקודמת הייתה נמחקת או נשלחת שוב. */
+          return askWithPhotos({
+            title: "הערה/דיווח",
+            message: t.repId ? "ההערה נשמרת ביומן, והתושב שדיווח מקבל עליה עדכון."
+                             : "ההערה נשמרת ביומן המשימה.",
+            value: t.note || "", placeholder: "למשל: נגזם, הגזם פונה למחרת",
+            okText: "שמירה", textWithPhotos: true
+          }).then(function (r) {
+            if (r) run("note", t.id, { note: r.text, photos: r.photos });
+          });
+        }
         if (m === "note") {
           // CBA.ui.prompt מחזירה Promise (null בביטול), לא מקבלת callback
           CBA.ui.prompt("ההערה נשמרת ביומן המשימה ונשארת גלויה למנהל.", {
@@ -1735,6 +1823,8 @@
                     'placeholder="למשל: בדקנו בשטח — העץ תקין ואינו מהווה סכנה."></textarea>' +
                   '<p class="gp-note">זה ייצא אליו במייל ויופיע לו באפליקציה. ' +
                   '"בוטל" לבדו אינו תשובה.</p>' +
+                  /* 📷 23.9 — עד שתי תמונות, לא חובה. ר' askWithPhotos. */
+                  '<div id="gt-why-ph"></div>' +
                   '<button type="button" class="gd-cta" id="gt-why-go" ' +
                     'style="margin-top:12px">סגירה ושליחה</button>' +
                 '</div>'
@@ -1745,10 +1835,16 @@
         var sheetClose = CBA.ui.mountSheet(wrap, { key: "gt-closure", sticky: true });
         function close() { sheetClose(); }
         var picked = "";
+        var whyPk = null;
+        var whyPh = wrap.querySelector("#gt-why-ph");
+        if (whyPh && CBA.photos && CBA.photos.picker &&
+            CBA.data.gardenDirectWrites && CBA.data.gardenDirectWrites()) {
+          whyPk = CBA.photos.picker(whyPh, 2);
+        }
         wrap.addEventListener("click", function (e) {
           if (e.target.closest("[data-cl-done]")) {
             close();
-            return (t.flag === "ממתין לאישור") ? run("approve", t.id, {}) : markDone(t.id);
+            return (t.flag === "ממתין לאישור") ? approveDone(t.id) : markDone(t.id);
           }
           var b = e.target.closest("[data-cl]");
           if (b) {
@@ -1765,7 +1861,7 @@
           var why = wrap.querySelector("#gt-why-t").value.trim();
           if (!why) return CBA.ui.alert("צריך לכתוב לתושב מה הסיבה");
           close();
-          run("close", t.id, { closure: picked, note: why });
+          run("close", t.id, { closure: picked, note: why, photos: whyPk ? whyPk.items() : [] });
         });
       }
 
@@ -1928,6 +2024,11 @@
                   '<span class="gd-det-mapbox__hint">' + ico("expand") + '</span></div>'
               : '') +
             (t.note ? '<div class="gt-note">' + esc(t.note) + '</div>' : '') +
+            /* 📷 23.9 — מה שהצוות צילם (בסגירה / בהערה). */
+            ((t.workPhotos && t.workPhotos.length)
+              ? '<button type="button" class="gd-det-b" data-m="wphotos" style="margin-top:8px">' +
+                  ico("camera") + 'תמונות מהצוות · ' + t.workPhotos.length + '</button>'
+              : '') +
             (closed
               ? '<div class="gd-rep__closed"><b>' + esc(t.closure) + '</b>' +
                   (t.approvedAt
@@ -2034,10 +2135,14 @@
             }
             return;
           }
+          if (m === "wphotos") {
+            if (CBA.photos) CBA.photos.open(t.workPhotos, "תמונות מהצוות");
+            return;
+          }
           if (m === "fullmap") return showOnMap(t, cat);
           close();
           if (m === "plan") return askWeek(id);
-          if (m === "approve") return run("approve", id, {});
+          if (m === "approve") return approveDone(id);
           if (m === "markdone") return markDone(id);
           menuAction(t, cat, m);
         });

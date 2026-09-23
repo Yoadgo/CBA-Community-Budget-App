@@ -5,12 +5,12 @@
 'use strict';
 
 const GP_FIELDS = ['id','title','category','areas','freq','firstWeek','weekOfMonth','months','rotate','clause','active','note','effectiveFrom','order','schema','updatedAt'];
-const GT_FIELDS = ['id','kind','templateId','title','category','area','x','y','stage','flag','closure','week','due','note','drags','firstWeek','createdAt','updatedAt','approvedBy','approvedAt','repId','photos','order','year','schema','syncedAt','pendingDelete','familyId','mergedReps','openedBy','openedUid','desc','place','reporter'];
-const GT_TEAM_ONLY = ['flag','closure','week','due','note','drags','approvedBy','approvedAt','openedBy','openedUid'];
-const GT_TEAM_UPDATE = ['stage','flag','closure','week','due','note','drags','firstWeek','title','category','area','x','y','approvedBy','approvedAt','repId','photos','order','updatedAt','syncedAt','notify','notifyPending','notifyNote','mergedReps','desc','place'];
+const GT_FIELDS = ['id','kind','templateId','title','category','area','x','y','stage','flag','closure','week','due','note','drags','firstWeek','createdAt','updatedAt','approvedBy','approvedAt','repId','photos','order','year','schema','syncedAt','pendingDelete','familyId','mergedReps','openedBy','openedUid','desc','place','reporter','workPhotos'];
+const GT_TEAM_ONLY = ['flag','closure','week','due','note','drags','approvedBy','approvedAt','openedBy','openedUid','workPhotos'];
+const GT_TEAM_UPDATE = ['stage','flag','closure','week','due','note','drags','firstWeek','title','category','area','x','y','approvedBy','approvedAt','repId','photos','order','updatedAt','syncedAt','notify','notifyPending','notifyNote','mergedReps','desc','place','workPhotos'];
 const GR_CREATE_FIELDS = ['id','familyId','date','category','area','title','desc','place','x','y','photos','taskId','clientRef','mailPending','photosExpected','photosIncomplete','year','schema','updatedAt'];
-const GR_TEAM_FIELDS = ['stage','flag','closure','closeWhy','mergedInto','feedback','feedbackUntil','canFeedback'];
-const GR_TEAM_UPDATE = ['stage','flag','closure','closeWhy','mergedInto','taskId','canFeedback','feedbackUntil','photos','photosIncomplete','updatedAt'];
+const GR_TEAM_FIELDS = ['stage','flag','closure','closeWhy','mergedInto','feedback','feedbackUntil','canFeedback','workPhotos'];
+const GR_TEAM_UPDATE = ['stage','flag','closure','closeWhy','mergedInto','taskId','canFeedback','feedbackUntil','photos','photosIncomplete','updatedAt','workPhotos'];
 const GL_FIELDS = ['taskId','kind','field','from','to','actorUid','note','at','schema','familyId','who','role'];
 const GL_RESIDENT_KINDS = ['נפתח','שיבוץ','גרירה','הערה','החזרה','ביטול ביצוע','ביצוע','סגירה','משוב'];
 const CLOSURES = ['בוצע','הועבר לבינוי','בוטל','לא רלוונטי','אוחד'];
@@ -59,17 +59,19 @@ function make(ctx) {
 
     /* ---- משימות ---- */
     canSeeGardenTasks: () => hasPerm('גינון'),
-    gtShapeOk: () => hasOnly(keysA, GT_FIELDS) && hasAll(keysA, ['id','title','stage','schema']) && isStr(A.title) && A.title.length > 0 && isInt(A.schema),
+    /* 📷 23.9 — gtWorkPhotosOk: רשימה, עד 40. */
+    gtWorkPhotosOk: () => Array.isArray(get(A, 'workPhotos', [])) && get(A, 'workPhotos', []).length <= 40,
+    gtShapeOk: () => hasOnly(keysA, GT_FIELDS) && hasAll(keysA, ['id','title','stage','schema']) && isStr(A.title) && A.title.length > 0 && isInt(A.schema) && rules.gtWorkPhotosOk(),
     gtFromReportOk: () => notExt() && rules.gtShapeOk() && A.stage === 'התקבל' && !hasAny(keysA, GT_TEAM_ONLY),
     gtOpenedOk: () => (get(A, 'openedUid', '') === '' || get(A, 'openedUid', '') === ctx.uid) && ['', 'מנהל', 'גנן'].includes(get(A, 'openedBy', '')),
     gtTeamCreateOk: () => hasPerm('גינון') && rules.gtShapeOk() && rules.gtOpenedOk(),
-    gtTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GT_TEAM_UPDATE),
+    gtTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GT_TEAM_UPDATE) && rules.gtWorkPhotosOk(),
     gtMgr: () => hasPerm('גינון') && m().isExternal === false,
     gtClosureValueOk: () => nx('closure') === '' || CLOSURES.includes(nx('closure')),
     gtClosureAuthOk: () => nx('closure') === cu('closure') || nx('closure') === '' || nx('closure') === 'בוצע' || nx('closure') === 'אוחד' || rules.gtMgr(),
     gtCloseNoteOk: () => nx('closure') === '' || nx('closure') === cu('closure') || cu('repId') === '' || nx('note') !== '',
     gtWithinDispute: () => !isTs(get(B, 'approvedAt', null)) || ctx.now < new Date(B.approvedAt.getTime() + 14 * 86400000),
-    gtClosedOk: () => cu('closure') === '' || rules.gtMgr() || hasOnly(aff(), ['flag','updatedAt']) || (cu('closure') === 'בוצע' && nx('closure') === '' && rules.gtWithinDispute()),
+    gtClosedOk: () => cu('closure') === '' || rules.gtMgr() || hasOnly(aff(), ['flag','updatedAt']) || hasOnly(aff(), ['workPhotos','updatedAt']) || (cu('closure') === 'בוצע' && nx('closure') === '' && rules.gtWithinDispute()),
     gtNotifyOk: () => nx('notify') === '' || NOTIFY.includes(nx('notify')),
     gtUpdateOk: () => rules.gtTeamUpdateOk() && rules.gtClosureValueOk() && rules.gtClosureAuthOk() && rules.gtCloseNoteOk() && rules.gtClosedOk() && rules.gtNotifyOk(),
     gtPendingDeleteOk: () => rules.gtMgr() && hasOnly(aff(), ['pendingDelete','updatedAt']) && A.pendingDelete === true,
@@ -87,7 +89,7 @@ function make(ctx) {
     grCreateOk: () => notExt() && A.familyId === myFamilyId() && rules.grShapeOk() && rules.grPlaceOk(),
     grFeedbackOk: () => notExt() && B.familyId === myFamilyId() && hasOnly(aff(), ['feedback','feedbackNote','feedbackAt','updatedAt']) && B.canFeedback === true && (get(B,'feedbackUntil',0) === 0 || ctx.now.getTime() <= get(B,'feedbackUntil',0)),
     grPhotosOk: () => notExt() && B.familyId === myFamilyId() && hasOnly(aff(), ['photos','photosIncomplete','updatedAt']),
-    grTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GR_TEAM_UPDATE),
+    grTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GR_TEAM_UPDATE) && rules.gtWorkPhotosOk(),
 
     /* ---- יומן ---- */
     /* 22.9 — חותם שורת יומן: role נאכף מול מסמך החבר. */

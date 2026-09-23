@@ -78,7 +78,17 @@ function makeFb(store, uid, clock, audit) {
     },
     mergeDoc: (c, id, fields, cb) => { /* set(merge) */
       const before = store[c] && store[c][id];
-      const after = Object.assign(deep(before || {}), deep(fields || {}));
+      /* 📷 23.9 — FieldValue.arrayUnion (ר' sb.firebase למטה). */
+      const f2 = {};
+      Object.keys(fields || {}).forEach(k => {
+        const v = fields[k];
+        if (v && v.__arrayUnion) {
+          const have = (before && Array.isArray(before[k])) ? before[k].slice() : [];
+          v.__arrayUnion.forEach(x => { if (!have.includes(x)) have.push(x); });
+          f2[k] = have;
+        } else f2[k] = v;
+      });
+      const after = Object.assign(deep(before || {}), deep(f2));
       const r = rules.check(ctx(before ? 'update' : 'create', c, id, before || {}, after));
       log(before ? 'merge' : 'merge-create', c, id, r.ok, r.why);
       if (!r.ok) return cb(denied(r.why));
@@ -127,6 +137,7 @@ function browser(store, uid, clock, opts) {
     navigator: { onLine: true }, addEventListener() {}, removeEventListener() {}, location: { href: 'https://x/' }
   };
   sb.window = sb;
+  sb.firebase = { firestore: { FieldValue: { arrayUnion: (...a) => ({ __arrayUnion: a }) } } };
   const fb = makeFb(store, uid, clock, audit);
   sb.CBA = {
     esc: s => String(s), authSession: 'S', mock: { currentYear: 'תשפ"ז' },

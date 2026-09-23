@@ -156,7 +156,7 @@ const section = s => console.log('\n' + s);
   const e9 = await H.call(cb => B('mgr').CBA.data.gardenEditTask(String(m9.id), { title: 'גזם', category: 'עצים', desc: 'פונה חלקית', place: '' }, cb));
   ok('ונערך', e9.ok && store.gardenTasks[String(m9.id)].desc === 'פונה חלקית' && store.gardenTasks[String(m9.id)].place === '');
   const RULES = R('firestore.rules');
-  ok('🔴 כללים: desc/place ב-gtFields וב-gtTeamUpdateOk, עם גבול אורך', /'desc', 'place',[\s\S]{0,300}'reporter'\];/.test(RULES) && /'mergedReps',\s*'desc', 'place'\]\) &&\s*gtTextOk\(\);/.test(RULES) && /function gtTextOk\(\)[\s\S]{0,300}size\(\) <= 1000/.test(RULES));
+  ok('🔴 כללים: desc/place ב-gtFields וב-gtTeamUpdateOk, עם גבול אורך', /'desc', 'place',[\s\S]{0,300}'reporter',[\s\S]{0,300}'workPhotos'\];/.test(RULES) && /'mergedReps',\s*'desc', 'place', 'workPhotos'\]\) &&\s*gtTextOk\(\) && gtWorkPhotosOk\(\);/.test(RULES) && /function gtTextOk\(\)[\s\S]{0,300}size\(\) <= 1000/.test(RULES));
   ok('כרטיס הפרטים מציג תיאור ו"איפה"', /t\.desc \? '<p class="gd-det-desc">'/.test(GT) && /<span class="l">איפה<\/span>/.test(GT));
   ok('🔑 טופס הצוות: תיאור עם מונה 75 מילים, כמו אצל התושב', /id="gf-desc"/.test(GF) && /var WORD_MAX = 75;/.test(GF) && /id="gf-place"/.test(GF));
   ok('השלמה לאחור בשרת: פעולה למנהל-על', /action === 'gardenBackfillText'/.test(CODE) && /gardenBackfillText: PERM_SUPER/.test(CODE) && /fsList_\(FS_GARDEN_REPORTS\)/.test(fnSrc('gardenBackfillText_')));

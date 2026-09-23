@@ -612,6 +612,13 @@ function doGet(e) {
       var ssGate = SpreadsheetApp.getActiveSpreadsheet();
       var topGate = authorize_(ssGate, e && e.parameter, GET_ACTION_PERMS[getAction],
                                EXTERNAL_BOOT_ACTIONS.indexOf(getAction) !== -1);
+      /* 📷 23.9 (בקשת יועד) — הגנן החיצוני צופה בתמונות. השער הכללי
+         (need=null) חוסם חיצוני מכל מה שאינו גינון, ולכן ניסיון שני עם
+         PERM_GARDEN — בדיוק הדפוס של gardenPhotoOne_. תושב רגיל עובר
+         כבר בניסיון הראשון; ההחלטה איזו תמונה מותרת — gardenPhotoAllowed_. */
+      if (!topGate.ok && getAction === 'gardenPhoto') {
+        topGate = authorize_(ssGate, e && e.parameter, PERM_GARDEN);
+      }
       if (!topGate.ok) return json_({ ok: false, error: topGate.error });
       /* ההרשאות המאומתות זמינות להנדלרים דרך הפרמטרים, כדי שפעולות שגוזרות
          זהות (שריון המועדון) לא ייקחו אותה מהלקוח. שם עם קו תחתון מוביל
@@ -17576,6 +17583,19 @@ function gardenPhotoAllowed_(ss, id, perm) {
   // תושב — רק תמונה שהוא עצמו צירף
   var famId = String(perm.familyId || '');
   if (!famId) return false;
+  /* 📷 23.9 — **קודם Firestore.** מאז שהדיווחים נכתבים מהדפדפן (16.9)
+     הגיליון אינו מקבל שורות חדשות, ולכן בדיקה מול הגיליון בלבד חסמה
+     את התושב מהתמונות של הדיווחים החדשים שלו. ומאז 23.9 התושב רואה גם
+     את תמונות הצוות מהסגירה (`workPhotos`, הכרעת יועד). השאילתה לפי
+     `familyId` שלו — כלומר רק דיווחים שלו. כשל → נופלים לגיליון. */
+  try {
+    var docs = fsQuery_(FS_GARDEN_REPORTS, 'familyId', 'EQUAL', famId, 300);
+    for (var d = 0; d < docs.length; d++) {
+      var dd = docs[d].data || {};
+      var list = [].concat(dd.photos || [], dd.workPhotos || []);
+      for (var q = 0; q < list.length; q++) if (String(list[q]).trim() === id) return true;
+    }
+  } catch (e) { Logger.log('gardenPhotoAllowed_ Firestore: ' + e); }
   var rsh = ss.getSheetByName(GARDEN_REPORTS_SHEET);
   if (!rsh || rsh.getLastRow() < 2) return false;
   var c = gardenCols_(rsh);
@@ -17588,10 +17608,28 @@ function gardenPhotoAllowed_(ss, id, perm) {
   return false;
 }
 
+/** האם הקובץ בתיקיית תמונות הגינון (ישירות, או בתת-תיקיית חודש שלה).
+ *  ר' getGardenPhotosFolder_: <שורש>/<GARDEN_PHOTOS_FOLDER_NAME>/<yyyy-MM>.
+ *  כשל בקריאה = לא (סגור כברירת מחדל). */
+function gardenPhotoInFolder_(file) {
+  try {
+    var ps = file.getParents();
+    while (ps.hasNext()) {
+      var p1 = ps.next();
+      if (p1.getName() === GARDEN_PHOTOS_FOLDER_NAME) return true;
+      var gs = p1.getParents();
+      while (gs.hasNext()) if (gs.next().getName() === GARDEN_PHOTOS_FOLDER_NAME) return true;
+    }
+  } catch (e) { Logger.log('gardenPhotoInFolder_: ' + e); }
+  return false;
+}
+
 function handleGardenPhoto_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var gate = authorize_(ss, p, null);   // מושב תקין + תושב פעיל
+    /* 📷 23.9 — גנן חיצוני: ניסיון שני עם PERM_GARDEN (ר' doGet). */
+    if (!gate.ok) gate = authorize_(ss, p, PERM_GARDEN);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
 
     var id = String((p && p.id) || '').trim();
@@ -17604,6 +17642,14 @@ function handleGardenPhoto_(p) {
     var file;
     try { file = DriveApp.getFileById(id); }
     catch (err) { return json_({ ok: false, error: 'התמונה לא נמצאה ב-Drive' }); }
+
+    /* 🔴 23.9 — **רק קבצים מתיקיית תמונות הגינון.** תמונות הגינון יושבות
+       באותו שורש Drive של הקבלות, ו-gardenPhotoAllowed_ מתיר לצוות "כל
+       תמונה" לפי מזהה — כלומר מי שיש לו הרשאת גינון (ומ-23.9 גם הקבלן
+       החיצוני) יכול היה לשלוף קבלה אם השיג את המזהה שלה. מנהל-על פטור. */
+    if (!gate.perm.isSuper && !gardenPhotoInFolder_(file)) {
+      return json_({ ok: false, error: 'הקובץ אינו תמונת גינון' });
+    }
 
     var size = 0;
     try { size = file.getSize(); } catch (err) { size = 0; }
