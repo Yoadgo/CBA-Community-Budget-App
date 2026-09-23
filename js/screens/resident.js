@@ -1675,6 +1675,31 @@ CBA.screens = CBA.screens || {};
     return DIR_ALPHABET.indexOf(ch) !== -1 ? ch : "#";
   }
 
+  /* "שמות ילדים" לתצוגה (2026-09-23). מאז "הפרטים שלי" v2 התא יכול להכיל
+     JSON של [{name,dob}] ולא רק טקסט חופשי — ובלי זה הכרטיס כאן ובפופאפ
+     המפה הציג את ה-JSON הגולמי. JSON ⇒ "נועה (7), איתי (4)" (גיל מחושב,
+     לא תאריך — תאריך לידה מלא של ילד לא צריך להופיע במדריך). טקסט ישן ⇒
+     כמו שהוא. אותו פענוח כמו parseKidsValue_ ב-myProfile.js. */
+  function dirKidsText(raw) {
+    var s = String(raw == null ? "" : raw).trim();
+    if (s.charAt(0) !== "[") return s;
+    try {
+      var list = JSON.parse(s);
+      if (!Array.isArray(list)) return s;
+      var now = new Date();
+      return list.map(function (k) {
+        var name = String((k && k.name) || "").trim();
+        if (!name) return "";
+        var d = new Date((k && k.dob) || "");
+        if (isNaN(d.getTime())) return name;
+        var age = now.getFullYear() - d.getFullYear();
+        var m = now.getMonth() - d.getMonth();
+        if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+        return age >= 0 ? name + " (" + age + ")" : name;
+      }).filter(Boolean).join(", ");
+    } catch (e) { return s; }
+  }
+
   function dirHouseHTML(row, c) {
     var house = dirVal(row, c.house) || "—";
     var fam = dirVal(row, c.family) || "משק בית";
@@ -1682,7 +1707,7 @@ CBA.screens = CBA.screens || {};
     var nameParts = c.firstName.map(function (k) { return dirVal(row, k); }).filter(Boolean);
     var names = nameParts.join(" ו");
     var phones = c.phone.map(function (k) { return dirVal(row, k); }).filter(Boolean);
-    var kids = dirVal(row, c.kids);
+    var kids = dirKidsText(dirVal(row, c.kids));
     // חיווי "תפקיד בוועד" (סעיף 5) — מואפר, לקריאה בלבד; אם יש כמה שמות בבית
     // מציינים לאיזה מהם שייך התפקיד ("שם — תפקיד"), אם שם אחד בלבד מספיק
     // להציג את התפקיד לבד.
