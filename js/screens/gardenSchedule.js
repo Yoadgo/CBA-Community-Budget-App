@@ -48,11 +48,11 @@
   var DAYS1 = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳"];
   var MON   = ["ינו׳", "פבר׳", "מרץ", "אפר׳", "מאי", "יוני",
                "יולי", "אוג׳", "ספט׳", "אוק׳", "נוב׳", "דצמ׳"];
-  var PRESETS = [30, 60, 90, 120, 180, 240];   // המשכים המוכנים (הכרעת יועד: ברירות + גלגלת)
   var LONG_MS = 450;          // לחיצה ארוכה
   var MOVE_TOL = 9;           // תזוזה שמבטלת לחיצה ארוכה (px)
   var WIDE_Q = "(min-width: 760px)";
   var HINT_KEY = "cba.gs.used";
+  var WHO_KEY = "cba.gs.who";
   /* ✨ לסידור החכם — מוטמע כאן כי ICONS של המסך אינו כולל אותו. */
   var SPARK = '<svg class="gw-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
     'stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 14.06 4 20"/><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/>' +
@@ -70,6 +70,8 @@
     scroll: {},         // מיקום גלילה לפי שבוע
     scrolled: {},       // האם כבר גללנו אוטומטית לשבוע הזה
     flash: null,        // מזהה משימה להבהוב אחרי שמירה
+    who: null,          // מסנן העובד בתצוגה: "all" או מפתח ("74:2"). null = עוד לא נקבע
+    crewAsked: false,
     ctx: null, host: null
   };
 
@@ -145,33 +147,64 @@
     return candidates(ctx).filter(function (t) { return !shown(t, ctx.week); });
   }
 
+  /* ==========================================================================
+   *  👷 עובדים (24.9) — "פנוי" הוא פנוי **לאותם עובדים**
+   * --------------------------------------------------------------------------
+   *  שני בלוקים באותה שעה מתנגשים רק אם יש להם עובד משותף. בלוק בלי עובדים
+   *  (או בדיקה בלי עובדים) מתנגש בכל דבר — כך בדיוק התנהג הסידור עד היום,
+   *  ולכן שיכון בלי צוות מוגדר לא מרגיש שום שינוי.
+   * ========================================================================== */
+  function whoOf(t) { return (t && t.slot && t.slot.who) || []; }
+  function whoOverlap(a, b) {
+    if (!a || !a.length || !b || !b.length) return true;
+    return a.some(function (k) { return b.indexOf(k) >= 0; });
+  }
   /* תפוסה ביום — מרווחים [start, end). ignore = המשימה שמזיזים. */
-  function busyOn(ctx, date, ignore) {
+  function busyOn(ctx, date, ignore, who) {
     return blocks(ctx).filter(function (t) {
-      return t.slot.date === date && String(t.id) !== String(ignore || "");
+      return t.slot.date === date && String(t.id) !== String(ignore || "") && whoOverlap(who, whoOf(t));
     }).map(function (t) { return [t.slot.start, t.slot.start + t.slot.dur]; });
   }
-  function isFree(ctx, date, a, len, ignore) {
+  function isFree(ctx, date, a, len, ignore, who) {
     if (a < D0() || a + len > D1()) return false;
-    return !busyOn(ctx, date, ignore).some(function (r) { return a < r[1] && a + len > r[0]; });
+    return !busyOn(ctx, date, ignore, who).some(function (r) { return a < r[1] && a + len > r[0]; });
   }
   /* כמה דקות פנויות ברצף מ-a (עד הבלוק הבא או 23:00). */
-  function maxFrom(ctx, date, a, ignore) {
+  function maxFrom(ctx, date, a, ignore, who) {
     var end = D1();
-    busyOn(ctx, date, ignore).forEach(function (r) {
+    busyOn(ctx, date, ignore, who).forEach(function (r) {
       if (r[1] > a && r[0] < a + 1) end = a;           // a עצמו תפוס
       else if (r[0] >= a && r[0] < end) end = r[0];
     });
     return Math.max(0, end - a);
   }
-  function freeStarts(ctx, date, ignore) {
+  function crew() { return (S() && S().crew) ? S().crew() : []; }
+  function crewName(k) { return (S() && S().crewName) ? (S().crewName(k) || "") : ""; }
+  function me() { var c = crew(); for (var i = 0; i < c.length; i++) if (c[i].me) return c[i].key; return ""; }
+  /* העובדים שמסומנים מראש לשיבוץ של משימה: המסנן הפעיל → ההרגל של המשימה
+     (gardenSlots.profile) → אני, אם אני בצוות. */
+  function defaultWho(ctx, t) {
+    var c = crew(); if (!c.length) return [];
+    var keys = c.map(function (x) { return x.key; });
+    if (st.who && st.who !== "all" && keys.indexOf(st.who) >= 0) return [st.who];
+    var p = S().profile ? S().profile(t, ctx.rows) : null;
+    if (p && p.who.length && p.who.every(function (k) { return keys.indexOf(k) >= 0; })) return p.who.slice();
+    return me() ? [me()] : [];
+  }
+  function viewWho() { return st.who && st.who !== "all" ? [st.who] : []; }
+  function pickWho() {
+    var saved = lsGet(WHO_KEY), c = crew();
+    if (saved && (saved === "all" || c.some(function (x) { return x.key === saved; }))) return saved;
+    return me() || "all";
+  }
+  function freeStarts(ctx, date, ignore, who) {
     var out = [];
-    for (var a = D0(); a < D1(); a += 30) if (isFree(ctx, date, a, 15, ignore)) out.push(a);
+    for (var a = D0(); a < D1(); a += 30) if (isFree(ctx, date, a, 15, ignore, who)) out.push(a);
     return out;
   }
-  function freeMinutes(ctx, date, ignore) {
+  function freeMinutes(ctx, date, ignore, who) {
     var used = 0;
-    busyOn(ctx, date, ignore).forEach(function (r) { used += Math.max(0, Math.min(r[1], D1()) - Math.max(r[0], D0())); });
+    busyOn(ctx, date, ignore, who).forEach(function (r) { used += Math.max(0, Math.min(r[1], D1()) - Math.max(r[0], D0())); });
     return Math.max(0, D1() - D0() - used);
   }
 
@@ -234,7 +267,21 @@
     var dates = weekDates(ctx.week);
     var cols = W ? [0, 1, 2, 3, 4, 5] : [st.day];
     var today = todayDate();
-    var bl = ctx.loading ? [] : blocks(ctx);
+    /* 👷 הצוות נטען פעם אחת (מטמון 12 שעות), ברקע — הסידור לא מחכה לו.
+       כשהוא מגיע: מסנן ברירת-המחדל הוא "אני" אם אני בצוות, אחרת "הכול". */
+    if (!st.crewAsked && S() && S().crewLoad) {
+      st.crewAsked = true;
+      var before = JSON.stringify(crew());
+      S().crewLoad(function (list) {
+        if (st.who == null) st.who = pickWho();
+        if (JSON.stringify(list || []) !== before && st.host && st.host.isConnected && st.ctx) render(st.host, st.ctx);
+      });
+    }
+    if (st.who == null && crew().length) st.who = pickWho();
+    var vw = viewWho();
+    var bl = ctx.loading ? [] : blocks(ctx).filter(function (t) {
+      return !vw.length || !whoOf(t).length || whoOf(t).indexOf(vw[0]) >= 0;
+    });
     var un = ctx.loading ? [] : unscheduled(ctx);
     var cand = ctx.loading ? 0 : candidates(ctx).length;
 
@@ -251,6 +298,17 @@
           '<i class="gw-dots" aria-label="' + n + ' משימות">' + (n ? new Array(Math.min(n, 4) + 1).join("<u></u>") : "") + '</i>' +
           '</button>';
       }).join("") + '</div>';
+    }
+
+    /* --- 👷 מסנן עובד — רק כשיש שניים ומעלה ---- */
+    var cr = crew();
+    if (cr.length >= 2) {
+      html += '<div class="gw-crew" role="tablist" aria-label="עובד">' +
+        [{ key: "all", name: "הכול" }].concat(cr).map(function (c) {
+          var on = (st.who || "all") === c.key;
+          return '<button type="button" role="tab" data-who="' + esc(c.key) + '" aria-selected="' + on + '" class="' + (on ? "on" : "") + '">' +
+            esc(c.name) + (c.me ? ' <small>(אני)</small>' : '') + '</button>';
+        }).join("") + '</div>';
     }
 
     /* --- שורת "לא בסידור" — גם סטטוס וגם נקודת כניסה ---- */
@@ -339,7 +397,18 @@
       '<b>' + (closed ? ctx.ico("check") : pend ? ctx.ico("clock") : ctx.ico(cat.ico)) +
         '<span>' + esc(t.title || t.category || "משימה") + '</span></b>' +
       '<em>' + esc(hhmm(s.start) + "–" + hhmm(s.start + s.dur)) + (t.area ? " · " + esc(t.area) : "") + '</em>' +
+      /* ראשי תיבות רק כשבאמת צר: עמודת מחשב מפוצלת, או חצי שעה. בנייד יש מקום לשם. */
+      whoTags(whoOf(t), (wide() && L.n > 1) || L.n > 2 || s.dur <= 30) +
       '</button>';
+  }
+  /* 👷 תוויות העובדים — מסגרת דקה עם השם (בקשת יועד). בבלוק צר או קצר —
+     האות הראשונה בלבד, והשם המלא ב-title. מפתח שאינו בצוות (עזב) לא מוצג. */
+  function whoTags(who, compact) {
+    var names = (who || []).map(crewName).filter(Boolean);
+    if (!names.length) return "";
+    return '<span class="gw-whos' + (compact ? " is-compact" : "") + '">' + names.map(function (n) {
+      return '<i title="' + esc(n) + '">' + esc(compact ? n.charAt(0) : n) + '</i>';
+    }).join("") + '</span>';
   }
 
   /* גובה אזור הגלילה = מה שנשאר עד תחתית המסך. כך הדף עצמו אינו נגלל
@@ -408,6 +477,11 @@
     });
     var todo = host.querySelector('[data-gs="todo"]');
     if (todo) todo.addEventListener("click", function () { flowFromList(ctx); });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-who]"), function (b) {
+      b.addEventListener("click", function () {
+        st.who = b.dataset.who; lsSet(WHO_KEY, st.who); render(host, ctx);
+      });
+    });
     var aib = host.querySelector('[data-gs="ai"]');
     if (aib) aib.addEventListener("click", function () { CBA.gardenScheduleAi.open(ctx, api()); });
     var ub = host.querySelector('[data-gs="undo"]');
@@ -435,7 +509,7 @@
       P = { x: e.clientX, y: e.clientY, col: col, type: e.pointerType, t0: Date.now(), fired: false };
       if (!col || e.pointerType === "mouse") return;
       var m = minuteAt(col, e.clientY);
-      if (!isFree(ctx, col.dataset.date, m, 15)) return;
+      if (!isFree(ctx, col.dataset.date, m, 15, null, viewWho())) return;
       P.m = m;
       ghost(col, m, "is-press");
       P.timer = setTimeout(function () {
@@ -455,7 +529,7 @@
         var col = e.target.closest(".gw-col");
         if (!col || e.target.closest(".gw-blk")) return unghost(host);
         var m = minuteAt(col, e.clientY);
-        if (isFree(ctx, col.dataset.date, m, 15)) {
+        if (isFree(ctx, col.dataset.date, m, 15, null, viewWho())) {
           Array.prototype.forEach.call(host.querySelectorAll(".gw-col"), function (c) {
             if (c !== col) { var g = c.querySelector(".gw-ghost"); if (g) g.parentNode.removeChild(g); }
           });
@@ -478,7 +552,7 @@
       }
       if (Math.abs(dx) > MOVE_TOL || Math.abs(dy) > MOVE_TOL || !p.col) return;
       var m = minuteAt(p.col, e.clientY);
-      if (!isFree(ctx, p.col.dataset.date, m, 15)) return;
+      if (!isFree(ctx, p.col.dataset.date, m, 15, null, viewWho())) return;
       if (p.type === "mouse") return flowFromSlot(ctx, p.col.dataset.date, m);
       /* הקשה קצרה במגע — מזכירים את המחווה, לא משבצים. */
       toast("לחיצה ארוכה על השעה — לשיבוץ משימה");
@@ -585,12 +659,12 @@
 
   /* ---- שלב: יום ---- */
   function stepDay(ctx, F, t, dots, onPick) {
-    var dates = weekDates(ctx.week), today = todayDate();
+    var dates = weekDates(ctx.week), today = todayDate(), who = defaultWho(ctx, t);
     F.push({
       title: "באיזה יום?", sub: t.title || t.category, dots: dots,
       html: '<div class="gw-list">' + dates.map(function (d, i) {
-        var fm = freeMinutes(ctx, d, t.id), starts = freeStarts(ctx, d, t.id).length;
-        var n = blocks(ctx).filter(function (x) { return x.slot.date === d && String(x.id) !== String(t.id); }).length;
+        var fm = freeMinutes(ctx, d, t.id, who), starts = freeStarts(ctx, d, t.id, who).length;
+        var n = blocks(ctx).filter(function (x) { return x.slot.date === d && String(x.id) !== String(t.id) && whoOverlap(who, whoOf(x)); }).length;
         var dd = parseKey(d);
         var info = [n ? (n === 1 ? "משימה אחת" : n + " משימות") : "ריק",
                     starts ? durText(Math.floor(fm / 30) * 30 || 15) + " פנויות" : "אין זמן פנוי"].join(" · ");
@@ -600,16 +674,20 @@
           '<span class="gw-opt__t"><b>יום ' + DAYS[i] +
             (d === today ? ' <i class="gw-today">היום</i>' : '') + '</b><small>' + esc(info) + '</small></span>' +
           '<span class="gw-opt__go">' + ctx.ico("next") + '</span></button>';
-      }).join("") + '</div>',
+      }).join("") + '</div>' +
+      (who.length ? '<p class="gw-note">הזמן הפנוי מחושב ל' + esc(who.map(crewName).filter(Boolean).join(" ו")) + '. אפשר לשנות עובדים בשלב האחרון.</p>' : ''),
       on: { day: function (b) { onPick(b.dataset.d); } }
     });
   }
 
   /* ---- שלב: שעה ---- */
   function stepTime(ctx, F, t, date, dots, onPick) {
-    var fs = freeStarts(ctx, date, t.id);
+    var fs = freeStarts(ctx, date, t.id, defaultWho(ctx, t));
     var today = todayDate(), nm = nowMin();
     var groups = [["בוקר", D0(), 12 * 60], ["צהריים", 12 * 60, 17 * 60], ["ערב", 17 * 60, D1()]];
+    /* ההרגל של המשימה ("בדרך כלל 07:00") מסומן — הצעה, לא חובה. */
+    var p = S().profile ? S().profile(t, ctx.rows) : null;
+    var usual = p && p.start != null ? Math.round(p.start / 30) * 30 : null;
     F.push({
       title: "באיזו שעה? · " + dayLabel(date, ctx.week), sub: t.title || t.category, dots: dots,
       html: groups.map(function (g) {
@@ -617,83 +695,163 @@
         if (!xs.length) return "";
         return '<div class="gw-tg"><h5>' + g[0] + '</h5><div class="gw-chips">' + xs.map(function (m) {
           var past = date === today && m + 30 <= nm;
-          return '<button type="button" class="gw-chip' + (past ? " is-past" : "") + '" data-f="time" data-m="' + m + '">' + hhmm(m) + '</button>';
+          return '<button type="button" class="gw-chip' + (past ? " is-past" : "") + (m === usual ? " is-usual" : "") +
+            '" data-f="time" data-m="' + m + '"' + (m === usual ? ' title="השעה הרגילה של המשימה"' : '') + '>' + hhmm(m) + '</button>';
         }).join("") + '</div></div>';
       }).join("") || '<div class="gw-empty"><b>אין זמן פנוי ביום הזה</b>אפשר לחזור ולבחור יום אחר.</div>',
       on: { time: function (b) { onPick(+b.dataset.m); } }
     });
   }
 
-  /* ---- שלב: משך — ברירות מוכנות + גלגלת (הכרעת יועד) ---- */
-  function stepDur(ctx, F, t, date, start, dots, cur, onPick) {
-    var max = maxFrom(ctx, date, start, t.id);
-    /* ברירות מוכנות; מה שלא נכנס עד הבלוק הבא — מחוק ולא נעלם, כדי
-       שיהיה ברור *למה* אין שעתיים. ברבע שעה פנויה בלבד — מוסיפים 15. */
-    var chips = (max < 30 ? [15] : []).concat(PRESETS);
-    /* 🧮 הערכה מהפעמים הקודמות (gardenSlots.estimate). כשאין משך נוכחי —
-       היא הבחירה המסומנת; משך שאינו בין המוכנים נוסף כצ'יפ משלו. */
-    var est = S() && S().estimate ? S().estimate(t, ctx.rows) : null;
-    if (cur == null && est) cur = est.dur;
-    if (cur && chips.indexOf(cur) < 0 && cur <= max) { chips.push(cur); chips.sort(function (a, b) { return a - b; }); }
-    var wheel = []; for (var m = 15; m <= max; m += 15) wheel.push(m);
+  /* ==========================================================================
+   *  גלגלת — רכיב אחד לשלושה שימושים: משך, עובדים+משך, זמן בפועל
+   * --------------------------------------------------------------------------
+   *  🔴 24.9 (יועד: "שפשוט ישר תיפתח הגלילה, בלי הפריסטים") — אין יותר
+   *     צ'יפים של משך. הגלגלת פתוחה מההתחלה, ההערכה כבר מסומנת בה, וכפתור
+   *     אחד שומר ("שיבוץ · שעה וחצי").
+   * ========================================================================== */
+  var IH = 40;
+  function wheelHtml(values) {
+    return '<div class="gw-wheel" tabindex="0" aria-label="משך">' +
+      values.map(function (w) { return '<div class="gw-wi" data-m="' + w + '">' + durText(w) + '</div>'; }).join("") + '</div>';
+  }
+  /* values משתנה (עובדים אחרים ⇒ זמן פנוי אחר) — rebuild מחליף אותן ושומר על הבחירה. */
+  function mountWheel(wl, values, init, onSel) {
+    var cur = values.slice(), tmr = null;
+    function sel() {
+      if (!cur.length) return onSel(null);
+      var i = Math.max(0, Math.min(cur.length - 1, Math.round(wl.scrollTop / IH)));
+      Array.prototype.forEach.call(wl.children, function (c, k) { c.classList.toggle("on", k === i); });
+      onSel(cur[i]);
+    }
+    function go(v) {
+      var i = cur.indexOf(v);
+      if (i < 0) { i = 0; for (var k = 0; k < cur.length; k++) if (cur[k] <= v) i = k; }
+      wl.scrollTop = i * IH; sel();
+    }
+    wl.addEventListener("scroll", function () { clearTimeout(tmr); tmr = setTimeout(sel, 60); }, { passive: true });
+    wl.addEventListener("click", function (e) {
+      var it = e.target.closest(".gw-wi"); if (!it) return;
+      wl.scrollTo({ top: Array.prototype.indexOf.call(wl.children, it) * IH, behavior: "smooth" });
+    });
+    wl.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); wl.scrollTop += (e.key === "ArrowDown" ? IH : -IH); sel(); }
+    });
+    /* scrollTop עובד רק כשהאלמנט כבר בעץ ובגובה אמיתי — לכן בפריים הבא. */
+    setTimeout(function () { go(init); }, 0);
+    return {
+      rebuild: function (vals, keep) {
+        cur = vals.slice(); wl.innerHTML = cur.map(function (w) { return '<div class="gw-wi" data-m="' + w + '">' + durText(w) + '</div>'; }).join("");
+        setTimeout(function () { go(keep); }, 0);
+      }
+    };
+  }
+  function range(max) { var a = []; for (var m = 15; m <= Math.min(max, 8 * 60); m += 15) a.push(m); return a; }
+  function crewChips(sel, disabled) {
+    var c = crew(); if (!c.length) return "";
+    return '<div class="gw-crewpick" role="group" aria-label="מי עושה">' + c.map(function (x) {
+      var on = sel.indexOf(x.key) >= 0, dis = !on && disabled && disabled[x.key];
+      return '<button type="button" class="gw-chip gw-chip--who' + (on ? " on" : "") + (dis ? " is-dis" : "") + '" data-f="who" data-k="' + esc(x.key) +
+        '" aria-pressed="' + on + '"' + (dis ? ' disabled title="תפוס בשעה הזו"' : '') + '>' + esc(x.name) + '</button>';
+    }).join("") + '</div>';
+  }
+  function whoText(who) { var n = (who || []).map(crewName).filter(Boolean); return n.length ? " · " + n.join(" ו") : ""; }
+
+  /* ---- שלב: משך + מי (אחרון בכל מסלול) ---- */
+  function stepDur(ctx, F, t, date, start, dots, cur, curWho, onPick) {
+    var who = (curWho || defaultWho(ctx, t)).slice();
+    function busyAt(k) { return !isFree(ctx, date, start, 15, t.id, [k]); }
+    var dis = {}; crew().forEach(function (x) { if (busyAt(x.key)) dis[x.key] = 1; });
+    who = who.filter(function (k) { return !dis[k]; });
+    function maxNow() { return maxFrom(ctx, date, start, t.id, who); }
+    function est() { return S().estimate ? S().estimate(t, ctx.rows, who) : null; }
+    var e0 = est(), pick = cur || (e0 && e0.dur) || 60, wheel = null;
     F.push({
-      title: "כמה זמן?", sub: (t.title || t.category) + " · " + dayLabel(date, ctx.week) + " " + hhmm(start), dots: dots,
+      title: crew().length ? "מי וכמה זמן?" : "כמה זמן?",
+      sub: (t.title || t.category) + " · " + dayLabel(date, ctx.week) + " " + hhmm(start), dots: dots,
       html:
-        '<div class="gw-chips gw-chips--dur">' + chips.map(function (m) {
-          var ok = m <= max;
-          return '<button type="button" class="gw-chip' + (ok ? "" : " is-dis") + (cur === m ? " on" : "") +
-            '" data-f="dur" data-m="' + m + '"' + (ok ? "" : " disabled") + '>' + durText(m) + '</button>';
-        }).join("") +
-        '<button type="button" class="gw-chip gw-chip--more" data-f="more" aria-expanded="false">אחר…</button></div>' +
-        '<div class="gw-wheel-wrap" hidden>' +
-          '<div class="gw-wheel" tabindex="0" aria-label="משך">' +
-            wheel.map(function (w) { return '<div class="gw-wi" data-m="' + w + '">' + durText(w) + '</div>'; }).join("") +
-          '</div>' +
-          '<button type="button" class="gd-cta gw-wheel-ok" data-f="wheel">שיבוץ</button>' +
-        '</div>' +
-        (est ? '<p class="gw-est">' + SPARK + 'הערכה: <b>' + durText(est.dur) + '</b> · ' + esc(S().estimateText(est)) + '</p>' : '') +
-        '<p class="gw-note">' + (max < D1() - start
-          ? "פנוי עד " + hhmm(start + max) + " — אחרי זה כבר יש משימה."
-          : "פנוי עד סוף היום (" + hhmm(D1()) + ").") + '</p>',
+        crewChips(who, dis) +
+        wheelHtml(range(maxNow())) +
+        '<p class="gw-est" data-est></p>' +
+        '<p class="gw-note" data-max></p>' +
+        '<button type="button" class="gd-cta gw-wheel-ok" data-f="ok">שיבוץ</button>',
       mount: function (body) {
-        var wl = body.querySelector(".gw-wheel");
-        var okb = body.querySelector(".gw-wheel-ok");
-        var IH = 40;
-        function sel() {
-          var i = Math.max(0, Math.min(wheel.length - 1, Math.round(wl.scrollTop / IH)));
-          Array.prototype.forEach.call(wl.children, function (c, k) { c.classList.toggle("on", k === i); });
-          okb.textContent = "שיבוץ · " + durText(wheel[i]);
-          okb.dataset.m = wheel[i];
-          return wheel[i];
+        var okb = body.querySelector("[data-f=ok]");
+        function note() {
+          var m = maxNow(), e = est();
+          body.querySelector("[data-max]").textContent = m < D1() - start
+            ? "פנוי עד " + hhmm(start + m) + " — אחרי זה כבר יש משימה" + (who.length ? " לאותם עובדים" : "") + "."
+            : "פנוי עד סוף היום (" + hhmm(D1()) + ").";
+          body.querySelector("[data-est]").innerHTML = e ? SPARK + 'הערכה: <b>' + durText(e.dur) + '</b> · ' + esc(S().estimateText(e)) : "";
         }
-        var tmr = null;
-        wl.addEventListener("scroll", function () { clearTimeout(tmr); tmr = setTimeout(sel, 60); }, { passive: true });
-        wl.addEventListener("click", function (e) {
-          var it = e.target.closest(".gw-wi"); if (!it) return;
-          wl.scrollTo({ top: Array.prototype.indexOf.call(wl.children, it) * IH, behavior: "smooth" });
+        wheel = mountWheel(body.querySelector(".gw-wheel"), range(maxNow()), pick, function (v) {
+          pick = v; okb.disabled = !v;
+          okb.textContent = v ? "שיבוץ · " + durText(v) + whoText(who) : "אין זמן פנוי";
         });
-        wl.addEventListener("keydown", function (e) {
-          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-            e.preventDefault(); wl.scrollTop += (e.key === "ArrowDown" ? IH : -IH); sel();
-          } else if (e.key === "Enter") okb.click();
-        });
-        body._wheelInit = function () {
-          var start0 = cur && cur <= max ? cur : Math.min(60, wheel[wheel.length - 1] || 15);
-          var i0 = Math.max(0, wheel.indexOf(start0));
-          wl.scrollTop = i0 * IH; sel();
+        note();
+        body._whoChanged = function () {
+          note();
+          wheel.rebuild(range(maxNow()), pick);
+          Array.prototype.forEach.call(body.querySelectorAll("[data-f=who]"), function (b) {
+            var on = who.indexOf(b.dataset.k) >= 0; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+          });
         };
       },
       on: {
-        dur: function (b) { onPick(+b.dataset.m); },
-        more: function (b) {
-          var body = b.closest(".gw-flow"), w = body.querySelector(".gw-wheel-wrap");
-          var openNow = w.hidden;
-          w.hidden = !openNow;
-          b.setAttribute("aria-expanded", String(openNow));
-          b.classList.toggle("on", openNow);
-          if (openNow && body._wheelInit) { body._wheelInit(); body.querySelector(".gw-wheel").focus({ preventScroll: true }); }
+        who: function (b) {
+          var k = b.dataset.k, i = who.indexOf(k);
+          if (i >= 0) who.splice(i, 1); else who.push(k);
+          b.closest(".gw-flow")._whoChanged();
         },
-        wheel: function (b) { if (b.dataset.m) onPick(+b.dataset.m); }
+        ok: function () { if (pick) onPick(pick, who.slice()); }
+      }
+    });
+  }
+
+  /* ---- 👷 עובדים של בלוק קיים ---- */
+  function stepWho(ctx, F, t, onPick) {
+    var s = t.slot, who = whoOf(t).slice(), dis = {};
+    crew().forEach(function (x) { if (!isFree(ctx, s.date, s.start, s.dur, t.id, [x.key])) dis[x.key] = 1; });
+    F.push({
+      title: "מי עושה?", sub: (t.title || t.category) + " · " + slotText(s, ctx.week),
+      html: crewChips(who, dis) +
+        (Object.keys(dis).length ? '<p class="gw-note">מי שמסומן כתפוס כבר משובץ למשימה אחרת בשעות האלה.</p>' : '') +
+        '<button type="button" class="gd-cta" data-f="ok">שמירה</button>',
+      on: {
+        who: function (b) {
+          var k = b.dataset.k, i = who.indexOf(k);
+          if (i >= 0) who.splice(i, 1); else who.push(k);
+          b.classList.toggle("on", i < 0); b.setAttribute("aria-pressed", String(i < 0));
+        },
+        ok: function () { onPick(who.slice()); }
+      }
+    });
+  }
+
+  /* ---- ⏱ כמה זמן זה לקח בפועל (24.9, הכרעת יועד: "לחיצה אחת ב'בוצע'") ----
+     נשאל **לפני** הסימון: אחרי שמשימה נסגרת הכלל כבר לא מתיר לגעת ב-slot. */
+  function stepActual(ctx, F, t, onDone) {
+    var planned = t.slot.dur, pick = planned;
+    var vals = []; for (var m = 15; m <= 8 * 60; m += 15) vals.push(m);
+    if (vals.indexOf(planned) < 0) vals.push(planned), vals.sort(function (a, b) { return a - b; });
+    F.push({
+      title: "כמה זמן זה לקח?", sub: (t.title || t.category) + " · תוכנן " + durText(planned),
+      html:
+        '<button type="button" class="gd-cta gw-asplan" data-f="plan">' + ctx.ico("check") + 'כמתוכנן · ' + durText(planned) + '</button>' +
+        '<p class="gw-note">או לבחור כמה זה לקח באמת — ההערכה של הפעם הבאה תלמד מזה:</p>' +
+        wheelHtml(vals) +
+        '<button type="button" class="gw-act" data-f="save">שמירה</button>' +
+        '<button type="button" class="gw-skip" data-f="skip">דלג</button>',
+      mount: function (body) {
+        var sb = body.querySelector("[data-f=save]");
+        mountWheel(body.querySelector(".gw-wheel"), vals, planned, function (v) {
+          pick = v; sb.textContent = v === planned ? "שמירה · כמתוכנן" : "שמירה · " + durText(v);
+        });
+      },
+      on: {
+        plan: function () { onDone(planned); },
+        save: function () { onDone(pick); },
+        skip: function () { onDone(null); }
       }
     });
   }
@@ -763,6 +921,8 @@
   function api() {
     return {
       Flow: Flow, unscheduled: unscheduled, blocks: blocks, busyOn: busyOn, isFree: isFree,
+      crew: crew, crewName: crewName, defaultWho: defaultWho, whoOf: whoOf, whoOverlap: whoOverlap,
+      viewWho: viewWho, whoTags: whoTags,
       weekDates: weekDates, todayDate: todayDate, nowMin: nowMin, hhmm: hhmm, durText: durText,
       dayLabel: dayLabel, DAYS: DAYS, DAYS1: DAYS1, D0: D0, D1: D1, esc: esc, toast: toast,
       byId: function (id) { return byId(st.ctx, id); }, dragLevel: dragLevel, SPARK: SPARK,
@@ -788,32 +948,39 @@
     };
   }
 
-  /* ---- מסלול א׳: מהסידור (השעה ידועה) → משימה → משך ---- */
+  function slotOf(date, start, dur, who, base) {
+    var o = { date: date, start: start, dur: dur };
+    if (who && who.length) o.who = who;
+    if (base && base.act != null) o.act = base.act;
+    return o;
+  }
+
+  /* ---- מסלול א׳: מהסידור (השעה ידועה) → משימה → מי וכמה זמן ---- */
   function flowFromSlot(ctx, date, start) {
     var F = Flow(ctx);
     stepTask(ctx, F, "מה לשבץ ב-" + hhmm(start) + "?",
       dayLabel(date, ctx.week) + " · משימות השבוע שעוד לא בסידור", [1, 0], function (t) {
         if (!t) return;
-        stepDur(ctx, F, t, date, start, [1, 1], null, function (m) {
-          save(ctx, t, { date: date, start: start, dur: m }, F);
+        stepDur(ctx, F, t, date, start, [1, 1], null, null, function (m, who) {
+          save(ctx, t, slotOf(date, start, m, who), F);
         });
       });
   }
 
-  /* ---- מסלול ב׳: מהמשימה → יום → שעה → משך ---- */
+  /* ---- מסלול ב׳: מהמשימה → יום → שעה → מי וכמה זמן ---- */
   function flowPlace(ctx, t, F, lead) {
     F = F || Flow(ctx);
     var pre = lead ? [1] : [];
     stepDay(ctx, F, t, pre.concat([1, 0, 0]), function (date) {
       stepTime(ctx, F, t, date, pre.concat([1, 1, 0]), function (start) {
-        stepDur(ctx, F, t, date, start, pre.concat([1, 1, 1]), t.slot && t.slot.dur, function (m) {
-          save(ctx, t, { date: date, start: start, dur: m }, F);
+        stepDur(ctx, F, t, date, start, pre.concat([1, 1, 1]), t.slot && t.slot.dur, t.slot && t.slot.who, function (m, who) {
+          save(ctx, t, slotOf(date, start, m, who), F);
         });
       });
     });
   }
 
-  /* ---- מהשורה "N עוד לא בסידור": משימה → יום → שעה → משך ---- */
+  /* ---- מהשורה "N לא בסידור": משימה → יום → שעה → מי וכמה זמן ---- */
   function flowFromList(ctx) {
     var F = Flow(ctx);
     stepTask(ctx, F, "מה לשבץ?", "משימות השבוע שעוד לא בסידור", [1, 0, 0, 0], function (t) {
@@ -829,27 +996,48 @@
     if (t.closure) return ctx.openDetails(t.id);
     var pri = null;
     (ctx.tiles(t) || []).forEach(function (x) { if (x[3] === "pri" && x[0] !== "plan") pri = x; });
+    var hasCrew = crew().length > 0;
     var F = Flow(ctx);
     F.push({
       title: t.title || t.category || "משימה",
-      sub: [t.area, slotText(t.slot, ctx.week)].filter(Boolean).join(" · "),
+      sub: [t.area, slotText(t.slot, ctx.week) + whoText(whoOf(t))].filter(Boolean).join(" · "),
       html: '<div class="gw-acts">' +
         (pri ? '<button type="button" class="gw-act is-pri" data-f="pri">' + ctx.ico(pri[1]) +
-               esc(String(pri[2]).replace(/​/g, "")) + '</button>' : '') +
+               esc(String(pri[2]).replace(/\u200B/g, "")) + '</button>' : '') +
         (t.flag === "ממתין לאישור" ? '<div class="gw-wait">' + ctx.ico("clock") + (ctx.isManager ? "בוצע · ממתין לאישורך" : "בוצע · ממתין לאישור המנהל") + '</div>' : '') +
         '<button type="button" class="gw-act" data-f="dur">' + ctx.ico("clock") + 'שינוי משך</button>' +
         '<button type="button" class="gw-act" data-f="move">' + ctx.ico("cal") + 'הזזה</button>' +
+        (hasCrew ? '<button type="button" class="gw-act is-wide" data-f="who">' + ctx.ico("team") + 'מי עושה' +
+          '<small>' + esc(whoText(whoOf(t)).replace(/^ · /, "") || "לא שובץ עובד") + '</small></button>' : '') +
         '<button type="button" class="gw-act is-wide" data-f="info">' + ctx.ico("note") + 'פרטי המשימה</button>' +
         '<button type="button" class="gw-act is-wide is-dng" data-f="rm">' + ctx.ico("x") + 'הסרה מהסידור' +
           '<small>המשימה נשארת פתוחה ובאותו שבוע</small></button>' +
       '</div>',
       on: {
-        pri: function () { F.close(); ctx.tile(t.id, pri[0]); },
+        pri: function () {
+          /* ⏱ "בוצע" של הגנן — קודם כמה זמן זה לקח (לחיצה אחת "כמתוכנן"),
+             ורק אז הסימון עצמו, אותה פונקציה בדיוק כמו מהכרטיס. */
+          if (pri[0] !== "markdone") { F.close(); return ctx.tile(t.id, pri[0]); }
+          stepActual(ctx, F, t, function (act) {
+            F.close();
+            if (act == null) return ctx.tile(t.id, pri[0]);
+            var s = slotOf(t.slot.date, t.slot.start, t.slot.dur, whoOf(t));
+            s.act = act;
+            t.slot = s;
+            S().write(t.id, s, function () { ctx.tile(t.id, pri[0]); });
+          });
+        },
         info: function () { F.close(); ctx.openDetails(t.id); },
         rm: function () { save(ctx, t, null, F, "הוסר מהסידור — חזר לרשימת \"לא בסידור\""); },
         dur: function () {
-          stepDur(ctx, F, t, t.slot.date, t.slot.start, null, t.slot.dur, function (m) {
-            save(ctx, t, { date: t.slot.date, start: t.slot.start, dur: m }, F, "המשך עודכן · " + durText(m));
+          stepDur(ctx, F, t, t.slot.date, t.slot.start, null, t.slot.dur, whoOf(t), function (m, who) {
+            save(ctx, t, slotOf(t.slot.date, t.slot.start, m, who, t.slot), F, "עודכן · " + durText(m) + whoText(who));
+          });
+        },
+        who: function () {
+          stepWho(ctx, F, t, function (who) {
+            save(ctx, t, slotOf(t.slot.date, t.slot.start, t.slot.dur, who, t.slot), F,
+                 who.length ? "שובץ ל" + whoText(who).replace(/^ · /, "") : "הוסרו העובדים מהבלוק");
           });
         },
         move: function () { flowPlace(ctx, t, F, false); }
@@ -877,7 +1065,7 @@
     chip: function (t, week) {
       if (!shown(t, week)) return "";
       var i = weekDates(week).indexOf(t.slot.date);
-      return DAYS1[i] + " " + hhmm(t.slot.start);
+      return DAYS1[i] + " " + hhmm(t.slot.start) + whoText(whoOf(t));
     },
     /* לבדיקות בלבד */
     _t: { layout: layout, candidates: candidates, shown: shown, unscheduled: unscheduled,

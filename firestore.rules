@@ -750,11 +750,15 @@ service cloud.firestore {
     function gtSlotOk(s) {
       return s == null ||
              (s is map &&
-              s.keys().hasOnly(['date', 'start', 'dur']) &&
+              s.keys().hasOnly(['date', 'start', 'dur', 'who', 'act']) &&   /* GW-24.9:R6-keys */
               s.keys().hasAll(['date', 'start', 'dur']) &&
               s.date is string && s.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
               s.start is int && s.dur is int &&
-              s.start >= 360 && s.dur >= 15 && s.start + s.dur <= 1380);
+              s.start >= 360 && s.dur >= 15 && s.start + s.dur <= 1380 &&
+              /* 🗓 GW-24.9:R5-who — עובדים: רשימת מפתחות אטומים ("74:2"), בלי שמות.
+                 act: כמה דקות זה לקח בפועל (נשאל ב"בוצע"). שניהם אופציונליים. */
+              s.get('who', []) is list && s.get('who', []).size() <= 6 &&
+              s.get('act', 60) is int && s.get('act', 60) >= 5 && s.get('act', 60) <= 720);
     }
     function gtSlotUpdateOk() {
       return hasPerm('גינון') &&

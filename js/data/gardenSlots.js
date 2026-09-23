@@ -33,6 +33,7 @@
   var DAY_END   = 23 * 60;      // 1380
   var STEP      = 15;           // רזולוציית המשך
   var DATE_RE   = /^\d{4}-\d{2}-\d{2}$/;
+  var WHO_RE    = /^\d{1,6}:\d$/;          // מזהה-שורה:משבצת — אטום, בלי שם
 
   function valid(s) {
     if (s === null) return true;
@@ -42,13 +43,21 @@
     if (typeof a !== "number" || typeof d !== "number") return false;
     if (a % 1 || d % 1) return false;
     if (a < DAY_START || d < STEP || a + d > DAY_END) return false;
+    /* 24.9 — עובדים (מפתחות אטומים "74:2") ומשך בפועל בדקות. שניהם אופציונליים. */
+    if (s.who != null && !(s.who instanceof Array && s.who.length <= 6 &&
+        s.who.every(function (k) { return WHO_RE.test(String(k)); }))) return false;
+    if (s.act != null && !(typeof s.act === "number" && s.act % 1 === 0 && s.act >= 5 && s.act <= 720)) return false;
     return true;
   }
 
-  /* מה שנכתב בפועל — שלושה מפתחות בדיוק, כי הכלל בודק `hasOnly`. */
+  /* מה שנכתב בפועל — רק המפתחות שהכלל מכיר (`hasOnly`). who ריק / act ריק
+     לא נכתבים בכלל, כדי שמסמך בלי עובדים ייראה בדיוק כמו לפני 24.9. */
   function clean(s) {
     if (s === null) return null;
-    return { date: String(s.date), start: Math.round(s.start), dur: Math.round(s.dur) };
+    var o = { date: String(s.date), start: Math.round(s.start), dur: Math.round(s.dur) };
+    if (s.who && s.who.length) o.who = s.who.map(String);
+    if (s.act != null) o.act = Math.round(s.act);
+    return o;
   }
 
   function fsErr(e) {
@@ -94,8 +103,8 @@
    *  חציון ולא ממוצע: פעם אחת של "4 שעות כי היה גשם" לא מזיזה את ההערכה.
    *  🔁 **הלולאה:** מה שהגנן מתקן בהערכה נשמר כמשך של השיבוץ, ולכן הופך
    *     להיסטוריה של הפעם הבאה. אין "אימון" נפרד — השימוש הוא האימון.
-   *  ⚠️ זה זמן **מתוכנן**, לא זמן בפועל. אין במערכת שעת התחלה/סיום של
-   *     ביצוע; שדה כזה הוא גרסה 2 (ר' המפרט).
+   *  🔁 24.9 — כשהגנן מסמן "בוצע" מתוך הבלוק הוא נשאל כמה זמן זה לקח
+   *     (`slot.act`, "כמתוכנן" בלחיצה אחת). כשיש זמן בפועל — הוא גובר.
    * ========================================================================== */
   var DEFAULTS = { lawn: 120, water: 60, tree: 90, prune: 90, weed: 90, clean: 60, bed: 90 };
   var FAULT_DEFAULT = 60;
@@ -111,35 +120,142 @@
     var m = n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
     return Math.max(STEP, Math.round(m / STEP) * STEP);
   }
+  function mode(xs) {
+    var c = {}, best = null, bn = 0;
+    xs.forEach(function (x) { var k = String(x); c[k] = (c[k] || 0) + 1; if (c[k] > bn) { bn = c[k]; best = x; } });
+    return { v: best, n: bn };
+  }
   function norm(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
+  /* 🔑 24.9 — משך **בפועל** גובר על המתוכנן כשיש. זה כל ההבדל בין הערכה
+     שמשחזרת את מה שתכננו לבין הערכה שמתקרבת למציאות. */
+  function spent(r) { return (r.slot && r.slot.act) || (r.slot && r.slot.dur) || 0; }
 
-  /** { dur, src: "template"|"title"|"category"|"default", n } */
-  function estimate(t, rows) {
+  /* ההיסטוריה של "אותה משימה" — מהספציפי לכללי. מחזיר { rows, src }. */
+  function family(t, rows) {
     t = t || {};
     var hist = (rows || []).filter(function (r) {
       return r && r !== t && String(r.id) !== String(t.id) && r.slot && valid(r.slot) && !r.pendingDelete;
     });
     var tpl = t.templateId ? hist.filter(function (r) { return r.templateId && r.templateId === t.templateId; }) : [];
-    if (tpl.length) return { dur: median(tpl.map(function (r) { return r.slot.dur; })), src: "template", n: tpl.length };
+    if (tpl.length) return { rows: tpl, src: "template" };
     var tt = norm(t.title), tc = norm(t.category);
     var same = tt ? hist.filter(function (r) { return norm(r.title) === tt && norm(r.category) === tc; }) : [];
-    if (same.length) return { dur: median(same.map(function (r) { return r.slot.dur; })), src: "title", n: same.length };
+    if (same.length) return { rows: same, src: "title" };
     var k = catKey(t);
     var cat = k ? hist.filter(function (r) { return catKey(r) === k; }) : [];
-    if (cat.length >= 2) return { dur: median(cat.map(function (r) { return r.slot.dur; })), src: "category", n: cat.length };
-    var isFault = !!t.repId || t.kind === "דיווח תושב";
-    return { dur: isFault ? FAULT_DEFAULT : (DEFAULTS[k] || 60), src: "default", n: 0 };
+    if (cat.length >= 2) return { rows: cat, src: "category" };
+    return { rows: [], src: "default" };
+  }
+
+  /** { dur, src: "worker"|"template"|"title"|"category"|"default", n, actual } —
+   *  who (אופציונלי): אם יש לפחות שתי דוגמאות של אותם עובדים, ההערכה שלהם. */
+  function estimate(t, rows, who) {
+    var f = family(t, rows);
+    if (!f.rows.length) {
+      var isFault = !!(t && (t.repId || t.kind === "דיווח תושב"));
+      return { dur: isFault ? FAULT_DEFAULT : (DEFAULTS[catKey(t)] || 60), src: "default", n: 0, actual: 0 };
+    }
+    var pool = f.rows;
+    if (who && who.length) {
+      var mine = f.rows.filter(function (r) {
+        var w = (r.slot && r.slot.who) || [];
+        return w.length === who.length && who.every(function (k) { return w.indexOf(k) >= 0; });
+      });
+      if (mine.length >= 2) return { dur: median(mine.map(spent)), src: "worker", n: mine.length,
+                                     actual: mine.filter(function (r) { return r.slot.act; }).length };
+    }
+    return { dur: median(pool.map(spent)), src: f.src, n: pool.length,
+             actual: pool.filter(function (r) { return r.slot.act; }).length };
   }
   function estimateText(e) {
     if (!e) return "";
     if (e.src === "default") return "הערכה ראשונית";
     var times = e.n === 1 ? "פעם אחת" : e.n + " פעמים";
-    return e.src === "category" ? "לפי " + times + " בקטגוריה" : "לפי " + times + " קודמות";
+    var base = e.src === "category" ? "לפי " + times + " בקטגוריה"
+             : e.src === "worker" ? "לפי " + times + " של אותם עובדים"
+             : "לפי " + times + " קודמות";
+    return base + (e.actual ? " (" + (e.actual === e.n ? "זמן בפועל" : e.actual + " בפועל") + ")" : "");
+  }
+
+  /* ==========================================================================
+   *  "איך זה בדרך כלל נראה" — הפרופיל של משימה חוזרת   (24.9, בקשת יועד:
+   *  "שלאט לאט ה-AI ילמד את הסידורים שהוא מייצר ואת החלוקה ביניהם")
+   * --------------------------------------------------------------------------
+   *  🔑 **אין אימון של מודל.** "למידה" = סטטיסטיקה על השיבוצים שנשמרו —
+   *     כלומר על מה שהגנן **אישר** בסוף, כולל כל תיקון שעשה להצעה. היא
+   *     משמשת לבחירת עובדים מראש, להערכת זמן, ולרמזים שנשלחים ל-AI.
+   *  רק ממשפחה ספציפית (תבנית/כותרת) — "בקטגוריה דשא עובדים בראשון" אינו
+   *  הרגל, זה רעש.
+   * ========================================================================== */
+  function dayIdx(date) {
+    var p = String(date).split("-"), d = new Date(+p[0], +p[1] - 1, +p[2], 12);
+    return d.getDay();
+  }
+  function profile(t, rows) {
+    var f = family(t, rows);
+    if (!f.rows.length || f.src === "category") return null;
+    var rs = f.rows;
+    var d = mode(rs.map(function (r) { return dayIdx(r.slot.date); }));
+    var w = mode(rs.map(function (r) { return ((r.slot.who || []).slice().sort()).join(","); }).filter(Boolean));
+    var st = rs.map(function (r) { return r.slot.start; }).sort(function (a, b) { return a - b; });
+    return {
+      n: rs.length,
+      day: d.n >= 2 || rs.length === 1 ? d.v : null,
+      start: st[Math.floor((st.length - 1) / 2)],
+      who: w.v ? String(w.v).split(",") : [],
+      whoN: w.n
+    };
+  }
+
+  /* ==========================================================================
+   *  הצוות — מי אפשר לשבץ   (24.9)
+   * --------------------------------------------------------------------------
+   *  הצוות **אינו רשימה חדשה לתחזק**: הוא משבצות ההתחברות בשורות המשתמש
+   *  החיצוני בטאב התושבים (היום: שורה 74 — אביתר, עומר). השרת מחזיר
+   *  { key: "74:2", name: "עומר", me }. 🔒 **השמות לא נכנסים ל-Firestore** —
+   *  במסמך נשמר רק המפתח האטום, והשם מגיע מהשרת בזמן התצוגה (הגבול שיועד
+   *  קבע: הקישור בין אדם לזהות נשאר בגיליון).
+   *  המטמון בדפדפן (12 שעות) כדי שפתיחת הסידור לא תחכה ל-Apps Script.
+   * ========================================================================== */
+  var CREW_KEY = "cba.gs.crew", CREW_TTL = 12 * 3600 * 1000;
+  var crewMem = null, crewWait = [];
+  function crewCached() {
+    if (crewMem) return crewMem;
+    try {
+      var c = JSON.parse(localStorage.getItem(CREW_KEY) || "null");
+      if (c && c.list instanceof Array && Date.now() - c.at < CREW_TTL) crewMem = c.list;
+    } catch (e) {}
+    return crewMem || [];
+  }
+  function crewLoad(cb, force) {
+    if (!force && crewMem) return cb && cb(crewMem);
+    if (!force) { var c = crewCached(); if (c.length) { if (cb) cb(c); return; } }
+    if (cb) crewWait.push(cb);
+    if (crewWait.loading) return;
+    crewWait.loading = true;
+    function done(list) {
+      crewWait.loading = false;
+      var q = crewWait.splice(0); q.forEach(function (f) { try { f(list); } catch (e) {} });
+    }
+    if (!(CBA.sheets && CBA.sheets.postRead)) return done(crewCached());
+    CBA.sheets.postRead("gardenCrew", {}, function (r) {
+      if (r && r.ok && r.crew instanceof Array) {
+        crewMem = r.crew.filter(function (x) { return x && WHO_RE.test(String(x.key)); });
+        try { localStorage.setItem(CREW_KEY, JSON.stringify({ at: Date.now(), list: crewMem })); } catch (e) {}
+      }
+      done(crewCached());
+    });
+  }
+  function crewName(key) {
+    var c = crewCached();
+    for (var i = 0; i < c.length; i++) if (c[i].key === key) return c[i].name;
+    return "";
   }
 
   CBA.gardenSlots = {
     DAY_START: DAY_START, DAY_END: DAY_END, STEP: STEP,
     valid: valid, clean: clean, write: write,
-    estimate: estimate, estimateText: estimateText
+    estimate: estimate, estimateText: estimateText, profile: profile,
+    crew: crewCached, crewLoad: crewLoad, crewName: crewName
   };
 })();

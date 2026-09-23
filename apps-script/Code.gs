@@ -168,6 +168,8 @@ var ACTION_PERMS = {
   gardenNotifyTask: PERM_GARDEN,
   /* 🗓 GW-23.9:C1-perm — סידור חכם לגנן. PERM_GARDEN: גם הגנן החיצוני. */
   gardenAiSchedule: PERM_GARDEN,
+  /* 🗓 GW-24.9:C5-perm — צוות הגינון לסידור (שמות פרטיים בלבד). */
+  gardenCrew: PERM_GARDEN,
   // Push notifications (16.9.26) — כל תושב מחובר יכול לנהל את המנוי שלו.
   savePushSubscription: null, removePushSubscription: null,
   // "שירותים לתושב" (2026-08-18) — אותו היגיון בדיוק כמו עץ הוועד: הקריאה
@@ -1724,6 +1726,8 @@ function doPostDispatch_(ss, body) {
       case 'gardenNotifyTask':    return json_(gardenNotifyTask_(ss, body));
       /* 🗓 GW-23.9:C2-route — הצעת סידור שבועי. לא כותבת דבר. */
       case 'gardenAiSchedule':    return json_(gardenAiSchedule_(ss, body));
+      /* 🗓 GW-24.9:C6-route — קריאה בלבד. */
+      case 'gardenCrew':          return json_(gardenCrew_(ss, body));
       /* 🔴 21.9, סעיף 5 — המשוב נכתב בדפדפן; כאן רק המייל. */
       case 'gardenFeedbackNotify': return json_(gardenFeedbackNotify_(ss, body));
       /* 🔴🔴 **שלוש הפעולות שכותבות מסמך בודד לאוסף `gardenPlan`**
@@ -3781,6 +3785,7 @@ var ACTION_DOMAIN = {
   gardenPhotoOne: 'gardenPhoto', gardenNotifyReport: 'gardenMail',
   gardenNotifyTask: 'gardenMail', gardenFeedbackNotify: 'gardenMail',
   /* 🗓 GW-23.9:C3-domain — אינה נוגעת בגיליון */ gardenAiSchedule: 'gardenAi',
+  /* 🗓 GW-24.9:C7-domain */ gardenCrew: 'gardenAi',
   /* 23.9 — מרכז ההתראות: אינן נוגעות בנתוני המטען הראשי. */
   saveNotifyCell: 'notifySettings', saveNotifyGlobal: 'notifySettings',
   notifyRsvpOpened: 'notifySettings', notifyServiceRecommend: 'notifySettings',
@@ -15196,40 +15201,57 @@ function gardenFeedbackNotify_(ss, body) {
 }
 
 /** קריאת השגר-ושכח מהדפדפן. איש אינו ממתין לתשובה שלה. */
-/* 🗓 GW-23.9:C4-fn */
+/* 🗓 GW-23.9:C4-fn · GW-24.9:C8-fn */
 /* ============================================================================
- *  🤖 סידור חכם לגנן — הצעת סידור שבועי ב-Gemini   (2026-09-23, בקשת יועד)
+ *  🤖 סידור חכם לגנן — הצעת סידור שבועי ב-Gemini   (2026-09-23; סבב 2 — 24.9)
  * ----------------------------------------------------------------------------
- *  הדפדפן (js/screens/gardenScheduleAi.js) שולח: הימים עם החלונות הפנויים,
- *  המשימות שעוד לא בסידור (עם הערכת זמן), הפריסטים והטקסט החופשי.
+ *  הדפדפן (js/screens/gardenScheduleAi.js) שולח: הימים עם החלונות הפנויים
+ *  (לכל עובד בנפרד), המשימות שעוד לא בסידור (עם הערכת זמן ו"היסטוריה" —
+ *  היום/השעה/העובדים הרגילים), הפריסטים והטקסט החופשי.
  *  כאן רק בונים פרומפט, קוראים ל-Gemini ומחזירים JSON.
  *
  *  🔴 **אין כאן כתיבה לשום מקום.** ההצעה חוזרת לדפדפן, נבדקת שם מחדש,
  *     והגנן מאשר לפני שנשמר משהו (כלל הליבה: פלט AI לעולם אינו נשמר לבד).
- *  🔒 **אין כאן מידע אישי.** הדפדפן שולח לתקלת תושב את הקטגוריה בלבד
- *     ("תקלה — השקיה"), בלי הכותרת שהתושב כתב, בלי שם ובלי תיאור.
+ *  🔒 **אין כאן מידע אישי.** תקלת תושב = הקטגוריה בלבד; עובדים = W1/W2.
  *  ⚠️ הקלט מוגבל בגודל כאן ולא רק בדפדפן — מה שרץ בדפדפן אפשר לעקוף.
- *  ⚠️ ACTION_DOMAIN: 'gardenAi' — אינה נוגעת בגיליון, ולכן אסור שתבטל את
- *     מטמון המטען הראשי של כולם (ברירת המחדל 'other' הייתה עושה בדיוק את זה).
+ *  ⚠️ ACTION_DOMAIN: 'gardenAi' — אינה נוגעת בגיליון.
  * ========================================================================== */
 function gardenAiSchedule_(ss, body) {
   var key = geminiApiKey_();
   if (!key) return { ok: false, error: 'GEMINI_API_KEY חסר בהגדרות הסקריפט.' };
   function str(v, n) { return String(v == null ? '' : v).replace(/[\u0000-\u001f]/g, ' ').slice(0, n); }
-  var HM = /^\d{2}:\d{2}-\d{2}:\d{2}$/;
+  var HM = /^\d{2}:\d{2}-\d{2}:\d{2}$/, W = /^W[1-6]$/;
   function wins(a) {
     return (a || []).slice(0, 12).map(function (x) { return str(x, 11); })
       .filter(function (x) { return HM.test(x); });
   }
+  var workers = (body.workers || []).slice(0, 6).map(function (w) { return str(w, 3); })
+    .filter(function (w) { return W.test(w); });
   var days = (body.days || []).slice(0, 6).map(function (d) {
-    return { date: str(d.date, 10), name: str(d.name, 10), work: wins(d.work), extra: wins(d.extra) };
+    var o = { date: str(d.date, 10), name: str(d.name, 10) };
+    if (workers.length) {
+      o.byWorker = (d.byWorker || []).slice(0, 6).map(function (x) {
+        return { w: str(x.w, 3), work: wins(x.work), extra: wins(x.extra) };
+      }).filter(function (x) { return workers.indexOf(x.w) >= 0; });
+    } else { o.work = wins(d.work); o.extra = wins(d.extra); }
+    return o;
   }).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d.date); });
   var tasks = (body.tasks || []).slice(0, 80).map(function (t) {
-    return {
+    var o = {
       id: str(t.id, 40), title: str(t.title, 80), category: str(t.category, 40), area: str(t.area, 60),
       fault: !!t.fault, dragWeeks: Math.max(0, Math.min(52, parseInt(t.dragWeeks, 10) || 0)),
       minutes: Math.max(15, Math.min(480, parseInt(t.minutes, 10) || 60))
     };
+    if (isFinite(+t.x) && isFinite(+t.y) && t.x !== undefined) { o.x = Math.round(+t.x); o.y = Math.round(+t.y); }
+    var h = t.history;
+    if (h && typeof h === 'object') {
+      o.history = { times: Math.max(0, Math.min(200, parseInt(h.times, 10) || 0)) };
+      if (h.usualDay) o.history.usualDay = str(h.usualDay, 10);
+      if (h.usualStart && /^\d{2}:\d{2}$/.test(String(h.usualStart))) o.history.usualStart = String(h.usualStart);
+      var uw = (h.usualWorkers || []).map(function (w) { return str(w, 3); }).filter(function (w) { return workers.indexOf(w) >= 0; });
+      if (uw.length) o.history.usualWorkers = uw;
+    }
+    return o;
   }).filter(function (t) { return t.id; });
   if (!days.length) return { ok: false, error: 'לא נבחרו ימים' };
   if (!tasks.length) return { ok: false, error: 'אין משימות לסידור' };
@@ -15241,28 +15263,35 @@ function gardenAiSchedule_(ss, body) {
     bufferMinutes: p.bufferMinutes === 15 ? 15 : 0
   };
   var note = str(body.note, 500).trim();
+  var multi = workers.length > 0;
 
   var rules = [
-    'אתה מתכנן את שבוע העבודה של גנן בשכונת מגורים. החזר JSON בלבד לפי הסכמה.',
+    'אתה מתכנן את שבוע העבודה של צוות גינון בשכונת מגורים. החזר JSON בלבד לפי הסכמה.',
     'כללים מחייבים:',
     '1. שבץ רק משימות מהרשימה, לפי ה-id שלהן, וכל משימה לכל היותר פעם אחת.',
-    '2. כל שיבוץ חייב להיכנס במלואו בתוך חלון "work" של אותו יום. חלונות "extra" (מחוץ לשעות העבודה) מותרים רק אם הטקסט החופשי של הגנן מתיר זאת במפורש.',
-    '3. אסור ששני שיבוצים יחפפו.' + (prefs.bufferMinutes ? ' השאר ' + prefs.bufferMinutes + ' דקות לפחות בין שיבוצים עוקבים.' : ''),
+    multi
+      ? '2. לכל שיבוץ "who" = עובד אחד או יותר מתוך ' + workers.join(', ') + ' (בדרך כלל אחד; שניים רק למשימה של 3 שעות ומעלה או אם הטקסט החופשי מבקש). השיבוץ חייב להיכנס במלואו בתוך חלון "work" של **כל** עובד שמשובץ, באותו יום (days[].byWorker). חלונות "extra" מותרים רק אם הטקסט החופשי מתיר זאת במפורש.'
+      : '2. כל שיבוץ חייב להיכנס במלואו בתוך חלון "work" של אותו יום. חלונות "extra" מותרים רק אם הטקסט החופשי מתיר זאת במפורש. "who" = רשימה ריקה.',
+    multi
+      ? '3. אסור שלאותו עובד יהיו שני שיבוצים חופפים. עובדים שונים יכולים לעבוד במקביל — נצל את זה כדי לחלק את העבודה ביניהם באופן מאוזן.' +
+        (prefs.bufferMinutes ? ' השאר ' + prefs.bufferMinutes + ' דקות לפחות בין שיבוצים עוקבים של אותו עובד.' : '')
+      : '3. אסור ששני שיבוצים יחפפו.' + (prefs.bufferMinutes ? ' השאר ' + prefs.bufferMinutes + ' דקות לפחות בין שיבוצים עוקבים.' : ''),
     '4. משך כל שיבוץ ("minutes") = ה-minutes של המשימה, אלא אם הטקסט החופשי אומר אחרת. כפולות של 15 דקות.',
     '5. "start" בפורמט HH:MM (24 שעות), כפולה של 15 דקות.',
     '6. משימה שלא נכנסת — ב-unplaced עם סיבה קצרה בעברית. אל תמציא זמן שאין.',
     'העדפות (לפי הסדר):',
+    '- "history" של משימה = איך היא סודרה בשבועות קודמים (usualDay, usualStart, usualWorkers). העדף לשמור על ההרגל — אותו יום, שעה קרובה ואותם עובדים — כי זה מה שהצוות אישר בעבר. חרוג ממנו רק אם הכללים, ההעדפות שלמטה או הטקסט החופשי מחייבים.',
     prefs.urgentFirst ? '- משימות עם dragWeeks גדול יותר (נגררו משבועות קודמים) — מוקדם ככל האפשר בשבוע.' : '- אין עדיפות מיוחדת למשימות שנגררו.',
     prefs.faults === 'first' ? '- משימות עם fault=true (תקלה שתושב דיווח) — ראשונות, בתחילת השבוע.'
       : prefs.faults === 'spread' ? '- משימות עם fault=true — לפזר על פני ימי השבוע, לא יותר מאחת-שתיים ביום, כדי שכל יום יטופל משהו לתושבים.'
       : '- משימות עם fault=true — כמו כל משימה אחרת.',
-    prefs.groupByArea ? '- לקבץ משימות באותו area לאותו יום וברצף, כדי לחסוך הליכה.' : '- אין צורך לקבץ לפי אזור.',
-    '- למלא את תחילת השבוע ואת תחילת כל יום לפני סופם, ולהשאיר את מה שנשאר פנוי בסוף.',
+    prefs.groupByArea ? '- לקבץ משימות באותו area לאותו יום ולאותו עובד, ברצף. בתוך יום של עובד — לסדר לפי מסלול הליכה קצר לפי x,y (נקודות קרובות ברצף).' : '- אין צורך לקבץ לפי אזור.',
+    '- למלא את תחילת השבוע ואת תחילת כל יום לפני סופם.',
     note ? 'הטקסט החופשי של הגנן גובר על ההעדפות (אך לא על הכללים המחייבים 1, 3, 5): "' + note + '"' : '',
-    'summary: עד שלושה משפטים קצרים בעברית שמסבירים את ההיגיון של הסידור (לא רשימת המשימות).'
+    'summary: עד שלושה משפטים קצרים בעברית שמסבירים את ההיגיון של הסידור (לא רשימת המשימות). אל תזכיר W1/W2 בשמם — כתוב "עובד 1", "עובד 2".'
   ].filter(String).join('\n');
 
-  var input = JSON.stringify({ days: days, tasks: tasks });
+  var input = JSON.stringify({ workers: workers, days: days, tasks: tasks });
   var payload = {
     contents: [{ parts: [{ text: rules + '\n\nנתונים:\n' + input }] }],
     generationConfig: {
@@ -15272,8 +15301,9 @@ function gardenAiSchedule_(ss, body) {
         type: 'OBJECT',
         properties: {
           plan: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
-            id: { type: 'STRING' }, date: { type: 'STRING' }, start: { type: 'STRING' }, minutes: { type: 'INTEGER' }
-          }, required: ['id', 'date', 'start', 'minutes'] } },
+            id: { type: 'STRING' }, date: { type: 'STRING' }, start: { type: 'STRING' }, minutes: { type: 'INTEGER' },
+            who: { type: 'ARRAY', items: { type: 'STRING' } }
+          }, required: ['id', 'date', 'start', 'minutes', 'who'] } },
           unplaced: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
             id: { type: 'STRING' }, reason: { type: 'STRING' }
           }, required: ['id', 'reason'] } },
@@ -15300,13 +15330,64 @@ function gardenAiSchedule_(ss, body) {
     var out = JSON.parse(text);
     return {
       ok: true,
-      plan: (out.plan || []).slice(0, 120),
+      plan: (out.plan || []).slice(0, 120).map(function (x) {
+        x = x || {};
+        return { id: str(x.id, 40), date: str(x.date, 10), start: str(x.start, 5), minutes: parseInt(x.minutes, 10) || 0,
+                 who: (x.who || []).map(function (w) { return str(w, 3); }).filter(function (w) { return workers.indexOf(w) >= 0; }) };
+      }),
       unplaced: (out.unplaced || []).slice(0, 120),
       summary: str(out.summary, 600)
     };
   } catch (e) {
     return { ok: false, error: 'שגיאה בסידור: ' + String(e) };
   }
+}
+
+/* ============================================================================
+ *  👷 צוות הגינון — מי אפשר לשבץ בסידור   (2026-09-24)
+ * ----------------------------------------------------------------------------
+ *  הצוות **אינו רשימה נפרדת לתחזק**: הוא משבצות ההתחברות בשורות המשתמש
+ *  החיצוני בטאב "תושבים" (סוג משתמש = חיצוני, סטטוס לא "עזב"), שיש להן
+ *  אימייל והרשאת גינון (כל משבצת = עובד אחד).
+ *  מחזיר { key: "<מזהה קבוע>:<משבצת>", name: <שם פרטי>, me }.
+ *  🔒 **השם לא נכנס ל-Firestore** — בסידור נשמר רק ה-key האטום. השם עובר
+ *     רק כאן, רק למי שיש לו הרשאת גינון (ACTION_PERMS), ורק שם פרטי.
+ *  ⚠️ קריאה בלבד — אינה נוגעת בגיליון. ACTION_DOMAIN: 'gardenAi'.
+ * ========================================================================== */
+function gardenCrew_(ss, body) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var v = sh.getDataRange().getValues();
+  if (v.length < 2) return { ok: true, crew: [] };
+  var hd = v[0].map(function (h) { return String(h).trim(); });
+  var emailCols = [], nameCols = [], permCols = [], idCol = -1, extCol = -1, statusCol = -1;
+  hd.forEach(function (h, i) {
+    if (h.indexOf(PERM_HEADER) !== -1) permCols.push(i);
+    else if (h.indexOf('שם פרטי') !== -1) nameCols.push(i);
+    else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
+    else if (h.indexOf(RESIDENT_ID_HEADER) !== -1) idCol = i;
+    else if (h.indexOf(EXTERNAL_HEADER) !== -1) extCol = i;
+    else if (h.indexOf('סטטוס') !== -1) statusCol = i;
+  });
+  if (idCol < 0 || extCol < 0) return { ok: true, crew: [] };
+  var me = normalizeEmail_(body && body._email);
+  var out = [];
+  for (var r = 1; r < v.length; r++) {
+    var row = v[r];
+    if (String(row[extCol]).trim() !== EXTERNAL_VALUE) continue;
+    if (statusCol > -1 && String(row[statusCol]).indexOf('עזב') !== -1) continue;
+    var rid = String(row[idCol]).trim();
+    if (!/^\d{1,6}$/.test(rid)) continue;
+    for (var c = 0; c < emailCols.length && c < 9; c++) {
+      var em = normalizeEmail_(row[emailCols[c]]);
+      if (!em) continue;
+      var perms = permCols[c] !== undefined ? String(row[permCols[c]] || '') : '';
+      if (perms.indexOf(PERM_GARDEN) === -1) continue;
+      var nm = nameCols[c] !== undefined ? String(row[nameCols[c]] || '').trim().split(/\s+/)[0] : '';
+      out.push({ key: rid + ':' + (c + 1), name: nm || ('עובד ' + (out.length + 1)), me: !!me && em === me });
+    }
+  }
+  return { ok: true, crew: out };
 }
 
 function gardenNotifyTask_(ss, body) {
