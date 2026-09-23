@@ -405,3 +405,196 @@
   .gw-ai-wait > svg { animation: none; }
   .gw-blk.is-flash, .gw-ghost.is-press, .gw-blk.is-skel { animation: none; }
 }
+
+/* ==========================================================================
+ *  ✂️ סבב 4 (25.9) — כלי עריכה, תצוגות, בחירה מרובה
+ *  שפה: iOS · מינימליסטי · זכוכית (.lg מ-liquid-glass.css). גוף זכוכית נפרד
+ *  לכל פקד; פעיל = מילוי כהה מלא; אין מסגרות אפורות.
+ * ========================================================================== */
+
+/* ---- שורת הכלים: עובד · תצוגה · ··· ---- */
+.gw-tb { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.gw-tb__sp { flex: 1; }
+.gw-tb__crew { height: 36px; flex: 0 1 auto; max-width: 40%; display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 10px 0 5px; border: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--text, #111827); }
+.gw-tb__crew .lg-ico { width: 26px; height: 26px; }
+.gw-tb__nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.gw-tb__crew > svg { width: 14px; height: 14px; flex: none; color: var(--text-muted, #9CA3AF); }
+.gw-tb__more { width: 36px; height: 36px; flex: none; border: 0; padding: 0; color: var(--text, #111827); }
+.gw-tb__more svg { width: 18px; height: 18px; }
+.gw-seg { flex: 1 1 auto; min-width: 0; height: 36px; display: flex; align-items: center; gap: 2px; padding: 3px; }
+.gw-seg button { flex: 1 1 auto; min-width: 30px; height: 30px; border: 0; background: none; border-radius: 999px;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-soft, #6B7280); cursor: pointer;
+  white-space: nowrap; padding: 0 7px; transition: background .18s ease, color .18s ease; font-variant-numeric: tabular-nums; }
+.gw-seg button.on { background: linear-gradient(165deg, #3A3833, var(--lg-on, #2B2924)); color: #FBFAF7;
+  box-shadow: 0 1px 2px rgba(16,24,40,.18); }
+.gw-seg button:active { transform: scale(.95); }
+
+/* רצועת הימים — חלון של 2/3 ימים כגלולה רציפה אחת */
+.gw-days button.on.is-first, .gw-days button.on.is-mid { box-shadow: -5px 0 0 var(--action, #111827); }
+.gw-days button.on.is-first { border-start-end-radius: 0; border-end-end-radius: 0; }
+.gw-days button.on.is-mid { border-radius: 0; }
+.gw-days button.on.is-last { border-start-start-radius: 0; border-end-start-radius: 0; }
+
+/* שורת הסטטוס במצב בחירה מרובה */
+.gw-todo.is-multi { background: rgba(255,255,255,.72); border-color: rgba(255,255,255,.8); }
+.gw-todo.is-multi .gw-todo__t { font-weight: 600; color: var(--text-soft, #6B7280); }
+
+/* ---- בלוק נבחר — מילוי בצבע הקטגוריה, כמו אירוע נבחר ביומן של אייפון ---- */
+.gw-blk.is-sel { background: var(--gk, #6E9F80); border-color: transparent; color: #fff; z-index: 5;
+  box-shadow: 0 10px 24px -8px rgba(16,24,40,.45); touch-action: none; }
+.gw-blk.is-sel b svg { color: #fff; }
+.gw-blk.is-sel em { color: rgba(255,255,255,.86); }
+.gw-blk.is-sel .gw-whos i { color: #fff; border-color: rgba(255,255,255,.75); background: transparent; }
+.gw-blk.is-sel::after { background: #fff !important; }
+.gw-blk.is-pdone { background: rgba(246,247,248,.9); border-inline-start-color: #B7BEC7; color: var(--text-soft, #6B7280); }
+.gw-blk.is-pdone b svg { color: var(--gs-ok, #0F6B45); }
+
+/* ידיות — עיגול לבן עם טבעת בצבע הקטגוריה; אזור מגע 30px סביבו */
+.gw-hdl { position: absolute; z-index: 7; width: 30px; height: 30px; margin-top: -15px; touch-action: none; cursor: ns-resize; }
+.gw-hdl::after { content: ""; position: absolute; left: 50%; top: 50%; width: 11px; height: 11px; margin: -6.5px 0 0 -6.5px;
+  border-radius: 50%; background: #fff; border: 2px solid var(--gk, #6E9F80); box-shadow: 0 1px 3px rgba(16,24,40,.3); }
+.gw-hdl.k-lawn  { --gk: var(--c-lawn); }  .gw-hdl.k-water { --gk: var(--c-water); }
+.gw-hdl.k-tree  { --gk: var(--c-tree); }  .gw-hdl.k-prune { --gk: var(--c-prune); }
+.gw-hdl.k-weed  { --gk: var(--c-weed); }  .gw-hdl.k-clean { --gk: var(--c-clean); }
+.gw-hdl.k-bed   { --gk: var(--c-bed); }
+
+/* קצוות גרירה בעכבר — שקופים, מתגלים בריחוף */
+.gw-edge { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .gw-edge { display: block; position: absolute; inset-inline: 0; height: 7px; z-index: 3; cursor: ns-resize; font-style: normal; }
+  .gw-edge.is-top { top: 0; } .gw-edge.is-bot { bottom: 0; }
+  .gw-edge::after { content: ""; position: absolute; left: 50%; width: 22px; height: 3px; margin-left: -11px; border-radius: 3px;
+    background: var(--gk, #6E9F80); opacity: 0; transition: opacity .15s; }
+  .gw-edge.is-top::after { top: 2px; } .gw-edge.is-bot::after { bottom: 2px; }
+  .gw-blk.is-ed:hover .gw-edge::after { opacity: .75; }
+  .gw-blk.is-ed { cursor: grab; }
+}
+
+/* גרירה חיה */
+.gw-host.is-dragging, .gw-host.is-dragging * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
+.gw-host.is-dragging .gw-blk:not(.is-drag) { pointer-events: none; }
+.gw-blk.is-drag { z-index: 9; transition: none; box-shadow: 0 16px 32px -10px rgba(16,24,40,.5); opacity: .97; }
+.gw-blk.is-bad { outline: 2px dashed #C0392B; outline-offset: 1px; }
+.gw-blk.is-limit { box-shadow: 0 0 0 2px rgba(192,57,43,.55), 0 16px 32px -10px rgba(16,24,40,.5); }
+.gw-dpill { position: absolute; top: 4px; inset-inline-end: 5px; z-index: 4; padding: 2px 7px; border-radius: 7px;
+  background: rgba(17,24,39,.86); color: #fff; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  white-space: nowrap; pointer-events: none; }
+
+/* בחירה מרובה — עיגול סימון כמו ב-iOS */
+.gw-check { position: absolute; top: 5px; inset-inline-end: 5px; width: 18px; height: 18px; border-radius: 50%; z-index: 3;
+  border: 1.5px solid rgba(17,24,39,.32); background: rgba(255,255,255,.88); display: grid; place-items: center; font-style: normal; }
+.gw-check svg { width: 12px; height: 12px; color: #fff; }
+.gw-blk.is-picked .gw-check { background: var(--gk, #111827); border-color: transparent; }
+.gw-blk.is-picked { outline: 2px solid var(--gk, #111827); outline-offset: 1px; }
+.gw-host.is-multi .gw-blk::after { display: none; }
+.gw-blk.is-short .gw-check { top: 50%; margin-top: -9px; }
+
+/* ---- 🫧 שכבה צפה בתחתית אזור הגלילה: "ביטול" + סרגל פעולות ---- */
+.gw-float { position: sticky; bottom: 12px; height: 0; z-index: 20; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; }
+.gw-float > * { pointer-events: auto; }
+.gw-bar { width: calc(100% - 20px); max-width: 460px; display: flex; align-items: center; gap: 2px; padding: 6px; border-radius: 22px; }
+.gw-bar__b { flex: 1 1 0; min-width: 0; min-height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; border: 0; background: none; border-radius: 15px; font: inherit; font-size: 11px; font-weight: 600;
+  color: var(--text, #111827); cursor: pointer; padding: 5px 2px; transition: background .15s, transform .15s; }
+.gw-bar__b span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-bar__b svg { width: 20px; height: 20px; }
+.gw-bar__b:hover { background: rgba(17,24,39,.06); }
+.gw-bar__b:active { transform: scale(.94); }
+.gw-bar__b:disabled { opacity: .35; cursor: default; }
+.gw-bar__b.is-dng { color: #C0392B; }
+.gw-bar__n { padding: 0 8px 0 10px; font-size: 13px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gw-bar__x { width: 34px; height: 34px; flex: none; border-radius: 50%; border: 0; background: rgba(17,24,39,.07);
+  color: var(--text-soft, #6B7280); display: grid; place-items: center; cursor: pointer; margin-inline-start: 2px; }
+.gw-bar__x svg { width: 15px; height: 15px; }
+.gw-toast { display: flex; align-items: center; gap: 10px; padding: 5px 5px 5px 14px; font-size: 13px; font-weight: 600;
+  max-width: calc(100% - 20px); transition: opacity .25s, transform .25s; }
+.gw-toast > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.gw-toast button { flex: none; display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(165deg, #3A3833, var(--lg-on, #2B2924)); color: #FBFAF7; font: inherit; font-size: 12.5px; padding: 6px 12px; }
+.gw-toast button svg { width: 14px; height: 14px; }
+.gw-toast.is-out { opacity: 0; transform: translateY(6px); }
+
+/* ---- תפריט צף (···, עובד) — תפריט הקשר של iOS ---- */
+.gw-pop, .gw-pop.lg { position: fixed; z-index: 1200; min-width: 212px; max-width: calc(100vw - 16px); padding: 6px; border-radius: 16px;
+  animation: gwPop .16s cubic-bezier(.2,.7,.2,1); transform-origin: top center; }
+@keyframes gwPop { from { opacity: 0; transform: scale(.94); } }
+.gw-pop button { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: none; border-radius: 10px;
+  padding: 10px 12px; font: inherit; font-size: 14.5px; text-align: start; color: var(--text, #111827); cursor: pointer; }
+.gw-pop button:hover, .gw-pop button:focus-visible { background: rgba(17,24,39,.06); outline: none; }
+.gw-pop button:disabled { opacity: .4; }
+.gw-pop button.on { font-weight: 700; }
+.gw-pop button.is-dng { color: #C0392B; }
+.gw-pop__t { flex: 1; min-width: 0; line-height: 1.25; }
+.gw-pop__t small { display: block; font-size: 11.5px; color: var(--text-soft, #6B7280); font-weight: 400;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-pop__i { flex: none; display: grid; color: var(--text-soft, #6B7280); }
+.gw-pop__i svg { width: 18px; height: 18px; }
+.gw-pop hr { border: 0; border-top: .5px solid rgba(17,24,39,.12); margin: 4px 10px; }
+
+/* ---- 🗺 מפת שבוע — פסים בלי טקסט ---- */
+.gw-grid.is-map { --gw-h: 22px; padding-bottom: 6px; }
+.gw-grid.is-map .gw-hd { cursor: pointer; padding: 6px 2px 5px; }
+.gw-grid.is-map .gw-hd b { font-size: 12.5px; }
+.gw-grid.is-map .gw-times span { font-size: 10px; transform: translateY(-6px); }
+.gw-grid.is-map .gw-col { cursor: pointer; }
+.gw-mapb { padding: 0; border: 0; border-radius: 5px; background: var(--gk, #6E9F80); opacity: .8; box-shadow: none; min-height: 4px; }
+.gw-mapb:hover { opacity: 1; box-shadow: none; }
+.gw-mapb.is-dim { opacity: .3; }
+.gw-sum { display: grid; grid-template-columns: var(--gw-tw) repeat(var(--cols, 6), minmax(0, 1fr)); row-gap: 3px;
+  padding: 8px 0 84px; border-top: .5px solid rgba(17,24,39,.1); font-size: 11.5px; text-align: center;
+  font-variant-numeric: tabular-nums; color: var(--text, #111827); }
+.gw-sum__w { color: var(--text-soft, #6B7280); font-weight: 700; }
+.gw-sum .is-over { color: #B45309; font-weight: 700; }
+
+/* ---- 📋 סדר יום ---- */
+.gw-scroll.gw-ag { background: none; border: 0; border-radius: 0; padding: 2px 1px 96px; }
+.gw-ag__day { margin-bottom: 16px; }
+.gw-ag__day h5 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 6px 7px; }
+.gw-ag__day h5 b { font-size: 14px; font-weight: 700; }
+.gw-ag__day h5 small { font-size: 12px; font-weight: 500; color: var(--text-soft, #6B7280); }
+.gw-ag__day.is-today h5 b { color: var(--gs-ok, #0F6B45); }
+.gw-ag__day.is-past { opacity: .62; }
+.gw-ag__card { border-radius: 16px; overflow: hidden; }
+.gw-ag__row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 0; background: none;
+  font: inherit; text-align: start; color: var(--text, #111827); cursor: pointer; }
+.gw-ag__row:active { background: rgba(17,24,39,.05); }
+.gw-ag__row + .gw-ag__row, .gw-ag__gap + .gw-ag__row, .gw-ag__row + .gw-ag__gap { border-top: .5px solid rgba(17,24,39,.09); }
+.gw-ag__tm { width: 42px; flex: none; text-align: center; font-weight: 700; font-size: 13px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.gw-ag__tm small { display: block; font-size: 11px; font-weight: 400; color: var(--text-muted, #9CA3AF); }
+.gw-ag__bar { width: 4px; align-self: stretch; border-radius: 4px; background: var(--gk, #6E9F80); flex: none; }
+.gw-ag__row.k-lawn  { --gk: var(--c-lawn); }  .gw-ag__row.k-water { --gk: var(--c-water); }
+.gw-ag__row.k-tree  { --gk: var(--c-tree); }  .gw-ag__row.k-prune { --gk: var(--c-prune); }
+.gw-ag__row.k-weed  { --gk: var(--c-weed); }  .gw-ag__row.k-clean { --gk: var(--c-clean); }
+.gw-ag__row.k-bed   { --gk: var(--c-bed); }
+.gw-ag__t { flex: 1; min-width: 0; line-height: 1.3; }
+.gw-ag__t b { display: block; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-ag__t small { display: block; font-size: 12px; color: var(--text-soft, #6B7280); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-ag__row .gw-whos { margin: 0; flex: none; }
+.gw-ag__row.is-closed .gw-ag__t b { color: var(--text-soft, #6B7280); text-decoration: line-through; text-decoration-color: rgba(17,24,39,.3); }
+.gw-ag__row.is-closed .gw-ag__bar { opacity: .35; }
+.gw-ag__row.is-skel { height: 46px; background: linear-gradient(90deg, rgba(243,244,246,.6), rgba(236,238,241,.9), rgba(243,244,246,.6));
+  background-size: 200% 100%; animation: gsSk 1.2s linear infinite; }
+.gw-ag__gap { display: flex; align-items: center; gap: 8px; padding: 5px 12px; font-size: 11.5px; color: var(--text-muted, #9CA3AF); }
+.gw-ag__gap span { flex: 1; border-top: 1px dashed rgba(17,24,39,.12); }
+.gw-ag__add { display: flex; align-items: center; gap: 6px; width: 100%; padding: 11px 12px; border: 0; background: none;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--gs-ok, #0F6B45); cursor: pointer; }
+.gw-ag__row + .gw-ag__add, .gw-ag__gap + .gw-ag__add { border-top: .5px solid rgba(17,24,39,.09); }
+.gw-ag__add svg { width: 15px; height: 15px; }
+.gw-ag__none { padding: 11px 12px; font-size: 13px; color: var(--text-muted, #9CA3AF); }
+
+/* 3 ימים — כותרות קצרות יותר */
+.gw-grid.is-dense .gw-hd b { font-size: 12px; }
+.gw-grid.is-dense .gw-blk em { font-size: 10.5px; }
+.gw-wait.is-ok { color: var(--gs-ok, #0F6B45); }
+.gw-clear-go { margin-top: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gw-pop { animation: none; }
+  .gw-seg button, .gw-toast, .gw-bar__b { transition: none; }
+}
+/* זכוכית צפה מעל תוכן צפוף (רשת שעות) — לבנה יותר, כמו תפריט הקשר של iOS;
+   בערכי ברירת המחדל הטקסט שמאחור נקרא דרכה. */
+.gw-pop.lg { --lg-w1: .9; --lg-w2: .82; --lg-blur: 28px; }
+.gw-bar.lg, .gw-toast.lg { --lg-w1: .86; --lg-w2: .74; --lg-blur: 24px; }

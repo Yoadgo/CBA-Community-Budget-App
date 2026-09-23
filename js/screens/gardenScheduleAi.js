@@ -36,7 +36,7 @@
 
   function defaults() {
     return { from: 7 * 60, to: 15 * 60, days: [0, 1, 2, 3, 4], urgent: true, faults: "first",
-             group: true, buffer: false, workers: null };
+             group: true, buffer: false, workers: null, spread: true };
   }
   function loadPrefs() {
     var p = lsGet(PREF_KEY) || {}, d = defaults();
@@ -108,10 +108,15 @@
       return String(a.category || "").localeCompare(String(b.category || ""), "he");
     });
     var load = {}; ws.forEach(function (w) { load[w] = 0; });
+    /* ⚖️ 25.9 — פיזור על כל הימים שנבחרו (ברירת מחדל). קודם: "הכי מוקדם
+       שנכנס" — ובשבוע עם שני עובדים הכול נדחס לראשון ושני. */
+    var dayLoad = {}; days.forEach(function (d) { dayLoad[d] = 0; });
+    function byLoad() { return days.slice().sort(function (a, b) { return dayLoad[a] - dayLoad[b] || (a < b ? -1 : 1); }); }
     var plan = [], unplaced = [], faultN = 0, gap = prefs.buffer ? 15 : 0, placedArea = {};
     list.forEach(function (t) {
       var dur = durs[t.id], p = prof[t.id];
-      var order = days.slice();
+      var early = (prefs.faults === "first" && isFault(t)) || (prefs.urgent && A.dragLevel(t, ctx) > 0);
+      var order = prefs.spread !== false && !early ? byLoad() : days.slice();
       if (prefs.faults === "spread" && isFault(t)) {
         var k = faultN++ % days.length;
         order = days.slice(k).concat(days.slice(0, k));
@@ -140,7 +145,7 @@
               iv[j][0] += dur + gap;
               if (iv[j][1] - iv[j][0] < 15) iv.splice(j, 1);
               if (t.area) placedArea[t.area] = order[i];
-              load[w] += dur;
+              load[w] += dur; dayLoad[order[i]] += dur;
               return;
             }
           }
@@ -149,6 +154,63 @@
       unplaced.push({ id: t.id, reason: "אין מספיק זמן פנוי בשעות העבודה" });
     });
     return { plan: plan, unplaced: unplaced, summary: "" };
+  }
+  /* לבדיקות */
+  CBA.gardenScheduleAiTest = { rebalance: function () { return rebalance.apply(null, arguments); }, planLocal: function () { return planLocal.apply(null, arguments); } };
+
+  /* ==========================================================================
+   *  ⚖️ איזון — "לפזר על כל הימים" לא נשאר בגדר בקשה (25.9)
+   * --------------------------------------------------------------------------
+   *  נבדק חי: גם עם הוראה ויעד מספרי, Gemini השאיר לפעמים יום ריק. כאן —
+   *  אחרי הבדיקה, לפני שהגנן רואה את ההצעה — מעבירים משימות מהיום העמוס
+   *  ליום הריק, עד שההפרש ביניהם קטן משעה. בלי לגעת בנגררות/תקלות שהוגדרו
+   *  "קודם", ורק לזמן פנוי אמיתי של אותו עובד בשעות העבודה.
+   * ========================================================================== */
+  function rebalance(A, ctx, items, days, prefs, byId) {
+    if (prefs.spread === false || days.length < 2 || items.length < 2) return items;
+    items = items.map(function (it) { var s = {}; for (var k in it.slot) s[k] = it.slot[k]; return { id: it.id, slot: s }; });
+    function load(d) { return items.reduce(function (m, it) { return m + (it.slot.date === d ? it.slot.dur : 0); }, 0); }
+    function early(it) {
+      var t = byId[it.id];
+      return !t || (prefs.faults === "first" && isFault(t)) || (prefs.urgent && A.dragLevel(t, ctx) > 0);
+    }
+    function others(it) { return items.filter(function (x) { return x !== it; }).map(function (x) { return x.slot; }); }
+    function fit(it, d) {
+      for (var a = prefs.from; a + it.slot.dur <= prefs.to; a += 15) {
+        if (d === A.todayDate() && a < A.nowMin()) continue;
+        if (A.isFree(ctx, d, a, it.slot.dur, null, it.slot.who || [], others(it))) return a;
+      }
+      return null;
+    }
+    var touched = {};
+    for (var guard = 0; guard < 60; guard++) {
+      var ls = days.map(function (d) { return { d: d, m: load(d) }; }).sort(function (a, b) { return a.m - b.m; });
+      var moved = false;
+      for (var hi = ls.length - 1; hi > 0 && !moved; hi--) {
+        for (var lo = 0; lo < hi && !moved; lo++) {
+          var gap = ls[hi].m - ls[lo].m;
+          if (gap <= 60) continue;
+          var cands = items.filter(function (it) { return it.slot.date === ls[hi].d && !early(it) && it.slot.dur < gap; })
+            .sort(function (a, b) { return Math.abs(a.slot.dur - gap / 2) - Math.abs(b.slot.dur - gap / 2); });
+          for (var c = 0; c < cands.length && !moved; c++) {
+            var a0 = fit(cands[c], ls[lo].d);
+            if (a0 != null) { touched[ls[hi].d] = touched[ls[lo].d] = 1; cands[c].slot.date = ls[lo].d; cands[c].slot.start = a0; moved = true; }
+          }
+        }
+      }
+      if (!moved) break;
+    }
+    /* ביום שממנו הוצאו משימות — לסגור את החורים שנוצרו (רק שם: ביום שלא
+       נגענו בו, השעות הן מה שה-AI בחר, אולי בכוונה). */
+    items.sort(function (a, b) { return a.slot.date.localeCompare(b.slot.date) || a.slot.start - b.slot.start; });
+    items.forEach(function (it) {
+      if (!touched[it.slot.date]) return;
+      for (var a = prefs.from; a < it.slot.start; a += 15) {
+        if (it.slot.date === A.todayDate() && a < A.nowMin()) continue;
+        if (A.isFree(ctx, it.slot.date, a, it.slot.dur, null, it.slot.who || [], others(it))) { it.slot.start = a; break; }
+      }
+    });
+    return items;
   }
 
   /* ==========================================================================
@@ -309,6 +371,7 @@
               '<span class="gw-ai-seg">' +
                 seg("faults", "first", "ראשונות") + seg("faults", "spread", "מפוזרות") + seg("faults", "normal", "רגיל") +
               '</span></div>' +
+            tog("spread", "לפזר על כל הימים", "עומס דומה בכל יום שנבחר — במקום למלא קודם את תחילת השבוע") +
             tog("group", "לקבץ לפי אזור ומסלול", "פחות הליכה — לפי האזור והמיקום במפה") +
             tog("buffer", "רבע שעה בין משימות", "זמן מעבר וסידור ציוד") +
           '</section>' +
@@ -397,7 +460,7 @@
       }
       var payload = {
         week: ctx.week, today: A.todayDate(),
-        prefs: { urgentFirst: !!prefs.urgent, faults: prefs.faults, groupByArea: !!prefs.group, bufferMinutes: prefs.buffer ? 15 : 0 },
+        prefs: { urgentFirst: !!prefs.urgent, faults: prefs.faults, groupByArea: !!prefs.group, bufferMinutes: prefs.buffer ? 15 : 0, spread: prefs.spread !== false },
         note: String(note || "").slice(0, 500),
         workers: ws.map(function (k) { return code[k]; }),
         days: days.map(function (d) {
@@ -430,6 +493,7 @@
         })
       };
       var done = false;
+      function byIdMap() { var o = {}; tasks.forEach(function (t) { o[String(t.id)] = t; }); return o; }
       var timer = setTimeout(function () { finish(null, "ה-AI לא ענה בזמן"); }, TIMEOUT_MS);
       function finish(res, err) {
         if (done) return; done = true; clearTimeout(timer);
@@ -439,6 +503,7 @@
         if (res && res.ok && res.plan) {
           res.plan.forEach(function (p) { p.who = (p.who || []).map(function (c) { return back[c]; }).filter(Boolean); });
           result = validate(A, ctx, res, tasks, durs, crewKeys);
+          result.plan = rebalance(A, ctx, result.plan, days, prefs, byIdMap());
         } else {
           mode = "local";
           result = validate(A, ctx, (function (lp) {
@@ -446,6 +511,7 @@
                        return { id: p.id, date: p.slot.date, start: A.hhmm(p.slot.start), minutes: p.slot.dur, who: p.slot.who || [] }; }),
                      unplaced: lp.unplaced };
           })(planLocal(A, ctx, tasks, days, prefs, durs, ws)), tasks, durs, crewKeys);
+          result.plan = rebalance(A, ctx, result.plan, days, prefs, byIdMap());
           result.why = err || (res && res.error) || "";
         }
         stepProposal(result, mode, false);

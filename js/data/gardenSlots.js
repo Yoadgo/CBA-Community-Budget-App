@@ -5,8 +5,20 @@
  *     הכרעת יועד (23.9): "שמירה על מסמך המשימה". אוסף נפרד היה מקום שני
  *     שצריך לסנכרן, ומשימה שנמחקה או נסגרה הייתה משאירה בלוק יתום.
  *
- *     slot = { date: "YYYY-MM-DD", start: דקות מחצות, dur: דקות }
+ *     slot = { date: "YYYY-MM-DD", start: דקות מחצות, dur: דקות,
+ *              who?: ["74:2"], act?: דקות בפועל, done?: true,
+ *              more?: [ { date, start, dur, who?, act?, done? }, … עד 2 ] }
  *     slot = null  →  "לא בסידור"
+ *
+ *  ✂️ 25.9 — **משימה בכמה ימים** (יועד: "צריך אולי לפצל משימה ליותר מיום
+ *     אחד, זאת אומרת המשך ביום אחר"). החלקים נשמרים **באותו שדה** — החלק
+ *     הראשון הוא slot עצמו, והמשכים ב-slot.more (עד שניים, שלושה חלקים
+ *     בסך הכול). כך הכתיבה נשארת אטומית (שדה אחד), הכלל נשאר אותו כלל,
+ *     וקוד שלא מכיר את `more` רואה פשוט את החלק הראשון.
+ *     🔑 החלקים **תמיד ממוינים כרונולוגית** (fromParts) — slot עצמו הוא
+ *     המוקדם, ולכן "יום רגיל"/"שעה רגילה" בפרופיל ממשיכים לעבוד.
+ *     `done` = החלק הזה הסתיים (הכרעת יועד: "בוצע" על חלק שאינו האחרון
+ *     מסמן רק אותו). המשימה עצמה נסגרת רק מהחלק האחרון, בדרך הרגילה.
  *
  *  🔴🔴 **הסידור שקוף לכל השאר.** (יועד, 23.9: "אין שום השפעה של הסידור
  *     השבועי על עמידה ביעדים, משימות נגררות וכאלה.")
@@ -35,8 +47,8 @@
   var DATE_RE   = /^\d{4}-\d{2}-\d{2}$/;
   var WHO_RE    = /^\d{1,6}:\d$/;          // מזהה-שורה:משבצת — אטום, בלי שם
 
-  function valid(s) {
-    if (s === null) return true;
+  var MAX_PARTS = 3;
+  function validPart(s) {
     if (!s || typeof s !== "object") return false;
     if (!DATE_RE.test(String(s.date || ""))) return false;
     var a = s.start, d = s.dur;
@@ -47,16 +59,47 @@
     if (s.who != null && !(s.who instanceof Array && s.who.length <= 6 &&
         s.who.every(function (k) { return WHO_RE.test(String(k)); }))) return false;
     if (s.act != null && !(typeof s.act === "number" && s.act % 1 === 0 && s.act >= 5 && s.act <= 720)) return false;
+    if (s.done != null && typeof s.done !== "boolean") return false;
     return true;
+  }
+  function valid(s) {
+    if (s === null) return true;
+    if (!validPart(s)) return false;
+    if (s.more == null) return true;
+    return s.more instanceof Array && s.more.length <= MAX_PARTS - 1 &&
+      s.more.every(function (p) { return validPart(p) && p.more == null; });
   }
 
   /* מה שנכתב בפועל — רק המפתחות שהכלל מכיר (`hasOnly`). who ריק / act ריק
      לא נכתבים בכלל, כדי שמסמך בלי עובדים ייראה בדיוק כמו לפני 24.9. */
-  function clean(s) {
-    if (s === null) return null;
+  function cleanPart(s) {
     var o = { date: String(s.date), start: Math.round(s.start), dur: Math.round(s.dur) };
     if (s.who && s.who.length) o.who = s.who.map(String);
     if (s.act != null) o.act = Math.round(s.act);
+    if (s.done === true) o.done = true;
+    return o;
+  }
+  function clean(s) {
+    if (s === null) return null;
+    var o = cleanPart(s);
+    if (s.more && s.more.length) o.more = s.more.map(cleanPart);
+    return o;
+  }
+
+  /* ✂️ החלקים כרשימה שטוחה (הראשון = slot עצמו), ובחזרה. */
+  function parts(s) {
+    if (!s) return [];
+    var a = [cleanPart(s)];
+    (s.more || []).forEach(function (p) { a.push(cleanPart(p)); });
+    return a;
+  }
+  function fromParts(list) {
+    var a = (list || []).filter(Boolean).map(cleanPart).sort(function (x, y) {
+      return x.date < y.date ? -1 : x.date > y.date ? 1 : x.start - y.start;
+    }).slice(0, MAX_PARTS);
+    if (!a.length) return null;
+    var o = a[0];
+    if (a.length > 1) o.more = a.slice(1);
     return o;
   }
 
@@ -128,7 +171,11 @@
   function norm(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
   /* 🔑 24.9 — משך **בפועל** גובר על המתוכנן כשיש. זה כל ההבדל בין הערכה
      שמשחזרת את מה שתכננו לבין הערכה שמתקרבת למציאות. */
-  function spent(r) { return (r.slot && r.slot.act) || (r.slot && r.slot.dur) || 0; }
+  function spent(r) {
+    /* ✂️ משימה שפוצלה — סך כל החלקים (זה הזמן שהמשימה לקחה, לא חלק ממנו). */
+    return parts(r.slot).reduce(function (sum, p) { return sum + (p.act || p.dur || 0); }, 0);
+  }
+  function hasAct(r) { return parts(r.slot).some(function (p) { return p.act; }); }
 
   /* ההיסטוריה של "אותה משימה" — מהספציפי לכללי. מחזיר { rows, src }. */
   function family(t, rows) {
@@ -162,10 +209,10 @@
         return w.length === who.length && who.every(function (k) { return w.indexOf(k) >= 0; });
       });
       if (mine.length >= 2) return { dur: median(mine.map(spent)), src: "worker", n: mine.length,
-                                     actual: mine.filter(function (r) { return r.slot.act; }).length };
+                                     actual: mine.filter(hasAct).length };
     }
     return { dur: median(pool.map(spent)), src: f.src, n: pool.length,
-             actual: pool.filter(function (r) { return r.slot.act; }).length };
+             actual: pool.filter(hasAct).length };
   }
   function estimateText(e) {
     if (!e) return "";
@@ -254,7 +301,8 @@
 
   CBA.gardenSlots = {
     DAY_START: DAY_START, DAY_END: DAY_END, STEP: STEP,
-    valid: valid, clean: clean, write: write,
+    MAX_PARTS: MAX_PARTS,
+    valid: valid, clean: clean, write: write, parts: parts, fromParts: fromParts,
     estimate: estimate, estimateText: estimateText, profile: profile,
     crew: crewCached, crewLoad: crewLoad, crewName: crewName
   };

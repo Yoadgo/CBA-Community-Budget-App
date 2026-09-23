@@ -747,18 +747,27 @@ service cloud.firestore {
      *  · משימה סגורה או "בדרך למחיקה" — לא.
      *  · 06:00–23:00, רבע שעה לפחות. זהה ל-DAY_START/DAY_END ב-gardenSlots.js.
      * ====================================================================== */
+    /* ✂️ GW-25.9:R7-parts — חלק אחד של שיבוץ. ks = המפתחות המותרים (לחלק
+       הראשון מותר גם 'more' — רשימת ההמשכים, עד שניים). done = החלק הסתיים. */
+    function gtPartOk(s, ks) {
+      return s is map &&
+             s.keys().hasOnly(ks) &&
+             s.keys().hasAll(['date', 'start', 'dur']) &&
+             s.date is string && s.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+             s.start is int && s.dur is int &&
+             s.start >= 360 && s.dur >= 15 && s.start + s.dur <= 1380 &&
+             /* 🗓 GW-24.9:R5-who — עובדים: רשימת מפתחות אטומים ("74:2"), בלי שמות.
+                act: כמה דקות זה לקח בפועל (נשאל ב"בוצע"). שניהם אופציונליים. */
+             s.get('who', []) is list && s.get('who', []).size() <= 6 &&
+             s.get('act', 60) is int && s.get('act', 60) >= 5 && s.get('act', 60) <= 720 &&
+             s.get('done', false) is bool;
+    }
     function gtSlotOk(s) {
       return s == null ||
-             (s is map &&
-              s.keys().hasOnly(['date', 'start', 'dur', 'who', 'act']) &&   /* GW-24.9:R6-keys */
-              s.keys().hasAll(['date', 'start', 'dur']) &&
-              s.date is string && s.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
-              s.start is int && s.dur is int &&
-              s.start >= 360 && s.dur >= 15 && s.start + s.dur <= 1380 &&
-              /* 🗓 GW-24.9:R5-who — עובדים: רשימת מפתחות אטומים ("74:2"), בלי שמות.
-                 act: כמה דקות זה לקח בפועל (נשאל ב"בוצע"). שניהם אופציונליים. */
-              s.get('who', []) is list && s.get('who', []).size() <= 6 &&
-              s.get('act', 60) is int && s.get('act', 60) >= 5 && s.get('act', 60) <= 720);
+             (gtPartOk(s, ['date', 'start', 'dur', 'who', 'act', 'done', 'more']) &&   /* GW-24.9:R6-keys */
+              s.get('more', []) is list && s.get('more', []).size() <= 2 &&
+              (s.get('more', []).size() < 1 || gtPartOk(s.more[0], ['date', 'start', 'dur', 'who', 'act', 'done'])) &&
+              (s.get('more', []).size() < 2 || gtPartOk(s.more[1], ['date', 'start', 'dur', 'who', 'act', 'done'])));
     }
     function gtSlotUpdateOk() {
       return hasPerm('גינון') &&
