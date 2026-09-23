@@ -1259,6 +1259,83 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "eventsList", year: year }, cb);
   }
+
+  /* ==========================================================================
+   *  לוח האירועים מ-Firestore   (2026-09-23)
+   * --------------------------------------------------------------------------
+   *  📊 `eventsList` ב-Apps Script קורא ארבעה יומנים: ~4–6 שניות. עמוד הבית
+   *  ומסך האירועים חיכו לזה בכל כניסה. המסמך `eventsCal/{year}` הוא מראה
+   *  (מודל א' — היומן הוא המקור), שנכתב ע"י Apps Script: בטריגר של היומן
+   *  (תוך דקה משינוי), בריצה השעתית, ובכל קריאה שנפלה לאחור.
+   *
+   *  🔑 **כאן, ורק כאן, נפילה לאחור שקטה היא הנכונה** — בניגוד ל-fsFirstRead.
+   *     שם הכלל נקבע כי מקור הנפילה (הגיליון) *מפגר* אחרי Firestore, ונפילה
+   *     שקטה הציגה נתונים ישנים. כאן ההפך: Apps Script קורא את **היומן עצמו**,
+   *     כלומר הנפילה טרייה לפחות כמו המראה. ובונוס — היא גם זורעת את המסמך
+   *     (handleGetEventsList_), כך שהכניסה הבאה כבר מהירה.
+   *
+   *  נופלים ל-Apps Script כשאין SDK · אין משתמש · הדגל `eventsFromFirestore`
+   *  כבוי · כלל דחה · המסמך חסר · המסמך ישן מ-EVENTS_STALE_MS (העבודה
+   *  השעתית נתקעה — "פער שהופך לנתון") · עבר EVENTS_FS_TIMEOUT_MS.
+   *  ⚠️ `events: []` במסמך קיים וטרי הוא תשובה תקינה (שנה בלי אירועים).
+   *  ⚠️ ימי הולדת לא נמצאים במסמך (מידע אישי) — ר' EVENTS_FS_SKIP בשרת.
+   *  📊 המדידה ב-`CBA.perf.events`.
+   * ======================================================================== */
+  var EVENTS_FROM_FIRESTORE = true;
+  var EVENTS_FS_TIMEOUT_MS = 8000;              // כולל טעינת SDK קר
+  var EVENTS_STALE_MS = 6 * 60 * 60 * 1000;     // שש שעות = שש ריצות שעתיות שנכשלו
+
+  function eventsDocAgeMs(doc) {
+    var u = doc && doc.updatedAt, ms = NaN;
+    try {
+      if (u && typeof u.toMillis === "function") ms = u.toMillis();
+      else if (u && typeof u.seconds === "number") ms = u.seconds * 1000;
+      else if (u instanceof Date) ms = u.getTime();
+      else if (u) ms = new Date(u).getTime();
+    } catch (e) {}
+    return isFinite(ms) ? Date.now() - ms : Infinity;
+  }
+
+  function getEventsFast(year, cb) {
+    cb = cb || function () {};
+    var t0 = Date.now(), settled = false, timer = null;
+    function note(source, why) {
+      try {
+        CBA.perf = CBA.perf || {};
+        CBA.perf.events = { source: source, ms: Date.now() - t0, why: why || "",
+                            year: year, at: new Date().toISOString() };
+      } catch (e) {}
+    }
+    function fallback(why) {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      getEventsList(year, function (res) { note("appsscript", why); cb(res); });
+    }
+    if (!EVENTS_FROM_FIRESTORE || !(CBA.fb && CBA.fb.readDoc && CBA.fb.ensureDb)) return fallback("disabled");
+    timer = setTimeout(function () { fallback("timeout"); }, EVENTS_FS_TIMEOUT_MS);
+    var ready = CBA.fb.userReady || CBA.fb.authReady;
+    ready.call(CBA.fb, function (user) {
+      if (settled) return;
+      if (!user) return fallback("no-user");
+      CBA.fb.ensureDb(function (dbErr) {
+        if (settled) return;
+        if (dbErr) return fallback("db");
+        /* הדגל נבדק אחרי ensureDb — לפני כן flag() מחזיר את ברירת המחדל שבקוד. */
+        if (CBA.fb.flag && !CBA.fb.flag("eventsFromFirestore", EVENTS_FROM_FIRESTORE)) return fallback("flag-off");
+        CBA.fb.readDoc("eventsCal", String(year), function (err, doc) {
+          if (settled) return;
+          if (err) return fallback("firestore:" + ((err && (err.code || err.message)) || "?"));
+          if (!doc || !Array.isArray(doc.events)) return fallback("missing");
+          if (eventsDocAgeMs(doc) > EVENTS_STALE_MS) return fallback("stale");
+          settled = true;
+          clearTimeout(timer);
+          note("firestore", "");
+          cb({ ok: true, events: doc.events, source: "firestore" });
+        });
+      });
+    });
+  }
   // גשר שם משפחה לטבלת ה-RSVP של מנהל (לא נשמר ב-Firestore בכלל, רק familyId).
   function getRsvpFamilyNames(ids, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
@@ -4746,6 +4823,7 @@ CBA.data = (function () {
     getClubMonth: getClubMonth,
     getMyClubReservations: getMyClubReservations,
     getEventsList: getEventsList,
+    getEventsFast: getEventsFast,
     getRsvpFamilyNames: getRsvpFamilyNames,
     cancelClubReservation: cancelClubReservation,
     getClubList: getClubList,

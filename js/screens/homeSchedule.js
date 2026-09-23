@@ -40,7 +40,9 @@ CBA.homeSchedule = (function () {
   var COMPACT_ROWS = 3;       // מובייל, תושב
   var LATER_N = 3;            // "בהמשך" — שלושה אחרי השבועיים
   var FEAT_DAYS = 60;         // "הבא בקהילה" — רק אם הוא בחודשיים הקרובים
-  var TTL = 15 * 60 * 1000;   // אחרי זה — מציירים מהמטמון ומרעננים ברקע
+  /* אחרי זה — מציירים מהמטמון ומרעננים ברקע. שתי דקות (היה 15) מאז שהלוח
+     נקרא מ-Firestore: קריאה של מסמך אחד, ~100ms, במקום ~5 שניות של Apps Script. */
+  var TTL = 2 * 60 * 1000;
   var LS_KEY = "cba_home_events_v1";
   var LS_MAX_AGE = 7 * DAY;   // מטמון ישן מזה לא מוצג בכלל
   var RSVP_TTL = 5 * 60 * 1000;
@@ -137,8 +139,10 @@ CBA.homeSchedule = (function () {
       }
       cbs.forEach(function (f) { try { f(res); } catch (e) { /* כרטיס שנעלם */ } });
     }
-    if (!(CBA.data && CBA.data.getEventsList)) { done({ ok: false, error: "מנוע הנתונים לא נטען" }); return; }
-    try { CBA.data.getEventsList(year, done); } catch (e) { done({ ok: false, error: String(e) }); }
+    /* Firestore קודם (eventsCal/{year}), ונפילה שקטה ל-Apps Script — ר' getEventsFast. */
+    var get = CBA.data && (CBA.data.getEventsFast || CBA.data.getEventsList);
+    if (!get) { done({ ok: false, error: "מנוע הנתונים לא נטען" }); return; }
+    try { get(year, done); } catch (e) { done({ ok: false, error: String(e) }); }
   }
   /* אילו שנים צריך: השנה, ובשוליים גם השכנה — שבוע שמתחיל בדצמבר, או
      "בהמשך" / "הבא בקהילה" שכבר בשנה הבאה. */

@@ -113,18 +113,20 @@ CBA.screens.events = (function () {
   /* ==========================================================================
    *  אירועי קהילה/תרבות/חגים/חופשות גנים — נתון אמיתי (2026-09-23)
    * --------------------------------------------------------------------------
-   *  מחובר ל-CBA.data.getEventsList (dataService.js) -> handleGetEventsList_
-   *  ב-Code.gs, שקורא מארבעת היומנים שב-EVENTS_CALENDARS.
+   *  מחובר ל-CBA.data.getEventsFast (dataService.js): קודם המסמך
+   *  `eventsCal/{year}` ב-Firestore, ובכל כשל — getEventsList ->
+   *  handleGetEventsList_ ב-Code.gs, שקורא מארבעת היומנים שב-EVENTS_CALENDARS.
    *  ⚠️ אין כאן עדיין ימי הולדת — זה תלוי ב-myProfile v2 (עדיין לא מוזג),
    *  ולכן לא מוצג שום אירוע דמדומה בקטגוריה הזו; היא פשוט ריקה עד אז.
    * ========================================================================== */
   function loadCommunityEvents(year, callback) {
-    if (!CBA.data || !CBA.data.getEventsList) {
+    var get = CBA.data && (CBA.data.getEventsFast || CBA.data.getEventsList);
+    if (!get) {
       state.allEvents = [];
       state.error = "מנוע הנתונים לא נטען.";
       return callback();
     }
-    CBA.data.getEventsList(year, function (res) {
+    get(year, function (res) {
       if (!res || !res.ok || !res.events) {
         state.allEvents = [];
         state.error = (res && res.error) || "לא הצלחנו לטעון את לוח האירועים.";
@@ -389,14 +391,20 @@ CBA.screens.events = (function () {
         '" data-date="' + current.toISOString() + '">' +
         '<span class="num">' + current.getDate() + '</span>';
 
-      dayHTML += dayEvents.slice(0, 2).map(function (e) {
+      /* 🔴 23.9 — גודל קבוע, אותו כלל של הלו"ז בעמוד הבית (בקשת יועד): לכל
+         היותר MAX_DAY שבבים, בשורה אחת כל אחד, ואז "+N נוספים". התא לא גדל
+         לפי התוכן (height ולא min-height ב-events.css). המספר נלקח מ-homeSchedule
+         כשהוא טעון — מקור אחד לשני המסכים. */
+      var MAX_DAY = (window.CBA && CBA.homeSchedule && CBA.homeSchedule.MAX_CHIPS) || 2;
+      dayHTML += dayEvents.slice(0, MAX_DAY).map(function (e) {
         var cat = CATEGORIES[e.category] || CATEGORIES.personal;
-        return '<div class="ev" style="background:var(' + cat.cssVar + '-tint)">' +
-          '<i style="background:var(' + cat.cssVar + ')"></i>' + esc(e.title) + '</div>';
+        return '<div class="ev" style="background:var(' + cat.cssVar + '-tint)" title="' + esc(e.title) + '">' +
+          '<i style="background:var(' + cat.cssVar + ')"></i><span class="t" dir="auto">' + esc(e.title) + '</span></div>';
       }).join("");
 
-      if (dayEvents.length > 2) {
-        dayHTML += '<div class="more">+' + (dayEvents.length - 2) + ' עוד</div>';
+      if (dayEvents.length > MAX_DAY) {
+        var extra = dayEvents.length - MAX_DAY;
+        dayHTML += '<div class="more">' + (extra === 1 ? "+1 נוסף" : "+" + extra + " נוספים") + '</div>';
       }
 
       dayHTML += '</div>';

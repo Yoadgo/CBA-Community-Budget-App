@@ -862,6 +862,25 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    /* ---------- לוח האירועים הקהילתי (2026-09-23) ---------- */
+
+    /* 🔑 **מעתיק בדיוק את `eventsList` בשרת.** שם הפעולה אינה ב-ACTION_PERMS,
+       כלומר `authorize_` עם need ריק — כל תושב פעיל. והשער החיצוני חוסם
+       משתמש חיצוני (הגנן) מכל פעולה שאינה גינון, ולכן גם מכאן.
+       ⚠️ `== false` ולא `!= true` — שדה חסר נכשל סגור.
+       🔴 המסמך `eventsCal/{year}` הוא מראה של יומני הקהילה (מודל א'). אין
+       בו מידע אישי: `birthdays` לעולם לא נכתב לכאן (EVENTS_FS_SKIP בשרת),
+       והשדות עוברים ברשימת היתר (eventsWriteFs_). */
+    function canSeeEvents() {
+      return isMember() && m().isExternal == false;
+    }
+
+    match /eventsCal/{year} {
+      allow read: if canSeeEvents();
+      /* הדפדפן לעולם אינו כותב — רק Apps Script, מהיומן. */
+      allow write: if false;
+    }
+
     /* ---------- מטא-התקציב לפי שנה (צעד 08א) ---------- */
 
     /* 🔑 **הכלל הזה מעתיק בדיוק את `seesBudget` שב-doGet.**

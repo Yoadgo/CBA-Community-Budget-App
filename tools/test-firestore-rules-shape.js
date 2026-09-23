@@ -208,7 +208,10 @@ const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks', 'gar
                 'pushSubscriptions',
                 /* 22.9 — מסמך מטא לקטגוריות השירותים, אותו דפוס בדיוק
                    כמו gardenMeta/lists. קריאה בלבד, אותו שער כמו services. */
-                'servicesMeta'];
+                'servicesMeta',
+                /* 23.9 — לוח האירועים, מסמך לשנה. מראה של היומן (מודל א'),
+                   קריאה בלבד, אותו שער כמו services. בלי ימי הולדת. */
+                'eventsCal'];
 const found = (CODE.match(/^\s*match \/([A-Za-z0-9_]+)\//gm) || [])
                 .map(function (x) { return x.trim().replace(/^match \//, '').replace(/\/$/, ''); })
                 .filter(function (x) { return x !== 'databases'; });
@@ -223,6 +226,15 @@ ok('⚠️ וכל מה שברשימה אכן קיים (רשימה שהתיישנ
    שהיה נותן לכל מנהל את כל חמש הספירות, בעוד
    ש-`handleHomeExtras_` בודק כל מקטע בנפרד.
    ====================================================================== */
+section('5ב2. לוח האירועים (23.9)');
+const ev = blockOf('/eventsCal/{year}');
+ok('הבלוק קיים', !!ev);
+ok('קריאה דרך פונקציה בעלת שם', /allow read: if canSeeEvents\(\);/.test(ev || ''));
+ok('🔴 וכתיבה אסורה לחלוטין — רק Apps Script, מהיומן', /allow write: if false;/.test(ev || ''));
+const fnE = (CODE.match(/function canSeeEvents\(\) \{[\s\S]*?\}/) || [''])[0];
+ok('🔴 isMember ולא signedIn', /isMember\(\)/.test(fnE) && !/signedIn\(\)/.test(fnE), fnE);
+ok('🔴 isExternal == false (נכשל-סגור) — eventsList חסום לחיצוני בשרת', /m\(\)\.isExternal == false/.test(fnE), fnE);
+
 section('5ג. 🔴 מוני עמוד הבית — מסמך לכל הרשאה');
 ok('הבלוק קיים ועובר דרך פונקציה בעלת שם',
    /match \/homeCounts\/\{id\}\s*\{\s*allow read: if canSeeHomeCount\(id\);/.test(CODE));

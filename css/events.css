@@ -298,9 +298,13 @@
   margin-bottom: 8px;
 }
 
+/* 🔴 23.9 — גובה קבוע (בקשת יועד: "להתקבע על גודל קבוע של לוח שנה שמתאים
+   לכמות ממוצעת של אירועים"). 122px מכילים מספר + שני שבבים + "+N נוספים" —
+   אותו כלל של homeSchedule.css. השבבים בשורה אחת עם שלוש נקודות, לא נשברים. */
 .day {
   position: relative;
-  min-height: 122px;
+  height: var(--ev-day-h, 122px);
+  box-sizing: border-box;
   border-radius: 11px;
   padding: 7px 8px;
   background: rgba(17,24,39,.018);
@@ -350,6 +354,8 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
+  min-width: 0;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--ev-text);
@@ -853,7 +859,7 @@
 
   .day {
     padding: 0.25rem;
-    min-height: 64px;
+    --ev-day-h: 64px;
   }
 }
 

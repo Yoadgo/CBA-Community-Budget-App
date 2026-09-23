@@ -38,6 +38,13 @@ var EVENTS_CALENDARS = {
   culture:   { id: 'c_b8f2bbdbd2c302d5f7e7752775ff98b46a30bdeec052a7273132e9e84580f2ad@group.calendar.google.com', he: 'אירועי תרבות' },
   breaks:    { id: 'c_5e5ef982e72a5534b748717ee597f06cfb5b9782e2f8fd0bbb3526ce68b11a7e@group.calendar.google.com', he: 'חופשות גנים' }
 };
+/* לוח האירועים ב-Firestore (2026-09-23) — מסמך לשנה, `eventsCal/{year}`.
+   מראה של היומנים למעלה (מודל א': היומן הוא המקור), כדי שעמוד הבית ומסך
+   האירועים לא יחכו ~5 שניות ל-Apps Script. ר' eventsWriteFs_.
+   🔴 `birthdays` לעולם לא נכתב ל-Firestore — שמות תושבים (כלל: מידע אישי
+      לא עובר ל-Firestore). כשיתווסף יומן ימי הולדת, הוא יוגש רק דרך Apps Script. */
+var FS_EVENTS = 'eventsCal';
+var EVENTS_FS_SKIP = { birthdays: true };
 
 // כותרת עמודת "מזהה קבוע" בטאב "תושבים" (2026-08-06). זהו המזהה היציב של המשפחה —
 // לא מספר הבית (שיכול להשתנות כשדיירים עוברים בין בתים) ולא שם המשפחה (יכול להיות
@@ -298,6 +305,8 @@ var GET_ACTION_PERMS = {
   homeCountsSync: PERM_SUPER,
   /* צעד 12 (16.9) — זריעת הסיור והשריונים. אותה סיבה. */
   homeSync: PERM_SUPER,
+  /* 23.9 — זריעת לוח האירועים ב-Firestore + התקנת טריגרי היומן. אותה סיבה. */
+  eventsSync: PERM_SUPER,
   /* דגלי זמן ריצה (2026-09-15, צעד 05א) — מדליקים ומכבים תחום
      בלי דיפלוי. שינוי התנהגות לכל המשתמשים — מנהל-על בלבד. */
   flagSet: PERM_SUPER, flagsGet: PERM_SUPER,
@@ -631,6 +640,10 @@ function doGet(e) {
     /* זריעת הסיור והשריונים (2026-09-16, צעד 12). */
     if (e && e.parameter && e.parameter.action === 'homeSync') {
       return handleHomeSync_(e.parameter);
+    }
+    /* זריעת לוח האירועים ב-Firestore (2026-09-23). */
+    if (e && e.parameter && e.parameter.action === 'eventsSync') {
+      return handleEventsSync_(e.parameter);
     }
     /* גשר הזהות ל-Firestore (2026-09-14). ר' handleFirebaseLink_. */
     if (e && e.parameter && e.parameter.action === 'firebaseLink') {
@@ -2123,30 +2136,134 @@ function clubClipEvents_(evs, backDays) {
 /* רשימת השריונים העתידיים (וקרוב-עבר, יום אחד אחורה) של התושב המחובר — לפי
  * המייל/שם המשפחה שסופקו, מוצלב מול התגיות שנשמרו על האירוע ביצירה. */
 /* לוח אירועים קהילתי (2026-09-23) — קורא מארבעת היומנים ב-EVENTS_CALENDARS לשנה
- * נתונה ומאחד אותם למערך אחד. פתוח לכל תושב פעיל ולא-חיצוני (לא ב-ACTION_PERMS). */
+ * נתונה ומאחד אותם למערך אחד. פתוח לכל תושב פעיל ולא-חיצוני (לא ב-ACTION_PERMS).
+ * 🔑 מקור יחיד לשני המסלולים — התשובה של eventsList והמסמך ב-Firestore נבנים
+ *    מאותה פונקציה, כדי שלא יהיו "שתי רשימות שלא מסכימות". */
+function eventsForYear_(year) {
+  var from = new Date(year, 0, 1);
+  var to = new Date(year, 11, 31, 23, 59, 59);
+  var events = [];
+  Object.keys(EVENTS_CALENDARS).forEach(function (catKey) {
+    var meta = EVENTS_CALENDARS[catKey];
+    var cal = CalendarApp.getCalendarById(meta.id);
+    if (!cal) return;
+    cal.getEvents(from, to).forEach(function (ev) {
+      events.push({
+        id: ev.getId(),
+        title: ev.getTitle(),
+        date: ev.getStartTime().toISOString(),
+        allDay: ev.isAllDayEvent(),
+        category: catKey,
+        description: ev.getDescription() || '',
+        location: ev.getLocation() || ''
+      });
+    });
+  });
+  return events;
+}
+
 function handleGetEventsList_(p) {
   try {
     var year = parseInt(p && p.year, 10) || new Date().getFullYear();
-    var from = new Date(year, 0, 1);
-    var to = new Date(year, 11, 31, 23, 59, 59);
-    var events = [];
-    Object.keys(EVENTS_CALENDARS).forEach(function (catKey) {
-      var meta = EVENTS_CALENDARS[catKey];
-      var cal = CalendarApp.getCalendarById(meta.id);
-      if (!cal) return;
-      cal.getEvents(from, to).forEach(function (ev) {
-        events.push({
-          id: ev.getId(),
-          title: ev.getTitle(),
-          date: ev.getStartTime().toISOString(),
-          allDay: ev.isAllDayEvent(),
-          category: catKey,
-          description: ev.getDescription() || '',
-          location: ev.getLocation() || ''
-        });
-      });
-    });
+    var events = eventsForYear_(year);
+    /* 🔴 23.9 — כל קריאה כאן היא דפדפן שנפל לאחור (המסמך חסר, או כלל/רשת
+       נכשלו). מנצלים את הרשימה שכבר חושבה כדי **לזרוע/לרענן** את המראה —
+       כך הזריעה הראשונה קורית מעצמה, בלי הרצה ידנית.
+       ⚠️ כשל בכתיבה לא מפיל את התשובה: המשתמש מקבל את האירועים בכל מקרה. */
+    try { eventsWriteFs_(year, events); } catch (e) { Logger.log('eventsWriteFs_ נכשל: ' + e); }
     return json_({ ok: true, events: events });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/* כותב את מסמך השנה. **רשימת היתר** של שדות, באורך מוגבל — ולא העתקה של
+   אובייקט האירוע כמו שהוא. אובייקט מלא ⇒ `fsSet_` (ר' ההערה ליד fsMerge_). */
+function eventsWriteFs_(year, events) {
+  var list = (events || []).filter(function (e) {
+    return e && !EVENTS_FS_SKIP[e.category];
+  }).map(function (e) {
+    return {
+      id: String(e.id || ''),
+      title: String(e.title || '').substring(0, 200),
+      date: String(e.date || ''),
+      allDay: !!e.allDay,
+      category: String(e.category || ''),
+      location: String(e.location || '').substring(0, 200),
+      description: String(e.description || '').substring(0, 1000)
+    };
+  });
+  fsSet_(FS_EVENTS + '/' + year, { year: year, events: list, count: list.length,
+                                   schema: 1, updatedAt: new Date() });
+  return list.length;
+}
+
+/* אילו שנים לסנכרן: השנה; מאוקטובר גם הבאה (עמוד הבית מסתכל 90 יום
+   קדימה — אותו חישוב של neededYears ב-homeSchedule.js); בינואר גם הקודמת
+   (השבוע הראשון מתחיל עוד בדצמבר). */
+function eventsSyncYears_(now) {
+  now = now || new Date();
+  var y = now.getFullYear(), years = [y];
+  if (now.getMonth() >= 9) years.push(y + 1);
+  if (now.getMonth() === 0) years.unshift(y - 1);
+  return years;
+}
+
+function eventsSyncAll_() {
+  var out = { ok: false, years: [], wrote: 0, error: '' };
+  try {
+    eventsSyncYears_().forEach(function (yr) {
+      out.wrote += eventsWriteFs_(yr, eventsForYear_(yr));
+      out.years.push(yr);
+    });
+    out.ok = true;
+  } catch (e) { out.error = String(e); }
+  return out;
+}
+
+/* ============================================================================
+ *  טריגר "אירוע השתנה ביומן" — הלוח בבית מתעדכן בתוך דקה, לא בעוד שעה
+ * ----------------------------------------------------------------------------
+ *  🔑 "פעם בשעה" הוא תסמין: מי שמשנה את הנתון צריך לכתוב אותו למקום שממנו
+ *     קוראים. אבל אירועים נערכים ב-Google Calendar עצמו, לא דרך האפליקציה —
+ *     ולכן היומן הוא שמודיע לנו, דרך טריגר. הריצה השעתית נשארת רשת ביטחון.
+ *  ⚠️ יומן החגים הוא יומן ציבורי של Google — אין עליו בעלות ואי אפשר להירשם
+ *     לשינויים בו, והוא משתנה פעם בשנה. הוא נכנס בריצה השעתית בלבד.
+ *  ⚠️ ההתקנה אידמפוטנטית ורצה מתוך העבודה השעתית — אין "הרצה ידנית מהעורך"
+ *     (בורר הפונקציות לא אמין, ר' נוהל הדיפלוי). */
+function eventsCalendarChanged(e) {
+  var r = eventsSyncAll_();
+  if (!r.ok) Logger.log('eventsCalendarChanged: ' + r.error);
+}
+
+function ensureEventsTriggers_() {
+  var out = { made: 0, errors: [] };
+  var have = {};
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'eventsCalendarChanged') have[t.getTriggerSourceId()] = true;
+  });
+  Object.keys(EVENTS_CALENDARS).forEach(function (k) {
+    if (k === 'holidays') return;
+    var id = EVENTS_CALENDARS[k].id;
+    if (have[id]) return;
+    try {
+      ScriptApp.newTrigger('eventsCalendarChanged').forUserCalendar(id).onEventUpdated().create();
+      out.made++;
+    } catch (err) { out.errors.push(k + ': ' + err); }
+  });
+  return out;
+}
+
+/* זריעה/בדיקה יזומה (מנהל-על) — אותה תבנית של homeCountsSync. */
+function handleEventsSync_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_SUPER);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var r = eventsSyncAll_();
+    var t = ensureEventsTriggers_();
+    return json_({ ok: r.ok, years: r.years, wrote: r.wrote, error: r.error,
+                   triggersMade: t.made, triggerErrors: t.errors });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -6137,6 +6254,19 @@ function hourlyJobsRun_() {
   } catch (e) {
     Logger.log('homeCountsSyncAll_ נכשל: ' + e);
   }
+  /* לוח האירועים (23.9) — רשת הביטחון של טריגר היומן, והמקום היחיד
+     שבו יומן החגים נכנס. ומתקין את טריגרי היומן אם חסרים. */
+  try {
+    var evs = eventsSyncAll_();
+    if (evs.error) Logger.log('eventsSyncAll_ נכשל: ' + evs.error);
+    var evt = ensureEventsTriggers_();
+    if (evt.made || evt.errors.length) {
+      Logger.log('טריגרי יומן האירועים: הותקנו ' + evt.made +
+                 (evt.errors.length ? ' | ' + evt.errors.join(' ; ') : ''));
+    }
+  } catch (e) {
+    Logger.log('סנכרון לוח האירועים נכשל: ' + e);
+  }
   /* 🔴🔴 **מימוש שבוע השגרה** (16.9). עד היום זה רץ במקום אחד
      בלבד — בתוך `handleGardenTasks_`, כלומר **רק כשמישהו פתח
      את מסך הניהול דרך Apps Script**. מרגע שהמסך קורא מ-Firestore
@@ -7196,6 +7326,12 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
         האפליקציה מפסיקה לקלוט נתונים חדשים עד רענון עמוד. מכבים רק אם
         מתברר שהשומר עצמו מנתק שמירות אמיתיות. */
   'writeWatchdog',
+  /* לוח האירועים (2026-09-23) — `eventsCal/{year}`, מראה של היומנים.
+     ברירת המחדל בלקוח `true` (EVENTS_FROM_FIRESTORE). כיבוי מחזיר את
+     הלוח ל-`eventsList`, שקורא את היומן עצמו — כלומר בלי שום אובדן
+     טריות. ⚠️ לא תלוי ב-`appsScriptFallback`: כאן הנפילה תמיד שקטה,
+     כי מקור הנפילה (היומן) טרי לפחות כמו המראה. */
+  'eventsFromFirestore',
   /* 🔴🔴 **מתג החירום של הנפילה לאחור** (2026-09-17, ממצא 02 — הכרעת יועד).
      כבוי כברירת מחדל, ובכוונה: מאז 17.9 כשל Firestore **אינו** מחזיר את
      המסך ל-Apps Script בשקט, אלא מציג "לא הצלחנו לטעון" עם "נסה שוב".

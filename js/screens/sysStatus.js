@@ -54,6 +54,9 @@ CBA.screens = CBA.screens || {};
     homeCountsFromFirestore:  ["מוני עמוד הבית", "תגיות הספירה בעמוד הבית נקראות ישירות מ-Firestore ומצוירות מיד, בלי לחכות ל-homeExtras.", false],
     tourFromFirestore:        ["כרטיס הסיור", "צעדי הסיור ו\"מה כבר ראיתי\" נקראים מ-Firestore במקום מ-Apps Script.", false],
     clubResvFromFirestore:    ["השריון הקרוב", "שורת השריון הקרוב בעמוד הבית נקראת מהמסמך של המשפחה ב-Firestore.", false],
+    /* 23.9 — ברירת מחדל true, כמו EVENTS_FROM_FIRESTORE ב-dataService. כיבוי
+       מחזיר את הלוח ל-Apps Script (היומן עצמו), בלי שום אובדן נתונים. */
+    eventsFromFirestore:      ["לוח האירועים", "לוח האירועים (בית + מסך האירועים) נקרא ממסמך השנה ב-Firestore, שמתעדכן מהיומן תוך דקה. כשל — נופל בשקט ל-Apps Script, שקורא את היומן ישירות.", true],
     /* ⚠️ ברירת המחדל כאן היא `true` ולא בגלל אופטימיות: `fsFirstRead`
        מקצרת על ברירת המחדל שבקוד לפני שהיא קוראת את הדגל החי,
        ולכן `false` היה הופך את המתג הזה לחסר השפעה לחלוטין. */
@@ -111,6 +114,10 @@ CBA.screens = CBA.screens || {};
        `all` פתוח לכל חבר פעיל ולכן `ok`; השריון תלוי במזהה משפחה
        ובכך שיש למשפחה בכלל שריון, ולכן `any`. */
     list.push({ key: "tour", label: "צעדי הסיור", c: "tourSteps", id: "all", expect: "ok" });
+    /* 23.9 — לוח האירועים. `ok`: פתוח לכל חבר פעיל שאינו חיצוני, והמסמך נזרע
+       מהיומן. "אין מסמך" כאן = הזריעה עוד לא רצה (eventsSync / הריצה השעתית). */
+    list.push({ key: "events", label: "לוח האירועים " + new Date().getFullYear(), c: "eventsCal",
+                id: String(new Date().getFullYear()), expect: "ok" });
     var fam = String(((window.CBA && CBA.user) || {}).familyId || "").trim();
     if (fam) list.push({ key: "resv", label: "השריון הקרוב שלי", c: "clubReservations", id: fam, expect: "any" });
     return list;

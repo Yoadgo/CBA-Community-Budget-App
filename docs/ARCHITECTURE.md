@@ -30,7 +30,7 @@
 ### עבר ל-Firestore
 `gardenPlan` + `gardenMeta` · `services` · `budgetYears` · `budgetTx` ·
 `counters` · `appConfig` (flags / rev / boot) · `gymStatus` · `gymCode` · `members` ·
-`homeCounts` · `clubReservations` · `tourSteps` · `tourSeen`
+`homeCounts` · `clubReservations` · `tourSteps` · `tourSeen` · `eventsCal`
 
 > **צעד 12 (16.9) — עמוד הבית יוצא מ-Apps Script.** אחרי המונים נשארו שני
 > דברים שהחזיקו את הקריאה: כרטיס הסיור והשריון הקרוב. `clubReservations`
@@ -51,14 +51,22 @@
 > ידנית בגיליון. ⚠️ אין לו גיבוי, במכוון — הכול נגזר מהגיליון
 > ונבנה מחדש כל שעה, בדיוק כמו `gymStatus`.
 
-> **⚠️ חריגה מודעת (23.9) — הלו"ז בעמוד הבית קורא `eventsList` מ-Apps Script.**
-> לוח האירועים יושב ב-Google Calendar, ואין לו עדיין מסמך ב-Firestore. כדי
-> שעמוד הבית לא יחכה לו (~5 שניות, נמדד): הכרטיס מצייר שלד ושאר העמוד
-> ממשיך; התשובה נשמרת בזיכרון וב-`localStorage` (`cba_home_events_v1`,
-> 15 דקות טריות), כך שציור חוזר — וכניסה הבאה — מציירים מיד ומרעננים ברקע.
-> **ימי הולדת לעולם לא נכתבים למטמון** (שמות תושבים). הצעד הבא, כשירצו
-> לסגור את החריגה: מסמך `eventsUpcoming` שטריגר שעתי בונה מהיומנים —
-> בדיוק כמו `homeCounts`. ר' `js/screens/homeSchedule.js`.
+> **`eventsCal` (23.9) — לוח האירועים. החריגה שנרשמה כאן בבוקר נסגרה באותו יום.**
+> מודל א': **Google Calendar הוא המקור**, `eventsCal/{year}` הוא מראה לקריאה —
+> מסמך לשנה, רשימת היתר של שבעה שדות (id, title, date, allDay, category,
+> location, description), באורך מוגבל. 🔴 **`birthdays` לעולם לא נכתב לכאן**
+> (שמות תושבים — `EVENTS_FS_SKIP` בשרת), וגם לא ל-`localStorage` בבית.
+> 🔑 **מי כותב:** טריגר `onEventUpdated` על שלושת יומני הקהילה
+> (`eventsCalendarChanged`, תוך דקה משינוי) · הריצה השעתית (רשת ביטחון, והמקום
+> היחיד של יומן החגים — יומן ציבורי של Google שאי אפשר להירשם אליו; היא גם
+> מתקינה את הטריגרים אם חסרים) · **וכל קריאת `eventsList`** — כלומר כל נפילה
+> לאחור זורעת את המסמך. זריעה יזומה: `?action=eventsSync` (מנהל-על).
+> ⚠️ **נפילה שקטה — בכוונה, בניגוד ל-`fsFirstRead`.** שם הכלל נקבע כי הגיליון
+> מפגר אחרי Firestore. כאן ההפך: `eventsList` קורא את היומן עצמו, כך שהנפילה
+> טרייה לפחות כמו המראה. נופלים גם כשהמסמך ישן משש שעות (`updatedAt`) —
+> "פער שהופך לנתון". דגל: `eventsFromFirestore` (ברירת מחדל `true`).
+> אין גיבוי, במכוון — הכול נגזר מהיומן, כמו `homeCounts`.
+> ר' `getEventsFast` ב-`js/data/dataService.js` ו-`eventsWriteFs_` ב-Code.gs.
 
 ### נשאר בגיליון — **ולמה בדיוק**
 הכלל של יועד: **מידע אישי לא עובר ל-Firestore.** אבל "יש עמודה אישית" אינו

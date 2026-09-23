@@ -158,7 +158,8 @@ ok('⚠️ ושניהם נושאים את אותה גרסה כמו השאר',
     pulseToFirestore:          ['js/app.js',              'PULSE_DEFAULT'],
     homeCountsFromFirestore:   ['js/data/dataService.js', 'HOME_COUNTS_FROM_FIRESTORE'],
     tourFromFirestore:         ['js/data/dataService.js', 'TOUR_FROM_FIRESTORE'],
-    clubResvFromFirestore:     ['js/data/dataService.js', 'CLUB_RESV_FROM_FIRESTORE']
+    clubResvFromFirestore:     ['js/data/dataService.js', 'CLUB_RESV_FROM_FIRESTORE'],
+    eventsFromFirestore:       ['js/data/dataService.js', 'EVENTS_FROM_FIRESTORE']
   };
   const declared = {};
   (SRC.match(/^    ([a-zA-Z]+):\s*\[[\s\S]*?\],?$/gm) || []).forEach(function (line) {
@@ -180,8 +181,9 @@ ok('⚠️ ושניהם נושאים את אותה גרסה כמו השאר',
      5 → 6 ב-16.9 עם `gardenReportsFromFirestore`. */
   /* (2026-09-17) שמונה ולא שבעה — נוסף writeWatchdog, שאינו מתג
      מיגרציה אלא מתג ביטול לרשת ביטחון, ולכן ברירת המחדל שלו דלוקה. */
-  ok('⚠️ ושמונה מהם דלוקים היום כברירת מחדל',
-     Object.keys(declared).filter(k => declared[k]).length === 8,
+  /* (2026-09-23) תשעה — נוסף eventsFromFirestore (לוח האירועים). */
+  ok('⚠️ ותשעה מהם דלוקים היום כברירת מחדל',
+     Object.keys(declared).filter(k => declared[k]).length === 9,
      String(Object.keys(declared).filter(k => declared[k]).length));
 
   /* =============================================================== */
