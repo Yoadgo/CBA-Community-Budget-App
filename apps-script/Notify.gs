@@ -1782,6 +1782,18 @@ function cxGemini_(prompt, schema) {
   }
 }
 
+/** מייל שחזר מה-AI בשורה אחת (קורה) — מחזירים ירידות שורה לפני תבליטים,
+ *  רשימות ({{רשימת…}}) והחתימה, כדי שלא יגיע גוש טקסט אחד. */
+function cxFixLines_(t) {
+  t = String(t || '');
+  if (t.indexOf('\n') !== -1) return t;
+  return t.replace(/\s*•\s*/g, '\n• ')
+          .replace(/\s*(\{\{רשימ[^}]*\}\}|\{\{משימות[^}]*\}\})\s*/g, '\n\n$1\n\n')
+          .replace(/\s*(בברכה|תודה,|שבוע טוב|ועד הקהילה)/, '\n\n$1')
+          .replace(/^(שלום[^,\n]*,)\s*/, '$1\n\n')
+          .replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function cxVarsIn_(t) {
   var out = [];
   String(t || '').replace(/\{\{([^}]+)\}\}/g, function (_, k) { k = k.trim(); if (out.indexOf(k) === -1) out.push(k); return ''; });
@@ -1833,7 +1845,7 @@ function notifyAiRewrite_(ss, body) {
   }
   var maxT = sec === 'push' ? 80 : 200, maxB = sec === 'push' ? 200 : 5000;
   return { ok: true, title: String(res.data.title || '').replace(/\s+/g, ' ').trim().substring(0, maxT),
-           text: (sec === 'push' ? String(res.data.text || '').replace(/\s+/g, ' ') : String(res.data.text || '')).trim().substring(0, maxB),
+           text: (sec === 'push' ? String(res.data.text || '').replace(/\s+/g, ' ') : cxFixLines_(res.data.text)).trim().substring(0, maxB),
            missing: missing, unknown: unknown };
 }
 
@@ -1857,6 +1869,7 @@ function notifyAiBuild_(ss, body) {
     Object.keys(CX_CAL_CATS).map(function (k) { return k + '=' + CX_CAL_CATS[k]; }).join(', ') +
     '; offset = כמה ימים לפני האירוע, 0 = ביום עצמו, מספר שלילי = אחרי). hour = שעה עגולה בין ' + CX_HOUR_MIN + ' ל-' + CX_HOUR_MAX + '.\n' +
     'משתנים שמותר לשלב בטקסט: בכל סוג — {{תאריך}} {{יום}}; ב-cal במקומם — {{שם האירוע}} {{תאריך}} {{מיקום}} {{ימים}}. אסור אחרים.\n' +
+    'בחירת תחום: לפי הנושא. תזכורת כללית לקהילה (פח, ניקיון, תשלומים כלליים, הודעות ועד) → oth אם קיים; אירועים → evt.\n' +
     'ערוצים: mail / push. אם לא צוין — push בלבד. לפוש: כותרת עד 45 תווים וטקסט עד 110. אם יש mail — נושא וגוף קצר שמתחיל ב"שלום," ונחתם "ועד הקהילה".\n' +
     'עברית טבעית, בלי אימוג\'ים, בלי להמציא פרטים שלא נאמרו.\n' +
     '🔴 אם הבקשה תלויה בפעולה שמישהו עושה באפליקציה ("כשמישהו משריין", "כשמגיע דיווח", "כשמשלמים") ולא בזמן או ביומן — ' +
@@ -2043,6 +2056,7 @@ function notifyAiSummary_(ss, body) {
     ' · אפשר גם {{תאריך}} {{יום}}. אסור משתנים אחרים.\n' +
     'פוש: pt = כותרת עד 40 תווים; pb = שורה עד 110 תווים שמציגה את המספרים החשובים (בלי רשימות). ' +
     'מייל: su = נושא עד 70 תווים; bo = גוף קצר: "שלום," · שורה לכל מספר בתבליט • · הרשימות אם יש · חתימה "ועד הקהילה".\n' +
+    'בגוף המייל חובה ירידות שורה (\\n): כל תבליט בשורה משלו, שורה ריקה לפני הרשימות ולפני החתימה.\n' +
     'עברית טבעית, ענייני ונעים, בלי אימוג\'ים, בלי להמציא עובדות.';
   var schema = { type: 'OBJECT', properties: { pt: { type: 'STRING' }, pb: { type: 'STRING' }, su: { type: 'STRING' }, bo: { type: 'STRING' } },
                  required: ['pt', 'pb', 'su', 'bo'] };
@@ -2053,5 +2067,5 @@ function notifyAiSummary_(ss, body) {
   var unknown = cxVarsIn_(all).filter(function (v) { return allowed.indexOf(v) === -1; });
   var missing = nums.filter(function (l) { return all.indexOf('{{' + l + '}}') === -1; });
   return { ok: true, pt: String(a.pt || '').substring(0, 80), pb: String(a.pb || '').replace(/\s+/g, ' ').substring(0, 200),
-           su: String(a.su || '').substring(0, 200), bo: String(a.bo || '').substring(0, 5000), unknown: unknown, missing: missing };
+           su: String(a.su || '').substring(0, 200), bo: cxFixLines_(a.bo).substring(0, 5000), unknown: unknown, missing: missing };
 }
