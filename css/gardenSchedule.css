@@ -638,10 +638,39 @@
 .gw-rule-ex { font-size: 12px; color: var(--text-soft, #6B7280); margin: 2px 2px 10px; line-height: 1.5; }
 /* בלוק צר (שניים באותה שעה) — השמות יורדים שורה במקום להיחתך */
 .gw-blk.is-narrow:not(.is-short) .gw-whos { flex-wrap: wrap; overflow: visible; }
-.gw-blk.is-narrow .gw-whos i { padding: 1px 5px; }
+.gw-blk.is-narrow .gw-whos i { padding: 1px 3px; border-color: transparent; background: rgba(255,255,255,.6); font-size: 10px; text-overflow: clip; }
+.gw-blk.is-narrow.is-sel .gw-whos i { background: rgba(255,255,255,.2); }
 .gw-grid.is-tight .gw-times span:first-child { transform: translateY(2px); }
 /* מסך נמוך (שעה < 34px): בלוק של שעה — כותרת ושמות בשורה אחת, כמו בלוק קצר */
 .gw-grid.is-tight .gw-blk.is-hr { flex-direction: row; align-items: center; gap: 6px; padding-block: 1px; }
 .gw-grid.is-tight .gw-blk.is-hr b { flex: 1; min-width: 0; }
 .gw-grid.is-tight .gw-blk.is-hr em { display: none; }
 .gw-grid.is-tight .gw-blk.is-hr .gw-whos { order: 0; flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; margin-top: 0; overflow: hidden; }
+
+/* 🏷 חיוויים על הבלוק — מקור התקלה, דגל חם, לאישור, נגררה (25.9) */
+.gw-flags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; min-width: 0; order: 2; }
+.gw-f { font-style: normal; font-size: 10px; font-weight: 700; line-height: 1; padding: 2px 6px; border-radius: 99px;
+  white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.gw-f.is-res  { background: rgba(140,74,99,.14);  color: var(--gt-res, #8C4A63); }
+.gw-f.is-team { background: rgba(91,123,200,.15); color: #3F5FA8; }
+.gw-f.is-gard { background: rgba(78,154,108,.16); color: #2F7A4E; }
+.gw-f.is-l1   { background: #FCE7F3; color: #9D174D; }
+.gw-f.is-l2, .gw-f.is-hot { background: #FBE0E1; color: #A32F3E; }
+.gw-f.is-pend { background: rgba(162,75,117,.12); color: var(--u1-t, #A24B75); }
+/* בלוק קצר — נקודות צבע בלבד (השם המלא ב-title) */
+.gw-flags.is-mini { flex-wrap: nowrap; flex: none; margin-top: 0; order: 0; gap: 3px; }
+.gw-flags.is-mini .gw-f { width: 7px; height: 7px; padding: 0; }
+.gw-flags.is-mini .gw-f.is-res  { background: var(--gt-res, #8C4A63); }
+.gw-flags.is-mini .gw-f.is-team { background: #5B7BC8; }
+.gw-flags.is-mini .gw-f.is-gard { background: #4E9A6C; }
+.gw-flags.is-mini .gw-f.is-l1   { background: var(--u1, #D98AAE); }
+.gw-flags.is-mini .gw-f.is-l2, .gw-flags.is-mini .gw-f.is-hot { background: var(--u2, #D46A6A); }
+.gw-flags.is-mini .gw-f.is-pend { background: var(--u1-t, #A24B75); }
+/* הנקודה הישנה בפינה (נגררה) מוחלפת בתווית */
+.gw-blk.is-u1::after, .gw-blk.is-u2::after { content: none; }
+/* בלוק נבחר (מלא בצבע) — התוויות לבנות */
+.gw-blk.is-sel .gw-f { background: rgba(255,255,255,.24); color: #fff; }
+.gw-blk.is-sel .gw-flags.is-mini .gw-f { background: #fff; }
+/* מסך נמוך, בלוק של שעה — בשורה אחת עם הכותרת */
+.gw-grid.is-tight .gw-blk.is-hr .gw-flags { order: 0; flex-wrap: nowrap; flex: 0 1 auto; margin-top: 0; min-width: 0; overflow: hidden; }
+.gw-ag__t .gw-flags { margin-top: 3px; }

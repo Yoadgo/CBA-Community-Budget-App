@@ -552,7 +552,8 @@
     var part = B.n > 1 ? " (" + (B.i + 1) + "/" + B.n + ")" : "";
     var title = (t.title || t.category || "משימה") + part;
     var label = title + ", " + hhmm(s.start) + " עד " + hhmm(s.start + s.dur) +
-      (t.area ? ", " + t.area : "") + (state ? ", " + state : "");
+      (t.area ? ", " + t.area : "") + (state ? ", " + state : "") +
+      flagsOf(t, ctx).map(function (x) { return ", " + x.title; }).join("");
     var html = '<button type="button" class="' + cls + '" data-gsid="' + esc(t.id) + '" data-bk="' + esc(B.key) + '" aria-label="' + esc(label) + '"' +
       (st.multi ? ' aria-pressed="' + picked + '"' : '') +
       ' style="top:calc(var(--gw-h) * ' + top + ' + 1px);height:calc(var(--gw-h) * ' + h + ' - 3px);' +
@@ -560,6 +561,7 @@
       '<b>' + (closed || pdone ? ctx.ico("check") : pend ? ctx.ico("clock") : ctx.ico(cat.ico)) +
         '<span>' + esc(title) + '</span></b>' +
       '<em>' + esc(hhmm(s.start) + "–" + hhmm(s.start + s.dur)) + (t.area ? " · " + esc(t.area) : "") + '</em>' +
+      flagsHtml(t, ctx, s.dur <= 30 || L.n > 1) +
       whoTags(whoOfB(B)) +
       /* 🖱 קצוות גרירה — רק בעכבר (ריחוף), ורק לבלוק שאפשר לערוך */
       (ed && !st.multi ? '<i class="gw-edge is-top" data-edge="top" aria-hidden="true"></i><i class="gw-edge is-bot" data-edge="bot" aria-hidden="true"></i>' : '') +
@@ -631,7 +633,8 @@
           '<span class="gw-ag__tm">' + hhmm(s.start) + '<small>' + hhmm(s.start + s.dur) + '</small></span>' +
           '<i class="gw-ag__bar"></i>' +
           '<span class="gw-ag__t"><b>' + esc((t.title || t.category || "משימה") + (B.n > 1 ? " (" + (B.i + 1) + "/" + B.n + ")" : "")) + '</b>' +
-            '<small>' + esc([t.area, closed ? (t.closure || "החלק הסתיים") : ""].filter(Boolean).join(" · ")) + '</small></span>' +
+            '<small>' + esc([t.area, closed ? (t.closure || "החלק הסתיים") : ""].filter(Boolean).join(" · ")) + '</small>' +
+            (closed ? "" : flagsHtml(t, ctx, false)) + '</span>' +
           whoTags(whoOfB(B)) + '</button>';
       });
       if (d >= today || !xs.length) {
@@ -689,6 +692,35 @@
     return pri ? { key: pri[0], ico: pri[1], label: String(pri[2]).replace(/\u200B/g, ""), raw: pri } : null;
   }
 
+  /* 🏷 חיוויים על הבלוק (25.9, יועד: "אין סימנים של דיווח דייר / מנהל גנן
+     וכאלה… גם משימה שנגררה") — אותה שפה כמו בכרטיס ברשימה:
+     מקור התקלה (בורדו = דייר, כחול = מנהל, ירוק = גנן), דגל "חם", ממתין
+     לאישור, ונגררה (ורוד שבוע, אדום שבועיים+). בבלוק קצר — נקודות צבע. */
+  var FLAG_HOT = { "דורש בדיקה חוזרת": 1, "הוחזר להשלמה": 1, "דורש בדיקה בשטח": 1 };
+  var SRC_LBL = { res: "דייר", team: "מנהל", gard: "גנן" };
+  function srcOf(t) {
+    if (!t || !(t.kind === "דיווח תושב" || t.repId)) return "";
+    return t.repId ? "res" : t.openedBy === "גנן" ? "gard" : "team";
+  }
+  function flagsOf(t, ctx) {
+    var out = [];
+    if (!t || t.closure) return out;
+    var s = srcOf(t);
+    if (s) out.push({ k: s, text: SRC_LBL[s], title: s === "res" ? "דיווח תושב" : "תקלה · " + SRC_LBL[s] });
+    var f = String(t.flag || "");
+    if (FLAG_HOT[f]) out.push({ k: "hot", text: f, title: f });
+    else if (f === "ממתין לאישור") out.push({ k: "pend", text: "לאישור", title: "בוצע · ממתין לאישור" });
+    var GL = CBA.gardenLang, d = (GL && GL.drag) ? GL.drag(t, ctx.thisWeek) : null;
+    if (d && d.level) out.push({ k: "l" + d.level, text: d.weeks > 1 ? "נגררה " + d.weeks + " ש׳" : "נגררה", title: d.text || "נגררה" });
+    return out;
+  }
+  function flagsHtml(t, ctx, mini) {
+    var fs = flagsOf(t, ctx);
+    if (!fs.length) return "";
+    return '<span class="gw-flags' + (mini ? " is-mini" : "") + '">' + fs.map(function (x) {
+      return '<i class="gw-f is-' + x.k + '" title="' + esc(x.title) + '">' + (mini ? "" : esc(x.text)) + '</i>';
+    }).join("") + '</span>';
+  }
   /* 👷 תוויות העובדים — מסגרת דקה עם השם (בקשת יועד). 🔴 25.9 (יועד: "צריך
      שהשם יופיע באופן מלא, לא רואה סיבה שיקוצר לאות אחת") — תמיד השם המלא;
      בבלוק צר הוא נחתך בסוף (…) ולא מוחלף באות. מפתח שאינו בצוות לא מוצג. */
@@ -842,9 +874,13 @@
   /* ==========================================================================
    *  מחוות
    * ========================================================================== */
+  /* ⚠️ zoom על ה-body (הגדרת גודל טקסט באפליקציה): מיקום העכבר והמלבנים
+     מוגדלים, אבל גובה השעה (--gw-h) נמדד לפני ההגדלה. בלי החלוקה הרחף
+     "ברח" חצי שעה למטה בשעות הערב (נצפה חי, 25.9). */
+  function zoomOf(el) { var r = el.getBoundingClientRect(); return el.offsetHeight ? (r.height / el.offsetHeight) || 1 : 1; }
   function minuteAt(col, clientY) {
     var H = gridH(col);
-    var y = clientY - col.getBoundingClientRect().top;
+    var y = (clientY - col.getBoundingClientRect().top) / zoomOf(col);
     var m = D0() + Math.floor(y / H * 2) * 30;
     return Math.max(D0(), Math.min(D1() - 30, m));
   }
@@ -1060,7 +1096,7 @@
    *  עובדים. רק בשחרור נשמר — ואז "ביטול" בבועה למטה.
    *  ⚠️ מאזינים על window: אצבע שיוצאת מהבלוק עדיין גוררת אותו.
    * ========================================================================== */
-  function contentY(sc, clientY) { return clientY - sc.getBoundingClientRect().top + sc.scrollTop; }
+  function contentY(sc, clientY) { return (clientY - sc.getBoundingClientRect().top) / zoomOf(sc) + sc.scrollTop; }
   function autoScroll(sc, clientY) {
     var r = sc.getBoundingClientRect();
     if (clientY < r.top + 40) sc.scrollTop -= 10;
