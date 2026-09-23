@@ -955,6 +955,12 @@ CBA.screens.events = (function () {
         }, function (err) {
           toggleBtn.disabled = false;
           if (err) { toggleBtn.textContent = "שגיאה — נסו שוב"; return; }
+          /* 23.9 — מרכז ההתראות: "נפתח אישור הגעה" לכל התושבים, לפי הטבלה.
+             שגר-ושכח. השרת בודק בעצמו שהמעקב באמת פתוח, ושולח פעם אחת
+             לכל אירוע (פתיחה-סגירה-פתיחה לא שולחת שוב). */
+          if (wantOpen) {
+            try { CBA.sheets.postRead("notifyRsvpOpened", { eventId: ctx.event.id }, function () {}); } catch (e) {}
+          }
           ctx.config = ctx.config || {};
           ctx.config.enabled = wantOpen;
           state.rsvpEnabledIds[ctx.event.id] = wantOpen || undefined;

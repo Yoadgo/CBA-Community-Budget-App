@@ -153,6 +153,15 @@ var ACTION_PERMS = {
   // ניהול מיילים (שלב 1, 2026-08-18) — פתוח לכל מנהל (הרשאה כלשהי), הבדיקה
   // המדויקת של "תחום" השורה הספציפית נעשית בתוך saveEmailSetting_ עצמה.
   saveEmailSetting: PERM_ANY_ADMIN,
+  // מרכז ההתראות (23.9) — תא בטבלה: כל מנהל, והבדיקה לפי התחום בתוך
+  // saveNotifyCell_. הגדרות כלליות — מנהל-על בלבד.
+  saveNotifyCell: PERM_ANY_ADMIN, saveNotifyGlobal: PERM_SUPER,
+  notifyRsvpOpened: PERM_ANY_ADMIN,
+  /* 🔴 23.9 — תיקון דחוף 3: המייל על פעולת הגנן. בלי השורה הזו
+     `authorize_` דחה את הגנן החיצוני, וכל מייל על פעולה שלו חיכה
+     לסריקה השעתית (ולפעמים שעתיים). PERM_GARDEN הוא הדרישה היחידה
+     שהגנן עובר (ר' authorize_). */
+  gardenNotifyTask: PERM_GARDEN,
   // Push notifications (16.9.26) — כל תושב מחובר יכול לנהל את המנוי שלו.
   savePushSubscription: null, removePushSubscription: null,
   // "שירותים לתושב" (2026-08-18) — אותו היגיון בדיוק כמו עץ הוועד: הקריאה
@@ -277,6 +286,7 @@ var GET_ACTION_PERMS = {
   clubList: PERM_CLUB, approveClubReservation: PERM_CLUB,
   rejectClubReservation: PERM_CLUB, approveClubReservations: PERM_CLUB,
   residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN, rsvpFamilyNames: PERM_CULTURE,   /* 23.9 — היה PERM_ANY_ADMIN */
+  listNotifySettings: PERM_ANY_ADMIN,
   gardenStats: PERM_GARDEN, gardenTaskLog: PERM_GARDEN,
   gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
   /* גיבוי Firestore ← גיליון (2026-09-15, צעד 07א) — מנהל-על בלבד. */
@@ -825,6 +835,10 @@ function doGet(e) {
     // getResidents; הכתיבה (saveEmailSetting) עוברת ב-doPost הרגיל, ר' ACTION_PERMS.
     if (e && e.parameter && e.parameter.action === 'listEmailSettings') {
       return handleListEmailSettings_(e.parameter);
+    }
+    // מסך "ניהול התראות" (23.9) — מחליף את "ניהול מיילים". קריאה בלבד.
+    if (e && e.parameter && e.parameter.action === 'listNotifySettings') {
+      return handleListNotifySettings_(e.parameter);
     }
     // "שירותים לתושב" (2026-08-18) — קריאה פתוחה לכל תושב מחובר ופעיל, בדיוק
     // כמו committeeTree. מחזירה את שני הטאבים (כרטיסים + סעיפים) בקריאה אחת.
@@ -1450,16 +1464,60 @@ function removePushSubscription_(ss, body) {
  *  ערוץ משני, כשל בו לא עוצר את הפעולה שקראה לו (מייל/כתיבה). שאילתת
  *  שוויון-יחיד על familyId — לא דורשת אינדקס מורכב, ר' cba-hybrid-architecture. */
 function sendPush_(familyId, title, body, data) {
+  var sent = 0;
   try {
-    if (!familyId) return;
-    var subs = fsQuery_('pushSubscriptions', 'familyId', 'EQUAL', String(familyId), 20);
+    if (!familyId) return 0;
+    var subs = pushSubsForFamily_(familyId);
+    /* FCM דורש שכל ערך ב-data יהיה מחרוזת. */
+    var d = {};
+    Object.keys(data || {}).forEach(function (k) { d[k] = String(data[k] == null ? '' : data[k]); });
     (subs || []).forEach(function (doc) {
       var token = doc && doc.data && doc.data.token;
       if (!token) return;
-      var ok = fcmSendToToken_(token, title, body, data || {});
-      if (!ok) { try { fsDelete_('pushSubscriptions/' + doc.id); } catch (e2) {} } // טוקן מת — ניקוי
+      var ok = fcmSendToToken_(token, title, body, d);
+      if (ok) sent++;
+      else { try { fsDelete_('pushSubscriptions/' + doc.id); } catch (e2) {} } // טוקן מת — ניקוי
     });
   } catch (e) { /* Push הוא ערוץ משני */ }
+  return sent;
+}
+
+/** המכשיר של אדם אחד (מסמך pushSubscriptions/{uid}), או null. */
+var PUSH_UID_MEMO_ = {};
+function pushSubForUid_(uid) {
+  var k = String(uid || '');
+  if (!k) return null;
+  if (k in PUSH_UID_MEMO_) return PUSH_UID_MEMO_[k];
+  var doc = fsGet_('pushSubscriptions/' + k);
+  PUSH_UID_MEMO_[k] = (doc && doc.token) ? doc : null;
+  return PUSH_UID_MEMO_[k];
+}
+
+/** פוש לאדם אחד (לפי uid) — למנהלים ולגנן, כדי שהודעת ניהול עם שם
+ *  של תושב לא תגיע לטלפון של בן/בת הזוג של המנהל. */
+function sendPushUid_(uid, title, body, data) {
+  try {
+    var sub = pushSubForUid_(uid);
+    if (!sub) return 0;
+    var d = {};
+    Object.keys(data || {}).forEach(function (k) { d[k] = String(data[k] == null ? '' : data[k]); });
+    if (fcmSendToToken_(sub.token, title, body, d)) return 1;
+    try { fsDelete_('pushSubscriptions/' + uid); } catch (e2) {}
+    PUSH_UID_MEMO_[String(uid)] = null;
+  } catch (e) { /* Push הוא ערוץ משני */ }
+  return 0;
+}
+
+/** המכשירים של משפחה (מסמכי pushSubscriptions). זיכרון לריצה אחת —
+ *  מרכז ההתראות שואל "יש לו פוש?" ואז שולח, בלי שתי שאילתות. */
+var PUSH_SUBS_MEMO_ = {};
+function pushSubsForFamily_(familyId) {
+  var k = String(familyId || '');
+  if (!k) return [];
+  if (PUSH_SUBS_MEMO_[k]) return PUSH_SUBS_MEMO_[k];
+  var subs = fsQuery_('pushSubscriptions', 'familyId', 'EQUAL', k, 20) || [];
+  PUSH_SUBS_MEMO_[k] = subs;
+  return subs;
 }
 
 /** שולח Push לכל המנהלים שמחזיקים permKey (או מנהל-על) — נוסף 16.9.26.
@@ -1535,7 +1593,11 @@ function doPost(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     // שער ההרשאות (2026-08-07): מושב חתום -> הרשאות מהגיליון -> בדיקה מול הפעולה.
     // סיסמת מנהל נשארת כמסלול חירום. ר' authorize_ בראש הקובץ.
-    var gate = authorize_(ss, body, ACTION_PERMS[body.action]);
+    /* 23.9 — גם הגנן החיצוני מנהל את מנוי ההתראות **שלו** (אחרת אף פוש
+       של "הוחזר אליך" / "העבודה שלך השבוע" לא היה מגיע אליו). שתי
+       הפעולות מאמתות idToken מול גוגל ונוגעות רק במסמך של המשתמש. */
+    var extOk = body && (body.action === 'savePushSubscription' || body.action === 'removePushSubscription');
+    var gate = authorize_(ss, body, ACTION_PERMS[body.action], extOk);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     body._email = gate.email;
     body._perm = gate.perm;
@@ -1614,6 +1676,10 @@ function doPostDispatch_(ss, body) {
       case 'createResidents':   return json_(createResidents_(ss, body));
       case 'scanReceipt':       return json_(handleScanReceipt_(ss, body));
       case 'saveEmailSetting':  return json_(saveEmailSetting_(ss, body));
+      case 'saveNotifyCell':    return json_(saveNotifyCell_(ss, body));
+      case 'saveNotifyGlobal':  return json_(saveNotifyGlobal_(ss, body));
+      case 'notifyRsvpOpened':  return json_(notifyRsvpOpened_(ss, body));
+      case 'notifyServiceRecommend': return json_(notifyServiceRecommend_(ss, body));
       case 'markTourSeen':      return json_(markTourSeen_(ss, body));
       case 'saveMyProfile':        return json_(saveMyProfile_(ss, body));
       case 'submitProfileChange':  return json_(submitProfileChange_(ss, body));
@@ -1798,8 +1864,8 @@ function saveTransactionRow_(ss, body) {
         sendResidentTemplate_(ss, STATUS_EMAIL_KEY_[newStatus], famEmails2, {
           'שם': rowObj['רוכש'] || '', 'סכום': Math.round(Number(rowObj['סכום']) || 0),
           'מזהה': rowObj['מזהה'], 'הערה': rowObj['הערת בדיקה'] ? ('\nהערה: ' + rowObj['הערת בדיקה']) : ''
-        });
-        sendPush_(rowObj['מזהה משפחה'], 'עדכון בקשת החזר', 'הסטטוס של הבקשה שלך השתנה', { type: 'reimbursement' });
+        }, { familyId: rowObj['מזהה משפחה'] });
+        /* הפוש יוצא עכשיו ממרכז ההתראות (טבלת "תקציב"), עם טקסט משלו. */
       }
     } catch (mailErr) { Logger.log('מייל עדכון סטטוס נכשל: ' + mailErr); }
   } else {
@@ -2059,6 +2125,12 @@ function handleReserveClub_(p) {
       // נכשלת בשקט (ReferenceError, נבלע ע"י ה-try/catch) ואף מייל לא נשלח.
       // זה קרוב לוודאי הגורם למה שיועד דיווח ("שריון מועדון לא שלח מייל").
       var ssForMail = SpreadsheetApp.getActiveSpreadsheet();
+      /* 23.9 — אישור קבלה לתושב (מרכז ההתראות: "בקשת שריון"). */
+      sendResidentTemplate_(ssForMail, 'CLUB_RECEIVED', who.email ? [who.email] : [], {
+        'שם': who.famName || 'תושב',
+        'תאריך': Utilities.formatDate(startDt, Session.getScriptTimeZone(), 'dd/MM/yyyy'),
+        'שעה': p.start + '–' + p.end
+      });
       notifyAdmins_(ssForMail, PERM_CLUB, 'ADMIN_NEW_CLUB', {
         'שם': who.famName || who.email || 'תושב',
         'תאריך': Utilities.formatDate(startDt, Session.getScriptTimeZone(), 'dd/MM/yyyy'),
@@ -2447,7 +2519,6 @@ function approveOneClubEvent_(ss, cal, id) {
       'תאריך': Utilities.formatDate(ev.getStartTime(), tz1, 'dd/MM/yyyy'),
       'שעה': Utilities.formatDate(ev.getStartTime(), tz1, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz1, 'HH:mm')
     });
-    sendPush_((permissionsFor_(evEmail) || {}).familyId, 'השריון אושר', 'שריון המועדון שלך אושר', { type: 'club' });
   } catch (mailErr) { Logger.log('מייל אישור שריון נכשל: ' + mailErr); }
   /* 🔴 הליבה המשותפת לאישור בודד ולאישור מרובה — ולכן הרענון כאן
      מכסה את שני המסלולים בלי לשכפל. */
@@ -2508,7 +2579,6 @@ function handleRejectClubReservation_(p) {
       sendResidentTemplate_(ss, 'CLUB_REJECTED', rejEmail ? [rejEmail] : [], {
         'שם': rejFamily, 'תאריך': rejStartStr, 'שעה': rejTimeStr
       });
-      sendPush_((permissionsFor_(rejEmail) || {}).familyId, 'השריון נדחה', 'שריון המועדון שלך נדחה', { type: 'club' });
     } catch (mailErr) { Logger.log('מייל דחיית שריון נכשל: ' + mailErr); }
     return json_({ ok: true });
   } catch (err) {
@@ -3695,7 +3765,10 @@ var ACTION_DOMAIN = {
   /* ההיפוך (16.9) — שתיהן אינן נוגעות בגיליון: 'other' היה מבטל
      את מטמון המטען של כל המשתמשים בכל תמונה ובכל מייל. */
   gardenPhotoOne: 'gardenPhoto', gardenNotifyReport: 'gardenMail',
-  gardenNotifyTask: 'gardenMail', gardenFeedbackNotify: 'gardenMail'
+  gardenNotifyTask: 'gardenMail', gardenFeedbackNotify: 'gardenMail',
+  /* 23.9 — מרכז ההתראות: אינן נוגעות בנתוני המטען הראשי. */
+  saveNotifyCell: 'notifySettings', saveNotifyGlobal: 'notifySettings',
+  notifyRsvpOpened: 'notifySettings', notifyServiceRecommend: 'notifySettings'
 };
 
 /* ============================================================================
@@ -5737,7 +5810,23 @@ function ensureEmailSettingsSheet_(ss) {
   var values = sh.getDataRange().getValues();
   var existing = {};
   for (var r = 1; r < values.length; r++) { var k = String(values[r][0]).trim(); if (k) existing[k] = true; }
-  var toAdd = DEFAULT_EMAIL_SETTINGS.filter(function (row) { return !existing[row[0]]; });
+  /* 23.9 — תבניות והגדרות של מרכז ההתראות, ונוסח חדש לכל שורה שנוצרת. */
+  /* ⚠️ typeof — אם Notify.gs לא עלה לעורך, המיילים ממשיכים במסלול הישן
+     במקום ש-ReferenceError כאן ישבית את כולם (זה כבר קרה פעם, 20.8). */
+  var NT = (typeof NOTIFY_MAIL_TEXTS !== 'undefined') ? NOTIFY_MAIL_TEXTS : {};
+  var allDefaults = DEFAULT_EMAIL_SETTINGS.concat(
+    (typeof notifyExtraEmailRows_ === 'function') ? notifyExtraEmailRows_() : []);
+  var toAdd = allDefaults.filter(function (row) {
+    if (existing[row[0]]) return false;
+    existing[row[0]] = true;
+    return true;
+  }).map(function (row) {
+    var t = NT[row[0]];
+    if (!t || !t.su || !t.bo) return row;
+    var c = row.slice();
+    c[1] = t.su; c[2] = t.bo;
+    return c;
+  });
   if (toAdd.length) {
     /* הקשחה (2026-08-20, אחרי תקלה אמיתית): setValues דורש מערך מלבני מדויק.
      * כשנוספו תבניות המכון הן נכתבו עם 4 שדות בלבד — בלי "תחום"/"פעיל" שנוספו
@@ -5758,7 +5847,7 @@ function ensureEmailSettingsSheet_(ss) {
   // מילוי "תחום"/"פעיל" לשורות ישנות (או לשורה חדשה שמישהו הוסיף ידנית בלי
   // למלא את שתי העמודות האלה) — נוגע רק בתאים ריקים.
   var domainByKey = {};
-  DEFAULT_EMAIL_SETTINGS.forEach(function (row) { domainByKey[row[0]] = row[4]; });
+  allDefaults.forEach(function (row) { domainByKey[row[0]] = row[4]; });
   values = sh.getDataRange().getValues();
   for (var r2 = 1; r2 < values.length; r2++) {
     var key2 = String(values[r2][0]).trim();
@@ -5856,7 +5945,7 @@ function buildEmailHtml_(bodyText, ctaUrl, ctaLabel, accent) {
         '</div>' +
       '</div>' +
       '<div style="max-width:480px;margin:14px auto 0;text-align:center;font-size:11px;color:#9ca3af;">' +
-        'מייל אוטומטי מאפליקציית ניהול התקציב של הוועד' +
+        'מייל אוטומטי מאפליקציית ניהול הקהילה' +
       '</div>' +
     '</div>';
 }
@@ -5881,7 +5970,14 @@ function sendMail_(toList, subject, plainBody, htmlBody) {
  * המיילים של משק הבית ביחד — ר' emailsForResidentRow_/emailsForFamilyId_).
  * אדום (rose) אוטומטית לכל תבנית שהמפתח שלה מסתיים ב-REJECTED, ירוק (emerald)
  * לכל השאר — בלי צורך לסמן את זה ידנית בכל קריאה. */
-function sendResidentTemplate_(ss, key, emails, vars) {
+function sendResidentTemplate_(ss, key, emails, vars, opt) {
+  /* 23.9 — מרכז ההתראות. תבנית שיש לה שורה בטבלה עוברת ל-notify_,
+     שמחליט לפי הטבלה: מייל, פוש, סיכום, והטקסט באפליקציה. */
+  var hit = (typeof notifyLookupKey_ === 'function') ? notifyLookupKey_(key, ['r', 'all'], opt && opt.trigger) : null;
+  if (hit) {
+    notify_(ss, hit.t, { vars: vars || {}, r: { emails: emails || [], familyId: (opt && opt.familyId) || '' } }, [hit.role]);
+    return;
+  }
   var settings = getEmailSettings_(ss);
   if (!emailEnabled_(settings, key)) return;
   var t = settings[key];
@@ -5934,18 +6030,22 @@ function adminEmailsByPerm_(ss, permKey) {
   var values = rsh.getDataRange().getValues();
   if (values.length < 2) return [];
   var headers = values[0].map(function (h) { return String(h).trim(); });
-  var emailCols = [], permCols = [], roleCol = -1, statusCol = -1;
+  var emailCols = [], permCols = [], roleCol = -1, statusCol = -1, extCol = -1;
   headers.forEach(function (h, i) {
     if (h.indexOf(PERM_HEADER) !== -1) permCols.push(i);
     else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
     else if (h.indexOf('תפקיד') !== -1) roleCol = i;
     else if (h.indexOf('סטטוס') !== -1) statusCol = i;
+    else if (h.indexOf(EXTERNAL_HEADER) !== -1) extCol = i;
   });
   var out = [];
   for (var r = 1; r < values.length; r++) {
     var row = values[r];
     var active = !(statusCol > -1 && String(row[statusCol]).indexOf('פעיל') === -1);
     if (!active) continue;
+    /* 🔴 23.9 — משתמש חיצוני (הגנן) אינו "מנהל" לעניין מיילים: מיילי
+       מנהל נושאים שמות תושבים. עד היום הוא קיבל את כולם. */
+    if (extCol > -1 && String(row[extCol]).trim().indexOf(EXTERNAL_VALUE) !== -1) continue;
     var role = roleCol > -1 ? String(row[roleCol]).trim() : '';
     for (var c = 0; c < emailCols.length; c++) {
       var email = String(row[emailCols[c]] || '').trim();
@@ -5959,7 +6059,14 @@ function adminEmailsByPerm_(ss, permKey) {
 }
 
 /** שולח מייל למנהלים לפי תבנית + מידור הרשאה, ללא כפילויות. */
-function notifyAdmins_(ss, permKey, key, vars) {
+function notifyAdmins_(ss, permKey, key, vars, opt) {
+  /* 23.9 — מרכז ההתראות: מנהל התחום, מנהל-על והגנן לפי הטבלה. */
+  var hit = (typeof notifyLookupKey_ === 'function') ? notifyLookupKey_(key, ['a', 's'], opt && opt.trigger) : null;
+  if (hit) {
+    var dom = notifyIndex_().byId[hit.t].row.cells;
+    notify_(ss, hit.t, { vars: vars || {} }, ['a', 's', 'g'].filter(function (x) { return dom[x]; }));
+    return;
+  }
   var settings = getEmailSettings_(ss);
   if (!emailEnabled_(settings, key)) return;
   var emails = adminEmailsByPerm_(ss, permKey);
@@ -6081,6 +6188,9 @@ function dailyEmailJobs_() {
   try { gymDailyJob_(ss); } catch (e) { Logger.log('gymDailyJob_ נכשל: ' + e); }
   try { weeklyDigestJob_(ss); } catch (e) { Logger.log('weeklyDigestJob_ נכשל: ' + e); }
   try { monthlyDigestJob_(ss); } catch (e) { Logger.log('monthlyDigestJob_ נכשל: ' + e); }
+  /* 23.9 — מרכז ההתראות: סיכומי הגינון ותזכורת "מחר האירוע". */
+  try { gardenDigestJob_(ss); } catch (e) { Logger.log('gardenDigestJob_ נכשל: ' + e); }
+  try { rsvpReminderJob_(ss); } catch (e) { Logger.log('rsvpReminderJob_ נכשל: ' + e); }
   /* ריטנשן יומן הגינון (22.9) — מעל 12 חודשים לטאב ארכיון ומחיקה מ-Firestore. */
   try {
     var glr = gardenLogRetention_(ss);
@@ -6134,6 +6244,13 @@ function hourlyJobs() {
 
 function hourlyJobsRun_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  /* 23.9 — מרכז ההתראות: החלפת הנוסחים (פעם אחת בלבד) ופוש שנדחה
+     בשעות שקט. ראשונים וזולים — אם השאר נכשל, אלה עדיין יוצאים. */
+  try { notifyApplyNewTextsOnce_(ss); } catch (e) { Logger.log('notifyApplyNewTextsOnce_ נכשל: ' + e); }
+  try {
+    var nq = notifyFlushQueue_(ss);
+    if (nq.sent || nq.errors.length) Logger.log('תור פוש: נשלחו ' + nq.sent + (nq.errors.length ? ' | ' + nq.errors.join(' ; ') : ''));
+  } catch (e) { Logger.log('notifyFlushQueue_ נכשל: ' + e); }
   /* תיבת הדואר (2026-09-15, צעד 09א) — סטטוסים שהדפדפן
      כתב ל-Firestore וטרם הוחלו על הגיליון.
      ⚠️ **לפני הגיבוי המצטבר** — אחרת הגיבוי מעתיק מסמכים
@@ -6691,10 +6808,22 @@ function sendDigestBySection_(ss, subjectKey, sections, includeKeys) {
   if (!emailEnabled_(settings, subjectKey)) return;
   var t = settings[subjectKey];
   if (!t) return;
+  /* 23.9 — מרכז ההתראות: מי מקבל את הסיכום לפי הטבלה.
+     ⚠️ adminEmailsByPerm_ מחזירה גם מנהלי-על — כאן מפרידים: מנהל תחום
+     לפי תא "מנהל התחום", מנהל-על לפי תא "מנהל-על". */
+  var trig = subjectKey === 'ADMIN_MONTHLY_DIGEST' ? 'reimb-17' : 'digest';
+  var hasNC = (typeof notifyMemo_ === 'function');
+  var cells = hasNC ? notifyMemo_(ss).cells : {};
+  var cellA = cells[trig + '|a'] || { m: true }, cellS = cells[trig + '|s'] || { m: true };
+  var g0 = hasNC ? notifyGlobals_(settings) : { superAll: 'table', masterMail: 'on' };
+  var supers = {};
+  if (hasNC) notifyDirectory_(ss).forEach(function (p) { if (p.active && p.isSuper) supers[normalizeEmail_(p.email)] = true; });
   var recipients = {}; // email -> { residents:bool, budget:bool, club:bool }
   function addAll_(permKey, flagKey) {
     if (includeKeys.indexOf(flagKey) === -1) return;
+    if (!cellA.m) return;
     adminEmailsByPerm_(ss, permKey).forEach(function (e) {
+      if (supers[normalizeEmail_(e)]) return;
       recipients[e] = recipients[e] || {};
       recipients[e][flagKey] = true;
     });
@@ -6703,7 +6832,12 @@ function sendDigestBySection_(ss, subjectKey, sections, includeKeys) {
   addAll_(PERM_BUDGET, 'budget');
   addAll_(PERM_CLUB, 'club');
   addAll_(PERM_GYM, 'gym');
-  adminEmailsByPerm_(ss, PERM_SUPER).forEach(function (e) {
+  /* מנהל-על מקבל לפי התא שלו; ובנוסף — כמו מנהל התחום — כשאין לתחום
+     מנהל משלו, או במצב "כל מה שמנהלי התחומים מקבלים". */
+  var noDomainMgr = !Object.keys(recipients).length;
+  var superGets = (g0.superAll !== 'fallback' && cellS.m) ||
+                  (cellA.m && (noDomainMgr || g0.superAll === 'all'));
+  if (superGets && g0.masterMail !== 'off') adminEmailsByPerm_(ss, PERM_SUPER).forEach(function (e) {
     recipients[e] = recipients[e] || {};
     includeKeys.forEach(function (k) { recipients[e][k] = true; });
   });
@@ -7788,25 +7922,20 @@ function notifyServiceUpdate_(ss, body) {
   var name = String(body.serviceName || '').trim();
   if (!name) return { ok: false, error: 'חסר שם השירות' };
 
-  var settings = getEmailSettings_(ss);
-  if (!emailEnabled_(settings, 'SERVICE_UPDATED')) {
-    return { ok: false, error: 'שליחת המייל הזה כבויה כרגע במסך "ניהול מיילים"' };
-  }
-  var t = settings['SERVICE_UPDATED'];
-  if (!t) return { ok: false, error: 'תבנית SERVICE_UPDATED חסרה בגיליון "הגדרות מיילים"' };
-
-  var emails = allActiveResidentEmails_(ss);
-  if (!emails.length) return { ok: false, error: 'לא נמצאו כתובות מייל של תושבים פעילים' };
-
+  /* 23.9 — מרכז ההתראות: "עדכון תושבים על שירות" → כל התושבים, לפי
+     הטבלה (ברירת המחדל: פוש בלבד — מייל לכולם שורף את המכסה היומית).
+     🔴 ואם המייל דלוק — בעותק מוסתר; עד היום כל הכתובות הופיעו ב"אל". */
   var vars = {
     'שם השירות': name,
     'ספק': String(body.provider || ''),
     'מה השתנה': String(body.whatChanged || '')
   };
-  var plain = renderTemplate_(t.body, vars);
-  var html = buildEmailHtml_(plain, CBA_APP_URL, 'לצפייה בשירות', 'emerald');
-  sendMail_(emails, renderTemplate_(t.subject, vars), plain + '\n\n' + CBA_APP_URL, html);
-  return { ok: true, sent: emails.length };
+  if (typeof notify_ !== 'function') return { ok: false, error: 'מרכז ההתראות (Notify.gs) לא הותקן בשרת' };
+  var rep = notify_(ss, 'svc-update', { vars: vars }, ['all']);
+  if (!rep.mail && !rep.push) {
+    return { ok: false, error: 'לא יצאה אף הודעה — ייתכן שהשורה כבויה במסך "ניהול התראות", או שאין לתושבים התראות פעילות' };
+  }
+  return { ok: true, sent: rep.mail + rep.push, mail: rep.mail, push: rep.push };
 }
 
 /** כל כתובות המייל של תושבים פעילים (בלי סינון הרשאה) — אותה לוגיקת סריקה
@@ -8731,7 +8860,11 @@ function submitGymApplication_(ss, body) {
     // --- מיילים (אותה מערכת תבניות כמו כל השאר, ר' הגדרות מיילים) ---
     var displayName = (body.firstName || (me.found ? me.firstName : '') || email);
     try {
-      sendResidentTemplate_(ss, 'GYM_APPLICATION_RECEIVED', [email], { 'שם': displayName });
+      /* 23.9 — הודעה אחת לתושב ולא שתיים: דגל בריאות ← "נדרש אישור רופא";
+         אושר מיד ← "נשאר לשלם"; אחרת — אישור קבלה כמו קודם. */
+      if (!flags.blocking && status !== GYM_ST_PAYMENT) {
+        sendResidentTemplate_(ss, 'GYM_APPLICATION_RECEIVED', [email], { 'שם': displayName });
+      }
       if (flags.blocking) {
         sendResidentTemplate_(ss, 'GYM_DOCTOR_NOTE_REQUIRED', [email], {
           'שם': displayName, 'שאלות': flags.flagged.join(', ')
@@ -8743,7 +8876,7 @@ function submitGymApplication_(ss, body) {
       } else if (status === GYM_ST_PAYMENT) {
         sendResidentTemplate_(ss, 'GYM_APPROVED_AWAITING_PAYMENT', [email], {
           'שם': displayName, 'סכום': plan.total, 'מסלול': plan.name
-        });
+        }, { trigger: 'gym-new' });
       }
     } catch (mailErr) { Logger.log('מייל מכון נכשל: ' + mailErr); }
 
@@ -8832,7 +8965,7 @@ function createGymMembership_(ss, body) {
       if (mode === 'received') {
         sendResidentTemplate_(ss, 'GYM_APPROVED_AWAITING_PAYMENT', [email], {
           'שם': displayName, 'סכום': plan.total, 'מסלול': plan.name
-        });
+        }, { trigger: 'gym-approve' });
       } else {
         sendResidentTemplate_(ss, 'GYM_DECLARATION_REQUEST', [email], {
           'שם': displayName, 'קישור': CBA_APP_URL
@@ -9355,7 +9488,7 @@ function renewGymMembership_(ss, body) {
     try {
       sendResidentTemplate_(ss, 'GYM_APPROVED_AWAITING_PAYMENT', [email], {
         'שם': name, 'סכום': plan.total, 'מסלול': plan.name
-      });
+      }, { trigger: 'gym-approve' });
     } catch (mailErr) { Logger.log('מייל חידוש נכשל: ' + mailErr); }
 
     return { ok: true, id: newId, status: GYM_ST_PAYMENT, previous: prevId };
@@ -10887,7 +11020,7 @@ function btxSideEffects_(ss, headers, rowArr, from, to) {
       'סכום': Math.round(Number(g('סכום')) || 0),
       'מזהה': g('מזהה'),
       'הערה': g('הערת בדיקה') ? ('\nהערה: ' + g('הערת בדיקה')) : ''
-    });
+    }, { familyId: g('מזהה משפחה') });
   }
 }
 
@@ -14932,7 +15065,10 @@ var GARDEN_TASK_TEMPLATES = ['GARDEN_COMPLETED', 'GARDEN_REPORT_DECLINED',
                              'GARDEN_PLANNED', 'GARDEN_REOPENED',
                              'GARDEN_REPORT_MERGED',
                              /* 2026-09-22, ממצא 32 */
-                             'GARDEN_RESCHEDULED', 'GARDEN_STATUS_NOTE'];
+                             'GARDEN_RESCHEDULED', 'GARDEN_STATUS_NOTE',
+                             /* 23.9 — מרכז ההתראות */
+                             'GARDEN_FINAL_CHECK', 'GARDEN_PENDING_REVIEW',
+                             'GARDENER_TASK_RETURNED', 'GARDEN_RECHECK_DONE'];
 
 /** שבוע העבודה לתצוגה אנושית. `2026-09-27` → `27.9.2026`.
  *  ⚠️ ערך שאינו בתבנית הזאת עובר כמו שהוא — שבוע שנערך ידנית
@@ -14951,66 +15087,24 @@ function gardenSendTaskMail_(ss, taskId) {
     var t = fsGet_(path);
     if (!t) { out.error = 'המשימה לא נמצאה'; return out; }
     if (t.notifyPending !== true) { out.ok = true; return out; }   /* כבר נשלח */
+    t.id = t.id || taskId;
 
     var tpl = String(t.notify || '').trim();
-    var repId = String(t.repId || '').trim();
-    /* ⚠️ משימת שגרה או יזומה — אין מדווח ואין למי לכתוב.
-       מורידים את הדגל כדי שהסריקה לא תחזור עליו כל שעה. */
-    if (GARDEN_TASK_TEMPLATES.indexOf(tpl) === -1 || !repId) {
-      fsMerge_(path, { notifyPending: false, notifiedAt: new Date() });
-      out.ok = true;
+    /* 23.9 — מרכז ההתראות. ההחלטה מי מקבל (תושב / מנהל / גנן) ובאיזה
+       ערוץ היא של הטבלה, ב-notifyGardenTask_. משימה בלי דיווח (שגרה,
+       יזומה) כבר לא נזרקת: לצוות עדיין יש מה לדעת (חסימה, החזרה).
+       🔴 תיקון דחוף 2: הטקסט לתושב הוא רק מה שנכתב **בפעולה הזאת**
+       (notifyNote) — לא הערה קודמת שיושבת על המשימה. */
+    /* ⚠️ אם Notify.gs לא הותקן בעורך — משאירים את הדגל למעלה ויוצאים:
+       הסריקה השעתית תשלח אחרי שהקובץ יעלה. להוריד את הדגל כאן היה
+       מאבד את המייל לתמיד. */
+    if (typeof notifyGardenTask_ !== 'function') {
+      out.error = 'Notify.gs חסר בשרת';
       return out;
     }
-
-    var rep = fsGet_(fsDocPath_(FS_GARDEN_REPORTS, repId));
-    if (!rep) {
-      fsMerge_(path, { notifyPending: false, notifiedAt: new Date() });
-      out.ok = true;
-      return out;
+    if (GARDEN_TASK_TEMPLATES.indexOf(tpl) !== -1) {
+      try { out.sent = notifyGardenTask_(ss, t, tpl); } catch (e) { out.error = String(e); }
     }
-
-    var famId = String(rep.familyId || '').trim();
-    var names = txFamilyNames_(ss);
-    var name = String(names[famId] || '').trim() || 'תושב';
-    var emails = emailsForFamilyId_(ss, famId);
-    var place = String(rep.place || rep.area || '').trim() || 'השיכון';
-    var note = String(t.notifyNote || t.note || '').trim();
-
-    var vars = {
-      'שם': name,
-      'מזהה': String(rep.id || repId),
-      'קטגוריה': String(rep.category || ''),
-      'מיקום': place,
-      /* 🔴🔴 **באג ייצור שנתפס ב-22.9, חי מאז גל 3 (21.9).**
-         בתבנית `GARDEN_COMPLETED` הסמן יושב צמוד למשפט הבא
-         (`{{מה נעשה}}{{איחוד}}אם משהו לא נראה לך תקין`), כי
-         `gardenNotifyCompleted_` — המסלול **הישן**, בשרת — נשאה
-         את שורת הרווח בתוך הערך עצמו. כשהכתיבה עברה לדפדפן,
-         המייל התחיל לצאת מכאן, וכאן הערך הועבר גולמי: התוצאה
-         היא "גזמתי את הענףאם משהו לא נראה לך תקין" — מילים
-         דבוקות, בכל מייל "הטיפול הושלם" מאז 21.9.
-         🔑 הכלל: **ערך אופציונלי שיושב צמוד לטקסט בתבנית נושא
-            את שורת הרווח שאחריו.** בדיוק כמו `{{סיבה}}` למטה. */
-      'מה נעשה': note ? note + '\n\n' : '',
-      /* 🔴 2026-09-22 — `{{עדכון}}` לתבנית `GARDEN_STATUS_NOTE`.
-         אותו טקסט של `{{מה נעשה}}`, בשם שמתאים למה שהוא אומר שם:
-         בסגירה זה "מה נעשה", בעדכון באמצע הדרך זה "מה קורה". */
-      'עדכון': note,
-      /* ⚠️ **שינוי בתצוגה של תבנית קיימת** (2026-09-22): עד היום
-         `{{שבוע}}` ב-`GARDEN_PLANNED` יצא כ-`2026-09-27`. */
-      'שבוע': gardenWeekLabel_(t.week)
-    };
-    /* ⚠️ אותה צורה בדיוק כמו ב-`gardenNotifyReopened_`: הטקסט נושא
-       איתו את שורת הרווח שאחריו, כך שתבנית בלי סיבה אינה
-       משאירה שורה ריקה כפולה באמצע המייל. */
-    vars['סיבה'] = (tpl === 'GARDEN_REOPENED')
-      ? (note ? note + '\n\n' : '')
-      : note;
-
-    try {
-      sendResidentTemplate_(ss, tpl, emails, vars);
-      out.sent = 1;
-    } catch (e) { out.error = String(e); }
 
     /* ⚠️ מורידים את הדגל גם כשהשליחה נכשלה — ניסיון חוזר
        שעתי על תבנית שבורה הופך לנודניק אינסופי. אותה הכרעה
@@ -15051,7 +15145,8 @@ function gardenFeedbackNotify_(ss, body) {
 
 /** קריאת השגר-ושכח מהדפדפן. איש אינו ממתין לתשובה שלה. */
 function gardenNotifyTask_(ss, body) {
-  var gate = authorize_(ss, body, null);
+  /* 🔴 23.9 — PERM_GARDEN ולא null: עם null הגנן החיצוני נדחה כאן. */
+  var gate = authorize_(ss, body, PERM_GARDEN);
   if (!gate.ok) return { ok: false, error: gate.error };
   var id = String((body && body.id) || '').trim();
   if (!id) return { ok: false, error: 'חסר מזהה משימה' };
@@ -17291,7 +17386,12 @@ function gardenTaskAction_(ss, body) {
       /* ⚠️ רק כשבאמת הייתה סגירה. "החזרה להשלמה" על משימה שממתינה לאישור
          היא תנועה פנימית בין הצוות למנהל — התושב לא קיבל עליה שום מייל
          ולכן אין מה לתקן אצלו. */
-      if (wasClosed) gardenNotifyReopened_(ss, id, wasClosed, why);
+      /* 🔴 23.9 — תיקון דחוף 2: הערת ההחזרה היא לגנן בלבד. עד היום
+         היא יצאה לתושב בתוך "נפתח מחדש". עכשיו: פוש לגנן לפי הטבלה. */
+      try {
+        notify_(ss, 'gar-returned', { vars: { 'כותרת': cur.title, 'הערה': why, 'מזהה': id,
+                                              'מיקום': cur.area || 'השיכון' } }, ['g', 'a', 's']);
+      } catch (e) { /* כשל הודעה לא מבטל פעולה שנשמרה */ }
 
     } else if (act === 'plan') {
       /* שיבוץ לשבוע — החוליה שהייתה חסרה. דיווח תושב נשמר עם שלב "התקבל"

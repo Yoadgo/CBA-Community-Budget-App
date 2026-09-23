@@ -91,8 +91,12 @@ ok('🔴 שיבוץ מחדש לשבוע אחר שולח שינוי מועד',
    /else if \(String\(cur\.week\) !== wk\) notify = "GARDEN_RESCHEDULED";/.test(DS));
 ok('⚠️ ושיבוץ מחדש לאותו שבוע אינו שולח כלום',
    /String\(cur\.week\) !== wk/.test(DS));
-ok('הערת סטטוס שולחת GARDEN_STATUS_NOTE', /if \(isReport && note\) notify = "GARDEN_STATUS_NOTE";/.test(DS));
-ok('⚠️ והערה ריקה אינה עדכון', /isReport && note\) notify = "GARDEN_STATUS_NOTE"/.test(DS));
+/* 23.9 — מרכז ההתראות: הערה מגיעה לתושב רק כשסומן "לשלוח לתושב". */
+ok('הערת סטטוס שולחת GARDEN_STATUS_NOTE — רק בסימון לתושב',
+   /var toResident = isReport && note && extra\.toResident === true;/.test(DS) && /if \(toResident\) notify = "GARDEN_STATUS_NOTE";/.test(DS));
+ok('⚠️ והערה ריקה אינה עדכון', /isReport && note && extra\.toResident/.test(DS));
+ok('🔴 הערה בלי הסימון נרשמת כ"הערה פנימית" — מחוץ לקו הזמן של התושב',
+   /kind: toResident \? "הערה" : "הערה פנימית"/.test(DS));
 ok('🔴 כל השלוש מותנות בדיווח תושב ולא במשימת שגרה',
    (DS.match(/if \(isReport\) notify = "GARDEN_RESCHEDULED";/g) || []).length === 1 &&
    /if \(isReport\) \{\n          if \(!cur\.week\)/.test(DS));
@@ -144,13 +148,15 @@ ok('⚠️ לקוח ישן במטמון פשוט לא מצייר קו זמן',
    /if \(CBA\.data\.getMyGardenLog\)/.test(load), load);
 
 section('8. השרת — התבנית מקבלת את מה שהיא צריכה');
-const mail = (GS.match(/var vars = \{\n      'שם': name,[\s\S]*?\n    \};/) || [''])[0];
+/* 23.9 — הבנייה עברה ל-notifyGardenTask_ ב-Notify.gs (מרכז ההתראות). */
+const NG = R('apps-script/Notify.gs');
+const mail = (NG.match(/function notifyGardenTask_[\s\S]*?\n\}/) || [''])[0];
 ok("{{עדכון}} קיים לתבנית הסטטוס", /'עדכון': note,/.test(mail), mail);
 ok('{{שבוע}} עובר דרך מעצב התאריך', /'שבוע': gardenWeekLabel_\(t\.week\)/.test(mail), mail);
 ok('gardenWeekLabel_ הופכת ISO לתאריך עברי', /function gardenWeekLabel_/.test(GS));
 ok('⚠️ וערך שאינו ISO עובר כמו שהוא', /if \(!m\) return String\(w \|\| ''\);/.test(GS));
 ok('🔑 השם והמיילים עדיין נשלפים בשרת לפי familyId — הקו האדום',
-   /var emails = emailsForFamilyId_\(ss, famId\);/.test(GS));
+   /txFamilyNames_\(ss\)/.test(mail) && /r: \{ familyId: fam \}/.test(mail) && /emailsForFamilyId_\(ss, fam\)/.test(NG));
 
 section('9. גרסה — אי-התאמה = דפדפנים מגישים JS ישן');
 const swV = (SW.match(/var VERSION = "([^"]+)"/) || [, ''])[1];
@@ -166,7 +172,8 @@ ok('DEFAULT_EMAIL_SETTINGS נמצא', !!defs);
 ok('🔴 GARDEN_RESCHEDULED מוגדרת', /\['GARDEN_RESCHEDULED',/.test(defs), 'חסר');
 ok('🔴 GARDEN_STATUS_NOTE מוגדרת', /\['GARDEN_STATUS_NOTE',/.test(defs), 'חסר');
 ok('⚠️ ולכן אין עבודה ידנית בגיליון — ensureEmailSettingsSheet_ מוסיפה מפתח חסר',
-   /var toAdd = DEFAULT_EMAIL_SETTINGS\.filter\(function \(row\) \{ return !existing\[row\[0\]\]; \}\);/.test(GS));
+   /* 23.9 — מרכז ההתראות: עוד שורות (allDefaults), אותו עיקרון — רק מה שחסר. */
+   /var toAdd = allDefaults\.filter\(function \(row\) \{\s*if \(existing\[row\[0\]\]\) return false;/.test(GS));
 ok('שתיהן בתחום הגינון ופעילות', /\['GARDEN_RESCHEDULED',[\s\S]*?PERM_GARDEN, 'כן'\]/.test(defs) &&
    /\['GARDEN_STATUS_NOTE',[\s\S]*?PERM_GARDEN, 'כן'\]/.test(defs), defs.slice(0, 200));
 ok('GARDEN_RESCHEDULED משתמשת ב-{{שבוע}}', /\['GARDEN_RESCHEDULED'[\s\S]*?\{\{שבוע\}\}/.test(defs));
@@ -179,7 +186,7 @@ ok('🔑 ושלוש הרשימות מכילות את שני השמות — גי�
 
 section('11. 🔴🔴 באג הייצור של המילים הדבוקות (חי מאז 21.9)');
 ok('{{מה נעשה}} נושא את שורת הרווח שאחריו',
-   /'מה נעשה': note \? note \+ '\\n\\n' : '',/.test(GS), 'לא תוקן');
+   /'מה נעשה': note \? note \+ '\\n\\n' : '',/.test(NG), 'לא תוקן');   // 23.9 — עבר ל-Notify.gs
 ok('⚠️ והסמן בתבנית אכן צמוד לטקסט — זה מה שהפך את זה לבאג',
    /\{\{מה נעשה\}\}\{\{איחוד\}\}אם משהו/.test(GS));
 ok('המסלול הישן בשרת עדיין עושה את אותו דבר — שני המסלולים מסכימים',

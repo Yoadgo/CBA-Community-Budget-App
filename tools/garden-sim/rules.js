@@ -12,9 +12,11 @@ const GR_CREATE_FIELDS = ['id','familyId','date','category','area','title','desc
 const GR_TEAM_FIELDS = ['stage','flag','closure','closeWhy','mergedInto','feedback','feedbackUntil','canFeedback','workPhotos'];
 const GR_TEAM_UPDATE = ['stage','flag','closure','closeWhy','mergedInto','taskId','canFeedback','feedbackUntil','photos','photosIncomplete','updatedAt','workPhotos'];
 const GL_FIELDS = ['taskId','kind','field','from','to','actorUid','note','at','schema','familyId','who','role'];
-const GL_RESIDENT_KINDS = ['נפתח','שיבוץ','גרירה','הערה','החזרה','ביטול ביצוע','ביצוע','סגירה','משוב'];
+/* 23.9 — סוג ההחזרה ירד (מרכז ההתראות, תיקון דחוף 2). */
+const GL_RESIDENT_KINDS = ['נפתח','שיבוץ','גרירה','הערה','ביטול ביצוע','ביצוע','סגירה','משוב'];
 const CLOSURES = ['בוצע','הועבר לבינוי','בוטל','לא רלוונטי','אוחד'];
-const NOTIFY = ['GARDEN_COMPLETED','GARDEN_REPORT_DECLINED','GARDEN_PLANNED','GARDEN_REOPENED','GARDEN_REPORT_MERGED','GARDEN_RESCHEDULED','GARDEN_STATUS_NOTE'];
+const NOTIFY = ['GARDEN_COMPLETED','GARDEN_REPORT_DECLINED','GARDEN_PLANNED','GARDEN_REOPENED','GARDEN_REPORT_MERGED','GARDEN_RESCHEDULED','GARDEN_STATUS_NOTE',
+  /* 23.9 — מרכז ההתראות */ 'GARDEN_FINAL_CHECK','GARDEN_PENDING_REVIEW','GARDENER_TASK_RETURNED','GARDEN_RECHECK_DONE'];
 
 const isInt = v => typeof v === 'number' && Number.isInteger(v);
 const isStr = v => typeof v === 'string';
@@ -73,7 +75,9 @@ function make(ctx) {
     gtWithinDispute: () => !isTs(get(B, 'approvedAt', null)) || ctx.now < new Date(B.approvedAt.getTime() + 14 * 86400000),
     gtClosedOk: () => cu('closure') === '' || rules.gtMgr() || hasOnly(aff(), ['flag','updatedAt']) || hasOnly(aff(), ['workPhotos','updatedAt']) || (cu('closure') === 'בוצע' && nx('closure') === '' && rules.gtWithinDispute()),
     gtNotifyOk: () => nx('notify') === '' || NOTIFY.includes(nx('notify')),
-    gtUpdateOk: () => rules.gtTeamUpdateOk() && rules.gtClosureValueOk() && rules.gtClosureAuthOk() && rules.gtCloseNoteOk() && rules.gtClosedOk() && rules.gtNotifyOk(),
+    /* 23.9 — gtNotifyMgrOnlyOk: שתי הודעות שהן החלטת מנהל. */
+    gtNotifyMgrOnlyOk: () => rules.gtMgr() || !['GARDEN_RECHECK_DONE', 'GARDENER_TASK_RETURNED'].includes(nx('notify')),
+    gtUpdateOk: () => rules.gtTeamUpdateOk() && rules.gtClosureValueOk() && rules.gtClosureAuthOk() && rules.gtCloseNoteOk() && rules.gtClosedOk() && rules.gtNotifyOk() && rules.gtNotifyMgrOnlyOk(),
     gtPendingDeleteOk: () => rules.gtMgr() && hasOnly(aff(), ['pendingDelete','updatedAt']) && A.pendingDelete === true,
     gtReportPhotosOk: () => notExt() && isStr(B.repId) && B.repId !== '' && hasOnly(aff(), ['photos','updatedAt']) && getDoc('gardenReports', B.repId).familyId === myFamilyId(),
     gtDeleteOk: () => hasPerm('גינון') && m().isExternal === false,

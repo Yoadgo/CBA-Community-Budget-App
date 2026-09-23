@@ -23,7 +23,7 @@
    ⚠️ בכל דיפלוי שמשנה JS/CSS: לעדכן את VERSION כאן *ואת* כל ה-?v=
       ב-index.html לאותו ערך בדיוק. שני המספרים חייבים להיות זהים.  */
 
-var VERSION = "20260923zwp";
+var VERSION = "20260923ntf";
 var CACHE   = "cba-app";
 
 /* הערה על השיטה: בכוונה *אין* כאן רשימת קבצים לשמירה מראש (precache).
@@ -133,12 +133,21 @@ self.addEventListener("push", function (e) {
   e.waitUntil(self.registration.showNotification(title, opts));
 });
 
+/* 23.9 — מרכז ההתראות: לחיצה על פוש פותחת את המסך שנבחר בטבלה
+   (data.screen). חלון פתוח — מקבל הודעה ומנווט בלי טעינה מחדש;
+   אין חלון — נפתח עם ?go=<מסך>, ו-app.js מנווט אחרי הכניסה. */
 self.addEventListener("notificationclick", function (e) {
   e.notification.close();
-  e.waitUntil(clients.matchAll({ type: "window" }).then(function (list) {
+  var d = (e.notification && e.notification.data) || {};
+  var screen = /^[A-Za-z]{2,40}$/.test(String(d.screen || "")) ? String(d.screen) : "";
+  var url = "/CBA-Community-Budget-App/" + (screen ? "?go=" + screen : "");
+  e.waitUntil(clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (list) {
     for (var i = 0; i < list.length; i++) {
-      if ("focus" in list[i]) return list[i].focus();
+      if ("focus" in list[i]) {
+        if (screen) { try { list[i].postMessage({ type: "cba-go", screen: screen }); } catch (err) {} }
+        return list[i].focus();
+      }
     }
-    if (clients.openWindow) return clients.openWindow("/CBA-Community-Budget-App/");
+    if (clients.openWindow) return clients.openWindow(url);
   }));
 });

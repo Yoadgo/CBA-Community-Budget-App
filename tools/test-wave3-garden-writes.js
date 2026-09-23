@@ -93,12 +93,15 @@ ok('🔴 והקריאה היא שגר-ושכח — אין callback שממתינ�
 const snd = (GS.match(/function gardenSendTaskMail_[\s\S]*?\n\}/) || [''])[0];
 ok('gardenSendTaskMail_ קיימת', !!snd);
 ok('⚠️ אידמפוטנטית — דגל כבוי = יוצאים', /if \(t\.notifyPending !== true\) \{ out\.ok = true; return out; \}/.test(snd), snd);
+/* 23.9 — מרכז ההתראות: הבנייה עברה ל-notifyGardenTask_ (Notify.gs). */
+const NGS = fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Notify.gs'), 'utf8');
+const ngt = (NGS.match(/function notifyGardenTask_[\s\S]*?\n\}/) || [''])[0];
 ok('🔑 הנמענים נשלפים בשרת מטאב התושבים לפי familyId — הקו האדום',
-   /emailsForFamilyId_\(ss, famId\)/.test(snd) && /txFamilyNames_\(ss\)/.test(snd), snd);
-ok('🔴 ותבנית שאינה ברשימה מורידה את הדגל במקום לחזור עליה כל שעה',
-   /GARDEN_TASK_TEMPLATES\.indexOf\(tpl\) === -1/.test(snd), snd);
+   /notifyGardenTask_\(ss, t, tpl\)/.test(snd) && /txFamilyNames_\(ss\)/.test(ngt) && /r: \{ familyId: fam \}/.test(ngt), ngt.slice(0, 300));
+ok('🔴 ותבנית שאינה ברשימה אינה נשלחת — והדגל יורד בכל מקרה',
+   /GARDEN_TASK_TEMPLATES\.indexOf\(tpl\) !== -1/.test(snd) && /notifyPending: false/.test(snd), snd);
 ok("⚠️ ו-GARDEN_REOPENED שומר על צורת שורת הרווח של הסיבה",
-   /tpl === 'GARDEN_REOPENED'/.test(snd), snd);
+   /tpl === 'GARDEN_REOPENED'/.test(ngt), ngt.slice(0, 300));
 ok('הרשת השעתית קיימת ושואלת שוויון על שדה בודד',
    /fsQuery_\(FS_GARDEN_TASKS, 'notifyPending', 'EQUAL', true, 200\)/.test(GS));
 ok('והיא מחוברת לעבודה השעתית', /var gtn = gardenTaskNotifyPending_\(ss\);/.test(GS));

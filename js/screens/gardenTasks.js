@@ -1145,7 +1145,9 @@
           title: "מה נעשה?",
           message: t.repId ? "המשפט הזה נשלח לתושב שדיווח, ונשמר ביומן המשימה."
                            : "ההערה נשמרת ביומן המשימה.",
-          value: t.note || "", placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
+          /* 🔴 23.9 — בלי מילוי מראש: note עלול להחזיק סיבת חסימה או הערת
+             החזרה של המנהל, והטקסט כאן נשלח לתושב. */
+          value: "", placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
           okText: "סיום וסגירה", required: !!t.repId,
           requiredMsg: "צריך לכתוב מה נעשה — המשפט נשלח לתושב."
         }).then(function (r) {
@@ -1173,7 +1175,11 @@
           title: "אישור הביצוע",
           message: t.repId ? "מה שכתוב כאן נשלח לתושב. אפשר להשאיר את מה שהצוות כתב."
                            : "ההערה נשמרת ביומן המשימה.",
-          value: t.note || "", placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
+          /* 🔴 23.9 — ממלאים מראש רק את "מה נעשה" של הגנן (כשהמשימה ממתינה
+             לאישור). בכל מצב אחר note יכול להיות סיבת חסימה או הערת החזרה —
+             פנימיים, וטקסט שממולא מראש כאן נשלח לתושב בלחיצה אחת. */
+          value: t.flag === "ממתין לאישור" ? (t.note || "") : "",
+          placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
           okText: "אישור וסגירה", required: !!t.repId,
           requiredMsg: "צריך לכתוב מה נעשה — המשפט נשלח לתושב."
         }).then(function (r) {
@@ -1201,7 +1207,13 @@
           html: '<textarea class="gd-inp" data-aw="t" rows="3" maxlength="600" placeholder="' +
                   esc(o.placeholder || "") + '"></textarea>' +
                 '<p class="gp-note" data-aw="err" hidden style="color:#B91C1C"></p>' +
-                (canPh ? '<div data-aw="ph"></div>' : ''),
+                (canPh ? '<div data-aw="ph"></div>' : '') +
+                /* 23.9 — מרכז ההתראות: הערה מגיעה לתושב רק בסימון (כבוי מראש). */
+                (o.residentToggle
+                  ? '<label class="gt-note-res"><input type="checkbox" data-aw="res"> ' +
+                    'לשלוח לתושב שדיווח (יראה אותה ואת התמונות באפליקציה ויקבל התראה)</label>' +
+                    '<p class="gt-note-hint">בלי הסימון — ההערה נשארת ביומן, גלויה לצוות בלבד.</p>'
+                  : ''),
           okText: o.okText || "שמירה", cancelText: "ביטול", sticky: true,
           onMount: function (wrap) {
             var ta = wrap.querySelector('[data-aw="t"]');
@@ -1221,7 +1233,8 @@
               wrap.querySelector('[data-aw="t"]').focus();
               return;
             }
-            result = { text: txt, photos: photos };
+            var resCb = wrap.querySelector('[data-aw="res"]');
+            result = { text: txt, photos: photos, toResident: !!(resCb && resCb.checked) };
             close(true);
           }
         }).then(function (ok) { return ok ? result : null; });
@@ -1685,24 +1698,53 @@
         if (m === "note" && isFault(t)) {
           /* 🔴 23.9 — "הערה/דיווח" על תקלה: אותו חלון עם תמונות. תמונה בלי
              משפט אינה עוברת — אחרת ההערה הקודמת הייתה נמחקת או נשלחת שוב. */
+          /* 🔴 23.9 — מרכז ההתראות, תיקון דחוף 2: פנימית כברירת מחדל. */
           return askWithPhotos({
             title: "הערה/דיווח",
-            message: t.repId ? "ההערה נשמרת ביומן, והתושב שדיווח מקבל עליה עדכון."
-                             : "ההערה נשמרת ביומן המשימה.",
-            value: t.note || "", placeholder: "למשל: נגזם, הגזם פונה למחרת",
-            okText: "שמירה", textWithPhotos: true
+            message: "ההערה נשמרת ביומן המשימה.",
+            value: "", placeholder: "למשל: נגזם, הגזם פונה למחרת",
+            okText: "שמירה", textWithPhotos: true, residentToggle: !!t.repId
           }).then(function (r) {
-            if (r) run("note", t.id, { note: r.text, photos: r.photos });
+            if (r) run("note", t.id, { note: r.text, photos: r.photos, toResident: r.toResident });
           });
         }
         if (m === "note") {
-          // CBA.ui.prompt מחזירה Promise (null בביטול), לא מקבלת callback
-          CBA.ui.prompt("ההערה נשמרת ביומן המשימה ונשארת גלויה למנהל.", {
-            title: "הערת ביצוע", value: t.note || "",
-            placeholder: "למשל: נגזם, הגזם פונה למחרת", okText: "שמירה"
-          }).then(function (txt) { if (txt !== null) run("note", t.id, { note: txt }); });
+          /* 🔴 23.9 — מרכז ההתראות, תיקון דחוף 2: הערה היא **פנימית**
+             כברירת מחדל. היא מגיעה לתושב (פוש + קו הזמן שלו) רק כשמסמנים
+             "לשלוח לתושב" — ולכן הסימון כבוי מראש. */
+          var isRep = !!String(t.repId || "").trim();
+          CBA.ui.dialog({
+            title: "הערת צוות", okText: "שמירה", sticky: true,
+            html:
+              '<textarea class="field-input gt-note-txt" rows="3" maxlength="600" ' +
+              'placeholder="למשל: נגזם, הגזם פונה למחרת"></textarea>' +
+              (isRep
+                ? '<label class="gt-note-res"><input type="checkbox" class="gt-note-send"> ' +
+                  'לשלוח לתושב שדיווח (יראה אותה באפליקציה ויקבל התראה)</label>'
+                : '') +
+              '<p class="gt-note-hint">בלי הסימון — ההערה נשארת ביומן, גלויה לצוות בלבד.</p>',
+            onOk: function (wrap, close) {
+              var txt = String(wrap.querySelector(".gt-note-txt").value || "").trim();
+              if (!txt) { wrap.querySelector(".gt-note-txt").focus(); return; }
+              var cb = wrap.querySelector(".gt-note-send");
+              close(true);
+              run("note", t.id, { note: txt, toResident: !!(cb && cb.checked) });
+            }
+          });
+          return;
         }
-        if (m === "clearflag") return run("clearflag", t.id, {});
+        if (m === "clearflag") {
+          /* 23.9 — אחרי משוב שלילי התושב שומע שבדקנו שוב. מה שנכתב כאן
+             (לא חובה) הוא מה שהוא יקרא. */
+          if (t.flag === "דורש בדיקה חוזרת" && String(t.repId || "").trim()) {
+            CBA.ui.prompt("התושב שנתן את המשוב יקבל עדכון שבדקנו שוב. מה שתכתוב כאן יגיע אליו (אפשר להשאיר ריק).", {
+              title: "הבדיקה החוזרת הסתיימה",
+              placeholder: "למשל: תוקן, הממטרה הוחלפה", okText: "סימון שטופל"
+            }).then(function (txt) { if (txt !== null) run("clearflag", t.id, { note: txt }); });
+            return;
+          }
+          return run("clearflag", t.id, {});
+        }
         if (m === "undo") return run("undo", t.id, {});
         if (m === "reopen") {
           /* אישור, ולא לחיצה אחת: זו פעולה שמבטלת החלטה שכבר נשלחה לתושב

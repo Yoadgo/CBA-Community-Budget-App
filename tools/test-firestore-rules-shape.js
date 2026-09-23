@@ -211,7 +211,10 @@ const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks', 'gar
                 'servicesMeta',
                 /* 23.9 — לוח האירועים, מסמך לשנה. מראה של היומן (מודל א'),
                    קריאה בלבד, אותו שער כמו services. בלי ימי הולדת. */
-                'eventsCal'];
+                'eventsCal',
+                /* 23.9 — מרכז ההתראות: "עדכון חדש" של המשפחה. קריאה בלבד,
+                   רק של המשפחה שלך (canSeeInbox), כתיבה מהשרת בלבד. */
+                'notifyInbox'];
 const found = (CODE.match(/^\s*match \/([A-Za-z0-9_]+)\//gm) || [])
                 .map(function (x) { return x.trim().replace(/^match \//, '').replace(/\/$/, ''); })
                 .filter(function (x) { return x !== 'databases'; });

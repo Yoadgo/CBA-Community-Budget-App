@@ -863,9 +863,9 @@ function sadmOpenMail() {
   wrap.innerHTML =
     '<div class="sadm-modal__bg" data-mclose></div>' +
     '<div class="sadm-modal__box">' +
-      "<h3>עדכון תושבים במייל</h3>" +
-      '<p class="sadm-modal__sub">נשלח לכל תושבי השיכון הפעילים — רק עכשיו, בלחיצה שלך. ' +
-        'שמירה רגילה של השירות לא שולחת כלום.</p>' +
+      "<h3>עדכון תושבים</h3>" +
+      '<p class="sadm-modal__sub">נשלח לכל תושבי השיכון הפעילים — רק עכשיו, בלחיצה שלך — ' +
+        'בפוש או במייל, לפי מסך "ניהול התראות". שמירה רגילה של השירות לא שולחת כלום.</p>' +
       '<div class="form-field form-field--wide"><label>מה השתנה?</label>' +
         '<input class="field-input" id="sadm-mail-what" placeholder="למשל: עודכן המחירון והתווספו טלפונים של טכנאים"></div>' +
       '<div class="sadm-modal__acts">' +
@@ -880,16 +880,20 @@ function sadmOpenMail() {
 
   document.getElementById("sadm-mail-send").addEventListener("click", function () {
     var what = String(document.getElementById("sadm-mail-what").value || "").trim();
-    if (!what) { CBA.ui.alert('צריך לכתוב מה השתנה — זה מה שהתושבים יראו במייל.'); return; }
+    if (!what) { CBA.ui.alert('צריך לכתוב מה השתנה — זה מה שהתושבים יראו.'); return; }
     var btn = this;
-    var release = CBA.ui.busy(btn, "שולח מיילים…");
+    var release = CBA.ui.busy(btn, "שולח…");
     CBA.data.notifyServiceUpdate(
       { serviceName: d.name, provider: d.provider, whatChanged: what },
       function (res) {
         release();
         if (res && res.ok) {
           close();
-          CBA.ui.alert("נשלח ל-" + res.sent + " כתובות מייל.", "העדכון נשלח");
+          /* 23.9 — מרכז ההתראות: פוש למשפחות שהדליקו התראות, מייל אם הוא דלוק בטבלה. */
+          var parts = [];
+          if (res.push) parts.push(res.push + " משפחות בפוש");
+          if (res.mail) parts.push(res.mail + " כתובות מייל");
+          CBA.ui.alert("נשלח ל-" + (parts.join(" ול-") || res.sent) + ".", "העדכון נשלח");
         } else {
           CBA.ui.alert((res && res.error) || "השליחה נכשלה, נסו שוב.");
         }

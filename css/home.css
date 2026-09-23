@@ -317,3 +317,18 @@
 .app-brand--link { cursor: pointer; border-radius: 12px; }
 .app-brand--link:hover .app-brand__title { color: var(--action); }
 .app-brand--link:focus-visible { outline: 2px solid var(--action); outline-offset: 3px; }
+
+/* 23.9 — "עדכון חדש" (מרכז ההתראות, js/ui/inbox.js): שורה לכל עדכון שעוד
+   לא נראה, בראש "אצלנו בבית". נקודה ירוקה אחת — שימוש מדוד בצבע. */
+.hm-inbox { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.hm-inbox__i {
+  all: unset; box-sizing: border-box; cursor: pointer; width: 100%;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: var(--radius-sm, 10px); background: var(--ok-soft, #ECFDF5);
+}
+.hm-inbox__i:hover { filter: brightness(.98); }
+.hm-inbox__i:focus-visible { outline: 2px solid var(--ok, #059669); outline-offset: 2px; }
+.hm-inbox__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok, #059669); }
+.hm-inbox__txt { display: flex; flex-direction: column; min-width: 0; }
+.hm-inbox__txt small { font-size: 12px; color: var(--text-soft, #6B7280); }
+.hm-inbox__txt b { font-size: 14px; font-weight: 600; color: var(--text, #111827); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

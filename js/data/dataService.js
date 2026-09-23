@@ -2293,9 +2293,9 @@ CBA.data = (function () {
             patch.stage = "בטיפול";
           }
           log = { kind: "ביצוע", note: note };
-          /* לתושב: "הצוות סיים, ממתין לאישור המנהל" — אותה תבנית של הערת
-             סטטוס; "בוצע" הסופי יוצא באישור. */
-          notify = "GARDEN_STATUS_NOTE";
+          /* 23.9 — מרכז ההתראות: "ממתין לאישור". לתושב "בבדיקה אחרונה",
+             למנהל "ממתין לאישורך" — לפי הטבלה. "בוצע" הסופי יוצא באישור. */
+          notify = "GARDEN_FINAL_CHECK";
         } else {
           close("בוצע", note || String(cur.note || ""));
         }
@@ -2317,10 +2317,16 @@ CBA.data = (function () {
 
       } else if (op === "note") {
         patch.note = note;
-        log = { kind: "הערה", note: note };
-        /* 🔴 ממצא 32 — הערת ביצוע על דיווח תושב היא אינטראקציה איתו,
-           ולכן מייל. ⚠️ רק כשנכתב משהו: הערה ריקה אינה עדכון. */
-        if (isReport && note) notify = "GARDEN_STATUS_NOTE";
+        /* 🔴 23.9 — תיקון דחוף 2: הערת צוות מגיעה לתושב **רק** כשסומן
+           "לשלוח לתושב". אחרת היא פנימית — גם לא בקו הזמן שלו: סוג
+           "הערה פנימית" אינו ברשימת הסוגים שתושב רשאי לקרוא. */
+        var toResident = isReport && note && extra.toResident === true;
+        log = { kind: toResident ? "הערה" : "הערה פנימית", note: note };
+        if (toResident) notify = "GARDEN_STATUS_NOTE";
+        /* 🔴 הערה פנימית **אינה** נכתבת לשדה note של המשימה — היא נשארת
+           ביומן בלבד. שדה note הוא מה שיוצא לתושב כ"מה נעשה" כשהמנהל
+           מאשר בלי לכתוב הערה חדשה; הערה פנימית שנכתבה שם הייתה דולפת. */
+        if (!toResident) delete patch.note;
 
       } else if (op === "defer") {
         if (!cur.week) return cb({ ok: false, error: "למשימה אין שבוע משובץ" });
@@ -2350,10 +2356,14 @@ CBA.data = (function () {
         /* אישור בלי הערה חדשה: מה שהגנן כתב ב"בוצע" הוא מה שהתושב מקבל.
            ⚠️ אותה דרישה כמו ב-`gtCloseNoteOk`: סגירת "בוצע" של דיווח תושב
            בלי שום הערה נדחית בכללים — עדיף לומר למה כאן. */
-        if (reason === "בוצע" && isReport && !note && !String(cur.note || "").trim()) {
+        /* 🔴 23.9 — "מה נעשה" של הגנן נלקח **רק** כשהמשימה באמת ממתינה
+           לאישור (אז note הוא מה שהגנן כתב בסימון "בוצע"). בכל מצב אחר
+           note יכול להיות סיבת חסימה או הערת החזרה — פנימיים, ולא לתושב. */
+        var gardenerDid = String(cur.flag || "") === "ממתין לאישור" ? String(cur.note || "").trim() : "";
+        if (reason === "בוצע" && isReport && !note && !gardenerDid) {
           return cb({ ok: false, error: "צריך לכתוב מה נעשה — המשפט הזה נשלח לתושב שדיווח." });
         }
-        close(reason, note || (op === "approve" ? String(cur.note || "") : ""));
+        close(reason, note || (op === "approve" ? gardenerDid : ""));
 
       } else if (op === "return") {
         if (!note) return cb({ ok: false, error: "צריך לכתוב מה חסר" });
@@ -2368,6 +2378,11 @@ CBA.data = (function () {
         patch.flag = "הוחזר להשלמה";
         patch.note = note;
         log = { kind: "החזרה", note: note };
+        /* 🔴 23.9 — תיקון דחוף 2: ההערה היא לגנן בלבד. על משימה פתוחה —
+           "הוחזר אליך" לגנן. על משימה **סגורה** — GARDEN_REOPENED, והשרת
+           (לפי הדגל "הוחזר להשלמה") שולח לתושב "נפתח מחדש" **בלי** ההערה,
+           ולגנן את ההערה. */
+        notify = closure ? "GARDEN_REOPENED" : "GARDENER_TASK_RETURNED";
 
       } else if (op === "plan") {
         var wk = String(extra.week || "").trim();
@@ -2392,12 +2407,20 @@ CBA.data = (function () {
       } else if (op === "clearflag") {
         patch.flag = "";
         log = { kind: "דגל", note: note || "" };
+        /* 23.9 — "הבדיקה החוזרת הסתיימה": אחרי משוב שלילי התושב שומע
+           שבדקנו שוב (ומה יצא, אם נכתב). */
+        /* ⚠️ מנהל בלבד — על משימה סגורה הגנן רשאי לגעת רק ב-flag
+           (gtClosedOk), ושדות ההודעה היו מפילים לו את הכתיבה. */
+        if (isReport && gardenIsMgr() && String(cur.flag || "") === "דורש בדיקה חוזרת") notify = "GARDEN_RECHECK_DONE";
 
       } else if (op === "block") {
         if (!note) return cb({ ok: false, error: "צריך לכתוב מה חוסם" });
         patch.flag = "דורש בדיקה בשטח";
         patch.note = note;
         log = { kind: "חסימה", note: note };
+        /* 23.9 — עד היום במסלול הזה לא יצאה אף הודעה, למרות שהגנן ראה
+           "נשלח למנהל". עכשיו: למנהל עם הסיבה, לתושב "ממתין לבדיקה" בלי. */
+        notify = "GARDEN_PENDING_REVIEW";
 
       } else {
         return cb({ ok: false, error: "פעולה לא מוכרת" });
@@ -2407,7 +2430,12 @@ CBA.data = (function () {
       if (notify) {
         patch.notify = notify;
         patch.notifyPending = true;
-        patch.notifyNote = note || String(patch.note || cur.note || "");
+        /* 🔴 23.9 — תיקון דחוף 2: רק מה שנכתב **בפעולה הזאת**. עד היום
+           נפלנו להערה הקודמת שעל המשימה (החזרה, חסימה) — והיא יצאה
+           לתושב בתוך "המועד השתנה". חריג אחד: סגירה בלי הערה חדשה —
+           אז הטקסט הוא "מה נעשה" שהגנן כתב בסימון "בוצע". */
+        var closing = notify === "GARDEN_COMPLETED" || notify === "GARDEN_REPORT_DECLINED";
+        patch.notifyNote = note || (closing ? String(patch.note || "") : "");
       }
 
       CBA.fb.updateDoc("gardenTasks", String(id), patch, function (e2) {
@@ -2445,8 +2473,11 @@ CBA.data = (function () {
         /* 🔴 23.9 — תמונות מהצוות (סגירה / הערה-דיווח). אותו מנגנון של
            הדיווח: הפעולה כבר קיימת, והתמונות עולות ברקע. ר' gardenAddWorkPhotos. */
         var wp = (extra.photos || []).slice(0, GARDEN_WORK_PHOTO_MAX);
+        /* 🔴 23.9 — תמונות של הערה **פנימית** נשארות על המשימה בלבד,
+           ולא מגיעות לדיווח של התושב. */
+        var photosToResident = !(op === "note" && extra.toResident !== true);
         if (wp.length) {
-          var reps = isReport ? [String(cur.repId)].concat((cur.mergedReps || []).map(String))
+          var reps = (isReport && photosToResident) ? [String(cur.repId)].concat((cur.mergedReps || []).map(String))
             .filter(function (r, i, a) { return r && a.indexOf(r) === i; }) : [];
           gardenAddWorkPhotos(String(id), reps, wp);
         }
@@ -3324,8 +3355,10 @@ CBA.data = (function () {
      ⚠️ **הרשימה הזאת חייבת להיות זהה ל-`glResidentKinds()` בכללי
         האבטחה.** שם היא נאכפת; כאן היא נמנעת מלכתחילה.
         `tools/test-finding32-timeline.js` משווה ביניהן. */
+  /* 🔴 23.9 — סוג ההחזרה ירד מהרשימה (תיקון דחוף 2): הערת ההחזרה היא
+     בין המנהל לגנן. גם הערה פנימית אינה כאן, בכוונה. */
   var GARDEN_LOG_RESIDENT_KINDS = {
-    "נפתח": 1, "שיבוץ": 1, "גרירה": 1, "הערה": 1, "החזרה": 1,
+    "נפתח": 1, "שיבוץ": 1, "גרירה": 1, "הערה": 1,
     "ביטול ביצוע": 1, "ביצוע": 1, "סגירה": 1, "משוב": 1
   };
 
@@ -3907,6 +3940,8 @@ CBA.data = (function () {
     if (!doc.title) { cb({ ok: false, error: "צריך כותרת" }); return; }
     CBA.fb.createDoc("residentServiceCards", id, doc, function (err) {
       if (err) { cb({ ok: false, error: "שמירה נכשלה" }); return; }
+      /* 23.9 — מרכז ההתראות: "תושב הוסיף המלצה" (כבוי כברירת מחדל). שגר-ושכח. */
+      try { CBA.sheets.postRead("notifyServiceRecommend", { service: doc.title }, function () {}); } catch (e) {}
       cb({ ok: true, card: doc });
     });
   }
@@ -4889,6 +4924,20 @@ CBA.data = (function () {
     getEventsList: getEventsList,
     getEventsFast: getEventsFast,
     getRsvpFamilyNames: getRsvpFamilyNames,
+    /* מרכז ההתראות (23.9) — מסך "ניהול התראות". */
+    listNotifySettings: function (cb) { CBA.sheets.get({ action: "listNotifySettings" }, cb); },
+    saveNotifyCell: function (trig, role, fields, cb) {
+      CBA.sheets.postRead("saveNotifyCell", { trig: trig, role: role, fields: fields }, cb);
+    },
+    saveNotifyGlobal: function (id, value, cb) {
+      CBA.sheets.postRead("saveNotifyGlobal", { id: id, value: value }, cb);
+    },
+    /* "עדכון חדש" — המסמך של המשפחה ב-notifyInbox. null כשאין/נכשל. */
+    readNotifyInbox: function (cb) {
+      var fid = String(((window.CBA && CBA.user) || {}).familyId || "").trim();
+      if (!fid || !(CBA.fb && CBA.fb.readDoc)) return cb(null);
+      CBA.fb.readDoc("notifyInbox", fid, function (e, doc) { cb(e ? null : (doc || null)); });
+    },
     cancelClubReservation: cancelClubReservation,
     getClubList: getClubList,
     getGymList: getGymList,

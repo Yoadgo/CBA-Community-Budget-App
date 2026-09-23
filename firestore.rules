@@ -621,17 +621,28 @@ service cloud.firestore {
        `GARDEN_STATUS_NOTE` נוספו ב-22.9 (ממצא 32) וחייבות להופיע
        גם ב-`GARDEN_TASK_TEMPLATES` ב-Code.gs — אחרת הדגל יירד
        בשקט בלי שיצא מייל. */
+    /* 🔴 23.9 — שתי הודעות שהן **החלטת מנהל** ונושאות טקסט חופשי לתושב
+       או לגנן: "הבדיקה החוזרת הסתיימה" ו"הוחזר אליך". הגנן החיצוני אינו
+       שולח אותן (הדפדפן שלו גם לא מציע אותן — כאן זה נאכף). */
+    function gtNotifyMgrOnlyOk() {
+      return gtMgr() ||
+             !['GARDEN_RECHECK_DONE', 'GARDENER_TASK_RETURNED'].hasAny([gtNext('notify')]);
+    }
+
     function gtNotifyOk() {
       return gtNext('notify') == '' ||
              ['GARDEN_COMPLETED', 'GARDEN_REPORT_DECLINED', 'GARDEN_PLANNED',
               'GARDEN_REOPENED', 'GARDEN_REPORT_MERGED',
-              'GARDEN_RESCHEDULED', 'GARDEN_STATUS_NOTE'].hasAny([gtNext('notify')]);
+              'GARDEN_RESCHEDULED', 'GARDEN_STATUS_NOTE',
+              /* 23.9 — מרכז ההתראות. הנמענים נקבעים בשרת לפי הטבלה. */
+              'GARDEN_FINAL_CHECK', 'GARDEN_PENDING_REVIEW',
+              'GARDENER_TASK_RETURNED', 'GARDEN_RECHECK_DONE'].hasAny([gtNext('notify')]);
     }
 
     /* השער המלא לעדכון של הצוות — כל השומרים ביחד. */
     function gtUpdateOk() {
       return gtTeamUpdateOk() && gtClosureValueOk() && gtClosureAuthOk() &&
-             gtCloseNoteOk() && gtClosedOk() && gtNotifyOk();
+             gtCloseNoteOk() && gtClosedOk() && gtNotifyOk() && gtNotifyMgrOnlyOk();
     }
 
     /* 🔴 "בדרך למחיקה" (22.9.2026) — מנהל בלבד, כמו `gtDeleteOk`.
@@ -785,7 +796,8 @@ service cloud.firestore {
        ⚠️ "איחוד" אינו כאן — הטקסט שלו נושא מזהי משימות פנימיים,
           ולתושב יש עליו כרטיס ומייל משלו. */
     function glResidentKinds() {
-      return ['נפתח', 'שיבוץ', 'גרירה', 'הערה', 'החזרה',
+      /* 🔴 23.9 — סוג ההחזרה ירד (תיקון דחוף 2): הערה בין המנהל לגנן. */
+      return ['נפתח', 'שיבוץ', 'גרירה', 'הערה',
               'ביטול ביצוע', 'ביצוע', 'סגירה', 'משוב'];
     }
 
@@ -1578,6 +1590,27 @@ service cloud.firestore {
                        rsvpEventOpen(resource.data.eventId) &&
                        rsvpResponseShapeOk();
       allow delete: if false;
+    }
+
+    /* ========================================================================
+     *  "עדכון חדש" — מרכז ההתראות   (23.9.2026)
+     * ------------------------------------------------------------------------
+     *  מסמך אחד לכל משפחה, notifyInbox/{familyId}: לכל תחום השורה האחרונה
+     *  שהופיעה לה באפליקציה ("שובץ לשבוע 27.9") והאם להציג נקודה. נכתב
+     *  **רק מהשרת** (חשבון שירות). אין בו שם, מייל או טלפון — רק הטקסט
+     *  שבטבלת ההתראות. כל משפחה קוראת את שלה בלבד.
+     *  ⚠️ `myFamilyId() != ''` — אחרת '' == '' פותח מסמך בלי מזהה.
+     *  ⚠️ הגנן החיצוני אינו מקבל שורות כאלה (הן לתושב על הבקשה שלו).
+     *  התור של השרת (פוש בשעות שקט, שורות סיכום) יושב בגיליון ולא כאן —
+     *  הטקסטים למנהלים נושאים שמות.
+     * ==================================================================== */
+    function canSeeInbox(fid) {
+      return isMember() && myFamilyId() != '' && fid == myFamilyId();
+    }
+
+    match /notifyInbox/{fid} {
+      allow read: if canSeeInbox(fid);
+      allow write: if false;
     }
 
     /* ---------- ברירת המחדל ---------- */

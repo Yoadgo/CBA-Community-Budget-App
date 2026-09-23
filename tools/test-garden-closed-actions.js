@@ -94,7 +94,7 @@ ok('⚠️ והשרת באמת שומר אותה', /String\(body\.note \|\| ''\)
 section('10. 🔴 מייל לתושב כשדיווח נפתח מחדש');
 ok('התבנית GARDEN_REOPENED קיימת בברירות המחדל', /'GARDEN_REOPENED',/.test(GS));
 ok('⚠️ והיא נכנסת לגיליון לבד — ensureEmailSettingsSheet_ מוסיף רק מפתחות חסרים',
-   /var toAdd = DEFAULT_EMAIL_SETTINGS\.filter/.test(GS));
+   /var allDefaults = DEFAULT_EMAIL_SETTINGS\.concat\(/.test(GS) && /var toAdd = allDefaults\.filter/.test(GS));   // 23.9
 ok('היא בתחום הגינון ופעילה', /'GARDEN_REOPENED',[\s\S]{0,900}PERM_GARDEN, 'כן'\]/.test(GS));
 const nf = (GS.match(/function gardenNotifyReopened_[\s\S]*?\n\}/) || [''])[0];
 ok('gardenNotifyReopened_ קיימת', !!nf);
@@ -108,8 +108,10 @@ ok('⚠️ סיבה ריקה לא משאירה שורה כפולה', /\+ '\\n\\n
 section('11. השליחה — רק כשבאמת בוטלה סגירה');
 ok('🔴 ב-undo היא אחרי הכתיבה לגיליון, לא לפניה',
    /'תאריך אישור', ''\);[\s\S]{0,260}gardenNotifyReopened_/.test(GS));
-ok('🔴 ב-return היא מותנית ב-wasClosed', /if \(wasClosed\) gardenNotifyReopened_\(ss, id, wasClosed, why\);/.test(GS));
-ok('⚠️ wasClosed נלקח לפני ניקוי הסגירה', GS.indexOf('var wasClosed = cur.closure;') < GS.indexOf("if (wasClosed) gardenNotifyReopened_"));
+/* 23.9 — מרכז ההתראות, תיקון דחוף 2: הערת ההחזרה היא לגנן בלבד. גם על
+   משימה סגורה היא כבר לא יוצאת לתושב בתוך "נפתח מחדש". */
+ok('🔴 ב-return אין יותר "נפתח מחדש" לתושב עם הערת ההחזרה', !/if \(wasClosed\) gardenNotifyReopened_/.test(GS));
+ok('⚠️ ובמקומה פוש לגנן לפי הטבלה (gar-returned)', /notify_\(ss, 'gar-returned', \{ vars: \{ 'כותרת': cur\.title, 'הערה': why/.test(GS));
 ok('⚠️ "החזרה להשלמה" על משימה פתוחה אינה שולחת כלום',
    !/gardenSet_\(sh, row, c, 'דגל', 'הוחזר להשלמה'\);[\s\S]{0,120}gardenNotifyReopened_\(ss, id, cur/.test(GS));
 

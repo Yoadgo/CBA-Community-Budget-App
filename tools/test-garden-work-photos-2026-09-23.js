@@ -84,10 +84,14 @@ const PH = n => Array.from({ length: n }, (_, i) => ({ name: 'p' + i + '.jpg', m
   section('6. הערה/דיווח עם תמונה');
   const r3 = await H.call(cb => B('res2').CBA.data.submitGardenReport({ title: 'דשא יבש', category: 'מדשאות', area: 'ציר מזרחי', x: 0.3, y: 0.3, photos: [] }, cb));
   const t3 = String(r3.taskId);
-  const n1 = await H.call(cb => B('gard').CBA.data.gardenTask('note', t3, { note: 'הממטרה נסתמה, ניקינו', photos: PH(1) }, cb));
+  /* 23.9 — מרכז ההתראות: הערה מגיעה לתושב (עם התמונות) רק ב"לשלוח לתושב". */
+  const n1 = await H.call(cb => B('gard').CBA.data.gardenTask('note', t3, { note: 'הממטרה נסתמה, ניקינו', photos: PH(1), toResident: true }, cb));
   await tick();
   ok('נשמר', n1 && n1.ok, JSON.stringify(n1));
   ok('workPhotos על המשימה ועל הדיווח', (store.gardenTasks[t3].workPhotos || []).length === 1 && (store.gardenReports[String(r3.id)].workPhotos || []).length === 1);
+  const n1b = await H.call(cb => B('gard').CBA.data.gardenTask('note', t3, { note: 'פנימי', photos: PH(1) }, cb));
+  await tick();
+  ok('🔴 הערה פנימית עם תמונה — על המשימה בלבד, לא על הדיווח של התושב', n1b && n1b.ok && (store.gardenTasks[t3].workPhotos || []).length === 2 && (store.gardenReports[String(r3.id)].workPhotos || []).length === 1);
 
   section('7. בלי תמונות — בדיוק כמו קודם');
   const before7 = ups('gard');
@@ -148,7 +152,7 @@ const PH = n => Array.from({ length: n }, (_, i) => ({ name: 'p' + i + '.jpg', m
   const GT = R('js/screens/gardenTasks.js'), RG = R('js/screens/resGarden.js'), PHJ = R('js/ui/photos.js'), DL = R('js/ui/dialog.js'), RU = R('firestore.rules');
   ok('🔑 שגרה/יזומה: "בוצע" בלחיצה אחת', /if \(!isFault\(t\)\) return run\("done", id, \{\}\);/.test(GT));
   ok('🔑 תקלה = kind תושב או repId', /function isFault\(t\) \{ return !!t && \(t\.kind === GK_REPORT \|\| !!t\.repId\); \}/.test(GT));
-  ok('חלון אחד עם בורר של 2 תמונות', /function askWithPhotos\(o\)[\s\S]{0,1200}CBA\.photos\.picker\(host, 2\)/.test(GT));
+  ok('חלון אחד עם בורר של 2 תמונות', /function askWithPhotos\(o\)[\s\S]{0,2400}CBA\.photos\.picker\(host, 2\)/.test(GT));
   ok('סגירה עם סיבה — בורר בחלון הסגירה', /whyPk = CBA\.photos\.picker\(whyPh, 2\)/.test(GT) && /photos: whyPk \? whyPk\.items\(\) : \[\]/.test(GT));
   ok('אישור מנהל עובר בחלון', (GT.match(/approveDone\(/g) || []).length >= 4);
   ok('הערה/דיווח על תקלה — בחלון, ותמונה מחייבת משפט', /m === "note" && isFault\(t\)[\s\S]{0,700}textWithPhotos: true/.test(GT));

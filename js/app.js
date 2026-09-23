@@ -150,7 +150,50 @@
     }
     // הצגת כפתור "צור שנה" רק בבניית תקציב נשלטת ב-CSS לפי body[data-screen]
     saveRoute();   // זוכרים איפה היינו — כדי שרענון עמוד (F5) יחזיר לכאן
+    /* 23.9 — "עדכון חדש": מי שפתח את המסך ראה את העדכון. */
+    try { if (CBA.inbox && CBA.inbox.seenScreen) CBA.inbox.seenScreen(name); } catch (e) {}
   }
+
+  /* ==========================================================================
+     קישור עמוק — פוש וכפתור במייל פותחים את המסך הנכון   (23.9.2026)
+     --------------------------------------------------------------------------
+     המייל והפוש נושאים `?go=<מסך>`. בטעינה קוראים אותו פעם אחת ומוחקים
+     מהכתובת (רענון לא יחזור אליו). אם האפליקציה כבר פתוחה, ה-service worker
+     שולח הודעה ואנחנו מנווטים בלי לטעון מחדש.
+     ⚠️ אין כאן עקיפה של הרשאות: showScreen מסרב למסך שאינו באף אזור של
+        המשתמש, ואז נשארים במסך הרגיל.
+     ========================================================================== */
+  var GO_KEY = "cba_pending_go_v1";
+  var pendingGo = (function () {
+    try {
+      var m = /[?&]go=([^&#]+)/.exec(location.search || "");
+      if (!m) {
+        /* כניסה שעברה דרך דף ההתחברות של גוגל וחזרה — היעד נשמר כאן. */
+        var saved = "";
+        try { saved = sessionStorage.getItem(GO_KEY) || ""; sessionStorage.removeItem(GO_KEY); } catch (e0) {}
+        return /^[A-Za-z]{2,40}$/.test(saved) ? saved : "";
+      }
+      var v = decodeURIComponent(m[1]);
+      var clean = location.pathname + location.search.replace(/([?&])go=[^&#]+&?/, "$1").replace(/[?&]$/, "") + location.hash;
+      try { history.replaceState(null, "", clean); } catch (e) {}
+      if (!/^[A-Za-z]{2,40}$/.test(v)) return "";
+      try { sessionStorage.setItem(GO_KEY, v); } catch (e1) {}
+      return v;
+    } catch (e) { return ""; }
+  })();
+  function goFromNotification(name) {
+    if (!name || !CBA.screens[name]) return;
+    if (!inited) { pendingGo = name; return; }
+    showScreen(name);
+  }
+  try {
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.addEventListener("message", function (e) {
+        var d = e && e.data;
+        if (d && d.type === "cba-go") goFromNotification(String(d.screen || ""));
+      });
+    }
+  } catch (e) {}
 
   /* ==========================================================================
      הרשאות ומידור (2026-08-07)
@@ -256,7 +299,8 @@
       .some(function (p) { return myPerms().indexOf(p) !== -1; });
   }
   function canScreen(name) {
-    if (SCREEN_PERM[name] === "ANY") return hasAnyAdmin();
+    /* 23.9 — "ניהול התראות": כל מנהל, אבל לא הגנן החיצוני (השרת חוסם גם הוא). */
+    if (SCREEN_PERM[name] === "ANY") return hasAnyAdmin() && !isExternalUser();
     if (SCREEN_PERM[name] === "MANAGER") return can(PERM.GARDEN) && !isExternalUser();
     return !SCREEN_PERM[name] || can(SCREEN_PERM[name]);
   }
@@ -1329,6 +1373,13 @@
       if (CBA.screens.events && CBA.screens.events.focusEvent) CBA.screens.events.focusEvent(deepEvent);
     }
     showScreen(target);
+    /* 23.9 — הגענו מפוש/מייל: המסך שהם הצביעו עליו, אחרי שהמסך הרגיל
+       כבר צויר (כך שסירוב הרשאה משאיר את המשתמש במקום תקין). */
+    if (pendingGo) {
+      var go = pendingGo; pendingGo = "";
+      try { sessionStorage.removeItem(GO_KEY); } catch (e) {}
+      if (go !== target) showScreen(go);
+    }
   }
 
   // אייקוני קו מונוכרומיים (currentColor) — ללא אימוג'ים צבעוניים
@@ -1466,7 +1517,9 @@
     if (pushBtn) pushBtn.addEventListener("click", function () {
       closeUserPanel(panel, btn);
       var action = CBA.push.isSubscribed() ? CBA.push.unsubscribe() : CBA.push.subscribe();
-      action.catch(function (err) { if (window.CBA.toast) CBA.toast(String((err && err.message) || err), "error"); })
+      /* 23.9 — CBA.toast לא קיים (הפונקציה היא CBA.ui.toast), ולכן שגיאת
+         הרשמה להתראות נבלעה בשקט עד היום. */
+      action.catch(function (err) { if (CBA.ui && CBA.ui.toast) CBA.ui.toast(String((err && err.message) || err), "error"); })
             .then(function () { renderControls(); });
     });
     // שתי גלולות ולא כפתור אחד (2026-09-07) — querySelectorAll, לא querySelector.
@@ -1678,7 +1731,7 @@
       tiles.push(['data-panel-update', ICON.refresh, 'עדכון גרסה', 'בדיקת עדכון גרסה']);
     }
     if (currentArea === "admin" && canScreen("emailSettings")) {
-      tiles.push(['data-panel-goto="emailSettings"', ICON.mail, 'מיילים', 'ניהול מיילים']);
+      tiles.push(['data-panel-goto="emailSettings"', ICON.bell, 'התראות', 'ניהול התראות']);
     }
     /* דיווחים על האפליקציה — מנהל-על בלבד. במכוון אריח בתפריט ולא טאב ניווט:
        זה מסך שנכנסים אליו כשמתפנים לטפל במשוב, לא יעד יומיומי, ובר הניווט

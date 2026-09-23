@@ -900,6 +900,8 @@ CBA.screens = CBA.screens || {};
          הקובעת נשענת עליו, ואין שום סיבה שיחכו לה. */
       loadMyGarden(container);
       loadMyGym(container);
+      /* 23.9 — "עדכון חדש" ממרכז ההתראות (js/ui/inbox.js). Firestore, מקביל. */
+      if (window.CBA.inbox) CBA.inbox.mount(container);
 
       seedHomeFast(container, function () {
         primeHomeExtras(function () {

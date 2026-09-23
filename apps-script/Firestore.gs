@@ -409,7 +409,8 @@ function fcmSendToToken_(token, title, body, data) {
         token: token,
         notification: { title: title, body: body },
         data: data || {},
-        webpush: { fcm_options: { link: CBA_APP_URL } }
+        /* 23.9 — מרכז ההתראות: הקישור פותח את מסך היעד (data.screen). */
+        webpush: { fcm_options: { link: CBA_APP_URL + ((data && /^[A-Za-z]{2,40}$/.test(String(data.screen || ''))) ? '?go=' + data.screen : '') } }
       }
     };
     var res = UrlFetchApp.fetch(url, {

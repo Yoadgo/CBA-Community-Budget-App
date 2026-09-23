@@ -92,7 +92,8 @@ const residentLog = (W, taskId) => Object.values(W.store.gardenLog).filter(l => 
     ok('המשימה נושאת familyId מהיצירה', W.store.gardenTasks[W.ids.task1].familyId === 'F1');
     await H.call(cb => W.B('mgr').CBA.data.gardenTask('plan', W.ids.task1, { week: W.THIS }, cb));
     await H.call(cb => W.B('gard').CBA.data.gardenTask('defer', W.ids.task1, {}, cb));
-    await H.call(cb => W.B('gard').CBA.data.gardenTask('note', W.ids.task1, { note: 'הגעתי' }, cb));
+    /* 23.9 — מרכז ההתראות: הערה מגיעה לתושב רק כש"לשלוח לתושב" מסומן. */
+    await H.call(cb => W.B('gard').CBA.data.gardenTask('note', W.ids.task1, { note: 'הגעתי', toResident: true }, cb));
     await H.call(cb => W.B('mgr').CBA.data.gardenTask('done', W.ids.task1, { note: 'תוקן' }, cb));
     eq('התושב רואה: נפתח, שיבוץ, גרירה, הערה, סגירה', residentLog(W, W.ids.task1), ['נפתח', 'שיבוץ', 'גרירה', 'הערה', 'סגירה']);
     const my = await H.call(cb => W.B('res1').CBA.data.getMyGardenLog(cb));

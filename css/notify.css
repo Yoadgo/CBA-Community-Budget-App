@@ -1,0 +1,139 @@
+/* מסך "ניהול התראות" (23.9.2026) — אותה שפה בדיוק כמו אב-הטיפוס של מרכז
+   ההתראות: לשוניות על רקע אפור, טבלה נקייה, וכפתורי-גלולה צבעוניים בתא.
+   ההבדל היחיד מאב-הטיפוס (בקשת יועד): במצב רגיל התא מציג רק מה שדלוק;
+   מעבר עכבר / מיקוד / לחיצה בטלפון פותחים את כל הכפתורים. */
+.nt-screen {
+  --nt-mail: #1D4ED8; --nt-mail-bg: #E8EEFC;
+  --nt-push: #047857; --nt-push-bg: #E3F5EC;
+  --nt-dg: #6D28D9;   --nt-dg-bg: #F0E9FD;
+  --nt-line: var(--border, #E5E7EB); --nt-line2: #F0F1F3;
+  --nt-mute: #8A919C; --nt-ink2: var(--text-soft, #4B5563);
+  --nt-warn: #B45309;
+  display: flex; flex-direction: column; gap: 16px;
+}
+#nt-drawer {
+  --nt-mail: #1D4ED8; --nt-mail-bg: #E8EEFC;
+  --nt-push: #047857; --nt-push-bg: #E3F5EC;
+  --nt-dg: #6D28D9;   --nt-dg-bg: #F0E9FD;
+  --nt-line: var(--border, #E5E7EB); --nt-line2: #F0F1F3;
+  --nt-mute: #8A919C; --nt-ink2: var(--text-soft, #4B5563);
+}
+
+.nt-top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; justify-content: space-between; }
+.nt-seg { display: flex; flex-wrap: wrap; gap: 4px; background: var(--nt-line2); padding: 4px; border-radius: 12px; }
+.nt-tab {
+  border: 0; background: transparent; padding: 7px 14px; border-radius: 9px; cursor: pointer;
+  font: inherit; font-size: 14px; color: var(--nt-ink2);
+}
+.nt-tab[aria-selected="true"] { background: var(--surface, #fff); color: var(--text, #111827); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.nt-tab:focus-visible { outline: 2px solid var(--nt-push); outline-offset: 2px; }
+.nt-legend { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 12.5px; color: var(--nt-ink2); align-items: center; }
+.nt-legend .nt-tg { cursor: default; }
+.nt-legend-hint { color: var(--nt-mute); }
+.nt-save { font-size: 13px; color: var(--nt-mute); min-height: 1em; }
+.nt-save.is-bad { color: var(--danger, #B91C1C); font-weight: 500; }
+
+.nt-panel { padding: 16px 18px; }
+
+/* טבלה */
+.nt-tbl { overflow-x: auto; }
+.nt-tbl table { width: 100%; border-collapse: collapse; min-width: 760px; }
+.nt-tbl th { font-size: 12.5px; font-weight: 500; color: var(--nt-mute); text-align: right; padding: 8px; border-bottom: 1px solid var(--nt-line); white-space: nowrap; }
+.nt-tbl th.nt-rc { text-align: center; }
+.nt-tbl td { padding: 9px 8px; border-bottom: 1px solid var(--nt-line2); vertical-align: middle; }
+.nt-grp td { background: var(--nt-line2); font-size: 12px; font-weight: 700; color: var(--nt-ink2); padding: 5px 10px; }
+.nt-row:hover td { background: color-mix(in srgb, var(--nt-line2) 55%, transparent); }
+.nt-ev { width: 34%; }
+.nt-evbtn { all: unset; cursor: pointer; display: block; width: 100%; }
+.nt-evbtn:focus-visible { outline: 2px solid var(--nt-push); outline-offset: 3px; border-radius: 6px; }
+.nt-evbtn b { font-weight: 500; display: block; }
+.nt-evbtn b::after { content: " ›"; color: var(--nt-mute); font-weight: 400; }
+.nt-meta { font-size: 12px; color: var(--nt-mute); display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
+td.nt-rc { text-align: center; }
+
+/* התא — במצב רגיל רק מה שדלוק */
+.nt-cell {
+  display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: center; align-items: center;
+  min-height: 28px; min-width: 64px; padding: 3px 4px; border-radius: 10px; outline: none;
+  transition: background var(--t, .15s);
+}
+.nt-cell .nt-tg:not(.on) { display: none; }
+.nt-cell .nt-off { display: none; color: #C9CDD3; font-size: 14px; }
+.nt-cell.is-empty .nt-off { display: inline; }
+/* פתוח: עכבר מעל, מיקוד מקלדת, או לחיצה בטלפון.
+   ⚠️ :focus-visible ולא :focus-within — אחרי לחיצת עכבר הכפתור נשאר
+      ממוקד, והתא היה נשאר פתוח עד שלוחצים במקום אחר. */
+.nt-cell.is-open, .nt-cell:focus-visible, .nt-cell:has(.nt-tg:focus-visible) { background: var(--nt-line2); }
+.nt-cell.is-open .nt-tg, .nt-cell:focus-visible .nt-tg, .nt-cell:has(.nt-tg:focus-visible) .nt-tg { display: inline-flex; }
+.nt-cell.is-open .nt-off, .nt-cell:focus-visible .nt-off, .nt-cell:has(.nt-tg:focus-visible) .nt-off { display: none; }
+@media (hover: hover) {
+  .nt-cell { cursor: pointer; }
+  .nt-cell:hover { background: var(--nt-line2); }
+  .nt-cell:hover .nt-tg { display: inline-flex; }
+  .nt-cell:hover .nt-off { display: none; }
+}
+.nt-na { color: var(--nt-line); font-size: 18px; }
+.nt-cnote { display: block; font-size: 11px; color: var(--nt-warn); margin: 3px auto 0; max-width: 130px; line-height: 1.3; }
+
+.nt-tg {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--nt-line); background: var(--surface, #fff); color: var(--nt-mute);
+  border-radius: 999px; padding: 2px 9px; font: inherit; font-size: 12px; cursor: pointer; min-width: 44px;
+}
+.nt-tg:disabled { opacity: .45; cursor: not-allowed; }
+.nt-tg.on.nt-tg--m { background: var(--nt-mail-bg); color: var(--nt-mail); border-color: transparent; font-weight: 500; }
+.nt-tg.on.nt-tg--p { background: var(--nt-push-bg); color: var(--nt-push); border-color: transparent; font-weight: 500; }
+.nt-tg.on.nt-tg--d { background: var(--nt-dg-bg); color: var(--nt-dg); border-color: transparent; font-weight: 500; }
+.nt-tg:focus-visible { outline: 2px solid var(--nt-push); outline-offset: 2px; }
+
+/* הגדרות כלליות */
+.nt-h2 { font-size: 18px; font-weight: 700; margin: 0; }
+.nt-h3 { font-size: 15px; font-weight: 700; margin: 22px 0 0; }
+.nt-sub { color: var(--nt-ink2); margin: 4px 0 6px; font-size: 14px; }
+.nt-glist { display: flex; flex-direction: column; }
+.nt-g { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--nt-line2); }
+.nt-g:last-child { border-bottom: 0; }
+.nt-gt b { display: block; font-weight: 600; }
+.nt-gt span { font-size: 13.5px; color: var(--nt-ink2); }
+.nt-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.nt-opt { border: 1px solid var(--nt-line); background: var(--surface, #fff); padding: 5px 12px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 13.5px; }
+.nt-opt[aria-pressed="true"] { background: var(--action, #111827); color: #fff; border-color: var(--action, #111827); }
+.nt-num { width: 90px; text-align: center; }
+
+/* חלונית */
+.nt-dbody { display: flex; flex-direction: column; gap: 14px; padding-top: 14px; }
+.nt-drawer .nt-seg--roles { align-self: flex-start; }
+.nt-dot { color: var(--nt-push); font-size: 10px; }
+.nt-info { background: var(--nt-line2); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; color: var(--nt-ink2); }
+.nt-info b { color: var(--text, #111827); }
+.nt-lbl { font-size: 12.5px; color: var(--nt-mute); margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px; }
+.nt-over { color: var(--danger, #B91C1C); font-weight: 500; }
+.nt-sec { border: 1px solid var(--nt-line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.nt-sec h3 { margin: 0; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+.nt-sec h3 .nt-tg { margin-inline-start: auto; }
+.nt-sec-body { display: flex; flex-direction: column; gap: 10px; }
+.nt-sec.is-off .nt-sec-body { opacity: .45; }
+.nt-sec .field-input { width: 100%; }
+.nt-ta { resize: vertical; line-height: 1.5; min-height: 160px; }
+.nt-hint { font-size: 12.5px; color: var(--nt-mute); }
+.nt-notif { background: #EDEFF2; border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; }
+.nt-notif-ico { flex: none; width: 30px; height: 30px; border-radius: 8px; background: var(--action, #111827); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+.nt-notif-t { font-weight: 700; font-size: 14px; }
+.nt-notif-b { font-size: 13.5px; color: var(--nt-ink2); }
+.nt-notif-a { font-size: 11.5px; color: var(--nt-mute); }
+.nt-var-prev { color: var(--nt-push); }
+.nt-vars { display: flex; flex-wrap: wrap; gap: 5px; }
+.nt-var { border: 1px dashed var(--nt-line); background: transparent; border-radius: 6px; padding: 1px 7px; font: inherit; font-size: 12px; cursor: pointer; color: var(--nt-ink2); }
+.nt-chk { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+
+@media (max-width: 600px) {
+  .nt-panel { padding: 12px; }
+  .nt-legend-hint { width: 100%; }
+  /* בטלפון הטבלה נגללת לרוחב — שם הפעולה נשאר צמוד לימין כדי שתמיד
+     יהיה ברור על איזו שורה מסתכלים. */
+  .nt-tbl table { min-width: 620px; }
+  .nt-ev { position: sticky; right: 0; z-index: 1; background: var(--surface, #fff); width: 150px; min-width: 150px; box-shadow: -6px 0 8px -8px rgba(0,0,0,.25); }
+  .nt-tbl th:first-child { position: sticky; right: 0; z-index: 1; background: var(--surface, #fff); }
+  .nt-grp-t { position: sticky; right: 10px; }
+  .nt-meta span + span { display: none; }
+}
