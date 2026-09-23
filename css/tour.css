@@ -137,7 +137,7 @@ body.tr-open { overflow: hidden; }
    שלו (המחשה/אייקון → כותרת → טקסט → כפתור) נכנסים בזה אחר זה. --d נקבע
    ב-render() לפי מקום הילד.
    ========================================================================== */
-.tr-body > * { animation: tr-rise 480ms cubic-bezier(.2, .8, .25, 1) both; animation-delay: calc(var(--d, 0) * 70ms); }
+.tr-body > * { animation: tr-rise 480ms cubic-bezier(.2, .8, .25, 1) backwards; animation-delay: calc(var(--d, 0) * 70ms); }
 .tr-body.is-fwd  > * { animation-name: tr-from-left; }
 .tr-body.is-back > * { animation-name: tr-from-right; }
 @keyframes tr-rise       { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
@@ -269,7 +269,7 @@ body.tr-open { overflow: hidden; }
 .trv-road-top path { fill: none; stroke: #FCFBF8; stroke-width: 11; }
 .trv-park { fill: #E2DDD0; stroke: #D3CCBC; }
 .trv-tree { fill: #CBDFB6; }
-.trv-h { cursor: pointer; animation: trv-pop-in 420ms cubic-bezier(.3, 1.5, .5, 1) both; animation-delay: calc(200ms + var(--i, 0) * 45ms); transform-box: fill-box; transform-origin: center; }
+.trv-h { cursor: pointer; animation: trv-pop-in 420ms cubic-bezier(.3, 1.5, .5, 1) backwards; animation-delay: calc(200ms + var(--i, 0) * 45ms); transform-box: fill-box; transform-origin: center; }
 @keyframes trv-pop-in { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
 .trv-mh { fill: #E3DED1; stroke: #C7C0AE; stroke-width: 1; transition: fill 200ms, stroke 200ms; }
 .trv-h:hover .trv-mh { fill: #D9D2C1; }
@@ -310,7 +310,9 @@ body.tr-open { overflow: hidden; }
   position: relative; min-width: 0; display: flex; flex-direction: column; gap: 5px;
   background: var(--surface); border: 1px solid var(--hairline, rgba(16,24,40,.07)); border-radius: 12px;
   padding: 10px; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.05);
-  animation: tr-rise 420ms cubic-bezier(.2, .8, .25, 1) both; animation-delay: calc(250ms + var(--i, 0) * 110ms);
+  /* backwards ולא both: אחרי הכניסה האנימציה משחררת את opacity/transform,
+     אחרת is-dim/is-match לא היו נראים בכלל (fill-mode דורס מחלקות). */
+  animation: tr-rise 420ms cubic-bezier(.2, .8, .25, 1) backwards; animation-delay: calc(250ms + var(--i, 0) * 110ms);
   transition: opacity 300ms, transform 300ms, box-shadow 300ms, border-color 300ms;
 }
 .trv-dir.is-dim { opacity: .35; transform: scale(.97); }
@@ -325,7 +327,7 @@ body.tr-open { overflow: hidden; }
   min-width: 0; display: flex; flex-direction: column; gap: 3px;
   background: var(--surface); border: 1px solid var(--hairline, rgba(16,24,40,.07)); border-radius: 13px;
   padding: 10px 10px 9px; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.05);
-  animation: tr-rise 420ms cubic-bezier(.2, .8, .25, 1) both; animation-delay: calc(250ms + var(--i, 0) * 110ms);
+  animation: tr-rise 420ms cubic-bezier(.2, .8, .25, 1) backwards; animation-delay: calc(250ms + var(--i, 0) * 110ms);
 }
 .trv-card__head { display: flex; align-items: center; gap: 5px; font-size: 12.5px; }
 .trv-meta { font-size: 10.5px; color: var(--text-muted); }
@@ -352,7 +354,7 @@ body.tr-open { overflow: hidden; }
 .trv-day {
   min-width: 0; min-height: 46px; display: flex; flex-direction: column; gap: 2px; padding: 3px;
   background: var(--surface); border: 1px solid var(--hairline, rgba(16,24,40,.07)); border-radius: 7px;
-  animation: trv-pop-in 380ms cubic-bezier(.3, 1.4, .5, 1) both; animation-delay: calc(200ms + var(--i, 0) * 30ms);
+  animation: trv-pop-in 380ms cubic-bezier(.3, 1.4, .5, 1) backwards; animation-delay: calc(200ms + var(--i, 0) * 30ms);
 }
 .trv-day b { font-size: 9.5px; color: var(--text-soft); }
 .trv-day.is-today { border-color: var(--action); }
