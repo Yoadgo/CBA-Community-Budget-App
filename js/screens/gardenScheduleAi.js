@@ -278,6 +278,56 @@
   }
 
   /* ==========================================================================
+   *  📌 כללים קבועים לסידור (25.9, יועד: "אופציה שיהיה למנהל וגנן אפשרות
+   *  לשמור כללים קבועים לסידור האוטומטי")
+   * --------------------------------------------------------------------------
+   *  מסמך אחד — gardenMeta/scheduleRules { text, updatedAt, updatedBy } — כלל
+   *  בשורה. משותף לגנן ולמנהל (hasPerm('גינון') בכללי Firestore), נשלח ל-AI
+   *  בכל סידור. עד 12 כללים, עד 200 תווים לכל אחד.
+   *  🔒 שמות עובדים בטקסט מוחלפים ב-W1/W2 **לפני** שהוא יוצא מהמכשיר
+   *     (ר' codeNames) — גם כדי שהשם לא יגיע ל-Gemini וגם כדי שה-AI יבין
+   *     על מי מדובר: הוא מכיר את העובדים רק כ-W1/W2.
+   *  ⚠️ המסדר המקומי (נפילה לאחור) והאיזון האוטומטי לא קוראים טקסט — ולכן
+   *     כשיש כללים או הערה, האיזון לא רץ (הוא עלול להזיז משימה לתוך יום
+   *     שהכלל אסר), וההוראה ל-AI היא זו שמפזרת.
+   * ========================================================================== */
+  var MAX_RULES = 12, RULE_LEN = 200, rulesMem = null;
+  function rulesList(text) {
+    return String(text || "").split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
+  }
+  function loadRules(cb, force) {
+    if (rulesMem && !force) return cb(rulesMem);
+    if (!(CBA.fb && CBA.fb.readDoc)) return cb({ list: [], err: true });
+    CBA.fb.readDoc("gardenMeta", "scheduleRules", function (e, d) {
+      rulesMem = { list: e ? [] : rulesList(d && d.text), err: !!e };
+      cb(rulesMem);
+    });
+  }
+  function saveRules(list, cb) {
+    var clean = list.map(function (x) { return String(x || "").replace(/\s+/g, " ").trim().slice(0, RULE_LEN); })
+      .filter(Boolean).slice(0, MAX_RULES);
+    if (!(CBA.fb && CBA.fb.mergeDoc)) return cb("no-fb");
+    CBA.fb.mergeDoc("gardenMeta", "scheduleRules", {
+      text: clean.join("\n"),
+      updatedAt: CBA.fb.serverNow ? CBA.fb.serverNow() : new Date(),
+      updatedBy: CBA.fb.uid ? CBA.fb.uid() : ""
+    }, function (e) {
+      if (!e) rulesMem = { list: clean, err: false };
+      cb(e, clean);
+    });
+  }
+  /* שם עובד → הקוד שלו בבקשה (W1). מי שלא עובד השבוע → "עובד שלא עובד השבוע". */
+  function codeNames(text, crew, code) {
+    var out = String(text || "");
+    crew.slice().sort(function (a, b) { return String(b.name).length - String(a.name).length; }).forEach(function (c) {
+      if (!c.name) return;
+      var re = new RegExp(c.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+      out = out.replace(re, code[c.key] || "עובד שלא עובד השבוע");
+    });
+    return out;
+  }
+
+  /* ==========================================================================
    *  הזרימה
    * ========================================================================== */
   function open(ctx, A) {
@@ -342,8 +392,8 @@
     }
 
     /* ---------- שלב 1: אפשרויות ---------- */
-    function stepOptions() {
-      F.push({
+    function optionsStep() {
+      return ({
         title: "סידור חכם", sub: tasks.length + " משימות שעוד לא בסידור · ה-AI מציע, אתה מאשר",
         html:
           '<div class="gw-ai">' +
@@ -352,6 +402,8 @@
               (lastWeek.plan.length === 1 ? "משימת שגרה אחת" : lastWeek.plan.length + " משימות שגרה") +
               ' — אותו יום, שעה ועובדים. בלי AI, מיידי.</small></span>' + '<i>›</i></button>'
             : '') +
+          '<section class="gw-ai-rules"><h5>כללים קבועים <small>משותפים לגנן ולמנהל · ה-AI מקבל אותם בכל סידור</small></h5>' +
+            '<div data-rules>' + rulesHtml() + '</div></section>' +
           '<section><h5>מתי עובדים</h5>' +
             '<div class="gw-ai-hours"><label>מ-<select data-p="from">' + hOpts(prefs.from) + '</select></label>' +
             '<label>עד<select data-p="to">' + hOpts(prefs.to) + '</select></label></div>' +
@@ -378,18 +430,25 @@
           '<details class="gw-ai-ests"><summary><span><b>הערכות זמן</b><small>לומדות מהפעמים הקודמות · אפשר לתקן</small></span>' +
             '<i data-need></i></summary><div class="gw-ai-estlist">' + estRows() + '</div></details>' +
           '<section><h5>משהו נוסף? <small>לא חובה</small></h5>' +
-            '<textarea class="gd-inp" rows="3" maxlength="500" data-note placeholder="למשל: ביום שלישי אני רק עד 12. עומר על הכיסוחים. כיסוח לפני השקיה.">' +
-            esc(note) + '</textarea></section>' +
+            '<textarea class="gd-inp" rows="3" maxlength="500" data-note placeholder="רק לשבוע הזה. למשל: ביום שלישי אני רק עד 12.">' +
+            esc(note) + '</textarea>' +
+            '<div class="gw-rules-act"><small>חל רק על הסידור הזה</small>' +
+              '<button type="button" class="gw-linkbtn" data-f="note2rule"' + (note.trim() ? '' : ' disabled') + '>+ לשמור ככלל קבוע</button></div>' +
+          '</section>' +
           '<div data-cap>' + capHtml() + '</div>' +
           '<button type="button" class="gd-cta gw-ai-go" data-f="go">' + A.SPARK + 'סדר לי</button>' +
           '</div>',
         mount: function (body) {
+          /* ⚠️ המאזינים על .gw-ai (נבנה מחדש בכל הצגה) ולא על body — body הוא
+             מכל החלון שנשאר בין השלבים, וחזרה לשלב הזה הכפילה מאזינים (מתג
+             שנלחץ פעם אחת התהפך פעמיים). */
+          var root = body.querySelector(".gw-ai") || body;
           function refresh() {
             body.querySelector("[data-cap]").innerHTML = capHtml();
             var ni = body.querySelector("[data-need]"); if (ni) ni.textContent = A.durText(need());
           }
           refresh();
-          body.addEventListener("change", function (e) {
+          root.addEventListener("change", function (e) {
             var p = e.target.getAttribute("data-p");
             if (p) {
               prefs[p] = +e.target.value;
@@ -397,8 +456,14 @@
               refresh();
             }
           });
-          body.addEventListener("input", function (e) { if (e.target.hasAttribute("data-note")) note = e.target.value; });
-          body.addEventListener("click", function (e) {
+          root.addEventListener("input", function (e) {
+            if (!e.target.hasAttribute("data-note")) return;
+            note = e.target.value;
+            var nb = body.querySelector('[data-f="note2rule"]'); if (nb) nb.disabled = !note.trim();
+          });
+          /* הכללים נטענים ברקע — החלון לא מחכה להם. */
+          loadRules(function () { var r = body.querySelector("[data-rules]"); if (r) r.innerHTML = rulesHtml(); });
+          root.addEventListener("click", function (e) {
             var b = e.target.closest("button"); if (!b || b.disabled) return;
             if (b.dataset.day != null) {
               var i = +b.dataset.day, k = prefs.days.indexOf(i);
@@ -426,11 +491,88 @@
         },
         on: {
           go: function () { run(); },
+          rules: function () { stepRules(); },
+          note2rule: function () {
+            var t = String(note || "").trim(); if (!t) return;
+            var list = ((rulesMem && rulesMem.list) || []).concat([t]);
+            if (list.length > MAX_RULES) return A.toast("אפשר עד " + MAX_RULES + " כללים קבועים");
+            saveRules(list, function (e) {
+              if (e) return A.toast("הכלל לא נשמר — " + (/permission/i.test(String(e.code || e)) ? "אין הרשאה" : "נסה שוב"), "error");
+              note = "";
+              var ta = document.querySelector(".gw-flow [data-note]"); if (ta) ta.value = "";
+              var r = document.querySelector(".gw-flow [data-rules]"); if (r) r.innerHTML = rulesHtml();
+              var nb = document.querySelector('.gw-flow [data-f="note2rule"]'); if (nb) nb.disabled = true;
+              A.toast("נשמר ככלל קבוע");
+            });
+          },
           last: function () {
             stepProposal(validate(A, ctx, lastWeek, tasks, durs, crewKeys), "last", true);
           }
         }
       });
+    }
+    function stepOptions() { F.push(optionsStep()); }
+    function rulesHtml() {
+      if (!rulesMem) return '<p class="gw-rule-ex">טוען…</p>';
+      var list = rulesMem.list || [];
+      if (rulesMem.err && !list.length) return '<p class="gw-rule-ex">לא הצלחתי לטעון את הכללים הקבועים — הסידור ימשיך בלעדיהם.</p>';
+      return (list.length
+          ? '<ul class="gw-rules">' + list.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join("") + '</ul>'
+          : '<p class="gw-rule-ex">עוד אין. למשל: "עומר לא עובד בשישי" · "השקיה רק לפני 10:00" · "כיסוח לפני השקיה באותו אזור".</p>') +
+        '<div class="gw-rules-act"><span></span><button type="button" class="gw-linkbtn" data-f="rules">' +
+          (list.length ? "עריכה" : "+ הוספת כלל") + '</button></div>';
+    }
+    /* ---------- עריכת הכללים הקבועים ---------- */
+    function stepRules() {
+      var list = ((rulesMem && rulesMem.list) || []).slice();
+      if (!list.length) list.push("");
+      function rows() {
+        return list.map(function (r, i) {
+          return '<div class="gw-rule"><input class="gd-inp" maxlength="' + RULE_LEN + '" data-ri="' + i + '" value="' + esc(r) + '" placeholder="כלל אחד בשורה">' +
+            '<button type="button" data-f="rrm" data-i="' + i + '" aria-label="מחיקת הכלל">×</button></div>';
+        }).join("");
+      }
+      function collect(body) {
+        Array.prototype.forEach.call(body.querySelectorAll("[data-ri]"), function (inp) { list[+inp.dataset.ri] = inp.value; });
+      }
+      F.push({
+        title: "כללים קבועים", sub: "משותפים לגנן ולמנהל · עד " + MAX_RULES + " כללים",
+        html: '<p class="gw-rule-ex">מה שנכון תמיד, לא רק השבוע. אפשר לכתוב שמות — הם מוחלפים בקוד לפני שהכלל נשלח ל-AI.</p>' +
+          '<div data-rl>' + rows() + '</div>' +
+          '<button type="button" class="gw-linkbtn" data-f="radd">+ עוד כלל</button>' +
+          '<button type="button" class="gd-cta" data-f="rsave" style="margin-top:12px">שמירה</button>',
+        on: {
+          radd: function (b) {
+            var body = b.closest(".gw-flow"); collect(body);
+            if (list.length >= MAX_RULES) return A.toast("אפשר עד " + MAX_RULES + " כללים");
+            list.push(""); body.querySelector("[data-rl]").innerHTML = rows();
+            var last = body.querySelector('[data-ri="' + (list.length - 1) + '"]'); if (last) last.focus();
+          },
+          rrm: function (b) {
+            var body = b.closest(".gw-flow"); collect(body);
+            list.splice(+b.dataset.i, 1); if (!list.length) list.push("");
+            body.querySelector("[data-rl]").innerHTML = rows();
+          },
+          rsave: function (b) {
+            var body = b.closest(".gw-flow"); collect(body);
+            b.disabled = true;
+            saveRules(list, function (e) {
+              b.disabled = false;
+              if (e) return A.toast("הכללים לא נשמרו — " + (/permission/i.test(String(e.code || e)) ? "אין הרשאה" : "נסה שוב"), "error");
+              A.toast("הכללים נשמרו");
+              stepOptionsBack();
+            });
+          }
+        }
+      });
+    }
+    function stepOptionsBack() {
+      /* חזרה למסך האפשרויות — ⚠️ בנוי מחדש (F.replace) ולא "חזרה" רגילה: ה-HTML
+         של שלב נבנה פעם אחת, ובחזרה רגילה המתגים והטקסט היו מוצגים כמו
+         שהיו לפני היציאה, בעוד שההעדפות עצמן כבר השתנו. */
+      var back = document.querySelector('.gw-flow [data-f="__back"]');
+      if (back) back.click();
+      F.replace(optionsStep());
     }
     function tog(k, label, sub) {
       return '<button type="button" class="gw-ai-row gw-ai-tog' + (prefs[k] ? " on" : "") + '" data-tog="' + k + '" aria-pressed="' + !!prefs[k] + '">' +
@@ -461,7 +603,8 @@
       var payload = {
         week: ctx.week, today: A.todayDate(),
         prefs: { urgentFirst: !!prefs.urgent, faults: prefs.faults, groupByArea: !!prefs.group, bufferMinutes: prefs.buffer ? 15 : 0, spread: prefs.spread !== false },
-        note: String(note || "").slice(0, 500),
+        note: codeNames(String(note || "").slice(0, 500), crew, code),
+        standing: ((rulesMem && rulesMem.list) || []).map(function (r) { return codeNames(r, crew, code); }).join("\n"),
         workers: ws.map(function (k) { return code[k]; }),
         days: days.map(function (d) {
           var i = dates.indexOf(d), o = { date: d, name: A.DAYS[i] };
@@ -493,6 +636,7 @@
         })
       };
       var done = false;
+      function hasText() { return !!(String(note || "").trim() || ((rulesMem && rulesMem.list) || []).length); }
       function byIdMap() { var o = {}; tasks.forEach(function (t) { o[String(t.id)] = t; }); return o; }
       var timer = setTimeout(function () { finish(null, "ה-AI לא ענה בזמן"); }, TIMEOUT_MS);
       function finish(res, err) {
@@ -503,7 +647,7 @@
         if (res && res.ok && res.plan) {
           res.plan.forEach(function (p) { p.who = (p.who || []).map(function (c) { return back[c]; }).filter(Boolean); });
           result = validate(A, ctx, res, tasks, durs, crewKeys);
-          result.plan = rebalance(A, ctx, result.plan, days, prefs, byIdMap());
+          if (!hasText()) result.plan = rebalance(A, ctx, result.plan, days, prefs, byIdMap());
         } else {
           mode = "local";
           result = validate(A, ctx, (function (lp) {
@@ -511,7 +655,7 @@
                        return { id: p.id, date: p.slot.date, start: A.hhmm(p.slot.start), minutes: p.slot.dur, who: p.slot.who || [] }; }),
                      unplaced: lp.unplaced };
           })(planLocal(A, ctx, tasks, days, prefs, durs, ws)), tasks, durs, crewKeys);
-          result.plan = rebalance(A, ctx, result.plan, days, prefs, byIdMap());
+          if (!hasText()) result.plan = rebalance(A, ctx, result.plan, days, prefs, byIdMap());
           result.why = err || (res && res.error) || "";
         }
         stepProposal(result, mode, false);

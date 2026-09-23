@@ -598,3 +598,50 @@
    בערכי ברירת המחדל הטקסט שמאחור נקרא דרכה. */
 .gw-pop.lg { --lg-w1: .9; --lg-w2: .82; --lg-blur: 28px; }
 .gw-bar.lg, .gw-toast.lg { --lg-w1: .86; --lg-w2: .74; --lg-blur: 24px; }
+
+/* ==========================================================================
+ *  25.9 ערב — משוב יועד על סבב 4
+ * ========================================================================== */
+/* 🖥 שורת הכלים יושבת בתוך שורת הבקרה של המסך (ליד "רשימה", ?, +) */
+.gd-screen.is-sched .gt-ctl.has-gw .gw-view { margin-inline-end: 0; }
+.gt-ctl .gw-tb.is-wide { flex: 1 1 auto; min-width: 0; }
+.gw-tb.is-wide .gw-todo { flex: 0 1 auto; width: auto; min-width: 0; padding: 0 2px 0 6px; background: transparent; border: 0; }
+.gw-tb.is-wide .gw-todo.is-done { background: transparent; }
+.gw-tb.is-wide .gw-todo__t { white-space: nowrap; }
+/* 🖥 כל היום במסך אחד */
+.gw-grid.is-fit { padding-bottom: 0; }
+.gw-grid.is-tight .gw-blk { padding: 2px 6px 1px; gap: 0; }
+.gw-grid.is-tight .gw-blk b { font-size: 11.5px; }
+.gw-grid.is-tight .gw-blk em { font-size: 10px; }
+.gw-grid.is-tight .gw-times span { font-size: 10px; transform: translateY(-6px); }
+.gw-grid.is-tight .gw-whos i { font-size: 10px; padding: 1px 5px; }
+/* 👷 שמות מלאים תמיד — נחתכים ב-… ולא מוחלפים באות */
+.gw-blk.is-short .gw-whos { flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.gw-blk.is-narrow .gw-whos { flex-wrap: nowrap; overflow: hidden; }
+.gw-sum__w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; padding-inline: 2px; }
+
+/* 📌 כללים קבועים לסידור החכם */
+.gw-rules { list-style: none; margin: 0; padding: 0; background: rgba(255,255,255,.72); border-radius: 13px;
+  border: 1px solid rgba(255,255,255,.85); box-shadow: 0 0 0 1px rgba(17,24,39,.05); }
+.gw-rules li { display: flex; gap: 8px; align-items: baseline; padding: 9px 12px; font-size: 13.5px; line-height: 1.35; }
+.gw-rules li + li { border-top: .5px solid rgba(17,24,39,.08); }
+.gw-rules li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--gs-ok, #0F6B45); flex: none; transform: translateY(-2px); }
+.gw-rules-act { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 7px; }
+.gw-rules-act small { font-size: 11.5px; color: var(--text-muted, #9CA3AF); }
+.gw-linkbtn { border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--gs-ok, #0F6B45);
+  cursor: pointer; padding: 4px 2px; display: inline-flex; align-items: center; gap: 4px; }
+.gw-linkbtn:disabled { opacity: .4; cursor: default; }
+.gw-rule { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.gw-rule input { flex: 1; min-width: 0; }
+.gw-rule button { width: 36px; height: 36px; flex: none; border-radius: 50%; border: 0; background: rgba(17,24,39,.06);
+  color: var(--text-soft, #6B7280); display: grid; place-items: center; cursor: pointer; font-size: 17px; line-height: 1; }
+.gw-rule-ex { font-size: 12px; color: var(--text-soft, #6B7280); margin: 2px 2px 10px; line-height: 1.5; }
+/* בלוק צר (שניים באותה שעה) — השמות יורדים שורה במקום להיחתך */
+.gw-blk.is-narrow:not(.is-short) .gw-whos { flex-wrap: wrap; overflow: visible; }
+.gw-blk.is-narrow .gw-whos i { padding: 1px 5px; }
+.gw-grid.is-tight .gw-times span:first-child { transform: translateY(2px); }
+/* מסך נמוך (שעה < 34px): בלוק של שעה — כותרת ושמות בשורה אחת, כמו בלוק קצר */
+.gw-grid.is-tight .gw-blk.is-hr { flex-direction: row; align-items: center; gap: 6px; padding-block: 1px; }
+.gw-grid.is-tight .gw-blk.is-hr b { flex: 1; min-width: 0; }
+.gw-grid.is-tight .gw-blk.is-hr em { display: none; }
+.gw-grid.is-tight .gw-blk.is-hr .gw-whos { order: 0; flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; margin-top: 0; overflow: hidden; }

@@ -4396,6 +4396,47 @@ function geminiApiKey_() {
 // מדי או לא מדויקות מספיק בפועל, אפשר להחליף כאן בלבד (לא נוגע בשאר הקוד).
 var GEMINI_MODEL = 'gemini-3.1-flash-lite';
 
+/* ============ ניסיונות חוזרים ל-Gemini (23.9.26) ============
+ * כל חמש הפניות ל-Gemini (סריקת קבלה, כרטיס שירות, תשלום מכון, סידור חכם,
+ * ניסוח מיילים) עוברות כאן במקום ישירות ב-UrlFetchApp.fetch — אותה חתימה בדיוק.
+ * למה: 503 ("The model is overloaded") הוא עומס זמני בשרתי גוגל — לא תקלה אצלנו
+ * ולא בעיית מכסה. הוא בדרך כלל חולף תוך שניות, ולכן ניסיון אחד בלבד הפיל סריקות
+ * שהיו מצליחות בניסיון השני. גם מנוי בתשלום לא מונע 503 (קיבולת משותפת).
+ * מה: עד 3 ניסיונות בסך הכול, המתנה ~1.5ש' ואז ~3ש' (+רעש אקראי קטן), רק על קודים
+ * זמניים (429/500/503/504) או שגיאת רשת. 400/403/404 = טעות קבועה → לא חוזרים.
+ * ⚠ לא להגדיל בלי מחשבה: הלקוח מחכה לכל הזמן הזה, ו-Apps Script מוגבל ל-6 דק'. */
+var GEMINI_RETRY_CODES = [429, 500, 503, 504];
+var GEMINI_RETRY_WAITS_MS = [1500, 3000];
+
+function geminiFetch_(url, opts) {
+  var attempts = GEMINI_RETRY_WAITS_MS.length + 1;
+  for (var i = 0; i < attempts; i++) {
+    var last = (i === attempts - 1);
+    var resp;
+    try {
+      resp = UrlFetchApp.fetch(url, opts);
+    } catch (e) {
+      if (last) throw e;                       // אחרי הניסיון האחרון — כמו קודם בדיוק
+      Logger.log('geminiFetch_: network error, retry ' + (i + 1) + ': ' + String(e));
+      Utilities.sleep(GEMINI_RETRY_WAITS_MS[i] + Math.floor(Math.random() * 500));
+      continue;
+    }
+    var code = resp.getResponseCode();
+    if (code === 200 || last || GEMINI_RETRY_CODES.indexOf(code) === -1) return resp;
+    Logger.log('geminiFetch_: HTTP ' + code + ', retry ' + (i + 1));
+    Utilities.sleep(GEMINI_RETRY_WAITS_MS[i] + Math.floor(Math.random() * 500));
+  }
+}
+
+/** הודעת שגיאה בעברית פשוטה למשתמש — במקום "Gemini החזיר קוד 503". */
+function geminiErrorMsg_(code) {
+  if (code === 503 || code === 500 || code === 504) {
+    return 'שירות ה-AI של גוגל עמוס כרגע (ניסינו 3 פעמים). נסו שוב בעוד דקה — שום דבר לא נשמר ולא אבד.';
+  }
+  if (code === 429) return 'הגענו למכסת השימוש ב-AI לעכשיו. נסו שוב בעוד כמה דקות.';
+  return 'Gemini החזיר קוד ' + code;
+}
+
 /** קריאה בפועל ל-Gemini עם תמונת קבלה (base64) — מבקשת פלט JSON קשיח (לא טקסט
  * חופשי) עם סכום/ספק/תיאור/תאריך, כדי לא להזדקק לפענוח טקסט חופשי ולשמור על
  * מהירות. לא נוגעת בגיליון/Drive בכלל — שכבת התאמה טהורה סביב ה-API החיצוני,
@@ -4454,7 +4495,7 @@ function scanReceiptWithGemini_(dataBase64, mimeType) {
     ':generateContent?key=' + encodeURIComponent(key);
   var resp;
   try {
-    resp = UrlFetchApp.fetch(url, {
+    resp = geminiFetch_(url, {
       method: 'post',
       contentType: 'application/json',
       payload: JSON.stringify(payload),
@@ -4466,7 +4507,7 @@ function scanReceiptWithGemini_(dataBase64, mimeType) {
   var code = resp.getResponseCode();
   var raw = resp.getContentText();
   if (code !== 200) {
-    return { ok: false, error: 'Gemini החזיר קוד ' + code, raw: raw };
+    return { ok: false, error: geminiErrorMsg_(code), raw: raw };
   }
   try {
     var data = JSON.parse(raw);
@@ -8076,7 +8117,7 @@ function scanServiceDocWithGemini_(files, freeText) {
     ':generateContent?key=' + encodeURIComponent(key);
   var resp;
   try {
-    resp = UrlFetchApp.fetch(url, {
+    resp = geminiFetch_(url, {
       method: 'post', contentType: 'application/json',
       payload: JSON.stringify(payload), muteHttpExceptions: true
     });
@@ -8084,7 +8125,7 @@ function scanServiceDocWithGemini_(files, freeText) {
     return { ok: false, error: 'שגיאת רשת בקריאה ל-Gemini: ' + String(e) };
   }
   if (resp.getResponseCode() !== 200) {
-    return { ok: false, error: 'Gemini החזיר קוד ' + resp.getResponseCode(), raw: resp.getContentText() };
+    return { ok: false, error: geminiErrorMsg_(resp.getResponseCode()), raw: resp.getContentText() };
   }
   try {
     var data = JSON.parse(resp.getContentText());
@@ -9235,13 +9276,13 @@ function scanGymPayment_(ss, body) {
   };
 
   try {
-    var resp = UrlFetchApp.fetch(
+    var resp = geminiFetch_(
       'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
       ':generateContent?key=' + encodeURIComponent(key),
       { method: 'post', contentType: 'application/json',
         payload: JSON.stringify(payload), muteHttpExceptions: true });
     if (resp.getResponseCode() !== 200) {
-      return { ok: false, error: 'Gemini החזיר קוד ' + resp.getResponseCode() };
+      return { ok: false, error: geminiErrorMsg_(resp.getResponseCode()) };
     }
     var data = JSON.parse(resp.getContentText());
     var text = data.candidates && data.candidates[0] && data.candidates[0].content &&
@@ -15267,6 +15308,10 @@ function gardenAiSchedule_(ss, body) {
     spread: p.spread !== false
   };
   var note = str(body.note, 500).trim();
+  /* 📌 GW-25.9:C10-standing — כללים קבועים של הצוות (gardenMeta/scheduleRules),
+     כלל בשורה. שמות העובדים כבר הוחלפו ב-W1/W2 בדפדפן. */
+  var standing = String(body.standing == null ? '' : body.standing).split('\n').slice(0, 12)
+    .map(function (x) { return str(x, 200).trim(); }).filter(String);
   var multi = workers.length > 0;
   /* ⚖️ יעד מספרי ליום — "לפזר באופן מאוזן" לבד עדיין השאיר ימים ריקים
      (נבדק חי: 14 משימות, 5 ימים → שלושה ימים בלבד). מספר מפורש עובד. */
@@ -15297,7 +15342,9 @@ function gardenAiSchedule_(ss, body) {
     prefs.spread
       ? '- ⚖️ חובה לפזר את העבודה על **כל** ' + days.length + ' הימים שב-days — הגנן בחר אותם בכוונה. סה"כ ' + totalMin + ' דקות ⇒ יעד של כ-' + perDay + ' דקות ביום (כל העובדים יחד, סטייה של עד כשעה). **כל יום ב-days חייב לקבל עבודה**; יום ריק או יום שמקבל פי שניים מהיעד = סידור שגוי. לפני שאתה מחזיר — סכם את הדקות לכל יום ותקן. העדפות "מוקדם בשבוע" שלמעלה חלות רק על המשימות שהן מזכירות (נגררות/תקלות), לא על כל השאר. בתוך יום — להתחיל מתחילת חלון העבודה, בלי חורים מיותרים.'
       : '- למלא את תחילת השבוע ואת תחילת כל יום לפני סופם.',
-    note ? 'הטקסט החופשי של הגנן גובר על ההעדפות (אך לא על הכללים המחייבים 1, 3, 5): "' + note + '"' : '',
+    standing.length ? 'כללים קבועים של הצוות — תמיד בתוקף, גוברים על ההעדפות (אך לא על הכללים המחייבים 1, 3, 5). עובדים מופיעים בהם כ-W1/W2:\n' +
+      standing.map(function (x) { return '  • ' + x; }).join('\n') : '',
+    note ? 'הטקסט החופשי של הגנן לשבוע הזה גובר על ההעדפות ועל הכללים הקבועים (אך לא על הכללים המחייבים 1, 3, 5). עובדים מופיעים בו כ-W1/W2: "' + note + '"' : '',
     'summary: עד שלושה משפטים קצרים בעברית שמסבירים את ההיגיון של הסידור (לא רשימת המשימות). אל תזכיר W1/W2 בשמם — כתוב "עובד 1", "עובד 2".'
   ].filter(String).join('\n');
 
@@ -15324,13 +15371,13 @@ function gardenAiSchedule_(ss, body) {
     }
   };
   try {
-    var resp = UrlFetchApp.fetch(
+    var resp = geminiFetch_(
       'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
       ':generateContent?key=' + encodeURIComponent(key),
       { method: 'post', contentType: 'application/json',
         payload: JSON.stringify(payload), muteHttpExceptions: true });
     if (resp.getResponseCode() !== 200) {
-      return { ok: false, error: 'Gemini החזיר קוד ' + resp.getResponseCode() };
+      return { ok: false, error: geminiErrorMsg_(resp.getResponseCode()) };
     }
     var data = JSON.parse(resp.getContentText());
     var text = data.candidates && data.candidates[0] && data.candidates[0].content &&

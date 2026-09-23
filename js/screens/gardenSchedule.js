@@ -409,8 +409,9 @@
       }).join("") + '</div>';
     }
 
-    /* --- שורת הסטטוס: "לא בסידור" / מצב בחירה מרובה ---- */
-    if (!ctx.loading) {
+    /* --- שורת הסטטוס: "לא בסידור" / מצב בחירה מרובה ----
+       🖥 במחשב היא יושבת בתוך שורת הכלים (toolbarHtml) — שורה אחת פחות. */
+    if (!ctx.loading && !wide()) {
       if (st.multi) {
         html += '<div class="gw-todo is-multi">' +
           '<span class="gw-todo__t">' + (Object.keys(st.picked).length ? "אפשר להוסיף עוד בהקשה" : "הקשה על משימות בוחרת אותן") + '</span>' +
@@ -429,9 +430,7 @@
           '<span class="gw-todo__t">' + (cand ? "כל משימות השבוע בסידור" : "אין משימות פתוחות לשבוע הזה") + '</span></div>';
       }
       if (!lsGet(HINT_KEY) && canEditView()) {
-        html += '<div class="gw-hint">' + (wide()
-          ? "לחיצה על שעה פנויה משבצת משימה · גרירה מזיזה · הקצוות משנים משך."
-          : "לחיצה ארוכה על שעה פנויה משבצת · הקשה על משימה בוחרת אותה.") + '</div>';
+        html += '<div class="gw-hint">לחיצה ארוכה על שעה פנויה משבצת · הקשה על משימה בוחרת אותה.</div>';
       }
     }
 
@@ -440,6 +439,16 @@
 
     host.innerHTML = html;
     host.classList.add("gw-host");
+    /* 🖥 במחשב — שורת הכלים עוברת לשורת הבקרה של המסך (ליד "רשימה", ? ו-+),
+       כך שמעל הרשת נשארות רק כותרת השבוע ושורה אחת. (יועד, 25.9: "יש בחלק
+       העליון בתצוגת דסקטופ יותר מדי מקום פנוי".) */
+    st.tbEl = null;
+    var scr = host.closest ? host.closest(".gd-screen") : null, ctl = scr && scr.querySelector(".gt-ctl");
+    if (ctl) Array.prototype.forEach.call(ctl.querySelectorAll(".gw-tb"), function (x) { x.parentNode.removeChild(x); });
+    if (wide() && ctl) {
+      var tb = host.querySelector(".gw-tb"), vbtn = ctl.querySelector(".gw-view");
+      if (tb) { ctl.insertBefore(tb, vbtn ? vbtn.nextSibling : ctl.firstChild); st.tbEl = tb; ctl.classList.add("has-gw"); }
+    } else if (ctl) ctl.classList.remove("has-gw");
     host.classList.toggle("is-multi", !!st.multi);
     host.classList.toggle("is-sel", !!st.sel);
     wire(host, ctx);
@@ -449,8 +458,27 @@
   }
 
   /* ---- שורת הכלים: עובד · תצוגה · ··· (הכרעת יועד: שורה אחת + תפריט) ---- */
+  function todoHtml(ctx) {
+    if (ctx.loading) return "";
+    var un = unscheduled(ctx), cand = candidates(ctx).length;
+    if (st.multi) {
+      return '<div class="gw-todo is-multi">' +
+        '<span class="gw-todo__t">' + (Object.keys(st.picked).length ? "אפשר להוסיף עוד בהקשה" : "הקשה על משימות בוחרת אותן") + '</span>' +
+        '<button type="button" class="gw-todo__b" data-gs="pickall">' + (visCols(curView()).length > 1 ? "כל הימים המוצגים" : "כל היום") + '</button></div>';
+    }
+    if (un.length) {
+      return '<div class="gw-todo">' +
+        '<span class="gw-todo__n">' + un.length + '</span>' +
+        '<span class="gw-todo__t">' + (un.length === 1 ? "משימה לא בסידור" : "לא בסידור") + '</span>' +
+        '<button type="button" class="gw-todo__b" data-gs="todo">ידני</button>' +
+        (aiOk() ? '<button type="button" class="gw-todo__b is-ai" data-gs="ai">' + SPARK + 'סידור חכם</button>' : '') +
+      '</div>';
+    }
+    return '<div class="gw-todo is-done">' + ctx.ico("check") +
+      '<span class="gw-todo__t">' + (cand ? "כל משימות השבוע בסידור" : "אין משימות פתוחות לשבוע הזה") + '</span></div>';
+  }
   function toolbarHtml(ctx, V) {
-    var cr = crew(), h = '<div class="gw-tb">';
+    var cr = crew(), h = '<div class="gw-tb' + (wide() ? " is-wide" : "") + '">';
     if (cr.length >= 2) {
       var cur = st.who && st.who !== "all" ? crewName(st.who) : "כולם";
       h += '<button type="button" class="lg lg-pill gw-tb__crew" data-gs="crew" aria-haspopup="menu" aria-label="עובד: ' + esc(cur) + '">' +
@@ -462,7 +490,7 @@
         return '<button type="button" role="tab" data-gv="' + x[0] + '" aria-selected="' + on + '" class="' + (on ? "on" : "") + '"' +
           (x[0] === "2" || x[0] === "3" ? ' aria-label="' + x[0] + ' ימים"' : '') + '>' + x[1] + '</button>';
       }).join("") + '</div>';
-    } else h += '<span class="gw-tb__sp"></span>';
+    } else h += todoHtml(ctx) + '<span class="gw-tb__sp"></span>';
     h += '<button type="button" class="lg lg-circle gw-tb__more" data-gs="more" aria-haspopup="menu" aria-label="עוד פעולות">' + ctx.ico("dots") + '</button>';
     return h + '</div>';
   }
@@ -517,7 +545,7 @@
     var sel = st.sel === B.key, picked = st.multi && !!st.picked[B.key];
     var ed = editable(B);
     var cls = "gw-blk k-" + cat.key + (closed ? " is-closed" : "") + (pdone ? " is-pdone" : "") + (pend ? " is-pend" : "") +
-      (lvl ? " is-u" + lvl : "") + (s.dur <= 30 ? " is-short" : "") + (L.n > 1 ? " is-narrow" : "") +
+      (lvl ? " is-u" + lvl : "") + (s.dur <= 30 ? " is-short" : s.dur <= 60 ? " is-hr" : "") + (L.n > 1 ? " is-narrow" : "") +
       (sel ? " is-sel" : "") + (picked ? " is-picked" : "") + (ed ? " is-ed" : "") +
       (st.flash && String(st.flash) === B.key ? " is-flash" : "");
     var state = closed ? (t.closure === "בוצע" ? "בוצע" : t.closure) : pdone ? "החלק הסתיים" : pend ? "ממתין לאישור" : "";
@@ -525,7 +553,6 @@
     var title = (t.title || t.category || "משימה") + part;
     var label = title + ", " + hhmm(s.start) + " עד " + hhmm(s.start + s.dur) +
       (t.area ? ", " + t.area : "") + (state ? ", " + state : "");
-    var compact = (ncols >= 3 && L.n > 1) || (wide() && L.n > 1) || L.n > 2 || s.dur <= 30;
     var html = '<button type="button" class="' + cls + '" data-gsid="' + esc(t.id) + '" data-bk="' + esc(B.key) + '" aria-label="' + esc(label) + '"' +
       (st.multi ? ' aria-pressed="' + picked + '"' : '') +
       ' style="top:calc(var(--gw-h) * ' + top + ' + 1px);height:calc(var(--gw-h) * ' + h + ' - 3px);' +
@@ -533,7 +560,7 @@
       '<b>' + (closed || pdone ? ctx.ico("check") : pend ? ctx.ico("clock") : ctx.ico(cat.ico)) +
         '<span>' + esc(title) + '</span></b>' +
       '<em>' + esc(hhmm(s.start) + "–" + hhmm(s.start + s.dur)) + (t.area ? " · " + esc(t.area) : "") + '</em>' +
-      whoTags(whoOfB(B), compact) +
+      whoTags(whoOfB(B)) +
       /* 🖱 קצוות גרירה — רק בעכבר (ריחוף), ורק לבלוק שאפשר לערוך */
       (ed && !st.multi ? '<i class="gw-edge is-top" data-edge="top" aria-hidden="true"></i><i class="gw-edge is-bot" data-edge="bot" aria-hidden="true"></i>' : '') +
       (st.multi ? '<i class="gw-check" aria-hidden="true">' + (picked ? IC.tick : '') + '</i>' : '') +
@@ -568,7 +595,7 @@
     var dates = weekDates(ctx.week), cr = crew(), cap = capMinutes();
     var rows = cr.length ? cr.filter(function (c) { return !viewWho().length || c.key === viewWho()[0]; }) : [{ key: "", name: "" }];
     return '<div class="gw-sum" style="--cols:' + cols.length + '">' + rows.map(function (c) {
-      return '<span class="gw-sum__w">' + esc(c.name ? c.name.charAt(0) : "סה״כ") + '</span>' + cols.map(function (i) {
+      return '<span class="gw-sum__w">' + esc(c.name || "סה״כ") + '</span>' + cols.map(function (i) {
         var m = 0;
         bl.forEach(function (B) {
           if (B.s.date !== dates[i]) return;
@@ -605,7 +632,7 @@
           '<i class="gw-ag__bar"></i>' +
           '<span class="gw-ag__t"><b>' + esc((t.title || t.category || "משימה") + (B.n > 1 ? " (" + (B.i + 1) + "/" + B.n + ")" : "")) + '</b>' +
             '<small>' + esc([t.area, closed ? (t.closure || "החלק הסתיים") : ""].filter(Boolean).join(" · ")) + '</small></span>' +
-          whoTags(whoOfB(B), false) + '</button>';
+          whoTags(whoOfB(B)) + '</button>';
       });
       if (d >= today || !xs.length) {
         html += d >= today
@@ -662,13 +689,14 @@
     return pri ? { key: pri[0], ico: pri[1], label: String(pri[2]).replace(/\u200B/g, ""), raw: pri } : null;
   }
 
-  /* 👷 תוויות העובדים — מסגרת דקה עם השם (בקשת יועד). בבלוק צר או קצר —
-     האות הראשונה בלבד, והשם המלא ב-title. מפתח שאינו בצוות (עזב) לא מוצג. */
-  function whoTags(who, compact) {
+  /* 👷 תוויות העובדים — מסגרת דקה עם השם (בקשת יועד). 🔴 25.9 (יועד: "צריך
+     שהשם יופיע באופן מלא, לא רואה סיבה שיקוצר לאות אחת") — תמיד השם המלא;
+     בבלוק צר הוא נחתך בסוף (…) ולא מוחלף באות. מפתח שאינו בצוות לא מוצג. */
+  function whoTags(who) {
     var names = (who || []).map(crewName).filter(Boolean);
     if (!names.length) return "";
-    return '<span class="gw-whos' + (compact ? " is-compact" : "") + '">' + names.map(function (n) {
-      return '<i title="' + esc(n) + '">' + esc(compact ? n.charAt(0) : n) + '</i>';
+    return '<span class="gw-whos">' + names.map(function (n) {
+      return '<i title="' + esc(n) + '">' + esc(n) + '</i>';
     }).join("") + '</span>';
   }
 
@@ -680,6 +708,29 @@
     var top = sc.getBoundingClientRect().top;
     var avail = Math.round(window.innerHeight - Math.max(top, 0) - 12);
     sc.style.height = Math.max(320, avail) + "px";
+    /* מה שמתחת לאזור (ריווח תחתון של המסך, שוליים) — אם הדף עדיין נגלל,
+       מקטינים בדיוק בכמה שחורג. (נמדד: 32px שנשארו מתחת לקצה במחשב.) */
+    var se = pageScroller(host), over = se ? se.scrollHeight - se.clientHeight - se.scrollTop : 0;
+    if (over > 0 && avail - over >= 320) { avail -= over; sc.style.height = avail + "px"; }
+    /* 🖥 במחשב — כל היום (06:00–23:00) במסך אחד, בלי גלילה (יועד, 25.9).
+       גובה שעה = מה שנשאר חלקי 17, בין 24 ל-48 פיקסלים. במסך נמוך מדי
+       (פחות מ-24 לשעה) — נשארת גלילה, כי בלוק של רבע שעה חייב להיות קריא. */
+    var g = sc.querySelector(".gw-grid");
+    if (g && wide() && curView() === "week") {
+      var hd = g.querySelector(".gw-hd");
+      var H = Math.floor((Math.max(320, avail) - (hd ? hd.offsetHeight : 0) - 4) / ((D1() - D0()) / 60));
+      H = Math.max(24, Math.min(48, H));
+      g.style.setProperty("--gw-h", H + "px");
+      g.classList.add("is-fit");
+      g.classList.toggle("is-tight", H < 34);
+    }
+  }
+  function pageScroller(el) {
+    for (var p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      var oy = getComputedStyle(p).overflowY;
+      if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight + 1) return p;
+    }
+    return document.scrollingElement || document.documentElement;
   }
   function gridH(el) {
     var g = (el && el.closest ? el.closest(".gw-grid") : null) || (st.host && st.host.querySelector(".gw-grid"));
@@ -750,12 +801,17 @@
         (x.on ? '<span class="gw-pop__i">' + IC.tick + '</span>' : x.ico ? '<span class="gw-pop__i">' + x.ico + '</span>' : '') + '</button>';
     }).join("");
     document.body.appendChild(el);
-    var r = anchor.getBoundingClientRect(), w = el.offsetWidth, vw = window.innerWidth;
+    el.style.left = "0px"; el.style.top = "0px";
+    /* ⚠️ zoom על ה-body (הגדרת גודל טקסט באפליקציה) — getBoundingClientRect
+       מחזיר ערכים מוגדלים, אבל left/top נמדדים לפני ההגדלה. בלי החלוקה
+       התפריט ברח מהמסך (נצפה חי: שמות הגננים נחתכו בצד). */
+    var er = el.getBoundingClientRect(), z = el.offsetWidth ? er.width / el.offsetWidth : 1;
+    var r = anchor.getBoundingClientRect(), w = er.width, vw = window.innerWidth;
     /* RTL: מיושר לקצה הימני של הכפתור, אלא אם אין מקום. */
     var left = Math.min(Math.max(8, r.right - w), vw - w - 8);
     if (r.left < vw / 2) left = Math.max(8, Math.min(r.left, vw - w - 8));
-    el.style.left = left + "px";
-    el.style.top = Math.round(r.bottom + 6) + "px";
+    el.style.left = (left - er.left) / z + "px";
+    el.style.top = (r.bottom + 6 - er.top) / z + "px";
     el.addEventListener("click", function (e) {
       var b = e.target.closest("[data-pi]"); if (!b || b.disabled) return;
       var it = items[+b.dataset.pi]; closePop(); if (it && it.go) it.go();
@@ -820,10 +876,16 @@
   }
 
   function wire(host, ctx) {
+    /* שורת הכלים יכולה לשבת מחוץ ל-host (במחשב) — מחפשים בשניהם. */
+    function all(sel) {
+      var a = Array.prototype.slice.call(host.querySelectorAll(sel));
+      if (st.tbEl) a = a.concat(Array.prototype.slice.call(st.tbEl.querySelectorAll(sel)));
+      return a;
+    }
     Array.prototype.forEach.call(host.querySelectorAll("[data-gsday]"), function (b) {
       b.addEventListener("click", function () { setDay(+b.dataset.gsday); });
     });
-    Array.prototype.forEach.call(host.querySelectorAll("[data-gv]"), function (b) {
+    all("[data-gv]").forEach(function (b) {
       b.addEventListener("click", function () { setView(b.dataset.gv); });
     });
     Array.prototype.forEach.call(host.querySelectorAll("[data-gsgo]"), function (b) {
@@ -831,7 +893,7 @@
       b.addEventListener("click", go);
       b.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
     });
-    function on(sel, fn) { var b = host.querySelector(sel); if (b) b.addEventListener("click", function (e) { fn(b, e); }); }
+    function on(sel, fn) { var b = all(sel)[0]; if (b) b.addEventListener("click", function (e) { fn(b, e); }); }
     on('[data-gs="todo"]', function () { flowFromList(ctx); });
     on('[data-gs="ai"]', function () { CBA.gardenScheduleAi.open(ctx, api()); });
     on('[data-gs="undo"]', function () { undo(ctx); });

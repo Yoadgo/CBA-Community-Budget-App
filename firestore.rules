@@ -174,6 +174,20 @@ service cloud.firestore {
     match /gardenMeta/settings {
       allow write: if gsSettingsWriteOk();
     }
+    /* 📌 GW-25.9:R8-rules — כללים קבועים לסידור החכם (יועד, 25.9: "למנהל וגנן
+       אפשרות לשמור כללים קבועים"). מסמך אחד, טקסט אחד (כלל בשורה).
+       ⚠️ מחרוזת ולא רשימה — כללים לא יודעים לאמת איבר ברשימה לפי אינדקס
+       (נתקלנו בזה ב-slot.more), ואורך מחרוזת כן. */
+    function gsSchedRulesOk() {
+      return hasPerm('גינון') &&
+             request.resource.data.keys().hasOnly(['text', 'updatedAt', 'updatedBy']) &&
+             request.resource.data.text is string && request.resource.data.text.size() <= 2600 &&
+             request.resource.data.updatedAt == request.time &&
+             request.resource.data.updatedBy == request.auth.uid;
+    }
+    match /gardenMeta/scheduleRules {
+      allow write: if gsSchedRulesOk();
+    }
 
     /* ========================================================================
      *  🔴🔴  דיווחי הגינון של התושב   (2026-09-16)
