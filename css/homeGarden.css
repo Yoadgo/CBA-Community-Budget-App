@@ -15,10 +15,10 @@
 .hmg-head__s { font-size: 12.5px; color: var(--text-soft); }
 
 /* ---- אריחים ---- */
-.hmg-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.hmg-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .hmg-kpi {
-  display: flex; flex-direction: column; gap: 7px; min-width: 0; width: 100%;
-  padding: 15px 17px; margin: 0; border: 1px solid transparent;
+  display: flex; flex-direction: column; gap: 5px; min-width: 0; width: 100%;
+  padding: 12px 14px; margin: 0; border: 1px solid transparent;
   font: inherit; color: var(--text); text-align: start; cursor: pointer;
   transition: transform var(--t), box-shadow var(--t);
 }
@@ -27,7 +27,7 @@
 .hmg-kpi.is-skel { cursor: default; gap: 12px; }
 .hmg-kpi__l { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--text-soft); }
 .hmg-kpi__v {
-  font-size: 30px; font-weight: 800; letter-spacing: -.02em; line-height: 1;
+  font-size: 26px; font-weight: 800; letter-spacing: -.02em; line-height: 1;
   font-variant-numeric: tabular-nums; color: var(--text);
 }
 .hmg-kpi__v small { font-size: 16px; font-weight: 700; color: var(--text-muted); }
@@ -42,13 +42,13 @@
 .hmg-chip--l2 { background: #FBE9E9; color: #A83D3D; }
 
 /* ---- כרטיסים ---- */
-.hmg-cards { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+.hmg-cards { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; }
 .hmg-card { margin: 0; display: flex; flex-direction: column; min-width: 0; }
 .hmg-card.is-skel { gap: 14px; }
 .hmg-card__t { font-size: 15px; }
 .hmg-drag .hm-row__txt b { font-weight: 600; unicode-bidi: plaintext; }
 .hmg-sh { margin: 2px 0 8px; font-size: 12px; font-weight: 800; color: var(--text-soft); }
-.hmg-bars { display: flex; flex-direction: column; gap: 9px; margin-bottom: 14px; }
+.hmg-bars { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .hmg-bars__r {
   display: grid; grid-template-columns: minmax(96px, 42%) minmax(0, 1fr) 24px;
   align-items: center; gap: 10px; font-size: 12.5px; color: #374151;
@@ -59,18 +59,18 @@
 .hmg-bars__r b { text-align: end; font-weight: 800; font-variant-numeric: tabular-nums; }
 
 /* עמידה בתוכנית — עמודה לשבוע. הישן מימין והחדש משמאל (זרימת הזמן ב-RTL). */
-.hmg-tr { display: flex; gap: 8px; align-items: flex-end; flex: 1; min-height: 150px; }
+.hmg-tr { display: flex; gap: 8px; align-items: flex-end; flex: 1; min-height: 116px; }
 .hmg-tr__c { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .hmg-tr__v { font-size: 11.5px; font-weight: 800; color: #374151; }
 .hmg-tr__b {
-  width: 100%; max-width: 30px; height: 110px; display: flex; align-items: flex-end;
+  width: 100%; max-width: 30px; height: 80px; display: flex; align-items: flex-end;
   background: rgba(17,24,39,.05); border-radius: 8px; overflow: hidden;
 }
 .hmg-tr__b i { display: block; width: 100%; border-radius: 8px; background: #10B981; }
 .hmg-tr__c.is-now .hmg-tr__b i { background: repeating-linear-gradient(135deg, #A7F3D0 0 4px, #D1FAE5 4px 8px); }
 .hmg-tr__c.is-now .hmg-tr__v { color: var(--text-muted); }
 .hmg-tr__l { font-size: 11px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
-.hmg-foot { margin: 12px 0 0; font-size: 12.5px; color: var(--text-soft); }
+.hmg-foot { margin: 8px 0 0; font-size: 12.5px; color: var(--text-soft); }
 
 .hmg-empty { display: flex; align-items: center; gap: 7px; margin: 2px 0 14px; font-size: 13px; color: var(--text-soft); }
 .hmg-empty svg { color: var(--ok); flex: none; }
@@ -86,8 +86,8 @@
 @media (max-width: 720px) {
   .hmg { margin-top: 18px; }
   .hmg-kpis { gap: 10px; }
-  .hmg-kpi { padding: 12px 14px; gap: 5px; }
-  .hmg-kpi__v { font-size: 26px; }
+  .hmg-kpi { padding: 10px 12px; gap: 4px; }
+  .hmg-kpi__v { font-size: 24px; }
   .hmg-cards { display: none; }
   .hmg-more { display: flex; margin-top: 10px; }
 }

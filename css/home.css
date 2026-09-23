@@ -9,7 +9,13 @@
    כבר לא תופסות שורה משלהן מעל הכרטיסים. מתחת ל-1100px חוזרים לשתי שורות. */
 .hm-hero {
   display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap;
-  gap: 14px 24px; padding: 6px 2px 20px;
+  gap: 12px 24px; padding: 0 2px 14px;
+}
+/* 🔴 23.9 (לילה) — צפיפות לבקשת יועד ("לצמצם שטחים, להכניס יותר בכל מסך").
+   עמוד הבית בלבד: הריפוד העליון של הדף (32px הכלליים) קטן, ובכל כרטיס
+   ריפוד/מרווחים קטנים ב-15%-25%. גודל הטקסט לא ירד, חוץ מהברכה. */
+@media (min-width: 721px) {
+  body[data-screen="resHome"] .app-main { padding-top: 20px; }
 }
 .hm-hero__txt { min-width: 0; }
 .hm-hero .hm-actions { margin: 0; min-width: 0; }
@@ -21,14 +27,14 @@
   .hm-hero .hm-actions__row { justify-content: flex-start; }
 }
 .hm-hero__hi {
-  font-size: clamp(24px, 3.4vw, 32px); font-weight: 800; color: var(--text);
+  font-size: clamp(22px, 2.6vw, 28px); font-weight: 800; color: var(--text);
   letter-spacing: -.01em; line-height: 1.15;
 }
-.hm-hero__sub { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
+.hm-hero__sub { font-size: 13.5px; color: var(--text-muted); margin-top: 3px; }
 
 /* --- כרטיס סעיף --- */
-.hm-card { padding: 20px; margin-bottom: 16px; }
-.hm-card__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.hm-card { padding: 16px; margin-bottom: 14px; }
+.hm-card__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .hm-card__t { font-size: 16px; font-weight: 800; margin: 0; color: var(--text); }
 .hm-card__sub { font-size: 12.5px; color: var(--text-muted); }
 .hm-link {
@@ -41,14 +47,14 @@
 .hm-tasks { display: flex; flex-direction: column; gap: 8px; }
 .hm-task {
   display: flex; align-items: center; gap: 12px; width: 100%;
-  padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px;
   background: var(--surface); cursor: pointer; font: inherit; text-align: start;
   color: var(--text); transition: border-color var(--t), background var(--t), transform var(--t);
 }
 .hm-task:hover { border-color: var(--action); background: var(--hover); }
 .hm-task:active { transform: scale(.995); }
 .hm-task__n {
-  min-width: 34px; height: 34px; padding: 0 8px; border-radius: 10px; flex: none;
+  min-width: 30px; height: 30px; padding: 0 7px; border-radius: 9px; flex: none;
   display: grid; place-items: center;
   font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums;
   background: var(--hover); color: var(--text-soft);
@@ -74,7 +80,7 @@
      (homeSchedule.css).
    ⚠️ hm-cols--two עדיין נדלק מ-loadNewCard כשיש כרטיס "יש חדש" — עכשיו הוא
       רק מציג את העמודה שלו. */
-.hm-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.hm-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
 .hm-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .hm-main > .hm-card, .hm-main > .hm-vaad { margin-bottom: 0; }
 .hm-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -114,12 +120,12 @@
 }
 
 /* --- "אצלנו בבית" — ארבע שורות מצב באותה שפה --- */
-.hm-mine { display: flex; flex-direction: column; gap: 8px; }
+.hm-mine { display: flex; flex-direction: column; gap: 6px; }
 
 /* השורה השקטה — "אין בקשות החזר פתוחות · אין שריון קרוב" (2026-09-23) */
 .hm-quiet {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px;
-  margin-top: 10px; padding: 0 2px; font-size: 12.5px; color: var(--text-soft);
+  margin-top: 8px; padding: 0 2px; font-size: 12.5px; color: var(--text-soft);
 }
 .hm-quiet[hidden] { display: none; }     /* ⚠️ display:flex גובר על [hidden] */
 .hm-quiet__ico { color: var(--ok); display: inline-flex; }
@@ -132,7 +138,7 @@
 .hm-slot:empty { display: none; }
 .hm-row {
   display: flex; align-items: center; gap: 11px; width: 100%;
-  padding: 11px 13px; border: 1px solid var(--border); border-radius: 12px;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px;
   background: var(--surface); cursor: pointer; font: inherit; text-align: start; color: var(--text);
   transition: border-color var(--t), background var(--t);
 }
@@ -167,7 +173,7 @@
 }
 .hm-vaad__t { margin: 0; font-size: 14.5px; font-weight: 800; letter-spacing: -.01em; color: #fff; }
 .hm-vaad__sub { font-size: 11.5px; color: rgba(255,255,255,.62); }
-.hm-vaad .hm-tasks { gap: 7px; }
+.hm-vaad .hm-tasks { gap: 6px; }
 .hm-vaad .hm-task {
   background: rgba(255,255,255,.055); border-color: var(--vaad-line); color: #fff;
 }
@@ -191,17 +197,17 @@
    לידן, ושלושת כרטיסי הגינון בשורה מלאה מתחת. `.hmg`/`.hmg-body` הופכים
    ל-display:contents כדי שהילדים שלהם יהיו תאים בגריד של המשטח — ה-DOM
    של homeGarden.js לא משתנה. */
-.hm-vzone { margin-top: 18px; padding: 18px 18px 18px; }
-.hm-vzone .hm-vaad__head { margin-bottom: 14px; }
+.hm-vzone { margin-top: 14px; padding: 14px 16px 16px; }
+.hm-vzone .hm-vaad__head { margin-bottom: 10px; }
 .hm-vzone .hm-vaad__t { font-size: 16px; }
-.hm-vzone__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px 18px; align-items: start; }
+.hm-vzone__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px 14px; align-items: start; }
 .hm-vzone__tasks { min-width: 0; }
-.hm-vzone__lbl { margin: 2px 2px 10px; font-size: 13px; font-weight: 800; color: rgba(255,255,255,.88); }
+.hm-vzone__lbl { margin: 0 2px 8px; font-size: 13px; font-weight: 800; color: rgba(255,255,255,.88); }
 
 /* הגינון על הצפחה: כותרת בלבן, וכרטיסים לבנים אטומים (זכוכית על צפחה
    נראית אפורה-עכורה, והמספרים הם העיקר כאן). */
 .hm-vzone .hmg { margin-top: 0; }
-.hm-vzone .hmg-head { margin: 2px 2px 10px; }
+.hm-vzone .hmg-head { margin: 0 2px 8px; }
 .hm-vzone .hmg-head__t { font-size: 15px; color: #fff; }
 .hm-vzone .hmg-head__s { color: rgba(255,255,255,.62); }
 .hm-vzone .hmg-head__ico { background: rgba(255,255,255,.14); color: #A7F3D0; }
@@ -235,7 +241,7 @@
   .hm-vzone--g .hmg-err { grid-area: kpis; }
 }
 @media (max-width: 720px) {
-  .hm-vzone { margin-top: 14px; padding: 14px; }
+  .hm-vzone { margin-top: 12px; padding: 12px; }
 }
 
 /* --- פעולות מהירות — גלולות בראש העמוד (2026-09-16) ------------------
@@ -265,8 +271,8 @@
 .hm-actions__dots i.on { width: 20px; background: var(--text-muted); }
 
 @media (max-width: 720px) {
-  .hm-card { padding: 16px; }
-  .hm-actions { margin-bottom: 14px; }
+  .hm-card { padding: 14px; }
+  .hm-actions { margin-bottom: 10px; }
   /* מובייל: שורה נגללת במקום עטיפה. הריפוד הצדדי מוחזר לתוך השורה
      כדי שהכפתור הראשון יתחיל בקו של הכרטיסים ולא בקצה המסך. */
   .hm-actions__row {
