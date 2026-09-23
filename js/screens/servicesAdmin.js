@@ -246,6 +246,7 @@ function sadmCloseEditor(force) {
   document.removeEventListener("keydown", sadmEditorKey);
   sadmState.draft = null;
   sadmState.editIndex = null;
+  sadmState.promoteSourceId = null;
   sadmState.dirty = false;
   if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("servicesAdmin:edit");
 }
@@ -270,13 +271,32 @@ function sadmApplyPreset(key) {
   sadmTouch(); sadmPaintEditor();
 }
 
-function sadmOpenEditor(index) {
+/* המרת כרטיס המלצה לפריט מנוהל (2026-09-23) — אותו עורך בדיוק כמו "שירות
+   חדש", רק שהטיוטה ממולאת מראש מתוך ההמלצה (כותרת/גוף/קישור מפות, אותו
+   דפוס כמו svcResidentToService במסך התושב). ר' cba-services-ai-multiimage-
+   and-promote-spec-2026-09-23. */
+function sadmDraftFromRecommendation(card) {
+  var id = sadmNewId();
+  var sections = [{ secId: id + "_s1", order: 1, type: "טקסט", title: "על ההמלצה", content: card.body || "" }];
+  if (card.mapsUrl) {
+    sections.push({ secId: id + "_s2", order: 2, type: "רשימה", title: "קישורים", content: "פתח במפות: " + card.mapsUrl });
+  }
+  return {
+    id: id, name: card.title || "", desc: "", icon: "", provider: "", phone: "", doc: "",
+    categoryId: CBA.serviceUtils.CATEGORY_VENDOR_ID, phoneChannel: CBA.serviceUtils.CH_PHONE, isNew: true,
+    active: true, updated: "", updatedBy: "", sections: sections
+  };
+}
+
+function sadmOpenEditor(index, promoteFrom) {
   sadmCloseEditor(true);
   sadmState.editIndex = index;
+  sadmState.promoteSourceId = promoteFrom ? promoteFrom.id : null;
   sadmState.draft = index === -1
-    ? { id: sadmNewId(), name: "", desc: "", icon: "", provider: "", phone: "", doc: "",
-        categoryId: CBA.serviceUtils.CATEGORY_VENDOR_ID, phoneChannel: CBA.serviceUtils.CH_PHONE, isNew: true,
-        active: true, updated: "", updatedBy: "", sections: [] }
+    ? (promoteFrom ? sadmDraftFromRecommendation(promoteFrom)
+      : { id: sadmNewId(), name: "", desc: "", icon: "", provider: "", phone: "", doc: "",
+          categoryId: CBA.serviceUtils.CATEGORY_VENDOR_ID, phoneChannel: CBA.serviceUtils.CH_PHONE, isNew: true,
+          active: true, updated: "", updatedBy: "", sections: [] })
     : sadmClone(sadmState.list[index]);
 
   var overlay = document.createElement("div");
@@ -304,7 +324,8 @@ function sadmOpenEditor(index) {
   document.body.appendChild(overlay);
 
   document.getElementById("sadm-title").textContent =
-    index === -1 ? "שירות חדש" : "עריכת שירות — " + sadmState.draft.name;
+    promoteFrom ? 'הפיכת המלצה לפריט שירות — "' + (promoteFrom.title || "") + '"'
+    : index === -1 ? "שירות חדש" : "עריכת שירות — " + sadmState.draft.name;
 
   overlay.querySelectorAll("[data-aclose]").forEach(function (el) {
     el.addEventListener("click", function () { sadmCloseEditor(); });
@@ -349,7 +370,11 @@ function sadmPaintEditor() {
          הרשימה עצמה מנוהלת בדרואר נפרד ("ניהול קטגוריות"), לא כאן. */
       '<div class="form-field form-field--wide"><label>קטגוריה</label>' +
         '<select class="field-input" data-f="categoryId">' +
-          (sadmState.categories || []).map(function (c) {
+          (sadmState.categories || []).filter(function (c) {
+            // בהפיכת המלצה לפריט — "המלצות תושבים" עצמה לא אפשרות (אין טעם
+            // להפוך המלצה לפריט ולהשאיר אותה באותה קטגוריה).
+            return !sadmState.promoteSourceId || c.id !== sadmRecommendCategoryId();
+          }).map(function (c) {
             return '<option value="' + sadmEsc(c.id) + '"' +
               ((d.categoryId || CBA.serviceUtils.CATEGORY_VENDOR_ID) === c.id ? " selected" : "") +
               ">" + sadmEsc(c.name) + "</option>";
@@ -401,6 +426,17 @@ function sadmPaintEditor() {
    תווית המרחב בכלי הכיול. שני מקורות אמת שמישהו צריך לזכור לסנכרן — ובלי
    החיווי הזה, שינוי שם באחד הצדדים היה מנתק את הנקודה מהמפה בשקט מוחלט.
    אז במקום "אוטומטי" שנשבר — הפער צועק כאן, במסך שבו עורכים את השם. */
+/* מזהה "המלצות תושבים" לפי שם — אותו דפוס בדיוק כמו svcRecommendCategoryId
+   במסך התושב (services.js). לא קבוע קשיח, כי הקטגוריה נוצרת דרך "ניהול
+   קטגוריות" ומזהה שלה לא ידוע מראש בקוד. */
+function sadmRecommendCategoryId() {
+  var list = sadmState.categories || [];
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].name === "המלצות תושבים") return list[i].id;
+  }
+  return null;
+}
+
 function sadmMapNote(d) {
   if ((d.categoryId || CBA.serviceUtils.CATEGORY_VENDOR_ID) !== CBA.serviceUtils.CATEGORY_INFRA_ID) return "";
   var geo = (window.CBA && CBA.mapGeo && CBA.mapGeo.objects) || null;
@@ -799,10 +835,14 @@ function sadmSaveEditor() {
   if (sadmState.editIndex === -1) sadmState.list.push(d);
   else sadmState.list[sadmState.editIndex] = d;
 
+  var promoteSourceId = sadmState.promoteSourceId;
+
   sadmPersist(function (ok) {
     release();
     if (!ok) {
-      // החזרת המצב: שירות חדש שנכשל לא צריך להישאר ברשימה המקומית
+      // החזרת המצב: שירות חדש שנכשל לא צריך להישאר ברשימה המקומית.
+      // ⚠️ בהפיכת המלצה — הכרטיס המקורי *לא* נמחק כשזה קורה (ר' אפיון:
+      // "אם השמירה נכשלת — הכרטיס המקורי לא נמחק"). המחיקה קורית רק בהצלחה, למטה.
       if (sadmState.editIndex === -1) sadmState.list.pop();
       return;
     }
@@ -814,6 +854,19 @@ function sadmSaveEditor() {
       if (res && res.ok) sadmState.list = CBA.serviceUtils.build(res.services, res.sections);
       sadmPaintList();
     });
+    // הפריט החדש נשמר בהצלחה — עכשיו, ורק עכשיו, מוחקים את כרטיס ההמלצה
+    // המקורי (כולל הלייקים/תגובות עליו, שלא נשמרים ולא עוברים — הוחלט
+    // באפיון). כישלון מחיקה כאן לא מבטל את הפריט החדש שכבר נשמר.
+    if (promoteSourceId) {
+      CBA.data.deleteResidentServiceCard(promoteSourceId, function (delRes) {
+        if (!delRes || !delRes.ok) {
+          CBA.ui.alert("הפריט נשמר בהצלחה, אבל מחיקת כרטיס ההמלצה המקורי נכשלה — " +
+            "אפשר למחוק אותו ידנית דרך \"ניהול המלצות תושבים\".");
+          return;
+        }
+        CBA.ui.toast("ההמלצה הומרה לפריט שירות ונמחקה.");
+      });
+    }
   });
 }
 
@@ -915,12 +968,23 @@ function sadmOpenAI() {
   wrap.innerHTML =
     '<div class="sadm-modal__bg" data-aiclose></div>' +
     '<div class="sadm-modal__box">' +
-      "<h3>מילוי אוטומטי ממסמך</h3>" +
-      '<p class="sadm-modal__sub">בחרו PDF או תמונה של החוזה/הנוהל. הסעיפים שיוצעו ייכנסו לעורך ' +
-        "<strong>לעריכה בלבד</strong> — שום דבר לא נשמר לבד, בדיוק כמו בסריקת קבלות.</p>" +
-      '<input type="file" id="sadm-ai-file" accept="application/pdf,image/*" class="field-input">' +
+      "<h3>מילוי אוטומטי (AI)</h3>" +
+      '<div class="seg" id="sadm-ai-mode">' +
+        '<button type="button" class="seg__opt is-active" data-ai-mode="file">קובץ / תמונות</button>' +
+        '<button type="button" class="seg__opt" data-ai-mode="text">טקסט חופשי</button>' +
+      "</div>" +
+      '<div id="sadm-ai-file-zone">' +
+        '<p class="sadm-modal__sub">בחרו עד 5 קבצי PDF/תמונה של החוזה/הנוהל (אפשר כמה תמונות של אותו מסמך). הסעיפים שיוצעו ייכנסו לעורך ' +
+          "<strong>לעריכה בלבד</strong> — שום דבר לא נשמר לבד, בדיוק כמו בסריקת קבלות.</p>" +
+        '<input type="file" id="sadm-ai-file" accept="application/pdf,image/*" multiple class="field-input">' +
+      "</div>" +
+      '<div id="sadm-ai-text-zone" hidden>' +
+        '<p class="sadm-modal__sub">הדביקו טקסט חופשי עם פרטי השירות (למשל מייל/הודעה מהספק) — ' +
+          "<strong>לעריכה בלבד</strong> אחרי הניתוח, בדיוק כמו בקובץ.</p>" +
+        '<textarea id="sadm-ai-text" class="field-input" rows="8" maxlength="10000" placeholder="הדביקו כאן את הפרטים…"></textarea>' +
+      "</div>" +
       '<div class="sadm-modal__acts">' +
-        '<button type="button" class="btn-primary" id="sadm-ai-go">ניתוח המסמך</button>' +
+        '<button type="button" class="btn-primary" id="sadm-ai-go">ניתוח</button>' +
         '<button type="button" class="btn-ghost" data-aiclose>ביטול</button>' +
       "</div>" +
       '<div class="sadm-ai-status" id="sadm-ai-status"></div>' +
@@ -930,23 +994,26 @@ function sadmOpenAI() {
   function close() { if (wrap.parentNode) wrap.remove(); }
   wrap.querySelectorAll("[data-aiclose]").forEach(function (el) { el.addEventListener("click", close); });
 
+  var aiMode = "file";
+  wrap.querySelectorAll("[data-ai-mode]").forEach(function (mbtn) {
+    mbtn.addEventListener("click", function () {
+      aiMode = mbtn.getAttribute("data-ai-mode");
+      wrap.querySelectorAll("[data-ai-mode]").forEach(function (b) { b.classList.toggle("is-active", b === mbtn); });
+      document.getElementById("sadm-ai-file-zone").hidden = aiMode !== "file";
+      document.getElementById("sadm-ai-text-zone").hidden = aiMode !== "text";
+    });
+  });
+
   document.getElementById("sadm-ai-go").addEventListener("click", function () {
-    var input = document.getElementById("sadm-ai-file");
-    var file = input.files && input.files[0];
-    if (!file) { CBA.ui.alert("צריך לבחור קובץ."); return; }
-    // Apps Script מוגבל בגודל בקשה; מסמך שירות סביר הוא כמה מאות KB.
-    if (file.size > 8 * 1024 * 1024) { CBA.ui.alert("הקובץ גדול מדי (מעל 8MB)."); return; }
-
     var btn = this, status = document.getElementById("sadm-ai-status");
-    btn.disabled = true; btn.textContent = "מנתח…";
-    status.textContent = "קורא את הקובץ…";
 
-    var reader = new FileReader();
-    reader.onload = function () {
-      var b64 = String(reader.result || "").split(",")[1] || "";
+    if (aiMode === "text") {
+      var text = String((document.getElementById("sadm-ai-text").value || "")).trim();
+      if (!text) { CBA.ui.alert("צריך להדביק טקסט."); return; }
+      btn.disabled = true; btn.textContent = "מנתח…";
       status.textContent = "שולח לניתוח — זה יכול לקחת עד חצי דקה…";
-      CBA.data.scanServiceDoc(b64, file.type || "application/pdf", function (res) {
-        btn.disabled = false; btn.textContent = "ניתוח המסמך";
+      CBA.data.scanServiceDoc({ text: text }, function (res) {
+        btn.disabled = false; btn.textContent = "ניתוח";
         if (!res || !res.ok) {
           status.textContent = "";
           CBA.ui.alert((res && res.error) || "הניתוח נכשל, נסו שוב.");
@@ -955,13 +1022,54 @@ function sadmOpenAI() {
         sadmApplyAI(res.fields || {});
         close();
       });
-    };
-    reader.onerror = function () {
-      btn.disabled = false; btn.textContent = "ניתוח המסמך";
-      status.textContent = "";
-      CBA.ui.alert("קריאת הקובץ נכשלה.");
-    };
-    reader.readAsDataURL(file);
+      return;
+    }
+
+    var input = document.getElementById("sadm-ai-file");
+    var files = input.files ? Array.prototype.slice.call(input.files) : [];
+    if (!files.length) { CBA.ui.alert("צריך לבחור קובץ אחד לפחות."); return; }
+    if (files.length > 5) { CBA.ui.alert("עד 5 קבצים בבת אחת."); return; }
+    // Apps Script מוגבל בגודל בקשה; מסמך שירות סביר הוא כמה מאות KB לקובץ.
+    var tooBig = files.some(function (f) { return f.size > 8 * 1024 * 1024; });
+    if (tooBig) { CBA.ui.alert("אחד הקבצים גדול מדי (מעל 8MB)."); return; }
+
+    btn.disabled = true; btn.textContent = "מנתח…";
+    status.textContent = "קורא " + files.length + (files.length === 1 ? " קובץ" : " קבצים") + "…";
+
+    var results = new Array(files.length);
+    var pending = files.length;
+    var failed = false;
+
+    files.forEach(function (file, i) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        results[i] = { dataBase64: String(reader.result || "").split(",")[1] || "", mimeType: file.type || "application/pdf" };
+        pending--;
+        if (pending === 0 && !failed) sendFiles();
+      };
+      reader.onerror = function () {
+        if (failed) return;
+        failed = true;
+        btn.disabled = false; btn.textContent = "ניתוח";
+        status.textContent = "";
+        CBA.ui.alert("קריאת אחד הקבצים נכשלה.");
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function sendFiles() {
+      status.textContent = "שולח לניתוח — זה יכול לקחת עד חצי דקה…";
+      CBA.data.scanServiceDoc({ files: results }, function (res) {
+        btn.disabled = false; btn.textContent = "ניתוח";
+        if (!res || !res.ok) {
+          status.textContent = "";
+          CBA.ui.alert((res && res.error) || "הניתוח נכשל, נסו שוב.");
+          return;
+        }
+        sadmApplyAI(res.fields || {});
+        close();
+      });
+    }
   });
 }
 
@@ -1009,7 +1117,7 @@ function sadmOpenRecommendations() {
       var wrapRef = null;
       CBA.ui.dialog({
         title: "ניהול המלצות תושבים", html: html, wide: true, okText: "סגירה",
-        onMount: function (wrap) { wrapRef = wrap; sadmBindRecRows(wrap); }
+        onMount: function (wrap) { wrapRef = wrap; sadmBindRecRows(wrap, cards); }
       });
     });
   });
@@ -1029,6 +1137,7 @@ function sadmRecRowHtml(c) {
           (isActive ? "" : ' <span style="color:var(--text-muted);font-weight:400">(מוסתר)</span>') + "</div>" +
         '<div style="font-size:12px;color:var(--text-muted)">' + sadmEsc(fam) + "</div>" +
       "</div>" +
+      '<button type="button" class="btn-ghost btn-sm" data-rec-promote="' + sadmEsc(c.id) + '">הפוך לפריט שירות</button>' +
       '<button type="button" class="btn-ghost btn-sm" data-rec-toggle="' + sadmEsc(c.id) +
         '" data-active="' + (isActive ? "1" : "0") + '">' + (isActive ? "הסתרה" : "הצגה") + "</button>" +
       '<button type="button" class="btn-ghost btn-sm" data-rec-del="' + sadmEsc(c.id) +
@@ -1036,16 +1145,29 @@ function sadmRecRowHtml(c) {
     "</div>";
 }
 
-function sadmBindRecRows(wrap) {
+function sadmBindRecRows(wrap, initialCards) {
+  var cardsById = {};
+  (initialCards || []).forEach(function (c) { cardsById[c.id] = c; });
+
   function reload() {
     CBA.data.getResidentServiceCards(false, function (res) {
       var host = wrap.querySelector(".cba-dlg__body");
       if (!host) return;   // הדיאלוג נסגר בינתיים
-      host.innerHTML = sadmRecListHtml((res && res.ok && res.cards) || []);
+      var cards = (res && res.ok && res.cards) || [];
+      cardsById = {};
+      cards.forEach(function (c) { cardsById[c.id] = c; });
+      host.innerHTML = sadmRecListHtml(cards);
       bind();
     });
   }
   function bind() {
+    wrap.querySelectorAll("[data-rec-promote]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var card = cardsById[btn.dataset.recPromote];
+        if (!card) { CBA.ui.toast("ההמלצה כבר לא קיימת — כדאי לרענן."); return; }
+        sadmPromoteRecommendation(card);
+      });
+    });
     wrap.querySelectorAll("[data-rec-toggle]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.dataset.recToggle;
@@ -1072,4 +1194,24 @@ function sadmBindRecRows(wrap) {
     });
   }
   bind();
+}
+
+/* ============================================================================
+ *  הפיכת המלצת תושב לפריט שירות מנוהל (2026-09-23)
+ * ----------------------------------------------------------------------------
+ *  המרה מלאה, לא רק שינוי קטגוריה: פותח את אותו עורך פריט רגיל, ממולא מראש
+ *  מתוך ההמלצה, המנהל בוחר קטגוריה אמיתית ועורך כרגיל. רק אחרי ששמירת
+ *  הפריט החדש הצליחה (ר' sadmSaveEditor) — כרטיס ההמלצה המקורי נמחק.
+ *  ר' cba-services-ai-multiimage-and-promote-spec-2026-09-23.
+ * ========================================================================== */
+function sadmPromoteRecommendation(card) {
+  CBA.ui.confirm(
+    'להפוך את ההמלצה "' + (card.title || "") + '" לפריט שירות מנוהל? ' +
+    "ייפתח עורך פריט חדש, ממולא מתוך ההמלצה — תוכלו לערוך הכל ולבחור קטגוריה לפני שמירה. " +
+    "אחרי שהפריט החדש יישמר, כרטיס ההמלצה המקורי (כולל הלייקים והתגובות עליו) יימחק לצמיתות.",
+    { title: "הפיכה לפריט שירות", okText: "המשך לעריכה" }
+  ).then(function (ok) {
+    if (!ok) return;
+    sadmOpenEditor(-1, card);
+  });
 }

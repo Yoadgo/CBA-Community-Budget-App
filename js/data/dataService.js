@@ -5452,9 +5452,11 @@ CBA.data = (function () {
       CBA.sheets.postRead("notifyServiceUpdate", payload || {}, cb);
     },
     /* מילוי אוטומטי ממסמך (Gemini) — לא שומר כלום, רק מחזיר סעיפים מוצעים
-       לעריכה בעורך הפתוח, בדיוק כמו scanReceipt. */
-    scanServiceDoc: function (dataBase64, mimeType, cb) {
-      CBA.sheets.postRead("scanServiceDoc", { dataBase64: dataBase64, mimeType: mimeType }, cb);
+       לעריכה בעורך הפתוח, בדיוק כמו scanReceipt.
+       payload = { files: [{dataBase64, mimeType}, ...] } (עד 5) או { text: "..." } —
+       ר' cba-services-ai-multiimage-and-promote-spec-2026-09-23. */
+    scanServiceDoc: function (payload, cb) {
+      CBA.sheets.postRead("scanServiceDoc", payload || {}, cb);
     }
   };
 })();

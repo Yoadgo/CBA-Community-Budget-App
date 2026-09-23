@@ -7971,7 +7971,7 @@ function allActiveResidentEmails_(ss) {
  * דבר לא נשמר** — התוצאה חוזרת ללקוח ונכנסת לעורך הפתוח לעריכה של המנהל.
  * מנהל-על בלבד (ACTION_PERMS), בניגוד ל-scanReceipt שפתוח לכל תושב, כי רק
  * מנהל-על עורך כרטיסי שירות בכלל. */
-function scanServiceDocWithGemini_(dataBase64, mimeType) {
+function scanServiceDocWithGemini_(files, freeText) {
   var key = geminiApiKey_();
   if (!key) {
     return { ok: false, error: 'GEMINI_API_KEY חסר. יש להוסיף אותו תחת Project Settings → Script Properties בעורך Apps Script.' };
@@ -7992,16 +7992,21 @@ function scanServiceDocWithGemini_(dataBase64, mimeType) {
     'עבור "אנשי קשר" — כל שורה בפורמט "שם|תפקיד|טלפון". ' +
     'הנחיות: השתמש ב"טבלה" למחירונים, ב"אנשי קשר" לכל רשימת טלפונים, וב"הדגשה" ' +
     'רק לאזהרות או לדברים שהתושב חייב לשים לב אליהם. ' +
-    'אל תמציא מידע שאינו במסמך — שדה שלא מופיע יוחזר כמחרוזת ריקה. ' +
-    'שמור על הניסוח המקורי של המסמך ככל האפשר, רק קצר וסדר אותו.';
+    'אל תמציא מידע שאינו קיים במקור — שדה שלא מופיע יוחזר כמחרוזת ריקה. ' +
+    'שמור על הניסוח המקורי ככל האפשר, רק קצר וסדר אותו. ' +
+    (freeText ? 'המקור הוא טקסט חופשי שהמנהל הדביק (לא קובץ סרוק) — ייתכן שהוא מייל, הודעה, או תיאור קצר; תתייחס אליו באותו אופן.' : '');
+
+  var parts = [{ text: prompt }];
+  if (files && files.length) {
+    files.forEach(function (f) {
+      parts.push({ inline_data: { mime_type: (f && f.mimeType) || 'application/pdf', data: f && f.dataBase64 } });
+    });
+  } else if (freeText) {
+    parts.push({ text: freeText });
+  }
 
   var payload = {
-    contents: [{
-      parts: [
-        { text: prompt },
-        { inline_data: { mime_type: mimeType || 'application/pdf', data: dataBase64 } }
-      ]
-    }],
+    contents: [{ parts: parts }],
     generationConfig: {
       response_mime_type: 'application/json',
       response_schema: {
@@ -8065,10 +8070,24 @@ function scanServiceDocWithGemini_(dataBase64, mimeType) {
   }
 }
 
-/** עטיפה מול הלקוח — מנהל-על בלבד (ACTION_PERMS). לא נוגעת בגיליון/Drive כלל. */
+/** עטיפה מול הלקוח — מנהל-על בלבד (ACTION_PERMS). לא נוגעת בגיליון/Drive כלל.
+ * body.files = [{dataBase64, mimeType}, ...] (עד 5, ריבוי-תמונות) או body.text = "..." (טקסט חופשי,
+ * חלופה לקובץ — לא בנוסף). תאימות לאחור: body.dataBase64/body.mimeType הישנים (קובץ בודד) עדיין נתמכים.
+ * ר' cba-services-ai-multiimage-and-promote-spec-2026-09-23. */
 function handleScanServiceDoc_(ss, body) {
-  if (!body.dataBase64) return { ok: false, error: 'לא צורף מסמך לסריקה' };
-  return scanServiceDocWithGemini_(body.dataBase64, body.mimeType || 'application/pdf');
+  var files = Array.isArray(body.files) ? body.files : null;
+  var text = typeof body.text === 'string' ? body.text.trim() : '';
+
+  if ((!files || !files.length) && !text && body.dataBase64) {
+    files = [{ dataBase64: body.dataBase64, mimeType: body.mimeType || 'application/pdf' }];
+  }
+  if ((!files || !files.length) && !text) {
+    return { ok: false, error: 'לא צורף מסמך או טקסט לסריקה' };
+  }
+  if (files && files.length > 5) {
+    return { ok: false, error: 'עד 5 קבצים בבת אחת' };
+  }
+  return scanServiceDocWithGemini_(files, text);
 }
 
 /* ============================================================================
