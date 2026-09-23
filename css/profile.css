@@ -1,7 +1,7 @@
 /* ==========================================================================
-   profile.css — "הפרטים שלי" (2026-08-28). ר' js/screens/myProfile.js.
-   כל המחלקות בתחילית pf-, חוץ מ-.res-chg-* שמשרתות את כרטיס בקשות השינוי
-   במסך התושבים ולכן יושבות על שלד .res-su הקיים.
+   profile.css — "הפרטים שלי" (2026-08-28, מורחב 2026-09-21 למתג דייר/ת 1/2).
+   ר' js/screens/myProfile.js. כל המחלקות בתחילית pf-, חוץ מ-.res-chg-*
+   שמשרתות את כרטיס בקשות השינוי במסך התושבים ולכן יושבות על שלד .res-su הקיים.
    ========================================================================== */
 
 .pf-card { padding: 20px; margin-bottom: 16px; }
@@ -20,6 +20,25 @@
 .pf-foot { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
 .pf-saved { font-size: 13px; font-weight: 700; color: var(--ok); }
 .pf-saved[hidden] { display: none; }
+
+/* --- מתג דייר/ת 1 / 2 (חדש 21.9.26) --- */
+.pf-slotswitch {
+  display: flex; gap: 6px; padding: 4px; margin-bottom: 12px;
+  background: var(--hover); border: 1px solid var(--border); border-radius: 12px;
+  width: fit-content; max-width: 100%;
+}
+.pf-slotbtn {
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  font: inherit; font-size: 13.5px; font-weight: 700; color: var(--text-muted);
+  padding: 8px 16px; border-radius: 9px; white-space: nowrap;
+  transition: background .15s ease, color .15s ease;
+}
+.pf-slotbtn.is-active { background: var(--surface, #fff); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.pf-slotbtn:not(.is-active):hover { color: var(--text-soft); }
+
+.pf-touchline { font-size: 12.5px; color: var(--text-muted); margin: -4px 0 16px; }
+
+.pf-card--empty { background: var(--hover); }
 
 /* --- אימייל --- */
 .pf-current {
@@ -45,6 +64,27 @@
 .pf-ro span { font-size: 12.5px; color: var(--text-muted); font-weight: 600; }
 .pf-ro b { font-size: 15px; font-weight: 700; color: var(--text-soft); }
 
+/* --- ילדים: שם + תאריך לידה לכל ילד/ה (חדש 22.9.26) --- */
+.pf-kids-legacy {
+  font-size: 12.5px; color: var(--text-muted); line-height: 1.6;
+  background: var(--hover); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 12px;
+}
+.pf-kidsrows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.pf-kidrow {
+  display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 10px; align-items: center;
+}
+.pf-kidrow__age {
+  font-size: 12.5px; color: var(--text-muted); font-weight: 700; min-width: 34px; text-align: center;
+}
+.pf-kidrow__remove {
+  appearance: none; border: 1px solid var(--border); background: transparent; cursor: pointer;
+  color: var(--text-muted); border-radius: 8px; width: 32px; height: 32px; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; flex: none;
+}
+.pf-kidrow__remove:hover { color: var(--danger, #F43F5E); border-color: var(--danger, #F43F5E); }
+.pf-kids-add { margin-bottom: 12px; }
+
 /* --- כרטיס בקשות השינוי במסך התושבים --- */
 .res-chg__vals { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .res-chg__arrow { color: var(--text-muted); font-size: 15px; }
@@ -54,4 +94,8 @@
   .pf-card { padding: 16px; }
   .pf-emailform { flex-direction: column; }
   .pf-emailform .field-input { min-width: 0; }
+  .pf-slotswitch { width: 100%; }
+  .pf-slotbtn { flex: 1; text-align: center; }
+  .pf-kidrow { grid-template-columns: 1fr; }
+  .pf-kidrow__age { text-align: start; }
 }

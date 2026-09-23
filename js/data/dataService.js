@@ -5151,9 +5151,11 @@ CBA.data = (function () {
     /* "הפרטים שלי" (2026-08-28). שים לב: אף אחת מהפעולות לא מקבלת מזהה שורה —
        השרת גוזר את השורה ואת המשבצת מהמושב החתום. ר' Code.gs. */
     getMyProfile: function (cb) { CBA.sheets.get({ action: "myProfile" }, cb); },
-    saveMyProfile: function (fields, cb) { CBA.sheets.postRead("saveMyProfile", { fields: fields }, cb); },
-    submitProfileChange: function (field, value, cb) {
-      CBA.sheets.postRead("submitProfileChange", { field: field, value: value }, cb);
+    saveMyProfile: function (slot, fields, cb) {
+      CBA.sheets.postRead("saveMyProfile", { slot: slot, fields: fields }, cb);
+    },
+    submitProfileChange: function (field, value, slot, cb) {
+      CBA.sheets.postRead("submitProfileChange", { field: field, value: value, slot: slot }, cb);
     },
     cancelProfileChange: function (id, cb) { CBA.sheets.postRead("cancelProfileChange", { id: id }, cb); },
     getProfileChanges: function (cb) { CBA.sheets.get({ action: "profileChanges" }, cb); },

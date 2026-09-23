@@ -4635,7 +4635,10 @@ function txRowsForFamily_(ss, famId) {
  * "ת.ז. 1"/"ת.ז. 2" נוספו ב-2026-08-18 עבור מודול מכון הכושר: הן ממוספרות לפי
  * אדם בדיוק כמו "אימייל N"/"שם פרטי N"/"הרשאות N", כי הטאב הוא שורה למשק בית.
  * אשף ההרשמה למכון ישאל ת.ז. פעם אחת ויכתוב אותה לכאן, כך שהמאגר מתמלא מעצמו. */
-var EXTRA_RESIDENT_COLS = ['מקצוע 1', 'מקצוע 2', 'שמות ילדים', 'הערות', 'ת.ז. 1', 'ת.ז. 2'];
+/* "תאריך לידה 1"/"תאריך לידה 2" נוספו 22.9.26 עבור "הפרטים שלי" — אותו
+ * עיקרון בדיוק כמו "ת.ז. 1/2": עמודה ממוספרת לפי אדם, נוצרת לבד אם חסרה. */
+var EXTRA_RESIDENT_COLS = ['מקצוע 1', 'מקצוע 2', 'שמות ילדים', 'הערות', 'ת.ז. 1', 'ת.ז. 2',
+  'תאריך לידה 1', 'תאריך לידה 2'];
 
 function ensureResidentCols_(ss, body) {
   var sh = ss.getSheetByName('תושבים');
@@ -5346,6 +5349,9 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['PROFILE_CHANGE_NEW', 'בקשת שינוי פרטים חדשה מ{{שם}}',
     'שלום,\n\n{{שם}} ביקש/ה לשנות את {{שדה}}.\n\nמ: {{ערך נוכחי}}\nל: {{ערך מבוקש}}\n\nהבקשה ממתינה לאישור במסך "תושבים" באפליקציה.\n\nבברכה,\nהאפליקציה',
     'נשלח למנהלי התושבים כשתושב מגיש בקשת שינוי פרטים', PERM_RESIDENTS, 'כן'],
+  ['PROFILE_CHANGE_OTHER_SLOT_NOTICE', 'התראה: בקשה לשנות את כתובת ההתחברות שלך',
+    'שלום,\n\n{{שם המבקש}} הגיש/ה בקשה לשנות את כתובת ההתחברות שלך לאפליקציה ל-{{ערך מבוקש}}.\n\nהבקשה ממתינה לאישור הוועד ועדיין לא בוצעה. אם זה לא נראה לך נכון — אנא פנו לוועד בהקדם, לפני שהבקשה מאושרת.\n\nבברכה,\nועד הקהילה',
+    'נשלח לכתובת הנוכחית של דייר/ת כשבן/בת הזוג מגיש/ה עבורו/ה בקשת שינוי אימייל — כדי שזה לעולם לא יקרה בשקט', PERM_RESIDENTS, 'כן'],
 
   ['REIMBURSEMENT_RECEIVED', "קיבלנו את בקשת ההחזר שלך (מס' {{מזהה}})",
     "שלום {{שם}},\n\nקיבלנו את בקשת ההחזר שלך על סך {{סכום}} ₪ (מס' {{מזהה}}). הבקשה ממתינה לטיפול ונעדכן אותך בכל שינוי סטטוס.\n\nבברכה,\nועד הקהילה", 'נשלח לתושב מיד עם הגשת בקשת החזר', PERM_BUDGET, 'כן'],
@@ -12235,16 +12241,22 @@ function setupTourModule() {
  * ========================================================================== */
 var PROFILE_SHEET = 'בקשות שינוי';
 var PROFILE_HEADERS = ['מזהה', 'תאריך', 'מזהה קבוע', 'אימייל מבקש', 'שדה',
-  'ערך נוכחי', 'ערך מבוקש', 'סטטוס', 'טופל ע"י', 'טופל בתאריך'];
+  'ערך נוכחי', 'ערך מבוקש', 'סטטוס', 'טופל ע"י', 'טופל בתאריך', 'משבצת'];
 var PROFILE_TOUCH_BY = 'עודכן ע"י';
 var PROFILE_TOUCH_AT = 'עודכן בתאריך';
 
-/* השדות שתושב רשאי לשנות בעצמו. slot=true → נפתר למשבצת של הקורא.
+/* השדות שתושב רשאי לשנות בעצמו. slot=true → נפתר למשבצת היעד (targetSlot),
+   שמגיעה מהלקוח אבל תמיד מוגבלת ל-1/2 בלבד — לא לפרמטר חופשי.
    להוסיף שדה כאן = לפתוח אותו לעריכה עצמית. לא להוסיף שדה מבני. */
 var MY_PROFILE_FIELDS = [
-  { key: 'phone', frag: 'טלפון', slot: true,  label: 'טלפון' },
-  { key: 'job',   frag: 'מקצוע', slot: true,  label: 'מקצוע' },
-  { key: 'kids',  frag: 'ילדים', slot: false, label: 'שמות וגילאי הילדים' }
+  { key: 'firstName', frag: 'שם פרטי',     slot: true,  label: 'שם פרטי' },
+  { key: 'phone',     frag: 'טלפון',       slot: true,  label: 'טלפון' },
+  { key: 'job',       frag: 'מקצוע',       slot: true,  label: 'מקצוע' },
+  { key: 'birthDate', frag: 'תאריך לידה',  slot: true,  label: 'תאריך לידה' },
+  { key: 'kids',      frag: 'ילדים',       slot: false, label: 'שמות וגילאי הילדים' }
+  /* kids מוחזק כמחרוזת גולמית — מ-22.9.26 הלקוח שם בה JSON של [{name,dob}]
+   * במקום טקסט חופשי, אבל השרת לא צריך לדעת את זה בכלל: הוא ממשיך לקרוא
+   * ולכתוב אותה בדיוק כמו כל שדה טקסט אחר. */
 ];
 /* שדות שדורשים אישור מנהל — לא נכתבים ישירות לעולם. */
 var MY_PROFILE_REQUEST_FIELDS = [
@@ -12272,17 +12284,37 @@ function profileColFor_(headers, def, slot) {
   return (idx >= 0 && idx < cols.length) ? cols[idx] : -1;
 }
 
+/** מקבל slot גולמי מהלקוח (או undefined) ומחזיר תמיד 1 או 2 — לעולם לא ערך
+ * אחר. ברירת המחדל היא המשבצת של הקורא עצמו, לא 1 קבוע, כדי שהתנהגות ישנה
+ * (לקוח שלא שולח slot בכלל) תישאר זהה למה שהייתה. */
+function clampSlot_(rawSlot, mySlot) {
+  var n = parseInt(rawSlot, 10);
+  return (n === 1 || n === 2) ? n : (mySlot === 2 ? 2 : 1);
+}
+
 function ensureProfileSheet_(ss) {
   var sh = ss.getSheetByName(PROFILE_SHEET);
-  if (sh) return sh;
-  sh = ss.insertSheet(PROFILE_SHEET);
-  sh.getRange(1, 1, 1, PROFILE_HEADERS.length).setValues([PROFILE_HEADERS]);
-  sh.getRange(1, 1, 1, PROFILE_HEADERS.length).setFontWeight('bold');
-  sh.setFrozenRows(1);
-  sh.setColumnWidth(1, 110); sh.setColumnWidth(2, 140); sh.setColumnWidth(3, 110);
-  sh.setColumnWidth(4, 210); sh.setColumnWidth(5, 90);  sh.setColumnWidth(6, 210);
-  sh.setColumnWidth(7, 210); sh.setColumnWidth(8, 90);  sh.setColumnWidth(9, 180);
-  sh.setColumnWidth(10, 140);
+  if (!sh) {
+    sh = ss.insertSheet(PROFILE_SHEET);
+    sh.getRange(1, 1, 1, PROFILE_HEADERS.length).setValues([PROFILE_HEADERS]);
+    sh.getRange(1, 1, 1, PROFILE_HEADERS.length).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.setColumnWidth(1, 110); sh.setColumnWidth(2, 140); sh.setColumnWidth(3, 110);
+    sh.setColumnWidth(4, 210); sh.setColumnWidth(5, 90);  sh.setColumnWidth(6, 210);
+    sh.setColumnWidth(7, 210); sh.setColumnWidth(8, 90);  sh.setColumnWidth(9, 180);
+    sh.setColumnWidth(10, 140); sh.setColumnWidth(11, 80);
+    return sh;
+  }
+  // מיגרציה (21.9.26): טאב "בקשות שינוי" שכבר קיים מייצור מקבל את עמודת
+  // "משבצת" בסוף, בלי לגעת בשום עמודה/שורה קיימת — כמו שנעשה עם עמודות
+  // ה"עודכן ע"י/בתאריך" ב-ensureProfileTouchCols_.
+  var lastCol = sh.getLastColumn();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  if (headers.indexOf('משבצת') === -1) {
+    sh.getRange(1, lastCol + 1).setValue('משבצת');
+    sh.getRange(1, lastCol + 1).setFontWeight('bold');
+    sh.setColumnWidth(lastCol + 1, 80);
+  }
   return sh;
 }
 
@@ -12301,6 +12333,8 @@ function ensureProfileTouchCols_(ss) {
   return { by: headers.indexOf(PROFILE_TOUCH_BY), at: headers.indexOf(PROFILE_TOUCH_AT) };
 }
 
+/** בקשות של מבקש ספציפי (נשאר לשימוש היכן שבאמת רוצים "מה שאני הגשתי",
+ * כמו cancelProfileChange_ שבודק בעלות על הבקשה עצמה). */
 function profileRowsFor_(ss, email) {
   ensureProfileSheet_(ss);
   var target = normalizeEmail_(email);
@@ -12309,8 +12343,22 @@ function profileRowsFor_(ss, email) {
   });
 }
 
+/** בקשות של כל משק הבית (שני הצדדים), לפי "מזהה קבוע" — לא לפי מי הגיש.
+ * זה מה שהמסך צריך כדי להראות לכל אחד מהצדדים את הסטטוס של שניהם, גם אם
+ * את הבקשה הגיש בן/בת הזוג ולא הוא/היא בעצמו/ה. */
+function profileRowsForFamily_(ss, familyId) {
+  ensureProfileSheet_(ss);
+  var target = String(familyId || '').trim();
+  if (!target) return [];
+  return readTable_(ss, PROFILE_SHEET).filter(function (r) {
+    return String(r['מזהה קבוע'] || '').trim() === target;
+  });
+}
+
 /* ------------------------------------------------------------------ קריאה */
-/* מחזיר רק את מה שהמסך באמת צריך. סטטוס והרשאות לא נכללים בכוונה. */
+/* מחזיר את שתי המשבצות (1 ו-2) יחד, כדי שהמתג במסך יחליף ביניהן בלי בקשה
+ * נוספת לשרת. סטטוס והרשאות לא נכללים בכוונה — אף פעם לא יוצאים מהשרת
+ * למסך הזה. */
 function handleMyProfile_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -12326,25 +12374,42 @@ function handleMyProfile_(p) {
       .map(function (h) { return String(h).trim(); });
     var row = sh.getRange(r.rowIndex, 1, 1, headers.length).getValues()[0];
 
-    var values = {};
-    MY_PROFILE_FIELDS.concat(MY_PROFILE_REQUEST_FIELDS).forEach(function (def) {
-      var c = profileColFor_(headers, def, r.slot);
-      values[def.key] = c === -1 ? '' : String(row[c] == null ? '' : row[c]);
-    });
-
-    var pending = profileRowsFor_(ss, gate.email).filter(function (x) {
+    var pendingAll = profileRowsForFamily_(ss, r.familyId).filter(function (x) {
       return String(x['סטטוס'] || '').trim() === 'ממתין';
     });
 
+    var slotsOut = {};
+    [1, 2].forEach(function (slotNum) {
+      var values = {};
+      MY_PROFILE_FIELDS.concat(MY_PROFILE_REQUEST_FIELDS).forEach(function (def) {
+        var c = profileColFor_(headers, def, slotNum);
+        values[def.key] = c === -1 ? '' : String(row[c] == null ? '' : row[c]);
+      });
+      var pendingForSlot = pendingAll.filter(function (x) {
+        // בקשות ישנות בלי עמודת "משבצת" (לפני המיגרציה) נופלות תמיד ל-1,
+        // לא נעלמות מהתצוגה.
+        var s = parseInt(x['משבצת'], 10) || 1;
+        return s === slotNum;
+      });
+      slotsOut[slotNum] = {
+        values: values,
+        // "יש בכלל דייר/ת כזה/כזאת" — נגזר מקיום אימייל במשבצת, לא ממבנה קבוע.
+        exists: !!(values.email && String(values.email).trim()),
+        pending: pendingForSlot
+      };
+    });
+    // המשבצת שלי עצמי תמיד "קיימת", גם אם משום מה שדה האימייל שלה ריק —
+    // הגענו לכאן דרך lookupResident_ שכבר מצא אותנו שם.
+    slotsOut[r.slot].exists = true;
+
     return json_({
       ok: true,
-      slot: r.slot,
-      values: values,
+      mySlot: r.slot,
+      slots: slotsOut,
       // לתצוגה בלבד — המסך מראה אותם אפורים עם "לשינוי, פנו לוועד"
-      readOnly: { family: r.family, house: r.house, firstName: r.firstName },
+      readOnly: { family: r.family, house: r.house },
       touchedBy: touch.by === -1 ? '' : String(row[touch.by] || ''),
-      touchedAt: touch.at === -1 ? '' : String(row[touch.at] || ''),
-      pending: pending
+      touchedAt: touch.at === -1 ? '' : String(row[touch.at] || '')
     });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -12361,6 +12426,11 @@ function saveMyProfile_(ss, body) {
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
     .map(function (h) { return String(h).trim(); });
 
+  // "לאיזו משבצת שומרים" מגיע מהלקוח (כדי לאפשר עריכת בן/בת הזוג), אבל
+  // clampSlot_ מבטיח שזה תמיד 1 או 2 — השורה עצמה תמיד נעולה ל-body._email.
+  var targetSlot = clampSlot_(body.slot, r.slot);
+  var crossSlot = targetSlot !== r.slot;
+
   var fields = body.fields || {};
   var written = [], householdChanged = false;
   Object.keys(fields).forEach(function (key) {
@@ -12370,7 +12440,9 @@ function saveMyProfile_(ss, body) {
       if (MY_PROFILE_FIELDS[i].key === key) { def = MY_PROFILE_FIELDS[i]; break; }
     }
     if (!def) return;
-    var c = profileColFor_(headers, def, r.slot);
+    // שדה משפחתי (ילדים) אין לו משבצת בכלל — תמיד על השורה עצמה.
+    var slotForField = def.slot ? targetSlot : r.slot;
+    var c = profileColFor_(headers, def, slotForField);
     if (c === -1) return;
     sh.getRange(r.rowIndex, c + 1).setValue(String(fields[key] == null ? '' : fields[key]));
     written.push(key);
@@ -12378,13 +12450,14 @@ function saveMyProfile_(ss, body) {
   });
   if (!written.length) return { ok: false, error: 'לא נמצאו שדות מותרים לעדכון' };
 
-  // חיווי "אחרון קובע" — נרשם רק כששדה משפחתי השתנה, כי רק שם יש מה להסביר
-  if (householdChanged && touch.by !== -1 && touch.at !== -1) {
+  // חיווי "עודכן ע"י/מתי" — כמו קודם על שדה משפחתי, ומעכשיו גם כשעורכים את
+  // המשבצת של בן/בת הזוג: אז יש מה להסביר, זה לא בהכרח מה שהוא/היא הקליד/ה.
+  if ((householdChanged || crossSlot) && touch.by !== -1 && touch.at !== -1) {
     var who = (r.firstName || '').trim() || body._email;
     sh.getRange(r.rowIndex, touch.by + 1).setValue(who);
     sh.getRange(r.rowIndex, touch.at + 1).setValue(new Date());
   }
-  return { ok: true, written: written };
+  return { ok: true, written: written, slot: targetSlot };
 }
 
 /* ------------------------------------------------------- בקשת שינוי */
@@ -12402,29 +12475,43 @@ function submitProfileChange_(ss, body) {
   var r = lookupResident_(body._email);
   if (!r.found) return { ok: false, error: 'המשתמש אינו ברשימת התושבים' };
 
+  var targetSlot = clampSlot_(body.slot, r.slot);
+  var crossSlot = targetSlot !== r.slot;
+
   var sh = ss.getSheetByName('תושבים');
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
     .map(function (h) { return String(h).trim(); });
-  var c = profileColFor_(headers, def, r.slot);
+  var c = profileColFor_(headers, def, targetSlot);
   var current = c === -1 ? '' : String(sh.getRange(r.rowIndex, c + 1).getValue() || '');
   if (normalizeEmail_(current) === normalizeEmail_(want)) {
     return { ok: false, error: 'הערך המבוקש זהה לקיים' };
   }
 
   var psh = ensureProfileSheet_(ss);
-  var mine = profileRowsFor_(ss, body._email);
-  var dup = mine.some(function (x) {
-    return String(x['סטטוס'] || '').trim() === 'ממתין' && String(x['שדה'] || '').trim() === def.key;
+  // כפילות נבדקת לפי משק הבית + שדה + משבצת — לא לפי מי מגיש. כך שני בני
+  // הזוג לא יכולים לפתוח שתי בקשות סותרות לאותה משבצת בו-זמנית.
+  var famPending = profileRowsForFamily_(ss, r.familyId).filter(function (x) {
+    return String(x['סטטוס'] || '').trim() === 'ממתין';
+  });
+  var dup = famPending.some(function (x) {
+    return String(x['שדה'] || '').trim() === def.key &&
+      (parseInt(x['משבצת'], 10) || 1) === targetSlot;
   });
   if (dup) return { ok: false, error: 'כבר יש בקשה ממתינה לשדה הזה' };
 
   var id = 'PC' + new Date().getTime();
-  psh.appendRow([id, new Date(), r.familyId, body._email, def.key, current, want, 'ממתין', '', '']);
+  psh.appendRow([id, new Date(), r.familyId, body._email, def.key, current, want, 'ממתין', '', '', targetSlot]);
 
   var name = (r.firstName || '').trim() || body._email;
   try {
     sendResidentTemplate_(ss, 'PROFILE_CHANGE_RECEIVED', [body._email],
       { 'שם': name, 'שדה': def.label, 'ערך': want });
+    // בקשה שהוגשה עבור המשבצת של בן/בת הזוג — מתריעים גם לכתובת הנוכחית
+    // שלו/ה, כדי ששינוי זהות ההתחברות שלו/ה לעולם לא יקרה בלי שהוא/היא יידע/תדע.
+    if (crossSlot && def.key === 'email' && current) {
+      sendResidentTemplate_(ss, 'PROFILE_CHANGE_OTHER_SLOT_NOTICE', [current],
+        { 'שם המבקש': name, 'ערך מבוקש': want });
+    }
     notifyAdmins_(ss, PERM_RESIDENTS, 'PROFILE_CHANGE_NEW',
       { 'שם': name, 'שדה': def.label, 'ערך נוכחי': current || '(ריק)', 'ערך מבוקש': want });
   } catch (mailErr) { Logger.log('מייל בקשת שינוי נכשל: ' + mailErr); }
@@ -12444,8 +12531,11 @@ function cancelProfileChange_(ss, body) {
   var sh = ensureProfileSheet_(ss);
   var row = profileRowById_(sh, body.id);
   if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
-  var rec = sh.getRange(row, 1, 1, PROFILE_HEADERS.length).getValues()[0];
-  // רק על הבקשות של עצמי, ורק כל עוד הן ממתינות
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+  var rec = sh.getRange(row, 1, 1, headers.length).getValues()[0];
+  // רק על הבקשות של עצמי (מי שהגיש/ה, לא בהכרח מי שהמשבצת שלו/ה), ורק כל
+  // עוד הן ממתינות.
   if (normalizeEmail_(String(rec[3] || '')) !== normalizeEmail_(body._email)) {
     return { ok: false, error: 'אין הרשאה' };
   }
@@ -12472,31 +12562,41 @@ function approveProfileChange_(ss, body) {
   var sh = ensureProfileSheet_(ss);
   var row = profileRowById_(sh, body.id);
   if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
-  var rec = sh.getRange(row, 1, 1, PROFILE_HEADERS.length).getValues()[0];
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h).trim(); });
+  var rec = sh.getRange(row, 1, 1, headers.length).getValues()[0];
   if (String(rec[7] || '').trim() !== 'ממתין') return { ok: false, error: 'הבקשה כבר טופלה' };
 
   var reqEmail = String(rec[3] || ''), fieldKey = String(rec[4] || '').trim(), want = String(rec[6] || '');
   var def = profileFieldDef_(fieldKey);
   if (!def) return { ok: false, error: 'שדה לא נתמך' };
 
-  // השורה נמצאת לפי המייל של *המבקש* כפי שנרשם בבקשה — לא לפי פרמטר מהלקוח
+  // השורה נמצאת לפי המייל של *המבקש* כפי שנרשם בבקשה — לא לפי פרמטר מהלקוח.
+  // אבל המשבצת שאליה כותבים היא זו שנשמרה בבקשה (עמודה "משבצת") — יכולה
+  // להיות שונה מהמשבצת של המבקש עצמו, אם הוא/היא הגיש/ה עבור בן/בת הזוג.
   var r = lookupResident_(reqEmail);
   if (!r.found) return { ok: false, error: 'המבקש אינו ברשימת התושבים' };
+  var slotColIdx = headers.indexOf('משבצת');
+  var targetSlot = (slotColIdx !== -1 && rec[slotColIdx]) ? (parseInt(rec[slotColIdx], 10) || r.slot) : r.slot;
+
   var rsh = ss.getSheetByName('תושבים');
-  var headers = rsh.getRange(1, 1, 1, rsh.getLastColumn()).getValues()[0]
+  var rHeaders = rsh.getRange(1, 1, 1, rsh.getLastColumn()).getValues()[0]
     .map(function (h) { return String(h).trim(); });
-  var c = profileColFor_(headers, def, r.slot);
+  var c = profileColFor_(rHeaders, def, targetSlot);
   if (c === -1) return { ok: false, error: 'לא נמצאה עמודה מתאימה' };
 
+  var oldValue = String(rsh.getRange(r.rowIndex, c + 1).getValue() || '');
   rsh.getRange(r.rowIndex, c + 1).setValue(want);
   sh.getRange(row, 8).setValue('אושר');
   sh.getRange(row, 9).setValue(body._email);
   sh.getRange(row, 10).setValue(new Date());
 
   try {
-    // המייל נשלח לכתובת החדשה *ולישנה* — הישנה כדי שהתושב יידע שהזהות שלו
-    // השתנתה גם אם החדשה שגויה, החדשה כדי שיוכל לוודא שהיא עובדת.
-    var to = def.key === 'email' ? [want, reqEmail] : [reqEmail];
+    // המייל נשלח לכתובת החדשה *ולישנה* — הישנה כדי שהצד הרלוונטי יידע שהזהות
+    // שלו/ה השתנתה גם אם החדשה שגויה, החדשה כדי שיוכל לוודא שהיא עובדת.
+    // כשהבקשה הייתה עבור בן/בת הזוג, "הישנה" היא הכתובת שבן/בת הזוג נכנס/ת
+    // איתה היום — לא בהכרח כתובת המבקש/ת.
+    var to = def.key === 'email' ? [want, oldValue || reqEmail] : [reqEmail];
     sendResidentTemplate_(ss, 'PROFILE_CHANGE_APPROVED', to,
       { 'שם': (r.firstName || '').trim() || reqEmail, 'שדה': def.label, 'ערך': want });
   } catch (mailErr) { Logger.log('מייל אישור שינוי נכשל: ' + mailErr); }
@@ -12527,13 +12627,17 @@ function rejectProfileChange_(ss, body) {
   return { ok: true };
 }
 
-/** התקנה ידנית מהעורך — יוצר את הטאב ואת שתי העמודות מראש. */
+/** התקנה ידנית מהעורך — יוצר את הטאב/העמודות מראש (כולל עמודת "משבצת" ושתי
+ * עמודות "תאריך לידה 1/2" בטאב "תושבים", כך שהמסך עובד מיד אחרי הדיפלוי
+ * ולא מחכה שמישהו יגיע דרך זרימה אחרת שקוראת ל-ensureResidentCols_). */
 function setupProfileModule() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureProfileSheet_(ss);
   var t = ensureProfileTouchCols_(ss);
-  return 'טאב "' + PROFILE_SHEET + '" מוכן; "' + PROFILE_TOUCH_BY + '" בעמודה ' + (t.by + 1) +
-    ', "' + PROFILE_TOUCH_AT + '" בעמודה ' + (t.at + 1);
+  var cols = ensureResidentCols_(ss, {});
+  return 'טאב "' + PROFILE_SHEET + '" מוכן (כולל עמודת "משבצת"); "' + PROFILE_TOUCH_BY + '" בעמודה ' + (t.by + 1) +
+    ', "' + PROFILE_TOUCH_AT + '" בעמודה ' + (t.at + 1) +
+    '; עמודות "תושבים" שנוספו: ' + (cols.added && cols.added.length ? cols.added.join(', ') : '(אף אחת, כבר קיימות)');
 }
 
 
