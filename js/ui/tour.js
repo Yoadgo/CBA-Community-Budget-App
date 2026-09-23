@@ -63,7 +63,8 @@ CBA.tour = (function () {
   /* ------------------------------------------------- המחשות (2026-09-23) ---
      "חלק מסך": העתק קטן וחי של כפתור או כרטיס מתוך האפליקציה, עם נתוני דוגמה.
      מופיע במקום האייקון כשבעמודה "המחשה" בגיליון רשום אחד המפתחות כאן:
-       map · directory · services · events · receipts · profile · push
+       map · directory · services · events · garden · receipts · profile ·
+       report · push
      מפתח לא מוכר או תא ריק ⇒ האייקון הרגיל, בדיוק כמו קודם. כלומר צעד חדש
      עדיין לא דורש קוד — רק צעד שרוצים לו המחשה חדשה.
 
@@ -190,7 +191,7 @@ CBA.tour = (function () {
     var tile = q(root, ".trv-tile"), ban = q(root, ".trv-banner");
     tile.classList.toggle("is-on", on);
     q(root, ".trv-tile__d").innerHTML = on ? VI.bellOn : VI.bellOff;
-    q(root, ".trv-tile__l").textContent = on ? "התראות פעילות" : "הפעלת התראות";
+    q(root, ".trv-tile__l").textContent = on ? "התראות Push פעילות" : "הפעלת התראות Push";
     if (on) { replay(q(root, ".trv-tile__d"), "is-ring"); ban.classList.add("is-in"); pushCycle(root, 0); }
     else ban.classList.remove("is-in");
   }
@@ -199,6 +200,73 @@ CBA.tour = (function () {
     t.innerHTML = '<small><span>ניהול קהילה</span><span>עכשיו</span></small><b>' + m[0] + '</b>' + m[1];
     replay(q(root, ".trv-banner"), "is-bump");
     later(2800, function () { if (q(root, ".trv-tile.is-on")) pushCycle(root, i + 1); });
+  }
+
+  /* ------------------------------------------------------- גינון --- */
+  function typeInto(root, sel, text, start, step) {
+    var out = q(root, sel), box = out.closest(".trv-search, .trv-rep__item");
+    out.textContent = ""; box.classList.remove("has-q");
+    later(start, function () { box.classList.add("is-typing"); });
+    text.split("").forEach(function (ch, i) {
+      later(start + 120 + i * step, function () { out.textContent += ch; box.classList.add("has-q"); });
+    });
+    later(start + 120 + text.length * step + 200, function () { box.classList.remove("is-typing"); });
+    return start + 120 + text.length * step + 200;
+  }
+  function gardenCat(root, c) {
+    qa(root, "[data-v-gcat]").forEach(function (b) { b.classList.toggle("is-on", b.getAttribute("data-v-gcat") === c); });
+  }
+  function gardenPin(root, x, y) {
+    var pin = q(root, ".trv-pin");
+    pin.setAttribute("transform", "translate(" + Math.round(x) + " " + Math.round(y) + ")");
+    pin.classList.add("is-on");
+    replay(q(root, ".trv-pin__b"), "is-drop");
+    q(root, ".trv-gmap").classList.add("has-pin");
+  }
+  function gardenPhoto(root, on) {
+    q(root, ".trv-gph").classList.toggle("is-on", on);
+    q(root, "[data-v-photo]").textContent = on ? "✕" : "+";
+  }
+  function gardenSend(root) {
+    var btn = q(root, "[data-v-gsend]"), steps = qa(root, ".trv-gtrail .trv-step"), dashes = qa(root, ".trv-gtrail .trv-dash");
+    press(btn);
+    btn.classList.add("is-done"); btn.textContent = "✓ נשלח";
+    steps.forEach(function (s) { s.classList.remove("is-done", "is-now"); });
+    dashes.forEach(function (d) { d.classList.remove("is-full"); });
+    later(350,  function () { steps[0].classList.add("is-done"); });
+    later(650,  function () { dashes[0].classList.add("is-full"); });
+    later(1000, function () { steps[1].classList.add("is-done"); });
+    later(1300, function () { dashes[1].classList.add("is-full"); });
+    later(1650, function () { steps[2].classList.add("is-done"); floatTxt(steps[2], "🌱", "is-emoji"); });
+  }
+  function gardenReset(root) {
+    gardenCat(root, ""); gardenPhoto(root, false);
+    q(root, ".trv-pin").classList.remove("is-on"); q(root, ".trv-gmap").classList.remove("has-pin");
+    var btn = q(root, "[data-v-gsend]"); btn.classList.remove("is-done"); btn.textContent = "שליחה";
+    qa(root, ".trv-gtrail .trv-step").forEach(function (s) { s.classList.remove("is-done", "is-now"); });
+    qa(root, ".trv-gtrail .trv-dash").forEach(function (d) { d.classList.remove("is-full"); });
+  }
+
+  /* ------------------------------------------------- כפתור הדיווח --- */
+  var REP_TXT = { bug: "הכפתור בלוח האירועים לא נלחץ באייפון", idea: "כדאי תזכורת יום לפני כל אירוע" };
+  var REP_FAB = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18v-5.25m0 0a6.01 6.01 0 0 0 1.5-.189m-1.5.189a6.01 6.01 0 0 1-1.5-.189m3.75 7.478a12.06 12.06 0 0 1-4.5 0m3.75 2.383a14.406 14.406 0 0 1-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 1 0-7.517 0c.85.493 1.509 1.333 1.509 2.316V18"/></svg>';
+  function repState(root, st) {
+    var r = q(root, ".trv-rep");
+    ["is-menu", "is-form", "is-shot", "is-sent"].forEach(function (c) { r.classList.remove(c); });
+    (st || []).forEach(function (c) { r.classList.add(c); });
+  }
+  function repOpenForm(root, kind, t0) {
+    q(root, ".trv-rep__title").textContent = kind === "idea" ? "הצעת ייעול לאפליקציה" : "דיווח על תקלה";
+    var b = q(root, "[data-v-rsend]"); b.textContent = "שליחה"; b.classList.remove("is-done");
+    repState(root, ["is-form"]);
+    var end = typeInto(root, "[data-v-rtext]", REP_TXT[kind === "idea" ? "idea" : "bug"], t0 || 250, 55);
+    later(end + 250, function () { repState(root, ["is-form", "is-shot"]); });
+    return end + 250;
+  }
+  function repSend(root) {
+    var b = q(root, "[data-v-rsend]");
+    press(b); b.classList.add("is-done"); b.textContent = "✓ נשלח";
+    later(300, function () { repState(root, ["is-form", "is-shot", "is-sent"]); });
   }
 
   var VIS = {
@@ -410,15 +478,115 @@ CBA.tour = (function () {
       }
     },
 
+    garden: {
+      html: function () {
+        function cat(k, ico, label) {
+          return '<button type="button" tabindex="-1" class="trv-chip" data-v-gcat="' + k + '">' + ico + ' ' + label + '</button>';
+        }
+        return '<div class="trv-chips">' + cat("water", "💧", "השקיה וממטרות") + cat("lawn", "🌿", "דשא") +
+            cat("tree", "🌳", "עצים") + cat("clean", "🧹", "ניקיון") + '</div>' +
+          '<div class="trv-row">' +
+            '<div class="trv-search"><span class="trv-typed" data-v-typed></span><span class="trv-caret"></span>' +
+              '<span class="trv-ph">כותרת קצרה — מה הבעיה?</span></div>' +
+            '<span class="trv-gph" aria-hidden="true"></span>' +
+            '<button type="button" tabindex="-1" class="trv-gadd" data-v-photo>+</button>' +
+          '</div>' +
+          '<div class="trv-gmap" data-v-gmap>' +
+            '<svg viewBox="0 0 400 74" preserveAspectRatio="xMidYMid slice" width="100%" height="100%">' +
+              '<rect width="400" height="74" class="trv-ground"/>' +
+              '<path d="M0 40H400" class="trv-gpath"/>' +
+              '<rect x="14" y="48" width="120" height="22" rx="8" class="trv-lawn"/>' +
+              '<rect x="160" y="6" width="90" height="26" rx="8" class="trv-lawn"/>' +
+              '<rect x="270" y="48" width="116" height="22" rx="8" class="trv-lawn"/>' +
+              '<circle cx="40" cy="58" r="6" class="trv-tree"/><circle cx="300" cy="58" r="7" class="trv-tree"/><circle cx="232" cy="18" r="6" class="trv-tree"/>' +
+              '<rect x="30" y="6" width="34" height="22" rx="3" class="trv-mh"/><text x="47" y="20.5" class="trv-mn">341</text>' +
+              '<rect x="80" y="6" width="34" height="22" rx="3" class="trv-mh"/><text x="97" y="20.5" class="trv-mn">343</text>' +
+              '<rect x="300" y="6" width="34" height="22" rx="3" class="trv-mh"/><text x="317" y="20.5" class="trv-mn">345</text>' +
+              '<g class="trv-pin"><g class="trv-pin__b"><path d="M0 0C-5-7-8-10-8-14a8 8 0 1 1 16 0c0 4-3 7-8 14z" fill="#E11D48"/>' +
+                '<circle cy="-14" r="3" fill="#fff"/></g></g>' +
+            '</svg>' +
+            '<span class="trv-gmap__hint">איפה זה? לחצו על המפה</span>' +
+          '</div>' +
+          '<div class="trv-row">' +
+            '<div class="trv-trail trv-gtrail">' +
+              '<span class="trv-step">התקבל</span><span class="trv-dash"><i></i></span>' +
+              '<span class="trv-step">תוכנן</span><span class="trv-dash"><i></i></span>' +
+              '<span class="trv-step">טופל</span></div>' +
+            '<button type="button" tabindex="-1" class="trv-cta" data-v-gsend>שליחה</button>' +
+          '</div>';
+      },
+      play: function (root) {
+        gardenReset(root);
+        later(500, function () { var c = q(root, '[data-v-gcat="water"]'); press(c); gardenCat(root, "water"); });
+        var end = typeInto(root, "[data-v-typed]", "ראש ממטרה שבור", 800, 60);
+        later(end + 150, function () { gardenPin(root, 150, 42); });
+        later(end + 750, function () { press(q(root, "[data-v-photo]")); gardenPhoto(root, true); });
+        later(end + 1450, function () { gardenSend(root); });
+      },
+      tap: function (t, root, e) {
+        var c = t.closest("[data-v-gcat]"), ph = t.closest("[data-v-photo]"), s = t.closest("[data-v-gsend]"), m = t.closest("[data-v-gmap]");
+        if (c) { press(c); gardenCat(root, c.getAttribute("data-v-gcat")); }
+        else if (ph) { press(ph); gardenPhoto(root, !q(root, ".trv-gph").classList.contains("is-on")); }
+        else if (s) { clearTimers(); gardenSend(root); }
+        else if (m && e) {
+          var svgEl = m.querySelector("svg"), pt = svgEl.createSVGPoint();
+          pt.x = e.clientX; pt.y = e.clientY;
+          var ctm = svgEl.getScreenCTM();
+          if (ctm) { var p = pt.matrixTransform(ctm.inverse()); gardenPin(root, p.x, p.y + 6); }
+        }
+      }
+    },
+
+    report: {
+      html: function () {
+        return '<div class="trv-rep">' +
+            '<div class="trv-rep__screen" aria-hidden="true">' +
+              '<span class="trv-rep__bar"></span><span class="trv-rep__ln" style="width:62%"></span>' +
+              '<span class="trv-rep__ln" style="width:84%"></span><span class="trv-rep__ln" style="width:48%"></span>' +
+              '<span class="trv-rep__tag">מסך: לוח אירועים</span></div>' +
+            '<div class="trv-rep__menu">' +
+              '<button type="button" tabindex="-1" data-v-kind="idea">' + REP_FAB.replace('width="20" height="20"', 'width="14" height="14"') + ' הצעת ייעול לאפליקציה</button>' +
+              '<button type="button" tabindex="-1" data-v-kind="bug">🐞 דיווח על תקלה</button></div>' +
+            '<button type="button" tabindex="-1" class="trv-rep__fab" data-v-fab>' + REP_FAB + '</button>' +
+            '<div class="trv-rep__sheet">' +
+              '<b class="trv-rep__title">דיווח על תקלה</b>' +
+              '<div class="trv-rep__item"><span class="trv-rep__n">1</span><span class="trv-typed" data-v-rtext></span><span class="trv-caret"></span></div>' +
+              '<div class="trv-rep__att"><span class="trv-rep__shot" aria-hidden="true"><i></i><i></i><i></i></span>' +
+                '<span class="trv-rep__ctx">📷 צילום מסך צורף<br>נשלח לבד: המסך, המכשיר והגרסה</span></div>' +
+              '<button type="button" tabindex="-1" class="trv-cta" data-v-rsend>שליחה</button>' +
+              '<span class="trv-rep__ok">✓ הדיווח התקבל — תודה!</span>' +
+            '</div>' +
+          '</div>' +
+          '<span class="trv-hint">לחצו על הנורה</span>';
+      },
+      play: function (root) {
+        repState(root, []);
+        later(900,  function () { press(q(root, "[data-v-fab]")); repState(root, ["is-menu"]); });
+        later(1900, function () {
+          press(q(root, '[data-v-kind="bug"]'));
+          var end = repOpenForm(root, "bug", 250);
+          later(end + 700, function () { repSend(root); });
+        });
+      },
+      tap: function (t, root) {
+        var fab = t.closest("[data-v-fab]"), k = t.closest("[data-v-kind]"), s = t.closest("[data-v-rsend]");
+        var r = q(root, ".trv-rep");
+        if (fab) { clearTimers(); press(fab); repState(root, r.classList.contains("is-menu") ? [] : ["is-menu"]); }
+        else if (k) { clearTimers(); press(k); repOpenForm(root, k.getAttribute("data-v-kind"), 150); }
+        else if (s && !r.classList.contains("is-sent")) { clearTimers(); repSend(root); }
+        else if (r.classList.contains("is-sent") && t.closest(".trv-rep__sheet")) { clearTimers(); repState(root, []); }
+      }
+    },
+
     push: {
       html: function () {
         return '<div class="trv-phone-top"><div class="trv-banner">' +
             '<span class="trv-banner__app">' + VI.logo + '</span><span class="trv-banner__t"></span></div></div>' +
           '<div class="trv-nt">' +
             '<button type="button" tabindex="-1" class="trv-tile"><span class="trv-tile__d">' + VI.bellOff + '</span>' +
-              '<span class="trv-tile__l">הפעלת התראות</span></button>' +
+              '<span class="trv-tile__l">הפעלת התראות Push</span></button>' +
             '<div class="trv-two">' +
-              '<div class="trv-lane"><b>📱 לטלפון</b><span>ההחזר שלך התקדם</span><span>שריון מועדון אושר או נדחה</span></div>' +
+              '<div class="trv-lane"><b>📱 Push לטלפון</b><span>ההחזר שלך התקדם</span><span>שריון מועדון אושר או נדחה</span></div>' +
               '<div class="trv-lane"><b>✉️ למייל</b><span>קבלות והחזרים</span><span>מועדון ומכון כושר</span><span>דיווחי גינון · עדכון פרטים</span></div>' +
             '</div></div>';
       },
@@ -563,6 +731,9 @@ CBA.tour = (function () {
     if (target === "security") { if (CBA.security) CBA.security.open(); return; }
     if (target === "install")  { if (CBA.pwa) CBA.pwa.promptInstall(); return; }
     if (target === "push")     { enablePush(); return; }
+    /* "report" (2026-09-23) — פותח את תפריט כפתור הדיווח האמיתי. setTimeout: אותה
+       לחיצה ממשיכה לבעבע ל-document, ושם report.js סוגר תפריט פתוח בלחיצה מבחוץ. */
+    if (target === "report")   { setTimeout(function () { if (CBA.report && CBA.report.openMenu) CBA.report.openMenu(); }, 60); return; }
     if (CBA.navigate) CBA.navigate(target);
   }
 
@@ -606,7 +777,7 @@ CBA.tour = (function () {
     el.addEventListener("click", function (e) {
       // לחיצה בתוך ההמחשה = "לנסות את הכפתור". משחק מקומי בלבד, ר' VIS.
       var vr = e.target.closest(".tr-vis");
-      if (vr) { var vv = VIS[vr.getAttribute("data-vis")]; if (vv && vv.tap) vv.tap(e.target, vr); return; }
+      if (vr) { var vv = VIS[vr.getAttribute("data-vis")]; if (vv && vv.tap) vv.tap(e.target, vr, e); return; }
       if (e.target.closest("[data-tr-skip]")) { finish(); return; }
       if (e.target.closest("[data-tr-next]")) { go(1); return; }
       if (e.target.closest("[data-tr-back]")) { go(-1); return; }
