@@ -94,7 +94,7 @@ CBA.screens = CBA.screens || {};
       '</button>';
   }
 
-  function adminSectionHTML() {
+  function adminSectionHTML(garden) {
     if (!anyAdmin()) return "";
     var a = (window.CBA.alerts ? CBA.alerts() : null) || {};
     var rows = "";
@@ -123,15 +123,27 @@ CBA.screens = CBA.screens || {};
        ⚠️ **המחלקות `hm-tasks`/`hm-clear` והמזהים לא השתנו** במכוון:
           `loadLazyCounts`, `fastPaint` ו-`syncClearState` בוחרות לפיהם,
           וכל שינוי שם היה מנתק את התגיות מהשלד שמחכה להן. */
-    return '<section class="hm-card hm-vaad">' +
+    /* 🔴 23.9 (ערב) — "תפקיד ועד" הוא עכשיו **משטח** ולא כרטיס: רצועה אפורה
+       ברוחב מלא מתחת לעולם המשפחתי, והגינון יושב בתוכה (בקשת יועד: "הגינון
+       צריך להיטמע ברקע של הוועד", ו"התושב אמור להיות ראשון לגמרי").
+       לפני כן הלו"ז — שהוא עולם התושב — ישב בין הוועד לגינון.
+       ⚠️ `hm-vaad` נשאר על המשטח, וכל המזהים (#hm-tasks, #hm-clear,
+          #hm-gardensec) לא השתנו — הבדיקות, הסיור והשלד בוחרים לפיהם. */
+    return '<section class="hm-vaad hm-vzone' + (garden ? " hm-vzone--g" : "") + '" id="hm-vzone" aria-label="תפקיד ועד">' +
       '<div class="hm-vaad__head">' +
         '<span class="hm-vaad__ico">' + svg(ICO.badge, 15) + '</span>' +
         '<h2 class="hm-vaad__t">תפקיד ועד</h2>' +
         '<span class="hm-vaad__sub">רק מה ששייך לתחומי הניהול שלך</span></div>' +
-      '<div class="hm-tasks" id="hm-tasks">' + rows + lazy + '</div>' +
-      '<div class="hm-clear" id="hm-clear"' + (rows ? " hidden" : "") + '>' +
-        CBA.ui.emptyState({ icon: "check", title: "הכול מטופל",
-          sub: "אין כרגע שום דבר שממתין לאישור שלך." }) +
+      '<div class="hm-vzone__grid">' +
+        '<div class="hm-vzone__tasks">' +
+          (garden ? '<div class="hm-vzone__lbl">ממתין לטיפולך</div>' : "") +
+          '<div class="hm-tasks" id="hm-tasks">' + rows + lazy + '</div>' +
+          '<div class="hm-clear" id="hm-clear"' + (rows ? " hidden" : "") + '>' +
+            CBA.ui.emptyState({ icon: "check", title: "הכול מטופל",
+              sub: "אין כרגע שום דבר שממתין לאישור שלך." }) +
+          '</div>' +
+        '</div>' +
+        (garden ? '<section class="hmg" id="hm-gardensec" aria-label="גינון"></section>' : "") +
       '</div>' +
       '</section>';
   }
@@ -826,8 +838,9 @@ CBA.screens = CBA.screens || {};
              לשורה של הברכה.
            • תושב: הלו"ז (שבועיים, js/screens/homeSchedule.js) מקבל את רוב
              המסך; בעמודה הצרה "אצלנו בבית" ו"הבא בקהילה".
-           • בעל תפקיד: "אצלנו בבית" · "תפקיד ועד" · לו"ז של 10 ימים בשורה
-             אחת, ומתחתם — למנהל־על/גינון — מקטע הגינון (homeGarden.js).
+           • בעל תפקיד: "אצלנו בבית" · לו"ז של 10 ימים בשורה אחת (עולם
+             התושב, ראשון לגמרי), ומתחתם משטח אפור אחד — "תפקיד ועד" —
+             שבתוכו גם מקטע הגינון (homeGarden.js) למנהל־על/גינון.
            • במובייל הלו"ז עולה ראשון ומתכווץ (homeSchedule.css). */
       var admin = anyAdmin();
       var sched = !!window.CBA.homeSchedule;
@@ -846,14 +859,14 @@ CBA.screens = CBA.screens || {};
         '<div class="hm-cols hm-cols--' + (admin ? "adm" : "res") + (sched ? "" : " hm-cols--nosch") + '" id="hm-cols">' +
           '<div class="hm-main">' +
             mineSectionHTML() +
-            adminSectionHTML() +
             (admin ? "" : '<div id="hm-feat" class="hm-featslot"></div>') +
           '</div>' +
           (sched ? '<section class="card hm-card hm-sch" id="hm-sch"></section>' : "") +
           /* ⚠️ העמודה של "יש חדש" נולדת ריקה; `loadNewCard` מדליק אותה. */
           '<aside class="hm-side"><div id="hm-new"></div></aside>' +
         '</div>' +
-        (garden ? '<section class="hmg" id="hm-gardensec" aria-label="גינון"></section>' : "") +
+        /* משטח הוועד (כולל הגינון) — אחרי כל עולם התושב. ר' adminSectionHTML. */
+        (admin ? adminSectionHTML(garden) : "") +
         '</div>';
 
       /* ⚠️ `|| container` — סביבת בדיקה עם DOM מינימלי (test-data-failure) לא

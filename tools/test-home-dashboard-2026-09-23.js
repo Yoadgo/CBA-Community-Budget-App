@@ -132,7 +132,11 @@ function render(container) {
     ok('בעל תפקיד → לו"ז כרשימה', !!c.querySelector('#hm-sch.hm-sch--list'));
     ok('בעל תפקיד → אין "הבא בקהילה" בעמודה', !c.querySelector('#hm-feat'));
     ok('🔴 "אצלנו בבית" עדיין לפני "תפקיד ועד" ב-DOM',
-       c.querySelector('.hm-main').innerHTML.indexOf('hm-mine') < c.querySelector('.hm-main').innerHTML.indexOf('hm-vaad'));
+       c.innerHTML.indexOf('hm-mine') < c.innerHTML.indexOf('hm-vaad'));
+    /* 23.9 (ערב) — עולם התושב ראשון לגמרי: הוועד יצא מהשורה של הלו"ז. */
+    ok('🔴 הלו"ז לפני משטח הוועד — לא ביניהם', c.innerHTML.indexOf('id="hm-sch"') < c.innerHTML.indexOf('hm-vzone'));
+    ok('תפקיד ועד אינו בתוך #hm-cols', !c.querySelector('#hm-cols .hm-vaad'));
+    ok('בלי גינון → משטח בלי hm-vzone--g', !!c.querySelector('.hm-vzone') && !c.querySelector('.hm-vzone--g'));
     ok('מנהל תקציב בלי גינון → אין מקטע גינון', !c.querySelector('#hm-gardensec'));
 
     boot({ withSched: false });
@@ -309,6 +313,8 @@ function render(container) {
     boot({ perms: ['גינון'], withGarden: true, gardenRows: [] });
     let c = render();
     ok('מנהל גינון → יש מקטע', !!c.querySelector('#hm-gardensec'));
+    ok('🔴 הגינון יושב בתוך משטח הוועד', !!c.querySelector('.hm-vzone.hm-vzone--g #hm-gardensec'));
+    ok('ועם תווית לעמודת המשימות', !!c.querySelector('.hm-vzone__lbl'));
     ok('ושלד "מחכה להחלטה" בכרטיס הוועד', !!c.querySelector('#hm-gdecide.hm-lazy'));
 
     boot({ perms: ['גינון'], user: { isExternal: true }, withGarden: true });
@@ -385,7 +391,12 @@ function render(container) {
        idx.indexOf('js/screens/homeSchedule.js') < idx.indexOf('js/screens/home.js'));
     ok('service-worker על אותה גרסה', sw.indexOf('VERSION = "' + v + '"') !== -1);
     ok('🔴 עמוד הבית רחב במחשב (resident.css)', /data-screen="resHome"\] \.app-main \{ max-width: min\(2000px, 97vw\)/.test(CSS_R));
-    ['hm-quiet', 'hm-cols--res', 'hm-cols--adm', 'hm-hero__txt'].forEach(k => ok('.' + k + ' ב-home.css', CSS_H.indexOf('.' + k) !== -1));
+    ['hm-quiet', 'hm-cols--res', 'hm-cols--adm', 'hm-hero__txt',
+     'hm-vzone', 'hm-vzone--g', 'hm-vzone__grid', 'hm-vzone__tasks', 'hm-vzone__lbl'].forEach(k => ok('.' + k + ' ב-home.css', CSS_H.indexOf('.' + k) !== -1));
+    /* 🔴 השלד/מצב-ריק ההפוכים (לבן-שקוף) רק בעמודת המשימות — אחרת שלד הגינון
+       בכרטיס לבן בלתי נראה. */
+    ok('🔴 שלד לבן-שקוף מוגבל ל-.hm-tasks', /\.hm-vaad \.hm-tasks \.skeleton/.test(CSS_H) && !/\.hm-vaad \.skeleton/.test(CSS_H));
+    ok('🔴 כרטיסי הגינון על הצפחה — טקסט כהה (לא יורשים לבן)', /\.hm-vzone \.hmg \.card \{[^}]*color: var\(--text\)/.test(CSS_H));
     ['hmg-kpi', 'hmg-cards', 'hmg-tr', 'hmg-more'].forEach(k => ok('.' + k + ' ב-homeGarden.css', CSS_G.indexOf('.' + k) !== -1));
   }
 

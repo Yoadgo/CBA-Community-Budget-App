@@ -98,22 +98,19 @@
 @media (max-width: 1279px) {
   .hm-cols--res .hm-sch { order: -1; }
 }
-@media (min-width: 1200px) {
-  /* align-items:start ולא stretch — נצפה חי: כשיש בכרטיס הוועד שורה אחת, stretch
-     מתח אותו לגובה הלו"ז והשאיר גוש כהה ריק. */
-  .hm-cols--adm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr); align-items: start; }
+/* 🔴 23.9 (ערב) — בעל תפקיד: השורה הראשונה היא עולם התושב בלבד ("אצלנו בבית"
+   + לו"ז 10 ימים, חצי-חצי). "תפקיד ועד" ירד למשטח משלו מתחת (.hm-vzone). */
+@media (min-width: 900px) {
+  .hm-cols--adm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   .hm-cols--adm .hm-main { display: contents; }
   .hm-cols--adm .hm-side { grid-column: 1 / 2; }
 }
-@media (min-width: 721px) and (max-width: 1199px) {
-  .hm-cols--adm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 899px) {
   .hm-cols--adm .hm-main { display: contents; }
-  .hm-cols--adm .hm-sch { grid-column: 1 / -1; }
+  .hm-cols--adm .hm-sch { order: -1; }
 }
 @media (max-width: 720px) {
   .hm-cols { gap: 14px; }
-  .hm-cols--adm .hm-main { display: contents; }
-  .hm-cols--adm .hm-sch { order: -1; }
 }
 
 /* --- "אצלנו בבית" — ארבע שורות מצב באותה שפה --- */
@@ -155,10 +152,12 @@
    צפחה רכה ולא שחור: `--action` (#111827) שמור ל-CTA הראשי, וכרטיס
    שלם באותו צבע היה גוזל ממנו את הבלעדיות. ר' cba-core-standards. */
 .hm-vaad {
-  --vaad-line: rgba(255,255,255,.16);
-  background: linear-gradient(168deg, #42505F, #33404F);
-  border: 1px solid #2C3846; border-radius: var(--radius);
-  box-shadow: 0 6px 20px rgba(51,64,79,.18);
+  --vaad-line: rgba(255,255,255,.18);
+  /* 23.9 (ערב) — הובהר מעט לבקשת יועד (היה #42505F → #33404F). לבן על
+     #4A5668 עדיין ~7:1 — קריא בנוחות. */
+  background: linear-gradient(168deg, #5A687A, #4A5668);
+  border: 1px solid #435061; border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(51,64,79,.14);
   color: #fff; padding: 16px 16px 14px;
 }
 .hm-vaad__head { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -176,12 +175,68 @@
 .hm-vaad .hm-task__n { background: rgba(255,255,255,.14); color: rgba(255,255,255,.82); }
 .hm-vaad .hm-task--warn .hm-task__n { background: #F7D9A6; color: #5A3A08; }
 .hm-vaad .hm-task__c { color: rgba(255,255,255,.5); }
-/* השלד והמצב-הריק חייבים להתהפך גם הם — אחרת אפור על צפחה. */
-.hm-vaad .empty { padding: 22px 16px; }
-.hm-vaad .empty__ico { color: rgba(255,255,255,.22); }
-.hm-vaad .empty__title { color: rgba(255,255,255,.86); }
-.hm-vaad .empty__sub { color: rgba(255,255,255,.55); }
-.hm-vaad .skeleton { background-color: rgba(255,255,255,.10); }
+/* השלד והמצב-הריק חייבים להתהפך גם הם — אחרת אפור על צפחה.
+   ⚠️ רק בעמודת המשימות: כרטיסי הגינון שבתוך המשטח לבנים, ושלד לבן-שקוף
+      עליהם היה בלתי נראה. */
+.hm-vaad .hm-clear .empty { padding: 22px 16px; }
+.hm-vaad .hm-clear .empty__ico { color: rgba(255,255,255,.28); }
+.hm-vaad .hm-clear .empty__title { color: rgba(255,255,255,.9); }
+.hm-vaad .hm-clear .empty__sub { color: rgba(255,255,255,.62); }
+.hm-vaad .hm-tasks .skeleton { background-color: rgba(255,255,255,.14); }
+
+/* --- משטח "תפקיד ועד" (23.9, ערב) --------------------------------------
+   רצועה ברוחב מלא מתחת לעולם התושב. בתוכה: המשימות, ולמנהל־על/גינון גם
+   מקטע הגינון (homeGarden.js) — "מוטמע ברקע של הוועד".
+   במחשב (≥1200) עם גינון: המשימות בעמודה מימין, כותרת הגינון והאריחים
+   לידן, ושלושת כרטיסי הגינון בשורה מלאה מתחת. `.hmg`/`.hmg-body` הופכים
+   ל-display:contents כדי שהילדים שלהם יהיו תאים בגריד של המשטח — ה-DOM
+   של homeGarden.js לא משתנה. */
+.hm-vzone { margin-top: 18px; padding: 18px 18px 18px; }
+.hm-vzone .hm-vaad__head { margin-bottom: 14px; }
+.hm-vzone .hm-vaad__t { font-size: 16px; }
+.hm-vzone__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px 18px; align-items: start; }
+.hm-vzone__tasks { min-width: 0; }
+.hm-vzone__lbl { margin: 2px 2px 10px; font-size: 13px; font-weight: 800; color: rgba(255,255,255,.88); }
+
+/* הגינון על הצפחה: כותרת בלבן, וכרטיסים לבנים אטומים (זכוכית על צפחה
+   נראית אפורה-עכורה, והמספרים הם העיקר כאן). */
+.hm-vzone .hmg { margin-top: 0; }
+.hm-vzone .hmg-head { margin: 2px 2px 10px; }
+.hm-vzone .hmg-head__t { font-size: 15px; color: #fff; }
+.hm-vzone .hmg-head__s { color: rgba(255,255,255,.62); }
+.hm-vzone .hmg-head__ico { background: rgba(255,255,255,.14); color: #A7F3D0; }
+.hm-vzone .hmg-head .hm-link { color: rgba(255,255,255,.88); }
+.hm-vzone .hmg .card {
+  background: rgba(255,255,255,.97); color: var(--text); border-color: transparent;
+  backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;
+}
+.hm-vzone .hmg .card::after { display: none; }
+.hm-vzone .hmg-kpi:hover { box-shadow: 0 0 0 2px rgba(255,255,255,.45); }
+.hm-vzone .hmg-more { background: rgba(255,255,255,.97); border-color: transparent; color: var(--text); }
+
+@media (min-width: 721px) {
+  /* משימות בכמה עמודות — כשהן בשורה מלאה (בלי גינון, או מתחת ל-1200). */
+  .hm-vzone .hm-tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+}
+@media (min-width: 1200px) {
+  .hm-vzone--g .hm-vzone__grid {
+    grid-template-columns: minmax(300px, 1fr) minmax(0, 2.4fr);
+    grid-template-areas: "tasks ghead" "tasks kpis" "cards cards";
+    /* ⚠️ 1fr בשורת האריחים: כשעמודת המשימות גבוהה מכותרת+אריחים, התוספת
+       נבלעת מתחת לאריחים — ולא נפתח רווח בין "גינון" לאריחים (נתפס בצילום). */
+    grid-template-rows: auto 1fr auto;
+  }
+  .hm-vzone--g .hmg, .hm-vzone--g .hmg-body { display: contents; }
+  .hm-vzone--g .hm-vzone__tasks { grid-area: tasks; }
+  .hm-vzone--g .hm-tasks { display: flex; flex-direction: column; }
+  .hm-vzone--g .hmg-head { grid-area: ghead; margin-bottom: 0; }
+  .hm-vzone--g .hmg-kpis { grid-area: kpis; }
+  .hm-vzone--g .hmg-cards { grid-area: cards; margin-top: 0; }
+  .hm-vzone--g .hmg-err { grid-area: kpis; }
+}
+@media (max-width: 720px) {
+  .hm-vzone { margin-top: 14px; padding: 14px; }
+}
 
 /* --- פעולות מהירות — גלולות בראש העמוד (2026-09-16) ------------------
    ⚠️ הרמזים לגלילה (דהייה, מקפים) מודלקים מ-JS לפי

@@ -106,8 +106,11 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     const c = setup({ isSuper: true });
     const html = c.innerHTML;
     ok('הפעולות לפני הכרטיסים', html.indexOf('hm-actions') < html.indexOf('hm-cols'));
-    const main = c.querySelector('.hm-main').innerHTML;
-    ok('🔴 "אצלנו בבית" לפני "תפקיד ועד"', main.indexOf('hm-mine') < main.indexOf('hm-vaad'));
+    /* 23.9 (ערב) — "תפקיד ועד" יצא מ-.hm-main למשטח משלו אחרי #hm-cols:
+       עולם התושב ראשון לגמרי. */
+    ok('🔴 "אצלנו בבית" לפני "תפקיד ועד"', html.indexOf('hm-mine') < html.indexOf('hm-vaad'));
+    ok('🔴 ותפקיד ועד אחרי כל עולם התושב (אחרי #hm-cols)', html.indexOf('id="hm-cols"') < html.indexOf('hm-vaad') &&
+       !c.querySelector('#hm-cols .hm-vaad'));
     ok('הכרטיס נושא את השם החדש', /תפקיד ועד/.test(c.querySelector('.hm-vaad__t').textContent));
     ok('⚠️ והעמודה השנייה נולדת כבויה',
        !c.querySelector('#hm-cols').classList.contains('hm-cols--two'));
