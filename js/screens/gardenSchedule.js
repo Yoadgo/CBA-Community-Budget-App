@@ -1294,13 +1294,42 @@
       '<span class="gw-opt__go">' + ctx.ico("next") + '</span></button>';
   }
 
+  /* 🗂 שורה בחלונית הבחירה — **אותה שפה כמו הכרטיס ברשימת המשימות**
+     (23.9, בקשת יועד): קוביית קטגוריה, "דיווח 31" / ↻ / "נגררה שבועיים",
+     נקודת מקור (בורדו/כחול/ירוק) ופס דחיפות בקצה. הכול מגיע מ-ctx.list
+     של מסך המשימות — כך שהשורה כאן לא יכולה להתרחק מהכרטיס שם. */
+  function taskOptL(t, ctx, L) {
+    var cat = ctx.catOf(t) || { key: "lawn", ico: "lawn" }, u = L.urg ? L.urg(t) : 0;
+    return '<button type="button" class="gw-opt gw-opt--task k-' + cat.key + (u ? " is-u" + u : "") +
+        '" data-f="task" data-id="' + esc(t.id) + '">' +
+      '<span class="gt-cube">' + ctx.ico(cat.ico) + '</span>' +
+      '<span class="gw-opt__t"><b>' + esc(t.title || t.category || "משימה") + '</b>' +
+        '<span class="gt-meta">' + (L.meta ? L.meta(t) : "") + '</span></span>' +
+      (L.src ? L.src(t) : "") +
+      '<span class="gw-opt__go">' + ctx.ico("next") + '</span></button>';
+  }
+  function pickListHtml(ctx, list) {
+    var L = ctx.list;
+    if (!L || !L.groups) {   /* מסך משימות ישן בלי ctx.list — הרשימה השטוחה הקודמת */
+      return '<div class="gw-list">' + sortPick(list, ctx).map(function (t) { return taskOpt(t, ctx); }).join("") + '</div>';
+    }
+    /* כמו "עבודת השבוע": מה שבוצע (ממתין לאישור) יורד לסוף, בקבוצה משלו. */
+    var done = list.filter(function (t) { return t.flag === "ממתין לאישור"; });
+    var groups = L.groups(list.filter(function (t) { return t.flag !== "ממתין לאישור"; }));
+    if (done.length) groups.push({ area: "בוצעו · ממתינות לאישור", items: done, done: true });
+    return groups.map(function (g) {
+      return '<div class="gt-grp gt-grp--sub gw-pgrp">' + esc(g.area) + ' <em>· ' + g.items.length + '</em><hr></div>' +
+        '<div class="gw-list">' + g.items.map(function (t) { return taskOptL(t, ctx, L); }).join("") + '</div>';
+    }).join("");
+  }
+
   /* ---- שלב: בחירת משימה ---- */
   function stepTask(ctx, F, title, sub, dots, onPick) {
-    var list = sortPick(unscheduled(ctx), ctx);
+    var list = unscheduled(ctx);
     F.push({
       title: title, sub: sub, dots: dots,
       html: list.length
-        ? '<div class="gw-list">' + list.map(function (t) { return taskOpt(t, ctx); }).join("") + '</div>'
+        ? pickListHtml(ctx, list)
         : '<div class="gw-empty"><b>הכול כבר בסידור</b>אין משימות פתוחות לשבוע הזה שממתינות לשעה. ' +
           'משימה בלי שבוע צריכה קודם שיבוץ לשבוע במסך המשימות.</div>',
       on: { task: function (b) { onPick(byId(ctx, b.dataset.id)); } }

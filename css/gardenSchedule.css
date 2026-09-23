@@ -674,3 +674,16 @@
 /* מסך נמוך, בלוק של שעה — בשורה אחת עם הכותרת */
 .gw-grid.is-tight .gw-blk.is-hr .gw-flags { order: 0; flex-wrap: nowrap; flex: 0 1 auto; margin-top: 0; min-width: 0; overflow: hidden; }
 .gw-ag__t .gw-flags { margin-top: 3px; }
+
+/* 🗂 חלונית הבחירה = אותה שפה כמו הכרטיס ברשימה (23.9, בקשת יועד):
+   כותרת אזור · מטא (דיווח/↻/נגררה) · נקודת מקור · פס דחיפות בקצה. */
+.gw-pgrp { margin: 14px 2px 7px; }
+.gw-pgrp:first-child { margin-top: 2px; }
+.gw-opt--task { position: relative; overflow: hidden; }
+.gw-opt--task::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 4px; background: transparent; }
+.gw-opt--task.is-u1::before { background: var(--u1, #D98AAE); }
+.gw-opt--task.is-u2::before { background: var(--u2, #D46A6A); }
+.gw-opt--task .gt-meta { display: flex; flex-wrap: nowrap; overflow: hidden; margin-top: 3px; min-width: 0; }
+.gw-opt--task .gt-meta > * { flex: none; }
+.gw-opt--task .gt-meta .gt-res { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-opt--task .gt-src { width: 18px; height: 18px; }

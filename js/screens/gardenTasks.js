@@ -684,6 +684,42 @@
         var i = (order.type || []).indexOf(name);
         return i === -1 ? 9999 : i;
       }
+      /* 🗂 **הקיבוץ של "עבודת השבוע" — פונקציה אחת** (23.9, בקשת יועד:
+         "שבחלונית הבחירה… יהיה סידור זהה לרשימת משימות מבחינת חלוקה,
+         תעדוף וסדר"). גם הרשימה וגם חלונית הבחירה של הסידור השבועי
+         קוראות לה, כך ששינוי בסדר כאן משנה את שתיהן יחד.
+         · אזורים — לפי הסדר שבטאב ההגדרות (מצפון לדרום = מסלול ההליכה).
+         · בתוך אזור — דיווח תושב ראשון (יש אדם שמחכה), ואז לפי דחיפות. */
+      function areaGroups(list) {
+        var areas = [], seen = {};
+        (list || []).forEach(function (t) {
+          var a = t.area || "ללא אזור";
+          if (!seen[a]) { seen[a] = []; areas.push(a); }
+          seen[a].push(t);
+        });
+        areas.sort(function (a, b) {
+          return areaRank(a) - areaRank(b) || a.localeCompare(b, "he");
+        });
+        return areas.map(function (a) {
+          seen[a].sort(function (x, y) {
+            var rx = x.kind === GK_REPORT ? 0 : 1, ry = y.kind === GK_REPORT ? 0 : 1;
+            return (rx - ry) || urgency(y) - urgency(x);
+          });
+          return { area: a, items: seen[a] };
+        });
+      }
+      /* אותה שורת מטא כמו בכרטיס (בלי מיקום — הוא כותרת הקבוצה, ובלי
+         שעת הסידור — המשימה עוד לא בסידור): תושב · שגרה · דגל. */
+      function pickMeta(t) {
+        return [
+          (t.kind === GK_REPORT && !isTeamFault(t)
+            ? '<span class="gt-res">' + ico("person") + esc(GL.reportRef(t.repId)) +
+              (t.reporter ? ' · ' + esc(t.reporter) : '') + '</span>'
+            : ''),
+          (t.kind === GK_ROUTINE ? ico("repeat") : ''),
+          tagHtml(t)
+        ].filter(Boolean).join('<i>·</i>');
+      }
       function lane(label, n) {
         return '<div class="gt-grp gt-grp--lane">' + esc(label) +
           ' <em>· ' + (n === 1 ? "משימה אחת" : n + " משימות") + '</em><hr></div>';
@@ -702,6 +738,8 @@
           rows: rowsAll, week: week, thisWeek: todayKey(), loading: !!lastSkeleton,
           isManager: isManager, ico: ico, catOf: catT,
           tiles: tileList, tile: tileAction, openDetails: openDetails,
+          /* 🗂 חלונית הבחירה מציגה בדיוק כמו הרשימה (ר' areaGroups) */
+          list: { groups: areaGroups, meta: pickMeta, src: srcDot, urg: urgLevel },
           redraw: function () { draw(); }
         };
       }
@@ -772,27 +810,11 @@
              אחת בסוף, והרשימה מציגה רק את מה שעוד פתוח. למנהל הקיפול פתוח
              כברירת מחדל — אלה המשימות שממתינות לו. */
           var doneW = thisWeek.filter(function (t) { return t.flag === "ממתין לאישור"; });
-          var areas = [], seen = {};
-          thisWeek.filter(function (t) { return t.flag !== "ממתין לאישור"; }).forEach(function (t) {
-            var a = t.area || "ללא אזור";
-            if (!seen[a]) { seen[a] = []; areas.push(a); }
-            seen[a].push(t);
-          });
-          /* סדר האזורים הוא הסדר שבטאב ההגדרות — הם כתובים שם מצפון לדרום,
-             וזה מסלול ההליכה האמיתי בשטח. */
-          areas.sort(function (a, b) {
-            return areaRank(a) - areaRank(b) || a.localeCompare(b, "he");
-          });
-          html += areas.map(function (a) {
-            /* דיווח תושב ראשון גם כאן, מאותו נימוק. */
-            seen[a].sort(function (x, y) {
-              var rx = x.kind === GK_REPORT ? 0 : 1, ry = y.kind === GK_REPORT ? 0 : 1;
-              return (rx - ry) || urgency(y) - urgency(x);
-            });
-            return '<div class="gt-grp gt-grp--sub">' + esc(a) +
-              ' <em>· ' + seen[a].length + '</em><hr></div>' +
+          html += areaGroups(thisWeek.filter(function (t) { return t.flag !== "ממתין לאישור"; })).map(function (g) {
+            return '<div class="gt-grp gt-grp--sub">' + esc(g.area) +
+              ' <em>· ' + g.items.length + '</em><hr></div>' +
               '<div class="gd-reps">' +
-                seen[a].map(function (t) { return card(t, { hideArea: true }); }).join("") +
+                g.items.map(function (t) { return card(t, { hideArea: true }); }).join("") +
               '</div>';
           }).join("");
           if (doneW.length) {
