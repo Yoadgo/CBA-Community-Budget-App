@@ -4402,36 +4402,74 @@ var GEMINI_MODEL = 'gemini-3.1-flash-lite';
  * למה: 503 ("The model is overloaded") הוא עומס זמני בשרתי גוגל — לא תקלה אצלנו
  * ולא בעיית מכסה. הוא בדרך כלל חולף תוך שניות, ולכן ניסיון אחד בלבד הפיל סריקות
  * שהיו מצליחות בניסיון השני. גם מנוי בתשלום לא מונע 503 (קיבולת משותפת).
- * מה: עד 3 ניסיונות בסך הכול, המתנה ~1.5ש' ואז ~3ש' (+רעש אקראי קטן), רק על קודים
- * זמניים (429/500/503/504) או שגיאת רשת. 400/403/404 = טעות קבועה → לא חוזרים.
+ * מה: שני ניסיונות על המודל הראשי ואז מודלי גיבוי (ראו GEMINI_FALLBACK_MODELS), רק על
+ * קודים זמניים (429/500/503/504), 404 או שגיאת רשת. 400/403 = טעות קבועה → לא חוזרים.
  * ⚠ לא להגדיל בלי מחשבה: הלקוח מחכה לכל הזמן הזה, ו-Apps Script מוגבל ל-6 דק'. */
 var GEMINI_RETRY_CODES = [429, 500, 503, 504];
-var GEMINI_RETRY_WAITS_MS = [1500, 3000];
+/* 🔁 מודלי גיבוי (23.9.26 ערב): 503 חזר *בכל* קריאה ולא רק מדי פעם — כלומר המאגר
+ * של המודל הראשי עמוס לאורך זמן, וניסיון חוזר על אותו מודל לא עוזר. לכל מודל יש
+ * שרתים משלו, אז אחרי שני ניסיונות על הראשי עוברים למודל אחר. 404 (מודל שהופסק)
+ * גם מעביר לגיבוי. ⚠ אם גוגל מפסיקה מודל מהרשימה — להחליף כאן בלבד. */
+var GEMINI_FALLBACK_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash'];
+// סדר הניסיונות: [מודל, המתנה לפני (מ"ש)]. בסך הכול ~2.5ש' המתנה במקרה הגרוע.
+function geminiAttemptPlan_() {
+  var plan = [[GEMINI_MODEL, 0], [GEMINI_MODEL, 1500]];
+  GEMINI_FALLBACK_MODELS.forEach(function (m, i) { if (m !== GEMINI_MODEL) plan.push([m, i ? 1000 : 0]); });
+  return plan;
+}
 
 function geminiFetch_(url, opts) {
-  var attempts = GEMINI_RETRY_WAITS_MS.length + 1;
-  for (var i = 0; i < attempts; i++) {
-    var last = (i === attempts - 1);
-    var resp;
+  var marker = '/models/' + GEMINI_MODEL + ':';
+  var plan = geminiAttemptPlan_();
+  var resp = null, lastErr = null;
+  for (var i = 0; i < plan.length; i++) {
+    var model = plan[i][0];
+    if (plan[i][1]) Utilities.sleep(plan[i][1] + Math.floor(Math.random() * 400));
+    var u = url.indexOf(marker) === -1 ? url : url.replace(marker, '/models/' + model + ':');
     try {
-      resp = UrlFetchApp.fetch(url, opts);
+      resp = UrlFetchApp.fetch(u, opts);
+      lastErr = null;
     } catch (e) {
-      if (last) throw e;                       // אחרי הניסיון האחרון — כמו קודם בדיוק
-      Logger.log('geminiFetch_: network error, retry ' + (i + 1) + ': ' + String(e));
-      Utilities.sleep(GEMINI_RETRY_WAITS_MS[i] + Math.floor(Math.random() * 500));
+      lastErr = e;
+      Logger.log('geminiFetch_: ' + model + ' network error: ' + String(e));
       continue;
     }
     var code = resp.getResponseCode();
-    if (code === 200 || last || GEMINI_RETRY_CODES.indexOf(code) === -1) return resp;
-    Logger.log('geminiFetch_: HTTP ' + code + ', retry ' + (i + 1));
-    Utilities.sleep(GEMINI_RETRY_WAITS_MS[i] + Math.floor(Math.random() * 500));
+    if (code === 200) {
+      if (i > 0) Logger.log('geminiFetch_: הצליח עם ' + model + ' בניסיון ' + (i + 1));
+      return resp;
+    }
+    Logger.log('geminiFetch_: ' + model + ' HTTP ' + code + ' — ' + String(resp.getContentText()).slice(0, 300));
+    var moveOn = GEMINI_RETRY_CODES.indexOf(code) !== -1 || code === 404;
+    if (!moveOn) return resp;                   // 400/403 = בעיה קבועה (מפתח/בקשה) — לא ממשיכים
   }
+  if (lastErr && !resp) throw lastErr;          // רק שגיאות רשת — כמו קודם
+  return resp;
+}
+
+/** 🔧 בדיקה ידנית בעורך: בוחרים testGeminiModels ← ▶ Run ← Execution log.
+ *  שולח שאלה קצרה לכל מודל ומדפיס איזה עונה (200) ואיזה לא (503/404...).
+ *  אם *כולם* 503 — הבעיה בפרויקט/במפתח ולא במודל מסוים. */
+function testGeminiModels() {
+  var key = geminiApiKey_();
+  if (!key) { Logger.log('חסר GEMINI_API_KEY'); return; }
+  [GEMINI_MODEL].concat(GEMINI_FALLBACK_MODELS).forEach(function (m) {
+    var t0 = Date.now();
+    try {
+      var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m +
+        ':generateContent?key=' + encodeURIComponent(key),
+        { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+          payload: JSON.stringify({ contents: [{ parts: [{ text: 'ענה במילה אחת: שלום' }] }] }) });
+      Logger.log(m + ' → ' + r.getResponseCode() + ' (' + (Date.now() - t0) + 'ms) ' +
+        String(r.getContentText()).slice(0, 200));
+    } catch (e) { Logger.log(m + ' → שגיאת רשת: ' + String(e)); }
+  });
 }
 
 /** הודעת שגיאה בעברית פשוטה למשתמש — במקום "Gemini החזיר קוד 503". */
 function geminiErrorMsg_(code) {
   if (code === 503 || code === 500 || code === 504) {
-    return 'שירות ה-AI של גוגל עמוס כרגע (ניסינו 3 פעמים). נסו שוב בעוד דקה — שום דבר לא נשמר ולא אבד.';
+    return 'שירות ה-AI של גוגל עמוס כרגע (ניסינו כמה מודלים). נסו שוב בעוד דקה — שום דבר לא נשמר ולא אבד.';
   }
   if (code === 429) return 'הגענו למכסת השימוש ב-AI לעכשיו. נסו שוב בעוד כמה דקות.';
   return 'Gemini החזיר קוד ' + code;

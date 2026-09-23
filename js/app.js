@@ -62,6 +62,13 @@
     } catch (e) {}
   }
 
+  /* 🔴 24.9 — מסמן למסך שהציור הזה הוא רענון רקע שקט (לא ניווט של המשתמש), כדי שיוכל לשמור
+     את מצב התצוגה (שבוע/חודש/מסנן) במקום לאפס אותו. הדגל תקף רק בזמן הקריאה הסינכרונית. */
+  function renderScreenFlagged(screen, opts, silent) {
+    CBA.renderSilent = !!silent;
+    try { screen.render(main, opts); } finally { CBA.renderSilent = false; }
+  }
+
   function showScreen(name, opts) {
     // (2026-08-09, תיקון באג "קפיצה חזרה למסך הראשי"): הניווט העליון בראש
     // index.html מגיע עם 3 כפתורים קבועים שכבר יש להם data-screen, ולכן
@@ -115,14 +122,15 @@
          ויציג מספרים שגויים, ואז "יתקן" את עצמו — וזה גרוע יותר מהמתנה. */
       main.innerHTML = skeletonScreen();
       var want = name;
+      var wasSilent = silent;
       CBA.sheets.loadAllYears(function (ok) {
         if (currentScreen !== want || !main.isConnected) return;   // המשתמש כבר עבר מסך
         if (!ok) { main.innerHTML = dataUnavailableHTML("לא הצלחנו לטעון את נתוני השנים הקודמות."); wireDataRetry(main); return; }
         main.innerHTML = "";
-        screen.render(main, opts);
+        renderScreenFlagged(screen, opts, wasSilent);
       });
     } else {
-      screen.render(main, opts);
+      renderScreenFlagged(screen, opts, silent);
     }
     if (silent) {
       applyPulse(main, before);
@@ -2299,6 +2307,10 @@
   function onGoogleLogin(resp) {
     /* 🔴 תשובה אוטומטית אחרי שכבר נדחינו = עוד סבב בלולאה. מתעלמים. */
     if (gisAutoBlocked && resp && /^auto/.test(String(resp.select_by || ""))) return;
+    /* 🔴 24.9 — התחברות אוטומטית (auto_select) שמגיעה כשהמשתמש כבר בפנים מפעילה מחדש את כל
+       מסלול הכניסה: מסך "מתחבר…", משיכת מטען מלאה וניתוב מחדש — בדיוק "הדף מתרענן ועובר
+       דרך מטען פתיחה", ומוחק עריכה פתוחה. אותו משתמש כבר מחובר — מתעלמים. */
+    if (inited && currentUser && resp && /^auto/.test(String(resp.select_by || ""))) return;
     gisDisarm();   // התשובה הגיעה — אין "תקיעה" (ר' רשת הביטחון מעל hideLoginGate)
     loginError = null;
     showLoginConnecting();   // גוגל כבר סיימה; עכשיו מחכים לשרת שלנו — תראו את זה, לא מסך ריק
@@ -2892,6 +2904,8 @@
      מותר לרענן לגרסה חדשה — במכוון אותו שער בדיוק שבו doPoll משתמש, כדי
      שלא יהיה מגן שני עם התנהגות אחרת. ר' מסמך אפיון PWA, סעיף 5. */
   window.CBA.userIsEditingMain = userIsEditingMain;
+  /* 24.9 — לשער הרענון של pwa.js: כמה זמן עבר מאז נגיעה אחרונה של המשתמש. */
+  window.CBA.msSinceActivity = function () { return Date.now() - lastActivity; };
   var pendingSilentRefresh = false;
 
   /* ==========================================================================

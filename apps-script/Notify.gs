@@ -1767,10 +1767,10 @@ function cxGemini_(prompt, schema) {
   var payload = { contents: [{ parts: [{ text: prompt }] }],
                   generationConfig: { temperature: 0.7, response_mime_type: 'application/json', response_schema: schema } };
   try {
-    var resp = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
+    var resp = geminiFetch_('https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
       ':generateContent?key=' + encodeURIComponent(key),
       { method: 'post', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true });
-    if (resp.getResponseCode() !== 200) return { ok: false, error: 'ה-AI לא זמין כרגע (' + resp.getResponseCode() + ')' };
+    if (resp.getResponseCode() !== 200) return { ok: false, error: geminiErrorMsg_(resp.getResponseCode()) };
     var data = JSON.parse(resp.getContentText());
     var text = data.candidates && data.candidates[0] && data.candidates[0].content &&
                data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&

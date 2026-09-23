@@ -1154,6 +1154,7 @@ CBA.screens.events = (function () {
        • calendarLinks — אותם קישורי Google / Apple של "הוספה ליומן".
      ⚠️ openRsvp מצפה ל-ev עם id, title ו-category (מפתח הקטגוריה, "community"). */
   var pendingFocus = null;
+  var wasShown = false;
   var pendingEventId = null;
 
   return {
@@ -1170,12 +1171,13 @@ CBA.screens.events = (function () {
     focusEvent: function (id) { pendingEventId = id ? String(id) : null; },
     render: function (container) {
       activeContainer = container;
+      var silentNow = !!CBA.renderSilent;   // הדגל תקף רק סינכרונית — לוכדים לפני הטעינה האסינכרונית
       ensureResizeListener();
       var focusDate = pendingFocus;
       pendingFocus = null;
       var wantEventId = pendingEventId;
       pendingEventId = null;
-      var year = focusDate ? focusDate.getFullYear() : new Date().getFullYear();
+      var year = focusDate ? focusDate.getFullYear() : ((silentNow && wasShown && state.year) ? state.year : new Date().getFullYear());
       loadEvents(year, function () {
         /* קישור ישיר: האירוע יכול לשבת בשנה אחרת מזו שנטענה. אם הוא לא נמצא
            בשנה הנוכחית — לא טוענים שנה שנייה (איטי), פשוט פותחים את הלוח. */
@@ -1194,10 +1196,14 @@ CBA.screens.events = (function () {
            הבדיקה שמעל תמיד עוברת. נתפס חי: האפליקציה נפתחה על "לוח אירועים",
            עברתי לבית, ו-eventsList (~5 שניות) חזר וצייר את הלוח מעל עמוד הבית. */
         if (document.body.dataset.screen && document.body.dataset.screen !== "events") return;
-        state.selectedDate = focusDate;
-        state.currentMonth = focusDate ? new Date(focusDate) : new Date();
-        state.year = year;
-        state.activeCategories = null;
+        /* 🔴 24.9 — רענון רקע שקט לא מקפיץ את הלוח לחודש הנוכחי: משאירים חודש/יום/מסננים. */
+        if (!(silentNow && wasShown && state.currentMonth && !focusDate)) {
+          state.selectedDate = focusDate;
+          state.currentMonth = focusDate ? new Date(focusDate) : new Date();
+          state.year = year;
+          state.activeCategories = null;
+        }
+        wasShown = true;
         draw(container);
       });
     }

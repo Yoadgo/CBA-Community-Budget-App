@@ -83,6 +83,13 @@ CBA.pwa = (function () {
       if (CBA.userIsEditingMain && CBA.userIsEditingMain()) return false;
       if (document.body.classList.contains("has-cba-dlg")) return false;   // מודל פתוח
       if (document.querySelector(".cba-dlg-backdrop")) return false;
+      /* 🔴 24.9 — מגירת הוספה/עריכה (למשל חשבונית) יושבת על body ולא ב-#app-main, ולכן לא נספרה;
+         עדכון גרסה רענן דף מלא באמצע עריכה. עכשיו: כל מגירה/דיאלוג פתוחים, שדה בפוקוס בכל מקום,
+         או נגיעה של המשתמש בחצי הדקה האחרונה — לא מרעננים. */
+      if (document.getElementById("cba-drawer") || document.querySelector(".drawer-backdrop, .drawer, [role=dialog]")) return false;
+      var ae = document.activeElement;
+      if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return false;
+      if (CBA.msSinceActivity && CBA.msSinceActivity() < 30000) return false;
       return true;
     } catch (e) { return false; }
   }

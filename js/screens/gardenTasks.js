@@ -273,6 +273,10 @@
     render: function (container) { CBA.screens.gardenTasks.render(container, "mine"); }
   };
 
+  /* 🔴 24.9 — רענון רקע (showScreen silent) מצייר את המסך מחדש, ו-week/filter היו משתנים מקומיים
+     של render → כל רענון החזיר "שבוע הבא" ל"השבוע". הזיכרון הזה שורד ציור מחדש שקט בלבד;
+     ניווט אמיתי למסך (לא שקט) תמיד מתחיל מהשבוע הנוכחי כמו קודם. */
+  var gtMem = null;
   CBA.screens.gardenTasks = {
     /* opts (22.9, מסך הנתונים): { openId, onChange } — פתיחת כרטיס הפרטים
        של משימה אחת מתוך מסך אחר. ר' CBA.gardenOpenCard בסוף הקובץ. */
@@ -280,6 +284,7 @@
       opts = opts || {};
       var cardOpened = false;
       var week = todayKey();
+      var restoredWeek = false;
       /* ⚠️ שלושה מסננים (2026-09-09), אחרי הצוות האדום. קודם היו שישה,
          ושניים מהם שינו משמעות לפי מי מסתכל — "בוצעו" הופיע פעמיים ברצועה
          אצל הגנן, פעם למה שסימן ופעם למה שאושר.
@@ -293,6 +298,9 @@
          ר' js/screens/gardenSchedule.js. נזכר לכל צופה בדפדפן שלו. */
       var view = "list";
       try { if (localStorage.getItem("cba.gt.view") === "sched") view = "sched"; } catch (e) {}
+      if (CBA.renderSilent && gtMem && gtMem.mode === mode) {
+        week = gtMem.week; filter = gtMem.filter; restoredWeek = true;
+      }
       var lastSkeleton = false;
       /* הסידור הוא גם הקיבוץ. ברירת המחדל היא שבוע, כי זו השאלה שהמסך הזה
          נכשל בה: "לא ברור שיש דברים לשבוע ויש דברים שצריך להכניס לשיבוץ".
@@ -358,7 +366,7 @@
              אחד לא רואה בפועל. המידור עצמו נשאר בשרת ואינו מושפע מזה. */
           var sim = window.CBA.user;
           isManager = (sim && sim.isRoleSim) ? !sim.isExternal : !!res.isManager;
-          if (res.week) week = res.week;
+          if (res.week && !restoredWeek) week = res.week;
           draw();
           /* מסך הנתונים ביקש כרטיס — נפתח פעם אחת, אחרי הטעינה הראשונה.
              כל טעינה אחריה היא תוצאה של פעולה בכרטיס, ומסך הנתונים מתרענן. */
@@ -441,6 +449,7 @@
       }
 
       function draw(skeleton) {
+        gtMem = { mode: mode, week: week, filter: filter };
         /* מצויר לפני הכול, גם לפני מצב התיבה: כשהטעינה נכשלה אין שום נתון
            אמיתי להציג, וכל מסך שייבנה מעליו יהיה מסך של שקרים. */
         if (loadErr && !skeleton) {
