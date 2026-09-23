@@ -2152,13 +2152,30 @@ function clubClipEvents_(evs, backDays) {
  * נתונה ומאחד אותם למערך אחד. פתוח לכל תושב פעיל ולא-חיצוני (לא ב-ACTION_PERMS).
  * 🔑 מקור יחיד לשני המסלולים — התשובה של eventsList והמסמך ב-Firestore נבנים
  *    מאותה פונקציה, כדי שלא יהיו "שתי רשימות שלא מסכימות". */
+/* 🔴 23.9.26 — למה יומן החגים החזיר 0 אירועים גם אחרי תיקון המזהה:
+ * getCalendarById מחזיר null ליומן ציבורי (כמו חגים יהודים של גוגל) אם
+ * החשבון שהסקריפט רץ בשמו (הגזבר) **לא מנוי עליו** — ו-eventsForYear_ דילג
+ * בשקט. כאן: אם לא נמצא, נרשמים פעם אחת (מוסתר ולא מסומן, כדי לא ללכלך את
+ * היומן של הגזבר) ומנסים שוב. כשל נרשם ל-Logger ולא מפיל את שאר היומנים. */
+function eventsCalendar_(id) {
+  var cal = CalendarApp.getCalendarById(id);
+  if (cal) return cal;
+  try {
+    cal = CalendarApp.subscribeToCalendar(id, { hidden: true, selected: false });
+  } catch (err) {
+    Logger.log('eventsCalendar_: הרשמה ליומן נכשלה ' + id + ' — ' + err);
+    cal = null;
+  }
+  return cal;
+}
+
 function eventsForYear_(year) {
   var from = new Date(year, 0, 1);
   var to = new Date(year, 11, 31, 23, 59, 59);
   var events = [];
   Object.keys(EVENTS_CALENDARS).forEach(function (catKey) {
     var meta = EVENTS_CALENDARS[catKey];
-    var cal = CalendarApp.getCalendarById(meta.id);
+    var cal = eventsCalendar_(meta.id);
     if (!cal) return;
     cal.getEvents(from, to).forEach(function (ev) {
       events.push({
