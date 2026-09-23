@@ -113,7 +113,18 @@
     /* אין נתונים אמיתיים ביד — מסך שכולו תקציב מציג את הפאנל במקום מספרים.
        ⚠️ אסור לצייר אותו "בלי מספרים": CBA.mock עדיין מחזיק את נתוני הדמו
        מ-mock.js, ושרטוט שלהם היה מציג סכומים מומצאים כאילו הם אמיתיים. */
-    if (screenNeedsBudget(name) && !CBA.sheets.isConnected()) {
+    if (CBA.sheets.isConnected()) bootDataFailed = false;
+    if (bootDataFailed) {
+      /* 🔴 הטעינה הראשונה נכשלה (23.9.26, הערב של דר): אין שום נתון אמיתי,
+         ו-46 קריאות ב-dataService חסומות מאחורי pushConnected() — כלומר
+         **אף מסך** לא יעבוד באמת. עד היום כל מסך נכשל בשקט בדרכו שלו
+         (מכון "טעינה נכשלה", מפה בלי שמות, בית ריק). עכשיו: פאנל אחד
+         ברור עם "נסה שוב", בכל מסך, עד שהמטען מגיע. הסקר (runCycle)
+         ממשיך לנסות ברקע, וכשהנתונים נוחתים המסך מצויר מחדש. */
+      main.innerHTML = dataUnavailableHTML("לא הצלחנו לטעון את הנתונים מהשרת. בדקו את החיבור לאינטרנט ונסו שוב.",
+                                           "הנתונים עדיין לא נטענו");
+      wireDataRetry(main);
+    } else if (screenNeedsBudget(name) && !CBA.sheets.isConnected()) {
       main.innerHTML = dataUnavailableHTML();
       wireDataRetry(main);
     } else if (screenNeedsAllYears(name) && CBA.sheets.loadAllYears &&
@@ -2239,22 +2250,32 @@
    *  כי הוא ממתין לרשת. כלומר נבחר בלי כוונה הרגע הגרוע ביותר: הורדה של
    *  ~300KB במקביל בדיוק למשיכת נתוני התקציב.
    *
-   *  ✅ לכן כאן **אין ניחוש על מצב הדפדפן**. ההמתנה תלויה באירוע מפורש:
-   *  התשובה מהרשת של המשיכה הראשית כבר חזרה (`source !== "cache"`), ועוד
-   *  שהות קצרה שמפנה את הדרך גם לשתי הקריאות הנדחות שכבר קיימות שם
-   *  (התראות ב-2.5ש', סיור ב-3.2ש').
+   *  🔴🔴 **גרסה שלישית (23.9.26, הערב של דר) — ההתחברות יוצאת מיד, לא אחרי
+   *  המטען.** הגרסה השנייה דחתה אותה ל"אחרי שהמשיכה הראשית חזרה + 5 שניות",
+   *  והייתה נכונה כל עוד Firebase היה בונוס. מאז 15-17.9 המטען עצמו **תלוי**
+   *  ב-Firebase: `payloadTx` → `fsFirstRead("budgetTx")` → `userReady` ממתין
+   *  למשתמש Firebase עד 12 שניות — משתמש שלא יגיע, כי ההתחברות תוזמנה רק
+   *  אחרי שהמטען יחזור. במכשיר חדש (אין persistence) זה מעגל סגור: 12 שניות
+   *  המתנה, כשל "no-user", והאפליקציה עולה "לא מחוברת" — מכון "טעינה
+   *  נכשלה", מפה בלי שמות, לוח אירועים נופל, שנה תשפ"ו מ-mock.js. בכניסה
+   *  שנייה באותו דפדפן זה לא נראה, כי Firebase זוכר את המשתמש. ר' project
+   *  doc `dar-first-login-forensics-2026-09-23.md`.
    *
-   *  ⚠️ כישלון כאן הוא חסר-משמעות במכוון: אין קולבק, אין הודעה, אין חסימה.
-   *     האפליקציה ממשיכה על המושב החתום של Apps Script בדיוק כמו אתמול.
+   *  ✅ עכשיו: `expectUser()` ומיד אחריו `signIn()` — **לפני** `CBA.sheets.load`.
+   *  ההתחברות (~שנייה) רצה במקביל למשיכה (3-10 שניות), ו-`userReady` מקבל
+   *  משתמש הרבה לפני שהמטען מגיע לשלב שצריך אותו. הורדת ה-SDK במקביל
+   *  למטען היא מחיר קטן ומדיד; המעגל הסגור היה מחיר אינסופי.
+   *
+   *  ⚠️ הכרעת יועד (23.9): **אין נפילה לגיליון** כשFirebase לא מוכן. כשל
+   *     אמיתי (נדיר) מוצג כפאנל "נסה שוב" — ר' `bootDataFailed` בהמשך.
    * ========================================================================== */
-  var FIREBASE_SIGNIN_DELAY_MS = 5000;
   var firebaseSignInDone = false;
 
-  function firebaseSignInAfterLoad(googleIdToken) {
-    if (firebaseSignInDone) return;          // המשיכה מדווחת עד פעמיים
+  function firebaseSignInNow(googleIdToken) {
+    if (firebaseSignInDone) return;          // מגן מפני קריאה כפולה
     firebaseSignInDone = true;
     if (!googleIdToken || !window.CBA || !CBA.fb) return;
-    setTimeout(function () {
+    (function () {
       try {
         CBA.fb.signIn(googleIdToken, function (err) {
           if (err) return;               // ר' כלל 1 — כישלון שקט
@@ -2278,7 +2299,7 @@
           } catch (e) {}
         });
       } catch (e) {}
-    }, FIREBASE_SIGNIN_DELAY_MS);
+    })();
   }
 
   /* מבקש מהשרת לכתוב `members/{uid}` ב-Firestore (צעד 02ג, 2026-09-14).
@@ -2321,9 +2342,9 @@
           currentUser = data;
           /* 🔴 אותה סיבה כמו בנתיב עליית-העמוד למטה: הזהות נקבעת **לפני**
              המשיכה, כי הטעינה הקרה מ-Firestore גוזרת את השאילתה שלה
-             מ-`CBA.user`/`CBA.perms`. כאן זה ממילא כמעט תמיד לא-רלוונטי
-             (חיבור Firebase מתרחש רק אחרי הטעינה), אבל שתי נקודות כניסה
-             לאותה פונקציה לא יכולות להתנהג שונה. */
+             מ-`CBA.user`/`CBA.perms`. מאז 23.9 זה רלוונטי גם כאן: חיבור
+             Firebase יוצא לפני המשיכה, והטעינה הקרה מ-Firestore יכולה
+             להקדים את המטען גם בכניסה ראשונה. */
           applyUser();
           // הטוקן החתום שהשרת הנפיק — נשלח מעכשיו בכל פעולת כתיבה במקום הסיסמה
           window.CBA.authSession = data.session || "";
@@ -2340,17 +2361,17 @@
           var routedAfterLogin = false;
           firebaseSignInDone = false;
           /* 🔴 **מסמנים "התחברות בדרך" לפני שהמשיכה מתחילה** (2026-09-17, ממצא 02).
-             ההתחברות עצמה עדיין נדחית (ר' FIREBASE_SIGNIN_DELAY_MS), אבל
              `CBA.fb.userReady` צריך לדעת **עכשיו** שיהיה משתמש — אחרת כל
-             קריאה בשניות הראשונות רואה "אין משתמש" ונופלת לגיליון.
-             זה הרגע המוקדם ביותר שבו הטוקן ביד. */
+             קריאה בשניות הראשונות רואה "אין משתמש". זה הרגע המוקדם ביותר
+             שבו הטוקן ביד, ומיד אחריו (23.9) יוצאת גם ההתחברות עצמה. */
           try { if (window.CBA && CBA.fb && CBA.fb.expectUser) CBA.fb.expectUser(); } catch (e) {}
+          /* 🔴🔴 ההתחברות ל-Firebase יוצאת **עכשיו**, במקביל למשיכה (23.9.26).
+             עד היום היא חיכתה לתשובת המשיכה + 5 שניות — והמשיכה חיכתה לה.
+             ר' ההערה הגדולה ליד firebaseSignInNow. */
+          firebaseSignInNow(resp.credential);
           CBA.sheets.load(function (ok, info) {
             var wasInited = inited;
             sheetsLoadHandler(ok, info);
-            /* ⚠️ `source === "cache"` הוא הקריאה הראשונה מתוך שתיים —
-               הרשת עוד בדרך, וזה בדיוק הרגע שאסור להתחרות בו. */
-            if (!info || info.source !== "cache") firebaseSignInAfterLoad(resp.credential);
             // ציור ראשון: sheetsLoadHandler כבר קורא ל-routeByRole בעצמו.
             // כניסה חוזרת באותה טעינת עמוד (אחרי יציאה): המסך כבר מאותחל,
             // ולכן צריך לנתב כאן — פעם אחת בלבד.
@@ -2701,9 +2722,9 @@
      `CBA.mock._source === "sheets"` — הדגל הזה כבר קיים ומתרומם רק כש-apply()
      החיל מטען אמיתי. **בכוונה לא הומצא דגל חדש**: דגל שני היה יכול להיפרד
      מהראשון ולהציג נתוני דמו כאילו הם אמיתיים, וזה בדיוק מה שיועד אסר. */
-  function dataUnavailableHTML(sub) {
+  function dataUnavailableHTML(sub, title) {
     return '<div class="load-error">' +
-        '<div class="load-error__title">לא הצלחנו לטעון את נתוני התקציב</div>' +
+        '<div class="load-error__title">' + CBA.esc(title || "לא הצלחנו לטעון את נתוני התקציב") + '</div>' +
         '<div class="load-error__sub">' + CBA.esc(sub || "ייתכן שיש בעיית חיבור לאינטרנט. אפשר לנסות שוב.") + '</div>' +
         '<button type="button" class="btn-primary" data-data-retry>נסה שוב</button>' +
       '</div>';
@@ -2745,6 +2766,10 @@
         והוא מוצג כ-"—" במקום לחסום ספר טלפונים שלם. */
   var BUDGET_SCREENS = ["budget", "expenses", "planning", "reconcile", "resRequests"];
   function screenNeedsBudget(name) { return BUDGET_SCREENS.indexOf(name) !== -1; }
+  /* 🔴 "הטעינה הראשונה נכשלה ועדיין אין נתונים" (23.9.26). נדלק רק
+     ב-sheetsLoadHandler כשהמטען נכשל ואין מטמון; נכבה ברגע ש-isConnected()
+     — בכל showScreen. ר' השער בתחילת showScreen. */
+  var bootDataFailed = false;
 
   /* 🔴 מסכים שסורקים תנועות של **כל השנים יחד**, ולא רק את השנה המוצגת
      (2026-09-14). ⚠️ אחרי שהמטען יפסיק לשלוח שנים ישנות, מסך כזה לא יזרוק
@@ -2774,6 +2799,14 @@
       // כגיבוי אמיתי (ר' "cache-kept" למטה), ולא בנתוני דמו.
       ensureHeaderShell();
       return;   // מחכים לקריאה הבאה (תוצאת הרשת) לפני שמציגים תוכן
+    }
+
+    /* 🔴 (23.9.26) המטען נכשל ואין שום נתון אמיתי ביד ⇒ כל מסך יציג את
+       פאנל "נסה שוב" (ר' showScreen). כשל של רענון רקע אחרי שכבר יש נתונים
+       אינו נכנס לכאן — הנתונים הישנים נשארים על המסך כמו היום. */
+    bootDataFailed = !ok && !CBA.sheets.isConnected();
+    if (bootDataFailed) {
+      try { if (window.CBA.diag) CBA.diag.log("הטעינה הראשונה נכשלה — מוצג פאנל נסה שוב"); } catch (e) {}
     }
 
     if (!inited) {

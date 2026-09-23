@@ -762,19 +762,36 @@ CBA.sheets = (function () {
    * ======================================================================== */
   var BUDGET_TX_FROM_FIRESTORE_READ = true;
 
+  var PAYLOAD_TIMEOUT_MS = 60000;
   function fetchPayload(slim, done) {
     /* המושב החתום מצורף גם למשיכה הראשית (2026-08-23 — תיקון אבטחה).
        עד היום זו הייתה הקריאה היחידה בקובץ שיצאה בלי session, כי בצד השרת
        ממילא לא נבדק כלום. עכשיו doGet דורש מושב תקין גם כאן.
        ⚠️ **אסור להסיר את הדגל בלי להסיר גם את הדיאטה בשרת** — הוא מה
           שמונע מלקוח ישן לקבל מטען חסר ולהציג תקציב ריק. ר' doGet ב-Code.gs. */
-    fetch(API_URL + "?session=" + encodeURIComponent(authSession()) + "&slim=" + slim, { method: "GET" })
+    /* ⚠️ תקציב זמן (23.9.26): זו הייתה קריאת ה-fetch **היחידה** בקובץ בלי
+       גבול. Apps Script שלא עונה = callback שלא נקרא לעולם = שלד לנצח בלי
+       שום סימן. 60 שניות ולא פחות — התעוררות קרה + מטען מלא לוקחים 10-15. */
+    var settled = false;
+    var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    function finish(err, payload) {
+      if (settled) return;            // פעם אחת בלבד — או התשובה או פסק הזמן
+      settled = true;
+      clearTimeout(timer);
+      done(err, payload);
+    }
+    var timer = setTimeout(function () {
+      try { if (ctl) ctl.abort(); } catch (e) {}
+      finish(new Error("המטען לא חזר בזמן (" + Math.round(PAYLOAD_TIMEOUT_MS / 1000) + " שניות)"));
+    }, PAYLOAD_TIMEOUT_MS);
+    fetch(API_URL + "?session=" + encodeURIComponent(authSession()) + "&slim=" + slim,
+          ctl ? { method: "GET", signal: ctl.signal } : { method: "GET" })
       .then(function (r) { return r.json(); })
       .then(function (payload) {
-        if (!payload || !payload.ok) throw new Error((payload && payload.error) || "bad payload");
-        done(null, payload);
+        if (!payload || !payload.ok) return finish(new Error((payload && payload.error) || "bad payload"));
+        finish(null, payload);
       })
-      ["catch"](function (err) { done(err); });
+      ["catch"](function (err) { finish(err); });
   }
 
   /* ==========================================================================
@@ -1004,7 +1021,12 @@ CBA.sheets = (function () {
   function bootFromFirestore(done) {
     done = done || function () {};
     if (!(CBA.fb && CBA.fb.readDoc && CBA.fb.ensureDb && CBA.data)) return done(false);
-    CBA.fb.authReady(function (user) {
+    /* 🔴 `userReady` ולא `authReady` (23.9.26): בכניסה ראשונה במכשיר ההתחברות
+       ל-Firebase יוצאת עכשיו במקביל למשיכה (ר' firebaseSignInNow ב-app.js),
+       ו-`authReady` היה עונה "אין משתמש" רגע לפני שהיא מסתיימת — והטעינה
+       הקרה הייתה מדלגת בדיוק אצל מי שהכי צריך אותה. `userReady` ממתין
+       להתחברות שכבר בדרך; בלי התחברות בדרך הוא זהה ל-authReady. */
+    (CBA.fb.userReady || CBA.fb.authReady).call(CBA.fb, function (user) {
       if (!user) return done(false);
       CBA.fb.ensureDb(function (err) {
         if (err) return done(false);

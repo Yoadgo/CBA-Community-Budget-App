@@ -1250,7 +1250,12 @@ CBA.screens = CBA.screens || {};
 
     function renderForm() {
       if (state.selStart == null) { formEl.hidden = true; formEl.innerHTML = ""; return; }
-      if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubReserveSelect");   // יש בחירת משבצת ממתינה לאישור (מוגן גם בזמן שליחת reserveClub עצמה, ר' doSubmit — לא מנוקה עד hideForm בהצלחה)
+      /* 🔴 שקט (label:false) — 23.9.26, דיווח 21 של דר. עד היום בחירת משבצת
+         הדליקה "שומר…" בכותרת, ואחרי 45 שניות של מילוי טופס — "הפעולה
+         מתעכבת", כאילו השרת תקוע. לא נשמר כלום בשלב הזה. ההגנה מרענון רקע
+         נשארת (זה כל התפקיד של markDirty כאן); החיווי "שולח בקשה…" מוצג
+         רק סביב הקריאה עצמה, ר' doSubmit. לא מנוקה עד hideForm בהצלחה. */
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubReserveSelect", false);
       var lo = Math.min(state.selStart, state.selEnd), hi = Math.max(state.selStart, state.selEnd);
       var startLbl = slotLabel(lo), endLbl = slotEndLabel(hi);
       var mins = (hi - lo + 1) * 30;
@@ -1285,7 +1290,10 @@ CBA.screens = CBA.screens || {};
           family: fam, house: u.house || "", email: u.email || "",
           note: noteEl ? noteEl.value.trim() : ""
         };
+        /* החיווי בכותרת רק בזמן השליחה האמיתית (23.9.26) — ר' ההערה ב-renderForm. */
+        if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubReserveSend", "שולח בקשה…");
         CBA.data.reserveClub(payload, function (res) {
+          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubReserveSend");
           if (res && res.ok) {
             hideForm();
             showMsg("is-ok", checkIcon + ' הבקשה נשלחה וממתינה לאישור מנהל: ' + startLbl + '–' + endLbl + ', ' + CBA.esc(dateLabel(state.date)));
