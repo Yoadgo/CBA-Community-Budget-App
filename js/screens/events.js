@@ -1019,16 +1019,33 @@ CBA.screens.events = (function () {
   /**
    * ממשק ציבורי של המסך
    */
+  /* 🔴 23.9 — עמוד הבית (js/screens/homeSchedule.js) משתמש בשלושה חלקים מכאן,
+     כדי שלא יהיו שתי גרסאות של אותו דבר:
+       • focus(date)   — לחיצה על יום בלו"ז של הבית פותחת את הלוח על היום הזה.
+       • openRsvp(ev)  — אותו דיאלוג "אישור הגעה" בדיוק (אותם מסמכים ב-Firestore).
+       • calendarLinks — אותם קישורי Google / Apple של "הוספה ליומן".
+     ⚠️ openRsvp מצפה ל-ev עם id, title ו-category (מפתח הקטגוריה, "community"). */
+  var pendingFocus = null;
+
   return {
     title: "לוח אירועים",
+    focus: function (d) {
+      var x = d ? new Date(d) : null;
+      pendingFocus = (x && !isNaN(x.getTime())) ? startOfDay(x) : null;
+    },
+    openRsvp: function (ev) { if (ev && ev.id) openRsvpDialog(ev); },
+    calendarLinks: { google: googleAddUrl, apple: appleIcsDataUri },
     render: function (container) {
       activeContainer = container;
       ensureResizeListener();
-      loadEvents(new Date().getFullYear(), function () {
+      var focusDate = pendingFocus;
+      pendingFocus = null;
+      var year = focusDate ? focusDate.getFullYear() : new Date().getFullYear();
+      loadEvents(year, function () {
         if (activeContainer !== container || !container.isConnected) return; // המשתמש כבר עבר מסך
-        state.selectedDate = null;
-        state.currentMonth = new Date();
-        state.year = new Date().getFullYear();
+        state.selectedDate = focusDate;
+        state.currentMonth = focusDate ? new Date(focusDate) : new Date();
+        state.year = year;
         state.activeCategories = null;
         draw(container);
       });

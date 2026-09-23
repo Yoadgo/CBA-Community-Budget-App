@@ -31,6 +31,13 @@ CBA.screens = CBA.screens || {};
   function anyAdmin() {
     return !!CBA.isSuper || ["תקציב", "מועדון", "תושבים", "מכון", "גינון"].some(can);
   }
+  /* מקטע הגינון ושורת "מחכה להחלטה" (2026-09-23) — מנהל־על ומנהל גינון בלבד.
+     אותו תנאי של SCREEN_PERM "MANAGER" ב-app.js: הרשאת גינון **ולא** משתמש
+     חיצוני (הגנן). ⚠️ והמקטע נשען על homeGarden.js — בלעדיו אין מי שימלא את
+     השלד, ו"הכול מטופל" היה נחסם לנצח. */
+  function canGarden() {
+    return can("גינון") && !u().isExternal && !!window.CBA.homeGarden;
+  }
 
   var ICO = {
     receipt: '<path d="M6 2h8l5 5v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v5h5"/><path d="M8.5 12.5h7M8.5 16h4.5"/>',
@@ -44,7 +51,8 @@ CBA.screens = CBA.screens || {};
        ב-app.js במכוון: אותו נושא, אותו סמליל, בכל מקום באפליקציה. */
     leaf:    '<path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20"/><path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13"/>',
     gym:     '<path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/>',
-    badge:   '<path d="M12 3 2.5 8 12 13l9.5-5z"/><path d="M6 10.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.5"/>'
+    badge:   '<path d="M12 3 2.5 8 12 13l9.5-5z"/><path d="M6 10.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.5"/>',
+    check:   '<path d="m5 12.5 4.5 4.5L19 7.5"/>'   /* השורה השקטה (23.9) */
   };
   function svg(d, size) {
     var n = size || 20;
@@ -78,10 +86,10 @@ CBA.screens = CBA.screens || {};
   /* ---------------------------------------------------- "מה מחכה לאישורך" */
   /* כל שורה: תווית, מספר, ולאן קופצים. שורה עם 0 לא מוצגת בכלל — עמוד קבלה
      שמלא באפסים מלמד את העין להתעלם ממנו. */
-  function taskRow(label, n, target, tone) {
+  function taskRow(label, n, target, tone, sub) {
     return '<button type="button" class="hm-task' + (tone ? " hm-task--" + tone : "") + '" data-admin-goto="' + esc(target) + '">' +
       '<span class="hm-task__n">' + n + '</span>' +
-      '<span class="hm-task__l">' + esc(label) + '</span>' +
+      '<span class="hm-task__l">' + esc(label) + (sub ? '<small>' + esc(sub) + '</small>' : "") + '</span>' +
       '<span class="hm-task__c">' + svg(ICO.chev, 16) + '</span>' +
       '</button>';
   }
@@ -102,6 +110,11 @@ CBA.screens = CBA.screens || {};
     if (can("תושבים")) lazy += '<div id="hm-profile" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
     if (can("מכון"))   lazy += '<div id="hm-gym" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
     if (can("גינון"))  lazy += '<div id="hm-garden" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
+    /* 🔴 23.9 — "מחכה להחלטה". נמדד חי: דיווח תושב חיכה להחלטה (בלי שבוע)
+       בזמן שהכרטיס הזה הכריז "הכול מטופל" — השורה של #hm-garden סופרת רק
+       "ממתין לאישור" (הגנן סיים). המספר מגיע מ-homeGarden.js (אותו מנוע של
+       מסך הנתונים), ולכן השלד נסגר רק כשהוא מגיע. */
+    if (canGarden())   lazy += '<div id="hm-gdecide" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
 
     /* 🔴 "תפקיד ועד" (2026-09-16) — שם וכרטיס נפרדים, לבקשת יועד.
        הרקע: הכרטיס הזה והכרטיס המשפחתי שמתחתיו ענו על שתי שאלות
@@ -479,6 +492,7 @@ CBA.screens = CBA.screens || {};
         '<div id="hm-mygarden" class="hm-slot"></div>' +
         '<div id="hm-mygym" class="hm-slot"></div>' +
       '</div>' +
+      '<div class="hm-quiet" id="hm-quiet" hidden></div>' +
       '</section>';
   }
 
@@ -502,6 +516,24 @@ CBA.screens = CBA.screens || {};
 
   /* ההחזרים — השורה היחידה שאינה עולה דבר: היא נגזרת מהתנועות
      שכבר בזיכרון (`CBA.residentUtils.myRequests`), בלי שום קריאה. */
+  /* ---------------------------------------------- השורה השקטה (2026-09-23) ----
+     "אין בקשות החזר פתוחות" ו"אין שריון קרוב" היו שתי שורות מלאות, בגובה של
+     שורה שיש בה משהו. עכשיו שתיהן חולקות שורה קטנה אחת בתחתית הכרטיס —
+     אותו עיקרון שכבר כתוב למעלה ליד taskRow: עמוד קבלה שמלא ב"אין" מלמד
+     את העין להתעלם ממנו. כל חלק עדיין לחיץ ומוביל למסך שלו. */
+  var quiet = { refund: false, resv: false };
+  function paintQuiet(el) {
+    var host = el && el.closest ? el.closest(".hm-card") : null;
+    var q = host && host.querySelector("#hm-quiet");
+    if (!q) return;
+    var parts = [];
+    if (quiet.refund) parts.push('<button type="button" class="hm-quiet__i" data-goto="resRequests">אין בקשות החזר פתוחות</button>');
+    if (quiet.resv) parts.push('<button type="button" class="hm-quiet__i" data-goto="resReserve">אין שריון קרוב</button>');
+    q.hidden = !parts.length;
+    q.innerHTML = parts.length ? '<span class="hm-quiet__ico">' + svg(ICO.check, 14) + '</span>' +
+      parts.join('<span class="hm-quiet__sep" aria-hidden="true">·</span>') : "";
+  }
+
   function refundRowHTML(c, money) {
     var title, pill = "", tone = "", sub = "";
     if (c.pending) {
@@ -512,7 +544,9 @@ CBA.screens = CBA.screens || {};
       title = c.ready === 1 ? "בקשה אחת אושרה לתשלום" : c.ready + " בקשות אושרו לתשלום";
       pill = "אושר"; tone = "ok";
     } else {
-      title = "אין בקשות החזר פתוחות";
+      /* 23.9 — "אין" לא מקבל שורה משלו; הוא עובר לשורה השקטה (ר' quietHTML). */
+      quiet.refund = true;
+      return "";
     }
     sub += money + " שולמו השנה";
     return stateRow({ goto: "resRequests", ico: ICO.receipt, title: title, sub: sub, pill: pill, tone: tone });
@@ -555,15 +589,20 @@ CBA.screens = CBA.screens || {};
   /* ציור השורה — חולץ מתוך ה-callback כדי שגם המסלול מהמטמון וגם המסלול
      מהרשת יציירו בדיוק אותו דבר. */
   function paintNext(slot, list) {
+    /* 23.9 — אותם שריונים נכנסים גם ללו"ז (קטגוריה "שלי"), בלי קריאה נוספת. */
+    if (window.CBA.homeSchedule) CBA.homeSchedule.setPersonal(list || []);
     var next = (list || [])[0];
+    quiet.resv = !next;
     if (!next) {
-      slot.innerHTML = stateRow({ goto: "resReserve", ico: ICO.key,
-        title: "אין שריון קרוב", sub: "אפשר לשריין את המועדון" });
+      slot.innerHTML = "";
+      paintQuiet(slot);
       return;
     }
+    paintQuiet(slot);
     var a = new Date(next.start), b = new Date(next.end);
     var day = a.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "numeric" });
-    var time = pad(a.getHours()) + ":" + pad(a.getMinutes()) + "–" + pad(b.getHours()) + ":" + pad(b.getMinutes());
+    /* ⚠️ טווח עם מקף ארוך מתהפך ב-RTL ("20:00–17:00"). ⁦…⁩ מבודדים אותו. */
+    var time = "\u2066" + pad(a.getHours()) + ":" + pad(a.getMinutes()) + "–" + pad(b.getHours()) + ":" + pad(b.getMinutes()) + "\u2069";
     var pend = next.status === "pending";
     slot.innerHTML = stateRow({ goto: "resReserve", ico: ICO.key,
       title: "המועדון " + day, sub: time,
@@ -725,16 +764,29 @@ CBA.screens = CBA.screens || {};
       }
     }
     row.addEventListener("scroll", sync, { passive: true });
-    window.addEventListener("resize", sync);
+    /* 23.9 — המאזין על window שורד את הציור; מסירים אותו ברגע שהשורה כבר לא
+       בעמוד, אחרת כל ביקור בבית משאיר עוד אחד. */
+    function onResize() {
+      if (!row.isConnected) { window.removeEventListener("resize", onResize); return; }
+      sync();
+    }
+    window.addEventListener("resize", onResize);
     sync();
   }
 
   /* ------------------------------------------------------------- חיווט ----
-     האזנה אחת על המכל כולו, ולא מאזין לכל כפתור. חלק מהכפתורים כאן נולדים
+     האזנה אחת על העמוד כולו, ולא מאזין לכל כפתור. חלק מהכפתורים כאן נולדים
      מאוחר יותר (השריון הקרוב, שתי הספירות העצלות) — מאזין שנרשם בזמן הציור
-     היה מפספס בדיוק אותם. */
-  function bindClicks(container) {
-    container.addEventListener("click", function (e) {
+     היה מפספס בדיוק אותם.
+     🔴 23.9 — ההאזנה נרשמת על `.hm-page`, העטיפה שנוצרת מחדש בכל ציור, ולא
+        על ה-container. ה-container הוא #app-main — **אותו אלמנט לנצח**
+        (showScreen רק מרוקן אותו). עד היום כל ציור של עמוד הבית הוסיף עליו
+        מאזין נוסף: אחרי עשרה ביקורים לחיצה על כל [data-goto] — גם במסכים
+        אחרים (budget/expenses/resident משתמשים באותה תכונה) — ניווטה
+        עשר פעמים. */
+  function bindClicks(page) {
+    if (!page || !page.addEventListener) return;
+    page.addEventListener("click", function (e) {
       var admin = e.target.closest("[data-admin-goto]");
       if (admin) { if (window.CBA.gotoAdmin) CBA.gotoAdmin(admin.dataset.adminGoto); return; }
       if (e.target.closest("[data-tour-new]")) { if (window.CBA.tour) CBA.tour.startNew(); return; }
@@ -744,35 +796,86 @@ CBA.screens = CBA.screens || {};
   }
   function bindAdminJumps() { /* נשמר לתאימות — החיווט עבר להאזנה על המכל */ }
 
+  /* שורת "מחכה להחלטה" בכרטיס הוועד — מתמלאת מ-homeGarden.js. n === null
+     פירושו כשל: השורה נעלמת בשקט, ולא מכריזה "אין". */
+  function paintDecide(container, n, first) {
+    var slot = container.querySelector("#hm-gdecide");
+    if (!slot || !slot.isConnected) return;
+    var html = "";
+    if (n) {
+      var sub = "";
+      if (first && first.title) {
+        sub = first.title + (first.days == null ? "" :
+          first.days === 0 ? " · היום" : first.days === 1 ? " · מאתמול" : " · לפני " + first.days + " ימים");
+      }
+      html = taskRow(n === 1 ? "דיווח גינון מחכה להחלטה" : n + " דיווחי גינון מחכים להחלטה",
+                     n, "gardenTasks", "warn", sub);
+    }
+    slot.outerHTML = html;
+    syncClearState(container);
+  }
+
   CBA.screens.resHome = {
     render: function (container) {
       /* 🔴 סדר העמוד (2026-09-16): ברכה · פעולות · אצלנו בבית · תפקיד ועד.
          העולם המשפחתי קודם והניהולי אחריו — גם למנהל־על. מי שנכנס
-         נכנס קודם כל כתושב, והכובע השני הוא תוספת ולא הכותרת. */
+         נכנס קודם כל כתושב, והכובע השני הוא תוספת ולא הכותרת.
+
+         🔴 23.9 — עמוד הבית אחרי לוח האירועים (הסקיצה שאושרה):
+           • במחשב העמוד תופס את כל הרוחב (resident.css), והפעולות עלו
+             לשורה של הברכה.
+           • תושב: הלו"ז (שבועיים, js/screens/homeSchedule.js) מקבל את רוב
+             המסך; בעמודה הצרה "אצלנו בבית" ו"הבא בקהילה".
+           • בעל תפקיד: "אצלנו בבית" · "תפקיד ועד" · לו"ז של 10 ימים בשורה
+             אחת, ומתחתם — למנהל־על/גינון — מקטע הגינון (homeGarden.js).
+           • במובייל הלו"ז עולה ראשון ומתכווץ (homeSchedule.css). */
+      var admin = anyAdmin();
+      var sched = !!window.CBA.homeSchedule;
+      var garden = canGarden();
+      quiet = { refund: false, resv: false };
       container.innerHTML =
+        '<div class="hm-page">' +
         '<header class="hm-hero">' +
-          '<div class="hm-hero__hi">' + esc(greeting()) + ', ' + esc(displayName()) + '</div>' +
-          '<div class="hm-hero__sub">' + esc(todayLabel()) +
-            (u().house ? ' · בית ' + esc(u().house) : "") + '</div>' +
+          '<div class="hm-hero__txt">' +
+            '<div class="hm-hero__hi">' + esc(greeting()) + ', ' + esc(displayName()) + '</div>' +
+            '<div class="hm-hero__sub">' + esc(todayLabel()) +
+              (u().house ? ' · בית ' + esc(u().house) : "") + '</div>' +
+          '</div>' +
+          actionsHTML() +
         '</header>' +
-        actionsHTML() +
-        '<div class="hm-cols" id="hm-cols">' +
+        '<div class="hm-cols hm-cols--' + (admin ? "adm" : "res") + (sched ? "" : " hm-cols--nosch") + '" id="hm-cols">' +
           '<div class="hm-main">' +
             mineSectionHTML() +
             adminSectionHTML() +
+            (admin ? "" : '<div id="hm-feat" class="hm-featslot"></div>') +
           '</div>' +
-          /* ⚠️ העמודה השנייה נולדת ריקה, והפריסה נשארת עמודה אחת רחבה
-             עד ש-`loadNewCard` מוצא משהו להראות ומדליק `hm-cols--two`.
-             עמודה ריקה קבועה היתה מכווצת את הכרטיס המרכזי אצל **כל**
-             התושבים בשביל כרטיס שמופיע פעם בחודש. */
+          (sched ? '<section class="card hm-card hm-sch" id="hm-sch"></section>' : "") +
+          /* ⚠️ העמודה של "יש חדש" נולדת ריקה; `loadNewCard` מדליק אותה. */
           '<aside class="hm-side"><div id="hm-new"></div></aside>' +
+        '</div>' +
+        (garden ? '<section class="hmg" id="hm-gardensec" aria-label="גינון"></section>' : "") +
         '</div>';
 
-      bindClicks(container);
+      /* ⚠️ `|| container` — סביבת בדיקה עם DOM מינימלי (test-data-failure) לא
+         יודעת לבחור; שם ההאזנה פשוט נרשמת על המכל, כמו פעם. */
+      var page = (container.querySelector && container.querySelector(".hm-page")) || container;
+      bindClicks(page);
       wireActionsHint(container);
       // כפתור "נסה שוב" של הפאנל, אם הכרטיס הכספי הוחלף בו
       if (window.CBA && CBA.wireDataRetry) CBA.wireDataRetry(container);
+      paintQuiet(container.querySelector("#hm-quiet"));
       syncClearState(container);
+
+      if (sched) {
+        CBA.homeSchedule.mount({ root: page, host: container.querySelector("#hm-sch"),
+                                 featHost: container.querySelector("#hm-feat"),
+                                 mode: admin ? "list" : "grid" });
+      }
+      if (garden) {
+        CBA.homeGarden.mount(container.querySelector("#hm-gardensec"), {
+          onDecide: function (n, first) { paintDecide(container, n, first); }
+        });
+      }
       /* קריאה אחת מזינה את כל המטמונים, ואז שלוש הפונקציות רצות בדיוק כמו
          קודם — רק בלי לפנות לרשת. ר' primeHomeExtras. */
       /* 🔴 קודם המסלול המהיר (~75 אלפיות), ומיד אחריו הקריאה

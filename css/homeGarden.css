@@ -1,0 +1,93 @@
+/* ==========================================================================
+   homeGarden.css — מקטע "גינון" בעמוד הבית (2026-09-23).
+   ר' js/screens/homeGarden.js. מנהל־על ומנהל גינון בלבד.
+   ארבעה אריחים + שלושה כרטיסים במחשב; במובייל ארבעה אריחים 2×2 ושורת
+   קישור אחת למסך הנתונים (שם יש את כל השאר).
+   ========================================================================== */
+
+.hmg { margin-top: 26px; }
+.hmg-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 2px 12px; }
+.hmg-head__ico {
+  width: 28px; height: 28px; border-radius: 9px; flex: none;
+  background: rgba(5,150,105,.13); color: #047857; display: grid; place-items: center;
+}
+.hmg-head__t { margin: 0; font-size: 17px; font-weight: 800; color: var(--text); }
+.hmg-head__s { font-size: 12.5px; color: var(--text-soft); }
+
+/* ---- אריחים ---- */
+.hmg-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.hmg-kpi {
+  display: flex; flex-direction: column; gap: 7px; min-width: 0; width: 100%;
+  padding: 15px 17px; margin: 0; border: 1px solid transparent;
+  font: inherit; color: var(--text); text-align: start; cursor: pointer;
+  transition: transform var(--t), box-shadow var(--t);
+}
+.hmg-kpi:hover { box-shadow: var(--shadow-hover); }
+.hmg-kpi:active { transform: scale(.99); }
+.hmg-kpi.is-skel { cursor: default; gap: 12px; }
+.hmg-kpi__l { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--text-soft); }
+.hmg-kpi__v {
+  font-size: 30px; font-weight: 800; letter-spacing: -.02em; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.hmg-kpi__v small { font-size: 16px; font-weight: 700; color: var(--text-muted); }
+.hmg-kpi__s { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-soft); }
+.hmg-bar { display: block; height: 6px; border-radius: 999px; background: rgba(17,24,39,.08); overflow: hidden; }
+.hmg-bar i { display: block; height: 100%; border-radius: 999px; background: var(--ok); }
+
+/* "נגררה" — אותם שני גוונים של מסך המשימות (--u1/--u2 ב-garden.css) */
+.hmg-chip { display: inline-flex; align-items: center; flex: none; white-space: nowrap;
+  font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.hmg-chip--l1 { background: #FBEAF2; color: #A24B75; }
+.hmg-chip--l2 { background: #FBE9E9; color: #A83D3D; }
+
+/* ---- כרטיסים ---- */
+.hmg-cards { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+.hmg-card { margin: 0; display: flex; flex-direction: column; min-width: 0; }
+.hmg-card.is-skel { gap: 14px; }
+.hmg-card__t { font-size: 15px; }
+.hmg-drag .hm-row__txt b { font-weight: 600; unicode-bidi: plaintext; }
+.hmg-sh { margin: 2px 0 8px; font-size: 12px; font-weight: 800; color: var(--text-soft); }
+.hmg-bars { display: flex; flex-direction: column; gap: 9px; margin-bottom: 14px; }
+.hmg-bars__r {
+  display: grid; grid-template-columns: minmax(96px, 42%) minmax(0, 1fr) 24px;
+  align-items: center; gap: 10px; font-size: 12.5px; color: #374151;
+}
+.hmg-bars__l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hmg-bars__t { height: 10px; border-radius: 999px; background: rgba(17,24,39,.06); overflow: hidden; }
+.hmg-bars__t i { display: block; height: 100%; border-radius: 999px; }
+.hmg-bars__r b { text-align: end; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* עמידה בתוכנית — עמודה לשבוע. הישן מימין והחדש משמאל (זרימת הזמן ב-RTL). */
+.hmg-tr { display: flex; gap: 8px; align-items: flex-end; flex: 1; min-height: 150px; }
+.hmg-tr__c { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.hmg-tr__v { font-size: 11.5px; font-weight: 800; color: #374151; }
+.hmg-tr__b {
+  width: 100%; max-width: 30px; height: 110px; display: flex; align-items: flex-end;
+  background: rgba(17,24,39,.05); border-radius: 8px; overflow: hidden;
+}
+.hmg-tr__b i { display: block; width: 100%; border-radius: 8px; background: #10B981; }
+.hmg-tr__c.is-now .hmg-tr__b i { background: repeating-linear-gradient(135deg, #A7F3D0 0 4px, #D1FAE5 4px 8px); }
+.hmg-tr__c.is-now .hmg-tr__v { color: var(--text-muted); }
+.hmg-tr__l { font-size: 11px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+.hmg-foot { margin: 12px 0 0; font-size: 12.5px; color: var(--text-soft); }
+
+.hmg-empty { display: flex; align-items: center; gap: 7px; margin: 2px 0 14px; font-size: 13px; color: var(--text-soft); }
+.hmg-empty svg { color: var(--ok); flex: none; }
+.hmg-err { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--text-soft); margin: 0; }
+.hmg-more { display: none; }
+
+/* ---- רוחב ---- */
+@media (max-width: 1199px) {
+  .hmg-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hmg-cards { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .hmg-cards > :first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .hmg { margin-top: 18px; }
+  .hmg-kpis { gap: 10px; }
+  .hmg-kpi { padding: 12px 14px; gap: 5px; }
+  .hmg-kpi__v { font-size: 26px; }
+  .hmg-cards { display: none; }
+  .hmg-more { display: flex; margin-top: 10px; }
+}

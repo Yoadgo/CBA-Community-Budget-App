@@ -5,7 +5,21 @@
    ========================================================================== */
 
 /* --- כותרת --- */
-.hm-hero { padding: 6px 2px 22px; }
+/* 🔴 23.9 — הברכה והפעולות באותה שורה במחשב (הסקיצה שאושרה): הפעולות
+   כבר לא תופסות שורה משלהן מעל הכרטיסים. מתחת ל-1100px חוזרים לשתי שורות. */
+.hm-hero {
+  display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap;
+  gap: 14px 24px; padding: 6px 2px 20px;
+}
+.hm-hero__txt { min-width: 0; }
+.hm-hero .hm-actions { margin: 0; min-width: 0; }
+.hm-hero .hm-actions__row { justify-content: flex-end; }
+@media (max-width: 1100px) {
+  /* ⚠️ nowrap: בעמודה עם wrap, "stretch" נמתח לרוחב של השורה הארוכה ביותר
+     (שורת הפעולות, ~870px) — והעמוד כולו גלש הצידה בטלפון. נתפס בצילום. */
+  .hm-hero { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+  .hm-hero .hm-actions__row { justify-content: flex-start; }
+}
 .hm-hero__hi {
   font-size: clamp(24px, 3.4vw, 32px); font-weight: 800; color: var(--text);
   letter-spacing: -.01em; line-height: 1.15;
@@ -41,19 +55,81 @@
 }
 .hm-task--warn .hm-task__n { background: var(--warn-soft, #FEF3C7); color: var(--warn, #B45309); }
 .hm-task__l { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.hm-task__l small {
+  display: block; margin-top: 1px; font-size: 12px; font-weight: 500; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .hm-task__c { color: var(--text-muted); display: inline-flex; flex: none; }
 .hm-lazy { min-height: 0; }
 
 /* --- פריסה: עמודה אחת רחבה, ושנייה רק כשיש בה משהו (2026-09-16) --- */
-.hm-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; max-width: 1040px; }
-.hm-cols--two { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); max-width: none; }
-.hm-main { display: flex; flex-direction: column; gap: 16px; }
-.hm-main > .hm-card { margin-bottom: 0; }
-.hm-side { display: flex; flex-direction: column; gap: 12px; }
-@media (max-width: 1023px) { .hm-cols--two { grid-template-columns: minmax(0, 1fr); } }
+/* ---- פריסה (2026-09-23) --------------------------------------------------
+   שתי פריסות, לפי מי שנכנס. במחשב העמוד רחב (resident.css), ולכן:
+   • hm-cols--res (תושב): עמודה צרה מימין — "אצלנו בבית", "הבא בקהילה",
+     "יש חדש"; והלו"ז (hm-sch) לוקח את כל השאר.
+   • hm-cols--adm (בעל תפקיד): "אצלנו בבית" · "תפקיד ועד" · לו"ז בשורה אחת.
+     `.hm-main` הופך ל-display:contents כדי ששני הכרטיסים שבו יהיו תאים
+     בגריד — הסדר ב-DOM (משפחה לפני ועד) לא משתנה.
+   • במובייל ובטאבלט הלו"ז עולה ראשון (order), ובמובייל הוא מתכווץ
+     (homeSchedule.css).
+   ⚠️ hm-cols--two עדיין נדלק מ-loadNewCard כשיש כרטיס "יש חדש" — עכשיו הוא
+      רק מציג את העמודה שלו. */
+.hm-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.hm-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.hm-main > .hm-card, .hm-main > .hm-vaad { margin-bottom: 0; }
+.hm-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.hm-cols:not(.hm-cols--two) .hm-side { display: none; }
+.hm-cols--two .hm-side:empty { display: none; }
+
+@media (min-width: 1280px) {
+  .hm-cols--res {
+    grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+    grid-template-areas: "main sch" "side sch";
+    grid-template-rows: auto 1fr;
+  }
+  .hm-cols--res .hm-main { grid-area: main; }
+  .hm-cols--res .hm-sch  { grid-area: sch; }
+  .hm-cols--res .hm-side { grid-area: side; }
+  .hm-cols--res.hm-cols--nosch { grid-template-areas: "main side"; grid-template-columns: minmax(320px, 520px) minmax(0, 380px); }
+}
+@media (min-width: 900px) and (max-width: 1279px) {
+  .hm-cols--res .hm-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+@media (max-width: 1279px) {
+  .hm-cols--res .hm-sch { order: -1; }
+}
+@media (min-width: 1200px) {
+  .hm-cols--adm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr); align-items: stretch; }
+  .hm-cols--adm .hm-main { display: contents; }
+  .hm-cols--adm .hm-side { grid-column: 1 / 2; }
+}
+@media (min-width: 721px) and (max-width: 1199px) {
+  .hm-cols--adm { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .hm-cols--adm .hm-main { display: contents; }
+  .hm-cols--adm .hm-sch { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .hm-cols { gap: 14px; }
+  .hm-cols--adm .hm-main { display: contents; }
+  .hm-cols--adm .hm-sch { order: -1; }
+}
 
 /* --- "אצלנו בבית" — ארבע שורות מצב באותה שפה --- */
 .hm-mine { display: flex; flex-direction: column; gap: 8px; }
+
+/* השורה השקטה — "אין בקשות החזר פתוחות · אין שריון קרוב" (2026-09-23) */
+.hm-quiet {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px;
+  margin-top: 10px; padding: 0 2px; font-size: 12.5px; color: var(--text-soft);
+}
+.hm-quiet[hidden] { display: none; }     /* ⚠️ display:flex גובר על [hidden] */
+.hm-quiet__ico { color: var(--ok); display: inline-flex; }
+.hm-quiet__i {
+  border: none; background: none; padding: 2px 0; cursor: pointer;
+  font: inherit; color: inherit; text-align: start;
+}
+.hm-quiet__i:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.hm-quiet__sep { color: var(--text-muted); }
 .hm-slot:empty { display: none; }
 .hm-row {
   display: flex; align-items: center; gap: 11px; width: 100%;

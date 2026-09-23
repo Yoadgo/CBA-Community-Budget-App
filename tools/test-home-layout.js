@@ -155,10 +155,17 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     ok('⚠️ אחת → לשון יחיד',
        /בקשת החזר אחת ממתינה/.test(one.querySelector('.hm-row').textContent));
 
+    /* 🔴 23.9 — "אין" כבר לא מקבל שורה בגובה מלא. הוא עובר לשורה השקטה
+       בתחתית הכרטיס (#hm-quiet), יחד עם "אין שריון קרוב". */
     const none = setup({ refunds: [] });
-    const r0 = none.querySelector('.hm-mine .hm-row');
-    ok('אפס → "אין בקשות החזר פתוחות"', /אין בקשות החזר פתוחות/.test(r0.textContent));
-    ok('⚠️ ובלי תגית סטטוס על כלום', !r0.querySelector('.badge'));
+    ok('אפס → אין שורת החזרים בגובה מלא', !none.querySelector('.hm-mine .hm-row[data-goto="resRequests"]'));
+    const q0 = none.querySelector('#hm-quiet');
+    ok('🔴 והטקסט עובר לשורה השקטה', !!q0 && !q0.hidden && /אין בקשות החזר פתוחות/.test(q0.textContent),
+       q0 ? q0.outerHTML.slice(0, 120) : 'אין #hm-quiet');
+    ok('⚠️ ובלי תגית סטטוס על כלום', !q0.querySelector('.badge'));
+    ok('והחלק לחיץ ומוביל לבקשות', !!q0.querySelector('[data-goto="resRequests"]'));
+    const two = setup({ refunds: [{ status: 'submitted', amount: 10 }] });
+    ok('⚠️ כשיש בקשה פתוחה — השורה השקטה מוסתרת', two.querySelector('#hm-quiet').hidden === true);
   }
 
   section('6. שורת הגינון — ו🔴 כשל אינו "אין"');

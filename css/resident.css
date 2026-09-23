@@ -435,6 +435,10 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
     padding-inline: 14px;
     padding-bottom: 24px;
   }
+  /* עמוד הבית (2026-09-23, לבקשת יועד: "בדסקטופ לנצל את כל רוחב המסך כך
+     שמקבלים יותר מידע"). עד היום היה תקוע על 760px הכלליים — במסך של יועד
+     (2133px) זה שליש מהרוחב. אותו דפוס הרחבה כמו events/resReserve. */
+  body[data-area="resident"][data-screen="resHome"] .app-main { max-width: min(2000px, 97vw); }
 
   /* 2 טורים: ימין (~65%) = לוח/שריון; שמאל (~35%) = תשלום + תקנון + השריונים שלי,
      נערמים זה מתחת לזה לפי grid-template-areas (סדר זהה לסדר ה-DOM במובייל). */
