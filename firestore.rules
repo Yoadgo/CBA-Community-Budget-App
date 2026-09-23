@@ -1539,7 +1539,8 @@ service cloud.firestore {
 
     match /eventRSVP/{eventId} {
       allow read: if isMember() && m().isExternal == false;
-      allow create, update: if isAdminUser() && rsvpConfigShapeOk();
+      /* 23.9 — הרשאת "תרבות" (או מנהל-על, דרך hasPerm) במקום "כל מנהל". */
+      allow create, update: if hasPerm('תרבות') && rsvpConfigShapeOk();
       allow delete: if false;
     }
 
@@ -1562,8 +1563,10 @@ service cloud.firestore {
     }
 
     match /eventRSVPResponses/{docId} {
-      allow read: if isAdminUser() ||
-                     (isMember() && resource.data.familyId == myFamilyId());
+      /* 23.9 (הכרעת יועד) — הספירה החיה על האירוע גלויה לכל תושב, ולכן
+         כל חבר פעיל שאינו חיצוני קורא את התגובות. אין כאן שם או אימייל —
+         רק מזהה משפחה ומספר נפשות. השמות עוברים רק דרך rsvpFamilyNames בשרת. */
+      allow read: if isMember() && m().isExternal == false;
       allow create: if isMember() && m().isExternal == false &&
                        request.resource.data.familyId == myFamilyId() &&
                        rsvpEventOpen(request.resource.data.eventId) &&

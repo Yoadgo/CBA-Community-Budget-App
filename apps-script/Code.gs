@@ -81,7 +81,13 @@ var PERM_GYM       = 'מכון';
 // PERM_GARDEN רשאי גם לאשר. יועד החליט (7.9.26) לא לבנות "מאשר משני" —
 // אם המנהל אינו זמין, נותנים את ההרשאה הזו זמנית למישהו אחר.
 var PERM_GARDEN    = 'גינון';
-var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN];
+/* תרבות (23.9.26) — לוח האירועים והסקרים. מי שמחזיק בה פותח/סוגר מעקב הגעה
+ * לאירוע ורואה את רשימת המאשרים. האכיפה עצמה בכללי Firestore (eventRSVP —
+ * hasPerm('תרבות')), כי ה-RSVP נכתב ישירות מהדפדפן. כאן היא נדרשת כדי ש-
+ * parsePerms_ לא יזרוק אותה ושתגיע ל-members/{uid}.perms ול-CBA.perms.
+ * ⚠️ חייב להיות זהה ל-PERM.CULTURE ב-app.js ולרשימה ב-residents.js. */
+var PERM_CULTURE   = 'תרבות';
+var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN, PERM_CULTURE];
 var PERM_HEADER = 'הרשאות';
 /* עמודת גשר הזהות (2026-09-14, צעד 02ד). כמו עמודות האימייל וההרשאות, היא
    **פר-משבצת**: 'מזהה Firebase 1', 'מזהה Firebase 2' וכו'.
@@ -270,7 +276,7 @@ var GET_ACTION_PERMS = {
   assignResidentIds: PERM_RESIDENTS, profileChanges: PERM_RESIDENTS,
   clubList: PERM_CLUB, approveClubReservation: PERM_CLUB,
   rejectClubReservation: PERM_CLUB, approveClubReservations: PERM_CLUB,
-  residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN, rsvpFamilyNames: PERM_ANY_ADMIN,
+  residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN, rsvpFamilyNames: PERM_CULTURE,   /* 23.9 — היה PERM_ANY_ADMIN */
   gardenStats: PERM_GARDEN, gardenTaskLog: PERM_GARDEN,
   gardenPlan: PERM_GARDEN, gardenTasks: PERM_GARDEN,
   /* גיבוי Firestore ← גיליון (2026-09-15, צעד 07א) — מנהל-על בלבד. */
@@ -11624,11 +11630,11 @@ function txFamilyNames_(ss) {
 
 /* RSVP לאירועי לוח הקהילה (2026-09-23) — גשר familyId->שם לטבלת המנהל על גבי הרשמות ב-Firestore.
  * עוטף את txFamilyNames_ הקיים במקום להמציא מחדש. שם משפחה/אימייל לא נשמרים ב-Firestore בכלל —
- * זהו הגשר היחיד שמחזיר שם למנהל, ו-PERM_ANY_ADMIN בלבד (GET_ACTION_PERMS). */
+ * זהו הגשר היחיד שמחזיר שם למנהל. 23.9 — PERM_CULTURE (או מנהל-על), היה "כל מנהל". */
 function handleRsvpFamilyNames_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var gate = authorize_(ss, p, PERM_ANY_ADMIN);
+    var gate = authorize_(ss, p, PERM_CULTURE);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     var all = txFamilyNames_(ss);
     if (!p || !p.ids) return json_({ ok: true, names: all });
