@@ -166,6 +166,8 @@ var ACTION_PERMS = {
      לסריקה השעתית (ולפעמים שעתיים). PERM_GARDEN הוא הדרישה היחידה
      שהגנן עובר (ר' authorize_). */
   gardenNotifyTask: PERM_GARDEN,
+  /* 🗓 GW-23.9:C1-perm — סידור חכם לגנן. PERM_GARDEN: גם הגנן החיצוני. */
+  gardenAiSchedule: PERM_GARDEN,
   // Push notifications (16.9.26) — כל תושב מחובר יכול לנהל את המנוי שלו.
   savePushSubscription: null, removePushSubscription: null,
   // "שירותים לתושב" (2026-08-18) — אותו היגיון בדיוק כמו עץ הוועד: הקריאה
@@ -1720,6 +1722,8 @@ function doPostDispatch_(ss, body) {
       /* 🔴 18.9, גל 3 — המייל על פעולת מנהל שנכתבה בדפדפן.
          שגר-ושכח: המסך אינו ממתין לתשובה. */
       case 'gardenNotifyTask':    return json_(gardenNotifyTask_(ss, body));
+      /* 🗓 GW-23.9:C2-route — הצעת סידור שבועי. לא כותבת דבר. */
+      case 'gardenAiSchedule':    return json_(gardenAiSchedule_(ss, body));
       /* 🔴 21.9, סעיף 5 — המשוב נכתב בדפדפן; כאן רק המייל. */
       case 'gardenFeedbackNotify': return json_(gardenFeedbackNotify_(ss, body));
       /* 🔴🔴 **שלוש הפעולות שכותבות מסמך בודד לאוסף `gardenPlan`**
@@ -3776,6 +3780,7 @@ var ACTION_DOMAIN = {
      את מטמון המטען של כל המשתמשים בכל תמונה ובכל מייל. */
   gardenPhotoOne: 'gardenPhoto', gardenNotifyReport: 'gardenMail',
   gardenNotifyTask: 'gardenMail', gardenFeedbackNotify: 'gardenMail',
+  /* 🗓 GW-23.9:C3-domain — אינה נוגעת בגיליון */ gardenAiSchedule: 'gardenAi',
   /* 23.9 — מרכז ההתראות: אינן נוגעות בנתוני המטען הראשי. */
   saveNotifyCell: 'notifySettings', saveNotifyGlobal: 'notifySettings',
   notifyRsvpOpened: 'notifySettings', notifyServiceRecommend: 'notifySettings',
@@ -15191,6 +15196,119 @@ function gardenFeedbackNotify_(ss, body) {
 }
 
 /** קריאת השגר-ושכח מהדפדפן. איש אינו ממתין לתשובה שלה. */
+/* 🗓 GW-23.9:C4-fn */
+/* ============================================================================
+ *  🤖 סידור חכם לגנן — הצעת סידור שבועי ב-Gemini   (2026-09-23, בקשת יועד)
+ * ----------------------------------------------------------------------------
+ *  הדפדפן (js/screens/gardenScheduleAi.js) שולח: הימים עם החלונות הפנויים,
+ *  המשימות שעוד לא בסידור (עם הערכת זמן), הפריסטים והטקסט החופשי.
+ *  כאן רק בונים פרומפט, קוראים ל-Gemini ומחזירים JSON.
+ *
+ *  🔴 **אין כאן כתיבה לשום מקום.** ההצעה חוזרת לדפדפן, נבדקת שם מחדש,
+ *     והגנן מאשר לפני שנשמר משהו (כלל הליבה: פלט AI לעולם אינו נשמר לבד).
+ *  🔒 **אין כאן מידע אישי.** הדפדפן שולח לתקלת תושב את הקטגוריה בלבד
+ *     ("תקלה — השקיה"), בלי הכותרת שהתושב כתב, בלי שם ובלי תיאור.
+ *  ⚠️ הקלט מוגבל בגודל כאן ולא רק בדפדפן — מה שרץ בדפדפן אפשר לעקוף.
+ *  ⚠️ ACTION_DOMAIN: 'gardenAi' — אינה נוגעת בגיליון, ולכן אסור שתבטל את
+ *     מטמון המטען הראשי של כולם (ברירת המחדל 'other' הייתה עושה בדיוק את זה).
+ * ========================================================================== */
+function gardenAiSchedule_(ss, body) {
+  var key = geminiApiKey_();
+  if (!key) return { ok: false, error: 'GEMINI_API_KEY חסר בהגדרות הסקריפט.' };
+  function str(v, n) { return String(v == null ? '' : v).replace(/[\u0000-\u001f]/g, ' ').slice(0, n); }
+  var HM = /^\d{2}:\d{2}-\d{2}:\d{2}$/;
+  function wins(a) {
+    return (a || []).slice(0, 12).map(function (x) { return str(x, 11); })
+      .filter(function (x) { return HM.test(x); });
+  }
+  var days = (body.days || []).slice(0, 6).map(function (d) {
+    return { date: str(d.date, 10), name: str(d.name, 10), work: wins(d.work), extra: wins(d.extra) };
+  }).filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d.date); });
+  var tasks = (body.tasks || []).slice(0, 80).map(function (t) {
+    return {
+      id: str(t.id, 40), title: str(t.title, 80), category: str(t.category, 40), area: str(t.area, 60),
+      fault: !!t.fault, dragWeeks: Math.max(0, Math.min(52, parseInt(t.dragWeeks, 10) || 0)),
+      minutes: Math.max(15, Math.min(480, parseInt(t.minutes, 10) || 60))
+    };
+  }).filter(function (t) { return t.id; });
+  if (!days.length) return { ok: false, error: 'לא נבחרו ימים' };
+  if (!tasks.length) return { ok: false, error: 'אין משימות לסידור' };
+  var p = body.prefs || {};
+  var prefs = {
+    urgentFirst: !!p.urgentFirst,
+    faults: ['first', 'spread', 'normal'].indexOf(p.faults) >= 0 ? p.faults : 'normal',
+    groupByArea: !!p.groupByArea,
+    bufferMinutes: p.bufferMinutes === 15 ? 15 : 0
+  };
+  var note = str(body.note, 500).trim();
+
+  var rules = [
+    'אתה מתכנן את שבוע העבודה של גנן בשכונת מגורים. החזר JSON בלבד לפי הסכמה.',
+    'כללים מחייבים:',
+    '1. שבץ רק משימות מהרשימה, לפי ה-id שלהן, וכל משימה לכל היותר פעם אחת.',
+    '2. כל שיבוץ חייב להיכנס במלואו בתוך חלון "work" של אותו יום. חלונות "extra" (מחוץ לשעות העבודה) מותרים רק אם הטקסט החופשי של הגנן מתיר זאת במפורש.',
+    '3. אסור ששני שיבוצים יחפפו.' + (prefs.bufferMinutes ? ' השאר ' + prefs.bufferMinutes + ' דקות לפחות בין שיבוצים עוקבים.' : ''),
+    '4. משך כל שיבוץ ("minutes") = ה-minutes של המשימה, אלא אם הטקסט החופשי אומר אחרת. כפולות של 15 דקות.',
+    '5. "start" בפורמט HH:MM (24 שעות), כפולה של 15 דקות.',
+    '6. משימה שלא נכנסת — ב-unplaced עם סיבה קצרה בעברית. אל תמציא זמן שאין.',
+    'העדפות (לפי הסדר):',
+    prefs.urgentFirst ? '- משימות עם dragWeeks גדול יותר (נגררו משבועות קודמים) — מוקדם ככל האפשר בשבוע.' : '- אין עדיפות מיוחדת למשימות שנגררו.',
+    prefs.faults === 'first' ? '- משימות עם fault=true (תקלה שתושב דיווח) — ראשונות, בתחילת השבוע.'
+      : prefs.faults === 'spread' ? '- משימות עם fault=true — לפזר על פני ימי השבוע, לא יותר מאחת-שתיים ביום, כדי שכל יום יטופל משהו לתושבים.'
+      : '- משימות עם fault=true — כמו כל משימה אחרת.',
+    prefs.groupByArea ? '- לקבץ משימות באותו area לאותו יום וברצף, כדי לחסוך הליכה.' : '- אין צורך לקבץ לפי אזור.',
+    '- למלא את תחילת השבוע ואת תחילת כל יום לפני סופם, ולהשאיר את מה שנשאר פנוי בסוף.',
+    note ? 'הטקסט החופשי של הגנן גובר על ההעדפות (אך לא על הכללים המחייבים 1, 3, 5): "' + note + '"' : '',
+    'summary: עד שלושה משפטים קצרים בעברית שמסבירים את ההיגיון של הסידור (לא רשימת המשימות).'
+  ].filter(String).join('\n');
+
+  var input = JSON.stringify({ days: days, tasks: tasks });
+  var payload = {
+    contents: [{ parts: [{ text: rules + '\n\nנתונים:\n' + input }] }],
+    generationConfig: {
+      temperature: 0.2,
+      response_mime_type: 'application/json',
+      response_schema: {
+        type: 'OBJECT',
+        properties: {
+          plan: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+            id: { type: 'STRING' }, date: { type: 'STRING' }, start: { type: 'STRING' }, minutes: { type: 'INTEGER' }
+          }, required: ['id', 'date', 'start', 'minutes'] } },
+          unplaced: { type: 'ARRAY', items: { type: 'OBJECT', properties: {
+            id: { type: 'STRING' }, reason: { type: 'STRING' }
+          }, required: ['id', 'reason'] } },
+          summary: { type: 'STRING' }
+        },
+        required: ['plan', 'unplaced', 'summary']
+      }
+    }
+  };
+  try {
+    var resp = UrlFetchApp.fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
+      ':generateContent?key=' + encodeURIComponent(key),
+      { method: 'post', contentType: 'application/json',
+        payload: JSON.stringify(payload), muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) {
+      return { ok: false, error: 'Gemini החזיר קוד ' + resp.getResponseCode() };
+    }
+    var data = JSON.parse(resp.getContentText());
+    var text = data.candidates && data.candidates[0] && data.candidates[0].content &&
+               data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
+               data.candidates[0].content.parts[0].text;
+    if (!text) return { ok: false, error: 'תשובה לא צפויה מ-Gemini' };
+    var out = JSON.parse(text);
+    return {
+      ok: true,
+      plan: (out.plan || []).slice(0, 120),
+      unplaced: (out.unplaced || []).slice(0, 120),
+      summary: str(out.summary, 600)
+    };
+  } catch (e) {
+    return { ok: false, error: 'שגיאה בסידור: ' + String(e) };
+  }
+}
+
 function gardenNotifyTask_(ss, body) {
   /* 🔴 23.9 — PERM_GARDEN ולא null: עם null הגנן החיצוני נדחה כאן. */
   var gate = authorize_(ss, body, PERM_GARDEN);

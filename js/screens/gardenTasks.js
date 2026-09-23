@@ -289,6 +289,11 @@
          "נגררו" ו"לבדיקה" ירדו כמסננים: גרירה היא תכונה של משימה ולא קטגוריה
          שלה, ומשוב שלילי הוא החלטה שממתינה — ולכן מקומו ב-mine. */
       var filter = mode === "mine" ? "mine" : "open";   // mine | open | closed
+      /* 🗓 GW-23.9:G1-view — סידור שבועי: מצב תצוגה ולא מסך נפרד.
+         ר' js/screens/gardenSchedule.js. נזכר לכל צופה בדפדפן שלו. */
+      var view = "list";
+      try { if (localStorage.getItem("cba.gt.view") === "sched") view = "sched"; } catch (e) {}
+      var lastSkeleton = false;
       /* הסידור הוא גם הקיבוץ. ברירת המחדל היא שבוע, כי זו השאלה שהמסך הזה
          נכשל בה: "לא ברור שיש דברים לשבוע ויש דברים שצריך להכניס לשיבוץ".
          כשהקבוצה "לשיבוץ · אין שבוע" יושבת בראש אותה רשימה, אין מה להסביר. */
@@ -545,6 +550,12 @@
         /* ⚠️ מצב "לטיפולך" הוסר (9.9). הוא היה מסך שני שהראה לכל תפקיד חצי
            אחר מאותה שאלה, ואף אחד מהם לא ראה את החצי השני. מה שהיה בו נמצא
            עכשיו במסנן "מחכה לך" של המסך הזה — ר' isMine. */
+        /* 🗓 GW-23.9:G2-body — בסידור, גוף הרשימה מוחלף במארח. הכותרת
+           ושורת הבקרה נשארות — אותו שבוע, אותם חצים, אותו "משימה חדשה". */
+        lastSkeleton = !!skeleton;
+        var sched = schedOn();
+        if (sched) body = '<div id="gw-host"></div>';
+        root.classList.toggle("is-sched", sched);
         root.innerHTML =
           /* ⚠️ בלי חיצי שבוע (9.9). המסך כבר לא ממוסגר בשבוע אחד — הוא מחזיק
              את כל המשימות, והשבוע הוא קיבוץ בתוך הרשימה. הכותרת נשארה כדי
@@ -570,6 +581,7 @@
               ico("next") + '</button>' +
           '</div>' +
           '<div class="gt-ctl">' +
+            /* 🗓 GW-23.9:G3-seg */ viewSeg() +
             '<div class="gt-ctl__f">' +
               /* "מחכה לך" ראשון תמיד, וגם כשהוא ריק: הוא המקום שהמשתמש אמור
                  לפתוח בו את הבוקר, ומסנן שנעלם כשהוא מתרוקן מלמד לא להסתכל
@@ -597,6 +609,8 @@
           '</div>' + body;
 
         wire();
+        /* 🗓 GW-23.9:G4-render */
+        if (sched) CBA.gardenSchedule.render(root.querySelector("#gw-host"), schedCtx());
       }
 
       /* תור האישורים מקובץ אחרת מכל שאר המסך, ובכוונה: כאן הקיבוץ **הוא
@@ -674,6 +688,39 @@
         return '<div class="gt-grp gt-grp--lane">' + esc(label) +
           ' <em>· ' + (n === 1 ? "משימה אחת" : n + " משימות") + '</em><hr></div>';
       }
+      /* ==========================================================================
+       *  🗓 GW-23.9:G9-helpers — חיבור הסידור השבועי
+       * --------------------------------------------------------------------------
+       *  המסך הזה מחזיק את הנתונים, השבוע והפעולות; הסידור רק מצייר ועורך slot.
+       *  🔴 הסידור **שקוף**: אינו משנה שבוע / גרירה / דגל (הכרעת יועד 23.9).
+       * ======================================================================== */
+      function schedOn() {
+        return view === "sched" && !!(CBA.gardenSchedule && CBA.gardenSchedule.available());
+      }
+      function schedCtx() {
+        return {
+          rows: rowsAll, week: week, thisWeek: todayKey(), loading: !!lastSkeleton,
+          isManager: isManager, ico: ico, catOf: catT,
+          tiles: tileList, tile: tileAction, openDetails: openDetails,
+          redraw: function () { draw(); }
+        };
+      }
+      /* כפתור אחד שמציג את **המצב האחר** — שני מצבים בשורה צפופה היו
+         דוחקים את רצועת המסננים; התוכן עצמו כבר אומר איפה נמצאים. */
+      function viewSeg() {
+        if (!(CBA.gardenSchedule && CBA.gardenSchedule.available())) return "";
+        var on = schedOn();
+        return '<button type="button" class="gw-view" data-view="' + (on ? "list" : "sched") + '" ' +
+          'aria-label="' + (on ? "חזרה לרשימת המשימות" : "סידור שבועי") + '">' +
+          ico(on ? "filter" : "cal") + (on ? "רשימה" : "סידור") + '</button>';
+      }
+      /* "ד׳ 08:00" בשורת המטא — רק כשהמשימה בסידור של השבוע המוצג. */
+      function schedChip(t) {
+        if (!(CBA.gardenSchedule && CBA.gardenSchedule.available())) return "";
+        var x = CBA.gardenSchedule.chip(t, week);
+        return x ? '<span class="gw-chipmeta">' + ico("clock") + esc(x) + '</span>' : "";
+      }
+
       function openBody(list) {
         var weekIsNow = week === todayKey();
         var decide = [], thisWeek = [];
@@ -936,6 +983,7 @@
                     'title="צפייה בתמונות">' + ico("camera") + allPhotos(t).length + '</button>'
                 : ''),
               (where && !hideArea ? '<span class="gt-nb">' + ico("pin") + esc(where) + '</span>' : ''),
+              /* 🗓 GW-23.9:G8-chip */ schedChip(t),
               tags
             ].filter(Boolean).join('<i>·</i>') +
             '</div>' +
@@ -992,6 +1040,15 @@
         });
         Array.prototype.forEach.call(root.querySelectorAll("[data-f]"), function (b) {
           b.addEventListener("click", function () { filter = b.dataset.f; draw(); });
+        });
+        /* 🗓 GW-23.9:G5-wire — מעבר רשימה ↔ סידור */
+        Array.prototype.forEach.call(root.querySelectorAll("[data-view]"), function (b) {
+          b.addEventListener("click", function () {
+            if (view === b.dataset.view) return;
+            view = b.dataset.view;
+            try { localStorage.setItem("cba.gt.view", view); } catch (e) {}
+            draw();
+          });
         });
         var nb = root.querySelector("#gt-new");
         if (nb) nb.addEventListener("click", openNewTask);
@@ -1614,6 +1671,11 @@
         if (canDispute(t)) L.push(["undo", "undo", "ביטול סימון"]);
         if (isManager && closed && !canDispute(t)) L.push(["reopen", "undo", "פתיחה מחדש"]);
         if (isManager && t.flag === "דורש בדיקה חוזרת") L.push(["clearflag", "check", "טופל"]);
+        /* 🗓 GW-23.9:G6-tile — "סידור": שעה בתוך השבוע. רק למשימה פתוחה
+           שכבר יש לה שבוע — הסידור אינו מחליט על שבוע במקום המנהל. */
+        if (!closed && t.week && CBA.gardenSchedule && CBA.gardenSchedule.available()) {
+          L.push(["sched", "cal", "סידור"]);
+        }
         if (!closed) {
           if (planning) {
             if (isManager) L.push(["close", "closeok", "סגירה"]);
@@ -1685,6 +1747,8 @@
         if (!t) return;
         if (m === "plan") return askWeek(id);
         if (m === "markdone") return markDone(id);
+        /* 🗓 GW-23.9:G7-action */
+        if (m === "sched") return CBA.gardenSchedule.place(t, schedCtx());
         menuAction(t, catT(t), m);
       }
 

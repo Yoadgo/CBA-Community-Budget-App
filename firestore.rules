@@ -735,10 +735,45 @@ service cloud.firestore {
                .data.familyId == myFamilyId();
     }
 
+
+    /* ========================================================================
+     *  🗓  סידור שבועי — `slot`   (GW-23.9:R3-funcs, 2026-09-23)
+     * ------------------------------------------------------------------------
+     *  שעה ביום בתוך השבוע: { date: 'YYYY-MM-DD', start: דקות, dur: דקות },
+     *  או null. **שער נפרד וצר** — הוא משנה את `slot` ו-`updatedAt` בלבד.
+     *  🔴 זה מה שמבטיח שהסידור שקוף (הכרעת יועד): אין דרכו שום נגיעה
+     *     בשבוע, בגרירה, בדגל או בשלב — גם לא בטעות בקוד הלקוח.
+     *  · הגנן **והמנהל** עורכים (hasPerm('גינון')) — הכרעה 23.9.
+     *  · משימה סגורה או "בדרך למחיקה" — לא.
+     *  · 06:00–23:00, רבע שעה לפחות. זהה ל-DAY_START/DAY_END ב-gardenSlots.js.
+     * ====================================================================== */
+    function gtSlotOk(s) {
+      return s == null ||
+             (s is map &&
+              s.keys().hasOnly(['date', 'start', 'dur']) &&
+              s.keys().hasAll(['date', 'start', 'dur']) &&
+              s.date is string && s.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+              s.start is int && s.dur is int &&
+              s.start >= 360 && s.dur >= 15 && s.start + s.dur <= 1380);
+    }
+    function gtSlotUpdateOk() {
+      return hasPerm('גינון') &&
+             gtCur('closure') == '' &&
+             resource.data.get('pendingDelete', false) != true &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['slot', 'updatedAt']) &&
+             /* זמן השרת ולא של הלקוח — אחרת אפשר היה "להחביא" שינוי
+                מהגיבוי המצטבר (updatedAt > X) בתאריך ישן. */
+             request.resource.data.updatedAt == request.time &&
+             gtSlotOk(request.resource.data.get('slot', null));
+    }
+
     match /gardenTasks/{id} {
       allow read: if canSeeGardenTasks();
       allow create: if gtTeamCreateOk() || gtFromReportOk();
       allow update: if gtUpdateOk() || gtReportPhotosOk() || gtReportFlagOk() || gtPendingDeleteOk();
+      /* 🗓 GW-23.9:R4-allow — סידור שבועי: שער נפרד, slot + updatedAt בלבד. */
+      allow update: if gtSlotUpdateOk();
       allow delete: if gtDeleteOk() || gtOrphanCleanupOk();
     }
 

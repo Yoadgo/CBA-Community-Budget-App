@@ -1,0 +1,359 @@
+/* ============================================================================
+ *  סידור שבועי לגנן (23.9) — ר' js/screens/gardenSchedule.js
+ *  ⚠️ נטען **אחרי garden.css**: נשען על --c-<קטגוריה> / --c-<קטגוריה>-s שלו,
+ *     ועל .gt-sheet-wrap / .gt-cube / .gt-age / .gd-cta.
+ *  שפת העיצוב: רצועת הימים והשורה העליונה בזכוכית (כמו .gt-week);
+ *  הרשת עצמה משטח לבן אטום — היא תוכן, לא ניווט.
+ * ========================================================================== */
+
+.gw-host { --gw-h: 56px; --gw-tw: 42px; display: flex; flex-direction: column; gap: 8px; }
+@media (min-width: 760px) { .gw-host { --gw-h: 48px; --gw-tw: 50px; } }
+
+/* ---- מתג התצוגה (רשימה ↔ סידור) — כפתור אחד בשורת הבקרה של המסך ----
+   מציג את המצב **האחר**. בשפת .gt-tool (32×30, מתאר), עם מילה. */
+.gw-view { flex: none; height: 30px; display: inline-flex; align-items: center; gap: 5px;
+  padding: 0 10px; border-radius: 10px; border: 1px solid rgba(17,24,39,.09);
+  background: rgba(255,255,255,.72); font: inherit; font-size: 12px; font-weight: 600;
+  color: var(--text, #374151); cursor: pointer; white-space: nowrap; }
+.gw-view svg { width: 15px; height: 15px; }
+.gw-view:hover { border-color: rgba(17,24,39,.22); background: #fff; }
+/* בסידור אין מסננים — הוא מציג את משימות השבוע, תמיד. הכפתור נצמד להתחלה
+   והכלים (+, ?) נשארים בקצה. */
+.gd-screen.is-sched .gt-ctl__f { display: none; }
+.gd-screen.is-sched .gw-view { margin-inline-end: auto; }
+
+/* ---- רצועת הימים (מובייל) ---- */
+.gw-days { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; padding: 5px;
+  background: rgba(255,255,255,.76); border: 1px solid rgba(255,255,255,.7); border-radius: 14px;
+  -webkit-backdrop-filter: saturate(180%) blur(14px); backdrop-filter: saturate(180%) blur(14px);
+  box-shadow: 0 4px 16px rgba(16,24,40,.06); }
+.gw-days button { border: 0; background: none; font: inherit; cursor: pointer; border-radius: 10px;
+  padding: 6px 0 5px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  color: var(--text, #111827); line-height: 1.1; min-height: 50px; }
+.gw-days button b { font-size: 13px; font-weight: 700; }
+.gw-days button small { font-size: 11px; color: var(--text-soft, #6B7280); font-variant-numeric: tabular-nums; }
+.gw-days button.is-past { color: var(--text-muted, #9CA3AF); }
+.gw-days button.is-today small { color: var(--gs-ok, #0F6B45); font-weight: 700; }
+.gw-days button.on { background: var(--action, #111827); color: #fff; }
+.gw-days button.on small { color: rgba(255,255,255,.78); }
+.gw-dots { display: flex; gap: 2px; height: 4px; margin-top: 2px; }
+.gw-dots u { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .45; }
+
+/* ---- "N עוד לא בסידור" — סטטוס ונקודת כניסה ---- */
+.gw-todo { display: flex; align-items: center; gap: 10px; width: 100%; text-align: start;
+  font: inherit; font-size: 13px; padding: 7px 8px 7px 12px; border-radius: 12px;
+  background: #fff; border: 1px solid rgba(17,24,39,.08); color: var(--text, #111827); }
+.gw-todo__n { min-width: 24px; height: 24px; padding: 0 6px; border-radius: 99px; display: grid;
+  place-items: center; background: var(--action, #111827); color: #fff; font-weight: 700;
+  font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.gw-todo__t { flex: 1; min-width: 0; font-weight: 600; }
+.gw-todo__go { display: inline-flex; align-items: center; gap: 2px; color: var(--text-soft, #6B7280);
+  font-weight: 600; font-size: 12.5px; }
+.gw-todo__go svg { width: 14px; height: 14px; }
+.gw-todo.is-done { cursor: default; color: var(--gs-ok, #0F6B45); background: rgba(15,107,69,.05);
+  border-color: rgba(15,107,69,.14); }
+.gw-todo.is-done svg { width: 16px; height: 16px; flex: none; }
+.gw-hint { font-size: 12px; color: var(--text-soft, #6B7280); padding: 0 4px; }
+
+/* ---- הרשת ---- */
+.gw-scroll { overflow-y: auto; overscroll-behavior: contain; border-radius: 14px;
+  background: #fff; border: 1px solid rgba(17,24,39,.08); position: relative;
+  -webkit-overflow-scrolling: touch; touch-action: pan-y; overflow-x: hidden; }
+.gw-scroll:focus { outline: none; }
+.gw-grid { display: grid; grid-template-columns: var(--gw-tw) repeat(var(--cols, 1), minmax(0, 1fr));
+  position: relative; padding-bottom: 76px; /* מקום לכפתור המשוב הצף */ }
+.gw-hd { position: sticky; top: 0; z-index: 4; background: rgba(255,255,255,.94);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(17,24,39,.08); padding: 7px 4px 6px; text-align: center; line-height: 1.15; }
+.gw-hd b { display: block; font-size: 13px; font-weight: 700; }
+.gw-hd small { font-size: 11px; color: var(--text-soft, #6B7280); }
+.gw-hd.is-today b, .gw-hd.is-today small { color: var(--gs-ok, #0F6B45); }
+.gw-hd.is-past b { color: var(--text-muted, #9CA3AF); }
+.gw-hd--corner { border-inline-end: 0; }
+
+.gw-times { display: flex; flex-direction: column; }
+.gw-times span { height: var(--gw-h); flex: none; font-size: 11px; color: var(--text-muted, #9CA3AF);
+  text-align: center; transform: translateY(-7px); font-variant-numeric: tabular-nums; }
+.gw-times span:first-child { transform: translateY(2px); }
+
+/* קווי שעה וחצי-שעה כרקע ולא כתאים — 17 שורות × 6 ימים היו 102 אלמנטים
+   שכל אחד מהם צריך מאזין. כאן יש מאזין אחד על אזור הגלילה. */
+.gw-col { position: relative; height: calc(var(--gw-h) * 17); cursor: default;
+  border-inline-start: 1px solid rgba(17,24,39,.07);
+  background-image:
+    linear-gradient(to bottom, rgba(17,24,39,.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(17,24,39,.035) 1px, transparent 1px);
+  background-size: 100% var(--gw-h), 100% var(--gw-h);
+  background-position: 0 0, 0 calc(var(--gw-h) / 2);
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@media (pointer: fine) { .gw-col { cursor: pointer; } }
+.gw-col.is-past { background-color: rgba(17,24,39,.018); }
+.gw-pastshade { position: absolute; inset-inline: 0; top: 0; background: rgba(17,24,39,.025); pointer-events: none; }
+.gw-now { position: absolute; inset-inline: 0; height: 2px; margin-top: -1px; background: var(--gs-ok, #0F6B45);
+  z-index: 3; pointer-events: none; }
+.gw-now::before { content: ""; position: absolute; inset-inline-start: 0; top: -3px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--gs-ok, #0F6B45); }
+
+/* ---- בלוק ---- */
+.gw-blk { position: absolute; z-index: 2; box-sizing: border-box; overflow: hidden; cursor: pointer;
+  font: inherit; text-align: start; color: var(--text, #111827);
+  display: flex; flex-direction: column; gap: 1px; padding: 4px 7px 3px;
+  border-radius: 9px; border: 1px solid rgba(17,24,39,.06);
+  border-inline-start: 3px solid var(--gk, #6E9F80); background: var(--gks, #EDF4EF);
+  box-shadow: 0 1px 2px rgba(16,24,40,.05); line-height: 1.2;
+  transition: box-shadow .15s, transform .15s; }
+.gw-blk:hover { box-shadow: 0 3px 10px rgba(16,24,40,.12); }
+.gw-blk:focus-visible { outline: 2px solid var(--action, #111827); outline-offset: 1px; }
+.gw-blk b { display: flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; min-width: 0; }
+.gw-blk b svg { width: 13px; height: 13px; flex: none; color: var(--gk, #6E9F80); }
+.gw-blk b span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-blk em { font-style: normal; font-size: 11px; color: var(--text-soft, #6B7280);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gw-blk.is-short { flex-direction: row; align-items: center; gap: 6px; padding-block: 1px; }
+.gw-blk.is-short b { flex: 1; }
+.gw-blk.is-short em { flex: none; }
+.gw-blk.is-narrow em { display: none; }
+/* במחשב עמודה צרה — בלוק קצר מציג כותרת בלבד; השעה ממילא נקראת מהמיקום. */
+.gw-grid.is-wide .gw-blk.is-short em { display: none; }
+.gw-blk.is-closed { background: #F6F7F8; border-inline-start-color: #B7BEC7; color: var(--text-soft, #6B7280); }
+.gw-blk.is-closed b span { text-decoration: line-through; text-decoration-color: rgba(17,24,39,.3); }
+.gw-blk.is-closed b svg { color: var(--gs-ok, #0F6B45); }
+.gw-blk.is-pend b svg { color: var(--u1-t, #A24B75); }
+.gw-blk.is-u1::after, .gw-blk.is-u2::after { content: ""; position: absolute; top: 5px; inset-inline-end: 5px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--u1-t, #A24B75); }
+.gw-blk.is-u2::after { background: var(--u2-t, #A83D3D); }
+.gw-blk.is-short.is-u1::after, .gw-blk.is-short.is-u2::after { top: 50%; margin-top: -3px; }
+.gw-blk.is-skel { background: linear-gradient(90deg, #F3F4F6, #ECEEF1, #F3F4F6); background-size: 200% 100%;
+  animation: gsSk 1.2s linear infinite; border-color: transparent; inset-inline: 4px; cursor: default; }
+@keyframes gsSk { to { background-position: -200% 0; } }
+.gw-blk.is-flash { animation: gsFlash 1.4s ease-out; }
+@keyframes gsFlash { 0% { box-shadow: 0 0 0 3px rgba(15,107,69,.45); transform: scale(1.02); }
+                     100% { box-shadow: 0 1px 2px rgba(16,24,40,.05); transform: none; } }
+
+.gw-blk.k-lawn  { --gk: var(--c-lawn);  --gks: var(--c-lawn-s); }
+.gw-blk.k-water { --gk: var(--c-water); --gks: var(--c-water-s); }
+.gw-blk.k-tree  { --gk: var(--c-tree);  --gks: var(--c-tree-s); }
+.gw-blk.k-prune { --gk: var(--c-prune); --gks: var(--c-prune-s); }
+.gw-blk.k-weed  { --gk: var(--c-weed);  --gks: var(--c-weed-s); }
+.gw-blk.k-clean { --gk: var(--c-clean); --gks: var(--c-clean-s); }
+.gw-blk.k-bed   { --gk: var(--c-bed);   --gks: var(--c-bed-s); }
+
+/* ---- "רוח" — איפה תיפול המשימה ---- */
+.gw-ghost { position: absolute; inset-inline: 3px; height: calc(var(--gw-h) / 2 - 2px); z-index: 1;
+  border-radius: 8px; border: 1.5px dashed rgba(17,24,39,.22); background: rgba(17,24,39,.03);
+  font-size: 11.5px; font-weight: 600; color: var(--text-soft, #6B7280);
+  display: flex; align-items: center; padding-inline: 8px; pointer-events: none; }
+.gw-ghost.is-press { border-style: solid; border-color: rgba(17,24,39,.3);
+  background: linear-gradient(to left, rgba(17,24,39,.10) 50%, rgba(17,24,39,.03) 50%);
+  background-size: 200% 100%; background-position: 0 0; animation: gsPress .45s linear forwards; }
+@keyframes gsPress { from { background-position: 0 0; } to { background-position: -100% 0; } }
+
+/* ==========================================================================
+ *  הגיליון
+ * ========================================================================== */
+.gw-sheet { --gw-h: 56px; }
+/* ⚠️ במחשב — אותו חלון צד כמו כל גיליונות הגינון (garden.css, 860px+),
+   ולא חלון ממורכז: שפה אחת לכל המודול. */
+.gw-fh { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.gw-fh__t { flex: 1; min-width: 0; }
+.gw-fh__t h4 { margin: 0; font-size: 16px; font-weight: 700; }
+.gw-fh__t span { display: block; font-size: 12.5px; color: var(--text-soft, #6B7280); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-back, .gw-x { width: 32px; height: 32px; flex: none; border-radius: 10px; border: 1px solid rgba(17,24,39,.09);
+  background: rgba(255,255,255,.8); color: var(--text-soft, #6B7280); display: grid; place-items: center;
+  cursor: pointer; }
+.gw-back svg, .gw-x svg { width: 16px; height: 16px; }
+.gw-steps { display: flex; gap: 4px; margin: 0 0 12px; }
+.gw-steps i { flex: 1; height: 3px; border-radius: 2px; background: rgba(17,24,39,.1); }
+.gw-steps i.on { background: var(--action, #111827); }
+
+.gw-list { display: flex; flex-direction: column; gap: 7px; }
+.gw-opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: start; font: inherit;
+  padding: 9px 11px; border-radius: 13px; border: 1px solid rgba(17,24,39,.08); background: #fff;
+  color: var(--text, #111827); cursor: pointer; min-height: 54px; }
+.gw-opt:hover { border-color: rgba(17,24,39,.2); }
+.gw-opt:active { background: #F8F9FB; }
+.gw-opt .gt-cube { width: 34px; height: 34px; border-radius: 10px; }
+.gw-opt.k-lawn  .gt-cube { background-color: var(--c-lawn-s);  color: var(--c-lawn); }
+.gw-opt.k-water .gt-cube { background-color: var(--c-water-s); color: var(--c-water); }
+.gw-opt.k-tree  .gt-cube { background-color: var(--c-tree-s);  color: var(--c-tree); }
+.gw-opt.k-prune .gt-cube { background-color: var(--c-prune-s); color: var(--c-prune); }
+.gw-opt.k-weed  .gt-cube { background-color: var(--c-weed-s);  color: var(--c-weed); }
+.gw-opt.k-clean .gt-cube { background-color: var(--c-clean-s); color: var(--c-clean); }
+.gw-opt.k-bed   .gt-cube { background-color: var(--c-bed-s);   color: var(--c-bed); }
+.gw-opt__t { flex: 1; min-width: 0; line-height: 1.25; }
+.gw-opt__t b { display: block; font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-opt__t small { display: block; font-size: 12px; color: var(--text-soft, #6B7280);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-opt__go { color: var(--text-muted, #9CA3AF); flex: none; }
+.gw-opt__go svg { width: 16px; height: 16px; }
+.gw-opt .gt-age { flex: none; }
+.gw-rep { color: #8A3B4F; flex: none; display: grid; }
+.gw-rep svg { width: 15px; height: 15px; }
+.gw-opt.is-dis { opacity: .45; cursor: default; }
+.gw-opt.is-past .gw-dnum { opacity: .6; }
+.gw-dnum { width: 38px; flex: none; display: flex; flex-direction: column; align-items: center; line-height: 1.1;
+  padding: 5px 0; border-radius: 10px; background: rgba(17,24,39,.045); }
+.gw-dnum b { font-size: 13px; } .gw-dnum small { font-size: 11px; color: var(--text-soft, #6B7280); }
+.gw-today { font-style: normal; font-size: 11px; font-weight: 700; color: var(--gs-ok, #0F6B45);
+  background: rgba(15,107,69,.08); padding: 1px 7px; border-radius: 99px; margin-inline-start: 4px; }
+
+.gw-tg + .gw-tg { margin-top: 12px; }
+.gw-tg h5 { margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--text-soft, #6B7280); }
+.gw-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.gw-chip { border: 1px solid rgba(17,24,39,.1); background: #fff; font: inherit; font-size: 14px;
+  font-weight: 600; padding: 9px 14px; border-radius: 99px; cursor: pointer; color: var(--text, #111827);
+  min-height: 40px; font-variant-numeric: tabular-nums; }
+.gw-chip:hover { border-color: rgba(17,24,39,.25); }
+.gw-chip.on { background: var(--action, #111827); border-color: var(--action, #111827); color: #fff; }
+.gw-chip.is-dis { opacity: .4; text-decoration: line-through; cursor: default; }
+.gw-chip.is-past { color: var(--text-muted, #9CA3AF); }
+.gw-chip--more { border-style: dashed; }
+.gw-chip--more.on { background: rgba(17,24,39,.05); color: var(--text, #111827); border-color: rgba(17,24,39,.2); border-style: solid; }
+.gw-chips--dur .gw-chip { flex: 1 0 calc(33.333% - 7px); }
+.gw-note { font-size: 12px; color: var(--text-soft, #6B7280); margin: 10px 2px 0; }
+
+/* גלגלת המשך — 15 דק' לכל שורה. snap אנכי; הפריט שבמרכז הוא הנבחר. */
+.gw-wheel-wrap { margin-top: 12px; }
+.gw-wheel-wrap[hidden] { display: none; }
+.gw-wheel { height: 200px; overflow-y: auto; scroll-snap-type: y mandatory; padding-block: 80px;
+  box-sizing: border-box; border-radius: 14px; border: 1px solid rgba(17,24,39,.08); background: #fff;
+  scrollbar-width: none; position: relative; outline: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent); }
+.gw-wheel::-webkit-scrollbar { display: none; }
+.gw-wi { height: 40px; display: grid; place-items: center; scroll-snap-align: center; font-size: 15px;
+  color: var(--text-soft, #6B7280); cursor: pointer; font-variant-numeric: tabular-nums; }
+.gw-wi.on { color: var(--text, #111827); font-weight: 700; font-size: 17px; }
+.gw-wheel-ok { margin-top: 10px; }
+
+.gw-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gw-act { display: flex; align-items: center; justify-content: center; gap: 7px; flex-wrap: wrap;
+  font: inherit; font-size: 14px; font-weight: 600; padding: 12px; border-radius: 12px; cursor: pointer;
+  border: 1px solid rgba(17,24,39,.09); background: #fff; color: var(--text, #111827); min-height: 48px; }
+.gw-act:hover { border-color: rgba(17,24,39,.2); }
+.gw-act svg { width: 16px; height: 16px; }
+.gw-act.is-pri { grid-column: 1 / -1; background: var(--action, #111827); border-color: var(--action, #111827); color: #fff; }
+.gw-act.is-wide { grid-column: 1 / -1; }
+.gw-act.is-dng { color: #A83D3D; }
+.gw-act small { flex-basis: 100%; text-align: center; font-weight: 400; font-size: 11.5px; color: var(--text-soft, #6B7280); margin-top: -3px; }
+.gw-wait { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 13px;
+  color: var(--u1-t, #A24B75); padding: 2px 4px 4px; }
+.gw-wait svg { width: 15px; height: 15px; }
+.gw-empty { text-align: center; padding: 18px 10px; font-size: 13px; color: var(--text-soft, #6B7280); line-height: 1.5; }
+.gw-empty b { display: block; color: var(--text, #111827); font-size: 14.5px; margin-bottom: 3px; }
+
+/* שורת המטא בכרטיס המשימה — "ד׳ 08:00" */
+.gw-chipmeta { display: inline-flex; align-items: center; gap: 3px; color: var(--text-soft, #6B7280);
+  font-variant-numeric: tabular-nums; }
+.gw-chipmeta svg { width: 12px; height: 12px; }
+
+/* ---- שורת "לא בסידור": שני כפתורים — ידני / סידור חכם ---- */
+.gw-todo__b { flex: none; height: 32px; padding: 0 12px; border-radius: 10px; font: inherit; font-size: 12.5px;
+  font-weight: 600; cursor: pointer; border: 1px solid rgba(17,24,39,.1); background: #fff; color: var(--text, #111827);
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.gw-todo__b:hover { border-color: rgba(17,24,39,.25); }
+.gw-todo__b.is-ai { background: var(--action, #111827); border-color: var(--action, #111827); color: #fff; }
+.gw-spark { width: 15px; height: 15px; flex: none; }
+/* אחרי החלת סידור חכם — "ביטול" זמין עד שסוגרים. */
+.gw-undo { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 12px; border-radius: 12px;
+  font-size: 13px; background: rgba(15,107,69,.06); border: 1px solid rgba(15,107,69,.16); color: var(--gs-ok, #0F6B45); }
+.gw-undo > span { flex: 1; min-width: 0; font-weight: 600; }
+.gw-undo button { font: inherit; font-size: 12.5px; font-weight: 600; border: 0; background: #fff; color: var(--text, #111827);
+  border-radius: 9px; padding: 6px 11px; cursor: pointer; box-shadow: 0 0 0 1px rgba(17,24,39,.1) inset; }
+.gw-undo .gw-undo__x { padding: 6px; background: none; box-shadow: none; color: var(--text-soft, #6B7280); display: grid; }
+.gw-undo .gw-undo__x svg { width: 14px; height: 14px; }
+/* הערכת הזמן בשלב "כמה זמן?" */
+.gw-est { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-soft, #6B7280); margin: 10px 2px 0; }
+.gw-est b { color: var(--text, #111827); }
+
+/* ==========================================================================
+ *  סידור חכם
+ * ========================================================================== */
+.gw-ai { display: flex; flex-direction: column; gap: 14px; }
+.gw-ai section h5 { margin: 0 0 7px; font-size: 12.5px; font-weight: 700; color: var(--text-soft, #6B7280); }
+.gw-ai section h5 small { font-weight: 400; color: var(--text-muted, #9CA3AF); }
+.gw-ai-hours { display: flex; gap: 8px; }
+.gw-ai-hours label { flex: 1; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-soft, #6B7280);
+  background: #fff; border: 1px solid rgba(17,24,39,.1); border-radius: 11px; padding: 0 10px; }
+.gw-ai-hours select { flex: 1; border: 0; background: none; font: inherit; font-size: 14.5px; font-weight: 600;
+  color: var(--text, #111827); padding: 10px 0; font-variant-numeric: tabular-nums; }
+.gw-ai-days { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 8px; }
+.gw-ai-days button { height: 40px; border-radius: 11px; border: 1px solid rgba(17,24,39,.1); background: #fff; font: inherit;
+  font-weight: 700; font-size: 13.5px; cursor: pointer; color: var(--text-soft, #6B7280); }
+.gw-ai-days button.on { background: var(--action, #111827); border-color: var(--action, #111827); color: #fff; }
+.gw-ai-days button.is-dis { opacity: .35; cursor: default; text-decoration: line-through; }
+.gw-ai-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: start; font: inherit;
+  padding: 10px 12px; border-radius: 12px; background: #fff; border: 1px solid rgba(17,24,39,.08);
+  color: var(--text, #111827); margin-bottom: 6px; }
+.gw-ai-row > span:first-child { flex: 1; min-width: 0; line-height: 1.25; }
+.gw-ai-row b { display: block; font-size: 13.5px; font-weight: 700; }
+.gw-ai-row small { display: block; font-size: 11.5px; color: var(--text-soft, #6B7280); }
+.gw-ai-tog { cursor: pointer; }
+.gw-sw { width: 36px; height: 22px; border-radius: 99px; background: rgba(17,24,39,.14); position: relative; flex: none;
+  transition: background .18s; }
+.gw-sw::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: inset-inline-start .18s; }
+.gw-ai-tog.on .gw-sw { background: var(--gs-ok, #0F6B45); }
+.gw-ai-tog.on .gw-sw::after { inset-inline-start: 17px; }
+.gw-ai-seg { display: inline-flex; flex: none; background: rgba(17,24,39,.05); border-radius: 10px; padding: 2px; gap: 2px; }
+.gw-ai-seg button { border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; padding: 6px 9px;
+  border-radius: 8px; cursor: pointer; color: var(--text-soft, #6B7280); white-space: nowrap; }
+.gw-ai-seg button.on { background: #fff; color: var(--text, #111827); box-shadow: 0 1px 2px rgba(16,24,40,.1); }
+
+.gw-ai-ests { background: #fff; border: 1px solid rgba(17,24,39,.08); border-radius: 12px; }
+.gw-ai-ests > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.gw-ai-ests > summary::-webkit-details-marker { display: none; }
+.gw-ai-ests > summary > span { flex: 1; line-height: 1.25; }
+.gw-ai-ests > summary b { display: block; font-size: 13.5px; }
+.gw-ai-ests > summary small { display: block; font-size: 11.5px; color: var(--text-soft, #6B7280); }
+.gw-ai-ests > summary i { font-style: normal; font-size: 12.5px; font-weight: 700; color: var(--text-soft, #6B7280);
+  font-variant-numeric: tabular-nums; }
+.gw-ai-estlist { border-top: 1px solid rgba(17,24,39,.06); padding: 4px 12px 8px; max-height: 260px; overflow: auto; }
+.gw-ai-est { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(17,24,39,.05); }
+.gw-ai-est:last-child { border-bottom: 0; }
+.gw-ai-est__t { flex: 1; min-width: 0; line-height: 1.25; }
+.gw-ai-est__t b { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-ai-est__t small { display: block; font-size: 11px; color: var(--text-soft, #6B7280); }
+.gw-step { display: inline-flex; align-items: center; flex: none; border: 1px solid rgba(17,24,39,.1); border-radius: 10px; overflow: hidden; }
+.gw-step button { width: 32px; height: 32px; border: 0; background: #fff; font: inherit; font-size: 17px; cursor: pointer; color: var(--text, #111827); }
+.gw-step button:active { background: #F3F4F6; }
+.gw-step output { min-width: 44px; text-align: center; font-weight: 700; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.gw-ai textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; font-size: 14px; }
+.gw-ai-cap { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-soft, #6B7280); padding: 0 2px; }
+.gw-ai-cap b { color: var(--text, #111827); }
+.gw-ai-cap em { flex-basis: 100%; font-style: normal; color: #A83D3D; }
+.gw-ai-cap.is-over span:first-child b { color: #A83D3D; }
+.gw-ai-go { margin-top: 0; }
+.gw-ai-wait { display: flex; flex-direction: column; gap: 10px; padding: 12px 0 20px; }
+.gw-ai-wait > svg { width: 28px; height: 28px; align-self: center; color: var(--text-soft, #6B7280); animation: gwPulse 1.2s ease-in-out infinite; }
+.gw-ai-wait .skeleton { height: 54px; border-radius: 12px; }
+@keyframes gwPulse { 50% { opacity: .35; transform: scale(.9); } }
+
+.gw-ai-prop { display: flex; flex-direction: column; gap: 12px; }
+.gw-ai-note { display: flex; gap: 8px; font-size: 13px; line-height: 1.5; padding: 10px 12px; border-radius: 12px;
+  background: rgba(17,24,39,.04); color: var(--text, #374151); }
+.gw-ai-note svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--text-soft, #6B7280); }
+.gw-ai-note.is-warn { background: #FFFBEB; color: #92400E; }
+.gw-ai-day h5 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+.gw-ai-day h5 small { font-weight: 400; color: var(--text-soft, #6B7280); }
+.gw-ai-it { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #fff; border-radius: 12px;
+  border: 1px solid rgba(17,24,39,.08); margin-bottom: 6px; }
+.gw-ai-it__h { width: 44px; flex: none; font-weight: 700; font-size: 13.5px; line-height: 1.15; font-variant-numeric: tabular-nums; text-align: center; }
+.gw-ai-it__h small { display: block; font-weight: 400; font-size: 11px; color: var(--text-muted, #9CA3AF); }
+.gw-ai-it__t { flex: 1; min-width: 0; line-height: 1.25; }
+.gw-ai-it__t b { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-ai-it__t small { display: block; font-size: 11.5px; color: var(--text-soft, #6B7280); }
+.gw-ai-fault { width: 8px; height: 8px; border-radius: 50%; background: #8A3B4F; flex: none; }
+.gw-ai-rm { width: 30px; height: 30px; flex: none; border-radius: 9px; border: 1px solid rgba(17,24,39,.1); background: #fff;
+  font-size: 18px; line-height: 1; cursor: pointer; color: var(--text-soft, #6B7280); }
+.gw-ai-out { font-size: 13px; background: #fff; border: 1px solid rgba(17,24,39,.08); border-radius: 12px; padding: 0 12px; }
+.gw-ai-out summary { cursor: pointer; padding: 10px 0; color: var(--text-soft, #6B7280); }
+.gw-ai-out div { padding: 6px 0; border-top: 1px solid rgba(17,24,39,.05); }
+.gw-ai-out div b { display: block; font-size: 13px; }
+.gw-ai-out div small { color: var(--text-soft, #6B7280); font-size: 11.5px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gw-ai-wait > svg { animation: none; }
+  .gw-blk.is-flash, .gw-ghost.is-press, .gw-blk.is-skel { animation: none; }
+}
