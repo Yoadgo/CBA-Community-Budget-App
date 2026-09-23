@@ -1296,8 +1296,46 @@ CBA.data = (function () {
     return isFinite(ms) ? Date.now() - ms : Infinity;
   }
 
+  /* 🔴 23.9.26 — יומן החגים מחזיר את השמות באנגלית (שפת החשבון שהסקריפט רץ
+     בשמו, לא שפת היומן). תרגום בצד הלקוח, בנקודה אחת שכל המסכים עוברים בה
+     (מסך האירועים + הלו"ז בבית). שם שלא נמצא נשאר כמו שהוא — שום דבר לא נעלם.
+     "(Day N)" מתורגם ל"(יום N)", ושם כפול עם "/" מתורגם לכל חלק בנפרד. */
+  var HOLIDAY_HE = {
+    "Tu Bishvat": "ט״ו בשבט", "Fast of Esther": "תענית אסתר", "Purim Eve": "ערב פורים",
+    "Purim": "פורים", "Shushan Purim": "שושן פורים", "Passover Eve": "ערב פסח",
+    "Passover": "פסח", "Yom HaShoah": "יום השואה", "Yom HaZikaron": "יום הזיכרון",
+    "Yom HaAtzmaut": "יום העצמאות", "Lag BaOmer": "ל״ג בעומר",
+    "Memorial Day for Ethiopian Jews": "יום הזיכרון ליהודי אתיופיה",
+    "Jerusalem Day": "יום ירושלים", "Shavuot Eve": "ערב שבועות", "Shavuot": "שבועות",
+    "17th of Tammuz": "י״ז בתמוז", "Tisha B'Av Eve": "ערב תשעה באב", "Tisha B'Av": "תשעה באב",
+    "Rosh Hashana Eve": "ערב ראש השנה", "Rosh Hashana": "ראש השנה", "Gedaliah Fast": "צום גדליה",
+    "Yom Kippur Eve": "ערב יום כיפור", "Yom Kippur": "יום כיפור", "Sukkot Eve": "ערב סוכות",
+    "Sukkot": "סוכות", "Hoshanah Rabah": "הושענא רבה", "Shemini Atzeret": "שמיני עצרת",
+    "Simchat Torah": "שמחת תורה", "Sigd": "סיגד", "Hanukkah": "חנוכה",
+    "Rosh Chodesh Tevet": "ראש חודש טבת", "Asarah B'Tevet (Tenth of Tevet)": "עשרה בטבת",
+    "Asarah B'Tevet": "עשרה בטבת"
+  };
+  function holidayHe(title) {
+    var t = String(title || "");
+    if (HOLIDAY_HE[t]) return HOLIDAY_HE[t];
+    return t.split(" / ").map(function (part) {
+      var m = /^(.*?) \(Day (\d+)\)$/.exec(part);
+      if (m && HOLIDAY_HE[m[1]]) return HOLIDAY_HE[m[1]] + " (יום " + m[2] + ")";
+      return HOLIDAY_HE[part] || part;
+    }).join(" / ");
+  }
+  function hebrewHolidays(res) {
+    if (res && Array.isArray(res.events)) {
+      res.events = res.events.map(function (e) {
+        return (e && e.category === "holidays") ? Object.assign({}, e, { title: holidayHe(e.title) }) : e;
+      });
+    }
+    return res;
+  }
+
   function getEventsFast(year, cb) {
-    cb = cb || function () {};
+    var userCb = cb || function () {};
+    cb = function (res) { userCb(hebrewHolidays(res)); };
     var t0 = Date.now(), settled = false, timer = null;
     function note(source, why) {
       try {
