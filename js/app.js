@@ -1397,6 +1397,8 @@
     // טיוטה ראשונה, לא מוקדש עדיין — יועד יכול לבקש עיצוב אחר.
     bell: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"/></svg>',
     bellOff: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.143 17.082a24.248 24.248 0 0 0 3.844.148m-3.844-.148a23.856 23.856 0 0 1-5.455-1.31 8.964 8.964 0 0 0 2.3-5.542m3.155 6.852a3 3 0 0 0 5.667 1.97m1.965-2.277L21 21m-4.225-4.225a23.81 23.81 0 0 0 3.536-1.003A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6.53 6.53m10.245 10.245L6.53 6.53M3 3l3.53 3.53"/></svg>',
+    // מתגים — "מרכז התראות" (23.9). במכוון לא פעמון: הפעמון הוא הפוש שלי.
+    sliders: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"/></svg>',
     // מגן — "אבטחת המידע שלי" (2026-08-24). אותו גודל/עובי קו כמו השאר.
     shield: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>',
     // זכוכית מגדלת — כפתור החיפוש הגלובלי בכותרת (2026-08-25). שים לב: זו מפת
@@ -1731,7 +1733,10 @@
       tiles.push(['data-panel-update', ICON.refresh, 'עדכון גרסה', 'בדיקת עדכון גרסה']);
     }
     if (currentArea === "admin" && canScreen("emailSettings")) {
-      tiles.push(['data-panel-goto="emailSettings"', ICON.bell, 'התראות', 'ניהול התראות']);
+      /* 23.9 (יועד) — "מרכז התראות" ולא "התראות", ואייקון של מתגים ולא
+         פעמון: זה מסך ההגדרות של *כל הקהילה* (מי מקבל מה). הפעמון שמור
+         לאריח "התראות לטלפון" — הפעלת הפוש במכשיר שלי. */
+      tiles.push(['data-panel-goto="emailSettings"', ICON.sliders, 'מרכז התראות', 'מרכז התראות — מי מקבל מייל או פוש על כל פעולה']);
     }
     /* דיווחים על האפליקציה — מנהל-על בלבד. במכוון אריח בתפריט ולא טאב ניווט:
        זה מסך שנכנסים אליו כשמתפנים לטפל במשוב, לא יעד יומיומי, ובר הניווט
@@ -1749,7 +1754,10 @@
     // התראות Push (16.9.26) — רק כשהדפדפן/המכשיר תומכים בכלל (ר' CBA.push.canOffer).
     if (window.CBA.push && CBA.push.canOffer().ok) {
       var pushOn = CBA.push.isSubscribed();
-      tiles.push(['data-panel-push', pushOn ? ICON.bell : ICON.bellOff, pushOn ? 'התראות פעילות' : 'הפעלת התראות', pushOn ? 'ביטול התראות' : 'הפעלת התראות']);
+      /* 23.9 — שם שמדבר על *המכשיר* ("לטלפון"), ונקודה ירוקה כשפעיל, כדי
+         שלא יתבלבל עם "מרכז התראות". המצב נקרא מהנקודה והפעמון, לא מהתווית. */
+      tiles.push(['data-panel-push' + (pushOn ? ' data-on' : ''), pushOn ? ICON.bell : ICON.bellOff, 'התראות לטלפון',
+                  pushOn ? 'התראות לטלפון פעילות במכשיר הזה — לחיצה מכבה' : 'הפעלת התראות לטלפון במכשיר הזה']);
     }
     var tilesItem = tiles.length
       ? '<div class="up-tiles">' + tiles.map(function (t) {

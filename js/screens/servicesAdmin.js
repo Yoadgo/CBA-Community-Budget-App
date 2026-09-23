@@ -918,7 +918,7 @@ function sadmOpenMail() {
     '<div class="sadm-modal__box">' +
       "<h3>עדכון תושבים</h3>" +
       '<p class="sadm-modal__sub">נשלח לכל תושבי השיכון הפעילים — רק עכשיו, בלחיצה שלך — ' +
-        'בפוש או במייל, לפי מסך "ניהול התראות". שמירה רגילה של השירות לא שולחת כלום.</p>' +
+        'בפוש או במייל, לפי "מרכז התראות". שמירה רגילה של השירות לא שולחת כלום.</p>' +
       '<div class="form-field form-field--wide"><label>מה השתנה?</label>' +
         '<input class="field-input" id="sadm-mail-what" placeholder="למשל: עודכן המחירון והתווספו טלפונים של טכנאים"></div>' +
       '<div class="sadm-modal__acts">' +

@@ -422,12 +422,13 @@ CBA.screens = CBA.screens || {};
   document.addEventListener("change", onField);
 
   CBA.screens.emailSettings = {
-    title: "ניהול התראות",
+    title: "מרכז התראות",
     render: function (container) {
       closeDrawer();
       container.innerHTML =
-        '<div class="screen-head"><div class="screen-head__title">ניהול התראות</div>' +
-        '<div class="screen-head__sub">מי מקבל מייל או פוש על כל פעולה. לחיצה על שם הפעולה פותחת את הנוסחים.</div></div>' +
+        '<div class="screen-head"><div class="screen-head__title">מרכז התראות</div>' +
+        '<div class="screen-head__sub">מה כל הקהילה מקבלת — מייל או פוש — על כל פעולה. לחיצה על שם הפעולה פותחת את הנוסחים. ' +
+        '(להפעלת התראות בטלפון <b>שלך</b>: התפריט האישי ← "התראות לטלפון".)</div></div>' +
         '<div id="nt-body" class="nt-screen">' + (CBA.skel && CBA.skel.sections ? CBA.skel.sections(3) : "טוען…") + "</div>";
       var root = container.querySelector("#nt-body");
       bind(root);

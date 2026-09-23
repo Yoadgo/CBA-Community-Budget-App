@@ -88,7 +88,7 @@ function world(opts) {
     Session: { getScriptTimeZone: () => 'Asia/Jerusalem', getEffectiveUser: () => ({ getEmail: () => 'gizbar@x.com' }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; }, getKeys: () => Object.keys(props) }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => { props[k] = v; }, deleteProperty: k => { delete props[k]; }, getKeys: () => Object.keys(props) }) },
     SpreadsheetApp: { getActiveSpreadsheet: () => ss, flush() {} },
     MailApp: { sendEmail: o => mails.push(o) },
     DriveApp: {}, CalendarApp: {}, ScriptApp: {},
@@ -563,6 +563,56 @@ section('12. סיכום שבועי של המנהלים — לפי הטבלה');
   const { sb, ss } = world();
   sb.sendDigestBySection_(ss, 'ADMIN_MONTHLY_DIGEST', { budget: ['• בקשה'] }, ['budget']);
   ok('סיכום חודשי: מנהל התקציב מקבל; מנהל-על לא (התא שלו כבוי ויש מנהל)', mailTo('bud@x.com').length === 1 && mailTo('super@x.com').length === 0);
+}
+
+section('13. "השבוע בשיכון" — מוצאי שבת');
+function seedWeek() {
+  fsDocs['eventsCal/2026'] = { year: 2026, events: [
+    { id: 'e1', title: 'ערב שירה', date: '2026-09-29T16:00:00Z', allDay: false, category: 'community', location: 'המועדון' },
+    { id: 'e2', title: 'שמחת תורה', date: '2026-10-02T21:00:00Z', allDay: true, category: 'holidays', location: '' },
+    { id: 'e3', title: 'הצגת ילדים', date: '2026-09-27T14:30:00Z', allDay: false, category: 'culture', location: '' },
+    { id: 'e4', title: 'אחרי השבוע', date: '2026-10-04T15:00:00Z', allDay: false, category: 'community', location: '' },
+    { id: 'e5', title: 'שבוע שעבר', date: '2026-09-24T15:00:00Z', allDay: false, category: 'community', location: '' }
+  ] };
+}
+{
+  const { sb, ss } = world({ now: new Date('2026-09-26T18:30:00Z') });   // שבת 21:30
+  seedWeek();
+  const r = sb.eventsWeekJob_(ss);
+  const p = pushTo('F1')[0] || {};
+  ok('שבת 21:30 — יצא פוש לתושבים', r.due && r.events === 3 && pushTo('F1').length === 1, JSON.stringify(r));
+  ok('הכותרת: השבוע בשיכון · 27.9–3.10', p.title === 'השבוע בשיכון · 27.9–3.10', p.title);
+  ok('בגוף: הקהילה והתרבות לפני החג, בלי מה שמחוץ לשבוע', /^הצגת ילדים \(א׳\) · ערב שירה \(ג׳\) · שמחת תורה \(שבת\)$/.test(p.body || ''), p.body);
+  ok('מסך היעד: לוח האירועים', p.data && p.data.screen === 'events', JSON.stringify(p.data));
+  ok('🔴 הגנן החיצוני לא מקבל', pushTo('F4').length === 0);
+  ok('ברירת מחדל: בלי מייל', mails.length === 0, mails.length);
+  const r2 = sb.eventsWeekJob_(ss);
+  ok('ריצה שנייה באותו ערב — לא שולחת שוב', r2.already && pushTo('F1').length === 1, JSON.stringify(r2));
+}
+{
+  const { sb, ss } = world({ now: new Date('2026-09-26T15:00:00Z') });   // שבת 18:00
+  seedWeek();
+  ok('שבת 18:00 — עוד לא', sb.eventsWeekJob_(ss).due === false && pushes.length === 0);
+}
+{
+  const { sb, ss } = world({ now: new Date('2026-09-27T06:00:00Z') });   // ראשון 09:00
+  seedWeek();
+  const r = sb.eventsWeekJob_(ss);
+  ok('ראשון בבוקר — השלמה אם מוצ"ש פוספס, לאותו שבוע', r.events === 3 && (pushTo('F1')[0] || {}).title === 'השבוע בשיכון · 27.9–3.10', JSON.stringify(r));
+}
+{
+  const { sb, ss } = world({ now: new Date('2026-09-26T18:30:00Z') });
+  fsDocs['eventsCal/2026'] = { events: [] };
+  const r = sb.eventsWeekJob_(ss);
+  ok('שבוע ריק — לא יוצא כלום', r.empty && pushes.length === 0 && mails.length === 0, JSON.stringify(r));
+}
+{
+  const { sb, ss } = world({ now: new Date('2026-09-26T18:30:00Z'), subs: { F2: 1 } });
+  seedWeek();
+  setCell(ss, 'evt-week', 'all', 4, 'כן'); sb.notifyResetMemo_();
+  sb.eventsWeekJob_(ss);
+  const m = mails[0] || {};
+  ok('מייל דלוק — בעותק מוסתר, עם הרשימה המלאה', mails.length === 1 && /dana@x\.com/.test(m.bcc || '') && /יום ג׳ 29\.9 · 19:00 — ערב שירה \(המועדון\)/.test(m.body || ''), (m.body || '').slice(0, 200));
 }
 
 console.log('\n' + (fail ? '✗ ' : '✓ ') + pass + ' עברו · ' + fail + ' נכשלו');

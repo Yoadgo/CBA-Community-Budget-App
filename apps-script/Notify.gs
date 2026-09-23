@@ -835,6 +835,94 @@ function rsvpReminderJob_(ss) {
   return out;
 }
 
+/* ---------------------------------------------------------------------------
+ *  "השבוע בשיכון" — מוצאי שבת   (23.9.2026, יועד)
+ * ---------------------------------------------------------------------------
+ *  פוש אחד לכל התושבים במוצאי שבת, עם האירועים של השבוע שמתחיל (ראשון–שבת)
+ *  מלוח האירועים (Firestore eventsCal/{year} — אותו מקור של מסך האירועים).
+ *  רץ מהעבודה השעתית: בשבת מ-21:00 (אחרי צאת השבת גם בקיץ), ואם הריצה של
+ *  מוצ"ש פוספסה — ראשון בבוקר עד 12:00. דגל לשבוע ב-Script Properties
+ *  מבטיח פעם אחת בלבד. שבוע בלי אירועים — לא שולחים כלום.
+ *  ⚠️ מה/למי/באיזה ערוץ — לפי השורה "evt-week" בטבלה, כמו כל טריגר.
+ * ------------------------------------------------------------------------- */
+var EVT_WEEK_FROM_HOUR = 21;
+var EVT_WEEK_CATS = { community: '', culture: '', holidays: 'חג', breaks: 'חופשת גנים' };
+var EVT_WEEK_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
+
+/** האם עכשיו הזמן — ואם כן, מאיזה רגע סופרים את יום ראשון. */
+function eventsWeekDue_(now) {
+  var tz = 'Asia/Jerusalem';
+  var dow = Number(Utilities.formatDate(now, tz, 'u'));   // 6=שבת, 7=ראשון
+  var h = Number(Utilities.formatDate(now, tz, 'H'));
+  var sunMs = null;
+  if (dow === 6 && h >= EVT_WEEK_FROM_HOUR) sunMs = now.getTime() + 86400000;
+  else if (dow === 7 && h >= 7 && h < 12) sunMs = now.getTime();
+  if (sunMs === null) return null;
+  return { sunMs: sunMs, key: Utilities.formatDate(new Date(sunMs), tz, 'yyyy-MM-dd') };
+}
+
+/** האירועים של שבעת הימים מ-sunMs, ממוינים, והמשתנים לתבנית. */
+function eventsWeekData_(sunMs) {
+  var tz = 'Asia/Jerusalem';
+  var days = [], dayIdx = {}, years = {};
+  for (var i = 0; i < 7; i++) {
+    var d = new Date(sunMs + i * 86400000);
+    var key = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+    days.push(key); dayIdx[key] = i; years[key.substring(0, 4)] = true;
+  }
+  var evs = [];
+  Object.keys(years).forEach(function (yy) {
+    var doc = null;
+    try { doc = fsGet_(fsDocPath_('eventsCal', yy)); } catch (e) { Logger.log('eventsWeekData_: ' + e); }
+    ((doc && doc.events) || []).forEach(function (e) {
+      if (!e || !e.title || !(e.category in EVT_WEEK_CATS)) return;
+      var when = new Date(String(e.date || ''));
+      if (isNaN(when.getTime())) return;
+      var k = Utilities.formatDate(when, tz, 'yyyy-MM-dd');
+      if (!(k in dayIdx)) return;
+      evs.push({ i: dayIdx[k], t: when.getTime(), allDay: !!e.allDay, title: String(e.title).substring(0, 80),
+                 place: String(e.location || '').substring(0, 60), cat: e.category,
+                 dm: Utilities.formatDate(when, tz, 'd.M'),
+                 hm: e.allDay ? '' : Utilities.formatDate(when, tz, 'HH:mm') });
+    });
+  });
+  evs.sort(function (a, b) { return a.t - b.t; });
+  var lines = evs.map(function (e) {
+    var tag = EVT_WEEK_CATS[e.cat];
+    return '• יום ' + EVT_WEEK_DAYS[e.i] + ' ' + e.dm + (e.hm ? ' · ' + e.hm : '') + ' — ' + e.title +
+           (e.place ? ' (' + e.place + ')' : '') + (tag ? ' · ' + tag : '');
+  });
+  /* לפוש: קודם אירועי הקהילה והתרבות, אחר כך חגים וחופשות. */
+  var ordered = evs.filter(function (e) { return !EVT_WEEK_CATS[e.cat]; })
+                   .concat(evs.filter(function (e) { return !!EVT_WEEK_CATS[e.cat]; }));
+  var short = ordered.map(function (e) { return e.title + ' (' + EVT_WEEK_DAYS[e.i] + ')'; }).join(' · ');
+  var first = Utilities.formatDate(new Date(sunMs), tz, 'd.M');
+  var last = Utilities.formatDate(new Date(sunMs + 6 * 86400000), tz, 'd.M');
+  return { count: evs.length, key: days[0],
+           vars: { 'שבוע': first + '–' + last, 'מספר': String(evs.length),
+                   'רשימה': lines.join('\n'), 'רשימה קצרה': short } };
+}
+
+function eventsWeekJob_(ss, now) {
+  now = now || new Date();
+  var due = eventsWeekDue_(now);
+  if (!due) return { due: false };
+  var props = PropertiesService.getScriptProperties();
+  var flag = 'EVT_WEEK_SENT_' + due.key;
+  if (props.getProperty(flag)) return { due: true, already: true };
+  var w = eventsWeekData_(due.sunMs);
+  /* הדגל לפני השליחה: כשל באמצע עדיף על פוש כפול לכל השיכון. */
+  props.setProperty(flag, new Date().toISOString());
+  try {
+    (props.getKeys ? props.getKeys() : []).forEach(function (k) {
+      if (k.indexOf('EVT_WEEK_SENT_') === 0 && k !== flag) props.deleteProperty(k);
+    });
+  } catch (e) { /* ניקוי בלבד */ }
+  if (!w.count) return { due: true, sent: 0, empty: true };
+  var rep = notify_(ss, 'evt-week', { vars: w.vars }, ['all']);
+  return { due: true, events: w.count, push: rep.push, mail: rep.mail };
+}
+
 /** המלצת תושב על שירות — נקרא מהדפדפן אחרי שההמלצה נכתבה. */
 function notifyServiceRecommend_(ss, body) {
   /* ⚠️ פתוח לכל תושב — ולכן מגבלה: הודעה אחת לתושב בשתי דקות, כדי
@@ -1089,6 +1177,7 @@ var NOTIFY_DOMAINS = [
   {"id":"svc-update","ev":"עדכון תושבים על שירות","w":"ידני","vars":["שם השירות","ספק","מה השתנה"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"SERVICE_UPDATED","pt":"עדכון: {{שם השירות}}","pb":"{{מה השתנה}}","link":"לוח אירועים","app":"","badge":0}},"why":"פוש לכולם במקום מייל — מייל לכולם שורף את מכסת המיילים היומית."},
   {"id":"rsvp-open","ev":"נפתח אישור הגעה לאירוע","w":"מיידי","vars":["שם האירוע","תאריך"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"EVENT_RSVP_OPEN","pt":"","pb":"","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא כשמנהל פותח אישור הגעה לאירוע."},
   {"id":"rsvp-remind","ev":"תזכורת יום לפני — למי שאישר","w":"בדיקה יומית","vars":["שם האירוע","תאריך","מיקום"],"cells":{"r":{"m":0,"p":1,"d":0,"k":"EVENT_REMINDER","pt":"","pb":"","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא יום לפני האירוע, רק למי שאישר הגעה."},
+  {"id":"evt-week","ev":"השבוע בשיכון — אירועי השבוע","w":"מוצאי שבת 21:00","vars":["שבוע","מספר","רשימה","רשימה קצרה"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"EVENTS_WEEKLY","pt":"השבוע בשיכון · {{שבוע}}","pb":"{{רשימה קצרה}}","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא במוצאי שבת (מ-21:00) עם האירועים של השבוע שמתחיל. שבוע בלי אירועים — לא יוצא כלום."},
   {"id":"svc-recommend","ev":"תושב הוסיף המלצה","w":"מיידי","vars":["שם","שירות"],"cells":{"s":{"m":0,"p":0,"d":0,"k":"","pt":"","pb":"","link":"שירותים","app":"","badge":0}},"why":"יוצא כשתושב מוסיף המלצה על שירות."}
  ]},
  {"id":"oth","name":"כללי","perm":"*","cols":{"r":"מי שפנה","s":"מנהל-על","a":"כל מנהל"},"rows":[
@@ -1180,13 +1269,14 @@ var NOTIFY_MAIL_TEXTS = {
  GARDEN_RECHECK_DONE: {"su":"בדקנו שוב את הדיווח שלך","bo":"שלום {{שם}},\n\nבעקבות המשוב שלך בדקנו שוב את הטיפול ב{{קטגוריה}} ב{{מיקום}}.\n\n{{תוצאה}}\n\nתודה שעדכנת אותנו,\nועד הקהילה"},
  ADMIN_GARDEN_DAILY: {"su":"סיכום גינון יומי","bo":"שלום,\n\nמה מחכה היום בגינון:\n\n• לא שובצו: {{לא שובצו}}\n• ממתינות לאישורך: {{לאישורך}}\n• חסומות: {{חסומות}}\n• פתוחות מעל 7 ימים: {{מעל 7 ימים}}\n\n{{עדכונים}}הפירוט המלא במסך המשימות.\n\nאפליקציית הוועד"},
  EVENT_RSVP_OPEN: {"su":"נפתח אישור הגעה: {{שם האירוע}}","bo":"שלום,\n\nנפתח אישור הגעה לאירוע {{שם האירוע}} ({{תאריך}}).\n\nאפשר לאשר הגעה בלוח האירועים באפליקציה.\n\nבברכה,\nועד הקהילה"},
- EVENT_REMINDER: {"su":"תזכורת: {{שם האירוע}} מחר","bo":"שלום,\n\nתזכורת — מחר ({{תאריך}}) מתקיים {{שם האירוע}}, ב{{מיקום}}. אישרת הגעה.\n\nנתראה,\nועד הקהילה"}
+ EVENT_REMINDER: {"su":"תזכורת: {{שם האירוע}} מחר","bo":"שלום,\n\nתזכורת — מחר ({{תאריך}}) מתקיים {{שם האירוע}}, ב{{מיקום}}. אישרת הגעה.\n\nנתראה,\nועד הקהילה"},
+ EVENTS_WEEKLY: {"su":"השבוע בשיכון · {{שבוע}}","bo":"שלום,\n\nמה מחכה לנו השבוע בשיכון:\n\n{{רשימה}}\n\nכל הפרטים בלוח האירועים באפליקציה.\n\nשבוע טוב,\nועד הקהילה"}
 };
 
 /* תבניות חדשות שלא היו ב-DEFAULT_EMAIL_SETTINGS — [מפתח, תחום]. */
 function notifyExtraEmailRows_() {
   var out = [];
-  var NEW = {CLUB_RECEIVED: PERM_CLUB, GARDENER_WEEKLY_PLAN: PERM_GARDEN, ADMIN_GARDEN_DAILY: PERM_GARDEN, GARDENER_TASK_ADDED: PERM_GARDEN, GARDEN_FINAL_CHECK: PERM_GARDEN, ADMIN_GARDEN_AWAITING_APPROVAL: PERM_GARDEN, GARDENER_TASK_RETURNED: PERM_GARDEN, GARDEN_PENDING_REVIEW: PERM_GARDEN, GARDEN_RECHECK_DONE: PERM_GARDEN, EVENT_RSVP_OPEN: PERM_SUPER, EVENT_REMINDER: PERM_SUPER};
+  var NEW = {CLUB_RECEIVED: PERM_CLUB, GARDENER_WEEKLY_PLAN: PERM_GARDEN, ADMIN_GARDEN_DAILY: PERM_GARDEN, GARDENER_TASK_ADDED: PERM_GARDEN, GARDEN_FINAL_CHECK: PERM_GARDEN, ADMIN_GARDEN_AWAITING_APPROVAL: PERM_GARDEN, GARDENER_TASK_RETURNED: PERM_GARDEN, GARDEN_PENDING_REVIEW: PERM_GARDEN, GARDEN_RECHECK_DONE: PERM_GARDEN, EVENT_RSVP_OPEN: PERM_SUPER, EVENT_REMINDER: PERM_SUPER, EVENTS_WEEKLY: PERM_SUPER};
   Object.keys(NEW).forEach(function (k) {
     var t = NOTIFY_MAIL_TEXTS[k] || {};
     out.push([k, t.su || '', t.bo || '', 'מרכז ההתראות (23.9) — נשלח לפי הטבלה במסך "ניהול התראות"', NEW[k], 'כן']);

@@ -6251,6 +6251,14 @@ function hourlyJobsRun_() {
     var nq = notifyFlushQueue_(ss);
     if (nq.sent || nq.errors.length) Logger.log('תור פוש: נשלחו ' + nq.sent + (nq.errors.length ? ' | ' + nq.errors.join(' ; ') : ''));
   } catch (e) { Logger.log('notifyFlushQueue_ נכשל: ' + e); }
+  /* 23.9 — "השבוע בשיכון": פוש לכולם במוצאי שבת (הפונקציה בודקת בעצמה
+     אם הגיע הזמן; ברוב השעות היא חוזרת מיד). */
+  try {
+    if (typeof eventsWeekJob_ === 'function') {
+      var ew = eventsWeekJob_(ss);
+      if (ew && ew.events) Logger.log('השבוע בשיכון: ' + ew.events + ' אירועים, פוש ' + ew.push);
+    }
+  } catch (e) { Logger.log('eventsWeekJob_ נכשל: ' + e); }
   /* תיבת הדואר (2026-09-15, צעד 09א) — סטטוסים שהדפדפן
      כתב ל-Firestore וטרם הוחלו על הגיליון.
      ⚠️ **לפני הגיבוי המצטבר** — אחרת הגיבוי מעתיק מסמכים
