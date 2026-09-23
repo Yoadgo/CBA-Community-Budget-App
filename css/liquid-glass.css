@@ -414,10 +414,11 @@ input, textarea, select, .field-input, .num-input {
 }
 
 /* 23.9 — "התראות לטלפון" פעיל: נקודה ירוקה על העיגול, כדי שהמצב ייקרא
-   במבט ולא יתבלבל עם אריח "מרכז התראות". */
-.up-tile[data-on] .up-tile__d { position: relative; }
-.up-tile[data-on] .up-tile__d::after {
-  content: ""; position: absolute; top: 6px; inset-inline-end: 6px;
-  width: 8px; height: 8px; border-radius: 50%;
+   במבט ולא יתבלבל עם אריח "מרכז התראות".
+   ⚠️ span אמיתי ולא ::after — ‎.lg כבר משתמש ב-::after לאפקט הזכוכית. */
+.up-tile__d { position: relative; }
+.up-tile__dot {
+  position: absolute; top: 5px; inset-inline-end: 5px; z-index: 2;
+  width: 9px; height: 9px; border-radius: 50%;
   background: var(--success, #059669); box-shadow: 0 0 0 2px var(--surface, #fff);
 }

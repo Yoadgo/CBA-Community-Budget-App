@@ -1762,7 +1762,8 @@
     var tilesItem = tiles.length
       ? '<div class="up-tiles">' + tiles.map(function (t) {
           return '<button class="up-tile" ' + t[0] + ' title="' + CBA.esc(t[3]) + '" aria-label="' + CBA.esc(t[3]) + '">' +
-                   '<span class="lg lg-circle up-tile__d">' + t[1] + '</span>' +
+                   '<span class="lg lg-circle up-tile__d">' + t[1] +
+                     (/\bdata-on\b/.test(t[0]) ? '<span class="up-tile__dot" aria-hidden="true"></span>' : '') + '</span>' +
                    '<span class="up-tile__l">' + CBA.esc(t[2]) + '</span>' +
                  '</button>';
         }).join('') + '</div>'
