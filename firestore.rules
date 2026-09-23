@@ -748,7 +748,9 @@ service cloud.firestore {
      *  · 06:00–23:00, רבע שעה לפחות. זהה ל-DAY_START/DAY_END ב-gardenSlots.js.
      * ====================================================================== */
     /* ✂️ GW-25.9:R7-parts — חלק אחד של שיבוץ. ks = המפתחות המותרים (לחלק
-       הראשון מותר גם 'more' — רשימת ההמשכים, עד שניים). done = החלק הסתיים. */
+       הראשון מותרים גם 'p1', 'p2' — ההמשכים בימים אחרים). done = החלק הסתיים.
+       🔴 מפות ולא רשימה: `more: [..]` עם שני איברים נדחה תמיד (נבדק חי
+       23.9 — גם כשהבדיקה של האיבר השני הוטמעה בלי פונקציה). p1/p2 עובד. */
     function gtPartOk(s, ks) {
       return s is map &&
              s.keys().hasOnly(ks) &&
@@ -764,10 +766,9 @@ service cloud.firestore {
     }
     function gtSlotOk(s) {
       return s == null ||
-             (gtPartOk(s, ['date', 'start', 'dur', 'who', 'act', 'done', 'more']) &&   /* GW-24.9:R6-keys */
-              s.get('more', []) is list && s.get('more', []).size() <= 2 &&
-              (s.get('more', []).size() < 1 || gtPartOk(s.more[0], ['date', 'start', 'dur', 'who', 'act', 'done'])) &&
-              (s.get('more', []).size() < 2 || gtPartOk(s.more[1], ['date', 'start', 'dur', 'who', 'act', 'done'])));
+             (gtPartOk(s, ['date', 'start', 'dur', 'who', 'act', 'done', 'p1', 'p2']) &&   /* GW-24.9:R6-keys */
+              (s.get('p1', null) == null || gtPartOk(s.p1, ['date', 'start', 'dur', 'who', 'act', 'done'])) &&
+              (s.get('p2', null) == null || gtPartOk(s.p2, ['date', 'start', 'dur', 'who', 'act', 'done'])));
     }
     function gtSlotUpdateOk() {
       return hasPerm('גינון') &&

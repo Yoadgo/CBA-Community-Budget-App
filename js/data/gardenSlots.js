@@ -7,14 +7,18 @@
  *
  *     slot = { date: "YYYY-MM-DD", start: דקות מחצות, dur: דקות,
  *              who?: ["74:2"], act?: דקות בפועל, done?: true,
- *              more?: [ { date, start, dur, who?, act?, done? }, … עד 2 ] }
+ *              p1?: { date, start, dur, who?, act?, done? }, p2?: { … } }
  *     slot = null  →  "לא בסידור"
  *
  *  ✂️ 25.9 — **משימה בכמה ימים** (יועד: "צריך אולי לפצל משימה ליותר מיום
  *     אחד, זאת אומרת המשך ביום אחר"). החלקים נשמרים **באותו שדה** — החלק
- *     הראשון הוא slot עצמו, והמשכים ב-slot.more (עד שניים, שלושה חלקים
+ *     הראשון הוא slot עצמו, וההמשכים ב-slot.p1 / slot.p2 (שלושה חלקים
  *     בסך הכול). כך הכתיבה נשארת אטומית (שדה אחד), הכלל נשאר אותו כלל,
- *     וקוד שלא מכיר את `more` רואה פשוט את החלק הראשון.
+ *     וקוד שלא מכיר את ההמשכים רואה פשוט את החלק הראשון.
+ *     🔴 **מפות ולא רשימה.** נוסה קודם `more: [..]` — וכללי Firestore דחו
+ *     כל רשימה עם שני איברים, גם כשהבדיקה של האיבר השני הייתה זהה לראשון
+ *     (נבדק חי 23.9, גם בבדיקה מוטמעת בלי פונקציה). עם p1/p2 — עובד.
+ *     `more` ישן (אם נשמר ב-15 הדקות שבהן היה חי) עדיין נקרא, ונכתב מחדש כ-p1.
  *     🔑 החלקים **תמיד ממוינים כרונולוגית** (fromParts) — slot עצמו הוא
  *     המוקדם, ולכן "יום רגיל"/"שעה רגילה" בפרופיל ממשיכים לעבוד.
  *     `done` = החלק הזה הסתיים (הכרעת יועד: "בוצע" על חלק שאינו האחרון
@@ -65,9 +69,11 @@
   function valid(s) {
     if (s === null) return true;
     if (!validPart(s)) return false;
-    if (s.more == null) return true;
-    return s.more instanceof Array && s.more.length <= MAX_PARTS - 1 &&
-      s.more.every(function (p) { return validPart(p) && p.more == null; });
+    var extra = [s.p1, s.p2].filter(function (p) { return p != null; });
+    if (!extra.every(function (p) { return validPart(p) && p.p1 == null && p.p2 == null && p.more == null; })) return false;
+    if (s.more != null && !(s.more instanceof Array && s.more.length + extra.length <= MAX_PARTS - 1 &&
+        s.more.every(function (p) { return validPart(p); }))) return false;
+    return true;
   }
 
   /* מה שנכתב בפועל — רק המפתחות שהכלל מכיר (`hasOnly`). who ריק / act ריק
@@ -81,16 +87,14 @@
   }
   function clean(s) {
     if (s === null) return null;
-    var o = cleanPart(s);
-    if (s.more && s.more.length) o.more = s.more.map(cleanPart);
-    return o;
+    return fromParts(parts(s));
   }
 
   /* ✂️ החלקים כרשימה שטוחה (הראשון = slot עצמו), ובחזרה. */
   function parts(s) {
     if (!s) return [];
     var a = [cleanPart(s)];
-    (s.more || []).forEach(function (p) { a.push(cleanPart(p)); });
+    [s.p1, s.p2].concat(s.more || []).forEach(function (p) { if (p) a.push(cleanPart(p)); });
     return a;
   }
   function fromParts(list) {
@@ -99,7 +103,8 @@
     }).slice(0, MAX_PARTS);
     if (!a.length) return null;
     var o = a[0];
-    if (a.length > 1) o.more = a.slice(1);
+    if (a[1]) o.p1 = a[1];
+    if (a[2]) o.p2 = a[2];
     return o;
   }
 
