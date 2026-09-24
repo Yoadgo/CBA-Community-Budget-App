@@ -274,7 +274,7 @@ CBA.screens = CBA.screens || {};
   }
 
   function head() {
-    return '<div class="screen-head"><div class="screen-head__title">הפרטים שלי</div>' +
+    return '<div class="screen-head"><div class="screen-head__title">המשפחה שלי</div>' +
       '<div class="screen-head__sub">מה שמופיע עליכם במדריך התושבים ובמערכת</div></div>';
   }
   function dateLabel(v) {

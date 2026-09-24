@@ -1540,6 +1540,12 @@
     });
     const pushBtn = panel.querySelector("[data-panel-push]");
     if (pushBtn) pushBtn.addEventListener("click", function () {
+      /* 24.9 — במכשיר שלא תומך השורה מוצגת ומסבירה למה, במקום להיעלם. */
+      if (pushBtn.hasAttribute("data-na")) {
+        var why = CBA.push.canOffer().reason || "התראות לטלפון לא זמינות במכשיר הזה";
+        if (CBA.ui && CBA.ui.toast) CBA.ui.toast(why);
+        return;
+      }
       closeUserPanel(panel, btn);
       var action = CBA.push.isSubscribed() ? CBA.push.unsubscribe() : CBA.push.subscribe();
       /* 23.9 — CBA.toast לא קיים (הפונקציה היא CBA.ui.toast), ולכן שגיאת
@@ -1689,24 +1695,27 @@
       const avatar = currentUser.picture
         ? '<img class="up-avatar-img" src="' + CBA.esc(currentUser.picture) + '" alt="">'
         : '<span class="up-avatar">' + CBA.esc(initials(currentUser.name || currentUser.email)) + '</span>';
-      /* "מטא" — עזרה ויציאה. שניהם על האפליקציה ולא בתוכה, ושניהם סמלים
-         שעומדים בלי מילה, ולכן הם עיגולים בפינה ולא פריטים ברשימה. */
+      /* 24.9 (סידור "חלון משתמש", הכרעת יועד — אפשרות ב'):
+         הראש כולו לחיץ ופותח את "המשפחה שלי" (במקום אריח "פרטים").
+         "סיור" עבר לקבוצת "עזרה" ו"יציאה" לשורת התחתית — רחוק מאצבע בטעות.
+         ⚠️ נקודת החיבור היא כפתור נפרד *מחוץ* לכפתור הראש — כפתור בתוך
+            כפתור אינו HTML תקין. */
       head =
-        '<div class="up-head">' +
+        '<div class="up-head up-head--click">' +
           '<span class="up-avatar-wrap">' + avatar +
             '<button type="button" class="up-live' + (connOpen ? ' up-live--warn' : '') + '" data-panel-conn aria-label="מצב החיבור"></button>' +
           '</span>' +
-          '<div class="up-head__txt">' +
-            '<div class="up-nameline">' +
-              '<div class="up-name">' + CBA.esc(currentUser.name || currentUser.email) + '</div>' +
-              '<span class="up-role" title="' + CBA.esc(myRoleLabel()) + '">' + CBA.esc(myRoleLabel()) + '</span>' +
-            '</div>' +
-            '<div class="up-sub">' + CBA.esc(currentUser.email) + '</div>' +
-          '</div>' +
-          '<div class="up-meta">' +
-            '<button class="lg lg-circle up-mbtn" data-panel-tour title="סיור באפליקציה" aria-label="סיור באפליקציה">' + ICON.help + '</button>' +
-            '<button class="lg lg-circle up-mbtn up-mbtn--quit" data-panel-logout title="יציאה" aria-label="יציאה">' + ICON.logout + '</button>' +
-          '</div>' +
+          '<button type="button" class="up-head__btn" data-panel-profile aria-label="המשפחה שלי">' +
+            '<span class="up-head__txt">' +
+              '<span class="up-nameline">' +
+                '<span class="up-name">' + CBA.esc(currentUser.name || currentUser.email) + '</span>' +
+                '<span class="up-role" title="' + CBA.esc(myRoleLabel()) + '">' + CBA.esc(myRoleLabel()) + '</span>' +
+              '</span>' +
+              '<span class="up-sub">' + CBA.esc(currentUser.email) + '</span>' +
+              '<span class="up-sub up-sub--link">המשפחה שלי</span>' +
+            '</span>' +
+            '<span class="up-chev" aria-hidden="true">‹</span>' +
+          '</button>' +
         '</div>';
       action = "";
     } else {
@@ -1718,84 +1727,95 @@
       action = "";
     }
 
-    /* מתג האזורים — שתי גלולות נפרדות ולא בורר מחולק. ב-iOS פקד כבוי הוא
-       זכוכית ופקד דלוק הוא מילוי מלא; בורר עם קווי הפרדה נקרא כשדה טופס.
-       מוצג רק למי שיש לו הרשאת ניהול, ולא למשתמש חיצוני שאין לו אזור תושב. */
+    /* שורה ברשימה מקובצת: [סמל] כותרת/תת-כותרת [צד שמאל] */
+    function li(attrs, icon, title, sub, side, cls) {
+      return '<button type="button" class="up-li' + (cls ? ' ' + cls : '') + '" ' + attrs + '>' +
+               '<span class="up-li__ico">' + icon + '</span>' +
+               '<span class="up-li__t">' + CBA.esc(title) +
+                 (sub ? '<span class="up-li__s">' + CBA.esc(sub) + '</span>' : '') + '</span>' +
+               (side || '<span class="up-li__chev" aria-hidden="true">‹</span>') +
+             '</button>';
+    }
+    function group(label, body) {
+      return body ? '<div class="up-grp"><div class="up-grp__l">' + label + '</div><div class="up-list">' + body + '</div></div>' : "";
+    }
+
+    /* --- "אני" --- */
+    var me = "";
+    if (currentUser && window.CBA.push) {
+      /* "התראות לטלפון" מוצג תמיד (קודם נעלם בשקט במכשיר שלא תומך). במכשיר
+         כזה — מתג כבוי ואפור, ולחיצה מסבירה למה (canOffer().reason). */
+      var po = CBA.push.canOffer();
+      var pushOn = po.ok && CBA.push.isSubscribed();
+      me += li('data-panel-push' + (po.ok ? '' : ' data-na'), pushOn ? ICON.bell : ICON.bellOff, 'התראות לטלפון',
+               po.ok ? (pushOn ? 'פעילות במכשיר הזה' : 'כבויות במכשיר הזה') : 'לא זמין במכשיר הזה',
+               '<span class="up-sw' + (pushOn ? ' is-on' : '') + (po.ok ? '' : ' is-na') + '" aria-hidden="true"></span>');
+    }
+    // נעלם מעצמו ברגע שהאפליקציה כבר מותקנת (ר' מסמך אפיון PWA, סעיפים 6-7)
+    if (window.CBA.pwa && CBA.pwa.canInstall()) {
+      me += li('data-panel-install', ICON.install, 'התקנה למסך הבית', 'פתיחה מהירה כמו אפליקציה');
+    }
+
+    /* --- "ניהול" — רק למי שיש לו הרשאת ניהול --- */
+    var adm = "";
+    // מתג האזורים — שתי גלולות נפרדות ולא בורר מחולק (2026-09-07).
     var switchItem = (hasAnyAdmin() && !isExternalUser())
       ? '<div class="up-seg">' +
           '<button class="lg lg-pill up-tg' + (currentArea === "resident" ? " is-on" : "") + '" data-panel-switch="resident">תושב</button>' +
           '<button class="lg lg-pill up-tg' + (currentArea === "admin" ? " is-on" : "") + '" data-panel-switch="admin">ניהול</button>' +
         '</div>'
       : "";
-
     var yearItem = currentUser ? yearPanelHTML() : "";
-
     // הדמיית תושב — כלי רב-עוצמה (רואים דרכו נתונים של אחרים), מנהל על בלבד.
-    // נשאר שורה שלמה עם מילים, לבקשת יועד: חצים לא אומרים "לראות כמו מישהו אחר".
-    var simItem = isSuper()
-      ? (window.CBA.isSimulating && window.CBA.isSimulating()
-          ? '<button class="lg lg-pill up-pill up-pill--sim" data-panel-simstop><span class="lg-ico">' + ICON.swap + '</span><span class="up-pill__t">צא ממצב הדמיה</span></button>'
-          : '<button class="lg lg-pill up-pill up-pill--sim" data-panel-sim><span class="lg-ico">' + ICON.swap + '</span><span class="up-pill__t">הדמיית תושב</span></button>')
-      : "";
-
-    /* רשת האריחים — כאן יושב כל מה שצריך תווית כדי להיות מובן.
-       ⚠️ "פרטים" חייב תווית: NAV_ICONS כבר משתמש באייקון דמות לשני פריטי
-       ניווט ("האזור שלי", "מדריך תושבים"), ודמות חשופה הייתה מתנגשת בהם.
-       ⚠️ גלגל השיניים "הגדרות" הוסר כאן (הוכרע 2026-08-18, ר' התיעוד). */
-    var tiles = [];
-    if (currentUser) {
-      tiles.push(['data-panel-profile', ICON.person, 'פרטים', 'הפרטים שלי']);
-      tiles.push(['data-panel-security', ICON.shield, 'אבטחה', 'אבטחת המידע שלי']);
-      /* דיווח על האפליקציה — נקודת הכניסה השנייה, לצד הכפתור הצף. היא כאן
-         כבר עכשיו ולא "אחר כך": התוכנית היא להסיר את הכפתור הצף אחרי
-         שהאפליקציה נקלטת, ואז האריח הזה הוא מה שנשאר. */
-      tiles.push(['data-panel-report', ICON.report, 'דיווח', 'דיווח על האפליקציה']);
-      /* בדיקת עדכון גרסה (2026-09-16, יועד) — לתושבים ב-PWA לפעמים לוקח
-         שעות עד שהדפדפן בעצמו שם לב שיש גרסה חדשה. אריח לכולם, לא רק
-         מנהל-על: זו בעיה שפוגעת בכל מי שמתקין את האפליקציה למסך הבית. */
-      tiles.push(['data-panel-update', ICON.refresh, 'עדכון גרסה', 'בדיקת עדכון גרסה']);
+    if (isSuper()) {
+      adm += (window.CBA.isSimulating && window.CBA.isSimulating())
+        ? li('data-panel-simstop', ICON.swap, 'צא ממצב הדמיה', 'חזרה לתצוגה שלך', '', 'up-li--sim')
+        : li('data-panel-sim', ICON.swap, 'הדמיית תושב', 'לראות את האפליקציה כמו תושב', '', 'up-li--sim');
     }
-    /* גל 4 (24.9, הכרעת יועד) — אריח אחד "ניהול מערכת" במקום שלושה
-       (מרכז התראות · תיבת דיווחים · מצב המערכת). הלשוניות בפנים מסוננות
-       לפי הרשאה, ולכן אף אחד לא מאבד גישה שהייתה לו:
-       · מנהל-על — בשני האזורים, כמו שני האריחים שהוחלפו.
-       · מנהל תחום — באזור הניהול, כמו מרכז ההתראות; רואה רק "התראות".
-       המסכים הוותיקים נשארים רשומים — קישורים ישנים אליהם ממשיכים לעבוד. */
+    /* גל 4 (24.9) — "ניהול מערכת": מנהל-על בשני האזורים; מנהל תחום באזור
+       הניהול בלבד (רואה שם רק "התראות"). */
     if (isSuper() || (currentArea === "admin" && canScreen("emailSettings"))) {
-      tiles.push(['data-panel-goto="sysHub"', ICON.gauge, 'ניהול מערכת', 'דיווחים, תחקור, מצב המערכת והתראות']);
+      adm += li('data-panel-goto="sysHub"', ICON.gauge, 'ניהול מערכת', 'דיווחים · תחקור · מצב · התראות');
     }
-    // נעלם מעצמו ברגע שהאפליקציה כבר מותקנת (ר' מסמך אפיון PWA, סעיפים 6-7)
-    if (window.CBA.pwa && CBA.pwa.canInstall()) {
-      tiles.push(['data-panel-install', ICON.install, 'התקנה', 'התקנת האפליקציה']);
-    }
-    // התראות Push (16.9.26) — רק כשהדפדפן/המכשיר תומכים בכלל (ר' CBA.push.canOffer).
-    if (window.CBA.push && CBA.push.canOffer().ok) {
-      var pushOn = CBA.push.isSubscribed();
-      /* 23.9 — שם שמדבר על *המכשיר* ("לטלפון"), ונקודה ירוקה כשפעיל, כדי
-         שלא יתבלבל עם "מרכז התראות". המצב נקרא מהנקודה והפעמון, לא מהתווית. */
-      tiles.push(['data-panel-push' + (pushOn ? ' data-on' : ''), pushOn ? ICON.bell : ICON.bellOff, 'התראות לטלפון',
-                  pushOn ? 'התראות לטלפון פעילות במכשיר הזה — לחיצה מכבה' : 'הפעלת התראות לטלפון במכשיר הזה']);
-    }
-    var tilesItem = tiles.length
-      ? '<div class="up-tiles">' + tiles.map(function (t) {
-          return '<button class="up-tile" ' + t[0] + ' title="' + CBA.esc(t[3]) + '" aria-label="' + CBA.esc(t[3]) + '">' +
-                   '<span class="lg lg-circle up-tile__d">' + t[1] +
-                     (/\bdata-on\b/.test(t[0]) ? '<span class="up-tile__dot" aria-hidden="true"></span>' : '') + '</span>' +
-                   '<span class="up-tile__l">' + CBA.esc(t[2]) + '</span>' +
-                 '</button>';
-        }).join('') + '</div>'
+    var admGroup = (switchItem || yearItem || adm)
+      ? '<div class="up-grp"><div class="up-grp__l">ניהול</div>' + switchItem + yearItem +
+          (adm ? '<div class="up-list">' + adm + '</div>' : '') + '</div>'
       : "";
 
+    /* --- "עזרה" — כולל "אבטחת המידע שלי" (הכרעת יועד 24.9) --- */
+    var help = "";
+    if (currentUser) {
+      help += li('data-panel-tour', ICON.help, 'סיור באפליקציה', '');
+      help += li('data-panel-security', ICON.shield, 'אבטחת המידע שלי', '');
+      help += li('data-panel-report', ICON.report, 'דיווח על תקלה או רעיון', '');
+    }
+
+    /* --- תחתית: גרסה · בדיקת עדכון · יציאה --- */
+    var cliVer = "";
+    try {
+      var sc = document.querySelector('script[src*="js/app.js"]');
+      var mv = sc && String(sc.src).match(/[?&]v=([^&"]+)/);
+      cliVer = mv ? mv[1] : "";
+    } catch (e) { /* לא קריטי */ }
+    var foot = currentUser
+      ? '<div class="up-foot">' +
+          '<span class="up-foot__ver">' + (cliVer ? 'גרסה ' + CBA.esc(cliVer) + ' · ' : '') +
+            '<button type="button" class="up-foot__link" data-panel-update>בדיקת עדכון</button></span>' +
+          '<button type="button" class="up-foot__quit" data-panel-logout>יציאה</button>' +
+        '</div>'
+      : "";
+
+    /* לתושב רגיל אין התראות ניהוליות — ולכן גם לא שורה ריקה "אין התראות". */
     return (
       head +
       connRow +
       '<div class="up-stack">' +
-        notifItemsHTML() +
-        switchItem +
-        yearItem +
-        simItem +
-        tilesItem +
+        (hasAnyAdmin() ? notifItemsHTML() : "") +
+        group('אני', me) +
+        admGroup +
+        group('עזרה', help) +
       '</div>' +
+      foot +
       action
     );
   }

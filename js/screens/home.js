@@ -732,7 +732,7 @@ CBA.screens = CBA.screens || {};
       ["resGym",       ICO.gym,     "מכון כושר"],
       ["resMap",       ICO.map,     "מפת השיכון"],
       ["resDirectory", ICO.users,   "שכנים"],
-      ["resMe",        ICO.person,  "הפרטים שלי"]
+      ["resMe",        ICO.person,  "המשפחה שלי"]
     ];
     return '<section class="hm-actions">' +
       '<div class="hm-actions__edge" id="hm-acts-edge">' +
