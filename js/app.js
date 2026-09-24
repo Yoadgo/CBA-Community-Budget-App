@@ -1510,7 +1510,9 @@
     const avatarMode = !!(currentUser && currentUser.picture);
     // הנקודה האדומה מוצגת רק למנהל (כולל כשהוא באזור התושב דרך המתג) — לתושב
     // רגיל אין גישה להתרעות ניהוליות, אז גם לא מציגים לו רמז עליהן.
-    const hasAlerts = alertsTotal() > 0 && hasAnyAdmin();
+    /* 24.9 (סבב 2 של חלון המשתמש, יועד) — ההתרעות הוצאו מהמגש, ולכן גם
+       הנקודה על התמונה: היא הבטיחה משהו שכבר לא נמצא בפנים. */
+    const hasAlerts = false;
     controls.innerHTML =
       // החיפוש נכתב ראשון ולכן מופיע *מימין* לכפתור המשתמש (הכותרת ב-RTL)
       '<button type="button" class="search-btn" id="search-btn" title="חיפוש (Ctrl+K)" aria-label="חיפוש">' + ICON.search + '</button>' +
@@ -1711,8 +1713,7 @@
                 '<span class="up-name">' + CBA.esc(currentUser.name || currentUser.email) + '</span>' +
                 '<span class="up-role" title="' + CBA.esc(myRoleLabel()) + '">' + CBA.esc(myRoleLabel()) + '</span>' +
               '</span>' +
-              '<span class="up-sub">' + CBA.esc(currentUser.email) + '</span>' +
-              '<span class="up-sub up-sub--link">המשפחה שלי</span>' +
+              '<span class="up-sub up-sub--link" title="' + CBA.esc(currentUser.email) + '">המשפחה שלי</span>' +
             '</span>' +
             '<span class="up-chev" aria-hidden="true">‹</span>' +
           '</button>' +
@@ -1748,13 +1749,12 @@
       var po = CBA.push.canOffer();
       var pushOn = po.ok && CBA.push.isSubscribed();
       me += li('data-panel-push' + (po.ok ? '' : ' data-na'), pushOn ? ICON.bell : ICON.bellOff, 'התראות לטלפון',
-               po.ok ? (pushOn ? 'פעילות במכשיר הזה' : 'כבויות במכשיר הזה') : 'לא זמין במכשיר הזה',
+               po.ok ? '' : 'לא זמין במכשיר הזה',
                '<span class="up-sw' + (pushOn ? ' is-on' : '') + (po.ok ? '' : ' is-na') + '" aria-hidden="true"></span>');
     }
-    // נעלם מעצמו ברגע שהאפליקציה כבר מותקנת (ר' מסמך אפיון PWA, סעיפים 6-7)
-    if (window.CBA.pwa && CBA.pwa.canInstall()) {
-      me += li('data-panel-install', ICON.install, 'התקנה למסך הבית', 'פתיחה מהירה כמו אפליקציה');
-    }
+    /* "התקנה" ירדה לקישור קטן בתחתית (יועד, 24.9: "תופס יותר מדי מקום ביחס
+       לכמה שהוא רלוונטי"). עדיין נעלמת מעצמה אחרי התקנה. */
+    var canInst = !!(window.CBA.pwa && CBA.pwa.canInstall());
 
     /* --- "ניהול" — רק למי שיש לו הרשאת ניהול --- */
     var adm = "";
@@ -1766,16 +1766,15 @@
         '</div>'
       : "";
     var yearItem = currentUser ? yearPanelHTML() : "";
-    // הדמיית תושב — כלי רב-עוצמה (רואים דרכו נתונים של אחרים), מנהל על בלבד.
-    if (isSuper()) {
-      adm += (window.CBA.isSimulating && window.CBA.isSimulating())
-        ? li('data-panel-simstop', ICON.swap, 'צא ממצב הדמיה', 'חזרה לתצוגה שלך', '', 'up-li--sim')
-        : li('data-panel-sim', ICON.swap, 'הדמיית תושב', 'לראות את האפליקציה כמו תושב', '', 'up-li--sim');
+    /* "הדמיית תושב" הוסרה מהמגש (יועד, 24.9). הקוד (openSimPicker/stopSim)
+       נשאר — אם ההדמיה פעילה, יציאה ממנה עדיין מוצגת כדי לא להיתקע. */
+    if (window.CBA.isSimulating && window.CBA.isSimulating()) {
+      adm += li('data-panel-simstop', ICON.swap, 'צא ממצב הדמיה', '', '', 'up-li--sim');
     }
     /* גל 4 (24.9) — "ניהול מערכת": מנהל-על בשני האזורים; מנהל תחום באזור
        הניהול בלבד (רואה שם רק "התראות"). */
     if (isSuper() || (currentArea === "admin" && canScreen("emailSettings"))) {
-      adm += li('data-panel-goto="sysHub"', ICON.gauge, 'ניהול מערכת', 'דיווחים · תחקור · מצב · התראות');
+      adm += li('data-panel-goto="sysHub"', ICON.gauge, 'ניהול מערכת', '');
     }
     var admGroup = (switchItem || yearItem || adm)
       ? '<div class="up-grp"><div class="up-grp__l">ניהול</div>' + switchItem + yearItem +
@@ -1800,7 +1799,8 @@
     var foot = currentUser
       ? '<div class="up-foot">' +
           '<span class="up-foot__ver">' + (cliVer ? 'גרסה ' + CBA.esc(cliVer) + ' · ' : '') +
-            '<button type="button" class="up-foot__link" data-panel-update>בדיקת עדכון</button></span>' +
+            '<button type="button" class="up-foot__link" data-panel-update>בדיקת עדכון</button>' +
+            (canInst ? ' · <button type="button" class="up-foot__link" data-panel-install>התקנה</button>' : '') + '</span>' +
           '<button type="button" class="up-foot__quit" data-panel-logout>יציאה</button>' +
         '</div>'
       : "";
@@ -1810,7 +1810,7 @@
       head +
       connRow +
       '<div class="up-stack">' +
-        (hasAnyAdmin() ? notifItemsHTML() : "") +
+        /* שורות ההתרעות (ממתינים לאישור וכו') הוסרו מהמגש — יועד, 24.9. */
         group('אני', me) +
         admGroup +
         group('עזרה', help) +

@@ -489,3 +489,30 @@ input, textarea, select, .field-input, .num-input {
 .up-foot__link { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
 .up-foot__quit { color: #9F1239; font-weight: 700; font-size: 12px; }
 .up-foot__quit:hover { color: #7F1D1D; }
+
+/* 24.9 סבב 2 (יועד: "צריך קצת לצמצם את הגודל") — מגש קומפקטי יותר */
+.user-panel { width: 256px; padding: 8px; }
+.up-stack { gap: 6px; padding: 6px 0 0; }
+.up-head__btn { padding: 5px 8px; border-radius: 12px; }
+.up-grp { gap: 4px; }
+.up-grp__l { font-size: 10px; padding: 0 8px; }
+.up-list { border-radius: 12px; }
+.up-li { padding: 6px 9px; gap: 8px; }
+.up-li__ico { width: 22px; height: 22px; }
+.up-li__ico svg { width: 13px; height: 13px; }
+.up-li__t { font-size: 12px; }
+.up-sw { width: 30px; height: 18px; }
+.up-sw::after { width: 14px; height: 14px; }
+.up-sw.is-on::after { right: 14px; }
+.up-tg { padding: 6px; font-size: 11.5px; }
+.up-foot { margin-top: 6px; padding: 6px 6px 0; }
+
+/* "שנת צפייה" בצבע אחר ממתג תושב/ניהול (יועד, 24.9: "לא באותו צבע").
+   המתג נשאר מילוי כהה; השנים — בורר iOS בהיר: הנבחרת לבנה עם צל. */
+.up-year__label { font-size: 10px; margin-bottom: 4px; padding: 0 8px; }
+.up-year__track { padding: 3px; background: rgba(17,24,39,.07); }
+.up-year__chip { padding: 4px 12px; font-size: 11.5px; }
+.up-year__chip.is-on {
+  background: #fff; color: var(--text);
+  box-shadow: 0 1px 3px rgba(16,24,40,.18), 0 0 0 .5px rgba(16,24,40,.08);
+}
