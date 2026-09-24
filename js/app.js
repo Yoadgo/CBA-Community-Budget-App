@@ -2516,8 +2516,15 @@
      הגלובלי הפך לתג תצוגה בלבד. כל מה שהיה כאן (מיתוג הצפייה, ההגדרה
      כשנת עבודה, ויצירת שנה) עבר: המיתוג ל-yearPanelHTML/הפאנל למטה,
      ויצירת שנה למסך "בניית תקציב" (ר' planning.js). */
+  /* 🔴 (24.9.26, הערב של דר) עד שאין מטען אמיתי — **אין שנה בכותרת.**
+     `CBA.mock.currentYear` הוא 'תשפ"ו' קשיח מ-mock.js, וכל עוד הטעינה לא
+     הסתיימה (או נכשלה) זה מה שהיה מוצג — ודר "התעוררה על תשפ"ו". שנה של
+     דמו היא נתון דמו, ואסור להציג אותו כאילו הוא אמיתי (הכלל של יועד).
+     השבב נשאר ריק עד ש-`isConnected()` — ואז `apply()` כבר שם את השנה
+     מהשרת. אותו שער חל על רשימת "שנת צפייה" בתפריט המשתמש. */
   function renderYearSwitch() {
     if (!yearBox) return;
+    if (!CBA.sheets.isConnected()) { yearBox.innerHTML = ""; return; }
     const cur = CBA.data.getCurrentYear();
     yearBox.innerHTML =
       '<span class="year-switch__chip" title="שנה מוצגת — להחלפה: תפריט המשתמש">' +
@@ -2529,6 +2536,7 @@
      שמראה את השנה הנוכחית, ומתחתיו רשימת שבבים שנפתחת/נסגרת. פחות משנה
      אחת בכלל — אין מה להחליף, אז לא מוצג שורה ריקה. */
   function yearPanelHTML() {
+    if (!CBA.sheets.isConnected()) return "";   // שנות דמו אינן שנים (ר' renderYearSwitch)
     const years = CBA.data.getYears();
     if (!years || years.length < 2) return "";
     const cur     = CBA.data.getCurrentYear();

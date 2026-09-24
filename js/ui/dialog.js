@@ -278,7 +278,9 @@ CBA.ui = (function () {
   }
 
   /* toast — הודעת הצלחה קצרה שלא חוסמת כלום. מחליפה alert של "הצליח!". */
-  function toast(message, kind) {
+  /* ms (24.9.26): משך אופציונלי — הודעת הדרכה של שתי שורות (למשל "הקובץ ירד,
+     פתחו אותו מהורדות") לא נקראת ב-2.6 שניות. ברירת המחדל לא השתנתה. */
+  function toast(message, kind, ms) {
     var t = document.createElement("div");
     t.className = "cba-toast" + (kind ? " cba-toast--" + kind : "");
     t.textContent = message;
@@ -287,7 +289,7 @@ CBA.ui = (function () {
     setTimeout(function () {
       t.classList.remove("is-open");
       setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
-    }, 2600);
+    }, (ms > 0) ? ms : 2600);
   }
 
   /* busy — מצב "עסוק" בולט על הכפתור עצמו (2026-08-20).

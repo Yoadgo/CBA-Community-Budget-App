@@ -273,29 +273,30 @@ CBA.screens.events = (function () {
       '</span>';
   }
 
-  /* iOS (23.9.26, דיווח יועד): קישור עם download מוריד קובץ .ics ל"קבצים"
-     במקום לפתוח את יומן iOS. בספארי ב-iPhone/iPad פתיחת data:text/calendar
-     כעמוד (בלי download) מעלה את גיליון "הוספה ליומן" של המערכת. בכל שאר
-     המכשירים נשארת ההורדה הרגילה. פונקציה אחת לכל האפליקציה — גם עמוד הבית
-     (homeSchedule.js) קורא לה דרך calendarLinks.openApple. */
+  /* iOS — מה באמת קורה (24.9.26, הכרעת יועד אחרי בדיקה חיה):
+     באייפון **אין** דרך לפתוח קובץ יומן מהאינטרנט ישירות ביומן. מאז iOS 13
+     כל קובץ .ics — מקישור רגיל, מ-data: ומ-blob: — יורד קודם ל"הורדות",
+     ורק לחיצה עליו שם פותחת את גיליון "הוספה ליומן". הניסיון הקודם
+     (window.open על data:text/calendar) הוריד קובץ בדיוק כמו קישור download,
+     רק בלי שם קובץ ובלי להסביר למשתמש מה קרה.
+     לכן: מסלול אחד לכל המכשירים — הורדה עם שם קובץ ברור — ובאייפון גם
+     הודעה שאומרת איפה הקובץ ומה לעשות איתו. פונקציה אחת לכל האפליקציה,
+     גם עמוד הבית (homeSchedule.js) קורא לה דרך calendarLinks.openApple. */
   function isIOS() {
     var ua = navigator.userAgent || "";
     return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   }
   function openApple(ev) {
     var uri = appleIcsDataUri(ev);
-    if (isIOS()) {
-      var w = null;
-      try { w = window.open(uri, "_blank"); } catch (e) { w = null; }
-      if (!w) window.location.href = uri;
-      return;
-    }
     var link = document.createElement("a");
     link.href = uri;
     link.download = (ev.title || "event").replace(/[^\w\u0590-\u05FF -]/g, "").slice(0, 60) + ".ics";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    if (isIOS() && CBA.ui && CBA.ui.toast) {
+      CBA.ui.toast("הקובץ ירד. לחצו על חץ ההורדות למעלה ואז על הקובץ — היומן ייפתח עם האירוע.", "ok", 7000);
+    }
   }
 
   /* קישור ישיר לאירוע (23.9.26): כתובת האתר + #event=<מזהה>. app.js קורא את

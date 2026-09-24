@@ -84,5 +84,48 @@ ok('hideForm עדיין מנקה את הבחירה (ההגנה מרענון רק
   ok('hideForm ⇒ לא dirty בכלל', !ctx.isDirty());
 }
 
+section('3. app.js — אין שנת דמו בכותרת לפני מטען (24.9)');
+{
+  const m = app.match(/function renderYearSwitch\(\) \{[\s\S]*?\n  \}/);
+  ok('renderYearSwitch חולצה', !!m);
+  ok('🔴 בלי חיבור — השבב ריק', /if \(!CBA\.sheets\.isConnected\(\)\) \{ yearBox\.innerHTML = ""; return; \}/.test(m[0]));
+  ok('yearPanelHTML מגודר באותו שער', /function yearPanelHTML\(\) \{\s*\n\s*if \(!CBA\.sheets\.isConnected\(\)\) return "";/.test(app));
+  /* הרצה */
+  function run(connected) {
+    const box = { innerHTML: 'OLD' };
+    new Function('yearBox', 'CBA', m[0] + '; renderYearSwitch();')(box, {
+      sheets: { isConnected: () => connected },
+      data: { getCurrentYear: () => 'תשפ"ו' },
+      esc: s => s
+    });
+    return box.innerHTML;
+  }
+  ok('לא מחובר ⇒ ריק (לא "תשפ"ו" של mock.js)', run(false) === '');
+  ok('מחובר ⇒ השנה מוצגת', /תשפ"ו/.test(run(true)));
+}
+
+section('4. events.js — Apple באייפון: הורדה + הסבר (24.9, הכרעת יועד)');
+{
+  const ev = read('js/screens/events.js');
+  const m = ev.match(/function openApple\(ev\) \{[\s\S]*?\n  \}/);
+  ok('openApple חולצה', !!m);
+  ok('⚠️ אין יותר window.open על data: (זה הוריד קובץ בלי שם ובלי הסבר)', !/window\.open/.test(m[0]));
+  ok('מסלול אחד: קישור download עם שם קובץ .ics', /link\.download = [\s\S]*?\.ics"/.test(m[0]));
+  ok('באייפון — הודעה שמסבירה איפה הקובץ', /isIOS\(\)[\s\S]{0,80}CBA\.ui\.toast\("הקובץ ירד/.test(m[0]));
+  ok('ההודעה נשארת מספיק זמן (7 שניות)', /"ok", 7000\)/.test(m[0]));
+  ok('toast מקבל משך אופציונלי', /function toast\(message, kind, ms\)/.test(read('js/ui/dialog.js')) &&
+     /\(ms > 0\) \? ms : 2600/.test(read('js/ui/dialog.js')));
+  /* הרצה: iOS ⇒ toast; מחשב ⇒ בלי toast */
+  function run(ios) {
+    const calls = { click: 0, toast: [] };
+    const doc = { createElement: () => ({ click: () => calls.click++ }), body: { appendChild: () => {}, removeChild: () => {} } };
+    new Function('ev', 'document', 'CBA', 'isIOS', 'appleIcsDataUri', m[0] + '; openApple(ev);')(
+      { title: 'מסיבה' }, doc, { ui: { toast: (msg, k, ms) => calls.toast.push(ms) } }, () => ios, () => 'data:x');
+    return calls;
+  }
+  ok('אייפון: הורדה + הודעה', run(true).click === 1 && run(true).toast.length === 1);
+  ok('מחשב: הורדה בלבד, בלי הודעה', run(false).click === 1 && run(false).toast.length === 0);
+}
+
 console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);
