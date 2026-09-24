@@ -1676,6 +1676,112 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    /* ======================================================================
+     *  דיווחים על האפליקציה — appReports/{id}   (גל 4, 24.9.2026)
+     * ----------------------------------------------------------------------
+     *  מודל ב': Firestore הוא המסד החי. הדפדפן כותב את הדיווח ישירות,
+     *  וטאב "דיווחי אפליקציה" בגיליון הוא מראה בלבד (Apps Script כותב אותו).
+     *  🔒 אין שם, מייל או טלפון במסמך — רק uid ו-familyId. השם והמייל
+     *     נשלפים בשרת מהגיליון כשצריך לשלוח מייל.
+     *  🔴 שלושה כותבים, שלוש רשימות שדות סגורות:
+     *     · המדווח — יוצר פעם אחת, ומשלים תמונות על המסמך שלו בלבד.
+     *     · מנהל-על — "טופל" ותשובה. לעולם לא נוגע במה שהמדווח כתב.
+     *     · השרת — mailPending/pulse וכו' (חשבון שירות, עוקף כללים).
+     *  ⚠️ הגנן החיצוני אינו מדווח כאן — בדיוק כמו submitAppReport_ בשרת,
+     *     שהשער הכללי שלו חוסם חיצוני.
+     * ==================================================================== */
+    function arCreateFields() {
+      return ['id', 'uid', 'familyId', 'kind', 'items', 'screen', 'ver', 'srvVer',
+              'ua', 'perms', 'year', 'net', 'dialog', 'errors', 'trail', 'extra',
+              'photos', 'photosExpected', 'photosIncomplete',
+              'mailPending', 'mirrorPending', 'createdAt', 'schema'];
+    }
+
+    function arStrOk(f, max) {
+      return !request.resource.data.keys().hasAny([f]) ||
+             (request.resource.data[f] is string && request.resource.data[f].size() <= max);
+    }
+
+    function arTextOk() {
+      return arStrOk('screen', 200) && arStrOk('ver', 60) && arStrOk('srvVer', 60) &&
+             arStrOk('ua', 300) && arStrOk('perms', 200) && arStrOk('year', 40) &&
+             arStrOk('net', 80) && arStrOk('dialog', 200) && arStrOk('errors', 2500) &&
+             arStrOk('trail', 2500) && arStrOk('extra', 500);
+    }
+
+    function arShapeOk(docId) {
+      return request.resource.data.keys().hasOnly(arCreateFields()) &&
+             request.resource.data.keys().hasAll(
+               ['id', 'uid', 'familyId', 'kind', 'items', 'photos',
+                'mailPending', 'mirrorPending', 'createdAt', 'schema']) &&
+             request.resource.data.id == docId &&
+             request.resource.data.kind in ['תקלה', 'ייעול'] &&
+             request.resource.data.items is list &&
+             request.resource.data.items.size() >= 1 &&
+             request.resource.data.items.size() <= 5 &&
+             request.resource.data.items[0] is string &&
+             request.resource.data.items[0].size() <= 300 &&
+             request.resource.data.photos is list &&
+             request.resource.data.photos.size() == 0 &&
+             (!request.resource.data.keys().hasAny(['photosExpected']) ||
+              (request.resource.data.photosExpected is int &&
+               request.resource.data.photosExpected >= 0 &&
+               request.resource.data.photosExpected <= 3)) &&
+             (!request.resource.data.keys().hasAny(['photosIncomplete']) ||
+              request.resource.data.photosIncomplete is bool) &&
+             request.resource.data.mailPending == true &&
+             request.resource.data.mirrorPending == true &&
+             request.resource.data.createdAt == request.time &&
+             request.resource.data.schema is int &&
+             arTextOk();
+    }
+
+    /* יצירה: חבר פעיל, לא חיצוני, בשמו ובשם המשפחה שלו בלבד. */
+    function arCreateOk(docId) {
+      return isMember() && m().isExternal == false &&
+             request.resource.data.uid == request.auth.uid &&
+             request.resource.data.familyId == myFamilyId() &&
+             arShapeOk(docId);
+    }
+
+    /* המדווח משלים את התמונות שהעלה — ורק אותן. */
+    function arPhotosOk() {
+      return isMember() && resource.data.uid == request.auth.uid &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['photos', 'photosIncomplete']) &&
+             request.resource.data.photos is list &&
+             request.resource.data.photos.size() <= 3 &&
+             request.resource.data.photosIncomplete is bool;
+    }
+
+    /* מנהל-על: טופל/תשובה בלבד. mirrorPending חייב לעלות — אחרת הגיליון
+       לא יידע על השינוי. */
+    function arAdminOk() {
+      return isSuper() &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['done', 'doneAt', 'reply', 'replyLast', 'replyAt',
+                         'replyPending', 'mirrorPending']) &&
+             (!request.resource.data.keys().hasAny(['done']) || request.resource.data.done is bool) &&
+             (!request.resource.data.keys().hasAny(['reply']) ||
+              (request.resource.data.reply is string && request.resource.data.reply.size() <= 4000)) &&
+             (!request.resource.data.keys().hasAny(['replyLast']) ||
+              (request.resource.data.replyLast is string && request.resource.data.replyLast.size() <= 1000)) &&
+             (!request.resource.data.keys().hasAny(['replyPending']) ||
+              request.resource.data.replyPending is bool) &&
+             request.resource.data.mirrorPending == true;
+    }
+
+    function arReadOk() {
+      return isSuper();
+    }
+
+    match /appReports/{docId} {
+      allow read: if arReadOk();
+      allow create: if arCreateOk(docId);
+      allow update: if arPhotosOk() || arAdminOk();
+      allow delete: if false;
+    }
+
     /* ---------- ברירת המחדל ---------- */
 
     /* 🔴 **הכול אסור, אלא אם נפתח במפורש למעלה.**

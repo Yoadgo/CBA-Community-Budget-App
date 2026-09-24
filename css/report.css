@@ -273,3 +273,77 @@ body[data-screen="planning"] .rep-fab-wrap { bottom: 104px; }
      ומספרי שורה. ב-RTL הדפדפן היה מעיף את "planning.js:412" לתחילת השורה. */
   direction: ltr; text-align: start; max-height: 220px; overflow: auto;
 }
+
+/* ============================================================================
+ *  מסך הדיווחים — עיצוב גל 4 (24.9.2026)
+ *  כרטיס לכל דיווח עם פס צבע לפי סוג (אדום תקלה, ורוד הצעה), תגיות מצב,
+ *  מדדים בראש, קיבוץ לפי זמן. הצבעים מהטוקנים הקיימים בלבד.
+ * ========================================================================== */
+.rr-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 14px; }
+.rr-kpi { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 11px 13px; }
+.rr-kpi__v { font-size: 21px; font-weight: 700; color: var(--text); line-height: 1.2; }
+.rr-kpi__v.is-warn { color: var(--badge-warn); }
+.rr-kpi__l { font-size: 12px; color: var(--text-soft); margin-top: 2px; }
+
+.rr-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 6px; }
+.rr-seg { display: inline-flex; }
+.rr-filters { display: flex; gap: 6px; }
+.rr-filter {
+  padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
+  font: inherit; font-size: 12.5px; color: var(--text-soft); cursor: pointer;
+}
+.rr-filter.is-on { background: var(--text); border-color: var(--text); color: #fff; }
+
+.rr-group { font-size: 12px; font-weight: 600; color: var(--text-muted); margin: 16px 2px 7px; }
+
+.rr-card {
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+  padding: 12px 15px 12px 14px; margin-bottom: 8px;
+  border-inline-start: 4px solid var(--badge-danger);
+}
+.rr-card--idea { border-inline-start-color: #F9A8D4; }   /* ורוד בהיר — מובחן מהאדום של תקלה */
+.rr-seg .seg__opt { white-space: nowrap; }
+.rr-card.is-done { background: var(--hover); border-inline-start-color: var(--border); }
+
+.rr-card__head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 12px; color: var(--text-soft); }
+.rr-pill { padding: 2px 9px; border-radius: 999px; font-weight: 600; font-size: 11px; }
+.rr-pill--bug  { background: var(--danger-soft); color: var(--badge-danger); }
+.rr-pill--idea { background: var(--report-soft); color: var(--report); }
+.rr-pill--open { background: var(--hover); color: var(--text-soft); border: 1px solid var(--border); }
+.rr-pill--done { background: var(--ok-soft); color: var(--badge-ok); }
+.rr-card .rr-meta { margin: 0; font-size: 12px; color: var(--text-soft); }
+.rr-meta--who { color: var(--text); font-weight: 500; }
+.rr-chip { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--hover); color: var(--text-soft); }
+.rr-chip--err { background: var(--warn-soft); color: var(--badge-warn); }
+
+.rr-text { margin-top: 7px; font-size: 14.5px; line-height: 1.6; color: var(--text); }
+.rr-card .rr-items { margin-top: 7px; }
+.rr-done { margin-top: 9px; padding: 7px 11px; border-radius: 8px; background: var(--ok-soft); color: var(--badge-ok); font-size: 12.5px; }
+.rr-done--muted { background: var(--hover); color: var(--text-soft); }
+
+.rr-card .rr-acts { margin-top: 10px; }
+.rr-acts .rr-btn-main { background: var(--action); border-color: var(--action); color: #fff; }
+.rr-acts .rr-btn-main:hover { background: var(--action-hover); color: #fff; }
+.rr-acts button[aria-expanded="true"] { border-color: var(--text); color: var(--text); }
+
+.rr-tech { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--hover); }
+.rr-tech__meta { font-size: 12px; color: var(--text-soft); line-height: 1.6; }
+.rr-tech__b { margin-top: 8px; }
+.rr-tech__t { font-size: 11.5px; font-weight: 600; color: var(--text-soft); margin-bottom: 3px; }
+.rr-tech pre {
+  margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--surface); color: var(--text-soft);
+  font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  unicode-bidi: plaintext; text-align: start; max-height: 220px; overflow: auto;
+}
+
+.rep-copy {
+  align-self: flex-start; padding: 6px 12px; border-radius: 999px; border: 1px dashed var(--border);
+  background: transparent; font: inherit; font-size: 12.5px; color: var(--text-soft); cursor: pointer;
+}
+.rep-copy:hover { border-color: var(--text); color: var(--text); }
+
+@media (max-width: 640px) {
+  .rr-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rr-controls { flex-direction: column; align-items: stretch; }
+  .rr-seg .seg__opt { flex: 1 1 0; }
+}

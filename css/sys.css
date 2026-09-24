@@ -90,3 +90,90 @@
   .sys-row__name { flex: 1 1 60%; }
   .sys-row__path { flex: 1 1 100%; order: 3; padding-inline-start: 1.15rem; }
 }
+
+/* ============================================================================
+ *  גל 4 (24.9.2026) — מרכז "ניהול מערכת" ולשונית "תחקור"
+ * ========================================================================== */
+.hub-tabs { display: flex; margin: 0 0 16px; }
+.hub-tabs .seg__opt { flex: 1 1 0; padding: 9px 8px; font-size: 13.5px; }
+/* המסכים הוותיקים מצוירים לתוך החלונית — הכותרת שלהם מיותרת כאן. */
+.hub-pane > .screen-head, .hub-pane .rr-root > .screen-head { display: none; }
+
+.hub-toolbar { display: flex; gap: 8px; justify-content: flex-end; margin: 0 0 12px; flex-wrap: wrap; }
+.hub-card { margin-bottom: 12px; }
+.hub-h { font-weight: 600; font-size: 14px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.hub-h span { font-weight: 400; font-size: 12px; color: var(--text-muted); }
+.hub-empty { font-size: 13px; color: var(--text-muted); padding: 10px 0; }
+.hub-note { margin-top: 8px; font-size: 12px; color: var(--text-soft); line-height: 1.55; }
+.hub-note--err { color: var(--badge-danger); }
+.hub-link { border: 0; background: none; padding: 6px 0 0; font: inherit; font-size: 12.5px; color: var(--text-soft); text-decoration: underline; cursor: pointer; }
+
+.hub-chart { width: 100%; height: auto; display: block; }
+.hub-bar { fill: var(--text-muted); opacity: .55; }
+.hub-bar--hi { fill: var(--warn); opacity: 1; }
+.hub-bar--skip { fill: var(--border); opacity: 1; }
+.hub-ceil { stroke: var(--danger); stroke-width: 1; stroke-dasharray: 4 4; }
+.hub-base { stroke: var(--border); stroke-width: 1; }
+.hub-axis { font-size: 11px; fill: var(--text-muted); }
+
+.hub-stage { display: flex; align-items: center; gap: 10px; margin: 7px 0; font-size: 13px; }
+.hub-stage__n { flex: 0 0 150px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-stage__bar { flex: 1 1 auto; height: 9px; border-radius: 5px; background: var(--hover); overflow: hidden; }
+.hub-stage__bar span { display: block; height: 100%; border-radius: 5px; background: var(--text); opacity: .75; }
+.hub-stage__v { flex: 0 0 64px; text-align: left; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.hub-fail { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: var(--danger-soft); color: var(--badge-danger); }
+
+.hub-cmp { display: flex; gap: 8px; flex-wrap: wrap; }
+.hub-cmp select, .hub-cmp input {
+  height: 38px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; font: inherit; font-size: 14px; background: var(--surface);
+}
+.hub-cmp input { flex: 1 1 120px; min-width: 0; }
+.hub-cmp .hub-cmp__year { flex: 0 1 150px; }
+.hub-verdict { margin-top: 12px; padding: 9px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 500; }
+.hub-verdict--ok { background: var(--ok-soft); color: var(--badge-ok); }
+.hub-verdict--warn { background: var(--warn-soft); color: var(--badge-warn); }
+.hub-tbl { margin-top: 8px; overflow-x: auto; }
+.hub-tbl table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.hub-tbl th { text-align: right; font-weight: 600; color: var(--text-soft); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.hub-tbl td { padding: 6px 8px; border-bottom: 1px solid var(--hairline); vertical-align: top; unicode-bidi: plaintext; word-break: break-word; }
+.hub-tbl tr.is-diff td { background: var(--warn-soft); }
+
+.hub-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--hairline); font-size: 13px; }
+.hub-row:first-child { border-top: 0; }
+.hub-row span:last-child { color: var(--text-soft); flex: 0 0 auto; }
+.hub-row--err span:first-child { color: var(--text-soft); font-size: 12.5px; }
+
+@media (max-width: 640px) {
+  .hub-tabs .seg__opt { font-size: 12.5px; padding: 8px 4px; }
+  .hub-stage__n { flex-basis: 110px; }
+}
+
+/* ---------- ליטוש "מצב המערכת" (גל 4) — כרטיסים מרווחים, דגל כמתג ---------- */
+.hub-pane .card { border-radius: var(--radius-sm); }
+.sys-sec { font-size: 14px; margin-bottom: .8rem; }
+.sys-flag { padding: .8rem .2rem; }
+.sys-flag--on { box-shadow: none; }
+.sys-flag--on .sys-flag__name { color: var(--text); }
+.sys-flag__btn {
+  position: relative; min-width: 0; width: 46px; height: 26px; padding: 0; border-radius: 999px;
+  border: 0; background: var(--border); color: transparent; font-size: 0; cursor: pointer; flex: 0 0 auto;
+}
+.sys-flag__btn::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left var(--t);
+}
+.sys-flag--on .sys-flag__btn { background: var(--ok); }
+.sys-flag--on .sys-flag__btn::after { left: 23px; }
+.sys-flag__btn:disabled { opacity: .5; }
+#sys-fix-reports.sys-flag__btn {
+  width: auto; height: auto; padding: 6px 14px; font-size: 13px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border);
+}
+#sys-fix-reports.sys-flag__btn::after { display: none; }
+.sys-row { padding: .6rem .2rem; }
+.hub-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-soft); margin: 0 0 6px; }
+.hub-key { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-inline-end: 5px; vertical-align: middle; }
+.hub-key--ceil { height: 0; border-top: 2px dashed var(--danger); border-radius: 0; }
+.hub-key--hi { background: var(--warn); }
+.hub-key--skip { background: var(--border); }
+.hub-axisrow { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-muted); margin-top: 3px; }

@@ -3221,6 +3221,163 @@ CBA.data = (function () {
     });
   }
 
+  /* ==========================================================================
+   *  דיווחים על האפליקציה — Firestore   (גל 4, 24.9.2026)
+   * --------------------------------------------------------------------------
+   *  מודל ב': הדפדפן כותב את הדיווח ישירות ל-`appReports/{id}`, ו-Apps Script
+   *  שולח את המייל ומשקף לגיליון ברקע (Diag.gs). התושב מקבל "נשלח" תוך
+   *  עשרות אלפיות, במקום 2–3 שניות של Apps Script.
+   *
+   *  🔴 **נפילה לאחור בכתיבה היא בכוונה שקטה.** דיווח על תקלה הוא בדיוק
+   *     הרגע שבו משהו כנראה שבור — אם Firestore הוא השבור, המשתמש עדיין
+   *     חייב להצליח לדווח. כל כשל לפני שהמסמך נכתב → המסלול הישן.
+   *  🔒 אין שם ואין מייל במסמך — רק uid ו-familyId (כללי האבטחה אוכפים).
+   *  ⚠️ דגל אחד לקריאה ולכתיבה: `appReportsFromFirestore` (ברירת מחדל true).
+   * ======================================================================== */
+  var APP_REPORTS_FS_DEFAULT = true;
+  var appReportsSource = "";           /* מאיפה נקראה הרשימה האחרונה — קובע לאן כותבים "טופל" */
+
+  function appReportsFsReady(cb) {
+    if (!CBA.fb || !CBA.fb.createDoc || !CBA.fb.nextId) return cb(false);
+    var ready = (CBA.fb.userReady || CBA.fb.authReady);
+    try {
+      ready.call(CBA.fb, function (user) {
+        if (!user) return cb(false);
+        CBA.fb.ensureDb(function (err) {
+          if (err) return cb(false);
+          cb(!!CBA.fb.flag("appReportsFromFirestore", APP_REPORTS_FS_DEFAULT));
+        });
+      });
+    } catch (e) { cb(false); }
+  }
+
+  function appReportLegacySubmit(payload, cb) {
+    CBA.sheets.postRead("submitAppReport", payload, cb);
+  }
+
+  function appReportUploadPhotos(photos, done) {
+    var n = photos.length, slot = new Array(n), left = n;
+    if (!n) return done([]);
+    photos.forEach(function (ph, i) {
+      CBA.sheets.postRead("appReportPhotoOne", { photo: ph }, function (res) {
+        if (res && res.ok && res.id) slot[i] = res.id;
+        if (--left <= 0) done(slot.filter(Boolean));
+      });
+    });
+  }
+
+  function cut(v, max) { return String(v == null ? "" : v).substring(0, max); }
+
+  function submitAppReportFs(payload, cb) {
+    appReportsFsReady(function (on) {
+      if (!on) return appReportLegacySubmit(payload, cb);
+      var user = (window.CBA && CBA.user) || {};
+      var uid = CBA.fb.uid && CBA.fb.uid();
+      if (!uid || user.isExternal) return appReportLegacySubmit(payload, cb);
+      var photos = (payload.photos || []).slice(0, 3);
+      CBA.fb.nextId("appReport", function (e1, n) {
+        if (e1 || !n) return appReportLegacySubmit(payload, cb);
+        var id = String(n);
+        var doc = {
+          id: id, uid: uid, familyId: String(user.familyId || ""),
+          kind: payload.kind,
+          items: (payload.items || []).map(function (t) { return cut(t, 300); }).filter(Boolean).slice(0, 5),
+          screen: cut(payload.screen, 200), ver: cut(payload.ver, 60), srvVer: cut(payload.srvVer, 60),
+          ua: cut(payload.ua, 300), perms: cut(payload.perms, 200), year: cut(payload.year, 40),
+          net: cut(payload.net, 80), dialog: cut(payload.dialog, 200),
+          errors: cut(payload.errors, 2500), trail: cut(payload.trail, 2500), extra: cut(payload.extra, 500),
+          photos: [], photosExpected: photos.length, photosIncomplete: photos.length > 0,
+          mailPending: true, mirrorPending: true,
+          createdAt: CBA.fb.serverNow(), schema: 1
+        };
+        CBA.fb.createDoc("appReports", id, doc, function (e2) {
+          if (e2) {
+            try { if (CBA.diag && CBA.diag.error) CBA.diag.error("דיווח ל-Firestore נכשל, נשלח במסלול הישן · " + (e2.code || e2), "dataService.js"); } catch (x) {}
+            return appReportLegacySubmit(payload, cb);
+          }
+          /* מכאן הדיווח **קיים**. התושב חופשי ללכת; השאר ברקע. */
+          cb({ ok: true, id: id, photosPending: photos.length });
+          function notify() {
+            try { CBA.sheets.postRead("appReportNotify", { id: id }, function () {}); } catch (x) {}
+          }
+          if (!photos.length) return notify();
+          appReportUploadPhotos(photos, function (ids) {
+            CBA.fb.mergeDoc("appReports", id, {
+              photos: ids, photosIncomplete: ids.length < photos.length
+            }, function () { notify(); });
+          });
+        });
+      });
+    });
+  }
+
+  function tsIso(v) {
+    if (!v) return "";
+    try {
+      if (v.toDate) return v.toDate().toISOString();
+      if (v instanceof Date) return v.toISOString();
+      var d = new Date(v);
+      return isNaN(d.getTime()) ? "" : d.toISOString();
+    } catch (e) { return ""; }
+  }
+
+  function appReportRowFromDoc(d) {
+    var fid = String(d.familyId || "").trim();
+    return {
+      id: String(d.id || ""), date: tsIso(d.createdAt), familyId: fid,
+      name: (fid && familyDisplayName(fid)) || (fid ? "משפחה " + fid : "צוות / ללא משפחה"),
+      email: "", kind: String(d.kind || ""), items: d.items || [],
+      screen: d.screen || "", ver: d.ver || "", ua: d.ua || "", dialog: d.dialog || "",
+      perms: d.perms || "", year: d.year || "", srvVer: d.srvVer || "", net: d.net || "",
+      errors: d.errors || "", trail: d.trail || "", extra: d.extra || "", pulse: d.pulse || "",
+      photos: d.photos || [], photosIncomplete: !!d.photosIncomplete,
+      done: !!d.done, doneAt: tsIso(d.doneAt), reply: d.reply || "",
+      mailPending: !!d.mailPending, legacy: !!d.legacy, src: "fs"
+    };
+  }
+
+  function getAppReportsFs(cb) {
+    fsFirstRead("appReports", APP_REPORTS_FS_DEFAULT, function (done) {
+      CBA.fb.readCollection("appReports", function (err, docs) {
+        if (err) return done(err);
+        ensureFamilyNames(function () {
+          var rows = (docs || []).map(appReportRowFromDoc);
+          rows.sort(function (a, b) { return (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0); });
+          done(null, { ok: true, rows: rows, source: "fs" });
+        });
+      });
+    }, function (done) {
+      CBA.sheets.get({ action: "appReports" }, function (res) {
+        if (res && res.ok) (res.rows || []).forEach(function (r) { r.src = "sheet"; });
+        done(res);
+      });
+    }, function (res) {
+      appReportsSource = (res && res.source) || "sheet";
+      cb(res);
+    });
+  }
+
+  /* "טופל" / תשובה. row — השורה מהמסך (צריך את התשובות הקודמות כדי לצבור). */
+  function setAppReportStateFs(row, done, reply, cb) {
+    if (!row || row.src !== "fs") {
+      return CBA.sheets.postRead("setAppReportDone", { id: row && row.id, done: !!done, reply: reply || "" }, cb);
+    }
+    var now = CBA.fb.serverNow();
+    var patch = { done: !!done, doneAt: done ? now : null, mirrorPending: true };
+    reply = String(reply || "").trim().substring(0, 1000);
+    if (reply) {
+      var prev = String(row.reply || "").trim();
+      patch.reply = (prev ? prev + "\n---\n" + reply : reply).substring(0, 4000);
+      patch.replyLast = reply; patch.replyAt = now; patch.replyPending = true;
+    }
+    CBA.fb.mergeDoc("appReports", String(row.id), patch, function (err) {
+      if (err) return cb({ ok: false, error: "לא הצלחנו לשמור. נסו שוב." });
+      cb({ ok: true, reply: patch.reply });
+      /* מראה לגיליון + מייל התשובה — שגר ושכח; הסריקה השעתית היא הרשת. */
+      try { CBA.sheets.postRead("appReportReplyNotify", { id: String(row.id) }, function () {}); } catch (x) {}
+    });
+  }
+
   function gardenReportFsWrite(payload, cb, onProgress) {
     var user = (window.CBA && CBA.user) || {};
     var fid = String(user.familyId || "").trim();
@@ -5067,9 +5224,17 @@ CBA.data = (function () {
        submitAppReport פתוח לכל משתמש מחובר (הכפתור הצף בכל מסך);
        שני האחרים הם מנהל-על בלבד, והאכיפה בשרת. */
     submitAppReport: function (payload, cb) {
-      CBA.sheets.postRead("submitAppReport", payload, cb);
+      submitAppReportFs(payload, cb);
     },
-    getAppReports: function (cb) { CBA.sheets.get({ action: "appReports" }, cb); },
+    getAppReports: function (cb) { getAppReportsFs(cb); },
+    /* גל 4 — "טופל"/תשובה לפי המקור שממנו נקראה השורה. */
+    setAppReportState: function (row, done, reply, cb) { setAppReportStateFs(row, done, reply, cb); },
+    /* גל 4 — כלי התחקור (מנהל-על, רק בלחיצה). */
+    getDiagPulse: function (cb) { CBA.sheets.get({ action: "diagPulse" }, cb); },
+    diagCompare: function (kind, id, year, cb) {
+      CBA.sheets.get({ action: "diagCompare", kind: kind, id: id, year: year || "" }, cb);
+    },
+    appReportsSeed: function (cb) { CBA.sheets.get({ action: "appReportsSeed" }, cb); },
     setAppReportDone: function (id, done, reply, cb) {
       CBA.sheets.postRead("setAppReportDone", { id: id, done: !!done, reply: reply || "" }, cb);
     },

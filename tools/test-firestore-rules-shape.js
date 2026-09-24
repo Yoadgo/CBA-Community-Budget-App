@@ -128,7 +128,10 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                         הוא עבר להיות רכיב בתוך `gtUpdateOk`, שמאחד את כל
                         השומרים שעברו מ-Apps Script. ר' test-wave3-garden-writes.js. */
                      'gtUpdateOk',
-                     'glCreateOk', 'glResidentCreateOk'];
+                     'glCreateOk', 'glResidentCreateOk',
+                     /* 🔴 נוסף ביודעין 24.9 (גל 4) — דיווחים על האפליקציה: יצירה
+                        בשם עצמך, השלמת תמונות לדיווח שלך, וטופל/תשובה למנהל-על. */
+                     'arCreateOk', 'arPhotosOk', 'arAdminOk'];
 {
   const used = [];
   (CODE.match(/allow (create|update|delete)[^\n]*/g) || []).forEach(function (t) {
@@ -214,7 +217,10 @@ const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks', 'gar
                 'eventsCal',
                 /* 23.9 — מרכז ההתראות: "עדכון חדש" של המשפחה. קריאה בלבד,
                    רק של המשפחה שלך (canSeeInbox), כתיבה מהשרת בלבד. */
-                'notifyInbox'];
+                'notifyInbox',
+                /* 24.9 (גל 4) — דיווחים על האפליקציה. מודל ב': הדפדפן כותב.
+                   קריאה למנהל-על בלבד. בלי שם ובלי מייל במסמך. */
+                'appReports'];
 const found = (CODE.match(/^\s*match \/([A-Za-z0-9_]+)\//gm) || [])
                 .map(function (x) { return x.trim().replace(/^match \//, '').replace(/\/$/, ''); })
                 .filter(function (x) { return x !== 'databases'; });

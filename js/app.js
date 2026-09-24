@@ -290,6 +290,9 @@
        מנהל-על בלבד. השרת אוכף את זה בעצמו (flagsGet/flagSet ב-GET_ACTION_PERMS);
        כאן רק מסתירים, בדיוק כמו ב-appReports. */
     sysStatus: PERM.SUPER,
+    /* גל 4 (24.9) — "ניהול מערכת": כל מנהל (כמו מרכז ההתראות). הלשוניות
+       שבתוכו מסוננות לפי הרשאה — מנהל תחום רואה רק "התראות". ר' sysHub.js. */
+    sysHub: "ANY",
     /* בדיקת החזרים (PHASE 4.2) — אותה הרשאה כמו שאר מסכי הכסף. */
     reconcile: PERM.BUDGET
   };
@@ -336,7 +339,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "reconcile"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "sysHub", "reconcile"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -1751,20 +1754,14 @@
          מנהל-על: זו בעיה שפוגעת בכל מי שמתקין את האפליקציה למסך הבית. */
       tiles.push(['data-panel-update', ICON.refresh, 'עדכון גרסה', 'בדיקת עדכון גרסה']);
     }
-    if (currentArea === "admin" && canScreen("emailSettings")) {
-      /* 23.9 (יועד) — "מרכז התראות" ולא "התראות", ואייקון של מתגים ולא
-         פעמון: זה מסך ההגדרות של *כל הקהילה* (מי מקבל מה). הפעמון שמור
-         לאריח "התראות לטלפון" — הפעלת הפוש במכשיר שלי. */
-      tiles.push(['data-panel-goto="emailSettings"', ICON.sliders, 'מרכז התראות', 'מרכז התראות — מי מקבל מייל או פוש על כל פעולה']);
-    }
-    /* דיווחים על האפליקציה — מנהל-על בלבד. במכוון אריח בתפריט ולא טאב ניווט:
-       זה מסך שנכנסים אליו כשמתפנים לטפל במשוב, לא יעד יומיומי, ובר הניווט
-       התחתון במובייל כבר מחלק את רוחבו בין היעדים הקיימים. */
-    if (isSuper()) {
-      tiles.push(['data-panel-goto="appReports"', ICON.inbox, 'תיבת דיווחים', 'ניהול הדיווחים שהתקבלו']);
-      /* מצב המערכת — אותו נימוק בדיוק כמו "תיבת דיווחים": נכנסים אליו
-         כשמשהו לא מסתדר או כשמדליקים תחום, לא כיעד יומיומי. */
-      tiles.push(['data-panel-goto="sysStatus"', ICON.gauge, 'מצב המערכת', 'דגלים ובדיקת קריאה מ-Firestore']);
+    /* גל 4 (24.9, הכרעת יועד) — אריח אחד "ניהול מערכת" במקום שלושה
+       (מרכז התראות · תיבת דיווחים · מצב המערכת). הלשוניות בפנים מסוננות
+       לפי הרשאה, ולכן אף אחד לא מאבד גישה שהייתה לו:
+       · מנהל-על — בשני האזורים, כמו שני האריחים שהוחלפו.
+       · מנהל תחום — באזור הניהול, כמו מרכז ההתראות; רואה רק "התראות".
+       המסכים הוותיקים נשארים רשומים — קישורים ישנים אליהם ממשיכים לעבוד. */
+    if (isSuper() || (currentArea === "admin" && canScreen("emailSettings"))) {
+      tiles.push(['data-panel-goto="sysHub"', ICON.gauge, 'ניהול מערכת', 'דיווחים, תחקור, מצב המערכת והתראות']);
     }
     // נעלם מעצמו ברגע שהאפליקציה כבר מותקנת (ר' מסמך אפיון PWA, סעיפים 6-7)
     if (window.CBA.pwa && CBA.pwa.canInstall()) {
