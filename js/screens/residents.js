@@ -156,7 +156,10 @@ var RES_PERMS = [
   { code: "גינון",  label: "ניהול גינון",           hint: "משימות הצוות, תכנון שבועי ואישור ביצוע" },
   // תרבות (23.9.26) — לוח האירועים והסקרים. חייב להיות זהה ל-PERM_CULTURE
   // בשרת ול-PERM.CULTURE ב-app.js. לא פותחת אזור ניהול (ר' hasAnyAdmin שם).
-  { code: "תרבות",  label: "ניהול אירועים וסקרים",  hint: "פתיחת מעקב הגעה לאירועים ורשימת המאשרים" }
+  { code: "תרבות",  label: "ניהול אירועים וסקרים",  hint: "פתיחת מעקב הגעה לאירועים ורשימת המאשרים" },
+  // WeWork (25.9.26) — מידור עצמאי. חייב להיות זהה ל-PERM_WEWORK בשרת,
+  // ל-PERM.WEWORK ב-app.js ול-hasPerm('WeWork') בכללי Firestore.
+  { code: "WeWork", label: "ניהול WeWork",           hint: "שריוני עמדות, ביטולים וכללי השריון" }
 ];
 var RES_PERM_CODES = RES_PERMS.map(function (p) { return p.code; });
 

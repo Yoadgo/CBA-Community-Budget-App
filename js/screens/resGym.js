@@ -291,6 +291,10 @@ CBA.screens = CBA.screens || {};
               "</div>";
     }
 
+    /* 25.9 — כפתור הדלת (Nuki). מצייר רק כשהמכון עבר לדלת; אחרת נשאר
+       ריק והקוד למטה ממשיך כרגיל. ר' CBA.doorGym ב-js/ui/doorButton.js. */
+    html += '<div data-door-gym hidden></div>';
+
     // קוד הכניסה
     if (code) {
       html += codeCardHTML(code);
@@ -693,6 +697,7 @@ CBA.screens = CBA.screens || {};
     var renewBtn = container.querySelector("[data-gym-renew]");
     if (renewBtn) renewBtn.addEventListener("click", function () { doRenew(container, renewBtn); });
     wireCopy(container);
+    if (CBA.doorGym) CBA.doorGym.mount(container.querySelector("[data-door-gym]"));
   }
 
   function wireCopy(container) {

@@ -1782,6 +1782,81 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /* ======================================================================
+     *  דלת Nuki + WeWork   (25.9.2026, Door.gs)
+     * ----------------------------------------------------------------------
+     *  🔴 **הדפדפן לא כותב לאף אחד מהאוספים האלה.** יצירת שריון דורשת
+     *  בדיקת תפוסה תחת נעילה + אירוע ביומן גוגל, ופתיחת דלת דורשת טוקן
+     *  סודי — שניהם בשרת. כל `allow write` כאן הוא `false`.
+     *  🔑 אף מסמך לא נושא שם, מייל או טלפון — רק familyId / uid.
+     *  ⚠️ `m().isExternal == false` בכל שער: `authorize_` חוסם משתמש
+     *     חיצוני מכל פעולה שאינה גינון, והכלל לא רשאי להיות רחב ממנו.
+     * ==================================================================== */
+    function canSeeWework() {
+      return isMember() && m().isExternal == false;
+    }
+    function isInternalAdmin(p) {
+      return canSeeWework() && hasPerm(p);
+    }
+
+    /* כללי השריון — כל חבר (המסך בונה מהם את לוח השעות). */
+    match /weworkConfig/{docId} {
+      allow read: if canSeeWework();
+      allow write: if false;
+    }
+
+    /* תפוסה לפי שעה — ספירות בלבד, בלי מי. */
+    match /weworkDays/{docId} {
+      allow read: if canSeeWework();
+      allow write: if false;
+    }
+
+    /* שריון — המשפחה עצמה, ומנהל WeWork. שאילתה של תושב חייבת לסנן
+       `familyId == שלי`, אחרת היא נדחית לפני שנקרא מסמך אחד.
+       ⚠️ `fid != ''` תמיד — myFamilyId() מחזירה '' לשאינו-חבר. */
+    function canSeeWwBooking(fid) {
+      return canSeeWework() &&
+             (hasPerm('WeWork') || (fid is string && fid != '' && fid == myFamilyId()));
+    }
+    match /weworkBookings/{docId} {
+      allow read: if canSeeWwBooking(resource.data.familyId);
+      allow write: if false;
+    }
+
+    /* מצב הדלת לציבור: off/sim/live ו"המכון עבר לדלת". בלי סודות. */
+    match /doorConfig/{docId} {
+      allow read: if canSeeWework();
+      allow write: if false;
+    }
+
+    /* סוללה/חיבור — מנהל המכון בלבד. */
+    function canSeeDoorState() {
+      return isInternalAdmin('מכון');
+    }
+    match /doorState/{docId} {
+      allow read: if canSeeDoorState();
+      allow write: if false;
+    }
+
+    /* יומן הפתיחות — מנהל המכון את הכול; מנהל WeWork רק את כניסות
+       ה-WeWork (שאילתה שלו חייבת לסנן `kind == 'wework'`). */
+    function canSeeDoorLog(kind) {
+      return isInternalAdmin('מכון') || (isInternalAdmin('WeWork') && kind == 'wework');
+    }
+    match /doorLog/{docId} {
+      allow read: if canSeeDoorLog(resource.data.kind);
+      allow write: if false;
+    }
+
+    /* מצב הזמנת Nuki של מנוי — הוא עצמו, ומנהל המכון. */
+    function canSeeGymNuki(uid) {
+      return canSeeGymStatus(uid) || isInternalAdmin('מכון');
+    }
+    match /gymNuki/{uid} {
+      allow read: if canSeeGymNuki(uid);
+      allow write: if false;
+    }
+
     /* ---------- ברירת המחדל ---------- */
 
     /* 🔴 **הכול אסור, אלא אם נפתח במפורש למעלה.**

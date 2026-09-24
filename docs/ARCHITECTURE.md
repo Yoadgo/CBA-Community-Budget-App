@@ -512,3 +512,25 @@ var SCREEN_DOMAINS = { ..., xScreen: ["x"] };   // js/app.js
 🔑 **הכלל:** *כל טאב שהופך לאוסף חייב מזהה ייחודי מובטח.* לפני מעבר
 תחום — להשוות `count(rows)` מול `count(unique ids)`. אם הם לא שווים,
 המעבר ימחק נתונים בשקט.
+
+
+---
+
+## תחום: דלת Nuki + WeWork (25.9.2026)
+
+- **מודל:** Firestore הוא המסד היחיד, אבל **הדפדפן לא כותב** — כל כתיבה דרך
+  `apps-script/Door.gs`. הסיבה: יצירת שריון = בדיקת תפוסה תחת `LockService` +
+  אירוע ביומן הגוגל הייעודי; פתיחת דלת = טוקן Nuki שיושב ב-Script Properties.
+  זו "לוגיקה עסקית שכלל אינו יודע לאכוף" — ולכן שרת.
+- **אוספים:** `weworkConfig/main`, `weworkDays/{date}` (ספירות בלבד, נגזר מחדש
+  מהשריונים בכל כתיבה — לא מונה), `weworkBookings/{id}`, `doorConfig/public`,
+  `doorState/main`, `doorLog/{id}`, `gymNuki/{uid}`. כללים: `firestore.rules`,
+  תוצאות צפויות: `tools/firestore-rules-expectations.md` (W1–N4).
+- **מצבי הדלת:** `DOOR_MODE` = off / sim / live. live בלי טוקן ומזהה = off.
+  `DOOR_GYM_ON` מעביר את המכון מקוד לדלת: `handleGymMy_` מפסיק למסור קוד
+  ו-`gymStatusSyncAll_` מפסיק לכתוב `gymCode` (הסחיפה מוחקת).
+- **Nuki:** כל קריאה ב-`nukiReq_`. הזמנות למנויים עם `allowedUntilDate` = סוף
+  המנוי **ו-`allowedWeekDays: 127`** (בלעדיו הגבלת התאריכים לא נכנסת לתוקף).
+- **מלכודת שנתפסה בבנייה:** פעולה שלא ממופה ב-`ACTION_DOMAIN` נופלת ל-`'other'`,
+  וזה מבטל את מטמון המטען הראשי **של כל המשתמשים**. כל פעולות הדלת ממופות ל-`'door'`.
+- **בדיקות:** `tools/test-wework-door-2026-09-25.js`.

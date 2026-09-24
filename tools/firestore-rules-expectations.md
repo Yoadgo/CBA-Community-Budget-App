@@ -642,3 +642,42 @@ Apps Script החזיר **41 משימות**, Firestore **10**.
 
 ⚠️ מחשבון של יועד (מנהל-על) אפשר לאמת N1 (המשפחה שלו), N2 (משפחה אחרת — גם
 מנהל-על נחסם, הכלל אינו מתיר לו) ו-N4.
+
+---
+
+## דלת Nuki + WeWork (נרשם 25.9.2026, **לפני** פרסום הכללים ולפני כל בדיקה חיה)
+
+שבעה אוספים, **כולם `allow write: if false`** — הדפדפן לא כותב לאף אחד מהם
+(שריון = Apps Script עם נעילה + יומן גוגל; פתיחת דלת = טוקן סודי בשרת).
+אף מסמך לא נושא שם, מייל או טלפון — רק `familyId` / `uid`. ר' `apps-script/Door.gs`.
+
+תפקידים: **R** תושב פעיל (משפחה 12) · **R2** תושב פעיל ממשפחה אחרת (משפחה 7) ·
+**X** משתמש חיצוני (גנן) · **G** מנהל מכון (`מכון`) · **W** מנהל WeWork (`WeWork`) ·
+**S** מנהל-על · **L** מי שעזב (`active:false`).
+
+| # | מי | פעולה | צפוי |
+|---|---|---|---|
+| W1 | R | `get weworkConfig/main` | ✅ |
+| W2 | R | `get weworkDays/<תאריך>` | ✅ |
+| W3 🔴 | X | `get weworkConfig/main` / `weworkDays/…` | ❌ |
+| W4 | R | `query weworkBookings where familyId == '12'` | ✅ |
+| W5 🔴 | R | `query weworkBookings where familyId == '7'` | ❌ |
+| W6 🔴 | R | `query weworkBookings where date == <היום>` (בלי סינון משפחה) | ❌ נדחית לפני שנקרא מסמך |
+| W7 | W | `query weworkBookings where date == <היום>` | ✅ |
+| W8 🔴 | G (בלי WeWork) | `query weworkBookings where date == <היום>` | ❌ |
+| W9 🔴 | L | `get` על שריון של המשפחה שלו | ❌ |
+| W10 🔴 | כל אחד, כולל S | `set` / `update` / `delete` על כל אחד משבעת האוספים | ❌ |
+| D1 | R | `get doorConfig/public` | ✅ |
+| D2 🔴 | R / W | `get doorState/main` | ❌ |
+| D3 | G | `get doorState/main` | ✅ |
+| D4 | G | `query doorLog where day == <היום>` | ✅ |
+| D5 | W | `query doorLog where day == <היום> and kind == 'wework'` | ✅ |
+| D6 🔴 | W | `query doorLog where day == <היום>` (בלי `kind`) | ❌ — יומן המכון אינו שלו |
+| D7 🔴 | R | `query doorLog where day == <היום>` | ❌ |
+| N1 | מנוי מכון (uid A) | `get gymNuki/A` | ✅ |
+| N2 🔴 | מנוי מכון (uid A) | `get gymNuki/B` | ❌ |
+| N3 | G | `list gymNuki` | ✅ |
+| N4 🔴 | X עם הרשאת מכון (אם אי-פעם) | `list gymNuki` | ❌ (`isInternalAdmin` דורש לא-חיצוני) |
+
+⚠️ חשבון מנהל-על (יועד) מאמת רק את ✅ ואת W10. W5/W6/W8/D2/D6/D7/N2 דורשים
+חשבון תושב רגיל — `hasPerm()` מתקיים למנהל-על תמיד. לומר את זה במפורש, לא "נבדק".

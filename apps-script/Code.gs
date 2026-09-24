@@ -87,7 +87,13 @@ var PERM_GARDEN    = 'גינון';
  * parsePerms_ לא יזרוק אותה ושתגיע ל-members/{uid}.perms ול-CBA.perms.
  * ⚠️ חייב להיות זהה ל-PERM.CULTURE ב-app.js ולרשימה ב-residents.js. */
 var PERM_CULTURE   = 'תרבות';
-var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN, PERM_CULTURE];
+/* WeWork (25.9.26) — מידור עצמאי (יועד, 24.9: "מנהל WeWork הוא עצמאי").
+ * רואה ומבטל שריונים ועורך את כללי השריון. **לא** רואה את מצב המנעול —
+ * זה של מנהל המכון (PERM_GYM). ר' Door.gs.
+ * ⚠️ חייב להיות זהה ל-PERM.WEWORK ב-app.js, לרשימה ב-residents.js,
+ *    ול-hasPerm('WeWork') בכללי Firestore. */
+var PERM_WEWORK    = 'WeWork';
+var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN, PERM_CULTURE, PERM_WEWORK];
 var PERM_HEADER = 'הרשאות';
 /* עמודת גשר הזהות (2026-09-14, צעד 02ד). כמו עמודות האימייל וההרשאות, היא
    **פר-משבצת**: 'מזהה Firebase 1', 'מזהה Firebase 2' וכו'.
@@ -237,7 +243,15 @@ var ACTION_PERMS = {
   /* קליטת קובץ החיובים (PHASE 4.2). doPost ולא doGet כי הקובץ מגיע כ-Base64
      בגוף הבקשה. הפעולה **קוראת בלבד** — היא לא כותבת שום דבר לגיליון
      העבודה; היא ממירה קובץ ומחזירה טבלה. */
-  parseChargeFile: PERM_BUDGET
+  parseChargeFile: PERM_BUDGET,
+  /* דלת Nuki + WeWork (25.9.26, Door.gs). weworkBook / weworkCancel /
+     doorOpen / doorGymResend **אינן כאן בכוונה** — פתוחות לכל תושב פעיל,
+     והזכאות נבדקת בתוך הפעולה (שריון פעיל עכשיו / מנוי בתוקף / בעלות). */
+  weworkSaveConfig: PERM_WEWORK,
+  doorStatus: PERM_GYM,
+  doorSaveContact: PERM_GYM,
+  doorConfigure: PERM_SUPER,
+  doorTestConnection: PERM_SUPER
 };
 
 /* מה ש**הוסר** מכאן ב-2026-09-09, ולמה זה חשוב: היו כאן שמונה מפתחות
@@ -1813,6 +1827,16 @@ function doPostDispatch_(ss, body) {
       case 'saveGymQuestion':        return json_(saveGymQuestion_(ss, body));
       case 'deleteGymQuestion':      return json_(deleteGymQuestion_(ss, body));
       case 'deleteGymMembership':    return json_(deleteGymMembership_(ss, body));
+      // דלת Nuki + WeWork (25.9.26) — ר' Door.gs
+      case 'weworkBook':             return json_(weworkBook_(ss, body));
+      case 'weworkCancel':           return json_(weworkCancel_(ss, body));
+      case 'weworkSaveConfig':       return json_(weworkSaveConfig_(ss, body));
+      case 'doorOpen':               return json_(doorOpen_(ss, body));
+      case 'doorStatus':             return json_(doorStatus_(ss, body));
+      case 'doorConfigure':          return json_(doorConfigure_(ss, body));
+      case 'doorTestConnection':     return json_(doorTestConnection_(ss, body));
+      case 'doorSaveContact':        return json_(doorSaveContact_(ss, body));
+      case 'doorGymResend':          return json_(doorGymResend_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
 }
@@ -3827,6 +3851,11 @@ var ACTION_DOMAIN = {
   /* 🗓 GW-24.9:C7-domain */ gardenCrew: 'gardenAi',
   /* 23.9 — מרכז ההתראות: אינן נוגעות בנתוני המטען הראשי. */
   saveNotifyCell: 'notifySettings', saveNotifyGlobal: 'notifySettings',
+  /* 25.9 — דלת + WeWork: הכול ב-Firestore, אף אחת לא נוגעת במטען הראשי.
+     בלי המיפוי כל לחיצה על "פתיחת הדלת" הייתה מבטלת את המטמון של כולם. */
+  weworkBook: 'door', weworkCancel: 'door', weworkSaveConfig: 'door',
+  doorOpen: 'door', doorStatus: 'door', doorConfigure: 'door',
+  doorTestConnection: 'door', doorSaveContact: 'door', doorGymResend: 'door',
   notifyRsvpOpened: 'notifySettings', notifyServiceRecommend: 'notifySettings',
   saveCustomTrigger: 'notifySettings', customTriggerAction: 'notifySettings',
   notifyAiRewrite: 'notifySettings', notifyAiBuild: 'notifySettings', notifyAiSummary: 'notifySettings',
@@ -5919,6 +5948,19 @@ var DEFAULT_EMAIL_SETTINGS = [
     'התקבלה בקשת הרשמה למכון הכושר מ-{{שם}} ({{אימייל}}) עם דגל בריאות: {{שאלות}}.\n\nהבקשה ממתינה לאישור רופא ולאישורך.',
     'למנהלי מכון + מנהל-על. שים לב: בקשה נקייה (כל התשובות "לא") מאושרת אוטומטית ולא שולחת מייל למנהל', PERM_GYM, 'כן'],
 
+  /* דלת Nuki + WeWork (25.9.26) — ר' Door.gs */
+  ['WEWORK_BOOKED', 'השריון שלך ב-WeWork אושר',
+    'שלום {{שם}},\n\nשריינת {{עמדה}} ב-WeWork ל-{{תאריך}}, בשעות {{שעה}}.\n\nכשמגיעים, פותחים את הדלת מהכפתור במסך "WeWork" באפליקציה. הכפתור פעיל רק בזמן השריון.\n\nאם התוכניות השתנו, אפשר לבטל מאותו מסך — כך העמדה מתפנה לשכנים.\n\nבברכה,\nועד הקהילה',
+    'נשלח לתושב מיד אחרי שריון עמדה ב-WeWork', PERM_WEWORK, 'כן'],
+  ['WEWORK_CANCELED', 'השריון שלך ב-WeWork בוטל',
+    'שלום {{שם}},\n\nהשריון של {{עמדה}} ב-WeWork ל-{{תאריך}}, בשעות {{שעה}}, בוטל {{מי}}.\n\nאפשר לשריין מחדש מהאפליקציה בכל עת.\n\nבברכה,\nועד הקהילה',
+    'נשלח לתושב כששריון WeWork בוטל (על ידו או על ידי המנהל)', PERM_WEWORK, 'כן'],
+  ['GYM_NUKI_INVITE', 'הגישה שלך לדלת המכון מוכנה',
+    'שלום {{שם}},\n\nמעכשיו פותחים את דלת המכון בלי קוד. יש שתי דרכים:\n\n1. באפליקציית הקהילה — מסך "מכון כושר", כפתור "פתיחת הדלת".\n2. באפליקציית Nuki — שלחנו לך מייל נפרד מ-Nuki. מתקינים את האפליקציה, נרשמים עם אותו מייל ומאשרים את ההזמנה. משם אפשר לפתוח גם מהשעון או מווידג׳ט.\n\nהגישה בתוקף עד {{עד}}, יחד עם המנוי.\n\nבברכה,\nועד הקהילה',
+    'נשלח למנוי כשנפתחה לו גישה לדלת המכון (הזמנת Nuki)', PERM_GYM, 'כן'],
+  ['ADMIN_DOOR_ALERT', 'התראה מדלת הכניסה',
+    '{{בעיה}}\n\nזמן: {{זמן}}.\n\nמצב המנעול מופיע במסך "מכון כושר", בכרטיס "הדלת".', 'למנהלי מכון + מנהל-על: סוללה חלשה, ניתוק, או פתיחה שנכשלה', PERM_GYM, 'כן'],
+
   ['ADMIN_WEEKLY_DIGEST', 'סיכום שבועי — מה פתוח באפליקציית הוועד',
     'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו — חוצה מידורים ולכן שייך למנהל-על', PERM_SUPER, 'כן'],
   ['ADMIN_MONTHLY_DIGEST', 'תזכורת: בקשות החזר פתוחות לפני סגירת החלון ב-19 לחודש',
@@ -6634,6 +6676,18 @@ function hourlyJobsRun_() {
   } catch (e) {
     hjF(e);
     Logger.log('סנכרון עמוד הבית נכשל: ' + e);
+  }
+  /* דלת Nuki + WeWork (25.9.26) — זריעה, השלמת יומן, בריאות המנעול,
+     ובמצב live גם הזמנות Nuki למנויים ויבוא היומן של Nuki. ר' Door.gs. */
+  hjM('doorHourly_');
+  try {
+    var dh = (typeof doorHourly_ === 'function') ? doorHourly_(ss) : {};
+    if ((dh.cal && dh.cal.created) || (dh.gym && (dh.gym.invited || dh.gym.revoked || dh.gym.errors))) {
+      Logger.log('דלת: ' + JSON.stringify(dh));
+    }
+  } catch (e) {
+    hjF(e);
+    Logger.log('doorHourly_ נכשל: ' + e);
   }
   /* 🔴 מוני עמוד הבית (2026-09-16, פעולה 3) — חישוב מחדש של
      הכול. זו רשת הביטחון שתופסת את מה ש-`bumpRev_` לא
@@ -8060,6 +8114,8 @@ function gymStatusSyncAll_(ss) {
     var byEmail = gymUidByEmail_(ss);
     var rows = readTable_(ss, GYM_SHEET);
     var code = String((readGymSettings_(ss).settings['\u05e7\u05d5\u05d3 \u05db\u05e0\u05d9\u05e1\u05d4'] || '')).trim();
+    /* 25.9 — הדלת החליפה את הקוד ⇒ אין אוסף gymCode, והסחיפה מוחקת את הקיים. */
+    if (typeof doorGymOn_ === 'function' && doorGymOn_()) code = '';
     var live = {}, codeLive = {};
     /* 🔴🔴 **שורה אחת לאדם, ובחירה אחת.** בגיליון יכולות לשבת שתי
        שורות לאותו אדם (מנוי שפג + חדש), והקוד הקודם דחף את שתיהן
@@ -9015,7 +9071,8 @@ function handleGymMy_(p) {
       var isActive = String(membership['סטטוס'] || '').trim() === GYM_ST_ACTIVE;
       var until = gymToDate_(membership['בתוקף עד']);
       var stillValid = until ? (until.getTime() >= new Date().setHours(0, 0, 0, 0)) : false;
-      if (isActive && stillValid) entryCode = String(cfg.settings['קוד כניסה'] || '').trim();
+      /* 25.9 — כשהדלת מחליפה את הקוד (doorGymOn_), הקוד לא נמסר יותר. */
+      if (isActive && stillValid && !(typeof doorGymOn_ === 'function' && doorGymOn_())) entryCode = String(cfg.settings['קוד כניסה'] || '').trim();
 
       // עד מתי ההצהרה שנחתמה עדיין תקפה — זה מה שקובע אם חידוש ידרוש
       // למלא את השאלון מחדש או שיהיה שתי לחיצות בלבד.
@@ -10073,6 +10130,7 @@ function deleteGymMembership_(ss, body) {
       if (uid) {
         fsDelete_(fsDocPath_(FS_GYM_STATUS, uid));
         fsDelete_(fsDocPath_(FS_GYM_CODE, uid));
+        if (typeof doorGymNukiRevoke_ === 'function') doorGymNukiRevoke_(uid);   /* 25.9 — גם הרשאת Nuki, מיד */
       }
     } catch (fsErr) { Logger.log('ניקוי Firestore אחרי מחיקת מנוי נכשל: ' + fsErr); }
 
@@ -12327,7 +12385,13 @@ var BK_COLLECTIONS = [
      לנוהל שרץ. */
   { collection: 'gardenReports', tab: BK_PREFIX + 'דיווחי גינון' },
   { collection: 'gardenTasks',   tab: BK_PREFIX + 'משימות גינון' },
-  { collection: 'gardenLog',     tab: BK_PREFIX + 'יומן גינון' }
+  { collection: 'gardenLog',     tab: BK_PREFIX + 'יומן גינון' },
+  /* 25.9 — דלת + WeWork: Firestore הוא המסד היחיד שלהם. weworkDays
+     נגזר מהשריונים (wwRebuildDay_) ו-doorState נכתב מחדש כל שעה. */
+  { collection: 'weworkBookings', tab: BK_PREFIX + 'שריוני WeWork' },
+  { collection: 'weworkConfig',   tab: BK_PREFIX + 'הגדרות WeWork' },
+  { collection: 'doorLog',        tab: BK_PREFIX + 'יומן דלת' },
+  { collection: 'gymNuki',        tab: BK_PREFIX + 'הזמנות Nuki' }
 ];
 var BK_HEADERS = ['id', 'עודכן', 'schema', 'json'];
 

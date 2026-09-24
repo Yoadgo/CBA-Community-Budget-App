@@ -231,7 +231,8 @@ ok('והטאב שלו עובר את השער',
    sandbox.bkTabOk_((sandbox.BK_COLLECTIONS.find(c => c.collection === 'budgetTx') || {}).tab));
 /* ⚠️ 6 → 9 ב-16.9: הגינון עבר ל-Firestore, ולכן שלושת האוספים שלו
    נכנסו לגיבוי השעתי — הגיליון הוא הגיבוי שלהם. */
-ok('תשעה אוספים מגובים', sandbox.BK_COLLECTIONS.length === 9,
+/* 25.9 — 9→13: +weworkBookings, weworkConfig, doorLog, gymNuki (Door.gs) */
+ok('13 אוספים מגובים', sandbox.BK_COLLECTIONS.length === 13,
    String(sandbox.BK_COLLECTIONS.length));
 
 section('🔴 כלל האבטחה');

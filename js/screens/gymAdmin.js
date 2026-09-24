@@ -927,6 +927,8 @@ CBA.screens = CBA.screens || {};
           '<button type="button" class="btn-primary" id="ga-new">הקמת מנוי ידנית</button>' +
         '</div>' +
         '<div id="ga-kpis" class="gym-kpis"></div>' +
+        /* 25.9 — כרטיס הדלת (Nuki): מצב, יומן, פתיחה מרחוק. ר' doorAdmin.js */
+        '<div class="card club-card ga-door" id="ga-door"></div>' +
         '<div class="card club-card" id="ga-verify-card">' +
           '<div class="club-sec__title">ממתינים לאימות תשלום</div>' +
           '<div id="ga-verify">' + gaLoadingHTML() + '</div>' +
@@ -942,6 +944,7 @@ CBA.screens = CBA.screens || {};
 
       var newBtn = container.querySelector("#ga-new");
       if (newBtn) newBtn.addEventListener("click", function () { openCreate(container, load); });
+      if (CBA.doorAdmin) CBA.doorAdmin.render(container.querySelector("#ga-door"));
 
       var kpisEl    = container.querySelector("#ga-kpis");
       var membersEl = container.querySelector("#ga-members");

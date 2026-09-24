@@ -1,0 +1,236 @@
+/* ==========================================================================
+   wework.css — WeWork + כפתור הדלת (Nuki)   (25.9.2026)
+   תחיליות: ww- (מסך התושב), wa- (ניהול WeWork), da- (כרטיס הדלת בניהול
+   המכון), dr- (כפתור הדלת), dg- (הסבר הפתיחה), gym-door/gym-nuki (כרטיס המנוי).
+   לפי הסקיצה המאושרת (Artifact "סקיצת דלת Nuki"). טוקנים מ-style.css בלבד.
+   ========================================================================== */
+
+/* ---------- פריסה ---------- */
+.ww-layout { display: flex; flex-direction: column; gap: 16px; }
+.ww-card { padding: 16px; }
+.ww-book { display: flex; flex-direction: column; gap: 16px; }
+.ww-book__grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.ww-book__side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 12px; }
+@media (max-width: 900px) {
+  .ww-book__grid { grid-template-columns: minmax(0, 1fr); }
+  .ww-book__side { position: static; }
+}
+.ww-lbl { font-size: 12.5px; font-weight: 700; color: var(--text-soft); margin: 2px 0 8px; }
+.ww-sec-t { font-size: 15px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.ww-sec-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ww-note { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; margin-top: 8px; }
+.ww-why { font-size: 13px; color: var(--badge-danger); line-height: 1.55; margin-top: 6px; }
+
+/* ---------- ימים ---------- */
+.ww-days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; margin-bottom: 4px; }
+.ww-days::-webkit-scrollbar { display: none; }
+.ww-day {
+  flex: none; width: 52px; padding: 7px 0; border-radius: 14px; cursor: pointer; font-family: inherit;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  transition: background var(--t), transform var(--t);
+}
+.ww-day b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ww-day span { font-size: 11.5px; color: var(--text-soft); font-weight: 600; }
+.ww-day:active { transform: scale(.96); }
+.ww-day[aria-pressed="true"] { background: #2B2924; border-color: #2B2924; color: #FBFAF7; }
+.ww-day[aria-pressed="true"] span { color: rgba(251, 250, 247, .7); }
+.ww-day.is-past:not([aria-pressed="true"]) { opacity: .55; }
+
+/* ---------- סוג עמדה / מצב (גלולות נפרדות) ---------- */
+.ww-seats { display: flex; gap: 8px; flex-wrap: wrap; }
+.ww-seat {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-family: inherit;
+  padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 14px; font-weight: 700;
+}
+.ww-seat small { font-weight: 500; color: var(--text-soft); font-size: 12px; }
+.ww-seat[aria-pressed="true"] { background: #2B2924; border-color: #2B2924; color: #FBFAF7; }
+.ww-seat[aria-pressed="true"] small { color: rgba(251, 250, 247, .7); }
+.ww-seat__sq { width: 12px; height: 12px; border-radius: 4px; background: rgba(17, 24, 39, .12); }
+.ww-seat__sq--lounge { border-radius: 50%; }
+.ww-seat[aria-pressed="true"] .ww-seat__sq { background: rgba(251, 250, 247, .6); }
+
+/* ---------- לוח השעות ---------- */
+.ww-tl { display: flex; flex-direction: column; gap: 3px; }
+.ww-row {
+  display: grid; grid-template-columns: 48px 1fr 46px; align-items: center; gap: 10px;
+  width: 100%; border: none; background: none; font-family: inherit; color: inherit;
+  padding: 3px 6px; border-radius: 9px; cursor: pointer; text-align: start;
+  transition: background var(--t);
+}
+.ww-row:hover:not(:disabled) { background: rgba(17, 24, 39, .035); }
+.ww-row__h { font-size: 12.5px; color: var(--text-soft); font-weight: 600; font-variant-numeric: tabular-nums; direction: ltr; text-align: end; }
+.ww-row__seats { display: flex; gap: 4px; align-items: center; }
+.ww-row__free { font-size: 12px; font-weight: 700; color: var(--text-soft); text-align: end; font-variant-numeric: tabular-nums; }
+.ww-row__free.is-full { color: var(--badge-danger); }
+.ww-sq { flex: 1; height: 15px; border-radius: 4px; background: rgba(17, 24, 39, .06); display: inline-block; }
+.ww-sq.on { background: #9CA3AF; }
+.ww-sq--lounge { border-radius: 999px; flex: .9; }
+.ww-sq-gap { width: 6px; flex: none; }
+.ww-row.sel { background: rgba(5, 150, 105, .08); }
+/* הבחירה צובעת רק את העמדות מהסוג שנבחר (מחשב או כורסה) */
+.ww-tl[data-seat="desk"] .ww-row.sel .ww-sq:not(.on):not(.ww-sq--lounge),
+.ww-tl[data-seat="lounge"] .ww-row.sel .ww-sq--lounge:not(.on) { background: rgba(5, 150, 105, .38); }
+.ww-row.sel.full { background: rgba(244, 63, 94, .08); }
+.ww-tl[data-seat="desk"] .ww-row.sel.full .ww-sq:not(.on):not(.ww-sq--lounge),
+.ww-tl[data-seat="lounge"] .ww-row.sel.full .ww-sq--lounge:not(.on) { background: rgba(244, 63, 94, .35); }
+.ww-row.out .ww-row__h { color: var(--text-muted); }
+.ww-row.out:not(.sel) { background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(17, 24, 39, .025) 6px 12px); }
+.ww-row.past { opacity: .4; cursor: default; }
+.ww-more {
+  display: block; width: 100%; border: 1px dashed var(--border); background: none; font-family: inherit;
+  color: var(--text-soft); font-size: 12.5px; font-weight: 600; border-radius: 10px; padding: 6px; margin: 4px 0; cursor: pointer;
+}
+.ww-more:hover { color: var(--text); background: rgba(17, 24, 39, .03); }
+.ww-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--text-soft); margin-top: 10px; }
+.ww-legend .ww-sq { width: 12px; height: 12px; flex: none; vertical-align: -2px; margin-inline-end: 5px; }
+.ww-sq--sel { background: rgba(5, 150, 105, .45); }
+
+/* ---------- משך + סיכום ---------- */
+.ww-dur { display: grid; grid-template-columns: repeat(var(--n, 6), 1fr); gap: 5px; }
+.ww-dur button {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 8px 0;
+  font-family: inherit; font-weight: 800; font-size: 15px; color: var(--text); cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.ww-dur button[aria-pressed="true"] { background: #2B2924; border-color: #2B2924; color: #FBFAF7; }
+.ww-sum { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.ww-sum__when { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ww-sum__seat { font-size: 13px; color: var(--text-soft); margin-top: 2px; }
+.ww-out-tag { color: var(--badge-warn); font-weight: 600; }
+.ww-cta { width: 100%; margin-top: 12px; padding: 12px 16px; font-size: 15px; border-radius: 12px; }
+.ww-cta:disabled { background: #D1D5DB; border-color: #D1D5DB; cursor: not-allowed; }
+.ww-done { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.ww-done__ico { width: 52px; height: 52px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; }
+.ww-done__ico svg { width: 26px; height: 26px; }
+.ww-done__t { font-size: 17px; font-weight: 800; }
+.ww-done__s { font-size: 13px; color: var(--text-soft); line-height: 1.6; }
+
+/* ---------- השריון שלי ---------- */
+.ww-mine { display: flex; flex-direction: column; gap: 12px; }
+.ww-ticket { display: flex; align-items: center; gap: 12px; }
+.ww-ticket__ico { width: 42px; height: 42px; border-radius: 14px; background: rgba(17, 24, 39, .06); display: grid; place-items: center; flex: none; color: var(--text); }
+.ww-ticket__ico svg { width: 20px; height: 20px; }
+.ww-ticket__txt { flex: 1; min-width: 0; }
+.ww-ticket__t { font-weight: 800; font-size: 15.5px; }
+.ww-ticket__d { font-size: 13px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.ww-ticket__actions { display: flex; justify-content: center; }
+.ww-door { margin: 10px 0 8px; }
+.ww-next__row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; font-size: 13.5px; }
+.ww-next__row + .ww-next__row { border-top: 1px solid var(--hairline); }
+.ww-next .ww-sec-t { margin-bottom: 4px; }
+@media (min-width: 901px) {
+  .ww-ticket-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t door" "a door";
+                    grid-template-rows: 1fr 1fr; column-gap: 32px; row-gap: 14px; padding: 22px 26px; }
+  .ww-ticket-card .ww-ticket { grid-area: t; align-self: end; max-width: 460px; }
+  .ww-ticket-card .ww-ticket__txt { flex: 0 1 auto; }
+  .ww-ticket-card .ww-door { grid-area: door; margin: 0; }
+  .ww-ticket-card .ww-ticket__actions { grid-area: a; justify-content: flex-start; align-self: start; padding-inline-start: 54px; }
+}
+
+/* ---------- כפתור הדלת ---------- */
+.dr { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.dr-btn {
+  position: relative; width: 168px; height: 168px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--action); color: #fff; font-family: inherit; display: grid; place-items: center;
+  box-shadow: 0 18px 40px -12px rgba(17, 24, 39, .55), inset 0 1px 0 rgba(255, 255, 255, .18);
+  transition: transform 150ms, background 250ms;
+}
+.dr--md .dr-btn { width: 128px; height: 128px; }
+.dr-btn:active:not(:disabled) { transform: scale(.955); }
+.dr-btn:focus-visible { outline: 3px solid rgba(17, 24, 39, .35); outline-offset: 4px; }
+.dr-in { display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 800; font-size: 16px; line-height: 1.2; padding: 0 12px; }
+.dr--md .dr-in { font-size: 14px; }
+.dr-in svg { width: 38px; height: 38px; }
+.dr--md .dr-in svg { width: 30px; height: 30px; }
+.dr-btn[data-s="off"], .dr-btn[data-s="before"], .dr-btn[data-s="ended"] {
+  background: #E5E7EB; color: var(--text-muted); box-shadow: none; cursor: not-allowed;
+}
+.dr-btn[data-s="off"] .dr-in svg, .dr-btn[data-s="before"] .dr-in svg, .dr-btn[data-s="ended"] .dr-in svg { width: 28px; height: 28px; }
+.dr-btn[data-s="opening"] { background: #374151; cursor: progress; }
+.dr-btn[data-s="opened"] { background: var(--ok); }
+.dr-btn[data-s="error"] { background: var(--surface); color: var(--badge-danger); box-shadow: inset 0 0 0 2px var(--danger); }
+.dr-ring { position: absolute; inset: -8px; border-radius: 50%; border: 3px solid transparent; border-top-color: var(--action); display: none; }
+.dr-btn[data-s="opening"] .dr-ring { display: block; animation: dr-spin 1s linear infinite; }
+@keyframes dr-spin { to { transform: rotate(360deg); } }
+.dr-msg { font-size: 15px; font-weight: 700; color: var(--text); }
+.dr-sub { font-size: 13px; color: var(--text-soft); max-width: 30ch; line-height: 1.55; }
+.dr-extra { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 300px; }
+.dr-retry { width: 100%; }
+.dr-contact {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px;
+  border-radius: 12px; background: var(--danger-soft); color: var(--badge-danger); font-size: 13px; font-weight: 600;
+}
+.dr-phone { color: var(--text); font-variant-numeric: tabular-nums; user-select: all; }
+@media (prefers-reduced-motion: reduce) { .dr-btn[data-s="opening"] .dr-ring { animation: none; border-color: var(--action); } }
+
+/* ---------- כרטיס המנוי (מכון) ---------- */
+.gym-door { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 0 6px; }
+.gym-door__alt { font-size: 12.5px; color: var(--text-muted); }
+.gym-nuki { border: 1px solid var(--hairline); border-radius: 14px; padding: 12px 14px; margin: 10px 0 14px; background: var(--surface); }
+.gym-nuki__h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.gym-nuki__t { font-size: 13px; color: var(--text-soft); line-height: 1.6; }
+.gym-nuki__mail { direction: ltr; unicode-bidi: isolate; color: var(--text); }
+.gym-nuki__act { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+/* ---------- הסבר הפתיחה (בתוך .tr של tour.css) ---------- */
+.dg-demo { width: 100%; border-radius: 16px; background: var(--bg); border: 1px solid var(--border); padding: 10px 12px; font-size: 13px; text-align: start; }
+.dg-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; line-height: 1.5; }
+.dg-row + .dg-row { border-top: 1px solid var(--hairline); }
+.dg-row div div { color: var(--text-soft); font-size: 12px; }
+.dg-dot { width: 28px; height: 28px; border-radius: 9px; background: var(--action); flex: none; }
+
+/* ---------- ניהול: מדדים ורשימות ---------- */
+.wa-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 208px)); gap: 12px; margin-bottom: 16px; }
+.wa-kpi { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+.wa-kpi__l { font-size: 12.5px; color: var(--text-soft); font-weight: 600; }
+.wa-kpi__v { font-size: 24px; font-weight: 800; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.wa-kpi__v small { font-size: 13px; font-weight: 600; color: var(--text-soft); }
+.wa-kpi__s { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.wa-kpi--ok .wa-kpi__v { color: var(--ok); }
+.wa-kpi--danger .wa-kpi__v { color: var(--badge-danger); }
+.wa-kpi--warn .wa-kpi__s { color: var(--badge-warn); }
+.wa-kpi--muted .wa-kpi__v { color: var(--text-soft); }
+.wa-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .wa-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .wa-kpis { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); } }
+.wa-list { display: flex; flex-direction: column; margin-top: 8px; }
+.wa-row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; padding: 10px 0; font-size: 13.5px; }
+.wa-row + .wa-row { border-top: 1px solid var(--hairline); }
+.wa-row__t { font-variant-numeric: tabular-nums; color: var(--text-soft); font-weight: 600; font-size: 12.5px; min-width: 42px; }
+.wa-row__who { min-width: 0; }
+.wa-row__who b { font-weight: 700; }
+.wa-row__who div { font-size: 12px; color: var(--text-soft); }
+.wa-row__sp { width: 1px; }
+.wa-row.is-off { opacity: .55; }
+.wa-row--log { grid-template-columns: auto 1fr auto; }
+.wa-row--log.is-fail .wa-row__who div { color: var(--badge-danger); }
+.wa-rule { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; font-size: 13.5px; }
+.wa-rule + .wa-rule { border-top: 1px solid var(--hairline); }
+.wa-rule span { color: var(--text-soft); }
+.wa-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+@media (max-width: 520px) { .wa-form { grid-template-columns: 1fr; } }
+@media (max-width: 520px) {
+  .wa-row { grid-template-columns: auto 1fr auto; }
+  .wa-row .btn-ghost, .wa-row .wa-row__sp { grid-column: 2 / -1; justify-self: start; }
+}
+
+/* ---------- כרטיס הדלת בניהול המכון ---------- */
+.ga-door { margin-bottom: 20px; }
+.wa-kpis--4 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.da-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 900px) { .da-grid { grid-template-columns: minmax(0, 1fr); } }
+.da-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.da-inline input {
+  flex: 1; min-width: 110px; font-family: inherit; font-size: 14px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text);
+}
+.da-contact { display: flex; flex-direction: column; gap: 6px; }
+.da-contact .ww-note { margin: 0 0 4px; }
+.da-super { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
+.da-super .gym-field { margin-bottom: 0; }
+.da-super .btn-primary { align-self: flex-start; }
+.da-switch { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.da-switch input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--action); }
+.da-switch b { display: block; font-size: 14px; }
+.da-switch small { display: block; font-size: 12.5px; color: var(--text-soft); line-height: 1.5; margin-top: 2px; }

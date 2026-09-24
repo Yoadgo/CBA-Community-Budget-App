@@ -235,7 +235,9 @@
   // כלי ניהול (פתיחת מעקב הגעה, רשימת המאשרים). חייב להיות זהה ל-PERM_CULTURE
   // ב-Code.gs ולכלל eventRSVP ב-firestore.rules.
   const PERM = { SUPER: "על", BUDGET: "תקציב", CLUB: "מועדון", RESIDENTS: "תושבים",
-                 GYM: "מכון", GARDEN: "גינון", CULTURE: "תרבות" };
+                 GYM: "מכון", GARDEN: "גינון", CULTURE: "תרבות",
+                 /* 25.9 — WeWork, מידור עצמאי. ⚠️ זהה ל-PERM_WEWORK ב-Code.gs. */
+                 WEWORK: "WeWork" };
   const PERM_LABEL = {
     "על": "מנהל על", "תקציב": "ניהול תקציב ותשלומים",
     "מועדון": "ניהול מועדון", "תושבים": "ניהול תושבים",
@@ -243,12 +245,15 @@
     // "גינון" (2026-09-07) — הרשאת אזור-ניהול לכל דבר, בדיוק כמו "תקציב":
     // היא פותחת טאב ניהול משלה, וניתן להעניק אותה לתושב ממסך התושבים.
     "גינון": "ניהול גינון",
-    "תרבות": "ניהול אירועים וסקרים"
+    "תרבות": "ניהול אירועים וסקרים",
+    "WeWork": "ניהול WeWork"
   };
   // איזו הרשאה נדרשת לכל מסך ניהול
   const SCREEN_PERM = {
     budget: PERM.BUDGET, expenses: PERM.BUDGET, planning: PERM.BUDGET,
     clubAdmin: PERM.CLUB, residents: PERM.RESIDENTS,
+    // WeWork (25.9) — מידור עצמאי, נפרד ממנהל המכון (יועד, 24.9).
+    weworkAdmin: PERM.WEWORK,
     // ניהול עץ הוועד — מנהל-על בלבד (2026-08-10, לבקשת יועד: "הניהול עץ
     // צריך להיות רק באזור ניהול למי שיש הרשאות מנהל על"). התצוגה-לקריאה
     // המקבילה (resCommittee, אזור תושב) פתוחה לכל תושב וללא הרשאה כאן.
@@ -318,7 +323,7 @@
   // האם יש למשתמש בכלל דריסת רגל באזור הניהול
   function hasAnyAdmin() {
     // PERM.CULTURE אינה כאן בכוונה — אין לה מסכי ניהול, היא פועלת בתוך אזור התושב
-    return isSuper() || [PERM.BUDGET, PERM.CLUB, PERM.RESIDENTS, PERM.GYM, PERM.GARDEN]
+    return isSuper() || [PERM.BUDGET, PERM.CLUB, PERM.RESIDENTS, PERM.GYM, PERM.GARDEN, PERM.WEWORK]
       .some(function (p) { return myPerms().indexOf(p) !== -1; });
   }
   function canScreen(name) {
@@ -340,7 +345,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "sysHub", "reconcile"],
+      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "weworkAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "sysHub", "reconcile"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -355,7 +360,7 @@
         // (PERM.CLUB מול PERM.GYM), ו-rebuildAreas כבר מסנן פריט-פריט — כך
         // שמנהל מועדון יראה כאן פריט אחד, ומי שאין לו אף אחד מהם לא יראה
         // את הקבוצה בכלל. אין צורך בשום לוגיקה מיוחדת.
-        { group: "mitkanim", label: "מתקנים", items: [["clubAdmin", "שריון מועדון"], ["gymAdmin", "מכון כושר"]] },
+        { group: "mitkanim", label: "מתקנים", items: [["clubAdmin", "שריון מועדון"], ["gymAdmin", "מכון כושר"], ["weworkAdmin", "WeWork"]] },
         // (2026-08-18, גל 2 — לבקשת יועד: "אני רוצה קוהרנטיות בין אזור תושב
         // למנהל. אם ועד ורשימת תושבים זה תחת השיכון באזור תושב אז שיהיה ככה גם
         // אצל המנהל".) "תושבים", "ועד השיכון" ו"שירותים" עברו לקבוצת "השיכון" —
@@ -395,7 +400,7 @@
       def: "resHome",
       // resMe ("הפרטים שלי") רשום כמסך אבל **לא כטאב** — מגיעים אליו מתפריט
       // המשתמש ומעמוד הבית. הוא על *אותי*, לא יעד ניווט, ושורת הניווט כבר בת 5.
-      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resDirectory", "resMap", "resCommittee", "resServices", "resGarden", "resGardenNew", "events"],
+      screens: ["resHome", "resMe", "resRequests", "resSubmit", "resReserve", "resGym", "resWework", "resDirectory", "resMap", "resCommittee", "resServices", "resGarden", "resGardenNew", "events"],
       // "שכנים"/"מפת השיכון" אוחדו לכפתור-קבוצה אחד "השיכון" (2026-08-08) — לחיצה
       // עליו פותחת שני תת-כפתורים במקום לנווט ישר (ר' renderNav/toggleGroup).
       // "ועד השיכון" הצטרף כפריט שלישי (2026-08-09) — עץ הוועד, פתוח לכל תושב
@@ -415,7 +420,8 @@
         // "מתקנים" (2026-08-19) — שריון המועדון ומכון הכושר אוחדו לקבוצה אחת,
         // באותה תבנית של "השיכון". נעשה רק עכשיו, בשלב שבו נולד הפריט השני:
         // קבוצה מתקפלת עם פריט יחיד היא רעש ויזואלי בלי תועלת.
-        { group: "mitkanim", label: "מתקנים", items: [["resReserve", "שריון מועדון"], ["resGym", "מכון כושר"]] },
+        // WeWork (25.9) — פריט שלישי, "תחת מתקנים כמובן" (יועד, 24.9).
+        { group: "mitkanim", label: "מתקנים", items: [["resReserve", "שריון מועדון"], ["resGym", "מכון כושר"], ["resWework", "WeWork"]] },
         // "שירותים" (2026-08-18) הצטרף כפריט רביעי לאותה קבוצה ולא ככפתור עצמאי:
         // הוא שייך תמטית ל"מה יש בשיכון", ושורת הניווט הראשית כבר עמוסה.
         { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"], ["resCommittee", "ועד השיכון"], ["resServices", "שירותים"]] },
@@ -494,6 +500,8 @@
     // מכון כושר — משקולת. "מתקנים" (כפתור-הקבוצה) — מבנה עם גג, מייצג את
     // המתקנים הפיזיים בשיכון כמכלול ולא מסך ספציפי.
     gymAdmin:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/></svg>',
+    resWework:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="10" rx="1.5"/><path d="M2 19h20M9 15l-1 4M15 15l1 4"/></svg>',
+    weworkAdmin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="10" rx="1.5"/><path d="M2 19h20M9 15l-1 4M15 15l1 4"/></svg>',
     resGym:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/></svg>',
     myarea:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>',
     mitkanim:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205 3 1m1.5.5-1.5-.5M6.75 7.364V3h-3v18m3-13.636 10.5-3.819"/></svg>',
