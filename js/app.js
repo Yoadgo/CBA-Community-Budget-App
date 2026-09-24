@@ -301,8 +301,9 @@
     var u = simUser || currentUser;
     if (!u) return [];
     if (Array.isArray(u.perms)) return u.perms;
-    // תאימות לאחור: מושב ישן/הדמיה שנשמרו לפני שהיו הרשאות
-    return (u.role && u.role.indexOf("מנהל") !== -1) ? [PERM.SUPER] : [];
+    /* 24.9 — אין יותר נפילה לעמודת "תפקיד" הישנה (גם לא בשרת, ר' permissionsFor_).
+       מושב בלי perms = בלי הרשאות; ההתחברות הבאה תביא אותן מהשרת. */
+    return [];
   }
   function isSuper() { return myPerms().indexOf(PERM.SUPER) !== -1; }
   /* משתמש חיצוני (עמודת "סוג משתמש" בגיליון) — קבלן הגינון. השרת חוסם לו

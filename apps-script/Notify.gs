@@ -213,31 +213,32 @@ function notifyDirectory_(ss) {
   if (rsh) {
     var values = rsh.getDataRange().getValues();
     var headers = (values[0] || []).map(function (h) { return String(h).trim(); });
-    var emailCols = [], permCols = [], uidCols = [], roleCol = -1, statusCol = -1, idCol = -1, houseCol = -1, extCol = -1;
+    var emailCols = [], permCols = [], uidCols = [], firstCols = [], statusCol = -1, idCol = -1, houseCol = -1, extCol = -1, famNameCol = -1;
     headers.forEach(function (h, i) {
       if (h.indexOf(FB_UID_HEADER) !== -1) uidCols.push(i);
       else if (h.indexOf(PERM_HEADER) !== -1) permCols.push(i);
-      else if (h.indexOf('שם פרטי') !== -1) { /* לא נדרש */ }
+      else if (h.indexOf('שם פרטי') !== -1) firstCols.push(i);   // 24.9 — לשם הנמען במייל
       else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
-      else if (h.indexOf('תפקיד') !== -1) roleCol = i;
+      else if (h.indexOf('תפקיד') !== -1) { /* 24.9 — לא נקרא יותר, ר' permissionsFor_ */ }
       else if (h.indexOf('סטטוס') !== -1) statusCol = i;
       else if (h.indexOf(RESIDENT_ID_HEADER) !== -1) idCol = i;
       else if (h.indexOf(EXTERNAL_HEADER) !== -1) extCol = i;
-      else if (h.indexOf('משפחה') !== -1) { /* לא נדרש */ }
+      else if (h.indexOf('משפחה') !== -1 && famNameCol === -1) famNameCol = i;
       else if (h.indexOf('בית') !== -1 && houseCol === -1) houseCol = i;
     });
     for (var r = 1; r < values.length; r++) {
       var row = values[r];
       var active = !(statusCol > -1 && String(row[statusCol]).indexOf('פעיל') === -1);
-      var role = roleCol > -1 ? String(row[roleCol]).trim() : '';
       var fam = (idCol > -1 ? String(row[idCol]).trim() : '') || (houseCol > -1 ? String(row[houseCol]).trim() : '');
+      var famName = famNameCol > -1 ? String(row[famNameCol]).trim() : '';
       var ext = extCol > -1 && String(row[extCol]).trim().indexOf(EXTERNAL_VALUE) !== -1;
       for (var c = 0; c < emailCols.length; c++) {
         var email = String(row[emailCols[c]] || '').trim();
         if (!email) continue;
-        var perms = parsePerms_(permCols[c] !== undefined ? row[permCols[c]] : '');
-        if (!perms.length && role.indexOf('מנהל') !== -1) perms = [PERM_SUPER];
+        var perms = parsePerms_(permCols[c] !== undefined ? row[permCols[c]] : '');   // 24.9 — בלי נפילה ל"תפקיד"
         out.push({ email: email, key: normalizeEmail_(email), familyId: fam, perms: perms,
+                   firstName: firstCols[c] !== undefined ? String(row[firstCols[c]] || '').trim() : '',
+                   family: famName,
                    uid: uidCols[c] !== undefined ? String(row[uidCols[c]] || '').trim() : '',
                    isSuper: perms.indexOf(PERM_SUPER) !== -1, isExternal: ext, active: active });
       }
@@ -246,6 +247,15 @@ function notifyDirectory_(ss) {
   if (!NOTIFY_MEMO_) NOTIFY_MEMO_ = {};
   NOTIFY_MEMO_.dir = out;
   return out;
+}
+
+/** 24.9 — רשומת האדם לפי מייל (שם פרטי, משפחה, …), או null. */
+function notifyPersonByEmail_(ss, email) {
+  var k = normalizeEmail_(email);
+  if (!k) return null;
+  var dir = notifyDirectory_(ss);
+  for (var i = 0; i < dir.length; i++) if (dir[i].key === k) return dir[i];
+  return null;
 }
 
 function notifyFamilyOf_(ss, email) {
@@ -548,6 +558,15 @@ function notify_(ss, trigId, ctx, roles) {
         /* 🔴 לכל התושבים — בעותק מוסתר. עד היום כל הכתובות הופיעו
            בשדה "אל" של אותו מייל, וכל תושב ראה את המייל של כולם. */
         sendMailBcc_(to, subject, plain + '\n\n' + link, html);
+      } else if (slot.role === 'r') {
+        /* 24.9 — מייל לכל דייר בשמו (דר קיבלה "שלום יועד גולן"). ר'
+           residentVarsFor_ ב-Code.gs. */
+        to.forEach(function (em) {
+          var v = residentVarsFor_(ss, em, slot.vars);
+          var pl = renderTemplate_(t.body, v);
+          sendMail_([em], renderTemplate_(t.subject, v), pl + '\n\n' + link,
+                    buildEmailHtml_(pl, link, 'פתיחת האפליקציה', accent));
+        });
       } else {
         sendMail_(to, subject, plain + '\n\n' + link, html);
       }

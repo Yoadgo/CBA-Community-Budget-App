@@ -32,6 +32,14 @@ CBA.tour = (function () {
   var el = null, idx = 0, deck = [], lastFocus = null;
   var dir = 0;             // כיוון המעבר האחרון: 1 קדימה, -1 אחורה, 0 פתיחה — לאנימציית הכניסה
   var AUTO_KEY = "cba_tour_auto_v1";   // רשת ביטחון מקומית, ר' maybeAutoStart
+  /* 🔴 24.9 — המפתח המקומי הוא **לכל משתמש**. עד היום הוא היה אחד לדפדפן,
+     ולכן בן/בת זוג שנכנס/ה מאותו מכשיר אחרי מי שכבר ראה את הסיור — לא קיבל
+     אותו לעולם. אותה סיבה בדיוק כמו "סיור נצפה" בשרת, שהפך ללכל דייר. */
+  function autoKey() {
+    var u = (window.CBA && CBA.user) || {};
+    var who = String(u.email || "").trim().toLowerCase();
+    return who ? AUTO_KEY + ":" + who : AUTO_KEY;
+  }
 
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
   function num(v, d) { var n = parseInt(v, 10); return isNaN(n) ? (d || 0) : n; }
@@ -638,19 +646,30 @@ CBA.tour = (function () {
   }
 
   /* ------------------------------------------------------------- טעינה --- */
+  /* 24.9 — מי שמבקש בזמן שטעינה כבר בדרך **מצטרף אליה** במקום לקבל false.
+     עד היום maybeAutoStart שנקרא בזמן ש-newCount (עמוד הבית) כבר טען קיבל
+     false, ו-autoDone כבר היה true — והסיור לא נפתח בכל הסשן. */
+  var loadWaiters = [];
   function load(cb) {
     if (loaded) { if (cb) cb(true); return; }
-    if (loading) { if (cb) cb(false); return; }
-    if (!(CBA.data && CBA.data.getTour)) { if (cb) cb(false); return; }
+    if (cb) loadWaiters.push(cb);
+    if (loading) return;
+    if (!(CBA.data && CBA.data.getTour)) { flushLoad(false); return; }
     loading = true;
     CBA.data.getTour(function (res) {
       loading = false;
-      if (!res || !res.ok) { if (cb) cb(false); return; }
-      steps = res.steps || [];
-      seen = num(res.seen, 0);
-      loaded = true;
-      if (cb) cb(true);
+      if (!res || !res.ok) { flushLoad(false); return; }
+      if (!loaded) {   // seed() עשוי היה להקדים אותנו
+        steps = res.steps || [];
+        seen = num(res.seen, 0);
+        loaded = true;
+      }
+      flushLoad(true);
     });
+  }
+  function flushLoad(ok) {
+    var list = loadWaiters; loadWaiters = [];
+    list.forEach(function (fn) { try { fn(ok); } catch (e) {} });
   }
 
   /* שמירת "ראיתי עד כאן". שומרים גם מקומית מיד — כדי שכישלון רשת רגעי לא
@@ -658,11 +677,11 @@ CBA.tour = (function () {
   function markSeen(v) {
     if (v <= seen) return;
     seen = v;
-    try { localStorage.setItem(AUTO_KEY, String(v)); } catch (e) {}
+    try { localStorage.setItem(autoKey(), String(v)); } catch (e) {}
     if (CBA.data && CBA.data.markTourSeen) CBA.data.markTourSeen(v, function () {});
   }
   function localSeen() {
-    try { return num(localStorage.getItem(AUTO_KEY), 0); } catch (e) { return 0; }
+    try { return num(localStorage.getItem(autoKey()), 0); } catch (e) { return 0; }
   }
 
   /* -------------------------------------------------------------- ציור --- */
@@ -846,7 +865,8 @@ CBA.tour = (function () {
     if (autoDone) return;
     autoDone = true;
     load(function (ok) {
-      if (!ok || !steps.length) return;
+      if (!ok) { autoDone = false; return; }   // 24.9 — כשל רשת: מותר לנסות שוב בקריאה הבאה
+      if (!steps.length) return;
       if (seen > 0 || localSeen() > 0) return;
       if (document.getElementById("login-gate") &&
           !document.getElementById("login-gate").hidden) return;
@@ -872,6 +892,7 @@ CBA.tour = (function () {
     steps = res.steps || [];
     seen = num(res.seen, 0);
     loaded = true;
+    flushLoad(true);   // 24.9 — מי שחיכה לטעינה שבדרך מקבל את ההזרעה
     return true;
   }
 

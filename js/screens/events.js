@@ -202,18 +202,22 @@ CBA.screens.events = (function () {
   /**
    * הבאת אירועים מכל המקורות — הפונקציה הראשית שהמסך קורא לה.
    */
+  /* ⚡ 24.9 (דיווח 20 של דר: "לוח אירועים לא עולה כמעט 2 דקות") — שלוש
+     הטעינות **במקביל**. עד היום הן רצו בטור, וכל אחת עם פסק זמן משלה
+     (Firestore 8ש', Apps Script 30ש'), כך שבמקרה הרע ההמתנות הצטברו.
+     הן בלתי תלויות זו בזו: כל אחת כותבת לשדה אחר ב-state. */
   function loadEvents(year, callback) {
     state.loading = true;
     state.error = null;
-
-    loadCommunityEvents(year, function () {
-      loadPrivateEvents(function () {
-        loadRsvpEnabledIds(function () {
-          state.loading = false;
-          if (callback) callback();
-        });
-      });
-    });
+    var left = 3;
+    function one() {
+      if (--left > 0) return;
+      state.loading = false;
+      if (callback) callback();
+    }
+    loadCommunityEvents(year, one);
+    loadPrivateEvents(one);
+    loadRsvpEnabledIds(one);
   }
 
   /* ==========================================================================
