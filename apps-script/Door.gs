@@ -112,6 +112,13 @@ function doorMode_() {
  *  בשני מקומות: handleGymMy_ (לא מוסר קוד) ו-gymStatusSyncAll_ (לא כותב
  *  gymCode, והסחיפה מוחקת את הקיימים). */
 function doorGymOn_() {
+  /* 🔴 צוות אדום 25.9: **רק ב-live**. אחרת הקוד נעלם והדלת לא נפתחת
+     (off) או "נפתחת" בהדמיה — ואף מנוי לא נכנס. אם הטוקן/המזהה נמחקים
+     והמצב נופל ל-off, הקוד חוזר לבד בכל המקומות ששואלים כאן. */
+  try { return doorProp_('DOOR_GYM_ON') === '1' && doorMode_() === 'live'; } catch (e) { return false; }
+}
+/** מה שמנהל-העל ביקש (להצגה במסך), בלי קשר למצב בפועל. */
+function doorGymWanted_() {
   try { return doorProp_('DOOR_GYM_ON') === '1'; } catch (e) { return false; }
 }
 function doorContact_() {
@@ -198,10 +205,14 @@ function setupWeworkModule() {
 function wwCalendar_() {
   var id = doorProp_('WEWORK_CALENDAR_ID');
   if (id) {
-    try { var c = CalendarApp.getCalendarById(id); if (c) return c; } catch (e) { }
+    var c = CalendarApp.getCalendarById(id);
+    if (c) return c;
+    /* 🔴 צוות אדום 25.9: לא יוצרים יומן חדש בשקט על תקלה רגעית — זה היה
+       מייתם את כל האירועים הקיימים. יומן שנמחק באמת: למחוק את
+       WEWORK_CALENDAR_ID ב-Script Properties, והשעתי ייצור ויחזיר הכול. */
+    throw new Error('יומן WeWork לא נמצא (' + id + ')');
   }
-  /* 🔴 נוצר פעם אחת ונשמר. אם מישהו מחק אותו — נוצר חדש, והשריונים
-     הקיימים ייכתבו אליו מחדש ב-wwCalendarReconcile_ (שעתי). */
+  /* נוצר פעם אחת ונשמר. */
   var cal = CalendarApp.createCalendar('WeWork — שריונים', { timeZone: wwTz_(), color: CalendarApp.Color.TEAL });
   doorPropSet_('WEWORK_CALENDAR_ID', cal.getId());
   return cal;
@@ -226,7 +237,7 @@ function wwCreateEvent_(b, famName) {
   return ev.getId();
 }
 function wwDeleteEvent_(evId) {
-  if (!evId) return;
+  if (!evId || !doorProp_('WEWORK_CALENDAR_ID')) return;
   try { var ev = wwCalendar_().getEventById(evId); if (ev) ev.deleteEvent(); } catch (e) { Logger.log('wwDeleteEvent_: ' + e); }
 }
 
@@ -325,9 +336,12 @@ function weworkBook_(ss, body) {
 
     /* יומן — אם נכשל, השריון עדיין תקף. השעתי ישלים את האירוע. */
     try { b.calEventId = wwCreateEvent_(b, perm.family); } catch (e) { Logger.log('weworkBook_ calendar: ' + e); }
-    fsSet_(fsDocPath_(FS_WW_BOOK, b.id), b);
+    try { fsSet_(fsDocPath_(FS_WW_BOOK, b.id), b); }
+    catch (e) { wwDeleteEvent_(b.calEventId); throw e; }   /* בלי שריון — בלי אירוע יתום */
     list.push(b);
-    wwRebuildDay_(b.date, list);
+    /* השריון כבר נשמר — כשל כאן לא יחזיר "נכשל" (זה היה מוביל לשריון כפול).
+       הכתיבה הבאה או השעתי בונים את היום מחדש. */
+    try { wwRebuildDay_(b.date, list); } catch (e) { Logger.log('weworkBook_ day: ' + e); }
   } finally { lock.releaseLock(); }
 
   try {
@@ -369,13 +383,19 @@ function weworkCancel_(ss, body) {
     if (b.date < wwDateStr_(now) || (b.date === wwDateStr_(now) && b.to * 60 <= wwNowMin_(now))) {
       return { ok: false, error: 'השריון כבר הסתיים' };
     }
+    /* 🔴 צוות אדום 25.9: תושב לא מבטל שריון שכבר התחיל. אחרת אפשר לשריין
+       "עכשיו", לפתוח את הדלת ולבטל — בלי שום עקבה ביומן הגוגל. מנהל כן. */
+    if (mine && !isAdmin && (b.enteredAtMs || b.date < wwDateStr_(now) ||
+        (b.date === wwDateStr_(now) && b.from * 60 <= wwNowMin_(now)))) {
+      return { ok: false, error: 'השריון כבר התחיל — אי אפשר לבטל אותו' };
+    }
     var by = mine ? 'self' : 'admin';
     fsMerge_(fsDocPath_(FS_WW_BOOK, id), {
       status: 'canceled', canceledBy: by, canceledAtMs: Date.now(), updatedAt: new Date()
     });
     b.status = 'canceled'; b.canceledBy = by;
     wwDeleteEvent_(b.calEventId);
-    wwRebuildDay_(b.date);
+    try { wwRebuildDay_(b.date); } catch (e) { Logger.log('weworkCancel_ day: ' + e); }
   } finally { lock.releaseLock(); }
 
   try {
@@ -462,6 +482,13 @@ function doorOpen_(ss, body) {
   var cache = CacheService.getScriptCache();
   var rk = 'door:' + (fid || body._email);
   if (cache.get(rk)) return { ok: false, error: 'הפקודה כבר נשלחה — רגע אחד', code: 'BUSY' };
+  cache.put(rk, '1', 5);   /* מיד — לפני הבדיקות האיטיות, אחרת שתי לחיצות עוברות */
+  var r0 = doorOpenInner_(ss, body, perm, fid, reason);
+  if (!r0.ok) { try { cache.remove(rk); } catch (e) { } }   /* רק הצלחה חוסמת 5 שניות */
+  return r0;
+}
+
+function doorOpenInner_(ss, body, perm, fid, reason) {
 
   var booking = null;
   if (reason === 'wework') {
@@ -478,7 +505,6 @@ function doorOpen_(ss, body) {
 
   var mode = doorMode_();
   if (mode === 'off') return { ok: false, code: 'DOOR_OFF', error: 'הדלת עדיין לא מחוברת לאפליקציה' };
-  cache.put(rk, '1', 5);
 
   var res;
   if (mode === 'sim') { Utilities.sleep(1200); res = { ok: true }; }
@@ -637,8 +663,11 @@ function nukiFindAuth_(auths, accountUserId) {
  * ------------------------------------------------------------------------- */
 function doorGymNukiSync_(ss, onlyEmail) {
   var out = { invited: 0, updated: 0, revoked: 0, errors: 0, skipped: '' };
-  if (doorMode_() !== 'live') { out.skipped = 'mode'; return out; }
-  if (!doorGymOn_()) { out.skipped = 'gymOff'; return out; }
+  if (!(nukiToken_() && nukiLockId_())) { out.skipped = 'noApi'; return out; }
+  /* 🔴 צוות אדום 25.9: מחוץ ל-live+gymOn לא מזמינים — **אבל כן מבטלים**.
+     אחרת הרשאות שכבר יצאו נשארות תקפות עד סוף המנוי המקורי. */
+  if (doorMode_() !== 'live') { out.revoked = doorGymNukiRevokeAll_(); out.skipped = 'mode'; return out; }
+  if (!doorGymOn_()) { out.revoked = doorGymNukiRevokeAll_(); out.skipped = 'gymOff'; return out; }
 
   var byEmail = gymUidByEmail_(ss);
   var rows = readTable_(ss, GYM_SHEET);
@@ -664,7 +693,7 @@ function doorGymNukiSync_(ss, onlyEmail) {
     var doc = docs[uid];
     var name = (String(row['שם פרטי'] || '') + ' ' + String(row['שם משפחה'] || '')).trim();
     try {
-      if (!doc || !doc.authId || doc.state === 'expired' || doc.state === 'error') {
+      if (!doc || !doc.authId || doc.state === 'expired' || doc.state === 'error' || doc.resend) {
         if (budget-- <= 0) return;
         var u = nukiEnsureAccountUser_(em, name);
         if (!u.ok) throw new Error(u.error);
@@ -690,14 +719,16 @@ function doorGymNukiSync_(ss, onlyEmail) {
       }
     } catch (e) {
       out.errors++;
-      try { fsMerge_(fsDocPath_(FS_GYM_NUKI, uid), { uid: uid, state: 'error', error: String(e).slice(0, 160), schema: 1, updatedAt: new Date() }); } catch (e2) { }
+      /* ⚠️ בלי טקסט התשובה של Nuki — היא עלולה להחזיר את המייל. רק קוד. */
+      var codeOnly = (String(e).match(/Nuki (\d{3})/) || [])[1] || 'שגיאה';
+      try { fsMerge_(fsDocPath_(FS_GYM_NUKI, uid), { uid: uid, state: 'error', error: 'Nuki ' + codeOnly, resend: false, schema: 1, updatedAt: new Date() }); } catch (e2) { }
     }
   });
 
   if (!onlyEmail) {
     Object.keys(docs).forEach(function (uid) {
       var d = docs[uid];
-      if (entitledUids[uid] || !d || (d.state !== 'sent' && d.state !== 'active')) return;
+      if (entitledUids[uid] || !d || !d.authId || d.state === 'expired') return;
       try {
         if (d.authId) nukiReq_('delete', '/smartlock/' + nukiLockId_() + '/auth/' + d.authId);
         fsMerge_(fsDocPath_(FS_GYM_NUKI, uid), { state: 'expired', authId: '', updatedAt: new Date() });
@@ -716,6 +747,22 @@ function doorTime_(v) {
   return isNaN(t) ? 0 : t;
 }
 
+/** מבטל את כל ההרשאות שיצאו (המכון חזר לקוד / הדלת לא ב-live). */
+function doorGymNukiRevokeAll_() {
+  if (!(nukiToken_() && nukiLockId_())) return 0;
+  var n = 0;
+  fsList_(FS_GYM_NUKI).forEach(function (d) {
+    var x = d.data || {};
+    if (!x.authId || x.state === 'expired') return;
+    var r = nukiReq_('delete', '/smartlock/' + nukiLockId_() + '/auth/' + x.authId);
+    if (r.ok || r.code === 404) {
+      fsMerge_(fsDocPath_(FS_GYM_NUKI, d.id), { state: 'expired', authId: '', updatedAt: new Date() });
+      n++;
+    }
+  });
+  return n;
+}
+
 /** ביטול מיידי כשמנוי נמחק (נקרא מ-deleteGymMembership_). */
 function doorGymNukiRevoke_(uid) {
   if (!uid) return;
@@ -732,7 +779,7 @@ function doorGymNukiRevoke_(uid) {
  * ------------------------------------------------------------------------- */
 function doorNukiLogImport_() {
   var out = { imported: 0 };
-  var r = nukiReq_('get', '/smartlock/' + encodeURIComponent(nukiLockId_()) + '/log?limit=40');
+  var r = nukiReq_('get', '/smartlock/' + encodeURIComponent(nukiLockId_()) + '/log?limit=100');
   if (!r.ok) { out.error = r.error; return out; }
   var mark = Number(doorProp_('DOOR_NUKI_LOG_MARK') || 0), maxMark = mark;
   var byAuth = {};
@@ -741,6 +788,7 @@ function doorNukiLogImport_() {
     var t = new Date(e.date).getTime();
     if (!t || t <= mark) return;
     if (t > maxMark) maxMark = t;
+    if (e.action !== 1 && e.action !== 3) return;  /* רק פתיחה (unlock / unlatch), לא נעילה */
     var who = byAuth[String(e.authId)];
     if (!who) return;                           /* רק פתיחות של מנויים מאפליקציית Nuki */
     var member = null;
@@ -817,12 +865,24 @@ function permissionsForFamily_(ss, familyId) {
   } catch (e) { return ''; }
 }
 
+/** שמירה של 180 יום ביומן הדלת — אחרת הוא גדל לעד והגיבוי המלא קורא הכול. */
+function doorLogPurge_() {
+  var cutoff = Date.now() - 180 * 24 * 3600 * 1000, n = 0;
+  try {
+    fsQuery_(FS_DOOR_LOG, 'atMs', 'LESS_THAN', cutoff, 200).forEach(function (r) {
+      try { fsDelete_(fsDocPath_(FS_DOOR_LOG, r.id)); n++; } catch (e) { }
+    });
+  } catch (e) { Logger.log('doorLogPurge_: ' + e); }
+  return n;
+}
+
 /** שלב בשעתי (hourlyJobsRun_). */
 function doorHourly_(ss) {
   var out = { ensure: null, cal: null, health: null, gym: null, log: null };
   out.ensure = doorEnsureDocs_();
   out.cal = wwCalendarReconcile_(ss);
   out.health = doorHealth_(ss);
+  out.purged = doorLogPurge_();
   if (doorMode_() === 'live') {
     out.gym = doorGymNukiSync_(ss);
     out.log = doorNukiLogImport_();
@@ -838,7 +898,7 @@ function doorStatus_(ss, body) {
   var st = doorHealth_(ss);
   var perm = body._perm || {};
   return {
-    ok: true, mode: doorMode_(), modeRaw: doorModeRaw_(), gymOn: doorGymOn_(),
+    ok: true, mode: doorMode_(), modeRaw: doorModeRaw_(), gymOn: doorGymOn_(), gymWanted: doorGymWanted_(),
     tokenSet: !!nukiToken_(), lockId: perm.isSuper ? nukiLockId_() : (nukiLockId_() ? 'set' : ''),
     contact: doorContact_(), state: {
       online: st.online, battery: st.battery, batteryCritical: st.batteryCritical,
@@ -867,12 +927,21 @@ function doorConfigure_(ss, body) {
     if (m === 'live' && !(nukiToken_() && nukiLockId_())) return { ok: false, error: 'למצב אמיתי צריך טוקן ומזהה מנעול' };
     doorPropSet_('DOOR_MODE', m);
   }
-  if (body.gymOn !== undefined) doorPropSet_('DOOR_GYM_ON', body.gymOn === true || body.gymOn === 'true' ? '1' : '');
+  if (body.gymOn !== undefined) {
+    var wantGym = body.gymOn === true || body.gymOn === 'true';
+    if (wantGym && doorMode_() !== 'live') return { ok: false, error: 'אפשר להעביר את המכון לדלת רק כשהדלת במצב אמיתי ועובדת' };
+    doorPropSet_('DOOR_GYM_ON', wantGym ? '1' : '');
+  }
   doorWritePublic_();
   var out = doorStatus_(ss, body);
   /* המעבר של המכון לדלת משנה את מה שנכתב ל-gymCode — מסנכרנים מיד
      ולא מחכים לשעתי, אחרת קוד שבוטל ממשיך להופיע עד שעה. */
-  if (body.gymOn !== undefined) { try { gymStatusSyncAll_(ss); } catch (e) { Logger.log('gymStatusSyncAll_ אחרי doorConfigure: ' + e); } }
+  /* גם מעבר מצב משנה את doorGymOn_ בפועל (live ⇄ אחר). */
+  if (body.gymOn !== undefined || body.mode !== undefined || body.clearToken === true) {
+    try { gymStatusSyncAll_(ss); } catch (e) { Logger.log('gymStatusSyncAll_ אחרי doorConfigure: ' + e); }
+  }
+  /* 🔴 המכון יצא מהדלת ⇒ מבטלים מיד את כל הזמנות Nuki שכבר יצאו. */
+  if (!doorGymOn_()) { try { doorGymNukiRevokeAll_(); } catch (e) { Logger.log('doorGymNukiRevokeAll_: ' + e); } }
   return out;
 }
 
@@ -892,11 +961,17 @@ function doorSaveContact_(ss, body) {
 
 /** מנוי מכון מבקש לשלוח שוב את הזמנת Nuki. */
 function doorGymResend_(ss, body) {
-  if (doorMode_() !== 'live' || !doorGymOn_()) return { ok: false, error: 'ההזמנות ל-Nuki עדיין לא פעילות' };
+  if (!doorGymOn_()) return { ok: false, error: 'ההזמנות ל-Nuki עדיין לא פעילות' };
+  /* ריסון: כל שליחה = מייל מ-Nuki + מייל מאיתנו. פעם ב-10 דקות לאדם. */
+  var cache = CacheService.getScriptCache(), ck = 'nukiResend:' + normalizeEmail_(body._email);
+  if (cache.get(ck)) return { ok: false, error: 'כבר שלחנו לפני רגע — אפשר לנסות שוב בעוד כמה דקות' };
+  if (!doorGymEntitled_(ss, body._email)) return { ok: false, error: 'המנוי אינו בתוקף' };
   var perm = body._perm || {};
   var uid = doorCallerUid_(ss, perm);
   if (!uid) return { ok: false, error: 'צריך להתחבר לאפליקציה פעם אחת לפני כן' };
-  try { fsMerge_(fsDocPath_(FS_GYM_NUKI, uid), { uid: uid, state: 'expired', authId: '', schema: 1, updatedAt: new Date() }); } catch (e) { }
+  cache.put(ck, '1', 600);
+  /* ⚠️ לא מוחקים את authId — אם הניסיון ייכשל, צריך אותו כדי לבטל בעתיד. */
+  try { fsMerge_(fsDocPath_(FS_GYM_NUKI, uid), { uid: uid, resend: true, schema: 1, updatedAt: new Date() }); } catch (e) { }
   var r = doorGymNukiSync_(ss, body._email);
-  return r.invited ? { ok: true } : { ok: false, error: 'לא הצלחנו לשלוח — ייתכן שהמנוי אינו בתוקף' };
+  return r.invited ? { ok: true } : { ok: false, error: 'לא הצלחנו לשלוח — נסה/י שוב מאוחר יותר' };
 }

@@ -63,8 +63,10 @@ CBA.doorAdmin = (function () {
       '<div class="ww-sec-t">הגדרות חיבור <span class="gym-pill gym-pill--muted">מנהל-על</span></div>' +
       '<div class="ww-lbl">מצב הדלת</div><div class="ww-seats">' + seg("off") + seg("sim") + seg("live") + "</div>" +
       '<div class="ww-note">הדמיה = הכול עובד והפתיחה נרשמת ביומן, בלי לפתוח באמת. אמיתי דורש טוקן ומזהה מנעול.</div>' +
-      '<label class="da-switch"><input type="checkbox" id="da-gymon" data-da-gymon' + (s.gymOn ? " checked" : "") + '>' +
-        "<span><b>המכון עובר לדלת</b><small>מסתיר את קוד הכניסה הקבוע ומציג למנויים את כפתור הדלת. אפשר להחזיר בכל רגע.</small></span></label>" +
+      '<label class="da-switch' + (s.mode !== "live" ? " is-off" : "") + '"><input type="checkbox" id="da-gymon" data-da-gymon' + (s.gymOn ? " checked" : "") + (s.mode !== "live" && !s.gymOn ? " disabled" : "") + '>' +
+        "<span><b>המכון עובר לדלת</b><small>" + (s.mode !== "live"
+          ? "זמין רק כשהדלת במצב אמיתי ועובדת — אחרת מנויים יישארו בלי קוד ובלי דלת." + (s.gymWanted ? " (מופעל, אבל מושהה עד שהדלת תחזור לעבוד — הקוד מוצג בינתיים.)" : "")
+          : "מסתיר את קוד הכניסה הקבוע ומציג למנויים את כפתור הדלת. אפשר להחזיר בכל רגע.") + "</small></span></label>" +
       '<div class="gym-field"><label for="da-token">טוקן Nuki Web API ' + (s.tokenSet ? '<span class="gym-pill gym-pill--ok">שמור</span>' : '<span class="gym-pill gym-pill--warn">חסר</span>') + "</label>" +
         '<input type="password" id="da-token" autocomplete="off" placeholder="' + (s.tokenSet ? "להחלפה — להדביק טוקן חדש" : "להדביק כאן את הטוקן מ-Nuki Web") + '"></div>' +
       '<div class="gym-field"><label for="da-lock">מזהה המנעול</label>' +

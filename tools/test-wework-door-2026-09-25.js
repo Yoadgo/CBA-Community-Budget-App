@@ -67,7 +67,7 @@ function makeSandbox(opts) {
     Session: { getScriptTimeZone: () => 'Asia/Jerusalem' },
     Logger: { log: () => {} },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-    CacheService: { getScriptCache: () => ({ get: k => cache[k] || null, put: (k, v) => { cache[k] = v; } }) },
+    CacheService: { getScriptCache: () => ({ get: k => cache[k] || null, put: (k, v) => { cache[k] = v; }, remove: k => { delete cache[k]; } }) },
     PropertiesService: { getScriptProperties: () => ({
       getProperty: k => (k in props ? props[k] : null),
       setProperty: (k, v) => { props[k] = String(v); },
@@ -75,7 +75,7 @@ function makeSandbox(opts) {
     }) },
     CalendarApp: {
       Color: { TEAL: 'teal' },
-      getCalendarById: id => id === 'cal1' ? cal : null,
+      getCalendarById: id => (id === 'cal1' && !opts.calGone) ? cal : null,
       createCalendar: () => cal
     },
     UrlFetchApp: { fetch: (url, o) => { fetches.push({ url, o }); const r = nukiReply(url, o);
@@ -120,7 +120,7 @@ function makeSandbox(opts) {
   };
 }
 const ME = (fid, extra) => Object.assign({ _email: 'me@x.il', _perm: Object.assign({ familyId: fid || '12', family: 'לוי', firstName: 'נועה', perms: [], isSuper: false, rowIndex: 5, slot: 1 }, extra || {}) });
-const call = (T, fn, body) => T.sb[fn]({}, body);
+const call = (T, fn, body) => T.sb[fn]({ getSheetByName: () => ({}) }, body);
 
 /* ============================================================ 1. אימות --- */
 section('1. אימות בקשת שריון');
@@ -220,6 +220,9 @@ section('4. פתיחת הדלת');
   r = call(T, 'doorOpen_', Object.assign(ME('12'), { reason: 'wework' }));
   ok('לחיצה כפולה תוך 5 שניות נבלמת', !r.ok && r.code === 'BUSY');
   T.reset();
+  call(T, 'doorOpen_', Object.assign(ME('55'), { reason: 'wework' }));
+  ok('ניסיון שנדחה לא חוסם ניסיון חוזר (הריסון רק אחרי הצלחה)', !T.cache['door:55']);
+  T.reset();
   r = call(T, 'doorOpen_', Object.assign(ME('55'), { reason: 'wework' }));
   ok('🔴 משפחה בלי שריון — לא נפתח', !r.ok && r.code === 'NOT_NOW');
   T.reset(); T.setNow(new Date(2026, 8, 25, 12, 0));
@@ -245,9 +248,9 @@ section('4. פתיחת הדלת');
     { 'אימייל': 'me@x.il', 'סטטוס': 'פעיל', 'בתוקף עד': '2027-06-30' },
     { 'אימייל': 'old@x.il', 'סטטוס': 'פעיל', 'בתוקף עד': '2026-09-01' }
   ];
-  const T = makeSandbox({ gymRows: rows, props: { DOOR_MODE: 'sim', DOOR_GYM_ON: '1' } });
+  const T = makeSandbox({ gymRows: rows, props: { DOOR_MODE: 'live', DOOR_GYM_ON: '1', NUKI_API_TOKEN: 'x'.repeat(40), NUKI_SMARTLOCK_ID: '123456' } });
   let r = call(T, 'doorOpen_', Object.assign(ME('12'), { reason: 'gym' }));
-  ok('מנוי בתוקף + המכון עבר לדלת — נפתח', r.ok, JSON.stringify(r));
+  ok('מנוי בתוקף + המכון עבר לדלת (live) — נפתח', r.ok, JSON.stringify(r));
   T.reset();
   r = call(T, 'doorOpen_', Object.assign(ME('13'), { reason: 'gym', _email: 'old@x.il' }));
   ok('🔴 מנוי שפג — לא נפתח', !r.ok && r.code === 'NOT_NOW', JSON.stringify(r));
@@ -404,6 +407,66 @@ section('8. חיווט: Code.gs, כללים, לקוח');
   ok('🔴 service-worker VERSION = ?v=', new RegExp('var VERSION = "' + v + '"').test(SW));
   ok('הסקריפטים החדשים לפני app.js', ['door.js', 'doorButton.js', 'doorAdmin.js', 'resWework.js', 'weworkAdmin.js'].every(f => IDX.indexOf(f) !== -1 && IDX.indexOf(f) < IDX.indexOf('js/app.js')));
   ok('wework.css נטען', /css\/wework\.css\?v=/.test(IDX));
+}
+
+/* ============================================= 9. תיקוני צוות אדום 25.9 --- */
+section('9. תיקוני צוות אדום');
+{
+  const P = { WEWORK_CALENDAR_ID: 'cal1', DOOR_MODE: 'sim', DOOR_GYM_ON: '1' };
+  const T = makeSandbox({ props: P });
+  ok('🔴 gymOn בהדמיה = כבוי בפועל (הקוד נשאר, אף אחד לא נתקע)', T.sb.doorGymOn_() === false);
+  const r = call(T, 'doorConfigure_', Object.assign(ME('1', { isSuper: true }), { gymOn: true }));
+  ok('🔴 אי אפשר להעביר את המכון לדלת כשהיא לא ב-live', !r.ok, JSON.stringify(r));
+  T.props.NUKI_API_TOKEN = 'x'.repeat(40); T.props.NUKI_SMARTLOCK_ID = '123456'; T.props.DOOR_MODE = 'live';
+  ok('ב-live עם טוקן — פעיל', T.sb.doorGymOn_() === true);
+  delete T.props.NUKI_API_TOKEN;
+  ok('🔴 הטוקן נמחק ⇒ live נופל ל-off ⇒ הקוד חוזר לבד', T.sb.doorGymOn_() === false);
+}
+{
+  const T = makeSandbox({ props: { WEWORK_CALENDAR_ID: 'cal1', DOOR_MODE: 'sim' } });
+  const r = call(T, 'weworkBook_', Object.assign(ME('12'), { date: '2026-09-25', from: 10, hours: 2 }));
+  const c1 = call(T, 'weworkCancel_', Object.assign(ME('12'), { id: r.booking.id }));
+  ok('🔴 תושב לא מבטל שריון שכבר התחיל (שריין-פתח-בטל)', !c1.ok && /התחיל/.test(c1.error), c1.error);
+  const c2 = call(T, 'weworkCancel_', Object.assign(ME('99', { perms: ['WeWork'] }), { id: r.booking.id }));
+  ok('מנהל WeWork כן יכול לבטל שריון שהתחיל', c2.ok, c2.error);
+  const r2 = call(T, 'weworkBook_', Object.assign(ME('12'), { date: '2026-09-26', from: 10, hours: 2 }));
+  ok('תושב מבטל שריון עתידי', call(T, 'weworkCancel_', Object.assign(ME('12'), { id: r2.booking.id })).ok);
+}
+{
+  const T = makeSandbox({ props: { WEWORK_CALENDAR_ID: 'cal1' }, calGone: true });
+  let threw = false;
+  try { T.sb.wwCalendar_(); } catch (e) { threw = true; }
+  ok('🔴 יומן שלא נמצא — שגיאה, לא יומן חדש בשקט', threw && T.props.WEWORK_CALENDAR_ID === 'cal1');
+  const b = call(T, 'weworkBook_', Object.assign(ME('12'), { date: '2026-09-26', from: 10, hours: 2 }));
+  ok('השריון עדיין נשמר גם כשהיומן לא זמין (השעתי ישלים)', b.ok, b.error);
+}
+{
+  const T = makeSandbox({ props: { DOOR_MODE: 'live', DOOR_GYM_ON: '', NUKI_API_TOKEN: 'x'.repeat(40), NUKI_SMARTLOCK_ID: '123456' } });
+  T.db['gymNuki/uA'] = { uid: 'uA', state: 'sent', authId: 'A1' };
+  T.db['gymNuki/uB'] = { uid: 'uB', state: 'error', authId: 'B1' };
+  T.db['gymNuki/uC'] = { uid: 'uC', state: 'expired', authId: '' };
+  const out = T.sb.doorGymNukiSync_({});
+  ok('🔴 המכון חזר לקוד ⇒ כל ההרשאות שיצאו מבוטלות', out.revoked === 2 && T.db['gymNuki/uA'].state === 'expired' && T.db['gymNuki/uB'].state === 'expired', JSON.stringify(out));
+  ok('🔴 גם הרשאה במצב "תקלה" מבוטלת', T.fetches.some(f => /\/auth\/B1$/.test(f.url) && f.o.method === 'delete'));
+}
+{
+  const rows = [{ 'אימייל': 'a@x.il', 'שם פרטי': 'אבי', 'סטטוס': 'פעיל', 'בתוקף עד': '2027-06-30' }];
+  const T = makeSandbox({ gymRows: rows, gymUids: { 'a@x.il': 'uA' },
+    props: { DOOR_MODE: 'live', DOOR_GYM_ON: '1', NUKI_API_TOKEN: 'x'.repeat(40), NUKI_SMARTLOCK_ID: '123456' },
+    nukiReply: (url, o) => /\/account\/user$/.test(url) ? { code: 409, text: 'user a@x.il exists' } : /\?email=/.test(url) ? { code: 500, text: 'a@x.il' } : { code: 204 } });
+  T.sb.doorGymNukiSync_({});
+  ok('🔴 שגיאת Nuki לא מכניסה מייל ל-Firestore', JSON.stringify(T.db['gymNuki/uA'] || {}).indexOf('@') === -1, JSON.stringify(T.db['gymNuki/uA']));
+  const r1 = call(T, 'doorGymResend_', Object.assign(ME('1'), { _email: 'a@x.il' }));
+  const r2 = call(T, 'doorGymResend_', Object.assign(ME('1'), { _email: 'a@x.il' }));
+  ok('שליחה חוזרת מרוסנת (פעם ב-10 דקות)', !r2.ok && /כבר שלחנו/.test(r2.error), JSON.stringify([r1, r2]));
+  ok('🔴 שליחה חוזרת לא מוחקת את authId הקיים', !('authId' in (T.db['gymNuki/uA'] || {})) || T.db['gymNuki/uA'].authId !== '' || T.db['gymNuki/uA'].state === 'error');
+}
+{
+  const T = makeSandbox();
+  const old = Date.now() - 200 * 86400e3;
+  T.db['doorLog/D-old'] = { atMs: old }; T.db['doorLog/D-new'] = { atMs: Date.now() };
+  T.sb.fsQuery_ = (c, f, op, v) => Object.keys(T.db).filter(k => k.startsWith(c + '/') && op === 'LESS_THAN' && T.db[k][f] < v).map(k => ({ id: k.slice(c.length + 1), data: T.db[k] }));
+  ok('יומן הדלת: מעל 180 יום נמחק, השאר נשאר', T.sb.doorLogPurge_() === 1 && !T.db['doorLog/D-old'] && T.db['doorLog/D-new']);
 }
 
 console.log('\n' + (fail ? '✗' : '✓') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
