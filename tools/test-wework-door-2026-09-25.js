@@ -686,6 +686,12 @@ section('12. מכון הכושר ב-Firestore (GymFirestore.gs + gymFs.js)');
   ok('מסך הניהול נועל פעולות בזמן תשובה חלקית', /classList\.toggle\("ga-partial", !!res\.partial\)/.test(GA) && /\.ga-partial #ga-members button/.test(R('css/gym.css')));
   const RG = R('js/screens/resGym.js');
   ok('מסך המנוי: כפתור הדלת כבר בציור המוקדם', /st\.fast && CBA\.doorGym\) CBA\.doorGym\.mount/.test(RG));
+
+  /* 25.9 (יועד): הבחירה צובעת עמדה אחת — הראשונה הפנויה — ותפוס אדמדם. */
+  const RW = R('js/screens/resWework.js'), WC = R('css/wework.css');
+  ok('בחירה: רק עמדה אחת מסומנת (mine = הראשונה הפנויה)', /var mineD = sel && st\.seat === "desk" && uD < st\.cfg\.desks \? uD : -1/.test(RW) && /k === mineD \? " mine"/.test(RW));
+  ok('בחירה: ה-CSS לא צובע יותר את כל הפנויות', !/\.ww-row\.sel \.ww-sq:not\(\.on\)/.test(WC) && /\.ww-sq\.mine \{/.test(WC));
+  ok('תפוס = אדמדם', /\.ww-sq\.on \{ background: rgba\(244, 63, 94/.test(WC));
 }
 
 console.log('\n' + (fail ? '✗' : '✓') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');

@@ -186,10 +186,15 @@ CBA.screens = CBA.screens || {};
       var out = h < st.cfg.regularFrom || h >= st.cfg.regularTo;
       var past = isPast(h);
       var seats = "";
-      for (var k = 0; k < st.cfg.desks; k++) seats += '<span class="ww-sq' + (k < used(h, "desk") ? " on" : "") + '"></span>';
+      /* 25.9 (יועד): הבחירה צובעת **עמדה אחת** — הראשונה הפנויה מהסוג שנבחר,
+         לא את כל הפנויות. תפוס = אדמדם. */
+      var uD = used(h, "desk"), uL = used(h, "lounge");
+      var mineD = sel && st.seat === "desk" && uD < st.cfg.desks ? uD : -1;
+      var mineL = sel && st.seat === "lounge" && uL < st.cfg.lounge ? uL : -1;
+      for (var k = 0; k < st.cfg.desks; k++) seats += '<span class="ww-sq' + (k < uD ? " on" : k === mineD ? " mine" : "") + '"></span>';
       if (st.cfg.lounge) {
         seats += '<span class="ww-sq-gap"></span>';
-        for (var j = 0; j < st.cfg.lounge; j++) seats += '<span class="ww-sq ww-sq--lounge' + (j < used(h, "lounge") ? " on" : "") + '"></span>';
+        for (var j = 0; j < st.cfg.lounge; j++) seats += '<span class="ww-sq ww-sq--lounge' + (j < uL ? " on" : j === mineL ? " mine" : "") + '"></span>';
       }
       var free = cap(st.seat) - used(h, st.seat);
       rows += '<button type="button" class="ww-row' + (sel ? " sel" : "") + (sel && full !== -1 ? " full" : "") +
