@@ -82,6 +82,9 @@ var WW_LIMITS = {
 
 var NUKI_BASE = 'https://api.nuki.io';
 var NUKI_ACTION_UNLATCH = 3;
+/* 26.9 — פעולת הפתיחה ניתנת לבחירה בהגדרות: 3 = שחרור לשונית (ברירת מחדל),
+   1 = פתיחת נעילה בלבד (אם מנגנון הלשונית נתקע — ר' הדיווח על המנוע שרץ). */
+function doorAction_() { return doorProp_('DOOR_ACTION') === '1' ? 1 : NUKI_ACTION_UNLATCH; }
 
 /* ---------------------------------------------------------------------------
  *  Script Properties
@@ -185,7 +188,7 @@ function doorEnsureDocs_() {
 /** מה שהלקוח צריך לדעת על הדלת — ובלי שום סוד. */
 function doorWritePublic_() {
   fsSet_(fsDocPath_(FS_DOOR_CONFIG, 'public'), {
-    mode: doorMode_(), gymOn: doorGymOn_(), schema: 1, updatedAt: new Date()
+    mode: doorMode_(), gymOn: doorGymOn_(), action: doorAction_(), schema: 1, updatedAt: new Date()
   });
 }
 
@@ -327,6 +330,7 @@ function weworkBook_(ss, body) {
     b.id = 'WW-' + b.date.replace(/-/g, '') + '-' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
     b.familyId = fid;
     b.uid = doorCallerUid_(ss, perm);
+    b.slot = Number(perm.slot) || 0;   /* 26.9 — להצגת שם פרטי אצל מנהל WeWork */
     b.status = 'active';
     b.calEventId = '';
     b.createdAtMs = Date.now();
@@ -512,7 +516,7 @@ function doorOpenInner_(ss, body, perm, fid, reason) {
 
   var result = mode === 'sim' ? 'sim' : (res.ok ? 'ok' : 'fail');
   doorLogWrite_({
-    kind: reason, familyId: fid, uid: doorCallerUid_(ss, perm), source: 'app',
+    kind: reason, familyId: fid, uid: doorCallerUid_(ss, perm), slot: Number(perm.slot) || 0, source: 'app',
     result: result, error: res.ok ? '' : String(res.error || '').slice(0, 200),
     bookingId: booking ? booking.id : ''
   });
@@ -593,7 +597,7 @@ function nukiReq_(method, path, payload) {
 function nukiUnlatch_() {
   var id = nukiLockId_();
   if (!id) return { ok: false, error: 'חסר NUKI_SMARTLOCK_ID' };
-  return nukiReq_('post', '/smartlock/' + encodeURIComponent(id) + '/action', { action: NUKI_ACTION_UNLATCH });
+  return nukiReq_('post', '/smartlock/' + encodeURIComponent(id) + '/action', { action: doorAction_() });
 }
 /** רשימת המנעולים בחשבון — לבחירת המזהה במסך הדלת. */
 function nukiListLocks_() {
@@ -807,7 +811,9 @@ function doorNukiLogImport_() {
     if (!who) return;                           /* רק פתיחות של מנויים מאפליקציית Nuki */
     var member = null;
     try { member = fsGet_(fsDocPath_('members', who.uid)); } catch (x) { }
-    doorLogWrite_({ kind: 'gym', familyId: member ? String(member.familyId || '') : '', uid: who.uid,
+    var gmSlot = 0;
+    try { var gm = fsQuery_(FS_GYM_MEMBERS, 'uid', '==', who.uid); gmSlot = gm.length ? Number(gm[0].data.slot) || 0 : 0; } catch (x) { }
+    doorLogWrite_({ kind: 'gym', familyId: member ? String(member.familyId || '') : '', uid: who.uid, slot: gmSlot,
                     source: 'nuki', result: 'ok', error: '', bookingId: '' });
     if (who.state === 'sent') {
       try { fsMerge_(fsDocPath_(FS_GYM_NUKI, who.uid), { state: 'active', updatedAt: new Date() }); } catch (x) { }
@@ -917,7 +923,7 @@ function doorStatus_(ss, body) {
   return {
     ok: true, mode: doorMode_(), modeRaw: doorModeRaw_(), gymOn: doorGymOn_(), gymWanted: doorGymWanted_(),
     tokenSet: !!nukiToken_(), lockId: perm.isSuper ? nukiLockId_() : (nukiLockId_() ? 'set' : ''),
-    lockName: doorProp_('NUKI_LOCK_NAME') || '',
+    lockName: doorProp_('NUKI_LOCK_NAME') || '', action: doorAction_(),
     contact: doorContact_(), state: {
       online: st.online, battery: st.battery, batteryCritical: st.batteryCritical,
       lastCheckMs: st.lastCheckMs, error: st.error, errorText: st.errorText || ''
@@ -957,6 +963,11 @@ function doorConfigure_(ss, body) {
       if (!live.ok) return { ok: false, error: nukiErrText_(live) };
     }
     doorPropSet_('DOOR_MODE', m);
+  }
+  if (body.action !== undefined && body.action !== null && body.action !== '') {
+    var act = Number(body.action);
+    if (act !== 1 && act !== 3) return { ok: false, error: 'פעולה לא מוכרת' };
+    doorPropSet_('DOOR_ACTION', String(act));
   }
   if (body.gymOn !== undefined) {
     var wantGym = body.gymOn === true || body.gymOn === 'true';
@@ -1105,7 +1116,11 @@ function doorLogExternal_(body) {
   var result = ['ok', 'sim', 'fail'].indexOf(String(body.result)) !== -1 ? String(body.result) : 'ok';
   var err = String(body.error || '').replace(/[^\w\s:.-]/g, '').slice(0, 60);
   var bookingId = String(body.bookingId || '');
-  doorLogWrite_({ kind: reason, familyId: fid, uid: uid, source: 'app', result: result, error: err,
+  /* 26.9 — איזה מבני הזוג לחץ (משבצת 1/2), כדי שהיומן יציג שם פרטי ולא
+     "משפחה X". רק המספר נכתב ל-Firestore; השם מוצג מספריית התושבים. */
+  var slot = 0;
+  try { slot = Number((gymResidentIndex_(SpreadsheetApp.getActiveSpreadsheet())[normalizeEmail_(sess.email)] || {}).slot) || 0; } catch (e) { }
+  doorLogWrite_({ kind: reason, familyId: fid, uid: uid, slot: slot, source: 'app', result: result, error: err,
                   bookingId: bookingId, via: 'worker', ms: Number(body.ms) || 0 });
   if (bookingId && fsIdOk_(bookingId) && result !== 'fail') {
     try {
@@ -1212,7 +1227,7 @@ function doorOpenFastInner_(body, reason, claimUid, claimFid, sess, t0) {
     var tok = nukiToken_();
     var r2 = UrlFetchApp.fetchAll([
       { url: NUKI_BASE + '/smartlock/' + encodeURIComponent(nukiLockId_()) + '/action', method: 'post',
-        contentType: 'application/json', payload: JSON.stringify({ action: NUKI_ACTION_UNLATCH }),
+        contentType: 'application/json', payload: JSON.stringify({ action: doorAction_() }),
         headers: { Authorization: 'Bearer ' + tok, Accept: 'application/json' }, muteHttpExceptions: true },
       commitReq
     ]);

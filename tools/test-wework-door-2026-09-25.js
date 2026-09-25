@@ -165,7 +165,7 @@ section('2. שריון ותפוסה');
   ok('נשלח מייל WEWORK_BOOKED לכל שריון', T.mails.filter(m => m.key === 'WEWORK_BOOKED').length === 5);
   const doc = T.db['weworkBookings/' + r1.booking.id];
   const keys = Object.keys(doc || {});
-  const ALLOWED = ['date', 'from', 'to', 'hours', 'seat', 'id', 'familyId', 'uid', 'status', 'calEventId', 'createdAtMs', 'enteredAtMs', 'schema', 'updatedAt'];
+  const ALLOWED = ['date', 'from', 'to', 'hours', 'seat', 'id', 'familyId', 'uid', 'status', 'calEventId', 'createdAtMs', 'enteredAtMs', 'schema', 'updatedAt', 'slot'];
   ok('🔴 מסמך השריון בלי שם/מייל — רשימת היתר בלבד', keys.every(k => ALLOWED.indexOf(k) !== -1), keys.join(','));
   ok('updatedAt ו-schema קיימים (לגיבוי המצטבר)', doc && doc.updatedAt && doc.schema === 1);
   const f1 = b('7', 14, 2), f2 = b('7', 14, 2), f3 = b('7', 15, 1);
@@ -291,8 +291,8 @@ section('5. הגדרות הדלת ו-WeWork');
   ok('🔴 והטוקן לא נכתב ל-Firestore', JSON.stringify(T.db).indexOf(TOK) === -1);
   r = call(T, 'doorConfigure_', Object.assign(ME('1', { isSuper: true }), { mode: 'live', gymOn: true }));
   ok('מעבר ל-live + המכון לדלת', r.ok && r.mode === 'live' && r.gymOn === true && T.props.DOOR_GYM_ON === '1');
-  ok('doorConfig/public נכתב (mode/gymOn בלבד)', T.db['doorConfig/public'].mode === 'live' && T.db['doorConfig/public'].gymOn === true &&
-     Object.keys(T.db['doorConfig/public']).sort().join() === 'gymOn,mode,schema,updatedAt');
+  ok('doorConfig/public נכתב (mode/gymOn/action בלבד — בלי סודות)', T.db['doorConfig/public'].mode === 'live' && T.db['doorConfig/public'].gymOn === true &&
+     Object.keys(T.db['doorConfig/public']).sort().join() === 'action,gymOn,mode,schema,updatedAt');
   r = call(T, 'doorConfigure_', Object.assign(ME('1', { isSuper: true }), { mode: 'bogus' }));
   ok('מצב לא מוכר נדחה', !r.ok);
   const T2 = makeSandbox();
@@ -352,7 +352,7 @@ section('5ב. דיווח 30: חיבור ל-Nuki נבדק לפני שמירה');
 }
 {
   const DA = R('js/screens/doorAdmin.js');
-  ok('ההגדרות לא מוצגות בכרטיס — כפתור למסך נפרד', /data-da-setup/.test(DA) && /function openSetup/.test(DA) && !/id="da-lock"/.test(DA));
+  ok('ההגדרות לא מוצגות בכרטיס — לשונית "בקרת כניסה" בגיליון ההגדרות', /data-da-settings/.test(DA) && /function mountSetup/.test(DA) && !/id="da-lock"/.test(DA) && /CBA\.doorAdmin\.mountSetup\(doorPane/.test(R('js/screens/gymAdmin.js')));
   ok('אין שדה להקלדת מזהה מנעול — בוחרים מהרשימה', !/placeholder="מספר"/.test(DA) && /data-da-pick/.test(DA));
   ok('"אמיתי" חסום עד שהמנעול מחובר', /var dis = m === "live" && !lockOk/.test(DA));
 }
@@ -393,6 +393,32 @@ section('5ג. פתיחה דרך Cloudflare Worker');
   T.sb.doorLogExternal_({ session: 'good', idToken: 'x', uid: 'uid-me', reason: 'admin', result: 'fail', error: 'Nuki 503<b>' });
   ok('רישום ברקע: כשל ⇒ התראה למנהל המכון, והשגיאה מנוקה', T.admins.some(a => a.key === 'ADMIN_DOOR_ALERT') &&
      Object.keys(T.db).some(k => k.startsWith('doorLog/') && T.db[k].result === 'fail' && T.db[k].error === 'Nuki 503b'));
+}
+
+/* ============================== 5ד. 26.9 — שם מי שנכנס, סוג פעולה, מסך מאוחד --- */
+section('5ד. מי נכנס (slot), סוג הפעולה, מסך המכון המאוחד');
+{
+  const T = makeSandbox({ props: { NUKI_API_TOKEN: 'x'.repeat(40), NUKI_SMARTLOCK_ID: '123456' },
+    nukiReply: () => ({ code: 200, text: JSON.stringify({ name: 'דלת', serverState: 0, state: {} }) }) });
+  let r = call(T, 'doorConfigure_', Object.assign(ME('1', { isSuper: true }), { action: 1 }));
+  ok('פעולה "פתיחת נעילה בלבד" נשמרת ומתפרסמת ל-Worker', r.ok && T.props.DOOR_ACTION === '1' && T.db['doorConfig/public'].action === 1 && r.action === 1);
+  r = call(T, 'doorConfigure_', Object.assign(ME('1', { isSuper: true }), { action: 7 }));
+  ok('פעולה לא מוכרת נדחית', !r.ok && T.props.DOOR_ACTION === '1');
+  T.props.DOOR_MODE = 'live'; T.reset();
+  T.fetches.length = 0;
+  call(T, 'doorOpen_', Object.assign(ME('1', { isSuper: true, perms: ['על'] }), { reason: 'admin' }));
+  const act = T.fetches.filter(f => /\/action$/.test(f.url)).map(f => JSON.parse(f.o.payload).action);
+  ok('המסלול הרגיל שולח את הפעולה שנבחרה', act[0] === 1, JSON.stringify(act));
+  const log = Object.keys(T.db).filter(k => k.startsWith('doorLog/')).map(k => T.db[k]).pop() || {};
+  ok('היומן שומר איזה מבני הזוג לחץ (slot) — בלי שם', log.slot === 1 && !('name' in log) && !('firstName' in log), JSON.stringify(log));
+  const W = R('cloudflare/door-worker.js');
+  ok('Worker: הפעולה נקראת מ-doorConfig/public', /nukiOpen\(env, cfg && cfg\.action\)/.test(W));
+  const DS = R('js/data/dataService.js'), DA = R('js/screens/doorAdmin.js'), GA = R('js/screens/gymAdmin.js'), WA = R('js/screens/weworkAdmin.js');
+  ok('personName: שם פרטי לפי משבצת מהספרייה', /function personName\(familyId, slot\)/.test(DS) && /"שם פרטי " \+ n/.test(DS));
+  ok('יומן הדלת ומנהל WeWork מציגים שם אדם, לא "משפחה X"', /personName\(e\.familyId, e\.slot\)/.test(DA) && /famName\(b\.familyId, b\.slot\)/.test(WA) && !/"משפחה " \+ fid/.test(WA));
+  ok('מסך המכון: שני כרטיסים + שורת מספרים + הגדרות בגיליון', /class="ga-grid"/.test(GA) && /id="ga-kpis" class="ga-chips"/.test(GA) && /function openSettings\(tab/.test(GA) && !/id="ga-verify-card"/.test(GA));
+  ok('מנויים: ממתינים לך ראשונים + סינון', /GA_ORDER/.test(GA) && /data-ga-f="attn"/.test(GA));
+  ok('תפריט ⋯ שומר את אותם data-ga-* (הקישור לפעולות לא השתנה)', /<details class="ga-more">/.test(GA) && /data-ga-edit="/.test(GA) && /data-ga-delete="/.test(GA) && /data-ga-extend="/.test(GA));
 }
 
 /* ================================================= 6. בריאות + התראות --- */

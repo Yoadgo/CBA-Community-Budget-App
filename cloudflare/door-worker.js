@@ -8,7 +8,7 @@
  *  🔐 הגדרות ב-Cloudflare (Settings → Variables and Secrets):
  *     NUKI_TOKEN      (Secret)  המפתח מ-web.nuki.io. יועד מדביק בעצמו.
  *     NUKI_LOCK_ID    (Text)    מזהה המנעול ב-Nuki Web. ריק ⇒ המנעול הראשון בחשבון.
- *     NUKI_ACTION     (Text)    3 = שחרור לשונית (ברירת מחדל), 1 = פתיחת נעילה בלבד.
+ *     NUKI_ACTION     (Text)    גיבוי בלבד — הפעולה נקבעת במסך ההגדרות (doorConfig/public.action).
  *     APPS_SCRIPT_URL (Text)    כתובת ה-/exec — לרישום ביומן ברקע.
  *
  *  זרימה (סבב רשת אחד לפני Nuki):
@@ -111,7 +111,7 @@ function israelNow() {
 }
 
 /* ------------------------------------------------------------------ Nuki --- */
-async function nukiOpen(env) {
+async function nukiOpen(env, want) {
   let id = String(env.NUKI_LOCK_ID || lockIdMemo || '').trim();
   const h = { Authorization: 'Bearer ' + env.NUKI_TOKEN, Accept: 'application/json' };
   if (!id) {
@@ -121,7 +121,8 @@ async function nukiOpen(env) {
     if (!arr.length) return { ok: false, code: 404 };
     id = lockIdMemo = String(arr[0].smartlockId);
   }
-  const action = Number(env.NUKI_ACTION || 3) === 1 ? 1 : 3;
+  /* 26.9 — הפעולה נבחרת במסך ההגדרות (doorConfig/public.action); env רק כגיבוי. */
+  const action = Number(want || env.NUKI_ACTION || 3) === 1 ? 1 : 3;
   const r = await fetch('https://api.nuki.io/smartlock/' + encodeURIComponent(id) + '/action', {
     method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, h), body: JSON.stringify({ action })
   });
@@ -179,7 +180,7 @@ export default {
 
     let result = 'sim', error = '';
     if (mode === 'live') {
-      const n = await nukiOpen(env);
+      const n = await nukiOpen(env, cfg && cfg.action);
       result = n.ok ? 'ok' : 'fail';
       if (!n.ok) error = 'Nuki ' + n.code;
     }

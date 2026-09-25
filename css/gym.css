@@ -375,4 +375,91 @@
 
 /* 25.9 — מסך הניהול בזמן שהפרטים האישיים עוד בדרך (gymFs.js) */
 .ga-partial #ga-members button, .ga-partial #ga-verify button,
-.ga-partial #ga-status button, .ga-partial #ga-new { pointer-events: none; opacity: .5; }
+.ga-partial #ga-status button, .ga-partial #ga-new, .ga-partial #ga-settings, .ga-partial #ga-members summary { pointer-events: none; opacity: .5; }
+
+/* ============================================================================
+ *  מסך המכון המאוחד — שני כרטיסים (26.9, בקשת יועד: "כמו בגינון, קומפקטי")
+ * ========================================================================== */
+.ga-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.ga-head__t { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+.ga-chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.ga-chip { font-size: 12.5px; color: var(--text-soft); background: var(--surface); border: 1px solid var(--hairline); border-radius: 99px; padding: 4px 10px; white-space: nowrap; }
+.ga-chip b { color: var(--text); margin-inline-start: 4px; font-variant-numeric: tabular-nums; }
+.ga-chip--ok b { color: var(--badge-ok); }
+.ga-chip--warn { background: var(--warn-soft); } .ga-chip--warn b { color: var(--badge-warn); }
+.ga-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 980px) { .ga-grid { grid-template-columns: minmax(0, 1fr); } }
+.ga-grid .club-card + .club-card { margin-top: 0; }
+.ga-card { padding-bottom: 10px; }
+.ga-card__h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.ga-card__h .club-sec__title { flex: 1; margin: 0; }
+.ga-card__h .gym-seg button { font-size: 12.5px; padding: 5px 10px; }
+
+/* שורת מנוי */
+.ga-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto; gap: 12px; align-items: center;
+  padding: 10px 6px; border-top: 1px solid var(--hairline); }
+.ga-row:first-child { border-top: 0; }
+.ga-row.is-attn { background: linear-gradient(270deg, rgba(217, 119, 6, .07), transparent 70%); border-radius: 10px; }
+.ga-row__who { min-width: 0; }
+.ga-row__who b { display: block; font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ga-row__who small { display: block; font-size: 12px; color: var(--text-soft); }
+.ga-row__flags { color: var(--badge-danger) !important; }
+.ga-row__pills { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.ga-row__acts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.ga-row__verify { grid-column: 1 / -1; }
+.ga-row__verify .gym-verify { margin: 4px 0 0; }
+.ga-meter { height: 6px; border-radius: 99px; background: #EEF0F3; overflow: hidden; }
+.ga-meter i { display: block; height: 100%; border-radius: 99px; background: var(--ok); }
+.ga-meter i.ga-meter--w { background: var(--warn); } .ga-meter i.ga-meter--d { background: var(--danger); }
+.ga-meter--none { visibility: hidden; }
+.ga-meter__t { font-size: 11.5px; color: var(--text-soft); margin-top: 3px; white-space: nowrap; }
+@media (max-width: 640px) {
+  .ga-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+  .ga-row__valid { grid-column: 1 / -1; order: 3; }
+  .ga-row__pills { justify-content: flex-start; order: 2; grid-column: 1; }
+  .ga-row__acts { order: 1; grid-row: 1; grid-column: 2; }
+}
+
+/* תפריט ⋯ — <details> מקורי */
+.ga-more { position: relative; }
+.ga-more > summary { list-style: none; width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface);
+  display: grid; place-items: center; cursor: pointer; font-size: 17px; line-height: 1; color: var(--text-soft); user-select: none; }
+.ga-more > summary::-webkit-details-marker { display: none; }
+.ga-more[open] > summary { background: var(--hover); color: var(--text); }
+.ga-menu { position: absolute; inset-inline-end: 0; top: calc(100% + 6px); z-index: 20; min-width: 170px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-hover); padding: 5px; display: flex; flex-direction: column; }
+.ga-menu button { font: inherit; font-size: 13.5px; text-align: start; border: 0; background: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--text); }
+.ga-menu button:hover { background: var(--hover); }
+.ga-menu .ga-menu__danger { color: var(--badge-danger); }
+
+/* גיליון ההגדרות */
+.ga-sheet__h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.ga-sheet__h h2 { margin: 0; font-size: 17px; }
+.ga-tabs { display: flex; margin-bottom: 12px; }
+.ga-tabs button { flex: 1; padding: 8px 12px; }
+.ga-sheet .gym-check__row { padding: 10px 0; }
+
+/* כרטיס בקרת כניסה */
+.da-line { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--hover); border: 1px solid var(--hairline); }
+.da-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--text-muted); }
+.da-line--ok .da-dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(5, 150, 105, .14); }
+.da-line--warn .da-dot { background: var(--warn); box-shadow: 0 0 0 4px rgba(217, 119, 6, .14); }
+.da-line--danger { background: var(--danger-soft); } .da-line--danger .da-dot { background: var(--danger); }
+.da-line__t { flex: 1; min-width: 0; }
+.da-line__t b { display: block; font-size: 14px; } .da-line__t small { display: block; font-size: 12px; color: var(--text-soft); }
+.da-log { margin-top: 6px; }
+.da-lg { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 2px; border-top: 1px solid var(--hairline); }
+.da-lg:first-child { border-top: 0; }
+.da-lg__t { font-size: 12.5px; color: var(--text-soft); font-variant-numeric: tabular-nums; direction: ltr; text-align: end; }
+.da-lg b { display: block; font-size: 13.5px; } .da-lg small { display: block; font-size: 11.5px; color: var(--text-soft); }
+.da-lg.is-fail small { color: var(--badge-danger); }
+.da-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--hairline); font-size: 12.5px; color: var(--text-soft); }
+.da-foot span { flex: 1; }
+.da-link { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text); background: none; border: 0; padding: 2px 0; cursor: pointer; }
+.da-link:hover { text-decoration: underline; }
+@media (max-width: 720px) {
+  .ga-head__t { flex: 1; }
+  .ga-chips { order: 3; flex-basis: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .ga-chips::-webkit-scrollbar { display: none; }
+  #ga-settings { padding-inline: 10px; }
+}

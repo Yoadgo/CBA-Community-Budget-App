@@ -55,9 +55,12 @@ CBA.screens = CBA.screens || {};
     });
   }
 
-  function famName(fid) {
+  /* 26.9 — שם פרטי של מי ששריין (slot), ורק אם אין — שם המשפחה. */
+  function famName(fid, slot) {
+    var p = CBA.data && CBA.data.personName ? CBA.data.personName(fid, slot) : "";
+    if (p) return p;
     var n = CBA.data && CBA.data.familyDisplayName ? CBA.data.familyDisplayName(fid) : "";
-    return n || ("משפחה " + fid);
+    return n || "תושב";
   }
 
   function kpis() {
@@ -97,7 +100,7 @@ CBA.screens = CBA.screens || {};
         ph === "now" ? '<span class="gym-pill gym-pill--warn">עוד לא הגיע/ה</span>' : '<span class="gym-pill gym-pill--muted">מתוכנן</span>';
       return '<div class="wa-row' + (active ? "" : " is-off") + '">' +
         '<span class="wa-row__t"><bdi dir="ltr">' + esc(D().range(b.from, b.to)) + "</bdi></span>" +
-        '<div class="wa-row__who"><b>' + esc(famName(b.familyId)) + "</b><div>" + esc(D().SEAT_LABEL[b.seat] || "") + "</div></div>" +
+        '<div class="wa-row__who"><b>' + esc(famName(b.familyId, b.slot)) + "</b><div>" + esc(D().SEAT_LABEL[b.seat] || "") + "</div></div>" +
         status +
         (active && ph !== "ended" ? '<button type="button" class="btn-ghost btn-sm" data-wa-cancel="' + esc(b.id) + '">ביטול</button>' : '<span class="wa-row__sp"></span>') +
       "</div>";
@@ -142,7 +145,7 @@ CBA.screens = CBA.screens || {};
   function cancel(container, id, btn) {
     var b = (st.rows || []).filter(function (x) { return x.id === id; })[0];
     if (!b) return;
-    CBA.ui.confirm("לבטל את השריון של " + famName(b.familyId) + " (" + D().range(b.from, b.to) + ")? התושב יקבל על כך מייל.",
+    CBA.ui.confirm("לבטל את השריון של " + famName(b.familyId, b.slot) + " (" + D().range(b.from, b.to) + ")? התושב יקבל על כך מייל.",
       { title: "ביטול שריון", okText: "ביטול השריון", cancelText: "השאר", danger: true })
       .then(function (ok) {
         if (!ok) return;

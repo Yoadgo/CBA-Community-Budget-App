@@ -24,13 +24,6 @@ CBA.screens = CBA.screens || {};
     return CBA.skel.stats(4) + CBA.skel.table(6, 5);
   }
 
-  function kpi(n, label, tone) {
-    return '<div class="gym-kpi' + (tone ? ' gym-kpi--' + tone : '') + '">' +
-             '<div class="gym-kpi__n">' + CBA.esc(String(n)) + '</div>' +
-             '<div class="gym-kpi__l">' + CBA.esc(label) + '</div>' +
-           '</div>';
-  }
-
   /* "מצב המודול" (2026-09-16) — יועד: היה רשימת-קריאה עם מלא פריטים שלא עוזרים בשוטף (כמה טאבים נוצרו, כמה מקטעי תקנון…). הוחלף בכרטיס פעולה: רק הגדרות שמנהל/ת המכון באמת עורך/ת שוטף — כל שורה נותנת ללחוץ "עדכון" שפותח מגירה עם שדה אחד (openFormDrawer, אותו דפוס שכבר משמש להארכה/לרישום תשלום). קוד הכניסה לעולם אף פעם לא מוצג כאן — השרת מסתיר אותו מהמסך הזה בכוונה (ראו handleGymList_), אז השדה נשאר ריק. */
   function settingRowHTML(o) {
     return '<div class="gym-check__row">' +
@@ -51,56 +44,73 @@ CBA.screens = CBA.screens || {};
     }).length;
   }
 
-  /* ---------- שורת מנוי ברשימה ---------- */
+  /* ---------- שורת מנוי ברשימה ----------
+     26.9 (בקשת יועד: "מסך אחד, שני כרטיסים, קומפקטי") — שורה אחת לכל מנוי:
+     שם · מד תוקף · סטטוס · פעולה ראשית אחת (רק כשיש מה לעשות) · תפריט ⋯ לכל
+     השאר. תפריט ⋯ הוא <details> מקורי — הכפתורים שבו נושאים את אותם
+     data-ga-* כמו קודם, ולכן bindMemberActions לא השתנה. */
   var GA_TONE = {
     "פעיל": "ok", "פג תוקף": "muted", "מוקפא": "muted",
     "ממתין לאישור רופא": "danger", "נדחה": "danger", "בוטל": "danger"
   };
+  /* מה דורש ממך פעולה — מופיע ראשון ומסומן. */
+  var GA_ATTN = { "ממתין לאימות": 1, "ממתין לאישור רופא": 1 };
+  var GA_ORDER = { "ממתין לאימות": 0, "ממתין לאישור רופא": 1, "ממתין לתשלום": 2, "ממתין להצהרה": 3, "פעיל": 4, "פג תוקף": 5 };
+  var gaFilter = "all";
+  var gaNuki = { on: false, byId: {}, state: {} };   /* גישת Nuki לפי מזהה מנוי (רק כשהמכון בדלת) */
+
+  function daysLeft(v) {
+    var d = asDate(v); if (!d) return null;
+    var t = new Date(); t.setHours(0, 0, 0, 0);
+    return Math.round((d.getTime() - t.getTime()) / 86400000);
+  }
+  function meterHTML(m) {
+    var left = daysLeft(m["בתוקף עד"]);
+    if (left === null) return '<div class="ga-meter ga-meter--none"></div>';
+    var total = (planMonthsFor(m["מסלול"]) || 12) * 30.4;
+    var pct = Math.max(0, Math.min(100, Math.round(left / total * 100)));
+    var tone = left < 0 ? "d" : left <= 30 ? "w" : "ok";
+    return '<div class="ga-meter"><i class="ga-meter--' + tone + '" style="width:' + (left < 0 ? 100 : Math.max(4, pct)) + '%"></i></div>' +
+      '<div class="ga-meter__t">עד ' + CBA.esc(fmtDate(m["בתוקף עד"])) +
+        (left < 0 ? " · פג" : left <= 60 ? " · עוד " + left + " ימים" : "") + "</div>";
+  }
+  function nukiPillHTML(m) {
+    if (!gaNuki.on) return "";
+    var uid = gaNuki.byId[String(m["מזהה"] || "")];
+    var st = uid ? (gaNuki.state[uid] || {}).state : "";
+    if (st === "active") return '<span class="gym-pill gym-pill--ok">Nuki פעיל</span>';
+    if (st === "sent") return '<span class="gym-pill gym-pill--muted">הזמנה נשלחה</span>';
+    if (st === "error") return '<span class="gym-pill gym-pill--warn">Nuki: תקלה</span>';
+    return "";
+  }
   function memberRowHTML(m) {
+    var id = CBA.esc(m["מזהה"] || "");
     var status = String(m["סטטוס"] || "").trim();
     var tone = GA_TONE[status] || "warn";
     var name = ((m["שם פרטי"] || "") + " " + (m["שם משפחה"] || "")).trim() || m["אימייל"] || "";
     var flags = String(m["שאלות שנענו בכן"] || "").trim();
-    return '<div class="gym-row">' +
-             '<div class="gym-row__main">' +
-               '<div class="gym-row__name">' + CBA.esc(name) +
-                 (flags ? ' <span class="gym-pill gym-pill--danger">דגל</span>' : "") + "</div>" +
-               '<div class="gym-row__meta">' +
-                 (m["מספר בית"] ? "בית " + CBA.esc(m["מספר בית"]) + " · " : "") +
-                 CBA.esc(m["מסלול"] || "") +
-                 (m["בתוקף עד"] ? " · בתוקף עד " + CBA.esc(fmtDate(m["בתוקף עד"])) : "") +
-               "</div>" +
-               (flags ? '<div class="gym-row__flags">סומן "כן": ' + CBA.esc(flags) + "</div>" : "") +
-             "</div>" +
-             '<div class="gym-row__side">' +
-               '<span class="gym-pill gym-pill--' + tone + '">' + CBA.esc(status) + "</span>" +
-               // אם כבר יש הצהרה חתומה — הפעולה הטבעית היא לצפות בה, לא לבקש
-               // אותה שוב (יועד העיר על זה בצדק, 2026-08-20). "בקשת הצהרה"
-               // נשארת רק למי שאין לו הצהרה, או שההצהרה שלו כבר לא בתוקף.
-               (m["תאריך חתימה"]
-                 ? '<button type="button" class="btn-ghost" data-ga-view="' + CBA.esc(m["מזהה"] || "") +
-                   '">צפייה בהצהרה</button>'
-                 : "") +
-               (status === "ממתין להצהרה" || m["תאריך חתימה"]
-                 ? ""
-                 : '<button type="button" class="btn-ghost" data-ga-declare="' + CBA.esc(m["מזהה"] || "") +
-                   '">בקשת הצהרה</button>') +
-               (status === "פעיל" || status === "פג תוקף"
-                 ? '<button type="button" class="btn-ghost" data-ga-extend="' + CBA.esc(m["מזהה"] || "") +
-                   '" data-ga-months="' + CBA.esc(String(m["מסלול"] || "")) + '">הארכה</button>'
-                 : "") +
-               (status === "ממתין לתשלום"
-                 ? '<button type="button" class="btn-ghost" data-ga-cash="' + CBA.esc(m["מזהה"] || "") +
-                   '" data-ga-price="' + CBA.esc(String(m["מחיר מוסכם"] || "")) + '">רישום תשלום ידני</button>'
-                 : "") +
-               '<button type="button" class="btn-ghost" data-ga-edit="' +
-                 CBA.esc(m["מזהה"] || "") + '">עריכה</button>' +
-               '<button type="button" class="btn-ghost btn-danger" data-ga-delete="' +
-                 CBA.esc(m["מזהה"] || "") + '">מחיקה</button>' +
-               (m["מצב סנכרון"] && m["מצב סנכרון"] !== "מסונכרן"
-                 ? '<span class="gym-pill gym-pill--warn">' + CBA.esc(m["מצב סנכרון"]) + "</span>"
-                 : "") +
-             "</div>" +
+    var gap = m["מצב סנכרון"] && m["מצב סנכרון"] !== "מסונכרן" ? String(m["מצב סנכרון"]) : "";
+    var primary =
+      status === "ממתין לאימות" ? '<button type="button" class="btn-primary btn-sm" data-ga-verify-open="' + id + '">אימות תשלום</button>' :
+      status === "ממתין לתשלום" ? '<button type="button" class="btn-ghost btn-sm" data-ga-cash="' + id + '" data-ga-price="' + CBA.esc(String(m["מחיר מוסכם"] || "")) + '">רישום תשלום</button>' :
+      status === "ממתין לאישור רופא" && m["תאריך חתימה"] ? '<button type="button" class="btn-primary btn-sm" data-ga-view="' + id + '">בדיקת הצהרה</button>' : "";
+    var menu =
+      (m["תאריך חתימה"] ? '<button type="button" data-ga-view="' + id + '">צפייה בהצהרה</button>' : "") +
+      (status === "ממתין להצהרה" || m["תאריך חתימה"] ? "" : '<button type="button" data-ga-declare="' + id + '">בקשת הצהרה</button>') +
+      (status === "פעיל" || status === "פג תוקף" ? '<button type="button" data-ga-extend="' + id + '" data-ga-months="' + CBA.esc(String(m["מסלול"] || "")) + '">הארכה</button>' : "") +
+      (status !== "ממתין לתשלום" && status !== "פעיל" ? "" : '<button type="button" data-ga-cash="' + id + '" data-ga-price="' + CBA.esc(String(m["מחיר מוסכם"] || "")) + '">רישום תשלום ידני</button>') +
+      '<button type="button" data-ga-edit="' + id + '">עריכה</button>' +
+      '<button type="button" class="ga-menu__danger" data-ga-delete="' + id + '">מחיקה</button>';
+    return '<div class="ga-row' + (GA_ATTN[status] ? " is-attn" : "") + '" data-ga-row="' + id + '">' +
+             '<div class="ga-row__who"><b>' + CBA.esc(name) + (flags ? ' <span class="gym-pill gym-pill--danger">דגל</span>' : "") + "</b>" +
+               "<small>" + (m["מספר בית"] ? "בית " + CBA.esc(m["מספר בית"]) + " · " : "") + CBA.esc(m["מסלול"] || "") + "</small>" +
+               (flags ? '<small class="ga-row__flags">סומן "כן": ' + CBA.esc(flags) + "</small>" : "") + "</div>" +
+             '<div class="ga-row__valid">' + (status === "פעיל" || status === "פג תוקף" ? meterHTML(m) : "") + "</div>" +
+             '<div class="ga-row__pills"><span class="gym-pill gym-pill--' + tone + '">' + CBA.esc(status) + "</span>" +
+               nukiPillHTML(m) + (gap ? '<span class="gym-pill gym-pill--warn">' + CBA.esc(gap) + "</span>" : "") + "</div>" +
+             '<div class="ga-row__acts">' + primary +
+               '<details class="ga-more"><summary aria-label="עוד פעולות">⋯</summary><div class="ga-menu">' + menu + "</div></details></div>" +
+             (status === "ממתין לאימות" ? '<div class="ga-row__verify" hidden>' + verifyRowHTML(m) + "</div>" : "") +
            "</div>";
   }
 
@@ -912,6 +922,54 @@ CBA.screens = CBA.screens || {};
     });
   }
 
+  /* ---------- ⚙ הגדרות — גיליון אחד, שתי לשוניות (26.9) ----------
+     "הגדרות מכון" (קוד, פייבוקס, שאלון) ו"בקרת כניסה" (Nuki, מצב הדלת, איש קשר).
+     שני התוכנים נבנים ע"י הקוד שכבר היה — כאן רק המסגרת. */
+  function settingsHTML(res) {
+    var settings = res.settings || {}, questions = res.questions || [];
+    var paybox = String(settings["קישור פייבוקס"] || "").trim();
+    return '<div class="gym-check">' +
+      settingRowHTML({ key: "קוד כניסה", label: "קוד כניסה למכון", hasValue: !!res.hasEntryCode, valueText: res.hasEntryCode ? "מוגדר" : "לא הוגדר" }) +
+      settingRowHTML({ key: "קישור פייבוקס", label: "קישור לתשלום בפייבוקס", hasValue: !!paybox, valueText: paybox || "לא הוגדר", rawValue: paybox }) +
+      '<div class="gym-check__row"><span class="gym-check__mark gym-check__mark--' + (questions.length ? "on" : "off") + '">' + (questions.length ? "✓" : "!") + "</span>" +
+        '<span class="gym-check__label">שאלון בריאות</span>' +
+        '<span class="gym-check__val">' + questions.length + " שאלות (" + questions.filter(function (q) { return q.active !== false; }).length + " פעילות)</span>" +
+        '<button type="button" class="btn-ghost" data-ga-questions>ניהול שאלות</button></div>' +
+    "</div>";
+  }
+  function openSettings(tab, reload, doorEl) {
+    if (!gaLast) return;
+    var sh = CBA.ui.sheet({ label: "הגדרות מכון הכושר", sheetCls: "ga-sheet", html:
+      '<div class="ga-sheet__h"><h2>הגדרות</h2><button type="button" class="btn-ghost btn-sm" data-ga-close>סגירה</button></div>' +
+      '<div class="gym-seg ga-tabs" role="tablist"><button type="button" data-ga-tab="gym">הגדרות מכון</button><button type="button" data-ga-tab="door">בקרת כניסה</button></div>' +
+      '<div data-ga-pane="gym"></div><div data-ga-pane="door" hidden></div>',
+      onMount: function (wrap, close) {
+        var gymPane = wrap.querySelector('[data-ga-pane="gym"]'), doorPane = wrap.querySelector('[data-ga-pane="door"]');
+        function paintGym() {
+          gymPane.innerHTML = settingsHTML(gaLast);
+          bindSettingActions(gymPane, function () { reload(function () { paintGym(); }); });
+          var q = gymPane.querySelector("[data-ga-questions]");
+          if (q) q.addEventListener("click", function () { openQuestionsManager(reload); });
+        }
+        paintGym();
+        if (CBA.doorAdmin && CBA.doorAdmin.mountSetup) CBA.doorAdmin.mountSetup(doorPane, doorEl);
+        function show(t) {
+          wrap.querySelectorAll("[data-ga-tab]").forEach(function (b) { b.classList.toggle("is-on", b.getAttribute("data-ga-tab") === t); });
+          gymPane.hidden = t !== "gym"; doorPane.hidden = t !== "door";
+        }
+        show(tab || "gym");
+        wrap.addEventListener("click", function (e) {
+          var t = e.target.closest("[data-ga-tab]"); if (t) show(t.getAttribute("data-ga-tab"));
+          if (e.target.closest("[data-ga-close]")) close();
+        });
+      } });
+    return sh;
+  }
+
+  function chip(n, label, tone) {
+    return '<span class="ga-chip' + (tone && n ? " ga-chip--" + tone : "") + '">' + CBA.esc(label) + "<b>" + CBA.esc(String(n)) + "</b></span>";
+  }
+
   CBA.screens.gymAdmin = {
     title: "מכון כושר",
 
@@ -919,134 +977,125 @@ CBA.screens = CBA.screens || {};
       gaWinScrollY = window.scrollY || 0;
 
       container.innerHTML =
-        '<div class="screen-head screen-head--row">' +
-          '<div>' +
-            '<div class="screen-head__title">מכון כושר — ניהול</div>' +
-            '<div class="screen-head__sub">מנויים, אישורי הרשמה ומעקב תשלומים</div>' +
-          '</div>' +
-          '<button type="button" class="btn-primary" id="ga-new">הקמת מנוי ידנית</button>' +
-        '</div>' +
-        '<div id="ga-kpis" class="gym-kpis"></div>' +
-        /* 25.9 — כרטיס הדלת (Nuki): מצב, יומן, פתיחה מרחוק. ר' doorAdmin.js */
-        '<div class="card club-card ga-door" id="ga-door"></div>' +
-        '<div class="card club-card" id="ga-verify-card">' +
-          '<div class="club-sec__title">ממתינים לאימות תשלום</div>' +
-          '<div id="ga-verify">' + gaLoadingHTML() + '</div>' +
-        '</div>' +
-        '<div class="card club-card">' +
-          '<div class="club-sec__title">מנויים</div>' +
-          '<div id="ga-members">' + gaLoadingHTML() + '</div>' +
-        '</div>' +
-        '<div class="card club-card">' +
-          '<div class="club-sec__title">הגדרות מכון</div>' +
-          '<div id="ga-status" class="gym-check">' + gaLoadingHTML() + '</div>' +
-        '</div>';
+        '<div class="ga-head">' +
+          '<div class="ga-head__t">מכון כושר</div>' +
+          '<div id="ga-kpis" class="ga-chips"></div>' +
+          '<button type="button" class="btn-ghost" id="ga-settings">⚙ הגדרות</button>' +
+          '<button type="button" class="btn-primary" id="ga-new">+ מנוי חדש</button>' +
+        "</div>" +
+        '<div class="ga-grid">' +
+          '<section class="card club-card ga-card">' +
+            '<div class="ga-card__h"><div class="club-sec__title">מנויים</div>' +
+              '<div class="gym-seg" id="ga-filter"></div></div>' +
+            '<div id="ga-members">' + gaLoadingHTML() + "</div>" +
+          "</section>" +
+          /* בקרת כניסה — מצב המנעול, פתיחה מרחוק, כניסות היום. ר' doorAdmin.js */
+          '<section class="card club-card ga-card ga-door" id="ga-door"></section>' +
+        "</div>";
 
+      var doorEl = container.querySelector("#ga-door");
       var newBtn = container.querySelector("#ga-new");
       if (newBtn) newBtn.addEventListener("click", function () { openCreate(container, load); });
-      if (CBA.doorAdmin) CBA.doorAdmin.render(container.querySelector("#ga-door"));
+      container.querySelector("#ga-settings").addEventListener("click", function () { openSettings("gym", load, doorEl); });
+      if (CBA.doorAdmin) {
+        CBA.doorAdmin.onSettings = function () { openSettings("door", load, doorEl); };
+        CBA.doorAdmin.render(doorEl);
+      }
 
       var kpisEl    = container.querySelector("#ga-kpis");
       var membersEl = container.querySelector("#ga-members");
-      var verifyEl  = container.querySelector("#ga-verify");
-      var statusEl  = container.querySelector("#ga-status");
+      var filterEl  = container.querySelector("#ga-filter");
 
-      // הצהרת פונקציה (לא ביטוי) — ולכן היא מורמת ונגישה גם לכפתור שנקשר למעלה.
-      // cb אופציונלי (2026-09-16) — נקרא אחרי שה-DOM עודכן, כדי שמסכי משנה
-      // (כמו ניהול שאלון הבריאות) יוכלו לרענן את עצמם מ-gaLast בלי
-      // לנחש מתי הבקשה האסינכרונית הסתיימה.
+      /* סגירת תפריט ⋯ פתוח בלחיצה בחוץ / אחרי בחירה. */
+      membersEl.addEventListener("click", function (e) {
+        var inMenu = e.target.closest(".ga-menu button");
+        membersEl.querySelectorAll("details.ga-more[open]").forEach(function (d) {
+          if (inMenu || !d.contains(e.target)) d.removeAttribute("open");
+        });
+        var v = e.target.closest("[data-ga-verify-open]");
+        if (v) {
+          var row = v.closest(".ga-row"), box = row && row.querySelector(".ga-row__verify");
+          if (box) { box.hidden = !box.hidden; v.textContent = box.hidden ? "אימות תשלום" : "סגירה"; }
+        }
+      });
+
+      function paintMembers() {
+        var members = ((gaLast && gaLast.members) || []).slice();
+        members.sort(function (x, y) {
+          var a = GA_ORDER[String(x["סטטוס"] || "").trim()], b = GA_ORDER[String(y["סטטוס"] || "").trim()];
+          return (a == null ? 9 : a) - (b == null ? 9 : b);
+        });
+        var attn = members.filter(function (m) { return GA_ATTN[String(m["סטטוס"] || "").trim()]; });
+        var gone = members.filter(function (m) { return ["פג תוקף", "בוטל", "נדחה"].indexOf(String(m["סטטוס"] || "").trim()) !== -1; });
+        filterEl.innerHTML =
+          '<button type="button" data-ga-f="all" class="' + (gaFilter === "all" ? "is-on" : "") + '">הכול</button>' +
+          '<button type="button" data-ga-f="attn" class="' + (gaFilter === "attn" ? "is-on" : "") + '">ממתינים לך' + (attn.length ? " (" + attn.length + ")" : "") + "</button>" +
+          '<button type="button" data-ga-f="gone" class="' + (gaFilter === "gone" ? "is-on" : "") + '">לא פעילים</button>';
+        var list = gaFilter === "attn" ? attn : gaFilter === "gone" ? gone : members;
+        membersEl.innerHTML = list.length ? list.map(memberRowHTML).join("") :
+          gaFilter === "all"
+            ? '<div class="gym-note">עדיין אין מנויים. תושבים נרשמים לבד ב"מתקנים ← מכון כושר", ואפשר להקים מנוי ידנית מ"+ מנוי חדש".</div>'
+            : '<div class="gym-note">' + (gaFilter === "attn" ? "אין כרגע מה לאשר." : "אין מנויים לא פעילים.") + "</div>";
+        bindMemberActions(membersEl, load);
+        bindVerifyActions(membersEl, load);
+      }
+      filterEl.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-ga-f]"); if (!b) return;
+        gaFilter = b.getAttribute("data-ga-f"); paintMembers();
+      });
+
+      /* גישת Nuki לכל מנוי — רק כשהמכון עבר לדלת. קריאה ישירה מ-Firestore. */
+      function loadNuki() {
+        if (!(CBA.door && CBA.fb && CBA.fb.readCollection)) return;
+        CBA.door.readPublic(function (err, pub) {
+          gaNuki.on = !!(pub && pub.gymOn);
+          if (!gaNuki.on) return;
+          CBA.fb.readCollection("gymMembers", function (e1, rows) {
+            (rows || []).forEach(function (d) { if (d.uid) gaNuki.byId[String(d["מזהה"] || d.id || "")] = d.uid; });
+            CBA.fb.readCollection("gymNuki", function (e2, n) {
+              (n || []).forEach(function (d) { if (d.uid || d.id) gaNuki.state[d.uid || d.id] = d; });
+              if (gaLast) paintMembers();
+            });
+          });
+        });
+      }
+
+      // cb אופציונלי — נקרא אחרי שה-DOM עודכן (ניהול השאלון והגדרות נשענים עליו).
       function load(cb) {
         if (!(CBA.data && CBA.data.getGymList)) {
           membersEl.innerHTML = '<div class="club-empty">המודול עדיין לא מחובר לגיליון.</div>';
-          statusEl.innerHTML = '';
           if (cb) cb();
           return;
         }
         CBA.data.getGymList(function (res) {
           if (!res || !res.ok) {
-            // שגיאת הרשאה היא המקרה השכיח כאן, והיא לא באמת "תקלה" — לכן
-            // מוצגת כהודעה מסבירה ולא כאדום מבהיל.
-            membersEl.innerHTML = '<div class="club-empty">' +
-              CBA.esc((res && res.error) || "לא ניתן לטעון כרגע.") + '</div>';
-            statusEl.innerHTML = '';
-            kpisEl.innerHTML = '';
+            membersEl.innerHTML = '<div class="club-empty">' + CBA.esc((res && res.error) || "לא ניתן לטעון כרגע.") + "</div>";
+            kpisEl.innerHTML = "";
             if (cb) cb();
             return;
           }
-
           gaLast = res;
-          /* 25.9 — תשובה חלקית מ-Firestore (js/data/gymFs.js): הרשימה והמספרים
-             כבר על המסך, הפרטים האישיים בדרך מ-Apps Script. עד שהם מגיעים —
-             כפתורי הפעולה נעולים, כדי שאף טופס לא ייפתח עם שדות ריקים. */
+          /* 25.9 — תשובה חלקית מ-Firestore (js/data/gymFs.js): הרשימה כבר על
+             המסך, הפרטים האישיים בדרך. עד אז כפתורי הפעולה נעולים. */
           container.classList.toggle("ga-partial", !!res.partial);
           var gaNote = container.querySelector("#ga-partial-note");
           if (!gaNote) {
             gaNote = document.createElement("div");
             gaNote.id = "ga-partial-note"; gaNote.className = "gym-hint gym-hint--tight";
             gaNote.textContent = "טוען פרטים אישיים… הפעולות ייפתחו בעוד רגע.";
-            kpisEl.parentNode.insertBefore(gaNote, kpisEl);
+            container.querySelector(".ga-grid").parentNode.insertBefore(gaNote, container.querySelector(".ga-grid"));
           }
           gaNote.hidden = !res.partial;
-          var members   = res.members   || [];
-          var plans     = res.plans     || [];
-          var questions = res.questions || [];
-          var rules     = res.rules     || [];
-          var settings  = res.settings  || {};
-
-          var active   = countBy(members, "פעיל");
-          var waitDoc  = countBy(members, "ממתין לאישור רופא");
-          var waitPay  = countBy(members, "ממתין לתשלום");
-          var waitVer  = countBy(members, "ממתין לאימות");
-          var expired  = countBy(members, "פג תוקף");
-          // "פער" = כל מנוי שמצב הסנכרון שלו אינו ריק ואינו "מסונכרן".
-          // מוצג ככרטיסון כי זה הדבר שהכי קל לשכוח ממנו.
-          var gaps = members.filter(function (x) {
-            var sv = String(x["מצב סנכרון"] || "").trim();
-            return sv && sv !== "מסונכרן";
-          }).length;
-
-          kpisEl.innerHTML =
-            kpi(active,  "מנויים פעילים", active ? "ok" : "muted") +
-            kpi(waitDoc, "ממתינים לאישור רופא", waitDoc ? "warn" : "muted") +
-            kpi(waitPay, "ממתינים לתשלום", waitPay ? "warn" : "muted") +
-            kpi(waitVer, "ממתינים לאימות תשלום", waitVer ? "warn" : "muted") +
-            kpi(expired, "פג תוקף", "muted") +
-            kpi(gaps, "פערי תשלום", gaps ? "warn" : "muted");
-
-          var waitingVerify = members.filter(function (x) {
-            return String(x["סטטוס"] || "").trim() === "ממתין לאימות";
-          });
-          verifyEl.innerHTML = waitingVerify.length
-            ? waitingVerify.map(verifyRowHTML).join("")
-            : CBA.ui.emptyState({ icon: "check", title: "אין תשלומים לאימות",
-                sub: "כשתושב ידווח על תשלום, הוא יופיע כאן לאישור שלך." });
-          bindVerifyActions(verifyEl, load);
-
-          membersEl.innerHTML = members.length
-            ? members.map(memberRowHTML).join("")
-            : '<div class="gym-note">עדיין אין מנויים.<br>' +
-              'תושבים יכולים להירשם לבד במסך "מתקנים ← מכון כושר", ואפשר גם להקים מנוי ידנית מהכפתור למעלה.</div>';
-          bindMemberActions(membersEl, load);
-
-          var payboxValue = String(settings["קישור פייבוקס"] || "").trim();
-
-          statusEl.innerHTML =
-            settingRowHTML({ key: "קוד כניסה", label: "קוד כניסה למכון",
-                              hasValue: !!res.hasEntryCode, valueText: res.hasEntryCode ? "מוגדר" : "לא הוגדר" }) +
-            settingRowHTML({ key: "קישור פייבוקס", label: "קישור לתשלום בפייבוקס",
-                              hasValue: !!payboxValue, valueText: payboxValue || "לא הוגדר", rawValue: payboxValue }) +
-            '<div class="gym-check__row">' +
-              '<span class="gym-check__mark gym-check__mark--' + (questions.length ? "on" : "off") + '">' +
-                (questions.length ? "✓" : "!") + '</span>' +
-              '<span class="gym-check__label">שאלון בריאות</span>' +
-              '<span class="gym-check__val">' + questions.length + ' שאלות (' +
-                questions.filter(function (q) { return q.active !== false; }).length + ' פעילות)</span>' +
-              '<button type="button" class="btn-ghost" data-ga-questions>ניהול שאלות</button>' +
-            '</div>';
-          bindSettingActions(statusEl, load);
-          var qBtn = statusEl.querySelector("[data-ga-questions]");
-          if (qBtn) qBtn.addEventListener("click", function () { openQuestionsManager(load); });
-
+          var members = res.members || [];
+          var active  = countBy(members, "פעיל");
+          var mine    = countBy(members, "ממתין לאישור רופא") + countBy(members, "ממתין לאימות");
+          var waitPay = countBy(members, "ממתין לתשלום");
+          var expired = countBy(members, "פג תוקף");
+          var gaps = members.filter(function (x) { var sv = String(x["מצב סנכרון"] || "").trim(); return sv && sv !== "מסונכרן"; }).length;
+          kpisEl.innerHTML = chip(active, "פעילים", "ok") + chip(mine, "ממתינים לך", "warn") +
+            (waitPay ? chip(waitPay, "ממתינים לתשלום", "") : "") + (expired ? chip(expired, "פג תוקף", "") : "") +
+            (gaps ? chip(gaps, "פערי תשלום", "warn") : "");
+          paintMembers();
           if (gaWinScrollY) window.scrollTo(0, gaWinScrollY);
           gaWinScrollY = 0;
           if (cb) cb();
@@ -1054,6 +1103,7 @@ CBA.screens = CBA.screens || {};
       }
 
       load();
+      loadNuki();
     }
   };
 })();

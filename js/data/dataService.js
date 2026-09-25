@@ -4057,6 +4057,21 @@ CBA.data = (function () {
     return familyNameMap[k] || "";
   }
 
+  /* 26.9 — שם פרטי של אדם מסוים במשפחה (משבצת 1/2), מתוך אותה ספרייה.
+     ליומן הדלת ולשריוני WeWork: Firestore שומר רק familyId + slot, בלי שמות.
+     "" אם הספרייה עוד לא נטענה או שאין משבצת — הקורא נופל לשם המשפחה. */
+  function personName(familyId, slot) {
+    var k = String(familyId == null ? "" : familyId).trim(), n = Number(slot);
+    if (!k || !(n === 1 || n === 2) || !directoryCache) return "";
+    for (var i = 0; i < directoryCache.length; i++) {
+      var r = directoryCache[i];
+      if (String(r["מזהה קבוע"] == null ? "" : r["מזהה קבוע"]).trim() !== k) continue;
+      var first = String(r["שם פרטי " + n] || "").trim(), fam = String(r["משפחה"] || "").trim();
+      return first ? first + (fam ? " " + fam : "") : "";
+    }
+    return "";
+  }
+
   function ensureFamilyNames(cb) {
     if (familyNameMap) { if (cb) cb(true); return; }
     getResidentDirectory(function (res) {
@@ -5183,6 +5198,7 @@ CBA.data = (function () {
     refreshResidents: function (cb) { residentsCache = null; directoryCache = null; communityCache = null; getResidents(cb); },
     residentPickerOptions: residentPickerOptions,
     familyDisplayName: familyDisplayName,
+    personName: personName,
     ensureFamilyNames: ensureFamilyNames,
     /* משותף עם sheets.js (צעד 08ב-3): מנגנון הדגל + הנפילה
        לאחור הוא אחד בלבד. שכפול שלו היה נפרד בשקט. */
