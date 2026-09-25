@@ -39,7 +39,10 @@ CBA.homeSchedule = (function () {
   var LIST_ROWS = 5;          // גובה קבוע לרשימה: לכל היותר 5 שורות-יום (כולל היום)
   var COMPACT_ROWS = 3;       // מובייל, תושב
   var LATER_N = 3;            // "בהמשך" — שלושה אחרי השבועיים
-  var FEAT_DAYS = 60;         // "הבא בקהילה" — רק אם הוא בחודשיים הקרובים
+  /* 28.9 (בקשת יועד): "הבא בקהילה" בלי מגבלת זמן — גם אם הוא בעוד
+     חצי שנה. במקום החלון של 60 יום: עד FEAT_MAX שורות — קודם כל אירוע
+     שפתוח לאישור הגעה, ואחריו אירוע הקהילה/תרבות הבא. */
+  var FEAT_MAX = 3;
   /* אחרי זה — מציירים מהמטמון ומרעננים ברקע. שתי דקות (היה 15) מאז שהלוח
      נקרא מ-Firestore: קריאה של מסמך אחד, ~100ms, במקום ~5 שניות של Apps Script. */
   var TTL = 2 * 60 * 1000;
@@ -252,16 +255,44 @@ CBA.homeSchedule = (function () {
     });
     return m;
   }
-  /* "הבא בקהילה" — אירוע קהילה/תרבות הבא, מהיום, בחודשיים הקרובים. */
-  function nextCommunity(today) {
-    var lim = addDays(today, FEAT_DAYS).getTime();
-    var c = (st.ev || []).filter(function (e) {
-      return (e.cat === "community" || e.cat === "culture") && e.date >= today && e.date.getTime() < lim;
-    }).sort(function (a, b) { return a.date - b.date; });
-    return c[0] || null;
+  /* "הבא בקהילה" (28.9) — רשימה ולא אירוע אחד:
+     1. כל אירוע עתידי שפתוח לאישור הגעה (בכל קטגוריה), לפי תאריך;
+     2. אירוע הקהילה/תרבות הבא — בלי מגבלת זמן — אם עוד לא ברשימה.
+     אם בשנה הנוכחית לא נשאר אירוע קהילה/תרבות, נמשכת השנה הבאה פעם אחת
+     ברקע (loadNextYear) — עמוד הבית לא מחכה לה. */
+  var nextYear = { y: 0, list: null, busy: false };
+  function loadNextYear(y) {
+    if (nextYear.y === y && (nextYear.list || nextYear.busy)) return;
+    var c = cachedYear(y);
+    if (c) { nextYear = { y: y, list: normalize(c.list), busy: false }; return; }
+    nextYear = { y: y, list: null, busy: true };
+    fetchYear(y, function () {
+      var cc = cachedYear(y);
+      nextYear = { y: y, list: cc ? normalize(cc.list) : [], busy: false };
+      paint();
+    });
   }
+  function featured(today) {
+    var t = today.getTime();
+    var pool = (st.ev || []).slice();
+    if (nextYear.list) pool = pool.concat(nextYear.list);
+    var seen = {}, out = [];
+    pool.filter(function (e) {
+      return e.date.getTime() >= t && rsvp.ids && rsvp.ids[e.id];
+    }).sort(function (a, b) { return a.date - b.date; }).forEach(function (e) {
+      if (!seen[e.id] && out.length < FEAT_MAX) { seen[e.id] = 1; out.push(e); }
+    });
+    var com = pool.filter(function (e) {
+      return (e.cat === "community" || e.cat === "culture") && e.date.getTime() >= t;
+    }).sort(function (a, b) { return a.date - b.date; })[0];
+    if (!com && st.ev) loadNextYear(today.getFullYear() + 1);
+    if (com && !seen[com.id] && out.length < FEAT_MAX) out.push(com);
+    return out.sort(function (a, b) { return a.date - b.date; });
+  }
+  function nextCommunity(today) { return featured(today)[0] || null; }
+  function isOpen(e) { return !!(rsvp.ids && rsvp.ids[e.id]); }
   function findEvent(id) {
-    var all = allEvents();
+    var all = allEvents().concat(nextYear.list || []);
     for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
     return null;
   }
@@ -353,7 +384,7 @@ CBA.homeSchedule = (function () {
     return '<div class="hm-ag__d hm-ag__d--feat">' +
       '<button type="button" class="hm-ag__open" data-hm-date="' + dkey(f.date) + '">' +
         '<span class="hm-ag__w"><small>' + WD_SHORT[f.date.getDay()] + '</small><b>' + dm(f.date) + '</b></span>' +
-        '<span class="hm-ag__l"><span class="hm-ag__k">הבא בקהילה</span>' +
+        '<span class="hm-ag__l"><span class="hm-ag__k">' + (open ? "פתוח לאישור הגעה" : "הבא בקהילה") + '</span>' +
           '<span class="hm-ag__i"><i class="hm-dot hm-dot--' + k + '"></i><span class="hm-ag__t" dir="auto">' + esc(f.title) + '</span></span>' +
           '<span class="hm-ag__m">' + meta.join(" · ") + '</span></span></button>' +
       (open ? '<button type="button" class="hm-rsvp-sm" data-hm-rsvp="' + esc(f.id) + '">' + svg(ICO.check, 13) + 'אישור הגעה</button>' : "") +
@@ -362,16 +393,18 @@ CBA.homeSchedule = (function () {
 
   function listHTML(today, days, rows, feat, compact) {
     var out = [agendaRow(today, days[dkey(today)] || [], (days[dkey(today)] || []).length ? "" : "is-empty-today", today)];
-    var shown = 0, featShown = false;
+    var shown = 0, seen = [];
+    feat = feat || [];
+    function mark(list) { feat.forEach(function (f) { if (list.indexOf(f) !== -1) seen.push(f); }); }
+    mark(days[dkey(today)] || []);
     for (var i = 1; i < LIST_DAYS && out.length < rows; i++) {
       var d = addDays(today, i), list = days[dkey(d)] || [];
       if (!list.length) continue;
-      if (feat && list.indexOf(feat) !== -1) featShown = true;
+      mark(list);
       out.push(agendaRow(d, list, (shown >= 2 ? "is-extra" : ""), today));
       shown++;
     }
-    if ((days[dkey(today)] || []).indexOf(feat) !== -1) featShown = true;
-    if (feat && !featShown && !compact) out.push(featRowHTML(feat));
+    if (!compact) feat.forEach(function (f) { if (seen.indexOf(f) === -1) out.push(featRowHTML(f)); });
     return '<div class="hm-ag">' + out.join("") + '</div>';
   }
 
@@ -393,11 +426,11 @@ CBA.homeSchedule = (function () {
     }
     var rows = [], n = 0;
     for (var j = 0; j < 45 && n < COMPACT_ROWS; j++) {
-      var dd = addDays(today, j), l = (days[dkey(dd)] || []).filter(function (e) { return e !== feat; });
+      var dd = addDays(today, j), l = (days[dkey(dd)] || []).filter(function (e) { return (feat || []).indexOf(e) === -1; });
       if (!l.length) continue;
       rows.push(agendaRow(dd, l, "", today)); n++;
     }
-    if (feat) rows.push(featRowHTML(feat));
+    (feat || []).forEach(function (f) { rows.push(featRowHTML(f)); });
     if (!rows.length) rows.push('<p class="hm-sch__empty">אין אירועים בשבועות הקרובים.</p>');
     return '<div class="hm-strip">' + strip + '</div><div class="hm-ag">' + rows.join("") + '</div>';
   }
@@ -432,23 +465,27 @@ CBA.homeSchedule = (function () {
         '<button type="button" class="hm-link" data-hm-retry>לנסות שוב</button></div>';
     }
     if (!st.ev) return skeletonHTML(st.mode);
-    var all = allEvents(), days = byDay(all), feat = nextCommunity(today);
+    var all = allEvents(), days = byDay(all), feat = featured(today);
     if (st.mode === "list") return listHTML(today, days, LIST_ROWS, feat, false);
     return '<div class="hm-sch__grid">' + gridHTML(today, days) + laterHTML(today) + '</div>' +
       '<div class="hm-sch__compact">' + compactHTML(today, days, feat) + '</div>';
   }
 
+  /* כרטיס "הבא בקהילה" (תושב, מחשב) — פריט לכל אירוע ב-featured(). */
   function featCardHTML() {
-    var f = st.ev ? nextCommunity(sod(new Date())) : null;
-    if (!f) return "";
+    var list = st.ev ? featured(sod(new Date())) : [];
+    if (!list.length) return "";
+    return '<section class="card hm-card hm-feat">' + list.map(featItemHTML).join("") + '</section>';
+  }
+  function featItemHTML(f) {
     var mon = MON_SHORT[f.date.getMonth()];
     var meta = [WD_LONG[f.date.getDay()]];
     if (!f.allDay) meta.push(hm(f.date));
     var open = !!(rsvp.ids && rsvp.ids[f.id]);
     var cal = CBA.screens && CBA.screens.events && CBA.screens.events.calendarLinks;
     var gUrl = cal && cal.google ? cal.google(f) : "";
-    return '<section class="card hm-card hm-feat">' +
-      '<span class="hm-feat__k">הבא בקהילה · ' + CAT[f.cat].he + '</span>' +
+    return '<div class="hm-feat__item">' +
+      '<span class="hm-feat__k">' + (open ? "פתוח לאישור הגעה" : "הבא בקהילה") + ' · ' + CAT[f.cat].he + '</span>' +
       '<button type="button" class="hm-feat__row" data-hm-date="' + dkey(f.date) + '">' +
         '<span class="hm-feat__date"><small>' + mon + '</small><b>' + f.date.getDate() + '</b></span>' +
         '<span class="hm-feat__txt"><b dir="auto">' + esc(f.title) + '</b>' +
@@ -463,7 +500,7 @@ CBA.homeSchedule = (function () {
           (gUrl ? '<a class="hm-feat__btn" href="' + esc(gUrl) + '" target="_blank" rel="noopener">Google</a>' : "") +
           '<button type="button" class="hm-feat__btn" data-hm-apple="' + esc(f.id) + '">Apple</button>' +
         '</span>' +
-      '</div></section>';
+      '</div></div>';
   }
 
   function paint() {

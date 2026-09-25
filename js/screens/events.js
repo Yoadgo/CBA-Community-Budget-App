@@ -113,13 +113,42 @@ CBA.screens.events = (function () {
   }
 
   /* ==========================================================================
+   *  ימי הולדת — נתון מ-Apps Script (קריאה מגיליון התושבים)
+   * --------------------------------------------------------------------------
+   *  קוראים מהשרת את כל תושבים עם ימי הולדת, משומרים ממלא, ויוצרים אירוע
+   *  חוזר בשנה הנוכחית/הבאה. רק תושבים עם birthDate שמומלאו מופיעים.
+   *  (2026-09-25: התוספת הראשונה של ימי הולדת לעמוד האירועים)
+   *  ⏳ דורש action חדש "eventsBirthdays" בשרת (Code.gs > handleEventsBirthdays_)
+   * ========================================================================== */
+  /* ימי הולדת (28.9) — Apps Script בלבד (שמות תושבים לא עוברים ל-Firestore
+     ולא נשמרים במכשיר). השרת מחזיר יום+חודש בלבד — בלי שנת לידה/גיל — ואנחנו
+     ממקמים אותם בשנה שמוצגת בלוח. ⚠️ הלוח **לא מחכה** לקריאה הזו (~2-5ש'):
+     הוא מצויר מיד, וימי ההולדת נכנסים בציור חוזר כשהם מגיעים. */
+  var bdCache = null; // [{key,name,month,day}] לכל אורך המושב
+  function loadBirthdayEvents(year, done) {
+    function place(list) {
+      return list.map(function (b) {
+        var ev = { id: "bd-" + b.key + "-" + year, title: "יום הולדת — " + b.name,
+                   date: new Date(year, b.month - 1, b.day), allDay: true,
+                   category: "birthdays", description: "", location: "" };
+        return ev;
+      }).filter(function (ev) { return ev.date.getMonth() >= 0 && !isNaN(ev.date.getTime()); });
+    }
+    if (bdCache) return done(place(bdCache));
+    if (!CBA.sheets || !CBA.sheets.get) return done([]);
+    CBA.sheets.get({ action: "eventsBirthdays" }, function (res) {
+      if (!res || !res.ok || !Array.isArray(res.birthdays)) return done([]);
+      bdCache = res.birthdays;
+      done(place(bdCache));
+    });
+  }
+
+  /* ==========================================================================
    *  אירועי קהילה/תרבות/חגים/חופשות גנים — נתון אמיתי (2026-09-23)
    * --------------------------------------------------------------------------
    *  מחובר ל-CBA.data.getEventsFast (dataService.js): קודם המסמך
    *  `eventsCal/{year}` ב-Firestore, ובכל כשל — getEventsList ->
    *  handleGetEventsList_ ב-Code.gs, שקורא מארבעת היומנים שב-EVENTS_CALENDARS.
-   *  ⚠️ אין כאן עדיין ימי הולדת — זה תלוי ב-myProfile v2 (עדיין לא מוזג),
-   *  ולכן לא מוצג שום אירוע דמדומה בקטגוריה הזו; היא פשוט ריקה עד אז.
    * ========================================================================== */
   function loadCommunityEvents(year, callback) {
     var get = CBA.data && (CBA.data.getEventsFast || CBA.data.getEventsList);
@@ -149,6 +178,17 @@ CBA.screens.events = (function () {
         return ev;
       });
       callback();
+      // ימי הולדת — ברקע, ואז ציור חוזר (ר' loadBirthdayEvents)
+      loadBirthdayEvents(year, function (birthdays) {
+        if (!birthdays.length || state.year !== year) return;
+        birthdays.forEach(function (b) {
+          if (state.eventsById[b.id]) return;
+          state.allEvents.push(b);
+          state.eventsById[b.id] = b;
+        });
+        if (activeContainer && activeContainer.isConnected &&
+            !document.body.classList.contains("has-cba-dlg")) draw(activeContainer);
+      });
     });
   }
 
@@ -546,7 +586,7 @@ CBA.screens.events = (function () {
           '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
           '<div class="ev-actions">' +
           addCalHTML(e.id) + shareBtnHTML(e.id) +
-          (rsvpOpen ? '<button type="button" class="btn-rsvp" data-event-id="' + esc(e.id) + '">אישור הגעה</button>' : "") +
+          rsvpBtnHTML(e, rsvpOpen) +
           '</div>' +
           '</div></div>';
       });
@@ -782,7 +822,7 @@ CBA.screens.events = (function () {
             '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
             '<div class="ev-actions">' +
             (e.category !== "personal" ? addCalHTML(e.id) + shareBtnHTML(e.id) : "") +
-            (rsvpOpen ? '<button type="button" class="btn-rsvp" data-event-id="' + esc(e.id) + '">אישור הגעה</button>' : "") +
+            rsvpBtnHTML(e, rsvpOpen) +
             '</div>' +
             '</div></div>';
         });
@@ -861,6 +901,18 @@ CBA.screens.events = (function () {
      ב-Code.gs ולכלל eventRSVP ב-firestore.rules — ההסתרה כאן היא נוחות בלבד,
      המידור האמיתי הוא בכללי Firestore. CBA.perms מתמלא ב-app.js. */
   var PERM_CULTURE = "תרבות";
+  /* 28.9 — תיקון "ביצה ותרנגולת": הכפתור הופיע רק כשהמעקב כבר פתוח,
+     ולכן מנהל לא יכול היה לפתוח אותו מלכתחילה (דיווח יועד: "לא רואה
+     אפשרות להוסיף שאלון הגעה"). מנהל אירועים/על רואה תמיד כפתור; תושב
+     רק כשהמעקב פתוח. האכיפה האמיתית נשארת בכלל eventRSVP (hasPerm('תרבות')). */
+  function rsvpBtnHTML(e, open) {
+    if (open) return '<button type="button" class="btn-rsvp" data-event-id="' + esc(e.id) + '">אישור הגעה</button>';
+    if (e.category !== "birthdays" && viewerIsAdmin()) {
+      return '<button type="button" class="btn-rsvp btn-rsvp--admin" data-event-id="' + esc(e.id) + '">+ פתיחת אישור הגעה</button>';
+    }
+    return "";
+  }
+
   function viewerIsAdmin() {
     if (!window.CBA) return false;
     if (CBA.isSuper) return true;
@@ -1074,13 +1126,10 @@ CBA.screens.events = (function () {
     return window.innerWidth < 768 ? "mobile" : "monthly";
   }
 
-  /* הערה (לא אזהרה): ימי הולדת עדיין לא מוצגים כי הם תלויים ב-myProfile v2
-   * שטרם מוזג. כל שאר הקטגוריות (קהילה/תרבות/חגים/גנים) הן נתון אמיתי
-   * מ-Google Calendar, ולכן אין יותר באנר "נתוני דמה" כללי. */
+  /* הערה (לא אזהרה): ימי הולדת כעת מוצגים, קרויים מ-myProfile בכל כניסה למסך.
+   * כל הקטגוריות (קהילה/תרבות/חגים/גנים/ימי הולדת) הן נתון אמיתי. */
   function demoBannerHTML() {
-    return '<div class="events-info-banner" dir="rtl">' +
-      'ℹ️ ימי הולדת יתווספו כאן לאחר עדכון "המשפחה שלי" — עדיין לא זמינים.' +
-      '</div>';
+    return '';  // אין באנר הודעות — כל הנתונים חיים
   }
 
   /* טאב "חודשי/שנתי" — רק בדסקטופ. עוזר במעבר בין renderMonthlyView
@@ -1138,13 +1187,16 @@ CBA.screens.events = (function () {
   /* מאזין-שינוי-גודל יחיד למודול כולו (לא אחד חדש בכל כניסה למסך), כדי שלא
    * ייערמו מאזינים בכל מעבר הלוך-חזור ל"לוח אירועים" באותו סבב עבודה.
    * בודק isConnected כמו showScreen ב-app.js — אם container כבר לא בעץ
-   * המסמך (המשתמש עבר למסך אחר), לא מציירים לתוכו. */
+   * המסמך (המשתמש עבר למסך אחר), לא מציירים לתוכו.
+   * 🔴 24.9 — בדיקת has-cba-dlg מונעת ציור כשדיאלוג פתוח (גלילה בדיאלוג
+      עוררת resize event; נפתר ע"י דחיית draw עד שהדיאלוג סוגר). */
   var activeContainer = null;
   var resizeListenerAttached = false;
   function ensureResizeListener() {
     if (resizeListenerAttached) return;
     resizeListenerAttached = true;
     window.addEventListener("resize", function () {
+      if (document.body.classList.contains("has-cba-dlg")) return;  // דיאלוג פתוח — אל תצייר
       if (activeContainer && activeContainer.isConnected) draw(activeContainer);
     });
   }

@@ -19,12 +19,12 @@
   --ev-line: #E5E7EB;
   --ev-action: #111827;
 
-  --cat-community: #6366F1;      --cat-community-tint: rgba(129,140,248,.34);
-  --cat-culture: #0D9488;        --cat-culture-tint: rgba(94,187,178,.30);
-  --cat-holiday: #C2760A;        --cat-holiday-tint: rgba(234,179,110,.34);
-  --cat-kg: #7C5CC4;             --cat-kg-tint: rgba(167,139,250,.30);
-  --cat-birthday: #DB2777;       --cat-birthday-tint: rgba(219,140,175,.28);
-  --cat-personal: #0EA5E9;       --cat-personal-tint: rgba(147,197,235,.30);
+  --cat-community: #DC2626;      --cat-community-tint: rgba(220,38,38,.22);
+  --cat-culture: #7C3AED;        --cat-culture-tint: rgba(124,58,237,.25);
+  --cat-holiday: #CA8A04;        --cat-holiday-tint: rgba(202,138,4,.28);
+  --cat-kg: #059669;             --cat-kg-tint: rgba(5,150,105,.24);
+  --cat-birthday: #DB2777;       --cat-birthday-tint: rgba(219,40,119,.26);
+  --cat-personal: #0EA5E9;       --cat-personal-tint: rgba(14,165,233,.28);
 
   font-variant-numeric: tabular-nums;
 }
@@ -911,6 +911,10 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   white-space: nowrap;
   transition: all 150ms ease-in-out;
 }
+
+/* 28.9 — כפתור המנהל כשהמעקב עוד סגור: משני (מסגרת), לא שחור — פעולת ניהול, לא CTA של תושב */
+.btn-rsvp.btn-rsvp--admin { background: transparent; color: #374151; border: 1px dashed #9CA3AF; }
+.btn-rsvp.btn-rsvp--admin:hover { background: #F3F4F6; }
 
 .btn-rsvp:hover {
   background-color: #1F2937;

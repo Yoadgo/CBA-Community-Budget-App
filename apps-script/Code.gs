@@ -739,6 +739,10 @@ function doGetInner_(e) {
     if (e && e.parameter && e.parameter.action === 'eventsList') {
       return handleGetEventsList_(e.parameter);
     }
+    // ימי הולדת ללוח האירועים (28.9.26) — יום+חודש+שם בלבד, לכל תושב פעיל. ר' handleEventsBirthdays_.
+    if (e && e.parameter && e.parameter.action === 'eventsBirthdays') {
+      return handleEventsBirthdays_(e.parameter);
+    }
     if (e && e.parameter && e.parameter.action === 'cancelClubReservation') {
       return handleCancelClubReservation_(e.parameter);
     }
@@ -2367,6 +2371,68 @@ function eventsForYear_(year) {
     });
   });
   return events;
+}
+
+/* ============================================================================
+ *  ימי הולדת ללוח האירועים (28.9.26)
+ * ----------------------------------------------------------------------------
+ *  פתוח לכל תושב מחובר ופעיל (authorize_ עם need=null, כמו communityDirectory).
+ *  🔴 מחזיר **יום + חודש + שם בלבד** — שנת הלידה (ולכן הגיל) לא יוצאת מהשרת.
+ *  🔴 לא נכתב ל-Firestore (EVENTS_FS_SKIP) ולא נשמר במכשיר.
+ *  מקור: "תאריך לידה 1/2" ו"שם פרטי 1/2" + "שם משפחה" בטאב "תושבים".
+ *  התאריך בגיליון יכול להיות Date אמיתי, 'YYYY-MM-DD' או 'DD/MM/YYYY' — שלושתם נתמכים.
+ * ========================================================================== */
+function handleEventsBirthdays_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, null);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var sh = ss.getSheetByName('תושבים');
+    if (!sh) return json_({ ok: true, birthdays: [] });
+    var values = sh.getDataRange().getValues();
+    if (values.length < 2) return json_({ ok: true, birthdays: [] });
+    var H = {};
+    values[0].forEach(function (h, i) { H[String(h).trim()] = i; });
+    var out = [];
+    for (var r = 1; r < values.length; r++) {
+      var row = values[r];
+      var status = H['סטטוס'] != null ? String(row[H['סטטוס']] || '') : '';
+      if (/לא פעיל|עזב/.test(status)) continue;
+      var fam = H['שם משפחה'] != null ? String(row[H['שם משפחה']] || '').trim() : '';
+      var rid = H[RESIDENT_ID_HEADER] != null ? String(row[H[RESIDENT_ID_HEADER]] || '').trim() : String(r);
+      [1, 2].forEach(function (n) {
+        var bc = H['תאריך לידה ' + n], nc = H['שם פרטי ' + n];
+        if (bc == null || nc == null) return;
+        var md = birthdayMonthDay_(row[bc]);
+        var first = String(row[nc] || '').trim();
+        if (!md || !first) return;
+        out.push({ key: String(rid + '-' + n).replace(/[^A-Za-z0-9_-]/g, '_'),
+                   name: (first + ' ' + fam).trim(), month: md.m, day: md.d });
+      });
+    }
+    return json_({ ok: true, birthdays: out });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
+/** {m,d} מתוך Date / 'YYYY-MM-DD' / 'DD/MM/YYYY'; null אם לא תקין. */
+function birthdayMonthDay_(v) {
+  if (!v) return null;
+  var m, d;
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    if (isNaN(v.getTime())) return null;
+    var tz = Session.getScriptTimeZone();
+    m = parseInt(Utilities.formatDate(v, tz, 'M'), 10);
+    d = parseInt(Utilities.formatDate(v, tz, 'd'), 10);
+  } else {
+    var s = String(v).trim(), a;
+    if ((a = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) { m = +a[2]; d = +a[3]; }
+    else if ((a = s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})$/))) { d = +a[1]; m = +a[2]; }
+    else return null;
+  }
+  if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31)) return null;
+  return { m: m, d: d };
 }
 
 function handleGetEventsList_(p) {
