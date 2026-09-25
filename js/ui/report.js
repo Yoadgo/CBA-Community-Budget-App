@@ -120,6 +120,10 @@ CBA.report = (function () {
           (ctx.errors && ctx.errors.length
             ? '<br>וכן ' + ctx.errors.length + ' הודעות שגיאה טכניות שנרשמו ברקע.' : "") +
         '</p>' +
+        /* גל 4 — מנהל-על בלבד: אותו גוש הקשר, להדבקה ישירה בשיחה, בלי לפתוח
+           דיווח רשמי. מהזיכרון בלבד (CBA.diag.pack) — אין בקשת רשת. */
+        (CBA.isSuper === true && CBA.diag && CBA.diag.pack
+          ? '<button type="button" class="rep-copy">העתקת מצב לתחקור</button>' : '') +
         '<p class="rep-err" hidden></p>' +
       '</div>';
 
@@ -162,6 +166,12 @@ CBA.report = (function () {
         });
 
         photoBtn.addEventListener("click", function () { fileEl.click(); });
+        var copyBtn = wrap.querySelector(".rep-copy");
+        if (copyBtn) copyBtn.addEventListener("click", function () {
+          copyText(CBA.diag.pack(), function (ok) {
+            CBA.ui.toast(ok ? "המצב הועתק — אפשר להדביק בשיחה" : "ההעתקה נכשלה", ok ? "ok" : "error");
+          });
+        });
         fileEl.addEventListener("change", function () {
           Array.prototype.slice.call(fileEl.files || []).forEach(function (f) {
             if (photos.length >= PHOTO_MAX) return;
@@ -235,10 +245,30 @@ CBA.report = (function () {
             return;
           }
           close(true);
-          CBA.ui.toast("תודה! הדיווח נשלח · מס' " + res.id, "ok");
+          CBA.ui.toast("תודה! הדיווח נשלח · מס' " + res.id +
+                       (res.photosPending ? " · התמונות ממשיכות לעלות ברקע" : ""), "ok");
         });
       }
     });
+  }
+
+  /* העתקה ללוח — עם נפילה ל-textarea לדפדפנים בלי clipboard API. משותף למסכי הניהול. */
+  function copyText(text, cb) {
+    function fallback() {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.setAttribute("readonly", "");
+        ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        var ok = document.execCommand("copy");
+        ta.remove(); cb(!!ok);
+      } catch (e) { cb(false); }
+    }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { cb(true); }, fallback);
+      } else fallback();
+    } catch (e) { fallback(); }
   }
 
   /* ====================== הכפתור הצף ====================== */
@@ -304,6 +334,6 @@ CBA.report = (function () {
     if (wrapEl.__openMenu) wrapEl.__openMenu();
   }
 
-  return { mount: mount, open: openForm, openMenu: openMenu,
+  return { mount: mount, open: openForm, openMenu: openMenu, copyText: copyText,
            KIND_IDEA: KIND_IDEA, KIND_BUG: KIND_BUG };
 })();

@@ -1079,7 +1079,7 @@ CBA.screens.events = (function () {
    * מ-Google Calendar, ולכן אין יותר באנר "נתוני דמה" כללי. */
   function demoBannerHTML() {
     return '<div class="events-info-banner" dir="rtl">' +
-      'ℹ️ ימי הולדת יתווספו כאן לאחר עדכון "הפרטים שלי" — עדיין לא זמינים.' +
+      'ℹ️ ימי הולדת יתווספו כאן לאחר עדכון "המשפחה שלי" — עדיין לא זמינים.' +
       '</div>';
   }
 

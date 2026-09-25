@@ -372,3 +372,7 @@
 }
 .gym-wiz__foot .btn-primary.is-danger { background: var(--danger, #E11D48); border-color: var(--danger, #E11D48); }
 .gym-wiz__foot .btn-primary.is-danger:hover { background: #BE123C; }
+
+/* 25.9 — מסך הניהול בזמן שהפרטים האישיים עוד בדרך (gymFs.js) */
+.ga-partial #ga-members button, .ga-partial #ga-verify button,
+.ga-partial #ga-status button, .ga-partial #ga-new { pointer-events: none; opacity: .5; }

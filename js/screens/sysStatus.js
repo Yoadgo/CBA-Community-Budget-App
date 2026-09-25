@@ -56,6 +56,9 @@ CBA.screens = CBA.screens || {};
     clubResvFromFirestore:    ["השריון הקרוב", "שורת השריון הקרוב בעמוד הבית נקראת מהמסמך של המשפחה ב-Firestore.", false],
     /* 23.9 — ברירת מחדל true, כמו EVENTS_FROM_FIRESTORE ב-dataService. כיבוי
        מחזיר את הלוח ל-Apps Script (היומן עצמו), בלי שום אובדן נתונים. */
+    /* גל 4 (24.9) — ברירת מחדל true, כמו APP_REPORTS_FS_DEFAULT ב-dataService.
+       כיבוי מחזיר שליחה ומסך ניהול ל-Apps Script; השרת ממשיך לכתוב מסמך. */
+    appReportsFromFirestore:  ["דיווחים על האפליקציה", "שליחת דיווח נכתבת ישירות ל-Firestore, ומסך הדיווחים קורא משם. מייל ומראה לגיליון — ברקע ב-Apps Script.", true],
     eventsFromFirestore:      ["לוח האירועים", "לוח האירועים (בית + מסך האירועים) נקרא ממסמך השנה ב-Firestore, שמתעדכן מהיומן תוך דקה. כשל — נופל בשקט ל-Apps Script, שקורא את היומן ישירות.", true],
     /* ⚠️ ברירת המחדל כאן היא `true` ולא בגלל אופטימיות: `fsFirstRead`
        מקצרת על ברירת המחדל שבקוד לפני שהיא קוראת את הדגל החי,

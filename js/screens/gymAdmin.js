@@ -927,6 +927,8 @@ CBA.screens = CBA.screens || {};
           '<button type="button" class="btn-primary" id="ga-new">הקמת מנוי ידנית</button>' +
         '</div>' +
         '<div id="ga-kpis" class="gym-kpis"></div>' +
+        /* 25.9 — כרטיס הדלת (Nuki): מצב, יומן, פתיחה מרחוק. ר' doorAdmin.js */
+        '<div class="card club-card ga-door" id="ga-door"></div>' +
         '<div class="card club-card" id="ga-verify-card">' +
           '<div class="club-sec__title">ממתינים לאימות תשלום</div>' +
           '<div id="ga-verify">' + gaLoadingHTML() + '</div>' +
@@ -942,6 +944,7 @@ CBA.screens = CBA.screens || {};
 
       var newBtn = container.querySelector("#ga-new");
       if (newBtn) newBtn.addEventListener("click", function () { openCreate(container, load); });
+      if (CBA.doorAdmin) CBA.doorAdmin.render(container.querySelector("#ga-door"));
 
       var kpisEl    = container.querySelector("#ga-kpis");
       var membersEl = container.querySelector("#ga-members");
@@ -972,6 +975,18 @@ CBA.screens = CBA.screens || {};
           }
 
           gaLast = res;
+          /* 25.9 — תשובה חלקית מ-Firestore (js/data/gymFs.js): הרשימה והמספרים
+             כבר על המסך, הפרטים האישיים בדרך מ-Apps Script. עד שהם מגיעים —
+             כפתורי הפעולה נעולים, כדי שאף טופס לא ייפתח עם שדות ריקים. */
+          container.classList.toggle("ga-partial", !!res.partial);
+          var gaNote = container.querySelector("#ga-partial-note");
+          if (!gaNote) {
+            gaNote = document.createElement("div");
+            gaNote.id = "ga-partial-note"; gaNote.className = "gym-hint gym-hint--tight";
+            gaNote.textContent = "טוען פרטים אישיים… הפעולות ייפתחו בעוד רגע.";
+            kpisEl.parentNode.insertBefore(gaNote, kpisEl);
+          }
+          gaNote.hidden = !res.partial;
           var members   = res.members   || [];
           var plans     = res.plans     || [];
           var questions = res.questions || [];

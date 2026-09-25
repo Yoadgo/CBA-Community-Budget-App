@@ -45,6 +45,19 @@ CBA.diag = (function () {
     s = String(s == null ? "" : s).replace(/\s+/g, " ").trim();
     return s.length > n ? s.substring(0, n - 1) + "…" : s;
   }
+  /* 🔴 גל 4 (24.9) — **ניקוי לפני שמירה, לא לפני שליחה.** אסימון המושב
+     נוסע במחרוזת השאילתה של כל בקשת GET לשרת (ממצא 30). היום שום דבר כאן
+     לא רושם כתובת בקשה — אבל שגיאת רשת עתידית שתכלול את הכתובת בהודעה
+     הייתה מכניסה אסימון חי לדיווח ולגוש שמודבק בשיחה. לכן כל טקסט שנכנס
+     לחוצצים עובר כאן: מחרוזות שאילתה נחתכות, ומפתחות רגישים ואסימונים
+     ארוכים מוחלפים. */
+  function clean(s) {
+    return String(s == null ? "" : s)
+      .replace(/(https?:\/\/[^\s?#"']+)\?[^\s#"']*/gi, "$1?…")
+      .replace(/\b(session|idToken|token|key|auth|code)=([^&\s"']+)/gi, "$1=…")
+      .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9._-]+/g, "[אסימון הוסר]")
+      .replace(/\b[A-Za-z0-9_-]{40,}\b/g, "[מחרוזת ארוכה הוסרה]");
+  }
   function push(arr, v, max) {
     arr.push(v);
     while (arr.length > max) arr.shift();
@@ -57,7 +70,7 @@ CBA.diag = (function () {
     return f + (line ? ":" + line + (col ? ":" + col : "") : "");
   }
   function addError(text, where) {
-    var line = clock() + " " + cut(text, 180) + (where ? "  @ " + where : "");
+    var line = clock() + " " + cut(clean(text), 180) + (where ? "  @ " + clean(where) : "");
     /* שגיאה שחוזרת בלולאה לא מציפה חמש שורות זהות — מונה במקום כפילות. */
     var last = errors[errors.length - 1];
     if (last && last.line === line) { last.n++; return; }
@@ -88,7 +101,7 @@ CBA.diag = (function () {
   /* ---------- 2. שובל פעולות ---------- */
   function log(text) {
     if (!text) return;
-    push(trail, clock() + " " + cut(text, 120), TRAIL_MAX);
+    push(trail, clock() + " " + cut(clean(text), 120), TRAIL_MAX);
   }
 
   function labelOf(el) {
@@ -235,7 +248,8 @@ CBA.diag = (function () {
       onScreen:    span(Date.now() - screenSince),
       session:     span(Date.now() - started),
       localTime:   localTime(),
-      url:         cut(String(location.pathname + location.search + location.hash), 160),
+      /* ⚠️ בלי location.search — ר' clean(). הנתיב והעוגן מספיקים לאבחון. */
+      url:         cut(clean(String(location.pathname + location.hash)), 160),
       errors:      errors.map(function (e) { return e.line + (e.n > 1 ? "  (×" + e.n + ")" : ""); }),
       trail:       trail.slice()
     };
@@ -251,8 +265,57 @@ CBA.diag = (function () {
     ].filter(Boolean).join(" · ");
   }
 
+  /* ==========================================================================
+   *  גוש "מצב לתחקור" — טקסט אחד להדבקה בשיחה או לצירוף לדיווח (גל 4)
+   * --------------------------------------------------------------------------
+   *  🔴 **אין כאן בקשת רשת.** הכול מהזיכרון: ההקשר, הדגלים שכבר נטענו
+   *     ומדידות הטעינה (CBA.perf). מה שמגיע מהשרת (יומן הדופק) מועבר
+   *     כ-`extra` ע"י הקורא, ורק אם הוא כבר ביד.
+   *  🔒 עובר שוב דרך clean() — גם אם משהו נכנס לחוצצים לפני הניקוי.
+   * ======================================================================== */
+  function pack(extra) {
+    var s = snapshot();
+    var lines = ["=== CBA · מצב לתחקור ===",
+      "זמן: " + s.localTime + " · בסשן " + s.session + " · במסך " + s.onScreen,
+      "גרסה: לקוח " + (s.ver || "?") + " · שרת " + (s.srvVer || "?"),
+      "משתמש: " + (s.perms || "?") + (s.year ? " · שנת עבודה " + s.year : ""),
+      "מסך: " + (s.screen || "?") + (s.dialog ? " · " + s.dialog : ""),
+      "מכשיר: " + s.ua + " · " + s.net,
+      "כתובת: " + s.url];
+    try {
+      var fl = (CBA.fb && CBA.fb.flags && CBA.fb.flags()) || null;
+      if (fl) {
+        var on = [], off = [];
+        Object.keys(fl).sort().forEach(function (k) {
+          if (fl[k] === true) on.push(k); else if (fl[k] === false) off.push(k);
+        });
+        lines.push("דגלים דלוקים במפורש: " + (on.join(", ") || "—"));
+        if (off.length) lines.push("דגלים כבויים במפורש: " + off.join(", "));
+      }
+      var st = CBA.fb && CBA.fb.state && CBA.fb.state();
+      if (st) lines.push("Firebase: " + (st.user ? "מחובר" : "לא מחובר") +
+                         (st.lastError ? " · שגיאה אחרונה " + st.lastError : ""));
+    } catch (e) {}
+    try {
+      var perf = CBA.perf || {};
+      var pk = Object.keys(perf);
+      if (pk.length) lines.push("טעינות: " + pk.map(function (k) {
+        var x = perf[k] || {};
+        return k + " " + (x.source || "?") + " " + (x.ms == null ? "?" : x.ms) + "ms" + (x.why ? " (" + x.why + ")" : "");
+      }).join(" | "));
+    } catch (e) {}
+    lines.push("שגיאות (" + errors.length + "):");
+    errors.forEach(function (e) { lines.push("  " + e.line + (e.n > 1 ? "  (×" + e.n + ")" : "")); });
+    lines.push("שובל פעולות:");
+    trail.forEach(function (t) { lines.push("  " + t); });
+    if (extra) lines.push(String(extra));
+    return clean(lines.join("\n"));
+  }
+
   return {
     snapshot: snapshot,
+    pack: pack,
+    clean: clean,
     extraLine: extraLine,
     log: log,
     error: addError,

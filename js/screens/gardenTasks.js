@@ -1556,9 +1556,17 @@
           /* כפתור סגירה מפורש, בדיוק כמו במקרא: משימה ותיקה צוברת רשומות,
              הגיליון גדל עד גובה המסך, והרקע שנשאר ללחיצה הוא רצועה דקה.
              כלל: גיליון שגובהו משתנה עם הנתונים חייב כפתור. */
+          /* גל 4 — כלי 1: מנהל-על משווה את המסמך לשורת הגיליון, רק בלחיצה.
+             אפס עלות לשאר — הכפתור לא מופיע, ושום קריאה לא יוצאת. */
+          (CBA.isSuper === true && CBA.screens.sysHub && CBA.screens.sysHub.openCompare
+            ? '<button type="button" class="gd-cta gd-cta--ghost" data-cmp="1" ' +
+              'style="margin-top:14px">השוואת מסמך מול גיליון</button>' : '') +
           '<button type="button" class="gd-cta" data-close="1" ' +
             'style="margin-top:14px">סגירה</button>',
-          function (e, close) { if (e.target.closest("[data-close]")) close(); });
+          function (e, close) {
+            if (e.target.closest("[data-cmp]")) { close(); CBA.screens.sysHub.openCompare("task", id); return; }
+            if (e.target.closest("[data-close]")) close();
+          });
         CBA.data.getGardenTaskLog(id, function (res) {
           var el = document.getElementById("gt-hist");
           if (!el) return;                      // הגיליון נסגר בזמן הטעינה

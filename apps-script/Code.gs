@@ -87,7 +87,13 @@ var PERM_GARDEN    = 'גינון';
  * parsePerms_ לא יזרוק אותה ושתגיע ל-members/{uid}.perms ול-CBA.perms.
  * ⚠️ חייב להיות זהה ל-PERM.CULTURE ב-app.js ולרשימה ב-residents.js. */
 var PERM_CULTURE   = 'תרבות';
-var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN, PERM_CULTURE];
+/* WeWork (25.9.26) — מידור עצמאי (יועד, 24.9: "מנהל WeWork הוא עצמאי").
+ * רואה ומבטל שריונים ועורך את כללי השריון. **לא** רואה את מצב המנעול —
+ * זה של מנהל המכון (PERM_GYM). ר' Door.gs.
+ * ⚠️ חייב להיות זהה ל-PERM.WEWORK ב-app.js, לרשימה ב-residents.js,
+ *    ול-hasPerm('WeWork') בכללי Firestore. */
+var PERM_WEWORK    = 'WeWork';
+var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN, PERM_CULTURE, PERM_WEWORK];
 var PERM_HEADER = 'הרשאות';
 /* עמודת גשר הזהות (2026-09-14, צעד 02ד). כמו עמודות האימייל וההרשאות, היא
    **פר-משבצת**: 'מזהה Firebase 1', 'מזהה Firebase 2' וכו'.
@@ -231,10 +237,21 @@ var ACTION_PERMS = {
      בכוונה — הוא פתוח לכל משתמש מחובר ופעיל, כמו הגשת קבלה ודיווח גינון.
      סימון "טופל" ותגובה לתושב הם ניהול המוצר, ולכן מנהל-על. */
   setAppReportDone: PERM_SUPER,
+  /* גל 4 — התשובה לתושב. appReportNotify/appReportPhotoOne אינם כאן בכוונה:
+     פתוחים לכל חבר מחובר, בדיוק כמו submitAppReport. */
+  appReportReplyNotify: PERM_SUPER,
   /* קליטת קובץ החיובים (PHASE 4.2). doPost ולא doGet כי הקובץ מגיע כ-Base64
      בגוף הבקשה. הפעולה **קוראת בלבד** — היא לא כותבת שום דבר לגיליון
      העבודה; היא ממירה קובץ ומחזירה טבלה. */
-  parseChargeFile: PERM_BUDGET
+  parseChargeFile: PERM_BUDGET,
+  /* דלת Nuki + WeWork (25.9.26, Door.gs). weworkBook / weworkCancel /
+     doorOpen / doorGymResend **אינן כאן בכוונה** — פתוחות לכל תושב פעיל,
+     והזכאות נבדקת בתוך הפעולה (שריון פעיל עכשיו / מנוי בתוקף / בעלות). */
+  weworkSaveConfig: PERM_WEWORK,
+  doorStatus: PERM_GYM,
+  doorSaveContact: PERM_GYM,
+  doorConfigure: PERM_SUPER,
+  doorTestConnection: PERM_SUPER
 };
 
 /* מה ש**הוסר** מכאן ב-2026-09-09, ולמה זה חשוב: היו כאן שמונה מפתחות
@@ -289,6 +306,8 @@ var GET_PUBLIC_ACTIONS = [
 var EXTERNAL_BOOT_ACTIONS = ['', 'firebaseLink'];
 
 var GET_ACTION_PERMS = {
+  /* גל 4 (24.9) — כלי התחקור. ר' Diag.gs. */
+  diagPulse: PERM_SUPER, diagCompare: PERM_SUPER, appReportsSeed: PERM_SUPER,
   listSignups: PERM_RESIDENTS, getResidents: PERM_RESIDENTS,
   assignResidentIds: PERM_RESIDENTS, profileChanges: PERM_RESIDENTS,
   clubList: PERM_CLUB, approveClubReservation: PERM_CLUB,
@@ -790,6 +809,17 @@ function doGetInner_(e) {
     }
     if (e && e.parameter && e.parameter.action === 'gardenCountersSeed') {
       return handleGardenCountersSeed_(e.parameter);
+    }
+    /* גל 4 (24.9) — כלי תחקור + זריעת הדיווחים. מנהל-על, קריאה בלבד חוץ
+       מהזריעה (שיוצרת מסמכים חסרים בלבד). ר' Diag.gs. */
+    if (e && e.parameter && e.parameter.action === 'diagPulse') {
+      return handleDiagPulse_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'diagCompare') {
+      return handleDiagCompare_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'appReportsSeed') {
+      return handleAppReportsSeed_(e.parameter);
     }
     /* מראת הגינון (2026-09-17) — הרצה יזומה לאימות. פעולה עם כתובת
        ולא הרצה ידנית מבורר הפונקציות, מאותה סיבה כמו כל השאר כאן:
@@ -1616,6 +1646,13 @@ function doPost(e) {
 function doPostInner_(e) {
   try {
     var body = JSON.parse(e.postData.contents);
+    /* ⚡ 25.9 — פתיחת הדלת במסלול המהיר: זהות מ-Firebase ולא מהגיליון,
+       שני סבבי רשת במקביל, בלי bumpRev_. ר' doorOpenFast_ ב-Door.gs.
+       אם חסרה זהות Firebase (NEED_SLOW) — ממשיכים למסלול הרגיל למטה. */
+    if (body && body.action === 'doorOpen' && body.idToken && typeof doorOpenFast_ === 'function') {
+      var fast = doorOpenFast_(body);
+      if (!(fast && fast.code === 'NEED_SLOW')) return json_(fast);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     // שער ההרשאות (2026-08-07): מושב חתום -> הרשאות מהגיליון -> בדיקה מול הפעולה.
     // סיסמת מנהל נשארת כמסלול חירום. ר' authorize_ בראש הקובץ.
@@ -1653,6 +1690,9 @@ function doPostInner_(e) {
      *     `cached_` ממופתח לפי המונה. */
     var res = doPostDispatch_(ss, body);
     try { SpreadsheetApp.flush(); } catch (e) { /* אין מה לרוקן */ }
+    /* 25.9 — פעולת מכון ששינתה מנוי ⇒ gymStatus/gymCode (ו-Nuki) של המנוי
+       הזה מתעדכנים מיד ב-Firestore, לא בשעתי. ר' gymSyncOne_ ב-Door.gs. */
+    if (typeof doorGymAfterWrite_ === 'function') doorGymAfterWrite_(ss, body, res);
     bumpRev_(body.action);
     return res;
   } catch (err) {
@@ -1725,6 +1765,10 @@ function doPostDispatch_(ss, body) {
       case 'parseChargeFile':     return json_(parseChargeFile_(ss, body));
       case 'submitAppReport':     return json_(submitAppReport_(ss, body));
       case 'setAppReportDone':    return json_(setAppReportDone_(ss, body));
+      /* גל 4 (24.9) — הדיווח נכתב מהדפדפן ל-Firestore; שלוש קריאות שגר-ושכח. ר' Diag.gs. */
+      case 'appReportNotify':      return json_(appReportNotify_(ss, body));
+      case 'appReportReplyNotify': return json_(appReportReplyNotify_(ss, body));
+      case 'appReportPhotoOne':    return json_(appReportPhotoOne_(ss, body));
       /* 🔴 שש פעולות הכתיבה של הגינון עוברות דרך `gardenWrite_`, שמריצה
          את המטפל ואז מסנכרן ל-Firestore **רק את המסמכים שהוא נגע בהם**.
          ר' הבלוק הארוך מעל `gardenAfterWrite_` — ובמיוחד למה ההוק
@@ -1793,6 +1837,16 @@ function doPostDispatch_(ss, body) {
       case 'saveGymQuestion':        return json_(saveGymQuestion_(ss, body));
       case 'deleteGymQuestion':      return json_(deleteGymQuestion_(ss, body));
       case 'deleteGymMembership':    return json_(deleteGymMembership_(ss, body));
+      // דלת Nuki + WeWork (25.9.26) — ר' Door.gs
+      case 'weworkBook':             return json_(weworkBook_(ss, body));
+      case 'weworkCancel':           return json_(weworkCancel_(ss, body));
+      case 'weworkSaveConfig':       return json_(weworkSaveConfig_(ss, body));
+      case 'doorOpen':               return json_(doorOpen_(ss, body));
+      case 'doorStatus':             return json_(doorStatus_(ss, body));
+      case 'doorConfigure':          return json_(doorConfigure_(ss, body));
+      case 'doorTestConnection':     return json_(doorTestConnection_(ss, body));
+      case 'doorSaveContact':        return json_(doorSaveContact_(ss, body));
+      case 'doorGymResend':          return json_(doorGymResend_(ss, body));
       default:                  return json_({ ok: false, error: 'פעולה לא מוכרת: ' + body.action });
     }
 }
@@ -3790,6 +3844,7 @@ var ACTION_DOMAIN = {
   /* תחום משלו ולא ברירת המחדל 'other': 'other' נכלל במפתח המטמון של המטען
      הראשי, כלומר כל דיווח על האפליקציה היה מבטל את המטמון של *כולם*. */
   submitAppReport: 'appReports', setAppReportDone: 'appReports',
+  appReportNotify: 'appReports', appReportReplyNotify: 'appReports', appReportPhotoOne: 'appReports',
   /* קליטת קובץ החיובים אינה משנה שום נתון בגיליון — היא ממירה קובץ זמני
      וקוראת אותו. ברירת המחדל 'other' הייתה מבטלת את מטמון המטען הראשי
      של *כל* המשתמשים בכל העלאה, בלי שהשתנה דבר. */
@@ -3806,6 +3861,11 @@ var ACTION_DOMAIN = {
   /* 🗓 GW-24.9:C7-domain */ gardenCrew: 'gardenAi',
   /* 23.9 — מרכז ההתראות: אינן נוגעות בנתוני המטען הראשי. */
   saveNotifyCell: 'notifySettings', saveNotifyGlobal: 'notifySettings',
+  /* 25.9 — דלת + WeWork: הכול ב-Firestore, אף אחת לא נוגעת במטען הראשי.
+     בלי המיפוי כל לחיצה על "פתיחת הדלת" הייתה מבטלת את המטמון של כולם. */
+  weworkBook: 'door', weworkCancel: 'door', weworkSaveConfig: 'door',
+  doorOpen: 'door', doorStatus: 'door', doorConfigure: 'door',
+  doorTestConnection: 'door', doorSaveContact: 'door', doorGymResend: 'door',
   notifyRsvpOpened: 'notifySettings', notifyServiceRecommend: 'notifySettings',
   saveCustomTrigger: 'notifySettings', customTriggerAction: 'notifySettings',
   notifyAiRewrite: 'notifySettings', notifyAiBuild: 'notifySettings', notifyAiSummary: 'notifySettings',
@@ -5898,6 +5958,19 @@ var DEFAULT_EMAIL_SETTINGS = [
     'התקבלה בקשת הרשמה למכון הכושר מ-{{שם}} ({{אימייל}}) עם דגל בריאות: {{שאלות}}.\n\nהבקשה ממתינה לאישור רופא ולאישורך.',
     'למנהלי מכון + מנהל-על. שים לב: בקשה נקייה (כל התשובות "לא") מאושרת אוטומטית ולא שולחת מייל למנהל', PERM_GYM, 'כן'],
 
+  /* דלת Nuki + WeWork (25.9.26) — ר' Door.gs */
+  ['WEWORK_BOOKED', 'השריון שלך ב-WeWork אושר',
+    'שלום {{שם}},\n\nשריינת {{עמדה}} ב-WeWork ל-{{תאריך}}, בשעות {{שעה}}.\n\nכשמגיעים, פותחים את הדלת מהכפתור במסך "WeWork" באפליקציה. הכפתור פעיל רק בזמן השריון.\n\nאם התוכניות השתנו, אפשר לבטל מאותו מסך — כך העמדה מתפנה לשכנים.\n\nבברכה,\nועד הקהילה',
+    'נשלח לתושב מיד אחרי שריון עמדה ב-WeWork', PERM_WEWORK, 'כן'],
+  ['WEWORK_CANCELED', 'השריון שלך ב-WeWork בוטל',
+    'שלום {{שם}},\n\nהשריון של {{עמדה}} ב-WeWork ל-{{תאריך}}, בשעות {{שעה}}, בוטל {{מי}}.\n\nאפשר לשריין מחדש מהאפליקציה בכל עת.\n\nבברכה,\nועד הקהילה',
+    'נשלח לתושב כששריון WeWork בוטל (על ידו או על ידי המנהל)', PERM_WEWORK, 'כן'],
+  ['GYM_NUKI_INVITE', 'הגישה שלך לדלת המכון מוכנה',
+    'שלום {{שם}},\n\nמעכשיו פותחים את דלת המכון בלי קוד. יש שתי דרכים:\n\n1. באפליקציית הקהילה — מסך "מכון כושר", כפתור "פתיחת הדלת".\n2. באפליקציית Nuki — שלחנו לך מייל נפרד מ-Nuki. מתקינים את האפליקציה, נרשמים עם אותו מייל ומאשרים את ההזמנה. משם אפשר לפתוח גם מהשעון או מווידג׳ט.\n\nהגישה בתוקף עד {{עד}}, יחד עם המנוי.\n\nבברכה,\nועד הקהילה',
+    'נשלח למנוי כשנפתחה לו גישה לדלת המכון (הזמנת Nuki)', PERM_GYM, 'כן'],
+  ['ADMIN_DOOR_ALERT', 'התראה מדלת הכניסה',
+    '{{בעיה}}\n\nזמן: {{זמן}}.\n\nמצב המנעול מופיע במסך "מכון כושר", בכרטיס "הדלת".', 'למנהלי מכון + מנהל-על: סוללה חלשה, ניתוק, או פתיחה שנכשלה', PERM_GYM, 'כן'],
+
   ['ADMIN_WEEKLY_DIGEST', 'סיכום שבועי — מה פתוח באפליקציית הוועד',
     'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו — חוצה מידורים ולכן שייך למנהל-על', PERM_SUPER, 'כן'],
   ['ADMIN_MONTHLY_DIGEST', 'תזכורת: בקשות החזר פתוחות לפני סגירת החלון ב-19 לחודש',
@@ -6417,32 +6490,43 @@ function dailyEmailJobs_() {
 function hourlyJobs() {
   var r = withSyncLock_('hourlyJobs', function () { hourlyJobsRun_(); return { ok: true }; });
   if (r && r.busy) Logger.log('hourlyJobs דילגה: ' + r.error);
+  /* גל 4 — גם ריצה שדולגה נרשמת ביומן הדופק (Diag.gs). */
+  if (r && r.busy && typeof hjSkipped_ === 'function') { try { hjSkipped_(r.error); } catch (e) {} }
 }
 
 function hourlyJobsRun_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  /* גל 4 — יומן הדופק (Diag.gs): כמה זמן לקח כל שלב. קורא בלבד. */
+  /* ⚠️ דרך typeof — אם Diag.gs לא נפרס/לא נטען, העבודה השעתית רצה כרגיל. */
+  var HJ = (typeof hjStart_ === 'function') ? hjStart_() : null;
+  var hjM = function (n) { if (HJ) hjMark_(HJ, n); };
+  var hjF = function (e) { if (HJ) hjFail_(HJ, e); };
   /* 23.9 — מרכז ההתראות: החלפת הנוסחים (פעם אחת בלבד) ופוש שנדחה
      בשעות שקט. ראשונים וזולים — אם השאר נכשל, אלה עדיין יוצאים. */
-  try { notifyApplyNewTextsOnce_(ss); } catch (e) { Logger.log('notifyApplyNewTextsOnce_ נכשל: ' + e); }
+  hjM('notifyApplyNewTextsOnce_');
+  try { notifyApplyNewTextsOnce_(ss); } catch (e) { hjF(e); Logger.log('notifyApplyNewTextsOnce_ נכשל: ' + e); }
+  hjM('notifyFlushQueue_');
   try {
     var nq = notifyFlushQueue_(ss);
     if (nq.sent || nq.errors.length) Logger.log('תור פוש: נשלחו ' + nq.sent + (nq.errors.length ? ' | ' + nq.errors.join(' ; ') : ''));
-  } catch (e) { Logger.log('notifyFlushQueue_ נכשל: ' + e); }
+  } catch (e) { hjF(e); Logger.log('notifyFlushQueue_ נכשל: ' + e); }
   /* 23.9 — "השבוע בשיכון": פוש לכולם במוצאי שבת (הפונקציה בודקת בעצמה
      אם הגיע הזמן; ברוב השעות היא חוזרת מיד). */
+  hjM('eventsWeekJob_');
   try {
     if (typeof eventsWeekJob_ === 'function') {
       var ew = eventsWeekJob_(ss);
       if (ew && ew.events) Logger.log('השבוע בשיכון: ' + ew.events + ' אירועים, פוש ' + ew.push);
     }
-  } catch (e) { Logger.log('eventsWeekJob_ נכשל: ' + e); }
+  } catch (e) { hjF(e); Logger.log('eventsWeekJob_ נכשל: ' + e); }
   /* 23.9 סבב 3 — טריגרים וסיכומים שנבנו במרכז ההתראות. */
+  hjM('customTriggersJob_');
   try {
     if (typeof customTriggersJob_ === 'function') {
       var cj = customTriggersJob_(ss);
       if (cj && cj.fired) Logger.log('טריגרים מותאמים: יצאו ' + cj.fired + ' (פוש ' + cj.push + ', מייל ' + cj.mail + ')');
     }
-  } catch (e) { Logger.log('customTriggersJob_ נכשל: ' + e); }
+  } catch (e) { hjF(e); Logger.log('customTriggersJob_ נכשל: ' + e); }
   /* תיבת הדואר (2026-09-15, צעד 09א) — סטטוסים שהדפדפן
      כתב ל-Firestore וטרם הוחלו על הגיליון.
      ⚠️ **לפני הגיבוי המצטבר** — אחרת הגיבוי מעתיק מסמכים
@@ -6451,6 +6535,7 @@ function hourlyJobsRun_() {
      שורות שנכתבו ישירות ל-Firestore. בלעדיה `budgetTxApplyPending_`
      מחפשת שורה שאינה קיימת, סופרת `missing`, ו**התושב לא
      מקבל מייל**. נמדד חי: שתי בקשות במצב הזה. */
+  hjM('btxMirrorToSheet_');
   try {
     var mr = btxMirrorToSheet_(ss);
     if (mr.added || mr.updated || mr.archived || mr.mailed || mr.errors.length) {
@@ -6459,8 +6544,10 @@ function hourlyJobsRun_() {
                  (mr.errors.length ? ' | שגיאות: ' + mr.errors.join(' ; ') : ''));
     }
   } catch (e) {
+    hjF(e);
     Logger.log('btxMirrorToSheet_ נכשל: ' + e);
   }
+  hjM('budgetTxApplyPending_');
   try {
     var a = budgetTxApplyPending_(ss);
     if (a.found) {
@@ -6469,11 +6556,13 @@ function hourlyJobsRun_() {
                  (a.errors.length ? ' | שגיאות: ' + a.errors.join(' ; ') : ''));
     }
   } catch (e) {
+    hjF(e);
     Logger.log('budgetTxApplyPending_ נכשל: ' + e);
   }
   /* תיבת הדואר (2026-09-15, צעד 09ב-5א) — מיילים על בקשות שנכתבו
      ישירות מהדפדפן. אחרי החלת הסטטוסים, כדי שמייל על סטטוס שהוחל
      זה עתה לא ייצא לפני שהגיליון יודע עליו. */
+  hjM('budgetTxMailPending_');
   try {
     var mp = budgetTxMailPending_(ss);
     if (mp.found) {
@@ -6482,10 +6571,12 @@ function hourlyJobsRun_() {
                  (mp.errors.length ? ' | ' + mp.errors.join(' ; ') : ''));
     }
   } catch (e) {
+    hjF(e);
     Logger.log('budgetTxMailPending_ נכשל: ' + e);
   }
   /* מונה המזהים (2026-09-15, צעד 09ב-1) — עוקב אחרי שורות שנוצרו
      במסלול הישן. לעולם אינו מוריד את המונה. */
+  hjM('seedTxCounters_');
   try {
     var c = seedTxCounters_(ss);
     if (c.seeded || c.errors.length) {
@@ -6493,11 +6584,13 @@ function hourlyJobsRun_() {
                  (c.errors.length ? ' | שגיאות: ' + c.errors.join(' ; ') : ''));
     }
   } catch (e) {
+    hjF(e);
     Logger.log('seedTxCounters_ נכשל: ' + e);
   }
   /* 🔴 שתי רשתות הביטחון של הגינון — ר' הבלוק שלהן.
      מיילים קודם, כדי שדיווח שנכתב זה עתה יקבל את המייל שלו
      לפני שמתריעים על התמונות שחסרות בו. */
+  hjM('gardenMailPending_');
   try {
     var gm = gardenMailPending_(ss);
     /* 🔴 18.9 — אותה רשת למיילים של פעולות מנהל. */
@@ -6511,13 +6604,15 @@ function hourlyJobsRun_() {
       Logger.log('מיילי גינון ממתינים: נמצאו ' + gm.found + ', נשלחו ' + gm.sent +
                  (gm.errors.length ? ' | ' + gm.errors.join(' ; ') : ''));
     }
-  } catch (e) { Logger.log('gardenMailPending_ נכשל: ' + e); }
+  } catch (e) { hjF(e); Logger.log('gardenMailPending_ נכשל: ' + e); }
+  hjM('gardenPhotosIncomplete_');
   try {
     var gp = gardenPhotosIncomplete_(ss);
     if (gp.notified) Logger.log('דיווחים עם תמונות חסרות: ' + gp.notified);
-  } catch (e) { Logger.log('gardenPhotosIncomplete_ נכשל: ' + e); }
+  } catch (e) { hjF(e); Logger.log('gardenPhotosIncomplete_ נכשל: ' + e); }
   /* מוני הגינון (2026-09-16, ההיפוך) — עוקבים אחרי מה שעדיין
      נוצר במסלול הישן. לעולם אינם יורדים. */
+  hjM('seedGardenCounters_');
   try {
     var gc = seedGardenCounters_(ss);
     if (gc.seeded || gc.errors.length) {
@@ -6525,6 +6620,7 @@ function hourlyJobsRun_() {
                  (gc.errors.length ? ' | ' + gc.errors.join(' ; ') : ''));
     }
   } catch (e) {
+    hjF(e);
     Logger.log('seedGardenCounters_ נכשל: ' + e);
   }
   /* 🔴 סטטוס מנוי כושר (2026-09-16, צעד 10ב-1).
@@ -6536,10 +6632,12 @@ function hourlyJobsRun_() {
         לגיבוי באותה ריצה ולא ימתין שעה. */
   /* 🔴 מסמך הפתיחה (צעד 11) — רשימת השנים והשנה הנוכחית.
      משתנה נדיר, אבל אם יתיישן הטעינה הקרה תציג שנה שגויה. */
+  hjM('bootSync_');
   try {
     var b = bootSync_(ss);
     if (b.error) Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + b.error);
   } catch (e) {
+    hjF(e);
     Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + e);
   }
   /* 🔴 **מסמך השנה הנוכחית — רק הוא, וכל שעה.** מצעד 11 הוא נושא גם
@@ -6549,12 +6647,15 @@ function hourlyJobsRun_() {
      לנצח, והמסך היה מציג "סגור תקציב" על שנה שכבר סגורה.
      ⚠️ השנה הנוכחית בלבד: היא היחידה שהטעינה הקרה בונה, והיא
         היחידה שמשתנה. סנכרון כל השנים נשאר פעולה ידנית. */
+  hjM('currentBudgetYearSync_');
   try {
     var cy = currentBudgetYearSync_(ss);
     if (cy.error) Logger.log('\u05e9\u05e0\u05d4 \u05e0\u05d5\u05db\u05d7\u05d9\u05ea: ' + cy.error);
   } catch (e) {
+    hjF(e);
     Logger.log('currentBudgetYearSync_ \u05e0\u05db\u05e9\u05dc: ' + e);
   }
+  hjM('gymStatusSyncAll_');
   try {
     var g = gymStatusSyncAll_(ss);
     if (g.wrote || g.deleted || g.codes || g.codesDeleted || g.error) {
@@ -6564,11 +6665,13 @@ function hourlyJobsRun_() {
                  (g.error ? ' | ' + g.error : ''));
     }
   } catch (e) {
+    hjF(e);
     Logger.log('gymStatusSyncAll_ נכשל: ' + e);
   }
   /* 🔴 שריוני המועדון וצעדי הסיור (צעד 12) — שלושת האוספים שמוציאים
      את עמוד הבית מהתלות ב-Apps Script. רצים כאן, בתוך נעילת הסנכרון,
      כי כולם עושים כתיבה **וסחיפת יתומים**. */
+  hjM('tourSyncAll_');
   try {
     var tr = tourSyncAll_(ss);
     if (tr.error) Logger.log('tourSyncAll_ נכשל: ' + tr.error);
@@ -6581,20 +6684,36 @@ function hourlyJobsRun_() {
                  ', דולגו ' + cr.skipped);
     }
   } catch (e) {
+    hjF(e);
     Logger.log('סנכרון עמוד הבית נכשל: ' + e);
+  }
+  /* דלת Nuki + WeWork (25.9.26) — זריעה, השלמת יומן, בריאות המנעול,
+     ובמצב live גם הזמנות Nuki למנויים ויבוא היומן של Nuki. ר' Door.gs. */
+  hjM('doorHourly_');
+  try {
+    var dh = (typeof doorHourly_ === 'function') ? doorHourly_(ss) : {};
+    if ((dh.cal && dh.cal.created) || (dh.gym && (dh.gym.invited || dh.gym.revoked || dh.gym.errors))) {
+      Logger.log('דלת: ' + JSON.stringify(dh));
+    }
+  } catch (e) {
+    hjF(e);
+    Logger.log('doorHourly_ נכשל: ' + e);
   }
   /* 🔴 מוני עמוד הבית (2026-09-16, פעולה 3) — חישוב מחדש של
      הכול. זו רשת הביטחון שתופסת את מה ש-`bumpRev_` לא
      רואה: **עריכה ידנית בגיליון** ואת ספירת המועדון,
      שבמכוון אינה רצה בכתיבה (ר' הבלוק מעל `homeCountsDoc_`). */
+  hjM('homeCountsSyncAll_');
   try {
     var hc = homeCountsSyncAll_(ss);
     if (hc.errors.length) Logger.log('מוני עמוד הבית: ' + hc.errors.join(' ; '));
   } catch (e) {
+    hjF(e);
     Logger.log('homeCountsSyncAll_ נכשל: ' + e);
   }
   /* לוח האירועים (23.9) — רשת הביטחון של טריגר היומן, והמקום היחיד
      שבו יומן החגים נכנס. ומתקין את טריגרי היומן אם חסרים. */
+  hjM('eventsSyncAll_');
   try {
     var evs = eventsSyncAll_();
     if (evs.error) Logger.log('eventsSyncAll_ נכשל: ' + evs.error);
@@ -6604,6 +6723,7 @@ function hourlyJobsRun_() {
                  (evt.errors.length ? ' | ' + evt.errors.join(' ; ') : ''));
     }
   } catch (e) {
+    hjF(e);
     Logger.log('סנכרון לוח האירועים נכשל: ' + e);
   }
   /* 🔴🔴 **מימוש שבוע השגרה** (16.9). עד היום זה רץ במקום אחד
@@ -6623,6 +6743,7 @@ function hourlyJobsRun_() {
         מזהה חדש חייב להיגזר מגיליון שכבר מעודכן.
      ⚠️ כשהדגל כבוי היא יוצאת מיד עם `skipped: 'flag-off'`, ולכן
         השורה הזאת חסרת-השפעה לחלוטין עד שנדליק אותו. */
+  hjM('gardenMirrorToSheet_');
   try {
     var gmr = gardenMirrorToSheet_(ss);
     if (gmr.added || gmr.updated || gmr.orphanRows || gmr.errors.length) {
@@ -6631,6 +6752,7 @@ function hourlyJobsRun_() {
                  (gmr.errors.length ? ' | שגיאות: ' + gmr.errors.join(' ; ') : ''));
     }
   } catch (e) {
+    hjF(e);
     Logger.log('gardenMirrorToSheet_ נכשל: ' + e);
   }
   /* 🔴🔴 **הגינון ב-Firestore — 22.9.2026.** כש-Firestore הבעלים,
@@ -6638,6 +6760,7 @@ function hourlyJobsRun_() {
      8 שבועות קדימה, קורא את התוכנית מ-Firestore ולא מהטאב, ומסיים
      מחיקות שהדפדפן סימן. הישן נשאר רדום — כלל גל 5 (מכבים, מחכים
      שבוע, מוחקים). כיבוי `gardenWriteToFirestore` מחזיר אותו בלי דיפלוי. */
+  hjM('gardenHorizonRun_');
   try {
     if (gardenFsOwns_()) {
       var gh = gardenHorizonRun_(ss);
@@ -6655,6 +6778,7 @@ function hourlyJobsRun_() {
       gardenMaterializeWeek_(ss, gardenWeekKey_());
     }
   } catch (e) {
+    hjF(e);
     Logger.log('אופק הגינון נכשל: ' + e);
   }
   /* 🔴 נתוני הגינון (2026-09-16) — דיווחים ומשימות של השנה הנוכחית.
@@ -6663,21 +6787,46 @@ function hourlyJobsRun_() {
      ⚠️ שעה היא **לא** קצב מספיק כשהדפדפן יקרא מכאן — תושב שמגיש
         דיווח חייב לראות אותו מיד. הצעד הבא (רעננות בכתיבה) חייב
         לנחות **לפני** שהדגל נדלק. עד אז הכתיבה הזאת בלתי-נראית. */
+  hjM('gardenDataSyncAll_');
   try {
     var gd = gardenDataSyncAll_(ss);
     if (gd.error) Logger.log('נתוני גינון: ' + gd.error);
     else Logger.log('נתוני גינון: משימות ' + gd.tasks.wrote + '/' + gd.tasks.deleted +
                     ', דיווחים ' + gd.reports.wrote + '/' + gd.reports.deleted);
   } catch (e) {
+    hjF(e);
     Logger.log('gardenDataSyncAll_ נכשל: ' + e);
   }
+  /* גל 4 (24.9) — דיווחים על האפליקציה: מייל/תשובה/מראה שלא יצאו מהדפדפן. */
+  hjM('appReportsHourly_');
+  try {
+    var arh = appReportsHourly_(ss);
+    if (arh.mailed || arh.replied || arh.mirrored || arh.errors.length) {
+      Logger.log('דיווחי אפליקציה: מיילים ' + arh.mailed + ', תשובות ' + arh.replied +
+                 ', מראה ' + arh.mirrored + (arh.errors.length ? ' | ' + arh.errors.join(' ; ') : ''));
+    }
+  } catch (e) {
+    hjF(e);
+    Logger.log('appReportsHourly_ נכשל: ' + e);
+  }
+  hjM('fsBackupIncremental_');
   try {
     var r = fsBackupIncremental_(ss);
     Logger.log('גיבוי מצטבר: נקראו ' + r.read + ' מסמכים' +
                (r.errors.length ? ' | שגיאות: ' + r.errors.join(' ; ') : ''));
   } catch (e) {
+    hjF(e);
     Logger.log('fsBackupIncremental_ נכשל: ' + e);
   }
+  /* גל 4 — סוף הריצה. ⚠️ `typeof` ולא גישה ישירה: שלב שנכשל לפני ההשמה
+     משאיר את המשתנה undefined, וזה לא אמור להפיל את השמירה. */
+  if (HJ) hjSave_(HJ, {
+    mail: ((typeof mr !== 'undefined' && mr && mr.mailed) || 0) +
+          ((typeof mp !== 'undefined' && mp && mp.sent) || 0) +
+          ((typeof gm !== 'undefined' && gm && gm.sent) || 0) +
+          ((typeof arh !== 'undefined' && arh && (arh.mailed + arh.replied)) || 0),
+    push: (typeof nq !== 'undefined' && nq && nq.sent) || 0
+  });
 }
 
 /* התקנה מהעורך (חלופה למסך "מפעילים").
@@ -7688,6 +7837,11 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
      טריות. ⚠️ לא תלוי ב-`appsScriptFallback`: כאן הנפילה תמיד שקטה,
      כי מקור הנפילה (היומן) טרי לפחות כמו המראה. */
   'eventsFromFirestore',
+  /* גל 4 (24.9) — דיווחים על האפליקציה: **קריאה וכתיבה יחד** (אותו כלל
+     כמו budgetTxFromFirestore). ברירת המחדל בלקוח `true`. כיבוי מחזיר את
+     השליחה ואת מסך הניהול ל-Apps Script; submitAppReport_ ממשיך לכתוב גם
+     מסמך, כך שהדלקה חוזרת אינה מאבדת דיווחים. */
+  'appReportsFromFirestore',
   /* 🔴🔴 **מתג החירום של הנפילה לאחור** (2026-09-17, ממצא 02 — הכרעת יועד).
      כבוי כברירת מחדל, ובכוונה: מאז 17.9 כשל Firestore **אינו** מחזיר את
      המסך ל-Apps Script בשקט, אלא מציג "לא הצלחנו לטעון" עם "נסה שוב".
@@ -7970,6 +8124,8 @@ function gymStatusSyncAll_(ss) {
     var byEmail = gymUidByEmail_(ss);
     var rows = readTable_(ss, GYM_SHEET);
     var code = String((readGymSettings_(ss).settings['\u05e7\u05d5\u05d3 \u05db\u05e0\u05d9\u05e1\u05d4'] || '')).trim();
+    /* 25.9 — הדלת החליפה את הקוד ⇒ אין אוסף gymCode, והסחיפה מוחקת את הקיים. */
+    if (typeof doorGymOn_ === 'function' && doorGymOn_()) code = '';
     var live = {}, codeLive = {};
     /* 🔴🔴 **שורה אחת לאדם, ובחירה אחת.** בגיליון יכולות לשבת שתי
        שורות לאותו אדם (מנוי שפג + חדש), והקוד הקודם דחף את שתיהן
@@ -8925,7 +9081,8 @@ function handleGymMy_(p) {
       var isActive = String(membership['סטטוס'] || '').trim() === GYM_ST_ACTIVE;
       var until = gymToDate_(membership['בתוקף עד']);
       var stillValid = until ? (until.getTime() >= new Date().setHours(0, 0, 0, 0)) : false;
-      if (isActive && stillValid) entryCode = String(cfg.settings['קוד כניסה'] || '').trim();
+      /* 25.9 — כשהדלת מחליפה את הקוד (doorGymOn_), הקוד לא נמסר יותר. */
+      if (isActive && stillValid && !(typeof doorGymOn_ === 'function' && doorGymOn_())) entryCode = String(cfg.settings['קוד כניסה'] || '').trim();
 
       // עד מתי ההצהרה שנחתמה עדיין תקפה — זה מה שקובע אם חידוש ידרוש
       // למלא את השאלון מחדש או שיהיה שתי לחיצות בלבד.
@@ -9983,6 +10140,7 @@ function deleteGymMembership_(ss, body) {
       if (uid) {
         fsDelete_(fsDocPath_(FS_GYM_STATUS, uid));
         fsDelete_(fsDocPath_(FS_GYM_CODE, uid));
+        if (typeof doorGymNukiRevoke_ === 'function') doorGymNukiRevoke_(uid);   /* 25.9 — גם הרשאת Nuki, מיד */
       }
     } catch (fsErr) { Logger.log('ניקוי Firestore אחרי מחיקת מנוי נכשל: ' + fsErr); }
 
@@ -12237,7 +12395,13 @@ var BK_COLLECTIONS = [
      לנוהל שרץ. */
   { collection: 'gardenReports', tab: BK_PREFIX + 'דיווחי גינון' },
   { collection: 'gardenTasks',   tab: BK_PREFIX + 'משימות גינון' },
-  { collection: 'gardenLog',     tab: BK_PREFIX + 'יומן גינון' }
+  { collection: 'gardenLog',     tab: BK_PREFIX + 'יומן גינון' },
+  /* 25.9 — דלת + WeWork: Firestore הוא המסד היחיד שלהם. weworkDays
+     נגזר מהשריונים (wwRebuildDay_) ו-doorState נכתב מחדש כל שעה. */
+  { collection: 'weworkBookings', tab: BK_PREFIX + 'שריוני WeWork' },
+  { collection: 'weworkConfig',   tab: BK_PREFIX + 'הגדרות WeWork' },
+  { collection: 'doorLog',        tab: BK_PREFIX + 'יומן דלת' },
+  { collection: 'gymNuki',        tab: BK_PREFIX + 'הזמנות Nuki' }
 ];
 var BK_HEADERS = ['id', 'עודכן', 'schema', 'json'];
 
@@ -17936,7 +18100,9 @@ var APP_REPORT_HEADERS = [
   'מסך', 'חלון פתוח', 'הרשאות', 'שנת עבודה',
   'גרסת לקוח', 'גרסת שרת', 'דפדפן', 'רשת',
   'שגיאות', 'שובל פעולות', 'מידע נוסף', 'תמונות',
-  'טופל', 'תגובה', 'תאריך טיפול', 'טופל על ידי'
+  'טופל', 'תגובה', 'תאריך טיפול', 'טופל על ידי',
+  /* גל 4 (24.9) — שורת "מה השרת עשה לאחרונה" שנצמדת לדיווח. ר' Diag.gs. */
+  'דופק שרת'
 ];
 var APP_REPORT_PHOTOS_FOLDER_NAME = 'דיווחי אפליקציה';
 var APP_REPORT_ITEM_MAX  = 5;
@@ -17953,7 +18119,7 @@ function ensureAppReportsSheet_(ss) {
      190, 190, 130, 90,
      100, 90, 230, 110,
      360, 360, 300, 210,
-     60, 320, 130, 140]);
+     60, 320, 130, 140, 300]);
 }
 
 function getAppReportPhotosFolder_() {
@@ -17991,7 +18157,9 @@ function submitAppReport_(ss, body) {
       } catch (e) { /* תמונה שנכשלה לא מפילה דיווח שכבר נכתב */ }
     }
 
-    var id = nextGardenId_(sh);
+    /* גל 4 — מזהה משותף עם המונה של Firestore (Diag.gs), כדי ששני המסלולים
+       לא יקצו אותו מספר כשהדגל appReportsFromFirestore נכבה ונדלק. */
+    var id = (typeof appReportNextIdShared_ === 'function') ? appReportNextIdShared_(sh) : nextGardenId_(sh);
     var name = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email;
 
     var row = new Array(sh.getLastColumn()).fill('');
@@ -18018,14 +18186,28 @@ function submitAppReport_(ss, body) {
     setDiagCell_(row, c, 'מידע נוסף',   body.extra,  400);
     row[c['תמונות']]     = ids.join(',');
     row[c['טופל']]       = '';
+    var pulseTxt = '';
+    try { if (typeof diagPulseLine_ === 'function') pulseTxt = diagPulseLine_(); } catch (eP) {}
+    setDiagCell_(row, c, 'דופק שרת', pulseTxt, 400);
     sh.appendRow(row);
+    /* גל 4 — גם במסלול הישן נכתב מסמך, כדי שמסך הניהול (שקורא מ-Firestore)
+       יראה את הדיווח. בלי שם ובלי מייל — רק מזהה משפחה. */
+    if (typeof appReportDocFromLegacy_ === 'function') try {
+      appReportDocFromLegacy_(id, {
+        familyId: perm.familyId || '', kind: kind, items: items,
+        screen: body.screen, ver: body.ver, srvVer: body.srvVer, ua: body.ua,
+        perms: body.perms, year: body.year, net: body.net, dialog: body.dialog,
+        errors: body.errors, trail: body.trail, extra: body.extra,
+        photos: ids, pulse: pulseTxt, date: new Date()
+      });
+    } catch (eD) {}
 
     try {
       notifyAdmins_(ss, PERM_SUPER, 'ADMIN_NEW_APP_REPORT', {
         'שם': name, 'סוג': kind === 'תקלה' ? 'דיווח על תקלה' : 'הצעת ייעול',
         'מזהה': id, 'תוכן': items.join('\n'), 'מסך': String(body.screen || ''),
         'אבחון': [String(body.dialog || ''), String(body.ver || ''),
-                  String(body.ua || ''), String(body.net || '')]
+                  String(body.ua || ''), String(body.net || ''), pulseTxt]
                  .filter(function (t) { return t; }).join(' · '),
         'שגיאות': String(body.errors || '')
       });
@@ -18083,6 +18265,10 @@ function handleAppReports_(p) {
       extra:  appReportCell_(v[r], c, 'מידע נוסף'),
       photos: String(v[r][c['תמונות']] || '').split(',').filter(Boolean),
       done:   String(v[r][c['טופל']] || '').trim() === 'כן',
+      /* גל 4 — למדד "זמן טיפול" ולשורה הירוקה במסך החדש. */
+      doneAt: (c['תאריך טיפול'] !== undefined && v[r][c['תאריך טיפול']] instanceof Date)
+                ? v[r][c['תאריך טיפול']].toISOString() : '',
+      pulse:  appReportCell_(v[r], c, 'דופק שרת'),
       reply:  String(v[r][c['תגובה']] || '')
     });
   }
@@ -18116,6 +18302,17 @@ function setAppReportDone_(ss, body) {
   sh.getRange(row, c['טופל על ידי'] + 1).setValue(done ? who : '');
 
   var reply = String(body.reply || '').trim().substring(0, 1000);
+  /* גל 4 — המסמך ב-Firestore מתעדכן גם במסלול הישן (כשהדגל כבוי). */
+  try {
+    var fsPatch = { done: done };
+    if (done) fsPatch.doneAt = new Date();
+    if (reply) {
+      var prevR = String(v[row - 1][c['תגובה']] || '').trim();
+      fsPatch.reply = prevR ? (prevR + '\n---\n' + reply) : reply;
+      fsPatch.replyLast = reply; fsPatch.replyAt = new Date();
+    }
+    if (typeof FS_APP_REPORTS !== 'undefined' && fsGet_(fsDocPath_(FS_APP_REPORTS, id))) fsMerge_(fsDocPath_(FS_APP_REPORTS, id), fsPatch);
+  } catch (eF) {}
   if (reply) {
     /* התגובות נצברות ולא נדרסות: שיחה קצרה עם תושב יכולה להיות שני משפטים
        בשני מועדים, ודריסה הייתה מוחקת את מה שכבר נשלח לו בפועל. */

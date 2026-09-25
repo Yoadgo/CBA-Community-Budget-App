@@ -50,7 +50,8 @@ ok('הגדרת תוכנית עבודה נשארה על T+גיליון (מרחב 
    /var newId = 'T' \+ nextGardenId_\(sh, 'מזהה'\);/.test(GS));
 ok('זריעת תוכנית העבודה נשארה', /var next = nextGardenId_\(sh, 'מזהה'\);/.test(GS));
 ok('דיווחי האפליקציה נשארו על הגיליון — טאב אחר לגמרי',
-   /var id = nextGardenId_\(sh\);/.test(GS));
+   /* גל 4 (24.9) — המזהה משותף עם מונה Firestore, והגיליון נשאר נפילה לאחור. */
+   /var id = \(typeof appReportNextIdShared_ === 'function'\) \? appReportNextIdShared_\(sh\) : nextGardenId_\(sh\);/.test(GS));
 ok('🔴 ובמרחב הגינון עצמו לא נשארה אף הקצאה ישירה מהגיליון',
    !/var (taskId|repId) = nextGardenId_/.test(GS));
 

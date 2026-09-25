@@ -32,10 +32,13 @@ window.matchMedia = window.matchMedia || (() => ({ matches: false }));
 
 let lastSubmit = null, submitReply = { ok: true, id: 7 };
 let lastDone = null, doneReply = { ok: true };
+let lastCopy = null;
 window.CBA.data = {
   submitAppReport: (payload, cb) => { lastSubmit = payload; setTimeout(() => cb(submitReply), 0); },
   getAppReports: cb => setTimeout(() => cb(window.__reports), 0),
   setAppReportDone: (id, done, reply, cb) => { lastDone = { id, done, reply }; setTimeout(() => cb(doneReply), 0); },
+  /* גל 4 — המסך החדש שולח את השורה כולה (כדי לדעת לאן לכתוב ולצבור תשובות). */
+  setAppReportState: (row, done, reply, cb) => { lastDone = { id: row.id, done, reply }; setTimeout(() => cb(doneReply), 0); },
   getReceipt: (id, cb) => setTimeout(() => cb({ ok: true, url: 'data:image/png;base64,AA' }), 0)
 };
 
@@ -172,55 +175,86 @@ const $$ = s => Array.from(document.querySelectorAll(s));
   await wait(260);
   ok('Escape סוגר confirm רגיל', confirmed === false, String(confirmed));
 
-  section('7. מסך הניהול');
+  section('7. מסך הניהול — גל 4: לשוניות, היסטוריה שנשארת, סינון');
+  try { window.localStorage.removeItem('cba_rr_view'); } catch (e) {}
+  const now = Date.now();
   window.__reports = { ok: true, rows: [
-    { id: 1, date: '2026-09-09T08:00:00.000Z', email: 'a@b.c', name: 'דנה', kind: 'תקלה',
+    { id: 3, date: new Date(now - 3600e3).toISOString(), name: 'דנה', kind: 'תקלה',
       items: ['לא נשמר'], screen: 'תכנון מול ביצוע (budget)', ver: '20260909q', ua: 'Safari · iOS',
-      photos: ['abcdefghij12'], done: false, reply: '' },
-    { id: 2, date: '2026-09-08T08:00:00.000Z', email: 'd@e.f', name: 'רון', kind: 'ייעול',
-      items: ['כדאי חיפוש', 'וגם מיון'], screen: '', ver: '', ua: '', photos: [], done: true, reply: 'תודה' }
+      errors: '10:00:01 השמירה לא קיבלה תשובה  @ sheets.js:1', trail: '10:00:00 לחיצה: שמירה',
+      photos: ['abcdefghij12'], done: false, reply: '', src: 'fs' },
+    { id: 2, date: new Date(now - 2 * 86400e3).toISOString(), name: 'רון', kind: 'ייעול',
+      items: ['כדאי חיפוש', 'וגם מיון'], screen: '', photos: [], done: true,
+      doneAt: new Date(now - 86400e3).toISOString(), reply: 'תודה', src: 'fs' },
+    { id: 1, date: new Date(now - 40 * 86400e3).toISOString(), name: 'גל', kind: 'ייעול',
+      items: ['רעיון ישן'], photos: [], done: false, reply: '', src: 'sheet' }
   ] };
   const main = document.createElement('div');
   document.body.appendChild(main);
   window.CBA.screens.appReports.render(main);
   await wait(60);
-  ok('רק הפתוחים מוצגים כברירת מחדל', main.querySelectorAll('.rr-row').length === 1,
-     String(main.querySelectorAll('.rr-row').length));
-  ok('כותרת מונה נכון', main.querySelector('.screen-head__sub').textContent.indexOf('1 פתוחים') !== -1,
-     main.querySelector('.screen-head__sub').textContent);
-  main.querySelector('#rr-toggle').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  ok('הצגת מה שטופל', main.querySelectorAll('.rr-row').length === 2);
-  ok('שני סעיפים מוצגים כרשימה', main.querySelectorAll('.rr-row')[1].querySelectorAll('.rr-items li').length === 2);
-  ok('תגובה קודמת מוצגת', main.innerHTML.indexOf('תגובה שנשלחה') !== -1);
+  const cards = () => main.querySelectorAll('.rr-card');
+  ok('ברירת מחדל: פתוחים בלבד', cards().length === 2, String(cards().length));
+  ok('ארבעה מדדים בראש', main.querySelectorAll('.rr-kpi').length === 4);
+  ok('מדד "פתוחים" נכון', main.querySelector('.rr-kpi__v').textContent === '2', main.querySelector('.rr-kpi__v').textContent);
+  ok('קיבוץ לפי זמן ("היום")', main.innerHTML.indexOf('rr-group">היום<') !== -1);
+  ok('פס צבע לפי סוג', main.querySelector('.rr-card--bug') && main.querySelector('.rr-card--idea'));
+  ok('ספירת שגיאות על הכרטיס', /1 שגיאות/.test(main.innerHTML));
 
-  const chk = main.querySelector('.rr-row .rr-chk');
-  chk.checked = true;
-  chk.dispatchEvent(new window.Event('change', { bubbles: true }));
+  const clickSel = sel => main.querySelector(sel).dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  clickSel('[data-view="done"]');
+  ok('לשונית "טופלו" מציגה את מה שטופל', cards().length === 1 && cards()[0].dataset.id === '2');
+  ok('⚠️ ומה שטופל מציג מתי ומה נענה', /טופל/.test(main.querySelector('.rr-done').textContent) &&
+     /תודה/.test(main.querySelector('.rr-done').textContent), main.querySelector('.rr-done') && main.querySelector('.rr-done').textContent);
+  ok('שני סעיפים מוצגים כרשימה', cards()[0].querySelectorAll('.rr-items li').length === 2);
+  clickSel('[data-view="all"]');
+  ok('"הכול" מציג את שלושתם', cards().length === 3);
+  clickSel('[data-kind="bug"]');
+  ok('סינון לפי תקלות', cards().length === 1 && cards()[0].dataset.id === '3');
+  clickSel('[data-kind="all"]');
+  clickSel('[data-view="open"]');
+
+  section('7ב. סימון "טופל" — נשאר על המסך');
+  lastDone = null; doneReply = { ok: true };
+  main.querySelector('.rr-card[data-id="3"] [data-act="done"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await wait(40);
-  ok('סימון טופל נשלח לשרת', lastDone && String(lastDone.id) === '1' && lastDone.done === true,
-     JSON.stringify(lastDone));
-  ok('השורה סומנה חזותית', main.querySelector('.rr-row').classList.contains('is-done'));
+  ok('סימון נשלח עם השורה', lastDone && String(lastDone.id) === '3' && lastDone.done === true, JSON.stringify(lastDone));
+  ok('🔴 הכרטיס לא נעלם מלשונית "פתוחים"', !!main.querySelector('.rr-card[data-id="3"]'));
+  ok('והוא מסומן כטופל', main.querySelector('.rr-card[data-id="3"]').classList.contains('is-done'));
+  ok('ויש לו "פתיחה מחדש"', !!main.querySelector('.rr-card[data-id="3"] [data-act="reopen"]'));
 
   lastDone = null; doneReply = { ok: false, error: 'נכשל' };
-  const chk2 = main.querySelectorAll('.rr-row .rr-chk')[1];
-  chk2.checked = false;
-  chk2.dispatchEvent(new window.Event('change', { bubbles: true }));
+  main.querySelector('.rr-card[data-id="3"] [data-act="reopen"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await wait(40);
-  ok('כישלון מחזיר את התיבה למצבה', chk2.checked === true);
+  ok('כישלון לא משנה את המצב', main.querySelector('.rr-card[data-id="3"]').classList.contains('is-done'));
+  const alertBtn = document.querySelector('[data-dlg="ok"]');
+  if (alertBtn) alertBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await wait(260);
+
+  section('7ג. פרטים טכניים והעתקה לתחקור');
+  doneReply = { ok: true };
+  clickSel('.rr-card[data-id="3"] [data-act="tech"]');
+  ok('פרטים טכניים נפתחים', !!main.querySelector('.rr-card[data-id="3"] .rr-tech'));
+  ok('והם מראים את השובל', /לחיצה: שמירה/.test(main.querySelector('.rr-tech').textContent));
+  window.CBA.report.copyText = (t, cb) => { lastCopy = t; cb(true); };
+  clickSel('.rr-card[data-id="3"] [data-act="copy"]');
+  ok('העתקה מייצרת גוש עם מזהה ושגיאות', lastCopy && /דיווח #3/.test(lastCopy) && /השמירה לא קיבלה תשובה/.test(lastCopy), lastCopy);
 
   section('8. אין הצטברות מאזינים בציור חוזר');
-  doneReply = { ok: true };
-  main.querySelector('#rr-toggle').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  main.querySelector('#rr-toggle') && main.querySelector('#rr-toggle')
-    .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  clickSel('[data-view="all"]'); clickSel('[data-view="open"]'); clickSel('[data-view="all"]');
   let calls = 0;
-  const realSet = window.CBA.data.setAppReportDone;
-  window.CBA.data.setAppReportDone = (id, d, r, cb) => { calls++; realSet(id, d, r, cb); };
-  const c3 = main.querySelector('.rr-row .rr-chk');
-  c3.checked = !c3.checked;
-  c3.dispatchEvent(new window.Event('change', { bubbles: true }));
+  const realSet = window.CBA.data.setAppReportState;
+  window.CBA.data.setAppReportState = (row, d, r, cb) => { calls++; realSet(row, d, r, cb); };
+  main.querySelector('.rr-card[data-id="1"] [data-act="done"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await wait(40);
-  ok('סימון אחד = קריאה אחת לשרת', calls === 1, String(calls));
+  ok('לחיצה אחת = קריאה אחת', calls === 1, String(calls));
+
+  section('9. גל 4 — ניקוי אסימונים בהקשר ובגוש התחקור');
+  window.CBA.diag.error('fetch failed https://script.google.com/macros/s/X/exec?session=SECRET123&action=y', 'sheets.js:9');
+  const packed = window.CBA.diag.pack('');
+  ok('🔴 האסימון לא מופיע בגוש', packed.indexOf('SECRET123') === -1, packed.slice(0, 300));
+  ok('והשגיאה עצמה כן מופיעה', /fetch failed/.test(packed));
+  ok('וגם בדיווח עצמו', window.CBA.diag.snapshot().errors.join('\n').indexOf('SECRET123') === -1);
 
   console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);

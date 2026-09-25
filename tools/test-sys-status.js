@@ -100,9 +100,12 @@ ok('נרשם כמסך', /CBA\.screens\.sysStatus = \{/.test(SRC));
 ok('🔴 ומוגן במנהל-על בלבד', /sysStatus: PERM\.SUPER,/.test(APP));
 ok('⚠️ והשרת אוכף את זה בעצמו — לא רק ההסתרה כאן',
    /flagSet: PERM_SUPER, flagsGet: PERM_SUPER,/.test(GS));
-ok('נמצא ברשימת מסכי הניהול', /"appReports", "sysStatus", "reconcile"\]/.test(APP));
-ok('⚠️ ויש אליו אריח בתפריט המשתמש, רק למנהל-על',
-   /isSuper\(\)\) \{[\s\S]{0,600}data-panel-goto="sysStatus"/.test(APP));
+ok('נמצא ברשימת מסכי הניהול', /"appReports", "sysStatus", "sysHub", "reconcile"\]/.test(APP));
+/* גל 4 (24.9) — האריח הוא עכשיו "ניהול מערכת" (sysHub), והמסך הזה לשונית בתוכו. */
+ok('⚠️ ויש אליו אריח בתפריט המשתמש — "ניהול מערכת", למנהל-על בשני האזורים',
+   /if \(isSuper\(\) \|\| \(currentArea === "admin" && canScreen\("emailSettings"\)\)\) \{[\s\S]{0,200}data-panel-goto="sysHub"/.test(APP));
+ok('⚠️ ובתוך המרכז — לשונית למנהל-על בלבד',
+   /id: "status",[^\n]*superOnly: true/.test(fs.readFileSync(path.join(__dirname, '..', 'js/screens/sysHub.js'), 'utf8')));
 ok('הקובץ נטען ב-index.html', /js\/screens\/sysStatus\.js\?v=/.test(HTML));
 ok('⚠️ וגם גיליון הסגנון שלו', /css\/sys\.css\?v=/.test(HTML));
 ok('⚠️ ושניהם נושאים את אותה גרסה כמו השאר',
@@ -182,8 +185,8 @@ ok('⚠️ ושניהם נושאים את אותה גרסה כמו השאר',
   /* (2026-09-17) שמונה ולא שבעה — נוסף writeWatchdog, שאינו מתג
      מיגרציה אלא מתג ביטול לרשת ביטחון, ולכן ברירת המחדל שלו דלוקה. */
   /* (2026-09-23) תשעה — נוסף eventsFromFirestore (לוח האירועים). */
-  ok('⚠️ ותשעה מהם דלוקים היום כברירת מחדל',
-     Object.keys(declared).filter(k => declared[k]).length === 9,
+  ok('⚠️ ועשרה מהם דלוקים היום כברירת מחדל (24.9: +appReportsFromFirestore)',
+     Object.keys(declared).filter(k => declared[k]).length === 10,
      String(Object.keys(declared).filter(k => declared[k]).length));
 
   /* =============================================================== */
