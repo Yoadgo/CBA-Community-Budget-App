@@ -975,6 +975,18 @@ CBA.screens = CBA.screens || {};
           }
 
           gaLast = res;
+          /* 25.9 — תשובה חלקית מ-Firestore (js/data/gymFs.js): הרשימה והמספרים
+             כבר על המסך, הפרטים האישיים בדרך מ-Apps Script. עד שהם מגיעים —
+             כפתורי הפעולה נעולים, כדי שאף טופס לא ייפתח עם שדות ריקים. */
+          container.classList.toggle("ga-partial", !!res.partial);
+          var gaNote = container.querySelector("#ga-partial-note");
+          if (!gaNote) {
+            gaNote = document.createElement("div");
+            gaNote.id = "ga-partial-note"; gaNote.className = "gym-hint gym-hint--tight";
+            gaNote.textContent = "טוען פרטים אישיים… הפעולות ייפתחו בעוד רגע.";
+            kpisEl.parentNode.insertBefore(gaNote, kpisEl);
+          }
+          gaNote.hidden = !res.partial;
           var members   = res.members   || [];
           var plans     = res.plans     || [];
           var questions = res.questions || [];

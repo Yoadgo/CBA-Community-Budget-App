@@ -609,5 +609,84 @@ section('11. סנכרון מנוי מיידי (gymSyncOne_)');
   ok('פעולה שנכשלה ⇒ לא נוגעים', !T.db['gymCode/uA']);
 }
 
+/* ================================================= 12. מכון ב-Firestore --- */
+section('12. מכון הכושר ב-Firestore (GymFirestore.gs + gymFs.js)');
+{
+  const GF = R('apps-script/GymFirestore.gs');
+  const T = fastSandbox({ gymUids: {} });
+  const FORB = ['אימייל', 'שם פרטי', 'שם משפחה', 'טלפון', 'מספר בית', 'ת.ז.', 'תאריך לידה', 'שאלות שנענו בכן',
+    'דגלים', 'הערת דגל', 'תאריך חתימה', 'קישור חתימה', 'גרסת שאלון', 'אישור רופא', 'תאריך הנפקת האישור',
+    'קישור אישור', 'טופל ע"י', 'הערות מנהל', 'מזהה קבוע'];
+  const row = { 'מזהה': 'GYM-9', 'סטטוס': 'פעיל', 'מסלול': 'מנוי שנתי', 'בתוקף עד': '2027-06-30', 'סה"כ שולם': 360 };
+  FORB.forEach(f => { row[f] = 'VAL::' + f; });
+  row['אימייל'] = 'a@x.il';
+  T.sb.RESIDENT_ID_HEADER = 'מזהה קבוע';
+  T.sb.residentSlotCols_ = () => ({ email: [1, 2], uid: [3, 4], perm: [] });
+  const resVals = [['מזהה קבוע', 'אימייל 1', 'אימייל 2', 'מזהה Firebase 1', 'מזהה Firebase 2'], ['F12', 'x@x.il', 'a@x.il', 'uX', 'uA']];
+  T.sb.fsSweepOrphans_ = (c, live, out) => { Object.keys(T.db).filter(k => k.startsWith(c + '/') && !live[k.slice(c.length + 1)]).forEach(k => { delete T.db[k]; out.deleted++; }); };
+  T.sb.fsWriteAll_ = (c, items, out, live) => items.forEach(i => { T.db[c + '/' + i.id] = JSON.parse(JSON.stringify(i.doc)); live[i.id] = 1; out.wrote++; });
+  const ss = { getSheetByName: () => ({ getDataRange: () => ({ getValues: () => resVals }) }) };
+  T.sb.readTable_ = () => [row];
+  T.sb.readGymSettings_ = () => ({ settings: { 'קוד כניסה': '0606', 'קישור פייבוקס': 'https://paybox/x', 'ימים לתזכורת חידוש': '30', 'אישור אוטומטי': 'כן' },
+    plans: [{ id: 'PLAN-12M', name: 'מנוי שנתי', months: 12, active: true }], questions: [{ id: 'Q1', text: 'האם…', active: true }], rules: [] });
+  vm.runInContext(GF, T.sb);
+  T.sb.gymMembersSyncAll_(ss);
+  const doc = T.db['gymMembers/GYM-9'];
+  ok('gymMembers נכתב עם familyId + uid + slot מהגשר', doc && doc.familyId === 'F12' && doc.uid === 'uA' && doc.slot === 2, JSON.stringify(doc));
+  ok('🔴 אף שדה אישי/בריאות לא עבר (רשימת היתר)', FORB.every(f => !(f in doc)), FORB.filter(f => f in doc).join(','));
+  ok('🔴 וגם שום ערך אישי לא דלף', FORB.every(f => JSON.stringify(doc).indexOf('VAL::' + f) === -1));
+  ok('מה שכן עבר: סטטוס/מסלול/תוקף/תשלום', doc['סטטוס'] === 'פעיל' && doc['בתוקף עד'] === '2027-06-30' && doc['סה"כ שולם'] === 360);
+  T.db['gymMembers/OLD'] = { x: 1 };
+  T.sb.gymMembersSyncAll_(ss);
+  ok('מנוי שנמחק מהגיליון נמחק גם מ-Firestore (סחיפה)', !T.db['gymMembers/OLD']);
+  T.sb.gymConfigSync_(ss);
+  const pub = T.db['gymConfig/public'], adm = T.db['gymConfig/admin'];
+  ok('🔴 קוד הכניסה לא נכתב לשום מסמך הגדרות', JSON.stringify(pub).indexOf('0606') === -1 && JSON.stringify(adm).indexOf('0606') === -1);
+  ok('gymConfig/public: פייבוקס + מסלולים + ימי תזכורת', pub.payboxUrl === 'https://paybox/x' && pub.plans.length === 1 && pub.renewDaysBefore === 30 && pub.hasEntryCode === true);
+  ok('gymConfig/public בלי הגדרות מנהל פנימיות', !('settings' in pub) && JSON.stringify(pub).indexOf('אישור אוטומטי') === -1);
+  ok('gymConfig/admin: ההגדרות (בלי הקוד)', adm.settings['אישור אוטומטי'] === 'כן' && !('קוד כניסה' in adm.settings));
+  delete T.db['gymMembers/GYM-9'];
+  T.sb.gymMembersSyncEmail_(ss, 'A@x.il');
+  ok('סנכרון מנוי אחד לפי אימייל (אחרי פעולה)', !!T.db['gymMembers/GYM-9']);
+}
+{
+  const DOOR2 = R('apps-script/Door.gs');
+  ok('אחרי פעולת הגדרות מכון ⇒ gymConfigSync_', /GYM_CONFIG_ACTIONS\[a\][\s\S]{0,80}gymConfigSync_\(ss\)/.test(DOOR2));
+  ok('אחרי מחיקת מנוי ⇒ נמחק גם מ-gymMembers', /a === 'deleteGymMembership'[\s\S]{0,200}fsDelete_\(fsDocPath_\(FS_GYM_MEMBERS, did\)\)/.test(DOOR2));
+  ok('שעתי: gymFsHourly_', /gymFsHourly_\(ss\)/.test(DOOR2));
+  const blk = (RULES.match(/match \/gymMembers\/\{docId\} \{[\s\S]*?\n    \}/) || [''])[0];
+  ok('🔴 gymMembers: מנהל מכון בלבד, כתיבה אסורה', /canSeeDoorState\(\)/.test(blk) && /allow write: if false;/.test(blk));
+  ok("🔴 gymConfig: public לכל חבר, השאר למנהל מכון", /docId == 'public' && canSeeWework\(\)\) \|\| isInternalAdmin\('מכון'\)/.test(RULES));
+  ok('index: gymFs.js אחרי dataService ולפני app.js', IDX.indexOf('js/data/gymFs.js') > IDX.indexOf('js/data/dataService.js') && IDX.indexOf('js/data/gymFs.js') < IDX.indexOf('js/app.js'));
+}
+{
+  /* הלקוח: קודם Firestore, אחר כך Apps Script; המלא מנצח תמיד. */
+  const code = R('js/data/gymFs.js');
+  function run(opts) {
+    const calls = [];
+    let fullCb = null;
+    const sb = { window: {}, setTimeout, console };
+    sb.window.CBA = sb.CBA = {
+      data: { getGymList: cb => { fullCb = cb; }, getResidentDirectory: cb => cb({ ok: true, rows: [{ 'מזהה קבוע': 'F12', 'משפחה': 'לוי', 'שם פרטי 1': 'נועה', 'שם פרטי 2': 'אבי' }] }) },
+      fb: { ensureDb: cb => cb(null), readDoc: (c, id, cb) => cb(null, { settings: {}, plans: [] }),
+            readCollection: (c, cb) => cb(null, opts.members) }
+    };
+    vm.createContext(sb); vm.runInContext(code, sb);
+    sb.CBA.data.getGymList(r => calls.push(r));
+    return { calls, full: r => fullCb(r) };
+  }
+  const a = run({ members: [{ 'מזהה': 'GYM-9', 'סטטוס': 'פעיל', familyId: 'F12', slot: 2 }] });
+  ok('תשובה חלקית מ-Firestore מגיעה לפני Apps Script', a.calls.length >= 1 && a.calls[0].partial === true);
+  ok('השם נבנה מספריית השמות לפי משבצת (2 = אבי)', a.calls[a.calls.length - 1].members[0]['שם פרטי'] === 'אבי' && a.calls[a.calls.length - 1].members[0]['שם משפחה'] === 'לוי');
+  a.full({ ok: true, members: [{ 'מזהה': 'GYM-9' }] });
+  ok('ואז המלא', a.calls[a.calls.length - 1].partial !== true);
+  const b = run({ members: [] });
+  ok('Firestore ריק ⇒ לא מציגים "אין מנויים" בטעות (מחכים למלא)', b.calls.length === 0);
+  const GA = R('js/screens/gymAdmin.js');
+  ok('מסך הניהול נועל פעולות בזמן תשובה חלקית', /classList\.toggle\("ga-partial", !!res\.partial\)/.test(GA) && /\.ga-partial #ga-members button/.test(R('css/gym.css')));
+  const RG = R('js/screens/resGym.js');
+  ok('מסך המנוי: כפתור הדלת כבר בציור המוקדם', /st\.fast && CBA\.doorGym\) CBA\.doorGym\.mount/.test(RG));
+}
+
 console.log('\n' + (fail ? '✗' : '✓') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

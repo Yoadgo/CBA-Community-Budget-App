@@ -217,7 +217,8 @@ ok('🔴 ושני המסלולים קוראים לה',
    String((GYM.match(/codeCardHTML\(/g) || []).length));
 ok('⚠️ ואין HTML כפול של הכרטיס', (GYM.match(/gym-code__value/g) || []).length === 1,
    String((GYM.match(/gym-code__value/g) || []).length));
-ok('הציור המוקדם מציג את הקוד', /if \(partial\) \{\s*\n\s*if \(st\.fastCode\) html \+= codeCardHTML\(st\.fastCode\);/.test(GYM));
+/* 25.9 — הבלוק החלקי מציג גם מד תוקף וכפתור דלת לפני הקוד; הקוד עדיין בתוכו. */
+ok('הציור המוקדם מציג את הקוד', /if \(partial\) \{[\s\S]{0,2000}if \(st\.fastCode\) html \+= codeCardHTML\(st\.fastCode\);[\s\S]{0,800}return html;/.test(GYM));
 /* 🔴 היעדר קוד בציור המוקדם פירושו "עוד לא יודעים" — לא "אין קוד".
    הענף "הכניסה באמצעות מפתח" שייך לתשובה המלאה בלבד. */
 ok('🔴 ואינו מציג "עדיין באמצעות מפתח" לפני שהתשובה המלאה הגיעה',

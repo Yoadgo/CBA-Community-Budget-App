@@ -224,7 +224,9 @@ const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks', 'gar
                 /* 25.9 — דלת Nuki + WeWork. קריאה בלבד, כתיבה מהשרת בלבד
                    (כל ה-allow write הם false). ר' Door.gs. */
                 'weworkConfig', 'weworkDays', 'weworkBookings',
-                'doorConfig', 'doorState', 'doorLog', 'gymNuki'];
+                'doorConfig', 'doorState', 'doorLog', 'gymNuki',
+                /* 25.9 — מכון הכושר: מראה בלי פרטים אישיים, קריאה בלבד. */
+                'gymMembers', 'gymConfig'];
 const found = (CODE.match(/^\s*match \/([A-Za-z0-9_]+)\//gm) || [])
                 .map(function (x) { return x.trim().replace(/^match \//, '').replace(/\/$/, ''); })
                 .filter(function (x) { return x !== 'databases'; });

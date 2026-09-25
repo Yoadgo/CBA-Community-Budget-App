@@ -883,6 +883,8 @@ function doorHourly_(ss) {
   out.cal = wwCalendarReconcile_(ss);
   out.health = doorHealth_(ss);
   out.purged = doorLogPurge_();
+  /* המכון ב-Firestore (GymFirestore.gs) — רשת ביטחון לעריכה ידנית בגיליון. */
+  if (typeof gymFsHourly_ === 'function') out.gymFs = gymFsHourly_(ss);
   if (doorMode_() === 'live') {
     out.gym = doorGymNukiSync_(ss);
     out.log = doorNukiLogImport_();
@@ -1173,13 +1175,22 @@ function gymSyncOne_(ss, email) {
   return { ok: true };
 }
 
+var GYM_CONFIG_ACTIONS = { updateGymSetting: 1, saveGymQuestion: 1, deleteGymQuestion: 1 };
+
 /** אחרי פעולת מכון שהצליחה: מי המנוי שהשתנה → סנכרון שלו בלבד. */
 function doorGymAfterWrite_(ss, body, res) {
-  if (!GYM_SYNC_ACTIONS[body.action]) return;
+  var a = body && body.action;
+  if (!GYM_SYNC_ACTIONS[a] && !GYM_CONFIG_ACTIONS[a] && a !== 'deleteGymMembership') return;
   try {
     var parsed = null;
     try { parsed = JSON.parse(res.getContent()); } catch (e) { parsed = null; }
     if (!parsed || parsed.ok !== true) return;
+    if (GYM_CONFIG_ACTIONS[a]) { if (typeof gymConfigSync_ === 'function') gymConfigSync_(ss); return; }
+    if (a === 'deleteGymMembership') {
+      var did = String(body.id || '').trim();
+      if (did && fsIdOk_(did) && typeof FS_GYM_MEMBERS !== 'undefined') { try { fsDelete_(fsDocPath_(FS_GYM_MEMBERS, did)); } catch (e) { } }
+      return;
+    }
     var email = body.email || '';
     if (!email && body.id) {
       var id = String(body.id).trim();
@@ -1188,6 +1199,9 @@ function doorGymAfterWrite_(ss, body, res) {
       });
     }
     if (!email) email = body._email || '';
-    if (email) gymSyncOne_(ss, email);
+    if (email) {
+      gymSyncOne_(ss, email);
+      if (typeof gymMembersSyncEmail_ === 'function') gymMembersSyncEmail_(ss, email);
+    }
   } catch (e) { Logger.log('doorGymAfterWrite_: ' + e); }
 }

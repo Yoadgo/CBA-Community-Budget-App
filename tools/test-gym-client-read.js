@@ -32,7 +32,13 @@ ok('שתיהן נקראות ברמה אחת', /CBA\.data\.getGymMy\(function \(m
 
 section('2. 🔴 הציור המוקדם — בלי כפתורי פעולה');
 ok('viewStatus מקבלת partial', /function viewStatus\(m, partial\)/.test(RG));
-ok('🔴 והיא עוצרת לפני כל כפתור', /if \(partial\) \{[\s\S]{0,220}return html;/.test(RG));
+/* 25.9 — הבלוק החלקי גדל (מד תוקף, כפתור הדלת, קישור פייבוקס — כולם
+   מ-Firestore). מה שנשמר: הוא עדיין עוצר, ואין בו אף כפתור שצריך Apps Script. */
+{
+  const pb = (RG.match(/if \(partial\) \{[\s\S]*?return html;\s*\}/) || [''])[0];
+  ok('🔴 והיא עוצרת לפני כל כפתור', pb.length > 0 &&
+     !/data-gym-start|data-gym-renew|data-gym-pay[^_]|activeCardHTML\(|declarationValidUntil/.test(pb), pb.length);
+}
 /* 🔴 הדרישה המהותית: כל מה שנוגע בשדות שאינם ב-Firestore חייב להיות
    **אחרי** נקודת העצירה. */
 const partialIdx = RG.indexOf('if (partial) {');

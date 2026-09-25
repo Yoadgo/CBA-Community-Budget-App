@@ -103,6 +103,16 @@ CBA.screens = CBA.screens || {};
       });
     }
 
+    /* 25.9 — הגדרות המכון מ-Firestore (מסלולים, פייבוקס): הציור המוקדם
+       יכול להראות מד תוקף וכפתור תשלום בלי לחכות ל-Apps Script. */
+    if (CBA.data.getGymPublicFast) {
+      CBA.data.getGymPublicFast(function (pub) {
+        if (!pub) return;
+        st.pub = pub;
+        if (st.fast && st.loading && !st.my) { try { draw(container); } catch (e) {} }
+      });
+    }
+
     var left = 2;
     function done() { if (--left === 0) { st.loading = false; st.fast = null; if (cb) cb(); } }
     CBA.data.getGymMy(function (my) {
@@ -132,7 +142,7 @@ CBA.screens = CBA.screens || {};
      12 חודשים (ולא 6) — כך שאם שם המסלול לא נמצא, המד לא יראה כאילו
      המנוי כבר עבר את אמצע הדרך. */
   function planMonthsByName(name) {
-    var lists = [(st.my && st.my.plans) || [], (st.form && st.form.plans) || []];
+    var lists = [(st.my && st.my.plans) || [], (st.form && st.form.plans) || [], (st.pub && st.pub.plans) || []];
     for (var i = 0; i < lists.length; i++) {
       for (var j = 0; j < lists[i].length; j++) {
         if (lists[i][j].name === name) return Number(lists[i][j].months) || 12;
@@ -187,7 +197,25 @@ CBA.screens = CBA.screens || {};
        ⚠️ ואין כאן את הענף "עדיין באמצעות מפתח": היעדר קוד
           בשלב הזה פירושו "עוד לא יודעים", לא "אין קוד". */
     if (partial) {
+      /* 25.9 — יותר מ-Firestore: מד התוקף וכפתור הדלת למנוי פעיל, וכפתור
+         התשלום למי שממתין לתשלום. הכפתורים שצריכים את Apps Script
+         (חידוש, דיווח תשלום, שאלון) מחכים לתשובה המלאה. */
+      if (status === ST_ACTIVE) {
+        var leftF = daysLeft(m["בתוקף עד"]);
+        if (leftF !== null) {
+          var pctF = Math.max(0, Math.min(100, Math.round((leftF / (planMonthsByName(m["מסלול"]) * 30)) * 100)));
+          var toneF = leftF <= 7 ? "danger" : (leftF <= 30 ? "warn" : "ok");
+          html += '<div class="gym-meter"><div class="gym-meter__bar"><span class="gym-meter__fill gym-meter__fill--' + toneF +
+                  '" style="width:' + pctF + '%"></span></div><div class="gym-meter__label">' +
+                  (leftF > 0 ? "נשארו " + leftF + " ימים" : "המנוי מסתיים היום") + "</div></div>";
+        }
+        html += '<div data-door-gym hidden></div>';
+      }
       if (st.fastCode) html += codeCardHTML(st.fastCode);
+      if (status === ST_PAYMENT && st.pub && st.pub.payboxUrl) {
+        html += '<div class="gym-pay"><div class="gym-pay__amount">' + esc(m["מחיר מוסכם"] || "") + " ₪</div>" +
+                '<a class="btn-primary gym-pay__btn" href="' + esc(st.pub.payboxUrl) + '" target="_blank" rel="noopener">מעבר לתשלום בפייבוקס</a></div>';
+      }
       html += '<div class="gym-hint gym-hint--tight">טוען את שאר הפרטים…</div>' + "</div>";
       return html;
     }
@@ -675,6 +703,8 @@ CBA.screens = CBA.screens || {};
     if (st.loading || !st.my) {
       /* 🔴 יש כבר סטטוס מ-Firestore ⇒ כרטיס אמיתי במקום שלדים. */
       container.innerHTML = head + (st.fast ? viewStatus(st.fast, true) : CBA.skel.cards(2));
+      /* 25.9 — כפתור הדלת כבר בציור המוקדם: מי שעומד ליד הדלת לא מחכה ל-Apps Script. */
+      if (st.fast && CBA.doorGym) CBA.doorGym.mount(container.querySelector("[data-door-gym]"));
       /* ⚠️ **גם כאן מחווטים את ההעתקה.** הקוד כבר על המסך; כפתור
          שלא עושה כלום בשתי השניות שהמשתמש באמת מסתכל בו הוא
          בדיוק החוויה שהצעד הזה בא לתקן. */

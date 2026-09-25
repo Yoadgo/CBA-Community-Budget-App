@@ -195,6 +195,7 @@ CBA.doorGuide = (function () {
     draw();
   }
   function maybeAuto() {
+    if (el) return;   /* כבר פתוח — ציור חוזר של המסך לא פותח אותו שוב */
     var seen = false;
     try { seen = localStorage.getItem(KEY) === "1"; } catch (e) { seen = true; }
     if (!seen) open();

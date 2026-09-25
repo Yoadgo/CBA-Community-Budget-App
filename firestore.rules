@@ -1857,6 +1857,27 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    /* ======================================================================
+     *  מכון הכושר — מראה ב-Firestore   (25.9.2026, GymFirestore.gs)
+     * ----------------------------------------------------------------------
+     *  gymMembers: סטטוס/מסלול/תאריכים/תשלומים + familyId/uid. **בלי** שם,
+     *  מייל, טלפון, ת.ז., תאריך לידה, תשובות שאלון או הערות — רשימת היתר.
+     *  קריאה: מנהל מכון (לא חיצוני). כתיבה: שרת בלבד.
+     *  gymConfig/public: מסלולים, תקנון, נוסח השאלות, פייבוקס — כל חבר.
+     *  gymConfig/admin: הגדרות המכון בלי קוד הכניסה — מנהל מכון.
+     * ==================================================================== */
+    match /gymMembers/{docId} {
+      allow read: if canSeeDoorState();
+      allow write: if false;
+    }
+    function canSeeGymConfig(docId) {
+      return (docId == 'public' && canSeeWework()) || isInternalAdmin('מכון');
+    }
+    match /gymConfig/{docId} {
+      allow read: if canSeeGymConfig(docId);
+      allow write: if false;
+    }
+
     /* ---------- ברירת המחדל ---------- */
 
     /* 🔴 **הכול אסור, אלא אם נפתח במפורש למעלה.**
