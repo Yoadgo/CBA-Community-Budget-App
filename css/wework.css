@@ -254,3 +254,46 @@
 .da-ok, .da-bad { font-size: 13px; font-weight: 600; line-height: 1.5; }
 .da-ok { color: #047857; }
 .da-bad { color: var(--badge-danger); }
+
+/* ---- הסבר הכניסה — הדגמות מונפשות (26.9) --------------------------------- */
+.dg-stage { position: relative; width: 100%; height: 178px; border-radius: 16px; background: var(--bg); border: 1px solid var(--hairline); overflow: hidden; }
+.dg-phone { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); width: 84px; height: 152px; border-radius: 18px; background: #111827; padding: 6px; }
+.dg-scr { position: relative; height: 100%; border-radius: 12px; background: #fff; display: grid; place-items: center; }
+.dg-big { width: 50px; height: 50px; border-radius: 50%; background: var(--action); color: #fff; display: grid; place-items: center; animation: dgPress 3s infinite; }
+@keyframes dgPress { 0%,30% { transform: scale(1); background: #111827 } 38% { transform: scale(.88) } 46%,80% { transform: scale(1); background: var(--ok) } 100% { background: #111827 } }
+.dg-finger { position: absolute; left: calc(50% - 12px); width: 24px; height: 24px; border-radius: 50%; background: rgba(17,24,39,.16); border: 2px solid rgba(17,24,39,.35); animation: dgTap 3s infinite; }
+@keyframes dgTap { 0% { top: 130px; opacity: 0 } 20% { opacity: 1 } 35%,40% { top: 58px } 55% { top: 130px; opacity: 0 } 100% { opacity: 0 } }
+.dg-okmsg { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font-size: 11.5px; font-weight: 700; color: var(--badge-ok); animation: dgOk 3s infinite; }
+@keyframes dgOk { 0%,44% { opacity: 0 } 50%,85% { opacity: 1 } 100% { opacity: 0 } }
+.dg-stage--two { display: flex; justify-content: space-around; align-items: center; }
+.dg-mini { position: relative; width: 45%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+.dg-mini small { font-size: 11.5px; color: var(--text-soft); position: relative; z-index: 2; margin-top: 10px; }
+.dg-phone--sm { position: relative; left: auto; top: auto; transform: none; width: 70px; height: 128px; }
+.dg-nuki { position: absolute; top: 8px; font-size: 10px; font-weight: 800; letter-spacing: .04em; color: #111827; }
+.dg-big--sm { width: 40px; height: 40px; font-size: 16px; }
+.dg-watch { width: 78px; height: 92px; border-radius: 24px; background: #111827; padding: 7px; box-shadow: 0 -16px 0 -6px #374151, 0 16px 0 -6px #374151; }
+.dg-wscr { height: 100%; border-radius: 17px; background: #0B0F1A; display: grid; place-items: center; }
+.dg-wb { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #6B7280; display: grid; place-items: center; font-size: 15px; animation: dgWb 3s infinite; }
+@keyframes dgWb { 0%,35% { border-color: #6B7280 } 45%,85% { border-color: #34D399; box-shadow: 0 0 0 6px rgba(52,211,153,.2) } }
+.dg-stage--map { height: 196px; }
+.dg-map { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 47%, #E7E9EE 47%, #E7E9EE 52%, transparent 52%), linear-gradient(0deg, transparent 58%, #E7E9EE 58%, #E7E9EE 63%, transparent 63%), var(--bg); }
+.dg-fence { position: absolute; width: 130px; height: 130px; left: calc(72% - 65px); top: calc(38% - 65px); border-radius: 50%; border: 2px dashed rgba(79,70,229,.45); background: rgba(79,70,229,.05); }
+.dg-home { position: absolute; left: calc(72% - 13px); top: calc(38% - 13px); width: 26px; height: 26px; border-radius: 8px; background: #fff; border: 1px solid var(--border); display: grid; place-items: center; font-size: 13px; z-index: 2; }
+.dg-ble { position: absolute; left: calc(72% - 13px); top: calc(38% - 13px); width: 26px; height: 26px; border-radius: 50%; border: 2px solid #3B82F6; opacity: 0; animation: dgBle 8s infinite; }
+.dg-ble--2 { animation-delay: .35s; }
+@keyframes dgBle { 0%,56% { opacity: 0; transform: scale(1) } 60% { opacity: .8 } 75% { opacity: 0; transform: scale(3.2) } 100% { opacity: 0 } }
+.dg-me { position: absolute; width: 15px; height: 15px; border-radius: 50%; background: #111827; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); z-index: 3; animation: dgWalk 8s infinite linear; }
+@keyframes dgWalk { 0%,12% { left: 5%; top: 74% } 55% { left: 62%; top: 42% } 70%,100% { left: 68%; top: 39% } }
+.dg-unlock { position: absolute; left: calc(72% + 16px); top: calc(38% - 26px); z-index: 4; font-size: 11.5px; font-weight: 800; color: var(--badge-ok); background: var(--ok-soft); border-radius: 99px; padding: 2px 8px; opacity: 0; animation: dgS4 8s infinite; }
+.dg-lab { position: absolute; left: 8px; right: 8px; bottom: 8px; height: 30px; background: #fff; border: 1px solid var(--hairline); border-radius: 10px; z-index: 4; font-size: 12px; }
+.dg-lab span { position: absolute; inset: 0; padding: 6px 9px; opacity: 0; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dg-l1 { animation: dgS1 8s infinite; } .dg-l2 { animation: dgS2 8s infinite; } .dg-l3 { animation: dgS3 8s infinite; } .dg-l4 { animation: dgS4 8s infinite; }
+@keyframes dgS1 { 0%,28% { opacity: 1 } 32%,100% { opacity: 0 } }
+@keyframes dgS2 { 0%,30% { opacity: 0 } 34%,54% { opacity: 1 } 58%,100% { opacity: 0 } }
+@keyframes dgS3 { 0%,56% { opacity: 0 } 60%,72% { opacity: 1 } 76%,100% { opacity: 0 } }
+@keyframes dgS4 { 0%,74% { opacity: 0 } 78%,98% { opacity: 1 } 100% { opacity: 0 } }
+.dg-callout { margin-top: 8px; font-size: 12.5px; line-height: 1.55; text-align: start; background: #EEF2FF; color: #3730A3; border-radius: 12px; padding: 8px 10px; }
+@media (prefers-reduced-motion: reduce) {
+  .dg-big, .dg-finger, .dg-okmsg, .dg-wb, .dg-ble, .dg-me, .dg-unlock, .dg-lab span { animation: none; }
+  .dg-okmsg, .dg-l4, .dg-unlock { opacity: 1; } .dg-me { left: 68%; top: 39%; }
+}

@@ -129,23 +129,32 @@ CBA.doorButton = (function () {
  * ========================================================================== */
 CBA.doorGuide = (function () {
   "use strict";
-  var KEY = "cba_door_guide_seen_v1";
+  var KEY = "cba_door_guide_seen_v2";   /* v2 (26.9) — ההסבר החדש מוצג שוב פעם אחת */
   var el = null, idx = 0;
 
   function svg(p) {
     return '<svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + p + "</svg>";
   }
+  /* 26.9 (יועד: "משהו יותר ויזואלי, ו… סימולציה של הפתיחה עם הטלפון") —
+     כל דרך כניסה עם הדגמה קטנה שרצה לבד (CSS בלבד, בלי ספריות). */
+  var STAGE_TAP = '<div class="dg-stage"><div class="dg-phone"><div class="dg-scr"><div class="dg-big">🔓</div>' +
+    '<div class="dg-finger"></div><div class="dg-okmsg">הדלת נפתחה</div></div></div></div>';
+  var STAGE_WATCH = '<div class="dg-stage dg-stage--two">' +
+    '<div class="dg-mini"><div class="dg-phone dg-phone--sm"><div class="dg-scr"><div class="dg-nuki">Nuki</div><div class="dg-big dg-big--sm">🔓</div></div></div><small>אפליקציית Nuki</small></div>' +
+    '<div class="dg-mini"><div class="dg-watch"><div class="dg-wscr"><div class="dg-wb">🔓</div></div></div><small>שעון חכם</small></div></div>';
+  var STAGE_AUTO = '<div class="dg-stage dg-stage--map"><div class="dg-map"></div><div class="dg-fence"></div>' +
+    '<div class="dg-ble"></div><div class="dg-ble dg-ble--2"></div><div class="dg-home">🚪</div><div class="dg-unlock">נפתח ✓</div><div class="dg-me"></div>' +
+    '<div class="dg-lab"><span class="dg-l1">📍 רחוק מהבית — הטלפון יודע שיצאת</span><span class="dg-l2">🚶 חוזר ונכנס לאזור (GPS)</span>' +
+    '<span class="dg-l3">📶 ליד הדלת — מתחבר בבלוטות\'</span><span class="dg-l4">🔓 המנעול נפתח לבד</span></div></div>';
   var STEPS = [
     { ico: svg('<rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="15" cy="12" r="1.2" fill="currentColor"/>'),
-      t: "אין יותר קוד כניסה", x: "את דלת המכון פותחים מהטלפון. יש שתי דרכים, ובוחרים מה שנוח לך." },
-    { ico: svg('<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/>'),
-      t: "דרך 1: הכפתור כאן באפליקציה", x: "נכנסים ל\"מכון כושר\" ולוחצים על הכפתור השחור. בלי התקנה ובלי הרשמה נוספת.",
-      demo: '<div class="dg-row"><span class="dg-dot"></span><div><b>פתיחת הדלת</b><div>לוקח כמה שניות, אז לוחצים כשמגיעים</div></div></div>' },
-    { ico: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'),
-      t: "דרך 2: אפליקציית Nuki", x: "קיבלת מייל הזמנה מ-Nuki. היא פותחת מהר יותר, גם בלי להיכנס לאפליקציה שלנו.",
-      demo: '<div class="dg-row"><b>1.</b><div>מחפשים במייל "Nuki"</div></div><div class="dg-row"><b>2.</b><div>מתקינים את Nuki ונרשמים עם אותו מייל</div></div><div class="dg-row"><b>3.</b><div>מאשרים את ההזמנה. זהו.</div></div>' },
-    { ico: svg('<rect x="7" y="6" width="10" height="12" rx="3"/><path d="M9 6l1-3h4l1 3M9 18l1 3h4l1-3"/>'),
-      t: "בונוס: שעון וווידג'ט", x: "אחרי ש-Nuki מותקנת אפשר לפתוח גם מהשעון החכם או מווידג'ט במסך הבית. הגישה נגמרת לבד עם סוף המנוי." }
+      t: "אין יותר קוד כניסה", x: "את דלת המכון פותחים מהטלפון. יש שלוש דרכים — בוחרים מה שנוח לך, ואפשר גם כמה." },
+    { t: "דרך 1: הכפתור כאן באפליקציה", x: "נכנסים ל\"מכון כושר\" ולוחצים \"פתיחת הדלת\" כשעומדים ליד הדלת. בלי התקנה ובלי הרשמה נוספת.",
+      demo: STAGE_TAP, raw: true },
+    { t: "דרך 2: אפליקציית Nuki או השעון", x: "קיבלת מייל הזמנה מ-Nuki. מתקינים את Nuki, נרשמים עם אותו מייל ומאשרים. משם פותחים בלחיצה — גם מהשעון או מווידג'ט.",
+      demo: STAGE_WATCH, raw: true },
+    { t: "דרך 3: פתיחה אוטומטית", x: "באפליקציית Nuki מפעילים פעם אחת \"Auto Unlock\" ומאשרים מיקום \"תמיד\" ובלוטות'. מאז — פשוט מגיעים, והדלת נפתחת.",
+      demo: STAGE_AUTO + '<div class="dg-callout">עובד רק אחרי שיצאת מהאזור וחזרת — כדי שהדלת לא תיפתח סתם כשאתה בבית. הגישה נגמרת לבד עם סוף המנוי.</div>', raw: true }
   ];
 
   function draw() {
@@ -154,10 +163,10 @@ CBA.doorGuide = (function () {
     el.querySelector(".tr-card").innerHTML =
       '<button type="button" class="tr-skip" data-dg-close>' + (last ? "סגירה" : "דילוג") + "</button>" +
       '<div class="tr-body is-open">' +
-        '<div class="tr-ico">' + s.ico + "</div>" +
+        (s.ico ? '<div class="tr-ico">' + s.ico + "</div>" : "") +
         '<h2 class="tr-title">' + s.t + "</h2>" +
         '<p class="tr-text">' + s.x + "</p>" +
-        (s.demo ? '<div class="dg-demo">' + s.demo + "</div>" : "") +
+        (s.demo ? (s.raw ? s.demo : '<div class="dg-demo">' + s.demo + "</div>") : "") +
       "</div>" +
       '<div class="tr-foot">' +
         '<button type="button" class="tr-back" data-dg-back' + (idx === 0 ? " hidden" : "") + ">הקודם</button>" +
