@@ -975,3 +975,219 @@ function doorGymResend_(ss, body) {
   var r = doorGymNukiSync_(ss, body._email);
   return r.invited ? { ok: true } : { ok: false, error: 'לא הצלחנו לשלוח — נסה/י שוב מאוחר יותר' };
 }
+
+/* ============================================================================
+ *  ⚡ doorOpenFast_ — המסלול המהיר לכפתור הדלת   (25.9.2026, בקשת יועד:
+ *  "תקצץ למקסימום ותעביר כמה שיותר ל-Firebase")
+ * ----------------------------------------------------------------------------
+ *  המסלול הרגיל (doorOpen_) עובר דרך שער ההרשאות של doPost, שקורא את
+ *  **טאב התושבים בגיליון** בכל לחיצה, ואחר כך עושה 3–5 קריאות רשת אחת אחרי
+ *  השנייה. כאן:
+ *    • **בלי גיליון בכלל.** הזהות = טוקן Firebase שגוגל מאמתת, וההרשאות =
+ *      members/{uid} ב-Firestore (אותו מסמך שכללי האבטחה סומכים עליו, ושמתג
+ *      הכיבוי "עזב" מעדכן מיד). + חתימת המושב של CBA (בדיקה מקומית, בלי רשת).
+ *    • **שני סבבי רשת במקביל במקום ~6 בטור** (UrlFetchApp.fetchAll):
+ *        סבב 1: אימות הטוקן ‖ members/{uid} ‖ שריוני היום / gymStatus/{uid}
+ *        סבב 2: הפקודה ל-Nuki ‖ היומן + "הגיע" (commit אחד, שתי כתיבות)
+ *    • **בלי bumpRev_** — הדלת לא משנה שום נתון שמסך אחר מחכה לו.
+ *  🔐 הלקוח שולח uid ו-familyId רק כדי שנוכל לשאול במקביל. **שום דבר לא
+ *     נסמך עליהם:** ה-uid חייב להיות זהה למה שגוגל החזירה על הטוקן, וה-familyId
+ *     חייב להיות זהה למה שכתוב ב-members. אחרת — נדחה.
+ *  ⚠️ מכון: הזכאות נקראת מ-gymStatus/{uid} (סנכרון שעתי + מחיקה מיידית).
+ *     שינוי סטטוס מ"פעיל" ל"בוטל" בגיליון מגיע לכאן עד שעה — ר' gymSyncOne_.
+ * ========================================================================== */
+function doorFsDocUrl_(path) { return fsUrl_(path); }
+function doorFsName_(path) {
+  return 'projects/' + fsProjectId_() + '/databases/(default)/documents/' + path;
+}
+function doorFsAuth_() { return { Authorization: 'Bearer ' + fsToken_() }; }
+
+function doorOpenFast_(body) {
+  var t0 = Date.now();
+  var reason = String(body.reason || '');
+  if (['wework', 'gym', 'admin'].indexOf(reason) === -1) return { ok: false, error: 'סיבת כניסה לא מוכרת' };
+  var claimUid = String(body.uid || ''), claimFid = String(body.familyId || '');
+  if (!body.idToken || !fsIdOk_(claimUid)) return { ok: false, code: 'NEED_SLOW', error: 'חסרה זהות' };
+
+  /* חתימת המושב של CBA — מקומית (HMAC), בלי גיליון ובלי רשת. */
+  var sess = verifySession_(body.session);
+  if (!sess) return { ok: false, error: 'פג תוקף ההתחברות — התחבר/י מחדש' };
+
+  var cache = CacheService.getScriptCache();
+  var rk = 'door:' + (claimFid || claimUid);
+  if (cache.get(rk)) return { ok: false, error: 'הפקודה כבר נשלחה — רגע אחד', code: 'BUSY' };
+  cache.put(rk, '1', 5);
+  var out = doorOpenFastInner_(body, reason, claimUid, claimFid, sess, t0);
+  if (!out.ok) { try { cache.remove(rk); } catch (e) { } }
+  return out;
+}
+
+function doorOpenFastInner_(body, reason, claimUid, claimFid, sess, t0) {
+  var mode = doorMode_();
+  if (mode === 'off') return { ok: false, code: 'DOOR_OFF', error: 'הדלת עדיין לא מחוברת לאפליקציה' };
+  if (reason === 'gym' && !doorGymOn_()) return { ok: false, code: 'GYM_CODE', error: 'הכניסה למכון עדיין בקוד — הוא מופיע בכרטיס המנוי' };
+
+  var now = new Date(), today = wwDateStr_(now), min = wwNowMin_(now);
+  var auth = doorFsAuth_();
+
+  /* ---------- סבב 1: שלוש שאלות במקביל ---------- */
+  var reqs = [
+    { url: 'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FS_WEB_API_KEY,
+      method: 'post', contentType: 'application/json',
+      payload: JSON.stringify({ idToken: String(body.idToken) }), muteHttpExceptions: true },
+    { url: doorFsDocUrl_('members/' + encodeURIComponent(claimUid)), method: 'get', headers: auth, muteHttpExceptions: true }
+  ];
+  if (reason === 'wework') {
+    reqs.push({
+      url: 'https://firestore.googleapis.com/v1/projects/' + fsProjectId_() + '/databases/(default)/documents:runQuery',
+      method: 'post', contentType: 'application/json', headers: auth, muteHttpExceptions: true,
+      payload: JSON.stringify({ structuredQuery: { from: [{ collectionId: FS_WW_BOOK }],
+        where: { fieldFilter: { field: { fieldPath: 'date' }, op: 'EQUAL', value: { stringValue: today } } } } })
+    });
+  } else if (reason === 'gym') {
+    reqs.push({ url: doorFsDocUrl_(FS_GYM_STATUS + '/' + encodeURIComponent(claimUid)), method: 'get', headers: auth, muteHttpExceptions: true });
+  }
+  var res = UrlFetchApp.fetchAll(reqs);
+
+  /* זהות: הטוקן אמיתי ושייך בדיוק ל-uid שנשלח, והמייל שלו = המייל של המושב. */
+  if (res[0].getResponseCode() !== 200) return { ok: false, error: 'אימות הזהות נכשל — התחבר/י מחדש' };
+  var users = []; try { users = JSON.parse(res[0].getContentText()).users || []; } catch (e) { }
+  var who = users[0] || {};
+  if (String(who.localId || '') !== claimUid) return { ok: false, error: 'הזהות אינה תואמת' };
+  if (normalizeEmail_(who.email) !== normalizeEmail_(sess.e || sess.email || '')) return { ok: false, error: 'הזהות אינה תואמת למשתמש המחובר' };
+
+  /* הרשאות: members/{uid} — פעיל, לא חיצוני, familyId תואם. */
+  if (res[1].getResponseCode() !== 200) return { ok: false, error: 'המשתמש אינו רשום' };
+  var mem = fsUnfields_((JSON.parse(res[1].getContentText()).fields) || {});
+  if (mem.active !== true) return { ok: false, error: 'המשתמש מסומן כלא פעיל' };
+  if (mem.isExternal === true) return { ok: false, error: 'הפעולה אינה זמינה למשתמש חיצוני' };
+  var fid = String(mem.familyId || '');
+  if (claimFid && claimFid !== fid) return { ok: false, error: 'הזהות אינה תואמת' };
+  var perms = mem.perms || [];
+
+  var booking = null;
+  if (reason === 'wework') {
+    var rows = []; try { rows = JSON.parse(res[2].getContentText()) || []; } catch (e) { rows = []; }
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i] || !rows[i].document) continue;
+      var b = fsUnfields_(rows[i].document.fields || {});
+      if (b.status === 'active' && String(b.familyId) === fid && b.from * 60 <= min && min < b.to * 60) {
+        if (!booking || b.id === body.bookingId) booking = b;
+      }
+    }
+    if (!booking) return { ok: false, code: 'NOT_NOW', error: 'אין לך שריון פעיל כרגע' };
+  } else if (reason === 'gym') {
+    if (res[2].getResponseCode() !== 200) return { ok: false, code: 'NOT_NOW', error: 'המנוי אינו בתוקף' };
+    var gs = fsUnfields_((JSON.parse(res[2].getContentText()).fields) || {});
+    var until = String(gs['בתוקף עד'] || '');
+    if (String(gs['סטטוס'] || '').trim() !== GYM_ST_ACTIVE || !until || until < today) {
+      return { ok: false, code: 'NOT_NOW', error: 'המנוי אינו בתוקף' };
+    }
+  } else {
+    var admin = perms.indexOf(PERM_SUPER) !== -1 || perms.indexOf(PERM_GYM) !== -1 || perms.indexOf(PERM_WEWORK) !== -1;
+    if (!admin) return { ok: false, error: 'אין לך הרשאה לפעולה הזו' };
+  }
+
+  /* ---------- סבב 2: הפקודה ל-Nuki ‖ היומן + "הגיע", במקביל ---------- */
+  var logId = 'D-' + now.getTime() + '-' + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+  var logDoc = { id: logId, kind: reason, familyId: fid, uid: claimUid, source: 'app',
+                 result: mode === 'sim' ? 'sim' : 'ok', error: '', bookingId: booking ? booking.id : '',
+                 atMs: now.getTime(), day: today, fast: true, schema: 1, updatedAt: now };
+  var writes = [{ update: { name: doorFsName_(FS_DOOR_LOG + '/' + logId), fields: fsFields_(logDoc) } }];
+  if (booking && !booking.enteredAtMs) {
+    writes.push({ update: { name: doorFsName_(FS_WW_BOOK + '/' + encodeURIComponent(booking.id)),
+                            fields: fsFields_({ enteredAtMs: now.getTime(), updatedAt: now }) },
+                  updateMask: { fieldPaths: ['enteredAtMs', 'updatedAt'] },
+                  currentDocument: { exists: true } });
+  }
+  var commitReq = {
+    url: 'https://firestore.googleapis.com/v1/projects/' + fsProjectId_() + '/databases/(default)/documents:commit',
+    method: 'post', contentType: 'application/json', headers: auth, muteHttpExceptions: true,
+    payload: JSON.stringify({ writes: writes })
+  };
+
+  var nukiOk = true, nukiErr = '';
+  if (mode === 'sim') {
+    UrlFetchApp.fetch(commitReq.url, commitReq);
+  } else {
+    var tok = nukiToken_();
+    var r2 = UrlFetchApp.fetchAll([
+      { url: NUKI_BASE + '/smartlock/' + encodeURIComponent(nukiLockId_()) + '/action', method: 'post',
+        contentType: 'application/json', payload: JSON.stringify({ action: NUKI_ACTION_UNLATCH }),
+        headers: { Authorization: 'Bearer ' + tok, Accept: 'application/json' }, muteHttpExceptions: true },
+      commitReq
+    ]);
+    var c = r2[0].getResponseCode();
+    nukiOk = c >= 200 && c < 300;
+    if (!nukiOk) {
+      nukiErr = 'Nuki ' + c;
+      /* היומן נכתב במקביל כ"הצליח" — מתקנים אותו ל"נכשל". */
+      try { fsMerge_(fsDocPath_(FS_DOOR_LOG, logId), { result: 'fail', error: nukiErr, updatedAt: new Date() }); } catch (e) { }
+    }
+  }
+
+  if (!nukiOk) {
+    try { doorAlert_(SpreadsheetApp.getActiveSpreadsheet(), 'fail', 'פתיחת הדלת מהאפליקציה נכשלה: ' + nukiErr); } catch (e) { }
+    return { ok: false, code: 'NUKI_FAIL', error: 'הדלת לא נפתחה. ייתכן שהמנעול לא מחובר לרשת.', contact: doorContact_() };
+  }
+  return { ok: true, simulated: mode === 'sim', ms: Date.now() - t0 };
+}
+
+/* ============================================================================
+ *  gymSyncOne_ — סנכרון מיידי של מנוי אחד ל-Firestore   (25.9.2026)
+ * ----------------------------------------------------------------------------
+ *  עד היום gymStatus/gymCode נכתבו רק בסנכרון השעתי. מרגע שהדלת בודקת
+ *  זכאות מ-gymStatus (doorOpenFast_), "שעה" היא פער אבטחה: מנוי שבוטל היה
+ *  ממשיך לפתוח עד שעה, ומנוי שאושר היה מחכה עד שעה לכפתור.
+ *  מכאן: כל פעולת מכון שמשנה סטטוס/תוקף מסנכרנת את **המנוי הזה בלבד** מיד,
+ *  באותה לוגיקה בדיוק כמו gymStatusSyncAll_ (gymPickRow_ / gymRowEntitled_).
+ *  ב-live + המכון בדלת — גם הזמנת Nuki יוצאת מיד, לא בשעה הבאה.
+ * ========================================================================== */
+var GYM_SYNC_ACTIONS = {
+  submitGymApplication: 1, createGymMembership: 1, reportGymPayment: 1,
+  confirmGymPayment: 1, rejectGymPayment: 1, recordGymPayment: 1,
+  extendGymMembership: 1, renewGymMembership: 1, updateGymMembership: 1
+};
+
+function gymSyncOne_(ss, email) {
+  var em = normalizeEmail_(email);
+  if (!em) return { ok: false };
+  var uid = gymUidByEmail_(ss)[em];
+  if (!uid) return { ok: true, skipped: 'noUid' };
+  var chosen = null;
+  readTable_(ss, GYM_SHEET).forEach(function (row) {
+    if (normalizeEmail_(String(row['אימייל'] || '')) === em) chosen = gymPickRow_(chosen, row);
+  });
+  if (!chosen) {
+    try { fsDelete_(fsDocPath_(FS_GYM_STATUS, uid)); } catch (e) { }
+    try { fsDelete_(fsDocPath_(FS_GYM_CODE, uid)); } catch (e) { }
+    return { ok: true, deleted: true };
+  }
+  fsSet_(fsDocPath_(FS_GYM_STATUS, uid), gymStatusDoc_(chosen, uid));
+  var code = String((readGymSettings_(ss).settings['קוד כניסה'] || '')).trim();
+  if (doorGymOn_()) code = '';
+  var until = gymRowEntitled_(chosen);
+  if (code && until) fsSet_(fsDocPath_(FS_GYM_CODE, uid), gymCodeDoc_(uid, code, until));
+  else { try { fsDelete_(fsDocPath_(FS_GYM_CODE, uid)); } catch (e) { } }
+  if (doorGymOn_()) { try { doorGymNukiSync_(ss, em); } catch (e) { Logger.log('gymSyncOne_ nuki: ' + e); } }
+  return { ok: true };
+}
+
+/** אחרי פעולת מכון שהצליחה: מי המנוי שהשתנה → סנכרון שלו בלבד. */
+function doorGymAfterWrite_(ss, body, res) {
+  if (!GYM_SYNC_ACTIONS[body.action]) return;
+  try {
+    var parsed = null;
+    try { parsed = JSON.parse(res.getContent()); } catch (e) { parsed = null; }
+    if (!parsed || parsed.ok !== true) return;
+    var email = body.email || '';
+    if (!email && body.id) {
+      var id = String(body.id).trim();
+      readTable_(ss, GYM_SHEET).forEach(function (row) {
+        if (String(row['מזהה'] || '').trim() === id) email = String(row['אימייל'] || '');
+      });
+    }
+    if (!email) email = body._email || '';
+    if (email) gymSyncOne_(ss, email);
+  } catch (e) { Logger.log('doorGymAfterWrite_: ' + e); }
+}

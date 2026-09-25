@@ -1646,6 +1646,13 @@ function doPost(e) {
 function doPostInner_(e) {
   try {
     var body = JSON.parse(e.postData.contents);
+    /* ⚡ 25.9 — פתיחת הדלת במסלול המהיר: זהות מ-Firebase ולא מהגיליון,
+       שני סבבי רשת במקביל, בלי bumpRev_. ר' doorOpenFast_ ב-Door.gs.
+       אם חסרה זהות Firebase (NEED_SLOW) — ממשיכים למסלול הרגיל למטה. */
+    if (body && body.action === 'doorOpen' && body.idToken && typeof doorOpenFast_ === 'function') {
+      var fast = doorOpenFast_(body);
+      if (!(fast && fast.code === 'NEED_SLOW')) return json_(fast);
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     // שער ההרשאות (2026-08-07): מושב חתום -> הרשאות מהגיליון -> בדיקה מול הפעולה.
     // סיסמת מנהל נשארת כמסלול חירום. ר' authorize_ בראש הקובץ.
@@ -1683,6 +1690,9 @@ function doPostInner_(e) {
      *     `cached_` ממופתח לפי המונה. */
     var res = doPostDispatch_(ss, body);
     try { SpreadsheetApp.flush(); } catch (e) { /* אין מה לרוקן */ }
+    /* 25.9 — פעולת מכון ששינתה מנוי ⇒ gymStatus/gymCode (ו-Nuki) של המנוי
+       הזה מתעדכנים מיד ב-Firestore, לא בשעתי. ר' gymSyncOne_ ב-Door.gs. */
+    if (typeof doorGymAfterWrite_ === 'function') doorGymAfterWrite_(ss, body, res);
     bumpRev_(body.action);
     return res;
   } catch (err) {

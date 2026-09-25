@@ -469,5 +469,145 @@ section('9. תיקוני צוות אדום');
   ok('יומן הדלת: מעל 180 יום נמחק, השאר נשאר', T.sb.doorLogPurge_() === 1 && !T.db['doorLog/D-old'] && T.db['doorLog/D-new']);
 }
 
+/* ================================================ 10. המסלול המהיר ⚡ --- */
+section('10. ⚡ פתיחה במסלול המהיר (זהות מ-Firebase, בלי גיליון)');
+function fastSandbox(o) {
+  o = o || {};
+  const T = makeSandbox({ props: Object.assign({ DOOR_MODE: 'sim', WEWORK_CALENDAR_ID: 'cal1' }, o.props || {}), gymRows: o.gymRows, gymUids: o.gymUids });
+  const FSG = R('apps-script/Firestore.gs');
+  vm.runInContext(['fsVal_', 'fsFields_', 'fsUnval_', 'fsUnfields_'].map(n => grab(FSG, n)).join('\n'), T.sb);
+  T.sb.FS_WEB_API_KEY = 'k'; T.sb.FS_GYM_STATUS = 'gymStatus'; T.sb.FS_GYM_CODE = 'gymCode';
+  T.sb.fsProjectId_ = () => 'p'; T.sb.fsToken_ = () => 'svc';
+  T.sb.fsUrl_ = p => 'https://firestore.googleapis.com/v1/projects/p/databases/(default)/documents/' + p;
+  T.sb.verifySession_ = tok => tok === 'good' ? { email: 'me@x.il' } : null;
+  T.sb.SpreadsheetApp = { getActiveSpreadsheet: () => ({}) };
+  T.idUser = { localId: 'U1', email: 'me@x.il' };
+  T.members = { U1: { familyId: '12', perms: [], isExternal: false, active: true } };
+  T.sheetReads = 0;
+  const toFields = obj => JSON.parse(JSON.stringify({ fields: vm.runInContext('fsFields_', T.sb)(obj) }));
+  const answer = (r) => {
+    const u = r.url;
+    if (/accounts:lookup/.test(u)) return { code: 200, text: JSON.stringify({ users: T.idUser ? [T.idUser] : [] }) };
+    let m = u.match(/documents\/members\/([^?]+)$/);
+    if (m) { const d = T.members[decodeURIComponent(m[1])]; return d ? { code: 200, text: JSON.stringify(toFields(d)) } : { code: 404, text: '' }; }
+    m = u.match(/documents\/gymStatus\/([^?]+)$/);
+    if (m) { const d = T.db['gymStatus/' + decodeURIComponent(m[1])]; return d ? { code: 200, text: JSON.stringify(toFields(d)) } : { code: 404, text: '' }; }
+    if (/:runQuery$/.test(u)) {
+      const q = JSON.parse(r.payload).structuredQuery;
+      const val = q.where.fieldFilter.value.stringValue;
+      const rows = Object.keys(T.db).filter(k => k.startsWith(q.from[0].collectionId + '/') && T.db[k].date === val)
+        .map(k => ({ document: { name: k, fields: toFields(T.db[k]).fields } }));
+      return { code: 200, text: JSON.stringify(rows) };
+    }
+    if (/:commit$/.test(u)) {
+      JSON.parse(r.payload).writes.forEach(w => {
+        const path = w.update.name.split('/documents/')[1];
+        const data = vm.runInContext('fsUnfields_', T.sb)(w.update.fields);
+        T.db[decodeURIComponent(path)] = Object.assign({}, w.updateMask ? T.db[decodeURIComponent(path)] : {}, JSON.parse(JSON.stringify(data)));
+      });
+      return { code: 200, text: '{}' };
+    }
+    if (/api\.nuki\.io/.test(u)) return T.nukiFast ? T.nukiFast() : { code: 204, text: '' };
+    return { code: 404, text: '' };
+  };
+  T.fetchAllCalls = 0;
+  T.sb.UrlFetchApp = {
+    fetchAll: reqs => { T.fetchAllCalls++; return reqs.map(r => { T.fetches.push({ url: r.url, o: r }); const a = answer(r); return { getResponseCode: () => a.code, getContentText: () => a.text }; }); },
+    fetch: (url, r) => { r = Object.assign({ url }, r); T.fetches.push({ url, o: r }); const a = answer(r); return { getResponseCode: () => a.code, getContentText: () => a.text }; }
+  };
+  T.sb.readTable_ = () => { T.sheetReads++; return o.gymRows || []; };
+  return T;
+}
+const FAST = (extra) => Object.assign({ action: 'doorOpen', idToken: 'tok', uid: 'U1', familyId: '12', session: 'good', reason: 'wework' }, extra || {});
+{
+  const T = fastSandbox();
+  T.db['weworkBookings/WW-A'] = { id: 'WW-A', date: '2026-09-25', from: 10, to: 12, seat: 'desk', familyId: '12', status: 'active', enteredAtMs: 0 };
+  const r = T.sb.doorOpenFast_(FAST());
+  ok('⚡ שריון פעיל — נפתח (הדמיה)', r.ok && r.simulated, JSON.stringify(r));
+  ok('⚡ סבב אחד במקביל לזהות+הרשאות+שריונים (fetchAll אחד)', T.fetchAllCalls === 1, T.fetchAllCalls);
+  ok('⚡ בלי קריאה מהגיליון', T.sheetReads === 0);
+  const log = Object.keys(T.db).filter(k => k.startsWith('doorLog/')).map(k => T.db[k])[0];
+  ok('⚡ היומן נכתב (commit אחד)', log && log.kind === 'wework' && log.result === 'sim' && log.familyId === '12', JSON.stringify(log));
+  ok('⚡ השריון סומן "הגיע" באותו commit', T.db['weworkBookings/WW-A'].enteredAtMs > 0);
+  T.reset();
+  ok('🔴 uid שלא תואם לטוקן — נדחה', !T.sb.doorOpenFast_(FAST({ uid: 'U2' })).ok);
+  T.reset();
+  T.idUser = { localId: 'U1', email: 'other@x.il' };
+  ok('🔴 טוקן של מייל אחר מהמושב — נדחה', !T.sb.doorOpenFast_(FAST()).ok);
+  T.idUser = { localId: 'U1', email: 'me@x.il' };
+  T.reset();
+  ok('🔴 מושב לא חתום — נדחה', !T.sb.doorOpenFast_(FAST({ session: 'forged' })).ok);
+  T.reset();
+  ok('🔴 familyId שנשלח לא תואם ל-members — נדחה', !T.sb.doorOpenFast_(FAST({ familyId: '99' })).ok);
+  T.reset();
+  T.members.U1.active = false;
+  ok('🔴 מי שעזב (active:false) — נדחה', !T.sb.doorOpenFast_(FAST()).ok);
+  T.members.U1.active = true; T.members.U1.isExternal = true; T.reset();
+  ok('🔴 משתמש חיצוני — נדחה', !T.sb.doorOpenFast_(FAST()).ok);
+  T.members.U1.isExternal = false; T.reset();
+  T.setNow(new Date(2026, 8, 25, 12, 0));
+  const late = T.sb.doorOpenFast_(FAST());
+  ok('🔴 אחרי סוף השריון — NOT_NOW', !late.ok && late.code === 'NOT_NOW');
+  T.reset();
+  ok('בלי טוקן ⇒ NEED_SLOW (נופל למסלול הרגיל)', T.sb.doorOpenFast_(FAST({ idToken: '' })).code === 'NEED_SLOW');
+}
+{
+  const T = fastSandbox({ props: { DOOR_MODE: 'live', DOOR_GYM_ON: '1', NUKI_API_TOKEN: 'x'.repeat(40), NUKI_SMARTLOCK_ID: '123456' } });
+  T.db['gymStatus/U1'] = { uid: 'U1', 'סטטוס': 'פעיל', 'בתוקף עד': '2027-06-30' };
+  let r = T.sb.doorOpenFast_(FAST({ reason: 'gym' }));
+  ok('⚡ מכון מ-gymStatus (בלי גיליון) — נפתח', r.ok && T.sheetReads === 0, JSON.stringify(r));
+  ok('⚡ Nuki והיומן באותו סבב (2 fetchAll סה"כ)', T.fetchAllCalls === 2, T.fetchAllCalls);
+  T.reset();
+  T.db['gymStatus/U1']['בתוקף עד'] = '2026-09-24';
+  r = T.sb.doorOpenFast_(FAST({ reason: 'gym' }));
+  ok('🔴 מנוי שפג אתמול — נדחה', !r.ok && r.code === 'NOT_NOW');
+  T.reset();
+  T.db['gymStatus/U1'] = { 'סטטוס': 'בוטל', 'בתוקף עד': '2027-06-30' };
+  ok('🔴 מנוי בוטל — נדחה', !T.sb.doorOpenFast_(FAST({ reason: 'gym' })).ok);
+  T.reset();
+  T.db['gymStatus/U1'] = { 'סטטוס': 'פעיל', 'בתוקף עד': '2027-06-30' };
+  T.nukiFast = () => ({ code: 503, text: 'down' });
+  r = T.sb.doorOpenFast_(FAST({ reason: 'gym' }));
+  const fl = Object.keys(T.db).filter(k => k.startsWith('doorLog/')).map(k => T.db[k]).filter(x => x.result === 'fail');
+  ok('⚡ כשל Nuki — היומן תוקן ל"נכשל" + איש קשר', !r.ok && r.code === 'NUKI_FAIL' && fl.length === 1, JSON.stringify(r));
+}
+{
+  const T = fastSandbox({ props: { DOOR_MODE: 'sim' } });
+  ok('⚡ מכון כשהמכון לא בדלת — מפנה לקוד', T.sb.doorOpenFast_(FAST({ reason: 'gym' })).code === 'GYM_CODE');
+  T.reset();
+  ok('🔴 "ניהול" בלי הרשאה ב-members — נדחה', !T.sb.doorOpenFast_(FAST({ reason: 'admin' })).ok);
+  T.members.U1.perms = ['מכון']; T.reset();
+  ok('מנהל מכון (לפי members) פותח מרחוק', T.sb.doorOpenFast_(FAST({ reason: 'admin' })).ok);
+}
+{
+  ok('doPost: doorOpen עם טוקן עובר במסלול המהיר לפני שער הגיליון',
+     /body\.action === 'doorOpen' && body\.idToken[\s\S]{0,200}doorOpenFast_\(body\)[\s\S]{0,300}var ss = SpreadsheetApp\.getActiveSpreadsheet\(\);\s*\/\/ שער ההרשאות/.test(GS));
+  ok('doPost: סנכרון מנוי מיידי אחרי פעולת מכון', /doorGymAfterWrite_\(ss, body, res\)/.test(GS));
+  const DJ = R('js/data/door.js');
+  ok('לקוח: שולח idToken + uid + familyId, ונופל למסלול הרגיל אחרי 1.5ש׳', /payload\.idToken = tok; payload\.uid = uid; payload\.familyId/.test(DJ) && /1500/.test(DJ));
+}
+
+section('11. סנכרון מנוי מיידי (gymSyncOne_)');
+{
+  const rows = [{ 'מזהה': 'GYM-7', 'אימייל': 'a@x.il', 'סטטוס': 'פעיל', 'בתוקף עד': '2027-06-30' }];
+  const T = fastSandbox({ gymRows: rows, gymUids: { 'a@x.il': 'uA' } });
+  vm.runInContext(grab(GS, 'gymStatusDoc_') + '\n' + grab(GS, 'gymCodeDoc_'), T.sb);
+  const m = GS.match(/var GYM_FS_FIELDS = [^;]+;/); vm.runInContext(m[0], T.sb);
+  T.sb.readGymSettings_ = () => ({ settings: { 'קוד כניסה': '0606' } });
+  T.sb.gymSyncOne_({}, 'a@x.il');
+  ok('סטטוס נכתב מיד', T.db['gymStatus/uA'] && T.db['gymStatus/uA']['סטטוס'] === 'פעיל');
+  ok('קוד נכתב מיד (המכון עוד בקוד)', T.db['gymCode/uA'] && T.db['gymCode/uA'].code === '0606');
+  rows[0]['סטטוס'] = 'בוטל';
+  T.sb.gymSyncOne_({}, 'a@x.il');
+  ok('🔴 ביטול ⇒ הקוד נמחק מיד (לא בעוד שעה)', !T.db['gymCode/uA'] && T.db['gymStatus/uA']['סטטוס'] === 'בוטל');
+  rows[0]['סטטוס'] = 'פעיל';
+  const res = { getContent: () => JSON.stringify({ ok: true }) };
+  T.sb.doorGymAfterWrite_({}, { action: 'extendGymMembership', id: 'GYM-7', _email: 'admin@x.il' }, res);
+  ok('פעולת מנהל לפי מזהה ⇒ מסנכרן את המנוי (לא את המנהל)', T.db['gymCode/uA'] && T.db['gymStatus/uA']['סטטוס'] === 'פעיל');
+  delete T.db['gymCode/uA'];
+  T.sb.doorGymAfterWrite_({}, { action: 'extendGymMembership', id: 'GYM-7' }, { getContent: () => JSON.stringify({ ok: false }) });
+  ok('פעולה שנכשלה ⇒ לא נוגעים', !T.db['gymCode/uA']);
+}
+
 console.log('\n' + (fail ? '✗' : '✓') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

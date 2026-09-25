@@ -155,6 +155,24 @@ CBA.door = (function () {
     CBA.sheets.postRead(action, payload || {}, function (res) { cb(res || { ok: false, error: "אין תשובה מהשרת" }); });
   }
 
+  /* ⚡ פתיחת הדלת — המסלול המהיר (25.9). שולחים את טוקן Firebase כדי
+     שהשרת יזהה אותנו בלי לקרוא את הגיליון (ר' doorOpenFast_ ב-Door.gs).
+     uid/familyId נשלחים רק כדי שהשרת ישאל במקביל — הוא לא סומך עליהם.
+     אין טוקן (Firebase לא עלה) ⇒ אותה בקשה בלי טוקן = המסלול הרגיל. */
+  function openDoor(reason, bookingId, cb) {
+    var payload = { reason: reason, bookingId: bookingId || "" };
+    var uid = CBA.fb && CBA.fb.uid && CBA.fb.uid();
+    if (!(uid && CBA.fb.idToken)) return post("doorOpen", payload, cb);
+    var done = false;
+    var guard = setTimeout(function () { if (!done) { done = true; post("doorOpen", payload, cb); } }, 1500);
+    CBA.fb.idToken(function (err, tok) {
+      if (done) return;
+      done = true; clearTimeout(guard);
+      if (!err && tok) { payload.idToken = tok; payload.uid = uid; payload.familyId = myFamilyId(); }
+      post("doorOpen", payload, cb);
+    });
+  }
+
   return {
     SEAT_LABEL: SEAT_LABEL, SEAT_SHORT: SEAT_SHORT, DAYS: DAYS, DEFAULTS: WW_DEFAULTS,
     myFamilyId: myFamilyId, can: can,
@@ -165,7 +183,7 @@ CBA.door = (function () {
     readState: readState, readGymNuki: readGymNuki,
     book: function (p, cb) { post("weworkBook", p, cb); },
     cancel: function (id, cb) { post("weworkCancel", { id: id }, cb); },
-    open: function (reason, bookingId, cb) { post("doorOpen", { reason: reason, bookingId: bookingId || "" }, cb); },
+    open: openDoor,
     saveConfig: function (p, cb) { post("weworkSaveConfig", p, cb); },
     status: function (cb) { post("doorStatus", {}, cb); },
     configure: function (p, cb) { post("doorConfigure", p, cb); },
