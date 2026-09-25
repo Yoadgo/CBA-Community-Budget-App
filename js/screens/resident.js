@@ -1719,10 +1719,15 @@ CBA.screens = CBA.screens || {};
     // חיווי "תפקיד בוועד" (סעיף 5) — מואפר, לקריאה בלבד; אם יש כמה שמות בבית
     // מציינים לאיזה מהם שייך התפקיד ("שם — תפקיד"), אם שם אחד בלבד מספיק
     // להציג את התפקיד לבד.
-    var roleLines = nameParts.map(function (fn) {
-      var role = dirRoleFor(fn, fam, rid);
+    /* 25.9 — ועד השיכון v2: התפקיד מוצמד לאדם לפי משפחה+מספר דייר בלבד.
+       קודם הותאם גם לפי שם פרטי, ולכן כל "בר" בשיכון הוצג כיו"ר השיכון. */
+    var slotParts = c.firstName.map(function (k, i) {
+      return { fn: dirVal(row, k), slot: dirSlotOf(k, i) };
+    }).filter(function (x) { return x.fn; });
+    var roleLines = slotParts.map(function (x) {
+      var role = dirRoleFor(rid, x.slot);
       if (!role) return "";
-      return CBA.esc(nameParts.length > 1 ? (fn + " — " + role) : role);
+      return CBA.esc(slotParts.length > 1 ? (x.fn + " — " + role) : role);
     }).filter(Boolean);
     return (
       '<div class="card dir-card">' +
@@ -1749,47 +1754,32 @@ CBA.screens = CBA.screens || {};
   var dirScrollY = 0;
   var dirContainer = null;   // ה-container החי האחרון — לא סומכים על רפרנס-DOM שנתפס
 
-  // חיווי "תפקיד בוועד" בכרטיס הבית ברשימת "תושבי השיכון" (2026-08-10, לבקשת
-  // יועד — סעיף 5). מטמון נפרד מ-dirState (נטען פעם אחת, לא תלוי בחיפוש/
-  // רענון של המדריך), נבנה מ-CBA.data.getCommitteeTree ישירות (לא דרך
-  // CBA.committee.buildBoxes — כאן צריך שורה-לפי-אדם, לא תא מאוחד). התאמה בין
-  // תושב לתפקיד היא "best effort": קודם שם מלא מדויק ("פרטי משפחה", כמו
-  // שה-autocomplete בעץ מזין), אחר-כך שם פרטי בלבד, ולבסוף מזהה תושב (rid)
-  // רק אם יש אדם יחיד עם אותו rid בבית (כדי לא לייחס תפקיד לבן/בת הזוג הלא
-  // נכון/ה). זה חיווי בלבד — לא ניתן לעריכה כאן, עריכה רק דרך עץ הוועד.
+  // חיווי "תפקיד בוועד" בכרטיס הבית ברשימת "תושבי השיכון" (2026-08-10, סעיף 5).
+  // 25.9 — עבר ל-CBA.committeeTree (ועד השיכון v2): תפקיד מוצמד לאדם לפי
+  // "מזהה קבוע" של המשפחה + מספר הדייר (1/2) בלבד. ⛔ אין יותר התאמה לפי
+  // שם פרטי — היא זו שגרמה לכל "בר" להופיע כיו"ר השיכון. חיווי בלבד;
+  // עריכה רק דרך מסך "ועד השיכון" באזור הניהול.
   var dirRoleIndex = null;
   var dirRoleLoading = false;
-  function buildDirRoleIndex(rows) {
-    var byLabel = {}, byFirst = {}, byRid = {};
-    (rows || []).forEach(function (r) {
-      var role = String(r["תפקיד"] || "").trim();
-      var name = String(r["שם"] || "").trim();
-      var rid = String(r["מזהה תושב"] || "").trim();
-      if (!role || !name) return;
-      (byLabel[name] = byLabel[name] || []).push(role);
-      var first = name.split(" ")[0];
-      if (first) (byFirst[first] = byFirst[first] || []).push(role);
-      if (rid) (byRid[rid] = byRid[rid] || []).push({ name: name, role: role });
-    });
-    return { byLabel: byLabel, byFirst: byFirst, byRid: byRid };
+  function dirSlotOf(key, idx) {
+    if (CBA.committeeTree && CBA.committeeTree.slotOfKey) return CBA.committeeTree.slotOfKey(key, idx);
+    var m = String(key || "").match(/(\d)/);
+    return m ? parseInt(m[1], 10) : idx + 1;
   }
-  function dirRoleFor(fn, fam, rid) {
-    if (!dirRoleIndex || !fn) return "";
-    var label = fn + " " + fam;
-    if (dirRoleIndex.byLabel[label]) return dirRoleIndex.byLabel[label][0];
-    if (dirRoleIndex.byFirst[fn]) return dirRoleIndex.byFirst[fn][0];
-    if (rid && dirRoleIndex.byRid[rid] && dirRoleIndex.byRid[rid].length === 1) return dirRoleIndex.byRid[rid][0].role;
-    return "";
+  function dirRoleFor(rid, slot) {
+    if (!dirRoleIndex || !rid || !CBA.committeeTree) return "";
+    return CBA.committeeTree.rolesFor(rid, slot).join(" · ");
   }
   function ensureDirRoleIndex() {
-    if (dirRoleIndex || dirRoleLoading) return;
+    if (dirRoleIndex || dirRoleLoading || !CBA.committeeTree) return;
     dirRoleLoading = true;
-    CBA.data.getCommitteeTree(function (res) {
+    CBA.committeeTree.load(function () {
       dirRoleLoading = false;
-      dirRoleIndex = buildDirRoleIndex(res && res.ok ? res.rows : []);
+      dirRoleIndex = true;
       dirRenderList();
     });
   }
+
                               // ברגע קריאה ל-render() אחת, כי קריאה חדשה (רענון רקע
                               // נוסף שמגיע לפני שהראשונה סיימה לטעון) בונה DOM חדש,
                               // וה-callback של הבקשה הישנה חייב לכתוב לתוך ה-DOM

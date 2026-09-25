@@ -106,6 +106,9 @@ ok('🔴 gardenMeta — כתיבה אסורה לכולם', /allow write: if fals
    יפיל את השורה הזאת, ויחייב מישהו להוסיף אותו לכאן **ביודעין**.
    זו ההגנה שנשארה אחרי שספירת הכתיבות איבדה משמעות. */
 const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk',
+                     /* 🔴 נוסף ביודעין 25.9 — ועד השיכון v2. מנהל-על בלבד,
+                        rev עולה באחד בדיוק, יצירה רק של committee/tree. */
+                     'committeeCreateOk', 'committeeUpdateOk',
                      'txDetailsUpdateOk', 'counterBumpOk', 'canSeeBudget', 'false',
                      /* 🔴 ההיפוך של הגינון (16.9): Firestore הוא המסד החי
                         והדפדפן כותב. שלושה שערים, ושלושתם מפורטים
@@ -226,7 +229,10 @@ const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks', 'gar
                 'weworkConfig', 'weworkDays', 'weworkBookings',
                 'doorConfig', 'doorState', 'doorLog', 'gymNuki',
                 /* 25.9 — מכון הכושר: מראה בלי פרטים אישיים, קריאה בלבד. */
-                'gymMembers', 'gymConfig'];
+                'gymMembers', 'gymConfig',
+                /* 25.9 — ועד השיכון v2: מסמך יחיד, קריאה לכל תושב פנימי,
+                   כתיבה למנהל-על בלבד. בלי שמות תושבים — familyId+slot. */
+                'committee'];
 const found = (CODE.match(/^\s*match \/([A-Za-z0-9_]+)\//gm) || [])
                 .map(function (x) { return x.trim().replace(/^match \//, '').replace(/\/$/, ''); })
                 .filter(function (x) { return x !== 'databases'; });

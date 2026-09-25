@@ -12403,7 +12403,10 @@ var BK_COLLECTIONS = [
   { collection: 'weworkBookings', tab: BK_PREFIX + 'שריוני WeWork' },
   { collection: 'weworkConfig',   tab: BK_PREFIX + 'הגדרות WeWork' },
   { collection: 'doorLog',        tab: BK_PREFIX + 'יומן דלת' },
-  { collection: 'gymNuki',        tab: BK_PREFIX + 'הזמנות Nuki' }
+  { collection: 'gymNuki',        tab: BK_PREFIX + 'הזמנות Nuki' },
+  /* 25.9 — ועד השיכון v2: Firestore הוא המסד היחיד (מסמך אחד committee/tree).
+     הטאב הישן "עץ ועד השיכון" מפסיק להתעדכן מרגע השמירה הראשונה. */
+  { collection: 'committee',      tab: BK_PREFIX + 'ועד השיכון' }
 ];
 var BK_HEADERS = ['id', 'עודכן', 'schema', 'json'];
 

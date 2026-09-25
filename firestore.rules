@@ -1878,6 +1878,66 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    /* ========================================================================
+     *  ועד השיכון v2 — מסמך יחיד committee/tree   (2026-09-25)
+     * ------------------------------------------------------------------------
+     *  Firestore הוא המסד החי של עץ הוועד (מודל ב'). הגיליון הישן "עץ ועד
+     *  השיכון" נשאר רק כמקור להעברה הראשונה; הגיבוי הוא טאב _נתוני_.
+     *  ר' js/screens/committeeTree.js.
+     *
+     *  🔒 קריאה — בדיוק כמו handleCommitteeTree_ בשרת: authorize_(…, null)
+     *     חוסם משתמש חיצוני, ולכן גם כאן `isExternal == false`.
+     *  🔒 כתיבה — מנהל-על בלבד, כמו saveCommitteeTree ב-ACTION_PERMS.
+     *  🔒 `rev` עולה באחד בדיוק בכל שמירה. זה מה שמונע משני מנהלים לדרוס
+     *     זה את זה: שמירה שנבנתה על גרסה ישנה נדחית כאן גם אם הדפדפן
+     *     "שכח" לבדוק. יצירה רק עם rev == 1, ומחיקה סגורה.
+     *  ⚠️ במסמך אין שמות תושבים — רק familyId + מספר דייר. שם חופשי נשמר
+     *     רק לאדם מחוץ לשיכון (מב"ס, קבלן), שממילא אין לו רשומת תושב.
+     *  ⚠️ הכלל לא בודק את התוכן של כל תפקיד ברשימה (כללי Firestore לא
+     *     יודעים לעבור על רשימה). זה מקובל כי הכותב היחיד הוא מנהל-על.
+     * ====================================================================== */
+    function canSeeCommittee() {
+      return isMember() && m().isExternal == false;
+    }
+
+    function committeeWriter() {
+      return isSuper() && m().isExternal == false;
+    }
+
+    function committeeShapeOk() {
+      return request.resource.data.keys().hasOnly(
+               ['schema', 'rev', 'roles', 'cats', 'updatedAt', 'updatedBy']) &&
+             request.resource.data.keys().hasAll(
+               ['schema', 'rev', 'roles', 'cats', 'updatedAt', 'updatedBy']) &&
+             request.resource.data.schema == 1 &&
+             request.resource.data.rev is int &&
+             request.resource.data.roles is list &&
+             request.resource.data.roles.size() <= 300 &&
+             request.resource.data.cats is list &&
+             request.resource.data.cats.size() >= 1 &&
+             request.resource.data.cats.size() <= 40 &&
+             request.resource.data.updatedBy == request.auth.uid &&
+             request.resource.data.updatedAt == request.time;
+    }
+
+    function committeeCreateOk(docId) {
+      return docId == 'tree' && committeeWriter() && committeeShapeOk() &&
+             request.resource.data.rev == 1;
+    }
+
+    function committeeUpdateOk() {
+      return committeeWriter() && committeeShapeOk() &&
+             request.resource.data.rev == resource.data.rev + 1;
+    }
+
+    match /committee/{docId} {
+      allow read: if canSeeCommittee();
+      allow create: if committeeCreateOk(docId);
+      allow update: if committeeUpdateOk();
+      allow delete: if false;
+    }
+
+
     /* ---------- ברירת המחדל ---------- */
 
     /* 🔴 **הכול אסור, אלא אם נפתח במפורש למעלה.**

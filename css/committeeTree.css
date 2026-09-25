@@ -1,0 +1,309 @@
+/* ============================================================================
+ *  ועד השיכון v2 — עץ היררכי   (2026-09-25)   ר' js/screens/committeeTree.js
+ * ----------------------------------------------------------------------------
+ *  🔑 כל קו בעץ שייך לכרטיס שמתחתיו (::before/::after). אין SVG ואין מדידה.
+ *     המספרים היחידים שחייבים להסכים זה עם זה הם שלושת המשתנים למטה:
+ *     --ct-rp (ריווח מעל שורה), --ct-rg (רווח בין שורות), --ct-bt (עובי
+ *     הפס העליון בכרטיס). שינוי באחד מהם — משנים רק כאן.
+ * ========================================================================== */
+.ct {
+  --ct-line: #CBD2DC;
+  --ct-lw: 1.5px;
+  --ct-g: 14px;      /* רווח בין כרטיסים בשורה */
+  --ct-rp: 26px;     /* המרחק מהפס האופקי עד ראש הכרטיס */
+  --ct-rg: 26px;     /* רווח בין שורות */
+  --ct-bt: 3px;      /* הפס העליון בצבע הקטגוריה */
+  --ct-tint: #F3F4F6;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* ---------- סרגל עליון ---------- */
+.ct-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ct-search {
+  flex: 1 1 220px; min-width: 0; display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 0 12px; color: var(--text-muted); height: 40px;
+}
+.ct-search input { border: 0; outline: 0; background: transparent; font: inherit; color: var(--text); flex: 1; min-width: 0; height: 100%; }
+.ct-search:focus-within { border-color: var(--text); }
+.ct-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ct-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background var(--t), color var(--t), border-color var(--t);
+}
+.ct-chip:hover { border-color: #C9CED6; }
+.ct-chip.is-on { background: var(--action); color: #fff; border-color: var(--action); }
+.ct-chip.is-on .ct-dot { box-shadow: 0 0 0 2px #fff; }
+.ct-chip--ghost { border-style: dashed; color: var(--text-soft); }
+.ct-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--cat, var(--text)); flex: none; }
+
+.ct-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 38px; padding: 0 16px; border-radius: 10px; font: inherit; font-weight: 700; font-size: 14px;
+  background: var(--action); color: #fff; border: 1px solid var(--action); cursor: pointer;
+  transition: transform var(--t), background var(--t);
+}
+.ct-btn:active { transform: scale(.97); }
+.ct-btn:disabled { opacity: .45; cursor: default; }
+.ct-btn--ghost { background: var(--surface); color: var(--text); border-color: var(--border); }
+.ct-btn--danger { background: var(--surface); color: var(--danger); border-color: var(--border); }
+.ct-btn--danger:hover { border-color: var(--danger); }
+.ct button:focus-visible, .ct [role="button"]:focus-visible,
+.ct-sheet button:focus-visible { outline: 2px solid #7C3AED; outline-offset: 2px; }
+.ct input:focus-visible, .ct select:focus-visible, .ct-sheet input:focus-visible { outline: none; }
+
+.ct-banner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 14px; font-size: 14px; margin-bottom: 8px;
+}
+.ct-banner > span:not(.ct-pill) { flex: 1 1 240px; }
+.ct-banner--warn { border-color: #F5D9A8; background: var(--warn-soft); }
+.ct-pill { background: var(--warn); color: #fff; border-radius: 999px; padding: 1px 10px; font-weight: 800; font-size: 12.5px; }
+
+.ct-hint { margin: -6px 0 0; font-size: 13px; color: var(--text-muted); }
+
+/* ---------- פריסה: עץ + חלונית עריכה ---------- */
+.ct-main { display: block; }
+.ct.has-panel .ct-main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
+.ct-panel {
+  position: sticky; top: 84px; max-height: calc(100vh - 110px); overflow: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow-hover); padding: 16px;
+}
+.ct-canvas { min-width: 0; }
+
+/* ---------- אנשים ---------- */
+.ct-people { display: flex; flex-direction: column; gap: 6px; }
+.ct-person { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; font-size: 14.5px; flex-wrap: wrap; }
+.ct-person__name { min-width: 0; overflow-wrap: anywhere; }
+.ct-av {
+  width: 28px; height: 28px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: var(--ct-tint); border: 1px solid var(--border); color: var(--text);
+  font-size: 11.5px; font-weight: 800;
+}
+.ct-house { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.ct-tag { font-size: 11px; font-weight: 700; color: var(--text-soft); border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; }
+.ct-tag--warn { color: var(--badge-warn); border-color: #F5D9A8; background: var(--warn-soft); }
+.ct-vacant { align-self: flex-start; font-size: 13px; color: var(--text-muted); font-weight: 500; }
+.ct-card .ct-person, .ct-acc__b .ct-person { font-weight: 500; }
+.ct-sub__who { font-weight: 600; }
+
+/* ---------- השרשרת העליונה (מב"ס ← סמב"ס ← יו"ר) ---------- */
+.ct-tree + .ct-tree { margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--border); }
+.ct-chain { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.ct-chain.has-rows { padding-bottom: 24px; }
+.ct-lead {
+  position: relative; min-width: 240px; max-width: 100%;
+  background: var(--surface); border: 1px solid var(--border); border-top: var(--ct-bt) solid var(--cat);
+  border-radius: 14px; padding: 10px 16px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+}
+.ct-lead .ct-people { align-items: center; }
+.ct-lead__title { font-size: 12.5px; font-weight: 700; color: var(--text-soft); letter-spacing: .02em; }
+.ct-lead.is-hub { border-color: #9CA3AF; border-top-color: var(--cat); }
+.ct-lead + .ct-lead::before {
+  content: ""; position: absolute; left: 50%; bottom: 100%; margin-bottom: var(--ct-bt);
+  height: 21px; border-left: var(--ct-lw) solid var(--ct-line);
+}
+.ct-chain.has-rows .ct-lead.is-hub::after {
+  content: ""; position: absolute; left: 50%; top: 100%; height: 26px;
+  border-left: var(--ct-lw) solid var(--ct-line);
+}
+
+/* ---------- שורות התחומים ---------- */
+.ct-rows { display: flex; flex-direction: column; gap: var(--ct-rg); }
+.ct-row { display: grid; column-gap: var(--ct-g); padding-top: var(--ct-rp); position: relative; align-items: start; }
+/* הגזע ממשיך מהשורה הזאת לשורה הבאה — דרך הרווח שבין שני הכרטיסים האמצעיים */
+.ct-row:not(.is-last)::after {
+  content: ""; position: absolute; left: 50%; top: 0; bottom: calc(-1 * var(--ct-rg));
+  border-left: var(--ct-lw) solid var(--ct-line);
+}
+.ct-row > .ct-card { grid-column: span 2; }
+
+.ct-card {
+  position: relative; min-width: 0;
+  background: var(--surface); border: 1px solid var(--border); border-top: var(--ct-bt) solid var(--cat, var(--text));
+  border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 9px;
+  transition: opacity var(--t), box-shadow var(--t), border-color var(--t);
+}
+/* הקו מהפס האופקי לכרטיס */
+.ct-row > .ct-card::before {
+  content: ""; position: absolute; left: 50%;
+  top: calc(-1 * (var(--ct-rp) + var(--ct-bt))); height: var(--ct-rp);
+  border-left: var(--ct-lw) solid var(--ct-line);
+}
+/* הפס האופקי — כל כרטיס מצייר את החלק שלו, כולל חצי מהרווח לכל צד */
+.ct-row > .ct-card::after {
+  content: ""; position: absolute; height: 0;
+  top: calc(-1 * (var(--ct-rp) + var(--ct-bt)));
+  inset-inline-start: calc(var(--ct-g) / -2 - 1px);
+  inset-inline-end: calc(var(--ct-g) / -2 - 1px);
+  border-top: var(--ct-lw) solid var(--ct-line);
+}
+.ct-row > .ct-card:first-child::after { inset-inline-start: 50%; }
+.ct-row > .ct-card:last-child::after  { inset-inline-end: 50%; }
+.ct-row.is-single > .ct-card::after { display: none; }
+/* כרטיס שהוא גם הראשון וגם האחרון בשורה של יותר מאחד — לא קורה; הגנה */
+.ct-row > .ct-card:first-child:last-child::after { display: none; }
+
+.ct-card__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ct-card__title { flex: 1; min-width: 0; font-weight: 800; font-size: 14.5px; overflow-wrap: anywhere; }
+.ct-card__edit { color: var(--text-muted); display: inline-flex; }
+
+/* ---------- תתי-תפקידים: עץ קבצים ---------- */
+.ct-subs { display: flex; flex-direction: column; gap: 7px; margin-inline-start: 13px; }
+.ct-card > .ct-subs, .ct-acc__b > .ct-subs { margin-top: 2px; }
+.ct-sub { position: relative; font-size: 13.5px; }
+.ct-sub::before {
+  content: ""; position: absolute; inset-inline-start: -13px; top: -8px; height: 19px; width: 9px;
+  border-inline-start: var(--ct-lw) solid var(--ct-line); border-bottom: var(--ct-lw) solid var(--ct-line);
+  border-end-start-radius: 7px;
+}
+.ct-sub:not(:last-child)::after {
+  content: ""; position: absolute; inset-inline-start: -13px; top: 10px; bottom: -8px;
+  border-inline-start: var(--ct-lw) solid var(--ct-line);
+}
+.ct-sub > .ct-subs { margin-top: 7px; }
+.ct-sub__row { display: flex; align-items: baseline; gap: 7px; min-height: 22px; flex-wrap: wrap; border-radius: 7px; }
+.ct-sub__row .ct-dot { width: 7px; height: 7px; align-self: center; }
+.ct-sub__title { color: var(--text-soft); }
+.ct-sub__who { font-weight: 700; margin-inline-start: auto; text-align: end; }
+.ct-sub__name.is-warn { color: var(--badge-warn); }
+.ct-sep { color: var(--text-muted); font-weight: 400; }
+.ct-sub__row .ct-vacant { margin-inline-start: auto; }
+
+/* ---------- חיפוש וסינון ---------- */
+.ct .is-dim { opacity: .32; }
+.ct-card.is-hit > .ct-card__head .ct-card__title,
+.ct-lead.is-hit .ct-lead__title,
+.ct-sub.is-hit > .ct-sub__row .ct-sub__title { background: #FEF3C7; border-radius: 5px; padding: 0 3px; color: var(--text); }
+
+/* ---------- מצב עריכה ---------- */
+.ct--edit [data-edit][role="button"] { cursor: pointer; }
+.ct--edit .ct-card__head:hover .ct-card__title,
+.ct--edit .ct-sub__row[data-edit]:hover .ct-sub__title { text-decoration: underline; text-underline-offset: 3px; }
+.ct--edit .ct-sub__row[data-edit]:hover { background: var(--hover); }
+.ct--edit .ct-lead[data-edit]:hover, .ct--edit .ct-card:hover { border-color: #B8BFCA; }
+.ct-card.is-sel, .ct-lead.is-sel { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+.ct-addsub {
+  align-self: stretch; border: 1px dashed #CBD2DC; background: transparent; border-radius: 8px;
+  padding: 5px 8px; color: var(--text-soft); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.ct-addsub:hover { border-color: var(--text); color: var(--text); }
+.ct-card--add {
+  border: 1.5px dashed #CBD2DC; border-top: 1.5px dashed #CBD2DC; background: transparent;
+  min-height: 96px; align-items: center; justify-content: center; font: inherit; font-weight: 700;
+  color: var(--text-soft); cursor: pointer;
+}
+.ct-card--add:hover { border-color: var(--text); color: var(--text); }
+/* הכרטיס המקווקו יושב על פס עליון דק יותר — מתקנים את נקודת הקו */
+.ct-row > .ct-card--add::before, .ct-row > .ct-card--add::after { top: calc(-1 * (var(--ct-rp) + 1.5px)); }
+.ct-emptyedit { text-align: center; padding: 40px 0; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--text-soft); }
+
+/* ---------- טלפון: גזע אחד בצד ימין ---------- */
+.ct-canvas.is-phone .ct-chain--phone { align-items: stretch; gap: 14px; }
+.ct-canvas.is-phone .ct-chain--phone.has-rows { padding-bottom: 12px; }
+.ct-chain--phone .ct-lead { min-width: 0; flex-direction: row; justify-content: space-between; text-align: start; padding: 9px 12px; }
+.ct-chain--phone .ct-lead .ct-people { align-items: flex-end; }
+.ct-chain--phone .ct-lead + .ct-lead::before { left: auto; inset-inline-start: 16px; height: 15px; }
+.ct-chain--phone.has-rows .ct-lead.is-hub::after { left: auto; inset-inline-start: 16px; height: 14px; }
+.ct-ptree { position: relative; display: flex; flex-direction: column; gap: 10px; padding-inline-start: 36px; padding-top: 12px; }
+.ct-pitem { position: relative; }
+.ct-pitem::before {
+  content: ""; position: absolute; inset-inline-start: -20px; top: -11px; height: 37px; width: 18px;
+  border-inline-start: var(--ct-lw) solid var(--ct-line); border-bottom: var(--ct-lw) solid var(--ct-line);
+  border-end-start-radius: 10px;
+}
+.ct-pitem:first-child::before { top: -13px; height: 39px; }
+.ct-pitem:not(:last-child)::after {
+  content: ""; position: absolute; inset-inline-start: -20px; top: 24px; bottom: -11px;
+  border-inline-start: var(--ct-lw) solid var(--ct-line);
+}
+.ct-acc { background: var(--surface); border: 1px solid var(--border); border-inline-start: var(--ct-bt) solid var(--cat, var(--text)); border-radius: 14px; }
+.ct-acc__h { display: flex; align-items: center; }
+.ct-acc__toggle {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 52px;
+  padding: 8px 12px; background: none; border: 0; font: inherit; color: inherit; text-align: start; cursor: pointer;
+}
+.ct-acc__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ct-acc__title { font-weight: 800; font-size: 14.5px; }
+.ct-acc__who { font-size: 13px; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-chev { color: var(--text-muted); font-size: 13px; }
+.ct-acc__b { padding: 2px 12px 12px; display: flex; flex-direction: column; gap: 9px; border-top: 1px solid var(--border); padding-top: 10px; }
+.ct-iconbtn { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--text-soft); cursor: pointer; }
+.ct-acc--add { width: 100%; min-height: 48px; border: 1.5px dashed #CBD2DC; background: transparent; font: inherit; font-weight: 700; color: var(--text-soft); cursor: pointer; }
+.ct-pitem--add::before { height: 35px; }
+
+/* ---------- טופס עריכה ---------- */
+.ct-form { display: flex; flex-direction: column; gap: 14px; }
+.ct-sheet .ct-form { padding: 4px 18px 22px; }
+.ct-form__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ct-form__head h3 { margin: 0; font-size: 17px; font-weight: 800; }
+.ct-x {
+  width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--ct-tint, #F3F4F6);
+  color: var(--text-soft); font-size: 18px; line-height: 1; cursor: pointer; flex: none;
+}
+.ct-x:disabled { opacity: .35; cursor: default; }
+.ct-field { display: flex; flex-direction: column; gap: 6px; }
+.ct-field > label { font-size: 13px; font-weight: 700; color: var(--text-soft); }
+.ct-input {
+  height: 40px; border: 1px solid var(--border); border-radius: 10px; padding: 0 10px;
+  font: inherit; color: var(--text); background: var(--surface); min-width: 0;
+}
+.ct-input:focus { outline: none; border-color: var(--text); }
+.ct-row2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ct-row2 .ct-btn { height: 34px; padding: 0 10px; font-size: 13px; }
+.ct-muted { color: var(--text-muted); font-size: 13px; margin: 0; }
+.ct-chips--wrap { flex-wrap: wrap; }
+.ct-sheet .ct-form { min-width: 0; overflow-x: hidden; }
+.ct-note { margin-top: -6px; }
+.ct-holders { display: flex; flex-direction: column; gap: 6px; }
+.ct-holder { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 6px 8px; }
+.ct-holder .ct-person { flex: 1; }
+.ct-holder .ct-x { width: 28px; height: 28px; font-size: 16px; }
+.ct-holder.is-warn { border-color: #F5D9A8; background: var(--warn-soft); }
+.ct-link { border: 0; background: none; color: var(--text); text-decoration: underline; text-underline-offset: 3px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ct-picker { display: flex; flex-direction: column; gap: 6px; }
+.ct-search--in { flex: none; }
+.ct-opts { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; }
+.ct-opts:not(:empty) { border: 1px solid var(--border); }
+.ct-opt {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--surface);
+  border: 0; border-bottom: 1px solid var(--border); font: inherit; font-size: 14px; text-align: start; cursor: pointer; color: var(--text);
+}
+.ct-opt:last-child { border-bottom: 0; }
+.ct-opt:hover, .ct-opt:focus-visible { background: var(--hover); }
+.ct-opt__name { flex: 1; min-width: 0; font-weight: 600; }
+.ct-opt--ext { color: var(--text-soft); }
+.ct-opt--none { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.ct-form__foot { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.ct-form__foot .ct-btn--danger { margin-inline-start: auto; }
+
+/* ---------- קטגוריות וצבעים ---------- */
+.ct-catlist { display: flex; flex-direction: column; gap: 10px; }
+.ct-cat { border: 1px solid var(--border); border-inline-start: 4px solid var(--cat); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.ct-cat__top { display: flex; align-items: center; gap: 8px; }
+.ct-cat__top .ct-input { flex: 1; }
+.ct-swatch { width: 26px; height: 26px; border-radius: 8px; background: var(--cat); flex: none; }
+.ct-palette { display: flex; flex-wrap: wrap; gap: 6px; }
+.ct-pal {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--p); border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--border); cursor: pointer; padding: 0; position: relative; overflow: hidden;
+}
+.ct-pal.is-on { box-shadow: 0 0 0 2px var(--text); }
+.ct-pal--custom { background: conic-gradient(#F43F5E, #D97706, #65A30D, #0891B2, #7C3AED, #F43F5E); }
+.ct-pal--custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; border: 0; padding: 0; }
+
+@media (max-width: 899px) {
+  .ct.has-panel .ct-main { display: block; }
+}
+@media (max-width: 600px) {
+  .ct-tools .ct-btn { width: 100%; }
+  .ct-tools .ct-chips { flex: 1 1 100%; min-width: 0; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .ct-tools .ct-chip { flex: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ct *, .ct-sheet * { transition: none !important; }
+}
