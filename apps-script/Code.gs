@@ -456,13 +456,17 @@ function permissionsFor_(email) {
   if (!r.found) return { found: false, active: false, perms: [], isSuper: false, isExternal: false };
   var active = !(r.status && r.status.indexOf('פעיל') === -1);
   var perms = parsePerms_(r.permissions);
-  // תאימות לאחור לעמודת "תפקיד" הישנה
-  if (!perms.length && r.role && r.role.indexOf('מנהל') !== -1) perms = [PERM_SUPER];
+  /* 🔴 (24.9.26) **אין יותר נפילה לעמודת "תפקיד" הישנה.** היא עמודה אחת
+     לשורה, ולכן "ללא הרשאות" לבן/בת זוג של מנהל ותיק היה בלתי אפשרי: התא
+     הריק הפעיל את הנפילה, והשמירה "נשמר ✓" לא שינתה כלום (דיווח 24, דר).
+     הרשאה = רק מה שכתוב ב"הרשאות N" של המשבצת. המעבר החד-פעמי של שורות
+     ותיקות: migrateResidentsPerSlot ב-Maintenance.gs. */
   var out = {
     found: true, active: active, perms: perms,
     isSuper: perms.indexOf(PERM_SUPER) !== -1,
     isExternal: !!r.isExternal,
     familyId: r.familyId, family: r.family, house: r.house, firstName: r.firstName,
+    slot: r.slot,   // 24.9 — משבצת האימייל (1/2): "סיור נצפה N" וכל נתון פר-דייר
     /* 🔴 מספר השורה נוסע יחד עם ההרשאות (16.9, פעולה 2) — כך פונקציה
        שצריכה תא בודד מהשורה של המשתמש **לא קוראת שוב את כל טאב
        התושבים**. `tourSeenFor_` עשתה בדיוק את זה, ר' שם. */
@@ -606,7 +610,15 @@ function listYears_(ss, settings) {
   return fallback;
 }
 
+/* 24.9 — עטיפה: התראות שנאספו בזמן הבקשה יוצאות רק אחרי ה-handler (ואחרי
+   שחרור הנעילה שלו). ר' notifyDeferFlush_. הגוף עצמו לא השתנה. */
 function doGet(e) {
+  notifyDeferStart_();
+  try { return doGetInner_(e); }
+  finally { notifyDeferFlush_(); }
+}
+
+function doGetInner_(e) {
   try {
     // "מה מספר הגרסה?" (2026-08-19) — התשובה הזולה ביותר בקובץ: קריאת ערך
     // בודד מ-Script Properties, בלי לפתוח את הגיליון בכלל. חייבת להיות
@@ -1596,6 +1608,12 @@ function handleFirebaseLink_(p) {
 
 /* ===================== כתיבה ===================== */
 function doPost(e) {
+  notifyDeferStart_();
+  try { return doPostInner_(e); }
+  finally { notifyDeferFlush_(); }
+}
+
+function doPostInner_(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -6068,11 +6086,62 @@ function sendMail_(toList, subject, plainBody, htmlBody) {
   }
 }
 
+/* ============================================================================
+ *  התראות אחרי הנעילה   (24.9.26, "שריון מועדון לוקח זמן רב")
+ * ----------------------------------------------------------------------------
+ *  מאז מרכז ההתראות (23.9) כל התראה היא 8-15 שניות: קריאת טאבים, ולכל נמען
+ *  Firestore + MailApp + FCM. רוב ה-handlers קוראים לה **בתוך** ה-Script
+ *  Lock, וכל כתיבה אחרת במערכת (כ-20 handlers עם waitLock(20000)) חיכתה
+ *  עד שהמיילים יצאו — ולפעמים קיבלה "תפוס — נסה שוב".
+ *  🔑 הפתרון במקום אחד ולא ב-20: doGet/doPost פותחים תור, sendResidentTemplate_
+ *     ו-notifyAdmins_ נכנסים אליו במקום לשלוח, והתור מתרוקן **אחרי** שה-handler
+ *     החזיר תשובה — כלומר אחרי שה-finally שלו כבר שחרר את הנעילה.
+ *  ⚠️ מחוץ לבקשה (טריגר שעתי, הרצה מהעורך) התור הוא null והשליחה מיידית,
+ *     בדיוק כמו קודם.
+ *  ⚠️ כל פריט עטוף ב-try: התראה אחת שנכשלה לא עוצרת את הבאות ולא את התשובה.
+ * ========================================================================== */
+var NOTIFY_DEFER_ = null;
+function notifyDeferStart_() { NOTIFY_DEFER_ = []; }
+function notifyDeferFlush_() {
+  var q = NOTIFY_DEFER_;
+  NOTIFY_DEFER_ = null;
+  if (!q || !q.length) return;
+  q.forEach(function (fn) {
+    try { fn(); } catch (err) { Logger.log('התראה נדחית נכשלה: ' + err); }
+  });
+}
+
+/* ============================================================================
+ *  מייל לתושב — בשם **הנמען**, לא בשם מי שפעל   (24.9.26, דר)
+ * ----------------------------------------------------------------------------
+ *  מייל למשק בית נשלח לשתי הכתובות של השורה, ו-{{שם}} היה של מי שפעל או של
+ *  "שם פרטי 1" — ולכן דר קיבלה "שלום יועד גולן". עכשיו מייל נפרד לכל כתובת,
+ *  ו-{{שם}} = שם פרטי + משפחה **של אותה כתובת**. נוספו גם {{שם פרטי}} ו-{{משפחה}}.
+ *  ⚠️ חל רק על מיילים לתושב (תפקיד r). במיילי מנהל {{שם}} הוא שם המבקש, וזה נכון.
+ *  ⚠️ כתובת שאינה בטאב תושבים (נדיר) — נשלחת עם המשתנים כמו שהם.
+ *  מספר המיילים במכסה לא משתנה: MailApp סופר נמענים, לא הודעות.
+ * ========================================================================== */
+function residentVarsFor_(ss, email, vars) {
+  var p = (typeof notifyPersonByEmail_ === 'function') ? notifyPersonByEmail_(ss, email) : null;
+  if (!p || !p.firstName) return vars || {};
+  var out = {};
+  Object.keys(vars || {}).forEach(function (k) { out[k] = vars[k]; });
+  out['שם'] = (p.firstName + ' ' + (p.family || '')).trim();
+  out['שם פרטי'] = p.firstName;
+  if (p.family) out['משפחה'] = p.family;
+  return out;
+}
+
 /** שולח לתושב לפי מפתח תבנית מהגדרות + placeholders, לרשימת כתובות (בד"כ שני
  * המיילים של משק הבית ביחד — ר' emailsForResidentRow_/emailsForFamilyId_).
  * אדום (rose) אוטומטית לכל תבנית שהמפתח שלה מסתיים ב-REJECTED, ירוק (emerald)
  * לכל השאר — בלי צורך לסמן את זה ידנית בכל קריאה. */
 function sendResidentTemplate_(ss, key, emails, vars, opt) {
+  if (NOTIFY_DEFER_) {   // 24.9 — בתוך בקשה: אחרי שחרור הנעילה, ר' notifyDeferFlush_
+    var a = arguments;
+    NOTIFY_DEFER_.push(function () { NOTIFY_DEFER_ = null; sendResidentTemplate_(a[0], a[1], a[2], a[3], a[4]); });
+    return;
+  }
   /* 23.9 — מרכז ההתראות. תבנית שיש לה שורה בטבלה עוברת ל-notify_,
      שמחליט לפי הטבלה: מייל, פוש, סיכום, והטקסט באפליקציה. */
   var hit = (typeof notifyLookupKey_ === 'function') ? notifyLookupKey_(key, ['r', 'all'], opt && opt.trigger) : null;
@@ -6084,10 +6153,13 @@ function sendResidentTemplate_(ss, key, emails, vars, opt) {
   if (!emailEnabled_(settings, key)) return;
   var t = settings[key];
   if (!t) return;
-  var plain = renderTemplate_(t.body, vars);
   var accent = key.indexOf('REJECTED') !== -1 ? 'rose' : 'emerald';
-  var html = buildEmailHtml_(plain, CBA_APP_URL, 'פתיחת האפליקציה', accent);
-  sendMail_(emails, renderTemplate_(t.subject, vars), plain + '\n\n' + CBA_APP_URL, html);
+  (emails || []).filter(Boolean).forEach(function (em) {   // 24.9 — מייל לכל נמען, בשמו
+    var v = residentVarsFor_(ss, em, vars);
+    var plain = renderTemplate_(t.body, v);
+    var html = buildEmailHtml_(plain, CBA_APP_URL, 'פתיחת האפליקציה', accent);
+    sendMail_([em], renderTemplate_(t.subject, v), plain + '\n\n' + CBA_APP_URL, html);
+  });
 }
 
 /** שני האימיילים (אם קיימים) של שורת תושב נתונה בטאב "תושבים". */
@@ -6124,7 +6196,7 @@ function emailsForFamilyId_(ss, familyId) {
 }
 
 /** כל כתובות המייל של תושבים פעילים בעלי הרשאה נתונה (או מנהל-על) — אותה לוגיקת
- * "משבצת אימייל + הרשאות N לפי סדר, עם נפילה לעמודת 'תפקיד' הישנה" כמו ב-
+ * "משבצת אימייל + הרשאות N לפי סדר" (מ-24.9 בלי נפילה לעמודת 'תפקיד') כמו ב-
  * permissionsFor_/lookupResident_, רק שסורקת את כל הטאב במקום אימייל בודד. */
 function adminEmailsByPerm_(ss, permKey) {
   var rsh = ss.getSheetByName('תושבים');
@@ -6148,12 +6220,10 @@ function adminEmailsByPerm_(ss, permKey) {
     /* 🔴 23.9 — משתמש חיצוני (הגנן) אינו "מנהל" לעניין מיילים: מיילי
        מנהל נושאים שמות תושבים. עד היום הוא קיבל את כולם. */
     if (extCol > -1 && String(row[extCol]).trim().indexOf(EXTERNAL_VALUE) !== -1) continue;
-    var role = roleCol > -1 ? String(row[roleCol]).trim() : '';
     for (var c = 0; c < emailCols.length; c++) {
       var email = String(row[emailCols[c]] || '').trim();
       if (!email) continue;
-      var perms = parsePerms_(permCols[c] !== undefined ? row[permCols[c]] : '');
-      if (!perms.length && role.indexOf('מנהל') !== -1) perms = [PERM_SUPER];
+      var perms = parsePerms_(permCols[c] !== undefined ? row[permCols[c]] : '');   // 24.9 — בלי נפילה ל"תפקיד", ר' permissionsFor_
       if (perms.indexOf(PERM_SUPER) !== -1 || perms.indexOf(permKey) !== -1) out.push(email);
     }
   }
@@ -6162,6 +6232,11 @@ function adminEmailsByPerm_(ss, permKey) {
 
 /** שולח מייל למנהלים לפי תבנית + מידור הרשאה, ללא כפילויות. */
 function notifyAdmins_(ss, permKey, key, vars, opt) {
+  if (NOTIFY_DEFER_) {   // 24.9 — ר' notifyDeferFlush_
+    var a = arguments;
+    NOTIFY_DEFER_.push(function () { NOTIFY_DEFER_ = null; notifyAdmins_(a[0], a[1], a[2], a[3], a[4]); });
+    return;
+  }
   /* 23.9 — מרכז ההתראות: מנהל התחום, מנהל-על והגנן לפי הטבלה. */
   var hit = (typeof notifyLookupKey_ === 'function') ? notifyLookupKey_(key, ['a', 's'], opt && opt.trigger) : null;
   if (hit) {
@@ -9992,17 +10067,51 @@ function ensureTourSheet_(ss) {
   return sh;
 }
 
-/** מוסיף את עמודת "סיור נצפה" לטאב תושבים אם אינה קיימת, ומחזיר את מספרה. */
+/* ============================================================================
+ *  "סיור נצפה" — **לכל דייר**, לא לכל משק בית   (24.9.26, הערב של דר)
+ * ----------------------------------------------------------------------------
+ *  עד היום זו הייתה עמודה אחת לשורה. יועד סיים את הסיור, התא קיבל 5, ודר —
+ *  שנכנסה בפעם הראשונה אי פעם — קיבלה "כבר ראתה" ולא קיבלה סיור בכלל.
+ *  מעכשיו: "סיור נצפה 1" / "סיור נצפה 2", לפי המספר בכותרת, בדיוק כמו
+ *  "כתובת אימייל N" (המשבצת של המשתמש = lookupResident_().slot).
+ *  ⚠️ **שני המצבים נתמכים**: טאב שעדיין מחזיק את העמודה הישנה
+ *     ("סיור נצפה" בלי מספר) ממשיך לעבוד כמו קודם עד שמריצים
+ *     migrateResidentsPerSlot (Maintenance.gs), שממיר אותה במקום.
+ *  ⚠️ טאב בלי אף אחת מהן — נוצרות שתי עמודות המשבצות בסוף.
+ * ========================================================================== */
+var TOUR_SEEN_SLOT_RE = /^סיור נצפה (\d+)$/;
+
+/** {legacy: עמודה (1-based) או -1, slots: [עמודה למשבצת 1, 2, …] (1-based, -1 חסר)} */
+function tourSeenCols_(sh) {
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var out = { legacy: -1, slots: [] };
+  headers.forEach(function (h, i) {
+    if (h === TOUR_SEEN_HEADER) { out.legacy = i + 1; return; }
+    var m = TOUR_SEEN_SLOT_RE.exec(h);
+    if (m) out.slots[parseInt(m[1], 10) - 1] = i + 1;
+  });
+  for (var k = 0; k < out.slots.length; k++) if (!out.slots[k]) out.slots[k] = -1;
+  return out;
+}
+
+/** העמודה (1-based) של משבצת נתונה, או -1. במצב הישן — העמודה המשותפת. */
+function tourSeenColFor_(cols, slot) {
+  if (cols.slots.length) return cols.slots[(parseInt(slot, 10) || 1) - 1] || -1;
+  return cols.legacy;
+}
+
+/** מוודא שיש עמודות "סיור נצפה" ומחזיר את tourSeenCols_. */
 function ensureTourSeenCol_(ss) {
   var sh = ss.getSheetByName('תושבים');
-  if (!sh) return -1;
+  if (!sh) return null;
+  var cols = tourSeenCols_(sh);
+  if (cols.legacy !== -1 || cols.slots.length) return cols;
+  var n = Math.max(residentSlotCols_(sh).email.length, 1);
   var lastCol = sh.getLastColumn();
-  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
-  var idx = headers.indexOf(TOUR_SEEN_HEADER);
-  if (idx !== -1) return idx + 1;
-  sh.getRange(1, lastCol + 1, 1, 1).setValues([[TOUR_SEEN_HEADER]]);
-  sh.getRange(1, lastCol + 1, 1, 1).setFontWeight('bold');
-  return lastCol + 1;
+  var names = [];
+  for (var i = 1; i <= n; i++) names.push(TOUR_SEEN_HEADER + ' ' + i);
+  sh.getRange(1, lastCol + 1, 1, n).setValues([names]).setFontWeight('bold');
+  return tourSeenCols_(sh);
 }
 
 /* ============================================================================
@@ -10039,15 +10148,18 @@ function tourRowsCached_(ss) {
   return cached_('cba_tour_rows', function () { return readTable_(ss, TOUR_SHEET); });
 }
 
-function tourSeenFor_(ss, email, rowIndex) {
-  var col = ensureTourSeenCol_(ss);
-  if (col === -1) return 0;
+function tourSeenFor_(ss, email, rowIndex, slot) {
+  var cols = ensureTourSeenCol_(ss);
+  if (!cols) return 0;
   var row = parseInt(rowIndex, 10) || 0;
-  if (!row) {
+  var sl = parseInt(slot, 10) || 0;
+  if (!row || !sl) {
     var r = lookupResident_(email);
     if (!r.found) return 0;
-    row = r.rowIndex;
+    row = r.rowIndex; sl = r.slot;
   }
+  var col = tourSeenColFor_(cols, sl);
+  if (col === -1) return 0;
   var sh = ss.getSheetByName('תושבים');
   if (!sh) return 0;
   var v = sh.getRange(row, col).getValue();
@@ -10146,10 +10258,11 @@ function residentIdentityIndex_(ss) {
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
                   .map(function (h) { return String(h).trim(); });
   var cols = residentSlotCols_(sh);
-  var idCol = -1, famCol = -1, houseCol = -1, seenCol = -1;
+  var tsc = tourSeenCols_(sh);   // 24.9 — "סיור נצפה" לכל משבצת (או העמודה הישנה)
+  var idCol = -1, famCol = -1, houseCol = -1;
   headers.forEach(function (h, k) {
     if (h.indexOf(RESIDENT_ID_HEADER) !== -1) idCol = k;
-    else if (h === TOUR_SEEN_HEADER) seenCol = k;
+    else if (h === TOUR_SEEN_HEADER || TOUR_SEEN_SLOT_RE.test(h)) { /* ר' tsc */ }
     else if (h.indexOf(PERM_HEADER) !== -1 || h.indexOf(FB_UID_HEADER) !== -1) { /* נתפס ב-cols */ }
     else if (h.indexOf('\u05de\u05e9\u05e4\u05d7\u05d4') !== -1 && famCol === -1) famCol = k;
     else if (h.indexOf('\u05d1\u05d9\u05ea') !== -1 && houseCol === -1) houseCol = k;
@@ -10174,6 +10287,7 @@ function residentIdentityIndex_(ss) {
       var uid = (cols.uid[i] !== undefined) ? String(row[cols.uid[i]] || '').trim() : '';
       if (uid) {
         out.uidByEmail[em] = uid;
+        var seenCol = tourSeenColFor_(tsc, i + 1) - 1;   // 0-based; -2 = אין
         if (seenCol > -1) {
           var n = parseInt(row[seenCol], 10);
           out.seenByUid[uid] = isNaN(n) ? 0 : n;
@@ -12566,7 +12680,7 @@ function handleTour_(p) {
       if (va !== vb) return va - vb;
       return (parseInt(a['סדר'], 10) || 0) - (parseInt(b['סדר'], 10) || 0);
     });
-    return json_({ ok: true, steps: rows, seen: tourSeenFor_(ss, gate.email, gate.perm && gate.perm.rowIndex) });
+    return json_({ ok: true, steps: rows, seen: tourSeenFor_(ss, gate.email, gate.perm && gate.perm.rowIndex, gate.perm && gate.perm.slot) });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -12577,10 +12691,12 @@ function handleTour_(p) {
    שים לב: השורה נקבעת מהאימייל שבמושב החתום (gate.email) ולעולם לא מפרמטר
    שהגיע מהלקוח — אחרת תושב אחד היה יכול לסמן עבור אחר. */
 function markTourSeen_(ss, body) {
-  var col = ensureTourSeenCol_(ss);
-  if (col === -1) return { ok: false, error: 'אין טאב "תושבים"' };
+  var cols = ensureTourSeenCol_(ss);
+  if (!cols) return { ok: false, error: 'אין טאב "תושבים"' };
   var r = lookupResident_(body._email);
   if (!r.found) return { ok: false, error: 'המשתמש אינו ברשימת התושבים' };
+  var col = tourSeenColFor_(cols, r.slot);   // 24.9 — התא של הדייר הזה, לא של השורה
+  if (col === -1) return { ok: false, error: 'אין עמודת "סיור נצפה" למשבצת ' + r.slot };
   var n = parseInt(body.version, 10);
   if (isNaN(n) || n < 0) return { ok: false, error: 'גרסה לא תקינה' };
   var sh = ss.getSheetByName('תושבים');
@@ -12647,8 +12763,8 @@ function setupTourStepV3() {
 function setupTourModule() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureTourSheet_(ss);
-  var col = ensureTourSeenCol_(ss);
-  return 'טאב "' + TOUR_SHEET + '" מוכן; עמודת "' + TOUR_SEEN_HEADER + '" בעמודה ' + col;
+  var cols = ensureTourSeenCol_(ss);
+  return 'טאב "' + TOUR_SHEET + '" מוכן; עמודות "' + TOUR_SEEN_HEADER + '": ' + JSON.stringify(cols);
 }
 
 /* ============================================================================

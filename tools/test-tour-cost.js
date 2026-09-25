@@ -45,15 +45,16 @@ function sandbox(opts) {
   const box = {
     String, parseInt, isNaN, JSON,
     TOUR_SHEET: 'סיור היכרות',
-    ensureTourSeenCol_: () => { log.headerReads++; return opts.noCol ? -1 : 12; },
-    lookupResident_: () => { log.lookups++; return opts.missing ? { found: false } : { found: true, rowIndex: 5 }; },
+    ensureTourSeenCol_: () => { log.headerReads++; return opts.noCol ? null : (opts.perSlot ? { legacy: -1, slots: [12, 13] } : { legacy: 12, slots: [] }); },
+    lookupResident_: () => { log.lookups++; return opts.missing ? { found: false } : { found: true, rowIndex: 5, slot: opts.slot || 1 }; },
     readTable_: () => { log.tableReads = (log.tableReads || 0) + 1; return [{ 'מזהה': 'welcome' }]; },
     cached_: (key, build) => { log.cacheKeys = (log.cacheKeys || []).concat(key); return build(); }
   };
   vm.createContext(box);
   vm.runInContext([
     grab(/function tourRowsCached_\(ss\) \{[\s\S]*?\n\}/),
-    grab(/function tourSeenFor_\(ss, email, rowIndex\) \{[\s\S]*?\n\}/)
+    grab(/function tourSeenColFor_\(cols, slot\) \{[\s\S]*?\n\}/),
+    grab(/function tourSeenFor_\(ss, email, rowIndex, slot\) \{[\s\S]*?\n\}/)
   ].join('\n\n'), box);
   return { box, log, ss: { getSheetByName: () => sheet } };
 }
@@ -61,7 +62,7 @@ function sandbox(opts) {
 section('1. 🔴 טאב התושבים לא נקרא פעם שנייה');
 {
   const s = sandbox();
-  const seen = s.box.tourSeenFor_(s.ss, 'me@x', 5);
+  const seen = s.box.tourSeenFor_(s.ss, 'me@x', 5, 1);
   ok('מחזירה את המספר מהתא הנכון', seen === 3, String(seen));
   ok('🔴🔴 ולא קראה את כל טאב התושבים שוב', s.log.lookups === 0, String(s.log.lookups));
   ok('נסיעה אחת לתא, לא יותר', s.log.cellReads === 1, String(s.log.cellReads));
@@ -78,13 +79,20 @@ section('2. 🔴 נפילה לאחור — בלי מספר שורה, כמו קו
   const s3 = sandbox({ missing: true });
   ok('משתמש שאינו ברשימה ⇒ 0', s3.box.tourSeenFor_(s3.ss, 'x@x') === 0);
   const s4 = sandbox({ noCol: true });
-  ok('אין עמודה ⇒ 0, ובלי לגעת בתא', s4.box.tourSeenFor_(s4.ss, 'x@x', 5) === 0 && s4.log.cellReads === 0);
+  ok('אין עמודה ⇒ 0, ובלי לגעת בתא', s4.box.tourSeenFor_(s4.ss, 'x@x', 5, 1) === 0 && s4.log.cellReads === 0);
+  /* 24.9 — לכל דייר: משבצת 2 קוראת את עמודה 13, לא את 12 של בן הזוג */
+  const s5 = sandbox({ perSlot: true });
+  ok('🔴 (24.9) משבצת 1 ⇒ עמודה 12 (=3)', s5.box.tourSeenFor_(s5.ss, 'y@x', 5, 1) === 3);
+  const s6 = sandbox({ perSlot: true });
+  ok('🔴🔴 (24.9) משבצת 2 ⇒ עמודה 13 (ריקה = 0), לא הסיור של בן הזוג', s6.box.tourSeenFor_(s6.ss, 'd@x', 5, 2) === 0);
+  const s7 = sandbox({ perSlot: true, slot: 2 });
+  ok('(24.9) בלי שורה/משבצת — המשבצת מ-lookupResident_', s7.box.tourSeenFor_(s7.ss, 'd@x') === 0 && s7.log.lookups === 1);
 }
 
 section('3. ⚠️ ומספר העמודה במכוון לא ממוטמן');
 {
   const s = sandbox();
-  s.box.tourSeenFor_(s.ss, 'me@x', 5);
+  s.box.tourSeenFor_(s.ss, 'me@x', 5, 1);
   ok('🔴 נקרא חי בכל בקשה', s.log.headerReads === 1, String(s.log.headerReads));
   ok('🔴🔴 ואין מפתח מטמון למספר העמודה', !/cba_tour_seen_col/.test(GS));
 }
@@ -114,7 +122,7 @@ section('5. handleTour_ — מה באמת השתנה שם');
      /if \(aud === 'תושבים'\) return !isAdmin;/.test(ht));
   ok('⚠️ וקהל שהוא שם הרשאה עדיין נבדק מול ההרשאות של הקורא',
      /ALL_PERMS\.indexOf\(aud\)/.test(ht));
-  ok('🔴 ומספר השורה מועבר מההרשאות', /tourSeenFor_\(ss, gate\.email, gate\.perm && gate\.perm\.rowIndex\)/.test(ht));
+  ok('🔴 ומספר השורה והמשבצת מועברים מההרשאות', /tourSeenFor_\(ss, gate\.email, gate\.perm && gate\.perm\.rowIndex, gate\.perm && gate\.perm\.slot\)/.test(ht));
 }
 
 section('6. permissionsFor_ נושא את מספר השורה');
@@ -127,7 +135,8 @@ section('6. permissionsFor_ נושא את מספר השורה');
 }
 
 section('7. ⚠️ הכתיבה של "סיור נצפה" לא נגעה במטמון');
-ok('markTourSeen קורא את מספר העמודה חי', /var col = ensureTourSeenCol_\(ss\);\n  if \(col === -1\) return \{ ok: false/.test(GS));
+ok('markTourSeen קורא את מספר העמודה חי', /var cols = ensureTourSeenCol_\(ss\);\n  if \(!cols\) return \{ ok: false/.test(GS));
+ok('🔴 (24.9) markTourSeen כותב לתא של המשבצת שלו', /var col = tourSeenColFor_\(cols, r\.slot\);/.test(GS));
 
 console.log('\n' + (fail ? '❌' : '✅') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

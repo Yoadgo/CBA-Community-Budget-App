@@ -27,8 +27,19 @@ var RESIDENTS_COLUMN_ORDER = [
   /* משק בית */
   'שמות ילדים', 'הערות',
   /* מערכת */
-  'תפקיד (תושב/מנהל)', 'סיור נצפה', 'מזהה Firebase 1', 'מזהה Firebase 2', 'עודכן ע"י', 'עודכן בתאריך'
+  'תפקיד (תושב/מנהל)', 'סיור נצפה 1', 'סיור נצפה 2', 'מזהה Firebase 1', 'מזהה Firebase 2', 'עודכן ע"י', 'עודכן בתאריך'
 ];
+/* לפני migrateResidentsPerSlot הטאב מחזיק את העמודה הישנה "סיור נצפה" במקום
+   שתי עמודות המשבצות. tidyResidentsSheet מקבל את שני המצבים. */
+function residentsExpectedOrder_(headers) {
+  if (headers.indexOf('סיור נצפה') === -1) return RESIDENTS_COLUMN_ORDER.slice();
+  var out = [];
+  RESIDENTS_COLUMN_ORDER.forEach(function (h) {
+    if (h === 'סיור נצפה 1') out.push('סיור נצפה');
+    else if (h !== 'סיור נצפה 2') out.push(h);
+  });
+  return out;
+}
 var RESIDENTS_SYSTEM_COLS_FROM = 22;   // 1-based: מכאן ואילך "מערכת" (אפור)
 var RESIDENTS_TEXT_COLS = ['מספר בית', 'מספר טלפון 1', 'מספר טלפון 2', 'ת.ז. 1', 'ת.ז. 2'];
 var RESIDENTS_COL_WIDTHS = {
@@ -36,7 +47,7 @@ var RESIDENTS_COL_WIDTHS = {
   'שם פרטי 1': 100, 'כתובת אימייל 1': 210, 'מספר טלפון 1': 110, 'מקצוע 1': 130, 'תאריך לידה 1': 100, 'ת.ז. 1': 100, 'הרשאות 1': 110,
   'שם פרטי 2': 100, 'כתובת אימייל 2': 210, 'מספר טלפון 2': 110, 'מקצוע 2': 130, 'תאריך לידה 2': 100, 'ת.ז. 2': 100, 'הרשאות 2': 110,
   'שמות ילדים': 180, 'הערות': 220,
-  'תפקיד (תושב/מנהל)': 110, 'סיור נצפה': 80, 'מזהה Firebase 1': 200, 'מזהה Firebase 2': 200, 'עודכן ע"י': 160, 'עודכן בתאריך': 130
+  'תפקיד (תושב/מנהל)': 110, 'סיור נצפה': 80, 'סיור נצפה 1': 80, 'סיור נצפה 2': 80, 'מזהה Firebase 1': 200, 'מזהה Firebase 2': 200, 'עודכן ע"י': 160, 'עודכן בתאריך': 130
 };
 
 /** בודק בלבד — מדפיס מה יזוז, בלי לגעת. להריץ קודם. */
@@ -55,6 +66,7 @@ function tidyResidentsSheet_(dryRun) {
   if (!sh) throw new Error('אין טאב "תושבים"');
   var lastCol = sh.getLastColumn();
   var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h || '').trim(); });
+  var ORDER = residentsExpectedOrder_(headers);
 
   /* --- שומר: קבוצת הכותרות חייבת להיות בדיוק הרשימה --- */
   var problems = [];
@@ -63,9 +75,9 @@ function tidyResidentsSheet_(dryRun) {
     if (!h) { problems.push('עמודה ריקה במיקום ' + (i + 1)); return; }
     if (seen[h]) problems.push('כותרת כפולה: ' + h);
     seen[h] = true;
-    if (RESIDENTS_COLUMN_ORDER.indexOf(h) === -1) problems.push('כותרת לא מוכרת: ' + h);
+    if (ORDER.indexOf(h) === -1) problems.push('כותרת לא מוכרת: ' + h);
   });
-  RESIDENTS_COLUMN_ORDER.forEach(function (h) { if (!seen[h]) problems.push('כותרת חסרה: ' + h); });
+  ORDER.forEach(function (h) { if (!seen[h]) problems.push('כותרת חסרה: ' + h); });
   if (problems.length) {
     var msg = 'לא מסדרים — ' + problems.join(' · ');
     Logger.log(msg);
@@ -75,8 +87,8 @@ function tidyResidentsSheet_(dryRun) {
   /* --- תוכנית ההזזות (מחושבת על עותק, לפני שנוגעים) --- */
   var plan = [];
   var sim = headers.slice();
-  for (var i = 0; i < RESIDENTS_COLUMN_ORDER.length; i++) {
-    var want = RESIDENTS_COLUMN_ORDER[i];
+  for (var i = 0; i < ORDER.length; i++) {
+    var want = ORDER[i];
     var cur = sim.indexOf(want);          // 0-based
     if (cur === i) continue;
     /* cur > i תמיד: כל מה שלפני i כבר במקומו. moveColumns עם יעד i+1
@@ -88,7 +100,7 @@ function tidyResidentsSheet_(dryRun) {
   }
   var report = { moves: plan.length, plan: plan, dryRun: !!dryRun };
   Logger.log(JSON.stringify(report));
-  if (sim.join('|') !== RESIDENTS_COLUMN_ORDER.join('|')) throw new Error('סימולציית הסידור לא הגיעה לסדר היעד — לא נוגעים');
+  if (sim.join('|') !== ORDER.join('|')) throw new Error('סימולציית הסידור לא הגיעה לסדר היעד — לא נוגעים');
   if (dryRun) return report;
 
   var lock = LockService.getScriptLock();
@@ -110,13 +122,13 @@ function tidyResidentsSheet_(dryRun) {
     SpreadsheetApp.flush();
 
     /* --- אימות: הכותרות עכשיו בדיוק בסדר היעד --- */
-    var after = sh.getRange(1, 1, 1, RESIDENTS_COLUMN_ORDER.length).getValues()[0].map(function (h) { return String(h || '').trim(); });
-    if (after.join('|') !== RESIDENTS_COLUMN_ORDER.join('|')) {
+    var after = sh.getRange(1, 1, 1, ORDER.length).getValues()[0].map(function (h) { return String(h || '').trim(); });
+    if (after.join('|') !== ORDER.join('|')) {
       throw new Error('אחרי ההזזה הסדר אינו כמצופה: ' + after.join(' | ') + ' — יש גיבוי בטאב "' + bkName + '"');
     }
 
     /* --- עיצוב אחיד --- */
-    formatResidentsTidy_(sh);
+    formatResidentsTidy_(sh, ORDER);
     report.formatted = true;
     report.backup = bkName;
   } finally {
@@ -128,8 +140,9 @@ function tidyResidentsSheet_(dryRun) {
 
 /** עיצוב: פונט אחד, כותרת מודגשת וקבועה, 3 עמודות זיהוי קפואות, טקסט
  *  לעמודות מספריות-לכאורה, רוחב עמודות, וקבוצת "מערכת" באפור. */
-function formatResidentsTidy_(sh) {
-  var n = RESIDENTS_COLUMN_ORDER.length;
+function formatResidentsTidy_(sh, ORDER) {
+  ORDER = ORDER || RESIDENTS_COLUMN_ORDER;
+  var n = ORDER.length;
   var lastRow = Math.max(sh.getLastRow(), 2);
   var all = sh.getRange(1, 1, lastRow, n);
   all.setFontFamily('Arial').setFontSize(10).setFontColor('#1f2937')
@@ -141,18 +154,19 @@ function formatResidentsTidy_(sh) {
   sh.setRowHeight(1, 32);
 
   /* עמודות "מערכת" — אפור, גם בכותרת וגם בגוף */
-  var sysCount = n - RESIDENTS_SYSTEM_COLS_FROM + 1;
-  sh.getRange(1, RESIDENTS_SYSTEM_COLS_FROM, lastRow, sysCount).setFontColor('#6b7280');
-  sh.getRange(1, RESIDENTS_SYSTEM_COLS_FROM, 1, sysCount).setBackground('#e5e7eb');
+  var sysFrom = ORDER.indexOf('תפקיד (תושב/מנהל)') + 1 || RESIDENTS_SYSTEM_COLS_FROM;
+  var sysCount = n - sysFrom + 1;
+  sh.getRange(1, sysFrom, lastRow, sysCount).setFontColor('#6b7280');
+  sh.getRange(1, sysFrom, 1, sysCount).setBackground('#e5e7eb');
 
   /* עמודות טקסט — שלא ייעלמו אפסים מובילים (טלפון/ת.ז./בית) */
   RESIDENTS_TEXT_COLS.forEach(function (h) {
-    var c = RESIDENTS_COLUMN_ORDER.indexOf(h) + 1;
+    var c = ORDER.indexOf(h) + 1;
     if (c > 0) sh.getRange(1, c, lastRow, 1).setNumberFormat('@');
   });
 
   /* רוחב עמודות */
-  RESIDENTS_COLUMN_ORDER.forEach(function (h, i) {
+  ORDER.forEach(function (h, i) {
     var w = RESIDENTS_COL_WIDTHS[h];
     if (w) sh.setColumnWidth(i + 1, w);
   });
@@ -160,4 +174,118 @@ function formatResidentsTidy_(sh) {
   sh.setFrozenRows(1);
   sh.setFrozenColumns(3);
   if (!sh.isRightToLeft()) sh.setRightToLeft(true);
+}
+
+/* ============================================================================
+ *  migrateResidentsPerSlot — מעבר חד-פעמי לנתונים "לכל דייר"   (24.9.2026)
+ * ----------------------------------------------------------------------------
+ *  שני תיקונים מהערב של דר, שניהם "עמודה אחת לשורה במקום לכל דייר":
+ *
+ *  1. הרשאות: שורה שבה "תפקיד" מכיל "מנהל" ושתי עמודות "הרשאות N" ריקות —
+ *     כותבים "על" ב"הרשאות 1" בלבד ומרוקנים את "תפקיד". מאותו רגע הקוד לא
+ *     קורא יותר את "תפקיד" (ר' permissionsFor_), ולכן בן/בת הזוג אינו מנהל
+ *     אלא אם כתוב לו במפורש. בגיליון החי (24.9) רק שורה 401 עונה על זה.
+ *
+ *  2. סיור: העמודה "סיור נצפה" הופכת במקום ל"סיור נצפה 1", ומיד אחריה
+ *     נוספת "סיור נצפה 2". הערך הישן (של השורה) עובר לדייר שכנראה ראה
+ *     את הסיור: אם רק לאחד מהם יש "מזהה Firebase" — לו; אחרת לדייר 1.
+ *     הדייר השני יקבל את הסיור בכניסה הבאה (פעם אחת).
+ *
+ *  ואחר כך: members/{uid} ב-Firestore לשורות שהשתנו (fbSyncRow_), ו-tourSeen
+ *  לכולם (tourSeenSyncAll_) — אחרת Firestore היה ממשיך לומר את הישן.
+ *
+ *  ⚠️ אידמפוטנטית: הרצה שנייה לא מוצאת מה לשנות ומחזירה אפסים.
+ *  ⚠️ לפני שינוי — גיבוי מוסתר "תושבים — לפני מעבר <תאריך>" (פעם ביום).
+ *  ⚠️ migrateResidentsPerSlotDryRun מדפיסה מה ישתנה בלי לגעת.
+ * ========================================================================== */
+function migrateResidentsPerSlotDryRun() { return migrateResidentsPerSlot_(true); }
+function migrateResidentsPerSlot() { return migrateResidentsPerSlot_(false); }
+
+function migrateResidentsPerSlot_(dryRun) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) throw new Error('אין טאב "תושבים"');
+  var report = { dryRun: !!dryRun, perms: [], tour: null, fbSynced: 0, tourSync: null };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h || '').trim(); });
+    var vals = lastRow > 1 ? sh.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
+    var cols = residentSlotCols_(sh);
+    var roleCol = -1, famCol = -1, houseCol = -1;
+    headers.forEach(function (h, i) {
+      if (h.indexOf('תפקיד') !== -1) roleCol = i;
+      else if (h === 'משפחה') famCol = i;
+      else if (h === 'מספר בית') houseCol = i;
+    });
+
+    if (!dryRun) {
+      var day = Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'dd.MM.yyyy');
+      var bkName = 'תושבים — לפני מעבר ' + day;
+      if (!ss.getSheetByName(bkName)) { var bk = sh.copyTo(ss); bk.setName(bkName); bk.hideSheet(); }
+      report.backup = bkName;
+    }
+
+    /* --- 1. הרשאות --- */
+    var touchedRows = [];
+    if (roleCol > -1 && cols.perm.length) {
+      for (var r = 0; r < vals.length; r++) {
+        var role = String(vals[r][roleCol] || '').trim();
+        if (role.indexOf('מנהל') === -1) continue;
+        var anyPerm = cols.perm.some(function (c) { return String(vals[r][c] || '').trim() !== ''; });
+        var e1 = String(vals[r][cols.email[0]] || '').trim();
+        var item = { row: r + 2, house: houseCol > -1 ? String(vals[r][houseCol]) : '', family: famCol > -1 ? String(vals[r][famCol]) : '',
+                     role: role, action: anyPerm ? 'יש כבר הרשאות — רק מרוקנים תפקיד' : ('הרשאות 1 = על (' + e1 + ')') };
+        report.perms.push(item);
+        if (dryRun) continue;
+        if (!anyPerm && e1) sh.getRange(r + 2, cols.perm[0] + 1).setValue(PERM_SUPER);
+        sh.getRange(r + 2, roleCol + 1).setValue('');
+        touchedRows.push(r + 2);
+      }
+    }
+
+    /* --- 2. סיור נצפה --- */
+    var legacyIdx = headers.indexOf(TOUR_SEEN_HEADER);   // 0-based
+    var tsc = tourSeenCols_(sh);
+    if (legacyIdx === -1) {
+      report.tour = tsc.slots.length ? 'כבר לכל דייר' : 'אין עמודה — תיווצר בקריאה הראשונה';
+    } else {
+      var moves = { toSlot1: 0, toSlot2: 0, empty: 0 };
+      var s1 = [], s2 = [];
+      for (var q = 0; q < vals.length; q++) {
+        var v = vals[q][legacyIdx];
+        var has = !(v === '' || v === null);
+        var uid1 = cols.uid[0] !== undefined ? String(vals[q][cols.uid[0]] || '').trim() : '';
+        var uid2 = cols.uid[1] !== undefined ? String(vals[q][cols.uid[1]] || '').trim() : '';
+        var toSecond = has && !uid1 && !!uid2;
+        s1.push([has && !toSecond ? v : '']);
+        s2.push([toSecond ? v : '']);
+        if (!has) moves.empty++; else if (toSecond) moves.toSlot2++; else moves.toSlot1++;
+      }
+      report.tour = moves;
+      if (!dryRun) {
+        var col1 = legacyIdx + 1;
+        sh.insertColumnAfter(col1);
+        sh.getRange(1, col1, 1, 2).setValues([[TOUR_SEEN_HEADER + ' 1', TOUR_SEEN_HEADER + ' 2']]).setFontWeight('bold');
+        if (vals.length) {
+          sh.getRange(2, col1, vals.length, 1).setValues(s1);
+          sh.getRange(2, col1 + 1, vals.length, 1).setValues(s2);
+        }
+        SpreadsheetApp.flush();
+      }
+    }
+  } finally {
+    lock.releaseLock();
+  }
+
+  if (!dryRun) {
+    /* Firestore — אחרי השחרור: fbSyncRow_ קוראת permissionsFor_ מהגיליון. */
+    PERMS_MEMO_ = {};
+    (touchedRows || []).forEach(function (row) { report.fbSynced += fbSyncRow_(ss, row) || 0; });
+    try { report.tourSync = tourSeenSyncAll_(ss); } catch (e) { report.tourSync = String(e); }
+  }
+  Logger.log(JSON.stringify(report));
+  return report;
 }

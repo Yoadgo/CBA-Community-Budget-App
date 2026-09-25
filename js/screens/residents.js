@@ -165,12 +165,12 @@ function resParsePerms(raw) {
     .filter(function (x) { return RES_PERM_CODES.indexOf(x) !== -1; })
     .filter(function (x, i, a) { return a.indexOf(x) === i; });
 }
-/* ההרשאות בפועל של אדם בשורה. תאימות לאחור: אם עמודת ההרשאות ריקה אבל עמודת
-   "תפקיד" הישנה אומרת "מנהל" — הוא נחשב מנהל על, בדיוק כמו בשרת. */
+/* ההרשאות בפועל של אדם בשורה — רק מה שכתוב ב"הרשאות N" שלו.
+   🔴 24.9: עד היום עמודת "תפקיד" הישנה (אחת לשורה) נחשבה "מנהל על" כשהתא ריק,
+   ולכן "ללא הרשאות" לבן/בת זוג של מנהל ותיק חזר מיד ל"מנהל על" גם כאן וגם
+   בשרת (דיווח 24). אותו כלל כמו permissionsFor_ ב-Code.gs. */
 function resPermsOf(row, c, i) {
-  var p = resParsePerms(resVal(row, c.perm[i]));
-  if (!p.length && (resVal(row, c.role) || "").indexOf("מנהל") !== -1) return ["על"];
-  return p;
+  return resParsePerms(resVal(row, c.perm[i]));
 }
 /* כל ההרשאות בשורה, לתצוגה מרוכזת בטבלה */
 function resRowPerms(row, c) {

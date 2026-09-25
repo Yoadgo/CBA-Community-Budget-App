@@ -61,6 +61,9 @@ function serverBox(opts) {
   };
   vm.createContext(box);
   vm.runInContext([
+    grab(/var TOUR_SEEN_SLOT_RE = [^\n]*\n/),
+    grab(/function tourSeenCols_\(sh\) \{[\s\S]*?\n\}/),
+    grab(/function tourSeenColFor_\(cols, slot\) \{[\s\S]*?\n\}/),
     grab(/function residentIdentityIndex_\(ss\) \{[\s\S]*?\n\}/),
     grab(/var FS_CLUB_RESV = 'clubReservations';/),
     grab(/function clubResvItem_\(ev\) \{[\s\S]*?\n\}/),
@@ -78,8 +81,8 @@ function serverBox(opts) {
   return { box, log };
 }
 
-function residentsSheet(rows) {
-  const headers = ['מזהה קבוע', 'אימייל 1', 'אימייל 2', 'משפחה', 'מזהה Firebase 1',
+function residentsSheet(rows, headersOverride) {
+  const headers = headersOverride || ['מזהה קבוע', 'אימייל 1', 'אימייל 2', 'משפחה', 'מזהה Firebase 1',
                    'מזהה Firebase 2', 'בית', 'סיור נצפה'];
   return { getSheetByName: n => (n === 'תושבים' ? {
     getLastRow: () => rows.length + 1,
@@ -94,6 +97,18 @@ const ROWS = [
   ['3', 'c@x.com', '', 'כהן', '', '', '12', 5],
   ['4', 'd@x.com', 'e@x.com', 'לוי', 'uidD', 'uidE', '13', 2]
 ];
+
+section('0. 🔴 (24.9) "סיור נצפה" לכל דייר — ולא לכל שורה');
+{
+  const s = serverBox();
+  const H = ['מזהה קבוע', 'אימייל 1', 'אימייל 2', 'משפחה', 'מזהה Firebase 1',
+             'מזהה Firebase 2', 'בית', 'סיור נצפה 1', 'סיור נצפה 2'];
+  const idx = s.box.residentIdentityIndex_(residentsSheet([
+    ['1', 'yoad@x.com', 'dar@x.com', 'גולן', 'uidY', 'uidD', '401', 5, ''],
+  ], H));
+  ok('🔴 דייר 1 ראה 5', idx.seenByUid['uidY'] === 5, JSON.stringify(idx.seenByUid));
+  ok('🔴🔴 ודיירת 2 — 0 (תקבל סיור), לא 5 של בן הזוג', idx.seenByUid['uidD'] === 0, JSON.stringify(idx.seenByUid));
+}
 
 section('1. 🔴🔴 מפת הזהות — ושם משפחה כפול שאינו מזהה');
 {
