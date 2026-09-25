@@ -5,8 +5,9 @@
  *  (gymAdmin אין לו לשוניות, ר' CBA.doorAdmin.render בתוך render שלו).
  *    • כל מנהל מכון: מצב המנעול, סוללה, פתיחות היום, יומן, פתיחה מרחוק,
  *      ואיש הקשר שמוצג לתושב כשהפתיחה נכשלת.
- *    • מנהל-על בלבד: מצב הדלת (כבוי/הדמיה/אמיתי), מעבר המכון מקוד לדלת,
- *      טוקן Nuki ומזהה המנעול. 🔐 הטוקן נשלח לשרת ולא חוזר לעולם.
+ *    • מנהל-על בלבד: שורת מצב + כפתור "הגדרות חיבור" שפותח מסך נפרד בשלושה
+ *      שלבים (חיבור ל-Nuki → מצב הדלת → המכון עובר לדלת). 🔐 הטוקן נשלח
+ *      לשרת ולא חוזר לעולם. המנעול נבחר מהרשימה של Nuki — לא מקלידים מזהה.
  * ========================================================================== */
 window.CBA = window.CBA || {};
 
@@ -15,7 +16,7 @@ CBA.doorAdmin = (function () {
   var st = { s: null, log: null, nuki: null, err: "" };
   function esc(s) { return CBA.esc(String(s == null ? "" : s)); }
   function D() { return CBA.door; }
-  var MODE_LABEL = { off: "כבויה", sim: "הדמיה", live: "מחוברת" };
+  var MODE_LABEL = { off: "כבויה", sim: "הדמיה", live: "אמיתי" };
 
   function famName(fid) {
     var n = fid && CBA.data && CBA.data.familyDisplayName ? CBA.data.familyDisplayName(fid) : "";
@@ -55,25 +56,117 @@ CBA.doorAdmin = (function () {
     }).join("") + "</div>";
   }
 
+  /* ⚙ 25.9 (בקשת יועד, דיווח 30): הגדרות החיבור עברו למסך נפרד (setupHTML
+     למטה), נפתח מכפתור בכרטיס. בכרטיס נשארת רק שורת מצב אחת. */
   function superHTML() {
     if (!CBA.isSuper || !st.s) return "";
-    var s = st.s;
-    function seg(m) { return '<button type="button" class="ww-seat" data-da-mode="' + m + '" aria-pressed="' + (s.modeRaw === m) + '">' + MODE_LABEL[m] + "</button>"; }
-    return '<div class="da-super">' +
-      '<div class="ww-sec-t">הגדרות חיבור <span class="gym-pill gym-pill--muted">מנהל-על</span></div>' +
-      '<div class="ww-lbl">מצב הדלת</div><div class="ww-seats">' + seg("off") + seg("sim") + seg("live") + "</div>" +
-      '<div class="ww-note">הדמיה = הכול עובד והפתיחה נרשמת ביומן, בלי לפתוח באמת. אמיתי דורש טוקן ומזהה מנעול.</div>' +
-      '<label class="da-switch' + (s.mode !== "live" ? " is-off" : "") + '"><input type="checkbox" id="da-gymon" data-da-gymon' + (s.gymOn ? " checked" : "") + (s.mode !== "live" && !s.gymOn ? " disabled" : "") + '>' +
-        "<span><b>המכון עובר לדלת</b><small>" + (s.mode !== "live"
-          ? "זמין רק כשהדלת במצב אמיתי ועובדת — אחרת מנויים יישארו בלי קוד ובלי דלת." + (s.gymWanted ? " (מופעל, אבל מושהה עד שהדלת תחזור לעבוד — הקוד מוצג בינתיים.)" : "")
-          : "מסתיר את קוד הכניסה הקבוע ומציג למנויים את כפתור הדלת. אפשר להחזיר בכל רגע.") + "</small></span></label>" +
-      '<div class="gym-field"><label for="da-token">טוקן Nuki Web API ' + (s.tokenSet ? '<span class="gym-pill gym-pill--ok">שמור</span>' : '<span class="gym-pill gym-pill--warn">חסר</span>') + "</label>" +
-        '<input type="password" id="da-token" autocomplete="off" placeholder="' + (s.tokenSet ? "להחלפה — להדביק טוקן חדש" : "להדביק כאן את הטוקן מ-Nuki Web") + '"></div>' +
-      '<div class="gym-field"><label for="da-lock">מזהה המנעול</label>' +
-        '<div class="da-inline"><input type="text" inputmode="numeric" id="da-lock" value="' + esc(s.lockId === "set" ? "" : (s.lockId || "")) + '" placeholder="מספר">' +
-        '<button type="button" class="btn-ghost btn-sm" data-da-test>בדיקת חיבור</button></div><div data-da-locks></div></div>' +
-      '<button type="button" class="btn-primary" data-da-save>שמירת החיבור</button>' +
+    var s = st.s, stt = s.state || {};
+    var line = s.mode === "live" && stt.errorText ? '<span class="da-bad">' + esc(stt.errorText) + "</span>" :
+      !s.tokenSet ? "עוד לא חובר מנעול" :
+      "מצב: <b>" + MODE_LABEL[s.mode] + "</b>" + (s.lockName ? " · " + esc(s.lockName) : "") + (s.gymOn ? " · המכון עבר לדלת" : " · קוד הכניסה פעיל");
+    return '<div class="da-super da-super--line"><span>' + line + "</span>" +
+      '<button type="button" class="btn-ghost btn-sm" data-da-setup>הגדרות חיבור</button></div>';
+  }
+
+  /* ---------------------------------------------------- מסך הגדרות החיבור --- */
+  var su = { locks: null, msg: null, busy: "" };   /* msg: {step, ok, text} */
+  function stepMsg(n) {
+    if (!su.msg || su.msg.step !== n) return "";
+    return '<div class="' + (su.msg.ok ? "da-ok" : "da-bad") + '" role="status">' + esc(su.msg.text) + "</div>";
+  }
+  function setupHTML() {
+    var s = st.s || {}, stt = s.state || {};
+    var lockOk = !!(s.tokenSet && s.lockId && !(s.mode === "live" && stt.error));
+    var locks = su.locks ? su.locks.map(function (l) {
+      var on = String(l.id) === String(s.lockId);
+      return '<button type="button" class="da-lock' + (on ? " is-on" : "") + '" data-da-pick="' + esc(l.id) + '" aria-pressed="' + on + '">' +
+        "<b>" + esc(l.name || "מנעול") + "</b><small>" + (l.online ? "מחובר" : "לא מחובר") +
+        (l.battery >= 0 ? " · סוללה " + l.battery + "%" : "") + "</small></button>";
+    }).join("") : "";
+    function seg(m) {
+      var dis = m === "live" && !lockOk;
+      return '<button type="button" class="ww-seat" data-da-mode="' + m + '" aria-pressed="' + (s.modeRaw === m) + '"' + (dis ? " disabled" : "") + ">" + MODE_LABEL[m] + "</button>";
+    }
+    return '<div class="da-setup">' +
+      '<div class="da-setup__h"><h2>הגדרות חיבור הדלת</h2><button type="button" class="btn-ghost btn-sm" data-da-close>סגירה</button></div>' +
+      '<section class="da-step' + (lockOk ? " is-done" : "") + '"><div class="da-step__n">1</div><div class="da-step__b">' +
+        "<h3>חיבור ל-Nuki</h3>" +
+        (lockOk && !(su.msg && su.msg.step === 1) ? '<div class="da-ok">מחובר ל' + esc(s.lockName || "מנעול") + "</div>" : lockOk ? "" : '<p class="ww-note">מדביקים את המפתח (API token) מ-web.nuki.io ולוחצים "בדיקה". המנעול נבחר לבד.</p>') +
+        '<div class="da-inline"><input type="password" id="da-token" autocomplete="off" placeholder="' + (s.tokenSet ? "המפתח שמור · להחלפה מדביקים חדש" : "להדביק כאן את המפתח") + '">' +
+        '<button type="button" class="btn-primary btn-sm" data-da-test>' + (su.busy === "test" ? "בודק…" : "בדיקה") + "</button></div>" +
+        (locks ? '<div class="da-locks">' + locks + "</div>" : "") + stepMsg(1) +
+      "</div></section>" +
+      '<section class="da-step' + (lockOk ? "" : " is-locked") + '"><div class="da-step__n">2</div><div class="da-step__b">' +
+        "<h3>מצב הדלת</h3>" +
+        '<div class="ww-seats">' + seg("off") + seg("sim") + seg("live") + "</div>" +
+        '<p class="ww-note"><b>כבויה</b> — הכפתור לא פותח. <b>הדמיה</b> — הכול עובד ונרשם ביומן, הדלת לא זזה. <b>אמיתי</b> — כל לחיצה פותחת באמת' + (lockOk ? "" : " (זמין אחרי שלב 1)") + ".</p>" + stepMsg(2) +
+      "</div></section>" +
+      '<section class="da-step' + (s.mode === "live" ? "" : " is-locked") + '"><div class="da-step__n">3</div><div class="da-step__b">' +
+        "<h3>המכון עובר לדלת</h3>" +
+        '<label class="da-switch' + (s.mode !== "live" ? " is-off" : "") + '"><input type="checkbox" data-da-gymon' + (s.gymOn ? " checked" : "") + (s.mode !== "live" && !s.gymOn ? " disabled" : "") + ">" +
+          "<span><b>" + (s.gymOn ? "פעיל — קוד הכניסה מוסתר" : "כבוי — קוד הכניסה פעיל") + "</b><small>" + (s.mode !== "live"
+            ? "זמין רק כשהדלת במצב אמיתי ועובדת." + (s.gymWanted ? " (מופעל, אבל מושהה עד שהדלת תחזור לעבוד.)" : "")
+            : "מסתיר את קוד הכניסה ושולח למנויים הזמנות Nuki. אפשר להחזיר בכל רגע.") + "</small></span></label>" + stepMsg(3) +
+      "</div></section>" +
     "</div>";
+  }
+  function openSetup(cardEl) {
+    su = { locks: null, msg: null, busy: "" };
+    return CBA.ui.sheet({ label: "הגדרות חיבור הדלת", sheetCls: "da-sheet", html: setupHTML(), onMount: function (wrap, close) {
+      var box = wrap.querySelector(".gt-sheet");
+      function paint() {
+        var grip = box.querySelector(".gt-grip");
+        box.innerHTML = ""; if (grip) box.appendChild(grip);
+        box.insertAdjacentHTML("beforeend", setupHTML());
+      }
+      function after(res, step, okText) {
+        if (res && res.ok) { if (res.status) st.s = res.status; else if (res.mode) st.s = res; su.msg = okText ? { step: step, ok: true, text: okText } : null; }
+        else su.msg = { step: step, ok: false, text: (res && res.error) || "משהו השתבש. נסו שוב." };
+        paint();
+        if (cardEl && document.body.contains(cardEl)) { cardEl.innerHTML = html(); redraw(cardEl); }
+      }
+      wrap.addEventListener("click", function (e) {
+        var t;
+        if (e.target.closest("[data-da-close]")) { close(); return; }
+        if ((t = e.target.closest("[data-da-test]"))) {
+          if (su.busy) return;
+          var tokIn = wrap.querySelector("#da-token"), tok = tokIn ? tokIn.value.trim() : "";
+          if (!tok && !(st.s && st.s.tokenSet)) { su.msg = { step: 1, ok: false, text: "צריך קודם להדביק את המפתח." }; paint(); return; }
+          su.busy = "test"; su.msg = null; paint();
+          D().testConnection(tok ? { token: tok } : {}, function (res) {
+            su.busy = "";
+            if (res.ok) su.locks = res.locks || [];
+            var name = res.ok && res.picked ? ((res.locks || []).filter(function (l) { return String(l.id) === String(res.picked); })[0] || {}).name : "";
+            after(res, 1, !res.ok ? "" : res.picked ? "המפתח עובד ✓ מחובר ל" + (name || "מנעול") + "." : "המפתח עובד ✓ בוחרים מנעול מהרשימה.");
+          });
+          return;
+        }
+        if ((t = e.target.closest("[data-da-pick]"))) {
+          D().configure({ lockId: t.getAttribute("data-da-pick") }, function (res) { after(res, 1, "המנעול נבחר ✓"); });
+          return;
+        }
+        if ((t = e.target.closest("[data-da-mode]"))) {
+          var m = t.getAttribute("data-da-mode");
+          var go = function () {
+            su.msg = { step: 2, ok: true, text: "שומר…" }; paint();
+            D().configure({ mode: m }, function (res) { after(res, 2, "מצב הדלת: " + MODE_LABEL[m] + " ✓"); });
+          };
+          if (m === "live") CBA.ui.confirm("לעבור למצב אמיתי? מעכשיו כל לחיצה תפתח את הדלת באמת.", { title: "מצב אמיתי", okText: "לעבור" }).then(function (ok) { if (ok) go(); });
+          else go();
+        }
+      });
+      wrap.addEventListener("change", function (e) {
+        var cb = e.target.closest("[data-da-gymon]");
+        if (!cb) return;
+        var want = cb.checked;
+        var msg = want ? "להעביר את המכון לדלת? קוד הכניסה הקבוע יוסתר מכל המנויים, והם יקבלו הזמנות Nuki." :
+          "להחזיר את קוד הכניסה הקבוע? כפתור הדלת ייעלם ממסך המנויים.";
+        CBA.ui.confirm(msg, { title: "המכון והדלת", okText: want ? "להעביר" : "להחזיר" }).then(function (ok) {
+          if (!ok) { cb.checked = !want; return; }
+          D().configure({ gymOn: want }, function (res) { after(res, 3, want ? "המכון עבר לדלת ✓" : "קוד הכניסה חזר ✓"); });
+        });
+      });
+    } });
   }
 
   function contactHTML() {
@@ -143,58 +236,7 @@ CBA.doorAdmin = (function () {
         });
         return;
       }
-      if ((t = e.target.closest("[data-da-mode]"))) {
-        var m = t.getAttribute("data-da-mode");
-        var go = function () {
-          var release = CBA.ui.busy(t, "…");
-          D().configure({ mode: m }, function (res) {
-            release();
-            if (!res.ok) return CBA.ui.alert(res.error || "השמירה נכשלה");
-            st.s = res; CBA.ui.toast("מצב הדלת: " + MODE_LABEL[res.mode]); el.innerHTML = html(); redraw(el);
-          });
-        };
-        if (m === "live") CBA.ui.confirm("לעבור למצב אמיתי? מעכשיו כל לחיצה תפתח את הדלת באמת.", { title: "מצב אמיתי", okText: "לעבור" }).then(function (ok) { if (ok) go(); });
-        else go();
-        return;
-      }
-      if ((t = e.target.closest("[data-da-test]"))) {
-        var tokIn = el.querySelector("#da-token");
-        var runTest = function () {
-          var release = CBA.ui.busy(t, "בודק…");
-          D().testConnection(function (res) {
-            release();
-            var box = el.querySelector("[data-da-locks]");
-            if (!res.ok) { if (box) box.innerHTML = '<div class="ww-why">' + esc(res.error) + "</div>"; return; }
-            if (box) box.innerHTML = '<div class="ww-note">החיבור עובד. בחר/י מנעול:</div>' + (res.locks || []).map(function (l) {
-              return '<button type="button" class="btn-ghost btn-sm" data-da-pick="' + esc(l.id) + '">' + esc(l.name || "מנעול") + " · " + esc(l.id) + "</button>";
-            }).join(" ");
-          });
-        };
-        if (tokIn && tokIn.value.trim()) {
-          D().configure({ token: tokIn.value.trim() }, function (res) {
-            if (!res.ok) return CBA.ui.alert(res.error || "שמירת הטוקן נכשלה");
-            tokIn.value = ""; st.s = res; runTest();
-          });
-        } else runTest();
-        return;
-      }
-      if ((t = e.target.closest("[data-da-pick]"))) {
-        var li = el.querySelector("#da-lock"); if (li) li.value = t.getAttribute("data-da-pick");
-        return;
-      }
-      if ((t = e.target.closest("[data-da-save]"))) {
-        var p = {};
-        var tok = el.querySelector("#da-token"), lk = el.querySelector("#da-lock");
-        if (tok && tok.value.trim()) p.token = tok.value.trim();
-        if (lk) p.lockId = lk.value.trim();
-        var release = CBA.ui.busy(t, "שומר…");
-        D().configure(p, function (res) {
-          release();
-          if (!res.ok) return CBA.ui.alert(res.error || "השמירה נכשלה");
-          st.s = res; CBA.ui.toast("החיבור נשמר"); el.innerHTML = html(); redraw(el);
-        });
-        return;
-      }
+      if (e.target.closest("[data-da-setup]")) { openSetup(el); return; }
       if ((t = e.target.closest("[data-da-contact]"))) {
         var n = el.querySelector("#da-cname"), ph = el.querySelector("#da-cphone");
         var rel = CBA.ui.busy(t, "שומר…");
@@ -204,20 +246,6 @@ CBA.doorAdmin = (function () {
           CBA.ui.toast("נשמר");
         });
       }
-    });
-    el.addEventListener("change", function (e) {
-      var cb = e.target.closest("[data-da-gymon]");
-      if (!cb) return;
-      var want = cb.checked;
-      var msg = want ? "להעביר את המכון לדלת? קוד הכניסה הקבוע יוסתר מכל המנויים, והם יראו את כפתור הדלת." :
-        "להחזיר את קוד הכניסה הקבוע? כפתור הדלת ייעלם ממסך המנויים.";
-      CBA.ui.confirm(msg, { title: "המכון והדלת", okText: want ? "להעביר" : "להחזיר" }).then(function (ok) {
-        if (!ok) { cb.checked = !want; return; }
-        D().configure({ gymOn: want }, function (res) {
-          if (!res.ok) { cb.checked = !want; return CBA.ui.alert(res.error || "השמירה נכשלה"); }
-          st.s = res; CBA.ui.toast(want ? "המכון עבר לדלת" : "קוד הכניסה חזר");
-        });
-      });
     });
   }
 

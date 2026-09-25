@@ -187,7 +187,8 @@ CBA.door = (function () {
     saveConfig: function (p, cb) { post("weworkSaveConfig", p, cb); },
     status: function (cb) { post("doorStatus", {}, cb); },
     configure: function (p, cb) { post("doorConfigure", p, cb); },
-    testConnection: function (cb) { post("doorTestConnection", {}, cb); },
+    /* p = {token?} — מפתח חדש נבדק ונשמר באותה קריאה (25.9, דיווח 30). */
+    testConnection: function (p, cb) { if (typeof p === "function") { cb = p; p = {}; } post("doorTestConnection", p || {}, cb); },
     saveContact: function (p, cb) { post("doorSaveContact", p, cb); },
     gymResend: function (cb) { post("doorGymResend", {}, cb); }
   };

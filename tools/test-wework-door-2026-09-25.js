@@ -311,6 +311,52 @@ section('5. הגדרות הדלת ו-WeWork');
   ok('אפס עמדות נדחה', !s.ok);
 }
 
+/* ======================================= 5ב. דיווח 30 — חיבור שבאמת נבדק --- */
+section('5ב. דיווח 30: חיבור ל-Nuki נבדק לפני שמירה');
+{
+  const GOOD = 'g'.repeat(80), BAD = 'b'.repeat(80);
+  const lockJson = JSON.stringify([{ smartlockId: 18123456789, name: 'דלת המכון', type: 4, serverState: 0, state: { batteryCharge: 81 } }]);
+  const reply = (url, o) => {
+    const auth = (o && o.headers && o.headers.Authorization) || '';
+    if (auth.indexOf(GOOD) === -1) return { code: 401, text: '{"detailMessage":"Your access token is not authorized"}' };
+    if (/\/smartlock$/.test(url)) return { code: 200, text: lockJson };
+    if (/\/smartlock\/18123456789$/.test(url)) return { code: 200, text: JSON.stringify({ name: 'דלת המכון', serverState: 0, state: { batteryCharge: 81 } }) };
+    if (/\/smartlock\/\d+$/.test(url)) return { code: 404, text: '{"detailMessage":"doesn\'t exist"}' };
+    return { code: 204, text: '' };
+  };
+  const T = makeSandbox({ nukiReply: reply });
+  let r = call(T, 'doorTestConnection_', Object.assign(ME('1', { isSuper: true }), { token: BAD }));
+  ok('מפתח לא תקין: הודעה ברורה בעברית (לא "Nuki 401: {...}")', !r.ok && /המפתח של Nuki לא תקין/.test(r.error) && r.error.indexOf('{') === -1, r.error);
+  ok('מפתח לא תקין: לא נשמר', !T.props.NUKI_API_TOKEN);
+  r = call(T, 'doorTestConnection_', Object.assign(ME('1', { isSuper: true }), { token: GOOD }));
+  ok('מפתח תקין + מנעול יחיד ⇒ נבחר לבד', r.ok && r.picked === '18123456789' && T.props.NUKI_SMARTLOCK_ID === '18123456789', JSON.stringify(r).slice(0, 200));
+  ok('שם המנעול נשמר ומוחזר בסטטוס', T.props.NUKI_LOCK_NAME === 'דלת המכון' && r.status && r.status.lockName === 'דלת המכון');
+  ok('הרשימה כוללת סוללה', r.locks[0].battery === 81 && r.locks[0].online === true);
+  ok('🔴 המפתח לא חוזר בתשובה', JSON.stringify(r).indexOf(GOOD) === -1);
+  r = call(T, 'doorConfigure_', Object.assign(ME('1', { isSuper: true }), { lockId: '1325584199' }));
+  ok('🔴 דיווח 30: מזהה שלא קיים ב-Nuki נדחה (לא "החיבור נשמר")', !r.ok && /לא נמצא בחשבון/.test(r.error), JSON.stringify(r));
+  ok('ומזהה המנעול הטוב נשאר', T.props.NUKI_SMARTLOCK_ID === '18123456789');
+  r = call(T, 'doorConfigure_', Object.assign(ME('1', { isSuper: true }), { mode: 'live' }));
+  ok('מעבר לאמיתי מול מנעול שעונה — עובר', r.ok && r.mode === 'live', JSON.stringify(r).slice(0, 200));
+  T.props.NUKI_SMARTLOCK_ID = '1325584199'; T.props.DOOR_MODE = 'sim';
+  r = call(T, 'doorConfigure_', Object.assign(ME('1', { isSuper: true }), { mode: 'live' }));
+  ok('🔴 לא עוברים לאמיתי מול מנעול שלא קיים', !r.ok && T.props.DOOR_MODE === 'sim', JSON.stringify(r));
+  T.props.DOOR_MODE = 'live';
+  const h = T.sb.doorHealth_({});
+  ok('בדיקת בריאות: הסבר ברור לצד הקוד הגולמי', /לא נמצא בחשבון/.test(h.errorText) && /404/.test(h.error));
+}
+{
+  const T = makeSandbox({ nukiReply: () => ({ code: 200, text: '[]' }) });
+  const r = call(T, 'doorTestConnection_', Object.assign(ME('1', { isSuper: true }), { token: 'g'.repeat(60) }));
+  ok('מפתח שעובד בלי מנעולים — הסבר (להפעיל Nuki Web)', !r.ok && /Nuki Web/.test(r.error), r.error);
+}
+{
+  const DA = R('js/screens/doorAdmin.js');
+  ok('ההגדרות לא מוצגות בכרטיס — כפתור למסך נפרד', /data-da-setup/.test(DA) && /function openSetup/.test(DA) && !/id="da-lock"/.test(DA));
+  ok('אין שדה להקלדת מזהה מנעול — בוחרים מהרשימה', !/placeholder="מספר"/.test(DA) && /data-da-pick/.test(DA));
+  ok('"אמיתי" חסום עד שהמנעול מחובר', /var dis = m === "live" && !lockOk/.test(DA));
+}
+
 /* ================================================= 6. בריאות + התראות --- */
 section('6. בריאות המנעול והתראות');
 {

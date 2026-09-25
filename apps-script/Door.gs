@@ -600,17 +600,31 @@ function nukiListLocks_() {
   var r = nukiReq_('get', '/smartlock');
   if (!r.ok) return r;
   return { ok: true, locks: (r.json || []).map(function (l) {
-    return { id: String(l.smartlockId), name: String(l.name || ''), type: l.type };
+    var st = l.state || {};
+    return { id: String(l.smartlockId), name: String(l.name || ''), type: l.type,
+             battery: typeof st.batteryCharge === 'number' ? st.batteryCharge : -1,
+             online: l.serverState === 0 || l.serverState === undefined };
   }) };
 }
-function nukiLockInfo_() {
-  var id = nukiLockId_();
-  if (!id) return { ok: false, error: 'חסר NUKI_SMARTLOCK_ID' };
+/* 25.9 (דיווח 30) — הודעת שגיאה שמנהל-על מבין, במקום "Nuki 404: {...}".
+   הקוד המלא נשאר ב-error לצורך תחקור; זו רק התווית למסך. */
+function nukiErrText_(r) {
+  var c = r && r.code;
+  if (c === 401) return 'המפתח של Nuki לא תקין או שנמחק. צריך ליצור מפתח חדש ב-web.nuki.io.';
+  if (c === 403) return 'למפתח של Nuki חסרה הרשאה. צריך מפתח עם ההרשאות View devices ו-Operate devices.';
+  if (c === 404) return 'המנעול הזה לא נמצא בחשבון ה-Nuki. בוחרים אותו מהרשימה אחרי "בדיקת חיבור".';
+  if (c === 0) return 'עוד לא הוזן מפתח של Nuki.';
+  if (c === -1) return 'אין כרגע תקשורת עם Nuki. נסו שוב בעוד דקה.';
+  return 'Nuki החזירה שגיאה (' + c + '). נסו שוב.';
+}
+function nukiLockInfo_(explicitId) {
+  var id = explicitId || nukiLockId_();
+  if (!id) return { ok: false, code: 0, error: 'חסר NUKI_SMARTLOCK_ID' };
   var r = nukiReq_('get', '/smartlock/' + encodeURIComponent(id));
   if (!r.ok) return r;
   var j = r.json || {}, s = j.state || {};
   return {
-    ok: true,
+    ok: true, name: String(j.name || ''),
     online: j.serverState === 0 || j.serverState === undefined,
     battery: typeof s.batteryCharge === 'number' ? s.batteryCharge : -1,
     batteryCritical: !!s.batteryCritical,
@@ -812,11 +826,12 @@ function doorHealth_(ss) {
   var mode = doorMode_();
   var doc = { mode: mode, gymOn: doorGymOn_(), tokenSet: !!nukiToken_(), lockIdSet: !!nukiLockId_(),
               online: false, battery: -1, batteryCritical: false, lockState: -1,
-              lastCheckMs: Date.now(), error: '', schema: 1, updatedAt: new Date() };
+              lastCheckMs: Date.now(), error: '', errorText: '', schema: 1, updatedAt: new Date() };
   if (mode === 'live') {
     var info = nukiLockInfo_();
     if (!info.ok) {
       doc.error = String(info.error || '').slice(0, 200);
+      doc.errorText = nukiErrText_(info);
       doorAlert_(ss, 'offline', 'לא ניתן להתחבר למנעול: ' + doc.error);
     } else {
       doc.online = info.online; doc.battery = info.battery;
@@ -902,9 +917,10 @@ function doorStatus_(ss, body) {
   return {
     ok: true, mode: doorMode_(), modeRaw: doorModeRaw_(), gymOn: doorGymOn_(), gymWanted: doorGymWanted_(),
     tokenSet: !!nukiToken_(), lockId: perm.isSuper ? nukiLockId_() : (nukiLockId_() ? 'set' : ''),
+    lockName: doorProp_('NUKI_LOCK_NAME') || '',
     contact: doorContact_(), state: {
       online: st.online, battery: st.battery, batteryCritical: st.batteryCritical,
-      lastCheckMs: st.lastCheckMs, error: st.error
+      lastCheckMs: st.lastCheckMs, error: st.error, errorText: st.errorText || ''
     }
   };
 }
@@ -921,12 +937,25 @@ function doorConfigure_(ss, body) {
   if (body.lockId !== undefined && body.lockId !== null) {
     var lid = String(body.lockId).trim();
     if (lid && !/^\d{3,20}$/.test(lid)) return { ok: false, error: 'מזהה המנעול צריך להיות מספר' };
+    /* 🔴 25.9 (דיווח 30): מזהה שהוקלד ידנית נשמר בלי בדיקה, והשמירה הציגה
+       "החיבור נשמר" למרות ש-Nuki לא הכירה אותו. מעכשיו — בודקים מול Nuki
+       לפני שמירה, ושומרים גם את שם המנעול להצגה. */
+    if (lid) {
+      var chk = nukiLockInfo_(lid);
+      if (!chk.ok) return { ok: false, error: nukiErrText_(chk) };
+      doorPropSet_('NUKI_LOCK_NAME', String(chk.name || '').slice(0, 60));
+    } else doorPropSet_('NUKI_LOCK_NAME', '');
     doorPropSet_('NUKI_SMARTLOCK_ID', lid);
   }
   if (body.mode !== undefined) {
     var m = String(body.mode);
     if (DOOR_MODES.indexOf(m) === -1) return { ok: false, error: 'מצב לא מוכר' };
-    if (m === 'live' && !(nukiToken_() && nukiLockId_())) return { ok: false, error: 'למצב אמיתי צריך טוקן ומזהה מנעול' };
+    if (m === 'live' && !(nukiToken_() && nukiLockId_())) return { ok: false, error: 'למצב אמיתי צריך קודם לחבר מנעול (שלב 1)' };
+    /* 🔴 25.9 — לא עוברים ל"אמיתי" מול מנעול שלא עונה. */
+    if (m === 'live') {
+      var live = nukiLockInfo_();
+      if (!live.ok) return { ok: false, error: nukiErrText_(live) };
+    }
     doorPropSet_('DOOR_MODE', m);
   }
   if (body.gymOn !== undefined) {
@@ -949,9 +978,29 @@ function doorConfigure_(ss, body) {
 
 /** מנהל-על: בדיקת חיבור ל-Nuki + רשימת המנעולים (לבחירת המזהה). */
 function doorTestConnection_(ss, body) {
+  /* 25.9 (דיווח 30): מפתח שהודבק נבדק ונשמר באותה קריאה — צעד אחד במקום שניים. */
+  if (body && body.token !== undefined && String(body.token).trim() !== '') {
+    var tok = String(body.token).trim();
+    if (tok.length < 20 || /\s/.test(tok)) return { ok: false, error: 'המפתח לא נראה תקין — כדאי להעתיק אותו שוב' };
+    var prev = nukiToken_();
+    doorPropSet_('NUKI_API_TOKEN', tok);
+    var probe = nukiListLocks_();
+    if (!probe.ok) { doorPropSet_('NUKI_API_TOKEN', prev || ''); return { ok: false, error: nukiErrText_(probe) }; }
+  }
   var r = nukiListLocks_();
-  if (!r.ok) return { ok: false, error: r.error || 'החיבור נכשל' };
-  return { ok: true, locks: r.locks };
+  if (!r.ok) return { ok: false, error: nukiErrText_(r) };
+  if (!r.locks.length) return { ok: false, error: 'המפתח עובד, אבל אין מנעולים בחשבון הזה. צריך להפעיל Nuki Web באפליקציה של Nuki.' };
+  var out = { ok: true, locks: r.locks, picked: '' };
+  var cur = nukiLockId_();
+  var known = r.locks.some(function (l) { return l.id === cur; });
+  /* מנעול יחיד ⇒ בוחרים אותו אוטומטית (אין מה להקליד). */
+  if (r.locks.length === 1 && !known) {
+    doorPropSet_('NUKI_SMARTLOCK_ID', r.locks[0].id);
+    doorPropSet_('NUKI_LOCK_NAME', r.locks[0].name.slice(0, 60));
+    out.picked = r.locks[0].id;
+  } else if (known) out.picked = cur;
+  out.status = doorStatus_(ss, body);
+  return out;
 }
 
 function doorSaveContact_(ss, body) {

@@ -232,3 +232,25 @@
 .da-switch input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--action); }
 .da-switch b { display: block; font-size: 14px; }
 .da-switch small { display: block; font-size: 12.5px; color: var(--text-soft); line-height: 1.5; margin-top: 2px; }
+
+/* ---- הגדרות חיבור הדלת — מסך נפרד (25.9, דיווח 30) ------------------------ */
+.da-super--line { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; max-width: none; font-size: 13.5px; color: var(--text-soft); }
+.da-super--line b { color: var(--text); }
+/* .da-sheet — גיליון תחתון בנייד, חלון צד במחשב (אותו רכיב כמו בשאר האפליקציה). */
+.da-setup__h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.da-setup__h h2 { margin: 0; font-size: 17px; }
+.da-step { display: flex; gap: 12px; padding: 14px 0; border-top: 1px solid var(--border); }
+.da-step__n { width: 26px; height: 26px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: rgba(17, 24, 39, .08); color: var(--text); }
+.da-step.is-done .da-step__n { background: rgba(5, 150, 105, .16); color: #047857; }
+.da-step.is-locked { opacity: .55; }
+.da-step__b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.da-step__b h3 { margin: 2px 0 0; font-size: 15px; }
+.da-step__b .ww-note { margin: 0; }
+.da-locks { display: flex; flex-direction: column; gap: 6px; }
+.da-lock { text-align: start; font: inherit; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+.da-lock b { display: block; font-size: 14px; }
+.da-lock small { font-size: 12px; color: var(--text-soft); }
+.da-lock.is-on { border-color: #059669; background: rgba(5, 150, 105, .06); }
+.da-ok, .da-bad { font-size: 13px; font-weight: 600; line-height: 1.5; }
+.da-ok { color: #047857; }
+.da-bad { color: var(--badge-danger); }
