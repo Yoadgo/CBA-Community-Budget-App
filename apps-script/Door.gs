@@ -1073,6 +1073,54 @@ function doorOpenFast_(body) {
   return out;
 }
 
+/* ============================================================================
+ *  doorLogExternal_ — רישום פתיחה שבוצעה ב-Cloudflare Worker   (26.9.2026)
+ * ----------------------------------------------------------------------------
+ *  ה-Worker (cloudflare/door-worker.js) פותח את הדלת ועונה לטלפון מיד, ואז
+ *  שולח לכאן **ברקע** את פרטי הפתיחה. כאן: יומן, "הגיע" לשריון, התראה על כשל.
+ *  🔐 לא סומכים על ה-Worker: מאמתים את המושב + טוקן Firebase של התושב עצמו,
+ *     בדיוק כמו במסלול המהיר. בקשה מזויפת נכשלת כאן בלי לכתוב כלום.
+ * ========================================================================== */
+function doorLogExternal_(body) {
+  var sess = verifySession_(body.session);
+  if (!sess) return { ok: false, error: 'no session' };
+  var uid = String(body.uid || '');
+  if (!body.idToken || !fsIdOk_(uid)) return { ok: false, error: 'no identity' };
+  var reason = String(body.reason || '');
+  if (['wework', 'gym', 'admin'].indexOf(reason) === -1) return { ok: false, error: 'bad reason' };
+  var res = UrlFetchApp.fetchAll([
+    { url: 'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FS_WEB_API_KEY,
+      method: 'post', contentType: 'application/json',
+      payload: JSON.stringify({ idToken: String(body.idToken) }), muteHttpExceptions: true },
+    { url: doorFsDocUrl_('members/' + encodeURIComponent(uid)), method: 'get', headers: doorFsAuth_(), muteHttpExceptions: true }
+  ]);
+  if (res[0].getResponseCode() !== 200) return { ok: false, error: 'token' };
+  var users = []; try { users = JSON.parse(res[0].getContentText()).users || []; } catch (e) { }
+  var who = users[0] || {};
+  if (String(who.localId || '') !== uid) return { ok: false, error: 'uid' };
+  if (normalizeEmail_(who.email) !== normalizeEmail_(sess.e || sess.email || '')) return { ok: false, error: 'email' };
+  if (res[1].getResponseCode() !== 200) return { ok: false, error: 'member' };
+  var mem = fsUnfields_((JSON.parse(res[1].getContentText()).fields) || {});
+  var fid = String(mem.familyId || '');
+  var result = ['ok', 'sim', 'fail'].indexOf(String(body.result)) !== -1 ? String(body.result) : 'ok';
+  var err = String(body.error || '').replace(/[^\w\s:.-]/g, '').slice(0, 60);
+  var bookingId = String(body.bookingId || '');
+  doorLogWrite_({ kind: reason, familyId: fid, uid: uid, source: 'app', result: result, error: err,
+                  bookingId: bookingId, via: 'worker', ms: Number(body.ms) || 0 });
+  if (bookingId && fsIdOk_(bookingId) && result !== 'fail') {
+    try {
+      var b = fsGet_(fsDocPath_(FS_WW_BOOK, bookingId));
+      if (b && String(b.familyId) === fid && !b.enteredAtMs) {
+        fsMerge_(fsDocPath_(FS_WW_BOOK, bookingId), { enteredAtMs: Date.now(), updatedAt: new Date() });
+      }
+    } catch (e) { }
+  }
+  if (result === 'fail') {
+    try { doorAlert_(SpreadsheetApp.getActiveSpreadsheet(), 'fail', 'פתיחת הדלת מהאפליקציה נכשלה: ' + err); } catch (e) { }
+  }
+  return { ok: true };
+}
+
 function doorOpenFastInner_(body, reason, claimUid, claimFid, sess, t0) {
   var mode = doorMode_();
   if (mode === 'off') return { ok: false, code: 'DOOR_OFF', error: 'הדלת עדיין לא מחוברת לאפליקציה' };

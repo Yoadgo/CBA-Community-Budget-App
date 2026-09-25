@@ -1649,6 +1649,8 @@ function doPostInner_(e) {
     /* ⚡ 25.9 — פתיחת הדלת במסלול המהיר: זהות מ-Firebase ולא מהגיליון,
        שני סבבי רשת במקביל, בלי bumpRev_. ר' doorOpenFast_ ב-Door.gs.
        אם חסרה זהות Firebase (NEED_SLOW) — ממשיכים למסלול הרגיל למטה. */
+    /* 26.9 — רישום פתיחה שבוצעה ב-Cloudflare Worker (ברקע). ר' doorLogExternal_ ב-Door.gs. */
+    if (body && body.action === 'doorLogExternal' && typeof doorLogExternal_ === 'function') return json_(doorLogExternal_(body));
     if (body && body.action === 'doorOpen' && body.idToken && typeof doorOpenFast_ === 'function') {
       var fast = doorOpenFast_(body);
       if (!(fast && fast.code === 'NEED_SLOW')) return json_(fast);
