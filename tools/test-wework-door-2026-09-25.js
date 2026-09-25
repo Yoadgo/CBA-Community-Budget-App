@@ -357,6 +357,44 @@ section('5ב. דיווח 30: חיבור ל-Nuki נבדק לפני שמירה');
   ok('"אמיתי" חסום עד שהמנעול מחובר', /var dis = m === "live" && !lockOk/.test(DA));
 }
 
+/* ====================================== 5ג. Cloudflare Worker + רישום ברקע --- */
+section('5ג. פתיחה דרך Cloudflare Worker');
+{
+  const W = R('cloudflare/door-worker.js'), DJ = R('js/data/door.js');
+  ok('Worker: מאמת חתימת טוקן של גוגל מול הפרויקט', /securetoken@system\.gserviceaccount\.com/.test(W) && /body\.aud !== PROJECT/.test(W) && /crypto\.subtle\.verify/.test(W));
+  ok('Worker: קורא ל-Firestore בשם המשתמש (לא מפתח שירות)', /Authorization: 'Bearer ' \+ tok/.test(W) && !/private_key|serviceAccount/.test(W));
+  ok('Worker: המפתח של Nuki רק מ-env (Secret), לא בקוד', /env\.NUKI_TOKEN/.test(W) && !/nk_|[A-Fa-f0-9]{60,}/.test(W));
+  ok('Worker: אותן בדיקות זכאות (פעיל, לא חיצוני, familyId, מנוי/שריון/הרשאה)', /mem\.active !== true/.test(W) && /mem\.isExternal === true/.test(W) && /claimFid !== fid/.test(W) && /'סטטוס'/.test(W) && /ADMIN_PERMS/.test(W));
+  ok('Worker: CORS רק לאתר של CBA', /ORIGINS = \['https:\/\/yoadgo\.github\.io'\]/.test(W));
+  ok('Worker: יומן ברקע ל-Apps Script (לא מעכב את התושב)', /ctx\.waitUntil\(fetch\(env\.APPS_SCRIPT_URL/.test(W) && /doorLogExternal/.test(W));
+  ok('לקוח: קודם Worker, ל-Apps Script רק כשאין תשובה או NEED_SLOW', /viaWorker\(payload/.test(DJ) && /res\.code !== "NEED_SLOW"\) return cb\(res\)/.test(DJ));
+}
+{
+  const T = makeSandbox();
+  T.sb.verifySession_ = s => s === 'good' ? { e: 'me@x.il' } : null;
+  T.sb.SpreadsheetApp = { getActiveSpreadsheet: () => ({}) };
+  T.sb.FS_WEB_API_KEY = 'k'; T.sb.doorFsDocUrl_ = p => 'https://fs/' + p; T.sb.fsToken_ = () => 't';
+  T.sb.fsUnfields_ = f => { const o = {}; Object.keys(f).forEach(k => { const v = f[k]; o[k] = 'stringValue' in v ? v.stringValue : v.booleanValue; }); return o; };
+  let who = { localId: 'uid-me', email: 'me@x.il' };
+  T.sb.UrlFetchApp.fetchAll = reqs => reqs.map(r => /accounts:lookup/.test(r.url)
+    ? { getResponseCode: () => 200, getContentText: () => JSON.stringify({ users: [who] }) }
+    : { getResponseCode: () => 200, getContentText: () => JSON.stringify({ fields: { familyId: { stringValue: '12' }, active: { booleanValue: true } } }) });
+  let r = T.sb.doorLogExternal_({ session: 'bad', idToken: 'x', uid: 'uid-me', reason: 'wework', result: 'ok' });
+  ok('רישום ברקע: בלי מושב תקין — לא נכתב כלום', !r.ok && !Object.keys(T.db).some(k => k.startsWith('doorLog/')));
+  who = { localId: 'uid-other', email: 'me@x.il' };
+  r = T.sb.doorLogExternal_({ session: 'good', idToken: 'x', uid: 'uid-me', reason: 'wework', result: 'ok' });
+  ok('רישום ברקע: טוקן של משתמש אחר — נדחה', !r.ok);
+  who = { localId: 'uid-me', email: 'me@x.il' };
+  T.db['weworkBookings/B1'] = { id: 'B1', familyId: '12', status: 'active' };
+  r = T.sb.doorLogExternal_({ session: 'good', idToken: 'x', uid: 'uid-me', reason: 'wework', result: 'ok', bookingId: 'B1', ms: 640 });
+  const log = Object.keys(T.db).filter(k => k.startsWith('doorLog/')).map(k => T.db[k])[0] || {};
+  ok('רישום ברקע: נכתב עם familyId מהשרת (לא מהבקשה) + via=worker', r.ok && log.familyId === '12' && log.via === 'worker' && log.ms === 640, JSON.stringify(log));
+  ok('רישום ברקע: השריון סומן "הגיע"', !!T.db['weworkBookings/B1'].enteredAtMs);
+  T.sb.doorLogExternal_({ session: 'good', idToken: 'x', uid: 'uid-me', reason: 'admin', result: 'fail', error: 'Nuki 503<b>' });
+  ok('רישום ברקע: כשל ⇒ התראה למנהל המכון, והשגיאה מנוקה', T.admins.some(a => a.key === 'ADMIN_DOOR_ALERT') &&
+     Object.keys(T.db).some(k => k.startsWith('doorLog/') && T.db[k].result === 'fail' && T.db[k].error === 'Nuki 503b'));
+}
+
 /* ================================================= 6. בריאות + התראות --- */
 section('6. בריאות המנעול והתראות');
 {

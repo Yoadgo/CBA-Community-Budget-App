@@ -159,7 +159,24 @@ CBA.door = (function () {
      שהשרת יזהה אותנו בלי לקרוא את הגיליון (ר' doorOpenFast_ ב-Door.gs).
      uid/familyId נשלחים רק כדי שהשרת ישאל במקביל — הוא לא סומך עליהם.
      אין טוקן (Firebase לא עלה) ⇒ אותה בקשה בלי טוקן = המסלול הרגיל. */
+  /* ⚡⚡ 26.9 — קודם Cloudflare Worker (~0.3ש' + זמן המנעול), ר' cloudflare/door-worker.js.
+     אם ה-Worker לא עונה (רשת, תקלה) או מבקש את המסלול הרגיל (NEED_SLOW) —
+     אותה בקשה ל-Apps Script. תשובה עניינית (DOOR_OFF / NOT_NOW / NUKI_FAIL) לא
+     נשלחת שוב, אחרת כשל אמיתי היה מפעיל את המנעול פעמיים. */
+  var WORKER_URL = "https://cba-door.gizbar30.workers.dev/";
+  function viaWorker(payload, cb) {
+    var sess = CBA.authSession || "";
+    var body = JSON.stringify({ reason: payload.reason, bookingId: payload.bookingId, idToken: payload.idToken,
+                                familyId: payload.familyId, session: sess });
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 12000);
+    fetch(WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: body, signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { clearTimeout(timer); cb(res && typeof res.ok === "boolean" ? res : null); })
+      .catch(function () { clearTimeout(timer); cb(null); });
+  }
   function openDoor(reason, bookingId, cb) {
+    cb = cb || function () {};
     var payload = { reason: reason, bookingId: bookingId || "" };
     var uid = CBA.fb && CBA.fb.uid && CBA.fb.uid();
     if (!(uid && CBA.fb.idToken)) return post("doorOpen", payload, cb);
@@ -168,8 +185,12 @@ CBA.door = (function () {
     CBA.fb.idToken(function (err, tok) {
       if (done) return;
       done = true; clearTimeout(guard);
-      if (!err && tok) { payload.idToken = tok; payload.uid = uid; payload.familyId = myFamilyId(); }
-      post("doorOpen", payload, cb);
+      if (err || !tok) return post("doorOpen", payload, cb);
+      payload.idToken = tok; payload.uid = uid; payload.familyId = myFamilyId();
+      viaWorker(payload, function (res) {
+        if (res && res.code !== "NEED_SLOW") return cb(res);
+        post("doorOpen", payload, cb);
+      });
     });
   }
 
