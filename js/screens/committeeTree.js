@@ -227,10 +227,23 @@
     else catsDone();
   }
   function convertSheet(rows) {
+    /* 🔴 26.9 — נתפס בהעברה החיה: בטאב "קטגוריות ועד השיכון" נשארה שורה אחת,
+       וכל 29 התפקידים קיבלו אותה קטגוריה. לכן הרשימה = מה שבטאב **ועוד** כל
+       שם קטגוריה שמופיע בשורות העץ עצמן (צבע מוכר אם השם מוכר, אחרת מהפלטה). */
     var sheetCats = (CBA.committee && CBA.committee.catsList) ? CBA.committee.catsList() : [];
-    S.cats = sheetCats.length
-      ? sheetCats.map(function (c, i) { return { id: "c" + (i + 1), name: c.name, color: c.color || "#111827" }; })
-      : clone(DEFAULT_CATS);
+    var byName = {};
+    S.cats = [];
+    function addCat(name, color) {
+      name = String(name || "").trim();
+      if (!name || byName[name]) return;
+      var def = DEFAULT_CATS.filter(function (d) { return d.name === name; })[0];
+      var c = { id: "c" + (S.cats.length + 1), name: name,
+                color: color || (def ? def.color : PALETTE[S.cats.length % PALETTE.length]) };
+      byName[name] = c; S.cats.push(c);
+    }
+    sheetCats.forEach(function (c) { addCat(c.name, c.color); });
+    rows.forEach(function (r) { addCat(r["קטגוריה"]); });
+    if (!S.cats.length) S.cats = clone(DEFAULT_CATS);
     function catId(name) {
       for (var i = 0; i < S.cats.length; i++) if (S.cats[i].name === name) return S.cats[i].id;
       return S.cats[0] ? S.cats[0].id : "";
