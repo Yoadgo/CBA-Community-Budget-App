@@ -160,8 +160,7 @@ section('2. שריון ותפוסה');
   const day = T.db['weworkDays/2026-09-26'];
   ok('מסמך היום נגזר מהשריונים', day && day.slots['11'].desk === 3 && day.slots['11'].lounge === 1 && day.slots['9'].desk === 1, JSON.stringify(day && day.slots));
   ok('ספירה = כמות השריונים הפעילים', day && day.count === 5, day && day.count);
-  ok('נוצר אירוע ביומן לכל שריון', Object.keys(T.calEvents).length === 5);
-  ok('כותרת האירוע: סוג עמדה + שם המשפחה', Object.values(T.calEvents).some(e => /WeWork · מחשב · לוי/.test(e.t)));
+  ok('26.9: אין יותר אירועים ביומן גוגל', Object.keys(T.calEvents).length === 0);
   ok('נשלח מייל WEWORK_BOOKED לכל שריון', T.mails.filter(m => m.key === 'WEWORK_BOOKED').length === 5);
   const doc = T.db['weworkBookings/' + r1.booking.id];
   const keys = Object.keys(doc || {});
@@ -188,7 +187,7 @@ section('3. ביטול');
   const adm = call(T, 'weworkCancel_', Object.assign(ME('99', { perms: ['WeWork'] }), { id }));
   ok('מנהל WeWork מבטל שריון של אחרים', adm.ok && adm.canceledBy === 'admin', JSON.stringify(adm));
   ok('המייל הולך למשפחה שבוטלה, לא למנהל', T.mails.some(m => m.key === 'WEWORK_CANCELED' && m.emails[0] === 'fam12@x.il' && /מנהל/.test(m.vars['מי'])));
-  ok('האירוע ביומן נמחק', Object.keys(T.calEvents).length === 0);
+  ok('ביטול בלי יומן — לא נכשל', Object.keys(T.calEvents).length === 0);
   ok('מסמך היום התעדכן לאפס', T.db['weworkDays/2026-09-26'].count === 0);
   const again = call(T, 'weworkCancel_', Object.assign(ME('12'), { id }));
   ok('ביטול כפול נדחה', !again.ok);
@@ -454,7 +453,7 @@ section('5ה. שריון WeWork מהיר (Cloudflare Worker + עסקה ב-Firest
   ok('שריון חדש לא דורס קיים (exists:false)', /currentDocument: \{ exists: false \}/.test(W));
   ok('זהות מה-members של השרת, לא מהבקשה (familyId)', /familyId: m\.fid, uid: who\.uid/.test(W));
   ok('ביטול: מנהל = "על" או "WeWork"', /indexOf\(SUPER\)/.test(W) && /indexOf\(PERM_WW\)/.test(W));
-  ok('מייל + יומן גוגל ברקע (waitUntil ⇒ weworkAfterExternal)', /ctx\.waitUntil\(fetch\(env\.APPS_SCRIPT_URL/.test(W) && /weworkAfterExternal/.test(W));
+  ok('מייל ברקע (waitUntil ⇒ weworkAfterExternal)', /ctx\.waitUntil\(fetch\(env\.APPS_SCRIPT_URL/.test(W) && /weworkAfterExternal/.test(W));
   ok('תקלה פנימית ⇒ NEED_SLOW (הלקוח עובר ל-Apps Script)', /code: 'NEED_SLOW', error: 'השרת המהיר לא זמין'/.test(W));
   ok('לקוח: book/cancel דרך ה-Worker עם נפילה ל-Apps Script', /viaWorkerOr\("wwBook", p, "weworkBook", cb\)/.test(DJ) && /viaWorkerOr\("wwCancel", \{ id: id \}, "weworkCancel", cb\)/.test(DJ));
   ok('לקוח: רשת נפלה בשריון ⇒ בודקים שלא נשמר לפני ניסיון ב-Apps Script', /worker-recovered/.test(DJ) && /createdAtMs \|\| 0\) > t0/.test(DJ));
@@ -479,15 +478,16 @@ section('5ה. שריון WeWork מהיר (Cloudflare Worker + עסקה ב-Firest
   ok('ברקע: בלי מושב — כלום', !r.ok && T.mails.length === 0);
   r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'book' }));
   const bk = T.db['weworkBookings/WW-20260927-aaaa'];
-  ok('ברקע: אירוע ביומן + slot + מייל אישור', r.ok && bk.calEventId && bk.slot === 2 && T.mails.some(m => m.key === 'WEWORK_BOOKED' && m.emails[0] === 'me@x.il' && m.vars['שם'] === 'יועד'), JSON.stringify(bk));
+  ok('ברקע: slot + מייל אישור, בלי אירוע ביומן', r.ok && !bk.calEventId && Object.keys(T.calEvents).length === 0 && bk.slot === 2 && T.mails.some(m => m.key === 'WEWORK_BOOKED' && m.emails[0] === 'me@x.il' && m.vars['שם'] === 'יועד'), JSON.stringify(bk));
   const nMail = T.mails.length, nEv = Object.keys(T.calEvents).length;
   r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'book' }));
-  ok('ברקע: אותה בקשה פעמיים ⇒ מייל ואירוע אחד בלבד', r.dup && T.mails.length === nMail && Object.keys(T.calEvents).length === nEv);
+  ok('ברקע: אותה בקשה פעמיים ⇒ מייל אחד בלבד', r.dup && T.mails.length === nMail && Object.keys(T.calEvents).length === nEv);
   r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'cancel' }));
   ok('ברקע: "ביטול" לשריון שעדיין פעיל — נדחה', !r.ok && Object.keys(T.calEvents).length === nEv);
   bk.status = 'canceled'; bk.canceledBy = 'admin';
+  T.props.WEWORK_CALENDAR_ID = 'cal1'; T.calEvents.old1 = { t: 'ישן' }; bk.calEventId = 'old1';
   r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'cancel' }));
-  ok('ברקע: ביטול ע"י מנהל ⇒ האירוע נמחק + מייל למשפחה', r.ok && Object.keys(T.calEvents).length === nEv - 1 &&
+  ok('ברקע: ביטול ע"י מנהל ⇒ אירוע ישן (לפני 26.9) נמחק + מייל למשפחה', r.ok && !T.calEvents.old1 &&
      T.mails.some(m => m.key === 'WEWORK_CANCELED' && m.emails[0] === 'fam12@x.il' && /מנהל/.test(m.vars['מי'])));
   T.db['weworkBookings/WW-20260927-bbbb'] = { id: 'WW-20260927-bbbb', date: '2026-09-27', from: 9, to: 11, seat: 'desk', familyId: '99', uid: 'uid-x', status: 'active' };
   r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'book', bookingId: 'WW-20260927-bbbb' }));
@@ -621,7 +621,8 @@ section('9. תיקוני צוות אדום');
   try { T.sb.wwCalendar_(); } catch (e) { threw = true; }
   ok('🔴 יומן שלא נמצא — שגיאה, לא יומן חדש בשקט', threw && T.props.WEWORK_CALENDAR_ID === 'cal1');
   const b = call(T, 'weworkBook_', Object.assign(ME('12'), { date: '2026-09-26', from: 10, hours: 2 }));
-  ok('השריון עדיין נשמר גם כשהיומן לא זמין (השעתי ישלים)', b.ok, b.error);
+  ok('השריון נשמר גם כשהיומן לא קיים (לא תלוי בו יותר)', b.ok, b.error);
+  ok('השעתי לא מריץ יותר השלמת יומן', !/wwCalendarReconcile_\(ss\);/.test(DOOR.slice(DOOR.indexOf('function doorHourly_'))));
 }
 {
   const T = makeSandbox({ props: { DOOR_MODE: 'live', DOOR_GYM_ON: '', NUKI_API_TOKEN: 'x'.repeat(40), NUKI_SMARTLOCK_ID: '123456' } });

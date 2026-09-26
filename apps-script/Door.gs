@@ -194,9 +194,8 @@ function doorWritePublic_() {
 
 /** להריץ פעם אחת מהעורך (לא חובה — השעתי עושה אותו דבר לבד). */
 function setupWeworkModule() {
-  var cal = wwCalendar_();
   var docs = doorEnsureDocs_();
-  var msg = 'WeWork: יומן ' + (cal ? cal.getId() : 'לא נוצר') + ' | הגדרות ' + docs.config + ' | דלת ' + docs.public +
+  var msg = 'WeWork: הגדרות ' + docs.config + ' | דלת ' + docs.public +
             ' | מצב ' + doorMode_();
   Logger.log(msg);
   return msg;
@@ -338,10 +337,9 @@ function weworkBook_(ss, body) {
     b.schema = 1;
     b.updatedAt = new Date();
 
-    /* יומן — אם נכשל, השריון עדיין תקף. השעתי ישלים את האירוע. */
-    try { b.calEventId = wwCreateEvent_(b, perm.family); } catch (e) { Logger.log('weworkBook_ calendar: ' + e); }
-    try { fsSet_(fsDocPath_(FS_WW_BOOK, b.id), b); }
-    catch (e) { wwDeleteEvent_(b.calEventId); throw e; }   /* בלי שריון — בלי אירוע יתום */
+    /* 26.9 (יועד): בלי יומן גוגל — Firestore הוא הלו"ז היחיד. calEventId נשאר
+       ריק; אירועים ישנים (לפני 26.9) עדיין נמחקים בביטול. */
+    fsSet_(fsDocPath_(FS_WW_BOOK, b.id), b);
     list.push(b);
     /* השריון כבר נשמר — כשל כאן לא יחזיר "נכשל" (זה היה מוביל לשריון כפול).
        הכתיבה הבאה או השעתי בונים את היום מחדש. */
@@ -899,9 +897,9 @@ function doorLogPurge_() {
 
 /** שלב בשעתי (hourlyJobsRun_). */
 function doorHourly_(ss) {
-  var out = { ensure: null, cal: null, health: null, gym: null, log: null };
+  var out = { ensure: null, health: null, gym: null, log: null };
   out.ensure = doorEnsureDocs_();
-  out.cal = wwCalendarReconcile_(ss);
+  /* 26.9 — בלי יומן גוגל ל-WeWork (הכרעת יועד). wwCalendarReconcile_ לא רץ יותר. */
   out.health = doorHealth_(ss);
   out.purged = doorLogPurge_();
   /* המכון ב-Firestore (GymFirestore.gs) — רשת ביטחון לעריכה ידנית בגיליון. */
@@ -1150,11 +1148,12 @@ function doorLogExternal_(body) {
  *  weworkAfterExternal_ — 26.9: מה שנשאר אחרי שריון/ביטול ב-Worker
  * ----------------------------------------------------------------------------
  *  ה-Worker (cloudflare/door-worker.js) כותב את השריון ל-Firestore ועונה
- *  לתושב מיד. כאן, ברקע: אירוע ביומן הגוגל, מספר המשבצת (שם פרטי אצל
- *  המנהל), ומייל האישור/הביטול. אותן הודעות כמו weworkBook_/weworkCancel_.
+ *  לתושב מיד. כאן, ברקע: מספר המשבצת (שם פרטי אצל המנהל) ומייל
+ *  האישור/הביטול. אותן הודעות כמו weworkBook_/weworkCancel_.
+ *  (26.9 — אין יותר יומן גוגל ל-WeWork; בביטול נמחק רק אירוע ישן אם יש.)
  *  🔐 לא סומכים על ה-Worker: doorExternalWho_ + בעלות על השריון.
  *  חזרה כפולה של אותה בקשה ⇒ לא נשלח מייל פעמיים (CacheService, 6 שעות).
- *  אם הקריאה הזו אבדה — השעתי (wwCalendarReconcile_) משלים את היומן.
+ *  אם הקריאה הזו אבדה — השריון תקף; חסרים רק המייל ושם פרטי אצל המנהל.
  * ========================================================================== */
 function weworkAfterExternal_(body) {
   var w = doorExternalWho_(body);
@@ -1175,13 +1174,7 @@ function weworkAfterExternal_(body) {
   if (op === 'book') {
     if (!mine || b.uid !== w.uid || b.status !== 'active') return { ok: false, error: 'not yours' };
     cache.put(ck, '1', 21600);
-    var patch = { slot: Number(perm.slot) || 0, updatedAt: new Date() };
-    if (!b.calEventId) { try { patch.calEventId = wwCreateEvent_(b, perm.family); } catch (e) { Logger.log('weworkAfterExternal_ cal: ' + e); } }
-    fsMerge_(fsDocPath_(FS_WW_BOOK, id), patch);
-    /* בוטל בינתיים (ביטול מהיר מאוד)? לא משאירים אירוע יתום. */
-    if (patch.calEventId) {
-      try { var again = fsGet_(fsDocPath_(FS_WW_BOOK, id)); if (again && again.status !== 'active') wwDeleteEvent_(patch.calEventId); } catch (e) { }
-    }
+    fsMerge_(fsDocPath_(FS_WW_BOOK, id), { slot: Number(perm.slot) || 0, updatedAt: new Date() });
     try {
       sendResidentTemplate_(ss, 'WEWORK_BOOKED', w.email ? [w.email] : [], {
         'שם': perm.firstName || perm.family || 'תושב',
