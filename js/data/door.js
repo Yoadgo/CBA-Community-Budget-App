@@ -2,7 +2,8 @@
  *  door.js — שכבת הנתונים של הדלת (Nuki) ושל WeWork   (25.9.2026)
  * ----------------------------------------------------------------------------
  *  קריאה: ישירות מ-Firestore (CBA.fb) — מהיר, בלי Apps Script.
- *  כתיבה: **רק** דרך Apps Script (Door.gs). הכללים חוסמים כל כתיבה מהדפדפן.
+ *  כתיבה: לעולם לא מהדפדפן (הכללים חוסמים). שריון/ביטול/פתיחה — קודם
+ *  Cloudflare Worker (מהיר), ואם אינו זמין — Apps Script (Door.gs).
  *
  *  ⚠️ כל עטיפות CBA.fb הן callback עם (err, data) — לא Promise.
  *  ⚠️ CBA.sheets.postRead מחזיר cb(res) עם res.ok.
@@ -166,7 +167,8 @@ CBA.door = (function () {
   var WORKER_URL = "https://cba-door.gizbar30.workers.dev/";
   function viaWorker(payload, cb) {
     var sess = CBA.authSession || "";
-    var body = JSON.stringify({ reason: payload.reason, bookingId: payload.bookingId, idToken: payload.idToken,
+    var body = JSON.stringify(payload.op ? Object.assign({}, payload, { session: sess }) :
+                              { reason: payload.reason, bookingId: payload.bookingId, idToken: payload.idToken,
                                 familyId: payload.familyId, session: sess });
     var ctl = window.AbortController ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 12000);
@@ -194,6 +196,37 @@ CBA.door = (function () {
     });
   }
 
+  /* ⚡ 26.9 — שריון וביטול WeWork דרך ה-Worker (כתיבה בעסקה ל-Firestore, ~0.5ש').
+     המייל והיומן של גוגל יוצאים ברקע מ-Apps Script. בלי טוקן / NEED_SLOW ⇒
+     אותה פעולה ב-Apps Script כמו קודם. תשובה עניינית (תפוס, אין הרשאה) — סופית.
+     ⚠️ אין תשובה בכלל (רשת נפלה) בשריון: אולי הוא כבר נשמר. לפני שמנסים
+     ב-Apps Script בודקים אם שריון זהה של המשפחה נוצר ב-2 הדקות האחרונות —
+     אחרת לחיצה אחת הייתה יכולה לשריין פעמיים. */
+  function viaWorkerOr(op, fields, slowAction, cb) {
+    cb = cb || function () {};
+    var uid = CBA.fb && CBA.fb.uid && CBA.fb.uid();
+    if (!(uid && CBA.fb.idToken)) return post(slowAction, fields, cb);
+    var done = false;
+    var guard = setTimeout(function () { if (!done) { done = true; post(slowAction, fields, cb); } }, 1500);
+    CBA.fb.idToken(function (err, tok) {
+      if (done) return;
+      done = true; clearTimeout(guard);
+      if (err || !tok) return post(slowAction, fields, cb);
+      viaWorker(Object.assign({ op: op, idToken: tok }, fields), function (res) {
+        if (res && res.code !== "NEED_SLOW") return cb(res);
+        if (res || op !== "wwBook") return post(slowAction, fields, cb);
+        var t0 = Date.now() - 120000;
+        myBookings(function (e, list) {
+          var hit = (list || []).filter(function (b) {
+            return b.date === fields.date && b.from === Number(fields.from) && b.seat === fields.seat && (b.createdAtMs || 0) > t0;
+          })[0];
+          if (hit) return cb({ ok: true, booking: hit, via: "worker-recovered" });
+          post(slowAction, fields, cb);
+        });
+      });
+    });
+  }
+
   return {
     SEAT_LABEL: SEAT_LABEL, SEAT_SHORT: SEAT_SHORT, DAYS: DAYS, DEFAULTS: WW_DEFAULTS,
     myFamilyId: myFamilyId, can: can,
@@ -202,8 +235,8 @@ CBA.door = (function () {
     readPublic: readPublic, readConfig: readConfig, watchDay: watchDay, readDay: readDay,
     myBookings: myBookings, dayBookings: dayBookings, dayLog: dayLog,
     readState: readState, readGymNuki: readGymNuki,
-    book: function (p, cb) { post("weworkBook", p, cb); },
-    cancel: function (id, cb) { post("weworkCancel", { id: id }, cb); },
+    book: function (p, cb) { viaWorkerOr("wwBook", p, "weworkBook", cb); },
+    cancel: function (id, cb) { viaWorkerOr("wwCancel", { id: id }, "weworkCancel", cb); },
     open: openDoor,
     saveConfig: function (p, cb) { post("weworkSaveConfig", p, cb); },
     status: function (cb) { post("doorStatus", {}, cb); },

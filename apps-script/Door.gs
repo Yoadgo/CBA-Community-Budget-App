@@ -1092,13 +1092,13 @@ function doorOpenFast_(body) {
  *  🔐 לא סומכים על ה-Worker: מאמתים את המושב + טוקן Firebase של התושב עצמו,
  *     בדיוק כמו במסלול המהיר. בקשה מזויפת נכשלת כאן בלי לכתוב כלום.
  * ========================================================================== */
-function doorLogExternal_(body) {
+/** 26.9 — מי שלח בקשה מה-Worker: מושב Apps Script תקף + טוקן Firebase של
+ *  **אותו** אדם + members/{uid}. בלי שלושתם — לא עושים כלום. */
+function doorExternalWho_(body) {
   var sess = verifySession_(body.session);
   if (!sess) return { ok: false, error: 'no session' };
   var uid = String(body.uid || '');
   if (!body.idToken || !fsIdOk_(uid)) return { ok: false, error: 'no identity' };
-  var reason = String(body.reason || '');
-  if (['wework', 'gym', 'admin'].indexOf(reason) === -1) return { ok: false, error: 'bad reason' };
   var res = UrlFetchApp.fetchAll([
     { url: 'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FS_WEB_API_KEY,
       method: 'post', contentType: 'application/json',
@@ -1112,6 +1112,16 @@ function doorLogExternal_(body) {
   if (normalizeEmail_(who.email) !== normalizeEmail_(sess.e || sess.email || '')) return { ok: false, error: 'email' };
   if (res[1].getResponseCode() !== 200) return { ok: false, error: 'member' };
   var mem = fsUnfields_((JSON.parse(res[1].getContentText()).fields) || {});
+  return { ok: true, sess: sess, uid: uid, mem: mem, fid: String(mem.familyId || ''),
+           email: String(who.email || sess.e || sess.email || '') };
+}
+
+function doorLogExternal_(body) {
+  var w = doorExternalWho_(body);
+  if (!w.ok) return w;
+  var reason = String(body.reason || '');
+  if (['wework', 'gym', 'admin'].indexOf(reason) === -1) return { ok: false, error: 'bad reason' };
+  var sess = w.sess, uid = w.uid, mem = w.mem;
   var fid = String(mem.familyId || '');
   var result = ['ok', 'sim', 'fail'].indexOf(String(body.result)) !== -1 ? String(body.result) : 'ok';
   var err = String(body.error || '').replace(/[^\w\s:.-]/g, '').slice(0, 60);
@@ -1133,6 +1143,69 @@ function doorLogExternal_(body) {
   if (result === 'fail') {
     try { doorAlert_(SpreadsheetApp.getActiveSpreadsheet(), 'fail', 'פתיחת הדלת מהאפליקציה נכשלה: ' + err); } catch (e) { }
   }
+  return { ok: true };
+}
+
+/* ============================================================================
+ *  weworkAfterExternal_ — 26.9: מה שנשאר אחרי שריון/ביטול ב-Worker
+ * ----------------------------------------------------------------------------
+ *  ה-Worker (cloudflare/door-worker.js) כותב את השריון ל-Firestore ועונה
+ *  לתושב מיד. כאן, ברקע: אירוע ביומן הגוגל, מספר המשבצת (שם פרטי אצל
+ *  המנהל), ומייל האישור/הביטול. אותן הודעות כמו weworkBook_/weworkCancel_.
+ *  🔐 לא סומכים על ה-Worker: doorExternalWho_ + בעלות על השריון.
+ *  חזרה כפולה של אותה בקשה ⇒ לא נשלח מייל פעמיים (CacheService, 6 שעות).
+ *  אם הקריאה הזו אבדה — השעתי (wwCalendarReconcile_) משלים את היומן.
+ * ========================================================================== */
+function weworkAfterExternal_(body) {
+  var w = doorExternalWho_(body);
+  if (!w.ok) return w;
+  var id = String(body.bookingId || '');
+  if (!fsIdOk_(id) || id.indexOf('WW-') !== 0) return { ok: false, error: 'bad id' };
+  var op = body.op === 'cancel' ? 'cancel' : 'book';
+  var cache = CacheService.getScriptCache(), ck = 'wwx_' + op + '_' + id;
+  if (cache.get(ck)) return { ok: true, dup: true };
+  var b = fsGet_(fsDocPath_(FS_WW_BOOK, id));
+  if (!b) return { ok: false, error: 'not found' };
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var perms = w.mem.perms || [];
+  var isAdmin = perms.indexOf(PERM_SUPER) !== -1 || perms.indexOf(PERM_WEWORK) !== -1;
+  var mine = w.fid !== '' && String(b.familyId) === w.fid;
+  var perm = {}; try { perm = permissionsFor_(w.email) || {}; } catch (e) { }
+
+  if (op === 'book') {
+    if (!mine || b.uid !== w.uid || b.status !== 'active') return { ok: false, error: 'not yours' };
+    cache.put(ck, '1', 21600);
+    var patch = { slot: Number(perm.slot) || 0, updatedAt: new Date() };
+    if (!b.calEventId) { try { patch.calEventId = wwCreateEvent_(b, perm.family); } catch (e) { Logger.log('weworkAfterExternal_ cal: ' + e); } }
+    fsMerge_(fsDocPath_(FS_WW_BOOK, id), patch);
+    /* בוטל בינתיים (ביטול מהיר מאוד)? לא משאירים אירוע יתום. */
+    if (patch.calEventId) {
+      try { var again = fsGet_(fsDocPath_(FS_WW_BOOK, id)); if (again && again.status !== 'active') wwDeleteEvent_(patch.calEventId); } catch (e) { }
+    }
+    try {
+      sendResidentTemplate_(ss, 'WEWORK_BOOKED', w.email ? [w.email] : [], {
+        'שם': perm.firstName || perm.family || 'תושב',
+        'עמדה': WW_SEAT_LABEL[b.seat],
+        'תאריך': wwHebDate_(b.date),
+        'שעה': wwHH_(b.from) + '–' + wwHH_(b.to)
+      }, { familyId: b.familyId });
+    } catch (e) { Logger.log('WEWORK_BOOKED ext: ' + e); }
+    return { ok: true };
+  }
+
+  if (b.status !== 'canceled' || (!mine && !isAdmin)) return { ok: false, error: 'not canceled' };
+  cache.put(ck, '1', 21600);
+  wwDeleteEvent_(b.calEventId);
+  try {
+    var self = b.canceledBy === 'self';
+    sendResidentTemplate_(ss, 'WEWORK_CANCELED', self ? (w.email ? [w.email] : []) : emailsForFamilyId_(ss, b.familyId), {
+      'שם': 'תושב',
+      'עמדה': WW_SEAT_LABEL[b.seat] || '',
+      'תאריך': wwHebDate_(b.date),
+      'שעה': wwHH_(b.from) + '–' + wwHH_(b.to),
+      'מי': self ? 'לבקשתך' : 'על ידי מנהל ה-WeWork'
+    }, { familyId: b.familyId });
+  } catch (e) { Logger.log('WEWORK_CANCELED ext: ' + e); }
   return { ok: true };
 }
 

@@ -1651,6 +1651,8 @@ function doPostInner_(e) {
        אם חסרה זהות Firebase (NEED_SLOW) — ממשיכים למסלול הרגיל למטה. */
     /* 26.9 — רישום פתיחה שבוצעה ב-Cloudflare Worker (ברקע). ר' doorLogExternal_ ב-Door.gs. */
     if (body && body.action === 'doorLogExternal' && typeof doorLogExternal_ === 'function') return json_(doorLogExternal_(body));
+    /* 26.9 — אחרי שריון/ביטול WeWork ב-Worker: יומן גוגל + מייל (ברקע). ר' Door.gs. */
+    if (body && body.action === 'weworkAfterExternal' && typeof weworkAfterExternal_ === 'function') return json_(weworkAfterExternal_(body));
     if (body && body.action === 'doorOpen' && body.idToken && typeof doorOpenFast_ === 'function') {
       var fast = doorOpenFast_(body);
       if (!(fast && fast.code === 'NEED_SLOW')) return json_(fast);

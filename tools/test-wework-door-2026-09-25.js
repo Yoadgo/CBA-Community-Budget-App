@@ -362,7 +362,9 @@ section('5ג. פתיחה דרך Cloudflare Worker');
 {
   const W = R('cloudflare/door-worker.js'), DJ = R('js/data/door.js');
   ok('Worker: מאמת חתימת טוקן של גוגל מול הפרויקט', /securetoken@system\.gserviceaccount\.com/.test(W) && /body\.aud !== PROJECT/.test(W) && /crypto\.subtle\.verify/.test(W));
-  ok('Worker: קורא ל-Firestore בשם המשתמש (לא מפתח שירות)', /Authorization: 'Bearer ' \+ tok/.test(W) && !/private_key|serviceAccount/.test(W));
+  const openPart = W.slice(W.indexOf('/* ------------------------------------------------------ Firestore REST --- */'), W.indexOf('/* ============================================ WeWork'));
+  ok('Worker: פתיחת הדלת קוראת ל-Firestore בשם המשתמש (לא מפתח שירות)', /Authorization: 'Bearer ' \+ tok/.test(openPart) && !/saToken|FIREBASE_SA/.test(openPart));
+  ok('Worker: מפתח השירות רק מ-env.FIREBASE_SA (Secret), לא בקוד', /env\.FIREBASE_SA/.test(W) && !/BEGIN PRIVATE KEY[A-Za-z0-9+\/]/.test(W) && !/"private_key"\s*:/.test(W));
   ok('Worker: המפתח של Nuki רק מ-env (Secret), לא בקוד', /env\.NUKI_TOKEN/.test(W) && !/nk_|[A-Fa-f0-9]{60,}/.test(W));
   ok('Worker: אותן בדיקות זכאות (פעיל, לא חיצוני, familyId, מנוי/שריון/הרשאה)', /mem\.active !== true/.test(W) && /mem\.isExternal === true/.test(W) && /claimFid !== fid/.test(W) && /'סטטוס'/.test(W) && /ADMIN_PERMS/.test(W));
   ok('Worker: CORS רק לאתר של CBA', /ORIGINS = \['https:\/\/yoadgo\.github\.io'\]/.test(W));
@@ -421,6 +423,77 @@ section('5ד. מי נכנס (slot), סוג הפעולה, מסך המכון המ�
   ok('תפריט ⋯ שומר את אותם data-ga-* (הקישור לפעולות לא השתנה)', /<details class="ga-more">/.test(GA) && /data-ga-edit="/.test(GA) && /data-ga-delete="/.test(GA) && /data-ga-extend="/.test(GA));
 }
 
+
+/* ========================= 5ה. 26.9 — שריון/ביטול WeWork דרך ה-Worker --- */
+section('5ה. שריון WeWork מהיר (Cloudflare Worker + עסקה ב-Firestore)');
+(async () => {
+  const W = R('cloudflare/door-worker.js'), DJ = R('js/data/door.js'), GD = R('apps-script/Door.gs');
+  const tmp = path.join(require('os').tmpdir(), 'dw-' + process.pid + '.mjs');
+  fs.writeFileSync(tmp, W);
+  const M = await import('file://' + tmp);
+  const cfg = { viewFrom: 8, viewTo: 21, regularFrom: 7, regularTo: 22, desks: 3, lounge: 1, maxHours: 6, advanceDays: 14, perFamily: 2 };
+  const now = { day: '2026-09-26', min: 10 * 60 };
+  ok('בדיקה: שעה שעברה היום נדחית', !M.wwValidate({ date: '2026-09-26', from: 8, hours: 2, seat: 'desk' }, cfg, now).ok);
+  ok('בדיקה: יותר מ-maxHours נדחה', !M.wwValidate({ date: '2026-09-27', from: 8, hours: 7, seat: 'desk' }, cfg, now).ok);
+  ok('בדיקה: מעבר ל-advanceDays נדחה', !M.wwValidate({ date: '2026-10-11', from: 8, hours: 1, seat: 'desk' }, cfg, now).ok);
+  ok('בדיקה: שריון תקין עובר', M.wwValidate({ date: '2026-09-27', from: 8, hours: 2, seat: 'desk' }, cfg, now).ok);
+  const mk = (fid, from, to, seat) => ({ familyId: fid, from, to, seat: seat || 'desk', status: 'active' });
+  const full = [mk('1', 8, 10), mk('2', 8, 10), mk('3', 9, 11)];
+  const fb = M.wwFits({ from: 9, to: 10, seat: 'desk' }, full, cfg, '4');
+  ok('העמדה הרביעית נדחית עם השעה הבעייתית', !fb.ok && fb.hour === 9 && /09:00/.test(fb.error), fb.error);
+  ok('כורסה נספרת בנפרד', M.wwFits({ from: 9, to: 10, seat: 'lounge' }, full, cfg, '4').ok);
+  ok('מגבלת משפחה (perFamily=2)', !M.wwFits({ from: 12, to: 13, seat: 'desk' }, [mk('5', 12, 14), mk('5', 12, 13)], cfg, '5').ok);
+  const sl = M.wwSlots([mk('1', 8, 10), mk('2', 9, 10, 'lounge')]);
+  ok('מסמך היום: ספירה לפי שעה וסוג', sl['8'].desk === 1 && sl['9'].desk === 1 && sl['9'].lounge === 1 && !sl['10']);
+  /* אותם כללים כמו Door.gs — אם מישהו משנה רק צד אחד, הבדיקה תיפול. */
+  ['אפשר לשריין עד ', 'השריון חייב להסתיים עד חצות', 'אי אפשר לשריין לתאריך שעבר', 'החלון הזה כבר עבר',
+   'השריון כבר התחיל — אי אפשר לבטל אותו', 'שריונים באותן שעות', 'אין הרשאה לבטל שריון זה'].forEach(t =>
+    ok('זהה ל-Door.gs: "' + t + '"', W.indexOf(t) !== -1 && GD.indexOf(t) !== -1));
+  ok('עסקה: קוראים את מסמך היום + שריוני היום בתוך העסקה, וכותבים שניהם יחד', /beginTransaction/.test(W) && /saGet\(tok, 'weworkDays\/' \+ nb\.date, tx\)/.test(W) && /saDayBookings\(tok, nb\.date, tx\)/.test(W) && /:commit/.test(W));
+  ok('עסקה: התנגשות (409) ⇒ ניסיון חוזר', /c\.status === 409/.test(W) && /for \(let i = 0; i < 4; i\+\+\)/.test(W));
+  ok('שריון חדש לא דורס קיים (exists:false)', /currentDocument: \{ exists: false \}/.test(W));
+  ok('זהות מה-members של השרת, לא מהבקשה (familyId)', /familyId: m\.fid, uid: who\.uid/.test(W));
+  ok('ביטול: מנהל = "על" או "WeWork"', /indexOf\(SUPER\)/.test(W) && /indexOf\(PERM_WW\)/.test(W));
+  ok('מייל + יומן גוגל ברקע (waitUntil ⇒ weworkAfterExternal)', /ctx\.waitUntil\(fetch\(env\.APPS_SCRIPT_URL/.test(W) && /weworkAfterExternal/.test(W));
+  ok('תקלה פנימית ⇒ NEED_SLOW (הלקוח עובר ל-Apps Script)', /code: 'NEED_SLOW', error: 'השרת המהיר לא זמין'/.test(W));
+  ok('לקוח: book/cancel דרך ה-Worker עם נפילה ל-Apps Script', /viaWorkerOr\("wwBook", p, "weworkBook", cb\)/.test(DJ) && /viaWorkerOr\("wwCancel", \{ id: id \}, "weworkCancel", cb\)/.test(DJ));
+  ok('לקוח: רשת נפלה בשריון ⇒ בודקים שלא נשמר לפני ניסיון ב-Apps Script', /worker-recovered/.test(DJ) && /createdAtMs \|\| 0\) > t0/.test(DJ));
+  ok('Code.gs: weworkAfterExternal מנותב לפני השער (מאמת בעצמו)', /body\.action === 'weworkAfterExternal' && typeof weworkAfterExternal_ === 'function'/.test(GS));
+  fs.unlinkSync(tmp);
+
+  /* ---- Apps Script: השלמת היומן והמייל ---- */
+  const T = makeSandbox();
+  T.sb.verifySession_ = s => s === 'good' ? { e: 'me@x.il' } : null;
+  T.sb.SpreadsheetApp = { getActiveSpreadsheet: () => ({}) };
+  T.sb.FS_WEB_API_KEY = 'k'; T.sb.doorFsDocUrl_ = p => 'https://fs/' + p; T.sb.fsToken_ = () => 't';
+  T.sb.fsUnfields_ = f => { const o = {}; Object.keys(f).forEach(k => { const v = f[k]; o[k] = 'stringValue' in v ? v.stringValue : ('arrayValue' in v ? (v.arrayValue.values || []).map(x => x.stringValue) : v.booleanValue); }); return o; };
+  T.sb.permissionsFor_ = () => ({ firstName: 'יועד', family: 'גולן', slot: 2 });
+  let memPerms = [];
+  T.sb.UrlFetchApp.fetchAll = reqs => reqs.map(r => /accounts:lookup/.test(r.url)
+    ? { getResponseCode: () => 200, getContentText: () => JSON.stringify({ users: [{ localId: 'uid-me', email: 'me@x.il' }] }) }
+    : { getResponseCode: () => 200, getContentText: () => JSON.stringify({ fields: { familyId: { stringValue: '12' }, active: { booleanValue: true },
+        perms: { arrayValue: { values: memPerms.map(p => ({ stringValue: p })) } } } }) });
+  T.db['weworkBookings/WW-20260927-aaaa'] = { id: 'WW-20260927-aaaa', date: '2026-09-27', from: 9, to: 11, hours: 2, seat: 'desk', familyId: '12', uid: 'uid-me', status: 'active', calEventId: '', slot: 0 };
+  const base = { session: 'good', idToken: 'x', uid: 'uid-me', bookingId: 'WW-20260927-aaaa' };
+  let r = T.sb.weworkAfterExternal_(Object.assign({}, base, { session: 'bad', op: 'book' }));
+  ok('ברקע: בלי מושב — כלום', !r.ok && T.mails.length === 0);
+  r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'book' }));
+  const bk = T.db['weworkBookings/WW-20260927-aaaa'];
+  ok('ברקע: אירוע ביומן + slot + מייל אישור', r.ok && bk.calEventId && bk.slot === 2 && T.mails.some(m => m.key === 'WEWORK_BOOKED' && m.emails[0] === 'me@x.il' && m.vars['שם'] === 'יועד'), JSON.stringify(bk));
+  const nMail = T.mails.length, nEv = Object.keys(T.calEvents).length;
+  r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'book' }));
+  ok('ברקע: אותה בקשה פעמיים ⇒ מייל ואירוע אחד בלבד', r.dup && T.mails.length === nMail && Object.keys(T.calEvents).length === nEv);
+  r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'cancel' }));
+  ok('ברקע: "ביטול" לשריון שעדיין פעיל — נדחה', !r.ok && Object.keys(T.calEvents).length === nEv);
+  bk.status = 'canceled'; bk.canceledBy = 'admin';
+  r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'cancel' }));
+  ok('ברקע: ביטול ע"י מנהל ⇒ האירוע נמחק + מייל למשפחה', r.ok && Object.keys(T.calEvents).length === nEv - 1 &&
+     T.mails.some(m => m.key === 'WEWORK_CANCELED' && m.emails[0] === 'fam12@x.il' && /מנהל/.test(m.vars['מי'])));
+  T.db['weworkBookings/WW-20260927-bbbb'] = { id: 'WW-20260927-bbbb', date: '2026-09-27', from: 9, to: 11, seat: 'desk', familyId: '99', uid: 'uid-x', status: 'active' };
+  r = T.sb.weworkAfterExternal_(Object.assign({}, base, { op: 'book', bookingId: 'WW-20260927-bbbb' }));
+  ok('ברקע: שריון של משפחה אחרת — לא נוגעים', !r.ok && !T.db['weworkBookings/WW-20260927-bbbb'].calEventId);
+})().then(rest);
+function rest() {
 /* ================================================= 6. בריאות + התראות --- */
 section('6. בריאות המנעול והתראות');
 {
@@ -806,3 +879,4 @@ section('12. מכון הכושר ב-Firestore (GymFirestore.gs + gymFs.js)');
 
 console.log('\n' + (fail ? '✗' : '✓') + '  ' + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);
+}
