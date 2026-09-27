@@ -2065,8 +2065,8 @@ CBA.screens = CBA.screens || {};
           w: fw / MAP_WORLD_W * 100, h: fh / MAP_WORLD_H * 100 });
       }
       if (o.duo) {
-        put(o.l,  o.x - ux * o.w / 4, o.y - uy * o.w / 4, o.w / 2, o.h);
-        put(o.l2, o.x + ux * o.w / 4, o.y + uy * o.w / 4, o.w / 2, o.h);
+        put(o.l,  o.x + ux * o.w / 4, o.y + uy * o.w / 4, o.w / 2, o.h);
+        put(o.l2, o.x - ux * o.w / 4, o.y - uy * o.w / 4, o.w / 2, o.h);
       } else {
         put(o.l, o.x, o.y, o.w, o.h);
       }
