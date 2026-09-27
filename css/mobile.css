@@ -179,9 +179,14 @@
      בבלוק אחד — כדי שאפשר יהיה להחזיר את הישן במחיקת הבלוק הזה בלבד.
      ========================================================================== */
   .app-nav.app-nav--bottom {
-    inset-inline-start: 12px; inset-inline-end: 74px; max-width: none;
+    /* 27.9.26 סבב 2 (יועד: "לצופף מעט את הסמלילים ולהגדיל את הרווח מהחיפוש"):
+       הבר ברוחב התוכן — כל יעד 62px — ולא מתוח עד כפתור החיפוש. */
+    inset-inline-start: 12px; inset-inline-end: auto; width: auto; max-width: calc(100% - 100px);
+    justify-content: flex-start;
     padding: 5px;
-    overflow: visible; touch-action: none;
+    overflow: visible;
+    /* pan-y: גלילה אנכית שמתחילה על הבר ממשיכה לגלול את הדף (ובוטלת כגרירה) */
+    touch-action: pan-y;
     background: linear-gradient(180deg, rgba(255,255,255,.40), rgba(255,255,255,.22));
     backdrop-filter: blur(10px) saturate(190%) brightness(1.08);
     -webkit-backdrop-filter: blur(10px) saturate(190%) brightness(1.08);
@@ -192,6 +197,10 @@
                 padding .55s cubic-bezier(.34,1.45,.5,1), transform .3s cubic-bezier(.34,1.45,.5,1);
   }
   .app-nav.app-nav--bottom.is-pressed { transform: scale(1.035); }
+  .app-nav--bottom > .app-nav__tab,
+  .app-nav--bottom > .app-nav__group { flex: 0 0 62px; width: 62px; transition: flex-basis .55s cubic-bezier(.34,1.45,.5,1), width .55s cubic-bezier(.34,1.45,.5,1); }
+  body.nav-mini .app-nav--bottom > .app-nav__tab,
+  body.nav-mini .app-nav--bottom > .app-nav__group { flex-basis: 40px; width: 40px; }
   .app-nav--bottom .app-nav__tab {
     font-size: 10.5px; gap: 2px; padding: 6px 2px 5px; border-radius: 999px;
     color: #1F2937; text-shadow: 0 0 3px rgba(255,255,255,.95);
@@ -240,12 +249,12 @@
   body:not([data-nav-single="1"]) .app-controls .search-btn { display: none; }
 
   /* --- כיווץ בגלילה: קטן בהרבה, בלי תוויות --- */
-  body.nav-mini .app-nav.app-nav--bottom { inset-inline-start: 22%; inset-inline-end: calc(22% + 48px); padding: 3px; }
+  body.nav-mini .app-nav.app-nav--bottom { inset-inline-start: 18%; padding: 3px; }
   body.nav-mini .app-nav--bottom .app-nav__tab { font-size: 0; padding: 5px 2px; gap: 0; }
   body.nav-mini .app-nav--bottom .app-nav__ico svg { width: 19px; height: 19px; }
   body.nav-mini .app-nav.app-nav--bottom .nav-indicator { top: 3px; bottom: 3px; }
   body.nav-mini .app-nav--bottom .nav-badge { top: -4px; font-size: 9.5px; }
-  body.nav-mini .nav-search-fab { width: 40px; height: 40px; inset-inline-end: 22%; }
+  body.nav-mini .nav-search-fab { width: 40px; height: 40px; inset-inline-end: 18%; }
   body.nav-mini .nav-search-fab svg { width: 17px; height: 17px; }
 
   /* ---------- בועת כמוסות לקבוצת ניווט (27.9.26, במקום הגיליון התחתון) ---------- */

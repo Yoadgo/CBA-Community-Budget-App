@@ -33,6 +33,9 @@ ok('🔴 גרירה: הקליק הטבעי נבלע (אין ניווט כפול)
 ok('המחוון עוקב אחרי is-hot', /querySelector\("\.app-nav__tab\.is-hot"\)/.test(MOT));
 ok('חיפוש: כפתור צף, והכותרת מוסתרת רק כשיש בר', /nav-search-fab/.test(MJS) && /body:not\(\[data-nav-single="1"\]\) \.app-controls \.search-btn \{ display: none; \}/.test(MCSS));
 ok('🔴 בלי בר (יעד יחיד) — גם בלי כפתור חיפוש צף', /body\[data-nav-single="1"\] \.nav-search-fab \{ display: none; \}/.test(MCSS));
+ok('🔴 דיווח 32: שחרור מחוץ לבר לא בוחר, ותנועה אנכית מבטלת גרירה', /if \(e\.clientY < br\.top - 12 \|\| e\.clientY > br\.bottom \+ 12\) commit = false;/.test(MJS) && /if \(dy > 18 && dy > dx\) \{ endPress\(false\); return; \}/.test(MJS) && /touch-action: pan-y;/.test(MCSS));
+ok('המחוון עובר לקבוצה שנפתחה (is-menu) וחוזר בסגירה', /gbtn\.classList\.add\("is-menu"\)/.test(APP) && /classList\.remove\("is-menu"\)/.test(APP) && /\.app-nav__tab\.is-menu/.test(MOT));
+ok('הבועה נסגרת בגלילה', /bd\.addEventListener\("touchmove", closeNavSheet/.test(APP) && /CBA\.closeNavSheet\(\)/.test(MJS));
 const vs = (IDX.match(/\?v=([0-9a-z]+)/g) || []).map(x => x.slice(3));
 const swv = (SW.match(/var VERSION = "([^"]+)"/) || [])[1];
 ok('גרסה אחידה ב-index.html וב-service-worker', vs.length > 50 && vs.every(v => v === swv), swv);

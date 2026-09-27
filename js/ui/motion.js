@@ -57,6 +57,9 @@
          עוקב אחרי הכפתור שמתחת לאצבע, לפני שהוא באמת נבחר. */
       var hot = nav.querySelector(".app-nav__tab.is-hot");
       if (hot) return hot;
+      /* ...ובזמן שבועת קבוצה פתוחה — המחוון יושב על כפתור הקבוצה (27.9.26) */
+      var menu = nav.querySelector(".app-nav__tab.is-menu");
+      if (menu) return menu;
       var active = nav.querySelector(".app-nav__tab.is-active");
       if (!active) return null;
       var closedGroup = active.closest(".app-nav__group:not(.is-open)");

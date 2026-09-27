@@ -99,8 +99,16 @@
     press.hot = t;
     if (t) t.classList.add("is-hot");
   }
-  function endPress(commit) {
+  function endPress(commit, e) {
     if (!press) return;
+    /* 🔴 27.9.26, דיווח 32 ("בגלילה על מסך שירותים זה עובר ללוח אירועים"):
+       גלילה שהתחילה על הבר ויצאה ממנו נחשבה לגרירה, והשחרור — מעל התוכן —
+       "בחר" את הכפתור האחרון שעבר מתחת לאצבע. עכשיו בחירה בגרירה רק אם
+       האצבע שוחררה על הבר עצמו. */
+    if (commit && e && press.hot !== press.down) {
+      var br = nav.getBoundingClientRect();
+      if (e.clientY < br.top - 12 || e.clientY > br.bottom + 12) commit = false;
+    }
     var p = press; press = null;
     nav.classList.remove("is-pressed");
     if (p.hot) p.hot.classList.remove("is-hot");
@@ -120,19 +128,22 @@
       if (document.body.classList.contains("nav-mini")) setMini(false);
       var t = tabAt(e.clientX, e.clientY);
       if (!t) return;
-      press = { down: t, hot: null };
+      press = { down: t, hot: null, x: e.clientX, y: e.clientY };
       nav.classList.add("is-pressed");
       setHot(t);
     });
     nav.addEventListener("pointermove", function (e) {
       if (!press) return;
+      /* תנועה אנכית בעיקרה = ניסיון גלילה, לא גרירה על הבר — מבטלים */
+      var dx = Math.abs(e.clientX - press.x), dy = Math.abs(e.clientY - press.y);
+      if (dy > 18 && dy > dx) { endPress(false); return; }
       var t = tabAt(e.clientX, e.clientY);
       if (t) setHot(t);
     });
     nav.addEventListener("click", function (e) {
       if (!ownClick && swallowUntil && Date.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); }
     }, true);
-    nav.addEventListener("pointerup", function () { endPress(true); });
+    nav.addEventListener("pointerup", function (e) { endPress(true, e); });
     nav.addEventListener("pointercancel", function () { endPress(false); });
     nav.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") endPress(false); });
   }
@@ -141,6 +152,10 @@
   window.CBA.measureHeader = setHeaderVar;
 
   window.addEventListener("scroll", onScroll, { passive: true });
+  /* בועת קבוצה פתוחה נסגרת בכל גלילה של הדף (27.9.26) */
+  window.addEventListener("scroll", function () {
+    if (document.getElementById("nav-sheet") && window.CBA && CBA.closeNavSheet) CBA.closeNavSheet();
+  }, { passive: true });
   window.addEventListener("resize", placeNav);
   window.addEventListener("load", setHeaderVar);
   if (mq.addEventListener) mq.addEventListener("change", placeNav);
