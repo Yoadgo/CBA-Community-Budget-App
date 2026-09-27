@@ -2818,3 +2818,100 @@ button.is-busy,
 @media (min-width: 721px) {
   body { zoom: 1.05; }
 }
+
+/* ==========================================================================
+   "המלצות השיכון" — resRecommendations.js   (27.9.26)
+   קבוצת קלאסים rr-* חדשה; משתמשת מחדש בכל מה שכבר קיים אצל "שירותים"
+   (svc-search, svc-card__reacts, drawer*, badge, field-input, btn-*) —
+   כאן רק מה שספציפי למסך הזה: צ'יפים, קוביות קבוצה, שורות/טבלה, פילות.
+   ========================================================================== */
+.rr-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.rr-toolbar .svc-search { flex: 1; max-width: 340px; }
+
+.rr-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.rr-chip {
+  padding: 6px 13px; border-radius: 999px; border: 1px solid var(--hairline);
+  background: var(--surface); font-size: 12.5px; cursor: pointer; color: var(--text-soft);
+  transition: border-color var(--t), background var(--t), color var(--t);
+}
+.rr-chip:hover { border-color: var(--action); }
+.rr-chip.is-on { background: var(--action); color: #fff; border-color: var(--action); }
+
+.rr-cat-head { font-size: 15px; font-weight: 800; margin: 20px 0 10px; }
+.rr-cat-head:first-child { margin-top: 0; }
+.rr-empty-cat { font-size: 12.5px; color: var(--text-muted); padding: 6px 2px 18px; }
+
+.rr-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 6px; }
+.rr-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 16px 10px; border-radius: 14px; border: 1px solid var(--hairline);
+  background: var(--surface); cursor: pointer; text-align: center;
+  transition: border-color var(--t), transform var(--t);
+}
+.rr-tile:hover { border-color: var(--action); transform: translateY(-1px); }
+.rr-tile__ico { font-size: 26px; line-height: 1; }
+.rr-tile__name { font-size: 13px; font-weight: 700; color: var(--text); }
+.rr-tile__count { font-size: 11px; color: var(--text-muted); }
+
+.rr-group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.rr-group-title { font-size: 17px; font-weight: 800; color: var(--text); }
+
+.rr-rows { display: flex; flex-direction: column; gap: 8px; }
+.rr-row {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border-radius: 14px; border: 1px solid var(--hairline);
+  background: var(--surface); cursor: pointer; transition: border-color var(--t);
+}
+.rr-row:hover { border-color: var(--action); }
+.rr-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.rr-row__name { font-weight: 700; font-size: 14px; color: var(--text); }
+.rr-row__meta { display: flex; gap: 10px; font-size: 12px; color: var(--text-soft); flex-wrap: wrap; }
+.rr-row__pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.rr-row__stale {
+  font-size: 11.5px; color: var(--badge-warn); background: var(--warn-soft);
+  display: inline-block; padding: 3px 8px; border-radius: 8px; width: fit-content;
+}
+.rr-row__side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.rr-flag-btn { white-space: nowrap; }
+
+.rr-pill {
+  display: inline-flex; align-items: center; gap: 3px; font-size: 11px;
+  font-weight: 700; padding: 3px 8px; border-radius: 999px; line-height: 1.4;
+}
+.rr-drawer-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+.rr-label-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+.rr-label-opt { display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer; color: var(--text-soft); }
+
+/* 27.9.26 — סמלילי יצירת קשר (מוקד טלפוני / מוקד וואטסאפ / קבוצת וואטסאפ
+   שיכון) + שורת "אחראי מטעם הוועד", ר' resRecommendations.js. אותו מרכיב
+   גיאומטרי כמו .svc-icb הקיים (ריבוע מעוגל, לא עיגול) — רק עם צבע-רקע
+   קבוע לפי סוג כדי שאפשר יהיה להבחין בלי לרחף (הכרטיס עצמו הוא תצוגה,
+   לא רק תפריט פעולות). ⚠️ הבחנה גדולה בכוונה בין וואטסאפ-מוקד (ירוק)
+   לוואטסאפ-קבוצה (סגול-אינדיגו) — לא רק צורת אייקון שונה. */
+.rr-contact { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.rr-cbtn {
+  width: 30px; height: 30px; border-radius: 9px; border: 1px solid transparent;
+  cursor: pointer; display: grid; place-items: center; flex: none;
+  text-decoration: none; transition: filter var(--t);
+}
+.rr-cbtn:hover { filter: brightness(0.94); }
+.rr-cbtn--phone { color: #1D4ED8; background: #EFF6FF; }
+.rr-cbtn--wa { color: #047857; background: #ECFDF5; }
+.rr-cbtn--wag { color: #4338CA; background: #EEF2FF; }
+
+.rr-owner { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-soft); margin-top: 2px; }
+.rr-owner svg { flex: none; color: var(--text-muted); }
+.rr-owner b { color: var(--text); }
+
+/* דסקטופ — שורת ה"טבלה" מתפרסת לעמודות במקום להיערם, כדי שתיקרא כמו
+   טבלה קומפקטית בלי לבנות רכיב <table> נפרד (אותה תבנית בדיוק בכל רוחב,
+   ר' ההערה בדו"ח המסירה על החלטה זו). */
+@media (min-width: 721px) {
+  .rr-tiles { grid-template-columns: repeat(4, 1fr); }
+  .rr-row { align-items: center; }
+  .rr-row__main { flex-direction: row; align-items: center; gap: 18px; }
+  .rr-row__name { flex: 0 0 210px; }
+  .rr-row__meta { flex: 0 0 170px; flex-direction: column; gap: 2px; }
+  .rr-row__pills { flex: 1; }
+}

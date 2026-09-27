@@ -982,6 +982,46 @@
     });
     return out;
   }
+  /* 27.9.26 — API ציבורי ל"קישוריות שירותים-ועד" (resRecommendations.js,
+     יועד: "שהעדכונים יהיו עצמיים ולא שאם הועד משתנה אני צריך לעדכן ב-3
+     מקומות"). רק פריטים (kind:"item", למשל "מועדון ילדים") — לא תפקידים
+     עצמם — כי אלה מה שכרטיס שירות/המלצה מקשר אליו. אחרי normalizeParents
+     (רץ בכל load/save) parent של פריט מצביע תמיד ישירות על תפקיד, אז אין
+     צורך לטפס בעץ כאן. הקריאה חיה — נגזרת מ-S בזמן הקריאה, לעולם לא
+     מועתקת; קורא אחר (resRecommendations) שומר רק את מזהה הפריט. חובה
+     לקרוא load() לפני שקוראים לפונקציות האלה (כמו rolesFor למעלה). */
+  function itemsForYear(year) {
+    if (!S.loaded) return [];
+    year = year || curYear();
+    var byId = {}; S.roles.forEach(function (r) { byId[r.id] = r; });
+    return S.roles.filter(function (r) { return r.year === year && kindOf(r) === "item"; })
+      .map(function (r) {
+        var role = r.parent && byId[r.parent];
+        var names = role ? role.holders.map(who).filter(function (w) { return w.kind !== "gone"; }).map(function (w) { return w.name; }) : [];
+        return { id: r.id, title: r.title, roleTitle: role ? role.title : "", ownerNames: names };
+      });
+  }
+  function itemOwnerText(itemId, year) {
+    if (!itemId) return "";
+    var it = itemsForYear(year).filter(function (x) { return x.id === itemId; })[0];
+    return it && it.ownerNames.length ? it.ownerNames.join(", ") : "";
+  }
+
+  /* בורר <option> משותף לכל מסך שרוצה לקשר משהו לפריט בעץ הוועד (טופס
+     כרטיס המלצה, עורך שירות רשמי) — כדי שלא ייכתב פעמיים באותה תבנית
+     בדיוק. ריק אם עדיין לא נטען העץ (itemsForYear כבר מטפלת בזה). */
+  function itemOptionsHtml(selectedId, emptyLabel) {
+    var items = itemsForYear();
+    var html = '<option value="">' + esc(emptyLabel || "— ללא —") + '</option>';
+    items.forEach(function (it) {
+      var label = it.title + (it.ownerNames.length ? " — " + it.ownerNames.join(", ") : " — טרם שובץ");
+      html += '<option value="' + esc(it.id) + '"' + (selectedId === it.id ? " selected" : "") + ">" + esc(label) + "</option>";
+    });
+    return html;
+  }
+
   CBA.committeeTree = { load: load, rolesFor: rolesFor, slotOfKey: slotOfKey,
+                        itemsForYear: itemsForYear, itemOwnerText: itemOwnerText,
+                        itemOptionsHtml: itemOptionsHtml,
                         _state: S, _view: V, _index: index, _layoutFor: layoutFor, _applyDoc: applyDoc };
 })();

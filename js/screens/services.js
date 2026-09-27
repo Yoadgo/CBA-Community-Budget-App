@@ -77,6 +77,9 @@ CBA.serviceUtils = (function () {
            שהוצגה למשתמש עד היום. */
         updated: String(r["עודכן"] || "").trim().slice(0, 10),
         updatedBy: String(r['עודכן ע"י'] || "").trim(),
+        /* 27.9.26 — קישור לפריט בעץ הוועד (ר' ההערה ב-SERVICES_HEADERS
+           ב-Code.gs). מזהה בלבד — לעולם לא שם. */
+        committeeItemId: String(r["פריט ועד"] || "").trim(),
         sections: []
       };
       byId[svc.id] = svc;
@@ -118,7 +121,8 @@ CBA.serviceUtils = (function () {
         "מזהה קטגוריה": s.categoryId || "vendor",
         "ספק": s.provider, "טלפון ראשי": s.phone, "ערוץ טלפון": s.phoneChannel || CH_PHONE,
         "קישור למסמך": s.doc, "סדר": i + 1, "פעיל": s.active ? "כן" : "לא",
-        "עודכן": s.updated || "", 'עודכן ע"י': s.updatedBy || ""
+        "עודכן": s.updated || "", 'עודכן ע"י': s.updatedBy || "",
+        "פריט ועד": s.committeeItemId || ""
       });
       (s.sections || []).forEach(function (sec, j) {
         secRows.push({
@@ -694,8 +698,11 @@ CBA.screens.resServices = {
     var body = container.querySelector("#svc-body");
 
     function paint() {
-      // כל תושב מחובר יכול להוסיף המלצה — לא רק מנהל-על (ר' האפיון).
-      var canRecommend = !!(window.CBA && CBA.user && CBA.user.familyId);
+      // Resident recommendations moved to the separate "resRecommendations" screen
+      // (js/screens/resRecommendations.js, 2026-09-27). Adding/editing a recommendation
+      // now happens there, not here. This old button + flow is disabled, not deleted,
+      // so it can be restored easily if needed.
+      var canRecommend = false;
       body.innerHTML =
         '<div class="svc-toolbar">' +
           '<div class="svc-search">' +
@@ -820,16 +827,15 @@ CBA.screens.resServices = {
       svcState.list = CBA.serviceUtils.build(res.services, res.sections);
       svcState.categories = CBA.serviceUtils.buildCategories(res.categories);
       svcState.recCatId = svcRecommendCategoryId();
-      // כרטיסי המלצות תושבים (WAVE 3) — נטענים בנפרד מ-Firestore ומתמזגים
-      // לתוך אותה רשימה, ככה שהם עוברים באותו קיבוץ-לפי-קטגוריה, אותו
-      // חיפוש ואותה מגירה כמו כרטיסי מנהל. אם הטעינה נכשלת (Firestore לא
-      // זמין) — לא נופלים בשקט: מסך השירותים הרשמי עדיין עולה, רק בלי
-      // ההמלצות באותו רגע (בדיוק כמו תגובות גינון).
-      svcLoadResidentExtras(function () {
-        svcLoadEngagementSummary(function () {
-          svcState.loaded = true;
-          paint();
-        });
+      // כרטיסי המלצות תושבים (WAVE 3, עד 27.9.26) — קודם נטענו בנפרד
+      // מ-Firestore והתמזגו לתוך הרשימה כאן. 27.9.26: המלצות התושבים
+      // עברו למסך עצמאי (resRecommendations.js), ולכן המיזוג כאן בוטל —
+      // מסך זה (resServices) חוזר להיות שירותים רשמיים (Sheets) בלבד.
+      // svcLoadResidentExtras/svcResidentToService/svcRecommendCategoryId
+      // לא נמחקו (עדיין בשימוש/נשמרים לצורך הפיכות), רק לא נקראים כאן יותר.
+      svcLoadEngagementSummary(function () {
+        svcState.loaded = true;
+        paint();
       });
     });
   }
@@ -1362,6 +1368,17 @@ function svcPhoneIcon() {
 }
 function svcWaIcon() {
   return '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm5.6 14.2c-.2.7-1.4 1.3-2 1.4-.5.1-1.1.1-1.8-.1-.4-.1-1-.3-1.7-.6-3-1.3-4.9-4.3-5-4.5-.2-.2-1.2-1.6-1.2-3s.8-2.1 1-2.4c.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5l.9 2c.1.2.1.4 0 .5l-.3.5-.4.4c-.1.1-.3.3-.1.6.1.3.6 1.1 1.4 1.8 1 .9 1.8 1.1 2 1.2.3.1.4.1.6-.1l.8-1c.2-.2.4-.2.6-.1l2 1c.3.1.4.2.5.3v1.4z"/></svg>';
+}
+
+/* קבוצת וואטסאפ (לא מוקד אחד-על-אחד) — 27.9.26, לבקשת יועד: "סמליל דומה
+   אבל מעט שונה" משני קודמיו. שתי בועות חופפות (קבוצה) במקום בועה אחת
+   (svcWaIcon), אותה שפה מלאה (fill=currentColor) כדי שיישב טבעי לצד
+   svcPhoneIcon/svcWaIcon בכל מקום שמשתמש בהם. */
+function svcWaGroupIcon() {
+  return '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">' +
+    '<path opacity=".45" d="M9 3h9a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-1v3l-3.5-3H9a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z"/>' +
+    '<path d="M6 8H4a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h1v2.5L10.8 20H12a3 3 0 0 0 3-3v-1H9a5 5 0 0 1-5-5V8Z"/>' +
+    "</svg>";
 }
 
 function svcPlusIcon() {

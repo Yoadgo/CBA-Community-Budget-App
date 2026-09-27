@@ -93,7 +93,15 @@ var PERM_CULTURE   = 'תרבות';
  * ⚠️ חייב להיות זהה ל-PERM.WEWORK ב-app.js, לרשימה ב-residents.js,
  *    ול-hasPerm('WeWork') בכללי Firestore. */
 var PERM_WEWORK    = 'WeWork';
-var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN, PERM_CULTURE, PERM_WEWORK];
+/* שירותים (27.9.26) — ניהול המלצות תושבים (residentServiceCards, כולל
+ * שורות מיובאות) ודיווחי "לא מעודכן" (staleReports) — שתיהן נכתבות ישירות
+ * מהדפדפן ל-Firestore, ולכן ההרשאה הזו לא מופיעה כלל ב-ACTION_PERMS/
+ * GET_ACTION_PERMS (אין כאן action של Apps Script שדורש אותה): האכיפה
+ * האמיתית יושבת ב-hasPerm('שירותים') בכללי Firestore. היא כן חייבת להיות
+ * ב-ALL_PERMS, אחרת parsePerms_ מסנן אותה בשקט מכל שמירת הרשאות.
+ * ⚠️ חייב להיות זהה ל-PERM.SERVICES ב-app.js ולרשימה ב-residents.js. */
+var PERM_SERVICES  = 'שירותים';
+var ALL_PERMS = [PERM_SUPER, PERM_BUDGET, PERM_CLUB, PERM_RESIDENTS, PERM_GYM, PERM_GARDEN, PERM_CULTURE, PERM_WEWORK, PERM_SERVICES];
 var PERM_HEADER = 'הרשאות';
 /* עמודת גשר הזהות (2026-09-14, צעד 02ד). כמו עמודות האימייל וההרשאות, היא
    **פר-משבצת**: 'מזהה Firebase 1', 'מזהה Firebase 2' וכו'.
@@ -1756,6 +1764,9 @@ function doPostDispatch_(ss, body) {
       case 'notifyTestSend':    return json_(notifyTestSend_(ss, body));
       case 'notifyRsvpOpened':  return json_(notifyRsvpOpened_(ss, body));
       case 'notifyServiceRecommend': return json_(notifyServiceRecommend_(ss, body));
+      /* דיווח "לא מעודכן" על המלצת שירות (27.9.26, resRecommendations) — אותו דפוס
+         בדיוק כמו notifyServiceRecommend: שגר-ושכח אחרי כתיבה ישירה ל-Firestore. */
+      case 'notifyStaleReport': return json_(notifyStaleReport_(ss, body));
       case 'markTourSeen':      return json_(markTourSeen_(ss, body));
       case 'saveMyProfile':        return json_(saveMyProfile_(ss, body));
       case 'submitProfileChange':  return json_(submitProfileChange_(ss, body));
@@ -3871,6 +3882,7 @@ var ACTION_DOMAIN = {
   doorOpen: 'door', doorStatus: 'door', doorConfigure: 'door',
   doorTestConnection: 'door', doorSaveContact: 'door', doorGymResend: 'door',
   notifyRsvpOpened: 'notifySettings', notifyServiceRecommend: 'notifySettings',
+  notifyStaleReport: 'notifySettings',
   saveCustomTrigger: 'notifySettings', customTriggerAction: 'notifySettings',
   notifyAiRewrite: 'notifySettings', notifyAiBuild: 'notifySettings', notifyAiSummary: 'notifySettings',
   notifyTestSend: 'notifySettings'
@@ -5978,7 +5990,17 @@ var DEFAULT_EMAIL_SETTINGS = [
   ['ADMIN_WEEKLY_DIGEST', 'סיכום שבועי — מה פתוח באפליקציית הוועד',
     'הנה סיכום כל מה שממתין לטיפול השבוע:', 'נשלח ביום RULE_WEEKLY_DAY, לכל מנהל רק הסעיפים שבהרשאתו — חוצה מידורים ולכן שייך למנהל-על', PERM_SUPER, 'כן'],
   ['ADMIN_MONTHLY_DIGEST', 'תזכורת: בקשות החזר פתוחות לפני סגירת החלון ב-19 לחודש',
-    'תזכורת — עוד מעט נסגר חלון ההחזרים החודשי (ה-19 לחודש). הנה כל בקשות ההחזר שעדיין פתוחות:', 'נשלח ביום RULE_MONTHLY_DAY, למנהלי תקציב + מנהל-על בלבד', PERM_BUDGET, 'כן']
+    'תזכורת — עוד מעט נסגר חלון ההחזרים החודשי (ה-19 לחודש). הנה כל בקשות ההחזר שעדיין פתוחות:', 'נשלח ביום RULE_MONTHLY_DAY, למנהלי תקציב + מנהל-על בלבד', PERM_BUDGET, 'כן'],
+
+  /* "המלצות השיכון" — דיווח "לא מעודכן" (27.9.26). נכתב ישירות מהדפדפן
+     ל-Firestore (staleReports), והשליחה כאן היא שגר-ושכח אחרי הכתיבה
+     (notifyStaleReport_ ב-Notify.gs), אותו דפוס בדיוק כמו SERVICE_UPDATED/
+     ADMIN_NEW_APP_REPORT. תחום ברירת המחדל PERM_SERVICES כולל אוטומטית גם
+     מנהל-על (ר' adminEmailsByPerm_). */
+  ['ADMIN_STALE_REPORT', 'המלצה בהמלצות השיכון סומנה "לא מעודכן"',
+    "{{שם}} דיווח/ה שההמלצה \"{{שם הכרטיס}}\" ({{קבוצה}}) לא מעודכנת.\n\n" +
+    "מה לא מעודכן: {{למה}}\n{{הערה}}\n\nאפשר לטפל במסך \"ניהול שירותים\" באפליקציה.",
+    'למנהלי "שירותים" + מנהל-על. {{הערה}} מכיל את המידע הנוסף אם נכתב, ואחרת ריק', PERM_SERVICES, 'כן']
 ];
 
 /** יוצר את גיליון ההגדרות אם אינו קיים, וממלא רק מפתחות/עמודות חסרים — לא נוגע
@@ -7364,7 +7386,13 @@ var SERVICES_HEADERS = ['מזהה שירות', 'שם', 'תיאור קצר', 'א�
      חדשה ולכן ריקה בכל השורות הקיימות — הלקוח יודע לגזור את הקטגוריה
      הנכונה גם משורה ריקה, לפי הערך הישן ב'סוג שירות' (ר' build() ב-
      services.js), כך שאין צורך במיגרציה חד-פעמית של הגיליון. */
-  'מזהה קטגוריה'];
+  'מזהה קטגוריה',
+  /* 27.9.26 — קישור אופציונלי ל"פריט" בעץ הוועד (committee/tree, ר'
+     committeeTree.js). מחזיק רק מזהה פריט, לעולם לא שם — השם נגזר חי
+     מעץ הוועד בזמן הצגה (בכרטיס ובפופאפ המפה), כדי שעדכון בעץ הוועד
+     ישתקף לבד ולא ידרוש עדכון נפרד כאן (יועד: "שהעדכונים יהיו עצמיים
+     ולא שאם הועד משתנה אני צריך לעדכן אחראי ב-3 מקומות"). */
+  'פריט ועד'];
 
 var SERVICE_SECTIONS_SHEET = 'סעיפי שירותים';
 var SERVICE_SECTIONS_HEADERS = ['מזהה שירות', 'מזהה סעיף', 'סדר', 'סוג', 'כותרת', 'תוכן'];

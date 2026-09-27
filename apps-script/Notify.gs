@@ -973,6 +973,35 @@ function notifyServiceRecommend_(ss, body) {
   return { ok: true };
 }
 
+/** דיווח "לא מעודכן" על המלצה ב"המלצות השיכון" — נקרא מהדפדפן אחרי
+ *  שהדיווח נכתב ישירות ל-Firestore (staleReports). אותו דפוס בדיוק כמו
+ *  notifyServiceRecommend_ למעלה: שגר-ושכח, לא כתיבה לגיליון. ⚠️ עובר דרך
+ *  notifyAdmins_ (המערכת הישנה, תבנית ADMIN_STALE_REPORT ב-
+ *  DEFAULT_EMAIL_SETTINGS) ולא notify_ — כי אין עדיין שורה ב"מרכז ההתראות"
+ *  (הקטלוג ב-notifyCatalog_) לתחום "שירותים" עם עמודת "מנהל התחום", ואין
+ *  סיבה טובה להמציא אחת רק בשביל תבנית אחת; ר' cba-hybrid-architecture. */
+function notifyStaleReport_(ss, body) {
+  /* ⚠️ פתוח לכל תושב — אותה מגבלה כמו notifyServiceRecommend_: הודעה אחת
+     לאותו כרטיס+תושב בשתי דקות, כדי שלחיצות חוזרות לא יציפו את המנהלים. */
+  try {
+    var cache = CacheService.getScriptCache();
+    var ck = 'svcstale_' + normalizeEmail_(body._email) + '_' + String(body.cardId || '').substring(0, 40);
+    if (cache.get(ck)) return { ok: true, throttled: true };
+    cache.put(ck, '1', 120);
+  } catch (e) { /* בלי מטמון — ממשיכים */ }
+  var name = '';
+  try { var pr = permissionsFor_(body._email); name = (pr.firstName || '') + (pr.family ? ' ' + pr.family : ''); } catch (e) {}
+  var note = String(body.note || '').substring(0, 300);
+  notifyAdmins_(ss, PERM_SERVICES, 'ADMIN_STALE_REPORT', {
+    'שם': name.trim() || 'תושב',
+    'שם הכרטיס': String(body.cardName || '').substring(0, 80),
+    'קבוצה': String(body.group || '').substring(0, 60),
+    'למה': String(body.why || '').substring(0, 200),
+    'הערה': note ? ('מידע נוסף: ' + note) : ''
+  });
+  return { ok: true };
+}
+
 /* ===========================================================================
  *  גינון — מיפוי אירוע המשימה לטריגר, וסיכומים
  * ========================================================================= */

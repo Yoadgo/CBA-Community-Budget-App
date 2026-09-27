@@ -82,26 +82,54 @@ var SADM_ICONS = ["🏊","🏋️","🏀","⚽","🎾","🎉","🧒","📚","�
 CBA.screens.servicesAdmin = {
   title: "ניהול שירותים",
 
+  /* 27.9.26 — המסך נפתח עכשיו גם לבעלי הרשאת "שירותים" (ר' SCREEN_PERM.
+     servicesAdmin ב-app.js), לא רק מנהל-על. עריכת כרטיסי השירות הרשמיים
+     (העורך/קטגוריות/"שירות חדש") נשארת מנהל-על בלבד — saveServices עדיין
+     PERM_SUPER בשרת, ולכן אין טעם להראות עורך שממילא ייכשל בשמירה. מי
+     שיש לו רק "שירותים" רואה כאן רק את ניהול ההמלצות ודיווחי "לא מעודכן". */
   render: function (container) {
+    var isSuperAdmin = window.CBA && CBA.isSuper === true;
     container.innerHTML =
       '<div class="screen-head screen-head--row">' +
         '<div><div class="screen-head__title">ניהול שירותים</div>' +
-        '<div class="screen-head__sub">הכרטיסים שהתושבים רואים במסך "שירותים" — הוספה, עריכה, סידור והסתרה</div></div>' +
+        '<div class="screen-head__sub">' + (isSuperAdmin
+          ? 'הכרטיסים שהתושבים רואים במסך "שירותים" — הוספה, עריכה, סידור והסתרה'
+          : 'המלצות השיכון ודיווחי "לא מעודכן"') + "</div></div>" +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-          '<button type="button" class="btn-ghost" id="sadm-cats">ניהול קטגוריות</button>' +
+          (isSuperAdmin ? '<button type="button" class="btn-ghost" id="sadm-cats">ניהול קטגוריות</button>' : "") +
           // ניהול "המלצות תושבים" (WAVE 4, 2026-09-23) — הסתרה/מחיקה של
           // כרטיסים שתושבים יצרו בעצמם (ר' services.js/dataService.js).
           // לא עורכים תוכן כאן — עריכה עצמית היא רק אצל היוצר, במגירה.
+          // 27.9.26 — פתוח גם לבעלי הרשאת "שירותים", לא רק מנהל-על.
           '<button type="button" class="btn-ghost" id="sadm-recs">ניהול המלצות תושבים</button>' +
-          '<button type="button" class="btn-primary" id="sadm-new">שירות חדש +</button>' +
+          // דיווחי "לא מעודכן" (27.9.26, resRecommendations סעיף 6) —
+          // תור המתנה/טופל, פתוח לאותם בעלי הרשאה כמו "ניהול המלצות תושבים".
+          '<button type="button" class="btn-ghost" id="sadm-stale">דיווחי "לא מעודכן"</button>' +
+          (isSuperAdmin ? '<button type="button" class="btn-primary" id="sadm-new">שירות חדש +</button>' : "") +
         "</div>" +
       "</div>" +
       '<div id="sadm-body"></div>';
 
     var body = container.querySelector("#sadm-body");
-    container.querySelector("#sadm-new").addEventListener("click", function () { sadmOpenEditor(-1); });
-    container.querySelector("#sadm-cats").addEventListener("click", sadmOpenCategories);
+    /* טעינה מוקדמת (best-effort, לא חוסמת) של עץ הוועד — כדי ש"אחראי
+       מטעם הוועד" בעורך השירות כבר יהיה מלא ברגע שהעורך נפתח, בלי
+       להמתין. אם היא נכשלת, השדה פשוט מוצג ריק ("— ללא —"). */
+    if (isSuperAdmin && window.CBA && CBA.committeeTree && CBA.committeeTree.load) {
+      try { CBA.committeeTree.load(function () {}); } catch (e) {}
+    }
+    if (isSuperAdmin) {
+      container.querySelector("#sadm-new").addEventListener("click", function () { sadmOpenEditor(-1); });
+      container.querySelector("#sadm-cats").addEventListener("click", sadmOpenCategories);
+    }
     container.querySelector("#sadm-recs").addEventListener("click", sadmOpenRecommendations);
+    container.querySelector("#sadm-stale").addEventListener("click", sadmOpenStaleReports);
+
+    if (!isSuperAdmin) {
+      body.innerHTML = '<div class="card club-card"><div class="club-empty">' +
+        'עריכת כרטיסי השירות הרשמיים פתוחה למנהל-על בלבד. כאן אפשר לנהל המלצות תושבים ודיווחי "לא מעודכן".' +
+        "</div></div>";
+      return;
+    }
 
     body.innerHTML = CBA.skel.tiles(6);
 
@@ -296,6 +324,7 @@ function sadmOpenEditor(index, promoteFrom) {
     ? (promoteFrom ? sadmDraftFromRecommendation(promoteFrom)
       : { id: sadmNewId(), name: "", desc: "", icon: "", provider: "", phone: "", doc: "",
           categoryId: CBA.serviceUtils.CATEGORY_VENDOR_ID, phoneChannel: CBA.serviceUtils.CH_PHONE, isNew: true,
+          committeeItemId: "",
           active: true, updated: "", updatedBy: "", sections: [] })
     : sadmClone(sadmState.list[index]);
 
@@ -382,6 +411,7 @@ function sadmPaintEditor() {
         "</select>" +
         '<div class="sadm-hint">חיווי פתיחה על המפה מוצג רק לקטגוריית "תשתיות השיכון". קטגוריות חדשות — דרך "ניהול קטגוריות" למעלה.</div>' +
         '<div id="sadm-mapnote">' + sadmMapNote(d) + "</div></div>" +
+      '<div id="sadm-committee-field">' + sadmCommitteeFieldHtml(d) + "</div>" +
       '<div class="form-field form-field--wide"><label>תיאור קצר (שורה אחת בכרטיס)</label>' +
         '<input class="field-input" data-f="desc" value="' + sadmEsc(d.desc) + '"></div>' +
       '<div class="form-grid">' +
@@ -435,6 +465,21 @@ function sadmRecommendCategoryId() {
     if (list[i].name === "המלצות תושבים") return list[i].id;
   }
   return null;
+}
+
+/* 27.9.26 — "אחראי מטעם הוועד", רק לתשתיות שיכון (יועד: "אם יש פין קיים
+   במפה אפשר לקשר אותו לשירות, בעיקר תשתיות שיכון"). בורר, לא טקסט —
+   קישור למזהה פריט בעץ הוועד בלבד (ר' committeeTree.js), לעולם לא שם. אם
+   השירות הזה מקושר למרחב במפה (ר' sadmMapNote למעלה) הפופאפ של אותו מרחב
+   יציג את האחראי הזה חי — ר' openInfra ב-resident.js. */
+function sadmCommitteeFieldHtml(d) {
+  if ((d.categoryId || CBA.serviceUtils.CATEGORY_VENDOR_ID) !== CBA.serviceUtils.CATEGORY_INFRA_ID) return "";
+  var opts = (window.CBA && CBA.committeeTree && CBA.committeeTree.itemOptionsHtml)
+    ? CBA.committeeTree.itemOptionsHtml(d.committeeItemId || "")
+    : '<option value="">— ללא —</option>';
+  return '<div class="form-field form-field--wide"><label>אחראי מטעם הוועד (לא חובה)</label>' +
+    '<select class="field-input" data-f="committeeItemId">' + opts + '</select>' +
+    '<div class="sadm-hint">נגזר חי מעץ הוועד — גם כאן וגם בפופאפ המפה, לעולם לא נשמר כטקסט. אם הפריט חסר, מוסיפים אותו קודם במסך "ועד השיכון".</div></div>';
 }
 
 function sadmMapNote(d) {
@@ -609,6 +654,19 @@ function sadmBindEditor(body) {
       if (inp.dataset.f === "name" || inp.dataset.f === "categoryId") {
         var note = document.getElementById("sadm-mapnote");
         if (note) note.innerHTML = sadmMapNote(d);
+      }
+      /* 27.9.26 — השדה "אחראי מטעם הוועד" מוצג רק לתשתיות, אז החלפת
+         קטגוריה חייבת לצייר אותו מחדש (להראות/להסתיר) בדיוק כמו sadm-
+         mapnote מעל. מחליף data-f=committeeItemId חדש, ולכן צריך גם
+         לחבר לו מאזין input מחדש (הבינדינג הכללי כבר רץ פעם אחת, לפני
+         שהשדה הזה בכלל קיים ב-DOM אם המנהל בחר "תשתיות שיכון" כרגע). */
+      if (inp.dataset.f === "categoryId") {
+        var cbox = document.getElementById("sadm-committee-field");
+        if (cbox) {
+          cbox.innerHTML = sadmCommitteeFieldHtml(d);
+          var csel = cbox.querySelector("[data-f]");
+          if (csel) csel.addEventListener("input", function () { d[csel.dataset.f] = csel.value; sadmTouch(); });
+        }
       }
     });
   });
@@ -1213,5 +1271,104 @@ function sadmPromoteRecommendation(card) {
   ).then(function (ok) {
     if (!ok) return;
     sadmOpenEditor(-1, card);
+  });
+}
+
+/* ============================================================================
+ *  דיווחי "לא מעודכן" — תור ניהול   (27.9.26, resRecommendations סעיף 6)
+ * ----------------------------------------------------------------------------
+ *  דיאלוג גנרי (CBA.ui.dialog), אותה תבנית בדיוק כמו sadmOpenRecommendations
+ *  למעלה: פתוחים קודם, טופלו אחר כך, כל שורה עם כפתור "סמן כטופל". אין
+ *  כאן "ניהול תוויות" נפרד — התוויות קבועות בקוד (RR_LABELS ב-
+ *  resRecommendations.js), בדיוק כפי שיועד ביקש.
+ * ========================================================================== */
+function sadmOpenStaleReports() {
+  CBA.data.getStaleReports(function (res) {
+    var reports = (res && res.ok && res.reports) || [];
+    CBA.ui.dialog({
+      title: 'דיווחי "לא מעודכן"', html: sadmStaleListHtml(reports), wide: true, okText: "סגירה",
+      onMount: function (wrap) { sadmBindStaleRows(wrap, reports); }
+    });
+  });
+}
+
+function sadmStaleListHtml(reports) {
+  if (!reports.length) return '<div class="club-empty">אין עדיין דיווחים.</div>';
+  var open = reports.filter(function (r) { return r.status !== "done"; });
+  var done = reports.filter(function (r) { return r.status === "done"; });
+  var ordered = open.concat(done);
+  return '<div class="sadm-list" id="sadm-stale-list">' + ordered.map(sadmStaleRowHtml).join("") + "</div>";
+}
+
+function sadmStaleRowHtml(r) {
+  var isOpen = r.status !== "done";
+  return '<div class="sadm-line" style="align-items:flex-start">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600">' + sadmEsc(r.cardName || r.cardId) +
+          (r.group ? ' <span style="color:var(--text-muted);font-weight:400">· ' + sadmEsc(r.group) + "</span>" : "") + "</div>" +
+        '<div style="font-size:12.5px;margin-top:2px">' + sadmEsc(r.why || "") + "</div>" +
+        (r.note ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + sadmEsc(r.note) + "</div>" : "") +
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">' +
+          sadmEsc(String(r.createdAt || "").slice(0, 10)) + "</div>" +
+      "</div>" +
+      '<span class="badge ' + (isOpen ? "badge--warn" : "badge--ok") + '">' + (isOpen ? "ממתין" : "טופל") + "</span>" +
+      (isOpen ? '<button type="button" class="btn-ghost btn-sm" data-stale-done="' + sadmEsc(r.id) + '">סימון כטופל</button>' : "") +
+    "</div>";
+}
+
+function sadmBindStaleRows(wrap, initialReports) {
+  function reload() {
+    CBA.data.getStaleReports(function (res) {
+      var host = wrap.querySelector(".cba-dlg__body");
+      if (!host) return;   // הדיאלוג נסגר בינתיים
+      var reports = (res && res.ok && res.reports) || [];
+      host.innerHTML = sadmStaleListHtml(reports);
+      bind();
+    });
+  }
+  function bind() {
+    wrap.querySelectorAll("[data-stale-done]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var done = CBA.ui.busy(btn, "");
+        CBA.data.setStaleReportStatus(btn.dataset.staleDone, "done", function (res) {
+          done();
+          if (!res || !res.ok) { CBA.ui.toast((res && res.error) || "עדכון נכשל"); return; }
+          reload();
+        });
+      });
+    });
+  }
+  bind();
+}
+
+/* ============================================================================
+ *  מיגרציה חד-פעמית — "המלצות תושבים" הישנות (cat_mud7r57ebu) לתוך
+ *  resRecommendations   (27.9.26, אפיון סעיף 8)
+ * ----------------------------------------------------------------------------
+ *  🔴🔴 **לא הופעלה ולא תופעל אוטומטית משום קוד.** אין קריאה ל-
+ *  sadmRunRecommendationsMigration בשום מקום מלבד הכפתור הזה, ולכפתור הזה
+ *  אין שום קריאה אוטומטית ב-render — מנהל-על צריך ללחוץ עליו בפועל.
+ *  מה שהיא עושה בפועל: לכל residentServiceCards שאין לו עדיין `group` —
+ *  מוסיפה group:"ללא קבוצה" (לא נוגעת בעוד כלום — לא ב-id, לא בתגובות/
+ *  לייקים, לא מוחקת ולא יוצרת מסמך). זה כל מה שצריך כדי שהכרטיסים הישנים
+ *  יופיעו תחת "קבוצות נוספות → ללא קבוצה" ב-resRecommendations, בלי לגעת
+ *  בגיליון/בקטגוריה cat_mud7r57ebu עצמה (השבתתה נשארת פעולה נפרדת, ר'
+ *  דו"ח המסירה — גם היא לא בוצעה). */
+function sadmRunRecommendationsMigration() {
+  CBA.ui.confirm(
+    'להריץ מיגרציה חד-פעמית? הפעולה מוסיפה group:"ללא קבוצה" לכל "המלצת תושב" ' +
+    'ישנה שעדיין אין לה קבוצה, כדי שתופיע במסך "המלצות השיכון" החדש. ' +
+    "היא לא מוחקת ולא יוצרת שום כרטיס, ולא נוגעת בתגובות/לייקים קיימים. " +
+    "מומלץ להריץ פעם אחת בלבד.",
+    { title: "מיגרציה — המלצות ישנות", okText: "הרצת המיגרציה" }
+  ).then(function (ok) {
+    if (!ok) return;
+    CBA.data.migrateResidentExtrasToRecommendations(function (res) {
+      if (!res || !res.ok) {
+        CBA.ui.alert("המיגרציה הסתיימה עם שגיאות: " + ((res && res.errors) || []).join(", "));
+        return;
+      }
+      CBA.ui.alert("המיגרציה הסתיימה — " + res.migrated + " מתוך " + res.total + ' כרטיסים קיבלו group:"ללא קבוצה".');
+    });
   });
 }

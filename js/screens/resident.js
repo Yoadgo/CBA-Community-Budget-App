@@ -2493,6 +2493,12 @@ CBA.screens = CBA.screens || {};
       var INFRA = {};        /* שם מרחב -> כרטיס השירות, לשימוש הפופאפ */
       function linkInfra() {
         if (!opts.full || !CBA.data || !CBA.data.getServices || !CBA.serviceUtils) return;
+        /* 27.9.26 — best-effort, לא חוסם: עץ הוועד, לשורת "אחראי מטעם
+           הוועד" בפופאפ של תשתית (openInfra למטה). כשל שקט — פשוט לא
+           תוצג השורה. */
+        if (window.CBA && CBA.committeeTree && CBA.committeeTree.load) {
+          try { CBA.committeeTree.load(function () {}); } catch (e) {}
+        }
         CBA.data.getServices(function (res) {
           if (!res || !res.ok) return;
           var list;
@@ -3055,6 +3061,13 @@ CBA.screens = CBA.screens || {};
                 parsed.season.from.d + '/' + parsed.season.from.m + ' – ' +
                 parsed.season.to.d + '/' + parsed.season.to.m + '</bdi></span></div>'
               : '') +
+            (function () {
+              // 27.9.26 — "אחראי מטעם הוועד", ר׳ sadmCommitteeFieldHtml
+              // ב-servicesAdmin.js: מזהה פריט בלבד, השם נגזר חי מעץ הוועד.
+              var ownerTxt = (svc.committeeItemId && CBA.committeeTree && CBA.committeeTree.itemOwnerText)
+                ? CBA.committeeTree.itemOwnerText(svc.committeeItemId) : '';
+              return ownerTxt ? '<div class="mp-inf__row"><b>אחראי מטעם הוועד</b><span>' + CBA.esc(ownerTxt) + '</span></div>' : '';
+            })() +
             '<button type="button" class="btn-primary btn-sm mp-inf__go" data-go="' + dest + '">לכרטיס המלא</button>' +
           '</div>';
         popupEl.querySelector(".map-popup__close").addEventListener("click", function (ev) { ev.stopPropagation(); closePopup(); });

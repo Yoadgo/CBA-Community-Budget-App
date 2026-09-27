@@ -159,7 +159,12 @@ var RES_PERMS = [
   { code: "תרבות",  label: "ניהול אירועים וסקרים",  hint: "פתיחת מעקב הגעה לאירועים ורשימת המאשרים" },
   // WeWork (25.9.26) — מידור עצמאי. חייב להיות זהה ל-PERM_WEWORK בשרת,
   // ל-PERM.WEWORK ב-app.js ול-hasPerm('WeWork') בכללי Firestore.
-  { code: "WeWork", label: "ניהול WeWork",           hint: "שריוני עמדות, ביטולים וכללי השריון" }
+  { code: "WeWork", label: "ניהול WeWork",           hint: "שריוני עמדות, ביטולים וכללי השריון" },
+  // "שירותים" (27.9.26) — ניהול המלצות תושבים (כולל מיובאות) ודיווחי
+  // "לא מעודכן", בלי לגעת בכרטיסי השירות הרשמיים (עדיין מנהל-על בלבד).
+  // חייב להיות זהה ל-PERM_SERVICES בשרת, ל-PERM.SERVICES ב-app.js
+  // ול-hasPerm('שירותים') בכללי Firestore.
+  { code: "שירותים", label: "ניהול המלצות שירות",    hint: "עריכה/מחיקה של כל המלצה בהמלצות השיכון, וטיפול בדיווחי \"לא מעודכן\"" }
 ];
 var RES_PERM_CODES = RES_PERMS.map(function (p) { return p.code; });
 

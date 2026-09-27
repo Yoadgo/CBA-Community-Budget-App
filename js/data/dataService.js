@@ -4133,6 +4133,30 @@ CBA.data = (function () {
     });
   }
 
+  /* 27.9.26 — resRecommendations מוסיף כאן שדות אופציונליים (group ועוד,
+     ר' rsvcRecommendationFields_ למטה): נכתבים רק כשנשלחו וכשאינם ריקים,
+     כדי שכרטיס "המלצה רגילה" (מסך שירותים הישן) ימשיך להיראות בדיוק כמו
+     קודם — בלי document עם שדות ריקים מיותרים. */
+  function rsvcRecommendationFields_(fields) {
+    fields = fields || {};
+    var out = {};
+    if (fields.group != null && String(fields.group).trim()) out.group = String(fields.group).trim().slice(0, 60);
+    if (fields.phone != null && String(fields.phone).trim()) out.phone = String(fields.phone).trim().slice(0, 30);
+    if (fields.city != null && String(fields.city).trim()) out.city = String(fields.city).trim().slice(0, 60);
+    if (fields.kupah != null && String(fields.kupah).trim()) out.kupah = String(fields.kupah).trim().slice(0, 30);
+    if (fields.note != null && String(fields.note).trim()) out.note = String(fields.note).trim().slice(0, 300);
+    if (Array.isArray(fields.labels) && fields.labels.length) {
+      out.labels = fields.labels.map(function (l) { return String(l); }).slice(0, 10);
+    }
+    if (fields.kosher === true || fields.kosher === false) out.kosher = !!fields.kosher;
+    /* 27.9.26 — "אחראי מטעם הוועד" (תצוגה בלבד) + שלושת סמלילי יצירת הקשר. */
+    if (fields.committeeItemId != null && String(fields.committeeItemId).trim()) out.committeeItemId = String(fields.committeeItemId).trim().slice(0, 40);
+    if (fields.hotlinePhone != null && String(fields.hotlinePhone).trim()) out.hotlinePhone = String(fields.hotlinePhone).trim().slice(0, 30);
+    if (fields.whatsappHotline != null && String(fields.whatsappHotline).trim()) out.whatsappHotline = String(fields.whatsappHotline).trim().slice(0, 30);
+    if (fields.whatsappGroupLink != null && String(fields.whatsappGroupLink).trim()) out.whatsappGroupLink = String(fields.whatsappGroupLink).trim().slice(0, 300);
+    return out;
+  }
+
   function createResidentServiceCard(fields, cb) {
     var fid = currentFamilyId();
     if (!fid) { cb({ ok: false, error: "לא משויך למשפחה" }); return; }
@@ -4147,6 +4171,8 @@ CBA.data = (function () {
     };
     var mapsUrl = String((fields || {}).mapsUrl || "").trim().slice(0, 300);
     if (mapsUrl) doc.mapsUrl = mapsUrl;
+    var extra = rsvcRecommendationFields_(fields);
+    Object.keys(extra).forEach(function (k) { doc[k] = extra[k]; });
     if (!doc.title) { cb({ ok: false, error: "צריך כותרת" }); return; }
     CBA.fb.createDoc("residentServiceCards", id, doc, function (err) {
       if (err) { cb({ ok: false, error: "שמירה נכשלה" }); return; }
@@ -4156,7 +4182,8 @@ CBA.data = (function () {
     });
   }
 
-  /* עריכה עצמית — רק תוכן. הכלל דוחה כל ניסיון לגעת ב-familyId/active/id. */
+  /* עריכה עצמית — רק תוכן (כולל שדות resRecommendations, 27.9.26). הכלל
+     דוחה כל ניסיון לגעת ב-familyId/active/id. */
   function updateResidentServiceCard(id, fields, cb) {
     if (!(CBA.fb && CBA.fb.updateDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
     var patch = { updatedAt: new Date().toISOString() };
@@ -4164,6 +4191,27 @@ CBA.data = (function () {
     if (fields.title != null) patch.title = String(fields.title).trim().slice(0, 80);
     if (fields.body != null) patch.body = String(fields.body).trim().slice(0, 1500);
     if (fields.mapsUrl != null) patch.mapsUrl = String(fields.mapsUrl).trim().slice(0, 300);
+    var extra = rsvcRecommendationFields_(fields);
+    Object.keys(extra).forEach(function (k) { patch[k] = extra[k]; });
+    CBA.fb.updateDoc("residentServiceCards", String(id), patch, function (err) {
+      cb(err ? { ok: false, error: "עדכון נכשל" } : { ok: true });
+    });
+  }
+
+  /* 27.9.26 — עריכה מלאה ע"י מנהל-על/בעל הרשאת "שירותים" (rsvcAdminEditOk
+     בכללי Firestore), כולל כרטיסים מיובאים: כל שדה, כולל source/originalText
+     ש-updateResidentServiceCard הרגילה (עריכה עצמית) לעולם לא נוגעת בו. */
+  function adminUpdateResidentServiceCard(id, fields, cb) {
+    if (!(CBA.fb && CBA.fb.updateDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    var patch = { updatedAt: new Date().toISOString() };
+    fields = fields || {};
+    if (fields.title != null) patch.title = String(fields.title).trim().slice(0, 80);
+    if (fields.body != null) patch.body = String(fields.body).trim().slice(0, 1500);
+    if (fields.mapsUrl != null) patch.mapsUrl = String(fields.mapsUrl).trim().slice(0, 300);
+    if (fields.source != null) patch.source = String(fields.source).trim().slice(0, 30);
+    if (fields.originalText != null) patch.originalText = String(fields.originalText).slice(0, 3000);
+    var extra = rsvcRecommendationFields_(fields);
+    Object.keys(extra).forEach(function (k) { patch[k] = extra[k]; });
     CBA.fb.updateDoc("residentServiceCards", String(id), patch, function (err) {
       cb(err ? { ok: false, error: "עדכון נכשל" } : { ok: true });
     });
@@ -4301,6 +4349,102 @@ CBA.data = (function () {
         comments[id] = (comments[id] || 0) + 1;
       });
       done();
+    });
+  }
+
+  /* ========================================================================
+   *  דיווחי "לא מעודכן" — staleReports   (27.9.26, resRecommendations סעיף 5)
+   * ------------------------------------------------------------------------
+   *  אוסף Firestore נפרד, נכתב ונקרא ישירות מהדפדפן (מודל ב', כמו
+   *  residentServiceCards/serviceReactions/serviceComments למעלה) — לא
+   *  דרך Apps Script/הגיליון. פרטיות: reporterFamilyId בלבד, לא uid/שם.
+   * ====================================================================== */
+
+  /* כל הדיווחים (פתוחים + טופלו) — אוסף קטן, נטען בבת אחת כמו
+     getServiceEngagementSummary. המסך/הדיאלוג הקורא מסנן/ממפה לפי צורך. */
+  function getStaleReports(cb) {
+    if (!(CBA.fb && CBA.fb.readCollection)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    CBA.fb.readCollection("staleReports", function (err, rows) {
+      if (err) { cb({ ok: false, error: "שגיאת טעינה" }); return; }
+      var out = (rows || []).slice().sort(function (a, b) {
+        return String(b.createdAt || "") < String(a.createdAt || "") ? -1 : 1;
+      });
+      cb({ ok: true, reports: out });
+    });
+  }
+
+  /* fields: { cardId, cardName, group, why, note }. reporterFamilyId/status/
+     createdAt נקבעים כאן — לא ניתנים לשליטה מהקורא (הכלל דוחה כל ערך אחר
+     ל-status חוץ מ"open" ביצירה, ור' srShapeOk ב-firestore.rules). */
+  function createStaleReport(fields, cb) {
+    var fid = currentFamilyId();
+    if (!fid) { cb({ ok: false, error: "לא משויך למשפחה" }); return; }
+    if (!(CBA.fb && CBA.fb.createDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    fields = fields || {};
+    var why = String(fields.why || "").trim().slice(0, 200);
+    if (!why) { cb({ ok: false, error: "צריך לכתוב מה לא מעודכן" }); return; }
+    var now = new Date().toISOString();
+    var id = newLocalId("sr");
+    var doc = {
+      id: id, cardId: String(fields.cardId || ""),
+      cardName: String(fields.cardName || "").trim().slice(0, 80),
+      why: why, reporterFamilyId: fid, status: "open", createdAt: now, updatedAt: now
+    };
+    var group = String(fields.group || "").trim();
+    if (group) doc.group = group.slice(0, 60);
+    var note = String(fields.note || "").trim();
+    if (note) doc.note = note.slice(0, 1000);
+    CBA.fb.createDoc("staleReports", id, doc, function (err) {
+      if (err) { cb({ ok: false, error: "השליחה נכשלה" }); return; }
+      /* שגר-ושכח אל המערכת הקיימת (notifyAdmins_/ADMIN_STALE_REPORT) —
+         אותו דפוס בדיוק כמו notifyServiceRecommend. */
+      try {
+        CBA.sheets.postRead("notifyStaleReport", {
+          cardId: doc.cardId, cardName: doc.cardName, group: doc.group || "",
+          why: doc.why, note: doc.note || ""
+        }, function () {});
+      } catch (e) {}
+      cb({ ok: true, report: doc });
+    });
+  }
+
+  /* מנהל-על/"שירותים" בלבד (הכלל אוכף) — "open"|"done", בלי לגעת בתוכן
+     הדיווח. */
+  function setStaleReportStatus(id, status, cb) {
+    if (!(CBA.fb && CBA.fb.updateDoc)) { cb({ ok: false, error: "לא מחובר" }); return; }
+    CBA.fb.updateDoc("staleReports", String(id),
+      { status: status === "done" ? "done" : "open", updatedAt: new Date().toISOString() },
+      function (err) { cb(err ? { ok: false, error: "עדכון נכשל" } : { ok: true }); });
+  }
+
+  /* ========================================================================
+   *  מיגרציה חד-פעמית — "המלצות תושבים" הישנות (cat_mud7r57ebu) לתוך
+   *  resRecommendations   (27.9.26, אפיון סעיף 8)
+   * ------------------------------------------------------------------------
+   *  🔴 לא רצה אוטומטית משום מקום — נקראת רק בלחיצה מפורשת של מנהל-על
+   *  ממסך ניהול השירותים (sadmRunRecommendationsMigration ב-servicesAdmin.js),
+   *  ואינה מוזמנת ע"י אף קוד אחר. הפעולה: לכל residentServiceCards שאין לו
+   *  עדיין שדה group — מוסיפה group:"ללא קבוצה" ותו לא (לא נוגעת ב-id, לא
+   *  יוצרת מסמך חדש, לא נוגעת בתגובות/לייקים). דורש הרשאת "שירותים"/מנהל-על
+   *  (rsvcAdminEditOk בכללי Firestore) בדיוק כמו adminUpdateResidentServiceCard. */
+  function migrateResidentExtrasToRecommendations(cb) {
+    getResidentServiceCards(false, function (res) {
+      if (!res || !res.ok) { cb({ ok: false, error: (res && res.error) || "טעינה נכשלה" }); return; }
+      var targets = (res.cards || []).filter(function (c) { return !c.group; });
+      if (!targets.length) { cb({ ok: true, migrated: 0, total: 0 }); return; }
+      var i = 0, migrated = 0, errors = [];
+      function next() {
+        if (i >= targets.length) {
+          cb({ ok: errors.length === 0, migrated: migrated, total: targets.length, errors: errors });
+          return;
+        }
+        var c = targets[i++];
+        adminUpdateResidentServiceCard(c.id, { group: "ללא קבוצה" }, function (r) {
+          if (r && r.ok) migrated++; else errors.push(c.id);
+          next();
+        });
+      }
+      next();
     });
   }
 
@@ -5637,6 +5781,10 @@ CBA.data = (function () {
     addServiceComment: addServiceComment,
     deleteServiceComment: deleteServiceComment,
     getServiceEngagementSummary: getServiceEngagementSummary,
+    adminUpdateResidentServiceCard: adminUpdateResidentServiceCard,
+    getStaleReports: getStaleReports, createStaleReport: createStaleReport,
+    setStaleReportStatus: setStaleReportStatus,
+    migrateResidentExtrasToRecommendations: migrateResidentExtrasToRecommendations,
     /* עדכון תושבים במייל — ידני בלבד, נשלח רק בלחיצה מפורשת של מנהל-על
        (ר' notifyServiceUpdate_ ב-Code.gs). לא מנקה מטמון: הוא לא משנה נתונים. */
     notifyServiceUpdate: function (payload, cb) {

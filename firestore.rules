@@ -1469,7 +1469,50 @@ service cloud.firestore {
 
     function rsvcCreateFields() {
       return ['id', 'familyId', 'title', 'body', 'mapsUrl',
-              'createdAt', 'updatedAt', 'active', 'schema'];
+              'createdAt', 'updatedAt', 'active', 'schema',
+              /* 27.9.26 — סכימת "המלצות השיכון" (resRecommendations): שדות
+                 אופציונליים בלבד, על גבי מה שהיה קיים — לא מחליפים כלום.
+                 group/labels/kosher משמשים גם המלצות שתושב מוסיף עכשיו דרך
+                 הטופס המורחב; phone/city/kupah/note/source/originalText
+                 שייכים בעיקר לשורות מיובאות (ר' rsvcAdminEditOk למטה). */
+              'group', 'phone', 'city', 'kupah', 'labels', 'note',
+              'source', 'originalText', 'kosher',
+              /* 27.9.26 — "אחראי מטעם הוועד" (תצוגה בלבד) + שלושת סמלילי
+                 יצירת הקשר (מוקד טלפוני / מוקד וואטסאפ / קבוצת וואטסאפ
+                 שיכון). כולם אופציונליים, אותו דפוס כמו phone/city/kupah
+                 למעלה. */
+              'committeeItemId', 'hotlinePhone', 'whatsappHotline',
+              'whatsappGroupLink'];
+    }
+
+    /* שדות "המלצות השיכון" — כולם אופציונליים, ולכן נבדקים רק כשקיימים. */
+    function rrOptFieldsOk() {
+      return (!request.resource.data.keys().hasAny(['group']) ||
+              (request.resource.data.group is string && request.resource.data.group.size() <= 60)) &&
+             (!request.resource.data.keys().hasAny(['phone']) ||
+              (request.resource.data.phone is string && request.resource.data.phone.size() <= 30)) &&
+             (!request.resource.data.keys().hasAny(['city']) ||
+              (request.resource.data.city is string && request.resource.data.city.size() <= 60)) &&
+             (!request.resource.data.keys().hasAny(['kupah']) ||
+              (request.resource.data.kupah is string && request.resource.data.kupah.size() <= 30)) &&
+             (!request.resource.data.keys().hasAny(['labels']) ||
+              (request.resource.data.labels is list && request.resource.data.labels.size() <= 10)) &&
+             (!request.resource.data.keys().hasAny(['note']) ||
+              (request.resource.data.note is string && request.resource.data.note.size() <= 300)) &&
+             (!request.resource.data.keys().hasAny(['source']) ||
+              (request.resource.data.source is string && request.resource.data.source.size() <= 30)) &&
+             (!request.resource.data.keys().hasAny(['originalText']) ||
+              (request.resource.data.originalText is string && request.resource.data.originalText.size() <= 3000)) &&
+             (!request.resource.data.keys().hasAny(['kosher']) ||
+              request.resource.data.kosher is bool) &&
+             (!request.resource.data.keys().hasAny(['committeeItemId']) ||
+              (request.resource.data.committeeItemId is string && request.resource.data.committeeItemId.size() <= 40)) &&
+             (!request.resource.data.keys().hasAny(['hotlinePhone']) ||
+              (request.resource.data.hotlinePhone is string && request.resource.data.hotlinePhone.size() <= 30)) &&
+             (!request.resource.data.keys().hasAny(['whatsappHotline']) ||
+              (request.resource.data.whatsappHotline is string && request.resource.data.whatsappHotline.size() <= 30)) &&
+             (!request.resource.data.keys().hasAny(['whatsappGroupLink']) ||
+              (request.resource.data.whatsappGroupLink is string && request.resource.data.whatsappGroupLink.size() <= 300));
     }
 
     function rsvcShapeOk() {
@@ -1487,11 +1530,14 @@ service cloud.firestore {
               (request.resource.data.mapsUrl is string &&
                request.resource.data.mapsUrl.size() <= 300)) &&
              request.resource.data.active is bool &&
-             request.resource.data.schema is int;
+             request.resource.data.schema is int &&
+             rrOptFieldsOk();
     }
 
     /* יצירה: רק בשם המשפחה שלו, ותמיד פעיל — מתפרסם מיד, אין אישור מנהל
-       מראש (הוחלט 22.9.26). */
+       מראש (הוחלט 22.9.26). 27.9.26 — resRecommendations מוסיף כאן שדות
+       אופציונליים (group ועוד, למשל כשתושב בוחר קבוצה בטופס), אבל התנאי
+       על הבעלות/הפעילות לא השתנה. */
     function rsvcCreateOk() {
       return isMember() && m().isExternal == false &&
              request.resource.data.familyId == myFamilyId() &&
@@ -1499,13 +1545,16 @@ service cloud.firestore {
              rsvcShapeOk();
     }
 
-    /* עריכה עצמית: היוצר יכול לגעת רק בתוכן, לעולם לא בבעלות. */
+    /* עריכה עצמית: היוצר יכול לגעת רק בתוכן — עכשיו כולל את שדות
+       resRecommendations — לעולם לא בבעלות. */
     function rsvcOwnerUpdateOk() {
       return isMember() && m().isExternal == false &&
              resource.data.familyId == myFamilyId() &&
              request.resource.data.familyId == resource.data.familyId &&
              request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['title', 'body', 'mapsUrl', 'updatedAt']) &&
+               .hasOnly(['title', 'body', 'mapsUrl', 'updatedAt',
+                         'group', 'phone', 'city', 'kupah', 'labels', 'note', 'kosher',
+                         'committeeItemId', 'hotlinePhone', 'whatsappHotline', 'whatsappGroupLink']) &&
              rsvcShapeOk();
     }
 
@@ -1517,16 +1566,30 @@ service cloud.firestore {
              request.resource.data.familyId == resource.data.familyId;
     }
 
+    /* 27.9.26 — עריכה מלאה, כולל כרטיסים מיובאים (אפיון resRecommendations
+       סעיף 3): מנהל-על או בעל הרשאת "שירותים" — hasPerm('שירותים') כבר
+       מחזיר אמת לשניהם (ר' ההערה ליד hasPerm למעלה בקובץ). נוגעים בתוכן,
+       לא בבעלות — id/familyId קבועים, זו "עריכה" ולא "החרמה". */
+    function rsvcAdminEditOk() {
+      return hasPerm('שירותים') &&
+             request.resource.data.familyId == resource.data.familyId &&
+             request.resource.data.id == resource.data.id &&
+             rsvcShapeOk();
+    }
+
     match /residentServiceCards/{id} {
       allow read: if canSeeServices();
       allow create: if rsvcCreateOk();
-      allow update: if rsvcOwnerUpdateOk() || rsvcAdminHideOk();
-      /* מחיקה אמיתית רק ליוצר (אפיון: "תושב יכול למחוק את שלו"). מנהל
-         מסתיר (active:false), לא מוחק — כרטיס שנעלם לגמרי אינו ניתן
-         לשחזור אם תתעורר מחלוקת. ⚠️ פתוח: מחיקה עצמית משאירה יתומות
-         את התגובות/הלייקים על הכרטיס — ר' הערת "פתוח" בסוף הבלוק. */
-      allow delete: if isMember() && m().isExternal == false &&
-                       resource.data.familyId == myFamilyId();
+      allow update: if rsvcOwnerUpdateOk() || rsvcAdminHideOk() || rsvcAdminEditOk();
+      /* מחיקה: היוצר מוחק את שלו כרגיל, ומעכשיו גם מנהל-על/"שירותים" —
+         אפיון resRecommendations סעיף 3 ("עריכה/מחיקה של כל כרטיס, כולל
+         מיובאים"). מנהל יכול להעדיף הסתרה (rsvcAdminHideOk) על כרטיס תושב
+         עצמו; מחיקה אמיתית שמורה בעיקר לכרטיסים מיובאים/פגומים. ⚠️ פתוח:
+         מחיקה משאירה יתומות את התגובות/הלייקים על הכרטיס — ר' הערת "פתוח"
+         בסוף הבלוק. */
+      allow delete: if (isMember() && m().isExternal == false &&
+                       resource.data.familyId == myFamilyId()) ||
+                       hasPerm('שירותים');
     }
 
     /* ---------- לייק/דיסלייק ---------- */
@@ -1599,6 +1662,54 @@ service cloud.firestore {
     */
 
     /* ========================================================================
+     *  דיווחי "לא מעודכן" על המלצת שירות — staleReports   (27.9.26,
+     *  אפיון resRecommendations סעיף 5)
+     * ------------------------------------------------------------------------
+     *  כל תושב יכול לדגול המלצה כ"לא מעודכן" (טופס קצר: למה + הערה
+     *  אופציונלית). הסטטוס תמיד גלוי באפליקציה לכולם — לא רק במייל (כלל
+     *  קשיח בפרויקט) — ומייל למנהלים יוצא דרך המערכת הקיימת (notifyAdmins_,
+     *  ר' Code.gs/Notify.gs), לא מנגנון נפרד.
+     *  🔒 reporterFamilyId ולא uid/שם/מייל — אותו דפוס פרטיות בדיוק כמו
+     *  residentServiceCards/serviceReactions/serviceComments למעלה.
+     * ====================================================================== */
+    function srShapeOk() {
+      return request.resource.data.keys().hasOnly(
+               ['id', 'cardId', 'cardName', 'group', 'why', 'note',
+                'reporterFamilyId', 'status', 'createdAt', 'updatedAt']) &&
+             request.resource.data.keys().hasAll(
+               ['id', 'cardId', 'cardName', 'why', 'reporterFamilyId', 'status', 'createdAt']) &&
+             request.resource.data.cardId is string && request.resource.data.cardId != '' &&
+             request.resource.data.cardName is string && request.resource.data.cardName.size() <= 80 &&
+             (!request.resource.data.keys().hasAny(['group']) ||
+              (request.resource.data.group is string && request.resource.data.group.size() <= 60)) &&
+             request.resource.data.why is string &&
+             request.resource.data.why.size() > 0 && request.resource.data.why.size() <= 200 &&
+             (!request.resource.data.keys().hasAny(['note']) ||
+              (request.resource.data.note is string && request.resource.data.note.size() <= 1000)) &&
+             request.resource.data.reporterFamilyId == myFamilyId() &&
+             request.resource.data.status == 'open';
+    }
+
+    /* טיפול ע"י מנהל-על/"שירותים" — נוגעים רק בסטטוס, אף פעם לא בתוכן
+       הדיווח או בזהות המדווח/הכרטיס. */
+    function srAdminUpdateOk() {
+      return hasPerm('שירותים') &&
+             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+             request.resource.data.status in ['open', 'done'] &&
+             request.resource.data.cardId == resource.data.cardId &&
+             request.resource.data.reporterFamilyId == resource.data.reporterFamilyId;
+    }
+
+    match /staleReports/{id} {
+      /* קריאה פתוחה לכל חבר (לא רק מנהל) — הסטטוס חייב להיות גלוי
+         באפליקציה לכולם, לא רק דרך המייל למנהל (כלל קשיח, ר' האפיון). */
+      allow read: if canSeeServices();
+      allow create: if isMember() && m().isExternal == false && srShapeOk();
+      allow update: if srAdminUpdateOk();
+      allow delete: if false;
+    }
+
+        /* ========================================================================
      *  RSVP לאירועי לוח הקהילתי   (2026-09-23, אפיון events-rsvp-spec)
      * ------------------------------------------------------------------------
      *  שני אוספים: eventRSVP/{eventId} — מסמך הגדרה, נכתב רק ע"י מנהל;

@@ -52,7 +52,7 @@ section('2. המסכים שבהם הבאג התגלה');
 
 section('3. שאר המסכים שטוענים לעצמם');
 const expect = { clubAdmin: 'club', resReserve: 'club', residents: 'residents',
-  servicesAdmin: 'services', resServices: 'services', gymAdmin: 'gym', resGym: 'gym',
+  servicesAdmin: 'services', resServices: 'services', resRecommendations: 'services', gymAdmin: 'gym', resGym: 'gym',
   committeeAdmin: 'committee', appReports: 'appReports' };
 Object.keys(expect).forEach(s => {
   ok(s + ' → ' + expect[s], (SCREEN_DOMAINS[s] || []).indexOf(expect[s]) !== -1,
