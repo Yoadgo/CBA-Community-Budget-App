@@ -127,11 +127,13 @@
 .ct-sub__in:empty { display: none; }
 
 /* ---------- לא משויכים ---------- */
-.ct-more { margin-top: 22px; padding-top: 14px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 10px; min-height: 40px; }
-.ct-more h3 { margin: 0; font-size: 14px; color: var(--text-soft); text-align: center; }
-.ct-more > .ct-muted { text-align: center; }
-.ct-more__grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.ct-more__grid > .ct-item { min-width: 200px; }
+.ct-loose { margin: 28px auto 0; width: 85%; background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.ct-canvas.is-phone .ct-loose { width: 100%; }
+.ct-loose h3 { margin: 0; font-size: 15px; font-weight: 800; color: var(--text); text-align: center; }
+.ct-loose > .ct-muted { text-align: center; }
+.ct-loose__grid { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--ct-g); }
+.ct-loose__grid > .ct-card { width: var(--ct-cw, 100%); }
 
 /* ---------- חיפוש ---------- */
 .ct .is-dim { opacity: .3; }
@@ -145,7 +147,7 @@
 .ct-card.is-sel, .ct-lead.is-sel, .ct-item.is-sel, .ct-sub__row.is-sel { box-shadow: 0 0 0 2px var(--text); }
 .ct.is-dragging .ct-card, .ct.is-dragging .ct-item { transition: none; }
 .ct .is-drop { box-shadow: 0 0 0 2px var(--c, #16A34A), 0 8px 20px -8px rgba(16,24,40,.3); }
-.ct-more.is-drop { background: var(--hover); border-radius: 12px; }
+.ct-loose.is-drop { background: var(--hover); }
 .ct .is-drop-before { box-shadow: inset -3px 0 0 #2563EB; }
 .ct .is-drop-after { box-shadow: inset 3px 0 0 #2563EB; }
 .ct-item.is-drop-before { box-shadow: inset 0 3px 0 #2563EB; }

@@ -435,6 +435,16 @@
       (body ? '<div class="ct-card__body">' + body + '</div>' : "") +
     '</div>';
   }
+  /* תחום שלא תחת תפקיד — כרטיס בגודל כרטיס תפקיד, בצבע הסוג שלו. */
+  function looseCardHTML(r, m, edit) {
+    var c = catOf(r.cat);
+    return '<div class="ct-card ct-card--loose' + hitCls(m, r.id) + (V.sel === r.id ? " is-sel" : "") + '" style="--c:' + esc(c.color) + '"' +
+        (edit ? ' data-drop="' + esc(r.id) + '"' : "") + dragAttrs(edit, r.id) + '>' +
+      '<div class="ct-card__head"' + (edit ? ' data-edit="' + esc(r.id) + '" role="button" tabindex="0"' : "") + '>' +
+        '<span class="ct-card__t">' + esc(r.title || "(ללא שם)") + '</span>' +
+        (r.holders.length ? namesHTML(r, edit, "ct-card__w") : "") +
+      '</div></div>';
+  }
   function leadHTML(r, isHub, m, edit) {
     var c = catOf(r.cat);
     return '<div class="ct-lead' + (isHub ? " is-hub" : "") + (V.sel === r.id ? " is-sel" : "") + hitCls(m, r.id) + '" style="--c:' + esc(c.color) + '"' +
@@ -539,10 +549,18 @@
       } else {
         /* 27.9 יועד: משבצות צרות ב-15% ⇒ השורות תופסות 85% מהרוחב, ממורכזות. */
         var rowW = w >= PHONE ? w * ROW_SHARE : w;
+        /* 27.9 יועד: תחום בלי תפקיד מעליו = כרטיס מלא בגודל של כרטיס תפקיד
+           (לא שורה), בתוך כרטיס רקע "תחומי אחריות". תחום שתחת תפקיד נשאר שורה. */
+        var cw = 0;
+        if (w >= PHONE && roots.length) {
+          var hub0 = chainOf(ix, roots[0]).slice(-1)[0];
+          var n0 = layoutFor(rowW, ix.roleKids(hub0.id).length + (edit ? 1 : 0)) || 1;
+          cw = Math.floor((rowW - (n0 - 1) * GAP) / n0);
+        }
         canvas.innerHTML = roots.map(function (r) { return treeHTML(ix, r, m, edit, rowW); }).join("") +
-          ((loose.length || edit) ? '<div class="ct-more"' + (edit ? ' data-drop=""' : "") + '><h3>לא משויכים לתפקיד</h3>' +
-            (loose.length ? '<div class="ct-more__grid">' + loose.map(function (x) { return itemHTML(x, m, edit); }).join("") + '</div>'
-                          : '<p class="ct-muted">גררו לכאן שורה כדי לנתק אותה מתפקיד.</p>') + '</div>' : "");
+          ((loose.length || edit) ? '<section class="ct-loose"' + (edit ? ' data-drop=""' : "") + '><h3>תחומי אחריות</h3>' +
+            (loose.length ? '<div class="ct-loose__grid"' + (cw ? ' style="--ct-cw:' + cw + 'px"' : "") + '>' + loose.map(function (x) { return looseCardHTML(x, m, edit); }).join("") + '</div>'
+                          : '<p class="ct-muted">גררו לכאן שורה כדי לנתק אותה מתפקיד.</p>') + '</section>' : "");
       }
       canvas.classList.toggle("is-phone", w < PHONE);
       drawLegend(roles); drawBanner();
