@@ -53,7 +53,31 @@ var RR_GROUPS = [
   { name: "משלוחי אוכל מוכן לבסיס", emoji: "🍔", categoryId: "shopping" },
   { name: "סופרים ומשלוחי מזון", emoji: "🛒", categoryId: "shopping" },
   { name: "מסעדות מומלצות",   emoji: "🍽️", categoryId: "food" },
-  { name: "בייביסיטרים",      emoji: "🍼", categoryId: "food" }
+  { name: "בייביסיטרים",      emoji: "🍼", categoryId: "food" },
+  /* 27.9.26 — הורחב לקראת ייבוא 244 השורות מהמדריך השכונתי המודפס
+     (task: resident-recs-import). כל השורות הבאות תואמות group אמיתי
+     שמגיע מהייבוא, כדי שלא ייפלו ל"קבוצות נוספות" (rrOverflowGroups). */
+  { name: "רפואת נשים",              emoji: "🩺", categoryId: "medicine" },
+  { name: "טיפת חלב",                emoji: "🍼", categoryId: "medicine" },
+  { name: "רופאי שיניים לילדים",      emoji: "🦷", categoryId: "medicine" },
+  { name: "רופאי שיניים מבוגרים",     emoji: "🦷", categoryId: "medicine" },
+  { name: "תופרות",                  emoji: "🧵", categoryId: "home" },
+  { name: "וטרינר",                  emoji: "🐾", categoryId: "home" },
+  { name: "משתלות (גינה ופרחים)",     emoji: "🌱", categoryId: "home" },
+  { name: "מדבירים",                 emoji: "🐜", categoryId: "home" },
+  { name: "טכנאי מוצרי חשמל",         emoji: "🔌", categoryId: "home" },
+  { name: "טכנאי מזגנים",            emoji: "❄️", categoryId: "home" },
+  { name: "ניקוי ספות",              emoji: "🛋️", categoryId: "home" },
+  { name: "עסקים בתוך השיכון",        emoji: "🏘️", categoryId: "biz" },
+  { name: "משלוחים שונים לבסיס",      emoji: "🚚", categoryId: "shopping" },
+  { name: "חנויות משקאות",           emoji: "🍷", categoryId: "shopping" },
+  { name: "מרכזי קניות",             emoji: "🏬", categoryId: "shopping" },
+  { name: "חנויות סטייל והנחות",      emoji: "🏷️", categoryId: "shopping" },
+  { name: "מעדניות ואוכל מוכן",       emoji: "🧀", categoryId: "shopping" },
+  { name: "מאפיות",                  emoji: "🥐", categoryId: "shopping" },
+  { name: "טבע אורגני וללא גלוטן",    emoji: "🌿", categoryId: "shopping" },
+  { name: "קצביות ובשר",             emoji: "🥩", categoryId: "shopping" },
+  { name: "בתי קפה ומסעדות",         emoji: "☕", categoryId: "food" }
 ];
 
 /* תוויות-צבע קבועות (סעיף 4 באפיון) — לא כולל "כשר", שהוא שדה בוליאני
