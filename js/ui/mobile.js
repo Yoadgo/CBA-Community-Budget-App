@@ -33,6 +33,8 @@
       header.classList.remove("app-header--hidden");
     }
     setHeaderVar();
+    ensureSearchFab();
+    if (!mq.matches) document.body.classList.remove("nav-mini");
   }
 
   // הסתרת הכותרת בגלילה למטה, הצגה בגלילה למעלה (מובייל בלבד — ה-CSS מגביל).
@@ -44,8 +46,10 @@
       var y = window.pageYOffset || document.documentElement.scrollTop || 0;
       if (mq.matches && y > lastY && y > 80) {
         header.classList.add("app-header--hidden");
-      } else {
+        setMini(true);
+      } else if (y < lastY - 4 || y <= 80) {
         header.classList.remove("app-header--hidden");
+        setMini(false);
       }
       lastY = y;
       ticking = false;
@@ -55,6 +59,84 @@
   // (2026-08-18) חושפים את המדידה החוצה — app.js קורא לה בכל שינוי של חיווי
   // השמירה, כרשת ביטחון: אם משום מה הכותרת כן משנה גובה, --header-h (שקובע
   // מאיפה מתחיל התוכן) יתעדכן איתה במקום להישאר על הערך מרגע הטעינה.
+  /* ---------- 27.9.26 — ניווט מובייל v2 (ר' claude/mobile-nav-spec-2026-09-27.md) ----------
+     (1) כיווץ הבר בגלילה למטה (body.nav-mini), חזרה בגלילה למעלה או בהקשה.
+     (2) כפתור חיפוש עגול ליד הבר (במקום הכפתור בכותרת).
+     (3) לחיצה-וגרירה על הבר: המחוון עוקב אחרי האצבע (.is-hot, ר' motion.js),
+         והבחירה נעשית בשחרור. הקשה רגילה נשארת קליק רגיל לגמרי. */
+  function setMini(on) {
+    on = !!on && mq.matches;
+    if (document.body.classList.contains("nav-mini") === on) return;
+    document.body.classList.toggle("nav-mini", on);
+  }
+
+  var fab = null;
+  function ensureSearchFab() {
+    if (!mq.matches) { if (fab) fab.hidden = true; return; }
+    if (!fab) {
+      fab = document.createElement("button");
+      fab.type = "button";
+      fab.className = "nav-search-fab";
+      fab.setAttribute("aria-label", "חיפוש");
+      fab.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>';
+      fab.addEventListener("click", function () {
+        if (window.CBA && CBA.search && CBA.search.open) CBA.search.open();
+      });
+      document.body.appendChild(fab);
+    }
+    fab.hidden = false;
+  }
+
+  var press = null;
+  function tabAt(x, y) {
+    var el = document.elementFromPoint(x, y);
+    var t = el && el.closest && el.closest(".app-nav__tab");
+    return (t && nav.contains(t)) ? t : null;
+  }
+  function setHot(t) {
+    if (!press || press.hot === t) return;
+    if (press.hot) press.hot.classList.remove("is-hot");
+    press.hot = t;
+    if (t) t.classList.add("is-hot");
+  }
+  function endPress(commit) {
+    if (!press) return;
+    var p = press; press = null;
+    nav.classList.remove("is-pressed");
+    if (p.hot) p.hot.classList.remove("is-hot");
+    /* רק אם האצבע נגררה לכפתור אחר — הקשה רגילה מטופלת ע"י הקליק הטבעי */
+    if (commit && p.hot && p.hot !== p.down) {
+      /* הקליק הטבעי (על הכפתור שבו התחילה הלחיצה, בגלל לכידת מגע) נבלע —
+         אחרת היינו מנווטים פעמיים: פעם למקור ופעם ליעד. */
+      swallowUntil = Date.now() + 450;
+      var target = p.hot;
+      ownClick = true; try { target.click(); } finally { ownClick = false; }
+    }
+  }
+  var swallowUntil = 0, ownClick = false;
+  if (nav) {
+    nav.addEventListener("pointerdown", function (e) {
+      if (!mq.matches || e.button > 0) return;
+      if (document.body.classList.contains("nav-mini")) setMini(false);
+      var t = tabAt(e.clientX, e.clientY);
+      if (!t) return;
+      press = { down: t, hot: null };
+      nav.classList.add("is-pressed");
+      setHot(t);
+    });
+    nav.addEventListener("pointermove", function (e) {
+      if (!press) return;
+      var t = tabAt(e.clientX, e.clientY);
+      if (t) setHot(t);
+    });
+    nav.addEventListener("click", function (e) {
+      if (!ownClick && swallowUntil && Date.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+    nav.addEventListener("pointerup", function () { endPress(true); });
+    nav.addEventListener("pointercancel", function () { endPress(false); });
+    nav.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") endPress(false); });
+  }
+
   window.CBA = window.CBA || {};
   window.CBA.measureHeader = setHeaderVar;
 

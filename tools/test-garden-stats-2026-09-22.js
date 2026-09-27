@@ -209,8 +209,10 @@ ok('בכרטיס הפרטים — אותו תג', /\(closed \? '' : tagHtml\(t\)
 ok('המקרא מתאר את שתי הרמות', /gt-age is-l1">נגררה</.test(GT) && /gt-age is-l2">נגררה 3 שבועות</.test(GT));
 ok('כרטיס התקלה נפתח מבחוץ — CBA.gardenOpenCard', /CBA\.gardenOpenCard = function/.test(GT) && /CBA\.gardenOpenCard\(id, refresh\)/.test(ST));
 ok('🔴 מנהל ומנהל-על בלבד — "MANAGER"', /gardenStats: "MANAGER"/.test(APP));
-ok('"נתונים" ראשון בקבוצת הגינון, ו-landing', /group: "ginun", label: "גינון", landing: "gardenStats", items: \[\s*\["gardenStats"/.test(APP));
-ok('landing עובר את rebuildAreas', /landing: t\.landing \|\| ""/.test(APP));
+// 27.9.26 (ניווט מובייל v2): "גינון" הוא מקטע בתוך "שירותים". "נתונים" עדיין ראשון במקטע,
+// וכשהקבוצה מצטמצמת למקטע הגינון בלבד (מנהל גינון) היא נוחתת עליו — SECTION_LANDING.
+ok('"נתונים" ראשון במקטע הגינון, ו-landing', /\["gardenStats", "נתוני גינון", "garden"\],\s*\["gardenPlan"/.test(APP) && /SECTION_LANDING = \{ garden: "gardenStats" \}/.test(APP));
+ok('landing עובר את rebuildAreas', /var landing = t\.landing \|\| \(oneSec && SECTION_LANDING\[oneSec\]\) \|\| ""/.test(APP));
 ok('לחיצה על הקבוצה מנווטת ל-landing כשלא בתוכה', /showScreen\(grp\.landing\)/.test(APP));
 ok('המנוע נטען לפני המסך', IDX.indexOf('js/data/gardenStatsCalc.js') > 0 &&
    IDX.indexOf('js/data/gardenStatsCalc.js') < IDX.indexOf('js/screens/gardenStats.js'));

@@ -53,6 +53,10 @@
     // צאצא — כולל .app-nav__group-items, .app-nav__tab--sub, .app-nav__chev)
     // ולמדוד מחדש רק אחרי שהתנועה שגרמה לשינוי הגודל/מיקום באמת נגמרה.
     function targetEl() {
+      /* 27.9.26 — בזמן לחיצה/גרירה על הבר במובייל (ר' mobile.js) המחוון
+         עוקב אחרי הכפתור שמתחת לאצבע, לפני שהוא באמת נבחר. */
+      var hot = nav.querySelector(".app-nav__tab.is-hot");
+      if (hot) return hot;
       var active = nav.querySelector(".app-nav__tab.is-active");
       if (!active) return null;
       var closedGroup = active.closest(".app-nav__group:not(.is-open)");

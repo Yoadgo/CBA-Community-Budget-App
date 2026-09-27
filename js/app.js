@@ -373,38 +373,27 @@
         // (PERM.CLUB מול PERM.GYM), ו-rebuildAreas כבר מסנן פריט-פריט — כך
         // שמנהל מועדון יראה כאן פריט אחד, ומי שאין לו אף אחד מהם לא יראה
         // את הקבוצה בכלל. אין צורך בשום לוגיקה מיוחדת.
-        { group: "mitkanim", label: "מתקנים", items: [["clubAdmin", "שריון מועדון"], ["gymAdmin", "מכון כושר"], ["weworkAdmin", "WeWork"]] },
-        // (2026-08-18, גל 2 — לבקשת יועד: "אני רוצה קוהרנטיות בין אזור תושב
-        // למנהל. אם ועד ורשימת תושבים זה תחת השיכון באזור תושב אז שיהיה ככה גם
-        // אצל המנהל".) "תושבים", "ועד השיכון" ו"שירותים" עברו לקבוצת "השיכון" —
-        // אותו שם, אותו אייקון ואותו סדר כמו באזור התושב למטה, בדיוק כמו
-        // ש"מתקנים" כבר זהה בשני הצדדים. התוצאה: מי שעובר בין האזורים מוצא את
-        // אותם דברים באותם מקומות, ובר הניווט במובייל מקבל מספר קבוע של יעדים.
-        // "ניהול מיילים" ירד מהניווט הראשי לתפריט המשתמש ליד "הגדרות" (לבקשת
-        // יועד — הוא שייך להגדרות המערכת ולא ליעד ניווט יומיומי); הוא נשאר
-        // ב-screens למעלה, כך שניווט אליו עובד רגיל.
-        { group: "shikun", label: "השיכון", items: [["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"], ["servicesAdmin", "שירותים"]] },
-        /* "גינון" — קבוצה, לא טאב בודד (2026-09-08, אחרי הצוות האדום).
-           קדמה לזה הצעה לסרגל טאבים *בתוך* המסך, והיא נפסלה: היא הוסיפה
-           49px קבועים לכל מסך גינון ורמת ניווט שלישית, שבוע אחרי שהורדנו
-           235px של כרום. קבוצה עולה אפס פיקסלים בתוך המסך, והיא כבר הדפוס
-           של "תקציב" ו"השיכון" — אותו מנגנון בדיוק, בלי קוד חדש.
-           הסדר הוא סדר מסלול החיים של משימה: תוכנית -> נכנס לשבוע -> מעקב.
-           ⚠️ לאחראי הגינון החיצוני שני הראשונים מסוננים (SCREEN_PERM), ואז
-           הקבוצה מצטמצמת לפריט אחד ומתקפלת לטאב רגיל — ר' rebuildAreas. */
-        /* ⚠️ שלושה פריטים ולא ארבעה (2026-09-09). "לטיפולך" היה טאב נפרד
-           שהכיל, לפי התפקיד, או דיווחים חדשים או תור אישורים — אף פעם לא את
-           שניהם. אותה מילה אמרה שני דברים, וחצי מהתשובה תמיד ישב בטאב השני.
-           מהיום הוא החלק העליון של "משימות", שמחזיק את **כל** המשימות. */
-        /* 🔴 22.9 (הכרעת יועד) — **"נתונים" הוא המסך הראשי של מנהל הגינון.**
-           לחיצה על "גינון" פותחת אותו ישר (landing, ר' toggleGroup), ולכן
-           הוא גם הראשון בקבוצה. לגנן החיצוני הוא מסונן (SCREEN_PERM "MANAGER"),
-           והקבוצה שלו מתקפלת ל"משימות" בלבד — בדיוק כמו עד היום. */
-        { group: "ginun", label: "גינון", landing: "gardenStats", items: [
-            ["gardenStats", "נתונים"],
-            ["gardenPlan",  "תוכנית העבודה"],
-            ["gardenTasks", "משימות"]
-          ] }
+        /* 🔴 27.9.26 (ניווט מובייל v2, הכרעת יועד — ר' claude/mobile-nav-spec-2026-09-27.md
+           בפרויקט): "מתקנים" ו"גינון" נבלעו בקבוצה אחת "שירותים", בדיוק כמו אצל
+           התושב, והבר של המנהל ירד לשלושה יעדים: תקציב · שירותים · השיכון.
+           האיבר השלישי בכל פריט הוא **מקטע** — בבועה (openNavSheet) נפתח מרווח
+           ברור בין מקטעים. ניהול ההמלצות יושב בתוך servicesAdmin, ולכן כאן
+           "ספקים והמלצות" הוא פריט אחד.
+           ⚠️ אחראי הגינון החיצוני שורד כאן רק עם "משימות" — והקבוצה מתקפלת
+           לטאב רגיל. התווית שנשארת היא של **המקטע** ("גינון"), לא של הקבוצה —
+           ר' SECTION_LABELS ב-rebuildAreas. גם מנהל גינון שאין לו מתקנים
+           מקבל קבוצה שכל פריטיה מאותו מקטע — ואז היא נקראת "גינון" ונוחתת
+           ישר על "נתונים" (SECTION_LANDING), בדיוק כמו עד היום. */
+        { group: "services", label: "שירותים", items: [
+            ["clubAdmin", "מועדון משפחות", "facilities"],
+            ["gymAdmin", "מכון כושר", "facilities"],
+            ["weworkAdmin", "WeWork", "facilities"],
+            ["servicesAdmin", "ספקים והמלצות", "community"],
+            ["gardenStats", "נתוני גינון", "garden"],
+            ["gardenPlan",  "תוכנית העבודה", "garden"],
+            ["gardenTasks", "משימות", "garden"]
+          ] },
+        { group: "shikun", label: "השיכון", items: [["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"]] }
       ]
     },
     resident: {
@@ -429,28 +418,24 @@
         // האלה גם עוסקות באותו דבר — הבקשות שלי מול הוועד — ולכן האיחוד מחזיר
         // את השורה לחמישה יעדים ומקצר את הפער בין התוויות. הגשת קבלה נשארת
         // בהישג יד ישיר גם מכרטיס הפעולות המהיר בעמוד הבית (ר' home.js).
-        { group: "myarea", label: "האזור שלי", items: [["resRequests", "הבקשות שלי"], ["resSubmit", "הגשת קבלה"]] },
-        // "מתקנים" (2026-08-19) — שריון המועדון ומכון הכושר אוחדו לקבוצה אחת,
-        // באותה תבנית של "השיכון". נעשה רק עכשיו, בשלב שבו נולד הפריט השני:
-        // קבוצה מתקפלת עם פריט יחיד היא רעש ויזואלי בלי תועלת.
-        // WeWork (25.9) — פריט שלישי, "תחת מתקנים כמובן" (יועד, 24.9).
-        { group: "mitkanim", label: "מתקנים", items: [["resReserve", "שריון מועדון"], ["resGym", "מכון כושר"], ["resWework", "WeWork"]] },
-        // "שירותים" (2026-08-18) הצטרף כפריט רביעי לאותה קבוצה ולא ככפתור עצמאי:
-        // הוא שייך תמטית ל"מה יש בשיכון", ושורת הניווט הראשית כבר עמוסה.
+        /* 🔴 27.9.26 (ניווט מובייל v2, הכרעת יועד): ארבעה יעדים בלבד —
+           בית · שירותים · השיכון · אירועים. "האזור שלי", "מתקנים" ו"מראה שיכון"
+           נבלעו בקבוצת "שירותים", שמחולקת למקטעים (האיבר השלישי) שבבועה
+           מופרדים במרווח: החזרים · מתקנים · בשיכון · מראה שיכון (לבד, לבקשת
+           יועד). "שריון מועדון" נקרא בניווט "מועדון משפחות". כלל: לכל היותר
+           שתי רמות — כפתור בבר ← בועה ← מסך. */
+        { group: "services", label: "שירותים", items: [
+            ["resSubmit", "הגשת החזר", "refunds"],
+            ["resRequests", "הבקשות שלי", "refunds"],
+            ["resReserve", "מועדון משפחות", "facilities"],
+            ["resGym", "מכון כושר", "facilities"],
+            ["resWework", "WeWork", "facilities"],
+            ["resServices", "ספקים ושירותים", "community"],
+            ["resRecommendations", "המלצות השיכון", "community"],
+            ["resGarden", "מראה שיכון", "garden"]
+          ] },
         { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"], ["resCommittee", "ועד השיכון"]] },
-        // "שירותים" (27.9.26) — קבוצה עצמאית במקום פריט בתוך "השיכון": resServices
-        // יצא מ"השיכון" (שנשאר עם שלושה פריטים), והצטרפה אליו "המלצות השיכון"
-        // (resRecommendations, חדש) — אותה תבנית מתקפלת בדיוק. ⚠️ שורת הניווט
-        // עולה מ-6 יעדים ל-7 — ר' ההערה למעלה ליד קבוצת "האזור שלי" על כך
-        // שמעל שישה יעדים המרווח הנראה בין האייקונים נהיה לא אחיד; לא טופל
-        // כאן (בקשה מפורשת שלא לגעת ב-CSS הניווט), ר' דו"ח המסירה.
-        { group: "services", label: "שירותים", items: [["resServices", "שירותים"], ["resRecommendations", "המלצות השיכון"]] },
-        // "מראה שיכון" (2026-09-07) — טאב ייעודי ולא פריט בתוך "השיכון",
-        // לבקשת יועד: למודול יש זהות משלו באפליקציה. resGardenNew (טופס
-        // הדיווח) רשום כמסך אבל **לא כטאב** — מגיעים אליו מכפתור "דיווח חדש"
-        // בתוך המסך, בדיוק כמו resMe.
-        ["resGarden", "מראה שיכון"],
-        ["events", "לוח אירועים"]
+        ["events", "אירועים"]
       ]
     }
   };
@@ -467,6 +452,10 @@
   // AREAS הוא תצוגה מסוננת של AREAS_ALL לפי ההרשאות של המשתמש הנוכחי. הוא נבנה
   // מחדש בכל התחברות/החלפת משתמש/כניסה ויציאה ממצב הדמיה (ר' applyUser).
   let AREAS = JSON.parse(JSON.stringify(AREAS_ALL));
+  /* שמות מקטעים (27.9.26) — משמשים רק כשקבוצה מצטמצמת למקטע יחיד (ר' rebuildAreas). */
+  var SECTION_LABELS = { garden: "גינון", facilities: "מתקנים", refunds: "החזרים" };
+  var SECTION_LANDING = { garden: "gardenStats" };
+  var SECTION_ICON = { garden: "ginun", facilities: "mitkanim", refunds: "myarea" };
   function rebuildAreas() {
     var a = AREAS_ALL.admin;
     var screens = a.screens.filter(canScreen);
@@ -480,8 +469,14 @@
            מקבל כפתור-קבוצה שנפתח לגיליון עם שורה אחת — ניווט לשום מקום.
            התווית הנשארת היא של *הקבוצה* ולא של הפריט: "גינון" אומר לו איפה
            הוא, בעוד "מעקב" לבדו בבר הניווט לא אומר על מה. */
-        if (items.length === 1) return [items[0][0], t.label];
-        return { group: t.group, label: t.label, items: items, landing: t.landing || "" };
+        /* 27.9.26 — קבוצה שכל מה ששרד בה הוא ממקטע אחד (אחראי/מנהל גינון)
+           נקראת בשם המקטע ונוחתת על המסך הראשי שלו, כמו קבוצת "גינון" של פעם. */
+        var secs = items.map(function (it) { return it[2] || ""; });
+        var oneSec = secs[0] && secs.every(function (x) { return x === secs[0]; }) ? secs[0] : "";
+        var label = (oneSec && SECTION_LABELS[oneSec]) || t.label;
+        if (items.length === 1) return [items[0][0], label];
+        var landing = t.landing || (oneSec && SECTION_LANDING[oneSec]) || "";
+        return { group: t.group, label: label, items: items, landing: landing, icon: (oneSec && SECTION_ICON[oneSec]) || "" };
       }
       return canScreen(t[0]) ? t : null;
     }).filter(Boolean);
@@ -566,6 +561,21 @@
     // כפתור-הקבוצה "תקציב" — מייצג את מודול התקציב כמכלול (לא מסך ספציפי), ר' AREAS_ALL.admin.tabs
     taktziv:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3"/></svg>'
   };
+  /* צבע הסמליל בבועת הניווט במובייל (27.9.26) — רק הסמליל צבוע, לא רקע.
+     אותה פלטה של מקורות המימון (--fund-*) ושל קטגוריות הוועד, כך שלא
+     מתנגשים בירוק/אדום/כתום של הסטטוסים. */
+  var NAV_TINT = {
+    resSubmit: "#3730A3", resRequests: "#475569",
+    resReserve: "#6D28D9", clubAdmin: "#6D28D9",
+    resGym: "#0E7490", gymAdmin: "#0E7490",
+    resWework: "#A16207", weworkAdmin: "#A16207",
+    resServices: "#0369A1", servicesAdmin: "#0369A1",
+    resRecommendations: "#9D174D",
+    resGarden: "#047857", gardenStats: "#047857", gardenPlan: "#047857", gardenTasks: "#047857",
+    budget: "#0E7490", expenses: "#3730A3", planning: "#475569",
+    resMap: "#0E7490", resDirectory: "#6D28D9", resCommittee: "#3730A3",
+    residents: "#6D28D9", committeeAdmin: "#3730A3"
+  };
   // שברון קטן שמתהפך כשהקבוצה פתוחה
   var CHEV_ICON = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>';
   // איזו קבוצת-ניווט מקופלת (אם יש) פתוחה כרגע. null = הכול סגור.
@@ -623,12 +633,24 @@
     a.tabs.forEach(function (t) { if (t && t.group === groupKey) group = t; });
     if (!group) return;
 
-    var itemsHTML = group.items.map(function (it) {
+    /* 🔴 27.9.26 — ניווט מובייל v2: "בועת כמוסות" במקום גיליון תחתון
+       (הכרעת יועד, ר' claude/mobile-nav-spec-2026-09-27.md). בועה צרה שנפתחת
+       מעל הכפתור שנלחץ ונסגרת חזרה אליו; כל פריט הוא כמוסת זכוכית עם סמליל
+       צבעוני (רק הסמליל צבוע). בין מקטעים (האיבר השלישי ב-items) — מרווח
+       ברור עם קו דקיק, בלי כותרות. שמות המחלקות nav-sheet* נשמרו בכוונה:
+       closeNavSheet והמאזינים למטה עובדים בדיוק כמו קודם. */
+    var prevSec = null;
+    var itemsHTML = group.items.map(function (it, i) {
+      var sec = it[2] || "";
+      var gap = (i > 0 && sec !== prevSec) ? '<div class="nav-sheet__gap" aria-hidden="true"></div>' : '';
+      prevSec = sec;
       var ico = NAV_ICONS[it[0]] ? '<span class="nav-sheet__ico">' + NAV_ICONS[it[0]] + '</span>' : '';
       var n = navBadgeCount(it[0]);
       var badge = n ? '<span class="nav-badge">' + (n > 9 ? "9+" : n) + '</span>' : '';
-      return '<button type="button" class="nav-sheet__item' + (it[0] === currentScreen ? " is-active" : "") +
-        '" data-screen="' + it[0] + '">' + ico + '<span class="nav-sheet__txt">' + CBA.esc(it[1]) + '</span>' + badge + '</button>';
+      var tint = NAV_TINT[it[0]] || "#374151";
+      return gap + '<button type="button" class="nav-sheet__item' + (it[0] === currentScreen ? " is-active" : "") +
+        '" data-screen="' + it[0] + '" style="--tint:' + tint + ';--d:' + (i * 22) + 'ms">' + ico +
+        '<span class="nav-sheet__txt">' + CBA.esc(it[1]) + '</span>' + badge + '</button>';
     }).join("");
 
     var wrap = document.createElement("div");
@@ -637,10 +659,18 @@
     wrap.innerHTML =
       '<div class="nav-sheet__backdrop"></div>' +
       '<div class="nav-sheet__panel" role="dialog" aria-label="' + CBA.esc(group.label) + '">' +
-        '<div class="nav-sheet__grip" aria-hidden="true"></div>' +
-        '<div class="nav-sheet__title">' + CBA.esc(group.label) + '</div>' +
         itemsHTML +
       '</div>';
+    /* מיקום: מעל הכפתור, צמוד לקצוות המסך; הבועה "צומחת" מתוך הכפתור. */
+    var gbtn = nav && nav.querySelector('.app-nav__tab--group[data-group="' + groupKey + '"]');
+    var panel = wrap.querySelector(".nav-sheet__panel");
+    if (gbtn) {
+      var r = gbtn.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+      var W = 212, cx = r.left + r.width / 2;
+      var left = Math.max(10, Math.min(vw - W - 10, cx - W / 2));
+      panel.style.left = left + "px";
+      panel.style.transformOrigin = (cx - left) + "px calc(100% + 30px)";
+    }
     document.body.appendChild(wrap);
     /* 🔴 ממצא 27 (2026-09-22) — ההערה הקודמת כאן הייתה נכונה לגבי
        הטרנזיציה ושגויה לגבי המחיר: **בלשונית שאינה גלויה rAF אינו רץ**,
@@ -772,7 +802,8 @@
         // השני (מדורג, ר' STAGGER_MS) ולא בבת אחת, כדי שהעין תספיק לעקוב.
         var groupActive = t.items.some(function (it) { return it[0] === currentScreen; });
         var isOpen = openGroup === t.group;
-        var gico = NAV_ICONS[t.group] ? '<span class="app-nav__ico">' + NAV_ICONS[t.group] + '</span>' : '';
+        var gkey = t.icon || t.group;
+        var gico = NAV_ICONS[gkey] ? '<span class="app-nav__ico">' + NAV_ICONS[gkey] + '</span>' : '';
         // תגית-מספר על כותרת הקבוצה עצמה = סכום ההתרעות של כל הפריטים שבתוכה
         // (למשל "ניהול הוצאות" שיושב היום בתוך קבוצת "תקציב") — כדי שהתרעה לא
         // "תיעלם" מהעין רק כי הטאב שלה מקופל בתוך קבוצה סגורה.

@@ -36,7 +36,8 @@
     /* בר הניווט התחתון — מרחק מתחתית המסך עד לראש הכמוסה הצפה. נמדד מחדש
        (Playwright) אחרי הקטנת המידות ב-15%: הגובה בפועל ירד מ-45px ל-39px
        (ריפוד 4px + ריפוד טאב 8px + תוכן ~27px), אז 39+10=49px (היה 55px). */
-    --botnav-h: 49px;
+    /* 27.9.26 — ניווט v2: הבר גבוה יותר (אייקון 24px מעל תווית), 60px + 10px מהתחתית. */
+    --botnav-h: 70px;
     /* השורה התחתונה הקבועה (תקציב / בניית תקציב) */
     --bottomline-h: 60px;
   }
@@ -170,41 +171,125 @@
   /* התגית עוברת לפינה כדי לא לתפוס שורה שלישית בתוך הכפתור */
   .app-nav--bottom .nav-badge { position: absolute; top: 3px; inset-inline-end: 6px; margin: 0; }
 
-  /* ---------- גיליון תחתון לקבוצת ניווט (2026-08-18, גל 2) ---------- */
+  /* ==========================================================================
+     🔴 27.9.26 — ניווט מובייל v2 (הכרעת יועד, ר' claude/mobile-nav-spec-2026-09-27.md)
+     בר זכוכית שקוף מאוד, כמוסה פעילה בהירה (לא שחור), תווית מתחת לאייקון,
+     כיווץ בגלילה (body.nav-mini), כפתור חיפוש עגול נפרד, ובועת כמוסות
+     במקום הגיליון התחתון. כל הכללים כאן **דורסים** את הבר שלמעלה, בכוונה
+     בבלוק אחד — כדי שאפשר יהיה להחזיר את הישן במחיקת הבלוק הזה בלבד.
+     ========================================================================== */
+  .app-nav.app-nav--bottom {
+    inset-inline-start: 12px; inset-inline-end: 74px; max-width: none;
+    padding: 5px;
+    overflow: visible; touch-action: none;
+    background: linear-gradient(180deg, rgba(255,255,255,.40), rgba(255,255,255,.22));
+    backdrop-filter: blur(10px) saturate(190%) brightness(1.08);
+    -webkit-backdrop-filter: blur(10px) saturate(190%) brightness(1.08);
+    border: 1px solid rgba(255,255,255,.6);
+    box-shadow: 0 6px 20px rgba(16,24,40,.12), inset 0 1px 0 rgba(255,255,255,.85), inset 0 -1px 0 rgba(255,255,255,.25);
+    transition: left .55s cubic-bezier(.34,1.45,.5,1), right .55s cubic-bezier(.34,1.45,.5,1),
+                inset-inline-start .55s cubic-bezier(.34,1.45,.5,1), inset-inline-end .55s cubic-bezier(.34,1.45,.5,1),
+                padding .55s cubic-bezier(.34,1.45,.5,1), transform .3s cubic-bezier(.34,1.45,.5,1);
+  }
+  .app-nav.app-nav--bottom.is-pressed { transform: scale(1.035); }
+  .app-nav--bottom .app-nav__tab {
+    font-size: 10.5px; gap: 2px; padding: 6px 2px 5px; border-radius: 999px;
+    color: #1F2937; text-shadow: 0 0 3px rgba(255,255,255,.95);
+    transition: font-size .45s cubic-bezier(.34,1.45,.5,1), padding .55s cubic-bezier(.34,1.45,.5,1);
+  }
+  .app-nav--bottom .app-nav__ico svg {
+    width: 24px; height: 24px; filter: drop-shadow(0 0 2px rgba(255,255,255,.9));
+    transition: width .5s cubic-bezier(.34,1.45,.5,1), height .5s cubic-bezier(.34,1.45,.5,1), transform .3s cubic-bezier(.34,1.45,.5,1);
+  }
+  .app-nav--bottom .app-nav__tab.is-hot .app-nav__ico svg { transform: scale(1.12); }
+  /* הפעיל: טקסט מודגש על כמוסה בהירה (המחוון), לא לבן על שחור */
+  .app-nav--bottom .app-nav__tab.is-active,
+  .app-nav--bottom .app-nav__tab--group.has-active { color: var(--text); background: none; font-weight: 700; }
+  .app-nav--bottom .app-nav__tab.is-active .nav-badge { background: var(--danger); color: #fff; }
+  .app-nav--bottom .nav-badge { top: 1px; inset-inline-end: calc(50% - 24px); box-shadow: 0 0 0 2px rgba(255,255,255,.9); transition: top .5s; }
+  .app-nav.app-nav--bottom .nav-indicator {
+    top: 5px; bottom: 5px;
+    background: rgba(17,24,39,.085);
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.75), inset 0 0 0 1px rgba(255,255,255,.35);
+    transition: transform .5s cubic-bezier(.34,1.3,.5,1), width .5s cubic-bezier(.34,1.3,.5,1),
+                top .3s cubic-bezier(.34,1.45,.5,1), bottom .3s cubic-bezier(.34,1.45,.5,1), background .25s, opacity .25s;
+  }
+  .app-nav.app-nav--bottom.is-pressed .nav-indicator {
+    top: 1px; bottom: 1px; background: rgba(255,255,255,.6);
+    box-shadow: 0 4px 14px rgba(16,24,40,.12), inset 0 1px 0 #fff;
+  }
+
+  /* --- כפתור החיפוש העגול (נוצר ב-mobile.js) --- */
+  .nav-search-fab {
+    position: fixed; z-index: 40; inset-inline-end: 12px; bottom: calc(10px + env(safe-area-inset-bottom));
+    width: 60px; height: 60px; border-radius: 50%; padding: 0; cursor: pointer;
+    display: grid; place-items: center; color: #1F2937;
+    background: linear-gradient(180deg, rgba(255,255,255,.40), rgba(255,255,255,.22));
+    backdrop-filter: blur(10px) saturate(190%) brightness(1.08);
+    -webkit-backdrop-filter: blur(10px) saturate(190%) brightness(1.08);
+    border: 1px solid rgba(255,255,255,.6);
+    box-shadow: 0 6px 20px rgba(16,24,40,.12), inset 0 1px 0 rgba(255,255,255,.85);
+    transition: width .55s cubic-bezier(.34,1.45,.5,1), height .55s cubic-bezier(.34,1.45,.5,1),
+                inset-inline-end .55s cubic-bezier(.34,1.45,.5,1), left .55s cubic-bezier(.34,1.45,.5,1), transform .3s cubic-bezier(.34,1.45,.5,1);
+  }
+  .nav-search-fab:active { transform: scale(1.08); }
+  .nav-search-fab svg { width: 22px; height: 22px; filter: drop-shadow(0 0 2px rgba(255,255,255,.9)); transition: width .5s, height .5s; }
+  body[data-nav-single="1"] .nav-search-fab { display: none; }
+  /* במובייל החיפוש יושב למטה — הכפתור בכותרת מוסתר (חוץ ממי שאין לו בר) */
+  body:not([data-nav-single="1"]) .app-controls .search-btn { display: none; }
+
+  /* --- כיווץ בגלילה: קטן בהרבה, בלי תוויות --- */
+  body.nav-mini .app-nav.app-nav--bottom { inset-inline-start: 22%; inset-inline-end: calc(22% + 48px); padding: 3px; }
+  body.nav-mini .app-nav--bottom .app-nav__tab { font-size: 0; padding: 5px 2px; gap: 0; }
+  body.nav-mini .app-nav--bottom .app-nav__ico svg { width: 19px; height: 19px; }
+  body.nav-mini .app-nav.app-nav--bottom .nav-indicator { top: 3px; bottom: 3px; }
+  body.nav-mini .app-nav--bottom .nav-badge { top: -4px; font-size: 9.5px; }
+  body.nav-mini .nav-search-fab { width: 40px; height: 40px; inset-inline-end: 22%; }
+  body.nav-mini .nav-search-fab svg { width: 17px; height: 17px; }
+
+  /* ---------- בועת כמוסות לקבוצת ניווט (27.9.26, במקום הגיליון התחתון) ---------- */
   .nav-sheet { position: fixed; inset: 0; z-index: 60; }
   .nav-sheet__backdrop {
-    position: absolute; inset: 0; background: rgba(16,24,40,.28);
+    position: absolute; inset: 0; background: rgba(16,24,40,.08);
     opacity: 0; transition: opacity .24s ease;
   }
   .nav-sheet.is-open .nav-sheet__backdrop { opacity: 1; }
   .nav-sheet__panel {
-    position: absolute; inset-inline: 10px;
-    bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 18px);
-    background: rgba(255,255,255,.92);
-    backdrop-filter: saturate(190%) blur(20px);
-    -webkit-backdrop-filter: saturate(190%) blur(20px);
-    border: 1px solid rgba(255,255,255,.7); border-radius: 20px;
-    box-shadow: 0 12px 40px rgba(16,24,40,.22), inset 0 1px 0 rgba(255,255,255,.8);
-    padding: 8px 8px 10px;
-    transform: translateY(14px); opacity: 0;
-    transition: transform .26s cubic-bezier(.2,.7,.2,1), opacity .2s ease;
+    position: absolute; width: 212px; left: 10px;
+    bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 10px);
+    max-height: calc(100vh - var(--botnav-h) - 90px); overflow-y: auto;
+    padding: 6px; border-radius: 60px;
+    background: linear-gradient(180deg, rgba(255,255,255,.42), rgba(255,255,255,.26));
+    backdrop-filter: blur(18px) saturate(200%) brightness(1.08);
+    -webkit-backdrop-filter: blur(18px) saturate(200%) brightness(1.08);
+    border: 1px solid rgba(255,255,255,.7);
+    box-shadow: 0 16px 40px rgba(16,24,40,.16), inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(255,255,255,.3);
+    transform: scale(.12); opacity: 0;
+    transition: transform .55s cubic-bezier(.34,1.45,.5,1), opacity .18s ease, border-radius .55s cubic-bezier(.34,1.45,.5,1);
   }
-  .nav-sheet.is-open .nav-sheet__panel { transform: translateY(0); opacity: 1; }
-  .nav-sheet__grip { width: 36px; height: 4px; border-radius: 999px; background: rgba(17,24,39,.14); margin: 2px auto 8px; }
-  .nav-sheet__title { font-size: 12px; font-weight: 700; color: var(--text-muted); padding: 0 10px 8px; text-align: start; }
+  .nav-sheet.is-open .nav-sheet__panel { transform: none; opacity: 1; border-radius: 26px; }
   .nav-sheet__item {
     position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
-    padding: 12px; border: none; background: none; border-radius: 13px;
-    font: inherit; font-size: 14.5px; font-weight: 500; color: var(--text);
+    height: 40px; padding: 0 13px; border: none; border-radius: 20px;
+    background: rgba(255,255,255,.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(16,24,40,.04);
+    font: inherit; font-size: 14px; font-weight: 500; color: var(--text);
     cursor: pointer; text-align: start;
+    opacity: 0; transform: translateY(6px);
+    transition: opacity .25s ease var(--d, 0ms), transform .4s cubic-bezier(.34,1.45,.5,1) var(--d, 0ms), background .15s;
   }
-  .nav-sheet__item:active { background: var(--hover); }
-  .nav-sheet__item.is-active { background: var(--action); color: #fff; font-weight: 600; }
-  .nav-sheet__ico { display: inline-flex; flex: none; }
-  .nav-sheet__ico svg { width: 18px; height: 18px; display: block; }
-  .nav-sheet__txt { flex: 1; min-width: 0; }
+  .nav-sheet.is-open .nav-sheet__item { opacity: 1; transform: none; }
+  .nav-sheet__item + .nav-sheet__item { margin-top: 4px; }
+  .nav-sheet__item:active { background: rgba(255,255,255,.85); }
+  .nav-sheet__item.is-active { background: rgba(255,255,255,.88); font-weight: 700; }
+  .nav-sheet__ico { display: inline-flex; flex: none; color: var(--tint, #374151); }
+  .nav-sheet__ico svg { width: 20px; height: 20px; display: block; stroke-width: 2; }
+  .nav-sheet__txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 6px rgba(255,255,255,.8); }
   .nav-sheet__item .nav-badge { position: static; margin: 0; }
-  .nav-sheet__item.is-active .nav-badge { background: #fff; color: var(--action); }
+  /* מרווח ברור בין מקטעים (דרישת יועד), עם קו דקיק באמצע */
+  .nav-sheet__gap { height: 18px; display: flex; align-items: center; padding: 0 22px; }
+  .nav-sheet__gap::after { content: ""; flex: 1; height: 1px; background: rgba(17,24,39,.08); }
 
   /* ---------- "בניית תקציב": ביטול רוחבי-מינימום מובנים (2026-08-18, ממצא 2.4) ----------
      זה היה המסך היחיד שגרם לכל העמוד לזוז ימינה-שמאלה בטלפון (נמדד: מסמך

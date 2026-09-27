@@ -582,7 +582,7 @@ section('8. חיווט: Code.gs, כללים, לקוח');
   ok('האוספים מעל ברירת המחדל האוסרת', RULES.indexOf('match /gymNuki/') < RULES.indexOf('match /{document=**}'));
   ok('app.js: PERM.WEWORK = "WeWork"', /WEWORK: "WeWork"/.test(APP));
   ok('app.js: weworkAdmin דורש PERM.WEWORK', /weworkAdmin: PERM\.WEWORK/.test(APP));
-  ok('app.js: WeWork תחת "מתקנים" — תושב ומנהל', /\["resGym", "מכון כושר"\], \["resWework", "WeWork"\]/.test(APP) && /\["gymAdmin", "מכון כושר"\], \["weworkAdmin", "WeWork"\]/.test(APP));
+  ok('app.js: WeWork במקטע "מתקנים" (בתוך "שירותים", 27.9.26) — תושב ומנהל', /\["resGym", "מכון כושר", "facilities"\],\s*\["resWework", "WeWork", "facilities"\]/.test(APP) && /\["gymAdmin", "מכון כושר", "facilities"\],\s*\["weworkAdmin", "WeWork", "facilities"\]/.test(APP));
   ok('app.js: hasAnyAdmin כולל WeWork (אחרת מנהל WeWork בלבד לא נכנס לניהול)', /PERM\.GARDEN, PERM\.WEWORK\]/.test(APP));
   ok('residents.js: אפשר להעניק הרשאת WeWork', /code: "WeWork"/.test(R('js/screens/residents.js')));
   const v = (IDX.match(/\?v=([a-z0-9]+)/) || [])[1];
