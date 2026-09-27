@@ -34,7 +34,7 @@
   CBA.screens = CBA.screens || {};
 
   var COLL = "committee", DOC = "tree", SCHEMA = 1;
-  var MINW = 150, GAP = 12, PHONE = 600;
+  var MINW = 128, GAP = 12, PHONE = 600;   /* 27.9 יועד: משבצת צרה ב-15% */
 
   var DEFAULT_CATS = [
     { id: "k-role", name: "תפקיד בוועד",  color: "#16A34A", kind: "role" },
@@ -352,7 +352,7 @@
 
   function itemHTML(r, m, edit) {
     var c = catOf(r.cat);
-    return '<div class="ct-item' + hitCls(m, r.id) + (V.sel === r.id ? " is-sel" : "") + '" style="--c:' + esc(c.color) + '"' +
+    return '<div class="ct-item' + (r.holders.length ? "" : " is-solo") + hitCls(m, r.id) + (V.sel === r.id ? " is-sel" : "") + '" style="--c:' + esc(c.color) + '"' +
       (edit ? ' data-edit="' + esc(r.id) + '" data-drop="' + esc(r.id) + '" role="button" tabindex="0"' : "") + dragAttrs(edit, r.id) + '>' +
       '<span class="ct-item__t">' + esc(r.title || "(ללא שם)") + '</span>' +
       (r.holders.length ? namesHTML(r, edit, "ct-item__w") : "") +
