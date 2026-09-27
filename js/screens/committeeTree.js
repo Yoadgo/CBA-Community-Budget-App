@@ -60,7 +60,7 @@
   var S = { loaded: false, loading: false, waiters: [], error: "",
             exists: false, rev: 0, roles: [], cats: [], upgraded: false,
             people: null, dirOk: false, dirDone: false, dirLoading: false, saving: false };
-  var V = { q: "", open: {}, sel: null, draft: null };
+  var V = { q: "", sel: null, draft: null };
 
   /* ==========================================================================
    *  תושבים — מקור השמות
@@ -383,7 +383,6 @@
   /* ==========================================================================
    *  ציור
    * ======================================================================== */
-  var ICON_EDIT = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   var ICON_SEARCH = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
 
   function namesHTML(r, edit, cls) {
@@ -492,21 +491,17 @@
   }
 
   function phoneList(ix, depts, hub, m, edit) {
+    /* 27.9 יועד: תמיד פתוח (לא אקורדיון) — שם התפקיד ושם בעל/ת התפקיד
+       על אותה שורה, כדי שהשורה תהיה נמוכה יותר וייכנס יותר למסך. */
     return '<div class="ct-ptree">' + depts.map(function (d) {
       var c = catOf(d.cat);
-      var open = m ? !!m.live[d.id] : !!V.open[d.id];
       var inner = bodyHTML(ix, d.id, m, edit);
-      var n = ix.kids(d.id).length;
       return '<div class="ct-pitem' + hitCls(m, d.id) + '" style="--c:' + esc(c.color) + '">' +
-        '<div class="ct-acc' + (open ? " is-open" : "") + '">' +
-          '<div class="ct-acc__h">' +
-            '<button type="button" class="ct-acc__toggle" data-toggle="' + esc(d.id) + '" aria-expanded="' + open + '"' + (inner ? "" : " disabled") + '>' +
-              '<span class="ct-acc__txt"><b>' + esc(d.title || "(ללא שם)") + '</b>' + namesHTML(d, edit, "ct-acc__w") + '</span>' +
-              (inner ? '<span class="ct-acc__n">' + n + ' ' + (open ? "▴" : "▾") + '</span>' : "") +
-            '</button>' +
-            (edit ? '<button type="button" class="ct-iconbtn" data-edit="' + esc(d.id) + '" aria-label="עריכת ' + esc(d.title) + '">' + ICON_EDIT + '</button>' : "") +
+        '<div class="ct-acc is-open">' +
+          '<div class="ct-acc__h"' + (edit ? ' data-edit="' + esc(d.id) + '" role="button" tabindex="0"' : "") + '>' +
+            '<span class="ct-acc__txt"><b>' + esc(d.title || "(ללא שם)") + '</b>' + namesHTML(d, edit, "ct-acc__w") + '</span>' +
           '</div>' +
-          (open && inner ? '<div class="ct-acc__b">' + inner + '</div>' : "") +
+          (inner ? '<div class="ct-acc__b">' + inner + '</div>' : "") +
         '</div></div>';
     }).join("") +
     (edit ? '<div class="ct-pitem ct-pitem--add"><button type="button" class="ct-acc ct-acc--add" data-add="' + esc(hub.id) + '">+ תפקיד חדש</button></div>' : "") +
@@ -605,10 +600,9 @@
     var qEl = container.querySelector("#ct-q");
     qEl.addEventListener("input", function () { V.q = qEl.value; draw(); });
     root.addEventListener("click", function (e) {
-      var t = e.target.closest("[data-toggle],[data-edit],[data-add],[data-retry],#ct-cats,#ct-copy");
+      var t = e.target.closest("[data-edit],[data-add],[data-retry],#ct-cats,#ct-copy");
       if (!t || !root.contains(t)) return;
       if (t.hasAttribute("data-retry")) { S.error = ""; load(draw, true); return; }
-      if (t.hasAttribute("data-toggle")) { var id = t.getAttribute("data-toggle"); V.open[id] = !V.open[id]; draw(); return; }
       if (!edit) return;
       e.stopPropagation();
       if (t.id === "ct-cats") return openCats();

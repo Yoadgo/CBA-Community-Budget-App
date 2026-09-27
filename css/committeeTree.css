@@ -169,15 +169,11 @@
 .ct-pitem:first-child::before { top: -13px; height: 39px; }
 .ct-pitem:not(:last-child)::after { content: ""; position: absolute; inset-inline-start: -18px; top: 24px; bottom: -11px; border-inline-start: var(--ct-lw) solid var(--ct-line); }
 .ct-acc { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-.ct-acc__h { display: flex; align-items: center; background: var(--ct-tint); }
-.ct-acc__toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 50px; padding: 7px 12px; background: none; border: 0; font: inherit; color: inherit; text-align: start; cursor: pointer; }
-.ct-acc__toggle:disabled { cursor: default; opacity: 1; }
-.ct-acc__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.ct-acc__txt b { color: var(--ct-ink); font-size: 14.5px; }
-.ct-acc__w { font-size: 13.5px; }
-.ct-acc__n { color: var(--text-muted); font-size: 12.5px; white-space: nowrap; }
+.ct-acc__h { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; background: var(--ct-tint); }
+.ct-acc__txt { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+.ct-acc__txt b { color: var(--ct-ink); font-size: 16px; }
+.ct-acc__w { margin-inline-start: auto; color: var(--text-soft); font-size: 13.5px; text-align: end; }
 .ct-acc__b { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 5px; }
-.ct-iconbtn { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--text-soft); cursor: pointer; }
 .ct-acc--add { width: 100%; min-height: 46px; border: 1.5px dashed #C9D1CB; background: transparent; font: inherit; font-weight: 700; color: var(--text-soft); cursor: pointer; }
 
 /* ---------- טופס ---------- */
