@@ -34,7 +34,7 @@
   CBA.screens = CBA.screens || {};
 
   var COLL = "committee", DOC = "tree", SCHEMA = 1;
-  var MINW = 128, GAP = 12, PHONE = 600;   /* 27.9 יועד: משבצת צרה ב-15% */
+  var MINW = 115, GAP = 12, PHONE = 600, ROW_SHARE = 0.85;   /* 27.9 יועד: משבצת צרה ב-15% */
 
   var DEFAULT_CATS = [
     { id: "k-role", name: "תפקיד בוועד",  color: "#16A34A", kind: "role" },
@@ -488,7 +488,9 @@
       if (!roles.length) {
         canvas.innerHTML = emptyYearHTML();
       } else {
-        canvas.innerHTML = roots.map(function (r) { return treeHTML(ix, r, m, edit, w); }).join("") +
+        /* 27.9 יועד: משבצות צרות ב-15% ⇒ השורות תופסות 85% מהרוחב, ממורכזות. */
+        var rowW = w >= PHONE ? w * ROW_SHARE : w;
+        canvas.innerHTML = roots.map(function (r) { return treeHTML(ix, r, m, edit, rowW); }).join("") +
           ((loose.length || edit) ? '<div class="ct-more"' + (edit ? ' data-drop=""' : "") + '><h3>לא משויכים לתפקיד</h3>' +
             (loose.length ? '<div class="ct-more__grid">' + loose.map(function (x) { return itemHTML(x, m, edit); }).join("") + '</div>'
                           : '<p class="ct-muted">גררו לכאן שורה כדי לנתק אותה מתפקיד.</p>') + '</div>' : "");

@@ -63,19 +63,19 @@
 .ct-lead {
   position: relative; min-width: 230px; max-width: 100%; text-align: center;
   background: var(--ct-tint); border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
-  border-radius: 14px; padding: 6px 16px; display: flex; flex-direction: column; align-items: center; line-height: 1.3;
+  border-radius: 14px; padding: 9px 18px; display: flex; flex-direction: column; align-items: center; line-height: 1.3;
 }
-.ct-lead__t { font-size: 12.5px; font-weight: 700; color: var(--ct-ink); }
-.ct-lead__w { font-weight: 700; font-size: 15px; }
+.ct-lead__t { font-size: 14px; font-weight: 700; color: var(--ct-ink); }
+.ct-lead__w { font-weight: 700; font-size: 16.5px; }
 .ct-lead.is-hub { background: var(--c); border-color: var(--c); }
 .ct-lead.is-hub .ct-lead__t { color: rgba(255,255,255,.85); }
-.ct-lead.is-hub .ct-lead__w, .ct-lead.is-hub .ct-nm { color: #fff; font-size: 16px; }
+.ct-lead.is-hub .ct-lead__w, .ct-lead.is-hub .ct-nm { color: #fff; font-size: 17.5px; }
 .ct-lead + .ct-lead::before { content: ""; position: absolute; left: 50%; bottom: 100%; height: 17px; border-left: var(--ct-lw) solid var(--ct-line); }
 .ct-chain.has-rows .ct-lead.is-hub::after { content: ""; position: absolute; left: 50%; top: 100%; height: calc(var(--ct-rp) + 1px); border-left: var(--ct-lw) solid var(--ct-line); }
 .ct-hubitems { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 640px; }
 
 /* ---------- שורות ---------- */
-.ct-rows { display: flex; flex-direction: column; gap: var(--ct-rg); }
+.ct-rows { display: flex; flex-direction: column; gap: var(--ct-rg); width: 85%; margin-inline: auto; }   /* = ROW_SHARE ב-JS */
 .ct-row { display: grid; column-gap: var(--ct-g); padding-top: var(--ct-rp); position: relative; align-items: start; }
 .ct-row:not(.is-last)::after { content: ""; position: absolute; left: 50%; top: 0; bottom: calc(-1 * var(--ct-rg)); border-left: var(--ct-lw) solid var(--ct-line); }
 .ct-row > .ct-card { grid-column: span 2; }
@@ -95,26 +95,26 @@
   display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(16,24,40,.04);
   transition: opacity var(--t), box-shadow var(--t), border-color var(--t);
 }
-.ct-card__head { background: var(--ct-tint); border-radius: 13px 13px 0 0; padding: 6px 8px; line-height: 1.3; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1px; }
+.ct-card__head { background: var(--ct-tint); border-radius: 13px 13px 0 0; padding: 11px 8px; line-height: 1.3; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1px; }
 .ct-card__head:last-child { border-radius: 13px; }
-.ct-card__t { font-weight: 800; font-size: 14px; color: var(--ct-ink); overflow-wrap: anywhere; }
-.ct-card__w { font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
-.ct-card__body { padding: 6px 6px 7px; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid color-mix(in srgb, var(--c) 18%, transparent); }
+.ct-card__t { font-weight: 800; font-size: 16px; color: var(--ct-ink); overflow-wrap: anywhere; }
+.ct-card__w { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.ct-card__body { padding: 8px 6px 9px; display: flex; flex-direction: column; gap: 5px; border-top: 1px solid color-mix(in srgb, var(--c) 18%, transparent); }
 
 /* שורה צבעונית (פריט) — בלי קווים: זה לא היררכיה */
 .ct-item {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; border-radius: 7px; padding: 3px 7px; line-height: 1.3;
-  font-size: 13px; background: var(--ct-tint); border-inline-start: 3px solid var(--c);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; border-radius: 7px; padding: 5px 7px; line-height: 1.3;
+  font-size: 14.5px; background: var(--ct-tint); border-inline-start: 3px solid var(--c);
 }
 .ct-item__t { font-weight: 600; }
 /* 27.9 יועד: הכול ממורכז, חוץ משורות שיש בהן תוכן בשני הצדדים */
 .ct-item.is-solo { justify-content: center; text-align: center; }
-.ct-item__w { margin-inline-start: auto; color: var(--text-soft); font-size: 12.5px; text-align: end; }
+.ct-item__w { margin-inline-start: auto; color: var(--text-soft); font-size: 13.5px; text-align: end; }
 
 /* תת-תפקיד — היררכיה אמיתית ⇒ קו מרפק אחד */
 .ct-sub { position: relative; margin-inline-start: 13px; display: flex; flex-direction: column; gap: 4px; }
 .ct-sub::before { content: ""; position: absolute; inset-inline-start: -13px; top: -6px; height: 20px; width: 9px; border-inline-start: var(--ct-lw) solid var(--ct-line); border-bottom: var(--ct-lw) solid var(--ct-line); border-end-start-radius: 7px; }
-.ct-sub__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; background: var(--ct-tint); border-radius: 7px; padding: 3px 7px; font-size: 13px; line-height: 1.3; }
+.ct-sub__row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; background: var(--ct-tint); border-radius: 7px; padding: 5px 7px; font-size: 14.5px; line-height: 1.3; }
 .ct-sub__t { color: var(--ct-ink); }
 .ct-sub__w { margin-inline-start: auto; font-weight: 600; text-align: end; }
 .ct-sub__in { display: flex; flex-direction: column; gap: 5px; margin-inline-start: 8px; }
