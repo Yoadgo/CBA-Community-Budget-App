@@ -59,7 +59,7 @@
    * ======================================================================== */
   var S = { loaded: false, loading: false, waiters: [], error: "",
             exists: false, rev: 0, roles: [], cats: [], upgraded: false,
-            people: null, dirOk: false, saving: false };
+            people: null, dirOk: false, dirDone: false, dirLoading: false, saving: false };
   var V = { q: "", open: {}, sel: null, draft: null };
 
   /* ==========================================================================
@@ -107,6 +107,7 @@
     if (h.fid) {
       var p = S.people && S.people.byKey[h.fid + "#" + h.slot];
       if (p && p.active) return { name: p.full, house: p.house, kind: "res" };
+      if (!S.dirDone) return { name: "…", house: "", kind: "loading" };
       if (!S.dirOk) return { name: "שם לא זמין", house: "", kind: "res" };
       return { name: "תושב/ת שעזב/ה", house: "", kind: "gone" };
     }
@@ -116,27 +117,74 @@
   /* ==========================================================================
    *  טעינה — Firebase בלבד
    * ======================================================================== */
+  /* ==========================================================================
+   *  🔑 מהירות (27.9): העץ מ-Firestore עולה ב-~50ms, אבל רשימת התושבים
+   *  (השמות) עוברת דרך Apps Script — נמדד 6.2 שניות. לכן:
+   *   1. המסך מצויר מיד כש-Firestore עונה, בלי לחכות לשמות.
+   *   2. שמות בעלי התפקידים נשמרים בעותק קטן במכשיר (NAMES_KEY) — בכניסה
+   *      הבאה הם מוצגים מיד. רק בעלי תפקידים, רק שם ומספר בית: המידע שהמסך
+   *      הזה ממילא מציג לכל תושב. בלי טלפונים, בלי ילדים.
+   *   3. הרשימה המלאה מגיעה ברקע, מחליפה את העותק, והמסך מצויר שוב.
+   *  ⚠️ העותק שייך למשתמש (uid) — משתמש אחר באותו דפדפן לא רואה אותו.
+   * ======================================================================== */
+  var NAMES_KEY = "cba_ct_names_v1";
+  var redrawers = [];
+  function onPeople(fn) { redrawers.push(fn); }
+  function notifyPeople() {
+    redrawers = redrawers.filter(function (f) { try { return f() !== false; } catch (e) { return false; } });
+  }
+  function readNamesCache() {
+    try {
+      var c = JSON.parse(localStorage.getItem(NAMES_KEY) || "null");
+      if (!c || !c.names || c.uid !== uid()) return null;
+      var byKey = {};
+      Object.keys(c.names).forEach(function (k) { byKey[k] = { key: k, full: c.names[k].n, house: c.names[k].h || "", active: true }; });
+      return { list: [], byKey: byKey, partial: true };
+    } catch (e) { return null; }
+  }
+  function writeNamesCache() {
+    try {
+      if (!S.people || S.people.partial || !uid()) return;
+      var names = {};
+      S.roles.forEach(function (r) {
+        r.holders.forEach(function (h) {
+          if (!h.fid) return;
+          var p = S.people.byKey[h.fid + "#" + h.slot];
+          if (p && p.active) names[p.key] = { n: p.full, h: p.house };
+        });
+      });
+      localStorage.setItem(NAMES_KEY, JSON.stringify({ uid: uid(), at: Date.now(), names: names }));
+    } catch (e) {}
+  }
+  function loadPeople(force) {
+    if (S.dirLoading || (S.dirDone && !force)) return;
+    S.dirLoading = true;
+    CBA.data.getCommunityDirectory(function (res) {
+      S.dirLoading = false; S.dirDone = true;
+      S.dirOk = !!(res && res.ok);
+      if (S.dirOk) S.people = buildPeople(res.rows);
+      else if (!S.people) S.people = buildPeople([]);
+      if (S.loaded) writeNamesCache();
+      notifyPeople();
+    });
+  }
+
   function load(cb, force) {
     if (S.loaded && !force) { if (cb) cb(); return; }
     if (cb) S.waiters.push(cb);
     if (S.loading) return;
     S.loading = true;
-    var pending = 2, doc = null, err = null;
-    readFs(function (e, d) { err = e; doc = d; done(); });
-    if (S.people && !force) done();
-    else CBA.data.getCommunityDirectory(function (res) {
-      S.dirOk = !!(res && res.ok);
-      S.people = buildPeople(S.dirOk ? res.rows : []);
-      done();
-    });
-    function done() {
-      if (--pending) return;
+    if (!S.dirDone) loadPeople(false);
+    readFs(function (err, doc) {
       if (err) S.error = "לא הצלחנו לטעון את עץ הוועד (" + err + ").";
       else { S.error = ""; applyDoc(doc); }
+      /* השמות מהעותק במכשיר — רק אם הרשימה המלאה עוד לא הגיעה */
+      if (!S.dirDone && !S.people) S.people = readNamesCache();
+      if (S.dirDone && S.dirOk) writeNamesCache();
       S.loading = false; S.loaded = true;
       var w = S.waiters; S.waiters = [];
       w.forEach(function (f) { try { f(); } catch (e) { console.error(e); } });
-    }
+    });
   }
   function readFs(cb) {
     if (!CBA.fb || !CBA.fb.readDoc) return cb("אין חיבור ל-Firebase");
@@ -344,6 +392,7 @@
     return '<span class="' + cls + '">' + hs.map(function (h) {
       var w = who(h);
       var warn = edit && (w.review || w.kind === "gone");
+      if (w.kind === "loading") return '<span class="ct-nm is-loading" aria-label="טוען שם"></span>';
       return '<span class="ct-nm' + (warn ? " is-warn" : "") + '">' + esc(w.name) + '</span>';
     }).join('<span class="ct-sep">, </span>') + '</span>';
   }
@@ -767,6 +816,7 @@
       var d = V.draft, el = host.querySelector("#ct-f-opts"), q = d.pq.trim();
       if (!q) { el.innerHTML = ""; return; }
       var taken = {}; d.holders.forEach(function (h) { if (h.fid) taken[h.fid + "#" + h.slot] = 1; });
+      if (!S.dirDone) { el.innerHTML = '<div class="ct-muted ct-opt--none">רשימת התושבים עוד נטענת…</div>'; setTimeout(function () { if (el.isConnected) drawOpts(host); }, 800); return; }
       var hits = (S.people ? S.people.list : []).filter(function (p) { return !taken[p.key] && (p.full.indexOf(q) !== -1 || String(p.house) === q); }).slice(0, 8);
       el.innerHTML = hits.map(function (p) {
         return '<button type="button" class="ct-opt" data-pick="' + esc(p.key) + '"><span class="ct-opt__n">' + esc(p.full) + '</span><small>' + (p.house ? "בית " + esc(p.house) : "") + '</small></button>';
@@ -886,6 +936,11 @@
       else if (typeof btn._ctDone === "function") { btn._ctDone(); btn._ctDone = null; }
     }
 
+    /* כשהשמות מגיעים ברקע — מציירים שוב (אם המסך עדיין פתוח). */
+    onPeople(function () {
+      if (!root.isConnected) return false;
+      if (S.loaded) { draw(); var h = container.querySelector("#ct-form") || document.querySelector(".ct-sheet #ct-form"); if (h && V.draft) renderForm(h); }
+    });
     load(function () {
       if (!root.isConnected) return;
       if (edit && V.sel) { var s = V.sel; V.sel = null; draw(); openPanel(s, null); return; }

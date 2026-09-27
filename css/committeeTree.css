@@ -53,6 +53,12 @@
 
 /* ---------- שמות ---------- */
 .ct-nm.is-warn { color: var(--badge-warn); }
+/* שם שעוד לא הגיע (רשימת התושבים נטענת ברקע) — פס מהבהב במקום טקסט */
+.ct-nm.is-loading { display: inline-block; width: 64px; height: .9em; border-radius: 6px; vertical-align: middle;
+  background: linear-gradient(90deg, rgba(0,0,0,.06), rgba(0,0,0,.12), rgba(0,0,0,.06)); background-size: 200% 100%;
+  animation: ctShimmer 1.2s linear infinite; }
+.ct-lead.is-hub .ct-nm.is-loading { background: rgba(255,255,255,.35); }
+@keyframes ctShimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .ct-sep { color: var(--text-muted); }
 .is-vacant { color: var(--text-muted); font-weight: 500; }
 
