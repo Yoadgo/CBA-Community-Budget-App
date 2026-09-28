@@ -276,7 +276,7 @@ function render(container) {
     boot({ events: [{ id: 'far', title: 'רחוק', date: at(80, 20), category: 'community' }] });
     c = render();
     await wait(40);
-    ok('⚠️ אירוע בעוד 80 יום → אין כרטיס', c.querySelector('#hm-feat').innerHTML === '');
+    ok('אירוע בעוד 80 יום → יש כרטיס (28.9: "הבא בקהילה" בלי מגבלת זמן)', c.querySelector('#hm-feat').innerHTML !== '');
   }
 
   section('10. לחיצה על יום → לוח האירועים על אותו יום');

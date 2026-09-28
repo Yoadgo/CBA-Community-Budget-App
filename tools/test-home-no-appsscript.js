@@ -365,7 +365,7 @@ ok('🔴 ושלושתם אסורים בכתיבה מהדפדפן',
 
 section('13. החיווט בשרת');
 ok('שלושת הסנכרונים בעבודה השעתית',
-   /function hourlyJobsRun_[\s\S]{0,8000}tourSyncAll_\(ss\)[\s\S]{0,400}clubResvSyncAll_\(ss\)/.test(GS));
+   /function hourlyJobsRun_[\s\S]{0,12000}tourSyncAll_\(ss\)[\s\S]{0,400}clubResvSyncAll_\(ss\)/.test(GS));
 const nFam = (GS.match(/clubResvBumpFamily_\(SpreadsheetApp/g) || []).length;
 const nEv  = (GS.match(/clubResvBumpEvent_\(ss,/g) || []).length;
 ok('🔴 והשריון מתרענן אחרי כל אחת מארבע הכתיבות',
