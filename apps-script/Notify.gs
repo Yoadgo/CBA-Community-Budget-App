@@ -1028,7 +1028,55 @@ function eventMessagesJob_(ss, onlyId) {
       fsMerge_(path, { status: 'sent', sentAtMs: Date.now(), sentPush: rep.push, sentMail: rep.mail });
       out.sent++; out.push += rep.push;
     });
+    /* 29.9 — "הזכירו לי" של תושבים, באותה ריצה של 15 דקות */
+    if (!onlyId) { try { out.reminders = eventRemindersJob_(ss); } catch (e) { Logger.log('eventRemindersJob_: ' + e); } }
   } finally { lock.releaseLock(); }
+  return out;
+}
+
+/* ===========================================================================
+ *  "הזכירו לי" — תזכורת אישית לאירוע   (29.9.2026, יועד)
+ * ---------------------------------------------------------------------------
+ *  Firestore eventReminders/{eventId}_{familyId} — התושב יוצר/מבטל מעמוד
+ *  הבית (כללי אבטחה: רק למשפחה שלו). השרת בלבד שולח ומסמן.
+ *  offset: 'day' = ערב לפני (19:00) · '2h' = שעתיים לפני. remindAtMs מחושב
+ *  בדפדפן; השרת לא סומך עליו לבד — בודק שהאירוע קיים ועוד לא עבר.
+ *  🔑 פוש למשפחה בלבד (תפקיד 'r'). מי שכבר אישר הגעה מקבל ממילא את
+ *     "rsvp-remind" יום לפני — אז תזכורת 'day' שלו לא יוצאת פעמיים.
+ * ========================================================================= */
+var EVT_REM_COL = 'eventReminders';
+function eventRemindersJob_(ss) {
+  var out = { sent: 0, skipped: 0, expired: 0 };
+  var rows = fsQuery_(EVT_REM_COL, 'status', 'EQUAL', 'pending', 300) || [];
+  var now = Date.now();
+  var today = Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'yyyy-MM-dd');
+  rows.forEach(function (r) {
+    var id = decodeURIComponent(String(r.id || '')), d = r.data || {};
+    var at = Number(d.remindAtMs);
+    if (!(at <= now + 60000)) return;
+    var path = fsDocPath_(EVT_REM_COL, id);
+    var fam = String(d.familyId || ''), eid = String(d.eventId || '');
+    if (!fam || !eid || id !== eid + '_' + fam) { fsMerge_(path, { status: 'expired' }); out.expired++; return; }
+    var ev = notifyFindEvent_(eid);
+    if (!ev || ev.date < today || at < now - EVT_MSG_STALE_MS) { fsMerge_(path, { status: 'expired' }); out.expired++; return; }
+    fsMerge_(path, { status: 'sending' });
+    if (d.offset === 'day') {
+      var dup = false;
+      try {
+        var cfg = fsGet_(fsDocPath_('eventRSVP', eid));
+        var mine = cfg && cfg.enabled === true ? fsGet_(fsDocPath_('eventRSVPResponses', eid + '_' + fam)) : null;
+        dup = !!(mine && mine.status === 'attending');
+      } catch (e) {}
+      if (dup) { fsMerge_(path, { status: 'sent', sentAtMs: Date.now(), dup: true }); out.skipped++; return; }
+    }
+    var rep = notify_(ss, 'evt-remind', {
+      vars: { 'שם האירוע': ev.title, 'תאריך': ev.dateLabel, 'פרטים': evtDetails_(ev),
+              'מתי': d.offset === '2h' ? 'בעוד שעתיים' : 'מחר' },
+      r: { familyId: fam }
+    }, ['r']);
+    fsMerge_(path, { status: 'sent', sentAtMs: Date.now(), sentPush: rep.push, sentMail: rep.mail });
+    out.sent++;
+  });
   return out;
 }
 
@@ -1429,6 +1477,7 @@ var NOTIFY_DOMAINS = [
   {"id":"evt-changed","ev":"אירוע קהילה/תרבות עודכן","w":"סנכרון היומן (אחרי 10 דק' יציבות)","vars":["שם האירוע","תאריך","פרטים","מה השתנה"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"","pt":"עדכון: {{שם האירוע}}","pb":"{{מה השתנה}}","link":"לוח אירועים","app":"","badge":0}},"why":"שינוי בשם, בתאריך, בשעה או במיקום של אירוע עתידי. שינוי בתיאור לא שולח כלום."},
   {"id":"evt-invite","ev":"נוספה הזמנה לאירוע","w":"מיידי","vars":["שם האירוע","תאריך","פרטים"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"EVENT_INVITE","pt":"הזמנה: {{שם האירוע}}","pb":"{{פרטים}} · ההזמנה בלוח האירועים","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא פעם אחת לאירוע, כשמנהל אירועים מעלה הזמנה ומשאיר את \"לשלוח התראה\" מסומן."},
   {"id":"evt-msg","ev":"הודעה / תזכורת ממנהל האירועים","w":"ידני או מתוזמן","vars":["שם האירוע","תאריך","פרטים","הודעה"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"EVENT_MESSAGE","pt":"{{שם האירוע}}","pb":"{{הודעה}}","link":"לוח אירועים","app":"","badge":0}},"why":"מנהל אירועים כותב הודעה לכל התושבים, למי שאישר הגעה או למי שעוד לא ענה — עכשיו או בזמן שנקבע."},
+  {"id":"evt-remind","ev":"\"הזכירו לי\" — תזכורת אישית לאירוע","w":"בזמן שהתושב בחר (בדיקה כל 15 דק')","vars":["שם האירוע","תאריך","פרטים","מתי"],"cells":{"r":{"m":0,"p":1,"d":0,"k":"EVENT_REMIND_ME","pt":"תזכורת: {{שם האירוע}} {{מתי}}","pb":"{{פרטים}}","link":"לוח אירועים","app":"","badge":0}},"why":"התושב לחץ \"תזכורת\" בעמוד הבית ובחר ערב לפני או שעתיים לפני. רק למשפחה שלו."},
   {"id":"evt-week","ev":"השבוע בשיכון — אירועי השבוע","w":"מוצאי שבת 21:00","vars":["שבוע","מספר","רשימה","רשימה קצרה"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"EVENTS_WEEKLY","pt":"השבוע בשיכון · {{שבוע}}","pb":"{{רשימה קצרה}}","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא במוצאי שבת (מ-21:00) עם האירועים של השבוע שמתחיל. שבוע בלי אירועים — לא יוצא כלום."},
   {"id":"svc-recommend","ev":"תושב הוסיף המלצה","w":"מיידי","vars":["שם","שירות"],"cells":{"s":{"m":0,"p":0,"d":0,"k":"","pt":"","pb":"","link":"שירותים","app":"","badge":0}},"why":"יוצא כשתושב מוסיף המלצה על שירות."}
  ]},
@@ -1523,6 +1572,7 @@ var NOTIFY_MAIL_TEXTS = {
  GARDEN_RECHECK_DONE: {"su":"בדקנו שוב את הדיווח שלך","bo":"שלום {{שם}},\n\nבעקבות המשוב שלך בדקנו שוב את הטיפול ב{{קטגוריה}} ב{{מיקום}}.\n\n{{תוצאה}}\n\nתודה שעדכנת אותנו,\nועד הקהילה"},
  ADMIN_GARDEN_DAILY: {"su":"סיכום גינון יומי","bo":"שלום,\n\nמה מחכה היום בגינון:\n\n• לא שובצו: {{לא שובצו}}\n• ממתינות לאישורך: {{לאישורך}}\n• חסומות: {{חסומות}}\n• פתוחות מעל 7 ימים: {{מעל 7 ימים}}\n\n{{עדכונים}}הפירוט המלא במסך המשימות.\n\nאפליקציית הוועד"},
  EVENT_INVITE: {"su":"הזמנה: {{שם האירוע}}","bo":"שלום,\n\nנוספה הזמנה לאירוע {{שם האירוע}} ({{פרטים}}).\n\nאת ההזמנה ואת הלו\"ז אפשר לראות בלוח האירועים באפליקציה.\n\nבברכה,\nועד הקהילה"},
+ EVENT_REMIND_ME: {"su":"תזכורת: {{שם האירוע}} {{מתי}}","bo":"שלום,\n\nביקשתם תזכורת: {{שם האירוע}} {{מתי}} ({{פרטים}}).\n\nנתראה,\nועד הקהילה"},
  EVENT_MESSAGE: {"su":"{{שם האירוע}} — הודעה","bo":"שלום,\n\nהודעה לגבי {{שם האירוע}} ({{פרטים}}):\n\n{{הודעה}}\n\nבברכה,\nועד הקהילה"},
  EVENT_RSVP_OPEN: {"su":"נפתח אישור הגעה: {{שם האירוע}}","bo":"שלום,\n\nנפתח אישור הגעה לאירוע {{שם האירוע}} ({{תאריך}}).\n\nאפשר לאשר הגעה בלוח האירועים באפליקציה.\n\nבברכה,\nועד הקהילה"},
  EVENT_REMINDER: {"su":"תזכורת: {{שם האירוע}} מחר","bo":"שלום,\n\nתזכורת — מחר ({{תאריך}}) מתקיים {{שם האירוע}}, ב{{מיקום}}. אישרת הגעה.\n\nנתראה,\nועד הקהילה"},
@@ -1534,7 +1584,7 @@ var NOTIFY_MAIL_TEXTS = {
 /* תבניות חדשות שלא היו ב-DEFAULT_EMAIL_SETTINGS — [מפתח, תחום]. */
 function notifyExtraEmailRows_() {
   var out = [];
-  var NEW = {CLUB_RECEIVED: PERM_CLUB, GARDENER_WEEKLY_PLAN: PERM_GARDEN, ADMIN_GARDEN_DAILY: PERM_GARDEN, GARDENER_TASK_ADDED: PERM_GARDEN, GARDEN_FINAL_CHECK: PERM_GARDEN, ADMIN_GARDEN_AWAITING_APPROVAL: PERM_GARDEN, GARDENER_TASK_RETURNED: PERM_GARDEN, GARDEN_PENDING_REVIEW: PERM_GARDEN, GARDEN_RECHECK_DONE: PERM_GARDEN, EVENT_RSVP_OPEN: PERM_SUPER, EVENT_INVITE: PERM_SUPER, EVENT_MESSAGE: PERM_SUPER, EVENT_REMINDER: PERM_SUPER, EVENTS_WEEKLY: PERM_SUPER, ADMIN_CUSTOM_PROPOSED: PERM_SUPER, CUSTOM_DECIDED: PERM_ANY_ADMIN};
+  var NEW = {CLUB_RECEIVED: PERM_CLUB, GARDENER_WEEKLY_PLAN: PERM_GARDEN, ADMIN_GARDEN_DAILY: PERM_GARDEN, GARDENER_TASK_ADDED: PERM_GARDEN, GARDEN_FINAL_CHECK: PERM_GARDEN, ADMIN_GARDEN_AWAITING_APPROVAL: PERM_GARDEN, GARDENER_TASK_RETURNED: PERM_GARDEN, GARDEN_PENDING_REVIEW: PERM_GARDEN, GARDEN_RECHECK_DONE: PERM_GARDEN, EVENT_RSVP_OPEN: PERM_SUPER, EVENT_INVITE: PERM_SUPER, EVENT_MESSAGE: PERM_SUPER, EVENT_REMINDER: PERM_SUPER, EVENT_REMIND_ME: PERM_SUPER, EVENTS_WEEKLY: PERM_SUPER, ADMIN_CUSTOM_PROPOSED: PERM_SUPER, CUSTOM_DECIDED: PERM_ANY_ADMIN};
   Object.keys(NEW).forEach(function (k) {
     var t = NOTIFY_MAIL_TEXTS[k] || {};
     out.push([k, t.su || '', t.bo || '', 'מרכז ההתראות (23.9) — נשלח לפי הטבלה במסך "ניהול התראות"', NEW[k], 'כן']);

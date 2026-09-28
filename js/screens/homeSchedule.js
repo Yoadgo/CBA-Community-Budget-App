@@ -94,7 +94,9 @@ CBA.homeSchedule = (function () {
     check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
     cal:   '<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
-    pin:   '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>'
+    pin:   '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    bell:  '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    down:  '<path d="m6 9 6 6 6-6"/>'
   };
 
   /* ================================================================ נתונים */
@@ -206,7 +208,8 @@ CBA.homeSchedule = (function () {
     err: "",
     personal: [],      // שריונים של המשפחה (מעמוד הבית)
     host: null,        // הכרטיס
-    featHost: null,    // "הבא בקהילה" (תושב, מחשב)
+    featHost: null,    // "הבא בקהילה" (תושב, מחשב) — ישן, לא בשימוש מ-29.9
+    nextHost: null,    // 29.9 — שני הכרטיסים: אירוע הקהילה הבא ואירוע התרבות הבא
     mode: "grid",
     bound: null        // האלמנט שעליו רשומה ההאזנה (ראו mount)
   };
@@ -335,6 +338,200 @@ CBA.homeSchedule = (function () {
     var all = allEvents().concat(nextYear.list || []);
     for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
     return null;
+  }
+
+  /* ==========================================================================
+   *  29.9 — "הבא בקהילה" + "הבא בתרבות": שני כרטיסים קבועים בראש עמוד הבית
+   * --------------------------------------------------------------------------
+   *  תמיד: אירוע הקהילה הבא ואירוע התרבות הבא (בלי מגבלת זמן — גם בשנה
+   *  הבאה). ועוד אירוע שפתוח לאישור הגעה, אם הוא לא אחד מהשניים.
+   *  בכל כרטיס: התשובה שלי + כמה משפחות מגיעות (כשאישור ההגעה פתוח),
+   *  "תזכורת" (פוש "הזכירו לי" — Firestore eventReminders, השרת שולח),
+   *  ו"פרטים" שנפתחים במקום: תיאור, לו"ז, הזמנה, הוספה ליומן, שיתוף.
+   * ========================================================================== */
+  var nx = { data: {}, rem: null, ts: 0, busy: false, open: {}, menu: null };
+  var NX_TTL = 60 * 1000;
+  function myFam() {
+    var u = (window.CBA && CBA.user) || {};
+    return String(u.familyId || u.house || "").trim();
+  }
+  function nextEvents(today) {
+    var t = today.getTime();
+    var pool = (st.ev || []).slice();
+    if (nextYear.list) pool = pool.concat(nextYear.list);
+    function first(cat) {
+      return pool.filter(function (e) { return e.cat === cat && sod(e.date).getTime() >= t; })
+        .sort(function (a, b) { return a.date - b.date; })[0] || null;
+    }
+    var com = first("community"), cul = first("culture");
+    if ((!com || !cul) && st.ev) loadNextYear(today.getFullYear() + 1);
+    var out = [{ role: "com", ev: com }, { role: "cul", ev: cul }];
+    pool.filter(function (e) { return sod(e.date).getTime() >= t && isOpen(e) && e !== com && e !== cul; })
+      .sort(function (a, b) { return a.date - b.date; }).slice(0, 1)
+      .forEach(function (e) { out.push({ role: "open", ev: e }); });
+    return out;
+  }
+  /* נתונים לכל כרטיס — ברקע, ואז ציור חוזר של הכרטיסים בלבד */
+  function loadNext(list, force) {
+    if (!window.CBA || !CBA.fb || !CBA.fb.readDoc) return;
+    var fam = myFam(), evs = list.filter(function (x) { return x.ev; }).map(function (x) { return x.ev; });
+    /* אישור הגעה נפתח/נטען אחרי הקריאה הקודמת — לא מחכים לתום הדקה */
+    var stale = evs.some(function (e) { var d = nx.data[e.id]; return !d || (isOpen(e) && d.families === undefined); });
+    if (nx.busy || (!force && !stale && Date.now() - nx.ts < NX_TTL)) return;
+    nx.busy = true;
+    var left = 1 + evs.length * 3;
+    function done() { if (--left > 0) return; nx.busy = false; nx.ts = Date.now(); paintNext(); }
+    if (fam && CBA.fb.queryCollection) {
+      CBA.fb.queryCollection("eventReminders", [["familyId", fam]], function (err, rows) {
+        if (!err) { nx.rem = {}; (rows || []).forEach(function (r) { if (r.status === "pending") nx.rem[r.eventId] = r; }); }
+        done();
+      });
+    } else done();
+    evs.forEach(function (e) {
+      var d = nx.data[e.id] = nx.data[e.id] || {};
+      CBA.fb.readDoc("eventInfo", e.id, function (err, doc) { if (!err) d.info = doc || null; done(); });
+      if (isOpen(e) && CBA.fb.queryCollection) {
+        CBA.fb.queryCollection("eventRSVPResponses", [["eventId", e.id]], function (err, rows) {
+          if (!err) {
+            var att = (rows || []).filter(function (r) { return r.status === "attending"; });
+            d.families = att.length;
+            d.mine = null;
+            (rows || []).forEach(function (r) { if (fam && String(r.familyId) === fam) d.mine = r; });
+          } else d.families = null;   // כשל — לא מנסים שוב בכל ציור (רק אחרי דקה)
+          done(); done();
+        });
+      } else { done(); done(); }
+    });
+  }
+  function remindAt(e, offset) {
+    var day = sod(e.date);
+    if (offset === "day") { var x = addDays(day, -1); x.setHours(19, 0, 0, 0); return x.getTime(); }
+    if (e.allDay) { var y = new Date(day); y.setHours(8, 0, 0, 0); return y.getTime(); }
+    return e.date.getTime() - 2 * 3600 * 1000;
+  }
+  var REM_LABEL = { day: "ערב לפני", "2h": "שעתיים לפני" };
+  var NX_HEAD = { com: "אירוע הקהילה הבא", cul: "אירוע התרבות הבא", open: "פתוח לאישור הגעה" };
+
+  function nextCardHTML(x) {
+    var e = x.ev;
+    if (!e) {
+      return '<article class="hm-nx hm-nx--' + x.role + ' is-empty"><div class="hm-nx__k"><i class="hm-dot hm-dot--' +
+        (x.role === "cul" ? "cul" : "com") + '"></i>' + NX_HEAD[x.role] + '</div>' +
+        '<p class="hm-nx__none">עוד לא נקבע. כשיתווסף ללוח — הוא יופיע כאן.</p></article>';
+    }
+    var k = CAT[e.cat].k, d = nx.data[e.id] || {}, open = isOpen(e);
+    var meta = [WD_LONG[e.date.getDay()]];
+    if (!e.allDay) meta.push(hm(e.date));
+    if (e.location) meta.push(esc(e.location));
+    var status = "";
+    if (open) {
+      var mine = d.mine, fams = d.families;
+      var cnt = (typeof fams === "number" && fams > 0) ? (fams === 1 ? "משפחה אחת מגיעה" : fams + " משפחות מגיעות") : "";
+      if (mine && mine.status === "attending") {
+        var who = [];
+        if (Number(mine.adults)) who.push(mine.adults + (Number(mine.adults) === 1 ? " מבוגר" : " מבוגרים"));
+        if (Number(mine.children)) who.push(mine.children + (Number(mine.children) === 1 ? " ילד" : " ילדים"));
+        status = '<div class="hm-nx__st is-yes">' + svg(ICO.check, 14) + 'אישרתם הגעה' + (who.length ? " · " + who.join(", ") : "") + (cnt ? " · " + cnt : "") + '</div>';
+      } else if (mine) {
+        status = '<div class="hm-nx__st is-no">לא מגיעים' + (cnt ? " · " + cnt : "") + '</div>';
+      } else if (d.families !== undefined) {
+        status = '<div class="hm-nx__st is-wait">' + svg(ICO.clock, 14) + 'עוד לא עניתם' + (cnt ? " · " + cnt : "") + '</div>';
+      }
+    }
+    var rem = nx.rem && nx.rem[e.id];
+    var remBtn = '<button type="button" class="hm-nx__b' + (rem ? " is-on" : "") + '" data-nx-remind="' + esc(e.id) + '">' +
+      svg(ICO.bell, 14) + (rem ? "תזכורת: " + (REM_LABEL[rem.offset] || "") : "תזכורת") + '</button>';
+    var menuOpen = nx.menu === e.id, now = Date.now();
+    var menu = menuOpen ? '<div class="hm-nx__menu">' + ["day", "2h"].map(function (o) {
+        var late = remindAt(e, o) <= now;
+        return '<button type="button" class="hm-nx__b' + (rem && rem.offset === o ? " is-on" : "") + '" data-nx-set="' + o + '" data-nx-id="' + esc(e.id) + '"' +
+          (late ? " disabled" : "") + '>' + REM_LABEL[o] + (o === "day" ? " (19:00)" : "") + '</button>';
+      }).join("") + (rem ? '<button type="button" class="hm-nx__b is-ghost" data-nx-set="off" data-nx-id="' + esc(e.id) + '">ביטול תזכורת</button>' : "") + '</div>' : "";
+    var rsvpBtn = open ? '<button type="button" class="hm-nx__b' + (d.mine ? "" : " is-primary") + '" data-hm-rsvp="' + esc(e.id) + '">' +
+      (d.mine ? "שינוי תשובה" : svg(ICO.check, 14) + "אישור הגעה") + '</button>' : "";
+    var isOpenMore = !!nx.open[e.id];
+    var info = d.info || {};
+    var cal = CBA.screens && CBA.screens.events && CBA.screens.events.calendarLinks;
+    var gUrl = cal && cal.google ? cal.google(e) : "";
+    var more = isOpenMore ? '<div class="hm-nx__more">' +
+      (e.description ? '<p class="hm-nx__desc" dir="auto">' + esc(String(e.description).slice(0, 600)) + '</p>' : "") +
+      (info.schedule ? '<div class="hm-nx__sch">' + String(info.schedule).split(/\r?\n/).filter(function (l) { return l.trim(); }).slice(0, 12).map(function (l) {
+          var m = l.trim().match(/^(\d{1,2}[:.]\d{2})\s*[—–\-·:]?\s*(.*)$/);
+          return '<b dir="ltr">' + (m ? esc(m[1].replace(".", ":")) : "") + '</b><span dir="auto">' + esc(m ? m[2] : l.trim()) + '</span>';
+        }).join("") + '</div>' : "") +
+      (!e.description && !info.schedule ? '<p class="hm-nx__desc is-muted">אין עוד פרטים לאירוע הזה.</p>' : "") +
+      '<div class="hm-nx__acts">' +
+        (info.hasImage ? '<button type="button" class="hm-nx__b" data-nx-inv="' + esc(e.id) + '">הזמנה</button>' : "") +
+        (gUrl ? '<a class="hm-nx__b" href="' + esc(gUrl) + '" target="_blank" rel="noopener">Google</a>' : "") +
+        '<button type="button" class="hm-nx__b" data-hm-apple="' + esc(e.id) + '">Apple</button>' +
+        '<button type="button" class="hm-nx__b" data-nx-share="' + esc(e.id) + '">שיתוף</button>' +
+      '</div></div>' : "";
+    return '<article class="hm-nx hm-nx--' + x.role + '">' +
+      '<div class="hm-nx__k"><i class="hm-dot hm-dot--' + k + '"></i>' + NX_HEAD[x.role] + '</div>' +
+      '<button type="button" class="hm-nx__top" data-hm-date="' + dkey(e.date) + '">' +
+        '<span class="hm-nx__date hm-ev--' + k + '"><small>' + MON_SHORT[e.date.getMonth()] + '</small><b>' + e.date.getDate() + '</b></span>' +
+        '<span class="hm-nx__txt"><b dir="auto">' + esc(e.title) + '</b><span class="hm-nx__m">' + meta.join(" · ") + '</span></span>' +
+      '</button>' + status +
+      '<div class="hm-nx__acts">' + rsvpBtn + remBtn +
+        '<button type="button" class="hm-nx__b is-ghost" data-nx-more="' + esc(e.id) + '">פרטים ' + svg(ICO.down, 13) + '</button>' +
+      '</div>' + menu + more + '</article>';
+  }
+  function nextHTML() {
+    if (!st.ev) return "";
+    var list = nextEvents(sod(new Date()));
+    loadNext(list, false);
+    return list.map(nextCardHTML).join("");
+  }
+  function paintNext() {
+    var n = st.nextHost;
+    if (n && n.isConnected) n.innerHTML = nextHTML();
+  }
+  function setReminder(id, offset) {
+    var e = findEvent(id), fam = myFam();
+    if (!e || !fam || !CBA.fb) return;
+    var docId = e.id + "_" + fam;
+    function after(err) {
+      if (err) { if (CBA.ui && CBA.ui.toast) CBA.ui.toast("לא הצלחנו לשמור את התזכורת. נסו שוב.", "err"); return; }
+      if (CBA.ui && CBA.ui.toast) CBA.ui.toast(offset === "off" ? "התזכורת בוטלה" : "נזכיר לכם " + REM_LABEL[offset] + " (בפוש)", "ok");
+      nx.menu = null; loadNext(nextEvents(sod(new Date())), true); paintNext();
+    }
+    if (offset === "off") {
+      if (nx.rem) delete nx.rem[e.id];
+      return CBA.fb.deleteDoc("eventReminders", docId, after);
+    }
+    var doc = { eventId: e.id, familyId: fam, offset: offset, remindAtMs: Math.round(remindAt(e, offset)),
+                status: "pending", createdByUid: CBA.fb.uid && CBA.fb.uid(), createdAt: CBA.fb.serverNow() };
+    nx.rem = nx.rem || {}; nx.rem[e.id] = doc;
+    CBA.fb.mergeDoc("eventReminders", docId, doc, after);
+  }
+  function openInvite(id) {
+    var e = findEvent(id);
+    if (!e || !CBA.ui || !CBA.ui.dialog) return;
+    CBA.ui.dialog({ title: e.title, html: '<div class="ev-inv-dlg"><div class="ev-inv-dlg__img">טוען…</div></div>', okText: "סגירה",
+      onMount: function (wrap) {
+        var box = wrap.querySelector(".ev-inv-dlg__img");
+        CBA.fb.readDoc("eventImages", id, function (err, d) {
+          var src = (!err && d && typeof d.image === "string" && d.image.indexOf("data:image/") === 0) ? d.image : "";
+          box.innerHTML = src ? '<img src="' + esc(src) + '" alt="ההזמנה לאירוע" style="max-width:100%;border-radius:12px">' : "ההזמנה לא נטענה. אפשר לנסות שוב בעוד רגע.";
+        });
+      } });
+  }
+  function shareEv(id) {
+    var e = findEvent(id); if (!e) return;
+    var url = window.location.origin + window.location.pathname + "#event=" + encodeURIComponent(e.id);
+    var text = e.title + " · " + dm(e.date);
+    if (navigator.share) { navigator.share({ title: e.title, text: text, url: url }).catch(function () {}); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function () { if (CBA.ui && CBA.ui.toast) CBA.ui.toast("הקישור לאירוע הועתק", "ok"); });
+    }
+  }
+  /* אחרי דיאלוג "אישור הגעה" — מרעננים את הכרטיס כשהוא נסגר */
+  function watchDialogThenRefresh() {
+    var n = 0, t = setInterval(function () {
+      if (++n > 600 || !document.body.classList.contains("has-cba-dlg")) {
+        clearInterval(t); loadNext(nextEvents(sod(new Date())), true);
+      }
+    }, 800);
   }
 
   /* ================================================================ HTML */
@@ -506,7 +703,7 @@ CBA.homeSchedule = (function () {
         '<button type="button" class="hm-link" data-hm-retry>לנסות שוב</button></div>';
     }
     if (!st.ev) return skeletonHTML(st.mode);
-    var all = allEvents(), days = byDay(all), feat = featured(today), now = nowHTML(today);
+    var all = allEvents(), days = byDay(all), feat = st.nextHost ? [] : featured(today), now = nowHTML(today);
     if (st.mode === "list") return now + listHTML(today, days, LIST_ROWS, feat, false);
     return now + '<div class="hm-sch__grid">' + gridHTML(today, days) + laterHTML(today) + '</div>' +
       '<div class="hm-sch__compact">' + compactHTML(today, days, feat) + '</div>';
@@ -551,6 +748,7 @@ CBA.homeSchedule = (function () {
     }
     var f = st.featHost;
     if (f && f.isConnected) f.innerHTML = featCardHTML();
+    paintNext();
   }
 
   /* ================================================================ פעולות */
@@ -562,6 +760,12 @@ CBA.homeSchedule = (function () {
   }
   function onClick(e) {
     var t = e.target;
+    var nb;
+    if ((nb = t.closest("[data-nx-remind]"))) { var rid = nb.getAttribute("data-nx-remind"); nx.menu = nx.menu === rid ? null : rid; paintNext(); return; }
+    if ((nb = t.closest("[data-nx-set]"))) { setReminder(nb.getAttribute("data-nx-id"), nb.getAttribute("data-nx-set")); return; }
+    if ((nb = t.closest("[data-nx-more]"))) { var mid = nb.getAttribute("data-nx-more"); nx.open[mid] = !nx.open[mid]; paintNext(); return; }
+    if ((nb = t.closest("[data-nx-inv]"))) { openInvite(nb.getAttribute("data-nx-inv")); return; }
+    if ((nb = t.closest("[data-nx-share]"))) { shareEv(nb.getAttribute("data-nx-share")); return; }
     var r = t.closest("[data-hm-rsvp]");
     if (r) {
       var ev = findEvent(r.getAttribute("data-hm-rsvp"));
@@ -571,6 +775,7 @@ CBA.homeSchedule = (function () {
       if (ev && scr && typeof scr.openRsvp === "function") {
         scr.openRsvp({ id: ev.id, title: ev.title, date: ev.date, location: ev.location,
                        description: ev.description, category: ev.cat });
+        watchDialogThenRefresh();
       } else if (ev) openDate(dkey(ev.date));
       return;
     }
@@ -599,6 +804,7 @@ CBA.homeSchedule = (function () {
   function mount(opts) {
     st.host = opts.host || null;
     st.featHost = opts.featHost || null;
+    st.nextHost = opts.nextHost || null;
     st.mode = opts.mode === "list" ? "list" : "grid";
     if (opts.root && st.bound !== opts.root) {
       opts.root.addEventListener("click", onClick);

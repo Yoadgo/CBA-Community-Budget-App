@@ -122,7 +122,7 @@ function render(container) {
     let c = render();
     ok('תושב → hm-cols--res', !!c.querySelector('#hm-cols.hm-cols--res'));
     ok('תושב → כרטיס לו"ז בגריד', !!c.querySelector('#hm-sch.hm-sch--grid'));
-    ok('תושב → מקום ל"הבא בקהילה"', !!c.querySelector('#hm-feat'));
+    ok('תושב → מקום לכרטיסי "האירועים הבאים" (29.9)', !!c.querySelector('#hm-upnext'));
     ok('תושב → אין מקטע גינון', !c.querySelector('#hm-gardensec'));
     ok('🔴 הפעולות יושבות בתוך שורת הברכה', !!c.querySelector('.hm-hero .hm-actions'));
 
@@ -257,8 +257,8 @@ function render(container) {
     boot({ events: [ev], rsvp: ['c1'] });
     let c = render();
     await wait(40);
-    const f = c.querySelector('#hm-feat .hm-feat');
-    ok('הכרטיס מופיע', !!f);
+    const f = c.querySelector('#hm-upnext .hm-nx--cul');
+    ok('הכרטיס מופיע (29.9: אירוע התרבות הבא)', !!f);
     ok('עם הכותרת והמקום', f && /פתיחת שנה מבוגרים/.test(f.textContent) && /מועדון משפחות/.test(f.textContent));
     ok('🔴 RSVP פתוח → כפתור "אישור הגעה"', !!(f && f.querySelector('[data-hm-rsvp="c1"]')));
     f.querySelector('[data-hm-rsvp]').click();
@@ -267,16 +267,17 @@ function render(container) {
     boot({ events: [ev], rsvp: [] });
     c = render();
     await wait(40);
-    ok('⚠️ RSVP סגור → אין כפתור', !c.querySelector('#hm-feat [data-hm-rsvp]'));
-    ok('אבל "הוספה ליומן" כן', !!c.querySelector('#hm-feat [data-hm-addcal]'));
-    c.querySelector('[data-hm-addcal]').click();
-    ok('והלחיצה חושפת Google ו-Apple', c.querySelector('.hm-feat__cals').hidden === false &&
-       /Google/.test(c.querySelector('.hm-feat__cals').textContent));
+    ok('⚠️ RSVP סגור → אין כפתור', !c.querySelector('#hm-upnext [data-hm-rsvp]'));
+    ok('אבל "פרטים" כן', !!c.querySelector('#hm-upnext [data-nx-more="c1"]'));
+    c.querySelector('[data-nx-more="c1"]').click();
+    ok('והלחיצה חושפת Google ו-Apple', !!c.querySelector('#hm-upnext .hm-nx__more') &&
+       /Google/.test(c.querySelector('#hm-upnext .hm-nx__more').textContent) && /Apple/.test(c.querySelector('#hm-upnext .hm-nx__more').textContent));
+    ok('ויש גם כרטיס לקהילה (גם כשאין אירוע קהילה — "עוד לא נקבע")', !!c.querySelector('#hm-upnext .hm-nx--com'));
 
     boot({ events: [{ id: 'far', title: 'רחוק', date: at(80, 20), category: 'community' }] });
     c = render();
     await wait(40);
-    ok('אירוע בעוד 80 יום → יש כרטיס (28.9: "הבא בקהילה" בלי מגבלת זמן)', c.querySelector('#hm-feat').innerHTML !== '');
+    ok('אירוע בעוד 80 יום → יש כרטיס (28.9: "הבא בקהילה" בלי מגבלת זמן)', /רחוק/.test(c.querySelector('#hm-upnext').textContent));
   }
 
   section('10. לחיצה על יום → לוח האירועים על אותו יום');

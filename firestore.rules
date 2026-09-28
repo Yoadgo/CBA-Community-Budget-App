@@ -1849,6 +1849,38 @@ service cloud.firestore {
     }
 
     /* ========================================================================
+     *  "הזכירו לי" — תזכורת אישית לאירוע   (29.9.2026)
+     * ------------------------------------------------------------------------
+     *  eventReminders/{eventId}_{familyId} — מסמך אחד למשפחה לאירוע.
+     *  התושב יוצר / משנה (ערב לפני ↔ שעתיים לפני) / מבטל רק את של המשפחה
+     *  שלו; המזהה חייב להיות eventId_familyId שלו. השליחה והסימון
+     *  (sending/sent/expired) — רק מהשרת. אין כאן שם/מייל — רק מזהים.
+     * ==================================================================== */
+    function remShapeOk(docId) {
+      return request.resource.data.keys().hasOnly(['eventId', 'familyId', 'offset', 'remindAtMs', 'status', 'createdByUid', 'createdAt']) &&
+             request.resource.data.keys().hasAll(['eventId', 'familyId', 'offset', 'remindAtMs', 'status', 'createdByUid']) &&
+             request.resource.data.eventId is string && request.resource.data.eventId.size() <= 300 &&
+             myFamilyId() is string && myFamilyId().size() > 0 &&
+             request.resource.data.familyId == myFamilyId() &&
+             docId == request.resource.data.eventId + '_' + myFamilyId() &&
+             request.resource.data.offset in ['day', '2h'] &&
+             request.resource.data.remindAtMs is int &&
+             request.resource.data.status == 'pending' &&
+             request.resource.data.createdByUid == request.auth.uid;
+    }
+
+    function remMine() {
+      return isMember() && m().isExternal == false && resource.data.familyId == myFamilyId();
+    }
+
+    match /eventReminders/{docId} {
+      allow read: if remMine();
+      allow create: if isMember() && m().isExternal == false && remShapeOk(docId);
+      allow update: if remMine() && remShapeOk(docId);
+      allow delete: if remMine();
+    }
+
+    /* ========================================================================
      *  "עדכון חדש" — מרכז ההתראות   (23.9.2026)
      * ------------------------------------------------------------------------
      *  מסמך אחד לכל משפחה, notifyInbox/{familyId}: לכל תחום השורה האחרונה

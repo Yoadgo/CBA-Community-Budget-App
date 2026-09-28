@@ -856,10 +856,11 @@ CBA.screens = CBA.screens || {};
           '</div>' +
           actionsHTML() +
         '</header>' +
+        /* 29.9 — אירוע הקהילה הבא + אירוע התרבות הבא, לכולם, בראש העמוד */
+        (sched ? '<section class="hm-upnext" id="hm-upnext" aria-label="האירועים הבאים"></section>' : "") +
         '<div class="hm-cols hm-cols--' + (admin ? "adm" : "res") + (sched ? "" : " hm-cols--nosch") + '" id="hm-cols">' +
           '<div class="hm-main">' +
             mineSectionHTML() +
-            (admin ? "" : '<div id="hm-feat" class="hm-featslot"></div>') +
           '</div>' +
           (sched ? '<section class="card hm-card hm-sch" id="hm-sch"></section>' : "") +
           /* ⚠️ העמודה של "יש חדש" נולדת ריקה; `loadNewCard` מדליק אותה. */
@@ -881,7 +882,7 @@ CBA.screens = CBA.screens || {};
 
       if (sched) {
         CBA.homeSchedule.mount({ root: page, host: container.querySelector("#hm-sch"),
-                                 featHost: container.querySelector("#hm-feat"),
+                                 nextHost: container.querySelector("#hm-upnext"),
                                  mode: admin ? "list" : "grid" });
       }
       if (garden) {

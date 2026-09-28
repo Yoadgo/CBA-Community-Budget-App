@@ -220,3 +220,68 @@
 .hm-now__r { margin-inline-start: auto; font-size: 11.5px; font-weight: 700; opacity: .75; white-space: nowrap; }
 .hm-now__p { height: 3px; border-radius: 2px; background: rgba(17,24,39,.08); overflow: hidden; }
 .hm-now__p i { display: block; height: 100%; border-radius: 2px; }
+
+/* ============================================================================
+ *  29.9.26 — אירוע הקהילה הבא + אירוע התרבות הבא (ראש עמוד הבית)
+ * ========================================================================== */
+.hm-upnext {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+  margin: 0 0 16px;
+}
+.hm-upnext:empty { display: none; }
+.hm-nx {
+  background: rgba(255,255,255,.86);
+  border: 1px solid rgba(17,24,39,.07);
+  border-radius: 18px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.hm-nx__k { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 800; color: var(--text-soft); }
+.hm-nx__top {
+  display: flex; align-items: flex-start; gap: 12px;
+  border: 0; background: none; padding: 0; text-align: start; font: inherit; color: inherit; cursor: pointer; min-width: 0;
+}
+.hm-nx__date {
+  width: 48px; flex: none; text-align: center; border-radius: 12px; padding: 5px 0; line-height: 1.15;
+}
+.hm-nx__date small { display: block; font-size: 11px; font-weight: 700; opacity: .8; }
+.hm-nx__date b { display: block; font-size: 21px; font-weight: 800; }
+.hm-nx__txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hm-nx__txt > b { font-size: 16px; font-weight: 800; unicode-bidi: plaintext; }
+.hm-nx__m { font-size: 12.5px; color: var(--text-soft); }
+.hm-nx__st {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 600; border-radius: 10px; padding: 6px 10px;
+}
+.hm-nx__st.is-yes  { background: #ECFDF5; color: #065F46; }
+.hm-nx__st.is-wait { background: #FEF3C7; color: #78350F; }
+.hm-nx__st.is-no   { background: #F3F4F6; color: #374151; }
+.hm-nx__acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.hm-nx__b {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 6px 12px; border-radius: 10px;
+  border: 1px solid rgba(17,24,39,.14); background: #fff; color: var(--text, #111827);
+  cursor: pointer; text-decoration: none;
+}
+.hm-nx__b:hover { border-color: var(--action, #111827); }
+.hm-nx__b.is-primary { background: var(--action, #111827); border-color: var(--action, #111827); color: #fff; }
+.hm-nx__b.is-on { background: #EEF2FF; border-color: #C7D2FE; color: #3730A3; }
+.hm-nx__b.is-ghost { border-color: transparent; background: transparent; color: var(--text-soft); }
+.hm-nx__b[disabled] { opacity: .45; cursor: default; }
+.hm-nx__menu { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border-radius: 12px; background: rgba(17,24,39,.035); }
+.hm-nx__more { border-top: 1px solid rgba(17,24,39,.08); padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.hm-nx__desc { margin: 0; font-size: 13px; line-height: 1.6; white-space: pre-line; }
+.hm-nx__desc.is-muted { color: var(--text-soft); }
+.hm-nx__sch { display: grid; grid-template-columns: 48px 1fr; gap: 3px 10px; font-size: 12.5px; }
+.hm-nx__sch b { font-weight: 700; text-align: start; }
+.hm-nx.is-empty { opacity: .8; }
+.hm-nx__none { margin: 0; font-size: 12.5px; color: var(--text-soft); }
+@media (max-width: 640px) {
+  .hm-upnext { grid-template-columns: 1fr; gap: 10px; }
+}
