@@ -338,6 +338,7 @@
          מהבהב, ואין לו שום אישור שהפעולה נקלטה. זה בדיוק אותו כשל שהוא תיאר,
          רק מהיר יותר. הרשימה מתנקה בטעינה הבאה, אחרי שהשרת אישר. */
       var justActed = {};
+      var metaFailed = false;   // 28.9 — קריאת gardenMeta/lists נכשלה פעמיים; אין קטגוריות לטעון
 
       container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
       var root = container.querySelector("#gt-root");
@@ -360,6 +361,7 @@
           rowsAll = res.rows || [];
           order.area = res.areas || [];
           order.type = res.categories || [];
+          metaFailed = !!res.metaErr;
           /* בהדמיית תפקיד השרת עדיין עונה לפי המשתמש האמיתי (ר' startRoleSim
              ב-app.js), אז isManager שלו יהיה "מנהל" גם כשמדמים את אחראי הגינון.
              כאן אנחנו כופים את התצוגה למה שמדמים — אחרת ההדמיה מראה מסך שאף
@@ -1647,6 +1649,13 @@
          והם כבר הספיקו לסטות זה מזה בכותרות, בסדר השדות ובניסוח.
          ההבדל היחיד בין שני המסכים הוא הפריסט של המתג. */
       function openNewTask() {
+        /* 28.9 — קטגוריות שלא נטענו = טופס שלא ניתן לשמור (שדה חובה ריק). לא
+           לפתוח אותו שבור — לנסות לטעון מחדש ולבקש מהמשתמש לנסות שוב. */
+        if (metaFailed) {
+          CBA.ui.alert("לא הצלחתי לטעון את רשימת הקטגוריות. בודקי/ו את החיבור לאינטרנט ונסו/י לפתוח שוב בעוד רגע.");
+          load();
+          return;
+        }
         CBA.gardenForm.open({
           mode: "task",
           /* הגנן אינו מוסיף לתוכנית העבודה — היא סמכות המנהל (והכלל חוסם). */
@@ -1669,6 +1678,11 @@
 
       /* עריכת תקלה (22.9) — אותו טופס, ממולא מראש. ר' gardenCanEditTask. */
       function openEditTask(t) {
+        if (metaFailed) {
+          CBA.ui.alert("לא הצלחתי לטעון את רשימת הקטגוריות. בודקי/ו את החיבור לאינטרנט ונסו/י לפתוח שוב בעוד רגע.");
+          load();
+          return;
+        }
         CBA.gardenForm.open({
           mode: "task", task: t,
           cats: order.type.length ? order.type : [],

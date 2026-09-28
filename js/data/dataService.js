@@ -3788,13 +3788,24 @@ CBA.data = (function () {
         out.sort(function (a, b) {
           return (parseInt(b.id, 10) || 0) - (parseInt(a.id, 10) || 0);
         });
-        CBA.fb.readDoc("gardenMeta", "lists", function (e2, lists) {
+        /* 🔴🔴 28.9.2026 — כשלון בקריאת gardenMeta/lists נבלע בשקט (`e2`
+           לא נבדק) והטופס "משימה חדשה" נפתח עם קטגוריות ריקות —
+           שדה חובה, ואי אפשר לשמור. עכשיו: ניסיון שני לפני שמוותרים,
+           ו-metaErr עובר למסך כדי שהוא לא יפתח טופס שבור בשקט. */
+        function readGardenMeta(retriesLeft, onDone) {
+          CBA.fb.readDoc("gardenMeta", "lists", function (e2, lists) {
+            if (e2 && retriesLeft > 0) return readGardenMeta(retriesLeft - 1, onDone);
+            onDone(e2, lists);
+          });
+        }
+        readGardenMeta(1, function (e2, lists) {
           var perm = (window.CBA && CBA.user) || {};
           done(null, {
             ok: true, rows: out, week: week, scope: scope,
             isManager: !perm.isExternal,
             areas: (lists && lists.areas) || [],
-            categories: (lists && lists.categories) || []
+            categories: (lists && lists.categories) || [],
+            metaErr: !!e2
           });
         });
       });
