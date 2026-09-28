@@ -4154,6 +4154,13 @@ CBA.data = (function () {
     if (fields.hotlinePhone != null && String(fields.hotlinePhone).trim()) out.hotlinePhone = String(fields.hotlinePhone).trim().slice(0, 30);
     if (fields.whatsappHotline != null && String(fields.whatsappHotline).trim()) out.whatsappHotline = String(fields.whatsappHotline).trim().slice(0, 30);
     if (fields.whatsappGroupLink != null && String(fields.whatsappGroupLink).trim()) out.whatsappGroupLink = String(fields.whatsappGroupLink).trim().slice(0, 300);
+    /* 28.9.26 — כתובת ואתר העסק. אתר בלי http(s) מקבל https:// כדי שהקישור יעבוד. */
+    if (fields.address != null && String(fields.address).trim()) out.address = String(fields.address).trim().slice(0, 150);
+    if (fields.website != null && String(fields.website).trim()) {
+      var w = String(fields.website).trim();
+      if (!/^https?:\/\//i.test(w)) w = "https://" + w;
+      out.website = w.slice(0, 300);
+    }
     return out;
   }
 

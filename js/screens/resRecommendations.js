@@ -107,6 +107,15 @@ var RR_KUPAH_COLORS = {
 var RR_KUPAH_LIST = ["מכבי", "כללית", "מאוחדת", "לאומית"];
 
 function rrEsc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
+/* 28.9.26 — קישורים חיצוניים (אתר/מפות): רק http(s), אחרת לא מציגים בכלל. */
+function rrSafeUrl(u) { u = String(u || "").trim(); return /^https?:\/\//i.test(u) ? u : ""; }
+/* "פתח במפות": קישור ששמור בכרטיס, ואם אין — חיפוש לפי שם + כתובת + עיר. */
+function rrMapsHref(c) {
+  var saved = rrSafeUrl(c.mapsUrl);
+  if (saved) return saved;
+  if (!c.address) return "";
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent([c.title, c.address, c.city].filter(Boolean).join(" "));
+}
 
 /* ============================================================================
  *  מצב המסך
@@ -163,7 +172,7 @@ function rrOverflowGroups() {
 
 function rrMatchesQuery(card, q) {
   if (!q) return true;
-  var hay = [card.title, card.body, card.city, card.phone].join(" ").toLowerCase();
+  var hay = [card.title, card.body, card.city, card.phone, card.address].join(" ").toLowerCase();
   return hay.indexOf(q.toLowerCase()) !== -1;
 }
 
@@ -496,6 +505,7 @@ function rrRowHtml(c) {
         '<div class="rr-row__name">' + rrEsc(c.title) + "</div>" +
         '<div class="rr-row__meta">' +
           (c.phone ? '<span>' + rrEsc(c.phone) + "</span>" : "") +
+          (c.address ? '<span>' + rrEsc(c.address) + "</span>" : "") +
           (c.city ? '<span>' + rrEsc(c.city) + "</span>" : "") +
         "</div>" +
         '<div class="rr-row__pills">' + rrAllPillsHtml(c) + "</div>" +
@@ -559,7 +569,10 @@ function rrOpenDrawer(id) {
           '<button type="button" class="svc-icb" data-call="' + rrEsc(c.phone) + '" title="חיוג">' + svcPhoneIcon() + "</button>" +
           '<a class="svc-icb svc-icb--wa" href="https://wa.me/' + rrEsc(CBA.serviceUtils.waDigits(c.phone)) + '" target="_blank" rel="noopener" title="וואטסאפ">' + svcWaIcon() + "</a>" +
           "</div></div>" : "") +
-        (c.city ? '<div class="svc-updated">עיר/אזור: ' + rrEsc(c.city) + "</div>" : "") +
+        (c.address ? '<div class="svc-updated">כתובת: ' + rrEsc(c.address) + (c.city ? ", " + rrEsc(c.city) : "") + "</div>"
+                   : (c.city ? '<div class="svc-updated">עיר/אזור: ' + rrEsc(c.city) + "</div>" : "")) +
+        (rrSafeUrl(c.website) ? '<div style="margin-top:8px"><a class="btn-ghost btn-sm" href="' + rrEsc(rrSafeUrl(c.website)) +
+          '" target="_blank" rel="noopener">לאתר / לעמוד העסק ↗</a></div>' : "") +
         (isAdmin && c.note ? '<div class="svc-hilite"><span class="svc-hilite__ico">!</span><div>הערת מנהל: ' + rrEsc(c.note) + "</div></div>" : "") +
         (isAdmin && c.originalText
           ? '<div class="svc-acc"><button type="button" class="svc-acc__btn" aria-expanded="false"><span>טקסט מקורי מהמדריך (מנהל בלבד)</span>' +
@@ -579,7 +592,7 @@ function rrOpenDrawer(id) {
       "</div>" +
       '<div class="drawer__actions drawer__actions--sticky">' +
         '<div class="drawer__actions-main">' +
-          (c.mapsUrl ? '<a class="btn-ghost" href="' + rrEsc(c.mapsUrl) + '" target="_blank" rel="noopener">פתח במפות</a>' : "") +
+          (rrMapsHref(c) ? '<a class="btn-ghost" href="' + rrEsc(rrMapsHref(c)) + '" target="_blank" rel="noopener">פתח במפות</a>' : "") +
           '<button type="button" class="btn-ghost" id="rr-flag-drawer">⚑ לא מעודכן</button>' +
           '<button type="button" class="btn-ghost" data-rclose>סגירה</button>' +
         "</div>" +
@@ -702,6 +715,10 @@ function rrOpenForm(existing, presetGroup, isAdminEdit) {
       '<input class="field-input" id="rr-f-phone" dir="ltr" value="' + rrEsc(isEdit ? (existing.phone || "") : "") + '"></div>' +
     '<div class="form-field"><label>עיר/אזור (לא חובה)</label>' +
       '<input class="field-input" id="rr-f-city" value="' + rrEsc(isEdit ? (existing.city || "") : "") + '"></div>' +
+    '<div class="form-field"><label>כתובת (לא חובה)</label>' +
+      '<input class="field-input" id="rr-f-address" maxlength="150" placeholder="רחוב ומספר, או שם המרכז המסחרי" value="' + rrEsc(isEdit ? (existing.address || "") : "") + '"></div>' +
+    '<div class="form-field"><label>אתר או עמוד העסק (לא חובה)</label>' +
+      '<input class="field-input" id="rr-f-website" dir="ltr" maxlength="300" placeholder="https://" value="' + rrEsc(isEdit ? (existing.website || "") : "") + '"></div>' +
     '<div class="form-field"><label>קופת חולים (רלוונטי לרופאים בלבד)</label>' +
       '<select class="field-input" id="rr-f-kupah">' +
         '<option value="">—</option>' +
@@ -753,6 +770,8 @@ function rrOpenForm(existing, presetGroup, isAdminEdit) {
         body: wrap.querySelector("#rr-f-body").value,
         phone: wrap.querySelector("#rr-f-phone").value,
         city: wrap.querySelector("#rr-f-city").value,
+        address: wrap.querySelector("#rr-f-address").value,
+        website: wrap.querySelector("#rr-f-website").value,
         kupah: wrap.querySelector("#rr-f-kupah").value,
         mapsUrl: wrap.querySelector("#rr-f-maps").value,
         group: group, labels: labels,

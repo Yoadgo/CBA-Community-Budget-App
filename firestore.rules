@@ -1482,7 +1482,10 @@ service cloud.firestore {
                  שיכון). כולם אופציונליים, אותו דפוס כמו phone/city/kupah
                  למעלה. */
               'committeeItemId', 'hotlinePhone', 'whatsappHotline',
-              'whatsappGroupLink'];
+              'whatsappGroupLink',
+              /* 28.9.26 — כתובת ואתר העסק (השלמת פרטים אחרי הצוות האדום על
+                 המדריך). אופציונליים, מחרוזות עם תקרת אורך — ר' rrOptFieldsOk. */
+              'address', 'website'];
     }
 
     /* שדות "המלצות השיכון" — כולם אופציונליים, ולכן נבדקים רק כשקיימים. */
@@ -1512,7 +1515,11 @@ service cloud.firestore {
              (!request.resource.data.keys().hasAny(['whatsappHotline']) ||
               (request.resource.data.whatsappHotline is string && request.resource.data.whatsappHotline.size() <= 30)) &&
              (!request.resource.data.keys().hasAny(['whatsappGroupLink']) ||
-              (request.resource.data.whatsappGroupLink is string && request.resource.data.whatsappGroupLink.size() <= 300));
+              (request.resource.data.whatsappGroupLink is string && request.resource.data.whatsappGroupLink.size() <= 300)) &&
+             (!request.resource.data.keys().hasAny(['address']) ||
+              (request.resource.data.address is string && request.resource.data.address.size() <= 150)) &&
+             (!request.resource.data.keys().hasAny(['website']) ||
+              (request.resource.data.website is string && request.resource.data.website.size() <= 300));
     }
 
     function rsvcShapeOk() {
@@ -1554,7 +1561,8 @@ service cloud.firestore {
              request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['title', 'body', 'mapsUrl', 'updatedAt',
                          'group', 'phone', 'city', 'kupah', 'labels', 'note', 'kosher',
-                         'committeeItemId', 'hotlinePhone', 'whatsappHotline', 'whatsappGroupLink']) &&
+                         'committeeItemId', 'hotlinePhone', 'whatsappHotline', 'whatsappGroupLink',
+                         'address', 'website']) &&
              rsvcShapeOk();
     }
 
