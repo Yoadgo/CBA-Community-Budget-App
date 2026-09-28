@@ -1734,7 +1734,7 @@ CBA.screens = CBA.screens || {};
         '<div class="dir-card__house">בית ' + CBA.esc(house) + '</div>' +
         '<div class="dir-card__fam">משפחת ' + CBA.esc(fam) +
           (names ? ' <span class="dir-card__names">(' + CBA.esc(names) + ')</span>' : '') + '</div>' +
-        (roleLines.length ? '<div class="dir-card__role" title="תפקיד בוועד השיכון — עריכה רק דרך עץ הוועד">' + roleIcon + roleLines.join(" · ") + '</div>' : '') +
+        (roleLines.length ? '<div class="dir-card__role" title="תפקיד בוועד השיכון — עריכה רק דרך עץ הוועד">' + roleIcon + '<span><b>תפקיד / אחריות בוועד:</b> ' + roleLines.join(" · ") + '</span></div>' : '') +
         (kids ? '<div class="dir-card__kids">' + kidsIcon + CBA.esc(kids) + '</div>' : '') +
         (phones.length
           ? '<div class="dir-card__phones">' + phones.map(function (p) {

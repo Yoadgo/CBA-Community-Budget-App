@@ -26,44 +26,21 @@ var resState = {
 // כל פעולה/רענון קורא ל-render() מחדש, וה-innerHTML החדש היה מאפס את הגלילה).
 var resScrollTop = 0, resWinScrollY = 0;
 
-// חיווי "תפקיד בוועד" בטבלת "תושבים" של הניהול (2026-08-10, לבקשת יועד —
-// סעיף 8: "שהתפקיד בשיכון... יופיע גם בצד של רשימת תושבים, גם למנהל וגם
-// לתושב, אך מואפר ללא יכולת עריכה"). בצד התושב זה כבר קיים ליד כל תושב
-// ב-resDirectory (resident.js, dir-card__role) — כאן זה אותו רעיון בדיוק
-// בטבלת הניהול, לכל שם בעמודת "דיירים". מטמון נפרד, נבנה פעם אחת מ-
-// CBA.data.getCommitteeTree ישירות (לא buildBoxes — כאן צריך שורה-לפי-אדם).
-// התאמה best-effort: קודם "שם פרטי משפחה" מדויק, אחר-כך שם פרטי בלבד,
-// ולבסוף מזהה קבוע (rid) רק אם יש אדם יחיד עם אותו rid. לקריאה בלבד —
-// עריכה רק דרך עץ הוועד (committeeAdmin).
-var resRoleIndex = null, resRoleLoading = false, resContainerRef = null;
-function buildResRoleIndex(rows) {
-  var byLabel = {}, byFirst = {}, byRid = {};
-  (rows || []).forEach(function (r) {
-    var role = String(r["תפקיד"] || "").trim();
-    var name = String(r["שם"] || "").trim();
-    var rid = String(r["מזהה תושב"] || "").trim();
-    if (!role || !name) return;
-    (byLabel[name] = byLabel[name] || []).push(role);
-    var first = name.split(" ")[0];
-    if (first) (byFirst[first] = byFirst[first] || []).push(role);
-    if (rid) (byRid[rid] = byRid[rid] || []).push({ name: name, role: role });
-  });
-  return { byLabel: byLabel, byFirst: byFirst, byRid: byRid };
-}
-function resRoleFor(fn, fam, rid) {
-  if (!resRoleIndex || !fn) return "";
-  var label = fn + " " + fam;
-  if (resRoleIndex.byLabel[label]) return resRoleIndex.byLabel[label][0];
-  if (resRoleIndex.byFirst[fn]) return resRoleIndex.byFirst[fn][0];
-  if (rid && resRoleIndex.byRid[rid] && resRoleIndex.byRid[rid].length === 1) return resRoleIndex.byRid[rid][0].role;
-  return "";
-}
+// חיווי "תפקיד בוועד" בטבלת "תושבים" של הניהול (2026-08-10, סעיף 8 —
+// "שהתפקיד בשיכון... יופיע גם בצד של רשימת תושבים, גם למנהל וגם לתושב,
+// אך מואפר ללא יכולת עריכה").
+/* 28.9.26 — עבר ל-CBA.committeeTree (ועד השיכון v2), בדיוק כמו המדריך
+   בצד התושב (resident.js, dirRoleFor): התאמה לפי "מזהה קבוע" של המשפחה +
+   מספר הדייר (1/2) בלבד. ⛔ קודם הותאם כאן גם לפי שם פרטי — אותו באג
+   שבגללו כל "בר" הוצג כיו"ר השיכון; במדריך הוא תוקן ב-25.9, כאן נשכח.
+   לקריאה בלבד — עריכה רק דרך עץ הוועד. */
+var resRoleLoaded = false, resRoleLoading = false, resContainerRef = null;
 function ensureResRoleIndex() {
-  if (resRoleIndex || resRoleLoading) return;
+  if (resRoleLoaded || resRoleLoading || !(window.CBA && CBA.committeeTree)) return;
   resRoleLoading = true;
-  CBA.data.getCommitteeTree(function (res) {
+  CBA.committeeTree.load(function () {
     resRoleLoading = false;
-    resRoleIndex = buildResRoleIndex(res && res.ok ? res.rows : []);
+    resRoleLoaded = true;
     // כתיבה ל-container החי בלבד (לא לרפרנס יתום מ-render קודם — ר' cba-data-refresh-policy)
     if (resContainerRef && document.body.contains(resContainerRef)) {
       CBA.screens.residents.render(resContainerRef);
@@ -71,13 +48,18 @@ function ensureResRoleIndex() {
   });
 }
 /* "שם — תפקיד" לכל דייר עם תפקיד בבית הזה, מחוברים ב-" · "; ריק אם אין. */
-function resRoleLine(names, family, rid) {
-  if (!resRoleIndex) return "";
-  var parts = names.map(function (fn) {
-    var role = resRoleFor(fn, family, rid);
-    return role ? (names.length > 1 ? (fn + " — " + role) : role) : "";
+function resRoleLine(r, c) {
+  if (!resRoleLoaded || !CBA.committeeTree) return "";
+  var rid = resVal(r, c.id);
+  if (!rid) return "";
+  var ppl = c.firstName.map(function (k, i) {
+    return { fn: resVal(r, k), slot: CBA.committeeTree.slotOfKey(k, i) };
+  }).filter(function (x) { return x.fn; });
+  var parts = ppl.map(function (x) {
+    var role = CBA.committeeTree.rolesFor(rid, x.slot).join(" · ");
+    return role ? (ppl.length > 1 ? (x.fn + " — " + role) : role) : "";
   }).filter(Boolean);
-  return parts.join(" · ");
+  return parts.length ? "תפקיד / אחריות בוועד: " + parts.join(" · ") : "";
 }
 
 /* מיון: שם משפחה ודיירים לפי א-ב עברי (localeCompare), בית ותנועות כמספרים.
@@ -569,7 +551,7 @@ function resRowHTML(r, c, idx) {
   var prof = c.profession.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" · ");
   var kids = resVal(r, c.kids);
   // חיווי "תפקיד בוועד" (סעיף 8) — מואפר, לקריאה בלבד; ר' resRoleLine למעלה.
-  var roleLine = resRoleLine(c.firstName.map(function (k) { return resVal(r, k); }).filter(Boolean), resVal(r, c.family), resVal(r, c.id));
+  var roleLine = resRoleLine(r, c);
   return '<div class="tx-row res-row' + (active ? "" : " is-left") + '" data-res-row="' + (idx + 2) + '" data-res-idx="' + idx + '">' +
     '<div class="tx-c">' + CBA.esc(resVal(r, c.house) || "—") + '</div>' +
     '<div class="tx-c res-fam">' + CBA.esc(resVal(r, c.family) || "—") + '</div>' +
@@ -603,7 +585,7 @@ function resMobileHTML(list, c) {
     var prof = c.profession.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" · ");
     var kids = resVal(r, c.kids);
     var extra = [prof, kids ? "ילדים: " + kids : ""].filter(Boolean).join("  ·  ");
-    var roleLine = resRoleLine(c.firstName.map(function (k) { return resVal(r, k); }).filter(Boolean), resVal(r, c.family), resVal(r, c.id));
+    var roleLine = resRoleLine(r, c);
     return '<button type="button" class="res-mcard' + (active ? "" : " is-left") + '" ' +
         'data-res-row="' + (idx + 2) + '" data-res-idx="' + idx + '">' +
       '<span class="res-mcard__house">' + CBA.esc(resVal(r, c.house) || "—") + '</span>' +
