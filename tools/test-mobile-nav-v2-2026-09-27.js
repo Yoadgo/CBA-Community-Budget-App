@@ -40,6 +40,11 @@ ok('המחוון עובר לקבוצה שנפתחה (is-menu) וחוזר בסג�
 ok('הבועה נסגרת בגלילה', /bd\.addEventListener\("touchmove", closeNavSheet/.test(APP) && /CBA\.closeNavSheet\(\)/.test(MJS));
 ok('28.9: מתכווץ בתחילת גלילה ונפתח רק בראש העמוד (לא בגלילה למעלה)', /if \(mq\.matches && y > lastY \+ 2 && y > 24\) setMini\(true\);\s*else if \(y <= 4\) setMini\(false\);/.test(MJS));
 ok('28.9: נגיעה סביב הבר המכווץ (18px) פותחת; נגיעה בסמליל גם מנווטת', /var r = nav\.getBoundingClientRect\(\), H = 18;/.test(MJS) && /if \(commit && p\.fromMini\) \{/.test(MJS));
+const LCSS = R('css/loading.css');
+ok('28.9: מסך פתיחה ב-HTML עצמו + רשת ביטחון של 20ש\'', /id="boot-splash"/.test(IDX) && /animation: bootFailsafe 0s linear 20s forwards;/.test(LCSS));
+ok('28.9: אין יותר כפתורי תקציב קבועים בניווט של index.html', !/data-screen="budget">תכנון מול ביצוע<\/button>/.test(IDX));
+ok('28.9: bootReveal אחרי הניתוב הראשון, bootDismiss לפני מסך הכניסה', /initialRoute\("resident"\); \}[^\n]*\n\s*bootReveal\(\);/.test(APP) && /if \(!currentUser\) \{ bootDismiss\(\); showLoginGate\(\); \}/.test(APP));
+ok('28.9: כניסה מדורגת + בר עולה מלמטה', /body\.boot-reveal #app-main > \* > \* \{ animation: bootRise/.test(LCSS) && /body\.boot-reveal \.nav-search-fab \{ animation: bootBarUp/.test(LCSS));
 const vs = (IDX.match(/\?v=([0-9a-z]+)/g) || []).map(x => x.slice(3));
 const swv = (SW.match(/var VERSION = "([^"]+)"/) || [])[1];
 ok('גרסה אחידה ב-index.html וב-service-worker', vs.length > 50 && vs.every(v => v === swv), swv);

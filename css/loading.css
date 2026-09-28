@@ -257,3 +257,72 @@ body.app-booting .app-nav__tab {
 @media (prefers-reduced-motion: reduce) {
   .sk-stagger > * { animation: none; }
 }
+
+
+/* ==========================================================================
+   🔴 28.9.26 — מסך פתיחה + כניסה מדורגת (הכרעת יועד, סקיצה loading-v2)
+   1. .boot-splash (ב-index.html): הלוגו צומח, נושם, ופס התקדמות דק.
+   2. bootReveal (app.js): הלוגו עף ומתכווץ אל .app-brand__logo שבכותרת,
+      הכיתוב והרקע נעלמים, ו-body.boot-reveal מעלה את פריטי המסך אחד-אחד
+      ואת הבר + כפתור החיפוש מלמטה.
+   3. רשת ביטחון: אם bootReveal לא רץ (שגיאת JS), המסך נעלם לבד אחרי 20ש'.
+   ========================================================================== */
+.boot-splash {
+  position: fixed; inset: 0; z-index: 180;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background:
+    radial-gradient(66vw 56vh at 86% 0%, rgba(129,140,248,.22), transparent 82%),
+    radial-gradient(58vw 52vh at 2% 10%, rgba(94,187,178,.20), transparent 84%),
+    radial-gradient(62vw 56vh at 64% 96%, rgba(234,179,110,.18), transparent 82%),
+    var(--bg, #F9FAFB);
+  transition: background-color .45s ease .25s, opacity .45s ease .25s;
+  animation: bootFailsafe 0s linear 20s forwards;
+}
+@keyframes bootFailsafe { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+.boot-logo {
+  width: 84px; height: 84px; border-radius: 24px; display: grid; place-items: center;
+  background: linear-gradient(140deg, #374151, #111827); color: #fff;
+  box-shadow: 0 14px 34px rgba(17,24,39,.25);
+  animation: bootBreathe 1.6s ease-in-out infinite;
+  transition: transform .6s cubic-bezier(.34,1.3,.5,1), box-shadow .5s, border-radius .6s;
+  will-change: transform;
+}
+.boot-logo rect { transform-box: fill-box; transform-origin: 50% 100%; animation: bootGrow 1.2s cubic-bezier(.34,1.45,.5,1) both; }
+.boot-logo rect:nth-child(2) { animation-delay: .12s; }
+.boot-logo rect:nth-child(3) { animation-delay: .24s; }
+@keyframes bootGrow { from { transform: scaleY(.15); } to { transform: scaleY(1); } }
+@keyframes bootBreathe { 0%,100% { scale: 1; } 50% { scale: 1.05; } }
+.boot-name { font-size: 20px; font-weight: 800; color: var(--text, #111827); transition: opacity .2s; }
+.boot-sub  { font-size: 13px; color: var(--text-soft, #6B7280); margin-top: -8px; transition: opacity .2s; }
+.boot-prog { width: 120px; height: 4px; border-radius: 2px; background: rgba(17,24,39,.08); overflow: hidden; transition: opacity .2s; }
+.boot-prog i { display: block; height: 100%; width: 40%; border-radius: 2px; background: #111827; animation: bootSlide 1.1s ease-in-out infinite; }
+@keyframes bootSlide { from { transform: translateX(160%); } to { transform: translateX(-260%); } }
+
+/* יציאה: הכיתוב נעלם מיד, הלוגו עף (transform נקבע ב-JS), ואז הרקע נמוג */
+.boot-splash.is-leaving { opacity: 0; pointer-events: none; }
+.boot-splash.is-leaving .boot-name,
+.boot-splash.is-leaving .boot-sub,
+.boot-splash.is-leaving .boot-prog { opacity: 0; }
+.boot-splash.is-leaving .boot-logo { animation: none; box-shadow: none; }
+
+/* כניסה מדורגת של פריטי המסך הראשון */
+@keyframes bootRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes bootBarUp { from { transform: translateY(120px); } to { transform: none; } }
+body.boot-reveal #app-main > * > * { animation: bootRise .6s cubic-bezier(.34,1.3,.5,1) both; }
+body.boot-reveal #app-main > * > *:nth-child(1) { animation-delay: .10s; }
+body.boot-reveal #app-main > * > *:nth-child(2) { animation-delay: .16s; }
+body.boot-reveal #app-main > * > *:nth-child(3) { animation-delay: .22s; }
+body.boot-reveal #app-main > * > *:nth-child(4) { animation-delay: .28s; }
+body.boot-reveal #app-main > * > *:nth-child(5) { animation-delay: .34s; }
+body.boot-reveal #app-main > * > *:nth-child(6) { animation-delay: .40s; }
+body.boot-reveal #app-main > * > *:nth-child(n+7) { animation-delay: .46s; }
+body.boot-reveal .app-nav.app-nav--bottom,
+body.boot-reveal .nav-search-fab { animation: bootBarUp .75s cubic-bezier(.34,1.3,.5,1) .38s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-logo, .boot-logo rect, .boot-prog i { animation: none; }
+  .boot-splash { transition: opacity .2s; }
+  body.boot-reveal #app-main > * > *,
+  body.boot-reveal .app-nav.app-nav--bottom,
+  body.boot-reveal .nav-search-fab { animation: none; }
+}

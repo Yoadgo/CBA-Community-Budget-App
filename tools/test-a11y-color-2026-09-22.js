@@ -58,8 +58,10 @@ ok('🔴 ומשוחררת כשהשער יורד',
    /if \(gate\) gate\.hidden = true;\n    shellInert\(false\);/.test(APP), 'לא נמצא');
 ok('⚠️ שחרור אחד בלבד — אחרת השחרור עלול לקרות כשהשער עוד עלה',
    (APP.match(/shellInert\(false\)/g) || []).length === 1);
-ok('שלושת הכפתורים אכן יושבים ב-header ב-index.html',
-   /<header class="app-header">[\s\S]*?data-screen="budget"[\s\S]*?data-screen="expenses"/.test(HTML));
+/* 28.9.26 — הכפתורים הקבועים הוסרו מ-index.html (נבנים ב-renderNav לפי תפקיד);
+   מה שחשוב לממצא 16 הוא ש-#app-nav עצמו יושב בתוך ה-header, ולכן ב-inert. */
+ok('הניווט (#app-nav) יושב בתוך ה-header ב-index.html',
+   /<header class="app-header">[\s\S]*?<nav class="app-nav" id="app-nav">[\s\S]*?<\/header>/.test(HTML));
 
 section('4. 🔴 ממצא 17 — תוויות ומצב פעיל');
 ok('🔴 aria-current על הלשונית הפעילה', /aria-current="page"/.test(APP), 'חסר');

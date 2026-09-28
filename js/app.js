@@ -1121,6 +1121,44 @@
   }
 
   /* שלד טעינה — מבנה shimmer שדומה למסך התקציב, כדי שהמעבר לא ירגיש קופצני */
+  /* 🔴 28.9.26 — מסך הפתיחה (#boot-splash ב-index.html, עיצוב ב-loading.css).
+     bootReveal: הלוגו עף אל הלוגו שבכותרת, והמסך הראשון נכנס מדורג.
+     מינימום ~0.7ש' מתחילת הטעינה — גם כשיש מטמון — כדי שהאנימציה עקבית
+     ולא "מהבהבת". bootDismiss: יציאה מיידית (מסך כניסה/שגיאה). */
+  var bootDone = false;
+  function bootDismiss() {
+    var sp = document.getElementById("boot-splash");
+    if (!sp || bootDone) return;
+    bootDone = true;
+    sp.classList.add("is-leaving");
+    setTimeout(function () { if (sp.parentNode) sp.parentNode.removeChild(sp); }, 700);
+  }
+  function bootReveal() {
+    var sp = document.getElementById("boot-splash");
+    if (!sp || bootDone) return;
+    bootDone = true;
+    var now = (window.performance && performance.now) ? performance.now() : 700;
+    setTimeout(function () {
+      var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      var logo = sp.querySelector(".boot-logo");
+      var target = document.querySelector(".app-header .app-brand__logo");
+      if (!reduce && logo && target) {
+        var a = logo.getBoundingClientRect(), t = target.getBoundingClientRect();
+        if (t.width && a.width) {
+          var dx = (t.left + t.width / 2) - (a.left + a.width / 2);
+          var dy = (t.top + t.height / 2) - (a.top + a.height / 2);
+          logo.style.transform = "translate(" + dx + "px," + dy + "px) scale(" + (t.width / a.width) + ")";
+        }
+      }
+      document.body.classList.add("boot-reveal");
+      sp.classList.add("is-leaving");
+      setTimeout(function () { if (sp.parentNode) sp.parentNode.removeChild(sp); }, 800);
+      setTimeout(function () { document.body.classList.remove("boot-reveal"); }, 1700);
+    }, Math.max(0, 700 - now));
+  }
+  window.CBA = window.CBA || {};
+  window.CBA.bootDismiss = bootDismiss;
+
   function skeletonScreen() {
     return (
       '<div class="screen-enter">' +
@@ -2801,7 +2839,7 @@
   document.body.classList.add("app-booting");
   currentUser = loadSession();          // מושב שמור ותקף? נחשוף את האפליקציה מיד — בלי מסך כניסה
   main.innerHTML = skeletonScreen();    // שלד shimmer במקום "טוען נתונים…"
-  if (!currentUser) showLoginGate();    // אין מושב תקף — חוסמים עד התחברות מאומתת
+  if (!currentUser) { bootDismiss(); showLoginGate(); }    // אין מושב תקף — חוסמים עד התחברות מאומתת
 
   // מעטפת האפליקציה (ניווט/משתמש/בורר שנה) לא תלויה במספרי התקציב עצמם —
   // מוכנים ברגע שיש לנו כל נתונים בפועל (מטמון או רשת), גם אם עוד לא ברור
@@ -2938,6 +2976,7 @@
       ensureHeaderShell();
       if (currentUser) { routeByRole(); }
       else { applyUser(); AREAS = JSON.parse(JSON.stringify(AREAS_ALL)); initialRoute("resident"); }   // אורח מאחורי הגייט — שלד מלא, לא נגיש בפועל
+      bootReveal();
       /* ⏱️ שתי הקריאות האלה נדחות בכוונה (2026-09-09).
          נמדד חי: ברגע שהמטען הראשי חוזר, **שמונה** קריאות משנה יוצאות באותה
          שנייה. ל-Apps Script יש תור פר-משתמש, וכולן נלחמות עליו — באותה
