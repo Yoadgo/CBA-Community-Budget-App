@@ -40,7 +40,6 @@ var RR_CATEGORIES = [
 var RR_GROUPS = [
   { name: "רופאי ילדים",      emoji: "🩺", categoryId: "medicine" },
   { name: "רופאי משפחה",      emoji: "🩺", categoryId: "medicine" },
-  { name: "רופאי שיניים",     emoji: "🦷", categoryId: "medicine" },
   { name: "פיזיותרפיה",       emoji: "🤕", categoryId: "medicine" },
   { name: "מספרות ומעצבי שיער", emoji: "💇", categoryId: "beauty" },
   { name: "קוסמטיקה וציפורניים", emoji: "💅", categoryId: "beauty" },
