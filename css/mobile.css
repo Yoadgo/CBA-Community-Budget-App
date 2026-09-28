@@ -37,7 +37,7 @@
        (Playwright) אחרי הקטנת המידות ב-15%: הגובה בפועל ירד מ-45px ל-39px
        (ריפוד 4px + ריפוד טאב 8px + תוכן ~27px), אז 39+10=49px (היה 55px). */
     /* 27.9.26 — ניווט v2: הבר גבוה יותר (אייקון 24px מעל תווית), 60px + 10px מהתחתית. */
-    --botnav-h: 70px;
+    --botnav-h: 80px;
     /* השורה התחתונה הקבועה (תקציב / בניית תקציב) */
     --bottomline-h: 60px;
   }
@@ -180,8 +180,8 @@
      ========================================================================== */
   .app-nav.app-nav--bottom {
     /* 27.9.26 סבב 2 (יועד: "לצופף מעט את הסמלילים ולהגדיל את הרווח מהחיפוש"):
-       הבר ברוחב התוכן — כל יעד 62px — ולא מתוח עד כפתור החיפוש. */
-    inset-inline-start: 12px; inset-inline-end: auto; width: auto; max-width: calc(100% - 100px);
+       הבר ברוחב התוכן — כל יעד עד 74px (28.9: הכול הוגדל ב-20%) — ולא מתוח עד כפתור החיפוש. */
+    inset-inline-start: 12px; inset-inline-end: auto; width: auto; max-width: calc(100% - 102px);
     justify-content: flex-start;
     padding: 5px;
     overflow: visible;
@@ -198,16 +198,16 @@
   }
   .app-nav.app-nav--bottom.is-pressed { transform: scale(1.035); }
   .app-nav--bottom > .app-nav__tab,
-  .app-nav--bottom > .app-nav__group { flex: 0 0 62px; width: 62px; transition: flex-basis .55s cubic-bezier(.34,1.45,.5,1), width .55s cubic-bezier(.34,1.45,.5,1); }
+  .app-nav--bottom > .app-nav__group { flex: 0 1 74px; width: 74px; min-width: 0; transition: flex-basis .55s cubic-bezier(.34,1.45,.5,1), width .55s cubic-bezier(.34,1.45,.5,1); }
   body.nav-mini .app-nav--bottom > .app-nav__tab,
-  body.nav-mini .app-nav--bottom > .app-nav__group { flex-basis: 48px; width: 48px; }
+  body.nav-mini .app-nav--bottom > .app-nav__group { flex-basis: 50px; width: 50px; }
   .app-nav--bottom .app-nav__tab {
-    font-size: 10.5px; gap: 2px; padding: 6px 2px 5px; border-radius: 999px;
+    font-size: 12.5px; gap: 3px; padding: 8px 2px 6px; border-radius: 999px;
     color: #1F2937; text-shadow: 0 0 3px rgba(255,255,255,.95);
     transition: font-size .45s cubic-bezier(.34,1.45,.5,1), padding .55s cubic-bezier(.34,1.45,.5,1);
   }
   .app-nav--bottom .app-nav__ico svg {
-    width: 24px; height: 24px; filter: drop-shadow(0 0 2px rgba(255,255,255,.9));
+    width: 29px; height: 29px; filter: drop-shadow(0 0 2px rgba(255,255,255,.9));
     transition: width .5s cubic-bezier(.34,1.45,.5,1), height .5s cubic-bezier(.34,1.45,.5,1), transform .3s cubic-bezier(.34,1.45,.5,1);
   }
   .app-nav--bottom .app-nav__tab.is-hot .app-nav__ico svg { transform: scale(1.12); }
@@ -232,7 +232,7 @@
   /* --- כפתור החיפוש העגול (נוצר ב-mobile.js) --- */
   .nav-search-fab {
     position: fixed; z-index: 40; inset-inline-end: 12px; bottom: calc(10px + env(safe-area-inset-bottom));
-    width: 60px; height: 60px; border-radius: 50%; padding: 0; cursor: pointer;
+    width: 66px; height: 66px; border-radius: 50%; padding: 0; cursor: pointer;
     display: grid; place-items: center; color: #1F2937;
     background: linear-gradient(180deg, rgba(255,255,255,.40), rgba(255,255,255,.22));
     backdrop-filter: blur(10px) saturate(190%) brightness(1.08);
@@ -243,19 +243,19 @@
                 inset-inline-end .55s cubic-bezier(.34,1.45,.5,1), left .55s cubic-bezier(.34,1.45,.5,1), transform .3s cubic-bezier(.34,1.45,.5,1);
   }
   .nav-search-fab:active { transform: scale(1.08); }
-  .nav-search-fab svg { width: 22px; height: 22px; filter: drop-shadow(0 0 2px rgba(255,255,255,.9)); transition: width .5s, height .5s; }
+  .nav-search-fab svg { width: 26px; height: 26px; filter: drop-shadow(0 0 2px rgba(255,255,255,.9)); transition: width .5s, height .5s; }
   body[data-nav-single="1"] .nav-search-fab { display: none; }
   /* במובייל החיפוש יושב למטה — הכפתור בכותרת מוסתר (חוץ ממי שאין לו בר) */
   body:not([data-nav-single="1"]) .app-controls .search-btn { display: none; }
 
-  /* --- כיווץ בגלילה: קטן יותר, בלי תוויות (28.9: הוגדל ב-20% לבקשת יועד — 48px ליעד) --- */
+  /* --- כיווץ בגלילה: קטן יותר, בלי תוויות (28.9: הוגדל ב-20% ואז עוד 5% לבקשת יועד — 50px ליעד) --- */
   body.nav-mini .app-nav.app-nav--bottom { inset-inline-start: var(--nm-start, 14%); padding: 4px; }
   body.nav-mini .app-nav--bottom .app-nav__tab { font-size: 0; padding: 7px 2px; gap: 0; }
-  body.nav-mini .app-nav--bottom .app-nav__ico svg { width: 23px; height: 23px; }
+  body.nav-mini .app-nav--bottom .app-nav__ico svg { width: 24px; height: 24px; }
   body.nav-mini .app-nav.app-nav--bottom .nav-indicator { top: 4px; bottom: 4px; }
   body.nav-mini .app-nav--bottom .nav-badge { top: -4px; font-size: 9.5px; }
-  body.nav-mini .nav-search-fab { width: 48px; height: 48px; inset-inline-end: var(--nm-start, 14%); }
-  body.nav-mini .nav-search-fab svg { width: 20px; height: 20px; }
+  body.nav-mini .nav-search-fab { width: 50px; height: 50px; inset-inline-end: var(--nm-start, 14%); }
+  body.nav-mini .nav-search-fab svg { width: 21px; height: 21px; }
 
   /* ---------- בועת כמוסות לקבוצת ניווט (27.9.26, במקום הגיליון התחתון) ---------- */
   .nav-sheet { position: fixed; inset: 0; z-index: 60; }
