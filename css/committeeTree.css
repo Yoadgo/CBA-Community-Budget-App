@@ -60,7 +60,6 @@
 .ct-lead.is-hub .ct-nm.is-loading { background: rgba(255,255,255,.35); }
 @keyframes ctShimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .ct-sep { color: var(--text-muted); }
-.is-vacant { color: var(--text-muted); font-weight: 500; }
 
 /* ---------- השרשרת ---------- */
 .ct-tree + .ct-tree { margin-top: 30px; padding-top: 24px; border-top: 1px solid var(--border); }

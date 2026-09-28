@@ -387,7 +387,7 @@
 
   function namesHTML(r, edit, cls) {
     var hs = edit ? r.holders : r.holders.filter(function (h) { return who(h).kind !== "gone"; });
-    if (!hs.length) return '<span class="' + cls + ' is-vacant">פנוי</span>';
+    if (!hs.length) return "";
     return '<span class="' + cls + '">' + hs.map(function (h) {
       var w = who(h);
       var warn = edit && (w.review || w.kind === "gone");
