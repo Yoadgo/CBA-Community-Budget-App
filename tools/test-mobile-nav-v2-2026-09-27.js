@@ -38,6 +38,8 @@ ok('🔴 בלי בר (יעד יחיד) — גם בלי כפתור חיפוש צ�
 ok('🔴 דיווח 32: שחרור מחוץ לבר לא בוחר, ותנועה אנכית מבטלת גרירה', /if \(e\.clientY < br\.top - 12 \|\| e\.clientY > br\.bottom \+ 12\) commit = false;/.test(MJS) && /if \(dy > 18 && dy > dx\) \{ endPress\(false\); return; \}/.test(MJS) && /touch-action: pan-y;/.test(MCSS));
 ok('המחוון עובר לקבוצה שנפתחה (is-menu) וחוזר בסגירה', /gbtn\.classList\.add\("is-menu"\)/.test(APP) && /classList\.remove\("is-menu"\)/.test(APP) && /\.app-nav__tab\.is-menu/.test(MOT));
 ok('הבועה נסגרת בגלילה', /bd\.addEventListener\("touchmove", closeNavSheet/.test(APP) && /CBA\.closeNavSheet\(\)/.test(MJS));
+ok('28.9: מתכווץ בתחילת גלילה ונפתח רק בראש העמוד (לא בגלילה למעלה)', /if \(mq\.matches && y > lastY \+ 2 && y > 24\) setMini\(true\);\s*else if \(y <= 4\) setMini\(false\);/.test(MJS));
+ok('28.9: נגיעה סביב הבר המכווץ (18px) פותחת; נגיעה בסמליל גם מנווטת', /var r = nav\.getBoundingClientRect\(\), H = 18;/.test(MJS) && /if \(commit && p\.fromMini\) \{/.test(MJS));
 const vs = (IDX.match(/\?v=([0-9a-z]+)/g) || []).map(x => x.slice(3));
 const swv = (SW.match(/var VERSION = "([^"]+)"/) || [])[1];
 ok('גרסה אחידה ב-index.html וב-service-worker', vs.length > 50 && vs.every(v => v === swv), swv);

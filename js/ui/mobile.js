@@ -44,12 +44,15 @@
     ticking = true;
     window.requestAnimationFrame(function () {
       var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+      /* 28.9.26 (הכרעת יועד, סבב 3): הבר **מתכווץ בתחילת גלילה** ולא נפתח
+         בגלילה למעלה — רק בנגיעה בו (או סביבו), או כשחוזרים ממש לראש העמוד.
+         קודם כל שינוי כיוון קטן פתח/סגר אותו, וזה נראה קופצני (סרטון 28.9). */
+      if (mq.matches && y > lastY + 2 && y > 24) setMini(true);
+      else if (y <= 4) setMini(false);
       if (mq.matches && y > lastY && y > 80) {
         header.classList.add("app-header--hidden");
-        setMini(true);
       } else if (y < lastY - 4 || y <= 80) {
         header.classList.remove("app-header--hidden");
-        setMini(false);
       }
       lastY = y;
       ticking = false;
@@ -60,7 +63,7 @@
   // השמירה, כרשת ביטחון: אם משום מה הכותרת כן משנה גובה, --header-h (שקובע
   // מאיפה מתחיל התוכן) יתעדכן איתה במקום להישאר על הערך מרגע הטעינה.
   /* ---------- 27.9.26 — ניווט מובייל v2 (ר' claude/mobile-nav-spec-2026-09-27.md) ----------
-     (1) כיווץ הבר בגלילה למטה (body.nav-mini), חזרה בגלילה למעלה או בהקשה.
+     (1) כיווץ הבר בתחילת גלילה (body.nav-mini); חזרה רק בנגיעה בו/סביבו או בראש העמוד (28.9).
      (2) כפתור חיפוש עגול ליד הבר (במקום הכפתור בכותרת).
      (3) לחיצה-וגרירה על הבר: המחוון עוקב אחרי האצבע (.is-hot, ר' motion.js),
          והבחירה נעשית בשחרור. הקשה רגילה נשארת קליק רגיל לגמרי. */
@@ -121,6 +124,13 @@
     nav.classList.remove("is-pressed");
     if (p.hot) p.hot.classList.remove("is-hot");
     /* רק אם האצבע נגררה לכפתור אחר — הקשה רגילה מטופלת ע"י הקליק הטבעי */
+    /* נגיעה בסמליל כשהבר היה מכווץ: הבר גדל וזז מתחת לאצבע, והקליק הטבעי
+       עלול ליפול בין כפתורים — לכן בוחרים בעצמנו את מה שנגעו בו בהתחלה. */
+    if (commit && p.fromMini) {
+      swallowUntil = Date.now() + 450;
+      ownClick = true; try { p.down.click(); } finally { ownClick = false; }
+      return;
+    }
     if (commit && p.hot && p.hot !== p.down) {
       /* הקליק הטבעי (על הכפתור שבו התחילה הלחיצה, בגלל לכידת מגע) נבלע —
          אחרת היינו מנווטים פעמיים: פעם למקור ופעם ליעד. */
@@ -130,18 +140,31 @@
     }
   }
   var swallowUntil = 0, ownClick = false;
+  /* נגיעה סביב הבר המכווץ (עד 18px ממנו, כולל כפתור החיפוש) פותחת אותו —
+     לא צריך לפגוע בדיוק בסמליל. נגיעה על סמליל גם פותחת וגם מנווטת. */
+  document.addEventListener("pointerdown", function (e) {
+    if (!nav || !mq.matches || !document.body.classList.contains("nav-mini")) return;
+    var r = nav.getBoundingClientRect(), H = 18;
+    var fr = fab && !fab.hidden ? fab.getBoundingClientRect() : r;
+    var left = Math.min(r.left, fr.left) - H, right = Math.max(r.right, fr.right) + H;
+    if (e.clientX >= left && e.clientX <= right && e.clientY >= r.top - H && e.clientY <= r.bottom + H) {
+      expandedAt = Date.now();
+      setMini(false);
+    }
+  }, true);
+  var expandedAt = 0;
   if (nav) {
     nav.addEventListener("pointerdown", function (e) {
       if (!mq.matches || e.button > 0) return;
-      if (document.body.classList.contains("nav-mini")) setMini(false);
+      var fromMini = Date.now() - expandedAt < 80;
       var t = tabAt(e.clientX, e.clientY);
       if (!t) return;
-      press = { down: t, hot: null, x: e.clientX, y: e.clientY };
+      press = { down: t, hot: null, x: e.clientX, y: e.clientY, fromMini: fromMini };
       nav.classList.add("is-pressed");
       setHot(t);
     });
     nav.addEventListener("pointermove", function (e) {
-      if (!press) return;
+      if (!press || press.fromMini) return;   /* הבר גדל מתחת לאצבע — אין גרירה */
       /* תנועה אנכית בעיקרה = ניסיון גלילה, לא גרירה על הבר — מבטלים */
       var dx = Math.abs(e.clientX - press.x), dy = Math.abs(e.clientY - press.y);
       if (dy > 18 && dy > dx) { endPress(false); return; }
