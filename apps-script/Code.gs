@@ -175,6 +175,8 @@ var ACTION_PERMS = {
   notifyAiRewrite: PERM_ANY_ADMIN, notifyAiBuild: PERM_ANY_ADMIN, notifyAiSummary: PERM_ANY_ADMIN,
   notifyTestSend: PERM_ANY_ADMIN,
   notifyRsvpOpened: PERM_ANY_ADMIN,
+  /* 28.9 — מנהל אירועים (תרבות) או מנהל-על, בדיוק כמו כלל eventInfo/eventMessages. */
+  notifyEventInvite: PERM_CULTURE, eventMessageSendNow: PERM_CULTURE,
   /* 🔴 23.9 — תיקון דחוף 3: המייל על פעולת הגנן. בלי השורה הזו
      `authorize_` דחה את הגנן החיצוני, וכל מייל על פעולה שלו חיכה
      לסריקה השעתית (ולפעמים שעתיים). PERM_GARDEN הוא הדרישה היחידה
@@ -1767,6 +1769,9 @@ function doPostDispatch_(ss, body) {
       case 'notifyAiSummary':   return json_(notifyAiSummary_(ss, body));
       case 'notifyTestSend':    return json_(notifyTestSend_(ss, body));
       case 'notifyRsvpOpened':  return json_(notifyRsvpOpened_(ss, body));
+      /* 28.9 — אירועים: הזמנה נוספה / "שליחה עכשיו" של הודעה (Notify.gs). */
+      case 'notifyEventInvite': return json_(notifyEventInvite_(ss, body));
+      case 'eventMessageSendNow': return json_(eventMessageSendNow_(ss, body));
       case 'notifyServiceRecommend': return json_(notifyServiceRecommend_(ss, body));
       /* דיווח "לא מעודכן" על המלצת שירות (27.9.26, resRecommendations) — אותו דפוס
          בדיוק כמו notifyServiceRecommend: שגר-ושכח אחרי כתיבה ישירה ל-Firestore. */
@@ -2486,8 +2491,13 @@ function eventsSyncAll_() {
   var out = { ok: false, years: [], wrote: 0, error: '' };
   try {
     eventsSyncYears_().forEach(function (yr) {
-      out.wrote += eventsWriteFs_(yr, eventsForYear_(yr));
+      var evList = eventsForYear_(yr);
+      out.wrote += eventsWriteFs_(yr, evList);
       out.years.push(yr);
+      /* 28.9 — פוש "אירוע חדש / עודכן" (Notify.gs). כשל כאן לא עוצר את הסנכרון. */
+      if (typeof eventsNotifyChanges_ === 'function') {
+        try { eventsNotifyChanges_(yr, evList); } catch (e) { Logger.log('eventsNotifyChanges_: ' + e); }
+      }
     });
     out.ok = true;
   } catch (e) { out.error = String(e); }
@@ -3948,6 +3958,7 @@ var ACTION_DOMAIN = {
   doorOpen: 'door', doorStatus: 'door', doorConfigure: 'door',
   doorTestConnection: 'door', doorSaveContact: 'door', doorGymResend: 'door',
   notifyRsvpOpened: 'notifySettings', notifyServiceRecommend: 'notifySettings',
+  notifyEventInvite: 'notifySettings', eventMessageSendNow: 'notifySettings',
   notifyStaleReport: 'notifySettings',
   saveCustomTrigger: 'notifySettings', customTriggerAction: 'notifySettings',
   notifyAiRewrite: 'notifySettings', notifyAiBuild: 'notifySettings', notifyAiSummary: 'notifySettings',
@@ -6611,6 +6622,17 @@ function hourlyJobsRun_() {
       if (ew && ew.events) Logger.log('השבוע בשיכון: ' + ew.events + ' אירועים, פוש ' + ew.push);
     }
   } catch (e) { hjF(e); Logger.log('eventsWeekJob_ נכשל: ' + e); }
+  /* 28.9 — הודעות ותזכורות של מנהלי האירועים: הטריגר של 15 דקות שולח;
+     כאן רק מוודאים שהוא מותקן, ורשת ביטחון אם הוא לא רץ. */
+  hjM('eventMessagesJob_');
+  try {
+    if (typeof eventMessagesJob_ === 'function') {
+      var emt = ensureEventMessagesTrigger_();
+      if (emt) Logger.log('הותקן טריגר eventMessagesTick');
+      var em = eventMessagesJob_(ss);
+      if (em.sent || em.expired) Logger.log('הודעות אירועים: יצאו ' + em.sent + ', פגו ' + em.expired);
+    }
+  } catch (e) { hjF(e); Logger.log('eventMessagesJob_ נכשל: ' + e); }
   /* 23.9 סבב 3 — טריגרים וסיכומים שנבנו במרכז ההתראות. */
   hjM('customTriggersJob_');
   try {

@@ -1819,6 +1819,36 @@ service cloud.firestore {
     }
 
     /* ========================================================================
+     *  הודעות ותזכורות למנהלי אירועים   (28.9.2026)
+     * ------------------------------------------------------------------------
+     *  eventMessages/{id} — הודעה לתושבים על אירוע: עכשיו או בזמן שנקבע.
+     *  הדפדפן רק **יוצר** (status='pending') ו**מבטל** (pending → canceled).
+     *  השליחה והסימון (sending/sent/expired) — רק מהשרת (חשבון שירות).
+     *  קריאה: רק מנהלי אירועים — תושב לא צריך לראות את התור.
+     * ==================================================================== */
+    function eventMessageShapeOk() {
+      return request.resource.data.keys().hasOnly(['eventId', 'text', 'audience', 'sendAtMs', 'status', 'createdByUid', 'createdAt']) &&
+             request.resource.data.keys().hasAll(['eventId', 'text', 'audience', 'sendAtMs', 'status', 'createdByUid']) &&
+             request.resource.data.eventId is string && request.resource.data.eventId.size() <= 300 &&
+             request.resource.data.text is string &&
+             request.resource.data.text.size() >= 2 && request.resource.data.text.size() <= 240 &&
+             request.resource.data.audience in ['all', 'attending', 'pending'] &&
+             request.resource.data.sendAtMs is int &&
+             request.resource.data.status == 'pending' &&
+             request.resource.data.createdByUid == request.auth.uid;
+    }
+
+    match /eventMessages/{msgId} {
+      allow read: if hasPerm('תרבות');
+      allow create: if hasPerm('תרבות') && eventMessageShapeOk();
+      allow update: if hasPerm('תרבות') &&
+                       resource.data.status == 'pending' &&
+                       request.resource.data.status == 'canceled' &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if false;
+    }
+
+    /* ========================================================================
      *  "עדכון חדש" — מרכז ההתראות   (23.9.2026)
      * ------------------------------------------------------------------------
      *  מסמך אחד לכל משפחה, notifyInbox/{familyId}: לכל תחום השורה האחרונה

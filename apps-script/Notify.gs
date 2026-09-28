@@ -869,6 +869,191 @@ function rsvpReminderJob_(ss) {
   return out;
 }
 
+/* ===========================================================================
+ *  אירועים — הזמנה, אירוע חדש/עודכן, הודעות ותזכורות   (28.9.2026, יועד)
+ * ---------------------------------------------------------------------------
+ *  ארבעה טריגרים חדשים בתחום "אירועים ושירותים" (שורות בקטלוג למעלה):
+ *    evt-invite  — נוספה הזמנה (תמונה) לאירוע. הדפדפן מבקש אחרי שמירה,
+ *                  השרת מוודא ב-eventInfo שבאמת יש תמונה, ופעם אחת לאירוע.
+ *    evt-new     — אירוע קהילה/תרבות חדש ביומן.
+ *    evt-changed — אירוע קהילה/תרבות השתנה (שם / תאריך / שעה / מיקום).
+ *    evt-msg     — הודעה או תזכורת שמנהל אירועים כתב (עכשיו או מתוזמנת).
+ *  🔑 "חדש/עודכן" מתגלה בסנכרון היומן (eventsSyncAll_), מול תמונת מצב
+ *     ב-Script Properties. שלושה בלמים נגד הצפה:
+ *       1. ריצה ראשונה (אין תמונת מצב) — רק רושמים, לא שולחים.
+ *       2. מחכים שהאירוע "יתייצב" 10 דקות — מי שיוצר אירוע ומתקן אותו
+ *          שלוש פעמים ברצף שולח התראה אחת, לא ארבע.
+ *       3. רק אירועים עתידיים, ורק שינוי בשם/תאריך/שעה/מיקום (לא בתיאור).
+ *  🔑 הודעות: Firestore eventMessages/{id} — הדפדפן יוצר (hasPerm('תרבות')),
+ *     השרת בלבד שולח ומסמן. נשלחות מטריגר של 15 דקות (eventMessagesTick),
+ *     ו"שליחה עכשיו" מבקשת שליחה מיידית (eventMessageSendNow).
+ * ========================================================================= */
+var EVT_NOTIFY_CATS = { community: 1, culture: 1 };
+var EVT_SETTLE_MS = 10 * 60 * 1000;
+var EVT_MSG_COL = 'eventMessages';
+var EVT_MSG_STALE_MS = 6 * 3600 * 1000;      // תזכורת שפוספסה ביותר מ-6 שעות — לא יוצאת
+
+/* 🔴 מנעול משלנו ולא getScriptLock: המנעול הכללי משרת כל כתיבה באפליקציה
+   (שריונים, תקציב…), ושליחת פוש ל-100 משפחות יכולה לקחת 20 שניות —
+   בזמן הזה כל כתיבה אחרת הייתה נתקעת. המנעול של הקובץ נפרד ממנו. */
+function evtLock_() {
+  try { var l = LockService.getDocumentLock(); if (l) return l; } catch (e) {}
+  return LockService.getUserLock();
+}
+
+function evtDetails_(ev) { return ev ? [ev.dateLabel, ev.place].filter(Boolean).join(' · ') : ''; }
+
+function evtValidId_(id) { return id && id.length <= 300 && !/[\/\s]/.test(id); }
+
+/** evt-invite — נקרא מהדפדפן אחרי שמירת הזמנה (שגר-ושכח). */
+function notifyEventInvite_(ss, body) {
+  var id = String(body.eventId || '').trim();
+  if (!evtValidId_(id)) return { ok: false, error: 'מזהה אירוע לא תקין' };
+  var info = fsGet_(fsDocPath_('eventInfo', id));
+  if (!info || info.hasImage !== true) return { ok: true, sent: 0 };
+  var ev = notifyFindEvent_(id);
+  var today = Utilities.formatDate(new Date(), 'Asia/Jerusalem', 'yyyy-MM-dd');
+  if (!ev || ev.date < today) return { ok: true, sent: 0, skipped: 'past' };
+  var props = PropertiesService.getScriptProperties(), flag = 'EVT_INVITE_SENT_' + id;
+  if (props.getProperty(flag)) return { ok: true, sent: 0, already: true };
+  props.setProperty(flag, new Date().toISOString());
+  var rep = notify_(ss, 'evt-invite', { vars: { 'שם האירוע': ev.title, 'תאריך': ev.dateLabel,
+                                                 'פרטים': evtDetails_(ev) } }, ['all']);
+  return { ok: true, sent: rep.push };
+}
+
+function evtSig_(e) {
+  return [e.title, e.date, e.allDay ? 1 : 0, e.location].join('\u0001');
+}
+
+/** evt-new / evt-changed — נקרא מתוך eventsSyncAll_ לכל שנה שסונכרנה. */
+function eventsNotifyChanges_(year, events, now) {
+  now = now || new Date();
+  var out = { fresh: 0, changed: 0, first: false };
+  var lock = evtLock_();
+  if (!lock.tryLock(20000)) return out;           // סנכרון מקביל כבר מטפל
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var props = PropertiesService.getScriptProperties(), key = 'EVT_SIG_' + year;
+    var snap = null;
+    try { snap = JSON.parse(props.getProperty(key) || 'null'); } catch (e) { snap = null; }
+    out.first = !snap;
+    snap = snap || {};
+    var dayStart = new Date(Utilities.formatDate(now, 'Asia/Jerusalem', "yyyy-MM-dd'T'00:00:00XXX"));
+    var t = now.getTime(), next = {};
+    (events || []).forEach(function (e) {
+      if (!e || !EVT_NOTIFY_CATS[e.category] || !e.id) return;
+      var when = new Date(String(e.date || ''));
+      if (isNaN(when.getTime()) || when < dayStart) return;     // עבר — יוצא מתמונת המצב
+      var sig = evtSig_(e), old = snap[e.id];
+      var cur = { s: sig, d: String(e.date || ''), a: e.allDay ? 1 : 0, l: String(e.location || '').substring(0, 60) };
+      if (out.first) { next[e.id] = cur; return; }
+      if (old && old.s === sig) { next[e.id] = cur; return; }
+      /* חדש או השתנה — מחכים שיתייצב */
+      if (!old || !old.p || old.p !== sig) {
+        next[e.id] = { s: old ? old.s : '', d: old ? old.d : '', a: old ? old.a : 0, l: old ? old.l : '',
+                       p: sig, t: t };
+        return;
+      }
+      if (t - old.t < EVT_SETTLE_MS) { next[e.id] = old; return; }
+      next[e.id] = cur;
+      var ev = notifyFindEvent_(e.id) || { title: e.title, dateLabel: '', place: e.location || '' };
+      var vars = { 'שם האירוע': ev.title, 'תאריך': ev.dateLabel, 'פרטים': evtDetails_(ev) };
+      if (!old.s) {
+        notify_(ss, 'evt-new', { vars: vars }, ['all']);
+        out.fresh++;
+      } else {
+        var what = [];
+        if (old.d !== cur.d || old.a !== cur.a) what.push('עבר ל-' + ev.dateLabel);
+        if (old.l !== cur.l) what.push(cur.l ? 'המיקום: ' + cur.l : 'המיקום עודכן');
+        vars['מה השתנה'] = what.length ? what.join(' · ') : 'פרטי האירוע עודכנו';
+        notify_(ss, 'evt-changed', { vars: vars }, ['all']);
+        out.changed++;
+      }
+    });
+    var json = JSON.stringify(next);
+    if (json.length > 8500) {                 // מגבלת Script Properties — משאירים רק חתימות
+      Object.keys(next).forEach(function (k) { next[k] = { s: next[k].s, p: next[k].p, t: next[k].t }; });
+      json = JSON.stringify(next);
+    }
+    props.setProperty(key, json);
+  } finally { lock.releaseLock(); }
+  return out;
+}
+
+/* ---- evt-msg: הודעות ותזכורות ---- */
+
+/** אילו משפחות: 'attending' = אישרו הגעה, 'pending' = עוד לא ענו. null = כולם. */
+function evtAudience_(ss, eventId, audience) {
+  if (audience !== 'attending' && audience !== 'pending') return null;
+  var resp = fsQuery_('eventRSVPResponses', 'eventId', 'EQUAL', eventId, 500) || [];
+  var allow = {};
+  if (audience === 'attending') {
+    resp.forEach(function (r) { var d = r.data || {}; if (d.status === 'attending' && d.familyId) allow[String(d.familyId)] = true; });
+    return allow;
+  }
+  var answered = {};
+  resp.forEach(function (r) { var d = r.data || {}; if (d.familyId) answered[String(d.familyId)] = true; });
+  notifyDirectory_(ss).forEach(function (p) {
+    if (p && !p.isExternal && p.familyId && !answered[p.familyId]) allow[p.familyId] = true;
+  });
+  return allow;
+}
+
+/** שולח כל הודעה שהגיע זמנה. onlyId — "שליחה עכשיו" של הודעה אחת. */
+function eventMessagesJob_(ss, onlyId) {
+  var out = { sent: 0, push: 0, expired: 0, busy: false };
+  var lock = evtLock_();
+  if (!lock.tryLock(25000)) { out.busy = true; return out; }
+  try {
+    ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+    var rows = fsQuery_(EVT_MSG_COL, 'status', 'EQUAL', 'pending', 100) || [];
+    var now = Date.now();
+    rows.forEach(function (r) {
+      var id = decodeURIComponent(String(r.id || '')), d = r.data || {};
+      if (onlyId && id !== onlyId) return;
+      var at = Number(d.sendAtMs);
+      if (!(at <= now + 60000)) return;
+      var path = fsDocPath_(EVT_MSG_COL, id);
+      if (at < now - EVT_MSG_STALE_MS) { fsMerge_(path, { status: 'expired' }); out.expired++; return; }
+      /* מסמנים לפני השליחה: אם משהו נופל באמצע — עדיף הודעה שלא יצאה
+         (גלוי למנהל כ"בשליחה") מאשר הודעה שיוצאת פעמיים. */
+      fsMerge_(path, { status: 'sending' });
+      var ev = notifyFindEvent_(String(d.eventId || ''));
+      var vars = { 'שם האירוע': ev ? ev.title : 'אירוע בשיכון', 'תאריך': ev ? ev.dateLabel : '',
+                   'פרטים': evtDetails_(ev), 'הודעה': String(d.text || '').substring(0, 240) };
+      var only = null;
+      try { only = evtAudience_(ss, String(d.eventId || ''), d.audience); } catch (e) { only = {}; }
+      var rep = notify_(ss, 'evt-msg', { vars: vars, only: only ? { all: only } : null }, ['all']);
+      fsMerge_(path, { status: 'sent', sentAtMs: Date.now(), sentPush: rep.push, sentMail: rep.mail });
+      out.sent++; out.push += rep.push;
+    });
+  } finally { lock.releaseLock(); }
+  return out;
+}
+
+/** "שליחה עכשיו" מהדפדפן (הרשאת תרבות — ר' ACTION_PERMS). */
+function eventMessageSendNow_(ss, body) {
+  var id = String(body.id || '').trim();
+  if (!/^[A-Za-z0-9_-]{6,60}$/.test(id)) return { ok: false, error: 'מזהה הודעה לא תקין' };
+  var r = eventMessagesJob_(ss, id);
+  if (r.busy) return { ok: true, queued: true };        // הטריגר הבא (עד 15 דק') ישלח
+  return { ok: true, sent: r.sent, push: r.push };
+}
+
+/** טריגר זמן — כל 15 דקות. זול: שאילתה אחת, ברוב הפעמים ריקה. */
+function eventMessagesTick() {
+  try { eventMessagesJob_(null); } catch (e) { Logger.log('eventMessagesTick: ' + e); }
+}
+
+/** מתקין את הטריגר אם חסר (נקרא מהעבודה השעתית — אידמפוטנטי). */
+function ensureEventMessagesTrigger_() {
+  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'eventMessagesTick'; });
+  if (has) return 0;
+  ScriptApp.newTrigger('eventMessagesTick').timeBased().everyMinutes(15).create();
+  return 1;
+}
+
 /* ---------------------------------------------------------------------------
  *  "השבוע בשיכון" — מוצאי שבת   (23.9.2026, יועד)
  * ---------------------------------------------------------------------------
@@ -1240,6 +1425,10 @@ var NOTIFY_DOMAINS = [
   {"id":"svc-update","ev":"עדכון תושבים על שירות","w":"ידני","vars":["שם השירות","ספק","מה השתנה"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"SERVICE_UPDATED","pt":"עדכון: {{שם השירות}}","pb":"{{מה השתנה}}","link":"לוח אירועים","app":"","badge":0}},"why":"פוש לכולם במקום מייל — מייל לכולם שורף את מכסת המיילים היומית."},
   {"id":"rsvp-open","ev":"נפתח אישור הגעה לאירוע","w":"מיידי","vars":["שם האירוע","תאריך"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"EVENT_RSVP_OPEN","pt":"","pb":"","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא כשמנהל פותח אישור הגעה לאירוע."},
   {"id":"rsvp-remind","ev":"תזכורת יום לפני — למי שאישר","w":"בדיקה יומית","vars":["שם האירוע","תאריך","מיקום"],"cells":{"r":{"m":0,"p":1,"d":0,"k":"EVENT_REMINDER","pt":"","pb":"","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא יום לפני האירוע, רק למי שאישר הגעה."},
+  {"id":"evt-new","ev":"אירוע קהילה/תרבות חדש בלוח","w":"סנכרון היומן (אחרי 10 דק' יציבות)","vars":["שם האירוע","תאריך","פרטים"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"","pt":"חדש בשיכון: {{שם האירוע}}","pb":"{{פרטים}}","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא כשנוסף ליומן אירוע קהילה או תרבות עתידי. פוש בלבד — בלי מייל חלופי, כדי לא לשרוף את מכסת המיילים."},
+  {"id":"evt-changed","ev":"אירוע קהילה/תרבות עודכן","w":"סנכרון היומן (אחרי 10 דק' יציבות)","vars":["שם האירוע","תאריך","פרטים","מה השתנה"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"","pt":"עדכון: {{שם האירוע}}","pb":"{{מה השתנה}}","link":"לוח אירועים","app":"","badge":0}},"why":"שינוי בשם, בתאריך, בשעה או במיקום של אירוע עתידי. שינוי בתיאור לא שולח כלום."},
+  {"id":"evt-invite","ev":"נוספה הזמנה לאירוע","w":"מיידי","vars":["שם האירוע","תאריך","פרטים"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"EVENT_INVITE","pt":"הזמנה: {{שם האירוע}}","pb":"{{פרטים}} · ההזמנה בלוח האירועים","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא פעם אחת לאירוע, כשמנהל אירועים מעלה הזמנה ומשאיר את \"לשלוח התראה\" מסומן."},
+  {"id":"evt-msg","ev":"הודעה / תזכורת ממנהל האירועים","w":"ידני או מתוזמן","vars":["שם האירוע","תאריך","פרטים","הודעה"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"EVENT_MESSAGE","pt":"{{שם האירוע}}","pb":"{{הודעה}}","link":"לוח אירועים","app":"","badge":0}},"why":"מנהל אירועים כותב הודעה לכל התושבים, למי שאישר הגעה או למי שעוד לא ענה — עכשיו או בזמן שנקבע."},
   {"id":"evt-week","ev":"השבוע בשיכון — אירועי השבוע","w":"מוצאי שבת 21:00","vars":["שבוע","מספר","רשימה","רשימה קצרה"],"cells":{"all":{"m":0,"p":1,"d":0,"k":"EVENTS_WEEKLY","pt":"השבוע בשיכון · {{שבוע}}","pb":"{{רשימה קצרה}}","link":"לוח אירועים","app":"","badge":0}},"why":"יוצא במוצאי שבת (מ-21:00) עם האירועים של השבוע שמתחיל. שבוע בלי אירועים — לא יוצא כלום."},
   {"id":"svc-recommend","ev":"תושב הוסיף המלצה","w":"מיידי","vars":["שם","שירות"],"cells":{"s":{"m":0,"p":0,"d":0,"k":"","pt":"","pb":"","link":"שירותים","app":"","badge":0}},"why":"יוצא כשתושב מוסיף המלצה על שירות."}
  ]},
@@ -1333,6 +1522,8 @@ var NOTIFY_MAIL_TEXTS = {
  GARDEN_PENDING_REVIEW: {"su":"הדיווח שלך ממתין לבדיקה","bo":"שלום {{שם}},\n\nהדיווח שלך על {{קטגוריה}} ב{{מיקום}} דורש בדיקה נוספת לפני שאפשר לטפל בו.\n\nנעדכן אותך כשתתקבל החלטה.\n\nבברכה,\nועד הקהילה"},
  GARDEN_RECHECK_DONE: {"su":"בדקנו שוב את הדיווח שלך","bo":"שלום {{שם}},\n\nבעקבות המשוב שלך בדקנו שוב את הטיפול ב{{קטגוריה}} ב{{מיקום}}.\n\n{{תוצאה}}\n\nתודה שעדכנת אותנו,\nועד הקהילה"},
  ADMIN_GARDEN_DAILY: {"su":"סיכום גינון יומי","bo":"שלום,\n\nמה מחכה היום בגינון:\n\n• לא שובצו: {{לא שובצו}}\n• ממתינות לאישורך: {{לאישורך}}\n• חסומות: {{חסומות}}\n• פתוחות מעל 7 ימים: {{מעל 7 ימים}}\n\n{{עדכונים}}הפירוט המלא במסך המשימות.\n\nאפליקציית הוועד"},
+ EVENT_INVITE: {"su":"הזמנה: {{שם האירוע}}","bo":"שלום,\n\nנוספה הזמנה לאירוע {{שם האירוע}} ({{פרטים}}).\n\nאת ההזמנה ואת הלו\"ז אפשר לראות בלוח האירועים באפליקציה.\n\nבברכה,\nועד הקהילה"},
+ EVENT_MESSAGE: {"su":"{{שם האירוע}} — הודעה","bo":"שלום,\n\nהודעה לגבי {{שם האירוע}} ({{פרטים}}):\n\n{{הודעה}}\n\nבברכה,\nועד הקהילה"},
  EVENT_RSVP_OPEN: {"su":"נפתח אישור הגעה: {{שם האירוע}}","bo":"שלום,\n\nנפתח אישור הגעה לאירוע {{שם האירוע}} ({{תאריך}}).\n\nאפשר לאשר הגעה בלוח האירועים באפליקציה.\n\nבברכה,\nועד הקהילה"},
  EVENT_REMINDER: {"su":"תזכורת: {{שם האירוע}} מחר","bo":"שלום,\n\nתזכורת — מחר ({{תאריך}}) מתקיים {{שם האירוע}}, ב{{מיקום}}. אישרת הגעה.\n\nנתראה,\nועד הקהילה"},
  ADMIN_CUSTOM_PROPOSED: {"su":"טריגר חדש ממתין לאישורך: {{שם הטריגר}}","bo":"שלום,\n\n{{שם}} הציע/ה טריגר חדש במרכז ההתראות:\n\n• שם: {{שם הטריגר}}\n• תחום: {{תחום}}\n• מתי: {{מתי}}\n\nהוא לא יוצא לאף אחד עד שתאשר/י אותו במרכז ההתראות.\n\nבברכה,\nמערכת הוועד"},
@@ -1343,7 +1534,7 @@ var NOTIFY_MAIL_TEXTS = {
 /* תבניות חדשות שלא היו ב-DEFAULT_EMAIL_SETTINGS — [מפתח, תחום]. */
 function notifyExtraEmailRows_() {
   var out = [];
-  var NEW = {CLUB_RECEIVED: PERM_CLUB, GARDENER_WEEKLY_PLAN: PERM_GARDEN, ADMIN_GARDEN_DAILY: PERM_GARDEN, GARDENER_TASK_ADDED: PERM_GARDEN, GARDEN_FINAL_CHECK: PERM_GARDEN, ADMIN_GARDEN_AWAITING_APPROVAL: PERM_GARDEN, GARDENER_TASK_RETURNED: PERM_GARDEN, GARDEN_PENDING_REVIEW: PERM_GARDEN, GARDEN_RECHECK_DONE: PERM_GARDEN, EVENT_RSVP_OPEN: PERM_SUPER, EVENT_REMINDER: PERM_SUPER, EVENTS_WEEKLY: PERM_SUPER, ADMIN_CUSTOM_PROPOSED: PERM_SUPER, CUSTOM_DECIDED: PERM_ANY_ADMIN};
+  var NEW = {CLUB_RECEIVED: PERM_CLUB, GARDENER_WEEKLY_PLAN: PERM_GARDEN, ADMIN_GARDEN_DAILY: PERM_GARDEN, GARDENER_TASK_ADDED: PERM_GARDEN, GARDEN_FINAL_CHECK: PERM_GARDEN, ADMIN_GARDEN_AWAITING_APPROVAL: PERM_GARDEN, GARDENER_TASK_RETURNED: PERM_GARDEN, GARDEN_PENDING_REVIEW: PERM_GARDEN, GARDEN_RECHECK_DONE: PERM_GARDEN, EVENT_RSVP_OPEN: PERM_SUPER, EVENT_INVITE: PERM_SUPER, EVENT_MESSAGE: PERM_SUPER, EVENT_REMINDER: PERM_SUPER, EVENTS_WEEKLY: PERM_SUPER, ADMIN_CUSTOM_PROPOSED: PERM_SUPER, CUSTOM_DECIDED: PERM_ANY_ADMIN};
   Object.keys(NEW).forEach(function (k) {
     var t = NOTIFY_MAIL_TEXTS[k] || {};
     out.push([k, t.su || '', t.bo || '', 'מרכז ההתראות (23.9) — נשלח לפי הטבלה במסך "ניהול התראות"', NEW[k], 'כן']);

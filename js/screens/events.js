@@ -1119,7 +1119,11 @@ CBA.screens.events = (function () {
           '<div class="evx-status" data-evx-status hidden></div>' +
           '<label class="evx-lbl" for="evx-sch">לו״ז פנימי <small>שורה לכל פריט, למשל: 20:30 — התכנסות</small></label>' +
           '<textarea id="evx-sch" rows="6" maxlength="2000" data-evx-sch></textarea>' +
-          '<button type="button" class="evx-link" data-evx-rsvp>ניהול אישור הגעה ←</button>' +
+          '<label class="evx-check" data-evx-notify hidden><input type="checkbox" checked data-evx-notify-cb> לשלוח לתושבים התראה על ההזמנה</label>' +
+          '<div class="evx-links">' +
+            '<button type="button" class="evx-link" data-evx-rsvp>ניהול אישור הגעה ←</button>' +
+            '<button type="button" class="evx-link" data-evx-msgs>הודעות ותזכורות לתושבים ←</button>' +
+          '</div>' +
           '<div class="evx-err" data-evx-err hidden></div>' +
         '</div>',
       onMount: function (wrap, close) {
@@ -1130,6 +1134,9 @@ CBA.screens.events = (function () {
 
         function paintThumb() {
           thumb.innerHTML = cur.image ? '<img src="' + esc(cur.image) + '" alt="">' : "אין הזמנה";
+          /* התראה על הזמנה — רק כשנוספת הזמנה לאירוע שלא הייתה לו (השרת גם הוא
+             שולח פעם אחת בלבד לאירוע). מנהל שמעלה מוקדם יכול לבטל את הסימון. */
+          $("[data-evx-notify]").hidden = !(cur.image && !inf.hasImage);
           delBtn.hidden = !cur.image;
           aiBtn.disabled = !cur.image;
         }
@@ -1183,10 +1190,13 @@ CBA.screens.events = (function () {
         });
 
         $("[data-evx-rsvp]").addEventListener("click", function () { close(false); setTimeout(function () { openRsvpDialog(ev); }, 220); });
+        $("[data-evx-msgs]").addEventListener("click", function () { close(false); setTimeout(function () { openEventMessages(ev); }, 220); });
       },
       onOk: function (wrap, close) {
         var errBox = wrap.querySelector("[data-evx-err]"), ok = wrap.querySelector('[data-dlg="ok"]');
         var schedule = wrap.querySelector("[data-evx-sch]").value.trim().slice(0, 2000);
+        var cb = wrap.querySelector("[data-evx-notify-cb]");
+        var announce = !!(cur.image && !inf.hasImage && cb && cb.checked);
         if (!cur.loaded) return;
         ok.disabled = true; ok.textContent = "שומר…"; errBox.hidden = true;
         var uid = CBA.fb.uid && CBA.fb.uid();
@@ -1203,7 +1213,8 @@ CBA.screens.events = (function () {
             state.eventInfo[ev.id] = { id: ev.id, schedule: schedule, hasImage: !!cur.image, year: doc.year };
             imgCache[ev.id] = cur.image;
             close(true);
-            if (CBA.ui.toast) CBA.ui.toast("פרטי האירוע נשמרו", "ok");
+            if (CBA.ui.toast) CBA.ui.toast(announce ? "נשמר — ההתראה על ההזמנה יוצאת לתושבים" : "פרטי האירוע נשמרו", "ok");
+            if (announce) { try { CBA.sheets.postRead("notifyEventInvite", { eventId: ev.id }, function () {}); } catch (e2) {} }
             if (activeContainer && activeContainer.isConnected) setTimeout(function () { draw(activeContainer); }, 200);
           });
         }
@@ -1216,6 +1227,181 @@ CBA.screens.events = (function () {
         } else {
           CBA.fb.deleteDoc(IMG_COL, ev.id, function (e) { e ? fail(e) : saveInfo(); });
         }
+      }
+    });
+  }
+
+  /* ==========================================================================
+   *  הודעות ותזכורות לתושבים   (28.9.26)
+   * --------------------------------------------------------------------------
+   *  Firestore eventMessages/{id}. הדפדפן יוצר (status='pending') ומבטל;
+   *  Apps Script שולח (טריגר כל 15 דקות, או מיד ב"שליחה עכשיו") ומסמן.
+   *  ר' eventMessagesJob_ ב-Notify.gs וכלל eventMessages ב-firestore.rules.
+   * ========================================================================== */
+  var MSG_COL = "eventMessages";
+  var MSG_STATUS = { pending: "ממתינה", sending: "בשליחה", sent: "נשלחה", canceled: "בוטלה", expired: "לא נשלחה (עבר הזמן)" };
+  var HEB_DAYS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "שבת"];
+
+  function whenLabel(ms) {
+    var d = new Date(ms);
+    return "יום " + HEB_DAYS[d.getDay()] + " " + dm(d) + " · " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  }
+  function atLocal(day, h, m) { var d = new Date(day); d.setHours(h, m || 0, 0, 0); return d.getTime(); }
+
+  /* קיצורי זמן לפי האירוע. רק מה שעוד לא עבר, ורק בשעות 07:00–21:45. */
+  function msgPresets(ev) {
+    var now = Date.now(), out = [];
+    var dayBefore = new Date(ev.date); dayBefore.setDate(dayBefore.getDate() - 1);
+    out.push({ id: "dayBefore", label: "יום לפני, 10:00", ms: atLocal(dayBefore, 10) });
+    out.push({ id: "sameDay", label: "ביום האירוע, 09:00", ms: atLocal(ev.date, 9) });
+    if (ev.allDay === false) {
+      var twoH = ev.date.getTime() - 2 * 3600000;
+      var h = new Date(twoH).getHours();
+      if (h >= 7 && h <= 21) out.push({ id: "twoHours", label: "שעתיים לפני (" + pad2(h) + ":" + pad2(new Date(twoH).getMinutes()) + ")", ms: twoH });
+    }
+    return out.filter(function (p) { return p.ms > now + 5 * 60000; });
+  }
+
+  function msgRowHTML(m) {
+    var st = MSG_STATUS[m.status] || m.status;
+    var aud = m.audience === "attending" ? "למי שאישר" : (m.audience === "pending" ? "למי שלא ענה" : "לכולם");
+    var extra = m.status === "sent" && typeof m.sentPush === "number" ? " · " + m.sentPush + " מכשירים" : "";
+    return '<li class="evm-item is-' + esc(m.status) + '">' +
+      '<div class="evm-item__top"><span class="evm-pill">' + esc(st) + '</span>' +
+        '<span class="evm-when">' + esc(whenLabel(m.sendAtMs)) + ' · ' + aud + esc(extra) + '</span>' +
+        (m.status === "pending" ? '<button type="button" class="evm-cancel" data-evm-cancel="' + esc(m.id) + '">ביטול</button>' : "") +
+      '</div><div class="evm-text" dir="auto">' + esc(m.text) + '</div></li>';
+  }
+
+  function openEventMessages(ev) {
+    if (!CBA.fb || !CBA.fb.createDoc) return;
+    var rsvpOpen = !!state.rsvpEnabledIds[ev.id];
+    var presets = msgPresets(ev);
+    var hours = [];
+    for (var h = 7; h <= 21; h++) [0, 15, 30, 45].forEach(function (mm) { hours.push(pad2(h) + ":" + pad2(mm)); });
+
+    CBA.ui.dialog({
+      title: "הודעות ותזכורות — " + ev.title,
+      sticky: true,
+      okText: "סגירה",
+      html:
+        '<div class="evm" dir="rtl">' +
+          '<ul class="evm-list" data-evm-list><li class="evm-empty">טוען…</li></ul>' +
+          '<div class="evm-form">' +
+            '<label class="evx-lbl" for="evm-text">הודעה חדשה <small>עד 240 תווים. תופיע כהתראה בטלפון, עם שם האירוע ככותרת.</small></label>' +
+            '<textarea id="evm-text" rows="3" maxlength="240" data-evm-text placeholder="למשל: מזכירים — מחר ב-20:30 במועדון, מביאים כיסא 🙂"></textarea>' +
+            '<div class="evm-count" data-evm-count>0/240</div>' +
+            '<div class="evm-lbl">למי</div>' +
+            '<div class="evm-seg" data-evm-aud>' +
+              '<button type="button" class="is-on" data-v="all">כל התושבים</button>' +
+              (rsvpOpen ? '<button type="button" data-v="attending">מי שאישר הגעה</button>' +
+                          '<button type="button" data-v="pending">מי שעוד לא ענה</button>' : "") +
+            '</div>' +
+            '<div class="evm-lbl">מתי</div>' +
+            '<div class="evm-seg evm-seg--wrap" data-evm-when>' +
+              '<button type="button" class="is-on" data-v="now">עכשיו</button>' +
+              presets.map(function (p) { return '<button type="button" data-v="' + p.id + '">' + esc(p.label) + '</button>'; }).join("") +
+              '<button type="button" data-v="custom">מועד אחר…</button>' +
+            '</div>' +
+            '<div class="evm-custom" data-evm-custom hidden>' +
+              '<input type="date" data-evm-date>' +
+              '<select data-evm-time>' + hours.map(function (t) { return '<option' + (t === "10:00" ? " selected" : "") + '>' + t + '</option>'; }).join("") + '</select>' +
+            '</div>' +
+            '<div class="evm-note">מתוזמנת יוצאת עד רבע שעה אחרי המועד. בשעות השקט של מרכז ההתראות — בבוקר.</div>' +
+            '<div class="evx-err" data-evm-err hidden></div>' +
+            '<button type="button" class="evm-send" data-evm-send>שליחה</button>' +
+          '</div>' +
+        '</div>',
+      onMount: function (wrap) {
+        var $ = function (s) { return wrap.querySelector(s); };
+        var list = $("[data-evm-list]"), txt = $("[data-evm-text]"), err = $("[data-evm-err]"), send = $("[data-evm-send]");
+        var sel = { aud: "all", when: "now" };
+        var dateIn = $("[data-evm-date]");
+        var dflt = new Date(ev.date); dflt.setDate(dflt.getDate() - 1);
+        if (dflt < new Date()) dflt = new Date();
+        dateIn.value = dflt.getFullYear() + "-" + pad2(dflt.getMonth() + 1) + "-" + pad2(dflt.getDate());
+
+        function refresh() {
+          CBA.fb.queryCollection(MSG_COL, [["eventId", ev.id]], function (e, rows) {
+            if (!list.isConnected) return;
+            if (e) { list.innerHTML = '<li class="evm-empty">לא הצלחנו לטעון את ההודעות</li>'; return; }
+            rows = (rows || []).sort(function (a, b) { return a.sendAtMs - b.sendAtMs; });
+            list.innerHTML = rows.length ? rows.map(msgRowHTML).join("") : '<li class="evm-empty">עוד לא נשלחו הודעות על האירוע הזה</li>';
+            list.querySelectorAll("[data-evm-cancel]").forEach(function (b) {
+              b.addEventListener("click", function () {
+                b.disabled = true;
+                CBA.fb.mergeDoc(MSG_COL, b.getAttribute("data-evm-cancel"), { status: "canceled" }, function (e2) {
+                  if (e2 && CBA.ui.toast) CBA.ui.toast("הביטול נכשל — ייתכן שההודעה כבר יצאה", "warn");
+                  refresh();
+                });
+              });
+            });
+          });
+        }
+        refresh();
+
+        txt.addEventListener("input", function () { $("[data-evm-count]").textContent = txt.value.length + "/240"; });
+        function seg(box, key, onPick) {
+          box.addEventListener("click", function (e) {
+            var b = e.target.closest("button[data-v]"); if (!b) return;
+            box.querySelectorAll("button").forEach(function (x) { x.classList.toggle("is-on", x === b); });
+            sel[key] = b.getAttribute("data-v");
+            if (onPick) onPick(sel[key]);
+          });
+        }
+        seg($("[data-evm-aud]"), "aud");
+        seg($("[data-evm-when]"), "when", function (v) {
+          $("[data-evm-custom]").hidden = v !== "custom";
+          send.textContent = v === "now" ? "שליחה" : "תזמון";
+        });
+
+        function sendAt() {
+          if (sel.when === "now") return Date.now();
+          if (sel.when === "custom") {
+            var t = $("[data-evm-time]").value.split(":");
+            var d = dateIn.value ? new Date(dateIn.value + "T00:00:00") : null;
+            return d ? atLocal(d, +t[0], +t[1]) : NaN;
+          }
+          var p = presets.filter(function (x) { return x.id === sel.when; })[0];
+          return p ? p.ms : NaN;
+        }
+
+        send.addEventListener("click", function () {
+          var text = txt.value.trim(), at = sendAt();
+          err.hidden = true;
+          if (text.length < 2) { err.hidden = false; err.textContent = "כתבו את ההודעה"; return; }
+          if (!isFinite(at)) { err.hidden = false; err.textContent = "בחרו מועד"; return; }
+          if (sel.when !== "now" && at < Date.now() + 2 * 60000) { err.hidden = false; err.textContent = "המועד כבר עבר — בחרו מועד עתידי"; return; }
+          var id = "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+          send.disabled = true; send.textContent = "שומר…";
+          CBA.fb.createDoc(MSG_COL, id, {
+            eventId: ev.id, text: text, audience: sel.aud, sendAtMs: Math.round(at), status: "pending",
+            createdByUid: CBA.fb.uid && CBA.fb.uid(), createdAt: CBA.fb.serverNow()
+          }, function (e) {
+            if (e) {
+              send.disabled = false; send.textContent = sel.when === "now" ? "שליחה" : "תזמון";
+              err.hidden = false;
+              err.textContent = "השמירה נכשלה" + (e.code === "permission-denied" ? " — אין הרשאת \"תרבות\"" : "") + ".";
+              return;
+            }
+            txt.value = ""; $("[data-evm-count]").textContent = "0/240";
+            refresh();
+            if (sel.when !== "now") {
+              send.disabled = false; send.textContent = "תזמון";
+              if (CBA.ui.toast) CBA.ui.toast("התזכורת תוזמנה ל" + whenLabel(at), "ok");
+              return;
+            }
+            send.textContent = "שולח…";
+            CBA.sheets.postRead("eventMessageSendNow", { id: id }, function (res) {
+              send.disabled = false; send.textContent = "שליחה";
+              refresh();
+              if (!CBA.ui.toast) return;
+              if (res && res.ok && res.queued) CBA.ui.toast("ההודעה תצא בדקות הקרובות", "ok");
+              else if (res && res.ok) CBA.ui.toast("נשלחה ל-" + (res.push || 0) + " מכשירים", "ok");
+              else CBA.ui.toast("ההודעה נשמרה ותצא בסבב הבא (עד 15 דקות)", "warn");
+            });
+          });
+        });
       }
     });
   }
