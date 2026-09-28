@@ -124,6 +124,39 @@ CBA.screens.events = (function () {
     return s.getDate() + "." + (s.getMonth() + 1) + "–" + l.getDate() + "." + (l.getMonth() + 1);
   }
 
+  /* ==========================================================================
+   *  פס "עכשיו" (28.9, הכרעת יועד) — אירוע של כמה ימים שקורה היום מוצג פעם
+   *  אחת, למעלה, עם "יום 3 מתוך 7" וטווח תאריכים. הימים ברשימה מציגים רק
+   *  מה שמתחיל בהם — בלי "סוכות (יום 4)", "סוכות (יום 5)" שוב ושוב.
+   * ========================================================================== */
+  function ongoingSpans(list, today) {
+    var t = startOfDay(today || new Date());
+    return list.filter(function (e) { return isMultiDay(e) && evCovers(e, t); })
+      .sort(function (a, b) { return evLastDay(a) - evLastDay(b); });
+  }
+  function spanDayOf(e, today) {
+    var total = Math.round((evLastDay(e) - startOfDay(e.date)) / DAY_MS) + 1;
+    var idx = Math.round((startOfDay(today) - startOfDay(e.date)) / DAY_MS) + 1;
+    return { idx: idx, total: total };
+  }
+  function nowStripHTML(spans, today, clickable) {
+    if (!spans.length) return "";
+    return '<div class="ev-now" dir="rtl"><div class="ev-now__k">עכשיו</div>' +
+      spans.slice(0, 4).map(function (e) {
+        var cat = CATEGORIES[e.category] || CATEGORIES.personal;
+        var d = spanDayOf(e, today);
+        var left = Math.round((evLastDay(e) - startOfDay(today)) / DAY_MS);
+        var note = d.idx === 1 ? "מתחיל היום" : left === 0 ? "יום אחרון" : "יום " + d.idx + " מתוך " + d.total;
+        var tag = clickable ? "button" : "div";
+        return '<' + tag + (clickable ? ' type="button"' : "") + ' class="ev-now__i" data-now-id="' + esc(e.id) + '"' +
+          ' style="background:var(' + cat.cssVar + '-tint)">' +
+          '<span class="ev-now__row"><b dir="auto">' + esc(e.title) + '</b><span class="ev-now__n">' + note + '</span>' +
+          '<span class="ev-now__r" dir="ltr">' + rangeLabel(e, true) + '</span></span>' +
+          '<span class="ev-now__p"><i style="width:' + Math.round(100 * d.idx / d.total) + '%;background:var(' + cat.cssVar + ')"></i></span>' +
+          '</' + tag + '>';
+      }).join("") + '</div>';
+  }
+
   /* איחוד רצף: אותה קטגוריה (MERGE_CATS), אותו שם בסיס (בלי "(יום N)"),
      ימים רצופים או חופפים ⇒ אירוע אחד. שם כפול "סוכות (יום 7) / הושענא רבה":
      החלק הראשון מצטרף לרצף, והשאר נשאר אירוע נפרד לאותו יום. */
@@ -168,6 +201,10 @@ CBA.screens.events = (function () {
     });
     return out.sort(function (a, b) { return a.date - b.date; });
   }
+
+  /* 28.9 — אותו חישוב משמש גם את הלו"ז בעמוד הבית (homeSchedule.js) */
+  if (window.CBA) CBA.eventSpans = { mergeSeries: mergeSeries, computeLastDay: computeLastDay,
+                                     evLastDay: evLastDay, isMultiDay: isMultiDay, rangeLabel: rangeLabel };
 
   function isCategoryActive(cat) {
     return !state.activeCategories || !!state.activeCategories[cat];
@@ -571,7 +608,12 @@ CBA.screens.events = (function () {
     var html = (prefixHTML || demoBannerHTML()) +
       '<div class="events-container">' +
       chipbarHTML(monthEventsAll, false) +
-      digestHTML(monthEvents) +
+      (function () {
+        var now = new Date();
+        var isCur = now.getMonth() === month && now.getFullYear() === year;
+        var spans = isCur ? ongoingSpans(monthEvents, now) : [];
+        return spans.length ? nowStripHTML(spans, now, true) : digestHTML(monthEvents);
+      })() +
       '<div class="cal-layout">' +
       '<div class="grid-card lg">' +
       renderMonthlyCalendar(month, year, monthEvents) +
@@ -646,7 +688,8 @@ CBA.screens.events = (function () {
         var cat = CATEGORIES[g.e.category] || CATEGORIES.personal;
         var multi = g.c2 > g.c1 || g.before || g.after;
         bars += '<div class="wk-bar' + (multi ? " is-span" : "") + (g.before ? " cont-before" : "") + (g.after ? " cont-after" : "") +
-          '" style="grid-column:' + (g.c1 + 1) + ' / ' + (g.c2 + 2) + ';grid-row:' + (lane + 1) +
+          '" data-bar-id="' + esc(g.e.id) + '" data-bar-day="' + addDaysEv(weekStart, g.c1).toISOString() +
+          '" title="' + esc(g.e.title) + (multi ? " · " + rangeLabel(g.e, true) : "") + '" style="grid-column:' + (g.c1 + 1) + ' / ' + (g.c2 + 2) + ';grid-row:' + (lane + 1) +
           ';background:var(' + cat.cssVar + '-tint)">' +
           (g.before ? "" : '<i style="background:var(' + cat.cssVar + ')"></i>') +
           '<span class="t" dir="auto">' + esc(g.e.title) + '</span></div>';
@@ -667,7 +710,7 @@ CBA.screens.events = (function () {
           (hidden[i] ? '<div class="more">' + (hidden[i] === 1 ? "+1 נוסף" : "+" + hidden[i] + " נוספים") + '</div>' : "") +
           '</div>';
       }
-      html += '<div class="wk-bars" aria-hidden="true">' + bars + '</div></div>';
+      html += '<div class="wk-bars">' + bars + '</div></div>';
       weekStart = addDaysEv(weekStart, 7);
     }
 
@@ -736,6 +779,15 @@ CBA.screens.events = (function () {
   // כל חיווט-מחדש כאן עובר דרך draw(container) ולא ישירות דרך renderMonthlyView —
   // כך הבאנר וטאב חודשי/שנתי תמיד נשארים, בלי לשכפל את הלוגיקה שבונה אותם.
   function wireMonthlyListeners(container) {
+    /* 28.9 — לחיצה על קפסולה: פרטי האירוע בפאנל הצד (היום שלה + הדגשה) */
+    container.querySelectorAll(".wk-bar[data-bar-id], .ev-now__i[data-now-id]").forEach(function (b) {
+      b.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        state.selectedDate = b.dataset.barDay ? startOfDay(new Date(b.dataset.barDay)) : startOfDay(new Date());
+        state.highlightEventId = b.dataset.barId || b.dataset.nowId;
+        draw(container);
+      });
+    });
     // בחירת יום
     container.querySelectorAll(".day").forEach(function (cell) {
       cell.addEventListener("click", function () {
@@ -911,24 +963,24 @@ CBA.screens.events = (function () {
     });
 
     var today = startOfDay(new Date());
-    var visibleEvents = state.showAllMonth ? monthEvents :
-      monthEvents.filter(function (e) { return evLastDay(e) >= today; });
-    var hiddenCount = monthEvents.length - visibleEvents.length;
+    var isCur = state.currentMonth.getMonth() === today.getMonth() && state.currentMonth.getFullYear() === today.getFullYear();
+    /* 28.9 — אירוע של כמה ימים שקורה היום עולה לפס "עכשיו" ולא חוזר ברשימה */
+    var spans = isCur ? ongoingSpans(monthEvents, today) : [];
+    var visibleEvents = (state.showAllMonth ? monthEvents :
+      monthEvents.filter(function (e) { return evLastDay(e) >= today; }))
+      .filter(function (e) { return spans.indexOf(e) === -1; });
+    var hiddenCount = monthEvents.filter(function (e) { return evLastDay(e) < today; }).length;
+    if (state.showAllMonth) hiddenCount = 0;
 
-    var html = '<div class="agenda-list" dir="rtl">';
-
-    if (hiddenCount > 0) {
-      html += '<button type="button" class="btn-show-all-month">הצגת כל אירועי החודש (כולל ' + hiddenCount + ' שעברו)</button>';
-    }
+    var html = '<div class="agenda-list m-list" dir="rtl">' + nowStripHTML(spans, today, false);
 
     if (visibleEvents.length === 0) {
-      html += '<div class="empty-agenda">אין אירועים קרובים בחודש זה</div>';
+      if (!spans.length) html += '<div class="empty-agenda">אין אירועים קרובים בחודש זה</div>';
     } else {
       var grouped = {};
       var agFrom = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth(), 1);
       if (!state.showAllMonth && today > agFrom) agFrom = today;
       visibleEvents.forEach(function (e) {
-        /* 28.9 — אירוע של כמה ימים שכבר התחיל: מופיע תחת היום הראשון שמוצג */
         var key = (startOfDay(e.date) < agFrom ? agFrom : startOfDay(e.date)).toDateString();
         if (!grouped[key]) grouped[key] = [];
         grouped[key].push(e);
@@ -937,35 +989,36 @@ CBA.screens.events = (function () {
       Object.keys(grouped).sort(function (a, b) { return new Date(a) - new Date(b); }).forEach(function (key) {
         var date = new Date(key);
         var isToday = date.toDateString() === today.toDateString();
-
-        html += '<div class="day-group">' +
-          '<div class="gh"><span class="dd">' + date.getDate() + '</span>' +
-          '<span class="dw">' + HEBREW_WEEKDAYS[date.getDay()] + ', ' + HEBREW_MONTHS[date.getMonth()] + '</span>' +
-          (isToday ? '<span class="tag">היום</span>' : "") +
-          '</div>';
+        html += '<div class="m-day' + (isToday ? " is-today" : "") + '">' +
+          '<div class="m-dn"><small>' + (isToday ? "היום" : HEBREW_WEEKDAYS[date.getDay()]) + '</small>' +
+          '<b>' + date.getDate() + '.' + (date.getMonth() + 1) + '</b></div><div class="m-evs">';
 
         grouped[key].forEach(function (e) {
           var cat = CATEGORIES[e.category] || CATEGORIES.personal;
           var rsvpOpen = !!state.rsvpEnabledIds[e.id];
-          html += '<div class="ev-row lg m-ev" data-event-id="' + esc(e.id) + '">' +
-            '<div class="bar" style="background:var(' + cat.cssVar + ')"></div>' +
-            '<div class="time">' + cat.icon + '</div>' +
-            '<div class="body">' +
-            '<div class="ttl2">' + esc(e.title) + '</div>' +
-            '<div class="meta">' + (isMultiDay(e) ? '<span dir="ltr">' + rangeLabel(e, true) + '</span> · ' : "") +
-            esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
-            extrasHTML(e, true) +
-            '<div class="ev-actions">' +
-            (e.category !== "personal" ? addCalHTML(e.id) + shareBtnHTML(e.id) : "") +
-            rsvpBtnHTML(e, rsvpOpen) + extraActionsHTML(e, true) +
+          var meta = [];
+          if (e.allDay === false) meta.push(pad2(e.date.getHours()) + ":" + pad2(e.date.getMinutes()));
+          if (isMultiDay(e)) meta.push('<span dir="ltr">' + rangeLabel(e, true) + '</span>');
+          if (e.location) meta.push("📍 " + esc(e.location));
+          var actions = (e.category !== "personal" ? addCalHTML(e.id) + shareBtnHTML(e.id) : "") +
+            (rsvpOpen ? "" : rsvpBtnHTML(e, false)) + extraActionsHTML(e, true) + rsvpCountHTML(e.id);
+          html += '<div class="ev-row m-it" data-event-id="' + esc(e.id) + '">' +
+            '<div class="m-it__l"><i class="m-dot" style="background:var(' + cat.cssVar + ')"></i>' +
+            '<span class="m-it__t" dir="auto">' + esc(e.title) + '</span>' +
+            (rsvpOpen ? '<button type="button" class="btn-rsvp m-tag" data-event-id="' + esc(e.id) + '">אישור הגעה</button>' : "") +
             '</div>' +
-            '</div></div>';
+            (meta.length ? '<div class="m-it__m">' + meta.join(" · ") + '</div>' : "") +
+            extrasHTML(e, true) +
+            (actions ? '<div class="ev-actions">' + actions + '</div>' : "") +
+            '</div>';
         });
-
-        html += '</div>';
+        html += '</div></div>';
       });
     }
 
+    if (hiddenCount > 0) {
+      html += '<button type="button" class="btn-show-all-month">הצגת ' + hiddenCount + ' אירועים שכבר עברו החודש</button>';
+    }
     html += '</div>';
     return html;
   }
@@ -993,6 +1046,14 @@ CBA.screens.events = (function () {
         wireMobileListeners(container);
       });
     }
+
+    /* 28.9 — שורה נקייה; לחיצה עליה פותחת את הפעולות (יומן, שיתוף, ניהול) */
+    container.querySelectorAll(".m-it").forEach(function (row) {
+      row.addEventListener("click", function (ev) {
+        if (ev.target.closest("button, a, summary, details, .ev-inv")) return;
+        row.classList.toggle("is-open");
+      });
+    });
 
     wireChipbar(container);
     wireRsvpButtons(container);
@@ -1889,7 +1950,7 @@ CBA.screens.events = (function () {
         if (document.body.dataset.screen && document.body.dataset.screen !== "events") return;
         /* 🔴 24.9 — רענון רקע שקט לא מקפיץ את הלוח לחודש הנוכחי: משאירים חודש/יום/מסננים. */
         if (!(silentNow && wasShown && state.currentMonth && !focusDate)) {
-          state.selectedDate = focusDate;
+          state.selectedDate = focusDate || startOfDay(new Date());   // 28.9 — הפאנל נפתח על היום
           state.currentMonth = focusDate ? new Date(focusDate) : new Date();
           state.year = year;
           state.activeCategories = null;

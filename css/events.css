@@ -1216,3 +1216,127 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   .wk-bar.cont-after { margin-inline-end: -2px; }
   .wk-row .day .more { bottom: 2px; inset-inline-start: 3px; font-size: 9px; }
 }
+
+/* ============================================================================
+ *  28.9.26 (ב') — פס "עכשיו" + רשימת מובייל נקייה (לפי הסקיצה שאושרה)
+ * ========================================================================== */
+.wk-bar { pointer-events: auto; cursor: pointer; }
+.wk-bar:hover { filter: brightness(.96); }
+
+.ev-now {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.ev-now__k {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ev-text-muted);
+  letter-spacing: .02em;
+  width: 100%;
+}
+.ev-now__i {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 0;
+  border-radius: 12px;
+  padding: 9px 12px;
+  text-align: start;
+  font: inherit;
+  color: var(--ev-text);
+}
+button.ev-now__i { cursor: pointer; }
+.ev-now__row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ev-now__row b { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev-now__n { font-size: 11.5px; color: var(--ev-text-soft); white-space: nowrap; }
+.ev-now__r { margin-inline-start: auto; font-size: 11.5px; font-weight: 700; color: var(--ev-text-soft); white-space: nowrap; }
+.ev-now__p { height: 3px; border-radius: 2px; background: rgba(17,24,39,.08); overflow: hidden; }
+.ev-now__p i { display: block; height: 100%; border-radius: 2px; }
+
+/* מובייל: כרטיס אחד, שורת יום = עמודת תאריך + אירועים */
+.m-list {
+  background: #fff;
+  border: 1px solid var(--ev-line);
+  border-radius: 16px;
+  padding: 12px 14px;
+  gap: 0;
+}
+.m-list .ev-now { margin-bottom: 6px; }
+.m-list .ev-now__i { flex-basis: 100%; }
+.m-day {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--ev-line);
+}
+.m-list .ev-now + .m-day, .m-list > .m-day:first-child { border-top: 0; }
+.m-dn {
+  width: 44px;
+  flex: none;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ev-text-muted);
+  line-height: 1.3;
+  padding-top: 1px;
+}
+.m-dn b { display: block; font-size: 15px; font-weight: 800; color: var(--ev-text); }
+.m-day.is-today .m-dn b {
+  display: inline-block;
+  background: var(--ev-action);
+  color: #fff;
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-size: 13px;
+}
+.m-evs { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.m-list .ev-row.m-it {
+  display: block;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+.m-it__l { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.m-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.m-it__t {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ev-text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  unicode-bidi: plaintext;
+}
+.m-it__m { font-size: 11.5px; color: var(--ev-text-muted); margin: 2px 15px 0 0; }
+.m-it .ev-inv, .m-it .ev-sch { margin-inline-start: 15px; margin-top: 6px; }
+.m-it .ev-actions { display: none; margin: 8px 15px 0 0; }
+.m-it.is-open .ev-actions { display: flex; }
+.m-tag.btn-rsvp {
+  margin: 0 0 0 0;
+  margin-inline-start: 4px;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  min-height: 0;
+  line-height: 1.5;
+}
+.m-list .btn-show-all-month {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 0 2px;
+  border: 0;
+  border-top: 1px solid var(--ev-line);
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ev-text-muted);
+  cursor: pointer;
+}

@@ -206,3 +206,17 @@
   /* "הבא בקהילה" בטלפון — הכותרת נשברת לשתי שורות במקום להיחתך ליד הכפתור */
   .hm-ag__d--feat .hm-ag__t { white-space: normal; }
 }
+
+/* 28.9.26 — פס "עכשיו": אירוע של כמה ימים שקורה היום, פעם אחת בראש הלו"ז */
+.hm-now { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
+.hm-now__i {
+  display: flex; flex-direction: column; gap: 5px;
+  border: 0; border-radius: 12px; padding: 8px 12px;
+  font: inherit; color: inherit; text-align: start; cursor: pointer;
+}
+.hm-now__row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.hm-now__row b { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-now__n { font-size: 11.5px; opacity: .75; white-space: nowrap; }
+.hm-now__r { margin-inline-start: auto; font-size: 11.5px; font-weight: 700; opacity: .75; white-space: nowrap; }
+.hm-now__p { height: 3px; border-radius: 2px; background: rgba(17,24,39,.08); overflow: hidden; }
+.hm-now__p i { display: block; height: 100%; border-radius: 2px; }

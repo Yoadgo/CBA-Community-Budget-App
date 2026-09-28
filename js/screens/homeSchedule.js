@@ -165,10 +165,19 @@ CBA.homeSchedule = (function () {
       var d = new Date(e.date);
       if (isNaN(d.getTime())) return;
       var cat = CAT[e.category] ? e.category : "community";
-      out.push({ id: String(e.id || ""), title: String(e.title || ""), date: d, allDay: !!e.allDay,
-                 end: e.end ? String(e.end) : "",   // 28.9 — אירוע של כמה ימים (ר' byDay)
-                 cat: cat, location: String(e.location || ""), description: String(e.description || "") });
+      var ev = { id: String(e.id || ""), title: String(e.title || ""), date: d, allDay: !!e.allDay,
+                 end: e.end ? String(e.end) : "",   // 28.9 — אירוע של כמה ימים
+                 cat: cat, category: cat, location: String(e.location || ""), description: String(e.description || "") };
+      out.push(ev);
     });
+    /* 28.9 — "סוכות (יום 1..7)" ואירוע רב-יומי ⇒ אירוע אחד עם lastDay (אותה
+       פונקציה של לוח האירועים). אם events.js לא נטען — כל יום בנפרד, כמו קודם. */
+    var sp = window.CBA && CBA.eventSpans;
+    if (sp) {
+      out.forEach(function (ev) { ev.lastDay = sp.computeLastDay(ev.date, ev.end ? new Date(ev.end) : null); });
+      out = sp.mergeSeries(out);
+      out.forEach(function (ev) { ev.cat = ev.category; });
+    }
     return out;
   }
 
@@ -247,17 +256,37 @@ CBA.homeSchedule = (function () {
   }
 
   function allEvents() { return (st.ev || []).concat(st.personal || []); }
+  function lastDayOf(e) { return e.lastDay || sod(e.date); }
+  function isMulti(e) { return lastDayOf(e).getTime() > sod(e.date).getTime(); }
+  function isOngoing(e, t) { return isMulti(e) && sod(e.date) <= t && lastDayOf(e) >= t; }
+  function rangeOf(e) {
+    var sp = window.CBA && CBA.eventSpans;
+    return sp ? sp.rangeLabel(e, true) : dm(e.date);
+  }
+  /* פס "עכשיו" (28.9) — כמו בלוח האירועים */
+  function nowHTML(today) {
+    var list = (st.ev || []).filter(function (e) { return isOngoing(e, today); })
+      .sort(function (a, b) { return lastDayOf(a) - lastDayOf(b); }).slice(0, 3);
+    if (!list.length) return "";
+    return '<div class="hm-now">' + list.map(function (e) {
+      var total = Math.round((lastDayOf(e) - sod(e.date)) / DAY) + 1;
+      var idx = Math.round((today - sod(e.date)) / DAY) + 1;
+      var note = idx === 1 ? "מתחיל היום" : idx === total ? "יום אחרון" : "היום יום " + idx + " מתוך " + total;
+      return '<button type="button" class="hm-now__i hm-ev--' + CAT[e.cat].k + '" data-hm-date="' + dkey(today) + '">' +
+        '<span class="hm-now__row"><b dir="auto">' + esc(e.title) + '</b><span class="hm-now__n">' + note + '</span>' +
+        '<span class="hm-now__r">עד <span dir="ltr">' + dm(lastDayOf(e)) + '</span></span></span>' +
+        '<span class="hm-now__p"><i class="hm-dot--' + CAT[e.cat].k + '" style="width:' + Math.round(100 * idx / total) + '%"></i></span>' +
+        '</button>';
+    }).join("") + '</div>';
+  }
   function byDay(list) {
     var m = {};
-    /* 28.9 — אירוע של כמה ימים (end) מופיע בכל אחד מימיו, עד 45 יום. */
+    /* 28.9 — אירוע של כמה ימים: רק ביום שבו הוא מתחיל. אם הוא כבר קורה
+       היום — הוא בפס "עכשיו" (nowHTML) ולא ברשימת הימים בכלל. */
+    var t0 = sod(new Date());
     list.forEach(function (e) {
-      var s0 = new Date(e.date); s0.setHours(0, 0, 0, 0);
-      var n = 0;
-      if (e.end) {
-        var l0 = new Date(new Date(e.end).getTime() - 1); l0.setHours(0, 0, 0, 0);
-        if (!isNaN(l0.getTime())) n = Math.max(0, Math.min(45, Math.round((l0 - s0) / 86400000)));
-      }
-      for (var i = 0; i <= n; i++) { var k = dkey(addDays(s0, i)); (m[k] = m[k] || []).push(e); }
+      if (isOngoing(e, t0)) return;
+      var k = dkey(e.date); (m[k] = m[k] || []).push(e);
     });
     Object.keys(m).forEach(function (k) {
       m[k].sort(function (a, b) {
@@ -372,6 +401,7 @@ CBA.homeSchedule = (function () {
       var k = CAT[e.cat].k;
       var meta = [];
       if (!e.allDay && TIMED[e.cat]) meta.push(hm(e.date));
+      if (isMulti(e)) meta.push('<span dir="ltr">' + rangeOf(e) + '</span>');
       if (e.location && e.cat !== "personal") meta.push(esc(e.location));
       return '<span class="hm-ag__i"><i class="hm-dot hm-dot--' + k + '"></i>' +
         '<span class="hm-ag__t" dir="auto">' + esc(e.title) + '</span>' +
@@ -476,9 +506,9 @@ CBA.homeSchedule = (function () {
         '<button type="button" class="hm-link" data-hm-retry>לנסות שוב</button></div>';
     }
     if (!st.ev) return skeletonHTML(st.mode);
-    var all = allEvents(), days = byDay(all), feat = featured(today);
-    if (st.mode === "list") return listHTML(today, days, LIST_ROWS, feat, false);
-    return '<div class="hm-sch__grid">' + gridHTML(today, days) + laterHTML(today) + '</div>' +
+    var all = allEvents(), days = byDay(all), feat = featured(today), now = nowHTML(today);
+    if (st.mode === "list") return now + listHTML(today, days, LIST_ROWS, feat, false);
+    return now + '<div class="hm-sch__grid">' + gridHTML(today, days) + laterHTML(today) + '</div>' +
       '<div class="hm-sch__compact">' + compactHTML(today, days, feat) + '</div>';
   }
 
