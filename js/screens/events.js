@@ -50,6 +50,7 @@ CBA.screens.events = (function () {
     allEvents: [],
     eventsById: {}, // אינדקס מהיר לפי id, לצורך כפתור "אישור הגעה" (RSVP) והוספה ליומן
     rsvpEnabledIds: {}, // מפת eventId -> true, לאירועים שמעקב ההגעה שלהם פתוח כרגע
+    eventInfo: {}, // 28.9 — eventId -> {schedule, hasImage} (eventInfo ב-Firestore)
     rsvpCounts: {}, // 23.9 — eventId -> {families, people} · ספירה חיה, גלויה לכל תושב (הכרעת יועד)
     highlightEventId: null, // 23.9 — קישור ישיר (#event=ID): האירוע שיודגש אחרי הציור
     privateEvents: [],
@@ -170,6 +171,7 @@ CBA.screens.events = (function () {
           id: e.id,
           title: e.title,
           date: new Date(e.date),
+          allDay: e.allDay !== false,   // 28.9 — כדי להציג שעה לאירוע עם שעה
           category: e.category,
           description: e.description || "",
           location: e.location || ""
@@ -249,7 +251,7 @@ CBA.screens.events = (function () {
   function loadEvents(year, callback) {
     state.loading = true;
     state.error = null;
-    var left = 3;
+    var left = 4;
     function one() {
       if (--left > 0) return;
       state.loading = false;
@@ -258,6 +260,7 @@ CBA.screens.events = (function () {
     loadCommunityEvents(year, one);
     loadPrivateEvents(one);
     loadRsvpEnabledIds(one);
+    loadEventInfo(year, one);   // 28.9 — הזמנה + לו"ז (Firestore, שאילתה אחת)
   }
 
   /* ==========================================================================
@@ -580,13 +583,14 @@ CBA.screens.events = (function () {
         var rsvpOpen = !!state.rsvpEnabledIds[e.id];
         html += '<div class="ev-row" data-event-id="' + esc(e.id) + '">' +
           '<div class="bar" style="background:var(' + cat.cssVar + ')"></div>' +
-          '<div class="time">כל היום</div>' +
+          '<div class="time">' + (e.allDay === false ? pad2(e.date.getHours()) + ":" + pad2(e.date.getMinutes()) : "כל היום") + '</div>' +
           '<div class="body">' +
           '<div class="ttl2">' + esc(e.title) + '</div>' +
           '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
+          extrasHTML(e, false) +
           '<div class="ev-actions">' +
           addCalHTML(e.id) + shareBtnHTML(e.id) +
-          rsvpBtnHTML(e, rsvpOpen) +
+          rsvpBtnHTML(e, rsvpOpen) + extraActionsHTML(e, false) +
           '</div>' +
           '</div></div>';
       });
@@ -647,6 +651,7 @@ CBA.screens.events = (function () {
   // חיווט משותף לכפתורי "אישור הגעה" — משמש גם בתצוגה החודשית (דסקטופ)
   // וגם בסדר היומי (מובייל), כך שהלוגיקה כתובה פעם אחת בלבד.
   function wireRsvpButtons(container) {
+    wireEventExtras(container);   // 28.9 — הזמנה, לו"ז, עריכת פרטים
     container.querySelectorAll(".btn-rsvp").forEach(function (btn) {
       btn.addEventListener("click", function (e) {
         e.stopPropagation(); // לא לגרום לבחירת יום מחדש בתצוגה החודשית
@@ -820,9 +825,10 @@ CBA.screens.events = (function () {
             '<div class="body">' +
             '<div class="ttl2">' + esc(e.title) + '</div>' +
             '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
+            extrasHTML(e, true) +
             '<div class="ev-actions">' +
             (e.category !== "personal" ? addCalHTML(e.id) + shareBtnHTML(e.id) : "") +
-            rsvpBtnHTML(e, rsvpOpen) +
+            rsvpBtnHTML(e, rsvpOpen) + extraActionsHTML(e, true) +
             '</div>' +
             '</div></div>';
         });
@@ -901,6 +907,319 @@ CBA.screens.events = (function () {
      ב-Code.gs ולכלל eventRSVP ב-firestore.rules — ההסתרה כאן היא נוחות בלבד,
      המידור האמיתי הוא בכללי Firestore. CBA.perms מתמלא ב-app.js. */
   var PERM_CULTURE = "תרבות";
+  /* ==========================================================================
+   *  פרטי אירוע: הזמנה (תמונה) + לו"ז פנימי   (28.9.26, אפיון wave4-events)
+   * --------------------------------------------------------------------------
+   *  🔑 מפתח = מזהה האירוע ביומן גוגל. הוא לא משתנה כשמזיזים תאריך ביומן —
+   *     ולכן ההזמנה והלו"ז "זזים" עם האירוע מעצמם, בלי לכתוב ליומן.
+   *     ⚠️ אירוע חוזר ביומן חולק מזהה אחד ⇒ כל המופעים יקבלו אותה הזמנה.
+   *  שני אוספים ב-Firestore (מודל ב' — הדפדפן כותב, הכלל אוכף):
+   *    eventInfo/{eventId}   — קטן: לו"ז, hasImage, שנה. נקרא לכל הלוח בשאילתה אחת.
+   *    eventImages/{eventId} — כבד (~200-600KB): התמונה עצמה. נקרא רק כשהשורה
+   *                            נראית במסך / כשפותחים את ההזמנה.
+   *  כתיבה: הרשאת "תרבות" או מנהל-על (hasPerm בכלל; viewerIsAdmin כאן = נוחות).
+   *  AI: קריאת הלו"ז מהתמונה דרך ה-Worker (cloudflare/door-worker.js, op=eventSchedule).
+   *      התוצאה נכנסת לתיבת הטקסט בלבד — נשמרת רק בלחיצה על "שמירה".
+   * ========================================================================== */
+  var INFO_COL = "eventInfo", IMG_COL = "eventImages";
+  /* ⚠️ אותה כתובת כמו WORKER_URL ב-js/data/door.js — שינוי שם ⇒ שינוי כאן. */
+  var AI_WORKER_URL = "https://cba-door.gizbar30.workers.dev/";
+  var IMG_MAX_CHARS = 900000;          // מסמך Firestore עד 1MiB; משאירים מרווח
+  var imgCache = {};                   // eventId -> dataURL ("" = אין)
+
+  function loadEventInfo(year, callback) {
+    state.eventInfo = {};
+    if (!CBA.fb || !CBA.fb.queryCollection) return callback();
+    CBA.fb.queryCollection(INFO_COL, [["year", year]], function (err, rows) {
+      if (!err && rows) rows.forEach(function (r) { if (r && r.id) state.eventInfo[r.id] = r; });
+      callback();
+    });
+  }
+
+  function canHaveInfo(e) { return e && e.category !== "birthdays" && e.category !== "personal"; }
+
+  /* "20:30 — התכנסות" / "20:30 התכנסות" / "פעילות" -> {time, text} */
+  function scheduleLines(text) {
+    return String(text || "").split(/\r?\n/).map(function (l) {
+      l = l.trim(); if (!l) return null;
+      var m = l.match(/^(\d{1,2}[:.]\d{2})\s*[—–\-·:]?\s*(.*)$/);
+      return m ? { time: m[1].replace(".", ":"), text: m[2] } : { time: "", text: l };
+    }).filter(Boolean);
+  }
+  function scheduleHTML(text) {
+    var items = scheduleLines(text);
+    if (!items.length) return "";
+    return '<ol class="ev-sch__list">' + items.map(function (i) {
+      return '<li>' + (i.time ? '<b dir="ltr">' + esc(i.time) + '</b>' : '<b></b>') +
+        '<span dir="auto">' + esc(i.text) + '</span></li>';
+    }).join("") + '</ol>';
+  }
+
+  /* מה מוצג מתחת לכותרת האירוע. במובייל ההזמנה ברצף לכרטיס (היא ההזמנה
+     עצמה); במחשב — כפתור "הזמנה" בשורת הפעולות (ר' extraActionsHTML). */
+  function extrasHTML(e, mobile) {
+    var inf = state.eventInfo && state.eventInfo[e.id];
+    if (!inf) return "";
+    var h = "";
+    if (inf.hasImage && mobile) {
+      h += '<button type="button" class="ev-inv" data-inv="' + esc(e.id) + '" aria-label="פתיחת ההזמנה במסך מלא">' +
+        '<span class="ev-inv__ph">טוען את ההזמנה…</span></button>';
+    }
+    if (inf.schedule) {
+      h += '<details class="ev-sch"><summary>לו״ז האירוע</summary>' + scheduleHTML(inf.schedule) + '</details>';
+    }
+    return h;
+  }
+  function extraActionsHTML(e, mobile) {
+    var inf = state.eventInfo && state.eventInfo[e.id];
+    var h = "";
+    if (!mobile && inf && inf.hasImage) {
+      h += '<button type="button" class="ev-inv-btn" data-inv-open="' + esc(e.id) + '">הזמנה</button>';
+    }
+    if (canHaveInfo(e) && viewerIsAdmin()) {
+      h += '<button type="button" class="ev-edit-btn" data-ev-edit="' + esc(e.id) + '">עריכת פרטים</button>';
+    }
+    return h;
+  }
+
+  function loadImage(id, cb) {
+    if (imgCache[id] != null) return cb(imgCache[id]);
+    if (!CBA.fb || !CBA.fb.readDoc) return cb("");
+    CBA.fb.readDoc(IMG_COL, id, function (err, d) {
+      var src = (!err && d && typeof d.image === "string" && d.image.indexOf("data:image/") === 0) ? d.image : "";
+      if (!err) imgCache[id] = src;       // כשל רשת לא נשמר במטמון — ננסה שוב בפעם הבאה
+      cb(src);
+    });
+  }
+
+  function fillInvitation(el) {
+    var id = el.getAttribute("data-inv");
+    loadImage(id, function (src) {
+      if (!el.isConnected) return;
+      el.innerHTML = src ? '<img src="' + esc(src) + '" alt="ההזמנה לאירוע" loading="lazy">'
+                         : '<span class="ev-inv__ph">ההזמנה לא נטענה — לחיצה לנסות שוב</span>';
+      el.classList.toggle("is-loaded", !!src);
+    });
+  }
+
+  function openInvitation(id) {
+    var ev = state.eventsById[id]; if (!ev) return;
+    var inf = (state.eventInfo && state.eventInfo[id]) || {};
+    CBA.ui.dialog({
+      title: ev.title,
+      html: '<div class="ev-inv-dlg"><div class="ev-inv-dlg__img">טוען…</div>' +
+            (inf.schedule ? '<div class="ev-inv-dlg__sch"><b>לו״ז האירוע</b>' + scheduleHTML(inf.schedule) + '</div>' : "") +
+            '</div>',
+      okText: "סגירה",
+      onMount: function (wrap) {
+        var box = wrap.querySelector(".ev-inv-dlg__img");
+        loadImage(id, function (src) {
+          box.innerHTML = src ? '<img src="' + esc(src) + '" alt="ההזמנה לאירוע">' : "ההזמנה לא נטענה. אפשר לנסות שוב בעוד רגע.";
+        });
+      }
+    });
+  }
+
+  /* חיווט — נקרא מתוך wireRsvpButtons, כך שהוא רץ גם בתצוגה החודשית וגם במובייל. */
+  function wireEventExtras(container) {
+    var invs = container.querySelectorAll(".ev-inv[data-inv]");
+    if (invs.length && "IntersectionObserver" in window) {
+      var io = new IntersectionObserver(function (ents) {
+        ents.forEach(function (en) { if (en.isIntersecting) { io.unobserve(en.target); fillInvitation(en.target); } });
+      }, { rootMargin: "300px" });
+      invs.forEach(function (el) { io.observe(el); });
+    } else invs.forEach(fillInvitation);
+
+    container.querySelectorAll(".ev-inv[data-inv], [data-inv-open]").forEach(function (b) {
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var id = b.getAttribute("data-inv") || b.getAttribute("data-inv-open");
+        if (b.classList.contains("ev-inv") && !b.classList.contains("is-loaded")) {
+          delete imgCache[id]; return fillInvitation(b);
+        }
+        openInvitation(id);
+      });
+    });
+    container.querySelectorAll("[data-ev-edit]").forEach(function (b) {
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var ev = state.eventsById[b.getAttribute("data-ev-edit")];
+        if (ev) openEventEditor(ev);
+      });
+    });
+  }
+
+  /* כיווץ עד שהתמונה נכנסת במסמך אחד. מתחילים בצלע 1400 ואיכות 0.8
+     ויורדים בשלבים — הזמנה היא טקסט על רקע, ו-0.6 עדיין קריא לגמרי. */
+  function shrinkForDoc(file, cb) {
+    if (!file || !/^image\//.test(file.type || "")) return cb(null, "זה לא קובץ תמונה");
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function () {
+      var steps = [[1400, 0.8], [1400, 0.7], [1200, 0.65], [1000, 0.6], [900, 0.55]];
+      var out = null;
+      for (var i = 0; i < steps.length; i++) {
+        var k = Math.min(1, steps[i][0] / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+        var cv = document.createElement("canvas");
+        cv.width = Math.max(1, Math.round(img.naturalWidth * k));
+        cv.height = Math.max(1, Math.round(img.naturalHeight * k));
+        var cx = cv.getContext("2d");
+        cx.fillStyle = "#fff"; cx.fillRect(0, 0, cv.width, cv.height);   // PNG שקוף -> רקע לבן
+        cx.drawImage(img, 0, 0, cv.width, cv.height);
+        out = cv.toDataURL("image/jpeg", steps[i][1]);
+        if (out.length <= IMG_MAX_CHARS) break;
+      }
+      URL.revokeObjectURL(url);
+      if (!out || out.length > IMG_MAX_CHARS) return cb(null, "התמונה גדולה מדי גם אחרי כיווץ");
+      cb(out);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); cb(null, "לא הצלחנו לקרוא את התמונה"); };
+    img.src = url;
+  }
+
+  function dm(d) { return d.getDate() + "." + (d.getMonth() + 1); }
+
+  /* קריאה ל-Worker. כשל כלשהו -> cb(null, הודעה) — אין מסלול גיבוי ב-Apps
+     Script בכוונה: זו פעולת נוחות, והמנהל תמיד יכול להקליד את הלו"ז בעצמו. */
+  function aiReadSchedule(image, cb) {
+    if (!(CBA.fb && CBA.fb.idToken)) return cb(null, "ההתחברות ל-Firebase לא הושלמה");
+    CBA.fb.idToken(function (err, tok) {
+      if (err || !tok) return cb(null, "ההתחברות ל-Firebase לא הושלמה");
+      var ctl = window.AbortController ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 45000);
+      fetch(AI_WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "eventSchedule", idToken: tok, image: image }),
+        signal: ctl ? ctl.signal : undefined })
+        .then(function (r) { return r.json(); })
+        .then(function (res) { clearTimeout(timer); res && res.ok ? cb(res) : cb(null, (res && res.error) || "הקריאה נכשלה"); })
+        .catch(function () { clearTimeout(timer); cb(null, "השרת לא ענה. אפשר לנסות שוב או להקליד ידנית."); });
+    });
+  }
+
+  function openEventEditor(ev) {
+    if (!CBA.fb || !CBA.fb.mergeDoc) return;
+    var inf = (state.eventInfo && state.eventInfo[ev.id]) || {};
+    var cur = { image: "", orig: "", changed: false, loaded: false };
+
+    CBA.ui.dialog({
+      title: "עריכת פרטי אירוע — " + ev.title,
+      sticky: true,
+      cancelText: "ביטול",
+      okText: "שמירה",
+      html:
+        '<div class="evx" dir="rtl">' +
+          '<div class="evx-note">שם, תאריך ומיקום מגיעים מיומן גוגל ולא נערכים כאן.</div>' +
+          '<div class="evx-img">' +
+            '<div class="evx-thumb" data-evx-thumb>טוען…</div>' +
+            '<div class="evx-img-acts">' +
+              '<label class="evx-btn">העלאת הזמנה<input type="file" accept="image/*" hidden data-evx-file></label>' +
+              '<button type="button" class="evx-btn" data-evx-ai>קריאת הלו״ז מהתמונה</button>' +
+              '<button type="button" class="evx-btn evx-btn--quiet" data-evx-del hidden>הסרת התמונה</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="evx-status" data-evx-status hidden></div>' +
+          '<label class="evx-lbl" for="evx-sch">לו״ז פנימי <small>שורה לכל פריט, למשל: 20:30 — התכנסות</small></label>' +
+          '<textarea id="evx-sch" rows="6" maxlength="2000" data-evx-sch></textarea>' +
+          '<button type="button" class="evx-link" data-evx-rsvp>ניהול אישור הגעה ←</button>' +
+          '<div class="evx-err" data-evx-err hidden></div>' +
+        '</div>',
+      onMount: function (wrap, close) {
+        var $ = function (s) { return wrap.querySelector(s); };
+        var thumb = $("[data-evx-thumb]"), fileIn = $("[data-evx-file]"), aiBtn = $("[data-evx-ai]"),
+            delBtn = $("[data-evx-del]"), sch = $("[data-evx-sch]"), status = $("[data-evx-status]");
+        sch.value = inf.schedule || "";
+
+        function paintThumb() {
+          thumb.innerHTML = cur.image ? '<img src="' + esc(cur.image) + '" alt="">' : "אין הזמנה";
+          delBtn.hidden = !cur.image;
+          aiBtn.disabled = !cur.image;
+        }
+        function say(msg, kind) {
+          status.hidden = !msg; status.textContent = msg || "";
+          status.className = "evx-status" + (kind ? " is-" + kind : "");
+        }
+        if (inf.hasImage) {
+          loadImage(ev.id, function (src) { cur.image = cur.orig = src; cur.loaded = true; paintThumb(); });
+        } else { cur.loaded = true; paintThumb(); }
+
+        fileIn.addEventListener("change", function () {
+          var f = fileIn.files && fileIn.files[0];
+          if (!f) return;
+          say("מכווץ את התמונה…");
+          shrinkForDoc(f, function (out, err) {
+            fileIn.value = "";
+            if (!out) return say(err, "err");
+            cur.image = out; cur.changed = true; paintThumb();
+            say("התמונה מוכנה (" + Math.round(out.length * 0.75 / 1024) + "KB). אפשר לקרוא ממנה את הלו״ז.");
+          });
+        });
+        delBtn.addEventListener("click", function () { cur.image = ""; cur.changed = true; paintThumb(); say(""); });
+
+        aiBtn.addEventListener("click", function () {
+          if (!cur.image) return;
+          function run() {
+            aiBtn.disabled = true; say("קורא את הלו״ז מהתמונה…");
+            aiReadSchedule(cur.image, function (res, err) {
+              aiBtn.disabled = false;
+              if (!res) return say(err, "err");
+              var items = Array.isArray(res.items) ? res.items : [];
+              if (!items.length) return say("לא נמצא לו״ז בתמונה. אפשר להקליד ידנית.", "warn");
+              sch.value = items.map(function (i) { return (i.time ? i.time + " — " : "") + (i.text || ""); }).join("\n");
+              /* השוואה ליומן — אזהרה בלבד, לא תיקון אוטומטי */
+              var warn = [];
+              var md = String(res.date || "").match(/(\d{1,2})[.\/](\d{1,2})/);
+              if (md && (+md[1] !== ev.date.getDate() || +md[2] !== ev.date.getMonth() + 1)) {
+                warn.push("בהזמנה כתוב " + res.date + " וביומן " + dm(ev.date));
+              }
+              if (res.location && ev.location && ev.location.indexOf(res.location) === -1 && res.location.indexOf(ev.location) === -1) {
+                warn.push("מיקום בהזמנה: " + res.location + " · ביומן: " + ev.location);
+              }
+              say("מולא מהתמונה — לבדוק ולתקן לפני שמירה." + (warn.length ? " ⚠ " + warn.join(" · ") : ""), "warn");
+            });
+          }
+          if (sch.value.trim() && CBA.ui.confirm) {
+            CBA.ui.confirm("הטקסט שבתיבה יוחלף במה שייקרא מהתמונה.",
+                           { title: "להחליף את הלו״ז הקיים?", okText: "להחליף" }).then(function (ok) { if (ok) run(); });
+          } else run();
+        });
+
+        $("[data-evx-rsvp]").addEventListener("click", function () { close(false); setTimeout(function () { openRsvpDialog(ev); }, 220); });
+      },
+      onOk: function (wrap, close) {
+        var errBox = wrap.querySelector("[data-evx-err]"), ok = wrap.querySelector('[data-dlg="ok"]');
+        var schedule = wrap.querySelector("[data-evx-sch]").value.trim().slice(0, 2000);
+        if (!cur.loaded) return;
+        ok.disabled = true; ok.textContent = "שומר…"; errBox.hidden = true;
+        var uid = CBA.fb.uid && CBA.fb.uid();
+        function fail(e) {
+          ok.disabled = false; ok.textContent = "שמירה";
+          errBox.hidden = false;
+          errBox.textContent = "השמירה נכשלה" + (e && e.code === "permission-denied" ? " — אין הרשאת \"תרבות\"" : "") + ". אפשר לנסות שוב.";
+        }
+        function saveInfo() {
+          var doc = { year: ev.date.getFullYear(), category: String(ev.category || ""), schedule: schedule,
+                      hasImage: !!cur.image, updatedByUid: uid, updatedAt: CBA.fb.serverNow() };
+          CBA.fb.mergeDoc(INFO_COL, ev.id, doc, function (e) {
+            if (e) return fail(e);
+            state.eventInfo[ev.id] = { id: ev.id, schedule: schedule, hasImage: !!cur.image, year: doc.year };
+            imgCache[ev.id] = cur.image;
+            close(true);
+            if (CBA.ui.toast) CBA.ui.toast("פרטי האירוע נשמרו", "ok");
+            if (activeContainer && activeContainer.isConnected) setTimeout(function () { draw(activeContainer); }, 200);
+          });
+        }
+        /* התמונה קודם, ואז המסמך הקטן: אם התמונה נכשלה — hasImage לא הודלק,
+           ואף אחד לא רואה "הזמנה" שלא קיימת. */
+        if (!cur.changed) return saveInfo();
+        if (cur.image) {
+          CBA.fb.mergeDoc(IMG_COL, ev.id, { image: cur.image, updatedByUid: uid, updatedAt: CBA.fb.serverNow() },
+            function (e) { e ? fail(e) : saveInfo(); });
+        } else {
+          CBA.fb.deleteDoc(IMG_COL, ev.id, function (e) { e ? fail(e) : saveInfo(); });
+        }
+      }
+    });
+  }
+
   /* 28.9 — תיקון "ביצה ותרנגולת": הכפתור הופיע רק כשהמעקב כבר פתוח,
      ולכן מנהל לא יכול היה לפתוח אותו מלכתחילה (דיווח יועד: "לא רואה
      אפשרות להוסיף שאלון הגעה"). מנהל אירועים/על רואה תמיד כפתור; תושב

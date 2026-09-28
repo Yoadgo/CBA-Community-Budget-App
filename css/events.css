@@ -1037,3 +1037,63 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   color: var(--text-secondary, #6B7280);
   font-size: 0.85rem;
 }
+
+/* ==========================================================================
+   הזמנה + לו"ז פנימי + עורך המנהל   (28.9.26)
+   ========================================================================== */
+/* ההזמנה ברצף לכרטיס (מובייל) — ברוחב מלא, יחס הגובה של התמונה עצמה */
+.ev-inv {
+  display: block; width: 100%; margin: 8px 0 4px; padding: 0; border: none; cursor: zoom-in;
+  background: #F3F4F6; border-radius: 12px; overflow: hidden; min-height: 120px;
+}
+.ev-inv img { display: block; width: 100%; height: auto; }
+.ev-inv.is-loaded { min-height: 0; background: none; }
+.ev-inv__ph { display: flex; align-items: center; justify-content: center; min-height: 120px; font-size: 0.8rem; color: #6B7280; }
+
+/* לו"ז מקופל */
+.ev-sch { margin: 6px 0 2px; border: 1px solid #E5E7EB; border-radius: 10px; padding: 6px 10px; background: #fff; }
+.ev-sch summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; color: #374151; }
+.ev-sch__list { list-style: none; margin: 6px 0 2px; padding: 0; }
+.ev-sch__list li { display: flex; gap: 10px; font-size: 0.82rem; line-height: 1.7; color: #374151; }
+.ev-sch__list b { min-width: 42px; font-variant-numeric: tabular-nums; color: #111827; }
+
+/* כפתורים משניים בשורת הפעולות */
+.ev-inv-btn, .ev-edit-btn {
+  flex-shrink: 0; align-self: center; padding: 0.4rem 0.75rem; border-radius: 999px; font-size: 0.75rem;
+  font-weight: 600; cursor: pointer; white-space: nowrap; background: transparent; color: #374151; border: 1px solid #D1D5DB;
+}
+.ev-edit-btn { border-style: dashed; border-color: #9CA3AF; }
+.ev-inv-btn:hover, .ev-edit-btn:hover { background: #F3F4F6; }
+
+/* חלון ההזמנה */
+.ev-inv-dlg__img { text-align: center; color: #6B7280; font-size: 0.85rem; }
+.ev-inv-dlg__img img { width: 100%; height: auto; border-radius: 10px; display: block; }
+.ev-inv-dlg__sch { margin-top: 12px; font-size: 0.85rem; }
+
+/* עורך המנהל */
+.evx { display: grid; gap: 10px; text-align: right; }
+.evx-note { font-size: 0.75rem; color: #6B7280; }
+.evx-img { display: flex; gap: 12px; align-items: flex-start; }
+.evx-thumb {
+  width: 84px; height: 110px; flex-shrink: 0; border-radius: 8px; background: #F3F4F6; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; font-size: 0.72rem; color: #6B7280; text-align: center;
+}
+.evx-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.evx-img-acts { display: grid; gap: 6px; flex: 1; }
+.evx-btn {
+  display: block; text-align: center; padding: 0.5rem 0.75rem; border-radius: 10px; border: 1px solid #D1D5DB;
+  background: #fff; color: #111827; font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+}
+.evx-btn:disabled { opacity: 0.45; cursor: default; }
+.evx-btn--quiet { border-color: transparent; color: #B91C1C; font-weight: 500; }
+.evx-status { font-size: 0.78rem; padding: 6px 10px; border-radius: 8px; background: #F3F4F6; color: #374151; }
+.evx-status.is-warn { background: #FEF3C7; color: #92400E; }
+.evx-status.is-err { background: #FEE2E2; color: #B91C1C; }
+.evx-lbl { font-size: 0.82rem; font-weight: 600; color: #111827; }
+.evx-lbl small { display: block; font-weight: 400; color: #6B7280; }
+.evx textarea {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 0.85rem; line-height: 1.7;
+  border: 1px solid #D1D5DB; border-radius: 10px; padding: 8px 10px; resize: vertical;
+}
+.evx-link { justify-self: start; background: none; border: none; padding: 0; color: #374151; font: inherit; font-size: 0.8rem; text-decoration: underline; cursor: pointer; }
+.evx-err { font-size: 0.78rem; color: #B91C1C; }

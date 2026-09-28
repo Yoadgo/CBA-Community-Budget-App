@@ -22,6 +22,9 @@
  *  ⚠️ פתיחת הדלת: אין כתיבה ל-Firestore — רק קריאות בשם המשתמש.
  *  ⚠️ לוגיקת הזכאות חייבת להישאר זהה ל-Door.gs. שינוי שם ⇒ שינוי כאן.
  *
+ *  🆕 28.9 — op='eventSchedule' (קריאת לו"ז מהזמנה): AI_SCHEDULE_MODEL (Text),
+ *     GEMINI_API_KEY (Secret) / Binding בשם AI — ר' eventSchedule.
+ *
  *  🆕 26.9 — שריון וביטול WeWork (op = 'wwBook' / 'wwCancel'):
  *     FIREBASE_SA (Secret) — חשבון השירות של Firebase (אותו JSON כמו
  *     FIREBASE_SA_JSON ב-Apps Script). משמש **רק** לשריון/ביטול.
@@ -358,6 +361,109 @@ async function wwCancel(req, env, ctx, b, who) {
 }
 
 /* ------------------------------------------------------------------ ראשי --- */
+/* ============================================================================
+ *  🆕 28.9 — קריאת לו"ז מתמונת הזמנה (op = 'eventSchedule')
+ * ----------------------------------------------------------------------------
+ *  מי: חבר פעיל, לא חיצוני, עם הרשאת "תרבות" או "על" — אותו תנאי כמו
+ *      hasPerm('תרבות') בכלל eventInfo. נבדק מול members/{uid} **בשם המשתמש**.
+ *  מה: מחזיר {items:[{time,text}], date, location}. לא כותב שום דבר —
+ *      הלקוח ממלא את תיבת הטקסט, והמנהל שומר בעצמו.
+ *  איזה מודל: AI_SCHEDULE_MODEL (Text) —
+ *      'gemini' (ברירת מחדל) ⇒ GEMINI_API_KEY (Secret) + GEMINI_MODEL (Text, רשות)
+ *      '@cf/…'              ⇒ Workers AI דרך Binding בשם AI
+ *      ההחלטה לפי ניסוי ai-schedule-test-worker.js; מחליפים בלי לגעת בקוד.
+ * ========================================================================== */
+const SCHEDULE_PERMS = ['תרבות', 'על'];
+const aiRecent = new Map();
+const SCHEDULE_PROMPT =
+  'זו תמונה של הזמנה לאירוע קהילתי בעברית. חלץ ממנה אך ורק מה שכתוב בה במפורש — ' +
+  'אל תמציא ואל תשלים. החזר JSON בלבד, בלי שום טקסט נוסף ובלי ```, במבנה:\n' +
+  '{"date":"יום.חודש או ריק","location":"המיקום כפי שכתוב או ריק",' +
+  '"items":[{"time":"HH:MM או ריק","text":"מה קורה"}]}\n' +
+  'items = סדר האירוע (לו"ז) לפי הסדר בתמונה. פריט בלי שעה — time ריק. ' +
+  'אם אין לו"ז בכלל, החזר רק את שעת ההתכנסות כפריט יחיד.';
+
+function hasAnyPerm(perms, want) {
+  if (Array.isArray(perms)) return want.some(p => perms.indexOf(p) !== -1);
+  if (perms && typeof perms === 'object') return want.some(p => p in perms);
+  return false;
+}
+
+async function eventSchedule(req, env, b, who) {
+  const last = aiRecent.get(who.uid) || 0;
+  if (Date.now() - last < 3000) return reply(req, { ok: false, error: 'רגע אחד — הבקשה הקודמת עוד רצה' });
+  aiRecent.set(who.uid, Date.now());
+
+  const mem = await getDoc('members/' + encodeURIComponent(who.uid), String(b.idToken));
+  if (!mem || mem.active !== true) return reply(req, { ok: false, error: 'המשתמש אינו פעיל' });
+  if (mem.isExternal === true || !hasAnyPerm(mem.perms, SCHEDULE_PERMS)) {
+    return reply(req, { ok: false, error: 'הפעולה זמינה למנהלי אירועים בלבד' });
+  }
+  const img = String(b.image || '');
+  if (!/^data:image\/(jpeg|png|webp);base64,/.test(img) || img.length > 1400000) {
+    return reply(req, { ok: false, error: 'התמונה חסרה או גדולה מדי' });
+  }
+
+  const model = String(env.AI_SCHEDULE_MODEL || 'gemini');
+  const t0 = Date.now();
+  const raw = model === 'gemini' ? await scheduleViaGemini(env, img) : await scheduleViaCf(env, model, img);
+  const out = cleanSchedule(raw);
+  if (!out) return reply(req, { ok: false, error: 'התשובה של המודל לא הייתה קריאה. אפשר לנסות שוב.' });
+  return reply(req, Object.assign({ ok: true, model: model, ms: Date.now() - t0 }, out));
+}
+
+async function scheduleViaGemini(env, dataUrl) {
+  if (!env.GEMINI_API_KEY) throw new Error('no GEMINI_API_KEY');
+  const m = String(env.GEMINI_MODEL || 'gemini-3.1-flash-lite');
+  const comma = dataUrl.indexOf(',');
+  const mime = dataUrl.slice(5, dataUrl.indexOf(';'));
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent?key=' + env.GEMINI_API_KEY, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: SCHEDULE_PROMPT }, { inline_data: { mime_type: mime, data: dataUrl.slice(comma + 1) } }] }],
+      generationConfig: { temperature: 0, responseMimeType: 'application/json' }
+    })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error('gemini ' + r.status);
+  return (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
+}
+
+async function scheduleViaCf(env, model, dataUrl) {
+  if (!env.AI) throw new Error('no AI binding');
+  const input = { max_tokens: 700, temperature: 0, messages: [{ role: 'user', content: [
+    { type: 'text', text: SCHEDULE_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }] }] };
+  let out;
+  try { out = await env.AI.run(model, input); }
+  catch (e) {
+    if (/agree/i.test(String(e && e.message))) { await env.AI.run(model, { prompt: 'agree' }); out = await env.AI.run(model, input); }
+    else throw e;
+  }
+  if (typeof out === 'string') return out;
+  if (out && typeof out.response === 'string') return out.response;
+  if (out && out.response && typeof out.response === 'object') return JSON.stringify(out.response);
+  const ch = out && out.choices && out.choices[0];
+  return ch ? (ch.message && ch.message.content) || '' : '';
+}
+
+/* ניקוי: רק שדות ידועים, אורכים סבירים, שעה בפורמט HH:MM. פלט המודל הוא
+   קלט לא-אמין — הוא מגיע לדפדפן ומוצג בתיבת טקסט (לא כ-HTML). */
+function cleanSchedule(raw) {
+  let o;
+  try {
+    const s = String(raw || '').replace(/```json|```/g, '');
+    o = JSON.parse(s.slice(s.indexOf('{'), s.lastIndexOf('}') + 1));
+  } catch (e) { return null; }
+  if (!o || typeof o !== 'object') return null;
+  const str = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
+  const items = (Array.isArray(o.items) ? o.items : []).slice(0, 20).map(i => {
+    let t = str(i && i.time, 5).replace('.', ':');
+    if (!/^\d{1,2}:\d{2}$/.test(t)) t = '';
+    return { time: t, text: str(i && i.text, 120) };
+  }).filter(i => i.text || i.time);
+  return { items, date: str(o.date, 10), location: str(o.location, 80) };
+}
+
 export default {
   async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
@@ -376,6 +482,11 @@ export default {
     if (op === 'wwBook' || op === 'wwCancel') {
       try { return await (op === 'wwBook' ? wwBook : wwCancel)(req, env, ctx, b, who); }
       catch (e) { return reply(req, { ok: false, code: 'NEED_SLOW', error: 'השרת המהיר לא זמין', detail: String(e.message || e).slice(0, 80) }); }
+    }
+    /* 28.9 — קריאת לו"ז מתמונת הזמנה. ר' eventSchedule למעלה. */
+    if (op === 'eventSchedule') {
+      try { return await eventSchedule(req, env, b, who); }
+      catch (e) { return reply(req, { ok: false, error: 'קריאת הלו"ז נכשלה. אפשר לנסות שוב או להקליד ידנית.', detail: String(e.message || e).slice(0, 80) }); }
     }
     if (op !== 'open') return reply(req, { ok: false, error: 'פעולה לא מוכרת' });
     const last = recent.get(who.uid) || 0;

@@ -1775,6 +1775,50 @@ service cloud.firestore {
     }
 
     /* ========================================================================
+     *  פרטי אירוע: הזמנה (תמונה) + לו"ז פנימי   (28.9.2026)
+     * ------------------------------------------------------------------------
+     *  eventInfo/{eventId}   — לו"ז, hasImage, שנה. קטן, נקרא לכל הלוח.
+     *  eventImages/{eventId} — התמונה עצמה (data URL של JPEG), נקראת לפי דרישה.
+     *  🔑 מפתח = מזהה האירוע ביומן גוגל ⇒ הנתונים זזים עם האירוע.
+     *  קריאה: כל חבר פעיל שאינו חיצוני — בדיוק כמו eventRSVP (אותו קהל רואה
+     *  את הלוח). כתיבה: "תרבות" או מנהל-על (hasPerm), כמו פתיחת אישור הגעה.
+     *  אין כאן שם/אימייל/טלפון — רק uid של מי שעדכן.
+     * ==================================================================== */
+    function eventInfoShapeOk() {
+      return request.resource.data.keys().hasOnly(['year', 'category', 'schedule', 'hasImage', 'updatedByUid', 'updatedAt']) &&
+             request.resource.data.keys().hasAll(['year', 'schedule', 'hasImage', 'updatedByUid']) &&
+             request.resource.data.year is int &&
+             request.resource.data.schedule is string &&
+             request.resource.data.schedule.size() <= 2000 &&
+             request.resource.data.hasImage is bool &&
+             request.resource.data.updatedByUid == request.auth.uid;
+    }
+
+    function eventImageShapeOk() {
+      return request.resource.data.keys().hasOnly(['image', 'updatedByUid', 'updatedAt']) &&
+             request.resource.data.image is string &&
+             request.resource.data.image.size() <= 950000 &&
+             request.resource.data.image.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$') &&
+             request.resource.data.updatedByUid == request.auth.uid;
+    }
+
+    function canReadEventExtras() {
+      return isMember() && m().isExternal == false;
+    }
+
+    match /eventInfo/{eventId} {
+      allow read: if canReadEventExtras();
+      allow create, update: if hasPerm('תרבות') && eventInfoShapeOk();
+      allow delete: if false;
+    }
+
+    match /eventImages/{eventId} {
+      allow read: if canReadEventExtras();
+      allow create, update: if hasPerm('תרבות') && eventImageShapeOk();
+      allow delete: if hasPerm('תרבות');
+    }
+
+    /* ========================================================================
      *  "עדכון חדש" — מרכז ההתראות   (23.9.2026)
      * ------------------------------------------------------------------------
      *  מסמך אחד לכל משפחה, notifyInbox/{familyId}: לכל תחום השורה האחרונה
