@@ -758,7 +758,7 @@ CBA.screens.resServices = {
               (s.icon ? '<span class="svc-card__ico">' + svcEsc(s.icon) + "</span>" : "") +
             "</div>";
 
-        return '<article class="svc-card' + (s.isResident ? ' svc-card--rec' : '') + '" data-svc="' + svcEsc(s.id) + '">' +
+        return '<article class="svc-card' + (s.isResident ? ' svc-card--rec' : '') + '" data-svc="' + svcEsc(s.id) + '" tabindex="0">' +
             headHtml +
             svcStatusTag(s) +
             (s.isResident
@@ -767,7 +767,9 @@ CBA.screens.resServices = {
             (s.isResident
               ? '<p class="svc-card__desc">' + svcEsc((s.body || "").slice(0, 110)) + ((s.body || "").length > 110 ? "…" : "") + "</p>"
               : (s.desc ? '<p class="svc-card__desc">' + svcEsc(s.desc) + "</p>" : '<p class="svc-card__desc"></p>')) +
-            svcCardReactsHtml(s.id) +
+            /* 28.9.26 — מונים מוצגים רק כשיש לייק/דיסלייק/תגובה אחד לפחות
+               (סקיצת "מדריך השיכון" שאושרה); הצבעה עדיין אפשרית במגירה. */
+            (svcHasEngagement(s.id) ? svcCardReactsHtml(s.id) : "") +
             // פס תחתון אחד מאוחד — חיוג/וואטסאפ (אם יש) + "כל הפרטים",
             // כל הכפתורים באותה שורה במקום שתי שורות נפרדות כמו קודם
             // (23.9.26, בקשת יועד).
@@ -782,9 +784,12 @@ CBA.screens.resServices = {
          כשיש בפועל רק קבוצה אחת (או שהקטגוריות לא נטענו) — בלי כותרות,
          בדיוק כמו ההתנהגות הקודמת. */
       var cats = (svcState.categories || []).filter(function (c) { return c.active; });
+      /* 28.9.26 — קטגוריה ריקה: לתושבים לא מוצגת (כמו קודם); למנהלים
+         ולעורכים מוצגת עם הערה, כדי שיידעו שהיא קיימת ואפשר להוסיף אליה. */
+      var svcAdmin = !!(window.CBA && (CBA.isSuper || ((CBA.perms || []).indexOf("שירותים") !== -1)));
       var groups = cats.map(function (c) {
         return { cat: c, items: list.filter(function (s) { return s.categoryId === c.id; }) };
-      }).filter(function (g) { return g.items.length; });
+      }).filter(function (g) { return g.items.length || (svcAdmin && !q); });
 
       // שירותים בלי קטגוריה תקפה (קטגוריה נמחקה בגיליון ידנית) — לא נעלמים,
       // מוצגים בקבוצה "ללא קטגוריה" בסוף כדי שאף שירות לא ייעלם בשקט.
@@ -796,12 +801,24 @@ CBA.screens.resServices = {
       grid.innerHTML = groups.length > 1
         ? groups.map(function (g) {
             return '<h2 class="svc-group">' + svcEsc(g.cat.name) + '</h2><div class="svc-grid__in">' +
-              g.items.map(card).join("") + "</div>";
+              (g.items.length ? g.items.map(card).join("")
+                : '<div class="svc-empty-cat">אין עדיין שירותים בקטגוריה הזו · מוצג רק למנהלים ולעורכים</div>') + "</div>";
           }).join("")
         : '<div class="svc-grid__in">' + list.map(card).join("") + "</div>";
 
       grid.querySelectorAll("[data-open]").forEach(function (btn) {
         btn.addEventListener("click", function () { svcOpenDrawer(btn.dataset.open); });
+      });
+      /* 28.9.26 — כל הכרטיס לחיץ (במקום שורת "כל הפרטים" נפרדת). לחיצה על
+         כפתור/קישור בתוך הכרטיס (חיוג, וואטסאפ, לייק) לא פותחת את המגירה. */
+      grid.querySelectorAll(".svc-card[data-svc]").forEach(function (el) {
+        el.addEventListener("click", function (e) {
+          if (e.target.closest("button, a")) return;
+          svcOpenDrawer(el.dataset.svc);
+        });
+        el.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && e.target === el) svcOpenDrawer(el.dataset.svc);
+        });
       });
       svcBindCallButtons(grid);
 
@@ -883,8 +900,9 @@ function svcCardFooterHtml(s) {
         svcWaIcon() + "<span>וואטסאפ</span></a>");
     }
   }
-  segs.push('<button type="button" class="svc-card__fbtn" data-open="' + svcEsc(s.id) + '">' +
-    svcPlusIcon() + "<span>כל הפרטים</span></button>");
+  /* 28.9.26 — "כל הפרטים" הוסר: כל הכרטיס לחיץ עכשיו (ר' paintGrid).
+     בלי חיוג/וואטסאפ — אין פס תחתון בכלל. */
+  if (!segs.length) return "";
   return '<div class="svc-card__footer">' + segs.join("") + "</div>";
 }
 
@@ -1389,6 +1407,11 @@ function svcPlusIcon() {
 function svcCommentIcon() {
   return '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" ' +
     'stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+}
+
+function svcHasEngagement(cardId) {
+  var r = svcState.reactionCounts[cardId] || {};
+  return !!((r.like || 0) + (r.dislike || 0) + (svcState.commentCounts[cardId] || 0));
 }
 
 function svcCardReactsHtml(cardId) {

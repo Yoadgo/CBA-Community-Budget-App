@@ -126,6 +126,7 @@ var rrState = {
   homeQuery: "", homeCategory: null,
   groupName: "", groupCategoryId: "",
   groupQuery: "", kupahFilter: "", sort: "name",
+  subFilter: "", cityFilter: "", mCat: "",   // 28.9.26 — מסננים/קטגוריה בטלפון
   staleByCard: {}            // cardId -> latest open staleReport
 };
 var rrRepaint = null;
@@ -309,144 +310,74 @@ CBA.screens.resRecommendations = {
   }
 };
 
-function rrPaint(body) {
-  if (rrState.view === "group") rrPaintGroup(body);
-  else rrPaintHome(body);
+/* ============================================================================
+ *  28.9.26 — סידור חדש לפי הסקיצה שאושרה ("סקיצת מדריך השיכון", גרסה 2):
+ *  • מחשב (≥900px): רשימת קבוצות קבועה בצד + טבלה (שם · פרטים · מיקום ·
+ *    טלפון). חיפוש בצד מחפש בכל ההמלצות (כל המילים, בכל השדות).
+ *  • טלפון: אריחי קטגוריה קטנים (כולן נראות בלי לגלול) → הקבוצות של
+ *    הקטגוריה → שורות דו-קומתיות עם כפתור חיוג עגול.
+ *  • קבוצות ריקות: לתושבים מוסתרות; למנהלים/עורכים (rrCanAdminEdit) מוצגות
+ *    בהיר עם "ריק", כדי שאפשר יהיה להוסיף אליהן.
+ *  • לייק/דיסלייק/תגובות ו"לא מעודכן" עברו למגירת הפרטים; ברשימה מוצג
+ *    לייק רק כשיש לפחות אחד.
+ *  ⚠️ מחלקות rr2-* בלבד — report.css מגדיר .rr-row משלו (התנגשות שמות).
+ * ========================================================================== */
+var RR_DESK_MQ = "(min-width: 900px)";
+var rrMqBound = false;
+var RR_SEARCH_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+
+function rrIsDesk() { return !!(window.matchMedia && window.matchMedia(RR_DESK_MQ).matches); }
+
+function rrCityNorm(c) {
+  c = String(c || "").trim();
+  var map = { "נס-ציונה": "נס ציונה", "ראשל\"צ": "ראשון לציון", "ראשון-לציון": "ראשון לציון" };
+  return map[c] || c;
+}
+/* תת-קבוצה מהמדריך המודפס נשמרה בייבוא בתוך note ("תת-קבוצה מהמדריך: X"). */
+function rrSubOf(card) {
+  var m = /תת-קבוצה מהמדריך:\s*([^|]+)/.exec(String(card.note || ""));
+  return m ? m[1].trim() : "";
+}
+/* תיאור אמיתי בלבד — בהרבה שורות מיובאות ה-body הוא רק העיר או השם. */
+function rrDescOf(card) {
+  var b = String(card.body || "").trim();
+  if (!b || b === card.title || b === card.city || b === rrCityNorm(card.city)) return "";
+  return b;
+}
+function rrLikes(card) { return ((rrState.reactionCounts || {})[card.id] || {}).like || 0; }
+function rrGroupMeta(name) { return RR_GROUPS.filter(function (g) { return g.name === name; })[0] || null; }
+function rrItemsOf(name) { return rrState.cards.filter(function (c) { return rrGroupOf(c) === name; }); }
+function rrLocText(c) {
+  var city = rrCityNorm(c.city);
+  return c.address ? c.address + (city ? ", " + city : "") : city;
+}
+function rrMatchesAll(c, q) {
+  var clean = function (s) { return String(s || "").toLowerCase().replace(/["'״׳\-]/g, " "); };
+  var hay = clean([c.title, c.body, c.city, rrCityNorm(c.city), c.address, c.phone, rrGroupOf(c), c.kupah, rrSubOf(c)].join(" "));
+  return clean(q).split(/\s+/).every(function (w) { return !w || hay.indexOf(w) !== -1; });
 }
 
-/* ---------- מסך הבית — חיפוש + צ'יפים + קבוצות לפי קטגוריה ---------- */
-function rrPaintHome(body) {
-  var overflow = rrOverflowGroups();
-  var cats = RR_CATEGORIES.slice();
-  var catList = rrState.homeCategory ? cats.filter(function (c) { return c.id === rrState.homeCategory; }) : cats;
-
-  body.innerHTML =
-    '<div class="rr-toolbar">' +
-      '<div class="svc-search">' +
-        '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>' +
-        '<input id="rr-q" class="field-input" placeholder="חיפוש המלצה, שם או תחום…" value="' + rrEsc(rrState.homeQuery) + '">' +
-      "</div>" +
-      '<div class="rr-chips" id="rr-chips">' +
-        '<button type="button" class="rr-chip' + (!rrState.homeCategory ? " is-on" : "") + '" data-cat="">הכול</button>' +
-        cats.map(function (c) {
-          return '<button type="button" class="rr-chip' + (rrState.homeCategory === c.id ? " is-on" : "") + '" data-cat="' + c.id + '">' +
-            c.emoji + " " + rrEsc(c.name) + "</button>";
-        }).join("") +
-      "</div>" +
-    "</div>" +
-    '<div id="rr-home"></div>';
-
-  var q = String(rrState.homeQuery || "").trim();
-  var home = body.querySelector("#rr-home");
-  var sections = catList.map(function (cat) {
-    var groups = rrGroupsForCategory(cat.id);
-    if (q) groups = groups.filter(function (g) { return g.items.some(function (it) { return rrMatchesQuery(it, q); }); });
-    if (!groups.length) {
-      if (q) return "";
-      return '<h2 class="rr-cat-head">' + cat.emoji + " " + rrEsc(cat.name) + "</h2>" +
-        '<div class="rr-empty-cat">עדיין אין קבוצות בקטגוריה זו — יתווספו עם המדריך השכונתי.</div>';
-    }
-    return '<h2 class="rr-cat-head">' + cat.emoji + " " + rrEsc(cat.name) + "</h2>" +
-      '<div class="rr-tiles">' + groups.map(function (g) { return rrTileHtml(g, cat.id); }).join("") + "</div>";
-  });
-
-  if (!rrState.homeCategory) {
-    var ov = overflow.slice();
-    if (q) ov = ov.filter(function (g) { return g.items.some(function (it) { return rrMatchesQuery(it, q); }); });
-    if (ov.length) {
-      sections.push('<h2 class="rr-cat-head">📌 קבוצות נוספות</h2><div class="rr-tiles">' +
-        ov.map(function (g) { return rrTileHtml(g, "_more"); }).join("") + "</div>");
-    }
+/* מבנה הניווט: קטגוריות → קבוצות (+ "קבוצות נוספות" ל-group לא מוכר). */
+function rrNavModel() {
+  var admin = rrCanAdminEdit();
+  var nav = RR_CATEGORIES.map(function (cat) {
+    var groups = rrGroupsForCategory(cat.id).filter(function (g) { return admin || g.items.length; });
+    return { cat: cat, groups: groups, total: groups.reduce(function (s, g) { return s + g.items.length; }, 0) };
+  }).filter(function (x) { return x.groups.length; });
+  var ov = rrOverflowGroups();
+  if (ov.length) {
+    nav.push({ cat: { id: "_more", name: "קבוצות נוספות", emoji: "📌" }, groups: ov,
+      total: ov.reduce(function (s, g) { return s + g.items.length; }, 0) });
   }
-
-  var shown = sections.filter(Boolean).join("");
-  home.innerHTML = shown || '<div class="card club-card svc-empty">לא נמצאה קבוצה שמתאימה לחיפוש.</div>';
-
-  home.querySelectorAll("[data-tile]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      rrState.view = "group";
-      rrState.groupName = btn.dataset.tile;
-      rrState.groupCategoryId = btn.dataset.tileCat;
-      rrState.groupQuery = ""; rrState.kupahFilter = "";
-      rrPaint(body);
-    });
-  });
-
-  var qEl = body.querySelector("#rr-q");
-  qEl.addEventListener("input", function () { rrState.homeQuery = qEl.value; rrPaintHome(body); });
-  body.querySelectorAll("#rr-chips [data-cat]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      rrState.homeCategory = btn.dataset.cat || null;
-      rrPaintHome(body);
-    });
-  });
+  return nav;
 }
 
-function rrTileHtml(g, catId) {
-  return '<button type="button" class="rr-tile" data-tile="' + rrEsc(g.name) + '" data-tile-cat="' + rrEsc(catId) + '">' +
-    '<span class="rr-tile__ico">' + g.emoji + "</span>" +
-    '<span class="rr-tile__name">' + rrEsc(g.name) + "</span>" +
-    '<span class="rr-tile__count">' + g.items.length + " פריטים</span>" +
-  "</button>";
-}
-
-/* ---------- מסך קבוצה — רשימת/טבלת פריטים ---------- */
-function rrPaintGroup(body) {
-  var items = rrState.cards.filter(function (c) { return rrGroupOf(c) === rrState.groupName; });
-  var isDoctorsGroup = items.some(function (c) { return !!c.kupah; });
-  var meta = RR_GROUPS.filter(function (g) { return g.name === rrState.groupName; })[0];
-  var emoji = meta ? meta.emoji : "📌";
-
-  var canRecommend = !!(window.CBA && CBA.user && CBA.user.familyId);
-
-  body.innerHTML =
-    '<div class="rr-group-head">' +
-      '<button type="button" class="btn-ghost btn-sm" id="rr-back">→ חזרה</button>' +
-      '<div class="rr-group-title">' + emoji + " " + rrEsc(rrState.groupName) + "</div>" +
-    "</div>" +
-    '<div class="rr-toolbar">' +
-      '<div class="svc-search">' +
-        '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>' +
-        '<input id="rr-gq" class="field-input" placeholder="חיפוש בקבוצה הזו…" value="' + rrEsc(rrState.groupQuery) + '">' +
-      "</div>" +
-      (isDoctorsGroup
-        ? '<select id="rr-kupah-filter" class="field-input" style="max-width:160px">' +
-            '<option value="">כל הקופות</option>' +
-            RR_KUPAH_LIST.map(function (k) { return '<option value="' + rrEsc(k) + '"' + (rrState.kupahFilter === k ? " selected" : "") + ">" + rrEsc(k) + "</option>"; }).join("") +
-          "</select>"
-        : "") +
-      '<select id="rr-sort" class="field-input" style="max-width:160px">' +
-        '<option value="name"' + (rrState.sort === "name" ? " selected" : "") + '>מיון: לפי שם</option>' +
-        '<option value="likes"' + (rrState.sort === "likes" ? " selected" : "") + '>מיון: הכי מומלץ</option>' +
-        '<option value="recent"' + (rrState.sort === "recent" ? " selected" : "") + '>מיון: עודכן לאחרונה</option>' +
-      "</select>" +
-      (canRecommend ? '<button type="button" class="btn-primary btn-sm" id="rr-add">+ הוספת המלצה</button>' : "") +
-    "</div>" +
-    '<div id="rr-list"></div>';
-
-  body.querySelector("#rr-back").addEventListener("click", function () {
-    rrState.view = "home"; rrPaint(body);
-  });
-  var gq = body.querySelector("#rr-gq");
-  gq.addEventListener("input", function () { rrState.groupQuery = gq.value; rrPaintList(body, items); });
-  var kf = body.querySelector("#rr-kupah-filter");
-  if (kf) kf.addEventListener("change", function () { rrState.kupahFilter = kf.value; rrPaintList(body, items); });
-  var sortEl = body.querySelector("#rr-sort");
-  sortEl.addEventListener("change", function () { rrState.sort = sortEl.value; rrPaintList(body, items); });
-  var addBtn = body.querySelector("#rr-add");
-  if (addBtn) addBtn.addEventListener("click", function () { rrOpenForm(null, rrState.groupName); });
-
-  rrPaintList(body, items);
-}
+function rrResetFilters() { rrState.kupahFilter = ""; rrState.subFilter = ""; rrState.cityFilter = ""; }
 
 function rrSortItems(list) {
   var out = list.slice();
   if (rrState.sort === "likes") {
-    out.sort(function (a, b) {
-      var la = (rrState.reactionCounts[a.id] || {}).like || 0;
-      var lb = (rrState.reactionCounts[b.id] || {}).like || 0;
-      return lb - la;
-    });
+    out.sort(function (a, b) { return rrLikes(b) - rrLikes(a); });
   } else if (rrState.sort === "recent") {
     out.sort(function (a, b) { return String(b.updatedAt || "") < String(a.updatedAt || "") ? -1 : 1; });
   } else {
@@ -455,68 +386,339 @@ function rrSortItems(list) {
   return out;
 }
 
-function rrPaintList(body, items) {
-  var list = document.getElementById("rr-list") || body.querySelector("#rr-list");
-  var q = String(rrState.groupQuery || "").trim();
-  var filtered = items.filter(function (c) {
-    if (!rrMatchesQuery(c, q)) return false;
+function rrFiltered(items) {
+  return rrSortItems(items.filter(function (c) {
     if (rrState.kupahFilter && c.kupah !== rrState.kupahFilter) return false;
+    if (rrState.subFilter && rrSubOf(c) !== rrState.subFilter) return false;
+    if (rrState.cityFilter && rrCityNorm(c.city) !== rrState.cityFilter) return false;
     return true;
-  });
-  filtered = rrSortItems(filtered);
-
-  if (!filtered.length) {
-    list.innerHTML = '<div class="card club-card svc-empty">' +
-      (q || rrState.kupahFilter ? "לא נמצאה המלצה שמתאימה." : "עדיין אין המלצות בקבוצה הזו — אפשר להיות הראשונים.") +
-      "</div>";
-    return;
-  }
-
-  list.innerHTML = '<div class="rr-rows">' + filtered.map(rrRowHtml).join("") + "</div>";
-
-  list.querySelectorAll("[data-open-item]").forEach(function (el) {
-    el.addEventListener("click", function () { rrOpenDrawer(el.dataset.openItem); });
-  });
-  list.querySelectorAll("[data-flag]").forEach(function (btn) {
-    btn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      var it = filtered.filter(function (c) { return c.id === btn.dataset.flag; })[0];
-      if (it) rrOpenStaleForm(it);
-    });
-  });
-  filtered.forEach(function (it) {
-    var row = list.querySelector('.rr-row[data-id="' + it.id.replace(/"/g, '\\"') + '"]');
-    var reactsEl = row && row.querySelector(".svc-card__reacts");
-    if (reactsEl) svcBindCardReacts(reactsEl, it.id, "resident");
-  });
-  /* 27.9.26 — סמלילי יצירת קשר: עוצרים את התפשטות הקליק כדי שלחיצה על
-     "התקשר"/וואטסאפ לא תפתח בטעות גם את מגירת הפרטים של השורה שמתחתם
-     (אותו דפוס בדיוק כמו כפתור "לא מעודכן" למעלה). */
-  list.querySelectorAll(".rr-cbtn").forEach(function (el) {
-    el.addEventListener("click", function (e) { e.stopPropagation(); });
-  });
-  svcBindCallButtons(list);
+  }));
 }
 
-function rrRowHtml(c) {
-  var stale = rrState.staleByCard[c.id];
-  return '<div class="rr-row" data-id="' + rrEsc(c.id) + '" data-open-item="' + rrEsc(c.id) + '">' +
-      '<div class="rr-row__main">' +
-        '<div class="rr-row__name">' + rrEsc(c.title) + "</div>" +
-        '<div class="rr-row__meta">' +
-          (c.phone ? '<span>' + rrEsc(c.phone) + "</span>" : "") +
-          (c.address ? '<span>' + rrEsc(c.address) + "</span>" : "") +
-          (c.city ? '<span>' + rrEsc(c.city) + "</span>" : "") +
-        "</div>" +
-        '<div class="rr-row__pills">' + rrAllPillsHtml(c) + "</div>" +
-        rrContactIconsHtml(c) + rrOwnerHtml(c) +
-        (stale ? '<div class="rr-row__stale">⚑ דווח כלא מעודכן · ממתין לטיפול</div>' : "") +
+function rrCounts(items, fn) {
+  var m = {};
+  items.forEach(function (c) { var k = fn(c); if (k) m[k] = (m[k] || 0) + 1; });
+  return Object.keys(m).sort(function (a, b) { return m[b] - m[a]; }).map(function (k) { return [k, m[k]]; });
+}
+
+function rrChipsHtml(items) {
+  var h = '<button type="button" class="rr2-chip' + (!rrState.kupahFilter && !rrState.subFilter ? " is-on" : "") +
+    '" data-f="all">הכול <span>' + items.length + "</span></button>";
+  rrCounts(items, function (c) { return c.kupah; }).forEach(function (k) {
+    var col = RR_KUPAH_COLORS[k[0]];
+    var on = rrState.kupahFilter === k[0];
+    h += '<button type="button" class="rr2-chip' + (on ? " is-on" : "") + '" data-kupah="' + rrEsc(k[0]) + '"' +
+      (!on && col ? ' style="background:' + col.bg + ";color:" + col.fg + ';border-color:transparent"' : "") + ">" +
+      rrEsc(k[0]) + " <span>" + k[1] + "</span></button>";
+  });
+  rrCounts(items, rrSubOf).forEach(function (s) {
+    h += '<button type="button" class="rr2-chip' + (rrState.subFilter === s[0] ? " is-on" : "") + '" data-sub="' + rrEsc(s[0]) + '">' +
+      rrEsc(s[0]) + " <span>" + s[1] + "</span></button>";
+  });
+  return h;
+}
+
+function rrSortSelectHtml() {
+  var o = function (v, t) { return '<option value="' + v + '"' + (rrState.sort === v ? " selected" : "") + ">" + t + "</option>"; };
+  return '<select id="rr-sort" class="field-input rr2-sel" aria-label="מיון">' +
+    o("name", "מיון: לפי שם") + o("likes", "מיון: הכי מומלץ") + o("recent", "מיון: עודכן לאחרונה") + "</select>";
+}
+
+function rrBindFilters(root, repaint) {
+  root.querySelectorAll("[data-f],[data-kupah],[data-sub]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (b.dataset.f) { rrState.kupahFilter = ""; rrState.subFilter = ""; }
+      if (b.dataset.kupah) { rrState.kupahFilter = rrState.kupahFilter === b.dataset.kupah ? "" : b.dataset.kupah; rrState.subFilter = ""; }
+      if (b.dataset.sub) { rrState.subFilter = rrState.subFilter === b.dataset.sub ? "" : b.dataset.sub; rrState.kupahFilter = ""; }
+      repaint();
+    });
+  });
+  var cs = root.querySelector("#rr-city");
+  if (cs) cs.addEventListener("change", function () { rrState.cityFilter = cs.value; repaint(); });
+  var ss = root.querySelector("#rr-sort");
+  if (ss) ss.addEventListener("change", function () { rrState.sort = ss.value; repaint(); });
+}
+
+function rrNameExtras(c) {
+  var n = rrLikes(c);
+  return (n ? '<span class="rr2-like" title="לייקים">👍 ' + n + "</span>" : "") +
+    (rrState.staleByCard[c.id] ? '<span class="rr2-stale" title="דווח כלא מעודכן · ממתין לטיפול">⚑</span>' : "");
+}
+
+function rrPhoneBtn(c, round) {
+  if (!c.phone) return round ? "" : '<span class="rr2-dash">—</span>';
+  if (round) {
+    return '<button type="button" class="rr-cbtn rr2-callc" data-call="' + rrEsc(c.phone) + '" aria-label="חיוג ' + rrEsc(c.phone) + '">' + svcPhoneIcon() + "</button>";
+  }
+  return '<button type="button" class="rr-cbtn rr2-phone" data-call="' + rrEsc(c.phone) + '">' + svcPhoneIcon() +
+    '<span dir="ltr">' + rrEsc(c.phone) + "</span></button>";
+}
+
+function rrTrHtml(c, showGroup) {
+  var det = [rrDescOf(c), rrSubOf(c)].filter(Boolean).join(" · ");
+  var pills = rrAllPillsHtml(c);
+  var loc = rrLocText(c);
+  return '<tr data-open-item="' + rrEsc(c.id) + '" tabindex="0">' +
+      '<td class="rr2-name">' + rrEsc(c.title) + rrNameExtras(c) + "</td>" +
+      '<td class="rr2-det"><span>' + rrEsc(det) + "</span>" + (pills ? '<span class="rr2-pills">' + pills + "</span>" : "") + "</td>" +
+      (showGroup ? '<td class="rr2-grpcol">' + rrEsc(rrGroupOf(c)) + "</td>" : "") +
+      '<td class="rr2-loc">' + (loc ? rrEsc(loc) : '<span class="rr2-dash">—</span>') + "</td>" +
+      '<td class="rr2-tel">' + rrPhoneBtn(c, false) + "</td>" +
+    "</tr>";
+}
+
+function rrMRowHtml(c, showGroup) {
+  var meta = [showGroup ? rrGroupOf(c) : "", rrDescOf(c), rrLocText(c)].filter(Boolean).join(" · ") || rrSubOf(c);
+  return '<div class="rr2-irow" data-open-item="' + rrEsc(c.id) + '" tabindex="0">' +
+      '<div class="rr2-irow__main">' +
+        '<div class="rr2-irow__name">' + rrEsc(c.title) + rrNameExtras(c) + "</div>" +
+        '<div class="rr2-irow__meta">' + rrAllPillsHtml(c) + "<span>" + rrEsc(meta) + "</span></div>" +
       "</div>" +
-      '<div class="rr-row__side">' +
-        svcCardReactsHtml(c.id) +
-        '<button type="button" class="btn-ghost btn-sm rr-flag-btn" data-flag="' + rrEsc(c.id) + '">⚑ לא מעודכן</button>' +
-      "</div>" +
+      rrPhoneBtn(c, true) +
     "</div>";
+}
+
+function rrBindRows(root) {
+  root.querySelectorAll("[data-open-item]").forEach(function (el) {
+    el.addEventListener("click", function () { rrOpenDrawer(el.dataset.openItem); });
+    el.addEventListener("keydown", function (e) { if (e.key === "Enter") rrOpenDrawer(el.dataset.openItem); });
+  });
+  /* חיוג מהשורה לא פותח גם את המגירה (אותו דפוס כמו בעבר). */
+  root.querySelectorAll(".rr-cbtn").forEach(function (el) {
+    el.addEventListener("click", function (e) { e.stopPropagation(); });
+  });
+  svcBindCallButtons(root);
+}
+
+function rrEmptyHtml(text) { return '<div class="rr2-empty">' + text + "</div>"; }
+
+function rrRenderTable(list, items, showGroup) {
+  if (!items.length) {
+    list.innerHTML = rrEmptyHtml("לא נמצאה המלצה שמתאימה. אפשר לנסות מילה אחרת או לנקות את המסננים.");
+    return;
+  }
+  list.innerHTML = '<div class="rr2-tablewrap"><table class="rr2-tbl"><thead><tr>' +
+      "<th>שם</th><th>פרטים</th>" + (showGroup ? "<th>קבוצה</th>" : "") + "<th>מיקום</th><th>טלפון</th>" +
+    "</tr></thead><tbody>" + items.map(function (c) { return rrTrHtml(c, showGroup); }).join("") + "</tbody></table></div>";
+  rrBindRows(list);
+}
+
+/* אחרי לייק במגירה — מעדכן רק את תג הלייק בשורה (בלי לצייר הכול מחדש). */
+function rrRefreshRowLike(cardId) {
+  var sel = '[data-open-item="' + String(cardId).replace(/"/g, '\\"') + '"]';
+  document.querySelectorAll(sel + " .rr2-name, " + sel + " .rr2-irow__name").forEach(function (cell) {
+    var old = cell.querySelector(".rr2-like");
+    if (old) old.remove();
+    var n = rrLikes({ id: cardId });
+    if (!n) return;
+    var s = document.createElement("span");
+    s.className = "rr2-like"; s.title = "לייקים"; s.textContent = "👍 " + n;
+    var stale = cell.querySelector(".rr2-stale");
+    cell.insertBefore(s, stale || null);
+  });
+}
+
+function rrPaint(body) {
+  rrState.lastBody = body;
+  if (!rrMqBound && window.matchMedia) {
+    rrMqBound = true;
+    var mq = window.matchMedia(RR_DESK_MQ);
+    var onChange = function () {
+      var b = rrState.lastBody;
+      if (b && document.body.contains(b) && rrState.loaded) rrPaint(b);
+    };
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else if (mq.addListener) mq.addListener(onChange);
+  }
+  if (rrIsDesk()) rrPaintDesk(body);
+  else rrPaintMobile(body);
+}
+
+/* ---------- מחשב: צד קבוע + טבלה ---------- */
+function rrPaintDesk(body) {
+  var nav = rrNavModel();
+  var all = [];
+  nav.forEach(function (x) { x.groups.forEach(function (g) { all.push(g); }); });
+  if (!rrState.groupName || !all.some(function (g) { return g.name === rrState.groupName; })) {
+    var first = all.filter(function (g) { return g.items.length; })[0] || all[0];
+    rrState.groupName = first ? first.name : "";
+  }
+  var canRecommend = !!(window.CBA && CBA.user && CBA.user.familyId);
+  var admin = rrCanAdminEdit();
+  var hasEmpty = all.some(function (g) { return !g.items.length; });
+
+  body.innerHTML =
+    '<div class="rr2">' +
+      '<aside class="rr2-side">' +
+        '<div class="rr2-side__top"><div class="svc-search rr2-search">' + RR_SEARCH_SVG +
+          '<input id="rr-q" class="field-input" placeholder="חיפוש בכל ההמלצות…" value="' + rrEsc(rrState.homeQuery) + '"></div></div>' +
+        '<nav class="rr2-side__list" aria-label="קבוצות">' +
+          nav.map(function (x) {
+            return '<div class="rr2-cat">' + x.cat.emoji + " " + rrEsc(x.cat.name) + "</div>" +
+              x.groups.map(function (g) {
+                return '<button type="button" class="rr2-grp' + (g.items.length ? "" : " is-empty") + '" data-g="' + rrEsc(g.name) + '">' +
+                  '<span class="rr2-grp__e">' + g.emoji + '</span><span class="rr2-grp__n">' + rrEsc(g.name) + "</span>" +
+                  '<span class="rr2-grp__c">' + (g.items.length || "ריק") + "</span></button>";
+              }).join("");
+          }).join("") +
+          (admin && hasEmpty ? '<div class="rr2-admin-note">קבוצות בהירות עם "ריק" מוצגות רק למנהלים ולעורכים.</div>' : "") +
+        "</nav>" +
+      "</aside>" +
+      '<section class="rr2-main">' +
+        '<div class="rr2-head"><div class="rr2-title" id="rr-title"></div>' +
+          (canRecommend ? '<button type="button" class="btn-primary btn-sm" id="rr-add">+ הוספת המלצה</button>' : "") +
+        "</div>" +
+        '<div class="rr2-filters" id="rr-filters"></div>' +
+        '<div id="rr-list"></div>' +
+      "</section>" +
+    "</div>";
+
+  function markSide() {
+    body.querySelectorAll(".rr2-grp").forEach(function (b) {
+      b.classList.toggle("is-on", !String(rrState.homeQuery || "").trim() && b.dataset.g === rrState.groupName);
+    });
+  }
+  body.querySelectorAll(".rr2-grp").forEach(function (b) {
+    b.addEventListener("click", function () {
+      rrState.groupName = b.dataset.g;
+      rrState.homeQuery = "";
+      body.querySelector("#rr-q").value = "";
+      rrResetFilters();
+      markSide();
+      rrDeskMain(body);
+    });
+  });
+  var q = body.querySelector("#rr-q");
+  q.addEventListener("input", function () { rrState.homeQuery = q.value; markSide(); rrDeskMain(body); });
+  var add = body.querySelector("#rr-add");
+  if (add) add.addEventListener("click", function () { rrOpenForm(null, rrState.groupName); });
+  markSide();
+  rrDeskMain(body);
+}
+
+function rrDeskMain(body) {
+  var q = String(rrState.homeQuery || "").trim();
+  var title = body.querySelector("#rr-title");
+  var filters = body.querySelector("#rr-filters");
+  var list = body.querySelector("#rr-list");
+  if (q) {
+    var res = rrSortItems(rrState.cards.filter(function (c) { return rrMatchesAll(c, q); }));
+    title.innerHTML = "תוצאות חיפוש<small>" + res.length + " המלצות</small>";
+    filters.innerHTML = "";
+    rrRenderTable(list, res, true);
+    return;
+  }
+  var meta = rrGroupMeta(rrState.groupName);
+  var items = rrItemsOf(rrState.groupName);
+  title.innerHTML = (meta ? meta.emoji : "📌") + " " + rrEsc(rrState.groupName) +
+    "<small>" + (items.length ? items.length + " המלצות" : "0 המלצות · רק מנהלים רואים") + "</small>";
+  if (!items.length) {
+    filters.innerHTML = "";
+    list.innerHTML = rrEmptyHtml("אין עדיין המלצות בקבוצה הזו. תושבים לא רואים אותה עד שתתווסף המלצה ראשונה.");
+    return;
+  }
+  var cities = rrCounts(items, function (c) { return rrCityNorm(c.city); });
+  filters.innerHTML = rrChipsHtml(items) + '<span class="rr2-gap"></span>' +
+    (cities.length > 1
+      ? '<select id="rr-city" class="field-input rr2-sel" aria-label="עיר"><option value="">כל הערים</option>' +
+          cities.map(function (c) { return '<option value="' + rrEsc(c[0]) + '"' + (rrState.cityFilter === c[0] ? " selected" : "") + ">" + rrEsc(c[0]) + " (" + c[1] + ")</option>"; }).join("") +
+        "</select>"
+      : "") +
+    rrSortSelectHtml();
+  rrBindFilters(filters, function () { rrDeskMain(body); });
+  rrRenderTable(list, rrFiltered(items), false);
+}
+
+/* ---------- טלפון: אריחי קטגוריה → קבוצות → שורות ---------- */
+function rrPaintMobile(body) {
+  if (rrState.view === "group" && rrState.groupName) { rrPaintMGroup(body); return; }
+  var nav = rrNavModel();
+  if (!rrState.mCat || !nav.some(function (x) { return x.cat.id === rrState.mCat; })) rrState.mCat = nav.length ? nav[0].cat.id : "";
+  var canRecommend = !!(window.CBA && CBA.user && CBA.user.familyId);
+
+  body.innerHTML =
+    '<div class="svc-search rr2-search rr2-msearch">' + RR_SEARCH_SVG +
+      '<input id="rr-q" class="field-input" placeholder="חיפוש בכל ההמלצות…" value="' + rrEsc(rrState.homeQuery) + '"></div>' +
+    '<div id="rr-mhome"></div>';
+
+  function inner() {
+    var host = body.querySelector("#rr-mhome");
+    var q = String(rrState.homeQuery || "").trim();
+    if (q) {
+      var res = rrSortItems(rrState.cards.filter(function (c) { return rrMatchesAll(c, q); }));
+      host.innerHTML = '<div class="rr2-mcount">' + res.length + " המלצות</div>" +
+        (res.length ? '<div class="rr2-glist">' + res.map(function (c) { return rrMRowHtml(c, true); }).join("") + "</div>"
+                    : rrEmptyHtml("לא נמצאה המלצה שמתאימה. אפשר לנסות מילה אחרת."));
+      rrBindRows(host);
+      return;
+    }
+    var cur = nav.filter(function (x) { return x.cat.id === rrState.mCat; })[0];
+    host.innerHTML =
+      '<div class="rr2-catgrid">' +
+        nav.map(function (x) {
+          return '<button type="button" class="rr2-catb' + (cur && x.cat.id === cur.cat.id ? " is-on" : "") + '" data-c="' + rrEsc(x.cat.id) + '">' +
+            '<span class="e">' + x.cat.emoji + '</span><span class="t">' + rrEsc(x.cat.name) + '</span><span class="n">' + x.total + "</span></button>";
+        }).join("") +
+        (canRecommend ? '<button type="button" class="rr2-catb rr2-catb--add" id="rr-add"><span class="e">＋</span><span class="t">המלצה חדשה</span></button>' : "") +
+      "</div>" +
+      (cur
+        ? '<div class="rr2-mhead">' + cur.cat.emoji + " " + rrEsc(cur.cat.name) + "</div>" +
+          '<div class="rr2-glist">' + cur.groups.map(function (g) {
+            return '<button type="button" class="rr2-grow' + (g.items.length ? "" : " is-empty") + '" data-g="' + rrEsc(g.name) + '">' +
+              '<span class="e">' + g.emoji + '</span><span class="t">' + rrEsc(g.name) + "</span>" +
+              '<span class="n">' + (g.items.length || "ריק") + '</span><span class="chev" aria-hidden="true">‹</span></button>';
+          }).join("") + "</div>"
+        : rrEmptyHtml("עדיין אין המלצות."));
+    host.querySelectorAll("[data-c]").forEach(function (b) {
+      b.addEventListener("click", function () { rrState.mCat = b.dataset.c; inner(); });
+    });
+    host.querySelectorAll("[data-g]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        rrState.view = "group"; rrState.groupName = b.dataset.g; rrResetFilters();
+        rrPaint(body);
+        window.scrollTo(0, 0);
+      });
+    });
+    var add = host.querySelector("#rr-add");
+    if (add) add.addEventListener("click", function () { rrOpenForm(null, ""); });
+  }
+  var q = body.querySelector("#rr-q");
+  q.addEventListener("input", function () { rrState.homeQuery = q.value; inner(); });
+  inner();
+}
+
+function rrPaintMGroup(body) {
+  var meta = rrGroupMeta(rrState.groupName);
+  var items = rrItemsOf(rrState.groupName);
+  var canRecommend = !!(window.CBA && CBA.user && CBA.user.familyId);
+  body.innerHTML =
+    '<div class="rr2-mtop">' +
+      '<button type="button" class="rr2-back" id="rr-back" aria-label="חזרה לקבוצות">→</button>' +
+      '<div class="rr2-mtitle">' + (meta ? meta.emoji : "📌") + " " + rrEsc(rrState.groupName) + " <small>" + items.length + "</small></div>" +
+      (canRecommend ? '<button type="button" class="btn-primary btn-sm" id="rr-add">+ המלצה</button>' : "") +
+    "</div>" +
+    (items.length ? '<div class="rr2-chiprow" id="rr-filters"></div>' : "") +
+    '<div id="rr-list"></div>';
+  body.querySelector("#rr-back").addEventListener("click", function () {
+    rrState.view = "home"; rrPaint(body); window.scrollTo(0, 0);
+  });
+  var add = body.querySelector("#rr-add");
+  if (add) add.addEventListener("click", function () { rrOpenForm(null, rrState.groupName); });
+  function inner() {
+    var f = body.querySelector("#rr-filters");
+    if (f) { f.innerHTML = rrChipsHtml(items); rrBindFilters(f, inner); }
+    var list = body.querySelector("#rr-list");
+    if (!items.length) {
+      list.innerHTML = rrEmptyHtml("אין עדיין המלצות בקבוצה הזו. תושבים לא רואים אותה עד שתתווסף המלצה ראשונה.");
+      return;
+    }
+    var fl = rrFiltered(items);
+    list.innerHTML = fl.length
+      ? '<div class="rr2-glist">' + fl.map(function (c) { return rrMRowHtml(c, false); }).join("") + "</div>"
+      : rrEmptyHtml("לא נמצאה המלצה שמתאימה.");
+    rrBindRows(list);
+  }
+  inner();
 }
 
 /* ============================================================================
@@ -638,6 +840,8 @@ function rrPaintReactions(cardId) {
         row.replaceWith(fresh);
         svcBindCardReacts(fresh, cardId, "resident");
       }
+      /* 28.9.26 — הטבלה/השורות החדשות: עדכון תג הלייק בלבד. */
+      if (typeof rrRefreshRowLike === "function") rrRefreshRowLike(cardId);
 
       var zone = document.querySelector('#rr-react-zone[data-cardid]');
       if (!zone || zone.dataset.cardid !== cardId) return;
