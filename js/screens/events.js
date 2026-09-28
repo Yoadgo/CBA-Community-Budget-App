@@ -25,11 +25,25 @@ CBA.screens.events = (function () {
     community: { he: "קהילה", cssVar: "--cat-community", icon: "📢" },
     culture: { he: "תרבות", cssVar: "--cat-culture", icon: "🎭" },
     holidays: { he: "חגי ישראל", cssVar: "--cat-holiday", icon: "🇮🇱" },
-    breaks: { he: "חופשות גנים", cssVar: "--cat-kg", icon: "👶" },
+    breaks: { he: "גנים", cssVar: "--cat-kg", icon: "👶" },
+    afterschool: { he: "צהרון", cssVar: "--cat-as", icon: "🎒" },   // 28.9 — גוון בהיר של ירוק הגנים
     birthdays: { he: "ימי הולדת", cssVar: "--cat-birthday", icon: "🎂" },
     personal: { he: "אירועים פרטיים", cssVar: "--cat-personal", icon: "🔑" }
   };
-  var CATEGORY_ORDER = ["community", "culture", "holidays", "breaks", "birthdays"];
+  var CATEGORY_ORDER = ["community", "culture", "holidays", "breaks", "afterschool", "birthdays"];
+
+  /* 28.9 — קוביית חודש בתצוגה השנתית מחולקת לאזורים (הכרעת יועד), מופרדים בקו.
+     אזור ריק לא מוצג. */
+  var YEAR_SECTIONS = [
+    { he: "גנים · צהרון", cats: ["breaks", "afterschool"] },
+    { he: "קהילה · תרבות", cats: ["community", "culture"] },
+    { he: "חגים", cats: ["holidays"] },
+    { he: "ימי הולדת", cats: ["birthdays"] }
+  ];
+  /* אילו קטגוריות מתאחדות לקפסולה אחת כשאותו אירוע חוזר בימים רצופים
+     ("סוכות (יום 1)", "(יום 2)"…, או "חופש בגנים" ב-1.10 וב-2.10).
+     ⚠️ לא קהילה/תרבות — שם לכל אירוע יש מזהה משלו לאישור הגעה ולהזמנה. */
+  var MERGE_CATS = { holidays: 1, breaks: 1, afterschool: 1 };
 
   const HEBREW_MONTHS = [
     "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
@@ -71,6 +85,88 @@ CBA.screens.events = (function () {
     var x = new Date(d);
     x.setHours(0, 0, 0, 0);
     return x;
+  }
+
+  /* ==========================================================================
+   *  אירועים של כמה ימים (28.9) — "קפסולה" אחת במקום שבב לכל יום
+   * --------------------------------------------------------------------------
+   *  lastDay = היום האחרון (כולל) שהאירוע מכסה. מחושב מ-end שהשרת שולח
+   *  (בסוף בלעדי: יום שלם שנגמר בחצות של מחר = יום אחד). בלי end — יום אחד.
+   * ========================================================================== */
+  var DAY_MS = 86400000;
+  function addDaysEv(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function computeLastDay(start, end) {
+    var s = startOfDay(start);
+    if (!end || isNaN(end.getTime())) return s;
+    var l = startOfDay(new Date(end.getTime() - 1));
+    return l > s ? l : s;
+  }
+  function evLastDay(e) {
+    if (e.lastDay) return e.lastDay;
+    return computeLastDay(e.date, e.end ? new Date(e.end) : null);
+  }
+  function isMultiDay(e) { return evLastDay(e).getTime() > startOfDay(e.date).getTime(); }
+  function evCovers(e, d) {
+    var t = startOfDay(d).getTime();
+    return t >= startOfDay(e.date).getTime() && t <= evLastDay(e).getTime();
+  }
+  function evOverlaps(e, from, to) {
+    return startOfDay(e.date) <= to && evLastDay(e) >= startOfDay(from);
+  }
+  /* "11–13" באותו חודש, "25.9–2.10" בין חודשים, "22" ליום אחד (withMonth: "22.9"). */
+  function rangeLabel(e, withMonth) {
+    var s = e.date, l = evLastDay(e);
+    var sd = s.getDate() + (withMonth ? "." + (s.getMonth() + 1) : "");
+    if (!isMultiDay(e)) return sd;
+    if (l.getMonth() === s.getMonth() && l.getFullYear() === s.getFullYear()) {
+      return s.getDate() + "–" + l.getDate() + (withMonth ? "." + (l.getMonth() + 1) : "");
+    }
+    return s.getDate() + "." + (s.getMonth() + 1) + "–" + l.getDate() + "." + (l.getMonth() + 1);
+  }
+
+  /* איחוד רצף: אותה קטגוריה (MERGE_CATS), אותו שם בסיס (בלי "(יום N)"),
+     ימים רצופים או חופפים ⇒ אירוע אחד. שם כפול "סוכות (יום 7) / הושענא רבה":
+     החלק הראשון מצטרף לרצף, והשאר נשאר אירוע נפרד לאותו יום. */
+  function seriesBase(title) {
+    var first = String(title || "").split(" / ")[0];
+    var m = /^(.*?)\s*\(יום \d+\)$/.exec(first);
+    return (m ? m[1] : first).trim();
+  }
+  function mergeSeries(list) {
+    var out = [], groups = {};
+    list.forEach(function (e) {
+      if (!MERGE_CATS[e.category]) { out.push(e); return; }
+      var parts = String(e.title || "").split(" / ");
+      if (parts.length > 1) {
+        out.push(Object.assign({}, e, { id: e.id + "~2", title: parts.slice(1).join(" / "),
+                                        lastDay: startOfDay(e.date), aliasOf: e.id }));
+      }
+      var k = e.category + "|" + seriesBase(e.title);
+      (groups[k] = groups[k] || []).push(e);
+    });
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k].sort(function (a, b) { return a.date - b.date; });
+      var cur = null;
+      g.forEach(function (e) {
+        var s = startOfDay(e.date), l = evLastDay(e);
+        if (cur && s.getTime() <= addDaysEv(cur.lastDay, 1).getTime()) {
+          if (l > cur.lastDay) cur.lastDay = l;
+          cur.memberIds.push(e.id);
+          cur.allDay = cur.allDay && e.allDay !== false;
+          return;
+        }
+        cur = Object.assign({}, e, { title: seriesBase(e.title) || e.title, lastDay: l, memberIds: [e.id] });
+        out.push(cur);
+      });
+    });
+    /* רצף של יום אחד נשאר עם השם המקורי ("ראש השנה (יום 2)" לבד — כפי שהוא) */
+    out.forEach(function (e) {
+      if (e.memberIds && e.memberIds.length === 1 && !isMultiDay(e)) {
+        var orig = list.filter(function (x) { return x.id === e.memberIds[0]; })[0];
+        if (orig) e.title = String(orig.title).split(" / ")[0];
+      }
+    });
+    return out.sort(function (a, b) { return a.date - b.date; });
   }
 
   function isCategoryActive(cat) {
@@ -171,13 +267,19 @@ CBA.screens.events = (function () {
           id: e.id,
           title: e.title,
           date: new Date(e.date),
+          end: e.end ? new Date(e.end) : null,   // 28.9 — אירוע של כמה ימים
           allDay: e.allDay !== false,   // 28.9 — כדי להציג שעה לאירוע עם שעה
           category: e.category,
           description: e.description || "",
           location: e.location || ""
         };
-        state.eventsById[ev.id] = ev;
+        ev.lastDay = computeLastDay(ev.date, ev.end);
         return ev;
+      });
+      state.allEvents = mergeSeries(state.allEvents);
+      state.allEvents.forEach(function (ev) {
+        state.eventsById[ev.id] = ev;
+        (ev.memberIds || []).forEach(function (id) { if (!state.eventsById[id]) state.eventsById[id] = ev; });
       });
       callback();
       // ימי הולדת — ברקע, ואז ציור חוזר (ר' loadBirthdayEvents)
@@ -279,8 +381,7 @@ CBA.screens.events = (function () {
 
   function googleAddUrl(ev) {
     var start = ev.date;
-    var end = new Date(start);
-    end.setDate(end.getDate() + 1);
+    var end = addDaysEv(evLastDay(ev), 1);   // 28.9 — אירוע של כמה ימים
     var params = new URLSearchParams({
       action: "TEMPLATE",
       text: ev.title,
@@ -293,8 +394,7 @@ CBA.screens.events = (function () {
 
   function appleIcsDataUri(ev) {
     var start = ev.date;
-    var end = new Date(start);
-    end.setDate(end.getDate() + 1);
+    var end = addDaysEv(evLastDay(ev), 1);
     var lines = [
       "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CBA//Events//HE",
       "BEGIN:VEVENT",
@@ -442,7 +542,7 @@ CBA.screens.events = (function () {
   function digestHTML(monthEvents) {
     var today = startOfDay(new Date());
     var upcoming = monthEvents
-      .filter(function (e) { return startOfDay(e.date) >= today; })
+      .filter(function (e) { return evLastDay(e) >= today; })
       .sort(function (a, b) { return a.date - b.date; })
       .slice(0, 4);
     if (!upcoming.length) upcoming = monthEvents.slice().sort(function (a, b) { return a.date - b.date; }).slice(0, 4);
@@ -452,7 +552,7 @@ CBA.screens.events = (function () {
       '<div class="ttl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>מה קורה החודש</div>' +
       '<div class="digest-list">' +
       upcoming.map(function (e) {
-        return '<div class="digest-item"><span class="date">' + e.date.getDate() + '.' + (e.date.getMonth() + 1) + '</span>' +
+        return '<div class="digest-item"><span class="date" dir="ltr">' + rangeLabel(e, true) + '</span>' +
           '<span class="t">' + esc(e.title) + '</span></div>';
       }).join("") +
       '</div></div>';
@@ -464,9 +564,8 @@ CBA.screens.events = (function () {
   function renderMonthlyView(container, prefixHTML) {
     var month = state.currentMonth.getMonth();
     var year = state.currentMonth.getFullYear();
-    var monthEventsAll = state.allEvents.filter(function (e) {
-      return e.date.getMonth() === month && e.date.getFullYear() === year;
-    });
+    var mFrom = new Date(year, month, 1), mTo = new Date(year, month + 1, 0);
+    var monthEventsAll = state.allEvents.filter(function (e) { return evOverlaps(e, mFrom, mTo); });
     var monthEvents = filterByActiveCategories(monthEventsAll);
 
     var html = (prefixHTML || demoBannerHTML()) +
@@ -507,46 +606,69 @@ CBA.screens.events = (function () {
       '</div>' +
       '<div class="month-grid">';
 
-    var current = new Date(startDate);
     var today = new Date();
     var selected = state.selectedDate;
+    /* 🔴 23.9 — גודל קבוע (בקשת יועד): לכל היותר MAX_DAY שורות אירועים ביום,
+       ואז "+N נוספים". המספר נלקח מ-homeSchedule כשהוא טעון.
+       28.9 — שבוע = שורה אחת: 7 תאי יום + שכבת "קפסולות" מעליהם. אירוע של
+       כמה ימים הוא קפסולה אחת שנמתחת על פני הימים, ואם הוא חוצה שבוע —
+       ממשיך בשורה הבאה (קצה ישר בצד ההמשך). הקפסולות לא תופסות לחיצות —
+       הלחיצה עוברת ליום שמתחת. */
+    var MAX_DAY = (window.CBA && CBA.homeSchedule && CBA.homeSchedule.MAX_CHIPS) || 2;
+    var lastOfMonth = new Date(year, month + 1, 0);
+    var weekStart = new Date(startDate);
 
-    while (current.getMonth() === month || current < new Date(year, month + 1, 1)) {
-      var isThisMonth = current.getMonth() === month;
-      var isToday = current.toDateString() === today.toDateString();
-      var isSelected = selected && current.toDateString() === selected.toDateString();
-
-      var dayEvents = monthEvents.filter(function (e) {
-        return e.date.toDateString() === current.toDateString();
+    while (weekStart <= lastOfMonth) {
+      var weekEnd = addDaysEv(weekStart, 6);
+      var segs = [];
+      monthEvents.forEach(function (e) {
+        if (!evOverlaps(e, weekStart, weekEnd)) return;
+        var s0 = startOfDay(e.date), l0 = evLastDay(e);
+        var s1 = s0 < weekStart ? weekStart : s0, l1 = l0 > weekEnd ? weekEnd : l0;
+        segs.push({ e: e, c1: Math.round((s1 - weekStart) / DAY_MS), c2: Math.round((startOfDay(l1) - weekStart) / DAY_MS),
+                    before: s0 < weekStart, after: l0 > weekEnd });
+      });
+      segs.sort(function (a, b) {
+        return (a.c1 - b.c1) || ((b.c2 - b.c1) - (a.c2 - a.c1)) ||
+          (CATEGORY_ORDER.indexOf(a.e.category) - CATEGORY_ORDER.indexOf(b.e.category)) || (a.e.date - b.e.date);
+      });
+      var lanes = [], hidden = [0, 0, 0, 0, 0, 0, 0], bars = "";
+      segs.forEach(function (g) {
+        var lane = -1;
+        for (var L = 0; L < MAX_DAY && lane < 0; L++) {
+          lanes[L] = lanes[L] || [];
+          var free = true;
+          for (var c = g.c1; c <= g.c2; c++) if (lanes[L][c]) { free = false; break; }
+          if (free) lane = L;
+        }
+        if (lane < 0) { for (var h = g.c1; h <= g.c2; h++) hidden[h]++; return; }
+        for (var c2 = g.c1; c2 <= g.c2; c2++) lanes[lane][c2] = true;
+        var cat = CATEGORIES[g.e.category] || CATEGORIES.personal;
+        var multi = g.c2 > g.c1 || g.before || g.after;
+        bars += '<div class="wk-bar' + (multi ? " is-span" : "") + (g.before ? " cont-before" : "") + (g.after ? " cont-after" : "") +
+          '" style="grid-column:' + (g.c1 + 1) + ' / ' + (g.c2 + 2) + ';grid-row:' + (lane + 1) +
+          ';background:var(' + cat.cssVar + '-tint)">' +
+          (g.before ? "" : '<i style="background:var(' + cat.cssVar + ')"></i>') +
+          '<span class="t" dir="auto">' + esc(g.e.title) + '</span></div>';
       });
 
-      var dayHTML = '<div class="day' +
-        (!isThisMonth ? " muted" : "") +
-        (isToday ? " today" : "") +
-        (isSelected ? " selected" : "") +
-        '" data-date="' + current.toISOString() + '">' +
-        '<span class="num">' + current.getDate() + '</span>';
-
-      /* 🔴 23.9 — גודל קבוע, אותו כלל של הלו"ז בעמוד הבית (בקשת יועד): לכל
-         היותר MAX_DAY שבבים, בשורה אחת כל אחד, ואז "+N נוספים". התא לא גדל
-         לפי התוכן (height ולא min-height ב-events.css). המספר נלקח מ-homeSchedule
-         כשהוא טעון — מקור אחד לשני המסכים. */
-      var MAX_DAY = (window.CBA && CBA.homeSchedule && CBA.homeSchedule.MAX_CHIPS) || 2;
-      dayHTML += dayEvents.slice(0, MAX_DAY).map(function (e) {
-        var cat = CATEGORIES[e.category] || CATEGORIES.personal;
-        return '<div class="ev" style="background:var(' + cat.cssVar + '-tint)" title="' + esc(e.title) + '">' +
-          '<i style="background:var(' + cat.cssVar + ')"></i><span class="t" dir="auto">' + esc(e.title) + '</span></div>';
-      }).join("");
-
-      if (dayEvents.length > MAX_DAY) {
-        var extra = dayEvents.length - MAX_DAY;
-        dayHTML += '<div class="more">' + (extra === 1 ? "+1 נוסף" : "+" + extra + " נוספים") + '</div>';
+      html += '<div class="wk-row">';
+      for (var i = 0; i < 7; i++) {
+        var current = addDaysEv(weekStart, i);
+        var isThisMonth = current.getMonth() === month;
+        var isToday = current.toDateString() === today.toDateString();
+        var isSelected = selected && current.toDateString() === selected.toDateString();
+        html += '<div class="day' +
+          (!isThisMonth ? " muted" : "") +
+          (isToday ? " today" : "") +
+          (isSelected ? " selected" : "") +
+          '" data-date="' + current.toISOString() + '">' +
+          '<span class="num">' + current.getDate() + '</span>' +
+          (hidden[i] ? '<div class="more">' + (hidden[i] === 1 ? "+1 נוסף" : "+" + hidden[i] + " נוספים") + '</div>' : "") +
+          '</div>';
       }
-
-      dayHTML += '</div>';
-
-      html += dayHTML;
-      current.setDate(current.getDate() + 1);
+      html += '<div class="wk-bars" aria-hidden="true">' + bars + '</div></div>';
+      weekStart = addDaysEv(weekStart, 7);
     }
 
     html += '</div>';
@@ -566,9 +688,7 @@ CBA.screens.events = (function () {
         '<h3>בחרו יום</h3><div class="sub">לחצו על יום בלוח כדי לראות פרטים</div>' +
         '</aside>';
     }
-    var dayEvents = monthEvents.filter(function (e) {
-      return e.date.toDateString() === date.toDateString();
-    });
+    var dayEvents = monthEvents.filter(function (e) { return evCovers(e, date); });
 
     var html = '<aside class="side-panel lg" dir="rtl">' +
       '<h3>' + HEBREW_WEEKDAYS[date.getDay()] + ', ' + date.getDate() + ' ב' +
@@ -583,7 +703,7 @@ CBA.screens.events = (function () {
         var rsvpOpen = !!state.rsvpEnabledIds[e.id];
         html += '<div class="ev-row" data-event-id="' + esc(e.id) + '">' +
           '<div class="bar" style="background:var(' + cat.cssVar + ')"></div>' +
-          '<div class="time">' + (e.allDay === false ? pad2(e.date.getHours()) + ":" + pad2(e.date.getMinutes()) : "כל היום") + '</div>' +
+          '<div class="time">' + (isMultiDay(e) ? '<span dir="ltr">' + rangeLabel(e, true) + '</span>' : e.allDay === false ? pad2(e.date.getHours()) + ":" + pad2(e.date.getMinutes()) : "כל היום") + '</div>' +
           '<div class="body">' +
           '<div class="ttl2">' + esc(e.title) + '</div>' +
           '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
@@ -681,31 +801,36 @@ CBA.screens.events = (function () {
 
     for (var m = 0; m < 12; m++) {
       var monthStart = new Date(year, m, 1);
-      var monthEnd = new Date(year, m + 1, 0, 23, 59, 59);
+      var monthEnd = new Date(year, m + 1, 0);
       var monthEvents = allEventsActive.filter(function (e) {
-        return e.date >= monthStart && e.date <= monthEnd;
+        return evOverlaps(e, monthStart, monthEnd);
       }).sort(function (a, b) { return a.date - b.date; });
 
       var isCurrentMonth = m === new Date().getMonth() && year === new Date().getFullYear();
-      var CAP = 6;
-      var shown = monthEvents.slice(0, CAP);
-      var rest = monthEvents.length - shown.length;
-
       html += '<div class="cube' + (isCurrentMonth ? " current" : "") + '" data-month="' + m + '">' +
         '<div class="ch"><span>' + HEBREW_MONTHS[m] + '</span>' +
         (isCurrentMonth ? '<em>עכשיו</em>' : "") +
-        '</div><ul>';
+        '</div>';
 
-      shown.forEach(function (e) {
-        var cat = CATEGORIES[e.category] || CATEGORIES.personal;
-        html += '<li><i style="background:var(' + cat.cssVar + ')"></i>' +
-          '<span class="tt">' + esc(e.title) + '</span>' +
-          '<span class="dd">(' + e.date.getDate() + ')</span></li>';
+      /* 28.9 — אזורים מופרדים בקו (YEAR_SECTIONS). עד 3 שורות לאזור. */
+      var CAP = 3, any = false;
+      YEAR_SECTIONS.forEach(function (sec) {
+        var list = monthEvents.filter(function (e) { return sec.cats.indexOf(e.category) !== -1; });
+        if (!list.length) return;
+        any = true;
+        var rest = list.length - CAP;
+        html += '<div class="cube-sec"><div class="cube-sec__h">' + esc(sec.he) + '</div><ul>';
+        list.slice(0, CAP).forEach(function (e) {
+          var cat = CATEGORIES[e.category] || CATEGORIES.personal;
+          var crosses = startOfDay(e.date) < monthStart || evLastDay(e) > monthEnd;
+          html += '<li><i style="background:var(' + cat.cssVar + ')"></i>' +
+            '<span class="tt">' + esc(e.title) + '</span>' +
+            '<span class="dd" dir="ltr">' + rangeLabel(e, crosses) + '</span></li>';
+        });
+        html += '</ul>' + (rest > 0 ? '<div class="more">+' + rest + ' נוספים</div>' : "") + '</div>';
       });
-
-      if (!shown.length) html += '<li class="no-events"><span class="tt" style="color:var(--text-muted)">אין אירועים</span></li>';
-
-      html += '</ul>' + (rest > 0 ? '<div class="more">+' + rest + ' נוספים</div>' : "") + '</div>';
+      if (!any) html += '<ul><li class="no-events"><span class="tt" style="color:var(--text-muted)">אין אירועים</span></li></ul>';
+      html += '</div>';
     }
 
     html += '</div></div>';
@@ -749,8 +874,8 @@ CBA.screens.events = (function () {
     var month = state.currentMonth.getMonth();
     var year = state.currentMonth.getFullYear();
     var monthStart = new Date(year, month, 1);
-    var monthEnd = new Date(year, month + 1, 0, 23, 59, 59);
-    return state.allEvents.filter(function (e) { return e.date >= monthStart && e.date <= monthEnd; });
+    var monthEnd = new Date(year, month + 1, 0);
+    return state.allEvents.filter(function (e) { return evOverlaps(e, monthStart, monthEnd); });
   }
 
   function renderPrivateEventsPanel() {
@@ -787,7 +912,7 @@ CBA.screens.events = (function () {
 
     var today = startOfDay(new Date());
     var visibleEvents = state.showAllMonth ? monthEvents :
-      monthEvents.filter(function (e) { return startOfDay(e.date) >= today; });
+      monthEvents.filter(function (e) { return evLastDay(e) >= today; });
     var hiddenCount = monthEvents.length - visibleEvents.length;
 
     var html = '<div class="agenda-list" dir="rtl">';
@@ -800,8 +925,11 @@ CBA.screens.events = (function () {
       html += '<div class="empty-agenda">אין אירועים קרובים בחודש זה</div>';
     } else {
       var grouped = {};
+      var agFrom = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth(), 1);
+      if (!state.showAllMonth && today > agFrom) agFrom = today;
       visibleEvents.forEach(function (e) {
-        var key = e.date.toDateString();
+        /* 28.9 — אירוע של כמה ימים שכבר התחיל: מופיע תחת היום הראשון שמוצג */
+        var key = (startOfDay(e.date) < agFrom ? agFrom : startOfDay(e.date)).toDateString();
         if (!grouped[key]) grouped[key] = [];
         grouped[key].push(e);
       });
@@ -824,7 +952,8 @@ CBA.screens.events = (function () {
             '<div class="time">' + cat.icon + '</div>' +
             '<div class="body">' +
             '<div class="ttl2">' + esc(e.title) + '</div>' +
-            '<div class="meta">' + esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
+            '<div class="meta">' + (isMultiDay(e) ? '<span dir="ltr">' + rangeLabel(e, true) + '</span> · ' : "") +
+            esc(cat.he) + (e.location ? " · 📍 " + esc(e.location) : "") + rsvpCountHTML(e.id) + '</div>' +
             extrasHTML(e, true) +
             '<div class="ev-actions">' +
             (e.category !== "personal" ? addCalHTML(e.id) + shareBtnHTML(e.id) : "") +

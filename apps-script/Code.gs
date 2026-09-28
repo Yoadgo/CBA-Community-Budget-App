@@ -36,7 +36,9 @@ var EVENTS_CALENDARS = {
   holidays:  { id: 'iw.judaism#holiday@group.v.calendar.google.com', he: 'חגי ישראל' },
   community: { id: 'c_20d29a7fa14e37df7736aba870ea77a4a2cc171823e0d9f8dae9f91d8494e808@group.calendar.google.com', he: 'אירועי קהילה' },
   culture:   { id: 'c_b8f2bbdbd2c302d5f7e7752775ff98b46a30bdeec052a7273132e9e84580f2ad@group.calendar.google.com', he: 'אירועי תרבות' },
-  breaks:    { id: 'c_5e5ef982e72a5534b748717ee597f06cfb5b9782e2f8fd0bbb3526ce68b11a7e@group.calendar.google.com', he: 'חופשות גנים' }
+  breaks:    { id: 'c_5e5ef982e72a5534b748717ee597f06cfb5b9782e2f8fd0bbb3526ce68b11a7e@group.calendar.google.com', he: 'גנים' },
+  // 28.9.26 — יומן "צהרון" (חשבון הגזבר, אומת בהגדרות היומן). שני גוונים של הירוק של הגנים בלקוח.
+  afterschool: { id: 'c_bd553d8086779d358842d632fe0f966788b0b9fc3c6d3dfda4cc9112187e5d2a@group.calendar.google.com', he: 'צהרון' }
 };
 /* לוח האירועים ב-Firestore (2026-09-23) — מסמך לשנה, `eventsCal/{year}`.
    מראה של היומנים למעלה (מודל א': היומן הוא המקור), כדי שעמוד הבית ומסך
@@ -2368,6 +2370,9 @@ function eventsForYear_(year) {
         id: ev.getId(),
         title: ev.getTitle(),
         date: ev.getStartTime().toISOString(),
+        // 28.9.26 — סוף האירוע, כדי שאירוע של כמה ימים יוצג כקפסולה אחת.
+        // ביום שלם גוגל מחזיר סוף בלעדי (חצות של היום שאחרי).
+        end: ev.getEndTime().toISOString(),
         allDay: ev.isAllDayEvent(),
         category: catKey,
         description: ev.getDescription() || '',
@@ -2465,6 +2470,7 @@ function eventsWriteFs_(year, events) {
       id: String(e.id || ''),
       title: String(e.title || '').substring(0, 200),
       date: String(e.date || ''),
+      end: String(e.end || ''),
       allDay: !!e.allDay,
       category: String(e.category || ''),
       location: String(e.location || '').substring(0, 200),

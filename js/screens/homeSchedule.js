@@ -54,14 +54,15 @@ CBA.homeSchedule = (function () {
     community: { he: "קהילה",       k: "com" },
     culture:   { he: "תרבות",       k: "cul" },
     holidays:  { he: "חגי ישראל",   k: "hol" },
-    breaks:    { he: "חופשות גנים", k: "kg"  },
+    breaks:    { he: "גנים",        k: "kg"  },
+    afterschool: { he: "צהרון",      k: "as"  },   // 28.9 — גוון בהיר של צבע הגנים
     birthdays: { he: "ימי הולדת",   k: "bd"  },
     personal:  { he: "שלי",         k: "per" }
   };
   /* סדר בתוך יום: מה שלי ומה שדורש החלטה (להגיע?) קודם; ימי הולדת אחרונים,
      כי הם אלה שיתמלאו ויידחקו ל-"+N". */
-  var RANK = { personal: 0, community: 1, culture: 2, holidays: 3, breaks: 4, birthdays: 5 };
-  var LEGEND = ["community", "culture", "holidays", "breaks", "personal"];
+  var RANK = { personal: 0, community: 1, culture: 2, holidays: 3, breaks: 4, afterschool: 5, birthdays: 6 };
+  var LEGEND = ["community", "culture", "holidays", "breaks", "afterschool", "personal"];
   var TIMED = { community: 1, culture: 1, personal: 1 };   // רק לאלה שעה מעניינת
   var WD_SHORT = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
   var WD_LONG = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
@@ -165,6 +166,7 @@ CBA.homeSchedule = (function () {
       if (isNaN(d.getTime())) return;
       var cat = CAT[e.category] ? e.category : "community";
       out.push({ id: String(e.id || ""), title: String(e.title || ""), date: d, allDay: !!e.allDay,
+                 end: e.end ? String(e.end) : "",   // 28.9 — אירוע של כמה ימים (ר' byDay)
                  cat: cat, location: String(e.location || ""), description: String(e.description || "") });
     });
     return out;
@@ -247,7 +249,16 @@ CBA.homeSchedule = (function () {
   function allEvents() { return (st.ev || []).concat(st.personal || []); }
   function byDay(list) {
     var m = {};
-    list.forEach(function (e) { var k = dkey(e.date); (m[k] = m[k] || []).push(e); });
+    /* 28.9 — אירוע של כמה ימים (end) מופיע בכל אחד מימיו, עד 45 יום. */
+    list.forEach(function (e) {
+      var s0 = new Date(e.date); s0.setHours(0, 0, 0, 0);
+      var n = 0;
+      if (e.end) {
+        var l0 = new Date(new Date(e.end).getTime() - 1); l0.setHours(0, 0, 0, 0);
+        if (!isNaN(l0.getTime())) n = Math.max(0, Math.min(45, Math.round((l0 - s0) / 86400000)));
+      }
+      for (var i = 0; i <= n; i++) { var k = dkey(addDays(s0, i)); (m[k] = m[k] || []).push(e); }
+    });
     Object.keys(m).forEach(function (k) {
       m[k].sort(function (a, b) {
         return (RANK[a.cat] - RANK[b.cat]) || (a.date - b.date) || a.title.localeCompare(b.title, "he");
@@ -342,7 +353,7 @@ CBA.homeSchedule = (function () {
   function laterHTML(today) {
     var from = addDays(today, 14 - today.getDay());
     var later = (st.ev || []).filter(function (e) {
-      return e.date >= from && (e.cat === "community" || e.cat === "culture" || e.cat === "breaks");
+      return e.date >= from && (e.cat === "community" || e.cat === "culture" || e.cat === "breaks" || e.cat === "afterschool");
     }).sort(function (a, b) { return a.date - b.date; }).slice(0, LATER_N);
     if (!later.length) return "";
     return '<div class="hm-later"><span class="hm-later__k">בהמשך</span><div class="hm-later__row">' +

@@ -20,6 +20,7 @@
 .hm-dot--cul { background: #0D9488; }
 .hm-dot--hol { background: #C2760A; }
 .hm-dot--kg  { background: #7C5CC4; }
+.hm-dot--as  { background: #B39DEB; }   /* 28.9 — צהרון: גוון בהיר של הגנים */
 .hm-dot--bd  { background: #DB2777; }
 .hm-dot--per { background: #0EA5E9; }
 
@@ -70,6 +71,7 @@
 .hm-ev--cul { background: rgba(94,187,178,.30); }
 .hm-ev--hol { background: rgba(234,179,110,.32); }
 .hm-ev--kg  { background: rgba(167,139,250,.28); }
+.hm-ev--as  { background: rgba(196,181,253,.24); }
 .hm-ev--bd  { background: rgba(219,140,175,.28); }
 .hm-ev--per { background: rgba(147,197,235,.36); }
 

@@ -28,7 +28,7 @@ const RULES = R('firestore.rules');
 /* ---------------- שרת ---------------- */
 let written, triggers, created, logs, calEvents, authorizeNeed;
 function fakeEv(o) {
-  return { getId: () => o.id, getTitle: () => o.title, getStartTime: () => new Date(o.date),
+  return { getId: () => o.id, getTitle: () => o.title, getStartTime: () => new Date(o.date), getEndTime: () => new Date(o.end || (new Date(o.date).getTime() + 86400000)),
            isAllDayEvent: () => !!o.allDay, getDescription: () => o.description || '',
            getLocation: () => o.location || '' };
 }
@@ -68,8 +68,8 @@ calEvents[CAL.community.id] = [{ id: 'c1', title: 'ערב קהילה', date: '20
 calEvents[CAL.holidays.id]  = [{ id: 'h1', title: 'סוכות', date: '2026-10-07T00:00:00Z', allDay: true }];
 const evs = sb.eventsForYear_(2026);
 ok('eventsForYear_ מאחד את היומנים', evs.length === 2 && evs.some(e => e.category === 'community') && evs.some(e => e.category === 'holidays'));
-ok('שדות: id/title/date/allDay/category/description/location',
-   Object.keys(evs[0]).sort().join(',') === 'allDay,category,date,description,id,location,title', Object.keys(evs[0]).join(','));
+ok('שדות: id/title/date/end/allDay/category/description/location (28.9: end לקפסולות)',
+   Object.keys(evs[0]).sort().join(',') === 'allDay,category,date,description,end,id,location,title', Object.keys(evs[0]).join(','));
 
 reset();
 const n = sb.eventsWriteFs_(2026, [
@@ -112,11 +112,11 @@ ok('⚠️ אותו חישוב כמו neededYears בלקוח (90 יום)', /addD
 section('4. 🔑 טריגר יומן — לא "פעם בשעה"');
 reset();
 let t = sb.ensureEventsTriggers_();
-ok('הותקנו שלושה טריגרים (קהילה/תרבות/גנים)', t.made === 3 && created.length === 3, JSON.stringify(t));
+ok('הותקנו ארבעה טריגרים (קהילה/תרבות/גנים/צהרון — 28.9)', t.made === 4 && created.length === 4, JSON.stringify(t));
 ok('⚠️ לא על יומן החגים (ציבורי של Google)', !created.some(c => c.id === CAL.holidays.id));
 ok('המטפל הוא eventsCalendarChanged', created.every(c => c.fn === 'eventsCalendarChanged'));
 t = sb.ensureEventsTriggers_();
-ok('🔴 אידמפוטנטי — הרצה שנייה לא מכפילה', t.made === 0 && created.length === 3);
+ok('🔴 אידמפוטנטי — הרצה שנייה לא מכפילה', t.made === 0 && created.length === 4);
 ok('eventsCalendarChanged פונקציה ציבורית (בלי קו תחתון — טריגר חייב לראות אותה)',
    /\nfunction eventsCalendarChanged\(e\)/.test(GS));
 const hourly = (GS.match(/function hourlyJobsRun_\(\) \{[\s\S]*?\n\}/) || [''])[0];
@@ -211,7 +211,7 @@ ok('קריאה בלבד', /match \/eventsCal\/\{year\} \{\s*allow read: if canSe
 section('9. מסך האירועים — גודל קבוע, כמו בעמוד הבית');
 const EVCSS = R('css/events.css');
 ok('אותו מקסימום אירועים ליום כמו בבית (MAX_CHIPS)', /CBA\.homeSchedule\.MAX_CHIPS\) \|\| 2/.test(EV));
-ok('slice(0, MAX_DAY) ו"+N נוספים"', /dayEvents\.slice\(0, MAX_DAY\)/.test(EV) && /"\+1 נוסף" : "\+" \+ extra \+ " נוספים"/.test(EV));
+ok('עד MAX_DAY שורות (נתיבים) ו"+N נוספים" (28.9: קפסולות)', /L < MAX_DAY/.test(EV) && /"\+1 נוסף" : "\+" \+ hidden\[i\] \+ " נוספים"/.test(EV));
 ok('תא בגובה קבוע (height ולא min-height)', /\.day \{[^}]*height: var\(--ev-day-h, 122px\)/.test(EVCSS));
 ok('ובמובייל גובה משלו', /--ev-day-h: 64px/.test(EVCSS));
 

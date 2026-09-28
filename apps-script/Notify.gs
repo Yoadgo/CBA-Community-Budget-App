@@ -1065,7 +1065,7 @@ function ensureEventMessagesTrigger_() {
  *  ⚠️ מה/למי/באיזה ערוץ — לפי השורה "evt-week" בטבלה, כמו כל טריגר.
  * ------------------------------------------------------------------------- */
 var EVT_WEEK_FROM_HOUR = 21;
-var EVT_WEEK_CATS = { community: '', culture: '', holidays: 'חג', breaks: 'חופשת גנים' };
+var EVT_WEEK_CATS = { community: '', culture: '', holidays: 'חג', breaks: 'גנים', afterschool: 'צהרון' };
 var EVT_WEEK_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
 
 /** האם עכשיו הזמן — ואם כן, מאיזה רגע סופרים את יום ראשון. */
@@ -1573,7 +1573,7 @@ var CX_ST = { live: 'פעיל', paused: 'מושהה', pending: 'ממתין לא�
 var CX_ROLE_LABEL = { all: 'כל התושבים', a: 'מנהל התחום', g: 'הגנן', s: 'מנהל-על' };
 var CX_TYPES = ['daily', 'weekly', 'monthly', 'once', 'cal'];
 var CX_CAL_CATS = { any: 'כל היומנים', community: 'אירועי קהילה', culture: 'אירועי תרבות',
-                    holidays: 'חגים', breaks: 'חופשות גנים' };
+                    holidays: 'חגים', breaks: 'גנים', afterschool: 'צהרון' };
 var CX_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 var CX_VARS = { base: ['תאריך', 'יום'], cal: ['שם האירוע', 'תאריך', 'מיקום', 'ימים'] };
 /* "סיכום חדש" — מה אפשר לספור בכל תחום. [מזהה, שם (= שם המשתנה בנוסח), רשימה?]
