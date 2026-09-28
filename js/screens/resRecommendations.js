@@ -342,6 +342,11 @@ function rrSubOf(card) {
 function rrDescOf(card) {
   var b = String(card.body || "").trim();
   if (!b || b === card.title || b === card.city || b === rrCityNorm(card.city)) return "";
+  /* לתצוגה בלבד: טלפון ועיר כבר מוצגים בעמודות משלהם — לא לחזור עליהם
+     (בשורות מהמדריך ה-body הוא לרוב "050-1234567 ראשון לציון"). */
+  b = b.replace(/\b0\d{1,2}-?\d{7}\b/g, " ");
+  [card.city, rrCityNorm(card.city)].forEach(function (c) { if (c) b = b.split(c).join(" "); });
+  b = b.replace(/\(\s*\)/g, " ").replace(/\s{2,}/g, " ").replace(/^[\s,·.\-–]+|[\s,·.\-–]+$/g, "").trim();
   return b;
 }
 function rrLikes(card) { return ((rrState.reactionCounts || {})[card.id] || {}).like || 0; }
