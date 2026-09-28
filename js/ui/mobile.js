@@ -67,6 +67,14 @@
   function setMini(on) {
     on = !!on && mq.matches;
     if (document.body.classList.contains("nav-mini") === on) return;
+    if (on && nav) {
+      /* הבר המכווץ + כפתור החיפוש ממורכזים יחד: אותו מרחק מהקצה לשניהם.
+         48px ליעד, 8px ריפוד, 8px רווח, 48px חיפוש (ר' mobile.css). */
+      var n = nav.querySelectorAll(":scope > .app-nav__tab, :scope > .app-nav__group").length;
+      var total = n * 48 + 8 + 8 + 48;
+      var start = Math.max(12, Math.round((document.documentElement.clientWidth - total) / 2));
+      document.documentElement.style.setProperty("--nm-start", start + "px");
+    }
     document.body.classList.toggle("nav-mini", on);
   }
 

@@ -388,11 +388,13 @@
             ["clubAdmin", "מועדון משפחות", "facilities"],
             ["gymAdmin", "מכון כושר", "facilities"],
             ["weworkAdmin", "WeWork", "facilities"],
-            ["servicesAdmin", "ספקים והמלצות", "community"],
             ["gardenStats", "נתוני גינון", "garden"],
             ["gardenPlan",  "תוכנית העבודה", "garden"],
             ["gardenTasks", "משימות", "garden"]
           ] },
+        /* "מדריך" גם אצל המנהל (28.9.26) — אותו מקום כמו אצל התושב. פריט יחיד
+           ולכן מתקפל לטאב רגיל בשם "מדריך" (ר' rebuildAreas). */
+        { group: "guide", label: "מדריך", items: [["servicesAdmin", "ספקים והמלצות", "guide"]] },
         { group: "shikun", label: "השיכון", items: [["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"]] }
       ]
     },
@@ -430,9 +432,13 @@
             ["resReserve", "מועדון משפחות", "facilities"],
             ["resGym", "מכון כושר", "facilities"],
             ["resWework", "WeWork", "facilities"],
-            ["resServices", "ספקים ושירותים", "community"],
-            ["resRecommendations", "המלצות השיכון", "community"],
             ["resGarden", "מראה שיכון", "garden"]
+          ] },
+        /* "מדריך" (28.9.26, הכרעת יועד) — ספקים/תשתיות וההמלצות יצאו משירותים
+           לכפתור משלהם: יש מקום לחמישה יעדים בבר (נמדד 360–440px). */
+        { group: "guide", label: "מדריך", items: [
+            ["resServices", "ספקים ושירותים", "guide"],
+            ["resRecommendations", "המלצות השיכון", "guide"]
           ] },
         { group: "shikun", label: "השיכון", items: [["resMap", "מפת השיכון"], ["resDirectory", "תושבי השיכון"], ["resCommittee", "ועד השיכון"]] },
         ["events", "אירועים"]
@@ -455,7 +461,7 @@
   /* שמות מקטעים (27.9.26) — משמשים רק כשקבוצה מצטמצמת למקטע יחיד (ר' rebuildAreas). */
   var SECTION_LABELS = { garden: "גינון", facilities: "מתקנים", refunds: "החזרים" };
   var SECTION_LANDING = { garden: "gardenStats" };
-  var SECTION_ICON = { garden: "ginun", facilities: "mitkanim", refunds: "myarea" };
+  var SECTION_ICON = { garden: "ginun", facilities: "mitkanim", refunds: "myarea", guide: "guide" };
   function rebuildAreas() {
     var a = AREAS_ALL.admin;
     var screens = a.screens.filter(canScreen);
@@ -474,7 +480,7 @@
         var secs = items.map(function (it) { return it[2] || ""; });
         var oneSec = secs[0] && secs.every(function (x) { return x === secs[0]; }) ? secs[0] : "";
         var label = (oneSec && SECTION_LABELS[oneSec]) || t.label;
-        if (items.length === 1) return [items[0][0], label];
+        if (items.length === 1) return [items[0][0], label, (oneSec && SECTION_ICON[oneSec]) || ""];
         var landing = t.landing || (oneSec && SECTION_LANDING[oneSec]) || "";
         return { group: t.group, label: label, items: items, landing: landing, icon: (oneSec && SECTION_ICON[oneSec]) || "" };
       }
@@ -535,6 +541,8 @@
     // כמו ש"ginun" יורש את עלה resGarden — אותו נושא, לא מסך ספציפי.
     /* 27.9.26 — ניווט v2: "שירותים" הוא עכשיו אוסף של כמה עולמות (החזרים,
        מתקנים, ספקים, מראה שיכון) — ארבעה ריבועים במקום המפתח, לבקשת יועד. */
+    /* "מדריך" (28.9.26) — ספר פתוח. */
+    guide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"/></svg>',
     services: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.75" y="3.75" width="6.75" height="6.75" rx="1.75"/><rect x="13.5" y="3.75" width="6.75" height="6.75" rx="1.75"/><rect x="3.75" y="13.5" width="6.75" height="6.75" rx="1.75"/><rect x="13.5" y="13.5" width="6.75" height="6.75" rx="1.75"/></svg>',
     // "המלצות השיכון" (27.9.26) — כוכב, לא מזוהה עם שום אייקון קיים אחר.
     resRecommendations: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2.25 2.86 6.24 6.89.6-5.2 4.56 1.57 6.8L12 16.98l-6.12 3.47 1.57-6.8-5.2-4.56 6.89-.6L12 2.25Z"/></svg>',
@@ -842,7 +850,8 @@
         html += '<div class="app-nav__group' + (isOpen ? " is-open" : "") + '" data-group-wrap="' + t.group + '">' + groupHtml + '</div>';
         return;
       }
-      var ico = NAV_ICONS[t[0]] ? '<span class="app-nav__ico">' + NAV_ICONS[t[0]] + '</span>' : '';
+      var ikey = (t[2] && NAV_ICONS[t[2]]) ? t[2] : t[0];
+      var ico = NAV_ICONS[ikey] ? '<span class="app-nav__ico">' + NAV_ICONS[ikey] + '</span>' : '';
       var n = navBadgeCount(t[0]);
       var badge = n ? '<span class="nav-badge">' + (n > 9 ? "9+" : n) + '</span>' : '';
       // מסמנים "פעיל" לפי המסך הנוכחי (לא תמיד הראשון ברשימה) — כדי שרענון תגיות

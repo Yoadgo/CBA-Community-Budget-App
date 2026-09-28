@@ -12,19 +12,21 @@ const lit = APP.slice(APP.indexOf('const AREAS_ALL = {') + 'const AREAS_ALL = '.
 const AREAS_ALL = eval('(' + lit.trim().replace(/;\s*$/, '') + ')');
 const top = t => Array.isArray(t) ? t[0] : t.group;
 
-ok('תושב: בית · שירותים · השיכון · אירועים', JSON.stringify(AREAS_ALL.resident.tabs.map(top)) === JSON.stringify(['resHome', 'services', 'shikun', 'events']));
-ok('מנהל: תקציב · שירותים · השיכון', JSON.stringify(AREAS_ALL.admin.tabs.map(top)) === JSON.stringify(['taktziv', 'services', 'shikun']));
+ok('תושב: בית · שירותים · מדריך · השיכון · אירועים (28.9)', JSON.stringify(AREAS_ALL.resident.tabs.map(top)) === JSON.stringify(['resHome', 'services', 'guide', 'shikun', 'events']));
+ok('מנהל: תקציב · שירותים · מדריך · השיכון', JSON.stringify(AREAS_ALL.admin.tabs.map(top)) === JSON.stringify(['taktziv', 'services', 'guide', 'shikun']));
+ok('מדריך (תושב) = ספקים ושירותים + המלצות', JSON.stringify(AREAS_ALL.resident.tabs[2].items.map(i => i[0])) === JSON.stringify(['resServices', 'resRecommendations']));
+ok('טאב שהתקפל מקבל סמליל מקטע (מדריך אצל המנהל = ספר)', /return \[items\[0\]\[0\], label, \(oneSec && SECTION_ICON\[oneSec\]\) \|\| ""\];/.test(APP) && /guide: "guide"/.test(APP) && /var ikey = \(t\[2\] && NAV_ICONS\[t\[2\]\]\) \? t\[2\] : t\[0\];/.test(APP));
 const groups = AREAS_ALL.resident.tabs.concat(AREAS_ALL.admin.tabs).filter(t => !Array.isArray(t));
 ok('שתי רמות בלבד — אין קבוצה בתוך קבוצה', groups.every(g => g.items.every(Array.isArray)));
 const svcR = AREAS_ALL.resident.tabs[1].items;
-ok('שירותים (תושב) — 8 פריטים בסדר המאושר', JSON.stringify(svcR.map(i => i[0])) === JSON.stringify(['resSubmit', 'resRequests', 'resReserve', 'resGym', 'resWework', 'resServices', 'resRecommendations', 'resGarden']));
-ok('מראה שיכון — מקטע משלו, אחרון', svcR[7][2] === 'garden' && svcR.filter(i => i[2] === 'garden').length === 1);
+ok('שירותים (תושב) — 6 פריטים בסדר המאושר', JSON.stringify(svcR.map(i => i[0])) === JSON.stringify(['resSubmit', 'resRequests', 'resReserve', 'resGym', 'resWework', 'resGarden']));
+ok('מראה שיכון — מקטע משלו, אחרון', svcR[5][2] === 'garden' && svcR.filter(i => i[2] === 'garden').length === 1);
 ok('"מועדון משפחות" בשני הצדדים', svcR[2][1] === 'מועדון משפחות' && AREAS_ALL.admin.tabs[1].items[0][1] === 'מועדון משפחות');
 ok('כל פריט בקבוצת שירותים מסומן במקטע', groups.filter(g => g.group === 'services').every(g => g.items.every(i => typeof i[2] === 'string' && i[2])));
 const allScreens = AREAS_ALL.resident.screens.concat(AREAS_ALL.admin.screens);
 ok('כל יעד בניווט רשום כמסך', groups.every(g => g.items.every(i => allScreens.indexOf(i[0]) !== -1)));
 ok('גינון במקטע אחד, "נתונים" ראשון', JSON.stringify(AREAS_ALL.admin.tabs[1].items.filter(i => i[2] === 'garden').map(i => i[0])) === JSON.stringify(['gardenStats', 'gardenPlan', 'gardenTasks']));
-ok('התמזגות למקטע יחיד → תווית המקטע (גנן חיצוני = "גינון")', /var label = \(oneSec && SECTION_LABELS\[oneSec\]\) \|\| t\.label;/.test(APP) && /if \(items\.length === 1\) return \[items\[0\]\[0\], label\];/.test(APP) && /garden: "גינון"/.test(APP));
+ok('התמזגות למקטע יחיד → תווית המקטע (גנן חיצוני = "גינון")', /var label = \(oneSec && SECTION_LABELS\[oneSec\]\) \|\| t\.label;/.test(APP) && /if \(items\.length === 1\) return \[items\[0\]\[0\], label,/.test(APP) && /garden: "גינון"/.test(APP));
 ok('סמליל קבוצה לפי מקטע', /var gkey = t\.icon \|\| t\.group;/.test(APP));
 ok('בועה: מרווח בין מקטעים', /nav-sheet__gap/.test(APP) && /\.nav-sheet__gap \{ height: 18px;/.test(MCSS));
 ok('בועה: צבע לכל סמליל', /var NAV_TINT = \{/.test(APP) && /color: var\(--tint/.test(MCSS));

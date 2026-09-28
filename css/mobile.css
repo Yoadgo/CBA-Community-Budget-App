@@ -200,7 +200,7 @@
   .app-nav--bottom > .app-nav__tab,
   .app-nav--bottom > .app-nav__group { flex: 0 0 62px; width: 62px; transition: flex-basis .55s cubic-bezier(.34,1.45,.5,1), width .55s cubic-bezier(.34,1.45,.5,1); }
   body.nav-mini .app-nav--bottom > .app-nav__tab,
-  body.nav-mini .app-nav--bottom > .app-nav__group { flex-basis: 40px; width: 40px; }
+  body.nav-mini .app-nav--bottom > .app-nav__group { flex-basis: 48px; width: 48px; }
   .app-nav--bottom .app-nav__tab {
     font-size: 10.5px; gap: 2px; padding: 6px 2px 5px; border-radius: 999px;
     color: #1F2937; text-shadow: 0 0 3px rgba(255,255,255,.95);
@@ -248,14 +248,14 @@
   /* במובייל החיפוש יושב למטה — הכפתור בכותרת מוסתר (חוץ ממי שאין לו בר) */
   body:not([data-nav-single="1"]) .app-controls .search-btn { display: none; }
 
-  /* --- כיווץ בגלילה: קטן בהרבה, בלי תוויות --- */
-  body.nav-mini .app-nav.app-nav--bottom { inset-inline-start: 18%; padding: 3px; }
-  body.nav-mini .app-nav--bottom .app-nav__tab { font-size: 0; padding: 5px 2px; gap: 0; }
-  body.nav-mini .app-nav--bottom .app-nav__ico svg { width: 19px; height: 19px; }
-  body.nav-mini .app-nav.app-nav--bottom .nav-indicator { top: 3px; bottom: 3px; }
+  /* --- כיווץ בגלילה: קטן יותר, בלי תוויות (28.9: הוגדל ב-20% לבקשת יועד — 48px ליעד) --- */
+  body.nav-mini .app-nav.app-nav--bottom { inset-inline-start: var(--nm-start, 14%); padding: 4px; }
+  body.nav-mini .app-nav--bottom .app-nav__tab { font-size: 0; padding: 7px 2px; gap: 0; }
+  body.nav-mini .app-nav--bottom .app-nav__ico svg { width: 23px; height: 23px; }
+  body.nav-mini .app-nav.app-nav--bottom .nav-indicator { top: 4px; bottom: 4px; }
   body.nav-mini .app-nav--bottom .nav-badge { top: -4px; font-size: 9.5px; }
-  body.nav-mini .nav-search-fab { width: 40px; height: 40px; inset-inline-end: 18%; }
-  body.nav-mini .nav-search-fab svg { width: 17px; height: 17px; }
+  body.nav-mini .nav-search-fab { width: 48px; height: 48px; inset-inline-end: var(--nm-start, 14%); }
+  body.nav-mini .nav-search-fab svg { width: 20px; height: 20px; }
 
   /* ---------- בועת כמוסות לקבוצת ניווט (27.9.26, במקום הגיליון התחתון) ---------- */
   .nav-sheet { position: fixed; inset: 0; z-index: 60; }
