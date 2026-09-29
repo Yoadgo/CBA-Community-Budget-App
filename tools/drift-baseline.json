@@ -160,6 +160,13 @@
   "fsize": 121,
   "all": 414
  },
+ "resident2.css": {
+  "hex": 0,
+  "radius": 0,
+  "shadow": 1,
+  "fsize": 1,
+  "all": 2
+ },
  "search.css": {
   "hex": 1,
   "radius": 6,

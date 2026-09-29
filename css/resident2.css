@@ -1,0 +1,37 @@
+/* ============================================================================
+   resident2.css — הבקשות שלי · הגשת קבלה · מועדון משפחות (גל 4, 1.10.2026)
+   ספר האבנים, פרקים 6–8. חל רק מתחת לחופה החדשה (.rq-v2 / .rs-v2 / .rv-v2),
+   כלומר רק כשה-canopy טעון. ערכים מ-tokens.css.
+   ============================================================================ */
+
+/* ---------- 6. הבקשות שלי ---------- */
+.rq-v2 .rq-section-title { font-size: var(--t-14); font-weight: 700; color: var(--ink-2); margin: 18px 2px 8px; }
+.rq-v2 .card.rq { border-radius: var(--r-card); box-shadow: var(--sh-card); border: 0; }
+.rq-v2 .rs-empty .rs-cta { margin-top: 14px; }
+/* החופה והתוכן באותו רוחב (880) — בלי העמודה הצרה של 680 שנשארה מלפני */
+.rq-v2 .rq-list, .rq-v2 .rq-mo, .rq-v2 .rq-past { max-width: none; }
+
+/* ---------- 7. הגשת קבלה ---------- */
+/* טופס — החופה והטופס באותו רוחב צר (680), כמו שהטופס היה */
+body:has(.rs-v2) { --cnp-w: 680px; }
+.rs-v2 .rs-form { max-width: none; }
+/* SA2 — מה ש-Gemini מילא מסומן בגוון התחום עד שנוגעים בו */
+.rs-v2 .field-input.is-ai { background: var(--dom-bud-bg); border-color: var(--dom-bud); }
+.rs-v2 .rs-upload { border-radius: var(--r-card); }
+.rs-v2 .rs-seg { border-radius: var(--r-pill); }
+
+/* ---------- 8. מועדון משפחות ---------- */
+/* C1 — הכותרת עברה לחופה; בתוך כרטיס הלוח היא כבר כפולה */
+.rv-v2 .rs-club__headwrap { display: none; }
+@media (max-width: 1023px) {
+  .rv-v2 .rs-club, .rv-v2 .rs-club-form, .rv-v2 .rs-club-month, .rv-v2 .club-rules, .rv-v2 .rs-mine-sec { max-width: none; }
+}
+.rv-v2 .card { border-radius: var(--r-card); }
+@media (max-width: 1023px) {
+  /* CA1 — בטלפון הלוח (המשימה העיקרית) ראשון; "השריונים שלי" והתקנון אחריו */
+  .rv-v2 .res-reserve-layout > #rv-booking { order: -1; }
+}
+@media (max-width: 720px) {
+  /* CA2 — משבצות בגובה שאפשר לגעת בו (26 → 36px) */
+  .rv-v2 .rs-slot { height: 36px; font-size: 11px; }
+}
