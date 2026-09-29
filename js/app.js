@@ -679,11 +679,12 @@
     if (gbtn && !isMobileNav()) {
       /* גל 1 (30.9.26, F2) — דסקטופ: תפריט לבן מתחת לטאב, מיושר לקצה הימני שלו */
       wrap.classList.add("nav-sheet--desk");
-      var rd = gbtn.getBoundingClientRect(), vwd = document.documentElement.clientWidth, Wd = 264;
+      var zd = parseFloat(getComputedStyle(document.body).zoom) || 1;   /* body{zoom:1.05} במסך רחב */
+      var rd = gbtn.getBoundingClientRect(), vwd = document.documentElement.clientWidth, Wd = 264 * zd;
       var leftd = Math.max(10, Math.min(vwd - Wd - 10, rd.right - Wd));
-      panel.style.left = leftd + "px";
-      panel.style.top = (rd.bottom + 8) + "px";
-      panel.style.transformOrigin = (rd.right - leftd) + "px -8px";
+      panel.style.left = (leftd / zd) + "px";
+      panel.style.top = ((rd.bottom + 8) / zd) + "px";
+      panel.style.transformOrigin = ((rd.right - leftd) / zd) + "px -8px";
     } else if (gbtn) {
       var r = gbtn.getBoundingClientRect(), vw = document.documentElement.clientWidth;
       var W = 212, cx = r.left + r.width / 2;
@@ -1602,13 +1603,17 @@
     var rtl = getComputedStyle(document.documentElement).direction === "rtl";
     /* גל 1 (30.9.26, F17) — הכפתור עבר לקצה הימני של החופה. המגש נפתח
        לכיוון מרכז המסך: כפתור בחצי הימני → הקצה הימני של המגש מיושר אליו. */
-    var x = (r.left + r.width / 2 > window.innerWidth / 2) ? (r.right - w) : (rtl ? r.left : (r.right - w));
-    x = Math.max(8, Math.min(x, window.innerWidth - w - 8));
+    /* ⚠️ body{zoom:1.05} במסך רחב (style.css): המדידות כאן בפיקסלי מסך, אבל
+       left/top על אלמנט בתוך ה-body מוכפלים ב-zoom. מחלקים בו. */
+    var z = parseFloat(getComputedStyle(document.body).zoom) || 1;
+    var wv = w * z;
+    var x = (r.left + r.width / 2 > window.innerWidth / 2) ? (r.right - wv) : (rtl ? r.left : (r.right - wv));
+    x = Math.max(8, Math.min(x, window.innerWidth - wv - 8));
     panel.style.position = "fixed";
     panel.style.insetInlineEnd = "auto";
-    panel.style.left = x + "px";
-    panel.style.top = (r.bottom + 10) + "px";
-    panel.style.maxHeight = Math.max(200, window.innerHeight - r.bottom - 24) + "px";
+    panel.style.left = (x / z) + "px";
+    panel.style.top = ((r.bottom + 10) / z) + "px";
+    panel.style.maxHeight = (Math.max(200, window.innerHeight - r.bottom - 24) / z) + "px";
   }
   function openUserPanel(panel, btn) {
     if (panel.parentNode !== document.body) document.body.appendChild(panel);
