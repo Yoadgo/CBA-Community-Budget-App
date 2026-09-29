@@ -35,3 +35,20 @@ body:has(.rs-v2) { --cnp-w: 680px; }
   /* CA2 — משבצות בגובה שאפשר לגעת בו (26 → 36px) */
   .rv-v2 .rs-slot { height: 36px; font-size: 11px; }
 }
+
+/* ---------- 9. מכון כושר ---------- */
+.gym-v2 .gym-card { border-radius: var(--r-card); box-shadow: var(--sh-card); }
+
+/* ---------- 10. WeWork ---------- */
+/* WB1 (גל 5) — [hidden] לא הסתיר: .ww-more {display:block} ו-.ww-mine {display:flex}
+   גברו עליו. הכפתורים "שעות מוקדמות/מאוחרות" נשארו לחיצים בקצה, וכרטיס ריק הוסיף רווח. */
+.ww-more[hidden], .ww-mine[hidden] { display: none !important; }
+
+/* ---------- 11. ספקים ושירותים ---------- */
+.svc-v2 .svc-toolbar { margin-top: 0; }
+/* WeWork — "נייר לתוכן": הכרטיסים לבנים ושטוחים (בלי הזכוכית של 25.9) */
+.ww-v2 .lg, .ww-v2 .lg-card {
+  background: var(--paper) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  box-shadow: var(--sh-card) !important; border: 0 !important; border-radius: var(--r-card) !important;
+}
+.ww-v2 .lg::before, .ww-v2 .lg-card::before { display: none !important; }

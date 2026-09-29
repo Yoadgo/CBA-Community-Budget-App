@@ -79,23 +79,35 @@ CBA.screens = CBA.screens || {};
     return '<div class="screen-head"><div class="screen-head__title">WeWork</div>' +
       '<div class="screen-head__sub">שריון עמדת עבודה וכניסה לחלל</div></div>';
   }
+  /* 🔴 גל 5 (1.10.26, ספר האבנים פרק 10) — החופה (js/ui/canopy.js). בלי הרכיב —
+     הראש הישן. המספר: השריונים הפעילים של המשפחה (אם כבר נטענו). */
+  function page(body) {
+    if (!(window.CBA && CBA.canopy)) return head() + body;
+    if (CBA.canopy.bindScroll) CBA.canopy.bindScroll();
+    var n = (st.mine && st.mine.length) || 0;
+    return CBA.canopy({ size: "mid", dom: "gym", wide: true, title: "WeWork",
+      ico: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+      sub: "שריון עמדת עבודה וכניסה לחלל",
+      stat: n ? { n: n, label: n === 1 ? "שריון פעיל" : "שריונים פעילים" } : null }) +
+      '<div class="cnp2-body cnp2-body--wide ww-v2">' + body + '</div>';
+  }
 
   function draw(container) {
-    if (!st.cfg && !st.err) { container.innerHTML = head() + CBA.skel.cards(2); return; }
+    if (!st.cfg && !st.err) { container.innerHTML = page(CBA.skel.cards(2)); return; }
     if (st.err) {
-      container.innerHTML = head() + CBA.ui.emptyState({
+      container.innerHTML = page(CBA.ui.emptyState({
         icon: "calendar", title: "לא הצלחנו לטעון את WeWork",
         sub: "בדוק/י את החיבור לאינטרנט ונסה/י שוב.", ctaLabel: "נסה שוב", ctaAttr: "data-ww-retry"
-      });
+      }));
       var r = container.querySelector("[data-ww-retry]");
       if (r) r.addEventListener("click", function () { st.err = ""; draw(container); load(container); });
       return;
     }
-    container.innerHTML = head() +
+    container.innerHTML = page(
       '<div class="ww-layout">' +
         '<div class="ww-mine" data-ww-mine></div>' +
         '<div class="ww-book" data-ww-book></div>' +
-      "</div>";
+      "</div>");
     drawMine(container.querySelector("[data-ww-mine]"));
     drawBooking(container.querySelector("[data-ww-book]"));
   }
@@ -299,7 +311,7 @@ CBA.screens = CBA.screens || {};
   CBA.screens[SCREEN] = {
     title: "WeWork",
     render: function (container) {
-      if (!CBA.door) { container.innerHTML = head(); return; }
+      if (!CBA.door) { container.innerHTML = page(""); return; }
       draw(container);
       if (!container.__wwWired) { wire(container); container.__wwWired = true; }
       load(container);

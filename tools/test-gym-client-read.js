@@ -50,8 +50,9 @@ const partialIdx = RG.indexOf('if (partial) {');
 });
 
 section('3. הציור עצמו');
+/* גל 5 (1.10.26) — הראש עבר לחופה (page), אותו תנאי בדיוק */
 ok('שלדים רק כשאין סטטוס מהיר',
-   /container\.innerHTML = head \+ \(st\.fast \? viewStatus\(st\.fast, true\) : CBA\.skel\.cards\(2\)\);/.test(RG));
+   /container\.innerHTML = page\(st\.fast, \(st\.fast \? viewStatus\(st\.fast, true\) : CBA\.skel\.cards\(2\)\)\);/.test(RG));
 ok('⚠️ ולא מציירים חלקי אחרי שהתשובה המלאה הגיעה',
    /if \(!doc \|\| !st\.loading \|\| st\.my\) return;/.test(RG));
 ok('⚠️ st.fast מתאפס בסיום', /st\.loading = false; st\.fast = null;/.test(RG));

@@ -428,8 +428,10 @@ CBA.screens = CBA.screens || {};
       var plan = (f.plans || [])[0];
       return '' +
         (w.isCompletion
+          /* GB3 (גל 5) — שם המסלול שהמנהל באמת פתח (לא תמיד המסלול הראשון ברשימה) */
           ? '<div class="gym-note">מנהל/ת המכון כבר פתח/ה עבורך מנוי' +
-            (plan ? " (" + esc(plan.name) + ")" : "") + ". נשאר רק להשלים את ההצהרה.</div>"
+            ((st.my && st.my.membership && st.my.membership["מסלול"]) ? " (" + esc(st.my.membership["מסלול"]) + ")"
+              : (plan ? " (" + esc(plan.name) + ")" : "")) + ". נשאר רק להשלים את ההצהרה.</div>"
           : (plan ? '<div class="gym-plan gym-plan--sm">' + planLine(plan) + "</div>" : "")) +
         '<div class="gym-field"><label>שם פרטי</label>' +
           '<input type="text" data-gf="firstName" value="' + esc(d.firstName) + '"></div>' +
@@ -693,16 +695,30 @@ CBA.screens = CBA.screens || {};
   /* ------------------------------------------------------------------ *
    *  ציור
    * ------------------------------------------------------------------ */
-  function draw(container) {
-    var head =
-      '<div class="screen-head">' +
+  /* 🔴 גל 5 (1.10.26, ספר האבנים פרק 9) — החופה (js/ui/canopy.js): הכותרת,
+     ובמנוי פעיל — מספר הימים שנשארו. בלי הרכיב (לקוח ישן) — הראש הישן. */
+  function page(m, body) {
+    if (!(window.CBA && CBA.canopy)) {
+      return '<div class="screen-head">' +
         '<div class="screen-head__title">מכון כושר</div>' +
         '<div class="screen-head__sub">הרשמה, הצהרת בריאות ומצב המנוי</div>' +
-      "</div>";
+      "</div>" + body;
+    }
+    if (CBA.canopy.bindScroll) CBA.canopy.bindScroll();
+    var status = m ? String(m["סטטוס"] || "").trim() : "";
+    var left = (m && status === ST_ACTIVE && m["בתוקף עד"]) ? daysLeft(m["בתוקף עד"]) : null;
+    return CBA.canopy({ size: "mid", dom: "gym", title: "מכון כושר",
+      ico: '<path d="M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12"/>',
+      sub: "הרשמה, הצהרת בריאות ומצב המנוי",
+      stat: (left != null && left >= 0) ? { n: left, label: left === 1 ? "יום נשאר במנוי" : "ימים נשארו במנוי" } : null,
+      minis: status ? [{ k: "מצב המנוי", b: status }] : [] }) +
+      '<div class="cnp2-body gym-v2">' + body + '</div>';
+  }
 
+  function draw(container) {
     if (st.loading || !st.my) {
       /* 🔴 יש כבר סטטוס מ-Firestore ⇒ כרטיס אמיתי במקום שלדים. */
-      container.innerHTML = head + (st.fast ? viewStatus(st.fast, true) : CBA.skel.cards(2));
+      container.innerHTML = page(st.fast, (st.fast ? viewStatus(st.fast, true) : CBA.skel.cards(2)));
       /* 25.9 — כפתור הדלת כבר בציור המוקדם: מי שעומד ליד הדלת לא מחכה ל-Apps Script. */
       if (st.fast && CBA.doorGym) CBA.doorGym.mount(container.querySelector("[data-door-gym]"));
       /* ⚠️ **גם כאן מחווטים את ההעתקה.** הקוד כבר על המסך; כפתור
@@ -712,13 +728,19 @@ CBA.screens = CBA.screens || {};
       return;
     }
     if (!st.my.ok) {
-      container.innerHTML = head +
-        '<div class="card gym-card"><div class="club-empty">' + esc(st.my.error) + "</div></div>";
+      /* GB5 (גל 5) — שגיאה עם "לנסות שוב" (עד היום: טקסט בלבד) */
+      container.innerHTML = page(null,
+        '<div class="card gym-card"><div class="club-empty">' + esc(st.my.error || "לא ניתן לטעון") +
+        '<div><button type="button" class="btn-primary" data-gym-retry style="margin-top:12px">לנסות שוב</button></div></div></div>');
+      var rt = container.querySelector("[data-gym-retry]");
+      if (rt) rt.addEventListener("click", function () {
+        st.my = null; draw(container); load(container, function () { if (!st.wizard) draw(container); });
+      });
       return;
     }
 
     var m = st.my.membership;
-    container.innerHTML = head + (m ? viewStatus(m) : viewNoMembership());
+    container.innerHTML = page(m, (m ? viewStatus(m) : viewNoMembership()));
 
     var startBtn = container.querySelector("[data-gym-start]");
     if (startBtn) startBtn.addEventListener("click", function () { openWizard(container); });
