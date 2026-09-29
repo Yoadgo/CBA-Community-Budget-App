@@ -3160,7 +3160,7 @@ function isUnderReceiptsRoot_(file) {
 
 function txReceiptSync_(ss, body) {
   var docId = String(body.docId || '');
-  if (!/^\d{4}__\d+$/.test(docId)) return { ok: false, error: 'מזהה לא תקין' };
+  if (!/^[^\/]{1,20}__\d+$/.test(docId)) return { ok: false, error: 'מזהה לא תקין' };   /* השנה היא עברית: "תשפ\"ז__23" */
   var d = fsGet_(fsDocPath_(FS_BUDGET_TX, docId));
   if (!d) return { ok: false, error: 'השורה לא נמצאה' };
   var url = String(d['קישור קבלה'] || '');
@@ -3201,7 +3201,7 @@ function btxReceiptIdsInUse_() {
 
 function txReceiptTrash_(ss, body) {
   var docId = String(body.docId || '');
-  if (!/^\d{4}__\d+$/.test(docId)) return { ok: false, error: 'מזהה לא תקין' };
+  if (!/^[^\/]{1,20}__\d+$/.test(docId)) return { ok: false, error: 'מזהה לא תקין' };   /* השנה היא עברית: "תשפ\"ז__23" */
   var id = extractDriveFileId_(body.url);
   if (!id) return { ok: true, skipped: 'אין קבלה' };
   if (fsGet_(fsDocPath_(FS_BUDGET_TX, docId))) return { ok: false, error: 'השורה עדיין קיימת' };
