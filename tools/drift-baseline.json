@@ -1,0 +1,163 @@
+{
+ "committeeTree.css": {
+  "hex": 28,
+  "radius": 27,
+  "shadow": 13,
+  "fsize": 28,
+  "all": 96
+ },
+ "events.css": {
+  "hex": 108,
+  "radius": 54,
+  "shadow": 8,
+  "fsize": 95,
+  "all": 265
+ },
+ "garden.css": {
+  "hex": 397,
+  "radius": 120,
+  "shadow": 41,
+  "fsize": 190,
+  "all": 748
+ },
+ "gardenSchedule.css": {
+  "hex": 218,
+  "radius": 59,
+  "shadow": 19,
+  "fsize": 102,
+  "all": 398
+ },
+ "gardenStats.css": {
+  "hex": 46,
+  "radius": 35,
+  "shadow": 21,
+  "fsize": 55,
+  "all": 157
+ },
+ "gym.css": {
+  "hex": 7,
+  "radius": 17,
+  "shadow": 4,
+  "fsize": 69,
+  "all": 97
+ },
+ "home.css": {
+  "hex": 20,
+  "radius": 10,
+  "shadow": 3,
+  "fsize": 21,
+  "all": 54
+ },
+ "homeGarden.css": {
+  "hex": 10,
+  "radius": 8,
+  "shadow": 1,
+  "fsize": 16,
+  "all": 35
+ },
+ "homeSchedule.css": {
+  "hex": 39,
+  "radius": 20,
+  "shadow": 5,
+  "fsize": 42,
+  "all": 106
+ },
+ "liquid-glass.css": {
+  "hex": 33,
+  "radius": 14,
+  "shadow": 8,
+  "fsize": 22,
+  "all": 77
+ },
+ "loading.css": {
+  "hex": 13,
+  "radius": 25,
+  "shadow": 5,
+  "fsize": 7,
+  "all": 50
+ },
+ "mobile.css": {
+  "hex": 8,
+  "radius": 13,
+  "shadow": 15,
+  "fsize": 27,
+  "all": 63
+ },
+ "motion.css": {
+  "hex": 0,
+  "radius": 4,
+  "shadow": 9,
+  "fsize": 0,
+  "all": 13
+ },
+ "notify.css": {
+  "hex": 50,
+  "radius": 19,
+  "shadow": 2,
+  "fsize": 41,
+  "all": 112
+ },
+ "profile.css": {
+  "hex": 6,
+  "radius": 6,
+  "shadow": 1,
+  "fsize": 14,
+  "all": 27
+ },
+ "pwa.css": {
+  "hex": 18,
+  "radius": 6,
+  "shadow": 1,
+  "fsize": 5,
+  "all": 30
+ },
+ "report.css": {
+  "hex": 11,
+  "radius": 19,
+  "shadow": 4,
+  "fsize": 41,
+  "all": 75
+ },
+ "resident.css": {
+  "hex": 141,
+  "radius": 87,
+  "shadow": 65,
+  "fsize": 121,
+  "all": 414
+ },
+ "search.css": {
+  "hex": 1,
+  "radius": 6,
+  "shadow": 1,
+  "fsize": 7,
+  "all": 15
+ },
+ "style.css": {
+  "hex": 184,
+  "radius": 173,
+  "shadow": 53,
+  "fsize": 365,
+  "all": 775
+ },
+ "sys.css": {
+  "hex": 16,
+  "radius": 9,
+  "shadow": 3,
+  "fsize": 19,
+  "all": 47
+ },
+ "tour.css": {
+  "hex": 85,
+  "radius": 63,
+  "shadow": 20,
+  "fsize": 58,
+  "all": 226
+ },
+ "wework.css": {
+  "hex": 41,
+  "radius": 36,
+  "shadow": 7,
+  "fsize": 57,
+  "all": 141
+ }
+}
