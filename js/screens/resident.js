@@ -1718,7 +1718,12 @@ CBA.screens = CBA.screens || {};
     return c;
   }
   function dirVal(row, key) { return key ? String(row[key] == null ? "" : row[key]).trim() : ""; }
-  function dirIsActive(row, c) { var s = dirVal(row, c.status); return !s || s.indexOf("פעיל") !== -1; }
+  function dirIsActive(row, c) {
+    /* DB8 (גל 6) — שורה בלי שם משפחה ובלי מספר בית (שורה ריקה/חלקית בגיליון)
+       הייתה נחשבת פעילה ומוצגת ככרטיס "בית — · משפחת משק בית". */
+    if (!dirVal(row, c.family) && !dirVal(row, c.house)) return false;
+    var s = dirVal(row, c.status); return !s || s.indexOf("פעיל") !== -1;
+  }
 
   /* קיבוץ המדריך לפי אות ראשונה של שם המשפחה (2026-09-16, לבקשת יועד —
      בסגנון "אנשי קשר" באייפון). כ/ם/ן/ף/ץ (אותיות סופיות) לא אמורות להופיע
@@ -1841,13 +1846,23 @@ CBA.screens = CBA.screens || {};
     var c = dirState.cols;
     var q = dirState.q.trim();
     var rows = dirState.rows.filter(function (r) { return dirIsActive(r, c); });
+    var total = rows.length;
+    if (CBA.canopy && CBA.canopy.set && dirContainer) CBA.canopy.set(dirContainer, "dir-cnp-n", String(total));
     if (q) {
+      /* DB2 (גל 6) — הילדים נכנסים לחיפוש כטקסט המוצג ("נועה (7)"), לא כ-JSON
+         הגולמי: קודם "2019" מצא כל משפחה עם ילד שנולד ב-2019 (וחשף תאריכי לידה
+         דרך החיפוש), ו-"name" מצא את כולם.
+         DB5 — טלפון: "0521234567" מוצא גם "052-123-4567" (משווים ספרות בלבד). */
+      var qDigits = q.replace(/\D/g, "");
       rows = rows.filter(function (r) {
-        var hay = [dirVal(r, c.house), dirVal(r, c.family), dirVal(r, c.kids)]
+        var phones = c.phone.map(function (k) { return dirVal(r, k); });
+        var hay = [dirVal(r, c.house), dirVal(r, c.family), dirKidsText(dirVal(r, c.kids))]
           .concat(c.firstName.map(function (k) { return dirVal(r, k); }))
-          .concat(c.phone.map(function (k) { return dirVal(r, k); }))
+          .concat(phones)
           .join(" ");
-        return hay.indexOf(q) !== -1;
+        if (hay.indexOf(q) !== -1) return true;
+        return qDigits.length >= 3 && qDigits.length === q.replace(/[\s\-()+]/g, "").length &&
+          phones.some(function (p) { return p.replace(/\D/g, "").indexOf(qDigits) !== -1; });
       });
     }
     rows.sort(function (a, b) {
@@ -1862,6 +1877,12 @@ CBA.screens = CBA.screens || {};
        גדולה ודביקה לכל קבוצה (בסגנון אנשי קשר באייפון) וסרגל אותיות קבוע
        בצד המסך לניווט/גרירה ישירה לכל אות. בזמן חיפוש אין קיבוץ ואין
        סרגל: התוצאות ממילא מעטות, וקבוצה עם כרטיס אחד היא רעש. */
+    if (!rows.length && !q) {
+      /* DB6 (גל 6) — אין אף משק בית פעיל (ולא חיפשו): בלי "נקה חיפוש" */
+      listEl.innerHTML = CBA.ui.emptyState({ icon: "users", title: "המדריך עדיין ריק",
+        sub: "כשיתווספו תושבים פעילים לגיליון הם יופיעו כאן." });
+      return;
+    }
     if (!rows.length) {
       listEl.innerHTML = CBA.ui.emptyState({ icon: "search", title: "לא נמצאו שכנים",
         sub: "אפשר לחפש לפי שם משפחה, שם פרטי, מספר בית או טלפון.",
@@ -1877,7 +1898,7 @@ CBA.screens = CBA.screens || {};
       return;
     }
     if (q) {
-      listEl.innerHTML = '<div class="dir-count">' + rows.length + ' תוצאות</div>' +
+      listEl.innerHTML = '<div class="dir-count">' + (rows.length === 1 ? "תוצאה אחת" : rows.length + " תוצאות") + '</div>' +
         '<div class="dir-grid">' + rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>';
       if (dirScrollY) { window.scrollTo(0, dirScrollY); dirScrollY = 0; }
       return;
@@ -1982,11 +2003,19 @@ CBA.screens = CBA.screens || {};
       if (!(opts && opts.silent)) dirState.loaded = false;
       ensureDirRoleIndex(); // חיווי "תפקיד בוועד" (סעיף 5) — נטען פעם אחת, מטמון נפרד מ-dirState
 
-      container.innerHTML =
-        '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
-          '<div class="screen-head__sub">מדריך התושבים בשיכון</div></div>' +
+      /* 🔴 גל 6 (1.10.26, ספר האבנים פרק 13) — החופה: הכותרת, ומספר משקי הבית
+         הפעילים (נכתב ב-dirRenderList). בלי הרכיב — הראש הישן. */
+      var top = cnp({ size: "mid", dom: "map", title: "תושבי השיכון",
+        ico: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20c0-2.8-1.6-4.9-4-5.7"/>',
+        sub: "מדריך התושבים בשיכון — שם, בית, טלפון",
+        stat: { id: "dir-cnp-n", n: "—", label: "משקי בית" } });
+      var inner =
         '<input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון" value="' + CBA.esc(dirState.q) + '">' +
         '<div id="dir-list">' + CBA.skel.rows(6) + '</div>';
+      container.innerHTML = top
+        ? top + '<div class="cnp2-body dir-v2">' + inner + '</div>'
+        : '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
+            '<div class="screen-head__sub">מדריך התושבים בשיכון</div></div>' + inner;
 
       var qEl = container.querySelector("#dir-q");
       qEl.addEventListener("input", function () {
@@ -2000,20 +2029,32 @@ CBA.screens = CBA.screens || {};
       // dirContainer/dirRenderList (לא לתוך רפרנס ישן), כך שהכיסוי תקין גם אם
       // כמה render() רצו בזמן שהבקשה הראשונה עוד לא חזרה.
       if (dirState.loaded) { dirRenderList(); return; }
+      /* DB1 (גל 6) — "ניווט אמיתי תמיד מרענן מהשרת" (ההערה למעלה) לא קרה בפועל:
+         getCommunityDirectory החזיר את המטמון של כל הסשן, ושכן חדש/שעזב לא הופיע
+         עד רענון הדף. עכשיו: מה שכבר בזיכרון מוצג מיד (בלי שלד), והרשימה
+         מתעדכנת מהשרת ברקע. נכשל ויש כבר רשימה — נשארים עליה בשקט. */
+      if (dirState.rows && dirState.rows.length && dirState.cols) dirRenderList();
       if (dirState.loading) return;
       dirState.loading = true;
       CBA.data.getCommunityDirectory(function (res) {
         dirState.loading = false;
         if (!res || !res.ok) {
+          if (dirState.rows && dirState.rows.length && dirState.cols) return;
           var listEl = dirContainer && dirContainer.querySelector("#dir-list");
-          if (listEl) listEl.innerHTML = '<div class="rs-empty"><p>' + CBA.esc((res && res.error) || "שגיאה בטעינת הרשימה. נסו שוב מאוחר יותר.") + '</p></div>';
+          /* DB4 (גל 6) — שגיאה עם "לנסות שוב" (עד היום: טקסט בלבד, ולפעמים שגיאה גולמית) */
+          if (listEl) {
+            listEl.innerHTML = CBA.ui.emptyState({ icon: "users", title: "לא הצלחנו לטעון את המדריך",
+              sub: "בדקו את החיבור לאינטרנט ונסו שוב.", ctaLabel: "לנסות שוב", ctaAttr: "data-dir-retry" });
+            var rt = listEl.querySelector("[data-dir-retry]");
+            if (rt) rt.addEventListener("click", function () { CBA.screens.resDirectory.render(dirContainer, {}); });
+          }
           return;
         }
         dirState.rows = res.rows || [];
         dirState.cols = dirCols(dirState.rows);
         dirState.loaded = true;
         dirRenderList();
-      });
+      }, !(opts && opts.silent));
     }
   };
 
@@ -2782,8 +2823,18 @@ CBA.screens = CBA.screens || {};
 
       // ---- נתוני דיירים אמיתיים (זהה למקור הנתונים של טאב "שכנים") ----
       var dirRows = [], dirC = null, byHouse = {};
+      /* MB1 (גל 6) — עד היום: לחיצה על בית לפני שהנתונים הגיעו (או אחרי כישלון)
+         הראתה "אין נתונים זמינים לבית זה", בלי שום דרך לנסות שוב. */
+      var dirLoad = "loading";
+      function loadDir() {
+      dirLoad = "loading";
       CBA.data.getCommunityDirectory(function (res) {
-        if (!res || !res.ok) return;
+        if (!res || !res.ok) {
+          dirLoad = "error";
+          if (openTile && houseEls[openTile]) openPopup(openTile);
+          return;
+        }
+        dirLoad = "ok";
         dirC = dirCols(res.rows || []);
         dirRows = (res.rows || []).filter(function (r) { return dirIsActive(r, dirC); });
         dirRows.forEach(function (r) {
@@ -2794,10 +2845,15 @@ CBA.screens = CBA.screens || {};
           var row = byHouse[normHouse(t.n)];
           var el = houseEls[t.n];
           if (!row) { el.classList.add("no-data"); return; }
+          el.classList.remove("no-data");
           el.querySelector(".mh-fam").textContent = dirVal(row, dirC.family) || "";
-          if (dirVal(row, dirC.kids)) el.querySelector(".mh-kids").classList.add("has");
+          /* MB4 (גל 6) — "[]" (כל הילדים הוסרו ב"הפרטים שלי") הדליק את סמל הילדים */
+          if (dirKidsText(dirVal(row, dirC.kids))) el.querySelector(".mh-kids").classList.add("has");
         });
+        if (openTile && houseEls[openTile]) openPopup(openTile);
       });
+      }
+      loadDir();
 
       // ---- מנוע תנועה: pan / zoom / pinch, עם שתי דרגות פירוט (שם משפחה -> +ילדים) ----
       var scale = 1, tx = 0, ty = 0, fitScaleVal = 1;
@@ -2905,6 +2961,11 @@ CBA.screens = CBA.screens || {};
         scale = Math.max(fitScaleVal, Math.min(capScale, widthFit));
         tx = (viewport.clientWidth - MAP_WORLD_W * scale) / 2;
         ty = 0;
+        /* MB2 (גל 6) — המרכוז על "הבית שלי" (ממצא 3.5) עבר לכאן. קודם הוא רץ
+           פעם אחת אחרי initialView, וה-ResizeObserver — שתמיד יורה פעם אחת
+           כשמתחילים להאזין — קרא שוב ל-initialView ואיפס אותו. */
+        var mt = myTileForView();
+        if (mt) ty = Math.min(0, viewport.clientHeight / 2 - py(mt.y + mt.h / 2) * scale);
         if (animated) { worldEl.style.transition = "transform .38s cubic-bezier(.2,.6,.2,1)"; setTimeout(function () { worldEl.style.transition = ""; }, 400); }
         apply();
       }
@@ -3066,8 +3127,13 @@ CBA.screens = CBA.screens || {};
         popupEl.innerHTML = '<button type="button" class="map-popup__close" aria-label="סגור">' + xIcon + '</button>' +
           (typeof opts.popup === 'function'
             ? opts.popup(num, row, dirC)
-            : (row && dirC ? dirHouseHTML(row, dirC) : '<div class="card dir-card"><div class="dir-card__house">בית ' + CBA.esc(num) + '</div><div class="dir-card__names">אין נתונים זמינים לבית זה.</div></div>'));
+            : (row && dirC ? dirHouseHTML(row, dirC) : '<div class="card dir-card"><div class="dir-card__house">בית ' + CBA.esc(num) + '</div><div class="dir-card__names">' +
+                (dirLoad === "loading" ? "טוען את פרטי הדיירים…"
+                  : dirLoad === "error" ? 'לא הצלחנו לטעון את פרטי הדיירים. <button type="button" class="btn-ghost btn-sm" data-map-dir-retry>לנסות שוב</button>'
+                  : "אין נתונים זמינים לבית זה.") + '</div></div>'));
         popupEl.querySelector(".map-popup__close").addEventListener("click", function (ev) { ev.stopPropagation(); closePopup(); });
+        var dirRetry = popupEl.querySelector("[data-map-dir-retry]");
+        if (dirRetry) dirRetry.addEventListener("click", function (ev) { ev.stopPropagation(); loadDir(); openPopup(num); });
         openTile = num;
         popupAt = { x: parseFloat(el.style.left) + parseFloat(el.style.width) / 2,
                     y: parseFloat(el.style.top), h: parseFloat(el.style.height) };
@@ -3133,14 +3199,19 @@ CBA.screens = CBA.screens || {};
       function runSearch(q) {
         q = q.trim();
         if (!q) { resultsEl.classList.remove("show"); return; }
-        var matches = MAP_TILES.filter(function (t) {
-          if (t.n.indexOf(q) !== -1) return true;
+        /* MB3 (גל 6) — הילדים כטקסט המוצג ולא JSON עם תאריכי לידה ("201" מצא כל
+           ילד שנולד ב-2010–2019, ובית 201 עצמו נדחק מחוץ ל-8 התוצאות).
+           ובתים שהמספר שלהם מתאים — ראשונים. */
+        var byNum = [], byName = [];
+        MAP_TILES.forEach(function (t) {
+          if (t.n.indexOf(q) !== -1) { byNum.push(t); return; }
           var row = byHouse[normHouse(t.n)];
-          if (!row || !dirC) return false;
-          var hay = [dirVal(row, dirC.family), dirVal(row, dirC.kids)]
+          if (!row || !dirC) return;
+          var hay = [dirVal(row, dirC.family), dirKidsText(dirVal(row, dirC.kids))]
             .concat(dirC.firstName.map(function (k) { return dirVal(row, k); })).join(" ");
-          return hay.indexOf(q) !== -1;
-        }).slice(0, 8);
+          if (hay.indexOf(q) !== -1) byName.push(t);
+        });
+        var matches = byNum.concat(byName).slice(0, 8);
         if (!matches.length) {
           resultsEl.innerHTML = '<div class="map-search-empty">לא נמצאו תוצאות</div>';
         } else {
@@ -3162,8 +3233,10 @@ CBA.screens = CBA.screens || {};
       if (qEl && resultsEl) {
         qEl.addEventListener("input", function () { runSearch(qEl.value); });
         qEl.addEventListener("focus", function () { if (qEl.value.trim()) resultsEl.classList.add("show"); });
-        document.addEventListener("click", function (e) {
-          if (!document.body.contains(qEl)) return;
+        /* MB6 (גל 6) — מאזין על document שמסיר את עצמו כשהמפה כבר לא בדף
+           (קודם נשאר לתמיד, והחזיק את כל המפה הישנה בזיכרון) */
+        document.addEventListener("click", function mapSearchOut(e) {
+          if (!document.body.contains(qEl)) { document.removeEventListener("click", mapSearchOut); return; }
           if (!e.target.closest(".map-search-wrap")) resultsEl.classList.remove("show");
         });
       }
@@ -3179,8 +3252,8 @@ CBA.screens = CBA.screens || {};
           e.stopPropagation();
           legendEl.classList.toggle("is-open");
         });
-        document.addEventListener("click", function (e) {
-          if (!document.body.contains(legendEl)) return;
+        document.addEventListener("click", function mapLegendOut(e) {
+          if (!document.body.contains(legendEl)) { document.removeEventListener("click", mapLegendOut); return; }
           if (!e.target.closest("#map-legend") && !e.target.closest("#map-legend-toggle")) legendEl.classList.remove("is-open");
         });
       }
@@ -3530,17 +3603,14 @@ CBA.screens = CBA.screens || {};
       worldEl.classList.add('map-enter');
       setTimeout(function () { worldEl.classList.remove('map-enter'); }, 1100);
 
-      initialView(false);
-      // אם ידוע לנו איפה התושב גר — ממרכזים עליו את הפתיחה (בלי לזום פנימה
-      // ובלי לפתוח פופאפ; רק כדי שהעין תמצא את עצמה מיד). ר' ממצא 3.5.
-      if (myHouse) {
-        var myTile = MAP_TILES.filter(function (r) { return normHouse(r.n) === myHouse; })[0];
-        if (myTile) {
-          var cy = py(myTile.y + myTile.h / 2);
-          ty = Math.min(0, viewport.clientHeight / 2 - cy * scale);
-          apply();
-        }
+      // אם ידוע לנו איפה התושב גר — initialView ממרכז עליו את הפתיחה (בלי לזום
+      // פנימה ובלי לפתוח פופאפ; רק כדי שהעין תמצא את עצמה מיד). ר' ממצא 3.5.
+      function myTileForView() {
+        // רק במפת התושב המלאה — במסכי הגינון הפתיחה ממורכזת על הנעיצה, לא על הבית
+        if (!myHouse || !(opts && opts.full)) return null;
+        return MAP_TILES.filter(function (r) { return normHouse(r.n) === myHouse; })[0] || null;
       }
+      initialView(false);
       // ידית לקורא — כדי שמסך הגינון יוכל לרענן סימונים בלי לצייר מפה מחדש
       return {
         setMarkers: setMarkers, setPin: setPin, getPin: getPin, areaAt: areaAt,
@@ -3557,8 +3627,21 @@ CBA.screens = CBA.screens || {};
        שם הטאב בניווט כבר אומר "מפת השיכון", והכותרת גבתה 176 פיקסלים שגרמו
        לדף לגלוש — כלומר אי-אפשר היה לראות את המפה במלואה. אותו שיקול בדיוק
        כמו במסך "ועד השיכון". */
-    render: function (container) { CBA.map.render(container, { full: true, head: false }); }
+    render: function (container, opts) {
+      /* MB5 (גל 6) — רענון רקע (silent) בנה את כל המפה מחדש: הזום, המיקום,
+         הפופאפ הפתוח, השכבות, התצ"א ו"מצב נקי" — הכול התאפס באמצע השימוש,
+         בכל פעם שמשהו השתנה בגינון או במטען הראשי. במפה אין נתון שמתעדכן כך
+         (המדריך ממילא במטמון), אז ברענון רקע מחזירים את אותה מפה בדיוק.
+         ניווט אמיתי למסך — תמיד בונה מחדש. */
+      if (opts && opts.silent && resMapKeep && resMapKeep.host === container && resMapKeep.nodes.length) {
+        resMapKeep.nodes.forEach(function (n) { container.appendChild(n); });
+        return;
+      }
+      CBA.map.render(container, { full: true, head: false });
+      resMapKeep = { host: container, nodes: Array.prototype.slice.call(container.childNodes) };
+    }
   };
+  var resMapKeep = null;
   /* ==== "ועד השיכון" — עץ ארגוני של הוועד, תצוגת קריאה בלבד (2026-08-10) ====
      פתוח לכל תושב מחובר ופעיל (CBA.data.getCommitteeTree, כמו טאב
      "שכנים"/המפה). עריכה (הוספת/מחיקת תפקיד, שינוי שם/קטגוריה/הורה/אנשים)
