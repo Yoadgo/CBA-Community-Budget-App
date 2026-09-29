@@ -1,0 +1,44 @@
+/* ============================================================================
+   events2.css — לוח האירועים בשפה החדשה (גל 3, 1.10.2026 · ספר האבנים פרק 5)
+   חל רק מתחת לחופה החדשה (.ev-v2, ר' draw ב-events.js). "נייר לתוכן":
+   כרטיסים לבנים אטומים במקום הזכוכית (.lg), היום בגוון האירועים, ובלי
+   ריפוד כפול (החופה כבר נותנת את הראש). כל הצבעים מ-tokens.css.
+   ============================================================================ */
+.ev-v2 .events-container, .ev-v2 .events-mobile { padding: 0; }
+.ev-v2 .lg {
+  background: var(--paper); -webkit-backdrop-filter: none; backdrop-filter: none;
+  border-radius: var(--r-card); box-shadow: var(--sh-card);
+}
+.ev-v2 .lg::before { display: none; }
+
+/* סרגל הכלים של החודש — נשאר (חצים, "חודש | שנה"), קומפקטי יותר */
+.ev-v2 .cal-title h2, .ev-v2 .month-header h2 { font-size: 20px; }
+.ev-v2 .seg { background: var(--hair-2); border-radius: var(--r-pill); padding: 3px; }
+.ev-v2 .seg .view-toggle-btn { border-radius: var(--r-pill); }
+.ev-v2 .seg .view-toggle-btn.on { background: var(--paper); color: var(--ink); box-shadow: var(--sh-card); }
+
+/* שבבים — EA3 "הכול" */
+.ev-v2 .chip { border-color: var(--hair); min-height: 34px; }
+.ev-v2 .chip-all { background: var(--ink) !important; color: var(--paper); border-color: var(--ink); opacity: 1; }
+
+/* הגריד: היום בגוון האירועים, יום נבחר במסגרת */
+.ev-v2 .day { border-radius: var(--r-in); }
+.ev-v2 .day.today { border-color: var(--dom-ev); }
+.ev-v2 .day.today .num { background: var(--dom-ev); color: var(--paper); }
+.ev-v2 .day.selected { box-shadow: 0 0 0 2px var(--dom-ev) inset; }
+
+/* כפתורי שורה — "אישור הגעה" נשאר ה-CTA; EA1 "הודעה לתושבים" למנהל */
+.ev-v2 .btn-rsvp { background: var(--ink); min-height: 32px; }
+.ev-msg-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px;
+  border-radius: var(--r-pill); border: 1px solid var(--dom-ev); background: var(--dom-ev-bg);
+  color: var(--dom-ev); font: inherit; font-size: var(--t-13); font-weight: 700; cursor: pointer;
+}
+.ev-msg-btn:hover { background: var(--dom-ev); color: var(--paper); }
+
+/* טלפון: פס החודשים והשבבים */
+.ev-v2 .m-strip .p.on { background: var(--dom-ev); border-color: var(--dom-ev); }
+.ev-v2 .events-mobile { gap: 12px; }
+
+/* שגיאה עם "לנסות שוב" (EB3) */
+.ev-v2 .events-error { background: var(--paper); border-radius: var(--r-card); box-shadow: var(--sh-card); padding: 24px; text-align: center; }

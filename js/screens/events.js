@@ -539,6 +539,9 @@ CBA.screens.events = (function () {
     monthEvents.forEach(function (e) { counts[e.category] = (counts[e.category] || 0) + 1; });
 
     var html = '<div class="' + (mobileClass ? "m-chipbar" : "chipbar") + '" dir="rtl">';
+    /* EA3 (גל 3, 1.10.26) — "הכול": מופיע רק כשמשהו כבוי, ומחזיר את כל הקטגוריות */
+    var anyOff = !!state.activeCategories && CATEGORY_ORDER.some(function (k) { return !isCategoryActive(k); });
+    if (anyOff) html += '<button type="button" class="chip chip-all" data-cat-all>הכול</button>';
     CATEGORY_ORDER.forEach(function (key) {
       var cat = CATEGORIES[key];
       var cnt = counts[key] || 0;
@@ -555,6 +558,8 @@ CBA.screens.events = (function () {
   }
 
   function wireChipbar(container) {
+    var allChip = container.querySelector(".chip[data-cat-all]");
+    if (allChip) allChip.addEventListener("click", function () { state.activeCategories = null; draw(activeContainer); });
     container.querySelectorAll(".chip[data-cat]").forEach(function (chip) {
       chip.addEventListener("click", function () {
         var cat = chip.dataset.cat;
@@ -628,6 +633,7 @@ CBA.screens.events = (function () {
     wireAddCalButtons(container);
     wireShareButtons(container);
     applyHighlight(container);
+    syncCanopy();
   }
 
   function renderMonthlyCalendar(month, year, monthEvents) {
@@ -803,7 +809,7 @@ CBA.screens.events = (function () {
       prevBtn.addEventListener("click", function () {
         state.currentMonth.setMonth(state.currentMonth.getMonth() - 1);
         state.selectedDate = null;
-        draw(container);
+        drawOrReloadYear();
       });
     }
 
@@ -812,7 +818,7 @@ CBA.screens.events = (function () {
       nextBtn.addEventListener("click", function () {
         state.currentMonth.setMonth(state.currentMonth.getMonth() + 1);
         state.selectedDate = null;
-        draw(container);
+        drawOrReloadYear();
       });
     }
 
@@ -890,6 +896,7 @@ CBA.screens.events = (function () {
     wireAnnualListeners(container);
     wireViewToggle(container);
     wireChipbar(container);
+    syncCanopy();
   }
 
   // קליק על קובייה שנתית -> קפיצה לתצוגה החודשית של אותו חודש (לפי האפיון)
@@ -909,7 +916,8 @@ CBA.screens.events = (function () {
    * תצוגה מובייל (סדר יומי)
    */
   function renderMobileView(container) {
-    state.showAllMonth = false; // חוזרים לברירת המחדל (ימי עבר מוסתרים) בכל כניסה מחדש
+    /* EB1 (גל 3) — האיפוס של "הצגת אירועים שעברו" עבר לכניסה למסך ולמעבר
+       חודש. כאן הוא מחק גם את מה שקישור ישיר ביקש (אירוע שעבר לא הוצג). */
     var html = demoBannerHTML() +
       '<div class="events-mobile" dir="rtl">' +
       renderPrivateEventsPanel() +
@@ -920,6 +928,16 @@ CBA.screens.events = (function () {
 
     container.innerHTML = html;
     wireMobileListeners(container);
+    syncCanopy();
+    /* E13 (גל 3) — פס החודשים נפתח על החודש המוצג (עד היום: תמיד על ינואר) */
+    var on = container.querySelector(".m-strip .p.on");
+    var strip = on && on.parentNode;
+    if (strip && strip.scrollWidth > strip.clientWidth) {
+      try {
+        var r = on.getBoundingClientRect(), sr = strip.getBoundingClientRect();
+        strip.scrollLeft += (r.left + r.width / 2) - (sr.left + sr.width / 2);
+      } catch (e) { /* סביבת בדיקה */ }
+    }
   }
 
   function monthEventsRaw() {
@@ -1028,6 +1046,7 @@ CBA.screens.events = (function () {
       btn.addEventListener("click", function () {
         var month = parseInt(btn.dataset.month, 10);
         state.currentMonth = new Date(state.year, month, 1);
+        state.showAllMonth = false;
         renderMobileView(container);
       });
     });
@@ -1036,14 +1055,7 @@ CBA.screens.events = (function () {
     if (showAllBtn) {
       showAllBtn.addEventListener("click", function () {
         state.showAllMonth = true;
-        container.innerHTML = demoBannerHTML() +
-          '<div class="events-mobile" dir="rtl">' +
-          renderPrivateEventsPanel() +
-          renderMonthSelector() +
-          chipbarHTML(monthEventsRaw(), true) +
-          renderAgendaList() +
-          '</div>';
-        wireMobileListeners(container);
+        renderMobileView(container);
       });
     }
 
@@ -1167,6 +1179,9 @@ CBA.screens.events = (function () {
       h += '<button type="button" class="ev-inv-btn" data-inv-open="' + esc(e.id) + '">הזמנה</button>';
     }
     if (canHaveInfo(e) && viewerIsAdmin()) {
+      /* EA1 (גל 3, 1.10.26) — "הודעות ותזכורות" ישירות מהשורה. עד היום רק דרך
+         "עריכת פרטים" ← קישור, והמעבר מחק עריכה שלא נשמרה. */
+      h += '<button type="button" class="ev-msg-btn" data-ev-msg="' + esc(e.id) + '">הודעה לתושבים</button>';
       h += '<button type="button" class="ev-edit-btn" data-ev-edit="' + esc(e.id) + '">עריכת פרטים</button>';
     }
     return h;
@@ -1228,6 +1243,13 @@ CBA.screens.events = (function () {
           delete imgCache[id]; return fillInvitation(b);
         }
         openInvitation(id);
+      });
+    });
+    container.querySelectorAll("[data-ev-msg]").forEach(function (b) {
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var ev = state.eventsById[b.getAttribute("data-ev-msg")];
+        if (ev) openEventMessages(ev);
       });
     });
     container.querySelectorAll("[data-ev-edit]").forEach(function (b) {
@@ -1786,11 +1808,11 @@ CBA.screens.events = (function () {
     if (!CBA.fb) return;
     var ctx = { event: event, isAdmin: viewerIsAdmin(), config: null, myResponse: null, stats: null, rows: null };
 
-    CBA.ui.dialog({
+    var dlg = CBA.ui.dialog({
       title: "אישור הגעה — " + event.title,
       html: rsvpDialogHTML(),
       sticky: true,
-      okText: "סגור",
+      okText: "סגירה",   /* E30 (גל 3) — "סגירה" בכל החלונות */
       onMount: function (wrap, close) {
         // הכפתור "אישור" הרגיל של הדיאלוג הופך כאן ל"סגור" בלבד —
         // כל שמירה בפועל קורית דרך btn-rsvp-save/btn-rsvp-toggle למעלה.
@@ -1811,6 +1833,16 @@ CBA.screens.events = (function () {
           });
         });
       }
+    });
+    /* EB4 (גל 3, 1.10.26) — אחרי סגירת החלון הלוח מתעדכן: כפתור "אישור הגעה"
+       מול "+ פתיחת…", ו"✓ N משפחות". עד היום נשארו ישנים עד כניסה מחדש.
+       ⚠️ רק כשהלוח עצמו פתוח — מהבית (homeSchedule) יש רענון משלו. */
+    if (dlg && dlg.then) dlg.then(function () {
+      if (!activeContainer || !activeContainer.isConnected) return;
+      if (document.body.dataset.screen !== "events") return;
+      loadRsvpEnabledIds(function () {
+        if (activeContainer && activeContainer.isConnected && document.body.dataset.screen === "events") draw(activeContainer);
+      });
     });
   }
 
@@ -1852,14 +1884,96 @@ CBA.screens.events = (function () {
   /**
    * פונקציית ציור ראשית של המסך
    */
+  /* ==========================================================================
+   *  🔴 גל 3 (1.10.26, ספר האבנים פרק 5) — החופה (E1, EA2)
+   * --------------------------------------------------------------------------
+   *  draw מצייר עכשיו שתי שכבות: החופה (#app-main > .cnp2) והתוכן בתוך
+   *  #ev-body. כל התצוגות הקיימות מקבלות את #ev-body כ-container — בדיוק
+   *  כמו שקיבלו קודם את #app-main — וכשהן קוראות draw(container) עם הגוף,
+   *  draw מזהה את זה ועולה לשורש. שום תצוגה לא יודעת שיש חופה.
+   *  בלי canopy.js (לקוח ישן) — הכול כמו קודם, בלי שכבה.
+   * ========================================================================== */
+  function canopyHTML() {
+    if (!(window.CBA && CBA.canopy)) return "";
+    var today = new Date();
+    var isCur = state.currentMonth && state.currentMonth.getMonth() === today.getMonth() &&
+                state.currentMonth.getFullYear() === today.getFullYear();
+    return CBA.canopy({ size: "mid", dom: "ev", wide: true, title: "לוח אירועים",
+      ico: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+      sub: canopySub(), subId: "ev-cnp-sub",
+      tools: '<button type="button" class="cnp2-btn" id="ev-today"' + (isCur ? " hidden" : "") + '>היום</button>' });
+  }
+  function canopySub() {
+    if (!state.currentMonth || state.loading || state.error) return "כל מה שקורה בשיכון — קהילה, תרבות, חגים וגנים";
+    var m = state.currentMonth.getMonth(), y = state.currentMonth.getFullYear();
+    var from = new Date(y, m, 1), to = new Date(y, m + 1, 0);
+    var n = (state.allEvents || []).filter(function (e) { return evOverlaps(e, from, to) && e.category !== "personal"; }).length;
+    return (state.viewMode === "annual" && selectViewMode() !== "mobile" ? "שנת " + state.year
+      : HEBREW_MONTHS[m] + " " + y) + " · " + (n === 1 ? "אירוע אחד" : n + " אירועים") + " בחודש";
+  }
+  function syncCanopy() {
+    var root = activeContainer;
+    if (!root || !root.querySelector) return;
+    var sub = root.querySelector("#ev-cnp-sub");
+    if (sub) sub.textContent = canopySub();
+    var t = root.querySelector("#ev-today");
+    if (t) {
+      var now = new Date();
+      t.hidden = !!(state.currentMonth && state.currentMonth.getMonth() === now.getMonth() &&
+                    state.currentMonth.getFullYear() === now.getFullYear() && state.viewMode !== "annual");
+    }
+  }
+  /* EB2 (גל 3) — חודש בשנה אחרת (דצמבר ← ינואר): טוענים את השנה ההיא.
+     עד היום הלוח הציג חודש ריק, כי רק שנה אחת נטענה. */
+  function drawOrReloadYear() {
+    var y = state.currentMonth.getFullYear();
+    if (y === state.year) return draw(activeContainer);
+    var keepMonth = new Date(state.currentMonth), keepSel = state.selectedDate;
+    state.loading = true;
+    draw(activeContainer);
+    loadEvents(y, function () {
+      state.year = y;
+      state.currentMonth = keepMonth;
+      state.selectedDate = keepSel;
+      if (activeContainer && activeContainer.isConnected && document.body.dataset.screen === "events") draw(activeContainer);
+    });
+  }
+  function goToday() {
+    var t = startOfDay(new Date());
+    state.viewMode = "monthly";
+    state.currentMonth = new Date(t);
+    state.selectedDate = t;
+    state.showAllMonth = false;
+    drawOrReloadYear();
+  }
+
   function draw(container) {
+    /* החופה + הגוף. ר' ההסבר מעל canopyHTML. */
+    var root = (container && container.id === "ev-body" && container.parentNode) ? container.parentNode : container;
+    var cnp = canopyHTML();
+    if (cnp) {
+      root.innerHTML = cnp + '<div class="cnp2-body cnp2-body--wide ev-v2" id="ev-body"></div>';
+      if (CBA.canopy.bindScroll) CBA.canopy.bindScroll();
+      var tb = root.querySelector("#ev-today");
+      if (tb) tb.addEventListener("click", goToday);
+      container = root.querySelector("#ev-body");
+    } else {
+      container = root;
+    }
+
     if (state.loading) {
       container.innerHTML = '<div class="events-loading">טוען אירועים...</div>';
       return;
     }
 
     if (state.error) {
-      container.innerHTML = '<div class="events-error">' + esc(state.error) + '</div>';
+      /* EB3 (גל 3) — שגיאה עם "לנסות שוב" (עד היום: טקסט בלבד, בלי יציאה) */
+      container.innerHTML = '<div class="events-error">' + esc(state.error) +
+        '<div><button type="button" class="btn-primary" data-ev-retry style="margin-top:12px">לנסות שוב</button></div></div>';
+      var rb = container.querySelector("[data-ev-retry]");
+      if (rb) rb.addEventListener("click", function () {
+        if (CBA.screens && CBA.screens.events) CBA.screens.events.render(root);
+      });
       return;
     }
 
@@ -1929,6 +2043,7 @@ CBA.screens.events = (function () {
       pendingFocus = null;
       var wantEventId = pendingEventId;
       pendingEventId = null;
+      var keepShowAll = false;   /* EB1 — קישור ישיר לאירוע שעבר משאיר את "העבר" גלוי */
       var year = focusDate ? focusDate.getFullYear() : ((silentNow && wasShown && state.year) ? state.year : new Date().getFullYear());
       loadEvents(year, function () {
         /* קישור ישיר: האירוע יכול לשבת בשנה אחרת מזו שנטענה. אם הוא לא נמצא
@@ -1939,6 +2054,7 @@ CBA.screens.events = (function () {
             focusDate = startOfDay(new Date(target.date));
             state.highlightEventId = wantEventId;
             state.showAllMonth = true; // במובייל: גם אם היום כבר עבר, שיהיה גלוי
+            keepShowAll = true;
           } else if (CBA.ui && CBA.ui.toast) {
             CBA.ui.toast("האירוע מהקישור לא נמצא בלוח", "warn");
           }
@@ -1954,6 +2070,7 @@ CBA.screens.events = (function () {
           state.currentMonth = focusDate ? new Date(focusDate) : new Date();
           state.year = year;
           state.activeCategories = null;
+          state.showAllMonth = keepShowAll;   /* EB1 — איפוס בכניסה (עבר מ-renderMobileView) */
         }
         wasShown = true;
         draw(container);
