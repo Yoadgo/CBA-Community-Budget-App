@@ -62,7 +62,7 @@ CBA.screens.budget = {
       container.innerHTML = topHTML + '<div class="budget-cols">' + cardsHTML + '</div>' + bottomHTML;
       bindTopControls(container);
       container.querySelectorAll("[data-count]").forEach(function (el) {
-        el.textContent = CBA.formatILS(parseFloat(el.dataset.count) || 0);
+        el.textContent = CBA.formatILSWhole(parseFloat(el.dataset.count) || 0);
       });
       bindCards(container);
       bindChartHover(container);
@@ -118,12 +118,12 @@ function bindCards(container) {
 /* אנימציית ספירה: מ-0 עד היעד, מעוצב כמטבע (רק בניווט רגיל — לא בעדכון רקע שקט) */
 function countUp(el, target) {
   const dur = 550, start = performance.now();
-  el.textContent = CBA.formatILS(0);
+  el.textContent = CBA.formatILSWhole(0);
   function step(now) {
     const p = Math.min((now - start) / dur, 1);
     const eased = 1 - Math.pow(1 - p, 3);
-    el.textContent = CBA.formatILS(target * eased);
-    if (p < 1) requestAnimationFrame(step); else el.textContent = CBA.formatILS(target);
+    el.textContent = CBA.formatILSWhole(target * eased);
+    if (p < 1) requestAnimationFrame(step); else el.textContent = CBA.formatILSWhole(target);
   }
   requestAnimationFrame(step);
 }
@@ -132,7 +132,7 @@ function countUp(el, target) {
 function pendingBanner(n, sum) {
   return `<div class="pending-banner" data-goto-pending role="button" tabindex="0">
     <span class="pending-banner__flag">⚑</span>
-    <span>${n === 1 ? "קבלה אחת ממתינה" : "<b>" + n + "</b> קבלות ממתינות"} לאישורך · <b>${CBA.formatILS(sum)}</b></span>
+    <span>${n === 1 ? "קבלה אחת ממתינה" : "<b>" + n + "</b> קבלות ממתינות"} לאישורך · <b>${CBA.formatILSWhole(sum)}</b></span>
     <span class="pending-banner__cta">מעבר לאישור →</span>
   </div>`;
 }
@@ -151,14 +151,14 @@ function bottomBar(summary, pace) {
   if (pace) {
     const over = summary.diff > 0;
     return `
-      <div class="bl-cell"><div class="bl-cell__label">צפי עד עכשיו</div><div class="bl-cell__val" data-pulse-key="bl-primary" data-count="${summary.expected}">${CBA.formatILS(summary.expected)}</div></div>
-      <div class="bl-cell"><div class="bl-cell__label">בוצע עד כה</div><div class="bl-cell__val" data-pulse-key="bl-secondary" data-count="${summary.actual}">${CBA.formatILS(summary.actual)}</div></div>
-      <div class="bl-cell bl-cell--result ${over ? "bl-cell--neg" : "bl-cell--pos"}"><div class="bl-cell__label">${over ? '<span class="ico-over">▲</span>חריגה מהקצב' : '<span class="ico-under">▼</span>מתחת לקצב'}</div><div class="bl-cell__val ${over ? "neg" : "pos"}" data-pulse-key="bl-result" data-count="${Math.abs(summary.diff)}">${CBA.formatILS(Math.abs(summary.diff))}</div></div>`;
+      <div class="bl-cell"><div class="bl-cell__label">צפי עד עכשיו</div><div class="bl-cell__val" data-pulse-key="bl-primary" data-count="${summary.expected}">${CBA.formatILSWhole(summary.expected)}</div></div>
+      <div class="bl-cell"><div class="bl-cell__label">בוצע עד כה</div><div class="bl-cell__val" data-pulse-key="bl-secondary" data-count="${summary.actual}">${CBA.formatILSWhole(summary.actual)}</div></div>
+      <div class="bl-cell bl-cell--result ${over ? "bl-cell--neg" : "bl-cell--pos"}"><div class="bl-cell__label">${over ? '<span class="ico-over">▲</span>חריגה מהקצב' : '<span class="ico-under">▼</span>מתחת לקצב'}</div><div class="bl-cell__val ${over ? "neg" : "pos"}" data-pulse-key="bl-result" data-count="${Math.abs(summary.diff)}">${CBA.formatILSWhole(Math.abs(summary.diff))}</div></div>`;
   }
   return `
-    <div class="bl-cell"><div class="bl-cell__label">תקציב מתוכנן</div><div class="bl-cell__val" data-pulse-key="bl-primary" data-count="${summary.totalPlan}">${CBA.formatILS(summary.totalPlan)}</div></div>
-    <div class="bl-cell"><div class="bl-cell__label">בוצע עד כה</div><div class="bl-cell__val" data-pulse-key="bl-secondary" data-count="${summary.totalActual}">${CBA.formatILS(summary.totalActual)}</div></div>
-    <div class="bl-cell bl-cell--result ${summary.remaining < 0 ? "bl-cell--neg" : "bl-cell--pos"}"><div class="bl-cell__label">יתרה</div><div class="bl-cell__val ${summary.remaining < 0 ? "neg" : "pos"}" data-pulse-key="bl-result" data-count="${summary.remaining}">${CBA.formatILS(summary.remaining)}</div></div>`;
+    <div class="bl-cell"><div class="bl-cell__label">תקציב מתוכנן</div><div class="bl-cell__val" data-pulse-key="bl-primary" data-count="${summary.totalPlan}">${CBA.formatILSWhole(summary.totalPlan)}</div></div>
+    <div class="bl-cell"><div class="bl-cell__label">בוצע עד כה</div><div class="bl-cell__val" data-pulse-key="bl-secondary" data-count="${summary.totalActual}">${CBA.formatILSWhole(summary.totalActual)}</div></div>
+    <div class="bl-cell bl-cell--result ${summary.remaining < 0 ? "bl-cell--neg" : "bl-cell--pos"}"><div class="bl-cell__label">יתרה</div><div class="bl-cell__val ${summary.remaining < 0 ? "neg" : "pos"}" data-pulse-key="bl-result" data-count="${summary.remaining}">${CBA.formatILSWhole(summary.remaining)}</div></div>`;
 }
 
 /* --- גרף מצטבר: תכנון (מקווקו) מול ביצוע (רציף) + תחזית Run-Rate + Tooltip --- */
@@ -223,9 +223,9 @@ function bindChartHover(container) {
     const future = i > asof;
     tip.innerHTML =
       '<div class="cum-tip__m">' + s.labels[i] + '</div>' +
-      '<div>תכנון: <b>' + CBA.formatILS(plan) + '</b></div>' +
-      '<div>' + (future ? "ביצוע (עד היום): " : "ביצוע: ") + '<b>' + CBA.formatILS(act) + '</b></div>' +
-      '<div class="' + (gap > 0 ? "neg" : "pos") + '">פער: ' + (gap > 0 ? "+" : "") + CBA.formatILS(gap) + '</div>';
+      '<div>תכנון: <b>' + CBA.formatILSWhole(plan) + '</b></div>' +
+      '<div>' + (future ? "ביצוע (עד היום): " : "ביצוע: ") + '<b>' + CBA.formatILSWhole(act) + '</b></div>' +
+      '<div class="' + (gap > 0 ? "neg" : "pos") + '">פער: ' + (gap > 0 ? "+" : "") + CBA.formatILSWhole(gap) + '</div>';
     tip.hidden = false;
     tip.style.left = Math.max(6, Math.min(relX + 10, rect.width - 150)) + "px";
     tip.style.top = "6px";
@@ -245,8 +245,8 @@ function bindChartHover(container) {
 /* --- קבוצה + כרטיסיות --- */
 function groupHTML(g, pace, silent) {
   const sub = pace
-    ? `בוצע <b>${CBA.formatILS(g.actual)}</b> מתוך צפי ${CBA.formatILS(g.expected)}`
-    : `בוצע <b>${CBA.formatILS(g.actual)}</b> מתוך ${CBA.formatILS(g.plan)}`;
+    ? `בוצע <b>${CBA.formatILSWhole(g.actual)}</b> מתוך צפי ${CBA.formatILSWhole(g.expected)}`
+    : `בוצע <b>${CBA.formatILSWhole(g.actual)}</b> מתוך ${CBA.formatILSWhole(g.plan)}`;
   return `
     <div class="bgroup">
       <div class="bgroup__head">
@@ -275,8 +275,8 @@ function cardHTML(r, silent) {
   const barWidth = Math.min(r.pct, 100);
   const over = r.remaining < 0;
   const remainHTML = noBudget
-    ? (r.actual > 0 ? `<span class="ico-over">▲</span>הוצאו <b class="is-over">${CBA.formatILS(r.actual)}</b> ללא סעיף מתוכנן` : `אין הוצאות`)
-    : (over ? `<span class="ico-over">▲</span>חריגה של <b class="is-over">${CBA.formatILS(-r.remaining)}</b>` : `<span class="ico-under">▼</span>נותרו <b>${CBA.formatILS(r.remaining)}</b>`);
+    ? (r.actual > 0 ? `<span class="ico-over">▲</span>הוצאו <b class="is-over">${CBA.formatILSWhole(r.actual)}</b> ללא סעיף מתוכנן` : `אין הוצאות`)
+    : (over ? `<span class="ico-over">▲</span>חריגה של <b class="is-over">${CBA.formatILSWhole(-r.remaining)}</b>` : `<span class="ico-under">▼</span>נותרו <b>${CBA.formatILSWhole(r.remaining)}</b>`);
   const delay = cardEnterDelay();
   const cardStyle = silent ? "animation:none" : ("animation-delay:" + delay + "ms");
   const barStyle = silent ? ("width:" + barWidth + "%") : "width:0";
@@ -287,8 +287,8 @@ function cardHTML(r, silent) {
         <div class="bcard__pct bcard__pct--${r.band}">${pctText}</div>
       </div>
       <div class="bcard__amounts">
-        <span class="bcard__actual">${CBA.formatILS(r.actual)}</span>
-        <span class="bcard__plan">/ ${CBA.formatILS(r.plan)}</span>
+        <span class="bcard__actual">${CBA.formatILSWhole(r.actual)}</span>
+        <span class="bcard__plan">/ ${CBA.formatILSWhole(r.plan)}</span>
       </div>
       <div class="bar"><div class="bar__fill bar__fill--${r.band}" style="${barStyle}" data-fill="${barWidth}"></div></div>
       <div class="bcard__remain">${remainHTML}</div>
@@ -303,7 +303,7 @@ function itemsListHTML(items) {
   if (!items || !items.length) return "";
   return '<div class="bcard__items">' + items.map(function (it) {
     return '<div class="bcard__items-row"><span class="bcard__items-name">' + CBA.esc(it.name) + '</span>' +
-      '<span class="bcard__items-val">' + CBA.formatILS(it.actual) + ' / ' + CBA.formatILS(it.plan) + '</span></div>';
+      '<span class="bcard__items-val">' + CBA.formatILSWhole(it.actual) + ' / ' + CBA.formatILSWhole(it.plan) + '</span></div>';
   }).join("") + '</div>';
 }
 
@@ -321,8 +321,8 @@ function paceCardHTML(r, silent) {
   const pctText = noExp ? (r.actual > 0 ? "מעל הצפי" : "—") : Math.round(r.pct) + "%";
   const barWidth = Math.min(r.pct, 100);
   const remainHTML = r.diff > 0
-    ? `<span class="ico-over">▲</span>חריגה מהקצב <b class="is-over">${CBA.formatILS(r.diff)}</b>`
-    : (r.diff < 0 ? `<span class="ico-under">▼</span>מתחת לקצב <b>${CBA.formatILS(-r.diff)}</b>` : `בדיוק בקצב`);
+    ? `<span class="ico-over">▲</span>חריגה מהקצב <b class="is-over">${CBA.formatILSWhole(r.diff)}</b>`
+    : (r.diff < 0 ? `<span class="ico-under">▼</span>מתחת לקצב <b>${CBA.formatILSWhole(-r.diff)}</b>` : `בדיוק בקצב`);
   const delay = cardEnterDelay();
   const cardStyle = silent ? "animation:none" : ("animation-delay:" + delay + "ms");
   const barStyle = silent ? ("width:" + barWidth + "%") : "width:0";
@@ -333,8 +333,8 @@ function paceCardHTML(r, silent) {
         <div class="bcard__pct bcard__pct--${r.band}">${pctText}</div>
       </div>
       <div class="bcard__amounts">
-        <span class="bcard__actual">${CBA.formatILS(r.actual)}</span>
-        <span class="bcard__plan">/ צפי ${CBA.formatILS(r.expected)}</span>
+        <span class="bcard__actual">${CBA.formatILSWhole(r.actual)}</span>
+        <span class="bcard__plan">/ צפי ${CBA.formatILSWhole(r.expected)}</span>
       </div>
       <div class="bar"><div class="bar__fill bar__fill--${r.band}" style="${barStyle}" data-fill="${barWidth}"></div></div>
       <div class="bcard__remain">${remainHTML}</div>
@@ -352,7 +352,7 @@ function openDrawer(catId) {
       <tr>
         <td class="dt__date">${CBA.esc(t.date || "")}</td>
         <td>${CBA.esc(t.description)}<div class="dt__supplier">${CBA.esc(t.supplier)}</div></td>
-        <td class="dt__amount">${CBA.formatILS(t.amount)}</td>
+        <td class="dt__amount">${CBA.formatILSWhole(t.amount)}</td>
         <td>${statusBadge(t)}</td>
       </tr>`;
   }).join("") : `<tr><td style="color:var(--text-muted); padding:16px 4px;">אין הוצאות בסעיף זה.</td></tr>`;
@@ -365,7 +365,7 @@ function openDrawer(catId) {
       <div class="drawer__head">
         <div>
           <div class="drawer__title">${CBA.esc(cat.name)}</div>
-          <div class="drawer__sub">בוצע ${CBA.formatILS(cat.actual)} מתוך ${CBA.formatILS(cat.plan)}</div>
+          <div class="drawer__sub">בוצע ${CBA.formatILSWhole(cat.actual)} מתוך ${CBA.formatILSWhole(cat.plan)}</div>
         </div>
         <button class="drawer__close" data-close aria-label="סגור">×</button>
       </div>

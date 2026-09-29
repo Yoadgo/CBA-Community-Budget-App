@@ -152,6 +152,14 @@ function feed(grid, sheet) {
   ok('מוצג שזה חיבור לפי שם דומה', /\(רונית ואבי שמש\)/.test(main.textContent));
   ok('שני "דוד כהן" — לא מנחשים', /לא חיברנו אוטומטית/.test(main.textContent));
 
+  section('12. התאמה בינונית — מציינים, לא מחברים');
+  txs = [{ id: 40, buyer: 'רונית ואבי שמש', supplier: 'חנות', familyId: '41', amount: 70, status: 'ready', expenseType: 'refund' }];
+  main.querySelector('.rc-again').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  feed([HEAD, row('41', 'חוז שמש יעל', '70.00', 'שיכון')]);
+  await wait(40);
+  ok('לא חובר (מילה משותפת אחת)', /שולם בלי שום בקשה פתוחה/.test(main.textContent));
+  ok('צוין "התאמה בינונית" עם השם והמילה המשותפת', /התאמה בינונית/.test(main.textContent) && /רונית ואבי שמש/.test(main.textContent) && /משותף: שמש/.test(main.textContent), main.textContent.slice(0, 300));
+
   console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);
 })();

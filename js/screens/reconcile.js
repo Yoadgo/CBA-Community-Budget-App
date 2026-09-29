@@ -110,8 +110,14 @@ CBA.screens.reconcile = (function () {
             : 'אין לו שום בקשה פתוחה אצלנו. זה הדגל האדום החזק ביותר בדף הזה.') +
         '</div>' +
         (it.candidates && it.candidates.length
-          ? '<div class="rc-why rc-why--warn">השם דומה ליותר מנמען אחד, ולכן לא חיברנו אוטומטית: ' +
-            it.candidates.map(function (g) { return esc(g.label); }).join(" / ") + '</div>'
+          ? '<div class="rc-why rc-why--warn">' +
+            (it.level === "ambiguous"
+              ? 'השם דומה ליותר מנמען אחד, ולכן לא חיברנו אוטומטית: '
+              : 'התאמה בינונית — ייתכן שזה: ') +
+            it.candidates.map(function (c) {
+              return '<b>' + esc(c.group.label) + '</b>' +
+                     (c.shared && c.shared.length ? ' (משותף: ' + esc(c.shared.join(" ")) + ')' : '');
+            }).join(" / ") + '</div>'
           : '') +
         '</div>';
     }).join("");

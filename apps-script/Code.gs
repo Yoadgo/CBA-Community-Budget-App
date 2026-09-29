@@ -256,6 +256,11 @@ var ACTION_PERMS = {
      בגוף הבקשה. הפעולה **קוראת בלבד** — היא לא כותבת שום דבר לגיליון
      העבודה; היא ממירה קובץ ומחזירה טבלה. */
   parseChargeFile: PERM_BUDGET,
+  /* 29.9.26 — עריכת פרטים נכתבת מהדפדפן ל-Firestore; זו הקריאה שמזיזה
+     את קובץ הקבלה לתיקיית החודש החדש. ר' txReceiptSync_. */
+  txReceiptSync: PERM_BUDGET,
+  txReceiptTrash: PERM_BUDGET,
+  receiptsRepair: PERM_SUPER,
   /* דלת Nuki + WeWork (25.9.26, Door.gs). weworkBook / weworkCancel /
      doorOpen / doorGymResend **אינן כאן בכוונה** — פתוחות לכל תושב פעיל,
      והזכאות נבדקת בתוך הפעולה (שריון פעיל עכשיו / מנוי בתוקף / בעלות). */
@@ -1789,6 +1794,9 @@ function doPostDispatch_(ss, body) {
       // דיווחים על האפליקציה (2026-09-09). submitAppReport אינו ב-ACTION_PERMS
       // בכוונה — פתוח לכל משתמש מחובר ופעיל, ר' ההערה שם.
       case 'parseChargeFile':     return json_(parseChargeFile_(ss, body));
+      case 'txReceiptSync':       return json_(txReceiptSync_(ss, body));
+      case 'txReceiptTrash':      return json_(txReceiptTrash_(ss, body));
+      case 'receiptsRepair':      return json_(receiptsRepair_(ss, body));
       case 'submitAppReport':     return json_(submitAppReport_(ss, body));
       case 'setAppReportDone':    return json_(setAppReportDone_(ss, body));
       /* גל 4 (24.9) — הדיווח נכתב מהדפדפן ל-Firestore; שלוש קריאות שגר-ושכח. ר' Diag.gs. */
@@ -3120,6 +3128,133 @@ function moveReceiptToPermanentIfNeeded_(url, monthKey) {
     var file = DriveApp.getFileById(id);
     file.moveTo(getReceiptsFolder_(monthKey));
   } catch (e) { /* לא קריטי */ }
+}
+
+/* ============================================================================
+ *  txReceiptSync_ — הקבלה עוקבת אחרי "חודש הגשה" גם בעריכה מהדפדפן (29.9.26)
+ * ----------------------------------------------------------------------------
+ *  הבאג (דיווח 34 של יועד): שינוי "חודש הגשה" לשורה מאושרת לא הזיז את הקבלה
+ *  לתיקיית החודש החדש ב-Drive. הסיבה: מאז צעד 09 עריכת פרטים נכתבת מהדפדפן
+ *  ישירות ל-Firestore (mergeDoc), ו-saveTransactionRow_ — המקום היחיד שהזיז/שינה
+ *  שם לקובץ — כבר לא נקרא במסלול הזה. תיבת הדואר (btxSideEffects_) מטפלת רק
+ *  בשינויי סטטוס.
+ *
+ *  🔐 הדפדפן שולח רק מזהה מסמך. הקישור, החודש והסטטוס נקראים כאן מ-Firestore,
+ *     ולכן אי אפשר לבקש "הזז את הקובץ X" לקובץ שרירותי. ובנוסף הקובץ חייב
+ *     לשבת כבר בתוך עץ תיקיית "שיכון" — אחרת לא נוגעים בו.
+ *  אידמפוטנטי: moveTo לתיקייה שהקובץ כבר בה אינו עושה דבר.
+ * ========================================================================== */
+function isUnderReceiptsRoot_(file) {
+  var seen = 0, queue = [];
+  var ps = file.getParents();
+  while (ps.hasNext()) queue.push({ f: ps.next(), d: 0 });
+  while (queue.length && seen < 20) {
+    var cur = queue.shift(); seen++;
+    if (cur.f.getId() === ROOT_RECEIPTS_FOLDER_ID) return true;
+    if (cur.d >= 3) continue;   // שיכון/<שנה>/<חודש> — שלוש רמות לכל היותר
+    var up = cur.f.getParents();
+    while (up.hasNext()) queue.push({ f: up.next(), d: cur.d + 1 });
+  }
+  return false;
+}
+
+function txReceiptSync_(ss, body) {
+  var docId = String(body.docId || '');
+  if (!/^\d{4}__\d+$/.test(docId)) return { ok: false, error: 'מזהה לא תקין' };
+  var d = fsGet_(fsDocPath_(FS_BUDGET_TX, docId));
+  if (!d) return { ok: false, error: 'השורה לא נמצאה' };
+  var url = String(d['קישור קבלה'] || '');
+  var id = extractDriveFileId_(url);
+  if (!id) return { ok: true, skipped: 'אין קבלה' };
+  var status = String(d['סטטוס'] || '');
+  var file;
+  try { file = DriveApp.getFileById(id); } catch (e) { return { ok: true, skipped: 'אין גישה לקובץ' }; }
+  if (!isUnderReceiptsRoot_(file)) return { ok: true, skipped: 'הקובץ אינו בתיקיית הקבלות' };
+  var nm = String(d['שם קובץ קבלה'] || '');
+  if (nm && file.getName() !== nm) { try { file.setName(nm); } catch (e) {} }
+  if (status !== STATUS_HE.ready && status !== STATUS_HE.paid) return { ok: true, skipped: 'טרם אושרה' };
+  var target = getReceiptsFolder_(d['חודש הגשה']);
+  file.moveTo(target);
+  return { ok: true, folder: target.getName() };
+}
+
+/* ============================================================================
+ *  txReceiptTrash_ — מחיקת שורה מהדפדפן מעבירה גם את הקבלה לסל (29.9.26)
+ * ----------------------------------------------------------------------------
+ *  אותו שורש כמו txReceiptSync_: מחיקה נעשית היום ב-deleteDoc מהדפדפן, ו-
+ *  deleteTransactionRow_ (שכן מעביר את הקבלה לסל) כבר לא נקראת. התוצאה שיועד
+ *  ראה: קבלות של שורות שנמחקו נשארות בתיקיית "ממתין לאישור".
+ *  🔐 שלושה שומרים לפני שנוגעים בקובץ:
+ *     1. המסמך באמת כבר לא קיים ב-Firestore (אי אפשר למחוק קבלה של שורה חיה).
+ *     2. הקובץ יושב בתוך עץ תיקיית "שיכון".
+ *     3. אף שורה אחרת אינה מצביעה על אותו קובץ.
+ *  סל מיחזור ולא מחיקה סופית — בדיוק כמו deleteTransactionRow_.
+ * ========================================================================== */
+function btxReceiptIdsInUse_() {
+  var used = {};
+  fsList_(FS_BUDGET_TX).forEach(function (r) {
+    var id = extractDriveFileId_((r.data || {})['קישור קבלה']);
+    if (id) used[id] = (used[id] || 0) + 1;
+  });
+  return used;
+}
+
+function txReceiptTrash_(ss, body) {
+  var docId = String(body.docId || '');
+  if (!/^\d{4}__\d+$/.test(docId)) return { ok: false, error: 'מזהה לא תקין' };
+  var id = extractDriveFileId_(body.url);
+  if (!id) return { ok: true, skipped: 'אין קבלה' };
+  if (fsGet_(fsDocPath_(FS_BUDGET_TX, docId))) return { ok: false, error: 'השורה עדיין קיימת' };
+  var file;
+  try { file = DriveApp.getFileById(id); } catch (e) { return { ok: true, skipped: 'אין גישה לקובץ' }; }
+  if (!isUnderReceiptsRoot_(file)) return { ok: true, skipped: 'הקובץ אינו בתיקיית הקבלות' };
+  if (btxReceiptIdsInUse_()[id]) return { ok: true, skipped: 'שורה אחרת משתמשת בקובץ' };
+  file.setTrashed(true);
+  return { ok: true, trashed: true };
+}
+
+/* ============================================================================
+ *  receiptsRepair_ — תיקון חד-פעמי של מה שהצטבר (29.9.26, מנהל-על בלבד)
+ * ----------------------------------------------------------------------------
+ *  שני הבאגים למעלה פעלו מאז צעד 09 (15.9), ולכן יש כבר נזק ב-Drive:
+ *   (א) קבלות של שורות מאושרות שיושבות בתיקיית חודש שגויה (או עדיין ב"ממתין").
+ *   (ב) קבלות ב"ממתין לאישור" שאף שורה אינה מצביעה עליהן (שורות שנמחקו).
+ *  body.apply !== true → רק דוח, לא נוגעים בכלום. קבצים בני פחות מיום
+ *  ב"ממתין" לא נחשבים יתומים — ייתכן שהגשה בדיוק עכשיו באמצע.
+ * ========================================================================== */
+function receiptsRepair_(ss, body) {
+  var apply = body.apply === true;
+  var rows = fsList_(FS_BUDGET_TX);
+  var used = {}, folderCache = {}, moved = [], orphans = [], errors = [];
+  var ok = function (st) { return st === STATUS_HE.ready || st === STATUS_HE.paid; };
+  rows.forEach(function (r) {
+    var d = r.data || {};
+    var id = extractDriveFileId_(d['קישור קבלה']);
+    if (!id) return;
+    used[id] = true;
+    if (!ok(String(d['סטטוס'] || ''))) return;
+    var mk = normalizeMonthKey_(d['חודש הגשה']);
+    if (!mk) return;
+    try {
+      var file = DriveApp.getFileById(id);
+      if (!isUnderReceiptsRoot_(file)) return;
+      var target = folderCache[mk] || (folderCache[mk] = getReceiptsFolder_(mk));
+      var ps = file.getParents(), inTarget = false, from = '';
+      while (ps.hasNext()) { var p = ps.next(); if (p.getId() === target.getId()) inTarget = true; else from = p.getName(); }
+      if (inTarget) return;
+      moved.push({ doc: r.id, name: file.getName(), from: from, to: mk });
+      if (apply) file.moveTo(target);
+    } catch (e) { errors.push(r.id + ': ' + String(e).substring(0, 120)); }
+  });
+  var pend = getPendingReceiptsFolder_(), it = pend.getFiles(), dayAgo = Date.now() - 86400000;
+  while (it.hasNext()) {
+    var f = it.next();
+    if (used[f.getId()]) continue;
+    if (f.getDateCreated().getTime() > dayAgo) continue;
+    orphans.push({ name: f.getName(), created: Utilities.formatDate(f.getDateCreated(), Session.getScriptTimeZone(), 'yyyy-MM-dd') });
+    if (apply) { try { f.setTrashed(true); } catch (e) { errors.push(f.getName() + ': ' + e); } }
+  }
+  return { ok: true, applied: apply, scanned: rows.length, moved: moved, orphans: orphans, errors: errors };
 }
 
 /* מוחקת (trash) קובץ Drive בפועל לפי קישור — לא רק ניתוק הקישור בגיליון. לא-קריטי:

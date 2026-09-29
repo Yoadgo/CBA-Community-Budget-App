@@ -820,6 +820,13 @@ CBA.data = (function () {
       CBA.fb.mergeDoc("budgetTx", txDocId(t), txDetailsPatch(t), function (err) {
         if (err) { txFellBack(); return txPushWhole(id, t, before); }
         txWrote("update");
+        /* 29.9.26 — הקבלה עוקבת אחרי "חודש הגשה". המסלול הזה לא עובר
+           ב-saveTransactionRow_, שהיה המקום היחיד שהזיז את הקובץ ב-Drive,
+           ולכן שורה מאושרת שחודשה שונה השאירה את הקבלה בתיקייה הישנה.
+           שגר-ושכח: השרת קורא את הקישור והחודש מ-Firestore בעצמו. */
+        if (t.receiptUrl && ("month" in fields || "fileName" in fields || "receiptUrl" in fields)) {
+          try { CBA.sheets.push("txReceiptSync", { docId: txDocId(t) }, function () {}); } catch (e) {}
+        }
       });
     });
     return t;
@@ -850,6 +857,12 @@ CBA.data = (function () {
       CBA.fb.deleteDoc("budgetTx", txDocId(copy), function (err) {
         if (err) { txFellBack(); return txDeleteViaSheets(id, yr, copy, at); }
         txWrote("delete");
+        /* 29.9.26 — המחיקה מהדפדפן לא עברה ב-deleteTransactionRow_, ולכן הקבלה
+           נשארה ב-Drive ("ממתין לאישור"). השרת מוודא שהשורה באמת נמחקה
+           ושאף שורה אחרת לא משתמשת בקובץ לפני שהוא מעביר אותו לסל. */
+        if (copy.receiptUrl) {
+          try { CBA.sheets.push("txReceiptTrash", { docId: txDocId(copy), url: copy.receiptUrl }, function () {}); } catch (e) {}
+        }
       });
     });
   }
@@ -6023,9 +6036,16 @@ CBA.committee = (function () {
 })();
 
 /* עוזר עיצוב מספרים: 36000 -> "₪36,000". גלובלי לכל המסכים. */
+/* 29.9.26 — שתי ספרות אחרי הנקודה (יועד). קודם עוגל לשקל שלם, ולכן
+   ₪79.90 הוצג כ-₪80 — ופער של אגורות מול קובץ העמותה היה בלתי נראה. */
 CBA.formatILS = function (n) {
-  const rounded = Math.round(n);
-  return "₪" + rounded.toLocaleString("he-IL");
+  const v = Math.round((Number(n) || 0) * 100) / 100;
+  return "₪" + v.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+/* סכומי תקציב מצטברים (מסכי "תקציב" ו"תכנון מול ביצוע") נשארים בשקלים
+   שלמים — עמודות צרות של סכומים גדולים, ושם האגורות רק מעמיסות. */
+CBA.formatILSWhole = function (n) {
+  return "₪" + Math.round(Number(n) || 0).toLocaleString("he-IL");
 };
 
 /* "בריחה" של טקסט לפני הכנסה ל-HTML — מונע שבירה כשיש גרשיים/סימנים בשם */

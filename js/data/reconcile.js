@@ -95,7 +95,15 @@
       else if (sc === best && sc > 0) hits.push(g);
     });
     if (best >= FUZZY_MIN && hits.length === 1) return { group: hits[0], how: "fuzzy" };
-    return { group: null, candidates: best >= FUZZY_MIN ? hits : [] };
+    /* 29.9.26 (יועד): התאמה בינונית — לא מחברים, אבל אומרים. מילה משותפת
+       אחת בלבד (למשל רק שם משפחה), או כמה נמענים עם אותו ציון. */
+    if (best >= 1 && hits.length <= 3) {
+      return { group: null, level: best >= FUZZY_MIN ? "ambiguous" : "medium",
+               candidates: hits.map(function (g) {
+                 return { group: g, shared: Object.keys(rowTok).filter(function (w) { return g._tok[w]; }) };
+               }) };
+    }
+    return { group: null, candidates: [] };
   }
 
   /* ---------- קריאת הקובץ ----------
@@ -238,7 +246,7 @@
       var pf = findRecipient(row, pendRecips, pendByName);
       if (!g) {
         // אולי יש לו בקשות שעדיין בבדיקה — זה משנה את נוסח ההתרעה
-        out.noRequests.push({ row: row, pendingOnly: pf.group || null, candidates: found.candidates || [] });
+        out.noRequests.push({ row: row, pendingOnly: pf.group || null, candidates: found.candidates || [], level: found.level || "" });
         return;
       }
       out.seen[g.key] = true;

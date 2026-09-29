@@ -1160,7 +1160,7 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
       <div class="form-grid">
         <div class="form-field"><label>תאריך רכישה</label><input class="field-input" type="date" data-field="date" value="${CBA.esc(state.date || "")}"></div>
         <div class="form-field"><label>חודש הגשה</label><input class="field-input" type="month" data-field="month" value="${CBA.esc(state.month || "")}"></div>
-        <div class="form-field"><label>סכום</label><input class="field-input" type="number" inputmode="decimal" data-field="amount" value="${state.amount}"></div>
+        <div class="form-field"><label>סכום</label><input class="field-input" type="number" inputmode="decimal" step="0.01" min="0" data-field="amount" value="${state.amount}"></div>
         <div class="form-field"><label>${buyerLabel}</label>${buyerFieldHtml}</div>
         <div class="form-field"><label>${supplierLabel}</label><input class="field-input" type="text" data-field="supplier" value="${CBA.esc(state.supplier || "")}"></div>
         <div class="form-field form-field--wide"><label>תיאור</label><input class="field-input" type="text" data-field="description" value="${CBA.esc(state.description || "")}"></div>

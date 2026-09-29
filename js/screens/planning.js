@@ -718,19 +718,19 @@ function planRecompute(container) {
     const total = CBA.data.getCategories()
       .filter(function (c) { return c.group === g.id; })
       .reduce(function (s, c) { return s + (c.plan || 0); }, 0);
-    sub.innerHTML = "<b>" + CBA.formatILS(total) + "</b>";
+    sub.innerHTML = "<b>" + CBA.formatILSWhole(total) + "</b>";
   });
 
   // סכום מפורמט (עם ₪) לכל מקור הכנסה — אחיד לכולם
   CBA.data.getIncomeSources().forEach(function (s) {
     const el = container.querySelector("#inc-amt-" + planKey(s.id));
-    if (el) el.textContent = CBA.formatILS(s.computed || 0);
+    if (el) el.textContent = CBA.formatILSWhole(s.computed || 0);
   });
   const duesSrc = CBA.data.getIncomeSources().find(function (s) { return s.type === "dues"; });
   const duesHint = container.querySelector("#dues-hint");
   if (duesHint && duesSrc) {
     const charges = duesSrc.families * duesSrc.months + duesSrc.tailFamilies * (duesSrc.tailMonths || 1);
-    duesHint.textContent = CBA.formatILS(duesSrc.rate) + " × " + charges + " חיובים";
+    duesHint.textContent = CBA.formatILSWhole(duesSrc.rate) + " × " + charges + " חיובים";
   }
 
   // מאזן מימון לכל מקור + התראת הקצאת־יתר
@@ -741,10 +741,10 @@ function planRecompute(container) {
       const pct = a.income > 0 ? Math.min(a.allocated / a.income * 100, 100) : (a.allocated > 0 ? 100 : 0);
       el.innerHTML =
         '<div class="alloc__bar"><div class="alloc__fill' + (a.over ? " alloc__fill--over" : "") + '" style="width:' + pct + '%"></div></div>' +
-        '<div class="alloc__text' + (a.over ? " alloc__text--over" : "") + '">הוקצה ' + CBA.formatILS(a.allocated) + " מתוך " + CBA.formatILS(a.income) +
-        (a.over ? " · חריגה של " + CBA.formatILS(-a.remaining) : "") + "</div>";
+        '<div class="alloc__text' + (a.over ? " alloc__text--over" : "") + '">הוקצה ' + CBA.formatILSWhole(a.allocated) + " מתוך " + CBA.formatILSWhole(a.income) +
+        (a.over ? " · חריגה של " + CBA.formatILSWhole(-a.remaining) : "") + "</div>";
     }
-    if (a.over) overList.push(a.name + " (חריגה של " + CBA.formatILS(-a.remaining) + ")");
+    if (a.over) overList.push(a.name + " (חריגה של " + CBA.formatILSWhole(-a.remaining) + ")");
   });
   const banner = container.querySelector("#alloc-banner");
   if (banner) {
@@ -756,7 +756,7 @@ function planRecompute(container) {
   const annualEl = container.querySelector("#plan-annual");
   if (annualEl) {
     const annual = CBA.data.getAnnualTotal();
-    let html = 'מתוכנן שנתי (לא מחולק לחודשים): <b>' + CBA.formatILS(annual) + "</b>";
+    let html = 'מתוכנן שנתי (לא מחולק לחודשים): <b>' + CBA.formatILSWhole(annual) + "</b>";
     html += planWarnHTML(CBA.data.getUnassignedCategories(), "ללא שיוך למקור");
     html += planWarnHTML(CBA.data.getSplitMismatchCategories(), "הפיצול אינו מסתכם לתכנון");
     html += planWarnHTML(CBA.data.getOrphanGroupCategories(), "בקבוצה שאינה קיימת — לא מוצגים בלוח");
@@ -766,13 +766,13 @@ function planRecompute(container) {
   const income = CBA.data.getIncomeTotal();
   const expense = CBA.data.getPlanTotal();
   const balance = income - expense;
-  setText(container, "#bl-income", CBA.formatILS(income));
-  setText(container, "#bl-expense", CBA.formatILS(expense));
+  setText(container, "#bl-income", CBA.formatILSWhole(income));
+  setText(container, "#bl-expense", CBA.formatILSWhole(expense));
 
   const bal = container.querySelector("#bl-balance");
   const label = container.querySelector("#bl-label");
   if (bal) {
-    bal.textContent = (balance < 0 ? "-" : "") + CBA.formatILS(Math.abs(balance));
+    bal.textContent = (balance < 0 ? "-" : "") + CBA.formatILSWhole(Math.abs(balance));
     bal.className = "bl-cell__val " + (balance < 0 ? "neg" : "pos");
   }
   if (label) label.textContent = balance < 0 ? "גירעון" : "עודף";
@@ -1071,7 +1071,7 @@ function planPresentCompareHTML(c) {
   const delta = diff === 0
     ? '<span class="present-cmp__delta">ללא שינוי</span>'
     : `<span class="present-cmp__delta ${diff > 0 ? "up" : "down"}">${diff > 0 ? "&#9650;" : "&#9660;"} ${planNumFmt(Math.abs(diff))}</span>`;
-  return `<span class="present-cmp" title="${CBA.esc(planCompareYear)}: ${CBA.formatILS(prev)}">`
+  return `<span class="present-cmp" title="${CBA.esc(planCompareYear)}: ${CBA.formatILSWhole(prev)}">`
        + `<span class="present-cmp__prev">${CBA.esc(planCompareYear)} ${planNumFmt(prev)}</span>${delta}</span>`;
 }
 
@@ -1117,7 +1117,7 @@ function planPresentBlockHTML(b) {
       <div class="present-group">
         <div class="present-group__head">
           <span class="present-group__name">${CBA.esc(b.name)}</span>
-          <span class="present-group__total">${CBA.formatILS(b.total)}<span class="present-gpct">${b.pct}%</span></span>
+          <span class="present-group__total">${CBA.formatILSWhole(b.total)}<span class="present-gpct">${b.pct}%</span></span>
         </div>
         <div class="present-gbar"><i style="width:${b.barPct}%"></i></div>
         <div class="present-grid">
@@ -1143,7 +1143,7 @@ function planPresentStripHTML(groups, cats, income) {
     return b.fundId ? "var(--fund-" + planFundClass(b.fundId) + ")" : ramp[i % ramp.length];
   };
   const segs = blocks.map(function (b, i) {
-    return `<i style="width:${(b.total / grand) * 100}%;background:${color(b, i)}" title="${CBA.esc(b.name)} — ${CBA.formatILS(b.total)}"></i>`;
+    return `<i style="width:${(b.total / grand) * 100}%;background:${color(b, i)}" title="${CBA.esc(b.name)} — ${CBA.formatILSWhole(b.total)}"></i>`;
   }).join("");
   const legend = blocks.map(function (b, i) {
     const pct = Math.round((b.total / grand) * 1000) / 10;
@@ -1164,14 +1164,14 @@ function planPresentIncomeHTML(income) {
     return `
       <div class="present-income-row">
         <span class="present-income-row__name">${CBA.esc(s.name)}</span>
-        <span class="present-income-row__amount">${CBA.formatILS(s.computed || 0)}</span>
+        <span class="present-income-row__amount">${CBA.formatILSWhole(s.computed || 0)}</span>
       </div>`;
   }).join("");
   return `
     <div class="card plan-present-card present-income-card">
       <div class="present-group__head">
         <span class="present-group__name">מקורות הכנסה</span>
-        <span class="present-group__total">${CBA.formatILS(total)}</span>
+        <span class="present-group__total">${CBA.formatILSWhole(total)}</span>
       </div>
       <div class="present-income-list">${rows}</div>
     </div>`;
@@ -1199,7 +1199,7 @@ function planPresentCardHTML(c, maxInBlock) {
   const inner =
     `<span class="present-card__chev"${hasItems ? "" : " aria-hidden=\"true\""}>${hasItems ? "&#9660;" : ""}</span>` +
     `<span class="present-card__name">${CBA.esc(c.name)}${flag}</span>` +
-    `<span class="present-card__amount">${CBA.formatILS(c.plan || 0)}</span>`;
+    `<span class="present-card__amount">${CBA.formatILSWhole(c.plan || 0)}</span>`;
 
   // רק סעיף מפורט הוא כפתור — סעיף בלי פירוט אין מה לפתוח בו
   const head = hasItems
@@ -1348,7 +1348,7 @@ function planSplitWarnHTML(c) {
   if (!c.sources || c.sources.length < 2) return "";
   const sum = c.sources.reduce(function (s, r) { return s + (Number(r.amount) || 0); }, 0);
   if (Math.round(sum) === Math.round(c.plan || 0)) return "";
-  return `<div class="src-split__warn">⚠ סכום הפיצול (${CBA.formatILS(sum)}) לא תואם לתכנון הסעיף (${CBA.formatILS(c.plan || 0)})</div>`;
+  return `<div class="src-split__warn">⚠ סכום הפיצול (${CBA.formatILSWhole(sum)}) לא תואם לתכנון הסעיף (${CBA.formatILSWhole(c.plan || 0)})</div>`;
 }
 
 /* פירוט סעיף לתת-סעיפים (סעיף 5, 2026-08-10). במצב לא-מפורט — כפתור "פרט
@@ -1391,7 +1391,7 @@ function planItemWarnHTML(c) {
   if (!c.items || !c.items.length) return "";
   const sum = c.items.reduce(function (s, it) { return s + (Number(it.plan) || 0); }, 0);
   if (Math.round(sum) === Math.round(c.plan || 0)) return "";
-  return `<div class="src-split__warn">⚠ סכום הפירוט (${CBA.formatILS(sum)}) לא תואם לתכנון הסעיף (${CBA.formatILS(c.plan || 0)})</div>`;
+  return `<div class="src-split__warn">⚠ סכום הפירוט (${CBA.formatILSWhole(sum)}) לא תואם לתכנון הסעיף (${CBA.formatILSWhole(c.plan || 0)})</div>`;
 }
 
 /* פקד מצב קומפקטי (משמאל לכותרת): כתום=תכנון, ירוק=סגור */
@@ -1423,7 +1423,7 @@ function planBaselineLine(c) {
   if (Math.round(diff) === 0) return "";
   const arrow = diff > 0 ? "▲" : "▼";
   const cls = diff > 0 ? "up" : "down";
-  return `<div class="cmp-line"><span class="upd-badge">עודכן</span> בסיס ${CBA.formatILS(base)} <span class="cmp-delta ${cls}">${arrow} ${CBA.formatILS(Math.abs(diff))}</span></div>`;
+  return `<div class="cmp-line"><span class="upd-badge">עודכן</span> בסיס ${CBA.formatILSWhole(base)} <span class="cmp-delta ${cls}">${arrow} ${CBA.formatILSWhole(Math.abs(diff))}</span></div>`;
 }
 
 /* חלון "עדכוני תקציב" — יומן כרונולוגי קבוע של כל שינוי אחרי נעילה */
@@ -1437,8 +1437,8 @@ function planOpenUpdatesModal(container) {
     return `<tr>
       <td class="dt__date">${CBA.esc(u.date || "")}</td>
       <td>${CBA.esc(u.section || "")}</td>
-      <td class="dt__amount">${CBA.formatILS(u.from || 0)} ← ${CBA.formatILS(u.to || 0)}</td>
-      <td><span class="cmp-delta ${cls}">${arrow} ${CBA.formatILS(Math.abs(diff))}</span></td>
+      <td class="dt__amount">${CBA.formatILSWhole(u.from || 0)} ← ${CBA.formatILSWhole(u.to || 0)}</td>
+      <td><span class="cmp-delta ${cls}">${arrow} ${CBA.formatILSWhole(Math.abs(diff))}</span></td>
       ${u.reason ? `<td>${CBA.esc(u.reason)}</td>` : "<td></td>"}
     </tr>`;
   }).join("") : `<tr><td style="color:var(--text-muted); padding:16px 4px;">אין עדכונים עדיין — שינויים בתכנון לאחר נעילת התקציב יירשמו כאן.</td></tr>`;
@@ -1482,8 +1482,8 @@ function planCompareLine(c) {
   const arrow = diff > 0 ? "▲" : (diff < 0 ? "▼" : "—");
   const cls = diff > 0 ? "up" : (diff < 0 ? "down" : "");
   return `<div class="cmp-line">${CBA.esc(year)}
-    <button type="button" class="cmp-copy" data-copy-prev="${CBA.esc(c.id)}" title="לחץ להעתקת הסכום לתכנון">${CBA.formatILS(prev)}</button>
-    <span class="cmp-delta ${cls}">${arrow} ${CBA.formatILS(Math.abs(diff))}</span></div>`;
+    <button type="button" class="cmp-copy" data-copy-prev="${CBA.esc(c.id)}" title="לחץ להעתקת הסכום לתכנון">${CBA.formatILSWhole(prev)}</button>
+    <span class="cmp-delta ${cls}">${arrow} ${CBA.formatILSWhole(Math.abs(diff))}</span></div>`;
 }
 
 /* סעיפים שהיו בשנה המושווית ואינם קיימים כעת — עם אפשרות להוסיף */
@@ -1495,7 +1495,7 @@ function planExtrasHTML() {
       <div class="cmp-extras__title">סעיפים שהיו ב${CBA.esc(planCompareYear)} ואינם כעת</div>
       ${extras.map(function (e) {
         return `<div class="cmp-extra">
-          <span>${CBA.esc(e.name)} · ${CBA.formatILS(e.plan)}</span>
+          <span>${CBA.esc(e.name)} · ${CBA.formatILSWhole(e.plan)}</span>
           <button class="btn-ghost" data-add-extra="${CBA.esc(e.id)}" data-add-name="${CBA.esc(e.name)}" data-add-plan="${e.plan}">+ הוסף</button>
         </div>`;
       }).join("")}
@@ -1611,7 +1611,7 @@ function planOpenCustomModal(container, catId) {
         <div class="modal__head">
           <div>
             <div class="modal__title">חלוקה חודשית — ${CBA.esc(c.name)}</div>
-            <div class="modal__sub">סכום החודשים צריך להשתוות לתכנון ${CBA.formatILS(c.plan || 0)}</div>
+            <div class="modal__sub">סכום החודשים צריך להשתוות לתכנון ${CBA.formatILSWhole(c.plan || 0)}</div>
           </div>
           <button class="drawer__close" data-modal-close aria-label="סגור">×</button>
         </div>
@@ -1644,12 +1644,12 @@ function planUpdateSum(c) {
   const plan = c.plan || 0;
   const sum = (c.dist.monthly || []).reduce(function (s, v) { return s + (v || 0); }, 0);
   const over = Math.round(sum) > Math.round(plan);
-  el.textContent = CBA.formatILS(sum) + " / " + CBA.formatILS(plan);
+  el.textContent = CBA.formatILSWhole(sum) + " / " + CBA.formatILSWhole(plan);
   el.className = "months-sum__val " + (over ? "neg" : "pos");
   if (note) {
     const diff = plan - sum;
-    note.textContent = over ? "חריגה של " + CBA.formatILS(-diff)
-      : (Math.round(diff) > 0 ? "נותרו לחלוקה " + CBA.formatILS(diff) : "תואם לתכנון");
+    note.textContent = over ? "חריגה של " + CBA.formatILSWhole(-diff)
+      : (Math.round(diff) > 0 ? "נותרו לחלוקה " + CBA.formatILSWhole(diff) : "תואם לתכנון");
     note.className = "months-note " + (over ? "neg" : "pos");
   }
 }
