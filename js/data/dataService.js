@@ -1161,6 +1161,24 @@ CBA.data = (function () {
    *  ⚠️ **`mailPending:true`** — כלל אבטחה אינו יכול לשלוח מייל. הטריגר
    *     סוחט וסולח, ותבנית המייל נגזרת ממצב המסמך ולא משדה של הלקוח.
    * ======================================================================== */
+  /* 🔴 29.9.26 (יועד) — "חודש הגשה" של בקשת תושב: מה-20 בחודש ואילך
+     עוברים לחודש הבא. זה הכלל שבשרת (submissionMonthForToday_) ובטופס
+     המנהל (txDefaultSubmissionMonth). מאז שההגשה עברה ל-Firestore (15.9)
+     המסלול הזה כתב `today.slice(0,7)` — החודש הקלנדרי — ולכן כל קבלה
+     שהוגשה אחרי ה-19 בספטמבר נרשמה לספטמבר במקום לאוקטובר.
+     ⚠️ גם התאריך עצמו: toISOString הוא UTC, ובין 00:00 ל-03:00 שעון
+        ישראל הוא נותן את התאריך של אתמול. */
+  function localISODate(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
+           String(d.getDate()).padStart(2, "0");
+  }
+  function submissionMonthFor(d) {
+    var y = d.getFullYear(), m = d.getMonth();
+    if (d.getDate() >= 20) { m += 1; if (m > 11) { m = 0; y += 1; } }
+    return y + "-" + String(m + 1).padStart(2, "0");
+  }
+  CBA.submissionMonthFor = submissionMonthFor;
+
   function submitReceiptViaFirestore(fields, cb, onProgress, fallback) {
     const year = getWorkingYear();
     CBA.sheets.postReadProgress("uploadReceiptOnly",
@@ -1169,9 +1187,9 @@ CBA.data = (function () {
         CBA.fb.nextId("tx_" + year, function (err, n) {
           if (err) return fallback();
           txDirtyUp();   /* ר' ההערה ב-`addTransaction` */
-          const today = new Date().toISOString().slice(0, 10);
+          const now = new Date(), today = localISODate(now);
           const t = {
-            id: n, year: year, month: today.slice(0, 7), date: today,
+            id: n, year: year, month: submissionMonthFor(now), date: today,
             supplier: fields.supplier || "", bankName: fields.bankName || "",
             amount: Number(fields.amount) || 0, categoryId: "", subItemId: "",
             expenseType: fields.expenseType, source: "resident", status: "submitted",
@@ -1214,9 +1232,9 @@ CBA.data = (function () {
     const payload = Object.assign({ year: year }, fields);
     CBA.sheets.postReadProgress("submitReceipt", payload, onProgress, function (res) {
       if (res && res.ok) {
-        const today = new Date().toISOString().slice(0, 10);
+        const now = new Date(), today = localISODate(now);
         CBA.mock.transactions.push({
-          id: Date.now(), month: today.slice(0, 7), date: today,
+          id: Date.now(), month: submissionMonthFor(now), date: today,
           buyer: fields.buyer || "", supplier: fields.supplier || "",
           bankName: fields.bankName || "", bankBranch: fields.bankBranch || "", bankAccount: fields.bankAccount || "",
           amount: Number(fields.amount) || 0, categoryId: "", description: fields.description || "",
