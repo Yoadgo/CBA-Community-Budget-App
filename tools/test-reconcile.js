@@ -129,6 +129,29 @@ function feed(grid, sheet) {
   ok('נשלח בלי הקידומת data:', lastPost && lastPost.p.data === 'QUJD', JSON.stringify(lastPost && lastPost.p.data));
   ok('נשלח שם הקובץ', lastPost && /\.xlsx$/.test(lastPost.p.fileName));
 
+  /* 29.9.26 — הקובץ האמיתי הראשון. השרת מחזיר getDisplayValues, כלומר טקסט
+     עם פסיק אלפים, והעמותה רושמת את בעל החשבון ולא את משק הבית. */
+  section('10. סכום עם פסיק אלפים (כפי שהשרת באמת מחזיר)');
+  txs = [{ id: 20, buyer: 'ספק גדול', supplier: 'ספק גדול', amount: 36000, status: 'ready', expenseType: 'supplier' }];
+  main.querySelector('.rc-again') && main.querySelector('.rc-again').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  feed([HEAD, row('20', 'ספק גדול', '36,000.00', 'שיכון')]);
+  await wait(40);
+  ok('"36,000.00" נקרא כ-36000 ולא כ-0', /תואם/.test(main.textContent) && !/פער בסכום/.test(main.textContent), main.textContent.slice(0, 200));
+  ok('parseAmount', window.CBA.reconcile.parseAmount('1,667.80') === 1667.8 && window.CBA.reconcile.parseAmount('₪ 6,171.50') === 6171.5);
+
+  section('11. שם בקובץ ≠ שם משק הבית אצלנו');
+  txs = [
+    { id: 30, buyer: 'רונית ואבי שמש', supplier: 'חנות', familyId: '41', amount: 70, status: 'ready', expenseType: 'refund' },
+    { id: 31, buyer: 'דוד ושרה כהן', supplier: 'חנות', familyId: '42', amount: 10, status: 'ready', expenseType: 'refund' },
+    { id: 32, buyer: 'דוד ומיכל כהן', supplier: 'חנות', familyId: '43', amount: 10, status: 'ready', expenseType: 'refund' }
+  ];
+  main.querySelector('.rc-again').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  feed([HEAD, row('41', 'חוז שמש אבי ורונית', '70.00', 'שיכון'), row('42', 'חוז כהן דוד', '10.00', 'שיכון')]);
+  await wait(40);
+  ok('"חוז שמש אבי ורונית" חובר ל"רונית ואבי שמש"', /תואם/.test(main.textContent) && /רונית ואבי שמש/.test(main.textContent), main.textContent.slice(0, 300));
+  ok('מוצג שזה חיבור לפי שם דומה', /\(רונית ואבי שמש\)/.test(main.textContent));
+  ok('שני "דוד כהן" — לא מנחשים', /לא חיברנו אוטומטית/.test(main.textContent));
+
   console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);
 })();

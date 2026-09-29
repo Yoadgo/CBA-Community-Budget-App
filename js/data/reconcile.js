@@ -14,6 +14,18 @@
      כל החישוב באגורות (מספרים שלמים). 161.8 + 350.9 בנקודה צפה נותן
      512.6999999999999, והשוואה ל-512.7 הייתה נכשלת ומדווחת "פער" מדומה. */
   function agorot(n) { return Math.round((Number(n) || 0) * 100); }
+
+  /* 🔴 29.9.26 — סכום מהקובץ. השרת קורא את הגיליון ב-getDisplayValues, ולכן
+     כל סכום מ-1,000 ומעלה מגיע כטקסט עם פסיק אלפים ("1,667.80").
+     Number("1,667.80") = NaN, ו-agorot הפך אותו בשקט ל-0 — כך ₪36,000 הוצג
+     כ"₪0 בקובץ" ו-₪6,171.50 כ"שולם ₪0". מנקים כל מה שאינו ספרה/נקודה/מינוס
+     (פסיקים, ₪, רווחים, סימן RTL). */
+  function parseAmount(v) {
+    if (typeof v === "number") return v;
+    var s = String(v == null ? "" : v).replace(/[^0-9.\-]/g, "");
+    var n = parseFloat(s);
+    return isFinite(n) ? n : 0;
+  }
   function shekels(a) { return a / 100; }
 
   /* ---------- נרמול שמות ----------
@@ -24,6 +36,7 @@
     s = s.replace(/_x000D_/g, " ");        // שאריות מהאקסל
     s = s.replace(/["'`״׳]/g, "");          // כל סוגי הגרשיים -> כלום (בע"מ / בע``מ)
     s = s.replace(/[־–—-]/g, " ");          // מקפים -> רווח (חיון-קדוש)
+    s = s.replace(/[|\/,&+()]/g, " ");      // מפרידים ("אבינתן אור | מבעד לאדמה")
     s = s.replace(/\s+/g, " ").trim();
     var parts = s.split(" ");
     if (parts.length > 1 && PREFIXES.indexOf(parts[0]) !== -1) parts.shift();
@@ -33,6 +46,56 @@
   /* מפתח חסין־סדר: קבוצת המילים ממוינת, כך ש"לוי סוזי" = "סוזי לוי". */
   function nameKey(raw) {
     return normalizeName(raw).split(" ").filter(Boolean).sort().join(" ");
+  }
+
+  /* ---------- התאמה גמישה של שמות (29.9.26) ----------
+     המפתח המדויק נכשל על הקובץ האמיתי הראשון בכל משקי הבית:
+       בקובץ  "חוז גולן מנדלבוים יועד"   אצלנו "יועד ודר גולן"
+       בקובץ  "חוז ממן שלומי ומורן"      אצלנו "מורן ושלומי ממן"
+     העמותה רושמת את בעל החשבון בבנק; אנחנו רושמים את משק הבית.
+     לכן: סופרים מילים משותפות. "ו" החיבור בתחילת מילה נחשבת גם בלעדיה
+     (ודר = דר), ושתי מילים משותפות לפחות (שם פרטי + משפחה) נחשבות התאמה.
+     ⚠️ אם שני נמענים שונים מקבלים את אותו ציון — לא מנחשים. */
+  function nameTokens(raw) {
+    var out = {};
+    normalizeName(raw).split(" ").forEach(function (w) {
+      if (!w) return;
+      out[w] = true;
+      if (w.length >= 3 && w.charAt(0) === "ו") out[w.substring(1)] = true;
+    });
+    return out;
+  }
+  function overlap(rowTok, groupTok) {
+    var n = 0;
+    Object.keys(rowTok).forEach(function (w) { if (groupTok[w]) n++; });
+    return n;
+  }
+  var FUZZY_MIN = 2;
+  /* מחזיר { group, how:"exact"|"fuzzy" } או { group:null, candidates:[...] } */
+  function findRecipient(row, groups, byName) {
+    if (byName[row.nameKey]) return { group: byName[row.nameKey], how: "exact" };
+    // מילים "מקוריות" בלבד בצד הקובץ, כדי ש"ומורן" לא ייספר פעמיים
+    var rowTok = {};
+    normalizeName(row.name).split(" ").forEach(function (w) {
+      if (!w) return;
+      rowTok[(w.length >= 3 && w.charAt(0) === "ו") ? w.substring(1) : w] = true;
+    });
+    var best = 0, hits = [];
+    groups.forEach(function (g) {
+      var gt = g._tok || (g._tok = (function () {
+        var t = {};
+        Object.keys(g.nameKeys).forEach(function (k) {
+          var x = nameTokens(k); Object.keys(x).forEach(function (w) { t[w] = true; });
+        });
+        return t;
+      })());
+      // בצד שלנו נשמרות שתי הצורות (ויגדר + יגדר), ולכן שם שבאמת מתחיל ב-ו עדיין נמצא
+      var sc = overlap(rowTok, gt);
+      if (sc > best) { best = sc; hits = [g]; }
+      else if (sc === best && sc > 0) hits.push(g);
+    });
+    if (best >= FUZZY_MIN && hits.length === 1) return { group: hits[0], how: "fuzzy" };
+    return { group: null, candidates: best >= FUZZY_MIN ? hits : [] };
   }
 
   /* ---------- קריאת הקובץ ----------
@@ -63,7 +126,7 @@
         supplierNum: String(num).trim(),
         name: String(nm).trim(),
         nameKey: nameKey(nm),
-        amountAg: agorot(amt),
+        amountAg: agorot(parseAmount(amt)),
         payDate: g[cDate] || "",
         sector: sec
       });
@@ -169,23 +232,24 @@
     var out = { ok: [], gap: [], noRequests: [], notInFile: [], seen: {} };
 
     chargeRows.forEach(function (row) {
-      var g = (savedSupplierMap[row.supplierNum] && byKey[savedSupplierMap[row.supplierNum]])
-              || byName[row.nameKey] || null;
+      var saved = savedSupplierMap[row.supplierNum] && byKey[savedSupplierMap[row.supplierNum]];
+      var found = saved ? { group: saved, how: "saved" } : findRecipient(row, recips, byName);
+      var g = found.group;
+      var pf = findRecipient(row, pendRecips, pendByName);
       if (!g) {
         // אולי יש לו בקשות שעדיין בבדיקה — זה משנה את נוסח ההתרעה
-        var p = pendByName[row.nameKey] || null;
-        out.noRequests.push({ row: row, pendingOnly: p });
+        out.noRequests.push({ row: row, pendingOnly: pf.group || null, candidates: found.candidates || [] });
         return;
       }
       out.seen[g.key] = true;
       var sum = g.txs.reduce(function (s, t) { return s + agorot(t.amount); }, 0);
-      if (sum === row.amountAg) { out.ok.push({ row: row, group: g, sumAg: sum }); return; }
+      if (sum === row.amountAg) { out.ok.push({ row: row, group: g, sumAg: sum, how: found.how }); return; }
       var item = {
-        row: row, group: g, sumAg: sum, deltaAg: row.amountAg - sum,
+        row: row, group: g, sumAg: sum, deltaAg: row.amountAg - sum, how: found.how,
         explain: explainGap(g.txs, row.amountAg), withPending: null
       };
       // האם הפער נסגר אם מצרפים בקשות שעדיין בבדיקה?
-      var p2 = pendByName[row.nameKey];
+      var p2 = pf.group;
       if (p2) {
         var combined = g.txs.concat(p2.txs);
         var e2 = explainGap(combined, row.amountAg);
@@ -209,6 +273,7 @@
     agorot: agorot, shekels: shekels,
     normalizeName: normalizeName, nameKey: nameKey,
     parseChargeGrid: parseChargeGrid, creditDateFor: creditDateFor,
+    parseAmount: parseAmount, nameTokens: nameTokens, findRecipient: findRecipient,
     buildRecipients: buildRecipients, explainGap: explainGap, compare: compare,
     SECTOR_MINE: SECTOR_MINE, SUBSET_MAX: SUBSET_MAX
   };

@@ -63,6 +63,13 @@ CBA.screens.reconcile = (function () {
       }).map(txLine).join("") + '</ul></div>';
   }
 
+  /* 29.9.26 — כשההתאמה נעשתה לפי מילים משותפות ולא לפי שם זהה, מראים
+     למי חיברנו, כדי שאפשר יהיה לתפוס חיבור שגוי בעין. */
+  function matchNote(it) {
+    if (it.how !== "fuzzy") return "";
+    return '<div class="rc-sub">זוהה לפי שם דומה ← ' + esc(it.group.label) + '</div>';
+  }
+
   function block(title, tone, n, bodyHTML, sub) {
     if (!n) return "";
     return '<section class="card club-card rc-block is-' + tone + '">' +
@@ -87,6 +94,7 @@ CBA.screens.reconcile = (function () {
           '<span class="rc-nums">בקובץ ' + money(it.row.amountAg) +
           ' · אצלנו ' + money(it.sumAg) +
           ' · <u>' + (it.deltaAg > 0 ? "עודף " : "חסר ") + money(Math.abs(it.deltaAg)) + '</u></span></div>' +
+        matchNote(it) +
         '<ul class="rc-txs">' + it.group.txs.map(txLine).join("") + '</ul>' +
         explainHTML(it) + pendingHTML(it) +
       '</div>';
@@ -100,7 +108,12 @@ CBA.screens.reconcile = (function () {
           (it.pendingOnly
             ? 'אין לו בקשה שאושרה להעברה — אבל יש בקשות שעדיין ממתינות לאישור. ייתכן ששולם לפני האישור.'
             : 'אין לו שום בקשה פתוחה אצלנו. זה הדגל האדום החזק ביותר בדף הזה.') +
-        '</div></div>';
+        '</div>' +
+        (it.candidates && it.candidates.length
+          ? '<div class="rc-why rc-why--warn">השם דומה ליותר מנמען אחד, ולכן לא חיברנו אוטומטית: ' +
+            it.candidates.map(function (g) { return esc(g.label); }).join(" / ") + '</div>'
+          : '') +
+        '</div>';
     }).join("");
 
     var missing = r.notInFile.map(function (it) {
@@ -111,7 +124,9 @@ CBA.screens.reconcile = (function () {
     }).join("");
 
     var okList = r.ok.map(function (it) {
-      return '<div class="rc-ok-row"><span>' + esc(it.row.name) + '</span>' +
+      return '<div class="rc-ok-row"><span>' + esc(it.row.name) +
+             (it.how === "fuzzy" ? ' <span class="rc-sub">(' + esc(it.group.label) + ')</span>' : '') +
+             '</span>' +
              '<b>' + money(it.sumAg) + '</b>' +
              '<span class="rc-sub">' + it.group.txs.length +
              (it.group.txs.length === 1 ? ' בקשה' : ' בקשות') + '</span></div>';
