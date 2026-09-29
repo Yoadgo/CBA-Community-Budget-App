@@ -13,6 +13,13 @@
   "fsize": 95,
   "all": 265
  },
+ "frame.css": {
+  "hex": 22,
+  "radius": 12,
+  "shadow": 18,
+  "fsize": 1,
+  "all": 53
+ },
  "garden.css": {
   "hex": 397,
   "radius": 120,

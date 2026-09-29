@@ -676,7 +676,15 @@
     /* מיקום: מעל הכפתור, צמוד לקצוות המסך; הבועה "צומחת" מתוך הכפתור. */
     var gbtn = nav && nav.querySelector('.app-nav__tab--group[data-group="' + groupKey + '"]');
     var panel = wrap.querySelector(".nav-sheet__panel");
-    if (gbtn) {
+    if (gbtn && !isMobileNav()) {
+      /* גל 1 (30.9.26, F2) — דסקטופ: תפריט לבן מתחת לטאב, מיושר לקצה הימני שלו */
+      wrap.classList.add("nav-sheet--desk");
+      var rd = gbtn.getBoundingClientRect(), vwd = document.documentElement.clientWidth, Wd = 264;
+      var leftd = Math.max(10, Math.min(vwd - Wd - 10, rd.right - Wd));
+      panel.style.left = leftd + "px";
+      panel.style.top = (rd.bottom + 8) + "px";
+      panel.style.transformOrigin = (rd.right - leftd) + "px -8px";
+    } else if (gbtn) {
       var r = gbtn.getBoundingClientRect(), vw = document.documentElement.clientWidth;
       var W = 212, cx = r.left + r.width / 2;
       var left = Math.max(10, Math.min(vw - W - 10, cx - W / 2));
@@ -706,7 +714,7 @@
     });
   }
   // סוגרים גיליון פתוח אם המסך התרחב לדסקטופ תוך כדי (סיבוב טלפון/שינוי חלון)
-  if (navMQ.addEventListener) navMQ.addEventListener("change", function () { if (!navMQ.matches) closeNavSheet(); });
+  if (navMQ.addEventListener) navMQ.addEventListener("change", function () { closeNavSheet(); });   /* גל 1: גם תפריט הדסקטופ */
   window.CBA = window.CBA || {};
   window.CBA.closeNavSheet = closeNavSheet;
 
@@ -723,9 +731,11 @@
       showScreen(grp.landing);
       return;
     }
-    if (isMobileNav()) { openNavSheet(g); return; }
-    openGroup = (openGroup === g) ? null : g;
-    applyNavGroupState();
+    /* 🔴 גל 1 (30.9.26, ספר האבנים F2) — גם בדסקטופ הקבוצה נפתחת כתפריט
+       (openNavSheet מציב אותו מתחת לטאב). ההרחבה בתוך השורה (openGroup)
+       נשארת בקוד אבל מוסתרת ב-css/frame.css — ביטול: להחזיר את התנאי
+       isMobileNav() לשורה הבאה. */
+    openNavSheet(g); return;
   }
   // 2026-08-08, גרסה שישית — חזרה לתפריט "מתרחב" בתוך שורת הטאבים עצמה (לא
   // dropdown צף) לבקשת יועד המפורשת, אחרי שה-dropdown האנכי (גרסה 5) התברר
@@ -1590,7 +1600,9 @@
     var r = btn.getBoundingClientRect();
     var w = panel.offsetWidth || 272;
     var rtl = getComputedStyle(document.documentElement).direction === "rtl";
-    var x = rtl ? r.left : (r.right - w);
+    /* גל 1 (30.9.26, F17) — הכפתור עבר לקצה הימני של החופה. המגש נפתח
+       לכיוון מרכז המסך: כפתור בחצי הימני → הקצה הימני של המגש מיושר אליו. */
+    var x = (r.left + r.width / 2 > window.innerWidth / 2) ? (r.right - w) : (rtl ? r.left : (r.right - w));
     x = Math.max(8, Math.min(x, window.innerWidth - w - 8));
     panel.style.position = "fixed";
     panel.style.insetInlineEnd = "auto";

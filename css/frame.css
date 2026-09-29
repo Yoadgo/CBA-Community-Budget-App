@@ -1,0 +1,279 @@
+/* ============================================================================
+   frame.css — המסגרת בשפה החדשה (גל 1, 30.9.2026)
+   ----------------------------------------------------------------------------
+   נטען **אחרון** מכל קובצי ה-CSS, ולכן גובר על הכללים הישנים של ההדר, הבר,
+   חלון המשתמש, הכפתורים הצפים, מסך הפתיחה ומסך הכניסה — בלי לגעת בהם.
+   כל ההחלטות: ספר האבנים, פרק 2 (F1–F34). ערכים רק מ-tokens.css.
+
+   ביטול מלא של הגל: מחיקת שורת ה-<link> של הקובץ הזה ושל js/ui/plus.js
+   מ-index.html, והחזרת שני הקטעים שסומנו "גל 1" ב-app.js וב-mobile.js.
+
+   מה **לא** כאן (בכוונה): התוכן של המסכים. עד שכל מסך יעבור בגל שלו, תוכן
+   ישן יושב בתוך מסגרת חדשה — זה צפוי.
+   ============================================================================ */
+
+/* ---------- 0. הרקע: שקט, בלי שכבות אמביינט (F — "נייר לתוכן") ----------
+   ⚠️ body::before היה מצויר *מעל* תוכן לא-ממוקם וצבע כרטיסים לבנים בגוון
+   הרקע (style.css, 28.9). הורדתו פותרת גם את זה. */
+body { background: var(--ground); }
+body::before, body::after { display: none !important; }
+
+/* ---------- 1. החופה (ההדר) — כחול-כהה, פינות תחתונות מעוגלות ---------- */
+.app-header {
+  background: var(--navy) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  border: 0 !important;
+  border-radius: 0 0 var(--r-card) var(--r-card);
+  box-shadow: 0 8px 20px -14px rgba(15,22,38,.55) !important;
+  color: #fff;
+}
+.app-header--scrolled { background: var(--navy) !important; }
+.app-header__inner { gap: 12px; flex-wrap: nowrap; min-height: 60px; }
+
+/* F1 — הלוגו יורד מההדר (נשאר בפתיחה, בכניסה ובאייקון) */
+.app-header .app-brand { display: none !important; }
+
+/* סדר בחופה (RTL): עיגול המשתמש ראשון מימין · טאבים · ומשמאל: שמירה, שנה, חיפוש.
+   app-controls "נפתח" כדי שהילדים שלו (חיפוש, משתמש) יסתדרו בשורה הראשית. */
+.app-header .app-controls { display: contents; }
+.app-header .user-btn { order: -2; }
+.app-nav__viewport { order: 0; flex: 1 1 auto; min-width: 0; }
+.save-indicator-slot { order: 3; }
+.year-switch { order: 4; }
+.app-header .search-btn { order: 5; }
+
+/* F8 — עיגול המשתמש: ראשי תיבות על גוון-התחום, או תמונת גוגל */
+.app-header .user-btn {
+  width: 36px; height: 36px; border: 0; border-radius: 50%;
+  background: var(--dom); color: #fff; font-weight: 800; font-size: var(--t-14);
+}
+.app-header .user-btn:hover, .app-header .user-btn.is-open { background: var(--dom); box-shadow: 0 0 0 3px rgba(255,255,255,.18); }
+.app-header .user-btn * { color: #fff; }
+.app-header .user-btn--avatar { background: none; }
+.app-header .user-btn--avatar .up-avatar-img { width: 36px; height: 36px; }
+
+/* F7 — חיפוש בחופה (בשני המסכים) */
+.app-header .search-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04);
+  color: var(--on-navy); display: grid !important; place-items: center;
+}
+.app-header .search-btn:hover { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.1); color: #fff; }
+
+/* F5 — תג השנה: רק באזור הניהול */
+body:not([data-area="admin"]) .year-switch { display: none !important; }
+.year-switch__chip {
+  height: 30px; background: rgba(255,255,255,.04) !important; color: var(--on-navy) !important;
+  border: 1px solid rgba(255,255,255,.14) !important; font-size: var(--t-13);
+}
+
+/* F6 — חיווי שמירה כגלולה בחופה */
+.app-header .save-indicator {
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); color: var(--on-navy);
+}
+.app-header .save-indicator.is-saved { background: rgba(74,222,128,.12); color: #86EFAC; border-color: transparent; }
+.app-header .save-indicator.is-saved .save-indicator__dot { background: #4ADE80; }
+.app-header .save-indicator.is-error { background: rgba(244,63,94,.16); color: #FDA4AF; border-color: transparent; }
+.app-header .save-indicator.is-pending .save-indicator__dot { background: #FBBF24; }
+.app-header .save-indicator.is-pending .save-indicator__text { color: #FCD34D; }
+
+/* ---------- 2. טאבים בחופה (דסקטופ) — F2, F3, F4 ---------- */
+@media (min-width: 721px) {
+  .app-header { position: sticky; top: 0; z-index: 30; }          /* F9 — פס כהה דביק */
+  .app-nav {
+    background: none !important; border: 0 !important; box-shadow: none !important;
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+    overflow: visible; gap: 2px;
+  }
+  .app-nav__tab {
+    font-size: var(--t-15); font-weight: 500; color: var(--on-navy-2);
+    padding: 10px 12px; border-radius: 6px 6px 0 0; background: none !important;
+  }
+  .app-nav__tab:hover { color: #fff; background: rgba(255,255,255,.05) !important; }
+  .app-nav__tab.is-active, .app-nav__tab--group.has-active { color: #fff; font-weight: 700; }
+  .app-nav__tab.is-menu { color: #fff; }
+  .app-nav__ico { display: none; }                                   /* טאבים נקיים, בלי סמלילים */
+  .app-nav__chev { color: var(--on-navy-3); }
+  .app-nav__group, .app-nav__group.is-open { background: none !important; }
+  .app-nav__group.is-open .app-nav__tab--group { background: none !important; }
+  .app-nav__group-items { display: none !important; }                /* הקבוצה נפתחת כתפריט, לא בתוך השורה */
+  /* F3 — המחוון הנוזלי הופך לקו בגוון-התחום מתחת לטאב */
+  .app-nav .nav-indicator {
+    top: auto !important; bottom: 0 !important; height: 2px;
+    border-radius: 2px; background: var(--dom) !important;
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important; box-shadow: none !important;
+  }
+  .app-nav__tab.is-active .nav-badge { background: var(--bad); color: #fff; }
+}
+
+/* ---------- 3. תפריט קבוצה — דסקטופ (תפריט לבן) + טלפון (הבועה של 27.9) — F2, F14 ---------- */
+.nav-sheet__ico {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: inline-flex !important; align-items: center; justify-content: center; flex: none;
+  color: var(--tint, var(--dom)) !important;
+  background: color-mix(in srgb, var(--tint, #6366F1) 13%, #fff);
+}
+.nav-sheet__ico svg { width: 16px !important; height: 16px !important; stroke-width: 1.8 !important; }
+.nav-sheet__txt { text-shadow: none !important; }
+
+/* דסקטופ — תפריט נפתח מתחת לטאב */
+.nav-sheet--desk { position: fixed; inset: 0; z-index: var(--z-menu); }
+.nav-sheet--desk .nav-sheet__backdrop { position: absolute; inset: 0; background: transparent; }
+.nav-sheet--desk .nav-sheet__panel {
+  position: fixed; width: 264px; padding: 8px;
+  background: var(--paper); border-radius: 16px; box-shadow: var(--sh-menu);
+  opacity: 0; transform: translateY(-4px) scale(.98);
+  transition: opacity var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.nav-sheet--desk.is-open .nav-sheet__panel { opacity: 1; transform: none; }
+.nav-sheet--desk .nav-sheet__item {
+  display: flex; align-items: center; gap: 12px; width: 100%; height: 44px;
+  padding: 0 10px; border: 0; border-radius: var(--r-in); background: none;
+  font: inherit; font-size: var(--t-15); color: var(--ink); cursor: pointer; text-align: start;
+}
+.nav-sheet--desk .nav-sheet__item:hover { background: var(--ground); }
+.nav-sheet--desk .nav-sheet__item.is-active { background: var(--ground); font-weight: 700; }
+.nav-sheet--desk .nav-sheet__item .nav-badge { margin-inline-start: auto; }
+.nav-sheet--desk .nav-sheet__gap { height: 1px; background: var(--hair-2); margin: 6px 10px; padding: 0; }
+.nav-sheet--desk .nav-sheet__gap::before, .nav-sheet--desk .nav-sheet__gap::after { display: none; }
+
+/* טלפון — הבועה נשארת (צורה, מיקום, אנימציה של 27.9); כמוסות לבנות על לוח לבן */
+@media (max-width: 720px) {
+  .nav-sheet:not(.nav-sheet--desk) .nav-sheet__backdrop { background: rgba(15,22,38,.28); }
+  .nav-sheet:not(.nav-sheet--desk) .nav-sheet__panel {
+    background: var(--paper) !important;
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+    border: 0 !important; box-shadow: var(--sh-menu) !important; padding: 8px;
+  }
+  .nav-sheet:not(.nav-sheet--desk) .nav-sheet__item {
+    height: 44px; padding: 0 8px 0 12px; border-radius: var(--r-pill);
+    background: var(--ground) !important; box-shadow: none !important;
+    font-size: var(--t-15); font-weight: 600;
+  }
+  .nav-sheet:not(.nav-sheet--desk) .nav-sheet__item + .nav-sheet__item { margin-top: 6px; }
+  .nav-sheet:not(.nav-sheet--desk) .nav-sheet__item.is-active { background: var(--dom-bg) !important; color: var(--ink); }
+}
+
+/* ---------- 4. טלפון: החופה והבר — F7, F9, F11, F12 ---------- */
+@media (max-width: 720px) {
+  .app-header { border-radius: 0 0 var(--r-card) var(--r-card); }
+  .app-header__inner { padding: 10px 16px; min-height: 56px; }
+  /* F7 — החיפוש בחופה גם בטלפון; הכפתור הצף ליד הבר יורד */
+  body .app-controls .search-btn, body .app-header .search-btn { display: grid !important; }
+  .nav-search-fab { display: none !important; }
+  /* F11 — הבר נשאר כמוסת זכוכית: זה המקום היחיד באפליקציה עם זכוכית (החלטת יועד 30.9) */
+  .app-nav.app-nav--bottom .app-nav__tab.is-active { color: var(--ink); font-weight: 700; }
+}
+
+/* ---------- 5. חלון המשתמש — F17 ---------- */
+.user-panel {
+  background: var(--paper) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  border: 1px solid var(--hair) !important; border-radius: 18px !important;
+  box-shadow: var(--sh-menu) !important;
+  width: 300px !important; padding: 10px !important; color: var(--ink);
+}
+.user-panel .up-li { border-radius: 10px; }
+.user-panel .up-li:hover { background: var(--ground); }
+.user-panel .up-list { background: none; }
+.user-panel .up-tg { background: transparent !important; border: 1px solid var(--hair) !important; color: var(--ink) !important; }
+.user-panel .up-tg::before, .user-panel .up-tg::after { display: none !important; }
+.user-panel .up-tg.is-on { background: var(--ink) !important; border-color: var(--ink) !important; color: #fff !important; }
+.user-panel .up-year__chip.is-on { background: var(--dom-bg) !important; color: var(--dom) !important; box-shadow: none !important; font-weight: 700; }
+.user-panel .up-role { background: var(--dom-bg); color: var(--dom); }
+/* טלפון — גיליון מלמטה, עם מסך מוחשך מאחור */
+@media (max-width: 720px) {
+  .user-panel:not([hidden]) {
+    position: fixed !important; left: 0 !important; right: 0 !important; bottom: 0 !important; top: auto !important;
+    width: auto !important; max-height: 85vh !important;
+    border-radius: 22px 22px 0 0 !important; border: 0 !important;
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom)) !important;
+    box-shadow: 0 0 0 100vmax rgba(15,22,38,.35), 0 -10px 30px -16px rgba(16,24,40,.4) !important;
+    z-index: var(--z-sheet) !important;
+    animation: frameSheetUp .26s var(--ease);
+  }
+  .user-panel:not([hidden])::before {
+    content: ""; display: block; width: 36px; height: 4px; border-radius: 2px;
+    background: var(--hair); margin: 0 auto 10px;
+  }
+}
+@keyframes frameSheetUp { from { transform: translateY(40%); opacity: .4; } to { transform: none; opacity: 1; } }
+
+/* ---------- 6. כפתורים צפים — F24 (דיווח), F25 ("+") — אותו גודל: 56px ---------- */
+.rep-fab-wrap { width: 56px; height: 56px; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom)); }
+.rep-fab {
+  width: 56px; height: 56px; background: var(--paper); color: var(--ink);
+  border: 1px solid var(--hair); box-shadow: var(--sh-float);
+}
+.plus-fab {
+  position: fixed; z-index: var(--z-fab);
+  left: 24px; bottom: calc(24px + env(safe-area-inset-bottom));
+  width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--navy); color: #fff; box-shadow: var(--sh-float);
+  display: none; place-items: center;
+  transition: transform var(--t-fast) var(--ease);
+}
+.plus-fab svg { width: 26px; height: 26px; }
+.plus-fab:active { transform: scale(.94); }
+body[data-area="resident"]:not(.is-gated) .plus-fab { display: grid; }
+@media (max-width: 720px) {
+  .rep-fab-wrap { right: 16px; bottom: calc(var(--botnav-h, 80px) + env(safe-area-inset-bottom) + 16px); }
+  .plus-fab     { left: 16px;  bottom: calc(var(--botnav-h, 80px) + env(safe-area-inset-bottom) + 16px); }
+  body[data-nav-single="1"] .plus-fab { bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+/* הגיליון של "+" */
+.plus-sheet .plus-t { font-size: var(--t-14); color: var(--ink-2); font-weight: 700; margin: 4px 4px 6px; }
+.plus-sheet .plus-opt {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px;
+  padding: 10px 8px; border: 0; border-radius: var(--r-in); background: none;
+  font: inherit; font-size: 16px; font-weight: 600; color: var(--ink); text-align: start; cursor: pointer;
+}
+.plus-sheet .plus-opt:hover { background: var(--ground); }
+.plus-sheet .plus-opt small { display: block; font-weight: 400; font-size: var(--t-13); color: var(--ink-2); }
+.plus-sheet .plus-disc {
+  width: 40px; height: 40px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.plus-sheet .plus-disc svg { width: 20px; height: 20px; }
+
+/* ---------- 7. חלונות, טוסט — F26, F28 ---------- */
+.cba-dlg {
+  background: var(--paper) !important; border-radius: var(--r-card) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  box-shadow: var(--sh-menu) !important; border: 0 !important;
+}
+.cba-toast { background: var(--navy) !important; color: #fff !important; border-radius: var(--r-pill) !important; box-shadow: var(--sh-float) !important; }
+.modal, .drawer {
+  background: var(--paper) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  border: 0 !important; box-shadow: var(--sh-menu) !important;
+}
+
+/* ---------- 8. מסך הפתיחה — F30: הלוגו הנושם על כהה, שהופך לחופה ---------- */
+.boot-splash { background: var(--navy) !important; }
+.boot-splash .boot-logo { background: #fff !important; color: var(--navy) !important; box-shadow: none !important; }
+.boot-splash .boot-name { color: #fff !important; }
+.boot-splash .boot-sub  { color: var(--on-navy-2) !important; }
+.boot-splash .boot-prog { background: rgba(255,255,255,.14) !important; }
+.boot-splash .boot-prog i { background: #fff !important; }
+/* היציאה: המשטח הכהה "מתכווץ" למעלה עד גובה החופה, ואז נעלם */
+.boot-splash.is-leaving {
+  opacity: 1 !important;
+  clip-path: inset(0 0 calc(100% - var(--header-h, 60px)) 0 round 0 0 var(--r-card) var(--r-card));
+  transition: clip-path .5s var(--ease), opacity .2s ease .5s !important;
+}
+.boot-splash.is-leaving .boot-logo, .boot-splash.is-leaving .boot-name,
+.boot-splash.is-leaving .boot-sub, .boot-splash.is-leaving .boot-prog { opacity: 0 !important; transition: opacity .15s !important; }
+.boot-splash { clip-path: inset(0 0 0 0 round 0); }
+@media (prefers-reduced-motion: reduce) {
+  .boot-splash.is-leaving { clip-path: none; opacity: 0 !important; transition: opacity .2s !important; }
+}
+
+/* ---------- 9. מסך הכניסה — F31: חופה כהה למעלה, כרטיס לבן ---------- */
+.login-gate { background: linear-gradient(var(--navy) 0 42%, var(--ground) 42%) !important; }
+.login-card {
+  background: var(--paper) !important; border: 0 !important; border-radius: var(--r-card) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  box-shadow: var(--sh-menu) !important;
+}
+.login-logo { background: var(--navy) !important; color: #fff !important; box-shadow: none !important; }
