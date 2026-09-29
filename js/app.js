@@ -70,6 +70,10 @@
   }
 
   function showScreen(name, opts) {
+    /* 🔴 גל 1 (30.9.26, יועד: "תפריט נפתח לא נעלם אחרי שלוחצים") — כל ניווט
+       סוגר תפריט קבוצה פתוח. בדסקטופ הכותרת מעל רקע התפריט, אז לחיצה על טאב
+       אחר (למשל "בית") ניווטה — והתפריט נשאר פתוח מעל המסך החדש. */
+    closeNavSheet();
     // (2026-08-09, תיקון באג "קפיצה חזרה למסך הראשי"): הניווט העליון בראש
     // index.html מגיע עם 3 כפתורים קבועים שכבר יש להם data-screen, ולכן
     // כבר לחיצים באמת עוד לפני שהאפליקציה סיימה להיטען (inited עדיין false —
@@ -631,10 +635,15 @@
   function closeNavSheet() {
     /* 27.9.26 — המחוון חוזר מהקבוצה שנפתחה אל המסך הפעיל (ר' is-menu ב-motion.js) */
     if (nav) nav.querySelectorAll(".app-nav__tab.is-menu").forEach(function (b) { b.classList.remove("is-menu"); });
-    var el = document.getElementById("nav-sheet");
-    if (!el) return;
-    el.classList.remove("is-open");
-    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 260);
+    /* 🔴 גל 1 (30.9.26, יועד: "תפריט נפתח לא נעלם") — סוגרים *כל* תפריט פתוח,
+       ומורידים ממנו את ה-id מיד: אחרת תפריט שנפתח שוב תוך 260ms חלק את
+       אותו id עם הישן, והסגירה הבאה תפסה את הישן והשאירה את החדש פתוח. */
+    document.querySelectorAll(".nav-sheet").forEach(function (el) {
+      el.classList.remove("is-open");
+      el.removeAttribute("id");
+      el.style.pointerEvents = "none";
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 260);
+    });
   }
 
   function openNavSheet(groupKey) {
@@ -668,6 +677,7 @@
     var wrap = document.createElement("div");
     wrap.className = "nav-sheet";
     wrap.id = "nav-sheet";
+    wrap.dataset.group = groupKey;   /* גל 1: לחיצה חוזרת על אותו טאב סוגרת (toggleGroup) */
     wrap.innerHTML =
       '<div class="nav-sheet__backdrop"></div>' +
       '<div class="nav-sheet__panel" role="dialog" aria-label="' + CBA.esc(group.label) + '">' +
@@ -736,6 +746,11 @@
        (openNavSheet מציב אותו מתחת לטאב). ההרחבה בתוך השורה (openGroup)
        נשארת בקוד אבל מוסתרת ב-css/frame.css — ביטול: להחזיר את התנאי
        isMobileNav() לשורה הבאה. */
+    /* 🔴 גל 1 (30.9.26) — לחיצה שנייה על אותו טאב סוגרת את התפריט. בדסקטופ
+       הכותרת (z 30) מעל הרקע השקוף של התפריט (z 20), כך שהלחיצה מגיעה לטאב
+       ולא לרקע — ובלי הבדיקה הזאת התפריט פשוט נפתח מחדש. */
+    var openSheet = document.getElementById("nav-sheet");
+    if (openSheet && openSheet.dataset.group === g) { closeNavSheet(); return; }
     openNavSheet(g); return;
   }
   // 2026-08-08, גרסה שישית — חזרה לתפריט "מתרחב" בתוך שורת הטאבים עצמה (לא
