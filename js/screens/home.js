@@ -14,6 +14,10 @@
    3. **טעינה עצלה בלבד.** שתי הספירות היחידות שדורשות פנייה לשרת (בקשות
       הרשמה, תשלומי מכון) נטענות רק למי שיש לו את ההרשאה המתאימה, ומציגות
       שלד עד שהן חוזרות. עמוד הקבלה לא מרשה לעצמו להיות המסך האיטי באפליקציה.
+
+   🔴 גל 2 (30.9.26) — הבית נבנה מחדש (ר' הבלוק "הבית החדש" למטה), ו"תפקיד
+   ועד" עבר למסך "לוח ניהול" (CBA.screens.adminBoard, בסוף הקובץ). שני המסכים
+   חולקים את אותו מנגנון טעינה ואת אותם מטמונים — לכן הם באותו קובץ.
    ========================================================================== */
 window.CBA = window.CBA || {};
 CBA.screens = CBA.screens || {};
@@ -92,60 +96,6 @@ CBA.screens = CBA.screens || {};
       '<span class="hm-task__l">' + esc(label) + (sub ? '<small>' + esc(sub) + '</small>' : "") + '</span>' +
       '<span class="hm-task__c">' + svg(ICO.chev, 16) + '</span>' +
       '</button>';
-  }
-
-  function adminSectionHTML(garden) {
-    if (!anyAdmin()) return "";
-    var a = (window.CBA.alerts ? CBA.alerts() : null) || {};
-    var rows = "";
-    if (can("תקציב")) {
-      if (a.pendingExpenses) rows += taskRow("הוצאות ממתינות לאישור", a.pendingExpenses, "expenses-pending", "warn");
-      if (a.reviewExpenses)  rows += taskRow("הוצאות שהוחזרו לבדיקה", a.reviewExpenses, "expenses-pending");
-    }
-    if (can("מועדון") && a.pendingClub) rows += taskRow("שריוני מועדון ממתינים לאישור", a.pendingClub, "clubAdmin", "warn");
-
-    // שתי השורות הבאות נטענות מהשרת ולכן מקבלות מקום שמור עם שלד
-    var lazy = "";
-    if (can("תושבים")) lazy += '<div id="hm-signups" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
-    if (can("תושבים")) lazy += '<div id="hm-profile" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
-    if (can("מכון"))   lazy += '<div id="hm-gym" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
-    if (can("גינון"))  lazy += '<div id="hm-garden" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
-    /* 🔴 23.9 — "מחכה להחלטה". נמדד חי: דיווח תושב חיכה להחלטה (בלי שבוע)
-       בזמן שהכרטיס הזה הכריז "הכול מטופל" — השורה של #hm-garden סופרת רק
-       "ממתין לאישור" (הגנן סיים). המספר מגיע מ-homeGarden.js (אותו מנוע של
-       מסך הנתונים), ולכן השלד נסגר רק כשהוא מגיע. */
-    if (canGarden())   lazy += '<div id="hm-gdecide" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
-
-    /* 🔴 "תפקיד ועד" (2026-09-16) — שם וכרטיס נפרדים, לבקשת יועד.
-       הרקע: הכרטיס הזה והכרטיס המשפחתי שמתחתיו ענו על שתי שאלות
-       שונות לגמרי — "מה מחכה לי כגזבר" מול "מה פתוח למשפחה שלי" —
-       ושניהם היו לבנים, זה מעל זה, בלי שום סימן שמפריד ביניהם.
-       ⚠️ **המחלקות `hm-tasks`/`hm-clear` והמזהים לא השתנו** במכוון:
-          `loadLazyCounts`, `fastPaint` ו-`syncClearState` בוחרות לפיהם,
-          וכל שינוי שם היה מנתק את התגיות מהשלד שמחכה להן. */
-    /* 🔴 23.9 (ערב) — "תפקיד ועד" הוא עכשיו **משטח** ולא כרטיס: רצועה אפורה
-       ברוחב מלא מתחת לעולם המשפחתי, והגינון יושב בתוכה (בקשת יועד: "הגינון
-       צריך להיטמע ברקע של הוועד", ו"התושב אמור להיות ראשון לגמרי").
-       לפני כן הלו"ז — שהוא עולם התושב — ישב בין הוועד לגינון.
-       ⚠️ `hm-vaad` נשאר על המשטח, וכל המזהים (#hm-tasks, #hm-clear,
-          #hm-gardensec) לא השתנו — הבדיקות, הסיור והשלד בוחרים לפיהם. */
-    return '<section class="hm-vaad hm-vzone' + (garden ? " hm-vzone--g" : "") + '" id="hm-vzone" aria-label="תפקיד ועד">' +
-      '<div class="hm-vaad__head">' +
-        '<span class="hm-vaad__ico">' + svg(ICO.badge, 15) + '</span>' +
-        '<h2 class="hm-vaad__t">תפקיד ועד</h2>' +
-        '<span class="hm-vaad__sub">רק מה ששייך לתחומי הניהול שלך</span></div>' +
-      '<div class="hm-vzone__grid">' +
-        '<div class="hm-vzone__tasks">' +
-          (garden ? '<div class="hm-vzone__lbl">ממתין לטיפולך</div>' : "") +
-          '<div class="hm-tasks" id="hm-tasks">' + rows + lazy + '</div>' +
-          '<div class="hm-clear" id="hm-clear"' + (rows ? " hidden" : "") + '>' +
-            CBA.ui.emptyState({ icon: "check", title: "הכול מטופל",
-              sub: "אין כרגע שום דבר שממתין לאישור שלך." }) +
-          '</div>' +
-        '</div>' +
-        (garden ? '<section class="hmg" id="hm-gardensec" aria-label="גינון"></section>' : "") +
-      '</div>' +
-      '</section>';
   }
 
   /* מטמון קצר לשתי הספירות שדורשות שרת. עמוד הקבלה מצייר את עצמו מחדש בכל
@@ -468,102 +418,6 @@ CBA.screens = CBA.screens || {};
     clear.hidden = !!has;
   }
 
-  /* ------------------------------------------------------ "אצלי בבית" */
-  function mineSectionHTML() {
-    /* ⚠️ הכרטיס הזה נגזר כולו מתנועות. אם המשיכה הראשית נכשלה, CBA.mock
-       עדיין מחזיק את נתוני הדמו מ-mock.js — והכרטיס היה מציג "0 ממתינות,
-       ₪0 שולמו השנה" כאילו אלה המספרים האמיתיים של המשפחה. אפס שקרי גרוע
-       יותר מהודעת שגיאה, ולכן כאן מוצג הפאנל המשותף (2026-09-14). */
-    if (window.CBA && CBA.sheets && !CBA.sheets.isConnected() && CBA.dataUnavailableHTML) {
-      return '<section class="card hm-card">' +
-        '<div class="hm-card__head"><h2 class="hm-card__t">אצלנו בבית</h2></div>' +
-        CBA.dataUnavailableHTML("הנתונים הכספיים לא נטענו. שאר האפליקציה עובדת כרגיל.") +
-        '</section>';
-    }
-    var counts = { pending: 0, ready: 0, paid: 0 };
-    if (CBA.residentUtils && CBA.residentUtils.myRequests) {
-      var groups = CBA.residentUtils.splitRequests(CBA.residentUtils.myRequests());
-      groups.refunds.forEach(function (t) {
-        if (t.status === "submitted") counts.pending++;
-        else if (t.status === "ready") counts.ready++;
-        else if (t.status === "paid") counts.paid += (t.amount || 0);
-      });
-    }
-    var money = CBA.formatILS ? CBA.formatILS(counts.paid) : String(counts.paid);
-    /* 🔴 שלושת הכרטיסים הפכו לשורה אחת (2026-09-16, החלטת יועד).
-       שלושה מספרים גדולים תפסו את כל הכרטיס וענו על שאלה אחת;
-       עכשיו ההחזרים מדברים באותה שפה בדיוק של המועדון, הגינון
-       והמכון — אייקון, מצב, תגית, ולחיצה למסך המלא. */
-    return '<section class="card hm-card">' +
-      '<div class="hm-card__head"><h2 class="hm-card__t">אצלנו בבית</h2>' +
-        '<span class="hm-card__sub">מה פתוח למשפחה שלי</span>' +
-        '<button type="button" class="hm-link" data-goto="resRequests">לכל הבקשות</button></div>' +
-      '<div class="hm-mine">' +
-        refundRowHTML(counts, money) +
-        '<div id="hm-next" class="hm-slot">' + CBA.skel.rows(1, { avatar: false }) + '</div>' +
-        '<div id="hm-mygarden" class="hm-slot"></div>' +
-        '<div id="hm-mygym" class="hm-slot"></div>' +
-      '</div>' +
-      '<div class="hm-quiet" id="hm-quiet" hidden></div>' +
-      '</section>';
-  }
-
-  /* ------------------------------------------------- שורת מצב משותפת ----
-     ארבע השורות של "אצלנו בבית" נבנות כולן מכאן. שורה אחת לכל תחום,
-     ותמיד באותו סדר פנימי: אייקון · כותרת · שורת פירוט · תגית · חץ.
-     ⚠️ אותה פונקציה בונה גם את שורת "אין" (המועדון הריק, הגינון הריק),
-        כדי ששתי הצורות לא ייפרדו ויתחילו להיראות אחרת. */
-  function stateRow(o) {
-    return '<button type="button" class="hm-row" data-goto="' + esc(o.goto) + '">' +
-      '<span class="hm-row__ico">' + svg(o.ico, 17) + '</span>' +
-      '<span class="hm-row__txt"><b>' + esc(o.title) + '</b>' +
-        (o.sub ? '<small>' + esc(o.sub) + '</small>' : '') + '</span>' +
-      /* ⚠️ `badge` הוא רכיב התגית הכלל-מערכתי (css/style.css), ולא
-         מחלקה חדשה של עמוד הבית: תגית "מאושר" כאן חייבת להיראות
-         בדיוק כמו "מאושר" בטבלת ההוצאות. */
-      (o.pill ? '<span class="badge badge--' + (o.tone || "info") + '">' + esc(o.pill) + '</span>' : '') +
-      '<span class="hm-row__c">' + svg(ICO.chev, 16) + '</span>' +
-      '</button>';
-  }
-
-  /* ההחזרים — השורה היחידה שאינה עולה דבר: היא נגזרת מהתנועות
-     שכבר בזיכרון (`CBA.residentUtils.myRequests`), בלי שום קריאה. */
-  /* ---------------------------------------------- השורה השקטה (2026-09-23) ----
-     "אין בקשות החזר פתוחות" ו"אין שריון קרוב" היו שתי שורות מלאות, בגובה של
-     שורה שיש בה משהו. עכשיו שתיהן חולקות שורה קטנה אחת בתחתית הכרטיס —
-     אותו עיקרון שכבר כתוב למעלה ליד taskRow: עמוד קבלה שמלא ב"אין" מלמד
-     את העין להתעלם ממנו. כל חלק עדיין לחיץ ומוביל למסך שלו. */
-  var quiet = { refund: false, resv: false };
-  function paintQuiet(el) {
-    var host = el && el.closest ? el.closest(".hm-card") : null;
-    var q = host && host.querySelector("#hm-quiet");
-    if (!q) return;
-    var parts = [];
-    if (quiet.refund) parts.push('<button type="button" class="hm-quiet__i" data-goto="resRequests">אין בקשות החזר פתוחות</button>');
-    if (quiet.resv) parts.push('<button type="button" class="hm-quiet__i" data-goto="resReserve">אין שריון קרוב</button>');
-    q.hidden = !parts.length;
-    q.innerHTML = parts.length ? '<span class="hm-quiet__ico">' + svg(ICO.check, 14) + '</span>' +
-      parts.join('<span class="hm-quiet__sep" aria-hidden="true">·</span>') : "";
-  }
-
-  function refundRowHTML(c, money) {
-    var title, pill = "", tone = "", sub = "";
-    if (c.pending) {
-      title = c.pending === 1 ? "בקשת החזר אחת ממתינה" : c.pending + " בקשות החזר ממתינות";
-      pill = "בבדיקה"; tone = "warn";
-      if (c.ready) sub = c.ready === 1 ? "אחת אושרה לתשלום · " : c.ready + " אושרו לתשלום · ";
-    } else if (c.ready) {
-      title = c.ready === 1 ? "בקשה אחת אושרה לתשלום" : c.ready + " בקשות אושרו לתשלום";
-      pill = "אושר"; tone = "ok";
-    } else {
-      /* 23.9 — "אין" לא מקבל שורה משלו; הוא עובר לשורה השקטה (ר' quietHTML). */
-      quiet.refund = true;
-      return "";
-    }
-    sub += money + " שולמו השנה";
-    return stateRow({ goto: "resRequests", ico: ICO.receipt, title: title, sub: sub, pill: pill, tone: tone });
-  }
-
   /* מטמון נפרד לשריון הקרוב (2026-09-09).
      ⚠️ ה-lazyCache שמעל נבנה ב-27.8 בדיוק בשביל הבעיה הזאת — אבל הוא מכסה
      שלושה מארבעת הטעונים העצלים של העמוד ו**מפספס דווקא את הרביעי**.
@@ -582,12 +436,12 @@ CBA.screens = CBA.screens || {};
     if (!slot) return;
     var me = u();
     var fam = String(me.familyId || me.house || "").trim();
-    if (!fam || !CBA.data.getMyClubReservations) { slot.innerHTML = ""; return; }
+    if (!fam || !CBA.data.getMyClubReservations) { paintNext(slot, []); return; }
 
     if (resvFresh()) { paintNext(slot, resvCache.list || []); return; }
 
     CBA.data.getMyClubReservations({ family: fam, email: me.email || "" }, function (res) {
-      if (!res || !res.ok) { if (slot.isConnected) slot.innerHTML = ""; return; }
+      if (!res || !res.ok) { if (slot.isConnected) paintNext(slot, []); return; }
       var list = (res.reservations || []).slice().sort(function (a, b) {
         return new Date(a.start) - new Date(b.start);
       });
@@ -598,214 +452,373 @@ CBA.screens = CBA.screens || {};
     });
   }
 
-  /* ציור השורה — חולץ מתוך ה-callback כדי שגם המסלול מהמטמון וגם המסלול
-     מהרשת יציירו בדיוק אותו דבר. */
-  function paintNext(slot, list) {
-    /* 23.9 — אותם שריונים נכנסים גם ללו"ז (קטגוריה "שלי"), בלי קריאה נוספת. */
-    if (window.CBA.homeSchedule) CBA.homeSchedule.setPersonal(list || []);
-    var next = (list || [])[0];
-    quiet.resv = !next;
-    if (!next) {
-      slot.innerHTML = "";
-      paintQuiet(slot);
-      return;
-    }
-    paintQuiet(slot);
-    var a = new Date(next.start), b = new Date(next.end);
-    var day = a.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "numeric" });
-    /* ⚠️ טווח עם מקף ארוך מתהפך ב-RTL ("20:00–17:00"). ⁦…⁩ מבודדים אותו. */
-    var time = "\u2066" + pad(a.getHours()) + ":" + pad(a.getMinutes()) + "–" + pad(b.getHours()) + ":" + pad(b.getMinutes()) + "\u2069";
-    var pend = next.status === "pending";
-    slot.innerHTML = stateRow({ goto: "resReserve", ico: ICO.key,
-      title: "המועדון " + day, sub: time,
-      pill: pend ? "ממתין" : "מאושר", tone: pend ? "warn" : "ok" });
-  }
   function pad(n) { return n < 10 ? "0" + n : String(n); }
 
-  /* ============================================================================
-   *  🔴 שתי השורות החדשות — גינון ומכון   (2026-09-16)
-   * ----------------------------------------------------------------------------
-   *  שתיהן נקראות **מ-Firestore בלבד** ולכן מותר להן להיות כאן:
-   *    · `getMyGardenReports` עובר ב-`fsFirstRead("gardenReports")` —
-   *      נמדד בייצור היום 30ms (היה 30,002 — timeout).
-   *    · `getGymStatusFast` קורא `gymStatus/{uid}` — 6–59ms.
-   *  לו אחת מהן היתה קריאת Apps Script היא לא היתה נכנסת לעמוד הזה:
-   *  שם המחיר הוא ~2,000ms מינימום, וכל דיאטת הפתיחה נועדה למחוק אותו.
-   *
-   *  ⚠️ **שתיהן מתחילות ריקות ולא בשלד.** שלד מבטיח שורה שתגיע, ואצל
-   *     רוב התושבים אין כאן שורה בכלל (לא דיווחו, לא מנויים) — שלד
-   *     שנעלם הוא הבטחה שנשברת. הן פשוט נכנסות כשיש מה להראות.
-   *  ⚠️ **כשל אינו "אין".** שתיהן משאירות את המקום ריק בשקט; מסך
-   *     הגינון עצמו הוא שמבחין בין "אין דיווחים" ל"לא הצלחנו לטעון".
+  /* ==========================================================================
+   *  🔴 גל 2 (30.9.26) — הבית החדש. ספר האבנים, פרק 1 (החלטות יועד 29–30.9)
+   * --------------------------------------------------------------------------
+   *  חופה: ברכה · "מה מחכה לי" (מספר גיבור + משפט, A1) · מיני-כרטיסים:
+   *        האירוע הבא (לחיצה = גיליון הכרטיסים, H17) · השריון הקרוב, או מנוי
+   *        המכון כשאין שריון (H11) · ולבעל תפקיד "ממתין לטיפולך: N" (A9/H30).
+   *  בנטו: השבוע (תמיד) · הדיווחים שלי (תמיד) · ההחזרים שלי (רק כשיש ממתין
+   *        או מאושר, H10) · מכון כושר (רק למנויים, H13).
+   *  רשימות: "מה קרה" (סיור חדש, עדכונים, אירועים עם פנים — H26) ו"דברים
+   *        לעשות" (אישור הגעה, פרטי משפחה, מנוי שפג — H27, בלי "קבלה חסרה").
+   *  ירדו מהבית (לא מהאפליקציה): 7 הגלולות → "+" (H8) · השורה השקטה (H14) ·
+   *  גריד השבועיים → לוח האירועים (H20) · 10 ימים למנהל (H24) · "תפקיד ועד"
+   *  והגינון → לוח ניהול (H31, CBA.screens.adminBoard למטה) · "שולמו השנה" →
+   *  מסך הבקשות (שם הוא כבר מוצג).
    * ========================================================================== */
+  var W = null;   /* מצב הציור הנוכחי של הבית — מתאפס בכל render */
+
+  /* סכום עגול בלי ".00" — מספר גדול באריח, לא שורה בטבלה */
+  function money(n) { return (CBA.formatILS ? CBA.formatILS(n) : "₪" + Math.round(n)).replace(/\.00$/, ""); }
+  function dm(d) { return d.getDate() + "." + (d.getMonth() + 1); }
+  var WD = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+  function disc(kind, ico) { return '<i class="hm2-disc hm2-disc--' + kind + '">' + svg(ico, 16) + '</i>'; }
+
+  /* ---- ההחזרים (בלי קריאה — מהתנועות שבזיכרון) ---- */
+  function refundCounts() {
+    var c = { pending: 0, ready: 0, readyAmt: 0, known: true };
+    if (window.CBA && CBA.sheets && CBA.sheets.isConnected && !CBA.sheets.isConnected()) { c.known = false; return c; }
+    if (CBA.residentUtils && CBA.residentUtils.myRequests) {
+      CBA.residentUtils.splitRequests(CBA.residentUtils.myRequests()).refunds.forEach(function (t) {
+        if (t.status === "submitted") c.pending++;
+        else if (t.status === "ready") { c.ready++; c.readyAmt += (Number(t.amount) || 0); }
+      });
+    }
+    return c;
+  }
+  function refundTileHTML(c) {
+    /* ⚠️ H16 — גיליון לא מחובר: לא "₪0" ולא היעלמות שקטה, אלא אריח שגיאה עם "נסה שוב" */
+    if (!c.known) {
+      return '<div class="hm2-tile hm2-tile--err" id="hm-refunds">' +
+        '<span class="hm2-tile__h">' + disc("bud", ICO.receipt) + 'ההחזרים שלי</span>' +
+        '<span class="hm2-tile__s">הנתונים הכספיים לא נטענו.</span>' +
+        '<button type="button" class="hm-link" data-data-retry>נסה שוב</button></div>';
+    }
+    if (!c.pending && !c.ready) return "";          /* H10 — רק כשיש */
+    var n, s;
+    if (c.ready) {
+      n = money(c.readyAmt);
+      s = (c.ready === 1 ? "אושר לתשלום" : c.ready + " אושרו לתשלום") + (c.pending ? " · " + c.pending + " בבדיקה" : "");
+    } else {
+      n = c.pending + '<em>בבדיקה</em>';
+      s = "ממתין לאישור הוועד";
+    }
+    return '<button type="button" class="hm2-tile" id="hm-refunds" data-goto="resRequests">' +
+      '<span class="hm2-tile__h">' + disc("bud", ICO.receipt) + 'ההחזרים שלי</span>' +
+      '<span class="hm2-tile__n">' + n + '</span><span class="hm2-tile__s">' + esc(s) + '</span></button>';
+  }
+
+  /* ---- הדיווחים שלי (Firestore, מיד) — אריח תמיד, 3 מצבים (H12) ---- */
   function loadMyGarden(container) {
     var slot = container.querySelector("#hm-mygarden");
-    if (!slot || !(CBA.data && CBA.data.getMyGardenReports)) return;
+    if (!slot || !(CBA.data && CBA.data.getMyGardenReports)) { heroPart("garden", 0, ""); return; }
     CBA.data.getMyGardenReports(function (res) {
       if (!slot.isConnected) return;
-      if (!res || !res.ok) return;                 /* כשל — לא ממציאים "אין" */
+      var head = '<span class="hm2-tile__h">' + disc("gar", ICO.leaf) + 'הדיווחים שלי</span>';
+      if (!res || !res.ok) {                        /* כשל — לא ממציאים "אין" */
+        slot.className = "hm2-tile";
+        slot.setAttribute("data-goto", "resGarden");
+        slot.innerHTML = head + '<span class="hm2-tile__s">לא הצלחנו לטעון כרגע</span>';
+        heroPart("garden", 0, "");
+        return;
+      }
       var rows = res.rows || [];
-      /* פתוח = עדיין לא נסגר ולא אוחד לתוך דיווח אחר. זו בדיוק ההגדרה
-         שמסך "הדיווחים שלי" מצייר לפיה את מסלול הנקודות. */
       var open = rows.filter(function (r) { return r && !r.closure && !r.mergedInto; });
       if (!rows.length) {
-        slot.innerHTML = stateRow({ goto: "resGardenNew", ico: ICO.leaf,
-          title: "לא דיווחת על כלום", sub: "ראית מפגע בשיכון? אפשר לדווח" });
+        slot.className = "hm2-tile";
+        slot.setAttribute("data-goto", "resGardenNew");
+        slot.innerHTML = head + '<span class="hm2-tile__n hm2-tile__n--sm">עוד לא דיווחת</span>' +
+          '<span class="hm2-tile__s">ראית מפגע בשיכון? <u>דיווח ראשון</u></span>';
+        heroPart("garden", 0, "");
         return;
       }
       if (!open.length) {
-        slot.innerHTML = stateRow({ goto: "resGarden", ico: ICO.leaf,
-          title: "כל הדיווחים שלך טופלו", sub: rows.length + " דיווחים בסך הכול",
-          pill: "הושלם", tone: "ok" });
+        slot.className = "hm2-tile";
+        slot.setAttribute("data-goto", "resGarden");
+        slot.innerHTML = head + '<span class="hm2-tile__n">' + rows.length + '<em>טופלו</em></span>' +
+          '<span class="hm2-tile__s">כל הדיווחים שלך טופלו</span>';
+        heroPart("garden", 0, "");
         return;
       }
-      slot.innerHTML = stateRow({ goto: "resGarden", ico: ICO.leaf,
-        title: open.length === 1 ? "דיווח אחד שלי בטיפול" : open.length + " דיווחים שלי בטיפול",
-        sub: open.map(function (r) { return r.title || r.category || ""; })
-               .filter(Boolean).slice(0, 2).join(" · "),
-        pill: "בטיפול", tone: "warn" });
+      var last = open[open.length - 1] || {};
+      var t = last.title || last.category || "";
+      slot.className = "hm2-tile hm2-tile--gar";
+      slot.setAttribute("data-goto", "resGarden");
+      slot.innerHTML = head + '<span class="hm2-tile__n">' + open.length + '<em>בטיפול</em></span>' +
+        '<span class="hm2-tile__s" dir="auto">' + esc(open.map(function (r) { return r.title || r.category || ""; })
+          .filter(Boolean).slice(0, 2).join(" · ")) + '</span>';
+      heroPart("garden", open.length, open.length === 1
+        ? "הדיווח שלך" + (t ? " על " + t : "") + " בטיפול"
+        : open.length + " דיווחים שלך בטיפול");
     });
   }
 
-  /* המכון — שורה רק למי שבאמת מנוי. תושב שאינו מנוי לא מקבל
-     כאן "אין מנוי": זו לא משימה פתוחה שלו, וזה הכרטיס של מה
-     שפתוח. מי שרוצה להצטרף מגיע דרך הפעולות המהירות. */
+  /* ---- מכון כושר (Firestore) — אריח רק למנויים (H13), ומיני-כרטיס כשאין שריון (H11) ---- */
+  function gymInfo(doc) {
+    if (!doc) return null;
+    var st = String(doc["סטטוס"] || "").trim();
+    if (!st) return null;
+    var until = String(doc["בתוקף עד"] || "").trim(), d = until ? new Date(until) : null;
+    if (d && isNaN(d)) d = null;
+    var days = d ? Math.ceil((d.setHours(23, 59, 0, 0) - Date.now()) / 86400000) : null;
+    return { st: st, until: d, days: days };
+  }
   function loadMyGym(container) {
     var slot = container.querySelector("#hm-mygym");
-    if (!slot || !(CBA.data && CBA.data.getGymStatusFast)) return;
+    if (!slot || !(CBA.data && CBA.data.getGymStatusFast)) { W.gym = null; W.gymKnown = true; syncTodo(container); return; }
     CBA.data.getGymStatusFast(function (doc) {
-      if (!slot.isConnected || !doc) return;
-      var st = String(doc["סטטוס"] || "").trim();
-      if (!st) return;
-      var until = String(doc["בתוקף עד"] || "").trim();
-      var tone = st === "פעיל" ? "ok" : (st === "פג תוקף" ? "danger" : "warn");
-      var sub = "";
-      if (st === "פעיל" && until) {
-        var d = new Date(until);
-        sub = isNaN(d) ? "" : "בתוקף עד " + d.toLocaleDateString("he-IL",
-          { day: "numeric", month: "numeric", year: "numeric" });
+      if (!slot.isConnected) return;
+      var g = gymInfo(doc);
+      W.gym = g; W.gymKnown = true;
+      if (!g) { slot.hidden = true; syncTodo(container); syncResvMini(container); return; }
+      var n, s;
+      if (g.st === "פעיל") {
+        n = (g.days != null && g.days >= 0) ? g.days + '<em>' + (g.days === 1 ? "יום" : "ימים") + '</em>' : '<span class="hm2-tile__n--sm">פעיל</span>';
+        s = "מנוי פעיל" + (g.until ? " · עד " + g.until.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" }) : "");
+      } else if (g.st === "פג תוקף") {
+        n = '<span class="hm2-tile__n--sm">פג תוקף</span>'; s = "אפשר לחדש במסך המכון";
+      } else {
+        n = '<span class="hm2-tile__n--sm">' + esc(g.st) + '</span>'; s = "מנוי מכון כושר";
       }
-      slot.innerHTML = stateRow({ goto: "resGym", ico: ICO.gym,
-        title: "מנוי מכון כושר", sub: sub, pill: st, tone: tone });
+      slot.hidden = false;
+      slot.innerHTML = '<span class="hm2-tile__h">' + disc("gym", ICO.gym) + 'מכון כושר</span>' +
+        '<span class="hm2-tile__n">' + n + '</span><span class="hm2-tile__s">' + esc(s) + '</span>';
+      syncTodo(container); syncResvMini(container);
     });
   }
 
-  /* ------------------------------------------------- "יש משהו חדש" ------
-     כשמוסיפים צעד לסיור עם מספר גרסה חדש, תושב ותיק לא מקבל השתלטות על
-     המסך — הוא מקבל את הכרטיס הזה, וגם אותו רק אם באמת יש משהו שלא ראה.
-     ההחלטה הזו היא כל ההבדל בין "האפליקציה מלמדת אותי" ל"האפליקציה קופצת
-     עליי". ר' js/ui/tour.js. */
+  /* ---- השריון הקרוב — מיני-כרטיס בחופה (H11). id="hm-next" נשמר (seedResvFast) ---- */
+  function paintNext(slot, list) {
+    if (window.CBA.homeSchedule) CBA.homeSchedule.setPersonal(list || []);
+    if (!W) return;
+    W.resv = (list || [])[0] || null; W.resvKnown = true;
+    var c = slot && slot.closest ? slot.closest(".hm-page") : null;
+    if (c) syncResvMini(c);
+  }
+  function syncResvMini(container) {
+    var slot = container.querySelector("#hm-next");
+    if (!slot || !W) return;
+    var next = W.resv;
+    if (next) {
+      var a = new Date(next.start), b = new Date(next.end);
+      var time = "⁦" + pad(a.getHours()) + ":" + pad(a.getMinutes()) + "–" + pad(b.getHours()) + ":" + pad(b.getMinutes()) + "⁩";
+      slot.hidden = false;
+      slot.setAttribute("data-goto", "resReserve");
+      slot.innerHTML = '<small>השריון הקרוב' + (next.status === "pending" ? ' · <span class="hm2-mini__warn">ממתין</span>' : "") + '</small>' +
+        '<b>יום ' + WD[a.getDay()] + " " + dm(a) + '</b><span>מועדון משפחות · ' + time + '</span>';
+      return;
+    }
+    var g = W.gym;
+    if (W.resvKnown && g) {
+      slot.hidden = false;
+      slot.setAttribute("data-goto", "resGym");
+      slot.innerHTML = '<small>מכון כושר</small><b>' + esc(g.st === "פעיל" && g.days != null && g.days >= 0 ? g.days + " ימים" : g.st) + '</b>' +
+        '<span>' + (g.until ? "בתוקף עד " + dm(g.until) : "מנוי") + '</span>';
+      return;
+    }
+    slot.hidden = true;
+  }
+
+  /* ---- "יש משהו חדש" — שורה ראשונה ב"מה קרה" (H28) ---- */
   function loadNewCard(container) {
     var slot = container.querySelector("#hm-new");
     if (!slot || !window.CBA.tour) return;
-    /* הדלקת העמודה השנייה — ר' ההערה ליד `hm-side` ב-render. */
-    function cols(on) {
-      var c = container.querySelector("#hm-cols");
-      if (c) c.classList.toggle("hm-cols--two", !!on);
-    }
     CBA.tour.newCount(function (n) {
       if (!slot.isConnected) return;
-      cols(n);
-      if (!n) { slot.innerHTML = ""; return; }
-      slot.innerHTML =
-        '<button type="button" class="tr-new" data-tour-new>' +
-          '<span class="tr-new__ico">' + svg(ICO.spark, 18) + '</span>' +
-          '<span class="tr-new__txt"><b>' +
-            (n === 1 ? "נוסף משהו חדש לאפליקציה" : "נוספו " + n + " דברים חדשים לאפליקציה") +
-          '</b><small>הצצה קצרה, פחות מדקה</small></span>' +
-          '<span class="tr-new__c">' + svg(ICO.chev, 16) + '</span>' +
-        '</button>';
+      slot.innerHTML = !n ? "" :
+        '<button type="button" class="hm2-row" data-tour-new>' + disc("home", ICO.spark) +
+          '<span class="hm2-row__t"><b>' + (n === 1 ? "נוסף משהו חדש לאפליקציה" : "נוספו " + n + " דברים חדשים לאפליקציה") +
+          '</b><small>הצצה קצרה, פחות מדקה</small></span><span class="badge badge--info">חדש</span></button>';
+      syncHappened(container);
+    });
+  }
+  function syncHappened(container) {
+    var card = container.querySelector("#hm-happened");
+    if (!card) return;
+    var any = !!card.querySelector(".hm2-row");
+    var e = card.querySelector("#hm-happened-empty");
+    if (e) e.hidden = any || !W || !W.feedReady;
+  }
+
+  /* ---- פרטי משפחה לא מלאים (H27) — "הפרטים שלי", Apps Script, מטמון 30 דק׳ ---- */
+  var profCache = { ts: 0, val: null };
+  function profileGaps(res) {
+    if (!res || !res.ok || !res.slots) return null;
+    var mine = res.slots[res.mySlot] || {}, v = mine.values || {}, gaps = [];
+    if (!String(v.phone || "").trim()) gaps.push("טלפון");
+    if (!String(v.birthDate || "").trim()) gaps.push("תאריך לידה");
+    var kids = String(v.kids || "").trim(), missing = 0;
+    if (kids) {
+      try {
+        var arr = JSON.parse(kids);
+        if (Array.isArray(arr)) arr.forEach(function (k) { if (!k || !String(k.dob || "").trim()) missing++; });
+        else missing = -1;
+      } catch (e) { missing = -1; }
+    }
+    if (missing > 0) gaps.push(missing === 1 ? "תאריך לידה של ילד/ה" : "תאריכי לידה של " + missing + " ילדים");
+    if (missing === -1) gaps.push("רשימת הילדים (פורמט ישן)");
+    return gaps;
+  }
+  function loadProfile(container) {
+    var me = u();
+    if (me.isRoleSim || me.isExternal || !(CBA.data && CBA.data.getMyProfile)) { W.prof = []; W.profKnown = true; syncTodo(container); return; }
+    if (profCache.val && Date.now() - profCache.ts < 30 * 60 * 1000) { W.prof = profCache.val; W.profKnown = true; syncTodo(container); return; }
+    CBA.data.getMyProfile(function (res) {
+      var g = profileGaps(res);
+      if (g) { profCache = { ts: Date.now(), val: g }; }
+      if (!W) return;
+      W.prof = g || []; W.profKnown = true;
+      syncTodo(container);
     });
   }
 
-  /* ------------------------------------------------------- פעולות מהירות */
-  /* 🔴 גלולות בראש העמוד במקום ריבועים מתחתיו (2026-09-16).
-     חמישה ריבועים בגובה ~120px ישבו **מתחת** לשני הכרטיסים, כלומר
-     הדבר שהתושב הכי מרבה לעשות היה הדבר האחרון שהוא הגיע אליו.
-     עכשיו: שורת גלולות בגובה ~36px מיד מתחת לברכה. השטח ירד בערך
-     ב-60%, ודווקא בגלל זה היה מקום להוסיף שתי פעולות ולא להוריד. */
-  function actionsHTML() {
-    var items = [
-      ["resSubmit",    ICO.receipt, "הגשת קבלה", 1],
-      ["resGardenNew", ICO.leaf,    "דיווח למראה שיכון"],
-      ["resReserve",   ICO.key,     "שריון מועדון"],
-      ["resGym",       ICO.gym,     "מכון כושר"],
-      ["resMap",       ICO.map,     "מפת השיכון"],
-      ["resDirectory", ICO.users,   "שכנים"],
-      ["resMe",        ICO.person,  "המשפחה שלי"]
-    ];
-    return '<section class="hm-actions">' +
-      '<div class="hm-actions__edge" id="hm-acts-edge">' +
-        '<div class="hm-actions__row" id="hm-acts">' + items.map(function (it) {
-          return '<button type="button" class="hm-act' + (it[3] ? " hm-act--cta" : "") +
-            '" data-goto="' + it[0] + '">' + svg(it[1], 15) +
-            '<span>' + esc(it[2]) + '</span></button>';
-        }).join("") + '</div>' +
-      '</div>' +
-      '<div class="hm-actions__dots" id="hm-acts-dots" hidden aria-hidden="true">' +
-        '<i></i><i></i></div>' +
-      '</section>';
+  /* ---- "דברים לעשות" ---- */
+  function syncTodo(container) {
+    var host = container.querySelector("#hm-todo-list");
+    if (!host || !W) return;
+    var items = [];
+    (W.rsvp || []).forEach(function (x) {
+      var e = x.ev, meta = CBA.homeSchedule && CBA.homeSchedule.metaOf ? CBA.homeSchedule.metaOf(e) : "";
+      var who = x.families ? " · " + (x.families === 1 ? "משפחה אחת כבר אישרה" : x.families + " כבר אישרו") : "";
+      items.push('<div class="hm2-todo"><span class="hm2-todo__t"><b dir="auto">אישור הגעה ל' + esc(e.title) + '</b>' +
+        '<small>' + esc(meta + who) + '</small></span>' +
+        '<button type="button" class="hm2-btn" data-hm-rsvp="' + esc(e.id) + '">אישור הגעה</button></div>');
+    });
+    if (W.prof && W.prof.length) {
+      items.push('<div class="hm2-todo"><span class="hm2-todo__t"><b>להשלים את פרטי המשפחה</b>' +
+        '<small>חסר: ' + esc(W.prof.join(" · ")) + '</small></span>' +
+        '<button type="button" class="hm2-btn hm2-btn--ghost" data-goto="resMe">להשלים</button></div>');
+    }
+    if (W.gym && W.gym.st === "פג תוקף") {
+      items.push('<div class="hm2-todo"><span class="hm2-todo__t"><b>המנוי למכון הכושר פג</b>' +
+        '<small>' + (W.gym.until ? "היה בתוקף עד " + dm(W.gym.until) : "מכון כושר") + '</small></span>' +
+        '<button type="button" class="hm2-btn hm2-btn--ghost" data-goto="resGym">לחידוש</button></div>');
+    }
+    var known = W.rsvpKnown && W.profKnown && W.gymKnown;
+    host.innerHTML = items.join("") + (known
+      ? '<div class="hm2-done"><i>' + svg(ICO.check, 13) + '</i>' + (items.length ? "זהו. כל השאר מסודר." : "הכול מסודר. אין מה לעשות כרגע.") + '</div>'
+      : (items.length ? "" : '<span class="skeleton" style="display:block;height:60px;border-radius:12px"></span>'));
   }
 
-  /* ------------------------------------------------- רמז הגלילה במובייל ----
-     במסך צר השורה נגללת, ובלי רמז היא נראית כמו שלושה כפתורים ותו לא.
-     שלושה רמזים יחד: הכפתור הבא **נחתך** בקצה (זה החזק מביניהם), דהייה
-     מעל הקצה, ושני מקפים שמראים איפה אנחנו.
-     ⚠️ **הכול מותנה ב-`scrollWidth > clientWidth`** — בדסקטופ, או אצל
-        תושב שרואה פחות פעולות, השורה נכנסת שלמה ואז אין מה לרמוז:
-        דהייה מעל שורה שאינה נגללת היא בדיוק סוג הרעש שאנחנו מנקים. */
-  function wireActionsHint(container) {
-    var edge = container.querySelector("#hm-acts-edge");
-    var row  = container.querySelector("#hm-acts");
-    var dots = container.querySelector("#hm-acts-dots");
-    if (!edge || !row) return;
-    function sync() {
-      var more = row.scrollWidth - row.clientWidth > 4;
-      edge.classList.toggle("is-more", more);
-      if (dots) dots.hidden = !more;
-      if (!more) return;
-      /* RTL: scrollLeft שלילי או אפס, תלוי בדפדפן. הערך המוחלט הוא
-         המרחק שנגלל, וזה מה שמעניין כאן. */
-      var at = Math.abs(row.scrollLeft);
-      var end = at > (row.scrollWidth - row.clientWidth) / 2;
-      edge.classList.toggle("is-end", end);
-      var d = dots ? dots.children : null;
-      if (d && d.length === 2) {
-        d[0].className = end ? "" : "on";
-        d[1].className = end ? "on" : "";
-      }
+  /* ---- "מה מחכה לי" — המספר הגדול (A1) ----
+     סכום של: החזרים שאושרו · דיווחים שלי בטיפול · אירועים פתוחים לאישור
+     הגעה שלא עניתי · עדכונים שלא נראו. ⚠️ עדכון מאותו תחום שכבר נספר
+     (החזר/גינון) לא נספר פעמיים — "ההחזר אושר" הוא אותו דבר כמו האריח. */
+  var HERO_KEYS = ["refund", "garden", "rsvp", "inbox"];
+  function heroPart(key, n, text) {
+    if (!W) return;
+    W.hero[key] = { n: n || 0, t: text || "" };
+    paintHero();
+  }
+  function paintHero() {
+    var el = W && W.root && W.root.querySelector("#hm-n");
+    var sEl = W && W.root && W.root.querySelector("#hm-s");
+    if (!el || !sEl) return;
+    var total = 0, parts = [], known = 0;
+    HERO_KEYS.forEach(function (k) {
+      var p = W.hero[k];
+      if (!p) return;
+      known++;
+      total += p.n;
+      if (p.n && p.t) parts.push(p.t);
+    });
+    var done = known === HERO_KEYS.length || W.heroTimeout;
+    el.textContent = (known || done) ? String(total) : "·";
+    el.classList.toggle("is-loading", !done);
+    sEl.textContent = parts.length ? parts.join(" · ")
+      : (done ? "הכול מסודר. אין כרגע שום דבר שמחכה לך." : "בודקים מה חדש…");
+  }
+
+  /* ---- מיני "ממתין לטיפולך" (A9) — אותן ספירות של לוח הניהול, בלי לצייר ---- */
+  function loadAdminCounts(upd) {
+    if (can("גינון")) {
+      if (gardenFresh()) upd("garden", lazyCache.garden || 0);
+      else if (CBA.data.getGardenTasks) {
+        lazyCache.gardenTs = Date.now();
+        CBA.data.getGardenTasks({ scope: "pending" }, function (res) {
+          if (!res || !res.ok) { lazyCache.gardenTs = 0; return upd("garden", null); }
+          lazyCache.garden = (res.rows || []).length;
+          upd("garden", lazyCache.garden);
+        });
+      } else upd("garden", null);
     }
-    row.addEventListener("scroll", sync, { passive: true });
-    /* 23.9 — המאזין על window שורד את הציור; מסירים אותו ברגע שהשורה כבר לא
-       בעמוד, אחרת כל ביקור בבית משאיר עוד אחד. */
-    function onResize() {
-      if (!row.isConnected) { window.removeEventListener("resize", onResize); return; }
-      sync();
+    if (canGarden() && CBA.homeGarden.undecided) CBA.homeGarden.undecided(function (n) { upd("decide", n); });
+    var wantR = can("תושבים"), wantG = can("מכון");
+    if (cacheFresh()) {
+      if (wantR) { upd("signups", lazyCache.signups || 0); upd("profile", lazyCache.profile || 0); }
+      if (wantG) upd("gym", lazyCache.gym || 0);
+      return;
     }
-    window.addEventListener("resize", onResize);
-    sync();
+    lazyCache.ts = Date.now();
+    if (wantR && CBA.data.listSignups) CBA.data.listSignups(function (res) {
+      var n = (res && res.ok) ? countPending(res.rows) : null; if (n != null) lazyCache.signups = n; upd("signups", n);
+    }); else if (wantR) upd("signups", null);
+    if (wantR && CBA.data.getProfileChanges) CBA.data.getProfileChanges(function (res) {
+      var n = (res && res.ok) ? countPending(res.rows) : null; if (n != null) lazyCache.profile = n; upd("profile", n);
+    }); else if (wantR) upd("profile", null);
+    if (wantG && CBA.data.getGymList) CBA.data.getGymList(function (res) {
+      var n = (res && res.ok) ? countGymPending(res) : null; if (n != null) lazyCache.gym = n; upd("gym", n);
+    }); else if (wantG) upd("gym", null);
+  }
+  function adminBase() {
+    var a = (window.CBA.alerts ? CBA.alerts() : null) || {}, n = 0;
+    if (can("תקציב")) n += (a.pendingExpenses || 0) + (a.reviewExpenses || 0);
+    if (can("מועדון")) n += (a.pendingClub || 0);
+    return n;
+  }
+  function paintAdminMini(container) {
+    var el = container.querySelector("#hm-mini-adm");
+    if (!el || !W) return;
+    var n = adminBase();
+    Object.keys(W.adm).forEach(function (k) { n += W.adm[k] || 0; });
+    el.innerHTML = '<small>ממתין לטיפולך</small><b>' + (W.admReady ? n : "…") + '</b>' +
+      '<span>' + (W.admReady && !n ? "הכול מטופל · לוח ניהול" : "לוח ניהול ←") + '</span>';
+    el.classList.toggle("is-zero", W.admReady && !n);
+  }
+
+  /* ---- המיני "האירוע הבא" + מה שמגיע מהלו״ז (homeSchedule.onChange) ---- */
+  function onSchedule(container, sum) {
+    if (!W || !container.isConnected) return;
+    var el = container.querySelector("#hm-mini-ev");
+    if (el) {
+      var e = sum.mini;
+      if (e) {
+        var meta = [e.allDay ? "" : pad(e.date.getHours()) + ":" + pad(e.date.getMinutes()), e.location].filter(Boolean).join(" · ");
+        el.hidden = false;
+        el.innerHTML = '<small>האירוע הבא</small><b>' + esc("יום " + WD[e.date.getDay()] + " " + dm(e.date)) + '</b>' +
+          '<span dir="auto">' + esc(e.title + (meta ? " · " + meta : "")) + '</span>';
+      } else if (sum.ready) el.hidden = true;
+    }
+    W.feedReady = !!sum.ready || !!sum.err;
+    syncHappened(container);
+    if (sum.todo) {
+      W.rsvp = sum.todo; W.rsvpKnown = true;
+      syncTodo(container);
+      heroPart("rsvp", sum.todo.length, sum.todo.length === 1
+        ? sum.todo[0].ev.title + " פתוח לאישור הגעה"
+        : sum.todo.length + " אירועים פתוחים לאישור הגעה");
+    } else if (sum.err) {
+      W.rsvp = []; W.rsvpKnown = true; syncTodo(container); heroPart("rsvp", 0, "");
+    }
   }
 
   /* ------------------------------------------------------------- חיווט ----
-     האזנה אחת על העמוד כולו, ולא מאזין לכל כפתור. חלק מהכפתורים כאן נולדים
-     מאוחר יותר (השריון הקרוב, שתי הספירות העצלות) — מאזין שנרשם בזמן הציור
-     היה מפספס בדיוק אותם.
-     🔴 23.9 — ההאזנה נרשמת על `.hm-page`, העטיפה שנוצרת מחדש בכל ציור, ולא
-        על ה-container. ה-container הוא #app-main — **אותו אלמנט לנצח**
-        (showScreen רק מרוקן אותו). עד היום כל ציור של עמוד הבית הוסיף עליו
-        מאזין נוסף: אחרי עשרה ביקורים לחיצה על כל [data-goto] — גם במסכים
-        אחרים (budget/expenses/resident משתמשים באותה תכונה) — ניווטה
-        עשר פעמים. */
+     האזנה אחת על העמוד (ר' ההערה המקורית מ-23.9: לא על #app-main). */
   function bindClicks(page) {
     if (!page || !page.addEventListener) return;
     page.addEventListener("click", function (e) {
       var admin = e.target.closest("[data-admin-goto]");
       if (admin) { if (window.CBA.gotoAdmin) CBA.gotoAdmin(admin.dataset.adminGoto); return; }
       if (e.target.closest("[data-tour-new]")) { if (window.CBA.tour) CBA.tour.startNew(); return; }
+      if (e.target.closest("[data-hm-nextsheet]")) { if (CBA.homeSchedule && CBA.homeSchedule.openNextSheet) CBA.homeSchedule.openNextSheet(); return; }
       var go = e.target.closest("[data-goto]");
       if (go && CBA.navigate) CBA.navigate(go.dataset.goto);
     });
   }
+
   function bindAdminJumps() { /* נשמר לתאימות — החיווט עבר להאזנה על המכל */ }
 
   /* שורת "מחכה להחלטה" בכרטיס הוועד — מתמלאת מ-homeGarden.js. n === null
@@ -827,89 +840,183 @@ CBA.screens = CBA.screens || {};
     syncClearState(container);
   }
 
+
+  /* ============================================================ הבית ==== */
   CBA.screens.resHome = {
     render: function (container) {
-      /* 🔴 סדר העמוד (2026-09-16): ברכה · פעולות · אצלנו בבית · תפקיד ועד.
-         העולם המשפחתי קודם והניהולי אחריו — גם למנהל־על. מי שנכנס
-         נכנס קודם כל כתושב, והכובע השני הוא תוספת ולא הכותרת.
-
-         🔴 23.9 — עמוד הבית אחרי לוח האירועים (הסקיצה שאושרה):
-           • במחשב העמוד תופס את כל הרוחב (resident.css), והפעולות עלו
-             לשורה של הברכה.
-           • תושב: הלו"ז (שבועיים, js/screens/homeSchedule.js) מקבל את רוב
-             המסך; בעמודה הצרה "אצלנו בבית" ו"הבא בקהילה".
-           • בעל תפקיד: "אצלנו בבית" · לו"ז של 10 ימים בשורה אחת (עולם
-             התושב, ראשון לגמרי), ומתחתם משטח אפור אחד — "תפקיד ועד" —
-             שבתוכו גם מקטע הגינון (homeGarden.js) למנהל־על/גינון.
-           • במובייל הלו"ז עולה ראשון ומתכווץ (homeSchedule.css). */
-      var admin = anyAdmin();
+      var admin = anyAdmin() && !u().isExternal;
       var sched = !!window.CBA.homeSchedule;
-      var garden = canGarden();
-      quiet = { refund: false, resv: false };
+      var me = u(), rc = refundCounts();
+      W = { hero: {}, heroTimeout: false, adm: {}, admReady: false, resv: null, resvKnown: false,
+            gym: null, gymKnown: false, prof: null, profKnown: false, rsvp: null, rsvpKnown: !sched,
+            feedReady: !sched, root: null };
       container.innerHTML =
-        '<div class="hm-page">' +
-        '<header class="hm-hero">' +
-          '<div class="hm-hero__txt">' +
-            '<div class="hm-hero__hi">' + esc(greeting()) + ', ' + esc(displayName()) + '</div>' +
-            '<div class="hm-hero__sub">' + esc(todayLabel()) +
-              (u().house ? ' · בית ' + esc(u().house) : "") + '</div>' +
+        '<div class="hm-page hm2">' +
+        '<section class="hm2-cnp" id="hm-cnp" aria-label="מה מחכה לי">' +
+          '<div class="hm2-in hm2-hero">' +
+            '<div class="hm2-hero__main">' +
+              '<div class="hm2-hi">' + esc(greeting()) + ', ' + esc(displayName()) +
+                (me.house ? '<span class="hm2-chip">בית ' + esc(me.house) + '</span>' : "") + '</div>' +
+              '<div class="hm2-date">' + esc(todayLabel()) + '</div>' +
+              '<div class="hm2-k">מה מחכה לי</div>' +
+              '<div class="hm2-n is-loading" id="hm-n">·</div>' +
+              '<div class="hm2-s" id="hm-s">בודקים מה חדש…</div>' +
+            '</div>' +
+            '<div class="hm2-minis">' +
+              (sched ? '<button type="button" class="hm2-mini hm2-mini--go" id="hm-mini-ev" data-hm-nextsheet hidden></button>' : "") +
+              '<button type="button" class="hm2-mini" id="hm-next" hidden></button>' +
+              (admin ? '<button type="button" class="hm2-mini hm2-mini--adm" id="hm-mini-adm" data-admin-goto="adminBoard"></button>' : "") +
+            '</div>' +
           '</div>' +
-          actionsHTML() +
-        '</header>' +
-        /* 29.9 — אירוע הקהילה הבא + אירוע התרבות הבא, לכולם, בראש העמוד */
-        (sched ? '<section class="hm-upnext" id="hm-upnext" aria-label="האירועים הבאים"></section>' : "") +
-        '<div class="hm-cols hm-cols--' + (admin ? "adm" : "res") + (sched ? "" : " hm-cols--nosch") + '" id="hm-cols">' +
-          '<div class="hm-main">' +
-            mineSectionHTML() +
-          '</div>' +
-          (sched ? '<section class="card hm-card hm-sch" id="hm-sch"></section>' : "") +
-          /* ⚠️ העמודה של "יש חדש" נולדת ריקה; `loadNewCard` מדליק אותה. */
-          '<aside class="hm-side"><div id="hm-new"></div></aside>' +
+        '</section>' +
+        '<div class="hm2-in hm2-body">' +
+          '<section class="hm2-bento" id="hm-bento" aria-label="מה המצב אצלי">' +
+            (sched ? '<div class="hm2-tile hm2-tile--week" id="hm-week"></div>' : "") +
+            '<button type="button" class="hm2-tile" id="hm-mygarden" data-goto="resGarden">' +
+              '<span class="hm2-tile__h">' + disc("gar", ICO.leaf) + 'הדיווחים שלי</span>' +
+              '<span class="skeleton" style="display:block;height:30px;width:40%;border-radius:8px"></span></button>' +
+            refundTileHTML(rc) +
+            '<button type="button" class="hm2-tile" id="hm-mygym" data-goto="resGym" hidden></button>' +
+          '</section>' +
+          '<section class="hm2-grid2">' +
+            '<div class="card hm2-card" id="hm-happened">' +
+              '<div class="hm2-card__h"><h2>מה קרה</h2><button type="button" class="hm-link" data-goto="events">לוח האירועים ←</button></div>' +
+              '<div id="hm-new"></div><div id="hm-inbox"></div>' +
+              (sched ? '<div id="hm-feed"></div>' : "") +
+              '<p class="hm2-empty" id="hm-happened-empty" hidden>אין חדש כרגע.</p>' +
+            '</div>' +
+            '<div class="card hm2-card" id="hm-todo">' +
+              '<div class="hm2-card__h"><h2>דברים לעשות</h2></div>' +
+              '<div id="hm-todo-list"></div>' +
+            '</div>' +
+          '</section>' +
         '</div>' +
-        /* משטח הוועד (כולל הגינון) — אחרי כל עולם התושב. ר' adminSectionHTML. */
-        (admin ? adminSectionHTML(garden) : "") +
         '</div>';
 
-      /* ⚠️ `|| container` — סביבת בדיקה עם DOM מינימלי (test-data-failure) לא
-         יודעת לבחור; שם ההאזנה פשוט נרשמת על המכל, כמו פעם. */
       var page = (container.querySelector && container.querySelector(".hm-page")) || container;
+      W.root = page;
+      /* החופה נפרדת מההדר רק כשגוללים מעבר אליה (דסקטופ: ההדר דביק) */
+      if (!window.__hm2Scroll && window.addEventListener) {
+        window.__hm2Scroll = true;
+        window.addEventListener("scroll", function () {
+          var c = document.getElementById("hm-cnp");
+          document.body.classList.toggle("hm2-past", !!c && c.getBoundingClientRect().bottom < 70);
+        }, { passive: true });
+      }
+      if (document.body && document.body.classList) document.body.classList.remove("hm2-past");
       bindClicks(page);
-      wireActionsHint(container);
-      // כפתור "נסה שוב" של הפאנל, אם הכרטיס הכספי הוחלף בו
       if (window.CBA && CBA.wireDataRetry) CBA.wireDataRetry(container);
-      paintQuiet(container.querySelector("#hm-quiet"));
-      syncClearState(container);
+
+      /* החזרים — ידוע מיד (או לא ידוע בכלל, H16) */
+      heroPart("refund", rc.ready, !rc.ready ? "" : rc.ready === 1
+        ? "החזר של " + money(rc.readyAmt) + " אושר לתשלום"
+        : rc.ready + " החזרים אושרו לתשלום (" + money(rc.readyAmt) + ")");
+      /* עד 4 שניות — אחרי זה המספר מוצג בלי מה שלא הגיע (לא נתקעים על "·") */
+      var myW = W;
+      setTimeout(function () { if (W === myW) { W.heroTimeout = true; paintHero(); } }, 4000);
+      /* ⚠️ ואחרי 8 שניות "דברים לעשות" מפסיק לחכות למה שלא חזר (כשל שקט של
+         קריאה) — מציג את מה שיש, בלי שלד נצחי. */
+      setTimeout(function () {
+        if (W !== myW) return;
+        W.rsvpKnown = W.profKnown = W.gymKnown = true;
+        W.feedReady = true;
+        syncTodo(container); syncHappened(container);
+      }, 8000);
 
       if (sched) {
-        CBA.homeSchedule.mount({ root: page, host: container.querySelector("#hm-sch"),
-                                 nextHost: container.querySelector("#hm-upnext"),
-                                 mode: admin ? "list" : "grid" });
+        CBA.homeSchedule.mount({ root: page,
+          weekHost: container.querySelector("#hm-week"),
+          feedHost: container.querySelector("#hm-feed"),
+          onChange: function (sum) { onSchedule(container, sum); } });
       }
-      if (garden) {
-        CBA.homeGarden.mount(container.querySelector("#hm-gardensec"), {
-          onDecide: function (n, first) { paintDecide(container, n, first); }
-        });
-      }
-      /* קריאה אחת מזינה את כל המטמונים, ואז שלוש הפונקציות רצות בדיוק כמו
-         קודם — רק בלי לפנות לרשת. ר' primeHomeExtras. */
-      /* 🔴 קודם המסלול המהיר (~75 אלפיות), ומיד אחריו הקריאה
-         הקובעת. שניהם יוצאים במקביל ובכוונה — המהיר מצייר
-         תגיות, והקובע מביא גם את כרטיס "יש משהו חדש"
-         ואת השריון הקרוב, שאינם ב-Firestore. */
-      /* שתי השורות מ-Firestore יוצאות **מיד ובמקביל**, לא בתוך
-         ההמתנה של `seedHomeFast`: הן לא מזינות שום מטמון שהקריאה
-         הקובעת נשענת עליו, ואין שום סיבה שיחכו לה. */
       loadMyGarden(container);
       loadMyGym(container);
-      /* 23.9 — "עדכון חדש" ממרכז ההתראות (js/ui/inbox.js). Firestore, מקביל. */
-      if (window.CBA.inbox) CBA.inbox.mount(container);
+      syncTodo(container);
+      /* עדכונים חדשים (H9) — שורות ב"מה קרה" ומספר במספר הגיבור. מאותו תחום
+         שכבר נספר (החזר שאושר / דיווח בטיפול) — לא נספר פעמיים. */
+      if (window.CBA.inbox) {
+        CBA.inbox.mount(container, { onList: function (list) {
+          if (!W || !container.isConnected) return;
+          syncHappened(container);
+          var l = (list || []).filter(function (it) {
+            if (it.dom === "bud" && rc.ready) return false;
+            if (it.dom === "gar" && W.hero.garden && W.hero.garden.n) return false;
+            return true;
+          });
+          heroPart("inbox", l.length, l.length === 1 ? "עדכון חדש: " + l[0].text : (l.length ? l.length + " עדכונים חדשים" : ""));
+        } });
+      } else heroPart("inbox", 0, "");
+      if (admin) paintAdminMini(container);
 
       seedHomeFast(container, function () {
         primeHomeExtras(function () {
-          loadLazyCounts(container);
           loadNextReservation(container);
           loadNewCard(container);
+          if (admin && W === myW) {
+            loadAdminCounts(function (k, n) {
+              if (W !== myW) return;
+              W.adm[k] = n || 0;
+              paintAdminMini(container);
+            });
+            W.admReady = true;
+            paintAdminMini(container);
+          }
+          loadProfile(container);
         });
+      });
+    }
+  };
+
+  /* ======================================================= לוח ניהול ====
+     🔴 גל 2 (30.9.26, ספר האבנים H30–H34) — "תפקיד ועד" יצא מהבית למסך משלו.
+     אותן שורות בדיוק, אותה טעינה (seedHomeFast → primeHomeExtras →
+     loadLazyCounts), אותם מזהים (#hm-tasks, #hm-clear, #hm-gardensec) — רק
+     שולחן בהיר במקום משטח בתחתית הבית. הגינון: אריחי המדדים + "הכי נגררות"
+     + קישור לנתוני הגינון (H33 — "קישור ללוח גינון עדיף"). */
+  function boardHTML(garden) {
+    var a = (window.CBA.alerts ? CBA.alerts() : null) || {};
+    var rows = "";
+    if (can("תקציב")) {
+      if (a.pendingExpenses) rows += taskRow("הוצאות ממתינות לאישור", a.pendingExpenses, "expenses-pending", "warn");
+      if (a.reviewExpenses)  rows += taskRow("הוצאות שהוחזרו לבדיקה", a.reviewExpenses, "expenses-pending");
+    }
+    if (can("מועדון") && a.pendingClub) rows += taskRow("שריוני מועדון ממתינים לאישור", a.pendingClub, "clubAdmin", "warn");
+    var lazy = "";
+    if (can("תושבים")) lazy += '<div id="hm-signups" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
+    if (can("תושבים")) lazy += '<div id="hm-profile" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
+    if (can("מכון"))   lazy += '<div id="hm-gym" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
+    if (can("גינון"))  lazy += '<div id="hm-garden" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
+    if (garden)        lazy += '<div id="hm-gdecide" class="hm-lazy">' + CBA.skel.rows(1, { avatar: false }) + '</div>';
+    return '<div class="hm-page hm2-board">' +
+      '<header class="hm2-bhead"><h1>לוח ניהול</h1>' +
+        '<span>רק מה ששייך לתחומי הניהול שלך · ' + esc(todayLabel()) + '</span></header>' +
+      '<div class="hm2-bgrid' + (garden ? " hm2-bgrid--g" : "") + '">' +
+        '<section class="card hm2-card hm-vzone" id="hm-vzone" aria-label="ממתין לטיפולך">' +
+          '<div class="hm2-card__h"><h2>ממתין לטיפולך</h2></div>' +
+          '<div class="hm-tasks" id="hm-tasks">' + rows + lazy + '</div>' +
+          '<div class="hm-clear" id="hm-clear"' + (rows ? " hidden" : "") + '>' +
+            CBA.ui.emptyState({ icon: "check", title: "הכול מטופל", sub: "אין כרגע שום דבר שממתין לאישור שלך." }) +
+          '</div>' +
+        '</section>' +
+        (garden ? '<section class="hmg hm2-bgarden" id="hm-gardensec" aria-label="גינון"></section>' : "") +
+      '</div></div>';
+  }
+
+  CBA.screens.adminBoard = {
+    render: function (container) {
+      var garden = canGarden();
+      container.innerHTML = boardHTML(garden);
+      var page = (container.querySelector && container.querySelector(".hm-page")) || container;
+      bindClicks(page);
+      syncClearState(container);
+      if (garden) {
+        CBA.homeGarden.mount(container.querySelector("#hm-gardensec"), {
+          board: true,
+          onDecide: function (n, first) { paintDecide(container, n, first); }
+        });
+      }
+      seedHomeFast(container, function () {
+        primeHomeExtras(function () { loadLazyCounts(container); });
       });
     }
   };

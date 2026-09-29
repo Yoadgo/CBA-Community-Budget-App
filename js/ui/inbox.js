@@ -46,13 +46,35 @@ window.CBA = window.CBA || {};
     return out;
   }
 
-  function mount(container) {
-    var host = container && container.querySelector && container.querySelector(".hm-mine");
-    if (!host || !CBA.data || !CBA.data.readNotifyInbox) return;
+  /* 🔴 גל 2 (30.9.26) — בבית החדש העדכונים הם שורות בכרטיס "מה קרה" (H9/H26),
+     בתוך #hm-inbox, ומספרם נכנס למספר הגיבור "מה מחכה לי" (A1) דרך onList.
+     בלי #hm-inbox — ההתנהגות הישנה (ראש .hm-mine) נשמרת בדיוק. */
+  var DOM_CLS = { gar: "gar", bud: "bud", club: "home", gym: "gym", res: "home", evt: "ev", oth: "home" };
+  function ago(at) {
+    var d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    var d = new Date(at); d.setHours(0, 0, 0, 0);
+    var n = Math.round((d0 - d) / 86400000);
+    return n <= 0 ? "היום" : n === 1 ? "אתמול" : "לפני " + n + " ימים";
+  }
+  function rowV2(it) {
+    return '<button type="button" class="hm2-row hm2-row--new" data-goto="' + esc(it.screen || "resHome") + '">' +
+      '<i class="hm2-disc hm2-disc--' + (DOM_CLS[it.dom] || "home") + '"><span class="hm2-dot"></span></i>' +
+      '<span class="hm2-row__t"><b dir="auto">' + esc(it.text) + '</b><small>' + esc((LABEL[it.dom] || "") + " · " + ago(it.at)) + '</small></span>' +
+      '<span class="badge badge--info">חדש</span></button>';
+  }
+
+  function mount(container, opts) {
+    opts = opts || {};
+    var slot = container && container.querySelector && container.querySelector("#hm-inbox");
+    var host = slot || (container && container.querySelector && container.querySelector(".hm-mine"));
+    if (!host || !CBA.data || !CBA.data.readNotifyInbox) { if (opts.onList) opts.onList(null); return; }
     CBA.data.readNotifyInbox(function (doc) {
       last = doc;
-      if (!doc || !host.isConnected) return;
-      var list = unseen(doc);
+      if (!host.isConnected) return;
+      var list = doc ? unseen(doc) : [];
+      if (opts.onList) { try { opts.onList(doc ? list : null); } catch (e) { /* הבית נעלם */ } }
+      if (slot) { slot.innerHTML = list.map(rowV2).join(""); return; }
+      if (!doc) return;
       var old = host.querySelector("#hm-inbox");
       if (old) old.remove();
       if (!list.length) return;

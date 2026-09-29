@@ -55,6 +55,13 @@
   "fsize": 21,
   "all": 54
  },
+ "home2.css": {
+  "hex": 1,
+  "radius": 10,
+  "shadow": 12,
+  "fsize": 13,
+  "all": 36
+ },
  "homeGarden.css": {
   "hex": 10,
   "radius": 8,
