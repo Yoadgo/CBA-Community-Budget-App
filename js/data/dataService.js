@@ -3957,8 +3957,10 @@ CBA.data = (function () {
     }, cb);
   }
 
+  /* SMB1 (גל 8, 1.10.26) — פרמטר שני אופציונלי {fresh:true} עוקף את המטמון וקורא מהשרת
+     (מסך הניהול: אחרת מטמון ישן דורס בשמירה של כל הרשימה עריכות של מנהל אחר). חתימה ישנה נשמרת. */
   function getServices(cb) {
-    if (servicesCache) {
+    if (servicesCache && !(arguments[1] && arguments[1].fresh)) {
       if (cb) cb({ ok: true, services: servicesCache.services, sections: servicesCache.sections,
                    categories: servicesCache.categories || [] });
       return;

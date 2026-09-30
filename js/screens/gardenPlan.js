@@ -89,6 +89,8 @@
 
       container.innerHTML = '<div class="gd-screen" id="gp-root"></div>';
       var root = container.querySelector("#gp-root");
+      /* GPB1 (גל 8, 1.10.26) — מאזין הלחיצות המואצל נרשם פעם אחת כאן, לא בכל draw() (אחרת טופס נפתח N פעמים). */
+      if (!root.dataset.gpWired) { root.addEventListener("click", onClick); root.dataset.gpWired = "1"; }
       draw(true);
       load();
 
@@ -201,7 +203,6 @@
 
         var nb = root.querySelector("#gp-new");
         if (nb) nb.addEventListener("click", function () { openForm(null); });
-        root.addEventListener("click", onClick);
         wireSettings();
       }
 
@@ -215,10 +216,30 @@
           var i = sw.querySelector(".gp-sw");
           if (i) i.classList.toggle("off", !on);
         }
-        CBA.data.getGardenSettings(function (s) {
-          paint(!!(s && s.requireApproval));
+        /* GPB2 (גל 8, 1.10.26) — כשל קריאה אינו "דלוק": getGardenSettings בולע שגיאות ומחזיר ברירת מחדל,
+           לכן בודקים את המסמך ישירות; בכשל המתג נשאר נעול עם "לא נטען". */
+        function readFail() {
+          sw.disabled = true;
+          var t = sw.querySelector(".nt-rep__t");
+          if (t && !t.querySelector(".gp-set-err")) {
+            t.insertAdjacentHTML("beforeend",
+              '<span class="gp-set-err" style="color:#B91C1C">לא נטען — ההגדרה לא נקראה. נסו לרענן את המסך.</span>');
+          }
+        }
+        function readOk(s) {
+          if (!s || s.ok === false || s.error || s.readErr) return readFail();
+          paint(!!s.requireApproval);
           sw.disabled = false;
-        });
+        }
+        if (CBA.fb && CBA.fb.readDoc) {
+          CBA.fb.readDoc("gardenMeta", "settings", function (e, doc) {
+            if (e) return readFail();
+            if (doc && typeof doc.requireApproval === "boolean") return readOk({ requireApproval: doc.requireApproval });
+            CBA.data.getGardenSettings(readOk);   // אין מסמך/שדה — ברירת המחדל של שכבת הנתונים
+          });
+        } else {
+          CBA.data.getGardenSettings(readOk);
+        }
         sw.addEventListener("click", function () {
           if (sw.disabled) return;
           var next = sw.getAttribute("aria-checked") !== "true";

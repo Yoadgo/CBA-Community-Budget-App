@@ -277,11 +277,24 @@
      של render → כל רענון החזיר "שבוע הבא" ל"השבוע". הזיכרון הזה שורד ציור מחדש שקט בלבד;
      ניווט אמיתי למסך (לא שקט) תמיד מתחיל מהשבוע הנוכחי כמו קודם. */
   var gtMem = null;
+  /* GTB3 (גל 8, 1.10.26) — המופע החי של המסך: גיליון שנפתח ממופע שכבר צויר מחדש קורא דרכו לטעינה/ציור/פעולה. */
+  var gtCurrent = null;
+  /* GTB2 (גל 8, 1.10.26) — הגלילה האחרונה של המשתמש במסך, לשחזור אחרי רענון רקע (main מתרוקן לפני הציור). */
+  var gtScrollY = 0;
+  try {
+    window.addEventListener("scroll", function () {
+      if (gtCurrent && gtCurrent.root.isConnected) gtScrollY = window.pageYOffset || 0;
+    }, { passive: true });
+  } catch (e) {}
   CBA.screens.gardenTasks = {
     /* opts (22.9, מסך הנתונים): { openId, onChange } — פתיחת כרטיס הפרטים
        של משימה אחת מתוך מסך אחר. ר' CBA.gardenOpenCard בסוף הקובץ. */
     render: function (container, mode, opts) {
+      /* GTB1 (גל 8, 1.10.26) — app מעביר את opts כארגומנט שני ({silent:true}); מצב הוא רק מחרוזת ("mine"), אחרת לא היה שחזור מסנן/שבוע. */
+      mode = typeof mode === "string" ? mode : undefined;
       opts = opts || {};
+      /* GTB3 (גל 8, 1.10.26) — מופע מנותק של gardenOpenCard אינו המסך החי: לא נוגע ב-gtMem/gtCurrent ולא מעביר קריאות. */
+      var detached = !!opts.openId;
       var cardOpened = false;
       var week = todayKey();
       var restoredWeek = false;
@@ -298,7 +311,7 @@
          ר' js/screens/gardenSchedule.js. נזכר לכל צופה בדפדפן שלו. */
       var view = "list";
       try { if (localStorage.getItem("cba.gt.view") === "sched") view = "sched"; } catch (e) {}
-      if (CBA.renderSilent && gtMem && gtMem.mode === mode) {
+      if (CBA.renderSilent && !detached && gtMem && gtMem.mode === mode) {
         week = gtMem.week; filter = gtMem.filter; restoredWeek = true;
       }
       var lastSkeleton = false;
@@ -339,14 +352,48 @@
          רק מהיר יותר. הרשימה מתנקה בטעינה הבאה, אחרי שהשרת אישר. */
       var justActed = {};
       var metaFailed = false;   // 28.9 — קריאת gardenMeta/lists נכשלה פעמיים; אין קטגוריות לטעון
+      /* GTB2 (גל 8, 1.10.26) — ברענון רקע מציירים מהזיכרון (רשימה + תפקיד) ולא שלד, ואז טוענים בשקט. */
+      var memData = (restoredWeek && gtMem && gtMem.loaded) ? gtMem : null;
+      var hasData = false;
+      if (memData) {
+        rowsAll = memData.rows || []; isManager = !!memData.isManager;
+        order = memData.order || order; metaFailed = !!memData.metaFailed; hasData = true;
+      } else if (!detached && !CBA.renderSilent) {
+        gtScrollY = window.pageYOffset || 0;
+      }
+      /* GTB4 (גל 8, 1.10.26) — ציור חדש = אין רצועת ⋯ פתוחה; משחררים עצירת רענון שנשארה. */
+      if (!detached && CBA.holdRefresh) CBA.holdRefresh("gtTiles", false);
 
       container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
       var root = container.querySelector("#gt-root");
       var cardsWired = false;   // ראה wire() — מאזין הלחיצות המואצל נרשם פעם אחת
-      draw(true);
-      load();
+      /* GTB3 (גל 8, 1.10.26) — גיליון/טופס שנפתח לפני ציור-מחדש קורא למופע החי, לא לשורש המנותק. */
+      var me = {
+        root: root,
+        draw: function (s) { draw(s); },
+        load: function (q) { load(q); },
+        run: function (op, id, extra) { run(op, id, extra); },
+        setFilter: function (f) { filter = f; }
+      };
+      if (!detached) gtCurrent = me;
+      function fwd() {
+        return (!detached && gtCurrent && gtCurrent !== me && !root.isConnected &&
+                gtCurrent.root.isConnected) ? gtCurrent : null;
+      }
+      if (memData) {
+        draw(false);
+        /* GTB2 (גל 8, 1.10.26) — שחזור גלילת החלון אחרי הציור מהזיכרון. */
+        try { if ((window.pageYOffset || 0) !== gtScrollY) window.scrollTo(0, gtScrollY); } catch (e) {}
+        load(true);
+      } else {
+        draw(true);
+        load();
+      }
 
-      function load() {
+      function load(quiet) {
+        /* GTB3 (גל 8, 1.10.26) — מופע שכבר הוחלף טוען את המופע החי. */
+        var cur = fwd();
+        if (cur) return cur.load(quiet);
         /* scope 'all' — כל המשימות בקריאה אחת. השרת ממש את התוכנית לשבוע
            הנוכחי לפני שהוא קורא את הגיליון, כך שמשימות שגרה שנוצרו עכשיו
            מגיעות כבר בתשובה הזאת ולא רק ברענון הבא. */
@@ -369,7 +416,15 @@
           var sim = window.CBA.user;
           isManager = (sim && sim.isRoleSim) ? !sim.isExternal : !!res.isManager;
           if (res.week && !restoredWeek) week = res.week;
-          draw();
+          hasData = true;
+          /* GTB2 (גל 8, 1.10.26) — טעינה שקטה אחרי ציור מהזיכרון שומרת על מקום הגלילה. */
+          if (quiet) {
+            var sy = window.pageYOffset || 0;
+            draw();
+            try { if ((window.pageYOffset || 0) !== sy) window.scrollTo(0, sy); } catch (e) {}
+          } else {
+            draw();
+          }
           /* מסך הנתונים ביקש כרטיס — נפתח פעם אחת, אחרי הטעינה הראשונה.
              כל טעינה אחריה היא תוצאה של פעולה בכרטיס, ומסך הנתונים מתרענן. */
           if (opts.openId && !cardOpened) {
@@ -413,6 +468,7 @@
 
       function counts() {
         var c = { mine: 0, open: 0, closed: 0, faults: 0, weekTotal: 0, weekDone: 0 };
+        var nowWeek = week === todayKey();
         rowsAll.forEach(function (t) {
           if (isMine(t)) c.mine++;
           /* ⚠️ המונה הזה סופר **את כל** דיווחי התושבים — פתוחים, משובצים
@@ -423,7 +479,11 @@
           /* פס ההתקדמות נשאר של **השבוע הנוכחי** — הוא עונה על "איך אנחנו
              עומדים השבוע", ולא על "כמה משימות יש בעולם". נמדד בסגורות ולא
              ב"סומן כבוצע": סימון הוא הצהרה של הצוות, ורק האישור סוגר. */
-          if (t.week === week) { c.weekTotal++; if (t.closure) c.weekDone++; }
+          /* GTB5 (גל 8, 1.10.26) — מונה = רק "בוצע"; מכנה = מה שב"עבודת השבוע" (כולל פתוחות שאיחרו בשבוע הנוכחי) + מה שבוצע, בלי סגירות בסיבה. */
+          var inWeek = t.week === week || (nowWeek && t.week && t.week < week && !t.closure);
+          if (inWeek && (!t.closure || t.closure === "בוצע")) {
+            c.weekTotal++; if (t.closure === "בוצע") c.weekDone++;
+          }
         });
         return c;
       }
@@ -451,7 +511,17 @@
       }
 
       function draw(skeleton) {
-        gtMem = { mode: mode, week: week, filter: filter };
+        /* GTB3 (גל 8, 1.10.26) — מופע שכבר הוחלף מצייר את המופע החי. */
+        var curD = fwd();
+        if (curD) return curD.draw(skeleton);
+        /* GTB4 (גל 8, 1.10.26) — הציור מחליף את הכרטיסים, אז רצועת ⋯ פתוחה נסגרת ומשחררת את עצירת הרענון. */
+        if (tilesOpen) closeTiles();
+        if (!detached) {
+          gtMem = { mode: mode, week: week, filter: filter };
+          /* GTB2 (גל 8, 1.10.26) — הנתונים נשמרים לציור מהזיכרון ברענון רקע. */
+          gtMem.loaded = !!hasData; gtMem.rows = rowsAll; gtMem.isManager = isManager;
+          gtMem.order = order; gtMem.metaFailed = metaFailed;
+        }
         /* מצויר לפני הכול, גם לפני מצב התיבה: כשהטעינה נכשלה אין שום נתון
            אמיתי להציג, וכל מסך שייבנה מעליו יהיה מסך של שקרים. */
         if (loadErr && !skeleton) {
@@ -1336,6 +1406,9 @@
          לשרת ורענון של כל הרשימה. יועד: "זה לא מסמן וי אלא ישר עובר למצב
          טעינה". פעולה שהמשתמש יזם צריכה להיראות קרתה — הרשת היא פרט טכני. */
       function run(op, id, extra) {
+        /* GTB3 (גל 8, 1.10.26) — פעולה מגיליון של מופע שהוחלף רצה במופע החי (שורות, busy וציור שלו). */
+        var curR = fwd();
+        if (curR) return curR.run(op, id, extra);
         if (busyIds[id]) return;          // אותה שורה פעמיים — כן חוסמים
         busyIds[id] = true;
 
@@ -1625,10 +1698,12 @@
       function askMerge(id) {
         var t = byId(id);
         if (!t || !t.dupOf) return;
+        var dupRef = t.dupOf.repId ? GL.reportRef(t.dupOf.repId) : "#" + t.dupOf.id;
         CBA.ui.confirm(
-          "משימה #" + id + " תיסגר, והדיווח שלה יצורף ל" + GL.reportRef(t.dupOf.repId || t.dupOf.id) + ".\n\n" +
+          /* GTB7 (גל 8, 1.10.26) — בלי repId מציגים "#"+מזהה כמו בכרטיס, ולא "דיווח <מזהה משימה>". */
+          "משימה #" + id + " תיסגר, והדיווח שלה יצורף ל" + dupRef + ".\n\n" +
           "המדווח יקבל מייל שמסביר את האיחוד, ובהמשך גם את הודעת הסיום.", {
-            title: "איחוד עם " + GL.reportRef(t.dupOf.repId || t.dupOf.id), okText: "אחד"
+            title: "איחוד עם " + dupRef, okText: "אחד"
           }).then(function (yes) {
             if (!yes || busy) return;
             busy = true;
@@ -1671,6 +1746,9 @@
           onSaved: function () {
             // קופצים לרשימה שבה היא באמת נחתה, אחרת היא "נעלמת" מול העיניים
             filter = "open";
+            /* GTB3 (גל 8, 1.10.26) — הטופס נפתח לפני ציור-מחדש? המסנן נקבע במופע החי. */
+            var curF = fwd();
+            if (curF) curF.setFilter("open");
             load();
           }
         });
@@ -1722,6 +1800,8 @@
         }
         if (isManager && (done || canDispute(t) || closed)) L.push(["return", "undo", closed ? "לא בוצע" : "החזרה"]);
         if (canDispute(t)) L.push(["undo", "undo", "ביטול סימון"]);
+        /* GTB8 (גל 8, 1.10.26) — הגנן על משימה שממתינה לאישור: "ביטול סימון" כמו בכרטיס הפרטים (אותה פעולה undo). */
+        else if (!isManager && !closed && done) L.push(["undo", "undo", "ביטול סימון"]);
         if (isManager && closed && !canDispute(t)) L.push(["reopen", "undo", "פתיחה מחדש"]);
         if (isManager && t.flag === "דורש בדיקה חוזרת") L.push(["clearflag", "check", "טופל"]);
         /* 🗓 GW-23.9:G6-tile — "סידור": שעה בתוך השבוע. רק למשימה פתוחה
@@ -1748,6 +1828,8 @@
       function closeTiles() {
         document.removeEventListener("click", onDocTiles, true);
         document.removeEventListener("keydown", onKeyTiles);
+        /* GTB4 (גל 8, 1.10.26) — הרצועה נסגרה (Esc/לחיצה בחוץ/פעולה/ציור) — הרענון ברקע חוזר. */
+        if (tilesOpen && CBA.holdRefresh) CBA.holdRefresh("gtTiles", false);
         if (!tilesOpen) return;
         var a = tilesOpen;
         tilesOpen = null;
@@ -1789,6 +1871,8 @@
           mb.innerHTML = ico("x");
         }
         tilesOpen = art;
+        /* GTB4 (גל 8, 1.10.26) — רצועת ⋯ פתוחה יושבת בתוך main: עוצרים רענון רקע עד שתיסגר. */
+        if (CBA.holdRefresh) CBA.holdRefresh("gtTiles", true);
         setTimeout(function () {
           if (tilesOpen !== art) return;
           document.addEventListener("click", onDocTiles, true);
@@ -1873,11 +1957,12 @@
             /* ⚠️ נאמר מראש ולא מתגלה אחרי: התושב כבר קיבל מייל סיום, והמייל
                הזה הוא מה שמתקן אותו. מנהל שלא יודע שזה קורה עלול לפתוח
                ולסגור כדי "לתקן משהו קטן" ולשלוח לתושב שני מיילים. */
-            (t.kind === GK_REPORT
+            /* GTB6 (גל 8, 1.10.26) — ההודעה לתושב רק כשיש repId (תקלת צוות — אין מי שיקבל מייל). */
+            (t.repId
               ? ' התושב שדיווח יקבל על כך עדכון במייל, ומה שתכתוב כאן ייכנס אליו.'
               : ''), {
               title: "פתיחה מחדש",
-              placeholder: t.kind === GK_REPORT
+              placeholder: t.repId
                 ? "למשל: נסגר בטעות, הטיפול לא הושלם"
                 : "למשל: נסגר בטעות בסיבה לא נכונה",
               okText: "פתיחה מחדש"
@@ -1946,7 +2031,8 @@
       function askClosure(t) {
         /* הסבר לתושב נדרש רק כשיש תושב מאחורי הפנייה. משימת שגרה או יזומה
            נסגרת בלחיצה אחת — אין למי לכתוב. */
-        var isReport = t.kind === GK_REPORT;
+        /* GTB6 (גל 8, 1.10.26) — "יש תושב" = repId (כמו markDone); תקלת צוות בלי תושב לא דורשת "מה לכתוב לתושב". */
+        var isReport = !!t.repId;
         var reasons = [
           { k: "הועבר לבינוי", sub: "לא בתחום הגינון" },
           { k: "בוטל",         sub: "הוחלט לא לבצע" },

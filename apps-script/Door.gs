@@ -426,7 +426,14 @@ function weworkSaveConfig_(ss, body) {
     if (isNaN(n) || n < lim[0] || n > lim[1]) { errs.push(k); return; }
     patch[k] = n;
   });
-  if (errs.length) return { ok: false, error: 'ערך לא תקין: ' + errs.join(', ') };
+  /* WWB5 (גל 8, 1.10.26) — שמות השדות בעברית (כמו FIELDS ב-weworkAdmin.js) במקום המפתחות באנגלית */
+  var WW_FIELD_HE = {
+    desks: 'עמדות מחשב', lounge: 'עמדות כורסאות', maxHours: 'שריון ארוך ביותר (שעות)',
+    advanceDays: 'כמה ימים קדימה', perFamily: 'שריונים חופפים למשפחה',
+    regularFrom: 'שעות רגילות — מ', regularTo: 'שעות רגילות — עד',
+    viewFrom: 'התצוגה נפתחת מ', viewTo: 'התצוגה נפתחת עד'
+  };
+  if (errs.length) return { ok: false, error: 'ערך לא תקין: ' + errs.map(function (k) { return WW_FIELD_HE[k] || k; }).join(', ') };
   var cur = wwConfig_();
   var next = {}; Object.keys(cur).forEach(function (k) { next[k] = k in patch ? patch[k] : cur[k]; });
   if (next.viewFrom >= next.viewTo) return { ok: false, error: 'שעת תחילת התצוגה חייבת להיות לפני הסוף' };

@@ -60,7 +60,20 @@
   var S = { loaded: false, loading: false, waiters: [], error: "",
             exists: false, rev: 0, roles: [], cats: [], upgraded: false,
             people: null, dirOk: false, dirDone: false, dirLoading: false, saving: false };
-  var V = { q: "", sel: null, draft: null };
+  var V = { q: "", sel: null, draft: null, mode: "" };   // mode (גל 8): "panel" (צד במסך) / "sheet" (גיליון בטלפון)
+
+  /* KEB1 (גל 8, 1.10.26) — עצירת רענון הרקע כל עוד חלונית העריכה הצדדית (#ct-panel, בתוך main — לא שכבה על body)
+     פתוחה, ושחרור ביציאה מהמסך (כמו clubAdmin), כדי שלא תישאר עצירה תקועה על מסך אחר. */
+  var editDraw = null, leaveWatch = false;
+  function holdEdit(on) { try { if (CBA.holdRefresh) CBA.holdRefresh("committeeEdit", on); } catch (e) {} }
+  function watchLeave() {
+    if (leaveWatch || typeof MutationObserver === "undefined" || !document.body) return;
+    leaveWatch = true;
+    new MutationObserver(function () {
+      if (CBA.onScreen && CBA.onScreen("committeeAdmin")) return;
+      holdEdit(false);
+    }).observe(document.body, { attributes: true, attributeFilter: ["data-screen"] });
+  }
 
   /* ==========================================================================
    *  תושבים — מקור השמות
@@ -545,7 +558,12 @@
     var lastW = -1, ro = null;
 
     function draw() {
-      if (!root.isConnected) { if (ro) ro.disconnect(); return; }
+      if (!root.isConnected) {
+        if (ro) ro.disconnect();
+        /* KEB2 (גל 8, 1.10.26) — גיליון עריכה בטלפון ששרד ציור-מחדש שייך למופע הישן; אחרי שמירה מציירים את המופע החי. */
+        if (edit && editDraw && editDraw !== draw) editDraw();
+        return;
+      }
       if (S.error) {
         canvas.innerHTML = CBA.ui.emptyState({ icon: "inbox", title: "לא הצלחנו לטעון", sub: S.error, ctaLabel: "נסו שוב", ctaAttr: "data-retry" });
         return;
@@ -624,8 +642,9 @@
       e.stopPropagation();
       if (t.id === "ct-cats") return openCats();
       if (t.id === "ct-copy") return copyYear(t.getAttribute("data-from"), t);
-      if (t.hasAttribute("data-edit")) return openPanel(t.getAttribute("data-edit"), null);
-      if (t.hasAttribute("data-add")) return openPanel(null, t.getAttribute("data-add"));
+      /* KEB5 (גל 8, 1.10.26) — מעבר לפריט אחר כשיש שינויים שלא נשמרו — קודם שואלים. */
+      if (t.hasAttribute("data-edit")) { var eid = t.getAttribute("data-edit"); return confirmLeave(function () { openPanel(eid, null); }); }
+      if (t.hasAttribute("data-add")) { var aid = t.getAttribute("data-add"); return confirmLeave(function () { openPanel(null, aid); }); }
     });
     root.addEventListener("keydown", function (e) {
       if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-edit][role=button]")) { e.preventDefault(); e.target.click(); }
@@ -727,31 +746,44 @@
     var sheetClose = null;
     function wide() { return container.clientWidth >= 900; }
     function closePanel() {
-      V.sel = null; V.draft = null;
+      V.sel = null; V.draft = null; V.mode = "";
+      holdEdit(false);   // KEB1 (גל 8, 1.10.26)
       var p = container.querySelector("#ct-panel");
       if (p) { p.hidden = true; p.innerHTML = ""; }
       root.classList.remove("has-panel");
       if (sheetClose) { var c = sheetClose; sheetClose = null; c(); }
     }
-    function openPanel(id, parentForNew) {
+    /* KEB2 (גל 8, 1.10.26) — keep: פתיחה מחדש אחרי ציור-מחדש עם הטיוטה הקיימת (מה שהוקלד), בלי לבנות אותה מחדש מ-S. */
+    function openPanel(id, parentForNew, keep) {
       if (!S.loaded || S.error) return;
       var ix = index(yearRoles(year)), r = id ? ix.byId[id] : null;
-      if (id && !r) return;
+      if (id && !r) {
+        if (keep) { closePanel(); CBA.ui.toast("הפריט שנערך נמחק בינתיים."); }
+        return;
+      }
       var parent = r ? r.parent : (parentForNew || "");
       var defaultCat = S.cats.filter(function (c) { return c.kind === "role"; })[0] || S.cats[0];
       V.sel = id || null;
-      V.draft = { id: id || null, title: r ? r.title : "", parent: parent,
-                  cat: r ? r.cat : defaultCat.id, holders: r ? clone(r.holders) : [], pq: "" };
+      if (!(keep && V.draft)) {
+        V.draft = { id: id || null, title: r ? r.title : "", parent: parent,
+                    cat: r ? r.cat : defaultCat.id, holders: r ? clone(r.holders) : [], pq: "" };
+      }
       var html = '<div class="ct-form" id="ct-form"></div>';
       if (wide()) {
         if (sheetClose) { var c0 = sheetClose; sheetClose = null; c0(); }
+        V.mode = "panel";
+        holdEdit(true);   // KEB1 (גל 8, 1.10.26)
         var p = container.querySelector("#ct-panel");
         p.hidden = false; p.innerHTML = html;
         root.classList.add("has-panel");
         renderForm(p.querySelector("#ct-form"));
         draw();
-        var ti = p.querySelector("#ct-f-title"); if (ti && !id) ti.focus();
+        var ti = p.querySelector("#ct-f-title"); if (ti && !id && !keep) ti.focus();
       } else {
+        /* KEB1 (גל 8, 1.10.26) — גיליון על body כבר דוחה רענון רקע מעצמו; אין עצירה ידנית, כי סגירה ברקע/Esc
+           לא מודיעה לנו ועצירה הייתה נתקעת. */
+        V.mode = "sheet";
+        holdEdit(false);
         var sh = CBA.ui.sheet({ label: "עריכה בוועד השיכון", key: "ct-role", sheetCls: "ct-sheet", html: html,
           onMount: function (wrap) { renderForm(wrap.querySelector("#ct-form")); } });
         sheetClose = function () { sh.close(); };
@@ -832,10 +864,11 @@
           return;
         }
         var f = b.getAttribute("data-f"), i = parseInt(b.getAttribute("data-i"), 10);
-        if (f === "close") { closePanel(); draw(); }
+        /* KEB5 (גל 8, 1.10.26) — "ביטול"/× עם שינויים שלא נשמרו — קודם שואלים. */
+        if (f === "close") confirmLeave(function () { closePanel(); draw(); });
         else if (f === "rm") { d.holders.splice(i, 1); renderForm(host); }
         else if (f === "okext") { delete d.holders[i].review; renderForm(host); }
-        else if (f === "addkid") { var pid = d.id; closePanel(); openPanel(null, pid); }
+        else if (f === "addkid") { var pid = d.id; confirmLeave(function () { closePanel(); openPanel(null, pid); }); }   // KEB5 (גל 8, 1.10.26)
         else if (f === "up" || f === "down") moveRole(d.id, f === "up" ? -1 : 1, b);
         else if (f === "save") submit(b);
         else if (f === "del") removeRole(d.id, b);
@@ -851,6 +884,22 @@
         return '<button type="button" class="ct-opt" data-pick="' + esc(p.key) + '"><span class="ct-opt__n">' + esc(p.full) + '</span><small>' + (p.house ? "בית " + esc(p.house) : "") + '</small></button>';
       }).join("") + (hits.length ? "" : '<div class="ct-muted ct-opt--none">לא נמצא תושב בשם הזה.</div>') +
         '<button type="button" class="ct-opt ct-opt--ext" data-pick="ext:' + esc(q) + '">+ אדם מחוץ לשיכון: <b>' + esc(q) + '</b></button>';
+    }
+    /* KEB5 (גל 8, 1.10.26) — האם הטיוטה שונה ממה שנשמר (פריט חדש: הוקלד שם או נוסף אדם). */
+    function draftDirty() {
+      var d = V.draft;
+      if (!d) return false;
+      if (!d.id) return !!(String(d.title || "").trim() || d.holders.length);
+      var r = null;
+      S.roles.forEach(function (x) { if (x.id === d.id) r = x; });
+      if (!r) return false;
+      return d.title !== r.title || d.parent !== r.parent || d.cat !== r.cat ||
+        JSON.stringify(d.holders) !== JSON.stringify(r.holders);
+    }
+    function confirmLeave(go) {
+      if (!draftDirty()) return go();
+      CBA.ui.confirm("השינויים שלא נשמרו יימחקו.", { title: "לצאת בלי לשמור?", okText: "יציאה בלי שמירה", danger: true })
+        .then(function (ok) { if (ok) go(); });
     }
     function nextOrder(ix, pid) {
       var k = ix.kids(pid);
@@ -935,7 +984,12 @@
         host.onclick = function (e) {
           var b = e.target.closest("[data-c]"); if (!b || b.disabled) return;
           var c = b.getAttribute("data-c"), i = parseInt(b.getAttribute("data-i"), 10);
-          if (c === "close") sh.close();
+          /* KEB5 (גל 8, 1.10.26) — סגירה עם שינויים שלא נשמרו בסוגים — קודם שואלים. */
+          if (c === "close") {
+            if (JSON.stringify(cats) === JSON.stringify(S.cats)) sh.close();
+            else CBA.ui.confirm("השינויים שלא נשמרו יימחקו.", { title: "לצאת בלי לשמור?", okText: "יציאה בלי שמירה", danger: true })
+              .then(function (ok) { if (ok) sh.close(); });
+          }
           else if (c === "color") { cats[i].color = b.getAttribute("data-color"); paint(host); }
           else if (c === "kind") { cats[i].kind = b.getAttribute("data-k"); paint(host); }
           else if (c === "del") { cats.splice(i, 1); paint(host); }
@@ -970,16 +1024,29 @@
       if (!root.isConnected) return false;
       if (S.loaded) { draw(); var h = container.querySelector("#ct-form") || document.querySelector(".ct-sheet #ct-form"); if (h && V.draft) renderForm(h); }
     }, function () { return root.isConnected; });
+    if (edit) { editDraw = draw; watchLeave(); }
     load(function () {
       if (!root.isConnected) return;
-      if (edit && V.sel) { var s = V.sel; V.sel = null; draw(); openPanel(s, null); return; }
+      /* KEB2 (גל 8, 1.10.26) — יש טיוטה פתוחה: משמרים אותה (כולל מה שהוקלד) במקום לבנות מחדש מ-S. */
+      if (edit && V.draft) {
+        var sheetOpen = !!document.querySelector(".gt-sheet-wrap.is-open .ct-sheet #ct-form");
+        if (V.mode === "sheet") {
+          if (!sheetOpen) { V.draft = null; V.sel = null; V.mode = ""; }   // הגיליון נסגר (רקע/Esc) — ביטול
+          /* גיליון פתוח ממשיך לערוך את אותה טיוטה; מאמצים את פונקציית הסגירה שלו (אותו key מחזיר את הקיים). */
+          else sheetClose = CBA.ui.sheet({ label: "עריכה בוועד השיכון", key: "ct-role", sheetCls: "ct-sheet", html: "" }).close;
+          draw(); return;
+        }
+        draw(); openPanel(V.draft.id, V.draft.parent, true); return;
+      }
+      if (edit) holdEdit(false);
       draw();
     });
     /* KB1 (גל 7) — העץ נטען פעם אחת בסשן: עריכה של מנהל (במכשיר אחר) לא הופיעה
        אצל תושב עד טעינת הדף מחדש (עריכות v3 לא מזיזות את מונה "committee",
        אז גם רענון הרקע לא עזר). כניסה למסך — מציירים מהזיכרון מיד ומרעננים ברקע.
        רק בתצוגת התושבים; בעריכה (committeeAdmin) — כמו קודם. */
-    if (!edit && wasLoaded && !(opts && opts.silent)) {
+    /* KEB3 (גל 8, 1.10.26) — גם במצב עריכה: כניסה רגילה (לא רענון שקט) בלי טיוטה פתוחה — מרעננים ברקע. */
+    if (wasLoaded && !(opts && opts.silent) && (!edit || !V.draft)) {
       load(function () { if (root.isConnected) draw(); }, true, true);
     }
   }
@@ -988,7 +1055,8 @@
    *  רישום + ממשק למדריך התושבים (resident.js)
    * ======================================================================== */
   CBA.screens.resCommittee = { render: function (container, opts) { mount(container, false, opts); } };
-  CBA.screens.committeeAdmin = { render: function (container) { if (!isSuper()) { container.innerHTML = ""; return; } mount(container, true); } };
+  /* KEB3 (גל 8, 1.10.26) — opts מועבר, כדי להבחין בין כניסה רגילה לרענון שקט. */
+  CBA.screens.committeeAdmin = { render: function (container, opts) { if (!isSuper()) { container.innerHTML = ""; return; } mount(container, true, opts); } };
 
   /* תפקידים של אדם בשנה המוצגת — לפי משפחה + מספר דייר בלבד. */
   function rolesFor(fid, slot) {

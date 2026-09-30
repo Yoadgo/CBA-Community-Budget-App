@@ -131,40 +131,76 @@ CBA.screens.servicesAdmin = {
       return;
     }
 
-    body.innerHTML = CBA.skel.tiles(6);
-
-    CBA.data.getServices(function (res) {
-      if (!res || !res.ok) {
-        body.innerHTML = '<div class="card club-card"><div class="club-empty">לא ניתן לטעון כרגע. ' +
-          sadmEsc((res && res.error) || "") + "</div></div>";
-        return;
-      }
-      sadmState.list = CBA.serviceUtils.build(res.services, res.sections);
-      sadmState.categories = CBA.serviceUtils.buildCategories(res.categories);
-      sadmState.loaded = true;
-      sadmPaintList();
-    });
+    /* SMB1 (גל 8, 1.10.26) — ציור שקט (רענון רקע) מציג מיד את מה שכבר יש, והקריאה הטרייה מחליפה — בלי הבהוב שלד. */
+    if (CBA.renderSilent && sadmState.loaded) sadmPaintList();
+    else body.innerHTML = CBA.skel.tiles(6);
+    sadmLoadList();
   }
 };
 
+/* SMB1 (גל 8, 1.10.26) — טעינת הרשימה תמיד טרייה (עוקפת את המטמון), גם בניווט וגם בציור שקט. */
+function sadmLoadList() {
+  CBA.data.getServices(function (res) {
+    if (!CBA.onScreen("servicesAdmin")) return;
+    if (sadmState.saving) return;   // שמירה בתעופה תטען בעצמה בסיומה
+    var body = document.getElementById("sadm-body");
+    if (!body) return;
+    if (!res || !res.ok) {
+      /* SMB6 (גל 8, 1.10.26) — שגיאת טעינה עם "נסו שוב" במקום מבוי סתום. */
+      body.innerHTML = '<div class="card club-card"><div class="club-empty">לא ניתן לטעון כרגע. ' +
+        sadmEsc((res && res.error) || "") +
+        ' <button type="button" class="btn-ghost btn-sm" id="sadm-retry">נסו שוב</button></div></div>';
+      var retry = document.getElementById("sadm-retry");
+      if (retry) retry.addEventListener("click", function () {
+        body.innerHTML = CBA.skel.tiles(6);
+        sadmLoadList();
+      });
+      return;
+    }
+    sadmApplyServer(res);
+    sadmPaintList();
+  }, { fresh: true });
+}
+
+/* SMB1 (גל 8, 1.10.26) — קליטת תשובת שרת: רשימה, קטגוריות (SMB7) וחתימת הבסיס שממנה המנהל מתחיל לערוך. */
+function sadmApplyServer(res) {
+  sadmState.list = CBA.serviceUtils.build(res.services, res.sections);
+  sadmState.categories = CBA.serviceUtils.buildCategories(res.categories);
+  sadmState.baseSig = sadmSig(sadmState.list);
+  sadmState.loaded = true;
+}
+
+/* SMB1 (גל 8, 1.10.26) — חתימת תוכן של הרשימה כפי שנבנתה מהשרת (סדר, מזהים וכל השדות, כולל "עודכן").
+   אין בנתונים מונה-גרסה אמין (updatedAt של servicesMeta נמחק בקריאה וגם מתחלף בכל סנכרון ידני),
+   לכן משווים תוכן: אם הרשימה הטרייה בשרת שונה ממה שהמנהל התחיל ממנו — מישהו אחר שמר בינתיים. */
+function sadmSig(list) {
+  try { return JSON.stringify(list || []); } catch (e) { return null; }
+}
+
 /* דרואר "ניהול קטגוריות" — קובץ נפרד (servicesCategoriesAdmin.js), נפתח עם
-   עותק נוכחי של הרשימה + כמה שירותים פעילים משתמשים בכל מזהה, כדי שאפשר
+   עותק נוכחי של הרשימה + כמה שירותים (כולל מוסתרים — SCB1) משתמשים בכל מזהה, כדי שאפשר
    יהיה לחסום מחיקה של קטגוריה בשימוש בלי לשאול את השרת. בסגירה עם שמירה —
    טעינה מחדש מהשרת, כדי שהמסך והמזהים יהיו תואמים למה שבאמת נשמר. */
 function sadmOpenCategories() {
-  var usage = {};
-  sadmState.list.forEach(function (s) {
-    if (!s.active) return;
-    usage[s.categoryId] = (usage[s.categoryId] || 0) + 1;
-  });
-  CBA.svcCategoriesAdmin.open(sadmState.categories, usage, function () {
-    CBA.data.getServices(function (res) {
-      if (!res || !res.ok) return;
-      sadmState.list = CBA.serviceUtils.build(res.services, res.sections);
-      sadmState.categories = CBA.serviceUtils.buildCategories(res.categories);
-      sadmPaintList();
+  if (sadmState.saving) { CBA.ui.toast("שמירה קודמת עדיין בתהליך — רגע אחד."); return; }
+  /* SCB2 (גל 8, 1.10.26) — הדרואר נפתח מרשימה טרייה מהשרת, לא ממטמון ישן. */
+  var btn = document.getElementById("sadm-cats");
+  var release = btn ? CBA.ui.busy(btn, "טוען…") : function () {};
+  CBA.data.getServices(function (res) {
+    release();
+    if (!res || !res.ok) { CBA.ui.alert((res && res.error) || "לא ניתן לטעון את הקטגוריות כרגע, נסו שוב."); return; }
+    if (!CBA.onScreen("servicesAdmin")) return;
+    sadmApplyServer(res);
+    sadmPaintList();
+    var usage = {};
+    sadmState.list.forEach(function (s) {
+      /* SCB1 (גל 8, 1.10.26) — סופרים את כל השירותים, גם מוסתרים: קטגוריה של שירות מוסתר אינה "ריקה" ואסור למחוק אותה. */
+      usage[s.categoryId] = (usage[s.categoryId] || 0) + 1;
     });
-  });
+    CBA.svcCategoriesAdmin.open(sadmState.categories, usage, function () {
+      if (CBA.onScreen("servicesAdmin")) sadmLoadList();
+    });
+  }, { fresh: true });
 }
 
 function sadmPaintList() {
@@ -206,6 +242,11 @@ function sadmPaintList() {
         "</div>";
     }).join("") + "</div>";
 
+  /* SMB5 (גל 8, 1.10.26) — בזמן שמירה בתעופה הפקדים נעולים, כדי ששתי שמירות של כל הרשימה לא יחפפו. */
+  if (sadmState.saving) {
+    body.querySelectorAll("button, input").forEach(function (el) { el.disabled = true; });
+  }
+
   body.querySelectorAll("[data-edit]").forEach(function (b) {
     b.addEventListener("click", function () { sadmOpenEditor(Number(b.dataset.edit)); });
   });
@@ -221,11 +262,13 @@ function sadmPaintList() {
     input.addEventListener("change", function () {
       var i = Number(input.dataset.toggle);
       var next = input.checked;
-      sadmState.list[i].active = next;
+      if (sadmState.saving) { input.checked = !next; return; }   // SMB5 (גל 8, 1.10.26) — לא חופפים שמירה
+      var svc = sadmState.list[i];
+      svc.active = next;
       input.disabled = true;
       sadmPersist(function (ok) {
         input.disabled = false;
-        if (!ok) sadmState.list[i].active = !next;   // החזרה למצב הקודם בכישלון
+        if (!ok) svc.active = !next;   // החזרה למצב הקודם בכישלון
         sadmPaintList();
       });
     });
@@ -235,11 +278,19 @@ function sadmPaintList() {
 function sadmMove(i, dir) {
   var j = i + dir;
   if (j < 0 || j >= sadmState.list.length) return;
+  if (sadmState.saving) return;   // SMB5 (גל 8, 1.10.26) — לא חופפים שמירה
   var tmp = sadmState.list[i];
   sadmState.list[i] = sadmState.list[j];
   sadmState.list[j] = tmp;
+  sadmPersist(function (ok) {
+    /* SMB2 (גל 8, 1.10.26) — כישלון שמירה מחזיר את ההחלפה, כדי שהמסך לא יציג סדר שלא נשמר. */
+    if (!ok && sadmState.list[j] === tmp) {
+      sadmState.list[j] = sadmState.list[i];
+      sadmState.list[i] = tmp;
+    }
+    sadmPaintList();
+  });
   sadmPaintList();
-  sadmPersist(function (ok) { if (!ok) sadmPaintList(); });
 }
 
 /* שמירה של כל המצב לשרת. משמשת גם את המתג/הסידור (בלי drawer) וגם את
@@ -248,13 +299,50 @@ function sadmMove(i, dir) {
    "שומר…/נשמר ✓" בכותרת על סמך זה, בלי שהמסך הזה צריך לצייר משהו. */
 function sadmPersist(cb) {
   var flat = CBA.serviceUtils.flatten(sadmState.list);
+  /* SMB5 (גל 8, 1.10.26) — דגל "שומר" + נעילת פקדי הרשימה עד שהשמירה (כולל הטעינה שאחריה) מסתיימת. */
+  sadmState.saving = true;
+  var lockBody = document.getElementById("sadm-body");
+  if (lockBody) lockBody.querySelectorAll("button, input").forEach(function (el) { el.disabled = true; });
   if (CBA.sheets.markDirty) CBA.sheets.markDirty("servicesAdmin");
-  CBA.data.saveServices(flat.services, flat.sections, function (res) {
+  var base = sadmState.baseSig;
+
+  function finish(ok, err) {
     if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("servicesAdmin");
-    var ok = !!(res && res.ok);
-    if (!ok) CBA.ui.alert((res && res.error) || "השמירה נכשלה, נסו שוב.");
+    sadmState.saving = false;
+    if (err) CBA.ui.alert(err);
     if (cb) cb(ok);
-  });
+    sadmPaintList();
+  }
+
+  /* SMB1 (גל 8, 1.10.26) — השמירה מחליפה את כל הרשימה בשרת, ולכן לפניה קוראים את הרשימה הטרייה
+     ומשווים לבסיס שממנו המנהל התחיל. שונה = מנהל אחר שמר בינתיים → לא דורסים, טוענים מחדש ומבקשים לחזור על השינוי. */
+  CBA.data.getServices(function (fresh) {
+    if (!fresh || !fresh.ok) {
+      finish(false, "לא הצלחנו לוודא שהרשימה עדכנית, ולכן לא נשמר כלום. נסו שוב." +
+        (fresh && fresh.error ? " (" + fresh.error + ")" : ""));
+      return;
+    }
+    var freshSig = sadmSig(CBA.serviceUtils.build(fresh.services, fresh.sections));
+    if (!base || freshSig !== base) {
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("servicesAdmin");
+      sadmState.saving = false;
+      if (cb) cb(false);            // המחזירים-אחורה של הקוראים רצים על הרשימה הישנה, שמוחלפת מיד
+      sadmApplyServer(fresh);
+      sadmPaintList();
+      CBA.ui.alert("מישהו אחר עדכן את השירותים בינתיים. המסך נטען מחדש — בצעו את השינוי שוב.");
+      return;
+    }
+    CBA.data.saveServices(flat.services, flat.sections, function (res) {
+      var ok = !!(res && res.ok);
+      if (!ok) { finish(false, (res && res.error) || "השמירה נכשלה, נסו שוב."); return; }
+      /* טעינה טרייה אחרי שמירה מוצלחת — "עודכן"/"עודכן ע"י" מהשרת, והבסיס החדש לשמירה הבאה. */
+      CBA.data.getServices(function (after) {
+        if (after && after.ok) sadmApplyServer(after);
+        else sadmState.baseSig = null;   // לא ידוע — השמירה הבאה תטען מחדש לפני שתדרוס
+        finish(true);
+      }, { fresh: true });
+    });
+  }, { fresh: true });
 }
 
 /* ============================================================================
@@ -878,6 +966,12 @@ function sadmSectionIsEmpty(sec) {
   return content.trim() === "";
 }
 
+/* מזהה ולא מיקום (גל 8, 1.10.26) — איתור שירות ברשימה הנוכחית לפי המזהה היציב שלו. */
+function sadmIndexById(id) {
+  for (var i = 0; i < sadmState.list.length; i++) if (sadmState.list[i].id === id) return i;
+  return -1;
+}
+
 function sadmSaveEditor() {
   var d = sadmState.draft;
   if (!String(d.name || "").trim()) { CBA.ui.alert("צריך למלא שם לשירות."); return; }
@@ -888,10 +982,22 @@ function sadmSaveEditor() {
     return String(s.title || "").trim() !== "" || !sadmSectionIsEmpty(s);
   });
 
+  if (sadmState.saving) { CBA.ui.toast("שמירה קודמת עדיין בתהליך — רגע אחד."); return; }   // SMB5 (גל 8, 1.10.26)
+
+  /* מזהה ולא מיקום (גל 8, 1.10.26) — הרשימה יכולה להיטען מחדש בזמן שהעורך פתוח, אז המיקום השמור כבר לא אמין. */
+  var idx = sadmState.editIndex === -1 ? -1 : sadmIndexById(d.id);
+  if (sadmState.editIndex !== -1 && idx === -1) {
+    CBA.ui.alert("השירות הזה כבר לא קיים ברשימה (אולי נמחק ע\"י מנהל אחר). השינויים לא נשמרו.");
+    return;
+  }
+
   var release = CBA.ui.busy(document.getElementById("sadm-save"), "שומר…");
 
-  if (sadmState.editIndex === -1) sadmState.list.push(d);
-  else sadmState.list[sadmState.editIndex] = d;
+  /* SMB3 (גל 8, 1.10.26) — שומרים את הכרטיס הקודם כדי להחזיר אותו אם השמירה נכשלת. */
+  var list = sadmState.list;
+  var prev = idx === -1 ? null : list[idx];
+  if (idx === -1) list.push(d);
+  else list[idx] = d;
 
   var promoteSourceId = sadmState.promoteSourceId;
 
@@ -901,17 +1007,17 @@ function sadmSaveEditor() {
       // החזרת המצב: שירות חדש שנכשל לא צריך להישאר ברשימה המקומית.
       // ⚠️ בהפיכת המלצה — הכרטיס המקורי *לא* נמחק כשזה קורה (ר' אפיון:
       // "אם השמירה נכשלת — הכרטיס המקורי לא נמחק"). המחיקה קורית רק בהצלחה, למטה.
-      if (sadmState.editIndex === -1) sadmState.list.pop();
+      var at = list.indexOf(d);
+      if (at !== -1) {
+        if (prev) list[at] = prev;
+        else list.splice(at, 1);
+      }
       return;
     }
     sadmState.dirty = false;
     sadmCloseEditor(true);
-    // טעינה מחדש מהשרת — כדי לקבל את "עודכן"/"עודכן ע"י" שהשרת כתב,
-    // במקום לנחש אותם בלקוח.
-    CBA.data.getServices(function (res) {
-      if (res && res.ok) sadmState.list = CBA.serviceUtils.build(res.services, res.sections);
-      sadmPaintList();
-    });
+    // הטעינה מחדש מהשרת ("עודכן"/"עודכן ע"י" + קטגוריות — SMB7) כבר בוצעה בתוך sadmPersist.
+    sadmPaintList();
     // הפריט החדש נשמר בהצלחה — עכשיו, ורק עכשיו, מוחקים את כרטיס ההמלצה
     // המקורי (כולל הלייקים/תגובות עליו, שלא נשמרים ולא עוברים — הוחלט
     // באפיון). כישלון מחיקה כאן לא מבטל את הפריט החדש שכבר נשמר.
@@ -934,12 +1040,16 @@ function sadmDelete() {
                  { title: "מחיקת שירות", okText: "מחיקה", danger: true })
     .then(function (ok) {
       if (!ok) return;
-      var idx = sadmState.editIndex;
-      var removed = sadmState.list.splice(idx, 1)[0];
+      if (sadmState.saving) { CBA.ui.toast("שמירה קודמת עדיין בתהליך — רגע אחד."); return; }   // SMB5 (גל 8, 1.10.26)
+      /* מזהה ולא מיקום (גל 8, 1.10.26) — אחרת טעינה מחדש באמצע הייתה מוחקת שירות אחר. */
+      var idx = sadmIndexById(d.id);
+      if (idx === -1) { sadmCloseEditor(true); sadmPaintList(); return; }   // כבר לא קיים — אין מה למחוק
+      var list = sadmState.list;
+      var removed = list.splice(idx, 1)[0];
       var release = CBA.ui.busy(document.getElementById("sadm-del"), "מוחק…");
       sadmPersist(function (saved) {
         release();
-        if (!saved) { sadmState.list.splice(idx, 0, removed); return; }
+        if (!saved) { list.splice(idx, 0, removed); return; }
         sadmState.dirty = false;
         sadmCloseEditor(true);
         sadmPaintList();
@@ -1171,7 +1281,8 @@ function sadmOpenRecommendations() {
   CBA.data.ensureFamilyNames(function () {
     CBA.data.getResidentServiceCards(false, function (res) {
       var cards = (res && res.ok && res.cards) || [];
-      var html = sadmRecListHtml(cards);
+      /* SMB4 (גל 8, 1.10.26) — כשל טעינה אינו "אין המלצות": שורת שגיאה עם "נסו שוב". */
+      var html = (res && res.ok) ? sadmRecListHtml(cards) : sadmLoadErrHtml(res);
       var wrapRef = null;
       CBA.ui.dialog({
         title: "ניהול המלצות תושבים", html: html, wide: true, okText: "סגירה",
@@ -1179,6 +1290,12 @@ function sadmOpenRecommendations() {
       });
     });
   });
+}
+
+/* SMB4 (גל 8, 1.10.26) — שורת שגיאת טעינה משותפת לשני הדיאלוגים, עם כפתור "נסו שוב" (data-sadm-retry). */
+function sadmLoadErrHtml(res) {
+  return '<div class="club-empty">לא ניתן לטעון כרגע. ' + sadmEsc((res && res.error) || "") +
+    ' <button type="button" class="btn-ghost btn-sm" data-sadm-retry>נסו שוב</button></div>';
 }
 
 function sadmRecListHtml(cards) {
@@ -1214,11 +1331,15 @@ function sadmBindRecRows(wrap, initialCards) {
       var cards = (res && res.ok && res.cards) || [];
       cardsById = {};
       cards.forEach(function (c) { cardsById[c.id] = c; });
-      host.innerHTML = sadmRecListHtml(cards);
+      host.innerHTML = (res && res.ok) ? sadmRecListHtml(cards) : sadmLoadErrHtml(res);   // SMB4 (גל 8, 1.10.26)
       bind();
     });
   }
   function bind() {
+    /* SMB4 (גל 8, 1.10.26) — "נסו שוב" אחרי כשל טעינה. */
+    wrap.querySelectorAll("[data-sadm-retry]").forEach(function (btn) {
+      btn.addEventListener("click", function () { CBA.ui.busy(btn, ""); reload(); });
+    });
     wrap.querySelectorAll("[data-rec-promote]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var card = cardsById[btn.dataset.recPromote];
@@ -1286,7 +1407,9 @@ function sadmOpenStaleReports() {
   CBA.data.getStaleReports(function (res) {
     var reports = (res && res.ok && res.reports) || [];
     CBA.ui.dialog({
-      title: 'דיווחי "לא מעודכן"', html: sadmStaleListHtml(reports), wide: true, okText: "סגירה",
+      /* SMB4 (גל 8, 1.10.26) — כשל טעינה אינו "אין דיווחים": שורת שגיאה עם "נסו שוב". */
+      title: 'דיווחי "לא מעודכן"', html: (res && res.ok) ? sadmStaleListHtml(reports) : sadmLoadErrHtml(res),
+      wide: true, okText: "סגירה",
       onMount: function (wrap) { sadmBindStaleRows(wrap, reports); }
     });
   });
@@ -1322,11 +1445,15 @@ function sadmBindStaleRows(wrap, initialReports) {
       var host = wrap.querySelector(".cba-dlg__body");
       if (!host) return;   // הדיאלוג נסגר בינתיים
       var reports = (res && res.ok && res.reports) || [];
-      host.innerHTML = sadmStaleListHtml(reports);
+      host.innerHTML = (res && res.ok) ? sadmStaleListHtml(reports) : sadmLoadErrHtml(res);   // SMB4 (גל 8, 1.10.26)
       bind();
     });
   }
   function bind() {
+    /* SMB4 (גל 8, 1.10.26) — "נסו שוב" אחרי כשל טעינה. */
+    wrap.querySelectorAll("[data-sadm-retry]").forEach(function (btn) {
+      btn.addEventListener("click", function () { CBA.ui.busy(btn, ""); reload(); });
+    });
     wrap.querySelectorAll("[data-stale-done]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var done = CBA.ui.busy(btn, "");
@@ -1341,34 +1468,5 @@ function sadmBindStaleRows(wrap, initialReports) {
   bind();
 }
 
-/* ============================================================================
- *  מיגרציה חד-פעמית — "המלצות תושבים" הישנות (cat_mud7r57ebu) לתוך
- *  resRecommendations   (27.9.26, אפיון סעיף 8)
- * ----------------------------------------------------------------------------
- *  🔴🔴 **לא הופעלה ולא תופעל אוטומטית משום קוד.** אין קריאה ל-
- *  sadmRunRecommendationsMigration בשום מקום מלבד הכפתור הזה, ולכפתור הזה
- *  אין שום קריאה אוטומטית ב-render — מנהל-על צריך ללחוץ עליו בפועל.
- *  מה שהיא עושה בפועל: לכל residentServiceCards שאין לו עדיין `group` —
- *  מוסיפה group:"ללא קבוצה" (לא נוגעת בעוד כלום — לא ב-id, לא בתגובות/
- *  לייקים, לא מוחקת ולא יוצרת מסמך). זה כל מה שצריך כדי שהכרטיסים הישנים
- *  יופיעו תחת "קבוצות נוספות → ללא קבוצה" ב-resRecommendations, בלי לגעת
- *  בגיליון/בקטגוריה cat_mud7r57ebu עצמה (השבתתה נשארת פעולה נפרדת, ר'
- *  דו"ח המסירה — גם היא לא בוצעה). */
-function sadmRunRecommendationsMigration() {
-  CBA.ui.confirm(
-    'להריץ מיגרציה חד-פעמית? הפעולה מוסיפה group:"ללא קבוצה" לכל "המלצת תושב" ' +
-    'ישנה שעדיין אין לה קבוצה, כדי שתופיע במסך "המלצות השיכון" החדש. ' +
-    "היא לא מוחקת ולא יוצרת שום כרטיס, ולא נוגעת בתגובות/לייקים קיימים. " +
-    "מומלץ להריץ פעם אחת בלבד.",
-    { title: "מיגרציה — המלצות ישנות", okText: "הרצת המיגרציה" }
-  ).then(function (ok) {
-    if (!ok) return;
-    CBA.data.migrateResidentExtrasToRecommendations(function (res) {
-      if (!res || !res.ok) {
-        CBA.ui.alert("המיגרציה הסתיימה עם שגיאות: " + ((res && res.errors) || []).join(", "));
-        return;
-      }
-      CBA.ui.alert("המיגרציה הסתיימה — " + res.migrated + " מתוך " + res.total + ' כרטיסים קיבלו group:"ללא קבוצה".');
-    });
-  });
-}
+/* SMB8 (גל 8, 1.10.26) — sadmRunRecommendationsMigration נמחקה: קוד מת בלי כפתור ובלי שום קריאה.
+   פונקציית הנתונים migrateResidentExtrasToRecommendations נשארת ב-dataService.js אם תידרש שוב. */

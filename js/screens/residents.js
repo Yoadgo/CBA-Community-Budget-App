@@ -19,7 +19,13 @@ var resState = {
   headers: [], rows: [], signups: [], changes: [],
   q: "", filter: "active",  // active | left | all
   sort: "family", dir: 1,   // ברירת מחדל: שם משפחה א-ב
-  conflicts: []
+  conflicts: [],
+  /* RSB3 (גל 8, 1.10.26) — בחירת המשפחה בבקשות הממתינות וגלילת הרשימה נקראו מה-DOM,
+     אבל showScreen כבר ריקן אותו ברענון רקע — הבחירה אבדה והאישור שויך לברירת המחדל. */
+  suSel: {}, listScroll: 0,
+  /* RSB6 (גל 8, 1.10.26) — כשל טעינה של בקשות הרשמה/שינוי פרטים היה שקט לגמרי */
+  reqError: false,
+  navRefreshing: false   // RSB2 — רענון ברקע אחרי כניסה למסך
 };
 
 // שימור מיקום גלילה בין ציורים מחדש (אותה בעיה ואותו פתרון כמו ב-expenses.js:
@@ -35,6 +41,12 @@ var resScrollTop = 0, resWinScrollY = 0;
    שבגללו כל "בר" הוצג כיו"ר השיכון; במדריך הוא תוקן ב-25.9, כאן נשכח.
    לקריאה בלבד — עריכה רק דרך עץ הוועד. */
 var resRoleLoaded = false, resRoleLoading = false, resContainerRef = null;
+/* RSB1 (גל 8, 1.10.26) — container הוא #app-main הקבוע, ולכן "עדיין ב-DOM" אינו אומר
+   "עדיין במסך התושבים": תשובה מאוחרת ציירה את התושבים מעל מסך אחר. כל ציור מאוחר עובר כאן. */
+function resOnScreen() {
+  if (window.CBA && CBA.onScreen) return CBA.onScreen("residents");
+  return !!(document.body && document.body.dataset.screen === "residents");
+}
 function ensureResRoleIndex() {
   if (resRoleLoaded || resRoleLoading || !(window.CBA && CBA.committeeTree)) return;
   resRoleLoading = true;
@@ -42,7 +54,8 @@ function ensureResRoleIndex() {
     resRoleLoading = false;
     resRoleLoaded = true;
     // כתיבה ל-container החי בלבד (לא לרפרנס יתום מ-render קודם — ר' cba-data-refresh-policy)
-    if (resContainerRef && document.body.contains(resContainerRef)) {
+    /* RSB1 (גל 8, 1.10.26) — צייר רק אם המשתמש עדיין במסך התושבים */
+    if (resContainerRef && document.body.contains(resContainerRef) && resOnScreen()) {
       CBA.screens.residents.render(resContainerRef);
     }
   });
@@ -233,7 +246,8 @@ function resConflicts(rows, c) {
   });
   Object.keys(byMail).forEach(function (m) {
     var idxs = byMail[m].filter(function (v, i, a) { return a.indexOf(v) === i; });
-    if (byMail[m].length < 2) return;
+    /* RSB9 (גל 8, 1.10.26) — נספרו הופעות ולא שורות: אותו מייל בשתי המשבצות של שורה אחת סומן "פעמיים" */
+    if (idxs.length < 2) return;
     out.push({
       kind: "email", severity: "err",
       title: "המייל " + m + " מופיע פעמיים",
@@ -378,10 +392,12 @@ function resLoad(container) {
   if (resState.loading) return;
   resState.loading = true;
   resState.error = null;
+  var reqFail = false;   // RSB6
   var pending = 3;   // תושבים · בקשות הרשמה · בקשות שינוי פרטים (2026-08-28)
   var done = function () {
     if (--pending === 0) {
       resState.loading = false; resState.loaded = true;
+      resState.reqError = reqFail;
       // אם היו עמודות חסרות — יוצרים אותן ואז טוענים שוב, כדי שהשדות החדשים
       // (מקצוע, שמות ילדים, הערות) יופיעו מיד ולא רק ברענון הבא
       resEnsureCols(container, function (created) {
@@ -390,7 +406,8 @@ function resLoad(container) {
           CBA.data.refreshResidents(function () { resLoad(container); });
           return;
         }
-        CBA.screens.residents.render(container);
+        /* RSB1 (גל 8, 1.10.26) — הנתונים נשמרים תמיד, אבל מציירים רק אם עדיין במסך התושבים */
+        if (resOnScreen()) CBA.screens.residents.render(container);
       });
     }
   };
@@ -405,11 +422,13 @@ function resLoad(container) {
   });
   CBA.data.listSignups(function (res) {
     if (res && res.ok) resState.signups = res.rows || [];
+    else reqFail = true;   // RSB6
     done();
   });
   // בקשות שינוי פרטים (2026-08-28) — אותה תבנית בדיוק של בקשות ההרשמה
   CBA.data.getProfileChanges(function (res) {
     if (res && res.ok) resState.changes = res.rows || [];
+    else reqFail = true;   // RSB6
     done();
   });
 }
@@ -421,19 +440,33 @@ CBA.screens.residents = {
     var st = resState;
     resContainerRef = container; // ר' ensureResRoleIndex — כתיבה לרפרנס חי בלבד ברענון אסינכרוני
     ensureResRoleIndex(); // חיווי "תפקיד בוועד" (סעיף 8) — נטען פעם אחת, מטמון נפרד מ-resState
+    /* RSB2 (גל 8, 1.10.26) — ניווט אמיתי למסך: showScreen ריקן את main ולא סימן silent.
+       ציור פנימי (סינון/חיפוש/מיון/סוף טעינה) תמיד נעשה על מסך מלא. */
+    var isNav = !CBA.renderSilent && !container.firstChild;
     // נשמר לפני שה-innerHTML נדרס (ר' ההערה ליד resScrollTop), ומוחזר בסוף הפונקציה
     var prevList = container.querySelector(".tx-list");
-    if (prevList) resScrollTop = prevList.scrollTop;
+    /* RSB3 (גל 8, 1.10.26) — הגלילה נשמרת ב-resState (גם בגלילה עצמה, ר' resBind),
+       כי ברענון רקע ה-DOM כבר ריק כאן. ניווט אמיתי מתחיל מלמעלה, כמו קודם. */
+    if (prevList) st.listScroll = prevList.scrollTop;
+    else if (isNav) st.listScroll = 0;
+    resScrollTop = st.listScroll;
     resWinScrollY = window.scrollY || 0;
     // ערכי ה-<select> שנבחרו ידנית בכרטיסי "בקשות הרשמה ממתינות", לפי מזהה הבקשה —
     // בלי זה, כל render() (כולל רענון רקע שקט) היה מאפס בחירה שהמשתמש כבר עשה.
-    var prevSignupSel = {};
-    container.querySelectorAll("[data-signup]").forEach(function (box) {
-      var sel = box.querySelector(".res-su__sel");
-      if (sel) prevSignupSel[box.dataset.signup] = sel.value;
-    });
+    /* RSB3 (גל 8, 1.10.26) — נקרא מ-resState.suSel (מתעדכן ב-change), לא מה-DOM שכבר ריק */
+    var prevSignupSel = st.suSel;
 
     if (!st.loaded && !st.loading) resLoad(container);
+    /* RSB2 (גל 8, 1.10.26) — הנתונים נטענו פעם אחת בלבד ולא התרעננו בכניסות הבאות.
+       עכשיו: בכניסה אמיתית מציירים מיד את המטמון (בלי שלד) וטוענים מחדש ברקע;
+       בסיום resLoad מצייר שוב (אם עדיין כאן). ברענון רקע שקט — לא טוענים. */
+    else if (isNav && st.loaded && !st.loading && !st.navRefreshing) {
+      if (st.error) { st.loaded = false; resLoad(container); }   // אין מטמון להציג — טעינה רגילה עם שלד
+      else {
+        st.navRefreshing = true;
+        CBA.data.refreshResidents(function () { st.navRefreshing = false; resLoad(container); });
+      }
+    }
 
     if (st.loading && !st.loaded) {
       container.innerHTML = CBA.skel.table(8, 6);
@@ -449,7 +482,8 @@ CBA.screens.residents = {
 
     var c = resCols(st.headers);
     var pending = st.signups.filter(function (s) { return String(s.status).trim() === "ממתין"; });
-    var q = st.q.trim();
+    /* RSB7 (גל 8, 1.10.26) — החיפוש היה תלוי-רישיות ("Cohen" לא מצא "cohen@…") */
+    var q = st.q.trim().toLowerCase();
 
     var visible = st.rows.filter(function (r) {
       if (st.filter === "active" && !resIsActive(r, c)) return false;
@@ -459,7 +493,7 @@ CBA.screens.residents = {
         .concat(c.firstName.map(function (k) { return resVal(r, k); }))
         .concat(c.email.map(function (k) { return resVal(r, k); }))
         .concat(c.kids ? [resVal(r, c.kids)] : [])
-        .join(" ");
+        .join(" ").toLowerCase();
       return hay.indexOf(q) !== -1;
     });
 
@@ -475,6 +509,9 @@ CBA.screens.residents = {
     });
 
     container.innerHTML =
+      /* RSB6 (גל 8, 1.10.26) — שורה קטנה עם "נסה שוב" במקום היעלמות שקטה של הכרטיסים */
+      (st.reqError ? '<div class="res-warn" style="margin:0 0 10px">לא נטענו הבקשות · ' +
+        '<button type="button" class="btn-link" data-res-req-retry>נסה שוב</button></div>' : "") +
       (pending.length ? resSignupsHTML(pending, st.rows, c) : "") +
       (pendingChanges.length ? resChangesHTML(pendingChanges) : "") +
       '<div class="tx-bar">' +
@@ -513,7 +550,7 @@ CBA.screens.residents = {
     var listEl = container.querySelector(".tx-list");
     if (listEl && resScrollTop) listEl.scrollTop = resScrollTop;
     if (resWinScrollY) window.scrollTo(0, resWinScrollY);
-    resScrollTop = 0; resWinScrollY = 0;
+    resScrollTop = 0; resWinScrollY = 0;   // (RSB3 — הערך הקבוע נשמר ב-resState.listScroll)
     container.querySelectorAll("[data-signup]").forEach(function (box) {
       var prevVal = prevSignupSel[box.dataset.signup];
       if (prevVal == null) return;
@@ -574,7 +611,8 @@ function resRowHTML(r, c, idx) {
    גם רשימת כרטיסים משלו — אותה שפה של .tx-mrow בהוצאות — וה-CSS בוחר מי מהם
    מוצג. שתי התצוגות נשענות על אותו מערך מסונן וממוין, כך שאין הבדל בתוכן. */
 function resMobileHTML(list, c) {
-  if (!list.length) return '<div class="card res-msg">לא נמצאו תושבים בסינון הזה</div>';
+  /* RSB8 (גל 8, 1.10.26) — ההודעה הריקה ישבה מחוץ ל-.res-mlist והופיעה פעמיים בדסקטופ */
+  if (!list.length) return '<div class="res-mlist"><div class="card res-msg">לא נמצאו תושבים בסינון הזה</div></div>';
   return '<div class="res-mlist">' + list.map(function (r) {
     var idx = resState.rows.indexOf(r);
     var names = c.firstName.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" · ");
@@ -682,6 +720,21 @@ function resBind(container, c) {
     CBA.screens.residents.render(container);
     var again = container.querySelector("#res-q");
     if (again) { again.focus(); again.setSelectionRange(pos, pos); }
+  });
+  /* RSB3 (גל 8, 1.10.26) — הבחירה והגלילה נשמרות ב-resState ברגע שהן קורות */
+  container.querySelectorAll("[data-signup] .res-su__sel").forEach(function (sel) {
+    sel.addEventListener("change", function () {
+      var box = sel.closest("[data-signup]");
+      if (box) resState.suSel[box.dataset.signup] = sel.value;
+    });
+  });
+  var listEl = container.querySelector(".tx-list");
+  if (listEl) listEl.addEventListener("scroll", function () { resState.listScroll = listEl.scrollTop; }, { passive: true });
+  /* RSB6 (גל 8, 1.10.26) — "נסה שוב" לבקשות: טעינה מחדש, המטמון נשאר מוצג עד הסיום */
+  var rq = container.querySelector("[data-res-req-retry]");
+  if (rq) rq.addEventListener("click", function () {
+    rq.disabled = true;
+    resLoad(container);
   });
   var rl = container.querySelector("[data-res-reload]");
   if (rl) rl.addEventListener("click", function () {
@@ -1018,9 +1071,26 @@ function resOpenAdd(container, c) {
   }
 
   function close() { wrap.remove(); document.removeEventListener("keydown", esc); resAddState = null; }
-  function esc(e) { if (e.key === "Escape" && document.getElementById("res-add")) close(); }
+  /* RSB5 (גל 8, 1.10.26) — לחיצה על הרקע / Escape זרקו לפח שורות שמולאו בלי לשאול,
+     ו-Escape פעל גם כשחלון "לאשר את היצירה?" פתוח מעל הגריד. */
+  var askingClose = false;
+  function softClose() {
+    if (askingClose || !resAddState) return;
+    var filled = resAddState.cells.some(function (row) {
+      return row.some(function (v) { return String(v || "").trim(); });
+    });
+    if (!filled) { close(); return; }
+    askingClose = true;
+    CBA.ui.confirm("השורות שמילאת לא יישמרו.", { title: "לסגור בלי ליצור?", okText: "סגור", danger: true })
+      .then(function (ok) { askingClose = false; if (ok && wrap.isConnected) close(); });
+  }
+  function esc(e) {
+    if (e.key !== "Escape" || !document.getElementById("res-add")) return;
+    if (document.body.classList.contains("has-cba-dlg")) return;   // RSB5 — חלון אישור פתוח מעל
+    softClose();
+  }
   document.addEventListener("keydown", esc);
-  wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
+  wrap.addEventListener("click", function (e) { if (e.target === wrap) softClose(); });
 
   function bind() {
     wrap.querySelector(".peek__x").addEventListener("click", close);
@@ -1598,7 +1668,11 @@ function resOpenDrawer(container, idx, rowIndex, c) {
      ברצף (שם → בית → אישור) — הפעולה הכי הרסנית במסך התושבים, דרך הממשק הכי
      גנרי שיש. עכשיו אותה שרשרת במודלים של האפליקציה, עם ולידציה בכל שלב
      ואישור אחרון אדום שמסביר בדיוק מה עומד לקרות. */
-  overlay.querySelector("[data-replace]").addEventListener("click", function () {
+  /* RSB4 (גל 8, 1.10.26) — בלי נעילה בזמן הבקשה, לחיצה כפולה פתחה שתי שורות חדשות */
+  var repBtn = overlay.querySelector("[data-replace]");
+  var replaceInFlight = false;
+  repBtn.addEventListener("click", function () {
+    if (replaceInFlight) return;
     CBA.ui.prompt("המשפחה שתיכנס לבית הזה.", { title: "החלפת משפחה", placeholder: "שם משפחה", okText: "המשך" })
       .then(function (fam) {
         if (fam === null) return;
@@ -1613,9 +1687,12 @@ function resOpenDrawer(container, idx, rowIndex, c) {
             'תיפתח שורה חדשה למשפחת ' + fam + ' עם מזהה קבוע משלה.',
             { title: "להחליף את המשפחה בבית?", okText: "כן, החלף", danger: true }
           ).then(function (ok) {
-            if (!ok) return;
+            if (!ok || replaceInFlight) return;
+            replaceInFlight = true;   // RSB4
+            var releaseRep = CBA.ui.busy ? CBA.ui.busy(repBtn, "מחליף…") : function () {};
             if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
             CBA.data.replaceFamily({ rowIndex: rowIndex, family: fam, house: String(house).trim() }, function (res) {
+              replaceInFlight = false; releaseRep();   // RSB4
               if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
               if (!res || !res.ok) { CBA.ui.alert("הפעולה נכשלה: " + ((res && res.error) || "שגיאה")); return; }
               resCloseDrawer();
@@ -1629,639 +1706,5 @@ function resOpenDrawer(container, idx, rowIndex, c) {
   });
 }
 
-/* ==========================================================================
-   "ועד השיכון" — ניהול/עריכת העץ הארגוני (2026-08-10)
-   מסך ניהול נפרד, מוצג רק למנהל-על (ר' SCREEN_PERM.committeeAdmin ב-app.js) —
-   לבקשת יועד: "הניהול עץ צריך להיות רק באזור ניהול למי שיש הרשאות מנהל על".
-   התצוגה-לקריאה-בלבד המקבילה, לכל תושב, יושבת ב-resident.js
-   (CBA.screens.resCommittee) — בלי שום כפתור עריכה, גם אם הצופה הוא מנהל-על.
-   שני הצדדים משתמשים באותה לוגיקת בניית-עץ מהשורות השטוחות — ר' CBA.committee
-   ב-dataService.js — כדי שלא ייסחפו זה מזה עם הזמן.
-   עטוף ב-IIFE משלו (בניגוד לשאר הקובץ, שהוא סקריפט גלובלי, ר' הערת הקובץ
-   למעלה) כדי לא להתנגש בשמות עם שאר הקוד כאן — אותה תבנית בדיוק כמו ה-IIFE
-   שהיה משמש קודם לעריכה הזו כשהיא ישבה ב-resident.js.
-   ========================================================================== */
-(function () {
-  "use strict";
-
-  function svg(inner) {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
-  }
-  var plusIcon  = svg('<path d="M12 5v14M5 12h14"/>');
-  var xIcon     = svg('<path d="M18 6L6 18M6 6l12 12"/>');
-  var editIcon  = svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>');
-  var chevIcon  = svg('<polyline points="6 9 12 15 18 9"/>');
-  // חצי הזזה בין אחים (2026-08-10, לבקשת יועד: "חצים שמאפשרים להזיז טור
-  // למיקום אחר"). אותה פעולה בדיוק בשני הכיוונים (moveSibling, ר' למטה) —
-  // רק האייקון/תווית מותאמים לכיוון התצוגה: בעץ האופקי (דסקטופ) ימין/שמאל,
-  // ברשימה האנכית (מובייל) למעלה/למטה.
-  var rightIcon = svg('<path d="M5 12h14M13 6l6 6-6 6"/>');
-  var leftIcon  = svg('<path d="M19 12H5M11 6l-6 6 6 6"/>');
-  var upIcon    = svg('<path d="M12 19V5M5 12l7-7 7 7"/>');
-  var downIcon  = svg('<path d="M12 5v14M5 12l7 7 7-7"/>');
-
-  function closeOrgModal() {
-    var el = document.getElementById("cba-modal");
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-    document.removeEventListener("keydown", escOrgModal);
-  }
-  function escOrgModal(e) { if (e.key === "Escape") closeOrgModal(); }
-
-  // autocomplete לשדה "שם" בתוך שורת-אדם אחת במודל העריכה — אותה תבנית בדיוק
-  // כמו txWireAutocomplete בטופס ההוצאה (expenses.js), מותאם לרשימה חוזרת
-  // (כמה שורות-אנשים באותו מודל, כל אחת עם data-ac="opN" משלה).
-  function orgWireAutocomplete(peopleEl, i, residentOptions, state) {
-    var input = peopleEl.querySelector('[data-ac="op' + i + '"]');
-    var list = peopleEl.querySelector('[data-ac-list="op' + i + '"]');
-    if (!input || !list) return;
-    function render(q) {
-      var query = (q || "").trim();
-      if (!query) { list.hidden = true; list.innerHTML = ""; return; }
-      var matches = residentOptions
-        .map(function (o, idx) { return { o: o, idx: idx }; })
-        .filter(function (x) { return x.o.label.indexOf(query) !== -1; })
-        .slice(0, 8);
-      if (!matches.length) { list.hidden = true; list.innerHTML = ""; return; }
-      list.innerHTML = matches.map(function (x) {
-        return '<div class="ac-item" data-ac-idx="' + x.idx + '">' + CBA.esc(x.o.label) + '</div>';
-      }).join("");
-      list.hidden = false;
-    }
-    input.addEventListener("input", function () { render(input.value); });
-    input.addEventListener("focus", function () { if (input.value) render(input.value); });
-    input.addEventListener("blur", function () { setTimeout(function () { list.hidden = true; }, 150); });
-    list.addEventListener("mousedown", function (e) {
-      var item = e.target.closest("[data-ac-idx]");
-      if (!item) return;
-      e.preventDefault();
-      var opt = residentOptions[parseInt(item.dataset.acIdx, 10)];
-      if (opt && state.people[i]) {
-        input.value = opt.label;
-        state.people[i].name = opt.label;
-        state.people[i].rid = opt.rid;
-      }
-      list.hidden = true;
-    });
-  }
-
-  CBA.screens.committeeAdmin = {
-    title: "ועד השיכון",
-
-    render: function (container) {
-      var isMobile = window.matchMedia("(max-width: 720px)").matches;
-      container.innerHTML =
-        '<div class="org-toolbar">' +
-          '<div class="org-hint">' + (isMobile
-            ? 'לחצו על תפקיד כדי לפתוח את מי שכפוף לו. העיפרון עורך, "+" מוסיף תפקיד־בן, החצים מזיזים בין אחים.'
-            : 'העץ רחב — גררו/גללו אופקית כדי לראות את כולו. לחצו על העיפרון על גבי תפקיד לעריכה, או על "+" להוספת תפקיד־בן.') + '</div>' +
-          '<button type="button" class="rs-ghost" id="org-add-root">' + plusIcon + 'הוספת תפקיד חדש</button>' +
-        '</div>' +
-        '<div id="org-body">' + CBA.skel.tree() + '</div>';
-
-      var bodyEl = container.querySelector("#org-body");
-      var rowsCache = [];
-      var expanded = null; // {boxId:true/false} ברשימה המתקפלת (מובייל) — ר' resCommittee/resident.js
-
-      // שומר rowsCache ומצייר — נקודת-כניסה אחת לכל שינוי שנשמר לשרת (גם
-      // מהמודל וגם מחצי ההזזה), כדי לא לשכפל את לוגיקת ה"שמור והצג" פעמיים.
-      // עדכון אופטימי (2026-08-10, לבקשת יועד: "התזוזה של החיצים לוקחת כמה
-      // שניות, עדיף שיהיה מיידי ומקסימום לאחר מכן כמה שניות כדי להישמר, באותו
-      // מנגנון שמירה") — מציירים עם הסדר החדש *מיד*, לפני שהשרת אישר, ורק אם
-      // השמירה בפועל נכשלת חוזרים למצב הקודם ומציירים שוב. saveCommitteeTree
-      // עובר דרך CBA.sheets.postRead ולא push() — postRead לא נספר אוטומטית
-      // ב-inFlightWrites (ר' cba-data-refresh-policy.md), אז בלי markDirty/
-      // clearDirty ידניים כאן רענון רקע שקט היה יכול לדרוס את rowsCache
-      // האופטימי באמצע השמירה. זה "אותו מנגנון שמירה" שיועד התכוון אליו —
-      // אותו markDirty/clearDirty-לפי-סיבה שמפעיל את חיווי "שומר…/נשמר" הגלובלי
-      // בכותרת (ר' resident.js's receiptUpload/clubReserveSelect לדוגמאות דומות).
-      function commitRows(newRows, cb) {
-        var prevRows = rowsCache;
-        rowsCache = newRows;
-        draw();
-        if (CBA.sheets.markDirty) CBA.sheets.markDirty("committeeTreeSave");
-        CBA.data.saveCommitteeTree(newRows, function (res) {
-          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("committeeTreeSave");
-          if (!res || !res.ok) { rowsCache = prevRows; draw(); }
-          if (cb) cb(res);
-        });
-      }
-
-      // הזזת תא בין האחים שלו (מיקום i -> i+dir בתוך אותה רשימת-אחים) —
-      // מזיזה את *כל* השורות של שני התאים המעורבים (כולל תאים עם כמה אנשים,
-      // כמו "הסעים") כבלוק אחד, בלי לגעת בשורות של תאים אחרים. dir=-1 קודם
-      // (ימינה בעץ / למעלה ברשימה), dir=+1 אחרי (שמאלה בעץ / למטה ברשימה).
-      function moveSibling(boxId, dir) {
-        var boxes = CBA.committee.buildBoxes(rowsCache);
-        var idSet = {}; boxes.forEach(function (b) { idSet[b.id] = true; });
-        var target = boxes.filter(function (b) { return b.id === boxId; })[0];
-        if (!target) return;
-        var parentKey = idSet[target.parent] ? target.parent : "";
-        var siblings = boxes.filter(function (b) { return (idSet[b.parent] ? b.parent : "") === parentKey; });
-        var ids = siblings.map(function (b) { return b.id; });
-        var pos = ids.indexOf(boxId);
-        var swapPos = pos + dir;
-        if (pos === -1 || swapPos < 0 || swapPos >= siblings.length) return;
-        var otherId = ids[swapPos];
-
-        var rowsA = rowsCache.filter(function (r) { return String(r["מזהה תא"] || "").trim() === boxId; });
-        var rowsB = rowsCache.filter(function (r) { return String(r["מזהה תא"] || "").trim() === otherId; });
-        var block = (dir < 0) ? rowsA.concat(rowsB) : rowsB.concat(rowsA);
-
-        var inserted = false, newRows = [];
-        rowsCache.forEach(function (r) {
-          var id = String(r["מזהה תא"] || "").trim();
-          if (id === boxId || id === otherId) {
-            if (!inserted) { newRows = newRows.concat(block); inserted = true; }
-            return;
-          }
-          newRows.push(r);
-        });
-        commitRows(newRows, function (res) {
-          if (!res || !res.ok) CBA.ui.alert("ההזזה נכשלה: " + ((res && res.error) || "שגיאה"));
-        });
-      }
-
-      // כרטיס בודד (2026-08-10, מנוע ציור מדויק) — כבר לא <li> מקונן; div שטוח
-      // עם data-node-id, ש-layoutOrgTree ממקם אחר כך ב-left/top מוחלטים.
-      // התוכן הפנימי (org-box + כפתורי פעולה) זהה לגמרי לגרסה הקודמת.
-      function orgNodeBoxHTML(box, siblingPos, siblingCount) {
-        var cat = CBA.committee.catInfo(box.category);
-        var peopleHTML = box.people.length
-          ? box.people.map(function (p) { return '<div class="org-box__person">' + CBA.esc(p.name) + '</div>'; }).join("")
-          : "";
-        var actionsHTML = '<div class="org-box__actions">' +
-              (siblingPos > 0 ? '<button type="button" class="org-box__act" data-org-move="' + CBA.esc(box.id) + '" data-dir="-1" title="הזז ימינה" aria-label="הזז ימינה">' + rightIcon + '</button>' : '') +
-              (siblingPos < siblingCount - 1 ? '<button type="button" class="org-box__act" data-org-move="' + CBA.esc(box.id) + '" data-dir="1" title="הזז שמאלה" aria-label="הזז שמאלה">' + leftIcon + '</button>' : '') +
-              '<button type="button" class="org-box__act" data-org-edit="' + CBA.esc(box.id) + '" title="עריכה" aria-label="עריכה">' + editIcon + '</button>' +
-              '<button type="button" class="org-box__act" data-org-add-child="' + CBA.esc(box.id) + '" title="הוספת תפקיד־בן" aria-label="הוספת תפקיד־בן">' + plusIcon + '</button>' +
-            '</div>';
-        return '<div class="org-tree-node" data-node-id="' + CBA.esc(box.id) + '">' +
-          '<div class="org-box" style="border-top-color:' + CBA.esc(cat.color) + '" title="' + CBA.esc(cat.name) + '">' +
-            '<div class="org-box__role">' + CBA.esc(box.role || "(ללא שם תפקיד)") + '</div>' +
-            (peopleHTML ? '<div class="org-box__people">' + peopleHTML + '</div>' : "") +
-            actionsHTML +
-          '</div>' +
-        '</div>';
-      }
-
-      // מנוע הפריסה (2026-08-10) — ר' ההסבר המלא בהערת ה-CSS מעל .org-tree-wrap
-      // ב-resident.css. אותו אלגוריתם בדיוק קיים גם ב-resCommittee (resident.js,
-      // התצוגה הציבורית לתושב) — לא מרוכז בקובץ משותף כי כל שאר לוגיקת ה-DOM/
-      // ציור של עץ הוועד כאן כבר כפולה כך בין שני המסכים (orgListHTML,
-      // defaultExpanded וכו'), אז זו הרחבה עקבית לדפוס הקיים ולא סטייה ממנו.
-      // שני שלבים: (1) מדידה — כל הקוביות כבר בדף (ב-innerHTML), מודדים גובה
-      // טבעי של כל אחת (תלוי תוכן: אורך שם התפקיד, כמה אנשים). (2) מיקום —
-      // X לפי "משבצת" קבועה-רוחב לכל עלה (הורה ממורכז בדיוק מעל טווח הילדים
-      // שלו, לא לפי כמה יש להם מתחת), Y לפי "דור" (כל הקוביות באותו מרחק
-      // מהשורש מיושרות לאותה שורה). קווי חיבור מצוירים ב-SVG לפי המיקומים
-      // המדויקים שהתקבלו — לא תלויים בטריק CSS כלשהו.
-      function layoutOrgTree(canvas, svg, nodesFlat, byParent) {
-        // סבב 3 (2026-08-10, לבקשת יועד: "להקטין את המרווח בין קוביות בשליש" +
-        // "להקטין את הגובה בין קוביות בחצי") — GAP_X (מרווח אופקי בין אחים)
-        // 20→13 (כ-2/3 מהערך הקודם), ROW_GAP (מרווח אנכי בין הורה לילדים) 40→20.
-        // סבב 4 (2026-08-10, לבקשת יועד: "תקטין את רוחב הקוביות בעוד 15%") —
-        // NODE_W 140→119 (עוד 15% פחות), חייב להישאר זהה לרוחב .org-box/
-        // .org-tree-node ב-resident.css כדי שהפריסה תואמת בפועל לגודל האמיתי.
-        var NODE_W = 119, GAP_X = 13, ROW_GAP = 20, PAD_X = 20, PAD_TOP = 6, PAD_BOTTOM = 10;
-
-        var heightOf = {}, elOf = {};
-        nodesFlat.forEach(function (n) {
-          var el = canvas.querySelector('.org-tree-node[data-node-id="' + CBA.esc(n.box.id) + '"]');
-          elOf[n.box.id] = el;
-          heightOf[n.box.id] = el ? el.offsetHeight : 70;
-        });
-
-        var slotOf = {}, leafCounter = 0;
-        function assignSlot(id) {
-          var kids = byParent[id] || [];
-          if (!kids.length) { var s = leafCounter++; slotOf[id] = s; return s; }
-          var centers = kids.map(function (k) { return assignSlot(k.id); });
-          var c = (centers[0] + centers[centers.length - 1]) / 2;
-          slotOf[id] = c;
-          return c;
-        }
-        var roots = nodesFlat.filter(function (n) { return n.depth === 0; }).map(function (n) { return n.box; });
-        roots.forEach(function (r) { assignSlot(r.id); });
-        var totalSlots = Math.max(leafCounter, 1);
-        var SLOT_W = NODE_W + GAP_X;
-        var totalWidth = PAD_X * 2 + totalSlots * NODE_W + (totalSlots - 1) * GAP_X;
-
-        // הופכים (mirror) את סדר המשבצות: אח 0 תמיד יושב הכי ימני, בדיוק כמו
-        // בעץ ה-flex/RTL הקודם — כדי לא לשבש את המשמעות של "הזז ימינה/שמאלה".
-        function leftOf(id) {
-          var abstractLeft = PAD_X + slotOf[id] * SLOT_W;
-          return totalWidth - NODE_W - abstractLeft;
-        }
-
-        // Y — מיקום מקומי לפי-הורה, לא לפי "שורת-דור" גלובלית (סבב 2, 2026-08-10,
-        // לבקשת יועד: "המרחקים בין הקוביות בציר הגובה... יש מקומות שפתאום ההפרש
-        // בגובה גדול ופתאום קטן"). בגרסה הקודמת כל הקוביות באותו עומק (דור) יושרו
-        // לאותה שורה לפי rowMaxH[depth] = הגובה המקסימלי בכל העץ באותו עומק —
-        // כך שילדים של קוביה קצרה התחילו רק אחרי המרחק עד תחתית הקוביה *הכי
-        // גבוהה* באותו דור, גם אם היא בענף אחר לגמרי. זה בדיוק יצר את התופעה
-        // שיועד תיאר: לפעמים המרווח לפני הילדים גדול (קוביה קצרה בדור עם קוביה
-        // גבוהה בענף אחר) ולפעמים קטן (כל הדור אחיד). עכשיו: הילדים של כל קוביה
-        // מתחילים תמיד מיד אחרי התחתית *של אותה קוביה עצמה* + ROW_GAP קבוע —
-        // בלי תלות בגובה קוביות אחרות בעץ. מעבר יחיד מלמעלה-למטה מספיק כי
-        // nodesFlat הוא preorder (ההורה תמיד מופיע לפני הילדים שלו, ר'
-        // collectNode למטה) — עד שמגיעים לקוביה בלולאה, topOf שלה כבר נקבע.
-        var topOf = {};
-        roots.forEach(function (r) { topOf[r.id] = PAD_TOP; });
-        nodesFlat.forEach(function (n) {
-          var kids = byParent[n.box.id] || [];
-          if (!kids.length) return;
-          var childTop = topOf[n.box.id] + heightOf[n.box.id] + ROW_GAP;
-          kids.forEach(function (k) { topOf[k.id] = childTop; });
-        });
-        var totalHeight = PAD_TOP;
-        nodesFlat.forEach(function (n) {
-          var bottom = topOf[n.box.id] + heightOf[n.box.id];
-          if (bottom > totalHeight) totalHeight = bottom;
-        });
-        totalHeight += PAD_BOTTOM;
-
-        nodesFlat.forEach(function (n) {
-          var el = elOf[n.box.id];
-          if (!el) return;
-          el.style.left = leftOf(n.box.id) + "px";
-          el.style.top = topOf[n.box.id] + "px";
-        });
-        canvas.style.width = totalWidth + "px";
-        canvas.style.height = totalHeight + "px";
-        svg.setAttribute("width", totalWidth);
-        svg.setAttribute("height", totalHeight);
-        svg.setAttribute("viewBox", "0 0 " + totalWidth + " " + totalHeight);
-
-        function centerX(id) { return leftOf(id) + NODE_W / 2; }
-        var lines = [];
-        nodesFlat.forEach(function (n) {
-          var kids = byParent[n.box.id] || [];
-          if (!kids.length) return;
-          var parentBottom = topOf[n.box.id] + heightOf[n.box.id];
-          var midY = parentBottom + ROW_GAP / 2;
-          var childTop = topOf[kids[0].id];
-          var childXs = kids.map(function (k) { return centerX(k.id); });
-          var minX = Math.min.apply(null, childXs), maxX = Math.max.apply(null, childXs);
-          var px = centerX(n.box.id);
-          lines.push('<line x1="' + px + '" y1="' + parentBottom + '" x2="' + px + '" y2="' + midY + '"></line>');
-          if (kids.length > 1) {
-            lines.push('<line x1="' + minX + '" y1="' + midY + '" x2="' + maxX + '" y2="' + midY + '"></line>');
-          }
-          kids.forEach(function (k) {
-            var cx = centerX(k.id);
-            lines.push('<line x1="' + cx + '" y1="' + midY + '" x2="' + cx + '" y2="' + childTop + '"></line>');
-          });
-        });
-        svg.innerHTML = lines.join("");
-      }
-
-      function defaultExpanded(boxes, byParent) {
-        var out = {};
-        boxes.forEach(function (b) { out[b.id] = (byParent[b.id] || []).length === 1; });
-        return out;
-      }
-
-      function orgListHTML(box, byParent, siblingPos, siblingCount) {
-        var cat = CBA.committee.catInfo(box.category);
-        var kids = byParent[box.id] || [];
-        var isOpen = !!expanded[box.id];
-        var peopleText = box.people.length ? box.people.map(function (p) { return CBA.esc(p.name); }).join(", ") : "";
-        return '<li class="org-list__item">' +
-          '<div class="org-list__row"' + (kids.length ? ' data-org-toggle="' + CBA.esc(box.id) + '"' : "") + '>' +
-            (kids.length
-              ? '<span class="org-list__chev' + (isOpen ? " is-open" : "") + '">' + chevIcon + '</span>'
-              : '<span class="org-list__chev org-list__chev--spacer"></span>') +
-            '<span class="org-list__dot" style="background:' + CBA.esc(cat.color) + '" title="' + CBA.esc(cat.name) + '"></span>' +
-            '<div class="org-list__text">' +
-              '<div class="org-list__role">' + CBA.esc(box.role || "(ללא שם תפקיד)") + '</div>' +
-              (peopleText ? '<div class="org-list__people">' + peopleText + '</div>' : "") +
-            '</div>' +
-            '<div class="org-list__actions">' +
-              (siblingPos > 0 ? '<button type="button" class="org-list__act" data-org-move="' + CBA.esc(box.id) + '" data-dir="-1" title="הזז למעלה" aria-label="הזז למעלה">' + upIcon + '</button>' : '') +
-              (siblingPos < siblingCount - 1 ? '<button type="button" class="org-list__act" data-org-move="' + CBA.esc(box.id) + '" data-dir="1" title="הזז למטה" aria-label="הזז למטה">' + downIcon + '</button>' : '') +
-              '<button type="button" class="org-list__act" data-org-edit="' + CBA.esc(box.id) + '" title="עריכה" aria-label="עריכה">' + editIcon + '</button>' +
-              '<button type="button" class="org-list__act" data-org-add-child="' + CBA.esc(box.id) + '" title="הוספת תפקיד־בן" aria-label="הוספת תפקיד־בן">' + plusIcon + '</button>' +
-            '</div>' +
-          '</div>' +
-          (kids.length
-            ? '<ul class="org-list__children"' + (isOpen ? "" : " hidden") + '>' +
-                kids.map(function (k, i) { return orgListHTML(k, byParent, i, kids.length); }).join("") +
-              '</ul>'
-            : "") +
-        '</li>';
-      }
-
-      function wireActions() {
-        bodyEl.querySelectorAll("[data-org-toggle]").forEach(function (row) {
-          row.addEventListener("click", function (e) {
-            if (e.target.closest("[data-org-move],[data-org-edit],[data-org-add-child]")) return;
-            var id = row.dataset.orgToggle;
-            expanded[id] = !expanded[id];
-            draw();
-          });
-        });
-      }
-
-      function draw() {
-        var boxes = CBA.committee.buildBoxes(rowsCache);
-        if (!boxes.length) {
-          bodyEl.innerHTML = '<div class="rs-empty"><p>עדיין לא הוגדר עץ ועד. לחצו למעלה על "הוספת תפקיד חדש" כדי להתחיל.</p></div>';
-          return;
-        }
-        var ids = {}; boxes.forEach(function (b) { ids[b.id] = true; });
-        var byParent = {};
-        boxes.forEach(function (b) {
-          var p = ids[b.parent] ? b.parent : "";
-          (byParent[p] = byParent[p] || []).push(b);
-        });
-        var roots = byParent[""] || [];
-
-        if (isMobile) {
-          if (!expanded) expanded = defaultExpanded(boxes, byParent);
-          bodyEl.innerHTML = '<ul class="org-list">' +
-            roots.map(function (b, i) { return orgListHTML(b, byParent, i, roots.length); }).join("") +
-            '</ul>';
-          wireActions();
-          return;
-        }
-
-        var nodesFlat = [];
-        function collectNode(node, depth, siblingPos, siblingCount) {
-          nodesFlat.push({ box: node, depth: depth, siblingPos: siblingPos, siblingCount: siblingCount });
-          var kids = byParent[node.id] || [];
-          kids.forEach(function (k, i) { collectNode(k, depth + 1, i, kids.length); });
-        }
-        roots.forEach(function (r, i) { collectNode(r, 0, i, roots.length); });
-
-        // (2026-08-18, ממצאים 3.6+3.9) — זהה בדיוק ל-resCommittee (resident.js):
-        // מקרא קטגוריות, סרגל זום, ו"התאמה למסך" כברירת מחדל. שני המסכים
-        // קוראים לאותה CBA.committee.attachOrgZoom כדי שלא תהיה סטייה ביניהם.
-        bodyEl.innerHTML = CBA.committee.legendHTML() +
-          '<div class="org-tools" id="org-tools"></div>' +
-          '<div class="org-tree-wrap"><div class="org-tree-canvas" id="org-tree-canvas">' +
-          '<svg class="org-tree-svg" id="org-tree-svg"></svg>' +
-          nodesFlat.map(function (n) { return orgNodeBoxHTML(n.box, n.siblingPos, n.siblingCount); }).join("") +
-          '</div></div>';
-        layoutOrgTree(bodyEl.querySelector("#org-tree-canvas"), bodyEl.querySelector("#org-tree-svg"), nodesFlat, byParent);
-        CBA.committee.attachOrgZoom(
-          bodyEl.querySelector(".org-tree-wrap"),
-          bodyEl.querySelector("#org-tree-canvas"),
-          bodyEl.querySelector("#org-tools")
-        );
-        // עוגן גלילה התחלתי (2026-08-10) — ר' אותה הערה ב-resCommittee/resident.js.
-        // חשוב באותה מידה כאן: אחרי כל שמירה draw() רץ מחדש, וגם אחרי עריכה
-        // רוצים שהמנהל ימשיך לראות את ראש העץ, לא ייזרק לתוך "האמצע" שלו.
-        var firstBox = roots[0] && bodyEl.querySelector('.org-tree-node[data-node-id="' + CBA.esc(roots[0].id) + '"]');
-        if (firstBox && firstBox.scrollIntoView) {
-          firstBox.scrollIntoView({ inline: "center", block: "nearest" });
-        }
-      }
-
-      function load() {
-        CBA.data.getCommitteeTree(function (res) {
-          if (!res || !res.ok) {
-            bodyEl.innerHTML = '<div class="rs-empty"><p>' + CBA.esc((res && res.error) || "שגיאה בטעינת עץ הוועד. נסו שוב מאוחר יותר.") + '</p></div>';
-            return;
-          }
-          rowsCache = res.rows || [];
-          draw();
-        });
-      }
-
-      // boxId=מזהה תא קיים לעריכה, defaultParent=ה"הורה" בעת הוספת תא חדש
-      // (מהכפתור "+" על תא ספציפי — ריק=שורש, מהכפתור הכללי למעלה).
-      function openOrgEdit(boxId, defaultParent) {
-        var boxes = CBA.committee.buildBoxes(rowsCache);
-        var editing = boxId ? boxes.filter(function (b) { return b.id === boxId; })[0] : null;
-        var blocked = editing ? CBA.committee.descendantIds(boxes, editing.id) : {};
-        var parentOptions = boxes.filter(function (b) { return (!editing || b.id !== editing.id) && !blocked[b.id]; });
-
-        var state = {
-          people: editing ? editing.people.map(function (p) { return { name: p.name, rid: p.rid }; }) : []
-        };
-
-        closeOrgModal();
-        var overlay = document.createElement("div");
-        overlay.id = "cba-modal";
-
-        function peopleRowsHTML() {
-          return state.people.map(function (p, i) {
-            return '<div class="org-person-row" data-i="' + i + '">' +
-              '<div class="ac-wrap">' +
-                '<input class="field-input" type="text" data-op-name="' + i + '" data-ac="op' + i + '" autocomplete="off" ' +
-                  'value="' + CBA.esc(p.name) + '" placeholder="שם — הקלידו או בחרו מרשימת תושבים">' +
-                '<div class="ac-list" data-ac-list="op' + i + '" hidden></div>' +
-              '</div>' +
-              '<button type="button" class="org-person-row__x" data-op-remove="' + i + '" aria-label="הסרת אדם">' + xIcon + '</button>' +
-            '</div>';
-          }).join("");
-        }
-
-        // קטגוריות (2026-08-10): רשימה דינמית מהשרת (CBA.committee.catsList) —
-        // לא עוד 4 קבועות בקוד. כל אפשרות מקבלת גם style=color שלה (עובד
-        // בדפדפנים מודרניים על <option>) כדי לתת רמז ויזואלי לצבע גם בתוך
-        // הרשימה הנפתחת, בלי לבנות ווידג'ט בחירה מותאם אישית משלנו.
-        // "+ קטגוריה חדשה…" תמיד אחרונה — בוחרים אותה כדי לחשוף מיני-טופס
-        // עם שם + בורר צבע native, ר' wiring למטה.
-        // סבב נוסף (2026-08-10, לבקשת יועד: "רשימת קטגוריות - צריך להצמיד לה
-        // את הצבעים") — style על <option> בתוך <select> סגור לא מוצג באופן
-        // אמין בכל דפדפן/מערכת הפעלה (בטלפון בפרט ה-OS מצייר את התפריט הנפתח
-        // בעצמו ולא תמיד מכבד style על option). מוסיפים נקודת-צבע קבועה
-        // (#og-cat-swatch) לצד הבורר עצמו, ומעדכנים אותה ב-JS בכל שינוי —
-        // רואים תמיד את צבע הקטגוריה הנבחרת, לא תלויים בעיצוב הפנימי
-        // של ה-<select>. גם צבע הטקסט של הבורר עצמו (כשסגור) מתעדכן לצבע
-        // הקטגוריה, שבדפדפנים רבים כן מכבד.
-        var cats = CBA.committee.catsList();
-        function catColorOf(name) {
-          var c = cats.filter(function (x) { return x.name === name; })[0];
-          return c ? c.color : "#9CA3AF";
-        }
-        function catOptionsHTML(selectedName) {
-          return cats.map(function (c) {
-            return '<option value="' + CBA.esc(c.name) + '" style="color:' + CBA.esc(c.color) + '"' +
-              (c.name === selectedName ? " selected" : "") + '>' + CBA.esc(c.name) + '</option>';
-          }).join("") + '<option value="__new__">+ קטגוריה חדשה…</option>';
-        }
-
-        overlay.innerHTML =
-          '<div class="modal-backdrop" data-modal-close>' +
-            '<div class="modal" role="dialog">' +
-              '<div class="modal__head">' +
-                '<div><div class="modal__title">' + (editing ? "עריכת תפקיד" : "תפקיד חדש") + '</div>' +
-                  '<div class="modal__sub">גלוי לכל תושבי השיכון — עריכה למנהל-על בלבד</div></div>' +
-                '<button class="drawer__close" data-modal-close aria-label="סגור">×</button>' +
-              '</div>' +
-              '<div class="modal__body">' +
-                '<div class="form-grid">' +
-                  '<div class="form-field form-field--wide"><label>שם התפקיד</label>' +
-                    '<input class="field-input" id="og-role" type="text" value="' + CBA.esc(editing ? editing.role : "") + '" placeholder="לדוגמה: גזבר, ועדת תרבות"></div>' +
-                  '<div class="form-field form-field--wide"><label>קטגוריה</label>' +
-                    '<div class="org-cat-select-wrap">' +
-                      '<span class="org-cat-swatch" id="og-cat-swatch" style="background:' + CBA.esc(catColorOf(editing ? editing.category : (cats[0] && cats[0].name))) + '"></span>' +
-                      '<select class="field-input" id="og-cat">' + catOptionsHTML(editing ? editing.category : (cats[0] && cats[0].name)) + '</select>' +
-                    '</div>' +
-                    '<div id="og-newcat" class="org-newcat" hidden>' +
-                      '<input class="field-input" id="og-newcat-name" type="text" placeholder="שם הקטגוריה החדשה">' +
-                      '<input type="color" id="og-newcat-color" class="org-newcat__color" value="#111827">' +
-                      '<button type="button" class="rs-ghost org-newcat__add" id="og-newcat-add">הוספה</button>' +
-                    '</div>' +
-                  '</div>' +
-                  '<div class="form-field"><label>כפוף ל־</label>' +
-                    '<select class="field-input" id="og-parent">' +
-                      '<option value=""' + (!editing && !defaultParent ? " selected" : (editing && !editing.parent ? " selected" : "")) + '>— בראש העץ —</option>' +
-                      parentOptions.map(function (b) {
-                        var sel = editing ? (b.id === editing.parent) : (b.id === defaultParent);
-                        return '<option value="' + CBA.esc(b.id) + '"' + (sel ? " selected" : "") + '>' + CBA.esc(b.role || b.id) + '</option>';
-                      }).join("") +
-                    '</select></div>' +
-                '</div>' +
-                '<div class="form-block">' +
-                  '<div class="org-people-head"><label>אנשים בתפקיד הזה</label>' +
-                    '<span class="res-dim">אפשר להשאיר ריק</span></div>' +
-                  '<div id="og-people">' + peopleRowsHTML() + '</div>' +
-                  '<button type="button" class="rs-ghost" id="og-add-person">' + plusIcon + 'הוספת אדם</button>' +
-                '</div>' +
-              '</div>' +
-              '<div class="drawer__actions drawer__actions--sticky">' +
-                '<div class="drawer__actions-main">' +
-                  '<button class="btn-primary" id="og-save">שמירה</button>' +
-                  '<button class="rs-ghost" data-modal-close>ביטול</button>' +
-                '</div>' +
-                (editing ? '<button type="button" class="btn-reject" id="og-delete">מחיקת תפקיד</button>' : "") +
-              '</div>' +
-            '</div>' +
-          '</div>';
-        document.body.appendChild(overlay);
-        overlay.querySelector(".modal").addEventListener("click", function (e) { e.stopPropagation(); });
-        overlay.querySelectorAll("[data-modal-close]").forEach(function (el) { el.addEventListener("click", closeOrgModal); });
-        document.addEventListener("keydown", escOrgModal);
-
-        var catSel = overlay.querySelector("#og-cat");
-        var catSwatch = overlay.querySelector("#og-cat-swatch");
-        var newCatBox = overlay.querySelector("#og-newcat");
-        // מעדכן את נקודת-הצבע + צבע הטקסט של הבורר עצמו לפי הקטגוריה הנבחרת
-        // כרגע — נקרא גם בשינוי וגם מיד אחרי הוספת קטגוריה חדשה (למטה).
-        function syncCatSwatch() {
-          var color = catSel.value === "__new__" ? "#9CA3AF" : catColorOf(catSel.value);
-          if (catSwatch) catSwatch.style.background = color;
-          catSel.style.color = catSel.value === "__new__" ? "" : color;
-        }
-        catSel.addEventListener("change", function () {
-          newCatBox.hidden = catSel.value !== "__new__";
-          syncCatSwatch();
-        });
-        syncCatSwatch();
-        overlay.querySelector("#og-newcat-add").addEventListener("click", function () {
-          var nameInp = overlay.querySelector("#og-newcat-name");
-          var colorInp = overlay.querySelector("#og-newcat-color");
-          var name = nameInp.value.trim();
-          if (!name) { CBA.ui.alert("צריך להזין שם לקטגוריה החדשה."); return; }
-          var addBtn = overlay.querySelector("#og-newcat-add");
-          addBtn.disabled = true;
-          CBA.committee.addCategory(name, colorInp.value, function (res) {
-            addBtn.disabled = false;
-            if (!res || !res.ok) { CBA.ui.alert("הוספת הקטגוריה נכשלה: " + ((res && res.error) || "שגיאה")); return; }
-            var opt = document.createElement("option");
-            opt.value = name; opt.textContent = name; opt.style.color = colorInp.value;
-            catSel.insertBefore(opt, catSel.lastChild);
-            catSel.value = name;
-            cats.push({ name: name, color: colorInp.value }); // כדי ש-catColorOf/syncCatSwatch יכירו אותה מיד
-            newCatBox.hidden = true;
-            nameInp.value = "";
-            syncCatSwatch();
-          });
-        });
-
-        var peopleEl = overlay.querySelector("#og-people");
-        var residentOptions = [];
-        function wirePeopleAutocomplete() {
-          state.people.forEach(function (p, i) { orgWireAutocomplete(peopleEl, i, residentOptions, state); });
-        }
-        CBA.data.residentPickerOptions(function (opts) { residentOptions = opts || []; wirePeopleAutocomplete(); });
-
-        function redrawPeople() {
-          peopleEl.innerHTML = peopleRowsHTML();
-          wirePeopleAutocomplete();
-        }
-
-        overlay.querySelector("#og-add-person").addEventListener("click", function () {
-          state.people.push({ name: "", rid: "" });
-          redrawPeople();
-        });
-        peopleEl.addEventListener("click", function (e) {
-          var rm = e.target.closest("[data-op-remove]");
-          if (!rm) return;
-          state.people.splice(parseInt(rm.dataset.opRemove, 10), 1);
-          redrawPeople();
-        });
-        peopleEl.addEventListener("input", function (e) {
-          var inp = e.target.closest("[data-op-name]");
-          if (!inp) return;
-          var i = parseInt(inp.dataset.opName, 10);
-          if (state.people[i]) { state.people[i].name = inp.value; state.people[i].rid = ""; }
-        });
-
-        function orgSave(newRows) {
-          var saveBtn = overlay.querySelector("#og-save");
-          if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "שומר…"; }
-          commitRows(newRows, function (res) {
-            if (!res || !res.ok) {
-              CBA.ui.alert("השמירה נכשלה: " + ((res && res.error) || "שגיאה"));
-              if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "שמירה"; }
-              return;
-            }
-            closeOrgModal();
-          });
-        }
-
-        if (editing) {
-          overlay.querySelector("#og-delete").addEventListener("click", function () {
-            var hasKids = boxes.some(function (b) { return b.parent === editing.id; });
-            if (hasKids) {
-              CBA.ui.alert('יש לו תפקידי־בן בעץ. קודם צריך למחוק אותם או להעביר אותם להורה אחר.',
-                'אי אפשר למחוק את "' + editing.role + '"');
-              return;
-            }
-            CBA.ui.confirm("התפקיד יוסר מעץ הוועד. אפשר להוסיף אותו מחדש בכל שלב.",
-              { title: 'למחוק את התפקיד "' + editing.role + '"?', okText: "מחק תפקיד", danger: true }
-            ).then(function (ok) {
-              if (!ok) return;
-              orgSave(rowsCache.filter(function (r) { return String(r["מזהה תא"] || "").trim() !== editing.id; }));
-            });
-          });
-        }
-
-        overlay.querySelector("#og-save").addEventListener("click", function () {
-          var role = overlay.querySelector("#og-role").value.trim();
-          if (!role) { CBA.ui.alert("צריך להזין שם תפקיד."); return; }
-          var category = overlay.querySelector("#og-cat").value;
-          if (category === "__new__") { CBA.ui.alert('סיימו קודם להוסיף את הקטגוריה החדשה (כפתור "הוספה"), או בחרו קטגוריה קיימת.'); return; }
-          var parent = overlay.querySelector("#og-parent").value;
-          var people = state.people.filter(function (p) { return p.name.trim(); });
-
-          var id = editing ? editing.id : ("c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
-          var newBoxRows = (people.length ? people : [{ name: "", rid: "" }]).map(function (p) {
-            var o = {};
-            o["מזהה תא"] = id; o["הורה"] = parent; o["תפקיד"] = role; o["קטגוריה"] = category;
-            o["שם"] = p.name.trim(); o["מזהה תושב"] = p.rid || "";
-            return o;
-          });
-          var rest = rowsCache.filter(function (r) { return String(r["מזהה תא"] || "").trim() !== id; });
-          orgSave(rest.concat(newBoxRows));
-        });
-      }
-
-      container.querySelector("#org-add-root").addEventListener("click", function () { openOrgEdit(null, ""); });
-      bodyEl.addEventListener("click", function (e) {
-        var moveBtn = e.target.closest("[data-org-move]");
-        if (moveBtn) { moveSibling(moveBtn.dataset.orgMove, parseInt(moveBtn.dataset.dir, 10)); return; }
-        var editBtn = e.target.closest("[data-org-edit]");
-        if (editBtn) { openOrgEdit(editBtn.dataset.orgEdit, null); return; }
-        var addBtn = e.target.closest("[data-org-add-child]");
-        if (addBtn) { openOrgEdit(null, addBtn.dataset.orgAddChild); return; }
-      });
-
-      CBA.committee.loadCategories(function () { load(); });
-    }
-  };
-})();
+/* RSB10 (גל 8, 1.10.26) — נמחק כאן הבלוק הישן של CBA.screens.committeeAdmin (עריכת עץ הוועד v1): קוד מת,
+   committeeTree.js נטען אחרי הקובץ הזה ודורס את הרישום, ואף פונקציה ממנו לא נקראה מבחוץ. */

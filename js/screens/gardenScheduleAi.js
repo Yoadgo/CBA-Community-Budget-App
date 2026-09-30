@@ -721,8 +721,20 @@
             if (rm) { removed[rm.dataset.rm] = 1; draw(); return; }
             if (e.target.closest("[data-apply]")) {
               var items = plan.filter(function (p) { return !removed[p.id]; });
+              /* GSB4 (גל 8, 1.10.26) — בדיקה חוזרת רגע לפני ההחלה (הלוח או השעה השתנו מאז שההצעה הגיעה); מה שכבר לא פנוי יורד ל"לא נכנסו" */
+              var live = A.ctxNow ? A.ctxNow(ctx) : ctx;
+              var chk = validate(A, live, { plan: items.map(function (p) {
+                return { id: p.id, date: p.slot.date, start: A.hhmm(p.slot.start), minutes: p.slot.dur, who: p.slot.who || [] }; }) },
+                tasks.filter(function (t) { return items.some(function (p) { return p.id === String(t.id); }); }), durs, crewKeys);
+              if (chk.unplaced.length) {
+                var bad = {}; chk.unplaced.forEach(function (u) { bad[u.id] = 1; });
+                plan = plan.filter(function (p) { return !bad[p.id]; });
+                result.unplaced = result.unplaced.concat(chk.unplaced.map(function (u) { return { id: u.id, reason: "בינתיים: " + u.reason }; }));
+                draw();
+                return A.toast(chk.unplaced.length === 1 ? "שיבוץ אחד כבר לא פנוי — הוסר מההצעה" : chk.unplaced.length + " שיבוצים כבר לא פנויים — הוסרו מההצעה", "error");
+              }
               F.close();
-              A.apply(ctx, items);
+              A.apply(live, items);
             }
           });
         }

@@ -988,7 +988,9 @@
       if (!isFree(ctx, col.dataset.date, m, 15, null, viewWho())) return;
       P.m = m;
       ghost(col, m, "is-press");
+      gwHold("gwPress", true);   /* GSB1 (גל 8, 1.10.26) — עצירת רענון בזמן לחיצה ארוכה; משוחררת בירי/בתזוזה/בשחרור */
       P.timer = setTimeout(function () {
+        gwHold("gwPress", false);
         if (!P) return;
         P.fired = true;
         unghost(host);
@@ -1004,7 +1006,7 @@
         return startMove(ctx, B, p0, e);
       }
       if (P && P.timer && (Math.abs(e.clientX - P.x) > MOVE_TOL || Math.abs(e.clientY - P.y) > MOVE_TOL)) {
-        clearTimeout(P.timer); P.timer = null; unghost(host);
+        clearTimeout(P.timer); P.timer = null; unghost(host); gwHold("gwPress", false);
       }
       /* רחף בעכבר: "+ 08:30" במקום שבו לחיצה תשבץ. */
       if (e.pointerType === "mouse" && !e.buttons && curView() !== "map" && !st.multi) {
@@ -1023,7 +1025,7 @@
     function end(e, cancelled) {
       if (!P) return;
       var p = P; P = null;
-      if (p.timer) clearTimeout(p.timer);
+      if (p.timer) { clearTimeout(p.timer); gwHold("gwPress", false); }
       unghost(host);
       if (cancelled || p.fired) return;
       var dx = e.clientX - p.x, dy = e.clientY - p.y;
@@ -1107,18 +1109,41 @@
     if (!p) { p = document.createElement("span"); p.className = "gw-dpill"; el.appendChild(p); }
     p.textContent = text;
   }
+  /* GSB1 (גל 8, 1.10.26) — "עצור רענון" בזמן גרירה/לחיצה ארוכה, כדי שציור-מחדש ברקע לא ינתק את המארח באמצע. */
+  function gwHold(k, on) { try { if (window.CBA && CBA.holdRefresh) CBA.holdRefresh(k, on); } catch (x) {} }
+  /* GSB1 (גל 8, 1.10.26) — רשת ביטחון: יציאה מהחלון/מהלשונית משחררת את העצירה (גרירה פעילה מבוטלת ב-dragEnd). */
+  function gwHoldSafety() {
+    gwHold("gwPress", false);
+    if (!st.drag) gwHold("gwDrag", false);
+  }
+  window.addEventListener("blur", function (e) { if (e.target === window) gwHoldSafety(); });
+  document.addEventListener("visibilitychange", function () { if (document.hidden) gwHoldSafety(); });
   function dragEnd(fn) {
-    function up(e) { cleanup(); fn(e, false); }
-    function cancel(e) { cleanup(); fn(e, true); }
-    function key(e) { if (e.key === "Escape") { cleanup(); fn(e, true); } }
+    /* GSB1 (גל 8, 1.10.26) — עצירת רענון לכל משך הגרירה; משוחררת בכל מסלול סיום (גם בשגיאה — finally). */
+    var fin = false;
+    gwHold("gwDrag", true);
+    function end(e, cancelled) {
+      if (fin) return; fin = true;
+      cleanup();
+      try { fn(e, cancelled); } finally { gwHold("gwDrag", false); }
+    }
+    function up(e) { end(e, false); }
+    function cancel(e) { end(e, true); }
+    function key(e) { if (e.key === "Escape") end(e, true); }
+    function vis() { if (document.hidden) end(null, true); }
+    function wblur(e) { if (e.target === window) end(e, true); }   /* רק החלון עצמו — לא blur של כפתור */
     function cleanup() {
       window.removeEventListener("pointerup", up, true);
       window.removeEventListener("pointercancel", cancel, true);
       window.removeEventListener("keydown", key, true);
+      window.removeEventListener("blur", wblur);
+      document.removeEventListener("visibilitychange", vis, true);
     }
     window.addEventListener("pointerup", up, true);
     window.addEventListener("pointercancel", cancel, true);
     window.addEventListener("keydown", key, true);
+    window.addEventListener("blur", wblur);
+    document.addEventListener("visibilitychange", vis, true);
     return cleanup;
   }
 
@@ -1136,8 +1161,9 @@
     pill(el, hhmm(a) + "–" + hhmm(b));
     function move(ev) {
       if (ev.pointerType === "touch" || ev.pointerType === "pen") ev.preventDefault();
+      if (!host.isConnected || !el.isConnected) return;   /* GSB1 (גל 8, 1.10.26) — מארח מנותק: מידות 0, לא מחשבים שעה */
       autoScroll(sc, ev.clientY);
-      var dm = Math.round((contentY(sc, ev.clientY) - y0) / H * 60 / 15) * 15;
+      var dm =Math.round((contentY(sc, ev.clientY) - y0) / H * 60 / 15) * 15;
       if (edge === "top") a = Math.max(lim.lo, Math.min(b0 - 15, a0 + dm));
       else b = Math.min(lim.hi, Math.max(a0 + 15, b0 + dm));
       el.style.top = "calc(var(--gw-h) * " + (a - D0()) / 60 + " + 1px)";
@@ -1150,6 +1176,8 @@
       window.removeEventListener("pointermove", move, { capture: true });
       st.drag = null;
       host.classList.remove("is-dragging");
+      /* GSB1 (גל 8, 1.10.26) — המארח/הבלוק נותקו באמצע (ציור-מחדש) → ביטול בלי לשמור שעה שלא נראתה */
+      if (!host.isConnected || !el.isConnected) { rerender(); return toast("המסך התרענן באמצע הגרירה — השינוי לא נשמר"); }
       if (cancelled || (a === a0 && b === b0)) return rerender();
       var np = copyPart(B.s); np.start = a; np.dur = b - a;
       commitPart(ctx, B, np, durText(b - a) + " · " + hhmm(a) + "–" + hhmm(b));
@@ -1171,6 +1199,7 @@
     Array.prototype.forEach.call(host.querySelectorAll(".gw-hdl"), function (h) { h.style.display = "none"; });
     function move(ev) {
       if (ev.pointerType === "touch" || ev.pointerType === "pen") ev.preventDefault();
+      if (!host.isConnected || !el.isConnected) return;   /* GSB1 (גל 8, 1.10.26) — מארח מנותק: מידות 0, לא מחשבים שעה */
       autoScroll(sc, ev.clientY);
       /* עמודה מתחת לאצבע — כשרואים כמה ימים אפשר להזיז גם ליום אחר. */
       var cols = host.querySelectorAll(".gw-col"), col = null;
@@ -1192,6 +1221,8 @@
       window.removeEventListener("pointermove", move, { capture: true });
       st.drag = null;
       host.classList.remove("is-dragging");
+      /* GSB1 (גל 8, 1.10.26) — המארח/הבלוק נותקו באמצע (ציור-מחדש) → ביטול בלי לשמור שעה שלא נראתה */
+      if (!host.isConnected || !el.isConnected) { rerender(); return toast("המסך התרענן באמצע הגרירה — השינוי לא נשמר"); }
       if (cancelled || (date === B.s.date && start === B.s.start)) return rerender();
       if (!ok) { rerender(); return toast("יש שם כבר משימה" + (who.length ? " לאותו עובד" : "") + " — הבלוק חזר למקומו"); }
       var np = copyPart(B.s); np.date = date; np.start = start;
@@ -1207,6 +1238,10 @@
     if (!st.host || !st.host.isConnected || !st.ctx || st.drag) return;
     var tg = e.target; if (tg && (tg.tagName === "INPUT" || tg.tagName === "TEXTAREA" || tg.tagName === "SELECT" || tg.isContentEditable)) return;
     if (document.querySelector(".cba-dlg-backdrop.is-open, .gw-sheet-wrap.is-open")) return;
+    /* GSB2 (גל 8, 1.10.26) — גם כרטיס הפרטים/טופס העריכה (.gt-sheet-wrap) ומקלדת מתוך חלון — לא מזיזים/מוחקים את הבלוק שמאחור */
+    if (tg && tg.closest && tg.closest(".gt-sheet-wrap, .gw-sheet-wrap, [role=dialog], [aria-modal=true], [contenteditable]")) return;
+    var gts = document.querySelectorAll(".gt-sheet-wrap");
+    for (var gi = 0; gi < gts.length; gi++) if (!gts[gi].hidden && gts[gi].getClientRects().length) return;
     var ctx = st.ctx;
     if (e.key === "Escape" && (st.sel || st.multi)) { closePop(); st.sel = null; st.multi = false; st.picked = {}; return rerender(); }
     var B = byKey(ctx, st.sel); if (!editable(B)) return;
@@ -1670,6 +1705,8 @@
       weekDates: weekDates, todayDate: todayDate, nowMin: nowMin, hhmm: hhmm, durText: durText,
       dayLabel: dayLabel, DAYS: DAYS, DAYS1: DAYS1, D0: D0, D1: D1, esc: esc, toast: toast,
       byId: function (id) { return byId(st.ctx, id); }, dragLevel: dragLevel, SPARK: SPARK,
+      /* GSB4 (גל 8, 1.10.26) — ההקשר העדכני ביותר (אותו שבוע) לבדיקה חוזרת לפני החלה */
+      ctxNow: function (ctx) { return (st.ctx && ctx && st.ctx.week === ctx.week) ? st.ctx : ctx; },
       apply: function (ctx, items) {
         if (items.length) {
           var d = weekDates(ctx.week).indexOf(items[0].slot.date);
@@ -1790,9 +1827,13 @@
       st.sel = null;
       if (act == null) return ctx.tile(B.t.id, pri.key);
       var np = copyPart(B.s); np.act = act;
-      var slot = slotWith(B.t, B.i, np);
+      var slot = slotWith(B.t, B.i, np), prevSlot = B.t.slot;
       B.t.slot = slot;
-      S().write(B.t.id, slot, function () { ctx.tile(B.t.id, pri.key); });
+      S().write(B.t.id, slot, function (r) {
+        /* GSB3 (גל 8, 1.10.26) — כשל בשמירת הזמן בפועל: מחזירים את השיבוץ הקודם ומודיעים, לא מסמנים "בוצע" בשקט */
+        if (!(r && r.ok)) { B.t.slot = prevSlot; if (ctx.redraw) ctx.redraw(); return toast((r && r.error) || "השינוי לא נשמר", "error"); }
+        ctx.tile(B.t.id, pri.key);
+      });
     });
   }
 

@@ -13,7 +13,8 @@ window.CBA = window.CBA || {};
 CBA.svcCategoriesAdmin = (function () {
   "use strict";
 
-  var state = { open: false, list: [], usage: {}, onSaved: null, dirty: false };
+  var state = { open: false, list: [], usage: {}, onSaved: null, dirty: false, lockedIds: {} };
+  var RECS_NAME = "המלצות תושבים";   // SCB4 (גל 8, 1.10.26)
 
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -23,10 +24,21 @@ CBA.svcCategoriesAdmin = (function () {
   function open(categories, usage, onSaved) {
     state.list = clone(categories || []);
     state.usage = usage || {};
+    /* SCB4 (גל 8, 1.10.26) — נועלים לפי המזהה שנשא את השם בפתיחה, כך שגם הקלדה לא "תשחרר" את הנעילה. */
+    state.lockedIds = {};
+    state.list.forEach(function (c) { if (c.name === RECS_NAME) state.lockedIds[c.id] = true; });
     state.onSaved = onSaved || null;
     state.dirty = false;
     state.open = true;
     paint();
+    document.addEventListener("keydown", onKey);   // SCB3 (גל 8, 1.10.26)
+  }
+
+  /* SCB3 (גל 8, 1.10.26) — Esc סוגר את הדרואר, דרך אותו אישור "שינויים שלא נשמרו" של close(). */
+  function onKey(e) {
+    if (e.key !== "Escape" || !state.open) return;
+    if (document.querySelector(".cba-dlg-backdrop")) return;   // חלון אישור פתוח מעליו — ה-Esc שלו
+    close();
   }
 
   function close(force) {
@@ -39,6 +51,7 @@ CBA.svcCategoriesAdmin = (function () {
     var el = document.getElementById("catm-drawer");
     if (el) el.remove();
     state.open = false;
+    document.removeEventListener("keydown", onKey);   // SCB3 (גל 8, 1.10.26)
   }
 
   function touch() { state.dirty = true; }
@@ -89,6 +102,9 @@ CBA.svcCategoriesAdmin = (function () {
 
     box.innerHTML = state.list.map(function (c, i) {
       var n = state.usage[c.id] || 0;
+      /* SCB4 (גל 8, 1.10.26) — "המלצות תושבים" מזוהה לפי השם (services.js/servicesAdmin.js), ולכן שינוי
+         השם שלה היה שובר את הקיבוץ וההמרה לפריט — שדה השם שלה נעול. */
+      var nameLocked = !!state.lockedIds[c.id];
       return '<div class="sadm-row' + (c.active ? "" : " sadm-row--off") + '" data-i="' + i + '">' +
           '<div class="sadm-row__move">' +
             '<button type="button" class="sadm-arrow" data-up="' + i + '" title="העברה למעלה"' +
@@ -98,8 +114,10 @@ CBA.svcCategoriesAdmin = (function () {
           "</div>" +
           '<span class="sadm-row__ico">' + (c.icon ? esc(c.icon) : "•") + "</span>" +
           '<div class="sadm-row__t">' +
-            '<input class="field-input catm-name" data-name="' + i + '" value="' + esc(c.name) + '">' +
-            '<div class="sadm-row__m">' + n + " שירות" + (n === 1 ? "" : "ים") + "</div>" +
+            '<input class="field-input catm-name" data-name="' + i + '" value="' + esc(c.name) + '"' +
+              (nameLocked ? ' disabled title="את שם הקטגוריה הזו אי אפשר לשנות — המסכים מזהים אותה לפי השם"' : "") + ">" +
+            '<div class="sadm-row__m">' + n + " שירות" + (n === 1 ? "" : "ים") +
+              (nameLocked ? " · השם נעול (המלצות תושבים)" : "") + "</div>" +
           "</div>" +
           '<label class="ems-toggle" title="' + (c.active ? "מוצג לתושבים — לחיצה תסתיר" : "מוסתר מהתושבים — לחיצה תציג") + '">' +
             '<input type="checkbox" data-toggle="' + i + '"' + (c.active ? " checked" : "") + ">" +
@@ -150,8 +168,9 @@ CBA.svcCategoriesAdmin = (function () {
     var c = state.list[i];
     var n = state.usage[c.id] || 0;
     if (n > 0) {
+      /* SCB1 (גל 8, 1.10.26) — הספירה כוללת גם שירותים מוסתרים, ולכן בלי המילה "פעיל". */
       CBA.ui.alert('אי אפשר למחוק את "' + c.name + '" — ' + n + " שירות" + (n === 1 ? "" : "ים") +
-        ' פעיל' + (n === 1 ? "" : "ים") + ' עדיין משויכ' + (n === 1 ? "" : "ים") + ' אליה. קודם העבירו אותם לקטגוריה אחרת דרך עריכת השירות.');
+        ' (כולל מוסתרים) עדיין משויכ' + (n === 1 ? "" : "ים") + ' אליה. קודם העבירו אותם לקטגוריה אחרת דרך עריכת השירות.');
       return;
     }
     CBA.ui.confirm('למחוק את הקטגוריה "' + c.name + '"?', { title: "מחיקת קטגוריה", okText: "מחיקה", danger: true })

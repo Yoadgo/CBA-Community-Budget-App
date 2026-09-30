@@ -16,7 +16,7 @@ window.CBA = window.CBA || {};
 
 CBA.doorAdmin = (function () {
   "use strict";
-  var st = { s: null, log: null, err: "", all: false };
+  var st = { s: null, log: null, err: "", all: false, logErr: false };   /* DRB1 (גל 8, 1.10.26) — logErr: קריאת היומן נכשלה */
   function esc(s) { return CBA.esc(String(s == null ? "" : s)); }
   function D() { return CBA.door; }
   var MODE_LABEL = { off: "כבויה", sim: "הדמיה", live: "אמיתי" };
@@ -34,7 +34,9 @@ CBA.doorAdmin = (function () {
   function lockLineHTML() {
     var s = st.s, stt = (s && s.state) || {};
     var tone, title, sub;
-    if (!s) { tone = "muted"; title = "בודק את הדלת…"; sub = ""; }
+    /* DRB2 (גל 8, 1.10.26) — בדיקת מצב שנכשלה לא נשארת "בודק…" לנצח: מצב שגיאה + "לנסות שוב" */
+    if (!s && st.err) { tone = "danger"; title = "לא הצלחנו לבדוק את הדלת"; sub = ""; }
+    else if (!s) { tone = "muted"; title = "בודק את הדלת…"; sub = ""; }
     else if (s.mode === "off") { tone = "muted"; title = "הדלת כבויה"; sub = "הכפתור לא פותח. קוד הכניסה פעיל"; }
     else if (s.mode === "sim") { tone = "muted"; title = "מצב הדמיה"; sub = "פתיחות נרשמות ביומן, הדלת לא זזה"; }
     else if (stt.error || !stt.online) { tone = "danger"; title = "המנעול לא עונה"; sub = stt.errorText || "ייתכן שהוא מנותק מהרשת"; }
@@ -45,9 +47,12 @@ CBA.doorAdmin = (function () {
     }
     return '<div class="da-line da-line--' + tone + '"><span class="da-dot"></span>' +
       '<div class="da-line__t"><b>' + esc(title) + "</b><small>" + esc(sub) + "</small></div>" +
-      (s && s.mode !== "off" ? '<button type="button" class="btn-primary btn-sm" data-da-open>פתיחה מרחוק</button>' : "") + "</div>";
+      (s && s.mode !== "off" ? '<button type="button" class="btn-primary btn-sm" data-da-open>פתיחה מרחוק</button>' : "") +
+      (!s && st.err ? '<button type="button" class="da-link" data-da-recheck>לנסות שוב</button>' : "") + "</div>";   /* DRB2 (גל 8, 1.10.26) */
   }
   function logHTML() {
+    /* DRB1 (גל 8, 1.10.26) — כישלון קריאה ≠ "אין כניסות": הודעה + "לנסות שוב" */
+    if (st.logErr) return '<div class="ww-note">לא הצלחנו לטעון את היומן. <button type="button" class="da-link" data-da-log-retry>לנסות שוב</button></div>';
     if (!st.log) return CBA.skel ? CBA.skel.rows(3) : "";
     if (!st.log.length) return '<div class="ww-note">אין כניסות היום עדיין.</div>';
     var rows = st.all ? st.log : st.log.slice(0, 6);
@@ -63,6 +68,7 @@ CBA.doorAdmin = (function () {
   }
   function footHTML() {
     if (!st.log) return "";
+    if (st.logErr) return '<div class="da-foot"><button type="button" class="da-link" data-da-settings>הגדרות בקרת כניסה</button></div>';   /* DRB1 (גל 8, 1.10.26) — בלי "היום: 0 כניסות" מזויף */
     var ok = st.log.filter(function (e) { return e.result !== "fail"; }).length, bad = st.log.length - ok;
     return '<div class="da-foot"><span>היום: ' + ok + " כניסות" + (bad ? " · " + bad + " תקלות" : "") + "</span>" +
       (st.log.length > 6 ? '<button type="button" class="da-link" data-da-all>' + (st.all ? "פחות" : "כל היום (" + st.log.length + ")") + "</button>" : "") +
@@ -91,15 +97,25 @@ CBA.doorAdmin = (function () {
     }
     el.innerHTML = html();
     if (!el.__daWired) { wire(el); el.__daWired = true; }
+    loadStatus(el);
+    loadLog(el);
+  }
+  /* DRB2 (גל 8, 1.10.26) — בדיקת המצב כפונקציה, כדי ש"לנסות שוב" יריץ אותה שוב */
+  function loadStatus(el) {
     D().status(function (res) {
       if (!document.body.contains(el)) return;
-      if (res.ok) { st.s = res; st.err = ""; } else st.err = res.error || "לא הצלחנו לקרוא את מצב הדלת";
+      if (res && res.ok) { st.s = res; st.err = ""; } else st.err = (res && res.error) || "לא הצלחנו לקרוא את מצב הדלת";
       el.innerHTML = html();
     });
+  }
+  /* DRB1 (גל 8, 1.10.26) — קריאת היומן כפונקציה + דגל שגיאה במקום [] שקט */
+  function loadLog(el) {
     D().dayLog(D().today(), "", function (err, rows) {
-      st.log = err ? [] : rows;
+      st.logErr = !!err;
+      st.log = err ? [] : (rows || []);
+      if (!document.body.contains(el)) return;
       redraw(el);
-      if (CBA.data && CBA.data.ensureFamilyNames) CBA.data.ensureFamilyNames(function () { redraw(el); });
+      if (!err && CBA.data && CBA.data.ensureFamilyNames) CBA.data.ensureFamilyNames(function () { redraw(el); });
     });
   }
 
@@ -120,6 +136,9 @@ CBA.doorAdmin = (function () {
         return;
       }
       if (e.target.closest("[data-da-all]")) { st.all = !st.all; redraw(el); return; }
+      /* DRB1+DRB2 (גל 8, 1.10.26) — "לנסות שוב" ליומן ולבדיקת המצב */
+      if (e.target.closest("[data-da-log-retry]")) { st.log = null; st.logErr = false; redraw(el); loadLog(el); return; }
+      if (e.target.closest("[data-da-recheck]")) { st.err = ""; el.innerHTML = html(); loadStatus(el); return; }
       if (e.target.closest("[data-da-settings]") && api.onSettings) api.onSettings();
     });
   }
@@ -142,7 +161,8 @@ CBA.doorAdmin = (function () {
   }
   function setupHTML() {
     var s = st.s || {}, stt = s.state || {};
-    if (!st.s) return '<div class="ww-note">טוען…</div>';
+    /* DRB2 (גל 8, 1.10.26) — גם בלשונית ההגדרות: כישלון בדיקת המצב לא נשאר "טוען…" */
+    if (!st.s) return su.statusErr ? '<div class="ww-note">' + esc(su.statusErr) + ' <button type="button" class="da-link" data-da-recheck-setup>לנסות שוב</button></div>' : '<div class="ww-note">טוען…</div>';
     if (!CBA.isSuper) return '<div class="da-setup">' + contactStepHTML(1) + "</div>";
     var lockOk = !!(s.tokenSet && s.lockId && !(s.mode === "live" && stt.error));
     var locks = su.locks ? su.locks.map(function (l) {
@@ -152,11 +172,13 @@ CBA.doorAdmin = (function () {
         (l.battery >= 0 ? " · סוללה " + l.battery + "%" : "") + "</small></button>";
     }).join("") : "";
     function seg(m) {
+      /* DRB3 (גל 8, 1.10.26) — שלב 2 נעול (אין חיבור) ⇒ הכפתורים באמת כבויים, לא רק מעומעמים. "כבויה" נשאר זמין תמיד — כיבוי הדלת אסור שייחסם (למשל מנעול שנפל במצב אמיתי) */
       var dis = m === "live" && !lockOk;
+      if (!lockOk && m !== "off") dis = true;
       return '<button type="button" class="ww-seat" data-da-mode="' + m + '" aria-pressed="' + (s.modeRaw === m) + '"' + (dis ? " disabled" : "") + ">" + MODE_LABEL[m] + "</button>";
     }
     function act(a) {
-      return '<button type="button" class="ww-seat" data-da-action="' + a + '" aria-pressed="' + (Number(s.action || 3) === a) + '">' + ACTION_LABEL[a] + "</button>";
+      return '<button type="button" class="ww-seat" data-da-action="' + a + '" aria-pressed="' + (Number(s.action || 3) === a) + '"' + (lockOk ? "" : " disabled") + ">" + ACTION_LABEL[a] + "</button>";   /* DRB3 (גל 8, 1.10.26) */
     }
     return '<div class="da-setup">' +
       '<section class="da-step' + (lockOk ? " is-done" : "") + '"><div class="da-step__n">1</div><div class="da-step__b">' +
@@ -196,10 +218,18 @@ CBA.doorAdmin = (function () {
       if (cardEl && document.body.contains(cardEl)) redraw(cardEl);
     }
     paint();
-    if (!st.s) D().status(function (res) { if (res && res.ok) st.s = res; paint(); });
+    /* DRB2 (גל 8, 1.10.26) */
+    function statusForSetup() {
+      D().status(function (res) {
+        if (res && res.ok) { st.s = res; su.statusErr = ""; } else su.statusErr = (res && res.error) || "לא הצלחנו לקרוא את מצב הדלת";
+        paint();
+      });
+    }
+    if (!st.s) statusForSetup();
     var contactStep = CBA.isSuper ? 4 : 1;
     pane.addEventListener("click", function (e) {
       var t;
+      if (e.target.closest("[data-da-recheck-setup]")) { su.statusErr = ""; paint(); statusForSetup(); return; }   /* DRB2 (גל 8, 1.10.26) */
       if ((t = e.target.closest("[data-da-test]"))) {
         if (su.busy) return;
         var tokIn = pane.querySelector("#da-token"), tok = tokIn ? tokIn.value.trim() : "";
@@ -218,11 +248,13 @@ CBA.doorAdmin = (function () {
         return;
       }
       if ((t = e.target.closest("[data-da-action]"))) {
+        if (t.disabled) return;   /* DRB3 (גל 8, 1.10.26) */
         var a = Number(t.getAttribute("data-da-action"));
         D().configure({ action: a }, function (res) { after(res, 2, "נשמר: " + ACTION_LABEL[a] + " ✓"); });
         return;
       }
       if ((t = e.target.closest("[data-da-mode]"))) {
+        if (t.disabled) return;   /* DRB3 (גל 8, 1.10.26) */
         var m = t.getAttribute("data-da-mode");
         var go = function () {
           su.msg = { step: 2, ok: true, text: "שומר…" }; paint();

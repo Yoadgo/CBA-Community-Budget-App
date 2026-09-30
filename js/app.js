@@ -3121,10 +3121,52 @@
      עצמו: אם הפוקוס כרגע בתוך שדה קלט במסך הראשי, מדלגים על ציור-מחדש הפעם
      (אבל עדיין קולטים את הנתונים ל-CBA.mock ברקע — רק לא מציירים) וממתינים
      למחזור הבא, או עד שהמשתמש עוזב את השדה (ר' listener ה-blur למטה). */
-  function userIsEditingMain() {
-    var el = document.activeElement;
-    return !!(el && main && main.contains(el) && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
+  /* ==========================================================================
+   *  🔴 X1 (1.10.2026, ספר האבנים חלק ב׳ — אושר ע"י יועד)
+   * --------------------------------------------------------------------------
+   *  עד היום "באמצע עריכה" = רק פוקוס בשדה בתוך #app-main. אבל מגירות, חלונות
+   *  וגיליונות יושבים על body, גרירה לא מזיזה פוקוס, ובחירות מסומנות הן לא
+   *  שדה — ולכן ציור-מחדש ברקע מחק עריכות פתוחות, קיפץ סינונים, ביטל גרירה
+   *  באמצע (ושמר שעה שלא נראתה) ומחק בחירות. חזר ב-12 מתוך 20 מסכי הניהול.
+   *  עכשיו מדלגים (ומשלימים מיד כשזה נסגר — ר' הבדיקה כל 1.5 שניות למטה) גם כש:
+   *    • יש שכבה צפה גלויה (מגירה/חלון/גיליון) — אותה רשימה ש-pwa.js כבר
+   *      משתמש בה כדי לא לרענן גרסה באמצע עבודה;
+   *    • מסך ביקש "עצור" במפורש: CBA.holdRefresh(key, true/false) — למשל
+   *      גרירה בסידור השבועי, או בחירות מסומנות באישור מרובה.
+   * ======================================================================== */
+  var refreshHolds = {};
+  window.CBA.holdRefresh = function (key, on) {
+    if (on) refreshHolds[key] = true; else delete refreshHolds[key];
+  };
+  var OVERLAY_SEL = ".cba-dlg-backdrop, .gt-sheet-wrap, .drawer, .drawer-backdrop, #cba-drawer, #cba-modal, " +
+    ".gym-wiz__backdrop, .tx-peek-overlay, [role=dialog], [aria-modal=true]";
+  function overlayOpen() {
+    try {
+      var list = document.querySelectorAll(OVERLAY_SEL);
+      for (var i = 0; i < list.length; i++) {
+        var el = list[i];
+        if (el.closest && el.closest("#nav-sheet, .nav-sheet, .gs")) continue;   // תפריט ניווט / חיפוש — לא עריכה
+        if (el.hidden || !el.getClientRects().length) continue;                 // קיים אבל מוסתר
+        return true;
+      }
+    } catch (e) {}
+    return false;
   }
+  function userIsEditingMain() {
+    if (Object.keys(refreshHolds).length) return true;
+    var el = document.activeElement;
+    if (el && main && main.contains(el) && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return true;
+    /* פוקוס בשדה בתוך שכבה צפה (מגירה על body) — גם זו עריכה */
+    if (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) && el !== document.body) {
+      if (el.closest && el.closest(OVERLAY_SEL)) return true;
+    }
+    return overlayOpen();
+  }
+  /* X1(ב) — "המסך עדיין פתוח?" לפני ציור מאוחר (תשובה משרת שהגיעה אחרי
+     שהמשתמש כבר עבר מסך). בלי זה המסך הישן נצבע מעל החדש. */
+  window.CBA.onScreen = function (name) {
+    return document.body && document.body.dataset.screen === name;
+  };
   /* (2026-08-20, PWA) נחשפת גם החוצה. js/pwa.js משתמש בה כדי להחליט מתי
      מותר לרענן לגרסה חדשה — במכוון אותו שער בדיוק שבו doPoll משתמש, כדי
      שלא יהיה מגן שני עם התנהגות אחרת. ר' מסמך אפיון PWA, סעיף 5. */
@@ -3287,6 +3329,14 @@
       doPoll(true);
     }
   }, true);
+  /* X1 — כשמגירה/חלון נסגרים או כשגרירה מסתיימת אין blur במסך, ולכן בודקים
+     כל 1.5 שניות אם רענון שדילגנו עליו כבר יכול לרוץ. זול: רק שני תנאים. */
+  setInterval(function () {
+    if (pendingSilentRefresh && !document.hidden && !userIsEditingMain()) {
+      pendingSilentRefresh = false;
+      doPoll(true);
+    }
+  }, 1500);
   /* 🔴 רשת ביטחון נגד "הקפאה" של iOS/Safari ב-PWA (יועד, 16.9.2026 — מקרה
      מורן: היא עברה לוואטסאפ ו-11 דקות אח"כ עדיין ראתה נתונים ישנים).
      wasIdle (למטה) תלוי בכך ש-runCycle *ירוץ* ויבחין שעבר זמן רב — אבל אם

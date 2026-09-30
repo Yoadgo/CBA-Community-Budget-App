@@ -10271,6 +10271,18 @@ function updateGymMembership_(ss, body) {
           [email], { 'שם': name, 'הערה': reasonTxt });
       } catch (mailErr) { Logger.log('מייל עריכה נכשל: ' + mailErr); }
     }
+    /* GMB1 (גל 8, 1.10.26) — "אישור" במסך הניהול למנוי "ממתין לאישור" עובר דרך
+       העריכה הזו (ממתין לאישור → ממתין לתשלום). עד היום לא יצא מייל, והתושב לא
+       ידע שאושר וכמה לשלם — אותו מייל בדיוק כמו באישור אוטומטי בהרשמה. */
+    if (prevStatus === GYM_ST_REVIEW && newStatus === GYM_ST_PAYMENT) {
+      try {
+        var emailA = String(sh.getRange(row, cols['אימייל']).getValue()).trim();
+        var nameA = String(sh.getRange(row, cols['שם פרטי']).getValue()).trim() || emailA;
+        if (emailA) sendResidentTemplate_(ss, 'GYM_APPROVED_AWAITING_PAYMENT', [emailA], {
+          'שם': nameA, 'סכום': w.get('מחיר מוסכם'), 'מסלול': String(w.get('מסלול') || '').trim()
+        }, { trigger: 'gym-approve' });
+      } catch (mailErr2) { Logger.log('מייל אישור מכון נכשל: ' + mailErr2); }
+    }
 
     return { ok: true, id: id, status: newStatus, changes: changes, sync: sync };
   } catch (err) {

@@ -54,8 +54,9 @@ CBA.screens = CBA.screens || {};
     "ממתין לאישור רופא": "danger", "נדחה": "danger", "בוטל": "danger"
   };
   /* מה דורש ממך פעולה — מופיע ראשון ומסומן. */
-  var GA_ATTN = { "ממתין לאימות": 1, "ממתין לאישור רופא": 1 };
-  var GA_ORDER = { "ממתין לאימות": 0, "ממתין לאישור רופא": 1, "ממתין לתשלום": 2, "ממתין להצהרה": 3, "פעיל": 4, "פג תוקף": 5 };
+  /* GMB1 (גל 8, 1.10.26) — "ממתין לאישור" (GYM_ST_REVIEW בשרת) נספר כממתין לך וממוין עם שאר הממתינים למנהל */
+  var GA_ATTN = { "ממתין לאימות": 1, "ממתין לאישור רופא": 1, "ממתין לאישור": 1 };
+  var GA_ORDER = { "ממתין לאימות": 0, "ממתין לאישור רופא": 1, "ממתין לאישור": 2, "ממתין לתשלום": 3, "ממתין להצהרה": 4, "פעיל": 5, "פג תוקף": 6 };
   var gaFilter = "all";
   var gaNuki = { on: false, byId: {}, state: {} };   /* גישת Nuki לפי מזהה מנוי (רק כשהמכון בדלת) */
 
@@ -93,7 +94,9 @@ CBA.screens = CBA.screens || {};
     var primary =
       status === "ממתין לאימות" ? '<button type="button" class="btn-primary btn-sm" data-ga-verify-open="' + id + '">אימות תשלום</button>' :
       status === "ממתין לתשלום" ? '<button type="button" class="btn-ghost btn-sm" data-ga-cash="' + id + '" data-ga-price="' + CBA.esc(String(m["מחיר מוסכם"] || "")) + '">רישום תשלום</button>' :
-      status === "ממתין לאישור רופא" && m["תאריך חתימה"] ? '<button type="button" class="btn-primary btn-sm" data-ga-view="' + id + '">בדיקת הצהרה</button>' : "";
+      status === "ממתין לאישור רופא" && m["תאריך חתימה"] ? '<button type="button" class="btn-primary btn-sm" data-ga-view="' + id + '">בדיקת הצהרה</button>' :
+      /* GMB1 (גל 8, 1.10.26) — פעולה ראשית ל"ממתין לאישור": פותחת את "עריכת מנוי" עם סטטוס "ממתין לתשלום" (המעבר שהשרת עושה באישור אוטומטי) */
+      status === "ממתין לאישור" ? '<button type="button" class="btn-primary btn-sm" data-ga-approve="' + id + '">אישור</button>' : "";
     var menu =
       (m["תאריך חתימה"] ? '<button type="button" data-ga-view="' + id + '">צפייה בהצהרה</button>' : "") +
       (status === "ממתין להצהרה" || m["תאריך חתימה"] ? "" : '<button type="button" data-ga-declare="' + id + '">בקשת הצהרה</button>') +
@@ -276,7 +279,7 @@ CBA.screens = CBA.screens || {};
 
      דחייה וביטול הם לא כפתור נפרד אלא בחירת סטטוס — עם שדה סיבה שהופך
      לחובה כשעוברים לאחד מהם, כי זה בדיוק מה שהתושב יקבל במייל. */
-  function openEdit(id, reload) {
+  function openEdit(id, reload, preset) {
     var m = memberById(id);
     if (!m) { CBA.ui.alert("לא נמצאה הרשומה."); return; }
     var plans = (gaLast && gaLast.plans) || [];
@@ -287,7 +290,9 @@ CBA.screens = CBA.screens || {};
     var ui = openFormDrawer({
       title: "עריכת מנוי — " + memberName(m),
       subtitle: "מזהה " + (m["מזהה"] || "") + " · " + (m["אימייל"] || "") +
-                (m["מצב סנכרון"] ? " · " + m["מצב סנכרון"] : ""),
+                (m["מצב סנכרון"] ? " · " + m["מצב סנכרון"] : "") +
+                /* GMB1 (גל 8, 1.10.26) — כשנפתח מכפתור "אישור" מסבירים מה השמירה תעשה */
+                (preset && preset.status ? ' · אישור הבקשה: הסטטוס יעבור ל"' + preset.status + '". בודקים ולוחצים שמירה.' : ""),
       okText: "שמירת השינויים",
       fields: [
         { key: "planId", label: "מסלול", type: "select", value: curPlanId,
@@ -298,7 +303,7 @@ CBA.screens = CBA.screens || {};
         { key: "price", label: "מחיר מוסכם (₪)", type: "number", value: m["מחיר מוסכם"] || "", min: 0 },
         { key: "startDate", label: "תאריך התחלה", type: "date", value: toDateInput(m["תאריך התחלה"]) },
         { key: "validUntil", label: "בתוקף עד חודש", type: "month", value: toMonthInput(m["בתוקף עד"]) },
-        { key: "status", label: "סטטוס", type: "select", value: curStatus, options: GYM_STATUSES,
+        { key: "status", label: "סטטוס", type: "select", value: (preset && preset.status) || curStatus, options: GYM_STATUSES,
           hint: 'מעבר ל"נדחה" או ל"בוטל" שולח מייל לתושב עם הסיבה שתכתבי' },
         { key: "note", label: "הערות מנהל (פנימי)", type: "textarea", value: m["הערות מנהל"] || "" },
         { key: "reason", label: "סיבת השינוי", type: "text",
@@ -700,6 +705,10 @@ CBA.screens = CBA.screens || {};
     root.querySelectorAll("[data-ga-edit]").forEach(function (btn) {
       btn.addEventListener("click", function () { openEdit(btn.dataset.gaEdit, reload); });
     });
+    /* GMB1 (גל 8, 1.10.26) — "אישור" = אותה מגירת עריכה (updateGymMembership), עם סטטוס מוצע "ממתין לתשלום" */
+    root.querySelectorAll("[data-ga-approve]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openEdit(btn.dataset.gaApprove, reload, { status: "ממתין לתשלום" }); });
+    });
 
     // מחיקה לצמיתות (2026-09-16, בקשת יועד: "כפתור אדום... אם צריך
     // למחוק אז למחוק באופן מלא") — שונה מ"עריכה" → סטטוס "בוטל", שרק
@@ -753,7 +762,8 @@ CBA.screens = CBA.screens || {};
              '<div class="gym-verify__head">' +
                '<div class="gym-row__name">' + CBA.esc(name) + "</div>" +
                '<div class="gym-row__meta">' +
-                 CBA.esc(m["מסלול"] || "") + " · מחיר מוסכם " + CBA.esc(expected) + " ₪" +
+                 /* GMB5 (גל 8, 1.10.26) — בלי מחיר מוסכם לא מציגים "מחיר מוסכם  ₪" ריק */
+                 CBA.esc(m["מסלול"] || "") + (String(expected).trim() !== "" ? " · מחיר מוסכם " + CBA.esc(expected) + " ₪" : "") +
                  (m["דווח בתאריך"] ? " · דווח " + CBA.esc(fmtDate(m["דווח בתאריך"])) : "") +
                "</div>" +
                '<div class="gym-row__meta">' +
@@ -938,7 +948,8 @@ CBA.screens = CBA.screens || {};
     "</div>";
   }
   function openSettings(tab, reload, doorEl) {
-    if (!gaLast) return;
+    /* GMB4 (גל 8, 1.10.26) — בזמן טעינה/אחרי שגיאה: הודעה במקום לחיצה שלא עושה כלום */
+    if (!gaLast) { if (CBA.ui && CBA.ui.toast) CBA.ui.toast("ההגדרות ייפתחו אחרי שהנתונים ייטענו"); return; }
     var sh = CBA.ui.sheet({ label: "הגדרות מכון הכושר", sheetCls: "ga-sheet", html:
       '<div class="ga-sheet__h"><h2>הגדרות</h2><button type="button" class="btn-ghost btn-sm" data-ga-close>סגירה</button></div>' +
       '<div class="gym-seg ga-tabs" role="tablist"><button type="button" data-ga-tab="gym">הגדרות מכון</button><button type="button" data-ga-tab="door">בקרת כניסה</button></div>' +
@@ -966,6 +977,20 @@ CBA.screens = CBA.screens || {};
     return sh;
   }
 
+  /* GMB2 (גל 8, 1.10.26) — תיבת אימות פתוחה (או תפריט ⋯ פתוח) יושבת בתוך main, ורענון שקט היה סוגר אותה
+     ומוחק סכום/חודש שהוקלדו. כל עוד אחת פתוחה — מבקשים מ-app.js לעצור רענון; בדיקה חוזרת כל 1.5ש'
+     משחררת לבד כשהיא נסגרת או כשעוזבים את המסך (ניווט לא עובר דרך הקוד הזה). */
+  var gaHoldTimer = null;
+  function gaSyncHold(membersEl) {
+    var on = !!(membersEl && document.body.contains(membersEl) &&
+      (!CBA.onScreen || CBA.onScreen("gymAdmin")) &&
+      membersEl.querySelector(".ga-row__verify:not([hidden]), details.ga-more[open]"));
+    if (CBA.holdRefresh) CBA.holdRefresh("gymVerify", on);
+    clearInterval(gaHoldTimer); gaHoldTimer = null;
+    if (on) gaHoldTimer = setInterval(function () { gaSyncHold(membersEl); }, 1500);
+  }
+  var gaLiveLoad = null;   /* GMB6 (גל 8, 1.10.26) — load() של הציור החי האחרון */
+
   function chip(n, label, tone) {
     return '<span class="ga-chip' + (tone && n ? " ga-chip--" + tone : "") + '">' + CBA.esc(label) + "<b>" + CBA.esc(String(n)) + "</b></span>";
   }
@@ -975,6 +1000,9 @@ CBA.screens = CBA.screens || {};
 
     render: function (container) {
       gaWinScrollY = window.scrollY || 0;
+      /* GMB2 (גל 8, 1.10.26) — ציור חדש = אין תיבה פתוחה; משחררים את העצירה */
+      if (CBA.holdRefresh) CBA.holdRefresh("gymVerify", false);
+      clearInterval(gaHoldTimer); gaHoldTimer = null;
 
       container.innerHTML =
         '<div class="ga-head">' +
@@ -1017,7 +1045,10 @@ CBA.screens = CBA.screens || {};
           var row = v.closest(".ga-row"), box = row && row.querySelector(".ga-row__verify");
           if (box) { box.hidden = !box.hidden; v.textContent = box.hidden ? "אימות תשלום" : "סגירה"; }
         }
+        gaSyncHold(membersEl);   /* GMB2 (גל 8, 1.10.26) */
       });
+      /* GMB2 (גל 8, 1.10.26) — פתיחה/סגירה של ⋯ (אירוע toggle לא מבעבע — לכן capture) */
+      membersEl.addEventListener("toggle", function () { gaSyncHold(membersEl); }, true);
 
       function paintMembers() {
         var members = ((gaLast && gaLast.members) || []).slice();
@@ -1038,6 +1069,7 @@ CBA.screens = CBA.screens || {};
             : '<div class="gym-note">' + (gaFilter === "attn" ? "אין כרגע מה לאשר." : "אין מנויים לא פעילים.") + "</div>";
         bindMemberActions(membersEl, load);
         bindVerifyActions(membersEl, load);
+        gaSyncHold(membersEl);   /* GMB2 (גל 8, 1.10.26) — ציור הרשימה סגר את התיבות */
       }
       filterEl.addEventListener("click", function (e) {
         var b = e.target.closest("[data-ga-f]"); if (!b) return;
@@ -1054,22 +1086,44 @@ CBA.screens = CBA.screens || {};
             (rows || []).forEach(function (d) { if (d.uid) gaNuki.byId[String(d["מזהה"] || d.id || "")] = d.uid; });
             CBA.fb.readCollection("gymNuki", function (e2, n) {
               (n || []).forEach(function (d) { if (d.uid || d.id) gaNuki.state[d.uid || d.id] = d; });
-              if (gaLast) paintMembers();
+              if (gaLast && !stale() && !gaHoldTimer) paintMembers();   /* GMB6+GMB2 (גל 8, 1.10.26) — לא לתוך DOM מנותק ולא מעל תיבת אימות פתוחה */
             });
           });
         });
       }
 
       // cb אופציונלי — נקרא אחרי שה-DOM עודכן (ניהול השאלון והגדרות נשענים עליו).
+      /* GMB6 (גל 8, 1.10.26) — אחרי רענון שקט, load() ישן (שמור במגירה/שאלון/הגדרות) צייר לתוך DOM מנותק.
+         עכשיו: אם הרשימה שלנו כבר לא על המסך — מעבירים לציור החי (רק כשעדיין במסך המכון). */
+      function stale() { return !document.body.contains(membersEl); }
+      function handOff(cb) {
+        if (gaLiveLoad && gaLiveLoad !== load && CBA.onScreen && CBA.onScreen("gymAdmin")) { gaLiveLoad(cb); return true; }
+        return false;
+      }
       function load(cb) {
+        if (stale() && handOff(cb)) return;   /* GMB6 (גל 8, 1.10.26) */
         if (!(CBA.data && CBA.data.getGymList)) {
           membersEl.innerHTML = '<div class="club-empty">המודול עדיין לא מחובר לגיליון.</div>';
           if (cb) cb();
           return;
         }
         CBA.data.getGymList(function (res) {
+          /* GMB6 (גל 8, 1.10.26) — התשובה חזרה אחרי שהמסך צויר מחדש: לא מציירים לתוך DOM מנותק */
+          if (stale()) {
+            if (handOff(cb)) return;
+            if (res && res.ok) gaLast = res;
+            if (cb) cb();
+            return;
+          }
           if (!res || !res.ok) {
-            membersEl.innerHTML = '<div class="club-empty">' + CBA.esc((res && res.error) || "לא ניתן לטעון כרגע.") + "</div>";
+            /* GMB3 (גל 8, 1.10.26) — שגיאת טעינה עם "נסה שוב" במקום מבוי סתום */
+            membersEl.innerHTML = CBA.ui && CBA.ui.emptyState
+              ? CBA.ui.emptyState({ icon: "inbox", title: "לא הצלחנו לטעון את המנויים",
+                  sub: (res && res.error) || "לא ניתן לטעון כרגע.", ctaLabel: "נסה שוב", ctaAttr: "data-ga-retry" })
+              : '<div class="club-empty">' + CBA.esc((res && res.error) || "לא ניתן לטעון כרגע.") +
+                ' <button type="button" class="btn-ghost btn-sm" data-ga-retry>נסה שוב</button></div>';
+            var retry = membersEl.querySelector("[data-ga-retry]");
+            if (retry) retry.addEventListener("click", function () { membersEl.innerHTML = gaLoadingHTML(); load(); });
             kpisEl.innerHTML = "";
             if (cb) cb();
             return;
@@ -1088,7 +1142,8 @@ CBA.screens = CBA.screens || {};
           gaNote.hidden = !res.partial;
           var members = res.members || [];
           var active  = countBy(members, "פעיל");
-          var mine    = countBy(members, "ממתין לאישור רופא") + countBy(members, "ממתין לאימות");
+          /* GMB1 (גל 8, 1.10.26) — גם "ממתין לאישור" ממתין לך */
+          var mine    = countBy(members, "ממתין לאישור רופא") + countBy(members, "ממתין לאימות") + countBy(members, "ממתין לאישור");
           var waitPay = countBy(members, "ממתין לתשלום");
           var expired = countBy(members, "פג תוקף");
           var gaps = members.filter(function (x) { var sv = String(x["מצב סנכרון"] || "").trim(); return sv && sv !== "מסונכרן"; }).length;
@@ -1102,6 +1157,7 @@ CBA.screens = CBA.screens || {};
         });
       }
 
+      gaLiveLoad = load;   /* GMB6 (גל 8, 1.10.26) */
       load();
       loadNuki();
     }

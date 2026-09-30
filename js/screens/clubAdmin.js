@@ -9,6 +9,23 @@ CBA.screens = CBA.screens || {};
 // render() נקרא מחדש גם ברענון רקע שקט, וה-innerHTML החדש היה מאפס גלילה).
 var caScrollP = 0, caScrollA = 0, caWinScrollY = 0;
 
+/* CLB2 (גל 8, 1.10.26) — הבחירות המסומנות נשמרות כאן (מזהה→true) ומסומנות מחדש אחרי כל ציור; רענון רקע מושהה כל עוד יש לפחות אחת */
+var caPicks = {};
+var caLeaveWatch = false;
+function caSyncPickHold() {
+  if (CBA.holdRefresh) CBA.holdRefresh("clubPicks", Object.keys(caPicks).length > 0);
+}
+/* CLB2 (גל 8, 1.10.26) — יציאה מהמסך: מנקים בחירות ומשחררים את ההשהיות, כדי לא לעצור רענון של מסך אחר */
+function caWatchLeave() {
+  if (caLeaveWatch || typeof MutationObserver === "undefined" || !document.body) return;
+  caLeaveWatch = true;
+  new MutationObserver(function () {
+    if (CBA.onScreen && CBA.onScreen("clubAdmin")) return;
+    caPicks = {};
+    if (CBA.holdRefresh) { CBA.holdRefresh("clubPicks", false); CBA.holdRefresh("clubAction", false); }
+  }).observe(document.body, { attributes: true, attributeFilter: ["data-screen"] });
+}
+
 var CLUB_WD_HE = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 function clubPad2(n) { return (n < 10 ? "0" : "") + n; }
 /* (2026-08-18, ממצא 2.5 בדו"ח הבדיקה) קודם לא הייתה כאן שום בדיקת תקינות:
@@ -70,14 +87,21 @@ CBA.screens.clubAdmin = {
     var caBulkBar = container.querySelector("#ca-bulk");
     var pendingList = container.querySelector("#ca-pending-list");
     var allList = container.querySelector("#ca-all-list");
+    caWatchLeave();
 
     function load() {
       pendingList.innerHTML = clubLoadingHTML();
       allList.innerHTML = clubLoadingHTML();
       CBA.data.getClubList(function (res) {
+        /* CLB3 (גל 8, 1.10.26) — תשובה מאוחרת: המסך עזב או צויר מחדש — לא מציירים (ולא קושרים כפתורים כפולים) */
+        if ((CBA.onScreen && !CBA.onScreen("clubAdmin")) || !container.contains(pendingList)) return;
         if (!res || !res.ok) {
-          pendingList.innerHTML = '<div class="club-empty">לא ניתן לטעון כרגע. ' + CBA.esc((res && res.error) || "") + '</div>';
+          /* CLB1 (גל 8, 1.10.26) — שגיאת טעינה עם כפתור "נסה שוב" במקום טקסט בלבד */
+          pendingList.innerHTML = CBA.ui.emptyState({ icon: "calendar", title: "לא הצלחנו לטעון את השריונים",
+            sub: "בדקו את החיבור ונסו שוב.", ctaLabel: "נסה שוב", ctaAttr: "data-club-retry" });
           allList.innerHTML = "";
+          var retry = pendingList.querySelector("[data-club-retry]");
+          if (retry) retry.addEventListener("click", function () { load(); });
           return;
         }
         var all = res.reservations || [];
@@ -90,7 +114,11 @@ CBA.screens.clubAdmin = {
         // הוא רעש: כפתור "אשר" של השורה עושה בדיוק את אותו דבר.
         var okPending = pending.filter(function (r) { return !clubRowBroken(r); });
         caBulkBar.hidden = okPending.length < 2;
-        caUpdateBulk();
+        /* CLB2 (גל 8, 1.10.26) — מזהים שכבר לא ממתינים (אושרו/נדחו/בוטלו) יוצאים מהבחירה */
+        var livePick = {};
+        okPending.forEach(function (r) { if (caPicks[r.id]) livePick[r.id] = true; });
+        caPicks = livePick;
+        caSyncPickHold();
 
         pendingList.innerHTML = pending.length
           ? pending.map(pendingRowHTML).join("")
@@ -101,6 +129,12 @@ CBA.screens.clubAdmin = {
           ? all.map(allRowHTML).join("")
           : CBA.ui.emptyState({ icon: "calendar", title: "אין שריונים קרובים",
               sub: "המועדון פנוי בתקופה הקרובה. שריונים מאושרים יופיעו כאן לפי תאריך." });
+
+        /* CLB2 (גל 8, 1.10.26) — סימון מחדש של הבחירות אחרי הציור */
+        container.querySelectorAll("[data-ca-pick]").forEach(function (cb) {
+          if (caPicks[cb.dataset.caPick]) cb.checked = true;
+        });
+        caUpdateBulk();
 
         // שחזור מיקום הגלילה (ר' ההערה למעלה ליד caScrollP)
         if (caScrollP) pendingList.scrollTop = caScrollP;
@@ -135,9 +169,12 @@ CBA.screens.clubAdmin = {
     }
 
     function allRowHTML(r) {
+      /* CLB4 (גל 8, 1.10.26) — "מאושר" רק לסטטוס approved; סטטוס אחר מוצג כפי שהוא בתגית ניטרלית */
       var badge = r.status === "pending"
         ? '<span class="badge badge--warn">ממתין</span>'
-        : '<span class="badge badge--ok">מאושר</span>';
+        : (!r.status || r.status === "approved")
+          ? '<span class="badge badge--ok">מאושר</span>'
+          : '<span class="badge badge--info">' + CBA.esc(r.status) + '</span>';
       return (
         '<div class="club-row">' +
           '<div class="club-row__main">' +
@@ -151,7 +188,8 @@ CBA.screens.clubAdmin = {
     }
 
     /* מצב הבחירה חי ב-DOM עצמו (checked) ולא במשתנה נפרד — הרשימה נבנית
-       מחדש בכל טעינה, ומשתנה מקביל היה נשאר עם מזהים שכבר לא קיימים. */
+       מחדש בכל טעינה, ומשתנה מקביל היה נשאר עם מזהים שכבר לא קיימים.
+       CLB2 (גל 8, 1.10.26) — caPicks הוא רק הגיבוי לסימון-מחדש אחרי ציור, ונגזם בכל טעינה. */
     function caPicked() {
       return Array.prototype.slice.call(container.querySelectorAll("[data-ca-pick]:checked"))
         .map(function (el) { return el.dataset.caPick; });
@@ -166,20 +204,25 @@ CBA.screens.clubAdmin = {
     function caBulkApprove() {
       var ids = caPicked();
       if (!ids.length) return;
+      /* CLB3 (גל 8, 1.10.26) — רענון רקע מושהה מהאישור ועד שהבקשה חוזרת (כולל הרגע שבין סגירת החלון לשליחה) */
+      if (CBA.holdRefresh) CBA.holdRefresh("clubAction", true);
       CBA.ui.confirm(ids.length + " שריונים יאושרו, וכל תושב יקבל מייל אישור.",
         { title: "לאשר " + ids.length + " שריונים?", okText: "אשר הכול" }
       ).then(function (ok) {
-        if (!ok) return;
+        if (!ok) { if (CBA.holdRefresh) CBA.holdRefresh("clubAction", false); return; }
         var btn = container.querySelector("#ca-bulk-ok");
         if (btn) { btn.disabled = true; btn.textContent = "מאשר…"; }
         CBA.data.approveClubReservations(ids, function (res) {
+          if (CBA.holdRefresh) CBA.holdRefresh("clubAction", false);
           if (btn) btn.textContent = "אשר את הנבחרים";
           if (!res || !res.ok) {
             if (btn) btn.disabled = false;
             CBA.ui.alert((res && res.error) || "האישור נכשל, נסו שוב.");
             return;
           }
-          load();
+          /* CLB2 (גל 8, 1.10.26) — אחרי אישור מרובה מוצלח: הבחירה מתאפסת וההשהיה משתחררת */
+          caPicks = {}; caSyncPickHold();
+          if (!CBA.onScreen || CBA.onScreen("clubAdmin")) load();
           if (res.failed && res.failed.length) {
             CBA.ui.alert(res.approved + " שריונים אושרו. " + res.failed.length +
               " לא אושרו — ייתכן שבוטלו ביומן בינתיים.");
@@ -192,7 +235,12 @@ CBA.screens.clubAdmin = {
 
     function bindActions() {
       container.querySelectorAll("[data-ca-pick]").forEach(function (cb) {
-        cb.addEventListener("change", caUpdateBulk);
+        /* CLB2 (גל 8, 1.10.26) — כל סימון/ביטול נרשם ב-caPicks ומעדכן את השהיית הרענון */
+        cb.addEventListener("change", function () {
+          if (cb.checked) caPicks[cb.dataset.caPick] = true; else delete caPicks[cb.dataset.caPick];
+          caSyncPickHold();
+          caUpdateBulk();
+        });
       });
       container.querySelectorAll("[data-approve]").forEach(function (btn) {
         btn.addEventListener("click", function () {
@@ -201,25 +249,31 @@ CBA.screens.clubAdmin = {
           // נספר אוטומטית ב-inFlightWrites — מסמנים dirty ידנית כדי שרענון רקע
           // לא "יעקוף" את הבקשה הזו באמצע (ר' מדיניות רענון נתונים בזיכרון הפרויקט).
           if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubAdminAction");
+          /* CLB3 (גל 8, 1.10.26) — השהיית ציור-מחדש ברקע עד שהבקשה חוזרת; ציור מאוחר רק אם עדיין במסך */
+          if (CBA.holdRefresh) CBA.holdRefresh("clubAction", true);
           CBA.data.approveClubReservation(btn.dataset.approve, function (res) {
             if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubAdminAction");
-            if (res && res.ok) { load(); CBA.ui.toast("השריון אושר"); }
+            if (CBA.holdRefresh) CBA.holdRefresh("clubAction", false);
+            if (res && res.ok) { if (!CBA.onScreen || CBA.onScreen("clubAdmin")) load(); CBA.ui.toast("השריון אושר"); }
             else { btn.disabled = false; btn.textContent = "אשר"; CBA.ui.alert((res && res.error) || "האישור נכשל, נסו שוב."); }
           });
         });
       });
       container.querySelectorAll("[data-reject]").forEach(function (btn) {
         btn.addEventListener("click", function () {
+          /* CLB3 (גל 8, 1.10.26) — השהיה מהלחיצה ועד חזרת הבקשה (גם בין סגירת חלון האישור לשליחה) */
+          if (CBA.holdRefresh) CBA.holdRefresh("clubAction", true);
           // (2026-08-19, ממצא 2.6) אישור דחייה — מודל של האפליקציה במקום חלון דפדפן
           CBA.ui.confirm("הפעולה תמחק את האירוע מהיומן ותשחרר את המשבצת בחזרה לפנויה.",
             { title: "לדחות את בקשת השריון?", okText: "דחה בקשה", danger: true }
           ).then(function (ok) {
-            if (!ok) return;
+            if (!ok) { if (CBA.holdRefresh) CBA.holdRefresh("clubAction", false); return; }
             btn.disabled = true; btn.textContent = "דוחה…";
             if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubAdminAction");
             CBA.data.rejectClubReservation(btn.dataset.reject, function (res) {
               if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubAdminAction");
-              if (res && res.ok) { load(); CBA.ui.toast("הבקשה נדחתה"); }
+              if (CBA.holdRefresh) CBA.holdRefresh("clubAction", false);
+              if (res && res.ok) { if (!CBA.onScreen || CBA.onScreen("clubAdmin")) load(); CBA.ui.toast("הבקשה נדחתה"); }
               else { btn.disabled = false; btn.textContent = "דחה"; CBA.ui.alert((res && res.error) || "הדחייה נכשלה, נסו שוב."); }
             });
           });

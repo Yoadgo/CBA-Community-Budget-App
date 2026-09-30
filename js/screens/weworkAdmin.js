@@ -14,7 +14,9 @@ CBA.screens = CBA.screens || {};
 (function () {
   "use strict";
   var SCREEN = "weworkAdmin";
-  var st = { cfg: null, day: null, rows: null, err: "", names: false };
+  var st = { cfg: null, day: null, rows: null, err: "", names: false,
+    /* WWB2/WWB3 (גל 8, 1.10.26) — rowsDay: לאיזה יום שייכות השורות; seq: רק התשובה האחרונה מציירת; sub: ההאזנה החיה ליום */
+    rowsDay: null, seq: 0, sub: null };
   function esc(s) { return CBA.esc(String(s == null ? "" : s)); }
   function D() { return CBA.door; }
   function alive() { return document.body.dataset.screen === SCREEN; }
@@ -32,27 +34,63 @@ CBA.screens = CBA.screens || {};
       '<div class="screen-head__sub">שריונים, כניסות וכללי השריון</div></div>';
   }
 
-  function load(container) {
+  function load(container, quiet) {
     D().readConfig(function (err, cfg) {
       if (!alive()) return;
       if (err) { st.err = String(err); draw(container); return; }
+      /* WWB1 (גל 8, 1.10.26) — טעינה מוצלחת מנקה שגיאה ישנה (קודם רק "נסה שוב" ניקה אותה) */
+      st.err = "";
       st.cfg = cfg;
       if (!st.day) st.day = D().today();
-      loadDay(container);
+      loadDay(container, quiet);
     });
     if (!st.names && CBA.data && CBA.data.ensureFamilyNames) {
       CBA.data.ensureFamilyNames(function () { st.names = true; if (alive() && st.rows) drawList(container); });
     }
   }
-  function loadDay(container) {
-    st.rows = null;
-    draw(container);
-    D().dayBookings(st.day, function (err, rows) {
-      if (!alive()) return;
+  function loadDay(container, quiet) {
+    if (!alive()) return;
+    var seq = ++st.seq, day = st.day;
+    /* WWB3 (גל 8, 1.10.26) — טעינה שקטה (רענון רקע / עדכון חי) שומרת את השורות הקיימות — בלי הבהוב שלד */
+    if (!(quiet && st.rows && st.rowsDay === day)) { st.rows = null; draw(container); }
+    watch(container);
+    D().dayBookings(day, function (err, rows) {
+      /* WWB2 (גל 8, 1.10.26) — תשובה של יום קודם/בקשה ישנה לא דורסת את היום שנבחר עכשיו */
+      if (!alive() || seq !== st.seq) return;
       if (err) { st.err = String(err); draw(container); return; }
-      st.rows = rows;
-      draw(container);
+      st.err = "";   /* WWB1 (גל 8, 1.10.26) — הצלחה מנקה שגיאה ישנה */
+      st.rows = rows; st.rowsDay = day;
+      if (quiet) paintDay(container); else draw(container);
     });
+  }
+  /* WWB3 (גל 8, 1.10.26) — ציור במקום של המדדים והרשימה בלבד (בלי לבנות את כל המסך מחדש) */
+  function paintDay(container) {
+    var k = container.querySelector("[data-wa-kpis]"), l = container.querySelector("[data-wa-list]");
+    if (!k || !l || !st.cfg) { draw(container); return; }
+    k.innerHTML = kpis();
+    l.innerHTML = listHTML();
+  }
+  /* WWB2 (גל 8, 1.10.26) — האזנה חיה ליום הנבחר (weworkDays נבנה מחדש בכל שריון/ביטול) → טעינה שקטה של הרשימה */
+  function unwatch() {
+    if (!st.sub) return;
+    st.sub.dead = true;
+    if (st.sub.off) { try { st.sub.off(); } catch (e) { } }
+    st.sub = null;
+  }
+  function watch(container) {
+    if (st.sub && st.sub.day === st.day) return;
+    unwatch();
+    if (!D().watchDay) return;
+    var sub = { day: st.day, first: true, off: null, dead: false };
+    st.sub = sub;
+    sub.off = D().watchDay(sub.day, function (err) {
+      if (sub.dead) return;
+      if (!alive()) { unwatch(); return; }
+      if (err) return;
+      if (sub.first) { sub.first = false; return; }   // התמונה הראשונה = המצב שכבר נטען
+      loadDay(container, true);
+    });
+    if (sub.dead && sub.off) { try { sub.off(); } catch (e) { } }
   }
 
   /* 26.9 — שם פרטי של מי ששריין (slot), ורק אם אין — שם המשפחה. */
@@ -197,11 +235,21 @@ CBA.screens = CBA.screens || {};
 
   CBA.screens[SCREEN] = {
     title: "ניהול WeWork",
-    render: function (container) {
+    render: function (container, opts) {
       if (!CBA.door) { container.innerHTML = head(); return; }
+      var silent = !!((opts && opts.silent) || CBA.renderSilent);
+      if (!silent) {
+        /* WWB1 (גל 8, 1.10.26) — כניסה רגילה למסך מתחילה בלי השגיאה של הביקור הקודם */
+        st.err = "";
+        /* WWB4 (גל 8, 1.10.26) — יום שנשמר מביקור קודם ונפל מחוץ לפס הימים → חוזרים להיום */
+        if (st.day && st.cfg) {
+          var t = D().today();
+          if (st.day < D().addDays(t, -2) || st.day > D().addDays(t, st.cfg.advanceDays)) st.day = t;
+        }
+      }
       draw(container);
       if (!container.__waWired) { wire(container); container.__waWired = true; }
-      load(container);
+      load(container, silent);
     }
   };
 })();
