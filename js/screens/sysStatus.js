@@ -183,9 +183,12 @@ CBA.screens = CBA.screens || {};
 
   function draw(container) {
     /* SYB4 (גל 9, 1.10.26) — משובץ ב"ניהול מערכת": בלי כותרת כפולה (המרכז כבר מציג כותרת ותת-כותרת). */
+    /* A0 (ספר האבנים — אושר) — לבד (CBA.navigate("sysStatus")): סרגל ניהול עם הכותרת
+       בלבד, בלי מונים ובלי פעולה; שורת ההסבר נשארת. משובץ / בלי canopy.js — כמו קודם. */
+    var bar = !st.embedded && !!CBA.canopy;
     var head = st.embedded ? "" :
       '<div class="screen-head">' +
-        '<div class="screen-head__title">מצב המערכת</div>' +
+        (bar ? "" : '<div class="screen-head__title">מצב המערכת</div>') +
         '<div class="screen-head__sub">אילו תחומים נקראים מ-Firestore, והאם הדפדפן הזה באמת מצליח לקרוא אותם</div>' +
       "</div>";
 
@@ -245,7 +248,8 @@ CBA.screens = CBA.screens || {};
       '</div>' +
     '</div>';
 
-    container.innerHTML = head + flagsHTML + probeHTML + fixHTML;
+    (bar ? CBA.canopy.shell(container, { key: "sysStatus", dom: "home", title: "מצב מערכת",
+        ico: '<path d="M3 12h4l3-7 4 14 3-7h4"/>' }).body : container).innerHTML = head + flagsHTML + probeHTML + fixHTML;
 
     Array.prototype.forEach.call(container.querySelectorAll("[data-flag]"), function (btn) {
       btn.addEventListener("click", function () { toggle(container, btn.getAttribute("data-flag")); });

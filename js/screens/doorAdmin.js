@@ -31,6 +31,18 @@ CBA.doorAdmin = (function () {
   function hm(ms) { var d = new Date(ms); return D().pad(d.getHours()) + ":" + D().pad(d.getMinutes()); }
 
   /* ------------------------------------------------------------ הכרטיס --- */
+  /* A0 (30.9.26) — גוון מצב המנעול לנקודה בסרגל של מסך המכון: אותה החלטה בדיוק
+     של שורת המצב בכרטיס (ok/warn/danger), מהמצב שכבר נטען — בלי קריאה נוספת.
+     null = אין מה להראות (עוד בודק / כבויה / הדמיה). */
+  function tone() {
+    var s = st.s, stt = (s && s.state) || {};
+    if (!s) return st.err ? "danger" : null;
+    if (s.mode === "off" || s.mode === "sim") return null;
+    if (stt.error || !stt.online) return "danger";
+    return (stt.batteryCritical || (stt.battery >= 0 && stt.battery < 20)) ? "warn" : "ok";
+  }
+  function notify() { if (api.onState) { try { api.onState(); } catch (e) {} } }
+
   function lockLineHTML() {
     var s = st.s, stt = (s && s.state) || {};
     var tone, title, sub;
@@ -106,6 +118,7 @@ CBA.doorAdmin = (function () {
       if (!document.body.contains(el)) return;
       if (res && res.ok) { st.s = res; st.err = ""; } else st.err = (res && res.error) || "לא הצלחנו לקרוא את מצב הדלת";
       el.innerHTML = html();
+      notify();   /* A0 — נקודת המנעול בסרגל */
     });
   }
   /* DRB1 (גל 8, 1.10.26) — קריאת היומן כפונקציה + דגל שגיאה במקום [] שקט */
@@ -138,7 +151,7 @@ CBA.doorAdmin = (function () {
       if (e.target.closest("[data-da-all]")) { st.all = !st.all; redraw(el); return; }
       /* DRB1+DRB2 (גל 8, 1.10.26) — "לנסות שוב" ליומן ולבדיקת המצב */
       if (e.target.closest("[data-da-log-retry]")) { st.log = null; st.logErr = false; redraw(el); loadLog(el); return; }
-      if (e.target.closest("[data-da-recheck]")) { st.err = ""; el.innerHTML = html(); loadStatus(el); return; }
+      if (e.target.closest("[data-da-recheck]")) { st.err = ""; el.innerHTML = html(); notify(); loadStatus(el); return; }
       if (e.target.closest("[data-da-settings]") && api.onSettings) api.onSettings();
     });
   }
@@ -216,6 +229,7 @@ CBA.doorAdmin = (function () {
       else su.msg = { step: step, ok: false, text: (res && res.error) || "משהו השתבש. נסו שוב." };
       paint();
       if (cardEl && document.body.contains(cardEl)) redraw(cardEl);
+      notify();   /* A0 — שינוי מצב/חיבור בהגדרות מעדכן גם את הנקודה בסרגל */
     }
     paint();
     /* DRB2 (גל 8, 1.10.26) */
@@ -223,6 +237,7 @@ CBA.doorAdmin = (function () {
       D().status(function (res) {
         if (res && res.ok) { st.s = res; su.statusErr = ""; } else su.statusErr = (res && res.error) || "לא הצלחנו לקרוא את מצב הדלת";
         paint();
+        notify();
       });
     }
     if (!st.s) statusForSetup();
@@ -287,6 +302,6 @@ CBA.doorAdmin = (function () {
     });
   }
 
-  var api = { render: render, mountSetup: mountSetup, onSettings: null };
+  var api = { render: render, mountSetup: mountSetup, onSettings: null, tone: tone, onState: null };
   return api;
 })();

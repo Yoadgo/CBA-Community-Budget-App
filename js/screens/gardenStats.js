@@ -114,12 +114,53 @@
       function keepState() { S.weeks = weeks; S.showClosed = showClosed; S.catFilter = catFilter; S.trendTab = trendTab; }
 
       hidePeek();   // GXB2 (גל 9, 1.10.26) — הצצה פתוחה מהציור הקודם נסגרת
-      container.innerHTML = '<div class="gd-screen gx gx-vars" id="gx-root"></div>';
+      /* A0/A1 (אושר ע"י יועד 30.9.26, ספר האבנים) — סרגל ניהול דק מעל המסך:
+         "נתוני גינון" · מונים "ממתינות לאישורך" ו"נגררות" (אותם מספרים של
+         M.now — הכרטיס והאריח) · "לאישור ←" = אותה רשימת אישור שהקישור בכרטיס
+         פותח. לא כפתור "+" — ולכן ב-extra עם אותו עיצוב (cnp2-act) וחץ במקום
+         "+" בטלפון. אין כאן שורת כותרת להסיר (סבב עיצוב 4, 23.9); שלוש
+         העמודות נשארות בגוף. בלי canopy.js — המסך בדיוק כמו קודם. */
+      var barEl = null;
+      if (CBA.canopy && CBA.canopy.shell) {
+        var sh = CBA.canopy.shell(container, { key: "gardenStats", dom: "gar", title: "נתוני גינון",
+          ico: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+          pills: [{ id: "gx-p-appr", k: "ממתינות לאישורך", hidden: true }, { id: "gx-p-drag", k: "נגררות" }],
+          extra: '<button type="button" class="cnp2-act" id="gx-bar-appr" aria-label="לאישור" hidden>' +
+                   '<span class="cnp2-act__l">לאישור ←</span><span class="cnp2-act__s" aria-hidden="true">←</span></button>' });
+        barEl = sh.bar;
+        sh.body.innerHTML = '<div class="gd-screen gx gx-vars" id="gx-root"></div>';
+        /* onclick (השמה) — מחליף את מאזין הציור הקודם ומפנה תמיד לציור הנוכחי. */
+        barEl.querySelector("#gx-bar-appr").onclick = function () {
+          if (M) openList(lists("approval"));
+        };
+        barEl.querySelector("#gx-p-appr").onclick = function () { jumpTo(".gx-ap"); };
+        barEl.querySelector("#gx-p-drag").onclick = function () { jumpTo('.gx-tile[data-list="dragged"]'); };
+      } else {
+        container.innerHTML = '<div class="gd-screen gx gx-vars" id="gx-root"></div>';
+      }
       var root = container.querySelector("#gx-root");
       if (!reuseMap) skeleton();   // GXB1 (גל 9, 1.10.26) — בציור שקט עם מפה: ציור מיידי בסוף render (ר' שם)
       load();
 
       function alive() { return root && root.isConnected; }
+
+      /* A0 — מוני הסרגל אחרי כל ציור. "ממתינות לאישורך" ו"לאישור ←" גלויים
+         באותם תנאים של הכרטיס והקישור שבו: המונה כשהמתג "אישור מנהל" דלוק,
+         הכפתור רק כשיש מה לאשר. בזמן טעינה/כשל — "—". */
+      function updateBar(sk) {
+        if (!barEl) return;
+        var ok = !sk && !loadErr && M;
+        var a = ok ? M.now.approval : null;
+        barEl.querySelector("#gx-p-appr").hidden = !!(ok && !a.on);
+        CBA.canopy.pill(barEl, "gx-p-appr", ok ? a.count : null);
+        CBA.canopy.pill(barEl, "gx-p-drag", ok ? M.now.dragged.count : null);
+        barEl.querySelector("#gx-bar-appr").hidden = !(ok && a.on && a.count);
+      }
+      function jumpTo(sel) {
+        var el = root.querySelector(sel);
+        if (!el) return;
+        try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+      }
 
       function load() {
         /* 12 שבועות תמיד — ר' ההערה בראש הקובץ: מעבר תקופה הוא חישוב, לא קריאה. */
@@ -157,6 +198,7 @@
               '<div class="skeleton" style="height:110px;border-radius:18px"></div>' +
               '<div class="skeleton" style="height:220px;border-radius:18px"></div></div>';
           }).join("") + '</div>';
+        updateBar(true);
       }
 
       /* 🔴 23.9 (סבב עיצוב 4) — אין שורת כותרת. בורר התקופה יושב בתוך
@@ -185,6 +227,7 @@
             '<span>' + esc(loadErr) + '</span>' +
             '<button type="button" class="gd-cta" data-act="retry">נסה שוב</button></div>';
           wire();
+          updateBar();
           return;
         }
         if (!M) { skeleton(); return; }
@@ -211,6 +254,7 @@
             '</section>' +
           '</div>';
         wire();
+        updateBar();
         placeMap(dataOnly);
         sizeCharts();
       }

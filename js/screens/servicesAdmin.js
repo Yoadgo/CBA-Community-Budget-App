@@ -89,6 +89,24 @@ CBA.screens.servicesAdmin = {
      שיש לו רק "שירותים" רואה כאן רק את ניהול ההמלצות ודיווחי "לא מעודכן". */
   render: function (container) {
     var isSuperAdmin = window.CBA && CBA.isSuper === true;
+    /* A0/A1 (אושר ע"י יועד 30.9.26) — סרגל הניהול הדק: "ניהול שירותים" + פעולה
+       ראשית ("שירות חדש" למנהל-על; למי שיש רק "שירותים" — דיווחי "לא מעודכן"),
+       ושאר כפתורי הכותרת בתפריט ⋯ — כל פריט קורא לאותה פונקציה בדיוק.
+       בלי canopy.js — המסך כמו קודם. */
+    if (CBA.canopy) {
+      var sh = CBA.canopy.shell(container, { key: "servicesAdmin:" + (isSuperAdmin ? "super" : "svc"),
+        dom: "svc", ico: SADM_BAR_ICO, title: "ניהול שירותים",
+        act: isSuperAdmin ? { id: "sadm-bar-new", label: "שירות חדש" } : null,
+        extra: '<button type="button" class="cnp2-ico" id="sadm-bar-more" aria-label="עוד פעולות" title="עוד פעולות" aria-haspopup="dialog">⋯</button>' +
+          (isSuperAdmin ? "" : '<button type="button" class="cnp2-act" id="sadm-bar-stale" aria-label="דיווחי &quot;לא מעודכן&quot;">' +
+            '<span class="cnp2-act__l">דיווחי "לא מעודכן"</span><span class="cnp2-act__s" aria-hidden="true">!</span></button>') });
+      if (sh.fresh) {
+        if (isSuperAdmin) sh.bar.querySelector("#sadm-bar-new").addEventListener("click", function () { sadmOpenEditor(-1); });
+        else sh.bar.querySelector("#sadm-bar-stale").addEventListener("click", sadmOpenStaleReports);
+        sh.bar.querySelector("#sadm-bar-more").addEventListener("click", function () { sadmOpenMoreMenu(isSuperAdmin); });
+      }
+      sh.body.innerHTML = '<div id="sadm-body"></div>';
+    } else
     container.innerHTML =
       '<div class="screen-head screen-head--row">' +
         '<div><div class="screen-head__title">ניהול שירותים</div>' +
@@ -117,12 +135,14 @@ CBA.screens.servicesAdmin = {
     if (isSuperAdmin && window.CBA && CBA.committeeTree && CBA.committeeTree.load) {
       try { CBA.committeeTree.load(function () {}); } catch (e) {}
     }
-    if (isSuperAdmin) {
-      container.querySelector("#sadm-new").addEventListener("click", function () { sadmOpenEditor(-1); });
-      container.querySelector("#sadm-cats").addEventListener("click", sadmOpenCategories);
+    if (!CBA.canopy) {
+      if (isSuperAdmin) {
+        container.querySelector("#sadm-new").addEventListener("click", function () { sadmOpenEditor(-1); });
+        container.querySelector("#sadm-cats").addEventListener("click", sadmOpenCategories);
+      }
+      container.querySelector("#sadm-recs").addEventListener("click", sadmOpenRecommendations);
+      container.querySelector("#sadm-stale").addEventListener("click", sadmOpenStaleReports);
     }
-    container.querySelector("#sadm-recs").addEventListener("click", sadmOpenRecommendations);
-    container.querySelector("#sadm-stale").addEventListener("click", sadmOpenStaleReports);
 
     if (!isSuperAdmin) {
       body.innerHTML = '<div class="card club-card"><div class="club-empty">' +
@@ -137,6 +157,29 @@ CBA.screens.servicesAdmin = {
     sadmLoadList();
   }
 };
+
+/* A0 — אייקון התחום בסרגל, ותפריט ⋯ של כפתורי הכותרת שעברו מהעמוד.
+   גיליון CBA.ui.sheet עם עיצוב רשימת ה-"+" (plus-sheet) — בלי CSS חדש. */
+var SADM_BAR_ICO = '<path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z"/>';
+function sadmOpenMoreMenu(isSuperAdmin) {
+  if (!(CBA.ui && CBA.ui.sheet)) return;
+  var items = (isSuperAdmin ? [["cats", "ניהול קטגוריות"]] : [])
+    .concat([["recs", "ניהול המלצות תושבים"]])
+    .concat(isSuperAdmin ? [["stale", 'דיווחי "לא מעודכן"']] : []);
+  var run = { cats: sadmOpenCategories, recs: sadmOpenRecommendations, stale: sadmOpenStaleReports };
+  CBA.ui.sheet({
+    key: "sadm-more", label: "ניהול שירותים — עוד פעולות", sheetCls: "plus-sheet",
+    html: '<div class="plus-t">ניהול שירותים</div>' + items.map(function (it) {
+      return '<button type="button" class="plus-opt" data-sadm-more="' + it[0] + '"><span>' + sadmEsc(it[1]) + "</span></button>";
+    }).join(""),
+    onPick: function (e, close) {
+      var b = e.target.closest("[data-sadm-more]");
+      if (!b) return;
+      close();
+      run[b.getAttribute("data-sadm-more")]();
+    }
+  });
+}
 
 /* SMB1 (גל 8, 1.10.26) — טעינת הרשימה תמיד טרייה (עוקפת את המטמון), גם בניווט וגם בציור שקט. */
 function sadmLoadList() {

@@ -176,14 +176,56 @@ CBA.screens.appReports = (function () {
 
   function headHTML() {
     if (st.embedded) return "";
-    return '<div class="screen-head"><div class="screen-head__title">דיווחים על האפליקציה</div>' +
+    /* A0 — עם סרגל הניהול הכותרת עוברת לסרגל; שורת ההסבר נשארת */
+    return '<div class="screen-head">' + (CBA.canopy ? "" : '<div class="screen-head__title">דיווחים על האפליקציה</div>') +
            '<div class="screen-head__sub">מה שמשתמשים שולחים דרך הכפתור הוורוד</div></div>';
   }
 
+  /* ---------- סרגל הניהול (A0, ספר האבנים — אושר) ----------
+     רק כשהמסך נפתח לבד (למשל מקישור בפוש: NOTIFY_SCREENS → appReports).
+     משובץ ב"ניהול מערכת" — בלי סרגל (לסרגל של המרכז יש "דיווחים פתוחים").
+     "פתוחים" ו"תקלות" = אותם מספרים של המדדים "פתוחים" / "תקלות פתוחות". */
+  var RR_ICO = '<path d="M4 4h16v12H8l-4 4z"/><path d="M9 9h6M9 12h4"/>';
+  function openRows() { return st.rows.filter(function (r) { return !r.done; }); }
+  function setFilter(view, kind) {
+    st.view = view; st.keep = {};   // כמו לחיצה על "פתוחים" בבורר
+    try { localStorage.setItem(VIEW_KEY, st.view); } catch (x) {}
+    if (kind) st.kind = kind;       // כמו לחיצה על שבב הסינון
+  }
+  function surface(container) {
+    if (st.embedded || !CBA.canopy) return container;
+    var sh = CBA.canopy.shell(container, { key: "appReports", dom: "home", ico: RR_ICO, title: "דיווחים",
+      pills: [{ id: "rr-p-open", k: "פתוחים" }, { id: "rr-p-bug", k: "תקלות" }] });
+    if (sh.fresh) {
+      sh.bar.querySelector("#rr-p-open").addEventListener("click", function () {
+        setFilter("open", "all");
+        if (st.loaded) paint(container);
+        try { sh.body.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+      });
+      sh.bar.querySelector("#rr-p-bug").addEventListener("click", function () {
+        setFilter("open", "bug");
+        if (st.loaded) paint(container);
+        try { sh.body.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+      });
+    }
+    return sh.body;
+  }
+  function syncBars(container) {
+    if (st.embedded) {
+      if (CBA.screens.sysHub && CBA.screens.sysHub.syncBar) CBA.screens.sysHub.syncBar();
+      return;
+    }
+    if (!CBA.canopy) return;
+    var open = st.loaded ? openRows() : null;
+    CBA.canopy.pill(container, "rr-p-open", open ? open.length : null);
+    CBA.canopy.pill(container, "rr-p-bug", open ? open.filter(isBug).length : null);
+  }
+
   function paint(container) {
-    container.innerHTML = '<div class="rr-root">' + headHTML() + kpis() + controlsHTML() +
+    surface(container).innerHTML = '<div class="rr-root">' + headHTML() + kpis() + controlsHTML() +
                           '<div class="rr-list">' + listHTML() + "</div></div>";
     wire(container, container.querySelector(".rr-root"));
+    syncBars(container);
   }
 
   /* ARB2 (גל 9, 1.10.26) — "המסך עדיין פתוח?" לפני ציור מאוחר: עצמאי — לפי CBA.onScreen; משובץ ב-sysHub — לפי חיבור החלונית ל-DOM. */
@@ -311,6 +353,13 @@ CBA.screens.appReports = (function () {
     title: "דיווחים על האפליקציה",
     /* לשימוש מסך התחקור — אותם נתונים בלי קריאה נוספת כשכבר נטענו. */
     rows: function () { return st.rows.slice(); },
+    /* A0 — לסרגל של "ניהול מערכת": מספר הפתוחים מהזיכרון (null = עוד לא נטען). */
+    openCount: function () { return st.loaded ? openRows().length : null; },
+    /* A0 — מונה "דיווחים פתוחים" בסרגל המרכז: אותו מעבר של "פתוחים" + "הכול". */
+    filter: function (view, kind, container) {
+      setFilter(view, kind);
+      if (container && st.loaded && container.isConnected !== false) paint(container);
+    },
     load: function (cb) {
       CBA.data.getAppReports(function (res) {
         if (res && res.ok) { st.rows = res.rows || []; st.loaded = true; }
@@ -327,15 +376,16 @@ CBA.screens.appReports = (function () {
         paint(container);
       } else {
         st.keep = {};
-        container.innerHTML = headHTML() + (CBA.skel && CBA.skel.cards ? CBA.skel.cards(3) :
+        surface(container).innerHTML = headHTML() + (CBA.skel && CBA.skel.cards ? CBA.skel.cards(3) :
           '<div class="card"><div class="club-empty">טוען…</div></div>');
+        syncBars(container);
       }
       CBA.data.getAppReports(function (res) {
         if (!stillHere(container, embedded)) return;   /* ARB2 (גל 9, 1.10.26) — המשתמש כבר עבר מסך/לשונית */
         if (!res || !res.ok) {
           if (quiet) return;   /* ARB1 — ברענון שקט נשארים עם מה שמצויר */
           /* ARB3 (גל 9, 1.10.26) — כפתור "נסה שוב" בכשל טעינה */
-          container.innerHTML = headHTML() + '<div class="card"><div class="club-empty">לא ניתן לטעון כרגע. ' +
+          surface(container).innerHTML = headHTML() + '<div class="card"><div class="club-empty">לא ניתן לטעון כרגע. ' +
             esc((res && res.error) || "") +
             ' <button type="button" class="btn-ghost btn-sm" data-rr-retry>נסה שוב</button></div></div>';
           var rb = container.querySelector("[data-rr-retry]");

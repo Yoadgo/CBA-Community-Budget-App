@@ -30,8 +30,45 @@ CBA.screens = CBA.screens || {};
   ];
 
   function head() {
+    if (CBA.canopy) return "";   /* A0 — הכותרת בסרגל הניהול */
     return '<div class="screen-head"><div class="screen-head__title">ניהול WeWork</div>' +
       '<div class="screen-head__sub">שריונים, כניסות וכללי השריון</div></div>';
+  }
+
+  /* A0/A1 (אושר ע"י יועד 30.9.26) — סרגל הניהול הדק: "ניהול WeWork", מונים
+     "תפוס עכשיו" ו"לא הגיעו" (מאותו חישוב של המדדים והרשימה), ו"כללי השריון"
+     שפותח את אותו עורך (data-wa-edit — נתפס במאזין הקיים של wire()).
+     מחזיר את הגוף שאליו המסך מצייר; בלי canopy.js — container כמו קודם. */
+  var WA_BAR_ICO = '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>';
+  function surface(container) {
+    if (!CBA.canopy) return container;
+    var sh = CBA.canopy.shell(container, { key: SCREEN, dom: "gym", ico: WA_BAR_ICO, title: "ניהול WeWork",
+      pills: [{ id: "wa-p-now", k: "תפוס עכשיו", hidden: true }, { id: "wa-p-noshow", k: "לא הגיעו" }],
+      extra: '<button type="button" class="cnp2-act" id="wa-bar-rules" data-wa-edit hidden aria-label="כללי השריון">' +
+        '<span class="cnp2-act__l">כללי השריון</span><span class="cnp2-act__s" aria-hidden="true">⚙</span></button>' });
+    if (sh.fresh) {
+      var go = function (sel) {
+        var el = sh.body.querySelector(sel) || sh.body.querySelector("[data-wa-list]");
+        if (el) { try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} }
+      };
+      sh.bar.querySelector("#wa-p-now").addEventListener("click", function () { go('[data-wa-ph="now"]'); });
+      sh.bar.querySelector("#wa-p-noshow").addEventListener("click", function () { go("[data-wa-noshow]"); });
+    }
+    return sh.body;
+  }
+  /* המונים — אותם תנאים של המדד "עכשיו" ושל תגית "לא הגיע/ה" ברשימה */
+  function updateBar(container) {
+    var bar = CBA.canopy && container.querySelector(":scope > .cnp2--bar");
+    if (!bar) return;
+    var ready = !!(st.cfg && st.rows && !st.err);
+    var rows = ready ? st.rows.filter(function (b) { return b.status === "active"; }) : [];
+    var today = st.day === D().today();
+    var nowN = rows.filter(function (b) { return D().phase(b) === "now"; }).length;
+    var noShow = rows.filter(function (b) { return !b.enteredAtMs && D().phase(b) === "ended"; }).length;
+    bar.querySelector("#wa-p-now").hidden = !(ready && today);
+    bar.querySelector("#wa-bar-rules").hidden = !st.cfg;   // העורך צריך את הכללים שנטענו (כמו כפתור "עריכה" בכרטיס)
+    CBA.canopy.pill(bar, "wa-p-now", ready && today ? nowN : null);
+    CBA.canopy.pill(bar, "wa-p-noshow", ready ? noShow : null);
   }
 
   function load(container, quiet) {
@@ -69,6 +106,7 @@ CBA.screens = CBA.screens || {};
     if (!k || !l || !st.cfg) { draw(container); return; }
     k.innerHTML = kpis();
     l.innerHTML = listHTML();
+    updateBar(container);
   }
   /* WWB2 (גל 8, 1.10.26) — האזנה חיה ליום הנבחר (weworkDays נבנה מחדש בכל שריון/ביטול) → טעינה שקטה של הרשימה */
   function unwatch() {
@@ -136,7 +174,10 @@ CBA.screens = CBA.screens || {};
         b.enteredAtMs ? '<span class="gym-pill gym-pill--ok">נכנס/ה ' + esc(new Date(b.enteredAtMs).toTimeString().slice(0, 5)) + "</span>" :
         ph === "ended" ? '<span class="gym-pill gym-pill--warn">לא הגיע/ה</span>' :
         ph === "now" ? '<span class="gym-pill gym-pill--warn">עוד לא הגיע/ה</span>' : '<span class="gym-pill gym-pill--muted">מתוכנן</span>';
-      return '<div class="wa-row' + (active ? "" : " is-off") + '">' +
+      /* A0 — סימון לגלילה ממוני הסרגל (בלי שינוי תצוגה) */
+      var mark = active && !b.enteredAtMs ? (ph === "ended" ? " data-wa-noshow" : "") : "";
+      if (active && ph === "now") mark += ' data-wa-ph="now"';
+      return '<div class="wa-row' + (active ? "" : " is-off") + '"' + mark + '>' +
         '<span class="wa-row__t"><bdi dir="ltr">' + esc(D().range(b.from, b.to)) + "</bdi></span>" +
         '<div class="wa-row__who"><b>' + esc(famName(b.familyId, b.slot)) + "</b><div>" + esc(D().SEAT_LABEL[b.seat] || "") + "</div></div>" +
         status +
@@ -159,14 +200,16 @@ CBA.screens = CBA.screens || {};
   }
 
   function draw(container) {
+    var host = surface(container);
     if (st.err) {
-      container.innerHTML = head() + CBA.ui.emptyState({ icon: "calendar", title: "לא הצלחנו לטעון", sub: st.err, ctaLabel: "נסה שוב", ctaAttr: "data-wa-retry" });
+      host.innerHTML = head() + CBA.ui.emptyState({ icon: "calendar", title: "לא הצלחנו לטעון", sub: st.err, ctaLabel: "נסה שוב", ctaAttr: "data-wa-retry" });
       var r = container.querySelector("[data-wa-retry]");
       if (r) r.addEventListener("click", function () { st.err = ""; load(container); });
+      updateBar(container);
       return;
     }
-    if (!st.cfg) { container.innerHTML = head() + CBA.skel.stats(3) + CBA.skel.table(5, 4); return; }
-    container.innerHTML = head() +
+    if (!st.cfg) { host.innerHTML = head() + CBA.skel.stats(3) + CBA.skel.table(5, 4); updateBar(container); return; }
+    host.innerHTML = head() +
       '<div data-wa-kpis>' + kpis() + "</div>" +
       '<div class="wa-grid">' +
         '<section class="card club-card ww-card wa-day">' + daysHTML() + '<div data-wa-list>' + listHTML() + "</div></section>" +
@@ -174,6 +217,7 @@ CBA.screens = CBA.screens || {};
       "</div>";
     var cur = container.querySelector('.ww-day[aria-pressed="true"]');
     if (cur) { try { cur.scrollIntoView({ block: "nearest", inline: "center" }); } catch (e) { } }
+    updateBar(container);
   }
   function drawList(container) {
     var el = container.querySelector("[data-wa-list]");
@@ -236,7 +280,7 @@ CBA.screens = CBA.screens || {};
   CBA.screens[SCREEN] = {
     title: "ניהול WeWork",
     render: function (container, opts) {
-      if (!CBA.door) { container.innerHTML = head(); return; }
+      if (!CBA.door) { surface(container).innerHTML = head(); return; }
       var silent = !!((opts && opts.silent) || CBA.renderSilent);
       if (!silent) {
         /* WWB1 (גל 8, 1.10.26) — כניסה רגילה למסך מתחילה בלי השגיאה של הביקור הקודם */

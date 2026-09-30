@@ -990,6 +990,9 @@ CBA.screens = CBA.screens || {};
     if (on) gaHoldTimer = setInterval(function () { gaSyncHold(membersEl); }, 1500);
   }
   var gaLiveLoad = null;   /* GMB6 (גל 8, 1.10.26) — load() של הציור החי האחרון */
+  /* A0 — כפתורי סרגל הניהול נקשרים פעם אחת וקוראים לציור החי האחרון */
+  var gaBarLive = null;
+  var GA_BAR_ICO = '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>';
 
   function chip(n, label, tone) {
     return '<span class="ga-chip' + (tone && n ? " ga-chip--" + tone : "") + '">' + CBA.esc(label) + "<b>" + CBA.esc(String(n)) + "</b></span>";
@@ -1004,12 +1007,32 @@ CBA.screens = CBA.screens || {};
       if (CBA.holdRefresh) CBA.holdRefresh("gymVerify", false);
       clearInterval(gaHoldTimer); gaHoldTimer = null;
 
-      container.innerHTML =
+      /* A0/A1 (אושר ע"י יועד 30.9.26) — סרגל הניהול הדק: "מכון כושר", שני מונים
+         ("ממתינים לך", "פערי תשלום" — אותם מספרים של השבבים), "+ מנוי חדש",
+         ⚙ הגדרות (אייקון) ונקודת מצב המנעול. שאר השבבים נשארים בשורה בגוף.
+         בלי canopy.js — המסך כמו קודם. */
+      var host = container, gaBar = null;
+      if (CBA.canopy) {
+        var sh = CBA.canopy.shell(container, { key: "gymAdmin", dom: "gym", ico: GA_BAR_ICO, title: "מכון כושר",
+          pills: [{ id: "ga-p-mine", k: "ממתינים לך" }, { id: "ga-p-gaps", k: "פערי תשלום", hidden: true }],
+          act: { id: "ga-bar-new", label: "מנוי חדש" },
+          extra: '<span class="da-dot" id="ga-bar-door" role="img" hidden></span>' +
+            '<button type="button" class="cnp2-ico" id="ga-bar-settings" aria-label="הגדרות" title="הגדרות">⚙</button>' });
+        host = sh.body; gaBar = sh.bar;
+        if (sh.fresh) {
+          /* נקשר פעם אחת; קורא לציור החי (gaBarLive) — לא לסגירה של ציור ישן */
+          gaBar.querySelector("#ga-bar-new").addEventListener("click", function () { if (gaBarLive) gaBarLive.create(); });
+          gaBar.querySelector("#ga-bar-settings").addEventListener("click", function () { if (gaBarLive) gaBarLive.settings(); });
+          gaBar.querySelector("#ga-p-mine").addEventListener("click", function () { if (gaBarLive) gaBarLive.attn(); });
+          gaBar.querySelector("#ga-p-gaps").addEventListener("click", function () { if (gaBarLive) gaBarLive.gaps(); });
+        }
+      }
+      host.innerHTML =
         '<div class="ga-head">' +
-          '<div class="ga-head__t">מכון כושר</div>' +
+          (gaBar ? "" : '<div class="ga-head__t">מכון כושר</div>') +
           '<div id="ga-kpis" class="ga-chips"></div>' +
-          '<button type="button" class="btn-ghost" id="ga-settings">⚙ הגדרות</button>' +
-          '<button type="button" class="btn-primary" id="ga-new">+ מנוי חדש</button>' +
+          (gaBar ? "" : '<button type="button" class="btn-ghost" id="ga-settings">⚙ הגדרות</button>' +
+          '<button type="button" class="btn-primary" id="ga-new">+ מנוי חדש</button>') +
         "</div>" +
         '<div class="ga-grid">' +
           '<section class="card club-card ga-card">' +
@@ -1024,11 +1047,43 @@ CBA.screens = CBA.screens || {};
       var doorEl = container.querySelector("#ga-door");
       var newBtn = container.querySelector("#ga-new");
       if (newBtn) newBtn.addEventListener("click", function () { openCreate(container, load); });
-      container.querySelector("#ga-settings").addEventListener("click", function () { openSettings("gym", load, doorEl); });
+      var setBtn = container.querySelector("#ga-settings");
+      if (setBtn) setBtn.addEventListener("click", function () { openSettings("gym", load, doorEl); });
+      gaBarLive = {
+        create: function () { openCreate(container, load); },
+        settings: function () { openSettings("gym", load, doorEl); },
+        attn: function () {   // = לחיצה על המסנן "ממתינים לך" של רשימת המנויים
+          gaFilter = "attn"; if (gaLast) paintMembers();
+          var card = membersEl.closest(".ga-card");
+          try { (card || membersEl).scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+        },
+        gaps: function () {   // אין מסנן לפערים — מציגים הכול וגוללים לשורה הראשונה שמסומן בה פער
+          if (gaFilter !== "all") { gaFilter = "all"; if (gaLast) paintMembers(); }
+          var first = null;
+          ((gaLast && gaLast.members) || []).some(function (m) {
+            var sv = String(m["מצב סנכרון"] || "").trim();
+            if (sv && sv !== "מסונכרן") { first = membersEl.querySelector('[data-ga-row="' + String(m["מזהה"] || "").replace(/"/g, "") + '"]'); return !!first; }
+            return false;
+          });
+          try { (first || membersEl).scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+        }
+      };
+      /* נקודת המנעול בסרגל — רק ממצב שכרטיס בקרת הכניסה כבר טוען (בלי קריאה נוספת) */
+      function paintDoorDot() {
+        var dot = gaBar && gaBar.querySelector("#ga-bar-door");
+        if (!dot) return;
+        var tone = CBA.doorAdmin && CBA.doorAdmin.tone ? CBA.doorAdmin.tone() : null;
+        var TXT = { ok: "הדלת מחוברת", warn: "הדלת: סוללה חלשה", danger: "הדלת: המנעול לא עונה" };
+        var COL = { ok: "var(--ok)", warn: "var(--warn)", danger: "var(--danger)" };
+        dot.hidden = !TXT[tone];
+        if (TXT[tone]) { dot.style.background = COL[tone]; dot.title = TXT[tone]; dot.setAttribute("aria-label", TXT[tone]); }
+      }
       if (CBA.doorAdmin) {
         CBA.doorAdmin.onSettings = function () { openSettings("door", load, doorEl); };
+        CBA.doorAdmin.onState = paintDoorDot;
         CBA.doorAdmin.render(doorEl);
       }
+      paintDoorDot();
 
       var kpisEl    = container.querySelector("#ga-kpis");
       var membersEl = container.querySelector("#ga-members");
@@ -1125,6 +1180,7 @@ CBA.screens = CBA.screens || {};
             var retry = membersEl.querySelector("[data-ga-retry]");
             if (retry) retry.addEventListener("click", function () { membersEl.innerHTML = gaLoadingHTML(); load(); });
             kpisEl.innerHTML = "";
+            if (gaBar) { CBA.canopy.pill(gaBar, "ga-p-mine", null); gaBar.querySelector("#ga-p-gaps").hidden = true; }
             if (cb) cb();
             return;
           }
@@ -1147,9 +1203,15 @@ CBA.screens = CBA.screens || {};
           var waitPay = countBy(members, "ממתין לתשלום");
           var expired = countBy(members, "פג תוקף");
           var gaps = members.filter(function (x) { var sv = String(x["מצב סנכרון"] || "").trim(); return sv && sv !== "מסונכרן"; }).length;
-          kpisEl.innerHTML = chip(active, "פעילים", "ok") + chip(mine, "ממתינים לך", "warn") +
+          /* A0 — "ממתינים לך" ו"פערי תשלום" עברו לסרגל (אותם מספרים); השאר נשארים כאן */
+          kpisEl.innerHTML = chip(active, "פעילים", "ok") + (gaBar ? "" : chip(mine, "ממתינים לך", "warn")) +
             (waitPay ? chip(waitPay, "ממתינים לתשלום", "") : "") + (expired ? chip(expired, "פג תוקף", "") : "") +
-            (gaps ? chip(gaps, "פערי תשלום", "warn") : "");
+            (gaps && !gaBar ? chip(gaps, "פערי תשלום", "warn") : "");
+          if (gaBar) {
+            CBA.canopy.pill(gaBar, "ga-p-mine", mine);
+            CBA.canopy.pill(gaBar, "ga-p-gaps", gaps);
+            gaBar.querySelector("#ga-p-gaps").hidden = !gaps;   // כמו השבב: מוצג רק כשיש פערים
+          }
           paintMembers();
           if (gaWinScrollY) window.scrollTo(0, gaWinScrollY);
           gaWinScrollY = 0;

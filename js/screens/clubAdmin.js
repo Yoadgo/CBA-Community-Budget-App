@@ -11,6 +11,9 @@ var caScrollP = 0, caScrollA = 0, caWinScrollY = 0;
 
 /* CLB2 (גל 8, 1.10.26) — הבחירות המסומנות נשמרות כאן (מזהה→true) ומסומנות מחדש אחרי כל ציור; רענון רקע מושהה כל עוד יש לפחות אחת */
 var caPicks = {};
+/* A0 — הציור החי האחרון (כפתורי הסרגל נקשרים פעם אחת וקוראים לכאן) */
+var caLive = null;
+var CA_BAR_ICO = '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M9 15l2 2 4-4"/>';
 var caLeaveWatch = false;
 function caSyncPickHold() {
   if (CBA.holdRefresh) CBA.holdRefresh("clubPicks", Object.keys(caPicks).length > 0);
@@ -61,9 +64,26 @@ CBA.screens.clubAdmin = {
     if (prevAll) caScrollA = prevAll.scrollTop;
     caWinScrollY = window.scrollY || 0;
 
-    container.innerHTML = `
+    /* A0/A1 (אושר ע"י יועד 30.9.26) — סרגל הניהול הדק במקום כותרת העמוד:
+       שם, מונה "ממתינות" (+ "פגומים" רק כשיש), ו"אשר את הנבחרים" — אותה פעולה
+       של סרגל האישור המרובה, שעבר לסרגל. בלי canopy.js — המסך כמו קודם. */
+    var host = container, caBar = null;
+    if (CBA.canopy) {
+      var sh = CBA.canopy.shell(container, { key: "clubAdmin", dom: "ev", ico: CA_BAR_ICO, title: "שריון מועדון",
+        pills: [{ id: "ca-p-pend", k: "ממתינות" }, { id: "ca-p-broken", k: "פגומים", hidden: true }],
+        extra: '<button type="button" class="cnp2-act" id="ca-bar-ok" hidden disabled aria-label="אשר את הנבחרים">' +
+          '<span class="cnp2-act__l">אשר את הנבחרים</span><span class="cnp2-act__s" aria-hidden="true">✓</span></button>' });
+      host = sh.body; caBar = sh.bar;
+      if (sh.fresh) {
+        /* המאזינים נקשרים פעם אחת לסרגל, וקוראים לציור החי (caLive) — לא לסגירה של ציור ישן */
+        caBar.querySelector("#ca-bar-ok").addEventListener("click", function () { if (caLive) caLive.approve(); });
+        caBar.querySelector("#ca-p-pend").addEventListener("click", function () { if (caLive) caLive.go("#ca-pending"); });
+        caBar.querySelector("#ca-p-broken").addEventListener("click", function () { if (caLive) caLive.go(".club-row--broken"); });
+      }
+    }
+    host.innerHTML = (CBA.canopy ? "" : `
       <div class="screen-head"><div class="screen-head__title">שריון מועדון — ניהול</div>
-        <div class="screen-head__sub">אישור בקשות שריון מתושבים, וצפייה בכל השריונים הקרובים</div></div>
+        <div class="screen-head__sub">אישור בקשות שריון מתושבים, וצפייה בכל השריונים הקרובים</div></div>`) + `
       <div class="card club-card" id="ca-pending">
         <div class="club-sec__title">ממתינות לאישור</div>
         <div id="ca-pending-list" class="club-list">${clubLoadingHTML()}</div>
@@ -80,14 +100,35 @@ CBA.screens.clubAdmin = {
       var bar = document.createElement("div");
       bar.className = "club-bulk"; bar.id = "ca-bulk"; bar.hidden = true;
       bar.innerHTML = '<span class="club-bulk__count" id="ca-bulk-count">בחרו שריונים לאישור</span>' +
-        '<button type="button" class="btn-approve" id="ca-bulk-ok" disabled>אשר את הנבחרים</button>';
+        /* A0 — הכפתור עצמו בסרגל הניהול (#ca-bar-ok); כאן רק כשאין סרגל */
+        (caBar ? "" : '<button type="button" class="btn-approve" id="ca-bulk-ok" disabled>אשר את הנבחרים</button>');
       pendingHost.parentNode.insertBefore(bar, pendingHost);
-      bar.querySelector("#ca-bulk-ok").addEventListener("click", function () { caBulkApprove(); });
+      var bulkOk = bar.querySelector("#ca-bulk-ok");
+      if (bulkOk) bulkOk.addEventListener("click", function () { caBulkApprove(); });
     }
     var caBulkBar = container.querySelector("#ca-bulk");
     var pendingList = container.querySelector("#ca-pending-list");
     var allList = container.querySelector("#ca-all-list");
     caWatchLeave();
+    caLive = {
+      approve: function () { caBulkApprove(); },
+      go: function (sel) {
+        var el = container.querySelector(sel);
+        if (el) { try { el.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} }
+      }
+    };
+    /* A0 — כפתור הסרגל משקף את כפתור האישור המרובה: מוצג כשסרגל האישור מוצג, כבוי כשאין בחירה */
+    function caOkBtn() { return caBar ? caBar.querySelector("#ca-bar-ok") : container.querySelector("#ca-bulk-ok"); }
+    function caSetOkLabel(t) {
+      var b = caOkBtn(); if (!b) return;
+      var l = b.querySelector(".cnp2-act__l");
+      if (l) l.textContent = t; else b.textContent = t;
+    }
+    function caSetOkDisabled(dis) {
+      var b = caOkBtn(); if (!b) return;
+      b.disabled = dis;
+      if (caBar) b.style.opacity = dis ? ".5" : "";
+    }
 
     function load() {
       pendingList.innerHTML = clubLoadingHTML();
@@ -114,6 +155,14 @@ CBA.screens.clubAdmin = {
         // הוא רעש: כפתור "אשר" של השורה עושה בדיוק את אותו דבר.
         var okPending = pending.filter(function (r) { return !clubRowBroken(r); });
         caBulkBar.hidden = okPending.length < 2;
+        if (caBar) {
+          caBar.querySelector("#ca-bar-ok").hidden = caBulkBar.hidden;
+          /* מונים: אותן רשימות שהמסך כבר מחשב — ממתינות, ומתוכן פגומות (clubRowBroken) */
+          var brokenN = pending.length - okPending.length;
+          CBA.canopy.pill(caBar, "ca-p-pend", pending.length);
+          CBA.canopy.pill(caBar, "ca-p-broken", brokenN);
+          caBar.querySelector("#ca-p-broken").hidden = !(brokenN > 0);
+        }
         /* CLB2 (גל 8, 1.10.26) — מזהים שכבר לא ממתינים (אושרו/נדחו/בוטלו) יוצאים מהבחירה */
         var livePick = {};
         okPending.forEach(function (r) { if (caPicks[r.id]) livePick[r.id] = true; });
@@ -197,9 +246,8 @@ CBA.screens.clubAdmin = {
     function caUpdateBulk() {
       var n = caPicked().length;
       var lbl = container.querySelector("#ca-bulk-count");
-      var btn = container.querySelector("#ca-bulk-ok");
       if (lbl) lbl.textContent = n ? n + " נבחרו" : "בחרו שריונים לאישור";
-      if (btn) btn.disabled = !n;
+      caSetOkDisabled(!n);
     }
     function caBulkApprove() {
       var ids = caPicked();
@@ -210,13 +258,12 @@ CBA.screens.clubAdmin = {
         { title: "לאשר " + ids.length + " שריונים?", okText: "אשר הכול" }
       ).then(function (ok) {
         if (!ok) { if (CBA.holdRefresh) CBA.holdRefresh("clubAction", false); return; }
-        var btn = container.querySelector("#ca-bulk-ok");
-        if (btn) { btn.disabled = true; btn.textContent = "מאשר…"; }
+        caSetOkDisabled(true); caSetOkLabel("מאשר…");
         CBA.data.approveClubReservations(ids, function (res) {
           if (CBA.holdRefresh) CBA.holdRefresh("clubAction", false);
-          if (btn) btn.textContent = "אשר את הנבחרים";
+          caSetOkLabel("אשר את הנבחרים");
           if (!res || !res.ok) {
-            if (btn) btn.disabled = false;
+            caSetOkDisabled(false);
             CBA.ui.alert((res && res.error) || "האישור נכשל, נסו שוב.");
             return;
           }

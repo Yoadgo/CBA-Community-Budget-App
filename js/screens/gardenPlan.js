@@ -87,7 +87,28 @@
          מחדש משימות שכבר קיימות. */
       var loadErr = null;
 
-      container.innerHTML = '<div class="gd-screen" id="gp-root"></div>';
+      /* A0/A1 (אושר ע"י יועד 30.9.26, ספר האבנים) — סרגל ניהול דק מעל המסך:
+         "תוכנית העבודה" · מונה "פעילות" (אותו מספר של שורת הסיכום) · "+ משימה
+         חדשה" (אותה openForm). המתג והערת "קדימה בלבד" נשארים בגוף. בלי
+         canopy.js — המסך בדיוק כמו קודם (הכותרת והכפתור בשורה). */
+      var barEl = null;
+      if (CBA.canopy && CBA.canopy.shell) {
+        var sh = CBA.canopy.shell(container, { key: "gardenPlan", dom: "gar", title: "תוכנית העבודה",
+          ico: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+          pills: [{ id: "gp-p-on", k: "פעילות" }],
+          act: { id: "gp-bar-new", label: "משימה חדשה" } });
+        barEl = sh.bar;
+        sh.body.innerHTML = '<div class="gd-screen" id="gp-root"></div>';
+        /* onclick (השמה ולא addEventListener) — מחליף את המאזין של ציור קודם
+           במקום לצבור, ותמיד מפנה ל-openForm/root של הציור הנוכחי. */
+        barEl.querySelector("#gp-bar-new").onclick = function () { openForm(null); };
+        barEl.querySelector("#gp-p-on").onclick = function () {
+          var top = root.querySelector(".gt-grp") || root;
+          try { top.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+        };
+      } else {
+        container.innerHTML = '<div class="gd-screen" id="gp-root"></div>';
+      }
       var root = container.querySelector("#gp-root");
       /* GPB1 (גל 8, 1.10.26) — מאזין הלחיצות המואצל נרשם פעם אחת כאן, לא בכל draw() (אחרת טופס נפתח N פעמים). */
       if (!root.dataset.gpWired) { root.addEventListener("click", onClick); root.dataset.gpWired = "1"; }
@@ -150,6 +171,7 @@
           root.querySelector("#gp-retry").addEventListener("click", function () {
             loadErr = null; draw(true); load();
           });
+          updateBar(null);
           return;
         }
         var body;
@@ -180,14 +202,19 @@
 
         var on = defs.filter(function (d) { return d.active; }).length;
         root.innerHTML =
-          '<div class="gt-ctl">' +
-            '<div class="gp-sum">' + (defs.length
-              ? '<b>' + on + '</b> משימות שגרה פעילות' +
-                (defs.length - on ? ' <em>· ' + (defs.length - on) + ' כבויות</em>' : '')
-              : 'תוכנית העבודה') + '</div>' +
-            '<button type="button" class="gt-tool is-primary" id="gp-new" aria-label="משימה חדשה">' +
-              ico("plus", 16) + '</button>' +
-          '</div>' +
+          /* A0 — עם הסרגל: הכותרת, מונה הפעילות וה-"+" עברו לסרגל; כאן נשארת
+             רק שורה קטנה של הכבויות (לא מוצגות בשום מקום אחר), כשיש כאלה. */
+          (barEl
+            ? '<div class="gp-sum gp-sum--off"' + (defs.length - on ? '' : ' hidden') + '>' +
+                offLine(defs.length - on) + '</div>'
+            : '<div class="gt-ctl">' +
+                '<div class="gp-sum">' + (defs.length
+                  ? '<b>' + on + '</b> משימות שגרה פעילות' +
+                    (defs.length - on ? ' <em>· ' + (defs.length - on) + ' כבויות</em>' : '')
+                  : 'תוכנית העבודה') + '</div>' +
+                '<button type="button" class="gt-tool is-primary" id="gp-new" aria-label="משימה חדשה">' +
+                  ico("plus", 16) + '</button>' +
+              '</div>') +
           '<p class="gp-hint">שינוי כאן משפיע קדימה בלבד. משימות שכבר נכנסו לשבוע לא זזות.</p>' +
           /* 🔴 22.9 (הכרעת יועד) — מתג "אישור מנהל לתקלות דיירים". יושב כאן,
              במסך שרק מנהל הגינון רואה, ולא במסך המשימות שגם הגנן רואה. */
@@ -204,6 +231,15 @@
         var nb = root.querySelector("#gp-new");
         if (nb) nb.addEventListener("click", function () { openForm(null); });
         wireSettings();
+        updateBar(skeleton ? null : on);
+      }
+
+      /* A0 — מונה "פעילות" בסרגל (null → "—" בזמן טעינה/כשל). */
+      function updateBar(n) {
+        if (barEl) CBA.canopy.pill(barEl, "gp-p-on", n);
+      }
+      function offLine(off) {
+        return off ? '<em>משימות שגרה כבויות: ' + off + '</em>' : '';
       }
 
       /* המתג נטען אחרי הרינדור (קריאה אחת, מסמך אחד) ומתהפך מיד; אם
@@ -311,6 +347,12 @@
         var el = root.querySelector(".gp-sum");
         if (!el || !defs.length) return;
         var on = defs.filter(function (x) { return x.active; }).length;
+        if (barEl) {   // A0 — המונה בסרגל + שורת הכבויות בגוף
+          updateBar(on);
+          el.innerHTML = offLine(defs.length - on);
+          el.hidden = !(defs.length - on);
+          return;
+        }
         el.innerHTML = '<b>' + on + '</b> משימות שגרה פעילות' +
           (defs.length - on ? ' <em>· ' + (defs.length - on) + ' כבויות</em>' : '');
       }

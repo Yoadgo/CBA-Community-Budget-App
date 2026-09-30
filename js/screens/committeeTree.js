@@ -421,7 +421,7 @@
       var w = who(h);
       var warn = edit && (w.review || w.kind === "gone");
       if (w.kind === "loading") return '<span class="ct-nm is-loading" aria-label="טוען שם"></span>';
-      return '<span class="ct-nm' + (warn ? " is-warn" : "") + '">' + esc(w.name) + '</span>';
+      return '<span class="ct-nm' + (warn ? " is-warn" : "") + '"' + (warn ? ' data-ct-warn="' + (w.review ? "review" : "gone") + '"' : "") + '>' + esc(w.name) + '</span>';
     }).join('<span class="ct-sep">, </span>') + '</span>';
   }
   function hitCls(m, id) { return !m ? "" : (m.self[id] ? " is-hit" : (m.live[id] ? "" : " is-dim")); }
@@ -540,14 +540,41 @@
   /* ==========================================================================
    *  המסך
    * ======================================================================== */
+  /* A0/A1 (אושר ע"י יועד 30.9.26) — סרגל הניהול הדק, רק במצב עריכה (committeeAdmin;
+     תצוגת התושבים בלי סרגל): "ועד השיכון · <שנה>", מונים "לבדיקה" ו"עזבו" (אותם
+     מספרים של שני הבאנרים שעברו לסרגל) ו"+ חדש". החיפוש, המקרא, "סוגים וצבעים",
+     הרמז והבאנר "מבנה חדש — שמירה" נשארים בגוף. הכפתורים נקשרים פעם אחת וקוראים
+     למופע החי (ctBarLive). */
+  var ctBarLive = null;
+  var CT_BAR_ICO = '<circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v4M5 16.5V14h14v2.5M12 11.5V14"/>';
+  var CT_WHY = { review: "שמות שלא זוהו אוטומטית. לחצו על הפריט ובחרו תושב, או סמנו שזה אדם מבחוץ.",
+                 gone: "בעלי תפקיד שכבר לא ברשימת התושבים הפעילים." };
+  function ctShell(container, year) {
+    var sh = CBA.canopy.shell(container, { key: "committeeAdmin:" + year, dom: "ev", ico: CT_BAR_ICO,
+      title: "ועד השיכון · " + (year || String(new Date().getFullYear())),
+      pills: [{ id: "ct-p-review", k: "לבדיקה" }, { id: "ct-p-gone", k: "עזבו" }],
+      act: { id: "ct-bar-add", label: "חדש" } });
+    if (sh.fresh) {
+      sh.bar.querySelector("#ct-bar-add").addEventListener("click", function () { if (ctBarLive) ctBarLive.add(); });
+      sh.bar.querySelector("#ct-p-review").addEventListener("click", function () { if (ctBarLive) ctBarLive.go("review"); });
+      sh.bar.querySelector("#ct-p-gone").addEventListener("click", function () { if (ctBarLive) ctBarLive.go("gone"); });
+      sh.bar.querySelector("#ct-p-review").title = CT_WHY.review;
+      sh.bar.querySelector("#ct-p-gone").title = CT_WHY.gone;
+    }
+    return sh;
+  }
+
   function mount(container, edit, opts) {
     var year = curYear();
     var wasLoaded = S.loaded;
-    container.innerHTML = '<div class="ct' + (edit ? " ct--edit" : "") + '">' +
+    var host = container, ctBar = null;
+    if (edit && CBA.canopy) { var sh = ctShell(container, year); host = sh.body; ctBar = sh.bar; }
+    host.innerHTML = '<div class="ct' + (edit ? " ct--edit" : "") + '">' +
       '<div class="ct-tools">' +
         '<label class="ct-search">' + ICON_SEARCH + '<input type="search" id="ct-q" placeholder="חיפוש שם או תפקיד" aria-label="חיפוש בעץ הוועד" value="' + esc(V.q) + '"></label>' +
         '<div class="ct-legend" id="ct-legend"></div>' +
-        (edit ? '<button type="button" class="ct-btn ct-btn--ghost" data-add="">+ חדש</button><button type="button" class="ct-btn ct-btn--ghost" id="ct-cats">סוגים וצבעים</button>' : "") +
+        /* A0 — "+ חדש" עבר לסרגל (אותה פעולה); נשאר כאן רק כשאין סרגל */
+        (edit ? (ctBar ? "" : '<button type="button" class="ct-btn ct-btn--ghost" data-add="">+ חדש</button>') + '<button type="button" class="ct-btn ct-btn--ghost" id="ct-cats">סוגים וצבעים</button>' : "") +
       '</div>' +
       (edit ? '<p class="ct-hint">לחצו על פריט כדי לערוך. אפשר לגרור כרטיס או שורה ולשחרר על תפקיד אחר.</p>' : "") +
       '<div id="ct-banner"></div>' +
@@ -615,8 +642,14 @@
       var parts = [], review = 0, gone = 0;
       yearRoles(year).forEach(function (r) { r.holders.forEach(function (h) { var w = who(h); if (w.review) review++; if (w.kind === "gone") gone++; }); });
       if (S.upgraded) parts.push('<div class="ct-banner"><span>העץ הוצג במבנה החדש (סוגים וצבעים, שנת ' + esc(year) + '). בדקו ולחצו שמירה.</span><button type="button" class="ct-btn" id="ct-commit">שמירה</button></div>');
-      if (review) parts.push('<div class="ct-banner ct-banner--warn"><span class="ct-pill">' + review + ' לבדיקה</span><span>שמות שלא זוהו אוטומטית. לחצו על הפריט ובחרו תושב, או סמנו שזה אדם מבחוץ.</span></div>');
-      if (gone) parts.push('<div class="ct-banner ct-banner--warn"><span class="ct-pill">' + gone + '</span><span>בעלי תפקיד שכבר לא ברשימת התושבים הפעילים.</span></div>');
+      /* A0 — "לבדיקה"/"עזבו" עברו למוני הסרגל; הבאנרים נשארים רק כשאין סרגל */
+      if (review && !ctBar) parts.push('<div class="ct-banner ct-banner--warn"><span class="ct-pill">' + review + ' לבדיקה</span><span>' + CT_WHY.review + '</span></div>');
+      if (gone && !ctBar) parts.push('<div class="ct-banner ct-banner--warn"><span class="ct-pill">' + gone + '</span><span>' + CT_WHY.gone + '</span></div>');
+      if (ctBar) {
+        /* עד שהשמות נטענים "עזבו" עוד לא ידוע (who() מחזיר "טוען") — מציגים "—" */
+        CBA.canopy.pill(ctBar, "ct-p-review", S.loaded && !S.error ? review : null);
+        CBA.canopy.pill(ctBar, "ct-p-gone", S.loaded && !S.error && S.dirDone ? gone : null);
+      }
       el.innerHTML = parts.join("");
       var c = el.querySelector("#ct-commit");
       if (c) c.addEventListener("click", function () {
@@ -629,6 +662,21 @@
       if (res && res.conflict) load(function () { closePanel(); draw(); }, true);
       CBA.ui.alert((res && res.error) || "השמירה נכשלה.", "לא נשמר");
       return false;
+    }
+
+    if (ctBar) {
+      ctBarLive = {
+        /* כמו לחיצה על "+ חדש" (data-add="") בשורת הכלים */
+        add: function () { if (root.isConnected) confirmLeave(function () { openPanel(null, ""); }); },
+        /* לפריט הראשון שסומן (אותו סימון is-warn של השם), ובטוסט — ההסבר שהיה בבאנר */
+        go: function (kind) {
+          var el = root.querySelector('.ct-nm[data-ct-warn="' + kind + '"]');
+          var tgt = el && (el.closest("[data-edit]") || el);
+          if (tgt) { try { tgt.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} }
+          if (CBA.ui && CBA.ui.toast) CBA.ui.toast(CT_WHY[kind], null, 5000);
+        }
+      };
+      if (!S.loaded) { CBA.canopy.pill(ctBar, "ct-p-review", null); CBA.canopy.pill(ctBar, "ct-p-gone", null); }
     }
 
     /* ---------- אירועים ---------- */

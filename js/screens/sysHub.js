@@ -203,12 +203,13 @@ CBA.screens = CBA.screens || {};
       ? '<div class="hub-note hub-note--err">' + esc(dg.pulseErr) + "</div>"
       : (dg.pulse ? kpisHTML() : (CBA.skel && CBA.skel.cards ? CBA.skel.cards(1) : "טוען…"));
     pane.innerHTML =
-      '<div class="hub-toolbar"><button type="button" class="btn-ghost" id="hub-copy">העתקת מצב לתחקור</button>' +
+      /* A0 — "העתקת מצב לתחקור" עבר לסרגל הניהול (אותה פונקציה, copyState); כאן רק כשאין סרגל */
+      '<div class="hub-toolbar">' + (CBA.canopy ? "" : '<button type="button" class="btn-ghost" id="hub-copy">העתקת מצב לתחקור</button>') +
         '<button type="button" class="btn-ghost" id="hub-refresh">רענון</button></div>' +
       pulseBlock +
       '<div class="card hub-card"><div class="hub-h">משך העבודה השעתית<span>24 ריצות אחרונות · מעבר עכבר מציג פרטים</span></div>' +
         (dg.pulse ? chartHTML() : '<div class="hub-empty">טוען…</div>') + "</div>" +
-      '<div class="card hub-card"><div class="hub-h">לאן הלך הזמן בריצה האחרונה</div>' +
+      '<div class="card hub-card" id="hub-last-run"><div class="hub-h">לאן הלך הזמן בריצה האחרונה</div>' +
         (dg.pulse ? stagesHTML() : '<div class="hub-empty">טוען…</div>') + "</div>" +
       '<div class="card hub-card"><div class="hub-h">השוואת פריט<span>מסמך Firestore מול שורת הגיליון</span></div>' + compareHTML() + "</div>" +
       '<div class="card hub-card"><div class="hub-h">מה חוזר בדיווחים<span>30 יום אחרונים</span></div>' + recurringHTML() + "</div>";
@@ -220,6 +221,7 @@ CBA.screens = CBA.screens || {};
     CBA.data.getDiagPulse(function (res) {
       if (!res || !res.ok) dg.pulseErr = "לא הצלחנו לטעון את יומן הדופק. " + ((res && res.error) || "");
       else dg.pulse = res;
+      syncBar();   /* A0 — מונה "ריצה אחרונה" בסרגל */
       if (pane.isConnected) drawDiag(pane);
     });
   }
@@ -231,20 +233,25 @@ CBA.screens = CBA.screens || {};
     if (!ar || !ar.load) { dg.reports = []; return; }
     ar.load(function () {
       dg.reports = ar.rows();
+      syncBar();   /* A0 — מונה "דיווחים פתוחים" בסרגל (אותה טעינה, בלי קריאה נוספת) */
       if (pane.isConnected) drawDiag(pane);
+    });
+  }
+
+  /* "העתקת מצב לתחקור" — פונקציה אחת לכפתור בסרגל ולכפתור הישן (כשאין סרגל). */
+  function copyState() {
+    var extra = dg.pulse && dg.pulse.line ? "שרת: " + dg.pulse.line : "";
+    var txt = (CBA.diag && CBA.diag.pack) ? CBA.diag.pack(extra) : extra;
+    (CBA.report && CBA.report.copyText ? CBA.report.copyText : function (t, cb) { cb(false); })(txt, function (ok) {
+      CBA.ui.toast(ok ? "המצב הועתק — אפשר להדביק בשיחה" : "ההעתקה נכשלה", ok ? "ok" : "error");
     });
   }
 
   function wireDiag(pane) {
     var q = function (sel) { return pane.querySelector(sel); };
     q("#hub-refresh").addEventListener("click", function () { dg.pulse = null; drawDiag(pane); loadPulse(pane); });
-    q("#hub-copy").addEventListener("click", function () {
-      var extra = dg.pulse && dg.pulse.line ? "שרת: " + dg.pulse.line : "";
-      var txt = (CBA.diag && CBA.diag.pack) ? CBA.diag.pack(extra) : extra;
-      (CBA.report && CBA.report.copyText ? CBA.report.copyText : function (t, cb) { cb(false); })(txt, function (ok) {
-        CBA.ui.toast(ok ? "המצב הועתק — אפשר להדביק בשיחה" : "ההעתקה נכשלה", ok ? "ok" : "error");
-      });
-    });
+    var cp = q("#hub-copy");   /* A0 — קיים רק כשאין סרגל (אחרת הכפתור בסרגל) */
+    if (cp) cp.addEventListener("click", copyState);
     q("#hub-cmp-kind").addEventListener("change", function (e) { dg.kind = e.target.value; dg.cmp = null; dg.cmpErr = ""; drawDiag(pane); });
     q("#hub-cmp-id").addEventListener("input", function (e) { dg.id = e.target.value; });
     var y = q("#hub-cmp-year"); if (y) y.addEventListener("input", function (e) { dg.year = e.target.value; });
@@ -292,6 +299,72 @@ CBA.screens = CBA.screens || {};
     }
   }
 
+  /* ===================== סרגל הניהול (A0, ספר האבנים — אושר) =====================
+     "ניהול מערכת" · מונים: "דיווחים פתוחים" (מהנתונים שמסך הדיווחים כבר טען —
+     בלי קריאת שרת נוספת; "—" עד שנטענו) ו"ריצה אחרונה" (מיומן הדופק שנטען רק
+     בלשונית "תחקור"; "—" עד אז) · פעולה: "העתקת מצב לתחקור" (copyState).
+     שני המונים והפעולה שייכים ללשוניות של מנהל-על — מנהל תחום רואה רק כותרת.
+     ⚠️ הפעולה בנויה ב-extra ולא ב-act: act מוסיף "+" ("+ העתקת…", ובטלפון
+        עיגול "+"), וזו העתקה, לא הוספה. אותן מחלקות (cnp2-act) — אותו מראה. */
+  var HUB_ICO = '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.5"/>';
+  var COPY_ICO = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>';
+  var hubBar = null;
+
+  function hubShell(container) {
+    if (!CBA.canopy) return container;   // בלי canopy.js — המסך כמו קודם (כותרת בעמוד)
+    var sup = isSuper();
+    var sh = CBA.canopy.shell(container, { key: "sysHub:" + (sup ? "s" : "m"), dom: "home", ico: HUB_ICO, title: "ניהול מערכת",
+      pills: [{ id: "hub-p-rep", k: "דיווחים פתוחים", hidden: !sup }, { id: "hub-p-run", k: "ריצה אחרונה", hidden: !sup }],
+      extra: '<button type="button" class="cnp2-act" id="hub-bar-copy" aria-label="העתקת מצב לתחקור"' + (sup ? "" : " hidden") + '>' +
+        '<span class="cnp2-act__l">העתקת מצב לתחקור</span><span class="cnp2-act__s" aria-hidden="true">' + COPY_ICO + "</span></button>" });
+    hubBar = sh.bar;
+    if (sh.fresh) {
+      sh.bar.querySelector("#hub-bar-copy").addEventListener("click", copyState);
+      sh.bar.querySelector("#hub-p-rep").addEventListener("click", function () {
+        var ar = CBA.screens.appReports;
+        var pane = container.querySelector(".hub-pane");
+        if (hub.tab === "reports" && pane) {
+          if (ar && ar.filter) ar.filter("open", "all", pane);   // אותו מעבר של "פתוחים" במסך הדיווחים
+        } else {
+          if (ar && ar.filter) ar.filter("open", "all");
+          goTab(container, "reports");
+        }
+        try { sh.body.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+      });
+      sh.bar.querySelector("#hub-p-run").addEventListener("click", function () {
+        if (hub.tab !== "diag") goTab(container, "diag");
+        var card = container.querySelector("#hub-last-run");
+        try { (card || sh.body).scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+      });
+    }
+    syncBar();
+    return sh.body;
+  }
+
+  /* המונים — ממה שכבר בזיכרון. נקרא אחרי כל טעינה רלוונטית. */
+  function syncBar() {
+    if (!hubBar || !hubBar.isConnected || !CBA.canopy) return;
+    var ar = CBA.screens.appReports;
+    CBA.canopy.pill(hubBar, "hub-p-rep", ar && ar.openCount ? ar.openCount() : null);
+    /* "ריצה אחרונה": תקינה — משך הריצה במקום המספר ("3 ש'"), עמום (מידע, לא
+       משימה); עם כשלים — מספר השלבים שנכשלו, אדום. */
+    var L = dg.pulse && dg.pulse.last;
+    var fails = L ? (L.fail || []).length : 0;
+    if (!L) CBA.canopy.pill(hubBar, "hub-p-run", null, "ריצה אחרונה");
+    else if (fails) CBA.canopy.pill(hubBar, "hub-p-run", fails, fails === 1 ? "שלב נכשל בריצה האחרונה" : "שלבים נכשלו בריצה האחרונה");
+    else {
+      CBA.canopy.pill(hubBar, "hub-p-run", 0, "ריצה אחרונה");
+      var b = hubBar.querySelector("#hub-p-run b");
+      if (b) b.textContent = secs(L.d);
+    }
+  }
+
+  function goTab(container, id) {
+    hub.tab = id;
+    try { localStorage.setItem(TAB_KEY, hub.tab); } catch (e) {}
+    render(container);
+  }
+
   function render(container, opts) {
     var tabs = allowedTabs();
     var want = (opts && opts.tab) || hub.tab;
@@ -299,9 +372,11 @@ CBA.screens = CBA.screens || {};
     if (!tabs.some(function (t) { return t.id === want; })) want = tabs[0].id;
     hub.tab = want;
     var cur = tabs.filter(function (t) { return t.id === want; })[0];
+    var body = hubShell(container);   /* A0 — הסרגל נבנה פעם אחת; מעבר לשונית מחליף רק את הגוף */
 
-    container.innerHTML =
-      '<div class="screen-head"><div class="screen-head__title">ניהול מערכת</div>' +
+    body.innerHTML =
+      /* A0 — הכותרת עברה לסרגל; שורת ההסבר של הלשונית נשארת */
+      '<div class="screen-head">' + (CBA.canopy ? "" : '<div class="screen-head__title">ניהול מערכת</div>') +
         '<div class="screen-head__sub">' + esc(cur.sub) + "</div></div>" +
       (tabs.length > 1
         ? '<div class="seg hub-tabs" role="tablist">' + tabs.map(function (t) {
@@ -321,5 +396,5 @@ CBA.screens = CBA.screens || {};
     paneFor(want, container.querySelector(".hub-pane"));
   }
 
-  CBA.screens.sysHub = { title: "ניהול מערכת", render: render, openCompare: openCompare };
+  CBA.screens.sysHub = { title: "ניהול מערכת", render: render, openCompare: openCompare, syncBar: syncBar };
 })();

@@ -371,7 +371,7 @@
       if (!detached && CBA.canopy) {   // בלי canopy.js — המסך כמו קודם
         container.innerHTML = CBA.canopy({ size: "bar", dom: "gar", title: "משימות גינון",
             ico: '<path d="M12 21c-4-3-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-3 8-7 11z"/><path d="M12 10v11"/>',
-            pills: [{ id: "gt-p-mine", k: GL.mineLabel(isManager) }, { id: "gt-p-unsched", k: "לשיבוץ", hidden: true }],
+            pills: [{ id: "gt-p-mine", k: isManager ? "ממתין לאישורך" : "לביצוע" }, { id: "gt-p-unsched", k: "ללא שיבוץ" }],
             act: { id: "gt-bar-new", label: "משימה חדשה", hidden: true },
             extra: '<button type="button" class="cnp2-ico" id="gt-bar-legend" aria-label="מקרא">?</button>' }) +
           '<div class="cnp2-body cnp2-body--adm"><div class="gd-screen" id="gt-root"></div></div>';
@@ -517,8 +517,9 @@
       function canNewTask() {
         return !!(isManager || (CBA.data.gardenDirectWrites && CBA.data.gardenDirectWrites()));
       }
-      /* A0 — מוני הסרגל אחרי כל ציור. "להחלטתך"/"לביצוע" = אותו מונה של המסנן;
-         "לשיבוץ" (מנהל בלבד) = פתוחות בלי שבוע — כרטיס "ממתין להחלטה". */
+      /* A0 — מוני הסרגל אחרי כל ציור (ספר האבנים GT-סרגל): מנהל "ממתין לאישורך",
+         גנן "לביצוע" — אותו מונה של המסנן "להחלטתך"/"לביצוע"; "ללא שיבוץ" =
+         פתוחות בלי שבוע (כרטיס "ממתין להחלטה"). */
       function updateBar(c, sched) {
         if (!barEl) return;
         if (sched && barEl.isConnected) barEl.remove();
@@ -526,9 +527,7 @@
         var unsched = 0;
         rowsAll.forEach(function (t) { if (!t.closure && !t.week) unsched++; });
         var sk = lastSkeleton;
-        CBA.canopy.pill(barEl, "gt-p-mine", sk ? null : c.mine, GL.mineLabel(isManager));
-        var pu = barEl.querySelector("#gt-p-unsched");
-        pu.hidden = !isManager;
+        CBA.canopy.pill(barEl, "gt-p-mine", sk ? null : c.mine, isManager ? "ממתין לאישורך" : "לביצוע");
         CBA.canopy.pill(barEl, "gt-p-unsched", sk ? null : unsched);
         barEl.querySelector("#gt-bar-new").hidden = !canNewTask();
       }

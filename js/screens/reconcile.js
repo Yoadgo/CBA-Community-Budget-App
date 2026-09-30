@@ -171,7 +171,58 @@ CBA.screens.reconcile = (function () {
     return head + body;
   }
 
-  function pickerHTML() {
+  /* A0/A1 (אושר ע"י יועד 30.9.26, ספר האבנים) — סרגל הניהול הדק של "בדיקת החזרים".
+     • "ממתינות לתשלום" — בקשות בסטטוס ready מכל השנים שנטענו: בדיוק הרשימה
+       "open" שהמנוע משווה מולה (אותו getAllTransactions שנמסר ל-compare).
+       לחיצה גוללת לתוצאות / לבורר.
+     • "דגלים אדומים" — שני הבלוקים האדומים של התוצאה ("שולם בלי שום בקשה
+       פתוחה" + "פער בסכום"), מאותה תוצאה שעל המסך. לפני בחירת קובץ: "—".
+       לחיצה גוללת לבלוק האדום הראשון.
+     • "בחירת קובץ" עבר מכרטיס הבורר לסרגל — אותו input#rc-file ואותו load().
+       ה-input יושב בסרגל, ולכן אפשר לבחור קובץ חדש גם כשהתוצאה מוצגת
+       ("קובץ אחר" בגוף נשאר כמו שהוא). מוסתר בזמן קריאת קובץ.
+     בלי canopy.js — המסך בדיוק כמו קודם (כותרת, כפתור וקלט בגוף). */
+  var ICO = '<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>';
+  function shell(container) {
+    if (!CBA.canopy || !CBA.canopy.shell) return null;
+    var sh = CBA.canopy.shell(container, { key: "reconcile", dom: "bud", ico: ICO, title: "בדיקת החזרים",
+      pills: [{ id: "rc-p-topay", k: "ממתינות לתשלום" }, { id: "rc-p-red", k: "דגלים אדומים" }],
+      act: { id: "rc-bar-go", label: "בחירת קובץ" },
+      extra: '<input type="file" id="rc-file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>' });
+    if (sh.fresh) {
+      var file = sh.bar.querySelector("#rc-file");
+      var act = sh.bar.querySelector("#rc-bar-go");
+      var l = act.querySelector(".cnp2-act__l"), sm = act.querySelector(".cnp2-act__s");
+      if (l) l.textContent = "בחירת קובץ";   // הרכיב מוסיף "+" — כאן זו בחירה, לא יצירה
+      if (sm) sm.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>';
+      act.addEventListener("click", function () { if (!state.busy) file.click(); });
+      file.addEventListener("change", function () {
+        var f = file.files && file.files[0];
+        file.value = "";
+        if (f) load(container, f);
+      });
+      sh.bar.querySelector("#rc-p-topay").addEventListener("click", function () {
+        var el = sh.body.querySelector(".rc-root");
+        if (el) { try { el.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} }
+      });
+      sh.bar.querySelector("#rc-p-red").addEventListener("click", function () {
+        var el = sh.body.querySelector(".rc-block.is-danger");
+        if (el) { try { el.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {} }
+      });
+    }
+    return sh;
+  }
+  function updateBar(sh) {
+    if (!sh) return;
+    var txs = CBA.data.getAllTransactions ? CBA.data.getAllTransactions() : CBA.data.getTransactions();
+    var open = (txs || []).filter(function (t) { return t.status === "ready"; }).length;
+    var r = state.result;
+    CBA.canopy.pill(sh.bar, "rc-p-topay", open);
+    CBA.canopy.pill(sh.bar, "rc-p-red", (r && !state.busy) ? r.noRequests.length + r.gap.length : null);
+    sh.bar.querySelector("#rc-bar-go").hidden = !!state.busy;
+  }
+
+  function pickerHTML(inBar) {
     return '<section class="card club-card rc-pick">' +
       CBA.ui.emptyState({
         icon: "inbox",
@@ -179,24 +230,29 @@ CBA.screens.reconcile = (function () {
         sub: "בוחרים את קובץ ה-Excel שהתקבל מהעמותה. הקובץ נקרא, מושווה מול הבקשות " +
              "שאושרו להעברה, ונמחק. שום דבר לא נשמר ושום מייל לא נשלח."
       }) +
+      (inBar ? "" :
       '<div class="rc-actions">' +
         '<button type="button" class="rc-btn" id="rc-go">בחירת קובץ</button>' +
         '<input type="file" id="rc-file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>' +
-      '</div>' +
+      '</div>') +
       (state.err ? '<p class="rc-err">' + esc(state.err) + '</p>' : "") +
     '</section>';
   }
 
   function draw(container) {
     if (!state.busy) recompute();   /* RCB2 (גל 9, 1.10.26) — ר' recompute */
-    container.innerHTML =
-      '<div class="screen-head"><div class="screen-head__title">בדיקת החזרים</div>' +
-      '<div class="screen-head__sub">השוואה בין רשימת התשלומים של העמותה לבין הבקשות שאושרו להעברה</div></div>' +
+    var sh = shell(container);   // A0 — בלי canopy.js: null, והמסך כמו קודם
+    (sh ? sh.body : container).innerHTML =
+      /* A0 — הכותרת עברה לסרגל; שורת ההסבר נשארת בגוף */
+      (sh ? '<div class="screen-head"><div class="screen-head__sub">השוואה בין רשימת התשלומים של העמותה לבין הבקשות שאושרו להעברה</div></div>'
+          : '<div class="screen-head"><div class="screen-head__title">בדיקת החזרים</div>' +
+            '<div class="screen-head__sub">השוואה בין רשימת התשלומים של העמותה לבין הבקשות שאושרו להעברה</div></div>') +
       '<div class="rc-root">' +
         (state.busy
           ? '<section class="card club-card"><div class="club-empty">קורא את הקובץ…</div></section>'
-          : (state.result ? resultHTML() : pickerHTML())) +
+          : (state.result ? resultHTML() : pickerHTML(!!sh))) +
       '</div>';
+    updateBar(sh);
 
     var root = container.querySelector(".rc-root");
 

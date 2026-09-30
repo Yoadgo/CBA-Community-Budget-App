@@ -87,8 +87,11 @@ CBA.screens.expenses = {
     const selCount = txSelCount();
     const selectable = rows.filter(function (t) { return !txForeign(t); });
     const allChecked = selectable.length > 0 && selectable.every(function (t) { return txSelected[t.id]; });
+    /* A0 — הסרגל נבנה אחרי חישוב prevList/EXB6 (שבודקים main ריק). בלי canopy.js: body = container. */
+    const bar = txShell(container);
+    const body = bar ? bar.body : container;
 
-    container.innerHTML = `
+    body.innerHTML = `
       <div class="tx-views">
         ${txViewTab("all", "הכל")}
         ${txViewTab("pending", "ממתינות לאישור")}
@@ -119,7 +122,7 @@ CBA.screens.expenses = {
         <div class="tx-actions">
           <div class="tx-summary"><span>סה״כ מסונן</span> <b>${CBA.formatILS(total)}</b> <span class="tx-summary__count">· ${rows.length} תנועות</span></div>
           <button class="btn-ghost btn-sm" data-manage-cols title="הצג/הסתר/שנה שם עמודות, או הוסף עמודה מותאמת אישית">⚙ עמודות</button>
-          <button class="btn-primary btn-sm tx-add-inline" data-add-tx>+ הוספת הוצאה</button>
+          ${bar ? "" : '<button class="btn-primary btn-sm tx-add-inline" data-add-tx>+ הוספת הוצאה</button>'}
         </div>
       </div>
 
@@ -152,11 +155,65 @@ CBA.screens.expenses = {
     txScrollTop = 0; txWinScrollY = 0;
 
     txBind(container);
+    txUpdateBar(bar);
     // מעדכן מיד את פעמון ההתרעות + תגית הטאב (ולא מחכה למחזור הרענון התקופתי) —
     // render() נקרא מחדש אחרי כל פעולה במסך הזה (אישור/דחייה/לבדיקה/שמירה/מחיקה).
     if (window.CBA.refreshAlerts) window.CBA.refreshAlerts();
   }
 };
+
+/* A0/A1 (אושר ע"י יועד 30.9.26, ספר האבנים) — סרגל הניהול הדק של "הוצאות".
+   • "ממתינות לאישור" — אותו מונה של הפעמון ושל מסך התקציב (pendingApprovalCount,
+     כל השנים שנטענו); לחיצה = הלשונית "ממתינות לאישור" (txView = "pending"),
+     ומנקה מסנן סטטוס סותר (למשל "הועבר להנה"ח") כדי שהרשימה לא תצא ריקה.
+   • "ממתינות לתשלום · ₪X" — סטטוס "ready" (הועבר להנה"ח = אושר וממתין לתשלום)
+     על כל השנים שנטענו (getAllTransactions — אותו מקור שבדיקת החזרים משווה מולו).
+     לחיצה = מסנן הסטטוס הקיים על "הועבר להנה"ח" (ובתצוגת "הכל", אחרת החיתוך ריק).
+     ⚠️ המסנן עצמו מציג את השנה המוצגת בלבד (כמו תמיד) — בקשה "הועבר להנה"ח"
+        משנה אחרת נספרת במונה אבל לא תופיע ברשימה אחרי הלחיצה.
+   • "+ הוספת הוצאה" עבר מהשורה שמעל הטבלה לסרגל — אותה פעולה (txOpenDrawer).
+   "⚙ עמודות", מיון, בחירה מרובה והכפתור הצף במובייל נשארים בגוף המסך. */
+var TX_BAR_ICO = '<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>';
+function txShell(container) {
+  if (!CBA.canopy || !CBA.canopy.shell) return null;
+  const sh = CBA.canopy.shell(container, { key: "expenses", dom: "bud", ico: TX_BAR_ICO, title: "הוצאות",
+    pills: [{ id: "tx-p-pending", k: "ממתינות לאישור" }, { id: "tx-p-topay", k: "ממתינות לתשלום" }],
+    act: { id: "tx-bar-add", label: "הוספת הוצאה" } });
+  if (sh.fresh) {
+    sh.bar.querySelector("#tx-p-pending").addEventListener("click", function () {
+      /* סטטוס שנבחר במסנן (למשל "הועבר להנה"ח" מהמונה השני) היה מרוקן את התצוגה —
+         המונה מבטיח "מה שממתין לאישור", ולכן מסנן סטטוס שאינו הוגשה/בבדיקה מתנקה */
+      if (txFilters.status && txFilters.status !== "submitted" && txFilters.status !== "review") txFilters.status = "";
+      txView = "pending"; txSelected = {};
+      CBA.screens.expenses.render(container);
+    });
+    sh.bar.querySelector("#tx-p-topay").addEventListener("click", function () {
+      txFilters.status = "ready";
+      if (txView !== "all") txView = "all";
+      txSelected = {};
+      CBA.screens.expenses.render(container);
+    });
+    sh.bar.querySelector("#tx-bar-add").addEventListener("click", function () { txOpenDrawer(container, null); });
+  }
+  return sh;
+}
+function txToPay() {
+  let count = 0, amount = 0;
+  txAllLoaded().forEach(function (t) {
+    if (t.status !== "ready") return;
+    count++;
+    amount += Number(t.amount) || 0;
+  });
+  return { count: count, amount: amount };
+}
+function txUpdateBar(sh) {
+  if (!sh) return;
+  const pend = CBA.data.pendingApprovalCount ? CBA.data.pendingApprovalCount().count : null;
+  const pay = txToPay();
+  CBA.canopy.pill(sh.bar, "tx-p-pending", pend);
+  CBA.canopy.pill(sh.bar, "tx-p-topay", pay.count,
+    "ממתינות לתשלום" + (pay.count ? " · " + CBA.formatILSWhole(pay.amount) : ""));
+}
 
 /* נקודת כניסה מבחוץ: מעבר למסך ההוצאות ופתיחת טופס הוספה עם סעיף ממולא מראש.
    בשימוש ההחלקה על כרטיס תקציב במובייל ("הוסף הוצאה לסעיף זה"). */

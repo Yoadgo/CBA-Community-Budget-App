@@ -26,7 +26,7 @@ CBA.screens = CBA.screens || {};
 
 (function () {
   var S = { data: null, tab: null, open: null, draft: null, dRole: null, lastField: null,
-            mode: null, b: null, ai: null, confirmDel: false };
+            mode: null, b: null, ai: null, confirmDel: false, bar: null };
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
@@ -165,10 +165,14 @@ CBA.screens = CBA.screens || {};
   }
 
   /* 🔑 מי יכול מה — שורה ברורה, מותאמת למי שנכנס (בקשת יועד). */
-  function permHTML() {
-    var names = S.data.domains.map(function (d) { return d.name; }).join(", ");
+  function pendTotal() {
     var pend = 0;
     S.data.domains.forEach(function (d) { d.rows.forEach(function (r) { if (r.cx && r.cx.status === "ממתין לאישור") pend++; }); });
+    return pend;
+  }
+  function permHTML() {
+    var names = S.data.domains.map(function (d) { return d.name; }).join(", ");
+    var pend = pendTotal();
     var main = canEdit()
       ? "<b>מנהל-על — עריכה מלאה.</b> כל שינוי כאן חל על כל הקהילה." +
         (pend ? ' <span class="nt-perm-hot">' + pend + " טריגרים ממתינים לאישורך (מסומנים בלשוניות).</span>" : "")
@@ -187,6 +191,7 @@ CBA.screens = CBA.screens || {};
     if (!S.data) return;
     if (!S.data.domains.length && !S.data.isSuper) {
       body.innerHTML = '<div class="card">' + (CBA.ui && CBA.ui.emptyState ? CBA.ui.emptyState({ title: "אין תחומים לניהול", sub: "ההרשאות שלך לא כוללות תחום עם התראות." }) : "אין תחומים לניהול") + "</div>";
+      syncBar();
       return;
     }
     if (!S.tab) S.tab = S.data.domains.length ? S.data.domains[0].id : "set";
@@ -195,13 +200,59 @@ CBA.screens = CBA.screens || {};
     body.innerHTML = permHTML() +
       '<div class="nt-top"><div class="nt-seg" role="tablist" aria-label="תחום">' + tabsHTML() + "</div>" +
       (canBuild ? '<div class="nt-new">' +
-        '<button type="button" class="btn-primary nt-newbtn" data-build="תזכורת">+ טריגר חדש</button>' +
+        /* A0 — כשהמסך פתוח לבד עם סרגל, "+ טריגר חדש" יושב בסרגל (אותו openBuilder) */
+        (barLive() ? "" : '<button type="button" class="btn-primary nt-newbtn" data-build="תזכורת">+ טריגר חדש</button>') +
         (anySum ? '<button type="button" class="btn-ghost nt-newbtn" data-build="סיכום">+ סיכום חדש</button>' : "") + "</div>" : "") +
       "</div>" +
       '<div class="nt-legend"><span class="nt-tg nt-tg--m on">מייל</span><span class="nt-tg nt-tg--p on">פוש</span><span class="nt-tg nt-tg--d on">בסיכום</span><span>= דלוק</span>' +
       (canEdit() ? '<span class="nt-legend-hint">' + (TOUCH ? "לחיצה על תא פותחת את כל האפשרויות" : "מעבר עם העכבר על תא מציג את כל האפשרויות") + "</span>" : "") +
       '<span class="nt-save" id="nt-save" aria-live="polite"></span></div>' +
       '<section class="card nt-panel" id="nt-panel">' + panelHTML() + "</section>";
+    syncBar();
+  }
+
+  /* ---------- סרגל הניהול (A0, ספר האבנים — אושר) ----------
+     רק כשהמסך נפתח לבד (CBA.navigate / קישור בפוש: NOTIFY_SCREENS → emailSettings).
+     משובץ בלשונית "התראות" של "ניהול מערכת" — בלי סרגל.
+     מונה "ממתינים לאישור" = אותו סכום של שורת ההרשאות (pendTotal), ומוצג —
+     כמו בעמוד — רק למי שיכול לאשר. "צפייה בלבד" — תגית (לא כפתור) למי שאינו עורך. */
+  var NT_ICO = '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>';
+  function barLive() { return !!(S.bar && S.bar.isConnected); }
+  function syncBar() {
+    if (!barLive() || !CBA.canopy) return;
+    var ready = !!S.data;
+    var edit = ready && canEdit();
+    var pill = S.bar.querySelector("#nt-p-pend");
+    if (pill) pill.hidden = ready && !edit;
+    CBA.canopy.pill(S.bar, "nt-p-pend", edit ? pendTotal() : null);
+    var ro = S.bar.querySelector("#nt-bar-ro");
+    if (ro) ro.hidden = !ready || edit;
+    var act = S.bar.querySelector("#nt-bar-new");
+    if (act) act.hidden = !(ready && builder().domains.length > 0);
+  }
+  function ntShell(container, root0) {
+    var sh = CBA.canopy.shell(container, { key: "emailSettings", dom: "home", ico: NT_ICO, title: "מרכז התראות",
+      pills: [{ id: "nt-p-pend", k: "ממתינים לאישור" }],
+      act: { id: "nt-bar-new", label: "טריגר חדש", hidden: true },
+      extra: '<span class="cnp2-pill" id="nt-bar-ro" hidden style="cursor:default;align-items:center"><span>צפייה בלבד</span></span>' });
+    S.bar = sh.bar;
+    if (sh.fresh) {
+      sh.bar.querySelector("#nt-bar-new").addEventListener("click", function () {
+        if (S.data && builder().domains.length) openBuilder("תזכורת");   // אותו כפתור "+ טריגר חדש"
+      });
+      sh.bar.querySelector("#nt-p-pend").addEventListener("click", function () {
+        if (!S.data) return;
+        /* כמו לחיצה על הלשונית המסומנת: עוברים לתחום הראשון שיש בו ממתינים */
+        var d = S.data.domains.filter(function (x) {
+          return x.rows.some(function (r) { return r.cx && r.cx.status === "ממתין לאישור"; });
+        })[0];
+        var root = container.querySelector("#nt-body");
+        if (d && root) { S.tab = d.id; render(root); }
+        var panel = container.querySelector("#nt-panel");
+        try { (panel || sh.body).scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+      });
+    }
+    return sh.body;
   }
 
   function redrawAll() {
@@ -971,14 +1022,18 @@ CBA.screens = CBA.screens || {};
       if (!(CBA.renderSilent && (S.open || S.b))) closeDrawer();
       /* EMB5 (גל 9, 1.10.26) — משובץ ב"ניהול מערכת": בלי כותרת מסך משלו (הכותרת והתת-כותרת של המרכז כבר מעל). */
       var embedded = !!(opts && opts.embedded) || !!(container.classList && container.classList.contains("hub-pane"));
-      container.innerHTML =
+      /* A0 — לבד: סרגל ניהול (הכותרת עוברת אליו); משובץ / בלי canopy.js — כמו קודם */
+      var bar = !embedded && !!CBA.canopy;
+      if (!bar) S.bar = null;
+      (bar ? ntShell(container) : container).innerHTML =
         (embedded ? "" :
-        '<div class="screen-head"><div class="screen-head__title">מרכז התראות</div>' +
+        '<div class="screen-head">' + (bar ? "" : '<div class="screen-head__title">מרכז התראות</div>') +
         '<div class="screen-head__sub">מה כל הקהילה מקבלת — מייל או פוש — על כל פעולה. לחיצה על שם הפעולה פותחת את הנוסחים. ' +
         '(להפעלת התראות בטלפון <b>שלך</b>: התפריט האישי ← "התראות לטלפון".)</div></div>') +
         '<div id="nt-body" class="nt-screen">' + (CBA.skel && CBA.skel.sections ? CBA.skel.sections(3) : "טוען…") + "</div>";
       var root = container.querySelector("#nt-body");
       bind(root);
+      syncBar();
       CBA.data.listNotifySettings(function (res) {
         if (!res || !res.ok) {
           /* EMB2 (גל 9, 1.10.26) — כפתור "נסה שוב" בכשל טעינה */

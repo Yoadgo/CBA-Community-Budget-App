@@ -97,6 +97,25 @@ window.CBA = window.CBA || {};
     el.classList.toggle("is-zero", !(n > 0));
   };
 
+  /* A0 — מעטפת למסך ניהול: סרגל + גוף. מחזירה { bar, body, fresh }.
+     fresh=true רק כשהסרגל נבנה עכשיו (ניווט / רענון שקט שריקן את main, או
+     key אחר) — רק אז מחברים מאזינים לכפתורי הסרגל, אחרת הם מצטברים.
+     ציור פנימי של המסך כותב ל-body.innerHTML ולא ל-container. */
+  canopy.shell = function (container, o) {
+    o = o || {};
+    var key = o.key || o.title || "";
+    var bar = container.querySelector(":scope > .cnp2--bar");
+    var body = container.querySelector(":scope > .cnp2-body--adm");
+    if (bar && body && bar.getAttribute("data-key") === key) return { bar: bar, body: body, fresh: false };
+    var spec = {}; for (var k in o) spec[k] = o[k];
+    spec.size = "bar";
+    container.innerHTML = canopy(spec) + '<div class="cnp2-body cnp2-body--adm"></div>';
+    bar = container.querySelector(":scope > .cnp2--bar");
+    body = container.querySelector(":scope > .cnp2-body--adm");
+    bar.setAttribute("data-key", key);
+    return { bar: bar, body: body, fresh: true };
+  };
+
   /* ההדר מקבל פינות מעוגלות רק כשהחופה יצאה מהמסך (כמו בבית, גל 2) */
   var bound = false;
   canopy.bindScroll = function () {

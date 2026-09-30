@@ -124,15 +124,20 @@ CBA.screens.planning = {
         </div>
       </div>`;
 
-    container.innerHTML = `
+    /* A0 — סרגל ניהול במצב עריכה בלבד. במצב "תצוגה להצגה" אין סרגל (החלטת הספר),
+       והמסך מצויר בדיוק כמו קודם — ה-innerHTML של container מוחק גם את הסרגל. */
+    const bar = planViewMode ? null : planShell(container);
+    const body = bar ? bar.body : container;
+
+    body.innerHTML = `
       <button class="notes-side-tab" type="button" id="notes-side-tab" data-open-notes title="פנקס הערות כלליות לשנה זו">
         <span class="notes-side-tab__ico">${PLAN_NOTES_ICON}</span>
         <span class="notes-side-tab__label">הערות</span>
       </button>
 
       <div class="screen-controls">
-        <div class="phase-ctrl">${planPhaseControl()}</div>
-        <button class="btn-ghost" type="button" data-toggle-present>${planViewMode ? "חזרה לעריכה" : "תצוגה להצגה"}</button>
+        <div class="phase-ctrl">${planPhaseControl(!!bar)}</div>
+        ${bar ? "" : `<button class="btn-ghost" type="button" data-toggle-present>${planViewMode ? "חזרה לעריכה" : "תצוגה להצגה"}</button>`}
         <button class="btn-ghost" type="button" data-new-year title="שנה חדשה נוצרת עם אותם סעיפי תקציב ומקורות הכנסה, בלי תנועות">+ שנת תקציב חדשה</button>
         ${planWorkingYearBtnHTML()}
       </div>
@@ -158,6 +163,7 @@ CBA.screens.planning = {
 
     planBind(container);
     planRecompute(container);
+    planUpdateBar(bar);
 
     // אנימציה עדינה: פסי מאזן המימון מתמלאים בטעינה
     requestAnimationFrame(function () {
@@ -1493,18 +1499,70 @@ function planItemWarnHTML(c) {
 }
 
 /* פקד מצב קומפקטי (משמאל לכותרת): כתום=תכנון, ירוק=סגור */
-function planPhaseControl() {
+/* inBar=true (A0): השלב ו"עדכונים (N)" מוצגים בסרגל הניהול, ולכן כאן נשארים
+   רק "סגור תקציב" / "פתח". בלי סרגל — בדיוק כמו קודם. */
+function planPhaseControl(inBar) {
   const phase = CBA.data.getBudgetPhase();
   if (phase === "locked") {
     const n = CBA.data.getBudgetUpdates().length;
-    return `
+    return (inBar ? "" : `
       <span class="phase-pill phase-pill--locked"><span class="dot"></span>סגור</span>
-      <button class="btn-ghost btn-sm" data-show-updates>עדכונים${n ? " (" + n + ")" : ""}</button>
+      <button class="btn-ghost btn-sm" data-show-updates>עדכונים${n ? " (" + n + ")" : ""}</button>`) + `
       <button class="btn-ghost btn-sm" data-reopen-budget>פתח</button>`;
   }
-  return `
-    <span class="phase-pill phase-pill--draft"><span class="dot"></span>תכנון</span>
+  return (inBar ? "" : `
+    <span class="phase-pill phase-pill--draft"><span class="dot"></span>תכנון</span>`) + `
     <button class="btn-ghost btn-sm" data-lock-budget>סגור תקציב</button>`;
+}
+
+/* A0/A1 (אושר ע"י יועד 30.9.26, ספר האבנים) — סרגל הניהול הדק של "בניית תקציב".
+   • מונה השלב — "תכנון" / "סגור" כתווית, בלי מספר (אותו getBudgetPhase של
+     תגית השלב שהייתה בפס הבקרות). לחיצה גוללת ל"סגור תקציב" / "פתח" שבגוף.
+   • "עדכונים" — אותו מונה (getBudgetUpdates().length) ואותה פעולה
+     (planOpenUpdatesModal) של הכפתור "עדכונים (N)". כמו קודם — רק כשהתקציב סגור.
+   • פעולה ראשית "תצוגה להצגה" — אותו מתג (planViewMode). הרכיב מוסיף "+"
+     לכל פעולה; כאן מחליפים אותו בתווית נקייה ובסמליל מסך (בטלפון).
+   "סגור תקציב"/"פתח", "+ שנת תקציב חדשה" ולשונית ההערות נשארים בגוף. */
+var PLAN_BAR_ICO = '<path d="M4 20h16M6 16V9M10 16V5M14 16v-6M18 16V8"/>';
+var PLAN_PRESENT_ICO = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4M8 20h8"/></svg>';
+function planShell(container) {
+  if (!CBA.canopy || !CBA.canopy.shell) return null;
+  const sh = CBA.canopy.shell(container, { key: "planning", dom: "bud", ico: PLAN_BAR_ICO, title: "בניית תקציב",
+    pills: [{ id: "plan-p-phase", k: "" }, { id: "plan-p-upd", k: "עדכונים", hidden: true }],
+    act: { id: "plan-bar-present", label: "תצוגה להצגה" } });
+  if (sh.fresh) {
+    const act = sh.bar.querySelector("#plan-bar-present");
+    const l = act.querySelector(".cnp2-act__l"), sm = act.querySelector(".cnp2-act__s");
+    if (l) l.textContent = "תצוגה להצגה";
+    if (sm) sm.innerHTML = PLAN_PRESENT_ICO;
+    act.addEventListener("click", function () {
+      planViewMode = !planViewMode;
+      CBA.screens.planning.render(container);
+    });
+    sh.bar.querySelector("#plan-p-upd").addEventListener("click", function () { planOpenUpdatesModal(container); });
+    sh.bar.querySelector("#plan-p-phase").addEventListener("click", function () {
+      const b = sh.body.querySelector("[data-lock-budget], [data-reopen-budget]");
+      if (b) { try { b.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} b.focus(); }
+    });
+  }
+  return sh;
+}
+function planUpdateBar(sh) {
+  if (!sh) return;
+  const locked = CBA.data.getBudgetPhase() === "locked";
+  const ph = sh.bar.querySelector("#plan-p-phase");
+  if (ph) {
+    const num = ph.querySelector("b");
+    num.textContent = ""; num.hidden = true;   // שלב — תווית בלבד, בלי מספר
+    ph.style.alignItems = "center";            // בלי המספר אין קו-בסיס — ממרכזים את התווית
+    ph.querySelector("span").textContent = locked ? "סגור" : "תכנון";
+    ph.classList.remove("is-zero", "is-hot");
+  }
+  const up = sh.bar.querySelector("#plan-p-upd");
+  if (up) {
+    up.hidden = !locked;
+    if (locked) CBA.canopy.pill(sh.bar, "plan-p-upd", CBA.data.getBudgetUpdates().length);
+  }
 }
 
 /* האם הסעיף עודכן מאז סגירת התקציב */

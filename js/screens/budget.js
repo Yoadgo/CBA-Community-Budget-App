@@ -45,9 +45,13 @@ CBA.screens.budget = {
     const summary = pace ? paceSummary(rows, noCat.amount) : CBA.data.getSummary();
     /* BUB3 (גל 9, 1.10.26) — אותו מונה כמו הפעמון (הוגשה+בבדיקה, כל השנים שנטענו) */
     const pending = CBA.data.pendingApprovalCount();
+    /* A0 (סרגל ניהול, אושר 30.9.26) — הסרגל נבנה פעם אחת; הציור כותב ל-body.
+       בלי canopy.js — body הוא container והמסך בדיוק כמו קודם (כולל הבאנר). */
+    const bar = budgetShell(container);
+    const body = bar ? bar.body : container;
 
     const topHTML =
-      (pending.count ? pendingBanner(pending.count, pending.amount) : "") +
+      (pending.count && !bar ? pendingBanner(pending.count, pending.amount) : "") +
       '<div class="screen-controls">' +
         '<div class="phase-ctrl">' +
           '<div class="seg seg--view">' +
@@ -66,7 +70,7 @@ CBA.screens.budget = {
     if (silent) {
       // עדכון רקע: הכול בבת אחת (בלי שלב נפרד/פריים נוסף) כדי שלא יהיה אפילו
       // רגע אחד שבו השורות נעלמות ומופיעות מחדש — רק מה שהשתנה בפועל "פועם".
-      container.innerHTML = topHTML + '<div class="budget-cols">' + cardsHTML + '</div>' + bottomHTML;
+      body.innerHTML = topHTML + '<div class="budget-cols">' + cardsHTML + '</div>' + bottomHTML;
       bindTopControls(container);
       container.querySelectorAll("[data-count]").forEach(function (el) {
         el.textContent = CBA.formatILSWhole(parseFloat(el.dataset.count) || 0);
@@ -74,17 +78,19 @@ CBA.screens.budget = {
       bindCards(container);
       bindChartHover(container);
       refreshOpenDrawer();   /* BUB4 (גל 9, 1.10.26) — מגירה פתוחה מתעדכנת עם הנתונים החדשים */
+      budgetUpdateBar(bar, pending);
       return;
     }
 
     // ניווט רגיל / החלפת תצוגה או שנה: טעינה מדורגת בשני שלבים.
     var myGen = ++renderGen;
-    container.innerHTML = topHTML + '<div class="budget-cols" data-cols-slot></div>' + bottomHTML;
+    body.innerHTML = topHTML + '<div class="budget-cols" data-cols-slot></div>' + bottomHTML;
     bindTopControls(container);
     container.querySelectorAll("[data-count]").forEach(function (el) {
       countUp(el, parseFloat(el.dataset.count) || 0);
     });
     bindChartHover(container);
+    budgetUpdateBar(bar, pending);
 
     // שלב 2: בונים את כרטיסיות הסעיפים ומכניסים אותן בפריים הבא — כך הדפדפן
     // מספיק לצייר את שאר המסך (בקרות/גרף/שורה תחתונה) לפני שממשיכים לשורות
@@ -102,6 +108,48 @@ CBA.screens.budget = {
     });
   }
 };
+
+/* A0/A1 (אושר ע"י יועד 30.9.26, ספר האבנים) — סרגל הניהול הדק של "תקציב".
+   • "ממתינות לאישור" = הבאנר "N קבלות ממתינות לאישורך · ₪" שהיה בראש המסך —
+     אותו מונה (CBA.data.pendingApprovalCount, BUB3) ואותה לחיצה (showPending).
+     הסכום נשמר בתווית ("ממתינות לאישור · ₪X"), ולכן הבאנר יורד כשיש סרגל.
+   • "סעיפים בחריגה" = אותה ספירה של הפעמון (getAlertCounts: remaining < 0 על
+     שורות השנה) — לחיצה גוללת לכרטיס הראשון בחריגה.
+   • "+ הוצאה" = אותה נקודת כניסה של "הוסף הוצאה" בהחלקה על כרטיס
+     (CBA.screens.expenses.openAddForCategory), בלי סעיף ממולא.
+   מחזיר null כשאין canopy.js — ואז המסך מצויר בדיוק כמו קודם. */
+var BUDGET_BAR_ICO = '<path d="M4 20V13M10 20V8M16 20v-9M22 20H2"/>';
+function budgetOverIds() {
+  return CBA.data.getBudgetRows().filter(function (r) { return r.remaining < 0; }).map(function (r) { return r.id; });
+}
+function budgetShell(container) {
+  if (!CBA.canopy || !CBA.canopy.shell) return null;
+  const sh = CBA.canopy.shell(container, { key: "budget", dom: "bud", ico: BUDGET_BAR_ICO, title: "תקציב",
+    pills: [{ id: "bud-p-pending", k: "ממתינות לאישור" }, { id: "bud-p-over", k: "סעיפים בחריגה" }],
+    act: { id: "bud-bar-add", label: "הוצאה" } });
+  if (sh.fresh) {
+    sh.bar.querySelector("#bud-p-pending").addEventListener("click", function () {
+      if (CBA.screens.expenses && CBA.screens.expenses.showPending) CBA.screens.expenses.showPending();
+    });
+    sh.bar.querySelector("#bud-p-over").addEventListener("click", function () {
+      const ids = budgetOverIds();
+      const card = Array.prototype.find.call(sh.body.querySelectorAll(".bcard[data-cat]"), function (el) {
+        return ids.indexOf(el.dataset.cat) !== -1;
+      });
+      if (card) { try { card.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} }
+    });
+    sh.bar.querySelector("#bud-bar-add").addEventListener("click", function () {
+      if (CBA.screens.expenses && CBA.screens.expenses.openAddForCategory) CBA.screens.expenses.openAddForCategory(null);
+    });
+  }
+  return sh;
+}
+function budgetUpdateBar(sh, pending) {
+  if (!sh) return;
+  CBA.canopy.pill(sh.bar, "bud-p-pending", pending.count,
+    "ממתינות לאישור" + (pending.count ? " · " + CBA.formatILSWhole(pending.amount) : ""));
+  CBA.canopy.pill(sh.bar, "bud-p-over", budgetOverIds().length);
+}
 
 /* מאזינים של פס הבקרות העליון (התראת ממתינות, מתג תצוגה, בורר "נכון ל-")
    — משותף לשני מסלולי הציור, כדי לא לשכפל קוד. */
