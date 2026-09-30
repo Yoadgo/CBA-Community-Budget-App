@@ -48,7 +48,8 @@ CBA.screens.planning = {
           מסך שהמשתמש כבר עזב. */
     if (CBA.data.ensureBudgetLogs) {
       CBA.data.ensureBudgetLogs(function (changed) {
-        if (changed && container && container.isConnected) CBA.screens.planning.render(container);
+        /* PLB4 (גל 9, 1.10.26) — ציור מלא רק אם המסך עדיין "בניית תקציב" והמשתמש לא באמצע עריכה */
+        if (changed && container && container.isConnected && CBA.onScreen("planning") && !CBA.userIsEditingMain()) CBA.screens.planning.render(container);
       });
     }
     const years = CBA.data.getComparisonYears();
@@ -133,6 +134,7 @@ CBA.screens.planning = {
         <div class="phase-ctrl">${planPhaseControl()}</div>
         <button class="btn-ghost" type="button" data-toggle-present>${planViewMode ? "חזרה לעריכה" : "תצוגה להצגה"}</button>
         <button class="btn-ghost" type="button" data-new-year title="שנה חדשה נוצרת עם אותם סעיפי תקציב ומקורות הכנסה, בלי תנועות">+ שנת תקציב חדשה</button>
+        ${planWorkingYearBtnHTML()}
       </div>
 
       ${planViewMode ? planPresentHTML(groups, cats, income) : editModeHTML}
@@ -233,12 +235,30 @@ function planBind(container) {
       if (!y) { CBA.ui.alert("צריך להזין שם לשנה החדשה."); return; }
       if (CBA.data.getYears().indexOf(y) !== -1) { CBA.ui.alert('כבר קיימת שנה בשם "' + y + '".'); return; }
       CBA.data.addYear(y, from);
-      // persist: שנה שנוצרה ומיד הוגדרה כנוכחית — אחרת היא הייתה "נשכחת"
-      // בטעינה הבאה, בדיוק כמו הבאג שתוקן במיתוג ב-15.9.26.
+      /* PLB1 (גל 9, 1.10.26) — יצירת שנה מציגה אותה מקומית בלבד; שנת העבודה המשותפת לא משתנה.
+         עד היום כאן היה setCurrentYear(y, true), כלומר יצירת טיוטה העבירה מיד
+         את כל ההוצאות ובקשות ההחזר של כל התושבים לשנה החדשה. השנה עצמה נשמרת
+         בשרת דרך addYear (addYear_ ב-Code.gs: הטאבים + רשימת "שנים" בהגדרות),
+         כך שהיא לא "נשכחת" — רק שהאפליקציה תיפתח שוב על שנת העבודה, כמו שצריך.
+         קביעת שנת העבודה היא פעולה נפרדת ומפורשת: [data-set-working-year]. */
+      CBA.data.setCurrentYear(y, false);
+      if (window.CBA.refreshHeaderYear) CBA.refreshHeaderYear();
+      rerender();
+      CBA.ui.toast('נוצרה שנת תקציב ' + y + ' (טיוטה — שנת העבודה לא השתנתה)');
+    });
+  });
+  /* PLB1 (גל 9, 1.10.26) — פעולה נפרדת ומפורשת: קביעת השנה המוצגת כשנת העבודה של כולם (עם אישור) */
+  const setWorkingBtn = container.querySelector("[data-set-working-year]");
+  if (setWorkingBtn) setWorkingBtn.addEventListener("click", function () {
+    var y = CBA.data.getCurrentYear();
+    CBA.ui.confirm("כל ההוצאות ובקשות ההחזר החדשות של כל התושבים יירשמו לשנה הזו.",
+      { title: "לקבוע את " + y + " כשנת העבודה?", okText: "קביעה" }
+    ).then(function (ok) {
+      if (!ok) return;
       CBA.data.setCurrentYear(y, true);
       if (window.CBA.refreshHeaderYear) CBA.refreshHeaderYear();
       rerender();
-      CBA.ui.toast('נוצרה שנת תקציב ' + y);
+      CBA.ui.toast("שנת העבודה היא עכשיו " + y);
     });
   });
   // מצב תצוגה — אין עריכה מכאן והלאה, רק הגלילה בריחוף ופקדי התצוגה
@@ -250,6 +270,18 @@ function planBind(container) {
     container.dataset.saveBound = "1";
     container.addEventListener("change", function (e) {
       if (e.target && e.target.matches("input, select")) planSave();
+    });
+    /* PLB3 (גל 9, 1.10.26) — הקלדה משנה את הזיכרון מיד, אז מסמנים "עסוק" (שקט) כבר מההקשה הראשונה.
+       עד היום markDirty קרה רק ב-change/blur, ורענון רקע שנחת באמצע הקלדה החליף
+       את CBA.mock.years — והשמירה ב-blur שלחה את ערכי השרת במקום מה שהוקלד.
+       הניקוי: בסוף השמירה (planSave), או ביציאה מהשדה בלי שינוי שמור (focusout). */
+    container.addEventListener("input", function (e) {
+      if (!e.target || !e.target.matches("input, select, textarea")) return;
+      if (!CBA.onScreen("planning")) return;
+      if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("planEdit", false);
+    });
+    container.addEventListener("focusout", function () {
+      setTimeout(planMaybeClearEdit, 0);
     });
   }
 
@@ -362,6 +394,18 @@ function planBind(container) {
     });
   });
   container.querySelectorAll("[data-split-amt]").forEach(function (inp) {
+    /* PLB5 (גל 9, 1.10.26) — תקציב סגור: שינוי סכום בפיצול נרשם ל"עדכוני תקציב" */
+    inp.addEventListener("focus", function () { inp.dataset.startVal = inp.value; });
+    inp.addEventListener("change", function () {
+      const c = findCat(inp.dataset.splitAmt);
+      if (!c || !c.sources) return;
+      const idx = parseInt(inp.dataset.splitIdx, 10);
+      const row = c.sources[idx];
+      const src = row ? findIncome(row.incomeSourceId) : null;
+      planLogIfLocked(c.id + " · פיצול: " + (src ? src.name : (row ? row.incomeSourceId : "")),
+        planNum(inp.dataset.startVal), planNum(inp.value), "פיצול מימון");
+      inp.dataset.startVal = inp.value;
+    });
     inp.addEventListener("input", function () {
       const c = findCat(inp.dataset.splitAmt);
       if (!c || !c.sources) return;
@@ -488,6 +532,13 @@ function planBind(container) {
   });
   // עריכת מקורות הכנסה קבועים
   container.querySelectorAll("[data-src]").forEach(function (inp) {
+    /* PLB5 (גל 9, 1.10.26) — תקציב סגור: שינוי סכום מקור הכנסה נרשם ל"עדכוני תקציב" */
+    inp.addEventListener("focus", function () { inp.dataset.startVal = inp.value; });
+    inp.addEventListener("change", function () {
+      const s = findIncome(inp.dataset.src);
+      planLogIfLocked("הכנסה: " + (s ? s.name : inp.dataset.src), planNum(inp.dataset.startVal), planNum(inp.value), "");
+      inp.dataset.startVal = inp.value;
+    });
     inp.addEventListener("input", function () {
       const s = findIncome(inp.dataset.src);
       if (s) s.amount = planNum(inp.value);
@@ -506,6 +557,23 @@ function planBind(container) {
   });
   // מחשבון מיסים
   container.querySelectorAll("[data-dues]").forEach(function (inp) {
+    /* PLB5 (גל 9, 1.10.26) — תקציב סגור: שינוי במחשבון המיסים נרשם ל"עדכוני תקציב" לפי הסכום המחושב (לפני/אחרי) */
+    inp.addEventListener("focus", function () {
+      inp.dataset.startVal = inp.value;
+      const d = CBA.data.getDuesSource();
+      inp.dataset.startTotal = String(d ? planIncomeComputed(d.id) : 0);
+    });
+    inp.addEventListener("change", function () {
+      const d = CBA.data.getDuesSource();
+      if (!d) return;
+      const fld = inp.closest(".dues-field");
+      const lab = fld && fld.querySelector("label");
+      const label = (lab && lab.textContent) || inp.dataset.dues;
+      planLogIfLocked("הכנסה: " + d.name, planNum(inp.dataset.startTotal), planIncomeComputed(d.id),
+        label + ": " + planNum(inp.dataset.startVal) + " ← " + planNum(inp.value));
+      inp.dataset.startVal = inp.value;
+      inp.dataset.startTotal = String(planIncomeComputed(d.id));
+    });
     inp.addEventListener("input", function () {
       const dues = CBA.data.getDuesSource();
       if (dues) dues[inp.dataset.dues] = planNum(inp.value);
@@ -673,19 +741,32 @@ function planBind(container) {
   // העתקת שנה שלמה כבסיס
   const copyBase = container.querySelector("[data-copy-base]");
   if (copyBase) copyBase.addEventListener("click", function () {
-    CBA.data.getCategories().forEach(function (c) {
-      const p = CBA.data.getYearPlan(planCompareYear, c.id);
-      if (p !== null) CBA.data.updateCategory(c.id, { plan: p });
+    /* PLB5 (גל 9, 1.10.26) — אישור לפני החלפת כל הסכומים, ורישום ל"עדכוני תקציב" כשהתקציב סגור */
+    var cmpYear = planCompareYear;
+    CBA.ui.confirm("כל הסכומים יוחלפו בסכומי " + cmpYear + ".",
+      { title: "להעתיק את " + cmpYear + " כבסיס?", okText: "העתק" }
+    ).then(function (ok) {
+      if (!ok) return;
+      CBA.data.getCategories().forEach(function (c) {
+        const p = CBA.data.getYearPlan(cmpYear, c.id);
+        if (p !== null) {
+          planLogIfLocked(c.id, c.plan || 0, p, "העתקה מ" + cmpYear);
+          CBA.data.updateCategory(c.id, { plan: p });
+        }
+      });
+      planSave();
+      rerender();
     });
-    planSave();
-    rerender();
   });
   // לחיצה על סכום שנה קודמת — מעתיקה רק אותו
   container.querySelectorAll("[data-copy-prev]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       const c = findCat(btn.dataset.copyPrev);
       const p = CBA.data.getYearPlan(planCompareYear, btn.dataset.copyPrev);
-      if (c && p !== null) c.plan = p;
+      if (c && p !== null) {
+        planLogIfLocked(c.id, c.plan || 0, p, "העתקה מ" + planCompareYear);   /* PLB5 (גל 9, 1.10.26) */
+        c.plan = p;
+      }
       planSave();
       rerender();
     });
@@ -703,9 +784,26 @@ function planBind(container) {
   });
   container.querySelectorAll("[data-remove-income]").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      CBA.data.removeIncomeSource(btn.dataset.removeIncome);
-      planSave();
-      rerender();
+      /* PLB6 (גל 9, 1.10.26) — מחיקת מקור הכנסה עם אישור, כמו סעיפים וקבוצות */
+      var srcId = btn.dataset.removeIncome;
+      var src = findIncome(srcId);
+      var linked = 0;
+      try {
+        linked = CBA.data.getCategories().filter(function (c) {
+          return c.incomeSourceId === srcId ||
+            (c.sources || []).some(function (r) { return r.incomeSourceId === srcId; });
+        }).length;
+      } catch (e) { linked = 0; }
+      var msg = 'מקור ההכנסה "' + (src ? src.name : srcId) + '" יימחק מהתקציב.' +
+        (linked ? (linked === 1 ? " סעיף אחד ממומן ממנו ויישאר בלי מקור מימון." : " " + linked + " סעיפים ממומנים ממנו ויישארו בלי מקור מימון.") : "") +
+        " אי אפשר לשחזר מתוך האפליקציה.";
+      CBA.ui.confirm(msg, { title: "למחוק את מקור ההכנסה?", okText: "כן, מחק", danger: true }).then(function (ok) {
+        if (!ok) return;
+        CBA.data.removeIncomeSource(srcId);
+        planSave();
+        rerender();
+        CBA.ui.toast("מקור ההכנסה נמחק");
+      });
     });
   });
 }
@@ -1869,16 +1967,23 @@ function setText(container, sel, text) { const el = container.querySelector(sel)
 // בתוך 700 המילישניות של ההשהיה, במקום שהעריכה תיעלם בלי שאף אחד ידע.
 // registerFlush רושם אותה ב-sheets.js; ר' flushPending/beforeunload שם.
 var planSaveTimer = null;
+/* PLB3 (גל 9, 1.10.26) — שמירה מתוזמנת/באוויר; כל עוד יש כזו, "planEdit" לא מתנקה ב-focusout */
+var planSaveBusy = false;
 function planSave() {
   if (!CBA.sheets || !CBA.sheets.isConnected || !CBA.sheets.isConnected()) return;
   var year = CBA.data.getCurrentYear();
+  planSaveBusy = true;   /* PLB3 (גל 9, 1.10.26) */
   if (CBA.sheets.markDirty) CBA.sheets.markDirty();
   clearTimeout(planSaveTimer);
   var doSave = function () {
     clearTimeout(planSaveTimer);
+    planSaveTimer = null;   /* PLB3 (גל 9, 1.10.26) — "אין שמירה מתוזמנת" (השמירה עצמה באוויר עד ה-callback) */
     if (CBA.sheets.registerFlush) CBA.sheets.registerFlush("planSave", null);   // כבר נשלח — אין מה להבריח
     CBA.data.saveBudgetToSheet(year, function (res) {
       if (CBA.sheets.clearDirty) CBA.sheets.clearDirty();
+      /* PLB3 (גל 9, 1.10.26) — השמירה חזרה: משחררים גם את סימון ההקלדה (אלא אם כבר הוזמנה שמירה חדשה / מקלידים שוב) */
+      if (planSaveTimer === null) planSaveBusy = false;
+      planMaybeClearEdit();
       /* ⚠️ עד 14.9 ה-callback התעלם לגמרי מהתשובה (PHASE 4.2). שמירת תקציב
          שנדחתה — שנה נעולה, אין הרשאת תקציב, נעילה שלא נתפסה — הייתה נגמרת
          ב"נשמר ✓" בכותרת, והמנהל המשיך לערוך עוד עשר דקות על בסיס שלא קיים
@@ -1892,4 +1997,34 @@ function planSave() {
   };
   if (CBA.sheets.registerFlush) CBA.sheets.registerFlush("planSave", doSave);
   planSaveTimer = setTimeout(doSave, 700);
+}
+
+/* PLB3 (גל 9, 1.10.26) — מנקה את "planEdit" רק כשאין שמירה מתוזמנת/באוויר ואין פוקוס בשדה של המסך.
+   (לא שומר כלום בעצמו — רק משחרר את חסימת הרענון כשאין יותר עריכה פתוחה.) */
+function planMaybeClearEdit() {
+  if (planSaveBusy) return;
+  var el = document.activeElement;
+  var main = document.getElementById("app-main");
+  if (el && main && main.contains(el) && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
+  if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("planEdit");
+}
+
+/* PLB5 (גל 9, 1.10.26) — רישום ל"עדכוני תקציב" כשהתקציב סגור, בדיוק כמו שדה סכום הסעיף (logBudgetUpdate) */
+function planLogIfLocked(section, from, to, reason) {
+  if (CBA.data.getBudgetPhase() !== "locked") return;
+  if (Math.round(Number(from) || 0) === Math.round(Number(to) || 0)) return;
+  CBA.data.logBudgetUpdate(section, from, to, reason || "");
+}
+function planIncomeComputed(id) {
+  var s = (CBA.data.getIncomeSources() || []).find(function (x) { return x.id === id; });
+  return s ? (s.computed || 0) : 0;
+}
+
+/* PLB1 (גל 9, 1.10.26) — כפתור "קביעה כשנת העבודה": מוצג רק כשהשנה המוצגת אינה שנת העבודה */
+function planWorkingYearBtnHTML() {
+  var cur = CBA.data.getCurrentYear();
+  var working = CBA.data.getWorkingYear ? CBA.data.getWorkingYear() : cur;
+  if (!cur || cur === working) return "";
+  return '<button class="btn-ghost" type="button" data-set-working-year title="שנת העבודה כרגע: ' +
+    CBA.esc(working) + '">קביעה כשנת העבודה</button>';
 }

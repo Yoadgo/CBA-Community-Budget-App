@@ -5,10 +5,12 @@
    ========================================================================== */
 
 /* ---------- בסיס שלד + אנימציית shimmer ---------- */
+/* SKB2 (גל 9, 1.10.26) — הגדרה אחת (הייתה כפולה כאן ולמטה). מדרג עדין בטוקנים: --hair-2 (#F3F4F6) ← --hair (#E5E7EB),
+   הכי קרובים ל-#EFF1F4 ← #E7EAEF שהיו בפועל. אפור אחיד נראה כמו "משהו נשבר", מדרג קל כמו משטח שממתין להתמלא. */
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: #EEF0F3;
+  background: linear-gradient(180deg, var(--hair-2) 0%, var(--hair) 100%);
   border-radius: 10px;
 }
 .skeleton::after {
@@ -16,8 +18,8 @@
   position: absolute;
   inset: 0;
   transform: translateX(100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .7), transparent);
-  animation: sk-shimmer 1.25s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .85), transparent);
+  animation: sk-shimmer 1.45s ease-in-out infinite;
 }
 /* ב-RTL הבוהק סוחף מימין לשמאל */
 @keyframes sk-shimmer { 100% { transform: translateX(-100%); } }
@@ -190,16 +192,8 @@ body.app-booting .app-nav__tab {
 /* ==========================================================================
    שלדים תואמי-צורה (2026-08-25) — ר' js/ui/skeleton.js
    כל המחלקות כאן בתחילית sk-, ונשענות על .skeleton הבסיסי שלמעלה.
-   הבסיס עודכן מאפור שטוח למדרג עדין: אפור אחיד נראה כמו "משהו נשבר",
-   מדרג קל נראה כמו משטח שממתין להתמלא.
    ========================================================================== */
-.skeleton {
-  background: linear-gradient(180deg, #EFF1F4 0%, #E7EAEF 100%);
-}
-.skeleton::after {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .85), transparent);
-  animation-duration: 1.45s;
-}
+/* SKB2 (גל 9, 1.10.26) — הדריסה הכפולה של .skeleton שהייתה כאן אוחדה לתוך ההגדרה היחידה למעלה. */
 
 /* --- מכל ואבני בניין --- */
 .sk        { display: flex; flex-direction: column; gap: 12px; }

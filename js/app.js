@@ -2151,7 +2151,10 @@
         '</div>' +
       '</div>';
     document.body.appendChild(wrap);
+    /* LGB2 (גל 9, 1.10.26) — Esc סוגר (כרטיס הסבר בלבד — אין מה לאבד). */
+    const onEscIntro = function (e) { if (e.key === "Escape" && wrap.isConnected) close(); };
     const close = function () {
+      document.removeEventListener("keydown", onEscIntro);
       wrap.remove();
       /* הדגשה קצרה של כפתור Google — הפעולה שהמשתמש אמור לעשות עכשיו. */
       const btn = document.getElementById("gate-signin");
@@ -2159,6 +2162,7 @@
       btn.classList.add("is-pulse");
       setTimeout(function () { btn.classList.remove("is-pulse"); }, 2400);
     };
+    document.addEventListener("keydown", onEscIntro);
     wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
     wrap.querySelector(".peek__x").addEventListener("click", close);
     wrap.querySelector("#su-got").addEventListener("click", close);
@@ -2179,22 +2183,37 @@
           '<button class="peek__x" aria-label="סגור">×</button></div>' +
         '<div class="signup-body">' +
           '<p class="signup-note">הבקשה תישלח לוועד לאישור. נשלח אליך גישה לאחר האישור.</p>' +
-          '<div class="form-field"><label>אימייל</label>' +
-            '<input class="field-input" value="' + CBA.esc(signupPrefill ? signupPrefill.email : "") + '" disabled></div>' +
-          '<div class="form-field"><label>שם פרטי</label>' +
+          /* LGB2 (גל 9, 1.10.26) — כל תווית מחוברת לשדה שלה (label for) */
+          '<div class="form-field"><label for="su-email">אימייל</label>' +
+            '<input class="field-input" id="su-email" value="' + CBA.esc(signupPrefill ? signupPrefill.email : "") + '" disabled></div>' +
+          '<div class="form-field"><label for="su-first">שם פרטי</label>' +
             '<input class="field-input" id="su-first" value="' + CBA.esc(guess[0] || "") + '"></div>' +
-          '<div class="form-field"><label>שם משפחה</label>' +
+          '<div class="form-field"><label for="su-last">שם משפחה</label>' +
             '<input class="field-input" id="su-last" value="' + CBA.esc(guess.slice(1).join(" ")) + '"></div>' +
-          '<div class="form-field"><label>מספר בית</label>' +
+          '<div class="form-field"><label for="su-house">מספר בית</label>' +
             '<input class="field-input" id="su-house" inputmode="numeric"></div>' +
-          '<div class="form-field"><label>טלפון</label>' +
+          '<div class="form-field"><label for="su-phone">טלפון</label>' +
             '<input class="field-input" id="su-phone" type="tel" inputmode="tel" placeholder="050-1234567"></div>' +
           '<div class="signup-msg" id="su-msg" hidden></div>' +
           '<button type="button" class="btn-primary signup-send" id="su-send">שלח בקשה</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(wrap);
-    const close = function () { wrap.remove(); };
+    /* LGB2 (גל 9, 1.10.26) — Esc סוגר; אם הוקלד משהו מעבר למילוי האוטומטי (ועוד לא נשלח) — מבקשים אישור. */
+    const SU_IDS = ["#su-first", "#su-last", "#su-house", "#su-phone"];
+    const suInit = SU_IDS.map(function (id) { return wrap.querySelector(id).value; });
+    let suConfirming = false;
+    const onEscForm = function (e) {
+      if (e.key !== "Escape" || suConfirming || !wrap.isConnected) return;
+      const sent = wrap.querySelector("#su-send").style.display === "none";
+      const dirty = !sent && SU_IDS.some(function (id, i) { return wrap.querySelector(id).value !== suInit[i]; });
+      if (!dirty || !(CBA.ui && CBA.ui.confirm)) { close(); return; }
+      suConfirming = true;
+      CBA.ui.confirm("לסגור את הטופס? מה שהוקלד לא יישמר.", { okText: "לסגור", cancelText: "להמשיך למלא" })
+        .then(function (yes) { suConfirming = false; if (yes) close(); });
+    };
+    const close = function () { document.removeEventListener("keydown", onEscForm); wrap.remove(); };
+    document.addEventListener("keydown", onEscForm);
     wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
     wrap.querySelector(".peek__x").addEventListener("click", close);
 
@@ -2211,13 +2230,22 @@
         return;
       }
       send.disabled = true; send.textContent = "שולח…";
+      /* LGB1 (גל 9, 1.10.26) — טוקן Google נשלח בגוף POST ולא בכתובת (שם הוא נרשם ביומנים/היסטוריה).
+         ⚠️ נפילה ל-GET הישן רק מול שרת שעוד לא עבר דיפלוי: doPost הישן עונה "אין הרשאה" משער ההרשאות. */
       const q = "?action=submitSignup&token=" + encodeURIComponent(signupToken) +
         "&firstName=" + encodeURIComponent(first) +
         "&lastName=" + encodeURIComponent(last) +
         "&house=" + encodeURIComponent(house) +
         "&phone=" + encodeURIComponent(phone);
-      fetch(CBA.sheets.url + q)
+      fetch(CBA.sheets.url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: "submitSignup", token: signupToken, firstName: first, lastName: last, house: house, phone: phone }) })
         .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok === false && d.error === "אין הרשאה") {
+            return fetch(CBA.sheets.url + q).then(function (r) { return r.json(); });
+          }
+          return d;
+        })
         .then(function (d) {
           msg.hidden = false;
           if (d && d.ok) {
@@ -2518,9 +2546,17 @@
     gisDisarm();   // התשובה הגיעה — אין "תקיעה" (ר' רשת הביטחון מעל hideLoginGate)
     loginError = null;
     showLoginConnecting();   // גוגל כבר סיימה; עכשיו מחכים לשרת שלנו — תראו את זה, לא מסך ריק
-    fetch(CBA.sheets.url + "?action=login&token=" + encodeURIComponent(resp.credential))
+    /* LGB1 (גל 9, 1.10.26) — טוקן Google בגוף POST ולא בכתובת. ⚠️ שרת שעוד לא עבר דיפלוי
+       עונה ל-POST "אין הרשאה" (שער doPost) — אז ניסיון אחד חוזר ב-GET הישן (resp._viaGet). */
+    (resp && resp._viaGet
+      ? fetch(CBA.sheets.url + "?action=login&token=" + encodeURIComponent(resp.credential))
+      : fetch(CBA.sheets.url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+                                body: JSON.stringify({ action: "login", token: resp.credential }) }))
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        if (data && data.ok === false && data.error === "אין הרשאה" && !(resp && resp._viaGet)) {
+          return onGoogleLogin(Object.assign({}, resp, { _viaGet: true }));
+        }
         if (data && data.ok && data.authorized) {
           currentUser = data;
           /* 🔴 אותה סיבה כמו בנתיב עליית-העמוד למטה: הזהות נקבעת **לפני**

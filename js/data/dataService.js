@@ -281,6 +281,34 @@ CBA.data = (function () {
     return { pendingExpenses: pendingExpenses, reviewExpenses: reviewExpenses, overBudget: overBudget };
   }
 
+  /* BUB3 (גל 9, 1.10.26) — מונה אחד משותף ל"ממתינות לאישור": הוגשה+בבדיקה, על כל השנים שנטענו (כמו הפעמון).
+     הבאנר במסך "תכנון מול ביצוע" ספר רק "הוגשה" ורק בשנה שעל המסך, ולכן
+     הראה מספר אחר מהפעמון. אותה לולאה ואותה הגנה מכפילות כמו getAlertCounts
+     (שנשארה כמו שהיא — יש עליה בדיקות מבנה). מחזיר { count, amount }. */
+  function pendingApprovalCount() {
+    var count = 0, amount = 0, seen = {};
+    function add(t) {
+      if (t.status !== "submitted" && t.status !== "review") return;
+      count++;
+      amount += Number(t.amount) || 0;
+    }
+    try {
+      var years = (CBA.mock && CBA.mock.years) || {};
+      Object.keys(years).forEach(function (y) {
+        ((years[y] && years[y].transactions) || []).forEach(function (t) {
+          var k = String(y) + "|" + String(t.id);
+          if (seen[k]) return;
+          seen[k] = 1;
+          add(t);
+        });
+      });
+    } catch (e) {
+      count = 0; amount = 0;
+      getTransactions().forEach(add);
+    }
+    return { count: count, amount: amount };
+  }
+
   // --- שלושת סוגי ההוצאה ---
   const EXPENSE_TYPES = [
     { key: "refund",   label: "החזר לדייר" },
@@ -4530,6 +4558,27 @@ CBA.data = (function () {
     return sums;
   }
 
+  /* BUB1 (גל 9, 1.10.26) — הוצאה שנספרת בלי סעיף קיים (לא שויכה / הסעיף נמחק) נספרת בסיכומים.
+     "הוצאה ללא סעיף כמובן שנחשבת" (יועד). actualByCategory ממפה רק לסעיפים
+     קיימים, ולכן הסכום הזה נאסף כאן בנפרד: getSummary מוסיף אותו ל"בוצע עד
+     כה"/יתרה, ומסך "תכנון מול ביצוע" מציג אותו ככרטיס "ללא סעיף".
+     asOf (מספר 0-11, אופציונלי) = רק עד אותו חודש בשנה, בדיוק כמו actualToDate. */
+  function getUncategorizedSpent(asOf) {
+    const cats = {};
+    getCategories().forEach(function (c) { cats[c.id] = 1; });
+    const keys = fiscalKeys();
+    const txs = getTransactions().filter(function (t) {
+      if (SPENT_STATUSES.indexOf(t.status) === -1) return false;
+      if (t.categoryId && cats.hasOwnProperty(t.categoryId)) return false;
+      if (typeof asOf === "number") {
+        const slot = fiscalSlotOf(t.month, keys);
+        return slot !== -1 && slot <= asOf;
+      }
+      return true;
+    });
+    return { amount: txs.reduce(function (s, t) { return s + (t.amount || 0); }, 0), txs: txs };
+  }
+
   // ניצול תת-סעיפים (סעיף 6, 2026-08-10) — עבור סעיף מפורט (c.items, ר' סעיף 5),
   // מחזיר לכל פריט את הביצוע בפועל (סכום תנועות נספרות ששויכו אליו דרך
   // subItemId), לתצוגה קלה (מלל מוקטן) במסך "תכנון מול ביצוע". null אם הסעיף
@@ -4628,6 +4677,18 @@ CBA.data = (function () {
     return out;
   }
   function fiscalKeys() { return fiscalKeysFor(getCurrentYear()); }
+  /* BUB2 (גל 9, 1.10.26) — חודש שמחוץ ל-12 חודשי השנה נצמד לקצה (אחרי הסוף -> החודש האחרון, לפני ההתחלה -> הראשון).
+     מה-20 בחודש הוצאה חדשה מקבלת את החודש הבא (expenses.js), ולכן הוצאה
+     מ-25.8 בתשפ"ו נושאת "2026-09" — מחוץ לשנה. "מול סך השנה" ספר אותה
+     ו"מול השלב בשנה" לא ספר אותה אף פעם. חודש ריק/לא תקין -> ‎-1 (לא נספר
+     בקצב, כמו קודם). */
+  function fiscalSlotOf(month, keys) {
+    const i = keys.indexOf(month);
+    if (i !== -1) return i;
+    const m = String(month || "");
+    if (!/^\d{4}-\d{2}$/.test(m)) return -1;
+    return m < keys[0] ? 0 : keys.length - 1;
+  }
   function getFiscalMonths() {
     const labels = getMonthLabels();
     return fiscalKeys().map(function (k, i) { return { key: k, label: labels[i], index: i }; });
@@ -4672,14 +4733,19 @@ CBA.data = (function () {
     return s;
   }
   function actualToDate(c, asOf) {
-    const keys = fiscalKeys().slice(0, asOf + 1);
+    /* BUB2 (גל 9, 1.10.26) — סינון לפי מקום בשנה (fiscalSlotOf) ולא לפי התאמה מדויקת של המחרוזת */
+    const keys = fiscalKeys();
     return getTransactions().filter(function (t) {
-      return t.categoryId === c.id && SPENT_STATUSES.indexOf(t.status) !== -1 && keys.indexOf(t.month) !== -1;
+      if (t.categoryId !== c.id || SPENT_STATUSES.indexOf(t.status) === -1) return false;
+      const slot = fiscalSlotOf(t.month, keys);
+      return slot !== -1 && slot <= asOf;
     }).reduce(function (s, t) { return s + (t.amount || 0); }, 0);
   }
   // שורות תקציב "נכון לחודש X" — צפי מול ביצוע עד אותו חודש
   function getBudgetRowsAsOf(asOf) {
-    const monthKeys = fiscalKeys().slice(0, asOf + 1);
+    /* BUB2 (גל 9, 1.10.26) — אותו סינון בדיוק גם לתת-הסעיפים, כדי שיסתכמו ל-r.actual */
+    const allKeys = fiscalKeys();
+    const inRange = function (t) { const slot = fiscalSlotOf(t.month, allKeys); return slot !== -1 && slot <= asOf; };
     return getCategories().map(function (c) {
       const expected = expectedToDate(c, asOf);
       const actual = actualToDate(c, asOf);
@@ -4688,7 +4754,7 @@ CBA.data = (function () {
       if (pct > 110) band = "danger"; else if (pct > 100) band = "warn";
       return {
         id: c.id, name: c.name, group: c.group, plan: c.plan, expected: expected, actual: actual, diff: actual - expected, pct: pct, band: band,
-        items: itemsActualForCategory(c, function (t) { return monthKeys.indexOf(t.month) !== -1; })
+        items: itemsActualForCategory(c, inRange)
       };
     });
   }
@@ -4696,13 +4762,19 @@ CBA.data = (function () {
   function cumulativeSeries() {
     const keys = fiscalKeys();
     const monthly = getCategories().map(categoryMonthly);
+    /* BUB2 (גל 9, 1.10.26) — ביצוע חודשי לפי fiscalSlotOf: הוצאה שחודשה אחרי סוף השנה נכנסת לחודש האחרון.
+       כך סוף הקו = כל ההוצאות שנספרו (כולל ללא סעיף, BUB1) = "בוצע עד כה". */
+    const monthActual = new Array(12).fill(0);
+    getTransactions().forEach(function (t) {
+      if (SPENT_STATUSES.indexOf(t.status) === -1) return;
+      const slot = fiscalSlotOf(t.month, keys);
+      if (slot !== -1) monthActual[slot] += (t.amount || 0);
+    });
     const plan = [], actual = [];
     let cp = 0, ca = 0;
     for (let i = 0; i < 12; i++) {
       cp += monthly.reduce(function (s, arr) { return s + arr[i]; }, 0);
-      ca += getTransactions().filter(function (t) {
-        return SPENT_STATUSES.indexOf(t.status) !== -1 && t.month === keys[i];
-      }).reduce(function (s, t) { return s + (t.amount || 0); }, 0);
+      ca += monthActual[i];
       plan.push(cp); actual.push(ca);
     }
     return { labels: getFiscalMonths().map(function (m) { return m.label; }), plan: plan, actual: actual };
@@ -4797,7 +4869,8 @@ CBA.data = (function () {
   function getSummary() {
     const rows = getBudgetRows();
     const totalPlan   = rows.reduce(function (s, r) { return s + r.plan; }, 0);
-    const totalActual = rows.reduce(function (s, r) { return s + r.actual; }, 0);
+    /* BUB1 (גל 9, 1.10.26) — "בוצע עד כה" כולל גם הוצאות ללא סעיף קיים, כמו סוף קו הגרף */
+    const totalActual = rows.reduce(function (s, r) { return s + r.actual; }, 0) + getUncategorizedSpent().amount;
     return {
       totalPlan: totalPlan,
       totalActual: totalActual,
@@ -4968,10 +5041,26 @@ CBA.data = (function () {
   function addYear(newYear, fromYear) {
     if (!newYear || CBA.mock.years[newYear]) return CBA.mock.years[newYear] || null;
     const srcY = CBA.mock.years[fromYear || CBA.mock.currentYear];
+    /* PLB2 (גל 9, 1.10.26) — מעתיקים (עותק עמוק) גם תת-סעיפים (items) ופיצול מימון (sources), לא רק את הסעיף.
+       השרת (addYear_ ב-Code.gs) כבר מעתיק את טאבי "פירוט סעיפים"/"פיצול מימון",
+       אבל העותק בזיכרון איבד אותם — והשמירה הראשונה של השנה החדשה (planSave)
+       הייתה שולחת items/sources ריקים ומוחקת את מה שהשרת העתיק.
+       מזהי הפריטים נשמרים כמו שהם: הם ייחודיים בתוך סעיף, ותנועות מפנות אליהם
+       דרך subItemId — כך אותו פריט נשאר אותו פריט גם בשנה הבאה. */
+    const copyDist = function (d) {
+      if (!d) return { mode: "equal", months: 12, monthly: null };
+      return { mode: d.mode, months: d.months, monthly: d.monthly ? d.monthly.slice() : null };
+    };
     const cats = (srcY ? srcY.categories : []).map(function (c) {
       return {
         id: c.id, name: c.name, plan: c.plan, group: c.group, incomeSourceId: c.incomeSourceId,
-        dist: { mode: c.dist.mode, months: c.dist.months, monthly: c.dist.monthly ? c.dist.monthly.slice() : null }
+        dist: copyDist(c.dist),
+        items: (c.items && c.items.length)
+          ? c.items.map(function (it) { return Object.assign({}, it, { dist: copyDist(it.dist) }); })
+          : null,
+        sources: (c.sources && c.sources.length)
+          ? c.sources.map(function (s) { return Object.assign({}, s); })
+          : null
       };
     });
     const inc = (srcY ? srcY.income : []).map(function (s) { return Object.assign({}, s); });
@@ -5709,6 +5798,7 @@ CBA.data = (function () {
     statusList: statusList,
     missingApprovalFields: missingApprovalFields,
     getAlertCounts: getAlertCounts,
+    pendingApprovalCount: pendingApprovalCount,   /* BUB3 (גל 9, 1.10.26) */
     payTypeOf: payTypeOf,
     expenseTypeList: expenseTypeList,
     expenseTypeOf: expenseTypeOf,
@@ -5730,6 +5820,7 @@ CBA.data = (function () {
     fiscalIndexIn: fiscalIndexIn,
     fiscalKeysFor: fiscalKeysFor,
     getSummary: getSummary,
+    getUncategorizedSpent: getUncategorizedSpent,   /* BUB1 (גל 9, 1.10.26) */
     getIncomeSources: getIncomeSources,
     getIncomeTotal: getIncomeTotal,
     getDuesSource: getDuesSource,

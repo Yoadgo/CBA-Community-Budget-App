@@ -28,7 +28,7 @@ CBA.screens.appReports = (function () {
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
 
   var VIEW_KEY = "cba_rr_view";
-  var st = { rows: [], view: "open", kind: "all", keep: {}, openDiag: {}, embedded: false };
+  var st = { rows: [], view: "open", kind: "all", keep: {}, openDiag: {}, embedded: false, loaded: false };
   try { var v0 = localStorage.getItem(VIEW_KEY); if (v0 === "open" || v0 === "done" || v0 === "all") st.view = v0; } catch (e) {}
 
   var DAY = 86400000;
@@ -186,6 +186,13 @@ CBA.screens.appReports = (function () {
     wire(container, container.querySelector(".rr-root"));
   }
 
+  /* ARB2 (גל 9, 1.10.26) — "המסך עדיין פתוח?" לפני ציור מאוחר: עצמאי — לפי CBA.onScreen; משובץ ב-sysHub — לפי חיבור החלונית ל-DOM. */
+  function stillHere(container, embedded) {
+    if (!container || container.isConnected === false) return false;
+    if (!embedded && CBA.onScreen && !CBA.onScreen("appReports")) return false;
+    return true;
+  }
+
   function findRow(id) { return st.rows.filter(function (r) { return String(r.id) === String(id); })[0]; }
 
   function packReport(r) {
@@ -240,6 +247,7 @@ CBA.screens.appReports = (function () {
           row.doneAt = want ? new Date().toISOString() : "";
           /* נשאר על המסך עד היציאה — לא קופץ מתחת לאצבע. */
           st.keep[row.id] = true;
+          if (!stillHere(container, st.embedded)) return;   /* ARB2 (גל 9, 1.10.26) — לא מציירים מעל מסך אחר */
           paint(container);
           if (want) CBA.ui.toast("סומן כטופל · נמצא גם בלשונית \"טופלו\"", "ok");
         });
@@ -256,6 +264,7 @@ CBA.screens.appReports = (function () {
             var t = String(txt).trim();
             row.reply = res.reply || (row.reply ? row.reply + "\n---\n" + t : t);
             CBA.ui.toast("התשובה נשלחה", "ok");
+            if (!stillHere(container, st.embedded)) return;   /* ARB2 (גל 9, 1.10.26) — לא מציירים מעל מסך אחר */
             paint(container);
           });
         });
@@ -273,19 +282,25 @@ CBA.screens.appReports = (function () {
         var box = card.querySelector(".rr-imgs");
         if (!box.hidden) { box.hidden = true; return; }
         box.hidden = false;
-        if (box.dataset.loaded === "1") return;
-        box.dataset.loaded = "1";
+        /* ARB3 (גל 9, 1.10.26) — "נטען" מסומן רק אחרי שכל התמונות הצליחו; כשל אחד ⇒ סגירה ופתיחה מחדש מנסה שוב. */
+        if (box.dataset.loaded === "1" || box.dataset.loaded === "busy") return;
+        box.dataset.loaded = "busy";
         box.innerHTML = "";
-        (row.photos || []).forEach(function (fid) {
+        var photos = row.photos || [], left = photos.length, failed = 0;
+        photos.forEach(function (fid) {
           CBA.data.getReceipt(fid, function (res) {
             var d = document.createElement("div");
             if (res && res.ok && res.url) {
               d.innerHTML = '<img class="rr-img" src="' + res.url + '" alt="צילום מהדיווח">';
             } else {
+              failed++;
               d.className = "rr-meta";
-              d.textContent = (res && res.error) || "לא הצלחנו לטעון תמונה";
+              d.textContent = ((res && res.error) || "לא הצלחנו לטעון תמונה") + " · לניסיון חוזר: סגירה ופתיחה של \"תמונות\"";
             }
             box.appendChild(d);
+            if (--left === 0) {
+              if (failed) delete box.dataset.loaded; else box.dataset.loaded = "1";
+            }
           });
         });
       }
@@ -298,23 +313,37 @@ CBA.screens.appReports = (function () {
     rows: function () { return st.rows.slice(); },
     load: function (cb) {
       CBA.data.getAppReports(function (res) {
-        if (res && res.ok) st.rows = res.rows || [];
+        if (res && res.ok) { st.rows = res.rows || []; st.loaded = true; }
         if (cb) cb(res);
       });
     },
 
-    render: function (container, opts) {
-      st.embedded = !!(opts && opts.embedded);
-      st.keep = {};
-      container.innerHTML = headHTML() + (CBA.skel && CBA.skel.cards ? CBA.skel.cards(3) :
-        '<div class="card"><div class="club-empty">טוען…</div></div>');
+    render: function render(container, opts) {
+      var embedded = !!(opts && opts.embedded);
+      st.embedded = embedded;
+      /* ARB1 (גל 9, 1.10.26) — רענון רקע שקט (כל done/reply מעלה את התחום): לא מאפסים keep ולא מציירים שלד — מציירים מהזיכרון וטוענים בשקט. */
+      var quiet = !!CBA.renderSilent && st.loaded;
+      if (quiet) {
+        paint(container);
+      } else {
+        st.keep = {};
+        container.innerHTML = headHTML() + (CBA.skel && CBA.skel.cards ? CBA.skel.cards(3) :
+          '<div class="card"><div class="club-empty">טוען…</div></div>');
+      }
       CBA.data.getAppReports(function (res) {
+        if (!stillHere(container, embedded)) return;   /* ARB2 (גל 9, 1.10.26) — המשתמש כבר עבר מסך/לשונית */
         if (!res || !res.ok) {
+          if (quiet) return;   /* ARB1 — ברענון שקט נשארים עם מה שמצויר */
+          /* ARB3 (גל 9, 1.10.26) — כפתור "נסה שוב" בכשל טעינה */
           container.innerHTML = headHTML() + '<div class="card"><div class="club-empty">לא ניתן לטעון כרגע. ' +
-            esc((res && res.error) || "") + "</div></div>";
+            esc((res && res.error) || "") +
+            ' <button type="button" class="btn-ghost btn-sm" data-rr-retry>נסה שוב</button></div></div>';
+          var rb = container.querySelector("[data-rr-retry]");
+          if (rb) rb.addEventListener("click", function () { render(container, opts); });
           return;
         }
         st.rows = res.rows || [];
+        st.loaded = true;
         paint(container);
       });
     }

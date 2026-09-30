@@ -81,22 +81,42 @@
   /* "מצביע עדין" — מחשב עם עכבר. הריחוף פותח תקצירים רק שם. */
   var FINE = window.matchMedia ? window.matchMedia("(hover: hover) and (pointer: fine)") : { matches: false };
 
+  /* GXB1 (גל 9, 1.10.26) — מצב התצוגה ברמת המודול: שורד ציור מחדש שקט (שינוי גינון ברקע), מתאפס רק בניווט אמיתי. */
+  function freshState() {
+    return { weeks: 8, showClosed: false, catFilter: "", trendTab: 0,
+             raw: null, mapHost: null, mapCtl: null, pinCb: null };
+  }
+  var S = freshState();
+  /* GXB2 (גל 9, 1.10.26) — חלונית הצצה אחת למודול (לא אחת לכל ציור), כדי שציור מחדש לא ישאיר אותה תקועה על המסך. */
+  var peekEl = null, peekTimer = null;
+  /* GXB3 (גל 9, 1.10.26) — מאזין resize יחיד למודול, שמפנה לציור הנוכחי בלבד (במקום מאזין חדש בכל ציור). */
+  var curResize = null;
+  window.addEventListener("resize", function () { if (curResize) curResize(); });
+
   CBA.screens.gardenStats = {
     render: function (container) {
-      var weeks = 8;
+      /* GXB1 (גל 9, 1.10.26) — ניווט אמיתי מאפס; ציור שקט ממשיך מאותו מצב (תקופה, סינון, מגמה, מפה). */
+      var silentRedraw = !!CBA.renderSilent;
+      if (!silentRedraw) S = freshState();
+      var weeks = S.weeks;
       var raw = null;          // מה שנקרא מ-Firestore
       var M = null;            // מה שחושב
       var byId = {};
       var loadErr = null;
-      var showClosed = false;
-      var catFilter = "";      // שם הקטגוריה שמסננת את המפה
-      var trendTab = 0;
-      var mapHost = null, mapCtl = null;
-      var peekTimer = null;
+      var showClosed = S.showClosed;
+      var catFilter = S.catFilter;      // שם הקטגוריה שמסננת את המפה
+      var trendTab = S.trendTab;
+      /* GXB1 (גל 9, 1.10.26) — המפה (והזום שלה) עוברת בין ציורים רק אם נצייר אותה מיד, באותה קריאה סינכרונית —
+         אחרת ה-ResizeObserver של המפה רואה אותה מנותקת ומתנתק לתמיד. */
+      var reuseMap = !!(silentRedraw && S.raw && S.mapHost && S.mapCtl);
+      var mapHost = reuseMap ? S.mapHost : null, mapCtl = reuseMap ? S.mapCtl : null;
+      if (!reuseMap) { S.mapHost = null; S.mapCtl = null; }
+      function keepState() { S.weeks = weeks; S.showClosed = showClosed; S.catFilter = catFilter; S.trendTab = trendTab; }
 
+      hidePeek();   // GXB2 (גל 9, 1.10.26) — הצצה פתוחה מהציור הקודם נסגרת
       container.innerHTML = '<div class="gd-screen gx gx-vars" id="gx-root"></div>';
       var root = container.querySelector("#gx-root");
-      skeleton();
+      if (!reuseMap) skeleton();   // GXB1 (גל 9, 1.10.26) — בציור שקט עם מפה: ציור מיידי בסוף render (ר' שם)
       load();
 
       function alive() { return root && root.isConnected; }
@@ -111,10 +131,11 @@
           }
           loadErr = null;
           raw = res;
+          S.raw = res;   // GXB1 (גל 9, 1.10.26) — לציור השקט הבא
           byId = {};
           (res.rows || []).forEach(function (t) { byId[String(t.id)] = t; });
           recompute();
-          draw();
+          draw(true);    // GXB1 (גל 9, 1.10.26) — רענון נתונים: לא מזיזים את הזום של המשתמש
         });
       }
       function recompute() {
@@ -129,7 +150,8 @@
 
       /* ============================ שלד ============================ */
       function skeleton() {
-        root.innerHTML = '<div class="gx-grid">' +
+        /* SKB1 (גל 9, 1.10.26) — שורש השלד: אזור חי אחד "טוען…" */
+        root.innerHTML = '<div class="gx-grid" role="status" aria-busy="true" aria-label="טוען…">' +
           ['', '', ''].map(function () {
             return '<div class="gx-pane"><div class="skeleton" style="height:30px;border-radius:10px;width:40%"></div>' +
               '<div class="skeleton" style="height:110px;border-radius:18px"></div>' +
@@ -152,9 +174,12 @@
       }
 
       /* ============================ ציור ============================ */
-      function draw() {
+      function draw(dataOnly) {
         hidePeek();
+        keepState();   // GXB1 (גל 9, 1.10.26)
         if (loadErr) {
+          /* GXB1 (גל 9, 1.10.26) — המפה יוצאת מה-DOM כאן, ולכן לא עוברת הלאה (ה-ResizeObserver שלה מתנתק). */
+          mapHost = mapCtl = null; S.mapHost = S.mapCtl = null;
           root.innerHTML =
             '<div class="gx-err lgx"><u>' + ico("cloud", 22) + '</u><b>לא הצלחתי לטעון</b>' +
             '<span>' + esc(loadErr) + '</span>' +
@@ -186,7 +211,7 @@
             '</section>' +
           '</div>';
         wire();
-        placeMap();
+        placeMap(dataOnly);
         sizeCharts();
       }
       /* מודד כל קופסת מגמה ומצייר את הגרף שלה מחדש בגובה שממלא אותה. */
@@ -205,11 +230,11 @@
       }
       var rsT = null;
       function onResize() {
-        if (!alive()) { window.removeEventListener("resize", onResize); return; }
+        if (!alive()) { if (curResize === onResize) curResize = null; return; }   // GXB3 (גל 9, 1.10.26)
         clearTimeout(rsT);
         rsT = setTimeout(function () { if (alive() && M) sizeCharts(); }, 180);
       }
-      window.addEventListener("resize", onResize);
+      curResize = onResize;   // GXB3 (גל 9, 1.10.26) — המאזין היחיד ברמת המודול מפנה לכאן
 
       /* ---------------------------- עכשיו ---------------------------- */
       /* 🔴 "ממתינות לאישורך" מובלטת (יועד, 23.9): כרטיס ברוחב מלא בראש
@@ -354,22 +379,30 @@
       }
       /* המפה נבנית **פעם אחת** ועוברת בין ציורים — ציור מחדש שלה
          (בסיס SVG של כל השכונה) היה מאט כל לחיצה על תקופה או מסנן. */
-      function placeMap() {
+      function placeMap(dataOnly) {
         var slot = root.querySelector("#gx-mapslot");
         if (!slot || !CBA.map) return;
+        /* GXB1 (גל 9, 1.10.26) — המפה עשויה לעבור לציור הבא, ולכן הנעצים פונים לציור הנוכחי דרך S.pinCb. */
+        S.pinCb = {
+          onPin: function (p, el) { showPop(p, el, true); },
+          onHover: function (p, el, on) { if (FINE.matches) { if (on) showPop(p, el, false); else hidePopSoon(); } },
+          onCluster: function (list) { openList(clusterList(list)); }
+        };
         if (!mapHost) {
           mapHost = document.createElement("div");
           mapHost.className = "gd-map gx-map";
           slot.insertBefore(mapHost, slot.firstChild);
           mapCtl = mountPins(mapHost, {
-            onPin: function (p, el) { showPop(p, el, true); },
-            onHover: function (p, el, on) { if (FINE.matches) { if (on) showPop(p, el, false); else hidePopSoon(); } },
-            onCluster: function (list) { openList(clusterList(list)); }
+            onPin: function (p, el) { if (S.pinCb) S.pinCb.onPin(p, el); },
+            onHover: function (p, el, on) { if (S.pinCb) S.pinCb.onHover(p, el, on); },
+            onCluster: function (list) { if (S.pinCb) S.pinCb.onCluster(list); }
           });
+          S.mapHost = mapHost; S.mapCtl = mapCtl;   // GXB1 (גל 9, 1.10.26)
         } else {
           slot.insertBefore(mapHost, slot.firstChild);
         }
-        mapCtl.set(visiblePins(showClosed, catFilter));
+        /* GXB1 (גל 9, 1.10.26) — רענון נתונים לא מתאים מחדש את התצוגה; רק מסנן/מתג/פתיחה ראשונה. */
+        mapCtl.set(visiblePins(showClosed, catFilter), !!dataOnly);
       }
 
       /* תקציר נעץ — במחשב חלונית קטנה מעל הנעץ. */
@@ -800,7 +833,7 @@
       }
 
       /* ---- הצצה בריחוף (מחשב בלבד): חמש השורות הראשונות של הרשימה ---- */
-      var peekEl = null;
+      /* GXB2 (גל 9, 1.10.26) — peekEl/peekTimer עברו לרמת המודול (למעלה). */
       function showPeek(tile) {
         var key = tile.dataset.list;
         var L = lists(key, tile.dataset.i ? +tile.dataset.i : undefined);
@@ -811,6 +844,8 @@
           peekEl = document.createElement("div");
           peekEl.className = "gx-peek gx-vars";
           document.body.appendChild(peekEl);
+        } else if (!peekEl.isConnected) {
+          document.body.appendChild(peekEl);   // GXB2 (גל 9, 1.10.26) — אותו אלמנט, לא חדש
         }
         peekEl.innerHTML = '<div class="gx-peek__h">' + esc(L.title) + '</div>' +
           (rows.length ? rows.slice(0, 5).join("") : '<p class="gx-none">' + esc(L.empty || "") + '</p>') +
@@ -836,12 +871,13 @@
           var b;
           if ((b = e.target.closest("[data-weeks]"))) {
             var w = +b.dataset.weeks;
-            if (w !== weeks) { weeks = w; recompute(); draw(); }
+            if (w !== weeks) { weeks = w; recompute(); draw(); }   // draw שומר את weeks ב-S (GXB1)
             return;
           }
           if (e.target.closest('[data-act="retry"]')) { loadErr = null; skeleton(); load(); return; }
           if (e.target.closest('[data-act="closed"]')) {
             showClosed = !showClosed;
+            keepState();   // GXB1 (גל 9, 1.10.26)
             var sw = root.querySelector('[data-act="closed"]');
             sw.setAttribute("aria-pressed", showClosed);
             sw.querySelector(".gx-sw").classList.toggle("on", showClosed);
@@ -868,6 +904,7 @@
           }
           if ((b = e.target.closest("[data-tab]")) && b.closest(".gx-tabs")) {
             trendTab = +b.dataset.tab;
+            keepState();   // GXB1 (גל 9, 1.10.26)
             var tr = root.querySelector(".gx-trends");
             tr.dataset.tab = trendTab;
             tr.querySelectorAll(".gx-tabs button").forEach(function (x, i) {
@@ -961,6 +998,15 @@
               !e.target.closest(".gx-full__tools")) panel.hidden = true;
         });
         wrap.querySelector("#gx-fcat").addEventListener("change", function (e) { fCat = e.target.value; set(); });
+      }
+
+      /* GXB1 (גל 9, 1.10.26) — ציור שקט: הנתונים האחרונים מיד (בלי שלד ובלי הבהוב) והמפה עם הזום שלה, והטעינה
+         שכבר יצאה מרעננת אחריה. ⚠️ כאן בסוף ולא למעלה — אחרי שכל ה-var של render (TR, CW/CH, LEG_*) כבר אותחלו. */
+      if (reuseMap) {
+        raw = S.raw;
+        (raw.rows || []).forEach(function (t) { byId[String(t.id)] = t; });
+        recompute();
+        draw(true);
       }
     }
   };
@@ -1072,9 +1118,10 @@
     }
     /* התצוגה מתאימה את עצמה לנעצים — רק כשקבוצת הנעצים השתנתה (פתיחה,
        מסנן סוג, המתג "סגורות"), כדי שמעבר תקופה לא יזרוק את הזום של המשתמש. */
-    var fitKey = "";
+    var fitKey = "", fitted = false;
     function fit() {
       if (!api.fitBox || !list.length) return;
+      fitted = true;   // GXB1 (גל 9, 1.10.26)
       var x0 = 1, y0 = 1, x1 = 0, y1 = 0;
       list.forEach(function (p) {
         x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
@@ -1091,10 +1138,11 @@
       api.fitBox(bx0, by0, Math.min(1, bx0 + w), Math.min(1, by0 + h), 24);
     }
     return {
-      set: function (pins) {
+      set: function (pins, keepView) {
         list = pins || [];
         var k = list.map(function (p) { return p.id; }).sort().join(",");
-        if (k !== fitKey) { fitKey = k; fit(); }
+        /* GXB1 (גל 9, 1.10.26) — keepView (רענון נתונים): לא מתאימים מחדש, אלא אם עוד אף פעם לא הותאם. */
+        if (k !== fitKey) { fitKey = k; if (!keepView || !fitted) fit(); }
         build();
       },
       api: api

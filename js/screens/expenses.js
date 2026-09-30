@@ -19,6 +19,10 @@ var txPresetCategory = null;  // סעיף שנבחר מראש (כשמגיעים 
 var txFiltersOpen = false;    // האם גיליון הסינון התחתון (מובייל) פתוח
 var txScrollTop = 0;          // מיקום גלילה בתוך רשימת הטבלה, נשמר בין רינדורים
 var txWinScrollY = 0;         // מיקום גלילת העמוד (מובייל — הרשימה לא גוללת בנפרד)
+/* EXB6 (גל 9, 1.10.26) — השורה הפתוחה במובייל ("שנה:מזהה"), כדי שרענון שקט לא יקפל אותה. */
+var txOpenMKey = null;
+/* EXB5 (גל 9, 1.10.26) — תנועות השנה המוצגת (Set), לזיהוי שורה שמגיעה משנה אחרת. */
+var txLocal = null;
 
 // אייקון "יש הערה" קטן — מוצג ליד תגית הסטטוס כשיש הערת בדיקה (tooltip מציג את הטקסט)
 var TX_NOTE_ICO = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H8l-4 4V4z"/><path d="M8 8h8M8 11h5"/></svg>';
@@ -69,17 +73,20 @@ function txGridColsCss() {
 CBA.screens.expenses = {
   title: "ניהול הוצאות",
 
-  render(container) {
+  render(container, opts) {
     // נשמר לפני שה-innerHTML נדרס, ומוחזר בסוף (ר' ההערה למטה)
     const prevList = container.querySelector(".tx-list");
     if (prevList) txScrollTop = prevList.scrollTop;
     txWinScrollY = window.scrollY || 0;
+    /* EXB6 (גל 9, 1.10.26) — כניסה אמיתית למסך (לא רענון שקט ולא ציור אחרי פעולה) מתחילה בלי שורה פתוחה. */
+    if (!prevList && !((opts && opts.silent) || CBA.renderSilent)) txOpenMKey = null;
 
-    const all = CBA.data.getTransactions();
+    const all = txSource();   /* EXB5 (גל 9, 1.10.26) — "ממתינות" וסינון לשנה אחרת רואים את כל השנים שנטענו */
     const rows = txSortRows(txApplyFilters(all));
     const total = rows.reduce(function (s, t) { return s + (t.amount || 0); }, 0);
     const selCount = txSelCount();
-    const allChecked = rows.length > 0 && rows.every(function (t) { return txSelected[t.id]; });
+    const selectable = rows.filter(function (t) { return !txForeign(t); });
+    const allChecked = selectable.length > 0 && selectable.every(function (t) { return txSelected[t.id]; });
 
     container.innerHTML = `
       <div class="tx-views">
@@ -98,7 +105,7 @@ CBA.screens.expenses = {
       <div class="tx-bar">
         <div class="tx-filters">
           <div class="tx-selects">
-            <select class="year-select" data-f="year">${txYearOptions(all)}</select>
+            <select class="year-select" data-f="year">${txYearOptions(txAllLoaded())}</select>
             <select class="year-select" data-f="month">${txMonthOptions(all)}</select>
             <select class="year-select" data-f="category">${txCatOptions()}</select>
             <select class="year-select" data-f="status">${txStatusOptions()}</select>
@@ -179,6 +186,32 @@ CBA.screens.expenses.openAddForCategory = function (catId) {
   txOpenDrawer(container, null);
   txPresetCategory = null;
 };
+
+/* EXB5 (גל 9, 1.10.26) — מקור השורות: השנה המוצגת, אלא בתצוגת "ממתינות" או כשסוננה שנה אחרת — אז כל השנים שנטענו.
+   ⚠️ שורה משנה אחרת היא לקריאה בלבד כאן: updateTransaction ו-find לפי מזהה עובדים רק על השנה המוצגת, והמזהים אינם ייחודיים בין שנים.
+   לכן במקום פעולות היא מקבלת "מעבר לשנה". */
+function txAllLoaded() { return CBA.data.getAllTransactions ? CBA.data.getAllTransactions() : CBA.data.getTransactions(); }
+function txWide() {
+  const cur = String(CBA.data.getCurrentYear() || "");
+  return !!CBA.data.getAllTransactions && (txView === "pending" || (!!txFilters.year && txFilters.year !== cur));
+}
+function txSource() {
+  const local = CBA.data.getTransactions();
+  txLocal = new Set(local);
+  return txWide() ? CBA.data.getAllTransactions() : local;
+}
+function txForeign(t) { return !!txLocal && !txLocal.has(t); }
+function txYearTag(t) { return txWide() && t.year ? `<span class="badge-src">${CBA.esc(String(t.year))}</span>` : ""; }
+function txGotoYear(container, y) {
+  if (CBA.data.setCurrentYear(y) !== y) { CBA.ui.toast("לא הצלחנו לעבור ל-" + y, "error"); return; }
+  if (CBA.refreshHeaderYear) CBA.refreshHeaderYear();
+  txSelected = {};
+  // כמו החלפת שנה מהכותרת (switchViewYear ב-app.js): ציור דרך הניווט, שגם זוכר את השנה
+  if (CBA.navigate) CBA.navigate("expenses"); else CBA.screens.expenses.render(container);
+}
+function txForeignActions(t, cls) {
+  return `<button class="${cls}" data-goto-year="${CBA.esc(String(t.year))}" title="הפעולות זמינות בשנה של הבקשה">מעבר ל-${CBA.esc(String(t.year))}</button>`;
+}
 
 function txSelCount() { return Object.keys(txSelected).filter(function (k) { return txSelected[k]; }).length; }
 function txViewTab(key, label) { return `<button class="tx-view${txView === key ? " is-active" : ""}" data-view="${key}">${label}</button>`; }
@@ -367,24 +400,31 @@ function txRowHTML(t) {
   const customCells = txVisibleCustomCols().map(function (c) {
     return '<div class="tx-c">' + CBA.esc((t.customFields && t.customFields[c.key]) || "") + '</div>';
   }).join("");
+  /* EXB5 (גל 9, 1.10.26) — שורה משנה אחרת: בלי בחירה, קבלה לפי קישור (לא לפי מזהה), ובמקום פעולות — מעבר לשנה. */
+  const foreign = txForeign(t);
+  const sel = !foreign && txSelected[t.id];
+  const peekBtn = !t.receiptUrl ? "" : foreign
+    ? `<button class="tx-peek" data-peek-url="${CBA.esc(t.receiptUrl)}" data-peek-title="${CBA.esc(t.supplier || t.buyer || "קבלה")}" title="תצוגה מקדימה של הקבלה" aria-label="תצוגה מקדימה של הקבלה">${TX_PEEK_ICO}</button>`
+    : `<button class="tx-peek" data-peek="${t.id}" title="תצוגה מקדימה של הקבלה" aria-label="תצוגה מקדימה של הקבלה">${TX_PEEK_ICO}</button>`;
   return `
-    <div class="tx-row${pending ? " is-pending" : ""}${txSelected[t.id] ? " is-selected" : ""}" data-tx="${t.id}">
-      <div class="tx-check"><input type="checkbox" data-check="${t.id}" ${txSelected[t.id] ? "checked" : ""}></div>
-      <div class="tx-c tx-c--peek">${t.receiptUrl ? `<button class="tx-peek" data-peek="${t.id}" title="תצוגה מקדימה של הקבלה" aria-label="תצוגה מקדימה של הקבלה">${TX_PEEK_ICO}</button>` : ""}</div>
+    <div class="tx-row${pending ? " is-pending" : ""}${sel ? " is-selected" : ""}" data-tx="${t.id}"${foreign ? ` data-foreign-year="${CBA.esc(String(t.year))}"` : ""}>
+      <div class="tx-check"><input type="checkbox" data-check="${t.id}" ${sel ? "checked" : ""}${foreign ? " disabled" : ""}></div>
+      <div class="tx-c tx-c--peek">${peekBtn}</div>
       ${stdCells}
       ${customCells}
       <div class="tx-c tx-c--status">
         <span class="badge badge--${s.cls}">${s.label}</span>
         ${t.reviewNote ? `<span class="tx-note-ico" title="${CBA.esc(t.reviewNote)}">${TX_NOTE_ICO}</span>` : ""}
         <span class="badge-src">${typ}</span>
+        ${txYearTag(t)}
       </div>
       <!-- כפתורים מפורשים, בלי תפריט (2026-08-06, לבקשת יועד): פעולה ראשית
            בטקסט מלא ללא שבירת שורה, ולידה "?" לסימון בדיקה ו-"✕" למחיקה. -->
-      <div class="tx-c--actions">
+      <div class="tx-c--actions">${foreign ? txForeignActions(t, "btn-ghost btn-sm") : `
         ${next ? `<button class="btn-approve" data-advance="${t.id}">${s.next}</button>` : ""}
         ${canReject ? `<button class="btn-reject" data-reject="${t.id}">דחה</button>` : ""}
         ${canReview ? `<button class="tx-ico-btn tx-ico-btn--review" data-review="${t.id}" title="העבר לבדיקה" aria-label="העבר לבדיקה">?</button>` : ""}
-        <button class="tx-ico-btn tx-ico-btn--del" data-del-tx="${t.id}" title="מחק" aria-label="מחק">✕</button>
+        <button class="tx-ico-btn tx-ico-btn--del" data-del-tx="${t.id}" title="מחק" aria-label="מחק">✕</button>`}
       </div>
     </div>`;
 }
@@ -405,9 +445,14 @@ function txMRowHTML(t) {
   const canReview = t.status === "submitted" || t.status === "ready";
   const canReject = t.status === "submitted" || t.status === "review" || t.status === "ready";
   const title = t.supplier || t.buyer || "(ללא ספק)";
-  const meta = CBA.data.hebrewDate(t.date || "") + " · " + CBA.data.categoryName(t.categoryId);
+  /* EXB5 (גל 9, 1.10.26) — בתצוגה חוצת-שנים השנה מוצגת בכל שורה */
+  const meta = CBA.data.hebrewDate(t.date || "") + " · " + CBA.data.categoryName(t.categoryId) + (txWide() && t.year ? " · " + t.year : "");
+  const foreign = txForeign(t);
+  /* EXB6 (גל 9, 1.10.26) — שחזור השורה הפתוחה אחרי ציור מחדש */
+  const mkey = String(t.year || "") + ":" + t.id;
+  const open = txOpenMKey === mkey;
   return `
-    <div class="tx-mrow${pending ? " is-pending" : ""}" data-tx="${t.id}">
+    <div class="tx-mrow${pending ? " is-pending" : ""}${open ? " is-open" : ""}" data-tx="${t.id}" data-mkey="${CBA.esc(mkey)}">
       <button type="button" class="tx-mcard" data-tx-toggle="${t.id}">
         <span class="tx-mcard__main">
           <span class="tx-mcard__title">${CBA.esc(title)}</span>
@@ -419,7 +464,7 @@ function txMRowHTML(t) {
         </span>
         <span class="tx-mcard__chev" aria-hidden="true">⌄</span>
       </button>
-      <div class="tx-mdetails" hidden>
+      <div class="tx-mdetails"${open ? "" : " hidden"}>
         <div class="tx-md__grid">
           <div><span class="tx-md__k">רוכש</span><span class="tx-md__v">${CBA.esc(t.buyer || "—")}</span></div>
           <div><span class="tx-md__k">חודש הגשה</span><span class="tx-md__v">${CBA.esc(txMonthLabel(t.month || "") || "—")}</span></div>
@@ -431,14 +476,14 @@ function txMRowHTML(t) {
             return v ? `<div><span class="tx-md__k">${CBA.esc(c.label)}</span><span class="tx-md__v">${CBA.esc(v)}</span></div>` : "";
           }).join("")}
           ${t.reviewNote ? `<div class="tx-md--wide"><span class="tx-md__k">הערת בדיקה</span><span class="tx-md__v">${CBA.esc(t.reviewNote)}</span></div>` : ""}
-          ${t.receiptUrl ? `<div class="tx-md--wide"><span class="tx-md__k">קבלה</span><button type="button" class="tx-receipt tx-receipt--btn" data-peek="${t.id}">${TX_PEEK_ICO} תצוגה מקדימה</button></div>` : ""}
+          ${t.receiptUrl ? `<div class="tx-md--wide"><span class="tx-md__k">קבלה</span><button type="button" class="tx-receipt tx-receipt--btn" ${foreign ? `data-peek-url="${CBA.esc(t.receiptUrl)}" data-peek-title="${CBA.esc(title)}"` : `data-peek="${t.id}"`}>${TX_PEEK_ICO} תצוגה מקדימה</button></div>` : ""}
         </div>
-        <div class="tx-md__actions">
+        <div class="tx-md__actions">${foreign ? txForeignActions(t, "btn-ghost btn-sm") : `
           ${next ? `<button class="btn-approve" data-advance="${t.id}">${s.next}</button>` : ""}
           ${canReview ? `<button class="btn-ghost btn-sm" data-review="${t.id}">לבדיקה</button>` : ""}
           ${canReject ? `<button class="btn-ghost btn-sm btn-danger" data-reject="${t.id}">דחה</button>` : ""}
           <button class="btn-ghost btn-sm" data-medit="${t.id}">עריכה</button>
-          <button class="btn-ghost btn-sm btn-danger" data-del-tx="${t.id}">מחיקה</button>
+          <button class="btn-ghost btn-sm btn-danger" data-del-tx="${t.id}">מחיקה</button>`}
         </div>
       </div>
     </div>`;
@@ -561,7 +606,12 @@ function txBindRows(container) {
         const d = r.querySelector(".tx-mdetails"); if (d) d.setAttribute("hidden", "");
       });
       if (!isOpen) { row.classList.add("is-open"); if (det) det.removeAttribute("hidden"); }
+      txOpenMKey = isOpen ? null : (row.dataset.mkey || null);   /* EXB6 (גל 9, 1.10.26) */
     });
+  });
+  /* EXB5 (גל 9, 1.10.26) — "מעבר ל-<שנה>" בשורה משנה אחרת */
+  container.querySelectorAll("[data-goto-year]").forEach(function (btn) {
+    btn.addEventListener("click", function (e) { e.stopPropagation(); txGotoYear(container, btn.dataset.gotoYear); });
   });
   container.querySelectorAll("[data-medit]").forEach(function (btn) {
     btn.addEventListener("click", function (e) { e.stopPropagation(); txOpenDrawer(container, parseInt(btn.dataset.medit, 10)); });
@@ -570,6 +620,8 @@ function txBindRows(container) {
   container.querySelectorAll(".tx-row").forEach(function (row) {
     row.addEventListener("click", function (e) {
       if (e.target.closest(".tx-check") || e.target.closest("[data-advance]") || e.target.closest("[data-del-tx]")) return;
+      /* EXB5 (גל 9, 1.10.26) — שורה משנה אחרת לא פותחת מגירה לפי מזהה (עלול להיות מזהה של תנועה אחרת בשנה המוצגת) */
+      if (row.dataset.foreignYear) return;
       txOpenDrawer(container, parseInt(row.dataset.tx, 10));
     });
   });
@@ -637,8 +689,15 @@ function txBindRows(container) {
   container.querySelectorAll("[data-reject]").forEach(function (btn) {
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
-      CBA.data.updateTransaction(parseInt(btn.dataset.reject, 10), { status: "rejected", reviewNote: "" });
-      CBA.screens.expenses.render(container);
+      /* EXB3 (גל 9, 1.10.26) — דחייה שולחת מייל מיד, לכן אישור + סיבה (רשות). סטטוס והערה בכתיבה אחת: זה "סטטוס בלבד" (txStatusOnly מתיר reviewNote), והערת בדיקה אינה שדה פרטים. */
+      const rid = parseInt(btn.dataset.reject, 10);
+      CBA.ui.prompt("התושב יקבל מייל על הדחייה. הסיבה (רשות) תוצג לו יחד עם הסטטוס.",
+        { title: "לדחות את הבקשה?", placeholder: "סיבת הדחייה (רשות)", okText: "דחייה", danger: true }
+      ).then(function (reason) {
+        if (reason === null) return;   // בוטל
+        CBA.data.updateTransaction(rid, { status: "rejected", reviewNote: String(reason).trim() });
+        CBA.screens.expenses.render(container);
+      });
     });
   });
   container.querySelectorAll("[data-del-tx]").forEach(function (btn) {
@@ -670,20 +729,29 @@ function txBulkAction(container, action) {
   else if (action === "approve") {
     const items = ids.map(function (id) { return CBA.data.getTransactions().find(function (x) { return x.id === id; }); }).filter(Boolean);
     const blocked = [];
+    /* EXB1 (גל 9, 1.10.26) — מאשרים רק הגשה/בבדיקה. "שולם"/"נדחה" לא חוזרים ל"מוכן" (ולא נשלח מייל נוסף); "מוכן" מדולג בשקט. */
+    const untouched = [];
+    let approved = 0;
     items.forEach(function (t) {
-      if (t.status === "submitted" || t.status === "review") {
-        const missing = CBA.data.missingApprovalFields(t);
-        if (missing.length) { blocked.push({ t: t, missing: missing }); return; }
-      }
-      CBA.data.updateTransaction(t.id, { status: "ready" });
+      if (t.status === "paid" || t.status === "rejected") { untouched.push(t); return; }
+      if (t.status !== "submitted" && t.status !== "review") return;
+      const missing = CBA.data.missingApprovalFields(t);
+      /* EXB1 (גל 9, 1.10.26) — סעיף חובה כמו בחלון הסיווג; "סעיף תקציבי" כבר נבדק ב-missingApprovalFields ומדווח כ"חסר: סעיף". */
+      if (missing.length) { blocked.push({ t: t, missing: missing.map(function (m) { return m === "סעיף תקציבי" ? "סעיף" : m; }) }); return; }
+      CBA.data.updateTransaction(t.id, { status: "ready", reviewNote: "" });
+      approved++;
     });
     txSelected = {};
-    if (blocked.length) {
+    if (blocked.length || untouched.length) {
       const lines = blocked.map(function (b) {
         return "• " + (b.t.supplier || b.t.buyer || ("#" + b.t.id)) + " — חסר: " + b.missing.join(", ");
       });
-      CBA.ui.alert((items.length - blocked.length) + " מתוך " + items.length + ' אושרו להנה"ח.\n' +
-        blocked.length + " לא אושרו כי חסרים בהן פרטים:\n" + lines.join("\n"));
+      const same = untouched.map(function (t) {
+        return "• " + (t.supplier || t.buyer || ("#" + t.id)) + " — " + CBA.data.statusMeta(t.status).label;
+      });
+      CBA.ui.alert(approved + " מתוך " + items.length + ' אושרו להנה"ח.' +
+        (blocked.length ? "\n" + blocked.length + " לא אושרו כי חסרים בהן פרטים:\n" + lines.join("\n") : "") +
+        (untouched.length ? "\n" + untouched.length + " לא שונו (כבר שולמו/נדחו):\n" + same.join("\n") : ""));
     }
   }
   else if (action === "delete") {
@@ -708,7 +776,7 @@ function txBulkAction(container, action) {
   CBA.screens.expenses.render(container);
 }
 function txRerenderList(container) {
-  const all = CBA.data.getTransactions();
+  const all = txSource();   /* EXB5 (גל 9, 1.10.26) */
   const rows = txSortRows(txApplyFilters(all));
   const total = rows.reduce(function (s, t) { return s + (t.amount || 0); }, 0);
   const list = container.querySelector(".tx-list");
@@ -872,9 +940,10 @@ function txCloseColumnManager() {
   const el = document.getElementById("cba-colmgr");
   if (el) el.remove();
 }
-function txOpenColumnManager(container) {
+/* EXB4 (גל 9, 1.10.26) — localCfg: הפתיחה מחדש אחרי הוספה/הסרה של עמודה מקבלת את הטיוטה המקומית ולא קוראת שוב את השמור. */
+function txOpenColumnManager(container, localCfg) {
   txCloseColumnManager();
-  const cfg = txColumnConfig();
+  const cfg = localCfg || txColumnConfig();
   const hiddenSet = {};
   (cfg.hidden || []).forEach(function (k) { hiddenSet[k] = true; });
 
@@ -914,6 +983,19 @@ function txOpenColumnManager(container) {
     </aside>`;
   document.body.appendChild(overlay);
   overlay.querySelectorAll("[data-colmgr-close]").forEach(function (el) { el.addEventListener("click", txCloseColumnManager); });
+  /* EXB4 (גל 9, 1.10.26) — קורא את הסימונים/השמות שבחלון לתוך הטיוטה, כדי שגם הם לא יאבדו בפתיחה מחדש. */
+  function readDraft() {
+    const newHidden = [];
+    const newLabels = {};
+    overlay.querySelectorAll("[data-col-visible]").forEach(function (cb) {
+      if (!cb.checked) newHidden.push(cb.dataset.colVisible);
+    });
+    overlay.querySelectorAll("[data-col-label]").forEach(function (inp) {
+      const v = inp.value.trim();
+      if (v) newLabels[inp.dataset.colLabel] = v;
+    });
+    cfg.hidden = newHidden; cfg.labels = newLabels;
+  }
 
   const addCustomBtn = overlay.querySelector("[data-add-custom-col]");
   if (addCustomBtn) addCustomBtn.addEventListener("click", function () {
@@ -925,8 +1007,9 @@ function txOpenColumnManager(container) {
       const clash = TX_STD_COLS.some(function (c) { return c.key === name || c.label === name; }) ||
         (cfg.custom || []).some(function (c) { return c.key === name; });
       if (clash) { CBA.ui.alert('כבר קיימת עמודה בשם "' + name + '".'); return; }
+      readDraft();
       cfg.custom = (cfg.custom || []).concat([{ key: name, label: name }]);
-      txOpenColumnManager(container); // רינדור מחדש — עדיין לא נשמר עד "שמור"
+      txOpenColumnManager(container, cfg); // רינדור מחדש — עדיין לא נשמר עד "שמור" (EXB4: עם הטיוטה)
     });
   });
   overlay.querySelectorAll("[data-remove-custom-col]").forEach(function (btn) {
@@ -936,23 +1019,16 @@ function txOpenColumnManager(container) {
         { title: 'להסיר את העמודה "' + key + '"?', okText: "הסר" }
       ).then(function (ok) {
         if (!ok) return;
+        readDraft();
         cfg.custom = (cfg.custom || []).filter(function (c) { return c.key !== key; });
-      txOpenColumnManager(container);
+        txOpenColumnManager(container, cfg);   // EXB4 (גל 9, 1.10.26) — עם הטיוטה
       });
     });
   });
   const saveBtn = overlay.querySelector("[data-save-cols]");
   if (saveBtn) saveBtn.addEventListener("click", function () {
-    const newHidden = [];
-    const newLabels = {};
-    overlay.querySelectorAll("[data-col-visible]").forEach(function (cb) {
-      if (!cb.checked) newHidden.push(cb.dataset.colVisible);
-    });
-    overlay.querySelectorAll("[data-col-label]").forEach(function (inp) {
-      const v = inp.value.trim();
-      if (v) newLabels[inp.dataset.colLabel] = v;
-    });
-    const newConfig = { hidden: newHidden, labels: newLabels, custom: cfg.custom || [] };
+    readDraft();
+    const newConfig = { hidden: cfg.hidden, labels: cfg.labels, custom: cfg.custom || [] };
     CBA.data.saveColumnConfig(newConfig, function () {});
     txCloseColumnManager();
     CBA.screens.expenses.render(container);
@@ -1500,7 +1576,25 @@ function txRenderForm(container, overlay, state, editing, id, residentOptions) {
       subItemId: (state.subItemId && state.subItemId !== "__new__") ? state.subItemId : "",
       customFields: state.customFields || {}
     };
-    if (editing) CBA.data.updateTransaction(id, fields);
+    if (editing) {
+      /* EXB2 (גל 9, 1.10.26) — מסלול הפרטים אינו כותב סטטוס/הערת בדיקה, ולכן שינוי סטטוס נעלם ברענון. כמו חלון הסיווג: קודם פרטים, אז סטטוס בכתיבה נפרדת. */
+      const live = CBA.data.getTransactions().find(function (x) { return x.id === id; }) || {};
+      const oldStatus = live.status;
+      const newStatus = fields.status, newNote = fields.reviewNote;
+      const statusChanged = newStatus !== oldStatus;
+      /* EXB2 (גל 9, 1.10.26) — מעבר שאינו חוקי (למשל שולם→הוגשה) היה נכתב לפרטים בלבד ומתהפך בשקט. חוסמים בהסבר, אלא אם הכתיבה ל-Firestore כבויה (אז השורה נשמרת כולה ב-Apps Script). */
+      if (statusChanged && CBA.data.txLegalStep && !CBA.data.txLegalStep(oldStatus, newStatus) &&
+          !(CBA.mock && CBA.mock._txFsOn === false)) {
+        CBA.ui.alert('אי אפשר לשנות סטטוס מ"' + CBA.data.statusMeta(oldStatus).label + '" ל"' +
+          CBA.data.statusMeta(newStatus).label + '" מכאן. שאר השינויים לא נשמרו — החזירו את הסטטוס ושמרו שוב.',
+          "שינוי סטטוס לא אפשרי");
+        return;
+      }
+      delete fields.status;
+      if (statusChanged) delete fields.reviewNote;   // ההערה נוסעת עם הסטטוס (txStatusOnly מתיר אותה)
+      CBA.data.updateTransaction(id, fields);
+      if (statusChanged) CBA.data.updateTransaction(id, { status: newStatus, reviewNote: newNote });
+    }
     else CBA.data.addTransaction(fields);
     txForceCloseDrawer();   // נשמר — בלי אזהרה
     CBA.screens.expenses.render(container);

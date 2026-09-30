@@ -773,8 +773,13 @@ CBA.screens = CBA.screens || {};
       });
       return true;
     }
-    if (e.target.closest("[data-bdev]")) {
+    if ((t = e.target.closest("[data-bdev]"))) {
+      /* EMB3 (גל 9, 1.10.26) — חיווי עסוק + דגל "בדרך": לחיצה כפולה לא שולחת פעמיים. */
+      if (b.devBusy) return true;
+      b.devBusy = true;
+      var relDev = CBA.ui && CBA.ui.busy ? CBA.ui.busy(t, "שומר…") : function () {};
       CBA.data.saveCustomTrigger({ dev: true, draft: { prompt: d.prompt, name: d.name, dom: d.dom } }, function (res) {
+        b.devBusy = false; relDev();
         if (!res || !res.ok) { bMsg((res && res.error) || "השמירה נכשלה"); return; }
         closeDrawer();
         toast("נשמר כבקשת פיתוח", "success");
@@ -782,9 +787,14 @@ CBA.screens = CBA.screens || {};
       });
       return true;
     }
-    if (e.target.closest("[data-btest]")) {
+    if ((t = e.target.closest("[data-btest]"))) {
+      /* EMB3 (גל 9, 1.10.26) — חיווי עסוק + דגל "בדרך": לחיצה כפולה לא שולחת פעמיים. */
+      if (b.testBusy) return true;
+      b.testBusy = true;
+      var relTest = CBA.ui && CBA.ui.busy ? CBA.ui.busy(t, "שולח…") : function () {};
       bMsg("שולח בדיקה…");
       CBA.data.notifyTestSend(payloadDraft(), buildVars(), function (res) {
+        b.testBusy = false; relTest();
         if (!res || !res.ok) { bMsg((res && res.error) || "הבדיקה נכשלה"); return; }
         var parts = [];
         if (res.push) parts.push("פוש נשלח לטלפון שלך");
@@ -845,7 +855,16 @@ CBA.screens = CBA.screens || {};
       var nb = e.target.closest("[data-build]");
       if (nb) { openBuilder(nb.dataset.build); return; }
       var dx = e.target.closest("[data-cxop]");
-      if (dx) { cxOp(dx.dataset.cxop, dx.dataset.cxid, dx); return; }
+      if (dx) {
+        /* EMB4 (גל 9, 1.10.26) — "טופל — להסיר" בהגדרות מוחק — רק אחרי אישור. */
+        if (dx.dataset.cxop === "delete" && CBA.ui && CBA.ui.confirm) {
+          CBA.ui.confirm("להסיר את בקשת הפיתוח מהרשימה?", { okText: "להסיר", danger: true }).then(function (yes) {
+            if (yes) cxOp(dx.dataset.cxop, dx.dataset.cxid, dx);
+          });
+          return;
+        }
+        cxOp(dx.dataset.cxop, dx.dataset.cxid, dx); return;
+      }
       var o = e.target.closest(".nt-opt[data-g]");
       if (o) { saveGlobal(o); return; }
       var ob = e.target.closest("[data-open]");
@@ -947,18 +966,26 @@ CBA.screens = CBA.screens || {};
 
   CBA.screens.emailSettings = {
     title: "מרכז התראות",
-    render: function (container) {
-      closeDrawer();
+    render: function renderScreen(container, opts) {
+      /* EMB1 (גל 9, 1.10.26) — רענון רקע שקט לא סוגר חלונית/בונה פתוחים (המסך מאחור מצויר מחדש, החלונית נשארת). */
+      if (!(CBA.renderSilent && (S.open || S.b))) closeDrawer();
+      /* EMB5 (גל 9, 1.10.26) — משובץ ב"ניהול מערכת": בלי כותרת מסך משלו (הכותרת והתת-כותרת של המרכז כבר מעל). */
+      var embedded = !!(opts && opts.embedded) || !!(container.classList && container.classList.contains("hub-pane"));
       container.innerHTML =
+        (embedded ? "" :
         '<div class="screen-head"><div class="screen-head__title">מרכז התראות</div>' +
         '<div class="screen-head__sub">מה כל הקהילה מקבלת — מייל או פוש — על כל פעולה. לחיצה על שם הפעולה פותחת את הנוסחים. ' +
-        '(להפעלת התראות בטלפון <b>שלך</b>: התפריט האישי ← "התראות לטלפון".)</div></div>' +
+        '(להפעלת התראות בטלפון <b>שלך</b>: התפריט האישי ← "התראות לטלפון".)</div></div>') +
         '<div id="nt-body" class="nt-screen">' + (CBA.skel && CBA.skel.sections ? CBA.skel.sections(3) : "טוען…") + "</div>";
       var root = container.querySelector("#nt-body");
       bind(root);
       CBA.data.listNotifySettings(function (res) {
         if (!res || !res.ok) {
-          root.innerHTML = '<div class="card">לא ניתן לטעון כרגע. ' + esc((res && res.error) || "") + "</div>";
+          /* EMB2 (גל 9, 1.10.26) — כפתור "נסה שוב" בכשל טעינה */
+          root.innerHTML = '<div class="card">לא ניתן לטעון כרגע. ' + esc((res && res.error) || "") +
+            ' <button type="button" class="btn-ghost btn-sm" data-nt-retry>נסה שוב</button></div>';
+          var rb = root.querySelector("[data-nt-retry]");
+          if (rb) rb.addEventListener("click", function (ev) { ev.stopPropagation(); renderScreen(container, opts); });
           return;
         }
         S.data = res;

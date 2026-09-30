@@ -20,6 +20,10 @@ var budgetAsOf = null;     // אינדקס החודש במבט הקצב
 var budgetSeries = null;   // סדרות הגרף (לשימוש ה-Tooltip)
 var cardStaggerIndex = 0;  // מונה טעינה מדורגת: כל כרטיסייה "נכנסת" קצת אחרי הקודמת לה
 var renderGen = 0;         // "דור" ציור — מונע משלב-2 מאוחר (מהפריים הבא) לכתוב על ציור חדש יותר
+/* BUB1 (גל 9, 1.10.26) — מזהה כרטיס "ללא סעיף" (הוצאות שנספרות בלי סעיף קיים). לא יכול להתנגש בסעיף אמיתי. */
+var BUDGET_NOCAT = "__nocat__";
+/* BUB4 (גל 9, 1.10.26) — איזה סעיף פתוח כרגע במגירה, כדי לרענן אותה אחרי ציור-מחדש */
+var drawerCatId = null;
 
 CBA.screens.budget = {
   title: "תכנון מול ביצוע",
@@ -36,12 +40,14 @@ CBA.screens.budget = {
     // שבכל ציור (כולל מעבר בין "מול סך השנה" / "מול השלב בשנה") השורות ייכנסו
     // שוב אחת אחרי השנייה, במקום לקפוץ כולן יחד בבת אחת.
     cardStaggerIndex = 0;
-    const summary = pace ? paceSummary(rows) : CBA.data.getSummary();
-    const pending = CBA.data.getTransactions().filter(function (t) { return t.status === "submitted"; });
-    const pendingSum = pending.reduce(function (s, t) { return s + (t.amount || 0); }, 0);
+    /* BUB1 (גל 9, 1.10.26) — הוצאות שנספרות בלי סעיף קיים: נכנסות לסיכום ומוצגות ככרטיס "ללא סעיף" */
+    const noCat = CBA.data.getUncategorizedSpent(pace ? budgetAsOf : undefined);
+    const summary = pace ? paceSummary(rows, noCat.amount) : CBA.data.getSummary();
+    /* BUB3 (גל 9, 1.10.26) — אותו מונה כמו הפעמון (הוגשה+בבדיקה, כל השנים שנטענו) */
+    const pending = CBA.data.pendingApprovalCount();
 
     const topHTML =
-      (pending.length ? pendingBanner(pending.length, pendingSum) : "") +
+      (pending.count ? pendingBanner(pending.count, pending.amount) : "") +
       '<div class="screen-controls">' +
         '<div class="phase-ctrl">' +
           '<div class="seg seg--view">' +
@@ -54,7 +60,8 @@ CBA.screens.budget = {
       (pace ? cumulativeChart() : "");
 
     const bottomHTML = '<div class="card bottomline-bar">' + bottomBar(summary, pace) + '</div>';
-    const cardsHTML = groups.map(function (g) { return groupHTML(g, pace, silent); }).join("");
+    const cardsHTML = groups.map(function (g) { return groupHTML(g, pace, silent); }).join("") +
+      (noCat.txs.length ? noCatGroupHTML(noCat.amount, pace, silent) : "");   /* BUB1 (גל 9, 1.10.26) */
 
     if (silent) {
       // עדכון רקע: הכול בבת אחת (בלי שלב נפרד/פריים נוסף) כדי שלא יהיה אפילו
@@ -66,6 +73,7 @@ CBA.screens.budget = {
       });
       bindCards(container);
       bindChartHover(container);
+      refreshOpenDrawer();   /* BUB4 (גל 9, 1.10.26) — מגירה פתוחה מתעדכנת עם הנתונים החדשים */
       return;
     }
 
@@ -138,9 +146,10 @@ function pendingBanner(n, sum) {
 }
 
 /* --- סיכום עליון --- */
-function paceSummary(rows) {
+function paceSummary(rows, noCatActual) {
   const expected = rows.reduce(function (s, r) { return s + r.expected; }, 0);
-  const actual = rows.reduce(function (s, r) { return s + r.actual; }, 0);
+  /* BUB1 (גל 9, 1.10.26) — גם במבט הקצב "בוצע עד כה" כולל הוצאות ללא סעיף */
+  const actual = rows.reduce(function (s, r) { return s + r.actual; }, 0) + (noCatActual || 0);
   return { expected: expected, actual: actual, diff: actual - expected };
 }
 /* שורה תחתונה דביקה וקומפקטית (כמו בבניית תקציב).
@@ -259,6 +268,28 @@ function groupHTML(g, pace, silent) {
     </div>`;
 }
 
+/* BUB1 (גל 9, 1.10.26) — קבוצה + כרטיס "ללא סעיף": תכנון 0, ביצוע = סכום ההוצאות שנספרו בלי סעיף קיים.
+   בלי מעטפת ההחלקה — "הוסף הוצאה" לסעיף שלא קיים אינו פעולה הגיונית.
+   לחיצה פותחת את אותה מגירה, עם רשימת ההוצאות האלה (ר' openDrawer). */
+function noCatGroupHTML(amount, pace, silent) {
+  const r = pace
+    ? { id: BUDGET_NOCAT, name: "ללא סעיף", plan: 0, expected: 0, actual: amount, diff: amount, pct: amount > 0 ? 999 : 0, band: amount > 0 ? "danger" : "ok", items: null }
+    : { id: BUDGET_NOCAT, name: "ללא סעיף", plan: 0, actual: amount, remaining: -amount, pct: amount > 0 ? 999 : 0, band: amount > 0 ? "danger" : "ok", items: null };
+  const sub = pace
+    ? `בוצע <b>${CBA.formatILSWhole(amount)}</b> מתוך צפי ${CBA.formatILSWhole(0)}`
+    : `בוצע <b>${CBA.formatILSWhole(amount)}</b> מתוך ${CBA.formatILSWhole(0)}`;
+  return `
+    <div class="bgroup">
+      <div class="bgroup__head">
+        <div class="bgroup__name">ללא סעיף</div>
+        <div class="bgroup__sub">${sub}</div>
+      </div>
+      <div class="budget-grid">
+        ${pace ? paceCardHTML(r, silent) : cardHTML(r, silent)}
+      </div>
+    </div>`;
+}
+
 /* עוטף כרטיס במעטפת החלקה + כפתור "הוסף הוצאה" שנחשף במובייל בלבד.
    בדסקטופ הכפתור מוסתר ב-CSS והמעטפת שקופה לחלוטין. */
 function swipeWrap(r, inner) {
@@ -345,13 +376,38 @@ function paceCardHTML(r, silent) {
 /* פתיחת חלון צד עם פירוט ההוצאות של הסעיף */
 function openDrawer(catId) {
   closeDrawer();
-  const cat = CBA.data.getBudgetRows().find(function (r) { return r.id === catId; });
-  const items = CBA.data.getTransactions().filter(function (t) { return t.categoryId === catId; });
+  const pace = budgetView === "pace";
+  let cat, items;
+  if (catId === BUDGET_NOCAT) {
+    /* BUB1 (גל 9, 1.10.26) — מגירת "ללא סעיף": ההוצאות שנספרו בלי סעיף קיים (אותן שבסכום הכרטיס) */
+    const nc = CBA.data.getUncategorizedSpent();
+    const ncTo = pace ? CBA.data.getUncategorizedSpent(budgetAsOf) : nc;
+    cat = { id: BUDGET_NOCAT, name: "ללא סעיף", plan: 0, actual: nc.amount, expected: 0, actualTo: ncTo.amount };
+    items = nc.txs;
+  } else {
+    cat = CBA.data.getBudgetRows().find(function (r) { return r.id === catId; });
+    items = CBA.data.getTransactions().filter(function (t) { return t.categoryId === catId; });
+    /* BUB4 (גל 9, 1.10.26) — במבט הקצב הכותרת מציגה את הנתונים "עד {חודש}" */
+    if (cat && pace) {
+      const pr = CBA.data.getBudgetRowsAsOf(budgetAsOf).find(function (r) { return r.id === catId; });
+      if (pr) { cat.expected = pr.expected; cat.actualTo = pr.actual; }
+    }
+  }
+  if (!cat) { drawerCatId = null; return; }   /* BUB4 (גל 9, 1.10.26) — הסעיף נמחק בינתיים */
+  drawerCatId = catId;
+  let subText = `בוצע ${CBA.formatILSWhole(cat.actual)} מתוך ${CBA.formatILSWhole(cat.plan)}`;
+  if (pace && typeof cat.actualTo === "number") {
+    const fm = (CBA.data.getFiscalMonths() || [])[budgetAsOf];
+    subText = `עד ${fm ? CBA.esc(fm.label) : ""}: בוצע ${CBA.formatILSWhole(cat.actualTo)} מתוך צפי ${CBA.formatILSWhole(cat.expected || 0)}` +
+      ` · כל השנה ${CBA.formatILSWhole(cat.actual)} / ${CBA.formatILSWhole(cat.plan)}`;
+  }
   const rowsHTML = items.length ? items.map(function (t) {
+    /* BUB1 (גל 9, 1.10.26) — בשורת "ללא סעיף" מציינים את שם הסעיף שנמחק, אם יש */
+    const lostCat = (catId === BUDGET_NOCAT && t.categoryId) ? ' · סעיף שנמחק: ' + CBA.esc(t.categoryId) : "";
     return `
       <tr>
         <td class="dt__date">${CBA.esc(t.date || "")}</td>
-        <td>${CBA.esc(t.description)}<div class="dt__supplier">${CBA.esc(t.supplier)}</div></td>
+        <td>${CBA.esc(t.description)}<div class="dt__supplier">${CBA.esc(t.supplier)}${lostCat}</div></td>
         <td class="dt__amount">${CBA.formatILSWhole(t.amount)}</td>
         <td>${statusBadge(t)}</td>
       </tr>`;
@@ -365,7 +421,7 @@ function openDrawer(catId) {
       <div class="drawer__head">
         <div>
           <div class="drawer__title">${CBA.esc(cat.name)}</div>
-          <div class="drawer__sub">בוצע ${CBA.formatILSWhole(cat.actual)} מתוך ${CBA.formatILSWhole(cat.plan)}</div>
+          <div class="drawer__sub">${subText}</div>
         </div>
         <button class="drawer__close" data-close aria-label="סגור">×</button>
       </div>
@@ -380,7 +436,15 @@ function openDrawer(catId) {
 function closeDrawer() {
   const el = document.getElementById("cba-drawer");
   if (el) el.remove();
+  drawerCatId = null;   /* BUB4 (גל 9, 1.10.26) */
   document.removeEventListener("keydown", onEscClose);
+}
+/* BUB4 (גל 9, 1.10.26) — אחרי ציור-מחדש ברקע: אם המגירה פתוחה, בונים אותה מחדש לאותו סעיף
+   (או סוגרים אם הסעיף כבר לא קיים). בפועל X1 ב-app.js דוחה ציור רקע כשמגירה
+   פתוחה — זו רשת ביטחון, כדי שמגירה לעולם לא תציג מספרים ישנים. */
+function refreshOpenDrawer() {
+  if (!drawerCatId || !document.getElementById("cba-drawer")) return;
+  openDrawer(drawerCatId);
 }
 function onEscClose(e) { if (e.key === "Escape") closeDrawer(); }
 

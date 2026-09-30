@@ -27,7 +27,22 @@ CBA.screens.reconcile = (function () {
     return "₪" + n.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  var state = { result: null, meta: null, err: "", busy: false };
+  var state = { result: null, meta: null, err: "", busy: false, rows: null };
+
+  /* RCB2 (גל 9, 1.10.26) — התוצאה מחושבת מחדש בכל ציור מהשורות השמורות, כדי שבקשה שסומנה "שולם" תרד מהרשימות. */
+  function recompute() {
+    if (!state.rows || !state.meta) return;
+    try {
+      var txs = CBA.data.getAllTransactions ? CBA.data.getAllTransactions() : CBA.data.getTransactions();
+      state.result = CBA.reconcile.compare(state.rows, txs, {});
+    } catch (e) { state.result = null; state.err = "הקובץ נקרא אבל לא הצלחנו להשוות אותו: " + String(e); }
+  }
+
+  /* RCB1 (גל 9, 1.10.26) — קולבק שחוזר אחרי שהמשתמש עבר מסך שומר את התוצאה אבל לא מצייר לתוך מסך אחר. */
+  function drawIfHere(container) {
+    if (CBA.onScreen && !CBA.onScreen("reconcile")) return;
+    draw(container);
+  }
 
   function txLine(t) {
     return '<li>' + esc(t.supplier || t.buyer || ("בקשה #" + t.id)) +
@@ -173,6 +188,7 @@ CBA.screens.reconcile = (function () {
   }
 
   function draw(container) {
+    if (!state.busy) recompute();   /* RCB2 (גל 9, 1.10.26) — ר' recompute */
     container.innerHTML =
       '<div class="screen-head"><div class="screen-head__title">בדיקת החזרים</div>' +
       '<div class="screen-head__sub">השוואה בין רשימת התשלומים של העמותה לבין הבקשות שאושרו להעברה</div></div>' +
@@ -186,7 +202,7 @@ CBA.screens.reconcile = (function () {
 
     var again = root.querySelector(".rc-again");
     if (again) again.addEventListener("click", function () {
-      state.result = null; state.meta = null; state.err = ""; draw(container);
+      state.result = null; state.meta = null; state.rows = null; state.err = ""; draw(container);
     });
 
     var go = root.querySelector("#rc-go");
@@ -205,23 +221,23 @@ CBA.screens.reconcile = (function () {
     state.err = ""; state.busy = true; draw(container);
     var rd = new FileReader();
     rd.onerror = function () {
-      state.busy = false; state.err = "לא הצלחנו לקרוא את הקובץ מהמחשב."; draw(container);
+      state.busy = false; state.err = "לא הצלחנו לקרוא את הקובץ מהמחשב."; drawIfHere(container);
     };
     rd.onload = function () {
       var s = String(rd.result || "");
       var comma = s.indexOf(",");
-      if (comma < 0) { state.busy = false; state.err = "הקובץ ריק."; return draw(container); }
+      if (comma < 0) { state.busy = false; state.err = "הקובץ ריק."; return drawIfHere(container); }
       CBA.data.parseChargeFile({
         fileName: f.name, mime: f.type || "", data: s.substring(comma + 1)
       }, function (res) {
         state.busy = false;
         if (!res || !res.ok) {
           state.err = (res && res.error) || "השרת לא הצליח לקרוא את הקובץ.";
-          return draw(container);
+          return drawIfHere(container);
         }
         try { apply(res, f.name); }
         catch (e) { state.err = "הקובץ נקרא אבל לא הצלחנו להשוות אותו: " + String(e); }
-        draw(container);
+        drawIfHere(container);   /* RCB1 (גל 9, 1.10.26) — ר' drawIfHere */
       });
     };
     rd.readAsDataURL(f);
@@ -230,7 +246,9 @@ CBA.screens.reconcile = (function () {
   function apply(res, fileName) {
     var parsed = CBA.reconcile.parseChargeGrid(res.grid);
     var txs = CBA.data.getAllTransactions ? CBA.data.getAllTransactions() : CBA.data.getTransactions();
+    /* RCB3 (גל 9, 1.10.26) — המנוע תומך במיפוי ספקים שמור, אבל אין כזה בשום מקום (לא בגיליון ולא ב-Firestore) — נשאר {}. */
     state.result = CBA.reconcile.compare(parsed.rows, txs, {});
+    state.rows = parsed.rows;   /* RCB2 (גל 9, 1.10.26) — נשמר לחישוב מחדש בכל ציור */
     state.meta = {
       fileName: fileName,
       sheet: res.sheet || "",
@@ -240,7 +258,7 @@ CBA.screens.reconcile = (function () {
     };
     if (!parsed.rows.length) {
       var found = Object.keys(parsed.sectors || {}).filter(Boolean).join(", ");
-      state.result = null; state.meta = null;
+      state.result = null; state.meta = null; state.rows = null;
       state.err = 'לא נמצאה אף שורה במגזר "שיכון" בגיליון "' + (res.sheet || "") + '"' +
                   (found ? ' (נמצאו: ' + found + ')' : '') + '.';
     }

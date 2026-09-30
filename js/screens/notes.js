@@ -25,6 +25,39 @@ CBA.notesPanel = (function () {
 
   function onEsc(e) { if (e.key === "Escape") close(); }
 
+  /* NTB1 (גל 9, 1.10.26) — ניקוי HTML ברשימה לבנה לפני ציור ולפני שמירה (XSS שמור בפנקס). */
+  var SAFE_TAGS = { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, H3: 1, P: 1, BR: 1, OL: 1, UL: 1, LI: 1, DIV: 1, SPAN: 1 };
+  var DROP_WITH_TEXT = { SCRIPT: 1, STYLE: 1, IFRAME: 1, OBJECT: 1, EMBED: 1, TEMPLATE: 1, NOSCRIPT: 1, TITLE: 1, TEXTAREA: 1, SELECT: 1 };
+  function cleanInto(src, dst, doc) {
+    Array.prototype.forEach.call(src.childNodes, function (n) {
+      if (n.nodeType === 3) { dst.appendChild(doc.createTextNode(n.nodeValue)); return; }
+      if (n.nodeType !== 1) return;                       // הערות וכו' — בחוץ
+      var tag = String(n.nodeName).toUpperCase();
+      if (DROP_WITH_TEXT[tag]) return;                    // תוכן שאינו טקסט קריא — נזרק כולו
+      if (SAFE_TAGS[tag]) {
+        var el = doc.createElement(tag.toLowerCase());    // תג נקי — בלי אף מאפיין
+        cleanInto(n, el, doc);
+        dst.appendChild(el);
+      } else {
+        cleanInto(n, dst, doc);                           // תג לא מותר — נשאר רק הטקסט שבתוכו
+      }
+    });
+  }
+  function sanitize(html) {
+    var raw = String(html == null ? "" : html);
+    if (!raw) return "";
+    try {
+      /* DOMParser: המסמך אינרטי — סקריפטים לא רצים ותמונות לא נטענות בזמן הניתוח. */
+      var doc = new DOMParser().parseFromString("<!doctype html><body>" + raw, "text/html");
+      var out = document.createElement("div");
+      cleanInto(doc.body, out, document);
+      return out.innerHTML;
+    } catch (e) {
+      /* בלי DOMParser — טקסט בלבד, לעולם לא HTML גולמי */
+      return CBA.esc ? CBA.esc(raw) : "";
+    }
+  }
+
   function close() {
     var el = document.getElementById("cba-notes-drawer");
     if (el) el.remove();
@@ -49,7 +82,7 @@ CBA.notesPanel = (function () {
       clearTimeout(saveTimer);
       if (CBA.sheets && CBA.sheets.registerFlush) CBA.sheets.registerFlush("notesSave", null);
       var year = CBA.data.getCurrentYear();
-      var content = editorEl.innerHTML;
+      var content = sanitize(editorEl.innerHTML);   /* NTB1 (גל 9, 1.10.26) — שומרים רק HTML נקי */
       var by = currentUserLabel();
       CBA.data.saveNotesToSheet(year, content, by, function (res) {
         if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("notesSave");
@@ -161,7 +194,7 @@ CBA.notesPanel = (function () {
             <button type="button" class="notes-tool" data-cmd="insertOrderedList" title="רשימה ממוספרת">1.</button>
             <button type="button" class="notes-tool" data-cmd="insertUnorderedList" title="רשימת תבליטים">•</button>
           </div>
-          <div class="notes-editor" id="notes-editor" contenteditable="true" dir="rtl">${n.content || ""}</div>
+          <div class="notes-editor" id="notes-editor" contenteditable="true" dir="rtl">${sanitize(n.content)}</div>
         </div>
       </aside>`;
     document.body.appendChild(overlay);
@@ -187,5 +220,5 @@ CBA.notesPanel = (function () {
     editor.focus();
   }
 
-  return { open: open, close: close };
+  return { open: open, close: close, sanitize: sanitize };
 })();

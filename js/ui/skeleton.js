@@ -23,8 +23,11 @@ CBA.skel = (function () {
   var W = ["86%", "62%", "74%", "55%", "80%", "68%"];
   function w(i) { return W[i % W.length]; }
 
+  /* SKB1 (גל 9, 1.10.26) — כל שורש שלד: אזור חי אחד בדיוק (status + busy + תווית), ובלי אזורים חיים מקוננים בתוכו. */
+  var LIVE = ' role="status" aria-live="polite" aria-busy="true" aria-label="טוען…"';
+
   function wrap(inner) {
-    return '<div class="sk sk-stagger" role="status" aria-live="polite" aria-label="טוען">' + inner + '</div>';
+    return '<div class="sk sk-stagger"' + LIVE + '>' + inner + '</div>';
   }
   function line(width, extra) {
     return '<div class="skeleton sk-line' + (extra ? " " + extra : "") + '" style="width:' + width + '"></div>';
@@ -64,7 +67,7 @@ CBA.skel = (function () {
 
   /* רשת אריחים — מסך השירותים ומסך ניהול השירותים. */
   function tiles(n) {
-    return '<div class="sk sk-grid sk-stagger" role="status" aria-live="polite" aria-label="טוען">' +
+    return '<div class="sk sk-grid sk-stagger"' + LIVE + '>' +
       rep(n || 6, function (i) {
         return '<div class="sk-box">' +
           '<div class="skeleton sk-ico"></div>' +
@@ -90,7 +93,8 @@ CBA.skel = (function () {
 
   /* אריחי סיכום עליונים (KPI) — ר' .sk-summary/.sk-stat ב-loading.css. */
   function stats(n) {
-    return '<div class="sk-summary sk-stagger">' +
+    /* SKB1 (גל 9, 1.10.26) — גם אריחי הסיכום הם שורש שלד: הוכרז "טוען…" כמו כל השאר */
+    return '<div class="sk-summary sk-stagger"' + LIVE + '>' +
       rep(n || 4, function () { return '<div class="skeleton sk-stat"></div>'; }) + '</div>';
   }
 
@@ -106,7 +110,7 @@ CBA.skel = (function () {
 
   /* שבבים — לוח הזמינות של שריון המועדון (שעות פנויות). */
   function chips(n) {
-    return '<div class="sk-chipwrap sk-stagger" role="status" aria-live="polite" aria-label="טוען">' +
+    return '<div class="sk-chipwrap sk-stagger"' + LIVE + '>' +
       rep(n || 10, function () { return '<div class="skeleton sk-chip"></div>'; }) + '</div>';
   }
 
@@ -119,7 +123,7 @@ CBA.skel = (function () {
 
   /* תצוגת קבלה/תמונה. */
   function img() {
-    return '<div class="sk sk-stagger" role="status" aria-live="polite" aria-label="טוען"><div class="skeleton sk-img"></div></div>';
+    return '<div class="sk sk-stagger"' + LIVE + '><div class="skeleton sk-img"></div></div>';
   }
 
   /* עץ הוועד — שורש, שתי רמות מתפצלות. הצורה מזוהה מיד גם באפור. */
@@ -129,7 +133,7 @@ CBA.skel = (function () {
         return '<div class="skeleton sk-tree__node"></div>';
       }) + '</div>';
     }
-    return '<div class="sk-tree sk-stagger" role="status" aria-live="polite" aria-label="טוען">' +
+    return '<div class="sk-tree sk-stagger"' + LIVE + '>' +
       row(1) + row(3) + row(4) + '</div>';
   }
 

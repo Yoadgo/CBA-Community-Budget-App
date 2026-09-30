@@ -1674,6 +1674,15 @@ function doPostInner_(e) {
     if (body && body.action === 'doorLogExternal' && typeof doorLogExternal_ === 'function') return json_(doorLogExternal_(body));
     /* 26.9 — אחרי שריון/ביטול WeWork ב-Worker: יומן גוגל + מייל (ברקע). ר' Door.gs. */
     if (body && body.action === 'weworkAfterExternal' && typeof weworkAfterExternal_ === 'function') return json_(weworkAfterExternal_(body));
+    /* LGB1 (גל 9, 1.10.26) — התחברות ובקשת הרשמה גם ב-POST (הטוקן בגוף ולא בכתובת). אותם הנדלרים
+       בדיוק כמו ב-doGet: כל אחד מאמת את טוקן Google בעצמו, ולכן הם לפני שער המושב — כמו ב-GET_PUBLIC_ACTIONS.
+       ⚠️ ה-GET הישן נשאר פעיל ללקוחות ישנים. */
+    if (body && body.action === 'login') return handleLogin_(body.token);
+    if (body && body.action === 'submitSignup') {
+      var suRes = handleSubmitSignup_(body);
+      try { bumpRev_('submitSignup'); } catch (eRev) { /* כמו GET_WRITE_ACTIONS — מונה בלבד */ }
+      return suRes;
+    }
     if (body && body.action === 'doorOpen' && body.idToken && typeof doorOpenFast_ === 'function') {
       var fast = doorOpenFast_(body);
       if (!(fast && fast.code === 'NEED_SLOW')) return json_(fast);
@@ -3545,13 +3554,35 @@ function logBudgetUpdate_(ss, body) {
  * נוצרים אוטומטית בפעם הראשונה, אותו דפוס בדיוק כמו logBudgetUpdate_ למעלה.
  * אין בדיקת התנגשות בין שני עורכים בו-זמנית — מי ששומר אחרון מנצח, בדיוק
  * כמו כל שמירה אחרת באפליקציה (ר' ההסבר ב-planning.js/notes.js). */
+/* NTB1 (גל 9, 1.10.26) — ניקוי תוכן הפנקס בשרת (XSS שמור): רשימה לבנה של תגים, בלי אף מאפיין.
+ * ⚠️ שמרני בכוונה: בלוקים מסוכנים נמחקים עם תוכנם, תג שאינו ברשימה נמחק והטקסט נשאר,
+ *    וכל '<'/'>' שנותר מחוץ לתג נקי הופך לישות — כך הסרה אינה יכולה "להדביק" תג חדש. */
+var NOTES_SAFE_TAGS_ = { b: 1, strong: 1, i: 1, em: 1, u: 1, h3: 1, p: 1, br: 1, ol: 1, ul: 1, li: 1, div: 1, span: 1 };
+function sanitizeNotesHtml_(html) {
+  var s = String(html == null ? '' : html);
+  s = s.replace(/<(script|style|iframe|object|embed|template|noscript|textarea|title|xmp|noembed|noframes|select)\b[\s\S]*?<\/\1\s*>/gi, '');
+  s = s.replace(/<!--[\s\S]*?(-->|$)/g, '');
+  function escText(t) { return t.replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  var out = '', last = 0, m, re = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>/g;
+  while ((m = re.exec(s))) {
+    out += escText(s.slice(last, m.index));
+    var tag = m[2].toLowerCase();
+    if (NOTES_SAFE_TAGS_[tag]) out += tag === 'br' ? (m[1] ? '' : '<br>') : '<' + m[1] + tag + '>';
+    last = re.lastIndex;
+  }
+  return out + escText(s.slice(last));
+}
+
 function saveNotes_(ss, body) {
   var lock = LockService.getScriptLock();
   try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
   try {
     var year = String(body.year || '').trim();
     if (!year) return { ok: false, error: 'שנה חסרה' };
-    var editedBy = body.editedBy || '';
+    /* NTB2 (גל 9, 1.10.26) — שם העורך מהמושב המאומת (body._perm מ-authorize_), לא מגוף הבקשה. */
+    var perm = body._perm || {};
+    var editedBy = ((perm.firstName || '') + ' ' + (perm.family || '')).trim() || body._email || '';
+    var content = sanitizeNotesHtml_(body.content || '');   /* NTB1 (גל 9, 1.10.26) */
     var now = new Date();
     var stamp = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
 
@@ -3567,9 +3598,9 @@ function saveNotes_(ss, body) {
       if (String(v[r][0]).trim() === year) { row = r + 1; break; }
     }
     if (row === -1) {
-      sh.appendRow([year, body.content || '', editedBy, stamp]);
+      sh.appendRow([year, content, editedBy, stamp]);
     } else {
-      sh.getRange(row, 2, 1, 3).setValues([[body.content || '', editedBy, stamp]]);
+      sh.getRange(row, 2, 1, 3).setValues([[content, editedBy, stamp]]);
     }
 
     var logSh = ss.getSheetByName('יומן הערות');

@@ -27,7 +27,14 @@ CBA.screens = CBA.screens || {};
   function esc(s) { return CBA.esc(String(s == null ? "" : s)); }
 
   var st = { flags: null, keys: [], error: "", busy: "", probes: {}, rows: [],
-             fixBusy: false, fixMsg: "" };
+             fixBusy: false, fixMsg: "", embedded: false, gen: 0 };
+
+  /* SYB2 (גל 9, 1.10.26) — "המסך עדיין פתוח?" לפני ציור מאוחר: עצמאי — CBA.onScreen; משובץ ב-sysHub — החלונית עדיין ב-DOM. */
+  function here(container) {
+    if (!container || container.isConnected === false) return false;
+    if (!st.embedded && CBA.onScreen && !CBA.onScreen("sysStatus")) return false;
+    return true;
+  }
 
   /* 🔴 **התיאור הוא חלק מהדגל, לא קישוט.** דגל בשם `budgetTxFromFirestore`
      אומר לי מה הוא עושה כי כתבתי אותו; בעוד חצי שנה, בשתיים בלילה, הוא
@@ -175,7 +182,8 @@ CBA.screens = CBA.screens || {};
   }
 
   function draw(container) {
-    var head =
+    /* SYB4 (גל 9, 1.10.26) — משובץ ב"ניהול מערכת": בלי כותרת כפולה (המרכז כבר מציג כותרת ותת-כותרת). */
+    var head = st.embedded ? "" :
       '<div class="screen-head">' +
         '<div class="screen-head__title">מצב המערכת</div>' +
         '<div class="screen-head__sub">אילו תחומים נקראים מ-Firestore, והאם הדפדפן הזה באמת מצליח לקרוא אותם</div>' +
@@ -183,9 +191,11 @@ CBA.screens = CBA.screens || {};
 
     var flagsHTML;
     if (st.error) {
-      flagsHTML = '<div class="card"><div class="club-empty">' + esc(st.error) + "</div></div>";
+      /* SYB5 (גל 9, 1.10.26) — "נסה שוב" בכשל טעינת הדגלים + שלד מוגן */
+      flagsHTML = '<div class="card"><div class="club-empty">' + esc(st.error) +
+        ' <button type="button" class="btn-ghost btn-sm" data-sys-retry>נסה שוב</button></div></div>';
     } else if (!st.flags) {
-      flagsHTML = CBA.skel.cards(2);
+      flagsHTML = (CBA.skel && CBA.skel.cards) ? CBA.skel.cards(2) : '<div class="card"><div class="club-empty">טוען…</div></div>';
     } else {
       flagsHTML = '<div class="card">' +
         '<div class="sys-sec">דגלי זמן ריצה</div>' +
@@ -243,6 +253,9 @@ CBA.screens = CBA.screens || {};
 
     var fixBtn = container.querySelector("#sys-fix-reports");
     if (fixBtn) fixBtn.addEventListener("click", function () { repairReports(container); });
+
+    var retry = container.querySelector("[data-sys-retry]");   /* SYB5 (גל 9, 1.10.26) */
+    if (retry) retry.addEventListener("click", function () { load(container); draw(container); });
   }
 
   function repairReports(container) {
@@ -262,7 +275,7 @@ CBA.screens = CBA.screens || {};
         } else {
           st.fixMsg = (res && res.error) || "הפעולה נכשלה.";
         }
-        draw(container);
+        if (here(container)) draw(container);   /* SYB2 (גל 9, 1.10.26) */
       });
     });
   }
@@ -284,7 +297,7 @@ CBA.screens = CBA.screens || {};
         st.busy = "";
         if (res && res.ok && res.flags) { st.flags = res.flags; }
         else { CBA.ui.alert((res && res.error) || "השינוי נכשל."); }
-        draw(container);
+        if (here(container)) draw(container);   /* SYB2 (גל 9, 1.10.26) */
       });
     });
   }
@@ -292,10 +305,13 @@ CBA.screens = CBA.screens || {};
   function load(container) {
     st.error = ""; st.flags = null; st.keys = []; st.probes = {};
     st.rows = probeList();
+    /* SYB2 (גל 9, 1.10.26) — תשובה של טעינה ישנה (או אחרי שהמשתמש עבר מסך/לשונית) לא מציירת. */
+    var gen = ++st.gen;
     CBA.data.getFlags(function (res) {
+      if (gen !== st.gen) return;
       if (res && res.ok) { st.flags = res.flags || {}; st.keys = res.keys || []; }
       else { st.error = (res && res.error) || "לא ניתן לטעון את הדגלים."; }
-      draw(container);
+      if (here(container)) draw(container);
     });
     /* ⚠️ הבדיקות רצות **במקביל** ולא בטור: כל אחת היא קריאת Firestore
        של עשרות אלפיות, ושרשור שמונה כאלה היה הופך אותן לשנייה שלמה
@@ -303,7 +319,9 @@ CBA.screens = CBA.screens || {};
     st.rows.forEach(function (item) {
       if (!CBA.data.probeDoc) return;
       CBA.data.probeDoc(item.c, item.id, function (p) {
+        if (gen !== st.gen) return;   /* SYB2 (גל 9, 1.10.26) */
         st.probes[item.key] = p;
+        if (!here(container)) return;
         try { draw(container); } catch (e) {}
       });
     });
@@ -311,7 +329,9 @@ CBA.screens = CBA.screens || {};
 
   CBA.screens.sysStatus = {
     title: "מצב המערכת",
-    render: function (container) {
+    render: function (container, opts) {
+      /* SYB4 (גל 9, 1.10.26) — משובץ = opts.embedded מ-sysHub (או החלונית של המרכז) */
+      st.embedded = !!(opts && opts.embedded) || !!(container.classList && container.classList.contains("hub-pane"));
       draw(container);
       load(container);
     }

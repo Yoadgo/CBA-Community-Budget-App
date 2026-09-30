@@ -249,6 +249,7 @@ CBA.screens = CBA.screens || {};
     q("#hub-cmp-id").addEventListener("input", function (e) { dg.id = e.target.value; });
     var y = q("#hub-cmp-year"); if (y) y.addEventListener("input", function (e) { dg.year = e.target.value; });
     function go() {
+      if (dg.cmpBusy) return;   /* SYB3 (גל 9, 1.10.26) — Enter בשדה לא עוקף את הכפתור הכבוי */
       var id = String(dg.id || "").trim();
       if (!id) { dg.cmpErr = "צריך להקליד מזהה"; return drawDiag(pane); }
       dg.cmpBusy = true; dg.cmpErr = ""; drawDiag(pane);
@@ -269,6 +270,7 @@ CBA.screens = CBA.screens || {};
   function openCompare(kind, id) {
     dg.kind = kind; dg.id = String(id); dg.cmp = null;
     try { localStorage.setItem(TAB_KEY, "diag"); } catch (e) {}
+    hub.tab = "diag";   /* SYB1 (גל 9, 1.10.26) — render מעדיף את hub.tab שבזיכרון על localStorage */
     if (CBA.gotoAdmin) CBA.gotoAdmin("sysHub");
     setTimeout(function () {
       var btn = document.querySelector("#hub-cmp-go");
@@ -280,8 +282,9 @@ CBA.screens = CBA.screens || {};
 
   function paneFor(tabId, pane) {
     if (tabId === "reports") return CBA.screens.appReports.render(pane, { embedded: true });
-    if (tabId === "status" && CBA.screens.sysStatus) return CBA.screens.sysStatus.render(pane);
-    if (tabId === "notify" && CBA.screens.emailSettings) return CBA.screens.emailSettings.render(pane);
+    /* SYB4/EMB5 (גל 9, 1.10.26) — משובץ: המסך לא מצייר כותרת משלו מתחת לכותרת המרכז */
+    if (tabId === "status" && CBA.screens.sysStatus) return CBA.screens.sysStatus.render(pane, { embedded: true });
+    if (tabId === "notify" && CBA.screens.emailSettings) return CBA.screens.emailSettings.render(pane, { embedded: true });
     if (tabId === "diag") {
       drawDiag(pane);
       loadReportsForStats(pane);

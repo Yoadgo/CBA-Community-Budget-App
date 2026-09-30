@@ -186,7 +186,9 @@ section('8. המסכים שצורכים');
 {
   ok('🔴 מסך התכנון מוודא טעינה', /CBA\.data\.ensureBudgetLogs\(function \(changed\)/.test(PLAN));
   ok('🔴🔴 ומצייר מחדש **רק** כשהגיעו נתונים — אחרת לולאה אין-סופית',
-     /if \(changed && container && container\.isConnected\) CBA\.screens\.planning\.render\(container\);/.test(PLAN));
+     /* PLB4 (גל 9, 1.10.26) — התנאי הורחב בכוונה: גם onScreen("planning") וגם לא באמצע עריכה.
+        הבדיקה נשארת על אותו עיקרון ("רק כשהגיעו נתונים") ובודקת גם את שני השערים החדשים. */
+     /if \(changed && container && container\.isConnected && CBA\.onScreen\("planning"\) && !CBA\.userIsEditingMain\(\)\) CBA\.screens\.planning\.render\(container\);/.test(PLAN));
   ok('🔴 ומסך ההערות פותח מיד ומחליף שורות כשהיומן מגיע',
      /function logRowsHTML\(\)/.test(NOTES) && /tbl\.innerHTML = logRowsHTML\(\)/.test(NOTES));
   ok('⚠️ ושמירת פנקס מסמנת את היומן כלא-טעון', /if \(res && res\.ok === true\) CBA\.mock\._logsLoaded = false;/.test(DS));

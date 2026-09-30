@@ -26,6 +26,8 @@ CBA.search = (function () {
   var el = null, inputEl = null, listEl = null;
   var results = [], sel = 0;
   var dirRows = null, dirAsked = false;
+  /* SRB1 (גל 9, 1.10.26) — המדריך שייך לסשן שטען אותו. התנתקות/משתמש אחר במכשיר משותף ⇒ נזרק ולא מוצג. */
+  var dirOwner = "";
   var lastFocus = null;
 
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
@@ -47,12 +49,33 @@ CBA.search = (function () {
     return h.charAt(i - 1) === " " ? 1 : 2;
   }
 
+  /* SRB3 (גל 9, 1.10.26) — אותו נירמול בדיוק כמו norm(), אבל עם מפה מכל תו מנורמל לאינדקס שלו במקור,
+     כדי שההדגשה תיפול במקום הנכון גם כשהתווית מכילה גרשיים/רווחים כפולים (תשפ"ז). */
+  function normMap(s) {
+    s = String(s == null ? "" : s);
+    var t = "", map = [], prevSpace = true;   // true בהתחלה = trim משמאל
+    for (var i = 0; i < s.length; i++) {
+      var lc = s.charAt(i).toLowerCase();
+      for (var j = 0; j < lc.length; j++) {
+        var c = lc.charAt(j);
+        if (/["'`״׳]/.test(c)) continue;
+        if (/\s/.test(c)) { if (prevSpace) continue; c = " "; prevSpace = true; }
+        else prevSpace = false;
+        t += c; map.push(i);
+      }
+    }
+    if (t.charAt(t.length - 1) === " ") { t = t.slice(0, -1); map.pop(); }   // trim מימין
+    return { t: t, map: map };
+  }
+
   /* הדגשת החלק התואם בתוך התווית */
   function mark(text, q) {
     var s = String(text == null ? "" : text);
-    var i = norm(s).indexOf(q);
-    if (i < 0 || !q) return esc(s);
-    return esc(s.slice(0, i)) + '<mark>' + esc(s.slice(i, i + q.length)) + '</mark>' + esc(s.slice(i + q.length));
+    var n = normMap(s);   // SRB3 (גל 9, 1.10.26) — אינדקסים של המקור, לא של הטקסט המנורמל
+    var i = q ? n.t.indexOf(q) : -1;
+    if (i < 0) return esc(s);
+    var a = n.map[i], b = n.map[i + q.length - 1] + 1;
+    return esc(s.slice(0, a)) + '<mark>' + esc(s.slice(a, b)) + '</mark>' + esc(s.slice(b));
   }
 
   /* --- קריאת שדות ממדריך התושבים ---
@@ -147,7 +170,9 @@ CBA.search = (function () {
     }
 
     /* 4. שכנים */
-    (dirRows || []).forEach(function (r) {
+    /* SRB2 (גל 9, 1.10.26) — רק למי שיש לו מסך תושבים (לא לגנן חיצוני וכד'); SRB1 — ורק מהמדריך של הסשן הנוכחי. */
+    var dirOk = !!directoryScreen() && dirFresh();
+    (dirOk ? dirRows || [] : []).forEach(function (r) {
       if (String(fld(r, "סטטוס")).indexOf("עזב") !== -1) return;
       var family = fld(r, "משפחה");
       var firsts = flds(r, "שם פרטי").join(" ו");
@@ -237,6 +262,8 @@ CBA.search = (function () {
 
   /* ------------------------------------------------------------ פתיחה/סגירה */
   function open() {
+    /* SRB1 (גל 9, 1.10.26) — אין חיפוש מעל שער הכניסה / בלי סשן. */
+    if (gated()) { close(); return; }
     if (el) { inputEl.focus(); inputEl.select(); return; }
     lastFocus = document.activeElement;
 
@@ -295,23 +322,53 @@ CBA.search = (function () {
   /* מדריך התושבים נטען פעם אחת בפתיחה הראשונה. אם המשתמש לא מחובר או שאין
      חיבור — פשוט אין קבוצת "שכנים", בלי הודעת שגיאה שתפריע לחיפוש עצמו. */
   function loadDirectoryOnce() {
+    dirFresh();   // SRB1 (גל 9, 1.10.26) — מדריך של סשן קודם נזרק לפני כל דבר
     if (dirAsked || dirRows) return;
     if (!window.CBA.authSession) return;
+    if (!directoryScreen()) return;   // SRB2 (גל 9, 1.10.26) — בלי מסך תושבים אין סיבה למשוך את המדריך
     if (!(CBA.data && CBA.data.getCommunityDirectory)) return;
     dirAsked = true;
+    var askedFor = window.CBA.authSession;   // SRB1 (גל 9, 1.10.26)
+    dirOwner = askedFor;
     CBA.data.getCommunityDirectory(function (res) {
+      /* SRB1 (גל 9, 1.10.26) — תשובה שהגיעה אחרי התנתקות/החלפת משתמש לא נשמרת */
+      if (window.CBA.authSession !== askedFor || dirOwner !== askedFor) return;
       if (res && res.ok) dirRows = res.rows || [];
       if (el) render();
     });
   }
 
+  /* SRB1 (גל 9, 1.10.26) — "מחובר?" = יש סשן ושער הכניסה לא מוצג. */
+  function gated() {
+    return !window.CBA.authSession || !!(document.body && document.body.classList.contains("is-gated"));
+  }
+  /* SRB1 (גל 9, 1.10.26) — המדריך שבזיכרון שייך לסשן הנוכחי? אם לא (התנתקות/משתמש אחר) — נזרק. */
+  function dirFresh() {
+    var sess = window.CBA.authSession || "";
+    if (!sess || dirOwner !== sess) { dirRows = null; dirAsked = false; dirOwner = ""; return false; }
+    return true;
+  }
+
   /* קיצור מקלדת גלובלי — Ctrl+K או ⌘K, כמו בכל כלי אחר שיועד מכיר */
   document.addEventListener("keydown", function (e) {
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+      if (gated()) { close(); return; }   // SRB1 (גל 9, 1.10.26) — לא על שער הכניסה
       e.preventDefault();
       if (el) close(); else open();
     }
   });
+
+  /* SRB1 (גל 9, 1.10.26) — כששער הכניסה עולה (התנתקות/פג סשן): סוגרים חיפוש פתוח וזורקים את המדריך. */
+  function watchGate() {
+    if (!document.body || !window.MutationObserver) return;
+    new MutationObserver(function () {
+      if (!document.body.classList.contains("is-gated")) return;
+      close();
+      dirRows = null; dirAsked = false; dirOwner = "";
+    }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  }
+  if (document.body) watchGate();
+  else document.addEventListener("DOMContentLoaded", watchGate);
 
   return { open: open, close: close, isOpen: function () { return !!el; } };
 })();
