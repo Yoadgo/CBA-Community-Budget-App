@@ -23,6 +23,8 @@ body.cnp2-past:has(#app-main .cnp2) .app-header { border-radius: 0 0 var(--r-car
 .cnp2[data-dom="ev"]  { --d: #C4B5FD; --d-soft: rgba(124,58,237,.3); }
 .cnp2[data-dom="bud"] { --d: #67E8F9; --d-soft: rgba(14,116,144,.35); }
 .cnp2[data-dom="gym"] { --d: #FCD34D; --d-soft: rgba(217,119,6,.3); }
+.cnp2[data-dom="svc"] { --d: #5EEAD4; --d-soft: rgba(13,148,136,.32); }
+.cnp2[data-dom="map"] { --d: #FDBA8C; --d-soft: rgba(200,115,76,.32); }
 .cnp2-in { position: relative; }
 .cnp2-back {
   display: inline-flex; align-items: center; gap: 4px; margin: 2px 0 6px; padding: 4px 10px 4px 12px;

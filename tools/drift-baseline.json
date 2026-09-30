@@ -1,10 +1,10 @@
 {
  "canopy.css": {
-  "hex": 4,
+  "hex": 6,
   "radius": 3,
   "shadow": 3,
   "fsize": 7,
-  "all": 17
+  "all": 19
  },
  "committeeTree.css": {
   "hex": 28,
@@ -159,6 +159,13 @@
   "shadow": 65,
   "fsize": 121,
   "all": 414
+ },
+ "resident2.css": {
+  "hex": 0,
+  "radius": 0,
+  "shadow": 3,
+  "fsize": 1,
+  "all": 4
  },
  "search.css": {
   "hex": 1,

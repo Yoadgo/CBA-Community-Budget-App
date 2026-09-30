@@ -682,7 +682,16 @@ CBA.screens.resServices = {
        ⚠️ CBA.isSuper נקבע פעם אחת באתחול (app.js) — לא לגזור הרשאה מכאן
           לשום דבר מלבד הצגת קיצור דרך. */
     var canEdit = window.CBA && CBA.isSuper === true && CBA.screens && CBA.screens.servicesAdmin;
-    container.innerHTML =
+    /* 🔴 גל 5 (1.10.26, ספר האבנים פרק 11) — החופה. SV1: הכותרת "ספקים ושירותים"
+       כמו בניווט (היה "שירותים"). "עריכת הכרטיסים" של מנהל-העל — בחופה. */
+    if (window.CBA && CBA.canopy) {
+      if (CBA.canopy.bindScroll) CBA.canopy.bindScroll();
+      container.innerHTML = CBA.canopy({ size: "mid", dom: "svc", wide: true, title: "ספקים ושירותים",
+          ico: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h6"/>',
+          sub: "כל השירותים בשיכון — פרטים מלאים, מחירים ואנשי קשר",
+          tools: canEdit ? '<button type="button" class="cnp2-btn" id="svc-edit">עריכת הכרטיסים</button>' : "" }) +
+        '<div class="cnp2-body cnp2-body--wide svc-v2"><div id="svc-body"></div></div>';
+    } else container.innerHTML =
       '<div class="screen-head screen-head--row">' +
         '<div><div class="screen-head__title">שירותים</div>' +
         '<div class="screen-head__sub">כל השירותים בשיכון — פרטים מלאים, מחירים ואנשי קשר</div></div>' +
@@ -724,10 +733,11 @@ CBA.screens.resServices = {
     svcRepaint = paint;
 
     function paintGrid() {
-      var q = String(svcState.query || "").trim();
+      /* SVB3 (גל 5) — חיפוש בלי תלות באותיות גדולות/קטנות ("wifi" מוצא "WiFi") */
+      var q = String(svcState.query || "").trim().toLowerCase();
       var list = svcState.list.filter(function (s) {
         if (!s.active) return false;
-        return !q || CBA.serviceUtils.searchText(s).indexOf(q) !== -1;
+        return !q || String(CBA.serviceUtils.searchText(s)).toLowerCase().indexOf(q) !== -1;
       });
       var grid = body.querySelector("#svc-grid");
       var count = body.querySelector("#svc-count");
@@ -1003,7 +1013,8 @@ function svcOpenDrawer(id) {
         (svc.updated ? '<div class="svc-updated">עודכן לאחרונה: ' + svcEsc(svc.updated) + "</div>" : "") +
         '<div class="hairline-sep" style="height:1px;background:var(--hairline);margin:16px 0"></div>' +
         '<div id="svc-react-zone" data-cardid="' + svcEsc(svc.id) + '">' + svcSkeletonReactions() + "</div>" +
-        (isOwner || isSuperAdmin
+        /* SVB2 (גל 5) — בלי כפתורים אין אזור: מנהל-על על כרטיס רשמי ראה כותרת ריקה */
+        (isOwner || (isSuperAdmin && svc.isResident)
           ? '<div class="svc-admin-zone">' +
               '<div class="svc-admin-zone__label">' + (isOwner ? "הכרטיס שלך" : "פעולות ניהול") + "</div>" +
               (isOwner
@@ -1282,6 +1293,8 @@ function svcReactionsHtml(cardId, cardType, reacts, comments) {
 function svcBindReactionZone(zone, cardId, cardType) {
   zone.querySelectorAll("[data-react]").forEach(function (btn) {
     btn.addEventListener("click", function () {
+      /* SVB1 (גל 5) — כמו בכרטיס: בלי משפחה אין הצבעה, ואומרים את זה (עד היום נכשל בשקט) */
+      if (!(window.CBA && CBA.user && CBA.user.familyId)) { CBA.ui.toast("צריך להיות תושב מחובר כדי להצביע"); return; }
       var val = btn.dataset.react;
       var isOn = btn.classList.contains("is-on");
       var done = CBA.ui.busy(btn, "");

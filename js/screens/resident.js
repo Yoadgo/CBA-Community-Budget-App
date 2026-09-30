@@ -176,7 +176,19 @@ CBA.screens = CBA.screens || {};
     return { refunds: refunds, handled: handled };
   }
 
+  /* 🔴 גל 4 (1.10.26, ספר האבנים פרקים 6–8) — החופה של מסכי התושב
+     (js/ui/canopy.js). בלי הרכיב (לקוח ישן) — "" והמסך מצייר את הראש הישן. */
+  var ICO_RECEIPT = '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/>';
+  var ICO_KEY = '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M15 8l2 2M18 5l2 2"/>';
+  function cnp(o) {
+    if (!(window.CBA && CBA.canopy)) return "";
+    if (CBA.canopy.bindScroll) CBA.canopy.bindScroll();
+    return CBA.canopy(o);
+  }
+
   var STATUS_PILL = {
+    /* RB1 (גל 4) — "בבדיקה" (review) קיבל תג משלו; קודם נפל לברירת המחדל */
+    review:    { cls: "warn", ico: clockIcon },
     submitted: { cls: "warn", ico: clockIcon },
     ready:     { cls: "blue", ico: clockIcon },
     paid:      { cls: "ok",   ico: checkIcon },
@@ -266,8 +278,13 @@ CBA.screens = CBA.screens || {};
 
   /* מרענן את הכרטיס במקום, בלי לצייר מחדש את כל המסך — כך שגלילה ומיקוד
      נשמרים, וגם אין הבהוב אם התשובה זהה למה שכבר מוצג. */
+  /* RB3 (גל 4) — קריאת Apps Script (2–10ש') רצה בכל ציור, גם ברענון רקע.
+     מעכשיו לכל היותר פעם בדקה; בין לבין — מה שכבר בזיכרון. */
+  var gymAt = 0;
   function refreshGymCard(container) {
     if (!(CBA.data && CBA.data.getGymMy)) return;
+    if (gymAt && Date.now() - gymAt < 60 * 1000) return;
+    gymAt = Date.now();
     CBA.data.getGymMy(function (res) {
       if (!res || !res.ok) return;
       var before = gymCardHTML();
@@ -441,7 +458,7 @@ CBA.screens = CBA.screens || {};
       refundSummaryShown = false;
       var u = user();
       var fam = u.family || u.name || "תושב";
-      var house = u.house ? ("בית " + u.house) : "אזור תושב";
+      var house = u.house ? ("בית " + u.house) : "";
       var groups = splitRequests(myRequests());
       var refunds = groups.refunds, handled = groups.handled;
       // כל השנים — לחלק ההיסטוריה בלבד. הרשימה הראשית והמונים נשארים
@@ -457,7 +474,8 @@ CBA.screens = CBA.screens || {};
       // "בקשות אחרות שטיפלנו בהן" זה לא כסף שמגיע למשפחה, אז לא נספר בתוכן.
       var counts = { pending: 0, ready: 0, paid: 0 };
       refunds.forEach(function (t) {
-        if (t.status === "submitted") counts.pending++;
+        /* RB1 (גל 4) — "בבדיקה" נספר עם הממתינות. קודם בקשה בבדיקה לא נספרה בשום אריח. */
+        if (t.status === "submitted" || t.status === "review") counts.pending++;
         else if (t.status === "ready") counts.ready++;
         else if (t.status === "paid") counts.paid += (t.amount || 0);
       });
@@ -487,6 +505,8 @@ CBA.screens = CBA.screens || {};
         listHTML = '<div class="rs-empty">' + inboxIcon +
               '<b>עדיין אין בקשות</b>' +
               '<p>לחצו על "הגשת בקשה חדשה" כדי לשלוח קבלה ראשונה. הבקשות שלכם יופיעו כאן עם הסטטוס שלהן.</p>' +
+              /* R3 (גל 4) — בחופה החדשה ה-CTA עבר ל-"+"; במצב הריק הוא נשאר כאן */
+              (window.CBA && CBA.canopy ? '<button class="btn-primary rs-cta" data-goto="resSubmit">' + plusIcon + ' הגשת בקשה חדשה</button>' : '') +
             '</div>';
       }
 
@@ -497,9 +517,18 @@ CBA.screens = CBA.screens || {};
       // נפתח מעצמו בדיוק כשאין מה להראות בשנה הפעילה — ר' pastYearsHTML.
       listHTML += pastYearsHTML(allYears, curYear, !refunds.length && !handled.length);
 
-      container.innerHTML =
+      /* גל 4 — R1/R2: הכותרת והמספרים בחופה, R3: "הגשת בקשה חדשה" ב-"+" (F25).
+         אותם שלושה מספרים בדיוק (ממתינות · אושרו · שולמו השנה). */
+      var head = cnp({ size: "mid", dom: "bud", ico: ICO_RECEIPT, title: "הבקשות שלי",
+        sub: (house ? house + " · " : "") + "ההחזרים והקבלות של המשפחה",
+        stat: { n: counts.pending, label: "ממתינות" },
+        minis: [{ k: "אושרו", b: counts.ready }, { k: "שולמו ב" + curYear, b: CBA.formatILS(counts.paid) }] });
+      if (head) {
+        container.innerHTML = head + '<div class="cnp2-body rq-v2">' +
+          '<div id="rq-gym">' + gymCardHTML() + '</div>' + listHTML + '</div>';
+      } else container.innerHTML =
         '<div class="screen-head"><div class="screen-head__title">שלום, ' + CBA.esc(fullName(u)) + '</div>' +
-          '<div class="screen-head__sub">' + CBA.esc(house) + ' · אזור תושב</div></div>' +
+          '<div class="screen-head__sub">' + CBA.esc(house || "אזור תושב") + ' · אזור תושב</div></div>' +
         '<div class="summary res-summary">' +
           '<div class="stat stat--warn"><div class="stat__label">ממתינות</div><div class="stat__value">' + counts.pending + '</div></div>' +
           '<div class="stat stat--blue"><div class="stat__label">אושרו</div><div class="stat__value">' + counts.ready + '</div></div>' +
@@ -535,9 +564,13 @@ CBA.screens = CBA.screens || {};
       var processing = false;  // מכווצים תמונה כרגע
       var expenseType = "refund";
 
-      container.innerHTML =
+      /* גל 4 — S1: חופה נמוכה (טופס). השם והבית נשארים בשורה שמתחת לכותרת. */
+      var sHead = cnp({ size: "low", dom: "bud", ico: ICO_RECEIPT, title: "הגשת קבלה",
+        sub: fullName(u) + (house ? " · " + house : "") + " · צילום הקבלה ממלא את הפרטים לבד",
+        back: { id: "rs-back", label: "הבקשות שלי" } });
+      container.innerHTML = (sHead ? sHead + '<div class="cnp2-body rs-v2">' :
         '<div class="screen-head"><div class="screen-head__title">הגשת בקשה</div>' +
-          '<div class="screen-head__sub">' + CBA.esc(fullName(u)) + (house ? " · " + CBA.esc(house) : "") + '</div></div>' +
+          '<div class="screen-head__sub">' + CBA.esc(fullName(u)) + (house ? " · " + CBA.esc(house) : "") + '</div></div>') +
         '<div class="rs-form">' +
           '<div class="rs-seg" id="type-seg">' +
             '<button data-type="refund" class="on">החזר לדייר</button>' +
@@ -565,7 +598,22 @@ CBA.screens = CBA.screens || {};
           '</div>' +
           '<button class="btn-primary rs-submit" id="rs-submit-btn">' + sendIcon + ' <span>שלח בקשה</span></button>' +
           '<div class="rs-err" id="rs-err" hidden></div>' +
-        '</div>';
+        '</div>' + (sHead ? '</div>' : '');
+      var backBtn = container.querySelector("#rs-back");
+      if (backBtn) backBtn.addEventListener("click", function () { CBA.navigate("resRequests"); });
+      /* SB3 + SA2 (גל 4) — מה שהתושב הקליד לא נדרס בסריקה, ומה ש-Gemini מילא
+         מסומן בשדה עד שנוגעים בו (פלט AI תמיד גלוי וניתן לעריכה). */
+      Array.prototype.forEach.call(container.querySelectorAll(".rs-form .field-input"), function (el) {
+        el.addEventListener("input", function () { el.dataset.user = "1"; el.classList.remove("is-ai"); });
+      });
+      function aiFill(sel, v) {
+        var el = container.querySelector(sel);
+        if (!el || !v) return false;
+        if (el.dataset.user === "1" && el.value.trim()) return false;
+        el.value = v;
+        el.classList.add("is-ai");
+        return true;
+      }
 
       var uploadEl  = container.querySelector("#rs-upload");
       var fileInput = container.querySelector("#rs-file");
@@ -639,7 +687,9 @@ CBA.screens = CBA.screens || {};
         // (2026-08-09) יש עכשיו קובץ בעיבוד/נבחר שעדיין לא נשלח — עד שהבקשה
         // תישלח בהצלחה (או תבוטל) לא רוצים שרענון רקע "יאפס" את המסך הזה
         // וימחק את מה שהמשתמש בחר, ר' ההסבר המלא ב-sheets.js (markDirty/isDirty).
-        if (CBA.sheets.markDirty) CBA.sheets.markDirty("receiptUpload");
+        /* SB1 (גל 4) — שקט (label:false), כמו בשריון המועדון (23.9): בחירת קובץ
+           אינה שמירה, והכותרת הציגה "שומר…" ואחרי 45 שניות "מתעכב". */
+        if (CBA.sheets.markDirty) CBA.sheets.markDirty("receiptUpload", false);
         processing = true;
         renderUploadBusy();
         var isImage = file.type.indexOf("image/") === 0;
@@ -673,10 +723,8 @@ CBA.screens = CBA.screens || {};
         showScanMsg("סורק את הקבלה אוטומטית…");
         CBA.data.scanReceipt(picked.dataBase64, picked.mimeType, function (res) {
           scanning = false;
-          /* לוג אבחון זמני (2026-08-09) — כדי לראות מיד בקונסול הדפדפן בדיוק מה חזר
-             מהשרת לכל שדה (כולל בנק/סניף/חשבון), בלי להמתין ליומני Apps Script.
-             אפשר להסיר בהמשך. */
-          console.log("CBA scanReceipt result:", res);
+          /* SB2 (גל 4) — הלוג הזמני מ-9.8 הוסר: הוא הדפיס לקונסול את כל תוצאת
+             הסריקה, כולל פרטי בנק. */
           if (!picked) return; // הקובץ הוסר בזמן שהסריקה רצה — אין מה לעדכן
           resetScanBtn();
           if (!res || !res.ok || !res.fields) {
@@ -686,33 +734,15 @@ CBA.screens = CBA.screens || {};
           }
           var f = res.fields;
           var filledLabels = [];
-          if (f.amount) {
-            container.querySelector("#rs-amount").value = f.amount;
-            filledLabels.push("סכום");
-          }
-          if (f.supplier) {
-            container.querySelector("#rs-supplier").value = f.supplier;
-            filledLabels.push("ספק");
-          }
-          if (f.description) {
-            container.querySelector("#rs-desc").value = f.description;
-            filledLabels.push("תיאור");
-          }
+          if (aiFill("#rs-amount", f.amount)) filledLabels.push("סכום");
+          if (aiFill("#rs-supplier", f.supplier)) filledLabels.push("ספק");
+          if (aiFill("#rs-desc", f.description)) filledLabels.push("תיאור");
           /* פרטי בנק (2026-08-09): רק כשמופיעים בקבלה/חשבונית (ר' bankName/bankBranch/
              bankAccount ב-scanReceiptWithGemini_ ב-Code.gs) וגם רק אם מדובר בתשלום לספק —
              השדות עצמם קיימים ב-DOM תמיד, רק מוסתרים בהחזר לדייר, אז אין נזק במילוי גם אז. */
-          if (f.bankName) {
-            container.querySelector("#rs-bank-name").value = f.bankName;
-            filledLabels.push("בנק");
-          }
-          if (f.bankBranch) {
-            container.querySelector("#rs-bank-branch").value = f.bankBranch;
-            filledLabels.push("סניף");
-          }
-          if (f.bankAccount) {
-            container.querySelector("#rs-bank-account").value = f.bankAccount;
-            filledLabels.push("מס' חשבון");
-          }
+          if (aiFill("#rs-bank-name", f.bankName)) filledLabels.push("בנק");
+          if (aiFill("#rs-bank-branch", f.bankBranch)) filledLabels.push("סניף");
+          if (aiFill("#rs-bank-account", f.bankAccount)) filledLabels.push("מס' חשבון");
           if (filledLabels.length) {
             showScanMsg("מולא אוטומטית: " + filledLabels.join(", ") + " — כדאי לבדוק ולערוך לפני השליחה.");
           } else {
@@ -1111,7 +1141,13 @@ CBA.screens = CBA.screens || {};
       // מוסתרת במובייל לגמרי — תג PayBox קטן משובץ בכותרת כרטיס התקנון במקומה
       // (ר' club-rules__pay-chip למטה + CSS @media(min-width:1024px) שמסתיר
       // אותו שוב בדסקטופ, כי שם כבר יש את הקובייה המלאה).
-      container.innerHTML =
+      /* גל 4 — C1: כותרת המסך בחופה (עד היום ישבה בתוך כרטיס הלוח, ובטלפון
+         באמצע העמוד). המספרים מתמלאים כש"השריונים שלי" נטען (renderMine). */
+      var rvHead = cnp({ size: "mid", dom: "home", ico: ICO_KEY, title: "מועדון משפחות",
+        sub: "בחרו תאריך וזמן פנוי — הבקשה תישלח לאישור הוועד",
+        stat: { id: "rv-cnp-n", n: "—", label: "שריונים קרובים" },
+        minis: [{ id: "rv-cnp-p", k: "ממתין לאישור", b: "—" }] });
+      container.innerHTML = (rvHead ? rvHead + '<div class="cnp2-body cnp2-body--wide rv-v2">' : "") +
         '<div class="res-reserve-layout" id="rv-layout">' +
           '<div class="rs-mine-sec" id="rv-mine"></div>' +
           '<div class="card club-rules" id="rc-rules">' +
@@ -1137,7 +1173,7 @@ CBA.screens = CBA.screens || {};
             '<p class="club-pay__note">התשלום מתבצע לאחר שהשריון מאושר ע"י הוועד.</p>' +
           '</div>' +
           '<div id="rv-booking"></div>' +
-        '</div>';
+        '</div>' + (rvHead ? '</div>' : '');
 
       var rulesCard = container.querySelector("#rc-rules");
       var rulesToggle = container.querySelector("#rc-rules-toggle");
@@ -1265,7 +1301,12 @@ CBA.screens = CBA.screens || {};
       var mins = (hi - lo + 1) * 30;
       var durLbl = mins >= 60 ? (Math.floor(mins / 60) + (mins % 60 ? ":" + pad2(mins % 60) : "") + " שעות") : (mins + " דקות");
 
+      var wasHidden = formEl.hidden;
       formEl.hidden = false;
+      /* CA3 (גל 4) — בטלפון הטופס נפתח מתחת ללוח שנגלל; מביאים אותו לעין פעם אחת */
+      if (wasHidden && window.matchMedia && window.matchMedia("(max-width: 720px)").matches) {
+        setTimeout(function () { try { formEl.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) {} }, 60);
+      }
       formEl.innerHTML =
         '<div class="rs-club-form__sum">' +
           '<div class="rs-club-form__range">' + startLbl + '–' + endLbl + '</div>' +
@@ -1518,6 +1559,11 @@ CBA.screens = CBA.screens || {};
     }
     function updateCompact() {
       compactSub.textContent = summaryText();
+      /* גל 4 — אותם מספרים גם בחופה */
+      if (window.CBA && CBA.canopy && CBA.canopy.set) {
+        CBA.canopy.set(document, "rv-cnp-n", list.length);
+        CBA.canopy.set(document, "rv-cnp-p", list.filter(function (r) { return r.status === "pending"; }).length);
+      }
       var hasPending = list.some(function (r) { return r.status === "pending"; });
       compactBadge.textContent = String(list.length);
       compactBadge.className = "rs-mine-compact__badge" + (!list.length ? "" : (hasPending ? " is-pending" : " is-ok"));
