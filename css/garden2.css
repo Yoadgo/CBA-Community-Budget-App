@@ -1,0 +1,80 @@
+/* ============================================================================
+   garden2.css — "מראה שיכון" של התושב בשפה החדשה (גל 3, 1.10.2026)
+   ספר האבנים, פרקים 3–4. חל רק על .gd-screen--v2 (המסך מתחת לחופה החדשה),
+   כלומר רק על resGarden / resGardenNew של התושב. מסכי הצוות (gardenTasks
+   וכו') לא נוגעים כאן — הם יקבלו את הפרק שלהם.
+   העיקרון: "נייר לתוכן" — כרטיס לבן אטום, בלי זכוכית ובלי רקע אמביינטי.
+   ============================================================================ */
+.gd-screen--v2::before { display: none; }
+.gd-screen--v2 { --g: var(--dom-gar); }
+
+/* כרטיסים: לבן, רדיוס כרטיס, בלי זכוכית */
+.gd-screen--v2 .gd-card, .gd-screen--v2 .gd-rep, .gd-screen--v2 .gd-stat {
+  background: var(--paper); -webkit-backdrop-filter: none; backdrop-filter: none;
+  border: 0; box-shadow: var(--sh-card); border-radius: var(--r-card);
+}
+.gd-screen--v2 .gd-card { padding: 18px 20px; }
+.gd-screen--v2 .gd-card + .gd-card { margin-top: 12px; }
+.gd-screen--v2 .gd-lbl { font-size: var(--t-14); color: var(--ink); }
+
+/* סינון (G4) — בקרה מפולחת נקייה */
+.gd-screen--v2 .gd-seg { background: var(--hair-2); border-radius: var(--r-pill); padding: 3px; margin-bottom: 14px; }
+.gd-screen--v2 .gd-seg button { border-radius: var(--r-pill); font-size: var(--t-13); padding: 6px 14px; }
+.gd-screen--v2 .gd-seg button.on { background: var(--paper); box-shadow: var(--sh-card); font-weight: 700; }
+
+/* כרטיס דיווח (G5–G12) */
+.gd-screen--v2 .gd-reps { gap: 12px; }
+.gd-screen--v2 .gd-rep { padding: 16px 18px; gap: 14px; }
+.gd-screen--v2 .gd-rep::before { display: none; }                 /* פס הצבע בצד → הדיסקית אומרת את הצבע */
+.gd-screen--v2 .gd-rep__th { width: 48px; height: 48px; border-radius: 50%; }
+.gd-screen--v2 .gd-rep__th svg { width: 22px; height: 22px; }
+.gd-screen--v2 .gd-rep__t { font-size: 16px; font-weight: 700; margin-top: 4px; }
+.gd-screen--v2 .gd-rep__m { font-size: var(--t-13); color: var(--ink-2); }
+.gd-screen--v2 .gd-rep__id { font-size: var(--t-12); color: var(--ink-3); }
+
+/* GA2 — המסלול עם שמות השלבים */
+.gd-screen--v2 .gd-axis { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 12px; }
+.gd-screen--v2 .gd-track { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; position: relative; }
+.gd-screen--v2 .gd-track::before {
+  content: ""; position: absolute; inset-inline: 10%; top: 50%; height: 2px; margin-top: -1px;
+  background: var(--hair); z-index: 0;
+}
+.gd-screen--v2 .gd-track i { width: 10px; height: 10px; justify-self: center; position: relative; z-index: 1; background: var(--hair); }
+.gd-screen--v2 .gd-track i.on { background: var(--ink-3); }
+.gd-screen--v2 .gd-track i.now { background: var(--ink); }
+.gd-screen--v2 .gd-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); text-align: center; }
+.gd-screen--v2 .gd-steps i { font-style: normal; font-size: var(--t-11); color: var(--ink-3); white-space: nowrap; }
+.gd-screen--v2 .gd-steps i.is-past { color: var(--ink-2); }
+.gd-screen--v2 .gd-steps i.is-now { color: var(--ink); font-weight: 700; }
+.gd-screen--v2 .gd-axis > b { font-size: var(--t-13); }
+.gd-screen--v2 .gd-axis .gd-flag { justify-self: start; }
+
+/* G12 — "הטיפול היה בסדר?" בולט: פס ירוק-בהיר בתחתית הכרטיס */
+.gd-screen--v2 .gd-fb {
+  margin-top: 14px; padding: 10px 12px; border-radius: var(--r-in);
+  background: var(--ok-bg); gap: 8px;
+}
+.gd-screen--v2 .gd-fb span { font-size: var(--t-14); font-weight: 700; color: var(--ok-ink); margin-inline-end: auto; }
+.gd-screen--v2 .gd-fb button { border-radius: var(--r-pill); padding: 7px 14px; font-size: var(--t-13); min-height: 34px; background: var(--paper); }
+.gd-screen--v2 .gd-fb button.y { background: var(--ok-ink); color: var(--paper); border-color: var(--ok-ink); }
+
+/* טופס (N2–N13) */
+.gd-screen--v2 .gd-inp { border-radius: var(--r-in); border-color: var(--hair); background: var(--paper); }
+.gd-screen--v2 .gd-cta { border-radius: var(--r-pill); min-height: 48px; font-size: 16px; font-weight: 700; background: var(--ink); }
+.gd-screen--v2 .gd-sendbar { margin-top: 16px; display: flex; justify-content: flex-end; }
+.gd-screen--v2 .gd-sendbar .gd-cta { width: min(100%, 420px); }
+
+/* טלפון */
+@media (max-width: 720px) {
+  .gd-screen--v2 .gd-card { padding: 16px; }
+  .gd-screen--v2 .gd-rep { padding: 14px; }
+  .gd-screen--v2 .gd-steps i { font-size: 10px; }
+  /* NA1 — כפתור השליחה דבוק לתחתית, מעל הבר (לאורך כל הטופס) */
+  .gd-screen--v2 .gd-sendbar {
+    position: sticky; z-index: 5;
+    bottom: calc(var(--botnav-h, 80px) + env(safe-area-inset-bottom) + 16px);
+    /* בין שני הכפתורים הצפים ("+" ודיווח, 56px כל אחד) — באותו גובה, בלי חפיפה */
+    margin-inline: 64px;
+  }
+  .gd-screen--v2 .gd-sendbar .gd-cta { width: 100%; min-height: 56px; box-shadow: var(--sh-float); }
+}

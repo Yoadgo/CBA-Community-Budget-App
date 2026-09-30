@@ -262,6 +262,9 @@
   };
   // איזו הרשאה נדרשת לכל מסך ניהול
   const SCREEN_PERM = {
+    /* 🔴 גל 2 (30.9.26, ספר האבנים H31) — "לוח ניהול": כל מנהל, לא הגנן
+       החיצוני. מה שכל מנהל רואה בו מסונן בתוכו לפי ההרשאות (home.js). */
+    adminBoard: "ANY",
     budget: PERM.BUDGET, expenses: PERM.BUDGET, planning: PERM.BUDGET,
     clubAdmin: PERM.CLUB, residents: PERM.RESIDENTS,
     // WeWork (25.9) — מידור עצמאי, נפרד ממנהל המכון (יועד, 24.9).
@@ -362,7 +365,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["budget", "expenses", "planning", "clubAdmin", "gymAdmin", "weworkAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "sysHub", "reconcile"],
+      screens: ["adminBoard", "budget", "expenses", "planning", "clubAdmin", "gymAdmin", "weworkAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "sysHub", "reconcile"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -371,6 +374,10 @@
       // (ר' SCREEN_PERM.committeeAdmin, residents.js). התצוגה-לקריאה המקבילה
       // יושבת באזור התושב (resCommittee) ופתוחה לכולם, ר' AREAS_ALL.resident למטה.
       tabs: [
+        /* 🔴 גל 2 (30.9.26, ספר האבנים F2/H31) — "לוח ניהול" ראשון, ולכן גם
+           מסך הנחיתה של האזור (firstScreenKey). מי שאין לו אותו (הגנן
+           החיצוני) — הטאב מסונן, והנחיתה נשארת כמו קודם. */
+        ["adminBoard", "לוח ניהול"],
         { group: "taktziv", label: "תקציב", items: [["budget", "תכנון מול ביצוע"], ["expenses", "ניהול הוצאות"], ["planning", "בניית תקציב"]] },
         // "מתקנים" (2026-08-18) — שריון המועדון ומכון הכושר אוחדו לקבוצה אחת,
         // באותה תבנית מתקפלת של "תקציב"/"השיכון". שים לב: לכל פריט מידור משלו
@@ -517,6 +524,7 @@
   }
   // אייקוני קו מונוכרומיים לטאבים (דסקטופ). במובייל האייקון מגיע מ-CSS mask (::before)
   var NAV_ICONS = {
+    adminBoard:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="4.5" rx="1.5"/><rect x="13.5" y="11" width="7" height="9.5" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/></svg>',
     resHome:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg>',
     budget:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/></svg>',
     expenses:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/></svg>',
@@ -1000,6 +1008,8 @@
      מהמקומות שכבר זיהו שינוי אמיתי, לא בכל מחזור רענון. */
   function refreshHomeIfOpen() {
     if (inited && currentScreen === "resHome" && CBA.screens.resHome) showScreen("resHome");
+    /* גל 2 — לוח הניהול מציג את אותן ספירות, ולכן מתרענן באותו רגע */
+    else if (inited && currentScreen === "adminBoard" && CBA.screens.adminBoard) showScreen("adminBoard");
   }
 
   function setArea(area) {
@@ -3185,7 +3195,9 @@
     /* ⚠️ "תושבים" נוסף 16.9 — עמוד הבית מציג שתי תגיות
        מהתחום הזה (בקשות הרשמה, בקשות שינוי פרטים) והוא
        לא היה רשום — אישור במכשיר אחר לא ריענן את המסך הפתוח. */
-    resHome: ["garden", "club", "services", "gym", "budget", "residents"]
+    resHome: ["garden", "club", "services", "gym", "budget", "residents"],
+    /* גל 2 — "תפקיד ועד" עבר ללוח הניהול, עם אותם מונים */
+    adminBoard: ["garden", "club", "gym", "budget", "residents"]
   };
 
   function screenNeedsMovedDomain(screen, moved) {

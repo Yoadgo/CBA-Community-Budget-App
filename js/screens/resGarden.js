@@ -261,6 +261,19 @@
       (rightHTML || "") + '</div>';
   }
 
+  /* 🔴 גל 3 (1.10.26, ספר האבנים B1/G1/N1) — החופה של מסכי התושב במקום
+     moduleHead. בלי canopy.js (לקוח ישן במטמון) — הראש הישן, בדיוק כמו קודם. */
+  function page(o, bodyHTML) {
+    if (CBA.canopy) {
+      if (CBA.canopy.bindScroll) CBA.canopy.bindScroll();
+      return CBA.canopy(o) + '<div class="cnp2-body"><div class="gd-screen gd-screen--v2">' + bodyHTML + '</div></div>';
+    }
+    var right = o.back
+      ? '<button type="button" class="gd-backbtn" id="' + o.back.id + '">' + ico("back") + ' ' + esc(o.back.label) + '</button>'
+      : (o.legacyRight || "");
+    return '<div class="gd-screen">' + moduleHead(o.title, o.sub, right) + bodyHTML + '</div>';
+  }
+
   function fmtDate(iso) {
     if (!iso) return "";
     var d = new Date(iso);
@@ -348,18 +361,25 @@
     render: function (container) {
       // .gd-screen עוטף כדי שהרקע האמביינטי (::before) יהיה מתחת לתוכן —
       // בלעדיו הזכוכית על הכרטיסים לא מראה כלום. ר' css/garden.css.
-      container.innerHTML = '<div class="gd-screen">' +
-        moduleHead("מראה שיכון", "הדיווחים שלך על הגינון, ומה קרה איתם",
-          '<button type="button" class="gd-newbtn" id="gd-new">' + ico("plus") + ' דיווח חדש</button>') +
-        '<div id="gd-list">' + (CBA.skel ? CBA.skel.cards(4) : "") + '</div>' +
-      '</div>';
+      /* גל 3 — G1/G3: הכותרת והמספרים בחופה. G2: "דיווח חדש" עבר ל-"+" (הוא
+         הפעולה הראשונה שלו במסך הזה) — הכפתור נשאר רק במצב הריק ובראש הישן. */
+      container.innerHTML = page({
+          size: "mid", dom: "gar", ico: ICONS.leaf, title: "מראה שיכון",
+          sub: "הדיווחים שלך על הגינון, ומה קרה איתם",
+          stat: { id: "gd-cnp-n", n: "—", label: "פתוחים" },
+          minis: [{ id: "gd-cnp-wait", k: "בוצע, לאישור", b: "—" }, { id: "gd-cnp-done", k: "הושלמו", b: "—" }],
+          legacyRight: '<button type="button" class="gd-newbtn" id="gd-new">' + ico("plus") + ' דיווח חדש</button>'
+        }, '<div id="gd-list">' + (CBA.skel ? CBA.skel.cards(4) : "") + '</div>');
 
-      container.querySelector("#gd-new").addEventListener("click", function () {
+      var newBtn = container.querySelector("#gd-new");
+      if (newBtn) newBtn.addEventListener("click", function () {
         CBA.navigate("resGardenNew");
       });
+      var v2 = !!container.querySelector(".cnp2");
 
       var listEl = container.querySelector("#gd-list");
-      var all = [], filter = "all", loadErr = false;
+      /* GA1 — "פתוחים" כברירת מחדל כשיש פתוחים (נקבע בטעינה הראשונה) */
+      var all = [], filter = null, loadErr = false;
       /* ממצא 32 — קו הזמן. `logErr` נפרד מ-`loadErr`: כשל בטעינת
          היומן אינו מוחק את הדיווחים מהמסך, הוא רק מחליף את הבלוק
          בשורה שאומרת שלא הצלחנו. */
@@ -399,6 +419,12 @@
           return;
         }
         var n = counts();
+        if (filter === null) filter = (v2 && n.open) ? "open" : "all";
+        if (v2 && CBA.canopy) {
+          CBA.canopy.set(container, "gd-cnp-n", n.open);
+          CBA.canopy.set(container, "gd-cnp-wait", n.wait);
+          CBA.canopy.set(container, "gd-cnp-done", n.done);
+        }
         var shown = all.filter(function (r) {
           if (filter === "open") return r.stage !== "הושלם";
           if (filter === "done") return r.stage === "הושלם";
@@ -406,7 +432,7 @@
         });
 
         listEl.innerHTML =
-          '<div class="gd-stats">' +
+          (v2 ? "" : '<div class="gd-stats">' +
             /* ⚠️ התוויות כאן חייבות להסכים עם מה שכתוב על הכרטיס ועל הסינון
                (2026-09-09). "בטיפול" ספר גם דיווחים שאיש עוד לא נגע בהם,
                בזמן שהכרטיס שמתחתיו אמר "התקבל"; ו"ממתין לאישור" בניסוח הגולמי
@@ -414,7 +440,7 @@
             statTile("open", "clock", n.open, "פתוחים") +
             statTile("wait", "list", n.wait, "בוצע, לאישור") +
             statTile("done", "check", n.done, "הושלמו") +
-          '</div>' +
+          '</div>') +
           '<div class="gd-seg" role="tablist">' +
             segBtn("all", "הכול", all.length) +
             segBtn("open", "פתוחים", n.open) +
@@ -556,7 +582,12 @@
             '<div class="gd-axis' + (done && !shut ? " is-done" : "") +
               (shut ? " is-shut" : "") + '">' +
               '<span class="gd-track">' + dots + '</span>' +
-              '<b>' + esc(st.text) + '</b>' +
+              /* GA2 (גל 3) — שם השלב מתחת לכל נקודה; הנוכחי מודגש */
+              (v2 ? '<span class="gd-steps" aria-hidden="true">' + STAGES.map(function (s, i) {
+                  return '<i class="' + (i === idx ? "is-now" : (i < idx ? "is-past" : "")) + '">' + esc(s) + '</i>';
+                }).join("") + '</span>' : '') +
+              /* GA2 — כששם השלב כבר מודגש מתחת לנקודות, לא חוזרים עליו */
+              ((v2 && st.text === STAGES[idx] && !done) ? '' : '<b>' + esc(st.text) + '</b>') +
               (flagTxt ? '<span class="gd-flag' + (crit ? " is-crit" : "") + '">' + esc(flagTxt) + '</span>' : '') +
             '</div>' +
             (r.mergedInto
@@ -748,11 +779,9 @@
               (rep.place ? " · " + esc(rep.place) : "") + '</p>' +
             (rep.desc ? '<p>' + esc(rep.desc) + '</p>' : '') +
           '</div>') : '';
-      container.innerHTML = '<div class="gd-screen">' +
-        moduleHead("השלמת תמונות · דיווח " + esc(repId),
-          "הדיווח נשמר. חסרות בו תמונות שלא הצליחו לעלות.",
-          '<button type="button" class="gd-backbtn" id="gd-back">' + ico("back") +
-          ' לדיווחים שלי</button>') +
+      container.innerHTML = page({ size: "low", dom: "gar", ico: ICONS.camera,
+          title: "השלמת תמונות · דיווח " + repId, sub: "הדיווח נשמר. חסרות בו תמונות שלא הצליחו לעלות.",
+          back: { id: "gd-back", label: "הדיווחים שלי" } },
         det +
         '<div class="gd-card">' +
           '<p class="gd-lbl">התמונות שלא עלו</p>' +
@@ -761,7 +790,7 @@
           '<button type="button" class="gd-btn2" id="gd-add2">הוספת תמונה</button>' +
           '<div id="gd-prog2" class="gd-progress" hidden></div>' +
           '<button type="button" class="gd-send" id="gd-up2">העלאת התמונות</button>' +
-        '</div></div>';
+        '</div>');
 
       container.querySelector("#gd-back")
         .addEventListener("click", function () { CBA.navigate("resGarden"); });
@@ -847,9 +876,12 @@
       /* ⚠️ 2026-09-09 — עד היום הטופס לא צייר כלום עד ש-getGardenMeta חזר,
          ולכן הכניסה הראשונה הייתה מסך לבן של כשנייה וחצי (קריאה ל-Apps
          Script עולה ~1.5ש' מינימום — ר' זיכרון הביצועים). */
-      container.innerHTML = '<div class="gd-screen">' +
-        moduleHead("דיווח חדש", "מגיע ישירות לצוות הגינון · שיכון פלמחים", "") +
-        (CBA.skel ? CBA.skel.cards(3) : "") + '</div>';
+      var HEAD = { size: "low", dom: "gar", ico: ICONS.leaf, title: "דיווח חדש",
+                   sub: "מגיע ישירות לצוות הגינון · שיכון פלמחים",
+                   back: { id: "gd-back", label: "הדיווחים שלי" } };
+      container.innerHTML = page(HEAD, (CBA.skel ? CBA.skel.cards(3) : ""));
+      var skBack = container.querySelector("#gd-back");
+      if (skBack) skBack.addEventListener("click", function () { CBA.navigate("resGarden"); });
 
       withMeta(function (meta) {
         var cats = (meta.categories || []);
@@ -859,15 +891,12 @@
            עדיף לומר את זה מראש מאשר לתת ללחוץ "שליחה" ולקבל "צריך לבחור
            קטגוריה" על שדה שאין בו מה לבחור. */
         if (!cats.length) {
-          container.innerHTML = '<div class="gd-screen">' +
-            moduleHead("דיווח חדש", "מגיע ישירות לצוות הגינון · שיכון פלמחים",
-              '<button type="button" class="gd-backbtn" id="gd-back">' + ico("back") +
-              ' לדיווחים שלי</button>') +
+          container.innerHTML = page(HEAD,
             CBA.ui.emptyState({
               title: "לא הצלחנו לטעון את הטופס",
               sub: "זו תקלת תקשורת. אפשר לנסות שוב בעוד רגע.",
               ctaLabel: "לנסות שוב", ctaAttr: 'id="gd-retry"'
-            }) + '</div>';
+            }));
           var bk = container.querySelector("#gd-back");
           if (bk) bk.addEventListener("click", function () { CBA.navigate("resGarden"); });
           var rt = container.querySelector("#gd-retry");
@@ -877,9 +906,7 @@
           return;
         }
 
-        container.innerHTML = '<div class="gd-screen">' +
-          moduleHead("דיווח חדש", "מגיע ישירות לצוות הגינון · שיכון פלמחים",
-            '<button type="button" class="gd-backbtn" id="gd-back">' + ico("back") + ' לדיווחים שלי</button>') +
+        container.innerHTML = page(HEAD,
           '<div class="gd-cols">' +
             '<div>' +
               '<div class="gd-card">' +
@@ -934,10 +961,13 @@
                 '<p class="gd-lbl">מיקום במילים <em>לא חובה</em></p>' +
                 '<input class="gd-inp" id="gd-place" placeholder="למשל: על השביל בין 341 ל-343">' +
               '</div>' +
-              '<button type="button" class="gd-cta" id="gd-send">' + ico("send") + ' שליחת דיווח</button>' +
             '</div>' +
           '</div>' +
-        '</div>';
+          /* NA1 (גל 3) — כפתור השליחה מחוץ לעמודה, כדי שבטלפון יוכל להיות
+             דבוק לתחתית לאורך כל הטופס (css/garden2.css). במחשב — אותו מקום. */
+          '<div class="gd-sendbar">' +
+            '<button type="button" class="gd-cta" id="gd-send">' + ico("send") + ' שליחת דיווח</button>' +
+          '</div>');
 
         container.querySelector("#gd-back").addEventListener("click", function () {
           CBA.navigate("resGarden");

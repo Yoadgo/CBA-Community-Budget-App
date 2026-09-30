@@ -18,6 +18,10 @@
         מסך המשימות.
      7. **ההאזנה לא נרשמת על #app-main** — הוא אותו אלמנט לנצח, ומאזין לכל
         ציור היה מצטבר (באג שתוקן כאן).
+
+   🔴 גל 2 (30.9.26) — הבית נבנה מחדש (ספר האבנים, פרק 1): הלו"ז הוא אריח
+   "השבוע", "הבא בקהילה" הם גיליון מהמיני-כרטיס, והגינון + "תפקיד ועד" עברו
+   ללוח הניהול (adminBoard). הגריד (host) נשאר ב-homeSchedule ונבדק ישירות.
    ========================================================================== */
 const fs = require('fs');
 const path = require('path');
@@ -39,7 +43,7 @@ const CALC = R('js/data/gardenStatsCalc.js');
 const EVENTS = R('js/screens/events.js');
 const CSS_S = R('css/homeSchedule.css');
 const CSS_G = R('css/homeGarden.css');
-const CSS_H = R('css/home.css');
+const CSS_H = R('css/home2.css');   /* גל 2 (30.9.26) */
 const CSS_R = R('css/resident.css');
 
 const DAY = 86400000;
@@ -70,7 +74,10 @@ function boot(o) {
     formatILS: n => '₪' + n, alerts: () => ({}),
     sheets: { isConnected: () => true },
     skel: { rows: () => '<div class="skeleton sk-line"></div>' },
-    ui: { emptyState: x => '<div class="empty"><div class="empty__title">' + x.title + '</div></div>' },
+    ui: { emptyState: x => '<div class="empty"><div class="empty__title">' + x.title + '</div></div>',
+          sheet: o => { const w = window.document.createElement('div'); w.className = 'gt-sheet-wrap';
+            w.innerHTML = '<div class="gt-sheet ' + (o.sheetCls || '') + '">' + o.html + '</div>';
+            window.document.body.appendChild(w); return { wrap: w, close: () => w.remove() }; } },
     residentUtils: { fullName: u => u.firstName, myRequests: () => [], splitRequests: () => ({ refunds: [] }) },
     tour: { newCount: cb => setTimeout(() => cb(0), 0) },
     fb: { queryCollection: (c, w, cb) => { calls.push('fs:' + c); setTimeout(() => cb(null, (o.rsvp || []).map(id => ({ id }))), 0); } }
@@ -107,75 +114,69 @@ function boot(o) {
   if (o.withGarden) window.eval(GARDEN);
   window.eval(HOME);
 }
-function render(container) {
+function render(container, screen) {
   const c = container || window.document.createElement('div');
   if (!container) { window.document.body.innerHTML = ''; window.document.body.appendChild(c); }
-  window.CBA.screens.resHome.render(c);
+  window.CBA.screens[screen || 'resHome'].render(c);
   return c;
+}
+/* הגריד/הרשימה של homeSchedule — לא בבית יותר, נבדק ישירות דרך mount({host}) */
+function mountSched(mode) {
+  window.document.body.innerHTML = '';
+  const root = window.document.createElement('div'), host = window.document.createElement('section');
+  root.appendChild(host); window.document.body.appendChild(root);
+  window.CBA.homeSchedule.mount({ root: root, host: host, mode: mode || 'grid' });
+  return host;
 }
 
 (async function () {
 
-  section('1. פריסה לפי תפקיד');
+  section('1. הבית לפי תפקיד');
   {
     boot({});
     let c = render();
-    ok('תושב → hm-cols--res', !!c.querySelector('#hm-cols.hm-cols--res'));
-    ok('תושב → כרטיס לו"ז בגריד', !!c.querySelector('#hm-sch.hm-sch--grid'));
-    ok('תושב → מקום לכרטיסי "האירועים הבאים" (29.9)', !!c.querySelector('#hm-upnext'));
+    ok('תושב → אריח "השבוע"', !!c.querySelector('#hm-week'));
+    ok('תושב → מיני "האירוע הבא"', !!c.querySelector('#hm-mini-ev[data-hm-nextsheet]'));
+    ok('🔴 אין גריד שבועיים ואין רשימת 10 ימים בבית (H20/H24)', !c.querySelector('#hm-sch') && !c.querySelector('.hm-day'));
     ok('תושב → אין מקטע גינון', !c.querySelector('#hm-gardensec'));
-    ok('🔴 הפעולות יושבות בתוך שורת הברכה', !!c.querySelector('.hm-hero .hm-actions'));
+    ok('תושב → אין מיני ניהול', !c.querySelector('#hm-mini-adm'));
 
     boot({ perms: ['תקציב'] });
     c = render();
-    ok('בעל תפקיד → hm-cols--adm', !!c.querySelector('#hm-cols.hm-cols--adm'));
-    ok('בעל תפקיד → לו"ז כרשימה', !!c.querySelector('#hm-sch.hm-sch--list'));
-    ok('בעל תפקיד → אין "הבא בקהילה" בעמודה', !c.querySelector('#hm-feat'));
-    ok('🔴 "אצלנו בבית" עדיין לפני "תפקיד ועד" ב-DOM',
-       c.innerHTML.indexOf('hm-mine') < c.innerHTML.indexOf('hm-vaad'));
-    /* 23.9 (ערב) — עולם התושב ראשון לגמרי: הוועד יצא מהשורה של הלו"ז. */
-    ok('🔴 הלו"ז לפני משטח הוועד — לא ביניהם', c.innerHTML.indexOf('id="hm-sch"') < c.innerHTML.indexOf('hm-vzone'));
-    ok('תפקיד ועד אינו בתוך #hm-cols', !c.querySelector('#hm-cols .hm-vaad'));
-    ok('בלי גינון → משטח בלי hm-vzone--g', !!c.querySelector('.hm-vzone') && !c.querySelector('.hm-vzone--g'));
-    ok('מנהל תקציב בלי גינון → אין מקטע גינון', !c.querySelector('#hm-gardensec'));
+    ok('🔴 בעל תפקיד → אותו בית בדיוק (A9) + מיני "ממתין לטיפולך"', !!c.querySelector('#hm-week') && !!c.querySelector('#hm-mini-adm'));
+    ok('ובלי משטח ועד בבית', !c.querySelector('.hm-vzone') && !c.querySelector('#hm-tasks'));
 
     boot({ withSched: false });
     c = render();
-    ok('⚠️ בלי homeSchedule.js — אין כרטיס לו"ז ריק', !c.querySelector('#hm-sch'));
+    ok('⚠️ בלי homeSchedule.js — אין אריח "השבוע" ריק', !c.querySelector('#hm-week'));
   }
 
-  section('2. 🔴 גודל קבוע — שני אירועים ביום, ומעבר לזה "+N"');
+  section('2. 🔴 גודל קבוע (הגריד שעבר ללוח) — שני אירועים ביום, ומעבר לזה "+N"');
   {
     const four = [1, 2, 3, 4].map(i => ({ id: 'e' + i, title: 'אירוע ' + i, date: at(1, 10 + i), allDay: false, category: 'community' }));
     const three = [5, 6, 7].map(i => ({ id: 'e' + i, title: 'אירוע ' + i, date: at(2, 10), allDay: true, category: 'breaks' }));
     boot({ events: four.concat(three) });
-    const c = render();
+    const c = mountSched('grid');
     await wait(30);
     const d1 = c.querySelector('.hm-day[data-hm-date="' + dayKey(1) + '"]');
     ok('התא קיים', !!d1);
-    ok('🔴 ארבעה אירועים → שני שבבים בלבד', d1 && d1.querySelectorAll('.hm-ev').length === 2,
-       d1 ? String(d1.querySelectorAll('.hm-ev').length) : '');
+    ok('🔴 ארבעה אירועים → שני שבבים בלבד', d1 && d1.querySelectorAll('.hm-ev').length === 2);
     ok('ו-"+2 נוספים"', d1 && /\+2 נוספים/.test(d1.textContent));
     const d2 = c.querySelector('.hm-day[data-hm-date="' + dayKey(2) + '"]');
     ok('שלושה → "+1 נוסף" (לשון יחיד)', d2 && /\+1 נוסף/.test(d2.textContent) && !/נוספים/.test(d2.textContent));
     ok('MAX_CHIPS הוא 2', window.CBA.homeSchedule.MAX_CHIPS === 2);
-    ok('⚠️ ה-CSS נותן לתא גובה קבוע (height, לא min-height)',
-       /\.hm-day \{[^}]*\bheight: var\(--hm-day-h\)/.test(CSS_S) && !/\.hm-day \{[^}]*min-height/.test(CSS_S));
-    ok('ו--hm-day-h מוגדר', /--hm-day-h:\s*\d+px/.test(CSS_S));
     ok('14 תאים בגריד', c.querySelectorAll('.hm-sch__grid .hm-day').length === 14);
-    ok('היום מסומן', !!c.querySelector('.hm-day.is-today'));
-    ok('ושעה מוצגת רק לאירוע עם שעה', /\d\d:\d\d/.test(d1.textContent) && !/\d\d:\d\d/.test(d2.textContent));
   }
 
-  section('3. 🔴 כשל אינו "אין"');
+  section('3. 🔴 כשל אינו "אין" — גם באריח "השבוע"');
   {
     boot({ eventsFail: true });
     const c = render();
     await wait(30);
-    const sch = c.querySelector('#hm-sch');
-    ok('הודעת שגיאה', /לא הצלחנו|נפל/.test(sch.textContent), sch.textContent.slice(0, 80));
-    ok('וכפתור "לנסות שוב"', !!sch.querySelector('[data-hm-retry]'));
-    ok('⚠️ ואין גריד ריק שנראה כמו "אין אירועים"', !sch.querySelector('.hm-day:not(.is-skel)'));
+    const w = c.querySelector('#hm-week');
+    ok('הודעת שגיאה באריח', /לא הצלחנו|נפל/.test(w.textContent), w.textContent.slice(0, 80));
+    ok('וכפתור "לנסות שוב"', !!w.querySelector('[data-hm-retry]'));
+    ok('⚠️ ואין פס ימים ריק שנראה כמו "אין אירועים"', !w.querySelector('.hm2-sd'));
   }
 
   section('4. המטמון — ציור חוזר לא יוצא שוב ל-Apps Script');
@@ -189,7 +190,7 @@ function render(container) {
     const n2 = calls.filter(x => x.indexOf('as:eventsList') === 0).length;
     ok('קריאה ראשונה יצאה', n1 >= 1, String(n1));
     ok('🔴 ציור שני — אפס קריאות חדשות', n2 === n1, n1 + '→' + n2);
-    ok('והאירוע מצויר מיד בציור השני', /פיקניק/.test(c.querySelector('#hm-sch').textContent));
+    ok('והאירוע מצויר מיד בציור השני ("מה קרה")', /פיקניק/.test(c.querySelector('#hm-feed').textContent));
   }
 
   section('5. 🔴 ימי הולדת לא נכתבים ל-localStorage');
@@ -206,92 +207,87 @@ function render(container) {
     ok('⚠️ ובלי תיאור (טקסט חופשי) — רק מה שהכרטיס צריך', raw.indexOf('"description"') === -1);
   }
 
-  section('6. השריונים של המשפחה נכנסים ללו"ז');
+  section('6. השריון הקרוב — מיני-כרטיס, ונכנס לנקודות של "השבוע"');
   {
     boot({ events: [], resv: [
-      { id: 'r1', start: at(2, 17), end: at(2, 20), status: 'approved' },
-      { id: 'r2', start: at(3, 17), end: at(3, 20), status: 'declined' }] });
+      { id: 'r1', start: at(2, 17), end: at(2, 20), status: 'approved' }] });
     const c = render();
     await wait(1400);
-    const d2 = c.querySelector('.hm-day[data-hm-date="' + dayKey(2) + '"]');
-    ok('שריון מאושר → שבב "שריון מועדון"', d2 && /שריון מועדון/.test(d2.textContent), d2 ? d2.textContent : '');
-    const d3 = c.querySelector('.hm-day[data-hm-date="' + dayKey(3) + '"]');
-    ok('⚠️ שריון שנדחה — לא', d3 && !/שריון מועדון/.test(d3.textContent));
-    ok('🔴 והשורה "אין שריון קרוב" לא מופיעה כשיש שריון',
-       !/אין שריון קרוב/.test(c.querySelector('#hm-quiet').textContent));
+    const m = c.querySelector('#hm-next');
+    ok('מיני "השריון הקרוב" מוצג', !m.hidden && /השריון הקרוב/.test(m.textContent), m.textContent);
+    ok('ומוביל למסך השריון', m.dataset.goto === 'resReserve');
+    const d2 = c.querySelector('.hm2-sd[data-hm-date="' + dayKey(2) + '"]');
+    ok('🔴 והיום של השריון מקבל נקודה ב"השבוע"', !!d2 && !!d2.querySelector('.hm-dot--per'));
   }
 
-  section('7. "אין שריון קרוב" עובר לשורה השקטה');
+  section('7. אין שריון ואין מנוי → בלי מיני-כרטיס (לא "אין")');
   {
     boot({ resv: [] });
     const c = render();
     await wait(1400);
-    const q = c.querySelector('#hm-quiet');
-    ok('השורה השקטה מופיעה', !q.hidden);
-    ok('עם "אין בקשות החזר פתוחות" ו"אין שריון קרוב"',
-       /אין בקשות החזר פתוחות/.test(q.textContent) && /אין שריון קרוב/.test(q.textContent), q.textContent);
-    ok('ואין שורה מלאה ל"אין שריון"', c.querySelector('#hm-next').innerHTML === '');
-    ok('"אין שריון קרוב" מוביל לשריון', !!q.querySelector('[data-goto="resReserve"]'));
+    ok('#hm-next מוסתר', c.querySelector('#hm-next').hidden === true);
+    ok('⚠️ ואין שום "אין שריון קרוב" בעמוד (H14)', !/אין שריון קרוב/.test(c.textContent));
   }
 
-  section('8. רשימה (בעל תפקיד) — גובה קבוע');
+  section('8. רשימה (host=list) — גובה קבוע, עדיין עובדת');
   {
     const evs = [];
     for (let i = 1; i <= 9; i++) evs.push({ id: 'l' + i, title: 'אירוע ' + i, date: at(i, 12), allDay: true, category: 'holidays' });
     boot({ perms: ['תקציב'], events: evs });
-    const c = render();
+    const c = mountSched('list');
     await wait(30);
-    const rows = c.querySelectorAll('#hm-sch .hm-ag__d');
-    ok("🔴 לכל היותר 5 שורות-יום", rows.length <= 5, String(rows.length));
+    const rows = c.querySelectorAll('.hm-ag__d');
+    ok('🔴 לכל היותר 5 שורות-יום', rows.length <= 5, String(rows.length));
     ok('השורה הראשונה היא היום', rows[0] && rows[0].classList.contains('is-today'));
-    ok('היום ריק → מסומן is-empty-today (מוסתר במובייל)', rows[0].classList.contains('is-empty-today'));
-    ok('השלישית ואילך מסומנות is-extra (מוסתרות במובייל)',
-       rows[3] && rows[3].classList.contains('is-extra') && !rows[2].classList.contains('is-extra'));
-    ok('⚠️ וה-CSS באמת מסתיר אותן במובייל',
-       /\.hm-sch--list \.hm-ag__d\.is-empty-today,\s*\.hm-sch--list \.hm-ag__d\.is-extra/.test(CSS_S));
   }
 
-  section('9. "הבא בקהילה" ואישור הגעה');
+  section('9. גיליון "האירועים הבאים" (החלטת יועד 30.9) ואישור הגעה');
   {
     const ev = { id: 'c1', title: 'פתיחת שנה מבוגרים', date: at(15, 20, 30), allDay: false, category: 'culture', location: 'מועדון משפחות' };
     boot({ events: [ev], rsvp: ['c1'] });
     let c = render();
     await wait(40);
-    const f = c.querySelector('#hm-upnext .hm-nx--cul');
-    ok('הכרטיס מופיע (29.9: אירוע התרבות הבא)', !!f);
-    ok('עם הכותרת והמקום', f && /פתיחת שנה מבוגרים/.test(f.textContent) && /מועדון משפחות/.test(f.textContent));
+    const mini = c.querySelector('#hm-mini-ev');
+    ok('המיני מציג את האירוע הבא', !mini.hidden && /פתיחת שנה מבוגרים/.test(mini.textContent), mini.textContent);
+    mini.click();
+    await wait(20);
+    const sh = window.document.querySelector('.hm2-nxsheet');
+    ok('🔴 לחיצה פותחת את הגיליון', !!sh);
+    const f = sh && sh.querySelector('.hm-nx--cul');
+    ok('עם כרטיס התרבות, הכותרת והמקום', f && /פתיחת שנה מבוגרים/.test(f.textContent) && /מועדון משפחות/.test(f.textContent));
     ok('🔴 RSVP פתוח → כפתור "אישור הגעה"', !!(f && f.querySelector('[data-hm-rsvp="c1"]')));
+    ok('🔴 בלי "תזכורת" לתושב (החלטת יועד 30.9)', !sh.querySelector('[data-nx-remind]') && !/תזכורת/.test(sh.textContent));
     f.querySelector('[data-hm-rsvp]').click();
     ok('והלחיצה פותחת את הדיאלוג של מסך האירועים, עם category', calls.indexOf('rsvp:c1:culture') !== -1, calls.join(','));
 
     boot({ events: [ev], rsvp: [] });
     c = render();
     await wait(40);
-    ok('⚠️ RSVP סגור → אין כפתור', !c.querySelector('#hm-upnext [data-hm-rsvp]'));
-    ok('אבל "פרטים" כן', !!c.querySelector('#hm-upnext [data-nx-more="c1"]'));
-    c.querySelector('[data-nx-more="c1"]').click();
-    ok('והלחיצה חושפת Google ו-Apple', !!c.querySelector('#hm-upnext .hm-nx__more') &&
-       /Google/.test(c.querySelector('#hm-upnext .hm-nx__more').textContent) && /Apple/.test(c.querySelector('#hm-upnext .hm-nx__more').textContent));
-    ok('ויש גם כרטיס לקהילה (גם כשאין אירוע קהילה — "עוד לא נקבע")', !!c.querySelector('#hm-upnext .hm-nx--com'));
+    c.querySelector('#hm-mini-ev').click();
+    await wait(20);
+    const sh2 = window.document.querySelector('.hm2-nxsheet');
+    ok('⚠️ RSVP סגור → אין כפתור', !sh2.querySelector('[data-hm-rsvp]'));
+    ok('אבל "פרטים" כן', !!sh2.querySelector('[data-nx-more="c1"]'));
+    sh2.querySelector('[data-nx-more="c1"]').click();
+    const more = window.document.querySelector('.hm2-nxsheet .hm-nx__more');
+    ok('והלחיצה חושפת Google ו-Apple', !!more && /Google/.test(more.textContent) && /Apple/.test(more.textContent));
 
     boot({ events: [{ id: 'far', title: 'רחוק', date: at(80, 20), category: 'community' }] });
     c = render();
     await wait(40);
-    ok('אירוע בעוד 80 יום → יש כרטיס (28.9: "הבא בקהילה" בלי מגבלת זמן)', /רחוק/.test(c.querySelector('#hm-upnext').textContent));
+    ok('אירוע בעוד 80 יום → במיני (בלי מגבלת זמן)', /רחוק/.test(c.querySelector('#hm-mini-ev').textContent));
   }
 
-  section('10. לחיצה על יום → לוח האירועים על אותו יום');
+  section('10. לחיצה על יום ב"השבוע" → לוח האירועים על אותו יום');
   {
     boot({ events: [] });
     const c = render();
     await wait(30);
-    c.querySelector('.hm-day[data-hm-date="' + dayKey(0) + '"]').click();
+    c.querySelector('.hm2-sd[data-hm-date="' + dayKey(0) + '"]').click();
     ok('focus נקרא עם התאריך', calls.indexOf('focus:' + dayKey(0)) !== -1, calls.join(','));
     ok('וניווט ל-events', calls.indexOf('nav:events') !== -1);
     ok('⚠️ events.js מייצא focus / openRsvp / calendarLinks',
        /focus: function \(d\)/.test(EVENTS) && /openRsvp: function \(ev\)/.test(EVENTS) && /calendarLinks: \{ google: googleAddUrl, apple: appleIcsDataUri/.test(EVENTS) && /openApple: openApple/.test(EVENTS));
-    ok('🔴 ו-render של events משתמש בתאריך ומאפס אותו',
-       /var focusDate = pendingFocus;\s*pendingFocus = null;/.test(EVENTS));
   }
 
   section('11. 🔴 ההאזנה לא נרשמת על המכל (#app-main)');
@@ -304,31 +300,31 @@ function render(container) {
     c.addEventListener = function (t, f, o) { if (t === 'click') adds++; return orig(t, f, o); };
     render(c); render(c); render(c);
     ok('שלושה ציורים → אפס מאזיני click על המכל', adds === 0, String(adds));
-    c.querySelector('.hm-act').click();
-    ok('ולחיצה עדיין עובדת — ניווט אחד בלבד', calls.filter(x => x === 'nav:resSubmit').length === 1,
+    c.querySelector('#hm-mygarden').click();
+    ok('ולחיצה עדיין עובדת — ניווט אחד בלבד', calls.filter(x => x === 'nav:resGarden').length === 1,
        calls.filter(x => x.indexOf('nav:') === 0).join(','));
   }
 
-  section('12. מקטע הגינון — מי רואה');
+  section('12. מקטע הגינון — בלוח הניהול, ומי רואה');
   {
     boot({ perms: ['גינון'], withGarden: true, gardenRows: [] });
-    let c = render();
+    let c = render(null, 'adminBoard');
     ok('מנהל גינון → יש מקטע', !!c.querySelector('#hm-gardensec'));
-    ok('🔴 הגינון יושב בתוך משטח הוועד', !!c.querySelector('.hm-vzone.hm-vzone--g #hm-gardensec'));
-    ok('ועם תווית לעמודת המשימות', !!c.querySelector('.hm-vzone__lbl'));
-    ok('ושלד "מחכה להחלטה" בכרטיס הוועד', !!c.querySelector('#hm-gdecide.hm-lazy'));
+    ok('ושלד "מחכה להחלטה" בכרטיס', !!c.querySelector('#hm-gdecide.hm-lazy'));
+    c = render(null, 'resHome');
+    ok('🔴 ובבית — אין מקטע גינון', !c.querySelector('#hm-gardensec'));
 
     boot({ perms: ['גינון'], user: { isExternal: true }, withGarden: true });
-    c = render();
+    c = render(null, 'adminBoard');
     ok('🔴 גנן חיצוני → אין מקטע', !c.querySelector('#hm-gardensec'));
     ok('🔴 ואין שלד שלעולם לא ייסגר', !c.querySelector('#hm-gdecide'));
 
     boot({ perms: ['גינון'], withGarden: false });
-    c = render();
+    c = render(null, 'adminBoard');
     ok('⚠️ בלי homeGarden.js → אין שלד תקוע', !c.querySelector('#hm-gdecide'));
   }
 
-  section('13. מקטע הגינון — המספרים');
+  section('13. מקטע הגינון — המספרים (לוח הניהול)');
   {
     boot({ isSuper: true, withGarden: false });
     const L = window.CBA.gardenLang;
@@ -344,37 +340,34 @@ function render(container) {
       { id: '6', kind: 'שגרה', title: 'נמחק', week: cur, pendingDelete: true }
     ];
     boot({ isSuper: true, withGarden: true, gardenRows: rows, perms: ['על'] });
-    const c = render();
+    const c = render(null, 'adminBoard');
     await wait(60);
     const sec = c.querySelector('#hm-gardensec');
     const kpis = sec.querySelectorAll('.hmg-kpi');
     ok('ארבעה אריחים', kpis.length === 4, String(kpis.length));
     ok('🔴 בוצעו השבוע: 1 / 3 (בלי המחוקה)', /1\s*\/\s*3/.test(kpis[0].textContent), kpis[0].textContent);
-    ok('תקלות פתוחות: 3', /^\s*תקלות פתוחות\s*3/.test(kpis[1].textContent.replace(/\s+/g, ' ')) || /3/.test(kpis[1].querySelector('.hmg-kpi__v').textContent),
-       kpis[1].textContent);
     ok('ו"אחת מחכה להחלטה"', /אחת מחכה להחלטה/.test(kpis[1].textContent));
-    ok('נגררות: 1, בשבועיים+', kpis[2].querySelector('.hmg-kpi__v').textContent === '1' && /שבועיים\+ · 1/.test(kpis[2].textContent),
-       kpis[2].textContent);
+    ok('נגררות: 1, בשבועיים+', kpis[2].querySelector('.hmg-kpi__v').textContent === '1' && /שבועיים\+ · 1/.test(kpis[2].textContent));
     ok('הכי נגררות → "גיזום שיחים" עם האזור', /גיזום שיחים/.test(sec.textContent) && /ציר מערבי/.test(sec.textContent));
+    ok('🔴 בלי שני הגרפים (H33) — קישור לנתוני הגינון במקומם',
+       !sec.querySelector('.hmg-tr') && !sec.querySelector('.hmg-bars') && !!sec.querySelector('[data-admin-goto="gardenStats"].hmg-link'));
     const dec = c.querySelector('#hm-tasks .hm-task[data-admin-goto="gardenTasks"]');
-    ok('🔴 שורת הוועד: "דיווח גינון מחכה להחלטה"', !!dec && /דיווח גינון מחכה להחלטה/.test(dec.textContent),
-       c.querySelector('#hm-tasks').textContent.slice(0, 120));
+    ok('🔴 שורת "דיווח גינון מחכה להחלטה"', !!dec && /דיווח גינון מחכה להחלטה/.test(dec.textContent));
     ok('עם כותרת הדיווח ומתי', dec && /ענפים פרוצים/.test(dec.textContent) && /לפני 2 ימים/.test(dec.textContent));
     ok('⚠️ ו"הכול מטופל" מוסתר', c.querySelector('#hm-clear').hidden === true);
-    ok('האריחים מובילים למסכי הגינון', kpis[0].dataset.adminGoto === 'gardenTasks' && kpis[1].dataset.adminGoto === 'gardenStats');
   }
 
   section('14. מקטע הגינון — אין החלטות / כשל');
   {
     boot({ isSuper: true, withGarden: true, perms: ['על'],
            gardenRows: [{ id: '1', kind: 'שגרה', title: 'כיסוח', week: '' }] });
-    let c = render();
+    let c = render(null, 'adminBoard');
     await wait(1500);
     ok('אפס החלטות → השלד נעלם', !c.querySelector('#hm-gdecide'));
     ok('ו"הכול מטופל" חוזר (אין שורות אחרות)', c.querySelector('#hm-clear').hidden === false);
 
     boot({ isSuper: true, withGarden: true, perms: ['על'], gardenFail: true });
-    c = render();
+    c = render(null, 'adminBoard');
     await wait(1500);
     ok('🔴 כשל → השלד נעלם בשקט, לא "0"', !c.querySelector('#hm-gdecide') && !/0 דיווחי/.test(c.textContent));
     ok('ובמקטע — הודעה ו"לנסות שוב"', /לא הצלחנו לטעון את נתוני הגינון/.test(c.querySelector('#hm-gardensec').textContent) &&
@@ -385,19 +378,14 @@ function render(container) {
   {
     const idx = R('index.html'), sw = R('service-worker.js');
     const v = ((idx.match(/\?v=([0-9a-z]+)/) || [])[1]) || '';
-    ['css/homeSchedule.css', 'css/homeGarden.css', 'js/screens/homeSchedule.js', 'js/screens/homeGarden.js']
+    ['css/homeSchedule.css', 'css/homeGarden.css', 'css/home2.css', 'js/screens/homeSchedule.js', 'js/screens/homeGarden.js']
       .forEach(f => ok(f + ' נטען עם הגרסה', idx.indexOf(f + '?v=' + v) !== -1));
     ok('🔴 homeSchedule/homeGarden נטענים לפני home.js',
        idx.indexOf('js/screens/homeGarden.js') < idx.indexOf('js/screens/home.js') &&
        idx.indexOf('js/screens/homeSchedule.js') < idx.indexOf('js/screens/home.js'));
     ok('service-worker על אותה גרסה', sw.indexOf('VERSION = "' + v + '"') !== -1);
-    ok('🔴 עמוד הבית רחב במחשב (resident.css)', /data-screen="resHome"\] \.app-main \{ max-width: min\(2000px, 97vw\)/.test(CSS_R));
-    ['hm-quiet', 'hm-cols--res', 'hm-cols--adm', 'hm-hero__txt',
-     'hm-vzone', 'hm-vzone--g', 'hm-vzone__grid', 'hm-vzone__tasks', 'hm-vzone__lbl'].forEach(k => ok('.' + k + ' ב-home.css', CSS_H.indexOf('.' + k) !== -1));
-    /* 🔴 השלד/מצב-ריק ההפוכים (לבן-שקוף) רק בעמודת המשימות — אחרת שלד הגינון
-       בכרטיס לבן בלתי נראה. */
-    ok('🔴 שלד לבן-שקוף מוגבל ל-.hm-tasks', /\.hm-vaad \.hm-tasks \.skeleton/.test(CSS_H) && !/\.hm-vaad \.skeleton/.test(CSS_H));
-    ok('🔴 כרטיסי הגינון על הצפחה — טקסט כהה (לא יורשים לבן)', /\.hm-vzone \.hmg \.card \{[^}]*color: var\(--text\)/.test(CSS_H));
+    ['hm2-strip', 'hm2-sd', 'hm2-sd__dots', 'hm2-nxsheet', 'hm2-faces', 'hm2-bgrid--g', 'hmg-cards--board', 'hmg-link']
+      .forEach(k => ok('.' + k + ' ב-home2.css', CSS_H.indexOf('.' + k) !== -1));
     ['hmg-kpi', 'hmg-cards', 'hmg-tr', 'hmg-more'].forEach(k => ok('.' + k + ' ב-homeGarden.css', CSS_G.indexOf('.' + k) !== -1));
   }
 

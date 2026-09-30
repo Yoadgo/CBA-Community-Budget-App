@@ -1,0 +1,232 @@
+/* ============================================================================
+   home2.css — הבית החדש + לוח הניהול (גל 2, 30.9.2026)
+   ----------------------------------------------------------------------------
+   ספר האבנים, פרק 1. סקיצה מאושרת: "הבית החדש 1:1". ערכים רק מ-tokens.css.
+   נטען אחרי frame.css. כל הכללים כאן מתחילים ב-.hm2 / body[data-screen=…]
+   ולכן לא נוגעים באף מסך אחר.
+   ביטול: להסיר את שורת ה-<link> — אבל אז גם home.js צריך לחזור (הקלאסים הישנים
+   hm-hero/hm-cols כבר לא מצוירים).
+   ============================================================================ */
+
+/* ---------- 0. פריסה: החופה ברוחב מלא, התוכן ב-1200 ---------- */
+body[data-screen="resHome"] .app-main { max-width: none !important; padding: 0 0 112px !important; margin: 0 !important; }
+body[data-screen="resHome"] .app-header { border-radius: 0; box-shadow: none !important; }
+body[data-screen="resHome"].hm2-past .app-header { border-radius: 0 0 var(--r-card) var(--r-card); box-shadow: 0 8px 20px -14px rgba(15,22,38,.55) !important; }
+.hm2-in { max-width: var(--content); margin-inline: auto; padding-inline: var(--gutter); }
+
+/* ---------- 1. החופה (A1, H7, H11, H17, A9) ---------- */
+.hm2-cnp {
+  background: var(--navy); color: var(--paper);
+  border-radius: 0 0 var(--r-canopy) var(--r-canopy);
+  padding: 8px 0 28px;
+}
+.hm2-hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; }
+.hm2-hi { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--t-16); font-weight: 700; }
+.hm2-chip {
+  font-size: var(--t-12); font-weight: 600; color: var(--on-navy);
+  border: 1px solid rgba(255,255,255,.14); border-radius: var(--r-pill); padding: 2px 10px;
+}
+.hm2-date { font-size: var(--t-13); color: var(--on-navy-3); margin-top: 2px; }
+.hm2-k { font-size: var(--t-14); color: var(--on-navy-2); margin-top: 18px; }
+.hm2-n {
+  font-size: var(--t-hero); font-weight: 800; line-height: 1; margin: 4px 0 8px;
+  font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.hm2-n.is-loading { opacity: .55; }
+.hm2-s { font-size: var(--t-14); color: var(--on-navy); max-width: 62ch; line-height: 1.45; min-height: 1.45em; }
+.hm2-minis { display: flex; gap: 12px; align-items: stretch; }
+.hm2-mini {
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.09); border-radius: 16px;
+  padding: 12px 16px; min-width: 180px; max-width: 240px; text-align: start; color: var(--paper);
+  font: inherit; cursor: pointer; position: relative;
+  transition: background var(--t-fast) var(--ease);
+}
+.hm2-mini[hidden] { display: none; }
+.hm2-mini:hover { background: rgba(255,255,255,.12); }
+.hm2-mini small { display: block; font-size: var(--t-12); color: var(--on-navy-2); letter-spacing: .01em; }
+.hm2-mini b { display: block; font-size: 18px; font-weight: 800; margin: 3px 0 2px; line-height: 1.2; }
+.hm2-mini span { display: block; font-size: var(--t-12); color: var(--on-navy-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm2-mini--go { padding-inline-end: 30px; }
+.hm2-mini--go::after {
+  content: ""; position: absolute; inset-inline-end: 13px; top: 50%; width: 7px; height: 7px;
+  border-left: 2px solid var(--on-navy-2); border-bottom: 2px solid var(--on-navy-2);
+  transform: translateY(-50%) rotate(45deg);   /* חץ "קדימה" (שמאלה ב-RTL) */
+}
+.hm2-mini--adm { background: rgba(99,102,241,.22); border-color: rgba(129,140,248,.35); }
+.hm2-mini--adm.is-zero { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.09); }
+.hm2-mini__warn { color: #FCD34D; font-weight: 700; }
+
+/* ---------- 2. הגוף ---------- */
+.hm2-body { padding-top: 20px; display: flex; flex-direction: column; gap: var(--gap); }
+
+/* דיסקיות צבע-תחום (שכבה 1) */
+.hm2-disc {
+  width: 32px; height: 32px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--dom-home-bg); color: var(--dom-home);
+}
+.hm2-disc svg { width: 16px; height: 16px; }
+.hm2-disc--gar { background: var(--dom-gar-bg); color: var(--dom-gar); }
+.hm2-disc--bud { background: var(--dom-bud-bg); color: var(--dom-bud); }
+.hm2-disc--ev  { background: var(--dom-ev-bg);  color: var(--dom-ev); }
+.hm2-disc--gym { background: var(--dom-gym-bg); color: var(--dom-gym); }
+.hm2-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+/* ---------- 3. בנטו (H10, H12, H13, H23) ---------- */
+.hm2-bento { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--gap); }
+.hm2-tile {
+  background: var(--paper); border: 0; border-radius: var(--r-card); padding: 18px 20px; min-height: 132px;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 6px;
+  box-shadow: var(--sh-card); text-align: start; width: 100%; font: inherit; color: var(--ink);
+  cursor: pointer; min-width: 0;
+}
+.hm2-tile[hidden] { display: none; }
+div.hm2-tile { cursor: default; }
+button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
+.hm2-tile__h { display: flex; align-items: center; gap: 10px; font-size: var(--t-13); font-weight: 600; color: var(--ink-2); }
+.hm2-tile__n { font-size: 30px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hm2-tile__n em { font-style: normal; font-size: var(--t-14); color: var(--ink-3); font-weight: 600; margin-inline-start: 4px; }
+.hm2-tile__n--sm { font-size: 20px; font-weight: 800; }
+.hm2-tile__s { font-size: var(--t-13); color: var(--ink-2); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; }
+.hm2-tile--gar { background: var(--dom-gar); color: var(--paper); }
+.hm2-tile--gar .hm2-tile__h, .hm2-tile--gar .hm2-tile__s, .hm2-tile--gar .hm2-tile__n em { color: rgba(255,255,255,.8); }
+.hm2-tile--gar .hm2-disc { background: rgba(255,255,255,.18); color: var(--paper); }
+.hm2-tile--err { cursor: default; }
+/* אריח "השבוע" */
+.hm2-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.hm2-sd {
+  background: var(--ground); border: 0; border-radius: 10px; padding: 7px 2px 6px; text-align: center;
+  font: inherit; font-size: var(--t-11); color: var(--ink-2); line-height: 1.15; cursor: pointer; min-width: 0;
+}
+.hm2-sd b { display: block; font-size: 15px; color: var(--ink); font-weight: 700; }
+.hm2-sd small { font-size: var(--t-11); }
+.hm2-sd.is-past { opacity: .55; }
+.hm2-sd.is-today { background: var(--dom); color: var(--paper); }
+.hm2-sd.is-today b { color: var(--paper); }
+.hm2-sd:hover { box-shadow: 0 0 0 1px var(--hair); }
+.hm2-sd__dots { display: flex; justify-content: center; gap: 3px; margin-top: 4px; height: 6px; }
+.hm2-sd__dots .hm-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.hm2-sd.is-today .hm-dot { box-shadow: 0 0 0 1.5px var(--paper); }
+.hm2-tile--week .hm-now { margin-top: 4px; }
+
+/* ---------- 4. שתי הרשימות (H26, H27) ---------- */
+.hm2-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap); align-items: start; }
+.hm2-card { background: var(--paper); border-radius: var(--r-card); padding: 20px; box-shadow: var(--sh-card); min-width: 0; border: 0; }
+.hm2-card__h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 12px; }
+.hm2-card__h h2 { font-size: 17px; font-weight: 700; margin: 0; }
+.hm2-row {
+  display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 0; width: 100%;
+  border: 0; border-top: 1px solid var(--hair-2); background: none; font: inherit; color: var(--ink);
+  text-align: start; cursor: pointer;
+}
+.hm2-card .hm2-row:first-of-type, #hm-new .hm2-row { border-top: 0; }
+#hm-inbox .hm2-row, #hm-feed .hm2-row { border-top: 1px solid var(--hair-2); }
+#hm-new:empty + #hm-inbox .hm2-row:first-child { border-top: 0; }
+.hm2-row:hover .hm2-row__t b { text-decoration: underline; text-underline-offset: 3px; }
+.hm2-row__t { flex: 1; min-width: 0; }
+.hm2-row__t b { display: block; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm2-row__t small { display: block; font-size: var(--t-13); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm2-row .badge { flex: none; }
+.hm2-row--new .hm2-dot { width: 9px; height: 9px; }
+.hm2-empty { margin: 10px 0 0; font-size: var(--t-13); color: var(--ink-2); }
+/* פנים (A3) */
+.hm2-who { display: inline-flex; align-items: center; gap: 12px; flex: none; font-size: var(--t-13); color: var(--ink-2); }
+.hm2-faces { display: inline-flex; align-items: center; margin-inline-end: 4px; }
+.hm2-face {
+  width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--paper);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--paper); font-style: normal; font-size: 10px; font-weight: 700; margin-inline-end: -8px;
+}
+.hm-nx__st .hm2-faces { margin-inline-end: 10px; }
+/* "דברים לעשות" */
+.hm2-todo {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: var(--ground); border-radius: var(--r-in); padding: 12px 14px; margin-top: 8px; min-height: 60px;
+}
+.hm2-todo__t { min-width: 0; }
+.hm2-todo__t b { display: block; font-size: 15px; font-weight: 600; }
+.hm2-todo__t small { display: block; font-size: var(--t-13); color: var(--ink-2); }
+.hm2-btn {
+  background: var(--ink); color: var(--paper); border: 1px solid var(--ink); border-radius: var(--r-pill);
+  padding: 8px 16px; font: inherit; font-size: var(--t-14); font-weight: 700; white-space: nowrap;
+  min-height: 36px; cursor: pointer; flex: none;
+}
+.hm2-btn--ghost { background: transparent; color: var(--ink); border-color: var(--hair); }
+.hm2-done { display: flex; align-items: center; gap: 8px; font-size: var(--t-13); color: var(--ink-2); padding: 10px 2px 0; }
+.hm2-done i {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--ok-bg); color: var(--ok-ink);
+  display: inline-flex; align-items: center; justify-content: center; font-style: normal;
+}
+
+/* ---------- 5. הגיליון "האירועים הבאים" — כרטיסי 29.9 בשפה החדשה ---------- */
+.hm2-nxsheet .hm2-sheet__t { font-size: 17px; font-weight: 800; margin: 2px 4px 4px; }
+.hm2-nxsheet .hm-nx {
+  background: var(--paper) !important; border: 1px solid var(--hair) !important; box-shadow: none !important;
+  border-radius: 16px !important; margin-top: 10px;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+
+/* ---------- 6. טלפון ---------- */
+@media (max-width: 720px) {
+  body[data-screen="resHome"] .app-main {
+    padding: var(--header-h, 60px) 0 calc(var(--botnav-h, 80px) + env(safe-area-inset-bottom) + 96px) !important;
+  }
+  body[data-screen="resHome"] .app-header:not(.app-header--scrolled) { border-radius: 0; box-shadow: none !important; }
+  body[data-screen="resHome"] .app-header.app-header--scrolled { border-radius: 0 0 var(--r-card) var(--r-card); }
+  .hm2-in { padding-inline: 16px; }
+  .hm2-cnp { border-radius: 0 0 24px 24px; padding: 4px 0 20px; }
+  .hm2-hero { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .hm2-k { margin-top: 12px; }
+  .hm2-s { font-size: var(--t-13); }
+  .hm2-minis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .hm2-mini { min-width: 0; max-width: none; padding: 10px 12px; }
+  .hm2-mini--go { padding-inline-end: 26px; }
+  .hm2-mini b { font-size: 16px; }
+  .hm2-mini--adm:nth-child(3):last-child { grid-column: 1 / -1; }
+  .hm2-body { padding-top: 14px; gap: 10px; }
+  .hm2-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .hm2-tile { padding: 14px; min-height: 118px; overflow: hidden; }
+  .hm2-tile--week { grid-column: 1 / -1; min-height: 0; }
+  .hm2-tile__n { font-size: 26px; }
+  .hm2-strip { gap: 3px; }
+  .hm2-sd { padding: 6px 0 5px; border-radius: 8px; }
+  .hm2-sd b { font-size: 13px; }
+  .hm2-grid2 { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .hm2-card { padding: 16px; }
+  .hm2-todo { flex-wrap: nowrap; }
+  .hm2-btn { padding: 8px 12px; font-size: var(--t-13); }
+}
+
+/* =====================================================================
+   לוח ניהול (H31) — "שולחן" בהיר, בלי צבע מלא. אותן שורות של "תפקיד ועד".
+   ===================================================================== */
+body[data-screen="adminBoard"] .app-main { max-width: calc(var(--content) + 2 * var(--gutter)); margin-inline: auto; }
+.hm2-board .hm2-bhead { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 4px 0 16px; }
+.hm2-board .hm2-bhead h1 { font-size: var(--t-20, 20px); font-weight: 800; margin: 0; }
+.hm2-board .hm2-bhead span { font-size: var(--t-13); color: var(--ink-2); }
+.hm2-bgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); align-items: start; }
+.hm2-bgrid--g { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); }
+.hm2-board .hm-vzone { background: var(--paper) !important; border: 0 !important; }
+.hm2-board .hm-tasks { display: flex; flex-direction: column; gap: 6px; }
+.hm2-bgarden { min-width: 0; }
+.hmg-cards--board { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+.hmg-link { display: flex !important; flex-direction: row !important; align-items: center; gap: 12px; text-align: start; cursor: pointer; border: 0; font: inherit; color: var(--ink); }
+.hmg-link .hm-row__txt { flex: 1; }
+.hmg-link .hm-row__txt b { display: block; font-size: 15px; }
+.hmg-link .hm-row__txt small { display: block; font-size: var(--t-13); color: var(--ink-2); }
+@media (max-width: 1000px) {
+  .hm2-bgrid--g, .hmg-cards--board { grid-template-columns: minmax(0, 1fr) !important; }
+}
+/* השולחן: כרטיסי הגינון והשורות — שטוחים ולבנים, בלי זכוכית/צל כבד */
+.hm2-board .hmg .card, .hm2-board .hmg-kpi, .hm2-board .hmg-card {
+  background: var(--paper) !important; border: 0 !important; box-shadow: var(--sh-card) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important; border-radius: var(--r-card) !important;
+}
+.hm2-board .hmg-head { margin-bottom: 10px; }
+.hm2-board .hm-task {
+  background: var(--ground) !important; border: 0 !important; box-shadow: none !important; border-radius: var(--r-in) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+.hm2-board .hm-task:hover { background: var(--hair-2) !important; }
+.hm2-board .hmg-drag { background: var(--ground) !important; border: 0 !important; box-shadow: none !important; }

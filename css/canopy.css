@@ -1,0 +1,87 @@
+/* ============================================================================
+   canopy.css — החופה של מסכי התושב (גל 3, 1.10.2026 · ספר האבנים B1)
+   בינונית (mid) למסך תושב, נמוכה (low) לטופס/מסך משנה. ר' js/ui/canopy.js.
+   נטען אחרי frame.css. חל רק על מסך שיש בו .cnp2 (body:has) — אחרים לא זזים.
+   ============================================================================ */
+
+/* ---------- פריסה: החופה ברוחב מלא, התוכן ממורכז ---------- */
+body:has(#app-main .cnp2) .app-main { max-width: none !important; padding: 0 0 112px !important; margin: 0 !important; }
+body:has(#app-main .cnp2) .app-header { border-radius: 0; box-shadow: none !important; }
+body.cnp2-past:has(#app-main .cnp2) .app-header { border-radius: 0 0 var(--r-card) var(--r-card); box-shadow: 0 8px 20px -14px rgba(15,22,38,.55) !important; }
+.cnp2-in, .cnp2-body { max-width: var(--cnp-w, 880px); margin-inline: auto; padding-inline: var(--gutter); }
+.cnp2-body { padding-top: 20px; }
+.cnp2-body--wide, .cnp2--wide .cnp2-in { max-width: var(--content); }
+
+/* ---------- החופה ---------- */
+.cnp2 {
+  --d: var(--dom-home); --d-soft: rgba(99,102,241,.22);
+  background: var(--navy); color: var(--paper);
+  border-radius: 0 0 var(--r-canopy) var(--r-canopy);
+  padding: 6px 0 24px;
+}
+.cnp2[data-dom="gar"] { --d: #34D399; --d-soft: rgba(4,120,87,.35); }
+.cnp2[data-dom="ev"]  { --d: #C4B5FD; --d-soft: rgba(124,58,237,.3); }
+.cnp2[data-dom="bud"] { --d: #67E8F9; --d-soft: rgba(14,116,144,.35); }
+.cnp2[data-dom="gym"] { --d: #FCD34D; --d-soft: rgba(217,119,6,.3); }
+.cnp2-in { position: relative; }
+.cnp2-back {
+  display: inline-flex; align-items: center; gap: 4px; margin: 2px 0 6px; padding: 4px 10px 4px 12px;
+  border: 1px solid rgba(255,255,255,.14); border-radius: var(--r-pill); background: rgba(255,255,255,.04);
+  color: var(--on-navy); font: inherit; font-size: var(--t-13); cursor: pointer;
+}
+.cnp2-back:hover { background: rgba(255,255,255,.1); color: var(--paper); }
+.cnp2-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.cnp2-main { min-width: 0; flex: 1 1 260px; }
+.cnp2-h { display: flex; align-items: center; gap: 12px; }
+.cnp2-disc {
+  width: 38px; height: 38px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--d-soft); color: var(--d);
+}
+.cnp2-t { font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -.01em; line-height: 1.2; color: var(--paper); }
+.cnp2-s { margin: 6px 0 0; font-size: var(--t-14); color: var(--on-navy-2); max-width: 62ch; line-height: 1.45; }
+.cnp2-side { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+.cnp2-stat { display: flex; flex-direction: column; justify-content: flex-end; padding-inline-end: 6px; }
+.cnp2-stat b { font-size: 44px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.cnp2-stat span { font-size: var(--t-13); color: var(--on-navy-2); margin-top: 4px; }
+.cnp2-mini {
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.09); border-radius: 14px;
+  padding: 10px 14px; min-width: 110px;
+}
+.cnp2-mini small { display: block; font-size: var(--t-12); color: var(--on-navy-2); }
+.cnp2-mini b { display: block; font-size: 20px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.cnp2-tools { margin-top: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* נמוכה — מסך משנה / טופס: בלי מספר, פחות גובה */
+.cnp2--low { padding-bottom: 18px; }
+.cnp2--low .cnp2-t { font-size: 20px; }
+.cnp2--low .cnp2-disc { width: 32px; height: 32px; }
+
+/* כפתורים על הכהה (לשימוש המסכים בתוך .cnp2-tools) */
+.cnp2-btn {
+  height: 34px; padding: 0 14px; border-radius: var(--r-pill);
+  border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.05);
+  color: var(--on-navy); font: inherit; font-size: var(--t-13); font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.cnp2-btn[hidden] { display: none; }
+.cnp2-btn:hover { background: rgba(255,255,255,.12); color: var(--paper); }
+.cnp2-btn.is-on { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+
+/* ---------- טלפון ---------- */
+@media (max-width: 720px) {
+  body:has(#app-main .cnp2) .app-main {
+    padding: var(--header-h, 60px) 0 calc(var(--botnav-h, 80px) + env(safe-area-inset-bottom) + 96px) !important;
+  }
+  body:has(#app-main .cnp2) .app-header:not(.app-header--scrolled) { border-radius: 0; box-shadow: none !important; }
+  body:has(#app-main .cnp2) .app-header.app-header--scrolled { border-radius: 0 0 var(--r-card) var(--r-card); }
+  .cnp2-in, .cnp2-body { padding-inline: 16px; }
+  .cnp2 { border-radius: 0 0 24px 24px; padding: 2px 0 18px; }
+  .cnp2-t { font-size: 21px; }
+  .cnp2-s { font-size: var(--t-13); }
+  .cnp2-row { gap: 12px; }
+  .cnp2-stat b { font-size: 36px; }
+  .cnp2-mini { padding: 8px 12px; min-width: 0; }
+  .cnp2-mini b { font-size: 17px; }
+  .cnp2-body { padding-top: 14px; }
+}

@@ -187,11 +187,13 @@ CBA.homeSchedule = (function () {
   var rsvp = { ids: null, ts: 0, busy: false };
   function loadRsvp(cb) {
     if (rsvp.ids && (Date.now() - rsvp.ts) < RSVP_TTL) return cb();
-    if (rsvp.busy || !(CBA.fb && CBA.fb.queryCollection)) return cb();
+    if (rsvp.busy) return cb();
+    if (!(CBA.fb && CBA.fb.queryCollection)) { rsvp.failed = true; return cb(); }   /* גל 2 — "לא ידוע" ≠ "עוד בדרך" */
     rsvp.busy = true;
     try {
       CBA.fb.queryCollection("eventRSVP", [["enabled", true]], function (err, rows) {
         rsvp.busy = false;
+        rsvp.failed = !!err || !rows;
         if (!err && rows) {
           rsvp.ids = {};
           rows.forEach(function (r) { if (r && r.id) rsvp.ids[r.id] = true; });
@@ -346,7 +348,7 @@ CBA.homeSchedule = (function () {
    *  תמיד: אירוע הקהילה הבא ואירוע התרבות הבא (בלי מגבלת זמן — גם בשנה
    *  הבאה). ועוד אירוע שפתוח לאישור הגעה, אם הוא לא אחד מהשניים.
    *  בכל כרטיס: התשובה שלי + כמה משפחות מגיעות (כשאישור ההגעה פתוח),
-   *  "תזכורת" (פוש "הזכירו לי" — Firestore eventReminders, השרת שולח),
+   *  ("תזכורת" לתושב ירדה בגל 2, 30.9 — ר' loadNext),
    *  ו"פרטים" שנפתחים במקום: תיאור, לו"ז, הזמנה, הוספה ליומן, שיתוף.
    * ========================================================================== */
   var nx = { data: {}, rem: null, ts: 0, busy: false, open: {}, menu: null };
@@ -379,14 +381,12 @@ CBA.homeSchedule = (function () {
     var stale = evs.some(function (e) { var d = nx.data[e.id]; return !d || (isOpen(e) && d.families === undefined); });
     if (nx.busy || (!force && !stale && Date.now() - nx.ts < NX_TTL)) return;
     nx.busy = true;
-    var left = 1 + evs.length * 3;
-    function done() { if (--left > 0) return; nx.busy = false; nx.ts = Date.now(); paintNext(); }
-    if (fam && CBA.fb.queryCollection) {
-      CBA.fb.queryCollection("eventReminders", [["familyId", fam]], function (err, rows) {
-        if (!err) { nx.rem = {}; (rows || []).forEach(function (r) { if (r.status === "pending") nx.rem[r.eventId] = r; }); }
-        done();
-      });
-    } else done();
+    /* 🔴 גל 2 (30.9.26) — "תזכורת" לתושב ירדה (יועד: "זו טעות — הכוונה הייתה
+       שמנהל יוסיף תזכורות מתוזמנות לכולם", וזה כבר קיים: "הודעות ותזכורות"
+       בחלון האירוע של המנהל במסך האירועים). לכן אין כאן יותר eventReminders. */
+    var left = evs.length * 3;
+    if (!left) { nx.busy = false; nx.ts = Date.now(); paint(); return; }
+    function done() { if (--left > 0) return; nx.busy = false; nx.ts = Date.now(); paint(); }
     evs.forEach(function (e) {
       var d = nx.data[e.id] = nx.data[e.id] || {};
       CBA.fb.readDoc("eventInfo", e.id, function (err, doc) { if (!err) d.info = doc || null; done(); });
@@ -395,6 +395,7 @@ CBA.homeSchedule = (function () {
           if (!err) {
             var att = (rows || []).filter(function (r) { return r.status === "attending"; });
             d.families = att.length;
+            d.att = att.map(function (r) { return String(r.familyId || ""); }).filter(Boolean);   /* גל 2 — פנים */
             d.mine = null;
             (rows || []).forEach(function (r) { if (fam && String(r.familyId) === fam) d.mine = r; });
           } else d.families = null;   // כשל — לא מנסים שוב בכל ציור (רק אחרי דקה)
@@ -403,13 +404,6 @@ CBA.homeSchedule = (function () {
       } else { done(); done(); }
     });
   }
-  function remindAt(e, offset) {
-    var day = sod(e.date);
-    if (offset === "day") { var x = addDays(day, -1); x.setHours(19, 0, 0, 0); return x.getTime(); }
-    if (e.allDay) { var y = new Date(day); y.setHours(8, 0, 0, 0); return y.getTime(); }
-    return e.date.getTime() - 2 * 3600 * 1000;
-  }
-  var REM_LABEL = { day: "ערב לפני", "2h": "שעתיים לפני" };
   var NX_HEAD = { com: "אירוע הקהילה הבא", cul: "אירוע התרבות הבא", open: "פתוח לאישור הגעה" };
 
   function nextCardHTML(x) {
@@ -427,6 +421,7 @@ CBA.homeSchedule = (function () {
     if (open) {
       var mine = d.mine, fams = d.families;
       var cnt = (typeof fams === "number" && fams > 0) ? (fams === 1 ? "משפחה אחת מגיעה" : fams + " משפחות מגיעות") : "";
+      if (cnt) cnt = facesHTML(d.att, 4) + cnt;   /* גל 2 (A3) — פנים לכולם, החלטת יועד */
       if (mine && mine.status === "attending") {
         var who = [];
         if (Number(mine.adults)) who.push(mine.adults + (Number(mine.adults) === 1 ? " מבוגר" : " מבוגרים"));
@@ -438,15 +433,7 @@ CBA.homeSchedule = (function () {
         status = '<div class="hm-nx__st is-wait">' + svg(ICO.clock, 14) + 'עוד לא עניתם' + (cnt ? " · " + cnt : "") + '</div>';
       }
     }
-    var rem = nx.rem && nx.rem[e.id];
-    var remBtn = '<button type="button" class="hm-nx__b' + (rem ? " is-on" : "") + '" data-nx-remind="' + esc(e.id) + '">' +
-      svg(ICO.bell, 14) + (rem ? "תזכורת: " + (REM_LABEL[rem.offset] || "") : "תזכורת") + '</button>';
-    var menuOpen = nx.menu === e.id, now = Date.now();
-    var menu = menuOpen ? '<div class="hm-nx__menu">' + ["day", "2h"].map(function (o) {
-        var late = remindAt(e, o) <= now;
-        return '<button type="button" class="hm-nx__b' + (rem && rem.offset === o ? " is-on" : "") + '" data-nx-set="' + o + '" data-nx-id="' + esc(e.id) + '"' +
-          (late ? " disabled" : "") + '>' + REM_LABEL[o] + (o === "day" ? " (19:00)" : "") + '</button>';
-      }).join("") + (rem ? '<button type="button" class="hm-nx__b is-ghost" data-nx-set="off" data-nx-id="' + esc(e.id) + '">ביטול תזכורת</button>' : "") + '</div>' : "";
+    var remBtn = "", menu = "";   /* גל 2 — התזכורת לתושב ירדה, ר' loadNext */
     var rsvpBtn = open ? '<button type="button" class="hm-nx__b' + (d.mine ? "" : " is-primary") + '" data-hm-rsvp="' + esc(e.id) + '">' +
       (d.mine ? "שינוי תשובה" : svg(ICO.check, 14) + "אישור הגעה") + '</button>' : "";
     var isOpenMore = !!nx.open[e.id];
@@ -479,30 +466,12 @@ CBA.homeSchedule = (function () {
   function nextHTML() {
     if (!st.ev) return "";
     var list = nextEvents(sod(new Date()));
-    loadNext(list, false);
+    loadNext(targets(), false);
     return list.map(nextCardHTML).join("");
   }
   function paintNext() {
     var n = st.nextHost;
     if (n && n.isConnected) n.innerHTML = nextHTML();
-  }
-  function setReminder(id, offset) {
-    var e = findEvent(id), fam = myFam();
-    if (!e || !fam || !CBA.fb) return;
-    var docId = e.id + "_" + fam;
-    function after(err) {
-      if (err) { if (CBA.ui && CBA.ui.toast) CBA.ui.toast("לא הצלחנו לשמור את התזכורת. נסו שוב.", "err"); return; }
-      if (CBA.ui && CBA.ui.toast) CBA.ui.toast(offset === "off" ? "התזכורת בוטלה" : "נזכיר לכם " + REM_LABEL[offset] + " (בפוש)", "ok");
-      nx.menu = null; loadNext(nextEvents(sod(new Date())), true); paintNext();
-    }
-    if (offset === "off") {
-      if (nx.rem) delete nx.rem[e.id];
-      return CBA.fb.deleteDoc("eventReminders", docId, after);
-    }
-    var doc = { eventId: e.id, familyId: fam, offset: offset, remindAtMs: Math.round(remindAt(e, offset)),
-                status: "pending", createdByUid: CBA.fb.uid && CBA.fb.uid(), createdAt: CBA.fb.serverNow() };
-    nx.rem = nx.rem || {}; nx.rem[e.id] = doc;
-    CBA.fb.mergeDoc("eventReminders", docId, doc, after);
   }
   function openInvite(id) {
     var e = findEvent(id);
@@ -529,7 +498,7 @@ CBA.homeSchedule = (function () {
   function watchDialogThenRefresh() {
     var n = 0, t = setInterval(function () {
       if (++n > 600 || !document.body.classList.contains("has-cba-dlg")) {
-        clearInterval(t); loadNext(nextEvents(sod(new Date())), true);
+        clearInterval(t); loadNext(targets(), true);
       }
     }, 800);
   }
@@ -749,6 +718,7 @@ CBA.homeSchedule = (function () {
     var f = st.featHost;
     if (f && f.isConnected) f.innerHTML = featCardHTML();
     paintNext();
+    paintWave2();
   }
 
   /* ================================================================ פעולות */
@@ -761,8 +731,6 @@ CBA.homeSchedule = (function () {
   function onClick(e) {
     var t = e.target;
     var nb;
-    if ((nb = t.closest("[data-nx-remind]"))) { var rid = nb.getAttribute("data-nx-remind"); nx.menu = nx.menu === rid ? null : rid; paintNext(); return; }
-    if ((nb = t.closest("[data-nx-set]"))) { setReminder(nb.getAttribute("data-nx-id"), nb.getAttribute("data-nx-set")); return; }
     if ((nb = t.closest("[data-nx-more]"))) { var mid = nb.getAttribute("data-nx-more"); nx.open[mid] = !nx.open[mid]; paintNext(); return; }
     if ((nb = t.closest("[data-nx-inv]"))) { openInvite(nb.getAttribute("data-nx-inv")); return; }
     if ((nb = t.closest("[data-nx-share]"))) { shareEv(nb.getAttribute("data-nx-share")); return; }
@@ -806,6 +774,9 @@ CBA.homeSchedule = (function () {
     st.featHost = opts.featHost || null;
     st.nextHost = opts.nextHost || null;
     st.mode = opts.mode === "list" ? "list" : "grid";
+    st.weekHost = opts.weekHost || null;      /* גל 2 */
+    st.feedHost = opts.feedHost || null;
+    st.onChange = opts.onChange || null;
     if (opts.root && st.bound !== opts.root) {
       opts.root.addEventListener("click", onClick);
       st.bound = opts.root;
@@ -817,12 +788,195 @@ CBA.homeSchedule = (function () {
     load();
   }
 
+
+  /* ==========================================================================
+   *  🔴 גל 2 (30.9.26) — הבית החדש. ספר האבנים, פרק 1 + החלטות 30.9:
+   *    • אריח "השבוע" בבנטו (H20/H23/H25) — פס 7 ימים + "עכשיו".
+   *    • אירועים קרובים בכרטיס "מה קרה" (H17/H22/H26), עם פנים (A3).
+   *    • "אישור הגעה" שעוד לא ענינו — ל"דברים לעשות" ולמספר הגיבור (A1/H27).
+   *    • מיני-כרטיס "האירוע הבא" בחופה, ולחיצה עליו פותחת גיליון עם כרטיסי
+   *      29.9 המלאים (החלטת יועד 30.9: "גיליון").
+   *  ⚠️ הגריד של שבועיים והרשימה של 10 ימים (host) עדיין כאן ועובדים — פשוט
+   *     הבית כבר לא מבקש אותם. הם חיים בלוח האירועים.
+   * ========================================================================== */
+  /* ---- פנים (A3, החלטת יועד 30.9: "פנים לכולם") ----
+     השמות מגיעים מרשימת השכנים (communityDirectory) — אותה רשימה שכל תושב
+     כבר רואה במדריך. אישורי ההגעה עצמם (Firestore) מחזיקים רק familyId.
+     כשל או רשימה שעוד לא נטענה ⇒ רק המספר, כמו עד היום. */
+  var dir = { map: null, busy: false, tried: false };
+  var FACE_COL = ["#7C3AED", "#0D9488", "#DB2777", "#0E7490", "#047857", "#B45309", "#6366F1", "#9D174D"];
+  function loadDir() {
+    if (dir.map || dir.busy || dir.tried || !(CBA.data && CBA.data.getCommunityDirectory)) return;
+    dir.busy = true;
+    CBA.data.getCommunityDirectory(function (res) {
+      dir.busy = false; dir.tried = true;
+      if (!res || !res.ok) return;
+      var m = {};
+      (res.rows || []).forEach(function (r) {
+        var fam = "", rid = "", house = "";
+        Object.keys(r || {}).forEach(function (k) {
+          var t = String(k).trim(), v = String(r[k] == null ? "" : r[k]).trim();
+          if (t.indexOf("מזהה קבוע") !== -1) rid = v;
+          else if (t.indexOf("משפחה") !== -1 && t.indexOf("מזהה") === -1) fam = v;
+          else if (t.indexOf("בית") !== -1) house = v;
+        });
+        if (!fam) return;
+        if (rid) m[rid] = fam;
+        if (house && !m[house]) m[house] = fam;
+      });
+      dir.map = m;
+      paint();
+    });
+  }
+  function faceColor(name) {
+    var h = 0; for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return FACE_COL[h % FACE_COL.length];
+  }
+  function facesHTML(ids, max) {
+    if (!ids || !ids.length) return "";
+    if (!dir.map) { loadDir(); return ""; }
+    var names = [];
+    ids.forEach(function (id) { var n = dir.map[id]; if (n && names.indexOf(n) === -1) names.push(n); });
+    if (!names.length) return "";
+    return '<span class="hm2-faces" aria-hidden="true">' + names.slice(0, max || 4).map(function (n) {
+      return '<i class="hm2-face" style="background:' + faceColor(n) + '" title="' + esc("משפחת " + n) + '">' + esc(n.charAt(0)) + '</i>';
+    }).join("") + '</span>';
+  }
+
+  /* ---- מי צריך פרטים (אישורי הגעה, eventInfo) ---- */
+  function openFuture(limit) {
+    var t = sod(new Date()).getTime();
+    return (st.ev || []).concat(nextYear.list || []).filter(function (e) {
+      return sod(e.date).getTime() >= t && isOpen(e);
+    }).sort(function (a, b) { return a.date - b.date; }).slice(0, limit || 4);
+  }
+  function feedEvents(n) {
+    if (!st.ev) return [];
+    var t = sod(new Date()).getTime(), seen = {};
+    return (st.ev || []).concat(nextYear.list || []).filter(function (e) {
+      return sod(e.date).getTime() >= t && (e.cat === "community" || e.cat === "culture" || isOpen(e));
+    }).sort(function (a, b) { return a.date - b.date; }).filter(function (e) {
+      if (seen[e.id]) return false; seen[e.id] = 1; return true;
+    }).slice(0, n || 3);
+  }
+  function targets() {
+    var out = [], seen = {};
+    function add(e) { if (e && !seen[e.id]) { seen[e.id] = 1; out.push({ ev: e }); } }
+    if (st.ev) nextEvents(sod(new Date())).forEach(function (x) { add(x.ev); });
+    feedEvents(3).forEach(add);
+    openFuture(4).forEach(add);
+    return out;
+  }
+
+  /* ---- מה חשוב לבית: המיני-כרטיס, ומה פתוח לאישור הגעה ---- */
+  function nextMini() {
+    if (!st.ev) return null;
+    var list = nextEvents(sod(new Date())).filter(function (x) { return x.ev; })
+      .map(function (x) { return x.ev; }).sort(function (a, b) { return a.date - b.date; });
+    return list[0] || null;
+  }
+  /* null = עוד לא ידוע (אין לוח / אין רשימת פתוחים / התשובות עוד בדרך) */
+  function unanswered() {
+    if (!st.ev) return null;
+    /* כשל בקריאת "פתוחים לאישור" / אין Firestore ⇒ אין מה להציג, ולא "עוד בדרך" לנצח */
+    if (!rsvp.ids) return rsvp.failed ? [] : null;
+    if (!(CBA.fb && CBA.fb.readDoc)) return [];
+    var out = [], unknown = false;
+    openFuture(4).forEach(function (e) {
+      var d = nx.data[e.id];
+      if (!d || d.families === undefined) { unknown = true; return; }
+      if (d.families === null) return;           /* כשל — לא ממציאים "לא עניתם" */
+      if (!d.mine) out.push({ ev: e, families: d.families, att: d.att || [] });
+    });
+    return unknown ? null : out;
+  }
+  function summary() {
+    return { ready: !!st.ev, err: st.err, mini: nextMini(), todo: unanswered() };
+  }
+
+  function metaOf(e) {
+    var m = [WD_LONG[e.date.getDay()] + " " + dm(e.date)];
+    if (!e.allDay) m.push(hm(e.date));
+    if (e.location) m.push(e.location);
+    return m.join(" · ");
+  }
+
+  /* ---- אריח "השבוע" ---- */
+  function weekHTML() {
+    var head = '<span class="hm2-tile__h"><i class="hm2-disc hm2-disc--ev">' + svg(ICO.cal, 16) + '</i>השבוע</span>';
+    if (!st.ev && st.err) {
+      return head + '<span class="hm2-tile__s">' + esc(st.err) +
+        ' <button type="button" class="hm-link" data-hm-retry>לנסות שוב</button></span>';
+    }
+    if (!st.ev) return head + '<span class="skeleton" style="display:block;height:54px;border-radius:10px"></span>';
+    var today = sod(new Date()), days = byDay(allEvents()), start = addDays(today, -today.getDay()), strip = "";
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(start, i), list = days[dkey(d)] || [], cats = [];
+      list.forEach(function (e) { if (cats.indexOf(e.cat) === -1) cats.push(e.cat); });
+      var isToday = d.getTime() === today.getTime();
+      strip += '<button type="button" class="hm2-sd' + (d < today ? " is-past" : "") + (isToday ? " is-today" : "") +
+        '" data-hm-date="' + dkey(d) + '" aria-label="' + esc(WD_LONG[d.getDay()] + " " + dm(d) +
+        (list.length ? " — " + list.map(function (e) { return e.title; }).join(", ") : " — אין אירועים")) + '">' +
+        '<b>' + d.getDate() + '</b><small>' + WD_LETTER[d.getDay()] + '</small>' +
+        '<span class="hm2-sd__dots">' + cats.slice(0, 3).map(function (c) {
+          return '<i class="hm-dot hm-dot--' + CAT[c].k + '"></i>';
+        }).join("") + '</span></button>';
+    }
+    return head + '<div class="hm2-strip">' + strip + '</div>' + nowHTML(today);
+  }
+
+  /* ---- שורות האירועים ב"מה קרה" ---- */
+  function feedHTML() {
+    if (!st.ev) return "";
+    return feedEvents(3).map(function (e) {
+      var d = nx.data[e.id] || {}, open = isOpen(e), right = "";
+      if (open && typeof d.families === "number" && d.families > 0) {
+        right = '<span class="hm2-who">' + facesHTML(d.att, 3) + '<span>' + d.families + '</span></span>';
+      } else if (open) {
+        right = '<span class="badge badge--info">אישור הגעה</span>';
+      }
+      return '<button type="button" class="hm2-row" data-hm-date="' + dkey(e.date) + '">' +
+        '<i class="hm2-disc hm2-disc--ev">' + svg(ICO.cal, 16) + '</i>' +
+        '<span class="hm2-row__t"><b dir="auto">' + esc(e.title) + '</b><small>' + esc(metaOf(e)) + '</small></span>' +
+        right + '</button>';
+    }).join("");
+  }
+
+  function paintWave2() {
+    var w = st.weekHost;
+    if (w && w.isConnected) w.innerHTML = weekHTML();
+    var f = st.feedHost;
+    if (f && f.isConnected) f.innerHTML = feedHTML();
+    if (st.ev && (st.weekHost || st.feedHost)) loadNext(targets(), false);
+    if (typeof st.onChange === "function") { try { st.onChange(summary()); } catch (e) { /* הבית נעלם */ } }
+  }
+
+  /* ---- הגיליון: כרטיסי 29.9 המלאים (קהילה, תרבות, פתוח לאישור) ---- */
+  function openNextSheet() {
+    if (!(CBA.ui && CBA.ui.sheet)) { if (CBA.navigate) CBA.navigate("events"); return; }
+    var sh = CBA.ui.sheet({ key: "hm-next", label: "האירועים הבאים", sheetCls: "hm2-nxsheet",
+      html: '<div class="hm2-sheet__t">האירועים הבאים</div><div class="hm2-nxlist"></div>' });
+    var list = sh.wrap.querySelector(".hm2-nxlist");
+    st.nextHost = list;
+    paintNext();
+    sh.wrap.addEventListener("click", function (e) {
+      /* מעבר ללוח האירועים / אישור הגעה ⇒ קודם סוגרים את הגיליון */
+      if (e.target.closest("[data-hm-date]") || e.target.closest("[data-hm-rsvp]")) sh.close();
+      onClick(e);
+    });
+  }
+
   return {
     mount: mount,
     setPersonal: setPersonal,
+    openNextSheet: openNextSheet,
+    summary: summary,
+    metaOf: metaOf,
+    faces: facesHTML,
     MAX_CHIPS: MAX_CHIPS,
     /* לבדיקות בלבד */
     _state: st, _reset: function () { mem = {}; inflight = {}; rsvp = { ids: null, ts: 0, busy: false };
-                                      st.ev = null; st.err = ""; st.personal = []; st.bound = null; }
+                                      st.ev = null; st.err = ""; st.personal = []; st.bound = null;
+                                      nx.data = {}; nx.ts = 0; nx.busy = false; dir = { map: null, busy: false, tried: false }; }
   };
 })();

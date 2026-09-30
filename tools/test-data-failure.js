@@ -103,21 +103,23 @@ function homeEnv(connected) {
   const env = homeEnv(true);
   const c = new El('div');
   env.CBA.screens.resHome.render(c);
-  ok('מחובר — מוצגים המספרים', /שולמו השנה/.test(c.innerHTML));
-  ok('מחובר — הסכום האמיתי מופיע', /₪250/.test(c.innerHTML), c.innerHTML.slice(0, 200));
-  ok('מחובר — אין פאנל שגיאה', !/PANEL:/.test(c.innerHTML));
+  /* 🔴 גל 2 (30.9.26) — הבית החדש: אריח "ההחזרים שלי" (H10), ו"שולמו השנה" עבר
+     למסך הבקשות. העיקרון לא השתנה: מחובר = מספרים אמיתיים, לא מחובר = שגיאה
+     עם "נסה שוב" (H16) — לעולם לא אפס שקרי. */
+  ok('מחובר — אריח ההחזרים עם המספר האמיתי', /hm-refunds/.test(c.innerHTML) && /בבדיקה/.test(c.innerHTML), c.innerHTML.slice(0, 200));
+  ok('מחובר — "שולמו השנה" לא בבית (עבר למסך הבקשות)', !/שולמו השנה/.test(c.innerHTML));
+  ok('מחובר — אין פאנל שגיאה', !/הנתונים הכספיים לא נטענו/.test(c.innerHTML));
 }
 {
   const env = homeEnv(false);
   const c = new El('div');
   env.CBA.screens.resHome.render(c);
-  ok('⚠️ לא מחובר — הפאנל מחליף את הכרטיס', /PANEL:/.test(c.innerHTML));
+  ok('⚠️ לא מחובר — אריח שגיאה במקום המספרים', /hm2-tile--err/.test(c.innerHTML) && /הנתונים הכספיים לא נטענו/.test(c.innerHTML));
   ok('⚠️ לא מחובר — **אין אפס שקרי** על המסך',
      !/שולמו השנה/.test(c.innerHTML) && !/₪0/.test(c.innerHTML), c.innerHTML.slice(0, 300));
-  ok('הכותרת "אצלנו בבית" נשמרת', /אצלנו בבית/.test(c.innerHTML));
-  ok('ההודעה מרגיעה שהשאר עובד', /שאר האפליקציה עובדת/.test(c.innerHTML));
+  ok('עם כפתור "נסה שוב" של הפאנל המשותף', /data-data-retry/.test(c.innerHTML));
   ok('כפתור "נסה שוב" חובר', env.wired === 1, String(env.wired));
-  ok('שאר עמוד הבית עדיין צויר (כפתורי הפעולה)', /hm-hero/.test(c.innerHTML));
+  ok('שאר עמוד הבית עדיין צויר (החופה)', /hm2-cnp/.test(c.innerHTML));
 }
 
 /* ================================================================= */

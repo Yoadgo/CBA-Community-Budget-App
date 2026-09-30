@@ -217,7 +217,7 @@ CBA.homeGarden = (function () {
     return '<div class="hmg-kpis">' + t + t + t + t + '</div><div class="hmg-cards">' + c + c + c + '</div>';
   }
 
-  function paint(host, res) {
+  function paint(host, res, board) {
     if (!host || !host.isConnected) return null;
     var body = host.querySelector(".hmg-body");
     if (!body) return null;
@@ -230,6 +230,18 @@ CBA.homeGarden = (function () {
     try { m = model(res); } catch (e) {
       body.innerHTML = '<div class="card hm-card hmg-err"><span>לא הצלחנו לחשב את נתוני הגינון.</span></div>';
       return null;
+    }
+    /* 🔴 גל 2 (30.9.26, ספר האבנים H33 — יועד: "קישור ללוח גינון עדיף") —
+       בלוח הניהול: האריחים + "הכי נגררות" בלבד. שני הגרפים (גיל/סוג, עמידה
+       בתוכנית) חיים במסך נתוני הגינון, והשורה למטה מובילה לשם. */
+    if (board) {
+      body.innerHTML = tilesHTML(m) +
+        '<div class="hmg-cards hmg-cards--board">' + dragCardHTML(m) +
+        '<button type="button" class="card hm-card hmg-card hmg-link" data-admin-goto="gardenStats">' +
+          '<span class="hm-row__ico">' + svg(ICO.trend, 17) + '</span>' +
+          '<span class="hm-row__txt"><b>נתוני הגינון</b><small>תקלות לפי גיל ולפי סוג · עמידה בתוכנית · 8 שבועות</small></span>' +
+          '<span class="hm-row__c">' + svg(ICO.chev, 16) + '</span></button></div>';
+      return m;
     }
     body.innerHTML = tilesHTML(m) +
       '<div class="hmg-cards">' + dragCardHTML(m) + faultsCardHTML(m) + trendCardHTML(m) + '</div>' +
@@ -248,7 +260,7 @@ CBA.homeGarden = (function () {
     host.innerHTML = headHTML() + '<div class="hmg-body">' + skeletonHTML() + '</div>';
     function run(force) {
       read(function (res) {
-        var m = paint(host, res);
+        var m = paint(host, res, !!opts.board);
         if (opts.onDecide) {
           if (m) {
             var f = m.undecided[0];
@@ -280,5 +292,14 @@ CBA.homeGarden = (function () {
     run(false);
   }
 
-  return { mount: mount, _reset: function () { cache = { res: null, ts: 0, busy: false, waiters: [] }; } };
+  /* גל 2 — מספר הדיווחים שמחכים להחלטה, בלי לצייר (למיני-כרטיס בבית).
+     cb(n) — n === null פירושו כשל: לא סופרים ולא מכריזים "אין". */
+  function undecided(cb) {
+    read(function (res) {
+      if (!res || !res.ok) return cb(null);
+      try { cb(model(res).M.now.open.undecided || 0); } catch (e) { cb(null); }
+    }, false);
+  }
+
+  return { mount: mount, undecided: undecided, _reset: function () { cache = { res: null, ts: 0, busy: false, waiters: [] }; } };
 })();
