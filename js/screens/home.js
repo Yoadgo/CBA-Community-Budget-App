@@ -788,8 +788,9 @@ CBA.screens = CBA.screens || {};
       if (e) {
         var meta = [e.allDay ? "" : pad(e.date.getHours()) + ":" + pad(e.date.getMinutes()), e.location].filter(Boolean).join(" · ");
         el.hidden = false;
-        el.innerHTML = '<small>האירוע הבא</small><b>' + esc("יום " + WD[e.date.getDay()] + " " + dm(e.date)) + '</b>' +
-          '<span dir="auto">' + esc(e.title + (meta ? " · " + meta : "")) + '</span>';
+        /* 30.9.26 (יועד): השם גדול, התאריך קטן — היה הפוך */
+        el.innerHTML = '<small>האירוע הבא</small><b dir="auto">' + esc(e.title) + '</b>' +
+          '<span>' + esc("יום " + WD[e.date.getDay()] + " " + dm(e.date) + (meta ? " · " + meta : "")) + '</span>';
       } else if (sum.ready) el.hidden = true;
     }
     W.feedReady = !!sum.ready || !!sum.err;

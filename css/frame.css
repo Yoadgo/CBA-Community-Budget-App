@@ -218,9 +218,23 @@ body:not([data-area="admin"]) .year-switch { display: none !important; }
 body[data-area="resident"]:not(.is-gated) .plus-fab { display: grid; }
 @media (max-width: 720px) {
   .rep-fab-wrap { right: 16px; bottom: calc(var(--botnav-h, 80px) + env(safe-area-inset-bottom) + 16px); }
-  .plus-fab     { left: 16px;  bottom: calc(var(--botnav-h, 80px) + env(safe-area-inset-bottom) + 16px); }
-  body[data-nav-single="1"] .plus-fab { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  /* 30.9.26 (יועד) — "+" אחד, במקום שבו ישב כפתור החיפוש: ליד בר הניווט, באותו
+     גובה, ומתכווץ איתו (ר' mobile.js setMini). הבר כבר משאיר לו מקום (max-width). */
+  .plus-fab {
+    left: auto; inset-inline-end: 12px; bottom: calc(10px + env(safe-area-inset-bottom));
+    width: 66px; height: 66px;
+    transition: width .55s cubic-bezier(.34,1.45,.5,1), height .55s cubic-bezier(.34,1.45,.5,1),
+                inset-inline-end .55s cubic-bezier(.34,1.45,.5,1), transform var(--t-fast) var(--ease);
+  }
+  body.nav-mini .plus-fab { width: 50px; height: 50px; inset-inline-end: var(--nm-start, 14%); }
+  body.nav-mini .plus-fab svg { width: 22px; height: 22px; }
+  body[data-nav-single="1"] .plus-fab { inset-inline-end: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); width: 56px; height: 56px; }
+  /* אזור הניהול: ה-"+" מופיע רק כשלמסך יש פעולת יצירה, והכפתור שבסרגל מוסתר */
+  body.plus-admin:not([data-area="resident"]):not(.is-gated) .plus-fab { display: grid; }
+  body.plus-admin .cnp2--bar .cnp2-act[data-plus] { display: none; }
 }
+/* הוצאות: הכפתור הצף הישן ירד — ה-"+" בסרגל (מחשב) / ליד הבר (טלפון) */
+body:has(#app-main .cnp2--bar) .tx-fab { display: none !important; }
 /* הגיליון של "+" */
 .plus-sheet .plus-t { font-size: var(--t-14); color: var(--ink-2); font-weight: 700; margin: 4px 4px 6px; }
 .plus-sheet .plus-opt {

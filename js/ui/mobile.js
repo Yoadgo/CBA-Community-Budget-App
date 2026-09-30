@@ -75,6 +75,9 @@
          50px ליעד, 8px ריפוד (+2 מסגרת), 8px רווח, 50px חיפוש (ר' mobile.css). */
       var n = nav.querySelectorAll(":scope > .app-nav__tab, :scope > .app-nav__group").length;
       var total = n * 50 + 10;   /* גל 1 (30.9.26, F7): כפתור החיפוש הצף ירד — החיפוש בחופה */
+      /* 30.9.26 — ה-"+" תפס את מקומו: 8px רווח + 50px, ממורכזים יחד עם הבר */
+      var pf = document.getElementById("plus-fab");
+      if (pf && getComputedStyle(pf).display !== "none") total += 58;
       var start = Math.max(12, Math.round((document.documentElement.clientWidth - total) / 2));
       document.documentElement.style.setProperty("--nm-start", start + "px");
     }

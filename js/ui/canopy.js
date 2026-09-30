@@ -40,7 +40,8 @@ window.CBA = window.CBA || {};
       return '<button type="button" class="cnp2-pill is-zero"' + (p.id ? ' id="' + esc(p.id) + '"' : "") + (p.hidden ? " hidden" : "") + '>' +
         '<b>' + esc(p.n == null ? "—" : p.n) + '</b><span>' + esc(p.k || "") + '</span></button>';
     }).join("");
-    var act = o.act ? '<button type="button" class="cnp2-act"' + (o.act.id ? ' id="' + esc(o.act.id) + '"' : "") +
+    /* data-plus — בטלפון ה-"+" היחיד (plus.js, ליד בר הניווט) מפעיל את הכפתור הזה */
+    var act = o.act ? '<button type="button" class="cnp2-act" data-plus="1"' + (o.act.id ? ' id="' + esc(o.act.id) + '"' : "") +
       (o.act.hidden ? " hidden" : "") + ' aria-label="' + esc(o.act.label || "") + '">' +
       '<span class="cnp2-act__l">+ ' + esc(o.act.label || "") + '</span><span class="cnp2-act__s" aria-hidden="true">+</span></button>' : "";
     return '<section class="cnp2 cnp2--bar" data-dom="' + esc(o.dom || "home") + '" aria-label="' + esc(o.title || "") + '">' +

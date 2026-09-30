@@ -70,6 +70,34 @@ CBA.plus = (function () {
     });
   }
 
+  /* 30.9.26 (בקשת יועד): "כפתור פלוס אחד, במקום שבעבר היה לחצן החיפוש, יחד
+     עם שורת הלחצנים". בטלפון ה-"+" יושב ליד בר הניווט (ר' css/frame.css §6),
+     ובאזור הניהול הוא הפעולה הראשית של המסך — הכפתור data-plus בסרגל הניהול
+     (canopy bar). במסך ניהול בלי פעולת יצירה אין "+". במחשב — כמו קודם. */
+  function barAct() {
+    if (document.body.dataset.area === "resident") return null;
+    var a = document.querySelector("#app-main .cnp2--bar .cnp2-act[data-plus]");
+    return (a && !a.hidden && !a.disabled) ? a : null;
+  }
+  var syncQueued = false;
+  function sync() {
+    syncQueued = false;
+    var a = barAct(), b = document.getElementById("plus-fab");
+    document.body.classList.toggle("plus-admin", !!a);
+    if (b && a) { var l = a.getAttribute("aria-label") || "פעולה חדשה"; b.setAttribute("aria-label", l); b.title = l; }
+    else if (b) { b.setAttribute("aria-label", "פעולה חדשה"); b.title = "פעולה חדשה"; }
+  }
+  function queueSync() {
+    if (syncQueued) return;
+    syncQueued = true;
+    (window.requestAnimationFrame || setTimeout)(sync);
+  }
+  function onClick() {
+    var a = barAct();
+    if (a) { a.click(); return; }
+    open();
+  }
+
   function mount() {
     if (document.getElementById("plus-fab")) return;
     var b = document.createElement("button");
@@ -77,12 +105,18 @@ CBA.plus = (function () {
     b.setAttribute("aria-label", "פעולה חדשה");
     b.title = "פעולה חדשה";
     b.innerHTML = ICO.plus;
-    b.addEventListener("click", open);
+    b.addEventListener("click", onClick);
     document.body.appendChild(b);
+    var main = document.getElementById("app-main");
+    if (main && window.MutationObserver) {
+      new MutationObserver(queueSync).observe(main, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "disabled"] });
+    }
+    if (window.MutationObserver) new MutationObserver(queueSync).observe(document.body, { attributes: true, attributeFilter: ["data-area"] });
+    sync();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
   else mount();
 
-  return { open: open, mount: mount, _ordered: ordered };
+  return { open: open, mount: mount, sync: sync, _ordered: ordered };
 })();

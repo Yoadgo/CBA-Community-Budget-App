@@ -167,10 +167,9 @@ CBA.screens.expenses = {
      כל השנים שנטענו); לחיצה = הלשונית "ממתינות לאישור" (txView = "pending"),
      ומנקה מסנן סטטוס סותר (למשל "הועבר להנה"ח") כדי שהרשימה לא תצא ריקה.
    • "ממתינות לתשלום · ₪X" — סטטוס "ready" (הועבר להנה"ח = אושר וממתין לתשלום)
-     על כל השנים שנטענו (getAllTransactions — אותו מקור שבדיקת החזרים משווה מולו).
+     **בשנה המוצגת** (30.9.26, יועד: "רוב הנתונים ימקדו בשנה הנוכחית", וההיסטוריה
+     נגישה — מסנן "כל השנים"). כך המונה והרשימה אחרי הלחיצה תמיד מסכימים.
      לחיצה = מסנן הסטטוס הקיים על "הועבר להנה"ח" (ובתצוגת "הכל", אחרת החיתוך ריק).
-     ⚠️ המסנן עצמו מציג את השנה המוצגת בלבד (כמו תמיד) — בקשה "הועבר להנה"ח"
-        משנה אחרת נספרת במונה אבל לא תופיע ברשימה אחרי הלחיצה.
    • "+ הוספת הוצאה" עבר מהשורה שמעל הטבלה לסרגל — אותה פעולה (txOpenDrawer).
    "⚙ עמודות", מיון, בחירה מרובה והכפתור הצף במובייל נשארים בגוף המסך. */
 var TX_BAR_ICO = '<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>';
@@ -189,6 +188,7 @@ function txShell(container) {
     });
     sh.bar.querySelector("#tx-p-topay").addEventListener("click", function () {
       txFilters.status = "ready";
+      txFilters.year = "";   // השנה המוצגת — כמו המונה
       if (txView !== "all") txView = "all";
       txSelected = {};
       CBA.screens.expenses.render(container);
@@ -199,7 +199,7 @@ function txShell(container) {
 }
 function txToPay() {
   let count = 0, amount = 0;
-  txAllLoaded().forEach(function (t) {
+  CBA.data.getTransactions().forEach(function (t) {   // השנה המוצגת בלבד (ר' למעלה)
     if (t.status !== "ready") return;
     count++;
     amount += Number(t.amount) || 0;
@@ -382,7 +382,11 @@ function txSortRows(list) {
 function txYearOptions(list) {
   const years = {};
   list.forEach(function (t) { if (t.year) years[t.year] = true; });
-  return `<option value="">כל השנים</option>` + Object.keys(years).map(function (y) {
+  /* 30.9.26 — "" הוא השנה המוצגת בלבד (txSource), לא "כל השנים" כפי שנכתב.
+     הרשימה מתמקדת בשנה הנוכחית; ההיסטוריה — בבחירת שנה קודמת כאן. */
+  const cur = String(CBA.data.getCurrentYear() || "");
+  delete years[cur];
+  return `<option value="">${CBA.esc(cur ? cur + " · השנה" : "השנה המוצגת")}</option>` + Object.keys(years).sort().reverse().map(function (y) {
     return `<option value="${CBA.esc(y)}"${txFilters.year === y ? " selected" : ""}>${CBA.esc(y)}</option>`;
   }).join("");
 }
