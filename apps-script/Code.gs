@@ -5430,6 +5430,28 @@ function handleResidentDirectory_(p) {
  * בלי אימייל/הרשאות/מקצוע/הערות. authorize_ עם need=null: מספיק מושב תקין +
  * "פעיל" בטאב תושבים, בלי צורך בהרשאת ניהול כלשהי (כל תושב מחובר). סטטוס נשלח
  * גם הוא כדי שהלקוח יוכל לסנן משקי-בית שעזבו — לא מוצג בפועל. */
+/** ילדים למדריך הציבורי: JSON של [{name,dob}] → "נועה (7), איתי (4)". גיל בלבד,
+ *  בלי תאריך. טקסט ישן (לא JSON) — כמו שהוא. אותו פענוח כמו dirKidsText בלקוח. */
+function communityKidsText_(raw) {
+  var s = String(raw == null ? '' : raw).trim();
+  if (s.charAt(0) !== '[') return s;
+  try {
+    var list = JSON.parse(s);
+    if (!Array.isArray(list)) return s;
+    var now = new Date();
+    return list.map(function (k) {
+      var name = String((k && k.name) || '').trim();
+      if (!name) return '';
+      var d = new Date((k && k.dob) || '');
+      if (isNaN(d.getTime())) return name;
+      var age = now.getFullYear() - d.getFullYear();
+      var m = now.getMonth() - d.getMonth();
+      if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+      return age >= 0 ? name + ' (' + age + ')' : name;
+    }).filter(function (x) { return x; }).join(', ');
+  } catch (e) { return ''; }
+}
+
 function handleCommunityDirectory_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -5446,10 +5468,33 @@ function handleCommunityDirectory_(p) {
              h.indexOf('טלפון') !== -1 || h.indexOf('ילדים') !== -1 ||
              h.indexOf('סטטוס') !== -1;
     }
+    /* 🔴 פרטיות (1.10.2026, ספר האבנים פרק 13 — אושר ע"י יועד).
+       עד היום נשלחו לכל תושב **כל** השורות — גם של מי שעזב (כולל טלפון), וגם
+       תאריכי לידה מלאים של ילדים (ה-JSON של "הפרטים שלי"). האפליקציה רק הסתירה
+       אותם, אבל הם עברו ברשת ונראו בכלי המפתחים. מעכשיו השרת שולח:
+         • רק שורות פעילות (סטטוס ריק או "פעיל" — אותו כלל כמו dirIsActive בלקוח),
+           ולא שורה ריקה (בלי שם משפחה ובלי מספר בית);
+         • ילדים כטקסט "שם (גיל)" — בלי תאריך לידה.
+       עץ הוועד לא נפגע: בעל תפקיד שלא ברשימה מוצג שם ממילא כ"תושב/ת שעזב/ה". */
+    var colStatus = -1, colFamily = -1, colHouse = -1, colKids = -1;
+    headers.forEach(function (h, i) {
+      if (h.indexOf('שם פרטי') !== -1) return;
+      if (colFamily === -1 && h.indexOf('משפחה') !== -1) colFamily = i;
+      else if (colHouse === -1 && h.indexOf('בית') !== -1) colHouse = i;
+      else if (colKids === -1 && h.indexOf('ילדים') !== -1) colKids = i;
+      else if (colStatus === -1 && h.indexOf('סטטוס') !== -1) colStatus = i;
+    });
+    function cellStr_(row, i) { return i === -1 ? '' : String(row[i] == null ? '' : row[i]).trim(); }
     var rows = [];
     for (var r = 1; r < values.length; r++) {
+      var st = cellStr_(values[r], colStatus);
+      if (st && st.indexOf('פעיל') === -1) continue;
+      if (!cellStr_(values[r], colFamily) && !cellStr_(values[r], colHouse)) continue;
       var obj = {};
-      headers.forEach(function (h, i) { if (keep_(h)) obj[h] = values[r][i]; });
+      headers.forEach(function (h, i) {
+        if (!keep_(h)) return;
+        obj[h] = (i === colKids) ? communityKidsText_(values[r][i]) : values[r][i];
+      });
       rows.push(obj);
     }
     return json_({ ok: true, rows: rows });

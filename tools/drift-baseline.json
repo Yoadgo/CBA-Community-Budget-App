@@ -24,8 +24,8 @@
   "hex": 0,
   "radius": 0,
   "shadow": 4,
-  "fsize": 1,
-  "all": 5
+  "fsize": 3,
+  "all": 7
  },
  "frame.css": {
   "hex": 22,

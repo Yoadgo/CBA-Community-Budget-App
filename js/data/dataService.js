@@ -1870,11 +1870,17 @@ CBA.data = (function () {
   // ומפת השיכון האינטראקטיבית. שונה מ-getResidentDirectory (שם+בית בלבד,
   // מנהלים בלבד, לבורר בטפסי ניהול) — לא לערבב בין השניים.
   var communityCache = null;
-  function getCommunityDirectory(cb) {
-    if (communityCache) { if (cb) cb({ ok: true, rows: communityCache }); return; }
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+  /* fresh (גל 6, מסך "תושבי השיכון") — לדלג על המטמון ולשאול את השרת. נכשל ויש
+     מטמון — מחזירים את המטמון (המפה/החיפוש שחולקים אותו לא נשארים ריקים). */
+  function getCommunityDirectory(cb, fresh) {
+    if (communityCache && !fresh) { if (cb) cb({ ok: true, rows: communityCache }); return; }
+    if (!pushConnected()) {
+      if (cb) cb(communityCache ? { ok: true, rows: communityCache } : { ok: false, error: "לא מחובר לגיליון" });
+      return;
+    }
     CBA.sheets.get({ action: "communityDirectory" }, function (res) {
       if (res && res.ok) communityCache = res.rows || [];
+      else if (communityCache) res = { ok: true, rows: communityCache, stale: true };
       if (cb) cb(res);
     });
   }
@@ -4205,6 +4211,17 @@ CBA.data = (function () {
     }
     return out;
   }
+  /* RRB1 (גל 6) — בעריכה, שדה שנשלח ריק (תווית שהורדה, טלפון שנמחק, קופ"ח "—")
+     לא נכתב בכלל, ולכן הערך הישן נשאר — והטוסט אמר "ההמלצה עודכנה". כאן: שדה
+     שנשלח במפורש וריק נמחק ("" / []). ביצירה לא משתמשים בזה (בלי שדות ריקים). */
+  var RSVC_CLEARABLE_ = ["group", "phone", "city", "kupah", "note", "committeeItemId", "hotlinePhone",
+    "whatsappHotline", "whatsappGroupLink", "address", "website"];
+  function rsvcClearedFields_(fields, patch) {
+    RSVC_CLEARABLE_.forEach(function (k) {
+      if (fields[k] != null && !String(fields[k]).trim() && !(k in patch)) patch[k] = "";
+    });
+    if (Array.isArray(fields.labels) && !fields.labels.length && !("labels" in patch)) patch.labels = [];
+  }
 
   function createResidentServiceCard(fields, cb) {
     var fid = currentFamilyId();
@@ -4242,6 +4259,7 @@ CBA.data = (function () {
     if (fields.mapsUrl != null) patch.mapsUrl = String(fields.mapsUrl).trim().slice(0, 300);
     var extra = rsvcRecommendationFields_(fields);
     Object.keys(extra).forEach(function (k) { patch[k] = extra[k]; });
+    rsvcClearedFields_(fields, patch);
     CBA.fb.updateDoc("residentServiceCards", String(id), patch, function (err) {
       cb(err ? { ok: false, error: "עדכון נכשל" } : { ok: true });
     });
@@ -4261,6 +4279,7 @@ CBA.data = (function () {
     if (fields.originalText != null) patch.originalText = String(fields.originalText).slice(0, 3000);
     var extra = rsvcRecommendationFields_(fields);
     Object.keys(extra).forEach(function (k) { patch[k] = extra[k]; });
+    rsvcClearedFields_(fields, patch);
     CBA.fb.updateDoc("residentServiceCards", String(id), patch, function (err) {
       cb(err ? { ok: false, error: "עדכון נכשל" } : { ok: true });
     });

@@ -265,7 +265,19 @@ CBA.screens.resRecommendations = {
   title: "המלצות השיכון",
 
   render: function (container) {
-    container.innerHTML =
+    /* 🔴 גל 6 (1.10.26, ספר האבנים פרק 12) — החופה: הכותרת, מספר ההמלצות
+       ומספר הקבוצות (נכתבים ב-finish), ולמנהל — דיווחי "לא מעודכן" פתוחים.
+       בלי הרכיב — הראש הישן. */
+    if (window.CBA && CBA.canopy) {
+      if (CBA.canopy.bindScroll) CBA.canopy.bindScroll();
+      var isAdm = rrCanAdminEdit();
+      container.innerHTML = CBA.canopy({ size: "mid", dom: "svc", wide: true, title: "המלצות השיכון",
+          ico: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
+          sub: "המלצות תושבים, לפי קטגוריה וקבוצה",
+          stat: { id: "rr-cnp-n", n: "—", label: "המלצות" },
+          minis: [{ id: "rr-cnp-g", k: "קבוצות", b: "—" }].concat(isAdm ? [{ id: "rr-cnp-st", k: "דיווחי \"לא מעודכן\"", b: "—" }] : []) }) +
+        '<div class="cnp2-body cnp2-body--wide rr-v2"><div id="rr-body"></div></div>';
+    } else container.innerHTML =
       '<div class="screen-head screen-head--row">' +
         '<div><div class="screen-head__title">המלצות השיכון</div>' +
         '<div class="screen-head__sub">המלצות תושבים, לפי קטגוריה וקבוצה</div></div>' +
@@ -274,12 +286,24 @@ CBA.screens.resRecommendations = {
     var body = container.querySelector("#rr-body");
     body.innerHTML = CBA.skel.tiles(6);
 
+    function syncCanopy() {
+      if (!(CBA.canopy && CBA.canopy.set)) return;
+      var groups = {};
+      rrState.cards.forEach(function (c) { groups[rrGroupOf(c)] = true; });
+      CBA.canopy.set(container, "rr-cnp-n", String(rrState.cards.length));
+      CBA.canopy.set(container, "rr-cnp-g", String(Object.keys(groups).length));
+      CBA.canopy.set(container, "rr-cnp-st", String(Object.keys(rrState.staleByCard || {}).length));
+    }
+
     function loadAndPaint() {
       CBA.data.ensureFamilyNames(function () {
         CBA.data.getResidentServiceCards(true, function (res) {
           if (!res || !res.ok) {
-            body.innerHTML = '<div class="card club-card"><div class="club-empty">לא ניתן לטעון כרגע. ' +
-              rrEsc((res && res.error) || "") + "</div></div>";
+            /* RRB4 (גל 6) — שגיאה עם "לנסות שוב" (עד היום: טקסט בלבד, יציאה מהמסך) */
+            body.innerHTML = CBA.ui.emptyState({ icon: "search", title: "לא הצלחנו לטעון את ההמלצות",
+              sub: "בדקו את החיבור לאינטרנט ונסו שוב.", ctaLabel: "לנסות שוב", ctaAttr: "data-rr-retry" });
+            var rt = body.querySelector("[data-rr-retry]");
+            if (rt) rt.addEventListener("click", function () { body.innerHTML = CBA.skel.tiles(6); loadAndPaint(); });
             return;
           }
           rrState.cards = res.cards || [];
@@ -296,7 +320,7 @@ CBA.screens.resRecommendations = {
               /* 27.9.26 — עץ הוועד, בשביל rrOwnerHtml/rrCommitteeItemOptionsHtml
                  (קישור "אחראי מטעם הוועד" חי, ר' committeeTree.js). best-effort:
                  כשל טעינה לא חוסם את המסך — פשוט לא יוצג "אחראי" באף כרטיס. */
-              function finish() { rrState.loaded = true; rrPaint(body); }
+              function finish() { rrState.loaded = true; syncCanopy(); rrPaint(body); }
               if (window.CBA && CBA.committeeTree && CBA.committeeTree.load) {
                 try { CBA.committeeTree.load(finish); } catch (e) { finish(); }
               } else finish();
@@ -384,7 +408,13 @@ function rrSortItems(list) {
   if (rrState.sort === "likes") {
     out.sort(function (a, b) { return rrLikes(b) - rrLikes(a); });
   } else if (rrState.sort === "recent") {
-    out.sort(function (a, b) { return String(b.updatedAt || "") < String(a.updatedAt || "") ? -1 : 1; });
+    /* RRB6 (גל 6) — המשווה לא החזיר 0 לעולם, ולכן כרטיסים עם אותו תאריך (למשל
+       מיובאים בלי תאריך) יצאו בסדר אקראי. שווים — לפי שם. */
+    out.sort(function (a, b) {
+      var x = String(a.updatedAt || ""), y = String(b.updatedAt || "");
+      if (x === y) return String(a.title || "").localeCompare(String(b.title || ""), "he");
+      return y < x ? -1 : 1;
+    });
   } else {
     out.sort(function (a, b) { return String(a.title || "").localeCompare(String(b.title || ""), "he"); });
   }
@@ -636,6 +666,9 @@ function rrDeskMain(body) {
 
 /* ---------- טלפון: אריחי קטגוריה → קבוצות → שורות ---------- */
 function rrPaintMobile(body) {
+  /* RRB3 (גל 6) — תושב שמחק את ההמלצה היחידה בקבוצה נשאר בדף הקבוצה וראה
+     את הטקסט של המנהלים ("תושבים לא רואים אותה…"). */
+  if (rrState.view === "group" && rrState.groupName && !rrItemsOf(rrState.groupName).length && !rrCanAdminEdit()) rrState.view = "home";
   if (rrState.view === "group" && rrState.groupName) { rrPaintMGroup(body); return; }
   var nav = rrNavModel();
   if (!rrState.mCat || !nav.some(function (x) { return x.cat.id === rrState.mCat; })) rrState.mCat = nav.length ? nav[0].cat.id : "";
@@ -972,6 +1005,8 @@ function rrOpenForm(existing, presetGroup, isAdminEdit) {
       if (!String(title || "").trim()) { CBA.ui.toast("צריך כותרת"); return; }
       var sel = wrap.querySelector("#rr-f-group");
       var group = sel.value === "__other__" ? wrap.querySelector("#rr-f-group-other").value : sel.value;
+      /* RRB2 (גל 6) — בלי קבוצה ההמלצה נפלה ל"ללא קבוצה" (ההערה בטופס אומרת שהיא חובה) */
+      if (!String(group || "").trim()) { CBA.ui.toast("צריך לבחור קבוצה"); return; }
       var labels = [];
       wrap.querySelectorAll("[data-label]").forEach(function (cb) { if (cb.checked) labels.push(cb.dataset.label); });
       var fields = {

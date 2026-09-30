@@ -1736,7 +1736,12 @@ CBA.screens = CBA.screens || {};
     return c;
   }
   function dirVal(row, key) { return key ? String(row[key] == null ? "" : row[key]).trim() : ""; }
-  function dirIsActive(row, c) { var s = dirVal(row, c.status); return !s || s.indexOf("פעיל") !== -1; }
+  function dirIsActive(row, c) {
+    /* DB8 (גל 6) — שורה בלי שם משפחה ובלי מספר בית (שורה ריקה/חלקית בגיליון)
+       הייתה נחשבת פעילה ומוצגת ככרטיס "בית — · משפחת משק בית". */
+    if (!dirVal(row, c.family) && !dirVal(row, c.house)) return false;
+    var s = dirVal(row, c.status); return !s || s.indexOf("פעיל") !== -1;
+  }
 
   /* קיבוץ המדריך לפי אות ראשונה של שם המשפחה (2026-09-16, לבקשת יועד —
      בסגנון "אנשי קשר" באייפון). כ/ם/ן/ף/ץ (אותיות סופיות) לא אמורות להופיע
@@ -1859,13 +1864,23 @@ CBA.screens = CBA.screens || {};
     var c = dirState.cols;
     var q = dirState.q.trim();
     var rows = dirState.rows.filter(function (r) { return dirIsActive(r, c); });
+    var total = rows.length;
+    if (CBA.canopy && CBA.canopy.set && dirContainer) CBA.canopy.set(dirContainer, "dir-cnp-n", String(total));
     if (q) {
+      /* DB2 (גל 6) — הילדים נכנסים לחיפוש כטקסט המוצג ("נועה (7)"), לא כ-JSON
+         הגולמי: קודם "2019" מצא כל משפחה עם ילד שנולד ב-2019 (וחשף תאריכי לידה
+         דרך החיפוש), ו-"name" מצא את כולם.
+         DB5 — טלפון: "0521234567" מוצא גם "052-123-4567" (משווים ספרות בלבד). */
+      var qDigits = q.replace(/\D/g, "");
       rows = rows.filter(function (r) {
-        var hay = [dirVal(r, c.house), dirVal(r, c.family), dirVal(r, c.kids)]
+        var phones = c.phone.map(function (k) { return dirVal(r, k); });
+        var hay = [dirVal(r, c.house), dirVal(r, c.family), dirKidsText(dirVal(r, c.kids))]
           .concat(c.firstName.map(function (k) { return dirVal(r, k); }))
-          .concat(c.phone.map(function (k) { return dirVal(r, k); }))
+          .concat(phones)
           .join(" ");
-        return hay.indexOf(q) !== -1;
+        if (hay.indexOf(q) !== -1) return true;
+        return qDigits.length >= 3 && qDigits.length === q.replace(/[\s\-()+]/g, "").length &&
+          phones.some(function (p) { return p.replace(/\D/g, "").indexOf(qDigits) !== -1; });
       });
     }
     rows.sort(function (a, b) {
@@ -1880,6 +1895,12 @@ CBA.screens = CBA.screens || {};
        גדולה ודביקה לכל קבוצה (בסגנון אנשי קשר באייפון) וסרגל אותיות קבוע
        בצד המסך לניווט/גרירה ישירה לכל אות. בזמן חיפוש אין קיבוץ ואין
        סרגל: התוצאות ממילא מעטות, וקבוצה עם כרטיס אחד היא רעש. */
+    if (!rows.length && !q) {
+      /* DB6 (גל 6) — אין אף משק בית פעיל (ולא חיפשו): בלי "נקה חיפוש" */
+      listEl.innerHTML = CBA.ui.emptyState({ icon: "users", title: "המדריך עדיין ריק",
+        sub: "כשיתווספו תושבים פעילים לגיליון הם יופיעו כאן." });
+      return;
+    }
     if (!rows.length) {
       listEl.innerHTML = CBA.ui.emptyState({ icon: "search", title: "לא נמצאו שכנים",
         sub: "אפשר לחפש לפי שם משפחה, שם פרטי, מספר בית או טלפון.",
@@ -1895,7 +1916,7 @@ CBA.screens = CBA.screens || {};
       return;
     }
     if (q) {
-      listEl.innerHTML = '<div class="dir-count">' + rows.length + ' תוצאות</div>' +
+      listEl.innerHTML = '<div class="dir-count">' + (rows.length === 1 ? "תוצאה אחת" : rows.length + " תוצאות") + '</div>' +
         '<div class="dir-grid">' + rows.map(function (r) { return dirHouseHTML(r, c); }).join("") + '</div>';
       if (dirScrollY) { window.scrollTo(0, dirScrollY); dirScrollY = 0; }
       return;
@@ -2000,11 +2021,19 @@ CBA.screens = CBA.screens || {};
       if (!(opts && opts.silent)) dirState.loaded = false;
       ensureDirRoleIndex(); // חיווי "תפקיד בוועד" (סעיף 5) — נטען פעם אחת, מטמון נפרד מ-dirState
 
-      container.innerHTML =
-        '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
-          '<div class="screen-head__sub">מדריך התושבים בשיכון</div></div>' +
+      /* 🔴 גל 6 (1.10.26, ספר האבנים פרק 13) — החופה: הכותרת, ומספר משקי הבית
+         הפעילים (נכתב ב-dirRenderList). בלי הרכיב — הראש הישן. */
+      var top = cnp({ size: "mid", dom: "map", title: "תושבי השיכון",
+        ico: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20c0-2.8-1.6-4.9-4-5.7"/>',
+        sub: "מדריך התושבים בשיכון — שם, בית, טלפון",
+        stat: { id: "dir-cnp-n", n: "—", label: "משקי בית" } });
+      var inner =
         '<input class="dir-search" id="dir-q" placeholder="חיפוש לפי שם, בית או טלפון" value="' + CBA.esc(dirState.q) + '">' +
         '<div id="dir-list">' + CBA.skel.rows(6) + '</div>';
+      container.innerHTML = top
+        ? top + '<div class="cnp2-body dir-v2">' + inner + '</div>'
+        : '<div class="screen-head"><div class="screen-head__title">שכנים</div>' +
+            '<div class="screen-head__sub">מדריך התושבים בשיכון</div></div>' + inner;
 
       var qEl = container.querySelector("#dir-q");
       qEl.addEventListener("input", function () {
@@ -2018,20 +2047,32 @@ CBA.screens = CBA.screens || {};
       // dirContainer/dirRenderList (לא לתוך רפרנס ישן), כך שהכיסוי תקין גם אם
       // כמה render() רצו בזמן שהבקשה הראשונה עוד לא חזרה.
       if (dirState.loaded) { dirRenderList(); return; }
+      /* DB1 (גל 6) — "ניווט אמיתי תמיד מרענן מהשרת" (ההערה למעלה) לא קרה בפועל:
+         getCommunityDirectory החזיר את המטמון של כל הסשן, ושכן חדש/שעזב לא הופיע
+         עד רענון הדף. עכשיו: מה שכבר בזיכרון מוצג מיד (בלי שלד), והרשימה
+         מתעדכנת מהשרת ברקע. נכשל ויש כבר רשימה — נשארים עליה בשקט. */
+      if (dirState.rows && dirState.rows.length && dirState.cols) dirRenderList();
       if (dirState.loading) return;
       dirState.loading = true;
       CBA.data.getCommunityDirectory(function (res) {
         dirState.loading = false;
         if (!res || !res.ok) {
+          if (dirState.rows && dirState.rows.length && dirState.cols) return;
           var listEl = dirContainer && dirContainer.querySelector("#dir-list");
-          if (listEl) listEl.innerHTML = '<div class="rs-empty"><p>' + CBA.esc((res && res.error) || "שגיאה בטעינת הרשימה. נסו שוב מאוחר יותר.") + '</p></div>';
+          /* DB4 (גל 6) — שגיאה עם "לנסות שוב" (עד היום: טקסט בלבד, ולפעמים שגיאה גולמית) */
+          if (listEl) {
+            listEl.innerHTML = CBA.ui.emptyState({ icon: "users", title: "לא הצלחנו לטעון את המדריך",
+              sub: "בדקו את החיבור לאינטרנט ונסו שוב.", ctaLabel: "לנסות שוב", ctaAttr: "data-dir-retry" });
+            var rt = listEl.querySelector("[data-dir-retry]");
+            if (rt) rt.addEventListener("click", function () { CBA.screens.resDirectory.render(dirContainer, {}); });
+          }
           return;
         }
         dirState.rows = res.rows || [];
         dirState.cols = dirCols(dirState.rows);
         dirState.loaded = true;
         dirRenderList();
-      });
+      }, !(opts && opts.silent));
     }
   };
 

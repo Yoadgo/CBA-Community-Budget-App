@@ -52,3 +52,19 @@ body:has(.rs-v2) { --cnp-w: 680px; }
   box-shadow: var(--sh-card) !important; border: 0 !important; border-radius: var(--r-card) !important;
 }
 .ww-v2 .lg::before, .ww-v2 .lg-card::before { display: none !important; }
+
+/* ---------- 11+12. רוחב המדריך (גל 6) ----------
+   המסכים "ספקים ושירותים" ו"המלצות השיכון" היו ברוחב עד 1500px במחשב (style.css,
+   "min(1500px, 97vw)"). החופה הרחבה (--content = 1200) צמצמה אותם בגל 5 בלי
+   החלטה — כאן הרוחב חוזר להיות בדיוק מה שהיה, גם לחופה וגם לתוכן. */
+@media (min-width: 900px) {
+  .rr-v2.cnp2-body--wide, .svc-v2.cnp2-body--wide,
+  body:has(.rr-v2) .cnp2--wide .cnp2-in, body:has(.svc-v2) .cnp2--wide .cnp2-in { max-width: min(1500px, 97vw); }
+}
+
+/* ---------- 13. תושבי השיכון ---------- */
+.dir-v2 .dir-search { margin-top: 0; }
+/* סרגל האותיות (fixed, שמאל) — המסך הישן שמר לו 40px ב-.app-main, והחופה
+   (padding עם !important ב-canopy.css) דרסה את זה. מחזירים אותו לתוכן. */
+@media (max-width: 720px) { .cnp2-body.dir-v2 { padding-left: 40px; } }
+@media (max-width: 400px) { .cnp2-body.dir-v2 { padding-left: 36px; } }
