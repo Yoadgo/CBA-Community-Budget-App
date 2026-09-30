@@ -117,7 +117,7 @@
       /* A0/A1 (אושר ע"י יועד 30.9.26, ספר האבנים) — סרגל ניהול דק מעל המסך:
          "נתוני גינון" · מונים "ממתינות לאישורך" ו"נגררות" (אותם מספרים של
          M.now — הכרטיס והאריח) · "לאישור ←" = אותה רשימת אישור שהקישור בכרטיס
-         פותח. לא כפתור "+" — ולכן ב-extra עם אותו עיצוב (cnp2-act) וחץ במקום
+         פותח. לא כפתור "+" — ולכן act עם plus:false (בלי data-plus) וחץ במקום
          "+" בטלפון. אין כאן שורת כותרת להסיר (סבב עיצוב 4, 23.9); שלוש
          העמודות נשארות בגוף. בלי canopy.js — המסך בדיוק כמו קודם. */
       var barEl = null;
@@ -125,8 +125,7 @@
         var sh = CBA.canopy.shell(container, { key: "gardenStats", dom: "gar", title: "נתוני גינון",
           ico: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
           pills: [{ id: "gx-p-appr", k: "ממתינות לאישורך", hidden: true }, { id: "gx-p-drag", k: "נגררות" }],
-          extra: '<button type="button" class="cnp2-act" id="gx-bar-appr" aria-label="לאישור" hidden>' +
-                   '<span class="cnp2-act__l">לאישור ←</span><span class="cnp2-act__s" aria-hidden="true">←</span></button>' });
+          act: { id: "gx-bar-appr", label: "לאישור ←", aria: "לאישור", plus: false, short: "←", hidden: true } });
         barEl = sh.bar;
         sh.body.innerHTML = '<div class="gd-screen gx gx-vars" id="gx-root"></div>';
         /* onclick (השמה) — מחליף את מאזין הציור הקודם ומפנה תמיד לציור הנוכחי. */

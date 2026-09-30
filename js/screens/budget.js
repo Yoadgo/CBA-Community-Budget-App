@@ -237,7 +237,7 @@ function cumulativeChart() {
   const forecastPts = asof < 11 ? (x(asof) + "," + y(s.actual[asof]) + " " + x(11) + "," + y(projEnd)) : "";
   const markX = x(asof);
   const labels = s.labels.map(function (lab, i) {
-    return `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#9CA3AF">${lab}</text>`;
+    return `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" style="font-size:calc(10px * var(--fs, 1))" fill="#9CA3AF">${lab}</text>`;
   }).join("");
   return `
     <div class="cum-chart card" id="cum-chart">

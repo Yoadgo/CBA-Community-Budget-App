@@ -155,7 +155,8 @@ ok('🔴 ארבע הכתיבות מרימות דגל עריכה (עם הסטטו
    (DS.match(/txDirtyUp\(\);/g) || []).length === 5,
    String((DS.match(/txDirtyUp\(\);/g) || []).length));
 ok('⚠️ ולכל נפילה לאחור יש שחרור',
-   (DS.match(/txFellBack\(\);/g) || []).length === 8,
+   /* גל 11: +2 ב-updateTransaction (משפחה ריקה↔משפחה, הערת בדיקה בלבד) — שתיהן אחרי txDirtyUp */
+   (DS.match(/txFellBack\(\);/g) || []).length === 10,
    String((DS.match(/txFellBack\(\);/g) || []).length));
 ok('⚠️ והשחרור אכן מוריד את המונה',
    /function txFellBack\(\) \{ txDirtyDown\(\); \}/.test(DS));

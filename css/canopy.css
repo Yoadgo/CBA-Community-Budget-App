@@ -113,6 +113,7 @@ body.cnp2-past:has(#app-main .cnp2) .app-header { border-radius: 0 0 var(--r-car
   font: inherit; font-size: var(--t-13); font-weight: 700; cursor: pointer; white-space: nowrap;
 }
 .cnp2-act[hidden] { display: none; }
+.cnp2-act:disabled { opacity: .5; cursor: default; }
 .cnp2-act__s { display: none; }
 .cnp2-ico {
   width: 34px; height: 34px; border-radius: var(--r-pill); border: 1px solid rgba(255,255,255,.16); background: transparent;
@@ -129,6 +130,9 @@ body.cnp2-past:has(#app-main .cnp2) .app-header { border-radius: 0 0 var(--r-car
   .cnp2-act { width: 34px; padding: 0; font-size: var(--t-17); font-weight: 600; }
   .cnp2-act__l { display: none; }
   .cnp2-act__s { display: inline; }
+  /* act.plus:false בלי short — התווית נשארת גלויה (גלולה, לא עיגול) */
+  .cnp2-act--txt { width: auto; padding: 0 12px; font-size: var(--t-12); font-weight: 700; }
+  .cnp2-act--txt .cnp2-act__l { display: inline; }
 }
 /* סידור שבועי (גובה מלא) — הסרגל יורד מה-DOM, והגוף חוזר בדיוק לשוליים של main */
 body:not(:has(#app-main .cnp2)) .cnp2-body--adm { padding: 0; }

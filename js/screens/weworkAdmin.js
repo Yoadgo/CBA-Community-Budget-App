@@ -44,9 +44,10 @@ CBA.screens = CBA.screens || {};
     if (!CBA.canopy) return container;
     var sh = CBA.canopy.shell(container, { key: SCREEN, dom: "gym", ico: WA_BAR_ICO, title: "ניהול WeWork",
       pills: [{ id: "wa-p-now", k: "תפוס עכשיו", hidden: true }, { id: "wa-p-noshow", k: "לא הגיעו" }],
-      extra: '<button type="button" class="cnp2-act" id="wa-bar-rules" data-wa-edit hidden aria-label="כללי השריון">' +
-        '<span class="cnp2-act__l">כללי השריון</span><span class="cnp2-act__s" aria-hidden="true">⚙</span></button>' });
+      act: { id: "wa-bar-rules", label: "כללי השריון", plus: false, short: "⚙", hidden: true } });
     if (sh.fresh) {
+      /* data-wa-edit — נתפס במאזין הקיים של wire() (אותו עורך של "עריכה" בכרטיס) */
+      sh.bar.querySelector("#wa-bar-rules").setAttribute("data-wa-edit", "");
       var go = function (sel) {
         var el = sh.body.querySelector(sel) || sh.body.querySelector("[data-wa-list]");
         if (el) { try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} }

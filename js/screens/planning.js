@@ -1062,14 +1062,14 @@ function planPaceChartHTML() {
     return `<line x1="${padL}" y1="${y(max * f)}" x2="${padL + iw}" y2="${y(max * f)}" stroke="#EEF0F3" stroke-width="1"></line>`;
   }).join("");
   const labels = cur.labels.map(function (lab, i) {
-    return `<text x="${x(i)}" y="${H - 7}" text-anchor="middle" font-size="10" fill="#9CA3AF">${lab}</text>`;
+    return `<text x="${x(i)}" y="${H - 7}" text-anchor="middle" style="font-size:calc(10px * var(--fs, 1))" fill="#9CA3AF">${lab}</text>`;
   }).join("");
   /* תווית קצה לכל סדרה — כך הזיהוי אינו נשען על צבע בלבד.
      מעל הקו ולא לצידו: לצד הנקודה היא התנגשה עם הסמן ועם קו התכנון
      המקווקו שממשיך מעבר לחודש הנוכחי. הילה לבנה (paint-order) כדי
      שהמספר יישאר קריא גם כשהוא נופל על קו רשת. */
   const tag = function (v, i, fill, text) {
-    return `<text x="${x(i)}" y="${Math.max(11, y(v) - 9)}" text-anchor="middle" font-size="10"`
+    return `<text x="${x(i)}" y="${Math.max(11, y(v) - 9)}" text-anchor="middle" style="font-size:calc(10px * var(--fs, 1))"`
          + ` font-weight="700" fill="${fill}" stroke="#fff" stroke-width="3" paint-order="stroke">${text}</text>`;
   };
   const nis = function (v) { return Math.round(v / 1000) + "K"; };
@@ -1520,8 +1520,8 @@ function planPhaseControl(inBar) {
      תגית השלב שהייתה בפס הבקרות). לחיצה גוללת ל"סגור תקציב" / "פתח" שבגוף.
    • "עדכונים" — אותו מונה (getBudgetUpdates().length) ואותה פעולה
      (planOpenUpdatesModal) של הכפתור "עדכונים (N)". כמו קודם — רק כשהתקציב סגור.
-   • פעולה ראשית "תצוגה להצגה" — אותו מתג (planViewMode). הרכיב מוסיף "+"
-     לכל פעולה; כאן מחליפים אותו בתווית נקייה ובסמליל מסך (בטלפון).
+   • פעולה ראשית "תצוגה להצגה" — אותו מתג (planViewMode). act עם plus:false —
+     בלי "+", לא נלקחת ל-"+" של הטלפון, ובטלפון סמליל מסך.
    "סגור תקציב"/"פתח", "+ שנת תקציב חדשה" ולשונית ההערות נשארים בגוף. */
 var PLAN_BAR_ICO = '<path d="M4 20h16M6 16V9M10 16V5M14 16v-6M18 16V8"/>';
 var PLAN_PRESENT_ICO = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4M8 20h8"/></svg>';
@@ -1529,12 +1529,9 @@ function planShell(container) {
   if (!CBA.canopy || !CBA.canopy.shell) return null;
   const sh = CBA.canopy.shell(container, { key: "planning", dom: "bud", ico: PLAN_BAR_ICO, title: "בניית תקציב",
     pills: [{ id: "plan-p-phase", k: "" }, { id: "plan-p-upd", k: "עדכונים", hidden: true }],
-    act: { id: "plan-bar-present", label: "תצוגה להצגה" } });
+    act: { id: "plan-bar-present", label: "תצוגה להצגה", plus: false, short: PLAN_PRESENT_ICO } });
   if (sh.fresh) {
     const act = sh.bar.querySelector("#plan-bar-present");
-    const l = act.querySelector(".cnp2-act__l"), sm = act.querySelector(".cnp2-act__s");
-    if (l) l.textContent = "תצוגה להצגה";
-    if (sm) sm.innerHTML = PLAN_PRESENT_ICO;
     act.addEventListener("click", function () {
       planViewMode = !planViewMode;
       CBA.screens.planning.render(container);

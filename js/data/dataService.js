@@ -807,9 +807,29 @@ CBA.data = (function () {
                           "סעיף", "תת-סעיף", "סוג הוצאה", "תיאור",
                           "שם קובץ קבלה", "קישור קבלה"];
 
-  function txDetailsPatch(t) {
+  /* EXB2 (גל 11, 1.10.26) — "מקור" ו"משפחה" מהמגירה לא נשמרו במסלול Firestore:
+     הם לא ב-TX_DETAIL_FIELDS (כי `txDetailsUpdateOk` בכללים לא מתיר אותם), ולכן
+     ה-merge הצליח בלעדיהם והשינוי חזר ברענון. נשלחים כאן **רק כשבאמת השתנו**:
+     בלי שינוי — הכתיבה זהה בדיוק לקודם. עם שינוי ובלי עדכון הכללים — הכלל דוחה
+     את כל הכתיבה, והמסלול הקיים נופל ל-Apps Script (saveTransaction), ששומר
+     בגיליון ודוחף ל-Firestore (btxPushRows_). אחרי פרסום הכללים — ישירות. */
+  var TX_OWNER_FIELDS = ["מקור", "מזהה משפחה", "familyId"];
+  function txFamOf(v) { return String(v == null ? "" : v).trim(); }
+  function txOwnerChanged(fields, before, t) {
+    var src = ("source" in fields) && String(before.source || "") !== String(t.source || "");
+    var fam = ("familyId" in fields) && txFamOf(before.familyId) !== txFamOf(t.familyId);
+    return { any: src || fam, fam: fam };
+  }
+
+  function txDetailsPatch(t, withOwner) {
     var full = txToDoc(t), out = {};
     TX_DETAIL_FIELDS.forEach(function (k) { out[k] = full[k] === undefined ? "" : full[k]; });
+    if (withOwner) {
+      /* שני שדות המשפחה תמיד יחד — הכלל וכלל הקריאה נשענים על `familyId`. */
+      out["מקור"] = full["מקור"] === undefined ? "" : full["מקור"];
+      out["מזהה משפחה"] = txFamOf(t.familyId);
+      out.familyId = txFamOf(t.familyId);
+    }
     out.updatedAt = CBA.fb.serverNow ? CBA.fb.serverNow() : new Date();
     return out;
   }
@@ -842,10 +862,33 @@ CBA.data = (function () {
     /* 🔴 עריכת פרטים ל-Firestore — **`mergeDoc` ולא `updateDoc`**.
        שם העמודה "ספק/נמען" מכיל לוכסן, ו-`update` מפרש אותו כנתיב
        שדה ונכשל ב-`invalid-argument`. נתפס חי ב-15.9. */
+    var owner = txOwnerChanged(fields, before, t);
+    var statusDrop = ("status" in fields) && fields.status !== fromStatus;
     txDirtyUp();   /* ר' ההערה ב-`addTransaction` */
     txWriteOn(function (on) {
       if (!on) { txFellBack(); return txPushWhole(id, t, before); }
-      CBA.fb.mergeDoc("budgetTx", txDocId(t), txDetailsPatch(t), function (err) {
+      /* EXB2 (גל 11) — שורה שעוברת מ"בלי משפחה" למשפחה (או להפך): רק השרת יודע
+         להוריד/להחזיר את שם הרוכש השמור במסמך (btxRow_), אז ישר ל-Apps Script. */
+      if (owner.fam && (!txFamOf(before.familyId) || !txFamOf(t.familyId))) {
+        txFellBack(); return txPushWhole(id, t, before);
+      }
+      /* גל 11 — עריכת הערת בדיקה בלי שינוי סטטוס: אף ענף בכלל לא מתיר אותה
+         (פרטים — לא ברשימה; סטטוס — דורש מעבר חוקי), והיא נעלמה ברענון.
+         Apps Script שומר אותה (ודוחף ל-Firestore). */
+      if (!statusDrop && ("reviewNote" in fields) &&
+          String(before.reviewNote == null ? "" : before.reviewNote) !== String(t.reviewNote == null ? "" : t.reviewNote)) {
+        txFellBack(); return txPushWhole(id, t, before);
+      }
+      /* EXB-Q (גל 11) — מסלול הפרטים לא כותב סטטוס (הכלל אוסר). מעבר שהגיע לכאן
+         (לא חוקי, או מעורב בפרטים) היה מוצג ומתהפך בשקט ברענון — מחזירים עכשיו
+         ואומרים. שאר השדות נשמרים כרגיל. */
+      if (statusDrop && t.status === fields.status) {
+        t.status = before.status;
+        if ("reviewNote" in fields) t.reviewNote = before.reviewNote;
+        rollbackNote('שינוי הסטטוס ל"' + statusMeta(fields.status).label + '" לא נשמר — המעבר מ"' +
+                     statusMeta(before.status).label + '" אינו אפשרי', null);
+      }
+      CBA.fb.mergeDoc("budgetTx", txDocId(t), txDetailsPatch(t, owner.any), function (err) {
         if (err) { txFellBack(); return txPushWhole(id, t, before); }
         txWrote("update");
         /* 29.9.26 — הקבלה עוקבת אחרי "חודש הגשה". המסלול הזה לא עובר
@@ -4564,10 +4607,18 @@ CBA.data = (function () {
      כה"/יתרה, ומסך "תכנון מול ביצוע" מציג אותו ככרטיס "ללא סעיף".
      asOf (מספר 0-11, אופציונלי) = רק עד אותו חודש בשנה, בדיוק כמו actualToDate. */
   function getUncategorizedSpent(asOf) {
+    return uncategorizedSpentIn(getCategories(), getTransactions(), fiscalKeys(), asOf);
+  }
+  /* גל 11 — אותו חישוב לשנה כלשהי (getYearRows / השוואה לשנה קודמת). */
+  function getUncategorizedSpentFor(year, asOf) {
+    const d = yearData(year);
+    if (!d) return { amount: 0, txs: [] };
+    return uncategorizedSpentIn(d.categories || [], d.transactions || [], fiscalKeysFor(year), asOf);
+  }
+  function uncategorizedSpentIn(categories, transactions, keys, asOf) {
     const cats = {};
-    getCategories().forEach(function (c) { cats[c.id] = 1; });
-    const keys = fiscalKeys();
-    const txs = getTransactions().filter(function (t) {
+    categories.forEach(function (c) { cats[c.id] = 1; });
+    const txs = transactions.filter(function (t) {
       if (SPENT_STATUSES.indexOf(t.status) === -1) return false;
       if (t.categoryId && cats.hasOwnProperty(t.categoryId)) return false;
       if (typeof asOf === "number") {
@@ -4808,7 +4859,7 @@ CBA.data = (function () {
         sums[t.categoryId] += (t.amount || 0);
       }
     });
-    return cats.map(function (c) {
+    const rows = cats.map(function (c) {
       const plan = Number(c.plan) || 0;
       const spent = sums[c.id] || 0;
       const pct = plan > 0 ? (spent / plan) * 100 : (spent > 0 ? 999 : 0);
@@ -4821,6 +4872,12 @@ CBA.data = (function () {
         plan: plan, actual: spent, remaining: plan - spent, pct: pct, band: band
       };
     });
+    /* גל 11 (יישור ל-BUB1) — הוצאה נספרת בלי סעיף קיים לא נכנסת לשום שורה,
+       בדיוק כמו getBudgetRows. היא מוצמדת לרשימה כשדה נפרד (כמו כרטיס "ללא סעיף"
+       במסך התקציב), כך שסך הביצוע של שנה = Σ actual + rows.uncategorized.amount
+       = getSummary().totalActual כשזו השנה הפעילה. */
+    rows.uncategorized = getUncategorizedSpentFor(year);
+    return rows;
   }
 
   /* תכנון מצטבר מול ביצוע מצטבר לשנה כלשהי — 12 ערכים לכל סדרה.
@@ -4831,13 +4888,20 @@ CBA.data = (function () {
     const keys = fiscalKeysFor(year);
     const monthly = (d.categories || []).map(categoryMonthly);
     const txs = d.transactions || [];
+    /* גל 11 (יישור ל-BUB2) — אותו שיבוץ כמו cumulativeSeries של השנה הפעילה:
+       fiscalSlotOf, כך שהוצאה שחודשה אחרי סוף השנה (מה-20 בחודש) נכנסת
+       לחודש האחרון ולא נעלמת. הוצאות ללא סעיף נספרו כאן תמיד (אין סינון סעיף). */
+    const monthActual = new Array(12).fill(0);
+    txs.forEach(function (t) {
+      if (SPENT_STATUSES.indexOf(t.status) === -1) return;
+      const slot = fiscalSlotOf(t.month, keys);
+      if (slot !== -1) monthActual[slot] += (t.amount || 0);
+    });
     const plan = [], actual = [];
     let cp = 0, ca = 0;
     for (let i = 0; i < 12; i++) {
       cp += monthly.reduce(function (s, arr) { return s + arr[i]; }, 0);
-      ca += txs.filter(function (t) {
-        return SPENT_STATUSES.indexOf(t.status) !== -1 && t.month === keys[i];
-      }).reduce(function (s, t) { return s + (t.amount || 0); }, 0);
+      ca += monthActual[i];
       plan.push(cp); actual.push(ca);
     }
     return { year: year, labels: getMonthLabels(), plan: plan, actual: actual, keys: keys };
@@ -5821,6 +5885,7 @@ CBA.data = (function () {
     fiscalKeysFor: fiscalKeysFor,
     getSummary: getSummary,
     getUncategorizedSpent: getUncategorizedSpent,   /* BUB1 (גל 9, 1.10.26) */
+    getUncategorizedSpentFor: getUncategorizedSpentFor,   /* גל 11 */
     getIncomeSources: getIncomeSources,
     getIncomeTotal: getIncomeTotal,
     getDuesSource: getDuesSource,

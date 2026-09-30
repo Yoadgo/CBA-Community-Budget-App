@@ -304,8 +304,8 @@ CBA.screens = CBA.screens || {};
      בלי קריאת שרת נוספת; "—" עד שנטענו) ו"ריצה אחרונה" (מיומן הדופק שנטען רק
      בלשונית "תחקור"; "—" עד אז) · פעולה: "העתקת מצב לתחקור" (copyState).
      שני המונים והפעולה שייכים ללשוניות של מנהל-על — מנהל תחום רואה רק כותרת.
-     ⚠️ הפעולה בנויה ב-extra ולא ב-act: act מוסיף "+" ("+ העתקת…", ובטלפון
-        עיגול "+"), וזו העתקה, לא הוספה. אותן מחלקות (cnp2-act) — אותו מראה. */
+     ⚠️ act עם plus:false — זו העתקה, לא הוספה: בלי "+" ובלי data-plus (ה-"+"
+        של הטלפון לא לוקח אותה), ובטלפון סמליל העתקה במקום "+". */
   var HUB_ICO = '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3.5"/>';
   var COPY_ICO = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>';
   var hubBar = null;
@@ -315,8 +315,7 @@ CBA.screens = CBA.screens || {};
     var sup = isSuper();
     var sh = CBA.canopy.shell(container, { key: "sysHub:" + (sup ? "s" : "m"), dom: "home", ico: HUB_ICO, title: "ניהול מערכת",
       pills: [{ id: "hub-p-rep", k: "דיווחים פתוחים", hidden: !sup }, { id: "hub-p-run", k: "ריצה אחרונה", hidden: !sup }],
-      extra: '<button type="button" class="cnp2-act" id="hub-bar-copy" aria-label="העתקת מצב לתחקור"' + (sup ? "" : " hidden") + '>' +
-        '<span class="cnp2-act__l">העתקת מצב לתחקור</span><span class="cnp2-act__s" aria-hidden="true">' + COPY_ICO + "</span></button>" });
+      act: { id: "hub-bar-copy", label: "העתקת מצב לתחקור", plus: false, short: COPY_ICO, hidden: !sup } });
     hubBar = sh.bar;
     if (sh.fresh) {
       sh.bar.querySelector("#hub-bar-copy").addEventListener("click", copyState);

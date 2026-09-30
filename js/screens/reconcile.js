@@ -182,19 +182,18 @@ CBA.screens.reconcile = (function () {
        ה-input יושב בסרגל, ולכן אפשר לבחור קובץ חדש גם כשהתוצאה מוצגת
        ("קובץ אחר" בגוף נשאר כמו שהוא). מוסתר בזמן קריאת קובץ.
      בלי canopy.js — המסך בדיוק כמו קודם (כותרת, כפתור וקלט בגוף). */
+  /* plus:false — בחירה, לא יצירה: בלי "+", לא נלקחת ל-"+" של הטלפון; בטלפון חץ העלאה */
+  var RC_UP_ICO = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>';
   var ICO = '<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>';
   function shell(container) {
     if (!CBA.canopy || !CBA.canopy.shell) return null;
     var sh = CBA.canopy.shell(container, { key: "reconcile", dom: "bud", ico: ICO, title: "בדיקת החזרים",
       pills: [{ id: "rc-p-topay", k: "ממתינות לתשלום" }, { id: "rc-p-red", k: "דגלים אדומים" }],
-      act: { id: "rc-bar-go", label: "בחירת קובץ" },
+      act: { id: "rc-bar-go", label: "בחירת קובץ", plus: false, short: RC_UP_ICO },
       extra: '<input type="file" id="rc-file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>' });
     if (sh.fresh) {
       var file = sh.bar.querySelector("#rc-file");
       var act = sh.bar.querySelector("#rc-bar-go");
-      var l = act.querySelector(".cnp2-act__l"), sm = act.querySelector(".cnp2-act__s");
-      if (l) l.textContent = "בחירת קובץ";   // הרכיב מוסיף "+" — כאן זו בחירה, לא יצירה
-      if (sm) sm.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>';
       act.addEventListener("click", function () { if (!state.busy) file.click(); });
       file.addEventListener("change", function () {
         var f = file.files && file.files[0];

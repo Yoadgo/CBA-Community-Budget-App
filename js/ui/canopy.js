@@ -40,10 +40,23 @@ window.CBA = window.CBA || {};
       return '<button type="button" class="cnp2-pill is-zero"' + (p.id ? ' id="' + esc(p.id) + '"' : "") + (p.hidden ? " hidden" : "") + '>' +
         '<b>' + esc(p.n == null ? "—" : p.n) + '</b><span>' + esc(p.k || "") + '</span></button>';
     }).join("");
-    /* data-plus — בטלפון ה-"+" היחיד (plus.js, ליד בר הניווט) מפעיל את הכפתור הזה */
-    var act = o.act ? '<button type="button" class="cnp2-act" data-plus="1"' + (o.act.id ? ' id="' + esc(o.act.id) + '"' : "") +
-      (o.act.hidden ? " hidden" : "") + ' aria-label="' + esc(o.act.label || "") + '">' +
-      '<span class="cnp2-act__l">+ ' + esc(o.act.label || "") + '</span><span class="cnp2-act__s" aria-hidden="true">+</span></button>' : "";
+    /* data-plus — בטלפון ה-"+" היחיד (plus.js, ליד בר הניווט) מפעיל את הכפתור הזה.
+       act.plus === false — פעולה שאינה יצירה (אישור, העתקה, בחירת קובץ, הגדרות):
+       בלי "+ " לפני התווית, בלי data-plus (ולכן נשארת בסרגל גם בטלפון), ובטלפון
+       העיגול מציג את act.short (תו או SVG — HTML גולמי) במקום "+". בלי short —
+       התווית עצמה נשארת גלויה בטלפון. act.disabled — כבוי מההתחלה.
+       act.aria — תווית נגישות אחרת מהתווית הנראית (ברירת מחדל: label). */
+    var act = "";
+    if (o.act) {
+      var isPlus = o.act.plus !== false, lab = esc(o.act.label || "");
+      var short = isPlus ? "+" : (o.act.short || "");
+      act = '<button type="button" class="cnp2-act' + (!isPlus && !short ? " cnp2-act--txt" : "") + '"' +
+        (isPlus ? ' data-plus="1"' : "") + (o.act.id ? ' id="' + esc(o.act.id) + '"' : "") +
+        (o.act.hidden ? " hidden" : "") + (o.act.disabled ? " disabled" : "") +
+        ' aria-label="' + esc(o.act.aria || o.act.label || "") + '">' +
+        '<span class="cnp2-act__l">' + (isPlus ? "+ " : "") + lab + '</span>' +
+        (short ? '<span class="cnp2-act__s" aria-hidden="true">' + short + '</span>' : "") + '</button>';
+    }
     return '<section class="cnp2 cnp2--bar" data-dom="' + esc(o.dom || "home") + '" aria-label="' + esc(o.title || "") + '">' +
       '<div class="cnp2-in"><div class="cnp2-row">' +
         '<div class="cnp2-main"><div class="cnp2-h">' + disc + '<h1 class="cnp2-t">' + esc(o.title || "") + '</h1></div></div>' +

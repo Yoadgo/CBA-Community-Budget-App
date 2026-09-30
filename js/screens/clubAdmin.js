@@ -71,8 +71,7 @@ CBA.screens.clubAdmin = {
     if (CBA.canopy) {
       var sh = CBA.canopy.shell(container, { key: "clubAdmin", dom: "ev", ico: CA_BAR_ICO, title: "שריון מועדון",
         pills: [{ id: "ca-p-pend", k: "ממתינות" }, { id: "ca-p-broken", k: "פגומים", hidden: true }],
-        extra: '<button type="button" class="cnp2-act" id="ca-bar-ok" hidden disabled aria-label="אשר את הנבחרים">' +
-          '<span class="cnp2-act__l">אשר את הנבחרים</span><span class="cnp2-act__s" aria-hidden="true">✓</span></button>' });
+        act: { id: "ca-bar-ok", label: "אשר את הנבחרים", plus: false, short: "✓", hidden: true, disabled: true } });
       host = sh.body; caBar = sh.bar;
       if (sh.fresh) {
         /* המאזינים נקשרים פעם אחת לסרגל, וקוראים לציור החי (caLive) — לא לסגירה של ציור ישן */

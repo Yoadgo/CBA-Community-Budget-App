@@ -44,6 +44,43 @@ CBA.ui = (function () {
     el.classList.add("is-open");
   }
 
+  /* ==========================================================================
+   *  🔴 DGB1 (ספר האבנים, פרק 37 — 1.10.26) — רק השכבה העליונה מקשיבה למקלדת
+   * --------------------------------------------------------------------------
+   *  כל חלון/גיליון רושם מאזין keydown משלו על document. כשנפתח חלון אישור
+   *  מעל גיליון (או מעל טופס), **כל** המאזינים רצו על אותה הקשה —
+   *  stopPropagation לא עוצר מאזין אחר על אותו document. נמדד בדפדפן:
+   *  Escape אחד סגר גם את האישור וגם את הגיליון שמתחתיו, ו-Enter על
+   *  "בטוח?" הפעיל גם את כפתור השמירה של הטופס שמתחת.
+   *  עכשיו כל שכבה נכנסת לערימה, ורק זו שבראש הערימה מגיבה.
+   * ======================================================================== */
+  var layerStack = [];
+  function pushLayer() { var t = {}; layerStack.push(t); return t; }
+  function dropLayer(t) { var i = layerStack.indexOf(t); if (i !== -1) layerStack.splice(i, 1); }
+  function isTop(t) { return layerStack[layerStack.length - 1] === t; }
+
+  /* 🟠 DGB3 — מלכודת המיקוד ספרה גם כפתורים כבויים, שדות מוסתרים ו-
+     tabindex="-1". כשהאחרון ברשימה היה כזה, Tab מהכפתור האחרון **האמיתי**
+     יצא מהחלון אל הדף שמאחור. כאן נשארים רק מה שבאמת אפשר להגיע אליו. */
+  function focusables(root, sel) {
+    return Array.prototype.filter.call(root.querySelectorAll(sel), function (n) {
+      if (n.disabled || n.type === "hidden") return false;
+      if (n.getAttribute("tabindex") === "-1") return false;
+      return !!(n.getClientRects && n.getClientRects().length);
+    });
+  }
+  function trapTab(e, back, root, sel) {
+    var f = focusables(root, sel);
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1], a = document.activeElement;
+    /* המיקוד עוד בדף שמאחור, על הגיליון עצמו או על טקסט שנלחץ — Tab מכניס
+       פנימה, אל הראשון (או האחרון עם Shift). */
+    if (f.indexOf(a) === -1) { e.preventDefault(); (back ? last : first).focus(); return; }
+    if (back && a === first) { e.preventDefault(); last.focus(); }
+    else if (!back && a === last) { e.preventDefault(); first.focus(); }
+  }
+  var dlgSeq = 0;
+
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
 
   // טקסט חופשי -> HTML עם שמירה על מעברי שורה (הודעות רבות באפליקציה מכילות \n)
@@ -54,11 +91,16 @@ CBA.ui = (function () {
   function build(opts) {
     var wrap = document.createElement("div");
     wrap.className = "cba-dlg-backdrop";
+    /* ⚪ DGB5 — חלון בלי כותרת (רוב חלונות האישור) היה בלי שם לקורא מסך:
+       הוא הכריז "תיבת דו-שיח" ותו לא. עכשיו ההודעה עצמה היא השם (אין
+       כותרת) או התיאור (יש כותרת). */
+    var msgId = opts.message ? "cba-dlg-msg-" + (++dlgSeq) : "";
     wrap.innerHTML =
       '<div class="cba-dlg' + (opts.wide ? ' cba-dlg--wide' : '') + '" role="dialog" aria-modal="true"' +
-        (opts.title ? ' aria-label="' + esc(opts.title) + '"' : "") + '>' +
+        (opts.title ? ' aria-label="' + esc(opts.title) + '"' : "") +
+        (msgId ? (opts.title ? ' aria-describedby="' : ' aria-labelledby="') + msgId + '"' : "") + '>' +
         (opts.title ? '<div class="cba-dlg__title">' + textHTML(opts.title) + '</div>' : "") +
-        (opts.message ? '<div class="cba-dlg__msg">' + textHTML(opts.message) + '</div>' : "") +
+        (opts.message ? '<div class="cba-dlg__msg" id="' + msgId + '">' + textHTML(opts.message) + '</div>' : "") +
         /* גוף HTML חופשי (2026-09-09). נולד בשביל חלונית הדיווחים, שהיא טופס
            ולא שאלה — וכל האלטרנטיבה הייתה מודל שני מקביל עם אותה לוגיקת
            פתיחה/סגירה/מלכודת-מיקוד, כלומר בדיוק סוג הכפילות שנשברת בשקט.
@@ -91,6 +133,7 @@ CBA.ui = (function () {
       openCount++;
       document.body.classList.add("has-cba-dlg");
       openNow(wrap);
+      var layer = pushLayer();
 
       var inputEl = wrap.querySelector(".cba-dlg__input");
       var okBtn = wrap.querySelector('[data-dlg="ok"]');
@@ -106,6 +149,7 @@ CBA.ui = (function () {
         done = true;
         wrap.classList.remove("is-open");
         document.removeEventListener("keydown", onKey, true);
+        dropLayer(layer);
         setTimeout(function () {
           if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
           openCount = Math.max(0, openCount - 1);
@@ -116,6 +160,13 @@ CBA.ui = (function () {
         resolve(result);
       }
       function onKey(e) {
+        if (!isTop(layer)) return;   // DGB1 — שכבה אחרת פתוחה מעליי
+        /* 🔴 DGB2 — Enter על כפתור ממוקד (למשל "ביטול") לוחץ **עליו**.
+           עד היום Enter נתפס כאן לפני הכפתור והפך ל"אישור" — ובחלון מחיקה
+           מי שעבר עם Tab ל"ביטול" ולחץ Enter **מחק**. הדפדפן עצמו הופך
+           Enter על כפתור ללחיצה, והלחיצה עוברת במאזין הרגיל למטה. */
+        var ae = document.activeElement;
+        if (e.key === "Enter" && ae && wrap.contains(ae) && (ae.tagName === "BUTTON" || ae.tagName === "A")) return;
         if (e.key === "Escape") {
           if (opts.sticky) return;   // טופס — Escape לא זורק לפח טקסט שהוקלד
           e.preventDefault(); e.stopPropagation(); close(opts.input ? null : false);
@@ -132,14 +183,8 @@ CBA.ui = (function () {
           if (opts.onOk) { opts.onOk(wrap, close); return; }
           close(opts.input ? inputEl.value : true);
         }
-        // מלכודת מיקוד — Tab לא יוצא מהמודל
-        else if (e.key === "Tab") {
-          var f = wrap.querySelectorAll("input, textarea, select, button");
-          if (!f.length) return;
-          var first = f[0], last = f[f.length - 1];
-          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-        }
+        // מלכודת מיקוד — Tab לא יוצא מהמודל (DGB3: רק מה שבאמת נגיש)
+        else if (e.key === "Tab") trapTab(e, e.shiftKey, wrap, "input, textarea, select, button, a[href], [tabindex]");
       }
       document.addEventListener("keydown", onKey, true);
       if (opts.onMount) { try { opts.onMount(wrap, close); } catch (e) {} }
@@ -196,6 +241,14 @@ CBA.ui = (function () {
     openCount++;
     document.body.classList.add("has-cba-dlg");
     openNow(wrap);
+    var layer = pushLayer();
+    /* 🟠 DGB4 — המיקוד נשאר על הכפתור שמאחור, ולכן מלכודת המיקוד לא
+       פעלה וקורא מסך לא ידע שנפתח משהו. ממקדים את הגיליון עצמו (לא שדה —
+       כדי שבטלפון המקלדת לא תקפוץ). */
+    if (dlg && !dlg.contains(document.activeElement)) {
+      if (!dlg.hasAttribute("tabindex")) { dlg.setAttribute("tabindex", "-1"); dlg.style.outline = "none"; }
+      try { dlg.focus({ preventScroll: true }); } catch (e) {}
+    }
 
     var done = false;
     function close() {
@@ -204,6 +257,7 @@ CBA.ui = (function () {
       if (key) delete openSheets[key];
       wrap.classList.remove("is-open");
       document.removeEventListener("keydown", onKey, true);
+      dropLayer(layer);
       setTimeout(function () {
         if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
         openCount = Math.max(0, openCount - 1);
@@ -214,15 +268,12 @@ CBA.ui = (function () {
     /* 🔴 ממצא 24 — Escape סוגר. היציאה היחידה עד היום הייתה לחיצה על
        רקע שקוף לגמרי, שאינו נראה כמשטח לחיץ. */
     function onKey(e) {
+      if (!isTop(layer)) return;   // DGB1 — חלון אישור פתוח מעליי: ה-Esc שלו
       if (e.key === "Escape") {
         if (opts.sticky) return;
         e.preventDefault(); e.stopPropagation(); close();
       } else if (e.key === "Tab") {
-        var f = wrap.querySelectorAll("input, textarea, select, button, [tabindex]");
-        if (!f.length) return;
-        var first = f[0], last = f[f.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        trapTab(e, e.shiftKey, wrap, "input, textarea, select, button, a[href], [tabindex]");   // DGB3
       }
     }
     document.addEventListener("keydown", onKey, true);
@@ -263,8 +314,10 @@ CBA.ui = (function () {
       danger: !!opts.danger
     });
   }
-  /* prompt — מחזירה את הטקסט, או null אם בוטל. validate(value) אופציונלי:
-     מחזיר מחרוזת שגיאה כדי לחסום אישור (זה מה שחסר לגמרי ב-window.prompt). */
+  /* prompt — מחזירה את הטקסט, או null אם בוטל.
+     ⚠️ (1.10.26, DGB7) ההערה כאן הבטיחה validate(value) — **הוא מעולם לא מומש**
+     ואף קורא לא מעביר אותו. מי שצריך לחסום אישור (שדה ריק וכו') — CBA.ui.dialog
+     עם onOk, שם הבדיקה מחליטה אם לקרוא ל-close. */
   function promptBox(message, opts) {
     opts = opts || {};
     return open({
@@ -283,6 +336,9 @@ CBA.ui = (function () {
   function toast(message, kind, ms) {
     var t = document.createElement("div");
     t.className = "cba-toast" + (kind ? " cba-toast--" + kind : "");
+    /* ⚪ DGB6 — קורא מסך לא הכריז על הודעות ההצלחה/השגיאה בכלל. */
+    t.setAttribute("role", kind === "error" ? "alert" : "status");
+    t.setAttribute("aria-live", kind === "error" ? "assertive" : "polite");
     t.textContent = message;
     document.body.appendChild(t);
     requestAnimationFrame(function () { t.classList.add("is-open"); });

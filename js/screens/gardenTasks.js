@@ -392,6 +392,7 @@
       }
       var root = container.querySelector("#gt-root");
       var cardsWired = false;   // ראה wire() — מאזין הלחיצות המואצל נרשם פעם אחת
+      var chipFilter = null, chipScroll = 0;   // ראה wire() — גלילת רצועת המסננים (אופקית בלבד)
       /* GTB3 (גל 8, 1.10.26) — גיליון/טופס שנפתח לפני ציור-מחדש קורא למופע החי, לא לשורש המנותק. */
       var me = {
         root: root,
@@ -1209,10 +1210,24 @@
         if (legBtn) legBtn.addEventListener("click", openLegend);
         /* הרצועה נגללת, ואחרי ציור מחדש היא חוזרת להתחלה — כך שהמסנן שנבחר
            זה עתה עלול לשבת מחוץ למסך והמשתמש רואה רשימה בלי לדעת מה סינן
-           אותה. inline:"nearest" כדי לא להזיז אותה כשהוא כבר נראה. */
-        var on = root.querySelector(".gt-ctl__f button.on");
-        if (on && on.scrollIntoView) {
-          try { on.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) {}
+           אותה.
+           🔴 1.10.26 (באג "העמוד קופץ"): כאן היה on.scrollIntoView בכל ציור —
+           והוא גולל גם את העמוד עצמו (אנכית), כולל בציורי רקע. עכשיו גוללים
+           רק את הרצועה, אופקית (scrollLeft), ורק כשהמסנן באמת השתנה; בציור
+           חוזר עם אותו מסנן — הרצועה חוזרת למקום שבו המשתמש השאיר אותה. */
+        var strip = root.querySelector(".gt-ctl__f");
+        if (strip) {
+          var on = strip.querySelector("button.on");
+          if (filter !== chipFilter && on) {
+            var sr = strip.getBoundingClientRect(), cr = on.getBoundingClientRect();
+            if (cr.left < sr.left) strip.scrollLeft += cr.left - sr.left - 8;
+            else if (cr.right > sr.right) strip.scrollLeft += cr.right - sr.right + 8;
+          } else if (filter === chipFilter && chipScroll) {
+            strip.scrollLeft = chipScroll;
+          }
+          chipFilter = filter;
+          chipScroll = strip.scrollLeft;
+          strip.addEventListener("scroll", function () { chipScroll = strip.scrollLeft; }, { passive: true });
         }
         /* ⚠️ פעם אחת בלבד (2026-09-09). wire() נקראת בכל draw(), ו-root עצמו
            אינו מוחלף — רק התוכן שלו. בלי השמירה הזאת נרשם מאזין נוסף

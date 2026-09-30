@@ -77,8 +77,12 @@
 .gx-grid {
   display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 14px; align-items: stretch;
-  min-height: calc(100vh - 150px);
+  min-height: calc(100vh - 150px - var(--gx-adm-bar, 0px));
 }
+/* סרגל הניהול (A0) מוסיף ~88px מעל ומתחת לתוכן (הסרגל עצמו + ריפוד הגוף במקום
+   ריפוד main, והריפוד התחתון של body:has(.cnp2)) — מורידים אותם מהגובה המינימלי
+   כדי שהמסך יתמלא בדיוק כמו קודם. בלי סרגל — --gx-adm-bar=0, בדיוק כמו קודם. */
+body:has(#app-main .cnp2--bar) .gx-grid { --gx-adm-bar: 88px; }
 .gx-pane {
   display: flex; flex-direction: column; gap: 11px; min-width: 0; min-height: 0;
   border-radius: 26px; padding: 12px;

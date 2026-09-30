@@ -444,6 +444,15 @@ function txStdCellHTML(key, t) {
     default: return "";
   }
 }
+/* גל 11 — "?" (העבר לבדיקה) על שורה "הועבר להנה"ח": המעבר הזה אינו חוקי בכללי
+   Firestore (txLegalStep) ובהחלה בשרת (BTX_STEPS_), ולכן הסטטוס הוצג כ"בבדיקה"
+   וחזר בשקט ברענון. מוצג רק כשהשינוי באמת יישמר: "הוגשה", או "הועבר להנה"ח"
+   כשהכתיבה ל-Firestore כבויה (אז השורה נשמרת כולה ב-Apps Script) — אותו תנאי
+   בדיוק כמו בחסימת המעבר במגירה (EXB2). */
+function txCanReview(t) {
+  if (t.status === "submitted") return true;
+  return t.status === "ready" && !!(CBA.mock && CBA.mock._txFsOn === false);
+}
 function txRowHTML(t) {
   const pending = t.status === "submitted";
   const s = CBA.data.statusMeta(t.status);
@@ -452,7 +461,7 @@ function txRowHTML(t) {
   const next = CBA.data.statusNext(t.status);
   // מי מוצג מתי (2026-08-06): "בדיקה" רלוונטי רק כשעוד לא בבדיקה ולא נסגר;
   // "דחה" זמין בכל שלב שלפני "שולם" — כולל אחרי ההעברה להנה"ח, לבקשת יועד.
-  const canReview = t.status === "submitted" || t.status === "ready";
+  const canReview = txCanReview(t);
   const canReject = t.status === "submitted" || t.status === "review" || t.status === "ready";
   const stdCells = txVisibleStdCols().map(function (c) {
     // התיאור והספק נחתכים בשורה אחת — title מציג את הטקסט המלא בריחוף
@@ -505,7 +514,7 @@ function txMRowHTML(t) {
   const next = CBA.data.statusNext(t.status);
   // מי מוצג מתי (2026-08-06): "בדיקה" רלוונטי רק כשעוד לא בבדיקה ולא נסגר;
   // "דחה" זמין בכל שלב שלפני "שולם" — כולל אחרי ההעברה להנה"ח, לבקשת יועד.
-  const canReview = t.status === "submitted" || t.status === "ready";
+  const canReview = txCanReview(t);
   const canReject = t.status === "submitted" || t.status === "review" || t.status === "ready";
   const title = t.supplier || t.buyer || "(ללא ספק)";
   /* EXB5 (גל 9, 1.10.26) — בתצוגה חוצת-שנים השנה מוצגת בכל שורה */

@@ -789,6 +789,11 @@ CBA.tour = (function () {
     el.setAttribute("role", "dialog");
     el.setAttribute("aria-modal", "true");
     el.setAttribute("aria-label", "סיור היכרות");
+    /* 🟠 TRB1 (ספר האבנים, פרק 38 — 1.10.26) — לחיצה על טקסט או על רווח בכרטיס
+       העבירה את המיקוד ל-body, ומאז Esc והחצים (שמאזינים על הסיור) **הפסיקו
+       לעבוד** בלי שום סימן. tabindex="-1" משאיר את המיקוד בתוך הסיור. */
+    el.setAttribute("tabindex", "-1");
+    el.style.outline = "none";
     el.innerHTML = '<div class="tr-card"></div>';
     document.body.appendChild(el);
     document.body.classList.add("tr-open");
@@ -807,6 +812,18 @@ CBA.tour = (function () {
       if (e.key === "Escape")     { e.preventDefault(); finish(); }
       else if (e.key === "ArrowLeft")  { e.preventDefault(); go(1); }   // RTL: שמאלה = קדימה
       else if (e.key === "ArrowRight") { e.preventDefault(); go(-1); }
+      /* 🟠 TRB1 — Tab יצא מהסיור אל הדף שמאחוריו (ההקשה הראשונה כבר!), למרות
+         aria-modal. עכשיו הוא מסתובב בין כפתורי הכרטיס בלבד. */
+      else if (e.key === "Tab") {
+        var f = Array.prototype.filter.call(el.querySelectorAll("button"), function (b) {
+          return b.getAttribute("tabindex") !== "-1" && !b.disabled && b.getClientRects().length;
+        });
+        if (!f.length) return;
+        var a = document.activeElement, i = f.indexOf(a);
+        if (i === -1) { e.preventDefault(); f[e.shiftKey ? f.length - 1 : 0].focus(); }
+        else if (e.shiftKey && i === 0) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+      }
     });
     // החלקה בנייד — אותו כיוון כמו החצים
     // (2026-09-23) התוכן נגרר אחרי האצבע — מרגישים שהכרטיס "זז" — ורק מעבר
@@ -847,7 +864,9 @@ CBA.tour = (function () {
     clearTimers();
     if (!el) return;
     el.remove(); el = null; deck = []; idx = 0;
-    document.body.classList.remove("tr-open");
+    /* ⚪ TRB2 — אותה מחלקה משמשת גם את מדריך הדלת (doorButton.js, אותו עיצוב
+       .tr). אם הוא עדיין פתוח — לא משחררים את נעילת הגלילה מתחתיו. */
+    if (!document.querySelector(".tr")) document.body.classList.remove("tr-open");
     if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
   }
 

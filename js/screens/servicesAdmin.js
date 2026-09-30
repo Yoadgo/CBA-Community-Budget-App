@@ -96,10 +96,9 @@ CBA.screens.servicesAdmin = {
     if (CBA.canopy) {
       var sh = CBA.canopy.shell(container, { key: "servicesAdmin:" + (isSuperAdmin ? "super" : "svc"),
         dom: "svc", ico: SADM_BAR_ICO, title: "ניהול שירותים",
-        act: isSuperAdmin ? { id: "sadm-bar-new", label: "שירות חדש" } : null,
-        extra: '<button type="button" class="cnp2-ico" id="sadm-bar-more" aria-label="עוד פעולות" title="עוד פעולות" aria-haspopup="dialog">⋯</button>' +
-          (isSuperAdmin ? "" : '<button type="button" class="cnp2-act" id="sadm-bar-stale" aria-label="דיווחי &quot;לא מעודכן&quot;">' +
-            '<span class="cnp2-act__l">דיווחי "לא מעודכן"</span><span class="cnp2-act__s" aria-hidden="true">!</span></button>') });
+        act: isSuperAdmin ? { id: "sadm-bar-new", label: "שירות חדש" }
+          : { id: "sadm-bar-stale", label: 'דיווחי "לא מעודכן"', plus: false, short: "!" },
+        extra: '<button type="button" class="cnp2-ico" id="sadm-bar-more" aria-label="עוד פעולות" title="עוד פעולות" aria-haspopup="dialog">⋯</button>' });
       if (sh.fresh) {
         if (isSuperAdmin) sh.bar.querySelector("#sadm-bar-new").addEventListener("click", function () { sadmOpenEditor(-1); });
         else sh.bar.querySelector("#sadm-bar-stale").addEventListener("click", sadmOpenStaleReports);
@@ -181,6 +180,31 @@ function sadmOpenMoreMenu(isSuperAdmin) {
   });
 }
 
+/* מצב "עסוק" לכפתור ה-⋯ שבסרגל (עיגול 34px — אין מקום לטקסט "טוען…", ולכן
+   ספינר בלבד + title/aria). מחזירה פונקציית שחרור בטוחה לקריאה כפולה, כמו CBA.ui.busy. */
+function sadmBusyMore() {
+  var b = document.getElementById("sadm-bar-more");
+  if (!b || b.dataset.busyOn === "1") return function () {};
+  var prevHTML = b.innerHTML, prevTitle = b.title, prevDis = !!b.disabled;
+  b.dataset.busyOn = "1";
+  b.disabled = true;
+  b.setAttribute("aria-busy", "true");
+  b.classList.add("is-busy");
+  b.title = "טוען…";
+  b.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+  var done = false;
+  return function () {
+    if (done) return;
+    done = true;
+    b.classList.remove("is-busy");
+    b.removeAttribute("aria-busy");
+    delete b.dataset.busyOn;
+    b.innerHTML = prevHTML;
+    b.title = prevTitle;
+    b.disabled = prevDis;
+  };
+}
+
 /* SMB1 (גל 8, 1.10.26) — טעינת הרשימה תמיד טרייה (עוקפת את המטמון), גם בניווט וגם בציור שקט. */
 function sadmLoadList() {
   CBA.data.getServices(function (res) {
@@ -228,7 +252,9 @@ function sadmOpenCategories() {
   if (sadmState.saving) { CBA.ui.toast("שמירה קודמת עדיין בתהליך — רגע אחד."); return; }
   /* SCB2 (גל 8, 1.10.26) — הדרואר נפתח מרשימה טרייה מהשרת, לא ממטמון ישן. */
   var btn = document.getElementById("sadm-cats");
-  var release = btn ? CBA.ui.busy(btn, "טוען…") : function () {};
+  /* A0 — עם סרגל הניהול אין #sadm-cats (הפריט ב-⋯). כפתור ה-⋯ עצמו מראה
+     "עסוק" (ספינר, כבוי, aria-busy) עד שהקטגוריות נטענו והמגירה נפתחת. */
+  var release = btn ? CBA.ui.busy(btn, "טוען…") : sadmBusyMore();
   CBA.data.getServices(function (res) {
     release();
     if (!res || !res.ok) { CBA.ui.alert((res && res.error) || "לא ניתן לטעון את הקטגוריות כרגע, נסו שוב."); return; }
@@ -1353,7 +1379,7 @@ function sadmRecRowHtml(c) {
       '<div style="flex:1;min-width:0">' +
         '<div style="font-weight:600">' + sadmEsc(c.title) +
           (isActive ? "" : ' <span style="color:var(--text-muted);font-weight:400">(מוסתר)</span>') + "</div>" +
-        '<div style="font-size:12px;color:var(--text-muted)">' + sadmEsc(fam) + "</div>" +
+        '<div style="font-size:calc(12px * var(--fs, 1));color:var(--text-muted)">' + sadmEsc(fam) + "</div>" +
       "</div>" +
       '<button type="button" class="btn-ghost btn-sm" data-rec-promote="' + sadmEsc(c.id) + '">הפוך לפריט שירות</button>' +
       '<button type="button" class="btn-ghost btn-sm" data-rec-toggle="' + sadmEsc(c.id) +
@@ -1472,9 +1498,9 @@ function sadmStaleRowHtml(r) {
       '<div style="flex:1;min-width:0">' +
         '<div style="font-weight:600">' + sadmEsc(r.cardName || r.cardId) +
           (r.group ? ' <span style="color:var(--text-muted);font-weight:400">· ' + sadmEsc(r.group) + "</span>" : "") + "</div>" +
-        '<div style="font-size:12.5px;margin-top:2px">' + sadmEsc(r.why || "") + "</div>" +
-        (r.note ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + sadmEsc(r.note) + "</div>" : "") +
-        '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">' +
+        '<div style="font-size:calc(12.5px * var(--fs, 1));margin-top:2px">' + sadmEsc(r.why || "") + "</div>" +
+        (r.note ? '<div style="font-size:calc(12px * var(--fs, 1));color:var(--text-muted);margin-top:2px">' + sadmEsc(r.note) + "</div>" : "") +
+        '<div style="font-size:calc(11px * var(--fs, 1));color:var(--text-muted);margin-top:4px">' +
           sadmEsc(String(r.createdAt || "").slice(0, 10)) + "</div>" +
       "</div>" +
       '<span class="badge ' + (isOpen ? "badge--warn" : "badge--ok") + '">' + (isOpen ? "ממתין" : "טופל") + "</span>" +
