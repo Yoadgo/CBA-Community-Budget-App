@@ -28,7 +28,7 @@ CBA.plus = (function () {
   /* שלוש פעולות היצירה של התושב (ירדו לכאן משורת הגלולות בבית, H8).
      tint = גוון-התחום (tokens.css), כדי שהדיסקית תתאים לצבע של המסך. */
   var ACTIONS = [
-    { screen: "resSubmit",    t: "הגשת קבלה להחזר",       s: "צילום או קובץ · Gemini ממלא את הפרטים", ico: "receipt", tint: "var(--dom-bud)", bg: "var(--dom-bud-bg)" },
+    { screen: "resSubmit",    t: "הגשת קבלה",             s: "צילום או קובץ · Gemini ממלא את הפרטים", ico: "receipt", tint: "var(--dom-bud)", bg: "var(--dom-bud-bg)" },
     { screen: "resGardenNew", t: "דיווח למראה שיכון",      s: "מפגע, תקלה או בקשה בגינון",             ico: "leaf",    tint: "var(--dom-gar)", bg: "var(--dom-gar-bg)" },
     { screen: "resReserve",   t: "שריון מועדון משפחות",    s: "תאריך ושעה, אישור מהוועד",              ico: "key",     tint: "var(--dom-home)", bg: "var(--dom-home-bg)" }
   ];

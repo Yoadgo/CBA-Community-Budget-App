@@ -438,7 +438,7 @@
            יועד). "שריון מועדון" נקרא בניווט "מועדון משפחות". כלל: לכל היותר
            שתי רמות — כפתור בבר ← בועה ← מסך. */
         { group: "services", label: "שירותים", items: [
-            ["resSubmit", "הגשת החזר", "refunds"],
+            ["resSubmit", "הגשת קבלה", "refunds"],   // SA1 (אושר 1.10.26) — היה "הגשת החזר"
             ["resRequests", "הבקשות שלי", "refunds"],
             ["resReserve", "מועדון משפחות", "facilities"],
             ["resGym", "מכון כושר", "facilities"],

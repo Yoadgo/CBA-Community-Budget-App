@@ -24,6 +24,9 @@ CBA.screens = CBA.screens || {};
   var ST_VERIFY      = "ממתין לאימות";
   var ST_ACTIVE      = "פעיל";
   var ST_EXPIRED     = "פג תוקף";
+  var ST_FROZEN      = "מוקפא";   // GB2 — אותם שמות כמו GYM_ST_* ב-Code.gs
+  var ST_REJECTED    = "נדחה";
+  var ST_CANCELLED   = "בוטל";
 
   // מצב המסך נשמר בין ציורים — render() נקרא שוב גם ברענון רקע שקט, ובלי זה
   // האשף היה נסגר באמצע מילוי (אותו לקח כמו persistent-state בשאר המסכים).
@@ -51,6 +54,10 @@ CBA.screens = CBA.screens || {};
     if (status === ST_VERIFY) return "התשלום דווח וממתין לאימות הוועד.";
     if (status === ST_ACTIVE) return "המנוי שלך פעיל.";
     if (status === ST_EXPIRED) return "המנוי הסתיים. אפשר לחדש אותו.";
+    /* GB2 (אושר 1.10.26) — שלושה מצבים שהשרת מכיר והמסך הראה רק כתג, בלי מילה */
+    if (status === ST_FROZEN) return "המנוי מוקפא כרגע. לפרטים ולחידוש — פנו לאחראית חדר הכושר.";
+    if (status === ST_REJECTED) return "הבקשה לא אושרה. אפשר להגיש בקשה חדשה, או לפנות לאחראית חדר הכושר לפרטים.";
+    if (status === ST_CANCELLED) return "המנוי בוטל. אפשר להירשם מחדש בכל עת.";
     return "";
   }
 
@@ -224,6 +231,10 @@ CBA.screens = CBA.screens || {};
       html += '<button type="button" class="btn-primary gym-cta" data-gym-start>מילוי הצהרת בריאות</button>';
     }
     if (status === ST_ACTIVE) html += activeCardHTML(m);
+    /* GB2 — אחרי "נדחה"/"בוטל" השרת מאפשר בקשה חדשה (חוסם רק מנוי חי) */
+    if (status === ST_REJECTED || status === ST_CANCELLED) {
+      html += '<button type="button" class="btn-primary gym-cta" data-gym-start>הרשמה מחדש</button>';
+    }
 
     if (status === ST_EXPIRED) {
       // חידוש בלחיצה אחת אם ההצהרה עדיין בתוקף; אחרת — טופס מלא מחדש.

@@ -847,8 +847,11 @@ CBA.screens.resServices = {
 
     CBA.data.getServices(function (res) {
       if (!res || !res.ok) {
-        body.innerHTML = '<div class="card club-card"><div class="club-empty">לא ניתן לטעון את השירותים כרגע. ' +
-          svcEsc((res && res.error) || "") + "</div></div>";
+        /* SVA1 (אושר 1.10.26) — "לנסות שוב" (עד היום טקסט בלבד, ולפעמים שגיאה גולמית) */
+        body.innerHTML = CBA.ui.emptyState({ icon: "search", title: "לא הצלחנו לטעון את השירותים",
+          sub: "בדקו את החיבור לאינטרנט ונסו שוב.", ctaLabel: "לנסות שוב", ctaAttr: "data-svc-retry" });
+        var rt = body.querySelector("[data-svc-retry]");
+        if (rt) rt.addEventListener("click", function () { CBA.screens.resServices.render(container); });
         return;
       }
       svcState.list = CBA.serviceUtils.build(res.services, res.sections);

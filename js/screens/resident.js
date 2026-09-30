@@ -504,7 +504,7 @@ CBA.screens = CBA.screens || {};
       } else {
         listHTML = '<div class="rs-empty">' + inboxIcon +
               '<b>עדיין אין בקשות</b>' +
-              '<p>לחצו על "הגשת בקשה חדשה" כדי לשלוח קבלה ראשונה. הבקשות שלכם יופיעו כאן עם הסטטוס שלהן.</p>' +
+              '<p>לחצו על "הגשת קבלה" כדי לשלוח קבלה ראשונה. הבקשות שלכם יופיעו כאן עם הסטטוס שלהן.</p>' +
               /* R3 (גל 4) — בחופה החדשה ה-CTA עבר ל-"+"; במצב הריק הוא נשאר כאן */
               (window.CBA && CBA.canopy ? '<button class="btn-primary rs-cta" data-goto="resSubmit">' + plusIcon + ' הגשת בקשה חדשה</button>' : '') +
             '</div>';
@@ -534,7 +534,7 @@ CBA.screens = CBA.screens || {};
           '<div class="stat stat--blue"><div class="stat__label">אושרו</div><div class="stat__value">' + counts.ready + '</div></div>' +
           '<div class="stat stat--ok"><div class="stat__label">שולמו ב' + CBA.esc(curYear) + '</div><div class="stat__value">' + CBA.formatILS(counts.paid) + '</div></div>' +
         '</div>' +
-        '<button class="btn-primary rs-cta" data-goto="resSubmit">' + plusIcon + ' הגשת בקשה חדשה</button>' +
+        '<button class="btn-primary rs-cta" data-goto="resSubmit">' + plusIcon + ' הגשת קבלה</button>' +
         '<div id="rq-gym">' + gymCardHTML() + '</div>' +
         listHTML;
 
@@ -569,7 +569,7 @@ CBA.screens = CBA.screens || {};
         sub: fullName(u) + (house ? " · " + house : "") + " · צילום הקבלה ממלא את הפרטים לבד",
         back: { id: "rs-back", label: "הבקשות שלי" } });
       container.innerHTML = (sHead ? sHead + '<div class="cnp2-body rs-v2">' :
-        '<div class="screen-head"><div class="screen-head__title">הגשת בקשה</div>' +
+        '<div class="screen-head"><div class="screen-head__title">הגשת קבלה</div>' +
           '<div class="screen-head__sub">' + CBA.esc(fullName(u)) + (house ? " · " + CBA.esc(house) : "") + '</div></div>') +
         '<div class="rs-form">' +
           '<div class="rs-seg" id="type-seg">' +
@@ -804,7 +804,12 @@ CBA.screens = CBA.screens || {};
         var errs = validate();
         if (errs.length) { showError(errs.join(" ")); return; }
 
-        openReceiptPurposeModal(function (purposeText) {
+        /* SA4 (אושר 1.10.26) — חלון "לאיזה שימוש?" רק כשהתיאור קצר מ-3 מילים.
+           תיאור מלא כבר אומר לטובת מה, והחלון היה עוד לחיצה על כל קבלה. */
+        (function (go) {
+          var words = String(val("#rs-desc") || "").trim().split(/\s+/).filter(Boolean).length;
+          if (words < 3) openReceiptPurposeModal(go); else go(null);
+        })(function (purposeText) {
           submitBtn.disabled = true;
           submitBtn.innerHTML = '<div class="rs-spin"></div><span>שולח…</span>';
 
@@ -989,7 +994,7 @@ CBA.screens = CBA.screens || {};
         '<div class="modal" role="dialog">' +
           '<div class="modal__head">' +
             '<div><div class="modal__title">לפני שמאשרים שריון</div>' +
-              '<div class="modal__sub">עיקרי הוראות השימוש במועדון — נא לקרוא ולאשר</div></div>' +
+              '<div class="modal__sub">עיקרי ההוראות ועלות השימוש (200₪) — נא לקרוא ולאשר</div></div>' +
             '<button class="drawer__close" data-modal-close aria-label="סגור">×</button>' +
           '</div>' +
           '<div class="modal__body">' +
@@ -1000,6 +1005,17 @@ CBA.screens = CBA.screens || {};
             '<div class="club-rules__modal-actions">' +
               '<button type="button" class="rs-ghost" data-modal-close>ביטול</button>' +
               '<button type="button" class="btn-primary" id="rc-agree-submit" disabled>אישור ושליחה</button>' +
+            '</div>' +
+            /* CA4 (אושר 1.10.26) — מה שהיה בחלון השני ("הבקשה מוכנה לשליחה")
+               עבר לכאן: אותו משפט ואותו כפתור PayBox משני. חלון אחד במקום שניים. */
+            '<p class="club-rules__more" style="text-align:center;margin-top:14px;">' +
+              'אחרי שהוועד יאשר את השריון אפשר לשלם — כאן, או מהכרטיס במסך המועדון.' +
+            '</p>' +
+            '<div style="text-align:center;margin-top:10px;">' +
+              '<a class="club-pay__btn club-pay__btn--ghost" href="' + PAYBOX_URL + '" ' +
+                 'target="_blank" rel="noopener">' +
+                payboxIcon + '<span>תשלום ב-PayBox · 200₪</span>' +
+              '</a>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -1014,7 +1030,9 @@ CBA.screens = CBA.screens || {};
     agreeBox.addEventListener("change", function () { confirmBtn.disabled = !agreeBox.checked; });
     confirmBtn.addEventListener("click", function () {
       closeAnyModal();
-      openPaymentReminder(onConfirm);   // 2026-08-06: אחרי אישור התקנון, עוד חלון לתשלום לפני השליחה בפועל
+      /* CA4 (אושר 1.10.26) — בלי חלון שני: התשלום כבר בחלון הזה. openPaymentReminder
+         נשאר בקוד (לא נקרא) כדי שאפשר יהיה להחזיר בשורה אחת. */
+      onConfirm();
     });
   }
 
