@@ -45,7 +45,7 @@ body[data-screen="resHome"].hm2-past .app-header { border-radius: 0 0 var(--r-ca
 .hm2-mini[hidden] { display: none; }
 .hm2-mini:hover { background: rgba(255,255,255,.12); }
 .hm2-mini small { display: block; font-size: var(--t-12); color: var(--on-navy-2); letter-spacing: .01em; }
-.hm2-mini b { display: block; font-size: 18px; font-weight: 800; margin: 3px 0 2px; line-height: 1.2; }
+.hm2-mini b { display: block; font-size: calc(18px * var(--fs, 1)); font-weight: 800; margin: 3px 0 2px; line-height: 1.2; }
 .hm2-mini span { display: block; font-size: var(--t-12); color: var(--on-navy-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hm2-mini--go { padding-inline-end: 30px; }
 .hm2-mini--go::after {
@@ -85,9 +85,9 @@ body[data-screen="resHome"].hm2-past .app-header { border-radius: 0 0 var(--r-ca
 div.hm2-tile { cursor: default; }
 button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
 .hm2-tile__h { display: flex; align-items: center; gap: 10px; font-size: var(--t-13); font-weight: 600; color: var(--ink-2); }
-.hm2-tile__n { font-size: 30px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hm2-tile__n { font-size: calc(30px * var(--fs, 1)); font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .hm2-tile__n em { font-style: normal; font-size: var(--t-14); color: var(--ink-3); font-weight: 600; margin-inline-start: 4px; }
-.hm2-tile__n--sm { font-size: 20px; font-weight: 800; }
+.hm2-tile__n--sm { font-size: calc(20px * var(--fs, 1)); font-weight: 800; }
 .hm2-tile__s { font-size: var(--t-13); color: var(--ink-2); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; }
 .hm2-tile--gar { background: var(--dom-gar); color: var(--paper); }
 .hm2-tile--gar .hm2-tile__h, .hm2-tile--gar .hm2-tile__s, .hm2-tile--gar .hm2-tile__n em { color: rgba(255,255,255,.8); }
@@ -99,7 +99,7 @@ button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
   background: var(--ground); border: 0; border-radius: 10px; padding: 7px 2px 6px; text-align: center;
   font: inherit; font-size: var(--t-11); color: var(--ink-2); line-height: 1.15; cursor: pointer; min-width: 0;
 }
-.hm2-sd b { display: block; font-size: 15px; color: var(--ink); font-weight: 700; }
+.hm2-sd b { display: block; font-size: calc(15px * var(--fs, 1)); color: var(--ink); font-weight: 700; }
 .hm2-sd small { font-size: var(--t-11); }
 .hm2-sd.is-past { opacity: .55; }
 .hm2-sd.is-today { background: var(--dom); color: var(--paper); }
@@ -114,7 +114,7 @@ button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
 .hm2-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap); align-items: start; }
 .hm2-card { background: var(--paper); border-radius: var(--r-card); padding: 20px; box-shadow: var(--sh-card); min-width: 0; border: 0; }
 .hm2-card__h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 12px; }
-.hm2-card__h h2 { font-size: 17px; font-weight: 700; margin: 0; }
+.hm2-card__h h2 { font-size: calc(17px * var(--fs, 1)); font-weight: 700; margin: 0; }
 .hm2-row {
   display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 0; width: 100%;
   border: 0; border-top: 1px solid var(--hair-2); background: none; font: inherit; color: var(--ink);
@@ -125,7 +125,7 @@ button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
 #hm-new:empty + #hm-inbox .hm2-row:first-child { border-top: 0; }
 .hm2-row:hover .hm2-row__t b { text-decoration: underline; text-underline-offset: 3px; }
 .hm2-row__t { flex: 1; min-width: 0; }
-.hm2-row__t b { display: block; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm2-row__t b { display: block; font-size: calc(15px * var(--fs, 1)); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hm2-row__t small { display: block; font-size: var(--t-13); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hm2-row .badge { flex: none; }
 .hm2-row--new .hm2-dot { width: 9px; height: 9px; }
@@ -136,7 +136,7 @@ button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
 .hm2-face {
   width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--paper);
   display: inline-flex; align-items: center; justify-content: center;
-  color: var(--paper); font-style: normal; font-size: 10px; font-weight: 700; margin-inline-end: -8px;
+  color: var(--paper); font-style: normal; font-size: calc(10px * var(--fs, 1)); font-weight: 700; margin-inline-end: -8px;
 }
 .hm-nx__st .hm2-faces { margin-inline-end: 10px; }
 /* "דברים לעשות" */
@@ -145,7 +145,7 @@ button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
   background: var(--ground); border-radius: var(--r-in); padding: 12px 14px; margin-top: 8px; min-height: 60px;
 }
 .hm2-todo__t { min-width: 0; }
-.hm2-todo__t b { display: block; font-size: 15px; font-weight: 600; }
+.hm2-todo__t b { display: block; font-size: calc(15px * var(--fs, 1)); font-weight: 600; }
 .hm2-todo__t small { display: block; font-size: var(--t-13); color: var(--ink-2); }
 .hm2-btn {
   background: var(--ink); color: var(--paper); border: 1px solid var(--ink); border-radius: var(--r-pill);
@@ -160,7 +160,7 @@ button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
 }
 
 /* ---------- 5. הגיליון "האירועים הבאים" — כרטיסי 29.9 בשפה החדשה ---------- */
-.hm2-nxsheet .hm2-sheet__t { font-size: 17px; font-weight: 800; margin: 2px 4px 4px; }
+.hm2-nxsheet .hm2-sheet__t { font-size: calc(17px * var(--fs, 1)); font-weight: 800; margin: 2px 4px 4px; }
 .hm2-nxsheet .hm-nx {
   background: var(--paper) !important; border: 1px solid var(--hair) !important; box-shadow: none !important;
   border-radius: 16px !important; margin-top: 10px;
@@ -182,16 +182,16 @@ button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
   .hm2-minis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .hm2-mini { min-width: 0; max-width: none; padding: 10px 12px; }
   .hm2-mini--go { padding-inline-end: 26px; }
-  .hm2-mini b { font-size: 16px; }
+  .hm2-mini b { font-size: calc(16px * var(--fs, 1)); }
   .hm2-mini--adm:nth-child(3):last-child { grid-column: 1 / -1; }
   .hm2-body { padding-top: 14px; gap: 10px; }
   .hm2-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .hm2-tile { padding: 14px; min-height: 118px; overflow: hidden; }
   .hm2-tile--week { grid-column: 1 / -1; min-height: 0; }
-  .hm2-tile__n { font-size: 26px; }
+  .hm2-tile__n { font-size: calc(26px * var(--fs, 1)); }
   .hm2-strip { gap: 3px; }
   .hm2-sd { padding: 6px 0 5px; border-radius: 8px; }
-  .hm2-sd b { font-size: 13px; }
+  .hm2-sd b { font-size: calc(13px * var(--fs, 1)); }
   .hm2-grid2 { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .hm2-card { padding: 16px; }
   .hm2-todo { flex-wrap: nowrap; }
@@ -213,7 +213,7 @@ body[data-screen="adminBoard"] .app-main { max-width: calc(var(--content) + 2 * 
 .hmg-cards--board { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
 .hmg-link { display: flex !important; flex-direction: row !important; align-items: center; gap: 12px; text-align: start; cursor: pointer; border: 0; font: inherit; color: var(--ink); }
 .hmg-link .hm-row__txt { flex: 1; }
-.hmg-link .hm-row__txt b { display: block; font-size: 15px; }
+.hmg-link .hm-row__txt b { display: block; font-size: calc(15px * var(--fs, 1)); }
 .hmg-link .hm-row__txt small { display: block; font-size: var(--t-13); color: var(--ink-2); }
 @media (max-width: 1000px) {
   .hm2-bgrid--g, .hmg-cards--board { grid-template-columns: minmax(0, 1fr) !important; }

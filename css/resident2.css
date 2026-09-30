@@ -33,7 +33,7 @@ body:has(.rs-v2) { --cnp-w: 680px; }
 }
 @media (max-width: 720px) {
   /* CA2 — משבצות בגובה שאפשר לגעת בו (26 → 36px) */
-  .rv-v2 .rs-slot { height: 36px; font-size: 11px; }
+  .rv-v2 .rs-slot { height: 36px; font-size: calc(11px * var(--fs, 1)); }
 }
 
 /* ---------- 9. מכון כושר ---------- */

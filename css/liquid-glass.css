@@ -261,13 +261,13 @@ input.lg, textarea.lg, select.lg {
 .up-live--warn { background: var(--warn); }
 .up-head__txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .up-nameline { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.up-name { font-size: 13px; }
+.up-name { font-size: calc(13px * var(--fs, 1)); }
 /* התגית חזרה לשורת השם — היא נדחסה שם ב-8.8 רק כי היא הייתה גדולה יותר */
 .up-role {
   align-self: center; margin-top: 0; flex: none;
-  font-size: 9.5px; padding: 1.5px 6px; background: rgba(16,24,40,.10);
+  font-size: calc(9.5px * var(--fs, 1)); padding: 1.5px 6px; background: rgba(16,24,40,.10);
 }
-.up-sub { font-size: 11px; margin-top: 0; }
+.up-sub { font-size: calc(11px * var(--fs, 1)); margin-top: 0; }
 
 /* "מטא" — עזרה ויציאה. סמלים שעומדים בלי מילה. */
 .up-meta { display: flex; gap: 5px; flex: none; }
@@ -291,7 +291,7 @@ input.lg, textarea.lg, select.lg {
 
 .up-pill {
   display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 7px 9px; font-size: 12px; text-align: start; font-family: inherit;
+  padding: 7px 9px; font-size: calc(12px * var(--fs, 1)); text-align: start; font-family: inherit;
 }
 .up-pill .up-row__ico, .up-pill .lg-ico {
   width: 26px; height: 26px; border-radius: 50%; flex: none;
@@ -301,16 +301,16 @@ input.lg, textarea.lg, select.lg {
 .up-pill__t, .up-alert__txt { flex: 1; min-width: 0; font-weight: 600; }
 .up-pill--sim .up-pill__t { color: var(--sim); }
 .up-pill--sim .lg-ico { background: rgba(124,58,237,.12); color: var(--sim); }
-.up-alert__n { min-width: 20px; height: 20px; font-size: 11px; }
+.up-alert__n { min-width: 20px; height: 20px; font-size: calc(11px * var(--fs, 1)); }
 
 /* מתג האזורים — שתי גלולות נפרדות. פעיל = מילוי מלא, כבוי = זכוכית. */
 .up-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-.up-tg { padding: 8px 6px; font-size: 12px; font-weight: 700; text-align: center; }
+.up-tg { padding: 8px 6px; font-size: calc(12px * var(--fs, 1)); font-weight: 700; text-align: center; }
 
 /* "שנת צפייה" (2026-09-15: הוסר האקורדיון שהיה כאן — יועד: "אין צורך
    גם בחץ וגם בכפתורים, זה ממש לא iOS style". תווית פשוטה, ומתחתיה ישר
    הקפסולה הגוללת-אופקית, תמיד גלויה. */
-.up-year__label { padding: 0 9px; margin-bottom: 6px; font-size: 11.5px; font-weight: 700;
+.up-year__label { padding: 0 9px; margin-bottom: 6px; font-size: calc(11.5px * var(--fs, 1)); font-weight: 700;
   color: var(--text-soft); }
 /* קפסולה בתוך קפסולה, בסגנון iOS (יועד, 15.9.26): מסלול אחד עגול-לגמרי
    שגוללים בתוכו אופקית, ובתוכו שבבים עגולים-לגמרי; הנבחר מלא וכהה,
@@ -323,16 +323,16 @@ input.lg, textarea.lg, select.lg {
 }
 .up-year__track::-webkit-scrollbar { display: none; }
 .up-year__chip {
-  flex: none; scroll-snap-align: center; padding: 6px 15px; font-size: 12px;
+  flex: none; scroll-snap-align: center; padding: 6px 15px; font-size: calc(12px * var(--fs, 1));
   font-weight: 700; font-family: inherit; border: 0; border-radius: 999px;
   background: transparent; color: var(--text-soft, #6B7280); cursor: pointer;
   transition: background .16s ease, color .16s ease;
 }
 .up-year__chip:hover { color: var(--text); }
 .up-year__chip.is-on { background: var(--action, #111827); color: #fff; }
-.up-year__note { font-size: 11px; color: var(--text-soft); margin-top: 8px; text-align: center; }
+.up-year__note { font-size: calc(11px * var(--fs, 1)); color: var(--text-soft); margin-top: 8px; text-align: center; }
 .up-year__note b { color: var(--text); }
-.up-year__set { margin-top: 6px; width: 100%; font-size: 12px; padding: 7px; text-align: center; }
+.up-year__set { margin-top: 6px; width: 100%; font-size: calc(12px * var(--fs, 1)); padding: 7px; text-align: center; }
 
 /* רשת האריחים */
 .up-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 1px; }
@@ -344,7 +344,7 @@ input.lg, textarea.lg, select.lg {
 }
 .up-tile__d { width: 100%; aspect-ratio: 1; max-width: 52px; color: var(--text); }
 .up-tile__d svg { width: 18px; height: 18px; display: block; }
-.up-tile__l { font-size: 9px; font-weight: 600; color: var(--text-soft); letter-spacing: -.1px; }
+.up-tile__l { font-size: calc(9px * var(--fs, 1)); font-weight: 600; color: var(--text-soft); letter-spacing: -.1px; }
 .up-tile:hover .up-tile__l { color: var(--text); }
 .up-tile:active .up-tile__d { transform: scale(.94); }
 
@@ -439,10 +439,10 @@ input, textarea, select, .field-input, .num-input {
 .up-head__btn .up-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .up-head__btn .up-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .up-sub--link { color: var(--text); font-weight: 600; }
-.up-chev, .up-li__chev { color: var(--text-soft); font-size: 16px; line-height: 1; flex: none; }
+.up-chev, .up-li__chev { color: var(--text-soft); font-size: calc(16px * var(--fs, 1)); line-height: 1; flex: none; }
 
 .up-grp { display: flex; flex-direction: column; gap: 6px; }
-.up-grp__l { font-size: 10.5px; font-weight: 700; color: var(--text-soft); padding: 2px 8px 0; letter-spacing: .2px; }
+.up-grp__l { font-size: calc(10.5px * var(--fs, 1)); font-weight: 700; color: var(--text-soft); padding: 2px 8px 0; letter-spacing: .2px; }
 .up-list {
   background: rgba(255,255,255,.72); border: 1px solid rgba(17,24,39,.07);
   border-radius: 14px; overflow: hidden;
@@ -459,8 +459,8 @@ input, textarea, select, .field-input, .num-input {
   background: rgba(17,24,39,.07); color: var(--text);
 }
 .up-li__ico svg { width: 14px; height: 14px; display: block; }
-.up-li__t { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; }
-.up-li__s { display: block; font-size: 10.5px; font-weight: 500; color: var(--text-soft); margin-top: 1px; }
+.up-li__t { flex: 1; min-width: 0; font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; }
+.up-li__s { display: block; font-size: calc(10.5px * var(--fs, 1)); font-weight: 500; color: var(--text-soft); margin-top: 1px; }
 .up-li--sim .up-li__t { color: var(--sim); }
 .up-li--sim .up-li__ico { background: rgba(124,58,237,.12); color: var(--sim); }
 
@@ -481,13 +481,13 @@ input, textarea, select, .field-input, .num-input {
 .up-foot {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   margin-top: 8px; padding: 8px 8px 2px; border-top: 1px solid rgba(17,24,39,.07);
-  font-size: 10.5px; color: var(--text-soft);
+  font-size: calc(10.5px * var(--fs, 1)); color: var(--text-soft);
 }
 .up-foot__link, .up-foot__quit {
   border: 0; background: none; padding: 0; font: inherit; cursor: pointer;
 }
 .up-foot__link { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
-.up-foot__quit { color: #9F1239; font-weight: 700; font-size: 12px; }
+.up-foot__quit { color: #9F1239; font-weight: 700; font-size: calc(12px * var(--fs, 1)); }
 .up-foot__quit:hover { color: #7F1D1D; }
 
 /* 24.9 סבב 2 (יועד: "צריך קצת לצמצם את הגודל") — מגש קומפקטי יותר */
@@ -495,23 +495,23 @@ input, textarea, select, .field-input, .num-input {
 .up-stack { gap: 6px; padding: 6px 0 0; }
 .up-head__btn { padding: 5px 8px; border-radius: 12px; }
 .up-grp { gap: 4px; }
-.up-grp__l { font-size: 10px; padding: 0 8px; }
+.up-grp__l { font-size: calc(10px * var(--fs, 1)); padding: 0 8px; }
 .up-list { border-radius: 12px; }
 .up-li { padding: 6px 9px; gap: 8px; }
 .up-li__ico { width: 22px; height: 22px; }
 .up-li__ico svg { width: 13px; height: 13px; }
-.up-li__t { font-size: 12px; }
+.up-li__t { font-size: calc(12px * var(--fs, 1)); }
 .up-sw { width: 30px; height: 18px; }
 .up-sw::after { width: 14px; height: 14px; }
 .up-sw.is-on::after { right: 14px; }
-.up-tg { padding: 6px; font-size: 11.5px; }
+.up-tg { padding: 6px; font-size: calc(11.5px * var(--fs, 1)); }
 .up-foot { margin-top: 6px; padding: 6px 6px 0; }
 
 /* "שנת צפייה" בצבע אחר ממתג תושב/ניהול (יועד, 24.9: "לא באותו צבע").
    המתג נשאר מילוי כהה; השנים — בורר iOS בהיר: הנבחרת לבנה עם צל. */
-.up-year__label { font-size: 10px; margin-bottom: 4px; padding: 0 8px; }
+.up-year__label { font-size: calc(10px * var(--fs, 1)); margin-bottom: 4px; padding: 0 8px; }
 .up-year__track { padding: 3px; background: rgba(17,24,39,.07); }
-.up-year__chip { padding: 4px 12px; font-size: 11.5px; }
+.up-year__chip { padding: 4px 12px; font-size: calc(11.5px * var(--fs, 1)); }
 .up-year__chip.is-on {
   background: #fff; color: var(--text);
   box-shadow: 0 1px 3px rgba(16,24,40,.18), 0 0 0 .5px rgba(16,24,40,.08);

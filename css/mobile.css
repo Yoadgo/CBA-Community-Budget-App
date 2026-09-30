@@ -157,7 +157,7 @@
     color: var(--text-soft);
     /* (2026-09-07) האייקון גדל והטקסט הוקטן: עם שישה יעדים בבר, האייקון הוא
        מה שהעין תופסת קודם והמילה רק מאשרת. */
-    font-size: 9px; font-weight: 500; line-height: 1.2;
+    font-size: calc(9px * var(--fs, 1)); font-weight: 500; line-height: 1.2;
     padding: 5px 2px; border-radius: 13px;
     white-space: nowrap; overflow: hidden; text-align: center;
   }
@@ -202,7 +202,7 @@
   body.nav-mini .app-nav--bottom > .app-nav__tab,
   body.nav-mini .app-nav--bottom > .app-nav__group { flex-basis: 50px; width: 50px; }
   .app-nav--bottom .app-nav__tab {
-    font-size: 12.5px; gap: 3px; padding: 8px 2px 6px; border-radius: 999px;
+    font-size: calc(12.5px * var(--fs, 1)); gap: 3px; padding: 8px 2px 6px; border-radius: 999px;
     color: #1F2937; text-shadow: 0 0 3px rgba(255,255,255,.95);
     transition: font-size .45s cubic-bezier(.34,1.45,.5,1), padding .55s cubic-bezier(.34,1.45,.5,1);
   }
@@ -253,7 +253,7 @@
   body.nav-mini .app-nav--bottom .app-nav__tab { font-size: 0; padding: 7px 2px; gap: 0; }
   body.nav-mini .app-nav--bottom .app-nav__ico svg { width: 24px; height: 24px; }
   body.nav-mini .app-nav.app-nav--bottom .nav-indicator { top: 4px; bottom: 4px; }
-  body.nav-mini .app-nav--bottom .nav-badge { top: -4px; font-size: 9.5px; }
+  body.nav-mini .app-nav--bottom .nav-badge { top: -4px; font-size: calc(9.5px * var(--fs, 1)); }
   body.nav-mini .nav-search-fab { width: 50px; height: 50px; inset-inline-end: var(--nm-start, 14%); }
   body.nav-mini .nav-search-fab svg { width: 21px; height: 21px; }
 
@@ -283,7 +283,7 @@
     height: 40px; padding: 0 13px; border: none; border-radius: 20px;
     background: rgba(255,255,255,.5);
     box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 2px rgba(16,24,40,.04);
-    font: inherit; font-size: 14px; font-weight: 500; color: var(--text);
+    font: inherit; font-size: calc(14px * var(--fs, 1)); font-weight: 500; color: var(--text);
     cursor: pointer; text-align: start;
     opacity: 0; transform: translateY(6px);
     transition: opacity .25s ease var(--d, 0ms), transform .4s cubic-bezier(.34,1.45,.5,1) var(--d, 0ms), background .15s;
@@ -330,10 +330,10 @@
   /* ---------- שלב 2: מסך "תכנון מול ביצוע" — פריסה אנכית מרווחת ---------- */
   .budget-cols { gap: 26px; }
   .bgroup__head { margin-bottom: 14px; }
-  .bgroup__name { font-size: 17px; }
+  .bgroup__name { font-size: calc(17px * var(--fs, 1)); }
   .budget-grid { gap: 12px; }
   .bcard { padding: 18px; }
-  .bcard__actual { font-size: 21px; }
+  .bcard__actual { font-size: calc(21px * var(--fs, 1)); }
   /* פס ההתקדמות מעט גבוה יותר — נקרא טוב יותר באגודל */
   .bcard .bar { height: 10px; margin-top: 14px; }
 
@@ -352,11 +352,11 @@
     position: absolute; inset-block: 0; inset-inline-start: 0; z-index: 0;
     width: 132px; border: none; cursor: pointer;
     background: var(--action); color: #fff;
-    font-family: inherit; font-size: 14px; font-weight: 600;
+    font-family: inherit; font-size: calc(14px * var(--fs, 1)); font-weight: 600;
     border-radius: var(--radius);
   }
   .bcard-action::before {
-    content: "＋"; font-size: 16px; font-weight: 700;
+    content: "＋"; font-size: calc(16px * var(--fs, 1)); font-weight: 700;
     margin-inline-end: 5px; line-height: 1;
   }
 
@@ -385,19 +385,19 @@
     flex: none; min-width: 38px; height: 38px; border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
     background: var(--hover); color: var(--text-soft);
-    font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums;
+    font-size: calc(14px * var(--fs, 1)); font-weight: 800; font-variant-numeric: tabular-nums;
   }
   .res-mcard__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
   .res-mcard__fam {
-    font-size: 15px; font-weight: 700; color: var(--text);
+    font-size: calc(15px * var(--fs, 1)); font-weight: 700; color: var(--text);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .res-mcard__ppl {
-    font-size: 12.5px; color: var(--text-soft);
+    font-size: calc(12.5px * var(--fs, 1)); color: var(--text-soft);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .res-mcard__extra {
-    font-size: 11.5px; color: var(--text-muted);
+    font-size: calc(11.5px * var(--fs, 1)); color: var(--text-muted);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .res-mcard__side {
@@ -416,7 +416,7 @@
 
   /* גריד ההוספה — במסך צר הוא נגלל לרוחב במקום להידחס לתאים בלתי-קריאים */
   .res-add__scroll { -webkit-overflow-scrolling: touch; }
-  .res-add__hint { font-size: 12px; gap: 8px; }
+  .res-add__hint { font-size: calc(12px * var(--fs, 1)); gap: 8px; }
   .res-add__paste { display: none; }
   .res-add__mob { display: inline; }
   .res-exp__cols { grid-template-columns: 1fr; }
@@ -432,7 +432,7 @@
   .tx-filter-btn {
     display: inline-flex; align-items: center; flex: none;
     border: 1px solid var(--border); background: var(--surface);
-    font-family: inherit; font-size: 13px; font-weight: 500; color: var(--text);
+    font-family: inherit; font-size: calc(13px * var(--fs, 1)); font-weight: 500; color: var(--text);
     padding: 8px 14px; border-radius: 10px; cursor: pointer;
   }
   .tx-actions { width: 100%; justify-content: flex-start; }
@@ -447,7 +447,7 @@
     box-shadow: 0 -8px 30px rgba(16,24,40,.18);
     animation: sheetUp .24s cubic-bezier(.2,.7,.2,1);
   }
-  .tx-selects.is-open .year-select { width: 100%; font-size: 15px; padding: 12px 10px; }
+  .tx-selects.is-open .year-select { width: 100%; font-size: calc(15px * var(--fs, 1)); padding: 12px 10px; }
   .tx-selects.is-open .tx-sheet-apply { display: block; width: 100%; padding: 12px; margin-top: 2px; }
   .tx-sheet-backdrop {
     position: fixed; inset: 0; z-index: 55; background: rgba(17,24,39,.4);
@@ -464,19 +464,19 @@
     font-family: inherit; text-align: start;
   }
   .tx-mcard__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-  .tx-mcard__title { font-size: 15px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tx-mcard__meta { font-size: 12px; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tx-mcard__title { font-size: calc(15px * var(--fs, 1)); font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tx-mcard__meta { font-size: calc(12px * var(--fs, 1)); color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tx-mcard__side { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex: none; }
-  .tx-mcard__amount { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .tx-mcard__chev { flex: none; color: var(--text-muted); font-size: 16px; transition: transform var(--t); }
+  .tx-mcard__amount { font-size: calc(16px * var(--fs, 1)); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .tx-mcard__chev { flex: none; color: var(--text-muted); font-size: calc(16px * var(--fs, 1)); transition: transform var(--t); }
   .tx-mrow.is-open .tx-mcard__chev { transform: rotate(180deg); }
 
   /* פרטי האקורדיון */
   .tx-mdetails { padding: 2px 16px 16px; border-top: 1px solid var(--border); }
   .tx-md__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 12px 0; }
   .tx-md--wide { grid-column: 1 / -1; }
-  .tx-md__k { display: block; font-size: 11px; color: var(--text-muted); }
-  .tx-md__v { display: block; font-size: 14px; color: var(--text); margin-top: 1px; }
+  .tx-md__k { display: block; font-size: calc(11px * var(--fs, 1)); color: var(--text-muted); }
+  .tx-md__v { display: block; font-size: calc(14px * var(--fs, 1)); color: var(--text); margin-top: 1px; }
   .tx-md__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
   /* כפתור + מרחף */
@@ -485,7 +485,7 @@
     position: fixed; left: 16px; bottom: calc(var(--botnav-h) + env(safe-area-inset-bottom) + 16px);
     z-index: 45; width: 56px; height: 56px; border-radius: 50%;
     background: var(--action); color: #fff; border: none;
-    font-size: 30px; line-height: 1; cursor: pointer;
+    font-size: calc(30px * var(--fs, 1)); line-height: 1; cursor: pointer;
     box-shadow: 0 6px 20px rgba(16,24,40,.28);
   }
 
@@ -493,7 +493,7 @@
   .drawer { width: 100vw; inset: 0; animation: sheetUp .26s cubic-bezier(.2,.7,.2,1); }
   .drawer__body { padding: 14px 16px calc(24px + env(safe-area-inset-bottom)); }
   /* 16px מונע זום אוטומטי של iOS + מגדיל שטח נגיעה */
-  .field-input, .num-input { font-size: 16px; padding: 12px; }
+  .field-input, .num-input { font-size: calc(16px * var(--fs, 1)); padding: 12px; }
   .drawer__actions { position: sticky; bottom: 0; background: var(--surface); padding: 12px 0 4px; margin-top: 16px; }
   .drawer__actions .btn-primary { flex: 1; padding: 12px; }
   /* הפס הדביק "בולט" לשוליים עם margin שלילי של 22px, שמחושב לפי ריפוד הדסקטופ.
@@ -526,10 +526,10 @@
   /* פריט 7: כותרת מעל המספר בכל תא — שורה תחתונה סימטרית גם עם טקסטים ארוכים */
   .bottomline-bar .bl-cell { flex-direction: column; align-items: center; gap: 1px; padding: 3px 4px; text-align: center; }
   .bottomline-bar .bl-cell + .bl-cell { border-inline-start: 1px solid var(--hairline); border-top: none; }
-  .bottomline-bar .bl-cell__label { font-size: 9px; line-height: 1.15; color: var(--text-soft); }
-  .bottomline-bar .bl-cell__val { font-size: 14px; color: var(--text); }
+  .bottomline-bar .bl-cell__label { font-size: calc(9px * var(--fs, 1)); line-height: 1.15; color: var(--text-soft); }
+  .bottomline-bar .bl-cell__val { font-size: calc(14px * var(--fs, 1)); color: var(--text); }
   .bottomline-bar .bl-cell--result { border-radius: 10px; }
-  .bottomline-bar .bl-cell--result .bl-cell__val { font-size: 15px; }
+  .bottomline-bar .bl-cell--result .bl-cell__val { font-size: calc(15px * var(--fs, 1)); }
 
   /* שמירת מקום בתחתית התוכן — רק במסכים שיש בהם שורה תחתונה */
   body[data-screen="budget"] .app-main,
@@ -552,6 +552,6 @@
 @media (max-width: 720px) and (orientation: portrait) {
   .cum-rotate-hint {
     display: flex; align-items: center; gap: 6px;
-    font-size: 11px; color: var(--text-muted); margin: 2px 0 8px;
+    font-size: calc(11px * var(--fs, 1)); color: var(--text-muted); margin: 2px 0 8px;
   }
 }

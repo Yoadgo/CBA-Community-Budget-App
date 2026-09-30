@@ -12,7 +12,7 @@
 .ev-v2 .lg::before { display: none; }
 
 /* סרגל הכלים של החודש — נשאר (חצים, "חודש | שנה"), קומפקטי יותר */
-.ev-v2 .cal-title h2, .ev-v2 .month-header h2 { font-size: 20px; }
+.ev-v2 .cal-title h2, .ev-v2 .month-header h2 { font-size: calc(20px * var(--fs, 1)); }
 .ev-v2 .seg { background: var(--hair-2); border-radius: var(--r-pill); padding: 3px; }
 .ev-v2 .seg .view-toggle-btn { border-radius: var(--r-pill); }
 .ev-v2 .seg .view-toggle-btn.on { background: var(--paper); color: var(--ink); box-shadow: var(--sh-card); }
@@ -46,9 +46,9 @@
 /* EA4 (אושר 1.10.26) — סימן פתיחה בשורה בטלפון + מספר המגיעים בשורת הפרטים */
 .m-it__chev { flex: none; margin-inline-start: auto; color: var(--ink-3); transition: transform .2s; }
 .m-it.is-open .m-it__chev { transform: rotate(180deg); }
-.m-it__m .rsvp-count-pill { font-size: 11px; padding: 1px 7px; vertical-align: 1px; }
+.m-it__m .rsvp-count-pill { font-size: calc(11px * var(--fs, 1)); padding: 1px 7px; vertical-align: 1px; }
 /* EA5 — שורת שריון לחיצה + מצב */
 button.private-row { width: 100%; border: 0; font-family: inherit; text-align: start; cursor: pointer; color: inherit; }
 button.private-row:hover { background: rgba(14,165,233,.12); }
-.private-row .pv-st { margin-inline-start: auto; flex: none; font-size: 11px; font-weight: 700; color: var(--ok-ink); }
+.private-row .pv-st { margin-inline-start: auto; flex: none; font-size: calc(11px * var(--fs, 1)); font-weight: 700; color: var(--ok-ink); }
 .private-row .pv-st--pend { color: var(--warn-ink); }

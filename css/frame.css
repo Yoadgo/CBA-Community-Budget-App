@@ -240,7 +240,7 @@ body:has(#app-main .cnp2--bar) .tx-fab { display: none !important; }
 .plus-sheet .plus-opt {
   display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px;
   padding: 10px 8px; border: 0; border-radius: var(--r-in); background: none;
-  font: inherit; font-size: 16px; font-weight: 600; color: var(--ink); text-align: start; cursor: pointer;
+  font: inherit; font-size: calc(16px * var(--fs, 1)); font-weight: 600; color: var(--ink); text-align: start; cursor: pointer;
 }
 .plus-sheet .plus-opt:hover { background: var(--ground); }
 .plus-sheet .plus-opt small { display: block; font-weight: 400; font-size: var(--t-13); color: var(--ink-2); }

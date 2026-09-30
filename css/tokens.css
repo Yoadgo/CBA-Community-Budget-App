@@ -69,14 +69,14 @@
   /* ---------- טיפוגרפיה (7 + גיבור) ---------- */
   --font:      "Assistant", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;  /* ספרות בשולחן בלבד */
-  --t-11: 11px;  /* תווית, מקטע */
-  --t-12: 12px;  /* מטא, תג */
-  --t-13: 13px;  /* משני, תת-שורה */
-  --t-14: 14px;  /* גוף */
-  --t-15: 15px;  /* שורה, טאב, כפתור */
-  --t-17: 17px;  /* כותרת כרטיס */
-  --t-30: 30px;  /* מספר באריח */
-  --t-hero: 64px; /* מספר גיבור בחופה (48 בטלפון) */
+  --t-11: calc(11px * var(--fs, 1));  /* תווית, מקטע */
+  --t-12: calc(12px * var(--fs, 1));  /* מטא, תג */
+  --t-13: calc(13px * var(--fs, 1));  /* משני, תת-שורה */
+  --t-14: calc(14px * var(--fs, 1));  /* גוף */
+  --t-15: calc(15px * var(--fs, 1));  /* שורה, טאב, כפתור */
+  --t-17: calc(17px * var(--fs, 1));  /* כותרת כרטיס */
+  --t-30: calc(30px * var(--fs, 1));  /* מספר באריח */
+  --t-hero: calc(64px * var(--fs, 1)); /* מספר גיבור בחופה (48 בטלפון) */
 
   /* ---------- מרווחים ---------- */
   --gutter:  24px;   /* שוליים (16 בטלפון) */
@@ -97,7 +97,7 @@
   --z-menu: 20;  --z-fab: 30;  --z-bar: 35;  --z-scrim: 40;  --z-sheet: 50;  --z-toast: 60;
 }
 @media (max-width: 720px) {
-  :root { --r-canopy: 24px; --t-hero: 48px; --gutter: 16px; --gap: 10px; }
+  :root { --r-canopy: 24px; --t-hero: calc(48px * var(--fs, 1)); --gutter: 16px; --gap: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   :root { --t-fast: 0ms; --t-in: 0ms; }

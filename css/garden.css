@@ -50,12 +50,12 @@
 }
 .gd-head__em svg { width: 23px; height: 23px; }
 .gd-head__t { min-width: 0; }
-.gd-head__t h3 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
-.gd-head__t p { font-size: 12.5px; color: var(--text-soft, #6B7280); margin: 0; }
+.gd-head__t h3 { font-size: calc(20px * var(--fs, 1)); font-weight: 700; margin: 0; letter-spacing: -.01em; }
+.gd-head__t p { font-size: calc(12.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); margin: 0; }
 .gd-newbtn, .gd-backbtn {
   margin-inline-start: auto; font-family: inherit; display: inline-flex;
   align-items: center; gap: 7px; border-radius: 11px; padding: 9px 15px;
-  font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  font-size: calc(13px * var(--fs, 1)); font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 .gd-newbtn { background: var(--action, #111827); color: #fff; border: 0;
   box-shadow: 0 8px 20px -12px rgba(17,24,39,.9); }
@@ -78,11 +78,11 @@
 .gd-card { padding: 15px 17px; }
 .gd-card + .gd-card { margin-top: 13px; }
 
-.gd-lbl { font-size: 12.5px; font-weight: 600; color: var(--text, #374151);
+.gd-lbl { font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; color: var(--text, #374151);
   margin: 0 0 10px; display: flex; align-items: center; gap: 7px; }
 .gd-lbl s { text-decoration: none; color: var(--danger, #F43F5E); font-weight: 700; }
 .gd-lbl em { font-style: normal; color: var(--text-soft, #6B7280); font-weight: 500;
-  margin-inline-start: auto; font-size: 11px; }
+  margin-inline-start: auto; font-size: calc(11px * var(--fs, 1)); }
 
 .gd-cols { display: grid; grid-template-columns: 1.02fr .98fr; gap: 16px; align-items: start; }
 @media (max-width: 900px) { .gd-cols { grid-template-columns: 1fr; } }
@@ -98,7 +98,7 @@
   box-shadow: inset 0 1px 0 rgba(255,255,255,.85), 0 0 0 1px rgba(17,24,39,.04);
   border-radius: 999px; padding: 6px 12px 6px 8px;
   display: flex; flex-direction: row; align-items: center; gap: 6px;
-  text-align: start; font-size: 12px; font-weight: 500;
+  text-align: start; font-size: calc(12px * var(--fs, 1)); font-weight: 500;
   color: var(--text, #374151); line-height: 1.2;
   transition: transform .14s ease, box-shadow .14s ease;
 }
@@ -128,12 +128,12 @@
 /* קפסולות "כותרת קצרה" (2026-09-15) — אותה שפה חזותית כמו קפסולות
    הקטגוריה (קומפקטיות, אופקיות), בלי אייקון; השבב הפעיל מציין מה נבחר. */
 .gd-tpicks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; min-height: 30px; align-items: center; }
-.gd-tpicks__hint { font-size: 11.5px; color: var(--text-soft, #6B7280); }
+.gd-tpicks__hint { font-size: calc(11.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
 .gd-tpick { font-family: inherit; cursor: pointer; border: 1px solid rgba(255,255,255,.8);
   background: rgba(255,255,255,.62); backdrop-filter: blur(10px) saturate(1.2);
   -webkit-backdrop-filter: blur(10px) saturate(1.2);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.85), 0 0 0 1px rgba(17,24,39,.04);
-  border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 500;
+  border-radius: 999px; padding: 6px 12px; font-size: calc(12px * var(--fs, 1)); font-weight: 500;
   color: var(--text, #374151); transition: transform .14s ease, box-shadow .14s ease; }
 .gd-tpick:hover { transform: translateY(-1px); }
 .gd-tpick.on { border-color: transparent; background: var(--action, #111827); color: #fff; font-weight: 600; }
@@ -142,7 +142,7 @@
    כמעט אטומים בכוונה: שדה שקוף מפסיק להיקרא כמקום שאפשר להקליד בו. */
 .gd-inp {
   border: 1px solid rgba(17,24,39,.10); background: rgba(255,255,255,.94);
-  border-radius: 11px; padding: 10px 13px; font-size: 13.5px;
+  border-radius: 11px; padding: 10px 13px; font-size: calc(13.5px * var(--fs, 1));
   font-family: inherit; color: var(--text-strong, #111827); width: 100%;
 }
 .gd-inp:focus { outline: 2px solid rgba(15,107,69,.35); outline-offset: 1px; border-color: transparent; }
@@ -150,7 +150,7 @@
 .gd-ta { min-height: 68px; resize: vertical; line-height: 1.55; }
 .gd-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 @media (max-width: 520px) { .gd-row2 { grid-template-columns: 1fr; } }
-.gd-hint { font-size: 11.5px; color: var(--text-soft, #6B7280); margin: 7px 0 0; }
+.gd-hint { font-size: calc(11.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); margin: 7px 0 0; }
 .gd-hint.is-ok { color: var(--ok, #059669); font-weight: 500; }
 .gd-meter { height: 3px; border-radius: 99px; background: rgba(17,24,39,.07);
   margin-top: 9px; overflow: hidden; }
@@ -167,11 +167,11 @@
    להגיע אליה ב-Tab ולהפעיל ברווח/Enter. */
 .gd-th .th-x { position: absolute; top: -5px; inset-inline-end: -5px; width: 18px; height: 18px;
   border: 0; padding: 0; font: inherit;
-  border-radius: 50%; background: var(--action, #111827); color: #fff; font-size: 9px;
+  border-radius: 50%; background: var(--action, #111827); color: #fff; font-size: calc(9px * var(--fs, 1));
   display: grid; place-items: center; font-style: normal; cursor: pointer; }
 .gd-th.add { background: rgba(255,255,255,.6); border: 1.5px dashed rgba(17,24,39,.18);
   display: grid; place-items: center; color: var(--text-soft, #6B7280);
-  font-size: 20px; font-weight: 300; font-family: inherit; cursor: pointer; }
+  font-size: calc(20px * var(--fs, 1)); font-weight: 300; font-family: inherit; cursor: pointer; }
 
 /* ---------- מפה ---------- */
 /* המפה היא החלק הקשה בטופס — נעיצה באצבע דורשת שטח, וזום/צביטה מחזירים
@@ -185,7 +185,7 @@
 
 /* ---------- CTA ---------- */
 .gd-cta { background: var(--action, #111827); color: #fff; border: 0; border-radius: 12px;
-  padding: 13px 18px; font-size: 14.5px; font-weight: 600; width: 100%;
+  padding: 13px 18px; font-size: calc(14.5px * var(--fs, 1)); font-weight: 600; width: 100%;
   font-family: inherit; display: flex; align-items: center; justify-content: center;
   gap: 9px; margin-top: 13px; cursor: pointer;
   box-shadow: 0 10px 24px -12px rgba(17,24,39,.85); }
@@ -201,8 +201,8 @@
 .gd-stat u { text-decoration: none; width: 30px; height: 30px; border-radius: 9px;
   display: grid; place-items: center; flex: none; }
 .gd-stat u svg { width: 16px; height: 16px; }
-.gd-stat b { font-size: 19px; font-weight: 700; line-height: 1; display: block; }
-.gd-stat span { font-size: 11.5px; color: var(--text-soft, #6B7280); display: block; }
+.gd-stat b { font-size: calc(19px * var(--fs, 1)); font-weight: 700; line-height: 1; display: block; }
+.gd-stat span { font-size: calc(11.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); display: block; }
 .gd-stat.is-open u { background: #FDF0DF; color: var(--warn, #D97706); }
 .gd-stat.is-open b { color: var(--warn, #D97706); }
 .gd-stat.is-wait u { background: #EEF1F5; color: #64748B; }
@@ -213,7 +213,7 @@
 /* ---------- מסנן ---------- */
 .gd-seg { display: inline-flex; background: rgba(237,240,242,.8); border-radius: 11px;
   padding: 3px; gap: 2px; margin-bottom: 13px; }
-.gd-seg button { font-family: inherit; font-size: 12.5px; font-weight: 500;
+.gd-seg button { font-family: inherit; font-size: calc(12.5px * var(--fs, 1)); font-weight: 500;
   color: var(--text-soft, #6B7280); padding: 5px 14px; border-radius: 9px;
   border: 0; background: transparent; cursor: pointer; }
 .gd-seg button.on { background: #fff; color: var(--text-strong, #111827);
@@ -252,17 +252,17 @@
 .k-bed   .gd-rep__th { background: var(--c-bed-s);   color: var(--c-bed); }
 .gd-rep__ph { position: absolute; inset-block-end: -3px; inset-inline-end: -3px;
   min-width: 17px; height: 17px; padding: 0 4px; border-radius: 99px;
-  background: var(--action, #111827); color: #fff; font-size: 10.5px; font-weight: 700;
+  background: var(--action, #111827); color: #fff; font-size: calc(10.5px * var(--fs, 1)); font-weight: 700;
   display: grid; place-items: center; border: 2px solid #fff; }
 .gd-rep__b { flex: 1; min-width: 0; }
 .gd-rep__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.gd-rep__id { font-size: 11.5px; color: var(--text-soft, #6B7280); font-weight: 600; }
-.gd-rep__t { font-weight: 600; font-size: 14.5px; margin-top: 3px;
+.gd-rep__id { font-size: calc(11.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); font-weight: 600; }
+.gd-rep__t { font-weight: 600; font-size: calc(14.5px * var(--fs, 1)); margin-top: 3px;
   overflow-wrap: anywhere; }
-.gd-rep__m { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 2px; }
-.gd-rep__merged { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 6px;
+.gd-rep__m { font-size: calc(12px * var(--fs, 1)); color: var(--text-soft, #6B7280); margin-top: 2px; }
+.gd-rep__merged { font-size: calc(12px * var(--fs, 1)); color: var(--text-soft, #6B7280); margin-top: 6px;
   padding-top: 6px; border-top: 1px dashed rgba(17,24,39,.08); }
-.gd-kchip { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px;
+.gd-kchip { font-size: calc(10.5px * var(--fs, 1)); font-weight: 600; padding: 2px 8px; border-radius: 99px;
   display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .gd-kchip svg { width: 11px; height: 11px; }
 .k-lawn  .gd-kchip { background: var(--c-lawn-s);  color: var(--c-lawn); }
@@ -291,23 +291,23 @@
    כמו דיווח שבוצע, וקיבל את אותה נקודה ירוקה. מבחינת התושב זה מסלול שהגיע
    ליעדו בהצלחה, וזו בדיוק ההפך מהמסר. אותו מיקום במסלול, גוון ניטרלי. */
 .gd-track i.shut { background: #9CA3AF; box-shadow: 0 0 0 3px rgba(17,24,39,.10); }
-.gd-axis b { font-size: 12.5px; font-weight: 600; color: var(--text, #374151); }
+.gd-axis b { font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; color: var(--text, #374151); }
 .gd-axis.is-done b { color: var(--ok, #059669); }
 .gd-axis.is-shut b { color: var(--text-soft, #6B7280); }
-.gd-flag { font-size: 11.5px; font-weight: 600; padding: 3px 10px 3px 15px;
+.gd-flag { font-size: calc(11.5px * var(--fs, 1)); font-weight: 600; padding: 3px 10px 3px 15px;
   border-radius: 4px; clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%);
   background: #FDF0DF; color: var(--warn, #D97706); }
 .gd-flag.is-crit { background: #FDE7EC; color: var(--danger, #F43F5E); }
 
 /* ---------- משוב ---------- */
 /* סינון בלי תוצאות — שורה אחת במקום אזור ריק בלי מילה. */
-.gd-none { text-align: center; padding: 26px 12px; font-size: 13.5px;
+.gd-none { text-align: center; padding: 26px 12px; font-size: calc(13.5px * var(--fs, 1));
   color: var(--text-soft, #6B7280); }
 
 .gd-fb { display: flex; gap: 7px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
-.gd-fb span { font-size: 12px; color: var(--text-soft, #6B7280); }
+.gd-fb span { font-size: calc(12px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
 .gd-fb button { font-family: inherit; border-radius: 9px; padding: 5px 13px;
-  font-size: 12.5px; font-weight: 600; border: 1px solid rgba(17,24,39,.10);
+  font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; border: 1px solid rgba(17,24,39,.10);
   background: rgba(255,255,255,.9); cursor: pointer; }
 .gd-fb button.y { color: var(--ok, #059669); border-color: #BFE6D3; }
 .gd-fb button.n { color: var(--danger, #F43F5E); border-color: #F7D2DA; }
@@ -335,12 +335,12 @@
 .gt-week > button svg { width: 14px; height: 14px; }
 .gt-week > button:hover { background: rgba(17,24,39,.09); }
 .gt-week__c { flex: 1; min-width: 0; text-align: center; }
-.gt-week__c b { display: block; font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
-.gt-week__c span { display: block; font-size: 10.5px; color: var(--text-soft, #6B7280); }
+.gt-week__c b { display: block; font-size: calc(13px * var(--fs, 1)); font-weight: 700; letter-spacing: -.01em; }
+.gt-week__c span { display: block; font-size: calc(10.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
 /* 🔴 21.9 — "היום": חזרה מהירה לשבוע הנוכחי, מופיע רק כשהחלון זז.
    בלעדיו מי שדפדף קדימה צריך לספור אחורה כדי לחזור. */
 .gt-wnow { margin-inline-start: 6px; border: 0; background: rgba(17,24,39,.06);
-  color: var(--text-soft, #6B7280); font: inherit; font-size: 10px; font-weight: 600;
+  color: var(--text-soft, #6B7280); font: inherit; font-size: calc(10px * var(--fs, 1)); font-weight: 600;
   padding: 1px 7px; border-radius: 999px; cursor: pointer; vertical-align: middle; }
 .gt-wnow:hover { background: rgba(17,24,39,.12); color: #111827; }
 .gt-bar { height: 3px; border-radius: 99px; background: rgba(17,24,39,.08); margin-top: 5px; overflow: hidden; }
@@ -365,7 +365,7 @@
   mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent); }
 .gt-ctl__f::-webkit-scrollbar { display: none; }
 .gt-ctl__f button { flex: none; border: 1px solid rgba(17,24,39,.09); border-radius: 99px;
-  background: rgba(255,255,255,.72); padding: 5px 11px; font: inherit; font-size: 12px;
+  background: rgba(255,255,255,.72); padding: 5px 11px; font: inherit; font-size: calc(12px * var(--fs, 1));
   color: var(--text-soft, #6B7280); cursor: pointer; white-space: nowrap; }
 .gt-ctl__f button b { font-weight: 700; margin-inline-start: 4px; color: var(--text, #374151);
   font-variant-numeric: tabular-nums; }
@@ -382,25 +382,25 @@
 .gt-tool.is-primary:hover { background: #000; color: #fff; }
 
 .gt-grp { display: flex; align-items: center; gap: 8px; margin: 13px 2px 7px;
-  font-size: 12.5px; font-weight: 700; color: var(--text, #374151); }
-.gt-grp em { font-style: normal; font-weight: 600; color: var(--text-soft, #6B7280); font-size: 11.5px; }
+  font-size: calc(12.5px * var(--fs, 1)); font-weight: 700; color: var(--text, #374151); }
+.gt-grp em { font-style: normal; font-weight: 600; color: var(--text-soft, #6B7280); font-size: calc(11.5px * var(--fs, 1)); }
 .gt-grp hr { flex: 1; border: 0; height: 1px; background: rgba(17,24,39,.08); margin: 0; }
 
 /* שני מסלולים (2026-09-09, גל 2). שתי רמות כותרת ולא שלוש:
    מסלול ("תקלות שדווחו" / "עבודת השבוע") ובתוכו מקום (האזור).
    ⚠️ ההיררכיה נקראת מהמשקל ומהמרווח, לא מהזחה — הזחה על כותרת ברוחב מלא
    שוברת את היישור של הכרטיסים שמתחתיה. */
-.gt-grp--lane { margin-top: 22px; font-size: 13.5px; color: var(--text, #374151); }
+.gt-grp--lane { margin-top: 22px; font-size: calc(13.5px * var(--fs, 1)); color: var(--text, #374151); }
 .gt-grp--lane:first-child { margin-top: 4px; }
 .gt-grp--lane hr { background: rgba(17,24,39,.14); }
-.gt-grp--sub { margin: 10px 2px 6px; font-size: 12px; font-weight: 600;
+.gt-grp--sub { margin: 10px 2px 6px; font-size: calc(12px * var(--fs, 1)); font-weight: 600;
   color: var(--text-soft, #6B7280); }
 .gt-grp--sub em { font-weight: 600; }
 .gt-grp--sub hr { background: rgba(17,24,39,.05); }
 
 /* מסלול ריק. "אין תקלות פתוחות" הוא תשובה, ולכן הוא נכתב — ולא מושמט.
    מסלול שנעלם כשהוא מתרוקן מלמד את העין לא לחפש אותו. */
-.gt-none { font-size: 12.5px; color: var(--text-soft, #6B7280);
+.gt-none { font-size: calc(12.5px * var(--fs, 1)); color: var(--text-soft, #6B7280);
   padding: 12px 14px; border-radius: 12px; background: rgba(17,24,39,.02);
   border: 1px dashed rgba(17,24,39,.08); }
 
@@ -423,7 +423,7 @@
 /* "אשר את כל N" — יושב בכותרת הקבוצה ולא על כרטיס, כי הוא פועל על הקבוצה. */
 .gt-bulk { flex: none; display: inline-flex; align-items: center; gap: 5px;
   border: 1px solid rgba(5,150,105,.35); border-radius: 99px; background: rgba(5,150,105,.07);
-  color: var(--ok, #059669); font: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--ok, #059669); font: inherit; font-size: calc(11.5px * var(--fs, 1)); font-weight: 600;
   padding: 4px 11px; cursor: pointer; }
 .gt-bulk svg { width: 13px; height: 13px; }
 .gt-bulk:hover { background: var(--ok, #059669); color: #fff; border-color: var(--ok, #059669); }
@@ -438,9 +438,9 @@
    וארבעה רקעים על כרטיס אחד. עכשיו: כותרת בשורה אחת, ומתחתיה שורת מטא
    אחת אפורה שבה הכול סמלילים — למעט שני חריגים שנשארים קריאים, "תושב"
    והתג הצבעוני. הכרטיס ירד מ-107px ל-61px. */
-.gt-t { font-weight: 600; font-size: 14px; line-height: 1.35; margin: 0; }
+.gt-t { font-weight: 600; font-size: calc(14px * var(--fs, 1)); line-height: 1.35; margin: 0; }
 .gt-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 3px;
-  font-size: 11.5px; color: #7A847F; }
+  font-size: calc(11.5px * var(--fs, 1)); color: #7A847F; }
 .gt-meta svg { width: 12px; height: 12px; opacity: .75; }
 .gt-meta i { font-style: normal; color: #C4CBC8; }
 /* סמליל וטקסט שלו נשברים יחד. בלי זה נקודת השבירה נופלת ביניהם, והסמליל
@@ -458,7 +458,7 @@
    שם. הוא לא רגיסטר צבע חדש: זה בדיוק הצבע של הפס בשפת הכרטיס, כך
    שהעין קוראת אותם כאותו דבר בשני גדלים. */
 .gt-row .gd-kchip { background: transparent; color: #7A847F; padding: 0;
-  font-weight: 500; font-size: 11.5px; }
+  font-weight: 500; font-size: calc(11.5px * var(--fs, 1)); }
 .gt-row .gd-kchip svg { width: 13px; height: 13px; opacity: 1; stroke-width: 2.1; }
 .gt-row.k-lawn  .gd-kchip svg { color: var(--c-lawn); }
 .gt-row.k-water .gd-kchip svg { color: var(--c-water); }
@@ -480,19 +480,19 @@
 /* המזהה יורש את אפור המטא ולא מקבל אפור שלישי משלו: שלוש דרגות אפור על
    כרטיס אחד הן עוד רגיסטר שהעין צריכה לפענח, והמזהה מובחן ממילא בזכות ה-#
    ובזכות מיקומו הקבוע בסוף השורה. */
-.gt-row .gd-rep__id { font-weight: 400; color: inherit; font-size: 11px; }
-.gt-note { font-size: 12px; color: var(--text-soft, #6B7280); margin-top: 5px;
+.gt-row .gd-rep__id { font-weight: 400; color: inherit; font-size: calc(11px * var(--fs, 1)); }
+.gt-note { font-size: calc(12px * var(--fs, 1)); color: var(--text-soft, #6B7280); margin-top: 5px;
   border-inline-start: 2px solid rgba(17,24,39,.12); padding-inline-start: 8px; }
 /* רמז כפילות. ענבר ולא אדום: זו הצעה לבדיקה, לא תקלה — ואדום היה גורם
    למנהל לאחד מהר כדי "לנקות" את ההתרעה, וזה בדיוק מה שלא רוצים. */
 .gt-dup { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px;
   padding: 6px 9px; border-radius: 8px; background: #FDF6E7; color: #8A5A12;
-  font-size: 11.5px; line-height: 1.45; }
+  font-size: calc(11.5px * var(--fs, 1)); line-height: 1.45; }
 .gt-dup svg { width: 13px; height: 13px; flex: none; }
 .gt-dup b { font-weight: 700; }
 .gt-dup button { margin-inline-start: auto; border: 1px solid rgba(138,90,18,.3);
   background: rgba(255,255,255,.7); color: #8A5A12; border-radius: 99px;
-  font: inherit; font-size: 11px; font-weight: 600; padding: 2px 10px; cursor: pointer; }
+  font: inherit; font-size: calc(11px * var(--fs, 1)); font-weight: 600; padding: 2px 10px; cursor: pointer; }
 .gt-dup button:hover { background: #8A5A12; color: #fff; border-color: #8A5A12; }
 
 /* אזור לחיצה 44px (יעד נגיעה תקין), אבל בלי לתפוח את גובה השורה — הריפוד
@@ -511,14 +511,14 @@
 .gt-row.is-done .gt-t { color: var(--text-soft, #6B7280);
   text-decoration: line-through; text-decoration-color: rgba(17,24,39,.22); }
 .gt-wait { display: flex; align-items: center; gap: 5px; margin-top: 5px;
-  font-size: 11.5px; font-weight: 600; color: var(--ok, #059669); }
+  font-size: calc(11.5px * var(--fs, 1)); font-weight: 600; color: var(--ok, #059669); }
 .gt-wait svg { width: 13px; height: 13px; }
 
 /* התג הצבעוני — הדבר הצבעוני היחיד שנשאר בכרטיס, ולכן היחיד שמסוגל
    לצעוק. צורתו זוויתית (clip-path) ולא גלולה, כדי שייקרא כתג-דגל ולא
    כשבב מידע נוסף. שני מצבים בלבד: ענבר = חריגה, אדום = דורש תשומת לב.
    כלל: דגל אחד לכל היותר, ורוב המשימות בלי דגל בכלל. */
-.gt-age { font-size: 10.5px; font-weight: 600; padding: 2px 9px 2px 12px; border-radius: 3px;
+.gt-age { font-size: calc(10.5px * var(--fs, 1)); font-weight: 600; padding: 2px 9px 2px 12px; border-radius: 3px;
   clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%);
   background: #FDEBD0; color: #96560A; }
 .gt-age.is-hot { background: #FBE0E1; color: #A32F3E; }
@@ -535,16 +535,16 @@
    מכוונות: אין תיבת סימון (אין מה לסמן — זה לא קורה עכשיו), ויש מתג, שהוא
    הפעולה היחידה שאפשר לעשות בלחיצה אחת.
    ========================================================================== */
-.gp-sum { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-soft, #6B7280); }
+.gp-sum { flex: 1; min-width: 0; font-size: calc(12.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
 .gp-sum b { font-weight: 700; color: var(--text-strong, #111827); font-variant-numeric: tabular-nums; }
 .gp-sum em { font-style: normal; color: #9BA3A0; }
-.gp-hint { font-size: 11.5px; color: #8A9199; margin: 0 2px 10px; line-height: 1.45; }
+.gp-hint { font-size: calc(11.5px * var(--fs, 1)); color: #8A9199; margin: 0 2px 10px; line-height: 1.45; }
 
 .gp-row { padding: 10px 13px; display: flex; gap: 11px; align-items: flex-start; }
 .gp-b { flex: 1; min-width: 0; }
-.gp-t { font-weight: 600; font-size: 14px; line-height: 1.35; }
+.gp-t { font-weight: 600; font-size: calc(14px * var(--fs, 1)); line-height: 1.35; }
 .gp-m { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 3px;
-  font-size: 11.5px; color: #7A847F; }
+  font-size: calc(11.5px * var(--fs, 1)); color: #7A847F; }
 .gp-m i { font-style: normal; color: #C4CBC8; }
 .gp-m .nb { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .gp-m .nb svg { opacity: .75; }
@@ -577,17 +577,17 @@
    ורשימה שפריטים נעלמים ממנה מאבדת את ההקשר של מה שהוגדר פעם. */
 .gp-row.is-off { opacity: .45; }
 
-.gp-note { font-size: 11px; color: #9BA3A0; margin: 4px 0 0; line-height: 1.4; }
+.gp-note { font-size: calc(11px * var(--fs, 1)); color: #9BA3A0; margin: 4px 0 0; line-height: 1.4; }
 .gp-areas { display: flex; flex-wrap: wrap; gap: 6px; }
 .gp-chip { border: 1px solid rgba(17,24,39,.12); border-radius: 99px; background: rgba(255,255,255,.7);
-  padding: 5px 11px; font: inherit; font-size: 12px; color: var(--text-soft, #6B7280); cursor: pointer; }
+  padding: 5px 11px; font: inherit; font-size: calc(12px * var(--fs, 1)); color: var(--text-soft, #6B7280); cursor: pointer; }
 .gp-chip.on { background: var(--action, #111827); border-color: var(--action, #111827);
   color: #fff; font-weight: 600; }
 /* מחיקה — כתובה בצבע הסכנה אבל בלי מילוי: היא בלתי הפיכה, ולכן היא צריכה
    להיקרא כאזהרה; היא גם לא הפעולה שבשבילה נכנסו לטופס, ולכן היא לא מתחרה
    עם "שמירה" על תשומת הלב. */
 .gp-del { width: 100%; margin-top: 8px; border: 0; background: none;
-  font: inherit; font-size: 12.5px; font-weight: 600; color: #A32F3E;
+  font: inherit; font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; color: #A32F3E;
   padding: 10px; border-radius: 10px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .gp-del:hover { background: rgba(163,47,62,.07); }
@@ -598,7 +598,7 @@
    ⚠️ הגודל נקבע כאן ולא בקריאה: כך הוא נכון **לכל** קורא, בלי להניח
       איזו חתימת `ico` הוזרקה. */
 .gp-del svg { width: 14px; height: 14px; flex: none; }
-.gp-check { display: flex; align-items: center; gap: 8px; font-size: 13px;
+.gp-check { display: flex; align-items: center; gap: 8px; font-size: calc(13px * var(--fs, 1));
   color: var(--text, #374151); cursor: pointer; }
 .gp-check span { display: inline-flex; align-items: center; gap: 6px; }
 .gp-check svg { opacity: .6; }
@@ -616,7 +616,7 @@
   transform: translateY(100%); transition: transform .26s cubic-bezier(.22,.9,.28,1); }
 .gt-sheet-wrap.is-open .gt-sheet { transform: translateY(0); }
 .gt-grip { width: 38px; height: 4px; border-radius: 99px; background: rgba(17,24,39,.16); margin: 0 auto 12px; }
-.gt-sheet h4 { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
+.gt-sheet h4 { margin: 0 0 2px; font-size: calc(15px * var(--fs, 1)); font-weight: 700; }
 /* הטופס בתוך הגיליון משתמש ברכיבי הטופס הקיימים (.gd-inp/.gd-lbl/.gd-cta),
    אבל select צריך חץ משלו — appearance:none מוריד את הנייטיב יחד עם החץ. */
 .gt-sheet select.gd-inp {
@@ -627,16 +627,16 @@
 }
 .gt-sheet .gd-lbl { margin-bottom: 5px; }
 .gt-sheet .gd-cta { width: 100%; }
-.gt-sheet p.sub { margin: 0 0 12px; font-size: 12px; color: var(--text-soft, #6B7280); line-height: 1.5; }
+.gt-sheet p.sub { margin: 0 0 12px; font-size: calc(12px * var(--fs, 1)); color: var(--text-soft, #6B7280); line-height: 1.5; }
 .gt-opt { width: 100%; display: flex; align-items: center; gap: 11px; padding: 11px 12px;
-  border: 0; border-radius: 12px; background: rgba(17,24,39,.035); font: inherit; font-size: 13.5px;
+  border: 0; border-radius: 12px; background: rgba(17,24,39,.035); font: inherit; font-size: calc(13.5px * var(--fs, 1));
   font-weight: 500; color: var(--text, #374151); cursor: pointer; text-align: start; }
 .gt-opt + .gt-opt { margin-top: 7px; }
 .gt-opt:hover { background: rgba(17,24,39,.06); }
 .gt-opt u { text-decoration: none; width: 30px; height: 30px; flex: none; border-radius: 9px;
   display: grid; place-items: center; background: #fff; color: var(--text-soft, #6B7280); }
 .gt-opt u svg { width: 15px; height: 15px; }
-.gt-opt span { display: block; font-size: 11.5px; color: #9CA3AF; font-weight: 400; margin-top: 1px; }
+.gt-opt span { display: block; font-size: calc(11.5px * var(--fs, 1)); color: #9CA3AF; font-weight: 400; margin-top: 1px; }
 .gt-sheet-wrap.is-map .gd-map { height: 62vh; margin-top: 4px; }
 
 /* ===========================================================================
@@ -683,8 +683,8 @@
   .gt-sheet-wrap.is-open .gt-sheet { transform: translateX(0); }
   .gt-grip { display: none; }
   /* הכותרת מקבלת את המשקל של `.drawer__title` — במחשב יש לה מקום. */
-  .gt-sheet h4 { font-size: 17px; }
-  .gt-sheet p.sub { font-size: 13px; margin-bottom: 16px; }
+  .gt-sheet h4 { font-size: calc(17px * var(--fs, 1)); }
+  .gt-sheet p.sub { font-size: calc(13px * var(--fs, 1)); margin-bottom: 16px; }
   /* כפתור ראשי ברוחב מלא הוא דפוס של נייד. במחשב הוא נצמד לתחתית
      החלון, כמו `.drawer__actions--sticky`. */
   .gt-sheet .gd-cta {
@@ -706,10 +706,10 @@
    הפרטים) — שפה חזותית אחת, כדי שלא יהיה מצב שבו רק לחלק יש כפתור
    סגירה מפורש (יועד, 15.9.26). */
 .gd-sheet-head { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
-.gd-sheet-head h4 { margin: 0; font-size: 15px; font-weight: 700; flex: 1; min-width: 0;
+.gd-sheet-head h4 { margin: 0; font-size: calc(15px * var(--fs, 1)); font-weight: 700; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gd-sheet-close { flex: none; border: 0; background: rgba(17,24,39,.05); color: var(--text, #374151);
-  font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 99px; padding: 6px 12px 6px 10px;
+  font: inherit; font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; border-radius: 99px; padding: 6px 12px 6px 10px;
   display: flex; align-items: center; gap: 3px; cursor: pointer; }
 .gd-sheet-close svg { width: 14px; height: 14px; }
 .gd-sheet-close:hover { background: rgba(17,24,39,.09); }
@@ -745,66 +745,66 @@
    סמליל-בלבד, קטן משמעותית. */
 .gd-det-mapbox__hint { width: 26px; height: 26px; padding: 0; justify-content: center; }
 .gd-det-photo__cnt { position: absolute; bottom: 10px; inset-inline-end: 10px;
-  background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 700;
+  background: rgba(0,0,0,.55); color: #fff; font-size: calc(11px * var(--fs, 1)); font-weight: 700;
   border: 0; padding: 4px 10px; border-radius: 99px; display: flex; align-items: center; gap: 4px; }
 .gd-det-photo__cnt svg { width: 13px; height: 13px; }
 .gd-det-nophoto { margin: 0 0 14px; padding: 22px 16px; text-align: center; border-radius: 14px;
   color: var(--text-soft, #6B7280); background: rgba(17,24,39,.03); }
 .gd-det-nophoto svg { width: 20px; height: 20px; opacity: .5; }
-.gd-det-nophoto span { display: block; font-size: 12px; margin-top: 4px; }
-.gd-det-kicker { display: flex; align-items: center; gap: 7px; font-size: 12px;
+.gd-det-nophoto span { display: block; font-size: calc(12px * var(--fs, 1)); margin-top: 4px; }
+.gd-det-kicker { display: flex; align-items: center; gap: 7px; font-size: calc(12px * var(--fs, 1));
   font-weight: 700; color: var(--text-soft, #6B7280); margin-bottom: 4px; }
 .gd-det-dot { width: 6px; height: 6px; border-radius: 99px; flex: none; }
-.gt-sheet h4.gd-det-title { margin: 0 0 3px; font-size: 19px; font-weight: 800; }
-.gd-det-sub { margin: 0 0 12px; font-size: 12.5px; color: var(--text-soft, #6B7280); }
+.gt-sheet h4.gd-det-title { margin: 0 0 3px; font-size: calc(19px * var(--fs, 1)); font-weight: 800; }
+.gd-det-sub { margin: 0 0 12px; font-size: calc(12.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
 /* מצב+שבוע כשבב קטן באותה שורה (2026-09-15, סבב ד׳) — במקום בלוק מלא-רוחב. */
 .gd-det-staterow { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .gd-det-chip { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px;
-  font-size: 11.5px; font-weight: 700; flex: none; background: rgba(17,24,39,.05); color: var(--text, #374151); }
+  font-size: calc(11.5px * var(--fs, 1)); font-weight: 700; flex: none; background: rgba(17,24,39,.05); color: var(--text, #374151); }
 .gd-det-chip.is-done { background: rgba(15,107,69,.10); color: #0F6B45; }
 .gd-det-chip.is-wait { background: rgba(202,138,4,.12); color: #96560A; }
 .gd-det-chip.is-warn { background: rgba(220,38,38,.10); color: #B42318; }
 .gd-det-chip.is-plan { background: rgba(14,165,233,.10); color: #0369A1; }
-.gd-det-week { font-size: 12.5px; font-weight: 600; color: var(--text-soft, #6B7280); }
+.gd-det-week { font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; color: var(--text-soft, #6B7280); }
 .gd-det-fields { margin-bottom: 12px; }
 .gd-det-f { display: flex; flex-direction: column; gap: 2px; }
-.gd-det-f .l { font-size: 10.5px; color: var(--text-soft, #6B7280); }
-.gd-det-f .v { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+.gd-det-f .l { font-size: calc(10.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
+.gd-det-f .v { font-size: calc(13px * var(--fs, 1)); font-weight: 600; display: flex; align-items: center; gap: 4px; }
 .gd-det-f .v svg { width: 13px; height: 13px; opacity: .7; }
 .gd-det .gd-map { height: 140px; margin-bottom: 12px; }
 .gd-det-mapbox { position: relative; cursor: pointer; border-radius: 14px; overflow: hidden;
   margin-bottom: 12px; }
 .gd-det-mapbox .gd-map { margin-bottom: 0; }
 .gd-det-mapbox__hint { position: absolute; bottom: 8px; inset-inline-end: 8px;
-  background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 700;
+  background: rgba(0,0,0,.55); color: #fff; font-size: calc(11px * var(--fs, 1)); font-weight: 700;
   border-radius: 50%; display: flex; align-items: center; gap: 4px;
   pointer-events: none; }
 .gd-det-mapbox__hint svg { width: 13px; height: 13px; }
 .gd-det-journal { margin-bottom: 14px; padding: 11px 12px; border-radius: 12px;
   background: rgba(17,24,39,.03); }
 .gd-det-journal__h { display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 8px; font-size: 12px; font-weight: 700; color: var(--text-soft, #6B7280); }
-.gd-det-journal__more { border: 0; background: none; font: inherit; font-size: 11.5px;
+  margin-bottom: 8px; font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: var(--text-soft, #6B7280); }
+.gd-det-journal__more { border: 0; background: none; font: inherit; font-size: calc(11.5px * var(--fs, 1));
   font-weight: 600; color: var(--text, #374151); display: flex; align-items: center; gap: 4px;
   padding: 2px 0; cursor: pointer; }
 .gd-det-journal__more svg { width: 13px; height: 13px; opacity: .75; }
 .gd-det-journal__more:hover { color: var(--action, #111827); }
 .gd-det-journal__list { display: flex; flex-direction: column; gap: 8px; }
-.gd-det-journal__none { margin: 0; font-size: 12px; color: var(--text-soft, #6B7280); }
-.gd-det-j { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.gd-det-journal__none { margin: 0; font-size: calc(12px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
+.gd-det-j { display: flex; align-items: center; gap: 8px; font-size: calc(12px * var(--fs, 1)); }
 .gd-det-j u { text-decoration: none; width: 24px; height: 24px; flex: none; border-radius: 8px;
   display: grid; place-items: center; background: #fff; color: var(--text-soft, #6B7280); }
 .gd-det-j u svg { width: 12px; height: 12px; }
 .gd-det-j b { font-weight: 600; color: var(--text, #374151); flex: none; }
 .gd-det-j span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; color: var(--text-soft, #6B7280); }
-.gd-det-j time { flex: none; font-size: 10.5px; color: #9CA3AF; }
+.gd-det-j time { flex: none; font-size: calc(10.5px * var(--fs, 1)); color: #9CA3AF; }
 /* שורת פעולה מהירה (3 עמודות שווים) + שורה משנית (2) — 2026-09-15, סבב ד׳. */
 .gd-det-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
 .gd-det-quickrow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
 .gd-det-secrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .gd-det-cta { background: var(--action, #111827); color: #fff; border: 0;
-  border-radius: 12px; padding: 10px 6px; font-size: 12.5px; font-weight: 700; font-family: inherit;
+  border-radius: 12px; padding: 10px 6px; font-size: calc(12.5px * var(--fs, 1)); font-weight: 700; font-family: inherit;
   display: flex; align-items: center; justify-content: center; gap: 5px; }
 .gd-det-cta.is-ghost { background: transparent; color: var(--text, #374151);
   box-shadow: inset 0 0 0 1px rgba(17,24,39,.16); }
@@ -812,7 +812,7 @@
 .gd-det-cta.is-positive:hover { background: #04795A; }
 .gd-det-cta svg { width: 14px; height: 14px; }
 .gd-det-b { border: 1px solid rgba(17,24,39,.10); background: #fff; border-radius: 10px;
-  padding: 8px; font-size: 12px; font-weight: 600; font-family: inherit; color: var(--text, #374151);
+  padding: 8px; font-size: calc(12px * var(--fs, 1)); font-weight: 600; font-family: inherit; color: var(--text, #374151);
   display: flex; align-items: center; justify-content: center; gap: 5px; }
 .gd-det-b svg { width: 13px; height: 13px; opacity: .75; }
 .gd-det-b.is-danger { color: var(--danger, #DC2626); border-color: rgba(220,38,38,.25); }
@@ -839,9 +839,9 @@
    שם הסגירה לבדו ("בוטל") אינו תשובה לאדם ששאל שאלה. */
 .gd-rep__closed { margin-top: 8px; padding: 9px 11px; border-radius: 10px;
   background: rgba(17,24,39,.045); }
-.gd-rep__closed b { display: block; font-size: 12px; font-weight: 700;
+.gd-rep__closed b { display: block; font-size: calc(12px * var(--fs, 1)); font-weight: 700;
   color: var(--text, #374151); }
-.gd-rep__closed span { display: block; font-size: 12.5px; color: #6B7280;
+.gd-rep__closed span { display: block; font-size: calc(12.5px * var(--fs, 1)); color: #6B7280;
   line-height: 1.5; margin-top: 4px; }
 
 /* ---- "מה נעשה" — הסגירה המוצלחת (2026-09-14) ----
@@ -851,14 +851,14 @@
    מלא היה מתחרה בתג הצבעוני שהוא הדבר היחיד שאמור לצעוק. */
 .gd-rep__done { margin-top: 8px; padding: 9px 11px; border-radius: 10px;
   background: rgba(15,107,69,.06); border-inline-start: 3px solid rgba(15,107,69,.55); }
-.gd-rep__done b { display: block; font-size: 12px; font-weight: 700;
+.gd-rep__done b { display: block; font-size: calc(12px * var(--fs, 1)); font-weight: 700;
   color: var(--gs-ok, #0F6B45); }
-.gd-rep__done span { display: block; font-size: 12.5px; color: #4B5563;
+.gd-rep__done span { display: block; font-size: calc(12.5px * var(--fs, 1)); color: #4B5563;
   line-height: 1.5; margin-top: 4px; }
 /* 📷 23.9 — תמונות הצוות מהסגירה ("אחרי"). כפתור שקט, בשפת הבלוק. */
 .gd-rep__wph { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
   min-height: 36px; padding: 6px 12px; border-radius: 999px; font: inherit;
-  font-size: 12.5px; font-weight: 600; color: var(--gs-ok, #0F6B45);
+  font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; color: var(--gs-ok, #0F6B45);
   background: #fff; border: 1px solid rgba(15,107,69,.28); cursor: pointer; }
 .gd-rep__wph svg { width: 15px; height: 15px; }
 
@@ -948,8 +948,8 @@
 .gt-err { display: block; text-align: center; padding: 30px 18px; }
 .gt-err u { text-decoration: none; display: block; color: #C08A8A; margin-bottom: 10px; }
 .gt-err u svg { width: 30px; height: 30px; }
-.gt-err b { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-.gt-err span { display: block; font-size: 12.5px; color: #8A9199; line-height: 1.55;
+.gt-err b { display: block; font-size: calc(15px * var(--fs, 1)); font-weight: 700; margin-bottom: 4px; }
+.gt-err span { display: block; font-size: calc(12.5px * var(--fs, 1)); color: #8A9199; line-height: 1.55;
   margin-bottom: 14px; }
 .gt-err .gd-cta { width: auto; padding-inline: 26px; }
 
@@ -977,20 +977,20 @@
   display: grid; place-items: center; background: rgba(17,24,39,.05);
   color: var(--text-soft, #6B7280); }
 .gt-hist > u svg { width: 14px; height: 14px; }
-.gt-hist b { display: block; font-size: 13.5px; font-weight: 600; }
-.gt-hist span { display: block; font-size: 12px; color: #7A847F; line-height: 1.45; margin-top: 1px; }
+.gt-hist b { display: block; font-size: calc(13.5px * var(--fs, 1)); font-weight: 600; }
+.gt-hist span { display: block; font-size: calc(12px * var(--fs, 1)); color: #7A847F; line-height: 1.45; margin-top: 1px; }
 /* מי ומתי — הקטן והחיוור ביותר בשורה. הוא ההקשר, לא האירוע. */
-.gt-hist em { display: block; font-style: normal; font-size: 11px; color: #9BA3A0; margin-top: 3px; }
-.gt-hist__none { font-size: 12.5px; color: #8A9199; text-align: center; padding: 18px 8px; margin: 0; }
+.gt-hist em { display: block; font-style: normal; font-size: calc(11px * var(--fs, 1)); color: #9BA3A0; margin-top: 3px; }
+.gt-hist__none { font-size: calc(12.5px * var(--fs, 1)); color: #8A9199; text-align: center; padding: 18px 8px; margin: 0; }
 
 /* ---- לטיפולך: התיבה הנכנסת (2026-09-08) ----
    שני מקטעים בכותרות ולא בפילטרים — זו כל הנקודה. יועד: "איפה אני מבדיל
    בין בקשות תושבים לאישור? הכול מעורבב." מסנן מראה אחד בכל פעם ולכן קורא
    כרשימה אחת; כותרת מראה את שניהם יחד ואומרת שהם שונים. */
-.gi-hint { font-size: 11.5px; color: #8A9199; margin: 0 2px 9px; line-height: 1.45; }
+.gi-hint { font-size: calc(11.5px * var(--fs, 1)); color: #8A9199; margin: 0 2px 9px; line-height: 1.45; }
 .gi-acts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .gi-cta { border: 0; border-radius: 8px; background: var(--action, #111827); color: #fff;
-  font: inherit; font-size: 11.5px; font-weight: 600; padding: 5px 11px; cursor: pointer;
+  font: inherit; font-size: calc(11.5px * var(--fs, 1)); font-weight: 600; padding: 5px 11px; cursor: pointer;
   display: inline-flex; align-items: center; gap: 5px; }
 /* ⚠️ חובה. ico() מייצר <svg> בלי width/height, וברירת המחדל של SVG בלי
    מידות בתוך flex היא להימתח לרוחב הזמין — הסמליל תפס את כל הכרטיס.
@@ -1014,25 +1014,25 @@
 .gi-zero { display: block; text-align: center; padding: 30px 16px; }
 .gi-zero u { text-decoration: none; display: block; color: #8FBFA4; margin-bottom: 10px; }
 .gi-zero u svg { width: 30px; height: 30px; }
-.gi-zero b { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-.gi-zero span { display: block; font-size: 12.5px; color: #8A9199; line-height: 1.6; }
+.gi-zero b { display: block; font-size: calc(15px * var(--fs, 1)); font-weight: 700; margin-bottom: 4px; }
+.gi-zero span { display: block; font-size: calc(12.5px * var(--fs, 1)); color: #8A9199; line-height: 1.6; }
 
 /* ---- מקרא. נפתח מסמליל ה-? בשורת הבקרה. הוא הכתובת היחידה שבה מותר
    להסביר סמלילים: ברגע שהמסך עצמו צריך תוויות טקסט ליד כל סמליל, הוא
    חוזר להיות עמוס. ---- */
 /* בלי letter-spacing ובלי uppercase: שניהם נועדו לאותיות לטיניות ובעברית
    הם רק מותחים את המילה ומקשים לקרוא אותה. */
-.gt-lg { font-size: 11.5px; font-weight: 700; color: #9BA3A0; margin: 15px 0 6px; }
+.gt-lg { font-size: calc(11.5px * var(--fs, 1)); font-weight: 700; color: #9BA3A0; margin: 15px 0 6px; }
 .gt-lg:first-of-type { margin-top: 0; }
 .gt-lgi { display: flex; align-items: flex-start; gap: 11px; padding: 6px 0; }
 .gt-lgi > u { text-decoration: none; width: 26px; flex: none; display: grid; place-items: center;
   padding-top: 1px; color: #3D4A44; }
 .gt-lgi > u svg { width: 14px; height: 14px; }
-.gt-lgi b { display: block; font-size: 13.5px; font-weight: 600; }
-.gt-lgi span { display: block; font-size: 12px; color: #7A847F; line-height: 1.45; margin-top: 1px; }
+.gt-lgi b { display: block; font-size: calc(13.5px * var(--fs, 1)); font-weight: 600; }
+.gt-lgi span { display: block; font-size: calc(12px * var(--fs, 1)); color: #7A847F; line-height: 1.45; margin-top: 1px; }
 .gt-lgs { width: 4px; height: 17px; border-radius: 2px; display: block; }
 .gt-lgc { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 5px; }
-.gt-lgc div { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #7A847F; }
+.gt-lgc div { display: flex; align-items: center; gap: 6px; font-size: calc(11.5px * var(--fs, 1)); color: #7A847F; }
 .gt-lgc i { width: 4px; height: 12px; border-radius: 2px; display: block; font-style: normal; }
 
 /* 🔴 **הכרטיס הצף הממורכז הוסר ב-22.9** והוחלף בחלון צד — ר' בלוק
@@ -1069,13 +1069,13 @@
   border-radius: 14px 14px 0 0; padding: 14px 16px 16px;
   box-shadow: 0 4px 16px rgba(16,24,40,.06); }
 .gs-hero__n { display: flex; align-items: baseline; gap: 10px; }
-.gs-hero__n b { font-size: 36px; font-weight: 800; line-height: 1;
+.gs-hero__n b { font-size: calc(36px * var(--fs, 1)); font-weight: 800; line-height: 1;
   letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-.gs-hero__n b i { font-style: normal; font-size: 20px; font-weight: 700;
+.gs-hero__n b i { font-style: normal; font-size: calc(20px * var(--fs, 1)); font-weight: 700;
   margin-inline-start: 2px; }
-.gs-hero p { margin: 8px 0 0; font-size: 11px; color: #8A9199; line-height: 1.4; }
-.gs-hero.is-empty b { display: block; font-size: 15px; font-weight: 700; }
-.gs-hero.is-empty span { display: block; font-size: 12.5px; color: #8A9199;
+.gs-hero p { margin: 8px 0 0; font-size: calc(11px * var(--fs, 1)); color: #8A9199; line-height: 1.4; }
+.gs-hero.is-empty b { display: block; font-size: calc(15px * var(--fs, 1)); font-weight: 700; }
+.gs-hero.is-empty span { display: block; font-size: calc(12.5px * var(--fs, 1)); color: #8A9199;
   line-height: 1.55; margin-top: 5px; }
 /* המד: מסלול ומילוי הם אותו גוון בשתי עוצמות, לא שני צבעים שמתחרים. */
 .gs-meter { height: 7px; border-radius: 99px; margin-top: 10px; overflow: hidden; }
@@ -1093,7 +1093,7 @@
 
 /* סמליל + מילה. ⚠️ אף פעם לא צבע לבד — ר' ההערה בראש הקובץ. */
 .gs-state { display: inline-flex; align-items: center; gap: 4px;
-  font-size: 12px; font-weight: 700; }
+  font-size: calc(12px * var(--fs, 1)); font-weight: 700; }
 .gs-hero.is-ok    .gs-state { color: var(--gs-ok); }
 .gs-hero.is-watch .gs-state { color: var(--gs-wa); }
 .gs-hero.is-bad   .gs-state { color: var(--gs-bd); }
@@ -1106,20 +1106,20 @@
   border: 1px solid rgba(17,24,39,.07); border-top: 0;
   border-radius: 0 0 14px 14px; overflow: hidden; }
 .gs-tile { background: #F7F8F7; padding: 9px 4px 8px; text-align: center; }
-.gs-tile b { display: block; font-size: 19px; font-weight: 700; line-height: 1;
+.gs-tile b { display: block; font-size: calc(19px * var(--fs, 1)); font-weight: 700; line-height: 1;
   font-variant-numeric: tabular-nums; color: var(--text-strong, #111827); }
-.gs-tile span { display: block; font-size: 10px; color: #8A9199; margin-top: 4px;
+.gs-tile span { display: block; font-size: calc(10px * var(--fs, 1)); color: #8A9199; margin-top: 4px;
   line-height: 1.25; }
 .gs-tile.is-watch b { color: var(--gs-wa); }
 .gs-tile.is-bad b { color: var(--gs-bd); }
-@media (max-width: 360px) { .gs-tile span { font-size: 9.5px; } }
+@media (max-width: 360px) { .gs-tile span { font-size: calc(9.5px * var(--fs, 1)); } }
 
 .gs-sec { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 7px;
   margin: 16px 2px 7px;
-  font-size: 13px; font-weight: 700; color: var(--text-strong, #111827); }
-.gs-sec em { font-style: normal; font-weight: 600; color: #9BA3A0; font-size: 11.5px; }
-.gs-note { font-size: 11px; color: #8A9199; margin: 0 2px 8px; line-height: 1.45; }
-.gs-empty { display: block; font-size: 12.5px; color: #8A9199; line-height: 1.6;
+  font-size: calc(13px * var(--fs, 1)); font-weight: 700; color: var(--text-strong, #111827); }
+.gs-sec em { font-style: normal; font-weight: 600; color: #9BA3A0; font-size: calc(11.5px * var(--fs, 1)); }
+.gs-note { font-size: calc(11px * var(--fs, 1)); color: #8A9199; margin: 0 2px 8px; line-height: 1.45; }
+.gs-empty { display: block; font-size: calc(12.5px * var(--fs, 1)); color: #8A9199; line-height: 1.6;
   padding: 18px 16px; text-align: center; }
 
 /* ---- עמידה בתוכנית. סדרה אחת, גוון אחד, בלי מקרא. ---- */
@@ -1132,7 +1132,7 @@
 .gs-cols { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 88px; }
 .gs-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: flex-end; height: 100%; cursor: default; }
-.gs-col span { font-size: 10px; font-weight: 700; color: #6B7280; margin-bottom: 3px;
+.gs-col span { font-size: calc(10px * var(--fs, 1)); font-weight: 700; color: #6B7280; margin-bottom: 3px;
   font-variant-numeric: tabular-nums; }
 /* קצה עליון מעוגל, בסיס מרובע — העמודה צומחת מקו אחד. עד 24px עובי. */
 .gs-col u { display: block; width: 100%; max-width: 24px; border-radius: 4px 4px 0 0;
@@ -1149,7 +1149,7 @@
 /* שבוע בלי תוכנית — מתאר ריק. "לא היה מה לעשות" אינו "לא נעשה". */
 .gs-col.is-none u { height: 6px; background: transparent;
   box-shadow: inset 0 0 0 1.5px rgba(17,24,39,.13); border-radius: 3px; }
-.gs-col em { font-style: normal; font-size: 9.5px; color: #9BA3A0; margin-top: 6px;
+.gs-col em { font-style: normal; font-size: calc(9.5px * var(--fs, 1)); color: #9BA3A0; margin-top: 6px;
   height: 14px; white-space: nowrap; }
 
 /* ---- שלוש התקועות ---- */
@@ -1157,12 +1157,12 @@
 .gs-stuck u { text-decoration: none; width: 26px; height: 26px; flex: none; border-radius: 8px;
   background: var(--gs-wa-s); color: var(--gs-wa); display: grid; place-items: center; }
 .gs-stuck > div { flex: 1; min-width: 0; }
-.gs-stuck b { display: block; font-size: 13px; font-weight: 600; line-height: 1.3;
+.gs-stuck b { display: block; font-size: calc(13px * var(--fs, 1)); font-weight: 600; line-height: 1.3;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gs-stuck span { display: block; font-size: 11px; color: #7A847F; margin-top: 1px; }
-.gs-stuck em { font-style: normal; flex: none; font-size: 12px; font-weight: 700;
+.gs-stuck span { display: block; font-size: calc(11px * var(--fs, 1)); color: #7A847F; margin-top: 1px; }
+.gs-stuck em { font-style: normal; flex: none; font-size: calc(12px * var(--fs, 1)); font-weight: 700;
   color: var(--gs-wa); text-align: center; }
-.gs-stuck em i { display: block; font-style: normal; font-size: 10px; font-weight: 500;
+.gs-stuck em i { display: block; font-style: normal; font-size: calc(10px * var(--fs, 1)); font-weight: 500;
   color: #9BA3A0; }
 
 /* ---- אזורים ---- */
@@ -1175,16 +1175,16 @@
 /* ⚠️ בלי זה העמודה הפנימית מתכווצת לרוחב הטקסט, ושורת ה"חוזר" שמתחתיה
    מקבלת סרגל באורך אחר בכל שורה — נמדד 24/27/24px במקום ציר קבוע. */
 .gs-area > div { flex: 1; min-width: 0; }
-.gs-area b { font-size: 13px; font-weight: 600; }
-.gs-area .gs-state { font-size: 11.5px; margin-inline-start: 7px; }
+.gs-area b { font-size: calc(13px * var(--fs, 1)); font-weight: 600; }
+.gs-area .gs-state { font-size: calc(11.5px * var(--fs, 1)); margin-inline-start: 7px; }
 .gs-area.is-ok    .gs-state { color: var(--gs-ok); }
 .gs-area.is-watch .gs-state { color: var(--gs-wa); }
 .gs-area.is-bad   .gs-state { color: var(--gs-bd); }
-.gs-sub { display: block; font-size: 11px; color: #7A847F; margin-top: 1px; }
+.gs-sub { display: block; font-size: calc(11px * var(--fs, 1)); color: #7A847F; margin-top: 1px; }
 /* קישור בכותרת המקטע ולא כפתור ברוחב מלא: הוא ניווט משני, והוא עלה 44px
    כדי לומר מה ששתי מילים אומרות. */
 .gs-map { margin-inline-start: auto; border: 0; background: none; padding: 0;
-  font: inherit; font-size: 11.5px; font-weight: 600; color: #0F6B45;
+  font: inherit; font-size: calc(11.5px * var(--fs, 1)); font-weight: 600; color: #0F6B45;
   cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
 .gs-map:hover { text-decoration: underline; }
 
@@ -1194,12 +1194,12 @@
    את ההפרש וכל שורה מקבלת סרגל באורך אחר — נמדד 132/174/132px. גרף שהציר
    שלו משתנה בין שורות אינו גרף. */
 .gs-rec { display: flex; align-items: center; gap: 6px; margin-top: 5px;
-  padding-top: 5px; border-top: 1px dashed rgba(17,24,39,.09); font-size: 11px; }
+  padding-top: 5px; border-top: 1px dashed rgba(17,24,39,.09); font-size: calc(11px * var(--fs, 1)); }
 .gs-rec svg { color: #9BA3A0; }
 /* ⚠️ רוחב **קבוע**, לא max-width. עם max-width שם ארוך ושם קצר נותנים
    שני רוחבים, הציר הגמיש בולע את ההפרש, וכל שורה מקבלת סרגל באורך אחר —
    בדיוק התקלה שנמדדה במקטע הנפרד שקדם לזה (132/174/132px). */
-.gs-rec b { font-size: 11.5px; font-weight: 600; color: var(--text, #374151);
+.gs-rec b { font-size: calc(11.5px * var(--fs, 1)); font-weight: 600; color: var(--text, #374151);
   flex: none; width: 40%; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; }
 .gs-rect { flex: 1; min-width: 24px; height: 6px; border-radius: 99px;
@@ -1216,13 +1216,13 @@
    כשתיים ולא כשש כותרות שוות. ⚠️ **לא** .gs-sub — השם הזה כבר תפוס לשורת
    הנפח בתוך כרטיס אזור (ר' למטה), ודריסה שלו הייתה משנה כרטיסים אחרים. */
 .gs-sub-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 7px;
-  margin: 13px 2px 6px; font-size: 12px; font-weight: 600; color: #4B5563; }
-.gs-sub-h em { font-style: normal; font-weight: 500; color: #9BA3A0; font-size: 11px; }
+  margin: 13px 2px 6px; font-size: calc(12px * var(--fs, 1)); font-weight: 600; color: #4B5563; }
+.gs-sub-h em { font-style: normal; font-weight: 500; color: #9BA3A0; font-size: calc(11px * var(--fs, 1)); }
 
 /* ---- משוב ---- */
 .gs-fb { display: flex; align-items: center; gap: 10px; padding: 10px 13px;
-  margin-top: 16px; font-size: 12px; font-weight: 600; color: var(--gs-ok); }
-.gs-fb > b { flex: none; font-size: 12.5px; color: var(--text-strong, #111827); }
+  margin-top: 16px; font-size: calc(12px * var(--fs, 1)); font-weight: 600; color: var(--gs-ok); }
+.gs-fb > b { flex: none; font-size: calc(12.5px * var(--fs, 1)); color: var(--text-strong, #111827); }
 .gs-fb__bar { flex: 1; min-width: 40px; display: flex; height: 9px;
   border-radius: 99px; overflow: hidden; background: rgba(17,24,39,.05); }
 .gs-fb__bar i.y { background: var(--gs-ok); }
@@ -1230,7 +1230,7 @@
 .gs-fb > span { flex: none; display: inline-flex; align-items: center; gap: 3px; }
 .gs-fb > span.n { color: var(--gs-bd); }
 .gs-fb > em { flex: none; font-style: normal; color: #9BA3A0; font-weight: 500;
-  font-size: 11px; }
+  font-size: calc(11px * var(--fs, 1)); }
 /* ⚠️ מוצגת גם כשאין תגובות. מגל 3 חלון התגובה של התושב הוא מה שהחליף את
    אישור המנהל, ולכן "אף אחד לא הגיב" הוא המידע שאומר שהוויתור עובד — ולא
    היעדר מידע שמותר להסתיר. שקטה ואפורה, לא ירוקה: אין כאן הישג. */
@@ -1245,7 +1245,7 @@
 /* ---- הסעיף שהכי נופל, מתחת לגרף העמידה ----
    שורה ולא כרטיס: היא ממשיכה את הגרף שמעליה ואומרת עליו דבר אחד. */
 .gs-fall { display: flex; align-items: center; gap: 6px; margin: 7px 2px 0;
-  font-size: 11.5px; color: #7A847F; }
+  font-size: calc(11.5px * var(--fs, 1)); color: #7A847F; }
 .gs-fall svg { color: var(--gs-wa); flex: none; }
 .gs-fall b { font-weight: 700; color: var(--text-strong, #111827); }
 .gs-fall em { font-style: normal; color: #9BA3A0; overflow: hidden;
@@ -1300,7 +1300,7 @@
  * ========================================================================== */
 .gd-progress {
   margin-top: 8px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs, 1));
   line-height: 1.5;
   color: var(--text-soft);
   text-align: center;
@@ -1317,7 +1317,7 @@
    ========================================================================== */
 .gd-tl { margin-top: 8px; border-top: 1px dashed rgba(17,24,39,.08); padding-top: 7px; }
 .gd-tl > summary { list-style: none; cursor: pointer; display: flex; gap: 6px;
-  align-items: baseline; flex-wrap: wrap; font-size: 12px; }
+  align-items: baseline; flex-wrap: wrap; font-size: calc(12px * var(--fs, 1)); }
 .gd-tl > summary::-webkit-details-marker { display: none; }
 .gd-tl > summary span { color: var(--text-soft, #6B7280); }
 .gd-tl > summary b { font-weight: 600; color: #374151; }
@@ -1330,12 +1330,12 @@
 .gd-tl__r > svg { width: 13px; height: 13px; flex: none; margin-top: 3px;
   color: var(--text-soft, #9CA3AF); }
 .gd-tl__r > div { min-width: 0; }
-.gd-tl__r b { display: block; font-size: 12.5px; font-weight: 600; color: #374151; }
-.gd-tl__r span { display: block; font-size: 12.5px; color: #4B5563; line-height: 1.5;
+.gd-tl__r b { display: block; font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; color: #374151; }
+.gd-tl__r span { display: block; font-size: calc(12.5px * var(--fs, 1)); color: #4B5563; line-height: 1.5;
   margin-top: 2px; overflow-wrap: anywhere; }
-.gd-tl__r em { display: block; font-style: normal; font-size: 11px;
+.gd-tl__r em { display: block; font-style: normal; font-size: calc(11px * var(--fs, 1));
   color: var(--text-soft, #9CA3AF); margin-top: 2px; }
-.gd-tl--err { font-size: 12px; color: var(--text-soft, #6B7280); }
+.gd-tl--err { font-size: calc(12px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
 
 /* ===========================================================================
  *  טופס "משימה חדשה" — המתג ושדות התקלה   (2026-09-22)
@@ -1351,8 +1351,8 @@
   cursor: pointer; }
 .nt-rep:hover { border-color: rgba(17,24,39,.22); }
 .nt-rep__t { flex: 1; min-width: 0; display: block; }
-.nt-rep__t b { display: block; font-size: .95rem; color: #111827; }
-.nt-rep__t span { display: block; font-size: .8rem; color: #6B7280; margin-top: 2px; }
+.nt-rep__t b { display: block; font-size: calc(.95rem * var(--fs, 1)); color: #111827; }
+.nt-rep__t span { display: block; font-size: calc(.8rem * var(--fs, 1)); color: #6B7280; margin-top: 2px; }
 .nt-rep .gp-sw { flex: none; }
 
 .nt-opt { font-weight: 400; color: #6B7280; }
@@ -1363,16 +1363,16 @@
    מחדל: ביטול אינו עבודה שנעשתה, ואין סיבה שיתפוס מקום ברשימה. */
 .gt-drawer { margin: 18px 2px 8px; }
 .gt-drawer > summary { display: flex; align-items: center; gap: 8px; cursor: pointer;
-  list-style: none; font-size: 13px; font-weight: 600; color: #6b7280; padding: 6px 0; }
+  list-style: none; font-size: calc(13px * var(--fs, 1)); font-weight: 600; color: #6b7280; padding: 6px 0; }
 .gt-drawer > summary::-webkit-details-marker { display: none; }
 .gt-drawer > summary::before { content: "›"; display: inline-block; transition: transform .15s;
-  font-size: 16px; line-height: 1; color: #9ca3af; }
+  font-size: calc(16px * var(--fs, 1)); line-height: 1; color: #9ca3af; }
 .gt-drawer[open] > summary::before { transform: rotate(90deg); }
 .gt-drawer > summary em { font-style: normal; font-weight: 500; color: #9ca3af; }
 .gt-drawer > .gd-reps { margin-top: 8px; opacity: .85; }
 
 /* 22.9 (הכרעת יועד: "מוצג לכולם") — התיאור בכרטיס הפרטים של המשימה. */
-.gd-det-desc { margin: 10px 0 2px; font-size: 13.5px; line-height: 1.6;
+.gd-det-desc { margin: 10px 0 2px; font-size: calc(13.5px * var(--fs, 1)); line-height: 1.6;
   color: var(--text, #374151); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 
@@ -1415,17 +1415,17 @@
 /* ---------- כותרת + בורר תקופה ---------- */
 .gn-head { display: flex; justify-content: space-between; align-items: center; gap: 12px;
   flex-wrap: wrap; margin-bottom: 16px; }
-.gn-head h3 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.01em; color: var(--gn-ink); }
-.gn-up { font-size: 11.5px; color: var(--gn-faint); }
+.gn-head h3 { margin: 0; font-size: calc(20px * var(--fs, 1)); font-weight: 700; letter-spacing: -.01em; color: var(--gn-ink); }
+.gn-up { font-size: calc(11.5px * var(--fs, 1)); color: var(--gn-faint); }
 .gn-seg { display: inline-flex; border: 1px solid var(--gn-line); border-radius: 999px; overflow: hidden;
   background: #fff; }
-.gn-seg button { font: inherit; font-size: 12px; border: 0; background: none; color: var(--gn-soft);
+.gn-seg button { font: inherit; font-size: calc(12px * var(--fs, 1)); border: 0; background: none; color: var(--gn-soft);
   padding: 5px 13px; cursor: pointer; white-space: nowrap; }
 .gn-seg button.on { background: var(--gn-ink); color: #fff; font-weight: 600; }
 .gn-seg button:focus-visible { outline: 2px solid var(--gn-accent); outline-offset: -2px; }
 .gn-seg__s { display: none; }
 
-.gn-grp { font-size: 11.5px; font-weight: 700; color: var(--gn-soft); letter-spacing: .02em; margin: 0 2px 6px; }
+.gn-grp { font-size: calc(11.5px * var(--fs, 1)); font-weight: 700; color: var(--gn-soft); letter-spacing: .02em; margin: 0 2px 6px; }
 /* שתי עמודות שמיושרות זו מתחת לזו: הימנית (2fr, ראשונה ב-RTL) היא "עכשיו",
    השמאלית (3fr) היא "בתקופה" — והמפה מקבלת את הצד הרחב. */
 .gn-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 14px; align-items: start; }
@@ -1448,28 +1448,28 @@
   display: block; width: 100%; transition: transform .14s ease, box-shadow .14s ease; }
 .gn-tile:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(17,24,39,.09); }
 .gn-tile:focus-visible, .gn-box button:focus-visible { outline: 2px solid var(--gn-accent); outline-offset: 2px; }
-.gn-n { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-.gn-n small { font-size: 15px; font-weight: 500; color: var(--gn-soft); }
-.gn-l { font-size: 12.5px; font-weight: 600; margin-top: 7px; }
-.gn-s { font-size: 11.5px; color: var(--gn-soft); margin-top: 3px; display: flex; gap: 4px 10px; flex-wrap: wrap; }
+.gn-n { font-size: calc(28px * var(--fs, 1)); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.gn-n small { font-size: calc(15px * var(--fs, 1)); font-weight: 500; color: var(--gn-soft); }
+.gn-l { font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; margin-top: 7px; }
+.gn-s { font-size: calc(11.5px * var(--fs, 1)); color: var(--gn-soft); margin-top: 3px; display: flex; gap: 4px 10px; flex-wrap: wrap; }
 .gn-s b { font-weight: 700; color: var(--gn-ink); }
-.gn-go { display: block; font-size: 11.5px; font-weight: 700; color: var(--gn-accent); margin-top: 6px; }
+.gn-go { display: block; font-size: calc(11.5px * var(--fs, 1)); font-weight: 700; color: var(--gn-accent); margin-top: 6px; }
 .gn-tile.is-act { border-color: var(--gn-accent); box-shadow: inset 0 0 0 1px var(--gn-accent); }
 .gn-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 4px; vertical-align: 0; }
 .gn-split { display: flex; height: 5px; border-radius: 3px; overflow: hidden; margin-top: 9px; gap: 2px; }
 .gn-split.is-empty { background: var(--gn-line2); }
 .gn-pair { display: flex; gap: 18px; align-items: flex-end; }
-.gn-pair .gn-n { font-size: 26px; }
-.gn-pair em { display: block; font-style: normal; font-size: 11px; color: var(--gn-soft); margin-top: 4px; }
+.gn-pair .gn-n { font-size: calc(26px * var(--fs, 1)); }
+.gn-pair em { display: block; font-style: normal; font-size: calc(11px * var(--fs, 1)); color: var(--gn-soft); margin-top: 4px; }
 
 /* ---------- תיבות פירוט ---------- */
 .gn-box { padding: 12px 14px; }
-.gn-box h5 { margin: 0; font-size: 13px; font-weight: 700; color: var(--gn-ink);
+.gn-box h5 { margin: 0; font-size: calc(13px * var(--fs, 1)); font-weight: 700; color: var(--gn-ink);
   display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.gn-lnk { font: inherit; font-size: 11.5px; font-weight: 600; color: var(--gn-accent); background: none;
+.gn-lnk { font: inherit; font-size: calc(11.5px * var(--fs, 1)); font-weight: 600; color: var(--gn-accent); background: none;
   border: 0; padding: 0; cursor: pointer; white-space: nowrap; }
 .gn-lnk.is-static { cursor: default; color: var(--gn-soft); font-weight: 500; }
-.gn-none { font-size: 12.5px; color: var(--gn-soft); margin: 10px 0 2px; }
+.gn-none { font-size: calc(12.5px * var(--fs, 1)); color: var(--gn-soft); margin: 10px 0 2px; }
 
 .gn-age { display: flex; height: 12px; border-radius: 4px; overflow: hidden; gap: 2px; margin-top: 10px; }
 .gn-age.is-empty, .gn-cat.is-empty { background: var(--gn-line2); }
@@ -1479,11 +1479,11 @@
 .gn-age .a4, .gn-age-k .a4 { background: var(--age4); }
 .gn-age-k { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 7px; }
 .gn-age-k button { font: inherit; text-align: start; background: none; border: 0; padding: 3px 4px;
-  border-radius: 6px; cursor: pointer; color: var(--gn-soft); font-size: 11px; min-width: 0; }
+  border-radius: 6px; cursor: pointer; color: var(--gn-soft); font-size: calc(11px * var(--fs, 1)); min-width: 0; }
 .gn-age-k button:hover:not(:disabled) { background: rgba(17,24,39,.04); }
 .gn-age-k button:disabled { cursor: default; }
 .gn-age-k i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-inline-end: 4px; }
-.gn-age-k b { font-size: 14px; color: var(--gn-ink); }
+.gn-age-k b { font-size: calc(14px * var(--fs, 1)); color: var(--gn-ink); }
 .gn-age-k .gn-l2, .gn-age-k .gn-s2 { display: block; }
 .gn-age-k .gn-s2 { display: none; }
 
@@ -1503,8 +1503,8 @@
 .gn-ci.k-clean { background: var(--c-clean-s); color: var(--c-clean); }
 .gn-ci.k-bed   { background: var(--c-bed-s);   color: var(--c-bed); }
 .gn-rt { flex: 1; min-width: 0; }
-.gn-rt b { display: block; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gn-rt > span { display: block; font-size: 11.5px; color: var(--gn-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gn-rt b { display: block; font-size: calc(13px * var(--fs, 1)); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gn-rt > span { display: block; font-size: calc(11.5px * var(--fs, 1)); color: var(--gn-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gn-vars .gt-age { flex: none; white-space: nowrap; }
 
 /* ---------- לפי סוג ---------- */
@@ -1512,10 +1512,10 @@
 .gn-cat-k { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
 .gn-cat-k button { font: inherit; background: none; border: 0; border-radius: 8px; padding: 5px 5px 4px;
   display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; cursor: pointer;
-  color: var(--gn-soft); font-size: 11px; text-align: start; }
+  color: var(--gn-soft); font-size: calc(11px * var(--fs, 1)); text-align: start; }
 .gn-cat-k button:hover { background: rgba(17,24,39,.04); }
 .gn-cat-k button.on { background: var(--gn-accent-s); box-shadow: inset 0 0 0 1px var(--gn-accent); }
-.gn-cat-k b { font-size: 14px; color: var(--gn-ink); line-height: 1.2; }
+.gn-cat-k b { font-size: calc(14px * var(--fs, 1)); color: var(--gn-ink); line-height: 1.2; }
 .gn-cat-k em { font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .gn-cat-i { display: grid; }
 
@@ -1526,7 +1526,7 @@
   gap: 8px; flex-wrap: wrap; pointer-events: none; z-index: 12; }
 .gn-map-tools > * { pointer-events: auto; }
 .gn-map-tools .gn-chip--n { margin-inline-start: auto; }
-.gn-chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 11.5px; color: var(--gn-ink);
+.gn-chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: calc(11.5px * var(--fs, 1)); color: var(--gn-ink);
   background: #fff; border: 1px solid var(--gn-line); border-radius: 999px; padding: 4px 11px;
   box-shadow: 0 6px 18px rgba(16,24,20,.12); cursor: pointer; white-space: nowrap; }
 .gn-chip--n { cursor: default; }
@@ -1553,15 +1553,15 @@
 .map-marker.gn-pin--c { width: 26px; height: 26px; transform: translate(-50%, -50%) scale(var(--gn-inv, 1)); transform-origin: 50% 50%; }
 .map-marker.gn-pin--c:hover { transform: translate(-50%, -50%) scale(calc(var(--gn-inv, 1) * 1.12)); }
 .gn-clu { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; border: 2px solid #fff;
-  color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 2px 7px rgba(16,24,20,.3); }
+  color: #fff; font-size: calc(12px * var(--fs, 1)); font-weight: 700; box-shadow: 0 2px 7px rgba(16,24,20,.3); }
 
 /* תקציר נעץ (מחשב) */
 .gn-pop { position: absolute; z-index: 20; width: 244px; background: #fff; border: 1px solid var(--gn-line);
-  border-radius: 10px; padding: 11px 13px; box-shadow: 0 10px 28px rgba(16,24,20,.16); font-size: 12px; color: var(--gn-ink); }
+  border-radius: 10px; padding: 11px 13px; box-shadow: 0 10px 28px rgba(16,24,20,.16); font-size: calc(12px * var(--fs, 1)); color: var(--gn-ink); }
 .gn-pop::after { content: ""; position: absolute; bottom: -7px; left: calc(var(--ax, 50%) - 6px); width: 12px; height: 12px;
   background: #fff; border-right: 1px solid var(--gn-line); border-bottom: 1px solid var(--gn-line); transform: rotate(45deg); }
 .gn-pop.is-below::after { bottom: auto; top: -7px; transform: rotate(225deg); }
-.gn-pop__t { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: 13.5px; }
+.gn-pop__t { display: flex; gap: 8px; align-items: center; font-weight: 700; font-size: calc(13.5px * var(--fs, 1)); }
 .gn-pop__t span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gn-pop__t u { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; color: #fff; flex: none; text-decoration: none; }
 .gn-pop__t u svg { width: 14px; height: 14px; }
@@ -1569,26 +1569,26 @@
 .gn-pop__r { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
 .gn-pop__go { font: inherit; font-weight: 700; color: var(--gn-accent); background: none; border: 0; padding: 0; cursor: pointer; }
 .gn-pop__a { color: var(--gn-soft); }
-.gn-stt { display: inline-flex; align-items: center; font-size: 11.5px; color: var(--gn-soft); }
+.gn-stt { display: inline-flex; align-items: center; font-size: calc(11.5px * var(--fs, 1)); color: var(--gn-soft); }
 
 /* ---------- מגמות ---------- */
 .gn-trends { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .gn-tabs { display: none; }
-.gn-tr p { font-size: 11.5px; color: var(--gn-soft); margin: 2px 0 6px; }
+.gn-tr p { font-size: calc(11.5px * var(--fs, 1)); color: var(--gn-soft); margin: 2px 0 6px; }
 /* ⚠️ direction:ltr — ב-RTL הדפדפן הופך את text-anchor ו"עד 9 ימים" נחתך
    מחוץ לגרף. הציר עצמו מצויר ידנית (השבוע הנוכחי מימין), אז ה-SVG ב-LTR. */
 .gn-chart { display: block; width: 100%; height: auto; overflow: visible; direction: ltr; }
-.gn-chart text { font-family: inherit; font-size: 7.5px; fill: var(--gn-faint); }
-.gn-chart .gn-cv { font-size: 7px; }
-.gn-chart .gn-cn { font-size: 8px; fill: var(--gn-soft); }
-.gn-chart .gn-cb { font-size: 9px; font-weight: 700; fill: var(--gn-ink); }
-.gn-chart .gn-leg text { font-size: 7px; }
+.gn-chart text { font-family: inherit; font-size: calc(7.5px * var(--fs, 1)); fill: var(--gn-faint); }
+.gn-chart .gn-cv { font-size: calc(7px * var(--fs, 1)); }
+.gn-chart .gn-cn { font-size: calc(8px * var(--fs, 1)); fill: var(--gn-soft); }
+.gn-chart .gn-cb { font-size: calc(9px * var(--fs, 1)); font-weight: 700; fill: var(--gn-ink); }
+.gn-chart .gn-leg text { font-size: calc(7px * var(--fs, 1)); }
 
 /* ---------- שגיאה / יומן חסר ---------- */
 .gn-err { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 26px 18px; }
 .gn-err u { color: var(--gn-soft); text-decoration: none; }
 .gn-err .gd-cta { width: auto; }
-.gn-warn { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: #7A4A06;
+.gn-warn { display: flex; gap: 8px; align-items: flex-start; font-size: calc(12.5px * var(--fs, 1)); color: #7A4A06;
   background: #FDF1DD; border-radius: 10px; padding: 9px 12px; margin-bottom: 12px; }
 .gn-warn svg { flex: none; margin-top: 2px; }
 .gn-warn button { font: inherit; font-weight: 700; color: inherit; background: none; border: 0; padding: 0;
@@ -1597,25 +1597,25 @@
 /* ---------- רשימות (גיליון / חלון צד) ---------- */
 .gn-sheet .sub { color: var(--gn-soft); }
 .gn-list { margin-top: 6px; }
-.gn-lh { font-size: 11.5px; font-weight: 700; color: var(--gn-soft); letter-spacing: .02em; margin: 14px 0 2px; }
+.gn-lh { font-size: calc(11.5px * var(--fs, 1)); font-weight: 700; color: var(--gn-soft); letter-spacing: .02em; margin: 14px 0 2px; }
 .gn-li { border-top: 1px solid var(--gn-line2); transition: opacity .2s ease; }
 .gn-li:first-child, .gn-lh + .gn-li { border-top: 0; }
 .gn-li.is-gone { opacity: .35; pointer-events: none; }
-.gn-li__note { white-space: normal !important; color: var(--gn-soft) !important; font-size: 12px !important; margin-top: 2px; }
+.gn-li__note { white-space: normal !important; color: var(--gn-soft) !important; font-size: calc(12px * var(--fs, 1)) !important; margin-top: 2px; }
 .gn-li__acts { display: flex; gap: 6px; padding: 0 37px 9px 0; }
-.gn-btn { font: inherit; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;
+.gn-btn { font: inherit; font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; display: inline-flex; align-items: center; gap: 5px;
   border-radius: 999px; padding: 6px 13px; border: 1px solid var(--gn-line); background: #fff; color: var(--gn-ink); cursor: pointer; }
 .gn-btn.is-ok { background: #0F6B45; border-color: #0F6B45; color: #fff; }
 .gn-btn:disabled { opacity: .5; cursor: default; }
-.gn-fb { font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: 3px; background: var(--gn-accent-s); color: var(--gn-accent); flex: none; }
+.gn-fb { font-size: calc(10.5px * var(--fs, 1)); font-weight: 600; padding: 2px 9px; border-radius: 3px; background: var(--gn-accent-s); color: var(--gn-accent); flex: none; }
 .gn-fb.is-neg { background: #FBE0E1; color: #A32F3E; }
 
 /* הצצה בריחוף (מחשב) — אינה חוסמת את העכבר */
 .gn-peek { position: fixed; z-index: 80; display: none; width: 320px; max-width: calc(100vw - 16px);
   background: #fff; border: 1px solid var(--gn-line); border-radius: 12px; padding: 10px 12px;
   box-shadow: 0 14px 34px rgba(16,24,20,.18); pointer-events: none; color: var(--gn-ink); }
-.gn-peek__h { font-size: 12px; font-weight: 700; color: var(--gn-soft); margin-bottom: 2px; }
-.gn-peek__f { font-size: 11px; color: var(--gn-accent); font-weight: 600; margin-top: 6px; }
+.gn-peek__h { font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: var(--gn-soft); margin-bottom: 2px; }
+.gn-peek__f { font-size: calc(11px * var(--fs, 1)); color: var(--gn-accent); font-weight: 600; margin-top: 6px; }
 .gn-peek .gn-li__acts { display: none; }
 
 /* ---------- מפה במסך מלא (טלפון) ---------- */
@@ -1625,16 +1625,16 @@
 .gn-full__map .map-viewport { border-radius: 0; }
 .gn-full__tools { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); inset-inline: 10px;
   display: flex; gap: 6px; flex-wrap: wrap; z-index: 14; }
-.gn-full__tools .gn-chip { padding: 6px 12px; font-size: 12.5px; }
+.gn-full__tools .gn-chip { padding: 6px 12px; font-size: calc(12.5px * var(--fs, 1)); }
 .gn-chip--sel { position: relative; padding-inline-end: 10px; }
 .gn-chip--sel select { font: inherit; border: 0; background: none; color: inherit; appearance: none; -webkit-appearance: none;
   padding: 0; padding-inline-end: 4px; cursor: pointer; max-width: 46vw; text-overflow: ellipsis; }
-.gn-full__body { font-size: 12.5px; }
+.gn-full__body { font-size: calc(12.5px * var(--fs, 1)); }
 /* ⚠️ z-index מעל סרגל הזום של המפה — אחרת כפתורי +/− יושבים על "פתיחת הכרטיס". */
 .gn-full__sheet { position: absolute; inset-inline: 0; bottom: 0; z-index: 60; background: #fff;
   border-radius: 16px 16px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,.18);
   padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px)); max-height: 60%; overflow-y: auto; }
-.gn-full__sheet .gn-pop__t { font-size: 15px; }
+.gn-full__sheet .gn-pop__t { font-size: calc(15px * var(--fs, 1)); }
 .gn-full__sheet .gn-pop__t u { width: 30px; height: 30px; border-radius: 8px; }
 .gn-full__sheet .gn-pop__cta { margin-top: 14px; }
 
@@ -1645,7 +1645,7 @@
   .gn-head { position: sticky; top: calc(var(--header-h, 56px) + 2px); z-index: 15; margin: 0 -4px 10px;
     padding: 8px 4px; background: rgba(250,251,250,.9);
     -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-radius: 12px; }
-  .gn-head h3 { font-size: 17px; }
+  .gn-head h3 { font-size: calc(17px * var(--fs, 1)); }
   .gn-up { display: none; }
   .gn-seg__l { display: none; }
   .gn-seg__s { display: inline; }
@@ -1660,11 +1660,11 @@
 
   .gn-tiles, .gn-o2:not(.has-act) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .gn-tile.is-act { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
-  .gn-tile.is-act .gn-n { font-size: 24px; }
+  .gn-tile.is-act .gn-n { font-size: calc(24px * var(--fs, 1)); }
   .gn-tile.is-act .gn-tx { flex: 1; min-width: 0; }
   .gn-tile.is-act .gn-l, .gn-tile.is-act .gn-s, .gn-tile.is-act .gn-go { margin: 0; }
   .gn-tile--pair { grid-column: 1 / -1; }
-  .gn-n { font-size: 25px; }
+  .gn-n { font-size: calc(25px * var(--fs, 1)); }
 
   .gn-age-k .gn-l2 { display: none; }
   .gn-age-k .gn-s2 { display: block; }
@@ -1682,7 +1682,7 @@
     background: rgba(255,255,255,.8); border-radius: 12px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(17,24,39,.05); }
   .gn-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--gn-line); margin-bottom: 8px; overflow-x: auto; }
-  .gn-tabs button { font: inherit; font-size: 12px; border: 0; background: none; color: var(--gn-soft);
+  .gn-tabs button { font: inherit; font-size: calc(12px * var(--fs, 1)); border: 0; background: none; color: var(--gn-soft);
     padding: 5px 8px 7px; cursor: pointer; white-space: nowrap; }
   .gn-tabs button.on { color: var(--gn-ink); font-weight: 700; box-shadow: inset 0 -2px 0 var(--gn-ink); }
   .gn-trends .gn-tr { background: none; box-shadow: none; border: 0; padding: 0;
@@ -1739,7 +1739,7 @@
 .gt-res.is-team { color: var(--gt-team, #5B7BC8); }
 
 .gt-age { display: inline-flex; align-items: center; gap: 4px; padding: 0; border-radius: 0;
-  clip-path: none; background: none !important; font-size: 11px; font-weight: 700; color: #A26A1E; }
+  clip-path: none; background: none !important; font-size: calc(11px * var(--fs, 1)); font-weight: 700; color: #A26A1E; }
 .gt-age::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
 .gt-age.is-l1 { color: var(--u1-t, #A24B75); }
 .gt-age.is-hot, .gt-age.is-l2 { color: var(--u2-t, #A83D3D); }
@@ -1751,7 +1751,7 @@
   grid-auto-columns: minmax(0, 1fr); gap: 5px; }
 .gt-tile { position: relative; border: 0; border-radius: 11px; min-height: 48px; padding: 6px 2px 5px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  font: inherit; font-size: 10.5px; font-weight: 600; line-height: 1.1; color: #1F2937; text-align: center;
+  font: inherit; font-size: calc(10.5px * var(--fs, 1)); font-weight: 600; line-height: 1.1; color: #1F2937; text-align: center;
   cursor: pointer; min-width: 0;
   background: linear-gradient(165deg, rgba(255,255,255,.52), rgba(255,255,255,.26));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px rgba(17,24,39,.05), 0 3px 8px -4px rgba(16,24,40,.16);
@@ -1770,7 +1770,7 @@
 @media (prefers-reduced-motion: reduce) { .gt-tile { animation: none; } }
 @media (max-width: 600px) {
   .gt-tiles { gap: 4px; }
-  .gt-tile { min-height: 40px; padding: 5px 1px 4px; border-radius: 9px; font-size: 8.5px; gap: 2px; }
+  .gt-tile { min-height: 40px; padding: 5px 1px 4px; border-radius: 9px; font-size: calc(8.5px * var(--fs, 1)); gap: 2px; }
   .gt-tile svg { width: 13px; height: 13px; }
   .gt-row.is-tiles { padding-inline: 8px 4px; gap: 6px; }
   .gt-row.is-tiles .gt-more { width: 34px; height: 34px; }
@@ -1781,7 +1781,7 @@
 /* ---- "בוצעו" מקופלות בסוף עבודת השבוע ---- */
 .gt-fold { margin-top: 10px; }
 .gt-fold > summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 9px 14px;
-  border-radius: 999px; font-size: 12.5px; font-weight: 700; color: #2F7D57; cursor: pointer;
+  border-radius: 999px; font-size: calc(12.5px * var(--fs, 1)); font-weight: 700; color: #2F7D57; cursor: pointer;
   background: linear-gradient(165deg, rgba(255,255,255,.62), rgba(255,255,255,.4));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(17,24,39,.05); }
 .gt-fold > summary::-webkit-details-marker { display: none; }
@@ -1844,7 +1844,7 @@
   .gt-cube { width: 36px; height: 36px; }
   .gt-row.is-tiles { padding-block: 8px; }
   .gt-tiles { gap: 6px; margin-inline-end: 10px; }
-  .gt-tile { min-height: 46px; font-size: 8.5px; }
+  .gt-tile { min-height: 46px; font-size: calc(8.5px * var(--fs, 1)); }
   .gt-tile svg { width: 14px; height: 14px; }
 }
 /* ה-⋯ נושא margin שלילי (כדי להיצמד לקצה במנוחה). במצב קוביות הוא אכל את
@@ -1856,6 +1856,6 @@
 
 /* 23.9 — חלון "הערת צוות": ההערה פנימית כברירת מחדל, ושליחה לתושב בסימון. */
 .gt-note-txt { width: 100%; resize: vertical; min-height: 84px; }
-.gt-note-res { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 14px; line-height: 1.45; cursor: pointer; }
+.gt-note-res { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: calc(14px * var(--fs, 1)); line-height: 1.45; cursor: pointer; }
 .gt-note-res input { margin-top: 3px; flex: none; }
-.gt-note-hint { margin: 8px 0 0; font-size: 12.5px; color: var(--text-soft, #6B7280); }
+.gt-note-hint { margin: 8px 0 0; font-size: calc(12.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); }

@@ -561,7 +561,7 @@ CBA.screens.residents = {
           '<button class="btn-ghost btn-sm" data-res-reload>רענן</button>' +
         '</div>' +
       '</div>' +
-      '<div class="card tx-card" style="--tx-cols: 62px .95fr 1.05fr .95fr 1.05fr 1.15fr 68px 118px 72px">' +
+      '<div class="card tx-card" style="--tx-cols: ' + '62px .95fr 1.05fr .95fr 1.05fr 1.15fr 68px 118px 72px'.replace(/(\d+)px/g, 'calc($1px * var(--fs, 1))') + '">' +
         '<div class="tx-head">' +
           resHeadCell("house", "בית") + resHeadCell("family", "משפחה") +
           resHeadCell("people", "דיירים") + '<div>מקצוע</div>' + '<div>ילדים</div>' +

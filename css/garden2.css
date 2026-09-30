@@ -28,7 +28,7 @@
 .gd-screen--v2 .gd-rep::before { display: none; }                 /* פס הצבע בצד → הדיסקית אומרת את הצבע */
 .gd-screen--v2 .gd-rep__th { width: 48px; height: 48px; border-radius: 50%; }
 .gd-screen--v2 .gd-rep__th svg { width: 22px; height: 22px; }
-.gd-screen--v2 .gd-rep__t { font-size: 16px; font-weight: 700; margin-top: 4px; }
+.gd-screen--v2 .gd-rep__t { font-size: calc(16px * var(--fs, 1)); font-weight: 700; margin-top: 4px; }
 .gd-screen--v2 .gd-rep__m { font-size: var(--t-13); color: var(--ink-2); }
 .gd-screen--v2 .gd-rep__id { font-size: var(--t-12); color: var(--ink-3); }
 
@@ -60,7 +60,7 @@
 
 /* טופס (N2–N13) */
 .gd-screen--v2 .gd-inp { border-radius: var(--r-in); border-color: var(--hair); background: var(--paper); }
-.gd-screen--v2 .gd-cta { border-radius: var(--r-pill); min-height: 48px; font-size: 16px; font-weight: 700; background: var(--ink); }
+.gd-screen--v2 .gd-cta { border-radius: var(--r-pill); min-height: 48px; font-size: calc(16px * var(--fs, 1)); font-weight: 700; background: var(--ink); }
 .gd-screen--v2 .gd-sendbar { margin-top: 16px; display: flex; justify-content: flex-end; }
 .gd-screen--v2 .gd-sendbar .gd-cta { width: min(100%, 420px); }
 
@@ -68,7 +68,7 @@
 @media (max-width: 720px) {
   .gd-screen--v2 .gd-card { padding: 16px; }
   .gd-screen--v2 .gd-rep { padding: 14px; }
-  .gd-screen--v2 .gd-steps i { font-size: 10px; }
+  .gd-screen--v2 .gd-steps i { font-size: calc(10px * var(--fs, 1)); }
   /* NA1 — כפתור השליחה דבוק לתחתית, מעל הבר (לאורך כל הטופס) */
   .gd-screen--v2 .gd-sendbar {
     position: sticky; z-index: 5;

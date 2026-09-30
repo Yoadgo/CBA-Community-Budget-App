@@ -40,23 +40,23 @@ body.cnp2-past:has(#app-main .cnp2) .app-header { border-radius: 0 0 var(--r-car
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--d-soft); color: var(--d);
 }
-.cnp2-t { font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -.01em; line-height: 1.2; color: var(--paper); }
+.cnp2-t { font-size: calc(24px * var(--fs, 1)); font-weight: 800; margin: 0; letter-spacing: -.01em; line-height: 1.2; color: var(--paper); }
 .cnp2-s { margin: 6px 0 0; font-size: var(--t-14); color: var(--on-navy-2); max-width: 62ch; line-height: 1.45; }
 .cnp2-side { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
 .cnp2-stat { display: flex; flex-direction: column; justify-content: flex-end; padding-inline-end: 6px; }
-.cnp2-stat b { font-size: 44px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.cnp2-stat b { font-size: calc(44px * var(--fs, 1)); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .cnp2-stat span { font-size: var(--t-13); color: var(--on-navy-2); margin-top: 4px; }
 .cnp2-mini {
   background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.09); border-radius: 14px;
   padding: 10px 14px; min-width: 110px;
 }
 .cnp2-mini small { display: block; font-size: var(--t-12); color: var(--on-navy-2); }
-.cnp2-mini b { display: block; font-size: 20px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.cnp2-mini b { display: block; font-size: calc(20px * var(--fs, 1)); font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .cnp2-tools { margin-top: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* נמוכה — מסך משנה / טופס: בלי מספר, פחות גובה */
 .cnp2--low { padding-bottom: 18px; }
-.cnp2--low .cnp2-t, .cnp2--bar .cnp2-t { font-size: 20px; }
+.cnp2--low .cnp2-t, .cnp2--bar .cnp2-t { font-size: calc(20px * var(--fs, 1)); }
 .cnp2--low .cnp2-disc, .cnp2--bar .cnp2-disc { width: 32px; height: 32px; }
 
 /* כפתורים על הכהה (לשימוש המסכים בתוך .cnp2-tools) */
@@ -79,12 +79,12 @@ body.cnp2-past:has(#app-main .cnp2) .app-header { border-radius: 0 0 var(--r-car
   body:has(#app-main .cnp2) .app-header.app-header--scrolled { border-radius: 0 0 var(--r-card) var(--r-card); }
   .cnp2-in, .cnp2-body { padding-inline: 16px; }
   .cnp2 { border-radius: 0 0 24px 24px; padding: 2px 0 18px; }
-  .cnp2-t { font-size: 21px; }
+  .cnp2-t { font-size: calc(21px * var(--fs, 1)); }
   .cnp2-s { font-size: var(--t-13); }
   .cnp2-row { gap: 12px; }
-  .cnp2-stat b { font-size: 36px; }
+  .cnp2-stat b { font-size: calc(36px * var(--fs, 1)); }
   .cnp2-mini { padding: 8px 12px; min-width: 0; }
-  .cnp2-mini b { font-size: 17px; }
+  .cnp2-mini b { font-size: calc(17px * var(--fs, 1)); }
   .cnp2-body { padding-top: 14px; }
 }
 

@@ -1,0 +1,50 @@
+/* density.css — צפיפות (אושר ע"י יועד 30.9.26, א+ב+ג): "בטלפון הכול ענק, במחשב
+   המון שטח ריק וגופן קטן". שכבה אחת, נטענת אחרונה.
+   א — כל font-size ב-css/ הוא calc(Npx * var(--fs, 1)); כאן --fs=1.14 במחשב.
+       ⚠️ גופן חדש ב-CSS: לכתוב calc(Npx * var(--fs, 1)) או טוקן --t-N, לא px עירום.
+   ב — רוחב תוכן גדול יותר במסכי התושב במחשב.
+   ג — טלפון: חופות, בית, כרטיסים ורווחים צפופים יותר.
+   ביטול: להסיר את תגית הקובץ מ-index.html (var(--fs) חוזר ל-1 = בדיוק כמו קודם). */
+
+/* ---------- מחשב: גופן גדול יותר ורוחב תוכן גדול יותר ----------
+   1100–1279 (מחשב נייד קטן): +7%; מ-1280: +14%. טבלאות צפופות (הוצאות, תושבים)
+   מקבלות חצי מהתוספת — אחרת שמות וסכומים נחתכים. */
+@media (min-width: 1100px) {
+  :root { --fs: 1.07; --content: 1320px; --cnp-w: 1080px; }
+  body[data-area="resident"] .app-main { max-width: 1080px; }
+  body:has(.rs-v2) { --cnp-w: 820px; }
+  .tx-card { --fs: 1; }
+}
+@media (min-width: 1280px) {
+  :root { --fs: 1.14; }
+  .tx-card { --fs: 1.07; }
+}
+
+/* ---------- טלפון: פחות גובה לחופות, לכרטיסים ולרווחים ---------- */
+@media (max-width: 720px) {
+  :root { --gap: 8px; }
+  .card { padding: 14px; }
+  /* חופה בינונית (מסך תושב): ~158px → ~110px */
+  .cnp2 { padding-bottom: 12px; }
+  .cnp2-t { font-size: 19px; }
+  .cnp2-disc { width: 30px; height: 30px; }
+  .cnp2-s { margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cnp2-row { gap: 8px; }
+  .cnp2-stat b { font-size: 28px; }
+  .cnp2-stat span { margin-top: 2px; }
+  .cnp2-mini { padding: 6px 10px; border-radius: 12px; }
+  .cnp2-mini b { font-size: 15px; }
+  .cnp2-body { padding-top: 10px; }
+  /* בית: "מה מחכה לי" והמספר באותה שורה, המשפט עד 2 שורות */
+  .hm2-cnp { padding-bottom: 14px; }
+  .hm2-k { margin-top: 10px; display: inline-block; }
+  .hm2-n { font-size: 34px; display: inline-block; margin: 0 8px 0 0; vertical-align: -4px; }
+  .hm2-s { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px; }
+  .hm2-hero { gap: 10px; }
+  .hm2-mini { padding: 8px 10px; }
+  .hm2-mini b { font-size: 15px; margin: 2px 0 1px; }
+  .hm2-body { padding-top: 10px; gap: 8px; }
+  .hm2-tile { padding: 12px; min-height: 96px; }
+  .hm2-tile__n { font-size: 22px; }
+  .hm2-card { padding: 12px; }
+}

@@ -39,7 +39,7 @@
   padding: 2rem;
   text-align: center;
   color: var(--text-secondary, #6B7280);
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--fs, 1));
 }
 
 .events-error {
@@ -56,7 +56,7 @@
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 0.5rem;
   color: #6B7280;
-  font-size: 0.8125rem;
+  font-size: calc(0.8125rem * var(--fs, 1));
   line-height: 1.4;
   text-align: right;
 }
@@ -106,7 +106,7 @@
 
 .cal-title h2,
 .month-header h2 {
-  font-size: 24px;
+  font-size: calc(24px * var(--fs, 1));
   font-weight: 800;
   color: var(--ev-text);
   margin: 0;
@@ -126,7 +126,7 @@
   border: 1px solid var(--ev-line);
   background: var(--ev-surface);
   color: var(--ev-text-soft);
-  font-size: 1.1rem;
+  font-size: calc(1.1rem * var(--fs, 1));
   line-height: 1;
   cursor: pointer;
   display: flex;
@@ -151,7 +151,7 @@
 }
 
 .seg .view-toggle-btn {
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs, 1));
   font-weight: 700;
   padding: 7px 16px;
   border-radius: 9px;
@@ -179,7 +179,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs, 1));
   font-weight: 600;
   color: var(--ev-text);
   padding: 7px 13px;
@@ -220,7 +220,7 @@
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs, 1));
   white-space: nowrap;
   padding-top: 2px;
   color: var(--ev-text);
@@ -245,12 +245,12 @@
   background: rgba(17,24,39,.03);
   border-radius: 11px;
   padding: 8px 13px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs, 1));
 }
 
 .digest-item .date {
   font-weight: 700;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs, 1));
   color: var(--ev-text);
   background: #fff;
   border-radius: 8px;
@@ -285,7 +285,7 @@
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs, 1));
   font-weight: 700;
   color: var(--ev-text-muted);
   padding: 4px 2px 10px;
@@ -335,7 +335,7 @@
 
 .day .num {
   font-weight: 700;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs, 1));
   color: var(--ev-text);
 }
 
@@ -348,7 +348,7 @@
   border-radius: 50%;
   background: var(--ev-action);
   color: #fff;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs, 1));
 }
 
 .day .ev {
@@ -357,7 +357,7 @@
   gap: 4px;
   white-space: nowrap;
   min-width: 0;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs, 1));
   font-weight: 600;
   color: var(--ev-text);
   background: #fff;
@@ -384,7 +384,7 @@
 }
 
 .day .more {
-  font-size: 10px;
+  font-size: calc(10px * var(--fs, 1));
   color: var(--ev-text-muted);
   margin-top: 3px;
   font-weight: 600;
@@ -398,13 +398,13 @@
 }
 
 .side-panel h3 {
-  font-size: 16px;
+  font-size: calc(16px * var(--fs, 1));
   margin: 0 0 3px;
   color: var(--ev-text);
 }
 
 .side-panel .sub {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   color: var(--ev-text-muted);
   margin-bottom: 14px;
 }
@@ -429,7 +429,7 @@
 }
 
 .ev-row .time {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   font-weight: 700;
   color: var(--ev-text-soft);
   min-width: 42px;
@@ -441,7 +441,7 @@
 }
 
 .ev-row .ttl2 {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs, 1));
   font-weight: 700;
   margin-bottom: 2px;
   color: var(--ev-text);
@@ -449,7 +449,7 @@
 }
 
 .ev-row .meta {
-  font-size: 11px;
+  font-size: calc(11px * var(--fs, 1));
   color: var(--ev-text-muted);
 }
 
@@ -470,7 +470,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs, 1));
   font-weight: 700;
   color: var(--ev-text-soft);
   border: 1px solid var(--ev-line);
@@ -493,7 +493,7 @@
 }
 
 /* כפתור "שיתוף" — אותו מראה כמו כפתורי "הוספה ליומן", יושב לצידם (23.9.26) */
-button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1.2; }
+button.addcal { font: inherit; font-size: calc(11px * var(--fs, 1)); font-weight: 700; line-height: 1.2; }
 
 /* ספירה חיה של אישורי הגעה, בשורת המטא של האירוע (23.9.26). ירוק = חיובי, מדוד */
 .rsvp-count-pill {
@@ -501,7 +501,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   margin-inline-start: 8px;
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs, 1));
   font-weight: 700;
   color: #166534;
   background: #dcfce7;
@@ -522,7 +522,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   padding: 1rem;
   text-align: center;
   color: var(--ev-text-muted);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--fs, 1));
 }
 
 .private-card {
@@ -533,7 +533,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs, 1));
   margin: 0 0 3px;
   color: var(--ev-text);
 }
@@ -545,7 +545,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 }
 
 .private-card .note {
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--fs, 1));
   color: var(--ev-text-muted);
   margin-bottom: 10px;
 }
@@ -557,7 +557,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   background: rgba(14,165,233,.06);
   border-radius: 10px;
   padding: 8px 10px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs, 1));
   margin-bottom: 6px;
 }
 
@@ -614,13 +614,13 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 
 .cube .ch span {
   font-weight: 800;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs, 1));
   color: var(--ev-text);
 }
 
 .cube .ch em {
   font-style: normal;
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--fs, 1));
   color: #fff;
   background: var(--ev-action);
   border-radius: 999px;
@@ -640,7 +640,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   display: flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs, 1));
   line-height: 1.5;
 }
 
@@ -668,7 +668,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 }
 
 .cube .more {
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--fs, 1));
   color: var(--ev-text-muted);
   font-weight: 600;
   margin-top: 4px;
@@ -687,7 +687,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 }
 
 .m-private h4 {
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   display: flex;
   align-items: center;
   gap: 6px;
@@ -710,7 +710,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 
 .m-strip .p {
   flex: none;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   font-weight: 700;
   color: var(--ev-text-soft);
   background: #fff;
@@ -738,7 +738,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 .m-chipbar .chip {
   flex: none;
   padding: 6px 11px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs, 1));
 }
 
 /* כפתור "הצג את כל אירועי החודש" — חושף ימים שעברו */
@@ -749,7 +749,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   border: 1px dashed var(--ev-line);
   border-radius: 12px;
   color: var(--ev-text-soft);
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   font-weight: 600;
   cursor: pointer;
   margin-bottom: 4px;
@@ -779,18 +779,18 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 
 .day-group .gh .dd {
   font-weight: 800;
-  font-size: 15px;
+  font-size: calc(15px * var(--fs, 1));
   color: var(--ev-text);
 }
 
 .day-group .gh .dw {
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs, 1));
   color: var(--ev-text-muted);
 }
 
 .day-group .gh .tag {
   margin-inline-start: auto;
-  font-size: 10px;
+  font-size: calc(10px * var(--fs, 1));
   font-weight: 700;
   color: #fff;
   background: var(--ev-action);
@@ -814,7 +814,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 
 .m-ev .time {
   font-weight: 700;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs, 1));
   color: var(--ev-text-soft);
   min-width: 28px;
   text-align: center;
@@ -826,14 +826,14 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 }
 
 .m-ev .ttl2 {
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--fs, 1));
   font-weight: 700;
   color: var(--ev-text);
   unicode-bidi: plaintext;
 }
 
 .m-ev .meta {
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--fs, 1));
   color: var(--ev-text-muted);
   margin-top: 1px;
 }
@@ -846,7 +846,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   padding: 2rem 1rem;
   text-align: center;
   color: var(--ev-text-muted);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--fs, 1));
 }
 
 /* ============================================================================
@@ -906,7 +906,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   color: #fff;
   border: none;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: calc(0.75rem * var(--fs, 1));
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -925,7 +925,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   padding: 1rem 0;
   text-align: center;
   color: var(--text-secondary, #6B7280);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--fs, 1));
 }
 
 .rsvp-admin-toggle {
@@ -938,13 +938,13 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   background-color: #F9FAFB;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 0.5rem;
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--fs, 1));
 }
 
 .rsvp-closed-note {
   padding: 0.75rem;
   color: var(--text-secondary, #6B7280);
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--fs, 1));
   text-align: center;
 }
 
@@ -960,7 +960,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--fs, 1));
 }
 
 .rsvp-form select,
@@ -969,7 +969,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   border-radius: 0.4rem;
   padding: 0.4rem 0.6rem;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: calc(0.875rem * var(--fs, 1));
   width: 7rem;
 }
 
@@ -978,7 +978,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 }
 
 .rsvp-save-status {
-  font-size: 0.8rem;
+  font-size: calc(0.8rem * var(--fs, 1));
   color: var(--text-secondary, #6B7280);
 }
 
@@ -1003,13 +1003,13 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 
 .rsvp-stat strong {
   display: block;
-  font-size: 1.25rem;
+  font-size: calc(1.25rem * var(--fs, 1));
   color: #1F2937;
 }
 
 .rsvp-stat span {
   display: block;
-  font-size: 0.7rem;
+  font-size: calc(0.7rem * var(--fs, 1));
   color: var(--text-secondary, #6B7280);
   margin-top: 0.15rem;
 }
@@ -1017,7 +1017,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 .rsvp-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: calc(0.8rem * var(--fs, 1));
 }
 
 .rsvp-table th,
@@ -1036,7 +1036,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   padding: 0.75rem;
   text-align: center;
   color: var(--text-secondary, #6B7280);
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--fs, 1));
 }
 
 /* ==========================================================================
@@ -1049,96 +1049,96 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 }
 .ev-inv img { display: block; width: 100%; height: auto; }
 .ev-inv.is-loaded { min-height: 0; background: none; }
-.ev-inv__ph { display: flex; align-items: center; justify-content: center; min-height: 120px; font-size: 0.8rem; color: #6B7280; }
+.ev-inv__ph { display: flex; align-items: center; justify-content: center; min-height: 120px; font-size: calc(0.8rem * var(--fs, 1)); color: #6B7280; }
 
 /* לו"ז מקופל */
 .ev-sch { margin: 6px 0 2px; border: 1px solid #E5E7EB; border-radius: 10px; padding: 6px 10px; background: #fff; }
-.ev-sch summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; color: #374151; }
+.ev-sch summary { cursor: pointer; font-size: calc(0.8rem * var(--fs, 1)); font-weight: 600; color: #374151; }
 .ev-sch__list { list-style: none; margin: 6px 0 2px; padding: 0; }
-.ev-sch__list li { display: flex; gap: 10px; font-size: 0.82rem; line-height: 1.7; color: #374151; }
+.ev-sch__list li { display: flex; gap: 10px; font-size: calc(0.82rem * var(--fs, 1)); line-height: 1.7; color: #374151; }
 .ev-sch__list b { min-width: 42px; font-variant-numeric: tabular-nums; color: #111827; }
 
 /* כפתורים משניים בשורת הפעולות */
 .ev-inv-btn, .ev-edit-btn {
-  flex-shrink: 0; align-self: center; padding: 0.4rem 0.75rem; border-radius: 999px; font-size: 0.75rem;
+  flex-shrink: 0; align-self: center; padding: 0.4rem 0.75rem; border-radius: 999px; font-size: calc(0.75rem * var(--fs, 1));
   font-weight: 600; cursor: pointer; white-space: nowrap; background: transparent; color: #374151; border: 1px solid #D1D5DB;
 }
 .ev-edit-btn { border-style: dashed; border-color: #9CA3AF; }
 .ev-inv-btn:hover, .ev-edit-btn:hover { background: #F3F4F6; }
 
 /* חלון ההזמנה */
-.ev-inv-dlg__img { text-align: center; color: #6B7280; font-size: 0.85rem; }
+.ev-inv-dlg__img { text-align: center; color: #6B7280; font-size: calc(0.85rem * var(--fs, 1)); }
 .ev-inv-dlg__img img { width: 100%; height: auto; border-radius: 10px; display: block; }
-.ev-inv-dlg__sch { margin-top: 12px; font-size: 0.85rem; }
+.ev-inv-dlg__sch { margin-top: 12px; font-size: calc(0.85rem * var(--fs, 1)); }
 
 /* עורך המנהל */
 .evx { display: grid; gap: 10px; text-align: right; }
-.evx-note { font-size: 0.75rem; color: #6B7280; }
+.evx-note { font-size: calc(0.75rem * var(--fs, 1)); color: #6B7280; }
 .evx-img { display: flex; gap: 12px; align-items: flex-start; }
 .evx-thumb {
   width: 84px; height: 110px; flex-shrink: 0; border-radius: 8px; background: #F3F4F6; overflow: hidden;
-  display: flex; align-items: center; justify-content: center; font-size: 0.72rem; color: #6B7280; text-align: center;
+  display: flex; align-items: center; justify-content: center; font-size: calc(0.72rem * var(--fs, 1)); color: #6B7280; text-align: center;
 }
 .evx-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .evx-img-acts { display: grid; gap: 6px; flex: 1; }
 .evx-btn {
   display: block; text-align: center; padding: 0.5rem 0.75rem; border-radius: 10px; border: 1px solid #D1D5DB;
-  background: #fff; color: #111827; font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  background: #fff; color: #111827; font: inherit; font-size: calc(0.82rem * var(--fs, 1)); font-weight: 600; cursor: pointer;
 }
 .evx-btn:disabled { opacity: 0.45; cursor: default; }
 .evx-btn--quiet { border-color: transparent; color: #B91C1C; font-weight: 500; }
-.evx-status { font-size: 0.78rem; padding: 6px 10px; border-radius: 8px; background: #F3F4F6; color: #374151; }
+.evx-status { font-size: calc(0.78rem * var(--fs, 1)); padding: 6px 10px; border-radius: 8px; background: #F3F4F6; color: #374151; }
 .evx-status.is-warn { background: #FEF3C7; color: #92400E; }
 .evx-status.is-err { background: #FEE2E2; color: #B91C1C; }
-.evx-lbl { font-size: 0.82rem; font-weight: 600; color: #111827; }
+.evx-lbl { font-size: calc(0.82rem * var(--fs, 1)); font-weight: 600; color: #111827; }
 .evx-lbl small { display: block; font-weight: 400; color: #6B7280; }
 .evx textarea {
-  width: 100%; box-sizing: border-box; font: inherit; font-size: 0.85rem; line-height: 1.7;
+  width: 100%; box-sizing: border-box; font: inherit; font-size: calc(0.85rem * var(--fs, 1)); line-height: 1.7;
   border: 1px solid #D1D5DB; border-radius: 10px; padding: 8px 10px; resize: vertical;
 }
-.evx-link { justify-self: start; background: none; border: none; padding: 0; color: #374151; font: inherit; font-size: 0.8rem; text-decoration: underline; cursor: pointer; }
-.evx-err { font-size: 0.78rem; color: #B91C1C; }
+.evx-link { justify-self: start; background: none; border: none; padding: 0; color: #374151; font: inherit; font-size: calc(0.8rem * var(--fs, 1)); text-decoration: underline; cursor: pointer; }
+.evx-err { font-size: calc(0.78rem * var(--fs, 1)); color: #B91C1C; }
 
 /* ==========================================================================
    הודעות ותזכורות לתושבים (28.9.26) + סימון ההתראה בעורך
    ========================================================================== */
-.evx-check { display: flex; gap: 8px; align-items: center; font-size: 0.82rem; color: #374151; }
+.evx-check { display: flex; gap: 8px; align-items: center; font-size: calc(0.82rem * var(--fs, 1)); color: #374151; }
 .evx-links { display: flex; flex-wrap: wrap; gap: 6px 18px; }
 
 .evm { display: grid; gap: 14px; text-align: right; }
 .evm-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 34vh; overflow: auto; }
-.evm-empty { font-size: 0.8rem; color: #6B7280; }
+.evm-empty { font-size: calc(0.8rem * var(--fs, 1)); color: #6B7280; }
 .evm-item { border: 1px solid #E5E7EB; border-radius: 10px; padding: 8px 10px; background: #fff; }
 .evm-item.is-canceled, .evm-item.is-expired { opacity: 0.55; }
 .evm-item__top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.evm-pill { font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #F3F4F6; color: #374151; }
+.evm-pill { font-size: calc(0.7rem * var(--fs, 1)); font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #F3F4F6; color: #374151; }
 .evm-item.is-pending .evm-pill { background: #FEF3C7; color: #92400E; }
 .evm-item.is-sent .evm-pill { background: #DCFCE7; color: #166534; }
-.evm-when { font-size: 0.75rem; color: #6B7280; flex: 1; }
-.evm-cancel { background: none; border: none; color: #B91C1C; font: inherit; font-size: 0.75rem; cursor: pointer; padding: 0; }
-.evm-text { font-size: 0.85rem; color: #111827; margin-top: 4px; white-space: pre-wrap; }
+.evm-when { font-size: calc(0.75rem * var(--fs, 1)); color: #6B7280; flex: 1; }
+.evm-cancel { background: none; border: none; color: #B91C1C; font: inherit; font-size: calc(0.75rem * var(--fs, 1)); cursor: pointer; padding: 0; }
+.evm-text { font-size: calc(0.85rem * var(--fs, 1)); color: #111827; margin-top: 4px; white-space: pre-wrap; }
 
 .evm-form { display: grid; gap: 8px; border-top: 1px solid #E5E7EB; padding-top: 12px; }
 .evm-form textarea {
-  width: 100%; box-sizing: border-box; font: inherit; font-size: 0.85rem; line-height: 1.6;
+  width: 100%; box-sizing: border-box; font: inherit; font-size: calc(0.85rem * var(--fs, 1)); line-height: 1.6;
   border: 1px solid #D1D5DB; border-radius: 10px; padding: 8px 10px; resize: vertical;
 }
-.evm-count { justify-self: end; font-size: 0.7rem; color: #9CA3AF; margin-top: -4px; }
-.evm-lbl { font-size: 0.78rem; font-weight: 600; color: #374151; }
+.evm-count { justify-self: end; font-size: calc(0.7rem * var(--fs, 1)); color: #9CA3AF; margin-top: -4px; }
+.evm-lbl { font-size: calc(0.78rem * var(--fs, 1)); font-weight: 600; color: #374151; }
 /* Segmented control — אותו דפוס של שאר האפליקציה */
 .evm-seg { display: inline-flex; gap: 2px; padding: 3px; background: #F3F4F6; border-radius: 10px; width: fit-content; max-width: 100%; }
 .evm-seg--wrap { flex-wrap: wrap; }
 .evm-seg button {
-  border: none; background: transparent; font: inherit; font-size: 0.78rem; padding: 6px 10px; border-radius: 8px;
+  border: none; background: transparent; font: inherit; font-size: calc(0.78rem * var(--fs, 1)); padding: 6px 10px; border-radius: 8px;
   color: #374151; cursor: pointer; white-space: nowrap;
 }
 .evm-seg button.is-on { background: #fff; color: #111827; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 .evm-custom { display: flex; gap: 8px; }
-.evm-custom input, .evm-custom select { font: inherit; font-size: 0.85rem; padding: 6px 8px; border: 1px solid #D1D5DB; border-radius: 8px; background: #fff; }
-.evm-note { font-size: 0.72rem; color: #6B7280; }
+.evm-custom input, .evm-custom select { font: inherit; font-size: calc(0.85rem * var(--fs, 1)); padding: 6px 8px; border: 1px solid #D1D5DB; border-radius: 8px; background: #fff; }
+.evm-note { font-size: calc(0.72rem * var(--fs, 1)); color: #6B7280; }
 .evm-send {
   justify-self: start; background: #111827; color: #fff; border: none; border-radius: 10px;
-  padding: 0.55rem 1.4rem; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  padding: 0.55rem 1.4rem; font: inherit; font-size: calc(0.85rem * var(--fs, 1)); font-weight: 600; cursor: pointer;
 }
 .evm-send:disabled { opacity: 0.6; cursor: default; }
 
@@ -1178,7 +1178,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--fs, 1));
   font-weight: 600;
   color: var(--ev-text);
   border-radius: 6px;
@@ -1199,22 +1199,22 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 /* קוביית חודש — אזורים מופרדים בקו */
 .cube-sec { padding: 6px 0; border-top: 1px solid var(--ev-line); }
 .cube-sec:first-of-type { border-top: 0; padding-top: 0; }
-.cube-sec__h { font-size: 10.5px; font-weight: 700; color: var(--ev-text-muted); margin-bottom: 3px; letter-spacing: .02em; }
+.cube-sec__h { font-size: calc(10.5px * var(--fs, 1)); font-weight: 700; color: var(--ev-text-muted); margin-bottom: 3px; letter-spacing: .02em; }
 .cube-sec ul { gap: 3px; }
 .cube-sec li .tt { flex: 1; min-width: 0; }
 .cube-sec li .dd { margin-inline-start: auto; flex: none; }
-.cube-sec .more { font-size: 10.5px; color: var(--ev-text-muted); font-weight: 600; margin-top: 2px; }
+.cube-sec .more { font-size: calc(10.5px * var(--fs, 1)); color: var(--ev-text-muted); font-weight: 600; margin-top: 2px; }
 
 @media (max-width: 480px) {
   .wk-row, .wk-bars { column-gap: 0.25rem; }
   .wk-row { gap: 0.25rem; }
   .month-grid { gap: 0.25rem; }
   .wk-bars { --ev-bar-top: 22px; --ev-bar-h: 14px; padding: 0 2px; row-gap: 2px; }
-  .wk-bar { font-size: 9.5px; padding: 0 3px; }
+  .wk-bar { font-size: calc(9.5px * var(--fs, 1)); padding: 0 3px; }
   .wk-bar i { display: none; }
   .wk-bar.cont-before { margin-inline-start: -2px; padding-inline-start: 4px; }
   .wk-bar.cont-after { margin-inline-end: -2px; }
-  .wk-row .day .more { bottom: 2px; inset-inline-start: 3px; font-size: 9px; }
+  .wk-row .day .more { bottom: 2px; inset-inline-start: 3px; font-size: calc(9px * var(--fs, 1)); }
 }
 
 /* ============================================================================
@@ -1231,7 +1231,7 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
   margin: 0 0 12px;
 }
 .ev-now__k {
-  font-size: 11px;
+  font-size: calc(11px * var(--fs, 1));
   font-weight: 700;
   color: var(--ev-text-muted);
   letter-spacing: .02em;
@@ -1252,9 +1252,9 @@ button.addcal { font: inherit; font-size: 11px; font-weight: 700; line-height: 1
 }
 button.ev-now__i { cursor: pointer; }
 .ev-now__row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.ev-now__row b { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ev-now__n { font-size: 11.5px; color: var(--ev-text-soft); white-space: nowrap; }
-.ev-now__r { margin-inline-start: auto; font-size: 11.5px; font-weight: 700; color: var(--ev-text-soft); white-space: nowrap; }
+.ev-now__row b { font-size: calc(13.5px * var(--fs, 1)); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev-now__n { font-size: calc(11.5px * var(--fs, 1)); color: var(--ev-text-soft); white-space: nowrap; }
+.ev-now__r { margin-inline-start: auto; font-size: calc(11.5px * var(--fs, 1)); font-weight: 700; color: var(--ev-text-soft); white-space: nowrap; }
 .ev-now__p { height: 3px; border-radius: 2px; background: rgba(17,24,39,.08); overflow: hidden; }
 .ev-now__p i { display: block; height: 100%; border-radius: 2px; }
 
@@ -1279,19 +1279,19 @@ button.ev-now__i { cursor: pointer; }
   width: 44px;
   flex: none;
   text-align: center;
-  font-size: 11px;
+  font-size: calc(11px * var(--fs, 1));
   color: var(--ev-text-muted);
   line-height: 1.3;
   padding-top: 1px;
 }
-.m-dn b { display: block; font-size: 15px; font-weight: 800; color: var(--ev-text); }
+.m-dn b { display: block; font-size: calc(15px * var(--fs, 1)); font-weight: 800; color: var(--ev-text); }
 .m-day.is-today .m-dn b {
   display: inline-block;
   background: var(--ev-action);
   color: #fff;
   border-radius: 8px;
   padding: 1px 6px;
-  font-size: 13px;
+  font-size: calc(13px * var(--fs, 1));
 }
 .m-evs { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .m-list .ev-row.m-it {
@@ -1303,7 +1303,7 @@ button.ev-now__i { cursor: pointer; }
 .m-it__l { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .m-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .m-it__t {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--fs, 1));
   font-weight: 700;
   color: var(--ev-text);
   min-width: 0;
@@ -1312,7 +1312,7 @@ button.ev-now__i { cursor: pointer; }
   white-space: nowrap;
   unicode-bidi: plaintext;
 }
-.m-it__m { font-size: 11.5px; color: var(--ev-text-muted); margin: 2px 15px 0 0; }
+.m-it__m { font-size: calc(11.5px * var(--fs, 1)); color: var(--ev-text-muted); margin: 2px 15px 0 0; }
 .m-it .ev-inv, .m-it .ev-sch { margin-inline-start: 15px; margin-top: 6px; }
 .m-it .ev-actions { display: none; margin: 8px 15px 0 0; }
 .m-it.is-open .ev-actions { display: flex; }
@@ -1320,7 +1320,7 @@ button.ev-now__i { cursor: pointer; }
   margin: 0 0 0 0;
   margin-inline-start: 4px;
   flex: none;
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--fs, 1));
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
@@ -1336,7 +1336,7 @@ button.ev-now__i { cursor: pointer; }
   border-top: 1px solid var(--ev-line);
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: calc(12px * var(--fs, 1));
   color: var(--ev-text-muted);
   cursor: pointer;
 }

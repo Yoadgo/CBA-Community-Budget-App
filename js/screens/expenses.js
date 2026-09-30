@@ -67,7 +67,9 @@ function txVisibleCustomCols() {
 function txGridColsCss() {
   var mid = txVisibleStdCols().map(function (c) { return c.width; })
     .concat(txVisibleCustomCols().map(function () { return "1fr"; }));
-  return "32px 30px " + mid.join(" ") + (mid.length ? " " : "") + "142px 196px";
+  /* צפיפות (30.9.26): עמודות קבועות גדלות עם הגופן במחשב (--fs), אחרת סכומים נחתכים */
+  return ("32px 30px " + mid.join(" ") + (mid.length ? " " : "") + "142px 196px")
+    .replace(/(\d+)px/g, "calc($1px * var(--fs, 1))");
 }
 
 CBA.screens.expenses = {

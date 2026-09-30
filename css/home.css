@@ -30,16 +30,16 @@
   font-size: clamp(22px, 2.6vw, 28px); font-weight: 800; color: var(--text);
   letter-spacing: -.01em; line-height: 1.15;
 }
-.hm-hero__sub { font-size: 13.5px; color: var(--text-muted); margin-top: 3px; }
+.hm-hero__sub { font-size: calc(13.5px * var(--fs, 1)); color: var(--text-muted); margin-top: 3px; }
 
 /* --- כרטיס סעיף --- */
 .hm-card { padding: 16px; margin-bottom: 14px; }
 .hm-card__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-.hm-card__t { font-size: 16px; font-weight: 800; margin: 0; color: var(--text); }
-.hm-card__sub { font-size: 12.5px; color: var(--text-muted); }
+.hm-card__t { font-size: calc(16px * var(--fs, 1)); font-weight: 800; margin: 0; color: var(--text); }
+.hm-card__sub { font-size: calc(12.5px * var(--fs, 1)); color: var(--text-muted); }
 .hm-link {
   margin-inline-start: auto; border: none; background: none; cursor: pointer;
-  font: inherit; font-size: 13px; font-weight: 700; color: var(--action); padding: 2px 4px;
+  font: inherit; font-size: calc(13px * var(--fs, 1)); font-weight: 700; color: var(--action); padding: 2px 4px;
 }
 .hm-link:hover { text-decoration: underline; }
 
@@ -56,13 +56,13 @@
 .hm-task__n {
   min-width: 30px; height: 30px; padding: 0 7px; border-radius: 9px; flex: none;
   display: grid; place-items: center;
-  font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums;
+  font-size: calc(15px * var(--fs, 1)); font-weight: 800; font-variant-numeric: tabular-nums;
   background: var(--hover); color: var(--text-soft);
 }
 .hm-task--warn .hm-task__n { background: var(--warn-soft, #FEF3C7); color: var(--warn, #B45309); }
-.hm-task__l { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.hm-task__l { flex: 1; font-size: calc(14px * var(--fs, 1)); font-weight: 600; min-width: 0; }
 .hm-task__l small {
-  display: block; margin-top: 1px; font-size: 12px; font-weight: 500; color: var(--text-muted);
+  display: block; margin-top: 1px; font-size: calc(12px * var(--fs, 1)); font-weight: 500; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .hm-task__c { color: var(--text-muted); display: inline-flex; flex: none; }
@@ -125,7 +125,7 @@
 /* השורה השקטה — "אין בקשות החזר פתוחות · אין שריון קרוב" (2026-09-23) */
 .hm-quiet {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px;
-  margin-top: 8px; padding: 0 2px; font-size: 12.5px; color: var(--text-soft);
+  margin-top: 8px; padding: 0 2px; font-size: calc(12.5px * var(--fs, 1)); color: var(--text-soft);
 }
 .hm-quiet[hidden] { display: none; }     /* ⚠️ display:flex גובר על [hidden] */
 .hm-quiet__ico { color: var(--ok); display: inline-flex; }
@@ -146,9 +146,9 @@
 .hm-row:active { transform: scale(.995); }
 .hm-row__ico { color: var(--text-soft); display: inline-flex; flex: none; }
 .hm-row__txt { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
-.hm-row__txt b { font-size: 14px; font-weight: 700; }
+.hm-row__txt b { font-size: calc(14px * var(--fs, 1)); font-weight: 700; }
 .hm-row__txt small {
-  font-size: 12.5px; color: var(--text-muted);
+  font-size: calc(12.5px * var(--fs, 1)); color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .hm-row__c { color: var(--text-muted); display: inline-flex; flex: none; }
@@ -171,8 +171,8 @@
   width: 26px; height: 26px; border-radius: 9px; flex: none;
   background: rgba(255,255,255,.12); display: grid; place-items: center;
 }
-.hm-vaad__t { margin: 0; font-size: 14.5px; font-weight: 800; letter-spacing: -.01em; color: #fff; }
-.hm-vaad__sub { font-size: 11.5px; color: rgba(255,255,255,.62); }
+.hm-vaad__t { margin: 0; font-size: calc(14.5px * var(--fs, 1)); font-weight: 800; letter-spacing: -.01em; color: #fff; }
+.hm-vaad__sub { font-size: calc(11.5px * var(--fs, 1)); color: rgba(255,255,255,.62); }
 .hm-vaad .hm-tasks { gap: 6px; }
 .hm-vaad .hm-task {
   background: rgba(255,255,255,.055); border-color: var(--vaad-line); color: #fff;
@@ -199,16 +199,16 @@
    של homeGarden.js לא משתנה. */
 .hm-vzone { margin-top: 14px; padding: 14px 16px 16px; }
 .hm-vzone .hm-vaad__head { margin-bottom: 10px; }
-.hm-vzone .hm-vaad__t { font-size: 16px; }
+.hm-vzone .hm-vaad__t { font-size: calc(16px * var(--fs, 1)); }
 .hm-vzone__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px 14px; align-items: start; }
 .hm-vzone__tasks { min-width: 0; }
-.hm-vzone__lbl { margin: 0 2px 8px; font-size: 13px; font-weight: 800; color: rgba(255,255,255,.88); }
+.hm-vzone__lbl { margin: 0 2px 8px; font-size: calc(13px * var(--fs, 1)); font-weight: 800; color: rgba(255,255,255,.88); }
 
 /* הגינון על הצפחה: כותרת בלבן, וכרטיסים לבנים אטומים (זכוכית על צפחה
    נראית אפורה-עכורה, והמספרים הם העיקר כאן). */
 .hm-vzone .hmg { margin-top: 0; }
 .hm-vzone .hmg-head { margin: 0 2px 8px; }
-.hm-vzone .hmg-head__t { font-size: 15px; color: #fff; }
+.hm-vzone .hmg-head__t { font-size: calc(15px * var(--fs, 1)); color: #fff; }
 .hm-vzone .hmg-head__s { color: rgba(255,255,255,.62); }
 .hm-vzone .hmg-head__ico { background: rgba(255,255,255,.14); color: #A7F3D0; }
 .hm-vzone .hmg-head .hm-link { color: rgba(255,255,255,.88); }
@@ -254,7 +254,7 @@
   display: inline-flex; align-items: center; gap: 7px; flex: none;
   padding: 8px 13px 8px 11px; border: 1px solid var(--border); border-radius: 999px;
   background: var(--surface); cursor: pointer; font: inherit;
-  font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap;
+  font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: var(--text); white-space: nowrap;
   transition: border-color var(--t), background var(--t), transform var(--t);
 }
 .hm-act svg { color: var(--text-soft); flex: none; }
@@ -303,12 +303,12 @@
   gap: 8px; padding: 34px 20px;
 }
 .empty__ico { color: var(--border); }
-.empty__title { font-size: 14.5px; font-weight: 700; color: var(--text-soft); }
-.empty__sub { font-size: 13px; color: var(--text-muted); margin: 0; max-width: 42ch; line-height: 1.6; }
+.empty__title { font-size: calc(14.5px * var(--fs, 1)); font-weight: 700; color: var(--text-soft); }
+.empty__sub { font-size: calc(13px * var(--fs, 1)); color: var(--text-muted); margin: 0; max-width: 42ch; line-height: 1.6; }
 .empty__cta {
   margin-top: 8px; border: 1px solid var(--border); background: var(--surface);
   border-radius: 10px; padding: 8px 16px; cursor: pointer;
-  font: inherit; font-size: 13px; font-weight: 700; color: var(--text);
+  font: inherit; font-size: calc(13px * var(--fs, 1)); font-weight: 700; color: var(--text);
   transition: border-color var(--t), background var(--t);
 }
 .empty__cta:hover { border-color: var(--action); background: var(--hover); }
@@ -330,5 +330,5 @@
 .hm-inbox__i:focus-visible { outline: 2px solid var(--ok, #059669); outline-offset: 2px; }
 .hm-inbox__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok, #059669); }
 .hm-inbox__txt { display: flex; flex-direction: column; min-width: 0; }
-.hm-inbox__txt small { font-size: 12px; color: var(--text-soft, #6B7280); }
-.hm-inbox__txt b { font-size: 14px; font-weight: 600; color: var(--text, #111827); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-inbox__txt small { font-size: calc(12px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
+.hm-inbox__txt b { font-size: calc(14px * var(--fs, 1)); font-weight: 600; color: var(--text, #111827); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
