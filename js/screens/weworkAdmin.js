@@ -178,11 +178,16 @@ CBA.screens = CBA.screens || {};
       /* A0 — סימון לגלילה ממוני הסרגל (בלי שינוי תצוגה) */
       var mark = active && !b.enteredAtMs ? (ph === "ended" ? " data-wa-noshow" : "") : "";
       if (active && ph === "now") mark += ' data-wa-ph="now"';
+      /* WWA1 (גל 13, אושר 1.10.26) — עברו 30 דק׳ מתחילת השריון ואף אחד לא נכנס:
+         במקום "ביטול" — "שחרור" בלחיצה, כדי שהעמדה תתפנה לשכנים. אותה פעולה
+         בשרת (ביטול ע"י מנהל + מייל לתושב), רק עם הסבר מדויק בחלון האישור. */
+      var late = active && !b.enteredAtMs && ph === "now" && b.date === D().today() && D().nowMin() >= b.from * 60 + 30;
       return '<div class="wa-row' + (active ? "" : " is-off") + '"' + mark + '>' +
         '<span class="wa-row__t"><bdi dir="ltr">' + esc(D().range(b.from, b.to)) + "</bdi></span>" +
         '<div class="wa-row__who"><b>' + esc(famName(b.familyId, b.slot)) + "</b><div>" + esc(D().SEAT_LABEL[b.seat] || "") + "</div></div>" +
         status +
-        (active && ph !== "ended" ? '<button type="button" class="btn-ghost btn-sm" data-wa-cancel="' + esc(b.id) + '">ביטול</button>' : '<span class="wa-row__sp"></span>') +
+        (late ? '<button type="button" class="btn-ghost btn-sm wa-release" data-wa-cancel="' + esc(b.id) + '" data-wa-late="1">שחרור העמדה</button>' :
+         active && ph !== "ended" ? '<button type="button" class="btn-ghost btn-sm" data-wa-cancel="' + esc(b.id) + '">ביטול</button>' : '<span class="wa-row__sp"></span>') +
       "</div>";
     }).join("") + "</div>";
   }
@@ -228,15 +233,19 @@ CBA.screens = CBA.screens || {};
   function cancel(container, id, btn) {
     var b = (st.rows || []).filter(function (x) { return x.id === id; })[0];
     if (!b) return;
-    CBA.ui.confirm("לבטל את השריון של " + famName(b.familyId, b.slot) + " (" + D().range(b.from, b.to) + ")? התושב יקבל על כך מייל.",
-      { title: "ביטול שריון", okText: "ביטול השריון", cancelText: "השאר", danger: true })
+    var late = btn && btn.getAttribute("data-wa-late") === "1";   /* WWA1 */
+    var msg = late
+      ? famName(b.familyId, b.slot) + " לא נכנס/ה בחצי השעה הראשונה של השריון (" + D().range(b.from, b.to) + "). לשחרר את העמדה לשכנים? התושב יקבל מייל שהשריון בוטל."
+      : "לבטל את השריון של " + famName(b.familyId, b.slot) + " (" + D().range(b.from, b.to) + ")? התושב יקבל על כך מייל.";
+    CBA.ui.confirm(msg,
+      { title: late ? "שחרור עמדה" : "ביטול שריון", okText: late ? "שחרור העמדה" : "ביטול השריון", cancelText: "השאר", danger: true })
       .then(function (ok) {
         if (!ok) return;
         var release = CBA.ui.busy(btn, "מבטל…");
         D().cancel(id, function (res) {
           release();
           if (!res.ok) return CBA.ui.alert(res.error || "הביטול נכשל");
-          CBA.ui.toast("השריון בוטל ונשלח מייל לתושב");
+          CBA.ui.toast(late ? "העמדה שוחררה ונשלח מייל לתושב" : "השריון בוטל ונשלח מייל לתושב");
           loadDay(container);
         });
       });

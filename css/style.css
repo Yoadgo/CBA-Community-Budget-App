@@ -3086,3 +3086,20 @@ body[data-screen="resServices"] #app-main { position: relative; z-index: 1; }
   text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
 .ct-nohit { margin: 0 0 12px; padding: 12px 14px; border-radius: var(--r-in); background: var(--canvas, var(--bg));
   color: var(--text-soft); font-size: var(--t-14, calc(14px * var(--fs, 1))); }
+/* BUA1 (גל 13) — "+ הוספת הוצאה לסעיף הזה" בראש מגירת הסעיף */
+.bud-addtx { width: 100%; margin: 6px 0 12px; justify-content: center; }
+/* SMA1 (גל 13) — תור "לא מעודכן" מעל רשימת השירותים */
+.sadm-q { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; padding: 10px 14px;
+  border-radius: var(--r-in); background: var(--warn-bg); color: var(--warn-ink); font-size: var(--t-14); }
+.sadm-q__t { margin-inline-end: 4px; }
+.sadm-q__c, .sadm-q__all { border: 1px solid var(--hair); background: var(--surface); color: var(--text); border-radius: var(--r-pill);
+  padding: 5px 12px; font: inherit; font-size: var(--t-13); cursor: pointer; }
+.sadm-q__all { background: none; border-color: transparent; text-decoration: underline; color: var(--warn-ink); }
+/* ARA1 (גל 13) — תשובות מוכנות לדיווח */
+.ar-rep__lead { margin: 0 0 10px; color: var(--text-soft); font-size: var(--t-14); }
+.ar-rep__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ar-rep__chip { border: 1px solid var(--hair); background: var(--surface); border-radius: var(--r-pill); padding: 6px 12px;
+  font: inherit; font-size: var(--t-13); cursor: pointer; text-align: start; }
+.ar-rep__chip:hover { border-color: var(--text-soft); }
+.ar-rep__txt { width: 100%; min-height: 84px; resize: vertical; }
+.ar-rep__done { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: var(--t-14); }

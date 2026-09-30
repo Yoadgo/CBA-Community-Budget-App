@@ -261,8 +261,14 @@ function rrOwnerHtml(c) {
 /* ============================================================================
  *  המסך
  * ========================================================================== */
+var rrPendingOpen = null;
 CBA.screens.resRecommendations = {
   title: "המלצות השיכון",
+  /* SMA1 (גל 13, אושר 1.10.26) — קפיצה מתור "לא מעודכן" ישר לכרטיס */
+  openCard: function (id) {
+    rrPendingOpen = String(id || "") || null;
+    if (CBA.navigate) CBA.navigate("resRecommendations");
+  },
 
   render: function (container) {
     /* 🔴 גל 6 (1.10.26, ספר האבנים פרק 12) — החופה: הכותרת, מספר ההמלצות
@@ -320,7 +326,11 @@ CBA.screens.resRecommendations = {
               /* 27.9.26 — עץ הוועד, בשביל rrOwnerHtml/rrCommitteeItemOptionsHtml
                  (קישור "אחראי מטעם הוועד" חי, ר' committeeTree.js). best-effort:
                  כשל טעינה לא חוסם את המסך — פשוט לא יוצג "אחראי" באף כרטיס. */
-              function finish() { rrState.loaded = true; syncCanopy(); rrPaint(body); }
+              function finish() {
+                rrState.loaded = true; syncCanopy(); rrPaint(body);
+                /* SMA1 (גל 13) — הגענו מתור "לא מעודכן" בניהול: פותחים את הכרטיס */
+                if (rrPendingOpen) { var pid = rrPendingOpen; rrPendingOpen = null; rrOpenDrawer(pid); }
+              }
               if (window.CBA && CBA.committeeTree && CBA.committeeTree.load) {
                 try { CBA.committeeTree.load(finish); } catch (e) { finish(); }
               } else finish();

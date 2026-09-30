@@ -1234,7 +1234,56 @@
            בכל ציור, ואחרי ארבע החלפות מסנן לחיצה אחת על ‹› פתחה ארבעה
            גיליונות מוערמים. שאר המאזינים כאן יושבים על אלמנטים שנבנים
            מחדש בכל ציור, ולכן הם אינם צוברים. */
-        if (!cardsWired) { root.addEventListener("click", onCardClick); cardsWired = true; }
+        if (!cardsWired) { root.addEventListener("click", onCardClick); wireSwipe(); cardsWired = true; }
+      }
+
+      /* ==========================================================================
+       *  GTA1 (גל 13, אושר 1.10.26) — "בוצע" בהחלקה, לגנן. עד היום: ⋯ ואז "בוצע".
+       * --------------------------------------------------------------------------
+       *  מחליקים שורה שמאלה (מעל 90px) — מתגלה פס ירוק "בוצע", ושחרור מעבר לסף
+       *  מפעיל בדיוק את markDone של התפריט (בתקלה — אותו חלון "מה נעשה?"; אין
+       *  מסלול שני). רק למי שהתפריט שלו מציע "בוצע" (tileList — גנן, משימה
+       *  פתוחה ומשובצת שעוד לא סומנה). תנועה אנכית = גלילה רגילה, בלי כלום.
+       *  במחשב אין החלקה — ה-⋯ נשאר כמו שהוא.
+       * ======================================================================== */
+      function canSwipeDone(t) {
+        return !!t && tileList(t).some(function (x) { return x[0] === "markdone"; });
+      }
+      function wireSwipe() {
+        var sx = 0, sy = 0, row = null, axis = "", dx = 0, TH = 90;
+        function reset(r) {
+          if (!r) return;
+          r.style.transform = ""; r.classList.remove("gt-swiping", "gt-swipe-go");
+        }
+        root.addEventListener("touchstart", function (e) {
+          var r = e.target.closest(".gt-row");
+          if (!r || e.touches.length !== 1 || e.target.closest("button, a, input, .gt-tiles")) { row = null; return; }
+          if (!canSwipeDone(byId(r.dataset.id))) { row = null; return; }
+          row = r; axis = ""; dx = 0;
+          sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+        }, { passive: true });
+        root.addEventListener("touchmove", function (e) {
+          if (!row) return;
+          var mx = e.touches[0].clientX - sx, my = e.touches[0].clientY - sy;
+          if (!axis) {
+            if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;
+            axis = Math.abs(mx) > Math.abs(my) * 1.3 ? "x" : "y";
+            if (axis === "y") { row = null; return; }
+          }
+          dx = Math.min(0, Math.max(-160, mx));
+          row.classList.add("gt-swiping");
+          row.classList.toggle("gt-swipe-go", dx <= -TH);
+          row.style.transform = "translateX(" + dx + "px)";
+        }, { passive: true });
+        function end() {
+          if (!row) return;
+          var r = row, go = dx <= -TH, id = r.dataset.id;
+          row = null;
+          reset(r);
+          if (go) markDone(id);
+        }
+        root.addEventListener("touchend", end);
+        root.addEventListener("touchcancel", function () { var r = row; row = null; reset(r); });
       }
 
       function onCardClick(e) {

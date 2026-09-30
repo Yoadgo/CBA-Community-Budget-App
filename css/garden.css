@@ -1859,3 +1859,9 @@
 .gt-note-res { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: calc(14px * var(--fs, 1)); line-height: 1.45; cursor: pointer; }
 .gt-note-res input { margin-top: 3px; flex: none; }
 .gt-note-hint { margin: 8px 0 0; font-size: calc(12.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
+/* GTA1 (גל 13) — "בוצע" בהחלקה: פס ירוק מתגלה מאחורי השורה */
+.gt-row.gt-swiping { position: relative; transition: none; will-change: transform; }
+.gt-row.gt-swiping::after { content: "✓ בוצע"; position: absolute; top: 0; bottom: 0; left: 100%; width: 160px;
+  display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: var(--t-14);
+  color: var(--paper); background: var(--g); opacity: .55; border-radius: var(--r-in); }
+.gt-row.gt-swipe-go::after { opacity: 1; }

@@ -297,15 +297,46 @@ CBA.screens.appReports = (function () {
       }
 
       if (act === "reply") {
-        CBA.ui.prompt("מה לכתוב למדווח? הטקסט יישלח אליו במייל.", {
-          title: "תשובה לדיווח #" + row.id, okText: "שליחה"
-        }).then(function (txt) {
-          if (!txt || !String(txt).trim()) return;
-          CBA.data.setAppReportState(row, !!row.done, String(txt).trim(), function (res) {
+        /* ARA1 (גל 13, אושר 1.10.26) — תשובות מוכנות: לחיצה ממלאת את השדה (ונשאר
+           לערוך), ו"תוקן" מסמן גם "לסמן כטופל". שום דבר לא נשלח בלי "שליחה". */
+        var READY = [
+          { t: "תוקן, תודה על הדיווח!", done: true },
+          { t: "בבדיקה — נעדכן כשיהיה תיקון.", done: false },
+          { t: "תודה על הרעיון! רשמנו אותו לתכנון.", done: false },
+          { t: "לא הצלחנו לשחזר את התקלה. אפשר לפרט מה בדיוק קרה?", done: false }
+        ];
+        CBA.ui.dialog({
+          title: "תשובה לדיווח #" + row.id, okText: "שליחה", cancelText: "ביטול", sticky: true,
+          html: '<p class="ar-rep__lead">מה לכתוב למדווח? הטקסט יישלח אליו במייל.</p>' +
+            '<div class="ar-rep__chips">' + READY.map(function (x, i) {
+              return '<button type="button" class="ar-rep__chip" data-ready="' + i + '">' + esc(x.t) + "</button>";
+            }).join("") + "</div>" +
+            '<textarea class="field-input ar-rep__txt" rows="3" aria-label="התשובה"></textarea>' +
+            (row.done ? "" : '<label class="ar-rep__done"><input type="checkbox" data-rep-done> לסמן גם כטופל</label>'),
+          onMount: function (wrap) {
+            wrap.addEventListener("click", function (e) {
+              var c = e.target.closest("[data-ready]");
+              if (!c) return;
+              var x = READY[+c.getAttribute("data-ready")], ta = wrap.querySelector(".ar-rep__txt");
+              ta.value = x.t; ta.focus();
+              var cb = wrap.querySelector("[data-rep-done]");
+              if (cb) cb.checked = !!x.done;
+            });
+          },
+          onOk: function (wrap, close) {
+            var ta = wrap.querySelector(".ar-rep__txt"), cb = wrap.querySelector("[data-rep-done]");
+            var t = String(ta.value || "").trim();
+            if (!t) { ta.focus(); return; }
+            close({ t: t, done: !!row.done || !!(cb && cb.checked) });
+          }
+        }).then(function (out) {
+          if (!out || !out.t) return;
+          CBA.data.setAppReportState(row, out.done, out.t, function (res) {
             if (!res || !res.ok) return CBA.ui.alert((res && res.error) || "לא הצלחנו לשלוח");
-            var t = String(txt).trim();
+            var t = out.t;
             row.reply = res.reply || (row.reply ? row.reply + "\n---\n" + t : t);
-            CBA.ui.toast("התשובה נשלחה", "ok");
+            if (out.done && !row.done) { row.done = true; row.doneAt = new Date().toISOString(); st.keep[row.id] = true; }
+            CBA.ui.toast(out.done ? "התשובה נשלחה וסומן כטופל" : "התשובה נשלחה", "ok");
             if (!stillHere(container, st.embedded)) return;   /* ARB2 (גל 9, 1.10.26) — לא מציירים מעל מסך אחר */
             paint(container);
           });

@@ -461,6 +461,7 @@ function openDrawer(catId) {
       </tr>`;
   }).join("") : `<tr><td style="color:var(--text-muted); padding:16px 4px;">אין הוצאות בסעיף זה.</td></tr>`;
 
+  const canAddHere = catId !== BUDGET_NOCAT && !!(CBA.screens.expenses && CBA.screens.expenses.openAddForCategory);
   const overlay = document.createElement("div");
   overlay.id = "cba-drawer";
   overlay.innerHTML = `
@@ -474,11 +475,20 @@ function openDrawer(catId) {
         <button class="drawer__close" data-close aria-label="סגור">×</button>
       </div>
       <div class="drawer__body">
+        ${canAddHere ? `<button type="button" class="btn-ghost bud-addtx" data-bud-addtx>+ הוספת הוצאה לסעיף הזה</button>` : ""}
         <table class="dt">${rowsHTML}</table>
       </div>
     </aside>`;
   document.body.appendChild(overlay);
   overlay.querySelectorAll("[data-close]").forEach(function (el) { el.addEventListener("click", closeDrawer); });
+  /* BUA1 (גל 13, אושר 1.10.26) — "+ הוצאה לסעיף" גם במגירה (עד היום רק בהחלקה
+     בטלפון). אותו טופס בדיוק, עם הסעיף ממולא. */
+  const addBtn = overlay.querySelector("[data-bud-addtx]");
+  if (addBtn) addBtn.addEventListener("click", function () {
+    const id = drawerCatId;
+    closeDrawer();
+    CBA.screens.expenses.openAddForCategory(id);
+  });
   document.addEventListener("keydown", onEscClose);
 }
 function closeDrawer() {

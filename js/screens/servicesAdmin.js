@@ -104,7 +104,7 @@ CBA.screens.servicesAdmin = {
         else sh.bar.querySelector("#sadm-bar-stale").addEventListener("click", sadmOpenStaleReports);
         sh.bar.querySelector("#sadm-bar-more").addEventListener("click", function () { sadmOpenMoreMenu(isSuperAdmin); });
       }
-      sh.body.innerHTML = '<div id="sadm-body"></div>';
+      sh.body.innerHTML = '<div id="sadm-staleq"></div><div id="sadm-body"></div>';
     } else
     container.innerHTML =
       '<div class="screen-head screen-head--row">' +
@@ -125,9 +125,10 @@ CBA.screens.servicesAdmin = {
           (isSuperAdmin ? '<button type="button" class="btn-primary" id="sadm-new">שירות חדש +</button>' : "") +
         "</div>" +
       "</div>" +
-      '<div id="sadm-body"></div>';
+      '<div id="sadm-staleq"></div><div id="sadm-body"></div>';
 
     var body = container.querySelector("#sadm-body");
+    sadmPaintStaleQueue(container.querySelector("#sadm-staleq"));   /* SMA1 */
     /* טעינה מוקדמת (best-effort, לא חוסמת) של עץ הוועד — כדי ש"אחראי
        מטעם הוועד" בעורך השירות כבר יהיה מלא ברגע שהעורך נפתח, בלי
        להמתין. אם היא נכשלת, השדה פשוט מוצג ריק ("— ללא —"). */
@@ -1472,6 +1473,34 @@ function sadmPromoteRecommendation(card) {
  *  כאן "ניהול תוויות" נפרד — התוויות קבועות בקוד (RR_LABELS ב-
  *  resRecommendations.js), בדיוק כפי שיועד ביקש.
  * ========================================================================== */
+/* SMA1 (גל 13, אושר 1.10.26) — רצועת "תור" מעל הרשימה: כמה דיווחי "לא מעודכן"
+   ממתינים, ושלושת הראשונים כקפיצה ישירה לכרטיס (מגירת ההמלצה, שם מתקנים).
+   אין דיווח פתוח — הרצועה לא מוצגת בכלל. כשל טעינה — שקט (הכפתור בסרגל נשאר). */
+function sadmPaintStaleQueue(host) {
+  if (!host || !(CBA.data && CBA.data.getStaleReports)) return;
+  CBA.data.getStaleReports(function (res) {
+    if (!host.isConnected) return;
+    var open = ((res && res.ok && res.reports) || []).filter(function (r) { return r.status !== "done"; });
+    if (!open.length) { host.innerHTML = ""; return; }
+    var seen = {}, top = [];
+    open.forEach(function (r) { if (!seen[r.cardId] && top.length < 3) { seen[r.cardId] = 1; top.push(r); } });
+    host.innerHTML = '<div class="sadm-q" role="region" aria-label="תור דיווחי לא מעודכן">' +
+      '<span class="sadm-q__t"><b>' + open.length + '</b> ' + (open.length === 1 ? 'דיווח "לא מעודכן" ממתין' : 'דיווחי "לא מעודכן" ממתינים') + '</span>' +
+      top.map(function (r) {
+        return '<button type="button" class="sadm-q__c" data-sq-card="' + sadmEsc(r.cardId) + '" title="' + sadmEsc(r.why || "") + '">' +
+          sadmEsc(r.cardName || r.cardId) + '</button>';
+      }).join("") +
+      '<button type="button" class="sadm-q__all" data-sq-all>לכל התור</button></div>';
+    host.onclick = function (e) {
+      var c = e.target.closest("[data-sq-card]");
+      if (c && CBA.screens.resRecommendations && CBA.screens.resRecommendations.openCard) {
+        CBA.screens.resRecommendations.openCard(c.getAttribute("data-sq-card")); return;
+      }
+      if (e.target.closest("[data-sq-all]")) sadmOpenStaleReports();
+    };
+  });
+}
+
 function sadmOpenStaleReports() {
   CBA.data.getStaleReports(function (res) {
     var reports = (res && res.ok && res.reports) || [];
