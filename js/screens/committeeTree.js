@@ -129,7 +129,13 @@
    * ======================================================================== */
   var NAMES_KEY = "cba_ct_names_v1";
   var redrawers = [];
-  function onPeople(fn) { redrawers.push(fn); }
+  /* KB3 (גל 7) — כל ציור של המסך (גם רענון רקע) הוסיף פונקציה לרשימה, והרשימה
+     נוקתה רק כשהשמות הגיעו — פעם אחת בסשן. כל עץ ישן נשאר בזיכרון. עכשיו:
+     alive() — מי שכבר לא על המסך יוצא מהרשימה ברישום הבא. */
+  function onPeople(fn, alive) {
+    redrawers = redrawers.filter(function (f) { return !f._alive || f._alive(); });
+    fn._alive = alive; redrawers.push(fn);
+  }
   function notifyPeople() {
     redrawers = redrawers.filter(function (f) { try { return f() !== false; } catch (e) { return false; } });
   }
@@ -169,14 +175,22 @@
     });
   }
 
-  function load(cb, force) {
+  /* quiet (KB1, גל 7) — רענון ברקע: נכשל ויש כבר עץ — נשארים עליו בלי שגיאה. */
+  function load(cb, force, quiet) {
     if (S.loaded && !force) { if (cb) cb(); return; }
     if (cb) S.waiters.push(cb);
     if (S.loading) return;
     S.loading = true;
     if (!S.dirDone) loadPeople(false);
+    /* KB2 (גל 7) — רשימת השמות שנכשלה סומנה "הסתיימה" ולא נוסתה שוב לעולם:
+       "שם לא זמין" לכל בעלי התפקידים עד סוף הסשן, גם אחרי "נסו שוב". */
+    else if (force && !S.dirOk) loadPeople(true);
     readFs(function (err, doc) {
-      if (err) S.error = "לא הצלחנו לטעון את עץ הוועד (" + err + ").";
+      /* KB5 (גל 7) — בלי קוד Firebase גולמי ("permission-denied") לתושבים; הקוד לקונסול */
+      if (err) {
+        try { console.warn("[committeeTree] load:", err); } catch (e) {}
+        if (!(quiet && S.loaded)) S.error = "לא הצלחנו לטעון את עץ הוועד. בדקו את החיבור ונסו שוב.";
+      }
       else { S.error = ""; applyDoc(doc); }
       /* השמות מהעותק במכשיר — רק אם הרשימה המלאה עוד לא הגיעה */
       if (!S.dirDone && !S.people) S.people = readNamesCache();
@@ -363,13 +377,15 @@
     while (ix.roleKids(cur.id).length === 1 && !ix.itemKids(cur.id).length && g++ < 12) { cur = ix.roleKids(cur.id)[0]; chain.push(cur); }
     return chain;
   }
-  function matcher(ix, roots) {
+  function matcher(ix, roots, edit) {
     var q = V.q.trim();
     if (!q) return null;
     var self = {}, live = {};
     function hit(r) {
       if (r.title.indexOf(q) !== -1) return true;
-      return r.holders.some(function (h) { return who(h).name.indexOf(q) !== -1; });
+      /* KB4 (גל 7) — בתצוגת התושבים שם של מי שעזב מוסתר (namesHTML), ולכן גם לא
+         נחשב התאמה: קודם "שעזב" הדגיש כרטיס שאין בו שום דבר גלוי שמתאים. */
+      return r.holders.some(function (h) { var w = who(h); return (edit || w.kind !== "gone") && w.name.indexOf(q) !== -1; });
     }
     function walk(r) {
       var any = self[r.id] = hit(r);
@@ -511,8 +527,9 @@
   /* ==========================================================================
    *  המסך
    * ======================================================================== */
-  function mount(container, edit) {
+  function mount(container, edit, opts) {
     var year = curYear();
+    var wasLoaded = S.loaded;
     container.innerHTML = '<div class="ct' + (edit ? " ct--edit" : "") + '">' +
       '<div class="ct-tools">' +
         '<label class="ct-search">' + ICON_SEARCH + '<input type="search" id="ct-q" placeholder="חיפוש שם או תפקיד" aria-label="חיפוש בעץ הוועד" value="' + esc(V.q) + '"></label>' +
@@ -538,7 +555,7 @@
       var loose = ix.kids("").filter(function (r) { return kindOf(r) !== "role"; });
       var w = canvas.clientWidth || container.clientWidth || 1000;
       lastW = w;
-      var m = matcher(ix, ix.kids(""));
+      var m = matcher(ix, ix.kids(""), edit);
       if (!roles.length) {
         canvas.innerHTML = emptyYearHTML();
       } else {
@@ -952,18 +969,25 @@
     onPeople(function () {
       if (!root.isConnected) return false;
       if (S.loaded) { draw(); var h = container.querySelector("#ct-form") || document.querySelector(".ct-sheet #ct-form"); if (h && V.draft) renderForm(h); }
-    });
+    }, function () { return root.isConnected; });
     load(function () {
       if (!root.isConnected) return;
       if (edit && V.sel) { var s = V.sel; V.sel = null; draw(); openPanel(s, null); return; }
       draw();
     });
+    /* KB1 (גל 7) — העץ נטען פעם אחת בסשן: עריכה של מנהל (במכשיר אחר) לא הופיעה
+       אצל תושב עד טעינת הדף מחדש (עריכות v3 לא מזיזות את מונה "committee",
+       אז גם רענון הרקע לא עזר). כניסה למסך — מציירים מהזיכרון מיד ומרעננים ברקע.
+       רק בתצוגת התושבים; בעריכה (committeeAdmin) — כמו קודם. */
+    if (!edit && wasLoaded && !(opts && opts.silent)) {
+      load(function () { if (root.isConnected) draw(); }, true, true);
+    }
   }
 
   /* ==========================================================================
    *  רישום + ממשק למדריך התושבים (resident.js)
    * ======================================================================== */
-  CBA.screens.resCommittee = { render: function (container) { mount(container, false); } };
+  CBA.screens.resCommittee = { render: function (container, opts) { mount(container, false, opts); } };
   CBA.screens.committeeAdmin = { render: function (container) { if (!isSuper()) { container.innerHTML = ""; return; } mount(container, true); } };
 
   /* תפקידים של אדם בשנה המוצגת — לפי משפחה + מספר דייר בלבד. */

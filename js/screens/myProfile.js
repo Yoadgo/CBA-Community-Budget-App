@@ -33,8 +33,13 @@ CBA.screens = CBA.screens || {};
 
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
 
-  var st = { loaded: false, loading: false, data: null, error: "", activeSlot: 1,
-    kidsRows: [], kidsLegacyText: "" };
+  /* PB1 (גל 7) — activeSlot התחיל ב-1, ולכן "פותחים תמיד על המשבצת של עצמי"
+     (ב-load) לא קרה אף פעם: דייר/ת 2 נפתח/ה על הטופס של בן/בת הזוג, ו"שמירה"
+     שם ערכה את הפרטים שלו/ה. 0 = "עוד לא נקבע" → load קובע mySlot.
+     owner (PB4) — של מי הנתונים בזיכרון; משתמש אחר באותו מכשיר → מאפסים. */
+  var st = { loaded: false, loading: false, data: null, error: "", activeSlot: 0,
+    kidsRows: [], kidsLegacyText: "", owner: "", editing: false };
+  function whoAmI_() { var u = (window.CBA && CBA.user) || {}; return String(u.email || u.familyId || ""); }
 
   /* שדות אישיים שנשמרים מיד, לכל משבצת. label/hint נשמרים כאן ולא בשרת —
      השרת מחזיק את רשימת ההרשאה, הלקוח רק מציג. */
@@ -119,32 +124,42 @@ CBA.screens = CBA.screens || {};
     });
   }
 
-  function load(container) {
+  /* o.keepKids (PB6) — אחרי שמירת פרטים אישיים לא דורסים שורות ילדים שעוד לא נשמרו.
+     o.quiet (PB3) — טעינה ברקע: אם בינתיים התחילו להקליד, לא מציירים מחדש.
+     o.after — אחרי הציור (PB7: "נשמר ✓" על ה-DOM החדש, לא על זה שנמחק). */
+  function load(container, o) {
+    o = o || {};
     st.loading = true; st.error = "";
     CBA.data.getMyProfile(function (res) {
       st.loading = false;
-      if (!res || !res.ok) { st.error = (res && res.error) || "לא הצלחנו לטעון את הפרטים."; }
+      if (!res || !res.ok) {
+        if (o.quiet && st.loaded) return;      // ברקע: נכשל — נשארים על מה שיש
+        st.error = (res && res.error) || "לא הצלחנו לטעון את הפרטים.";
+      }
       else {
-        st.data = res; st.loaded = true;
+        if (o.quiet && st.editing) { st.data = res; return; }
+        st.data = res; st.loaded = true; st.owner = whoAmI_();
         // בטעינה ראשונה (או אחרי ריענון) פותחים תמיד על המשבצת של עצמי.
         if (!st.activeSlot || (st.activeSlot !== 1 && st.activeSlot !== 2)) st.activeSlot = res.mySlot;
         // "שמות ילדים" משותף לשתי המשבצות (אותו תא) — לוקחים מהמשבצת שלי,
         // תמיד קיימת.
         var raw = (res.slots[res.mySlot] && res.slots[res.mySlot].values.kids) || "";
         var parsed = parseKidsValue_(raw);
-        st.kidsRows = parsed.rows;
-        st.kidsLegacyText = parsed.legacyText;
+        if (!o.keepKids) {
+          st.kidsRows = parsed.rows;
+          st.kidsLegacyText = parsed.legacyText;
+        }
       }
-      if (container.isConnected) draw(container);
+      if (container.isConnected) { draw(container); if (o.after) o.after(); }
     });
   }
 
   /* ---------------------------------------------------------------- ציור */
   function draw(container) {
-    if (st.loading && !st.loaded) { container.innerHTML = head() + CBA.skel.sections(3); return; }
+    if (st.loading && !st.loaded) { container.innerHTML = head() + CBA.skel.sections(3) + foot(); return; }
     if (st.error) {
       container.innerHTML = head() + CBA.ui.emptyState({ icon: "inbox", title: "לא הצלחנו לטעון",
-        sub: st.error, ctaLabel: "נסו שוב", ctaAttr: "data-retry" });
+        sub: st.error, ctaLabel: "נסו שוב", ctaAttr: "data-retry" }) + foot();
       var rt = container.querySelector("[data-retry]");
       if (rt) rt.addEventListener("click", function () { load(container); });
       return;
@@ -170,7 +185,7 @@ CBA.screens = CBA.screens || {};
         '</div>' +
         '<div class="pf-hint">מספר הבית ושם המשפחה מקושרים למפה, לשיוך ההוצאות ולמדריך התושבים. ' +
           'לשינוי — פנו לוועד.</div>' +
-      '</section>';
+      '</section>' + foot();
 
     bind(container);
   }
@@ -273,10 +288,23 @@ CBA.screens = CBA.screens || {};
     '</section>';
   }
 
+  /* 🔴 גל 7 (1.10.26, ספר האבנים פרק 16) — חופה נמוכה (טופס): הכותרת, ומיני
+     "בית" ו"ילדים" מהנתונים שכבר בזיכרון. בלי הרכיב — הראש הישן.
+     הגוף נפתח כאן ונסגר ב-foot(). */
   function head() {
+    if (window.CBA && CBA.canopy) {
+      if (CBA.canopy.bindScroll) CBA.canopy.bindScroll();
+      var d = st.data, minis = [];
+      if (d && d.readOnly && d.readOnly.house) minis.push({ k: "בית", b: d.readOnly.house });
+      if (st.loaded) minis.push({ k: "ילדים", b: String(st.kidsRows.filter(function (k) { return String(k.name || "").trim(); }).length) });
+      return CBA.canopy({ size: "low", dom: "home", ico: ICO.user, title: "המשפחה שלי",
+          sub: "מה שמופיע עליכם במדריך התושבים ובמערכת", minis: minis }) +
+        '<div class="cnp2-body pf-v2">';
+    }
     return '<div class="screen-head"><div class="screen-head__title">המשפחה שלי</div>' +
       '<div class="screen-head__sub">מה שמופיע עליכם במדריך התושבים ובמערכת</div></div>';
   }
+  function foot() { return (window.CBA && CBA.canopy) ? '</div>' : ''; }
   function dateLabel(v) {
     try {
       var d = new Date(v);
@@ -290,14 +318,21 @@ CBA.screens = CBA.screens || {};
     container.querySelectorAll("[data-slotswitch]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var n = parseInt(btn.dataset.slotswitch, 10);
-        if (n !== st.activeSlot) { st.activeSlot = n; draw(container); }
+        /* PB5 (גל 7) — הילדים משותפים לשתי המשבצות: שורות שעוד לא נשמרו לא נמחקות במעבר */
+        if (n !== st.activeSlot) { syncKidsFromDom_(container); st.activeSlot = n; draw(container); }
       });
     });
 
     // סימון "יש עריכה פתוחה" — מונע מרענון הרקע לדרוס הקלדה באמצע
+    /* PB2 (גל 7) — markDirty בלי תווית הדליק "שומר…" בכותרת כבר בהקשה הראשונה
+       (לא נשמר כלום), ומי שיצא בלי לשמור השאיר אותו דולק — וכעבור 2 דקות
+       הופיעה שגיאה "פעולה נתקעה ושוחררה". עכשיו: שקט (false), ומשתחרר לבד
+       כשהטופס כבר לא על המסך. */
     container.querySelectorAll("[data-f], [data-kid-name], [data-kid-dob]").forEach(function (el) {
       el.addEventListener("input", function () {
-        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("profileEdit");
+        st.editing = true;
+        if (CBA.sheets && CBA.sheets.markDirty) CBA.sheets.markDirty("profileEdit", false);
+        watchLeave_(container);
       });
     });
 
@@ -342,6 +377,16 @@ CBA.screens = CBA.screens || {};
     });
   }
 
+  var leaveTimer = null;
+  function watchLeave_(container) {
+    if (leaveTimer) return;
+    leaveTimer = setInterval(function () {
+      if (document.body.dataset.screen === "resMe" && container.isConnected) return;
+      clearInterval(leaveTimer); leaveTimer = null; st.editing = false;
+      if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("profileEdit");
+    }, 1500);
+  }
+
   function doSave(container, btn) {
     var which = btn.dataset.save;
     var fields = {};
@@ -364,13 +409,19 @@ CBA.screens = CBA.screens || {};
     btn.textContent = "שומר…";
     CBA.data.saveMyProfile(st.activeSlot, fields, function (res) {
       btn.disabled = false; btn.textContent = prev;
-      if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("profileEdit");
       if (!res || !res.ok) { CBA.ui.alert((res && res.error) || "השמירה נכשלה. נסו שוב."); return; }
+      /* PB6 (גל 7) — שמירת פרטים אישיים לא מוחקת שורות ילדים שעוד לא נשמרו
+         (ולכן גם סימון העריכה נשאר אם הן קיימות). */
+      if (which !== "kids") syncKidsFromDom_(container);
+      if (which === "kids" && CBA.sheets && CBA.sheets.clearDirty) { st.editing = false; CBA.sheets.clearDirty("profileEdit"); }
       // מרעננים את המצב מהשרת כדי שחיווי "עודכן ע"י" (וגם רשימת הילדים) יהיה
       // אמיתי ולא מנוחש
-      st.loaded = false; load(container);
-      var tag = container.querySelector('[data-saved="' + which + '"]');
-      if (tag) { tag.hidden = false; setTimeout(function () { if (tag) tag.hidden = true; }, 2500); }
+      st.loaded = false;
+      load(container, { keepKids: which !== "kids", after: function () {
+        /* PB7 — "נשמר ✓" על ה-DOM החדש (קודם הוצג על הישן, שנמחק מיד בציור) */
+        var tag = container.querySelector('[data-saved="' + which + '"]');
+        if (tag) { tag.hidden = false; setTimeout(function () { if (tag) tag.hidden = true; }, 2500); }
+      } });
     });
   }
 
@@ -388,7 +439,11 @@ CBA.screens = CBA.screens || {};
       { title: "לשלוח בקשה לשינוי האימייל?", okText: "שליחת בקשה" }
     ).then(function (ok) {
       if (!ok) return;
+      /* PB9 (גל 7) — הכפתור נעול עד שהשרת עונה (לחיצה כפולה = אישור שני + שגיאת "כבר קיימת") */
+      var reqBtn = container.querySelector("[data-req-email]");
+      var release = (reqBtn && CBA.ui.busy) ? CBA.ui.busy(reqBtn, "שולח…") : function () {};
       CBA.data.submitProfileChange("email", val, slotNum, function (res) {
+        release();
         if (!res || !res.ok) { CBA.ui.alert((res && res.error) || "לא הצלחנו לשלוח את הבקשה."); return; }
         if (CBA.sheets && CBA.sheets.clearDirty) CBA.sheets.clearDirty("profileEdit");
         st.loaded = false; load(container);
@@ -397,9 +452,21 @@ CBA.screens = CBA.screens || {};
   }
 
   CBA.screens.resMe = {
-    render: function (container) {
-      if (st.loaded) { draw(container); return; }
-      container.innerHTML = head() + CBA.skel.sections(3);
+    render: function (container, opts) {
+      /* PB4 (גל 7) — יציאה מהחשבון לא מאפסת את המסך (אין טעינת דף מחדש), והמשתמש
+         הבא באותו מכשיר ראה את הטלפונים, תאריכי הלידה והילדים של הבית הקודם. */
+      if (st.loaded && st.owner && st.owner !== whoAmI_()) {
+        st.loaded = false; st.data = null; st.activeSlot = 0; st.kidsRows = []; st.kidsLegacyText = ""; st.editing = false;
+      }
+      if (st.loaded) {
+        draw(container);
+        /* PB3 (גל 7) — עד היום המסך צויר מהזיכרון לנצח: אישור הוועד לבקשת האימייל
+           (במכשיר אחר) לא הופיע עד שמירה. כניסה למסך — מרעננים ברקע. */
+        if (!(opts && opts.silent) && !st.loading) load(container, { quiet: true });
+        return;
+      }
+      st.editing = false;
+      container.innerHTML = head() + CBA.skel.sections(3) + foot();
       load(container);
     }
   };
