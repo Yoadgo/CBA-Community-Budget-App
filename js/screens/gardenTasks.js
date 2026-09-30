@@ -364,7 +364,32 @@
       /* GTB4 (גל 8, 1.10.26) — ציור חדש = אין רצועת ⋯ פתוחה; משחררים עצירת רענון שנשארה. */
       if (!detached && CBA.holdRefresh) CBA.holdRefresh("gtTiles", false);
 
-      container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
+      /* A0/A1 (אושר ע"י יועד 30.9.26) — סרגל ניהול דק מעל המסך (לא במופע מנותק
+         של gardenOpenCard). "משימה חדשה" ו"?" (מקרא) עברו מקצה שורת הסינון לסרגל —
+         אותן פעולות. בסידור השבועי (גובה מלא) הסרגל יורד והכפתורים חוזרים לשורה. */
+      var barEl = null;
+      if (!detached && CBA.canopy) {   // בלי canopy.js — המסך כמו קודם
+        container.innerHTML = CBA.canopy({ size: "bar", dom: "gar", title: "משימות גינון",
+            ico: '<path d="M12 21c-4-3-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-3 8-7 11z"/><path d="M12 10v11"/>',
+            pills: [{ id: "gt-p-mine", k: GL.mineLabel(isManager) }, { id: "gt-p-unsched", k: "לשיבוץ", hidden: true }],
+            act: { id: "gt-bar-new", label: "משימה חדשה", hidden: true },
+            extra: '<button type="button" class="cnp2-ico" id="gt-bar-legend" aria-label="מקרא">?</button>' }) +
+          '<div class="cnp2-body cnp2-body--adm"><div class="gd-screen" id="gt-root"></div></div>';
+        barEl = container.querySelector(".cnp2--bar");
+        barEl.querySelector("#gt-bar-new").addEventListener("click", function () { openNewTask(); });
+        barEl.querySelector("#gt-bar-legend").addEventListener("click", function () { openLegend(); });
+        barEl.querySelector("#gt-p-mine").addEventListener("click", function () {
+          filter = "mine"; draw();
+          try { root.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+        });
+        barEl.querySelector("#gt-p-unsched").addEventListener("click", function () {
+          filter = "open"; draw();
+          var dec = root.querySelector(".gt-decide");
+          try { (dec || root).scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+        });
+      } else {
+        container.innerHTML = '<div class="gd-screen" id="gt-root"></div>';
+      }
       var root = container.querySelector("#gt-root");
       var cardsWired = false;   // ראה wire() — מאזין הלחיצות המואצל נרשם פעם אחת
       /* GTB3 (גל 8, 1.10.26) — גיליון/טופס שנפתח לפני ציור-מחדש קורא למופע החי, לא לשורש המנותק. */
@@ -486,6 +511,26 @@
           }
         });
         return c;
+      }
+
+      /* 🔴 22.9 (בקשת יועד) — **גם הגנן פותח תקלות.** במסלול הישיר בלבד. */
+      function canNewTask() {
+        return !!(isManager || (CBA.data.gardenDirectWrites && CBA.data.gardenDirectWrites()));
+      }
+      /* A0 — מוני הסרגל אחרי כל ציור. "להחלטתך"/"לביצוע" = אותו מונה של המסנן;
+         "לשיבוץ" (מנהל בלבד) = פתוחות בלי שבוע — כרטיס "ממתין להחלטה". */
+      function updateBar(c, sched) {
+        if (!barEl) return;
+        if (sched && barEl.isConnected) barEl.remove();
+        else if (!sched && !barEl.isConnected) container.insertBefore(barEl, container.firstChild);
+        var unsched = 0;
+        rowsAll.forEach(function (t) { if (!t.closure && !t.week) unsched++; });
+        var sk = lastSkeleton;
+        CBA.canopy.pill(barEl, "gt-p-mine", sk ? null : c.mine, GL.mineLabel(isManager));
+        var pu = barEl.querySelector("#gt-p-unsched");
+        pu.hidden = !isManager;
+        CBA.canopy.pill(barEl, "gt-p-unsched", sk ? null : unsched);
+        barEl.querySelector("#gt-bar-new").hidden = !canNewTask();
       }
 
       function visible() {
@@ -681,15 +726,17 @@
             /* 🔴 22.9 (בקשת יועד) — **גם הגנן פותח תקלות.** במסלול הישיר
                בלבד: המסלול הישן בשרת חוסם אותו, וכפתור שמוביל לשגיאה גרוע
                מהיעדר כפתור. הוא בוחר שבוע בעצמו, כמו המנהל. */
-            (isManager || (CBA.data.gardenDirectWrites && CBA.data.gardenDirectWrites())
+            /* A0 — בתצוגת רשימה הכפתורים יושבים בסרגל הניהול; כאן רק כשאין סרגל. */
+            (!barEl || sched ? (canNewTask()
               ? '<button type="button" class="gt-tool is-primary" id="gt-new" ' +
                 'aria-label="משימה חדשה">' + ico("plus") + '</button>'
               : '') +
             '<button type="button" class="gt-tool" id="gt-legend" aria-label="מקרא">' +
-              ico("help") + '</button>' +
+              ico("help") + '</button>' : '') +
           '</div>' + body;
 
         wire();
+        updateBar(c, sched);
         /* 🗓 GW-23.9:G4-render */
         if (sched) CBA.gardenSchedule.render(root.querySelector("#gw-host"), schedCtx());
       }

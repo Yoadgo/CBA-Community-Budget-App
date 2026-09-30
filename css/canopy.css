@@ -56,8 +56,8 @@ body.cnp2-past:has(#app-main .cnp2) .app-header { border-radius: 0 0 var(--r-car
 
 /* נמוכה — מסך משנה / טופס: בלי מספר, פחות גובה */
 .cnp2--low { padding-bottom: 18px; }
-.cnp2--low .cnp2-t { font-size: 20px; }
-.cnp2--low .cnp2-disc { width: 32px; height: 32px; }
+.cnp2--low .cnp2-t, .cnp2--bar .cnp2-t { font-size: 20px; }
+.cnp2--low .cnp2-disc, .cnp2--bar .cnp2-disc { width: 32px; height: 32px; }
 
 /* כפתורים על הכהה (לשימוש המסכים בתוך .cnp2-tools) */
 .cnp2-btn {
@@ -87,3 +87,48 @@ body.cnp2-past:has(#app-main .cnp2) .app-header { border-radius: 0 0 var(--r-car
   .cnp2-mini b { font-size: 17px; }
   .cnp2-body { padding-top: 14px; }
 }
+
+/* ---------- סרגל ניהול דק (A0/A1, אושר 30.9.26) ----------
+   שורה אחת: שם + צבע תחום · מונים לחיצים · פעולה ראשית. התוכן מתחת ב-.cnp2-body--adm
+   ברוחב המלא שהיה למסכי הניהול (בלי max-width), כדי שהמסך עצמו לא יזוז. */
+.cnp2--bar { padding: 4px 0 14px; position: relative; z-index: 2; }
+.cnp2--bar .cnp2-in, .cnp2-body--adm { max-width: none; padding-inline: var(--page-pad); }
+.cnp2-body--adm { padding-top: 18px; }
+.cnp2--bar .cnp2-row { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "t p a"; align-items: center; gap: 12px; }
+.cnp2--bar .cnp2-main { grid-area: t; flex: none; }
+.cnp2-pills { grid-area: p; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.cnp2-acts { grid-area: a; display: flex; gap: 8px; align-items: center; }
+.cnp2-pill {
+  display: inline-flex; align-items: baseline; gap: 6px; height: 34px; padding: 0 12px; border-radius: var(--r-pill);
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07);
+  color: var(--on-navy); font: inherit; font-size: var(--t-13); cursor: pointer; white-space: nowrap;
+}
+.cnp2-pill[hidden] { display: none; }
+.cnp2-pill b { font-size: var(--t-17); font-weight: 800; color: var(--paper); font-variant-numeric: tabular-nums; }
+.cnp2-pill.is-hot b { color: var(--d); }
+.cnp2-pill.is-zero { opacity: .55; }
+.cnp2-pill:hover { background: rgba(255,255,255,.12); }
+.cnp2-act {
+  height: 34px; padding: 0 16px; border-radius: var(--r-pill); border: 0; background: var(--paper); color: var(--ink);
+  font: inherit; font-size: var(--t-13); font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.cnp2-act[hidden] { display: none; }
+.cnp2-act__s { display: none; }
+.cnp2-ico {
+  width: 34px; height: 34px; border-radius: var(--r-pill); border: 1px solid rgba(255,255,255,.16); background: transparent;
+  color: var(--on-navy); font: inherit; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.cnp2-ico:hover { background: rgba(255,255,255,.1); color: var(--paper); }
+@media (max-width: 720px) {
+  .cnp2--bar { padding: 0 0 12px; }
+  .cnp2--bar .cnp2-in, .cnp2-body--adm { padding-inline: 16px; }
+  .cnp2--bar .cnp2-row { grid-template-columns: 1fr auto; grid-template-areas: "t a" "p p"; gap: 8px 10px; }
+  .cnp2-pills { justify-content: flex-start; }
+  .cnp2-pill { height: 28px; padding: 0 10px; font-size: var(--t-12); }
+  .cnp2-pill b { font-size: var(--t-14); }
+  .cnp2-act { width: 34px; padding: 0; font-size: var(--t-17); font-weight: 600; }
+  .cnp2-act__l { display: none; }
+  .cnp2-act__s { display: inline; }
+}
+/* סידור שבועי (גובה מלא) — הסרגל יורד מה-DOM, והגוף חוזר בדיוק לשוליים של main */
+body:not(:has(#app-main .cnp2)) .cnp2-body--adm { padding: 0; }

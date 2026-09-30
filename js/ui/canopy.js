@@ -16,6 +16,7 @@
       (לפי id), בדיוק כמו קודם. ולכן אפשר לאמץ אותו מסך אחרי מסך.
    ⚠️ הפריסה (רוחב מלא, ההדר בלי פינות מעל החופה) — ב-css/canopy.css, לפי
       body:has(.cnp2). מסך בלי חופה לא מושפע כלל.
+   size:"bar" — סרגל הניהול הדק (A0), ר' bar() למטה.
    ביטול: להסיר את תגית ה-script ואת css/canopy.css, ולהחזיר את moduleHead במסך.
    ========================================================================== */
 window.CBA = window.CBA || {};
@@ -24,8 +25,36 @@ window.CBA = window.CBA || {};
   function esc(s) { return CBA.esc ? CBA.esc(s) : String(s == null ? "" : s); }
   var BACK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
 
+  /* A0/A1 (אושר ע"י יועד 30.9.26) — סרגל ניהול דק (~60px): שם + צבע תחום,
+     1–2 מונים של "מה מחכה לי" (לחיצים) ופעולה ראשית. בטלפון: שם + "+" בשורה
+     אחת, המונים מתחת.
+       CBA.canopy({ size: "bar", dom: "ev", ico: "…", title: "תושבים",
+         pills: [{ id: "res-p-su", k: "הרשמות ממתינות" }],
+         act: { id: "res-bar-add", label: "הוספת משפחות" },
+         extra: '<button …>' })
+     המסך מחבר בעצמו את הכפתורים (לפי id) ומעדכן מונה עם CBA.canopy.pill.
+     התוכן יושב ב-<div class="cnp2-body cnp2-body--adm"> — ברוחב המלא הקודם. */
+  function bar(o) {
+    var disc = o.ico ? '<i class="cnp2-disc"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + o.ico + '</svg></i>' : "";
+    var pills = (o.pills || []).map(function (p) {
+      return '<button type="button" class="cnp2-pill is-zero"' + (p.id ? ' id="' + esc(p.id) + '"' : "") + (p.hidden ? " hidden" : "") + '>' +
+        '<b>' + esc(p.n == null ? "—" : p.n) + '</b><span>' + esc(p.k || "") + '</span></button>';
+    }).join("");
+    var act = o.act ? '<button type="button" class="cnp2-act"' + (o.act.id ? ' id="' + esc(o.act.id) + '"' : "") +
+      (o.act.hidden ? " hidden" : "") + ' aria-label="' + esc(o.act.label || "") + '">' +
+      '<span class="cnp2-act__l">+ ' + esc(o.act.label || "") + '</span><span class="cnp2-act__s" aria-hidden="true">+</span></button>' : "";
+    return '<section class="cnp2 cnp2--bar" data-dom="' + esc(o.dom || "home") + '" aria-label="' + esc(o.title || "") + '">' +
+      '<div class="cnp2-in"><div class="cnp2-row">' +
+        '<div class="cnp2-main"><div class="cnp2-h">' + disc + '<h1 class="cnp2-t">' + esc(o.title || "") + '</h1></div></div>' +
+        '<div class="cnp2-pills">' + pills + '</div>' +
+        '<div class="cnp2-acts">' + (o.extra || "") + act + '</div>' +
+      '</div></div>' +
+    '</section>';
+  }
+
   function canopy(o) {
     o = o || {};
+    if (o.size === "bar") return bar(o);
     var size = o.size === "low" ? "low" : "mid";
     var disc = o.ico ? '<i class="cnp2-disc"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + o.ico + '</svg></i>' : "";
     var back = o.back ? '<button type="button" class="cnp2-back"' + (o.back.id ? ' id="' + esc(o.back.id) + '"' : "") +
@@ -55,6 +84,17 @@ window.CBA = window.CBA || {};
   canopy.set = function (root, id, text) {
     var el = root && root.querySelector ? root.querySelector("#" + id) : null;
     if (el) el.textContent = text == null ? "—" : String(text);
+  };
+
+  /* מונה בסרגל הניהול: מספר + מצב (חם כשיש, עמום באפס). label — אופציונלי. */
+  canopy.pill = function (root, id, n, label) {
+    var el = root && root.querySelector ? root.querySelector("#" + id) : null;
+    if (!el) return;
+    var num = el.querySelector("b"), lab = el.querySelector("span");
+    if (num) num.textContent = n == null ? "—" : String(n);
+    if (label != null && lab) lab.textContent = label;
+    el.classList.toggle("is-hot", n > 0);
+    el.classList.toggle("is-zero", !(n > 0));
   };
 
   /* ההדר מקבל פינות מעוגלות רק כשהחופה יצאה מהמסך (כמו בבית, גל 2) */

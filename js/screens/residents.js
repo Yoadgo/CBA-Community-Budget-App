@@ -433,6 +433,34 @@ function resLoad(container) {
   });
 }
 
+/* A0/A1 (אושר ע"י יועד 30.9.26) — סרגל הניהול הדק מעל המסך. נבנה פעם אחת
+   לכל ציור מלא (ניווט/רענון שקט מרוקנים את main); ציורים פנימיים (סינון,
+   חיפוש, סוף טעינה) מחליפים רק את גוף המסך, והסרגל והמאזינים שלו נשארים.
+   "הוספת משפחות" עבר מהשורה שמעל הטבלה לסרגל — אותה פעולה בדיוק. */
+var RES_BAR_ICO = '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20c0-2.8-1.6-4.9-4-5.7"/>';
+function resShell(container) {
+  if (!CBA.canopy) return container;   // בלי canopy.js — המסך כמו קודם, בלי סרגל
+  var body = container.querySelector(":scope > .cnp2-body--adm");
+  if (body && container.querySelector(":scope > .cnp2--bar")) return body;
+  container.innerHTML = CBA.canopy({ size: "bar", dom: "ev", ico: RES_BAR_ICO, title: "תושבים",
+      pills: [{ id: "res-p-su", k: "הרשמות ממתינות" }, { id: "res-p-chg", k: "שינויי פרטים" }],
+      act: { id: "res-bar-add", label: "הוספת משפחות" } }) +
+    '<div class="cnp2-body cnp2-body--adm"></div>';
+  body = container.querySelector(".cnp2-body--adm");
+  function goTo(sel) {
+    var el = body.querySelector(sel);
+    var card = el && el.closest(".res-signups");
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  container.querySelector("#res-p-su").addEventListener("click", function () { goTo("[data-signup]"); });
+  container.querySelector("#res-p-chg").addEventListener("click", function () { goTo("[data-change]"); });
+  container.querySelector("#res-bar-add").addEventListener("click", function () {
+    if (!resState.loaded || resState.error) return;
+    resOpenAdd(container, resCols(resState.headers));
+  });
+  return body;
+}
+
 CBA.screens.residents = {
   title: "תושבים",
 
@@ -455,6 +483,7 @@ CBA.screens.residents = {
     // בלי זה, כל render() (כולל רענון רקע שקט) היה מאפס בחירה שהמשתמש כבר עשה.
     /* RSB3 (גל 8, 1.10.26) — נקרא מ-resState.suSel (מתעדכן ב-change), לא מה-DOM שכבר ריק */
     var prevSignupSel = st.suSel;
+    var body = resShell(container);   // A0 — הסרגל נבנה אחרי חישוב isNav (שבודק main ריק)
 
     if (!st.loaded && !st.loading) resLoad(container);
     /* RSB2 (גל 8, 1.10.26) — הנתונים נטענו פעם אחת בלבד ולא התרעננו בכניסות הבאות.
@@ -469,11 +498,11 @@ CBA.screens.residents = {
     }
 
     if (st.loading && !st.loaded) {
-      container.innerHTML = CBA.skel.table(8, 6);
+      body.innerHTML = CBA.skel.table(8, 6);
       return;
     }
     if (st.error) {
-      container.innerHTML = '<div class="card res-msg">' + CBA.esc(st.error) +
+      body.innerHTML = '<div class="card res-msg">' + CBA.esc(st.error) +
         '<div><button class="btn-ghost btn-sm" data-res-retry>נסה שוב</button></div></div>';
       var rb = container.querySelector("[data-res-retry]");
       if (rb) rb.addEventListener("click", function () { st.loaded = false; resLoad(container); });
@@ -508,7 +537,7 @@ CBA.screens.residents = {
       return String(x["סטטוס"] || "").trim() === "ממתין";
     });
 
-    container.innerHTML =
+    body.innerHTML =
       /* RSB6 (גל 8, 1.10.26) — שורה קטנה עם "נסה שוב" במקום היעלמות שקטה של הכרטיסים */
       (st.reqError ? '<div class="res-warn" style="margin:0 0 10px">לא נטענו הבקשות · ' +
         '<button type="button" class="btn-link" data-res-req-retry>נסה שוב</button></div>' : "") +
@@ -526,7 +555,8 @@ CBA.screens.residents = {
         '<div class="tx-actions">' +
           '<div class="tx-summary"><span>מוצגים</span> <b>' + visible.length + '</b> <span class="tx-summary__count">· מתוך ' + st.rows.length + ' משקי בית</span></div>' +
           resConflictChip(conflicts) +
-          '<button class="btn-primary btn-sm" data-res-add>הוספת משפחות</button>' +
+          /* A0 — "הוספת משפחות" עבר לסרגל; נשאר כאן רק אם הסרגל לא נטען */
+          (CBA.canopy ? "" : '<button class="btn-primary btn-sm" data-res-add>הוספת משפחות</button>') +
           '<button class="btn-ghost btn-sm" data-res-export>ייצוא לגיליון</button>' +
           '<button class="btn-ghost btn-sm" data-res-reload>רענן</button>' +
         '</div>' +
@@ -559,6 +589,10 @@ CBA.screens.residents = {
     });
 
     resBind(container, c);
+    if (CBA.canopy) {
+      CBA.canopy.pill(container, "res-p-su", pending.length);
+      CBA.canopy.pill(container, "res-p-chg", pendingChanges.length);
+    }
   }
 };
 
