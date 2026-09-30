@@ -4216,6 +4216,8 @@ function bumpRev_(action) {
        פעולה עתידית שתירשם ב-ACTION_DOMAIN תקבל את זה מעצמה.
        רשימת קריאות מפוזרת היתה מתיישנת בפיצ'ר הראשון. */
     homeCountsBump_(doms);
+    /* Q1 — רשימת המשפחות לכלל `txOwnerOk`. ר' `famRegistryWrite_`. */
+    if (doms.indexOf('residents') !== -1) famRegistryWrite_();
   } catch (err) { /* לא קריטי — במקרה הגרוע הלקוח פשוט ימשוך מלא */ }
 }
 
@@ -7034,6 +7036,10 @@ function hourlyJobsRun_() {
      הכול. זו רשת הביטחון שתופסת את מה ש-`bumpRev_` לא
      רואה: **עריכה ידנית בגיליון** ואת ספירת המועדון,
      שבמכוון אינה רצה בכתיבה (ר' הבלוק מעל `homeCountsDoc_`). */
+  /* Q1 — רשימת המשפחות (רשת הביטחון לעריכה ידנית בגיליון). */
+  hjM('famRegistryWrite_');
+  var fr = famRegistryWrite_(ss);
+  if (!fr.ok) Logger.log('famRegistryWrite_ נכשל: ' + fr.error);
   hjM('homeCountsSyncAll_');
   try {
     var hc = homeCountsSyncAll_(ss);
@@ -11178,6 +11184,60 @@ function homeCountsBump_(domains) {
     if (!want.length) return;
     homeCountsWrite_(SpreadsheetApp.getActiveSpreadsheet(), want);
   } catch (e) { /* שגר ושכח */ }
+}
+
+/* ============================================================================
+ *  רשימת מזהי המשפחות — famRegistry/ids   (Q1, 1.10.2026, אישור יועד)
+ * ----------------------------------------------------------------------------
+ *  🔴 **למה זה קיים:** כלל האבטחה `txOwnerOk` מתיר לשנות משפחה בהוצאה
+ *  ישירות ב-Firestore רק למשפחה **שקיימת**. לכללי אבטחה אין גישה לגיליון,
+ *  אז השרת מפרסם כאן את רשימת המזהים — ורק אותה: **בלי שמות, בלי בתים**.
+ *  ⚠️ המסמך אינו קריא לאף משתמש (אין לו `match` בכללים). רק `get()`
+ *     שבתוך הכלל רואה אותו.
+ *  🔴 **המזהה מחושב בדיוק כמו ב-`lookupResident_`**: "מזהה קבוע", ואם
+ *     הוא ריק — מספר הבית. אותה שרשרת זיהוי עמודות, באותו סדר, אחרת
+ *     הרשימה והמזהה שהלקוח שולח יתפצלו והכלל ידחה בשקט.
+ *  ⚠️ כל השורות, גם "עזב": הוצאה ישנה של משפחה שעזבה עדיין ניתנת לעריכה.
+ *  ⚠️ נכתב בכל שינוי בתחום "תושבים" (`bumpRev_`) ובכל שעה (רשת ביטחון
+ *     לעריכה ידנית בגיליון). לעולם אינו זורק.
+ * ========================================================================== */
+var FS_FAM_REGISTRY = 'famRegistry/ids';
+
+function famRegistryIds_(ss) {
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return null;
+  var values = sh.getDataRange().getValues();
+  if (values.length < 2) return [];
+  var houseCol = -1, residentIdCol = -1;
+  values[0].map(function (h) { return String(h).trim(); }).forEach(function (h, i) {
+    /* אותה שרשרת בדיוק כמו `lookupResident_` — ר' ההערה למעלה. */
+    if (h.indexOf(PERM_HEADER) !== -1) return;
+    else if (h.indexOf('שם פרטי') !== -1) return;
+    else if (h.indexOf('אימייל') !== -1) return;
+    else if (h.indexOf('תפקיד') !== -1) return;
+    else if (h.indexOf('סטטוס') !== -1) return;
+    else if (h.indexOf(RESIDENT_ID_HEADER) !== -1) residentIdCol = i;
+    else if (h.indexOf(EXTERNAL_HEADER) !== -1) return;
+    else if (h.indexOf('משפחה') !== -1) return;
+    else if (h.indexOf('בית') !== -1) houseCol = i;
+  });
+  var seen = {}, out = [];
+  for (var r = 1; r < values.length; r++) {
+    var house = houseCol > -1 ? String(values[r][houseCol]).trim() : '';
+    var rid = residentIdCol > -1 ? String(values[r][residentIdCol]).trim() : '';
+    var fid = rid || house;
+    if (fid && !seen[fid]) { seen[fid] = true; out.push(fid); }
+  }
+  return out;
+}
+
+function famRegistryWrite_(ss) {
+  try {
+    var ids = famRegistryIds_(ss || SpreadsheetApp.getActiveSpreadsheet());
+    if (!ids) return { ok: false, error: 'אין טאב "תושבים"' };
+    fsSet_(FS_FAM_REGISTRY, { ids: ids, n: ids.length, schema: 1, updatedAt: new Date() });
+    return { ok: true, n: ids.length };
+  } catch (e) { return { ok: false, error: String(e) }; }
 }
 
 /* סנכרון יזום — לזריעה ולאימות. מנהל-על בלבד (פעולת תשתית). */

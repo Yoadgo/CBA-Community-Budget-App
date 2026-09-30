@@ -91,8 +91,17 @@ section('4. 🔴 ההפרדה בין סטטוס לפרטים');
   ok('עריכת פרטים פתוחה לבעל תקציב בלבד', /canSeeBudget\(\)/.test(d), d);
   ok('🔴🔴 ו**אינה** יכולה לגעת בסטטוס — זו כל הנקודה',
      d.indexOf("'סטטוס'") === -1, d);
-  ok('🔴 ואינה יכולה לשנות משפחה — כלומר להעביר כסף למשפחה אחרת',
-     d.indexOf("'מזהה משפחה'") === -1 && d.indexOf('familyId') === -1, d);
+  /* Q1 (1.10.26, החלטת יועד) — משפחה ומקור **כן** ניתנים לשינוי, אבל רק
+     דרך `txOwnerOk`: שלושת השדות יחד, מקור מנהל/תושב, משפחה מהרשימה. */
+  ok('🔴 שינוי משפחה/מקור עובר תמיד דרך txOwnerOk',
+     /hasAny\(\['מקור', 'מזהה משפחה', 'familyId'\]\) \|\| txOwnerOk\(\)/.test(d), d);
+  const ow = fnBody('txOwnerOk');
+  ok('🔴 מקור — מנהל או תושב בלבד', /in \['מנהל', 'תושב'\]/.test(ow), ow);
+  ok('🔴 familyId לא ריק ושווה ל"מזהה משפחה"',
+     /familyId != ''/.test(ow) && /familyId == request\.resource\.data\.get\('מזהה משפחה'/.test(ow), ow);
+  ok('🔴🔴 ומשפחה קיימת בלבד — מתוך famRegistry/ids',
+     /familyId in\s+get\(\/databases\/\$\(database\)\/documents\/famRegistry\/ids\)\.data\.ids/.test(ow), ow);
+  ok('🔴 famRegistry אינו קריא למשתמשים (אין לו match)', !/match \/famRegistry/.test(RULES));
   ok('🔴 ואינה יכולה לשנות שנה או מזהה — הם מגדירים את המסמך',
      d.indexOf("'year'") === -1 && d.indexOf("'מזהה'") === -1, d);
   ok('🔴 ואינה יכולה להרים statusPending', d.indexOf('statusPending') === -1, d);

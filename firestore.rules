@@ -1154,13 +1154,45 @@ service cloud.firestore {
               request.resource.data['סטטוס'] == 'הועבר להנה"ח');
     }
 
+    /* ======================================================================
+     *  Q1 (1.10.2026, אישור יועד) — "מקור" ו"משפחה" בעריכת הוצאה
+     * ----------------------------------------------------------------------
+     *  עד היום שלושת שדות הבעלות לא היו ברשימה, והשינוי נשמר רק דרך
+     *  Apps Script (המסלול העוקף בונה את המסמך מחדש מהגיליון — ובמקרה
+     *  נדיר, תוך שעה מהגשה, עלול לאבד 'הוגש בתאריך' או מייל שממתין).
+     *
+     *  🔴 **שלושתם יחד או אף אחד** — `familyId` הוא מה שכלל הקריאה
+     *     (`canSeeFamilyTx`) בודק, ו'מזהה משפחה' הוא מה שהגיליון מציג.
+     *     שני שדות שנפרדים = משפחה אחת רואה הוצאה שהגיליון משייך לאחרת.
+     *  🔴 **משפחה קיימת בלבד** — `famRegistry/ids` הוא רשימת המזהים
+     *     שהשרת כותב מטאב "תושבים" (`famRegistryWrite_`: בכל שינוי
+     *     בתושבים + בכל שעה). מזהה שאינו שם = הוצאה שאף משפחה לא תראה.
+     *     ⚠️ המסמך אינו קריא לאף אחד (אין לו `match` — נופל לכלל הסוגר).
+     *        `get()` בתוך כלל עוקף את כללי הקריאה, אז זה עובד.
+     *     ⚠️ רשימה ישנה (משפחה שנוספה לפני פחות משעה) = הכלל דוחה,
+     *        והלקוח נופל ל-Apps Script כמו היום. לא שבירה — רק איטי.
+     *  ⚠️ מעבר מ"בלי משפחה" למשפחה (או להפך) לא מגיע לכאן בכלל — רק
+     *     השרת יודע להוריד/להחזיר את שם הרוכש (ר' EXB2 ב-dataService).
+     * ====================================================================== */
+    function txOwnerOk() {
+      return request.resource.data.get('מקור', '') in ['מנהל', 'תושב'] &&
+             request.resource.data.familyId is string &&
+             request.resource.data.familyId != '' &&
+             request.resource.data.familyId == request.resource.data.get('מזהה משפחה', '') &&
+             request.resource.data.familyId in
+               get(/databases/$(database)/documents/famRegistry/ids).data.ids;
+    }
+
     /* עריכת פרטים — כל מה שאינו סטטוס. */
     function txDetailsUpdateOk() {
       return canSeeBudget() &&
              request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['חודש הגשה', 'תאריך רכישה', 'ספק/נמען', 'בנק', 'סכום',
                          'סעיף', 'תת-סעיף', 'סוג הוצאה', 'תיאור',
-                         'שם קובץ קבלה', 'קישור קבלה', 'updatedAt']) &&
+                         'שם קובץ קבלה', 'קישור קבלה', 'updatedAt',
+                         'מקור', 'מזהה משפחה', 'familyId']) &&
+             (!request.resource.data.diff(resource.data).affectedKeys()
+                 .hasAny(['מקור', 'מזהה משפחה', 'familyId']) || txOwnerOk()) &&
              request.resource.data['סכום'] is number &&
              request.resource.data['סכום'] > 0;
     }
