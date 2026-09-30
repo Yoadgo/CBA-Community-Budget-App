@@ -73,6 +73,70 @@ CBA.screens = CBA.screens || {};
     if (h < 21) return "ערב טוב";
     return "לילה טוב";
   }
+  /* ==========================================================================
+   *  A6 (גל 12, אושר 1.10.26) — "שבת שלום" + זמן הדלקת נרות; בערב חג — שם החג.
+   * --------------------------------------------------------------------------
+   *  מקור: Hebcal (API חינמי, בלי מפתח, מאפשר קריאה מהדפדפן — נבדק 1.10).
+   *  מיקום: אזור פלמחים (31.93, 34.70) — הדלקה 18 דק' לפני השקיעה, כמו בכל
+   *  הארץ מלבד ירושלים. ⚠️ תוספת נחמדה בלבד: נכשל / אין רשת — הברכה הרגילה
+   *  נשארת כמו שהיא, בלי הודעה. נשמר במכשיר ל-12 שעות (שאילתה אחת ביום).
+   *  החלון: מ-12:00 ביום ההדלקה ועד ההבדלה. לפני ההדלקה — "הדלקת נרות HH:MM",
+   *  אחריה — "צאת השבת/החג HH:MM".
+   * ======================================================================== */
+  var HC_URL = "https://www.hebcal.com/shabbat?cfg=json&latitude=31.93&longitude=34.70&tzid=Asia/Jerusalem&M=on&lg=he&b=18";
+  var HC_KEY = "cba_hebcal_v1";
+  function hcLoad(cb) {
+    try {
+      var c = JSON.parse(localStorage.getItem(HC_KEY) || "null");
+      if (c && c.items && Date.now() - c.at < 12 * 3600 * 1000) return cb(c.items);
+    } catch (e) {}
+    if (!window.fetch) return cb(null);
+    fetch(HC_URL).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      var items = (j && j.items) || null;
+      if (items) { try { localStorage.setItem(HC_KEY, JSON.stringify({ at: Date.now(), items: items })); } catch (e) {} }
+      cb(items);
+    }).catch(function () { cb(null); });
+  }
+  function hhmm(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  /* מחזירה {greet, line} לחלון שבת/חג הנוכחי, או null מחוצה לו. */
+  function shabbatInfo(items, now) {
+    now = now || new Date();
+    var cand = null, hav = null;
+    (items || []).forEach(function (it) {
+      if (it.category === "candles" && !cand) cand = it;
+      if (it.category === "havdalah" && !hav) hav = it;
+    });
+    if (!cand) return null;
+    var tc = new Date(cand.date), th = hav ? new Date(hav.date) : new Date(tc.getTime() + 26 * 3600 * 1000);
+    if (isNaN(tc) || isNaN(th)) return null;
+    var start = new Date(tc); start.setHours(12, 0, 0, 0);
+    if (now < start || now > th) return null;
+    /* חג = פריט "holiday" עם yomtov ביום שאחרי ההדלקה */
+    var next = new Date(tc); next.setDate(next.getDate() + 1);
+    var ymd = next.getFullYear() + "-" + pad(next.getMonth() + 1) + "-" + pad(next.getDate());
+    var chag = null;
+    (items || []).forEach(function (it) {
+      if (it.category === "holiday" && it.yomtov && String(it.date).slice(0, 10) === ymd && !chag) chag = it;
+    });
+    var isShabbat = next.getDay() === 6;
+    var name = chag ? String(chag.hebrew || "").trim() : "";
+    var greet = chag ? (isShabbat ? "שבת שלום וחג שמח" : "חג שמח") : "שבת שלום";
+    var line = now < tc
+      ? (name ? "ערב " + name + " · " : "") + "הדלקת נרות " + hhmm(tc)
+      : (name || "שבת") + " · " + (chag && !isShabbat ? "צאת החג " : "צאת השבת ") + hhmm(th);
+    return { greet: greet, line: line };
+  }
+  CBA._shabbatInfo = shabbatInfo;   /* לבדיקות */
+  function applyShabbat(container) {
+    hcLoad(function (items) {
+      var info = items && shabbatInfo(items);
+      if (!info || !container.isConnected) return;
+      var g = container.querySelector("#hm-greet"), d = container.querySelector("#hm-date");
+      if (g) g.textContent = info.greet;
+      if (d) d.textContent = todayLabel() + " · " + info.line;
+    });
+  }
+
   function todayLabel() {
     try {
       return new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" });
@@ -575,9 +639,15 @@ CBA.screens = CBA.screens || {};
       W.gym = g; W.gymKnown = true;
       if (!g) { slot.hidden = true; syncTodo(container); syncResvMini(container); return; }
       var n, s;
+      /* GA1 (גל 12, אושר 1.10.26) — פחות מ-14 יום: האריח כתום ואומר את זה
+         במילים (הסף 14 — לפי ההחלטה; מייל התזכורת נשלח פעם אחת, N ימים לפני). */
+      var soon = g.st === "פעיל" && g.days != null && g.days >= 0 && g.days < 14;
+      slot.classList.toggle("hm2-tile--warn", soon);
       if (g.st === "פעיל") {
         n = (g.days != null && g.days >= 0) ? g.days + '<em>' + (g.days === 1 ? "יום" : "ימים") + '</em>' : '<span class="hm2-tile__n--sm">פעיל</span>';
-        s = "מנוי פעיל" + (g.until ? " · עד " + g.until.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" }) : "");
+        s = soon
+          ? (g.days === 0 ? "המנוי נגמר היום · לחידוש" : "המנוי נגמר בעוד " + (g.days === 1 ? "יום אחד" : g.days + " ימים") + " · לחידוש")
+          : "מנוי פעיל" + (g.until ? " · עד " + g.until.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" }) : "");
       } else if (g.st === "פג תוקף") {
         n = '<span class="hm2-tile__n--sm">פג תוקף</span>'; s = "אפשר לחדש במסך המכון";
       } else {
@@ -856,9 +926,9 @@ CBA.screens = CBA.screens || {};
         '<section class="hm2-cnp" id="hm-cnp" aria-label="מה מחכה לי">' +
           '<div class="hm2-in hm2-hero">' +
             '<div class="hm2-hero__main">' +
-              '<div class="hm2-hi">' + esc(greeting()) + ', ' + esc(displayName()) +
+              '<div class="hm2-hi"><span><span id="hm-greet">' + esc(greeting()) + '</span>, ' + esc(displayName()) + '</span>' +
                 (me.house ? '<span class="hm2-chip">בית ' + esc(me.house) + '</span>' : "") + '</div>' +
-              '<div class="hm2-date">' + esc(todayLabel()) + '</div>' +
+              '<div class="hm2-date" id="hm-date">' + esc(todayLabel()) + '</div>' +
               '<div class="hm2-k">מה מחכה לי</div>' +
               '<div class="hm2-n is-loading" id="hm-n">·</div>' +
               '<div class="hm2-s" id="hm-s">בודקים מה חדש…</div>' +
@@ -932,6 +1002,7 @@ CBA.screens = CBA.screens || {};
       }
       loadMyGarden(container);
       loadMyGym(container);
+      applyShabbat(container);   /* A6 */
       syncTodo(container);
       /* עדכונים חדשים (H9) — שורות ב"מה קרה" ומספר במספר הגיבור. מאותו תחום
          שכבר נספר (החזר שאושר / דיווח בטיפול) — לא נספר פעמיים. */

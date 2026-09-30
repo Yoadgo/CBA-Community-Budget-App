@@ -448,6 +448,41 @@ CBA.screens = CBA.screens || {};
     }
   }
 
+  /* RA3 (גל 12, אושר 1.10.26) — "מתי יגיע הכסף?" בשורה אחת בחופה.
+     סוכמים רק החזרים שאושרו וטרם שולמו ("ready") — אותו כלל כמו החוצץ
+     החודשי: לא מבטיחים כסף שעוד בבדיקה. מכל השנים, כי בקשה משנה קודמת
+     שאושרה עדיין בדרך. החודש = חודש ההחזר הצפוי הקרוב ביותר; חודש שכבר
+     עבר ועדיין לא שולם = "בהעברה הקרובה" (לא מבטיחים תאריך שכבר חלף).
+     אין מה לומר — מחזירה "" והחופה מציגה את הכותרת הרגילה. */
+  function nextCreditLine(list, today) {
+    var now = today || new Date();
+    /* ההעברה היא ב-1 לחודש: תאריך שכבר עבר (גם 1 בחודש הנוכחי, כשהיום ה-2)
+       ועדיין לא שולם = "בהעברה הקרובה". ב-1 עצמו — עדיין "ייכנסו ב־1". */
+    var todayIso = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    var by = {}, overdue = 0;
+    (list || []).forEach(function (t) {
+      if (t.payType !== "refund" || t.status !== "ready") return;
+      var iso = CBA.data.expectedRefundDate(t);
+      var a = Number(t.amount) || 0;
+      if (!iso) return;
+      var m = iso.slice(0, 7);
+      if (iso < todayIso) { overdue += a; return; }
+      by[m] = (by[m] || 0) + a;
+    });
+    var months = Object.keys(by).sort();
+    if (!months.length && !overdue) return "";
+    if (!months.length || overdue) {
+      /* חודש שעבר נאסף יחד עם הקרוב — ההעברה הבאה תכלול את שניהם. */
+      var sum = overdue + (months.length ? by[months[0]] : 0);
+      return CBA.formatILSWhole(sum) + " אושרו ויגיעו בהעברה הקרובה";
+    }
+    var label = CBA.data.hebrewDate(months[0] + "-01");
+    var yr = " " + now.getFullYear();
+    if (label.slice(-yr.length) === yr) label = label.slice(0, -yr.length);
+    return CBA.formatILSWhole(by[months[0]]) + " ייכנסו ב־" + label;
+  }
+
+  CBA.screens._nextCreditLine = nextCreditLine;   /* לבדיקות */
   CBA.screens.resRequests = {
     render: function (container) {
       // שימור מיקום גלילה (אותו פתרון כמו expenses.js/residents.js/clubAdmin.js) —
@@ -520,7 +555,8 @@ CBA.screens = CBA.screens || {};
       /* גל 4 — R1/R2: הכותרת והמספרים בחופה, R3: "הגשת בקשה חדשה" ב-"+" (F25).
          אותם שלושה מספרים בדיוק (ממתינות · אושרו · שולמו השנה). */
       var head = cnp({ size: "mid", dom: "bud", ico: ICO_RECEIPT, title: "הבקשות שלי",
-        sub: (house ? house + " · " : "") + "ההחזרים והקבלות של המשפחה",
+        /* RA3 — כשיש החזר מאושר בדרך, השורה אומרת כמה ומתי. */
+        sub: nextCreditLine(allYears) || ((house ? house + " · " : "") + "ההחזרים והקבלות של המשפחה"),
         stat: { n: counts.pending, label: "ממתינות" },
         minis: [{ k: "אושרו", b: counts.ready }, { k: "שולמו ב" + curYear, b: CBA.formatILS(counts.paid) }] });
       if (head) {
@@ -1811,7 +1847,10 @@ CBA.screens = CBA.screens || {};
         (kids ? '<div class="dir-card__kids">' + kidsIcon + CBA.esc(kids) + '</div>' : '') +
         (phones.length
           ? '<div class="dir-card__phones">' + phones.map(function (p) {
-              return '<a class="dir-phone" href="tel:' + CBA.esc(p.replace(/[^\d+]/g, "")) + '">' + phoneIcon + CBA.esc(p) + '</a>';
+              /* KA1 (גל 12, אושר 1.10.26) — וואטסאפ ליד כל טלפון */
+              var wa = CBA.waNumber ? CBA.waNumber(p) : "";
+              return '<span class="dir-phone-row"><a class="dir-phone" href="tel:' + CBA.esc(p.replace(/[^\d+]/g, "")) + '">' + phoneIcon + CBA.esc(p) + '</a>' +
+                (wa ? '<a class="dir-wa" href="https://wa.me/' + wa + '" target="_blank" rel="noopener" aria-label="וואטסאפ ל-' + CBA.esc(p) + '" title="וואטסאפ">' + waIcon + '</a>' : '') + '</span>';
             }).join('') + '</div>'
           : '') +
       '</div>'
@@ -2012,6 +2051,11 @@ CBA.screens = CBA.screens || {};
   document.addEventListener("pointercancel", function () { dirRailDragging = false; dirRailScheduleInactive(); });
 
   CBA.screens.resDirectory = {
+    /* SRA1 (גל 12, אושר 1.10.26) — חיפוש "שכנים" פותח את המדריך כבר מסונן */
+    focusSearch: function (q) {
+      dirState.q = String(q || "");
+      if (CBA.navigate) CBA.navigate("resDirectory");
+    },
     render: function (container, opts) {
       dirScrollY = window.scrollY || 0;
       dirContainer = container;

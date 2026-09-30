@@ -129,7 +129,9 @@ CBA.screens = CBA.screens || {};
           (ph === "now" ? '<span class="gym-pill gym-pill--ok">פעיל עכשיו</span>' : '<span class="gym-pill gym-pill--muted">מתחיל ' + esc(D().dayLabel(first.date)) + "</span>") +
         "</div>" +
         '<div class="ww-door" data-ww-door></div>' +
-        '<div class="ww-ticket__actions"><button type="button" class="btn-ghost" data-ww-cancel="' + esc(first.id) + '">ביטול השריון</button></div>' +
+        '<div class="ww-ticket__actions"><button type="button" class="btn-ghost" data-ww-cancel="' + esc(first.id) + '">ביטול השריון</button>' +
+          /* WA3 (גל 12) — ההסבר נגיש גם מכאן, לא רק ממסך המכון */
+          (CBA.doorGuide ? '<button type="button" class="btn-ghost" data-ww-guide>איך נכנסים?</button>' : "") + '</div>' +
       "</section>" +
       (rest.length ? '<section class="card ww-card ww-next"><div class="ww-sec-t">שריונים הבאים</div>' +
         rest.map(function (b) {
@@ -142,6 +144,8 @@ CBA.screens = CBA.screens || {};
     Array.prototype.forEach.call(el.querySelectorAll("[data-ww-cancel]"), function (b) {
       b.addEventListener("click", function () { cancel(b.getAttribute("data-ww-cancel"), b); });
     });
+    var g = el.querySelector("[data-ww-guide]");
+    if (g) g.addEventListener("click", function () { CBA.doorGuide.open("wework"); });
   }
 
   function cancel(id, btn) {
@@ -170,6 +174,25 @@ CBA.screens = CBA.screens || {};
     return -1;
   }
   function isPast(h) { return st.day === D().today() && (h + 1) * 60 <= D().nowMin(); }
+
+  /* WA1 (גל 12, אושר 1.10.26) — להגיד מראש, לא אחרי שנכשלים. ⚠️ המגבלה
+     בפועל (Door.gs, wwFits_) היא **שריונים חופפים למשפחה** (perFamily) ולא
+     "לשבוע" כמו שנוסח בהצעה — כאן סופרים בדיוק מה שהשרת סופר: שריונים
+     פעילים של המשפחה באותו יום שחופפים לשעות שנבחרו. */
+  function myOverlap() {
+    var from = st.from, to = st.from + st.hours;
+    return (st.mine || []).filter(function (b) {
+      return b.date === st.day && b.from < to && from < b.to;
+    }).length;
+  }
+  function limitNote() {
+    var lim = st.cfg.perFamily || 0, n = myOverlap();
+    if (!lim) return { block: false, html: "" };
+    if (n >= lim) return { block: true, html: '<div class="ww-why">למשפחה כבר יש ' + (n === 1 ? "שריון" : n + " שריונים") +
+      " בשעות האלה — זה המקסימום (" + lim + "). בחר/י שעות אחרות.</div>" };
+    if (n > 0 && n === lim - 1) return { block: false, html: '<div class="ww-limit">זה השריון האחרון שאפשר לשריין לשעות האלה (עד ' + lim + " חופפים למשפחה).</div>" };
+    return { block: false, html: "" };
+  }
 
   function daysHTML() {
     var t = D().today(), out = "";
@@ -244,11 +267,26 @@ CBA.screens = CBA.screens || {};
     var when = D().dayLabel(st.day) + " " + d.getDate() + "." + (d.getMonth() + 1) + " · " + D().range(st.from, Math.min(to, 24));
     var why = full === -1 ? "" : (full >= 24 ? "השריון חייב להסתיים עד חצות. קצר/י את המשך." :
       "ב-" + D().hh(full) + " אין " + (st.seat === "lounge" ? "כורסה פנויה" : "עמדה פנויה") + ". נסה/י שעה אחרת או משך קצר יותר.");
+    var lim = limitNote();
+    var can = full === -1 && !lim.block;
     return '<div class="ww-sum"><div><div class="ww-lbl">הבחירה שלך</div><div class="ww-sum__when"><bdi>' + esc(when) + "</bdi></div>" +
         '<div class="ww-sum__seat">' + esc(D().SEAT_LABEL[st.seat]) + (out ? ' · <span class="ww-out-tag">מחוץ לשעות הרגילות</span>' : "") + "</div></div>" +
         (full === -1 ? '<span class="gym-pill gym-pill--ok">יש מקום</span>' : '<span class="gym-pill gym-pill--danger">אין מקום</span>') + "</div>" +
-      (why ? '<div class="ww-why">' + esc(why) + "</div>" : "") +
-      '<button type="button" class="btn-primary ww-cta" data-ww-confirm' + (full === -1 ? "" : " disabled") + ">שריון עמדה</button>";
+      (why ? '<div class="ww-why">' + esc(why) + "</div>" : "") + lim.html +
+      '<button type="button" class="btn-primary ww-cta" data-ww-confirm' + (can ? "" : " disabled") + ">שריון עמדה</button>";
+  }
+
+  /* WA2 (גל 12, אושר 1.10.26) — בטלפון הכפתור דבוק לתחתית (מעל הבר), עם
+     השעות עליו, כך שלא צריך לגלול מתחת ללוח השעות כדי לשריין. אותו עיקרון
+     כמו NA1 במראה שיכון. במחשב מוסתר ב-CSS — שם הכרטיס הצדדי כבר דביק. */
+  function sendbarHTML() {
+    if (st.done) return "";
+    var full = selFull(), lim = limitNote(), can = full === -1 && !lim.block;
+    /* קצר, כדי שייכנס בשורה אחת בין שני הכפתורים הצפים — היום והשעות. */
+    var label = can ? "שריון · " + D().dayLabel(st.day) + " " +
+      D().range(st.from, Math.min(st.from + st.hours, 24)) : (lim.block ? "הגעתם למקסימום לשעות האלה" : "אין מקום בשעות האלה");
+    return '<div class="ww-sendbar"><button type="button" class="btn-primary ww-cta ww-cta--bar" data-ww-confirm' +
+      (can ? "" : " disabled") + '><bdi>' + esc(label) + "</bdi></button></div>";
   }
 
   function drawBooking(el) {
@@ -261,6 +299,7 @@ CBA.screens = CBA.screens || {};
           '<section class="card lg lg-card lg--plain ww-card">' + durHTML() + "</section>" +
           '<section class="card lg lg-card lg--plain ww-card ww-card--sum">' + summaryHTML() + "</section>" +
         "</div>" +
+        sendbarHTML() +
       "</div>";
     var cur = el.querySelector('.ww-day[aria-pressed="true"]');
     if (cur && cur.scrollIntoView && cur.parentNode.scrollWidth > cur.parentNode.clientWidth) {
@@ -292,9 +331,13 @@ CBA.screens = CBA.screens || {};
   }
 
   function confirm(btn) {
+    /* WA2 — יש עכשיו שני כפתורי שריון (בכרטיס ובפס הדביק); שליחה אחת בלבד. */
+    if (st.booking) return;
+    st.booking = true;
     var release = CBA.ui.busy(btn, "משריין…");
     var payload = { date: st.day, from: st.from, hours: st.hours, seat: st.seat };
     D().book(payload, function (res) {
+      st.booking = false;
       release();
       if (!alive()) return;
       if (!res.ok) { CBA.ui.alert(res.error || "השריון נכשל"); return; }

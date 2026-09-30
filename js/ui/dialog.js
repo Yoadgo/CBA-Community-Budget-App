@@ -141,7 +141,12 @@ CBA.ui = (function () {
          בלי החריג הזה המיקוד היה נוחת על כפתור האישור ומשתמש מקלדת היה
          צריך Shift+Tab כדי להגיע לשדה הראשון של הטופס שהרגע נפתח. */
       var firstEl = inputEl || (opts.html ? wrap.querySelector(".cba-dlg__body textarea, .cba-dlg__body input, .cba-dlg__body select") : null);
-      setTimeout(function () { (firstEl || okBtn).focus(); if (inputEl) inputEl.select(); }, 40);
+      /* Q2 (1.10.26, החלטת יועד) — בחלון אדום (danger) בלי שדה, המיקוד
+         נוחת על "ביטול": Enter מיד אחרי הפתיחה = ביטול, לא מחיקה.
+         חלון עם שדה (למשל סיבת מחיקה) — המיקוד נשאר בשדה כמו קודם. */
+      var cancelBtn = wrap.querySelector('[data-dlg="cancel"]');
+      var safeBtn = (opts.danger && cancelBtn) ? cancelBtn : okBtn;
+      setTimeout(function () { (firstEl || safeBtn).focus(); if (inputEl) inputEl.select(); }, 40);
 
       var done = false;
       function close(result) {
@@ -502,3 +507,48 @@ CBA.ui = (function () {
            sheet: sheet, mountSheet: mountSheet,
            busy: busy, busyText: busyText, emptyState: emptyState };
 })();
+
+/* ============================================================================
+ *  KA1 (גל 12, אושר 1.10.26) — גיליון קטן "חיוג / וואטסאפ" לאדם אחד.
+ *  משמש את עץ הוועד (לחיצה על שם) ואת מדריך התושבים. רק מה שהמדריך
+ *  ממילא מציג לכל תושב — שם, בית, טלפון. ⚠️ וואטסאפ: wa.me עם מספר בינלאומי
+ *  (0521234567 → 972521234567). מספר שלא נראה ישראלי/תקין — בלי כפתור וואטסאפ.
+ * ========================================================================== */
+CBA.waNumber = function (phone) {
+  var d = String(phone == null ? "" : phone).replace(/[^\d]/g, "");
+  if (/^0\d{8,9}$/.test(d)) d = "972" + d.slice(1);
+  return /^972\d{8,9}$/.test(d) ? d : "";
+};
+CBA.contactSheet = function (name, phone, sub) {
+  if (!(CBA.ui && CBA.ui.sheet)) return null;
+  var esc = CBA.esc || function (x) { return String(x); };
+  var tel = String(phone || "").replace(/[^\d+]/g, ""), wa = CBA.waNumber(phone);
+  var ICO_TEL = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>';
+  var ICO_WA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.6a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.6-4.3A8.5 8.5 0 1 1 20.5 11.6z"/><path d="M8.8 9.1c0 3 2.4 5.4 5.3 5.4l.9-1.4-1.8-.8-.8.8a4 4 0 0 1-1.9-1.9l.8-.8-.8-1.8z"/></svg>';
+  var body = '<div class="cs">' +
+        '<div class="cs-h"><b dir="auto">' + esc(name) + '</b>' +
+          (sub ? '<small>' + esc(sub) + '</small>' : "") +
+          '<bdi dir="ltr" class="cs-num">' + esc(phone) + '</bdi></div>' +
+        '<div class="cs-acts">' +
+          (tel ? '<a class="cs-btn" href="tel:' + esc(tel) + '">' + ICO_TEL + '<span>חיוג</span></a>' : "") +
+          (wa ? '<a class="cs-btn" href="https://wa.me/' + wa + '" target="_blank" rel="noopener">' + ICO_WA + '<span>וואטסאפ</span></a>' : "") +
+        '</div>' +
+        '</div>';
+  /* במחשב — חלון קטן במרכז (גיליון במחשב נפתח כפאנל צד בגובה מלא, כבד מדי
+     לשני כפתורים). בטלפון — גיליון תחתון, קרוב לאגודל. */
+  var phone = window.matchMedia && window.matchMedia("(max-width: 720px)").matches;
+  if (!phone && CBA.ui.dialog) {
+    return CBA.ui.dialog({ html: body, okText: "סגירה",
+      onMount: function (wrap, close) {
+        wrap.addEventListener("click", function (e) { if (e.target.closest(".cs-btn")) setTimeout(function () { close(false); }, 300); });
+      } });
+  }
+  return CBA.ui.sheet({
+    label: "יצירת קשר עם " + name, cls: "cs-wrap",
+    html: body.replace(/<\/div>$/, "") + '<button type="button" class="cs-close" data-cs-close>סגירה</button></div>',
+    onPick: function (e, close) {
+      if (e.target.closest("[data-cs-close]")) { close(); return; }
+      if (e.target.closest(".cs-btn")) setTimeout(close, 300);
+    }
+  });
+};

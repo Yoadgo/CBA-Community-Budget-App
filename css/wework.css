@@ -97,6 +97,20 @@
 .ww-out-tag { color: var(--badge-warn); font-weight: 600; }
 .ww-cta { width: 100%; margin-top: 12px; padding: 12px 16px; font-size: calc(15px * var(--fs, 1)); border-radius: 12px; }
 .ww-cta:disabled { background: #D1D5DB; border-color: #D1D5DB; cursor: not-allowed; }
+/* WA1 (גל 12) — "השריון האחרון לשעות האלה" */
+.ww-limit { font-size: calc(13px * var(--fs, 1)); color: var(--warn-ink); line-height: 1.55; margin-top: 6px; }
+/* WA2 (גל 12) — פס שריון דביק בטלפון. במחשב/טאבלט לא קיים. */
+.ww-sendbar { display: none; }
+@media (max-width: 720px) {
+  .ww-sendbar {
+    display: block; position: sticky; z-index: 5;
+    bottom: calc(var(--botnav-h, 80px) + env(safe-area-inset-bottom) + 16px);
+    /* בין שני הכפתורים הצפים ("+" ודיווח) — כמו NA1 */
+    margin-inline: 64px;
+  }
+  .ww-cta--bar { margin-top: 0; min-height: 56px; box-shadow:var(--sh-float); font-size: calc(14px * var(--fs, 1)); padding: 10px 12px; }
+  .ww-card--sum .ww-cta { display: none; }
+}
 .ww-done { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
 .ww-done__ico { width: 52px; height: 52px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; }
 .ww-done__ico svg { width: 26px; height: 26px; }

@@ -562,6 +562,12 @@ body[data-area="resident"] .app-main { max-width: 760px; margin-inline: auto; }
 }
 .dir-phone svg { width: 13px; height: 13px; }
 .dir-phone:active { background: var(--border); }
+/* KA1 (גל 12) — וואטסאפ ליד כל טלפון: עיגול באותו סגנון של כפתור הטלפון */
+.dir-phone-row { display: inline-flex; align-items: center; gap: 6px; }
+.dir-wa { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: var(--r-pill);
+  color: var(--action); background: var(--bg); border: 1px solid var(--border); text-decoration: none; }
+.dir-wa svg { width: 15px; height: 15px; }
+.dir-wa:active { background: var(--border); }
 @media (max-width: 720px) {
   .dir-grid { grid-template-columns: 1fr; }
   .dir-search { max-width: none; }

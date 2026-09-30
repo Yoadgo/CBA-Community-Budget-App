@@ -889,8 +889,40 @@ CBA.tour = (function () {
       if (seen > 0 || localSeen() > 0) return;
       if (document.getElementById("login-gate") &&
           !document.getElementById("login-gate").hidden) return;
-      open(steps.slice());
+      whenClear(function () { if (!el) open(steps.slice()); });
     });
+  }
+
+  /* Q3 (1.10.26, החלטת יועד) — הסיור לא קופץ מעל חלון פתוח. עד היום הוא נפתח
+     ~3 שניות אחרי הכניסה גם כשהמשתמש כבר היה בתוך גיליון/מגירה/אישור.
+     עכשיו: בודקים כל 1.5 שניות, ונפתחים ברגע ששום חלון לא פתוח.
+     "חלון" = כל מה שמכריז על עצמו role="dialog"/aria-modal וגלוי בפועל
+     בתוך המסך (מגירה סגורה שיושבת מחוץ למסך אינה נספרת), + החלון הכללי,
+     החיפוש ומדריך הדלת. ⚠️ תקרה של 10 דקות — אחריה מוותרים לסשן הזה
+     (הכניסה הבאה תנסה שוב, כי seen עדיין 0). */
+  function overlayOpen() {
+    var b = document.body;
+    if (b.classList.contains("has-cba-dlg") || b.classList.contains("gs-open") ||
+        document.querySelector(".tr")) return true;
+    var list = document.querySelectorAll('[role="dialog"], [aria-modal="true"]');
+    var W = window.innerWidth, H = window.innerHeight;
+    for (var i = 0; i < list.length; i++) {
+      var d = list[i];
+      if (d.hidden || d.closest("[hidden]")) continue;
+      var r = d.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      if (r.right <= 0 || r.left >= W || r.bottom <= 0 || r.top >= H) continue;
+      var cs = window.getComputedStyle(d);
+      if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) < 0.05) continue;
+      return true;
+    }
+    return false;
+  }
+  function whenClear(fn, tries) {
+    tries = tries || 0;
+    if (!overlayOpen()) { fn(); return; }
+    if (tries >= 400) return;
+    setTimeout(function () { whenClear(fn, tries + 1); }, 1500);
   }
 
   /* לעמוד הקבלה: כמה צעדים חדשים מחכים. מחזיר 0 כל עוד לא נטען — עמוד
@@ -918,6 +950,7 @@ CBA.tour = (function () {
   return {
     start: start, startNew: startNew, close: close,
     maybeAutoStart: maybeAutoStart, newCount: newCount, seed: seed,
-    isOpen: function () { return !!el; }
+    isOpen: function () { return !!el; },
+    _overlayOpen: overlayOpen   /* לבדיקות */
   };
 })();

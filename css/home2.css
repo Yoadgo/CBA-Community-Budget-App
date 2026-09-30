@@ -93,6 +93,9 @@ button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
 .hm2-tile--gar .hm2-tile__h, .hm2-tile--gar .hm2-tile__s, .hm2-tile--gar .hm2-tile__n em { color: rgba(255,255,255,.8); }
 .hm2-tile--gar .hm2-disc { background: rgba(255,255,255,.18); color: var(--paper); }
 .hm2-tile--err { cursor: default; }
+/* GA1 (גל 12) — מנוי שנגמר בפחות מ-14 יום */
+.hm2-tile--warn { background: var(--warn-bg); }
+.hm2-tile--warn .hm2-tile__n, .hm2-tile--warn .hm2-tile__s { color: var(--warn-ink); }
 /* אריח "השבוע" */
 .hm2-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .hm2-sd {

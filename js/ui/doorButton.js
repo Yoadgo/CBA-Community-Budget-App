@@ -157,7 +157,22 @@ CBA.doorGuide = (function () {
       demo: STAGE_AUTO + '<div class="dg-callout">עובד רק אחרי שיצאת מהאזור וחזרת — כדי שהדלת לא תיפתח סתם כשאתה בבית. הגישה נגמרת לבד עם סוף המנוי.</div>', raw: true }
   ];
 
+  /* WA3 (גל 12, אושר 1.10.26) — "איך נכנסים?" גם מ-WeWork. חפיסה משלה: ההסבר
+     של המכון מדבר על מנוי, הזמנת Nuki ופתיחה אוטומטית — ובשריון WeWork אין
+     אף אחד מהם. כאן רק מה שנכון לשריון: הכפתור, מתי הוא דולק, ומה עושים
+     כשלא נפתח. ⚠️ לא מסמן את הסבר המכון כ"נראה". */
+  var STEPS_WW = [
+    { ico: svg('<rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="15" cy="12" r="1.2" fill="currentColor"/>'),
+      t: "נכנסים עם הטלפון", x: "לחלל ה-WeWork נכנסים בכפתור שבאפליקציה — בלי קוד ובלי מפתח." },
+    { t: "הכפתור דולק בשעות השריון", x: "במסך WeWork, בכרטיס השריון שלך, לוחצים \"פתיחת הדלת\" כשעומדים ליד הדלת. הכפתור נדלק כשהשריון מתחיל ונכבה כשהוא נגמר.",
+      demo: STAGE_TAP, raw: true },
+    { ico: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/>'),
+      t: "אם הדלת לא נפתחה", x: "לוחצים \"לנסות שוב\". אם זה עדיין לא עובד — פונים לאחראי על WeWork. השריון שלך שמור בכל מקרה." }
+  ];
+  var deck = STEPS, deckKey = KEY;
+
   function draw() {
+    var STEPS = deck;
     var s = STEPS[idx], last = idx === STEPS.length - 1, dots = "";
     for (var i = 0; i < STEPS.length; i++) dots += '<span class="tr-dot' + (i === idx ? " is-on" : "") + '"></span>';
     el.querySelector(".tr-card").innerHTML =
@@ -176,13 +191,15 @@ CBA.doorGuide = (function () {
     var n = el.querySelector("[data-dg-next]"); if (n) n.focus();
   }
   function close() {
-    try { localStorage.setItem(KEY, "1"); } catch (e) { }
+    if (deckKey) { try { localStorage.setItem(deckKey, "1"); } catch (e) { } }
     if (el) { el.remove(); el = null; }
     document.body.classList.remove("tr-open");
   }
-  function open() {
+  function open(kind) {
     if (el) close();
     idx = 0;
+    deck = kind === "wework" ? STEPS_WW : STEPS;
+    deckKey = kind === "wework" ? "" : KEY;
     el = document.createElement("div");
     el.className = "tr";
     el.setAttribute("role", "dialog");
@@ -193,12 +210,12 @@ CBA.doorGuide = (function () {
     document.body.classList.add("tr-open");
     el.addEventListener("click", function (e) {
       if (e.target === el || e.target.closest("[data-dg-close]")) { close(); return; }
-      if (e.target.closest("[data-dg-next]")) { if (idx < STEPS.length - 1) { idx++; draw(); } else close(); return; }
+      if (e.target.closest("[data-dg-next]")) { if (idx < deck.length - 1) { idx++; draw(); } else close(); return; }
       if (e.target.closest("[data-dg-back]")) { if (idx > 0) { idx--; draw(); } }
     });
     el.addEventListener("keydown", function (e) {
       if (e.key === "Escape") { e.preventDefault(); close(); }
-      else if (e.key === "ArrowLeft" && idx < STEPS.length - 1) { idx++; draw(); }
+      else if (e.key === "ArrowLeft" && idx < deck.length - 1) { idx++; draw(); }
       else if (e.key === "ArrowRight" && idx > 0) { idx--; draw(); }
     });
     draw();
@@ -209,7 +226,7 @@ CBA.doorGuide = (function () {
     try { seen = localStorage.getItem(KEY) === "1"; } catch (e) { seen = true; }
     if (!seen) open();
   }
-  return { open: open, close: close, maybeAuto: maybeAuto, STEPS: STEPS };
+  return { open: open, close: close, maybeAuto: maybeAuto, STEPS: STEPS, STEPS_WW: STEPS_WW };
 })();
 
 /* ============================================================================

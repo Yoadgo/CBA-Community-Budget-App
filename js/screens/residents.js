@@ -1742,3 +1742,11 @@ function resOpenDrawer(container, idx, rowIndex, c) {
 
 /* RSB10 (גל 8, 1.10.26) — נמחק כאן הבלוק הישן של CBA.screens.committeeAdmin (עריכת עץ הוועד v1): קוד מת,
    committeeTree.js נטען אחרי הקובץ הזה ודורס את הרישום, ואף פונקציה ממנו לא נקראה מבחוץ. */
+
+/* SRA1 (גל 12, אושר 1.10.26) — חיפוש "שכנים" פותח את מסך התושבים כבר מסונן
+   (למנהל — המסך הניהולי; ר' directoryScreen ב-search.js). */
+CBA.screens.residents.focusSearch = function (q) {
+  resState.q = String(q || "");
+  resState.filter = "active";
+  if (CBA.navigate) CBA.navigate("residents");
+};

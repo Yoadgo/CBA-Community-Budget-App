@@ -3068,3 +3068,21 @@ body[data-screen="resServices"] .svc-card:focus-visible { outline: 2px solid var
    עולה לשכבה משלו מעל הרקע. (כנראה קורה גם במסכים אחרים — ר' דו"ח.) */
 body[data-screen="resRecommendations"] #app-main,
 body[data-screen="resServices"] #app-main { position: relative; z-index: 1; }
+
+/* KA1 (גל 12) — גיליון "חיוג / וואטסאפ" (CBA.contactSheet, dialog.js) */
+.cs { display: flex; flex-direction: column; gap: 16px; padding: 4px 4px 8px; }
+.cs-h { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.cs-h b { font-size: var(--t-17, calc(17px * var(--fs, 1))); font-weight: 800; }
+.cs-h small { font-size: var(--t-13, calc(13px * var(--fs, 1))); color: var(--text-soft); }
+.cs-num { font-size: var(--t-15, calc(15px * var(--fs, 1))); color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.cs-acts { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; }
+.cs-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px; border-radius: var(--r-in);
+  background: var(--canvas, var(--bg)); color: var(--text); text-decoration: none; font-weight: 700;
+  font-size: var(--t-14, calc(14px * var(--fs, 1))); }
+.cs-btn:hover { background: var(--hair); }
+.cs-close { background: none; border: 0; color: var(--text-soft); font: inherit; font-size: var(--t-14, calc(14px * var(--fs, 1))); padding: 8px; cursor: pointer; }
+/* KA1 — שם לחיץ בעץ הוועד (תצוגת תושבים) */
+.ct-nm--tap { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer;
+  text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+.ct-nohit { margin: 0 0 12px; padding: 12px 14px; border-radius: var(--r-in); background: var(--canvas, var(--bg));
+  color: var(--text-soft); font-size: var(--t-14, calc(14px * var(--fs, 1))); }

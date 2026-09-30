@@ -85,10 +85,12 @@
   function buildPeople(rows) {
     var keys = {};
     (rows || []).forEach(function (r) { Object.keys(r).forEach(function (k) { keys[k] = true; }); });
-    var c = { first: [], family: null, house: null, status: null, rid: null };
+    var c = { first: [], family: null, house: null, status: null, rid: null, phone: {} };
     Object.keys(keys).forEach(function (k) {
       var t = k.trim();
       if (t.indexOf("שם פרטי") !== -1) c.first.push(k);
+      /* KA1 (גל 12) — "טלפון N" לפי המשבצת, כמו "שם פרטי N" */
+      else if (t.indexOf("טלפון") !== -1) c.phone[slotOfKey(k, 0)] = k;
       else if (t.indexOf("מזהה קבוע") !== -1) c.rid = k;
       else if (t.indexOf("משפחה") !== -1) c.family = k;
       else if (t.indexOf("בית") !== -1) c.house = k;
@@ -106,8 +108,10 @@
       c.first.forEach(function (k, i) {
         var fn = v(r, k);
         if (!fn) return;
-        var p = { key: fid + "#" + slotOfKey(k, i), fid: fid, slot: slotOfKey(k, i),
+        var sl = slotOfKey(k, i);
+        var p = { key: fid + "#" + sl, fid: fid, slot: sl,
                   first: fn, family: fam, house: house, active: active,
+                  phone: v(r, c.phone[sl]),
                   full: fam ? fn + " " + fam : fn };
         byKey[p.key] = p;
         if (active) list.push(p);
@@ -119,7 +123,7 @@
   function who(h) {
     if (h.fid) {
       var p = S.people && S.people.byKey[h.fid + "#" + h.slot];
-      if (p && p.active) return { name: p.full, house: p.house, kind: "res" };
+      if (p && p.active) return { name: p.full, house: p.house, kind: "res", phone: p.phone || "", key: p.key };
       if (!S.dirDone) return { name: "…", house: "", kind: "loading" };
       if (!S.dirOk) return { name: "שם לא זמין", house: "", kind: "res" };
       return { name: "תושב/ת שעזב/ה", house: "", kind: "gone" };
@@ -421,6 +425,11 @@
       var w = who(h);
       var warn = edit && (w.review || w.kind === "gone");
       if (w.kind === "loading") return '<span class="ct-nm is-loading" aria-label="טוען שם"></span>';
+      /* KA1 (גל 12, אושר 1.10.26) — בתצוגת התושבים שם עם טלפון = כפתור שפותח
+         גיליון קטן עם חיוג / וואטסאפ. הטלפון כבר במדריך, שכל תושב רואה. */
+      if (!edit && w.kind === "res" && w.phone) {
+        return '<button type="button" class="ct-nm ct-nm--tap" data-ct-call="' + esc(w.key) + '">' + esc(w.name) + '</button>';
+      }
       return '<span class="ct-nm' + (warn ? " is-warn" : "") + '"' + (warn ? ' data-ct-warn="' + (w.review ? "review" : "gone") + '"' : "") + '>' + esc(w.name) + '</span>';
     }).join('<span class="ct-sep">, </span>') + '</span>';
   }
@@ -619,6 +628,10 @@
             (loose.length ? '<div class="ct-loose__grid"' + (cw ? ' style="--ct-cw:' + cw + 'px"' : "") + '>' + loose.map(function (x) { return looseCardHTML(x, m, edit); }).join("") + '</div>'
                           : '<p class="ct-muted">גררו לכאן שורה כדי לנתק אותה מתפקיד.</p>') + '</section>' : "");
       }
+      /* KA1 (גל 12) — חיפוש שלא מצא כלום אומר את זה (עד היום הכול פשוט התעמעם). */
+      if (m && roles.length && !Object.keys(m.self).some(function (k) { return m.self[k]; })) {
+        canvas.insertAdjacentHTML("afterbegin", '<div class="ct-nohit" role="status">לא נמצא "' + esc(V.q.trim()) + '" — נסו שם אחר או תפקיד.</div>');
+      }
       canvas.classList.toggle("is-phone", w < PHONE);
       drawLegend(roles); drawBanner();
     }
@@ -683,6 +696,12 @@
     var qEl = container.querySelector("#ct-q");
     qEl.addEventListener("input", function () { V.q = qEl.value; draw(); });
     root.addEventListener("click", function (e) {
+      var callEl = !edit && e.target.closest("[data-ct-call]");
+      if (callEl && root.contains(callEl)) {
+        var pp = S.people && S.people.byKey[callEl.getAttribute("data-ct-call")];
+        if (pp && pp.phone && CBA.contactSheet) CBA.contactSheet(pp.full, pp.phone, pp.house ? "בית " + pp.house : "");
+        return;
+      }
       var t = e.target.closest("[data-edit],[data-add],[data-retry],#ct-cats,#ct-copy");
       if (!t || !root.contains(t)) return;
       if (t.hasAttribute("data-retry")) { S.error = ""; load(draw, true); return; }

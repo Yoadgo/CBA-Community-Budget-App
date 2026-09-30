@@ -185,7 +185,8 @@ CBA.search = (function () {
       out.push({ g: "שכנים", sc: sc, icon: ICO.person,
         label: title || family || firsts,
         sub: [house ? "בית " + house : "", phones[0] || ""].filter(Boolean).join(" · "),
-        run: function () { var s = directoryScreen(); if (s) go(s); } });
+        /* SRA1 (גל 12, אושר 1.10.26) — המדריך נפתח כבר מסונן למשפחה הזו */
+        run: function () { openDirectory(family || house || firsts); } });
     });
 
     /* מיון: קודם חוזק ההתאמה, ואז אלפביתי — כדי שאותה שאילתה תמיד תיתן
@@ -204,6 +205,14 @@ CBA.search = (function () {
     return capped;
   }
   function pos(n) { return n < 0 ? 99 : n; }
+
+  function openDirectory(q) {
+    var s = directoryScreen();
+    if (!s) return;
+    var scr = CBA.screens && CBA.screens[s];
+    if (scr && scr.focusSearch) scr.focusSearch(q);
+    else go(s);
+  }
 
   function openExpenses(opts) {
     if (CBA.screens && CBA.screens.expenses && CBA.screens.expenses.focusSearch) {
