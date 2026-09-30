@@ -78,3 +78,19 @@
   }
   .gd-screen--v2 .gd-sendbar .gd-cta { width: 100%; min-height: 56px; box-shadow: var(--sh-float); }
 }
+
+/* NA3 (אושר 1.10.26) — בטלפון/טאבלט (עמודה אחת) סדר השדות לפי מה שקל לעשות
+   בשטח: קטגוריה → נעיצה במפה → מיקום במילים → צילום → כותרת → תיאור → הפרטים שלך.
+   במחשב (שתי עמודות) — בדיוק כמו קודם. רק סדר תצוגה; שום שדה לא השתנה. */
+@media (max-width: 900px) {
+  .gd-screen--v2 .gd-cols { display: flex; flex-direction: column; gap: 12px; }
+  .gd-screen--v2 .gd-cols > div { display: contents; }
+  .gd-screen--v2 .gd-cols .gd-card + .gd-card { margin-top: 0; }
+  .gd-screen--v2 .gd-card--cat    { order: 1; }
+  .gd-screen--v2 .gd-card--map    { order: 2; }
+  .gd-screen--v2 .gd-card--place  { order: 3; }
+  .gd-screen--v2 .gd-card--photos { order: 4; }
+  .gd-screen--v2 .gd-card--title  { order: 5; }
+  .gd-screen--v2 .gd-card--desc   { order: 6; }
+  .gd-screen--v2 .gd-card--me     { order: 7; }
+}

@@ -769,15 +769,33 @@ CBA.screens.events = (function () {
     return html;
   }
 
+  /* EA5 (אושר 1.10.26) — "האירועים הפרטיים שלי": רק השריונים של החודש המוצג
+     (קודם — כל השריונים, בלי קשר לחודש), עם המצב (ממתין / מאושר) כמו במסך
+     המועדון, ולחיצה על שורה פותחת את מסך שריון המועדון. */
+  function privateOfMonth() {
+    var y = state.currentMonth.getFullYear(), m = state.currentMonth.getMonth();
+    return state.privateEvents.filter(function (e) { return e.date.getFullYear() === y && e.date.getMonth() === m; })
+      .sort(function (a, b) { return a.date - b.date; });
+  }
+  function privateRowHTML(e, sep) {
+    var pend = e.status === "pending";
+    return '<button type="button" class="private-row" data-goto-resv title="למסך שריון המועדון"><span>🔑</span><b>' +
+      esc(e.title) + sep + e.date.getDate() + '.' + (e.date.getMonth() + 1) + '</b>' +
+      '<span class="pv-st' + (pend ? ' pv-st--pend' : '') + '">' + (pend ? 'ממתין לאישור' : 'מאושר') + '</span></button>';
+  }
+  function wirePrivateRows(container) {
+    container.querySelectorAll("[data-goto-resv]").forEach(function (b) {
+      b.addEventListener("click", function () { CBA.navigate("resReserve"); });
+    });
+  }
+
   function renderPrivatePanelDesktop() {
-    if (!state.privateEvents.length) return "";
+    var list = privateOfMonth();
+    if (!list.length) return "";
     var html = '<div class="private-card lg" dir="rtl">' +
       '<h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>האירועים הפרטיים שלי</h4>' +
       '<div class="note">נראה רק אצלך — לא מופיע ללוח הקהילתי</div>';
-    state.privateEvents.forEach(function (e) {
-      html += '<div class="private-row"><span>🔑</span><b>' + esc(e.title) + ' — ' +
-        e.date.getDate() + '.' + (e.date.getMonth() + 1) + '</b></div>';
-    });
+    list.forEach(function (e) { html += privateRowHTML(e, ' — '); });
     html += '</div>';
     return html;
   }
@@ -785,6 +803,7 @@ CBA.screens.events = (function () {
   // כל חיווט-מחדש כאן עובר דרך draw(container) ולא ישירות דרך renderMonthlyView —
   // כך הבאנר וטאב חודשי/שנתי תמיד נשארים, בלי לשכפל את הלוגיקה שבונה אותם.
   function wireMonthlyListeners(container) {
+    wirePrivateRows(container);
     /* 28.9 — לחיצה על קפסולה: פרטי האירוע בפאנל הצד (היום שלה + הדגשה) */
     container.querySelectorAll(".wk-bar[data-bar-id], .ev-now__i[data-now-id]").forEach(function (b) {
       b.addEventListener("click", function (ev) {
@@ -949,13 +968,11 @@ CBA.screens.events = (function () {
   }
 
   function renderPrivateEventsPanel() {
-    if (!state.privateEvents.length) return "";
+    var list = privateOfMonth();
+    if (!list.length) return "";
     var html = '<div class="private-card lg m-private">' +
       '<h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>האירועים הפרטיים שלי</h4>';
-    state.privateEvents.forEach(function (e) {
-      html += '<div class="private-row"><span>🔑</span><b>' + esc(e.title) + ' · ' +
-        e.date.getDate() + '.' + (e.date.getMonth() + 1) + '</b></div>';
-    });
+    list.forEach(function (e) { html += privateRowHTML(e, ' · '); });
     html += '</div>';
     return html;
   }
@@ -1018,11 +1035,16 @@ CBA.screens.events = (function () {
           if (e.allDay === false) meta.push(pad2(e.date.getHours()) + ":" + pad2(e.date.getMinutes()));
           if (isMultiDay(e)) meta.push('<span dir="ltr">' + rangeLabel(e, true) + '</span>');
           if (e.location) meta.push("📍 " + esc(e.location));
+          /* EA4 (אושר 1.10.26) — מספר המגיעים גלוי גם כשהשורה סגורה (בשורת הפרטים;
+             קודם הוסתר בתוך הפעולות), וסימן "⌄" שמראה שהשורה נפתחת. */
+          var countH = rsvpCountHTML(e.id);
+          if (countH) meta.push(countH);
           var actions = (e.category !== "personal" ? addCalHTML(e.id) + shareBtnHTML(e.id) : "") +
-            (rsvpOpen ? "" : rsvpBtnHTML(e, false)) + extraActionsHTML(e, true) + rsvpCountHTML(e.id);
-          html += '<div class="ev-row m-it" data-event-id="' + esc(e.id) + '">' +
+            (rsvpOpen ? "" : rsvpBtnHTML(e, false)) + extraActionsHTML(e, true);
+          html += '<div class="ev-row m-it' + (actions ? ' has-acts' : '') + '" data-event-id="' + esc(e.id) + '">' +
             '<div class="m-it__l"><i class="m-dot" style="background:var(' + cat.cssVar + ')"></i>' +
             '<span class="m-it__t" dir="auto">' + esc(e.title) + '</span>' +
+            (actions ? '<svg class="m-it__chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' : "") +
             (rsvpOpen ? '<button type="button" class="btn-rsvp m-tag" data-event-id="' + esc(e.id) + '">אישור הגעה</button>' : "") +
             '</div>' +
             (meta.length ? '<div class="m-it__m">' + meta.join(" · ") + '</div>' : "") +
@@ -1059,6 +1081,7 @@ CBA.screens.events = (function () {
       });
     }
 
+    wirePrivateRows(container);
     /* 28.9 — שורה נקייה; לחיצה עליה פותחת את הפעולות (יומן, שיתוף, ניהול) */
     container.querySelectorAll(".m-it").forEach(function (row) {
       row.addEventListener("click", function (ev) {

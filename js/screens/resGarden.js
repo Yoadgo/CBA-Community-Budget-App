@@ -909,7 +909,7 @@
         container.innerHTML = page(HEAD,
           '<div class="gd-cols">' +
             '<div>' +
-              '<div class="gd-card">' +
+              '<div class="gd-card gd-card--cat">' +
                 '<p class="gd-lbl">מה הבעיה? <s>*</s></p>' +
                 '<div class="gd-cats" id="gd-cats">' +
                   cats.map(function (c) {
@@ -919,25 +919,25 @@
                   }).join("") +
                 '</div>' +
               '</div>' +
-              '<div class="gd-card">' +
+              '<div class="gd-card gd-card--title">' +
                 '<p class="gd-lbl">כותרת קצרה <s>*</s></p>' +
                 '<div class="gd-tpicks" id="gd-tpicks"><span class="gd-tpicks__hint">בחרו קטגוריה כדי לראות הצעות</span></div>' +
                 '<input class="gd-inp" id="gd-title" maxlength="60" placeholder="למשל: ראש ממטרה שבור">' +
               '</div>' +
-              '<div class="gd-card">' +
+              '<div class="gd-card gd-card--desc">' +
                 '<p class="gd-lbl">תיאור <em id="gd-wc">0 / ' + WORD_MAX + ' מילים</em></p>' +
                 '<textarea class="gd-inp gd-ta" id="gd-desc" rows="3" ' +
                   'placeholder="מה קרה ואיפה בדיוק? כמה משפטים מספיקים."></textarea>' +
                 '<div class="gd-meter"><i id="gd-meter"></i></div>' +
               '</div>' +
-              '<div class="gd-card">' +
+              '<div class="gd-card gd-card--photos">' +
                 '<p class="gd-lbl">תמונות <em><span id="gd-pc">0</span> / ' + photoMax + '</em></p>' +
                 '<div class="gd-thumbs" id="gd-thumbs">' +
                   '<button type="button" class="gd-th add" id="gd-add">+</button>' +
                 '</div>' +
                 '<input type="file" id="gd-file" accept="image/*" multiple hidden>' +
               '</div>' +
-              '<div class="gd-card">' +
+              '<div class="gd-card gd-card--me">' +
                 // בלי "מולא אוטומטית": השם והבית אכן מגיעים מהמושב, אבל הטלפון
                 // **אינו** חלק מתשובת ההתחברות — ותווית שמבטיחה מילוי אוטומטי
                 // ליד שדה ריק היא שקר קטן בממשק.
@@ -952,12 +952,12 @@
               '</div>' +
             '</div>' +
             '<div>' +
-              '<div class="gd-card">' +
+              '<div class="gd-card gd-card--map">' +
                 '<p class="gd-lbl">איפה זה? <s>*</s> <em>לחצו על המפה</em></p>' +
                 '<div class="gd-map" id="gd-map"></div>' +
                 '<p class="gd-hint" id="gd-loc">לא צריך דיוק — מספיק לסמן ליד איזה בית זה.</p>' +
               '</div>' +
-              '<div class="gd-card">' +
+              '<div class="gd-card gd-card--place">' +
                 '<p class="gd-lbl">מיקום במילים <em>לא חובה</em></p>' +
                 '<input class="gd-inp" id="gd-place" placeholder="למשל: על השביל בין 341 ל-343">' +
               '</div>' +
