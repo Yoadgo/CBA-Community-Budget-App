@@ -570,11 +570,21 @@ function doorAlert_(ss, kind, text) {
     });
   } catch (e) { Logger.log('doorAlert_: ' + e); }
 }
-function doorAlertClear_(kind) {
+function doorAlertClear_(kind, ss) {
   try {
     var st = JSON.parse(doorProp_('DOOR_ALERT_STATE') || '{}');
-    if (st[kind]) { delete st[kind]; doorPropSet_('DOOR_ALERT_STATE', JSON.stringify(st)); }
-  } catch (e) { }
+    if (st[kind]) {
+      delete st[kind]; doorPropSet_('DOOR_ALERT_STATE', JSON.stringify(st));
+      /* GMA3 (1.10.26) — אחרי התראת ניתוק, הודעה אחת שהמנעול חזר. כך מנהל
+         המכון לא נשאר בספק. סוללה — בלי הודעת "תוקן" (מחליפים ורואים במסך). */
+      if (kind === 'offline' && ss) {
+        notifyAdmins_(ss, PERM_GYM, 'ADMIN_DOOR_ALERT', {
+          'בעיה': 'המנעול חזר לפעול ומחובר שוב',
+          'זמן': Utilities.formatDate(new Date(), wwTz_(), 'dd/MM HH:mm')
+        });
+      }
+    }
+  } catch (e) { Logger.log('doorAlertClear_: ' + e); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -848,7 +858,7 @@ function doorHealth_(ss) {
       doc.online = info.online; doc.battery = info.battery;
       doc.batteryCritical = info.batteryCritical; doc.lockState = info.lockState;
       if (!info.online) doorAlert_(ss, 'offline', 'המנעול התנתק מהרשת');
-      else doorAlertClear_('offline');
+      else doorAlertClear_('offline', ss);
       if (info.batteryCritical || (info.battery >= 0 && info.battery < 20)) {
         doorAlert_(ss, 'battery', 'הסוללה של המנעול חלשה (' + (info.battery >= 0 ? info.battery + '%' : 'קריטית') + ')');
       } else doorAlertClear_('battery');
@@ -900,6 +910,15 @@ function doorLogPurge_() {
     });
   } catch (e) { Logger.log('doorLogPurge_: ' + e); }
   return n;
+}
+
+/** GMA3 (1.10.26) — בדיקת מנעול כל 15 דקות (מהטריגר של הודעות האירועים,
+ *  eventMessagesTick ב-Notify.gs), במקום רק פעם בשעה. רק במצב "אמיתי".
+ *  קריאה אחת ל-Nuki ומסמך אחד ב-Firestore; ההתראות עצמן נשארות "פעם אחת
+ *  לכל מעבר מצב" (doorAlert_), אז אין הצפה. */
+function doorQuickHealth_(ss) {
+  if (doorMode_() !== 'live') return null;
+  return doorHealth_(ss || SpreadsheetApp.getActiveSpreadsheet());
 }
 
 /** שלב בשעתי (hourlyJobsRun_). */

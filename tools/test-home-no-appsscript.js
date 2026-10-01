@@ -57,7 +57,12 @@ function serverBox(opts) {
       live[it.id] = 1; out.wrote++; log.writes.push({ path: c + '/' + it.id, doc: it.doc }); }),
     fsSweepOrphans_: (c, live, out) => { log.lists++;
       (opts.existing || []).forEach(id => { if (!live[id]) { out.deleted++; log.deletes.push(c + '/' + id); } }); },
-    SpreadsheetApp: { getActiveSpreadsheet: () => opts.ss || null }
+    SpreadsheetApp: { getActiveSpreadsheet: () => opts.ss || null, flush: () => {} },
+    /* Q6 (1.10.26) — מצב ההגירה */
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (opts.props || {})[k] || null,
+      setProperty: (k, v) => { (opts.props = opts.props || {})[k] = v; } }) },
+    CacheService: { getScriptCache: () => ({ remove: () => {} }) },
+    tourApplyV6_: () => { log.v6 = (log.v6 || 0) + 1; return 0; }
   };
   vm.createContext(box);
   vm.runInContext([
@@ -76,6 +81,8 @@ function serverBox(opts) {
     grab(/function tourAudDocId_\(aud\) \{[\s\S]*?\n\}/),
     grab(/function tourStepCompare_\(a, b\) \{[\s\S]*?\n\}/),
     grab(/function tourSyncAll_\(ss\) \{[\s\S]*?\n\}/),
+    grab(/function tourWriteFromSheet_\(ss, applyV6\) \{[\s\S]*?\n\}/),
+    "var TOUR_FS_SOURCE_KEY = 'TOUR_FS_SOURCE';",
     grab(/function tourSeenSyncAll_\(ss\) \{[\s\S]*?\n\}/)
   ].join('\n\n'), box);
   return { box, log };
@@ -217,7 +224,8 @@ section('7. סנכרון הסיור — סינון, קיבוץ ומיון');
     { 'מזהה': 'f', 'קהל': 'משהו אחר', 'פעיל': 'כן', 'גרסה': 1, 'סדר': 1 }
   ];
   const s = serverBox({ tourRows: rows, existing: ['all', 'admins', 'perm-club'] });
-  const out = s.box.tourSyncAll_({});
+  /* Q6 — הקיבוץ עצמו לא השתנה; הוא עבר ל-tourWriteFromSheet_ (רץ פעם אחת בהגירה). */
+  const out = s.box.tourWriteFromSheet_({}, false);
   const all = s.log.writes.find(w => w.path === 'tourSteps/all');
   ok('שלושה מסמכים נכתבו — all, admins, residents', out.wrote === 3, JSON.stringify(out));
   ok('🔴 צעד לא-פעיל לא נכתב', all.doc.steps.every(x => x['מזהה'] !== 'd'));
@@ -229,6 +237,18 @@ section('7. סנכרון הסיור — סינון, קיבוץ ומיון');
      all.doc.steps[0]['מזהה'] === 'b' && all.doc.steps[1]['מזהה'] === 'a',
      all.doc.steps.map(x => x['מזהה']).join(','));
   ok('⚠️ ומסמך קהל שכבר אין לו צעדים נסחף', out.deleted === 1);
+}
+
+section('7ב. Q6 — Firebase הוא המקור: הגירה פעם אחת, ואז שקט');
+{
+  const props = {};
+  const s = serverBox({ tourRows: [{ 'מזהה': 'a', 'קהל': 'כולם', 'פעיל': 'כן', 'גרסה': 1, 'סדר': 1 }], props: props });
+  const o1 = s.box.tourSyncAll_({});
+  ok('ריצה ראשונה: מכניסה את הנוסח שאושר וכותבת', o1.ok && o1.wrote === 1 && s.log.v6 === 1, JSON.stringify(o1));
+  ok('🔴 ומסמנת שהמקור עבר ל-Firebase', props.TOUR_FS_SOURCE === '1');
+  const before = s.log.writes.length;
+  const o2 = s.box.tourSyncAll_({});
+  ok('🔴🔴 ריצה שנייה: לא כותבת כלום (עריכה ב-Firebase לא נדרסת)', o2.source === 'firestore' && s.log.writes.length === before && s.log.v6 === 1);
 }
 
 section('8. "מה כבר ראיתי" — מסמך לכל uid');

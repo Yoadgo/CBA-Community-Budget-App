@@ -707,9 +707,30 @@ function resChangesHTML(list) {
   '</div>';
 }
 
+/* RSA1 (גל 13, אושר 1.10.26 לפי הסקיצה) — "מומלץ" לאישור מרוכז = ההתאמה
+   הראשונה היא **מספר בית זהה** ויש בה משבצת מייל פנויה. שם משפחה בלבד לא
+   נחשב (נשאר לאישור אחד-אחד). ⚠️ משק בית אחד לכל היותר פעם אחת בכל סבב —
+   שתי בקשות לאותו בית עם משבצת פנויה אחת היו גורמות לשנייה לדרוס את הראשונה
+   (approveSignup_ כותב למשבצת האחרונה כשאין פנויה). השנייה נשארת ידנית. */
+function resStrongPicks(list, rows, c) {
+  var used = {}, out = [];
+  list.forEach(function (s) {
+    var best = resSuggest(s, rows, c)[0];
+    if (!best || !best.free || best.why.indexOf("מספר בית זהה") === -1) return;
+    if (used[best.i]) return;
+    used[best.i] = 1;
+    out.push({ s: s, rowIndex: best.i + 2, label: (resVal(best.row, c.family) || "—") + " · בית " + (resVal(best.row, c.house) || "—") });
+  });
+  return out;
+}
+
 function resSignupsHTML(list, rows, c) {
+  var strong = resStrongPicks(list, rows, c), strongIds = {};
+  strong.forEach(function (x) { strongIds[x.s.id] = 1; });
   return '<div class="card res-signups">' +
-    '<div class="res-signups__t">בקשות הרשמה ממתינות <span class="res-n res-n--warn">' + list.length + '</span></div>' +
+    '<div class="res-signups__t">בקשות הרשמה ממתינות <span class="res-n res-n--warn">' + list.length + '</span>' +
+      (strong.length > 1 ? '<button type="button" class="btn-approve res-su__all" data-su-all>אשר את ' + strong.length + ' המומלצים</button>' : '') +
+    '</div>' +
     list.map(function (s) {
       var sug = resSuggest(s, rows, c);
       var best = sug[0];
@@ -726,7 +747,8 @@ function resSignupsHTML(list, rows, c) {
         '</div>' +
         '<div class="res-su__match">' +
           (best
-            ? '<span class="res-dim">מומלץ: <b>' + CBA.esc(resVal(best.row, c.family) || "—") + '</b> — ' + CBA.esc(best.why) + '</span>'
+            ? '<span class="res-dim">מומלץ: <b>' + CBA.esc(resVal(best.row, c.family) || "—") + '</b> — ' + CBA.esc(best.why) +
+                (strongIds[s.id] ? ' <span class="res-su__ok">✓ התאמה חזקה</span>' : '') + '</span>'
             : '<span class="res-warn">לא נמצאה משפחה מתאימה</span>') +
           '<select class="field-input res-su__sel">' + opts +
             '<option value="new">— פתח משק בית חדש —</option></select>' +
@@ -863,6 +885,39 @@ function resBind(container, c) {
       });
     });
   });
+  /* RSA1 — "אשר את כל המומלצים": חלון אחד עם הרשימה, ואז אותה פעולה בדיוק
+     (approveSignup) לכל אחד, בזה אחר זה. כישלון של אחד לא עוצר את השאר;
+     בסוף — סיכום, ורענון אחד. */
+  var allBtn = container.querySelector("[data-su-all]");
+  if (allBtn) allBtn.addEventListener("click", function () {
+    var picks = resStrongPicks((resState.signups || []).filter(function (s) { return String(s.status).trim() === "ממתין"; }), resState.rows || [], c);
+    if (!picks.length) return;
+    CBA.ui.confirm(picks.map(function (x) { return x.s.firstName + " " + x.s.lastName + " ← " + x.label; }).join("\n") +
+        "\n\nכל אחד יקבל את מייל האישור הרגיל.",
+      { title: "לאשר " + picks.length + " הרשמות?", okText: "אישור " + picks.length }
+    ).then(function (ok) {
+      if (!ok) return;
+      var release = CBA.ui.busy(allBtn, "מאשר…"), okN = 0, fails = [];
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSignup");
+      (function step(k) {
+        if (k >= picks.length) {
+          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSignup");
+          release();
+          if (fails.length) CBA.ui.alert(okN + " אושרו · " + fails.length + " נכשלו:\n" + fails.join("\n"), "סיכום");
+          else CBA.ui.toast(okN + " הרשמות אושרו");
+          resState.loaded = false;
+          CBA.data.refreshResidents(function () { resLoad(container); });
+          return;
+        }
+        var x = picks[k];
+        CBA.data.approveSignup({ id: x.s.id, residentRowIndex: x.rowIndex }, function (res) {
+          if (res && res.ok) okN++; else fails.push(x.s.firstName + " " + x.s.lastName + ": " + ((res && res.error) || "שגיאה"));
+          step(k + 1);
+        });
+      })(0);
+    });
+  });
+
   container.querySelectorAll("[data-su-no]").forEach(function (b) {
     b.addEventListener("click", function () {
       // (2026-08-19, ממצא 2.6) אישור דחייה — מודל של האפליקציה
@@ -1705,38 +1760,83 @@ function resOpenDrawer(container, idx, rowIndex, c) {
   /* RSB4 (גל 8, 1.10.26) — בלי נעילה בזמן הבקשה, לחיצה כפולה פתחה שתי שורות חדשות */
   var repBtn = overlay.querySelector("[data-replace]");
   var replaceInFlight = false;
+  /* RSA2 (גל 13, אושר 1.10.26 לפי הסקיצה) — חלון אחד במקום שלושה: שם,
+     מספר בית, ובחירה (רשות) של בקשת הרשמה ממתינה של הנכנסים. אותה פעולת שרת
+     (replaceFamily), ואם נבחרה בקשה — approveSignup רגיל לשורה החדשה שהשרת
+     החזיר (newRow), כלומר אותו מייל אישור. ההחלפה עצמה לא שולחת מייל — כמו היום. */
   repBtn.addEventListener("click", function () {
     if (replaceInFlight) return;
-    CBA.ui.prompt("המשפחה שתיכנס לבית הזה.", { title: "החלפת משפחה", placeholder: "שם משפחה", okText: "המשך" })
-      .then(function (fam) {
-        if (fam === null) return;
-        fam = String(fam).trim();
-        if (!fam) { CBA.ui.alert("צריך שם משפחה."); return; }
-        CBA.ui.prompt("מספר הבית של המשפחה הנכנסת.",
-          { title: "מספר בית", value: resVal(freshRow(), c.house) || "", okText: "המשך" }
-        ).then(function (house) {
-          if (house === null) return;
-          CBA.ui.confirm(
-            'הדיירים הנוכחיים יסומנו כ"עזבו" ו-' + txN + ' התנועות יישארו משויכות אליהם.\n' +
-            'תיפתח שורה חדשה למשפחת ' + fam + ' עם מזהה קבוע משלה.',
-            { title: "להחליף את המשפחה בבית?", okText: "כן, החלף", danger: true }
-          ).then(function (ok) {
-            if (!ok || replaceInFlight) return;
-            replaceInFlight = true;   // RSB4
-            var releaseRep = CBA.ui.busy ? CBA.ui.busy(repBtn, "מחליף…") : function () {};
-            if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
-            CBA.data.replaceFamily({ rowIndex: rowIndex, family: fam, house: String(house).trim() }, function (res) {
-              replaceInFlight = false; releaseRep();   // RSB4
-              if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
-              if (!res || !res.ok) { CBA.ui.alert("הפעולה נכשלה: " + ((res && res.error) || "שגיאה")); return; }
-              resCloseDrawer();
-              resState.loaded = false;
-              CBA.data.refreshResidents(function () { resLoad(container); });
-              CBA.ui.toast("המשפחה הוחלפה");
-            });
-          });
+    var curHouse = resVal(freshRow(), c.house) || "";
+    var curFam = resVal(freshRow(), c.family) || "";
+    var pend = (resState.signups || []).filter(function (s) { return String(s.status).trim() === "ממתין"; });
+    var suOpts = '<option value="">— בלי (הבית ייפתח ריק) —</option>' + pend.map(function (s) {
+      var same = curHouse && String(s.house || "").trim() === String(curHouse).trim();
+      return '<option value="' + CBA.esc(s.id) + '">' + CBA.esc(s.firstName + " " + s.lastName + " · " + (s.email || "") +
+        (s.house ? " · ביקש בית " + s.house : "")) + (same ? " ✓" : "") + '</option>';
+    }).join("");
+    var firstSame = pend.filter(function (s) { return curHouse && String(s.house || "").trim() === String(curHouse).trim(); })[0];
+    CBA.ui.dialog({
+      title: "החלפת משפחה · בית " + (curHouse || "—"),
+      okText: "החלפה", cancelText: "ביטול", danger: true, sticky: true,
+      html:
+        '<div class="res-rep__note">היוצאים: <b>משפחת ' + CBA.esc(curFam || "—") + '</b> — יסומנו "עזבו". ' +
+          (txN ? txN + ' ההוצאות שלהם נשארות משויכות אליהם.' : 'אין להם הוצאות משויכות.') + '</div>' +
+        '<div class="form-grid">' +
+          '<div class="form-field"><label for="rep-fam">שם המשפחה הנכנסת</label><input class="field-input" id="rep-fam" autocomplete="off"></div>' +
+          '<div class="form-field"><label for="rep-house">מספר בית</label><input class="field-input" id="rep-house" value="' + CBA.esc(curHouse) + '"></div>' +
+          (pend.length ? '<div class="form-field form-field--wide"><label for="rep-su">יש כבר בקשת הרשמה של הנכנסים? (רשות)</label>' +
+            '<select class="field-input" id="rep-su">' + suOpts + '</select>' +
+            '<div class="form-hint">בחירה בבקשה = הבית החדש נפתח ישר עם הדייר, והבקשה מאושרת (אותו מייל אישור).</div></div>' : '') +
+        '</div>' +
+        '<div class="form-block__warn" id="rep-err" hidden></div>',
+      onMount: function (wrap) {
+        var su = wrap.querySelector("#rep-su"), famEl = wrap.querySelector("#rep-fam");
+        if (su) su.addEventListener("change", function () {
+          var s = pend.filter(function (x) { return x.id === su.value; })[0];
+          if (s && !famEl.value.trim()) famEl.value = s.lastName || "";
+        });
+        if (su && firstSame) { su.value = firstSame.id; famEl.value = firstSame.lastName || ""; }
+      },
+      onOk: function (wrap, close) {
+        var fam = wrap.querySelector("#rep-fam").value.trim();
+        var house = wrap.querySelector("#rep-house").value.trim();
+        var su = wrap.querySelector("#rep-su");
+        var err = wrap.querySelector("#rep-err");
+        if (!fam) { err.textContent = "צריך שם משפחה."; err.hidden = false; wrap.querySelector("#rep-fam").focus(); return; }
+        close({ fam: fam, house: house, su: su ? su.value : "" });
+      }
+    }).then(function (v) {
+      if (!v || replaceInFlight) return;
+      replaceInFlight = true;   // RSB4
+      var releaseRep = CBA.ui.busy ? CBA.ui.busy(repBtn, "מחליף…") : function () {};
+      if (CBA.sheets.markDirty) CBA.sheets.markDirty("residentsSave");
+      CBA.data.replaceFamily({ rowIndex: rowIndex, family: v.fam, house: v.house }, function (res) {
+        function done(msg) {
+          replaceInFlight = false; releaseRep();   // RSB4
+          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
+          resCloseDrawer();
+          resState.loaded = false;
+          CBA.data.refreshResidents(function () { resLoad(container); });
+          CBA.ui.toast(msg);
+        }
+        if (!res || !res.ok) {
+          replaceInFlight = false; releaseRep();
+          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSave");
+          CBA.ui.alert("הפעולה נכשלה: " + ((res && res.error) || "שגיאה"));
+          return;
+        }
+        if (!v.su || !res.newRow) return done("המשפחה הוחלפה");
+        CBA.data.approveSignup({ id: v.su, residentRowIndex: res.newRow }, function (r2) {
+          if (!r2 || !r2.ok) {
+            done("המשפחה הוחלפה");
+            CBA.ui.alert("המשפחה הוחלפה, אבל אישור בקשת ההרשמה נכשל: " + ((r2 && r2.error) || "שגיאה") +
+              "\nאפשר לאשר אותה מכרטיס ההרשמות.");
+            return;
+          }
+          done("המשפחה הוחלפה והדייר החדש אושר");
         });
       });
+    });
   });
 }
 

@@ -380,6 +380,7 @@
       var listEl = container.querySelector("#gd-list");
       /* GA1 — "פתוחים" כברירת מחדל כשיש פתוחים (נקבע בטעינה הראשונה) */
       var all = [], filter = null, loadErr = false;
+      var view = "list";   /* GA3 (גל 12-ב, אושר 1.10.26) — "list" | "map" */
       /* ממצא 32 — קו הזמן. `logErr` נפרד מ-`loadErr`: כשל בטעינת
          היומן אינו מוחק את הדיווחים מהמסך, הוא רק מחליף את הבלוק
          בשורה שאומרת שלא הצלחנו. */
@@ -446,7 +447,18 @@
             segBtn("open", "פתוחים", n.open) +
             segBtn("done", "הושלמו", n.done) +
           '</div>' +
-          (shown.length
+          /* GA3 — "הדיווחים שלי על המפה": נעץ לכל דיווח (מהסינון הנוכחי) שיש לו מיקום. */
+          (CBA.map && CBA.map.render && withLoc(all).length
+            ? '<div class="gd-viewsw"><button type="button" data-view="list"' + (view === "list" ? ' class="on"' : '') + '>רשימה</button>' +
+                '<button type="button" data-view="map"' + (view === "map" ? ' class="on"' : '') + '>על המפה</button></div>'
+            : '') +
+          (view === "map" && CBA.map && CBA.map.render
+            ? '<div class="gd-mymap-wrap"><div class="gd-map gd-mymap" id="gd-mymap"></div>' +
+                '<p class="gd-hint">' + (withLoc(shown).length
+                  ? withLoc(shown).length + " על המפה" + (shown.length > withLoc(shown).length ? " · " + (shown.length - withLoc(shown).length) + " בלי מיקום מסומן" : "") + " · לחיצה על נעץ פותחת את הדיווח"
+                  : "לאף דיווח בסינון הזה אין מיקום מסומן.") + '</p></div>'
+            : '') +
+          (view === "map" ? '' : shown.length
             ? '<div class="gd-reps">' + shown.map(card).join("") + '</div>'
             /* סינון שאין בו כלום הציג אזור ריק בלי מילה — ר' הצוות האדום. */
             : '<div class="gd-none">' +
@@ -457,6 +469,23 @@
         Array.prototype.forEach.call(listEl.querySelectorAll(".gd-seg button"), function (b) {
           b.addEventListener("click", function () { filter = b.dataset.f; draw(); });
         });
+        Array.prototype.forEach.call(listEl.querySelectorAll("[data-view]"), function (b) {
+          b.addEventListener("click", function () { view = b.dataset.view; draw(); });
+        });
+        var mh = listEl.querySelector("#gd-mymap");
+        if (mh) {
+          var pins = withLoc(shown).map(function (r) {
+            return { id: String(r.id), x: +r.x, y: +r.y, title: "#" + r.id + " · " + (r.title || r.category || "דיווח"),
+              cls: "gd-mypin" + (r.stage === "הושלם" ? " is-done" : "") };
+          });
+          CBA.map.render(mh, { head: false, search: false, legend: false, hint: false, popup: false, markers: pins,
+            onMarker: function (id) {
+              view = "list"; draw();
+              var a = listEl.querySelector('[data-rep-id="' + String(id).replace(/"/g, "") + '"]');
+              if (a) { try { a.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} a.classList.add("is-flash");
+                setTimeout(function () { a.classList.remove("is-flash"); }, 1600); }
+            } });
+        }
         Array.prototype.forEach.call(listEl.querySelectorAll("[data-fb]"), function (b) {
           b.addEventListener("click", function () { sendFeedback(b.dataset.id, b.dataset.fb === "y"); });
         });
@@ -495,6 +524,9 @@
         return '<div class="gd-stat is-' + kind + '"><u>' + ico(iconName) + '</u>' +
           '<div><b>' + num + '</b><span>' + esc(label) + '</span></div></div>';
       }
+      function withLoc(list) {
+        return list.filter(function (r) { return r.x !== null && r.x !== undefined && r.x !== "" && !isNaN(+r.x) && !isNaN(+r.y); });
+      }
       function segBtn(k, label, n) {
         return '<button type="button" data-f="' + k + '"' +
           (filter === k ? ' class="on"' : '') + '>' + esc(label) + ' · ' + n + '</button>';
@@ -531,7 +563,7 @@
         }
         var flagTxt = r.flag ? flagText(r.flag) : "";
         var crit = r.flag === "דורש בדיקה חוזרת";
-        return '<article class="gd-rep k-' + c.key + '">' +
+        return '<article class="gd-rep k-' + c.key + '" data-rep-id="' + esc(r.id) + '">' +
           /* ⚠️ 2026-09-09 — כאן ישב ריבוע עם גרדיאנט ירוק ותכונת data-photo
              שאיש לא קרא אף פעם, ומי שצירף שמונה תמונות ראה בדיוק את אותו
              ריבוע כמו מי שלא צירף כלום.

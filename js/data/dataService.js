@@ -1614,7 +1614,9 @@ CBA.data = (function () {
    *     שמותרים לו; מי שיבקש אחר — כלל האבטחה ידחה. הבחירה כאן היא
    *     חיסכון בקריאות, לא שער.
    * ======================================================================== */
-  var TOUR_FROM_FIRESTORE = false;
+  /* Q6 (1.10.26) — Firebase הוא המקור של ניסוחי הסיור (ר' tourSyncAll_ ב-Code.gs),
+     ולכן ברירת המחדל דלוקה. הדגל החי (appConfig/flags) עדיין יכול לכבות. */
+  var TOUR_FROM_FIRESTORE = true;
   var CLUB_RESV_FROM_FIRESTORE = false;
 
   /* הרשאה → מזהה מסמך. ⚠️ חייב להתאים ל-TOUR_PERM_DOC ב-Code.gs;

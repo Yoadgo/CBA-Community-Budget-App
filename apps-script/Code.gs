@@ -10657,7 +10657,24 @@ function ensureTourSeenCol_(ss) {
    בדיוק המלכודת שהפרויקט הזה כבר נפל בה: עמודה שנוספה לטאב שכבר
    בייצור הייתה מזיזה את המספר, והקוד היה קורא תא אחר לגמרי — בלי
    שום שגיאה, רק מספר לא נכון. שתי הנסיעות היקרות ירדו, וזה מספיק. */
+/* Q6 (1.10.26) — אחרי ההגירה הצעדים נקראים מ-tourSteps (המקור), כל המסמכים
+   יחד; הסינון לפי קהל נשאר ב-handleTour_. נכשל / לפני ההגירה — הגיליון, כמו קודם. */
+var TOUR_FS_DOC_IDS = ['all', 'admins', 'residents', 'perm-super', 'perm-budget', 'perm-club', 'perm-gym', 'perm-garden'];
 function tourRowsCached_(ss) {
+  var fsSource = false;
+  try { fsSource = PropertiesService.getScriptProperties().getProperty(TOUR_FS_SOURCE_KEY) === '1'; } catch (e) {}
+  if (fsSource) {
+    try {
+      return cached_('cba_tour_rows_fs', function () {
+        var rows = [];
+        TOUR_FS_DOC_IDS.forEach(function (id) {
+          var d = fsGet_(FS_TOUR + '/' + id);
+          if (d && d.steps) rows = rows.concat(d.steps);
+        });
+        return rows;
+      });
+    } catch (e) { Logger.log('tourRowsCached_ Firestore: ' + e); }
+  }
   return cached_('cba_tour_rows', function () { return readTable_(ss, TOUR_SHEET); });
 }
 
@@ -10983,11 +11000,84 @@ function tourAudDocId_(aud) {
   return TOUR_PERM_DOC[a] || '';
 }
 
+/* ============================================================================
+ *  Q6 (1.10.2026, אישור יועד) — Firebase הוא המקור של ניסוחי הסיור
+ * ----------------------------------------------------------------------------
+ *  עד היום: טאב "סיור היכרות" בגיליון ← (כל שעה) ← tourSteps ב-Firestore.
+ *  מעכשיו: tourSteps **הוא** המקור. ההעתקה מהגיליון רצה עוד פעם אחת בלבד —
+ *  ההגירה למטה, שמכניסה את הנוסח שאושר (5 כרטיסים + WeWork) לגיליון ומשם
+ *  ל-Firestore — ואז נכבית לתמיד (TOUR_FS_SOURCE=1 ב-Script Properties).
+ *  ⚠️ הטאב נשאר כגיבוי לקריאה; הערה בתא A1 אומרת שעריכה בו כבר לא משפיעה.
+ *  ⚠️ `handleTour_` (מסלול Apps Script וכרטיס "יש חדש" ב-homeExtras) קורא
+ *     עכשיו מאותם מסמכים — ר' tourRowsCached_ — כדי ששני המסלולים יסכימו.
+ *  עריכה מעכשיו: בקונסולת Firebase (tourSteps/<קהל>.steps), או דרך Claude.
+ * ========================================================================== */
+var TOUR_FS_SOURCE_KEY = 'TOUR_FS_SOURCE';
+var TOUR_V6_PATCH = {
+  directory: { 'טקסט': 'כל משפחות השיכון במקום אחד: מי גר באיזה בית, שמות הילדים ומי מחזיק תפקיד בוועד. מחפשים לפי שם, מספר בית או טלפון — ומחייגים או שולחים וואטסאפ בלחיצה. ובמסך "ועד השיכון" רואים מי אחראי על מה, ולחיצה על שם פותחת חיוג או וואטסאפ.' },
+  services: { 'כותרת': 'שירותים לתושב והמלצות השיכון',
+    'טקסט': 'גז, אינטרנט, הבריכה ושעות הפתיחה — במקום אחד, עם לייק, דיסלייק ותגובות. ובמסך "המלצות השיכון" — בעלי מקצוע ששכנים עבדו איתם וממליצים עליהם, ואפשר להוסיף המלצה משלכם.' },
+  garden: { 'כותרת': 'דיווח למראה שיכון',
+    'טקסט': 'רואים משהו שדורש טיפול בגינה המשותפת — עציץ שבור, ממטרה שדולפת, עשב שגדל פרא? לוחצים על ה-+ שבתחתית המסך ← "דיווח למראה שיכון", מצרפים תמונה, ועוקבים אחרי הטיפול עד שהוא נסגר.' },
+  gym: { 'טקסט': 'מנוי שנתי למכון הכושר של השיכון נפתח מכאן: ממלאים טופס קצר, מצרפים הצהרת בריאות, ומקבלים גישה למכון ברגע שהמנוי מאושר. בעמוד הבית תראו כמה ימים נשארו — והאריח יתריע כשהמנוי מתקרב לסוף.' },
+  receipts: { 'טקסט': 'שילמתם מהכיס? לוחצים על ה-+ שבתחתית המסך, מצלמים את הקבלה — והפרטים מתמלאים לבד. ב"הבקשות שלי" רואים איפה כל בקשה עומדת ומתי הכסף ייכנס. ומאותו + — שריון המועדון: בוחרים תאריך ושעה ורואים מיד מה פנוי.' },
+  admin: { 'טקסט': 'כמנהלים יש לכם בעמוד הבית כרטיס "ממתין לטיפולך" — לחיצה עליו פותחת את לוח הניהול: הוצאות, שריונים, הרשמות ודיווחים שמחכים לכם, כל אחד קופץ ישר למקום. באזור הניהול לכל מסך יש סרגל כהה עם המספרים החשובים, ובטלפון ה-+ שבתחתית מבצע את הפעולה של המסך.' }
+};
+var TOUR_V6_NEW = { 'מזהה': 'wework', 'סדר': 15, 'גרסה': 6, 'קהל': 'כולם', 'פעיל': 'כן',
+  'כותרת': 'WeWork — עמדת עבודה בשיכון',
+  'טקסט': 'חלל העבודה המשותף: בוחרים יום ושעות ומשריינים עמדת מחשב או כורסה. בזמן השריון נכנסים עם כפתור הדלת שבאפליקציה — בלי קוד ובלי מפתח.',
+  'כפתור': 'ל-WeWork', 'מסך יעד': 'resWework', 'אייקון': 'key' };
+
+/** מכניס את הנוסח שאושר לטאב (עדכון לפי מזהה + הוספת WeWork אם חסר). מחזיר כמה תאים השתנו. */
+function tourApplyV6_(ss) {
+  var sh = ensureTourSheet_(ss);
+  var values = sh.getDataRange().getValues();
+  var head = values[0].map(function (h) { return String(h).trim(); });
+  var col = {}; head.forEach(function (h, i) { col[h] = i; });
+  if (col['מזהה'] === undefined) throw new Error('אין עמודת מזהה בטאב הסיור');
+  var n = 0, haveNew = false;
+  for (var r = 1; r < values.length; r++) {
+    var id = String(values[r][col['מזהה']] || '').trim();
+    if (id === TOUR_V6_NEW['מזהה']) haveNew = true;
+    var patch = TOUR_V6_PATCH[id];
+    if (!patch) continue;
+    Object.keys(patch).forEach(function (k) {
+      if (col[k] === undefined) return;
+      if (String(values[r][col[k]]) === patch[k]) return;
+      sh.getRange(r + 1, col[k] + 1).setValue(patch[k]); n++;
+    });
+  }
+  if (!haveNew) {
+    sh.appendRow(head.map(function (h) { return TOUR_V6_NEW[h] === undefined ? '' : TOUR_V6_NEW[h]; }));
+    n++;
+  }
+  try {
+    sh.getRange(1, 1).setNote('מ-1.10.2026 ניסוחי הסיור נקראים מ-Firebase (אוסף tourSteps). ' +
+      'הטאב הזה הוא גיבוי לקריאה בלבד — עריכה כאן כבר לא משפיעה על האפליקציה.');
+  } catch (e) {}
+  return n;
+}
+
 function tourSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty(TOUR_FS_SOURCE_KEY) === '1') {
+    return { ok: true, wrote: 0, deleted: 0, skipped: 0, error: '', source: 'firestore' };
+  }
+  var out = tourWriteFromSheet_(ss, true);
+  if (out.ok) {
+    props.setProperty(TOUR_FS_SOURCE_KEY, '1');
+    try { CacheService.getScriptCache().remove('cba_tour_rows'); CacheService.getScriptCache().remove('cba_tour_rows_fs'); } catch (e) {}
+  }
+  return out;
+}
+
+/* ההעתקה הישנה (גיליון ← Firestore). רצה עכשיו רק בהגירה של Q6. */
+function tourWriteFromSheet_(ss, applyV6) {
   var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
   try {
     ensureTourSheet_(ss);
+    if (applyV6) { out.patched = tourApplyV6_(ss); SpreadsheetApp.flush(); }
     var rows = readTable_(ss, TOUR_SHEET);
     var byAud = {};
     rows.forEach(function (r) {

@@ -106,6 +106,7 @@ CBA.screens.expenses = {
              מגיעים אליו. ר' js/screens/reconcile.js -->
         <button class="tx-view tx-view--rec" data-goto-reconcile title="השוואת רשימת התשלומים של העמותה מול הבקשות שאושרו">בדיקת החזרים</button>
       </div>
+      ${txQueueBannerHTML()}
 
       <div class="tx-bar">
         <div class="tx-filters">
@@ -615,6 +616,8 @@ function txBind(container) {
       CBA.screens.expenses.render(container);
     });
   });
+  const qBtn = container.querySelector("[data-open-queue]");
+  if (qBtn) qBtn.addEventListener("click", function () { txOpenQueue(container); });
   const recBtn = container.querySelector("[data-goto-reconcile]");
   if (recBtn) recBtn.addEventListener("click", function () { CBA.navigate("reconcile"); });
   const saveViewBtn = container.querySelector("[data-save-view]");
@@ -1197,6 +1200,177 @@ function txOpenClassifyModal(container, t) {
     }
   });
 }
+
+/* ============================================================================
+ *  EXA1 (גל 13, אושר 1.10.26 לפי הסקיצה) — "תור אישורים"
+ * ----------------------------------------------------------------------------
+ *  בקשה אחת בכל פעם: הסיווג מימין, הקבלה משמאל, "אשר ← הבאה". הסעיף מוצע
+ *  מראש מאותו ניחוש של טופס העריכה (txSuggestCategory) — ותמיד ניתן לשינוי.
+ *  🔑 **אין כאן פעולה חדשה.** אישור = אותן שתי כתיבות של חלון הסיווג (קודם
+ *     סעיף, אז סטטוס — ר' txOpenClassifyModal), "לבדיקה…"/"דחייה…" = אותם
+ *     חלונות סיבה של השורה, ולכן אותם מיילים לתושב.
+ *  ⚠️ רק השנה המוצגת: שורה משנה אחרת היא לקריאה בלבד במסך הזה (EXB5) —
+ *     הבאנר אומר כמה כאלה יש, והן נשארות ברשימה.
+ * ========================================================================== */
+function txPendingLocal() {
+  return CBA.data.getTransactions().filter(function (t) { return t.status === "submitted" || t.status === "review"; })
+    .sort(function (a, b) { return String(a.date || "").localeCompare(String(b.date || "")) || (a.id - b.id); });
+}
+function txQueueBannerHTML() {
+  if (txView !== "pending") return "";
+  const n = txPendingLocal().length;
+  if (!n) return "";
+  return '<div class="txq-banner"><span><b>' + n + '</b> ' + (n === 1 ? "בקשה ממתינה" : "בקשות ממתינות") +
+    ' לאישור בשנה המוצגת — אחת אחרי השנייה, עם הקבלה ליד.</span>' +
+    '<button type="button" class="btn-primary btn-sm" data-open-queue>מעבר לתור אישורים</button></div>';
+}
+function txOpenQueue(container) {
+  /* אובייקטי השורות עצמם (לא מזהים) — המצב נקרא מהם בכל ציור. */
+  const ids = txPendingLocal();
+  if (!ids.length) { CBA.ui.toast("אין בקשות ממתינות בשנה המוצגת"); return; }
+  let i = 0, nOk = 0, nRev = 0, nRej = 0, busy = false;
+  const ov = document.createElement("div");
+  ov.className = "txq";
+  ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-modal", "true");
+  ov.setAttribute("aria-label", "תור אישורים");
+  document.body.appendChild(ov);
+  document.body.classList.add("txq-open");
+  function live(t) { return t && (t.status === "submitted" || t.status === "review") ? t : null; }
+  function left() { return ids.filter(function (id, k) { return k >= i && live(id); }).length; }
+  function close() {
+    document.removeEventListener("keydown", onKey, true);
+    ov.remove();
+    document.body.classList.remove("txq-open");
+    CBA.screens.expenses.render(container);
+  }
+  function catOptions(sel) {
+    return '<option value=""' + (sel ? "" : " selected") + '>— בחרו סעיף —</option>' +
+      CBA.data.getCategories().map(function (c) {
+        return '<option value="' + CBA.esc(c.id) + '"' + (c.id === sel ? " selected" : "") + '>' + CBA.esc(c.name) + '</option>';
+      }).join("");
+  }
+  function subOptions(catId, sel) {
+    const items = catId ? (CBA.data.getCategoryItems(catId) || []) : [];
+    return '<option value="">— ללא —</option>' + items.map(function (it) {
+      return '<option value="' + CBA.esc(it.id) + '"' + (it.id === sel ? " selected" : "") + '>' + CBA.esc(it.name) + '</option>';
+    }).join("");
+  }
+  function head() {
+    const n = left();
+    return '<div class="txq__bar"><b>תור אישורים</b>' +
+      (n ? '<span class="txq__pill">' + n + ' ממתינות</span>' : '') +
+      '<button type="button" class="txq__x" data-q="exit">יציאה מהתור</button></div>';
+  }
+  function finish() {
+    ov.innerHTML = head() + '<div class="txq__done"><div class="txq__done-ico">✓</div>' +
+      '<h3>סיימת את התור</h3><p>' + nOk + ' אושרו להנה"ח' + (nRev ? ' · ' + nRev + ' לבדיקה' : '') + (nRej ? ' · ' + nRej + ' נדחו' : '') + '</p>' +
+      '<button type="button" class="btn-primary" data-q="exit">חזרה לרשימה</button></div>';
+    const b = ov.querySelector(".txq__done .btn-primary"); if (b) b.focus();
+  }
+  function draw() {
+    while (i < ids.length && !live(ids[i])) i++;
+    if (i >= ids.length) { finish(); return; }
+    const t = live(ids[i]);
+    const sug = !t.categoryId ? txSuggestCategory(t.supplier || t.buyer) : null;
+    const cat = t.categoryId || (sug ? sug.catId : "");
+    const missing = (CBA.data.missingApprovalFields(t) || []).filter(function (m) { return m !== "סעיף תקציבי"; });
+    const total = ids.length, pos = Math.min(i + 1, total);
+    function kv(k, v) { return v ? '<span>' + k + '</span><b>' + CBA.esc(v) + '</b>' : ''; }
+    ov.innerHTML = head() +
+      '<div class="txq__in">' +
+        '<div class="txq__prog">בקשה ' + pos + ' מתוך ' + total + '<span class="txq__trk"><i style="width:' + Math.round(100 * (pos - 1) / total) + '%"></i></span></div>' +
+        '<div class="txq__split">' +
+          '<section class="txq__pnl">' +
+            '<h3>' + CBA.esc(t.supplier || t.buyer || ("#" + t.id)) + ' · ' + (Number(t.amount) > 0 ? CBA.formatILS(t.amount) : "בלי סכום") + '</h3>' +
+            '<div class="txq__kv">' +
+              kv("רוכש", t.buyer) + kv("תאריך רכישה", t.date) + kv("חודש הגשה", t.month) +
+              kv("סוג", CBA.data.expenseTypeLabel(CBA.data.expenseTypeOf(t))) + kv("תיאור", t.description) +
+            '</div>' +
+            (t.status === "review" && t.reviewNote ? '<div class="txq__note">הערת בדיקה קודמת: ' + CBA.esc(t.reviewNote) + '</div>' : '') +
+            '<label class="txq__f"><span>סעיף תקציבי' + (sug && cat === sug.catId ? ' <em>✨ מוצע לפי ' + sug.n + ' הוצאות קודמות</em>' : '') + '</span>' +
+              '<select class="field-input" data-q-cat>' + catOptions(cat) + '</select></label>' +
+            '<label class="txq__f"><span>תת-סעיף (רשות)</span><select class="field-input" data-q-sub>' + subOptions(cat, t.subItemId) + '</select></label>' +
+            (missing.length ? '<div class="form-block__warn">חסר עדיין: ' + CBA.esc(missing.join(", ")) + ' — אפשר לאשר ולהשלים אחר כך בעריכה.</div>' : '') +
+            '<div class="txq__acts">' +
+              '<button type="button" class="btn-approve" data-q="ok"' + (cat ? '' : ' disabled') + '>אשר ← הבאה</button>' +
+              '<button type="button" class="btn-ghost" data-q="review">לבדיקה…</button>' +
+              '<button type="button" class="btn-reject" data-q="reject">דחייה…</button>' +
+              '<span class="txq__nav">' + (i > 0 ? '<button type="button" class="btn-ghost btn-sm" data-q="prev">הקודמת</button>' : '') +
+                '<button type="button" class="btn-ghost btn-sm" data-q="skip">דלג</button></span>' +
+            '</div>' +
+            '<p class="txq__keys">מקלדת: Enter = אשר ← הבאה · ← הבאה · → הקודמת · Esc יציאה</p>' +
+          '</section>' +
+          '<section class="txq__rcpt" data-q-rcpt>' + (t.receiptUrl ? CBA.skel.img() : '<div class="peek__empty">אין קבלה מצורפת לבקשה הזו</div>') + '</section>' +
+        '</div>' +
+      '</div>';
+    const catEl = ov.querySelector("[data-q-cat]"), subEl = ov.querySelector("[data-q-sub]"), okEl = ov.querySelector('[data-q="ok"]');
+    catEl.addEventListener("change", function () { subEl.innerHTML = subOptions(catEl.value, ""); okEl.disabled = !catEl.value; });
+    if (t.receiptUrl) loadReceipt(t);
+    (okEl.disabled ? catEl : okEl).focus();
+  }
+  function loadReceipt(t) {
+    const slot = ov.querySelector("[data-q-rcpt]");
+    const id = driveFileId(t.receiptUrl), want = t.id;
+    function put(html, url) {
+      if (!slot.isConnected || !live(ids[i]) || ids[i].id !== want) return;
+      slot.innerHTML = html + (url ? '<a class="txq__open" href="' + CBA.esc(url) + '" target="_blank" rel="noopener">פתיחה בחלון</a>' : '');
+    }
+    if (!id) {
+      put(/\.(png|jpe?g|gif|webp)$/i.test(t.receiptUrl) ? '<img class="peek__img" src="' + CBA.esc(t.receiptUrl) + '" alt="קבלה">'
+        : '<div class="peek__empty">לא ניתן להציג את הקישור הזה כאן</div>', t.receiptUrl);
+      return;
+    }
+    CBA.data.getReceipt(id, function (res) { put(txReceiptBodyHTML(res), res && res.ok ? res.url : ""); });
+  }
+  function next() { i++; draw(); }
+  function act(kind) {
+    if (busy) return;
+    const t = live(ids[i]);
+    if (!t) { next(); return; }
+    if (kind === "ok") {
+      const cat = ov.querySelector("[data-q-cat]").value, sub = ov.querySelector("[data-q-sub]").value;
+      if (!cat) return;
+      CBA.data.updateTransaction(t.id, { categoryId: cat, subItemId: sub || "" });
+      CBA.data.updateTransaction(t.id, { status: "ready", reviewNote: "" });
+      nOk++; CBA.ui.toast('הועבר להנה"ח'); next(); return;
+    }
+    if (kind === "review" || kind === "reject") {
+      busy = true;
+      const p = kind === "review"
+        ? CBA.ui.prompt("ההערה תוצג לתושב יחד עם הסטטוס, כדי שיידע מה חסר.", { title: "למה ההוצאה עוברת לבדיקה?", value: t.reviewNote || "", okText: "העבר לבדיקה" })
+        : CBA.ui.prompt("התושב יקבל מייל על הדחייה. הסיבה (רשות) תוצג לו יחד עם הסטטוס.", { title: "לדחות את הבקשה?", placeholder: "סיבת הדחייה (רשות)", okText: "דחייה", danger: true });
+      p.then(function (note) {
+        busy = false;
+        if (note === null) return;
+        CBA.data.updateTransaction(t.id, { status: kind === "review" ? "review" : "rejected", reviewNote: String(note).trim() });
+        if (kind === "review") nRev++; else nRej++;
+        next();
+      });
+    }
+  }
+  function onKey(e) {
+    if (!ov.isConnected || document.body.classList.contains("has-cba-dlg") || busy) return;
+    const tag = (e.target && e.target.tagName) || "";
+    if (e.key === "Escape") { e.preventDefault(); close(); return; }
+    if (tag === "SELECT" || tag === "TEXTAREA" || tag === "INPUT") return;
+    if (e.key === "ArrowLeft") { e.preventDefault(); next(); }
+    else if (e.key === "ArrowRight" && i > 0) { e.preventDefault(); i--; while (i > 0 && !live(ids[i])) i--; draw(); }
+    else if (e.key === "Enter" && tag !== "BUTTON" && tag !== "A") { e.preventDefault(); act("ok"); }
+  }
+  document.addEventListener("keydown", onKey, true);
+  ov.addEventListener("click", function (e) {
+    const b = e.target.closest("[data-q]");
+    if (!b) return;
+    const q = b.getAttribute("data-q");
+    if (q === "exit") return close();
+    if (q === "skip") return next();
+    if (q === "prev") { i = Math.max(0, i - 1); while (i > 0 && !live(ids[i])) i--; return draw(); }
+    act(q);
+  });
+  draw();
+}
+CBA.screens.expenses._openQueue = txOpenQueue;   /* לבדיקות */
 
 function txOpenDrawer(container, id) {
   txForceCloseDrawer();   // פתיחה חדשה — אין מה להזהיר עליו

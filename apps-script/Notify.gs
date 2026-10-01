@@ -1092,6 +1092,8 @@ function eventMessageSendNow_(ss, body) {
 /** טריגר זמן — כל 15 דקות. זול: שאילתה אחת, ברוב הפעמים ריקה. */
 function eventMessagesTick() {
   try { eventMessagesJob_(null); } catch (e) { Logger.log('eventMessagesTick: ' + e); }
+  /* GMA3 (1.10.26) — בדיקת סוללה/ניתוק של מנעול Nuki כל 15 דקות (רק ב-live). */
+  try { if (typeof doorQuickHealth_ === 'function') doorQuickHealth_(null); } catch (e) { Logger.log('doorQuickHealth_: ' + e); }
 }
 
 /** מתקין את הטריגר אם חסר (נקרא מהעבודה השעתית — אידמפוטנטי). */

@@ -94,3 +94,14 @@
   .gd-screen--v2 .gd-card--desc   { order: 6; }
   .gd-screen--v2 .gd-card--me     { order: 7; }
 }
+
+/* GA3 (1.10.26) — "הדיווחים שלי על המפה" */
+.gd-viewsw { display: inline-flex; gap: 4px; padding: 3px; border-radius: var(--r-pill); background: var(--hair); margin: 0 0 12px; }
+.gd-viewsw button { border: 0; background: none; font: inherit; font-size: var(--t-13); font-weight: 700; color: var(--ink-2);
+  padding: 6px 14px; border-radius: var(--r-pill); cursor: pointer; }
+.gd-viewsw button.on { background: var(--paper); color: var(--ink); }
+.gd-mymap-wrap { display: grid; gap: 6px; margin-bottom: 14px; }
+.gd-mymap { height: min(62vh, 520px); border-radius: var(--r-card); overflow: hidden; }
+.map-marker.gd-mypin { background: var(--dom-gar); border: 2px solid var(--paper); }
+.map-marker.gd-mypin.is-done { background: var(--ink-3); }
+.gd-rep.is-flash { outline: 3px solid var(--dom-gar); outline-offset: 2px; transition: outline-color .6s; }
