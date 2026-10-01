@@ -609,6 +609,9 @@ body.is-gated { overflow: hidden; }
   color: var(--warn-text, #92400e); background: var(--warn-bg, #fef3c7);
   border: 1px solid var(--warn-border, #fcd34d); border-radius: 8px; padding: 4px 8px; }
 .drawer__sub { font-size: calc(13px * var(--fs, 1)); color: var(--text-soft); margin-top: 3px; }
+/* BUA2 (גל 15, 1.10.26) — משפט קצב במגירת סעיף */
+.drawer__pace { margin-top: 8px; padding: 6px 10px; border-radius: var(--r-in); background: var(--dom-bud-bg); color: var(--ink); font-size: var(--t-13); line-height: 1.45; }
+.drawer__pace.is-warn { background: var(--danger-soft); }
 .drawer__close {
   border: none; background: none; cursor: pointer; color: var(--text-soft);
   font-size: calc(24px * var(--fs, 1)); line-height: 1; padding: 2px 6px; border-radius: 8px; flex: none;
@@ -1463,6 +1466,10 @@ body[data-screen="committeeAdmin"] .app-main { padding-inline: 14px; }
 .drawer__head-actions { display: flex; align-items: center; gap: 8px; }
 .btn-ai { font-size: calc(12px * var(--fs, 1)); font-weight: 600; padding: 4px 10px; border-radius: 8px; }
 .btn-ai:disabled { opacity: .7; cursor: default; }
+label.btn-ai { cursor: pointer; display: inline-flex; align-items: center; }
+.btn-ai.is-busy { opacity: .6; pointer-events: none; }
+.tx-ainote { margin: 0 0 12px; padding: 8px 12px; border-radius: var(--r-in); background: var(--dom-bud-bg); color: var(--ink); font-size: var(--t-13); }
+.tx-ainote.is-bad { background: var(--danger-soft); }
 
 /* פרטי חשבון בנק — בנק / סניף / חשבון */
 .bank-row { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 8px; }
@@ -2885,6 +2892,13 @@ button.is-busy,
 .rr-drawer-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 
 .rr-label-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+/* RRA3 (גל 14, 1.10.26) — "✨ מילוי אוטומטי" בראש טופס המלצה */
+.rr-ai { display: grid; gap: 8px; padding: 10px 12px; border-radius: var(--r-in); background: var(--dom-svc-bg); }
+.rr-ai__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rr-ai__row .field-input { flex: 1; min-width: 180px; }
+.rr-ai__k { font-weight: 800; font-size: var(--t-13); color: var(--dom-svc); margin-inline-end: auto; }
+.rr-ai__pic { cursor: pointer; }
+.rr-ai .form-hint.is-bad { color: var(--danger); }
 .rr-label-opt { display: flex; align-items: center; gap: 5px; font-size: calc(12px * var(--fs, 1)); cursor: pointer; color: var(--text-soft); }
 
 /* 27.9.26 — סמלילי יצירת קשר (מוקד טלפוני / מוקד וואטסאפ / קבוצת וואטסאפ
@@ -3154,7 +3168,7 @@ body.txq-open { overflow: hidden; }
 /* RSA2 (גל 13) — החלפת משפחה בחלון אחד */
 .res-rep__note { margin: 0 0 12px; padding: 9px 12px; border-radius: var(--r-in); background: var(--canvas, var(--bg)); font-size: var(--t-14); color: var(--text-soft); }
 /* TRA3 (1.10.26) — טיפ בכניסה הראשונה למסך (js/ui/tips.js) */
-.cba-tip { position: fixed; z-index: 205; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
+.cba-tip { position: fixed; z-index: 45; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
   display: flex; align-items: center; gap: 10px; width: max-content; max-width: min(560px, calc(100% - 32px));
   padding: 10px 12px 10px 14px; border-radius: var(--r-card); border: 1px solid var(--hairline);
   background: var(--surface); color: var(--text); font-size: var(--t-14); line-height: 1.45;

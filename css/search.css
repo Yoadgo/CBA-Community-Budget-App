@@ -105,3 +105,10 @@ body.gs-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .gs, .gs-card { animation: none; }
 }
+
+/* SRA2 (גל 15, 1.10.26) — תשובה לשאלה חופשית */
+.gs-ans { margin: 10px; padding: 16px; border-radius: var(--r-card); background: var(--dom-home-bg); display: grid; gap: 6px; justify-items: start; }
+.gs-ans__k { font-size: var(--t-12); font-weight: 800; color: var(--dom-home); }
+.gs-ans__h { font-size: var(--t-17); font-weight: 700; color: var(--ink); line-height: 1.4; }
+.gs-ans__s { font-size: var(--t-13); color: var(--ink-2); line-height: 1.45; }
+.gs-ans__go { margin-top: 6px; }

@@ -946,6 +946,63 @@ function rrGroupOptionsHtml(selected) {
   return html;
 }
 
+/* RRA3 (גל 14) — חיווט "✨ מילוי אוטומטי" בטופס המלצה חדשה (ר' aiExtract_ בשרת). */
+function rrWireAiFill(wrap) {
+  var file = wrap.querySelector("#rr-ai-file"), txt = wrap.querySelector("#rr-ai-text"),
+      go = wrap.querySelector("#rr-ai-go"), msg = wrap.querySelector("#rr-ai-msg");
+  if (!file || !go) return;
+  var busy = false;
+  function say(t, bad) { msg.hidden = !t; msg.textContent = t || ""; msg.classList.toggle("is-bad", !!bad); }
+  function groups() { return RR_GROUPS.map(function (g) { return g.name; }); }
+  function put(sel, v) {
+    var el = wrap.querySelector(sel);
+    if (!el || !v || String(el.value || "").trim()) return false;
+    el.value = v; el.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
+  }
+  function run(input) {
+    if (busy) return;
+    busy = true; go.disabled = true;
+    say("✨ קורא…");
+    input.options = { groups: groups() };
+    CBA.data.aiExtract("recommendation", input, function (res) {
+      busy = false; go.disabled = false;
+      if (!wrap.isConnected) return;
+      if (!res || !res.ok) { say((res && res.error) || "לא הצלחנו לקרוא. אפשר למלא ידנית.", true); return; }
+      var f = res.fields || {}, got = [];
+      if (put("#rr-f-title", f.title)) got.push("כותרת");
+      var gs = wrap.querySelector("#rr-f-group");
+      if (f.group && gs && !gs.value) { gs.value = f.group; gs.dispatchEvent(new Event("change")); if (gs.value === f.group) got.push("קבוצה"); }
+      if (put("#rr-f-phone", f.phone)) got.push("טלפון");
+      if (put("#rr-f-city", f.city)) got.push("עיר");
+      if (put("#rr-f-address", f.address)) got.push("כתובת");
+      if (put("#rr-f-website", f.website)) got.push("אתר");
+      if (res.link) {
+        if (res.link.isMaps) { if (put("#rr-f-maps", res.link.url)) got.push("קישור מפות"); }
+        else if (put("#rr-f-website", res.link.url)) got.push("אתר");
+      }
+      say(got.length ? "מולא: " + got.join(", ") + " — כדאי לבדוק. את \"על ההמלצה\" כותבים בעצמכם."
+                     : "לא מצאנו פרטים חדשים למלא (שדות שכבר מילאתם לא משתנים).");
+    });
+  }
+  file.addEventListener("change", function () {
+    var f = file.files && file.files[0];
+    file.value = "";
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) { say("התמונה גדולה מדי (מעל 8MB).", true); return; }
+    var r = new FileReader();
+    r.onload = function () { run({ dataBase64: String(r.result).split(",")[1] || "", mimeType: f.type || "image/jpeg" }); };
+    r.readAsDataURL(f);
+  });
+  function goText() {
+    var v = String(txt.value || "").trim();
+    if (!v) { say("הדביקו קישור או טקסט, או צלמו כרטיס.", true); return; }
+    if (/^https:\/\/\S+$/i.test(v)) run({ url: v }); else run({ text: v });
+  }
+  go.addEventListener("click", goText);
+  txt.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); goText(); } });
+}
+
 function rrOpenForm(existing, presetGroup, isAdminEdit) {
   var isEdit = !!existing;
   var known = rrKnownGroupNames();
@@ -953,6 +1010,17 @@ function rrOpenForm(existing, presetGroup, isAdminEdit) {
   var isKnownGroup = !curGroup || !!known[curGroup];
 
   var html =
+    /* RRA3 (גל 14, 1.10.26) — "✨ מילוי מתמונה או קישור". רק בהמלצה חדשה.
+       ממלא **רק שדות ריקים**, ותמיד אפשר לערוך לפני הפרסום. */
+    (!isEdit && CBA.data && CBA.data.aiExtract
+      ? '<div class="form-field form-field--wide rr-ai">' +
+          '<div class="rr-ai__row"><span class="rr-ai__k">✨ מילוי אוטומטי</span>' +
+            '<label class="btn-ghost btn-sm rr-ai__pic">📷 צילום כרטיס ביקור / שלט<input type="file" accept="image/*" id="rr-ai-file" hidden></label></div>' +
+          '<div class="rr-ai__row"><input class="field-input" id="rr-ai-text" dir="auto" maxlength="2000" placeholder="או הדביקו קישור (מפות/אתר) או טקסט על העסק">' +
+            '<button type="button" class="btn-ghost btn-sm" id="rr-ai-go">מילוי</button></div>' +
+          '<div class="form-hint" id="rr-ai-msg" hidden></div>' +
+        '</div>'
+      : '') +
     '<div class="form-field form-field--wide"><label>כותרת ההמלצה</label>' +
       '<input class="field-input" id="rr-f-title" maxlength="80" value="' + rrEsc(isEdit ? existing.title : "") +
       '" placeholder="למשל: ד״ר כהן — רופא ילדים"></div>' +
@@ -1009,6 +1077,7 @@ function rrOpenForm(existing, presetGroup, isAdminEdit) {
       sel.addEventListener("change", function () {
         other.style.display = sel.value === "__other__" ? "" : "none";
       });
+      rrWireAiFill(wrap);
     },
     onOk: function (wrap, close) {
       var title = wrap.querySelector("#rr-f-title").value;

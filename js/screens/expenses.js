@@ -1372,6 +1372,14 @@ function txOpenQueue(container) {
 }
 CBA.screens.expenses._openQueue = txOpenQueue;   /* לבדיקות */
 
+/* EXA2 — שורת הודעה בראש טופס ההוצאה (נמחקת ברינדור מחדש של הטופס) */
+function txAiNote(form, text, bad) {
+  let n = form.querySelector(".tx-ainote");
+  if (!n) { n = document.createElement("div"); n.className = "tx-ainote"; form.insertBefore(n, form.firstChild); }
+  n.textContent = text;
+  n.classList.toggle("is-bad", !!bad);
+}
+
 function txOpenDrawer(container, id) {
   txForceCloseDrawer();   // פתיחה חדשה — אין מה להזהיר עליו
   const editing = id !== null;
@@ -1404,7 +1412,7 @@ function txOpenDrawer(container, id) {
       <div class="drawer__head">
         <div class="drawer__title">${editing ? "עריכת הוצאה" : "הוספת הוצאה"}${yearNote}</div>
         <div class="drawer__head-actions">
-          <button class="btn-ai" data-ai title="סריקת קבלה ב-AI (בקרוב)">✨ AI</button>
+          <label class="btn-ai" title="צילום או קובץ של קבלה — ממלא סכום, ספק, תיאור, תאריך ובנק">✨ סריקת קבלה<input type="file" accept="image/*,application/pdf" data-ai-file hidden></label>
           <button class="drawer__close" data-close aria-label="סגור">×</button>
         </div>
       </div>
@@ -1413,8 +1421,56 @@ function txOpenDrawer(container, id) {
   document.body.appendChild(overlay);
   overlay.querySelectorAll("[data-close]").forEach(function (el) { el.addEventListener("click", txCloseDrawer); });
   document.addEventListener("keydown", txEscDrawer);
-  const aiBtn = overlay.querySelector("[data-ai]");
-  if (aiBtn) aiBtn.addEventListener("click", function () { aiBtn.textContent = "✨ בקרוב"; aiBtn.disabled = true; });
+  /* EXA2 (גל 14, 1.10.26) — "✨ סריקת קבלה" גם אצל המנהל: אותה סריקה בדיוק
+     כמו בהגשת התושב (scanReceipt). ממלא את שדות הטופס בלבד — שום דבר לא
+     נשמר עד "שמור". בעריכה של הוצאה בלי קבלה — אותו קובץ גם מצורף כקבלה
+     (דרך כפתור ההעלאה הקיים). בהוצאה חדשה מצרפים אחרי השמירה הראשונה. */
+  const aiFile = overlay.querySelector("[data-ai-file]");
+  if (aiFile) aiFile.addEventListener("change", function () {
+    const file = aiFile.files && aiFile.files[0];
+    aiFile.value = "";
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { CBA.ui.alert("הקובץ גדול מדי (מקסימום 8MB)."); return; }
+    const form = overlay.querySelector("#tx-form");
+    if (!form || !form.querySelector('[data-field="amount"]')) { CBA.ui.toast("הטופס עוד נטען — רגע ונסו שוב"); return; }
+    const lbl = aiFile.parentNode;
+    lbl.classList.add("is-busy");
+    txAiNote(form, "✨ סורק את הקבלה…");
+    const reader = new FileReader();
+    reader.onload = function () {
+      const b64 = String(reader.result).split(",")[1] || "";
+      CBA.data.scanReceipt(b64, file.type || "image/jpeg", function (res) {
+        lbl.classList.remove("is-busy");
+        const f2 = overlay.querySelector("#tx-form");
+        if (!f2 || !overlay.isConnected) return;
+        if (!res || !res.ok || !res.fields) { txAiNote(f2, (res && res.error) || "הסריקה נכשלה — אפשר למלא ידנית.", true); return; }
+        const f = res.fields, got = [];
+        function put(field, v, label) {
+          const el = f2.querySelector('[data-field="' + field + '"]');
+          if (!el || v === undefined || v === null || v === "" || v === 0) return;
+          el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
+          got.push(label);
+        }
+        put("amount", f.amount, "סכום");
+        put("supplier", f.supplier, "ספק");
+        put("description", f.description, "תיאור");
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(f.date || ""))) put("date", f.date, "תאריך");
+        put("bankName", f.bankName, "בנק"); put("bankBranch", f.bankBranch, "סניף"); put("bankAccount", f.bankAccount, "חשבון");
+        const rf = f2.querySelector("#tx-receipt-file");
+        const attach = !!(id !== null && rf && !(f2.querySelector("[data-del-receipt]")));
+        txAiNote(f2, got.length
+          ? "✨ מולא מהקבלה: " + got.join(", ") + " — לבדוק לפני שמירה." +
+            (attach ? " הקובץ מצורף כקבלה." : (id === null ? " את קובץ הקבלה מצרפים אחרי השמירה (📎)." : ""))
+          : "לא זוהו פרטים ברורים בקבלה — אפשר למלא ידנית.", !got.length);
+        if (attach) {
+          try { const dt = new DataTransfer(); dt.items.add(file); rf.files = dt.files; rf.dispatchEvent(new Event("change")); }
+          catch (e) { /* דפדפן ישן — מצרפים ידנית בכפתור 📎 */ }
+        }
+      });
+    };
+    reader.onerror = function () { lbl.classList.remove("is-busy"); txAiNote(form, "קריאת הקובץ נכשלה.", true); };
+    reader.readAsDataURL(file);
+  });
 
   // רשימת התושבים (עם מזהה קבוע ליד כל שם) נטענת (או נשלפת מה-cache) לפני
   // הרינדור הראשון של הטופס, כדי ששדה "רוכש/מטפל" יהיה מוכן מיד עם הפתיחה. אם

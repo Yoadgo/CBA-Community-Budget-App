@@ -113,7 +113,8 @@ CBA.search = (function () {
     screen: '<path d="M4 5h16v11H4z"/><path d="M9 20h6M12 16v4"/>',
     cat:    '<path d="M4 7h16M4 12h16M4 17h10"/>',
     money:  '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/>',
-    person: '<circle cx="12" cy="8.5" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/>'
+    person: '<circle cx="12" cy="8.5" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+    ask:    '<path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>'
   };
   function ico(d) {
     return '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" ' +
@@ -230,11 +231,17 @@ CBA.search = (function () {
       listEl.innerHTML =
         '<div class="gs-hint">' +
           '<div class="gs-hint__t">מה מחפשים?</div>' +
-          '<div class="gs-hint__l">שם של מסך · סעיף תקציב · ספק או הוצאה · שם משפחה או מספר בית</div>' +
+          '<div class="gs-hint__l">שם של מסך · סעיף תקציב · ספק או הוצאה · שם משפחה או מספר בית — או שאלה, כמו "כמה הוצאנו על גינון ביוני?"</div>' +
         '</div>';
       return;
     }
     results = collect(q);
+    /* SRA2 (גל 15) — שאלה חופשית: שורה ראשונה "✨ לשאול" (גם כשאין תוצאות) */
+    var raw = String(inputEl.value || "").trim();
+    if (canAsk() && (isQuestion(raw) || (!results.length && raw.split(/\s+/).length >= 2))) {
+      results.unshift({ g: "שאלה", sc: -1, icon: ICO.ask, label: "לשאול: " + raw,
+        sub: "תשובה מהנתונים שבאפליקציה, או לאיזה מסך ללכת", ask: raw });
+    }
     if (!results.length) {
       listEl.innerHTML = '<div class="gs-hint"><div class="gs-hint__t">לא נמצא כלום</div>' +
         '<div class="gs-hint__l">נסו מילה אחת בלבד, או חלק מהשם</div></div>';
@@ -265,8 +272,82 @@ CBA.search = (function () {
   function activate(i) {
     var r = results[i];
     if (!r) return;
+    if (r.ask) { ask(r.ask); return; }   /* SRA2 — נשארים בחלון ומציגים תשובה */
     close();
     r.run();
+  }
+
+  /* ------------------------------------------------- SRA2 — שאלה חופשית (גל 15)
+     ה-AI רק מפענח את השאלה (כוונה · סעיף · חודשים · מסך) — ר' searchQuestion
+     ב-Code.gs. **הסכום מחושב כאן** מההוצאות שכבר טעונות, כך שהמספר מדויק ואף
+     נתון כספי לא נשלח החוצה. */
+  var QWORDS = /^(כמה|מתי|איך|איפה|מה|מי|למה|האם|באיזה|לאן|על כמה|כמה כסף)\s/;
+  function isQuestion(raw) {
+    return raw.split(/\s+/).length >= 2 && (/[?？]/.test(raw) || QWORDS.test(raw));
+  }
+  function canAsk() { return !!(CBA.data && CBA.data.aiExtract) && !gated(); }
+  function money(n) { return "₪" + Math.round(n).toLocaleString("he-IL"); }
+  function monthLabel(ym) {
+    var m = /^(\d{4})-(\d{2})$/.exec(ym || "");
+    if (!m) return "";
+    var names = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+    return names[+m[2] - 1] + " " + m[1];
+  }
+  function spendAnswer(f) {
+    var cats = CBA.data.getCategories() || [];
+    var cat = f.category ? cats.filter(function (c) { return c.name === f.category; })[0] : null;
+    var from = f.monthFrom || "", to = f.monthTo || f.monthFrom || "";
+    if (from && to && from > to) { var x = from; from = to; to = x; }
+    /* כמו מסך התקציב: "הוצאנו" = אושר (הועבר להנה"ח / שולם). ממתינות — בנפרד. */
+    var tot = 0, pend = 0, n = 0;
+    (CBA.data.getTransactions() || []).forEach(function (t) {
+      if (cat && t.categoryId !== cat.id) return;
+      var ym = String(t.date || t.month || "").slice(0, 7);
+      if (from && (!ym || ym < from || ym > to)) return;
+      var a = Number(t.amount) || 0;
+      if (t.status === "ready" || t.status === "paid") { tot += a; n++; }
+      else if (t.status === "submitted" || t.status === "review") pend += a;
+    });
+    var fm = (CBA.data.getFiscalMonths ? CBA.data.getFiscalMonths() : []) || [];
+    if (from && fm.length === 12 && (to < fm[0].key || from > fm[11].key)) {
+      return { head: "החודשים האלה לא בשנת " + (CBA.data.getCurrentYear ? CBA.data.getCurrentYear() : "") + " שמוצגת עכשיו.",
+        sub: "אפשר לבחור את השנה במסך ההוצאות ולשאול שוב.", btn: "לפתוח בהוצאות",
+        run: function () { openExpenses(cat ? { category: cat.id } : {}); } };
+    }
+    var when = !from ? "" : (from === to ? " ב" + monthLabel(from) : " מ" + monthLabel(from) + " עד " + monthLabel(to));
+    var yr = CBA.data.getCurrentYear ? CBA.data.getCurrentYear() : "";
+    var head = (cat ? "על " + cat.name : "בסך הכול") + when + ": " + money(tot) + " (" + n + " הוצאות)";
+    var sub = (pend ? "ועוד " + money(pend) + " בבקשות שממתינות לאישור. " : "") +
+      "לפי תאריך הרכישה, בנתוני שנת " + yr + " שטעונים עכשיו (הוצאות שאושרו, כמו במסך התקציב).";
+    return { head: head, sub: sub, btn: "לפתוח בהוצאות", run: function () { openExpenses(cat ? { category: cat.id } : {}); } };
+  }
+  function ask(q) {
+    var canExp = hasTarget("expenses") && (!(window.CBA && CBA.sheets) || CBA.sheets.isConnected());
+    var targets = navTargets();
+    listEl.innerHTML = '<div class="gs-ans"><div class="gs-ans__k">✨ חושב…</div></div>';
+    results = []; sel = 0;
+    CBA.data.aiExtract("searchQuestion", { text: q, options: {
+      categories: canExp ? (CBA.data.getCategories() || []).map(function (c) { return c.name; }) : [],
+      screens: targets.map(function (t) { return t.label; }) } }, function (res) {
+      if (!listEl || !inputEl || String(inputEl.value || "").trim() !== q) return;   // החלון נסגר / השאלה השתנתה
+      var f = (res && res.ok && res.fields) || {}, a = null;
+      if (f.intent === "spend" && canExp) a = spendAnswer(f);
+      else if (f.intent === "screen" && f.screen) {
+        var tg = targets.filter(function (t) { return t.label === f.screen; })[0];
+        if (tg) a = { head: f.answer || ("זה במסך " + tg.label), sub: "", btn: "למסך " + tg.label, run: function () { go(tg.key); } };
+      }
+      if (!a) {
+        listEl.innerHTML = '<div class="gs-ans"><div class="gs-ans__h">' +
+          esc(res && !res.ok && res.error ? res.error : "לא בטוח מה לענות על זה.") + '</div>' +
+          '<div class="gs-ans__s">נסו לנסח אחרת, או לחפש מילה אחת.</div></div>';
+        return;
+      }
+      listEl.innerHTML = '<div class="gs-ans"><div class="gs-ans__k">✨ תשובה</div>' +
+        '<div class="gs-ans__h">' + esc(a.head) + '</div>' +
+        (a.sub ? '<div class="gs-ans__s">' + esc(a.sub) + '</div>' : '') +
+        '<button type="button" class="btn-primary btn-sm gs-ans__go">' + esc(a.btn) + '</button></div>';
+      listEl.querySelector(".gs-ans__go").addEventListener("click", function () { close(); a.run(); });
+    });
   }
 
   /* ------------------------------------------------------------ פתיחה/סגירה */

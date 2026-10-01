@@ -1331,6 +1331,15 @@ CBA.data = (function () {
   // כאן — כ-2-3 שניות סבב מול Gemini; מסופק spinner בכפתור במקום זאת, ר' resident.js).
   // התוצאה היא תמיד הצעת-מילוי בלבד — התושב תמיד רואה ועורך את השדות לפני שליחה
   // בפועל (submitReceipt נשאר נפרד ולא מושפע), אף פעם לא שליחה אוטומטית.
+  /* ENG1 (גל 14) — "חלץ שדות": kind = gardenReport / recommendation.
+     input: { dataBase64, mimeType } או { text } או { url }, ו-options (רשימות
+     בחירה). התשובה היא **הצעה** — המסך מציג אותה לאישור ולא שומר כלום. */
+  function aiExtract(kind, input, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לשרת" }); return; }
+    var p = Object.assign({ kind: kind }, input || {});
+    (CBA.sheets.postQuiet || CBA.sheets.postRead)("aiExtract", p, cb);
+  }
+
   function scanReceipt(dataBase64, mimeType, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.postRead("scanReceipt", { dataBase64: dataBase64, mimeType: mimeType }, cb);
@@ -5541,6 +5550,7 @@ CBA.data = (function () {
     createGymMembership: createGymMembership,
     requestGymDeclaration: requestGymDeclaration,
     scanGymPayment: scanGymPayment,
+    aiExtract: aiExtract,
     reportGymPayment: reportGymPayment,
     confirmGymPayment: confirmGymPayment,
     recordGymPayment: recordGymPayment,

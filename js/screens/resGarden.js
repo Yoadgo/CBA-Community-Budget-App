@@ -950,6 +950,8 @@
                       '<u>' + ico(k.ico) + '</u>' + esc(c) + '</button>';
                   }).join("") +
                 '</div>' +
+                /* NA2 (גל 14) — הצעת קטגוריה וכותרת מהתמונה הראשונה */
+                '<div class="gd-aisug" id="gd-aisug" hidden></div>' +
               '</div>' +
               '<div class="gd-card gd-card--title">' +
                 '<p class="gd-lbl">כותרת קצרה <s>*</s></p>' +
@@ -1080,6 +1082,7 @@
               if (/jpeg/.test(mime)) name = name.replace(/\.[^.]+$/, "") + ".jpg";
               state.photos.push({ name: name, mime: mime, data: dataUrl.substring(comma + 1) });
               drawThumbs(dataUrl);
+              if (state.photos.length === 1) aiSuggest(state.photos[0]);
             });
           });
           fileEl.value = "";
@@ -1103,6 +1106,37 @@
             thumbsEl.insertBefore(el, addBtn);
           }
           sync();
+        }
+        /* ---- NA2 (גל 14, 1.10.26) — "✨ נראה כמו…" מהתמונה הראשונה ----
+           פעם אחת לטופס, רק כשעוד לא נבחרה קטגוריה. **הצעה בלבד**: שום שדה
+           לא משתנה עד שלוחצים "להחיל", והכול נשאר ניתן לעריכה. כישלון/אין
+           תקלה ברורה — ההצעה פשוט לא מופיעה (הטופס עובד כרגיל). */
+        var aiAsked = false;
+        var aiEl = container.querySelector("#gd-aisug");
+        function aiSuggest(ph) {
+          if (aiAsked || state.cat || !aiEl || !(CBA.data && CBA.data.aiExtract)) return;
+          aiAsked = true;
+          aiEl.hidden = false;
+          aiEl.className = "gd-aisug is-wait";
+          aiEl.innerHTML = '<span class="gd-aisug__k">✨</span><span>בודקים מה רואים בתמונה…</span>';
+          CBA.data.aiExtract("gardenReport", { dataBase64: ph.data, mimeType: ph.mime, options: { categories: cats } }, function (res) {
+            if (!aiEl.isConnected) return;
+            var f = (res && res.ok && res.fields) || {};
+            if (!f.category && !f.title) { aiEl.hidden = true; aiEl.innerHTML = ""; return; }
+            aiEl.className = "gd-aisug";
+            aiEl.innerHTML = '<span class="gd-aisug__k">✨</span><span class="gd-aisug__t">נראה כמו: <b></b></span>' +
+              '<button type="button" class="gd-aisug__ok">להחיל</button>' +
+              '<button type="button" class="gd-aisug__x" aria-label="לא תודה">✕</button>';
+            aiEl.querySelector("b").textContent = [f.category, f.title].filter(Boolean).join(" · ");
+            aiEl.querySelector(".gd-aisug__x").addEventListener("click", function () { aiEl.hidden = true; });
+            aiEl.querySelector(".gd-aisug__ok").addEventListener("click", function () {
+              var cb = f.category && Array.prototype.filter.call(container.querySelectorAll(".gd-cat"), function (x) { return x.dataset.c === f.category; })[0];
+              if (cb) cb.click();
+              if (f.title) { titleInput.value = f.title; titleInput.dispatchEvent(new Event("input")); }
+              aiEl.hidden = true;
+              CBA.ui.toast("מולא מהתמונה — אפשר לשנות");
+            });
+          });
         }
         function sync() {
           container.querySelector("#gd-pc").textContent = state.photos.length;

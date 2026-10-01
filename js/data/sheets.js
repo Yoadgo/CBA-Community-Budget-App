@@ -1540,6 +1540,18 @@ CBA.sheets = (function () {
       });
   }
 
+  /* ENG1 (גל 14, 1.10.26) — בקשה "שקטה" לשרת, להצעות AI ברקע (aiExtract).
+     כמו postRead, אבל **בלי** חיווי "שומר…" הכללי, בלי הודעת "הפעולה נכשלה"
+     ובלי bumpWriteFloor: זו לא כתיבה, וכישלון שלה רק אומר "אין הצעה" —
+     המסך שקרא לה מחליט מה להראות. */
+  function postQuiet(action, payload, cb) {
+    var body = Object.assign({ action: action, session: authSession() }, payload || {});
+    fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (data) { if (cb) cb(withAuthNote(data)); })
+      .catch(function (err) { if (cb) cb({ ok: false, error: String(err) }); });
+  }
+
   // כמו postRead, אבל דרך XMLHttpRequest כדי לחשוף אחוז התקדמות אמיתי של
   // ההעלאה (fetch לא חושף התקדמות של גוף הבקשה בדפדפנים הנפוצים). מיועד
   // לבקשות עם קובץ Base64 גדול (למשל submitReceipt) שבהן ההעלאה בפועל יכולה
@@ -1978,7 +1990,7 @@ CBA.sheets = (function () {
 
   return { url: API_URL, load: load, refresh: refresh, refreshIfChanged: refreshIfChanged,
     applyPulse: applyPulse,
-    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, loadBudgetLogs: loadBudgetLogs, yearLoaded: yearLoaded, dropTxCache: dropTxCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending,
+    pendingCount: pendingCount, retryPending: retryPending, push: push, get: get, postRead: postRead, postQuiet: postQuiet, postReadProgress: postReadProgress, isConnected: isConnected, clearCache: clearCache, loadYear: loadYear, loadAllYears: loadAllYears, loadBudgetLogs: loadBudgetLogs, yearLoaded: yearLoaded, dropTxCache: dropTxCache, markDirty: markDirty, clearDirty: clearDirty, isDirty: isDirty, registerFlush: registerFlush, flushPending: flushPending,
     /* (2026-09-17, ממצא 01) חשופות לבדיקות ולמסך "מצב המערכת" — לא לשימוש ממסכים. */
     _watchdogSweep: watchdogSweep, _busyDebug: function () { return { inFlight: inFlightWrites, reasons: Object.keys(dirtyReasons), guards: unloadGuards.length }; } };
 })();

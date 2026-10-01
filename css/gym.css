@@ -463,3 +463,6 @@
   .ga-chips::-webkit-scrollbar { display: none; }
   #ga-settings { padding-inline: 10px; }
 }
+
+/* GMA2 (גל 14, 1.10.26) — "📷 מילוי מצילום" במגירת רישום תשלום ידני */
+.gym-field label.ga-scan { display: inline-flex; align-items: center; cursor: pointer; color: var(--ink); margin-bottom: 0; font-weight: 600; }

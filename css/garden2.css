@@ -105,3 +105,20 @@
 .map-marker.gd-mypin { background: var(--dom-gar); border: 2px solid var(--paper); }
 .map-marker.gd-mypin.is-done { background: var(--ink-3); }
 .gd-rep.is-flash { outline: 3px solid var(--dom-gar); outline-offset: 2px; transition: outline-color .6s; }
+
+/* NA2 (גל 14, 1.10.26) — "✨ נראה כמו…" מתחת לקטגוריות */
+.gd-aisug { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding: 8px 10px;
+  border-radius: var(--r-in); background: var(--dom-gar-bg); font-size: var(--t-13); color: var(--ink); }
+.gd-aisug.is-wait { color: var(--ink-2); }
+.gd-aisug__k { color: var(--dom-gar); font-weight: 800; }
+.gd-aisug__t { flex: 1; min-width: 0; }
+.gd-aisug__ok { border: 0; background: var(--dom-gar); color: var(--paper); font: inherit; font-weight: 700;
+  padding: 5px 12px; border-radius: var(--r-pill); cursor: pointer; }
+.gd-aisug__x { border: 0; background: none; color: var(--ink-2); font: inherit; cursor: pointer; padding: 4px 6px; }
+
+/* GTA2 (גל 15, 1.10.26) — "✨ טיוטה לתושב" מתחת לתיבת ההודעה */
+.gt-draft-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.gt-draft { border: 1px solid var(--hair); background: var(--dom-gar-bg); color: var(--dom-gar); font: inherit; font-size: var(--t-13);
+  font-weight: 700; padding: 5px 12px; border-radius: var(--r-pill); cursor: pointer; }
+.gt-draft:disabled { opacity: .6; cursor: default; }
+.gt-draft__msg { font-size: var(--t-12); color: var(--ink-2); }

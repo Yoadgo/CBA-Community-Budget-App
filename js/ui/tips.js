@@ -1,6 +1,7 @@
 /* tips.js — טיפ קטן בכניסה הראשונה לכל מסך   (TRA3, אושר 1.10.2026)
    ============================================================================
-   שורה צפה בתחתית המסך, נסגרת ב-✕ (או לבד אחרי 15 שניות). מופיעה **פעם אחת** לכל מסך ולכל משתמש
+   שורה צפה בתחתית המסך, נסגרת ב-✕ (או לבד אחרי 15 שניות).
+   מתחת לחלונות ולמגירות (z-index 45), כדי שחלון שנפתח יכסה אותה. מופיעה **פעם אחת** לכל מסך ולכל משתמש
    במכשיר הזה (נרשם ברגע שהופיעה — "בכניסה הראשונה"), כדי שלא צריך לזכור
    את כל הסיור בבת אחת.
    ⚠️ לא נוגע ב-app.js: מאזין לשינוי body[data-screen] (רענון שקט לא משנה
@@ -55,6 +56,7 @@ CBA.tips = (function () {
     var b = document.body;
     return b.classList.contains("is-gated") || b.classList.contains("tr-open") ||
       b.classList.contains("has-cba-dlg") || b.classList.contains("gs-open") ||
+      !!document.querySelector("#cba-drawer, .gym-wiz, .txq") ||
       (CBA.tour && CBA.tour.isOpen && CBA.tour.isOpen());
   }
   function show(screen, tries) {

@@ -191,6 +191,41 @@ CBA.screens = CBA.screens || {};
            "</div>";
   }
 
+  /* GMA2 — חיווט "📷 מילוי מצילום" במגירת רישום תשלום ידני */
+  function gaWireScan(ui, m) {
+    var el = ui && ui.el, inp = el && el.querySelector("[data-ga-scan]"), msg = el && el.querySelector("[data-ga-scanmsg]");
+    if (!inp) return;
+    function say(t) { msg.hidden = !t; msg.textContent = t || ""; }
+    function set(key, v) { var f = el.querySelector('[data-gf="' + key + '"]'); if (f && v !== "" && v != null) { f.value = v; return true; } return false; }
+    inp.addEventListener("change", function () {
+      var file = inp.files && inp.files[0];
+      inp.value = "";
+      if (!file) return;
+      if (file.size > 8 * 1024 * 1024) { say("הקובץ גדול מדי (מעל 8MB)."); return; }
+      say("קורא את הצילום…");
+      var r = new FileReader();
+      r.onload = function () {
+        CBA.data.scanGymPayment(String(r.result).split(",")[1] || "", file.type || "image/jpeg", function (res) {
+          if (!el.isConnected) return;
+          if (!res || !res.ok) { say("לא הצלחנו לקרוא את הצילום. אפשר למלא ידנית."); return; }
+          var f = res.fields || {}, got = [];
+          if (Number(f.amount) && set("amount", f.amount)) got.push("סכום");
+          if (f.reference && set("reference", f.reference)) got.push("אסמכתא");
+          var methods = ["מזומן", "העברה בנקאית", "צ׳ק", "ביט", "פייבוקס", "אחר"];
+          var mth = String(f.method || "").trim();
+          var hit = methods.filter(function (x) { return mth && (mth.indexOf(x) !== -1 || x.indexOf(mth) !== -1); })[0];
+          if (hit && set("method", hit)) got.push("אמצעי");
+          var exp = Number(m["מחיר מוסכם"] || 0), amt = Number(f.amount || 0);
+          say(got.length
+            ? "מולא מהצילום: " + got.join(", ") + " — לבדוק לפני הרישום." +
+              (exp && amt && Math.abs(exp - amt) > 0.5 ? " ⚠️ הסכום (" + amt + " ₪) שונה מהמחיר המוסכם (" + exp + " ₪)." : "")
+            : "לא זוהו פרטים ברורים בצילום — אפשר למלא ידנית.");
+        });
+      };
+      r.readAsDataURL(file);
+    });
+  }
+
   function openFormDrawer(opts) {
     var el = document.createElement("div");
     el.className = "gym-wiz";
@@ -203,6 +238,7 @@ CBA.screens = CBA.screens || {};
         "</div>" +
         '<div class="gym-wiz__body">' +
           (opts.subtitle ? '<div class="gym-hint">' + CBA.esc(opts.subtitle) + "</div>" : "") +
+          (opts.topHTML || "") +   /* GMA2 — תוכן לפני השדות */
           (opts.fields || []).map(fieldHTML).join("") +
           (opts.extraHTML || "") +
           '<div class="gym-form__err" data-gf-err hidden></div>' +
@@ -663,10 +699,15 @@ CBA.screens = CBA.screens || {};
       btn.addEventListener("click", function () {
         var id = btn.dataset.gaCash;
         var m = memberById(id) || {};
-        openFormDrawer({
+        var payUi = openFormDrawer({
           title: "רישום תשלום ידני — " + memberName(m),
           subtitle: "למי ששילם במזומן או מחוץ לאפליקציה. המנוי יופעל באותו מסלול בדיוק כמו באימות רגיל.",
           okText: "רישום והפעלה",
+          /* GMA2 (גל 14, 1.10.26) — צילום אישור העברה/ביט/פייבוקס ממלא סכום,
+             אמצעי ואסמכתא (אותה סריקה של התושב). רק ממלא — נשמר ב"רישום". */
+          topHTML: '<div class="gym-field"><label class="btn-ghost btn-sm ga-scan">📷 מילוי מצילום אישור התשלום' +
+            '<input type="file" accept="image/*" data-ga-scan hidden></label>' +
+            '<div class="gym-hint gym-hint--sm" data-ga-scanmsg hidden></div></div>',
           fields: [
             { key: "amount", label: "סכום שהתקבל (₪)", type: "number",
               value: btn.dataset.gaPrice || "", min: 0,
@@ -674,14 +715,16 @@ CBA.screens = CBA.screens || {};
             { key: "validUntil", label: "בתוקף עד חודש", type: "month",
               value: defaultValidUntil(planMonthsFor(m["מסלול"])) },
             { key: "method", label: "אמצעי תשלום", type: "select", value: "מזומן",
-              options: ["מזומן", "העברה בנקאית", "צ׳ק", "ביט", "פייבוקס", "אחר"] }
+              options: ["מזומן", "העברה בנקאית", "צ׳ק", "ביט", "פייבוקס", "אחר"] },
+            { key: "reference", label: "אסמכתא (לא חובה)", type: "text", value: "" }
           ],
           onSave: function (v, ui) {
             if (!Number(v.amount)) { ui.error("צריך להזין את הסכום שהתקבל."); return; }
             if (!v.validUntil) { ui.error("צריך לבחור עד איזה חודש המנוי בתוקף."); return; }
             ui.busy("מפעיל מנוי…");
             CBA.data.recordGymPayment(
-              { id: id, amount: Number(v.amount), validUntil: v.validUntil, method: v.method || "מזומן" },
+              { id: id, amount: Number(v.amount), validUntil: v.validUntil, method: v.method || "מזומן",
+                reference: String(v.reference || "").trim() },
               function (res) {
                 ui.done();
                 if (!res || !res.ok) { ui.error((res && res.error) || "הרישום נכשל."); return; }
@@ -691,6 +734,7 @@ CBA.screens = CBA.screens || {};
               });
           }
         });
+        gaWireScan(payUi, m);
       });
     });
 

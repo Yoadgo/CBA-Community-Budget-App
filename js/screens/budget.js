@@ -422,6 +422,47 @@ function paceCardHTML(r, silent) {
 }
 
 /* פתיחת חלון צד עם פירוט ההוצאות של הסעיף */
+/* BUA2 (גל 15, 1.10.26) — "משפט קצב" במגירת הסעיף.
+   **חשבון, לא AI**: יחס הביצוע לצפי עד החודש הנוכחי (getBudgetRowsAsOf —
+   אותם מספרים של "מול השלב בשנה"), מוקרן על חלוקת התכנון החודשית של הסעיף
+   עצמו. כך סעיף עונתי (חגים, קייטנה) לא "חורג" רק כי עוד לא הגיע זמנו.
+   רק בשנה הנוכחית, מהחודש השני, ולסעיף עם תקציב. */
+function paceSentence(catId) {
+  const D = CBA.data;
+  if (!D.currentFiscalIndex || !D.getBudgetRowsAsOf || !D.getFiscalMonths) return "";
+  const months = D.getFiscalMonths() || [];
+  if (months.length !== 12) return "";
+  const today = new Date().toISOString().slice(0, 7);
+  if (today < months[0].key || today > months[11].key) return "";
+  const idx = D.currentFiscalIndex();
+  if (idx < 1 || idx > 10) return "";
+  const now = (D.getBudgetRowsAsOf(idx) || []).find(function (r) { return r.id === catId; });
+  if (!now || !(now.plan > 0) || !(now.actual > 0)) return "";
+  const fmt = CBA.formatILSWhole;
+  if (now.actual > now.plan) return "הסעיף כבר עבר את התקציב השנתי ב-" + fmt(now.actual - now.plan) + ".";
+  if (!(now.expected > 0)) return "";
+  const ratio = now.actual / now.expected;
+  const proj = now.plan * ratio;
+  if (ratio > 1.05) {
+    let label = "";
+    for (let i = idx + 1; i < 12 && !label; i++) {
+      const r = (D.getBudgetRowsAsOf(i) || []).find(function (x) { return x.id === catId; });
+      if (r && r.expected * ratio >= now.plan) label = months[i].label;
+    }
+    return "בקצב הזה הסעיף יעבור את התקציב" + (label ? " ב" + label : "") +
+      " ויסיים את השנה בחריגה של כ-" + fmt(proj - now.plan) + ".";
+  }
+  if (ratio < 0.8 && idx >= 3) return "בקצב הזה יישארו בסוף השנה כ-" + fmt(now.plan - proj) + " שלא נוצלו.";
+  return "בקצב הזה הסעיף יסיים את השנה בתוך התקציב.";
+}
+function paceSentenceHTML(catId) {
+  const t = paceSentence(catId);
+  if (!t) return "";
+  const warn = /יעבור|כבר עבר/.test(t);
+  return '<div class="drawer__pace' + (warn ? " is-warn" : "") + '" title="לפי הביצוע עד עכשיו מול חלוקת התכנון החודשית של הסעיף">' + CBA.esc(t) + "</div>";
+}
+CBA.screens.budget._paceSentence = paceSentence;   /* לבדיקות */
+
 function openDrawer(catId) {
   closeDrawer();
   const pace = budgetView === "pace";
@@ -471,6 +512,7 @@ function openDrawer(catId) {
         <div>
           <div class="drawer__title">${CBA.esc(cat.name)}</div>
           <div class="drawer__sub">${subText}</div>
+          ${catId !== BUDGET_NOCAT ? paceSentenceHTML(catId) : ""}
         </div>
         <button class="drawer__close" data-close aria-label="סגור">×</button>
       </div>

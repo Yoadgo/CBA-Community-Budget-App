@@ -1418,7 +1418,7 @@
           /* 🔴 23.9 — בלי מילוי מראש: note עלול להחזיק סיבת חסימה או הערת
              החזרה של המנהל, והטקסט כאן נשלח לתושב. */
           value: "", placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
-          okText: "סיום וסגירה", required: !!t.repId,
+          okText: "סיום וסגירה", required: !!t.repId, draftFor: t.repId ? t : null,
           requiredMsg: "צריך לכתוב מה נעשה — המשפט נשלח לתושב."
         }).then(function (r) {
           if (!r) return;                           // ביטול — לא סוגרים
@@ -1450,7 +1450,7 @@
              פנימיים, וטקסט שממולא מראש כאן נשלח לתושב בלחיצה אחת. */
           value: t.flag === "ממתין לאישור" ? (t.note || "") : "",
           placeholder: "למשל: הממטרה הוחלפה והמערכת נבדקה",
-          okText: "אישור וסגירה", required: !!t.repId,
+          okText: "אישור וסגירה", required: !!t.repId, draftFor: t.repId ? t : null,
           requiredMsg: "צריך לכתוב מה נעשה — המשפט נשלח לתושב."
         }).then(function (r) {
           if (!r) return;
@@ -1468,6 +1468,37 @@
        *     אין להן לאן להישמר, ולכן הבורר פשוט לא מופיע.
        *  מחזיר Promise: {text, photos} או null בביטול.
        * ======================================================================== */
+      /* GTA2 (גל 15, 1.10.26) — "✨ טיוטה" למשפט שנשלח לתושב בסגירת דיווח.
+         ה-AI מקבל רק את פרטי המשימה (בלי שמות/טלפונים) ואת מה שכבר נכתב,
+         ומחזיר הצעה **לתוך התיבה** — נשלחת רק בלחיצה על הכפתור הרגיל, ואפשר
+         לערוך. כישלון: הודעה קטנה, התיבה לא משתנה. */
+      function gtDraftButton(host, ta, t, kind) {
+        if (!host || !ta || !(CBA.data && CBA.data.aiExtract)) return;
+        host.innerHTML = '<button type="button" class="gt-draft">✨ טיוטה לתושב</button><span class="gt-draft__msg"></span>';
+        var btn = host.querySelector(".gt-draft"), msg = host.querySelector(".gt-draft__msg");
+        btn.onclick = function () {
+          var ctx = [
+            "סוג: " + kind,
+            t.category && ("קטגוריה: " + t.category),
+            t.title && ("כותרת: " + t.title),
+            t.desc && ("תיאור הדיווח: " + String(t.desc).slice(0, 300)),
+            (t.place || t.area) && ("מיקום: " + (t.place || t.area)),
+            (t.flag === "ממתין לאישור" && t.note) && ("מה הצוות כתב: " + String(t.note).slice(0, 300)),
+            String(ta.value || "").trim() && ("טיוטה קיימת: " + String(ta.value).trim().slice(0, 400))
+          ].filter(Boolean).join("\n");
+          btn.disabled = true; msg.textContent = "כותב…";
+          CBA.data.aiExtract("gardenReply", { text: ctx }, function (res) {
+            btn.disabled = false;
+            var r = res && res.ok && res.fields && res.fields.reply;
+            if (!r) { msg.textContent = (res && res.error) || "לא הצלחנו לנסח. אפשר לכתוב ידנית."; return; }
+            ta.value = r;
+            ta.dispatchEvent(new Event("input", { bubbles: true }));
+            msg.textContent = "טיוטה — אפשר לערוך לפני השליחה";
+            ta.focus();
+          });
+        };
+      }
+
       function askWithPhotos(o) {
         var result = null, pk = null;
         var canPh = !!(CBA.photos && CBA.photos.picker &&
@@ -1476,6 +1507,7 @@
           title: o.title, message: o.message || "",
           html: '<textarea class="gd-inp" data-aw="t" rows="3" maxlength="600" placeholder="' +
                   esc(o.placeholder || "") + '"></textarea>' +
+                (o.draftFor ? '<div class="gt-draft-row" data-aw="draft"></div>' : '') +
                 '<p class="gp-note" data-aw="err" hidden style="color:#B91C1C"></p>' +
                 (canPh ? '<div data-aw="ph"></div>' : '') +
                 /* 23.9 — מרכז ההתראות: הערה מגיעה לתושב רק בסימון (כבוי מראש). */
@@ -1488,6 +1520,7 @@
           onMount: function (wrap) {
             var ta = wrap.querySelector('[data-aw="t"]');
             if (ta) ta.value = o.value || "";
+            if (o.draftFor) gtDraftButton(wrap.querySelector('[data-aw="draft"]'), ta, o.draftFor, "בוצע");
             var host = wrap.querySelector('[data-aw="ph"]');
             if (host) pk = CBA.photos.picker(host, 2);
           },
@@ -2176,6 +2209,7 @@
                   '<label class="gd-lbl">מה לכתוב לתושב <s>*</s></label>' +
                   '<textarea class="gd-inp" id="gt-why-t" rows="3" maxlength="600" ' +
                     'placeholder="למשל: בדקנו בשטח — העץ תקין ואינו מהווה סכנה."></textarea>' +
+                  '<div class="gt-draft-row" id="gt-why-draft"></div>' +
                   '<p class="gp-note">זה ייצא אליו במייל ויופיע לו באפליקציה. ' +
                   '"בוטל" לבדו אינו תשובה.</p>' +
                   /* 📷 23.9 — עד שתי תמונות, לא חובה. ר' askWithPhotos. */
@@ -2209,6 +2243,7 @@
               x.classList.toggle("is-picked", x === b);
             });
             wrap.querySelector("#gt-why").hidden = false;
+            gtDraftButton(wrap.querySelector("#gt-why-draft"), wrap.querySelector("#gt-why-t"), t, "סגירה בלי ביצוע — " + picked);
             wrap.querySelector("#gt-why-t").focus();
             return;
           }
