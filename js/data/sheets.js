@@ -928,10 +928,19 @@ CBA.sheets = (function () {
 
   // שולפת מהגיליון, מחילה על CBA.mock ומעדכנת מטמון. משותף בין load() (רענון הרקע
   // הראשוני) ובין refresh() (רענון תקופתי מאוחר יותר, ר' למטה) — קוד אחד, לא כפול.
+  /* ⏱️ שעון העלייה, 2.10.26 — מטען שכבר בדרך. נמדד באייפון: הציור הראשון
+     הגיע מ-Firestore אחרי 16ש', המטען המלא מהשרת עוד היה בדרך (9ש'), והסקר
+     הראשון (lastRev עדיין null) שלח **מטען מלא שני** של 6ש' — אותו מידע
+     פעמיים, בתור הפר-משתמש של Apps Script. כל עוד משיכה מלאה בדרך, הסקר
+     מדלג; התשובה שתגיע תעדכן את lastRev והמחזור הבא יהיה זול. */
+  var fullFetchInFlight = false;
+
   function fetchAndApply(hadCache, cb, isBackgroundRefresh) {
     var mySeq = ++seqCounter;   // נתפס כאן, ברגע השליחה — לא ברגע שהתשובה חוזרת
+    fullFetchInFlight = true;
 
     function useIt(payload) {
+      fullFetchInFlight = false;
       /* 🔴 נגזר כאן, לפני ש-`lastDomains` נדרס למטה — אחרת משיכה
          מלאה (רשת הביטחון של FULL_EVERY_MS) היתה מגיעה בלי רשימת
          תחומים, ומסך תלוי-תחום לא היה מתרענן. */
@@ -978,6 +987,7 @@ CBA.sheets = (function () {
     }
 
     function failed(err) {
+      fullFetchInFlight = false;
       console.error("[CBA] טעינה מהגיליון נכשלה:", err);
       if (!hadCache) cb(false, { source: "none" });
       else cb(true, { source: "cache-kept", error: String(err) });
@@ -1243,6 +1253,7 @@ CBA.sheets = (function () {
   }
 
   function refreshIfChanged(cb) {
+    if (fullFetchInFlight) { cb(true, { source: "in-flight" }); return; }   /* ר' fullFetchInFlight */
     if (!revSupported || lastRev === null || (Date.now() - lastFullFetch) > FULL_EVERY_MS) {
       refresh(cb);
       return;
