@@ -351,7 +351,8 @@ CBA.homeSchedule = (function () {
    *  ("תזכורת" לתושב ירדה בגל 2, 30.9 — ר' loadNext),
    *  ו"פרטים" שנפתחים במקום: תיאור, לו"ז, הזמנה, הוספה ליומן, שיתוף.
    * ========================================================================== */
-  var nx = { data: {}, rem: null, ts: 0, busy: false, open: {}, menu: null };
+  var nx = { data: {}, rem: null, ts: 0, busy: false, open: {}, menu: null, focus: "" };
+  var invImg = {};   /* 2.10 — תמונות הזמנה שכבר נטענו (מזהה אירוע → data URL / "" אם נכשל) */
   var NX_TTL = 60 * 1000;
   function myFam() {
     var u = (window.CBA && CBA.user) || {};
@@ -440,7 +441,12 @@ CBA.homeSchedule = (function () {
     var info = d.info || {};
     var cal = CBA.screens && CBA.screens.events && CBA.screens.events.calendarLinks;
     var gUrl = cal && cal.google ? cal.google(e) : "";
+    /* 2.10.26 (יועד) — כשיש הזמנה היא מוצגת בתוך הכרטיס הפתוח (כמו במסך
+       האירועים בטלפון). לחיצה עליה = מסך מלא. */
+    var inlineInv = !!info.hasImage;
     var more = isOpenMore ? '<div class="hm-nx__more">' +
+      (inlineInv ? '<button type="button" class="hm-nx__inv" data-nx-inv="' + esc(e.id) + '" data-nx-invimg="' + esc(e.id) + '" aria-label="ההזמנה במסך מלא">' +
+        (invImg[e.id] ? '<img src="' + esc(invImg[e.id]) + '" alt="ההזמנה לאירוע">' : '<span class="hm-nx__invph">טוען את ההזמנה…</span>') + '</button>' : "") +
       (e.description ? '<p class="hm-nx__desc" dir="auto">' + esc(String(e.description).slice(0, 600)) + '</p>' : "") +
       (info.schedule ? '<div class="hm-nx__sch">' + String(info.schedule).split(/\r?\n/).filter(function (l) { return l.trim(); }).slice(0, 12).map(function (l) {
           var m = l.trim().match(/^(\d{1,2}[:.]\d{2})\s*[—–\-·:]?\s*(.*)$/);
@@ -448,7 +454,7 @@ CBA.homeSchedule = (function () {
         }).join("") + '</div>' : "") +
       (!e.description && !info.schedule ? '<p class="hm-nx__desc is-muted">אין עוד פרטים לאירוע הזה.</p>' : "") +
       '<div class="hm-nx__acts">' +
-        (info.hasImage ? '<button type="button" class="hm-nx__b" data-nx-inv="' + esc(e.id) + '">הזמנה</button>' : "") +
+        (info.hasImage && !inlineInv ? '<button type="button" class="hm-nx__b" data-nx-inv="' + esc(e.id) + '">הזמנה</button>' : "") +
         (gUrl ? '<a class="hm-nx__b" href="' + esc(gUrl) + '" target="_blank" rel="noopener">Google</a>' : "") +
         '<button type="button" class="hm-nx__b" data-hm-apple="' + esc(e.id) + '">Apple</button>' +
         '<button type="button" class="hm-nx__b" data-nx-share="' + esc(e.id) + '">שיתוף</button>' +
@@ -470,8 +476,34 @@ CBA.homeSchedule = (function () {
     return list.map(nextCardHTML).join("");
   }
   function paintNext() {
-    var n = st.nextHost;
-    if (n && n.isConnected) n.innerHTML = nextHTML();
+    /* 2.10 — גם הגיליון וגם הבית: ציור-מחדש של הבית מחליף את st.nextHost,
+       והגיליון הפתוח היה מפסיק לקבל עדכונים (למשל ההזמנה שנטענת אחרי רגע). */
+    [st.nextHost, st.sheetHost].forEach(function (n, i, arr) {
+      if (!n || !n.isConnected || (i === 1 && n === arr[0])) return;
+      n.innerHTML = nextHTML();
+      fillInvites(n);
+      if (nx.focus && n === st.sheetHost) {
+        var fc = n.querySelector('[data-nx-invimg="' + nx.focus + '"]') || n.querySelector('[data-nx-more="' + nx.focus + '"]');
+        if (fc && fc.scrollIntoView) { try { fc.closest(".hm-nx").scrollIntoView({ block: "nearest" }); } catch (e) {} }
+      }
+    });
+  }
+  /* 2.10 — טעינת תמונות ההזמנה שבכרטיסים הפתוחים (פעם אחת לכל אירוע) */
+  function fillInvites(host) {
+    Array.prototype.forEach.call(host.querySelectorAll("[data-nx-invimg]"), function (b) {
+      var id = b.getAttribute("data-nx-invimg");
+      if (invImg[id] !== undefined) return;
+      invImg[id] = null;   /* בטעינה */
+      CBA.fb.readDoc("eventImages", id, function (err, d) {
+        var src = (!err && d && typeof d.image === "string" && d.image.indexOf("data:image/") === 0) ? d.image : "";
+        invImg[id] = src;
+        /* כל המקומות שמציגים את ההזמנה הזו (בית + גיליון), לא רק זה שביקש */
+        Array.prototype.forEach.call(document.querySelectorAll('[data-nx-invimg="' + id + '"]'), function (slot) {
+          slot.innerHTML = src ? '<img src="' + esc(src) + '" alt="ההזמנה לאירוע">' : '<span class="hm-nx__invph">ההזמנה לא נטענה — לחיצה לנסות שוב</span>';
+        });
+        if (!src) delete invImg[id];
+      });
+    });
   }
   function openInvite(id) {
     var e = findEvent(id);
@@ -952,12 +984,17 @@ CBA.homeSchedule = (function () {
   }
 
   /* ---- הגיליון: כרטיסי 29.9 המלאים (קהילה, תרבות, פתוח לאישור) ---- */
-  function openNextSheet() {
+  /* focusId (2.10.26, יועד) — לחיצה על "האירוע הבא" בבית פותחת את הגיליון
+     כשהכרטיס של האירוע הזה כבר פתוח, עם ההזמנה שלו בפנים. */
+  function openNextSheet(focusId) {
     if (!(CBA.ui && CBA.ui.sheet)) { if (CBA.navigate) CBA.navigate("events"); return; }
+    nx.focus = focusId ? String(focusId) : "";
+    if (nx.focus) nx.open[nx.focus] = true;
     var sh = CBA.ui.sheet({ key: "hm-next", label: "האירועים הבאים", sheetCls: "hm2-nxsheet",
       html: '<div class="hm2-sheet__t">האירועים הבאים</div><div class="hm2-nxlist"></div>' });
     var list = sh.wrap.querySelector(".hm2-nxlist");
     st.nextHost = list;
+    st.sheetHost = list;
     paintNext();
     sh.wrap.addEventListener("click", function (e) {
       /* מעבר ללוח האירועים / אישור הגעה ⇒ קודם סוגרים את הגיליון */

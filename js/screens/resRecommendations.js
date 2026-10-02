@@ -23,14 +23,16 @@ CBA.screens = CBA.screens || {};
 /* ============================================================================
  *  קונפיגורציה קבועה — קטגוריות, קבוצות-זרע, תוויות, צבעי קופות חולים
  * ========================================================================== */
+/* 2.10.26 (יועד) — "עסקים מתושבי השיכון" ראשונה ובולטת: בטלפון אריח ברוחב
+   שתי משבצות (rr2-catb--hero), במחשב ראשונה ברשימת הצד עם רקע משלה. */
 var RR_CATEGORIES = [
+  { id: "biz",      name: "עסקים מתושבי השיכון",           emoji: "🏘️", hero: true, sub: "עסקים של השכנים שלנו" },
   { id: "medicine", name: "רפואה",                       emoji: "⚕️" },
   { id: "beauty",   name: "יופי וטיפוח",                  emoji: "💇" },
   { id: "home",     name: "בית ומשפחה",                    emoji: "🏠" },
   { id: "car",      name: "רכב",                          emoji: "🚗" },
   { id: "shopping", name: "קניות ומשלוחים",                emoji: "🛒" },
-  { id: "food",     name: "אוכל ובילוי",                   emoji: "🍽️" },
-  { id: "biz",      name: "עסקים מתושבי השיכון",           emoji: "🏘️" }
+  { id: "food",     name: "אוכל ובילוי",                   emoji: "🍽️" }
 ];
 
 /* קבוצות-זרע — דוגמה מייצגת לכל קטגוריה, לא רשימה סופית. שם הקבוצה הוא
@@ -599,12 +601,14 @@ function rrPaintDesk(body) {
           '<input id="rr-q" class="field-input" placeholder="חיפוש בכל ההמלצות…" value="' + rrEsc(rrState.homeQuery) + '"></div></div>' +
         '<nav class="rr2-side__list" aria-label="קבוצות">' +
           nav.map(function (x) {
-            return '<div class="rr2-cat">' + x.cat.emoji + " " + rrEsc(x.cat.name) + "</div>" +
+            var grps = '<div class="rr2-cat">' + x.cat.emoji + " " + rrEsc(x.cat.name) + "</div>" +
               x.groups.map(function (g) {
                 return '<button type="button" class="rr2-grp' + (g.items.length ? "" : " is-empty") + '" data-g="' + rrEsc(g.name) + '">' +
                   '<span class="rr2-grp__e">' + g.emoji + '</span><span class="rr2-grp__n">' + rrEsc(g.name) + "</span>" +
                   '<span class="rr2-grp__c">' + (g.items.length || "ריק") + "</span></button>";
               }).join("");
+            /* 2.10 — הקטגוריה הבולטת (עסקים מתושבי השיכון) בתיבה משלה */
+            return x.cat.hero ? '<div class="rr2-side__hero">' + grps + "</div>" : grps;
           }).join("") +
           (admin && hasEmpty ? '<div class="rr2-admin-note">קבוצות בהירות עם "ריק" מוצגות רק למנהלים ולעורכים.</div>' : "") +
         "</nav>" +
@@ -704,9 +708,14 @@ function rrPaintMobile(body) {
     host.innerHTML =
       '<div class="rr2-catgrid">' +
         nav.map(function (x) {
-          return '<button type="button" class="rr2-catb' + (cur && x.cat.id === cur.cat.id ? " is-on" : "") + '" data-c="' + rrEsc(x.cat.id) + '">' +
-            '<span class="e">' + x.cat.emoji + '</span><span class="t">' + rrEsc(x.cat.name) + '</span><span class="n">' + x.total + "</span></button>";
+          var hero = !!x.cat.hero;
+          return '<button type="button" class="rr2-catb' + (hero ? " rr2-catb--hero" : "") + (cur && x.cat.id === cur.cat.id ? " is-on" : "") + '" data-c="' + rrEsc(x.cat.id) + '">' +
+            '<span class="e">' + x.cat.emoji + '</span>' +
+            (hero ? '<span class="tt"><span class="t">' + rrEsc(x.cat.name) + '</span><span class="s">' + rrEsc(x.cat.sub || "") + "</span></span>"
+                  : '<span class="t">' + rrEsc(x.cat.name) + "</span>") +
+            '<span class="n">' + x.total + "</span></button>";
         }).join("") +
+        /* 2.10 — "המלצה חדשה" בשורה מלאה מתחת לאריחים (האריח הרחב תפס את מקומו) */
         (canRecommend ? '<button type="button" class="rr2-catb rr2-catb--add" id="rr-add"><span class="e">＋</span><span class="t">המלצה חדשה</span></button>' : "") +
       "</div>" +
       (cur

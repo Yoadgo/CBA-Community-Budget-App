@@ -62,7 +62,9 @@ function serverBox(opts) {
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (opts.props || {})[k] || null,
       setProperty: (k, v) => { (opts.props = opts.props || {})[k] = v; } }) },
     CacheService: { getScriptCache: () => ({ remove: () => {} }) },
-    tourApplyV6_: () => { log.v6 = (log.v6 || 0) + 1; return 0; }
+    tourApplyV6_: () => { log.v6 = (log.v6 || 0) + 1; return 0; },
+    /* 2.10 — תיקוני ניסוח חד-פעמיים (נבדקים ב-test-tweaks-2026-10-02.js) */
+    tourFsPatchesRun_: () => { log.patches = (log.patches || 0) + 1; return { applied: 0, error: '' }; }
   };
   vm.createContext(box);
   vm.runInContext([
@@ -249,6 +251,7 @@ section('7ב. Q6 — Firebase הוא המקור: הגירה פעם אחת, וא�
   const before = s.log.writes.length;
   const o2 = s.box.tourSyncAll_({});
   ok('🔴🔴 ריצה שנייה: לא כותבת כלום (עריכה ב-Firebase לא נדרסת)', o2.source === 'firestore' && s.log.writes.length === before && s.log.v6 === 1);
+  ok('ובמקום ההעתקה — רק התיקונים החד-פעמיים', s.log.patches === 1);
 }
 
 section('8. "מה כבר ראיתי" — מסמך לכל uid');

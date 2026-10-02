@@ -285,3 +285,9 @@
 @media (max-width: 640px) {
   .hm-upnext { grid-template-columns: 1fr; gap: 10px; }
 }
+
+/* 2.10.26 — ההזמנה בתוך הכרטיס הפתוח בגיליון "האירועים הבאים" */
+.hm-nx__inv { display: block; width: 100%; border: 0; padding: 0; background: var(--hover, var(--hair)); border-radius: var(--r-in);
+  overflow: hidden; cursor: zoom-in; min-height: 120px; }
+.hm-nx__inv img { display: block; width: 100%; height: auto; max-height: 70vh; object-fit: contain; }
+.hm-nx__invph { display: grid; place-items: center; min-height: 120px; font-size: var(--t-13); color: var(--ink-2); }
