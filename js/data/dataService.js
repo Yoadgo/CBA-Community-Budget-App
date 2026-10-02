@@ -1938,11 +1938,27 @@ CBA.data = (function () {
   // בשימוש ההשלמה האוטומטית, שנחוצה גם למי שמנהל תקציב ואין לו הרשאת "תושבים";
   // getResidents המלאה נשארת למסך התושבים בלבד.
   var directoryCache = null;
+  /* ⏱️ 2.10.26 (שעון העלייה) — הספרייה (שם+משפחה+מזהה, בלי אימייל/טלפון)
+     נמשכה מהשרת ~4.5 שניות **בכל פתיחה**, רק כדי להשלים שמות קונים
+     בתנועות. עכשיו היא נשמרת במכשיר ל-24 שעות; `refreshResidents` (אחרי
+     כל שינוי בטאב תושבים) מוחקת אותה. השרת עדיין בודק הרשאה בכל משיכה —
+     המטמון קיים רק אצל מי שכבר קיבל אותה. */
+  var DIR_KEY = "cba_dir_v1", DIR_TTL_MS = 24 * 3600 * 1000;
+  function dirRead() {
+    try {
+      var o = JSON.parse(localStorage.getItem(DIR_KEY) || "null");
+      if (o && Array.isArray(o.rows) && (Date.now() - o.ts) < DIR_TTL_MS) return o.rows;
+    } catch (e) {}
+    return null;
+  }
+  function dirWrite(rows) { try { localStorage.setItem(DIR_KEY, JSON.stringify({ ts: Date.now(), rows: rows })); } catch (e) {} }
+  function dirForget() { try { localStorage.removeItem(DIR_KEY); } catch (e) {} }
   function getResidentDirectory(cb) {
+    if (!directoryCache) directoryCache = dirRead();
     if (directoryCache) { if (cb) cb({ ok: true, rows: directoryCache }); return; }
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "residentDirectory" }, function (res) {
-      if (res && res.ok) directoryCache = res.rows || [];
+      if (res && res.ok) { directoryCache = res.rows || []; dirWrite(directoryCache); }
       if (cb) cb(res);
     });
   }
@@ -5574,7 +5590,7 @@ CBA.data = (function () {
     },
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,
-    refreshResidents: function (cb) { residentsCache = null; directoryCache = null; communityCache = null; getResidents(cb); },
+    refreshResidents: function (cb) { residentsCache = null; directoryCache = null; dirForget(); communityCache = null; getResidents(cb); },
     residentPickerOptions: residentPickerOptions,
     familyDisplayName: familyDisplayName,
     personName: personName,
@@ -5954,7 +5970,13 @@ CBA.data = (function () {
        השרת גוזר את השורה ואת המשבצת מהמושב החתום. ר' Code.gs. */
     getMyProfile: function (cb) { CBA.sheets.get({ action: "myProfile" }, cb); },
     saveMyProfile: function (slot, fields, cb) {
-      CBA.sheets.postRead("saveMyProfile", { slot: slot, fields: fields }, cb);
+      CBA.sheets.postRead("saveMyProfile", { slot: slot, fields: fields }, function (res) {
+        /* ⏱️ 2.10.26 — הפרופיל השתנה ⇒ כרטיס "פערים" בבית חייב לשאול מחדש (ר' home.js). */
+        if (res && res.ok) {
+          try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf("cba_prof_gaps_v1:") === 0) localStorage.removeItem(k); }); } catch (e) {}
+        }
+        if (cb) cb(res);
+      });
     },
     submitProfileChange: function (field, value, slot, cb) {
       CBA.sheets.postRead("submitProfileChange", { field: field, value: value, slot: slot }, cb);

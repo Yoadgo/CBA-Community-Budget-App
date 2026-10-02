@@ -2521,8 +2521,28 @@
         ה-uid בעצמו. ר' handleFirebaseLink_ ב-Code.gs.
      ⚠️ שקט לחלוטין, כמו כל צעד 02: אין קולבק למשתמש ואין הודעה. המסמך הזה
         נחוץ רק לקריאות עתידיות מ-Firestore, ואין היום מסך שתלוי בו. */
+  /* ⏱️ 2.10.26 (שעון העלייה) — `firebaseLink` יצא **בכל כניסה** (3.5 שניות
+     בתור השרת) גם כשרשומת החבר כבר נכתבה בדיוק עם אותן הרשאות. עכשיו המכשיר
+     זוכר (uid + טביעת-אצבע של ההרשאות) ומדלג עד שבוע — או עד שמשהו בהרשאות
+     שחזרו מההתחברות משתנה (אז הטביעה שונה והקריאה יוצאת כרגיל).
+     ⚠️ נשמר רק כשהשרת גם רשם את ה-uid בגיליון (`remembered`), אחרת ננסה שוב. */
+  var FBLINK_KEY = "cba_fblink_v1", FBLINK_TTL_MS = 7 * 86400000;
+  function fbLinkFingerprint() {
+    var u = currentUser || {};
+    return [String(u.email || "").toLowerCase(), String(u.familyId || ""), u.isSuper ? 1 : 0,
+            u.isExternal ? 1 : 0, (u.perms || []).slice().sort().join(",")].join("|");
+  }
   function firebaseLinkMember() {
     if (!window.CBA || !CBA.fb || !CBA.fb.idToken) return;
+    var uid = "", fp = fbLinkFingerprint();
+    try { var st = CBA.fb.state && CBA.fb.state(); uid = (st && st.user && st.user.uid) || ""; } catch (e) {}
+    try {
+      var prev = JSON.parse(localStorage.getItem(FBLINK_KEY) || "null");
+      if (prev && uid && prev.uid === uid && prev.fp === fp && (Date.now() - prev.at) < FBLINK_TTL_MS) {
+        try { console.log("[CBA.fb] רשומת החבר כבר מעודכנת — מדלגים על firebaseLink"); } catch (e) {}
+        return;
+      }
+    } catch (e) {}
     CBA.fb.idToken(function (err, token) {
       if (err || !token) return;
       fetch(CBA.sheets.url + "?action=firebaseLink" +
@@ -2530,7 +2550,12 @@
             "&idToken=" + encodeURIComponent(token))
         .then(function (r) { return r.json(); })
         .then(function (res) {
-          if (res && res.ok) { try { console.log("[CBA.fb] נרשמה רשומת חבר", res.uid); } catch (e) {} }
+          if (res && res.ok) {
+            try { console.log("[CBA.fb] נרשמה רשומת חבר", res.uid); } catch (e) {}
+            if (res.remembered !== false) {
+              try { localStorage.setItem(FBLINK_KEY, JSON.stringify({ uid: res.uid || uid, fp: fp, at: Date.now() })); } catch (e) {}
+            }
+          }
           else { try { console.log("[CBA.fb] רשומת חבר נכשלה:", res && res.error); } catch (e) {} }
         })
         ["catch"](function () { /* שקט — ר' ההערה למעלה */ });

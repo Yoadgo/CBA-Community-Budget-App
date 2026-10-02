@@ -1150,7 +1150,10 @@ CBA.sheets = (function () {
   var lastRev = null;          // null = עוד לא ידוע
   var lastFullFetch = 0;
   var revSupported = false;    // נדלק רק אחרי שהשרת באמת החזיר rev
-  var FULL_EVERY_MS = 60000;
+  /* ⏱️ 2.10.26 — 60000 → 300000. רשת הביטחון הזו (עריכה ישירה בגיליון שלא
+     מעלה מונה) עלתה מטען מלא של 6–9 שניות-שרת **כל דקה** לכל משתמש פעיל,
+     בזמן שהדופק מ-Firestore כבר תופס כל שינוי דרך האפליקציה תוך שניות. */
+  var FULL_EVERY_MS = 300000;
 
   /* ---------- מונה לכל תחום (2026-09-08, צעד ב') ----------------------------
      המונה הגלובלי עלה בכל כתיבה, בכל נושא — ולכן תושב ששלח דיווח גינון גרם
@@ -1294,7 +1297,17 @@ CBA.sheets = (function () {
   }
 
   // ניקוי המטמון (למשל בעת יציאה/החלפת משתמש)
-  function clearCache() { dropTxCache(); try { localStorage.removeItem(CACHE_KEY); } catch (e) {} }
+  function clearCache() {
+    dropTxCache();
+    try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+    /* ⏱️ 2.10.26 — מטמוני העלייה החדשים (ספריית שמות, פערי פרופיל, רישום Firebase)
+       יורדים יחד עם מטמון המטען ביציאה — כדי שמכשיר משותף לא ישאיר נתוני משתמש קודם. */
+    try {
+      Object.keys(localStorage).forEach(function (k) {
+        if (k === "cba_dir_v1" || k === "cba_fblink_v1" || k.indexOf("cba_prof_gaps_v1:") === 0) localStorage.removeItem(k);
+      });
+    } catch (e) {}
+  }
 
   /* כתיבה לגיליון (2026-08-18 — שוכתב, ממצא 4.1 בדו"ח הבדיקה).
      קודם זה עבד ב-mode:"no-cors" ("שגר ושכח"): הבקשה יוצאת, אבל הדפדפן לא

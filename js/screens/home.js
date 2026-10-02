@@ -715,6 +715,21 @@ CBA.screens = CBA.screens || {};
 
   /* ---- פרטי משפחה לא מלאים (H27) — "הפרטים שלי", Apps Script, מטמון 30 דק׳ ---- */
   var profCache = { ts: 0, val: null };
+  /* ⏱️ 2.10.26 (שעון העלייה) — המטמון היה בזיכרון בלבד, ולכן **כל פתיחה**
+     של האפליקציה שילמה קריאת שרת של ~5 שניות רק כדי לדעת אם חסר טלפון.
+     עכשיו התוצאה (רשימת תוויות בלבד — "טלפון", "תאריך לידה" — בלי הערכים
+     עצמם) נשמרת במכשיר ל-30 דקות, לפי משתמש. שמירה ב"הפרטים שלי" מוחקת
+     אותה (ר' saveMyProfile ב-dataService). */
+  var PROF_KEY = "cba_prof_gaps_v1";
+  function profKey() { return PROF_KEY + ":" + String(u().email || "").toLowerCase(); }
+  function profRead() {
+    try {
+      var o = JSON.parse(localStorage.getItem(profKey()) || "null");
+      if (o && Array.isArray(o.val) && (Date.now() - o.ts) < 30 * 60 * 1000) return o;
+    } catch (e) {}
+    return null;
+  }
+  function profWrite(g) { try { localStorage.setItem(profKey(), JSON.stringify({ ts: Date.now(), val: g })); } catch (e) {} }
   function profileGaps(res) {
     if (!res || !res.ok || !res.slots) return null;
     var mine = res.slots[res.mySlot] || {}, v = mine.values || {}, gaps = [];
@@ -735,10 +750,11 @@ CBA.screens = CBA.screens || {};
   function loadProfile(container) {
     var me = u();
     if (me.isRoleSim || me.isExternal || !(CBA.data && CBA.data.getMyProfile)) { W.prof = []; W.profKnown = true; syncTodo(container); return; }
+    if (!(profCache.val && Date.now() - profCache.ts < 30 * 60 * 1000)) { var stored = profRead(); if (stored) profCache = stored; }
     if (profCache.val && Date.now() - profCache.ts < 30 * 60 * 1000) { W.prof = profCache.val; W.profKnown = true; syncTodo(container); return; }
     CBA.data.getMyProfile(function (res) {
       var g = profileGaps(res);
-      if (g) { profCache = { ts: Date.now(), val: g }; }
+      if (g) { profCache = { ts: Date.now(), val: g }; profWrite(g); }
       if (!W) return;
       W.prof = g || []; W.profKnown = true;
       syncTodo(container);
