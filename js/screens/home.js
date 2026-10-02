@@ -858,6 +858,7 @@ CBA.screens = CBA.screens || {};
       if (e) {
         var meta = [e.allDay ? "" : pad(e.date.getHours()) + ":" + pad(e.date.getMinutes()), e.location].filter(Boolean).join(" · ");
         el.hidden = false;
+        el.setAttribute("data-evid", e.id || "");   /* 2.10 — הגיליון נפתח על האירוע הזה */
         /* 30.9.26 (יועד): השם גדול, התאריך קטן — היה הפוך */
         el.innerHTML = '<small>האירוע הבא</small><b dir="auto">' + esc(e.title) + '</b>' +
           '<span>' + esc("יום " + WD[e.date.getDay()] + " " + dm(e.date) + (meta ? " · " + meta : "")) + '</span>';
@@ -884,7 +885,8 @@ CBA.screens = CBA.screens || {};
       var admin = e.target.closest("[data-admin-goto]");
       if (admin) { if (window.CBA.gotoAdmin) CBA.gotoAdmin(admin.dataset.adminGoto); return; }
       if (e.target.closest("[data-tour-new]")) { if (window.CBA.tour) CBA.tour.startNew(); return; }
-      if (e.target.closest("[data-hm-nextsheet]")) { if (CBA.homeSchedule && CBA.homeSchedule.openNextSheet) CBA.homeSchedule.openNextSheet(); return; }
+      var nxs = e.target.closest("[data-hm-nextsheet]");
+      if (nxs) { if (CBA.homeSchedule && CBA.homeSchedule.openNextSheet) CBA.homeSchedule.openNextSheet(nxs.getAttribute("data-evid") || ""); return; }
       var go = e.target.closest("[data-goto]");
       if (go && CBA.navigate) CBA.navigate(go.dataset.goto);
     });

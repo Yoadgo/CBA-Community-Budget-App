@@ -11064,7 +11064,8 @@ function tourSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var props = PropertiesService.getScriptProperties();
   if (props.getProperty(TOUR_FS_SOURCE_KEY) === '1') {
-    return { ok: true, wrote: 0, deleted: 0, skipped: 0, error: '', source: 'firestore' };
+    var pr = tourFsPatchesRun_(ss, props);   /* 2.10 — תיקוני ניסוח חד-פעמיים ישירות ב-Firestore */
+    return { ok: true, wrote: pr.applied, deleted: 0, skipped: 0, error: pr.error, source: 'firestore', patches: pr.applied };
   }
   var out = tourWriteFromSheet_(ss, true);
   if (out.ok) {
@@ -11072,6 +11073,68 @@ function tourSyncAll_(ss) {
     try { CacheService.getScriptCache().remove('cba_tour_rows'); CacheService.getScriptCache().remove('cba_tour_rows_fs'); } catch (e) {}
   }
   return out;
+}
+
+/* ============================================================================
+ *  2.10.2026 — שינויי ניסוח בסיור אחרי ש-Firebase הפך למקור (Q6)
+ * ----------------------------------------------------------------------------
+ *  כל תיקון הוא רשומה כאן עם מפתח ייחודי. הריצה השעתית (tourSyncAll_) מחילה
+ *  כל רשומה **פעם אחת** (דגל ב-Script Properties) ישירות על מסמך הסיור
+ *  ב-Firestore, ומעדכנת גם את טאב הגיבוי בגיליון כדי שיישאר תמונת מצב נכונה.
+ *  add — כרטיס חדש (אם המזהה כבר קיים — לא נוגעים). set — שדות לכרטיס קיים.
+ *  כרטיס חדש מקבל גרסה גבוהה מהקודמת ⇒ מי שכבר עבר את הסיור רואה רק אותו
+ *  ("יש משהו חדש בסיור"). */
+var TOUR_FS_PATCHES = [
+  { key: 'TOUR_PATCH_V7_RECS', doc: 'all',
+    add: { 'מזהה': 'recommendations', 'סדר': 5, 'גרסה': 7, 'קהל': 'כולם', 'פעיל': 'כן',
+      'כותרת': 'המלצות השיכון',
+      'טקסט': 'בעלי מקצוע ועסקים ששכנים עבדו איתם וממליצים עליהם — רופאים, אנשי מקצוע לבית, מסעדות, ועסקים של תושבי השיכון עצמם. מחפשים לפי שם או תחום, רואים כמה שכנים אהבו, ומוסיפים המלצה משלכם ב-"+ המלצה חדשה" — אפשר גם לצלם כרטיס ביקור, והפרטים מתמלאים לבד.',
+      'כפתור': 'להמלצות', 'מסך יעד': 'resRecommendations', 'אייקון': 'star' } }
+  /* כרטיס "שירותים" נשאר כמו שהוא (הכרעת יועד 2.10). */
+];
+
+function tourFsPatchesRun_(ss, props) {
+  var out = { applied: 0, error: '' };
+  TOUR_FS_PATCHES.forEach(function (p) {
+    if (props.getProperty(p.key) === '1') return;
+    try {
+      var path = fsDocPath_(FS_TOUR, p.doc);
+      var doc = fsGet_(path) || { steps: [], schema: 1 };
+      var steps = (doc.steps || []).slice();
+      var idOf = function (st) { return String((st && st['מזהה']) || '').trim(); };
+      if (p.set) steps.forEach(function (st) {
+        var f = p.set[idOf(st)];
+        if (f) Object.keys(f).forEach(function (k) { st[k] = f[k]; });
+      });
+      if (p.add && !steps.some(function (st) { return idOf(st) === p.add['מזהה']; })) {
+        steps.push(JSON.parse(JSON.stringify(p.add)));
+      }
+      steps.sort(tourStepCompare_);
+      fsSet_(path, { steps: steps, schema: doc.schema || 1, updatedAt: new Date() });
+      try { tourSheetMirrorPatch_(ss, p); } catch (e2) { Logger.log('tourSheetMirrorPatch_: ' + e2); }
+      props.setProperty(p.key, '1');
+      out.applied++;
+    } catch (e) { out.error = String(e); Logger.log('tourFsPatchesRun_ ' + p.key + ': ' + e); }
+  });
+  if (out.applied) { try { CacheService.getScriptCache().remove('cba_tour_rows_fs'); } catch (e) {} }
+  return out;
+}
+
+/** אותו תיקון גם בטאב הגיבוי (לא מקור — רק כדי שהגיבוי ישקף את המצב). */
+function tourSheetMirrorPatch_(ss, p) {
+  var sh = ensureTourSheet_(ss || SpreadsheetApp.getActiveSpreadsheet());
+  var values = sh.getDataRange().getValues();
+  var head = values[0].map(function (h) { return String(h).trim(); });
+  var col = {}; head.forEach(function (h, i) { col[h] = i; });
+  if (col['מזהה'] === undefined) return;
+  var have = false;
+  for (var r = 1; r < values.length; r++) {
+    var id = String(values[r][col['מזהה']] || '').trim();
+    if (p.add && id === p.add['מזהה']) have = true;
+    var f = p.set && p.set[id];
+    if (f) Object.keys(f).forEach(function (k) { if (col[k] !== undefined) sh.getRange(r + 1, col[k] + 1).setValue(f[k]); });
+  }
+  if (p.add && !have) sh.appendRow(head.map(function (h) { return p.add[h] === undefined ? '' : p.add[h]; }));
 }
 
 /* ההעתקה הישנה (גיליון ← Firestore). רצה עכשיו רק בהגירה של Q6. */

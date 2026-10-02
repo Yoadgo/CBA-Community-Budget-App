@@ -3037,6 +3037,20 @@ button.is-busy,
 .rr2-catb.is-on { background: var(--action); color: #fff; }
 .rr2-catb.is-on .n { color: rgba(255,255,255,.7); }
 .rr2-catb--add { background: transparent; box-shadow: none; border: 1.5px dashed #C9CED6; color: var(--text-soft); }
+/* 2.10.26 — "עסקים מתושבי השיכון": אריח ברוחב שתי משבצות, ו"המלצה חדשה" בשורה מלאה */
+.rr2-catb--hero { grid-column: span 2; flex-direction: row; justify-content: flex-start; gap: 10px; padding: 10px 12px;
+  text-align: start; background: var(--dom-svc-bg); box-shadow:none; }
+.rr2-catb--hero .e { font-size: calc(26px * var(--fs, 1)); }
+.rr2-catb--hero .tt { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.rr2-catb--hero .t { font-size: var(--t-13); line-height: 1.25; }
+.rr2-catb--hero .s { font-size: var(--t-11); font-weight: 500; color: var(--dom-svc); }
+.rr2-catb--hero .n { align-self: center; }
+.rr2-catb--hero.is-on { background: var(--action); }
+.rr2-catb--hero.is-on .s { color: inherit; opacity: .75; }
+.rr2-catgrid .rr2-catb--add { grid-column: 1 / -1; min-height: 44px; flex-direction: row; gap: 6px; }
+.rr2-catgrid .rr2-catb--add .e { font-size: var(--t-15); }
+.rr2-side__hero { background: var(--dom-svc-bg); border-radius: var(--r-in); padding: 0 4px 6px; margin-bottom: 6px; }
+.rr2-side__hero .rr2-cat { color: var(--dom-svc); }
 .rr2-mhead { font-size: calc(12.5px * var(--fs, 1)); font-weight: 800; color: var(--text-muted); margin: 0 2px 6px; }
 .rr2-mcount { font-size: calc(12.5px * var(--fs, 1)); color: var(--text-muted); margin: 0 2px 6px; }
 .rr2-glist { background: var(--surface); border-radius: 14px; box-shadow: var(--rr2-ring); overflow: hidden; }
