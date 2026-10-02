@@ -782,6 +782,7 @@ CBA.sheets = (function () {
     }
     var timer = setTimeout(function () {
       try { if (ctl) ctl.abort(); } catch (e) {}
+      try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("המטען לא חזר בזמן"); } catch (e) {}
       finish(new Error("המטען לא חזר בזמן (" + Math.round(PAYLOAD_TIMEOUT_MS / 1000) + " שניות)"));
     }, PAYLOAD_TIMEOUT_MS);
     fetch(API_URL + "?session=" + encodeURIComponent(authSession()) + "&slim=" + slim,

@@ -198,6 +198,18 @@ CBA.screens = CBA.screens || {};
     }).join("");
   }
 
+  /* שעון העלייה (2.10.26) — חמש הפתיחות האחרונות של האפליקציה **במכשיר הזה**,
+     כפי שנרשמו ב-diag.js: שלבים, קריאות רשת, וקבצים. הכול מהזיכרון המקומי. */
+  function bootsHTML() {
+    var list = (CBA.diag && CBA.diag.boots) ? CBA.diag.boots() : [];
+    if (!list.length) return '<div class="hub-empty">עדיין לא נרשמה אף עלייה במכשיר הזה.</div>';
+    return list.map(function (b) {
+      var lines = CBA.diag.bootLines(b);
+      return '<div class="hub-row hub-boot"><span>' + esc(lines[0] || "") + "</span></div>" +
+        lines.slice(1).map(function (l) { return '<div class="hub-note hub-boot__line">' + esc(l) + "</div>"; }).join("");
+    }).join("");
+  }
+
   function drawDiag(pane) {
     var pulseBlock = dg.pulseErr
       ? '<div class="hub-note hub-note--err">' + esc(dg.pulseErr) + "</div>"
@@ -211,6 +223,7 @@ CBA.screens = CBA.screens || {};
         (dg.pulse ? chartHTML() : '<div class="hub-empty">טוען…</div>') + "</div>" +
       '<div class="card hub-card" id="hub-last-run"><div class="hub-h">לאן הלך הזמן בריצה האחרונה</div>' +
         (dg.pulse ? stagesHTML() : '<div class="hub-empty">טוען…</div>') + "</div>" +
+      '<div class="card hub-card"><div class="hub-h">עליות אחרונות במכשיר הזה<span>שעון העלייה · מה לקח זמן בפתיחה</span></div>' + bootsHTML() + "</div>" +
       '<div class="card hub-card"><div class="hub-h">השוואת פריט<span>מסמך Firestore מול שורת הגיליון</span></div>' + compareHTML() + "</div>" +
       '<div class="card hub-card"><div class="hub-h">מה חוזר בדיווחים<span>30 יום אחרונים</span></div>' + recurringHTML() + "</div>";
     wireDiag(pane);

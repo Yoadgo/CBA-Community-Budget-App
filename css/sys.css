@@ -177,3 +177,7 @@
 .hub-key--hi { background: var(--warn); }
 .hub-key--skip { background: var(--border); }
 .hub-axisrow { display: flex; justify-content: space-between; font-size: calc(11.5px * var(--fs, 1)); color: var(--text-muted); margin-top: 3px; }
+
+/* שעון העלייה (2.10.26) — כרטיס "עליות אחרונות" במצב המערכת */
+.hub-boot { margin-top: 14px; font-weight: 600; }
+.hub-boot__line { margin-top: 4px; word-break: break-word; direction: rtl; }

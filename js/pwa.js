@@ -98,6 +98,7 @@ CBA.pwa = (function () {
     if (reloading || !updateReady) return;
     if (!safeToReload()) return;    // עסוקים — ננסה שוב במחזור הבא
     reloading = true;
+    try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("רענון לגרסה חדשה"); } catch (e) {}
     try { CBA.ui.toast("עודכנה גרסה חדשה — מרעננים…"); } catch (e) {}
     setTimeout(function () { location.reload(); }, 1200);
   }
@@ -120,6 +121,8 @@ CBA.pwa = (function () {
         reg.addEventListener("updatefound", function () {
           var sw = reg.installing;
           if (!sw) return;
+          /* שעון העלייה — רק עדכון (יש כבר גרסה ששולטת), לא התקנה ראשונה */
+          try { if (navigator.serviceWorker.controller && window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("גרסה חדשה מתקינה"); } catch (e) {}
           sw.addEventListener("statechange", function () {
             // "מותקן" + יש כבר גרסה ששולטת = זה עדכון, לא התקנה ראשונה.
             // בהתקנה ראשונה אין מה לרענן, והמשתמש לא אמור להרגיש כלום.

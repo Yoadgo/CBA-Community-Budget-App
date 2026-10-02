@@ -89,6 +89,7 @@ CBA.fb = (function () {
   var userWaiters = [];
 
   function settleUser(u) {
+    try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark((u ? "Firebase מחובר" : "Firebase בלי משתמש")); } catch (e) {}   /* שעון העלייה */
     pendingSignIn = false;
     var list = userWaiters; userWaiters = [];
     list.forEach(function (fn) { try { fn(u); } catch (e) {} });

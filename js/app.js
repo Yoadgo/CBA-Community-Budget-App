@@ -2039,6 +2039,7 @@
 
   /* --- מסך כניסה חוסם: חובה להתחבר לפני שרואים את האפליקציה --- */
   function showLoginGate() {
+    try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("מסך כניסה"); } catch (e) {}   /* שעון העלייה (2.10.26) */
     let gate = document.getElementById("login-gate");
     if (!gate) {
       gate = document.createElement("div");
@@ -2544,6 +2545,7 @@
        דרך מטען פתיחה", ומוחק עריכה פתוחה. אותו משתמש כבר מחובר — מתעלמים. */
     if (inited && currentUser && resp && /^auto/.test(String(resp.select_by || ""))) return;
     gisDisarm();   // התשובה הגיעה — אין "תקיעה" (ר' רשת הביטחון מעל hideLoginGate)
+    try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("Google אישר"); } catch (e) {}
     loginError = null;
     showLoginConnecting();   // גוגל כבר סיימה; עכשיו מחכים לשרת שלנו — תראו את זה, לא מסך ריק
     /* LGB1 (גל 9, 1.10.26) — טוקן Google בגוף POST ולא בכתובת. ⚠️ שרת שעוד לא עבר דיפלוי
@@ -2558,6 +2560,7 @@
           return onGoogleLogin(Object.assign({}, resp, { _viaGet: true }));
         }
         if (data && data.ok && data.authorized) {
+          try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("השרת אישר כניסה"); } catch (e) {}
           currentUser = data;
           /* 🔴 אותה סיבה כמו בנתיב עליית-העמוד למטה: הזהות נקבעת **לפני**
              המשיכה, כי הטעינה הקרה מ-Firestore גוזרת את השאילתה שלה
@@ -2613,7 +2616,7 @@
           showLoginGate();
         }
       })
-      .catch(function () { loginError = "שגיאת תקשורת מול השרת."; blockGisAuto(); showLoginGate(); });
+      .catch(function () { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("כניסה נכשלה", "שגיאת תקשורת"); } catch (e) {} loginError = "שגיאת תקשורת מול השרת."; blockGisAuto(); showLoginGate(); });
   }
 
   /* ============================================================================
@@ -3016,6 +3019,7 @@
   }
 
   function sheetsLoadHandler(ok, info) {
+    try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark((ok ? "מטען חזר" : "מטען נכשל"), info && info.source); } catch (e) {}   /* שעון העלייה */
     window.CBA.connected = CBA.sheets.isConnected();
 
     if (info && info.source === "cache") {
@@ -3048,6 +3052,7 @@
       // ציור ראשון — יש לנו נתונים אמיתיים (מהרשת עכשיו, או מהמטמון כגיבוי
       // אחרי שהרשת נכשלה — "cache-kept" למעלה כבר החיל אותם על CBA.mock)
       inited = true;
+      try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("ציור ראשון"); } catch (e) {}
       /* 🔴 הפעימה החיה — כאן הזהות כבר משוחזרת בוודאות. */
       if (window.CBA.startPulse) window.CBA.startPulse();
       document.body.classList.remove("app-booting");   // הניווט הופך לפעיל בדיוק עכשיו, לא לפני
@@ -3055,6 +3060,8 @@
       if (currentUser) { routeByRole(); }
       else { applyUser(); AREAS = JSON.parse(JSON.stringify(AREAS_ALL)); initialRoute("resident"); }   // אורח מאחורי הגייט — שלד מלא, לא נגיש בפועל
       bootReveal();
+      /* שעון העלייה (2.10.26): "מוכן" = עמוד הבית קיבל גם את homeExtras (או תקרה של 12ש'). */
+      hxWait(function () { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("עמוד הבית מוכן"); } catch (e) {} try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("boot-done"); } catch (e) {} }, 12000);
       /* ⏱️ שתי הקריאות האלה נדחות בכוונה (2026-09-09).
          נמדד חי: ברגע שהמטען הראשי חוזר, **שמונה** קריאות משנה יוצאות באותה
          שנייה. ל-Apps Script יש תור פר-משתמש, וכולן נלחמות עליו — באותה
@@ -3123,7 +3130,7 @@
      מסלול שרץ לפני המטען נגע במצב שהמטען עצמו ממלא.
      ⚠️ `applyUser` אידמפוטנטית ותלויה רק ב-`currentUser` שכבר נטען
         מ-`loadSession()` למעלה — היא לא נוגעת בשום נתון מהגיליון. */
-  if (currentUser) { applyUser(); CBA.sheets.load(sheetsLoadHandler); }
+  if (currentUser) { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("מושב שמור — מושכים מטען"); } catch (e) {} applyUser(); CBA.sheets.load(sheetsLoadHandler); }
 
   /* --- רענון תקופתי (2026-08-05, כמה סבבים לבקשת יועד — קצב הלך והואץ, ולבסוף
      ביקש שהקצב המהיר יפעל רק כל עוד הוא בפועל משתמש באפליקציה, כדי לא "לבזבז"

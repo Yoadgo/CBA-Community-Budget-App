@@ -304,6 +304,10 @@ CBA.diag = (function () {
         return k + " " + (x.source || "?") + " " + (x.ms == null ? "?" : x.ms) + "ms" + (x.why ? " (" + x.why + ")" : "");
       }).join(" | "));
     } catch (e) {}
+    try {
+      var lastBoot = boots()[0];
+      if (lastBoot) { lines.push("עלייה אחרונה:"); bootLines(lastBoot).forEach(function (l) { lines.push("  " + l); }); }
+    } catch (e) {}
     lines.push("שגיאות (" + errors.length + "):");
     errors.forEach(function (e) { lines.push("  " + e.line + (e.n > 1 ? "  (×" + e.n + ")" : "")); });
     lines.push("שובל פעולות:");
@@ -312,9 +316,224 @@ CBA.diag = (function () {
     return clean(lines.join("\n"));
   }
 
+  /* ==========================================================================
+   *  4. שעון העלייה   (2.10.2026 — "למה הפתיחה לוקחת רבע שעה?")
+   * --------------------------------------------------------------------------
+   *  מה זה עושה, בשפה פשוטה: מהרגע שהעמוד מתחיל להיטען ועד שעמוד הבית מוכן,
+   *  נרשם כאן מתי קרה כל שלב (מסך הכניסה, אישור Google, תשובת השרת, המטען,
+   *  הציור הראשון) וכמה זמן לקחה **כל** קריאת רשת שיצאה בדרך — לשרת
+   *  (Apps Script), ל-Firestore ולקבצי ה-SDK. בסוף העלייה (או אחרי 3 דקות,
+   *  המוקדם מביניהם) התוצאה נשמרת במכשיר, חמש העליות האחרונות בלבד.
+   *
+   *  ⚠️ **זה לא מודד ביצועים כדי "לשפר אוטומטית" כלום.** זה רק רושם, כדי
+   *     שאפשר יהיה לראות בטלפון עצמו — במסך "מצב המערכת" ובדיווח תקלה —
+   *     איפה הזמן הלך. בלי זה כל אבחון של איטיות בטלפון הוא ניחוש.
+   *
+   *  🔒 פרטיות: נרשמות רק **תוויות** של קריאות (שם הפעולה, המארח), לעולם לא
+   *     כתובות מלאות, לא אסימוני מושב, לא גוף בקשה ולא תשובה. אותו clean()
+   *     כמו בשאר הקובץ רץ על כל תווית לפני שהיא נשמרת.
+   *
+   *  ⚠️ העטיפה של fetch/XHR מעבירה את כל הארגומנטים כמו שהם ומחזירה את
+   *     אותה הבטחה — היא לא נוגעת ב-AbortController, בכותרות או בגוף.
+   *     כל כישלון בתוך הרישום עצמו נבלע; הקריאה המקורית ממשיכה רגיל.
+   * ======================================================================== */
+  var BOOT_KEY = "cba_boot_log";
+  var BOOT_KEEP = 5;
+  var BOOT_WINDOW_MS = 180000;
+  var BOOT_CALLS_MAX = 80;
+  var boot = { at: new Date().toISOString(), marks: [], calls: [], done: false, hidden: 0 };
+  var bootSaved = false;
+
+  function bnow() {
+    try { return Math.round(performance.now()); } catch (e) { return Date.now() - started; }
+  }
+
+  /** CBA.diag.mark("שם-שלב") — נקרא מהקוד במקומות המעטים שחשובים לעלייה. */
+  function mark(name, extra) {
+    try {
+      if (boot.done) return;
+      var last = boot.marks[boot.marks.length - 1];
+      if (last && last.n === name && extra == null) return;   /* אותו שלב פעמיים ברצף — לא מעניין */
+      var m = { t: bnow(), n: cut(clean(name), 40) };
+      if (extra != null) m.x = cut(clean(String(extra)), 60);
+      boot.marks.push(m);
+      if (boot.marks.length > 60) boot.marks.shift();
+      if (name === "boot-done") bootFinish(true);
+    } catch (e) {}
+  }
+
+  /* תווית קצרה ובטוחה לכל קריאת רשת: לשרת שלנו — שם הפעולה בלבד;
+     ל-Firestore/גוגל — המארח ושם המשאב; לקבצי האתר — לא נרשם (יש להם
+     performance.getEntries). */
+  function callLabel(url, init) {
+    var u;
+    try { u = new URL(String(url), location.href); } catch (e) { return ""; }
+    var h = u.host, p = u.pathname;
+    if (/script\.google(usercontent)?\.com$/.test(h)) {
+      var a = u.searchParams.get("action") || "";
+      if (!a && init && typeof init.body === "string") {
+        try { a = JSON.parse(init.body).action || ""; } catch (e) { a = "post"; }
+      }
+      if (!a && init && init.method && String(init.method).toUpperCase() === "POST") a = "post";
+      return "שרת:" + (a || "מטען");
+    }
+    if (/firestore\.googleapis\.com$/.test(h)) {
+      var op = (p.match(/\/(Listen|Write|BatchGet|RunQuery|Commit)\b/) || [])[1] || "קריאה";
+      return "Firestore:" + op;
+    }
+    if (/identitytoolkit|securetoken/.test(h)) return "Firebase:אימות";
+    if (/gstatic\.com$/.test(h)) return "SDK:" + (p.split("/").pop() || "").replace(/\.js$/, "");
+    if (/accounts\.google\.com$/.test(h)) return "Google:כניסה";
+    if (h === location.host) return "";
+    return "אחר:" + h;
+  }
+
+  function callStart(label) {
+    if (!label || boot.done) return null;
+    var rec = { l: label, s: bnow(), d: null, st: "" };
+    if (boot.calls.length >= BOOT_CALLS_MAX) return null;
+    boot.calls.push(rec);
+    return rec;
+  }
+  function callEnd(rec, status) {
+    if (!rec) return;
+    rec.d = bnow() - rec.s;
+    rec.st = String(status == null ? "" : status);
+  }
+
+  /* ---- עטיפת fetch ---- */
+  try {
+    var origFetch = window.fetch;
+    if (typeof origFetch === "function") {
+      window.fetch = function (input, init) {
+        var rec = null;
+        try {
+          var url = (typeof input === "string") ? input : (input && input.url) || "";
+          rec = callStart(callLabel(url, init || (input && input.method ? { method: input.method } : null)));
+        } catch (e) { rec = null; }
+        var p = origFetch.apply(window, arguments);
+        if (rec && p && typeof p.then === "function") {
+          p.then(function (r) { callEnd(rec, r && r.status); },
+                 function (err) { callEnd(rec, (err && err.name === "AbortError") ? "בוטל" : "שגיאה"); });
+        }
+        return p;
+      };
+    }
+  } catch (e) {}
+
+  /* ---- עטיפת XMLHttpRequest (העלאות עם אחוזי התקדמות) ---- */
+  try {
+    var XO = XMLHttpRequest.prototype.open, XS = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (method, url) {
+      try { this.__cbaLabel = callLabel(url, { method: method }); } catch (e) {}
+      return XO.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function () {
+      try {
+        var rec = callStart(this.__cbaLabel);
+        if (rec) {
+          var self = this;
+          this.addEventListener("loadend", function () { callEnd(rec, self.status); });
+        }
+      } catch (e) {}
+      return XS.apply(this, arguments);
+    };
+  } catch (e) {}
+
+  /* ---- סימנים אוטומטיים ---- */
+  document.addEventListener("DOMContentLoaded", function () { mark("קבצים נטענו"); });
+  window.addEventListener("load", function () {
+    try {
+      var sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+      mark("עמוד נטען", sw ? "service worker פעיל" : "בלי service worker");
+    } catch (e) { mark("עמוד נטען"); }
+  });
+  document.addEventListener("visibilitychange", function () {
+    try {
+      if (boot.done) return;
+      if (document.hidden) { boot.hidden++; mark("האפליקציה ברקע"); }
+      else mark("האפליקציה חזרה לקדמה");
+    } catch (e) {}
+  });
+  window.addEventListener("pagehide", function () { bootFinish(false); });
+  setTimeout(function () { bootFinish(false); }, BOOT_WINDOW_MS);
+
+  /* סיכום הקבצים של האתר עצמו: כמה הגיעו מהמטמון וכמה מהרשת. ב-Safari
+     transferSize של משאב מהמטמון הוא 0, ולכן זה אומדן ולא ספירה מדויקת. */
+  function filesSummary() {
+    try {
+      var all = performance.getEntriesByType("resource").filter(function (r) {
+        try { return new URL(r.name).host === location.host; } catch (e) { return false; }
+      });
+      var net = 0, kb = 0, last = 0;
+      all.forEach(function (r) {
+        if (r.transferSize > 0) { net++; kb += r.transferSize; }
+        if (r.responseEnd > last) last = r.responseEnd;
+      });
+      return { n: all.length, net: net, kb: Math.round(kb / 1024), lastMs: Math.round(last) };
+    } catch (e) { return null; }
+  }
+
+  function bootFinish(complete) {
+    if (bootSaved) return;
+    bootSaved = true;
+    boot.done = true;
+    boot.complete = !!complete;
+    boot.total = bnow();
+    boot.ver = clientVersion();
+    boot.ua = browser();
+    boot.net = net();
+    boot.files = filesSummary();
+    try {
+      var perf = CBA.perf || {};
+      boot.reads = Object.keys(perf).map(function (k) {
+        var x = perf[k] || {};
+        return k + " " + (x.source || "?") + " " + (x.ms == null ? "?" : x.ms + "ms");
+      }).slice(0, 20);
+    } catch (e) {}
+    try {
+      var list = [];
+      try { list = JSON.parse(localStorage.getItem(BOOT_KEY) || "[]"); } catch (e) { list = []; }
+      if (!Array.isArray(list)) list = [];
+      list.push(boot);
+      while (list.length > BOOT_KEEP) list.shift();
+      localStorage.setItem(BOOT_KEY, JSON.stringify(list));
+    } catch (e) { /* אין אחסון — העלייה פשוט לא נשמרת */ }
+  }
+
+  /** חמש העליות האחרונות (האחרונה ראשונה), כולל הנוכחית אם כבר הסתיימה. */
+  function boots() {
+    var list = [];
+    try { list = JSON.parse(localStorage.getItem(BOOT_KEY) || "[]"); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    if (!bootSaved) list.push(Object.assign({}, boot, { live: true, total: bnow() }));
+    return list.slice().reverse();
+  }
+
+  function sec(ms) { return ms == null ? "?" : (Math.round(ms / 100) / 10) + "ש'"; }
+
+  /** שורות טקסט לעלייה אחת — להדבקה בשיחה ולדיווח. */
+  function bootLines(b) {
+    if (!b) return [];
+    var d = new Date(b.at);
+    function p(n) { return n < 10 ? "0" + n : String(n); }
+    var when = isNaN(d.getTime()) ? "?" : p(d.getDate()) + "." + p(d.getMonth() + 1) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+    var head = "עלייה " + when + " · גרסה " + (b.ver || "?") + " · " + (b.ua || "") + " · " + (b.net || "") +
+               " · סה\"כ " + sec(b.total) + (b.live ? " (עדיין רצה)" : (b.complete ? "" : " (לא הושלמה)")) +
+               (b.hidden ? " · ברקע " + b.hidden + " פעמים" : "");
+    var marks = (b.marks || []).filter(function (m) { return m.n !== "boot-done"; }).map(function (m) { return m.n + (m.x ? " [" + m.x + "]" : "") + " " + sec(m.t); }).join(" ← ");
+    var calls = (b.calls || []).map(function (c) { return c.l + " " + sec(c.d) + (c.st && c.st !== "200" ? " (" + c.st + ")" : ""); }).join(" | ");
+    var files = b.files ? "קבצי האתר: " + b.files.n + " (מהרשת " + b.files.net + ", " + b.files.kb + "KB) עד " + sec(b.files.lastMs) : "";
+    return [head, "שלבים: " + (marks || "—"), "קריאות: " + (calls || "—"), files,
+            (b.reads && b.reads.length) ? "טעינות Firestore: " + b.reads.join(" | ") : ""].filter(Boolean);
+  }
+
   return {
     snapshot: snapshot,
     pack: pack,
+    mark: mark,
+    boots: boots,
+    bootLines: bootLines,
     clean: clean,
     extraLine: extraLine,
     log: log,
