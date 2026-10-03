@@ -9354,7 +9354,11 @@ function ensureGymSheets_(ss) {
     return !existing[String(row[0]).trim() + '|' + String(row[1]).trim()];
   });
   if (toAdd.length) {
-    cfg.getRange(cfg.getLastRow() + 1, 1, toAdd.length, GYM_SETTINGS_HEADERS.length).setValues(toAdd);
+    var seedStart = cfg.getLastRow() + 1;
+    /* 🔴 עמודה E (תוכן) = טקסט רגיל, לפני הכתיבה. אחרת Sheets הופך את
+       '0606' למספר 606 והאפס מההתחלה נעלם (באג 3.10.26). */
+    cfg.getRange(seedStart, 5, toAdd.length, 1).setNumberFormat('@');
+    cfg.getRange(seedStart, 1, toAdd.length, GYM_SETTINGS_HEADERS.length).setValues(toAdd);
   }
 
   ensureGymQuestionCols_(ss, main, cfg);
@@ -10777,11 +10781,13 @@ function updateGymSetting_(ss, body) {
     if (rowIndex === -1) {
       var t = Math.max(cfg.getLastRow(), 1) + 1;
       if (cfg.getMaxRows() < t) cfg.insertRowsAfter(cfg.getMaxRows(), t - cfg.getMaxRows());
+      cfg.getRange(t, 5).setNumberFormat('@'); // טקסט רגיל — שומר אפס מוביל (0606)
       cfg.getRange(t, 1, 1, GYM_SETTINGS_HEADERS.length).setValues([
         ['הגדרה', key, '', key, value, '', '', '', 'כן', '']
       ]);
     } else {
-      cfg.getRange(rowIndex, 5).setValue(value); // עמודה E = תוכן
+      /* 🔴 קודם פורמט טקסט ורק אחריו הערך — אחרת "0606" נשמר כמספר 606 */
+      cfg.getRange(rowIndex, 5).setNumberFormat('@').setValue(value); // עמודה E = תוכן
     }
     return { ok: true, key: key, value: value };
   } catch (err) {

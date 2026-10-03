@@ -521,7 +521,7 @@ CBA.screens.residents = {
       var hay = [resVal(r, c.family), resVal(r, c.house)]
         .concat(c.firstName.map(function (k) { return resVal(r, k); }))
         .concat(c.email.map(function (k) { return resVal(r, k); }))
-        .concat(c.kids ? [resVal(r, c.kids)] : [])
+        .concat(c.kids ? [resKidsText(resVal(r, c.kids))] : [])
         .join(" ").toLowerCase();
       return hay.indexOf(q) !== -1;
     });
@@ -620,7 +620,7 @@ function resRowHTML(r, c, idx) {
   // מקצועות ושמות ילדים (2026-08-07) — שתי עמודות משלהן, כי זו בדיוק הסיבה
   // שממלאים אותן: לדעת מי גר איפה, במה הוא עוסק ומי הילדים.
   var prof = c.profession.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" · ");
-  var kids = resVal(r, c.kids);
+  var kids = resKidsText(resVal(r, c.kids));
   // חיווי "תפקיד בוועד" (סעיף 8) — מואפר, לקריאה בלבד; ר' resRoleLine למעלה.
   var roleLine = resRoleLine(r, c);
   return '<div class="tx-row res-row' + (active ? "" : " is-left") + '" data-res-row="' + (idx + 2) + '" data-res-idx="' + idx + '">' +
@@ -639,6 +639,33 @@ function resRowHTML(r, c, idx) {
   '</div>';
 }
 
+/* שמות ילדים לתצוגה (3.10.26). מאז "הפרטים שלי" v2 התא בגיליון יכול להכיל JSON
+   של [{name,dob}] ולא רק טקסט חופשי — ורשימת התושבים של המנהל הציגה את ה-JSON
+   הגולמי (וגם החיפוש התאים לתאריכי לידה). JSON ⇒ "אליה (12), אליון (14)" (גיל
+   מחושב); טקסט ישן ⇒ כמו שהוא. אותו פענוח כמו dirKidsText ב-resident.js. */
+function resKidsIsJson(raw) {
+  return String(raw == null ? "" : raw).trim().charAt(0) === "[";
+}
+function resKidsText(raw) {
+  var s = String(raw == null ? "" : raw).trim();
+  if (s.charAt(0) !== "[") return s;
+  try {
+    var list = JSON.parse(s);
+    if (!Array.isArray(list)) return s;
+    var now = new Date();
+    return list.map(function (k) {
+      var name = String((k && k.name) || "").trim();
+      if (!name) return "";
+      var d = new Date((k && k.dob) || "");
+      if (isNaN(d.getTime())) return name;
+      var age = now.getFullYear() - d.getFullYear();
+      var m = now.getMonth() - d.getMonth();
+      if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+      return age >= 0 ? name + " (" + age + ")" : name;
+    }).filter(Boolean).join(", ");
+  } catch (e) { return s; }
+}
+
 /* ---------- רשימת כרטיסים למובייל (2026-08-07) ----------
    טבלת 7 עמודות לא קריאה ב-390px, ובנוסף mobile.css מסתיר את .tx-card לגמרי
    (הוא נכתב עבור מסך ההוצאות, שמחליף את הטבלה ברשימה). לכן מסך התושבים מצייר
@@ -655,7 +682,7 @@ function resMobileHTML(list, c) {
     var perms = resRowPerms(r, c);
     // מקצוע וילדים בשורה שלישית — במובייל אין עמודות, אבל המידע לא צריך להיעלם
     var prof = c.profession.map(function (k) { return resVal(r, k); }).filter(Boolean).join(" · ");
-    var kids = resVal(r, c.kids);
+    var kids = resKidsText(resVal(r, c.kids));
     var extra = [prof, kids ? "ילדים: " + kids : ""].filter(Boolean).join("  ·  ");
     var roleLine = resRoleLine(r, c);
     return '<button type="button" class="res-mcard' + (active ? "" : " is-left") + '" ' +
@@ -1598,8 +1625,13 @@ function resOpenDrawer(container, idx, rowIndex, c) {
 
         '<div class="form-block">' +
           '<div class="form-grid">' +
-            (c.kids ? '<div class="form-field form-field--wide"><label>שמות ילדים</label>' +
-              '<input class="field-input" data-rf="' + CBA.esc(c.kids) + '" placeholder="מופרדים בפסיק" value="' + CBA.esc(resVal(r, c.kids)) + '"></div>' : "") +
+            (c.kids ? (resKidsIsJson(resVal(r, c.kids))
+              /* JSON מ"הפרטים שלי" — לא נערך כאן (בלי data-rf, כדי שלא יידרס בשמירה) */
+              ? '<div class="form-field form-field--wide"><label>שמות ילדים</label>' +
+                '<input class="field-input" type="text" readonly value="' + CBA.esc(resKidsText(resVal(r, c.kids))) + '">' +
+                '<div class="res-dim">הילדים נערכים על ידי התושב ב"הפרטים שלי" (כולל תאריכי לידה)</div></div>'
+              : '<div class="form-field form-field--wide"><label>שמות ילדים</label>' +
+                '<input class="field-input" data-rf="' + CBA.esc(c.kids) + '" placeholder="מופרדים בפסיק" value="' + CBA.esc(resVal(r, c.kids)) + '"></div>') : "") +
             (c.notes ? '<div class="form-field form-field--wide"><label>הערות</label>' +
               '<input class="field-input" data-rf="' + CBA.esc(c.notes) + '" value="' + CBA.esc(resVal(r, c.notes)) + '"></div>' : "") +
           '</div>' +

@@ -49,7 +49,7 @@ CBA.lazyManifest = {
     perms: ["תושבים"],
     screens: ["residents", "emailSettings", "appReports", "sysStatus", "sysHub"],
     files: [
-      "js/screens/residents.js?v=8bac69fec6",
+      "js/screens/residents.js?v=9ebc66c05d",
       "js/screens/emailSettings.js?v=a0cb23db5a",
       "js/screens/appReports.js?v=a47450bd91",
       "js/screens/sysStatus.js?v=af5674e9b1",

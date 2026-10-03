@@ -998,7 +998,7 @@ CBA.screens = CBA.screens || {};
           '</section>' +
           '<section class="hm2-grid2">' +
             '<div class="card hm2-card" id="hm-happened">' +
-              '<div class="hm2-card__h"><h2>מה קרה</h2><button type="button" class="hm-link" data-goto="events">לוח האירועים ←</button></div>' +
+              '<div class="hm2-card__h"><h2>מה חדש בקהילה</h2><button type="button" class="hm-link" data-goto="events">לוח האירועים ←</button></div>' +
               '<div id="hm-new"></div><div id="hm-inbox"></div>' +
               (sched ? '<div id="hm-feed"></div>' : "") +
               '<p class="hm2-empty" id="hm-happened-empty" hidden>אין חדש כרגע.</p>' +
