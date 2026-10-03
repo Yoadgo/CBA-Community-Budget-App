@@ -1,0 +1,3 @@
+# service-worker.js: רשימת הגרסאות נוצרת אוטומטית (node tools/stamp-versions.js).
+# 'union' = במיזוג שומרים את שתי הצדדים בלי התנגשות; הכלי מנקה כפילויות וחותם מחדש.
+service-worker.js merge=union

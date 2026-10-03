@@ -22,6 +22,7 @@
 
    איך משתמשים:
      node tools/stamp-versions.js          ← לפני כל קומיט
+     node tools/stamp-versions.js --resolve← אחרי מיזוג עם התנגשות בקבצי הגרסאות
      node tools/stamp-versions.js --check  ← רק בודק, לא כותב. יוצא
                                               עם שגיאה אם משהו לא
                                               מעודכן (הבדיקות מריצות)
@@ -142,7 +143,14 @@ function renderSw(sw, versions, keys, overall) {
   }
   let out = sw.slice(0, s) + renderSwBlock(versions, keys) + sw.slice(e + END.length);
   if (!/var VERSION = "[0-9a-z]+";/.test(out)) throw new Error('service-worker.js: לא נמצא var VERSION = "..."');
-  out = out.replace(/var VERSION = "[0-9a-z]+";/, 'var VERSION = "' + overall + '";');
+  /* (3.10.2026) אחרי מיזוג "union" (ר' .gitattributes) ייתכנו שתי שורות VERSION —
+     משאירים אחת בלבד עם הערך הנכון. */
+  let seen = false;
+  out = out.replace(/^[ \t]*var VERSION = "[0-9a-z]+";[ \t]*\r?\n?/gm, function () {
+    if (seen) return '';
+    seen = true;
+    return 'var VERSION = "' + overall + '";\n';
+  });
   return out;
 }
 
@@ -205,6 +213,17 @@ if (require.main === module) {
     }
     console.log('✓ כל ה-?v= ב-index.html ו-service-worker.js מעודכנים (' + compute().keys.length + ' קבצים, VERSION ' + compute().overall + ')');
     process.exit(0);
+  }
+  /* --resolve: אחרי מיזוג שנעצר עם התנגשות רק בקבצי הגרסאות — לוקח את הצד
+     המקומי (HEAD) בקבצים האלה וחותם מחדש. מותר רק לקבצים שנוצרים אוטומטית. */
+  if (args.indexOf('--resolve') !== -1) {
+    ['index.html', 'service-worker.js', MANIFEST].forEach(function (f) {
+      const abs = path.join(ROOT, f);
+      if (!fs.existsSync(abs)) return;
+      const t = fs.readFileSync(abs, 'utf8');
+      const r = t.replace(/^<<<<<<< [^\n]*\n([\s\S]*?)^=======\n[\s\S]*?^>>>>>>> [^\n]*\n/gm, '$1');
+      if (r !== t) { fs.writeFileSync(abs, r); console.log('• נפתרה התנגשות ב-' + f); }
+    });
   }
   try {
     const r = stamp();

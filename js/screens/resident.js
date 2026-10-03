@@ -2199,6 +2199,9 @@ CBA.screens = CBA.screens || {};
     '<rect x="14.2" y="12.2" width="3.2" height="2.2" rx=".8" fill="#3A73B8"/>' +
     '<circle cx="8.4" cy="18.6" r="1.7" fill="#fff"/>' +
     '<circle cx="15.6" cy="18.6" r="1.7" fill="#fff"/>';
+  /* עמדת טעינה חשמלית (3.10.26) — עיגול כחול + ברק צהוב, זהה בול לכלי הכיול. */
+  var EV_GLYPH =
+    '<path d="M12.8 2 5.2 13.2h5.1l-1.1 8.8 8.6-11.6h-5.4l1.4-8.4z" fill="#FFC940"/>';
 
   /* ---- MAP_TILES: משבצת לכל מספר בית ----
      נשמר באחוזי־עולם בדיוק כמו במפה הישנה, כדי שהחיפוש, goToHouse, "הבית שלי"
@@ -2387,7 +2390,7 @@ CBA.screens = CBA.screens || {};
         }
 
         var canopy = '', green = '', caseS = '', fillS = '', isl = '', tree = '',
-            bays = '', stre = '', pub = '', mkBin = '', mkShel = '', mkBus = '';
+            bays = '', stre = '', pub = '', mkBin = '', mkShel = '', mkBus = '', mkEv = '';
 
         /* קצה של קו שנכנס לקו אחר או לשטח מרוצף — נשאר חתוך ישר, כך שהצומת
            נסגר חלק. קצה שלא מוביל לשום מקום מקבל עיגול. אותה לוגיקה בדיוק
@@ -2544,6 +2547,12 @@ CBA.screens = CBA.screens || {};
                 rx: (sq * 0.22).toFixed(1), 'class': 'm2-bus' }) +
               E('g', { transform: 'translate(' + (-sq * 0.31).toFixed(1) + ' ' + (-sq * 0.31).toFixed(1) +
                 ') scale(' + (sq * 0.62 / 24).toFixed(4) + ')' }, BUS_GLYPH), 0, 'traffic');
+          } else if (o.t === 'ev') {
+            var evr = Math.min(o.w, o.h) / 2;
+            mkEv += markerG(o,
+              E('circle', { cx: 0, cy: 0, r: evr.toFixed(1), 'class': 'm2-ev' }) +
+              E('g', { transform: 'translate(' + (-evr * 0.62).toFixed(1) + ' ' + (-evr * 0.62).toFixed(1) +
+                ') scale(' + (evr * 2 * 0.62 / 24).toFixed(4) + ')' }, EV_GLYPH), 0, 'traffic');
           } else if (o.t === 'bin') {
             var K = BIN_KINDS[o.k] || BIN_KINDS.trash, inner;
             if (K.shape === 'circle') inner = E('circle', { cx: 0, cy: 0, r: (Math.min(o.w, o.h) / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
@@ -2579,6 +2588,7 @@ CBA.screens = CBA.screens || {};
             E('g', { 'class': 'm2-l-street', 'data-g': 'traffic' }, stre) +
             E('g', { 'class': 'm2-l-pub', 'data-g': 'public' }, pub) +
             E('g', { 'class': 'm2-l-mk', 'data-g': 'traffic' }, mkBus) +
+            E('g', { 'class': 'm2-l-mk', 'data-g': 'traffic' }, mkEv) +
             E('g', { 'class': 'm2-l-mk', 'data-g': 'shelter' }, mkShel) +
             E('g', { 'class': 'm2-l-mk', 'data-g': 'waste' }, mkBin) +
           '</svg>' +
