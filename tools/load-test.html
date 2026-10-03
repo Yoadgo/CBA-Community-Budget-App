@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CBA — בדיקת עומס לשרת</title>
+<!--
+  tools/load-test.html — בדיקת עומס ל-Apps Script (3.10.2026)
+  ============================================================
+  מה זה עושה, בשפה פשוטה: יורה N קריאות ?action=rev לשרת *באותה שנייה*
+  ומראה כמה הצליחו, כמה נכשלו, ומה הזמנים. rev לא דורש התחברות ולא
+  מחזיר נתונים — רק מספר גרסה — ולכן הבדיקה בטוחה.
+
+  איך פותחים: דרך האתר החי —
+    https://yoadgo.github.io/CBA-Community-Budget-App/tools/load-test.html
+  (אפשר גם לחיצה כפולה על הקובץ במחשב; אם כל הקריאות נכשלות ב-"Failed to
+  fetch" — זה הדפדפן שחוסם קבצים מקומיים, לפתוח דרך האתר.)
+
+  הקובץ הזה *לא* נטען ב-index.html ולא מגיע לאף תושב.
+  ⚠️ לא להריץ 60 בלולאה שוב ושוב — כל קריאה היא הפעלה אמיתית בשרת.
+-->
+<style>
+  :root { --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --bg:#f9fafb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Assistant, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:860px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; font-size:14px; line-height:1.5; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  input[type=text], input[type=number] { width:100%; font:inherit; font-size:14px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; direction:ltr; text-align:left; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  .row > div { flex:1 1 140px; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .seg button { font:inherit; padding:9px 16px; border:0; background:#fff; cursor:pointer; color:var(--ink); }
+  .seg button + button { border-inline-start:1px solid var(--line); }
+  .seg button.on { background:var(--ink); color:#fff; }
+  .cta { font:inherit; font-weight:600; padding:11px 20px; border-radius:10px; border:0; background:var(--ink); color:#fff; cursor:pointer; }
+  .cta[disabled] { opacity:.5; cursor:default; }
+  .ghost { font:inherit; padding:10px 16px; border-radius:10px; border:1px solid var(--line); background:#fff; cursor:pointer; color:var(--ink); }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+  .kpi { border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .kpi .v { font-size:24px; font-weight:700; }
+  .kpi .l { font-size:12px; color:var(--muted); }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
+  .bars { display:flex; align-items:flex-end; gap:2px; height:110px; margin-top:12px; border-bottom:1px solid var(--line); padding-bottom:2px; }
+  .bar { flex:1 1 0; min-width:3px; background:#9ca3af; border-radius:2px 2px 0 0; position:relative; }
+  .bar.err { background:var(--bad); }
+  .bar.slow { background:var(--warn); }
+  .legend { font-size:12px; color:var(--muted); margin-top:6px; }
+  .log { font-family: ui-monospace, Menlo, monospace; font-size:12px; direction:ltr; text-align:left; white-space:pre-wrap; background:#f3f4f6; border-radius:10px; padding:10px; max-height:220px; overflow:auto; }
+  .verdict { font-size:15px; line-height:1.6; }
+  .hist { font-size:13px; color:var(--muted); }
+  .hist table { border-collapse:collapse; width:100%; }
+  .hist td, .hist th { padding:4px 6px; border-bottom:1px solid var(--line); text-align:start; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>בדיקת עומס — כמה קריאות בו-זמנית השרת סופג?</h1>
+  <p class="sub">יורה N קריאות <code>?action=rev</code> באותה שנייה ומודד. <code>rev</code> לא דורש התחברות ולא מחזיר נתונים. כל ירייה היא הפעלה אמיתית ב-Apps Script — לבדוק פעם-פעמיים, לא בלולאה.</p>
+
+  <div class="card">
+    <label>כתובת ה-/exec של השרת</label>
+    <input type="text" id="url" value="https://script.google.com/macros/s/AKfycbw_LLAk8s6u1wK-7zY3P3emjXaDeTCla-KqgvfD-Rgt5RTfWw6ldNkb7DbrhSUknS4o/exec" />
+    <div class="row" style="margin-top:12px">
+      <div>
+        <label>כמה קריאות בבת אחת</label>
+        <span class="seg" id="seg">
+          <button data-n="10" class="on">10</button><button data-n="30">30</button><button data-n="60">60</button><button data-n="80">80</button>
+        </span>
+      </div>
+      <div style="flex:0 0 120px">
+        <label>או מספר אחר</label>
+        <input type="number" id="custom" min="1" max="200" placeholder="—" />
+      </div>
+      <div style="flex:0 0 auto">
+        <button class="ghost" id="warm">חימום (קריאה אחת)</button>
+      </div>
+      <div style="flex:0 0 auto">
+        <button class="cta" id="fire">ירי</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="results" hidden>
+    <div class="kpis">
+      <div class="kpi"><div class="v" id="k-ok">–</div><div class="l">הצליחו</div></div>
+      <div class="kpi"><div class="v" id="k-bad">–</div><div class="l">נכשלו</div></div>
+      <div class="kpi"><div class="v" id="k-min">–</div><div class="l">הכי מהיר</div></div>
+      <div class="kpi"><div class="v" id="k-med">–</div><div class="l">חציון</div></div>
+      <div class="kpi"><div class="v" id="k-p90">–</div><div class="l">90% מתחת ל־</div></div>
+      <div class="kpi"><div class="v" id="k-max">–</div><div class="l">הכי איטי</div></div>
+      <div class="kpi"><div class="v" id="k-wall">–</div><div class="l">עד שהאחרונה חזרה</div></div>
+    </div>
+    <div class="bars" id="bars"></div>
+    <div class="legend">כל עמודה = קריאה אחת (לפי סדר השיגור). אפור = תקין · כתום = מעל 8 שניות · אדום = נכשלה.</div>
+    <p class="verdict" id="verdict"></p>
+    <details><summary>פירוט לכל קריאה</summary><div class="log" id="log"></div></details>
+  </div>
+
+  <div class="card hist" id="hist" hidden>
+    <strong>היסטוריית הבדיקות בעמוד הזה</strong>
+    <table><thead><tr><th>#</th><th>N</th><th>הצליחו</th><th>חציון</th><th>הכי איטי</th><th>שגיאות</th></tr></thead><tbody id="histBody"></tbody></table>
+  </div>
+
+  <div class="card">
+    <strong>איך לקרוא את התוצאה</strong>
+    <p class="sub" style="margin:6px 0 0">
+      הרצפה הידועה של Apps Script היא כ-1–3 שניות גם לקריאה ריקה. אם ב-30 וב-60 בו-זמנית <b>החציון נשאר באותו סדר גודל והכול הצליח</b> — השרת לא מתור בשיא, ו"80 משתמשים" הוא עניין של מכסות יומיות, לא של רגע השיא.<br>
+      אם <b>הזמן גדל בערך ביחס ישר למספר הקריאות</b> (10 → 3ש', 30 → 9ש', 60 → 18ש') — יש תור: הקריאות מחכות זו לזו, וקריאות הפתיחה הן מה שצריך לקצר לפני ההשקה.<br>
+      אם <b>חלק נכשלו</b> עם 429 / "Too many" / "Service invoked too many times" — נגענו במגבלת הביצועים המקבילים של החשבון (30 בו-זמנית למשתמש).
+    </p>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var n = 10, runs = 0;
+  var seg = document.getElementById("seg");
+  seg.addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    Array.prototype.forEach.call(seg.querySelectorAll("button"), function (x) { x.classList.remove("on"); });
+    b.classList.add("on"); n = parseInt(b.getAttribute("data-n"), 10);
+    document.getElementById("custom").value = "";
+  });
+  document.getElementById("custom").addEventListener("input", function () {
+    var v = parseInt(this.value, 10);
+    if (v > 0) { n = Math.min(v, 200); Array.prototype.forEach.call(seg.querySelectorAll("button"), function (x) { x.classList.remove("on"); }); }
+  });
+
+  function fmt(ms) { return ms == null ? "–" : (ms >= 1000 ? (ms / 1000).toFixed(1) + "ש'" : Math.round(ms) + "מ\"ש"); }
+  function pct(arr, p) { if (!arr.length) return null; var s = arr.slice().sort(function (a, b) { return a - b; }); return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1) + 0.5))]; }
+
+  function one(url, i) {
+    var t0 = performance.now();
+    var sep = url.indexOf("?") === -1 ? "?" : "&";
+    return fetch(url + sep + "action=rev&_lt=" + i + "_" + Date.now(), { method: "GET", redirect: "follow", cache: "no-store", credentials: "omit" })
+      .then(function (r) {
+        return r.text().then(function (txt) {
+          var ms = performance.now() - t0;
+          var ok = r.ok; var note = "HTTP " + r.status;
+          try { var j = JSON.parse(txt); ok = ok && j && j.ok === true; note += j && j.ok ? " · rev " + j.rev : " · " + txt.slice(0, 80); }
+          catch (e) { ok = false; note += " · לא JSON: " + txt.slice(0, 80).replace(/\s+/g, " "); }
+          return { i: i, ms: ms, ok: ok, note: note };
+        });
+      })
+      .catch(function (err) { return { i: i, ms: performance.now() - t0, ok: false, note: String(err && err.message || err) }; });
+  }
+
+  function render(res, wall, N) {
+    document.getElementById("results").hidden = false;
+    var okMs = res.filter(function (r) { return r.ok; }).map(function (r) { return r.ms; });
+    var bad = res.filter(function (r) { return !r.ok; });
+    var set = function (id, v, cls) { var el = document.getElementById(id); el.textContent = v; el.className = "v" + (cls ? " " + cls : ""); };
+    set("k-ok", okMs.length + "/" + N, okMs.length === N ? "ok" : "warn");
+    set("k-bad", String(bad.length), bad.length ? "bad" : "ok");
+    set("k-min", fmt(pct(okMs, 0)));
+    set("k-med", fmt(pct(okMs, 0.5)));
+    set("k-p90", fmt(pct(okMs, 0.9)));
+    var mx = pct(okMs, 1); set("k-max", fmt(mx), mx > 8000 ? "warn" : "");
+    set("k-wall", fmt(wall));
+    var bars = document.getElementById("bars"); bars.innerHTML = "";
+    var top = Math.max(1000, Math.max.apply(null, res.map(function (r) { return r.ms; })));
+    res.forEach(function (r) {
+      var d = document.createElement("div");
+      d.className = "bar" + (!r.ok ? " err" : (r.ms > 8000 ? " slow" : ""));
+      d.style.height = Math.max(3, Math.round(100 * r.ms / top)) + "px";
+      d.title = "#" + (r.i + 1) + " · " + fmt(r.ms) + " · " + r.note;
+      bars.appendChild(d);
+    });
+    var med = pct(okMs, 0.5) || 0;
+    var v;
+    if (bad.length) v = "❌ " + bad.length + " מתוך " + N + " נכשלו. זה הממצא החשוב — ר' הפירוט למטה מה הסיבה (429 / timeout / שגיאת שרת).";
+    else if (mx > 15000) v = "⚠️ הכול הצליח, אבל הזנב ארוך (" + fmt(mx) + "). סימן לתור: קריאות מחכות זו לזו. להשוות מול 10 — אם הזמן גדל יחד עם N, יש תור.";
+    else if (med > 5000) v = "⚠️ הכול הצליח, החציון " + fmt(med) + " — איטי מהרצפה הרגילה (1–3ש'). להשוות מול ירייה של 10.";
+    else v = "✅ " + N + " בו-זמנית, הכול חזר, חציון " + fmt(med) + ". השרת לא מתור ברמה הזאת.";
+    document.getElementById("verdict").textContent = v;
+    document.getElementById("log").textContent = res.map(function (r) { return "#" + String(r.i + 1).padStart(3) + "  " + (r.ok ? "OK  " : "FAIL") + "  " + Math.round(r.ms).toString().padStart(6) + " ms  " + r.note; }).join("\n");
+    runs++;
+    var hb = document.getElementById("histBody"); document.getElementById("hist").hidden = false;
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + runs + "</td><td>" + N + "</td><td>" + okMs.length + "/" + N + "</td><td>" + fmt(med) + "</td><td>" + fmt(mx) + "</td><td>" + (bad.length ? bad.map(function (b) { return b.note; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).join(" · ") : "—") + "</td>";
+    hb.appendChild(tr);
+  }
+
+  function fire(N) {
+    var url = document.getElementById("url").value.trim();
+    if (!url) return;
+    var btn = document.getElementById("fire"), warm = document.getElementById("warm");
+    btn.disabled = true; warm.disabled = true; btn.textContent = "יורה " + N + "…";
+    var t0 = performance.now();
+    var ps = []; for (var i = 0; i < N; i++) ps.push(one(url, i));
+    Promise.all(ps).then(function (res) {
+      render(res, performance.now() - t0, N);
+    }).finally(function () { btn.disabled = false; warm.disabled = false; btn.textContent = "ירי"; });
+  }
+  document.getElementById("fire").addEventListener("click", function () { fire(n); });
+  document.getElementById("warm").addEventListener("click", function () { fire(1); });
+})();
+</script>
+</body>
+</html>

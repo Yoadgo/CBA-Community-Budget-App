@@ -681,7 +681,10 @@ CBA.screens.resServices = {
        היא בשרת (saveServices: PERM_SUPER ב-ACTION_PERMS), וזה רק ניווט.
        ⚠️ CBA.isSuper נקבע פעם אחת באתחול (app.js) — לא לגזור הרשאה מכאן
           לשום דבר מלבד הצגת קיצור דרך. */
-    var canEdit = window.CBA && CBA.isSuper === true && CBA.screens && CBA.screens.servicesAdmin;
+    /* (3.10.2026) servicesAdmin.js נטען לפי דרישה — הקיצור מוצג גם לפני שנטען;
+       CBA.navigate("servicesAdmin") מטפל בטעינה (ר' showScreen ב-app.js). */
+    var canEdit = window.CBA && CBA.isSuper === true && CBA.screens &&
+                  (CBA.screens.servicesAdmin || (CBA.lazy && CBA.lazy.groupFor("servicesAdmin")));
     /* 🔴 גל 5 (1.10.26, ספר האבנים פרק 11) — החופה. SV1: הכותרת "ספקים ושירותים"
        כמו בניווט (היה "שירותים"). "עריכת הכרטיסים" של מנהל-העל — בחופה. */
     if (window.CBA && CBA.canopy) {

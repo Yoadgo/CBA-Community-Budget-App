@@ -278,7 +278,13 @@ CBA.homeGarden = (function () {
       var o = e.target.closest("[data-hmg-open]");
       if (o) {
         var id = o.getAttribute("data-hmg-open");
-        if (typeof CBA.gardenOpenCard === "function") {
+        /* (3.10.2026) gardenTasks.js נטען לפי דרישה (js/lazy.js) — בפעם הראשונה
+           מוודאים שהוא בזיכרון ורק אז פותחים את הכרטיס. */
+        if (typeof CBA.gardenOpenCard !== "function" && CBA.lazy && CBA.lazy.groupFor("gardenTasks")) {
+          CBA.lazy.load("gardenTasks").then(function () {
+            if (typeof CBA.gardenOpenCard === "function") CBA.gardenOpenCard(id, function () { run(true); });
+          }, function () {});
+        } else if (typeof CBA.gardenOpenCard === "function") {
           CBA.gardenOpenCard(id, function () { run(true); });
         } else if (CBA.gotoAdmin) CBA.gotoAdmin("gardenTasks");
         return;

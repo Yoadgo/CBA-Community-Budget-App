@@ -312,10 +312,9 @@ const app = R('js/app.js');
 ok('אריח אחד "ניהול מערכת"', /data-panel-goto="sysHub"/.test(app) && !/data-panel-goto="sysStatus"/.test(app) && !/data-panel-goto="appReports"/.test(app));
 ok('מנהל תחום רואה רק "התראות"', /id: "notify",[^\n]*superOnly: false/.test(hub) && (hub.match(/superOnly: true/g) || []).length === 3);
 const idx = R('index.html');
-ok('sysHub.js נטען', /js\/screens\/sysHub\.js\?v=/.test(idx));
-const vers = new Set((idx.match(/\?v=([0-9a-z]+)/g) || []));
-ok('גרסה אחת בכל התגים', vers.size === 1, [...vers].join(','));
-ok('ו-VERSION ב-service-worker זהה', R('service-worker.js').indexOf('var VERSION = "' + [...vers][0].slice(3) + '"') !== -1);
+ok('sysHub.js נטען לפי דרישה (js/lazyManifest.js, 3.10)', /js\/screens\/sysHub\.js\?v=/.test(R('js/lazyManifest.js')));
+/* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
+ok('🔴 index.html + service-worker: גרסאות מעודכנות (stamp-versions --check)', require('./stamp-versions.js').check().length === 0);
 
 console.log('\n' + (fail ? '❌ ' : '✅ ') + pass + ' עברו, ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

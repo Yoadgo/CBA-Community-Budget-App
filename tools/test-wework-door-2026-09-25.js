@@ -585,9 +585,8 @@ section('8. חיווט: Code.gs, כללים, לקוח');
   ok('app.js: WeWork במקטע "מתקנים" (בתוך "שירותים", 27.9.26) — תושב ומנהל', /\["resGym", "מכון כושר", "facilities"\],\s*\["resWework", "WeWork", "facilities"\]/.test(APP) && /\["gymAdmin", "מכון כושר", "facilities"\],\s*\["weworkAdmin", "WeWork", "facilities"\]/.test(APP));
   ok('app.js: hasAnyAdmin כולל WeWork (אחרת מנהל WeWork בלבד לא נכנס לניהול)', /PERM\.GARDEN, PERM\.WEWORK\]/.test(APP));
   ok('residents.js: אפשר להעניק הרשאת WeWork', /code: "WeWork"/.test(R('js/screens/residents.js')));
-  const v = (IDX.match(/\?v=([a-z0-9]+)/) || [])[1];
-  ok('index.html: גרסה אחידה בכל התגים', v && (IDX.match(/\?v=([a-z0-9]+)/g) || []).every(t => t === '?v=' + v));
-  ok('🔴 service-worker VERSION = ?v=', new RegExp('var VERSION = "' + v + '"').test(SW));
+  /* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
+  ok('🔴 index.html + service-worker: גרסאות מעודכנות (stamp-versions --check)', require('./stamp-versions.js').check().length === 0);
   ok('הסקריפטים החדשים לפני app.js', ['door.js', 'doorButton.js', 'doorAdmin.js', 'resWework.js', 'weworkAdmin.js'].every(f => IDX.indexOf(f) !== -1 && IDX.indexOf(f) < IDX.indexOf('js/app.js')));
   ok('wework.css נטען', /css\/wework\.css\?v=/.test(IDX));
 }

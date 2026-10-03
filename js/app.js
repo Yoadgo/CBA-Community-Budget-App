@@ -87,6 +87,25 @@
     if (!inited) return quietFail("navigate-early", name,
       "ניווט לפני שהאפליקציה סיימה להיטען", true);
     const screen = CBA.screens[name];
+    /* (3.10.2026) טעינה לפי דרישה — ר' js/lazy.js. מסך שאינו רשום אבל שייך
+       לקבוצה במניפסט: שלד לרגע, הקבוצה נטענת, ואז showScreen רץ שוב כרגיל.
+       ⚠️ בדיקת ההרשאה (AREAS) נעשית בריצה השנייה — לפני הציור, לא לפני
+          הטעינה. הטעינה עצמה אינה חושפת כלום: אלה אותם קבצים ציבוריים
+          ב-GitHub Pages, והשרת וכללי Firestore הם שאוכפים נתונים. */
+    if (!screen && CBA.lazy && CBA.lazy.groupFor(name)) {
+      currentScreen = name;
+      main.innerHTML = skeletonScreen();
+      CBA.lazy.load(name).then(function () {
+        if (currentScreen !== name || !main.isConnected) return quietFail("navigate-stale", name, "המשתמש עבר מסך בזמן שהקבוצה נטענה", true);
+        showScreen(name, opts);
+      }, function () {
+        if (currentScreen !== name) return quietFail("navigate-lazy-failed", name, "טעינת הקבוצה נכשלה אחרי שהמשתמש עבר מסך", true);
+        main.innerHTML = dataUnavailableHTML("לא הצלחנו לטעון את המסך הזה. בדקו את החיבור לאינטרנט ונסו שוב.", "המסך לא נטען");
+        var again = main.querySelector("[data-data-retry]");
+        if (again) again.addEventListener("click", function () { showScreen(name, opts); });
+      });
+      return;
+    }
     if (!screen) return quietFail("navigate-missing", name,
       "אין מסך רשום בשם הזה");
     /* חסימת גישה: לא מציגים מסך שאינו שייך לאזור הנוכחי (תושב לא ניגש למסכי
@@ -205,7 +224,7 @@
     } catch (e) { return ""; }
   })();
   function goFromNotification(name) {
-    if (!name || !CBA.screens[name]) return;
+    if (!name || !(CBA.screens[name] || (CBA.lazy && CBA.lazy.groupFor(name)))) return;   // 3.10 — גם מסך לפי דרישה
     if (!inited) { pendingGo = name; return; }
     showScreen(name);
   }
@@ -1772,7 +1791,7 @@
         closeUserPanel(panel, btn);
         const target = gBtn.dataset.panelGoto;
         if (currentArea !== "admin" && hasAnyAdmin()) setArea("admin");
-        if (target === "expenses-pending" && CBA.screens.expenses && CBA.screens.expenses.showPending) CBA.screens.expenses.showPending();
+        if (target === "expenses-pending") gotoExpensesPending();   // 3.10 — דרך הטעינה לפי דרישה
         else showScreen(target);
       });
     });
@@ -2873,13 +2892,23 @@
   /* קפיצה לאזור הניהול ממקום שאינו התפריט (עמוד הקבלה). בכוונה אותו מסלול
      בדיוק של [data-panel-goto] בתפריט המשתמש — כולל המקרה המיוחד של
      "expenses-pending" — כדי שלא ייווצרו שתי דרכים שונות להגיע לאותו מקום. */
+  /* (3.10.2026) "הוצאות ממתינות" — expenses.js נטען לפי דרישה (js/lazy.js), ולכן
+     קודם מוודאים שהוא בזיכרון ורק אז קוראים ל-showPending. בלי זה הקיצור
+     מהתפריט ומהמייל היה "לא עושה כלום" בפעם הראשונה. */
+  function gotoExpensesPending() {
+    var run = function () {
+      if (CBA.screens.expenses && CBA.screens.expenses.showPending) CBA.screens.expenses.showPending();
+      else showScreen("expenses");
+    };
+    if (CBA.lazy && CBA.lazy.groupFor("expenses") && !CBA.lazy.isReady("expenses")) {
+      main.innerHTML = skeletonScreen();
+      CBA.lazy.load("expenses").then(run, function () { showScreen("expenses"); });
+    } else run();
+  }
   window.CBA.gotoAdmin = function (target) {
     if (currentArea !== "admin" && hasAnyAdmin()) setArea("admin");
-    if (target === "expenses-pending" && CBA.screens.expenses && CBA.screens.expenses.showPending) {
-      CBA.screens.expenses.showPending();
-    } else {
-      showScreen(target);
-    }
+    if (target === "expenses-pending") gotoExpensesPending();
+    else showScreen(target);
   };
   /* חזרה לעמוד הקבלה — מהלוגו בכותרת ומהטאב "בית" */
   window.CBA.goHome = function () {
@@ -3085,6 +3114,12 @@
       if (currentUser) { routeByRole(); }
       else { applyUser(); AREAS = JSON.parse(JSON.stringify(AREAS_ALL)); initialRoute("resident"); }   // אורח מאחורי הגייט — שלד מלא, לא נגיש בפועל
       bootReveal();
+      /* (3.10.2026) חימום מטמון למסכי הניהול לפי דרישה — למנהלים בלבד, 6 שניות
+         אחרי הציור הראשון, ובלי להריץ את הקבצים (ר' CBA.lazy.warm). תושב רגיל:
+         אפס עבודה. ⚠️ לא לפני הציור — זה בדיוק מה שהורדנו מהנתיב הקריטי. */
+      if (CBA.lazy && hasAnyAdmin()) {
+        setTimeout(function () { try { CBA.lazy.warm(CBA.perms, CBA.isSuper === true); } catch (e) {} }, 6000);
+      }
       /* שעון העלייה (2.10.26): "מוכן" = עמוד הבית קיבל גם את homeExtras (או תקרה של 12ש'). */
       hxWait(function () { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("עמוד הבית מוכן"); } catch (e) {} try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("boot-done"); } catch (e) {} }, 12000);
       /* ⏱️ שתי הקריאות האלה נדחות בכוונה (2026-09-09).

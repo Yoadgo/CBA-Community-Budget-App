@@ -177,10 +177,10 @@ ok('הנעיצה ממלאת אזור רק כשהמנהל לא בחר אחד',
    /if \(st\.pinArea && !picked\("#gf-area", "data-a1"\)\.length\)/.test(NEW_TASK));
 
 section('10. גרסה ומטמון');
-const VER = (SW.match(/var VERSION = "(\d+\w?)"/) || [])[1];
-ok('index.html ו-service-worker על אותה גרסה', !!VER && HTML.indexOf('?v=' + VER) > 0, VER);
-ok('לא נשארה גרסה ישנה ב-index.html',
-   (HTML.match(/\?v=\d+[a-z]?/g) || []).every(v => v === '?v=' + VER));
+/* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
+const VER = (SW.match(/var VERSION = "([0-9a-z]+)"/) || [])[1];
+ok('index.html ו-service-worker על אותה גרסה', !!VER && require('./stamp-versions.js').check().length === 0, VER);
+ok('לא נשארה גרסה ישנה ב-index.html', !/\?v=2026\d{4}[a-z]?"/.test(HTML));
 ok('המודול המשותף רשום ב-index.html', HTML.indexOf('js/ui/gardenForm.js') > 0);
 
 

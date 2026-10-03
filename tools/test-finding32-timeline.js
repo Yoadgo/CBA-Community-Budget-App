@@ -159,12 +159,10 @@ ok('🔑 השם והמיילים עדיין נשלפים בשרת לפי familyI
    /txFamilyNames_\(ss\)/.test(mail) && /r: \{ familyId: fam \}/.test(mail) && /emailsForFamilyId_\(ss, fam\)/.test(NG));
 
 section('9. גרסה — אי-התאמה = דפדפנים מגישים JS ישן');
+/* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
 const swV = (SW.match(/var VERSION = "([^"]+)"/) || [, ''])[1];
-const htmlV = [...new Set((HTML.match(/\?v=[0-9a-z]+/g) || []).map(x => x.slice(3)))];
 ok('service-worker על ' + swV, !!swV);
-ok('index.html מחזיק ערך אחד בלבד', htmlV.length === 1, htmlV.join(','));
-ok('🔴 והם זהים', htmlV[0] === swV, htmlV[0] + ' מול ' + swV);
-ok('והגרסה עלתה מעבר ל-20260921d', swV > '20260921d', swV);
+ok('🔴 כל ?v= ב-index.html הוא טביעת האצבע של הקובץ, ו-service-worker תואם', require('./stamp-versions.js').check().length === 0);
 
 section('10. התבניות עצמן — נכתבות לגיליון מעצמן');
 const defs = (GS.match(/var DEFAULT_EMAIL_SETTINGS = \[[\s\S]*?\n\];/) || [''])[0];

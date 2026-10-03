@@ -450,8 +450,9 @@ function weworkSaveConfig_(ss, body) {
  * ------------------------------------------------------------------------- */
 function doorCallerUid_(ss, perm) {
   try {
-    if (!perm || !perm.rowIndex || !perm.slot) return '';
-    return fbUidForSlot_(ss.getSheetByName('תושבים'), perm.rowIndex, perm.slot) || '';
+    var rowIdx = permRowIndex_(perm);   // 3.10 — rowIndex לא נוסע במטמון ההרשאות
+    if (!perm || !rowIdx || !perm.slot) return '';
+    return fbUidForSlot_(ss.getSheetByName('תושבים'), rowIdx, perm.slot) || '';
   } catch (e) { return ''; }
 }
 

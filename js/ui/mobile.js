@@ -279,10 +279,15 @@
       e.preventDefault(); e.stopPropagation();
       var catId = addBtn.dataset.addCat;
       closeOpen();
-      if (window.CBA && CBA.screens && CBA.screens.expenses &&
-          CBA.screens.expenses.openAddForCategory) {
-        CBA.screens.expenses.openAddForCategory(catId);
-      }
+      /* (3.10.2026) expenses.js נטען לפי דרישה — CBA.lazy.ensure טוען אם צריך ואז מריץ. */
+      var openAdd = function () {
+        if (window.CBA && CBA.screens && CBA.screens.expenses &&
+            CBA.screens.expenses.openAddForCategory) {
+          CBA.screens.expenses.openAddForCategory(catId);
+        }
+      };
+      if (window.CBA && CBA.lazy && CBA.lazy.groupFor("expenses")) CBA.lazy.ensure("expenses", openAdd);
+      else openAdd();
       return;
     }
     if (Date.now() < suppressClickUntil) { e.preventDefault(); e.stopPropagation(); return; }

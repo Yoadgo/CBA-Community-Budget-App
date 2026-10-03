@@ -214,8 +214,9 @@ ok('🔴 מנהל ומנהל-על בלבד — "MANAGER"', /gardenStats: "MANAGE
 ok('"נתונים" ראשון במקטע הגינון, ו-landing', /\["gardenStats", "נתוני גינון", "garden"\],\s*\["gardenPlan"/.test(APP) && /SECTION_LANDING = \{ garden: "gardenStats" \}/.test(APP));
 ok('landing עובר את rebuildAreas', /var landing = t\.landing \|\| \(oneSec && SECTION_LANDING\[oneSec\]\) \|\| ""/.test(APP));
 ok('לחיצה על הקבוצה מנווטת ל-landing כשלא בתוכה', /showScreen\(grp\.landing\)/.test(APP));
+/* 3.10 — gardenStats.js נטען לפי דרישה (js/lazyManifest.js), כלומר תמיד אחרי הליבה שבה המנוע */
 ok('המנוע נטען לפני המסך', IDX.indexOf('js/data/gardenStatsCalc.js') > 0 &&
-   IDX.indexOf('js/data/gardenStatsCalc.js') < IDX.indexOf('js/screens/gardenStats.js'));
+   IDX.indexOf('js/screens/gardenStats.js') === -1 && /js\/screens\/gardenStats\.js\?v=/.test(R('js/lazyManifest.js')));
 ok('ואחרי המילון', IDX.indexOf('js/data/gardenLang.js') < IDX.indexOf('js/data/gardenStatsCalc.js'));
 ok('🔴 אין קריאה ל-Apps Script במסך החדש', !/getGardenStats\(/.test(ST) && /getGardenStatsLive\(12/.test(ST));
 ok('היומן — שאילתת טווח אחת על at', /queryCollection\("gardenLog", \[\["at", ">=", since\]\]/.test(DS));
