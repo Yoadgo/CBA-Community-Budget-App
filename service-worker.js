@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "d879ea495c";
+var VERSION = "35e308f360";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -75,13 +75,14 @@ var ASSET_VERSIONS = {
   "js/data/gardenSlots.js": "1b715264ff",
   "js/data/gardenStatsCalc.js": "177cc46e78",
   "js/data/gymFs.js": "51ed68cc48",
-  "js/data/mapGeo.js": "d69582e00d",
+  "js/data/gymWrite.js": "ebdd87e882",
+  "js/data/mapGeo.js": "21085276ad",
   "js/data/mock.js": "fd54e34660",
   "js/data/push.js": "198e321583",
   "js/data/reconcile.js": "899bfb8f4c",
   "js/data/sheets.js": "3fc95ad12e",
   "js/lazy.js": "011e0ffe5f",
-  "js/lazyManifest.js": "0ece286c34",
+  "js/lazyManifest.js": "b191b761fa",
   "js/pwa.js": "cc703231c6",
   "js/screens/appReports.js": "a47450bd91",
   "js/screens/budget.js": "5fbc7244f5",
@@ -114,7 +115,7 @@ var ASSET_VERSIONS = {
   "js/screens/servicesAdmin.js": "4c6fe01239",
   "js/screens/servicesCategoriesAdmin.js": "23bff879f4",
   "js/screens/sysHub.js": "b8e3ea99b4",
-  "js/screens/sysStatus.js": "af5674e9b1",
+  "js/screens/sysStatus.js": "79dcc2ec8b",
   "js/screens/weworkAdmin.js": "794ed62ea8",
   "js/ui/canopy.js": "b94420b1b4",
   "js/ui/diag.js": "5131c18964",

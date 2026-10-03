@@ -54,6 +54,8 @@ CBA.screens = CBA.screens || {};
     gardenPlanFromFirestore:  ["תוכנית הגינון", "מסכי הגינון קוראים את התוכנית ישירות מ-Firestore במקום מ-Apps Script.", true],
     servicesFromFirestore:    ["שירותים לתושב", "כרטיסי השירותים נקראים ישירות מ-Firestore.", true],
     budgetYearFromFirestore:  ["תקציב לפי שנה", "שנה שנמשכת לפי דרישה נקראת מ-Firestore במקום מהגיליון.", true],
+    gymAdminFs:               ["מכון כושר — קריאה", "מסך ניהול המכון נקרא מ-Firestore (ציור אחד, בלי ריצוד). כיבוי = קריאה מהגיליון.", true],
+    gymWriteFs:               ["מכון כושר — כתיבה מהירה", "פעולות מנהל במכון (תשלום, הפעלה, הארכה, עריכה) נשמרות מיד ב-Firestore; הגיליון, המיילים והדלת מתעדכנים ברקע. כיבוי = הכול עובר ב-Apps Script כמו קודם.", false],
     budgetTxStatusToFirestore: ["שינוי סטטוס תנועה", "כתיבה: שינוי סטטוס נכתב ישירות ל-Firestore, וטריגר מחיל אותו על הגיליון.", true],
     budgetTxFromFirestore:    ["תנועות התקציב", "התנועות של השנה הנוכחית נקראות מ-Firestore ולא נשלחות במטען.", true],
     pulseToFirestore:         ["הפעימה החיה", "השרת כותב מסמך פעימה, והלקוח מאזין לו במקום לסקור כל 3 שניות.", false],

@@ -220,6 +220,7 @@ var ACTION_PERMS = {
   recordGymPayment: PERM_GYM,
   activateGymManual: PERM_GYM,         // הפעלה ידנית בכל סטטוס (3.10.26)
   updateGymPayment: PERM_GYM,          // עריכת תשלום ביומן (3.10.26)
+  gymApplyOps: PERM_GYM,               // החלת פעולות מכון שנכתבו ל-Firebase (שלב 2-3, 3.10.26)
   voidGymPayment: PERM_GYM,            // ביטול תשלום ביומן (3.10.26)
   seedGymFirestore: PERM_GYM,          // זריעה/רענון מלא של מראה המכון ב-Firestore (3.10.26)
   extendGymMembership: PERM_GYM,
@@ -2052,6 +2053,7 @@ function doPostDispatch_(ss, body) {
       case 'updateGymPayment':      return json_(updateGymPayment_(ss, body));
       case 'voidGymPayment':        return json_(voidGymPayment_(ss, body));
       case 'seedGymFirestore':      return json_({ ok: true, seed: gymFsHourly_(ss) });
+      case 'gymApplyOps':           return json_(gymApplyOps_(ss, body.id));
       case 'extendGymMembership':   return json_(extendGymMembership_(ss, body));
       case 'renewGymMembership':    return json_(renewGymMembership_(ss, body));
       case 'updateGymMembership':   return json_(updateGymMembership_(ss, body));
@@ -4291,7 +4293,7 @@ var ACTION_DOMAIN = {
   // מכון כושר
   submitGymApplication: 'gym', createGymMembership: 'gym', requestGymDeclaration: 'gym',
   reportGymPayment: 'gym', confirmGymPayment: 'gym', rejectGymPayment: 'gym',
-  recordGymPayment: 'gym', activateGymManual: 'gym', updateGymPayment: 'gym', voidGymPayment: 'gym', extendGymMembership: 'gym', renewGymMembership: 'gym',
+  recordGymPayment: 'gym', activateGymManual: 'gym', updateGymPayment: 'gym', voidGymPayment: 'gym', gymApplyOps: 'gym', extendGymMembership: 'gym', renewGymMembership: 'gym',
   updateGymMembership: 'gym',
   // ועד השיכון ושירותים
   saveCommitteeTree: 'committee', saveCommitteeCategories: 'committee',
@@ -8609,6 +8611,13 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
      לתקלה רוחבית ב-Firestore, ולכן הוא אחד וגורף ולא אחד לכל תחום.
      ⚠️ אינו נוגע ב-`disabled`/`flag-off`: תחום שלא עבר, או שדגל המיגרציה
         שלו כבוי, ממשיך ב-Apps Script כרגיל בלי קשר למתג הזה. */
+  /* מכון הכושר (3.10.26, מעבר מלא ל-Firebase). ⚠️ gymAdminFs היה חסר כאן — כלומר דגל
+     הכיבוי של שלב 1 לא היה אפשר להפעיל ממסך "מצב המערכת". עכשיו כן.
+     gymAdminFs (ברירת מחדל true): מסך הניהול קורא מ-Firestore. כיבוי = קריאה מהגיליון.
+     gymWriteFs (ברירת מחדל false): פעולות מנהל נכתבות מיד ל-Firestore, והשרת מחיל אותן
+     על הגיליון ברקע (gymApplyOps_). כיבוי = כל פעולה עוברת ב-Apps Script כמו קודם;
+     פעולות שכבר נכתבו וטרם הוחלו מוחלות בכל מקרה (הטריגר השעתי אינו תלוי בדגל). */
+  'gymAdminFs', 'gymWriteFs',
   'appsScriptFallback'];
 
 /** מעדכן דגל בודד ומחזיר את מצב כל הדגלים אחרי השינוי. */
@@ -9732,7 +9741,7 @@ function gymLog_(ss, membershipId, type, extra) {
     var row = [];
     for (var c = 0; c < sh.getLastColumn(); c++) row.push('');
     function put(name, val) { if (cols[name]) row[cols[name] - 1] = val; }
-    put('מזהה אירוע', 'LOG-' + Date.now());
+    put('מזהה אירוע', extra.eventId || ('LOG-' + Date.now()));
     put('מזהה מנוי', membershipId);
     put('תאריך', new Date());
     put('סוג אירוע', type);
@@ -10435,7 +10444,8 @@ function gymActivate_(ss, body, isManual) {
 
     /* 3.10.26 — מגן מכפילות: אותו סכום לאותו מנוי בתוך 3 דקות = כנראה לחיצה כפולה
        (המסך הציג מצב ישן והמנהל רשם שוב). רישום מכוון של תשלום זהה — דרך יומן התשלומים. */
-    var dupAgo = gymRecentDuplicatePayment_(ss, id, amount);
+    /* כשיש eventId (הגיע מתור gymOps) הוא מפתח האידמפוטנטיות — המגן נועד ללחיצה כפולה במסלול הישן. */
+    var dupAgo = body.eventId ? null : gymRecentDuplicatePayment_(ss, id, amount);
     if (dupAgo !== null) {
       return { ok: false, error: 'כבר נרשם תשלום זהה (' + amount + ' ₪) לפני ' + dupAgo + ' שניות. ' +
                'אם זה תשלום נוסף ולא כפילות — המתן כמה דקות או הוסף אותו דרך "יומן תשלומים".' };
@@ -10470,7 +10480,7 @@ function gymActivate_(ss, body, isManual) {
     gymLog_(ss, id, 'תשלום', {
       amount: amount, method: body.method || (isManual ? 'מזומן' : 'פייבוקס'),
       ref: body.reference || '', validUntil: validLabel,
-      by: body._email || '',
+      by: body._email || '', eventId: body.eventId || '',
       note: recordOnly ? ('נרשם ידנית ע"י מנהל, בלי הפעלה (סטטוס נשאר: ' + prevStatus + ')')
                        : (isManual ? 'נרשם ידנית ע"י מנהל' : 'אומת מול דיווח התושב')
     });

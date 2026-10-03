@@ -191,7 +191,7 @@
        22 קבצי מסכי ניהול (~1.1MB: תקציב/הוצאות/תכנון, מתקנים ושירותים, תושבים
        ומערכת, ניהול הגינון) **אינם** כאן יותר. תושב לא מוריד אותם; מנהל מקבל
        אותם בניווט הראשון למסך כזה. סדר הקבצים בתוך קבוצה נשמר במניפסט. -->
-  <script defer src="js/lazyManifest.js?v=0ece286c34"></script>
+  <script defer src="js/lazyManifest.js?v=b191b761fa"></script>
   <script defer src="js/lazy.js?v=011e0ffe5f"></script>
   <script defer src="js/data/mock.js?v=fd54e34660"></script>
   <!-- כללי החזרתיות ומנוע האופק — אותו קובץ נטען גם ב-Apps Script (GardenRules.gs) -->
@@ -215,6 +215,8 @@
   <script defer src="js/data/door.js?v=71c7a113de"></script>
   <!-- 25.9 — מכון הכושר מ-Firestore קודם (עוטף את getGymList). אחרי dataService. -->
   <script defer src="js/data/gymFs.js?v=51ed68cc48"></script>
+  <!-- 3.10 — מכון כושר: פעולות מנהל נכתבות מיד ל-Firestore (דגל gymWriteFs, כבוי כברירת מחדל). אחרי gymFs. -->
+  <script defer src="js/data/gymWrite.js?v=ebdd87e882"></script>
   <script defer src="js/ui/doorButton.js?v=e274640af6"></script>
   <script defer src="js/screens/resWework.js?v=b3eb1b2b3c"></script>
   <!-- ניהול התראות (23.9, מרכז ההתראות) — מחליף את "ניהול מיילים", אותו מזהה מסך -->
@@ -226,7 +228,7 @@
   <script defer src="js/screens/resRecommendations.js?v=fe068c58c9"></script>
   <!-- אזור התושב (מסכי הפורטל) — לפני המנוע -->
   <!-- גיאומטריית מפת השיכון — נוצר אוטומטית מקובץ הכיול, אל תערוך ידנית -->
-  <script defer src="js/data/mapGeo.js?v=d69582e00d"></script>
+  <script defer src="js/data/mapGeo.js?v=21085276ad"></script>
   <script defer src="js/data/gardenAreas.js?v=457c00156c"></script>
   <!-- מילון הגינון (2026-09-09) — שם אחד לכל מושג ומשפט מצב יחיד.
        נטען לפני כל מסכי הגינון; הם קוראים אותו בזמן ריצה. -->

@@ -26,6 +26,7 @@
 
 var FS_GYM_MEMBERS = 'gymMembers';
 var FS_GYM_CONFIG  = 'gymConfig';
+var FS_GYM_OPS     = 'gymOps';
 
 var GYM_MEMBER_FS_FIELDS = ['מזהה', 'מסלול', 'מחיר מוסכם', 'תאריך התחלה', 'בתוקף עד', 'סטטוס',
   'סה"כ שולם', 'תשלום אחרון', 'חודשים ששולמו', 'מצב סנכרון', 'אישור תקנון',
@@ -123,17 +124,172 @@ function gymMemberDoc_(row, who, events, qLabels) {
   return doc;
 }
 
+
+/* ============================================================================
+ *  פעולות מכון שנכתבו ל-Firebase — gymOps   (שלבים 2-3, 3.10.26)
+ * ----------------------------------------------------------------------------
+ *  בקשת יועד: "שמירה מיידית, מיילים ודלת ברקע". הדפדפן (gymWrite.js) כותב שני דברים:
+ *     1. מסמך gymOps/{opId} = **הכוונה** (סוג פעולה + הגוף המלא, כמו שהיה נשלח לשרת).
+ *     2. עדכון אופטימי של gymMembers/{id} — כדי שהמסך יציג את התוצאה מיד.
+ *  ואז מעיר את gymApplyOps. השרת מחיל כל פעולה על הגיליון **בדיוק בפונקציות
+ *  הקיימות** (gymActivate_, updateGymPayment_ ...) — אותה לוגיקה, אותם מיילים —
+ *  מוחק את ה-op, ומשכתב את מסמך המנוי מהגיליון (האמת). זה גם מה שמסנכרן את הדלת.
+ *
+ *  🔑 למה אוסף נפרד ולא מערך בתוך מסמך המנוי: שני מנהלים/שתי לחיצות לא דורסים זה את
+ *     זה (כל op הוא מסמך משלו, create בלבד), והסנכרון השעתי שמשכתב את מסמך המנוי
+ *     לא יכול למחוק כוונה שעוד לא הוחלה.
+ *  🔑 כישלון **לא** נבלע: op שנכשל נשאר עם status:'failed' + error, המסמך משוכתב
+ *     מהגיליון (המסך חוזר לאמת), והלקוח מציג למנהל "הפעולה לא הוחלה: ...".
+ *  🔑 אידמפוטנטיות: תשלום נושא eventId; אם כבר ביומן — לא נרשם שוב (קריסה בין
+ *     ההחלה למחיקת ה-op לא יוצרת תשלום כפול). עריכה/ביטול/הארכה זהים במהותם בהחלה חוזרת.
+ *  🔑 רשת ביטחון: הטריגר השעתי (gymFsHourly_) מחיל ops גם אם הדפדפן נסגר לפני ההערה.
+ *  ⚠️ לא נתמך כאן (נשאר ב-Apps Script): יצירת מנוי חדש (מונה GYM-xxxx), מחיקה, דחיית
+ *     תשלום, בקשת הצהרה, הגדרות המכון.
+ * ========================================================================== */
+var GYM_OP_TYPES = { recordGymPayment: 1, confirmGymPayment: 1, updateGymPayment: 1, voidGymPayment: 1,
+  activateGymManual: 1, extendGymMembership: 1, updateGymMembership: 1 };
+
+/** פעולה אחת על הגיליון, בפונקציית השרת הקיימת. מחזיר { ok, already?, error? }. */
+function gymRunOp_(ss, type, body) {
+  if (!GYM_OP_TYPES[type]) return { ok: false, error: 'סוג פעולה לא מוכר: ' + type };
+  if (body.eventId && (type === 'recordGymPayment' || type === 'confirmGymPayment')) {
+    var logSh = ss.getSheetByName(GYM_LOG_SHEET);
+    if (logSh && gymLogRowByEvent_(logSh, gymCols_(logSh), body.eventId)) return { ok: true, already: true };
+  }
+  var r;
+  var needsLogRow = !!body.eventId && (type === 'recordGymPayment' || type === 'confirmGymPayment');
+  switch (type) {
+    case 'recordGymPayment':    r = recordGymPayment_(ss, body); break;
+    case 'confirmGymPayment':   r = confirmGymPayment_(ss, body); break;
+    case 'updateGymPayment':    r = updateGymPayment_(ss, body); break;
+    case 'voidGymPayment':      r = voidGymPayment_(ss, body); break;
+    case 'activateGymManual':   r = activateGymManual_(ss, body); break;
+    case 'extendGymMembership': r = extendGymMembership_(ss, body); break;
+    case 'updateGymMembership': r = updateGymMembership_(ss, body); break;
+  }
+  if (r && r.ok !== true && /כבר מבוטל/.test(String(r.error || ''))) return { ok: true, already: true };
+  /* gymLog_ בולעת שגיאות; ה-op נמחק אחרי הצלחה, אז בודקים שהתשלום באמת ביומן לפני שמוותרים על הכוונה. */
+  if (needsLogRow && r && r.ok === true) {
+    var logSh2 = ss.getSheetByName(GYM_LOG_SHEET);
+    if (logSh2 && !gymLogRowByEvent_(logSh2, gymCols_(logSh2), body.eventId)) {
+      return { ok: false, error: 'השורה בגיליון עודכנה אבל התשלום לא נרשם ביומן — בדוק ביומן התשלומים לפני שמנסים שוב' };
+    }
+  }
+  return r || { ok: false, error: 'אין תשובה' };
+}
+
+/** כל ה-ops הממתינים (אופציונלי: למנוי אחד), הישן ראשון. */
+function gymPendingOps_(memberId) {
+  var list = fsQuery_(FS_GYM_OPS, 'status', 'EQUAL', 'pending', 300) || [];
+  if (memberId) list = list.filter(function (o) { return o.data && String(o.data.memberId) === String(memberId); });
+  list.sort(function (a, b) {
+    var x = String((a.data && a.data.createdAt) || ''), y = String((b.data && b.data.createdAt) || '');
+    return x < y ? -1 : (x > y ? 1 : (a.id < b.id ? -1 : 1));
+  });
+  return list;
+}
+
+/** op שנכשל והמנהל כבר קיבל עליו הודעה — נמחק אחרי 14 יום (הלקוח זוכר מה כבר הוצג). */
+function gymPruneFailedOps_() {
+  var n = 0, cutoff = Date.now() - 14 * 86400000;
+  (fsQuery_(FS_GYM_OPS, 'status', 'EQUAL', 'failed', 100) || []).forEach(function (o) {
+    var t = o.data && o.data.failedAt ? new Date(o.data.failedAt).getTime() : 0;
+    if (t && t < cutoff) { fsDelete_(fsDocPath_(FS_GYM_OPS, o.id)); n++; }
+  });
+  return n;
+}
+
+/** מזהי מנויים שיש להם op ממתין — הסנכרון לא ידרוס את המסמך האופטימי שלהם. */
+function gymPendingMemberIds_() {
+  var out = {};
+  try { gymPendingOps_().forEach(function (o) { if (o.data && o.data.memberId) out[String(o.data.memberId)] = 1; }); }
+  catch (e) { Logger.log('gymPendingMemberIds_: ' + e); }
+  return out;
+}
+
+/**
+ * מחיל ops ממתינים. נקרא מהדפדפן (gymApplyOps, הרשאת מכון) ומהטריגר השעתי.
+ * @param {string=} memberId הגבלה למנוי אחד (הדפדפן שולח את המנוי שהשתנה)
+ */
+function gymApplyOps_(ss, memberId) {
+  ss = ss || SpreadsheetApp.getActiveSpreadsheet();
+  var out = { ok: true, found: 0, applied: 0, already: 0, failed: 0, errors: [] };
+  var pend;
+  try { pend = gymPendingOps_(memberId); }
+  catch (e) { out.ok = false; out.errors.push('שאילתה: ' + e); return out; }
+  if (!pend.length) return out;
+  /* 🔴 מחילה אחת בכל רגע (הדפדפן + הטריגר השעתי + שתי הערות רצופות). נעילת מסמך — לא
+     נעילת הסקריפט, כי הפונקציות שמוחלות לוקחות אותה בעצמן. אחרי הנעילה קוראים מחדש:
+     מי שחיכה רואה רק מה שנשאר. */
+  var applyLock = LockService.getDocumentLock();
+  try { applyLock.waitLock(25000); }
+  catch (eL) { out.ok = false; out.errors.push('המערכת עסוקה — ההחלה תיעשה בהערה הבאה'); return out; }
+  try {
+    pend = gymPendingOps_(memberId);
+    out.found = pend.length;
+    if (!pend.length) return out;
+    return gymApplyOpsLocked_(ss, pend, out);
+  } finally { applyLock.releaseLock(); }
+}
+
+function gymApplyOpsLocked_(ss, pend, out) {
+
+  var touched = {};
+  for (var i = 0; i < pend.length; i++) {
+    var op = pend[i], d = op.data || {};
+    var path = fsDocPath_(FS_GYM_OPS, op.id);
+    var mid = String(d.memberId || '').trim();
+    try {
+      var body = {};
+      Object.keys(d.body || {}).forEach(function (k) { body[k] = d.body[k]; });
+      body.id = body.id || mid;
+      body._email = d.by || '';
+      if (d.eventId) body.eventId = d.eventId;
+      var r = gymRunOp_(ss, String(d.type || ''), body);
+      if (r && r.ok === true) {
+        if (r.already) out.already++; else out.applied++;
+        fsDelete_(path);
+      } else {
+        out.failed++;
+        var msg = String((r && r.error) || 'נכשל').slice(0, 300);
+        out.errors.push(op.id + ': ' + msg);
+        if (fsGet_(path)) fsMerge_(path, { status: 'failed', error: msg, failedAt: new Date() });   /* לא יוצרים מסמך רפאים */
+      }
+    } catch (e2) {
+      out.failed++;
+      out.errors.push(op.id + ': ' + e2);
+      try { if (fsGet_(path)) fsMerge_(path, { status: 'failed', error: String(e2).slice(0, 300), failedAt: new Date() }); } catch (e3) { }
+    }
+    if (mid) touched[mid] = 1;
+  }
+
+  /* סנכרון הדלת + משכתב את מסמך המנוי מהגיליון (האמת) — גם למנוי שהפעולה שלו נכשלה,
+     כדי שהמסך יחזור למצב האמיתי. doorGymAfterWrite_ מדלג על מנוי שיש לו op חדש ממתין. */
+  Object.keys(touched).forEach(function (id) {
+    try {
+      doorGymAfterWrite_(ss, { action: 'updateGymMembership', id: id },
+        { getContent: function () { return JSON.stringify({ ok: true, id: id }); } });
+    } catch (e4) { out.errors.push('סנכרון ' + id + ': ' + e4); }
+  });
+  return out;
+}
+
 function gymMembersSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var out = { wrote: 0, deleted: 0, skipped: 0 };
   var idx = gymResidentIndex_(ss);
   var logs = gymLogByMember_(ss), ql = gymQuestionLabels_(ss);
-  var items = readTable_(ss, GYM_SHEET).map(function (row) {
+  var pending = gymPendingMemberIds_();   /* יש להם op שעוד לא הוחל — לא דורסים את המסמך האופטימי */
+  var held = [];
+  var items = [];
+  readTable_(ss, GYM_SHEET).forEach(function (row) {
     var id = String(row['מזהה'] || '').trim();
-    return { id: id,
-             doc: gymMemberDoc_(row, idx[normalizeEmail_(String(row['אימייל'] || ''))], logs[id], ql) };
+    if (pending[id]) { held.push(id); return; }
+    items.push({ id: id,
+             doc: gymMemberDoc_(row, idx[normalizeEmail_(String(row['אימייל'] || ''))], logs[id], ql) });
   });
   var live = {};
+  held.forEach(function (id) { live[id] = 1; out.skipped = (out.skipped || 0) + 1; });
   fsWriteAll_(FS_GYM_MEMBERS, items, out, live);
   fsSweepOrphans_(FS_GYM_MEMBERS, live, out);
   return out;
@@ -173,11 +329,13 @@ function gymMembersSyncEmail_(ss, email) {
   if (!em) return 0;
   var who = gymResidentIndex_(ss)[em] || null;
   var logs = gymLogByMember_(ss), ql = gymQuestionLabels_(ss);
+  var pending = gymPendingMemberIds_();
   var n = 0;
   readTable_(ss, GYM_SHEET).forEach(function (row) {
     if (normalizeEmail_(String(row['אימייל'] || '')) !== em) return;
     var id = String(row['מזהה'] || '').trim();
     if (!fsIdOk_(id)) return;
+    if (pending[id]) return;     /* op חדש הגיע באמצע — ההחלה הבאה תשכתב */
     fsSet_(fsDocPath_(FS_GYM_MEMBERS, id), gymMemberDoc_(row, who, logs[id], ql));
     n++;
   });
@@ -187,6 +345,8 @@ function gymMembersSyncEmail_(ss, email) {
 /** שלב שעתי — רשת הביטחון לעריכה ידנית בגיליון. */
 function gymFsHourly_(ss) {
   var out = {};
+  try { out.prunedOps = gymPruneFailedOps_(); } catch (e) { out.pruneError = String(e); }
+  try { out.ops = gymApplyOps_(ss); } catch (e) { out.opsError = String(e); }   /* קודם מחילים כוונות שהדפדפן לא הספיק להעיר */
   try { out.members = gymMembersSyncAll_(ss); } catch (e) { out.membersError = String(e); }
   try { gymConfigSync_(ss); out.config = true; } catch (e) { out.configError = String(e); }
   return out;

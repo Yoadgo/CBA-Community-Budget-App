@@ -2142,13 +2142,64 @@ service cloud.firestore {
      *  gymMembers: סטטוס/מסלול/תאריכים/תשלומים + familyId/uid, ומ-3.10.26 (schema 2)
      *  גם הצהרת בריאות, חתימה, הערות מנהל ויומן אירועים (החלטת יועד). **בלי** שם,
      *  מייל, טלפון, ת.ז., תאריך לידה — נתוני גיליון "תושבים". רשימת היתר.
-     *  קריאה: מנהל מכון (לא חיצוני). כתיבה: שרת בלבד.
+     *  קריאה: מנהל מכון (לא חיצוני). כתיבה: שרת, ומ-3.10.26 גם מנהל מכון (עדכון הקרנה בלבד — ר' מטה).
      *  gymConfig/public: מסלולים, תקנון, נוסח השאלות, פייבוקס — כל חבר.
      *  gymConfig/admin: הגדרות המכון בלי קוד הכניסה — מנהל מכון.
      * ==================================================================== */
+    /* ====================================================================
+     *  מכון כושר — כתיבה מהדפדפן (שלבים 2-3, 3.10.26, בקשת יועד "שמירה מיידית")
+     * --------------------------------------------------------------------
+     *  🔴 **שני כללים, ושניהם למנהל מכון פנימי בלבד** (isInternalAdmin('מכון')):
+     *   1. gymOps/{opId} — **הכוונה**. יצירה בלבד (בלי עדכון/מחיקה — השרת מוחק).
+     *      · רשימת שדות סגורה, status חייב להיות 'pending', type מרשימה סגורה.
+     *      · `by` חייב להיות המייל של המחובר — אי אפשר לרשום פעולה "בשם" מנהל אחר.
+     *      · body.id חייב להיות memberId, והמנוי חייב להתקיים.
+     *   2. gymMembers/{id} — **ההקרנה האופטימית**. עדכון בלבד (בלי יצירה/מחיקה),
+     *      ורק רשימת שדות סגורה של סטטוס/תאריכים/סכומים/יומן. **לא** אפשר לגעת
+     *      ב-familyId/uid/slot/הצהרה/חתימה/שאלון/schema.
+     *  ⚠️ ההקרנה אינה האמת: השרת מחיל את ה-op על הגיליון ומשכתב את המסמך מהגיליון.
+     *     לכן גם בהנחה גרועה (מנהל זדוני) הנזק מוגבל לתצוגה עד הסנכרון — ויומן
+     *     הפעולות בגיליון הוא הרישום האמיתי.
+     * ==================================================================== */
+    function gymOpTypes() {
+      return ['recordGymPayment', 'confirmGymPayment', 'updateGymPayment', 'voidGymPayment',
+              'activateGymManual', 'extendGymMembership', 'updateGymMembership'];
+    }
+    function gymStatuses() {
+      return ['ממתין להצהרה', 'ממתין לאישור רופא', 'ממתין לאישור', 'ממתין לתשלום', 'ממתין לאימות',
+              'פעיל', 'פג תוקף', 'מוקפא', 'נדחה', 'בוטל'];
+    }
+    function gymMemberPatchKeys() {
+      return ['סטטוס', 'סטטוס תשלום', 'בתוקף עד', 'תאריך התחלה', 'סה"כ שולם', 'תשלום אחרון',
+              'חודשים ששולמו', 'מצב סנכרון', 'מחיר מוסכם', 'מסלול', 'אמצעי תשלום', 'אסמכתא',
+              'אומת בתאריך', 'אומת ע"י', 'טופל בתאריך', 'טופל ע"י', 'הערות מנהל', 'log', 'updatedAt'];
+    }
+    function gymOpOk() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['memberId', 'type', 'body', 'by', 'createdAt', 'status', 'schema', 'eventId']) &&
+             d.keys().hasAll(['memberId', 'type', 'body', 'by', 'createdAt', 'status', 'schema']) &&
+             d.type in gymOpTypes() &&
+             d.status == 'pending' &&
+             d.schema == 1 &&
+             d.memberId is string && d.memberId.size() > 0 && d.memberId.size() <= 20 &&
+             d.by is string && d.by == request.auth.token.email.lower() &&
+             d.createdAt is string && d.createdAt.size() <= 40 &&
+             d.body is map && d.body.size() <= 15 && d.body.id == d.memberId &&
+             (!d.keys().hasAny(['eventId']) || (d.eventId is string && d.eventId.size() <= 60)) &&
+             exists(/databases/$(database)/documents/gymMembers/$(d.memberId));
+    }
+    match /gymOps/{opId} {
+      allow read: if isInternalAdmin('מכון');
+      allow create: if isInternalAdmin('מכון') && gymOpOk();
+      allow update, delete: if false;
+    }
     match /gymMembers/{docId} {
       allow read: if canSeeDoorState();
-      allow write: if false;
+      allow update: if isInternalAdmin('מכון') &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(gymMemberPatchKeys()) &&
+                       request.resource.data.log is list && request.resource.data.log.size() <= 60 &&
+                       request.resource.data['סטטוס'] in gymStatuses();
+      allow create, delete: if false;
     }
     function canSeeGymConfig(docId) {
       return (docId == 'public' && canSeeWework()) || isInternalAdmin('מכון');

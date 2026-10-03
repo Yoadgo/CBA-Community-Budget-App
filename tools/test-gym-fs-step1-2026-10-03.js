@@ -127,6 +127,7 @@ ok('הצהרה: ת.ז. ותאריך לידה נמשכים מהגיליון רק 
 ok('🔴 סנכרון אחרי עריכת/ביטול תשלום מזהה את המנוי לפי id מהתשובה', /var mid = body\.id \|\| \(parsed && parsed\.id\)/.test(DOOR));
 ok('פעולת זריעה seedGymFirestore (הרשאה + נתב)', /seedGymFirestore: PERM_GYM/.test(GS) && /case 'seedGymFirestore'/.test(GS));
 ok('🔴 לקוח שולח id של המנוי בעריכה/ביטול תשלום', (GA.match(/id: id, eventId/g) || []).length === 2);
+ok('🔴 getResidentDirectory מיוצא מ-dataService (אחרת המסך נופל לגיליון)', /getResidentDirectory: getResidentDirectory,/.test(require('fs').readFileSync('js/data/dataService.js','utf8')));
 
 console.log('\n' + (fail ? '❌ ' + fail + ' נכשלו' : '✅ הכול עבר') + ' (' + pass + ' עברו)');
 process.exit(fail ? 1 : 0);

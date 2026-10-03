@@ -107,7 +107,7 @@ section('4. defer');
 {
   const idx = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const tags = idx.match(/<script[^>]*src="js\/[^"]+"[^>]*>/g) || [];
-  ok('46 תגי סקריפט מקומיים (66 פחות 22 שעברו לטעינה לפי דרישה, ועוד lazy.js+lazyManifest.js)', tags.length === 46, String(tags.length));
+  ok('47 תגי סקריפט מקומיים (66 פחות 22 שעברו לטעינה לפי דרישה, ועוד lazy.js+lazyManifest.js, ועוד gymWrite.js)', tags.length === 47, String(tags.length));
   const noDefer = tags.filter(t => !/\bdefer\b/.test(t));
   ok('🔴 לכולם יש defer', noDefer.length === 0, noDefer.slice(0, 2).join(' '));
   const order = tags.map(t => t.match(/src="([^"?]+)/)[1]);

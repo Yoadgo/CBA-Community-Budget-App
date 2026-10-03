@@ -77,7 +77,7 @@ section('3. מגן מכפילות');
   ok('מנוי אחר → לא נתפס', f(e.ss, 'GYM-1', 360) === null);
   ok('לפני 10 דקות → לא נתפס', f(e.ss, 'GYM-6', 360) === null);
   ok('תשלום מבוטל לא נחשב כפילות', f(e.ss, 'GYM-5', 360) === null);
-  ok('🔴 gymActivate_ קורא למגן לפני כתיבה', /var dupAgo = gymRecentDuplicatePayment_\(ss, id, amount\);\s+if \(dupAgo !== null\)/.test(GS));
+  ok('🔴 gymActivate_ קורא למגן לפני כתיבה', /var dupAgo = body\.eventId \? null : gymRecentDuplicatePayment_\(ss, id, amount\);\s+if \(dupAgo !== null\)/.test(GS));
 }
 
 section('4. חיווט');
