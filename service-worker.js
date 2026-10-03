@@ -27,6 +27,7 @@
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
 var VERSION = "5a497f938b";
+var VERSION = "9e7f4cb3a2";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -76,7 +77,7 @@ var ASSET_VERSIONS = {
   "js/data/gardenStatsCalc.js": "177cc46e78",
   "js/data/gymFs.js": "51ed68cc48",
   "js/data/gymWrite.js": "ebdd87e882",
-  "js/data/mapGeo.js": "1df204f72d",
+  "js/data/mapGeo.js": "0bcd37db84",
   "js/data/mock.js": "fd54e34660",
   "js/data/push.js": "198e321583",
   "js/data/reconcile.js": "899bfb8f4c",
@@ -109,7 +110,7 @@ var ASSET_VERSIONS = {
   "js/screens/resGym.js": "d61998fa65",
   "js/screens/resRecommendations.js": "fe068c58c9",
   "js/screens/resWework.js": "b3eb1b2b3c",
-  "js/screens/resident.js": "e9a10e2d1e",
+  "js/screens/resident.js": "0bad963db6",
   "js/screens/residents.js": "9ebc66c05d",
   "js/screens/services.js": "bec9552396",
   "js/screens/servicesAdmin.js": "4c6fe01239",

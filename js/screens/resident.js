@@ -2228,6 +2228,9 @@ CBA.screens = CBA.screens || {};
      לא במטרים השמורים (o.w/o.h ב-mapGeo.js) — כך זה חל גם על כל האובייקטים
      שכבר קיימים במפה, בלי מיגרציית נתונים. */
   var MK_BIGGER = 1.2;
+  /* פחים בלבד: יועד ביקש להקטין ב-10% מהגודל שראה (1.2 → 1.08) — המיגונית
+     נשארת ב-1.2, לא נוגעים בה. */
+  var MK_BIGGER_BIN = MK_BIGGER * 0.9;
 
   /* ---- MAP_TILES: משבצת לכל מספר בית ----
      נשמר באחוזי־עולם בדיוק כמו במפה הישנה, כדי שהחיפוש, goToHouse, "הבית שלי"
@@ -2585,9 +2588,9 @@ CBA.screens = CBA.screens || {};
               E('g', { transform: 'translate(' + (-evr * 0.62).toFixed(1) + ' ' + (-evr * 0.62).toFixed(1) +
                 ') scale(' + (evr * 2 * 0.62 / 24).toFixed(4) + ')' }, EV_GLYPH), 0, 'traffic');
           } else if (o.t === 'bin') {
-            /* +20% ויזואלי (MK_BIGGER) — רק בציור, לא ב-o.w/o.h השמורים. */
+            /* +8% ויזואלי (MK_BIGGER_BIN, הוקטן ב-10% מהגרסה הקודמת של 1.2) — רק בציור, לא ב-o.w/o.h השמורים. */
             var K = BIN_KINDS[o.k] || BIN_KINDS.trash, inner;
-            var bnw = o.w * MK_BIGGER, bnh = o.h * MK_BIGGER, bnm = Math.min(bnw, bnh);
+            var bnw = o.w * MK_BIGGER_BIN, bnh = o.h * MK_BIGGER_BIN, bnm = Math.min(bnw, bnh);
             if (K.shape === 'circle') inner = E('circle', { cx: 0, cy: 0, r: (bnm / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
             else if (K.shape === 'oval') inner = E('ellipse', { cx: 0, cy: 0, rx: (bnw / 2).toFixed(1), ry: (bnh / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
             else inner = E('rect', { x: (-bnw / 2).toFixed(1), y: (-bnh / 2).toFixed(1), width: bnw.toFixed(1), height: bnh.toFixed(1),
