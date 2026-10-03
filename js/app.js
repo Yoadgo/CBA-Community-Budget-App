@@ -962,6 +962,15 @@
     notif.overBudget = c.overBudget;
     if (inited && changed) { renderNav(currentArea); renderControls(); refreshHomeIfOpen(); }
   }
+  /* (3.10.26 ערב, החלטת יועד: "לטעון רק בפתיחת המגש") — מונה שריוני המועדון
+     עלה 3.4 שניות של Apps Script בכל פתיחה, ועוד אחת כל 45 שניות של פעילות.
+     עכשיו הוא נשאל רק כשהמגש פתוח (או כשמסך ניהול המועדון פתוח — הוא מעדכן את
+     המונה בעצמו, ר' setClubPendingCount). כל הקוראים האחרים (עלייה, טיימר, חזרה
+     לטאב, אחרי רענון) נשארו במקומם ופשוט לא עושים כלום כשהמגש סגור. */
+  function clubTrayOpen() {
+    var p = document.getElementById("user-panel");
+    return !!(p && !p.hidden);
+  }
   function refreshAlertsClub() {
     if (clubAlertsInFlight) return;
     // (2026-08-18, ממצא 2.1 בדו"ח הבדיקה) מנהל בלי הרשאת מועדון דילג כאן החוצה
@@ -972,6 +981,7 @@
       if (!notif.clubChecked) { notif.clubChecked = true; if (inited) renderControls(); }
       return;
     }
+    if (!clubTrayOpen()) return;   // ר' ההערה ליד clubTrayOpen
     if (!(window.CBA.connected && CBA.data && CBA.data.getClubList)) return;
     clubAlertsInFlight = true;
     CBA.data.getClubList(function (res) {

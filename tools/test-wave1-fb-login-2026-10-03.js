@@ -113,7 +113,7 @@ section('1. memberDocFor_ — מקור אחד לתוכן המסמך');
                                familyId: '401', firstName: 'דר', family: 'גולן', house: 7, email: ' Dar@X.c ' });
   ok('🔴 email של הבעלים, מנורמל (צוות אדום H1)', d.email === 'dar@x.c');
   const keys = Object.keys(d).sort().join(',');
-  ok('עשרה שדות בדיוק', keys === 'active,email,family,familyId,firstName,house,isExternal,perms,schema,updatedAt', keys);
+  ok('אחד-עשר שדות בדיוק', keys === 'active,email,family,familyId,firstName,house,isExternal,perms,profileGaps,schema,updatedAt', keys);
   ok('schema 2, house כמחרוזת', d.schema === 2 && d.house === '7' && d.active === true);
   const r = sb.memberDocFor_(null, { revoke: true });
   ok('🔴 שלילה: הכול ריק ו-active:false', r.active === false && r.perms.length === 0 && r.familyId === '' && r.firstName === '' && r.schema === 2);

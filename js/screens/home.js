@@ -721,11 +721,29 @@ CBA.screens = CBA.screens || {};
      עצמם) נשמרת במכשיר ל-30 דקות, לפי משתמש. שמירה ב"הפרטים שלי" מוחקת
      אותה (ר' saveMyProfile ב-dataService). */
   var PROF_KEY = "cba_prof_gaps_v1";
+  /* (3.10.26 ערב, יועד: "פעם ביום מספיק") — המקור הראשי הוא עכשיו רשומת החבר
+     ב-Firestore (profileGaps, ר' profileGapsFor_ ב-Code.gs). המטמון במכשיר ומשיכת
+     myProfile מ-Apps Script נשארו רק כנפילה לאחור, ולכן 24 שעות. */
+  var PROF_TTL_MS = 24 * 3600 * 1000;
+  var PROF_MEM_MS = 5 * 60 * 1000;     // בתוך אותה פתיחה — לא לקרוא שוב בכל ציור של הבית
+  window.addEventListener("cba:profile-saved", function () { profCache = { ts: 0, val: null }; });
+  function fsProfileGaps(cb) {
+    if (!(window.CBA && CBA.fb && CBA.fb.authReady && CBA.fb.readDoc && CBA.fb.profile)) return cb(null);
+    CBA.fb.authReady(function () {
+      var p = CBA.fb.profile();
+      var me = String(u().email || "").toLowerCase();
+      if (!p || !p.uid || String(p.email || "").toLowerCase() !== me) return cb(null);
+      CBA.fb.readDoc("members", p.uid, function (e, d) {
+        var ok = !e && d && Array.isArray(d.profileGaps) && String(d.email || "").toLowerCase() === me;
+        cb(ok ? d.profileGaps.filter(function (x) { return typeof x === "string"; }) : null);
+      });
+    }, 4000);
+  }
   function profKey() { return PROF_KEY + ":" + String(u().email || "").toLowerCase(); }
   function profRead() {
     try {
       var o = JSON.parse(localStorage.getItem(profKey()) || "null");
-      if (o && Array.isArray(o.val) && (Date.now() - o.ts) < 30 * 60 * 1000) return o;
+      if (o && Array.isArray(o.val) && (Date.now() - o.ts) < PROF_TTL_MS) return o;
     } catch (e) {}
     return null;
   }
@@ -750,14 +768,25 @@ CBA.screens = CBA.screens || {};
   function loadProfile(container) {
     var me = u();
     if (me.isRoleSim || me.isExternal || !(CBA.data && CBA.data.getMyProfile)) { W.prof = []; W.profKnown = true; syncTodo(container); return; }
-    if (!(profCache.val && Date.now() - profCache.ts < 30 * 60 * 1000)) { var stored = profRead(); if (stored) profCache = stored; }
-    if (profCache.val && Date.now() - profCache.ts < 30 * 60 * 1000) { W.prof = profCache.val; W.profKnown = true; syncTodo(container); return; }
-    CBA.data.getMyProfile(function (res) {
-      var g = profileGaps(res);
-      if (g) { profCache = { ts: Date.now(), val: g }; profWrite(g); }
-      if (!W) return;
-      W.prof = g || []; W.profKnown = true;
-      syncTodo(container);
+    if (profCache.val && Date.now() - profCache.ts < PROF_MEM_MS) { W.prof = profCache.val; W.profKnown = true; syncTodo(container); return; }
+    /* 1) רשומת החבר ב-Firestore — בלי Apps Script. */
+    fsProfileGaps(function (fg) {
+      if (fg) {
+        profCache = { ts: Date.now(), val: fg }; profWrite(fg);
+        if (!W) return;
+        W.prof = fg; W.profKnown = true; syncTodo(container);
+        return;
+      }
+      /* 2) נפילה לאחור: המטמון במכשיר (24ש'), ואז myProfile כמו קודם. */
+      var stored = profRead();
+      if (stored) { profCache = stored; if (!W) return; W.prof = stored.val; W.profKnown = true; syncTodo(container); return; }
+      CBA.data.getMyProfile(function (res) {
+        var g = profileGaps(res);
+        if (g) { profCache = { ts: Date.now(), val: g }; profWrite(g); }
+        if (!W) return;
+        W.prof = g || []; W.profKnown = true;
+        syncTodo(container);
+      });
     });
   }
 

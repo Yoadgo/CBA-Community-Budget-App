@@ -5974,6 +5974,8 @@ CBA.data = (function () {
         /* ⏱️ 2.10.26 — הפרופיל השתנה ⇒ כרטיס "פערים" בבית חייב לשאול מחדש (ר' home.js). */
         if (res && res.ok) {
           try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf("cba_prof_gaps_v1:") === 0) localStorage.removeItem(k); }); } catch (e) {}
+          /* (3.10 ערב) גם הזיכרון של עמוד הבית — ר' PROF_MEM_MS ב-home.js. */
+          try { window.dispatchEvent(new Event("cba:profile-saved")); } catch (e2) {}
         }
         if (cb) cb(res);
       });

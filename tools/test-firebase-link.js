@@ -88,7 +88,7 @@ ok('ונרשם מול המייל של המושב', remembered[0].email === 'y@x.
 
 section('3. 🔴 במסמך רק מה שאושר (גל 1, 3.10.26: שם פרטי+משפחה+בית — יועד אישר; email של הבעלים — צוות אדום H1)');
 const keys = Object.keys(writes[0].obj).sort();
-ok('⚠️ בדיוק עשרה שדות', keys.length === 10, keys.join(','));
+ok('⚠️ בדיוק אחד-עשר שדות (+profileGaps — שמות שדות חסרים, 3.10 ערב)', keys.length === 11, keys.join(','));
 ok('שם/משפחה/בית/מייל-הבעלים — רק אלה נוספו', ['firstName','family','house','email'].every(k => keys.indexOf(k) !== -1));
 ok('המייל הוא של בעל המסמך בלבד (המושב), מנורמל', writes[0].obj.email === 'y@x.com', writes[0].obj.email);
 ['name','phone','mail','טלפון','שם','children','ילדים'].forEach(k =>

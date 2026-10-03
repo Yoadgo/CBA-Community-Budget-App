@@ -1545,7 +1545,7 @@ function memberDocFor_(pr, opt) {
   opt = opt || {};
   if (opt.revoke || !pr) {
     return { familyId: '', perms: [], isExternal: false, active: false, email: '',
-             firstName: '', family: '', house: '', updatedAt: new Date(), schema: MEMBER_SCHEMA };
+             firstName: '', family: '', house: '', profileGaps: [], updatedAt: new Date(), schema: MEMBER_SCHEMA };
   }
   var perms = (opt.perms || pr.perms || []).slice();
   if (!opt.perms && pr.isSuper && perms.indexOf(PERM_SUPER) === -1) perms.push(PERM_SUPER);
@@ -1561,9 +1561,63 @@ function memberDocFor_(pr, opt) {
     firstName: String(pr.firstName || ''),
     family: String(pr.family || ''),
     house: String(pr.house == null ? '' : pr.house),
+    /* (3.10.26 ערב, אושר ע"י יועד) **שמות** השדות החסרים בכרטיס "השלמת פרטים"
+       בבית — לא הערכים. null = לא הצלחנו לחשב (הלקוח שואל את Apps Script כמו קודם). */
+    profileGaps: (opt.gaps !== undefined) ? opt.gaps : profileGapsFor_(pr),
     updatedAt: new Date(),
     schema: MEMBER_SCHEMA
   };
+}
+
+/* ============================================================================
+ *  profileGapsFor_ — מה חסר ב"הפרטים שלי" (3.10.2026 ערב, אושר ע"י יועד)
+ * ----------------------------------------------------------------------------
+ *  🔑 **אותו חישוב בדיוק כמו profileGaps ב-js/screens/home.js** — שם הוא רץ על
+ *  תשובת myProfile. כאן הוא רץ על שורת הגיליון, והתוצאה נשמרת ברשומת החבר,
+ *  כך שעמוד הבית לא צריך לשאול את Apps Script רק כדי לדעת "מה חסר".
+ *  ⚠️ רק **שמות** שדות ("טלפון", "תאריך לידה") — שום ערך אישי לא יוצא מכאן.
+ *  ⚠️ משתמש חיצוני — רשימה ריקה (בבית שלו אין את הכרטיס הזה בכלל).
+ *  ⚠️ זורק/חסר עמודה ⇒ null, והלקוח נופל ל-myProfile כמו קודם.
+ *  ⚠️ שינוי כאן ⇒ לשנות גם ב-home.js (יש בדיקה שמשווה את השניים).
+ * ========================================================================== */
+function profileGapsFor_(pr) {
+  try {
+    if (!pr || !pr.found) return [];
+    if (pr.isExternal) return [];
+    var ri = permRowIndex_(pr);
+    if (!ri) return null;
+    var headers, row;
+    if (RES_VALUES_MEMO_ && RES_VALUES_MEMO_[ri - 1]) {
+      headers = RES_VALUES_MEMO_[0]; row = RES_VALUES_MEMO_[ri - 1];
+    } else {
+      var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('תושבים');
+      if (!sh) return null;
+      var n = sh.getLastColumn();
+      headers = sh.getRange(1, 1, 1, n).getValues()[0];
+      row = sh.getRange(ri, 1, 1, n).getValues()[0];
+    }
+    headers = headers.map(function (h) { return String(h).trim(); });
+    var val = function (key) {
+      var def = profileFieldDef_(key);
+      if (!def) return '';
+      var c = profileColFor_(headers, def, pr.slot);
+      return c === -1 ? '' : String(row[c] == null ? '' : row[c]);
+    };
+    var gaps = [];
+    if (!val('phone').trim()) gaps.push('טלפון');
+    if (!val('birthDate').trim()) gaps.push('תאריך לידה');
+    var kids = val('kids').trim(), missing = 0;
+    if (kids) {
+      try {
+        var arr = JSON.parse(kids);
+        if (Array.isArray(arr)) arr.forEach(function (k) { if (!k || !String(k.dob || '').trim()) missing++; });
+        else missing = -1;
+      } catch (e) { missing = -1; }
+    }
+    if (missing > 0) gaps.push(missing === 1 ? 'תאריך לידה של ילד/ה' : 'תאריכי לידה של ' + missing + ' ילדים');
+    if (missing === -1) gaps.push('רשימת הילדים (פורמט ישן)');
+    return gaps;
+  } catch (e) { return null; }
 }
 
 /* ============================================================================
@@ -7047,7 +7101,7 @@ var MEMBERS_FP_CHUNK = 8000;              // מאפיין אחד ≤ 9KB — מ�
 var MEMBERS_FORCE_MS = 24 * 3600 * 1000;  // פעם ביום כותבים הכול (מתקן כתיבה ישנה של כותב אחר)
 function memberFp_(doc) {
   var sig = JSON.stringify([doc.familyId, doc.perms, doc.isExternal, doc.active, doc.email,
-                            doc.firstName, doc.family, doc.house, doc.schema]);
+                            doc.firstName, doc.family, doc.house, doc.profileGaps, doc.schema]);
   return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, sig)).substring(0, 8);
 }
 function membersFpRead_() {
@@ -14093,6 +14147,9 @@ function saveMyProfile_(ss, body) {
     sh.getRange(r.rowIndex, touch.by + 1).setValue(who);
     sh.getRange(r.rowIndex, touch.at + 1).setValue(new Date());
   }
+  /* (3.10.26 ערב) כרטיס "השלמת פרטים" בבית נקרא מרשומת החבר — מעדכנים אותה
+     עכשיו (גם של בן/בת הזוג, אותה שורה), ולא רק בסנכרון השעתי. */
+  try { fbSyncRow_(ss, r.rowIndex); } catch (eSync) {}
   return { ok: true, written: written, slot: targetSlot };
 }
 
