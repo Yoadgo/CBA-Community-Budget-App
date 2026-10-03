@@ -2703,7 +2703,9 @@
     } else if (opt.fbReady) {
       afterFirebaseSignIn({ link: false, remember: !!opt.remember });
     }
-    if (!window.CBA.authSession) sessionReady();   // ברקע — לא חוסם את הציור
+    /* (3.10 ערב, שלב 2) המושב **לא** נמשך כאן. תושב נפתח מ-Firestore בלבד, והמושב
+       נמשך רק כשפעולה באמת צריכה את Apps Script (withSession ב-sheets.js) — זו
+       "הכניסה העצלה" שיועד בחר. מנהל תקציב מקבל אותו ממילא עם המטען. */
     CBA.sheets.load(function (ok, info) {
       var wasInited = inited;
       sheetsLoadHandler(ok, info);
@@ -3442,7 +3444,7 @@
      מסלול שרץ לפני המטען נגע במצב שהמטען עצמו ממלא.
      ⚠️ `applyUser` אידמפוטנטית ותלויה רק ב-`currentUser` שכבר נטען
         מ-`loadSession()` למעלה — היא לא נוגעת בשום נתון מהגיליון. */
-  if (currentUser) { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("מושב שמור — מושכים מטען"); } catch (e) {} applyUser(); if (!window.CBA.authSession) sessionReady(); CBA.sheets.load(sheetsLoadHandler); }
+  if (currentUser) { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("מושב שמור — מושכים מטען"); } catch (e) {} applyUser(); CBA.sheets.load(sheetsLoadHandler); }
 
   /* --- רענון תקופתי (2026-08-05, כמה סבבים לבקשת יועד — קצב הלך והואץ, ולבסוף
      ביקש שהקצב המהיר יפעל רק כל עוד הוא בפועל משתמש באפליקציה, כדי לא "לבזבז"

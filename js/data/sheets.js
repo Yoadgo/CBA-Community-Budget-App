@@ -1018,12 +1018,23 @@ CBA.sheets = (function () {
       else cb(true, { source: "cache-kept", error: String(err) });
     }
 
-    fetchPayload("2", function (err, payload) {
-      if (err) return failed(err);
-      /* השרת לא רוקן כלום (דגל כבוי, או שרת ישן, או תושב) — מסלול רגיל. */
-      if (!payload.txFromFirestore) return useIt(payload);
-      payloadTx(payload, useIt, failed);
-    });
+    function viaPayload() {
+      fetchPayload("2", function (err, payload) {
+        if (err) return failed(err);
+        /* השרת לא רוקן כלום (דגל כבוי, או שרת ישן, או תושב) — מסלול רגיל. */
+        if (!payload.txFromFirestore) return useIt(payload);
+        payloadTx(payload, useIt, failed);
+      });
+    }
+    /* שלב 2 — תושב: אותו מטען, מ-Firestore. כשל ⇒ המטען הרגיל. ר' liteMode. */
+    if (liteMode()) {
+      fetchPayloadFs(function (err, payload) {
+        if (err) return viaPayload();
+        useIt(payload);
+      });
+      return;
+    }
+    viaPayload();
   }
 
   /* טעינה בשיטת stale-while-revalidate:
@@ -1052,6 +1063,109 @@ CBA.sheets = (function () {
    *  ⚠️ כל כשל — אין SDK, אין משתמש, אין מסמך, אין הרשאה —
    *     פשוט לא מצייר מוקדם. אין מסלול שמציג שגיאה בגלל זה.
    * ======================================================================== */
+  /* ==========================================================================
+   *  🔴 שלב 2 — "תושבים בלי מטען"   (3.10.2026 ערב, אושר ע"י יועד)
+   * --------------------------------------------------------------------------
+   *  מה זה בשפה פשוטה: המטען הראשי של Apps Script (5-8 שניות) נשא לתושב רגיל
+   *  שלושה דברים בלבד — רשימת השנים, התנועות של המשפחה שלו, וסיסמת רשת
+   *  המועדון. שלושתם כבר יושבים ב-Firestore. אז למי שאין לו הרשאת תקציב
+   *  בונים את אותו "מטען" בדיוק מ-Firestore (3-4 קריאות, עשרות אלפיות),
+   *  והוא עובר באותו מסלול בדיוק (transform → apply) — אותן הגנות, אותם
+   *  מונים, אותו שער כתיבה.
+   *
+   *  🔑 מקור הנתונים של כל שדה (מול המטען של doGet לתושב, DATA_MIN):
+   *     years/currentYear/version ← appConfig/boot
+   *     rev/domains              ← appConfig/rev (הפעימה)
+   *     settings                 ← residentConfig/settings (clubWifi) — לא לחיצוני
+   *     data[y].transactions     ← budgetTx where familyId == שלי (כל השנים, שאילתה אחת)
+   *     budget/income/groups/... ← ריקים, בדיוק כמו DATA_MIN
+   *
+   *  ⚠️ **כל כשל ⇒ המטען הרגיל.** אין משתמש/אין SDK/מסמך חסר/כלל דחה/דגל כבוי
+   *     — fetchAndApply חוזר ל-fetchPayload כמו אתמול. שום תושב לא נשאר בלי נתונים.
+   *  ⚠️ מתג חירום בלי דיפלוי: appConfig/flags.residentLite = false.
+   *  ⚠️ רק כש-budgetTxFromFirestore דלוק — אחרת התנועות האמיתיות בגיליון.
+   *  ⚠️ לא בהדמיית תושב: ההדמיה רצה על המושב של המנהל, והשרת הוא שקובע לה.
+   * ======================================================================== */
+  var RESIDENT_LITE_DEFAULT = true;
+  function liteMode() {
+    if (!(window.CBA && CBA.fb && CBA.fb.readDoc && CBA.fb.queryCollection && CBA.fb.ensureDb && CBA.user)) return false;
+    if (CBA.isSimulating && CBA.isSimulating()) return false;
+    if (CBA.isSuper || (CBA.perms || []).indexOf("תקציב") !== -1) return false;
+    return true;
+  }
+  function fetchPayloadFs(done) {
+    var t0 = Date.now();
+    var settled = false;
+    function finish(err, p) {
+      if (settled) return;
+      settled = true;
+      try { CBA.perf = CBA.perf || {}; CBA.perf.lite = { ok: !err, ms: Date.now() - t0, why: err ? String(err.message || err) : "", at: new Date().toISOString() }; } catch (e) {}
+      try { if (CBA.diag && CBA.diag.mark) CBA.diag.mark(err ? "תושב: נפילה למטען" : "תושב: נטען מ-Firestore", err ? String(err.message || err) : ""); } catch (e) {}
+      done(err, p);
+    }
+    CBA.fb.authReady(function (user) {
+      if (!user) return finish(new Error("no-user"));
+      CBA.fb.ensureDb(function (err) {
+        if (err) return finish(err);
+        if (CBA.fb.flag && (!CBA.fb.flag("residentLite", RESIDENT_LITE_DEFAULT) || !CBA.fb.flag("budgetTxFromFirestore", false))) {
+          return finish(new Error("lite-off"));
+        }
+        var u = CBA.user || {};
+        var ext = u.isExternal === true;
+        var mine = String(u.familyId || "").trim();
+        var boot = null, pulse, settings = ext ? {} : null, rows = mine ? null : [];
+        function maybe() {
+          if (settled || !boot || pulse === undefined || settings === null || rows === null) return;
+          var cur = String(boot.currentYear);
+          var years = (Array.isArray(boot.years) && boot.years.length ? boot.years : [cur]).map(String);
+          if (years.indexOf(cur) === -1) years.push(cur);
+          var byYear = {};
+          rows.forEach(function (r) { var y = String(r.year || ""); (byYear[y] = byYear[y] || []).push(r); });
+          var famName = ((u.firstName || "") + " " + (u.family || "")).trim();
+          var data = {};
+          years.forEach(function (y) {
+            /* שם הרוכש — בכל השנים (המטען מילא אותו מהגיליון לכל השנים; כאן — מהמשתמש). */
+            var tx = txWithNames(fsPlainRows((byYear[y] || []).map(btxStrip))).map(function (r) {
+              return (String(r["רוכש"] || "").trim() || !famName) ? r : Object.assign({}, r, { "רוכש": famName });
+            });
+            data[y] = { budget: [], income: [], groups: [], splits: [], items: [], transactions: tx };
+          });
+          finish(null, {
+            ok: true, _lite: true,
+            rev: (pulse && typeof pulse.n === "number") ? pulse.n : undefined,
+            domains: (pulse && pulse.domains && typeof pulse.domains === "object") ? pulse.domains : undefined,
+            version: boot.version || "", years: years, currentYear: cur,
+            groups: [], notes: {}, settings: settings, data: data,
+            txFromFirestore: true, txFsScope: "family", txFsFamily: mine,
+            txFsFamilyName: famName,
+            txFsOn: true
+          });
+        }
+        CBA.fb.readDoc("appConfig", "boot", function (e1, d) {
+          if (e1 || !d || !d.currentYear) return finish(e1 || new Error("no-boot"));
+          boot = d; maybe();
+        });
+        /* הפעימה — בלעדיה פשוט אין נקודת ייחוס (רענון מלא בכל מחזור, וזה זול כאן). */
+        CBA.fb.readDoc("appConfig", "rev", function (e2, d) { pulse = (!e2 && d) ? d : null; maybe(); });
+        if (!ext) {
+          CBA.fb.readDoc("residentConfig", "settings", function (e3, d) {
+            /* מסמך חסר = השרת עוד לא כתב אותו ⇒ המטען (אחרת הסיסמה הייתה נעלמת בשקט). */
+            if (e3 || !d) return finish(e3 || new Error("no-resident-config"));
+            settings = {};
+            if (d.clubWifi) settings["סיסמת רשת המועדון"] = String(d.clubWifi);
+            maybe();
+          });
+        }
+        if (mine) {
+          CBA.fb.queryCollection("budgetTx", [["familyId", mine]], function (e4, all) {
+            if (e4) return finish(e4);
+            rows = all || []; maybe();
+          });
+        }
+      });
+    });
+  }
+
   var BOOT_FROM_FIRESTORE = false;
 
   function bootFromFirestore(done) {
@@ -1155,7 +1269,9 @@ CBA.sheets = (function () {
        הבית מצויר תוך ~שנייה מנתוני Firestore החיים (לא מהמטמון הישן), ומסכי
        התקציב נשארים נעולים לכתיבה (`_partial`) עד שהמטען הטרי נוחת.
        ⚠️ אם המטען הטרי הקדים (lastAppliedSeq) — הטעינה הקרה מוותרת מעצמה. */
-    bootFromFirestore(function (okFast) {
+    /* שלב 2 — לתושב הטעינה הרגילה עצמה כבר מ-Firestore (fetchPayloadFs);
+       טעינה קרה נוספת הייתה כפילות של אותן קריאות. */
+    if (!liteMode()) bootFromFirestore(function (okFast) {
         /* ⚠️ false = או שלא הצלחנו, או שהמטען הקדים אותנו. */
       if (okFast) cb(true, { source: "firestore-boot" });
     });
@@ -1294,6 +1410,14 @@ CBA.sheets = (function () {
     if (fullFetchInFlight) { cb(true, { source: "in-flight" }); return; }   /* ר' fullFetchInFlight */
     if (!revSupported || lastRev === null || (Date.now() - lastFullFetch) > FULL_EVERY_MS) {
       refresh(cb);
+      return;
+    }
+    /* שלב 2 — תושב: "האם משהו זז?" מהפעימה ב-Firestore, לא מ-Apps Script. */
+    if (liteMode()) {
+      CBA.fb.readDoc("appConfig", "rev", function (e, d) {
+        if (e || !d || typeof d.n !== "number") return refresh(cb);
+        applyRev({ rev: d.n, domains: d.domains }, cb);
+      });
       return;
     }
     fetch(API_URL + "?action=rev")

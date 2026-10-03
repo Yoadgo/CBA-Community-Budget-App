@@ -1377,6 +1377,15 @@ service cloud.firestore {
               (id == 'garden'    && hasPerm('גינון')));
     }
 
+    /* 🔴 שלב 2 (3.10.26 ערב) — ההגדרות שתושב צריך (סיסמת רשת המועדון) בלי
+       המטען הראשי. **לא ב-appConfig**: אותו קורא גם הקבלן החיצוני, והמטען
+       הקפיד שלא לתת לו את הסיסמה (RESIDENT_SETTINGS_ALLOW ריק למשתמש חיצוני).
+       ר' residentConfigDoc_ ב-Code.gs. */
+    match /residentConfig/{doc} {
+      allow read: if isMember() && !isExternalUser();
+      allow write: if false;
+    }
+
     match /homeCounts/{id} {
       allow read: if canSeeHomeCount(id);
       allow write: if false;

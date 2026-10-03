@@ -546,7 +546,7 @@ function memberDoc(over) {
     ok('הזהות לפני המשיכה (applyUser לפני load)', c.log.indexOf('applyUser') > -1 && c.log.indexOf('applyUser') < c.log.indexOf('load'), L);
     ok('בכניסה מ-Firebase: בלי התחברות Firebase שנייה, אבל עם afterFirebaseSignIn (בלי firebaseLink)',
        c.log.indexOf('fbSignInNow') === -1 && c.log.indexOf('after:{"link":false,"remember":true}') !== -1, L);
-    ok('בקשת המושב יצאה ברקע (לפני שהמטען חזר)', c.fetches.length === 1 && c.fetches[0].action === 'loginFb');
+    ok('🔴 שלב 2: אין בקשת מושב בכניסה (עצלה — רק כשפעולה צריכה Apps Script)', c.fetches.length === 0, JSON.stringify(c.fetches));
     const c2 = client();
     c2.t.enterApp({ email: 'dar@x.c', session: 'S', perms: [] }, { credential: 'G' });
     await wait(5);
@@ -554,7 +554,7 @@ function memberDoc(over) {
     ok('onGoogleLogin: קודם Firebase, ואז הדרך הרגילה', /fbFirstLogin\(resp, function \(handled\) \{ if \(!handled\) classicLogin\(resp\); \}\);/.test(APP));
     ok('הדרך הרגילה בהצלחה ⇒ enterApp עם credential', /enterApp\(data, \{ credential: resp\.credential \}\);/.test(APP));
     ok('המושב השמור: רשומה מ-Firebase בלי מושב נשמרת (תגיע ברקע)', /if \(!s\.user\.session && !\(s\.user\.via === "fb" && s\.user\.uid\)\)/.test(APP));
-    ok('ובעליית עמוד עם רשומה כזו — בקשת מושב ברקע', /applyUser\(\); if \(!window\.CBA\.authSession\) sessionReady\(\); CBA\.sheets\.load\(sheetsLoadHandler\);/.test(APP));
+    ok('ובעליית עמוד עם רשומה כזו — גם בלי בקשת מושב (עצלה)', /applyUser\(\); CBA\.sheets\.load\(sheetsLoadHandler\); \}/.test(APP) && !/sessionReady\(\); CBA\.sheets\.load/.test(APP));
   }
 
   console.log('\n====================================================');

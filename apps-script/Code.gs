@@ -4091,6 +4091,9 @@ function setCurrentYear_(ss, body) {
   if (prev === year) return { ok: true, year: year, unchanged: true };
   setSetting_(ss, 'שנה נוכחית', year);
   setSetting_(ss, 'שנה נוכחית עודכנה', new Date());
+  /* (3.10.26 ערב) תושבים נפתחים מ-appConfig/boot (שלב 2) — שנת העבודה החדשה
+     צריכה להגיע אליהם עכשיו, לא בסנכרון השעתי. */
+  try { bootSync_(ss); } catch (eBoot) {}
   bumpRev_();
   return { ok: true, year: year, previous: prev };
 }
@@ -12008,11 +12011,29 @@ function bootDoc_(ss, settings) {
   };
 }
 
+/* ============================================================================
+ *  residentConfig/settings — ההגדרות שתושב צריך, ב-Firestore   (3.10.2026 ערב)
+ * ----------------------------------------------------------------------------
+ *  שלב 2 ("תושבים בלי מטען", אושר ע"י יועד): תושב רגיל נפתח מ-Firestore בלבד,
+ *  בלי המטען הראשי של Apps Script. המטען נשא לו הגדרה אחת בלבד —
+ *  RESIDENT_SETTINGS_ALLOW = סיסמת רשת המועדון — והיא עוברת לכאן.
+ *  🔴 **לא ב-appConfig/boot:** את appConfig קורא כל חבר, כולל הקבלן החיצוני,
+ *     והמטען הקפיד שלא לתת לו את הסיסמה. לאוסף הזה יש כלל משלו:
+ *     isMember() && !isExternalUser() — אותו גבול בדיוק.
+ *  ⚠️ מפתח לטיני (clubWifi) — הלקוח ממפה אותו בחזרה לשם העברי.
+ * ========================================================================== */
+var FS_RESIDENT_CFG_DOC = 'residentConfig/settings';
+function residentConfigDoc_(settings) {
+  return { clubWifi: String((settings || {})['סיסמת רשת המועדון'] || ''), schema: 1, updatedAt: new Date() };
+}
+
 function bootSync_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var out = { ok: false, error: '' };
   try {
-    fsSet_(FS_BOOT_DOC, bootDoc_(ss));
+    var settings = readSettings_(ss);
+    fsSet_(FS_BOOT_DOC, bootDoc_(ss, settings));
+    fsSet_(FS_RESIDENT_CFG_DOC, residentConfigDoc_(settings));
     out.ok = true;
   } catch (err) { out.error = String(err); }
   return out;
