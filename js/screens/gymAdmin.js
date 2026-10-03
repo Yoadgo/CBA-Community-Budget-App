@@ -1085,8 +1085,10 @@ CBA.screens = CBA.screens || {};
         "</div>" +
         '<div class="gym-wiz__body">' +
           '<div class="gym-hint">האימייל חייב להיות רשום בטאב "תושבים" — משם נמשכים שם, בית ומזהה המשפחה.</div>' +
-          '<div class="gym-field"><label>אימייל התושב</label>' +
-            '<input type="email" data-gc="email" placeholder="name@example.com"></div>' +
+          '<div class="gym-field ac-wrap"><label>אימייל התושב — התחילו להקליד שם או אימייל ובחרו מהרשימה</label>' +
+            '<input type="email" data-gc="email" placeholder="שם או name@example.com" autocomplete="off">' +
+            '<div class="ac-list" data-gc-list hidden></div>' +
+            '<div class="gym-hint" data-gc-picked hidden></div></div>' +
           '<div class="gym-field"><label>שם פרטי (אפשר להשאיר ריק — יימשך מהתושבים)</label>' +
             '<input type="text" data-gc="firstName"></div>' +
           '<div class="gym-field"><label>שם משפחה</label><input type="text" data-gc="lastName"></div>' +
@@ -1123,6 +1125,51 @@ CBA.screens = CBA.screens || {};
       n.addEventListener("change", function () { data[n.dataset.gc] = n.value; });
       if (n.tagName === "SELECT") data[n.dataset.gc] = n.value;
     });
+    /* בורר תושבים (3.10.26): שדה האימייל הוא גם שדה החיפוש. בחירה ממלאת אימייל + שם + טלפון.
+       לא נטען/נכשל — השדה נשאר חופשי והשרת מאמת (נפילה בטוחה). */
+    var pickRows = null, picked = false;
+    var emailIn = el.querySelector('[data-gc="email"]');
+    var pickList = el.querySelector("[data-gc-list]");
+    var pickedNote = el.querySelector("[data-gc-picked]");
+    function setField(k, v) {
+      var n = el.querySelector('[data-gc="' + k + '"]');
+      if (n) n.value = v || "";
+      data[k] = v || "";
+    }
+    function pickLabel(r) {
+      return ((r.first ? r.first + " " : "") + (r.family || "")).trim() + (r.house ? " · בית " + r.house : "");
+    }
+    function renderPick(q) {
+      var query = String(q || "").trim().toLowerCase();
+      if (!pickRows || !query) { pickList.hidden = true; pickList.innerHTML = ""; return; }
+      var m = [];
+      pickRows.forEach(function (r, i) {
+        var hay = (pickLabel(r) + " " + r.email).toLowerCase();
+        if (hay.indexOf(query) !== -1 && m.length < 8) m.push({ r: r, i: i });
+      });
+      if (!m.length) { pickList.innerHTML = '<div class="ac-item" style="cursor:default;color:var(--text-soft)">לא נמצא תושב — האימייל חייב להיות רשום בטאב "תושבים"</div>'; pickList.hidden = false; return; }
+      pickList.innerHTML = m.map(function (x) {
+        return '<div class="ac-item" data-gc-idx="' + x.i + '">' + CBA.esc(pickLabel(x.r)) +
+               ' <span style="color:var(--text-soft);direction:ltr;unicode-bidi:embed">' + CBA.esc(x.r.email) + "</span></div>";
+      }).join("");
+      pickList.hidden = false;
+    }
+    emailIn.addEventListener("input", function () { picked = false; pickedNote.hidden = true; renderPick(emailIn.value); });
+    emailIn.addEventListener("focus", function () { if (emailIn.value) renderPick(emailIn.value); });
+    emailIn.addEventListener("blur", function () { setTimeout(function () { pickList.hidden = true; }, 150); });
+    pickList.addEventListener("mousedown", function (e) {
+      var it = e.target.closest("[data-gc-idx]"); if (!it || !pickRows) return;
+      e.preventDefault();
+      var r = pickRows[parseInt(it.dataset.gcIdx, 10)]; if (!r) return;
+      emailIn.value = r.email; data.email = r.email; picked = true;
+      setField("firstName", r.first); setField("lastName", r.family);
+      if (r.phone && !data.phone) setField("phone", r.phone);
+      pickedNote.textContent = "נבחר: " + pickLabel(r);
+      pickedNote.hidden = false; pickList.hidden = true;
+    });
+    if (CBA.data.getGymResidentPicker) {
+      CBA.data.getGymResidentPicker(function (res) { if (res && res.ok) pickRows = res.rows || []; });
+    }
     el.querySelectorAll("[data-gc-mode] button").forEach(function (b) {
       b.addEventListener("click", function () {
         data.declarationMode = b.dataset.val;
@@ -1142,7 +1189,12 @@ CBA.screens = CBA.screens || {};
       var errBox = el.querySelector("[data-gc-err]");
       function showErr(msg) { errBox.textContent = msg || ""; errBox.hidden = !msg; }
       showErr("");
-      if (!String(data.email || "").trim()) { showErr("צריך למלא אימייל."); return; }
+      if (!String(data.email || "").trim()) { showErr("צריך לבחור תושב."); return; }
+      if (pickRows && !picked) {
+        var typed = String(data.email).trim().toLowerCase();
+        var hit = pickRows.filter(function (r) { return r.email === typed; })[0];
+        if (!hit) { showErr('האימייל לא רשום בטאב "תושבים" — בחרו תושב מהרשימה.'); return; }
+      }
       if (data.declarationMode === "received" && !data.declarationDate) {
         showErr("צריך למלא את תאריך ההצהרה שהתקבלה."); return;
       }

@@ -1965,6 +1965,17 @@ CBA.data = (function () {
   }
   function dirWrite(rows) { try { localStorage.setItem(DIR_KEY, JSON.stringify({ ts: Date.now(), rows: rows })); } catch (e) {} }
   function dirForget() { try { localStorage.removeItem(DIR_KEY); } catch (e) {} }
+  /* בורר תושבים להקמת מנוי מכון (3.10.26) — כולל אימייל, לכן מנהל מכון בלבד (שער בשרת).
+     זיכרון בלבד: בכוונה לא נשמר ב-localStorage (שם יושבים מטמוני השמות בלי אימיילים). */
+  var gymPickerCache = null;
+  function getGymResidentPicker(cb) {
+    if (gymPickerCache) { if (cb) cb({ ok: true, rows: gymPickerCache }); return; }
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.get({ action: "gymResidentPicker" }, function (res) {
+      if (res && res.ok) gymPickerCache = res.rows || [];
+      if (cb) cb(res);
+    });
+  }
   function getResidentDirectory(cb) {
     if (!directoryCache) directoryCache = dirRead();
     if (directoryCache) { if (cb) cb({ ok: true, rows: directoryCache }); return; }
@@ -5606,6 +5617,7 @@ CBA.data = (function () {
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,
     getResidentDirectory: getResidentDirectory,
+    getGymResidentPicker: getGymResidentPicker,
     refreshResidents: function (cb) { residentsCache = null; directoryCache = null; dirForget(); communityCache = null; getResidents(cb); },
     residentPickerOptions: residentPickerOptions,
     familyDisplayName: familyDisplayName,

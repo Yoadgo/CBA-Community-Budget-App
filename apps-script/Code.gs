@@ -334,6 +334,7 @@ var GET_ACTION_PERMS = {
   assignResidentIds: PERM_RESIDENTS, profileChanges: PERM_RESIDENTS,
   clubList: PERM_CLUB, approveClubReservation: PERM_CLUB,
   rejectClubReservation: PERM_CLUB, approveClubReservations: PERM_CLUB,
+  gymResidentPicker: PERM_GYM,   /* 3.10.26 — בורר תושבים להקמת מנוי (עם אימייל), למנהל מכון בלבד */
   residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN, rsvpFamilyNames: PERM_CULTURE,   /* 23.9 — היה PERM_ANY_ADMIN */
   listNotifySettings: PERM_ANY_ADMIN,
   gardenStats: PERM_GARDEN, gardenTaskLog: PERM_GARDEN,
@@ -866,6 +867,9 @@ function doGetInner_(e) {
     // פתוחה לכל מי שיש לו הרשאת ניהול כלשהי ולא רק למנהל התושבים.
     if (e && e.parameter && e.parameter.action === 'residentDirectory') {
       return handleResidentDirectory_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'gymResidentPicker') {
+      return handleGymResidentPicker_(e.parameter);
     }
     // RSVP לאירועי לוח הקהילה (2026-09-23) — גשר familyId->שם לטבלת המנהל, PERM_ANY_ADMIN בלבד.
     if (e && e.parameter && e.parameter.action === 'rsvpFamilyNames') {
@@ -5703,6 +5707,60 @@ function exportResidents_(ss, body) {
 }
 
 /** ספריית שמות בלבד — בלי אימייל/טלפון/הרשאות. ר' ההערה ב-doGet. */
+/** בורר תושבים להקמת מנוי מכון (3.10.26, בקשת יועד: "כל דבר שנמלא מקפיץ אפשרות בחירה").
+ *  שורה לכל אדם (משבצת אימייל): שם פרטי, משפחה, בית, מזהה קבוע, אימייל, טלפון.
+ *  🔴 בניגוד ל-residentDirectory — כולל אימייל, ולכן **רק PERM_GYM** (שער עליון + בדיקה כפולה כאן).
+ *  רק משתתפים עם אימייל, ורק סטטוס פעיל (ריק = פעיל); חיצוניים (ספק/קבלן) לא מוצעים.
+ *  ללא ת.ז./תאריך לידה — אלה לא יוצאים מכאן. */
+function handleGymResidentPicker_(p) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_GYM);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    var sh = ss.getSheetByName('תושבים');
+    if (!sh) return json_({ ok: false, error: 'אין טאב "תושבים"' });
+    var values = sh.getDataRange().getValues();
+    if (values.length < 2) return json_({ ok: true, rows: [] });
+    var headers = values[0].map(function (h) { return String(h).trim(); });
+    var emailCols = [], nameCols = [], phoneCols = [], familyCol = -1, houseCol = -1, ridCol = -1, statusCol = -1, extCol = -1;
+    headers.forEach(function (h, i) {
+      if (h.indexOf(PERM_HEADER) !== -1) return;
+      if (h.indexOf('שם פרטי') !== -1) nameCols.push(i);
+      else if (h.indexOf('אימייל') !== -1) emailCols.push(i);
+      else if (h.indexOf('טלפון') !== -1) phoneCols.push(i);
+      else if (h.indexOf(RESIDENT_ID_HEADER) !== -1) ridCol = i;
+      else if (h.indexOf(EXTERNAL_HEADER) !== -1) extCol = i;
+      else if (h.indexOf('סטטוס') !== -1) statusCol = i;
+      else if (h.indexOf('משפחה') !== -1) familyCol = i;
+      else if (h.indexOf('בית') !== -1) houseCol = i;
+    });
+    var rows = [];
+    for (var r = 1; r < values.length; r++) {
+      var row = values[r];
+      if (extCol > -1 && String(row[extCol]).indexOf(EXTERNAL_VALUE) !== -1) continue;
+      var st = statusCol > -1 ? String(row[statusCol]).trim() : '';
+      if (st && st.indexOf('פעיל') === -1) continue;
+      var house = houseCol > -1 ? String(row[houseCol]).trim() : '';
+      var rid = ridCol > -1 ? String(row[ridCol]).trim() : '';
+      for (var c = 0; c < emailCols.length; c++) {
+        var em = normalizeEmail_(row[emailCols[c]]);
+        if (!em) continue;
+        rows.push({
+          email: em,
+          first: nameCols[c] !== undefined ? String(row[nameCols[c]]).trim() : '',
+          family: familyCol > -1 ? String(row[familyCol]).trim() : '',
+          house: house,
+          rid: rid || house,
+          phone: phoneCols[c] !== undefined ? String(row[phoneCols[c]]).trim() : ''
+        });
+      }
+    }
+    return json_({ ok: true, rows: rows });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
+
 function handleResidentDirectory_(p) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
