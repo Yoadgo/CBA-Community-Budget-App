@@ -1416,9 +1416,27 @@
   // רשימת ההרשאות. שינוי המפתח מאלץ התחברות אחת מחדש לכל המשתמשים, וזה מכוון:
   // מושב ישן לא מכיל טוקן, ובלעדיו השרת ידחה כל כתיבה.
   var SESSION_KEY = "cba_session_v2";
-  var SESSION_TTL = 12 * 3600 * 1000;   // 12 שעות
+  /* (3.10.26, יועד: "אפשר להאריך ל-24 שעות") — היה 12. 24 = תקרת המושב בשרת
+     (SESSION_TTL_MS ב-Code.gs), ולכן הרשומה כאן **לא חיה יותר מהטוקן עצמו**:
+     התפוגה נלקחת מתוך הטוקן החתום (שדה x), פחות 10 דקות מרווח. בלי זה רשומה
+     שנשמרה מחדש (למשל כשמושב מגיע ברקע) הייתה מחזיקה טוקן שכבר פג בשרת. */
+  var SESSION_TTL = 24 * 3600 * 1000;   // 24 שעות
+  var SESSION_SAFETY_MS = 10 * 60 * 1000;
+  function sessionTokenExp(tok) {
+    try {
+      var p = String(tok || "").split(".")[0];
+      if (!p) return 0;
+      p = p.replace(/-/g, "+").replace(/_/g, "/");
+      while (p.length % 4) p += "=";
+      var o = JSON.parse(atob(p));
+      return (o && typeof o.x === "number") ? o.x : 0;
+    } catch (e) { return 0; }
+  }
   function saveSession(user) {
-    try { localStorage.setItem(SESSION_KEY, JSON.stringify({ exp: Date.now() + SESSION_TTL, user: user })); } catch (e) {}
+    var exp = Date.now() + SESSION_TTL;
+    var tx = sessionTokenExp(user && user.session);
+    if (tx) exp = Math.min(exp, tx - SESSION_SAFETY_MS);
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify({ exp: exp, user: user })); } catch (e) {}
   }
   function loadSession() {
     try {
@@ -2797,6 +2815,16 @@
     }, 8000);
   }
   window.CBA.sessionReady = sessionReady;
+  /* השרת ענה "אין הרשאה" (המושב פג — למשל טאב פתוח יותר מ-24 שעות). למשתמש
+     מ-Firebase: שוכחים את המושב, והקריאה הבאה מביאה חדש דרך sessionReady.
+     משתמש מהדרך הרגילה — כמו קודם (ההודעה מסבירה לצאת ולהיכנס). */
+  window.CBA.sessionExpired = function () {
+    if (!currentUser || currentUser.via !== "fb" || !window.CBA.authSession) return;
+    window.CBA.authSession = "";
+    currentUser.session = "";
+    sessFailAt = 0;
+    saveSession(currentUser);
+  };
 
   /* השרת אמר "לא ברשימה"/"עזב" — המסמך ב-Firestore עוד לא התעדכן (עריכה
      ישירה בגיליון). יוצאים, ומסבירים למה. */

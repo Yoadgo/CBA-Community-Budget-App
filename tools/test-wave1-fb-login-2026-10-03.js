@@ -439,6 +439,12 @@ function memberDoc(over) {
        c.box.currentUser.perms.join() === 'תקציב,מועדון' && c.log.filter(x => x === 'applyUser').length === 1);
     c.t.sessionReady(s => got.push(s));
     ok('אחרי שיש מושב — מיד, בלי בקשה', got.length === 3 && c.fetches.length === 1);
+    c.box.CBA.sessionExpired();
+    ok('מושב שפג בשרת ("אין הרשאה") ⇒ נשכח', c.box.CBA.authSession === '' && c.box.currentUser.session === '');
+    c.t.sessionReady(s => got.push(s)); await wait(10);
+    ok('והקריאה הבאה מביאה מושב חדש', c.fetches.length === 2 && got[3] === 'SESS');
+    ok('sheets.js מפעיל את זה רק על "אין הרשאה" המדויק (מושב), לא על "אין לך הרשאה לפעולה"',
+       /data\.error === "אין הרשאה" &&\s*\n\s*window\.CBA && typeof CBA\.sessionExpired === "function"/.test(SHEETS));
 
     c = client({ server: Object.assign({}, okResp, { email: 'other@x.c' }) });
     c.box.currentUser = c.t.userFromMember(c.box.CBA.fb.profile(), memberDoc());

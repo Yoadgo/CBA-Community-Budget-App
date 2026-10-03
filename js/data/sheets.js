@@ -740,6 +740,12 @@ CBA.sheets = (function () {
   // חשוף כדי שהאפליקציה תוכל להציג התראה גם בלי שנכשלה פעולה
   CBA.serverOutdated = function () { var n = serverVer(); return n > 0 && n < MIN_SERVER; };
   function withAuthNote(data) {
+    /* גל 1 (3.10.26) — "אין הרשאה" בדיוק = המושב פג/לא תקין (authorize_). משתמש
+       שנכנס מ-Firebase מקבל מושב חדש בקריאה הבאה, בלי לצאת ולהיכנס. */
+    if (data && data.ok === false && data.error === "אין הרשאה" &&
+        window.CBA && typeof CBA.sessionExpired === "function") {
+      try { CBA.sessionExpired(); } catch (e) {}
+    }
     if (data && data.ok === false && typeof data.error === "string" &&
         data.error.indexOf("הרשאה") !== -1) {
       data.error += authNote();
