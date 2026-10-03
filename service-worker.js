@@ -26,11 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-<<<<<<< HEAD
-var VERSION = "efc09af4da";
-=======
 var VERSION = "1d1b8bf55e";
->>>>>>> a877267b45d3aca47a950b562d14b4580cce6cc5
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -83,11 +79,7 @@ var ASSET_VERSIONS = {
   "js/data/mock.js": "fd54e34660",
   "js/data/push.js": "198e321583",
   "js/data/reconcile.js": "899bfb8f4c",
-<<<<<<< HEAD
-  "js/data/sheets.js": "d6483778a4",
-=======
   "js/data/sheets.js": "5a925edb57",
->>>>>>> a877267b45d3aca47a950b562d14b4580cce6cc5
   "js/lazy.js": "011e0ffe5f",
   "js/lazyManifest.js": "ad0df004ab",
   "js/pwa.js": "cc703231c6",
