@@ -26,8 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "4f7decb94f";
-var VERSION = "b334708060";
+var VERSION = "9e7f4cb3a2";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
