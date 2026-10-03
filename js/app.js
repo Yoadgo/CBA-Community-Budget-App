@@ -70,6 +70,10 @@
   }
 
   function showScreen(name, opts) {
+    /* ניהול מפת השיכון (3.10.26) — אינו מסך SPA: פותח את הכלי העצמאי
+       tools/map-calibrator.html בלשונית נפרדת ויוצא בלי לשנות currentScreen/
+       CBA.screens, כדי שלא יישאר רשום כ'המסך הנוכחי' כשחוזרים לטאב הזה. */
+    if (name === "mapAdmin") { window.open("tools/map-calibrator.html", "_blank"); return; }
     /* 🔴 גל 1 (30.9.26, יועד: "תפריט נפתח לא נעלם אחרי שלוחצים") — כל ניווט
        סוגר תפריט קבוצה פתוח. בדסקטופ הכותרת מעל רקע התפריט, אז לחיצה על טאב
        אחר (למשל "בית") ניווטה — והתפריט נשאר פתוח מעל המסך החדש. */
@@ -338,7 +342,10 @@
        שבתוכו מסוננות לפי הרשאה — מנהל תחום רואה רק "התראות". ר' sysHub.js. */
     sysHub: "ANY",
     /* בדיקת החזרים (PHASE 4.2) — אותה הרשאה כמו שאר מסכי הכסף. */
-    reconcile: PERM.BUDGET
+    reconcile: PERM.BUDGET,
+    /* ניהול מפת השיכון (3.10.26) — פותח את tools/map-calibrator.html בלשונית
+       חדשה (לא מסך SPA פנימי — ר' showScreen). מנהל-על בלבד, כמו sysStatus/appReports. */
+    mapAdmin: PERM.SUPER
   };
 
   function myPerms() {
@@ -384,7 +391,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["adminBoard", "budget", "expenses", "planning", "clubAdmin", "gymAdmin", "weworkAdmin", "residents", "committeeAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "sysHub", "reconcile"],
+      screens: ["adminBoard", "budget", "expenses", "planning", "clubAdmin", "gymAdmin", "weworkAdmin", "residents", "committeeAdmin", "mapAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "sysHub", "reconcile"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -425,7 +432,7 @@
         /* "מדריך" גם אצל המנהל (28.9.26) — אותו מקום כמו אצל התושב. פריט יחיד
            ולכן מתקפל לטאב רגיל בשם "מדריך" (ר' rebuildAreas). */
         { group: "guide", label: "מדריך", items: [["servicesAdmin", "ספקים והמלצות", "guide"]] },
-        { group: "shikun", label: "השיכון", items: [["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"]] }
+        { group: "shikun", label: "השיכון", items: [["residents", "תושבים"], ["committeeAdmin", "ועד השיכון"], ["mapAdmin", "ניהול מפה"]] }
       ]
     },
     resident: {
@@ -582,6 +589,8 @@
     resReserve:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z"/></svg>',
     resDirectory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"/></svg>',
     resMap:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z"/></svg>',
+    // ניהול מפת השיכון (3.10.26) — אותו סמליל כמו resMap, צד ניהול.
+    mapAdmin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z"/></svg>',
     // "מראה שיכון" — עלה. הסמליל של המודול, מופיע גם בכותרת המסך ובבר המובייל.
     resGarden:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20"/><path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13"/></svg>',
     // לוח אירועים קהילתי (2026-09-23) — לוח שנה
