@@ -97,13 +97,25 @@ CBA.screens = CBA.screens || {};
       status === "ממתין לאישור רופא" && m["תאריך חתימה"] ? '<button type="button" class="btn-primary btn-sm" data-ga-view="' + id + '">בדיקת הצהרה</button>' :
       /* GMB1 (גל 8, 1.10.26) — פעולה ראשית ל"ממתין לאישור": פותחת את "עריכת מנוי" עם סטטוס "ממתין לתשלום" (המעבר שהשרת עושה באישור אוטומטי) */
       status === "ממתין לאישור" ? '<button type="button" class="btn-primary btn-sm" data-ga-approve="' + id + '">אישור</button>' : "";
+    /* 3.10.26 (בקשת יועד: "הכול באותו כרטיס, בלי שלוש נקודות — מבלבל") — כל הפעולות
+       מוצגות בשורת כפתורים קבועה בתחתית הכרטיס. הכפתור הראשי של הסטטוס נשאר מודגש
+       למעלה ולא חוזר בשורה. */
     var menu =
       (m["תאריך חתימה"] ? '<button type="button" data-ga-view="' + id + '">צפייה בהצהרה</button>' : "") +
       (status === "ממתין להצהרה" || m["תאריך חתימה"] ? "" : '<button type="button" data-ga-declare="' + id + '">בקשת הצהרה</button>') +
       (status === "פעיל" || status === "פג תוקף" ? '<button type="button" data-ga-extend="' + id + '" data-ga-months="' + CBA.esc(String(m["מסלול"] || "")) + '">הארכה</button>' : "") +
-      (status !== "ממתין לתשלום" && status !== "פעיל" ? "" : '<button type="button" data-ga-cash="' + id + '" data-ga-price="' + CBA.esc(String(m["מחיר מוסכם"] || "")) + '">רישום תשלום ידני</button>') +
+      /* 3.10.26 (בקשת יועד: "גמישות רחבה למנהל") — רישום תשלום והפעלה ידנית פתוחים בכל סטטוס.
+         ההגנה מטעויות היא חלון אישור עם סיכום, ואזהרה אדומה כשחסרה הצהרה או תשלום. */
+      '<button type="button" data-ga-cash="' + id + '" data-ga-price="' + CBA.esc(String(m["מחיר מוסכם"] || "")) + '">רישום תשלום ידני</button>' +
+      (status === "פעיל" ? "" : '<button type="button" data-ga-activate="' + id + '">הפעלה ידנית</button>') +
       '<button type="button" data-ga-edit="' + id + '">עריכה</button>' +
       '<button type="button" class="ga-menu__danger" data-ga-delete="' + id + '">מחיקה</button>';
+    if (primary.indexOf("data-ga-cash") !== -1) {
+      menu = menu.replace(/<button type="button" data-ga-cash="[^>]*>[^<]*<\/button>/, "");
+    }
+    if (primary.indexOf("data-ga-view") !== -1) {
+      menu = menu.replace(/<button type="button" data-ga-view="[^>]*>[^<]*<\/button>/, "");
+    }
     return '<div class="ga-row' + (GA_ATTN[status] ? " is-attn" : "") + '" data-ga-row="' + id + '">' +
              '<div class="ga-row__who"><b>' + CBA.esc(name) + (flags ? ' <span class="gym-pill gym-pill--danger">דגל</span>' : "") + "</b>" +
                "<small>" + (m["מספר בית"] ? "בית " + CBA.esc(m["מספר בית"]) + " · " : "") + CBA.esc(m["מסלול"] || "") + "</small>" +
@@ -112,7 +124,8 @@ CBA.screens = CBA.screens || {};
              '<div class="ga-row__pills"><span class="gym-pill gym-pill--' + tone + '">' + CBA.esc(status) + "</span>" +
                nukiPillHTML(m) + (gap ? '<span class="gym-pill gym-pill--warn">' + CBA.esc(gap) + "</span>" : "") + "</div>" +
              '<div class="ga-row__acts">' + primary +
-               '<details class="ga-more"><summary aria-label="עוד פעולות">⋯</summary><div class="ga-menu">' + menu + "</div></details></div>" +
+               "</div>" +
+             '<div class="ga-row__btns">' + menu + "</div>" +
              (status === "ממתין לאימות" ? '<div class="ga-row__verify" hidden>' + verifyRowHTML(m) + "</div>" : "") +
            "</div>";
   }
@@ -294,6 +307,29 @@ CBA.screens = CBA.screens || {};
     return ui;
   }
 
+  /* 3.10.26 — מה חסר למנוי לפני שמפעילים אותו. ריק = הכול תקין.
+     משמש את הפעלה ידנית, רישום ידני במצב "הפעלה" ושינוי סטטוס ל"פעיל" בעריכה. */
+  function activationGaps(m) {
+    var gaps = [];
+    if (!String(m["תאריך חתימה"] || "").trim()) gaps.push("לא חתם/ה על הצהרת בריאות");
+    var paid = Number(m["סה\"כ שולם"] || 0), price = Number(m["מחיר מוסכם"] || 0);
+    if (!(paid > 0)) gaps.push("לא נרשם תשלום");
+    else if (price > 0 && paid < price) gaps.push("שולם " + paid + " ₪ מתוך " + price + " ₪");
+    return gaps;
+  }
+  function activationConfirm(m, lines) {
+    var gaps = activationGaps(m);
+    var msg = memberName(m) + "\n\n" + lines.join("\n");
+    if (gaps.length) {
+      msg += "\n\n⚠️ שימי לב: " + gaps.join(" · ") + ".\nהתושב יקבל גישה למכון למרות זאת.";
+    }
+    return CBA.ui.confirm(msg, {
+      title: gaps.length ? "הפעלה עם חוסרים" : "אישור הפעולה",
+      okText: gaps.length ? "אני מבין/ה, להפעיל" : "אישור",
+      danger: gaps.length > 0
+    });
+  }
+
   /* התראת סנכרון אחרי פעולה — אף פעם לא *במקום* הפעולה. יועד היה מפורש:
      המערכת מודדת ומתריעה, לא חוסמת. */
   function afterActivate(res, verb) {
@@ -385,6 +421,8 @@ CBA.screens = CBA.screens || {};
                          { title: newStatus === "נדחה" ? "דחיית מנוי" : "ביטול מנוי",
                            okText: newStatus, danger: true })
             .then(function (ok) { if (ok) send(); });
+        } else if (newStatus === "פעיל" && curStatus !== "פעיל") {
+          activationConfirm(m, ["שינוי סטטוס: " + curStatus + " ← פעיל"]).then(function (ok) { if (ok) send(); });
         } else {
           send();
         }
@@ -701,8 +739,8 @@ CBA.screens = CBA.screens || {};
         var m = memberById(id) || {};
         var payUi = openFormDrawer({
           title: "רישום תשלום ידני — " + memberName(m),
-          subtitle: "למי ששילם במזומן או מחוץ לאפליקציה. המנוי יופעל באותו מסלול בדיוק כמו באימות רגיל.",
-          okText: "רישום והפעלה",
+          subtitle: "סטטוס נוכחי: " + (m["סטטוס"] || "") + ". אפשר לרשום את התשלום בלי להפעיל את המנוי.",
+          okText: "המשך",
           /* GMA2 (גל 14, 1.10.26) — צילום אישור העברה/ביט/פייבוקס ממלא סכום,
              אמצעי ואסמכתא (אותה סריקה של התושב). רק ממלא — נשמר ב"רישום". */
           topHTML: '<div class="gym-field"><label class="btn-ghost btn-sm ga-scan">📷 מילוי מצילום אישור התשלום' +
@@ -714,6 +752,10 @@ CBA.screens = CBA.screens || {};
               hint: "מחיר מוסכם: " + (m["מחיר מוסכם"] || "—") + " ₪" },
             { key: "validUntil", label: "בתוקף עד חודש", type: "month",
               value: defaultValidUntil(planMonthsFor(m["מסלול"])) },
+            { key: "mode", label: "מה לעשות", type: "select",
+              value: (["ממתין לתשלום", "ממתין לאימות", "פעיל", "פג תוקף"].indexOf(String(m["סטטוס"] || "").trim()) !== -1) ? "activate" : "record",
+              options: [{ value: "record", text: "רק לרשום את התשלום (הסטטוס לא ישתנה, בלי מייל)" },
+                        { value: "activate", text: "לרשום ולהפעיל את המנוי (נשלח מייל הפעלה)" }] },
             { key: "method", label: "אמצעי תשלום", type: "select", value: "מזומן",
               options: ["מזומן", "העברה בנקאית", "צ׳ק", "ביט", "פייבוקס", "אחר"] },
             { key: "reference", label: "אסמכתא (לא חובה)", type: "text", value: "" }
@@ -721,20 +763,65 @@ CBA.screens = CBA.screens || {};
           onSave: function (v, ui) {
             if (!Number(v.amount)) { ui.error("צריך להזין את הסכום שהתקבל."); return; }
             if (!v.validUntil) { ui.error("צריך לבחור עד איזה חודש המנוי בתוקף."); return; }
-            ui.busy("מפעיל מנוי…");
-            CBA.data.recordGymPayment(
-              { id: id, amount: Number(v.amount), validUntil: v.validUntil, method: v.method || "מזומן",
-                reference: String(v.reference || "").trim() },
-              function (res) {
-                ui.done();
-                if (!res || !res.ok) { ui.error((res && res.error) || "הרישום נכשל."); return; }
-                ui.close();
-                afterActivate(res, "המנוי הופעל");
-                reload();
-              });
+            var activate = v.mode !== "record";
+            function go() {
+              ui.busy(activate ? "מפעיל מנוי…" : "רושם תשלום…");
+              CBA.data.recordGymPayment(
+                { id: id, amount: Number(v.amount), validUntil: v.validUntil, method: v.method || "מזומן",
+                  reference: String(v.reference || "").trim(), activate: activate },
+                function (res) {
+                  ui.done();
+                  if (!res || !res.ok) { ui.error((res && res.error) || "הרישום נכשל."); return; }
+                  ui.close();
+                  afterActivate(res, activate ? "המנוי הופעל" : "התשלום נרשם (הסטטוס לא השתנה)");
+                  reload();
+                });
+            }
+            var lines = ["תשלום: " + v.amount + " ₪ · " + (v.method || "מזומן"),
+                         "בתוקף עד: " + v.validUntil,
+                         activate ? "המנוי יופעל ותישלח לתושב הודעת הפעלה." : "הסטטוס יישאר: " + (m["סטטוס"] || "") + ". לא יישלח מייל."];
+            if (activate) { activationConfirm(m, lines).then(function (ok) { if (ok) go(); }); }
+            else { CBA.ui.confirm(memberName(m) + "\n\n" + lines.join("\n"), { title: "רישום תשלום", okText: "רישום" })
+                     .then(function (ok) { if (ok) go(); }); }
           }
         });
         gaWireScan(payUi, m);
+      });
+    });
+
+    /* 3.10.26 — הפעלה ידנית בכל סטטוס (activateGymManual בשרת) */
+    root.querySelectorAll("[data-ga-activate]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.dataset.gaActivate;
+        var m = memberById(id) || {};
+        var ui = openFormDrawer({
+          title: "הפעלה ידנית — " + memberName(m),
+          subtitle: "סטטוס נוכחי: " + (m["סטטוס"] || "") + ". המנוי יהפוך ל\"פעיל\" והתושב יקבל גישה למכון.",
+          okText: "המשך",
+          fields: [
+            { key: "validUntil", label: "בתוקף עד חודש", type: "month",
+              value: toMonthInput(m["בתוקף עד"]) || defaultValidUntil(planMonthsFor(m["מסלול"])) },
+            { key: "sendMail", label: "הודעת הפעלה לתושב", type: "select", value: "yes",
+              options: [{ value: "yes", text: "לשלוח מייל הפעלה" }, { value: "no", text: "לא לשלוח (הפעלה שקטה)" }] },
+            { key: "note", label: "הערה (נרשמת ביומן)", type: "text", value: "" }
+          ],
+          onSave: function (v, dlg) {
+            if (!v.validUntil) { dlg.error("צריך לבחור עד איזה חודש המנוי בתוקף."); return; }
+            activationConfirm(m, ["בתוקף עד: " + v.validUntil,
+              v.sendMail === "no" ? "לא יישלח מייל." : "יישלח מייל הפעלה."]).then(function (ok) {
+              if (!ok) return;
+              dlg.busy("מפעיל מנוי…");
+              CBA.data.activateGymManual({ id: id, validUntil: v.validUntil, sendMail: v.sendMail !== "no",
+                note: String(v.note || "").trim() }, function (res) {
+                dlg.done();
+                if (!res || !res.ok) { dlg.error((res && res.error) || "ההפעלה נכשלה."); return; }
+                dlg.close();
+                afterActivate(res, "המנוי הופעל");
+                reload();
+              });
+            });
+          }
+        });
       });
     });
 

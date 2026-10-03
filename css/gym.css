@@ -420,6 +420,14 @@
   .ga-row__acts { order: 1; grid-row: 1; grid-column: 2; }
 }
 
+/* שורת פעולות קבועה בכרטיס המנוי (3.10.26) — במקום תפריט ⋯ */
+.ga-row__btns { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px; }
+.ga-row__btns button { font: inherit; font-size: calc(12.5px * var(--fs, 1)); padding: 6px 12px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.ga-row__btns button:hover { background: var(--hover); }
+.ga-row__btns .ga-menu__danger { color: var(--badge-danger); margin-inline-start: auto; }
+@media (max-width: 640px) { .ga-row__btns { order: 4; } }
+
 /* תפריט ⋯ — <details> מקורי */
 .ga-more { position: relative; }
 .ga-more > summary { list-style: none; width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface);
