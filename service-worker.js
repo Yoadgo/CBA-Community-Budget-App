@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "4f7decb94f";
+var VERSION = "5a497f938b";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -66,7 +66,7 @@ var ASSET_VERSIONS = {
   "icons/apple-touch-icon.png": "5ce56ce0dc",
   "icons/icon-192.png": "a624d0ac7a",
   "js/app.js": "e000aba3e1",
-  "js/data/dataService.js": "6144edc7f5",
+  "js/data/dataService.js": "5bbb734ece",
   "js/data/door.js": "71c7a113de",
   "js/data/firebase.js": "9669c19e11",
   "js/data/gardenAreas.js": "457c00156c",
