@@ -80,18 +80,20 @@ ok('ההרשאות נכתבו', JSON.stringify(writes[0].obj.perms) === '["תק�
 ok('updatedAt הוא תאריך (כלל היברידיות 3)',
    !!writes[0].obj.updatedAt && typeof writes[0].obj.updatedAt.getTime === 'function',
    String(writes[0].obj.updatedAt));
-ok('schema קיים (כלל היברידיות 3)', writes[0].obj.schema === 1);
+ok('schema קיים (כלל היברידיות 3) — 2 מגל 1', writes[0].obj.schema === 2);
 ok('⚠️ active=true — מתג הכיבוי שכללי האבטחה דורשים', writes[0].obj.active === true);
 ok('⚠️ ה-uid נרשם בגיליון (גשר לשלילת הרשאה מיידית)',
    remembered.length === 1 && remembered[0].uid === 'UID-1', JSON.stringify(remembered));
 ok('ונרשם מול המייל של המושב', remembered[0].email === 'y@x.com', remembered[0].email);
 
-section('3. 🔴 אין נתונים אישיים במסמך');
+section('3. 🔴 במסמך רק מה שאושר (גל 1, 3.10.26: שם פרטי+משפחה+בית — יועד אישר; email של הבעלים — צוות אדום H1)');
 const keys = Object.keys(writes[0].obj).sort();
-ok('⚠️ בדיוק שישה שדות', keys.length === 6, keys.join(','));
-['name','email','phone','firstName','family','house','mail','טלפון','שם'].forEach(k =>
+ok('⚠️ בדיוק עשרה שדות', keys.length === 10, keys.join(','));
+ok('שם/משפחה/בית/מייל-הבעלים — רק אלה נוספו', ['firstName','family','house','email'].every(k => keys.indexOf(k) !== -1));
+ok('המייל הוא של בעל המסמך בלבד (המושב), מנורמל', writes[0].obj.email === 'y@x.com', writes[0].obj.email);
+['name','phone','mail','טלפון','שם','children','ילדים'].forEach(k =>
   ok('⚠️ אין שדה ' + k, keys.indexOf(k) === -1));
-ok('⚠️ ושום ערך אינו המייל', JSON.stringify(writes[0].obj).indexOf('@') === -1,
+ok('⚠️ ושום ערך אחר אינו מייל (רק השדה email)', JSON.stringify(Object.assign({}, writes[0].obj, { email: '' })).indexOf('@') === -1,
    JSON.stringify(writes[0].obj));
 
 /* ================================================================= */
@@ -181,7 +183,8 @@ const APPJS = fs.readFileSync(path.join(__dirname, '..', 'js', 'app.js'), 'utf8'
 ok('הלקוח שולח idToken', /action=firebaseLink[\s\S]{0,300}idToken=/.test(APPJS));
 ok('⚠️ והוא **אינו** שולח uid', !/firebaseLinkMember[\s\S]{0,700}uid=/.test(APPJS));
 ok('הקישור קורה רק אחרי התחברות מוצלחת',
-   /CBA\.fb\.signIn\(googleIdToken, function \(err\) \{\s*\n\s*if \(err\) return;[\s\S]{0,80}firebaseLinkMember\(\)/.test(APPJS));
+   /CBA\.fb\.signIn\(googleIdToken, function \(err\) \{\s*\n\s*if \(err\) return;[\s\S]{0,80}afterFirebaseSignIn\(\{ link: true/.test(APPJS) &&
+   /if \(opt\.link\) firebaseLinkMember\(\);/.test(APPJS));
 ok('⚠️ ושקט לגמרי — בלי טוסט/דיאלוג',
    !/firebaseLinkMember[\s\S]{0,900}(CBA\.ui\.toast|CBA\.ui\.alert)/.test(APPJS));
 

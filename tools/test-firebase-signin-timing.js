@@ -31,10 +31,11 @@ ok('⚠️ אין setTimeout בגוף ההתחברות (היא מיידית)', m
 ok('⚠️ **אין קריאה ל-requestIdleCallback** (גרסה 1)',
    !/requestIdleCallback\s*\(/.test(SRC) && SRC.indexOf('window.requestIdleCallback') === -1);
 
-/* הסדר בתוך onGoogleLogin: איפוס הדגל → expectUser → signIn → load */
-const iReset  = SRC.indexOf('firebaseSignInDone = false;');
+/* הסדר בתוך enterApp (גל 1 — היה onGoogleLogin): איפוס הדגל → expectUser → signIn → load */
+const iEnter  = SRC.indexOf('function enterApp(user, opt) {');
+const iReset  = SRC.indexOf('firebaseSignInDone = false;', iEnter);
 const iExpect = SRC.indexOf('CBA.fb.expectUser()', iReset);
-const iSign   = SRC.indexOf('firebaseSignInNow(resp.credential)', iReset);
+const iSign   = SRC.indexOf('firebaseSignInNow(opt.credential)', iReset);
 const iLoad   = SRC.indexOf('CBA.sheets.load(function (ok, info)', iReset);
 ok('הדגל מאופס לפני ההתחברות', iReset > -1 && iReset < iSign);
 ok('🔴 expectUser נקראת לפני ההתחברות (ממצא 02 נשמר)', iExpect > -1 && iExpect < iSign);
@@ -106,13 +107,13 @@ function harness(opts) {
 
 section('4. התנהגות — fetchPayload עם פסק זמן (הקוד שחולץ מ-sheets.js)');
 {
-  const mFp = SHEETS.match(/function fetchPayload\(slim, done\) \{[\s\S]*?\n  \}/);
+  const mFp = SHEETS.match(/function fetchPayloadNow\(slim, done\) \{[\s\S]*?\n  \}/);
   ok('fetchPayload חולץ', !!mFp);
   function run(fetchImpl) {
     const timers = [];
     const out = [];
     const fn = new Function('fetch', 'setTimeout', 'clearTimeout', 'AbortController', 'API_URL', 'authSession', 'PAYLOAD_TIMEOUT_MS', 'done',
-      mFp[0] + '; fetchPayload("2", done);');
+      mFp[0] + '; fetchPayloadNow("2", done);');
     let aborted = false;
     function AC() { this.signal = {}; this.abort = () => { aborted = true; }; }
     fn(fetchImpl,

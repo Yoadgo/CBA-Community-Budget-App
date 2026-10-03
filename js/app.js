@@ -1425,8 +1425,9 @@
       var s = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
       if (!s || !s.user || !s.exp || s.exp < Date.now()) { localStorage.removeItem(SESSION_KEY); return null; }
       // בלי טוקן חתום אין טעם להמשיך — כל כתיבה תידחה בשרת. עדיף מסך התחברות.
-      if (!s.user.session) { localStorage.removeItem(SESSION_KEY); return null; }
-      window.CBA.authSession = s.user.session;
+      /* גל 1 — משתמש שנכנס מזהות Firebase נשמר גם בלי מושב (הוא יגיע ברקע). */
+      if (!s.user.session && !(s.user.via === "fb" && s.user.uid)) { localStorage.removeItem(SESSION_KEY); return null; }
+      window.CBA.authSession = s.user.session || "";
       return s.user;
     } catch (e) { return null; }
   }
@@ -2510,27 +2511,43 @@
       try {
         CBA.fb.signIn(googleIdToken, function (err) {
           if (err) return;               // ר' כלל 1 — כישלון שקט
-          firebaseLinkMember();
-          /* 🔴 דיווח #6 (21.9) — מצב ההתראות מסתנכרן מהשרת.
-             עד היום הכפתור הסתמך רק על `localStorage`, שנמחק
-             באיפון מדי פעם. שגר ושכח: אם המצב השתנה,
-             מציירים מחדש כדי שהכפתור יאמר את האמת. */
-          try {
-            if (window.CBA && CBA.push && CBA.push.syncFromServer) {
-              var wasOn = CBA.push.isSubscribed();
-              CBA.push.syncFromServer(function (on) {
-                /* ⚠️ מציירים מחדש רק כשהמצב באמת התהפך. */
-                if (on === wasOn) return;
-                try {
-                  var p = document.getElementById("user-panel");
-                  if (p) p.innerHTML = userPanelHTML();
-                } catch (e2) {}
-              });
-            }
-          } catch (e) {}
+          afterFirebaseSignIn({ link: true, remember: true });
         });
       } catch (e) {}
     })();
+  }
+
+  /* מה שקורה אחרי שיש משתמש Firebase — משותף לכניסה הרגילה ולכניסה מזהות
+     Firebase (גל 1). opt.link — לבקש מהשרת לכתוב את רשומת החבר (רק בכניסה
+     הרגילה; בגל 1 הרשומה כבר קיימת, היא זו שממנה נכנסנו). opt.remember —
+     לרשום שהייתה כאן עכשיו כניסת Google אמיתית (ר' IDENT_KEY). */
+  function afterFirebaseSignIn(opt) {
+    opt = opt || {};
+    if (opt.remember) {
+      try {
+        var pr = CBA.fb.profile && CBA.fb.profile();
+        if (pr && pr.uid && currentUser &&
+            String(pr.email || "").toLowerCase() === String(currentUser.email || "").toLowerCase()) identRemember(pr.uid);
+      } catch (e) {}
+    }
+    if (opt.link) firebaseLinkMember();
+    /* 🔴 דיווח #6 (21.9) — מצב ההתראות מסתנכרן מהשרת.
+       עד היום הכפתור הסתמך רק על `localStorage`, שנמחק
+       באיפון מדי פעם. שגר ושכח: אם המצב השתנה,
+       מציירים מחדש כדי שהכפתור יאמר את האמת. */
+    try {
+      if (window.CBA && CBA.push && CBA.push.syncFromServer) {
+        var wasOn = CBA.push.isSubscribed();
+        CBA.push.syncFromServer(function (on) {
+          /* ⚠️ מציירים מחדש רק כשהמצב באמת התהפך. */
+          if (on === wasOn) return;
+          try {
+            var p = document.getElementById("user-panel");
+            if (p) p.innerHTML = userPanelHTML();
+          } catch (e2) {}
+        });
+      }
+    } catch (e) {}
   }
 
   /* מבקש מהשרת לכתוב `members/{uid}` ב-Firestore (צעד 02ג, 2026-09-14).
@@ -2581,17 +2598,240 @@
     });
   }
 
+  /* ============================================================================
+   *  גל 1 — כניסה בלי Apps Script   (3.10.2026, אושר ע"י יועד: "כניסה עצלה")
+   * ----------------------------------------------------------------------------
+   *  מה זה בשפה פשוטה: עד היום כל כניסה חיכתה ל-Apps Script (~3 שניות, ועוד
+   *  תור כשהרבה נכנסים יחד) רק כדי לשמוע "מי אתה ומה מותר לך". את אותה
+   *  תשובה בדיוק השרת כבר כותב ל-`members/{uid}` ב-Firestore — מסמך שרק
+   *  בעליו רשאי לקרוא. מעכשיו:
+   *    1. Firebase מזהה את המשתמש (טוקן Google, או זיכרון המכשיר אחרי רענון).
+   *    2. האפליקציה בונה את המשתמש מהמסמך ונכנסת מיד.
+   *    3. המושב החתום ל-Apps Script נמשך **ברקע** (sessionReady), וכל פעולה
+   *       שצריכה את Apps Script ממתינה לו לבד (withSession ב-sheets.js).
+   *  ⚠️ זו נוחות תצוגה, לא אבטחה — בדיוק כמו המושב השמור. האבטחה נשארת
+   *     בשרת (authorize_ בכל בקשה) ובכללי Firestore (members/{uid}).
+   *  ⚠️ כל מה שלא מתאים (אין מסמך, schema ישן, active:false, Firebase איטי)
+   *     ⇒ הכניסה הרגילה דרך Apps Script, כמו אתמול. שום משתמש לא ננעל בחוץ.
+   * ========================================================================== */
+  /* "הייתה כאן כניסת Google אמיתית" — uid + מתי. שחזור אחרי רענון (בלי חלון
+     גוגל) מותר רק עד IDENT_MAX_MS אחריה. שחזור אינו מאריך את החלון — רק כניסת
+     Google אמיתית. כך מכשיר שנשכח פתוח לא נשאר מחובר לנצח. */
+  var IDENT_KEY = "cba_ident_v1";
+  var IDENT_MAX_MS = 30 * 86400000;     // 30 יום — ר' ההחלטה בזיכרון הפרויקט
+  var FB_ENTRY_RACE_MS = 5000;          // אחרי לחיצה על Google: Firebase לא הספיק ⇒ הדרך הרגילה
+  var FB_RESTORE_MS = 8000;             // אחרי רענון: לא הספקנו לשחזר ⇒ מסך הכניסה
+  function identRemember(uid) {
+    try { localStorage.setItem(IDENT_KEY, JSON.stringify({ uid: String(uid), at: Date.now() })); } catch (e) {}
+  }
+  function identRead() {
+    try {
+      var o = JSON.parse(localStorage.getItem(IDENT_KEY) || "null");
+      if (!o || !o.uid || typeof o.at !== "number" || (Date.now() - o.at) > IDENT_MAX_MS || o.at > Date.now() + 60000) return null;
+      return o;
+    } catch (e) { return null; }
+  }
+  function identForget() { try { localStorage.removeItem(IDENT_KEY); } catch (e) {} }
+  function bootMark(t) { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark(t); } catch (e) {} }
+
+  /* המשתמש מתוך members/{uid}. null = לא מספיק כדי להיכנס בלי השרת. */
+  var MEMBER_MIN_SCHEMA = 2;
+  function userFromMember(prof, doc) {
+    if (!prof || !prof.uid || !prof.email || prof.emailVerified !== true) return null;
+    if (!doc || !(Number(doc.schema) >= MEMBER_MIN_SCHEMA) || doc.active !== true) return null;
+    /* 🔴 (צוות אדום H1) המסמך שייך למייל של המחובר — uid ישן שנשאר בתא אחרי
+       החלפת מייל במשבצת לא נכנס עם הנתונים של מישהו אחר. */
+    if (String(doc.email || "").toLowerCase() !== String(prof.email).toLowerCase()) return null;
+    var perms = Array.isArray(doc.perms) ? doc.perms.filter(function (x) { return typeof x === "string"; }) : [];
+    return {
+      ok: true, authorized: true, via: "fb", uid: String(prof.uid),
+      email: String(prof.email), name: String(prof.name || ""), picture: String(prof.picture || ""),
+      perms: perms, isSuper: perms.indexOf(PERM.SUPER) !== -1, isExternal: doc.isExternal === true,
+      family: String(doc.family || ""), house: String(doc.house == null ? "" : doc.house),
+      familyId: String(doc.familyId || ""), firstName: String(doc.firstName || ""),
+      session: ""
+    };
+  }
+
+  /* כניסה לאפליקציה עם משתמש מוכן — משותף לשלושת המסלולים (Google→שרת,
+     Google→Firebase, שחזור אחרי רענון). זה בדיוק מה שהיה בתוך onGoogleLogin. */
+  function enterApp(user, opt) {
+    opt = opt || {};
+    currentUser = user;
+    /* 🔴 הזהות נקבעת **לפני** המשיכה — ר' ההערה ליד applyUser בעליית העמוד. */
+    applyUser();
+    // הטוקן החתום שהשרת הנפיק (בכניסה מ-Firebase — ריק, ויגיע ברקע)
+    window.CBA.authSession = user.session || "";
+    saveSession(currentUser);
+    if (window.CBA.startPulse) window.CBA.startPulse();
+    hideLoginGate();
+    renderControls();
+    if (!inited) main.innerHTML = skeletonScreen();
+    var routedAfterLogin = false;
+    if (opt.credential) {
+      firebaseSignInDone = false;
+      try { if (window.CBA && CBA.fb && CBA.fb.expectUser) CBA.fb.expectUser(); } catch (e) {}
+      firebaseSignInNow(opt.credential);
+    } else if (opt.fbReady) {
+      afterFirebaseSignIn({ link: false, remember: !!opt.remember });
+    }
+    if (!window.CBA.authSession) sessionReady();   // ברקע — לא חוסם את הציור
+    CBA.sheets.load(function (ok, info) {
+      var wasInited = inited;
+      sheetsLoadHandler(ok, info);
+      // ציור ראשון: sheetsLoadHandler כבר קורא ל-routeByRole בעצמו.
+      // כניסה חוזרת באותה טעינת עמוד (אחרי יציאה): המסך כבר מאותחל,
+      // ולכן צריך לנתב כאן — פעם אחת בלבד.
+      if (wasInited && !routedAfterLogin) { routedAfterLogin = true; routeByRole(); }
+    });
+  }
+
+  /* לחיצה על Google: קודם Firebase + המסמך. done(false) ⇒ הדרך הרגילה. */
+  function fbFirstLogin(resp, done) {
+    if (!(resp && resp.credential && window.CBA && CBA.fb && CBA.fb.signIn && CBA.fb.readDoc && CBA.fb.profile)) return done(false);
+    var settled = false;
+    var t = setTimeout(function () { if (settled) return; settled = true; bootMark("Firebase איטי — כניסה רגילה"); done(false); }, FB_ENTRY_RACE_MS);
+    try { CBA.fb.expectUser(); } catch (e) {}
+    CBA.fb.signIn(resp.credential, function (err, fbu) {
+      if (settled) return;
+      if (err || !fbu) { settled = true; clearTimeout(t); return done(false); }
+      CBA.fb.readDoc("members", fbu.uid, function (e2, doc) {
+        if (settled) return;
+        settled = true; clearTimeout(t);
+        var u = e2 ? null : userFromMember(CBA.fb.profile(), doc);
+        if (!u || u.uid !== fbu.uid) return done(false);
+        bootMark("נכנס מזהות Firebase");
+        firebaseSignInDone = true;   // כבר מחוברים — אין צורך בהתחברות שנייה
+        enterApp(u, { fbReady: true, remember: true });
+      });
+    });
+  }
+
+  /* עליית עמוד בלי מושב שמור: יש זיכרון של כניסת Google אחרונה ו-Firebase זוכר
+     את המשתמש ⇒ נכנסים בלי מסך כניסה. מחזיר true אם ניסיון יצא לדרך (ואז
+     הוא זה שיציג את מסך הכניסה אם ייכשל). */
+  function fbRestoreStart() {
+    var id = identRead();
+    if (!id || !(window.CBA && CBA.fb && CBA.fb.authReady && CBA.fb.readDoc && CBA.fb.profile)) return false;
+    bootMark("שחזור זהות מ-Firebase");
+    var settled = false;
+    function toGate() { bootDismiss(); showLoginGate(); }
+    var t = setTimeout(function () { if (settled) return; settled = true; bootMark("שחזור לא הספיק — מסך כניסה"); toGate(); }, FB_RESTORE_MS);
+    CBA.fb.authReady(function (fu) {
+      if (settled) return;
+      if (!fu || fu.uid !== id.uid) { settled = true; clearTimeout(t); return toGate(); }
+      CBA.fb.readDoc("members", fu.uid, function (e, doc) {
+        if (settled) return;
+        settled = true; clearTimeout(t);
+        var u = e ? null : userFromMember(CBA.fb.profile(), doc);
+        if (!u || u.uid !== id.uid) return toGate();
+        bootMark("שוחזר מ-Firebase");
+        enterApp(u, { fbReady: true, remember: false });
+      });
+    }, FB_RESTORE_MS);
+    return true;
+  }
+
+  /* ---------- המושב החתום — ברקע, פעם אחת (single-flight) ----------
+     cb(session|""). "" = לא הצלחנו; הקורא ממשיך בלי מושב והשרת יענה
+     "אין הרשאה" כרגיל (עם ההסבר של authNote). הקריאה הבאה תנסה שוב. */
+  var sessWaiters = null, sessGen = 0, sessFailAt = 0, SESS_BACKOFF_MS = 15000;
+  function permPrint(u) {
+    u = u || {};
+    return [u.familyId, u.isSuper ? 1 : 0, u.isExternal ? 1 : 0, (u.perms || []).slice().sort().join(","),
+            u.family, u.house, u.firstName].join("|");
+  }
+  function sessionReady(cb) {
+    cb = cb || function () {};
+    if (window.CBA.authSession) return cb(window.CBA.authSession);
+    if (!currentUser || currentUser.via !== "fb") return cb("");
+    if (sessWaiters) { sessWaiters.push(cb); return; }
+    /* (צוות אדום L2) כישלון אחרון לפני פחות מ-15 שניות — לא מפציצים את השרת
+       בבקשת מושב לפני כל קריאה. */
+    if (sessFailAt && (Date.now() - sessFailAt) < SESS_BACKOFF_MS) return cb("");
+    sessWaiters = [cb];
+    var gen = ++sessGen, forEmail = String(currentUser.email || "").toLowerCase();
+    var done = false;
+    function settle(sess) {
+      if (done || gen !== sessGen) return;
+      done = true; clearTimeout(timer);
+      sessFailAt = sess ? 0 : Date.now();
+      var list = sessWaiters || []; sessWaiters = null;
+      list.forEach(function (fn) { try { fn(sess); } catch (e) {} });
+    }
+    var timer = setTimeout(function () { bootMark("מושב לא חזר בזמן"); settle(""); }, 30000);
+    bootMark("מבקש מושב (ברקע)");
+    CBA.fb.authReady(function (fu) {
+      if (!fu) return settle("");
+      CBA.fb.idToken(function (err, tok) {
+        if (err || !tok) return settle("");
+        fetch(CBA.sheets.url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+                                body: JSON.stringify({ action: "loginFb", idToken: tok }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            /* (צוות אדום L2) תשובה שהגיעה אחרי תקרת הזמן — עדיין שלנו אם זה אותו
+               ניסיון (sessGen) — נשמרת, כדי שהקריאה הבאה לא תצטרך בקשה חדשה. */
+            if (gen !== sessGen) return;
+            if (!currentUser || String(currentUser.email || "").toLowerCase() !== forEmail) return settle("");
+            if (d && d.ok && d.authorized && d.session &&
+                String(d.email || "").toLowerCase() === forEmail) {
+              var before = permPrint(currentUser);
+              ["perms", "isSuper", "isExternal", "family", "house", "familyId", "firstName"].forEach(function (k) {
+                if (d[k] !== undefined) currentUser[k] = d[k];
+              });
+              currentUser.session = d.session;
+              window.CBA.authSession = d.session;
+              saveSession(currentUser);
+              sessFailAt = 0;
+              bootMark("מושב התקבל");
+              /* השרת יודע יותר מהמסמך (עריכה ישירה בגיליון) — מעדכנים מסך. */
+              if (permPrint(currentUser) !== before) { try { applyUser(); renderControls(); } catch (e) {} }
+              return settle(d.session);
+            }
+            if (d && d.ok && d.authorized === false) { settle(""); return sessionRevoked(d.reason); }
+            if (done) return;
+            settle("");
+          })
+          ["catch"](function () { settle(""); });
+      });
+    }, 8000);
+  }
+  window.CBA.sessionReady = sessionReady;
+
+  /* השרת אמר "לא ברשימה"/"עזב" — המסמך ב-Firestore עוד לא התעדכן (עריכה
+     ישירה בגיליון). יוצאים, ומסבירים למה. */
+  function sessionRevoked(reason) {
+    identForget();
+    logout();
+    /* "relogin" = עברו 30 יום מכניסת Google האחרונה, או שהמנהל ניתק את כולם.
+       לא חסימה — רק התחברות מחדש (One Tap האוטומטי נשאר דלוק). */
+    if (reason === "relogin") { loginError = "צריך להתחבר שוב עם Google."; showLoginGate(); return; }
+    loginError = reason === "inactive"
+      ? "המשתמש מסומן כ'עזב' — הגישה חסומה."
+      : "האימייל שלך כבר לא ברשימת התושבים. אם זו טעות — פנו לוועד.";
+    blockGisAuto();
+    showLoginGate();
+  }
+
   function onGoogleLogin(resp) {
     /* 🔴 תשובה אוטומטית אחרי שכבר נדחינו = עוד סבב בלולאה. מתעלמים. */
     if (gisAutoBlocked && resp && /^auto/.test(String(resp.select_by || ""))) return;
     /* 🔴 24.9 — התחברות אוטומטית (auto_select) שמגיעה כשהמשתמש כבר בפנים מפעילה מחדש את כל
        מסלול הכניסה: מסך "מתחבר…", משיכת מטען מלאה וניתוב מחדש — בדיוק "הדף מתרענן ועובר
        דרך מטען פתיחה", ומוחק עריכה פתוחה. אותו משתמש כבר מחובר — מתעלמים. */
-    if (inited && currentUser && resp && /^auto/.test(String(resp.select_by || ""))) return;
+    /* גל 1 — גם לפני הציור הראשון: כניסה מזהות Firebase כבר קבעה משתמש. */
+    if (currentUser && resp && /^auto/.test(String(resp.select_by || ""))) return;
     gisDisarm();   // התשובה הגיעה — אין "תקיעה" (ר' רשת הביטחון מעל hideLoginGate)
     try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("Google אישר"); } catch (e) {}
     loginError = null;
     showLoginConnecting();   // גוגל כבר סיימה; עכשיו מחכים לשרת שלנו — תראו את זה, לא מסך ריק
+    /* גל 1 (3.10.26) — קודם Firebase + members/{uid}; רק אם זה לא מספיק — השרת. */
+    fbFirstLogin(resp, function (handled) { if (!handled) classicLogin(resp); });
+  }
+
+  /* הכניסה הרגילה דרך Apps Script — כמו עד גל 1. משמשת את מי שעוד אין לו
+     רשומת חבר מלאה (כניסה ראשונה, לא ברשימה, עזב) או כש-Firebase איטי. */
+  function classicLogin(resp) {
     /* LGB1 (גל 9, 1.10.26) — טוקן Google בגוף POST ולא בכתובת. ⚠️ שרת שעוד לא עבר דיפלוי
        עונה ל-POST "אין הרשאה" (שער doPost) — אז ניסיון אחד חוזר ב-GET הישן (resp._viaGet). */
     (resp && resp._viaGet
@@ -2601,48 +2841,12 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data && data.ok === false && data.error === "אין הרשאה" && !(resp && resp._viaGet)) {
-          return onGoogleLogin(Object.assign({}, resp, { _viaGet: true }));
+          return classicLogin(Object.assign({}, resp, { _viaGet: true }));
         }
         if (data && data.ok && data.authorized) {
           try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("השרת אישר כניסה"); } catch (e) {}
-          currentUser = data;
-          /* 🔴 אותה סיבה כמו בנתיב עליית-העמוד למטה: הזהות נקבעת **לפני**
-             המשיכה, כי הטעינה הקרה מ-Firestore גוזרת את השאילתה שלה
-             מ-`CBA.user`/`CBA.perms`. מאז 23.9 זה רלוונטי גם כאן: חיבור
-             Firebase יוצא לפני המשיכה, והטעינה הקרה מ-Firestore יכולה
-             להקדים את המטען גם בכניסה ראשונה. */
-          applyUser();
-          // הטוקן החתום שהשרת הנפיק — נשלח מעכשיו בכל פעולת כתיבה במקום הסיסמה
-          window.CBA.authSession = data.session || "";
-          saveSession(currentUser);
-          /* 🔴 הפעימה החיה — רגע אחרי התחברות, כשיש משתמש. */
-          if (window.CBA.startPulse) window.CBA.startPulse();
-          hideLoginGate();
-          renderControls();
-          /* טעינת הנתונים מתחילה רק עכשיו (2026-08-23 — תיקון אבטחה).
-             עד היום האפליקציה משכה את כל נתוני הגיליון כבר בעליית העמוד,
-             לפני שבכלל היה ידוע מי המשתמש. מהיום המשיכה דורשת מושב חתום,
-             ולכן היא מתחילה כאן — אחרי שגוגל אימתה והשרת אישר. */
-          if (!inited) main.innerHTML = skeletonScreen();
-          var routedAfterLogin = false;
-          firebaseSignInDone = false;
-          /* 🔴 **מסמנים "התחברות בדרך" לפני שהמשיכה מתחילה** (2026-09-17, ממצא 02).
-             `CBA.fb.userReady` צריך לדעת **עכשיו** שיהיה משתמש — אחרת כל
-             קריאה בשניות הראשונות רואה "אין משתמש". זה הרגע המוקדם ביותר
-             שבו הטוקן ביד, ומיד אחריו (23.9) יוצאת גם ההתחברות עצמה. */
-          try { if (window.CBA && CBA.fb && CBA.fb.expectUser) CBA.fb.expectUser(); } catch (e) {}
-          /* 🔴🔴 ההתחברות ל-Firebase יוצאת **עכשיו**, במקביל למשיכה (23.9.26).
-             עד היום היא חיכתה לתשובת המשיכה + 5 שניות — והמשיכה חיכתה לה.
-             ר' ההערה הגדולה ליד firebaseSignInNow. */
-          firebaseSignInNow(resp.credential);
-          CBA.sheets.load(function (ok, info) {
-            var wasInited = inited;
-            sheetsLoadHandler(ok, info);
-            // ציור ראשון: sheetsLoadHandler כבר קורא ל-routeByRole בעצמו.
-            // כניסה חוזרת באותה טעינת עמוד (אחרי יציאה): המסך כבר מאותחל,
-            // ולכן צריך לנתב כאן — פעם אחת בלבד.
-            if (wasInited && !routedAfterLogin) { routedAfterLogin = true; routeByRole(); }
-          });
+          /* כל מה שהיה כאן עבר ל-enterApp — משותף לשלושת מסלולי הכניסה. */
+          enterApp(data, { credential: resp.credential });
         } else {
           // מייל מאומת שאינו ברשימת התושבים — מציעים לו לבקש הרשמה (2026-08-07).
           // שומרים את הטוקן כדי שהבקשה תישלח מאומתת, בלי סיסמת מנהל.
@@ -2656,6 +2860,9 @@
                 : "האימייל שלך עדיין לא ברשימת התושבים. אפשר לשלוח בקשת הרשמה לוועד:")
             : ((data && data.error) || "ההתחברות נכשלה.");
           currentUser = null;
+          /* גל 1 (צוות אדום L3) — fbFirstLogin כבר חיבר אותו ל-Firebase; מי שנדחה
+             לא נשאר מחובר שם (ההתחברות שם נשמרת במכשיר). */
+          try { if (window.CBA && CBA.fb && CBA.fb.signOut) CBA.fb.signOut(); } catch (e) {}
           blockGisAuto();   // 🔴 ר' gisAutoBlocked — עוצר את לולאת ההתחברות
           showLoginGate();
         }
@@ -2729,6 +2936,11 @@
     if (googleReady && google.accounts.id.disableAutoSelect) google.accounts.id.disableAutoSelect();
     if (window.CBA && CBA.fb) { try { CBA.fb.signOut(); } catch (e) {} }   // יציאה = יציאה משתי המערכות
     clearSession();
+    identForget();                       // גל 1 — יציאה = גם בלי שחזור מ-Firebase
+    (function () {                       // בקשת מושב שבדרך כבר לא שלנו — משחררים את הממתינים ריקים
+      var w = sessWaiters; sessGen++; sessWaiters = null;
+      (w || []).forEach(function (fn) { try { fn(""); } catch (e) {} });
+    })();
     clearRoute();
     if (CBA.sheets.clearCache) CBA.sheets.clearCache();
     currentUser = null; loginError = null;
@@ -2974,7 +3186,9 @@
   document.body.classList.add("app-booting");
   currentUser = loadSession();          // מושב שמור ותקף? נחשוף את האפליקציה מיד — בלי מסך כניסה
   main.innerHTML = skeletonScreen();    // שלד shimmer במקום "טוען נתונים…"
-  if (!currentUser) { bootDismiss(); showLoginGate(); }    // אין מושב תקף — חוסמים עד התחברות מאומתת
+  /* גל 1 — אין מושב שמור, אבל Firebase זוכר אותנו ⇒ נכנסים בלי מסך כניסה.
+     fbRestoreStart מציג בעצמו את מסך הכניסה אם השחזור נכשל. */
+  if (!currentUser && !fbRestoreStart()) { bootDismiss(); showLoginGate(); }    // אין מושב תקף — חוסמים עד התחברות מאומתת
 
   // מעטפת האפליקציה (ניווט/משתמש/בורר שנה) לא תלויה במספרי התקציב עצמם —
   // מוכנים ברגע שיש לנו כל נתונים בפועל (מטמון או רשת), גם אם עוד לא ברור
@@ -3190,7 +3404,7 @@
      מסלול שרץ לפני המטען נגע במצב שהמטען עצמו ממלא.
      ⚠️ `applyUser` אידמפוטנטית ותלויה רק ב-`currentUser` שכבר נטען
         מ-`loadSession()` למעלה — היא לא נוגעת בשום נתון מהגיליון. */
-  if (currentUser) { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("מושב שמור — מושכים מטען"); } catch (e) {} applyUser(); CBA.sheets.load(sheetsLoadHandler); }
+  if (currentUser) { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("מושב שמור — מושכים מטען"); } catch (e) {} applyUser(); if (!window.CBA.authSession) sessionReady(); CBA.sheets.load(sheetsLoadHandler); }
 
   /* --- רענון תקופתי (2026-08-05, כמה סבבים לבקשת יועד — קצב הלך והואץ, ולבסוף
      ביקש שהקצב המהיר יפעל רק כל עוד הוא בפועל משתמש באפליקציה, כדי לא "לבזבז"

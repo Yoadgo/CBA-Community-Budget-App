@@ -34,8 +34,13 @@ service cloud.firestore {
 
     /* ---------- פונקציות עזר ---------- */
 
+    /* 🔴 גל 1 (3.10.26, צוות אדום M2) — רק כניסת Google עם מייל מאומת.
+       כל משתמשי CBA נכנסים כך ממילא; זה סוגר את הדלת אם אי-פעם יודלק בקונסולה
+       ספק אחר (סיסמה/קישור במייל) שמאפשר לפתוח חשבון על מייל של מישהו אחר. */
     function signedIn() {
-      return request.auth != null && request.auth.uid != null;
+      return request.auth != null && request.auth.uid != null &&
+             request.auth.token.firebase.sign_in_provider == 'google.com' &&
+             request.auth.token.email_verified == true;
     }
 
     /* ⚠️ **פונקציה בכללי Firestore לא מחזירה נתיב.** הנתיב נבנה בתוך
@@ -48,8 +53,16 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
     }
 
+    /* 🔴 גל 1 (3.10.26, צוות אדום H1) — המסמך שייך למייל של המחובר.
+       uid שנשאר בתא אחרי שמנהל החליף את המייל במשבצת היה מקבל את המסמך של
+       התושב החדש. מסמך בלי שדה email (לפני הסנכרון של גל 1) — עובר כמו קודם;
+       אחרי `membersSyncNow` לכל המסמכים יש email והבדיקה מלאה. */
+    function memberEmailOk() {
+      return !('email' in m()) || m().email == request.auth.token.email.lower();
+    }
+
     function isMember() {
-      return memberExists() && m().active == true;
+      return memberExists() && m().active == true && memberEmailOk();
     }
 
     function isSuper() {

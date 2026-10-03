@@ -131,7 +131,7 @@ section('3. ממצא 03 — יציאה');
 
 ok('logout מנקה מסך וזיכרון', /wipeScreen\(\);\s*\n\s*wipeMemoryData\(\);/.test(APP));
 ok('🔴 והסדר הוא ניקוי לפני ציור השער',
-   APP.indexOf('wipeMemoryData();') < APP.indexOf('showLoginGate();\n  }'));
+   (function () { const lo = APP.slice(APP.indexOf('function logout() {')); return lo.indexOf('wipeMemoryData();') > -1 && lo.indexOf('wipeMemoryData();') < lo.indexOf('showLoginGate();\n  }'); })());
 ok('CBA.mock מאופס לשלד ריק ולא נמחק', /m\.years = \{ "": \{/.test(APP) && !/delete CBA\.mock/.test(APP));
 ok('⚠️ שלד הריק מחזיק את כל ששת מפתחות ה-accessor',
    ['categories', 'income', 'transactions', 'budget', 'notes', 'groups']

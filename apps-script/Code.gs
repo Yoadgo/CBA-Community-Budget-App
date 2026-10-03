@@ -658,6 +658,9 @@ function revokeAllSessions() {
   var props = PropertiesService.getScriptProperties();
   var next = String((parseInt(props.getProperty('CBA_SESSION_EPOCH') || '1', 10) || 1) + 1);
   props.setProperty('CBA_SESSION_EPOCH', next);
+  /* גל 1 — גם מושבים שנמשכים מטוקן Firebase (loginFb): רק מי שהתחבר עם Google
+     **אחרי** הרגע הזה יקבל מושב. ר' handleLoginFb_. */
+  props.setProperty('CBA_FB_REVOKE_AT', String(Date.now()));
   sessionCacheClear_();   // 3.10 — אחרת המטמון ממשיך להחזיר את הדור הישן עד 6 שעות
   Logger.log('✓ כל המושבים נותקו. דור המושבים החדש: ' + next);
   return next;
@@ -1509,11 +1512,57 @@ function fbRememberUid_(ss, email, uid) {
       if (normalizeEmail_(values[r][cols.email[sIdx]]) !== want) continue;
       var cur = String(values[r][cols.uid[sIdx]] || '').trim();
       if (cur === uid) return true;                      // כבר רשום — לא נוגעים
+      /* 🔴 (צוות אדום H1) uid קודם בתא = חשבון אחר (או מייל שהוחלף במשבצת).
+         המסמך שלו מכיל עכשיו את הנתונים של המשבצת — שוללים לפני שמחליפים. */
+      if (cur) { try { fsSet_('members/' + cur, memberDocFor_(null, { revoke: true })); } catch (eRv) {} }
       sh.getRange(r + 2, cols.uid[sIdx] + 1).setValue(uid);
       return true;
     }
   }
   return false;
+}
+
+/* ============================================================================
+ *  memberDocFor_ — תוכן רשומת החבר, במקום אחד   (3.10.2026, גל 1 — כניסה בלי Apps Script)
+ * ----------------------------------------------------------------------------
+ *  עד היום ארבעה מקומות בנו את `members/{uid}` כל אחד לבד (fbSyncRow_,
+ *  handleFirebaseLink_, savePermissions_, ומחיקת שורה). מגל 1 הדפדפן **בונה
+ *  את המשתמש מהמסמך הזה** בכניסה, במקום לשאול את Apps Script — ולכן כל
+ *  כותב חייב לכתוב בדיוק את אותם שדות. פונקציה אחת = אין סטייה בשקט.
+ *
+ *  schema 2 = נוספו firstName / family / house (אושר ע"י יועד, 3.10.26), ו-email
+ *  של בעל המסמך עצמו (צוות אדום H1 — ר' למטה).
+ *  ⚠️ המסמך נקרא **רק ע"י בעליו** (כללי Firestore: request.auth.uid == uid),
+ *     ונכתב רק מכאן. שם/משפחה/בית — המשתמש ממילא יודע אותם על עצמו.
+ *  ⚠️ הלקוח מקבל רק schema >= 2. מסמך ישן ⇒ הכניסה הישנה דרך Apps Script.
+ *  pr — תוצאת permissionsFor_ (או null למי שאינו ברשימה).
+ *  opt.perms — דריסת ההרשאות (savePermissions_ כותב את מה שזה עתה נשמר).
+ *  opt.revoke — שלילה מלאה (מחיקת שורה): הכול ריק ו-active:false.
+ * ========================================================================== */
+var MEMBER_SCHEMA = 2;
+function memberDocFor_(pr, opt) {
+  opt = opt || {};
+  if (opt.revoke || !pr) {
+    return { familyId: '', perms: [], isExternal: false, active: false, email: '',
+             firstName: '', family: '', house: '', updatedAt: new Date(), schema: MEMBER_SCHEMA };
+  }
+  var perms = (opt.perms || pr.perms || []).slice();
+  if (!opt.perms && pr.isSuper && perms.indexOf(PERM_SUPER) === -1) perms.push(PERM_SUPER);
+  return {
+    familyId: String(pr.familyId || ''),
+    perms: perms,
+    isExternal: !!pr.isExternal,
+    active: (opt.active !== undefined) ? !!opt.active : !!(pr.found && pr.active),
+    /* 🔴 (צוות אדום H1) המייל שהמסמך שייך לו. uid שנשאר בתא אחרי שמנהל החליף
+       את המייל במשבצת היה מקבל את הנתונים של התושב החדש. עכשיו הלקוח וכללי
+       Firestore משווים את המייל הזה למייל של המחובר — uid ישן לא עובר. */
+    email: normalizeEmail_(pr.email || ''),
+    firstName: String(pr.firstName || ''),
+    family: String(pr.family || ''),
+    house: String(pr.house == null ? '' : pr.house),
+    updatedAt: new Date(),
+    schema: MEMBER_SCHEMA
+  };
 }
 
 /* ============================================================================
@@ -1547,6 +1596,10 @@ function fbSyncRow_(ss, rowIndex) {
     var row = sh.getRange(rowIndex, 1, 1, sh.getLastColumn()).getValues()[0];
     var n = 0;
     var slots = Math.min(cols.email.length, cols.uid.length);
+    /* 🔴 (צוות אדום M1, 3.10.26) מטמון ההרשאות (5 דק') מת **עכשיו**, לא רק ב-bumpRev_
+       שרץ אחרי ההנדלר. בלי זה סימון "עזב" דרך האפליקציה היה כותב active:true
+       מהמטמון, למי שנכנס בחמש הדקות האחרונות. */
+    permCacheBump_();
     for (var i = 0; i < slots; i++) {
       var uid = String(row[cols.uid[i]] || '').trim();
       if (!uid) continue;                       // מעולם לא התחבר — אין מה לסנכרן
@@ -1554,14 +1607,7 @@ function fbSyncRow_(ss, rowIndex) {
       var key = normalizeEmail_(email);
       if (key && PERMS_MEMO_[key]) delete PERMS_MEMO_[key];
       var pr = email ? permissionsFor_(email) : { found: false, active: false, perms: [] };
-      fsSet_('members/' + uid, {
-        familyId: String((pr && pr.familyId) || ''),
-        perms: (pr && pr.perms) || [],
-        isExternal: !!(pr && pr.isExternal),
-        active: !!(pr && pr.found && pr.active),
-        updatedAt: new Date(),
-        schema: 1
-      });
+      fsSet_('members/' + uid, memberDocFor_(pr && pr.found ? pr : null));
       n++;
     }
     return n;
@@ -1702,21 +1748,12 @@ function handleFirebaseLink_(p) {
   }
 
   var perm = gate.perm || {};
-  var perms = (perm.perms || []).slice();
-  if (perm.isSuper && perms.indexOf(PERM_SUPER) === -1) perms.push(PERM_SUPER);
 
   try {
-    fsSet_('members/' + v.uid, {
-      familyId: String(perm.familyId || ''),
-      perms: perms,
-      isExternal: !!perm.isExternal,
-      /* ⚠️ תמיד true כאן — `authorize_` כבר דחה משתמש לא-פעיל לפני שהגענו.
-         השדה קיים כדי שכללי האבטחה יוכלו לדרוש אותו, וכדי שיהיה מקום אחד
-         לכבות משתמש בלי למחוק את המסמך. ר' האזהרה על "עזב" בזיכרון הפרויקט. */
-      active: true,
-      updatedAt: new Date(),
-      schema: 1
-    });
+    /* ⚠️ active:true תמיד כאן — `authorize_` כבר דחה משתמש לא-פעיל לפני שהגענו.
+       השדה קיים כדי שכללי האבטחה יוכלו לדרוש אותו, וכדי שיהיה מקום אחד
+       לכבות משתמש בלי למחוק את המסמך. ר' memberDocFor_. */
+    fsSet_('members/' + v.uid, memberDocFor_(Object.assign({}, perm, { email: perm.email || gate.email }), { active: true }));
   } catch (err) {
     return json_({ ok: false, error: 'כתיבת רשומת החבר נכשלה: ' + String(err) });
   }
@@ -1754,6 +1791,8 @@ function doPostInner_(e) {
        בדיוק כמו ב-doGet: כל אחד מאמת את טוקן Google בעצמו, ולכן הם לפני שער המושב — כמו ב-GET_PUBLIC_ACTIONS.
        ⚠️ ה-GET הישן נשאר פעיל ללקוחות ישנים. */
     if (body && body.action === 'login') return handleLogin_(body.token);
+    /* גל 1 (3.10.26) — מושב מטוקן Firebase. מאמת את הטוקן בעצמו, ולכן לפני שער המושב. ר' handleLoginFb_. */
+    if (body && body.action === 'loginFb') return handleLoginFb_(body);
     if (body && body.action === 'submitSignup') {
       var suRes = handleSubmitSignup_(body);
       try { bumpRev_('submitSignup'); } catch (eRev) { /* כמו GET_WRITE_ACTIONS — מונה בלבד */ }
@@ -4403,32 +4442,108 @@ function handleLogin_(token) {
     }
 
     // הצלבה מול רשימת התושבים
-    var resident = lookupResident_(info.email);
-    var base = { ok: true, email: info.email, name: info.name || '', picture: info.picture || '' };
+    return json_(loginAnswer_(info.email, info.name || '', info.picture || '').out);
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  }
+}
 
-    if (!resident.found) {
-      return json_(Object.assign(base, { authorized: false, reason: 'not_listed' }));
+/** תשובת ההתחברות — משותפת ל-login (טוקן גוגל) ול-loginFb (טוקן Firebase).
+ *  מחזיר { out, perm } — perm למי שרוצה גם לרענן את רשומת החבר. */
+function loginAnswer_(email, name, picture) {
+  var resident = lookupResident_(email);
+  var base = { ok: true, email: email, name: name || '', picture: picture || '' };
+
+  if (!resident.found) {
+    return { out: Object.assign(base, { authorized: false, reason: 'not_listed' }), perm: null };
+  }
+  if (resident.status && resident.status.indexOf('פעיל') === -1) {
+    return { out: Object.assign(base, { authorized: false, reason: 'inactive' }), perm: null };
+  }
+  // הרשאות (2026-08-07): נשלחות ללקוח כדי שידע מה להציג, ומונפק מושב חתום
+  // שילווה כל פעולת כתיבה. הלקוח לא מקבל יותר את סיסמת המנהל.
+  var perm = permissionsFor_(email, resident);   // 3.10 — טאב התושבים נקרא פעם אחת בכניסה, לא פעמיים
+  return { perm: perm, out: Object.assign(base, {
+    authorized: true,
+    session: makeSession_(email),
+    perms: perm.perms,
+    isSuper: perm.isSuper,
+    // (2026-09-07) הלקוח מסתיר את כל אזור התושב לפי הדגל הזה. ר' EXTERNAL_HEADER.
+    isExternal: perm.isExternal,
+    role: resident.role,
+    status: resident.status,
+    family: resident.family,
+    house: resident.house,
+    familyId: resident.familyId,
+    firstName: resident.firstName
+  }) };
+}
+
+/* ============================================================================
+ *  handleLoginFb_ — מושב חתום מטוקן Firebase   (3.10.2026, גל 1 — "כניסה עצלה")
+ * ----------------------------------------------------------------------------
+ *  מה זה בשפה פשוטה: מגל 1 הדפדפן נכנס לאפליקציה **בלי לשאול את Apps Script**
+ *  — הוא מזהה את המשתמש דרך Firebase ובונה אותו מ-`members/{uid}`. את המושב
+ *  החתום (שכל פעולה מול Apps Script צריכה) הוא מבקש כאן, ברקע, אחרי שהמסך
+ *  כבר מצויר. היתרון הנוסף: טוקן Firebase מתחדש לבד, כך שאין צורך לחזור
+ *  לחלון של גוגל כדי לקבל מושב חדש.
+ *
+ *  🔴 שלוש בדיקות, אף אחת לא עודפת:
+ *   1. הטוקן מאומת מול גוגל (accounts:lookup) — לא סומכים על שום דבר מהלקוח.
+ *   2. **emailVerified === true.** אם אי-פעם יודלק בקונסולה ספק "אימייל+סיסמה",
+ *      כל אחד יוכל לפתוח חשבון Firebase עם המייל של מישהו אחר — לא מאומת.
+ *      בלי הבדיקה הזו הוא היה מקבל את המושב של אותו אדם.
+ *   3. **ספק הזהות הוא google.com.** אותה סיבה, שכבה שנייה — זהות שלא הגיעה
+ *      מגוגל אינה זהות שהגיליון מכיר.
+ *  אחרי שלוש הבדיקות — בדיוק אותה תשובה כמו login (loginAnswer_), כולל
+ *  "לא ברשימה"/"עזב". בנוסף מרעננים את רשומת החבר (אם השתנתה הרשאה ישירות
+ *  בגיליון, כללי Firestore מתיישרים כאן ולא רק בסנכרון השעתי).
+ * ========================================================================== */
+var LOGINFB_MAX_AGE_MS = 30 * 86400000;   // ר' IDENT_MAX_MS ב-app.js — אותו חלון, נאכף כאן
+function fbTokenClaims_(tok) {
+  try {
+    var part = String(tok || '').split('.')[1] || '';
+    var json = Utilities.newBlob(Utilities.base64DecodeWebSafe(part + '==='.slice((part.length + 3) % 4))).getDataAsString();
+    return JSON.parse(json) || {};
+  } catch (e) { return {}; }
+}
+function handleLoginFb_(body) {
+  try {
+    var v = fsVerifyIdToken_(body && body.idToken);
+    if (!v.ok) return json_({ ok: false, error: v.error });
+    if (v.emailVerified !== true) return json_({ ok: false, error: 'האימייל אינו מאומת' });
+    if ((v.providers || []).indexOf('google.com') === -1) {
+      return json_({ ok: false, error: 'הזהות אינה מחשבון Google' });
     }
-    if (resident.status && resident.status.indexOf('פעיל') === -1) {
-      return json_(Object.assign(base, { authorized: false, reason: 'inactive' }));
+    /* 🔴 (צוות אדום M2) ספק **הכניסה הזו**, לא רק של החשבון. הטוקן כבר אומת
+       ע"י גוגל (accounts:lookup) — כאן רק קוראים ממנו את השדות. */
+    var cl = fbTokenClaims_(body.idToken);
+    if (!cl.firebase || cl.firebase.sign_in_provider !== 'google.com' || cl.email_verified !== true ||
+        normalizeEmail_(cl.email) !== normalizeEmail_(v.email) || String(cl.user_id || cl.sub || '') !== v.uid) {
+      return json_({ ok: false, error: 'הזהות אינה מכניסת Google' });
     }
-    // הרשאות (2026-08-07): נשלחות ללקוח כדי שידע מה להציג, ומונפק מושב חתום
-    // שילווה כל פעולת כתיבה. הלקוח לא מקבל יותר את סיסמת המנהל.
-    var perm = permissionsFor_(info.email, resident);   // 3.10 — טאב התושבים נקרא פעם אחת בכניסה, לא פעמיים
-    return json_(Object.assign(base, {
-      authorized: true,
-      session: makeSession_(info.email),
-      perms: perm.perms,
-      isSuper: perm.isSuper,
-      // (2026-09-07) הלקוח מסתיר את כל אזור התושב לפי הדגל הזה. ר' EXTERNAL_HEADER.
-      isExternal: perm.isExternal,
-      role: resident.role,
-      status: resident.status,
-      family: resident.family,
-      house: resident.house,
-      familyId: resident.familyId,
-      firstName: resident.firstName
-    }));
+    /* 🔴 (צוות אדום M3) 30 הימים ו"נתק את כולם" נאכפים **בשרת**, לא רק במכשיר:
+       מושב ניתן רק למי שהתחבר עם Google בחלון הזה, ואחרי revokeAllSessions. */
+    var last = Number(v.lastLoginAt || 0);
+    var cut = Number(PropertiesService.getScriptProperties().getProperty('CBA_FB_REVOKE_AT') || 0);
+    if (!last || (Date.now() - last) > LOGINFB_MAX_AGE_MS || last < cut) {
+      return json_({ ok: true, authorized: false, reason: 'relogin', email: v.email });
+    }
+    var ans = loginAnswer_(v.email, v.name || '', v.picture || '');
+    if (ans.out.authorized) {
+      /* ⚡ (צוות אדום M5) כותבים רק כשהמסמך באמת השתנה — אותה טביעה כמו הסנכרון. */
+      var doc = memberDocFor_(ans.perm, { active: true });
+      var fp = membersFpRead_();
+      if (fp[v.uid] !== memberFp_(doc)) {
+        try { fsSet_('members/' + v.uid, doc); } catch (e1) {}
+        try { fbRememberUid_(SpreadsheetApp.getActiveSpreadsheet(), v.email, v.uid); } catch (e2) {}
+      }
+    } else {
+      /* 🔴 (צוות אדום H1) לא מורשה ⇒ גם המסמך של ה-uid הזה נשלל עכשיו. */
+      try { fsSet_('members/' + v.uid, memberDocFor_(null, { revoke: true })); } catch (e3) {}
+    }
+    ans.out.uid = v.uid;
+    return json_(ans.out);
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -4446,6 +4561,7 @@ function handleLogin_(token) {
  * ה-1, וכן הלאה — לכן חשוב שהעמודות יתווספו באותו סדר (שם פרטי אחרי כל אימייל).
  * אם אין עמודת "שם פרטי" בכלל, firstName יחזור ריק ולא ישפיע על שום דבר קיים.
  */
+var RES_VALUES_MEMO_ = null;   // ר' membersSyncAll_ — חי רק בתוך אותה ריצה
 function lookupResident_(email) {
   var target = normalizeEmail_(email);
   if (!target) return { found: false, error: 'לא סופק אימייל' };
@@ -4454,7 +4570,9 @@ function lookupResident_(email) {
   var sh = ss.getSheetByName('תושבים');
   if (!sh) return { found: false, error: 'אין טאב "תושבים"' };
 
-  var values = sh.getDataRange().getValues();
+  /* RES_VALUES_MEMO_ (3.10.26) — membersSyncAll_ עוברת על כל התושבים; בלי
+     הזיכרון הזה כל אחד מהם היה קורא את כל הטאב מחדש (פי 150). */
+  var values = RES_VALUES_MEMO_ || sh.getDataRange().getValues();
   if (values.length < 2) return { found: false, error: 'הטאב "תושבים" ריק' };
 
   var headers = values[0].map(function (h) { return String(h).trim(); });
@@ -5326,8 +5444,7 @@ function deleteResidentRow_(ss, body) {
     var revoked = 0, revokeErrors = [];
     uids.forEach(function (u) {
       try {
-        fsSet_('members/' + u, { familyId: '', perms: [], isExternal: false,
-                                 active: false, updatedAt: new Date(), schema: 1 });
+        fsSet_('members/' + u, memberDocFor_(null, { revoke: true }));
         revoked++;
       } catch (e) { revokeErrors.push(u + ': ' + String(e)); }
     });
@@ -5900,14 +6017,7 @@ function savePermissions_(ss, body) {
          מחזיק את הערך הישן בתוך הריצה הזו, ושימוש בו היה כותב ל-Firestore
          בדיוק את ההרשאה שהרגע הסרנו. */
       var tp = permissionsFor_(targetEmail) || {};
-      fsSet_('members/' + uid, {
-        familyId: String(tp.familyId || ''),
-        perms: perms,
-        isExternal: !!tp.isExternal,
-        active: tp.active !== false,
-        updatedAt: new Date(),
-        schema: 1
-      });
+      fsSet_('members/' + uid, memberDocFor_(tp, { perms: perms, active: tp.active !== false }));
       fsSynced = true;
     }
   } catch (err) { fsSynced = false; }
@@ -6917,6 +7027,99 @@ function hjSyncDue_() {
   if (now - last.t >= HJ_SYNC_FORCE_MS) return { due: true, why: 'ריצה מלאה תקופתית', rev: rev, now: now };
   return { due: false, why: 'מונה ' + rev + ' לא זז מאז ' + new Date(last.t).toISOString(), rev: rev, now: now };
 }
+/* ============================================================================
+ *  membersSyncAll_ — כל רשומות החברים מול הגיליון   (3.10.2026, גל 1)
+ * ----------------------------------------------------------------------------
+ *  שני תפקידים:
+ *   1. **מילוי ראשון של schema 2** (שם/משפחה/בית) לכל מי שכבר מחובר — בלעדיו
+ *      הכניסה החדשה הייתה עובדת רק אחרי שכל אחד נכנס פעם בדרך הישנה.
+ *   2. **רשת ביטחון לעריכה ידנית בגיליון.** fbSyncRow_ רץ רק כשהכתיבה עוברת
+ *      דרך האפליקציה. מי שסומן "עזב" ישירות בתא — נשאר active:true ב-Firestore
+ *      עד היום. עכשיו: עד הריצה השעתית הבאה שבה השער פתוח (≤3 שעות).
+ *  ⚡ עלות: קריאה אחת של הטאב (RES_VALUES_MEMO_), ו-fsSet_ **רק לרשומה שתוכנה
+ *     השתנה** — טביעת אצבע לכל uid נשמרת במאפיין אחד (cba_members_fp).
+ *  ⚠️ כתיבה שנכשלה לא נרשמת בטביעה ⇒ תנוסה שוב בריצה הבאה.
+ *  ⚠️ להרצה ידנית מהעורך (מילוי מיידי אחרי דיפלוי): membersSyncNow.
+ * ========================================================================== */
+var MEMBERS_FP_KEY = 'cba_members_fp';
+var MEMBERS_FP_CHUNK = 8000;              // מאפיין אחד ≤ 9KB — מפצלים (צוות אדום M4)
+var MEMBERS_FORCE_MS = 24 * 3600 * 1000;  // פעם ביום כותבים הכול (מתקן כתיבה ישנה של כותב אחר)
+function memberFp_(doc) {
+  var sig = JSON.stringify([doc.familyId, doc.perms, doc.isExternal, doc.active, doc.email,
+                            doc.firstName, doc.family, doc.house, doc.schema]);
+  return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, sig)).substring(0, 8);
+}
+function membersFpRead_() {
+  var props = PropertiesService.getScriptProperties(), out = {};
+  for (var i = 0; i < 50; i++) {
+    var part = props.getProperty(MEMBERS_FP_KEY + '_' + i);
+    if (part === null || part === undefined) break;
+    String(part).split(';').forEach(function (kv) {
+      var j = kv.indexOf('='); if (j > 0) out[kv.substring(0, j)] = kv.substring(j + 1);
+    });
+  }
+  return out;
+}
+function membersFpWrite_(map) {
+  var props = PropertiesService.getScriptProperties();
+  var parts = [], cur = '';
+  Object.keys(map).forEach(function (k) {
+    var kv = k + '=' + map[k];
+    if (cur && (cur.length + kv.length + 1) > MEMBERS_FP_CHUNK) { parts.push(cur); cur = ''; }
+    cur += (cur ? ';' : '') + kv;
+  });
+  if (cur) parts.push(cur);
+  for (var i = 0; i < parts.length; i++) props.setProperty(MEMBERS_FP_KEY + '_' + i, parts[i]);
+  for (var j = parts.length; j < 50; j++) {
+    if (props.getProperty(MEMBERS_FP_KEY + '_' + j) === null) break;
+    props.deleteProperty(MEMBERS_FP_KEY + '_' + j);
+  }
+}
+function membersSyncAll_(ss, force) {
+  var out = { seen: 0, written: 0, errors: [] };
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return out;
+  var cols = residentSlotCols_(sh);
+  if (!cols.uid.length || !cols.email.length) return out;
+  var props = PropertiesService.getScriptProperties();
+  var fp = {};
+  try { fp = membersFpRead_(); } catch (e) { fp = {}; }
+  var lastForce = Number(props.getProperty(MEMBERS_FP_KEY + '_forceAt') || 0);
+  if (!force && (Date.now() - lastForce) > MEMBERS_FORCE_MS) force = true;
+  var next = {};
+  RES_VALUES_MEMO_ = sh.getDataRange().getValues();
+  try {
+    var values = RES_VALUES_MEMO_;
+    var slots = Math.min(cols.email.length, cols.uid.length);
+    for (var r = 1; r < values.length; r++) {
+      for (var i = 0; i < slots; i++) {
+        var uid = String(values[r][cols.uid[i]] || '').trim();
+        if (!uid) continue;
+        out.seen++;
+        var email = String(values[r][cols.email[i]] || '').trim();
+        var key = normalizeEmail_(email);
+        if (key && PERMS_MEMO_[key]) delete PERMS_MEMO_[key];
+        var res = email ? lookupResident_(email) : { found: false };
+        var pr = res.found ? permissionsFor_(email, res) : null;
+        var doc = memberDocFor_(pr && pr.found ? pr : null);
+        var h = memberFp_(doc);
+        if (!force && fp[uid] === h) { next[uid] = h; continue; }
+        try { fsSet_('members/' + uid, doc); next[uid] = h; out.written++; }
+        catch (e2) { out.errors.push(uid.substring(0, 6) + ': ' + String(e2).substring(0, 80)); }
+      }
+    }
+  } finally { RES_VALUES_MEMO_ = null; }
+  try { membersFpWrite_(next); } catch (e3) { out.errors.push('fp: ' + e3); }
+  if (force && !out.errors.length) { try { props.setProperty(MEMBERS_FP_KEY + '_forceAt', String(Date.now())); } catch (e4) {} }
+  return out;
+}
+/** להרצה ידנית מהעורך: מילוי כל רשומות החברים עכשיו (כולל מה שלא השתנה). */
+function membersSyncNow() {
+  var r = membersSyncAll_(SpreadsheetApp.getActiveSpreadsheet(), true);
+  Logger.log('רשומות חברים: נבדקו ' + r.seen + ', נכתבו ' + r.written + (r.errors.length ? ' | שגיאות: ' + r.errors.join(' ; ') : ''));
+  return r;
+}
+
 function hjSyncDone_(st) {
   try { PropertiesService.getScriptProperties().setProperty(HJ_SYNC_STATE_KEY, JSON.stringify({ rev: st.rev, t: st.now })); } catch (e) {}
 }
@@ -7171,6 +7374,16 @@ function hourlyJobsRun_() {
     if (!fr.ok) Logger.log('famRegistryWrite_ נכשל: ' + fr.error);
 
   } else hjSkip('famRegistryWrite_');
+  /* גל 1 (3.10.26) — רשומות החברים: מילוי schema 2 לכולם, ורשת הביטחון
+     לעריכה ידנית בגיליון (סימון "עזב" ישירות בתא לא עבר עד היום ל-Firestore
+     בכלל). כותב רק רשומה שתוכנה השתנה. ר' membersSyncAll_. */
+  if (hjSync.due) {
+    hjM('membersSyncAll_');
+    try {
+      var ms = membersSyncAll_(ss);
+      if (ms.written || ms.errors.length) Logger.log('רשומות חברים: נכתבו ' + ms.written + ' מתוך ' + ms.seen + (ms.errors.length ? ' | ' + ms.errors.slice(0, 3).join(' ; ') : ''));
+    } catch (e) { hjF(e); Logger.log('membersSyncAll_ נכשל: ' + e); }
+  } else hjSkip('membersSyncAll_');
   if (hjSync.due) {
     hjM('homeCountsSyncAll_');
     try {

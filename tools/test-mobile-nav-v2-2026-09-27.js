@@ -44,7 +44,7 @@ ok('28.9: נגיעה סביב הבר המכווץ (18px) פותחת; נגיעה 
 const LCSS = R('css/loading.css');
 ok('28.9: מסך פתיחה ב-HTML עצמו + רשת ביטחון של 20ש\'', /id="boot-splash"/.test(IDX) && /animation: bootFailsafe 0s linear 20s forwards;/.test(LCSS));
 ok('28.9: אין יותר כפתורי תקציב קבועים בניווט של index.html', !/data-screen="budget">תכנון מול ביצוע<\/button>/.test(IDX));
-ok('28.9: bootReveal אחרי הניתוב הראשון, bootDismiss לפני מסך הכניסה', /initialRoute\("resident"\); \}[^\n]*\n\s*bootReveal\(\);/.test(APP) && /if \(!currentUser\) \{ bootDismiss\(\); showLoginGate\(\); \}/.test(APP));
+ok('28.9: bootReveal אחרי הניתוב הראשון, bootDismiss לפני מסך הכניסה', /initialRoute\("resident"\); \}[^\n]*\n\s*bootReveal\(\);/.test(APP) && /if \(!currentUser && !fbRestoreStart\(\)\) \{ bootDismiss\(\); showLoginGate\(\); \}/.test(APP) && /function toGate\(\) \{ bootDismiss\(\); showLoginGate\(\); \}/.test(APP));
 ok('28.9: כניסה מדורגת + בר עולה מלמטה', /body\.boot-reveal #app-main > \* > \* \{ animation: bootRise/.test(LCSS) && /body\.boot-reveal \.nav-search-fab \{ animation: bootBarUp/.test(LCSS));
 /* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
 const vs = (IDX.match(/\?v=([0-9a-z]+)/g) || []).map(x => x.slice(3));

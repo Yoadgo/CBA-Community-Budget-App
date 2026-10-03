@@ -29,6 +29,10 @@ function grab(src, re) { const m = src.match(re); return m ? m[0] : ''; }
 function run(src, serverMode, firstSelectBy) {
   const fnGate  = grab(src, /  function renderGateButton\(\) \{[\s\S]*?\n  \}\n/);
   const fnLogin = grab(src, /  function onGoogleLogin\(resp\) \{[\s\S]*?\n  \}\n/);
+  /* גל 1 (3.10.26) — onGoogleLogin מנסה קודם Firebase ואז classicLogin. כאן Firebase
+     "לא מכיר" את המשתמש (done(false)) — בדיוק המצב של תושב חדש שלא ברשימה. */
+  const fnClassic = grab(src, /  function classicLogin\(resp\) \{[\s\S]*?\n  \}\n/);
+  const fbStub = fnClassic ? 'function fbFirstLogin(resp, done) { done(false); }\n' : '';
   const fnBlock = grab(src, /  let gisAutoBlocked = false;\n  function blockGisAuto\(\) \{[\s\S]*?\n  \}\n/);
   const state = { fetches: 0, prompts: 0, autoOff: false, queue: [] };
   const id = {
@@ -55,7 +59,7 @@ function run(src, serverMode, firstSelectBy) {
     'function initGoogle() {}\n' +
     'function showLoginConnecting() {}\nfunction gisDisarm() {}\n' +
     'function showLoginGate() { gateEl.childElementCount = 0; renderGateButton(); }\n' +
-    (fnBlock || '') + fnGate + fnLogin +
+    (fnBlock || '') + fnGate + fnLogin + fnClassic + fbStub +
     'this.onGoogleLogin = onGoogleLogin;', box);
   box.onGoogleLogin({ credential: 'tok', select_by: firstSelectBy || 'btn' });   // התושב לוחץ על הכפתור
   let guard = 0;

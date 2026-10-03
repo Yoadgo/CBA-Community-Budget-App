@@ -165,7 +165,16 @@ CBA.door = (function () {
      אותה בקשה ל-Apps Script. תשובה עניינית (DOOR_OFF / NOT_NOW / NUKI_FAIL) לא
      נשלחת שוב, אחרת כשל אמיתי היה מפעיל את המנעול פעמיים. */
   var WORKER_URL = "https://cba-door.gizbar30.workers.dev/";
+  /* גל 1 (3.10.26) — לחיצה על הדלת בשניות הראשונות אחרי כניסה מ-Firebase:
+     המושב עוד בדרך (ר' withSession ב-sheets.js). ממתינים לו, פעם אחת. */
   function viaWorker(payload, cb) {
+    /* רק פעולות ניהול (op) צריכות מושב — פתיחה רגילה מזוהה ב-Worker לפי idToken. */
+    if (payload.op && !CBA.authSession && typeof CBA.sessionReady === "function") {
+      return CBA.sessionReady(function () { viaWorkerNow(payload, cb); });
+    }
+    viaWorkerNow(payload, cb);
+  }
+  function viaWorkerNow(payload, cb) {
     var sess = CBA.authSession || "";
     var body = JSON.stringify(payload.op ? Object.assign({}, payload, { session: sess }) :
                               { reason: payload.reason, bookingId: payload.bookingId, idToken: payload.idToken,

@@ -42,7 +42,9 @@ ok('deleteResidentRow_ קיימת', !!dr);
 ok('🔴 שומר 1 — היסטוריה כספית חוסמת', /blocked: 'history'/.test(dr), dr);
 ok('⚠️ וההודעה מפנה ל"עזב" במקום', /סמנו "עזב" במקום/.test(dr), dr);
 ok('🔴🔴 שומר 2 — הגישה נשללת לפני מחיקת השורה',
-   dr.indexOf("active: false") > -1 && dr.indexOf("active: false") < dr.indexOf('rsh.deleteRow'), dr);
+   /* גל 1 (3.10.26) — השלילה נבנית ב-memberDocFor_(null, { revoke: true }) (active:false). */
+   dr.indexOf("revoke: true") > -1 && dr.indexOf("revoke: true") < dr.indexOf('rsh.deleteRow') &&
+   /if \(opt\.revoke \|\| !pr\) \{\s*return \{ familyId: '', perms: \[\], isExternal: false, active: false,/.test(GS), dr);
 ok('🔴 ושלילה שנכשלה עוצרת את המחיקה',
    /if \(revokeErrors\.length\) \{[\s\S]{0,140}return \{ ok: false/.test(dr), dr);
 ok('⚠️ שומר 3 — מחיקת המסמך היא מאמץ-מיטבי, אחרי הכול',
