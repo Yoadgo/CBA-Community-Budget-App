@@ -5605,6 +5605,7 @@ CBA.data = (function () {
     },
     rejectClubReservation: rejectClubReservation,
     getResidents: getResidents,
+    getResidentDirectory: getResidentDirectory,
     refreshResidents: function (cb) { residentsCache = null; directoryCache = null; dirForget(); communityCache = null; getResidents(cb); },
     residentPickerOptions: residentPickerOptions,
     familyDisplayName: familyDisplayName,
