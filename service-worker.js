@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "b1e4e3749c";
+var VERSION = "9874c32ce8";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -66,7 +66,7 @@ var ASSET_VERSIONS = {
   "icons/apple-touch-icon.png": "5ce56ce0dc",
   "icons/icon-192.png": "a624d0ac7a",
   "js/app.js": "1b51241ace",
-  "js/data/dataService.js": "79830af48b",
+  "js/data/dataService.js": "022b375cac",
   "js/data/door.js": "71c7a113de",
   "js/data/firebase.js": "9669c19e11",
   "js/data/gardenAreas.js": "457c00156c",
@@ -79,9 +79,9 @@ var ASSET_VERSIONS = {
   "js/data/mock.js": "fd54e34660",
   "js/data/push.js": "198e321583",
   "js/data/reconcile.js": "899bfb8f4c",
-  "js/data/sheets.js": "5da0546f53",
+  "js/data/sheets.js": "b9497047f6",
   "js/lazy.js": "011e0ffe5f",
-  "js/lazyManifest.js": "91045d9a91",
+  "js/lazyManifest.js": "679bda3068",
   "js/pwa.js": "cc703231c6",
   "js/screens/appReports.js": "a47450bd91",
   "js/screens/budget.js": "5fbc7244f5",
@@ -96,7 +96,7 @@ var ASSET_VERSIONS = {
   "js/screens/gardenScheduleAi.js": "4a2f2ab9f6",
   "js/screens/gardenStats.js": "9409f96dca",
   "js/screens/gardenTasks.js": "43f85ceec7",
-  "js/screens/gymAdmin.js": "7cd76a6166",
+  "js/screens/gymAdmin.js": "fff10cf606",
   "js/screens/home.js": "0205f05d94",
   "js/screens/homeGarden.js": "ee331ad56c",
   "js/screens/homeSchedule.js": "a39dc89ce9",

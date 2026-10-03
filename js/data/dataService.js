@@ -1861,6 +1861,10 @@ CBA.data = (function () {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.postRead("recordGymPayment", data || {}, cb);
   }
+  function activateGymManual(data, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    CBA.sheets.postRead("activateGymManual", data || {}, cb);
+  }
   function rejectGymPayment(data, cb) {
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.postRead("rejectGymPayment", data || {}, cb);
@@ -5570,6 +5574,7 @@ CBA.data = (function () {
     reportGymPayment: reportGymPayment,
     confirmGymPayment: confirmGymPayment,
     recordGymPayment: recordGymPayment,
+    activateGymManual: activateGymManual,
     rejectGymPayment: rejectGymPayment,
     extendGymMembership: extendGymMembership,
     renewGymMembership: renewGymMembership,

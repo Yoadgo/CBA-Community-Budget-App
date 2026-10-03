@@ -218,6 +218,7 @@ var ACTION_PERMS = {
   confirmGymPayment: PERM_GYM,
   rejectGymPayment: PERM_GYM,
   recordGymPayment: PERM_GYM,
+  activateGymManual: PERM_GYM,         // הפעלה ידנית בכל סטטוס (3.10.26)
   extendGymMembership: PERM_GYM,
   updateGymMembership: PERM_GYM,
   // מצב המודול (2026-09-16) — עדכון ישיר של הגדרה בודדת (קוד כניסה /
@@ -2044,6 +2045,7 @@ function doPostDispatch_(ss, body) {
       case 'confirmGymPayment':     return json_(confirmGymPayment_(ss, body));
       case 'rejectGymPayment':      return json_(rejectGymPayment_(ss, body));
       case 'recordGymPayment':      return json_(recordGymPayment_(ss, body));
+      case 'activateGymManual':     return json_(activateGymManual_(ss, body));
       case 'extendGymMembership':   return json_(extendGymMembership_(ss, body));
       case 'renewGymMembership':    return json_(renewGymMembership_(ss, body));
       case 'updateGymMembership':   return json_(updateGymMembership_(ss, body));
@@ -4283,7 +4285,7 @@ var ACTION_DOMAIN = {
   // מכון כושר
   submitGymApplication: 'gym', createGymMembership: 'gym', requestGymDeclaration: 'gym',
   reportGymPayment: 'gym', confirmGymPayment: 'gym', rejectGymPayment: 'gym',
-  recordGymPayment: 'gym', extendGymMembership: 'gym', renewGymMembership: 'gym',
+  recordGymPayment: 'gym', activateGymManual: 'gym', extendGymMembership: 'gym', renewGymMembership: 'gym',
   updateGymMembership: 'gym',
   // ועד השיכון ושירותים
   saveCommitteeTree: 'committee', saveCommitteeCategories: 'committee',
@@ -9937,6 +9939,19 @@ function submitGymApplication_(ss, body) {
     else if (autoApprove)    status = GYM_ST_PAYMENT;
     else                     status = GYM_ST_REVIEW;
 
+    /* 3.10.26 — "שולם מראש": התושב כבר שילם ויש תוקף, ולכן אחרי הצהרה תקינה (בלי
+       דגל חוסם, ואישור אוטומטי) עוברים ישר ל"פעיל" ולא מבקשים תשלום פעם שנייה. */
+    var prepaid = false, prepaidLabel = '';
+    if (isCompletion && status === GYM_ST_PAYMENT) {
+      var prePaid = cols['סה"כ שולם'] ? sh.getRange(existing.row, cols['סה"כ שולם']).getValue() : 0;
+      var preEnd  = cols['בתוקף עד'] ? sh.getRange(existing.row, cols['בתוקף עד']).getValue() : '';
+      if (gymIsPrepaid_(prePaid, plan.total, preEnd)) {
+        prepaid = true;
+        status = GYM_ST_ACTIVE;
+        prepaidLabel = Utilities.formatDate(gymToDate_(preEnd), Session.getScriptTimeZone(), 'MM/yyyy');
+      }
+    }
+
     var now = new Date();
     var rowIndex = isCompletion ? existing.row : 0;
     var id = rowIndex ? String(sh.getRange(rowIndex, cols['מזהה']).getValue()).trim()
@@ -9966,6 +9981,7 @@ function submitGymApplication_(ss, body) {
     put('מסלול', plan.name);
     put('מחיר מוסכם', plan.total);
     put('סטטוס', status);
+    if (prepaid) put('סטטוס תשלום', 'אומת');
     put('שאלות שנענו בכן', flags.flagged.join(', '));
     put('דגלים', flags.blocking ? 'חוסם' : (flags.flagged.length ? 'התראה' : ''));
     put('תאריך חתימה', now);
@@ -9990,7 +10006,7 @@ function submitGymApplication_(ss, body) {
     try {
       /* 23.9 — הודעה אחת לתושב ולא שתיים: דגל בריאות ← "נדרש אישור רופא";
          אושר מיד ← "נשאר לשלם"; אחרת — אישור קבלה כמו קודם. */
-      if (!flags.blocking && status !== GYM_ST_PAYMENT) {
+      if (!flags.blocking && status !== GYM_ST_PAYMENT && !prepaid) {
         sendResidentTemplate_(ss, 'GYM_APPLICATION_RECEIVED', [email], { 'שם': displayName });
       }
       if (flags.blocking) {
@@ -10005,6 +10021,8 @@ function submitGymApplication_(ss, body) {
         sendResidentTemplate_(ss, 'GYM_APPROVED_AWAITING_PAYMENT', [email], {
           'שם': displayName, 'סכום': plan.total, 'מסלול': plan.name
         }, { trigger: 'gym-new' });
+      } else if (prepaid) {
+        sendResidentTemplate_(ss, 'GYM_ACTIVE', [email], { 'שם': displayName, 'תוקף': prepaidLabel });
       }
     } catch (mailErr) { Logger.log('מייל מכון נכשל: ' + mailErr); }
 
@@ -10014,6 +10032,13 @@ function submitGymApplication_(ss, body) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/** "שולם מראש": סה"כ שולם מכסה את מחיר המסלול ו"בתוקף עד" עדיין בעתיד (3.10.26). */
+function gymIsPrepaid_(paid, planTotal, validUntil) {
+  var end = gymToDate_(validUntil);
+  return Number(paid) > 0 && Number(planTotal) > 0 && Number(paid) >= Number(planTotal) &&
+         !!end && end.getTime() > new Date().getTime();
 }
 
 /** הקמת מנוי ידנית ע"י מנהל המכון. נולד תמיד כ"ממתין לתשלום" (או "ממתין
@@ -10402,15 +10427,24 @@ function gymActivate_(ss, body, isManual) {
     var amount = Number(body.amount || 0);
     if (!(amount > 0)) return { ok: false, error: 'יש להזין את הסכום שהתקבל' };
 
-    var start = gymToDate_(cols['תאריך התחלה'] ? sh.getRange(row, cols['תאריך התחלה']).getValue() : '');
+    /* 3.10.26 — body.activate === false = "רק לרשום תשלום": הסכום והתוקף נרשמים,
+       אבל הסטטוס לא משתנה, אין מייל ואין הזמנת Nuki. נועד למנוי שעוד לא חתם על
+       הצהרה (או כל סטטוס אחר) — המנהל רשם שהתושב שילם בלי להפעיל אותו. */
+    var recordOnly = body.activate === false;
+    var prevStatus = cols['סטטוס'] ? String(sh.getRange(row, cols['סטטוס']).getValue()).trim() : '';
+
+    var start = gymToDate_(body.startDate) ||
+                gymToDate_(cols['תאריך התחלה'] ? sh.getRange(row, cols['תאריך התחלה']).getValue() : '');
     if (!start) start = new Date();
 
     var w = gymRowWriter_(sh, row);
     function put(name, val) { w.set(name, val); }
     put('תאריך התחלה', start);
     put('בתוקף עד', end);
-    put('סטטוס', GYM_ST_ACTIVE);
-    put('סטטוס תשלום', 'אומת');
+    if (!recordOnly) {
+      put('סטטוס', GYM_ST_ACTIVE);
+      put('סטטוס תשלום', 'אומת');
+    }
     put('אמצעי תשלום', body.method || (isManual ? 'מזומן' : 'פייבוקס'));
     put('אסמכתא', body.reference || '');
     put('אומת בתאריך', new Date());
@@ -10422,10 +10456,13 @@ function gymActivate_(ss, body, isManual) {
     gymLog_(ss, id, 'תשלום', {
       amount: amount, method: body.method || (isManual ? 'מזומן' : 'פייבוקס'),
       ref: body.reference || '', validUntil: validLabel,
-      by: body._email || '', note: isManual ? 'נרשם ידנית ע"י מנהל' : 'אומת מול דיווח התושב'
+      by: body._email || '',
+      note: recordOnly ? ('נרשם ידנית ע"י מנהל, בלי הפעלה (סטטוס נשאר: ' + prevStatus + ')')
+                       : (isManual ? 'נרשם ידנית ע"י מנהל' : 'אומת מול דיווח התושב')
     });
 
     var sync = gymPaymentSync_(ss, id);
+    if (recordOnly) return { ok: true, id: id, status: prevStatus, recordOnly: true, validUntil: validLabel, sync: sync };
 
     var email = String(sh.getRange(row, cols['אימייל']).getValue()).trim();
     var name = String(sh.getRange(row, cols['שם פרטי']).getValue()).trim() || email;
@@ -10433,6 +10470,55 @@ function gymActivate_(ss, body, isManual) {
       sendResidentTemplate_(ss, 'GYM_ACTIVE', [email], { 'שם': name, 'תוקף': validLabel });
     } catch (mailErr) { Logger.log('מייל הפעלת מנוי נכשל: ' + mailErr); }
 
+    return { ok: true, id: id, status: GYM_ST_ACTIVE, validUntil: validLabel, sync: sync };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** הפעלה ידנית בכל סטטוס (3.10.26, בקשת יועד: "גמישות רחבה למנהל"). בניגוד
+ * ל-gymActivate_ אין חובה בסכום — המנהל מחליט. הלקוח מציג אזהרה אדומה כשחסרה
+ * הצהרה או תשלום, ודורש סימון מפורש. נרשם ביומן עם שם המנהל.
+ * body: { id, validUntil: 'YYYY-MM', startDate?, sendMail?: false, note? } */
+function activateGymManual_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var sh = ss.getSheetByName(GYM_SHEET);
+    var cols = gymCols_(sh);
+    var id = String(body.id || '').trim();
+    var row = gymRowById_(sh, cols, id);
+    if (!row) return { ok: false, error: 'המנוי לא נמצא' };
+    var end = gymMonthEnd_(body.validUntil);
+    if (!end) return { ok: false, error: 'יש לבחור עד איזה חודש המנוי בתוקף' };
+
+    var w = gymRowWriter_(sh, row);
+    var prev = String(w.get('סטטוס')).trim();
+    var start = gymToDate_(body.startDate) || gymToDate_(w.get('תאריך התחלה')) || new Date();
+    w.set('תאריך התחלה', start);
+    w.set('בתוקף עד', end);
+    w.set('סטטוס', GYM_ST_ACTIVE);
+    w.set('טופל בתאריך', new Date());
+    w.set('טופל ע"י', body._email || '');
+    if (body.note) w.set('הערות מנהל', String(body.note));
+    w.flush();
+
+    var validLabel = Utilities.formatDate(end, Session.getScriptTimeZone(), 'MM/yyyy');
+    gymLog_(ss, id, 'הפעלה ידנית', { by: body._email || '', validUntil: validLabel,
+      note: 'מסטטוס "' + prev + '"' + (body.note ? (' · ' + body.note) : '') });
+    var sync = null;
+    try { sync = gymPaymentSync_(ss, id); } catch (e2) { Logger.log('sync אחרי הפעלה ידנית: ' + e2); }
+
+    if (body.sendMail !== false) {
+      try {
+        var email = String(sh.getRange(row, cols['אימייל']).getValue()).trim();
+        var name = String(sh.getRange(row, cols['שם פרטי']).getValue()).trim() || email;
+        sendResidentTemplate_(ss, 'GYM_ACTIVE', [email], { 'שם': name, 'תוקף': validLabel });
+      } catch (mailErr) { Logger.log('מייל הפעלה ידנית נכשל: ' + mailErr); }
+    }
     return { ok: true, id: id, status: GYM_ST_ACTIVE, validUntil: validLabel, sync: sync };
   } catch (err) {
     return { ok: false, error: String(err) };
