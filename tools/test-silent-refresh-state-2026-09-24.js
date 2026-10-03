@@ -5,7 +5,7 @@ let fail = 0; const ok = (n, c) => { console.log((c ? '✅ ' : '❌ ') + n); if 
 const APP = R('js/app.js'), PWA = R('js/pwa.js'), EV = R('js/screens/events.js'), GT = R('js/screens/gardenTasks.js');
 ok('showScreen מסמן renderSilent בשני מסלולי הציור', (APP.match(/renderScreenFlagged\(/g) || []).length === 3);
 ok('הדגל מנוקה ב-finally', /finally \{ CBA\.renderSilent = false; \}/.test(APP));
-ok('כניסה אוטומטית כשכבר מחוברים מתעלמת', /inited && currentUser && resp && \/\^auto\//.test(APP));
+ok('כניסה אוטומטית כשכבר מחוברים מתעלמת (גל 1: גם לפני הציור הראשון)', /if \(currentUser && resp && \/\^auto\//.test(APP));
 ok('שער העדכון בודק מגירה', /getElementById\("cba-drawer"\)/.test(PWA));
 ok('שער העדכון בודק שדה בפוקוס בכל הדף', /document\.activeElement/.test(PWA));
 ok('שער העדכון בודק נגיעה אחרונה', /msSinceActivity\(\) < 30000/.test(PWA));

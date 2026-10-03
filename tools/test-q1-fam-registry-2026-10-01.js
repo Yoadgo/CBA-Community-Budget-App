@@ -23,7 +23,7 @@ const ROWS = [HEAD,
 const sb = { SpreadsheetApp: { getActiveSpreadsheet: () => sheet(ROWS) }, normalizeEmail_: e => String(e || '').trim().toLowerCase(),
   fsSet_: (p, o) => { sb.written = [p, o]; } };
 vm.createContext(sb);
-vm.runInContext([cst('RESIDENT_ID_HEADER'), cst('PERM_HEADER'), cst('EXTERNAL_HEADER'), cst('EXTERNAL_VALUE'), cst('FS_FAM_REGISTRY'),
+vm.runInContext(['var RES_VALUES_MEMO_ = null;', cst('RESIDENT_ID_HEADER'), cst('PERM_HEADER'), cst('EXTERNAL_HEADER'), cst('EXTERNAL_VALUE'), cst('FS_FAM_REGISTRY'),
   fn('lookupResident_'), fn('famRegistryIds_'), fn('famRegistryWrite_')].join('\n'), sb);
 
 console.log('\n1. אותו מזהה כמו lookupResident_');

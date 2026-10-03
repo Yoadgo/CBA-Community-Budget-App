@@ -645,6 +645,16 @@ CBA.fb = (function () {
     signOut:  signOut,
     idToken:  idToken,
     uid:      function () { return state.user ? state.user.uid : null; },
+    /* גל 1 (3.10.26) — שם/תמונה/מייל של המשתמש המחובר, לבניית המשתמש בכניסה
+       בלי Apps Script (ר' fbIdentity ב-app.js). null כשאין משתמש. */
+    profile:  function () {
+      try {
+        var u = state.loaded && window.firebase && window.firebase.auth().currentUser;
+        if (!u) return null;
+        return { uid: u.uid, email: u.email || "", name: u.displayName || "",
+                 picture: u.photoURL || "", emailVerified: u.emailVerified === true };
+      } catch (e) { return null; }
+    },
     isReady:  function () { return state.loaded; },
     isDbReady: function () { return state.dbLoaded; },
     flag:     flag,

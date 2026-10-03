@@ -411,10 +411,19 @@ CBA.search = (function () {
 
   /* מדריך התושבים נטען פעם אחת בפתיחה הראשונה. אם המשתמש לא מחובר או שאין
      חיבור — פשוט אין קבוצת "שכנים", בלי הודעת שגיאה שתפריע לחיפוש עצמו. */
+  var dirSessWait = false;
   function loadDirectoryOnce() {
     dirFresh();   // SRB1 (גל 9, 1.10.26) — מדריך של סשן קודם נזרק לפני כל דבר
     if (dirAsked || dirRows) return;
-    if (!window.CBA.authSession) return;
+    if (!window.CBA.authSession) {
+      /* גל 1 (3.10.26) — נכנסו מזהות Firebase והמושב עוד בדרך: מחכים לו פעם אחת
+         ומנסים שוב רק אם החיפוש עדיין פתוח. */
+      if (!dirSessWait && typeof window.CBA.sessionReady === "function" && window.CBA.user) {
+        dirSessWait = true;
+        window.CBA.sessionReady(function (sess) { dirSessWait = false; if (sess && el) loadDirectoryOnce(); });
+      }
+      return;
+    }
     if (!directoryScreen()) return;   // SRB2 (גל 9, 1.10.26) — בלי מסך תושבים אין סיבה למשוך את המדריך
     if (!(CBA.data && CBA.data.getCommunityDirectory)) return;
     dirAsked = true;
@@ -430,7 +439,9 @@ CBA.search = (function () {
 
   /* SRB1 (גל 9, 1.10.26) — "מחובר?" = יש סשן ושער הכניסה לא מוצג. */
   function gated() {
-    return !window.CBA.authSession || !!(document.body && document.body.classList.contains("is-gated"));
+    /* גל 1 — משתמש שנכנס מ-Firebase אינו "בשער" גם בשניות שבהן המושב עוד בדרך. */
+    if (document.body && document.body.classList.contains("is-gated")) return true;
+    return !window.CBA.authSession && !window.CBA.user;
   }
   /* SRB1 (גל 9, 1.10.26) — המדריך שבזיכרון שייך לסשן הנוכחי? אם לא (התנתקות/משתמש אחר) — נזרק. */
   function dirFresh() {

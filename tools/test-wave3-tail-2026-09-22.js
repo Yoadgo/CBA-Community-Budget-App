@@ -35,9 +35,30 @@ const clientTtl = (APP.match(/var SESSION_TTL = (\d+) \* 3600 \* 1000/) || [, '0
 ok('תקרת הלקוח נמצאה (' + clientTtl + ' שעות)', Number(clientTtl) > 0, clientTtl);
 /* 🔑 זו האינווריאנטה שהופכת את הקיצור לחינם: השרת חייב להיות רחב מהלקוח,
    אחרת משתמש פעיל יידחה באמצע העבודה. */
-ok('🔴🔴 תקרת השרת גדולה מזו של הלקוח — אחרת נועלים משתמש פעיל בחוץ',
-   24 > Number(clientTtl), 'שרת 24 מול לקוח ' + clientTtl);
-ok('⚠️ ובמרווח של פי שניים לפחות, לסטיית שעון', 24 >= Number(clientTtl) * 2);
+/* 3.10.26 (יועד: 24 שעות) — האינווריאנטה נשמרת במנגנון ולא במרווח: הרשומה בלקוח
+   נקצצת לתפוגת הטוקן עצמו (x) פחות 10 דקות, ולכן לעולם לא חיה יותר ממנו. */
+ok('🔴🔴 תקרת הלקוח אינה עולה על השרת', 24 >= Number(clientTtl), 'שרת 24 מול לקוח ' + clientTtl);
+ok('🔴🔴 והרשומה נקצצת לתפוגת הטוקן עצמו (פחות מרווח) — לא חיה יותר ממנו',
+   /var tx = sessionTokenExp\(user && user\.session\);\s*\n\s*if \(tx\) exp = Math\.min\(exp, tx - SESSION_SAFETY_MS\);/.test(APP) &&
+   /var SESSION_SAFETY_MS = 10 \* 60 \* 1000;/.test(APP));
+{
+  const vm = require('vm');
+  const fnTok = (APP.match(/  function sessionTokenExp\(tok\) \{[\s\S]*?\n  \}\n/) || [''])[0];
+  const fnSave = (APP.match(/  function saveSession\(user\) \{[\s\S]*?\n  \}\n/) || [''])[0];
+  const store = {};
+  const box = { atob: b => Buffer.from(b, 'base64').toString('binary'), Date, JSON, Math, String,
+                localStorage: { setItem: (k, v) => { store[k] = v; } } };
+  vm.createContext(box);
+  vm.runInContext('var SESSION_KEY="k", SESSION_TTL=24*3600*1000, SESSION_SAFETY_MS=600000;\n' + fnTok + fnSave + 'this.save=saveSession;', box);
+  const x = Date.now() + 2 * 3600 * 1000;   // טוקן שנשארו לו שעתיים
+  const tok = Buffer.from(JSON.stringify({ e: 'a@b.c', v: '1', x })).toString('base64url') + '.sig';
+  box.save({ session: tok });
+  const exp = JSON.parse(store.k).exp;
+  ok('בפועל: טוקן שנשארו לו שעתיים ⇒ הרשומה פגה 10 דק\' לפניו', Math.abs(exp - (x - 600000)) < 50, String(exp - x));
+  box.save({ session: 'garbage' });
+  const exp2 = JSON.parse(store.k).exp;
+  ok('טוקן שאי אפשר לקרוא ⇒ 24 שעות כרגיל', Math.abs(exp2 - (Date.now() + 24 * 3600 * 1000)) < 1000);
+}
 ok('הנימוק מתועד בקוד', /שתי תקרות הזמן לא דיברו זו עם זו/.test(GS));
 ok('והתיקון המלא מתועד כגל בפני עצמו', /להוציא את האסימון מהכתובת/.test(GS));
 ok('מנגנון הביטול הגורף לא נפגע', /sessionEpoch_\(\)/.test(GS));

@@ -215,8 +215,9 @@ section('6. hourlyJobs — סנכרוני גיליון→Firestore רצים רק
   ok('HJ_SYNC_FORCE_MS = 3 שעות', sandbox.HJ_SYNC_FORCE_MS === 3 * 3600 * 1000);
 
   const fnSrc = CODE.slice(CODE.indexOf('function hourlyJobsRun_()'), CODE.indexOf('\nfunction ', CODE.indexOf('function hourlyJobsRun_()') + 10));
-  const gated = ['bootSync_', 'currentBudgetYearSync_', 'gymStatusSyncAll_', 'tourSyncAll_', 'famRegistryWrite_', 'homeCountsSyncAll_', 'gardenDataSyncAll_'];
-  ok('שבעת הסנכרונים עטופים בשער (if (hjSync.due) … else hjSkip)', gated.every(n => fnSrc.indexOf("} else hjSkip('" + n + "');") !== -1) && (fnSrc.match(/if \(hjSync\.due\) \{/g) || []).length === 7);
+  /* גל 1 (3.10.26) — נוסף membersSyncAll_ (רשומות החברים) לאותו שער. */
+  const gated = ['bootSync_', 'currentBudgetYearSync_', 'gymStatusSyncAll_', 'tourSyncAll_', 'famRegistryWrite_', 'membersSyncAll_', 'homeCountsSyncAll_', 'gardenDataSyncAll_'];
+  ok('שמונת הסנכרונים עטופים בשער (if (hjSync.due) … else hjSkip)', gated.every(n => fnSrc.indexOf("} else hjSkip('" + n + "');") !== -1) && (fnSrc.match(/if \(hjSync\.due\) \{/g) || []).length === 8);
   const notGated = ['notifyFlushQueue_', 'btxMirrorToSheet_', 'budgetTxApplyPending_', 'budgetTxMailPending_', 'gardenMailPending_', 'eventsSyncAll_', 'doorHourly_', 'gardenMirrorToSheet_', 'gardenHorizonRun_', 'appReportsHourly_', 'fsBackupIncremental_'];
   ok('🔴 תורים / מראה / גיבוי / אירועים / דלת — לא בשער (ממשיכים כל שעה)', notGated.every(n => fnSrc.indexOf("hjSkip('" + n + "')") === -1 && fnSrc.indexOf("hjM('" + n + "')") !== -1));
   ok('המצב נרשם רק אחרי הקבוצה כולה', fnSrc.indexOf("if (hjSync.due) hjSyncDone_(hjSync);") > fnSrc.indexOf("} else hjSkip('gardenDataSyncAll_');"));

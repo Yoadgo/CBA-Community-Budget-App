@@ -341,7 +341,15 @@ function fsVerifyIdToken_(idToken) {
   if (!users || !users.length) return { ok: false, error: 'הטוקן אינו מזוהה' };
   var u = users[0];
   if (!u.localId) return { ok: false, error: 'לא התקבל מזהה משתמש' };
-  return { ok: true, uid: String(u.localId), email: String(u.email || '') };
+  if (u.disabled === true) return { ok: false, error: 'המשתמש חסום ב-Firebase' };
+  /* 3.10.26 (גל 1) — גם האם המייל מאומת ומאיזה ספק הגיעה הזהות. handleLoginFb_
+     דורש את שניהם; הקוראים הקיימים מתעלמים מהשדות החדשים. */
+  var providers = (u.providerUserInfo || []).map(function (x) { return String((x && x.providerId) || ''); });
+  return { ok: true, uid: String(u.localId), email: String(u.email || ''),
+           emailVerified: u.emailVerified === true, providers: providers,
+           disabled: u.disabled === true,
+           name: String(u.displayName || ''), picture: String(u.photoUrl || ''),
+           lastLoginAt: Number(u.lastLoginAt || 0) };
 }
 
 /* ============================================================================

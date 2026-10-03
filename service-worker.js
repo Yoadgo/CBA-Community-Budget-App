@@ -26,7 +26,11 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
+<<<<<<< HEAD
 var VERSION = "efc09af4da";
+=======
+var VERSION = "1d1b8bf55e";
+>>>>>>> a877267b45d3aca47a950b562d14b4580cce6cc5
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -65,10 +69,10 @@ var ASSET_VERSIONS = {
   "css/wework.css": "3cfe17107a",
   "icons/apple-touch-icon.png": "5ce56ce0dc",
   "icons/icon-192.png": "a624d0ac7a",
-  "js/app.js": "944664a072",
+  "js/app.js": "7f51011c41",
   "js/data/dataService.js": "60b11c7f1f",
-  "js/data/door.js": "76001e4522",
-  "js/data/firebase.js": "a5def1a2f1",
+  "js/data/door.js": "71c7a113de",
+  "js/data/firebase.js": "9669c19e11",
   "js/data/gardenAreas.js": "457c00156c",
   "js/data/gardenLang.js": "0983592bf2",
   "js/data/gardenRules.js": "309560188b",
@@ -79,7 +83,11 @@ var ASSET_VERSIONS = {
   "js/data/mock.js": "fd54e34660",
   "js/data/push.js": "198e321583",
   "js/data/reconcile.js": "899bfb8f4c",
+<<<<<<< HEAD
   "js/data/sheets.js": "d6483778a4",
+=======
+  "js/data/sheets.js": "5a925edb57",
+>>>>>>> a877267b45d3aca47a950b562d14b4580cce6cc5
   "js/lazy.js": "011e0ffe5f",
   "js/lazyManifest.js": "ad0df004ab",
   "js/pwa.js": "cc703231c6",
@@ -128,7 +136,7 @@ var ASSET_VERSIONS = {
   "js/ui/photos.js": "8cdac86c85",
   "js/ui/plus.js": "c15f8707c4",
   "js/ui/report.js": "ea44ad6eed",
-  "js/ui/search.js": "9bd5d18b65",
+  "js/ui/search.js": "4a4fd40ce0",
   "js/ui/security.js": "6238d03d0a",
   "js/ui/skeleton.js": "f4934f5355",
   "js/ui/tips.js": "d4f66f2d2a",

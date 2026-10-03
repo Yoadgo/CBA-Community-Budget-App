@@ -706,6 +706,18 @@ CBA.sheets = (function () {
      את ההרשאות מול הגיליון בכל בקשה מחדש. app.js מגדיר את CBA.authSession. */
   function authSession() { return (window.CBA && CBA.authSession) || ""; }
 
+  /* גל 1 (3.10.26) — "כניסה עצלה": משתמש שנכנס מזהות Firebase עוד אין לו מושב
+     ברגע הציור הראשון; app.js מביא אותו ברקע (CBA.sessionReady). כל פעולה
+     מול Apps Script עוברת כאן וממתינה לו — פעם אחת לכולם. כשיש מושב (או
+     משתמש מהכניסה הרגילה) — fn רץ מיד, בדיוק כמו קודם.
+     ⚠️ fn נקרא תמיד, גם אם המושב לא הגיע — השרת יענה "אין הרשאה" והמסך
+        יציג את ההסבר הרגיל (authNote). אין כאן לולאה: הפונקציות *Now
+        עצמן לעולם לא קוראות ל-withSession. */
+  function withSession(fn) {
+    if (authSession() || !(window.CBA && typeof CBA.sessionReady === "function")) return fn();
+    CBA.sessionReady(function () { fn(); });
+  }
+
   /* כשהשרת עונה "אין הרשאה", ברוב המקרים הסיבה אינה שבאמת חסרה הרשאה אלא אחת
      משתיים: אין מושב חתום (צריך להתחבר מחדש), או שה-Apps Script עוד לא פורסם
      בגרסה החדשה. מוסיפים את ההסבר להודעת השגיאה במקום להשאיר "אין הרשאה" יבש
@@ -728,6 +740,12 @@ CBA.sheets = (function () {
   // חשוף כדי שהאפליקציה תוכל להציג התראה גם בלי שנכשלה פעולה
   CBA.serverOutdated = function () { var n = serverVer(); return n > 0 && n < MIN_SERVER; };
   function withAuthNote(data) {
+    /* גל 1 (3.10.26) — "אין הרשאה" בדיוק = המושב פג/לא תקין (authorize_). משתמש
+       שנכנס מ-Firebase מקבל מושב חדש בקריאה הבאה, בלי לצאת ולהיכנס. */
+    if (data && data.ok === false && data.error === "אין הרשאה" &&
+        window.CBA && typeof CBA.sessionExpired === "function") {
+      try { CBA.sessionExpired(); } catch (e) {}
+    }
     if (data && data.ok === false && typeof data.error === "string" &&
         data.error.indexOf("הרשאה") !== -1) {
       data.error += authNote();
@@ -763,7 +781,8 @@ CBA.sheets = (function () {
   var BUDGET_TX_FROM_FIRESTORE_READ = true;
 
   var PAYLOAD_TIMEOUT_MS = 60000;
-  function fetchPayload(slim, done) {
+  function fetchPayload() { var a = arguments; withSession(function () { fetchPayloadNow.apply(null, a); }); }
+  function fetchPayloadNow(slim, done) {
     /* המושב החתום מצורף גם למשיכה הראשית (2026-08-23 — תיקון אבטחה).
        עד היום זו הייתה הקריאה היחידה בקובץ שיצאה בלי session, כי בצד השרת
        ממילא לא נבדק כלום. עכשיו doGet דורש מושב תקין גם כאן.
@@ -1339,7 +1358,30 @@ CBA.sheets = (function () {
      חשוב: אם הבקשה נכשלת ברמת הרשת/CORS, זה ייראה עכשיו כשגיאה גלויה במקום
      כ"הצלחה" שקטה — וזה בכוונה. עדיף שיועד יראה "בעיית שמירה" מאשר שיאמין
      שנשמר משהו שלא נשמר. */
+  /* גל 1 — כתיבה בזמן שהמושב בדרך (צוות אדום H2, 3.10.26):
+     1. מסומנת "שומר…" מיד — אחרת isDirty() שקרי ורענון רקע דורס את העריכה.
+     2. בעזיבת דף אי אפשר לחכות — הכתיבה נכנסת לתור ותישלח בפתיחה הבאה.
+     3. 🔴 לעולם לא שולחים כתיבה בלי מושב: השרת היה עונה "אין הרשאה", וזו
+        "תשובה" — כתיבה מהתור הייתה נמחקת ממנו לתמיד. במקום זה — חזרה לתור. */
   function push(action, payload, cb, _retryAttempt) {
+    if (authSession() || !(window.CBA && typeof CBA.sessionReady === "function")) return pushNow(action, payload, cb, _retryAttempt);
+    if (unloading) { enqueueWrite(action, payload, _retryAttempt || 0); return; }
+    var key = "net:session:" + (++busySeq);
+    markDirty(key, "שומר…");
+    CBA.sessionReady(function (sess) {
+      clearDirty(key);
+      if (!sess && !authSession()) {
+        enqueueWrite(action, payload, _retryAttempt || 0);
+        lastWriteHadError = true;
+        noteFail(action, "אין עדיין חיבור לשרת — השינוי נשמר אצלכם וננסה שוב.");
+        notifyDirtyChange();
+        if (cb) { try { cb({ ok: false, error: "אין מושב פעיל — השינוי נשמר וננסה שוב." }); } catch (e) {} }
+        return;
+      }
+      pushNow(action, payload, cb, _retryAttempt);
+    });
+  }
+  function pushNow(action, payload, cb, _retryAttempt) {
     // inFlightWrites++ עכשיו (לא רק בקריאות המפורשות ל-markDirty) — כדי שכל
     // כתיבה, מכל מסך, תחסום רענון רקע אוטומטית עד שהיא תיגמר (ר' isDirty למעלה),
     // ותפעיל את חיווי "שומר…" הגלובלי מיד (notifyDirtyChange).
@@ -1482,7 +1524,8 @@ CBA.sheets = (function () {
    *  ⚠️ כל callback עטוף ב-try: אחד שזורק לא ימנע מהשאר לקבל את התשובה. */
   var inFlightGets = {};
 
-  function get(params, cb) {
+  function get() { var a = arguments; withSession(function () { getNow.apply(null, a); }); }
+  function getNow(params, cb) {
     var body = Object.assign({ session: authSession() }, params || {});
     var qs = Object.keys(body).map(function (k) {
       return encodeURIComponent(k) + "=" + encodeURIComponent(body[k] == null ? "" : body[k]);
@@ -1553,7 +1596,8 @@ CBA.sheets = (function () {
     return function endBusy() { clearDirty(key); };
   }
 
-  function postRead(action, payload, cb) {
+  function postRead() { var a = arguments; withSession(function () { postReadNow.apply(null, a); }); }
+  function postReadNow(action, payload, cb) {
     var body = Object.assign({ action: action, session: authSession() }, payload || {});
     var endBusy = beginBusy(action);
     fetch(API_URL, {
@@ -1585,7 +1629,8 @@ CBA.sheets = (function () {
      כמו postRead, אבל **בלי** חיווי "שומר…" הכללי, בלי הודעת "הפעולה נכשלה"
      ובלי bumpWriteFloor: זו לא כתיבה, וכישלון שלה רק אומר "אין הצעה" —
      המסך שקרא לה מחליט מה להראות. */
-  function postQuiet(action, payload, cb) {
+  function postQuiet() { var a = arguments; withSession(function () { postQuietNow.apply(null, a); }); }
+  function postQuietNow(action, payload, cb) {
     var body = Object.assign({ action: action, session: authSession() }, payload || {});
     fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })
@@ -1602,7 +1647,8 @@ CBA.sheets = (function () {
   // יתנהג אחרת; ה-CORS נבדק על הדפדפן לפי כותרות התשובה, לא לפי מנגנון
   // הבקשה (fetch מול XHR). onProgress(percent) נקרא במהלך השליחה;
   // cb(res) נקרא רק אחרי שהתשובה האמיתית מהשרת התקבלה ונפענחה — לא לפני.
-  function postReadProgress(action, payload, onProgress, cb) {
+  function postReadProgress() { var a = arguments; withSession(function () { postReadProgressNow.apply(null, a); }); }
+  function postReadProgressNow(action, payload, onProgress, cb) {
     var body = Object.assign({ action: action, session: authSession() }, payload || {});
     var endBusy = beginBusy(action);
     var xhr = new XMLHttpRequest();
@@ -1773,7 +1819,8 @@ CBA.sheets = (function () {
       CBA.mock.years[y] = built;
     }
 
-    function viaAppsScript(done) {
+    function viaAppsScript(done) { withSession(function () { viaAppsScriptNow(done); }); }
+    function viaAppsScriptNow(done) {
       fetch(API_URL + "?session=" + encodeURIComponent(authSession()) +
             "&action=budgetYear&year=" + encodeURIComponent(y), { method: "GET" })
         .then(function (r) { return r.json(); })
