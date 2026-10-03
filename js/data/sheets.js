@@ -1710,7 +1710,7 @@ CBA.sheets = (function () {
     submitGymApplication: "שולח בקשה…", reportGymPayment: "שולח דיווח…",
     requestGymDeclaration: "שולח מייל…", notifyServiceUpdate: "שולח מיילים…",
     createGymMembership: "מקים מנוי…", renewGymMembership: "מחדש…",
-    confirmGymPayment: "מפעיל מנוי…", recordGymPayment: "מפעיל מנוי…", activateGymManual: "מפעיל מנוי…",
+    confirmGymPayment: "מפעיל מנוי…", recordGymPayment: "מפעיל מנוי…", activateGymManual: "מפעיל מנוי…", updateGymPayment: "מעדכן תשלום…", voidGymPayment: "מבטל תשלום…",
     extendGymMembership: "מאריך…", updateGymMembership: "מעדכן…"
   };
   var busySeq = 0;

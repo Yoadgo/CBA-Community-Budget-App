@@ -108,6 +108,7 @@ CBA.screens = CBA.screens || {};
          ההגנה מטעויות היא חלון אישור עם סיכום, ואזהרה אדומה כשחסרה הצהרה או תשלום. */
       '<button type="button" data-ga-cash="' + id + '" data-ga-price="' + CBA.esc(String(m["מחיר מוסכם"] || "")) + '">רישום תשלום ידני</button>' +
       (status === "פעיל" ? "" : '<button type="button" data-ga-activate="' + id + '">הפעלה ידנית</button>') +
+      '<button type="button" data-ga-paylog="' + id + '">יומן תשלומים</button>' +
       '<button type="button" data-ga-edit="' + id + '">עריכה</button>' +
       '<button type="button" class="ga-menu__danger" data-ga-delete="' + id + '">מחיקה</button>';
     if (primary.indexOf("data-ga-cash") !== -1) {
@@ -845,6 +846,93 @@ CBA.screens = CBA.screens || {};
     // למחוק אז למחוק באופן מלא") — שונה מ"עריכה" → סטטוס "בוטל", שרק
     // מסמן את המנוי כלא-פעיל ומשאיר את ההיסטוריה. אזהרה מפורשת בדיאלוג
     // כי הפעולה בלתי הפיכה.
+    /* 3.10.26 (בקשת יועד: "לראות את יומן התשלומים ולערוך אותו") — רשימת כל התשלומים של
+       המנוי, עם עריכה וביטול. ביטול אינו מחיקה: השורה נשארת ביומן כ"תשלום מבוטל". */
+    function fmtDay(v) {
+      var t = String(v || "").slice(0, 10).split("-");
+      return t.length === 3 ? t[2] + "/" + t[1] + "/" + t[0] : String(v || "");
+    }
+    function payEvents(id) {
+      var log = (gaLast && gaLast.log) || [];
+      return log.filter(function (e) {
+        var t = String(e["סוג אירוע"] || "").trim();
+        return String(e["מזהה מנוי"] || "").trim() === id && (t === "תשלום" || t === "תשלום מבוטל");
+      }).sort(function (a, b) { return String(b["תאריך"]).localeCompare(String(a["תאריך"])); });
+    }
+    function openPayLog(id) {
+      var m = memberById(id) || {};
+      if (gaLast && gaLast.partial) { CBA.ui.alert("הפרטים עדיין נטענים. נסה שוב בעוד רגע."); return; }
+      var evs = payEvents(id);
+      var total = evs.reduce(function (a, e) { return String(e["סוג אירוע"]).trim() === "תשלום" ? a + (Number(e["סכום"]) || 0) : a; }, 0);
+      var rows = evs.length ? evs.map(function (e) {
+        var voided = String(e["סוג אירוע"]).trim() === "תשלום מבוטל";
+        var eid = CBA.esc(e["מזהה אירוע"] || "");
+        return '<div class="ga-pay' + (voided ? " is-void" : "") + '">' +
+          '<div class="ga-pay__main"><b>' + CBA.esc(String(e["סכום"] || "")) + ' ₪</b> · ' + CBA.esc(fmtDay(e["תאריך"])) +
+            ' · ' + CBA.esc(e["אמצעי תשלום"] || "—") + (e["אסמכתא"] ? ' · אסמכתא ' + CBA.esc(e["אסמכתא"]) : "") +
+            (voided ? ' <span class="gym-pill gym-pill--warn">מבוטל</span>' : "") + "</div>" +
+          '<small>' + CBA.esc(String(e["הערה"] || "").slice(0, 120)) + "</small>" +
+          (voided ? "" : '<div class="ga-pay__btns"><button type="button" data-ga-payedit="' + eid + '">עריכה</button>' +
+            '<button type="button" class="ga-menu__danger" data-ga-payvoid="' + eid + '">ביטול תשלום</button></div>') +
+          "</div>";
+      }).join("") : '<div class="gym-hint">אין תשלומים ביומן.</div>';
+      var ui = openFormDrawer({
+        title: "יומן תשלומים — " + memberName(m),
+        subtitle: "סה\"כ ששולם (בלי מבוטלים): " + total + " ₪. ביטול משאיר את השורה ביומן ומסומן כמבוטל.",
+        okText: "סגירה",
+        topHTML: '<div class="ga-paylist">' + rows + "</div>",
+        onSave: function (v, u) { u.close(); }
+      });
+      function evById(eid) { return evs.filter(function (e) { return String(e["מזהה אירוע"]) === eid; })[0]; }
+      function refresh() { ui.close(); reload(function () { if (gaLast && !gaLast.partial) openPayLog(id); }); }
+      ui.el.querySelectorAll("[data-ga-payedit]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var e = evById(b.dataset.gaPayedit); if (!e) return;
+          var eui = openFormDrawer({
+            title: "עריכת תשלום", subtitle: memberName(m) + " · תשלום מתאריך " + fmtDay(e["תאריך"]), okText: "שמירה",
+            fields: [
+              { key: "amount", label: "סכום (₪)", type: "number", value: e["סכום"], min: 0 },
+              { key: "date", label: "תאריך התשלום", type: "date", value: String(e["תאריך"] || "").slice(0, 10) },
+              { key: "method", label: "אמצעי תשלום", type: "select", value: e["אמצעי תשלום"] || "מזומן",
+                options: ["מזומן", "העברה בנקאית", "צ׳ק", "ביט", "פייבוקס", "אחר"] },
+              { key: "reference", label: "אסמכתא (לא חובה)", type: "text", value: e["אסמכתא"] || "" },
+              { key: "note", label: "סיבת התיקון (נרשמת ביומן)", type: "text", value: "" }
+            ],
+            onSave: function (v, u) {
+              if (!(Number(v.amount) > 0)) { u.error("הסכום חייב להיות גדול מאפס."); return; }
+              u.busy("שומר…");
+              CBA.data.updateGymPayment({ eventId: e["מזהה אירוע"], amount: Number(v.amount), date: v.date,
+                method: v.method, reference: String(v.reference || "").trim(), note: String(v.note || "").trim() },
+                function (res) {
+                  u.done();
+                  if (!res || !res.ok) { u.error((res && res.error) || "השמירה נכשלה."); return; }
+                  u.close(); CBA.ui.toast(res.unchanged ? "לא היה שינוי" : "התשלום עודכן"); refresh();
+                });
+            }
+          });
+        });
+      });
+      ui.el.querySelectorAll("[data-ga-payvoid]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var e = evById(b.dataset.gaPayvoid); if (!e) return;
+          CBA.ui.confirm("לבטל את התשלום של " + e["סכום"] + " ₪ מתאריך " + fmtDay(e["תאריך"]) + "?\n\n" +
+            "התשלום לא ייספר יותר בסה\"כ ששולם. השורה נשארת ביומן כ\"מבוטל\". הסטטוס והתוקף של המנוי לא משתנים.",
+            { title: "ביטול תשלום", okText: "ביטול התשלום", danger: true }).then(function (ok) {
+            if (!ok) return;
+            var release = CBA.ui.busy(b, "מבטל…");
+            CBA.data.voidGymPayment({ eventId: e["מזהה אירוע"] }, function (res) {
+              release();
+              if (!res || !res.ok) { CBA.ui.alert((res && res.error) || "הביטול נכשל."); return; }
+              CBA.ui.toast("התשלום בוטל"); refresh();
+            });
+          });
+        });
+      });
+    }
+    root.querySelectorAll("[data-ga-paylog]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openPayLog(String(btn.dataset.gaPaylog).trim()); });
+    });
+
     root.querySelectorAll("[data-ga-delete]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.dataset.gaDelete;
