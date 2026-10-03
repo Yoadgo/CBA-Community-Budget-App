@@ -221,6 +221,7 @@ var ACTION_PERMS = {
   activateGymManual: PERM_GYM,         // הפעלה ידנית בכל סטטוס (3.10.26)
   updateGymPayment: PERM_GYM,          // עריכת תשלום ביומן (3.10.26)
   voidGymPayment: PERM_GYM,            // ביטול תשלום ביומן (3.10.26)
+  seedGymFirestore: PERM_GYM,          // זריעה/רענון מלא של מראה המכון ב-Firestore (3.10.26)
   extendGymMembership: PERM_GYM,
   updateGymMembership: PERM_GYM,
   // מצב המודול (2026-09-16) — עדכון ישיר של הגדרה בודדת (קוד כניסה /
@@ -2050,6 +2051,7 @@ function doPostDispatch_(ss, body) {
       case 'activateGymManual':     return json_(activateGymManual_(ss, body));
       case 'updateGymPayment':      return json_(updateGymPayment_(ss, body));
       case 'voidGymPayment':        return json_(voidGymPayment_(ss, body));
+      case 'seedGymFirestore':      return json_({ ok: true, seed: gymFsHourly_(ss) });
       case 'extendGymMembership':   return json_(extendGymMembership_(ss, body));
       case 'renewGymMembership':    return json_(renewGymMembership_(ss, body));
       case 'updateGymMembership':   return json_(updateGymMembership_(ss, body));

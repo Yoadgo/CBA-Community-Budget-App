@@ -647,8 +647,8 @@ CBA.screens = CBA.screens || {};
         '<div class="gym-wiz__body">' +
           '<div class="gym-kv"><span>נחתמה בתאריך</span><span>' +
             CBA.esc(fmtDate(m["תאריך חתימה"]) || "—") + "</span></div>" +
-          '<div class="gym-kv"><span>ת.ז.</span><span>' + CBA.esc(m["ת.ז."] || "—") + "</span></div>" +
-          '<div class="gym-kv"><span>תאריך לידה</span><span>' + CBA.esc(fmtDate(m["תאריך לידה"]) || "—") + "</span></div>" +
+          '<div class="gym-kv"><span>ת.ז.</span><span data-gd-pid>' + CBA.esc(m["ת.ז."] || "—") + "</span></div>" +
+          '<div class="gym-kv"><span>תאריך לידה</span><span data-gd-pdob>' + CBA.esc(fmtDate(m["תאריך לידה"]) || "—") + "</span></div>" +
           '<div class="gym-kv"><span>אישור תקנון</span><span>' + CBA.esc(m["אישור תקנון"] || "—") + "</span></div>" +
           (flagged
             ? '<div class="gym-decl__flag">סומן "כן" ב: ' + CBA.esc(flagged) +
@@ -667,6 +667,18 @@ CBA.screens = CBA.screens || {};
         "</div>" +
       "</aside>";
     document.body.appendChild(el);
+    /* 3.10.26 — ת.ז. ותאריך לידה נשארים בגיליון "תושבים" (לא ב-Firebase): נמשכים מכאן רק בצפייה בהצהרה. */
+    if (m["ת.ז."] === undefined && CBA.data.getGymListSheets) {
+      var pidEl = el.querySelector("[data-gd-pid]"), pdobEl = el.querySelector("[data-gd-pdob]");
+      if (pidEl) pidEl.textContent = "טוען…";
+      if (pdobEl) pdobEl.textContent = "טוען…";
+      CBA.data.getGymListSheets(function (res) {
+        var f = null;
+        ((res && res.ok && res.members) || []).forEach(function (x) { if (String(x["מזהה"] || "").trim() === String(id).trim()) f = x; });
+        if (pidEl) pidEl.textContent = (f && f["ת.ז."]) || "—";
+        if (pdobEl) pdobEl.textContent = (f && fmtDate(f["תאריך לידה"])) || "—";
+      });
+    }
     function close() { if (el.parentNode) el.parentNode.removeChild(el); }
     el.querySelectorAll("[data-gd-close]").forEach(function (n) { n.addEventListener("click", close); });
     el.querySelector("[data-gd-request]").addEventListener("click", function () {
@@ -901,7 +913,7 @@ CBA.screens = CBA.screens || {};
             onSave: function (v, u) {
               if (!(Number(v.amount) > 0)) { u.error("הסכום חייב להיות גדול מאפס."); return; }
               u.busy("שומר…");
-              CBA.data.updateGymPayment({ eventId: e["מזהה אירוע"], amount: Number(v.amount), date: v.date,
+              CBA.data.updateGymPayment({ id: id, eventId: e["מזהה אירוע"], amount: Number(v.amount), date: v.date,
                 method: v.method, reference: String(v.reference || "").trim(), note: String(v.note || "").trim() },
                 function (res) {
                   u.done();
@@ -920,7 +932,7 @@ CBA.screens = CBA.screens || {};
             { title: "ביטול תשלום", okText: "ביטול התשלום", danger: true }).then(function (ok) {
             if (!ok) return;
             var release = CBA.ui.busy(b, "מבטל…");
-            CBA.data.voidGymPayment({ eventId: e["מזהה אירוע"] }, function (res) {
+            CBA.data.voidGymPayment({ id: id, eventId: e["מזהה אירוע"] }, function (res) {
               release();
               if (!res || !res.ok) { CBA.ui.alert((res && res.error) || "הביטול נכשל."); return; }
               CBA.ui.toast("התשלום בוטל"); refresh();
