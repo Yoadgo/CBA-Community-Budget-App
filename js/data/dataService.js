@@ -1972,7 +1972,9 @@ CBA.data = (function () {
     if (gymPickerCache) { if (cb) cb({ ok: true, rows: gymPickerCache }); return; }
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymResidentPicker" }, function (res) {
-      if (res && res.ok) gymPickerCache = res.rows || [];
+      /* שרת ישן (לפני הפריסה) עונה על פעולה לא מוכרת בתשובת-עלייה כללית בלי rows — לא נחשב רשימה ריקה. */
+      if (res && res.ok && Array.isArray(res.rows)) gymPickerCache = res.rows;
+      else if (res && res.ok) res = { ok: false, error: "הבורר לא זמין עדיין בשרת" };
       if (cb) cb(res);
     });
   }

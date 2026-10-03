@@ -43,6 +43,7 @@ ok('GET_ACTION_PERMS: gymResidentPicker = PERM_GYM', /gymResidentPicker: PERM_GY
 ok('נתב doGet', /action === 'gymResidentPicker'\) \{\s+return handleGymResidentPicker_\(e\.parameter\);/.test(GS));
 ok('dataService מיוצא, בלי localStorage', /getGymResidentPicker: getGymResidentPicker,/.test(DS) && !/gymPickerCache[^\n]*localStorage/.test(DS));
 ok('🔴 אין שימוש ב-residentDirectory להוספת אימייל (נשאר בלי אימייל)', !/\["אימייל|email/.test(GS.match(/function handleResidentDirectory_[\s\S]*?\n\}\n/)[0].replace(/אימייל\/טלפון/g, '')));
+ok('🔴 שרת ישן (תשובה בלי rows) לא נחשב רשימה ריקה', /Array\.isArray\(res\.rows\)/.test(DS.match(/function getGymResidentPicker[\s\S]*?\n  \}\n/)[0]));
 console.log('\n3. לקוח');
 ok('שדה האימייל הוא שדה החיפוש (ac-list + בחירה)', /data-gc-list/.test(GA) && /data-gc-idx/.test(GA));
 ok('בחירה ממלאת שם פרטי, משפחה וטלפון', /setField\("firstName", r\.first\); setField\("lastName", r\.family\)/.test(GA) && /setField\("phone", r\.phone\)/.test(GA));
