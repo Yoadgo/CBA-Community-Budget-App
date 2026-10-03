@@ -97,6 +97,9 @@ CBA.screens = CBA.screens || {};
       status === "ממתין לאישור רופא" && m["תאריך חתימה"] ? '<button type="button" class="btn-primary btn-sm" data-ga-view="' + id + '">בדיקת הצהרה</button>' :
       /* GMB1 (גל 8, 1.10.26) — פעולה ראשית ל"ממתין לאישור": פותחת את "עריכת מנוי" עם סטטוס "ממתין לתשלום" (המעבר שהשרת עושה באישור אוטומטי) */
       status === "ממתין לאישור" ? '<button type="button" class="btn-primary btn-sm" data-ga-approve="' + id + '">אישור</button>' : "";
+    /* 3.10.26 (בקשת יועד: "הכול באותו כרטיס, בלי שלוש נקודות — מבלבל") — כל הפעולות
+       מוצגות בשורת כפתורים קבועה בתחתית הכרטיס. הכפתור הראשי של הסטטוס נשאר מודגש
+       למעלה ולא חוזר בשורה. */
     var menu =
       (m["תאריך חתימה"] ? '<button type="button" data-ga-view="' + id + '">צפייה בהצהרה</button>' : "") +
       (status === "ממתין להצהרה" || m["תאריך חתימה"] ? "" : '<button type="button" data-ga-declare="' + id + '">בקשת הצהרה</button>') +
@@ -107,6 +110,12 @@ CBA.screens = CBA.screens || {};
       (status === "פעיל" ? "" : '<button type="button" data-ga-activate="' + id + '">הפעלה ידנית</button>') +
       '<button type="button" data-ga-edit="' + id + '">עריכה</button>' +
       '<button type="button" class="ga-menu__danger" data-ga-delete="' + id + '">מחיקה</button>';
+    if (primary.indexOf("data-ga-cash") !== -1) {
+      menu = menu.replace(/<button type="button" data-ga-cash="[^>]*>[^<]*<\/button>/, "");
+    }
+    if (primary.indexOf("data-ga-view") !== -1) {
+      menu = menu.replace(/<button type="button" data-ga-view="[^>]*>[^<]*<\/button>/, "");
+    }
     return '<div class="ga-row' + (GA_ATTN[status] ? " is-attn" : "") + '" data-ga-row="' + id + '">' +
              '<div class="ga-row__who"><b>' + CBA.esc(name) + (flags ? ' <span class="gym-pill gym-pill--danger">דגל</span>' : "") + "</b>" +
                "<small>" + (m["מספר בית"] ? "בית " + CBA.esc(m["מספר בית"]) + " · " : "") + CBA.esc(m["מסלול"] || "") + "</small>" +
@@ -115,7 +124,8 @@ CBA.screens = CBA.screens || {};
              '<div class="ga-row__pills"><span class="gym-pill gym-pill--' + tone + '">' + CBA.esc(status) + "</span>" +
                nukiPillHTML(m) + (gap ? '<span class="gym-pill gym-pill--warn">' + CBA.esc(gap) + "</span>" : "") + "</div>" +
              '<div class="ga-row__acts">' + primary +
-               '<details class="ga-more"><summary aria-label="עוד פעולות">⋯</summary><div class="ga-menu">' + menu + "</div></details></div>" +
+               "</div>" +
+             '<div class="ga-row__btns">' + menu + "</div>" +
              (status === "ממתין לאימות" ? '<div class="ga-row__verify" hidden>' + verifyRowHTML(m) + "</div>" : "") +
            "</div>";
   }

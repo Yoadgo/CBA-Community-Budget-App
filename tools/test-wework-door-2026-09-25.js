@@ -419,7 +419,8 @@ section('5ד. מי נכנס (slot), סוג הפעולה, מסך המכון המ�
   ok('יומן הדלת ומנהל WeWork מציגים שם אדם, לא "משפחה X"', /personName\(e\.familyId, e\.slot\)/.test(DA) && /famName\(b\.familyId, b\.slot\)/.test(WA) && !/"משפחה " \+ fid/.test(WA));
   ok('מסך המכון: שני כרטיסים + שורת מספרים + הגדרות בגיליון', /class="ga-grid"/.test(GA) && /id="ga-kpis" class="ga-chips"/.test(GA) && /function openSettings\(tab/.test(GA) && !/id="ga-verify-card"/.test(GA));
   ok('מנויים: ממתינים לך ראשונים + סינון', /GA_ORDER/.test(GA) && /data-ga-f="attn"/.test(GA));
-  ok('תפריט ⋯ שומר את אותם data-ga-* (הקישור לפעולות לא השתנה)', /<details class="ga-more">/.test(GA) && /data-ga-edit="/.test(GA) && /data-ga-delete="/.test(GA) && /data-ga-extend="/.test(GA));
+  /* 3.10.26 — תפריט ⋯ הוחלף בשורת כפתורים קבועה בכרטיס (בקשת יועד); אותם data-ga-* */
+  ok('שורת הכפתורים בכרטיס שומרת את אותם data-ga-* (הקישור לפעולות לא השתנה)', /<div class="ga-row__btns">/.test(GA) && /data-ga-edit="/.test(GA) && /data-ga-delete="/.test(GA) && /data-ga-extend="/.test(GA));
 }
 
 
