@@ -1639,6 +1639,7 @@
     // מתגים — "מרכז התראות" (23.9). במכוון לא פעמון: הפעמון הוא הפוש שלי.
     sliders: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"/></svg>',
     // מגן — "אבטחת המידע שלי" (2026-08-24). אותו גודל/עובי קו כמו השאר.
+    doc: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M13.4 12.6a2.2 2.2 0 1 0 0 2.8"/></svg>', /* תנאי שימוש (3.10.26) */
     shield: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>',
     // זכוכית מגדלת — כפתור החיפוש הגלובלי בכותרת (2026-08-25). שים לב: זו מפת
     // האייקונים של *תפריט המשתמש*, לא NAV_ICONS של המסכים (ר' באג 20.08).
@@ -1862,6 +1863,11 @@
       closeUserPanel(panel, btn);
       if (window.CBA.security) CBA.security.open();
     });
+    const termsBtn = panel.querySelector("[data-panel-terms]");
+    if (termsBtn) termsBtn.addEventListener("click", function () {
+      closeUserPanel(panel, btn);
+      if (window.CBA.terms) CBA.terms.open();
+    });
     const outBtn = panel.querySelector("[data-panel-logout]");
     if (outBtn) outBtn.addEventListener("click", logout);
     const updBtn = panel.querySelector("[data-panel-update]");
@@ -2008,6 +2014,7 @@
     if (currentUser) {
       help += li('data-panel-tour', ICON.help, 'סיור באפליקציה', '');
       help += li('data-panel-security', ICON.shield, 'אבטחת המידע שלי', '');
+      help += li('data-panel-terms', ICON.doc, 'תנאי שימוש וזכויות', '');
       help += li('data-panel-report', ICON.report, 'דיווח על תקלה או רעיון', '');
     }
 

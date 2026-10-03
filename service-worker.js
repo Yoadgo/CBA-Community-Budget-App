@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "5a1be11b72";
+var VERSION = "4f7decb94f";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -58,14 +58,14 @@ var ASSET_VERSIONS = {
   "css/resident.css": "2611ef87d3",
   "css/resident2.css": "521b8f184a",
   "css/search.css": "866322fbb8",
-  "css/style.css": "69c343dffe",
+  "css/style.css": "fc01d04aab",
   "css/sys.css": "48a9728e9a",
   "css/tokens.css": "b1f1b7d21f",
   "css/tour.css": "fbb848ba1f",
   "css/wework.css": "3cfe17107a",
   "icons/apple-touch-icon.png": "5ce56ce0dc",
   "icons/icon-192.png": "a624d0ac7a",
-  "js/app.js": "58ee4ced21",
+  "js/app.js": "e000aba3e1",
   "js/data/dataService.js": "6144edc7f5",
   "js/data/door.js": "71c7a113de",
   "js/data/firebase.js": "9669c19e11",
@@ -132,6 +132,7 @@ var ASSET_VERSIONS = {
   "js/ui/search.js": "4a4fd40ce0",
   "js/ui/security.js": "6238d03d0a",
   "js/ui/skeleton.js": "f4934f5355",
+  "js/ui/terms.js": "6c209ad9da",
   "js/ui/tips.js": "d4f66f2d2a",
   "js/ui/tour.js": "56cb035d22",
   "manifest.webmanifest": "bc85a26549"
