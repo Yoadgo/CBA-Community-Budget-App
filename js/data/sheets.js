@@ -819,6 +819,7 @@ CBA.sheets = (function () {
    * ======================================================================== */
   var fsTxCache = null;               /* {y, key, at, rows} */
   var TX_REQUERY_MS = 600000;         /* 10 דקות */
+  var BOOT_TX_ADOPT_MS = 15000;       /* 3.10 — חלון אימוץ שורות הטעינה הקרה ע"י המטען הראשון */
 
   function dropTxCache() { fsTxCache = null; }
 
@@ -837,6 +838,11 @@ CBA.sheets = (function () {
     if (!y || !payload.data || !payload.data[y]) return ok(payload);
 
     var key = txCacheKey(payload);
+    /* (3.10) שורות שהטעינה הקרה קראה לפני רגע (≤15ש') — אותו מקור, אותו רגע;
+       מאמצים אותן תחת המפתח של המטען במקום לשאול שוב. */
+    if (fsTxCache && fsTxCache.y === y && fsTxCache.key === "boot" && (Date.now() - fsTxCache.at) < BOOT_TX_ADOPT_MS) {
+      fsTxCache.key = key;
+    }
     if (fsTxCache && fsTxCache.y === y && fsTxCache.key === key &&
         (Date.now() - fsTxCache.at) < TX_REQUERY_MS) {
       /* ⚠️ **המטמון מחזיק שורות גולמיות, בלי שמות.** כך
@@ -1092,6 +1098,9 @@ CBA.sheets = (function () {
                ויומן ההערות היו נמחקים מהמסך. הבדיקה חייבת להיות
                **לפני** `apply`, לא לפני ה-`cb`. */
             if (lastAppliedSeq) return done(false);
+            /* (3.10) התנועות שנקראו עכשיו משמשות גם את המטען הראשון (ר' payloadTx)
+               — אחרת כל פתיחה הייתה שואלת את Firestore פעמיים על אותן שורות. */
+            if (Array.isArray(d.rawRows)) fsTxCache = { y: y, key: "boot", at: Date.now(), rows: d.rawRows };
             done(apply(store));
           });
         });
@@ -1118,12 +1127,19 @@ CBA.sheets = (function () {
     /* 1ב) אין מטמון ⇒ הטעינה הקרה מ-Firestore, **במקביל** למטען.
        ⚠️ רץ רק כשאין מטמון: כשיש מטמון המסך כבר מלא תוך
           270 אלפיות, וקריאה נוספת היתה עולה מכסה בלי לתת כלום. */
-    if (!hadCache) {
-      bootFromFirestore(function (okFast) {
+    /* (3.10.2026, שלב ד' — אושר ע"י יועד) **גם כשיש מטמון.** עד היום הטעינה
+       הקרה מ-Firestore רצה רק בלי מטמון, מתוך הנחה שהמטמון "ממלא את המסך
+       תוך 270 אלפיות". אבל app.js (כלל 6.8: לא להציג מספר ישן) **לא מצייר**
+       ממטמון — הוא רק מכין את הכותרת ומחכה למטען הטרי. התוצאה שנמדדה (3.10):
+       ציור ראשון בדיוק ברגע המטען — 4.4ש' במחשב, 7-9ש' באייפון — בזמן
+       שהבית כולו נקרא מ-Firestore ממילא. עכשיו הטעינה הקרה רצה תמיד:
+       הבית מצויר תוך ~שנייה מנתוני Firestore החיים (לא מהמטמון הישן), ומסכי
+       התקציב נשארים נעולים לכתיבה (`_partial`) עד שהמטען הטרי נוחת.
+       ⚠️ אם המטען הטרי הקדים (lastAppliedSeq) — הטעינה הקרה מוותרת מעצמה. */
+    bootFromFirestore(function (okFast) {
         /* ⚠️ false = או שלא הצלחנו, או שהמטען הקדים אותנו. */
-        if (okFast) cb(true, { source: "firestore-boot" });
-      });
-    }
+      if (okFast) cb(true, { source: "firestore-boot" });
+    });
 
     // 2) רענון ברקע מהגיליון
     fetchAndApply(hadCache, cb);
@@ -1946,6 +1962,7 @@ CBA.sheets = (function () {
         groups: (doc.groups || []).map(fsPlain),
         splits: fsPlainRows(doc.splits), items: fsPlainRows(doc.items),
         transactions: txWithNames(rows),
+        rawRows: rows,   // 3.10 — לטעינה הקרה, כדי שהמטען הראשון לא ישאל את Firestore שוב
         /* 🔴 שלושה שדות שהגיעו עד צעד 11 רק מההגדרות במטען.
            בלעדיהם אי-אפשר להרכיב שנה שלמה מ-Firestore לבד.
            ⚠️ לתושב הם פשוט אינם — הוא מקבל EMPTY_PLAN, וזו
