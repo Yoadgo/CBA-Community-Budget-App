@@ -1127,7 +1127,7 @@ CBA.screens = CBA.screens || {};
     });
     /* בורר תושבים (3.10.26): שדה האימייל הוא גם שדה החיפוש. בחירה ממלאת אימייל + שם + טלפון.
        לא נטען/נכשל — השדה נשאר חופשי והשרת מאמת (נפילה בטוחה). */
-    var pickRows = null, picked = false;
+    var pickRows = null, picked = false, pickFailed = false;
     var emailIn = el.querySelector('[data-gc="email"]');
     var pickList = el.querySelector("[data-gc-list]");
     var pickedNote = el.querySelector("[data-gc-picked]");
@@ -1141,7 +1141,14 @@ CBA.screens = CBA.screens || {};
     }
     function renderPick(q) {
       var query = String(q || "").trim().toLowerCase();
-      if (!pickRows || !query) { pickList.hidden = true; pickList.innerHTML = ""; return; }
+      if (!query) { pickList.hidden = true; pickList.innerHTML = ""; return; }
+      /* הרשימה מגיעה מ-Apps Script (1-3 שניות) — לפני שהגיעה מראים "טוען", ובהגיעה מציירים מחדש
+         (תיקון 4.10: מי שהקליד מיד אחרי הפתיחה לא ראה כלום ולא קיבל סימן חיים). */
+      if (!pickRows) {
+        pickList.innerHTML = '<div class="ac-item" style="cursor:default;color:var(--text-soft)">' +
+          (pickFailed ? "הרשימה לא נטענה — אפשר להקליד אימייל מלא, והשרת יבדוק אותו" : "טוען רשימת תושבים…") + "</div>";
+        pickList.hidden = false; return;
+      }
       var m = [];
       pickRows.forEach(function (r, i) {
         var hay = (pickLabel(r) + " " + r.email).toLowerCase();
@@ -1168,7 +1175,10 @@ CBA.screens = CBA.screens || {};
       pickedNote.hidden = false; pickList.hidden = true;
     });
     if (CBA.data.getGymResidentPicker) {
-      CBA.data.getGymResidentPicker(function (res) { if (res && res.ok) pickRows = res.rows || []; });
+      CBA.data.getGymResidentPicker(function (res) {
+        if (res && res.ok && Array.isArray(res.rows)) pickRows = res.rows; else pickFailed = true;
+        if (document.activeElement === emailIn || emailIn.value) { if (!picked) renderPick(emailIn.value); }
+      });
     }
     el.querySelectorAll("[data-gc-mode] button").forEach(function (b) {
       b.addEventListener("click", function () {
@@ -1445,6 +1455,8 @@ CBA.screens = CBA.screens || {};
           if (cb) cb();
           return;
         }
+        /* חימום מראש (4.10): רשימת התושבים להקמת מנוי נטענת עכשיו, כך שהבורר מוכן כשפותחים את הטופס */
+        if (CBA.data.getGymResidentPicker) CBA.data.getGymResidentPicker(function () {});
         CBA.data.getGymList(function (res) {
           /* GMB6 (גל 8, 1.10.26) — התשובה חזרה אחרי שהמסך צויר מחדש: לא מציירים לתוך DOM מנותק */
           if (stale()) {

@@ -1967,15 +1967,24 @@ CBA.data = (function () {
   function dirForget() { try { localStorage.removeItem(DIR_KEY); } catch (e) {} }
   /* בורר תושבים להקמת מנוי מכון (3.10.26) — כולל אימייל, לכן מנהל מכון בלבד (שער בשרת).
      זיכרון בלבד: בכוונה לא נשמר ב-localStorage (שם יושבים מטמוני השמות בלי אימיילים). */
-  var gymPickerCache = null;
+  var gymPickerCache = null, gymPickerWait = null;
   function getGymResidentPicker(cb) {
     if (gymPickerCache) { if (cb) cb({ ok: true, rows: gymPickerCache }); return; }
     if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (gymPickerWait) { if (cb) gymPickerWait.push(cb); return; }   /* שתי קריאות במקביל (חימום + פתיחת הטופס) = שאילתה אחת */
+    gymPickerWait = cb ? [cb] : [];
+    var settled = false;
+    function settle(res) {
+      if (settled) return; settled = true;
+      var q = gymPickerWait || []; gymPickerWait = null;
+      q.forEach(function (f) { try { f(res); } catch (e) {} });
+    }
+    setTimeout(function () { settle({ ok: false, error: "הרשימה לא חזרה בזמן" }); }, 15000);   /* לא נשארים "טוען" לנצח */
     CBA.sheets.get({ action: "gymResidentPicker" }, function (res) {
       /* שרת ישן (לפני הפריסה) עונה על פעולה לא מוכרת בתשובת-עלייה כללית בלי rows — לא נחשב רשימה ריקה. */
       if (res && res.ok && Array.isArray(res.rows)) gymPickerCache = res.rows;
       else if (res && res.ok) res = { ok: false, error: "הבורר לא זמין עדיין בשרת" };
-      if (cb) cb(res);
+      settle(res);
     });
   }
   function getResidentDirectory(cb) {
