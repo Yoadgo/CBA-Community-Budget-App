@@ -27,6 +27,7 @@
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
 var VERSION = "20b781a44c";
+var VERSION = "61962d10bd";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
