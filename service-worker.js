@@ -27,6 +27,7 @@
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
 var VERSION = "9d483ccd8f";
+var VERSION = "919a2b41fe";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -74,14 +75,14 @@ var ASSET_VERSIONS = {
   "js/data/gardenRules.js": "309560188b",
   "js/data/gardenSlots.js": "1b715264ff",
   "js/data/gardenStatsCalc.js": "177cc46e78",
-  "js/data/gymFs.js": "eec375c679",
+  "js/data/gymFs.js": "51ed68cc48",
   "js/data/mapGeo.js": "446d4fdd50",
   "js/data/mock.js": "fd54e34660",
   "js/data/push.js": "198e321583",
   "js/data/reconcile.js": "899bfb8f4c",
   "js/data/sheets.js": "3fc95ad12e",
   "js/lazy.js": "011e0ffe5f",
-  "js/lazyManifest.js": "4e7617e933",
+  "js/lazyManifest.js": "0ece286c34",
   "js/pwa.js": "cc703231c6",
   "js/screens/appReports.js": "a47450bd91",
   "js/screens/budget.js": "5fbc7244f5",
@@ -96,7 +97,7 @@ var ASSET_VERSIONS = {
   "js/screens/gardenScheduleAi.js": "4a2f2ab9f6",
   "js/screens/gardenStats.js": "9409f96dca",
   "js/screens/gardenTasks.js": "43f85ceec7",
-  "js/screens/gymAdmin.js": "1971f77c3c",
+  "js/screens/gymAdmin.js": "3516f2131a",
   "js/screens/home.js": "0205f05d94",
   "js/screens/homeGarden.js": "ee331ad56c",
   "js/screens/homeSchedule.js": "a39dc89ce9",

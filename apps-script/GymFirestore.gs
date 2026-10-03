@@ -11,11 +11,12 @@
  *     gymConfig/admin           הגדרות המכון (בלי קוד הכניסה). קריאה: מנהל מכון.
  *     (gymStatus/{uid}, gymCode/{uid} — כבר קיימים, Code.gs.)
  *
- *  ⛔ מה **לא** עובר, בכוונה (cba-hybrid-architecture, כלל 1):
- *     שם, אימייל, טלפון, ת.ז., תאריך לידה, מספר בית, תשובות השאלון ודגלי
- *     בריאות, תאריך חתימה, קישורי חתימה/אישור רופא, הערות מנהל (טקסט חופשי).
- *     הם נשארים בגיליון ומגיעים למסך הניהול מ-Apps Script ברקע, אחרי שהרשימה
- *     כבר על המסך (ר' js/data/gymFs.js).
+ *  ✅ 3.10.26 (schema 2, החלטת יועד: "תשובות בריאות וחתימה יכולים לשבת בפיירבייס"):
+ *     גם תשובות השאלון, דגלים, חתימה, אישור רופא, הערות מנהל ויומן האירועים (מערך `log`
+ *     בתוך המסמך) עוברים. הקריאה נשארת למנהל מכון בלבד.
+ *  ⛔ מה **לא** עובר, בכוונה: שם, אימייל, טלפון, ת.ז., תאריך לידה, מספר בית —
+ *     נתוני גיליון "תושבים". שם ומספר בית נגזרים בלקוח מספריית השמות
+ *     (js/data/gymFs.js); ת.ז./תאריך לידה נמשכים מהגיליון רק בצפייה בהצהרה.
  *     רשימת **היתר**, לא חסימה — עמודה חדשה בגיליון לא זולגת לכאן מעצמה.
  *
  *  🔑 הגיליון נשאר מקור האמת לכתיבה: כל פעולה עדיין עוברת ב-Apps Script
@@ -30,6 +31,15 @@ var GYM_MEMBER_FS_FIELDS = ['מזהה', 'מסלול', 'מחיר מוסכם', 'ת
   'סה"כ שולם', 'תשלום אחרון', 'חודשים ששולמו', 'מצב סנכרון', 'אישור תקנון',
   'הוגש בתאריך', 'טופל בתאריך', 'מנוי קודם', 'דווח בתאריך', 'אמצעי תשלום', 'אסמכתא',
   'דגלי תזכורת'];
+
+/* 3.10.26 (שלב 1 למעבר מלא ל-Firebase, החלטת יועד: "תשובות בריאות וחתימה יכולים לשבת בפיירבייס"):
+   גם נתוני ההצהרה והטיפול עוברים. עדיין רשימת היתר. נשארים בגיליון "תושבים" בלבד:
+   שם, אימייל, טלפון, ת.ז., תאריך לידה — המסך מושך שם ומספר בית מספריית השמות.
+   הקריאה למסמך הזה: מנהל מכון בלבד (isInternalAdmin('מכון') בכללים). */
+var GYM_MEMBER_FS_EXTRA = ['תאריך חתימה', 'קישור חתימה', 'גרסת שאלון', 'אישור רופא', 'תאריך הנפקת האישור',
+  'קישור אישור', 'טופל ע"י', 'הערות מנהל', 'שאלות שנענו בכן', 'דגלים', 'הערת דגל', 'סטטוס תשלום',
+  'אומת בתאריך', 'אומת ע"י'];
+var GYM_LOG_FS_MAX = 60;   // אירועים לכל מנוי במסמך (הישנים נחתכים; הגיליון שומר הכול)
 
 /* הגדרות שמותר לתושב לראות (gymConfig/public). כל השאר — רק למנהל. */
 var GYM_PUBLIC_SETTINGS = { 'קישור פייבוקס': 'payboxUrl', 'ימים לתזכורת חידוש': 'renewDaysBefore',
@@ -63,11 +73,53 @@ function gymFsDate_(v) {
   return v == null ? '' : v;
 }
 
-/** שורת מכון → מסמך, רשימת היתר בלבד + גשר הזהות. */
-function gymMemberDoc_(row, who) {
+/** שמות העמודות של שאלות הבריאות (הכותרת הקצרה בטאב ההגדרות) — כולל שאלות כבויות. */
+function gymQuestionLabels_(ss) {
+  var out = [];
+  var cfg = ss.getSheetByName(GYM_SETTINGS_SHEET);
+  if (!cfg) return out;
+  var rows = cfg.getDataRange().getValues();
+  for (var r = 1; r < rows.length; r++) {
+    if (String(rows[r][0]).trim() !== 'שאלה') continue;
+    var label = String(rows[r][3]).trim();
+    if (label && out.indexOf(label) === -1) out.push(label);
+  }
+  return out;
+}
+
+/** יומן האירועים מקובץ לפי מזהה מנוי: { 'GYM-0001': [ {id,t,type,amount,...}, ... ] } — הישן ראשון. */
+function gymLogByMember_(ss) {
+  var out = {};
+  var sh = ss.getSheetByName(GYM_LOG_SHEET);
+  if (!sh || sh.getLastRow() < 2) return out;
+  readTable_(ss, GYM_LOG_SHEET).forEach(function (e) {
+    var id = String(e['מזהה מנוי'] || '').trim();
+    if (!id) return;
+    var d = e['תאריך'];
+    var rec = {
+      id: String(e['מזהה אירוע'] || ''), t: (d instanceof Date) ? d.toISOString() : String(d || ''),
+      type: String(e['סוג אירוע'] || ''), amount: (e['סכום'] === '' || e['סכום'] == null) ? '' : Number(e['סכום']),
+      method: String(e['אמצעי תשלום'] || ''), ref: String(e['אסמכתא'] || ''),
+      until: String(e['בתוקף עד (אחרי)'] instanceof Date ? e['בתוקף עד (אחרי)'].toISOString() : (e['בתוקף עד (אחרי)'] || '')),
+      by: String(e['בוצע ע"י'] || ''), note: String(e['הערה'] || '')
+    };
+    (out[id] = out[id] || []).push(rec);
+  });
+  Object.keys(out).forEach(function (id) {
+    out[id].sort(function (a, b) { return a.t < b.t ? -1 : (a.t > b.t ? 1 : 0); });
+    if (out[id].length > GYM_LOG_FS_MAX) out[id] = out[id].slice(out[id].length - GYM_LOG_FS_MAX);
+  });
+  return out;
+}
+
+/** שורת מכון → מסמך, רשימת היתר בלבד + גשר הזהות. schema 2 = כולל הצהרה ויומן. */
+function gymMemberDoc_(row, who, events, qLabels) {
   var doc = { familyId: (who && who.familyId) || '', uid: (who && who.uid) || '', slot: (who && who.slot) || 0,
-              schema: 1, updatedAt: new Date() };
+              schema: 2, updatedAt: new Date() };
   GYM_MEMBER_FS_FIELDS.forEach(function (k) { doc[k] = gymFsDate_(row[k]); });
+  GYM_MEMBER_FS_EXTRA.forEach(function (k) { doc[k] = gymFsDate_(row[k]); });
+  (qLabels || []).forEach(function (k) { if (GYM_MEMBER_FS_FIELDS.indexOf(k) === -1) doc[k] = gymFsDate_(row[k]); });
+  doc.log = events || [];
   return doc;
 }
 
@@ -75,9 +127,11 @@ function gymMembersSyncAll_(ss) {
   ss = ss || SpreadsheetApp.getActiveSpreadsheet();
   var out = { wrote: 0, deleted: 0, skipped: 0 };
   var idx = gymResidentIndex_(ss);
+  var logs = gymLogByMember_(ss), ql = gymQuestionLabels_(ss);
   var items = readTable_(ss, GYM_SHEET).map(function (row) {
-    return { id: String(row['מזהה'] || '').trim(),
-             doc: gymMemberDoc_(row, idx[normalizeEmail_(String(row['אימייל'] || ''))]) };
+    var id = String(row['מזהה'] || '').trim();
+    return { id: id,
+             doc: gymMemberDoc_(row, idx[normalizeEmail_(String(row['אימייל'] || ''))], logs[id], ql) };
   });
   var live = {};
   fsWriteAll_(FS_GYM_MEMBERS, items, out, live);
@@ -118,12 +172,13 @@ function gymMembersSyncEmail_(ss, email) {
   var em = normalizeEmail_(email);
   if (!em) return 0;
   var who = gymResidentIndex_(ss)[em] || null;
+  var logs = gymLogByMember_(ss), ql = gymQuestionLabels_(ss);
   var n = 0;
   readTable_(ss, GYM_SHEET).forEach(function (row) {
     if (normalizeEmail_(String(row['אימייל'] || '')) !== em) return;
     var id = String(row['מזהה'] || '').trim();
     if (!fsIdOk_(id)) return;
-    fsSet_(fsDocPath_(FS_GYM_MEMBERS, id), gymMemberDoc_(row, who));
+    fsSet_(fsDocPath_(FS_GYM_MEMBERS, id), gymMemberDoc_(row, who, logs[id], ql));
     n++;
   });
   return n;

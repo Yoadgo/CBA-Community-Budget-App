@@ -1,5 +1,5 @@
 /* ============================================================================
- *  gymFs.js — מכון הכושר מ-Firestore קודם, Apps Script ברקע   (25.9.2026)
+ *  gymFs.js — מכון הכושר מ-Firestore בלבד, בלי ריצוד   (25.9.2026, שוכתב 3.10.2026)
  * ----------------------------------------------------------------------------
  *  בקשת יועד: "תעביר מקסימום תכולות ל-Firebase עם מזהה משפחה, uid".
  *
@@ -18,64 +18,89 @@ window.CBA = window.CBA || {};
   "use strict";
   if (!CBA.data) return;
 
-  function fbOk() { return !!(CBA.fb && CBA.fb.readDoc && CBA.fb.readCollection && CBA.fb.ensureDb); }
+  /* 3.10.26 — שלב 1 של המעבר המלא ל-Firebase (בקשת יועד), וגם תיקון "ריצוד השמות".
+     ❌ מה היה: המסך צויר שלוש פעמים — מ-Firestore בלי שמות ("משפחה 32"), שוב כשספריית
+        השמות הגיעה, ושוב מהגיליון. כל ציור החליף את מה שהמנהל ראה.
+     ✅ מה עכשיו: ציור **אחד**. מחכים לשלושה מקורות קצרים במקביל (מנויים, הגדרות מכון,
+        ספריית שמות — השלישית שמורה במכשיר) ורק אז מציירים. אין תשובה "חלקית" יותר.
+     🔑 גם הצהרות הבריאות והיומן יושבים עכשיו במסמך המנוי (schema 2), לכן אין עוד קריאה
+        לאפסקריפט כדי להציג את הרשימה. שם פרטי/משפחה ומספר בית מגיעים מספריית השמות;
+        ת.ז./תאריך לידה/טלפון נשארים בגיליון "תושבים" ונמשכים רק בעת צפייה בהצהרה.
+     🛑 דגל כיבוי: appConfig/flags → gymAdminFs:false מחזיר את המסך לקריאה מהגיליון.
+        אם המראה לא זרוע במלואו (מסמך בלי schema 2) — נופלים אוטומטית לגיליון. */
 
-  /* שם לפי משפחה + משבצת (1/2), מספריית השמות המצומצמת (בלי מייל וטלפון). */
-  function nameFor(rows, fid, slot) {
+  function fbOk() { return !!(CBA.fb && CBA.fb.readDoc && CBA.fb.readCollection && CBA.fb.ensureDb); }
+  function flagOn() { return !(CBA.fb && CBA.fb.flag) || CBA.fb.flag("gymAdminFs", true) !== false; }
+
+  function findFamily(rows, fid) {
     for (var i = 0; i < (rows || []).length; i++) {
-      var r = rows[i];
-      if (String(r["מזהה קבוע"] || "").trim() !== String(fid)) continue;
-      var first = String(r["שם פרטי " + (slot || 1)] || r["שם פרטי 1"] || "").trim();
-      return { first: first, last: String(r["משפחה"] || "").trim() };
+      if (String(rows[i]["מזהה קבוע"] || "").trim() === String(fid)) return rows[i];
     }
-    return { first: "", last: fid ? "משפחה " + fid : "" };
+    return null;
+  }
+  function houseOf(r) {
+    if (!r) return "";
+    if (r["מספר בית"] != null && r["מספר בית"] !== "") return String(r["מספר בית"]);
+    var ks = Object.keys(r);
+    for (var i = 0; i < ks.length; i++) {
+      if (ks[i].indexOf("בית") !== -1 && ks[i].indexOf("שם") === -1 && r[ks[i]] !== "") return String(r[ks[i]]);
+    }
+    return "";
   }
 
-  function partialGymList(dirRows, cb) {
-    if (!fbOk()) return cb(null);
-    var got = 0, members = null, admin = null, failed = false;
-    function one() {
-      if (++got < 2) return;
-      if (failed || !members) return cb(null);
-      var a = admin || {};
-      var rows = members.map(function (d) {
-        var n = nameFor(dirRows, d.familyId, d.slot);
-        var r = {};
-        Object.keys(d).forEach(function (k) { r[k] = d[k]; });
-        r["שם פרטי"] = n.first; r["שם משפחה"] = n.last; r["אימייל"] = "";
-        return r;
+  /* מסמכי Firestore → תשובה בצורת getGymList של Apps Script. מחזיר null אם המראה לא מוכן. */
+  function assemble(members, admin, dirRows) {
+    if (!members || !members.length || !admin) return null;
+    for (var i = 0; i < members.length; i++) if (!(Number(members[i].schema) >= 2)) return null;
+    var rows = [], log = [];
+    members.forEach(function (d) {
+      var fam = findFamily(dirRows, d.familyId);
+      var slot = d.slot || 1;
+      var first = fam ? String(fam["שם פרטי " + slot] || fam["שם פרטי 1"] || "").trim() : "";
+      var last = fam ? String(fam["משפחה"] || "").trim() : "";
+      var r = {};
+      Object.keys(d).forEach(function (k) { if (k !== "log") r[k] = d[k]; });
+      r["שם פרטי"] = first;
+      r["שם משפחה"] = last || (d.familyId ? "משפחה " + d.familyId : "");
+      r["אימייל"] = "";
+      r["מספר בית"] = houseOf(fam);
+      rows.push(r);
+      (d.log || []).forEach(function (e) {
+        log.push({
+          "מזהה אירוע": e.id, "מזהה מנוי": String(d["מזהה"] || d.id || ""), "תאריך": e.t, "סוג אירוע": e.type,
+          "סכום": e.amount, "אמצעי תשלום": e.method, "אסמכתא": e.ref, "בתוקף עד (אחרי)": e.until,
+          "בוצע ע\"י": e.by, "הערה": e.note
+        });
       });
-      cb({ ok: true, partial: true, members: rows, log: [], settings: a.settings || {},
-           plans: a.plans || [], questions: a.questions || [], rules: a.rules || [],
-           hasEntryCode: !!a.hasEntryCode });
+    });
+    log.sort(function (a, b) { return String(a["תאריך"]).localeCompare(String(b["תאריך"])); });
+    return { ok: true, members: rows, log: log, settings: admin.settings || {}, plans: admin.plans || [],
+             questions: admin.questions || [], rules: admin.rules || [], hasEntryCode: !!admin.hasEntryCode, src: "fs" };
+  }
+
+  function fsGymList(cb) {
+    if (!fbOk()) return cb(null);
+    var got = 0, members = null, admin = null, dir = null, failed = false;
+    function one() {
+      if (++got < 3) return;
+      if (failed) return cb(null);
+      cb(assemble(members, admin, dir));
     }
     CBA.fb.readCollection("gymMembers", function (err, rows) { if (err) failed = true; else members = rows || []; one(); });
     CBA.fb.readDoc("gymConfig", "admin", function (err, d) { if (err) failed = true; else admin = d; one(); });
+    if (CBA.data.getResidentDirectory) {
+      CBA.data.getResidentDirectory(function (res) { if (res && res.ok) dir = res.rows || []; else failed = true; one(); });
+    } else { failed = true; one(); }
   }
 
   var origList = CBA.data.getGymList;
   if (origList) {
+    /* גרסת הגיליון נשארת זמינה: לגיבוי, ולשליפת ת.ז./תאריך לידה בצפייה בהצהרה. */
+    CBA.data.getGymListSheets = origList;
     CBA.data.getGymList = function (cb) {
       cb = cb || function () {};
-      var full = false;
-      origList(function (res) { full = true; cb(res); });
-      var dir = null;
-      function emit() {
-        partialGymList(dir, function (part) {
-          /* ריק ב-Firestore = עוד לא סונכרן ⇒ לא מציגים "אין מנויים" בטעות. */
-          if (!full && part && part.members.length) cb(part);
-        });
-      }
-      emit();
-      /* השמות מגיעים מספרייה שנטענת פעם אחת בסשן. אם היא עוד לא כאן —
-         מציירים מיד בלי שמות, ושוב כשהיא מגיעה (אם המלא עוד לא חזר). */
-      if (CBA.data.getResidentDirectory) {
-        CBA.data.getResidentDirectory(function (res) {
-          if (full || !(res && res.ok)) return;
-          dir = res.rows || [];
-          emit();
-        });
-      }
+      if (!flagOn()) return origList(cb);
+      fsGymList(function (res) { if (res) cb(res); else origList(cb); });
     };
   }
 

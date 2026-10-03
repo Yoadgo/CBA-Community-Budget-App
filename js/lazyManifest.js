@@ -37,7 +37,7 @@ CBA.lazyManifest = {
     screens: ["clubAdmin", "gymAdmin", "weworkAdmin", "servicesAdmin"],
     files: [
       "js/screens/clubAdmin.js?v=2762c48dbf",
-      "js/screens/gymAdmin.js?v=1971f77c3c",
+      "js/screens/gymAdmin.js?v=3516f2131a",
       "js/screens/doorAdmin.js?v=9c1b798a5b",
       "js/screens/weworkAdmin.js?v=794ed62ea8",
       "js/screens/servicesAdmin.js?v=4c6fe01239",

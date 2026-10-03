@@ -1397,8 +1397,9 @@ function doorGymAfterWrite_(ss, body, res) {
       return;
     }
     var email = body.email || '';
-    if (!email && body.id) {
-      var id = String(body.id).trim();
+    var mid = body.id || (parsed && parsed.id) || '';   /* עריכת/ביטול תשלום מחזירים id של המנוי */
+    if (!email && mid) {
+      var id = String(mid).trim();
       readTable_(ss, GYM_SHEET).forEach(function (row) {
         if (String(row['מזהה'] || '').trim() === id) email = String(row['אימייל'] || '');
       });
