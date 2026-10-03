@@ -1299,6 +1299,7 @@ body[data-screen="resDirectory"] .app-main { padding-left: 40px; }
 .m2-bin  { stroke: rgba(0,0,0,.34); stroke-width: 1.1; vector-effect: non-scaling-stroke; }
 .m2-bin.is-dash { stroke-dasharray: 5 4; }
 .m2-bus  { fill: #3A73B8; stroke: #27578F; stroke-width: 1.1; vector-effect: non-scaling-stroke; }
+.m2-ev   { fill: #2F6FE4; stroke: #1E4FA8; stroke-width: 1.1; vector-effect: non-scaling-stroke; }
 
 /* שבב מרחב — יושב על מרכז המבנה, גודל קבוע על המסך, בלי קופסה מסביב */
 .map-poi { position: absolute; transform: translate(-50%,-50%); pointer-events: none; z-index: 2;

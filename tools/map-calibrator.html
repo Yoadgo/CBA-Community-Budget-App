@@ -6,7 +6,7 @@
 :root{
   --bg:#11141a; --panel:rgba(24,28,36,.94); --line:#333b4a; --ink:#eaecf1; --muted:#98a1b2;
   --accent:#F2A65A; --ok:#5BBB7B; --warn:#E4B04A; --danger:#F4737F;
-  --gzone:#C86FD6; --street:#6FD3BC; --plaza:#D9CFC0; --shelter:#EFE3CC; --bin:#5BB36E; --bus:#3A73B8; --house:#F2A65A; --public:#7FB3E8; --parking:#B9A8E8; --green:#7FCB94; --road:#EFE7D8; --path:#DAD3C6; --road-edge:#DCD4C4; --path-edge:#CFC8BB;
+  --gzone:#C86FD6; --street:#6FD3BC; --plaza:#D9CFC0; --shelter:#EFE3CC; --bin:#5BB36E; --bus:#3A73B8; --ev:#2F6FE4; --house:#F2A65A; --public:#7FB3E8; --parking:#B9A8E8; --green:#7FCB94; --road:#EFE7D8; --path:#DAD3C6; --road-edge:#DCD4C4; --path-edge:#CFC8BB;
   --shadow:0 6px 24px rgba(0,0,0,.45);
 }
 *{box-sizing:border-box}
@@ -85,6 +85,8 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 .mk.bus{fill:#3A73B8;stroke:#27578F}
 .busg{fill:#FFFFFF;stroke:none;pointer-events:none}
 .busg .win{fill:#3A73B8}
+.mk.ev{fill:#2F6FE4;stroke:#1E4FA8}
+.evg{fill:#FFC940;stroke:none;pointer-events:none}
 .mk.shelter.sel{stroke:var(--accent)}
 .mkin.shelterin{fill:#C0564C;stroke:none;pointer-events:none}
 .mk.bin.sel{stroke:var(--accent)!important}
@@ -262,6 +264,7 @@ var TYPES = {
   shelter:{he:"מיגונית",     geo:"area", col:"var(--shelter)", dw:6.0, dh:4.8},
   bin:    {he:"פח / מיכל",   geo:"area", col:"var(--bin)",     dw:2.4, dh:2.4},
   bus:    {he:"תחנת אוטובוס", geo:"area", col:"var(--bus)",     dw:4.0, dh:4.0},
+  ev:     {he:"עמדת טעינה חשמלית", geo:"area", col:"var(--ev)", dw:1.8, dh:1.8},
   plaza:  {he:"רחבה מרוצפת",  geo:"area", col:"var(--plaza)",   dw:20, dh:14},
   /* אזור גינון (2026-09-08). לא מבנה ולא שטח — חלוקה ניהולית של השיכון
      ל-12 אזורי אחריות. היא מה שמאפשר לתקלה שדייר נעץ על המפה לדעת לבד
@@ -277,6 +280,10 @@ var BUS_G=[
   ['circle',{cx:8.4,cy:18.6,r:1.7,class:''}],
   ['circle',{cx:15.6,cy:18.6,r:1.7,class:''}]
 ];
+/* סמל ברק הטעינה, בתיבת 24×24 — אותו סמל בדיוק עובר לרנדרר של המפה */
+var EV_G=[
+  ['path',{d:'M12.8 2 5.2 13.2h5.1l-1.1 8.8 8.6-11.6h-5.4l1.4-8.4z',class:''}]
+];
 /* טבלת המיכלים — צורה, צבע ומידה אמיתית במטרים.
    אותה טבלה בדיוק תעבור לרנדרר של המפה, כדי שהכלי והמפה ייראו זהים. */
 var BIN_KINDS = {
@@ -288,7 +295,7 @@ var BIN_KINDS = {
   glass:   {he:'מיכל זכוכית',             shape:'oval',   fill:'#7A5AA8', dw:3.8, dh:2.4},
   ewaste:  {he:'מיכל אלקטרוניקה',         shape:'rect',   fill:'#E3CE63', dw:2.8, dh:2.0}
 };
-function isMarker(o){ return o.type==='bin' || o.type==='shelter' || o.type==='bus'; }
+function isMarker(o){ return o.type==='bin' || o.type==='shelter' || o.type==='bus' || o.type==='ev'; }
 var STREET_DASH=[3.6,3.0];      /* מ׳: קו, רווח */
 
 /* ============================================================================
@@ -768,6 +775,15 @@ function renderShapes(){
       gg.setAttribute('class','busg');
       BUS_G.forEach(function(p){ var n=el(p[0],p[1]); if(p[1].class) n.setAttribute('class',p[1].class); gg.appendChild(n); });
       g.appendChild(gg);
+    } else if(o.type==='ev'){
+      var evr=Math.min(w,h)/2;
+      body=el('circle',{cx:0,cy:0,r:evr.toFixed(1)});
+      body.setAttribute('class','mk ev'+(sel===o.id?' sel':''));
+      g.appendChild(body);
+      var egs=evr*2*0.62/24, egg=el('g',{transform:'translate('+(-evr*0.62).toFixed(1)+' '+(-evr*0.62).toFixed(1)+') scale('+egs.toFixed(4)+')'});
+      egg.setAttribute('class','evg');
+      EV_G.forEach(function(p){ var n=el(p[0],p[1]); if(p[1].class) n.setAttribute('class',p[1].class); egg.appendChild(n); });
+      g.appendChild(egg);
     } else {
       var K=BIN_KINDS[o.kind]||BIN_KINDS.trash, s=K.shape;
       if(s==='circle') body=el('circle',{cx:0,cy:0,r:(Math.min(w,h)/2).toFixed(1)});
