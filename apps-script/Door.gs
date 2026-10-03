@@ -1352,7 +1352,7 @@ function doorOpenFastInner_(body, reason, claimUid, claimFid, sess, t0) {
  * ========================================================================== */
 var GYM_SYNC_ACTIONS = {
   submitGymApplication: 1, createGymMembership: 1, reportGymPayment: 1,
-  confirmGymPayment: 1, rejectGymPayment: 1, recordGymPayment: 1, activateGymManual: 1,
+  confirmGymPayment: 1, rejectGymPayment: 1, recordGymPayment: 1, activateGymManual: 1, updateGymPayment: 1, voidGymPayment: 1,
   extendGymMembership: 1, renewGymMembership: 1, updateGymMembership: 1
 };
 

@@ -219,6 +219,8 @@ var ACTION_PERMS = {
   rejectGymPayment: PERM_GYM,
   recordGymPayment: PERM_GYM,
   activateGymManual: PERM_GYM,         // הפעלה ידנית בכל סטטוס (3.10.26)
+  updateGymPayment: PERM_GYM,          // עריכת תשלום ביומן (3.10.26)
+  voidGymPayment: PERM_GYM,            // ביטול תשלום ביומן (3.10.26)
   extendGymMembership: PERM_GYM,
   updateGymMembership: PERM_GYM,
   // מצב המודול (2026-09-16) — עדכון ישיר של הגדרה בודדת (קוד כניסה /
@@ -2046,6 +2048,8 @@ function doPostDispatch_(ss, body) {
       case 'rejectGymPayment':      return json_(rejectGymPayment_(ss, body));
       case 'recordGymPayment':      return json_(recordGymPayment_(ss, body));
       case 'activateGymManual':     return json_(activateGymManual_(ss, body));
+      case 'updateGymPayment':      return json_(updateGymPayment_(ss, body));
+      case 'voidGymPayment':        return json_(voidGymPayment_(ss, body));
       case 'extendGymMembership':   return json_(extendGymMembership_(ss, body));
       case 'renewGymMembership':    return json_(renewGymMembership_(ss, body));
       case 'updateGymMembership':   return json_(updateGymMembership_(ss, body));
@@ -4285,7 +4289,7 @@ var ACTION_DOMAIN = {
   // מכון כושר
   submitGymApplication: 'gym', createGymMembership: 'gym', requestGymDeclaration: 'gym',
   reportGymPayment: 'gym', confirmGymPayment: 'gym', rejectGymPayment: 'gym',
-  recordGymPayment: 'gym', activateGymManual: 'gym', extendGymMembership: 'gym', renewGymMembership: 'gym',
+  recordGymPayment: 'gym', activateGymManual: 'gym', updateGymPayment: 'gym', voidGymPayment: 'gym', extendGymMembership: 'gym', renewGymMembership: 'gym',
   updateGymMembership: 'gym',
   // ועד השיכון ושירותים
   saveCommitteeTree: 'committee', saveCommitteeCategories: 'committee',
@@ -10427,6 +10431,14 @@ function gymActivate_(ss, body, isManual) {
     var amount = Number(body.amount || 0);
     if (!(amount > 0)) return { ok: false, error: 'יש להזין את הסכום שהתקבל' };
 
+    /* 3.10.26 — מגן מכפילות: אותו סכום לאותו מנוי בתוך 3 דקות = כנראה לחיצה כפולה
+       (המסך הציג מצב ישן והמנהל רשם שוב). רישום מכוון של תשלום זהה — דרך יומן התשלומים. */
+    var dupAgo = gymRecentDuplicatePayment_(ss, id, amount);
+    if (dupAgo !== null) {
+      return { ok: false, error: 'כבר נרשם תשלום זהה (' + amount + ' ₪) לפני ' + dupAgo + ' שניות. ' +
+               'אם זה תשלום נוסף ולא כפילות — המתן כמה דקות או הוסף אותו דרך "יומן תשלומים".' };
+    }
+
     /* 3.10.26 — body.activate === false = "רק לרשום תשלום": הסכום והתוקף נרשמים,
        אבל הסטטוס לא משתנה, אין מייל ואין הזמנת Nuki. נועד למנוי שעוד לא חתם על
        הצהרה (או כל סטטוס אחר) — המנהל רשם שהתושב שילם בלי להפעיל אותו. */
@@ -10471,6 +10483,126 @@ function gymActivate_(ss, body, isManual) {
     } catch (mailErr) { Logger.log('מייל הפעלת מנוי נכשל: ' + mailErr); }
 
     return { ok: true, id: id, status: GYM_ST_ACTIVE, validUntil: validLabel, sync: sync };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================================
+ *  יומן תשלומים — עריכה וביטול   (3.10.26, בקשת יועד: "לראות את יומן התשלומים ולערוך")
+ * ----------------------------------------------------------------------------
+ *  היומן הוא מקור האמת לסכום ששולם (gymPaymentSync_ מסכם ממנו), ולכן תיקון תשלום
+ *  = תיקון שורה ביומן + סנכרון מחדש. **ביטול אינו מחיקה**: סוג האירוע הופך ל"תשלום
+ *  מבוטל" והשורה נשארת, כדי שתמיד יהיה אפשר להסביר בדיעבד מה קרה. כל עריכה/ביטול
+ *  נרשמים כאירוע נפרד עם שם המנהל, הערך הישן והחדש.
+ * ========================================================================== */
+
+/** מחזיר כמה שניות עברו מתשלום זהה (אותו מנוי+סכום) בתוך 3 הדקות האחרונות, אחרת null. */
+function gymRecentDuplicatePayment_(ss, id, amount) {
+  var logSh = ss.getSheetByName(GYM_LOG_SHEET);
+  if (!logSh || logSh.getLastRow() < 2) return null;
+  var lc = gymCols_(logSh);
+  if (!lc['מזהה מנוי'] || !lc['סוג אירוע'] || !lc['סכום'] || !lc['תאריך']) return null;
+  var last = logSh.getLastRow();
+  var from = Math.max(2, last - 29);                       // מספיק לבדוק את 30 האחרונות
+  var rows = logSh.getRange(from, 1, last - from + 1, logSh.getLastColumn()).getValues();
+  var now = Date.now();
+  for (var i = rows.length - 1; i >= 0; i--) {
+    if (String(rows[i][lc['מזהה מנוי'] - 1]).trim() !== String(id).trim()) continue;
+    if (String(rows[i][lc['סוג אירוע'] - 1]).trim() !== 'תשלום') continue;
+    if (Number(rows[i][lc['סכום'] - 1]) !== Number(amount)) continue;
+    var dt = rows[i][lc['תאריך'] - 1];
+    var t = (dt instanceof Date) ? dt.getTime() : new Date(dt).getTime();
+    if (!isNaN(t) && now - t >= 0 && now - t < 180000) return Math.round((now - t) / 1000);
+  }
+  return null;
+}
+
+/** מאתר שורת אירוע ביומן לפי "מזהה אירוע". מחזיר מספר שורה או 0. */
+function gymLogRowByEvent_(logSh, lc, eventId) {
+  if (!lc['מזהה אירוע'] || logSh.getLastRow() < 2) return 0;
+  var ids = logSh.getRange(2, lc['מזהה אירוע'], logSh.getLastRow() - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]).trim() === String(eventId).trim()) return i + 2;
+  }
+  return 0;
+}
+
+/** עריכת תשלום ביומן. body: { eventId, amount?, date? 'YYYY-MM-DD', method?, reference?, note? } */
+function updateGymPayment_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var logSh = ss.getSheetByName(GYM_LOG_SHEET);
+    var lc = gymCols_(logSh);
+    var row = gymLogRowByEvent_(logSh, lc, body.eventId);
+    if (!row) return { ok: false, error: 'התשלום לא נמצא ביומן' };
+    var cur = logSh.getRange(row, 1, 1, logSh.getLastColumn()).getValues()[0];
+    function get(n) { return lc[n] ? cur[lc[n] - 1] : ''; }
+    if (String(get('סוג אירוע')).trim() !== 'תשלום') return { ok: false, error: 'אפשר לערוך רק תשלום פעיל (לא מבוטל)' };
+    var memberId = String(get('מזהה מנוי')).trim();
+
+    var changes = [];
+    function setCol(n, v) { if (lc[n]) logSh.getRange(row, lc[n]).setValue(v); }
+    if (body.amount != null && body.amount !== '') {
+      var amt = Number(body.amount);
+      if (!(amt > 0)) return { ok: false, error: 'הסכום חייב להיות גדול מאפס' };
+      if (amt !== Number(get('סכום'))) { changes.push('סכום ' + get('סכום') + '→' + amt); setCol('סכום', amt); }
+    }
+    if (body.date) {
+      var d = gymToDate_(body.date);
+      if (!d) return { ok: false, error: 'תאריך לא תקין' };
+      d.setHours(12, 0, 0, 0);
+      var oldD = get('תאריך');
+      var oldTxt = (oldD instanceof Date) ? Utilities.formatDate(oldD, Session.getScriptTimeZone(), 'yyyy-MM-dd') : String(oldD).slice(0, 10);
+      var newTxt = Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      if (oldTxt !== newTxt) { changes.push('תאריך ' + oldTxt + '→' + newTxt); setCol('תאריך', d); }
+    }
+    if (body.method != null && String(body.method) !== String(get('אמצעי תשלום'))) {
+      changes.push('אמצעי ' + get('אמצעי תשלום') + '→' + body.method); setCol('אמצעי תשלום', body.method);
+    }
+    if (body.reference != null && String(body.reference) !== String(get('אסמכתא'))) {
+      changes.push('אסמכתא עודכנה'); setCol('אסמכתא', body.reference);
+    }
+    if (!changes.length) return { ok: true, unchanged: true, id: memberId };
+    SpreadsheetApp.flush();
+    gymLog_(ss, memberId, 'עריכת תשלום', {
+      by: body._email || '',
+      note: 'אירוע ' + body.eventId + ': ' + changes.join(' · ') + (body.note ? ' | סיבה: ' + body.note : '')
+    });
+    return { ok: true, id: memberId, sync: gymPaymentSync_(ss, memberId) };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** ביטול תשלום (לא מחיקה). body: { eventId, reason? } */
+function voidGymPayment_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    ensureGymSheets_(ss);
+    var logSh = ss.getSheetByName(GYM_LOG_SHEET);
+    var lc = gymCols_(logSh);
+    var row = gymLogRowByEvent_(logSh, lc, body.eventId);
+    if (!row) return { ok: false, error: 'התשלום לא נמצא ביומן' };
+    if (String(logSh.getRange(row, lc['סוג אירוע']).getValue()).trim() !== 'תשלום') {
+      return { ok: false, error: 'התשלום כבר מבוטל' };
+    }
+    var memberId = String(logSh.getRange(row, lc['מזהה מנוי']).getValue()).trim();
+    var amt = logSh.getRange(row, lc['סכום']).getValue();
+    logSh.getRange(row, lc['סוג אירוע']).setValue('תשלום מבוטל');
+    SpreadsheetApp.flush();
+    gymLog_(ss, memberId, 'ביטול תשלום', {
+      by: body._email || '', amount: amt,
+      note: 'אירוע ' + body.eventId + ' בוטל' + (body.reason ? ' | סיבה: ' + body.reason : '')
+    });
+    return { ok: true, id: memberId, sync: gymPaymentSync_(ss, memberId) };
   } catch (err) {
     return { ok: false, error: String(err) };
   } finally {

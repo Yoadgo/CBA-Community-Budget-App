@@ -31,6 +31,7 @@ function env(initial) {
     gymRowWriter_: () => ({ cols: {}, get: k => row[k] == null ? '' : row[k], set: (k, v) => { row[k] = v; }, flush() {} }),
     gymLog_: (ss, id, type, extra) => logs.push({ type, extra }),
     gymPaymentSync_: () => ({ ok: true, label: 'מסונכרן' }),
+    gymRecentDuplicatePayment_: () => null,   // המגן נבדק במארז היומן
     sendResidentTemplate_: (ss, key) => mails.push(key),
   };
   box.sh = { getRange: (r, c) => ({ getValue: () => { const k = Object.keys(box.gymCols_()).find(x => box.gymCols_()[x] === c); return row[k] == null ? '' : row[k]; } }) };

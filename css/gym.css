@@ -474,3 +474,13 @@
 
 /* GMA2 (גל 14, 1.10.26) — "📷 מילוי מצילום" במגירת רישום תשלום ידני */
 .gym-field label.ga-scan { display: inline-flex; align-items: center; cursor: pointer; color: var(--ink); margin-bottom: 0; font-weight: 600; }
+
+/* 3.10.26 — יומן תשלומים בכרטיס מנוי */
+.ga-paylist { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.ga-pay { border: 1px solid var(--border, #e5e7eb); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; background: #fff; }
+.ga-pay.is-void { opacity: .6; background: #f9fafb; }
+.ga-pay.is-void .ga-pay__main b { text-decoration: line-through; }
+.ga-pay small { color: var(--muted, #6b7280); }
+.ga-pay__btns { display: flex; gap: 6px; padding-top: 4px; }
+.ga-pay__btns button { font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 9px; cursor: pointer; border: 1px solid var(--border, #e5e7eb); background: #fff; }
+.ga-pay__btns button.ga-menu__danger { color: #b91c1c; border-color: #fecaca; }
