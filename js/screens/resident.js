@@ -2182,26 +2182,52 @@ CBA.screens = CBA.screens || {};
     return POI_CAT[k] || (k.indexOf('חני') === 0 ? ['park2','house'] : ['comm','house']);
   }
 
-  /* ---- טבלת המיכלים — זהה בול לזו שבכלי הכיול ---- */
+  /* ---- טבלת המיכלים — זהה בול לזו שבכלי הכיול ----
+     3.10.26: נוספו 'he' (טקסט לתווית בזום קרוב, ר' MK_LABEL למטה) ו-'ic'
+     (גליף קו מיובא, לא מצויר — Lucide/Heroicons, ר' הערה לפני ה-glyphs). */
   var BIN_KINDS = {
-    trash:   { shape:'circle', fill:'#3E9B54' },
-    recycle: { shape:'circle', fill:'#E08A2B' },
-    glass:   { shape:'oval',   fill:'#7A5AA8' },
-    carton:  { shape:'square', fill:'#C9463D' },
-    ewaste:  { shape:'rect',   fill:'#E3CE63' },
-    bulky:   { shape:'rect',   fill:'#2F7D46' },
-    garden:  { shape:'rect',   fill:'#D8C24F', dash:1 }
+    trash:   { shape:'circle', fill:'#3E9B54', he:'פח זבל',                  ic:'trash' },
+    recycle: { shape:'circle', fill:'#E08A2B', he:'פח מחזור',                ic:'recycle' },
+    glass:   { shape:'oval',   fill:'#7A5AA8', he:'מיכל זכוכית',             ic:'glass' },
+    carton:  { shape:'square', fill:'#C9463D', he:'כלוב קרטונים',            ic:'carton' },
+    ewaste:  { shape:'rect',   fill:'#E3CE63', he:'מיכל אלקטרוניקה',         ic:'ewaste', dark:1 },
+    bulky:   { shape:'rect',   fill:'#2F7D46', he:'מיכלית פסולת בניין/גדולה', ic:'bulky' },
+    garden:  { shape:'rect',   fill:'#D8C24F', he:'מתחם פינוי גזם', dash:1,  ic:'garden', dark:1 }
   };
+  /* ---- גליפי קו מיובאים (3.10.26) — לא ציור ביד ----
+     פח/מגן/תחנה הם הגליפים האמיתיים מ-Heroicons (פח, מגן — בלי ה-✓) ומ-Lucide
+     (שאר סוגי הפח + תחנת אוטובוס, ל-Heroicons אין להם מקביל). קו לבן בלבד
+     (fill:none, stroke בלבד) כמו NAV_ICONS בתפריט — לא "שטח צבוע" כמו שהיה
+     לפני כן. dark:1 ב-BIN_KINDS (אלקטרוניקה/גזם) → stroke כהה במקום לבן,
+     כי הרקע שלהם בהיר מדי לקו לבן. */
+  var ICON_STROKE = ' fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"';
+  var BIN_GLYPH = {
+    trash:   '<path d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" stroke="#fff"' + ICON_STROKE + '/>',
+    recycle: '<path d="M7 19H4.815a1.83 1.83 0 0 1-1.57-.881 1.785 1.785 0 0 1-.004-1.784L7.196 9.5M11 19h8.203a1.83 1.83 0 0 0 1.556-.89 1.784 1.784 0 0 0 0-1.775l-1.226-2.12M14 16l-3 3 3 3M8.293 13.596 7.196 9.5 3.1 10.598M9.344 5.811l1.093-1.892A1.83 1.83 0 0 1 11.985 3a1.784 1.784 0 0 1 1.546.888l3.943 6.843M13.378 9.633l4.096 1.098 1.097-4.096" stroke="#fff"' + ICON_STROKE + '/>',
+    glass:   '<path d="M8 22h8M7 10h10M12 15v7M12 15a5 5 0 0 0 5-5c0-2-.5-4-2-8H9c-1.5 4-2 6-2 8a5 5 0 0 0 5 5Z" stroke="#fff"' + ICON_STROKE + '/>',
+    carton:  '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73zM12 22V12m-8.7-5 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7M7.5 4.27l9 5.15" stroke="#fff"' + ICON_STROKE + '/>',
+    ewaste:  '<rect width="16" height="16" x="4" y="4" rx="2" stroke="#3A3226"' + ICON_STROKE + '/><rect width="6" height="6" x="9" y="9" rx="1" stroke="#3A3226"' + ICON_STROKE + '/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2" stroke="#3A3226"' + ICON_STROKE + '/>',
+    bulky:   '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2M15 18H9M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" stroke="#fff"' + ICON_STROKE + '/><circle cx="17" cy="18" r="2" stroke="#fff"' + ICON_STROKE + '/><circle cx="7" cy="18" r="2" stroke="#fff"' + ICON_STROKE + '/>',
+    garden:  '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10ZM2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" stroke="#3A3226"' + ICON_STROKE + '/>'
+  };
+  /* מיגונית — Heroicons ShieldCheckIcon, בלי תת-הנתיב של ה-✓ (למגן ריק). */
+  var SHIELD_GLYPH =
+    '<path d="M12 2.714A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" stroke="#fff"' + ICON_STROKE + '/>';
+  /* תחנת אוטובוס — Lucide BusIcon (ל-Heroicons אין סמל תחבורה ציבורית).
+     3.10.26: הוחלף מ"שטח צבוע" (מלבנים לבנים) לקו, ו-bus הוצא מ-
+     PROD_SKIP_EXPORT בכלי הכיול כך שתחנות שסומנו מתחילות להגיע לכאן. */
   var BUS_GLYPH =
-    '<rect x="5" y="3.6" width="14" height="13.4" rx="2.6" fill="#fff"/>' +
-    '<rect x="6.6" y="5.6" width="10.8" height="4.6" rx="1" fill="#3A73B8"/>' +
-    '<rect x="6.6" y="12.2" width="3.2" height="2.2" rx=".8" fill="#3A73B8"/>' +
-    '<rect x="14.2" y="12.2" width="3.2" height="2.2" rx=".8" fill="#3A73B8"/>' +
-    '<circle cx="8.4" cy="18.6" r="1.7" fill="#fff"/>' +
-    '<circle cx="15.6" cy="18.6" r="1.7" fill="#fff"/>';
-  /* עמדת טעינה חשמלית (3.10.26) — עיגול כחול + ברק צהוב, זהה בול לכלי הכיול. */
+    '<path d="M8 6v6M15 6v6M2 12h19.6M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3M9 18h5" stroke="#fff"' + ICON_STROKE + '/><circle cx="7" cy="18" r="2" stroke="#fff"' + ICON_STROKE + '/><circle cx="16" cy="18" r="2" stroke="#fff"' + ICON_STROKE + '/>';
+  /* עמדת טעינה חשמלית (3.10.26) — עיגול כחול + ברק צהוב, זהה בול לכלי הכיול.
+     חריגה מכוונת לשפת הקו — הנחיה מדויקת של יועד, לא נוגעים. */
   var EV_GLYPH =
     '<path d="M12.8 2 5.2 13.2h5.1l-1.1 8.8 8.6-11.6h-5.4l1.4-8.4z" fill="#FFC940"/>';
+  /* טקסט תווית בזום קרוב לסוגים שאינם פח (ר' MK_LABEL ביישום התוויות למטה). */
+  var MK_LABEL = { shelter: 'מיגונית', bus: 'תחנת אוטובוס', ev: 'עמדת טעינה' };
+  /* הגדלה ויזואלית של פח/מיגונית (3.10.26, לבקשת יועד) — +20% בציור בלבד,
+     לא במטרים השמורים (o.w/o.h ב-mapGeo.js) — כך זה חל גם על כל האובייקטים
+     שכבר קיימים במפה, בלי מיגרציית נתונים. */
+  var MK_BIGGER = 1.2;
 
   /* ---- MAP_TILES: משבצת לכל מספר בית ----
      נשמר באחוזי־עולם בדיוק כמו במפה הישנה, כדי שהחיפוש, goToHouse, "הבית שלי"
@@ -2460,7 +2486,7 @@ CBA.screens = CBA.screens || {};
         }
 
         function markerG(o, inner, rot, grp) {
-          var mn = 13;                                   /* מינימום פיקסלי־עולם */
+          var mn = 20;                                   /* מינימום פיקסלי־עולם (3.10.26: 13→20, לבקשת יועד) */
           var s = Math.max(1, mn / Math.max(4, Math.min(o.w, o.h)));
           var r = rot === undefined ? (o.r || 0) : rot;
           return E('g', { 'class': 'm2-mk', 'data-x': o.x, 'data-y': o.y, 'data-r': r,
@@ -2534,12 +2560,17 @@ CBA.screens = CBA.screens || {};
           } else if (o.t === 'green') {
             green += rectAt(o, o.w, o.h, 'm2-green', 4);
           } else if (o.t === 'shelter') {
+            /* +20% ויזואלי (MK_BIGGER) — רק בציור, לא ב-o.w/o.h השמורים. */
+            var shw = o.w * MK_BIGGER, shh = o.h * MK_BIGGER;
+            var shbw = shw * 0.56, shbh = shh * 0.56, shbm = Math.min(shbw, shbh);
             mkShel += markerG(o,
-              E('rect', { x: (-o.w / 2).toFixed(1), y: (-o.h / 2).toFixed(1), width: o.w, height: o.h,
-                rx: (Math.min(o.w, o.h) * 0.12).toFixed(1), 'class': 'm2-shelter' }) +
-              E('rect', { x: (-o.w * 0.28).toFixed(1), y: (-o.h * 0.28).toFixed(1),
-                width: (o.w * 0.56).toFixed(1), height: (o.h * 0.56).toFixed(1),
-                rx: (Math.min(o.w, o.h) * 0.11).toFixed(1), 'class': 'm2-shelter-in' }), undefined, 'shelter');
+              E('rect', { x: (-shw / 2).toFixed(1), y: (-shh / 2).toFixed(1), width: shw.toFixed(1), height: shh.toFixed(1),
+                rx: (Math.min(shw, shh) * 0.12).toFixed(1), 'class': 'm2-shelter' }) +
+              E('rect', { x: (-shw * 0.28).toFixed(1), y: (-shh * 0.28).toFixed(1),
+                width: shbw.toFixed(1), height: shbh.toFixed(1),
+                rx: (Math.min(shw, shh) * 0.11).toFixed(1), 'class': 'm2-shelter-in' }) +
+              E('g', { transform: 'translate(' + (-shbm * 0.31).toFixed(1) + ' ' + (-shbm * 0.31).toFixed(1) +
+                ') scale(' + (shbm * 0.62 / 24).toFixed(4) + ')' }, SHIELD_GLYPH), undefined, 'shelter');
           } else if (o.t === 'bus') {
             var sq = Math.min(o.w, o.h);
             mkBus += markerG(o,
@@ -2554,12 +2585,17 @@ CBA.screens = CBA.screens || {};
               E('g', { transform: 'translate(' + (-evr * 0.62).toFixed(1) + ' ' + (-evr * 0.62).toFixed(1) +
                 ') scale(' + (evr * 2 * 0.62 / 24).toFixed(4) + ')' }, EV_GLYPH), 0, 'traffic');
           } else if (o.t === 'bin') {
+            /* +20% ויזואלי (MK_BIGGER) — רק בציור, לא ב-o.w/o.h השמורים. */
             var K = BIN_KINDS[o.k] || BIN_KINDS.trash, inner;
-            if (K.shape === 'circle') inner = E('circle', { cx: 0, cy: 0, r: (Math.min(o.w, o.h) / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
-            else if (K.shape === 'oval') inner = E('ellipse', { cx: 0, cy: 0, rx: (o.w / 2).toFixed(1), ry: (o.h / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
-            else inner = E('rect', { x: (-o.w / 2).toFixed(1), y: (-o.h / 2).toFixed(1), width: o.w, height: o.h,
-                rx: (Math.min(o.w, o.h) * (K.shape === 'square' ? 0.14 : 0.22)).toFixed(1),
+            var bnw = o.w * MK_BIGGER, bnh = o.h * MK_BIGGER, bnm = Math.min(bnw, bnh);
+            if (K.shape === 'circle') inner = E('circle', { cx: 0, cy: 0, r: (bnm / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
+            else if (K.shape === 'oval') inner = E('ellipse', { cx: 0, cy: 0, rx: (bnw / 2).toFixed(1), ry: (bnh / 2).toFixed(1), 'class': 'm2-bin', style: 'fill:' + K.fill });
+            else inner = E('rect', { x: (-bnw / 2).toFixed(1), y: (-bnh / 2).toFixed(1), width: bnw.toFixed(1), height: bnh.toFixed(1),
+                rx: (bnm * (K.shape === 'square' ? 0.14 : 0.22)).toFixed(1),
                 'class': 'm2-bin' + (K.dash ? ' is-dash' : ''), style: 'fill:' + K.fill });
+            var bglyph = BIN_GLYPH[K.ic] || BIN_GLYPH.trash;
+            inner += E('g', { transform: 'translate(' + (-bnm * 0.31).toFixed(1) + ' ' + (-bnm * 0.31).toFixed(1) +
+                ') scale(' + (bnm * 0.62 / 24).toFixed(4) + ')' }, bglyph);
             mkBin += markerG(o, inner, undefined, 'waste');
           } else {
             pub += rectAt(o, o.w, o.h, 'm2-pub', m2p(0.8));
@@ -2596,6 +2632,28 @@ CBA.screens = CBA.screens || {};
       })();
 
       var poiSeq = 0;
+
+      /* ---- תוויות פח/מיגונית/אוטובוס/טעינה בזום קרוב (3.10.26) ----
+         לא מנגנון חדש: עוגן "שבב" שקוף (0×0 — אין לו תוכן, אז אין לו שטח;
+         הסמל עצמו הוא ה-SVG שנבנה למעלה) שנרשם באותה מערכת collectPoi()/
+         layoutPoi() שמפעילה את כל שאר תוויות המפה. כשכמה פחים עומדים
+         צמודים, רק למי שיש מקום נקי (ללא התנגשות) תוצג תווית — השאר נופלים
+         ולא נדחסים, ממש כמו תוויות מרחב/רחוב שקיימות כבר. */
+      (GEO.objects || []).forEach(function (o) {
+        if (o.t !== 'bin' && o.t !== 'shelter' && o.t !== 'bus' && o.t !== 'ev') return;
+        var txt = o.t === 'bin' ? (BIN_KINDS[o.k] || BIN_KINDS.trash).he : MK_LABEL[o.t];
+        if (!txt) return;
+        var c = center(o);
+        var grp = o.t === 'bin' ? 'waste' : (o.t === 'shelter' ? 'shelter' : 'traffic');
+        var el0 = document.createElement("div");
+        el0.className = "map-poi map-poi--mk";
+        el0.dataset.g = grp;
+        el0.style.cssText = "left:" + c[0] + "px;top:" + c[1] + "px";
+        el0.dataset.a = Math.round(area(o));
+        worldEl.appendChild(el0);
+        var id0 = 'p' + (poiSeq++); el0.dataset.lbl = id0;
+        poiLabel(txt, c[0], c[1] + 10, area(o), id0, grp);
+      });
 
       /* ---- שבב P לכל חניון, ותווית שם אם יש ---- */
       (GEO.objects || []).forEach(function (o) {
