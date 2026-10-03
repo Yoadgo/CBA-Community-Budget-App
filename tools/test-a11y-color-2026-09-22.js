@@ -84,10 +84,8 @@ ok('⚠️ ומצב צפוי נרשם בשובל בלבד — כדי לא לזה
    /if \(trailOnly\)/.test(APP) && /CBA\.diag\.log\(line\)/.test(APP));
 
 section('6. גרסה');
-const swV = (SW.match(/var VERSION = "([^"]+)"/) || [, ''])[1];
-const htmlV = [...new Set((HTML.match(/\?v=[0-9a-z]+/g) || []).map(x => x.slice(3)))];
-ok('index.html מחזיק ערך אחד', htmlV.length === 1, htmlV.join(','));
-ok('🔴 והוא זהה ל-service-worker', htmlV[0] === swV, htmlV[0] + ' מול ' + swV);
+/* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
+ok('🔴 כל ?v= ב-index.html הוא טביעת האצבע של הקובץ, ו-service-worker תואם', require('./stamp-versions.js').check().length === 0);
 
 console.log('\n' + (fail ? '✗ ' : '✓ ') + pass + ' עברו · ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

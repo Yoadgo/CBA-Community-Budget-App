@@ -46,7 +46,7 @@ ok('שגיאת כתיבה — לא זורקת', (() => { const o = sb.fsSet_; sb
 
 console.log('\n3. החיבורים');
 ok('🔴 מתעדכן בכל שינוי בתחום תושבים (bumpRev_)',
-   /if \(doms\.indexOf\('residents'\) !== -1\) famRegistryWrite_\(\);/.test(fn('bumpRev_')));
+   /if \(doms\.indexOf\('residents'\) !== -1\) \{ permCacheBump_\(\); famRegistryWrite_\(\); \}/.test(fn('bumpRev_')));   // 3.10 — יחד עם ביטול מטמון ההרשאות
 ok('🔴 ובכל שעה (רשת ביטחון)', /hjM\('famRegistryWrite_'\);\s*var fr = famRegistryWrite_\(ss\);/.test(CODE));
 ok('🔴 הכלל קורא את אותו נתיב', /documents\/famRegistry\/ids\)\.data\.ids/.test(RULES) && /FS_FAM_REGISTRY = 'famRegistry\/ids'/.test(CODE));
 

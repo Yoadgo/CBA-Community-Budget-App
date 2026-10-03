@@ -120,11 +120,9 @@ section('7. ⚠️ שער הגרסה — קוד לקוח שלא מגיע לדפ�
 const tags = (IDX.match(/(?:src|href)="[^"]*\?v=[0-9a-zA-Z]+"/g) || [])
                .map(t => (t.match(/\?v=([0-9a-zA-Z]+)/) || [])[1]);
 ok('נמצאו תגים עם גרסה ב-index.html', tags.length > 0, String(tags.length));
-const v = tags[0];
-const uniq = Array.from(new Set(tags));
-ok('🔴 כל התגים באותה גרסה בדיוק', uniq.length === 1, uniq.join(','));
-ok('🔴🔴 ו-service-worker.js על אותו ערך בדיוק',
-   new RegExp('var VERSION = "' + v + '";').test(SW),
+/* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
+ok('🔴🔴 כל תג נושא את טביעת האצבע של הקובץ שלו, ו-service-worker.js תואם',
+   require('./stamp-versions.js').check().length === 0,
    (SW.match(/var VERSION = "[^"]*"/) || [''])[0]);
 
 section('8. כלל האבטחה תואם לשאילתה');

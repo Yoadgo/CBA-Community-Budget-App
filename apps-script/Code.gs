@@ -393,11 +393,30 @@ var GET_ACTION_PERMS = {
 };
 
 /** הסוד שבו נחתמים מושבי ההתחברות. נוצר פעם אחת ונשמר במאפייני הסקריפט. */
-function sessionSecret_() {
+/* (3.10.2026, קופון Properties) — סוד המושב ודור המושב נקראים **בכל בקשה
+   מאומתת** (verifySession_) ומשתנים כמעט אף פעם. בחשבון Gmail המכסה היא
+   50,000 קריאות Properties ביום, ועם 80 משתמשים זה היה הצרכן הגדול
+   ביותר. עכשיו הם יושבים ב-CacheService (6 שעות); Properties נקרא רק
+   כשהמטמון ריק. revokeAllSessions מנקה את המטמון מיד. */
+var SESSION_CACHE_SEC = 21600;
+function sessionCached_(cacheKey, propKey, build) {
+  var c = null;
+  try { c = CacheService.getScriptCache(); } catch (e) { c = null; }
+  if (c) { try { var hit = c.get(cacheKey); if (hit) return hit; } catch (e2) {} }
   var props = PropertiesService.getScriptProperties();
-  var s = props.getProperty('CBA_SESSION_SECRET');
-  if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); props.setProperty('CBA_SESSION_SECRET', s); }
-  return s;
+  var v = props.getProperty(propKey);
+  if (!v && build) { v = build(); props.setProperty(propKey, v); }
+  if (c && v) { try { c.put(cacheKey, v, SESSION_CACHE_SEC); } catch (e3) {} }
+  return v;
+}
+function sessionCacheClear_() {
+  try { CacheService.getScriptCache().removeAll(['cba_sess_secret', 'cba_sess_epoch']); } catch (e) {}
+}
+
+function sessionSecret_() {
+  return sessionCached_('cba_sess_secret', 'CBA_SESSION_SECRET', function () {
+    return Utilities.getUuid() + Utilities.getUuid();
+  });
 }
 
 /* מושב חתום (2026-08-07). למה לא להשתמש בטוקן של גוגל לכל כתיבה? כי הוא פג אחרי
@@ -410,7 +429,7 @@ function sessionSecret_() {
  * מושב ישן שנחתם לפני השינוי הזה לא נושא שדה v, ולכן נחשב לדור 1 — כך
  * ההטמעה עצמה לא מנתקת אף אחד, אבל ההעלאה הראשונה כן תנתק את כולם. */
 function sessionEpoch_() {
-  return String(PropertiesService.getScriptProperties().getProperty('CBA_SESSION_EPOCH') || '1');
+  return String(sessionCached_('cba_sess_epoch', 'CBA_SESSION_EPOCH', null) || '1');   // 3.10 — דרך המטמון
 }
 
 /* ============================================================================
@@ -484,11 +503,58 @@ function parsePerms_(raw) {
  *    התכונה שנשמרה במכוון (ר' ההערה על "דור" המושבים). */
 var PERMS_MEMO_ = {};
 
-/** ההרשאות בפועל של אימייל נתון, נקראות מהגיליון בזמן אמת. */
-function permissionsFor_(email) {
+/* ===== מטמון הרשאות (3.10.2026, אושר ע"י יועד — 5 דקות) ================
+   עד היום כל בקשה מאומתת קראה את **כל טאב התושבים** (lookupResident_ ←
+   getDataRange) רק כדי לענות "מי זה ומה מותר לו" — ~0.5-1 שנייה בכל
+   בקשה, לכולם. עכשיו התשובה נשמרת ב-CacheService ל-5 דקות.
+
+   למה זה עדיין "שלילת הרשאה נכנסת לתוקף מיד": המפתח כולל **דור**
+   (cba_perm_gen). כל כתיבה בתחום 'residents' דרך האפליקציה (savePermissions,
+   saveResidentRow, approveSignup, saveMyProfile…) עוברת ב-bumpRev_, ושם
+   הדור מתחלף ← כל הערכים הישנים מתים באותו רגע. הפער היחיד: עריכה
+   **ישירה בתא בגיליון** נכנסת לתוקף תוך עד 5 דקות.
+
+   ⚠️ rowIndex **לא** נשמר במטמון — שורה שהוכנסה ישירות בגיליון הייתה
+   מזיזה את כולם, ופונקציה שכותבת לפי מספר שורה ישן הייתה פוגעת בשורה
+   של מישהו אחר. מי שצריך rowIndex קורא permRowIndex_(perm) — ר' שם.
+   ⚠️ "לא נמצא" לא נשמר במטמון (כמו הכלל ל-ok:false). */
+var PERM_CACHE_SEC = 300;
+var PERM_GEN_KEY = 'cba_perm_gen';
+function permGen_(c) {
+  var g = null;
+  try { g = c.get(PERM_GEN_KEY); } catch (e) {}
+  if (!g) { g = String(Date.now()); try { c.put(PERM_GEN_KEY, g, 21600); } catch (e2) {} }
+  return g;
+}
+function permCacheBump_() {
+  try { CacheService.getScriptCache().put(PERM_GEN_KEY, String(Date.now()), 21600); } catch (e) {}
+}
+/* מספר השורה של המשתמש — טרי מהגיליון כשהוא לא נסע עם ההרשאות (מטמון). */
+function permRowIndex_(perm) {
+  if (!perm) return 0;
+  if (perm.rowIndex) return perm.rowIndex;
+  if (!perm.email) return 0;
+  var r = lookupResident_(perm.email);
+  return (r && r.found) ? (r.rowIndex || 0) : 0;
+}
+
+/** ההרשאות בפועל של אימייל נתון. מהגיליון, או מהמטמון (≤5 דקות, ר' למעלה). */
+function permissionsFor_(email, residentOpt) {
   var memoKey = normalizeEmail_(email);
   if (memoKey && PERMS_MEMO_[memoKey]) return PERMS_MEMO_[memoKey];
-  var r = lookupResident_(email);
+  var c = null, ck = null;
+  if (memoKey && !residentOpt) {
+    try { c = CacheService.getScriptCache(); } catch (e) { c = null; }
+    if (c) {
+      ck = 'cba_perm:' + permGen_(c) + ':' + memoKey;
+      try {
+        var hit = c.get(ck);
+        if (hit) { var cached = JSON.parse(hit); PERMS_MEMO_[memoKey] = cached; return cached; }
+      } catch (e2) {}
+    }
+  }
+  /* residentOpt (3.10) — handleLogin_ כבר קרא את השורה; לא לקרוא את הטאב פעמיים. */
+  var r = residentOpt || lookupResident_(email);
   if (!r.found) return { found: false, active: false, perms: [], isSuper: false, isExternal: false };
   var active = !(r.status && r.status.indexOf('פעיל') === -1);
   var perms = parsePerms_(r.permissions);
@@ -503,12 +569,21 @@ function permissionsFor_(email) {
     isExternal: !!r.isExternal,
     familyId: r.familyId, family: r.family, house: r.house, firstName: r.firstName,
     slot: r.slot,   // 24.9 — משבצת האימייל (1/2): "סיור נצפה N" וכל נתון פר-דייר
+    email: memoKey, // 3.10 — כדי ש-permRowIndex_ יוכל לשלוף שורה טרייה
     /* 🔴 מספר השורה נוסע יחד עם ההרשאות (16.9, פעולה 2) — כך פונקציה
        שצריכה תא בודד מהשורה של המשתמש **לא קוראת שוב את כל טאב
-       התושבים**. `tourSeenFor_` עשתה בדיוק את זה, ר' שם. */
+       התושבים**. `tourSeenFor_` עשתה בדיוק את זה, ר' שם.
+       (3.10) נוסע רק כשהתשובה הגיעה מהגיליון עכשיו — לא דרך המטמון. */
     rowIndex: r.rowIndex
   };
   if (memoKey) PERMS_MEMO_[memoKey] = out;
+  if (c && ck && out.found) {
+    try {
+      var toCache = {};
+      Object.keys(out).forEach(function (k) { if (k !== 'rowIndex') toCache[k] = out[k]; });
+      c.put(ck, JSON.stringify(toCache), PERM_CACHE_SEC);
+    } catch (e3) {}
+  }
   return out;
 }
 
@@ -583,6 +658,7 @@ function revokeAllSessions() {
   var props = PropertiesService.getScriptProperties();
   var next = String((parseInt(props.getProperty('CBA_SESSION_EPOCH') || '1', 10) || 1) + 1);
   props.setProperty('CBA_SESSION_EPOCH', next);
+  sessionCacheClear_();   // 3.10 — אחרת המטמון ממשיך להחזיר את הדור הישן עד 6 שעות
   Logger.log('✓ כל המושבים נותקו. דור המושבים החדש: ' + next);
   return next;
 }
@@ -2804,19 +2880,34 @@ function submitReceipt_(ss, body) {
   if (!sh) return { ok: false, error: 'אין טאב תנועות לשנה ' + year };
   if (!body.dataBase64) return { ok: false, error: 'לא צורפה קבלה' };
 
+  /* (3.10.2026, עומס) ההעלאה ל-Drive יוצאת **לפני** הנעילה. הנעילה היא
+     גלובלית לכל הכתיבות של כל המשתמשים, וקבלה של 4MB החזיקה אותה 2-3
+     שניות — בזמן הזה כל שמירה אחרת חיכתה (ועד 20 שניות: "תפוס — נסה
+     שוב"). Drive לא צריך נעילה; רק השורה בגיליון (המזהה הרץ) צריכה.
+     אם הנעילה נכשלת אחרי ההעלאה — הקובץ נזרק לאשפה, לא נשאר יתום. */
+  // 1) שמירת קובץ הקבלה בתיקיית "ממתין לאישור" (סעיף 4, 2026-08-06) + שיתוף לצפייה
+  //    בקישור (למקרה של כמה מנהלים). הקובץ עובר לתיקייה הקבועה שיכון/<שנה>/<חודש>
+  //    (המנגנון הקיים) אוטומטית ברגע שהמנהל מאשר את הבקשה — ר' saveTransaction_.
+  var folder = getPendingReceiptsFolder_();
+  var blob = Utilities.newBlob(
+    Utilities.base64Decode(body.dataBase64),
+    body.mimeType || 'image/jpeg',
+    body.fileName || 'receipt'
+  );
+  var file = folder.createFile(blob);
+  var famId = '';
+  if (body._email) {
+    var residentInfo = lookupResident_(body._email);
+    if (residentInfo && residentInfo.found) famId = residentInfo.familyId || '';
+  }
+
   var lock = LockService.getScriptLock();
-  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try { lock.waitLock(20000); }
+  catch (e) {
+    try { file.setTrashed(true); } catch (eT) { /* לא קריטי */ }
+    return { ok: false, error: 'תפוס — נסה שוב' };
+  }
   try {
-    // 1) שמירת קובץ הקבלה בתיקיית "ממתין לאישור" (סעיף 4, 2026-08-06) + שיתוף לצפייה
-    //    בקישור (למקרה של כמה מנהלים). הקובץ עובר לתיקייה הקבועה שיכון/<שנה>/<חודש>
-    //    (המנגנון הקיים) אוטומטית ברגע שהמנהל מאשר את הבקשה — ר' saveTransaction_.
-    var folder = getPendingReceiptsFolder_();
-    var blob = Utilities.newBlob(
-      Utilities.base64Decode(body.dataBase64),
-      body.mimeType || 'image/jpeg',
-      body.fileName || 'receipt'
-    );
-    var file = folder.createFile(blob);
     /* (2026-08-24) הקובץ נשאר פרטי בכוונה. קודם היה כאן setSharing ל-
        ANYONE_WITH_LINK, מתוך כוונה טובה — שכמה מנהלים יוכלו לצפות. בפועל זה
        הפך כל קבלה לציבורית לכל מי שהקישור הגיע אליו. הצפייה באפליקציה עוברת
@@ -2866,12 +2957,7 @@ function submitReceipt_(ss, body) {
      * קרא `body.email`, כלומר שדה רגיל מגוף הבקשה שהלקוח שולח, ולא `body._email`
      * שנקבע ע"י שער ההרשאות מתוך המושב החתום. כל תושב מחובר יכול היה לשלוח
      * אימייל של משפחה אחרת ולשייך אליה את בקשת ההחזר — כולל מייל האישור. */
-    var famId = '';
-    if (body._email) {
-      var residentInfo = lookupResident_(body._email);
-      if (residentInfo && residentInfo.found) famId = residentInfo.familyId || '';
-    }
-
+    /* famId נשלף לפני הנעילה (3.10) — ר' למעלה */
     var rowObj = {
       'מזהה': newId,
       // "חודש הגשה" מחושב עם אותו חיתוך יום-19/20 שנקבע ליועד לתזמון החזרים
@@ -4219,7 +4305,7 @@ function bumpRev_(action) {
        רשימת קריאות מפוזרת היתה מתיישנת בפיצ'ר הראשון. */
     homeCountsBump_(doms);
     /* Q1 — רשימת המשפחות לכלל `txOwnerOk`. ר' `famRegistryWrite_`. */
-    if (doms.indexOf('residents') !== -1) famRegistryWrite_();
+    if (doms.indexOf('residents') !== -1) { permCacheBump_(); famRegistryWrite_(); }   // 3.10 — מטמון ההרשאות מת מיד
   } catch (err) { /* לא קריטי — במקרה הגרוע הלקוח פשוט ימשוך מלא */ }
 }
 
@@ -4328,7 +4414,7 @@ function handleLogin_(token) {
     }
     // הרשאות (2026-08-07): נשלחות ללקוח כדי שידע מה להציג, ומונפק מושב חתום
     // שילווה כל פעולת כתיבה. הלקוח לא מקבל יותר את סיסמת המנהל.
-    var perm = permissionsFor_(info.email);
+    var perm = permissionsFor_(info.email, resident);   // 3.10 — טאב התושבים נקרא פעם אחת בכניסה, לא פעמיים
     return json_(Object.assign(base, {
       authorized: true,
       session: makeSession_(info.email),
@@ -5754,6 +5840,7 @@ function ensurePermissionCols_(ss, body) {
  *     בקהילה אף אחד שיכול לנהל הרשאות.
  */
 function savePermissions_(ss, body) {
+  permCacheBump_();   // 3.10 — גם כשנקראת מהעורך (grantMeSuperAdmin), לא רק דרך doPost
   var sh = ss.getSheetByName('תושבים');
   if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
   var rowIndex = parseInt(body.rowIndex, 10);
@@ -6818,6 +6905,22 @@ function hourlyJobs() {
   if (r && r.busy && typeof hjSkipped_ === 'function') { try { hjSkipped_(r.error); } catch (e) {} }
 }
 
+/* ===== שער הסנכרונים השעתיים (3.10.2026) — ר' ההערה בתוך hourlyJobsRun_ ===== */
+var HJ_SYNC_STATE_KEY = 'HJ_SYNC_STATE';
+var HJ_SYNC_FORCE_MS  = 3 * 60 * 60 * 1000;   // גם בלי שינוי — ריצה מלאה כל 3 שעות (עריכה ישירה בגיליון)
+function hjSyncDue_() {
+  var now = Date.now(), rev = -1, last = null;
+  try { rev = currentRev_(); } catch (e) { rev = -1; }
+  try { last = JSON.parse(PropertiesService.getScriptProperties().getProperty(HJ_SYNC_STATE_KEY) || 'null'); } catch (e2) { last = null; }
+  if (rev < 0 || !last || typeof last.rev !== 'number' || typeof last.t !== 'number') return { due: true, why: 'אין מצב קודם', rev: rev, now: now };
+  if (last.rev !== rev) return { due: true, why: 'מונה השינויים זז ' + last.rev + '→' + rev, rev: rev, now: now };
+  if (now - last.t >= HJ_SYNC_FORCE_MS) return { due: true, why: 'ריצה מלאה תקופתית', rev: rev, now: now };
+  return { due: false, why: 'מונה ' + rev + ' לא זז מאז ' + new Date(last.t).toISOString(), rev: rev, now: now };
+}
+function hjSyncDone_(st) {
+  try { PropertiesService.getScriptProperties().setProperty(HJ_SYNC_STATE_KEY, JSON.stringify({ rev: st.rev, t: st.now })); } catch (e) {}
+}
+
 function hourlyJobsRun_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   /* גל 4 — יומן הדופק (Diag.gs): כמה זמן לקח כל שלב. קורא בלבד. */
@@ -6825,6 +6928,17 @@ function hourlyJobsRun_() {
   var HJ = (typeof hjStart_ === 'function') ? hjStart_() : null;
   var hjM = function (n) { if (HJ) hjMark_(HJ, n); };
   var hjF = function (e) { if (HJ) hjFail_(HJ, e); };
+  /* (3.10.2026, קופון הטריגרים — אושר ע"י יועד) הסנכרונים גיליון→Firestore
+     (bootSync_, currentBudgetYearSync_, gymStatusSyncAll_, tourSyncAll_+שריונים,
+     famRegistryWrite_, homeCountsSyncAll_, gardenDataSyncAll_) הם רשתות ביטחון:
+     כל כתיבה דרך האפליקציה כבר כותבת ל-Firestore בזמן הכתיבה. בלילה שקט הם
+     רצו 24 פעמים על נתונים שלא זזו. עכשיו הם רצים רק אם מונה השינויים
+     הגלובלי (bumpRev_) זז מאז הריצה הקודמת — או כל HJ_SYNC_FORCE_MS, כדי
+     שעריכה ישירה בגיליון עדיין תגיע. מה שתלוי ב-Firestore/יומן/שעון
+     (תורים, מראה, גיבוי, אירועים, דלת, אופק הגינון) ממשיך לרוץ כל שעה. */
+  var hjSync = hjSyncDue_();
+  var hjSkip = function (n) { hjM('skip:' + n); };
+  if (!hjSync.due) Logger.log('סנכרוני גיליון→Firestore דולגו: ' + hjSync.why);
   /* 23.9 — מרכז ההתראות: החלפת הנוסחים (פעם אחת בלבד) ופוש שנדחה
      בשעות שקט. ראשונים וזולים — אם השאר נכשל, אלה עדיין יוצאים. */
   hjM('notifyApplyNewTextsOnce_');
@@ -6967,14 +7081,17 @@ function hourlyJobsRun_() {
         לגיבוי באותה ריצה ולא ימתין שעה. */
   /* 🔴 מסמך הפתיחה (צעד 11) — רשימת השנים והשנה הנוכחית.
      משתנה נדיר, אבל אם יתיישן הטעינה הקרה תציג שנה שגויה. */
-  hjM('bootSync_');
-  try {
-    var b = bootSync_(ss);
-    if (b.error) Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + b.error);
-  } catch (e) {
-    hjF(e);
-    Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + e);
-  }
+  if (hjSync.due) {
+    hjM('bootSync_');
+    try {
+      var b = bootSync_(ss);
+      if (b.error) Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + b.error);
+    } catch (e) {
+      hjF(e);
+      Logger.log('bootSync_ \u05e0\u05db\u05e9\u05dc: ' + e);
+    }
+
+  } else hjSkip('bootSync_');
   /* 🔴 **מסמך השנה הנוכחית — רק הוא, וכל שעה.** מצעד 11 הוא נושא גם
      `closed`/`baseline`/`notes`, והטעינה הקרה בונה מהם את מצב התקציב.
      עד היום הוא נכתב **אך ורק** ב-`budgetSync` הידני — כלומר מנהל
@@ -6982,46 +7099,55 @@ function hourlyJobsRun_() {
      לנצח, והמסך היה מציג "סגור תקציב" על שנה שכבר סגורה.
      ⚠️ השנה הנוכחית בלבד: היא היחידה שהטעינה הקרה בונה, והיא
         היחידה שמשתנה. סנכרון כל השנים נשאר פעולה ידנית. */
-  hjM('currentBudgetYearSync_');
-  try {
-    var cy = currentBudgetYearSync_(ss);
-    if (cy.error) Logger.log('\u05e9\u05e0\u05d4 \u05e0\u05d5\u05db\u05d7\u05d9\u05ea: ' + cy.error);
-  } catch (e) {
-    hjF(e);
-    Logger.log('currentBudgetYearSync_ \u05e0\u05db\u05e9\u05dc: ' + e);
-  }
-  hjM('gymStatusSyncAll_');
-  try {
-    var g = gymStatusSyncAll_(ss);
-    if (g.wrote || g.deleted || g.codes || g.codesDeleted || g.error) {
-      Logger.log('סטטוס מכון: נכתבו ' + g.wrote + ', נמחקו ' + g.deleted +
-                 ', דולגו ' + g.skipped +
-                 ' | קודי כניסה: נכתבו ' + g.codes + ', נמחקו ' + g.codesDeleted +
-                 (g.error ? ' | ' + g.error : ''));
+  if (hjSync.due) {
+    hjM('currentBudgetYearSync_');
+    try {
+      var cy = currentBudgetYearSync_(ss);
+      if (cy.error) Logger.log('\u05e9\u05e0\u05d4 \u05e0\u05d5\u05db\u05d7\u05d9\u05ea: ' + cy.error);
+    } catch (e) {
+      hjF(e);
+      Logger.log('currentBudgetYearSync_ \u05e0\u05db\u05e9\u05dc: ' + e);
     }
-  } catch (e) {
-    hjF(e);
-    Logger.log('gymStatusSyncAll_ נכשל: ' + e);
-  }
+
+  } else hjSkip('currentBudgetYearSync_');
+  if (hjSync.due) {
+    hjM('gymStatusSyncAll_');
+    try {
+      var g = gymStatusSyncAll_(ss);
+      if (g.wrote || g.deleted || g.codes || g.codesDeleted || g.error) {
+        Logger.log('סטטוס מכון: נכתבו ' + g.wrote + ', נמחקו ' + g.deleted +
+                   ', דולגו ' + g.skipped +
+                   ' | קודי כניסה: נכתבו ' + g.codes + ', נמחקו ' + g.codesDeleted +
+                   (g.error ? ' | ' + g.error : ''));
+      }
+    } catch (e) {
+      hjF(e);
+      Logger.log('gymStatusSyncAll_ נכשל: ' + e);
+    }
+
+  } else hjSkip('gymStatusSyncAll_');
   /* 🔴 שריוני המועדון וצעדי הסיור (צעד 12) — שלושת האוספים שמוציאים
      את עמוד הבית מהתלות ב-Apps Script. רצים כאן, בתוך נעילת הסנכרון,
      כי כולם עושים כתיבה **וסחיפת יתומים**. */
-  hjM('tourSyncAll_');
-  try {
-    var tr = tourSyncAll_(ss);
-    if (tr.error) Logger.log('tourSyncAll_ נכשל: ' + tr.error);
-    var ts = tourSeenSyncAll_(ss);
-    if (ts.error) Logger.log('tourSeenSyncAll_ נכשל: ' + ts.error);
-    var cr = clubResvSyncAll_(ss);
-    if (cr.error) Logger.log('clubResvSyncAll_ נכשל: ' + cr.error);
-    else if (cr.wrote || cr.deleted || cr.skipped) {
-      Logger.log('שריונים: נכתבו ' + cr.wrote + ', נמחקו ' + cr.deleted +
-                 ', דולגו ' + cr.skipped);
+  if (hjSync.due) {
+    hjM('tourSyncAll_');
+    try {
+      var tr = tourSyncAll_(ss);
+      if (tr.error) Logger.log('tourSyncAll_ נכשל: ' + tr.error);
+      var ts = tourSeenSyncAll_(ss);
+      if (ts.error) Logger.log('tourSeenSyncAll_ נכשל: ' + ts.error);
+      var cr = clubResvSyncAll_(ss);
+      if (cr.error) Logger.log('clubResvSyncAll_ נכשל: ' + cr.error);
+      else if (cr.wrote || cr.deleted || cr.skipped) {
+        Logger.log('שריונים: נכתבו ' + cr.wrote + ', נמחקו ' + cr.deleted +
+                   ', דולגו ' + cr.skipped);
+      }
+    } catch (e) {
+      hjF(e);
+      Logger.log('סנכרון עמוד הבית נכשל: ' + e);
     }
-  } catch (e) {
-    hjF(e);
-    Logger.log('סנכרון עמוד הבית נכשל: ' + e);
-  }
+
+  } else hjSkip('tourSyncAll_');
   /* דלת Nuki + WeWork (25.9.26) — זריעה, השלמת יומן, בריאות המנעול,
      ובמצב live גם הזמנות Nuki למנויים ויבוא היומן של Nuki. ר' Door.gs. */
   hjM('doorHourly_');
@@ -7039,17 +7165,23 @@ function hourlyJobsRun_() {
      רואה: **עריכה ידנית בגיליון** ואת ספירת המועדון,
      שבמכוון אינה רצה בכתיבה (ר' הבלוק מעל `homeCountsDoc_`). */
   /* Q1 — רשימת המשפחות (רשת הביטחון לעריכה ידנית בגיליון). */
-  hjM('famRegistryWrite_');
-  var fr = famRegistryWrite_(ss);
-  if (!fr.ok) Logger.log('famRegistryWrite_ נכשל: ' + fr.error);
-  hjM('homeCountsSyncAll_');
-  try {
-    var hc = homeCountsSyncAll_(ss);
-    if (hc.errors.length) Logger.log('מוני עמוד הבית: ' + hc.errors.join(' ; '));
-  } catch (e) {
-    hjF(e);
-    Logger.log('homeCountsSyncAll_ נכשל: ' + e);
-  }
+  if (hjSync.due) {
+    hjM('famRegistryWrite_');
+    var fr = famRegistryWrite_(ss);
+    if (!fr.ok) Logger.log('famRegistryWrite_ נכשל: ' + fr.error);
+
+  } else hjSkip('famRegistryWrite_');
+  if (hjSync.due) {
+    hjM('homeCountsSyncAll_');
+    try {
+      var hc = homeCountsSyncAll_(ss);
+      if (hc.errors.length) Logger.log('מוני עמוד הבית: ' + hc.errors.join(' ; '));
+    } catch (e) {
+      hjF(e);
+      Logger.log('homeCountsSyncAll_ נכשל: ' + e);
+    }
+
+  } else hjSkip('homeCountsSyncAll_');
   /* לוח האירועים (23.9) — רשת הביטחון של טריגר היומן, והמקום היחיד
      שבו יומן החגים נכנס. ומתקין את טריגרי היומן אם חסרים. */
   hjM('eventsSyncAll_');
@@ -7126,16 +7258,20 @@ function hourlyJobsRun_() {
      ⚠️ שעה היא **לא** קצב מספיק כשהדפדפן יקרא מכאן — תושב שמגיש
         דיווח חייב לראות אותו מיד. הצעד הבא (רעננות בכתיבה) חייב
         לנחות **לפני** שהדגל נדלק. עד אז הכתיבה הזאת בלתי-נראית. */
-  hjM('gardenDataSyncAll_');
-  try {
-    var gd = gardenDataSyncAll_(ss);
-    if (gd.error) Logger.log('נתוני גינון: ' + gd.error);
-    else Logger.log('נתוני גינון: משימות ' + gd.tasks.wrote + '/' + gd.tasks.deleted +
-                    ', דיווחים ' + gd.reports.wrote + '/' + gd.reports.deleted);
-  } catch (e) {
-    hjF(e);
-    Logger.log('gardenDataSyncAll_ נכשל: ' + e);
-  }
+  if (hjSync.due) {
+    hjM('gardenDataSyncAll_');
+    try {
+      var gd = gardenDataSyncAll_(ss);
+      if (gd.error) Logger.log('נתוני גינון: ' + gd.error);
+      else Logger.log('נתוני גינון: משימות ' + gd.tasks.wrote + '/' + gd.tasks.deleted +
+                      ', דיווחים ' + gd.reports.wrote + '/' + gd.reports.deleted);
+    } catch (e) {
+      hjF(e);
+      Logger.log('gardenDataSyncAll_ נכשל: ' + e);
+    }
+
+  } else hjSkip('gardenDataSyncAll_');
+  if (hjSync.due) hjSyncDone_(hjSync);   // נרשם רק אחרי שכל הקבוצה רצה
   /* גל 4 (24.9) — דיווחים על האפליקציה: מייל/תשובה/מראה שלא יצאו מהדפדפן. */
   hjM('appReportsHourly_');
   try {
@@ -8240,7 +8376,11 @@ function handleFlagsGet_(p) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var gate = authorize_(ss, p, PERM_SUPER);
     if (!gate.ok) return json_({ ok: false, error: gate.error });
-    return json_({ ok: true, keys: FLAG_KEYS, flags: fsGet_(FS_FLAGS_DOC) || {} });
+    /* (3.10.2026) מכסת המיילים היומית — 100 נמענים ביום בחשבון Gmail. אחרי
+       שהיא נגמרת שליחות נכשלות בשקט עד מחר, ולכן המספר מוצג ב"מצב המערכת". */
+    var mailLeft = null;
+    try { mailLeft = MailApp.getRemainingDailyQuota(); } catch (eQ) { mailLeft = null; }
+    return json_({ ok: true, keys: FLAG_KEYS, flags: fsGet_(FS_FLAGS_DOC) || {}, quotas: { mailRemaining: mailLeft } });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
@@ -13411,7 +13551,7 @@ function handleTour_(p) {
       if (va !== vb) return va - vb;
       return (parseInt(a['סדר'], 10) || 0) - (parseInt(b['סדר'], 10) || 0);
     });
-    return json_({ ok: true, steps: rows, seen: tourSeenFor_(ss, gate.email, gate.perm && gate.perm.rowIndex, gate.perm && gate.perm.slot) });
+    return json_({ ok: true, steps: rows, seen: tourSeenFor_(ss, gate.email, permRowIndex_(gate.perm), gate.perm && gate.perm.slot) });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }

@@ -181,3 +181,11 @@
 /* שעון העלייה (2.10.26) — כרטיס "עליות אחרונות" במצב המערכת */
 .hub-boot { margin-top: 14px; font-weight: 600; }
 .hub-boot__line { margin-top: 4px; word-break: break-word; direction: rtl; }
+
+/* (3.10.2026) מכסת מיילים יומית — שורה אחת בכרטיס הדגלים ב"מצב המערכת" */
+.sys-quota { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; padding:10px 0 4px; border-top:1px solid var(--line, #e5e7eb); margin-top:8px; }
+.sys-quota__label { font-size:14px; color:var(--text, #111827); }
+.sys-quota__val { font-size:20px; font-weight:700; font-variant-numeric: tabular-nums; }
+.sys-quota__hint { flex-basis:100%; font-size:12px; color:var(--muted, #6b7280); }
+.sys-quota--mid .sys-quota__val { color:#b45309; }
+.sys-quota--low .sys-quota__val { color:#b91c1c; }

@@ -244,8 +244,8 @@ const residentLog = (W, taskId) => Object.values(W.store.gardenLog).filter(l => 
     const twin = fs.readFileSync(path.join(__dirname, '..', 'js', 'data', 'gardenRules.js'), 'utf8') === fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'GardenRules.gs'), 'utf8');
     ok('🔴 gardenRules.js ≡ GardenRules.gs', twin);
     const HTML = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'), SW = fs.readFileSync(path.join(__dirname, '..', 'service-worker.js'), 'utf8');
-    const v = [...new Set((HTML.match(/\?v=[0-9a-z]+/g) || []).map(x => x.slice(3)))];
-    ok('גרסה אחת ב-index.html והיא ב-service-worker', v.length === 1 && SW.includes('VERSION = "' + v[0] + '"') && v[0] > '20260922l', v.join(','));
+    /* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
+    ok('גרסאות index.html ו-service-worker מעודכנות', require('./stamp-versions.js').check().length === 0);
   }
 
   console.log('\n════════════════════════════════');

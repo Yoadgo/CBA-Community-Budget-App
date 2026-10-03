@@ -260,10 +260,9 @@ ok('id של המסמך משמש כגיבוי ל-id שבתוכו', /o\.id = o\.id
 section('7. גרסה');
 const IDX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const SW = fs.readFileSync(path.join(ROOT, 'service-worker.js'), 'utf8');
-const vs = [...new Set((IDX.match(/\?v=[0-9a-z]+/g) || []))];
-ok('כל התגים באותה גרסה', vs.length === 1, vs.join(' '));
+/* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
 const swv = (SW.match(/var VERSION = "([^"]+)"/) || [])[1];
-ok('🔴 VERSION ב-service-worker זהה ל-?v=', vs[0] === '?v=' + swv, vs[0] + ' vs ' + swv);
+ok('🔴 כל ?v= ב-index.html הוא טביעת האצבע של הקובץ, ו-service-worker תואם', require('./stamp-versions.js').check().length === 0);
 ok('הגרסה עלתה מ-20260914m', swv !== '20260914m', swv);
 
 console.log('\n' + '='.repeat(52));

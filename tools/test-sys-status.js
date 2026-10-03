@@ -106,11 +106,10 @@ ok('⚠️ ויש אליו אריח בתפריט המשתמש — "ניהול מ
    /if \(isSuper\(\) \|\| \(currentArea === "admin" && canScreen\("emailSettings"\)\)\) \{[\s\S]{0,200}data-panel-goto="sysHub"/.test(APP));
 ok('⚠️ ובתוך המרכז — לשונית למנהל-על בלבד',
    /id: "status",[^\n]*superOnly: true/.test(fs.readFileSync(path.join(__dirname, '..', 'js/screens/sysHub.js'), 'utf8')));
-ok('הקובץ נטען ב-index.html', /js\/screens\/sysStatus\.js\?v=/.test(HTML));
+ok('הקובץ נטען לפי דרישה (js/lazyManifest.js, 3.10)', /js\/screens\/sysStatus\.js\?v=/.test(fs.readFileSync(path.join(__dirname, '..', 'js/lazyManifest.js'), 'utf8')));
 ok('⚠️ וגם גיליון הסגנון שלו', /css\/sys\.css\?v=/.test(HTML));
-ok('⚠️ ושניהם נושאים את אותה גרסה כמו השאר',
-   (HTML.match(/sysStatus\.js\?v=(\d+[a-z]*)/) || [])[1] ===
-   (HTML.match(/appReports\.js\?v=(\d+[a-z]*)/) || [])[1]);
+/* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
+ok('⚠️ ושניהם נושאים גרסה מעודכנת (stamp-versions --check)', require('./stamp-versions.js').check().length === 0);
 
 (async function () {
   /* =============================================================== */

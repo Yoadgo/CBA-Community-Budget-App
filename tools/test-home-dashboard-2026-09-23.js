@@ -377,13 +377,14 @@ function mountSched(mode) {
   section('15. קבצים וגרסה');
   {
     const idx = R('index.html'), sw = R('service-worker.js');
-    const v = ((idx.match(/\?v=([0-9a-z]+)/) || [])[1]) || '';
+    /* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
+    const stampV = require('./stamp-versions.js').compute().versions;
     ['css/homeSchedule.css', 'css/homeGarden.css', 'css/home2.css', 'js/screens/homeSchedule.js', 'js/screens/homeGarden.js']
-      .forEach(f => ok(f + ' נטען עם הגרסה', idx.indexOf(f + '?v=' + v) !== -1));
+      .forEach(f => ok(f + ' נטען עם הגרסה', idx.indexOf(f + '?v=' + stampV[f]) !== -1));
     ok('🔴 homeSchedule/homeGarden נטענים לפני home.js',
        idx.indexOf('js/screens/homeGarden.js') < idx.indexOf('js/screens/home.js') &&
        idx.indexOf('js/screens/homeSchedule.js') < idx.indexOf('js/screens/home.js'));
-    ok('service-worker על אותה גרסה', sw.indexOf('VERSION = "' + v + '"') !== -1);
+    ok('service-worker על אותה גרסה', require('./stamp-versions.js').check().length === 0);
     ['hm2-strip', 'hm2-sd', 'hm2-sd__dots', 'hm2-nxsheet', 'hm2-faces', 'hm2-bgrid--g', 'hmg-cards--board', 'hmg-link']
       .forEach(k => ok('.' + k + ' ב-home2.css', CSS_H.indexOf('.' + k) !== -1));
     ['hmg-kpi', 'hmg-cards', 'hmg-tr', 'hmg-more'].forEach(k => ok('.' + k + ' ב-homeGarden.css', CSS_G.indexOf('.' + k) !== -1));

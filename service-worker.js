@@ -20,11 +20,145 @@
       ב-sheets.js כבר יודע ליפול חזרה על המטמון שלו (cba_data_cache)
       ולסמן למשתמש שהנתונים לא טריים.
 
-   ⚠️ בכל דיפלוי שמשנה JS/CSS: לעדכן את VERSION כאן *ואת* כל ה-?v=
-      ב-index.html לאותו ערך בדיוק. שני המספרים חייבים להיות זהים.  */
+   ⚠️ (3.10.2026) גרסה לכל קובץ. עד היום היה ?v= אחד לכולם, וכל דיפלוי
+      הוריד מחדש את כל האפליקציה לכל מכשיר. עכשיו לכל קובץ טביעת אצבע
+      משלו, ו-VERSION כאן הוא טביעת האצבע של הרשימה כולה. **לא לערוך
+      ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
+      והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "20261002e";
+var VERSION = "9cd486bb23";
 var CACHE   = "cba-app";
+
+/* @@ASSET_VERSIONS_START@@ */
+/* נוצר אוטומטית ע"י tools/stamp-versions.js — לא לערוך ידנית. */
+var ASSET_VERSIONS = {
+  "css/canopy.css": "030914c935",
+  "css/committeeTree.css": "fae4abd61f",
+  "css/density.css": "6613a51158",
+  "css/events.css": "a48e8ef614",
+  "css/events2.css": "1bffa4b24e",
+  "css/frame.css": "7408e8f2b4",
+  "css/garden.css": "0ae26936da",
+  "css/garden2.css": "92f8f8dbd0",
+  "css/gardenSchedule.css": "f0d56e7ded",
+  "css/gardenStats.css": "9283136e86",
+  "css/gym.css": "57d2b051b8",
+  "css/home.css": "bd82c05fd6",
+  "css/home2.css": "9d4ca5c155",
+  "css/homeGarden.css": "c1c9331310",
+  "css/homeSchedule.css": "8803b15e97",
+  "css/liquid-glass.css": "9252e5160b",
+  "css/loading.css": "820a89ce19",
+  "css/mobile.css": "7e36274ab6",
+  "css/motion.css": "144675cc01",
+  "css/notify.css": "3f3d99a863",
+  "css/profile.css": "0a6f125973",
+  "css/pwa.css": "5cebb597c3",
+  "css/report.css": "a374c3446d",
+  "css/resident.css": "1a0d63fea2",
+  "css/resident2.css": "521b8f184a",
+  "css/search.css": "866322fbb8",
+  "css/style.css": "69c343dffe",
+  "css/sys.css": "48a9728e9a",
+  "css/tokens.css": "b1f1b7d21f",
+  "css/tour.css": "fbb848ba1f",
+  "css/wework.css": "3cfe17107a",
+  "icons/apple-touch-icon.png": "5ce56ce0dc",
+  "icons/icon-192.png": "a624d0ac7a",
+  "js/app.js": "944664a072",
+  "js/data/dataService.js": "60b11c7f1f",
+  "js/data/door.js": "76001e4522",
+  "js/data/firebase.js": "a5def1a2f1",
+  "js/data/gardenAreas.js": "457c00156c",
+  "js/data/gardenLang.js": "0983592bf2",
+  "js/data/gardenRules.js": "309560188b",
+  "js/data/gardenSlots.js": "1b715264ff",
+  "js/data/gardenStatsCalc.js": "177cc46e78",
+  "js/data/gymFs.js": "eec375c679",
+  "js/data/mapGeo.js": "3a7c5ea787",
+  "js/data/mock.js": "fd54e34660",
+  "js/data/push.js": "198e321583",
+  "js/data/reconcile.js": "899bfb8f4c",
+  "js/data/sheets.js": "c77bd69d7e",
+  "js/lazy.js": "011e0ffe5f",
+  "js/lazyManifest.js": "ad0df004ab",
+  "js/pwa.js": "cc703231c6",
+  "js/screens/appReports.js": "a47450bd91",
+  "js/screens/budget.js": "5fbc7244f5",
+  "js/screens/clubAdmin.js": "2762c48dbf",
+  "js/screens/committeeTree.js": "69b56f5e38",
+  "js/screens/doorAdmin.js": "9c1b798a5b",
+  "js/screens/emailSettings.js": "a0cb23db5a",
+  "js/screens/events.js": "00461235ca",
+  "js/screens/expenses.js": "1d93311741",
+  "js/screens/gardenPlan.js": "ea51dc59c9",
+  "js/screens/gardenSchedule.js": "861d4bba6f",
+  "js/screens/gardenScheduleAi.js": "4a2f2ab9f6",
+  "js/screens/gardenStats.js": "9409f96dca",
+  "js/screens/gardenTasks.js": "43f85ceec7",
+  "js/screens/gymAdmin.js": "7cd76a6166",
+  "js/screens/home.js": "26ae9f1b11",
+  "js/screens/homeGarden.js": "ee331ad56c",
+  "js/screens/homeSchedule.js": "a39dc89ce9",
+  "js/screens/myProfile.js": "5371fc4b54",
+  "js/screens/notes.js": "04bc8dece4",
+  "js/screens/planning.js": "22607620df",
+  "js/screens/reconcile.js": "8a59cd1261",
+  "js/screens/resGarden.js": "eb386bdfbb",
+  "js/screens/resGym.js": "d61998fa65",
+  "js/screens/resRecommendations.js": "fe068c58c9",
+  "js/screens/resWework.js": "b3eb1b2b3c",
+  "js/screens/resident.js": "c9ce2dcdf1",
+  "js/screens/residents.js": "8bac69fec6",
+  "js/screens/services.js": "bec9552396",
+  "js/screens/servicesAdmin.js": "4c6fe01239",
+  "js/screens/servicesCategoriesAdmin.js": "23bff879f4",
+  "js/screens/sysHub.js": "b8e3ea99b4",
+  "js/screens/sysStatus.js": "af5674e9b1",
+  "js/screens/weworkAdmin.js": "794ed62ea8",
+  "js/ui/canopy.js": "b94420b1b4",
+  "js/ui/diag.js": "5131c18964",
+  "js/ui/dialog.js": "0df981dda8",
+  "js/ui/doorButton.js": "e274640af6",
+  "js/ui/gardenForm.js": "7f70409b34",
+  "js/ui/inbox.js": "502c774321",
+  "js/ui/logo.js": "292fd3c7b2",
+  "js/ui/mobile.js": "432817994d",
+  "js/ui/motion.js": "b7b998f507",
+  "js/ui/photos.js": "8cdac86c85",
+  "js/ui/plus.js": "c15f8707c4",
+  "js/ui/report.js": "ea44ad6eed",
+  "js/ui/search.js": "9bd5d18b65",
+  "js/ui/security.js": "6238d03d0a",
+  "js/ui/skeleton.js": "f4934f5355",
+  "js/ui/tips.js": "d4f66f2d2a",
+  "js/ui/tour.js": "56cb035d22",
+  "manifest.webmanifest": "bc85a26549"
+};
+/* @@ASSET_VERSIONS_END@@ */
+
+/* הנתיב של בקשה יחסית לשורש האפליקציה ("js/app.js"), בלי ?v=.
+   ה-scope הוא למשל https://yoadgo.github.io/CBA-Community-Budget-App/ */
+function assetPath_(url) {
+  try {
+    var scope = self.registration && self.registration.scope;
+    var href = url.origin + url.pathname;
+    if (scope && href.indexOf(scope) === 0) return href.slice(scope.length);
+    return url.pathname.replace(/^\//, "");
+  } catch (e) { return url.pathname; }
+}
+
+/* האם ערך שמור במטמון שייך לגרסה ישנה של קובץ? רק קבצים עם ?v=:
+   • הקובץ ברשימה והגרסה שונה — ישן, למחוק.
+   • הקובץ כבר לא ברשימה בכלל (נמחק מ-index.html) — יתום, למחוק.
+   • הגרסה זהה — להשאיר. זה כל ההבדל מהשיטה הישנה, שמחקה הכול. */
+function isStaleAsset_(url) {
+  var v = url.searchParams.get("v");
+  if (!v) return false;
+  var want = ASSET_VERSIONS[assetPath_(url)];
+  if (want === undefined) return true;
+  return v !== want;
+}
 
 /* הערה על השיטה: בכוונה *אין* כאן רשימת קבצים לשמירה מראש (precache).
    כל 27 קבצי ה-JS/CSS נטענים ממילא בכל פתיחה של האפליקציה, ולכן אחרי
@@ -37,14 +171,13 @@ self.addEventListener("install", function () {
 
 self.addEventListener("activate", function (e) {
   e.waitUntil((async function () {
-    // ניקוי: מוחקים מהמטמון רק מה ששייך לגרסה ישנה. ערכים בלי ?v=
-    // (כמו index.html והאייקונים) נשארים — הם לא נושאים גרסה.
+    // ניקוי: מוחקים מהמטמון רק קבצים שגרסתם באמת התחלפה (ר' isStaleAsset_).
+    // ערכים בלי ?v= (כמו index.html) נשארים — הם לא נושאים גרסה.
     try {
       var cache = await caches.open(CACHE);
       var keys  = await cache.keys();
       await Promise.all(keys.map(function (req) {
-        var v = new URL(req.url).searchParams.get("v");
-        return (v && v !== VERSION) ? cache.delete(req) : null;
+        return isStaleAsset_(new URL(req.url)) ? cache.delete(req) : null;
       }));
       // מטמונים ישנים בשמות אחרים (אם אי פעם נשנה את CACHE)
       var names = await caches.keys();

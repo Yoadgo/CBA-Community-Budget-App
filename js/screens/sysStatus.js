@@ -181,6 +181,16 @@ CBA.screens = CBA.screens || {};
            "</div>";
   }
 
+  function mailQuotaRow() {
+    var q = st.quotas && st.quotas.mailRemaining;
+    if (q === null || q === undefined) return "";
+    var n = Number(q);
+    var cls = n <= 10 ? " sys-quota--low" : (n <= 30 ? " sys-quota--mid" : "");
+    return '<div class="sys-quota' + cls + '"><span class="sys-quota__label">מיילים שנותרו היום</span>' +
+           '<span class="sys-quota__val">' + esc(String(n)) + '</span>' +
+           '<span class="sys-quota__hint">מכסה יומית של חשבון השולח; מתאפסת בחצות. נספרים נמענים, לא הודעות.</span></div>';
+  }
+
   function draw(container) {
     /* SYB4 (גל 9, 1.10.26) — משובץ ב"ניהול מערכת": בלי כותרת כפולה (המרכז כבר מציג כותרת ותת-כותרת). */
     /* A0 (ספר האבנים — אושר) — לבד (CBA.navigate("sysStatus")): סרגל ניהול עם הכותרת
@@ -205,6 +215,9 @@ CBA.screens = CBA.screens || {};
         /* ⚠️ הרשימה מגיעה **מהשרת** (FLAG_KEYS), לא מהמפה כאן. דגל חדש
            שנוסף בשרת מופיע מיד, גם בלי גרסת לקוח חדשה — עם שמו בלבד. */
         st.keys.map(flagRow).join("") +
+        /* (3.10.2026) מכסת המיילים היומית של חשבון ה-gizbar (Gmail: 100 נמענים).
+           כשהיא נגמרת, שליחות נכשלות בשקט עד חצות — לכן המספר כאן. */
+        mailQuotaRow() +
         '<div class="sys-note">שינוי נכנס לתוקף בשרת מיד, ובלשוניות פתוחות תוך דקה. ' +
           'לשונית שכבר פתוחה קוראת את מפת הדגלים פעם אחת בטעינה — רענון מחיל מיד.</div>' +
       "</div>";
@@ -313,7 +326,7 @@ CBA.screens = CBA.screens || {};
     var gen = ++st.gen;
     CBA.data.getFlags(function (res) {
       if (gen !== st.gen) return;
-      if (res && res.ok) { st.flags = res.flags || {}; st.keys = res.keys || []; }
+      if (res && res.ok) { st.flags = res.flags || {}; st.keys = res.keys || []; st.quotas = res.quotas || null; }
       else { st.error = (res && res.error) || "לא ניתן לטעון את הדגלים."; }
       if (here(container)) draw(container);
     });

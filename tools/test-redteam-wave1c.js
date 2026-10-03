@@ -68,11 +68,9 @@ ok('⚠️ ושתיהן משניות — כפתור Google נשאר הפעולה
 
 section('4. גרסה');
 const IDX = R('index.html'), SW = R('service-worker.js');
-const vers = [...new Set((IDX.match(/\?v=([0-9a-z]+)/g) || []))];
-ok('כל התגים ב-index.html באותה גרסה', vers.length === 1, vers.join(','));
-ok('🔴 ו-VERSION ב-service-worker זהה לה',
-   SW.indexOf('var VERSION = "' + vers[0].slice(3) + '";') !== -1);
-ok('והגרסה עלתה מ-20260917b', vers[0] !== '?v=20260917b', vers[0]);
+/* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
+ok('🔴 index.html + service-worker: גרסאות מעודכנות (stamp-versions --check)', require('./stamp-versions.js').check().length === 0);
+ok('והגרסה עלתה מ-20260917b', IDX.indexOf('?v=20260917b') === -1);
 
 console.log('\n====================================================');
 console.log('עברו: ' + pass + '   נכשלו: ' + fail);

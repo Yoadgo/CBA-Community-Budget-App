@@ -223,15 +223,18 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
   section('10. 🔴 שער הגרסה — שכחה שלו מגישה JS ישן');
   {
-    const idx = R('index.html'), sw = R('service-worker.js');
-    const vs = Array.from(new Set(idx.match(/\?v=[0-9a-z]+/g) || []));
-    ok('מספר גרסה אחד בלבד ב-index.html', vs.length === 1, vs.join(','));
-    const v = (vs[0] || '').replace('?v=', '');
-    const m = sw.match(/VERSION = "([0-9a-z]+)"/);
-    ok('🔴🔴 ו-service-worker.js על אותו ערך בדיוק', !!m && m[1] === v,
-       (m ? m[1] : '?') + ' ≠ ' + v);
-    ok('ו-home2.css ו-home.js נטענים עם הגרסה',
-       idx.indexOf('css/home2.css?v=' + v) !== -1 && idx.indexOf('js/screens/home.js?v=' + v) !== -1);
+    /* (3.10.2026) גרסה לכל קובץ: אין יותר "מספר אחד לכולם". השער עכשיו הוא
+       tools/stamp-versions.js --check — כל ?v= ב-index.html חייב להיות
+       טביעת האצבע של הקובץ, ו-service-worker.js חייב לשאת את אותה רשימה. */
+    const stamp = require('./stamp-versions.js');
+    const problems = stamp.check();
+    ok('🔴🔴 כל ה-?v= ב-index.html ו-service-worker.js מעודכנים (node tools/stamp-versions.js)',
+       problems.length === 0, problems.slice(0, 3).join(' | '));
+    const c = stamp.compute();
+    const idx = R('index.html');
+    ok('ו-home2.css ו-home.js נטענים עם טביעת האצבע שלהם',
+       idx.indexOf('css/home2.css?v=' + c.versions['css/home2.css']) !== -1 &&
+       idx.indexOf('js/screens/home.js?v=' + c.versions['js/screens/home.js']) !== -1);
   }
 
   console.log('\n====================================================');

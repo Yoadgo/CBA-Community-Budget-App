@@ -46,8 +46,8 @@ ok('28.9: מסך פתיחה ב-HTML עצמו + רשת ביטחון של 20ש\'',
 ok('28.9: אין יותר כפתורי תקציב קבועים בניווט של index.html', !/data-screen="budget">תכנון מול ביצוע<\/button>/.test(IDX));
 ok('28.9: bootReveal אחרי הניתוב הראשון, bootDismiss לפני מסך הכניסה', /initialRoute\("resident"\); \}[^\n]*\n\s*bootReveal\(\);/.test(APP) && /if \(!currentUser\) \{ bootDismiss\(\); showLoginGate\(\); \}/.test(APP));
 ok('28.9: כניסה מדורגת + בר עולה מלמטה', /body\.boot-reveal #app-main > \* > \* \{ animation: bootRise/.test(LCSS) && /body\.boot-reveal \.nav-search-fab \{ animation: bootBarUp/.test(LCSS));
+/* (3.10.2026) גרסה לכל קובץ — אין יותר ערך אחד לכולם; השער הוא stamp-versions --check */
 const vs = (IDX.match(/\?v=([0-9a-z]+)/g) || []).map(x => x.slice(3));
-const swv = (SW.match(/var VERSION = "([^"]+)"/) || [])[1];
-ok('גרסה אחידה ב-index.html וב-service-worker', vs.length > 50 && vs.every(v => v === swv), swv);
+ok('🔴 כל ?v= ב-index.html הוא טביעת האצבע של הקובץ, ו-service-worker תואם', vs.length > 50 && require('./stamp-versions.js').check().length === 0);
 console.log((fail ? '✗ ' : '✓ ') + pass + ' עברו · ' + fail + ' נכשלו');
 process.exit(fail ? 1 : 0);

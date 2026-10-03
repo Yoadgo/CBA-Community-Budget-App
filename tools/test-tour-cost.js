@@ -122,12 +122,13 @@ section('5. handleTour_ — מה באמת השתנה שם');
      /if \(aud === 'תושבים'\) return !isAdmin;/.test(ht));
   ok('⚠️ וקהל שהוא שם הרשאה עדיין נבדק מול ההרשאות של הקורא',
      /ALL_PERMS\.indexOf\(aud\)/.test(ht));
-  ok('🔴 ומספר השורה והמשבצת מועברים מההרשאות', /tourSeenFor_\(ss, gate\.email, gate\.perm && gate\.perm\.rowIndex, gate\.perm && gate\.perm\.slot\)/.test(ht));
+  /* 3.10 — rowIndex לא נוסע במטמון ההרשאות; permRowIndex_ מחזיר אותו מההרשאות או טרי מהגיליון */
+  ok('🔴 ומספר השורה והמשבצת מועברים מההרשאות', /tourSeenFor_\(ss, gate\.email, permRowIndex_\(gate\.perm\), gate\.perm && gate\.perm\.slot\)/.test(ht));
 }
 
 section('6. permissionsFor_ נושא את מספר השורה');
 {
-  const pf = grab(/function permissionsFor_\(email\) \{[\s\S]*?\n\}/);
+  const pf = grab(/function permissionsFor_\(email, residentOpt\) \{[\s\S]*?\n\}/);   // 3.10 — פרמטר שני (login מעביר את השורה שכבר נקראה)
   ok('🔴 מחזירה rowIndex', /rowIndex: r\.rowIndex/.test(pf));
   ok('⚠️ ועדיין ממוטמנת לכל הבקשה (PERMS_MEMO_)', /PERMS_MEMO_\[memoKey\] = out/.test(pf));
   ok('⚠️ ו-lookupResident_ עצמה **לא** ממוטמנה — כתיבה באותה בקשה חייבת להיקרא טרייה',
