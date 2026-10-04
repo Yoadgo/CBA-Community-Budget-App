@@ -5710,7 +5710,7 @@ function exportResidents_(ss, body) {
 /** בורר תושבים להקמת מנוי מכון (3.10.26, בקשת יועד: "כל דבר שנמלא מקפיץ אפשרות בחירה").
  *  שורה לכל אדם (משבצת אימייל): שם פרטי, משפחה, בית, מזהה קבוע, אימייל, טלפון.
  *  🔴 בניגוד ל-residentDirectory — כולל אימייל, ולכן **רק PERM_GYM** (שער עליון + בדיקה כפולה כאן).
- *  רק משתתפים עם אימייל, ורק סטטוס פעיל (ריק = פעיל); חיצוניים (ספק/קבלן) לא מוצעים.
+ *  ורק סטטוס פעיל (ריק = פעיל); חיצוניים (ספק/קבלן) לא מוצעים. מי שבלי אימייל מוחזר עם noEmail:true (לא ניתן לבחירה).
  *  ללא ת.ז./תאריך לידה — אלה לא יוצאים מכאן. */
 function handleGymResidentPicker_(p) {
   try {
@@ -5742,10 +5742,15 @@ function handleGymResidentPicker_(p) {
       if (st && st.indexOf('פעיל') === -1) continue;
       var house = houseCol > -1 ? String(row[houseCol]).trim() : '';
       var rid = ridCol > -1 ? String(row[ridCol]).trim() : '';
-      for (var c = 0; c < emailCols.length; c++) {
-        var em = normalizeEmail_(row[emailCols[c]]);
-        if (!em) continue;
+      /* 4.10: גם מי שאין לו אימייל בטאב מוחזר (noEmail) — כדי שהמסך יסביר "אין אימייל" במקום לשתוק.
+         40 מתוך 73 משקי בית עדיין בלי אימייל; בלי זה החיפוש "לא עושה כלום" עבורם. */
+      var slots = Math.max(emailCols.length, nameCols.length);
+      for (var c = 0; c < slots; c++) {
+        var em = emailCols[c] !== undefined ? normalizeEmail_(row[emailCols[c]]) : '';
+        var fn = nameCols[c] !== undefined ? String(row[nameCols[c]]).trim() : '';
+        if (!em && !fn) continue;
         rows.push({
+          noEmail: !em,
           email: em,
           first: nameCols[c] !== undefined ? String(row[nameCols[c]]).trim() : '',
           family: familyCol > -1 ? String(row[familyCol]).trim() : '',

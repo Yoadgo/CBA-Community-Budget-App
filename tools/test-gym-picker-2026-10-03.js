@@ -31,7 +31,8 @@ console.log('\n1. שרת');
 {
   const { res, box } = run(true);
   ok('דורש PERM_GYM', box.needSeen === 'מכון');
-  ok('3 אנשים: 2 מבית כהן + 0 עזב + 0 חיצוני + 0 בלי אימייל', res.ok && res.rows.length === 2, JSON.stringify(res));
+  ok('2 עם אימייל + נועה בלי אימייל (noEmail) ; בלי עזב ובלי חיצוני', res.ok && res.rows.length === 3 && res.rows.filter(r => r.noEmail).length === 1 && res.rows.filter(r => !r.noEmail).length === 2, JSON.stringify(res));
+  ok('🔴 בלי אימייל = email ריק ו-noEmail:true', res.rows.some(r => r.noEmail && r.email === '' && r.first === 'נועה'));
   ok('אימייל מנורמל + שם + בית + rid + טלפון לפי משבצת', res.rows[0].email === 'dana@x.com' && res.rows[0].first === 'דנה' && res.rows[0].house === '5' && res.rows[0].rid === 'F1' && res.rows[0].phone === '050');
   ok('בן/בת הזוג (משבצת 2) מקבל את הטלפון שלו', res.rows[1].email === 'ron@x.com' && res.rows[1].phone === '052');
   ok('🔴 אין ת.ז./תאריך לידה בתשובה', !/123|1990|ת\.ז|לידה/.test(JSON.stringify(res)));

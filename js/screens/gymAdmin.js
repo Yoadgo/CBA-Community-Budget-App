@@ -1156,6 +1156,11 @@ CBA.screens = CBA.screens || {};
       });
       if (!m.length) { pickList.innerHTML = '<div class="ac-item" style="cursor:default;color:var(--text-soft)">לא נמצא תושב — האימייל חייב להיות רשום בטאב "תושבים"</div>'; pickList.hidden = false; return; }
       pickList.innerHTML = m.map(function (x) {
+        /* תושב בלי אימייל בטאב "תושבים": מוצג באפור, לא ניתן לבחירה, עם הסבר מה לעשות */
+        if (x.r.noEmail) {
+          return '<div class="ac-item" style="cursor:default;opacity:.6">' + CBA.esc(pickLabel(x.r)) +
+                 ' <span style="color:var(--text-soft)">— אין אימייל בטאב "תושבים", יש להוסיף שם קודם</span></div>';
+        }
         return '<div class="ac-item" data-gc-idx="' + x.i + '">' + CBA.esc(pickLabel(x.r)) +
                ' <span style="color:var(--text-soft);direction:ltr;unicode-bidi:embed">' + CBA.esc(x.r.email) + "</span></div>";
       }).join("");
@@ -1202,7 +1207,7 @@ CBA.screens = CBA.screens || {};
       if (!String(data.email || "").trim()) { showErr("צריך לבחור תושב."); return; }
       if (pickRows && !picked) {
         var typed = String(data.email).trim().toLowerCase();
-        var hit = pickRows.filter(function (r) { return r.email === typed; })[0];
+        var hit = pickRows.filter(function (r) { return !r.noEmail && r.email === typed; })[0];
         if (!hit) { showErr('האימייל לא רשום בטאב "תושבים" — בחרו תושב מהרשימה.'); return; }
       }
       if (data.declarationMode === "received" && !data.declarationDate) {

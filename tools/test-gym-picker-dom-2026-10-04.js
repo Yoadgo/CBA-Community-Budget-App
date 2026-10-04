@@ -9,6 +9,7 @@ const GA = fs.readFileSync(path.join(__dirname, '..', 'js/screens/gymAdmin.js'),
 const ROWS = [
   { email: 'dana@x.com', first: 'דנה', family: 'כהן', house: '5', rid: 'F1', phone: '050-1' },
   { email: 'ron@x.com', first: 'רון', family: 'לוי', house: '6', rid: 'F2', phone: '' },
+  { email: '', noEmail: true, first: 'מירי', family: 'פריד', house: '9', rid: 'F9', phone: '' },
 ];
 function boot(pickerBehavior) {
   const dom = new JSDOM('<!doctype html><body><div id="c"></div></body>', { runScripts: 'outside-only', pretendToBeVisual: true });
@@ -64,6 +65,16 @@ console.log('\n2. חיפוש לפי אימייל / אימייל לא רשום');
   ok('אין התאמה → הודעה ברורה', items(t.w).length === 1 && /לא נמצא תושב/.test(items(t.w)[0].textContent));
   t.w.document.querySelector('[data-gc-save]').click();
   ok('🔴 אימייל לא רשום נחסם, לא נשלח לשרת', t.calls.create.length === 0 && /לא רשום בטאב/.test(t.w.document.querySelector('[data-gc-err]').textContent));
+}
+console.log('\n2ב. תושב בלי אימייל בטאב (פריד)');
+{
+  const t = boot(); t.btn.click(); t.resolve({ ok: true, rows: ROWS });
+  const em = t.w.document.querySelector('[data-gc="email"]');
+  type(t.w, em, 'פריד');
+  ok('🔴 מופיע ברשימה עם הסבר "אין אימייל" (לא שקט)', items(t.w).length === 1 && /מירי פריד/.test(items(t.w)[0].textContent) && /אין אימייל בטאב/.test(items(t.w)[0].textContent), items(t.w).map(x => x.textContent).join('|'));
+  ok('ולא ניתן לבחירה', !items(t.w)[0].dataset.gcIdx);
+  items(t.w)[0].dispatchEvent(new t.w.MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+  ok('לחיצה עליו לא ממלאת כלום', t.w.document.querySelector('[data-gc="email"]').value === 'פריד');
 }
 console.log('\n3. שרת כושל — השדה נשאר חופשי');
 {
