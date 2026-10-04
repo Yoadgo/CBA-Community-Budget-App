@@ -73,8 +73,17 @@ service cloud.firestore {
        ⚠️ **שתי המערכות חייבות להסכים על הכלל הזה.** אם הוא ישתנה בצד אחד
        בלבד, אותו משתמש יראה דברים שונים בשני המסלולים — וזה בדיוק סוג
        הסטייה השקטה שכלל הסטייה הגלויה בא למנוע. */
+    /* 🔴 4.10.26 — **תקרת 1,000 הביטויים לבקשה.** Firestore מפסיק להעריך כלל אחרי
+       1,000 ביטויים ו**דוחה** את הבקשה ("Missing or insufficient permissions") —
+       בלי שום הבחנה בין "אין הרשאה" לבין "הכלל יקר מדי". פונקציה בכללים אינה
+       נזכרת: כל קריאה ל-isMember() מעריכה מחדש את signedIn, exists, active
+       ו-memberEmailOk (גל 1 הוסיף לשם עוד ~10 ביטויים). עד היום hasPerm קראה
+       ל-isMember **פעמיים** (פעם ישירות ופעם דרך isSuper), ו-gtUpdateOk קראה
+       ל-hasPerm עד 6 פעמים ⇒ אחרי גל 1 + השיוכים של 4.10, עדכון של משימה סגורה
+       (וסגירה של מנהל עם סיבה) עבר את התקרה ונדחה — גם למנהל-על.
+       כאן: isMember אחת בלבד. **אותו כלל לוגי בדיוק** ('על' = כל הרשאה). */
     function hasPerm(p) {
-      return isMember() && (isSuper() || (p in m().perms));
+      return isMember() && (('על' in m().perms) || (p in m().perms));
     }
 
     function myFamilyId() {
@@ -487,17 +496,18 @@ service cloud.firestore {
     }
 
     /* 🌱 4.10 — עד 5 שיוכים. שדה חסר עובר (כל המשימות שלפני 4.10). */
+    /* 4.10.26 — `let` אחד במקום 15 קריאות get() (ר' תקרת הביטויים ליד hasPerm),
+       ובלי לבדוק בכלל כשאין שיוכים (כמעט כל משימה). */
     function gtAssetsOk() {
-      return request.resource.data.get('assets', []) is list &&
-             request.resource.data.get('assets', []).size() <= 5 &&
-             gtAssetAt(0) && gtAssetAt(1) && gtAssetAt(2) && gtAssetAt(3) && gtAssetAt(4);
+      let a = request.resource.data.get('assets', []);
+      return a is list && a.size() <= 5 &&
+             (a.size() == 0 ||
+              (gtAssetAt(a, 0) && gtAssetAt(a, 1) && gtAssetAt(a, 2) && gtAssetAt(a, 3) && gtAssetAt(a, 4)));
     }
 
     /* כל שיוך הוא מזהה קצר — לא אובייקט. אין לולאות בכללים, ולכן 5 פעמים. */
-    function gtAssetAt(i) {
-      return request.resource.data.get('assets', []).size() <= i ||
-             (request.resource.data.get('assets', [])[i] is string &&
-              request.resource.data.get('assets', [])[i].size() <= 40);
+    function gtAssetAt(a, i) {
+      return a.size() <= i || (a[i] is string && a[i].size() <= 40);
     }
 
     /* 📷 23.9 — רשימת מזהי Drive, בגבול. 2 לפעולה; 40 הם תקרה נדיבה
@@ -651,9 +661,10 @@ service cloud.firestore {
        גנן חיצוני — או ניקוי דגל בלבד (המסלול שמונע מבוי סתום
        כשמשוב שלילי מרים דגל על משימה סגורה), או פתיחה מחדש
        של סגירת 'בוצע' בתוך חלון הערעור. */
+    /* 4.10.26 — הבדיקות הזולות לפני gtMgr() (אותה תוצאה, סדר אחר): gtMgr היא
+       הקריאה היקרה בכללים — ר' תקרת הביטויים ליד hasPerm. */
     function gtClosedOk() {
       return gtCur('closure') == '' ||
-             gtMgr() ||
              request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['flag', 'updatedAt']) ||
              /* 📷 23.9 — התמונה עולה **אחרי** הסגירה (שגר-ושכח), ולכן הגנן
@@ -661,6 +672,7 @@ service cloud.firestore {
                 השדות האלה — שום שינוי אחר במשימה סגורה. */
              request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['workPhotos', 'updatedAt']) ||
+             gtMgr() ||
              (gtCur('closure') == 'בוצע' && gtNext('closure') == '' &&
               gtWithinDispute());
     }
@@ -679,8 +691,8 @@ service cloud.firestore {
        או לגנן: "הבדיקה החוזרת הסתיימה" ו"הוחזר אליך". הגנן החיצוני אינו
        שולח אותן (הדפדפן שלו גם לא מציע אותן — כאן זה נאכף). */
     function gtNotifyMgrOnlyOk() {
-      return gtMgr() ||
-             !['GARDEN_RECHECK_DONE', 'GARDENER_TASK_RETURNED'].hasAny([gtNext('notify')]);
+      return !['GARDEN_RECHECK_DONE', 'GARDENER_TASK_RETURNED'].hasAny([gtNext('notify')]) ||
+             gtMgr();
     }
 
     function gtNotifyOk() {
