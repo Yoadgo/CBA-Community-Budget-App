@@ -26,7 +26,7 @@ ok('"מועדון משפחות" בשני הצדדים', svcR[2][1] === 'מועד
 ok('כל פריט בקבוצת שירותים מסומן במקטע', groups.filter(g => g.group === 'services').every(g => g.items.every(i => typeof i[2] === 'string' && i[2])));
 const allScreens = AREAS_ALL.resident.screens.concat(AREAS_ALL.admin.screens);
 ok('כל יעד בניווט רשום כמסך', groups.every(g => g.items.every(i => allScreens.indexOf(i[0]) !== -1)));
-ok('גינון במקטע אחד, "נתונים" ראשון', JSON.stringify(AREAS_ALL.admin.tabs[2].items.filter(i => i[2] === 'garden').map(i => i[0])) === JSON.stringify(['gardenStats', 'gardenPlan', 'gardenTasks']));
+ok('גינון במקטע אחד, "נתונים" ראשון', JSON.stringify(AREAS_ALL.admin.tabs[2].items.filter(i => i[2] === 'garden').map(i => i[0])) === JSON.stringify(['gardenStats', 'gardenPlan', 'gardenTasks', 'gardenLawn' /* 🌱 4.10 */]));
 ok('התמזגות למקטע יחיד → תווית המקטע (גנן חיצוני = "גינון")', /var label = \(oneSec && SECTION_LABELS\[oneSec\]\) \|\| t\.label;/.test(APP) && /if \(items\.length === 1\) return \[items\[0\]\[0\], label,/.test(APP) && /garden: "גינון"/.test(APP));
 ok('סמליל קבוצה לפי מקטע', /var gkey = t\.icon \|\| t\.group;/.test(APP));
 ok('בועה: מרווח בין מקטעים', /nav-sheet__gap/.test(APP) && /\.nav-sheet__gap \{ height: 18px;/.test(MCSS));

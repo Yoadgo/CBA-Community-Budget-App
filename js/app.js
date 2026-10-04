@@ -317,6 +317,9 @@
     // המסך שייך לאזור הניהול, והצפייה המקבילה של התושב (resGarden, "הדיווחים
     // שלי") יושבת באזור התושב ופתוחה לכולם ולכן אינה מופיעה כאן כלל.
     gardenTasks: PERM.GARDEN,
+    /* 🌱 4.10 — "דשא והשקיה": גם הגנן החיצוני (הכרעת יועד 3.10 — הוא זה שמסמן
+       בשטח). הכללים אוכפים את אותו דבר: gardenAssets = hasPerm('גינון'). */
+    gardenLawn: PERM.GARDEN,
     /* "MANAGER" — הרשאת גינון **ולא** משתמש חיצוני. אחראי הגינון עובד לפי
        התוכנית ואינו קובע אותה, ולא הוא מחליט מה נכנס לשבוע. השרת חוסם את
        שניהם בעצמו (ר' handleGardenPlan_ ו-gardenPlanSave_); כאן רק מסתירים,
@@ -391,7 +394,7 @@
   const AREAS_ALL = {
     admin: {
       def: "budget",
-      screens: ["adminBoard", "budget", "expenses", "planning", "clubAdmin", "gymAdmin", "weworkAdmin", "residents", "committeeAdmin", "mapAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "appReports", "sysStatus", "sysHub", "reconcile"],
+      screens: ["adminBoard", "budget", "expenses", "planning", "clubAdmin", "gymAdmin", "weworkAdmin", "residents", "committeeAdmin", "mapAdmin", "servicesAdmin", "emailSettings", "gardenTasks", "gardenPlan", "gardenInbox", "gardenStats", "gardenLawn", "appReports", "sysStatus", "sysHub", "reconcile"],
       // "תכנון מול ביצוע"/"ניהול הוצאות"/"בניית תקציב" אוחדו לכפתור-קבוצה אחד
       // "תקציב" (2026-08-09), באותה תבנית בדיוק כמו קבוצת "השיכון" באזור התושב
       // (ר' renderNav/toggleGroup) — שלושתם גם חולקים את אותה הרשאה (PERM.BUDGET,
@@ -427,7 +430,9 @@
             ["weworkAdmin", "WeWork", "facilities"],
             ["gardenStats", "נתוני גינון", "garden"],
             ["gardenPlan",  "תוכנית העבודה", "garden"],
-            ["gardenTasks", "משימות", "garden"]
+            ["gardenTasks", "משימות", "garden"],
+            /* 🌱 4.10 — מפת התשתית: ממטרות, מחשבי השקיה, צנרת ומצב הדשא. */
+            ["gardenLawn",  "דשא והשקיה", "garden"]
           ] },
         /* "מדריך" גם אצל המנהל (28.9.26) — אותו מקום כמו אצל התושב. פריט יחיד
            ולכן מתקפל לטאב רגיל בשם "מדריך" (ר' rebuildAreas). */
@@ -603,6 +608,8 @@
     // "גינון" באזור הניהול — אותו עלה בדיוק כמו resGarden באזור התושב, לפי
     // אותו כלל שכבר קיים ב-committeeAdmin/resCommittee וב-servicesAdmin/
     // resServices: אותו נושא, אותו סמליל, רק צד ניהול מול צד צפייה.
+    /* 🌱 4.10 — ממטרה: ראש + קשתות התזה. */
+    gardenLawn:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15" r="3"/><path d="M12 12V7"/><path d="M5 9a9 9 0 0 1 3-4M19 9a9 9 0 0 0-3-4M3 13a10 10 0 0 1 1-5M21 13a10 10 0 0 0-1-5"/><path d="M4 21h16"/></svg>',
     gardenTasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20"/><path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13"/></svg>',
     resGardenNew:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20a10 10 0 0010-10 25.9 25.9 0 00-1.04-7.281 1 1 0 00-1.755-.325C15.833 5.5 13 5.5 9.8 6.1A7 7 0 0011 20"/><path d="M2 21a5 5 0 012.911-4.544C7.613 15.212 8.351 15.24 11 13"/></svg>',
     resCommittee: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></svg>',
@@ -621,7 +628,7 @@
     resWework: "#A16207", weworkAdmin: "#A16207",
     resServices: "#0369A1", servicesAdmin: "#0369A1",
     resRecommendations: "#9D174D",
-    resGarden: "#047857", gardenStats: "#047857", gardenPlan: "#047857", gardenTasks: "#047857",
+    resGarden: "#047857", gardenStats: "#047857", gardenPlan: "#047857", gardenTasks: "#047857", gardenLawn: "#047857",
     budget: "#0E7490", expenses: "#3730A3", planning: "#475569",
     resMap: "#0E7490", resDirectory: "#6D28D9", resCommittee: "#3730A3",
     residents: "#6D28D9", committeeAdmin: "#3730A3"
@@ -3593,6 +3600,9 @@
     /* גינון — המסך שבו התגלה הבאג */
     gardenTasks: ["garden"], gardenInbox: ["garden"], gardenPlan: ["garden"],
     gardenStats: ["garden"], resGarden: ["garden"], resGardenNew: ["garden"],
+    /* 🌱 4.10 — רענון שקט בלבד: המסך מושך נתונים מחדש בלי לבנות את עצמו
+       (טיוטה באמצע ציור לא נמחקת). ר' render ב-gardenLawn.js. */
+    gardenLawn: ["garden"],
     resMap: ["garden"],
     /* מועדון */
     clubAdmin: ["club"], resReserve: ["club"],

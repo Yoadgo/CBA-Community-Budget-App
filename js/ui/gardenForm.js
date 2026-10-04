@@ -76,6 +76,9 @@ CBA.gardenForm = (function () {
    *   task      תקלה קיימת לעריכה (mode "task") — 22.9, בקשת יועד
    *   noRepeat  true = בלי המתג "משימה חוזרת" (הגנן אינו מוסיף לתוכנית)
    *   weekLabel (key) => string — לשבוע שנקבע ואינו בין האפשרויות
+   *   at        {x, y} — מיקום התחלתי לתקלה חדשה (4.10, "פתיחת תקלה כאן" ממסך דשא והשקיה)
+   *   cat       קטגוריה התחלתית לתקלה חדשה (4.10)
+   *   ⚠️ onSaved מקבל מ-4.10 את תשובת השמירה (res: {id, ids}) — קוראים ישנים מתעלמים ממנה.
    */
   function open(opts) {
     opts = opts || {};
@@ -103,12 +106,12 @@ CBA.gardenForm = (function () {
 
     var st = {
       repeat: isPlan,
-      cat: (d && d.category) || (tk && tk.category) || "",
+      cat: (d && d.category) || (tk && tk.category) || (opts.cat || ""),
       area: (tk && tk.area) || "",
       areas: (d && d.areas) || [],
       week: tk ? String(tk.week || "") : (weeks.length ? weeks[0].v : ""),
-      x: (tk && typeof tk.x === "number") ? tk.x : null,
-      y: (tk && typeof tk.y === "number") ? tk.y : null,
+      x: (tk && typeof tk.x === "number") ? tk.x : (opts.at && typeof opts.at.x === "number" ? opts.at.x : null),
+      y: (tk && typeof tk.y === "number") ? tk.y : (opts.at && typeof opts.at.y === "number" ? opts.at.y : null),
       pinArea: "",
       photos: [],
       busy: false
@@ -560,7 +563,7 @@ CBA.gardenForm = (function () {
             ? "נפתחו " + res.ids.length + " תקלות · #" + res.ids.join(", #")
             : "נפתחה תקלה #" + res.id) +
           (res.photosPending ? " · התמונות עולות ברקע" : ""));
-        if (opts.onSaved) opts.onSaved();
+        if (opts.onSaved) opts.onSaved(res);
       });
     });
 

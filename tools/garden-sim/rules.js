@@ -5,12 +5,16 @@
 'use strict';
 
 const GP_FIELDS = ['id','title','category','areas','freq','firstWeek','weekOfMonth','months','rotate','clause','active','note','effectiveFrom','order','schema','updatedAt'];
-const GT_FIELDS = ['id','kind','templateId','title','category','area','x','y','stage','flag','closure','week','due','note','drags','firstWeek','createdAt','updatedAt','approvedBy','approvedAt','repId','photos','order','year','schema','syncedAt','pendingDelete','familyId','mergedReps','openedBy','openedUid','desc','place','reporter','workPhotos'];
+const GT_FIELDS = ['id','kind','templateId','title','category','area','x','y','stage','flag','closure','week','due','note','drags','firstWeek','createdAt','updatedAt','approvedBy','approvedAt','repId','photos','order','year','schema','syncedAt','pendingDelete','familyId','mergedReps','openedBy','openedUid','desc','place','reporter','workPhotos','assets'];
 const GT_TEAM_ONLY = ['flag','closure','week','due','note','drags','approvedBy','approvedAt','openedBy','openedUid','workPhotos'];
-const GT_TEAM_UPDATE = ['stage','flag','closure','week','due','note','drags','firstWeek','title','category','area','x','y','approvedBy','approvedAt','repId','photos','order','updatedAt','syncedAt','notify','notifyPending','notifyNote','mergedReps','desc','place','workPhotos'];
+const GT_TEAM_UPDATE = ['stage','flag','closure','week','due','note','drags','firstWeek','title','category','area','x','y','approvedBy','approvedAt','repId','photos','order','updatedAt','syncedAt','notify','notifyPending','notifyNote','mergedReps','desc','place','workPhotos','assets'];
 const GR_CREATE_FIELDS = ['id','familyId','date','category','area','title','desc','place','x','y','photos','taskId','clientRef','mailPending','photosExpected','photosIncomplete','year','schema','updatedAt'];
 const GR_TEAM_FIELDS = ['stage','flag','closure','closeWhy','mergedInto','feedback','feedbackUntil','canFeedback','workPhotos'];
 const GR_TEAM_UPDATE = ['stage','flag','closure','closeWhy','mergedInto','taskId','canFeedback','feedbackUntil','photos','photosIncomplete','updatedAt','workPhotos'];
+/* 🌱 4.10 — דשא והשקיה */
+const LW_FIELDS = ['id','name','shape','pts','cx','cy','r','rx','ry','rev','archived','updatedAt','updatedBy','schema'];
+const GA_FIELDS = ['id','kind','name','x','y','pts','ctrl','station','type','range','lawnId','status','note','archived','updatedAt','updatedBy','schema','shape','cx','cy','r','rx','ry','parentId'];
+const LE_CREATE = ['id','lawnId','pts','baseRev','uid','status','createdAt','updatedAt','schema'];
 const GL_FIELDS = ['taskId','kind','field','from','to','actorUid','note','at','schema','familyId','who','role'];
 /* 23.9 — סוג ההחזרה ירד (מרכז ההתראות, תיקון דחוף 2). */
 const GL_RESIDENT_KINDS = ['נפתח','שיבוץ','גרירה','הערה','ביטול ביצוע','ביצוע','סגירה','משוב'];
@@ -63,11 +67,14 @@ function make(ctx) {
     canSeeGardenTasks: () => hasPerm('גינון'),
     /* 📷 23.9 — gtWorkPhotosOk: רשימה, עד 40. */
     gtWorkPhotosOk: () => Array.isArray(get(A, 'workPhotos', [])) && get(A, 'workPhotos', []).length <= 40,
-    gtShapeOk: () => hasOnly(keysA, GT_FIELDS) && hasAll(keysA, ['id','title','stage','schema']) && isStr(A.title) && A.title.length > 0 && isInt(A.schema) && rules.gtWorkPhotosOk(),
+    /* 🌱 4.10 — gtAssetsOk: רשימה, עד 5. */
+    gtAssetsOk: () => Array.isArray(get(A, 'assets', [])) && get(A, 'assets', []).length <= 5 &&
+      get(A, 'assets', []).every(v => isStr(v) && v.length <= 40),
+    gtShapeOk: () => hasOnly(keysA, GT_FIELDS) && hasAll(keysA, ['id','title','stage','schema']) && isStr(A.title) && A.title.length > 0 && isInt(A.schema) && rules.gtWorkPhotosOk() && rules.gtAssetsOk(),
     gtFromReportOk: () => notExt() && rules.gtShapeOk() && A.stage === 'התקבל' && !hasAny(keysA, GT_TEAM_ONLY),
     gtOpenedOk: () => (get(A, 'openedUid', '') === '' || get(A, 'openedUid', '') === ctx.uid) && ['', 'מנהל', 'גנן'].includes(get(A, 'openedBy', '')),
     gtTeamCreateOk: () => hasPerm('גינון') && rules.gtShapeOk() && rules.gtOpenedOk(),
-    gtTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GT_TEAM_UPDATE) && rules.gtWorkPhotosOk(),
+    gtTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GT_TEAM_UPDATE) && rules.gtWorkPhotosOk() && rules.gtAssetsOk(),
     gtMgr: () => hasPerm('גינון') && m().isExternal === false,
     gtClosureValueOk: () => nx('closure') === '' || CLOSURES.includes(nx('closure')),
     gtClosureAuthOk: () => nx('closure') === cu('closure') || nx('closure') === '' || nx('closure') === 'בוצע' || nx('closure') === 'אוחד' || rules.gtMgr(),
@@ -105,6 +112,40 @@ function make(ctx) {
     glResidentCreateOk: () => notExt() && rules.glRoleOk() && hasOnly(keysA, GL_FIELDS) && hasAll(keysA, ['taskId','actorUid','at']) && A.actorUid === ctx.uid && (nx('familyId') === '' || nx('familyId') === myFamilyId()) && (A.kind === 'נפתח' || A.kind === 'משוב'),
     glResidentReadOk: d => isMember() && myFamilyId() !== '' && get(d,'familyId','') === myFamilyId() && GL_RESIDENT_KINDS.includes(get(d,'kind','')),
 
+    /* ---- 🌱 דשא והשקיה (4.10) ---- */
+    isReqTime: v => isTs(v) && +v === +ctx.now,
+    lwPtsOk: () => Array.isArray(get(A,'pts',[])) && get(A,'pts',[]).length <= 240 && get(A,'pts',[]).length % 2 === 0 &&
+      (A.shape !== 'poly' || get(A,'pts',[]).length >= 6),
+    lwShapeOk: () => hasOnly(keysA, LW_FIELDS) && hasAll(keysA, ['id','name','shape','rev','updatedAt','updatedBy','schema']) &&
+      isStr(A.name) && A.name.length <= 60 && ['poly','circle','ellipse'].includes(A.shape) && isInt(A.rev) &&
+      typeof get(A,'archived',false) === 'boolean' &&
+      rules.isReqTime(A.updatedAt) && A.updatedBy === ctx.uid && isInt(A.schema) && rules.lwPtsOk() && rules.lwGeomOk(),
+    lwNum: f => !(f in A) || (isNum(A[f]) && A[f] >= 0 && A[f] <= 1),
+    lwGeomOk: () => ['cx','cy','r','rx','ry'].every(rules.lwNum) && (A.shape === 'poly' || (isNum(get(A,'cx',null)) && isNum(get(A,'cy',null)))),
+    lwCreateOk: docId => hasPerm('גינון') && rules.lwShapeOk() && A.id === docId && A.rev === 1,
+    lwUpdateOk: () => hasPerm('גינון') && rules.lwShapeOk() && A.id === B.id && A.rev === B.rev + 1,
+    gaShapeOk: () => hasOnly(keysA, GA_FIELDS) && hasAll(keysA, ['id','kind','updatedAt','updatedBy','schema']) &&
+      ['spr','ctrl','pipe','lawn','patch'].includes(A.kind) &&
+      [['name',60],['note',300],['ctrl',40],['lawnId',40],['parentId',40]].every(([f, n]) => isStr(get(A,f,'')) && get(A,f,'').length <= n) &&
+      [['x',1],['y',1],['cx',1],['cy',1],['r',1],['rx',1],['ry',1],['range',50],['station',99]].every(([f, n]) => !(f in A) || (isNum(A[f]) && A[f] >= 0 && A[f] <= n)) &&
+      ['','ok','dry','dead'].includes(get(A,'status','')) && ['','pop','rot','drip'].includes(get(A,'type','')) &&
+      typeof get(A,'archived',false) === 'boolean' && Array.isArray(get(A,'pts',[])) && get(A,'pts',[]).length <= 240 &&
+      get(A,'pts',[]).length % 2 === 0 && rules.isReqTime(A.updatedAt) && A.updatedBy === ctx.uid && isInt(A.schema),
+    gaKindOk: docId => (A.kind !== 'lawn' || (get(A,'lawnId','') === docId && ['ok','dry','dead'].includes(get(A,'status','')))) &&
+      (A.kind !== 'patch' || (['ok','dry','dead'].includes(get(A,'status','')) && ['poly','circle','ellipse'].includes(get(A,'shape','')))) &&
+      (['lawn','patch'].includes(A.kind) || get(A,'status','') === ''),
+    gaCreateOk: docId => hasPerm('גינון') && rules.gaShapeOk() && rules.gaKindOk(docId) && A.id === docId,
+    gaUpdateOk: docId => hasPerm('גינון') && rules.gaShapeOk() && rules.gaKindOk(docId) && A.id === B.id && A.kind === B.kind,
+    leMyReport: docId => myFamilyId() !== '' && getDoc('gardenReports', docId).familyId === myFamilyId(),
+    leCreateOk: docId => notExt() && hasOnly(keysA, LE_CREATE) && hasAll(keysA, LE_CREATE) && A.id === docId &&
+      A.uid === ctx.uid && A.status === 'pending' && isStr(A.lawnId) && isInt(A.baseRev) && A.baseRev >= 1 &&
+      getDoc('gardenLawns', A.lawnId).rev >= A.baseRev &&
+      Array.isArray(A.pts) && A.pts.length >= 6 && A.pts.length <= 240 && A.pts.length % 2 === 0 &&
+      rules.isReqTime(A.createdAt) && rules.isReqTime(A.updatedAt) && isInt(A.schema) && rules.leMyReport(docId),
+    leReadOk: d => hasPerm('גינון') || (notExt() && get(d,'uid','') === ctx.uid),
+    leDecideOk: () => hasPerm('גינון') && B.status === 'pending' && hasOnly(aff(), ['status','decidedBy','decidedAt','updatedAt']) &&
+      ['approved','rejected'].includes(A.status) && A.decidedBy === ctx.uid && rules.isReqTime(A.decidedAt) && rules.isReqTime(A.updatedAt),
+
     counterBumpOk: () => isMember() && hasOnly(aff(), ['n','updatedAt']) && isInt(A.n) && A.n === B.n + 1,
     isMember, hasPerm, myFamilyId
   };
@@ -114,6 +155,7 @@ function make(ctx) {
 /* op: 'get' | 'list' | 'create' | 'update' | 'delete'. מחזיר {ok, why}. */
 function check(ctx) {
   const r = make(ctx);
+  const members_notExt = () => !!(ctx.members[ctx.uid] && ctx.members[ctx.uid].isExternal === false);
   const c = ctx.coll, op = ctx.op, B = ctx.before || {};
   const T = (cond, why) => ({ ok: !!cond, why });
   try {
@@ -159,6 +201,32 @@ function check(ctx) {
       }
       if (op === 'create') return T(r.glCreateOk() || r.glResidentCreateOk(), 'glCreateOk||glResidentCreateOk');
       return T(false, 'update/delete:false');
+    }
+    /* 🌱 4.10 — דשא והשקיה */
+    if (c === 'gardenLawns') {
+      if (op === 'get' || op === 'list') return T(r.isMember(), 'isMember');
+      if (op === 'create') return T(r.lwCreateOk(ctx.id), 'lwCreateOk');   // set() על מזהה קיים = update
+      if (op === 'update') return T(r.lwUpdateOk(), 'lwUpdateOk');
+      return T(false, 'delete:false');
+    }
+    if (c === 'gardenAssets') {
+      if (op === 'get' || op === 'list') return T(r.canSeeGardenTasks(), 'canSeeGardenAssets');
+      if (op === 'create') return T(r.gaCreateOk(ctx.id), 'gaCreateOk');
+      if (op === 'update') return T(r.gaUpdateOk(ctx.id), 'gaUpdateOk');
+      return T(false, 'delete:false');
+    }
+    if (c === 'gardenLawnEdits') {
+      if (op === 'get') return T(r.leReadOk(B), 'leReadOk');
+      if (op === 'list') {
+        /* תושב: המסנן חייב להוכיח uid == שלי (כלל לא מסנן שורות). */
+        if (r.hasPerm('גינון')) return T(true, 'garden');
+        const q = ctx.query || [];
+        const f = q.find(([k]) => k === 'uid');
+        return T(r.isMember() && members_notExt() && f && f[1] === ctx.uid, 'query must filter uid==mine');
+      }
+      if (op === 'create') return T(safe(() => r.leCreateOk(ctx.id)), 'leCreateOk');
+      if (op === 'update') return T(r.leDecideOk(), 'leDecideOk');
+      return T(false, 'delete:false');
     }
     if (c === 'counters') {
       if (op === 'get' || op === 'list') return T(r.isMember(), 'isMember');

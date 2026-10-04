@@ -475,7 +475,26 @@ service cloud.firestore {
               'reporter',
               /* 📷 23.9 (בקשת יועד) — תמונות שהצוות צילם בסגירה או
                  ב"הערה/דיווח". נפרד מ-`photos` (של התושב). הצוות בלבד. */
-              'workPhotos'];
+              'workPhotos',
+              /* 🌱 4.10 (דשא והשקיה) — מזהי ממטרה/מחשב/קו/מדשאה שהתקלה משויכת
+                 אליהם. **השיוך נשמר רק כאן** — הצד של הממטרה נגזר, כדי שלא
+                 יהיו שני מקומות לסנכרן. תושב רשאי לשלוח אותו ביצירה (שיוך
+                 אוטומטי למדשאה שבה ננעץ הדיווח); הצוות — גם בעדכון. ר' gtAssetsOk. */
+              'assets'];
+    }
+
+    /* 🌱 4.10 — עד 5 שיוכים. שדה חסר עובר (כל המשימות שלפני 4.10). */
+    function gtAssetsOk() {
+      return request.resource.data.get('assets', []) is list &&
+             request.resource.data.get('assets', []).size() <= 5 &&
+             gtAssetAt(0) && gtAssetAt(1) && gtAssetAt(2) && gtAssetAt(3) && gtAssetAt(4);
+    }
+
+    /* כל שיוך הוא מזהה קצר — לא אובייקט. אין לולאות בכללים, ולכן 5 פעמים. */
+    function gtAssetAt(i) {
+      return request.resource.data.get('assets', []).size() <= i ||
+             (request.resource.data.get('assets', [])[i] is string &&
+              request.resource.data.get('assets', [])[i].size() <= 40);
     }
 
     /* 📷 23.9 — רשימת מזהי Drive, בגבול. 2 לפעולה; 40 הם תקרה נדיבה
@@ -509,7 +528,7 @@ service cloud.firestore {
              request.resource.data.title is string &&
              request.resource.data.title.size() > 0 &&
              request.resource.data.schema is int &&
-             gtTextOk() && gtWorkPhotosOk();
+             gtTextOk() && gtWorkPhotosOk() && gtAssetsOk();
     }
 
     /* 🔴 תושב פותח משימה נלווית לדיווח — בנקודת הפתיחה בלבד. */
@@ -551,8 +570,8 @@ service cloud.firestore {
                          'x', 'y', 'approvedBy', 'approvedAt',
                          'repId', 'photos', 'order', 'updatedAt', 'syncedAt',
                          'notify', 'notifyPending', 'notifyNote', 'mergedReps',
-                         'desc', 'place', 'workPhotos']) &&
-             gtTextOk() && gtWorkPhotosOk();
+                         'desc', 'place', 'workPhotos', 'assets']) &&
+             gtTextOk() && gtWorkPhotosOk() && gtAssetsOk();
     }
 
     /* ========================================================================
@@ -2268,6 +2287,229 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+
+    /* ========================================================================
+     *  🌱  דשא והשקיה   (2026-10-04 · אפיון: claude/lawn-irrigation-2026-10.md)
+     * ------------------------------------------------------------------------
+     *  שלושה אוספים, מפוצלים **לפי מי רשאי לקרוא** — כלל פועל על מסמך שלם,
+     *  ולכן החלוקה היא החלטת פרטיות ולא החלטת ביצועים:
+     *
+     *    gardenLawns      גבולות המדשאות (שם + צורה + rev). **כל חבר פעיל
+     *                     קורא** — טופס הדיווח של התושב מציג את הגבול כשהנעיצה
+     *                     נופלת בתוך מדשאה. אין כאן נתון על אדם, ואין מצב דשא.
+     *    gardenAssets     ממטרות, מחשבי השקיה, צנרת, ו**מצב הדשא** (תקין/יבש/מת),
+     *                     וגם **כתמים** (מקטע בתוך מדשאה — kind 'patch'). הגינון בלבד
+     *                     (כולל הגנן החיצוני — הכרעת יועד 3.10).
+     *                     🔴 כתם יושב כאן ולא ב-gardenLawns: הוא קיים רק איפה שהמצב
+     *                     שונה מהמדשאה סביבו — כלומר הגבול שלו *הוא* מצב. (צוות אדום 4.10)
+     *    gardenLawnEdits  דיוק גבול שתושב צירף לדיווח שלו. מזהה המסמך = מזהה
+     *                     הדיווח (אחד לדיווח, "נסה שוב" לא מכפיל). התושב יוצר
+     *                     בלבד; הגינון מחליט "עדכון"/"להשאיר".
+     *
+     *  🔑 **אין מחיקה לאיש** — הסרה היא `archived: true`. תקלה שמשויכת לממטרה
+     *     (`assets` על המשימה) לא תצביע לעולם על מסמך שנעלם.
+     *  🔑 נקודות = רשימה שטוחה [x0,y0,x1,y1,…] בשבר 0–1 של עולם המפה (אותן
+     *     יחידות כמו נעיצת תקלה). Firestore אינו שומר רשימה בתוך רשימה.
+     *  🔑 `rev` עולה באחד בדיוק בכל עדכון גבול — זה מה שמאפשר לגנן לראות
+     *     שדיוק של תושב נעשה על גרסה ישנה של המדשאה.
+     * ====================================================================== */
+    function lwFields() {
+      return ['id', 'name', 'shape', 'pts', 'cx', 'cy', 'r', 'rx', 'ry',
+              'rev', 'archived', 'updatedAt', 'updatedBy', 'schema'];
+    }
+
+    /* 🔴 צוות אדום 4.10 — כל תושב מוריד את האוסף הזה: מספר בטווח 0–1 או חסר.
+       (ערכי pts עצמם אינם נבדקים אחד-אחד — אין לולאות בכללים; הגבול הוא
+       אורך הרשימה, והלקוח ממיר כל ערך למספר.) */
+    function lwNum(f) {
+      return !(f in request.resource.data) ||
+             (request.resource.data[f] is number &&
+              request.resource.data[f] >= 0 && request.resource.data[f] <= 1);
+    }
+
+    function lwGeomOk() {
+      return lwNum('cx') && lwNum('cy') && lwNum('r') && lwNum('rx') && lwNum('ry') &&
+             (request.resource.data.shape == 'poly' ||
+              (request.resource.data.get('cx', null) is number &&
+               request.resource.data.get('cy', null) is number));
+    }
+
+    function lwPtsOk() {
+      return request.resource.data.get('pts', []) is list &&
+             request.resource.data.get('pts', []).size() <= 240 &&
+             request.resource.data.get('pts', []).size() % 2 == 0 &&
+             (request.resource.data.shape != 'poly' ||
+              request.resource.data.get('pts', []).size() >= 6);
+    }
+
+    function lwShapeOk() {
+      return request.resource.data.keys().hasOnly(lwFields()) &&
+             request.resource.data.keys().hasAll(['id', 'name', 'shape', 'rev',
+                                                  'updatedAt', 'updatedBy', 'schema']) &&
+             request.resource.data.name is string &&
+             request.resource.data.name.size() <= 60 &&
+             ['poly', 'circle', 'ellipse'].hasAny([request.resource.data.shape]) &&
+             request.resource.data.rev is int &&
+             request.resource.data.get('archived', false) is bool &&
+             request.resource.data.updatedAt == request.time &&
+             request.resource.data.updatedBy == request.auth.uid &&
+             request.resource.data.schema is int &&
+             lwPtsOk() && lwGeomOk();
+    }
+
+    function lwCreateOk(docId) {
+      return hasPerm('גינון') && lwShapeOk() &&
+             request.resource.data.id == docId &&
+             request.resource.data.rev == 1;
+    }
+
+    function lwUpdateOk() {
+      return hasPerm('גינון') && lwShapeOk() &&
+             request.resource.data.id == resource.data.id &&
+             request.resource.data.rev == resource.data.rev + 1;
+    }
+
+    match /gardenLawns/{docId} {
+      allow read: if isMember();
+      allow create: if lwCreateOk(docId);
+      allow update: if lwUpdateOk();
+      allow delete: if false;
+    }
+
+    function gaFields() {
+      return ['id', 'kind', 'name', 'x', 'y', 'pts', 'ctrl', 'station', 'type', 'range',
+              'lawnId', 'status', 'note', 'archived', 'updatedAt', 'updatedBy', 'schema',
+              /* כתם (kind 'patch') — צורה כמו מדשאה, והמדשאה שהוא בתוכה. */
+              'shape', 'cx', 'cy', 'r', 'rx', 'ry', 'parentId'];
+    }
+
+    function gaNum(f, max) {
+      return !(f in request.resource.data) ||
+             (request.resource.data[f] is number &&
+              request.resource.data[f] >= 0 && request.resource.data[f] <= max);
+    }
+
+    function gaStr(f, max) {
+      return request.resource.data.get(f, '') is string &&
+             request.resource.data.get(f, '').size() <= max;
+    }
+
+    /* מצב דשא: מסמך 'lawn' קשור למדשאה שלו (מזהה = lawnId), וכתם נושא מצב משלו.
+       לשאר הסוגים אין מצב. (צוות אדום 4.10) */
+    function gaKindOk(docId) {
+      return (request.resource.data.kind != 'lawn' ||
+              (request.resource.data.get('lawnId', '') == docId &&
+               ['ok', 'dry', 'dead'].hasAny([request.resource.data.get('status', '')]))) &&
+             (request.resource.data.kind != 'patch' ||
+              (['ok', 'dry', 'dead'].hasAny([request.resource.data.get('status', '')]) &&
+               ['poly', 'circle', 'ellipse'].hasAny([request.resource.data.get('shape', '')]))) &&
+             (['lawn', 'patch'].hasAny([request.resource.data.kind]) ||
+              request.resource.data.get('status', '') == '');
+    }
+
+    function gaShapeOk() {
+      return request.resource.data.keys().hasOnly(gaFields()) &&
+             request.resource.data.keys().hasAll(['id', 'kind', 'updatedAt', 'updatedBy', 'schema']) &&
+             ['spr', 'ctrl', 'pipe', 'lawn', 'patch'].hasAny([request.resource.data.kind]) &&
+             gaStr('name', 60) && gaStr('note', 300) && gaStr('ctrl', 40) &&
+             gaStr('lawnId', 40) && gaStr('parentId', 40) &&
+             gaNum('x', 1) && gaNum('y', 1) && gaNum('cx', 1) && gaNum('cy', 1) &&
+             gaNum('r', 1) && gaNum('rx', 1) && gaNum('ry', 1) &&
+             gaNum('range', 50) && gaNum('station', 99) &&
+             ['', 'ok', 'dry', 'dead'].hasAny([request.resource.data.get('status', '')]) &&
+             ['', 'pop', 'rot', 'drip'].hasAny([request.resource.data.get('type', '')]) &&
+             request.resource.data.get('archived', false) is bool &&
+             request.resource.data.get('pts', []) is list &&
+             request.resource.data.get('pts', []).size() <= 240 &&
+             request.resource.data.get('pts', []).size() % 2 == 0 &&
+             request.resource.data.updatedAt == request.time &&
+             request.resource.data.updatedBy == request.auth.uid &&
+             request.resource.data.schema is int;
+    }
+
+    function gaCreateOk(docId) {
+      return hasPerm('גינון') && gaShapeOk() && gaKindOk(docId) && request.resource.data.id == docId;
+    }
+
+    /* `kind` אינו משתנה — ממטרה לא הופכת לצינור. */
+    function gaUpdateOk(docId) {
+      return hasPerm('גינון') && gaShapeOk() && gaKindOk(docId) &&
+             request.resource.data.id == resource.data.id &&
+             request.resource.data.kind == resource.data.kind;
+    }
+
+    /* שם משלו ולא canSeeGardenTasks — כדי ששינוי עתידי בכלל המשימות לא ישנה
+       בשקט מי קורא את נכסי ההשקיה. (צוות אדום 4.10) */
+    function canSeeGardenAssets() {
+      return hasPerm('גינון');
+    }
+
+    match /gardenAssets/{docId} {
+      allow read: if canSeeGardenAssets();
+      allow create: if gaCreateOk(docId);
+      allow update: if gaUpdateOk(docId);
+      allow delete: if false;
+    }
+
+    /* 🔴 **הדיווח הוא של המשפחה שלי.** בלי זה כל תושב היה יכול לצרף
+       "דיוק" לדיווח של שכן — לא חשיפה, אבל הזרקת עבודה לתור של הגנן
+       בשם מישהו אחר. ⚠️ `myFamilyId() != ''` — ר' `canSeeFamilyTx`. */
+    function leMyReport(docId) {
+      return myFamilyId() != '' &&
+             get(/databases/$(database)/documents/gardenReports/$(docId)).data.familyId == myFamilyId();
+    }
+
+    function leCreateOk(docId) {
+      return isMember() && m().isExternal == false &&
+             request.resource.data.keys().hasOnly(['id', 'lawnId', 'pts', 'baseRev', 'uid',
+                                                   'status', 'createdAt', 'updatedAt', 'schema']) &&
+             request.resource.data.keys().hasAll(['id', 'lawnId', 'pts', 'baseRev', 'uid',
+                                                  'status', 'createdAt', 'updatedAt', 'schema']) &&
+             request.resource.data.id == docId &&
+             request.resource.data.uid == request.auth.uid &&
+             request.resource.data.status == 'pending' &&
+             request.resource.data.lawnId is string &&
+             request.resource.data.baseRev is int &&
+             request.resource.data.baseRev >= 1 &&
+             /* 🔴 צוות אדום 4.10 — הגרסה שעליה נעשה הדיוק אינה עתידית. מדשאה
+                שלא קיימת = get() נכשל = נדחה (אותו מספר קריאות כמו exists). */
+             get(/databases/$(database)/documents/gardenLawns/$(request.resource.data.lawnId)).data.rev >=
+               request.resource.data.baseRev &&
+             request.resource.data.pts is list &&
+             request.resource.data.pts.size() >= 6 &&
+             request.resource.data.pts.size() <= 240 &&
+             request.resource.data.pts.size() % 2 == 0 &&
+             request.resource.data.createdAt == request.time &&
+             request.resource.data.updatedAt == request.time &&
+             request.resource.data.schema is int &&
+             leMyReport(docId);
+    }
+
+    /* התושב קורא רק את שלו (השאילתה שלו מסננת `uid == שלי`); הגינון — הכול. */
+    function leReadOk() {
+      return hasPerm('גינון') ||
+             (isMember() && m().isExternal == false && resource.data.uid == request.auth.uid);
+    }
+
+    /* החלטה פעם אחת, ממצב "ממתין" בלבד, בשם עצמך. הגבול עצמו מתעדכן
+       ב-gardenLawns (lwUpdateOk) — כאן נרשמת רק ההחלטה. */
+    function leDecideOk() {
+      return hasPerm('גינון') &&
+             resource.data.status == 'pending' &&
+             request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'decidedBy', 'decidedAt', 'updatedAt']) &&
+             ['approved', 'rejected'].hasAny([request.resource.data.status]) &&
+             request.resource.data.decidedBy == request.auth.uid &&
+             request.resource.data.decidedAt == request.time &&
+             request.resource.data.updatedAt == request.time;
+    }
+
+    match /gardenLawnEdits/{docId} {
+      allow read: if leReadOk();
+      allow create: if leCreateOk(docId);
+      allow update: if leDecideOk();
+      allow delete: if false;
+    }
 
     /* ---------- ברירת המחדל ---------- */
 

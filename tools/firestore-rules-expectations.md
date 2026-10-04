@@ -700,3 +700,28 @@ Apps Script החזיר **41 משימות**, Firestore **10**.
 
 ⚠️ יועד (מנהל-על) יכול לאמת רק את C1, C4–C11. C2/C3 דורשים חשבון תושב רגיל
 או את הגנן החיצוני.
+
+---
+
+## 🌱 דשא והשקיה (נרשם 2026-10-04, **לפני** פרסום)
+
+תפקידים: **R** תושב רגיל · **E** הגנן החיצוני · **M** מנהל גינון פנימי · **L** מי שסומן "עזב" (`active:false`).
+סימולציה: `node tools/test-garden-lawn-rules-2026-10-04.js` (97 בדיקות מול הפורט). אחרי פרסום — השורות כאן, חי, מכל תפקיד שאפשר.
+
+| # | מי | פעולה | נתיב | צפוי |
+|---|---|---|---|---|
+| L1 | R | `list gardenLawns` | | ✅ (טופס הדיווח מציג גבולות) |
+| L2 🔴 | L | `list gardenLawns` | | ❌ |
+| L3 🔴 | R | `list gardenAssets` | | ❌ — מצב הדשא, הממטרות והכתמים לא יוצאים לתושב |
+| L4 | E | `list gardenAssets` | | ✅ |
+| L5 | E | `set gardenAssets/<חדש>` ממטרה, `updatedAt` = זמן שרת | | ✅ |
+| L6 🔴 | R | `set gardenAssets/<כל מזהה>` | | ❌ |
+| L7 | M | `set gardenLawns/<חדש>` עם `rev: 1` | | ✅ |
+| L8 🔴 | M | `set gardenLawns/<קיים>` בלי להעלות `rev` | | ❌ |
+| L9 🔴 | M | `set gardenLawns/<חדש>` עם `status` או `parentId` | | ❌ (מצב/כתם לא בגבולות) |
+| L10 🔴 | כל אחד | `delete` על gardenLawns / gardenAssets / gardenLawnEdits | | ❌ |
+| L11 | M / E | `update gardenTasks/<פתוחה>` רק `assets` + `updatedAt` | | ✅ |
+| L12 🔴 | E | `update gardenTasks/<סגורה>` רק `assets` | | ❌ (רק מנהל) |
+| L13 | R | `get gardenLawnEdits/<אין>` | | ❌ permission-denied (לא not-found — צפוי) |
+
+⚠️ יועד (מנהל-על) יכול לאמת חי רק את L1, L4, L5, L7–L11. L2, L3, L6, L12 דורשים חשבון תושב / גנן / "עזב".

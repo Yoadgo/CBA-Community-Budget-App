@@ -32,7 +32,8 @@ const indexFiles = (IDX.match(/<script defer src="(js\/[^"?]+)/g) || []).map(t =
 section('1. כל קובץ JS נטען פעם אחת בדיוק — או מ-index.html או מהמניפסט');
 {
   ok('4 קבוצות במניפסט', Object.keys(MAN).length === 4, Object.keys(MAN).join(','));
-  ok('22 קבצים לפי דרישה', lazyFiles.length === 22, String(lazyFiles.length));
+  /* 🌱 4.10 — +2: js/ui/gardenPins.js ו-js/screens/gardenLawn.js (דשא והשקיה) בקבוצת הגינון. */
+  ok('24 קבצים לפי דרישה', lazyFiles.length === 24, String(lazyFiles.length));
   const both = lazyFiles.filter(f => indexFiles.indexOf(f) !== -1);
   ok('🔴 אף קובץ לא גם ב-index.html וגם במניפסט', both.length === 0, both.join(','));
   const allJs = [];
@@ -110,7 +111,8 @@ section('3. הליבה לא נשענת על קבוצה בלי לעבור דרך 
 /* ---------- 4. סדר בתוך קבוצה ---------- */
 section('4. הסדר בתוך כל קבוצה = הסדר שהיה ב-index.html לפני הפיצול');
 {
-  const before = ['js/screens/budget.js', 'js/screens/expenses.js', 'js/screens/notes.js', 'js/screens/planning.js', 'js/screens/clubAdmin.js', 'js/screens/gymAdmin.js', 'js/screens/doorAdmin.js', 'js/screens/weworkAdmin.js', 'js/screens/residents.js', 'js/screens/emailSettings.js', 'js/screens/appReports.js', 'js/screens/sysStatus.js', 'js/screens/sysHub.js', 'js/screens/reconcile.js', 'js/screens/servicesAdmin.js', 'js/screens/servicesCategoriesAdmin.js', 'js/data/gardenSlots.js', 'js/screens/gardenPlan.js', 'js/screens/gardenStats.js', 'js/screens/gardenSchedule.js', 'js/screens/gardenScheduleAi.js', 'js/screens/gardenTasks.js'];
+  /* 🌱 4.10 — gardenPins לפני gardenStats (משתמש בו), gardenLawn לפני gardenTasks (שנשאר אחרון). */
+  const before = ['js/screens/budget.js', 'js/screens/expenses.js', 'js/screens/notes.js', 'js/screens/planning.js', 'js/screens/clubAdmin.js', 'js/screens/gymAdmin.js', 'js/screens/doorAdmin.js', 'js/screens/weworkAdmin.js', 'js/screens/residents.js', 'js/screens/emailSettings.js', 'js/screens/appReports.js', 'js/screens/sysStatus.js', 'js/screens/sysHub.js', 'js/screens/reconcile.js', 'js/screens/servicesAdmin.js', 'js/screens/servicesCategoriesAdmin.js', 'js/data/gardenSlots.js', 'js/ui/gardenPins.js', 'js/screens/gardenPlan.js', 'js/screens/gardenStats.js', 'js/screens/gardenSchedule.js', 'js/screens/gardenScheduleAi.js', 'js/screens/gardenLawn.js', 'js/screens/gardenTasks.js'];
   Object.keys(MAN).forEach(g => {
     const files = MAN[g].files.map(f => f.split('?')[0]);
     const idx = files.map(f => before.indexOf(f));

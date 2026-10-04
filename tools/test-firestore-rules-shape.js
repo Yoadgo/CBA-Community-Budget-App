@@ -134,7 +134,13 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                      'glCreateOk', 'glResidentCreateOk',
                      /* 🔴 נוסף ביודעין 24.9 (גל 4) — דיווחים על האפליקציה: יצירה
                         בשם עצמך, השלמת תמונות לדיווח שלך, וטופל/תשובה למנהל-על. */
-                     'arCreateOk', 'arPhotosOk', 'arAdminOk'];
+                     'arCreateOk', 'arPhotosOk', 'arAdminOk',
+                     /* 🌱 נוסף ביודעין 4.10 — דשא והשקיה. גבולות מדשאות (הגינון כותב,
+                        rev+1 בדיוק), נכסי השקיה (הגינון בלבד), ודיוק גבול שתושב
+                        מצרף לדיווח **שלו** (יצירה בלבד) והגינון מחליט עליו פעם אחת.
+                        אין מחיקה באף אחד מהשלושה. ר' firestore-rules-expectations.md. */
+                     'lwCreateOk', 'lwUpdateOk', 'gaCreateOk', 'gaUpdateOk',
+                     'leCreateOk', 'leDecideOk'];
 {
   const used = [];
   (CODE.match(/allow (create|update|delete)[^\n]*/g) || []).forEach(function (t) {
@@ -232,7 +238,9 @@ const OPENED = ['gardenPlan', 'gardenMeta', 'gardenReports', 'gardenTasks', 'gar
                 'gymMembers', 'gymConfig',
                 /* 25.9 — ועד השיכון v2: מסמך יחיד, קריאה לכל תושב פנימי,
                    כתיבה למנהל-על בלבד. בלי שמות תושבים — familyId+slot. */
-                'committee'];
+                'committee',
+                /* 🌱 4.10 — דשא והשקיה (ר' WRITE_GATES). */
+                'gardenLawns', 'gardenAssets', 'gardenLawnEdits'];
 const found = (CODE.match(/^\s*match \/([A-Za-z0-9_]+)\//gm) || [])
                 .map(function (x) { return x.trim().replace(/^match \//, '').replace(/\/$/, ''); })
                 .filter(function (x) { return x !== 'databases'; });

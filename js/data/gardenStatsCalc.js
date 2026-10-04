@@ -288,6 +288,11 @@
              !isNaN(+t.x) && !isNaN(+t.y);
     }
     var pins = [];
+    /* 🌱 4.10 — "חוזרת" על הנעץ: משוב שלילי או פתיחה מחדש בתקופה. */
+    var repIds = {};
+    fbItems.forEach(function (x) { repIds[String(x.id)] = 1; });
+    reopenItems.forEach(function (x) { repIds[String(x.id)] = 1; });
+    var nowMs = (opts.now ? new Date(opts.now) : new Date()).getTime();
     tasks.forEach(function (t) {
       if (!isFault(t) || !hasLoc(t)) return;
       var open = !t.closure || t.flag === "דורש בדיקה חוזרת";
@@ -296,8 +301,17 @@
       /* סמליל הנעץ לפי המשימה עצמה (דשא או טיפה לפי הכותרת — catOfTask, 23.9);
          הסינון לפי הקטגוריה המנורמלת, כמו בפס "לפי סוג". */
       var ct = L().catOfTask ? L().catOfTask(t) : L().catOf(t.category);
+      /* 🌱 4.10 — נעץ סגנון ב' (js/ui/gardenPins.js): תושבים שמחכים, תקלה חוזרת,
+         שיוך לממטרה/מדשאה, ימים פתוחה ושם (לתווית בזום קרוב). */
+      var hasRep = String(t.repId || "").trim() !== "";
+      var opened = openedMs(t);
       pins.push({ id: String(t.id), x: +t.x, y: +t.y, state: pinState(t, cur),
-                  cat: ct.key, ico: ct.ico, category: normCat(String(t.category || "")), closed: !open });
+                  cat: ct.key, ico: ct.ico, category: normCat(String(t.category || "")), closed: !open,
+                  title: t.title || t.category || "תקלה",
+                  res: open && hasRep ? 1 + ((t.mergedReps || []).length) : 0,
+                  rep: t.flag === "דורש בדיקה חוזרת" || !!repIds[String(t.id)],
+                  linked: !!(t.assets && t.assets.length),
+                  days: open && !isNaN(opened) ? Math.max(0, Math.floor((nowMs - opened) / DAY)) : 0 });
     });
     var openWithLoc = openF.filter(hasLoc).length;
 

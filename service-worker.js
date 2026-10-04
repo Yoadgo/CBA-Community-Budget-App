@@ -26,8 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "20b781a44c";
-var VERSION = "61962d10bd";
+var VERSION = "9b8c74c8ec";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -41,6 +40,7 @@ var ASSET_VERSIONS = {
   "css/frame.css": "7408e8f2b4",
   "css/garden.css": "0ae26936da",
   "css/garden2.css": "92f8f8dbd0",
+  "css/gardenLawn.css": "5d9c238a69",
   "css/gardenSchedule.css": "f0d56e7ded",
   "css/gardenStats.css": "9283136e86",
   "css/gym.css": "c480c9319b",
@@ -66,15 +66,16 @@ var ASSET_VERSIONS = {
   "css/wework.css": "3cfe17107a",
   "icons/apple-touch-icon.png": "5ce56ce0dc",
   "icons/icon-192.png": "a624d0ac7a",
-  "js/app.js": "e000aba3e1",
+  "js/app.js": "8c79c858e3",
   "js/data/dataService.js": "acd18cd826",
   "js/data/door.js": "71c7a113de",
   "js/data/firebase.js": "9669c19e11",
   "js/data/gardenAreas.js": "457c00156c",
+  "js/data/gardenAssets.js": "3a1043133a",
   "js/data/gardenLang.js": "0983592bf2",
   "js/data/gardenRules.js": "309560188b",
   "js/data/gardenSlots.js": "1b715264ff",
-  "js/data/gardenStatsCalc.js": "177cc46e78",
+  "js/data/gardenStatsCalc.js": "a4715965ff",
   "js/data/gymFs.js": "51ed68cc48",
   "js/data/gymWrite.js": "ebdd87e882",
   "js/data/mapGeo.js": "c42c0e1809",
@@ -83,7 +84,7 @@ var ASSET_VERSIONS = {
   "js/data/reconcile.js": "899bfb8f4c",
   "js/data/sheets.js": "3fc95ad12e",
   "js/lazy.js": "011e0ffe5f",
-  "js/lazyManifest.js": "9f0cc50f1b",
+  "js/lazyManifest.js": "0761b9db70",
   "js/pwa.js": "cc703231c6",
   "js/screens/appReports.js": "a47450bd91",
   "js/screens/budget.js": "5fbc7244f5",
@@ -93,10 +94,11 @@ var ASSET_VERSIONS = {
   "js/screens/emailSettings.js": "a0cb23db5a",
   "js/screens/events.js": "00461235ca",
   "js/screens/expenses.js": "1d93311741",
+  "js/screens/gardenLawn.js": "9fe65a992c",
   "js/screens/gardenPlan.js": "ea51dc59c9",
   "js/screens/gardenSchedule.js": "861d4bba6f",
   "js/screens/gardenScheduleAi.js": "4a2f2ab9f6",
-  "js/screens/gardenStats.js": "9409f96dca",
+  "js/screens/gardenStats.js": "9f310f2b18",
   "js/screens/gardenTasks.js": "43f85ceec7",
   "js/screens/gymAdmin.js": "f7ba90cfb6",
   "js/screens/home.js": "0205f05d94",
@@ -122,7 +124,8 @@ var ASSET_VERSIONS = {
   "js/ui/diag.js": "5131c18964",
   "js/ui/dialog.js": "0df981dda8",
   "js/ui/doorButton.js": "e274640af6",
-  "js/ui/gardenForm.js": "7f70409b34",
+  "js/ui/gardenForm.js": "2437fd1ab4",
+  "js/ui/gardenPins.js": "1c33e1bfc8",
   "js/ui/inbox.js": "502c774321",
   "js/ui/logo.js": "292fd3c7b2",
   "js/ui/mobile.js": "432817994d",

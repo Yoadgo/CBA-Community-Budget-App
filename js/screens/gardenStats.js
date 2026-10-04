@@ -395,7 +395,13 @@
           }).join("") + '</div><div class="gx-leg__sep"></div><div class="gx-leg__g">' +
           LEG_CATS.map(function (r) {
             return '<span style="color:var(--c-' + r[0] + ')">' + ico(r[0]) + '<em>' + esc(r[1]) + '</em></span>';
-          }).join("") + '</div></div>';
+          }).join("") + '</div>' +
+          /* 🌱 4.10 — שלושת התגים של נעץ ב' (js/ui/gardenPins.js). */
+          '<div class="gx-leg__sep"></div><div class="gx-leg__g gx-leg__g--tags">' +
+            '<span title="כמה תושבים מחכים לתשובה"><b class="gx-lt gx-lt--res">2</b><em>מחכים</em></span>' +
+            '<span><b class="gx-lt gx-lt--rep">' + ico("undo", 9) + '</b><em>חוזרת</em></span>' +
+            '<span title="משויכת לממטרה או למקטע דשא"><b class="gx-lt gx-lt--lnk"></b><em>משויכת</em></span>' +
+          '</div></div>';
       }
       function mapBox() {
         return '<div class="gx-mapbox" id="gx-mapslot">' +
@@ -1068,127 +1074,9 @@
    *     נעלם ובזום אין הוא מכסה בית שלם.
    * ======================================================================== */
   function mountPins(host, o) {
-    var list = [], groups = [], lastScale = 0, raf = 0;
-    var api = CBA.map.render(host, {
-      head: false, search: false, legend: false, hint: false, popup: false,
-      onMarker: function (id, m) {
-        if (m.cluster) { if (o.onCluster) o.onCluster(m.pins); return; }
-        if (o.onPin) o.onPin(m.pin, markerEl(m));
-      }
-    });
-    var world = host.querySelector(".map-world") || host.querySelector("#map-world");
-    /* קנה המידה נקרא מה-transform שהרכיב כותב על העולם בכל תזוזה.
-       (`--inv` נכתב רק כשיש שבבי מבני ציבור — לא לסמוך עליו לבד.) */
-    function scale() {
-      var m = world && /scale\(([\d.eE+-]+)\)/.exec(world.style.transform || "");
-      if (m && +m[1] > 0) return +m[1];
-      var inv = parseFloat(world && world.style.getPropertyValue("--inv"));
-      return inv > 0 ? 1 / inv : 1;
-    }
-    function worldWH() {
-      return { w: parseFloat(world && world.style.width) || 1000, h: parseFloat(world && world.style.height) || 1000 };
-    }
-    function markerEl(m) {
-      var els = world ? world.querySelectorAll(".map-marker") : [];
-      return els[groups.indexOf(m)] || null;
-    }
-    function pinSvg(state, catIco) {
-      var K = CBA.gardenKit, body = (K && K.ICONS && K.ICONS[catIco]) || "";
-      /* 23.9 — צל קרקע קטן מתחת לחוד: הנעץ "עומד" על המפה ולא מודבק עליה. */
-      return '<svg viewBox="0 0 24 30" aria-hidden="true">' +
-        '<ellipse class="gx-pin__g" cx="12" cy="29" rx="4.2" ry="1.5"/>' +
-        '<path class="gx-pin__b s-' + state + '" ' +
-        'd="M12 .8C5.8.8.8 5.7.8 11.8.8 19.6 12 29.2 12 29.2s11.2-9.6 11.2-17.4C23.2 5.7 18.2.8 12 .8Z"/>' +
-        '<g transform="translate(5 4.6) scale(.5833)" fill="none" stroke="#fff" stroke-width="2.6" ' +
-        'stroke-linecap="round" stroke-linejoin="round">' + body + '</g></svg>';
-    }
-    function build() {
-      var s = scale(), WH = worldWH();
-      lastScale = s;
-      host.style.setProperty("--gx-inv", (1 / s).toFixed(4));
-      var R = 22 / s;                         // 22 פיקסלי מסך
-      var sorted = list.slice().sort(function (a, b) {
-        return CBA.gardenStatsCalc.SEVERITY[b.state] - CBA.gardenStatsCalc.SEVERITY[a.state];
-      });
-      var gs = [];
-      sorted.forEach(function (p) {
-        var px = p.x * WH.w, py = p.y * WH.h, hit = null;
-        for (var i = 0; i < gs.length; i++) {
-          if (Math.abs(gs[i].px - px) < R && Math.abs(gs[i].py - py) < R) { hit = gs[i]; break; }
-        }
-        if (hit) hit.pins.push(p); else gs.push({ px: px, py: py, pins: [p] });
-      });
-      groups = gs.map(function (g) {
-        var top = g.pins[0];   // החמור ביותר — המיון למעלה
-        if (g.pins.length === 1) {
-          return { id: top.id, x: top.x, y: top.y, pin: top, cls: "gx-pin",
-                   title: ST_LABEL[top.state] + " · " + (top.category || "") };
-        }
-        var sx = 0, sy = 0;
-        g.pins.forEach(function (p) { sx += p.x; sy += p.y; });
-        return { id: "c" + top.id, x: sx / g.pins.length, y: sy / g.pins.length, cluster: true,
-                 pins: g.pins, state: top.state, cls: "gx-pin gx-pin--c",
-                 title: g.pins.length + " תקלות באותה נקודה" };
-      });
-      api.setMarkers(groups);
-      var els = world.querySelectorAll(".map-marker");
-      groups.forEach(function (g, i) {
-        var el = els[i];
-        if (!el) return;
-        if (g.cluster) {
-          el.innerHTML = '<span class="gx-clu s-' + g.state + '">' + g.pins.length + '</span>';
-        } else {
-          el.innerHTML = pinSvg(g.pin.state, g.pin.ico || catIcoOf(g.pin.category));
-          if (o.onHover) {
-            el.addEventListener("mouseenter", function () { o.onHover(g.pin, el, true); });
-            el.addEventListener("mouseleave", function () { o.onHover(g.pin, el, false); });
-          }
-        }
-      });
-    }
-    function catIcoOf(name) { return CBA.gardenLang.catOf(name).ico; }
-    if (world && window.MutationObserver) {
-      new MutationObserver(function () {
-        if (raf) return;
-        raf = requestAnimationFrame(function () {
-          raf = 0;
-          var s = scale();
-          /* על המכל ולא על העולם — כתיבה לעולם הייתה מפעילה את המשקיף הזה שוב. */
-          host.style.setProperty("--gx-inv", (1 / s).toFixed(4));
-          if (lastScale && Math.abs(s - lastScale) / lastScale > 0.12) build();
-        });
-      }).observe(world, { attributes: true, attributeFilter: ["style"] });
-    }
-    /* התצוגה מתאימה את עצמה לנעצים — רק כשקבוצת הנעצים השתנתה (פתיחה,
-       מסנן סוג, המתג "סגורות"), כדי שמעבר תקופה לא יזרוק את הזום של המשתמש. */
-    var fitKey = "", fitted = false;
-    function fit() {
-      if (!api.fitBox || !list.length) return;
-      fitted = true;   // GXB1 (גל 9, 1.10.26)
-      var x0 = 1, y0 = 1, x1 = 0, y1 = 0;
-      list.forEach(function (p) {
-        x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
-        y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
-      });
-      /* 🔴 23.9 (יועד: "המפה נפתחת מאוד בפנים") — התיבה של הנעצים לבדה
-         הייתה צמודה מדי: שני נעצים קרובים = זום עמוק, בלי הקשר של השכונה.
-         עכשיו: מרווח של 10% סביב הנעצים, והתיבה לעולם לא קטנה מ-55% מרוחב
-         וגובה השכונה. כך רואים איפה הנעצים ביחס לשאר השיכון. */
-      var MIN = 0.55, PAD = 0.10;
-      var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-      var w = Math.max(MIN, (x1 - x0) + 2 * PAD), h = Math.max(MIN, (y1 - y0) + 2 * PAD);
-      var bx0 = Math.max(0, Math.min(1 - w, cx - w / 2)), by0 = Math.max(0, Math.min(1 - h, cy - h / 2));
-      api.fitBox(bx0, by0, Math.min(1, bx0 + w), Math.min(1, by0 + h), 24);
-    }
-    return {
-      set: function (pins, keepView) {
-        list = pins || [];
-        var k = list.map(function (p) { return p.id; }).sort().join(",");
-        /* GXB1 (גל 9, 1.10.26) — keepView (רענון נתונים): לא מתאימים מחדש, אלא אם עוד אף פעם לא הותאם. */
-        if (k !== fitKey) { fitKey = k; if (!keepView || !fitted) fit(); }
-        build();
-      },
-      api: api
-    };
+    /* 🌱 4.10 — הנעץ עבר לרכיב משותף (js/ui/gardenPins.js, סגנון ב' — הכרעת
+       יועד 3.10), כדי שאותו נעץ בדיוק יופיע גם במסך "דשא והשקיה".
+       אותו ממשק בדיוק: set(pins, keepView) · api. */
+    return CBA.gardenPins.mount(host, o);
   }
 })();
