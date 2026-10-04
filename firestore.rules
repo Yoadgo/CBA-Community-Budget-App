@@ -61,8 +61,16 @@ service cloud.firestore {
       return !('email' in m()) || m().email == request.auth.token.email.lower();
     }
 
+    /* 🔴 4.10.26 — תקרת 1,000 הביטויים (ר' ההסבר ליד hasPerm). `m()` נבנית מחדש
+       בכל קריאה (נתיב + get), ולכן המסמך עובר כאן כפרמטר **פעם אחת** — במקום
+       שלוש בניות. אותו תנאי בדיוק: active == true ו-memberEmailOk. */
     function isMember() {
-      return memberExists() && m().active == true && memberEmailOk();
+      return memberExists() && memberDocOk(m());
+    }
+
+    function memberDocOk(d) {
+      return d.active == true &&
+             (!('email' in d) || d.email == request.auth.token.email.lower());
     }
 
     function isSuper() {
@@ -83,7 +91,12 @@ service cloud.firestore {
        (וסגירה של מנהל עם סיבה) עבר את התקרה ונדחה — גם למנהל-על.
        כאן: isMember אחת בלבד. **אותו כלל לוגי בדיוק** ('על' = כל הרשאה). */
     function hasPerm(p) {
-      return isMember() && (('על' in m().perms) || (p in m().perms));
+      return isMember() && permHas(m().perms, p);
+    }
+
+    /* 'על' = כל הרשאה. רשימת ההרשאות נשלפת פעם אחת. */
+    function permHas(ps, p) {
+      return ('על' in ps) || (p in ps);
     }
 
     function myFamilyId() {
@@ -1477,8 +1490,10 @@ service cloud.firestore {
      *  ⚠️ המסמכים האלה אינם נתונים של אדם — הם תוכן שיווקי של
      *     האפליקציה. מה שאישי הוא רק "מה כבר ראיתי", והוא באוסף נפרד.
      * ==================================================================== */
+    /* 4.10.26 — `isSuper()` הוסר מכאן: מי שיש לו 'על' כבר עונה ל-size() > 0, ולכן
+       התוצאה זהה — רק בלי isMember שנייה (תקרת הביטויים, ר' hasPerm). */
     function isAdminUser() {
-      return isMember() && (isSuper() || m().perms.size() > 0);
+      return isMember() && m().perms.size() > 0;
     }
 
     function canSeeTourDoc(id) {
@@ -2113,8 +2128,10 @@ service cloud.firestore {
     function canSeeWework() {
       return isMember() && m().isExternal == false;
     }
+    /* 4.10.26 — אותו תנאי כמו canSeeWework() && hasPerm(p), עם isMember אחת במקום
+       שתיים (תקרת הביטויים, ר' hasPerm). */
     function isInternalAdmin(p) {
-      return canSeeWework() && hasPerm(p);
+      return isMember() && m().isExternal == false && permHas(m().perms, p);
     }
 
     /* כללי השריון — כל חבר (המסך בונה מהם את לוח השעות). */

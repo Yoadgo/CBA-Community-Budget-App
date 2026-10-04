@@ -102,7 +102,10 @@ ok('⚠️ **active=false בשתי המשבצות**', writes.length === 2 && wri
    JSON.stringify(writes.map(w=>w.obj.active)));
 ok('המסמך לא נמחק — רק כובה', writes.every(w=>!!w.obj.updatedAt));
 ok('⚠️ ו-isMember() בכללים דורש active==true',
-   /return memberExists\(\) && m\(\)\.active == true && memberEmailOk\(\);/.test(
+   /* 4.10.26 — המסמך עובר כפרמטר (תקרת הביטויים); התנאי זהה. */
+   /return memberExists\(\) && memberDocOk\(m\(\)\);/.test(
+     fs.readFileSync(path.join(__dirname,'..','firestore.rules'),'utf8')) &&
+   /function memberDocOk\(d\) \{\s*return d\.active == true &&/.test(
      fs.readFileSync(path.join(__dirname,'..','firestore.rules'),'utf8')));
 
 /* ================================================================= */

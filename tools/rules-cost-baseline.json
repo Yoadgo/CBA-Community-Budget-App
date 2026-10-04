@@ -1,0 +1,542 @@
+{
+ "/gardenTasks/ update :: gtUpdateOk() || gtReportPhotosOk() || gtReportFlagOk() || gtPendingDeleteOk()": {
+  "tokens": 1422,
+  "ids": 9
+ },
+ "/residentServiceCards/ update :: rsvcOwnerUpdateOk() || rsvcAdminHideOk() || rsvcAdminEditOk()": {
+  "tokens": 1029,
+  "ids": 4
+ },
+ "/gardenTasks/ create :: gtTeamCreateOk() || gtFromReportOk()": {
+  "tokens": 778,
+  "ids": 2
+ },
+ "/tourSteps/ read :: canSeeTourDoc(id)": {
+  "tokens": 742,
+  "ids": 8
+ },
+ "/gardenLog/ create :: glCreateOk() || glResidentCreateOk()": {
+  "tokens": 673,
+  "ids": 5
+ },
+ "/gardenAssets/ update :: gaUpdateOk(docId)": {
+  "tokens": 649,
+  "ids": 1
+ },
+ "/gardenAssets/ create :: gaCreateOk(docId)": {
+  "tokens": 645,
+  "ids": 1
+ },
+ "/appReports/ create :: arCreateOk(docId)": {
+  "tokens": 598,
+  "ids": 2
+ },
+ "/eventReminders/ update :: remMine() && remShapeOk(docId)": {
+  "tokens": 555,
+  "ids": 6
+ },
+ "/budgetTx/ create :: txResidentCreateOk(docId) || txAdminCreateOk(docId)": {
+  "tokens": 537,
+  "ids": 3
+ },
+ "/gardenReports/ update :: grFeedbackOk() || grPhotosOk() || grTeamUpdateOk()": {
+  "tokens": 498,
+  "ids": 5
+ },
+ "/residentServiceCards/ create :: rsvcCreateOk()": {
+  "tokens": 487,
+  "ids": 2
+ },
+ "/eventReminders/ create :: isMember() && m().isExternal == false && remShapeOk(docId)": {
+  "tokens": 470,
+  "ids": 5
+ },
+ "/homeCounts/ read :: canSeeHomeCount(id)": {
+  "tokens": 467,
+  "ids": 5
+ },
+ "/gardenTasks/ update :: gtSlotUpdateOk()": {
+  "tokens": 429,
+  "ids": 1
+ },
+ "/budgetTx/ update :: txStatusUpdateOk() || txDetailsUpdateOk()": {
+  "tokens": 386,
+  "ids": 2
+ },
+ "/gardenLawns/ update :: lwUpdateOk()": {
+  "tokens": 380,
+  "ids": 1
+ },
+ "/gardenLawns/ create :: lwCreateOk(docId)": {
+  "tokens": 379,
+  "ids": 1
+ },
+ "/gardenLog/ read :: gtMgr() || glResidentReadOk()": {
+  "tokens": 363,
+  "ids": 4
+ },
+ "/gardenLawnEdits/ create :: leCreateOk(docId)": {
+  "tokens": 360,
+  "ids": 3
+ },
+ "/gardenReports/ create :: grCreateOk()": {
+  "tokens": 311,
+  "ids": 2
+ },
+ "/weworkBookings/ read :: canSeeWwBooking(resource.data.familyId)": {
+  "tokens": 268,
+  "ids": 3
+ },
+ "/eventRSVPResponses/ update :: isMember() && m().isExternal == false && resource.data.familyId == myFamilyId() ": {
+  "tokens": 257,
+  "ids": 2
+ },
+ "/residentServiceCards/ delete :: (isMember() && m().isExternal == false && resource.data.familyId == myFamilyId()": {
+  "tokens": 255,
+  "ids": 3
+ },
+ "/staleReports/ create :: isMember() && m().isExternal == false && srShapeOk()": {
+  "tokens": 254,
+  "ids": 2
+ },
+ "/eventRSVPResponses/ create :: isMember() && m().isExternal == false && request.resource.data.familyId == myFam": {
+  "tokens": 249,
+  "ids": 2
+ },
+ "/serviceComments/ delete :: isMember() && m().isExternal == false && (resource.data.familyId == myFamilyId()": {
+  "tokens": 246,
+  "ids": 3
+ },
+ "/appReports/ update :: arPhotosOk() || arAdminOk()": {
+  "tokens": 244,
+  "ids": 2
+ },
+ "/notifyInbox/ read :: canSeeInbox(fid)": {
+  "tokens": 231,
+  "ids": 3
+ },
+ "/gymOps/ create :: isInternalAdmin('מכון') && gymOpOk()": {
+  "tokens": 228,
+  "ids": 1
+ },
+ "/doorLog/ read :: canSeeDoorLog(resource.data.kind)": {
+  "tokens": 226,
+  "ids": 2
+ },
+ "/serviceComments/ create :: sscCreateOk()": {
+  "tokens": 219,
+  "ids": 2
+ },
+ "/gardenTasks/ delete :: gtDeleteOk() || gtOrphanCleanupOk()": {
+  "tokens": 217,
+  "ids": 2
+ },
+ "/serviceReactions/ create, update :: isMember() && m().isExternal == false && ssrShapeOk(id)": {
+  "tokens": 215,
+  "ids": 2
+ },
+ "/budgetTx/ read :: canSeeFamilyTx(resource.data.familyId)": {
+  "tokens": 205,
+  "ids": 2
+ },
+ "/gymNuki/ read :: canSeeGymNuki(uid)": {
+  "tokens": 200,
+  "ids": 2
+ },
+ "/gymConfig/ read :: canSeeGymConfig(docId)": {
+  "tokens": 199,
+  "ids": 2
+ },
+ "/gardenPlan/ create, update :: gpWriteOk() && gpShapeOk()": {
+  "tokens": 182,
+  "ids": 1
+ },
+ "/gardenLawnEdits/ read :: leReadOk()": {
+  "tokens": 178,
+  "ids": 2
+ },
+ "/gardenReports/ read :: canSeeGardenReport(resource.data.familyId)": {
+  "tokens": 174,
+  "ids": 2
+ },
+ "/clubReservations/ read :: canSeeClubResv(fid)": {
+  "tokens": 174,
+  "ids": 2
+ },
+ "/committee/ create :: committeeCreateOk(docId)": {
+  "tokens": 173,
+  "ids": 1
+ },
+ "/committee/ update :: committeeUpdateOk()": {
+  "tokens": 170,
+  "ids": 1
+ },
+ "/eventReminders/ read :: remMine()": {
+  "tokens": 165,
+  "ids": 2
+ },
+ "/eventReminders/ delete :: remMine()": {
+  "tokens": 165,
+  "ids": 2
+ },
+ "/gymMembers/ update :: isInternalAdmin('מכון') && request.resource.data.diff(resource.data).affectedKey": {
+  "tokens": 165,
+  "ids": 1
+ },
+ "/serviceReactions/ delete :: isMember() && m().isExternal == false && resource.data.familyId == myFamilyId()": {
+  "tokens": 163,
+  "ids": 2
+ },
+ "/eventMessages/ create :: hasPerm('תרבות') && eventMessageShapeOk()": {
+  "tokens": 156,
+  "ids": 1
+ },
+ "/residentConfig/ read :: isMember() && !isExternalUser()": {
+  "tokens": 146,
+  "ids": 2
+ },
+ "/eventInfo/ create, update :: hasPerm('תרבות') && eventInfoShapeOk()": {
+  "tokens": 133,
+  "ids": 1
+ },
+ "/gardenLawnEdits/ update :: leDecideOk()": {
+  "tokens": 129,
+  "ids": 1
+ },
+ "/gardenMeta/settings write :: gsSettingsWriteOk()": {
+  "tokens": 125,
+  "ids": 1
+ },
+ "/gardenMeta/scheduleRules write :: gsSchedRulesOk()": {
+  "tokens": 117,
+  "ids": 1
+ },
+ "/staleReports/ update :: srAdminUpdateOk()": {
+  "tokens": 117,
+  "ids": 1
+ },
+ "/eventImages/ create, update :: hasPerm('תרבות') && eventImageShapeOk()": {
+  "tokens": 116,
+  "ids": 1
+ },
+ "/eventRSVP/ create, update :: hasPerm('תרבות') && rsvpConfigShapeOk()": {
+  "tokens": 114,
+  "ids": 1
+ },
+ "/gardenPlan/ read :: canSeePlan()": {
+  "tokens": 111,
+  "ids": 1
+ },
+ "/gardenPlan/ delete :: gpWriteOk()": {
+  "tokens": 111,
+  "ids": 1
+ },
+ "/budgetYears/ read :: canSeeBudget()": {
+  "tokens": 111,
+  "ids": 1
+ },
+ "/budgetTx/ delete :: canSeeBudget()": {
+  "tokens": 111,
+  "ids": 1
+ },
+ "/doorState/ read :: canSeeDoorState()": {
+  "tokens": 111,
+  "ids": 1
+ },
+ "/gymMembers/ read :: canSeeDoorState()": {
+  "tokens": 111,
+  "ids": 1
+ },
+ "/gymOps/ read :: isInternalAdmin('מכון')": {
+  "tokens": 109,
+  "ids": 1
+ },
+ "/eventMessages/ update :: hasPerm('תרבות') && resource.data.status == 'pending' && request.resource.data.s": {
+  "tokens": 107,
+  "ids": 1
+ },
+ "/gymCode/ read :: canSeeGymCode(uid)": {
+  "tokens": 98,
+  "ids": 1
+ },
+ "/gardenTasks/ read :: canSeeGardenTasks()": {
+  "tokens": 93,
+  "ids": 1
+ },
+ "/gardenAssets/ read :: canSeeGardenAssets()": {
+  "tokens": 93,
+  "ids": 1
+ },
+ "/eventImages/ delete :: hasPerm('תרבות')": {
+  "tokens": 91,
+  "ids": 1
+ },
+ "/eventMessages/ read :: hasPerm('תרבות')": {
+  "tokens": 91,
+  "ids": 1
+ },
+ "/gymStatus/ read :: canSeeGymStatus(uid)": {
+  "tokens": 87,
+  "ids": 1
+ },
+ "/appReports/ read :: arReadOk()": {
+  "tokens": 84,
+  "ids": 1
+ },
+ "/counters/ update :: counterBumpOk()": {
+  "tokens": 83,
+  "ids": 1
+ },
+ "/services/ read :: canSeeServices()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/servicesMeta/ read :: canSeeServices()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/eventsCal/ read :: canSeeEvents()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/residentServiceCards/ read :: canSeeServices()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/serviceReactions/ read :: canSeeServices()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/serviceComments/ read :: canSeeServices()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/staleReports/ read :: canSeeServices()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/eventInfo/ read :: canReadEventExtras()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/eventImages/ read :: canReadEventExtras()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/weworkConfig/ read :: canSeeWework()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/weworkDays/ read :: canSeeWework()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/doorConfig/ read :: canSeeWework()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/committee/ read :: canSeeCommittee()": {
+  "tokens": 82,
+  "ids": 1
+ },
+ "/eventRSVP/ read :: isMember() && m().isExternal == false": {
+  "tokens": 80,
+  "ids": 1
+ },
+ "/eventRSVPResponses/ read :: isMember() && m().isExternal == false": {
+  "tokens": 80,
+  "ids": 1
+ },
+ "/tourSeen/ read :: canSeeTourSeen(uid)": {
+  "tokens": 69,
+  "ids": 1
+ },
+ "/gardenMeta/ read :: isMember()": {
+  "tokens": 62,
+  "ids": 1
+ },
+ "/counters/ read :: isMember()": {
+  "tokens": 62,
+  "ids": 1
+ },
+ "/appConfig/ read :: isMember()": {
+  "tokens": 62,
+  "ids": 1
+ },
+ "/gardenLawns/ read :: isMember()": {
+  "tokens": 62,
+  "ids": 1
+ },
+ "/pushSubscriptions/ read :: signedIn() && request.auth.uid == uid": {
+  "tokens": 21,
+  "ids": 0
+ },
+ "/members/ read :: signedIn() && request.auth.uid == uid": {
+  "tokens": 21,
+  "ids": 0
+ },
+ "/pushSubscriptions/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gardenMeta/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gardenReports/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gardenLog/ update, delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/services/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/servicesMeta/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/eventsCal/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/budgetYears/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/counters/ create, delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/appConfig/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gymStatus/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gymCode/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/residentConfig/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/homeCounts/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/clubReservations/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/tourSteps/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/tourSeen/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/members/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/serviceComments/ update :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/staleReports/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/eventRSVP/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/eventRSVPResponses/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/eventInfo/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/eventMessages/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/notifyInbox/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/appReports/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/weworkConfig/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/weworkDays/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/weworkBookings/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/doorConfig/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/doorState/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/doorLog/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gymNuki/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gymOps/ update, delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gymMembers/ create, delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gymConfig/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/committee/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gardenLawns/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gardenAssets/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gardenLawnEdits/ delete :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/gardenLawnEdits/ read, write :: false": {
+  "tokens": 1,
+  "ids": 0
+ }
+}

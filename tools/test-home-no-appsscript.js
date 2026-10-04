@@ -378,7 +378,8 @@ ok('🔴🔴 אין כלל ל-perm-residents — "תושבים" הוא קהל, �
 ok('🔴 ויש כלל ל-residents, שהוא היחיד ששולל הרשאה במקום לדרוש',
    /\(id == 'residents'\s*&& !isAdminUser\(\)\)/.test(RULES));
 ok('🔴 "מנהלים" נבדק מול הרשאה אמיתית ולא מול signedIn',
-   /function isAdminUser\(\)[\s\S]{0,160}isSuper\(\) \|\| m\(\)\.perms\.size\(\) > 0/.test(RULES));
+   /* 4.10.26 — isSuper הוסר: 'על' ⊂ size() > 0, ולכן אותה תוצאה (תקרת הביטויים). */
+   /function isAdminUser\(\) \{\s*return isMember\(\) && m\(\)\.perms\.size\(\) > 0;/.test(RULES));
 ok('tourSeen — כל אחד את שלו',
    /function canSeeTourSeen\(uid\)[\s\S]{0,160}request\.auth\.uid == uid/.test(RULES));
 ok('🔴 ושלושתם אסורים בכתיבה מהדפדפן',
