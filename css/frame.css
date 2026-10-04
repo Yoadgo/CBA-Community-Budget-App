@@ -92,7 +92,13 @@ body:not([data-area="admin"]) .year-switch { display: none !important; }
   .app-nav__tab:hover { color: #fff; background: rgba(255,255,255,.05) !important; }
   .app-nav__tab.is-active, .app-nav__tab--group.has-active { color: #fff; font-weight: 700; }
   .app-nav__tab.is-menu { color: #fff; }
-  .app-nav__ico { display: none; }                                   /* טאבים נקיים, בלי סמלילים */
+  /* 4.10.26 — יועד: "סמלילים בתפריט הראשי בהדר כמו במובייל". בגל 1 (30.9) הם
+     הוסתרו כאן ("טאבים נקיים"). הסמליל יורש את צבע הטקסט של הטאב (אפור-בהיר,
+     לבן כשפעיל) — לא צבעי NAV_TINT, שהם כהים ונבלעים ברקע הכחול-כהה של ההדר. */
+  .app-nav__tab { gap: 7px; }
+  .app-nav__ico { display: inline-flex; color: inherit; }
+  .app-nav__ico svg { width: 18px; height: 18px; }
+  .app-nav__tab:not(.is-active):not(:hover) .app-nav__ico { opacity: .85; }
   .app-nav__chev { color: var(--on-navy-3); }
   .app-nav__group, .app-nav__group.is-open { background: none !important; }
   .app-nav__group.is-open .app-nav__tab--group { background: none !important; }
