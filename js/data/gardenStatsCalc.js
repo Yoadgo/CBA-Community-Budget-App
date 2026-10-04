@@ -310,7 +310,7 @@
                   title: t.title || t.category || "תקלה",
                   res: open && hasRep ? 1 + ((t.mergedReps || []).length) : 0,
                   rep: t.flag === "דורש בדיקה חוזרת" || !!repIds[String(t.id)],
-                  linked: !!(t.assets && t.assets.length),
+                  linked: !!(t.assets && t.assets.length), fkind: String(t.fkind || ""),
                   days: open && !isNaN(opened) ? Math.max(0, Math.floor((nowMs - opened) / DAY)) : 0 });
     });
     var openWithLoc = openF.filter(hasLoc).length;

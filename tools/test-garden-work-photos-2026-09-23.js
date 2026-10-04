@@ -161,7 +161,7 @@ const PH = n => Array.from({ length: n }, (_, i) => ({ name: 'p' + i + '.jpg', m
   ok('🔴 Enter בטופס עובר דרך onOk', /if \(opts\.onOk\) \{ opts\.onOk\(wrap, close\); return; \}\s*close\(opts\.input/.test(DL));
   ok('התושב: כפתור "תמונות מהצוות" רק על "בוצע"', /r\.closure === "בוצע" && \(r\.closeWhy \|\| \(r\.workPhotos/.test(RG) && /data-wphotos/.test(RG));
   ok('כללים: gtClosedOk מתיר workPhotos+updatedAt בלבד', /hasOnly\(\['workPhotos', 'updatedAt'\]\)/.test(RU));
-  ok('כללים: workPhotos ב-gtTeamOnly וב-grTeamFields', /'openedBy', 'openedUid', 'workPhotos'\]/.test(RU) && /'canFeedback',[\s\S]{0,120}'workPhotos'\];/.test(RU));
+  ok('כללים: workPhotos ב-gtTeamOnly וב-grTeamFields', /'openedBy', 'openedUid', 'workPhotos'[,\]]/.test(RU) /* 4.10: + 'fkind' */ && /'canFeedback',[\s\S]{0,120}'workPhotos'\];/.test(RU));
 
   console.log('\n' + (fail ? '❌' : '✅') + ' ' + pass + ' עברו, ' + fail + ' נכשלו');
   process.exit(fail ? 1 : 0);

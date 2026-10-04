@@ -3105,6 +3105,16 @@ CBA.screens = CBA.screens || {};
       // איזו תצוגה "בתוקף" כרגע — כדי שאירוע שינוי גודל (סיבוב טלפון, שינוי
       // חלון) ישחזר את מה שהמשתמש בחר ולא יזרוק אותו חזרה לברירת מחדל.
       var viewMode = "initial";   // initial | whole | manual
+      /* 🔴 4.10 — **zoom של CSS על body.** בדסקטופ body מקבל zoom:1.05 (style.css,
+         23.9). קואורדינטות העכבר (clientX) ו-getBoundingClientRect הן בפיקסלי מסך,
+         אבל tx/ty/scale חיים בפיקסלי CSS של העולם — כלומר הפרש של 5% שגדל עם
+         המרחק מפינת המפה. התסמין: נעיצה (וממטרה ב"דשא והשקיה") נוחתת ליד
+         הסמן ולא מתחתיו, וגרירה מזיזה את המפה מהר מהעכבר. zf() מחזיר את
+         היחס בפועל (1 בטלפון ובכל מקום בלי zoom). */
+      function zf() {
+        var w = viewport.offsetWidth;
+        return w ? (viewport.getBoundingClientRect().width / w) || 1 : 1;
+      }
       function setScaleAnchored(newScale, ax, ay, animated) {
         viewMode = "manual";
         newScale = Math.max(minScale(), Math.min(maxScale(), newScale));
@@ -3148,11 +3158,11 @@ CBA.screens = CBA.screens || {};
           else {
             var ratio = dist / pinchDist, midX = (p0.x + p1.x) / 2, midY = (p0.y + p1.y) / 2;
             var rect = viewport.getBoundingClientRect();
-            setScaleAnchored(pinchScale * ratio, midX - rect.left, midY - rect.top, false);
+            setScaleAnchored(pinchScale * ratio, (midX - rect.left) / zf(), (midY - rect.top) / zf(), false);
           }
         } else if (dragging && ids.length === 1) {
           viewMode = "manual";
-          tx = txStart + (e.clientX - dragStartX); ty = tyStart + (e.clientY - dragStartY);
+          tx = txStart + (e.clientX - dragStartX) / zf(); ty = tyStart + (e.clientY - dragStartY) / zf();
           apply();
         }
       });
@@ -3203,7 +3213,7 @@ CBA.screens = CBA.screens || {};
         e.preventDefault();
         var rect = viewport.getBoundingClientRect();
         var factor = Math.pow(1.0016, -e.deltaY);
-        setScaleAnchored(scale * factor, e.clientX - rect.left, e.clientY - rect.top, false);
+        setScaleAnchored(scale * factor, (e.clientX - rect.left) / zf(), (e.clientY - rect.top) / zf(), false);
       }, {passive: false});
 
       container.querySelector("#map-zoom-in").addEventListener("click", function () {
@@ -3512,8 +3522,8 @@ CBA.screens = CBA.screens || {};
               e.target.closest(".map-topbar")) return;
           if (Math.hypot(e.clientX - pdX, e.clientY - pdY) > 6) return;
           var rect = viewport.getBoundingClientRect();
-          var wx = (e.clientX - rect.left - tx) / scale;
-          var wy = (e.clientY - rect.top - ty) / scale;
+          var wx = ((e.clientX - rect.left) / zf() - tx) / scale;
+          var wy = ((e.clientY - rect.top) / zf() - ty) / scale;
           if (wx < 0 || wy < 0 || wx > MAP_WORLD_W || wy > MAP_WORLD_H) return;
           var n = { x: wx / MAP_WORLD_W, y: wy / MAP_WORLD_H };
           setPin(n);
@@ -3748,7 +3758,15 @@ CBA.screens = CBA.screens || {};
       return {
         setMarkers: setMarkers, setPin: setPin, getPin: getPin, areaAt: areaAt,
         goToHouse: goToHouse, centerOnPin: centerOnPin, fit: function () { fitToScreen(true); },
-        fitBox: fitBox
+        fitBox: fitBox,
+        /* 4.10 — הזזה בפיקסלי מסך (גלגלת/משטח מגע ושתי אצבעות ב"דשא והשקיה"). */
+        panBy: function (dx, dy) { viewMode = "manual"; tx += dx / zf(); ty += dy / zf(); apply(); },
+        /* זום סביב נקודת מסך (צביטה בשכבת הציור החופשי). */
+        zoomAt: function (f, cx, cy) {
+          var r = viewport.getBoundingClientRect();
+          setScaleAnchored(scale * f, (cx - r.left) / zf(), (cy - r.top) / zf(), false);
+        },
+        zoomFactor: zf
       };
     }
   };

@@ -5,9 +5,9 @@
 'use strict';
 
 const GP_FIELDS = ['id','title','category','areas','freq','firstWeek','weekOfMonth','months','rotate','clause','active','note','effectiveFrom','order','schema','updatedAt'];
-const GT_FIELDS = ['id','kind','templateId','title','category','area','x','y','stage','flag','closure','week','due','note','drags','firstWeek','createdAt','updatedAt','approvedBy','approvedAt','repId','photos','order','year','schema','syncedAt','pendingDelete','familyId','mergedReps','openedBy','openedUid','desc','place','reporter','workPhotos','assets'];
-const GT_TEAM_ONLY = ['flag','closure','week','due','note','drags','approvedBy','approvedAt','openedBy','openedUid','workPhotos'];
-const GT_TEAM_UPDATE = ['stage','flag','closure','week','due','note','drags','firstWeek','title','category','area','x','y','approvedBy','approvedAt','repId','photos','order','updatedAt','syncedAt','notify','notifyPending','notifyNote','mergedReps','desc','place','workPhotos','assets'];
+const GT_FIELDS = ['id','kind','templateId','title','category','area','x','y','stage','flag','closure','week','due','note','drags','firstWeek','createdAt','updatedAt','approvedBy','approvedAt','repId','photos','order','year','schema','syncedAt','pendingDelete','familyId','mergedReps','openedBy','openedUid','desc','place','reporter','workPhotos','assets','fkind'];
+const GT_TEAM_ONLY = ['flag','closure','week','due','note','drags','approvedBy','approvedAt','openedBy','openedUid','workPhotos','fkind'];
+const GT_TEAM_UPDATE = ['stage','flag','closure','week','due','note','drags','firstWeek','title','category','area','x','y','approvedBy','approvedAt','repId','photos','order','updatedAt','syncedAt','notify','notifyPending','notifyNote','mergedReps','desc','place','workPhotos','assets','fkind'];
 const GR_CREATE_FIELDS = ['id','familyId','date','category','area','title','desc','place','x','y','photos','taskId','clientRef','mailPending','photosExpected','photosIncomplete','year','schema','updatedAt'];
 const GR_TEAM_FIELDS = ['stage','flag','closure','closeWhy','mergedInto','feedback','feedbackUntil','canFeedback','workPhotos'];
 const GR_TEAM_UPDATE = ['stage','flag','closure','closeWhy','mergedInto','taskId','canFeedback','feedbackUntil','photos','photosIncomplete','updatedAt','workPhotos'];
@@ -70,11 +70,13 @@ function make(ctx) {
     /* 🌱 4.10 — gtAssetsOk: רשימה, עד 5. */
     gtAssetsOk: () => Array.isArray(get(A, 'assets', [])) && get(A, 'assets', []).length <= 5 &&
       get(A, 'assets', []).every(v => isStr(v) && v.length <= 40),
-    gtShapeOk: () => hasOnly(keysA, GT_FIELDS) && hasAll(keysA, ['id','title','stage','schema']) && isStr(A.title) && A.title.length > 0 && isInt(A.schema) && rules.gtWorkPhotosOk() && rules.gtAssetsOk(),
+    /* 🌱 4.10 — gtFkindOk: רשימה סגורה, חסר עובר. */
+    gtFkindOk: () => ['', 'line', 'spr', 'ctrl', 'lawn'].indexOf(get(A, 'fkind', '')) !== -1,
+    gtShapeOk: () => hasOnly(keysA, GT_FIELDS) && hasAll(keysA, ['id','title','stage','schema']) && isStr(A.title) && A.title.length > 0 && isInt(A.schema) && rules.gtWorkPhotosOk() && rules.gtAssetsOk() && rules.gtFkindOk(),
     gtFromReportOk: () => notExt() && rules.gtShapeOk() && A.stage === 'התקבל' && !hasAny(keysA, GT_TEAM_ONLY),
     gtOpenedOk: () => (get(A, 'openedUid', '') === '' || get(A, 'openedUid', '') === ctx.uid) && ['', 'מנהל', 'גנן'].includes(get(A, 'openedBy', '')),
     gtTeamCreateOk: () => hasPerm('גינון') && rules.gtShapeOk() && rules.gtOpenedOk(),
-    gtTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GT_TEAM_UPDATE) && rules.gtWorkPhotosOk() && rules.gtAssetsOk(),
+    gtTeamUpdateOk: () => hasPerm('גינון') && hasOnly(aff(), GT_TEAM_UPDATE) && rules.gtWorkPhotosOk() && rules.gtAssetsOk() && rules.gtFkindOk(),
     gtMgr: () => hasPerm('גינון') && m().isExternal === false,
     gtClosureValueOk: () => nx('closure') === '' || CLOSURES.includes(nx('closure')),
     gtClosureAuthOk: () => nx('closure') === cu('closure') || nx('closure') === '' || nx('closure') === 'בוצע' || nx('closure') === 'אוחד' || rules.gtMgr(),

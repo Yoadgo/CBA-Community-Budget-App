@@ -172,6 +172,13 @@
 .lw-bar > span { display: inline-flex; align-items: center; gap: 6px; padding-inline-end: 4px; font-variant-numeric: tabular-nums; }
 .lw-bar button { border: 0; border-radius: 10px; min-height: 34px; padding: 0 12px; font: inherit; font-size: calc(13px * var(--fs, 1)); font-weight: 700; cursor: pointer; white-space: nowrap; }
 .lw-bw { background: #fff; color: #111827; }
+/* 4.10 — רמז כלי בתוך המפה, מעל סרגל הכלים (עד עכשיו טוסט גלובלי שכיסה את
+   הגיליון בטלפון). הקשה עליו סוגרת; נעלם לבד. */
+.lw-hint { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); z-index: 11; max-width: min(440px, calc(100% - 24px));
+  padding: 9px 14px; border-radius: 14px; background: rgba(17,24,39,.92); color: #fff; font-size: calc(13px * var(--fs, 1)); font-weight: 600;
+  line-height: 1.45; text-align: center; box-shadow: 0 10px 24px -10px rgba(15,22,38,.55); cursor: pointer;
+  opacity: 0; transition: opacity .2s ease, transform .2s ease; transform: translate(-50%, 6px); pointer-events: none; }
+.lw-hint.is-on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .lw-bw:disabled { opacity: .45; cursor: default; }
 .lw-bg { background: rgba(255,255,255,.14); color: #fff; }
 .lw-capture { position: absolute; inset: 0; z-index: 7; cursor: crosshair; touch-action: none; }
@@ -205,6 +212,26 @@
 .lw-c { min-height: 36px; padding: 0 12px; border: 1.5px solid #E5E7EB; border-radius: 999px; background: #fff; font: inherit;
   font-size: calc(13px * var(--fs, 1)); font-weight: 700; color: #374151; cursor: pointer; }
 .lw-c.is-on { background: #111827; border-color: #111827; color: #fff; }
+/* 4.10 — סוג התקלה: צ'יפ עם סמליל */
+.lw-fk .lw-c { display: inline-flex; align-items: center; gap: 6px; }
+.lw-fk .lw-c svg { flex: none; }
+.lw-fk .lw-c:disabled { opacity: .5; cursor: default; }
+.lw-sec__t em { font-style: normal; font-weight: 500; }
+/* רווח לחוץ = יד זמנית */
+.lw.is-space .lw-map .map-viewport { cursor: grab; }
+
+/* 4.10 — "סוג התקלה" בכרטיס התקלה (gardenTasks.js · lwKindHtml). כאן ולא ב-garden.css:
+   הקובץ הזה נטען תמיד, והבלוק שייך לפיצ'ר "דשא והשקיה". */
+.gd-det-fk { margin: 2px 0 12px; padding: 10px 12px; border: 1px solid rgba(17,24,39,.08); border-radius: 14px; background: #F8FAFB; }
+.gd-det-fk__h { display: flex; align-items: baseline; gap: 8px; font-size: calc(12.5px * var(--fs, 1)); font-weight: 700; color: var(--text, #111827); margin-bottom: 8px; }
+.gd-det-fk__h em { font-style: normal; font-weight: 500; color: var(--text-soft, #6B7280); }
+.gd-det-fk__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gd-det-fk__c { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border: 1.5px solid #E5E7EB; border-radius: 999px;
+  background: #fff; font: inherit; font-size: calc(13px * var(--fs, 1)); font-weight: 700; color: #374151; cursor: pointer; }
+.gd-det-fk__c.is-on { background: #111827; border-color: #111827; color: #fff; }
+.gd-det-fk__c:disabled { opacity: .5; cursor: default; }
+.gd-det-fk__map { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 10px; font-size: calc(12.5px * var(--fs, 1)); color: var(--text-soft, #6B7280); }
+.gd-det-fk__map > span { flex: 1 1 160px; }
 .lw-step { display: inline-flex; align-items: center; justify-content: space-between; gap: 4px; border: 1.5px solid #E5E7EB; border-radius: 12px; padding: 3px; }
 .lw-step button { width: 36px; height: 36px; border: 0; border-radius: 9px; background: #F3F4F6; font: inherit; font-size: 18px; font-weight: 700; color: #111827; cursor: pointer; }
 .lw-step button:disabled { opacity: .35; cursor: default; }
@@ -276,6 +303,12 @@
   .lw-tool span { display: none; }
   .lw-tool { padding: 0 11px; }
   .lw-tool.is-on span { display: inline; }
+  /* 4.10 — שכבות בשורה אחת נגללת, בלי לכסות חצי מפה בשתי שורות. */
+  .lw-layers { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: calc(100% - 20px); padding: 2px; margin: -2px; }
+  .lw-layers::-webkit-scrollbar { display: none; }
+  .lw-chip { flex: none; min-height: 32px; padding: 0 10px; }
+  /* כשהגיליון פתוח — הרמז יושב מעל הגיליון ולא מתחתיו. */
+  .lw.has-sheet .lw-hint { bottom: auto; top: 54px; }
   .lw-row { grid-template-columns: 1fr 1fr; }
   .lw-h { align-items: flex-start; }
 }

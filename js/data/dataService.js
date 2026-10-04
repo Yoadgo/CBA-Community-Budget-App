@@ -2790,6 +2790,8 @@ CBA.data = (function () {
 
   /** פתיחת משימה יזומה ע"י הצוות. payload: {title, category, area, week}.
    *  ⚠️ אין כאן `repId` ואין מייל — אין תושב שמחכה לתשובה. */
+  /* סוגי התקלה (4.10) — אותה רשימה כמו gtFkindOk בכללים ו-FKIND ב-gardenAssets. */
+  var GARDEN_FKINDS = { line: 1, spr: 1, ctrl: 1, lawn: 1 };
   function gardenFsCreateTask(payload, cb) {
     payload = payload || {};
     var title = String(payload.title || "").trim().substring(0, 60);
@@ -2847,6 +2849,9 @@ CBA.data = (function () {
         createdAt: now, updatedAt: now, order: 0,
         year: String((CBA.mock && CBA.mock.currentYear) || ""), schema: 1
       };
+      /* 4.10 — סוג תקלה (קו מים/ממטרה/מחשב/דשא), לצוות. רשימה סגורה בכללים
+         (gtFkindOk); ריק אינו נכתב — משימה בלי סוג נשארת כמו עד היום. */
+      if (GARDEN_FKINDS[payload.fkind]) doc.fkind = payload.fkind;
       /* 🔴 22.9 (בקשת יועד) — **מי פתח.** הגנן פותח עכשיו תקלות מהשטח
          (פינה ירוקה), והפותח רשאי לערוך את מה שפתח. שני שדות, שניהם
          נכתבים פעם אחת ביצירה ולעולם לא מתעדכנים (אינם ב-gtTeamUpdateOk):
@@ -2858,7 +2863,13 @@ CBA.data = (function () {
         var myUid = CBA.fb.uid ? CBA.fb.uid() : "";
         if (myUid) doc.openedUid = myUid;
       }
+      /* 🔴 4.10 — ניסיון חוזר בלי fkind אם הכללים עוד לא מכירים אותו (חלון בין
+         Push לפרסום הכללים): סוג התקלה הוא תוספת, ותקלה חייבת להיפתח בכל מקרה. */
+      function createOnce(retry) {
       CBA.fb.createDoc("gardenTasks", String(taskId), doc, function (e2) {
+        if (e2 && retry && doc.fkind && String(e2.code || "").indexOf("permission-denied") !== -1) {
+          delete doc.fkind; return createOnce(false);
+        }
         if (e2) return cb({ ok: false, error: gardenFsErr(e2, "לא הצלחנו לפתוח את המשימה") });
         gardenLogAppend(String(taskId), "נפתח",
           asReport ? (doc.openedBy === "גנן" ? "תקלה שפתח הגנן" : "תקלה שפתח הצוות")
@@ -2886,6 +2897,8 @@ CBA.data = (function () {
           });
         });
       });
+      }
+      createOnce(true);
     });
   }
 
@@ -3019,7 +3032,15 @@ CBA.data = (function () {
          הפתיחה: 'בטיפול' (אחרי שהגנן התחיל) אינו חוזר ל'מתוכנן' בגלל עריכה. */
       if (cur.stage === "התקבל" || cur.stage === "מתוכנן") patch.stage = wk ? "מתוכנן" : "התקבל";
       if (hasPin) { patch.x = Number(payload.x); patch.y = Number(payload.y); }
-      CBA.fb.updateDoc("gardenTasks", String(id), patch, function (e1) {
+      /* 4.10 — undefined = הטופס לא הציג את השדה (קטגוריה אחרת): לא נוגעים. */
+      if (payload.fkind !== undefined) patch.fkind = GARDEN_FKINDS[payload.fkind] ? payload.fkind : "";
+      var retried = false;
+      CBA.fb.updateDoc("gardenTasks", String(id), patch, function done1(e1) {
+        /* 4.10 — כמו ביצירה: fkind לא יפיל עריכה אם הכללים עוד לא פורסמו. */
+        if (e1 && !retried && patch.fkind !== undefined && String(e1.code || "").indexOf("permission-denied") !== -1) {
+          retried = true; delete patch.fkind;
+          return CBA.fb.updateDoc("gardenTasks", String(id), patch, done1);
+        }
         if (e1) return cb({ ok: false, error: gardenFsErr(e1, "העריכה לא נשמרה") });
         /* תקלת דייר: השלב (אם זז בגלל שינוי שבוע) משתקף בדיווח, כדי שמסך
            "הדיווחים שלי" יראה את האמת. **בלי notify** — עריכה אינה שולחת
@@ -3035,6 +3056,7 @@ CBA.data = (function () {
         if (String(cur.week || "") !== wk) what.push("שבוע");
         if (String(cur.desc || "") !== patch.desc) what.push("תיאור");
         if (String(cur.place || "") !== patch.place) what.push("מיקום במילים");
+        if (patch.fkind !== undefined && String(cur.fkind || "") !== patch.fkind) what.push("סוג התקלה");
         if (hasPin && (cur.x !== patch.x || cur.y !== patch.y)) what.push("מיקום");
         gardenLogAppend(String(id), "עריכה", what.length ? "עודכנו: " + what.join(", ") : "נשמר בלי שינוי");
         cb({ ok: true, id: id });

@@ -2278,6 +2278,7 @@
         var hasPhotos = !!(t.photos && t.photos.length);
         var planning = !closed && !t.week;
         var done = t.flag === "ממתין לאישור";
+        var fkHtml = lwKindHtml(t, cat, closed);
 
         /* שורת פעולה מהירה (2026-09-15, סבב ד׳) — שלושה כפתורים באותה שורה:
            יועד: "שיבוץ (שהופך לסימון כבוצע, שגם הוא כפתור שלא צריך אם יש
@@ -2396,6 +2397,7 @@
               /* 22.9 — "בכרטיס הפרטים התג זהה" (אפיון סעיף 4). */
               (closed ? '' : tagHtml(t)) +
             '</div>' +
+            fkHtml +
             /* 🔴 22.9 (הכרעת יועד: "מוצג לכולם") — התיאור ומיקום במילים,
                של תושב או של הצוות. עד היום הם לא הגיעו לכרטיס בכלל. */
             (t.desc ? '<p class="gd-det-desc">' + esc(t.desc) + '</p>' : '') +
@@ -2530,12 +2532,65 @@
             return;
           }
           if (m === "fullmap") return showOnMap(t, cat);
+          /* 4.10 — סוג התקלה + מעבר למסך "דשא והשקיה". */
+          if (m === "fk") {
+            if (closed && !isManager) return;
+            var nk = t.fkind === b.dataset.fk ? "" : b.dataset.fk;
+            b.disabled = true;
+            return CBA.gardenAssets.setFaultKind(id, nk, function (r) {
+              b.disabled = false;
+              if (!r.ok) return CBA.ui.toast("הסוג לא נשמר — נסו שוב", "error");
+              t.fkind = r.fkind;
+              wrap.querySelectorAll("[data-fk]").forEach(function (x) {
+                var on = x.dataset.fk === r.fkind;
+                x.classList.toggle("is-on", on); x.setAttribute("aria-pressed", on);
+              });
+              load(true);
+            });
+          }
+          if (m === "lwmap" || m === "lwpick") { close(); return CBA.gardenAssets.openOnMap(id, m === "lwpick"); }
           close();
           if (m === "plan") return askWeek(id);
           if (m === "approve") return approveDone(id);
           if (m === "markdone") return markDone(id);
           menuAction(t, cat, m);
         });
+      }
+
+      /* 🔴 4.10 (בקשת יועד) — **"סוג התקלה" בכרטיס, לצוות בלבד.** "צריך בתוך
+         התקלות אפשרות להבחין בין פיצוץ בקו המים לפיצוץ/תקלה בממטרה" + הכרעה:
+         ארבעה סוגים (קו מים · ממטרה · מחשב השקיה · דשא). רק בתקלות של
+         "מדשאות, השקיה וממטרות". הכרטיס הזה הוא של הצוות בלבד (התושב רואה את
+         הדיווח שלו במסך אחר), והכללים חוסמים את השדה לתושב (gtTeamOnly).
+         מתחת: כמה סימונים משויכים, ומעבר למסך "דשא והשקיה" — להצגה או לשיוך. */
+      function lwKindHtml(t, cat, closed) {
+        var A = CBA.gardenAssets;
+        if (!A || !A.FKIND) return "";
+        if (cat.key !== "lawn" && cat.key !== "water") return "";
+        if (!(t.repId || t.kind === "דיווח תושב" || t.kind === "תקלה")) return "";
+        var can = !closed || isManager;
+        var P = CBA.gardenPins && CBA.gardenPins.FK_ICO;
+        function gl(k) {
+          var path = (P && P[k]) || (k === "lawn" ? ICONS.lawn : "");
+          return path ? '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>' : "";
+        }
+        var n = (t.assets || []).length;
+        var hasLoc = t.x !== null && t.x !== undefined && t.x !== "";
+        return '<div class="gd-det-fk">' +
+          '<div class="gd-det-fk__h"><span>סוג התקלה</span><em>לצוות בלבד</em></div>' +
+          '<div class="gd-det-fk__chips" role="group" aria-label="סוג התקלה">' +
+            A.FKIND_ORDER.map(function (k) {
+              var on = t.fkind === k;
+              return '<button type="button" class="gd-det-fk__c' + (on ? " is-on" : "") + '" data-m="fk" data-fk="' + k + '" aria-pressed="' + on + '"' +
+                (can ? "" : " disabled") + ' title="' + esc(A.FKIND[k].long) + '">' + gl(k) + esc(A.FKIND[k].label) + '</button>';
+            }).join("") +
+          '</div>' +
+          '<div class="gd-det-fk__map">' +
+            '<span>' + (n ? "משויכת ל-" + n + (n === 1 ? " סימון" : " סימונים") + " במפת ההשקיה" : "עוד לא משויכת לממטרה, לקו או למקטע") + '</span>' +
+            (hasLoc ? '<button type="button" class="gd-det-b" data-m="lwmap">' + ico("pin") + 'במפת ההשקיה</button>' : '') +
+            (can && hasLoc ? '<button type="button" class="gd-det-b" data-m="lwpick">' + gl("spr") + (n ? 'שיוך נוסף' : 'שיוך') + '</button>' : '') +
+          '</div>' +
+        '</div>';
       }
 
       /* המפה היא הרכיב המשותף (CBA.map) — כאן במצב תצוגה בלבד: סימון בודד,

@@ -480,7 +480,10 @@ service cloud.firestore {
                  אליהם. **השיוך נשמר רק כאן** — הצד של הממטרה נגזר, כדי שלא
                  יהיו שני מקומות לסנכרן. תושב רשאי לשלוח אותו ביצירה (שיוך
                  אוטומטי למדשאה שבה ננעץ הדיווח); הצוות — גם בעדכון. ר' gtAssetsOk. */
-              'assets'];
+              'assets',
+              /* 🌱 4.10 (בקשת יועד) — סוג תקלת דשא/השקיה: קו מים / ממטרה / מחשב /
+                 דשא. **הצוות בלבד** (gtTeamOnly) — התושב לא רואה ולא בוחר. ר' gtFkindOk. */
+              'fkind'];
     }
 
     /* 🌱 4.10 — עד 5 שיוכים. שדה חסר עובר (כל המשימות שלפני 4.10). */
@@ -519,7 +522,7 @@ service cloud.firestore {
     /* השדות שרק הצוות קובע — תושב אינו שולח אותם כלל. */
     function gtTeamOnly() {
       return ['flag', 'closure', 'week', 'due', 'note', 'drags',
-              'approvedBy', 'approvedAt', 'openedBy', 'openedUid', 'workPhotos'];
+              'approvedBy', 'approvedAt', 'openedBy', 'openedUid', 'workPhotos', 'fkind'];
     }
 
     function gtShapeOk() {
@@ -528,7 +531,12 @@ service cloud.firestore {
              request.resource.data.title is string &&
              request.resource.data.title.size() > 0 &&
              request.resource.data.schema is int &&
-             gtTextOk() && gtWorkPhotosOk() && gtAssetsOk();
+             gtTextOk() && gtWorkPhotosOk() && gtAssetsOk() && gtFkindOk();
+    }
+
+    /* 🌱 4.10 — רשימה סגורה; שדה חסר עובר (כל המשימות שלפני 4.10). */
+    function gtFkindOk() {
+      return ['', 'line', 'spr', 'ctrl', 'lawn'].hasAny([request.resource.data.get('fkind', '')]);
     }
 
     /* 🔴 תושב פותח משימה נלווית לדיווח — בנקודת הפתיחה בלבד. */
@@ -570,8 +578,8 @@ service cloud.firestore {
                          'x', 'y', 'approvedBy', 'approvedAt',
                          'repId', 'photos', 'order', 'updatedAt', 'syncedAt',
                          'notify', 'notifyPending', 'notifyNote', 'mergedReps',
-                         'desc', 'place', 'workPhotos', 'assets']) &&
-             gtTextOk() && gtWorkPhotosOk() && gtAssetsOk();
+                         'desc', 'place', 'workPhotos', 'assets', 'fkind']) &&
+             gtTextOk() && gtWorkPhotosOk() && gtAssetsOk() && gtFkindOk();
     }
 
     /* ========================================================================

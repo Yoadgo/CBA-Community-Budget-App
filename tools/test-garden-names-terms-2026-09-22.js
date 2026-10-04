@@ -101,7 +101,7 @@ const logsOf = (store, id) => Object.values(store.gardenLog).filter(r => String(
   section('8. השרת והכללים');
   const RULES = R('firestore.rules');
   ok('glRoleOk בשני שערי היומן', (RULES.match(/glRoleOk\(\) &&/g) || []).length === 2);
-  ok('reporter ב-gtFields ולא ב-gtTeamUpdateOk', /'reporter',[\s\S]{0,300}'workPhotos'\];/.test(RULES) && !/gtTeamUpdateOk\(\)[\s\S]{0,600}'reporter'/.test(RULES));
+  ok('reporter ב-gtFields ולא ב-gtTeamUpdateOk', /'reporter',[\s\S]{0,300}'workPhotos'[,\]]/.test(RULES) /* 4.10: 'fkind' נוסף אחרי — הרשימה לא מסתיימת כאן */ && !/gtTeamUpdateOk\(\)[\s\S]{0,600}'reporter'/.test(RULES));
   const CODE = R('apps-script/Code.gs');
   ok('השרת מתרגם חותם לגנן', /lgRole === 'מנהל' \? 'מנהל גינון'/.test(CODE));
   ok('השלמה חד-פעמית קיימת', /function gardenBackfillReporters\(\)/.test(CODE));

@@ -33,6 +33,13 @@ CBA.gardenPins = (function () {
   var LABEL = { wait: "להחלטה", plan: "משובצת", appr: "לאישורך", l1: "נגררה", l2: "נגררה 2+", done: "נסגרה" };
   var REPEAT = '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>';
   var LINK = '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>';
+  /* 4.10 — סמליל לפי סוג התקלה שהצוות בחר (fkind): קו מים שהתפוצץ, ממטרה,
+     מחשב. "דשא" נשאר סמליל הדשא הרגיל. */
+  var FK_ICO = {
+    line: '<path d="M2 9h6.5l1.5 3-1.5 3H2"/><path d="M22 9h-6.5L14 12l1.5 3H22"/><path d="M12 3v3M8.8 4.4l1.2 2M15.2 4.4l-1.2 2"/>',
+    spr:  '<circle cx="12" cy="15" r="3"/><path d="M12 12V7"/><path d="M5 9a9 9 0 0 1 3-4M19 9a9 9 0 0 0-3-4M3 13a10 10 0 0 1 1-5M21 13a10 10 0 0 0-1-5"/>',
+    ctrl: '<rect x="4" y="3" width="16" height="18" rx="2"/><rect x="7" y="6" width="10" height="5" rx="1"/><path d="M8 15h.01M12 15h.01M16 15h.01M8 18h8"/>'
+  };
   var HOUSE_W = 34;   // רוחב בית חציוני ביחידות עולם (mapGeo) — ר' MED_TILE ב-resident.js
 
   function col(s) { return "var(--s-" + s + ", " + (COL[s] || COL.wait) + ")"; }
@@ -60,7 +67,7 @@ CBA.gardenPins = (function () {
       ? '<path d="' + TEAR + '" fill="#fff" stroke="' + c + '" stroke-width="1.9"/>'
       : '<path d="' + TEAR + '" fill="' + c + '" stroke="#fff" stroke-width="2.1"/>';
     var gl = '<g transform="translate(5 4.6) scale(.5833)" fill="none" stroke="' + (done ? c : "#fff") +
-      '" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">' + icon(p.ico) + '</g>';
+      '" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">' + (FK_ICO[p.fkind] || icon(p.ico)) + '</g>';
     var b = "";
     if (!done) {
       if (p.res > 0) b += '<g class="gpin__res" transform="translate(1.4 1.6)"><circle r="5.8" fill="#111827" stroke="#fff" stroke-width="1.4"/>' +
@@ -112,7 +119,8 @@ CBA.gardenPins = (function () {
 
   /** כותרת נגישה — מה שקורא מסך אומר על הנעץ. */
   function aria(p) {
-    return [p.title, LABEL[p.state], p.res ? p.res + " תושבים מחכים" : "", p.rep ? "תקלה חוזרת" : "",
+    var fk = p.fkind && CBA.gardenAssets && CBA.gardenAssets.FKIND && CBA.gardenAssets.FKIND[p.fkind];
+    return [p.title, fk ? fk.long : "", LABEL[p.state], p.res ? p.res + " תושבים מחכים" : "", p.rep ? "תקלה חוזרת" : "",
             p.linked ? "משויכת לממטרה או מדשאה" : ""].filter(Boolean).join(" · ");
   }
 
@@ -247,11 +255,11 @@ CBA.gardenPins = (function () {
       title: t.title || t.category || "תקלה", category: t.category || "", closed: !open,
       res: open && hasRep ? 1 + ((t.mergedReps || []).length) : 0,
       rep: t.flag === "דורש בדיקה חוזרת" || !!(opts.repIds && opts.repIds[String(t.id)]),
-      linked: !!(t.assets && t.assets.length),
+      linked: !!(t.assets && t.assets.length), fkind: String(t.fkind || ""),
       days: open && !isNaN(opened) ? Math.max(0, Math.floor((Date.now() - opened) / 86400000)) : 0
     };
   }
 
   return { mount: mount, pinSvg: pinSvg, dotSvg: dotSvg, clusterSvg: clusterSvg, lod: lod,
-           fromTask: fromTask, aria: aria, LABEL: LABEL, SEV: SEV, COL: COL };
+           fromTask: fromTask, aria: aria, LABEL: LABEL, SEV: SEV, COL: COL, FK_ICO: FK_ICO };
 })();

@@ -80,7 +80,8 @@ section('0. הפורט מול הקובץ האמיתי');
        return i > 0 && /allow delete: if false;/.test(R.slice(i, R.indexOf('\n    }', i)));
      }));
   ok("🔴 'assets' ב-gtFields וב-gtTeamUpdateOk",
-     /'workPhotos',[\s\S]{0,400}'assets'\];/.test(R) && /'desc', 'place', 'workPhotos', 'assets'\]\)/.test(R));
+     /* 4.10 — 'fkind' נוסף אחרי 'assets' בשתי הרשימות (סעיף 5). */
+     /'workPhotos',[\s\S]{0,400}'assets',/.test(R) && /'desc', 'place', 'workPhotos', 'assets'[,\]]/.test(R));
   ok('🔴 מצב הדשא **אינו** שדה של gardenLawns (שם הקריאה פתוחה לכל תושב)',
      !/function lwFields\(\) \{[\s\S]{0,300}'status'/.test(R));
   ok('🔴 וגם לא parentId — כתמים יושבים ב-gardenAssets', !/function lwFields\(\) \{[\s\S]{0,300}'parentId'/.test(R));
@@ -198,6 +199,30 @@ expect('תושב פותח תקלה עם שיוך אוטומטי למדשאה', t
 const closed = task({ closure: 'בוצע', note: 'הוחלף ראש', approvedAt: NOW });
 expect('🔴 גנן לא משנה שיוך על משימה סגורה', false, runTask('ext', 'update', Object.assign({}, closed, { assets: ['s1'], updatedAt: NOW }), closed));
 expect('מנהל כן', true, runTask('mgr', 'update', Object.assign({}, closed, { assets: ['s1'], updatedAt: NOW }), closed));
+
+section('5. fkind — סוג תקלה (4.10, צוות בלבד)');
+{
+  const R = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
+  ok("'fkind' ב-gtFields, ב-gtTeamOnly וב-gtTeamUpdateOk",
+     /'assets',[\s\S]{0,300}'fkind'\];/.test(R) &&
+     /'openedBy', 'openedUid', 'workPhotos', 'fkind'\];/.test(R) &&
+     /'desc', 'place', 'workPhotos', 'assets', 'fkind'\]\)/.test(R));
+  ok('function gtFkindOk — רשימה סגורה של 4 + ריק',
+     /function gtFkindOk\(\) \{\s*return \['', 'line', 'spr', 'ctrl', 'lawn'\]\.hasAny/.test(R));
+  ok('gtFkindOk נקרא ב-gtShapeOk וב-gtTeamUpdateOk', (R.match(/gtAssetsOk\(\) && gtFkindOk\(\)/g) || []).length === 2);
+}
+/* EXPECT: מנהל/גנן — מותר; ערך מחוץ לרשימה — נדחה; תושב ביצירה — נדחה (teamOnly);
+   גנן על סגורה — נדחה; מנהל על סגורה — מותר; שיוך+סוג באותה כתיבה — מותר. */
+expect('מנהל מסמן "קו מים"', true, runTask('mgr', 'update', task({ fkind: 'line', updatedAt: NOW })));
+expect('גנן מסמן "ממטרה"', true, runTask('ext', 'update', task({ fkind: 'spr', updatedAt: NOW })));
+expect('ניקוי הסוג ("")', true, runTask('mgr', 'update', task({ fkind: '', updatedAt: NOW }), task({ fkind: 'spr' })));
+expect('🔴 ערך מחוץ לרשימה — נדחה', false, runTask('mgr', 'update', task({ fkind: 'boom', updatedAt: NOW })));
+expect('🔴 סוג שאינו מחרוזת — נדחה', false, runTask('mgr', 'update', task({ fkind: 3, updatedAt: NOW })));
+expect('🔴 תושב לא קובע סוג ביצירה', false, runTask('res1', 'create', task({ fkind: 'line' })));
+expect('🔴 תושב לא משנה סוג', false, runTask('res1', 'update', task({ fkind: 'line', updatedAt: NOW })));
+expect('שיוך + סוג באותה כתיבה', true, runTask('ext', 'update', task({ assets: ['s1'], fkind: 'spr', updatedAt: NOW })));
+expect('🔴 גנן לא משנה סוג בסגורה', false, runTask('ext', 'update', Object.assign({}, closed, { fkind: 'line', updatedAt: NOW }), closed));
+expect('מנהל כן', true, runTask('mgr', 'update', Object.assign({}, closed, { fkind: 'line', updatedAt: NOW }), closed));
 
 console.log('\n====================================================');
 console.log('עברו: ' + pass + '   נכשלו: ' + fail);

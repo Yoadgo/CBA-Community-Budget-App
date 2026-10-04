@@ -179,6 +179,55 @@ section('6. רישום המסך');
   ok('gardenForm: מיקום התחלתי + onSaved(res)', /opts\.at && typeof opts\.at\.x === "number"/.test(R('js/ui/gardenForm.js')) && /opts\.onSaved\(res\)/.test(R('js/ui/gardenForm.js')));
 }
 
+section('7. סבב 2 (4.10): סוג תקלה, זום CSS, הזזת מפה');
+{
+  writes.length = 0;
+  ok('ארבעה סוגים בסדר קבוע', A.FKIND_ORDER.join() === 'line,spr,ctrl,lawn' && A.FKIND.line.asset === 'pipe');
+  ok('סימון → סוג: pipe→line, spr→spr, ctrl→ctrl, lawn→lawn, אחר → ""',
+     A.fkindOfAsset('pipe') === 'line' && A.fkindOfAsset('spr') === 'spr' && A.fkindOfAsset('ctrl') === 'ctrl' &&
+     A.fkindOfAsset('lawn') === 'lawn' && A.fkindOfAsset('patch') === '');
+  A.linkTask('42', ['s1'], () => {}, { fkind: 'spr' });
+  ok('שיוך + סוג באותה כתיבה', JSON.stringify(Object.keys(writes[0].d).sort()) === '["assets","fkind","updatedAt"]' && writes[0].d.fkind === 'spr');
+  A.linkTask('42', ['s1'], () => {}, { fkind: 'boom' });
+  ok('סוג לא מוכר לא נשלח', !('fkind' in writes[1].d));
+  let r1 = null; A.setFaultKind('42', 'line', r => { r1 = r; });
+  ok('setFaultKind: update עם fkind+updatedAt בלבד', writes[2].c === 'gardenTasks' && JSON.stringify(Object.keys(writes[2].d).sort()) === '["fkind","updatedAt"]' && r1.fkind === 'line');
+  A.setFaultKind('42', 'nope', () => {});
+  ok('setFaultKind: לא מוכר → "" (ניקוי)', writes[3].d.fkind === '');
+  const its = [{ id: 's1', kind: 'spr', x: 0.2, y: 0.2 }, { id: 'p1', kind: 'pipe', pts: [0.2, 0.2005, 0.21, 0.2005] }];
+  const s1 = A.suggest({ title: 'נראה שההשקייה לא עובדת', x: 0.2, y: 0.2 }, its, 12);
+  const s2 = A.suggest({ title: 'נראה שההשקייה לא עובדת', x: 0.2, y: 0.2, fkind: 'line' }, its, 12);
+  ok('"הקרוב ביותר" מצטמצם לסוג: בלי סוג → ממטרה, "קו מים" → הקו', s1 && s1.a.id === 's1' && s2 && s2.a.id === 'p1', [s1 && s1.a.id, s2 && s2.a.id]);
+  const pin = P.pinSvg({ state: 'wait', ico: 'water', fkind: 'line' });
+  ok('נעץ: סמליל קו מים במקום הטיפה', pin.indexOf(P.FK_ICO.line) !== -1 && !/d="W"/.test(pin));
+  ok('נעץ בלי סוג — כמו קודם', /d="W"/.test(P.pinSvg({ state: 'wait', ico: 'water' })));
+  ok('fromTask מעביר fkind', P.fromTask({ id: 1, x: 0.1, y: 0.1, title: 'x', fkind: 'ctrl' }, {}).fkind === 'ctrl');
+  ok('aria אומר את הסוג', /תקלה במחשב ההשקיה/.test(P.aria({ title: 'x', state: 'wait', fkind: 'ctrl' })));
+
+  {
+    /* 🔴 חלון בין Push לפרסום הכללים: הכלל הישן דוחה fkind — השיוך עדיין נשמר. */
+    const orig = sandbox.CBA.fb.updateDoc; const tries = [];
+    sandbox.CBA.fb.updateDoc = (c, id, d, cb) => { tries.push(Object.keys(d).sort().join()); cb('fkind' in d ? { code: 'permission-denied' } : null); };
+    let rr = null; A.linkTask('43', ['s1'], r => { rr = r; }, { fkind: 'spr' });
+    sandbox.CBA.fb.updateDoc = orig;
+    ok('🔴 כללים ישנים: שיוך נשמר בניסיון שני בלי fkind', rr && rr.ok && !rr.fkind && tries.length === 2 && tries[1] === 'assets,updatedAt', { rr, tries });
+    const DS = R('js/data/dataService.js');
+    ok('🔴 וכך גם יצירה ועריכה של תקלה (createOnce / retried)', /function createOnce\(retry\)/.test(DS) && /delete doc\.fkind; return createOnce\(false\)/.test(DS) && /retried = true; delete patch\.fkind;/.test(DS));
+  }
+  const LW = R('js/screens/gardenLawn.js'), RES = R('js/screens/resident.js'), LANG = R('js/data/gardenLang.js');
+  ok('🔴 toNorm מחלק ב-zoom של CSS (body zoom 1.05 בדסקטופ)', /\(\(\(cx - r\.left\) \/ z - v\.tx\) \/ v\.s\)/.test(LW) && /function zoomF\(\)/.test(LW));
+  ok('🔴 מנוע המפה: נעיצה, גרירה, צביטה וגלגלת מחולקים ב-zf()', /var wx = \(\(e\.clientX - rect\.left\) \/ zf\(\) - tx\) \/ scale;/.test(RES) &&
+     /tx = txStart \+ \(e\.clientX - dragStartX\) \/ zf\(\)/.test(RES) && (RES.match(/- rect\.left\) \/ zf\(\)/g) || []).length >= 3);
+  ok('מנוע המפה חושף panBy/zoomAt', /panBy: function \(dx, dy\)/.test(RES) && /zoomAt: function \(f, cx, cy\)/.test(RES));
+  ok('🔴 הזזת מפה בכל כלי: גלגלת, רווח, שתי אצבעות בציור חופשי', /addEventListener\("wheel"[\s\S]{0,400}api\.panBy\(-e\.deltaX/.test(LW) &&
+     /e\.code !== "Space"/.test(LW) && /if \(list\.length >= 2\)/.test(LW) && /!S\.space\)/.test(LW));
+  ok('catOfTask: fkind גובר על הכותרת', /t\.fkind === "lawn" \? \{ key: "lawn"/.test(LANG));
+  ok('טופס: סוג התקלה רק בקטגוריית דשא/השקיה, ונשמר ביצירה ובעריכה', /function fkOn\(\)/.test(R('js/ui/gardenForm.js')) &&
+     /fkind: fkOn\(\) \? st\.fkind : ""/.test(R('js/ui/gardenForm.js')) && /if \(GARDEN_FKINDS\[payload\.fkind\]\) doc\.fkind/.test(R('js/data/dataService.js')));
+  ok('כרטיס התקלה: סוג + מעבר למפת ההשקיה', /function lwKindHtml\(t, cat, closed\)/.test(R('js/screens/gardenTasks.js')) &&
+     /CBA\.gardenAssets\.openOnMap\(id, m === "lwpick"\)/.test(R('js/screens/gardenTasks.js')) && /function applyFocus\(\)/.test(LW));
+}
+
 console.log('\n====================================================');
 console.log('עברו: ' + pass + '   נכשלו: ' + fail);
 process.exit(fail ? 1 : 0);

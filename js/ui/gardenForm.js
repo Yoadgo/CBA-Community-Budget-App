@@ -78,6 +78,7 @@ CBA.gardenForm = (function () {
    *   weekLabel (key) => string — לשבוע שנקבע ואינו בין האפשרויות
    *   at        {x, y} — מיקום התחלתי לתקלה חדשה (4.10, "פתיחת תקלה כאן" ממסך דשא והשקיה)
    *   cat       קטגוריה התחלתית לתקלה חדשה (4.10)
+   *   fkind     סוג תקלה התחלתי — line|spr|ctrl|lawn (4.10, "דשא והשקיה")
    *   ⚠️ onSaved מקבל מ-4.10 את תשובת השמירה (res: {id, ids}) — קוראים ישנים מתעלמים ממנה.
    */
   function open(opts) {
@@ -113,6 +114,8 @@ CBA.gardenForm = (function () {
       x: (tk && typeof tk.x === "number") ? tk.x : (opts.at && typeof opts.at.x === "number" ? opts.at.x : null),
       y: (tk && typeof tk.y === "number") ? tk.y : (opts.at && typeof opts.at.y === "number" ? opts.at.y : null),
       pinArea: "",
+      /* 4.10 — סוג התקלה (לצוות; הטופס הזה הוא של הצוות בלבד). */
+      fkind: (tk && tk.fkind) || opts.fkind || "",
       photos: [],
       busy: false
     };
@@ -167,6 +170,18 @@ CBA.gardenForm = (function () {
         /* 🔴 22.9 (הכרעת יועד: "מוצג לכולם") — **תיאור, כמו אצל התושב.**
            אותה תווית, אותו מונה של 75 מילים ואותו פס. הוא נשמר על המשימה
            ומוצג בכרטיס הפרטים למנהל ולגנן. בתוכנית העבודה אין תיאור. */
+        /* 🔴 4.10 (בקשת יועד) — **סוג התקלה**: קו מים / ממטרה / מחשב / דשא.
+           רק בקטגוריה "מדשאות, השקיה וממטרות", ורק כאן (הצוות) — התושב לא
+           רואה ולא בוחר. לחיצה שנייה על הסוג שנבחר מבטלת. */
+        (isPlan || !(CBA.gardenAssets && CBA.gardenAssets.FKIND) ? '' :
+          '<div id="gf-fkbox" hidden>' +
+            '<label class="gd-lbl" style="margin-top:12px">סוג התקלה <em>לצוות בלבד · לא חובה</em></label>' +
+            '<div class="gp-areas" id="gf-fk">' +
+              chips(CBA.gardenAssets.FKIND_ORDER.map(function (k) {
+                return { v: k, label: esc(CBA.gardenAssets.FKIND[k].long) };
+              }), st.fkind, "data-fk") +
+            '</div>' +
+          '</div>') +
         (isPlan ? '' :
           '<div id="gf-descbox">' +
             '<label class="gd-lbl" style="margin-top:12px">תיאור <em id="gf-wc"></em></label>' +
@@ -301,7 +316,28 @@ CBA.gardenForm = (function () {
         function (b) { return b.getAttribute(attr); });
     }
 
-    pick("#gf-cats", "data-c", false, function (v) { st.cat = v; renderPicks(); });
+    pick("#gf-cats", "data-c", false, function (v) { st.cat = v; renderPicks(); syncFk(); });
+
+    /* ---- סוג התקלה (4.10) — גלוי רק בקטגוריית דשא/השקיה ---- */
+    var fkBox = q("#gf-fkbox");
+    function fkOn() {
+      if (!fkBox) return false;
+      var k = (CBA.gardenLang && CBA.gardenLang.catOf) ? CBA.gardenLang.catOf(st.cat).key : "";
+      return !!st.cat && (k === "lawn" || k === "water");
+    }
+    function syncFk() { if (fkBox) fkBox.hidden = !fkOn(); }
+    if (fkBox) {
+      q("#gf-fk").addEventListener("click", function (e) {
+        var b = e.target.closest("[data-fk]"); if (!b) return;
+        var v = b.getAttribute("data-fk");
+        st.fkind = st.fkind === v ? "" : v;
+        Array.prototype.forEach.call(q("#gf-fk").querySelectorAll("[data-fk]"), function (x) {
+          var on = x.getAttribute("data-fk") === st.fkind;
+          x.classList.toggle("on", on); x.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+      });
+      syncFk();
+    }
 
     /* ---- תיאור: מונה מילים, בדיוק כמו אצל התושב (75) ---- */
     var WORD_MAX = 75;
@@ -535,6 +571,7 @@ CBA.gardenForm = (function () {
           week: (picked("#gf-weeks", "data-w")[0]) || "",
           desc: descEl ? descEl.value.trim() : "",
           place: q("#gf-place") ? q("#gf-place").value.trim() : "",
+          fkind: fkOn() ? st.fkind : undefined,
           x: st.x, y: st.y
         }, function (res) {
           st.busy = false;
@@ -554,6 +591,7 @@ CBA.gardenForm = (function () {
         asReport: true,
         desc: descEl ? descEl.value.trim() : "",
         place: q("#gf-place") ? q("#gf-place").value.trim() : "",
+        fkind: fkOn() ? st.fkind : "",
         x: st.x, y: st.y, photos: st.photos
       }, function (res) {
         st.busy = false;

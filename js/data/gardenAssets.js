@@ -170,6 +170,24 @@ CBA.gardenAssets = (function () {
   var SCHEMA = 1;
   var LAWN_STATUS = { ok: "תקין", dry: "יבש", dead: "מת" };
   var SPR_TYPES = { pop: "ראש מתרומם", rot: "ראש מסתובב", drip: "טפטוף" };
+  /* 🔴 4.10 (בקשת יועד) — **סוג תקלה בתקלות דשא/השקיה, לצוות בלבד.**
+     "צריך בתוך התקלות אפשרות להבחין בין פיצוץ בקו המים לפיצוץ/תקלה
+     בממטרה" + הכרעה: ארבעה סוגים. נשמר על המשימה כ-`fkind` (הכללים: רשימה
+     סגורה, צוות בלבד — gtFkindOk/gtTeamOnly). מתמלא לבד בשיוך לסימון
+     מהסוג המתאים (אם עוד לא נבחר), ומשנה את הסמליל על הנעץ.
+     `asset` = סוג הסימון שמתאים — ממנו "הקרוב ביותר" מצמצם הצעות. */
+  var FKIND = {
+    line: { label: "קו מים",      long: "פיצוץ / דליפה בקו מים", asset: "pipe" },
+    spr:  { label: "ממטרה",       long: "תקלה בממטרה",           asset: "spr"  },
+    ctrl: { label: "מחשב השקיה",  long: "תקלה במחשב ההשקיה",     asset: "ctrl" },
+    lawn: { label: "דשא",         long: "דשא יבש / מת",          asset: "lawn" }
+  };
+  var FKIND_ORDER = ["line", "spr", "ctrl", "lawn"];
+  /** סוג הסימון → סוג התקלה שמתאים לו. */
+  function fkindOfAsset(kind) {
+    for (var i = 0; i < FKIND_ORDER.length; i++) if (FKIND[FKIND_ORDER[i]].asset === kind) return FKIND_ORDER[i];
+    return "";
+  }
 
   function fb() { return (window.CBA && CBA.fb) || null; }
   function uid() { var f = fb(); return (f && f.uid && f.uid()) || ""; }
@@ -318,10 +336,34 @@ CBA.gardenAssets = (function () {
   }
 
   /** שיוך משימה לנכסים. ⚠️ על משימה סגורה רק מנהל רשאי (gtClosedOk). */
-  function linkTask(taskId, assetIds, cb) {
+  /* extra.fkind — סוג התקלה, נכתב באותה כתיבה (4.10). הקורא מחליט מתי —
+     רק כשלתקלה עוד אין סוג, כדי לא לדרוס בחירה ידנית. */
+  function linkTask(taskId, assetIds, cb, extra) {
     var ids = (assetIds || []).filter(Boolean).slice(0, 5);
-    fb().updateDoc("gardenTasks", String(taskId), { assets: ids, updatedAt: now() }, function (e) {
-      cb(e ? { ok: false, err: e } : { ok: true, assets: ids });
+    var patch = { assets: ids, updatedAt: now() };
+    if (extra && FKIND[extra.fkind]) patch.fkind = extra.fkind;
+    fb().updateDoc("gardenTasks", String(taskId), patch, function done(e) {
+      /* fkind לא יפיל שיוך אם הכללים עוד לא מכירים אותו — השיוך הוא העיקר. */
+      if (e && patch.fkind && String(e.code || "").indexOf("permission-denied") !== -1) {
+        delete patch.fkind;
+        return fb().updateDoc("gardenTasks", String(taskId), patch, done);
+      }
+      cb(e ? { ok: false, err: e } : { ok: true, assets: ids, fkind: patch.fkind });
+    });
+  }
+
+  /** מעבר ממסך אחר (כרטיס התקלה) למסך "דשא והשקיה", עם התקלה נבחרת.
+      pick = מצב שיוך מיד. ההעברה דרך CBA._lwFocus — המסך קורא ומנקה. */
+  function openOnMap(taskId, pick) {
+    CBA._lwFocus = { id: String(taskId), pick: !!pick };
+    if (CBA.gotoAdmin) CBA.gotoAdmin("gardenLawn"); else if (CBA.navigate) CBA.navigate("gardenLawn");
+  }
+
+  /** סוג התקלה — "" מנקה. */
+  function setFaultKind(taskId, kind, cb) {
+    var k = FKIND[kind] ? kind : "";
+    fb().updateDoc("gardenTasks", String(taskId), { fkind: k, updatedAt: now() }, function (e) {
+      cb(e ? { ok: false, err: e } : { ok: true, fkind: k });
     });
   }
 
@@ -338,6 +380,8 @@ CBA.gardenAssets = (function () {
     var p = [+task.x, +task.y];
     var key = (CBA.gardenLang && CBA.gardenLang.catOfTask) ? CBA.gardenLang.catOfTask(task).key : "";
     var kinds = key === "water" ? ["spr", "pipe", "ctrl"] : key === "lawn" ? ["lawn"] : null;
+    /* סוג תקלה שנבחר מצמצם את ההצעה לסימון מהסוג שלו (קו מים → צנרת). */
+    if (FKIND[task.fkind]) kinds = [FKIND[task.fkind].asset];
     if (!kinds) return null;
     var best = null;
     items.forEach(function (a) {
@@ -377,6 +421,7 @@ CBA.gardenAssets = (function () {
 
   return {
     LAWN_STATUS: LAWN_STATUS, SPR_TYPES: SPR_TYPES, newId: newId,
+    FKIND: FKIND, FKIND_ORDER: FKIND_ORDER, fkindOfAsset: fkindOfAsset, setFaultKind: setFaultKind, openOnMap: openOnMap,
     load: load, loadLawns: loadLawns, saveLawn: saveLawn, setLawnStatus: setLawnStatus,
     saveAsset: saveAsset, linkTask: linkTask, faultsOf: faultsOf, suggest: suggest,
     summary: summary

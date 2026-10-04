@@ -62,13 +62,13 @@ CBA.lazyManifest = {
     screens: ["gardenTasks", "gardenInbox", "gardenPlan", "gardenStats", "gardenLawn"],
     files: [
       "js/data/gardenSlots.js?v=1b715264ff",
-      "js/ui/gardenPins.js?v=1c33e1bfc8",
+      "js/ui/gardenPins.js?v=03cd726d36",
       "js/screens/gardenPlan.js?v=ea51dc59c9",
       "js/screens/gardenStats.js?v=9f310f2b18",
       "js/screens/gardenSchedule.js?v=861d4bba6f",
       "js/screens/gardenScheduleAi.js?v=4a2f2ab9f6",
-      "js/screens/gardenLawn.js?v=9fe65a992c",
-      "js/screens/gardenTasks.js?v=43f85ceec7"
+      "js/screens/gardenLawn.js?v=99418e72f5",
+      "js/screens/gardenTasks.js?v=b1ca05ccd9"
     ]
   }
 };

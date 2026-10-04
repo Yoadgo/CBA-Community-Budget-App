@@ -154,6 +154,10 @@
   };
   L.catOfTask = function (t) {
     var c = L.catOf(t && t.category);
+    /* 4.10 — סוג תקלה שהצוות בחר (fkind) גובר על ניחוש מהכותרת. */
+    if ((c.key === "lawn" || c.key === "water") && t && t.fkind) {
+      return t.fkind === "lawn" ? { key: "lawn", ico: "lawn" } : { key: "water", ico: "water" };
+    }
     if (c.key === "lawn" || c.key === "water") return L.lawnOrWater(t && t.title);
     return c;
   };

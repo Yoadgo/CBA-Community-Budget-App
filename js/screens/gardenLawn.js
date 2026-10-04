@@ -37,7 +37,7 @@ CBA.screens = CBA.screens || {};
     ctrl: "הקישו במפה במקום מחשב ההשקיה.",
     pipe: "הקישו נקודה אחרי נקודה לאורך הקו, ואז \"סיום\".",
     "lawn:poly": "הקישו את פינות המקטע, ואז \"סיום\".",
-    "lawn:free": "ציירו באצבע את גבול המקטע. אחר כך אפשר לדייק בנקודות.",
+    "lawn:free": "ציירו באצבע את גבול המקטע. להזזת המפה בזמן ציור: שתי אצבעות, או רווח + גרירה במחשב.",
     "lawn:circle": "הקישו במרכז, ואז גררו את הידית לגודל הנכון.",
     "lawn:ellipse": "הקישו במרכז, ואז גררו את שתי הידיות."
   };
@@ -135,6 +135,7 @@ CBA.screens = CBA.screens || {};
               '<div class="lw-bar" id="lw-bar" hidden></div>' +
               '<div class="lw-tools" id="lw-tools" role="toolbar" aria-label="כלי סימון" hidden></div>' +
               '<div class="lw-capture" id="lw-capture" hidden></div>' +
+              '<div class="lw-hint" id="lw-hint" role="status" aria-live="polite"></div>' +
             '</div>' +
             '<aside class="lw-panel is-empty" id="lw-panel" aria-live="polite"></aside>' +
           '</div>' +
@@ -172,7 +173,19 @@ CBA.screens = CBA.screens || {};
       if (S.sel && !selected()) S.sel = null;
       renderState(); renderSum(); setPins(silent); drawOverlay(); renderPanel();
       if (!silent && !S.fitted) fitAll();
+      applyFocus();
     }
+  }
+  /* 4.10 — הגעה מכרטיס התקלה ("הצגה במפת ההשקיה" / "שיוך לממטרה / מקטע"):
+     התקלה נבחרת, המפה מתמקדת בה, ובשיוך — מצב בחירה מיד. */
+  function applyFocus() {
+    var f = CBA._lwFocus; if (!f || S.loading) return;
+    delete CBA._lwFocus;   /* תיבת דואר של הליבה (gardenAssets.openOnMap) — כאן רק קוראים ומנקים */
+    var t = taskById(f.id);
+    if (!t) return toast("התקלה לא נמצאה במפה — רק תקלות (לא שגרות) מופיעות כאן", "error");
+    select({ type: "task", id: t.id });
+    if (hasLoc(t)) zoomTo(+t.x, +t.y, 1.6);
+    if (f.pick && canRelink(t)) startPick(t.id);
   }
   /** פתיחה: התצוגה מתאימה את עצמה לכל מה שסומן (ולתקלות), עם מרווח —
       לא לכל השכונה, שבה הסימונים קטנים מכדי לראות. אין סימונים = כל השכונה. */
@@ -247,10 +260,17 @@ CBA.screens = CBA.screens || {};
     var m = world && /translate\(([-\d.eE]+)px,\s*([-\d.eE]+)px\)\s*scale\(([\d.eE+-]+)\)/.exec(world.style.transform || "");
     return m ? { tx: +m[1], ty: +m[2], s: +m[3] } : { tx: 0, ty: 0, s: 1 };
   }
-  /** נקודת מסך → שבר 0–1 של העולם. */
+  /** נקודת מסך → שבר 0–1 של העולם.
+      🔴 4.10 (יועד: "סימנתי ממטרה והיא לא יוצאת על נקודת העכבר") — בדסקטופ
+      body מקבל zoom:1.05, ולכן פיקסל מסך ≠ פיקסל CSS של העולם. z = היחס בפועל
+      (1 בטלפון). בלעדיו הסטייה גדלה ככל שמתרחקים מפינת המפה. */
+  function zoomF() {
+    var w = viewport.offsetWidth;
+    return w ? (viewport.getBoundingClientRect().width / w) || 1 : 1;
+  }
   function toNorm(cx, cy) {
-    var r = viewport.getBoundingClientRect(), v = view(), W = worldWH();
-    return [((cx - r.left - v.tx) / v.s) / W.w, ((cy - r.top - v.ty) / v.s) / W.h];
+    var r = viewport.getBoundingClientRect(), v = view(), W = worldWH(), z = zoomF();
+    return [(((cx - r.left) / z - v.tx) / v.s) / W.w, (((cy - r.top) / z - v.ty) / v.s) / W.h];
   }
   function zoomTo(x, y, mult) {
     var api = S.pins && S.pins.api;
@@ -351,12 +371,12 @@ CBA.screens = CBA.screens || {};
           /* ממטרות תמיד גלויות — בזום רחוק הן קטנות יותר (CSS לפי data-lod), לא נעלמות:
              מסך שנפתח בלי ממטרות נראה כמו "לא סומן כלום". */
           var ring = bad[a.id] ? "var(--s-" + bad[a.id] + ", " + CBA.gardenPins.COL[bad[a.id]] + ")" : "";
-          sym.push('<div class="lw-spr' + (bad[a.id] ? " has-fault" : "") + (selId === a.id ? " is-sel" : "") + '" role="button" tabindex="0" ' +
+          sym.push('<div class="lw-spr' + (bad[a.id] ? " has-fault" : "") + (selId === a.id || S.justAdded === a.id ? " is-sel" : "") + '" role="button" tabindex="0" ' +
             'data-lw="' + esc(a.id) + '" aria-label="' + esc(sprLabel(a) + (bad[a.id] ? " · יש תקלה פתוחה" : "")) + '" ' +
             'style="left:' + (a.x * W.w).toFixed(1) + 'px;top:' + (a.y * W.h).toFixed(1) + 'px' + (ring ? ';--ring:' + ring : '') + '">' +
             '<i></i>' + (level === "near" && a.station ? '<span class="lw-tag">קו ' + esc(a.station) + '</span>' : '') + '</div>');
         } else if (a.kind === "ctrl") {
-          sym.push('<div class="lw-ctrl' + (selId === a.id ? " is-sel" : "") + '" role="button" tabindex="0" data-lw="' + esc(a.id) + '" ' +
+          sym.push('<div class="lw-ctrl' + (selId === a.id || S.justAdded === a.id ? " is-sel" : "") + '" role="button" tabindex="0" data-lw="' + esc(a.id) + '" ' +
             'aria-label="' + esc(a.name || "מחשב השקיה") + '" style="left:' + (a.x * W.w).toFixed(1) + 'px;top:' + (a.y * W.h).toFixed(1) + 'px">' +
             '<b>' + ico("ctrl", 13) + '<em>' + esc(ctrlNo(a)) + '</em></b>' +
             (level !== "far" ? '<span class="lw-tag">' + esc(a.name || "") + '</span>' : '') + '</div>');
@@ -443,6 +463,7 @@ CBA.screens = CBA.screens || {};
     });
     viewport.addEventListener("pointerup", function (e) {
       var d = down; down = null;
+      if (S.space) return;   // רווח לחוץ = יד זמנית: גרירה מזיזה, הקשה לא מסמנת
       if (!d || d.n > 1 || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return;
       var target = document.elementFromPoint(e.clientX, e.clientY);
       if (target && (target.closest(".map-marker") || target.closest(".map-toolbar") || target.closest(".map-topbar"))) return;
@@ -457,25 +478,81 @@ CBA.screens = CBA.screens || {};
       if (t) { e.preventDefault(); onTap(null, t); }
     });
 
+    /* 🔴 4.10 (יועד: "אחרי כניסה למצב עריכה לא ניתן לחזור ולהזיז את המפה") —
+       **המפה זזה תמיד, בכל כלי:**
+       · גלגלת / שתי אצבעות על משטח המגע = הזזה (Ctrl/⌘ + גלגלת = זום, כמו קודם).
+         מסך עבודה על מפה — אין כאן עמוד שצריך לגלול מעל המפה.
+       · רווח לחוץ = יד זמנית (גרירה מזיזה, הקשה לא מסמנת, שכבת הציור יורדת).
+       · בציור חופשי (שכבת לכידה): שתי אצבעות מזיזות וצובטות במקום לצייר. */
+    var wrapEl = S.root.querySelector("#lw-mapwrap");
+    wrapEl.addEventListener("wheel", function (e) {
+      if (e.ctrlKey || e.metaKey) return;          // זום — של המנוע
+      var api = S.pins && S.pins.api; if (!api || !api.panBy) return;
+      if (e.target.closest && e.target.closest(".lw-bar, .lw-tools, .lw-layers, .lw-state")) return;
+      e.preventDefault(); e.stopPropagation();
+      var k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+      api.panBy(-e.deltaX * k, -e.deltaY * k);
+      drawOverlay();
+    }, { capture: true, passive: false });
+    function typing(t) { return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)); }
+    document.addEventListener("keydown", function sp(e) {
+      if (!S || !S.root || !S.root.isConnected) { document.removeEventListener("keydown", sp); return; }
+      if (e.code !== "Space" || typing(e.target) || S.mode !== "edit") return;
+      e.preventDefault();
+      if (!S.space) { S.space = true; S.root.classList.add("is-space"); renderTools(); }
+    });
+    document.addEventListener("keyup", function spu(e) {
+      if (!S || !S.root || !S.root.isConnected) { document.removeEventListener("keyup", spu); return; }
+      if (e.code !== "Space" || !S.space) return;
+      S.space = false; S.root.classList.remove("is-space"); renderTools();
+    });
+
     /* ציור חופשי — שכבת לכידה, רק כשהכלי פעיל */
-    var cap = S.root.querySelector("#lw-capture"), stroke = null;
+    var cap = S.root.querySelector("#lw-capture"), stroke = null, fingers = {}, gest = null;
+    function fingerList() { return Object.keys(fingers).map(function (k) { return fingers[k]; }); }
+    function gestFrom(list) {
+      var a = list[0], b = list[1];
+      return { mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
+    }
     cap.addEventListener("pointerdown", function (e) {
-      if (stroke) { stroke = null; S.draft = null; drawOverlay(); toast("להזזת המפה בזמן ציור — כלי \"הזזה\" או הכפתורים + / −"); return; }
-      cap.setPointerCapture(e.pointerId);
+      fingers[e.pointerId] = { x: e.clientX, y: e.clientY };
+      try { cap.setPointerCapture(e.pointerId); } catch (x) {}
+      var list = fingerList();
+      if (list.length >= 2) {
+        /* אצבע שנייה: מה שהתחיל כקו מבוטל — זו תנועת מפה, לא ציור. */
+        if (stroke) { stroke = null; S.draft = null; drawOverlay(); }
+        gest = gestFrom(list);
+        return;
+      }
       stroke = { id: e.pointerId };
       S.draft = { kind: "lawn", shape: "poly", pts: [toNorm(e.clientX, e.clientY)], free: true };
       drawOverlay();
     });
     cap.addEventListener("pointermove", function (e) {
+      if (fingers[e.pointerId]) fingers[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if (gest) {
+        var list = fingerList(); if (list.length < 2) return;
+        var g = gestFrom(list), api = S.pins && S.pins.api;
+        if (api && api.panBy) api.panBy(g.mx - gest.mx, g.my - gest.my);
+        if (api && api.zoomAt && Math.abs(g.d / gest.d - 1) > 0.01) api.zoomAt(g.d / gest.d, g.mx, g.my);
+        gest = g; drawOverlay();
+        return;
+      }
       if (!stroke || e.pointerId !== stroke.id) return;
       S.draft.pts.push(toNorm(e.clientX, e.clientY));
       drawOverlay();
     });
+    function liftFinger(e) {
+      delete fingers[e.pointerId];
+      if (gest && fingerList().length < 2) { gest = null; if (!fingerList().length) fingers = {}; return true; }
+      return !!gest;
+    }
     function endStroke(e) {
+      if (liftFinger(e)) return;
       if (!stroke || e.pointerId !== stroke.id) return;
       stroke = null;
       var pts = CBA.gardenGeo.thin(S.draft.pts, 1.5);
-      if (pts.length < 3) { S.draft = null; drawOverlay(); toast("הקו קצר מדי — ציירו את כל הגבול"); return; }
+      if (pts.length < 3) { S.draft = null; drawOverlay(); showHint("הקו קצר מדי — ציירו את כל הגבול"); return; }
       /* אחרי הציור: מצב דיוק עם ידיות, והכלי חוזר להזזה — כך אפשר להזיז את המפה ולדייק. */
       S.draft = null;
       S.edit = { id: null, kind: "lawn", shape: "poly", pts: pts, isNew: true };
@@ -483,7 +560,7 @@ CBA.screens = CBA.screens || {};
       drawOverlay(); renderBar();
     }
     cap.addEventListener("pointerup", endStroke);
-    cap.addEventListener("pointercancel", function () { stroke = null; S.draft = null; drawOverlay(); });
+    cap.addEventListener("pointercancel", function (e) { liftFinger(e); stroke = null; S.draft = null; drawOverlay(); });
   }
   function moveHandle(k, n) {
     var D = S.edit || S.draft; if (!D) return;
@@ -507,6 +584,11 @@ CBA.screens = CBA.screens || {};
     }
     /* כלי הוספה */
     if (S.mode === "edit" && S.tool !== "hand" && n && !S.edit) {
+      /* 4.10 — הקשה על סמל קיים (ממטרה/מחשב) עם כלי הוספת נקודה פותחת אותו,
+         ולא מניחה ממטרה שנייה בדיוק עליו. בכלי קו/מקטע — הנקודה ננעלת על הסמל. */
+      var symHit = hit && hit.closest(".lw-sym > *") && byId(hitId);
+      if (symHit && (S.tool === "spr" || S.tool === "ctrl")) return select({ type: "asset", id: hitId });
+      if (symHit && (S.tool === "pipe" || S.tool === "lawn:poly")) n = [symHit.x, symHit.y];
       if (S.tool === "spr") return addPoint("spr", n);
       if (S.tool === "ctrl") return addPoint("ctrl", n);
       if (S.tool === "pipe" || S.tool === "lawn:poly") {
@@ -562,8 +644,19 @@ CBA.screens = CBA.screens || {};
       var cnt = S.assets.filter(function (x) { return x.kind === "ctrl"; }).length;
       a.name = "מחשב " + (cnt + 1);
     }
-    saveAsset(a, function () { select({ type: "asset", id: a.id }); });
+    /* 4.10 (בדיקת מובייל) — בטלפון הגיליון התחתון מכסה את סרגל הכלים, ולכן כל
+       ממטרה חיבה "סגירה" לפני הבאה. שם: הכלי נשאר פעיל, הסמל החדש מודגש לרגע,
+       ורמז קצר אומר מה קרה. הקשה על הסמל פותחת את הפרטים כרגיל. במחשב — כמו קודם. */
+    saveAsset(a, function () {
+      if (!narrow()) return select({ type: "asset", id: a.id });
+      S.justAdded = a.id; drawOverlay();
+      var c2 = a.ctrl && byId(a.ctrl);
+      showHint((kind === "spr" ? "ממטרה נוספה" + (c2 ? " · שויכה ל" + c2.name : " · בלי מחשב") : a.name + " נוסף") +
+        ". ממשיכים להקיש, או הקשה על הסמל לפרטים.");
+      setTimeout(function () { if (S.justAdded === a.id) { S.justAdded = null; drawOverlay(); } }, 2200);
+    });
   }
+  function narrow() { return !!(S.root && S.root.getBoundingClientRect().width <= 760); }
   function saveAsset(a, after) {
     CBA.gardenAssets.saveAsset(a, function (res) {
       if (!res.ok) return toast(errText(res.err), "error");
@@ -694,19 +787,41 @@ CBA.screens = CBA.screens || {};
 
   /* ---- שיוך ---- */
   function canRelink(t) { return !t.closure || isMgr(); }
+  /* סוג תקלה (fkind) — רק בתקלות דשא/השקיה. */
+  function isLawnWater(t) {
+    var k = CBA.gardenLang && CBA.gardenLang.catOf ? CBA.gardenLang.catOf(t && t.category).key : "";
+    return k === "lawn" || k === "water";
+  }
+  /** הסוג שהשיוך ממלא — רק כשעוד לא נבחר סוג, ורק בקטגוריה המתאימה. */
+  function autoKind(t, a) {
+    if (!t || !a || t.fkind || !isLawnWater(t)) return "";
+    return CBA.gardenAssets.fkindOfAsset(a.kind);
+  }
+  function setKind(t, k) {
+    if (!canRelink(t)) return toast("התקלה סגורה — רק מנהל הגינון משנה", "error");
+    var next = t.fkind === k ? "" : k;
+    CBA.gardenAssets.setFaultKind(t.id, next, function (res) {
+      if (!res.ok) return toast(errText(res.err), "error");
+      t.fkind = res.fkind;
+      setPins(true); renderPanel(); renderBar();
+    });
+  }
   function linkTaskTo(taskId, assetId, fromPick) {
     var t = taskById(taskId), a = byId(assetId);
     if (!t || !a) return;
     if (!canRelink(t)) return toast("התקלה סגורה — רק מנהל הגינון משנה שיוך", "error");
     var next = (t.assets || []).filter(function (x) { return x !== assetId; }).concat([assetId]);
     if (next.length > 5) return toast("אפשר לשייך תקלה לעד 5 סימונים", "error");
+    var fk = autoKind(t, a);
     CBA.gardenAssets.linkTask(t.id, next, function (res) {
       if (!res.ok) return toast(errText(res.err), "error");
       t.assets = res.assets;
+      if (res.fkind) t.fkind = res.fkind;
       if (fromPick) S.pick = null;
-      toast("שויך: " + (t.title || "תקלה") + " ← " + displayName(a));
+      toast("שויך: " + (t.title || "תקלה") + " ← " + displayName(a) +
+        (res.fkind ? " · סוג: " + CBA.gardenAssets.FKIND[res.fkind].label : ""));
       renderBar(); setPins(true); drawOverlay(); renderPanel(); renderSum();
-    });
+    }, fk ? { fkind: fk } : null);
   }
   function unlink(taskId, assetId) {
     var t = taskById(taskId); if (!t) return;
@@ -740,6 +855,8 @@ CBA.screens = CBA.screens || {};
       ico: K.ico, catOf: K.catOf, esc: esc,
       weeks: [{ v: cur, label: "השבוע" }, { v: next, label: "שבוע הבא" }, { v: "", label: "בלי שבוע — לשיבוץ" }],
       at: { x: at[0], y: at[1] }, cat: cat,
+      /* הסוג נגזר מהסימון (ממטרה → "תקלה בממטרה"), ונבחר מראש בטופס — אפשר לשנות שם. */
+      fkind: CBA.gardenAssets.fkindOfAsset(a.kind),
       onSaved: function (res) {
         var ids = (res && res.ids && res.ids.length) ? res.ids : (res && res.id ? [res.id] : []);
         var left = ids.length;
@@ -810,7 +927,16 @@ CBA.screens = CBA.screens || {};
     S.tool = t;
     renderTools(); renderBar(); drawOverlay();
     /* הסבר הכלי — פעם אחת לכל כלי בכל כניסה, לא בכל לחיצה. */
-    if (!quiet && TOOL_HINT[t] && !hinted[t]) { hinted[t] = 1; toast(TOOL_HINT[t]); }
+    if (!quiet && TOOL_HINT[t] && !hinted[t]) { hinted[t] = 1; showHint(TOOL_HINT[t]); }
+  }
+  /* 4.10 — רמז בתוך המפה (לא טוסט): בטלפון הטוסט כיסה את הגיליון התחתון. */
+  var hintT = null;
+  function showHint(msg) {
+    var el = S.root && S.root.querySelector("#lw-hint"); if (!el) return toast(msg);
+    el.textContent = msg; el.classList.add("is-on");
+    clearTimeout(hintT);
+    hintT = setTimeout(function () { el.classList.remove("is-on"); }, Math.max(3500, msg.length * 70));
+    el.onclick = function () { clearTimeout(hintT); el.classList.remove("is-on"); };
   }
   function renderLayers() {
     var L = [["lawn", "דשא", "#5FA36F"], ["water", "השקיה", "#3E8DBA"], ["faults", "תקלות", "#C0655C"], ["spray", "טווח התזה", "rgba(62,141,186,.45)"]];
@@ -831,8 +957,8 @@ CBA.screens = CBA.screens || {};
         ico(x[2]) + '<span>' + x[1] + '</span></button>';
     }
     var cap = S.root.querySelector("#lw-capture");
-    cap.hidden = !(S.mode === "edit" && S.tool === "lawn:free" && !S.edit);
-    S.root.classList.toggle("is-drawing", S.mode === "edit" && S.tool !== "hand");
+    cap.hidden = !(S.mode === "edit" && S.tool === "lawn:free" && !S.edit && !S.space);
+    S.root.classList.toggle("is-drawing", S.mode === "edit" && S.tool !== "hand" && !S.space);
   }
   function renderBar() {
     var el = S.root.querySelector("#lw-bar"), G = CBA.gardenGeo;
@@ -936,7 +1062,7 @@ CBA.screens = CBA.screens || {};
     '</div>';
   }
   function head(color, icon, title, sub, editable) {
-    return '<div class="lw-ph"><span class="lw-ph__ic" style="background:' + color + '">' + ico(icon, 22) + '</span>' +
+    return '<div class="lw-ph"><span class="lw-ph__ic" style="background:' + color + '">' + (String(icon).charAt(0) === "<" ? icon : ico(icon, 22)) + '</span>' +
       '<div class="lw-ph__t">' +
         (editable ? '<input class="lw-rename" data-rename value="' + esc(title) + '" maxlength="60" aria-label="שם">' : '<b>' + esc(title) + '</b>') +
         '<span>' + esc(sub) + '</span></div>' +
@@ -1022,6 +1148,7 @@ CBA.screens = CBA.screens || {};
   function faultRow(t, o) {
     var st = stateOf(t), ct = CBA.gardenLang.catOfTask(t), p = CBA.gardenPins.fromTask(t, { cur: CBA.gardenLang.weekOf() });
     var meta = [CBA.gardenPins.LABEL[st]];
+    if (CBA.gardenAssets.FKIND[t.fkind]) meta.unshift(CBA.gardenAssets.FKIND[t.fkind].label);
     if (p.days) meta.push(p.days + " ימים");
     if (p.res) meta.push(p.res + " תושבים מחכים");
     if (o && o.dist !== undefined) meta.push(o.dist < 1 ? "בתוך הסימון" : fmt(o.dist) + " מ' מכאן");
@@ -1036,12 +1163,14 @@ CBA.screens = CBA.screens || {};
   }
   function faultPanel(t) {
     var st = stateOf(t), ct = CBA.gardenLang.catOfTask(t), p = CBA.gardenPins.fromTask(t, { cur: CBA.gardenLang.weekOf() });
-    var h = '<div class="lw-p">' + head("var(--s-" + st + ", " + CBA.gardenPins.COL[st] + ")", ct.ico, t.title || "תקלה",
-      "תקלה · " + [t.category, t.area].filter(Boolean).join(" · "), false);
+    var fkI = CBA.gardenAssets.FKIND[t.fkind] ? fkIco(t.fkind, 22) : ct.ico;
+    var h = '<div class="lw-p">' + head("var(--s-" + st + ", " + CBA.gardenPins.COL[st] + ")", fkI, t.title || "תקלה",
+      "תקלה · " + [CBA.gardenAssets.FKIND[t.fkind] ? CBA.gardenAssets.FKIND[t.fkind].long : t.category, t.area].filter(Boolean).join(" · "), false);
     h += '<div class="lw-pills"><span class="lw-pill" style="background:var(--s-' + st + ', ' + CBA.gardenPins.COL[st] + ')">' + CBA.gardenPins.LABEL[st] + '</span>' +
       (p.days ? '<span class="lw-pill lw-pill--soft">פתוחה ' + p.days + ' ימים</span>' : '') +
       (p.res ? '<span class="lw-pill lw-pill--ink">' + ico("user", 12) + p.res + ' תושבים מחכים</span>' : '') +
       (p.rep ? '<span class="lw-pill" style="background:#C0655C">' + ico("repeat", 12) + 'חוזרת</span>' : '') + '</div>';
+    h += kindSec(t);
     var la = (t.assets || []).map(function (id) { return byId(id) || { id: id, kind: "", name: "סימון שהוסר", archived: true }; });
     h += '<div class="lw-sec"><div class="lw-sec__t">משויכת ל</div><div class="lw-list">' +
       (la.length ? la.map(function (a) {
@@ -1063,8 +1192,29 @@ CBA.screens = CBA.screens || {};
     return h + '</div>';
   }
 
+  /** סמליל סוג התקלה — אותו סמליל כמו על הנעץ ובכרטיס (gardenPins.FK_ICO). */
+  function fkIco(k, size) {
+    var P = CBA.gardenPins && CBA.gardenPins.FK_ICO;
+    if (!P || !P[k]) return ico(k === "lawn" ? "lawn" : "spr", size);
+    return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + P[k] + '</svg>';
+  }
+  /** "סוג התקלה" — 4 צ'יפים, לצוות בלבד (המסך כולו של הצוות). */
+  function kindSec(t) {
+    if (!isLawnWater(t)) return "";
+    var F = CBA.gardenAssets.FKIND, can = canRelink(t);
+    return '<div class="lw-sec"><div class="lw-sec__t">סוג התקלה <em class="lw-muted">· לצוות בלבד</em></div>' +
+      '<div class="lw-chips lw-fk" role="group" aria-label="סוג התקלה">' +
+      CBA.gardenAssets.FKIND_ORDER.map(function (k) {
+        return '<button type="button" class="lw-c' + (t.fkind === k ? " is-on" : "") + '" data-fk="' + k + '" aria-pressed="' + (t.fkind === k) + '"' +
+          (can ? "" : " disabled") + ' title="' + esc(F[k].long) + '">' + fkIco(k, 14) + esc(F[k].label) + '</button>';
+      }).join("") + '</div>' +
+      (t.fkind ? '' : '<p class="lw-note">נבחר לבד כשמשייכים לסימון. אפשר גם לבחור עכשיו — זה מצמצם את ההצעה "הקרוב ביותר".</p>') +
+    '</div>';
+  }
   function onPanelClick(e) {
     var x = selected();
+    var fkb = e.target.closest("[data-fk]");
+    if (fkb && x && S.sel.type === "task") return setKind(x, fkb.dataset.fk);
     var st = e.target.closest("[data-status]");
     if (st && x && x.kind === "lawn") return setLawnStatus(x, st.dataset.status);
     var un = e.target.closest("[data-unlink]");
@@ -1086,7 +1236,7 @@ CBA.screens = CBA.screens || {};
     if (act === "linkmode" && x) { S.linkFor = S.linkFor === x.id ? null : x.id; return renderPanel(); }
     if (act === "newfault" && x) return openFaultAt(x);
     if (act === "shape" && x) return startShapeEdit(x);
-    if (act === "move" && x) { toast("גררו את הנקודה למקום החדש, ואז \"סיום\""); S.edit = { id: x.id, kind: x.kind, pts: [[x.x, x.y]], point: true }; drawOverlay(); renderBar(); return; }
+    if (act === "move" && x) { showHint("גררו את הנקודה למקום החדש, ואז \"סיום\". אפשר להזיז את המפה בגרירה מחוץ לנקודה."); S.edit = { id: x.id, kind: x.kind, pts: [[x.x, x.y]], point: true }; drawOverlay(); renderBar(); return; }
     if (act === "archive" && x) return archive(x);
     if (act === "pick" && x) return startPick(x.id);
     if (act === "quick" && x) return linkTaskTo(x.id, b.dataset.assetId, false);
