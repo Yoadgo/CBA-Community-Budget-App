@@ -314,26 +314,91 @@ CBA.fb = (function () {
     });
   }
 
-  /** קריאה חד-פעמית של מסמך הדגלים. לעולם אינה מעבירה שגיאה הלאה. */
+  /* ==========================================================================
+   *  🔴 דגלים שלא נקראו ≠ דגלים כבויים   (4.10.2026 — דין לא הצליח לסגור תקלות)
+   * --------------------------------------------------------------------------
+   *  עד היום מסמך הדגלים נקרא **פעם אחת** בעליית העמוד. נכשל (טלפון בלי קליטה
+   *  לרגע, Firestore "offline", פסק זמן של 4 שניות שלא נגמר בהצלחה) — ו-
+   *  `state.flags` נשאר null עד סוף הביקור. אז `flag()` מחזיר את ברירת המחדל
+   *  **שבקוד**, ושתי ברירות מחדל עדיין `false` מימי ההדלקה ההדרגתית
+   *  (`gardenWritesFromBrowser`, `gymWriteFs`) בעוד שבייצור הן `true`.
+   *  התוצאה: סגירת תקלת גינון יצאה בשקט למסלול ה-Apps Script הישן, שדורש מושב
+   *  שלא היה — והמשתמש קיבל "אין הרשאה", למרות שהוא מנהל-על.
+   *
+   *  התיקון, בשתי שכבות:
+   *   1. **העתק אחרון ידוע** — כל קריאה מוצלחת נשמרת במכשיר. כשהקריאה נכשלת,
+   *      משתמשים בהעתק במקום בברירות המחדל שבקוד. (מתג כיבוי שהופעל בזמן
+   *      שהמכשיר לא מצליח לקרוא — לא היה נתפס ממילא.)
+   *   2. **ניסיון חוזר** — דגלים שלא נקראו בהצלחה נקראים שוב, ברקע, לכל היותר
+   *      פעם ב-20 שניות, כשמישהו שואל עליהם (`flag()`).
+   *  ⚠️ רק ערכי true/false נשמרים במכשיר — שום נתון אחר מהמסמך.
+   * ======================================================================== */
+  var FLAGS_KEY = "cba_flags_last_v1";
+  var FLAGS_RETRY_MS = 20000;
+  var flagsLive = false;      // true = הערך הנוכחי נקרא עכשיו מ-Firestore (לא העתק)
+  var flagsLoading = false;
+  var flagsTriedAt = 0;
+
+  function flagsSave(obj) {
+    try {
+      var keep = {};
+      Object.keys(obj || {}).forEach(function (k) {
+        if (typeof obj[k] === "boolean") keep[k] = obj[k];
+      });
+      window.localStorage.setItem(FLAGS_KEY, JSON.stringify({ t: Date.now(), f: keep }));
+    } catch (e) {}
+  }
+  function flagsCached() {
+    try {
+      var raw = window.localStorage.getItem(FLAGS_KEY);
+      var o = raw ? JSON.parse(raw) : null;
+      return (o && o.f && typeof o.f === "object") ? o.f : null;
+    } catch (e) { return null; }
+  }
+  /* הקריאה נכשלה/לא הספיקה — העתק אחרון ידוע, אם יש ועוד אין ערך חי. */
+  function flagsFallback(why) {
+    if (flagsLive) return;
+    var c = flagsCached();
+    if (c && !state.flags) {
+      state.flags = c;
+      log("דגלים מהעתק אחרון ידוע (" + why + ")");
+    }
+    try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("דגלים לא נקראו: " + why + (c ? " · העתק" : " · ברירות מחדל")); } catch (e) {}
+  }
+
+  /** קריאת מסמך הדגלים. לעולם אינה מעבירה שגיאה הלאה. */
   function loadFlags(done) {
+    done = done || function () {};
     var fired = false;
     function finish() { if (fired) return; fired = true; done(); }
-    var t = setTimeout(finish, 4000);
+    flagsLoading = true;
+    flagsTriedAt = Date.now();
+    var t = setTimeout(function () { if (!flagsLive) flagsFallback("פסק זמן"); finish(); }, 4000);
     try {
       window.firebase.firestore().collection("appConfig").doc("flags").get()
         .then(function (d) {
           state.flags = d.exists ? (d.data() || {}) : {};
+          flagsLive = true;
+          flagsLoading = false;
+          if (d.exists) flagsSave(state.flags);
           log("דגלי זמן ריצה", state.flags);
           clearTimeout(t); finish();
         })["catch"](function (e) {
+          flagsLoading = false;
           log("קריאת דגלים נכשלה: " + (e && (e.code || e.message)));
+          flagsFallback((e && (e.code || e.message)) || "שגיאה");
           clearTimeout(t); finish();
         });
-    } catch (e) { clearTimeout(t); finish(); }
+    } catch (e) { flagsLoading = false; flagsFallback("חריגה"); clearTimeout(t); finish(); }
   }
 
   /** ערך הדגל, או ברירת המחדל שבקוד אם אינו ידוע. */
   function flag(key, dflt) {
+    /* דגלים שלא נקראו חי — ניסיון נוסף ברקע (התשובה הנוכחית לא מחכה לו). */
+    if (!flagsLive && !flagsLoading && state.dbLoaded &&
+        (Date.now() - flagsTriedAt) > FLAGS_RETRY_MS) {
+      try { loadFlags(); } catch (e) {}
+    }
     if (!state.flags || !(key in state.flags)) return !!dflt;
     return state.flags[key] === true;
   }
