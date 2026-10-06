@@ -1833,6 +1833,20 @@ body[data-screen="resDirectory"] .app-main { padding-left: 40px; }
 .mh-kids { position: static; margin: 0; }
 .mh-kids svg { width: calc(var(--mh-fs2, 13px) * .82); height: calc(var(--mh-fs2, 13px) * .82); }
 
+/* ---- דיווח 25 (6.10.26) — שם משפחה גם בזום הרגיל, בגופן שנכנס לריבוע ----
+   מתחת לדרגת השם המלא (tier2) השם מוצג קטן מתחת למספר. הגודל מחושב לכל בית:
+   רוחב הבית על המסך (--tw × --sc) × --fam-k (נמדד ב-resident.js מאורך השם),
+   בתקרה של 34% מגובה הבית ושל --mh-fs2. ביטול: להסיר את הבלוק הזה. */
+.map-world.fam-s .mh-body { display: flex; }
+.map-world.fam-s .mh-kids { display: none; }
+.map-world.fam-s .mh-in { gap: 0; }
+.map-world.fam-s .mh-fam {
+  font-weight: 600; line-height: 1;
+  font-size: min(var(--mh-fs2, 13px),
+                 calc(var(--tw, 30) * var(--sc, 1) * var(--fam-k, 0) * 1px),
+                 calc(var(--th, 30) * var(--sc, 1) * 0.34px));
+}
+
 /* ---- תצ״א: הרשת חוזרת, בעדינות ------------------------------------------
    יועד: "אין יותר כבישים, שבילים וחניונים — צריך אותם, קצת יותר עדין."
    ככה גוגל ואפל מציגים כבישים על גבי לוויין: לא מילוי אטום ולא מעטפת כהה,

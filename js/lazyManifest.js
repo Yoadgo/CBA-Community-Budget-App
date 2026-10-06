@@ -49,7 +49,7 @@ CBA.lazyManifest = {
     perms: ["תושבים"],
     screens: ["residents", "emailSettings", "appReports", "sysStatus", "sysHub"],
     files: [
-      "js/screens/residents.js?v=9ebc66c05d",
+      "js/screens/residents.js?v=f97d6d398d",
       "js/screens/emailSettings.js?v=a0cb23db5a",
       "js/screens/appReports.js?v=a47450bd91",
       "js/screens/sysStatus.js?v=79dcc2ec8b",
@@ -67,8 +67,8 @@ CBA.lazyManifest = {
       "js/screens/gardenStats.js?v=9f310f2b18",
       "js/screens/gardenSchedule.js?v=861d4bba6f",
       "js/screens/gardenScheduleAi.js?v=4a2f2ab9f6",
-      "js/screens/gardenLawn.js?v=99418e72f5",
-      "js/screens/gardenTasks.js?v=b1ca05ccd9"
+      "js/screens/gardenLawn.js?v=7b23349545",
+      "js/screens/gardenTasks.js?v=ecb8df2e92"
     ]
   }
 };

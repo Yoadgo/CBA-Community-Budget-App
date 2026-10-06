@@ -458,6 +458,17 @@ CBA.data = (function () {
     return CBA.sheets && CBA.sheets.push &&
            CBA.mock._source === "sheets" && !CBA.mock._partial;
   }
+  /* שער **לקריאה** (דיווח 36, 6.10.26). pushConnected הוא שער כתיבה, והוא
+     סגור בכוונה בחלון הטעינה החלקית — אבל קריאה מהשרת בטוחה בחלון הזה:
+     היא לא נגזרת ממה שלא נטען, ו-CBA.sheets.get ממילא ממתין למושב.
+     בלי ההפרדה, כניסה מקישור במייל (?go=residents) פתחה את מסך התושבים
+     בדיוק בחלון החלקי, הבקשה נדחתה מיד ב"לא מחובר לגיליון" והמסך נתקע
+     על "נסה שוב". אותה תקלה בדיוק הסתירה את שמות המשפחות במפה (דיווח 25:
+     getCommunityDirectory נדחה, והמפה לא ניסתה שוב). לכן **כל פונקציות
+     ה-get* הטהורות** כאן עברו לשער הזה; כל מה שכותב נשאר על pushConnected. */
+  function readConnected() {
+    return !!(CBA.sheets && CBA.sheets.get) && CBA.mock._source === "sheets";
+  }
   /* (syncTx הוסרה 14.9 — שלושת הקוראים שלה עברו לשליחה עם בדיקת תשובה.
      פונקציה ששולחת בלי לבדוק הייתה נשארת כאן כפיתוי לקריאה הבאה.) */
   function addTransaction(tx) {
@@ -1349,7 +1360,7 @@ CBA.data = (function () {
   // שתי הפעולות עוברות דרך CBA.sheets.get (GET קריא, לא no-cors) כי חייבים לדעת
   // מיד אם השריון הצליח או שהזמן נתפס (בדיוק כמו login). לא נוגעות בגיליון/ב-mock.
   function getClubBusy(dateStr, cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "clubBusy", date: dateStr }, cb);
   }
   function reserveClub(fields, cb) {
@@ -1357,17 +1368,17 @@ CBA.data = (function () {
     CBA.sheets.get(Object.assign({ action: "reserveClub" }, fields), cb);
   }
   function getClubMonth(monthStr, cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "clubMonth", month: monthStr }, cb);
   }
   function getMyClubReservations(fields, cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get(Object.assign({ action: "myClubReservations" }, fields), cb);
   }
   // לוח אירועים קהילתי (2026-09-23) — קורא מארבעת יומני Google Calendar
   // (חגים/קהילה/תרבות/גנים) דרך handleGetEventsList_ ב-Code.gs.
   function getEventsList(year, cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "eventsList", year: year }, cb);
   }
 
@@ -1487,7 +1498,7 @@ CBA.data = (function () {
   }
   // גשר שם משפחה לטבלת ה-RSVP של מנהל (לא נשמר ב-Firestore בכלל, רק familyId).
   function getRsvpFamilyNames(ids, cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     var params = { action: "rsvpFamilyNames" };
     if (ids && ids.length) params.ids = ids.join(",");
     CBA.sheets.get(params, cb);
@@ -1498,7 +1509,7 @@ CBA.data = (function () {
   }
   // --- ניהול אישורי שריון (מסך המנהל) — המושב החתום מצורף אוטומטית ע"י CBA.sheets.get ---
   function getClubList(cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "clubList" }, cb);
   }
   // --- מכון כושר (שלב 1, 2026-08-18) — קריאת מסך הניהול. מוגנת ב-PERM_GYM
@@ -1513,7 +1524,7 @@ CBA.data = (function () {
    *     ההסתרה בלקוח היא נוחות; המידור הוא שם.
    * ======================================================================== */
   function getFlags(cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "flagsGet" }, cb);
   }
   function setFlag(key, value, cb) {
@@ -1746,17 +1757,17 @@ CBA.data = (function () {
   }
 
   function getGymList(cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymList" }, cb);
   }
   // --- מכון כושר, שלב 2 (2026-08-19) ---
   // gymForm/gymMy הן קריאות של התושב (GET, פתוחות לכל תושב מחובר ופעיל).
   function getGymForm(cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymForm" }, cb);
   }
   function getGymMy(cb) {
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymMy" }, cb);
   }
 
@@ -1934,7 +1945,7 @@ CBA.data = (function () {
   var residentsCache = null; // null=טרם נטען, מערך=נטען
   function getResidents(cb) {
     if (residentsCache) { if (cb) cb({ ok: true, rows: residentsCache }); return; }
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "getResidents" }, function (res) {
       if (res && res.ok) residentsCache = res.rows || [];
       if (cb) cb(res);
@@ -1970,7 +1981,7 @@ CBA.data = (function () {
   var gymPickerCache = null, gymPickerWait = null;
   function getGymResidentPicker(cb) {
     if (gymPickerCache) { if (cb) cb({ ok: true, rows: gymPickerCache }); return; }
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     if (gymPickerWait) { if (cb) gymPickerWait.push(cb); return; }   /* שתי קריאות במקביל (חימום + פתיחת הטופס) = שאילתה אחת */
     gymPickerWait = cb ? [cb] : [];
     var settled = false;
@@ -1990,7 +2001,7 @@ CBA.data = (function () {
   function getResidentDirectory(cb) {
     if (!directoryCache) directoryCache = dirRead();
     if (directoryCache) { if (cb) cb({ ok: true, rows: directoryCache }); return; }
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "residentDirectory" }, function (res) {
       if (res && res.ok) { directoryCache = res.rows || []; dirWrite(directoryCache); }
       if (cb) cb(res);
@@ -2006,7 +2017,7 @@ CBA.data = (function () {
      מטמון — מחזירים את המטמון (המפה/החיפוש שחולקים אותו לא נשארים ריקים). */
   function getCommunityDirectory(cb, fresh) {
     if (communityCache && !fresh) { if (cb) cb({ ok: true, rows: communityCache }); return; }
-    if (!pushConnected()) {
+    if (!readConnected()) {
       if (cb) cb(communityCache ? { ok: true, rows: communityCache } : { ok: false, error: "לא מחובר לגיליון" });
       return;
     }
@@ -2025,7 +2036,7 @@ CBA.data = (function () {
   var committeeCache = null;
   function getCommitteeTree(cb) {
     if (committeeCache) { if (cb) cb({ ok: true, rows: committeeCache }); return; }
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "committeeTree" }, function (res) {
       if (res && res.ok) committeeCache = res.rows || [];
       if (cb) cb(res);
@@ -2048,7 +2059,7 @@ CBA.data = (function () {
   var committeeCatsCache = null;
   function getCommitteeCategories(cb) {
     if (committeeCatsCache) { if (cb) cb({ ok: true, rows: committeeCatsCache }); return; }
-    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "committeeCategories" }, function (res) {
       if (res && res.ok) committeeCatsCache = res.rows || [];
       if (cb) cb(res);
@@ -3638,6 +3649,10 @@ CBA.data = (function () {
           createdAt: now, updatedAt: now, order: 0,
           year: String(year), schema: 1
         };
+        /* 🌱 גל ב' (6.10) — שיוך אוטומטי למדשאה שבה ננעץ הדיווח (תקלת דשא/השקיה).
+           הכלל מתיר לתושב לשלוח `assets` ביצירה (gtAssetsOk, לא ב-gtTeamOnly). */
+        var autoAssets = (payload.assets || []).filter(function (a) { return typeof a === "string" && a && a.length <= 40; }).slice(0, 5);
+        if (autoAssets.length) task.assets = autoAssets;
         var report = {
           id: String(repId), familyId: fid, date: new Date().toISOString(),
           category: payload.category, area: payload.area || "",
@@ -3679,8 +3694,22 @@ CBA.data = (function () {
             }
 
             /* מכאן הדיווח **קיים**. כל מה שנכשל אחרי זה אינו מבטל אותו. */
-            gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId, { familyId: fid, asResident: true });
+            gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId +
+              (payload.lawnEdit ? " · צורף דיוק לגבול המדשאה, ממתין לאישור הצוות" : ""), { familyId: fid, asResident: true });
             CBA.sheets.postRead("gardenNotifyReport", { id: String(repId) }, function () {});
+
+            /* 🌱 גל ב' — הדיוק נכתב **אחרי** הדיווח (הכלל עושה get על הדיווח
+               כדי לוודא שהוא של המשפחה). כשל כאן אינו מבטל את הדיווח — רק
+               מדווח, והמסך אומר לתושב שהדיוק לא נשמר. */
+            var edit = payload.lawnEdit;
+            if (edit && CBA.gardenAssets && CBA.gardenAssets.submitLawnEdit) {
+              return CBA.gardenAssets.submitLawnEdit(String(repId), edit, function (er) {
+                if (!er.ok) gardenPhotoWarn("דיוק הגבול לא נשמר", repId, er.err);
+                afterReport(er.ok ? "ok" : "failed");
+              });
+            }
+            afterReport("");
+            function afterReport(lawnEdit) {
 
             /* 🔴🔴 **ההגשה נסגרת כאן, לפני התמונות** (17.9, החלטת יועד).
                מרגע שהמסמך נכתב הדיווח קיים, יש לו מספר, והתושב חופשי
@@ -3689,7 +3718,7 @@ CBA.data = (function () {
                השעתית להתריע ואת הבאנר ב"הדיווחים שלי" להופיע.
                ⚠️ **אין כאן `beforeunload`.** זו הנקודה: חסימה של סגירת
                   הדף הייתה מבטלת בדיוק את מה שהשינוי הזה בא לתת. */
-            cb({ ok: true, id: repId, taskId: taskId,
+            cb({ ok: true, id: repId, taskId: taskId, lawnEdit: lawnEdit,
                  photos: [], photosFailed: 0,
                  photosExpected: photos.length, photosPending: photos.length });
 
@@ -3718,6 +3747,7 @@ CBA.data = (function () {
                   });
               });
             });
+            }
           });
         });
       });
@@ -5913,6 +5943,11 @@ CBA.data = (function () {
     gardenCanEditTask: function (t) { return gardenCanEditTask(t); },
     /* מי עשה שורת יומן, בשפת התצוגה. ר' gardenLogWho. */
     gardenLogWho: function (r) { return gardenLogWho(r); },
+    /* 🌱 גל ב' (6.10) — שורת "הערה" בקו הזמן של התושב (החלטה על דיוק הגבול).
+       'הערה' כבר בין הסוגים שהתושב רואה — בלי שינוי בכללים. */
+    gardenLogNote: function (taskId, note, familyId) {
+      gardenLogAppend(String(taskId), "הערה", String(note || "").substring(0, 300), { familyId: familyId || "" });
+    },
     gardenPlanWeekImpact: function (payload, cb) { gardenPlanWeekImpact(payload, cb); },
     gardenEditTask: function (id, payload, cb) {
       if (!gardenWritesOn()) return cb({ ok: false, error: "עריכה זמינה רק במסלול הישיר" });

@@ -2937,6 +2937,9 @@ CBA.screens = CBA.screens || {};
         el.setAttribute("tabindex", "0");
         el.setAttribute("aria-label", "בית " + t.n + (mine ? " — הבית שלי" : ""));
         el.style.cssText = "left:" + px(t.x) + "px;top:" + py(t.y) + "px;width:" + px(t.w) + "px;height:" + py(t.h) + "px";
+        /* דיווח 25 — מידות הבית בפיקסלי-עולם, לחישוב גופן השם שנכנס לריבוע. */
+        el.style.setProperty("--tw", px(t.w).toFixed(2));
+        el.style.setProperty("--th", py(t.h).toFixed(2));
         /* עטיפה אחת (mh-in) ולא שני אלמנטים מוחלטים: המספר והשם צריכים
            לזרום זה מתחת לזה ולקבל קנה מידה נגדי *משותף*, אחרת כל אחד
            מתמרכז בנפרד והם נדרסים. */
@@ -2958,12 +2961,19 @@ CBA.screens = CBA.screens || {};
       var dirRows = [], dirC = null, byHouse = {};
       /* MB1 (גל 6) — עד היום: לחיצה על בית לפני שהנתונים הגיעו (או אחרי כישלון)
          הראתה "אין נתונים זמינים לבית זה", בלי שום דרך לנסות שוב. */
-      var dirLoad = "loading";
+      var dirLoad = "loading", dirRetries = 0;
       function loadDir() {
       dirLoad = "loading";
       CBA.data.getCommunityDirectory(function (res) {
         if (!res || !res.ok) {
           dirLoad = "error";
+          /* דיווח 25 — כישלון בטעינה (בדרך כלל: המפה נפתחה לפני שהאפליקציה
+             סיימה לעלות) השאיר את המפה בלי שמות עד רענון. עכשיו עוד עד 3
+             ניסיונות שקטים, כל 4 שניות, כל עוד המפה עדיין על המסך. */
+          if (dirRetries < 3) {
+            dirRetries++;
+            setTimeout(function () { if (document.body.contains(worldEl)) loadDir(); }, 4000);
+          }
           if (openTile && houseEls[openTile]) openPopup(openTile);
           return;
         }
@@ -2979,12 +2989,33 @@ CBA.screens = CBA.screens || {};
           var el = houseEls[t.n];
           if (!row) { el.classList.add("no-data"); return; }
           el.classList.remove("no-data");
-          el.querySelector(".mh-fam").textContent = dirVal(row, dirC.family) || "";
+          var famEl = el.querySelector(".mh-fam");
+          famEl.textContent = dirVal(row, dirC.family) || "";
+          el.style.setProperty("--fam-k", famFitK(famEl).toFixed(4));
           /* MB4 (גל 6) — "[]" (כל הילדים הוסרו ב"הפרטים שלי") הדליק את סמל הילדים */
           if (dirKidsText(dirVal(row, dirC.kids))) el.querySelector(".mh-kids").classList.add("has");
         });
         if (openTile && houseEls[openTile]) openPopup(openTile);
       });
+      }
+      /* דיווח 25 (6.10.26, הכרעת יועד): "בזום הרגיל להציג בגופן קטן שנכנס
+         לריבוע". עד היום השם הופיע רק מרוחב בית של 72 פיקסלים (tier2), ובטלפון
+         בפתיחה לא הופיע אף שם. עכשיו מתחת ל-tier2 השם מוצג בגופן שמחושב **לכל
+         בית בנפרד** כך שהשם השלם נכנס ברוחב הבית: מודדים פעם אחת את רוחב השם
+         בגופן של 1px (canvas.measureText, אותו font-family של .mh-fam), ומזה
+         --fam-k = כמה פיקסלי גופן לכל פיקסל רוחב בית. ה-CSS מכפיל ברוחב הבית
+         על המסך (--tw × --sc), עם תקרה לפי גובה הבית ותקרה של --mh-fs2. */
+      var famMeasureCtx = null;
+      function famFitK(famEl) {
+        var txt = famEl.textContent || "";
+        if (!txt) return 0;
+        try {
+          if (!famMeasureCtx) famMeasureCtx = document.createElement("canvas").getContext("2d");
+          var ff = getComputedStyle(famEl).fontFamily || "sans-serif";
+          famMeasureCtx.font = "600 100px " + ff;
+          var w = famMeasureCtx.measureText(txt).width / 100;   // רוחב בגופן 1px
+          return w > 0 ? 0.86 / w : 0;
+        } catch (e) { return 0.86 / (txt.length * 0.56); }
       }
       loadDir();
 
@@ -3049,6 +3080,7 @@ CBA.screens = CBA.screens || {};
            "נשארים תמיד, רק עדינים יותר"). השם מופיע רק כשיש לו באמת מקום,
            ואז הוא הגיבור — והמספר מצטמצם לטובתו. */
         var named = tw >= 72;
+        worldEl.style.setProperty('--sc', scale.toFixed(4));   // דיווח 25 — לגופן השם הקטן
         worldEl.style.setProperty('--mh-fs',  Math.max(6.5, tw * (named ? 0.17 : 0.26)).toFixed(2) + 'px');
         worldEl.style.setProperty('--mh-fs2', Math.max(11,  tw * 0.22).toFixed(2) + 'px');
         var tier = named ? 2 : (tw > 46 ? 1 : 0);
@@ -3056,6 +3088,7 @@ CBA.screens = CBA.screens || {};
           curTier = tier;
           worldEl.classList.toggle("tier1", tier === 1);
           worldEl.classList.toggle("tier2", tier === 2);
+          worldEl.classList.toggle("fam-s", tier < 2);   // דיווח 25 — שם קטן שנכנס לריבוע
         }
         if (Math.abs(scale - POI_LAID) > 0.001) { POI_LAID = scale; layoutPoi(tier); layoutStreets(tier); }
         if (popupAt) positionPopup();

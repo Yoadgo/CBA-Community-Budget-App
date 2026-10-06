@@ -953,13 +953,28 @@
      על טאבי הניווט הרלוונטיים ("ניהול הוצאות"/"שריון מועדון"), ורשימה אמיתית
      בתוך המגש הנפתח (userPanelHTML) — כל אלה קודם היו קיימים ויזואלית אבל לא
      הציגו שום דבר אמיתי (הפעמון תמיד אמר "אין התראות חדשות"). */
-  var notif = { pendingExpenses: 0, reviewExpenses: 0, overBudget: 0, pendingClub: 0, clubChecked: false };
+  var notif = { pendingExpenses: 0, reviewExpenses: 0, overBudget: 0, pendingClub: 0, clubChecked: false, lawnEdits: 0 };
   var clubAlertsInFlight = false;
 
   function navBadgeCount(screenKey) {
     if (screenKey === "expenses") return can(PERM.BUDGET) ? notif.pendingExpenses + notif.reviewExpenses : 0;
     if (screenKey === "clubAdmin") return can(PERM.CLUB) ? notif.pendingClub : 0;
+    /* 🌱 גל ב' (6.10) — דיוקי גבול מתושבים שממתינים לגנן/מנהל. */
+    if (screenKey === "gardenLawn") return can(PERM.GARDEN) ? notif.lawnEdits : 0;
     return 0;
+  }
+  window.CBA.lawnEditsCount = function () { return notif.lawnEdits; };
+  window.CBA.setLawnEditsCount = function (n) {
+    n = Math.max(0, n | 0);
+    if (n === notif.lawnEdits) return;
+    notif.lawnEdits = n;
+    if (inited) renderNav(currentArea);
+  };
+  /* שאילתת שוויון אחת ל-Firestore (בלי Apps Script), רק לצוות הגינון,
+     פעם אחת אחרי העלייה. מסך "דשא והשקיה" מעדכן את המונה בעצמו. */
+  function refreshLawnEdits() {
+    if (!can(PERM.GARDEN) || !(window.CBA.gardenAssets && CBA.gardenAssets.loadPendingEdits)) return;
+    CBA.gardenAssets.loadPendingEdits(function (r) { if (r && r.ok) window.CBA.setLawnEditsCount((r.edits || []).length); });
   }
   // ההתראות מסוננות לפי הרשאה — מי שמנהל רק את המועדון לא צריך לראות חריגות תקציב
   function alertsTotal() {
@@ -3397,6 +3412,7 @@
       if (CBA.lazy && hasAnyAdmin()) {
         setTimeout(function () { try { CBA.lazy.warm(CBA.perms, CBA.isSuper === true); } catch (e) {} }, 6000);
       }
+      setTimeout(function () { try { refreshLawnEdits(); } catch (e) {} }, 7000);
       /* שעון העלייה (2.10.26): "מוכן" = עמוד הבית קיבל גם את homeExtras (או תקרה של 12ש'). */
       hxWait(function () { try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("עמוד הבית מוכן"); } catch (e) {} try { if (window.CBA && CBA.diag && CBA.diag.mark) CBA.diag.mark("boot-done"); } catch (e) {} }, 12000);
       /* ⏱️ שתי הקריאות האלה נדחות בכוונה (2026-09-09).

@@ -71,8 +71,15 @@ const $$ = s => Array.from(document.querySelectorAll(s));
   window.CBA.report.mount(true);
 
   section('1ב. נקודת הכניסה מתפריט המשתמש');
-  window.CBA.report.openMenu();
-  ok('openMenu פותח את אותו תפריט', $('.rep-menu').hidden === false);
+  /* 6.10 — openMenu נדחה לסוף הלחיצה (setTimeout 0). מדמים לחיצה אמיתית על
+     אריח מחוץ לעטיפה: ה-handler קורא ל-openMenu, והלחיצה ממשיכה ל-document. */
+  const tile = document.createElement('button'); document.body.appendChild(tile);
+  tile.addEventListener('click', function () { window.CBA.report.openMenu(); });
+  tile.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  ok('🔴 מיד אחרי הלחיצה התפריט עוד לא נסגר-ונפתח (נדחה)', $('.rep-menu').hidden === true);
+  await new Promise(r => setTimeout(r, 5));
+  ok('openMenu פותח את אותו תפריט — גם כשנקרא מתוך לחיצה (באג האריח)', $('.rep-menu').hidden === false);
+  tile.remove();
   ok('הכפתור נראה גם אם הוסתר', $('.rep-fab-wrap').hidden === false);
   document.body.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 

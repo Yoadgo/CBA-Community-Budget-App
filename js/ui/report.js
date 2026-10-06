@@ -331,7 +331,11 @@ CBA.report = (function () {
   function openMenu() {
     build();
     wrapEl.hidden = false;
-    if (wrapEl.__openMenu) wrapEl.__openMenu();
+    /* ⚠️ דחייה לסוף הלחיצה (6.10, באג "האריח לא עושה כלום"): openMenu נקרא
+       מתוך לחיצה על אריח בתפריט המשתמש. אותה לחיצה ממשיכה לבעבע ל-document,
+       ושם המאזין "לחיצה מחוץ לתפריט" (למעלה) רואה תפריט פתוח ויעד שמחוץ
+       לעטיפה — וסוגר אותו מיד. בלי הדחייה התפריט נפתח ונסגר באותו רגע. */
+    setTimeout(function () { if (wrapEl.__openMenu) wrapEl.__openMenu(); }, 0);
   }
 
   return { mount: mount, open: openForm, openMenu: openMenu, copyText: copyText,

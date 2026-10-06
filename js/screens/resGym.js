@@ -499,7 +499,10 @@ CBA.screens = CBA.screens || {};
       '<div class="gym-sig">' +
         '<div class="gym-sig__label">חתימה (אפשר באצבע או בעכבר)</div>' +
         '<canvas id="gym-sig-canvas" class="gym-sig__canvas"></canvas>' +
-        '<button type="button" class="btn-ghost gym-sig__clear" data-gym-clear-sig>ניקוי</button>' +
+        '<div class="gym-sig__row">' +
+          '<button type="button" class="btn-ghost gym-sig__clear" data-gym-clear-sig>ניקוי</button>' +
+          '<span class="gym-sig__ok" data-gym-sig-ok hidden>✓ החתימה נקלטה</span>' +
+        '</div>' +
       "</div>";
   }
 
@@ -538,52 +541,135 @@ CBA.screens = CBA.screens || {};
 
   /* קנבס חתימה. Pointer Events מכסה עכבר ומגע באותו קוד, וזה גם מה שנותן
      קו חלק בטלפון. הרזולוציה מוכפלת ב-devicePixelRatio כדי שהחתימה לא תיראה
-     מרוחה במסכי רטינה. */
+     מרוחה במסכי רטינה.
+
+     ⚠️ דיווח 38 (4.10, אנדרואיד): "אין יכולת לחתום". הסיבה המדויקת לא שוחזרה,
+     ולכן הקנבס הוקשח בכל נקודה שבה הוא יכול להיכשל בשקט:
+     1. **מדידה מחדש בכל נגיעה** — לא רק פעם אחת בפתיחה. אם הגודל השתנה מאז
+        (סרגל הדפדפן, סיבוב, מקלדת שנסגרה) הקו היה נוחת במקום אחר מהאצבע,
+        או לא נראה בכלל אם המדידה הראשונה יצאה 0.
+     2. **נקודה בנגיעה** — הקשה בלי תזוזה לא ציירה כלום, ונראתה כמו "לא עובד".
+     3. **גיבוי ב-Touch Events** — אם Pointer Events לא מגיעים (דפדפן/מצב
+        שבולע אותם), touchstart/touchmove מציירים במקומם.
+     4. **אישור גלוי** — "✓ החתימה נקלטה" אחרי כל קו, כדי שהתושב יידע.
+     5. **רישום לשובל הדיווח** (CBA.diag.log) — אם זה יקרה שוב, הדיווח יראה
+        אם הקנבס קיבל נגיעות בכלל ובאיזה גודל. */
   function initSignature(el) {
     var canvas = el.querySelector("#gym-sig-canvas");
     if (!canvas) return;
-    var ratio = window.devicePixelRatio || 1;
-    var rect = canvas.getBoundingClientRect();
-    canvas.width = Math.round(rect.width * ratio);
-    canvas.height = Math.round(rect.height * ratio);
+    var okEl = el.querySelector("[data-gym-sig-ok]");
     var ctx = canvas.getContext("2d");
-    ctx.scale(ratio, ratio);
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#111827";
+    var drawing = false, mode = "", strokes = 0, cssW = 0, cssH = 0;
 
-    // שחזור חתימה קיימת אם חוזרים לשלב הזה
-    if (st.wizard.data.signature) {
-      var img = new Image();
-      img.onload = function () { ctx.drawImage(img, 0, 0, rect.width, rect.height); };
-      img.src = st.wizard.data.signature;
+    function note(t) { try { if (CBA.diag && CBA.diag.log) CBA.diag.log("חתימה: " + t); } catch (x) {} }
+
+    function style() {
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "#111827";
+      ctx.fillStyle = "#111827";
     }
-
-    var drawing = false;
-    function pos(e) {
+    /* מתאים את מפת הפיקסלים לגודל המוצג. שינוי width מוחק את הקנבס,
+       ולכן אחרי התאמה מציירים מחדש את החתימה השמורה (אם יש). */
+    function fit() {
       var r = canvas.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
+      if (r.width < 2 || r.height < 2) return false;
+      var ratio = window.devicePixelRatio || 1;
+      var w = Math.round(r.width * ratio), h = Math.round(r.height * ratio);
+      if (canvas.width === w && canvas.height === h && cssW === r.width && cssH === r.height) return true;
+      canvas.width = w; canvas.height = h;
+      cssW = r.width; cssH = r.height;
+      ctx.setTransform(w / r.width, 0, 0, h / r.height, 0, 0);
+      style();
+      var saved = st.wizard.data.signature;
+      if (saved) {
+        var img = new Image();
+        img.onload = function () { ctx.drawImage(img, 0, 0, cssW, cssH); };
+        img.src = saved;
+      }
+      return true;
     }
+    fit();
+    // אם המדידה הראשונה נפלה באמצע פריסה — עוד ניסיון בפריים הבא.
+    if (window.requestAnimationFrame) requestAnimationFrame(function () { fit(); });
+
+    function showOk(on) { if (okEl) okEl.hidden = !on; }
+    showOk(!!st.wizard.data.signature);
+
+    function pos(x, y) {
+      var r = canvas.getBoundingClientRect();
+      return { x: x - r.left, y: y - r.top };
+    }
+    function start(x, y, how) {
+      if (!fit()) { note("קנבס בגודל 0"); return false; }
+      drawing = true; mode = how;
+      var p = pos(x, y);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 1.2, 0, Math.PI * 2);   // נקודה — גם הקשה בלי תזוזה נראית
+      ctx.fill();
+      ctx.beginPath(); ctx.moveTo(p.x, p.y);
+      return true;
+    }
+    function move(x, y) {
+      var p = pos(x, y);
+      ctx.lineTo(p.x, p.y); ctx.stroke();
+    }
+    function end() {
+      if (!drawing) return;
+      drawing = false; mode = "";
+      strokes++;
+      try { st.wizard.data.signature = canvas.toDataURL("image/png"); }
+      catch (x) { note("שמירה נכשלה · " + x); }
+      showOk(true);
+      if (strokes === 1) note("קו ראשון נקלט · " + Math.round(cssW) + "×" + Math.round(cssH));
+    }
+
     canvas.addEventListener("pointerdown", function (e) {
-      drawing = true;
-      canvas.setPointerCapture(e.pointerId);
-      var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y);
+      if (!start(e.clientX, e.clientY, "pointer")) return;
+      try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
       e.preventDefault();
     });
     canvas.addEventListener("pointermove", function (e) {
-      if (!drawing) return;
-      var p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke();
+      if (!drawing || mode !== "pointer") return;
+      move(e.clientX, e.clientY);
       e.preventDefault();
     });
-    function end() {
-      if (!drawing) return;
-      drawing = false;
-      st.wizard.data.signature = canvas.toDataURL("image/png");
-    }
     canvas.addEventListener("pointerup", end);
-    canvas.addEventListener("pointerleave", end);
-    canvas.addEventListener("pointercancel", end);
+    canvas.addEventListener("pointerleave", function () { if (mode === "pointer") end(); });
+    /* pointercancel = הדפדפן לקח את הנגיעה (בדרך כלל לגלילה). במקום לסיים את
+       הקו — עוברים לגיבוי המגע, שממשיך את אותו קו מ-touchmove. */
+    canvas.addEventListener("pointercancel", function () {
+      if (mode === "pointer") { note("pointercancel — ממשיך דרך גיבוי מגע"); mode = "touch"; }
+    });
+
+    /* גיבוי מגע. כש-Pointer Events עובדים, pointerdown כבר הפעיל ציור במצב
+       "pointer" לפני touchstart, והגיבוי רק חוסם גלילה. כשהם לא מגיעים —
+       הגיבוי הוא שמצייר. passive:false כדי ש-preventDefault יעצור גלילה. */
+    function t0(e) { return (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]); }
+    canvas.addEventListener("touchstart", function (e) {
+      e.preventDefault();
+      if (drawing) return;
+      var t = t0(e); if (!t) return;
+      if (start(t.clientX, t.clientY, "touch")) note("מצייר דרך גיבוי מגע");
+    }, { passive: false });
+    canvas.addEventListener("touchmove", function (e) {
+      e.preventDefault();
+      if (!drawing || mode !== "touch") return;
+      var t = t0(e); if (t) move(t.clientX, t.clientY);
+    }, { passive: false });
+    canvas.addEventListener("touchend", function () { if (mode === "touch") end(); });
+    canvas.addEventListener("touchcancel", function () { if (mode === "touch") end(); });
+
+    // ניקוי — אותו קוד, כדי שגם ההודעה הירוקה תיעלם.
+    canvas.__sigClear = function () {
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      st.wizard.data.signature = "";
+      strokes = 0;
+      showOk(false);
+    };
   }
 
   function bindWizard(container, el) {
@@ -613,7 +699,8 @@ CBA.screens = CBA.screens || {};
     var clear = el.querySelector("[data-gym-clear-sig]");
     if (clear) clear.addEventListener("click", function () {
       var c = el.querySelector("#gym-sig-canvas");
-      if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height);
+      if (c && c.__sigClear) c.__sigClear();
+      else if (c) c.getContext("2d").clearRect(0, 0, c.width, c.height);
       d.signature = "";
     });
     var back = el.querySelector("[data-gym-back]");

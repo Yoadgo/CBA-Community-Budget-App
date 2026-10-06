@@ -210,6 +210,9 @@
   background: var(--surface); touch-action: none; cursor: crosshair;
 }
 .gym-sig__clear { margin-top: 8px; }
+.gym-sig__row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.gym-sig__ok { margin-top: 8px; color: var(--ok-ink, var(--ok)); font-weight: 600; font-size: calc(13px * var(--fs, 1)); }
+.gym-sig__ok[hidden] { display: none; }
 
 @media (max-width: 720px) {
   .gym-wiz__panel { width: 100%; }

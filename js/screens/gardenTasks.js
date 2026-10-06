@@ -497,10 +497,11 @@
         var nowWeek = week === todayKey();
         rowsAll.forEach(function (t) {
           if (isMine(t)) c.mine++;
-          /* ⚠️ המונה הזה סופר **את כל** דיווחי התושבים — פתוחים, משובצים
-             וסגורים, מכל השבועות. זו כל הנקודה של המסנן: מקום אחד שבו
-             אפשר לענות "מה קרה עם התקלה שדיווחתי" בלי לדפדף בשבועות. */
-          if (t.kind === GK_REPORT) c.faults++;
+          /* ⚠️ המסנן "תקלות" עדיין **מציג** את כל דיווחי התושבים — פתוחים,
+             משובצים וסגורים, מכל השבועות — כדי לענות "מה קרה עם התקלה
+             שדיווחתי". אבל **המונה** שעל הכפתור סופר רק את מה שעוד פתוח
+             (דיווח 35, 6.10.26: מונה שכולל סגורות נראה כמו עומס שלא קיים). */
+          if (t.kind === GK_REPORT && !t.closure) c.faults++;
           if (t.closure) c.closed++; else if (inOpenView(t)) c.open++;
           /* פס ההתקדמות נשאר של **השבוע הנוכחי** — הוא עונה על "איך אנחנו
              עומדים השבוע", ולא על "כמה משימות יש בעולם". נמדד בסגורות ולא
@@ -2398,6 +2399,8 @@
               (closed ? '' : tagHtml(t)) +
             '</div>' +
             fkHtml +
+            /* 🌱 גל ב' (6.10) — הצעת דיוק גבול מהתושב (נטען אחרי הפתיחה). */
+            ((t.repId && (cat.key === "lawn" || cat.key === "water")) ? '<div id="gd-det-lr"></div>' : '') +
             /* 🔴 22.9 (הכרעת יועד: "מוצג לכולם") — התיאור ומיקום במילים,
                של תושב או של הצוות. עד היום הם לא הגיעו לכרטיס בכלל. */
             (t.desc ? '<p class="gd-det-desc">' + esc(t.desc) + '</p>' : '') +
@@ -2481,6 +2484,14 @@
           if (recenterSmBtn) recenterSmBtn.addEventListener("click", function (e) {
             e.stopPropagation();
             if (mapApi && mapApi.centerOnPin) mapApi.centerOnPin();
+          });
+        }
+        var lrEl = wrap.querySelector("#gd-det-lr");
+        if (lrEl && CBA.lawnRefine && CBA.lawnRefine.decision) {
+          CBA.lawnRefine.decision(lrEl, {
+            repId: t.repId, taskId: id, familyId: t.familyId || "",
+            onMap: function () { close(); CBA.gardenAssets.openOnMap(id, false); },
+            onDecided: function () { load(true); }
           });
         }
         /* כותרת ארוכה נחתכת (ellipsis) בשורה עם כפתור הסגירה — לחיצה

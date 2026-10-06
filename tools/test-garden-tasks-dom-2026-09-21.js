@@ -76,8 +76,8 @@ ok('⚠️ והסגורה (#6) אינה מוצגת במסנן "פתוחות"', a
 section('4. מסנן "תקלות דיירים"');
 const chip = host.querySelector('[data-f="faults"]');
 ok('🔴 השבב קיים', !!chip);
-ok('🔑 והמונה סופר את כל שלושת הדיווחים — כולל הסגור',
-   !!chip && /3/.test(chip.querySelector('b').textContent), chip && chip.textContent);
+ok('🔑 המונה סופר רק דיווחים פתוחים — לא את הסגור (דיווח 35, 6.10)',
+   !!chip && /2/.test(chip.querySelector('b').textContent), chip && chip.textContent);
 chip.dispatchEvent(new window.MouseEvent('click', { bubbles:true }));
 const f = [].map.call(host.querySelectorAll('.gt-row'), r => r.dataset.id);
 ok('🔴 מציג את שלושת הדיווחים ורק אותם', f.slice().sort().join(',') === '1,3,6', f.join(','));

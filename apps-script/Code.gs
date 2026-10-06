@@ -131,6 +131,8 @@ var ACTION_PERMS = {
   // בניגוד לפעולות התושב (submitGardenReport / gardenFeedback), שפתוחות לכל
   // תושב פעיל ולכן אינן ברשימה הזאת כלל, אלה שייכות לבעלי הרשאת גינון בלבד.
   gardenTask: PERM_GARDEN,
+  /* 🌱 6.10 — הפוש לתושב על החלטה בדיוק גבול. רק מי שרשאי להחליט. */
+  gardenLawnEditNotify: PERM_GARDEN,
   gardenApproveBatch: PERM_GARDEN,
   gardenMerge: PERM_GARDEN,
   gardenCreateTask: PERM_GARDEN,
@@ -2005,6 +2007,8 @@ function doPostDispatch_(ss, body) {
          העלאת תמונה בודדת, ושליחת המיילים על דיווח שנכתב מהדפדפן. */
       case 'gardenPhotoOne':      return json_(gardenPhotoOne_(ss, body));
       case 'gardenNotifyReport':  return json_(gardenNotifyReport_(ss, body));
+      /* 🌱 6.10 — פוש לתושב על החלטה בדיוק גבול (שגר-ושכח). */
+      case 'gardenLawnEditNotify': return json_(gardenLawnEditNotify_(ss, body));
       /* 🔴 18.9, גל 3 — המייל על פעולת מנהל שנכתבה בדפדפן.
          שגר-ושכח: המסך אינו ממתין לתשובה. */
       case 'gardenNotifyTask':    return json_(gardenNotifyTask_(ss, body));
@@ -4317,7 +4321,7 @@ var ACTION_DOMAIN = {
   /* ההיפוך (16.9) — שתיהן אינן נוגעות בגיליון: 'other' היה מבטל
      את מטמון המטען של כל המשתמשים בכל תמונה ובכל מייל. */
   gardenPhotoOne: 'gardenPhoto', gardenNotifyReport: 'gardenMail',
-  gardenNotifyTask: 'gardenMail', gardenFeedbackNotify: 'gardenMail',
+  gardenNotifyTask: 'gardenMail', gardenFeedbackNotify: 'gardenMail', gardenLawnEditNotify: 'gardenMail',
   /* 🗓 GW-23.9:C3-domain — אינה נוגעת בגיליון */ gardenAiSchedule: 'gardenAi',
   /* ENG1 (גל 14) — הצעת מילוי בלבד, לא נוגעת בשום נתון */ aiExtract: 'ai',
   /* 🗓 GW-24.9:C7-domain */ gardenCrew: 'gardenAi',
@@ -13696,7 +13700,13 @@ var BK_COLLECTIONS = [
   { collection: 'gymNuki',        tab: BK_PREFIX + 'הזמנות Nuki' },
   /* 25.9 — ועד השיכון v2: Firestore הוא המסד היחיד (מסמך אחד committee/tree).
      הטאב הישן "עץ ועד השיכון" מפסיק להתעדכן מרגע השמירה הראשונה. */
-  { collection: 'committee',      tab: BK_PREFIX + 'ועד השיכון' }
+  { collection: 'committee',      tab: BK_PREFIX + 'ועד השיכון' },
+  /* 🌱 6.10 — דשא והשקיה: Firestore הוא המסד היחיד שלהם. גבולות המדשאות,
+     הממטרות/מחשבים/צנרת/מצב הדשא, ודיוקי הגבול שתושבים הציעו. לכולם updatedAt
+     — ולכן גם הגיבוי המצטבר תופס אותם. */
+  { collection: 'gardenLawns',     tab: BK_PREFIX + 'גבולות מדשאות' },
+  { collection: 'gardenAssets',    tab: BK_PREFIX + 'השקיה ומצב דשא' },
+  { collection: 'gardenLawnEdits', tab: BK_PREFIX + 'דיוקי גבול' }
 ];
 var BK_HEADERS = ['id', 'עודכן', 'schema', 'json'];
 
@@ -16702,6 +16712,42 @@ function gardenNotifyReport_(ss, body) {
   var id = String((body && body.id) || '').trim();
   if (!id) return { ok: false, error: 'חסר מזהה דיווח' };
   return gardenSendReportMail_(ss, id);
+}
+
+/* ============================================================================
+ *  🌱 דיוק גבול מדשאה — הפוש לתושב על ההחלטה   (6.10.2026, גל ב')
+ * ----------------------------------------------------------------------------
+ *  הכרעת יועד (3.10): **פוש בלבד, בלי מייל** — חריגה מכוונת מכלל "תבנית מייל
+ *  לכל פיצ'ר תושב". עובר דרך מרכז ההתראות (טריגר gar-lawn-edit, נמען 'r'),
+ *  כך שהטקסט ניתן לעריכה במסך ההתראות, ו"עדכון חדש" מופיע גם באפליקציה.
+ *  🔑 אידמפוטנטי: notifiedAt על מסמך הדיוק (חשבון השירות עוקף את הכללים).
+ *  🔑 ההחלטה עצמה נקראת מהמסמך — לא מהדפדפן: הקורא לא יכול "להמציא" אישור.
+ * ========================================================================== */
+function gardenLawnEditNotify_(ss, body) {
+  var gate = authorize_(ss, body, PERM_GARDEN);
+  if (!gate.ok) return { ok: false, error: gate.error };
+  var id = String((body && body.id) || '').trim();
+  if (!id || id.length > 40 || /[\/\s]/.test(id)) return { ok: false, error: 'מזהה לא תקין' };
+  try {
+    var path = fsDocPath_('gardenLawnEdits', id);
+    var ed = fsGet_(path);
+    if (!ed) return { ok: false, error: 'הדיוק לא נמצא' };
+    if (ed.status !== 'approved' && ed.status !== 'rejected') return { ok: true, skipped: 'pending' };
+    if (ed.notifiedAt) return { ok: true, skipped: 'already' };
+    var rep = fsGet_(fsDocPath_(FS_GARDEN_REPORTS, id)) || {};
+    var fam = String(rep.familyId || '').trim();
+    var lawn = fsGet_(fsDocPath_('gardenLawns', String(ed.lawnId || ''))) || {};
+    var vars = {
+      'כותרת': String(rep.title || ''),
+      'מיקום': String(lawn.name || rep.area || 'המדשאה'),
+      'תוצאה': ed.status === 'approved' ? 'הגבול עודכן במפה — תודה!' : 'הפעם הגבול נשאר כמו שהוא. תודה על העזרה!'
+    };
+    var out = fam ? notify_(ss, 'gar-lawn-edit', { vars: vars, r: { familyId: fam } }, ['r']) : null;
+    fsMerge_(path, { notifiedAt: new Date() });
+    return { ok: true, sent: out };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
 }
 
 /** השליחה עצמה. משותפת לקריאה מהדפדפן ולסריקה השעתית. */

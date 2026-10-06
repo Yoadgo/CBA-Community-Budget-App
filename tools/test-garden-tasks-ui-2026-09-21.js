@@ -80,7 +80,7 @@ ok('⚠️ והתווית כבר אינה מייחסת אותן לדיירים �
    !/"תקלות דיירים", c\.faults/.test(GT));
 ok('⚠️ והוא משתמש באותו מנגנון מסנן — לא מסך חדש',
    /if \(filter === "faults"\) return t\.kind === GK_REPORT;/.test(GT));
-ok('🔑 המונה סופר הכל — כולל סגורות', /if \(t\.kind === GK_REPORT\) c\.faults\+\+;/.test(GT));
+ok('🔑 המונה סופר רק פתוחות (דיווח 35, 6.10)', /if \(t\.kind === GK_REPORT && !t\.closure\) c\.faults\+\+;/.test(GT));
 const fb = (GT.match(/function faultsBody[\s\S]*?\n      \}/) || [''])[0];
 ok('🔑 והתצוגה מקובצת לפי מצב: ממתינות · משובצות · טופלו',
    fb.indexOf('lane("ממתינות לשיבוץ"') !== -1 &&

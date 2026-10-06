@@ -31,12 +31,12 @@
   <!-- שכבת טעינה — שלדי shimmer, כניסת מסך רכה, טוסט "מעודכן" -->
   <link rel="stylesheet" href="css/loading.css?v=820a89ce19" />
   <!-- אזור התושב — נגזר מהעיצוב, פונקציות מצומצמות -->
-  <link rel="stylesheet" href="css/resident.css?v=2611ef87d3" />
+  <link rel="stylesheet" href="css/resident.css?v=8f2a94ac58" />
   <!-- זכוכית נוזלית + תנועה (iOS 26) — שכבת עיצוב תוספתית, לא נוגעת במסכים -->
   <link rel="stylesheet" href="css/motion.css?v=144675cc01" />
   <link rel="stylesheet" href="css/events.css?v=a48e8ef614" />
   <!-- מכון כושר (2026-08-18) — שכבה ייעודית, כל המחלקות בתחילית gym- -->
-  <link rel="stylesheet" href="css/gym.css?v=c480c9319b" />
+  <link rel="stylesheet" href="css/gym.css?v=49722dbef9" />
   <link rel="stylesheet" href="css/wework.css?v=3cfe17107a" />
   <!-- PWA (2026-08-20) — שכבת ההסבר "הוספה למסך הבית" בלבד. כל המחלקות בתחילית pwa- -->
   <link rel="stylesheet" href="css/pwa.css?v=5cebb597c3" />
@@ -57,7 +57,7 @@
   <link rel="stylesheet" href="css/garden.css?v=0ae26936da" />
   <!-- מסך "נתוני גינון" (23.9, סבב עיצוב 4 — זכוכית). אחרי garden.css: נשען על --c-* שלו. -->
   <link rel="stylesheet" href="css/gardenStats.css?v=9283136e86" />
-  <link rel="stylesheet" href="css/gardenLawn.css?v=c3c0fe2319" />
+  <link rel="stylesheet" href="css/gardenLawn.css?v=4626362f94" />
   <!-- 🗓 GW-23.9:I1-css — סידור שבועי. אחרי garden.css: נשען על --c-* שלו. -->
   <link rel="stylesheet" href="css/gardenSchedule.css?v=f0d56e7ded" />
   <!-- שכבת ה-Liquid Glass (2026-09-07). טוקנים + .lg + הרקע האמביינטי. -->
@@ -176,7 +176,7 @@
   <script defer src="js/ui/security.js?v=6238d03d0a"></script>
   <script defer src="js/ui/terms.js?v=6c209ad9da"></script>
   <!-- הכפתור הצף "דיווח על האפליקציה". חייב להיטען לפני app.js, שקורא ל-CBA.report.mount -->
-  <script defer src="js/ui/report.js?v=ea44ad6eed"></script>
+  <script defer src="js/ui/report.js?v=de4bfb6872"></script>
   <!-- גל 1 (30.9.2026): הכפתור הצף "+" — ניווט בלבד, נשען על CBA.ui.sheet (dialog.js) -->
   <script defer src="js/ui/plus.js?v=c15f8707c4"></script>
   <script defer src="js/ui/canopy.js?v=b94420b1b4"></script>
@@ -193,12 +193,12 @@
        22 קבצי מסכי ניהול (~1.1MB: תקציב/הוצאות/תכנון, מתקנים ושירותים, תושבים
        ומערכת, ניהול הגינון) **אינם** כאן יותר. תושב לא מוריד אותם; מנהל מקבל
        אותם בניווט הראשון למסך כזה. סדר הקבצים בתוך קבוצה נשמר במניפסט. -->
-  <script defer src="js/lazyManifest.js?v=ee08b02e5c"></script>
+  <script defer src="js/lazyManifest.js?v=ff782a6076"></script>
   <script defer src="js/lazy.js?v=011e0ffe5f"></script>
   <script defer src="js/data/mock.js?v=fd54e34660"></script>
   <!-- כללי החזרתיות ומנוע האופק — אותו קובץ נטען גם ב-Apps Script (GardenRules.gs) -->
   <script defer src="js/data/gardenRules.js?v=309560188b"></script>
-  <script defer src="js/data/dataService.js?v=bbe8ecf2bd"></script>
+  <script defer src="js/data/dataService.js?v=6b2f6f70df"></script>
   <!-- מנוע ההשוואה של בדיקת ההחזרים. חייב להיטען לפני המסך שמשתמש בו -->
   <script defer src="js/data/reconcile.js?v=899bfb8f4c"></script>
   <!-- חיבור ל-Google Sheets (קריאה). אם נכשל — נשארים על נתוני mock -->
@@ -212,7 +212,7 @@
   <!-- מכון כושר — ניהול (2026-08-18). יושב ליד clubAdmin כי שניהם
        "מתקנים", אבל כל אחד עם מידור ההרשאות שלו. -->
   <!-- מכון כושר — מסך התושב והאשף (2026-08-19). אחרי gymAdmin, לפני המנוע. -->
-  <script defer src="js/screens/resGym.js?v=d61998fa65"></script>
+  <script defer src="js/screens/resGym.js?v=ebfaff99c4"></script>
   <!-- 25.9 — דלת Nuki + WeWork (נתונים, כפתור הדלת, מסכים). ר' apps-script/Door.gs -->
   <script defer src="js/data/door.js?v=71c7a113de"></script>
   <!-- 25.9 — מכון הכושר מ-Firestore קודם (עוטף את getGymList). אחרי dataService. -->
@@ -239,8 +239,9 @@
   <!-- מסך "נתוני גינון" (22.9) — המנוע: חישוב טהור מהמשימות ומהיומן.
        אחרי המילון (הוא קורא gardenLang.drag/catOf), לפני המסך. -->
   <script defer src="js/data/gardenStatsCalc.js?v=82babfdbde"></script>
-  <script defer src="js/data/gardenAssets.js?v=ed48bdd4a2"></script>
-  <script defer src="js/screens/resident.js?v=a900108c26"></script>
+  <script defer src="js/data/gardenAssets.js?v=3c5bf933a6"></script>
+  <script defer src="js/ui/lawnRefine.js?v=d5ec72b978"></script>
+  <script defer src="js/screens/resident.js?v=b7437d010d"></script>
   <!-- ועד השיכון v2 (25.9) — אחרי resident.js ו-residents.js: דורס את
        CBA.screens.resCommittee שלו. ⚠️ מ-1.10.26 (RSB10) ה-committeeAdmin הישן נמחק מ-residents.js —
        הסרת השורה כבר לא מחזירה אותו (רק את resCommittee הישן). -->
@@ -254,7 +255,7 @@
   <script defer src="js/screens/myProfile.js?v=5371fc4b54"></script>
   <!-- "מראה שיכון" (2026-09-07) — נטען **אחרי** resident.js: הוא נשען על
        CBA.map שמוגדר שם. ר' ההערה בראש הרכיב. -->
-  <script defer src="js/screens/resGarden.js?v=eb386bdfbb"></script>
+  <script defer src="js/screens/resGarden.js?v=9df4169e05"></script>
   <!-- 🗓 GW-23.9:I3-screen — לפני gardenTasks.js, שקורא לו. -->
   <!-- 🗓 GW-23.9:I4-ai — סידור חכם (Gemini דרך Apps Script) -->
   <!-- סיור היכרות (2026-08-28) — אחרי home.js (הכרטיס "יש חדש" קורא ל-CBA.tour)
@@ -262,7 +263,7 @@
   <script defer src="js/ui/tour.js?v=56cb035d22"></script>
   <script defer src="js/ui/tips.js?v=d4f66f2d2a"></script>
   <script defer src="js/screens/events.js?v=00461235ca"></script>
-  <script defer src="js/app.js?v=8c79c858e3"></script>
+  <script defer src="js/app.js?v=6c0dc31f3d"></script>
   <!-- התנהגויות מובייל (בר תחתון, כותרת נעלמת) — אחרי המנוע -->
   <script defer src="js/ui/mobile.js?v=432817994d"></script>
   <!-- זכוכית נוזלית + תנועה (iOS 26) — אפקטים בלבד, לא נוגע בנתונים/לוגיקה -->

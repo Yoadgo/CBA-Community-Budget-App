@@ -415,6 +415,7 @@ function resLoad(container) {
     if (res && res.ok) {
       resState.rows = res.rows || [];
       resState.headers = res.headers || (resState.rows[0] ? Object.keys(resState.rows[0]) : []);
+      resState.errAutoRetry = false;   // דיווח 36 — הצלחה מאפסת את הניסיון האוטומטי
     } else {
       resState.error = (res && res.error) || "לא הצלחנו לטעון את רשימת התושבים";
     }
@@ -486,6 +487,14 @@ CBA.screens.residents = {
     var body = resShell(container);   // A0 — הסרגל נבנה אחרי חישוב isNav (שבודק main ריק)
 
     if (!st.loaded && !st.loading) resLoad(container);
+    /* דיווח 36 (6.10.26) — רשת ביטחון: אם הטעינה נכשלה ואחר כך נחת מטען
+       (ציור שקט, לא ניווט), מנסים שוב **פעם אחת** לבד — במקום להשאיר את
+       התושב מול "נסה שוב". הדגל מונע לולאה כשהשרת באמת למטה. */
+    else if (!isNav && st.error && st.loaded && !st.loading && !st.errAutoRetry) {
+      st.errAutoRetry = true;
+      st.loaded = false;
+      resLoad(container);
+    }
     /* RSB2 (גל 8, 1.10.26) — הנתונים נטענו פעם אחת בלבד ולא התרעננו בכניסות הבאות.
        עכשיו: בכניסה אמיתית מציירים מיד את המטמון (בלי שלד) וטוענים מחדש ברקע;
        בסיום resLoad מצייר שוב (אם עדיין כאן). ברענון רקע שקט — לא טוענים. */
