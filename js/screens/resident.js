@@ -1246,10 +1246,7 @@ CBA.screens = CBA.screens || {};
       setRulesOpen(false);   // סגור כברירת מחדל תמיד (גם בדסקטופ) — מציגים רק את 5 הדגשים
       /* v2 — "תקנון המועדון" בחופה: התקנון המלא בחלון, בלי לגלול לתחתית המסך */
       var rulesBtn = container.querySelector("#rv-rules-btn");
-      if (rulesBtn) rulesBtn.addEventListener("click", function () {
-        CBA.ui.dialog({ title: "הוראות ותקנון המועדון", html: '<div class="club-rules__body rv-rules-dlg">' + clubRulesHTML() + '</div>',
-                        okText: "סגירה", wide: true });
-      });
+      if (rulesBtn) rulesBtn.addEventListener("click", function () { openClubRules(); });
 
       var bookingEl = container.querySelector("#rv-booking");
       var mineEl = container.querySelector("#rv-mine");
@@ -1385,8 +1382,14 @@ CBA.screens = CBA.screens || {};
     var d = new Date(iso);
     return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
   }
+  /* התקנון המלא בחלון — מהמסך הזה ומעמוד הבית (6.10.26: "התקנון והפייבוקס ממש בדף הראשי") */
+  function openClubRules() {
+    CBA.ui.dialog({ title: "הוראות ותקנון המועדון", html: '<div class="club-rules__body rv-rules-dlg">' + clubRulesHTML() + '</div>',
+                    okText: "סגירה", wide: true });
+  }
   CBA.clubUI = { KIND: CLUB_KIND, kindChip: kindChip, rangeOf: rangeOf,
-                 kindEditorHTML: kindEditorHTML, bindKindEditor: bindKindEditor, openKindEdit: openKindEdit };
+                 kindEditorHTML: kindEditorHTML, bindKindEditor: bindKindEditor, openKindEdit: openKindEdit,
+                 openRules: openClubRules, payUrl: PAYBOX_URL, payIcon: payboxIcon };
 
   /* ---- לוח + טופס שריון (onReserved נקרא אחרי יצירה מוצלחת, לרענון "השריונים שלי") ---- */
   function renderBooking(root, u, fam, house, onReserved) {

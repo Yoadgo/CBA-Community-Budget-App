@@ -660,6 +660,32 @@ CBA.screens = CBA.screens || {};
     });
   }
 
+  /* ---- מועדון משפחות — אריח קבוע בבית (6.10.26, יועד: "התקנון והפייבוקס ממש בדף
+     הראשי"). שני כפתורים ישירים: תשלום ב-PayBox (קישור) ותקנון (חלון). לחיצה
+     על שאר האריח — למסך המועדון. השורה מתחת לכותרת מתעדכנת מהשריון הקרוב
+     (syncResvMini), בלי קריאה נוספת. התקנון והקישור מגיעים מ-CBA.clubUI
+     (resident.js) — מקור אחד לשני המסכים. */
+  function clubTileHTML() {
+    var cu = window.CBA && CBA.clubUI;
+    return '<div class="hm2-tile hm2-tile--club" id="hm-club" data-goto="resReserve" role="link" tabindex="0" aria-label="מועדון משפחות">' +
+      '<span class="hm2-tile__h">' + disc("ev", ICO.key) + 'מועדון משפחות</span>' +
+      '<span class="hm2-tile__s" id="hm-club-s">שריון, תשלום ותקנון</span>' +
+      '<span class="hm2-club-acts">' +
+        (cu && cu.payUrl ? '<a class="hm2-club-btn hm2-club-btn--pay" href="' + esc(cu.payUrl) + '" target="_blank" rel="noopener" data-hm-stop>' +
+          (cu.payIcon || "") + '<span>PayBox · 200₪</span></a>' : "") +
+        (cu && cu.openRules ? '<button type="button" class="hm2-club-btn" data-hm-rules>תקנון</button>' : "") +
+      '</span></div>';
+  }
+  function syncClubTile(container, next) {
+    var s = container.querySelector("#hm-club-s");
+    if (!s) return;
+    if (!next) { s.textContent = "שריון, תשלום ותקנון"; return; }
+    var a = new Date(next.start), b = new Date(next.end);
+    /* ⁦…⁩ — טווח השעות משמאל לימין, כמו במיני-כרטיס (אחרת "22:00–18:00") */
+    s.textContent = "הקרוב: יום " + WD[a.getDay()] + " " + dm(a) + " · \u2066" + pad(a.getHours()) + ":" + pad(a.getMinutes()) + "–" +
+      pad(b.getHours()) + ":" + pad(b.getMinutes()) + "\u2069" + (next.status === "pending" ? " · ממתין" : "");
+  }
+
   /* ---- השריון הקרוב — מיני-כרטיס בחופה (H11). id="hm-next" נשמר (seedResvFast) ---- */
   function paintNext(slot, list) {
     if (window.CBA.homeSchedule) CBA.homeSchedule.setPersonal(list || []);
@@ -672,6 +698,7 @@ CBA.screens = CBA.screens || {};
     var slot = container.querySelector("#hm-next");
     if (!slot || !W) return;
     var next = W.resv;
+    syncClubTile(container, next);
     if (next) {
       var a = new Date(next.start), b = new Date(next.end);
       var time = "⁦" + pad(a.getHours()) + ":" + pad(a.getMinutes()) + "–" + pad(b.getHours()) + ":" + pad(b.getMinutes()) + "⁩";
@@ -930,10 +957,19 @@ CBA.screens = CBA.screens || {};
       var admin = e.target.closest("[data-admin-goto]");
       if (admin) { if (window.CBA.gotoAdmin) CBA.gotoAdmin(admin.dataset.adminGoto); return; }
       if (e.target.closest("[data-tour-new]")) { if (window.CBA.tour) CBA.tour.startNew(); return; }
+      /* אריח המועדון: PayBox נפתח כקישור רגיל, "תקנון" פותח חלון — שניהם לא מנווטים */
+      if (e.target.closest("[data-hm-stop]")) return;
+      if (e.target.closest("[data-hm-rules]")) { if (CBA.clubUI && CBA.clubUI.openRules) CBA.clubUI.openRules(); return; }
       var nxs = e.target.closest("[data-hm-nextsheet]");
       if (nxs) { if (CBA.homeSchedule && CBA.homeSchedule.openNextSheet) CBA.homeSchedule.openNextSheet(nxs.getAttribute("data-evid") || ""); return; }
       var go = e.target.closest("[data-goto]");
       if (go && CBA.navigate) CBA.navigate(go.dataset.goto);
+    });
+    /* אריח המועדון הוא div (יש בו כפתורים) — Enter/רווח מנווטים כמו כפתור */
+    page.addEventListener("keydown", function (e) {
+      if ((e.key === "Enter" || e.key === " ") && e.target && e.target.id === "hm-club") {
+        e.preventDefault(); if (CBA.navigate) CBA.navigate("resReserve");
+      }
     });
   }
 
@@ -995,6 +1031,7 @@ CBA.screens = CBA.screens || {};
               '<span class="skeleton" style="display:block;height:30px;width:40%;border-radius:8px"></span></button>' +
             refundTileHTML(rc) +
             '<button type="button" class="hm2-tile" id="hm-mygym" data-goto="resGym" hidden></button>' +
+            clubTileHTML() +
           '</section>' +
           '<section class="hm2-grid2">' +
             '<div class="card hm2-card" id="hm-happened">' +
