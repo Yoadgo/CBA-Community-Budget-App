@@ -149,6 +149,7 @@
       if (isNaN(best)) best = ms(t.updatedAt);
       return best;
     }
+    var apprF = appr.filter(isFault).length;   // GP-6.10:S1 — פיצול לשגרה/תקלות
     var apprItems = appr.map(function (t) {
       var s = waitingSince(t);
       return { id: String(t.id), days: isNaN(s) ? 0 : Math.max(0, Math.floor((nowMs - s) / DAY)) };
@@ -159,6 +160,14 @@
     var openF = tasks.filter(function (t) { return isFault(t) && !t.closure; })
       .sort(function (a, b) { return (openedMs(a) || 0) - (openedMs(b) || 0); });
     var undecided = openF.filter(function (t) { return !t.week; }).length;
+
+    /* 🌱 GP-6.10:S1 (בקשת יועד) — שגרה פתוחה: כל מה שאינו תקלה (שגרה +
+       יזומה), לא סגור, ומשובץ לשבוע הנוכחי או לשבוע שכבר עבר. ⚠️ לא כל
+       8 שבועות האופק — אחרת המספר הוא ~160 ואינו "פתוח" באמת. */
+    var openR = tasks.filter(function (t) {
+      return !isFault(t) && !t.closure && t.week && String(t.week) <= cur;
+    });
+    var openRLate = openR.filter(function (t) { return String(t.week) < cur; }).length;
 
     /* נגררות — "משימה פתוחה, תקלה או שגרה, שיצאה מהשבוע המקורי שלה." */
     var dragged = [];
@@ -319,11 +328,25 @@
     var tr = { dragged: zeros(), schedArr: weeks.map(function () { return []; }),
                closeArr: weeks.map(function () { return []; }),
                adhDen: zeros(), adhNum: zeros(),
-               src: weeks.map(function () { return { res: 0, mgr: 0, gard: 0 }; }) };
+               src: weeks.map(function () { return { res: 0, mgr: 0, gard: 0 }; }),
+               /* GP-6.10:S1 — טופלו בכל שבוע (לפי שבוע הסגירה, רק "בוצע"), ותקלות
+                  שנסגרו מכל סיבה חוץ מ"אוחד" (לגרף "נפתחו מול נסגרו"). */
+               doneR: zeros(), doneF: zeros(), closedF: zeros(),
+               /* מזהים לכל שבוע — לכפתור "לרשימה ←" שמתחת לגרף. */
+               idsDone: weeks.map(function () { return []; }), idsOpened: weeks.map(function () { return []; }),
+               idsClosedF: weeks.map(function () { return []; }), idsDrag: weeks.map(function () { return []; }) };
     tasks.forEach(function (t) {
+      var caw = ms(t.approvedAt);
+      if (t.closure && !isNaN(caw)) {
+        var cwk = wIdx[L().weekOf(new Date(caw))];
+        if (cwk !== undefined) {
+          if (t.closure === "בוצע") { if (isFault(t)) tr.doneF[cwk]++; else tr.doneR[cwk]++; tr.idsDone[cwk].push(String(t.id)); }
+          if (isFault(t) && t.closure !== "אוחד") { tr.closedF[cwk]++; tr.idsClosedF[cwk].push(String(t.id)); }
+        }
+      }
       var li = lateInfo(t, cur);
       /* נגררו בכל שבוע — "כמה משימות יצאו מהשבוע שלהן בכל שבוע". */
-      if (li && li.late && wIdx[li.orig] !== undefined) tr.dragged[wIdx[li.orig]]++;
+      if (li && li.late && wIdx[li.orig] !== undefined) { tr.dragged[wIdx[li.orig]]++; tr.idsDrag[wIdx[li.orig]].push(String(t.id)); }
       /* עמידה בתוכנית — "איזה אחוז ממשימות השגרה בוצעו בשבוע שבו תוכננו".
          מופע שבוטל בהחלטה אינו נספר לשום צד. */
       if (isRoutine(t) && li && wIdx[li.orig] !== undefined && !CANCELLED[t.closure]) {
@@ -339,7 +362,7 @@
       /* מי פתח את התקלות — תושב · מנהל · גנן, לפי שבוע הפתיחה. */
       if (!isNaN(o)) {
         var ow = wIdx[L().weekOf(new Date(o))];
-        if (ow !== undefined && o >= startMs) tr.src[ow][sourceOf(t)]++;
+        if (ow !== undefined && o >= startMs) { tr.src[ow][sourceOf(t)]++; tr.idsOpened[ow].push(String(t.id)); }
       }
       /* זמן עד שיבוץ — מהפתיחה עד השיבוץ הראשון ביומן. */
       var rows = logBy[String(t.id)] || [];
@@ -365,10 +388,15 @@
     return {
       weeks: W, cur: cur, start: start, weekKeys: weeks, logOk: logOk,
       now: {
-        approval: { on: opts.requireApproval !== false, count: apprItems.length,
+        /* GP-6.10:S1 — שני מתגים: לתקלות ולשגרה. הכרטיס גלוי כשאחד מהם דלוק.
+           מתג השגרה דלוק כברירת מחדל (הכרעת יועד 6.10). */
+        approval: { on: opts.requireApproval !== false || opts.requireApprovalRoutine !== false,
+                    count: apprItems.length, faults: apprF, routine: apprItems.length - apprF,
                     oldestDays: apprItems.length ? apprItems[0].days : null, items: apprItems },
         open: { count: openF.length, undecided: undecided, planned: openF.length - undecided,
                 ids: openF.map(function (t) { return String(t.id); }) },
+        openRoutine: { count: openR.length, late: openRLate, thisWeek: openR.length - openRLate,
+                       ids: openR.map(function (t) { return String(t.id); }) },
         dragged: { count: dragged.length,
                    l1: dragged.filter(function (d) { return d.level === 1; }).length,
                    l2: dragged.filter(function (d) { return d.level === 2; }).length,
@@ -391,7 +419,10 @@
         close: tr.closeArr.map(median),
         adherence: tr.adhDen.map(function (d, i) { return d ? Math.round(tr.adhNum[i] * 100 / d) : null; }),
         adhDen: tr.adhDen,
-        src: tr.src
+        adhNum: tr.adhNum,
+        src: tr.src,
+        doneR: tr.doneR, doneF: tr.doneF, closedF: tr.closedF,
+        ids: { done: tr.idsDone, opened: tr.idsOpened, closedF: tr.idsClosedF, drag: tr.idsDrag }
       }
     };
   }

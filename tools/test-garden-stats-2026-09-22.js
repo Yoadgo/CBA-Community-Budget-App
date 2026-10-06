@@ -101,7 +101,8 @@ const M = C.compute(T, LOG, { weeks: 8, now: NOW, categories: CATS, requireAppro
 section('2. עכשיו — ממתינות לאישורך, תקלות פתוחות, נגררות');
 ok('ממתינות לאישורך = 1', M.now.approval.count === 1, M.now.approval);
 ok('🔴 הוותיקה נמדדת מסימון הגנן ביומן (4 ימים), לא מעדכון אחר', M.now.approval.oldestDays === 4, M.now.approval.oldestDays);
-ok('המתג כבוי מסתיר את האריח', C.compute(T, LOG, { now: NOW, requireApproval: false }).now.approval.on === false);
+ok('GP-6.10: שני המתגים כבויים מסתירים את האריח', C.compute(T, LOG, { now: NOW, requireApproval: false, requireApprovalRoutine: false }).now.approval.on === false);
+ok('GP-6.10: מתג התקלות כבוי ומתג השגרה (ברירת מחדל דלוק) — האריח נשאר', C.compute(T, LOG, { now: NOW, requireApproval: false }).now.approval.on === true);
 ok('תקלות פתוחות = 5 (בלי שגרה, בלי נמחקת)', M.now.open.count === 5, M.now.open);
 ok('להחלטה 1 · משובצות 4', M.now.open.undecided === 1 && M.now.open.planned === 4, M.now.open);
 ok('מהוותיקה לחדשה', M.now.open.ids[0] === '1' && M.now.open.ids[4] === '2', M.now.open.ids);
@@ -221,13 +222,13 @@ ok('ואחרי המילון', IDX.indexOf('js/data/gardenLang.js') < IDX.indexOf
 ok('🔴 אין קריאה ל-Apps Script במסך החדש', !/getGardenStats\(/.test(ST) && /getGardenStatsLive\(12/.test(ST));
 ok('היומן — שאילתת טווח אחת על at', /queryCollection\("gardenLog", \[\["at", ">=", since\]\]/.test(DS));
 ok('firebase.js — טווח בשלושה איברים, שוויון נשאר', /c\.length === 3\) \? q\.where\(c\[0\], c\[1\], c\[2\]\) : q\.where\(c\[0\], '==', c\[1\]\)/.test(FB));
-ok('יומן שנכשל → "—" ולא אפס', /\(dash \? "—" : r\.feedback\.length\)/.test(ST));
+ok('יומן שנכשל → "—" ולא אפס', /\(dash \? "—" : \(r\.feedback\.length \+ r\.reopen\.length\)\)/.test(ST));
 ok('אישור והחזרה לגנן ישר מהשורה', /gardenTask\("approve", id/.test(ST) && /gardenTask\("return", id, \{ note: note \}/.test(ST));
 ok('ריחוף רק במחשב', /\(hover: hover\) and \(pointer: fine\)/.test(ST));
 const GX = R('css/gardenStats.css');
 ok('🔴 23.9 — שלוש עמודות 0.7 · 1.3 · 1', /grid-template-columns: minmax\(0, \.7fr\) minmax\(0, 1\.3fr\) minmax\(0, 1fr\)/.test(GX));
-ok('בלי שורת כותרת — בורר התקופה בכותרת "בתקופה"', /paneHead\("בתקופה", seg\(\)\)/.test(ST) && !/<h3>נתוני גינון<\/h3>/.test(ST));
-ok('"ממתינות לאישורך" מובלטת, ושקטה כשאין', /gx-ap is-hot/.test(ST) && /gx-ap is-calm/.test(ST) && /לאישור ←/.test(ST));
+ok('GP-6.10: בורר התקופה בכותרת "לאורך זמן", בלי שורת כותרת', /<h4>לאורך זמן<\/h4>' \+ seg\(\)/.test(ST) && !/<h3>נתוני גינון<\/h3>/.test(ST));
+ok('"ממתינות לאישורך" מובלטת (אריח כהה), ושקטה כשאין', /gx2-t is-dark/.test(ST) && /is-calm/.test(ST) && /לאישור ←/.test(ST));
 ok('"לפי סוג" — פס, הסמליל והמספר בתוך המקטע, רוחב מינימלי', /gx-cbar/.test(ST) && /\.gx-cbar button \{[^}]*min-width: 48px/.test(GX));
 ok('מקרא צף מצומצם עם שמות הסוגים, מתקפל', /LEG_CATS = \[\["lawn", "דשא"\]/.test(ST) && /cba\.gx\.leg/.test(ST));
 ok('הכרטיסייה שנפתחת — זכוכית', /cls: "gx-vars gx-sheet"/.test(ST) && /\.gx-sheet \.gt-sheet \{[^}]*backdrop-filter: blur\(26px\)/.test(GX));

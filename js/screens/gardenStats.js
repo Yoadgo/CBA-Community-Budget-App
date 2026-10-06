@@ -83,9 +83,23 @@
 
   /* GXB1 (גל 9, 1.10.26) — מצב התצוגה ברמת המודול: שורד ציור מחדש שקט (שינוי גינון ברקע), מתאפס רק בניווט אמיתי. */
   function freshState() {
-    return { weeks: 8, showClosed: false, catFilter: "", trendTab: 0,
+    return { weeks: 8, showClosed: false, catFilter: "", chartTab: "work", mv: "now", selWk: null,
              raw: null, mapHost: null, mapCtl: null, pinCb: null };
   }
+  /* 🌱 GP-6.10:S2 — ⚠️ ברמת המודול ולא בתוך render(): load() יכול לענות
+     **מיד** (מטמון), ואז draw() רץ לפני ששורות ה-var שבתוך render הספיקו
+     לרוץ — CTABS היה undefined והמסך נפל. אותו באג בדיוק כמו FLOW_H/TR. */
+  var CTABS = [
+    { k: "work",   t: "עבודה שבוצעה" },
+    { k: "faults", t: "תקלות נפתחו/נסגרו" },
+    { k: "time",   t: "זמני טיפול" },
+    { k: "drag",   t: "גרירות" }
+  ];
+  var SVGNS = "http://www.w3.org/2000/svg";
+  var LEG_STATES = [["wait", "להחלטה"], ["plan", "משובצת"], ["appr", "לאישורך"],
+                    ["l1", "נגררה"], ["l2", "נגררה 2+"], ["done", "נסגרה"]];
+  var LEG_CATS = [["lawn", "דשא"], ["water", "השקיה"], ["tree", "עצים"], ["prune", "גיזום"],
+                  ["weed", "עשבייה"], ["clean", "ניקיון/גזם"], ["bed", "ערוגות"]];
   var S = freshState();
   /* GXB2 (גל 9, 1.10.26) — חלונית הצצה אחת למודול (לא אחת לכל ציור), כדי שציור מחדש לא ישאיר אותה תקועה על המסך. */
   var peekEl = null, peekTimer = null;
@@ -105,13 +119,14 @@
       var loadErr = null;
       var showClosed = S.showClosed;
       var catFilter = S.catFilter;      // שם הקטגוריה שמסננת את המפה
-      var trendTab = S.trendTab;
+      var chartTab = S.chartTab, mv = S.mv, selWk = S.selWk;   // GP-6.10:S2
       /* GXB1 (גל 9, 1.10.26) — המפה (והזום שלה) עוברת בין ציורים רק אם נצייר אותה מיד, באותה קריאה סינכרונית —
          אחרת ה-ResizeObserver של המפה רואה אותה מנותקת ומתנתק לתמיד. */
       var reuseMap = !!(silentRedraw && S.raw && S.mapHost && S.mapCtl);
       var mapHost = reuseMap ? S.mapHost : null, mapCtl = reuseMap ? S.mapCtl : null;
       if (!reuseMap) { S.mapHost = null; S.mapCtl = null; }
-      function keepState() { S.weeks = weeks; S.showClosed = showClosed; S.catFilter = catFilter; S.trendTab = trendTab; }
+      function keepState() { S.weeks = weeks; S.showClosed = showClosed; S.catFilter = catFilter;
+        S.chartTab = chartTab; S.mv = mv; S.selWk = selWk; }
 
       hidePeek();   // GXB2 (גל 9, 1.10.26) — הצצה פתוחה מהציור הקודם נסגרת
       /* A0/A1 (אושר ע"י יועד 30.9.26, ספר האבנים) — סרגל ניהול דק מעל המסך:
@@ -182,7 +197,8 @@
         if (!raw) return;
         M = CBA.gardenStatsCalc.compute(raw.rows, raw.log, {
           weeks: weeks, categories: raw.categories,
-          requireApproval: raw.requireApproval, logOk: raw.logOk
+          requireApproval: raw.requireApproval, requireApprovalRoutine: raw.requireApprovalRoutine,
+          logOk: raw.logOk
         });
       }
       /* אחרי פעולה (אישור, החזרה, או כל פעולה בכרטיס) — טעינה מחדש שקטה. */
@@ -191,12 +207,12 @@
       /* ============================ שלד ============================ */
       function skeleton() {
         /* SKB1 (גל 9, 1.10.26) — שורש השלד: אזור חי אחד "טוען…" */
-        root.innerHTML = '<div class="gx-grid" role="status" aria-busy="true" aria-label="טוען…">' +
-          ['', '', ''].map(function () {
-            return '<div class="gx-pane"><div class="skeleton" style="height:30px;border-radius:10px;width:40%"></div>' +
-              '<div class="skeleton" style="height:110px;border-radius:18px"></div>' +
-              '<div class="skeleton" style="height:220px;border-radius:18px"></div></div>';
-          }).join("") + '</div>';
+        /* GP-6.10:S2 — אותו שלד של הסידור החדש: אריחים, גרף + מפה, פירוט. */
+        root.innerHTML = '<div class="gx2 gx2-skel" role="status" aria-busy="true" aria-label="טוען…">' +
+          '<div class="gx2-kpis">' + '<div class="skeleton" style="height:118px;border-radius:20px"></div>'.repeat(4) + '</div>' +
+          '<div class="gx2-main"><div class="skeleton" style="height:420px;border-radius:22px"></div>' +
+            '<div class="skeleton gx2-skmap" style="height:420px;border-radius:22px"></div></div>' +
+          '<div class="gx2-detail">' + '<div class="skeleton" style="height:130px;border-radius:20px"></div>'.repeat(3) + '</div></div>';
         updateBar(true);
       }
 
@@ -215,6 +231,19 @@
       }
 
       /* ============================ ציור ============================ */
+      /* ==========================================================================
+       *  🌱 GP-6.10:S2 — סידור חדש (סקיצה "פאצ' גינון" גרסה 3, אישור יועד 6.10.26)
+       * --------------------------------------------------------------------------
+       *  שלוש שורות במקום שלוש עמודות:
+       *    1. "עכשיו" — 4 אריחים: ממתינות לאישורך · פתוחות עכשיו (תקלות/שגרה)
+       *       · נגררות · טופלו השבוע.
+       *    2. גרף גדול אחד עם 4 לשוניות + המפה לידו.
+       *    3. פירוט — גיל התקלות · הכי נגררות · איכות בתקופה.
+       *  🔑 הכול לפי רוחב **המכל** (container query על #gx-root), לא המסך —
+       *     במכל צר (טלפון): סרגל דביק "עכשיו · מגמות · מפה", חלק אחד בכל
+       *     פעם, וב"מגמות" ארבעת הגרפים אחד אחרי השני (בקשת יועד 6.10).
+       *  🔑 הגרפים בפיקסלים אמיתיים (נמדדים אחרי הציור), לא viewBox שנמתח.
+       * ======================================================================== */
       function draw(dataOnly) {
         hidePeek();
         keepState();   // GXB1 (גל 9, 1.10.26)
@@ -230,108 +259,127 @@
           return;
         }
         if (!M) { skeleton(); return; }
-        var mp = M.map;
+        var a = M.now.approval;
         root.innerHTML =
           (M.logOk ? '' :
             '<div class="gx-warn">' + ico("cloud", 16) + '<span>יומן הפעולות לא נטען, ולכן "חזרו לטיפול", ' +
-            '"משוב שלילי" וזמן השיבוץ מסומנים "—". שאר המספרים מעודכנים. ' +
+            '"משוב שלילי" וזמני הטיפול מסומנים "—". שאר המספרים מעודכנים. ' +
             '<button type="button" data-act="retry">לנסות שוב</button></span></div>') +
-          /* שלוש עמודות, שלוש שאלות: עכשיו · בתקופה · איפה. כל אחת על לוח
-             זכוכית משלה — זו ההפרדה בין השלישים (בלי קווים). */
-          '<div class="gx-grid">' +
-            '<section class="gx-pane gx-pane--now" aria-label="עכשיו">' +
-              paneHead("עכשיו", '<small class="gx-live">חי</small>') +
-              approvalCard() + nowTiles() + ageBox() + topBox() +
-            '</section>' +
-            '<section class="gx-pane gx-pane--per" aria-label="בתקופה">' +
-              paneHead("בתקופה", seg()) +
-              perTiles() + trendsBox() +
-            '</section>' +
-            '<section class="gx-pane gx-pane--map" aria-label="איפה">' +
-              paneHead("איפה", '<small>' + mp.openWithLoc + ' מתוך ' + mp.openTotal + ' עם מיקום</small>') +
-              catBox() + mapBox() +
-            '</section>' +
+          '<div class="gx2" data-mv="' + mv + '">' +
+            '<nav class="gx2-mnav" aria-label="חלקי המסך">' +
+              [["now", "עכשיו"], ["trend", "מגמות"], ["map", "מפה"]].map(function (x) {
+                return '<button type="button" data-mv="' + x[0] + '"' + (mv === x[0] ? ' class="on" aria-current="true"' : '') + '>' +
+                  x[1] + (x[0] === "now" && a.on && a.count ? '<em>' + a.count + '</em>' : '') + '</button>';
+              }).join("") +
+            '</nav>' +
+            '<div class="gx2-kpis' + (a.on ? '' : ' n3') + '" data-sec="now">' +
+              approvalTile() + openTile() + dragTile() + doneTile() + '</div>' +
+            '<div class="gx2-main">' + trendCard() + whereCard() + '</div>' +
+            '<div class="gx2-detail">' +
+              '<div data-sec="now">' + ageBox() + '</div>' +
+              '<div data-sec="now">' + topBox() + '</div>' +
+              '<div data-sec="trend">' + qualityBox() + '</div>' +
+            '</div>' +
           '</div>';
         wire();
         updateBar();
         placeMap(dataOnly);
-        sizeCharts();
+        drawCharts();
       }
-      /* מודד כל קופסת מגמה ומצייר את הגרף שלה מחדש בגובה שממלא אותה. */
-      function sizeCharts() {
-        root.querySelectorAll(".gx-tr").forEach(function (box) {
-          var svg = box.querySelector(".gx-chart");
-          if (!svg || !box.offsetParent) return;
-          var w = svg.clientWidth || box.clientWidth;
-          var used = 0;
-          Array.prototype.forEach.call(box.children, function (c) { if (c !== svg) used += c.offsetHeight; });
-          var avail = box.clientHeight - used - 26;
-          if (w < 50 || avail < 40) return;
-          var k = TR[+box.dataset.i].k;
-          svg.outerHTML = chart(k, 200 * avail / w);
+      /* מצייר כל גרף **גלוי** ברוחב שלו בפועל. גרף מוסתר (לשונית אחרת,
+         או "הכול" במחשב) לא נמדד — ייצוייר כשיוצג. */
+      function drawCharts() {
+        if (!M || !root) return;
+        root.querySelectorAll(".gx2-chart").forEach(function (host) {
+          if (!host.offsetParent) return;
+          paintChart(host, host.dataset.k);
         });
       }
-      var rsT = null;
+      var rsT = null, lastW = 0;
       function onResize() {
         if (!alive()) { if (curResize === onResize) curResize = null; return; }   // GXB3 (גל 9, 1.10.26)
         clearTimeout(rsT);
-        rsT = setTimeout(function () { if (alive() && M) sizeCharts(); }, 180);
+        rsT = setTimeout(function () {
+          if (!alive() || !M) return;
+          var w = root.clientWidth;
+          if (w === lastW) return;
+          lastW = w; drawCharts();
+        }, 160);
       }
       curResize = onResize;   // GXB3 (גל 9, 1.10.26) — המאזין היחיד ברמת המודול מפנה לכאן
 
       /* ---------------------------- עכשיו ---------------------------- */
-      /* 🔴 "ממתינות לאישורך" מובלטת (יועד, 23.9): כרטיס ברוחב מלא בראש
-         העמודה, בזכוכית מרווה עם הילה וכפתור. כשאין מה לאשר — שקטה.
-         מופיעה רק כשהמתג "אישור מנהל" דלוק (אפיון סעיף 2). */
-      function approvalCard() {
+      /* GP-6.10:S2 — "ממתינות לאישורך" = האריח הכהה, הפעולה הראשית. מופיע רק
+         כשאחד משני מתגי האישור דלוק (תקלות / שגרה). */
+      function approvalTile() {
         var a = M.now.approval;
         if (!a.on) return '';
-        if (!a.count) {
-          return '<button type="button" class="gx-ap is-calm" data-list="approval">' +
-            '<span class="gx-ap__n">0</span><span class="gx-ap__l">ממתינות לאישורך</span>' +
-            '<span class="gx-ap__s">אין מה לאשר</span></button>';
-        }
-        return '<button type="button" class="gx-ap is-hot" data-list="approval">' +
-          '<span class="gx-ap__n">' + a.count + '</span><span class="gx-ap__l">ממתינות לאישורך</span>' +
-          '<span class="gx-ap__s">הוותיקה מחכה ' + esc(daysText(a.oldestDays)) + '</span>' +
-          '<span class="gx-ap__go">לאישור ←</span></button>';
+        return '<button type="button" class="gx-tile gx2-t is-dark' + (a.count ? '' : ' is-calm') + '" data-list="approval">' +
+          '<span class="gx2-n">' + a.count + '</span>' +
+          '<span class="gx2-b"><span class="gx2-k">ממתינות לאישורך</span>' +
+            '<span class="gx2-s">' + (a.count
+              ? '<b>' + a.routine + '</b> שגרה · <b>' + a.faults + '</b> ' + (a.faults === 1 ? 'תקלה' : 'תקלות') +
+                ' · הוותיקה מחכה ' + esc(daysText(a.oldestDays))
+              : 'אין מה לאשר') + '</span></span>' +
+          (a.count ? '<span class="gx2-go">לאישור ←</span>' : '') + '</button>';
       }
-      function nowTiles() {
-        var o = M.now.open, d = M.now.dragged;
-        return '<div class="gx-two">' +
-          '<button type="button" class="gx-tile lgx" data-list="open" style="--k:var(--k-open)">' +
-            '<span class="gx-k">' + ico("sprout2") + 'פתוחות</span>' +
-            '<span class="gx-n">' + o.count + '</span>' +
-            '<span class="gx-s"><b>' + o.undecided + '</b> להחלטה · <b>' + o.planned + '</b> משובצות</span></button>' +
-          '<button type="button" class="gx-tile lgx" data-list="dragged" style="--k:var(--k-drag)">' +
-            '<span class="gx-k">' + ico("clock2") + 'נגררות</span>' +
-            '<span class="gx-n">' + d.count + '</span>' +
-            '<span class="gx-s"><i class="gx-dot s-l1"></i><b>' + d.l1 + '</b> שבוע · <i class="gx-dot s-l2"></i><b>' + d.l2 + '</b> יותר</span>' +
-          '</button></div>';
+      /* GP-6.10:S1 — "פתוחות עכשיו" מפוצל: תקלות | שגרה. כל חצי פותח רשימה משלו. */
+      function openTile() {
+        var o = M.now.open, r = M.now.openRoutine;
+        return '<div class="gx2-t gx2-open">' +
+          '<span class="gx2-k">פתוחות עכשיו</span>' +
+          '<div class="gx2-split">' +
+            '<button type="button" data-list="open"><span class="gx2-s"><i class="gx2-sw is-f"></i>תקלות</span>' +
+              '<span class="gx2-n">' + o.count + '</span>' +
+              '<span class="gx2-s"><b>' + o.undecided + '</b> לשיבוץ · <b>' + o.planned + '</b> משובצות</span></button>' +
+            '<button type="button" data-list="openR"><span class="gx2-s"><i class="gx2-sw is-r"></i>שגרה</span>' +
+              '<span class="gx2-n">' + r.count + '</span>' +
+              '<span class="gx2-s"><b>' + r.thisWeek + '</b> השבוע · <b>' + r.late + '</b> מאחרות</span></button>' +
+          '</div></div>';
+      }
+      function dragTile() {
+        var d = M.now.dragged;
+        return '<button type="button" class="gx-tile gx2-t" data-list="dragged">' +
+          '<span class="gx2-k">נגררות</span><span class="gx2-n">' + d.count + '</span>' +
+          '<span class="gx2-s"><b>' + d.l1 + '</b> שבוע · <b>' + d.l2 + '</b> יותר</span>' +
+          '<span class="gx2-go" data-go="drag">לגרף ←</span></button>';
+      }
+      /* "טופלו השבוע" — עד עכשיו, מול הממוצע של השבועות שכבר נגמרו בתקופה.
+         ⚠️ השבוע עוד לא נגמר, ולכן "מתחת לממוצע" בתחילת שבוע אינו כישלון —
+         הפער מוצג בצבע ניטרלי, לא באדום. */
+      function doneTile() {
+        var T = M.trends, n = T.doneR.length, last = n - 1;
+        var tot = T.doneR.map(function (r, i) { return r + T.doneF[i]; });
+        var done = tot.slice(0, last), avg = done.length ? Math.round(sum(done) / done.length) : null;
+        var cur = tot[last], dl = avg === null ? null : cur - avg;
+        var mx = Math.max.apply(null, tot.concat([1]));
+        var pts = tot.map(function (v, i) {
+          return (4 + i * (112 / Math.max(1, n - 1))).toFixed(1) + "," + (27 - 22 * v / mx).toFixed(1);
+        }).join(" ");
+        return '<button type="button" class="gx-tile gx2-t" data-go="work">' +
+          '<span class="gx2-k">טופלו השבוע</span>' +
+          '<span class="gx2-n">' + cur + (dl === null ? '' :
+            '<span class="gx2-delta' + (dl > 0 ? '' : ' is-flat') + '">' +
+              (dl > 0 ? '↑ ' + dl + ' מהממוצע' : dl < 0 ? '↓ ' + (-dl) + ' מהממוצע' : 'כמו הממוצע') + '</span>') + '</span>' +
+          '<svg class="gx2-spark" viewBox="0 0 120 30" preserveAspectRatio="none" aria-hidden="true">' +
+            '<polyline points="' + pts + '" fill="none" stroke="var(--c-rout2)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>' +
+          '<span class="gx2-go">לגרף ←</span></button>';
       }
 
       /* ---------------------------- בתקופה ---------------------------- */
-      function perTiles() {
-        var r = M.period.returned, n = M.period.negative, rt = M.period.routine;
-        var dash = !M.logOk;
-        return '<div class="gx-tiles">' +
-          '<button type="button" class="gx-tile lgx" data-list="returned" style="--k:var(--k-back)">' +
-            '<span class="gx-k">' + ico("back") + 'חזרו לטיפול</span>' +
-            '<span class="gx-pair"><span><span class="gx-n">' + (dash ? "—" : r.feedback.length) + '</span><em>משוב תושב</em></span>' +
-            '<span><span class="gx-n">' + (dash ? "—" : r.reopen.length) + '</span><em>פתיחה מחדש</em></span></span></button>' +
-          '<button type="button" class="gx-tile lgx" data-list="negative" style="--k:var(--k-neg)">' +
-            '<span class="gx-k">' + ico("star") + 'משוב שלילי</span>' +
-            '<span class="gx-n">' + (dash || n.pct === null ? "—" : n.pct + '<small>%</small>') + '</span>' +
-            '<span class="gx-s">' + (dash ? "היומן לא נטען"
-                  : n.answered ? n.negative + " מתוך " + n.answered + " תושבים שענו"
-                               : "אף תושב עוד לא ענה") + '</span></button>' +
-          '<button type="button" class="gx-tile lgx" data-list="routine" style="--k:var(--k-rout)">' +
-            '<span class="gx-k">' + ico("repeat") + 'שגרה שנדחתה</span>' +
-            '<span class="gx-n">' + rt.deferred.length + '</span>' +
-            '<span class="gx-s">' + (rt.cancelled.length ? 'ועוד <b>' + rt.cancelled.length + '</b> שבוטלו'
-                                                          : 'אף מופע לא בוטל') + '</span></button>' +
-        '</div>';
+      function qualityBox() {
+        var r = M.period.returned, n = M.period.negative, rt = M.period.routine, dash = !M.logOk;
+        return '<div class="gx-box gx2-box"><h5>איכות בתקופה<small>' + weeks + ' שבועות</small></h5>' +
+          '<div class="gx2-q3">' +
+            '<button type="button" data-list="returned"><span class="gx2-n">' + (dash ? "—" : (r.feedback.length + r.reopen.length)) + '</span>' +
+              '<span>חזרו לטיפול<br>' + (dash ? 'היומן לא נטען' : r.feedback.length + ' משוב · ' + r.reopen.length + ' פתיחה') + '</span></button>' +
+            '<button type="button" data-list="negative"><span class="gx2-n">' + (dash || n.pct === null ? "—" : n.pct + '%') + '</span>' +
+              '<span>משוב שלילי<br>' + (dash ? 'היומן לא נטען' : n.answered ? n.negative + ' מתוך ' + n.answered : 'אף תושב לא ענה') + '</span></button>' +
+            '<button type="button" data-list="routine"><span class="gx2-n">' + rt.deferred.length + '</span>' +
+              '<span>שגרה שנדחתה<br>' + (rt.cancelled.length ? 'ועוד ' + rt.cancelled.length + ' בוטלו' : 'אף מופע לא בוטל') + '</span></button>' +
+          '</div></div>';
       }
+      function sum(a) { return a.reduce(function (s, x) { return s + (x || 0); }, 0); }
 
       /* ------------------------- גיל התקלות ------------------------- */
       function ageBox() {
@@ -378,10 +426,7 @@
       /* ---------------------------- המפה ---------------------------- */
       /* 🔴 המקרא צף ומצומצם (23.9): שתי שורות מצבים, ושורות סוגים עם
          סמליל ושם קצר. ✕ מקפל אותו לגלולה "מקרא" — ונזכר לפי הדפדפן. */
-      var LEG_STATES = [["wait", "להחלטה"], ["plan", "משובצת"], ["appr", "לאישורך"],
-                        ["l1", "נגררה"], ["l2", "נגררה 2+"], ["done", "נסגרה"]];
-      var LEG_CATS = [["lawn", "דשא"], ["water", "השקיה"], ["tree", "עצים"], ["prune", "גיזום"],
-                      ["weed", "עשבייה"], ["clean", "ניקיון/גזם"], ["bed", "ערוגות"]];
+      /* LEG_STATES / LEG_CATS — ברמת המודול (GP-6.10, אותו hoisting כמו CTABS). */
       function legOpen() { var def = !(window.matchMedia && window.matchMedia("(max-width: 899px)").matches); try { var v = localStorage.getItem("cba.gx.leg"); return v === null ? def : v !== "0"; } catch (e) { return def; } }
       function legSet(v) { try { localStorage.setItem("cba.gx.leg", v ? "1" : "0"); } catch (e) {} }
       function legendHtml() {
@@ -509,156 +554,300 @@
         if (pop) { pop.hidden = true; pop.dataset.pinned = ""; }
       }
 
-      /* -------------------------- לפי סוג -------------------------- */
-      /* 🔴 23.9 (יועד): פס, והסמליל והמספר **בתוך** כל מקטע. לכל מקטע רוחב
-         מינימלי כדי שגם תקלה אחת תיקרא; סוג בלי תקלות לא נכנס לפס (הוא
-         במקרא). לחיצה על מקטע מסננת את המפה ופותחת את הרשימה. */
-      function catBox() {
-        var cats = M.period.byCat.filter(function (c) { return c.ids.length; });
+      /* -------------------------- איפה -------------------------- */
+      /* 🔴 23.9 (יועד): פס, והסמליל והמספר **בתוך** כל מקטע. סוג בלי תקלות לא
+         נכנס לפס. לחיצה על מקטע מסננת את המפה ופותחת את הרשימה.
+         GP-6.10:S2 — הפס יושב ישר בכרטיס "איפה", מעל המפה. */
+      function whereCard() {
+        var mp = M.map, cats = M.period.byCat.filter(function (c) { return c.ids.length; });
         var total = M.period.faultsInPeriod;
-        return '<div class="gx-box lgx gx-catbox">' +
-          '<h5>תקלות לפי סוג<small>' + total + ' בתקופה</small></h5>' +
+        return '<section class="gx2-card gx2-where" data-sec="map" aria-label="איפה">' +
+          '<div class="gx2-ch"><h4>איפה</h4><small>' + mp.openWithLoc + ' מתוך ' + mp.openTotal + ' תקלות פתוחות עם מיקום</small></div>' +
           (total
-            ? '<div class="gx-cbar' + (catFilter ? ' has-f' : '') + '">' + cats.map(function (c) {
+            ? '<div class="gx-cbar gx2-cbar' + (catFilter ? ' has-f' : '') + '" aria-label="תקלות לפי סוג">' + cats.map(function (c) {
                 return '<button type="button" data-cat="' + esc(c.name) + '" title="' + esc(c.name) + ' · ' + c.ids.length + '"' +
                   ' aria-pressed="' + (catFilter === c.name) + '"' + (catFilter === c.name ? ' class="on"' : '') +
                   ' style="flex:' + c.ids.length + ';--cc:var(--c-' + c.key + ')">' + ico(c.ico) +
                   '<b>' + c.ids.length + '</b></button>';
               }).join("") + '</div>'
-            : '<div class="gx-cbar is-empty"></div><p class="gx-none">לא נפתחו תקלות בתקופה.</p>') +
-        '</div>';
+            : '<p class="gx-none">לא נפתחו תקלות בתקופה.</p>') +
+          mapBox() +
+        '</section>';
       }
 
-      /* ---------------------------- מגמות ---------------------------- */
-      var TR = [
-        { k: "bars",  t: "נגררו בכל שבוע",       p: "כמה משימות זזו משבוען",        tab: "נגררו" },
-        { k: "lines", t: "זמן עד שיבוץ וסגירה",  p: "ימים, חציון לשבוע",            tab: "זמנים" },
-        { k: "pct",   t: "עמידה בתוכנית",        p: "שגרה שבוצעה בשבוע שלה",       tab: "תוכנית" },
-        { k: "src",   t: "מי פתח את התקלות",     p: "תושב · מנהל · גנן",            tab: "מי פתח" }
-      ];
-      /* במחשב 2×2; בטלפון לשוניות על גרף אחד (CSS לפי data-tab). */
-      function trendsBox() {
-        return '<div class="gx-trends" data-tab="' + trendTab + '">' +
-          '<div class="gx-tabs lgx" role="tablist">' + TR.map(function (x, i) {
-            return '<button type="button" role="tab" aria-selected="' + (i === trendTab) + '" data-tab="' + i + '"' +
-              (i === trendTab ? ' class="on"' : '') + '>' + esc(x.tab) + '</button>';
+      /* ==================== מגמות — גרף אחד, ארבע לשוניות ====================
+         GP-6.10:S2. שתי לשוניות משלבות זוגות שהיו גרפים נפרדים:
+           עבודה שבוצעה = "טופלו" + "עמידה בתוכנית" (מסגרת מקווקוות = שגרה
+             שתוכננה לשבוע, מילוי = מה שנסגר כ"בוצע" באותו שבוע).
+           תקלות נפתחו/נסגרו = "מי פתח" + כמה נסגרו (קו על אותו ציר).
+         ⚠️ אין ציר כפול באף לשונית. השבוע הנוכחי מימין ושקוף-למחצה. */
+      /* CTABS ו-SVGNS ברמת המודול (למעלה) — ר' ההערה שם על hoisting. */
+      function trendCard() {
+        return '<section class="gx2-card gx2-trend" data-sec="trend" aria-label="לאורך זמן">' +
+          '<div class="gx2-ch"><h4>לאורך זמן</h4>' + seg() + '</div>' +
+          '<div class="gx2-tabs" role="tablist">' + CTABS.map(function (c) {
+            return '<button type="button" role="tab" data-ctab="' + c.k + '" aria-selected="' + (c.k === chartTab) + '"' +
+              (c.k === chartTab ? ' class="on"' : '') + '>' + esc(c.t) + '</button>';
           }).join("") + '</div>' +
-          TR.map(function (x, i) {
-            return '<div class="gx-box lgx gx-tr" data-i="' + i + '"><h5>' + esc(x.t) + '</h5><p>' + esc(x.p) + '</p>' +
-              chart(x.k) + '</div>';
-          }).join("") +
-        '</div>';
+          '<div class="gx2-one">' + chartBlock(chartTab) + '</div>' +
+          '<div class="gx2-all">' + CTABS.map(function (c) {
+            return '<div class="gx2-mc"><h5>' + esc(c.t) + '</h5>' + chartBlock(c.k) + '</div>';
+          }).join("") + '</div>' +
+        '</section>';
+      }
+      function chartBlock(k) {
+        return '<div class="gx2-sum">' + chartSum(k) + '</div>' +
+          '<div class="gx2-chart" data-k="' + k + '" role="img" aria-label="' + esc(tabTitle(k)) + '"></div>' +
+          '<div class="gx2-leg">' + chartLeg(k) + '</div>' +
+          '<div class="gx2-wk' + (selWk === null ? ' is-hint' : '') + '" data-wkfor="' + k + '">' + wkLine(k) + '</div>';
+      }
+      function tabTitle(k) { return (CTABS.filter(function (c) { return c.k === k; })[0] || {}).t || ""; }
+      function T() { return M.trends; }
+      function nW() { return M.weekKeys.length; }
+      function opened(i) { var s = T().src[i]; return s.res + s.mgr + s.gard; }
+      function avgOf(a) { var b = a.filter(function (x) { return x !== null && x !== undefined; }); return b.length ? Math.round(10 * sum(b) / b.length) / 10 : null; }
+      function chartSum(k) {
+        var t = T(), n = nW(), i;
+        if (k === "work") {
+          var tot = t.doneR.map(function (r, j) { return r + t.doneF[j]; });
+          var past = tot.slice(0, n - 1);
+          var den = sum(t.adhDen.slice(0, n - 1)), num = sum(t.adhNum.slice(0, n - 1));
+          return '<span><b>' + sum(tot) + '</b>טופלו ב-' + n + ' שבועות</span>' +
+            '<span><b>' + (past.length ? Math.round(sum(past) / past.length) : 0) + '</b>בממוצע לשבוע</span>' +
+            '<span><b>' + (den ? Math.round(100 * num / den) + '%' : '—') + '</b>עמידה בתוכנית</span>';
+        }
+        if (k === "faults") {
+          var o = 0; for (i = 0; i < n; i++) o += opened(i);
+          var c = sum(t.closedF), d = o - c;
+          return '<span><b>' + o + '</b>נפתחו</span><span><b>' + c + '</b>נסגרו</span>' +
+            '<span><b>' + (d > 0 ? '↑ ' + d : d < 0 ? '↓ ' + (-d) : '0') + '</b>' +
+            (d > 0 ? 'התקלות הפתוחות התרבו' : d < 0 ? 'התקלות הפתוחות פחתו' : 'מאוזן') + '</span>';
+        }
+        if (k === "time") {
+          if (!M.logOk) return '<span>היומן לא נטען — אין זמני טיפול</span>';
+          var as = avgOf(t.sched), ac = avgOf(t.close);
+          return '<span><b>' + (as === null ? '—' : as) + '</b>ימים עד שיבוץ</span>' +
+            '<span><b>' + (ac === null ? '—' : ac) + '</b>ימים עד סגירה</span><span>חציון שבועי, תקלות בלבד</span>';
+        }
+        return '<span><b>' + sum(t.dragged) + '</b>גרירות בתקופה</span><span><b>' + M.now.dragged.count + '</b>נגררות עכשיו</span>';
+      }
+      function chartLeg(k) {
+        function sq(c, l, cls) { return '<span><i class="' + (cls || '') + '" style="background:' + c + '"></i>' + l + '</span>'; }
+        if (k === "work") return sq("var(--c-rout2)", "שגרה") + sq("var(--c-fault2)", "תקלות") + sq("transparent", "שגרה שתוכננה", "is-ghost");
+        if (k === "faults") return sq("var(--c-res2)", "נפתחה ע״י תושב") + sq("var(--c-mgr2)", "מנהל") + sq("var(--c-gar2)", "גנן") + sq("#1F2A25", "נסגרו", "is-ln");
+        if (k === "time") return sq("var(--c-fault2)", "עד סגירה", "is-ln") + sq("var(--c-mgr2)", "עד שיבוץ", "is-ln is-dash");
+        return '';
+      }
+      function wkName(i) {
+        var key = M.weekKeys[i];
+        return i === nW() - 1 ? "השבוע · " + weekLabel(key).replace(/^שבוע \d+ · /, "") : weekLabel(key).replace(/^שבוע \d+ · /, "");
+      }
+      function wkLine(k) {
+        if (selWk === null || selWk >= nW()) return 'לחצו על שבוע בגרף כדי לראות מה היה בו';
+        var t = T(), i = selWk, h = '<span class="gx2-wt">' + esc(wkName(i)) + '</span>', ids;
+        if (k === "work") {
+          var pl = t.adhDen[i];
+          h += '<span>טופלו <b>' + (t.doneR[i] + t.doneF[i]) + '</b></span>' +
+            '<span>שגרה <b>' + t.doneR[i] + '</b>' + (pl ? ' מתוך ' + pl + ' מתוכננות' : '') + '</span>' +
+            '<span>תקלות <b>' + t.doneF[i] + '</b></span>';
+          ids = t.ids.done[i];
+        } else if (k === "faults") {
+          var s = t.src[i];
+          h += '<span>נפתחו <b>' + opened(i) + '</b> (' + s.res + ' תושב · ' + s.mgr + ' מנהל · ' + s.gard + ' גנן)</span>' +
+            '<span>נסגרו <b>' + t.closedF[i] + '</b></span>';
+          ids = t.ids.opened[i].concat(t.ids.closedF[i].filter(function (x) { return t.ids.opened[i].indexOf(x) < 0; }));
+        } else if (k === "time") {
+          h += (t.close[i] === null && t.sched[i] === null) ? '<span>אין נתונים לשבוע הזה</span>' :
+            '<span>עד שיבוץ <b>' + (t.sched[i] === null ? '—' : t.sched[i]) + '</b> ימים</span>' +
+            '<span>עד סגירה <b>' + (t.close[i] === null ? '—' : t.close[i]) + '</b> ימים</span>';
+          ids = t.ids.closedF[i];
+        } else {
+          h += '<span>נגררו <b>' + t.dragged[i] + '</b> משימות מהשבוע הזה</span>';
+          ids = t.ids.drag[i];
+        }
+        return h + (ids && ids.length ? '<button type="button" data-wklist="' + k + '">לרשימה ←</button>' : '');
+      }
+      function weekList(k) {
+        var t = T(), i = selWk, ids, title;
+        if (k === "work") { ids = t.ids.done[i]; title = "טופלו"; }
+        else if (k === "faults") { ids = t.ids.opened[i].concat(t.ids.closedF[i].filter(function (x) { return t.ids.opened[i].indexOf(x) < 0; })); title = "תקלות שנפתחו או נסגרו"; }
+        else if (k === "time") { ids = t.ids.closedF[i]; title = "תקלות שנסגרו"; }
+        else { ids = t.ids.drag[i]; title = "נגררו"; }
+        return { title: title + " · " + wkName(i), key: "week", empty: "אין משימות.",
+          sections: [{ rows: (ids || []).map(function (id) {
+            var x = byId[id] || {};
+            return row(id, { meta: srcOf(x) + (x.closure ? " · " + x.closure : x.week ? " · " + weekLabel(x.week) : "") });
+          }) }] };
       }
 
-      /* ================== הגרפים — SVG אחד לכל מגמה ==================
-         viewBox 200×72. עמודה לשבוע, השבוע הנוכחי מימין ובגוון בהיר (הוא
-         עוד לא נגמר) — בדיוק כמו במוקאפ. ציר אחד לכל גרף, מהאפס. */
-      var CW = 200, CH = 72, BASE = 56, TOP = 10;
-      /* 23.9 — הגרף ממלא את הקופסה שלו: גובה ה-viewBox נגזר מהיחס
-         רוחב/גובה של המקום הפנוי (במחשב הקופסאות גבוהות, 2×2). הטקסט
-         נשאר בגודלו כי הרוחב (200) קבוע. */
-      function setCH(h) { CH = Math.max(72, Math.min(190, Math.round(h))); BASE = CH - 16; }
-      function xAt(i, n) {        // i=0 הישן ביותר, n-1 הנוכחי
-        var slot = 188 / n;
-        return 6 + (i + 0.5) * slot;
+      /* ---- מנוע הגרף: SVG בפיקסלים אמיתיים ---- */
+      function sv(n, a, txt) {
+        var e = document.createElementNS(SVGNS, n);
+        for (var k in a) if (a[k] !== undefined) e.setAttribute(k, a[k]);
+        if (txt !== undefined) e.textContent = txt;
+        return e;
       }
-      function axis(n) {
-        return '<line x1="4" y1="' + BASE + '" x2="196" y2="' + BASE + '" stroke="var(--gx-line)"/>' +
-          '<text x="' + xAt(n - 1, n) + '" y="' + (BASE + 11) + '" text-anchor="middle">השבוע</text>' +
-          '<text x="' + xAt(0, n) + '" y="' + (BASE + 11) + '" text-anchor="middle">−' + (n - 1) + '</text>';
+      function niceMax(v) {
+        /* עד 10 — מספר זוגי, כדי שקו האמצע יהיה מספר שלם (לא "2.5"). */
+        if (v <= 10) return Math.max(2, Math.ceil(v / 2) * 2);
+        var p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p;
+        return (m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p;
       }
-      /* תווית קנה המידה בפינה השמאלית העליונה. ⚠️ עברית עם מספר בתוך SVG
-         שהוא LTR נקראת הפוך ("ימים 9 עד") — לכן הטקסט עצמו RTL, והעוגן
-         "end" (שב-RTL הוא הקצה השמאלי) מצמיד אותו ל-x=6. */
-      function scaleLbl(str) {
-        return '<text x="6" y="' + (TOP - 1) + '" class="gx-cv" direction="rtl" text-anchor="end" ' +
-          'style="direction:rtl;unicode-bidi:embed">' + esc(str) + '</text>';
+      function roundTop(x, y, w, h, r) {
+        if (h <= 0) return "";
+        r = Math.min(r, h, w / 2);
+        return "M" + x + "," + (y + h) + "V" + (y + r) + "Q" + x + "," + y + " " + (x + r) + "," + y +
+          "H" + (x + w - r) + "Q" + (x + w) + "," + y + " " + (x + w) + "," + (y + r) + "V" + (y + h) + "Z";
       }
-      function emptyNote(msg) {
-        return '<text x="100" y="30" text-anchor="middle" class="gx-cn">' + esc(msg) + '</text>';
+      function shortDate(key) {
+        var p = String(key || "").split("-");
+        return p.length === 3 ? (+p[2]) + "." + (+p[1]) : "";
       }
-      function wkTitle(i) { return weekLabel(M.weekKeys[i]); }
-      function chart(k, h) {
-        if (h) setCH(h); else setCH(72);
-        var n = M.weekKeys.length, T = M.trends, o = "", slot = 188 / n, bw = Math.min(16, slot * 0.62);
-        if (k === "bars") {
-          var v = T.dragged, mx = Math.max.apply(null, v.concat([1]));
-          v.forEach(function (c, i) {
-            var h = c ? Math.max(2, (BASE - TOP) * c / mx) : 0;
-            o += '<rect x="' + (xAt(i, n) - bw / 2) + '" y="' + (BASE - h) + '" width="' + bw + '" height="' + h +
-              '" rx="2" fill="' + (i === n - 1 ? "var(--gx-bar2)" : "var(--gx-bar)") + '"><title>' +
-              esc(wkTitle(i) + ": " + c) + '</title></rect>';
-          });
-          if (v.some(Boolean)) o += scaleLbl("עד " + mx);
-          else o += emptyNote("אף משימה לא נגררה בתקופה");
-        } else if (k === "lines") {
-          if (!M.logOk && !T.close.some(function (x) { return x !== null; })) {
-            o += emptyNote("היומן לא נטען");
-          } else {
-            var all = T.sched.concat(T.close).filter(function (x) { return x !== null; });
-            var mx2 = Math.max.apply(null, all.concat([1]));
-            var line = function (arr, col, dash, lbl) {
-              var pts = [], s = "";
-              arr.forEach(function (x, i) {
-                if (x === null) return;
-                var y = BASE - (BASE - TOP) * x / mx2;
-                pts.push(xAt(i, n).toFixed(1) + "," + y.toFixed(1));
-                s += '<circle cx="' + xAt(i, n).toFixed(1) + '" cy="' + y.toFixed(1) + '" r="2.2" fill="' + col + '"><title>' +
-                  esc(wkTitle(i) + " · " + lbl + ": " + x + " ימים") + '</title></circle>';
-              });
-              return (pts.length > 1 ? '<polyline fill="none" stroke="' + col + '" stroke-width="2"' +
-                (dash ? ' stroke-dasharray="4 3"' : '') + ' points="' + pts.join(" ") + '"/>' : '') + s;
-            };
-            o += line(T.close, "var(--gx-bar)", false, "עד סגירה") + line(T.sched, "var(--s-wait)", true, "עד שיבוץ");
-            if (all.length) o += scaleLbl("עד " + mx2 + " ימים");
-            else o += emptyNote("עוד אין תקלות ששובצו או נסגרו בתקופה");
-          }
-          o += '<g class="gx-leg"><line x1="146" y1="' + (TOP - 4) + '" x2="156" y2="' + (TOP - 4) + '" stroke="var(--gx-bar)" stroke-width="2"/>' +
-            '<text x="144" y="' + (TOP - 1) + '" text-anchor="end">סגירה</text>' +
-            '<line x1="186" y1="' + (TOP - 4) + '" x2="196" y2="' + (TOP - 4) + '" stroke="var(--s-wait)" stroke-width="2" stroke-dasharray="4 3"/>' +
-            '<text x="184" y="' + (TOP - 1) + '" text-anchor="end">שיבוץ</text></g>';
-        } else if (k === "pct") {
-          var a = T.adherence, pts = [], dots = "", last = null;
-          o += '<line x1="4" y1="' + TOP + '" x2="196" y2="' + TOP + '" stroke="var(--gx-line2)" stroke-dasharray="3 3"/>' +
-            '<text x="6" y="' + (TOP - 2) + '" class="gx-cv">100%</text>';
-          a.forEach(function (x, i) {
-            if (x === null) return;
-            var y = BASE - (BASE - TOP) * x / 100;
-            /* השבוע הנוכחי — נקודה בהירה בלבד, בלי קו: האחוז שלו חלקי. */
-            if (i < n - 1) pts.push(xAt(i, n).toFixed(1) + "," + y.toFixed(1));
-            dots += '<circle cx="' + xAt(i, n).toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (i === n - 1 ? 3 : 2.2) +
-              '" fill="' + (i === n - 1 ? "var(--gx-bar2)" : "var(--gx-bar)") + '"><title>' +
-              esc(wkTitle(i) + ": " + x + "% (" + T.adhDen[i] + " מופעים)") + '</title></circle>';
-            /* השבוע הנוכחי עוד לא נגמר — הנקודה שלו בהירה, והתווית
-               היא של השבוע האחרון שנסגר, לא של אחוז חלקי. */
-            if (i < n - 1) last = { x: xAt(i, n), y: y, v: x };
-          });
-          if (pts.length > 1) o += '<polyline fill="none" stroke="var(--gx-bar)" stroke-width="2" points="' + pts.join(" ") + '"/>';
-          o += dots;
-          if (last) o += '<text x="' + Math.min(188, last.x) + '" y="' + Math.max(TOP + 9, last.y - 5) +
-            '" text-anchor="middle" class="gx-cb">' + last.v + '%</text>';
-          else if (!a.some(function (x) { return x !== null; })) o += emptyNote("עוד אין שגרה מתוכננת בתקופה");
-        } else if (k === "src") {
-          var S = T.src, mx3 = 1;
-          S.forEach(function (s) { mx3 = Math.max(mx3, s.res + s.mgr + s.gard); });
-          S.forEach(function (s, i) {
-            var y = BASE;
-            [["res", "var(--gx-src1)", "תושב"], ["mgr", "var(--gx-src2)", "מנהל"], ["gard", "var(--gx-src3)", "גנן"]].forEach(function (c) {
-              var h = (BASE - TOP) * s[c[0]] / mx3;
-              if (!h) return;
-              y -= h;
-              o += '<rect x="' + (xAt(i, n) - bw / 2) + '" y="' + y + '" width="' + bw + '" height="' + h + '" fill="' + c[1] +
-                '"' + (i === n - 1 ? ' opacity=".7"' : '') + '><title>' + esc(wkTitle(i) + " · " + c[2] + ": " + s[c[0]]) + '</title></rect>';
-            });
-          });
-          o += '<g class="gx-leg">' +
-            '<rect x="186" y="' + (TOP - 8) + '" width="8" height="6" fill="var(--gx-src1)"/><text x="183" y="' + (TOP - 2) + '" text-anchor="end">תושב</text>' +
-            '<rect x="152" y="' + (TOP - 8) + '" width="8" height="6" fill="var(--gx-src2)"/><text x="149" y="' + (TOP - 2) + '" text-anchor="end">מנהל</text>' +
-            '<rect x="120" y="' + (TOP - 8) + '" width="8" height="6" fill="var(--gx-src3)"/><text x="117" y="' + (TOP - 2) + '" text-anchor="end">גנן</text></g>';
-          if (!S.some(function (s) { return s.res + s.mgr + s.gard; })) o += emptyNote("לא נפתחו תקלות בתקופה");
+      function frame(host, max, unit) {
+        var n = nW(), w = host.clientWidth || 300;
+        var h = host.closest(".gx2-all") ? 200 : (w < 420 ? 210 : 250);
+        var padT = 18, padB = 24, padL = 30, padR = 4;
+        var svg = sv("svg", { width: w, height: h, viewBox: "0 0 " + w + " " + h, "aria-hidden": "true" });
+        var slot = (w - padL - padR) / n, base = h - padB, top = padT;
+        function xAt(i) { return padL + (i + 0.5) * slot; }
+        if (selWk !== null && selWk < n) {
+          svg.appendChild(sv("rect", { x: xAt(selWk) - slot / 2 + 2, y: top - 12, width: Math.max(4, slot - 4),
+            height: base - top + 30, rx: 10, "class": "gx2-selband" }));
         }
-        return '<svg class="gx-chart" viewBox="0 0 ' + CW + ' ' + CH + '" role="img" aria-label="' +
-          esc((TR.filter(function (x) { return x.k === k; })[0] || {}).t) + '">' + axis(n) + o + '</svg>';
+        [0, max / 2, max].forEach(function (v) {
+          var y = base - (base - top) * v / max;
+          svg.appendChild(sv("line", { x1: padL - 4, x2: w - padR, y1: y, y2: y, "class": v ? "gx2-grid" : "gx2-base" }));
+          svg.appendChild(sv("text", { x: 2, y: y + 4, "text-anchor": "start" }, (v % 1 ? v.toFixed(1) : v) + (unit || "")));
+        });
+        var every = slot < 26 ? 3 : slot < 38 ? 2 : 1;
+        M.weekKeys.forEach(function (key, i) {
+          if (i !== n - 1 && (n - 1 - i) % every) return;
+          svg.appendChild(sv("text", { x: xAt(i), y: h - 6, "text-anchor": "middle",
+            "class": (i === n - 1 || i === selWk) ? "is-cur" : undefined }, i === n - 1 ? "השבוע" : shortDate(key)));
+        });
+        host.innerHTML = "";
+        host.appendChild(svg);
+        return { svg: svg, h: h, base: base, top: top, slot: slot, xAt: xAt,
+                 y: function (v) { return base - (base - top) * v / max; },
+                 hy: function (v) { return (base - top) * v / max; } };
+      }
+      function stack(f, i, series, bw) {
+        var x = f.xAt(i) - bw / 2, yAcc = f.base, cur = i === nW() - 1;
+        var vis = series.filter(function (s) { return s.v[i]; });
+        vis.forEach(function (s, si) {
+          var h = f.hy(s.v[i]), gap = si ? 2 : 0, y = yAcc - h;
+          var el = (si === vis.length - 1)
+            ? sv("path", { d: roundTop(x, y, bw, h - gap, 4) })
+            : sv("rect", { x: x, y: y, width: bw, height: Math.max(0, h - gap) });
+          el.setAttribute("fill", s.c);
+          if (cur) el.setAttribute("opacity", ".5");
+          f.svg.appendChild(el);
+          yAcc = y;
+        });
+        return yAcc;
+      }
+      function line(f, v, c, dash) {
+        var pts = [];
+        v.forEach(function (x, i) { if (x !== null && x !== undefined) pts.push(f.xAt(i) + "," + f.y(x)); });
+        if (pts.length > 1) f.svg.appendChild(sv("polyline", { points: pts.join(" "), fill: "none", stroke: c, "stroke-width": 2,
+          "stroke-linejoin": "round", "stroke-linecap": "round", "stroke-dasharray": dash ? "5 4" : undefined }));
+        v.forEach(function (x, i) {
+          if (x === null || x === undefined) return;
+          f.svg.appendChild(sv("circle", { cx: f.xAt(i), cy: f.y(x), r: 4, fill: c, stroke: "#fff", "stroke-width": 2 }));
+        });
+      }
+      function valLabel(f, i, y, txt) {
+        f.svg.appendChild(sv("text", { x: f.xAt(i), y: y - 6, "text-anchor": "middle", "class": "is-val" }, String(txt)));
+      }
+      function empty(f, msg) {
+        f.svg.appendChild(sv("text", { x: "50%", y: (f.top + f.base) / 2, "text-anchor": "middle", "class": "is-empty" }, msg));
+      }
+      function hits(f, tipOf) {
+        M.weekKeys.forEach(function (key, i) {
+          var r = sv("rect", { x: f.xAt(i) - f.slot / 2, y: 0, width: f.slot, height: f.h, fill: "transparent",
+            "class": "gx2-hit", "data-wk": i });
+          r.appendChild(sv("title", {}, wkName(i) + (tipOf ? " · " + tipOf(i) : "")));
+          f.svg.appendChild(r);
+        });
+      }
+      function paintChart(host, k) {
+        var t = T(), n = nW(), f, bw, mx;
+        if (k === "work") {
+          var tot = t.doneR.map(function (r, i) { return r + t.doneF[i]; });
+          mx = niceMax(Math.max.apply(null, tot.map(function (v, i) { return Math.max(v, t.adhDen[i] + t.doneF[i]); }).concat([1])) * 1.12);
+          f = frame(host, mx); bw = Math.min(26, f.slot * 0.56);
+          for (var i = 0; i < n; i++) {
+            var gh = f.hy(t.adhDen[i]);
+            if (gh > 0) f.svg.appendChild(sv("rect", { x: f.xAt(i) - bw / 2 - 3, y: f.base - gh, width: bw + 6, height: gh,
+              rx: 5, "class": "gx2-ghost" }));
+            var topY = stack(f, i, [{ v: t.doneR, c: "var(--c-rout2)" }, { v: t.doneF, c: "var(--c-fault2)" }], bw);
+            if (tot[i]) valLabel(f, i, Math.min(topY, f.base - gh), tot[i]);
+          }
+          if (!sum(tot) && !sum(t.adhDen)) empty(f, "עוד לא נסגרו משימות בתקופה");
+          hits(f, function (i) { return "שגרה " + t.doneR[i] + " · תקלות " + t.doneF[i]; });
+        } else if (k === "faults") {
+          var op = M.weekKeys.map(function (x, i) { return opened(i); });
+          mx = niceMax(Math.max.apply(null, op.concat(t.closedF).concat([1])) * 1.15);
+          f = frame(host, mx); bw = Math.min(24, f.slot * 0.5);
+          for (var j = 0; j < n; j++) {
+            stack(f, j, [{ v: t.src.map(function (s) { return s.res; }), c: "var(--c-res2)" },
+                         { v: t.src.map(function (s) { return s.mgr; }), c: "var(--c-mgr2)" },
+                         { v: t.src.map(function (s) { return s.gard; }), c: "var(--c-gar2)" }], bw);
+          }
+          line(f, t.closedF, "#1F2A25");
+          if (!sum(op) && !sum(t.closedF)) empty(f, "לא נפתחו ולא נסגרו תקלות בתקופה");
+          hits(f, function (i) { return "נפתחו " + op[i] + " · נסגרו " + t.closedF[i]; });
+        } else if (k === "time") {
+          var all = t.close.concat(t.sched).filter(function (x) { return x !== null; });
+          f = frame(host, niceMax(Math.max.apply(null, all.concat([1])) * 1.1));
+          if (!M.logOk && !all.length) empty(f, "היומן לא נטען");
+          else if (!all.length) empty(f, "עוד אין תקלות ששובצו או נסגרו בתקופה");
+          line(f, t.close, "var(--c-fault2)");
+          line(f, t.sched, "var(--c-mgr2)", true);
+          hits(f, function (i) { return "שיבוץ " + (t.sched[i] === null ? "—" : t.sched[i]) + " · סגירה " + (t.close[i] === null ? "—" : t.close[i]) + " ימים"; });
+        } else {
+          f = frame(host, niceMax(Math.max.apply(null, t.dragged.concat([1])) * 1.2));
+          bw = Math.min(26, f.slot * 0.56);
+          for (var q = 0; q < n; q++) {
+            var ty = stack(f, q, [{ v: t.dragged, c: "var(--c-one2)" }], bw);
+            if (t.dragged[q]) valLabel(f, q, ty, t.dragged[q]);
+          }
+          if (!sum(t.dragged)) empty(f, "אף משימה לא נגררה בתקופה");
+          hits(f, function (i) { return "נגררו " + t.dragged[i]; });
+        }
+      }
+      /* בחירת שבוע: מסמנת אותו **בכל הגרפים** ומעדכנת את שורות הפירוט, בלי ציור מלא. */
+      function pickWeek(i) {
+        selWk = (selWk === i) ? null : i;
+        keepState();
+        root.querySelectorAll(".gx2-wk").forEach(function (el) {
+          el.classList.toggle("is-hint", selWk === null);
+          el.innerHTML = wkLine(el.dataset.wkfor);
+        });
+        drawCharts();
+      }
+      function setTab(k) {
+        chartTab = k; keepState();
+        root.querySelectorAll("[data-ctab]").forEach(function (b) {
+          var on = b.dataset.ctab === k;
+          b.classList.toggle("on", on); b.setAttribute("aria-selected", on);
+        });
+        var one = root.querySelector(".gx2-one");
+        if (one) one.innerHTML = chartBlock(k);
+        drawCharts();
+      }
+      function setMv(v) {
+        mv = v; keepState();
+        var g = root.querySelector(".gx2");
+        if (!g) return;
+        g.dataset.mv = v;
+        g.querySelectorAll(".gx2-mnav button").forEach(function (b) {
+          var on = b.dataset.mv === v;
+          b.classList.toggle("on", on);
+          if (on) b.setAttribute("aria-current", "true"); else b.removeAttribute("aria-current");
+        });
+        hidePop();
+        drawCharts();
       }
 
       /* ============================ הרשימות ============================
@@ -710,6 +899,17 @@
             sections: [{ rows: M.now.open.ids.map(function (id) {
               var t = byId[id] || {};
               return row(id, { meta: (t.week ? weekLabel(t.week) : "ממתינה להחלטה") + " · נפתחה " + ago(ms(t.createdAt)) });
+            }) }] };
+        }
+        if (key === "openR") {
+          /* GP-6.10:S1 — שגרה פתוחה: השבוע + מה שנשאר משבועות קודמים. */
+          var OR = M.now.openRoutine;
+          return { title: "שגרה פתוחה", key: key, sub: "משובצת לשבוע הזה או לשבוע שכבר עבר, ועוד לא נסגרה.",
+            empty: "אין שגרה פתוחה.",
+            big: { n: OR.count, label: OR.thisWeek + " השבוע · " + OR.late + " מאחרות" },
+            sections: [{ rows: OR.ids.map(function (id) {
+              var t = byId[id] || {};
+              return row(id, { meta: srcOf(t) + " · " + weekLabel(t.week) });
             }) }] };
         }
         if (key === "age") {
@@ -951,17 +1151,19 @@
             openList(lists("cat", name));
             return;
           }
-          if ((b = e.target.closest("[data-tab]")) && b.closest(".gx-tabs")) {
-            trendTab = +b.dataset.tab;
-            keepState();   // GXB1 (גל 9, 1.10.26)
-            var tr = root.querySelector(".gx-trends");
-            tr.dataset.tab = trendTab;
-            tr.querySelectorAll(".gx-tabs button").forEach(function (x, i) {
-              x.classList.toggle("on", i === trendTab);
-              x.setAttribute("aria-selected", i === trendTab);
-            });
+          /* GP-6.10:S2 — מעברים: לשונית גרף, חלק במובייל, אריח→גרף, שבוע→רשימה. */
+          if ((b = e.target.closest("[data-ctab]"))) { setTab(b.dataset.ctab); return; }
+          if ((b = e.target.closest(".gx2-mnav [data-mv]"))) { setMv(b.dataset.mv); return; }
+          if ((b = e.target.closest("[data-go]"))) {
+            hidePeek();
+            if (mv !== "trend") setMv("trend");
+            setTab(b.dataset.go);
+            var tc = root.querySelector(".gx2-trend");
+            try { if (tc) tc.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (x) {}
             return;
           }
+          if ((b = e.target.closest(".gx2-hit"))) { pickWeek(+b.getAttribute("data-wk")); return; }
+          if ((b = e.target.closest("[data-wklist]"))) { if (selWk !== null) openList(weekList(b.dataset.wklist)); return; }
           if ((b = e.target.closest("[data-open]"))) { hidePop(); openCard(b.dataset.open); return; }
           if ((b = e.target.closest("[data-list]"))) {
             openList(lists(b.dataset.list, b.dataset.i ? +b.dataset.i : undefined));

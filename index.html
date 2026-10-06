@@ -54,9 +54,9 @@
   <!-- "הפרטים שלי" (2026-08-28) — מחלקות pf- + כרטיס בקשות השינוי במסך התושבים -->
   <link rel="stylesheet" href="css/profile.css?v=0a6f125973" />
   <!-- "מראה שיכון" (2026-09-07) — מודול הגינון. כל המחלקות בתחילית gd- -->
-  <link rel="stylesheet" href="css/garden.css?v=0ae26936da" />
+  <link rel="stylesheet" href="css/garden.css?v=b8e50d8740" />
   <!-- מסך "נתוני גינון" (23.9, סבב עיצוב 4 — זכוכית). אחרי garden.css: נשען על --c-* שלו. -->
-  <link rel="stylesheet" href="css/gardenStats.css?v=9283136e86" />
+  <link rel="stylesheet" href="css/gardenStats.css?v=3bd08c7406" />
   <link rel="stylesheet" href="css/gardenLawn.css?v=4626362f94" />
   <!-- 🗓 GW-23.9:I1-css — סידור שבועי. אחרי garden.css: נשען על --c-* שלו. -->
   <link rel="stylesheet" href="css/gardenSchedule.css?v=f0d56e7ded" />
@@ -184,7 +184,7 @@
   <script defer src="js/ui/photos.js?v=8cdac86c85"></script>
   <!-- טופס משימה אחד — משרת גם את מסך המשימות וגם את תוכנית העבודה.
        חייב להיטען אחרי dialog.js (mountSheet) ואחרי photos.js (toUpload). -->
-  <script defer src="js/ui/gardenForm.js?v=ee73f284e3"></script>
+  <script defer src="js/ui/gardenForm.js?v=ad261fa16f"></script>
   <!-- שלדי טעינה (2026-08-25) — נטען לפני המסכים, כולם קוראים ל-CBA.skel -->
   <script defer src="js/ui/skeleton.js?v=f4934f5355"></script>
   <!-- חיפוש גלובלי (2026-08-25) — נשען על CBA.navTargets/CBA.data בזמן ריצה בלבד -->
@@ -193,7 +193,7 @@
        22 קבצי מסכי ניהול (~1.1MB: תקציב/הוצאות/תכנון, מתקנים ושירותים, תושבים
        ומערכת, ניהול הגינון) **אינם** כאן יותר. תושב לא מוריד אותם; מנהל מקבל
        אותם בניווט הראשון למסך כזה. סדר הקבצים בתוך קבוצה נשמר במניפסט. -->
-  <script defer src="js/lazyManifest.js?v=ddbb959ff8"></script>
+  <script defer src="js/lazyManifest.js?v=a9f87571fb"></script>
   <script defer src="js/lazy.js?v=011e0ffe5f"></script>
   <script defer src="js/data/mock.js?v=fd54e34660"></script>
   <!-- כללי החזרתיות ומנוע האופק — אותו קובץ נטען גם ב-Apps Script (GardenRules.gs) -->
@@ -238,10 +238,10 @@
   <!-- 🗓 GW-23.9:I2-slots -->
   <!-- מסך "נתוני גינון" (22.9) — המנוע: חישוב טהור מהמשימות ומהיומן.
        אחרי המילון (הוא קורא gardenLang.drag/catOf), לפני המסך. -->
-  <script defer src="js/data/gardenStatsCalc.js?v=82babfdbde"></script>
+  <script defer src="js/data/gardenStatsCalc.js?v=9924b87287"></script>
   <script defer src="js/data/gardenAssets.js?v=3c5bf933a6"></script>
   <script defer src="js/ui/lawnRefine.js?v=d5ec72b978"></script>
-  <script defer src="js/screens/resident.js?v=76cca0a17e"></script>
+  <script defer src="js/screens/resident.js?v=325821a903"></script>
   <!-- ועד השיכון v2 (25.9) — אחרי resident.js ו-residents.js: דורס את
        CBA.screens.resCommittee שלו. ⚠️ מ-1.10.26 (RSB10) ה-committeeAdmin הישן נמחק מ-residents.js —
        הסרת השורה כבר לא מחזירה אותו (רק את resCommittee הישן). -->
@@ -255,7 +255,7 @@
   <script defer src="js/screens/myProfile.js?v=5371fc4b54"></script>
   <!-- "מראה שיכון" (2026-09-07) — נטען **אחרי** resident.js: הוא נשען על
        CBA.map שמוגדר שם. ר' ההערה בראש הרכיב. -->
-  <script defer src="js/screens/resGarden.js?v=9df4169e05"></script>
+  <script defer src="js/screens/resGarden.js?v=44cd559692"></script>
   <!-- 🗓 GW-23.9:I3-screen — לפני gardenTasks.js, שקורא לו. -->
   <!-- 🗓 GW-23.9:I4-ai — סידור חכם (Gemini דרך Apps Script) -->
   <!-- סיור היכרות (2026-08-28) — אחרי home.js (הכרטיס "יש חדש" קורא ל-CBA.tour)

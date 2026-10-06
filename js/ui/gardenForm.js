@@ -440,6 +440,7 @@ CBA.gardenForm = (function () {
         var mapEl = q("#gf-map");
         if (!mapEl || !CBA.map) return;
         CBA.map.render(mapEl, {
+          binKinds: ["garden"],                                 // GP-6.10:M1
           head: false, search: false, legend: false, popup: false, pin: true,
           pinAt: st.x !== null ? { x: st.x, y: st.y } : null,
           onPin: function (n, area) {

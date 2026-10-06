@@ -80,11 +80,11 @@ ok('🔑 המונה סופר רק דיווחים פתוחים — לא את הס
    !!chip && /2/.test(chip.querySelector('b').textContent), chip && chip.textContent);
 chip.dispatchEvent(new window.MouseEvent('click', { bubbles:true }));
 const f = [].map.call(host.querySelectorAll('.gt-row'), r => r.dataset.id);
-ok('🔴 מציג את שלושת הדיווחים ורק אותם', f.slice().sort().join(',') === '1,3,6', f.join(','));
+ok('🔴 GP-6.10 (דיווח 40): רק התקלות הפתוחות — הסגורה (#6) עוברת ל"סגורות"', f.slice().sort().join(',') === '1,3', f.join(','));
 ok('⚠️ ואף משימת שגרה אינה נכנסת', f.indexOf('2') === -1 && f.indexOf('4') === -1, f.join(','));
-ok('🔑 בסדר: ממתינה · משובצת · טופלה', f.join(',') === '1,3,6', f.join(','));
+ok('🔑 בסדר: ממתינה · משובצת', f.join(',') === '1,3', f.join(','));
 const txt = host.textContent;
-ok('ושלוש הכותרות נכתבות', /ממתינות לשיבוץ/.test(txt) && /משובצות/.test(txt) && /טופלו/.test(txt));
+ok('שתי הכותרות נכתבות, ואין מסלול "טופלו"', /ממתינות לשיבוץ/.test(txt) && /משובצות/.test(txt) && !/טופלו ·/.test(txt));
 
 section('5. חזרה ל"פתוחות" — אין מצב תקוע');
 host.querySelector('[data-f="open"]').dispatchEvent(new window.MouseEvent('click', { bubbles:true }));

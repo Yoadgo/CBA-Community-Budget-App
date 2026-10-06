@@ -48,7 +48,7 @@ ok('CSS: הילדים לא מוצגים בדרגה הקטנה', /\.map-world\.fa
 
 console.log('4. מונה תקלות (#35)');
 const GT = R('js/screens/gardenTasks.js');
-ok('סופר רק פתוחות', /if \(t\.kind === GK_REPORT && !t\.closure\) c\.faults\+\+;/.test(GT));
+ok('סופר רק פתוחות (GP-6.10: כל תקלה — isFault)', /if \(isFault\(t\) && !t\.closure\) c\.faults\+\+;/.test(GT));
 
 console.log('5. חתימה במכון (#38)');
 const GY = R('js/screens/resGym.js'), GC = R('css/gym.css');

@@ -385,6 +385,17 @@
   font-size: calc(12.5px * var(--fs, 1)); font-weight: 700; color: var(--text, #374151); }
 .gt-grp em { font-style: normal; font-weight: 600; color: var(--text-soft, #6B7280); font-size: calc(11.5px * var(--fs, 1)); }
 .gt-grp hr { flex: 1; border: 0; height: 1px; background: rgba(17,24,39,.08); margin: 0; }
+/* 🌱 GP-6.10:F2 — "סגורות" לפי שבוע הסגירה: כל שבוע מתקפל, ובכותרת כמה נסגרו. */
+.gt-wkfold > summary { list-style: none; cursor: pointer; flex-wrap: wrap; row-gap: 4px; }
+.gt-wkfold > summary hr { min-width: 16px; }
+.gt-wkfold > summary em { white-space: nowrap; }
+.gt-wkfold > summary::-webkit-details-marker { display: none; }
+.gt-wkfold > summary::after { content: "▾"; font-size: calc(11px * var(--fs, 1)); color: var(--text-soft, #6B7280);
+  transition: transform .15s ease; }
+.gt-wkfold:not([open]) > summary::after { transform: rotate(90deg); }
+.gt-wkn { font-weight: 700; font-size: calc(11.5px * var(--fs, 1)); color: var(--text, #374151); background: #fff;
+  border: 1px solid rgba(17,24,39,.09); border-radius: 99px; padding: 1px 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gt-wkfold > .gd-reps { margin-bottom: 4px; }
 
 /* שני מסלולים (2026-09-09, גל 2). שתי רמות כותרת ולא שלוש:
    מסלול ("תקלות שדווחו" / "עבודת השבוע") ובתוכו מקום (האזור).

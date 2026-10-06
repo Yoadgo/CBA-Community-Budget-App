@@ -134,6 +134,7 @@ CBA.gardenPins = (function () {
     o = o || {};
     var list = [], groups = [], lastScale = 0, lastLevel = "", raf = 0, selId = null;
     var opts = { head: false, search: false, legend: false, hint: false, popup: false,
+      binKinds: ["garden"],                                   // GP-6.10:M1 — רק מתחמי גזם
       onMarker: function (id, m) {
         if (m.cluster) { if (o.onCluster) o.onCluster(m.pins); return; }
         if (o.onPin) o.onPin(m.pin, elOf(m));

@@ -409,3 +409,158 @@ body:has(#app-main .cnp2--bar) .gx-grid { --gx-adm-bar: 88px; }
 @media (prefers-reduced-motion: reduce) {
   .gx-tile, .gx-ap, .gx-sw::after, .gx-full__in { transition: none; }
 }
+
+/* ============================================================================
+ *  🌱 GP-6.10:S2 — סידור חדש של "נתוני גינון" (סקיצה "פאצ' גינון" גרסה 3)
+ *  שלוש שורות: עכשיו (4 אריחים) → [גרף גדול | מפה] → פירוט.
+ *  🔑 לפי רוחב המכל (container query), לא המסך: מתחת ל-760px — סרגל דביק
+ *     "עכשיו · מגמות · מפה" וחלק אחד בכל פעם; ב"מגמות" כל הגרפים ברצף.
+ *  פלטה (עברה את בודק הצבעים, כולל עיוורון צבעים): שגרה/תקלות ירוק/כחול,
+ *  מי פתח כחול/ענבר/סגול, "נסגרו" כהה.
+ * ========================================================================== */
+.gx-vars {
+  --c-rout2: #2F8A5B; --c-fault2: #4E7CCB; --c-res2: #4E7CCB; --c-mgr2: #C48327; --c-gar2: #8E6BBF; --c-one2: #4F8770;
+  --gx2-card: rgba(255,255,255,.80);
+  --gx2-shadow: 0 1px 2px rgba(16,24,40,.05), 0 10px 28px -12px rgba(16,40,30,.18);
+}
+.gx.gx-vars { container-type: inline-size; container-name: gx; }
+.gx2 { display: flex; flex-direction: column; gap: 14px; }
+.gx2-mnav { display: none; }
+
+/* ---- שורה 1: אריחים ---- */
+.gx2-kpis { display: grid; grid-template-columns: 1.15fr 1.35fr 1fr 1.25fr; gap: 12px; }
+.gx2-kpis.n3 { grid-template-columns: 1.4fr 1fr 1.2fr; }
+.gx-vars .gx2-t { font: inherit; color: var(--gx-ink); text-align: start; border: 0; cursor: pointer; min-width: 0;
+  background: var(--gx2-card); border-radius: 20px; padding: 12px 14px; box-shadow: var(--gx2-shadow);
+  display: flex; flex-direction: column; align-items: stretch; transition: transform .15s ease; }
+.gx-vars button.gx2-t:hover { transform: translateY(-1px); }
+.gx-vars button.gx2-t:active { transform: scale(.98); }
+.gx2-k { font-size: calc(12px * var(--fs, 1)); font-weight: 600; color: var(--gx-soft); }
+.gx2-n { display: block; font-size: calc(30px * var(--fs, 1)); font-weight: 700; line-height: 1; margin-top: 8px;
+  letter-spacing: -.02em; color: var(--gx-ink); }
+.gx2-s { display: block; font-size: calc(12px * var(--fs, 1)); color: var(--gx-soft); margin-top: 6px; line-height: 1.35; }
+.gx2-s b { color: var(--gx-ink); }
+.gx2-go { margin-top: auto; padding-top: 8px; font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: var(--gx-acc); }
+.gx-vars .gx2-t.is-dark { background: #24463A; color: #fff; }
+.gx2-t.is-dark .gx2-n { color: #fff; }
+.gx2-t.is-dark .gx2-k, .gx2-t.is-dark .gx2-s { color: rgba(255,255,255,.78); }
+.gx2-t.is-dark .gx2-s b, .gx2-t.is-dark .gx2-go { color: #fff; }
+.gx2-t.is-dark .gx2-b { display: block; margin-top: 6px; }
+.gx-vars .gx2-t.is-dark.is-calm { background: var(--gx2-card); color: var(--gx-ink); }
+.gx2-t.is-calm .gx2-n { color: var(--gx-faint); }
+.gx2-t.is-calm .gx2-k, .gx2-t.is-calm .gx2-s { color: var(--gx-soft); }
+.gx2-open { cursor: default; }
+.gx2-split { display: flex; gap: 14px; margin-top: 4px; }
+.gx2-split button { flex: 1; min-width: 0; font: inherit; text-align: start; border: 0; background: none; padding: 4px 6px;
+  margin: 0 -6px; border-radius: 12px; cursor: pointer; color: inherit; }
+.gx2-split button:hover { background: rgba(31,42,37,.04); }
+.gx2-split .gx2-n { font-size: calc(26px * var(--fs, 1)); margin-top: 4px; }
+.gx2-sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-inline-end: 5px; }
+.gx2-sw.is-f { background: var(--c-fault2); } .gx2-sw.is-r { background: var(--c-rout2); }
+.gx2-delta { display: inline-block; font-size: calc(11.5px * var(--fs, 1)); font-weight: 700; border-radius: 6px; padding: 1px 6px;
+  background: #E7F3EC; color: #24694A; margin-inline-start: 6px; vertical-align: 4px; letter-spacing: 0; }
+.gx2-delta.is-flat { background: rgba(31,42,37,.06); color: var(--gx-soft); }
+.gx2-spark { display: block; width: 100%; height: 30px; margin-top: 6px; }
+
+/* ---- שורה 2: גרף + מפה ---- */
+.gx2-main { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.gx2-card { background: var(--gx2-card); border-radius: 22px; padding: 14px; min-width: 0; display: flex; flex-direction: column;
+  box-shadow: var(--gx2-shadow); }
+.gx2-ch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gx2-ch h4 { margin: 0; font-size: calc(16px * var(--fs, 1)); font-weight: 700; }
+.gx2-ch small { font-size: calc(12px * var(--fs, 1)); color: var(--gx-soft); }
+.gx2-ch .gx-seg { margin-inline-start: auto; background: rgba(31,42,37,.05); }
+.gx2-tabs { display: flex; gap: 4px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+.gx2-tabs::-webkit-scrollbar { display: none; }
+.gx2-tabs button { flex: none; font: inherit; border: 1px solid rgba(17,24,39,.09); border-radius: 99px; background: rgba(255,255,255,.72);
+  padding: 6px 12px; font-size: calc(12.5px * var(--fs, 1)); color: #4B5563; cursor: pointer; white-space: nowrap; }
+.gx2-tabs button.on { background: var(--action, #111827); border-color: var(--action, #111827); color: #fff; }
+.gx2-sum { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: calc(12.5px * var(--fs, 1)); color: var(--gx-soft); }
+.gx2-sum b { color: var(--gx-ink); font-size: calc(15px * var(--fs, 1)); margin-inline-end: 3px; }
+.gx2-chart { margin-top: 8px; min-height: 120px; }
+.gx2-chart svg { display: block; width: 100%; overflow: visible; direction: ltr; }   /* x/y בפיקסלים משמאל; עברית בתוך <text> עדיין נכונה */
+.gx2-detail { align-items: start; }
+.gx2-chart text { font-family: inherit; fill: var(--gx-soft); font-size: 11px; }
+.gx2-chart text.is-cur { fill: var(--gx-ink); font-weight: 700; }
+.gx2-chart text.is-val { fill: var(--gx-ink); font-weight: 700; font-size: 11.5px; }
+.gx2-chart text.is-empty { font-size: 12.5px; }
+.gx2-grid { stroke: rgba(31,42,37,.07); stroke-width: 1; }
+.gx2-base { stroke: rgba(31,42,37,.2); stroke-width: 1; }
+.gx2-ghost { fill: none; stroke: #9AA59F; stroke-width: 1.3; stroke-dasharray: 3 3; }
+.gx2-selband { fill: rgba(31,42,37,.06); }
+.gx2-hit { cursor: pointer; }
+.gx2-leg { display: flex; gap: 12px; flex-wrap: wrap; font-size: calc(11.5px * var(--fs, 1)); color: var(--gx-soft); margin-top: 6px; }
+.gx2-leg:empty { display: none; }
+.gx2-leg span { display: inline-flex; align-items: center; gap: 5px; }
+.gx2-leg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.gx2-leg i.is-ln { height: 3px; width: 14px; border-radius: 2px; }
+.gx2-leg i.is-dash { background: repeating-linear-gradient(90deg, var(--c-mgr2) 0 4px, transparent 4px 7px) !important; }
+.gx2-leg i.is-ghost { border: 1.5px dashed #9AA59F; }
+.gx2-wk { margin-top: 10px; border-radius: 14px; background: rgba(31,42,37,.04); padding: 9px 12px; display: flex; gap: 10px;
+  align-items: center; flex-wrap: wrap; font-size: calc(12.5px * var(--fs, 1)); color: var(--gx-soft); min-height: 42px; }
+.gx2-wk.is-hint { justify-content: center; }
+.gx2-wk b { color: var(--gx-ink); }
+.gx2-wt { font-weight: 700; color: var(--gx-ink); }
+.gx2-wk button { margin-inline-start: auto; font: inherit; border: 0; background: var(--action, #111827); color: #fff; border-radius: 99px;
+  padding: 5px 11px; font-size: calc(12px * var(--fs, 1)); font-weight: 700; cursor: pointer; }
+.gx2-all { display: none; }
+.gx2-mc h5 { margin: 0; font-size: calc(14.5px * var(--fs, 1)); font-weight: 700; }
+.gx2-mc + .gx2-mc { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--gx-line); }
+.gx2-where .gx2-cbar { display: flex; gap: 2px; height: 30px; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+.gx2-where .gx-mapbox { flex: 1; min-height: 340px; margin-top: 10px; border-radius: 16px; }
+
+/* ---- שורה 3: פירוט ---- */
+.gx2-detail { display: grid; grid-template-columns: 1fr 1.2fr 1.4fr; gap: 14px; }
+.gx2-detail > div { min-width: 0; display: flex; }
+.gx2-detail .gx-box { flex: 1; background: var(--gx2-card); box-shadow: var(--gx2-shadow); border-radius: 20px; padding: 12px 14px;
+  -webkit-backdrop-filter: none; backdrop-filter: none; }
+.gx2-detail .gx-box.lgx::before, .gx2-detail .gx-box.lgx::after { display: none; }
+.gx2-q3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.gx2-q3 button { font: inherit; color: inherit; border: 0; background: rgba(31,42,37,.04); border-radius: 14px; padding: 9px 10px;
+  text-align: start; cursor: pointer; min-width: 0; }
+.gx2-q3 button:hover { background: rgba(31,42,37,.07); }
+.gx2-q3 .gx2-n { font-size: calc(22px * var(--fs, 1)); margin: 0; line-height: 1.1; }
+.gx2-q3 span:not(.gx2-n) { font-size: calc(11.5px * var(--fs, 1)); color: var(--gx-soft); display: block; line-height: 1.3; margin-top: 2px; }
+.gx2-skel .gx2-skmap { min-height: 0; }
+
+/* ---- ביניים: גרף מעל המפה ---- */
+@container gx (max-width: 1099px) {
+  .gx2-kpis { grid-template-columns: 1fr 1fr; }
+  .gx2-kpis.n3 { grid-template-columns: 1fr 1fr; }
+  .gx2-main { grid-template-columns: 1fr; }
+  .gx2-where .gx-mapbox { min-height: 420px; }
+  .gx2-detail { grid-template-columns: 1fr 1fr; }
+  .gx2-detail > div:last-child { grid-column: 1 / -1; }
+}
+
+/* ---- טלפון: סרגל "עכשיו · מגמות · מפה", חלק אחד בכל פעם ---- */
+@container gx (max-width: 760px) {
+  .gx2 { gap: 10px; }
+  .gx2-mnav { display: flex; position: sticky; top: calc(var(--header-h, 56px) + 6px); z-index: 14; gap: 2px; padding: 3px;
+    border-radius: 99px; background: rgba(255,255,255,.86); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    box-shadow: 0 6px 18px -10px rgba(16,40,30,.35); }
+  .gx2-mnav button { flex: 1; font: inherit; border: 0; background: none; border-radius: 99px; padding: 7px 0;
+    font-size: calc(13px * var(--fs, 1)); font-weight: 700; color: var(--gx-soft); cursor: pointer; }
+  .gx2-mnav button.on { background: var(--gx-dark); color: #fff; }
+  .gx2-mnav em { font-style: normal; font-size: calc(11px * var(--fs, 1)); background: #C0655C; color: #fff; border-radius: 99px;
+    padding: 0 6px; margin-inline-start: 4px; }
+  .gx2-kpis, .gx2-kpis.n3 { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .gx-vars .gx2-t.is-dark { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 12px; }
+  .gx2-t.is-dark .gx2-n { margin-top: 0; }
+  .gx2-t.is-dark .gx2-b { margin-top: 0; flex: 1; min-width: 0; }
+  .gx2-t.is-dark .gx2-go { margin: 0; padding: 6px 12px; background: #fff; color: #24463A; border-radius: 99px; white-space: nowrap; }
+  .gx2-open { grid-column: 1 / -1; }
+  .gx2-n { font-size: calc(26px * var(--fs, 1)); }
+  .gx2-detail { grid-template-columns: 1fr; gap: 10px; }
+  .gx2-tabs, .gx2-one { display: none; }
+  .gx2-all { display: block; margin-top: 10px; }
+  .gx2[data-mv="now"] [data-sec]:not([data-sec="now"]),
+  .gx2[data-mv="trend"] [data-sec]:not([data-sec="trend"]),
+  .gx2[data-mv="map"] [data-sec]:not([data-sec="map"]) { display: none !important; }
+  /* המפה מקבלת את כל הגובה — ובלי מסך ביניים: הזזה ונעצים ישר כאן. */
+  .gx2[data-mv="map"] .gx-mapbox { height: calc(100svh - var(--header-h, 56px) - var(--botnav-h, 80px) - 190px); min-height: 380px; flex: none; }
+  .gx2[data-mv="map"] .gx-map-tools { display: flex; }
+  .gx2[data-mv="map"] .gx-mapbox .map-toolbar { display: flex; }
+  .gx2[data-mv="map"] .gx-map-cover { display: none; }
+  .gx2[data-mv="map"] .gx-pop:not([hidden]) { display: block; }
+}

@@ -501,7 +501,7 @@
              משובצים וסגורים, מכל השבועות — כדי לענות "מה קרה עם התקלה
              שדיווחתי". אבל **המונה** שעל הכפתור סופר רק את מה שעוד פתוח
              (דיווח 35, 6.10.26: מונה שכולל סגורות נראה כמו עומס שלא קיים). */
-          if (t.kind === GK_REPORT && !t.closure) c.faults++;
+          if (isFault(t) && !t.closure) c.faults++;   // GP-6.10:F1
           if (t.closure) c.closed++; else if (inOpenView(t)) c.open++;
           /* פס ההתקדמות נשאר של **השבוע הנוכחי** — הוא עונה על "איך אנחנו
              עומדים השבוע", ולא על "כמה משימות יש בעולם". נמדד בסגורות ולא
@@ -538,7 +538,10 @@
         return rowsAll.filter(function (t) {
           if (justActed[t.id]) return true;      // ר' ההערה ליד justActed
           if (filter === "mine") return isMine(t);
-          if (filter === "faults") return t.kind === GK_REPORT;
+          /* 🌱 GP-6.10:F1 (דיווח 40, הכרעת יועד) — "תקלות" = רק פתוחות
+             (לשיבוץ + משובצות). תקלה שנסגרה עוברת ל"סגורות". תקלה = של
+             תושב, מנהל או גנן (isFault), כמו בכל שאר המסך. */
+          if (filter === "faults") return isFault(t) && !t.closure;
           if (filter === "closed") return !!t.closure;
           return !t.closure;
         });
@@ -609,8 +612,8 @@
         } else if (!list.length) {
           body = CBA.ui.emptyState(
             filter === "faults"
-              ? { title: "אין תקלות מתושבים",
-                  sub: "כשתושב ידווח על משהו — הדיווח יופיע כאן, ויישאר כאן גם אחרי שיטופל." }
+              ? { title: "אין תקלות פתוחות",
+                  sub: "תקלה חדשה תופיע כאן עד שתיסגר. תקלות שנסגרו נמצאות ב\"סגורות\"." }
             : filter === "mine"
               ? { title: "אין מה לטפל",
                   sub: isManager
@@ -643,15 +646,13 @@
         } else if (filter === "faults") {
           /* כל תקלות התושבים, לפי מצב ולא לפי שבוע. ר' faultsBody(). */
           body = faultsBody(list);
+        } else if (filter === "closed") {
+          /* GP-6.10:F2 — "סגורות" לפי שבוע הסגירה. ר' closedBody(). */
+          body = closedBody(list);
         } else {
-          /* 22.9 (הכרעת יועד, ממצא E) — מופעי שגרה שבוטלו אינם "עבודה
-             שנעשתה"; הם יושבים במגירה סגורה בתחתית "סגורות", לא ברשימה. */
-          var cancelled = [];
+          /* "לביצוע" של הגנן — קיבוץ לפי שבוע התכנון, כמו קודם. */
           var groups = [], seen = {};
           list.forEach(function (t) {
-            if (filter === "closed" && t.kind === "שגרה" && t.closure && t.closure !== "בוצע") {
-              return cancelled.push(t);
-            }
             var g = grp(t);
             if (!seen[g]) { seen[g] = []; groups.push(g); }
             seen[g].push(t);
@@ -662,13 +663,6 @@
               ' <em>· ' + (n === 1 ? "משימה אחת" : n + " משימות") + '</em><hr></div>' +
               '<div class="gd-reps">' + seen[g].map(card).join("") + '</div>';
           }).join("");
-          if (cancelled.length) {
-            cancelled.sort(function (a, b) { return String(b.week || "").localeCompare(String(a.week || "")); });
-            body += '<details class="gt-drawer">' +
-              '<summary>מופעי שגרה שבוטלו <em>· ' + cancelled.length + '</em></summary>' +
-              '<div class="gd-reps">' + cancelled.map(card).join("") + '</div>' +
-            '</details>';
-          }
         }
 
         /* אין כותרת מסך (2026-09-08). הסמליל והכותרת "משימות השבוע" החזיקו
@@ -1003,11 +997,77 @@
           }).join("");
         }
 
-        html += lane("טופלו", handled.length) +
-          (handled.length
-            ? '<div class="gd-reps">' +
-                handled.map(function (t) { return card(t); }).join("") + '</div>'
-            : '<div class="gt-none">עוד לא נסגרה אף תקלה.</div>');
+        /* GP-6.10:F1 — אין יותר מסלול "טופלו" כאן: סגורות עוברות ל"סגורות". */
+        html += '<div class="gt-none">תקלות שנסגרו נמצאות ב"סגורות", לפי שבוע.</div>';
+        return html;
+      }
+
+      /* ==========================================================================
+       *  🌱 GP-6.10:F2 — "סגורות" לפי **שבוע הסגירה** (בקשת יועד, 6.10.26)
+       * --------------------------------------------------------------------------
+       *  עד היום הקיבוץ היה לפי שבוע התכנון (t.week), ולכן משימה שתוכננה
+       *  לפני חודש ונסגרה אתמול ישבה ב"שבועות שעברו" יחד עם כל השאר.
+       *  עכשיו: שבוע אחד = מה שנסגר בו בפועל, ובכותרת כמה נסגרו — ובנפרד
+       *  שגרה (כולל יזומה) ותקלות. שני השבועות האחרונים פתוחים, השאר
+       *  מקופלים. מופעי שגרה שבוטלו — במגירה בתחתית, כמו קודם (ממצא E).
+       *  אין תאריך סגירה תקין (נתון ישן) ⇒ שבוע התכנון, ואם גם הוא חסר —
+       *  קבוצה "ללא תאריך" בסוף.
+       * ======================================================================== */
+      function closedAtMs(t) {
+        var v = t && t.approvedAt;
+        if (!v) return NaN;
+        if (typeof v.toDate === "function") v = v.toDate();
+        else if (typeof v === "object" && v.seconds != null) v = new Date(v.seconds * 1000);
+        var ms = new Date(v).getTime();
+        return isNaN(ms) ? NaN : ms;
+      }
+      function closedWeekKey(t) {
+        var ms = closedAtMs(t);
+        if (isNaN(ms)) return t.week || "";
+        var d = new Date(ms); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - d.getDay());
+        return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
+          String(d.getDate()).padStart(2, "0");
+      }
+      /* "27.9–3.10" — קצר, כדי שהכותרת והמספרים ייכנסו בשורה אחת גם בטלפון. */
+      function shortRange(k) {
+        var a = parseKey(k); if (!a) return k;
+        var b = new Date(a.getTime()); b.setDate(b.getDate() + 6);
+        /* ⚠️ טווח מספרים בתוך RTL מתהפך ("10.10–4.10") — מבודדים אותו כ-LTR. */
+        return "\u2066" + a.getDate() + "." + (a.getMonth() + 1) + "–" + b.getDate() + "." + (b.getMonth() + 1) + "\u2069";
+      }
+      function closedBody(list) {
+        var cancelled = [], weeks = [], seenW = {};
+        list.forEach(function (t) {
+          if (t.kind === "שגרה" && t.closure && t.closure !== "בוצע") return cancelled.push(t);
+          var k = closedWeekKey(t);
+          if (!seenW[k]) { seenW[k] = []; weeks.push(k); }
+          seenW[k].push(t);
+        });
+        weeks.sort(function (a, b) {          // החדש למעלה; "ללא תאריך" בסוף
+          if (!a) return 1; if (!b) return -1;
+          return b.localeCompare(a);
+        });
+        var now = todayKey();
+        var html = weeks.map(function (k, i) {
+          var items = seenW[k].slice().sort(function (a, b) {
+            return (closedAtMs(b) || 0) - (closedAtMs(a) || 0);
+          });
+          var nF = items.filter(isFault).length, nR = items.length - nF;
+          var title = !k ? "ללא תאריך סגירה" : (k === now ? "השבוע · " : "") + shortRange(k);
+          return '<details class="gt-wkfold"' + (i < 2 ? ' open' : '') + '>' +
+            '<summary class="gt-grp gt-grp--lane">' + esc(title) +
+              ' <b class="gt-wkn">' + items.length + ' נסגרו</b>' +
+              '<em>' + nR + ' שגרה · ' + (nF === 1 ? 'תקלה אחת' : nF + ' תקלות') + '</em><hr></summary>' +
+            '<div class="gd-reps">' + items.map(function (t) { return card(t); }).join("") + '</div>' +
+          '</details>';
+        }).join("");
+        if (cancelled.length) {
+          cancelled.sort(function (a, b) { return String(b.week || "").localeCompare(String(a.week || "")); });
+          html += '<details class="gt-drawer">' +
+            '<summary>מופעי שגרה שבוטלו <em>· ' + cancelled.length + '</em></summary>' +
+            '<div class="gd-reps">' + cancelled.map(function (t) { return card(t); }).join("") + '</div>' +
+          '</details>';
+        }
         return html;
       }
 
@@ -2476,6 +2536,7 @@
            פותחת את showOnMap() כתצוגת מסך-מלא עם כפתור חזרה (ר' data-m="fullmap"). */
         if (hasMap && CBA.map) {
           var mapApi = CBA.map.render(wrap.querySelector("#gd-det-map"), {
+            binKinds: ["garden"],                               // GP-6.10:M1
             head: false, search: false, legend: false, hint: false, popup: false,
             pinAt: { x: t.x, y: t.y }
           });
@@ -2629,6 +2690,7 @@
         wrap.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) close(); });
         if (CBA.map) {
           var api = CBA.map.render(wrap.querySelector("#gt-map"), {
+            binKinds: ["garden"],                               // GP-6.10:M1
             head: false, search: false, legend: false, hint: false, popup: false,
             pinAt: { x: t.x, y: t.y }
           });

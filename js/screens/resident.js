@@ -2486,6 +2486,11 @@ CBA.screens = CBA.screens || {};
     render: function (container, opts) {
       opts = opts || {};
       function optOn(v) { return v !== false; }
+      /* 🌱 GP-6.10:M1 (בקשת יועד) — מפות הגינון מציגות רק מתחמי פינוי גזם.
+         opts.binKinds = רשימת סוגי מיכלים להצגה (למשל ['garden']). בלי
+         האפשרות — כל הפחים, כמו במפת השיכון הראשית. */
+      var binKinds = Array.isArray(opts.binKinds) ? opts.binKinds : null;
+      function binHidden(o) { return !!(binKinds && o.t === 'bin' && binKinds.indexOf(o.k || 'trash') === -1); }
       var oHead = optOn(opts.head), oSearch = optOn(opts.search),
           oLegend = optOn(opts.legend), oHint = optOn(opts.hint);
       container.innerHTML =
@@ -2670,6 +2675,7 @@ CBA.screens = CBA.screens || {};
 
         (GEO.objects || []).forEach(function (o) {
           if (o.t === 'house') return;                   /* בתים הם DIV, ר' למטה */
+          if (binHidden(o)) return;                      /* GP-6.10:M1 */
           if (o.s === 'poly') {
             if (o.t === 'green') green += E('path', { d: poly(o.p, true), 'class': 'm2-green' });
             else if (o.t === 'parking' || o.t === 'plaza') {
@@ -2815,6 +2821,7 @@ CBA.screens = CBA.screens || {};
          ולא נדחסים, ממש כמו תוויות מרחב/רחוב שקיימות כבר. */
       (GEO.objects || []).forEach(function (o) {
         if (o.t !== 'bin' && o.t !== 'shelter' && o.t !== 'bus' && o.t !== 'ev') return;
+        if (binHidden(o)) return;                        /* GP-6.10:M1 */
         var txt = o.t === 'bin' ? (BIN_KINDS[o.k] || BIN_KINDS.trash).he : MK_LABEL[o.t];
         if (!txt) return;
         var c = center(o);

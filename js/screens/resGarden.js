@@ -481,6 +481,7 @@
               cls: "gd-mypin" + (r.stage === "הושלם" ? " is-done" : "") };
           });
           CBA.map.render(mh, { head: false, search: false, legend: false, hint: false, popup: false, markers: pins,
+            binKinds: ["garden"],                               // GP-6.10:M1
             onMarker: function (id) {
               view = "list"; draw();
               var a = listEl.querySelector('[data-rep-id="' + String(id).replace(/"/g, "") + '"]');
@@ -1152,6 +1153,7 @@
         // ---- מפה במצב נעיצה ----
         var locEl = container.querySelector("#gd-loc");
         var formMapApi = CBA.map.render(container.querySelector("#gd-map"), {
+          binKinds: ["garden"],                                 // GP-6.10:M1
           head: false, search: false, legend: false, popup: false, pin: true,
           /* הפרמטר השני הוא אזור הגינון שהנעיצה נפלה בו. הוא נשלח עם הדיווח
              כדי שהתקלה תיפתח עם אזור במקום שמישהו יבחר אותו אחר כך — ואם אין
