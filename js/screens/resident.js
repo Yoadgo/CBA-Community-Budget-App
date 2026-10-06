@@ -954,6 +954,7 @@ CBA.screens = CBA.screens || {};
 
   /* ---- הוראות ותקנון שימוש במועדון (טקסט קבוע, נמסר ע"י יועד 2026-08-05) ---- */
   var PAYBOX_URL = "https://links.payboxapp.com/e5vEFrqvd5b";
+  var rulesDocIcon = svg('<path d="M6 2h8l5 5v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M14 2v5h5"/><path d="M8.5 12.5h7M8.5 16h4.5"/>');
   var payboxIcon = svg('<path d="M4 7h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M4 7l1.6-3.2A2 2 0 0 1 7.4 2.8h9.2a2 2 0 0 1 1.8 1.1L20 7"/><path d="M9 12h6"/>');
   /* (2026-08-24) היה כאן קבוע שנבנה בזמן טעינת הקובץ. הפך לפונקציה כדי
      שקוד הרשת האלחוטית ייקרא מההגדרות בזמן ההצגה — הוא כבר לא כתוב כאן.
@@ -1187,64 +1188,31 @@ CBA.screens = CBA.screens || {};
       var fam = u.family || u.name || "תושב";
       var house = u.house ? ("בית " + u.house) : "";
 
-      // פריסה (2026-08-06, סבב שני לבקשת יועד): דסקטופ = 2 טורים (ימין ~65%
-      // לוח/שריון, שמאל ~35% תשלום+תקנון+השריונים שלי, ר' res-reserve-layout
-      // ב-resident.css, מוצב לפי grid-area בלי תלות בסדר ה-DOM). במובייל אין
-      // כותרת עמוד נפרדת (הועברה לתוך כרטיס הלוח, ר' renderBooking) והסדר הוא
-      // "השריונים שלי" -> תקנון -> לוח/שריון; קובית התשלום העצמאית (.club-pay)
-      // מוסתרת במובייל לגמרי — תג PayBox קטן משובץ בכותרת כרטיס התקנון במקומה
-      // (ר' club-rules__pay-chip למטה + CSS @media(min-width:1024px) שמסתיר
-      // אותו שוב בדסקטופ, כי שם כבר יש את הקובייה המלאה).
+      // פריסה (v2, 6.10.26): פס עליון (תשלום + תקנון) לכל הרוחב, ומתחתיו
+      // דסקטופ = לוח/שריון (~65%) | השריונים שלי; בטלפון: פס → לוח → השריונים שלי.
+      // ר' grid-template-areas ב-resident2.css (8ב).
       /* גל 4 — C1: כותרת המסך בחופה (עד היום ישבה בתוך כרטיס הלוח, ובטלפון
          באמצע העמוד). המספרים מתמלאים כש"השריונים שלי" נטען (renderMine). */
       var rvHead = cnp({ size: "mid", dom: "home", ico: ICO_KEY, title: "מועדון משפחות",
         sub: "בחרו תאריך וזמן פנוי — הבקשה תישלח לאישור הוועד",
         stat: { id: "rv-cnp-n", n: "—", label: "שריונים קרובים" },
-        minis: [{ id: "rv-cnp-p", k: "ממתין לאישור", b: "—" }],
-        /* v2 (6.10.26, יועד: "צריך להוסיף בדף הראשי כפתור תשלום + כניסה לתקנון")
-           — שני כפתורים בחופה, בשפת שאר המסכים (cnp2-tools / cnp2-btn). */
-        tools: '<a class="cnp2-btn rv-pay" href="' + PAYBOX_URL + '" target="_blank" rel="noopener">' + payboxIcon +
-               '<span>תשלום ב-PayBox · 200₪</span></a>' +
-               '<button type="button" class="cnp2-btn" id="rv-rules-btn">תקנון המועדון</button>' });
+        minis: [{ id: "rv-cnp-p", k: "ממתין לאישור", b: "—" }] });
       container.innerHTML = (rvHead ? rvHead + '<div class="cnp2-body cnp2-body--wide rv-v2">' : "") +
         '<div class="res-reserve-layout" id="rv-layout">' +
-          '<div class="rs-mine-sec" id="rv-mine"></div>' +
-          '<div class="card club-rules" id="rc-rules">' +
-            '<div class="club-rules__toggle" id="rc-rules-toggle" role="button" tabindex="0" aria-expanded="false">' +
-              '<span class="club-rules__toggle-txt"><b>הוראות ותקנון המועדון</b><small>לחצו לפתיחה</small></span>' +
-              '<a class="club-rules__pay-chip" href="' + PAYBOX_URL + '" target="_blank" rel="noopener">' +
-                payboxIcon + '<span>200₪</span>' +
-              '</a>' +
-              chevLeftIcon +
-            '</div>' +
-            '<div class="club-rules__top5" id="rc-rules-top5">' + CLUB_RULES_TOP5_HTML + '</div>' +
-            '<div class="club-rules__body" id="rc-rules-body" hidden>' + clubRulesHTML() + '</div>' +
+          /* v2 (6.10.26, יועד: "התקנון והפייבוקס ממש בעמוד הראשי של המועדון") —
+             פס עליון עם שני כפתורים גדולים, ראשון במסך. כרטיס התקנון המתקפל
+             שהיה למטה, תג ה-PayBox שבו וקובית התשלום הגדולה — הוסרו (כפולים). */
+          '<div class="card rv-quick" id="rv-quick">' +
+            '<a class="rv-quick__btn rv-quick__btn--pay" href="' + PAYBOX_URL + '" target="_blank" rel="noopener">' + payboxIcon +
+              '<span><b><i class="rv-quick__long">תשלום ב-</i>PayBox · 200₪</b><small>אחרי שהוועד מאשר את השריון</small></span></a>' +
+            '<button type="button" class="rv-quick__btn" id="rv-rules-btn">' + rulesDocIcon +
+              '<span><b>תקנון המועדון</b><small>מה מותר, ומה עושים בסיום</small></span></button>' +
           '</div>' +
-          /* v2 (6.10.26) — קובית התשלום הגדולה הוסרה: התשלום עבר לחופה (rv-pay). */
+          '<div class="rs-mine-sec" id="rv-mine"></div>' +
           '<div id="rv-booking"></div>' +
         '</div>' + (rvHead ? '</div>' : '');
 
-      var rulesCard = container.querySelector("#rc-rules");
-      var rulesToggle = container.querySelector("#rc-rules-toggle");
-      var rulesTop5 = container.querySelector("#rc-rules-top5");
-      var rulesBody = container.querySelector("#rc-rules-body");
-      function setRulesOpen(open) {
-        rulesTop5.hidden = open;
-        rulesBody.hidden = !open;
-        rulesCard.classList.toggle("is-open", open);
-        rulesToggle.classList.toggle("is-open", open);
-        rulesToggle.setAttribute("aria-expanded", open ? "true" : "false");
-        rulesToggle.querySelector("small").textContent = open ? "לחצו לסגירה" : "לחצו לפתיחה";
-      }
-      rulesToggle.addEventListener("click", function (e) {
-        if (e.target.closest(".club-rules__pay-chip")) return;   // קליק על תג PayBox — לא מכווצים/פותחים
-        setRulesOpen(rulesBody.hidden);
-      });
-      rulesToggle.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setRulesOpen(rulesBody.hidden); }
-      });
-      setRulesOpen(false);   // סגור כברירת מחדל תמיד (גם בדסקטופ) — מציגים רק את 5 הדגשים
-      /* v2 — "תקנון המועדון" בחופה: התקנון המלא בחלון, בלי לגלול לתחתית המסך */
+      /* v2 — "תקנון המועדון" בפס העליון: התקנון המלא בחלון */
       var rulesBtn = container.querySelector("#rv-rules-btn");
       if (rulesBtn) rulesBtn.addEventListener("click", function () { openClubRules(); });
 

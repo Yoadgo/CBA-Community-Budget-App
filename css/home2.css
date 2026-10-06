@@ -95,16 +95,6 @@ button.hm2-tile:hover { box-shadow: 0 0 0 1px var(--hair), var(--sh-card); }
 .hm2-tile--err { cursor: default; }
 /* GA1 (גל 12) — מנוי שנגמר בפחות מ-14 יום */
 .hm2-tile--warn { background: var(--warn-bg); }
-/* מועדון משפחות (6.10.26) — אריח עם שני כפתורים: PayBox + תקנון */
-div.hm2-tile--club { cursor: pointer; }
-div.hm2-tile--club:hover { outline: 1px solid var(--hair); }
-.hm2-club-acts { display: flex; flex-wrap: wrap; gap: 6px; }
-.hm2-club-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 12px; border-radius: var(--r-pill);
-  border: 1px solid var(--hair); background: var(--paper); color: var(--ink); font: inherit; font-size: var(--t-12);
-  font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap; }
-.hm2-club-btn:hover { border-color: var(--ink-3); }
-.hm2-club-btn svg { width: 14px; height: 14px; }
-.hm2-club-btn--pay { background: var(--dom-ev-bg); color: var(--dom-ev); border-color: var(--dom-ev-bg); }
 .hm2-tile--warn .hm2-tile__n, .hm2-tile--warn .hm2-tile__s { color: var(--warn-ink); }
 /* אריח "השבוע" */
 .hm2-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }

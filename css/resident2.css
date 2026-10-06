@@ -43,11 +43,33 @@ body:has(.rs-v2) { --cnp-w: 680px; }
 .rv-v2 .club-pay { display: none !important; }            /* התשלום עבר לחופה */
 .rv-v2 .rs-mine-sec { background: none; border: 0; box-shadow:none; padding: 0; }
 @media (min-width: 1024px) {
-  .rv-v2 .res-reserve-layout { grid-template-areas: "main mine" "main rules"; grid-template-rows: auto 1fr; }
-  .rv-v2 .club-rules__pay-chip { display: inline-flex; }
+  .rv-v2 .res-reserve-layout { grid-template-areas: "quick quick" "main mine"; grid-template-rows: auto 1fr; }
+  .rv-v2 #rv-quick { grid-area: quick; }
 }
-.cnp2-btn.rv-pay { text-decoration: none; }
-.cnp2-btn.rv-pay svg { width: 15px; height: 15px; }
+/* פס עליון: תשלום ב-PayBox + תקנון (6.10.26) */
+.rv-quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; }
+.rv-quick__btn { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 14px; border-radius: var(--r-in);
+  border: 1px solid var(--hair); background: var(--paper); color: var(--ink); font: inherit; text-align: start;
+  text-decoration: none; cursor: pointer; min-width: 0; }
+.rv-quick__btn:hover { border-color: var(--ink-3); }
+.rv-quick__btn svg { width: 22px; height: 22px; flex: none; }
+.rv-quick__btn span { display: flex; flex-direction: column; min-width: 0; }
+.rv-quick__btn b { font-size: var(--t-15); font-weight: 800; }
+.rv-quick__btn small { font-size: var(--t-12); color: var(--ink-2); font-weight: 600; }
+.rv-quick__btn--pay { background: var(--dom-ev-bg); border-color: var(--dom-ev-bg); color: var(--dom-ev); }
+.rv-quick__btn--pay small { color: var(--dom-ev); }
+.rv-quick__long { font-style: normal; }
+@media (max-width: 1023px) {
+  .rv-v2 .res-reserve-layout > #rv-quick { order: -2; }
+}
+@media (max-width: 480px) {
+  .rv-quick { gap: 8px; padding: 8px; }
+  .rv-quick__btn { gap: 8px; padding: 10px; min-height: 56px; }
+  .rv-quick__btn svg { width: 18px; height: 18px; }
+  .rv-quick__btn b { font-size: var(--t-13); }
+  .rv-quick__btn small { display: none; }
+  .rv-quick__long { display: none; }
+}
 .rv-rules-dlg { margin-top: 0; padding-top: 0; border-top: 0; max-height: 60vh; overflow-y: auto; text-align: start; }
 
 /* מקרא + משבצות לפי סוג */

@@ -313,7 +313,11 @@ section('10. המסך');
 ok('הטופס: "מה האירוע?" בלי "(לא חובה)"', /מה האירוע\?/.test(RJ) && !/מטרת השריון \(לא חובה\)/.test(RJ));
 ok('בדיקת חובה לפני חלון התקנון', /if \(!editor\.check\(\)\) return;\s*openRulesConfirm/.test(RJ));
 ok('פרטי: "רק את השעות ואת" + שם המשפחה', /רק את השעות ואת " \+ famLabel/.test(RJ));
-ok('תשלום ותקנון בחופה', /id="rv-rules-btn"/.test(RJ) && /class="cnp2-btn rv-pay"/.test(RJ));
+ok('תשלום ותקנון בפס העליון של מסך המועדון (6.10: "ממש בעמוד הראשי של המועדון")',
+   /id="rv-quick"/.test(RJ) && /id="rv-rules-btn"/.test(RJ) && /rv-quick__btn--pay" href="' \+ PAYBOX_URL/.test(RJ));
+ok('🔴 והפס ראשון במסך — לפני "השריונים שלי" והלוח', RJ.indexOf('id="rv-quick"') < RJ.indexOf('id="rv-mine"') &&
+   RJ.indexOf('id="rv-quick"') < RJ.indexOf('<div id="rv-booking">'));
+ok('כרטיס התקנון המתקפל הישן הוסר (כפול)', RJ.indexOf('id="rc-rules"') === -1);
 ok('קובית התשלום הגדולה הוסרה', RJ.indexOf('id="rc-pay"') === -1);
 ok('כפתורי עדכון וביטול בכרטיס השריון', /data-edit="/.test(RJ) && /data-cancel="/.test(RJ));
 ok('🔴 "השריונים שלי" לא מאחורי כפתור שפותח חלון', RJ.indexOf('rc-mine-compact"') === -1);
