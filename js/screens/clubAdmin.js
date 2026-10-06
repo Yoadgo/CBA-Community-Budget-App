@@ -129,6 +129,9 @@ CBA.screens.clubAdmin = {
       if (caBar) b.style.opacity = dis ? ".5" : "";
     }
 
+    var caById = {};
+    /* שריון מועדון v2 (6.10.26) — תג סוג (פרטי/שיכון/בסיס) ליד כל שריון */
+    function caKind(r) { return (CBA.clubUI && CBA.clubUI.kindChip) ? " " + CBA.clubUI.kindChip(r.kind) : ""; }
     function load() {
       pendingList.innerHTML = clubLoadingHTML();
       allList.innerHTML = clubLoadingHTML();
@@ -145,6 +148,8 @@ CBA.screens.clubAdmin = {
           return;
         }
         var all = res.reservations || [];
+        caById = {};   // v2 (6.10.26) — לעדכון/ביטול לפי מזהה
+        all.forEach(function (r) { caById[r.id] = r; });
         var pending = all.filter(function (r) { return r.status === "pending"; });
         // מעדכן ישירות את הספירה הגלובלית (פעמון + תגית על הטאב) — בלי קריאת רשת
         // נוספת, כי הרשימה כבר בידינו מהקריאה הזו.
@@ -202,7 +207,7 @@ CBA.screens.clubAdmin = {
                   : '<input type="checkbox" class="club-row__cb" data-ca-pick="' + CBA.esc(r.id) + '" aria-label="בחירה לאישור מרובה">') +
           '<div class="club-row__main">' +
             '<div class="club-row__title">' + CBA.esc(r.family || "תושב") +
-              (r.email ? ' <span class="club-row__email">· ' + CBA.esc(r.email) + '</span>' : "") + '</div>' +
+              (r.email ? ' <span class="club-row__email">· ' + CBA.esc(r.email) + '</span>' : "") + caKind(r) + '</div>' +
             '<div class="club-row__meta">' + CBA.esc(clubDateLabel(r.start)) + ' · ' + clubTimeRange(r.start, r.end) +
               (r.note ? " · " + CBA.esc(r.note) : "") + '</div>' +
           '</div>' +
@@ -226,11 +231,17 @@ CBA.screens.clubAdmin = {
       return (
         '<div class="club-row">' +
           '<div class="club-row__main">' +
-            '<div class="club-row__title">' + CBA.esc(r.family || "תושב") + '</div>' +
+            '<div class="club-row__title">' + CBA.esc(r.family || "תושב") + caKind(r) + '</div>' +
             '<div class="club-row__meta">' + CBA.esc(clubDateLabel(r.start)) + ' · ' + clubTimeRange(r.start, r.end) +
               (r.note ? " · " + CBA.esc(r.note) : "") + '</div>' +
           '</div>' +
-          '<div class="club-row__actions">' + badge + '</div>' +
+          /* v2 (6.10.26) — "עדכון" (סוג + מהות) ו"ביטול שריון" גם לשריון שכבר אושר */
+          '<div class="club-row__actions">' + badge +
+            (clubRowBroken(r) || new Date(r.end).getTime() <= Date.now() ? "" :
+              '<button type="button" class="btn-ghost club-row__btn" data-ca-edit="' + CBA.esc(r.id) + '">עדכון</button>' +
+              (r.status === "pending" ? "" :
+                '<button type="button" class="btn-reject" data-ca-cancel="' + CBA.esc(r.id) + '">ביטול שריון</button>')) +
+          '</div>' +
         '</div>'
       );
     }
@@ -303,6 +314,43 @@ CBA.screens.clubAdmin = {
             if (res && res.ok) { if (!CBA.onScreen || CBA.onScreen("clubAdmin")) load(); CBA.ui.toast("השריון אושר"); }
             else { btn.disabled = false; btn.textContent = "אשר"; CBA.ui.alert((res && res.error) || "האישור נכשל, נסו שוב."); }
           });
+        });
+      });
+      /* v2 (6.10.26) — עדכון סוג + מהות (אותו חלון כמו אצל התושב, CBA.clubUI) */
+      container.querySelectorAll("[data-ca-edit]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var r = caById[btn.dataset.caEdit];
+          if (!r || !(CBA.clubUI && CBA.clubUI.openKindEdit)) return;
+          var famLbl = /^משפחת/.test(r.family || "") ? r.family : "משפחת " + (r.family || "");
+          CBA.clubUI.openKindEdit(r, famLbl, function () { if (!CBA.onScreen || CBA.onScreen("clubAdmin")) load(); });
+        });
+      });
+      /* v2 (6.10.26) — ביטול שריון מאושר: סיבה (לא חובה) נכנסת למייל לתושב */
+      container.querySelectorAll("[data-ca-cancel]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var r = caById[btn.dataset.caCancel];
+          if (!r) return;
+          if (CBA.holdRefresh) CBA.holdRefresh("clubAction", true);
+          CBA.ui.dialog({
+            title: "לבטל שריון מאושר?",
+            message: (r.family || "תושב") + " · " + clubDateLabel(r.start) + ", " + clubTimeRange(r.start, r.end) +
+              ".\nהאירוע יימחק מיומן גוגל, והמשפחה תקבל מייל והתראה.",
+            html: '<label class="rs-klbl" for="ca-reason">סיבה (לא חובה, תיכלל במייל)</label>' +
+                  '<textarea class="field-input" id="ca-reason" rows="2" maxlength="200" placeholder="למשל: עבודות חשמל במועדון"></textarea>',
+            okText: "בטל שריון", cancelText: "חזרה", danger: true,
+            onOk: function (wrap, close) {
+              var reason = (wrap.querySelector("#ca-reason") || {}).value || "";
+              close(true);
+              btn.disabled = true; btn.textContent = "מבטל…";
+              if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubAdminAction");
+              CBA.data.adminCancelClubReservation({ id: r.id, reason: reason.trim() }, function (res) {
+                if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubAdminAction");
+                if (CBA.holdRefresh) CBA.holdRefresh("clubAction", false);
+                if (res && res.ok) { if (!CBA.onScreen || CBA.onScreen("clubAdmin")) load(); CBA.ui.toast("השריון בוטל והמשפחה עודכנה"); }
+                else { btn.disabled = false; btn.textContent = "ביטול שריון"; CBA.ui.alert((res && res.error) || "הביטול נכשל, נסו שוב."); }
+              });
+            }
+          }).then(function (ok) { if (!ok && CBA.holdRefresh) CBA.holdRefresh("clubAction", false); });
         });
       });
       container.querySelectorAll("[data-reject]").forEach(function (btn) {

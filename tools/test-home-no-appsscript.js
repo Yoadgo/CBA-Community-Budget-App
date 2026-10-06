@@ -3,8 +3,9 @@
    הרצה:  node tools/test-home-no-appsscript.js
 
    🔴🔴 מה המארז שומר עליו:
-     1. **אימייל והערה לא נוסעים.** מסמך שריון נושא שלושה שדות בלבד.
-        ההערה היא טקסט חופשי שהתושב כתב על עצמו, ואינה ברשימת ההיתר.
+     1. **אימייל לא נוסע.** מסמך שריון נושא רשימה סגורה של שדות.
+        (6.10.26, שריון מועדון v2: נוספו id/kind/note — ההערה היא הטקסט של
+        המשפחה עצמה והמסמך נקרא רק ע"י אותה משפחה. ר' test-club-v2-2026-10-06.js)
      2. **שם משפחה כפול אינו מזהה.** שתי משפחות "כהן" הן שני משקי בית;
         שיוך לפי שם היה דליפה, לא אי-דיוק.
      3. **ביטול חייב לרוקן את המסמך** — אחרת "ביטלתי וזה עדיין שם".
@@ -73,6 +74,9 @@ function serverBox(opts) {
     grab(/function tourSeenColFor_\(cols, slot\) \{[\s\S]*?\n\}/),
     grab(/function residentIdentityIndex_\(ss\) \{[\s\S]*?\n\}/),
     grab(/var FS_CLUB_RESV = 'clubReservations';/),
+    /* 6.10.26 — שריון מועדון v2: הפריט נושא סוג (clubKindOf_) */
+    grab(/var CLUB_KINDS = [^\n]*\n/),
+    grab(/function clubKindOf_\(ev\) \{[\s\S]*?\n\}/),
     grab(/function clubResvItem_\(ev\) \{[\s\S]*?\n\}/),
     grab(/function clubResvFamilyOf_\(idx, ev\) \{[\s\S]*?\n\}/),
     grab(/function clubResvGroup_\(idx, evs, out\) \{[\s\S]*?\n\}/),
@@ -136,16 +140,19 @@ section('1. 🔴🔴 מפת הזהות — ושם משפחה כפול שאינו
      Object.keys(s.box.residentIdentityIndex_({ getSheetByName: () => null }).byEmail).length === 0);
 }
 
-section('2. 🔴 מסמך השריון — שלושה שדות, ולא יותר');
+section('2. 🔴 מסמך השריון — רשימה סגורה של שדות (v2, 6.10.26: +id/kind/note)');
 {
   const s = serverBox();
   const item = s.box.clubResvItem_(ev(2, 2.1, { email: 'a@x.com', family: 'גולן',
                                                 note: 'ברית לבן', status: 'pending' }));
   ok('🔴🔴 אין אימייל במסמך', item.email === undefined, JSON.stringify(item));
-  ok('🔴🔴 ואין הערה', item.note === undefined, JSON.stringify(item));
+  /* 6.10.26 — שריון מועדון v2: ההערה **כן** נכנסת — זה הטקסט של המשפחה
+     עצמה, והמסמך נקרא רק ע"י אותה משפחה (canSeeClubResv). בלעדיה מסך
+     "השריונים שלי" לא יכול לעבור ל-Firestore. אימייל — עדיין לא. */
+  ok('הערה של המשפחה עצמה — כן (v2)', item.note === 'ברית לבן', JSON.stringify(item));
   ok('🔴 ואין מזהה משפחה בתוך הפריט (הוא מזהה המסמך)', item.family === undefined);
-  ok('שלושת השדות בלבד',
-     JSON.stringify(Object.keys(item).sort()) === JSON.stringify(['end', 'start', 'status']),
+  ok('שישה שדות בלבד (v2): id, start, end, status, kind, note',
+     JSON.stringify(Object.keys(item).sort()) === JSON.stringify(['end', 'id', 'kind', 'note', 'start', 'status']),
      Object.keys(item).join(','));
 }
 
@@ -392,10 +399,10 @@ ok('שלושת הסנכרונים בעבודה השעתית',
    /function hourlyJobsRun_[\s\S]{0,12000}tourSyncAll_\(ss\)[\s\S]{0,400}clubResvSyncAll_\(ss\)/.test(GS));
 const nFam = (GS.match(/clubResvBumpFamily_\(SpreadsheetApp/g) || []).length;
 const nEv  = (GS.match(/clubResvBumpEvent_\(ss,/g) || []).length;
-ok('🔴 והשריון מתרענן אחרי כל אחת מארבע הכתיבות',
-   nFam === 2 && nEv === 3, 'family=' + nFam + ' event=' + nEv);
-/* ⚠️ nEv הוא 3 ולא 2: ההגדרה עצמה נספרת יחד עם שני אתרי הקריאה
-   (אישור ודחייה). הבדיקה הבאה היא זו שמוודאת שהם האתרים הנכונים. */
+ok('🔴 והשריון מתרענן אחרי כל אחת מהכתיבות (v2: שש)',
+   nFam === 2 && nEv === 5, 'family=' + nFam + ' event=' + nEv);
+/* ⚠️ nEv הוא 5: ההגדרה עצמה + אישור + דחייה + (v2, 6.10.26) עדכון סוג/מהות
+   וביטול ע"י מנהל. */
 ok('⚠️ ובדחייה התגיות נלקחות לפני המחיקה',
    GS.indexOf("var rejFamily = ev.getTag('family')") < GS.indexOf('clubResvBumpEvent_(ss, rejEmail, rejFamily)'));
 ok('פעולת הזריעה קיימת, מוגנת, ורצה בתוך נעילה',

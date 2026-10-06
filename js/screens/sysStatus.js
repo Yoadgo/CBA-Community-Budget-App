@@ -63,6 +63,8 @@ CBA.screens = CBA.screens || {};
     homeCountsFromFirestore:  ["מוני עמוד הבית", "תגיות הספירה בעמוד הבית נקראות ישירות מ-Firestore ומצוירות מיד, בלי לחכות ל-homeExtras.", false],
     tourFromFirestore:        ["כרטיס הסיור", "צעדי הסיור ו\"מה כבר ראיתי\" נקראים מ-Firestore (המקור מ-1.10, Q6) במקום מ-Apps Script.", true],
     clubResvFromFirestore:    ["השריון הקרוב", "שורת השריון הקרוב בעמוד הבית נקראת מהמסמך של המשפחה ב-Firestore.", false],
+    /* שריון מועדון v2 (6.10.26) — ברירת מחדל true (fsFirstRead: דגל קריאה חייב true). מסמך חודש חסר ⇒ Apps Script. */
+    clubSlotsFromFirestore:   ["לוח המועדון", "מסך שריון המועדון: הלוח (מסמך לכל חודש) ו\"השריונים שלי\" נקראים מ-Firestore — מעבר בין ימים מיידי. כשל או מסמך חסר — נופל בשקט ל-Apps Script.", true],
     /* 23.9 — ברירת מחדל true, כמו EVENTS_FROM_FIRESTORE ב-dataService. כיבוי
        מחזיר את הלוח ל-Apps Script (היומן עצמו), בלי שום אובדן נתונים. */
     /* גל 4 (24.9) — ברירת מחדל true, כמו APP_REPORTS_FS_DEFAULT ב-dataService.

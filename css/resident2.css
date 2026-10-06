@@ -36,6 +36,94 @@ body:has(.rs-v2) { --cnp-w: 680px; }
   .rv-v2 .rs-slot { height: 36px; font-size: calc(11px * var(--fs, 1)); }
 }
 
+/* ---------- 8ב. שריון מועדון v2 (6.10.2026) — סקיצה מאושרת ----------
+   סוג שריון (פרטי/שיכון/בסיס), "ביום הזה במועדון", כרטיס "השריונים שלי"
+   עם עדכון+ביטול גלויים, תשלום ותקנון בחופה. ביטול: למחוק את הבלוק הזה
+   (המסך נשאר שמיש — רק בלי הצבעים והרשימה המעוצבת). */
+.rv-v2 .club-pay { display: none !important; }            /* התשלום עבר לחופה */
+.rv-v2 .rs-mine-sec { background: none; border: 0; box-shadow:none; padding: 0; }
+@media (min-width: 1024px) {
+  .rv-v2 .res-reserve-layout { grid-template-areas: "main mine" "main rules"; grid-template-rows: auto 1fr; }
+  .rv-v2 .club-rules__pay-chip { display: inline-flex; }
+}
+.cnp2-btn.rv-pay { text-decoration: none; }
+.cnp2-btn.rv-pay svg { width: 15px; height: 15px; }
+.rv-rules-dlg { margin-top: 0; padding-top: 0; border-top: 0; max-height: 60vh; overflow-y: auto; text-align: start; }
+
+/* מקרא + משבצות לפי סוג */
+.rs-club__legend { flex-wrap: wrap; row-gap: 6px; }
+.rs-dot--priv { border: 1px solid var(--hair);
+  background: repeating-linear-gradient(135deg, var(--hair-2), var(--hair-2) 3px, var(--hair) 3px, var(--hair) 4px); }
+.rs-dot--com  { background: var(--dom-svc-bg); border: 1px solid var(--dom-svc); }
+.rs-dot--base { background: var(--dom-home-bg); border: 1px solid var(--fund-c4); }
+.rs-slot.is-busy { cursor: pointer; color: var(--ink-2); }
+.rs-slot.is-busy:hover { border-color: var(--ink-3); }
+.rs-slot.rs-k-priv { background: repeating-linear-gradient(135deg, var(--hair-2), var(--hair-2) 5px, var(--hair) 5px, var(--hair) 6px); border-color: var(--hair); }
+.rs-slot.rs-k-com  { background: var(--dom-svc-bg); border-color: var(--dom-svc-bg); color: var(--dom-svc); }
+.rs-slot.rs-k-base { background: var(--dom-home-bg); border-color: var(--dom-home-bg); color: var(--fund-c4); }
+.rs-slot.is-pend { border-style: dashed; }
+.rs-slot.is-hl { outline: 2px solid var(--ink); outline-offset: 1px; }
+.rs-slot.is-sending { background: var(--warn-bg); border-color: var(--warn); color: var(--warn-ink); cursor: default; }
+
+/* ביום הזה במועדון */
+.rs-day { border: 1px solid var(--hair); border-radius: var(--r-in); overflow: hidden; margin: 4px 0 14px; }
+.rs-day__h { display: flex; justify-content: space-between; align-items: center; background: var(--hair-2);
+  padding: 8px 12px; font-size: var(--t-12); font-weight: 800; color: var(--ink-2); }
+.rs-day__fresh { font-weight: 600; color: var(--ok-ink); }
+.rs-day__empty { padding: 14px 12px; font-size: var(--t-13); color: var(--ink-2); text-align: center; }
+.rs-ev { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: center;
+  padding: 10px 12px; border-top: 1px solid var(--hair-2); cursor: pointer; transition: background .15s; }
+.rs-ev:first-child { border-top: 0; }
+.rs-ev.is-hl { background: var(--warn-bg); }
+.rs-ev.is-sending { cursor: default; background: var(--warn-bg); }
+.rs-ev__time { font-size: var(--t-14); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; direction: ltr; }
+.rs-ev__t { font-size: var(--t-14); font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.rs-ev__t.is-muted { color: var(--ink-2); font-weight: 600; }
+.rs-ev__m { font-size: var(--t-12); color: var(--ink-2); }
+.rs-ev__tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.rs-kchip { display: inline-flex; align-items: center; border-radius: var(--r-pill); padding: 2px 9px;
+  font-size: var(--t-12); font-weight: 700; white-space: nowrap; }
+.rs-kchip--priv { background: var(--hair-2); color: var(--ink-2); }
+.rs-kchip--com  { background: var(--dom-svc-bg); color: var(--dom-svc); }
+.rs-kchip--base { background: var(--dom-home-bg); color: var(--fund-c4); }
+/* טווח שעות בטופס — "13:30–14:00" ולא "14:00–13:30" (מספרים בהקשר RTL) */
+.rs-club-form__range { direction: ltr; unicode-bidi: isolate; }
+.rs-club__msg.is-wait { background: var(--warn-bg); color: var(--warn-ink); }
+.rs-club__msg.is-err  { background: var(--bad-bg); color: var(--bad-ink); }
+
+/* בורר סוג + "מה האירוע?" (טופס, עדכון, ניהול) */
+.rs-klbl { display: block; font-size: var(--t-13); font-weight: 700; color: var(--ink); margin: 16px 0 6px; }
+.rs-kseg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--ground); border-radius: var(--r-in); padding: 4px; }
+.rs-kseg button { border: 0; background: none; border-radius: var(--r-in); padding: 9px 4px; font: inherit; font-size: var(--t-14);
+  font-weight: 700; color: var(--ink-2); cursor: pointer; line-height: 1.15; }
+.rs-kseg button small { display: block; font-size: var(--t-11); font-weight: 600; color: var(--ink-3); margin-top: 2px; }
+.rs-kseg button.on { background: var(--paper); color: var(--ink); box-shadow:var(--sh-card); outline: 1px solid var(--hair); }
+.rs-kseg button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.field-input.is-err { border-color: var(--bad); }
+.rs-khelp { font-size: var(--t-12); color: var(--ink-2); margin-top: 6px; line-height: 1.45; }
+.rs-khelp.is-pub { color: var(--dom-svc); }
+.rs-khelp.is-err { color: var(--bad-ink); }
+.rs-kedit { text-align: start; }
+.rs-kedit .rs-klbl:first-child { margin-top: 4px; }
+
+/* השריונים שלי — כרטיס אחד */
+.rs-mine-card__top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rs-mine-card__t { font-size: var(--t-17); font-weight: 800; color: var(--ink); }
+.rs-mine-card__s { font-size: var(--t-13); color: var(--ink-2); margin-top: 2px; }
+.rs-mq { border: 1px solid var(--hair); border-radius: var(--r-in); padding: 12px; margin-top: 10px; }
+.rs-mq__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.rs-mq__main { min-width: 0; }
+.rs-mq__sup { font-size: var(--t-12); color: var(--ink-2); }
+.rs-mq__desc { font-size: var(--t-14); font-weight: 700; color: var(--ink); margin-top: 2px; overflow-wrap: anywhere; }
+.rs-mq__none { color: var(--ink-3); font-weight: 600; }
+.rs-mq__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.rs-mq__vis { font-size: var(--t-12); color: var(--ink-3); }
+.rs-mq__foot { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+.club-row__actions { flex-wrap: wrap; justify-content: flex-end; }
+.club-row__title .rs-kchip { margin-inline-start: 6px; vertical-align: 1px; }
+.rs-mine-more { display: block; width: 100%; margin-top: 10px; border: 0; background: none; color: var(--ink);
+  font: inherit; font-size: var(--t-13); font-weight: 700; text-decoration: underline; cursor: pointer; }
+
 /* ---------- 9. מכון כושר ---------- */
 .gym-v2 .gym-card { border-radius: var(--r-card); box-shadow: var(--sh-card); }
 

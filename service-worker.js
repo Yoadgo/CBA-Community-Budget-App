@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "cb1df2dcfb";
+var VERSION = "d5a6f72cff";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -57,7 +57,7 @@ var ASSET_VERSIONS = {
   "css/pwa.css": "5cebb597c3",
   "css/report.css": "a374c3446d",
   "css/resident.css": "8f2a94ac58",
-  "css/resident2.css": "521b8f184a",
+  "css/resident2.css": "1b76063fe7",
   "css/search.css": "866322fbb8",
   "css/style.css": "fc01d04aab",
   "css/sys.css": "48a9728e9a",
@@ -67,7 +67,7 @@ var ASSET_VERSIONS = {
   "icons/apple-touch-icon.png": "5ce56ce0dc",
   "icons/icon-192.png": "a624d0ac7a",
   "js/app.js": "6c0dc31f3d",
-  "js/data/dataService.js": "6b2f6f70df",
+  "js/data/dataService.js": "655839f51d",
   "js/data/door.js": "71c7a113de",
   "js/data/firebase.js": "efd8c6c0d6",
   "js/data/gardenAreas.js": "457c00156c",
@@ -84,11 +84,11 @@ var ASSET_VERSIONS = {
   "js/data/reconcile.js": "899bfb8f4c",
   "js/data/sheets.js": "3fc95ad12e",
   "js/lazy.js": "011e0ffe5f",
-  "js/lazyManifest.js": "ff782a6076",
+  "js/lazyManifest.js": "ddbb959ff8",
   "js/pwa.js": "cc703231c6",
   "js/screens/appReports.js": "a47450bd91",
   "js/screens/budget.js": "5fbc7244f5",
-  "js/screens/clubAdmin.js": "2762c48dbf",
+  "js/screens/clubAdmin.js": "b5bbfd29bd",
   "js/screens/committeeTree.js": "69b56f5e38",
   "js/screens/doorAdmin.js": "9c1b798a5b",
   "js/screens/emailSettings.js": "a0cb23db5a",
@@ -112,13 +112,13 @@ var ASSET_VERSIONS = {
   "js/screens/resGym.js": "ebfaff99c4",
   "js/screens/resRecommendations.js": "fe068c58c9",
   "js/screens/resWework.js": "b3eb1b2b3c",
-  "js/screens/resident.js": "b7437d010d",
+  "js/screens/resident.js": "340b097e7e",
   "js/screens/residents.js": "f97d6d398d",
   "js/screens/services.js": "bec9552396",
   "js/screens/servicesAdmin.js": "4c6fe01239",
   "js/screens/servicesCategoriesAdmin.js": "23bff879f4",
   "js/screens/sysHub.js": "b8e3ea99b4",
-  "js/screens/sysStatus.js": "79dcc2ec8b",
+  "js/screens/sysStatus.js": "f1b5548c08",
   "js/screens/weworkAdmin.js": "794ed62ea8",
   "js/ui/canopy.js": "b94420b1b4",
   "js/ui/diag.js": "5131c18964",

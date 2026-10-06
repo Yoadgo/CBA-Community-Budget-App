@@ -1200,7 +1200,12 @@ CBA.screens = CBA.screens || {};
       var rvHead = cnp({ size: "mid", dom: "home", ico: ICO_KEY, title: "מועדון משפחות",
         sub: "בחרו תאריך וזמן פנוי — הבקשה תישלח לאישור הוועד",
         stat: { id: "rv-cnp-n", n: "—", label: "שריונים קרובים" },
-        minis: [{ id: "rv-cnp-p", k: "ממתין לאישור", b: "—" }] });
+        minis: [{ id: "rv-cnp-p", k: "ממתין לאישור", b: "—" }],
+        /* v2 (6.10.26, יועד: "צריך להוסיף בדף הראשי כפתור תשלום + כניסה לתקנון")
+           — שני כפתורים בחופה, בשפת שאר המסכים (cnp2-tools / cnp2-btn). */
+        tools: '<a class="cnp2-btn rv-pay" href="' + PAYBOX_URL + '" target="_blank" rel="noopener">' + payboxIcon +
+               '<span>תשלום ב-PayBox · 200₪</span></a>' +
+               '<button type="button" class="cnp2-btn" id="rv-rules-btn">תקנון המועדון</button>' });
       container.innerHTML = (rvHead ? rvHead + '<div class="cnp2-body cnp2-body--wide rv-v2">' : "") +
         '<div class="res-reserve-layout" id="rv-layout">' +
           '<div class="rs-mine-sec" id="rv-mine"></div>' +
@@ -1215,17 +1220,7 @@ CBA.screens = CBA.screens || {};
             '<div class="club-rules__top5" id="rc-rules-top5">' + CLUB_RULES_TOP5_HTML + '</div>' +
             '<div class="club-rules__body" id="rc-rules-body" hidden>' + clubRulesHTML() + '</div>' +
           '</div>' +
-          '<div class="card club-pay" id="rc-pay">' +
-            '<div class="club-pay__head">' +
-              '<span class="club-pay__badge">חובה</span>' +
-              '<div class="club-pay__title">תשלום השימוש במועדון</div>' +
-            '</div>' +
-            '<div class="club-pay__amount">200<span>₪</span></div>' +
-            '<a class="club-pay__btn" href="' + PAYBOX_URL + '" target="_blank" rel="noopener">' +
-              payboxIcon + '<span>מעבר לתשלום ב-PayBox</span>' +
-            '</a>' +
-            '<p class="club-pay__note">התשלום מתבצע לאחר שהשריון מאושר ע"י הוועד.</p>' +
-          '</div>' +
+          /* v2 (6.10.26) — קובית התשלום הגדולה הוסרה: התשלום עבר לחופה (rv-pay). */
           '<div id="rv-booking"></div>' +
         '</div>' + (rvHead ? '</div>' : '');
 
@@ -1249,6 +1244,12 @@ CBA.screens = CBA.screens || {};
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setRulesOpen(rulesBody.hidden); }
       });
       setRulesOpen(false);   // סגור כברירת מחדל תמיד (גם בדסקטופ) — מציגים רק את 5 הדגשים
+      /* v2 — "תקנון המועדון" בחופה: התקנון המלא בחלון, בלי לגלול לתחתית המסך */
+      var rulesBtn = container.querySelector("#rv-rules-btn");
+      if (rulesBtn) rulesBtn.addEventListener("click", function () {
+        CBA.ui.dialog({ title: "הוראות ותקנון המועדון", html: '<div class="club-rules__body rv-rules-dlg">' + clubRulesHTML() + '</div>',
+                        okText: "סגירה", wide: true });
+      });
 
       var bookingEl = container.querySelector("#rv-booking");
       var mineEl = container.querySelector("#rv-mine");
@@ -1268,13 +1269,134 @@ CBA.screens = CBA.screens || {};
     }
   };
 
+  /* ==========================================================================
+   *  שריון מועדון v2 — סוג שריון, "ביום הזה במועדון", עריכה   (6.10.2026)
+   * --------------------------------------------------------------------------
+   *  החלטות יועד (6.10, סקיצה מאושרת "שיראה בדיוק ככה"):
+   *   • בכל שריון בוחרים סוג: פרטי / שיכון / שימוש הבסיס. **מה האירוע — חובה**
+   *     ("להוריד את הלא חובה, אפשר פשוט לסמן כפרטי").
+   *   • כולם רואים את השריונים של כולם. פרטי ← השעות ושם המשפחה בלבד;
+   *     שיכון/בסיס ← גם המהות. הסינון בשרת (clubSlotItem_), לא כאן.
+   *   • בעל השריון ומנהל המועדון יכולים לעדכן סוג + מהות של שריון קיים.
+   *  CBA.clubUI — משותף למסך הניהול (clubAdmin.js, נטען אחרי הקובץ הזה).
+   * ======================================================================== */
+  var CLUB_KIND = {
+    priv: { he: "פרטי", sub: "רק השעות והשם" },
+    com:  { he: "שיכון", sub: "פתוח לקהילה" },
+    base: { he: "שימוש הבסיס", sub: "פעילות של הבסיס" }
+  };
+  var CLUB_KIND_ORDER = ["priv", "com", "base"];
+  var CLUB_NOTE_MAX = 120;
+  function clubKind(k) { return CLUB_KIND.hasOwnProperty(k) ? k : "priv"; }
+  function kindChip(k) {
+    k = clubKind(k);
+    return '<span class="rs-kchip rs-kchip--' + k + '">' + CLUB_KIND[k].he + '</span>';
+  }
+  function hmOf(d) { return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
+  function rangeOf(s, e) { return hmOf(new Date(s)) + "–" + hmOf(new Date(e)); }
+  /* בורר סוג + שדה "מה האירוע" — אותו רכיב בטופס, בעריכה ובניהול */
+  function kindEditorHTML(pfx, kind, note) {
+    kind = clubKind(kind);
+    return (
+      '<span class="rs-klbl">סוג השריון</span>' +
+      '<div class="rs-kseg" id="' + pfx + '-type" role="radiogroup" aria-label="סוג השריון">' +
+        CLUB_KIND_ORDER.map(function (k) {
+          return '<button type="button" role="radio" data-k="' + k + '" aria-checked="' + (k === kind) + '"' +
+            (k === kind ? ' class="on"' : "") + '>' + CLUB_KIND[k].he + '<small>' + CLUB_KIND[k].sub + '</small></button>';
+        }).join("") +
+      '</div>' +
+      '<label class="rs-klbl" for="' + pfx + '-note">מה האירוע?</label>' +
+      '<input class="field-input" id="' + pfx + '-note" type="text" maxlength="' + CLUB_NOTE_MAX + '" value="' + CBA.esc(note || "") + '">' +
+      '<div class="rs-khelp" id="' + pfx + '-help"></div>'
+    );
+  }
+  /* מחבר את הבורר. famLabel — איך השם יופיע לשכנים. מחזיר {get(), check()} */
+  function bindKindEditor(root, pfx, kind, famLabel) {
+    var state = { kind: clubKind(kind) };
+    var seg = root.querySelector("#" + pfx + "-type");
+    var note = root.querySelector("#" + pfx + "-note");
+    var help = root.querySelector("#" + pfx + "-help");
+    function paint(err) {
+      seg.querySelectorAll("button").forEach(function (b) {
+        var on = b.dataset.k === state.kind;
+        b.classList.toggle("on", on);
+        b.setAttribute("aria-checked", on ? "true" : "false");
+      });
+      note.placeholder = state.kind === "com" ? "למשל: ערב פאב, הרצאה, סדנת ילדים"
+        : state.kind === "base" ? "למשל: תדריך, ערב יחידה" : "למשל: יום הולדת, מפגש משפחתי";
+      note.classList.toggle("is-err", !!err);
+      if (err) { help.className = "rs-khelp is-err"; help.textContent = err; return; }
+      var v = note.value.trim();
+      if (state.kind === "priv") {
+        help.className = "rs-khelp";
+        help.textContent = "🔒 שאר התושבים יראו רק את השעות ואת " + famLabel + ". מה האירוע — רק הוועד.";
+      } else {
+        help.className = "rs-khelp is-pub";
+        help.textContent = "👁 כל התושבים יראו: \"" + (v || "מה האירוע") + " · " + famLabel + "\"";
+      }
+    }
+    seg.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-k]");
+      if (!b) return;
+      state.kind = b.dataset.k;
+      paint();
+    });
+    note.addEventListener("input", function () { paint(); });
+    paint();
+    return {
+      get: function () { return { kind: state.kind, note: note.value.replace(/\s+/g, " ").trim() }; },
+      check: function () {
+        if (note.value.trim()) return true;
+        paint("צריך לכתוב מה האירוע. מי שלא רוצה לשתף — מסמן \"פרטי\", ואז רק הוועד רואה.");
+        try { note.focus(); } catch (e) {}
+        return false;
+      }
+    };
+  }
+  /* חלון עריכה (סוג + מהות) — לבעל השריון ולמנהל. onSaved(res) אחרי הצלחה. */
+  function openKindEdit(r, famLabel, onSaved) {
+    var ed = null;
+    CBA.ui.dialog({
+      title: "עדכון השריון",
+      message: dateLabel(dayKeyOf(r.start)) + " · " + rangeOf(r.start, r.end),
+      html: '<div class="rs-kedit">' + kindEditorHTML("ke", r.kind, r.note) + '</div>',
+      okText: "שמירה", cancelText: "ביטול", sticky: true,
+      onMount: function (wrap) { ed = bindKindEditor(wrap, "ke", r.kind, famLabel); },
+      onOk: function (wrap, close) {
+        if (!ed || !ed.check()) return;
+        var v = ed.get();
+        var okBtn = wrap.querySelector('[data-dlg="ok"]');
+        if (okBtn) { okBtn.disabled = true; okBtn.textContent = "שומר…"; }
+        CBA.data.updateClubReservation({ id: r.id, kind: v.kind, note: v.note }, function (res) {
+          if (res && res.ok) {
+            close(true);
+            if (CBA.ui.toast) CBA.ui.toast("השריון עודכן");
+            if (onSaved) onSaved(res);
+          } else {
+            if (okBtn) { okBtn.disabled = false; okBtn.textContent = "שמירה"; }
+            var h = wrap.querySelector("#ke-help");
+            if (h) { h.className = "rs-khelp is-err"; h.textContent = (res && res.error) || "השמירה נכשלה — נסו שוב."; }
+          }
+        });
+      }
+    });
+  }
+  function dayKeyOf(iso) {
+    var d = new Date(iso);
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+  CBA.clubUI = { KIND: CLUB_KIND, kindChip: kindChip, rangeOf: rangeOf,
+                 kindEditorHTML: kindEditorHTML, bindKindEditor: bindKindEditor, openKindEdit: openKindEdit };
+
   /* ---- לוח + טופס שריון (onReserved נקרא אחרי יצירה מוצלחת, לרענון "השריונים שלי") ---- */
   function renderBooking(root, u, fam, house, onReserved) {
     var TODAY = todayStr();
     var myInstance = ++bookingSeq;
+    var famLabel = /^משפחת/.test(fam) ? fam : "משפחת " + fam;
     var state = {
-      date: TODAY, busy: [], loading: true, selStart: null, selEnd: null,
-      view: "day", month: TODAY.slice(0, 7), monthBusy: {}, monthLoading: false
+      date: TODAY, items: [], busy: [], loading: true, selStart: null, selEnd: null,
+      view: "day", month: TODAY.slice(0, 7), monthBusy: {}, monthLoading: false,
+      sending: null, hl: -1
     };
 
     root.innerHTML =
@@ -1289,14 +1411,20 @@ CBA.screens = CBA.screens || {};
           '<button type="button" class="rs-club__arrow" id="rc-next" aria-label="יום הבא">' + chevLeftIcon + '</button>' +
         '</div>' +
         '<button type="button" class="rs-ghost rs-club__month-toggle" id="rc-month-toggle">' + calGridIcon + ' תצוגה חודשית</button>' +
-        '<div class="rs-club__msg" id="rc-msg" hidden></div>' +
         '<div class="rs-club__legend">' +
           '<span><i class="rs-dot rs-dot--free"></i>פנוי</span>' +
-          '<span><i class="rs-dot rs-dot--busy"></i>תפוס</span>' +
+          '<span><i class="rs-dot rs-dot--priv"></i>פרטי</span>' +
+          '<span><i class="rs-dot rs-dot--com"></i>שיכון</span>' +
+          '<span><i class="rs-dot rs-dot--base"></i>שימוש הבסיס</span>' +
           '<span><i class="rs-dot rs-dot--sel"></i>הבחירה שלכם</span>' +
         '</div>' +
+        '<div class="rs-day" id="rc-day">' +
+          '<div class="rs-day__h"><span>ביום הזה במועדון</span><span class="rs-day__fresh" id="rc-day-fresh"></span></div>' +
+          '<div id="rc-day-list"></div>' +
+        '</div>' +
+        '<div class="rs-club__msg" id="rc-msg" hidden></div>' +
         '<div class="rs-slots" id="rc-slots"></div>' +
-        '<div class="rs-club__hint">בנייד: הקישו על משבצת התחלה ואז משבצת סיום. בעכבר: אפשר גם לגרור.</div>' +
+        '<div class="rs-club__hint">בנייד: הקישו על משבצת התחלה ואז משבצת סיום. הקשה על משבצת תפוסה מראה מה קורה בה.</div>' +
       '</div>' +
       '<div class="card rs-club-month" id="rc-monthcard" hidden></div>' +
       '<div class="card rs-club-form" id="rc-form" hidden></div>';
@@ -1304,16 +1432,54 @@ CBA.screens = CBA.screens || {};
     var dayCard = root.querySelector("#rc-daycard");
     var monthCard = root.querySelector("#rc-monthcard");
     var slotsEl = root.querySelector("#rc-slots");
+    var dayListEl = root.querySelector("#rc-day-list");
+    var freshEl = root.querySelector("#rc-day-fresh");
     var dateInput = root.querySelector("#rc-date");
     var formEl = root.querySelector("#rc-form");
     var msgEl = root.querySelector("#rc-msg");
     var prevBtn = root.querySelector("#rc-prev");
 
     function isPast(end) { return end.getTime() <= Date.now(); }
-    function overlapsBusy(s, e) { return state.busy.some(function (b) { return s < b.end && e > b.start; }); }
+    function itemAt(s, e) {
+      for (var k = 0; k < state.items.length; k++) {
+        var it = state.items[k];
+        if (s < new Date(it.e) && e > new Date(it.s)) return k;
+      }
+      return -1;
+    }
+    function sendingAt(i) {
+      return !!(state.sending && state.sending.date === state.date && i >= state.sending.lo && i <= state.sending.hi);
+    }
     function slotBlocked(i) {
       var b = slotBounds(state.date, i);
-      return overlapsBusy(b.start, b.end) || isPast(b.end);
+      return itemAt(b.start, b.end) !== -1 || sendingAt(i) || isPast(b.end);
+    }
+
+    function renderDayList() {
+      if (state.loading) { dayListEl.innerHTML = '<div class="rs-day__empty">טוען…</div>'; freshEl.textContent = ""; return; }
+      var rows = state.items.map(function (it, k) {
+        var kind = clubKind(it.k), body;
+        var famTxt = it.fam ? (/^משפחת/.test(it.fam) ? it.fam : "משפחת " + it.fam) : "";
+        if (kind === "priv" || !it.note) {
+          body = '<div class="rs-ev__t is-muted">' + (it.fam ? "אירוע פרטי" : "תפוס") + '</div>' +
+                 (famTxt ? '<div class="rs-ev__m">' + CBA.esc(famTxt) + '</div>' : "");
+        } else {
+          body = '<div class="rs-ev__t">' + CBA.esc(it.note) + '</div>' +
+                 (famTxt ? '<div class="rs-ev__m">' + CBA.esc(famTxt) + '</div>' : "");
+        }
+        return '<div class="rs-ev' + (k === state.hl ? " is-hl" : "") + '" data-k="' + k + '">' +
+          '<div class="rs-ev__time">' + rangeOf(it.s, it.e) + '</div>' +
+          '<div class="rs-ev__body">' + body + '</div>' +
+          '<div class="rs-ev__tags">' + (it.fam || kind !== "priv" ? kindChip(kind) : "") +
+            (it.st === "pending" ? '<span class="rs-pill rs-pill--warn">ממתין</span>' : "") + '</div>' +
+        '</div>';
+      }).join("");
+      if (state.sending && state.sending.date === state.date) {
+        rows += '<div class="rs-ev is-sending"><div class="rs-ev__time">' + slotLabel(state.sending.lo) + '–' + slotEndLabel(state.sending.hi) + '</div>' +
+          '<div class="rs-ev__body"><div class="rs-ev__t">השריון שלכם</div><div class="rs-ev__m">נשלח…</div></div>' +
+          '<div class="rs-ev__tags">' + kindChip(state.sending.kind) + '</div></div>';
+      }
+      dayListEl.innerHTML = rows || '<div class="rs-day__empty">המועדון פנוי כל היום.</div>';
     }
 
     function renderSlots() {
@@ -1326,15 +1492,33 @@ CBA.screens = CBA.screens || {};
       var rows = "";
       for (var i = 0; i < 48; i++) {
         var b = slotBounds(state.date, i);
-        var busy = overlapsBusy(b.start, b.end);
-        var past = !busy && isPast(b.end);
-        var blocked = busy || past;
+        var k = itemAt(b.start, b.end);
+        var snd = k === -1 && sendingAt(i);
+        var past = k === -1 && !snd && isPast(b.end);
         var inSel = lo != null && i >= lo && i <= hi;
-        var cls = "rs-slot" + (busy ? " is-disabled is-busy" : (past ? " is-disabled is-past" : "")) + (inSel ? " is-sel" : "");
-        rows += '<button type="button" class="' + cls + '" data-i="' + i + '"' + (blocked ? " disabled" : "") + '>' + slotLabel(i) + '</button>';
+        var cls = "rs-slot";
+        if (k !== -1) {
+          var it = state.items[k];
+          cls += " is-busy rs-k-" + clubKind(it.k) + (it.st === "pending" ? " is-pend" : "") + (k === state.hl ? " is-hl" : "");
+        } else if (snd) cls += " is-busy is-sending";
+        else if (past) cls += " is-disabled is-past";
+        if (inSel) cls += " is-sel";
+        /* משבצת תפוסה אינה disabled — הקשה עליה מדגישה את השריון ברשימה */
+        rows += '<button type="button" class="' + cls + '" data-i="' + i + '"' + (k !== -1 ? ' data-k="' + k + '"' : "") +
+          (past ? " disabled" : "") + (k !== -1 || snd ? ' aria-disabled="true"' : "") + '>' + slotLabel(i) + '</button>';
       }
       slotsEl.innerHTML = rows;
     }
+    function highlight(k) {
+      state.hl = k;
+      renderDayList(); renderSlots();
+      var row = dayListEl.querySelector('.rs-ev[data-k="' + k + '"]');
+      if (row) { try { row.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) {} }
+    }
+    dayListEl.addEventListener("click", function (e) {
+      var row = e.target.closest(".rs-ev[data-k]");
+      if (row) highlight(parseInt(row.dataset.k, 10));
+    });
 
     // (2026-08-09) בחירת משבצת קיימת רק בזיכרון המקומי (state) עד שנשלחת בפועל —
     // markDirty/clearDirty (ר' sheets.js) מגנים עליה מרענון רקע שהיה "שוכח" אותה.
@@ -1344,17 +1528,16 @@ CBA.screens = CBA.screens || {};
 
     function renderForm() {
       if (state.selStart == null) { formEl.hidden = true; formEl.innerHTML = ""; return; }
-      /* 🔴 שקט (label:false) — 23.9.26, דיווח 21 של דר. עד היום בחירת משבצת
-         הדליקה "שומר…" בכותרת, ואחרי 45 שניות של מילוי טופס — "הפעולה
-         מתעכבת", כאילו השרת תקוע. לא נשמר כלום בשלב הזה. ההגנה מרענון רקע
-         נשארת (זה כל התפקיד של markDirty כאן); החיווי "שולח בקשה…" מוצג
-         רק סביב הקריאה עצמה, ר' doSubmit. לא מנוקה עד hideForm בהצלחה. */
+      /* 🔴 שקט (label:false) — 23.9.26, דיווח 21 של דר. ההגנה מרענון רקע
+         נשארת; החיווי "שולח בקשה…" מוצג רק סביב הקריאה עצמה, ר' doSubmit. */
       if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubReserveSelect", false);
       var lo = Math.min(state.selStart, state.selEnd), hi = Math.max(state.selStart, state.selEnd);
       var startLbl = slotLabel(lo), endLbl = slotEndLabel(hi);
       var mins = (hi - lo + 1) * 30;
       var durLbl = mins >= 60 ? (Math.floor(mins / 60) + (mins % 60 ? ":" + pad2(mins % 60) : "") + " שעות") : (mins + " דקות");
 
+      /* בחירה חדשה באותו טופס פתוח — שומרים מה שכבר הוקלד */
+      var prev = formEl.querySelector("#rcf-note") ? { note: formEl.querySelector("#rcf-note").value, kind: state.formKind } : null;
       var wasHidden = formEl.hidden;
       formEl.hidden = false;
       /* CA3 (גל 4) — בטלפון הטופס נפתח מתחת ללוח שנגלל; מביאים אותו לעין פעם אחת */
@@ -1366,63 +1549,82 @@ CBA.screens = CBA.screens || {};
           '<div class="rs-club-form__range">' + startLbl + '–' + endLbl + '</div>' +
           '<div class="rs-club-form__dur">' + durLbl + ' · ' + CBA.esc(dateLabel(state.date)) + '</div>' +
         '</div>' +
-        '<div class="form-field form-field--wide"><label>מטרת השריון (לא חובה)</label>' +
-          '<input class="field-input" id="rc-note" type="text" placeholder="למשל: יום הולדת, מפגש שכונתי..."></div>' +
+        kindEditorHTML("rcf", prev ? prev.kind : "priv", prev ? prev.note : "") +
         '<div class="rs-club-form__who">בשם ' + CBA.esc(fam) + (house ? " · " + CBA.esc(house) : "") + '</div>' +
         '<button type="button" class="btn-primary rs-submit" id="rc-submit">' + calCheckIcon + ' <span>שריין את המועדון</span></button>' +
         '<div class="rs-err" id="rc-err" hidden></div>';
 
+      var editor = bindKindEditor(formEl, "rcf", prev ? prev.kind : "priv", famLabel);
+      formEl.querySelector("#rcf-type").addEventListener("click", function () { state.formKind = editor.get().kind; });
+      state.formKind = editor.get().kind;
       var submitBtn = formEl.querySelector("#rc-submit");
       var errEl = formEl.querySelector("#rc-err");
 
       submitBtn.addEventListener("click", function () {
+        if (!editor.check()) return;
         openRulesConfirm(function () { doSubmit(); });
       });
 
       function doSubmit() {
         errEl.hidden = true;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<div class="rs-spin"></div><span>שולח…</span>';
-        var noteEl = formEl.querySelector("#rc-note");
+        var v = editor.get();
         var payload = {
           date: state.date, start: startLbl, end: endLbl,
           family: fam, house: u.house || "", email: u.email || "",
-          note: noteEl ? noteEl.value.trim() : ""
+          note: v.note, kind: v.kind
         };
+        /* מיידי על המסך: המשבצת נצבעת "נשלח…" והטופס נסגר. השרת עדיין
+           בודק חפיפה — אם נתפס בינתיים, חוזרים עם הודעה. */
+        var sentDate = state.date;
+        state.sending = { date: sentDate, lo: lo, hi: hi, kind: v.kind };
+        formEl.hidden = true; formEl.innerHTML = "";
+        state.selStart = state.selEnd = null;
+        renderDayList(); renderSlots();
+        showMsg("is-wait", clockIcon + ' שולח את הבקשה… ' + startLbl + '–' + endLbl);
         /* החיווי בכותרת רק בזמן השליחה האמיתית (23.9.26) — ר' ההערה ב-renderForm. */
         if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubReserveSend", "שולח בקשה…");
         CBA.data.reserveClub(payload, function (res) {
           if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubReserveSend");
+          if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubReserveSelect");
+          if (myInstance !== bookingSeq) return;
+          state.sending = null;
+          if (CBA.data.clubSlotsDrop) CBA.data.clubSlotsDrop(sentDate.slice(0, 7));
           if (res && res.ok) {
-            hideForm();
-            showMsg("is-ok", checkIcon + ' הבקשה נשלחה וממתינה לאישור מנהל: ' + startLbl + '–' + endLbl + ', ' + CBA.esc(dateLabel(state.date)));
-            loadBusy();
+            showMsg("is-ok", checkIcon + ' הבקשה נשלחה וממתינה לאישור הוועד: ' + startLbl + '–' + endLbl + ', ' + CBA.esc(dateLabel(sentDate)));
+            loadDay(true);
             if (onReserved) onReserved();
           } else {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = calCheckIcon + ' <span>שריין את המועדון</span>';
-            errEl.textContent = (res && res.error) || "השריון נכשל — בדקו את החיבור ונסו שוב.";
-            errEl.hidden = false;
-            if (res && res.conflict) loadBusy();
+            showMsg("is-err", xIcon + ' ' + CBA.esc((res && res.error) || "השריון נכשל — בדקו את החיבור ונסו שוב."));
+            loadDay(true);
           }
         });
       }
     }
 
-    function loadBusy() {
+    function loadDay(fresh) {
+      var asked = state.date;
       state.loading = true;
-      renderSlots();
-      CBA.data.getClubBusy(state.date, function (res) {
+      state.hl = -1;
+      renderDayList(); renderSlots();
+      var t0 = Date.now();
+      CBA.data.getClubDay(asked, function (res) {
+        if (myInstance !== bookingSeq || asked !== state.date) return;   // יום אחר כבר נבחר
         state.loading = false;
         if (res && res.ok) {
-          state.busy = (res.busy || []).map(function (b) { return { start: new Date(b.start), end: new Date(b.end) }; });
+          state.items = res.items || [];
+          freshEl.textContent = res.source === "firestore" ? "● מעודכן" : "";
+          freshEl.title = (res.source || "") + " · " + (Date.now() - t0) + "ms";
         } else {
-          state.busy = [];
-          slotsEl.innerHTML = '<div class="rs-slots__msg rs-slots__msg--err">' + CBA.esc((res && res.error) || "טעינת הזמינות נכשלה") + '</div>';
+          state.items = [];
+          renderDayList();
+          slotsEl.innerHTML = '<div class="rs-slots__msg rs-slots__msg--err">' + CBA.esc((res && res.error) || "טעינת הזמינות נכשלה") +
+            ' <button type="button" class="rs-ghost" id="rc-retry">נסו שוב</button></div>';
+          var rt = slotsEl.querySelector("#rc-retry");
+          if (rt) rt.addEventListener("click", function () { loadDay(true); });
           return;
         }
-        renderSlots();
-      });
+        renderDayList(); renderSlots();
+      }, fresh === true);
     }
 
     function setDate(d) {
@@ -1431,7 +1633,7 @@ CBA.screens = CBA.screens || {};
       hideForm();
       clearMsg();
       prevBtn.disabled = (state.date <= TODAY);
-      loadBusy();
+      loadDay();
     }
 
     /* ---- בחירה: לחיצה-לחיצה (כל המכשירים) ---- */
@@ -1447,6 +1649,7 @@ CBA.screens = CBA.screens || {};
         if (blocked) { state.selStart = state.selEnd = i; }
         else { state.selStart = lo; state.selEnd = hi; }
       }
+      if (state.hl !== -1) { state.hl = -1; renderDayList(); }
       clearMsg();
       renderSlots();
       renderForm();
@@ -1454,7 +1657,10 @@ CBA.screens = CBA.screens || {};
     slotsEl.addEventListener("click", function (e) {
       var btn = e.target.closest(".rs-slot");
       if (!btn || btn.disabled) return;
-      selectByTap(parseInt(btn.dataset.i, 10));
+      if (btn.dataset.k != null) { highlight(parseInt(btn.dataset.k, 10)); return; }
+      var i = parseInt(btn.dataset.i, 10);
+      if (slotBlocked(i)) return;
+      selectByTap(i);
     });
 
     /* ---- בחירה: גרירת עכבר רציפה (דסקטופ בלבד — pointer:fine, לא מתנגש עם גלילת מגע) ---- */
@@ -1473,7 +1679,9 @@ CBA.screens = CBA.screens || {};
       function slotIndexFromPoint(x, y) {
         var el = document.elementFromPoint(x, y);
         var btn = el && el.closest ? el.closest(".rs-slot") : null;
-        return (btn && !btn.disabled) ? parseInt(btn.dataset.i, 10) : null;
+        if (!btn || btn.disabled) return null;
+        var i = parseInt(btn.dataset.i, 10);
+        return slotBlocked(i) ? null : i;
       }
       function onMove(e) {
         if (myInstance !== bookingSeq) { document.removeEventListener("mousemove", onMove); return; }
@@ -1493,10 +1701,12 @@ CBA.screens = CBA.screens || {};
       }
       slotsEl.addEventListener("mousedown", function (e) {
         var btn = e.target.closest(".rs-slot");
-        if (!btn || btn.disabled) return;
+        if (!btn || btn.disabled || btn.dataset.k != null) return;
+        var i = parseInt(btn.dataset.i, 10);
+        if (slotBlocked(i)) return;
         e.preventDefault();
         dragging = true;
-        dragAnchor = parseInt(btn.dataset.i, 10);
+        dragAnchor = i;
         state.selStart = state.selEnd = dragAnchor;
         clearMsg();
         renderSlots();
@@ -1515,7 +1725,9 @@ CBA.screens = CBA.screens || {};
     function loadMonth() {
       state.monthLoading = true;
       renderMonthCard();
-      CBA.data.getClubMonth(state.month, function (res) {
+      var asked = state.month;
+      CBA.data.getClubMonthDays(asked, function (res) {
+        if (myInstance !== bookingSeq || asked !== state.month) return;
         state.monthLoading = false;
         var set = {};
         if (res && res.ok) (res.busyDates || []).forEach(function (d) { set[d] = true; });
@@ -1576,34 +1788,31 @@ CBA.screens = CBA.screens || {};
     }
     root.querySelector("#rc-month-toggle").addEventListener("click", openMonth);
 
-    loadBusy();
-    return { refreshBusy: loadBusy };
+    loadDay();
+    return { refreshBusy: function () { if (CBA.data.clubSlotsDrop) CBA.data.clubSlotsDrop(state.date.slice(0, 7)); loadDay(true); } };
   }
 
-  /* ---- מקטע "השריונים שלי" (onChanged נקרא אחרי ביטול מוצלח, לרענון לוח הזמינות) ----
-     שתי תצוגות מאותם הנתונים, אחת מוצגת לפי מסך (ר' resident.css @media 1024px):
-     - .rs-mine-compact: "אובייקט" קומפקטי (מובייל) — תג עם מספר השריונים, לחיצה פותחת
-       חלון עם הרשימה המלאה.
-     - .rs-mine-full: הרשימה המלאה כרוכה (דסקטופ) — טור שלישי בפריסה הרחבה.
-     נתוני ה-list נשמרים בזיכרון-הפונקציה כדי שביטול יעדכן את שתי התצוגות (+ מודאל אם
-     פתוח) מיידית בלי טעינה חוזרת מהשרת. */
+  /* ---- "השריונים שלי" (onChanged נקרא אחרי ביטול/עריכה מוצלחים, לרענון הלוח) ----
+     v2 (6.10.26, לפי הסקיצה): כרטיס אחד בכל המסכים. השריון הקרוב גלוי עם
+     כפתורי "עדכון" ו"ביטול" (יועד: "לא מצאתי את כפתור הביטול" — בטלפון הוא
+     היה מאחורי כפתור שפותח חלון). שאר השריונים מאחורי "עוד N". */
   function renderMine(root, u, fam, onChanged) {
+    var famLabel = /^משפחת/.test(fam) ? fam : "משפחת " + fam;
     root.innerHTML =
-      '<div class="club-sec__title rs-mine-full-heading">השריונים שלי</div>' +
-      '<button type="button" class="rs-mine-compact" id="rc-mine-compact">' +
-        '<span class="rs-mine-compact__ico">' + inboxIcon + '</span>' +
-        '<span class="rs-mine-compact__text"><b>השריונים שלי</b><small id="rc-mine-compact-sub">טוען…</small></span>' +
-        '<span class="rs-mine-compact__badge" id="rc-mine-compact-badge">…</span>' +
-        chevLeftIcon +
-      '</button>' +
-      '<div class="rs-mine-full" id="rc-mine-full">' + CBA.skel.rows(2, { avatar: false }) + '</div>';
+      '<div class="card rs-mine-card">' +
+        '<div class="rs-mine-card__top">' +
+          '<div><div class="rs-mine-card__t">השריונים שלי</div><div class="rs-mine-card__s" id="rc-mine-sub">טוען…</div></div>' +
+          '<span class="rs-mine-compact__badge" id="rc-mine-badge">…</span>' +
+        '</div>' +
+        '<div id="rc-mine-list">' + CBA.skel.rows(2, { avatar: false }) + '</div>' +
+      '</div>';
 
-    var compactBtn = root.querySelector("#rc-mine-compact");
-    var compactSub = root.querySelector("#rc-mine-compact-sub");
-    var compactBadge = root.querySelector("#rc-mine-compact-badge");
-    var fullEl = root.querySelector("#rc-mine-full");
+    var subEl = root.querySelector("#rc-mine-sub");
+    var badgeEl = root.querySelector("#rc-mine-badge");
+    var listEl = root.querySelector("#rc-mine-list");
     var list = [];
     var loadError = null;
+    var showAll = false;
 
     function summaryText() {
       if (loadError) return "שגיאה בטעינה";
@@ -1611,35 +1820,51 @@ CBA.screens = CBA.screens || {};
       var pending = list.filter(function (r) { return r.status === "pending"; }).length;
       return list.length + (list.length === 1 ? " שריון" : " שריונים") + (pending ? " · " + pending + " ממתין לאישור" : "");
     }
-    function updateCompact() {
-      compactSub.textContent = summaryText();
+    function paint() {
+      subEl.textContent = summaryText();
+      var pendingN = list.filter(function (r) { return r.status === "pending"; }).length;
       /* גל 4 — אותם מספרים גם בחופה */
       if (window.CBA && CBA.canopy && CBA.canopy.set) {
         CBA.canopy.set(document, "rv-cnp-n", list.length);
-        CBA.canopy.set(document, "rv-cnp-p", list.filter(function (r) { return r.status === "pending"; }).length);
+        CBA.canopy.set(document, "rv-cnp-p", pendingN);
       }
-      var hasPending = list.some(function (r) { return r.status === "pending"; });
-      compactBadge.textContent = String(list.length);
-      compactBadge.className = "rs-mine-compact__badge" + (!list.length ? "" : (hasPending ? " is-pending" : " is-ok"));
+      badgeEl.textContent = loadError ? "!" : String(list.length);
+      badgeEl.className = "rs-mine-compact__badge" + (!list.length ? "" : (pendingN ? " is-pending" : " is-ok"));
+      if (loadError) {
+        listEl.innerHTML = '<div class="rs-empty">' + xIcon + '<b>שגיאה בטעינה</b><p>' + CBA.esc(loadError) + '</p></div>';
+        return;
+      }
+      if (!list.length) {
+        listEl.innerHTML = '<div class="rs-day__empty">שריונים שתבצעו יופיעו כאן, עם אפשרות לעדכון ולביטול.</div>';
+        return;
+      }
+      var rest = list.slice(1);
+      listEl.innerHTML = mineCardHTML(list[0]) +
+        (rest.length ? (showAll ? rest.map(mineCardHTML).join("")
+          : '<button type="button" class="rs-mine-more" id="rc-mine-more">עוד ' + rest.length + ' ' + (rest.length === 1 ? "שריון" : "שריונים") + '</button>') : "");
     }
-    function listHTML() {
-      if (loadError) return '<div class="rs-empty">' + xIcon + '<b>שגיאה בטעינה</b><p>' + CBA.esc(loadError) + '</p></div>';
-      return list.length
-        ? '<div class="rq-list">' + list.map(mineCardHTML).join("") + '</div>'
-        : '<div class="rs-empty">' + inboxIcon + '<b>אין שריונים קרובים</b><p>שריונים שתבצעו יופיעו כאן, עם אפשרות לביטול.</p></div>';
-    }
-    function bindCancel(scopeEl) {
-      scopeEl.querySelectorAll("[data-cancel]").forEach(function (btn) {
-        btn.addEventListener("click", function () { doCancel(btn); });
-      });
-      scopeEl.querySelectorAll("[data-share]").forEach(function (btn) {
-        btn.addEventListener("click", function () { shareToWhatsApp(btn.dataset.share); });
-      });
-    }
+    listEl.addEventListener("click", function (e) {
+      var more = e.target.closest("#rc-mine-more");
+      if (more) { showAll = true; paint(); return; }
+      var c = e.target.closest("[data-cancel]");
+      if (c) { doCancel(c); return; }
+      var ed = e.target.closest("[data-edit]");
+      if (ed) {
+        var r = list.filter(function (x) { return String(x.id) === ed.dataset.edit; })[0];
+        if (r) openKindEdit(r, famLabel, function (res) {
+          r.kind = res.kind; r.note = res.note;
+          paint();
+          if (onChanged) onChanged();
+        });
+        return;
+      }
+      var sh = e.target.closest("[data-share]");
+      if (sh) shareToWhatsApp(sh.dataset.share);
+    });
     function doCancel(btn) {
-      // (2026-08-19, ממצא 2.6) אישור ביטול — מודל של האפליקציה. שאר הפונקציה
-      // הוזזה פנימה אל תוך ה-then, כי מודל הוא א-סינכרוני בניגוד ל-confirm.
-      CBA.ui.confirm("הפעולה תמחק את האירוע מהיומן והמשבצת תחזור להיות פנויה.",
+      var r = list.filter(function (x) { return String(x.id) === btn.dataset.cancel; })[0];
+      var extra = r && r.status !== "pending" ? "\nאם כבר שילמתם, הוועד יקבל הודעה על הביטול." : "";
+      CBA.ui.confirm("השריון יימחק מיומן המועדון והמשבצת תחזור להיות פנויה." + extra,
         { title: "לבטל את השריון?", okText: "בטל שריון", danger: true }
       ).then(function (ok) { if (ok) doCancelConfirmed(btn); });
     }
@@ -1648,18 +1873,14 @@ CBA.screens = CBA.screens || {};
       btn.innerHTML = '<div class="rs-spin"></div>מבטל…';
       var id = btn.dataset.cancel;
       // cancelClubReservation עובר ב-CBA.sheets.get (לא push) — לא נספר
-      // אוטומטית ב-inFlightWrites, אז מסמנים ידנית כדי שרענון רקע לא יתערב
-      // באמצע (ר' מדיניות רענון נתונים בזיכרון הפרויקט).
+      // אוטומטית ב-inFlightWrites, אז מסמנים ידנית כדי שרענון רקע לא יתערב.
       if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubReserveCancel");
       CBA.data.cancelClubReservation({ id: id, family: fam, email: u.email || "" }, function (r) {
         if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubReserveCancel");
         if (r && r.ok) {
           list = list.filter(function (x) { return String(x.id) !== String(id); });
-          updateCompact();
-          fullEl.innerHTML = listHTML();
-          bindCancel(fullEl);
-          var modalList = document.getElementById("rc-mine-modal-list");
-          if (modalList) { modalList.innerHTML = listHTML(); bindCancel(modalList); }
+          paint();
+          if (CBA.ui.toast) CBA.ui.toast("השריון בוטל");
           if (onChanged) onChanged();
         } else {
           btn.disabled = false;
@@ -1669,42 +1890,19 @@ CBA.screens = CBA.screens || {};
       });
     }
 
-    compactBtn.addEventListener("click", function () {
-      closeAnyModal();
-      var overlay = document.createElement("div");
-      overlay.id = "cba-modal";
-      overlay.innerHTML =
-        '<div class="modal-backdrop" data-modal-close>' +
-          '<div class="modal" role="dialog">' +
-            '<div class="modal__head">' +
-              '<div><div class="modal__title">השריונים שלי</div><div class="modal__sub">' + CBA.esc(summaryText()) + '</div></div>' +
-              '<button class="drawer__close" data-modal-close aria-label="סגור">×</button>' +
-            '</div>' +
-            '<div class="modal__body" id="rc-mine-modal-list">' + listHTML() + '</div>' +
-          '</div>' +
-        '</div>';
-      document.body.appendChild(overlay);
-      overlay.querySelector(".modal").addEventListener("click", function (e) { e.stopPropagation(); });
-      overlay.querySelectorAll("[data-modal-close]").forEach(function (el) { el.addEventListener("click", closeAnyModal); });
-      document.addEventListener("keydown", escAnyModal);
-      bindCancel(overlay.querySelector("#rc-mine-modal-list"));
-    });
-
-    CBA.data.getMyClubReservations({ family: fam, email: u.email || "" }, function (res) {
+    (CBA.data.getMyClubFast || CBA.data.getMyClubReservations)({ family: fam, email: u.email || "" }, function (res) {
       if (!res || !res.ok) {
         loadError = (res && res.error) || "נסו שוב מאוחר יותר.";
-        updateCompact();
-        fullEl.innerHTML = listHTML();
+        paint();
         return;
       }
-      list = res.reservations || [];
-      updateCompact();
-      fullEl.innerHTML = listHTML();
-      bindCancel(fullEl);
+      list = (res.reservations || []).slice().sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+      paint();
     });
 
     return { refresh: function () { renderMine(root, u, fam, onChanged); } };
   }
+
   /* אייקון וואטסאפ — קו מונוכרומי כמו כל שאר האייקונים באפליקציה, בלי הלוגו
      הירוק הרשמי (שהוא סימן מסחרי ולא שייך לשפה העיצובית שלנו). */
   var waIcon = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.6a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.6-4.3A8.5 8.5 0 1 1 20.5 11.6z"/><path d="M8.8 9.1c0 3 2.4 5.4 5.3 5.4l.9-1.4-1.8-.8-.8.8a4 4 0 0 1-1.9-1.9l.8-.8-.8-1.8z"/></svg>';
@@ -1719,12 +1917,12 @@ CBA.screens = CBA.screens || {};
     var s = new Date(r.start), e = new Date(r.end);
     var ds = s.getFullYear() + "-" + pad2(s.getMonth() + 1) + "-" + pad2(s.getDate());
     var timeRange = pad2(s.getHours()) + ":" + pad2(s.getMinutes()) + "–" + pad2(e.getHours()) + ":" + pad2(e.getMinutes());
+    var kind = clubKind(r.kind);
     var pill = r.status === "pending"
-      ? '<span class="rs-pill rs-pill--warn">' + clockIcon + 'ממתין לאישור מנהל</span>'
+      ? '<span class="rs-pill rs-pill--warn">' + clockIcon + 'ממתין לאישור</span>'
       : '<span class="rs-pill rs-pill--ok">' + checkIcon + 'מאושר</span>';
     /* שיתוף בוואטסאפ (2026-08-27) — רק על שריון *מאושר*. שיתוף של שריון
-       שעדיין ממתין לאישור הוא הבטחה שאולי לא תתקיים, וזה בדיוק סוג ההודעה
-       שגורמת לאנשים להגיע למועדון נעול. */
+       שעדיין ממתין לאישור הוא הבטחה שאולי לא תתקיים. */
     var shareBtn = "";
     if (r.status !== "pending") {
       var msg = "אישרו לנו את מועדון השיכון — " + dateLabel(ds) + ", בשעות " + timeRange +
@@ -1733,15 +1931,17 @@ CBA.screens = CBA.screens || {};
         waIcon + ' שיתוף</button>';
     }
     return (
-      '<div class="card rq">' +
-        '<div class="rq__top">' +
-          '<div><div class="rq__sup">' + CBA.esc(dateLabel(ds)) + '</div>' +
-            '<div class="rq__desc">' + timeRange + (r.note ? " · " + CBA.esc(r.note) : "") + '</div></div>' +
+      '<div class="rs-mq">' +
+        '<div class="rs-mq__top">' +
+          '<div class="rs-mq__main"><div class="rs-mq__sup">' + CBA.esc(dateLabel(ds)) + ' · ' + timeRange + '</div>' +
+            '<div class="rs-mq__desc">' + (r.note ? CBA.esc(r.note) : '<span class="rs-mq__none">לא נכתב מה האירוע</span>') + '</div></div>' +
           pill +
         '</div>' +
-        '<div class="rq__foot">' +
-          '<span class="rq__date"></span>' +
+        '<div class="rs-mq__chips">' + kindChip(kind) +
+          '<span class="rs-mq__vis">' + (kind === "priv" ? "שאר התושבים רואים רק שעות ושם" : "גלוי לכל התושבים") + '</span></div>' +
+        '<div class="rs-mq__foot">' +
           shareBtn +
+          '<button type="button" class="rs-ghost" data-edit="' + CBA.esc(r.id) + '">עדכון</button>' +
           '<button type="button" class="rs-ghost rs-ghost--danger" data-cancel="' + CBA.esc(r.id) + '">' + xIcon + ' ביטול</button>' +
         '</div>' +
       '</div>'

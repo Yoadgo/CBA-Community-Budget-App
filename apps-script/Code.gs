@@ -147,6 +147,7 @@ var ACTION_PERMS = {
   saveNotes: PERM_BUDGET,
   // ניהול מועדון
   clubList: PERM_CLUB, approveClubReservation: PERM_CLUB, rejectClubReservation: PERM_CLUB,
+  adminCancelClubReservation: PERM_CLUB,
   // ניהול תושבים
   getResidents: PERM_RESIDENTS, assignResidentIds: PERM_RESIDENTS, listSignups: PERM_RESIDENTS,
   // ספריית שמות בלבד (בלי מייל/טלפון) — צריכה גם למי שמנהל תקציב, בשביל
@@ -336,6 +337,7 @@ var GET_ACTION_PERMS = {
   assignResidentIds: PERM_RESIDENTS, profileChanges: PERM_RESIDENTS,
   clubList: PERM_CLUB, approveClubReservation: PERM_CLUB,
   rejectClubReservation: PERM_CLUB, approveClubReservations: PERM_CLUB,
+  adminCancelClubReservation: PERM_CLUB,   /* 6.10.26 — ביטול שריון (גם מאושר) ע"י מנהל מועדון */
   gymResidentPicker: PERM_GYM,   /* 3.10.26 — בורר תושבים להקמת מנוי (עם אימייל), למנהל מכון בלבד */
   residentDirectory: PERM_ANY_ADMIN, listEmailSettings: PERM_ANY_ADMIN, rsvpFamilyNames: PERM_CULTURE,   /* 23.9 — היה PERM_ANY_ADMIN */
   listNotifySettings: PERM_ANY_ADMIN,
@@ -697,7 +699,9 @@ function diagnosePermissions() {
 /* פעולות כתיבה שעוברות דרך doGet ולא דרך doPost (שריון מועדון, בקשת הרשמה
    וכו') — גם הן חייבות להעלות את מונה השינויים, אחרת הלקוח לא ידע שיש חדש. */
 var GET_WRITE_ACTIONS = ['submitSignup', 'reserveClub', 'cancelClubReservation',
-  'approveClubReservation', 'approveClubReservations', 'rejectClubReservation', 'assignResidentIds'];
+  'approveClubReservation', 'approveClubReservations', 'rejectClubReservation', 'assignResidentIds',
+  /* שריון מועדון v2 (6.10.26) — עריכת סוג/מהות, וביטול שריון מאושר ע"י מנהל */
+  'updateClubReservation', 'adminCancelClubReservation'];
 
 /* ============================================================================
  *  listYears_ — מקור אחד לרשימת שנות התקציב        (2026-09-17, ממצא 18+09)
@@ -842,6 +846,14 @@ function doGetInner_(e) {
     }
     if (e && e.parameter && e.parameter.action === 'cancelClubReservation') {
       return handleCancelClubReservation_(e.parameter);
+    }
+    /* שריון מועדון v2 (6.10.26) — עריכה פתוחה לבעל השריון או למנהל מועדון
+       (הבדיקה בפנים); ביטול מנהל — PERM_CLUB בשער (GET_ACTION_PERMS). */
+    if (e && e.parameter && e.parameter.action === 'updateClubReservation') {
+      return handleUpdateClubReservation_(e.parameter);
+    }
+    if (e && e.parameter && e.parameter.action === 'adminCancelClubReservation') {
+      return handleAdminCancelClubReservation_(e.parameter);
     }
     // ניהול אישורים (המשך שלב 8) — דורשות סיסמת מנהל, בדיוק כמו כתיבות ב-doPost.
     if (e && e.parameter && e.parameter.action === 'clubList') {
@@ -2389,6 +2401,132 @@ function clubIdentity_(p) {
   };
 }
 
+/* ============================================================================
+ *  שריון מועדון v2 — סוג שריון, מסמכי חודש ב-Firestore   (6.10.2026)
+ * ----------------------------------------------------------------------------
+ *  החלטות יועד (6.10): בכל שריון בוחרים סוג — פרטי / שיכון / שימוש הבסיס —
+ *  ו**חובה** לכתוב מה האירוע. כל התושבים רואים את השריונים של כולם:
+ *   • פרטי ← רק השעות ושם המשפחה. המהות **לא יוצאת מהשרת** (לא לדפדפן,
+ *     לא ל-Firestore) — היא גלויה רק לבעלי השריון ולמנהל המועדון.
+ *   • שיכון / בסיס ← השעות, שם המשפחה והמהות.
+ *  ⚠️ שם המשפחה עובר ל-Firestore — חריגה מודעת מכלל "אין שמות ב-Firestore",
+ *     באישור יועד. שמות המשפחה כבר גלויים לכל תושב במדריך. אימייל, בית
+ *     והערה של שריון פרטי — לא עוברים.
+ *  🔑 נקודת גזירה אחת: `clubSlotItem_` בונה את הפריט גם למסמך החודש וגם
+ *     לתשובת `clubBusy` (הנפילה לאחור) — שני המסלולים מציגים אותו דבר.
+ *  שריון ישן בלי תג סוג = פרטי (ברירת המחדל הבטוחה).
+ * ========================================================================== */
+var CLUB_KINDS = { priv: 'פרטי', com: 'שיכון', base: 'שימוש הבסיס' };
+var CLUB_NOTE_MAX = 120;
+var FS_CLUB_SLOTS = 'clubSlots';
+
+function clubKindOf_(ev) {
+  var k = String(ev.getTag('kind') || '').trim();
+  return CLUB_KINDS.hasOwnProperty(k) ? k : 'priv';
+}
+function clubKindParam_(v) {
+  v = String(v == null ? '' : v).trim();
+  return CLUB_KINDS.hasOwnProperty(v) ? v : '';
+}
+function clubNoteParam_(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().substring(0, CLUB_NOTE_MAX);
+}
+/** כותרת האירוע ביומן גוגל. באירוע פרטי המהות לא נכנסת לכותרת. */
+function clubTitle_(fam, kind, note, pending) {
+  var t = 'שריון מועדון' + (pending ? ' (ממתין לאישור)' : '') + ' — ' + (fam || 'תושב');
+  if (kind && kind !== 'priv') t += ' · ' + CLUB_KINDS[kind] + (note ? ': ' + note : '');
+  return t;
+}
+/** תיאור האירוע: שורות "סוג:"/"הערה:" מוחלפות, כל השאר (בית, אימייל) נשמר. */
+function clubDescWith_(desc, kind, note) {
+  var lines = String(desc || '').split('\n').filter(function (l) {
+    return l && l.indexOf('סוג: ') !== 0 && l.indexOf('הערה: ') !== 0;
+  });
+  lines.push('סוג: ' + CLUB_KINDS[kind || 'priv']);
+  if (note) lines.push('הערה: ' + note);
+  return lines.join('\n');
+}
+/** 🔑 הפריט הציבורי — מה שכל תושב רואה. */
+function clubSlotItem_(ev) {
+  var k = clubKindOf_(ev);
+  var it = { s: ev.getStartTime().toISOString(), e: ev.getEndTime().toISOString(),
+             st: clubStatusOf_(ev), k: k, fam: String(ev.getTag('family') || '').trim() };
+  if (k !== 'priv') it.note = String(ev.getTag('note') || '');
+  return it;
+}
+
+/* ---- מסמכי חודש: clubSlots/{yyyy-MM} ---- */
+function clubMonthKey_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM'); }
+function clubMonthStart_(key) {
+  var p = String(key).split('-');
+  return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, 1, 0, 0, 0);
+}
+function clubMonthNext_(key) {
+  var d = clubMonthStart_(key);
+  return clubMonthKey_(new Date(d.getFullYear(), d.getMonth() + 1, 1, 12, 0, 0));
+}
+/** החודשים שהסנכרון מחזיק: מהחודש של "שבוע אחורה" ועד החודש של +180 ימים. */
+function clubSyncMonths_() {
+  var from = clubMonthKey_(new Date(Date.now() - CLUB_BACK_DAYS_ALL * 86400000));
+  var to = clubMonthKey_(new Date(Date.now() + CLUB_FWD_DAYS * 86400000));
+  var out = [from], k = from, guard = 0;
+  while (k < to && guard++ < 24) { k = clubMonthNext_(k); out.push(k); }
+  return out;
+}
+/** כל החודשים שאירוע [s,e) נוגע בהם. */
+function clubMonthsOf_(s, e) {
+  var keys = [], k = clubMonthKey_(s), last = clubMonthKey_(new Date(Math.max(s.getTime(), e.getTime() - 1)));
+  var guard = 0;
+  keys.push(k);
+  while (k < last && guard++ < 24) { k = clubMonthNext_(k); keys.push(k); }
+  return keys;
+}
+function clubSlotsDoc_(key, evs) {
+  var a = clubMonthStart_(key).getTime(), b = clubMonthStart_(clubMonthNext_(key)).getTime();
+  var items = (evs || []).filter(function (ev) {
+    return ev.getStartTime().getTime() < b && ev.getEndTime().getTime() > a;
+  }).map(clubSlotItem_).sort(function (x, y) { return x.s < y.s ? -1 : x.s > y.s ? 1 : 0; });
+  return { month: key, items: items, schema: 1, updatedAt: new Date() };
+}
+/** אירועי היומן לטווח של רשימת חודשים — קריאה אחת. */
+function clubEventsForMonths_(keys) {
+  var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
+  if (!cal || !keys.length) return null;
+  var sorted = keys.slice().sort();
+  return cal.getEvents(clubMonthStart_(sorted[0]), clubMonthStart_(clubMonthNext_(sorted[sorted.length - 1])));
+}
+
+/** סנכרון מלא — כל החודשים בחלון, וסחיפת חודשים שיצאו ממנו.
+ *  🔴 **חובה לרוץ בתוך `withSyncLock_`** — יש כאן סחיפה.
+ *  ⚠️ חודש ריק **נכתב** (items: []) — הלקוח מבין "אין מסמך" כ"לא יודע"
+ *     ונופל ל-Apps Script, ו"מסמך ריק" כ"פנוי כל החודש". */
+function clubSlotsSyncAll_(ss) {
+  var out = { ok: false, wrote: 0, deleted: 0, skipped: 0, error: '' };
+  try {
+    var keys = clubSyncMonths_();
+    var evs = clubEventsForMonths_(keys);
+    if (!evs) { out.error = 'לא נמצא יומן המועדון'; return out; }
+    var live = {};
+    fsWriteAll_(FS_CLUB_SLOTS, keys.map(function (k) { return { id: k, doc: clubSlotsDoc_(k, evs) }; }), out, live);
+    fsSweepOrphans_(FS_CLUB_SLOTS, live, out);
+    out.ok = true;
+  } catch (err) { out.error = String(err); }
+  return out;
+}
+
+/** רענון החודשים שאירוע אחד נוגע בהם — מיד אחרי כתיבה.
+ *  ⚠️ בלי סחיפה ולכן בלי נעילה. ⚠️ לעולם אינה זורקת: כשל ברענון אסור
+ *     שיהפוך שריון שהצליח לשגיאה על המסך (הסנכרון השעתי ישלים). */
+function clubSlotsBump_(start, end) {
+  try {
+    if (!start) return;
+    var keys = clubMonthsOf_(start, end || start);
+    var evs = clubEventsForMonths_(keys);
+    if (!evs) return;
+    keys.forEach(function (k) { fsSet_(FS_CLUB_SLOTS + '/' + k, clubSlotsDoc_(k, evs)); });
+  } catch (e) { /* שגר ושכח */ }
+}
+
 function handleClubBusy_(p) {
   try {
     var dateStr = p && p.date;
@@ -2402,7 +2540,8 @@ function handleClubBusy_(p) {
     var busy = events.map(function (ev) {
       return { start: ev.getStartTime().toISOString(), end: ev.getEndTime().toISOString() };
     });
-    return json_({ ok: true, date: dateStr, busy: busy });
+    /* v2 (6.10.26) — אותו פריט ציבורי בדיוק כמו במסמך החודש (clubSlotItem_) */
+    return json_({ ok: true, date: dateStr, busy: busy, items: events.map(clubSlotItem_) });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -2427,18 +2566,23 @@ function handleReserveClub_(p) {
     /* הזהות מהמושב, לא מהבקשה — ר' clubIdentity_. ההערה (note) כן מגיעה
        מהלקוח: היא הטקסט החופשי של התושב על עצמו, ואין בה שום סמכות. */
     var who = clubIdentity_(p);
-    var title = 'שריון מועדון (ממתין לאישור) — ' + (who.famName || who.email || 'תושב');
-    var desc = [
-      who.house ? ('בית ' + who.house) : '',
-      who.email,
-      p.note ? ('הערה: ' + p.note) : ''
-    ].filter(Boolean).join('\n');
+    /* v2 (6.10.26) — סוג + מהות. לקוח ישן (בלי kind) ממשיך לעבוד: פרטי,
+       מהות לא חובה. לקוח חדש שולח kind ⇒ המהות חובה (החלטת יועד). */
+    var kind = clubKindParam_(p.kind), note = clubNoteParam_(p.note);
+    if (p.kind != null && String(p.kind) !== '') {
+      if (!kind) return json_({ ok: false, error: 'סוג שריון לא תקין' });
+      if (!note) return json_({ ok: false, error: 'צריך לכתוב מה האירוע' });
+    }
+    kind = kind || 'priv';
+    var title = clubTitle_(who.famName || who.email || 'תושב', kind, note, true);
+    var desc = clubDescWith_([who.house ? ('בית ' + who.house) : '', who.email].filter(Boolean).join('\n'), kind, note);
     var ev = cal.createEvent(title, startDt, endDt, { description: desc });
     // תגיות (מטא-דאטה פרטית של הסקריפט, לא מוצגות ביומן עצמו) — כדי ש"השריונים שלי",
     // ביטול שריון, ומסך האישורים של המנהל יוכלו לשייך/לסנן אירוע בלי לחשוף פרטים לאחרים.
     ev.setTag('family', who.famName);
     ev.setTag('email', who.email);
-    ev.setTag('note', p.note || '');
+    ev.setTag('note', note);
+    ev.setTag('kind', kind);
     ev.setTag('status', 'pending');
     // חותמת זמן הבקשה (2026-08-09) — משמשת לתזכורת "ממתין כבר X ימים" למנהל המועדון.
     ev.setTag('requestedAt', String(Date.now()));
@@ -2462,7 +2606,8 @@ function handleReserveClub_(p) {
     /* 🔴 עותק הקריאה של המשפחה מתרענן **מיד** (צעד 12א) — אחרת התושב
        שזה עתה שרין היה חוזר לעמוד הבית ולא רואה את השריון שלו. */
     clubResvBumpFamily_(SpreadsheetApp.getActiveSpreadsheet(), clubResvActorFamily_(p));
-    return json_({ ok: true, id: ev.getId(), start: startDt.toISOString(), end: endDt.toISOString(), status: 'pending' });
+    clubSlotsBump_(startDt, endDt);   // v2 — הלוח הציבורי של החודש
+    return json_({ ok: true, id: ev.getId(), start: startDt.toISOString(), end: endDt.toISOString(), status: 'pending', kind: kind });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   } finally {
@@ -2781,6 +2926,7 @@ function handleMyClubReservations_(p, evs) {
         start: ev.getStartTime().toISOString(),
         end: ev.getEndTime().toISOString(),
         note: ev.getTag('note') || '',
+        kind: clubKindOf_(ev),
         status: clubStatusOf_(ev)   // אירועים ישנים/ידניים בלי תג — נחשבים מאושרים
       };
     }).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
@@ -2808,9 +2954,25 @@ function handleCancelClubReservation_(p) {
     if (!who.matches(ev.getTag('email'), ev.getTag('family'))) {
       return json_({ ok: false, error: 'אין הרשאה לבטל שריון זה' });
     }
+    /* v2 — פרטים לפני המחיקה: לרענון החודש, ולהודעה לוועד על ביטול שריון מאושר */
+    var cStart = ev.getStartTime(), cEnd = ev.getEndTime(), cWasApproved = clubStatusOf_(ev) === 'approved';
+    var cFam = ev.getTag('family') || who.famName || 'תושב';
     ev.deleteEvent();
     /* 🔴 ואותו רענון גם בביטול — זה בדיוק המקרה של "ביטלתי וזה עדיין שם". */
     clubResvBumpFamily_(SpreadsheetApp.getActiveSpreadsheet(), clubResvActorFamily_(p));
+    clubSlotsBump_(cStart, cEnd);
+    /* v2 (6.10.26) — שריון שכבר אושר (ואולי שולם) בוטל ע"י התושב: הוועד יודע. */
+    if (cWasApproved) {
+      try {
+        var tzC = Session.getScriptTimeZone();
+        notifyAdmins_(SpreadsheetApp.getActiveSpreadsheet(), PERM_CLUB, 'ADMIN_CLUB_CANCELLED', {
+          'שם': cFam,
+          'תאריך': Utilities.formatDate(cStart, tzC, 'dd/MM/yyyy'),
+          'שעה': Utilities.formatDate(cStart, tzC, 'HH:mm') + '–' + Utilities.formatDate(cEnd, tzC, 'HH:mm'),
+          'קישור': CBA_APP_URL
+        });
+      } catch (mailErr) { Logger.log('מייל ביטול שריון לוועד נכשל: ' + mailErr); }
+    }
     return json_({ ok: true });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -2864,6 +3026,7 @@ function handleClubList_(p) {
         family: ev.getTag('family') || '',
         email: ev.getTag('email') || '',
         note: ev.getTag('note') || '',
+        kind: clubKindOf_(ev),
         /* ⚠️ נקודת הגזירה האחת (16.9) — כאן נשארה הגדרה מקבילה
            אחרי הניקוי הקודם, והיא בדיוק "המספר בתגית לא מסכים
            עם המסך" מהכיוון ההפוך. */
@@ -2903,7 +3066,7 @@ function approveOneClubEvent_(ss, cal, id) {
   var ev = cal.getEventById(id);
   if (!ev) return { ok: false, error: 'השריון לא נמצא — ייתכן שכבר בוטל' };
   ev.setTag('status', 'approved');
-  ev.setTitle('שריון מועדון — ' + (ev.getTag('family') || 'תושב'));
+  ev.setTitle(clubTitle_(ev.getTag('family') || 'תושב', clubKindOf_(ev), String(ev.getTag('note') || ''), false));
   try {
     var tz1 = Session.getScriptTimeZone();
     var evEmail = ev.getTag('email');
@@ -2916,6 +3079,7 @@ function approveOneClubEvent_(ss, cal, id) {
   /* 🔴 הליבה המשותפת לאישור בודד ולאישור מרובה — ולכן הרענון כאן
      מכסה את שני המסלולים בלי לשכפל. */
   clubResvBumpEvent_(ss, ev.getTag('email'), ev.getTag('family'));
+  clubSlotsBump_(ev.getStartTime(), ev.getEndTime());
   return { ok: true };
 }
 
@@ -2965,14 +3129,101 @@ function handleRejectClubReservation_(p) {
     var rejFamily = ev.getTag('family') || 'תושב', rejEmail = ev.getTag('email') || '';
     var rejStartStr = Utilities.formatDate(ev.getStartTime(), tz2, 'dd/MM/yyyy');
     var rejTimeStr = Utilities.formatDate(ev.getStartTime(), tz2, 'HH:mm') + '–' + Utilities.formatDate(ev.getEndTime(), tz2, 'HH:mm');
+    var rejStart = ev.getStartTime(), rejEnd = ev.getEndTime();
     ev.deleteEvent();
     /* 🔴 התגיות נתפסו למעלה, לפני המחיקה — ר' ההערה שם. */
     clubResvBumpEvent_(ss, rejEmail, rejFamily);
+    clubSlotsBump_(rejStart, rejEnd);
     try {
       sendResidentTemplate_(ss, 'CLUB_REJECTED', rejEmail ? [rejEmail] : [], {
         'שם': rejFamily, 'תאריך': rejStartStr, 'שעה': rejTimeStr
       });
     } catch (mailErr) { Logger.log('מייל דחיית שריון נכשל: ' + mailErr); }
+    return json_({ ok: true });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================================
+ *  עריכת שריון קיים — סוג + מהות   (שריון מועדון v2, 6.10.2026)
+ * ----------------------------------------------------------------------------
+ *  [stated] יועד: "תאפשר לי לעדכן על שריונים קיימים". מי: בעל השריון
+ *  (לפי המושב החתום, כמו בביטול) או מנהל מועדון. מה: סוג + מהות בלבד —
+ *  השעות לא משתנות כאן (שינוי שעה = ביטול ושריון חדש, כדי לא לעקוף את
+ *  בדיקת החפיפה). שריון שכבר הסתיים — לא נערך.
+ * ========================================================================== */
+function handleUpdateClubReservation_(p) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return json_({ ok: false, error: 'תפוס — נסה שוב' }); }
+  try {
+    if (!p.id) return json_({ ok: false, error: 'חסר מזהה שריון' });
+    var kind = clubKindParam_(p.kind), note = clubNoteParam_(p.note);
+    if (!kind) return json_({ ok: false, error: 'סוג שריון לא תקין' });
+    if (!note) return json_({ ok: false, error: 'צריך לכתוב מה האירוע' });
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
+    if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
+    var ev = cal.getEventById(p.id);
+    if (!ev) return json_({ ok: false, error: 'השריון לא נמצא — ייתכן שבוטל' });
+    var who = clubIdentity_(p);
+    if (!who.matches(ev.getTag('email'), ev.getTag('family'))) {
+      var gate = authorize_(ss, p, PERM_CLUB);
+      if (!gate.ok) return json_({ ok: false, error: 'אין הרשאה לערוך שריון זה' });
+    }
+    if (ev.getEndTime().getTime() <= Date.now()) return json_({ ok: false, error: 'השריון כבר הסתיים' });
+    var pending = clubStatusOf_(ev) === 'pending';
+    ev.setTag('kind', kind);
+    ev.setTag('note', note);
+    ev.setTitle(clubTitle_(ev.getTag('family') || 'תושב', kind, note, pending));
+    ev.setDescription(clubDescWith_(ev.getDescription(), kind, note));
+    clubResvBumpEvent_(ss, ev.getTag('email'), ev.getTag('family'));
+    clubSlotsBump_(ev.getStartTime(), ev.getEndTime());
+    return json_({ ok: true, id: ev.getId(), kind: kind, note: note });
+  } catch (err) {
+    return json_({ ok: false, error: String(err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================================
+ *  ביטול שריון ע"י מנהל מועדון — גם שריון שכבר אושר   (v2, 6.10.2026)
+ * ----------------------------------------------------------------------------
+ *  "דחה" קיים רק לממתין. כאן: כל שריון שלא הסתיים. האירוע נמחק מיומן גוגל
+ *  (המשבצת מתפנה), והמשפחה מקבלת מייל + פוש (CLUB_CANCELLED) עם הסיבה אם נכתבה.
+ *  🔴 התגיות והזמנים נתפסים **לפני** המחיקה — כמו בדחייה.
+ * ========================================================================== */
+function handleAdminCancelClubReservation_(p) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return json_({ ok: false, error: 'תפוס — נסה שוב' }); }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var gate = authorize_(ss, p, PERM_CLUB);
+    if (!gate.ok) return json_({ ok: false, error: gate.error });
+    if (!p.id) return json_({ ok: false, error: 'חסר מזהה שריון' });
+    var cal = CalendarApp.getCalendarById(CLUB_CALENDAR_ID);
+    if (!cal) return json_({ ok: false, error: 'לא נמצא יומן המועדון' });
+    var ev = cal.getEventById(p.id);
+    if (!ev) return json_({ ok: false, error: 'השריון לא נמצא — ייתכן שכבר בוטל' });
+    if (ev.getEndTime().getTime() <= Date.now()) return json_({ ok: false, error: 'השריון כבר הסתיים' });
+    var tz3 = Session.getScriptTimeZone();
+    var caFamily = ev.getTag('family') || 'תושב', caEmail = ev.getTag('email') || '';
+    var caStart = ev.getStartTime(), caEnd = ev.getEndTime();
+    var reason = String(p.reason == null ? '' : p.reason).replace(/\s+/g, ' ').trim().substring(0, 200);
+    ev.deleteEvent();
+    clubResvBumpEvent_(ss, caEmail, caFamily);
+    clubSlotsBump_(caStart, caEnd);
+    try {
+      sendResidentTemplate_(ss, 'CLUB_CANCELLED', caEmail ? [caEmail] : [], {
+        'שם': caFamily,
+        'תאריך': Utilities.formatDate(caStart, tz3, 'dd/MM/yyyy'),
+        'שעה': Utilities.formatDate(caStart, tz3, 'HH:mm') + '–' + Utilities.formatDate(caEnd, tz3, 'HH:mm'),
+        'סיבה': reason ? ('\n\nהסיבה: ' + reason) : ''
+      });
+    } catch (mailErr) { Logger.log('מייל ביטול שריון לתושב נכשל: ' + mailErr); }
     return json_({ ok: true });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -4293,6 +4544,7 @@ var ACTION_DOMAIN = {
   // מועדון (כולן ב-GET_WRITE_ACTIONS)
   reserveClub: 'club', cancelClubReservation: 'club', approveClubReservation: 'club',
   approveClubReservations: 'club', rejectClubReservation: 'club',
+  updateClubReservation: 'club', adminCancelClubReservation: 'club',
   // מראה שיכון
   submitGardenReport: 'garden', gardenFeedback: 'garden', gardenTask: 'garden',
   gardenTaskDelete: 'garden',
@@ -7476,6 +7728,9 @@ function hourlyJobsRun_() {
       if (ts.error) Logger.log('tourSeenSyncAll_ נכשל: ' + ts.error);
       var cr = clubResvSyncAll_(ss);
       if (cr.error) Logger.log('clubResvSyncAll_ נכשל: ' + cr.error);
+      /* v2 (6.10.26) — לוח המועדון הציבורי. תופס גם אירוע שנוסף ידנית ביומן. */
+      var cs = clubSlotsSyncAll_(ss);
+      if (cs.error) Logger.log('clubSlotsSyncAll_ נכשל: ' + cs.error);
       else if (cr.wrote || cr.deleted || cr.skipped) {
         Logger.log('שריונים: נכתבו ' + cr.wrote + ', נמחקו ' + cr.deleted +
                    ', דולגו ' + cr.skipped);
@@ -8618,6 +8873,10 @@ var FLAG_KEYS = ['gardenPlanFromFirestore', 'servicesFromFirestore', 'budgetYear
         שונים, וכיבוי של אחד אמור להשאיר את השני עובד. */
   'tourFromFirestore',
   'clubResvFromFirestore',
+  /* שריון מועדון v2 (6.10.26) — הלוח (clubSlots/{חודש}) ו"השריונים שלי"
+     (clubReservations/{משפחה}, schema 2) נקראים מ-Firestore. ברירת המחדל
+     בלקוח true; מסמך חסר ⇒ נפילה ל-Apps Script. כיבוי = הכול מ-Apps Script. */
+  'clubSlotsFromFirestore',
   /* 🔴 **המתג של מיגרציית הגינון** (2026-09-16) — "הדיווחים שלי"
      נקראים ישירות מ-`gardenReports` לפי מזהה המשפחה.
      ⚠️ **הכתיבה בשרת אינה תלויה בדגל** — המסמכים מתעדכנים גם
@@ -11576,9 +11835,15 @@ function residentIdentityIndex_(ss) {
 var FS_CLUB_RESV = 'clubReservations';
 
 function clubResvItem_(ev) {
-  return { start: ev.getStartTime().toISOString(),
+  /* v2 (6.10.26) — נוספו id (לביטול/עריכה מהמסך בלי Apps Script), kind
+     ו-note. ⚠️ ההערה היא הטקסט של המשפחה עצמה, והמסמך נקרא **רק** ע"י
+     אותה משפחה (canSeeClubResv). אימייל — עדיין לא. */
+  return { id: ev.getId(),
+           start: ev.getStartTime().toISOString(),
            end:   ev.getEndTime().toISOString(),
-           status: clubStatusOf_(ev) };
+           status: clubStatusOf_(ev),
+           kind: clubKindOf_(ev),
+           note: String(ev.getTag('note') || '') };
 }
 
 /** מזהה המשפחה של אירוע — אימייל קודם, שם כנפילה לאחור. */
@@ -11606,7 +11871,9 @@ function clubResvGroup_(idx, evs, out) {
 }
 
 function clubResvDoc_(items) {
-  return { items: items || [], schema: 1, updatedAt: new Date() };
+  /* schema 2 (6.10.26) — פריטים עם id/kind/note. הלקוח קורא את המסך
+     "השריונים שלי" מכאן רק מ-schema 2; מסמך ישן ⇒ Apps Script. */
+  return { items: items || [], schema: 2, updatedAt: new Date() };
 }
 
 /** סנכרון מלא — כתיבה לכל משפחה וסחיפת יתומים.
@@ -11923,7 +12190,8 @@ function handleHomeSync_(p) {
     if (!gate.ok) return json_({ ok: false, error: gate.error });
     return json_(withSyncLock_('homeSync', function () {
       var t = tourSyncAll_(ss), sn = tourSeenSyncAll_(ss), c = clubResvSyncAll_(ss);
-      return { ok: true, tour: t, seen: sn, club: c };
+      var cs = clubSlotsSyncAll_(ss);   // v2 (6.10.26) — זריעת לוח המועדון
+      return { ok: true, tour: t, seen: sn, club: c, clubSlots: cs };
     }));
   } catch (err) {
     return json_({ ok: false, error: String(err) });

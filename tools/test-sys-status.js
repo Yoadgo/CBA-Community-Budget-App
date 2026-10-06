@@ -184,8 +184,8 @@ ok('⚠️ ושניהם נושאים גרסה מעודכנת (stamp-versions --c
   /* (2026-09-17) שמונה ולא שבעה — נוסף writeWatchdog, שאינו מתג
      מיגרציה אלא מתג ביטול לרשת ביטחון, ולכן ברירת המחדל שלו דלוקה. */
   /* (2026-09-23) תשעה — נוסף eventsFromFirestore (לוח האירועים). */
-  ok('⚠️ שניים-עשר מהם דלוקים היום כברירת מחדל (24.9: +appReportsFromFirestore; 1.10: +tourFromFirestore, Q6; 3.10: +gymAdminFs)',
-     Object.keys(declared).filter(k => declared[k]).length === 12,
+  ok('⚠️ שלושה-עשר מהם דלוקים היום כברירת מחדל (24.9: +appReportsFromFirestore; 1.10: +tourFromFirestore, Q6; 3.10: +gymAdminFs; 6.10: +clubSlotsFromFirestore)',
+     Object.keys(declared).filter(k => declared[k]).length === 13,
      String(Object.keys(declared).filter(k => declared[k]).length));
 
   /* =============================================================== */

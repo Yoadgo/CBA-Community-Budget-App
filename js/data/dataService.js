@@ -1756,6 +1756,127 @@ CBA.data = (function () {
     });
   }
 
+  /* ==========================================================================
+   *  שריון מועדון v2 — קריאה מ-Firestore, כתיבה דרך Apps Script   (6.10.2026)
+   * --------------------------------------------------------------------------
+   *  📊 עד היום כל מעבר יום במסך המועדון היה קריאת Apps Script + יומן גוגל
+   *  (~3 שניות), וכך גם "השריונים שלי" והתצוגה החודשית. עכשיו:
+   *   • הלוח — מסמך אחד לחודש, `clubSlots/{yyyy-MM}`, נקרא פעם אחת ונשמר
+   *     בזיכרון; מעבר בין ימים באותו חודש = אפס רשת.
+   *   • "השריונים שלי" — `clubReservations/{familyId}` (schema 2, עם id).
+   *   • הכתיבה (שריון/ביטול/עריכה/אישור) נשארת ב-Apps Script: רק השרת
+   *     בודק חפיפה תחת נעילה, שולח מיילים ונוגע ביומן. הוא גם מרענן את
+   *     המסמכים לפני שהוא עונה — ולכן קריאה מיד אחרי כתיבה רואה את החדש.
+   *  נפילה לאחור (כל כשל, דגל כבוי, או **מסמך חודש חסר**) ⇒ Apps Script,
+   *  שמחזיר את אותו פריט בדיוק (clubSlotItem_ בשרת).
+   *  ⚠️ "השריונים שלי": מסמך משפחה **חסר** = אין שריונים (תשובה תקפה, לא
+   *     כשל — רוב המשפחות). מסמך schema 1 (לפני הדיפלוי) ⇒ Apps Script.
+   *  ביטול: הדגל clubSlotsFromFirestore במסך "מצב המערכת".
+   * ======================================================================== */
+  var CLUB_SLOTS_FROM_FIRESTORE = true;
+  var CLUB_SLOTS_TTL_MS = 60000;
+  var clubSlotsMem = {};   // month -> { at, items }
+
+  function clubFsOn() {
+    return !(CBA.fb && CBA.fb.flag) || CBA.fb.flag("clubSlotsFromFirestore", CLUB_SLOTS_FROM_FIRESTORE);
+  }
+  /* פריט ישן מתשובת Apps Script שלפני v2 (רק busy, בלי items) */
+  function clubItemsFromBusy(res) {
+    if (res && res.items) return res.items;
+    return ((res && res.busy) || []).map(function (b) {
+      return { s: b.start, e: b.end, st: "approved", k: "priv", fam: "" };
+    });
+  }
+  function clubOverlapsDay(it, dateStr) {
+    var a = new Date(dateStr + "T00:00:00").getTime(), b = a + 86400000;
+    return new Date(it.s).getTime() < b && new Date(it.e).getTime() > a;
+  }
+  /** מסמך החודש. cb(items|null) — null = לא ידוע (ליפול לאחור). */
+  function clubMonthDoc(month, cb, fresh) {
+    var c = clubSlotsMem[month];
+    if (!fresh && c && Date.now() - c.at < CLUB_SLOTS_TTL_MS) return cb(c.items);
+    var t0 = Date.now();
+    fsReady(function (ready) {
+      if (!ready || !clubFsOn()) return cb(null);
+      CBA.fb.readDoc("clubSlots", month, function (e, d) {
+        if (e || !d || !d.items) return cb(null);   // 🔴 אין מסמך = לא יודעים, לא "פנוי"
+        clubSlotsMem[month] = { at: Date.now(), items: d.items };
+        try { CBA.perf = CBA.perf || {}; CBA.perf.clubSlots = { source: "firestore", ms: Date.now() - t0, n: d.items.length, at: new Date().toISOString() }; } catch (x) {}
+        cb(d.items);
+      });
+    });
+  }
+  /** השריונים של יום אחד: cb({ok, items, source}). */
+  function getClubDay(dateStr, cb, fresh) {
+    clubMonthDoc(dateStr.slice(0, 7), function (items) {
+      if (items) {
+        return cb({ ok: true, source: "firestore",
+                    items: items.filter(function (it) { return clubOverlapsDay(it, dateStr); }) });
+      }
+      getClubBusy(dateStr, function (res) {
+        if (!res || !res.ok) return cb(res || { ok: false });
+        cb({ ok: true, source: "appsscript", items: clubItemsFromBusy(res) });
+      });
+    }, fresh);
+  }
+  /** ימי החודש שיש בהם שריון: cb({ok, busyDates}). */
+  function getClubMonthDays(month, cb) {
+    clubMonthDoc(month, function (items) {
+      if (!items) return getClubMonth(month, cb);
+      var set = {};
+      items.forEach(function (it) {
+        var d = new Date(it.s), end = new Date(it.e), g = 0;
+        d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        while (d < end && g++ < 62) {
+          var ds = d.getFullYear() + "-" + (d.getMonth() < 9 ? "0" : "") + (d.getMonth() + 1) + "-" + (d.getDate() < 10 ? "0" : "") + d.getDate();
+          if (ds.slice(0, 7) === month) set[ds] = true;
+          d.setDate(d.getDate() + 1);
+        }
+      });
+      cb({ ok: true, month: month, busyDates: Object.keys(set) });
+    });
+  }
+  /** "השריונים שלי" — מסמך המשפחה (schema 2), ואחרת Apps Script. */
+  function getMyClubFast(fields, cb) {
+    var fid = String(((window.CBA && CBA.user) || {}).familyId || "").trim();
+    function slow() { getMyClubReservations(fields, cb); }
+    if (!fid) return slow();
+    fsReady(function (ready) {
+      if (!ready || !clubFsOn()) return slow();
+      CBA.fb.readDoc("clubReservations", fid, function (e, d) {
+        if (e) return slow();
+        if (!d) return cb({ ok: true, reservations: [], source: "firestore" });
+        if (!(d.schema >= 2)) return slow();
+        var now = Date.now() - 86400000;
+        cb({ ok: true, source: "firestore", reservations: (d.items || []).filter(function (r) {
+          return new Date(r.end).getTime() > now;
+        }) });
+      });
+    });
+  }
+  /** אחרי כתיבה: לזרוק את מטמון החודש כדי שהקריאה הבאה תביא את מה שהשרת כתב. */
+  function clubSlotsDrop(month) {
+    if (month) delete clubSlotsMem[month]; else clubSlotsMem = {};
+  }
+  function updateClubReservation(fields, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubUpdate");
+    CBA.sheets.get(Object.assign({ action: "updateClubReservation" }, fields), function (r) {
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubUpdate");
+      clubSlotsDrop();
+      if (cb) cb(r);
+    });
+  }
+  function adminCancelClubReservation(fields, cb) {
+    if (!pushConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
+    if (CBA.sheets.markDirty) CBA.sheets.markDirty("clubAdminCancel");
+    CBA.sheets.get(Object.assign({ action: "adminCancelClubReservation" }, fields), function (r) {
+      if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("clubAdminCancel");
+      clubSlotsDrop();
+      if (cb) cb(r);
+    });
+  }
+
   function getGymList(cb) {
     if (!readConnected()) { if (cb) cb({ ok: false, error: "לא מחובר לגיליון" }); return; }
     CBA.sheets.get({ action: "gymList" }, cb);
@@ -5608,6 +5729,10 @@ CBA.data = (function () {
     submitReceipt: submitReceipt,
     scanReceipt: scanReceipt,
     getClubBusy: getClubBusy,
+    /* שריון מועדון v2 (6.10.26) */
+    getClubDay: getClubDay, getClubMonthDays: getClubMonthDays, getMyClubFast: getMyClubFast,
+    clubSlotsDrop: clubSlotsDrop, updateClubReservation: updateClubReservation,
+    adminCancelClubReservation: adminCancelClubReservation,
     reserveClub: reserveClub,
     getClubMonth: getClubMonth,
     getMyClubReservations: getMyClubReservations,

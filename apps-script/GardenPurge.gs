@@ -538,7 +538,7 @@ function gpAllCollections_() {
   /* כל האוספים שהקוד מכיר. מסמכים בודדים (appConfig/*, gardenMeta/lists)
      אינם אוספים ואינם נסרקים — אין בהם מזהי גינון. */
   return ['gardenTasks', 'gardenReports', 'gardenLog', 'gardenPlan',
-          'services', 'gymStatus', 'gymCode', 'clubReservations',
+          'services', 'gymStatus', 'gymCode', 'clubReservations', 'clubSlots',
           'tourSteps', 'tourSeen', 'homeCounts', 'budgetYears',
           'budgetTx', 'counters', 'pushSubscriptions', 'members'];
 }

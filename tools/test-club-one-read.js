@@ -87,6 +87,9 @@ function sandbox(all) {
     grab(/function clubWindowEvents_\(backDays\) \{[\s\S]*?\n\}/),
     grab(/function clubClipEvents_\(evs, backDays\) \{[\s\S]*?\n\}/),
     grab(/function clubStatusOf_\(ev\) \{[\s\S]*?\n\}/),
+    /* 6.10.26 — שריון מועדון v2: הרשימה נושאת גם סוג (clubKindOf_) */
+    grab(/var CLUB_KINDS = [^\n]*\n/),
+    grab(/function clubKindOf_\(ev\) \{[\s\S]*?\n\}/),
     grab(/function clubPendingCount_\(evs\) \{[\s\S]*?\n\}/),
     grab(/function handleMyClubReservations_\(p, evs\) \{[\s\S]*?\n\}/)
   ].join('\n\n'), box);

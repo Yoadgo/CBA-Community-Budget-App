@@ -36,7 +36,7 @@ CBA.lazyManifest = {
     perms: ["מועדון", "מכון", "WeWork", "שירותים"],
     screens: ["clubAdmin", "gymAdmin", "weworkAdmin", "servicesAdmin"],
     files: [
-      "js/screens/clubAdmin.js?v=2762c48dbf",
+      "js/screens/clubAdmin.js?v=b5bbfd29bd",
       "js/screens/gymAdmin.js?v=96a084cd69",
       "js/screens/doorAdmin.js?v=9c1b798a5b",
       "js/screens/weworkAdmin.js?v=794ed62ea8",
@@ -52,7 +52,7 @@ CBA.lazyManifest = {
       "js/screens/residents.js?v=f97d6d398d",
       "js/screens/emailSettings.js?v=a0cb23db5a",
       "js/screens/appReports.js?v=a47450bd91",
-      "js/screens/sysStatus.js?v=79dcc2ec8b",
+      "js/screens/sysStatus.js?v=f1b5548c08",
       "js/screens/sysHub.js?v=b8e3ea99b4"
     ]
   },

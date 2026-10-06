@@ -299,6 +299,10 @@
   "tokens": 82,
   "ids": 1
  },
+ "/clubSlots/ read :: canSeeEvents()": {
+  "tokens": 82,
+  "ids": 1
+ },
  "/residentServiceCards/ read :: canSeeServices()": {
   "tokens": 82,
   "ids": 1
@@ -432,6 +436,10 @@
   "ids": 0
  },
  "/clubReservations/ write :: false": {
+  "tokens": 1,
+  "ids": 0
+ },
+ "/clubSlots/ write :: false": {
   "tokens": 1,
   "ids": 0
  },
