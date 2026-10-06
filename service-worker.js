@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "7e0eeb5165";
+var VERSION = "c4f9e0ef58";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -59,7 +59,7 @@ var ASSET_VERSIONS = {
   "css/resident.css": "8f2a94ac58",
   "css/resident2.css": "101b7aa074",
   "css/search.css": "866322fbb8",
-  "css/style.css": "fc01d04aab",
+  "css/style.css": "6e9233bdea",
   "css/sys.css": "48a9728e9a",
   "css/tokens.css": "b1f1b7d21f",
   "css/tour.css": "fbb848ba1f",
@@ -84,7 +84,7 @@ var ASSET_VERSIONS = {
   "js/data/reconcile.js": "899bfb8f4c",
   "js/data/sheets.js": "3fc95ad12e",
   "js/lazy.js": "011e0ffe5f",
-  "js/lazyManifest.js": "a9f87571fb",
+  "js/lazyManifest.js": "1515499340",
   "js/pwa.js": "cc703231c6",
   "js/screens/appReports.js": "a47450bd91",
   "js/screens/budget.js": "5fbc7244f5",
@@ -113,7 +113,7 @@ var ASSET_VERSIONS = {
   "js/screens/resRecommendations.js": "fe068c58c9",
   "js/screens/resWework.js": "b3eb1b2b3c",
   "js/screens/resident.js": "325821a903",
-  "js/screens/residents.js": "f97d6d398d",
+  "js/screens/residents.js": "02b857dd73",
   "js/screens/services.js": "bec9552396",
   "js/screens/servicesAdmin.js": "4c6fe01239",
   "js/screens/servicesCategoriesAdmin.js": "23bff879f4",

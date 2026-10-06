@@ -23,6 +23,8 @@ var resState = {
   /* RSB3 (גל 8, 1.10.26) — בחירת המשפחה בבקשות הממתינות וגלילת הרשימה נקראו מה-DOM,
      אבל showScreen כבר ריקן אותו ברענון רקע — הבחירה אבדה והאישור שויך לברירת המחדל. */
   suSel: {}, listScroll: 0,
+  /* 6.10.26 — בחירת המשבצת (איזה דייר) בכל בקשה: "rowIndex|slot:mode" */
+  suSlot: {},
   /* RSB6 (גל 8, 1.10.26) — כשל טעינה של בקשות הרשמה/שינוי פרטים היה שקט לגמרי */
   reqError: false,
   navRefreshing: false   // RSB2 — רענון ברקע אחרי כניסה למסך
@@ -349,12 +351,108 @@ function resSuggest(signup, rows, c) {
       if (rf === last) { score += 60; why.push("שם משפחה זהה"); }
       else if (rf.indexOf(last) !== -1 || last.indexOf(rf) !== -1) { score += 30; why.push("שם משפחה דומה"); }
     }
-    var free = c.email.some(function (col) { return !resVal(r, col); });
+    /* 6.10.26 — "פנוי" = יש לאן להכניס בלי לדרוס ובלי לנחש (ר' resSlotPlan) */
+    var plan = resSlotPlan(signup, r, c);
+    var free = plan.auto > -1;
     if (score > 0 && free) score += 5;
-    if (score > 0) out.push({ i: i, row: r, score: score, why: why.join(" · "), free: free });
+    if (score > 0) out.push({ i: i, row: r, score: score, why: why.join(" · "), free: free, plan: plan });
   });
   out.sort(function (a, b) { return b.score - a.score; });
   return out.slice(0, 5);
+}
+
+/* ============================================================================
+   🔴 6.10.26 — לאיזו משבצת נכנס הנרשם (באג שדרס 9 משקי בית)
+   ----------------------------------------------------------------------------
+   הקוד הישן הכניס את הנרשם ל"משבצת הראשונה בלי מייל" — גם כשהיה בה שם של
+   בן/בת הזוג (שנטען מראש בלי מייל). התוצאה: הנרשם הופיע פעמיים ובן/בת הזוג
+   נמחק/ה. עכשיו:
+     registered — יש מייל → לא נוגעים מכאן.
+     named      — יש שם בלי מייל → אם השם תואם: "חיבור" (המייל מתווסף, השם נשאר);
+                  אם לא: רק בחירה מפורשת — אותו אדם (claim) או החלפה (replace).
+     empty      — ריקה לגמרי → מילוי.
+   ⚠️ זהה ל-signupSlotPlan_ ב-Code.gs. השרת הוא השומר האמיתי; כאן — תצוגה והסבר.
+   ========================================================================== */
+function resNameKey(s) {
+  return String(s || "").toLowerCase()
+    .replace(/[֑-ׇ'"׳״.\-_,()]/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+function resNameMatch(a, b) {
+  a = resNameKey(a); b = resNameKey(b);
+  if (!a || !b) return false;
+  return a === b || a.split(" ")[0] === b.split(" ")[0];
+}
+function resSlotPlan(signup, row, c) {
+  var slots = c.email.map(function (col, i) {
+    var name = resVal(row, c.firstName[i]), email = resVal(row, col);
+    var st = email ? "registered" : (name ? "named" : "empty");
+    return { i: i, name: name, email: email, state: st,
+             match: st === "named" && resNameMatch(name, signup.firstName) };
+  });
+  var auto = -1, kind;
+  slots.forEach(function (s) { if (auto === -1 && s.match) auto = s.i; });
+  var anyNamed = slots.some(function (s) { return s.state === "named"; });
+  var firstEmpty = -1;
+  slots.forEach(function (s) { if (firstEmpty === -1 && s.state === "empty") firstEmpty = s.i; });
+  if (auto > -1) kind = "match";
+  else if (!anyNamed && firstEmpty > -1) { auto = firstEmpty; kind = "empty"; }
+  else if (!anyNamed) kind = "full";
+  else kind = "ambiguous";
+  return { slots: slots, auto: auto, kind: kind,
+           autoMode: kind === "match" ? "claim" : (kind === "empty" ? "fill" : "") };
+}
+
+/* פאנל "לאיזה דייר?" בתוך כרטיס הבקשה — מתעדכן בכל שינוי משפחה. */
+function resSlotPanelHTML(s, row, c, rowIndex) {
+  var first = s.firstName || "הנרשם/ת";
+  var plan = resSlotPlan(s, row, c);
+  var key = "slot-" + s.id;
+  var saved = resState.suSlot[s.id];
+  var rowKey = String(rowIndex || "");
+  var chosen = saved && saved.split("|")[0] === rowKey ? saved.split("|")[1] : "";
+  if (!chosen && plan.auto > -1) chosen = plan.auto + ":" + plan.autoMode;
+  function radio(val, text, cls) {
+    return '<label class="res-slot__opt' + (cls ? " " + cls : "") + '">' +
+      '<input type="radio" name="' + CBA.esc(key) + '" value="' + val + '"' + (chosen === val ? " checked" : "") + '> ' +
+      '<span>' + text + '</span></label>';
+  }
+  function info(text) { return '<div class="res-slot__opt is-locked"><span>' + text + '</span></div>'; }
+  /* "אותו אדם"/מילוי למעלה, "להחליף" (אדום) תמיד בסוף — ההרסני לא באמצע הרשימה */
+  var main = [], danger = [];
+  plan.slots.forEach(function (sl) {
+    var lbl = CBA.esc("דייר/ת " + (sl.i + 1) + ": ");
+    if (sl.state === "registered") {
+      main.push(info("🔒 " + lbl + CBA.esc(sl.name || "—") + " · רשום/ה — לא נוגעים"));
+    } else if (plan.kind === "match" && !sl.match) {
+      /* יש התאמה ברורה במשבצת אחרת — לא מציעים כאן כלום, רק מראים שהוא/היא נשאר/ת */
+      main.push(info(lbl + CBA.esc(sl.name || "משבצת ריקה") + (sl.name ? " · נשאר/ת כמו שהוא/היא" : "")));
+    } else if (sl.state === "empty") {
+      main.push(radio(sl.i + ":fill", lbl + "משבצת ריקה — להוסיף את <b>" + CBA.esc(first) + "</b> כדייר/ת"));
+    } else if (sl.match) {
+      main.push(radio(sl.i + ":claim", lbl + CBA.esc(sl.name) + ' — <b>זה/זו ' + CBA.esc(first) + '</b> <span class="res-su__ok">✓ שם תואם</span>'));
+    } else {
+      main.push(radio(sl.i + ":claim", lbl + "<b>" + CBA.esc(sl.name) + "</b> — זה/זו אותו אדם (כתיב אחר / באנגלית)"));
+      danger.push(radio(sl.i + ":replace", "להחליף את " + CBA.esc(sl.name) + " ב-" + CBA.esc(first) +
+        " (" + CBA.esc(sl.name) + " יימחק/תימחק)", "is-danger"));
+    }
+  });
+  var opts = main.concat(danger).join("");
+  var names = plan.slots.filter(function (x) { return x.state === "named"; }).map(function (x) { return x.name; });
+  var warn = "";
+  if (plan.kind === "full") {
+    warn = '<div class="res-slot__warn is-block"><b>⛔ שתי המשבצות תפוסות ע"י דיירים רשומים.</b> אישור לכאן היה דורס מישהו, ולכן הוא חסום. מה אפשר לעשות:' +
+      '<ul>' +
+        '<li>אם אחד/ת הדיירים עזב/ה — <button type="button" class="btn-link" data-su-edit="' + CBA.esc(rowKey) + '">לערוך את משק הבית</button>, להסיר אותו/ה, ואז לאשר.</li>' +
+        '<li>אם זו משפחה אחרת באותו בית (למשל שוכרים חדשים) — <button type="button" class="btn-link" data-su-new>לפתוח משק בית חדש</button>, או "החלפת משפחה" מתוך משק הבית.</li>' +
+        '<li>אם הבקשה שגויה או כפולה — לדחות אותה.</li>' +
+      '</ul></div>';
+  } else if (plan.kind === "ambiguous") {
+    warn = '<div class="res-slot__warn"><b>⚠ מי זה/זו?</b> השם בבקשה (' + CBA.esc(first) + ') לא תואם ל' +
+      CBA.esc(names.join(" / ")) + '. צריך לבחור לפני אישור. ' +
+      '"להחליף" — רק אם ' + CBA.esc(names.join(" / ")) + ' כבר לא גר/ה כאן.</div>';
+  }
+  return warn + (plan.kind === "full" ? "" : '<div class="res-slot__list" role="radiogroup" aria-label="לאיזה דייר שייכת הבקשה">' + opts + '</div>');
 }
 
 /* עמודות שהמסך הזה צריך כדי לעבוד במלואו. אם הן חסרות בגיליון — השדות פשוט
@@ -747,11 +845,12 @@ function resChangesHTML(list) {
    הראשונה היא **מספר בית זהה** ויש בה משבצת מייל פנויה. שם משפחה בלבד לא
    נחשב (נשאר לאישור אחד-אחד). ⚠️ משק בית אחד לכל היותר פעם אחת בכל סבב —
    שתי בקשות לאותו בית עם משבצת פנויה אחת היו גורמות לשנייה לדרוס את הראשונה
-   (approveSignup_ כותב למשבצת האחרונה כשאין פנויה). השנייה נשארת ידנית. */
+   (6.10.26: השרת כבר לא דורס — מחזיר needChoice; עדיין, השנייה נשארת ידנית). */
 function resStrongPicks(list, rows, c) {
   var used = {}, out = [];
   list.forEach(function (s) {
     var best = resSuggest(s, rows, c)[0];
+    /* 6.10.26 — רק כשהמשבצת חד-משמעית (שם תואם, או ריקה בלי שם אחר לצידה) */
     if (!best || !best.free || best.why.indexOf("מספר בית זהה") === -1) return;
     if (used[best.i]) return;
     used[best.i] = 1;
@@ -773,7 +872,7 @@ function resSignupsHTML(list, rows, c) {
       var opts = sug.map(function (x) {
         return '<option value="' + (x.i + 2) + '">' +
           CBA.esc((resVal(x.row, c.family) || "ללא שם") + " · בית " + (resVal(x.row, c.house) || "—")) +
-          (x.free ? "" : " (אין משבצת מייל פנויה)") + '</option>';
+          (x.free ? "" : (x.plan.kind === "full" ? " (שתי המשבצות תפוסות)" : " (צריך לבחור דייר)")) + '</option>';
       }).join("");
       return '<div class="res-su" data-signup="' + CBA.esc(s.id) + '">' +
         '<div class="res-su__who">' +
@@ -788,6 +887,7 @@ function resSignupsHTML(list, rows, c) {
             : '<span class="res-warn">לא נמצאה משפחה מתאימה</span>') +
           '<select class="field-input res-su__sel">' + opts +
             '<option value="new">— פתח משק בית חדש —</option></select>' +
+          '<div class="res-slot" data-slot-panel></div>' +
         '</div>' +
         '<div class="res-su__acts">' +
           '<button class="btn-approve" data-su-ok="' + CBA.esc(s.id) + '">אשר</button>' +
@@ -796,6 +896,45 @@ function resSignupsHTML(list, rows, c) {
       '</div>';
     }).join("") +
   '</div>';
+}
+
+/* 6.10.26 — מצייר מחדש את פאנל המשבצות של בקשה אחת לפי המשפחה שנבחרה */
+function resSlotPanelUpdate(container, box, c) {
+  var panel = box.querySelector("[data-slot-panel]");
+  var sel = box.querySelector(".res-su__sel");
+  var okBtn = box.querySelector("[data-su-ok]");
+  if (!panel || !sel) return;
+  var s = (resState.signups || []).filter(function (x) { return x.id === box.dataset.signup; })[0];
+  var val = sel.value;
+  if (!s || !val) { panel.innerHTML = ""; return; }
+  if (val === "new") {
+    panel.innerHTML = '<div class="res-slot__note">ייפתח משק בית חדש: משפחת <b>' + CBA.esc(s.lastName || "—") +
+      '</b>, בית ' + CBA.esc(s.house || "—") + '.</div>';
+    if (okBtn) okBtn.disabled = false;
+    return;
+  }
+  var idx = parseInt(val, 10) - 2;
+  var row = (resState.rows || [])[idx];
+  if (!row) { panel.innerHTML = ""; return; }
+  panel.innerHTML = resSlotPanelHTML(s, row, c, idx + 2);
+  var plan = resSlotPlan(s, row, c);
+  function sync() {
+    var pick = panel.querySelector('input[type="radio"]:checked');
+    if (pick) resState.suSlot[s.id] = (idx + 2) + "|" + pick.value;
+    if (okBtn) okBtn.disabled = plan.kind === "full" || !pick;
+  }
+  panel.querySelectorAll('input[type="radio"]').forEach(function (r) { r.addEventListener("change", sync); });
+  sync();
+  var ed = panel.querySelector("[data-su-edit]");
+  if (ed) ed.addEventListener("click", function () {
+    resOpenDrawer(container, idx, idx + 2, c);
+  });
+  var nw = panel.querySelector("[data-su-new]");
+  if (nw) nw.addEventListener("click", function () {
+    sel.value = "new";
+    resState.suSel[s.id] = "new";
+    resSlotPanelUpdate(container, box, c);
+  });
 }
 
 function resBind(container, c) {
@@ -818,8 +957,11 @@ function resBind(container, c) {
     sel.addEventListener("change", function () {
       var box = sel.closest("[data-signup]");
       if (box) resState.suSel[box.dataset.signup] = sel.value;
+      if (box) resSlotPanelUpdate(container, box, c);
     });
   });
+  /* 6.10.26 — פאנל "לאיזה דייר?" לכל בקשה (אחרי שחזור הבחירה ב-render) */
+  container.querySelectorAll("[data-signup]").forEach(function (box) { resSlotPanelUpdate(container, box, c); });
   var listEl = container.querySelector(".tx-list");
   if (listEl) listEl.addEventListener("scroll", function () { resState.listScroll = listEl.scrollTop; }, { passive: true });
   /* RSB6 (גל 8, 1.10.26) — "נסה שוב" לבקשות: טעינה מחדש, המטמון נשאר מוצג עד הסיום */
@@ -905,6 +1047,24 @@ function resBind(container, c) {
       if (!val) { CBA.ui.alert("בחר משפחה לשיוך"); return; }
       var payload = val === "new" ? { id: b.dataset.suOk, newFamily: true }
                                   : { id: b.dataset.suOk, residentRowIndex: parseInt(val, 10) };
+      /* 6.10.26 — המשבצת שנבחרה בפאנל נשלחת במפורש; בלי בחירה — לא שולחים בכלל */
+      if (val !== "new") {
+        var pick = box.querySelector('[data-slot-panel] input[type="radio"]:checked');
+        if (!pick) { CBA.ui.alert("צריך לבחור לאיזה דייר/ת שייכת הבקשה (בתוך הכרטיס)."); return; }
+        payload.slot = parseInt(pick.value.split(":")[0], 10);
+        payload.mode = pick.value.split(":")[1];
+        if (payload.mode === "replace") {
+          var who = pick.closest("label").querySelector("b");
+          var gone = who ? who.textContent : "הדייר/ת הקודם/ת";
+          CBA.ui.confirm(gone + " יימחק/תימחק ממשק הבית (שם, טלפון ופרטים אישיים), ובמקומו/ה ייכנס/תיכנס " +
+              ((resState.signups || []).filter(function (x) { return x.id === b.dataset.suOk; })[0] || {}).firstName + ".",
+            { title: "להחליף דייר/ת?", okText: "החלפה ואישור", danger: true }
+          ).then(function (ok) { if (ok) send(); });
+          return;
+        }
+      }
+      send();
+      function send() {
       b.disabled = true; b.textContent = "מאשר…";
       // approveSignup/rejectSignup עוברים ב-postRead (לא push) — לא נספרים
       // אוטומטית ב-inFlightWrites, אז מסמנים ידנית (ר' מדיניות רענון נתונים).
@@ -913,12 +1073,16 @@ function resBind(container, c) {
         if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("residentsSignup");
         if (!res || !res.ok) {
           b.disabled = false; b.textContent = "אשר";
-          CBA.ui.alert("האישור נכשל: " + ((res && res.error) || "שגיאה"));
+          CBA.ui.alert((res && res.needChoice ? "" : "האישור נכשל: ") + ((res && res.error) || "שגיאה"));
+          if (res && res.needChoice) { resState.loaded = false; CBA.data.refreshResidents(function () { resLoad(container); }); }
           return;
         }
+        delete resState.suSlot[b.dataset.suOk];
+        if (res.replaced) CBA.ui.toast(res.replaced + " הוחלף/ה");
         resState.loaded = false;
         CBA.data.refreshResidents(function () { resLoad(container); });
       });
+      }
     });
   });
   /* RSA1 — "אשר את כל המומלצים": חלון אחד עם הרשימה, ואז אותה פעולה בדיוק

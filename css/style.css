@@ -1934,6 +1934,20 @@ body[data-nav-single="1"] .app-nav__viewport { display: none; }
 .res-su__match { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .res-su__sel { font-size: calc(13px * var(--fs, 1)); padding: 5px 8px; }
 .res-su__acts { display: flex; gap: 6px; flex: none; }
+/* 6.10.26 — "לאיזה דייר?" בכרטיס בקשת הרשמה (נגד דריסת בן/בת הזוג) */
+.res-slot { display: flex; flex-direction: column; gap: 6px; }
+.res-slot:empty { display: none; }
+.res-slot__list { display: flex; flex-direction: column; gap: 4px; }
+.res-slot__opt { display: flex; align-items: flex-start; gap: 6px; font-size: calc(13px * var(--fs, 1)); line-height: 1.45; cursor: pointer; }
+.res-slot__opt input { margin-top: 3px; flex: none; }
+.res-slot__opt.is-locked { color: var(--text-soft); cursor: default; }
+.res-slot__opt.is-danger span { color: var(--danger); }
+.res-slot__warn, .res-slot__note { font-size: calc(12.5px * var(--fs, 1)); line-height: 1.55; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); border: 1px solid var(--warn); }
+.res-slot__note { background: var(--surface-2, #F3F4F6); border-color: transparent; }
+.res-slot__warn.is-block { background: var(--danger-soft); border-color: var(--danger); }
+.res-slot__warn ul { margin: 6px 0 0; padding-inline-start: 18px; }
+.res-slot__warn li { margin-bottom: 3px; }
+.res-su [data-su-ok]:disabled { opacity: .45; cursor: not-allowed; }
 
 /* אזהרת זהות בחלון העריכה */
 .res-hint { line-height: 1.6; }

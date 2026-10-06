@@ -5581,16 +5581,63 @@ function signupRowById_(sh, id) {
   return -1;
 }
 
-/**
- * אישור בקשה: כותב את האימייל ואת השם הפרטי לשורת המשפחה שנבחרה בטאב "תושבים".
- * body.residentRowIndex = אינדקס השורה (1-based, כפי שהוחזר ב-getResidents) —
- * או body.newFamily=true ליצירת משק בית חדש בסוף הטאב.
- */
+/* ============================================================================
+ *  🔴🔴 אישור הרשמה בלי דריסה   (6.10.26 — באג שדרס 9 משקי בית)
+ * ----------------------------------------------------------------------------
+ *  **מה קרה:** הקוד הישן בחר "משבצת האימייל הריקה הראשונה" וכתב לתוכה את השם
+ *  והטלפון של הנרשם. הרבה משקי בית נטענו מראש עם שני השמות ובלי מיילים — אז
+ *  כשבן/בת הזוג שבמשבצת 2 נרשם/ה, משבצת 1 (בלי מייל, אבל עם שם!) נראתה
+ *  "פנויה" והשם שבה נמחק. וכששתי המשבצות היו תפוסות — נדרסה משבצת 2.
+ *
+ *  **הכלל עכשיו — לעולם לא דורסים בשקט:**
+ *    • משבצת "רשומה" (יש בה מייל) — לא נוגעים בה מכאן. בכלל.
+ *    • משבצת עם שם שתואם לנרשם — "חיבור" (claim): ממלאים מייל, השם נשאר.
+ *    • משבצת ריקה לגמרי — "מילוי" (fill).
+ *    • משבצת עם שם אחר — רק בבחירה מפורשת של המנהל: claim (אותו אדם בכתיב
+ *      אחר, למשל Keren/קרן) או replace (אדם אחר — הישן נמחק, כולל טלפון).
+ *    • בלי בחירה ובלי התאמה חד-משמעית → { needChoice } ואין כתיבה.
+ *  ⚠️ אותה לוגיקה בדיוק רצה בלקוח (resSlotPlan ב-residents.js) לתצוגה בלבד.
+ *     השרת הוא השומר; הלקוח רק מסביר למנהל מה יקרה.
+ * ========================================================================== */
+function signupNameKey_(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[֑-ׇ'"׳״.\-_,()]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+function signupNameMatch_(a, b) {
+  a = signupNameKey_(a); b = signupNameKey_(b);
+  if (!a || !b) return false;
+  return a === b || a.split(' ')[0] === b.split(' ')[0];
+}
+/** מצב המשבצות בשורה + הבחירה האוטומטית (או -1 כשצריך החלטת מנהל). */
+function signupSlotPlan_(cur, cols, firstName) {
+  var slots = cols.email.map(function (ec, i) {
+    var name = cols.first[i] !== undefined ? String(cur[cols.first[i]] || '').trim() : '';
+    var email = String(cur[ec] || '').trim();
+    var st = email ? 'registered' : (name ? 'named' : 'empty');
+    return { i: i, name: name, state: st, match: st === 'named' && signupNameMatch_(name, firstName) };
+  });
+  var auto = -1, kind;
+  slots.forEach(function (s) { if (auto === -1 && s.match) auto = s.i; });
+  var anyNamed = slots.some(function (s) { return s.state === 'named'; });
+  var firstEmpty = -1;
+  slots.forEach(function (s) { if (firstEmpty === -1 && s.state === 'empty') firstEmpty = s.i; });
+  if (auto > -1) kind = 'match';
+  else if (!anyNamed && firstEmpty > -1) { auto = firstEmpty; kind = 'empty'; }
+  else if (!anyNamed) kind = 'full';
+  else kind = 'ambiguous';
+  return { slots: slots, auto: auto, kind: kind };
+}
+
 function approveSignup_(ss, body) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
   var sh = getSignupsSheet_(ss);
   var row = signupRowById_(sh, body.id);
   if (row === -1) return { ok: false, error: 'בקשה לא נמצאה' };
   var req = sh.getRange(row, 1, 1, SIGNUP_HEADERS.length).getValues()[0];
+  if (String(req[6]).trim() !== 'ממתין') return { ok: false, error: 'הבקשה כבר טופלה (' + String(req[6]).trim() + ')' };
   var email = String(req[2] || ''), firstName = String(req[3] || ''),
       lastName = String(req[4] || ''), house = String(req[5] || ''),
       phone = String(req[9] || '');
@@ -5612,6 +5659,17 @@ function approveSignup_(ss, body) {
   });
   if (!emailCols.length) return { ok: false, error: 'אין עמודת אימייל בטאב תושבים' };
 
+  /* המייל כבר רשום בשורה כלשהי? אישור נוסף היה יוצר כפילות זהות. */
+  var key = normalizeEmail_(email);
+  for (var r = 1; r < values.length; r++) {
+    for (var e = 0; e < emailCols.length; e++) {
+      if (key && normalizeEmail_(values[r][emailCols[e]]) === key) {
+        return { ok: false, error: 'המייל ' + email + ' כבר רשום אצל משפחת ' +
+                 (familyCol > -1 ? String(values[r][familyCol] || '—') : '—') + '. אפשר לדחות את הבקשה.' };
+      }
+    }
+  }
+
   var targetRow;   // 1-based בגיליון
   if (body.newFamily) {
     var blank = new Array(headers.length).fill('');
@@ -5622,23 +5680,54 @@ function approveSignup_(ss, body) {
     targetRow = rsh.getLastRow();
   } else {
     targetRow = parseInt(body.residentRowIndex, 10);
-    if (!targetRow || targetRow < 2) return { ok: false, error: 'לא נבחרה שורת משפחה' };
+    if (!targetRow || targetRow < 2 || targetRow > rsh.getLastRow()) return { ok: false, error: 'לא נבחרה שורת משפחה' };
   }
 
-  // בוחר את משבצת האימייל הפנויה הראשונה; אם כולן תפוסות — כותב לאחרונה
   var cur = rsh.getRange(targetRow, 1, 1, headers.length).getValues()[0];
-  var slot = -1;
-  for (var i = 0; i < emailCols.length; i++) {
-    if (!String(cur[emailCols[i]] || '').trim()) { slot = i; break; }
+  var plan = signupSlotPlan_(cur, { email: emailCols, first: firstNameCols }, firstName);
+  var slotsOut = plan.slots.map(function (s) { return { name: s.name, state: s.state, match: s.match }; });
+
+  var slot, mode;
+  if (body.slot === undefined || body.slot === null || body.slot === '') {
+    slot = plan.auto;
+    mode = plan.kind === 'match' ? 'claim' : 'fill';
+  } else {
+    slot = parseInt(body.slot, 10);
+    mode = String(body.mode || '');
   }
-  if (slot === -1) slot = emailCols.length - 1;
+  if (slot === -1 || isNaN(slot)) {
+    return { ok: false, needChoice: true, kind: plan.kind, slots: slotsOut,
+             error: plan.kind === 'full'
+               ? 'שתי המשבצות במשק הבית תפוסות ע"י דיירים רשומים. כדי לא לדרוס אף אחד — ערוך את משק הבית, פתח משק בית חדש, או דחה את הבקשה.'
+               : 'לא ברור לאיזה דייר שייכת הבקשה — צריך לבחור משבצת במסך האישור.' };
+  }
+  var s = plan.slots[slot];
+  if (!s) return { ok: false, error: 'משבצת לא קיימת' };
+  if (s.state === 'registered') {
+    return { ok: false, needChoice: true, kind: plan.kind, slots: slotsOut,
+             error: 'במשבצת ' + (slot + 1) + ' רשום/ה ' + (s.name || 'דייר/ת') + ' עם מייל — לא דורסים מכאן. אם עזב/ה, ערוך את משק הבית קודם.' };
+  }
+  if (s.state === 'empty') mode = 'fill';
+  else if (mode !== 'claim' && mode !== 'replace') {
+    if (s.match) mode = 'claim';
+    else return { ok: false, needChoice: true, kind: plan.kind, slots: slotsOut,
+                  error: 'במשבצת ' + (slot + 1) + ' כתוב/ה ' + s.name + ' — צריך לבחור: אותו אדם, או להחליף.' };
+  }
 
   rsh.getRange(targetRow, emailCols[slot] + 1).setValue(email);
-  if (firstNameCols[slot] !== undefined && firstName) {
-    rsh.getRange(targetRow, firstNameCols[slot] + 1).setValue(firstName);
+  var fnc = firstNameCols[slot], phc = phoneCols[slot];
+  if (fnc !== undefined && (mode !== 'claim' || !s.name) && firstName) rsh.getRange(targetRow, fnc + 1).setValue(firstName);
+  if (phc !== undefined) {
+    if (phone) rsh.getRange(targetRow, phc + 1).setValue(phone);
+    else if (mode === 'replace') rsh.getRange(targetRow, phc + 1).setValue('');
   }
-  if (phoneCols[slot] !== undefined && phone) {
-    rsh.getRange(targetRow, phoneCols[slot] + 1).setValue(phone);
+  if (mode === 'replace') {
+    /* הפרטים האישיים של מי שהוחלף לא עוברים בירושה לנכנס/ת. */
+    var n = String(slot + 1);
+    ['מקצוע', 'תאריך לידה', 'ת.ז.', 'הרשאות', 'סיור נצפה'].forEach(function (base) {
+      var c = headers.indexOf(base + ' ' + n);
+      if (c > -1) rsh.getRange(targetRow, c + 1).setValue('');
+    });
   }
   if (statusCol > -1 && !String(cur[statusCol] || '').trim()) {
     rsh.getRange(targetRow, statusCol + 1).setValue('פעיל');
@@ -5653,7 +5742,9 @@ function approveSignup_(ss, body) {
   try {
     sendResidentTemplate_(ss, 'SIGNUP_APPROVED', [email], { 'שם': firstName || email, 'קישור': CBA_APP_URL });
   } catch (mailErr) { Logger.log('מייל אישור הרשמה נכשל: ' + mailErr); }
-  return { ok: true, family: famName, row: targetRow };
+  return { ok: true, family: famName, row: targetRow, slot: slot, mode: mode,
+           replaced: mode === 'replace' ? s.name : '' };
+  } finally { lock.releaseLock(); }
 }
 
 function rejectSignup_(ss, body) {
