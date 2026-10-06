@@ -367,6 +367,88 @@ CBA.gardenAssets = (function () {
     });
   }
 
+  /* ==========================================================================
+   *  🌱 גל ב' (6.10) — דיוק גבול שתושב צירף לדיווח
+   * --------------------------------------------------------------------------
+   *  הכרעות יועד (3.10): רק בטופס הדיווח · רק הזזת נקודות קיימות · התושב
+   *  רואה רק את הגבול · הצעה שהגנן/מנהל מאשר · התראה לתושב בפוש בלבד.
+   *  מסמך gardenLawnEdits/{מזהה הדיווח} — אחד לדיווח (הכללים: leCreateOk,
+   *  leReadOk, leDecideOk). נכתב **אחרי** הדיווח: leMyReport עושה get עליו.
+   * ========================================================================== */
+
+  /** המדשאה (העליונה) שהנקודה בתוכה — הקטנה מביניהן. כתמים לא בכלל (התושב לא קורא אותם). */
+  function lawnAt(lawns, x, y) {
+    if (typeof x !== "number" || typeof y !== "number") return null;
+    var hits = (lawns || []).filter(function (l) { return !l.parentId && !l.archived && G.inShape(l, x, y); });
+    hits.sort(function (a, b) { return G.areaM2(a) - G.areaM2(b); });
+    return hits[0] || null;
+  }
+
+  /** האם הנקודות זזו בכלל (מתחת לחצי מטר — לא דיוק). a, b — רשימות שטוחות. */
+  function ptsMoved(a, b) {
+    var A = G.pairs(a), B = G.pairs(b);
+    if (A.length !== B.length) return true;
+    for (var i = 0; i < A.length; i++) if (G.distM(A[i], B[i]) >= 0.5) return true;
+    return false;
+  }
+
+  /** התושב: שליחת הדיוק. edit = { lawnId, baseRev, pts:[[x,y]…] }. */
+  function submitLawnEdit(repId, edit, cb) {
+    var f = fb();
+    if (!f || !edit || !edit.lawnId) return cb({ ok: false, err: new Error("no-edit") });
+    var t = now();
+    var doc = { id: String(repId), lawnId: String(edit.lawnId), pts: G.flat(edit.pts || []),
+                baseRev: Math.max(1, parseInt(edit.baseRev, 10) || 1), uid: uid(), status: "pending",
+                createdAt: t, updatedAt: t, schema: SCHEMA };
+    f.createDoc("gardenLawnEdits", doc.id, doc, function (e) { cb(e ? { ok: false, err: e } : { ok: true }); });
+  }
+
+  /** הצוות: הדיוק של דיווח אחד (או null). */
+  function readLawnEdit(repId, cb) {
+    ready(function (err) {
+      if (err) return cb({ ok: false, err: err });
+      fb().readDoc("gardenLawnEdits", String(repId), function (e, d) {
+        cb(e ? { ok: false, err: e } : { ok: true, edit: d || null });
+      });
+    });
+  }
+
+  /** הצוות: כל הדיוקים שממתינים (שאילתת שוויון אחת — בלי אינדקס). */
+  function loadPendingEdits(cb) {
+    ready(function (err) {
+      if (err || !fb().queryCollection) return cb({ ok: false, err: err, edits: [] });
+      fb().queryCollection("gardenLawnEdits", [["status", "pending"]], function (e, rows) {
+        cb(e ? { ok: false, err: e, edits: [] } : { ok: true, edits: rows || [] });
+      });
+    });
+  }
+
+  /** הצוות: החלטה. approve → קודם הגבול עצמו (rev+1), ורק אז ההחלטה על המסמך —
+      כך "אושר" לעולם לא נרשם על גבול שלא עודכן. lawn = המדשאה הנוכחית (עם rev). */
+  function decideLawnEdit(edit, lawn, approve, cb) {
+    var f = fb(); if (!f || !edit) return cb({ ok: false, err: new Error("no-edit") });
+    function mark() {
+      var t = now();
+      f.updateDoc("gardenLawnEdits", String(edit.id), {
+        status: approve ? "approved" : "rejected", decidedBy: uid(), decidedAt: t, updatedAt: t
+      }, function (e) {
+        if (e) return cb({ ok: false, err: e, lawnSaved: !!approve });
+        /* פוש לתושב — השרת שולח (מרכז ההתראות, gar-lawn-edit). שגר ושכח. */
+        try { if (CBA.sheets && CBA.sheets.postRead) CBA.sheets.postRead("gardenLawnEditNotify", { id: String(edit.id) }, function () {}); } catch (x) {}
+        cb({ ok: true, status: approve ? "approved" : "rejected" });
+      });
+    }
+    if (!approve) return mark();
+    if (!lawn || lawn.shape !== "poly") return cb({ ok: false, err: new Error("lawn-missing") });
+    var next = Object.assign({}, lawn, { pts: (edit.pts || []).slice() });   // שטוח, כמו במסמך
+    delete next.status;
+    saveLawn(next, function (r) {
+      if (!r.ok) return cb(r);
+      lawn.rev = r.rev; lawn.pts = next.pts;
+      mark();
+    });
+  }
+
   /* ---------------- נגזרות ---------------- */
 
   /** התקלות שמשויכות לנכס — נגזר מהמשימות, לא נשמר על הנכס. */
@@ -421,6 +503,8 @@ CBA.gardenAssets = (function () {
 
   return {
     LAWN_STATUS: LAWN_STATUS, SPR_TYPES: SPR_TYPES, newId: newId,
+    lawnAt: lawnAt, ptsMoved: ptsMoved, submitLawnEdit: submitLawnEdit, readLawnEdit: readLawnEdit,
+    loadPendingEdits: loadPendingEdits, decideLawnEdit: decideLawnEdit,
     FKIND: FKIND, FKIND_ORDER: FKIND_ORDER, fkindOfAsset: fkindOfAsset, setFaultKind: setFaultKind, openOnMap: openOnMap,
     load: load, loadLawns: loadLawns, saveLawn: saveLawn, setLawnStatus: setLawnStatus,
     saveAsset: saveAsset, linkTask: linkTask, faultsOf: faultsOf, suggest: suggest,

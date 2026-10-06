@@ -97,7 +97,7 @@ CBA.screens = CBA.screens || {};
   var S = null;
   function fresh() {
     return { mode: "view", tool: "hand", layers: loadLayers(), sel: null, pick: null, draft: null,
-             edit: null, vtx: -1, linkFor: null, lawns: [], assets: [], all: {}, tasks: [],
+             edit: null, vtx: -1, linkFor: null, lawns: [], assets: [], all: {}, tasks: [], edits: {},
              meta: { categories: [], areas: [] }, loading: true, err: null, tasksErr: null,
              root: null, pins: null, saving: false };
   }
@@ -152,7 +152,14 @@ CBA.screens = CBA.screens || {};
    *  נתונים
    * ====================================================================== */
   function loadAll(silent) {
-    var left = 2;
+    var left = 3;
+    /* 🌱 גל ב' — דיוקי גבול שממתינים (שאילתת שוויון אחת). כשל = אין מונה, לא חוסם. */
+    CBA.gardenAssets.loadPendingEdits(function (r) {
+      S.edits = {};
+      (r.edits || []).forEach(function (e) { S.edits[String(e.id)] = e; });
+      if (r.ok && CBA.setLawnEditsCount) CBA.setLawnEditsCount((r.edits || []).length);
+      step();
+    });
     if (!silent) { S.loading = true; renderState(); }
     CBA.gardenAssets.load(function (res) {
       if (res.ok) { S.lawns = res.lawns; S.assets = res.assets; S.all = res.all; S.err = null; }
@@ -345,6 +352,12 @@ CBA.screens = CBA.screens || {};
                  '" x2="' + (an[0] * W.w).toFixed(1) + '" y2="' + (an[1] * W.h).toFixed(1) + '"/>');
         });
       });
+    }
+    /* 🌱 גל ב' — תקלה נבחרה ויש לה דיוק ממתין: מה שהתושב הציע, בכתום. */
+    var selT = S.sel && S.sel.type === "task" ? taskById(S.sel.id) : null;
+    var pe = selT && selT.repId && S.edits[String(selT.repId)];
+    if (pe && pe.pts && pe.pts.length >= 6) {
+      o.push('<polygon class="lw-proposal" points="' + G.pairs(pe.pts).map(function (p) { return P(p[0], p[1]); }).join(" ") + '"/>');
     }
     /* טיוטה / עריכת צורה */
     var D = S.edit || S.draft;
@@ -906,6 +919,22 @@ CBA.screens = CBA.screens || {};
       else if (k === "sugg") linkTaskTo(S.pick, b.dataset.id, true);
       else if (k === "retry") { S.err = null; loadAll(false); }
     });
+    /* 🌱 גל ב' — "N דיוקי גבול ממתינים" → התקלה הראשונה, ממוקדת במפה. */
+    R.querySelector("#lw-sum").addEventListener("click", function (e) {
+      if (!e.target.closest('[data-act="edits"]')) return;
+      var list = pendingEditTasks(); if (!list.length) return;
+      var cur = S.sel && S.sel.type === "task" ? list.findIndex(function (t) { return String(t.id) === String(S.sel.id); }) : -1;
+      var t = list[(cur + 1) % list.length];
+      select({ type: "task", id: t.id });
+      var pe = S.edits[String(t.repId)];
+      var pp = pe && pe.pts ? CBA.gardenGeo.pairs(pe.pts) : (hasLoc(t) ? [[+t.x, +t.y]] : []);
+      if (pp.length) {
+        var x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+        pp.forEach(function (p) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
+        var api = S.pins && S.pins.api;
+        if (api && api.fitBox) api.fitBox(Math.max(0, x0 - 0.01), Math.max(0, y0 - 0.01), Math.min(1, x1 + 0.01), Math.min(1, y1 + 0.01), 40);
+      }
+    });
     R.querySelector("#lw-state").addEventListener("click", function (e) {
       if (e.target.closest("[data-retry]")) loadAll(false);
     });
@@ -1019,7 +1048,13 @@ CBA.screens = CBA.screens || {};
       '<span class="lw-stat lw-stat--lawn">דשא <b>' + fmt(tot) + '</b> מ"ר' +
         (tot ? '<span class="lw-meter" role="img" aria-label="' + pct("ok") + '% תקין, ' + pct("dry") + '% יבש, ' + pct("dead") + '% מת">' +
           '<u class="s-ok" style="width:' + pct("ok") + '%"></u><u class="s-dry" style="width:' + pct("dry") + '%"></u><u class="s-dead" style="width:' + pct("dead") + '%"></u></span>' +
-          '<em>' + pct("ok") + '% תקין · ' + pct("dry") + '% יבש · ' + pct("dead") + '% מת</em>' : '') + '</span>';
+          '<em>' + pct("ok") + '% תקין · ' + pct("dry") + '% יבש · ' + pct("dead") + '% מת</em>' : '') + '</span>' +
+      (pendingEditTasks().length ? '<button type="button" class="lw-stat lw-stat--edits" data-act="edits">' +
+        '<b>' + pendingEditTasks().length + '</b> ' + (pendingEditTasks().length === 1 ? "דיוק גבול ממתין" : "דיוקי גבול ממתינים") + '</button>' : '');
+  }
+  /** תקלות שיש להן דיוק גבול ממתין (לפי מזהה הדיווח). */
+  function pendingEditTasks() {
+    return S.tasks.filter(function (t) { return t.repId && S.edits[String(t.repId)]; });
   }
 
   /* ========================================================================
@@ -1040,6 +1075,11 @@ CBA.screens = CBA.screens || {};
     el.classList.toggle("is-empty", !x);
     if (!x) { el.innerHTML = emptyPanel(); return; }
     el.innerHTML = '<div class="lw-grip" aria-hidden="true"></div>' + (S.sel.type === "task" ? faultPanel(x) : assetPanel(x));
+    var lr = el.querySelector("#lw-lr");
+    if (lr && CBA.lawnRefine && CBA.lawnRefine.decision) {
+      CBA.lawnRefine.decision(lr, { repId: x.repId, taskId: x.id, familyId: x.familyId || "",
+        onDecided: function () { loadAll(true); } });
+    }
   }
   function emptyPanel() {
     if (S.loading) return '<div class="lw-empty"><div class="sk-line" style="width:60%"></div><div class="sk-line"></div><div class="sk-line" style="width:80%"></div></div>';
@@ -1171,6 +1211,7 @@ CBA.screens = CBA.screens || {};
       (p.res ? '<span class="lw-pill lw-pill--ink">' + ico("user", 12) + p.res + ' תושבים מחכים</span>' : '') +
       (p.rep ? '<span class="lw-pill" style="background:#C0655C">' + ico("repeat", 12) + 'חוזרת</span>' : '') + '</div>';
     h += kindSec(t);
+    if (t.repId && S.edits[String(t.repId)]) h += '<div id="lw-lr"></div>';
     var la = (t.assets || []).map(function (id) { return byId(id) || { id: id, kind: "", name: "סימון שהוסר", archived: true }; });
     h += '<div class="lw-sec"><div class="lw-sec__t">משויכת ל</div><div class="lw-list">' +
       (la.length ? la.map(function (a) {

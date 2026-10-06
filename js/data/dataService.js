@@ -3638,6 +3638,10 @@ CBA.data = (function () {
           createdAt: now, updatedAt: now, order: 0,
           year: String(year), schema: 1
         };
+        /* 🌱 גל ב' (6.10) — שיוך אוטומטי למדשאה שבה ננעץ הדיווח (תקלת דשא/השקיה).
+           הכלל מתיר לתושב לשלוח `assets` ביצירה (gtAssetsOk, לא ב-gtTeamOnly). */
+        var autoAssets = (payload.assets || []).filter(function (a) { return typeof a === "string" && a && a.length <= 40; }).slice(0, 5);
+        if (autoAssets.length) task.assets = autoAssets;
         var report = {
           id: String(repId), familyId: fid, date: new Date().toISOString(),
           category: payload.category, area: payload.area || "",
@@ -3679,8 +3683,22 @@ CBA.data = (function () {
             }
 
             /* מכאן הדיווח **קיים**. כל מה שנכשל אחרי זה אינו מבטל אותו. */
-            gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId, { familyId: fid, asResident: true });
+            gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId +
+              (payload.lawnEdit ? " · צורף דיוק לגבול המדשאה, ממתין לאישור הצוות" : ""), { familyId: fid, asResident: true });
             CBA.sheets.postRead("gardenNotifyReport", { id: String(repId) }, function () {});
+
+            /* 🌱 גל ב' — הדיוק נכתב **אחרי** הדיווח (הכלל עושה get על הדיווח
+               כדי לוודא שהוא של המשפחה). כשל כאן אינו מבטל את הדיווח — רק
+               מדווח, והמסך אומר לתושב שהדיוק לא נשמר. */
+            var edit = payload.lawnEdit;
+            if (edit && CBA.gardenAssets && CBA.gardenAssets.submitLawnEdit) {
+              return CBA.gardenAssets.submitLawnEdit(String(repId), edit, function (er) {
+                if (!er.ok) gardenPhotoWarn("דיוק הגבול לא נשמר", repId, er.err);
+                afterReport(er.ok ? "ok" : "failed");
+              });
+            }
+            afterReport("");
+            function afterReport(lawnEdit) {
 
             /* 🔴🔴 **ההגשה נסגרת כאן, לפני התמונות** (17.9, החלטת יועד).
                מרגע שהמסמך נכתב הדיווח קיים, יש לו מספר, והתושב חופשי
@@ -3689,7 +3707,7 @@ CBA.data = (function () {
                השעתית להתריע ואת הבאנר ב"הדיווחים שלי" להופיע.
                ⚠️ **אין כאן `beforeunload`.** זו הנקודה: חסימה של סגירת
                   הדף הייתה מבטלת בדיוק את מה שהשינוי הזה בא לתת. */
-            cb({ ok: true, id: repId, taskId: taskId,
+            cb({ ok: true, id: repId, taskId: taskId, lawnEdit: lawnEdit,
                  photos: [], photosFailed: 0,
                  photosExpected: photos.length, photosPending: photos.length });
 
@@ -3718,6 +3736,7 @@ CBA.data = (function () {
                   });
               });
             });
+            }
           });
         });
       });
@@ -5913,6 +5932,11 @@ CBA.data = (function () {
     gardenCanEditTask: function (t) { return gardenCanEditTask(t); },
     /* מי עשה שורת יומן, בשפת התצוגה. ר' gardenLogWho. */
     gardenLogWho: function (r) { return gardenLogWho(r); },
+    /* 🌱 גל ב' (6.10) — שורת "הערה" בקו הזמן של התושב (החלטה על דיוק הגבול).
+       'הערה' כבר בין הסוגים שהתושב רואה — בלי שינוי בכללים. */
+    gardenLogNote: function (taskId, note, familyId) {
+      gardenLogAppend(String(taskId), "הערה", String(note || "").substring(0, 300), { familyId: familyId || "" });
+    },
     gardenPlanWeekImpact: function (payload, cb) { gardenPlanWeekImpact(payload, cb); },
     gardenEditTask: function (id, payload, cb) {
       if (!gardenWritesOn()) return cb({ ok: false, error: "עריכה זמינה רק במסלול הישיר" });

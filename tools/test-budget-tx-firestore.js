@@ -232,7 +232,7 @@ ok('והטאב שלו עובר את השער',
 /* ⚠️ 6 → 9 ב-16.9: הגינון עבר ל-Firestore, ולכן שלושת האוספים שלו
    נכנסו לגיבוי השעתי — הגיליון הוא הגיבוי שלהם. */
 /* 25.9 — 9→13: +weworkBookings, weworkConfig, doorLog, gymNuki (Door.gs) */
-ok('13 אוספים מגובים', sandbox.BK_COLLECTIONS.length === 13,
+ok('17 אוספים מגובים', /* 6.10: 14 קיימים + 3 של דשא והשקיה */ sandbox.BK_COLLECTIONS.length === 17,
    String(sandbox.BK_COLLECTIONS.length));
 
 section('🔴 כלל האבטחה');

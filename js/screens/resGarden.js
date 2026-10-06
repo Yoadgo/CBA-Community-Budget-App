@@ -106,6 +106,8 @@
 
       if (res && res.ok) {
         pendingReport = null;
+        /* 🌱 גל ב' — הדיווח נשמר, הדיוק לא: אומרים את האמת (הדיווח עצמו בסדר). */
+        if (res.lawnEdit === "failed") setTimeout(function () { CBA.ui.toast("הדיווח נשלח, אבל דיוק הגבול לא נשמר", "error"); }, 2600);
         /* duplicate=true — השרת מצא שהדיווח כבר נכתב עם אותו מזהה שליחה.
            אומרים את האמת ולא "נשלח", כדי שהתושב לא יחפש דיווח שני. */
         var base = (res.duplicate ? "הדיווח כבר נשמר · מספר " : "הדיווח נשלח · מספר ") + res.id;
@@ -990,6 +992,9 @@
                 '<p class="gd-lbl">איפה זה? <s>*</s> <em>לחצו על המפה</em></p>' +
                 '<div class="gd-map" id="gd-map"></div>' +
                 '<p class="gd-hint" id="gd-loc">לא צריך דיוק — מספיק לסמן ליד איזה בית זה.</p>' +
+                /* 🌱 גל ב' (6.10) — דיוק גבול המדשאה. מופיע רק כשהנעיצה בתוך
+                   מדשאה מסומנת ובקטגוריית דשא/השקיה. */
+                '<div class="lr-box" id="gd-lawn" hidden aria-live="polite"></div>' +
               '</div>' +
               '<div class="gd-card gd-card--place">' +
                 '<p class="gd-lbl">מיקום במילים <em>לא חובה</em></p>' +
@@ -1030,6 +1035,7 @@
           });
           state.cat = b.dataset.c;
           renderTitlePicks();
+          lawnSync();
         });
         tpicksEl.addEventListener("click", function (e) {
           var b = e.target.closest(".gd-tpick");
@@ -1151,12 +1157,67 @@
              כדי שהתקלה תיפתח עם אזור במקום שמישהו יבחר אותו אחר כך — ואם אין
              מצולעים או שהנעיצה נפלה מחוץ לכולם הוא "" והכל ממשיך כרגיל. */
           onPin: function (n, area) {
+            /* בזמן דיוק הגבול הקשה על המפה אינה מזיזה את הנעיצה — מחזירים אותה. */
+            if (refine && refine.isRefining()) {
+              if (formMapApi && formMapApi.setPin && state.x !== null) formMapApi.setPin({ x: state.x, y: state.y });
+              return;
+            }
             state.x = n.x; state.y = n.y; state.area = area || "";
+            lawnSync();
             locEl.textContent = state.area
               ? ("המיקום סומן · " + state.area + ". אפשר ללחוץ שוב כדי להזיז.")
               : "המיקום סומן. אפשר ללחוץ שוב כדי להזיז.";
             locEl.classList.add("is-ok");
           }
+        });
+
+        /* ---- 🌱 גל ב' (6.10) — גבול המדשאה ודיוק שלו ----
+           הגבולות נקראים פעם אחת (gardenLawns פתוח לכל חבר פעיל — בלי מצב
+           דשא ובלי ממטרות). כשל = התכונה פשוט לא מופיעה; הדיווח עובד כרגיל. */
+        var lawnEl = container.querySelector("#gd-lawn");
+        var refine = (CBA.lawnRefine && CBA.gardenAssets && formMapApi)
+          ? CBA.lawnRefine.attach({ host: container.querySelector("#gd-map"), api: formMapApi, onChange: function () { lawnSync(); } })
+          : null;
+        if (refine && CBA.gardenAssets.loadLawns) {
+          CBA.gardenAssets.loadLawns(function (r) {
+            if (!r.ok || !container.isConnected) return;
+            refine.setLawns(r.lawns);
+            lawnSync();
+          });
+        }
+        function lawnCat() {
+          var k = catOf(state.cat).key;
+          return k === "lawn" || k === "water";
+        }
+        function lawnSync() {
+          if (!refine || !lawnEl) return;
+          var l = (state.x !== null) ? refine.setPin(state.x, state.y, lawnCat()) : null;
+          state.lawn = l;
+          if (!l) { lawnEl.hidden = true; lawnEl.innerHTML = ""; return; }
+          var inf = refine.info(), nm = esc(l.name || "המדשאה");
+          lawnEl.hidden = false;
+          lawnEl.className = "lr-box" + (inf.refining ? " is-on" : inf.moved ? " is-done" : "");
+          lawnEl.innerHTML = inf.refining
+            ? '<p><b>גררו את הנקודות הכתומות</b> למקום שבו הדשא באמת נגמר. אפשר להזיז את המפה ולהגדיל. ' +
+                '<span class="lr-muted">הוספה או מחיקה של נקודות — רק לצוות.</span></p>' +
+              '<div class="lr-acts"><button type="button" class="lr-btn lr-btn--pri" data-lr="done">סיום</button>' +
+                '<button type="button" class="lr-btn" data-lr="reset">איפוס</button>' +
+                '<button type="button" class="lr-btn" data-lr="cancel">ביטול</button></div>'
+            : inf.moved
+            ? '<p>צירפת דיוק לגבול של <b>' + nm + '</b>. הצוות יבדוק ויעדכן את המפה, ותקבלו הודעה.</p>' +
+              '<div class="lr-acts"><button type="button" class="lr-btn" data-lr="start">עריכה</button>' +
+                '<button type="button" class="lr-btn" data-lr="cancel">הסרת הדיוק</button></div>'
+            : '<p>הנעיצה בתוך <b>' + nm + '</b> (הגבול מסומן במפה בקו מקווקו). הגבול לא תואם את מה שרואים בשטח?</p>' +
+              '<div class="lr-acts"><button type="button" class="lr-btn" data-lr="start">לדייק את הגבול</button></div>';
+        }
+        if (lawnEl) lawnEl.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-lr]"); if (!b || !refine) return;
+          var k = b.dataset.lr;
+          if (k === "start") refine.start();
+          else if (k === "done") refine.done();
+          else if (k === "reset") refine.reset();
+          else if (k === "cancel") refine.cancel();
+          lawnSync();
         });
 
         /* ---- שחזור דיווח שנכשל (restore-pending) ----
@@ -1209,6 +1270,8 @@
           if (state.x === null && !place) {
             return CBA.ui.alert("צריך לסמן מיקום על המפה או לכתוב אותו במילים");
           }
+          if (refine && refine.isRefining()) { refine.done(); lawnSync(); }
+          var lawnNow = (refine && state.lawn && lawnCat()) ? state.lawn : null;
           sendReport({
             category: state.cat,
             title: titleVal,
@@ -1217,7 +1280,10 @@
             phone: container.querySelector("#gd-phone").value.trim(),
             x: state.x, y: state.y, area: state.area || "",
             photos: state.photos.slice(),
-            clientRef: state.clientRef
+            clientRef: state.clientRef,
+            /* 🌱 גל ב' — שיוך אוטומטי למדשאה + הדיוק (אם הוזזו נקודות). */
+            assets: lawnNow ? [lawnNow.id] : [],
+            lawnEdit: lawnNow ? refine.edit() : null
           }, sendBtn);
         });
       });
