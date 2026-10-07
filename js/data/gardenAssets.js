@@ -169,6 +169,10 @@ CBA.gardenAssets = (function () {
   var G = CBA.gardenGeo;
   var SCHEMA = 1;
   var LAWN_STATUS = { ok: "תקין", dry: "יבש", dead: "מת" };
+  /* 🌱 גל ג' (7.10) — תיקוני השטח הירוק, מסמכים ב-gardenLawns עם `kind`:
+     gadd = הוספת ירוק · gcut = לא דשא · gbld = מבנה ציבור ירוק/לא (name + green).
+     מנהל גינון בלבד (הכללים: lwKindOk). ר' js/ui/greenArea.js. */
+  var GKINDS = { gadd: 1, gcut: 1, gbld: 1 };
   var SPR_TYPES = { pop: "ראש מתרומם", rot: "ראש מסתובב", drip: "טפטוף" };
   /* 🔴 4.10 (בקשת יועד) — **סוג תקלה בתקלות דשא/השקיה, לצוות בלבד.**
      "צריך בתוך התקלות אפשרות להבחין בין פיצוץ בקו המים לפיצוץ/תקלה
@@ -220,7 +224,13 @@ CBA.gardenAssets = (function () {
       function done() {
         if (--left) return;
         if (firstErr) return cb({ ok: false, err: firstErr, lawns: [], assets: [] });
-        var state = {}, all = {}, patches = [];
+        var state = {}, all = {}, patches = [], corr = [];
+        /* 🌱 גל ג' — תיקוני שטח (gadd/gcut/gbld) יושבים באותו אוסף כמו
+           המדשאות, אבל הם לא מדשאות: נפרדים כאן, כולל מבוטלים (להיסטוריה). */
+        lawns = lawns.filter(function (l) {
+          if (!GKINDS[l.kind]) return true;
+          corr.push(l); return false;
+        });
         assets.forEach(function (a) {
           all[a.id] = a;
           if (a.kind === "lawn") state[a.lawnId || a.id] = a;
@@ -245,7 +255,9 @@ CBA.gardenAssets = (function () {
           ok: true,
           lawns: lawns.concat(patches).filter(function (l) { return !l.archived; }),
           assets: assets.filter(function (a) { return a.kind !== "lawn" && a.kind !== "patch" && !a.archived; }),
-          all: all
+          all: all, corr: corr,
+          /* מסמכי מצב של מדשאות (kind 'lawn') — להמרה החד-פעמית לכתמים (migrateStatus). */
+          lawnState: state
         });
       }
       fb().readCollection("gardenLawns", function (e, rows) {
@@ -275,7 +287,7 @@ CBA.gardenAssets = (function () {
   /** כתם — מסמך אחד ב-gardenAssets: צורה + מצב + המדשאה שהוא בתוכה. */
   function patchDoc(l, status) {
     var doc = { id: l.id, kind: "patch", name: String(l.name || "").slice(0, 60), shape: l.shape,
-                parentId: l.parentId, status: LAWN_STATUS[status] ? status : "ok", archived: !!l.archived,
+                parentId: String(l.parentId || ""), status: LAWN_STATUS[status] ? status : "ok", archived: !!l.archived,
                 updatedAt: now(), updatedBy: uid(), schema: SCHEMA };
     geom(doc, l);
     return doc;
@@ -290,7 +302,8 @@ CBA.gardenAssets = (function () {
       כתם (parentId) — הולך ל-gardenAssets (ר' ההערה בראש הקובץ). */
   function saveLawn(lawn, cb) {
     var isNew = !lawn.rev;
-    if (lawn.parentId) {
+    /* 🌱 גל ג' — כתם הוא כתם גם בלי מדשאה סביבו (parentId ריק): הדשא כבר לא מצויר. */
+    if (lawn.patch || lawn.parentId) {
       var pd = patchDoc(lawn, lawn.status);
       return fb().createDoc("gardenAssets", pd.id, pd, function (e) {
         if (e) return cb({ ok: false, err: e });
@@ -313,7 +326,7 @@ CBA.gardenAssets = (function () {
       `lawn` = אובייקט המקטע (או מזהה, לתאימות). */
   function setLawnStatus(lawn, status, cb) {
     if (!LAWN_STATUS[status]) return cb({ ok: false, err: new Error("bad-status") });
-    if (lawn && typeof lawn === "object" && lawn.parentId) {
+    if (lawn && typeof lawn === "object" && (lawn.patch || lawn.parentId)) {
       var pd = patchDoc(lawn, status);
       return fb().createDoc("gardenAssets", pd.id, pd, function (e) { cb(e ? { ok: false, err: e } : { ok: true }); });
     }
@@ -321,6 +334,38 @@ CBA.gardenAssets = (function () {
     var doc = { id: lawnId, kind: "lawn", lawnId: lawnId, status: status,
                 updatedAt: now(), updatedBy: uid(), schema: SCHEMA };
     fb().createDoc("gardenAssets", lawnId, doc, function (e) { cb(e ? { ok: false, err: e } : { ok: true }); });
+  }
+
+  /** 🌱 גל ג' — תיקון שטח: יצירה (rev 1) או עדכון (rev+1), כמו מדשאה.
+      c = { id, kind, name, rev, archived, pts:[[x,y]…] (gadd/gcut) | green:bool (gbld) }.
+      ⚠️ נקודות לא נחתכות ל-0–1 (בניגוד ל-flat): "הוספת ירוק" מותרת גם מעבר לקצה
+      העולם — אזור "ציר מזרחי" חורג מזרחה. הכללים בודקים אורך רשימה בלבד. */
+  function saveCorr(c, cb) {
+    if (!GKINDS[c.kind]) return cb({ ok: false, err: new Error("bad-kind") });
+    var doc = { id: c.id, kind: c.kind, name: String(c.name || "").slice(0, 60),
+                rev: c.rev ? c.rev + 1 : 1, archived: !!c.archived,
+                updatedAt: now(), updatedBy: uid(), schema: SCHEMA };
+    if (c.kind === "gbld") doc.green = !!c.green;
+    else {
+      doc.shape = "poly";
+      doc.pts = [];
+      /* 🔴 צוות אדום 7.10 — מסמך שמור מגיע עם pts שטוח; ציור חדש — זוגות. שניהם. */
+      var P = (c.pts && c.pts.length && typeof c.pts[0] === "number") ? G.pairs(c.pts) : (c.pts || []);
+      P.forEach(function (q) {
+        doc.pts.push(Math.round(Math.max(-0.2, Math.min(1.2, +q[0] || 0)) * 1e5) / 1e5,
+                     Math.round(Math.max(-0.2, Math.min(1.2, +q[1] || 0)) * 1e5) / 1e5);
+      });
+    }
+    fb().createDoc("gardenLawns", doc.id, doc, function (e) {
+      if (e) return cb({ ok: false, err: e });
+      cb({ ok: true, rev: doc.rev, doc: doc });
+    });
+  }
+  /** מזהה קבוע לעקיפת מבנה — לפי השם (אחד לכל מבנה, "נסה שוב" לא מכפיל). */
+  function bldId(name) {
+    var s = String(name || ""), h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return "gb" + h.toString(36);
   }
 
   var ASSET_KEYS = ["name", "x", "y", "ctrl", "station", "type", "range", "note", "archived"];
@@ -379,7 +424,7 @@ CBA.gardenAssets = (function () {
   /** המדשאה (העליונה) שהנקודה בתוכה — הקטנה מביניהן. כתמים לא בכלל (התושב לא קורא אותם). */
   function lawnAt(lawns, x, y) {
     if (typeof x !== "number" || typeof y !== "number") return null;
-    var hits = (lawns || []).filter(function (l) { return !l.parentId && !l.archived && G.inShape(l, x, y); });
+    var hits = (lawns || []).filter(function (l) { return !l.parentId && !l.patch && !GKINDS[l.kind] && !l.archived && G.inShape(l, x, y); });
     hits.sort(function (a, b) { return G.areaM2(a) - G.areaM2(b); });
     return hits[0] || null;
   }
@@ -395,6 +440,16 @@ CBA.gardenAssets = (function () {
   /** התושב: שליחת הדיוק. edit = { lawnId, baseRev, pts:[[x,y]…] }. */
   function submitLawnEdit(repId, edit, cb) {
     var f = fb();
+    /* 🌱 גל ג' — התושב מסמן את האזור היבש (עיגול), לא מדייק גבול מדשאה. */
+    if (f && edit && edit.kind === "patch") {
+      var t0 = now();
+      var pdoc = { id: String(repId), kind: "patch", shape: "circle",
+                   cx: Math.round(G.flat([[edit.cx, edit.cy]])[0] * 1e5) / 1e5,
+                   cy: Math.round(G.flat([[edit.cx, edit.cy]])[1] * 1e5) / 1e5,
+                   r: Math.round(Math.max(0.0005, Math.min(0.05, +edit.r || 0)) * 1e5) / 1e5,
+                   uid: uid(), status: "pending", createdAt: t0, updatedAt: t0, schema: SCHEMA };
+      return f.createDoc("gardenLawnEdits", pdoc.id, pdoc, function (e) { cb(e ? { ok: false, err: e } : { ok: true }); });
+    }
     if (!f || !edit || !edit.lawnId) return cb({ ok: false, err: new Error("no-edit") });
     var t = now();
     var doc = { id: String(repId), lawnId: String(edit.lawnId), pts: G.flat(edit.pts || []),
@@ -446,6 +501,44 @@ CBA.gardenAssets = (function () {
       if (!r.ok) return cb(r);
       lawn.rev = r.rev; lawn.pts = next.pts;
       mark();
+    });
+  }
+
+  /** 🌱 גל ג' — הצוות: החלטה על אזור יבש שתושב סימן.
+      status = 'dry' | 'dead' → קודם הכתם עצמו (gardenAssets), אחר כך שיוך לתקלה,
+      ורק אז ההחלטה — "אושר" לעולם לא נרשם על כתם שלא נשמר. null = לא להוסיף.
+      מזהה הכתם קבוע לדיווח ('pr' + מזהה), כך שלחיצה כפולה לא יוצרת שניים. */
+  function decidePatchEdit(edit, status, taskId, cb) {
+    var f = fb(); if (!f || !edit) return cb({ ok: false, err: new Error("no-edit") });
+    var approve = status === "dry" || status === "dead", linkFailed = false;
+    function mark(patchId) {
+      var t = now();
+      f.updateDoc("gardenLawnEdits", String(edit.id), {
+        status: approve ? "approved" : "rejected", decidedBy: uid(), decidedAt: t, updatedAt: t
+      }, function (e) {
+        if (e) return cb({ ok: false, err: e, lawnSaved: approve });
+        try { if (CBA.sheets && CBA.sheets.postRead) CBA.sheets.postRead("gardenLawnEditNotify", { id: String(edit.id) }, function () {}); } catch (x) {}
+        cb({ ok: true, status: approve ? "approved" : "rejected", patchId: patchId || "", linkFailed: linkFailed });
+      });
+    }
+    if (!approve) return mark("");
+    var p = { id: "pr" + String(edit.id).replace(/[^\w-]/g, "").slice(0, 30), patch: true, kind: "lawn", parentId: "",
+              name: status === "dead" ? "כתם מת · מדיווח תושב" : "כתם יבש · מדיווח תושב",
+              shape: "circle", cx: +edit.cx, cy: +edit.cy, r: +edit.r, pts: [], status: status, rev: 0 };
+    saveLawn(p, function (r) {
+      if (!r.ok) return cb(r);
+      if (!taskId) return mark(p.id);
+      /* שיוך: מצרפים לשיוכים הקיימים של התקלה (עד 5). כשל בשיוך לא מבטל — רק מדווח. */
+      f.readDoc("gardenTasks", String(taskId), function (e2, task) {
+        var cur = (!e2 && task && task.assets) ? task.assets.slice() : [];
+        /* כבר 5 שיוכים — לא מפילים את הוותיק בשקט; הכתם נשמר, השיוך מדווח ככשל. */
+        if (cur.indexOf(p.id) === -1 && cur.length >= 5) { linkFailed = true; return mark(p.id); }
+        if (cur.indexOf(p.id) === -1) cur.push(p.id);
+        linkTask(taskId, cur, function (lr) {
+          linkFailed = !lr.ok;
+          mark(p.id);
+        }, task && !task.fkind ? { fkind: "lawn" } : null);
+      });
     });
   }
 
@@ -504,7 +597,8 @@ CBA.gardenAssets = (function () {
   return {
     LAWN_STATUS: LAWN_STATUS, SPR_TYPES: SPR_TYPES, newId: newId,
     lawnAt: lawnAt, ptsMoved: ptsMoved, submitLawnEdit: submitLawnEdit, readLawnEdit: readLawnEdit,
-    loadPendingEdits: loadPendingEdits, decideLawnEdit: decideLawnEdit,
+    loadPendingEdits: loadPendingEdits, decideLawnEdit: decideLawnEdit, decidePatchEdit: decidePatchEdit,
+    GKINDS: GKINDS, saveCorr: saveCorr, bldId: bldId,
     FKIND: FKIND, FKIND_ORDER: FKIND_ORDER, fkindOfAsset: fkindOfAsset, setFaultKind: setFaultKind, openOnMap: openOnMap,
     load: load, loadLawns: loadLawns, saveLawn: saveLawn, setLawnStatus: setLawnStatus,
     saveAsset: saveAsset, linkTask: linkTask, faultsOf: faultsOf, suggest: suggest,

@@ -139,10 +139,12 @@ section('4. החיבורים בקוד');
   ok('🔴 דיווח: הדיוק נכתב אחרי מסמך הדיווח (בתוך ה-callback שלו)', DS.indexOf('CBA.fb.createDoc("gardenReports"') < DS.indexOf('CBA.gardenAssets.submitLawnEdit(String(repId)'));
   ok('דיווח: שורת "נפתח" אומרת שצורף דיוק (התושב רואה סטטוס)', /צורף דיוק לגבול המדשאה, ממתין לאישור הצוות/.test(DS));
   ok('דיווח: כשל בדיוק לא מכשיל את הדיווח — רק הודעה', /res\.lawnEdit === "failed"/.test(RG));
-  ok('טופס: שולח assets + lawnEdit, רק בקטגוריית דשא/השקיה', /assets: lawnNow \? \[lawnNow\.id\] : \[\]/.test(RG) && /lawnEdit: lawnNow \? refine\.edit\(\) : null/.test(RG) && /k === "lawn" \|\| k === "water"/.test(RG));
+  /* 7.10 גל ג' — עודכן: אין יותר מדשאה לשייך; ר' test-green-default-2026-10-07.js */
+  ok('טופס: שולח assets + lawnEdit, רק בקטגוריית דשא/השקיה', /assets: \(lawnNow && lawnNow\.id\) \? \[lawnNow\.id\] : \[\]/.test(RG) && /lawnEdit: lawnNow \? refine\.edit\(\) : null/.test(RG) && /k === "lawn" \|\| k === "water"/.test(RG));
   ok('🔴 טופס: בזמן דיוק הקשה על המפה לא מזיזה את הנעיצה', /if \(refine && refine\.isRefining\(\)\) \{[\s\S]{0,200}formMapApi\.setPin\(\{ x: state\.x, y: state\.y \}\)/.test(RG));
-  ok('🔴 דיוק: רק הזזת נקודות קיימות (אין הוספה/מחיקה)', !/splice\(/.test(LR) && /S\.pts\[drag\.i \* 2\] =/.test(LR));
-  ok('דיוק: רק מדשאות poly עליונות', /x\.shape === "poly" && !x\.parentId/.test(LR));
+  /* 7.10 גל ג' — במקום דיוק גבול: התושב מסמן עיגול של אזור יבש, רק על דשא מחושב. */
+  ok('🔴 גל ג׳: התושב שולח רק עיגול (kind patch), ברדיוס מוגבל', !/splice\(/.test(LR) && /kind: "patch", cx: S\.spot\.cx/.test(LR) && /RMAX = 0\.05/.test(LR));
+  ok('גל ג׳: "הנעיצה על דשא" — מהמנוע, לא ממדשאה מצוירת', /m\.inGreen\(x, y\)/.test(LR));
   ok('דיוק: zoom של CSS', /function zf\(\)/.test(LR));
   ok('כרטיס התקלה: בלוק ההחלטה (רק דיווח תושב בקטגוריית דשא/השקיה)', /t\.repId && \(cat\.key === "lawn" \|\| cat\.key === "water"\)\) \? '<div id="gd-det-lr"><\/div>'/.test(GT) && /CBA\.lawnRefine\.decision\(lrEl/.test(GT));
   ok('מסך דשא והשקיה: ממתינים, צ\'יפ, הצעה בכתום, בלוק החלטה', /loadPendingEdits/.test(LW) && /data-act="edits"/.test(LW) && /lw-proposal/.test(LW) && /CBA\.lawnRefine\.decision\(lr,/.test(LW));

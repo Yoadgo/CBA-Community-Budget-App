@@ -725,3 +725,17 @@ Apps Script החזיר **41 משימות**, Firestore **10**.
 | L13 | R | `get gardenLawnEdits/<אין>` | | ❌ permission-denied (לא not-found — צפוי) |
 
 ⚠️ יועד (מנהל-על) יכול לאמת חי רק את L1, L4, L5, L7–L11. L2, L3, L6, L12 דורשים חשבון תושב / גנן / "עזב".
+
+### 🌱 גל ג' (7.10.2026) — "ירוק כברירת מחדל": תיקוני שטח + סימון אזור יבש
+נכתב לפני הפרסום. הסימולטור (tools/test-green-default-2026-10-07.js) מכסה את כולם; כאן — מה לבדוק חי.
+
+| # | מי | פעולה | | צפוי |
+|---|---|---|---|---|
+| L14 | M | `set gardenLawns/<חדש>` עם `kind: 'gadd'`, `shape: 'poly'`, `rev: 1` | | ✅ |
+| L15 🔴 | E | אותו דבר (הגנן החיצוני) | | ❌ — תיקוני שטח: מנהל גינון בלבד |
+| L16 🔴 | R | אותו דבר (תושב) | | ❌ |
+| L17 | M | `set gardenLawns/<חדש>` עם `kind: 'gbld'`, `name`, `green: true`, בלי `shape` | | ✅ |
+| L18 🔴 | M | `update` שמחליף `kind` (gadd→gcut) | | ❌ |
+| L19 | R | `set gardenLawnEdits/<הדיווח שלי>` עם `kind: 'patch'`, `shape: 'circle'`, `r ≤ 0.05` | | ✅ |
+| L20 🔴 | R | אותו דבר על דיווח של משפחה אחרת / `r: 0.2` | | ❌ |
+| L21 | E | `set gardenAssets/<חדש>` כתם עם `parentId: ''` | | ✅ |

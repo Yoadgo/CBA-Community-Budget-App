@@ -17095,11 +17095,15 @@ function gardenLawnEditNotify_(ss, body) {
     if (ed.notifiedAt) return { ok: true, skipped: 'already' };
     var rep = fsGet_(fsDocPath_(FS_GARDEN_REPORTS, id)) || {};
     var fam = String(rep.familyId || '').trim();
-    var lawn = fsGet_(fsDocPath_('gardenLawns', String(ed.lawnId || ''))) || {};
+    /* 🌱 גל ג' (7.10) — התושב סימן אזור יבש (kind 'patch'), אין מדשאה לקרוא. */
+    var isPatch = ed.kind === 'patch';
+    var lawn = (!isPatch && ed.lawnId) ? (fsGet_(fsDocPath_('gardenLawns', String(ed.lawnId))) || {}) : {};
     var vars = {
       'כותרת': String(rep.title || ''),
-      'מיקום': String(lawn.name || rep.area || 'המדשאה'),
-      'תוצאה': ed.status === 'approved' ? 'הגבול עודכן במפה — תודה!' : 'הפעם הגבול נשאר כמו שהוא. תודה על העזרה!'
+      'מיקום': String(lawn.name || rep.area || (isPatch ? 'הדשא' : 'המדשאה')),
+      'תוצאה': isPatch
+        ? (ed.status === 'approved' ? 'האזור שסימנת נוסף למפת הגינון — תודה!' : 'הפעם לא הוספנו את הסימון למפה. תודה על העזרה!')
+        : (ed.status === 'approved' ? 'הגבול עודכן במפה — תודה!' : 'הפעם הגבול נשאר כמו שהוא. תודה על העזרה!')
     };
     var out = fam ? notify_(ss, 'gar-lawn-edit', { vars: vars, r: { familyId: fam } }, ['r']) : null;
     fsMerge_(path, { notifiedAt: new Date() });

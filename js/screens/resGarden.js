@@ -107,7 +107,7 @@
       if (res && res.ok) {
         pendingReport = null;
         /* 🌱 גל ב' — הדיווח נשמר, הדיוק לא: אומרים את האמת (הדיווח עצמו בסדר). */
-        if (res.lawnEdit === "failed") setTimeout(function () { CBA.ui.toast("הדיווח נשלח, אבל דיוק הגבול לא נשמר", "error"); }, 2600);
+        if (res.lawnEdit === "failed") setTimeout(function () { CBA.ui.toast("הדיווח נשלח, אבל סימון האזור לא נשמר", "error"); }, 2600);
         /* duplicate=true — השרת מצא שהדיווח כבר נכתב עם אותו מזהה שליחה.
            אומרים את האמת ולא "נשלח", כדי שהתושב לא יחפש דיווח שני. */
         var base = (res.duplicate ? "הדיווח כבר נשמר · מספר " : "הדיווח נשלח · מספר ") + res.id;
@@ -1173,9 +1173,10 @@
           }
         });
 
-        /* ---- 🌱 גל ב' (6.10) — גבול המדשאה ודיוק שלו ----
-           הגבולות נקראים פעם אחת (gardenLawns פתוח לכל חבר פעיל — בלי מצב
-           דשא ובלי ממטרות). כשל = התכונה פשוט לא מופיעה; הדיווח עובד כרגיל. */
+        /* ---- 🌱 גל ב' (6.10) → גל ג' (7.10) — "הנעיצה על דשא" וסימון האזור היבש ----
+           הדשא מחושב (CBA.greenArea); תיקוני השטח של המנהל נקראים פעם אחת
+           (gardenLawns פתוח לכל חבר פעיל — בלי מצב דשא ובלי ממטרות). כשל קריאה =
+           בודקים בלי התיקונים; הדיווח עובד כרגיל בכל מקרה. */
         var lawnEl = container.querySelector("#gd-lawn");
         var refine = (CBA.lawnRefine && CBA.gardenAssets && formMapApi)
           ? CBA.lawnRefine.attach({ host: container.querySelector("#gd-map"), api: formMapApi, onChange: function () { lawnSync(); } })
@@ -1196,21 +1197,20 @@
           var l = (state.x !== null) ? refine.setPin(state.x, state.y, lawnCat()) : null;
           state.lawn = l;
           if (!l) { lawnEl.hidden = true; lawnEl.innerHTML = ""; return; }
-          var inf = refine.info(), nm = esc(l.name || "המדשאה");
+          var inf = refine.info();
           lawnEl.hidden = false;
           lawnEl.className = "lr-box" + (inf.refining ? " is-on" : inf.moved ? " is-done" : "");
           lawnEl.innerHTML = inf.refining
-            ? '<p><b>גררו את הנקודות הכתומות</b> למקום שבו הדשא באמת נגמר. אפשר להזיז את המפה ולהגדיל. ' +
-                '<span class="lr-muted">הוספה או מחיקה של נקודות — רק לצוות.</span></p>' +
+            ? '<p><b>גררו את הנקודה הכתומה</b> כדי שהעיגול יכסה את האזור היבש. אפשר להזיז את המפה ולהגדיל.</p>' +
               '<div class="lr-acts"><button type="button" class="lr-btn lr-btn--pri" data-lr="done">סיום</button>' +
                 '<button type="button" class="lr-btn" data-lr="reset">איפוס</button>' +
                 '<button type="button" class="lr-btn" data-lr="cancel">ביטול</button></div>'
             : inf.moved
-            ? '<p>צירפת דיוק לגבול של <b>' + nm + '</b>. הצוות יבדוק ויעדכן את המפה, ותקבלו הודעה.</p>' +
+            ? '<p>סימנת אזור יבש של כ-' + Math.round(inf.areaM2) + ' מ"ר. הצוות יבדוק ויוסיף אותו למפה, ותקבלו הודעה.</p>' +
               '<div class="lr-acts"><button type="button" class="lr-btn" data-lr="start">עריכה</button>' +
-                '<button type="button" class="lr-btn" data-lr="cancel">הסרת הדיוק</button></div>'
-            : '<p>הנעיצה בתוך <b>' + nm + '</b> (הגבול מסומן במפה בקו מקווקו). הגבול לא תואם את מה שרואים בשטח?</p>' +
-              '<div class="lr-acts"><button type="button" class="lr-btn" data-lr="start">לדייק את הגבול</button></div>';
+                '<button type="button" class="lr-btn" data-lr="cancel">הסרת הסימון</button></div>'
+            : '<p><b>הנעיצה על דשא.</b> אפשר לסמן את האזור היבש — זה עוזר לגנן. לא חובה.</p>' +
+              '<div class="lr-acts"><button type="button" class="lr-btn" data-lr="start">סימון האזור היבש</button></div>';
         }
         if (lawnEl) lawnEl.addEventListener("click", function (e) {
           var b = e.target.closest("[data-lr]"); if (!b || !refine) return;
@@ -1283,8 +1283,9 @@
             x: state.x, y: state.y, area: state.area || "",
             photos: state.photos.slice(),
             clientRef: state.clientRef,
-            /* 🌱 גל ב' — שיוך אוטומטי למדשאה + הדיוק (אם הוזזו נקודות). */
-            assets: lawnNow ? [lawnNow.id] : [],
+            /* 🌱 גל ג' — אין יותר מדשאה לשייך אליה: הסימון (אם יש) הוא הצעה, והגנן
+               שמאשר אותו יוצר כתם ומשייך אותו לתקלה. */
+            assets: (lawnNow && lawnNow.id) ? [lawnNow.id] : [],
             lawnEdit: lawnNow ? refine.edit() : null
           }, sendBtn);
         });

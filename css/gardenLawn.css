@@ -355,3 +355,56 @@
 .lr-dec.is-decided { background: #F7F8F7; border-color: #E5E7EB; }
 .lw-sum .lw-stat--edits { border-color: #F0D9BD; background: #FFF8F0; color: #8A4B12; cursor: pointer; }
 .lw-svg .lw-proposal { fill: rgba(194,122,44,.16); stroke: #C27A2C; stroke-width: calc(2.4px * var(--gpin-inv, 1)); pointer-events: none; }
+
+/* ===== 🌱 גל ג' (7.10) — "ירוק כברירת מחדל" ===========================================
+   הדשא = מלבן ירוק דרך מסכה (js/ui/greenArea.js). כתמים מעליו. מצב "שטח ירוק" למנהל. */
+.lw-svg .lw-green { fill: var(--lw-ok); fill-opacity: .36; pointer-events: none; }
+.lw-svg .lw-named, .lw-svg .lw-patch { pointer-events: visiblePainted; cursor: pointer; }
+.lw-named { fill: transparent; stroke: #3E6B4C; stroke-width: calc(1.4px * var(--gpin-inv, 1));
+  stroke-dasharray: calc(5px * var(--gpin-inv, 1)) calc(4px * var(--gpin-inv, 1)); opacity: .7; }
+.lw-named.is-sel { stroke: #111827; opacity: 1; stroke-width: calc(2.6px * var(--gpin-inv, 1)); }
+.lw-pfill { stroke: none; pointer-events: none; }
+.lw-patch { fill: transparent; stroke-width: calc(1.7px * var(--gpin-inv, 1)); }
+.lw-patch.s-dry { stroke: #A88320; } .lw-patch.s-dead { stroke: var(--lw-dead); }
+.lw-patch.s-ok { stroke: #9CA3AF; stroke-dasharray: calc(3px * var(--gpin-inv, 1)) calc(3px * var(--gpin-inv, 1)); }
+.lw-patch.is-sel { stroke: #111827; stroke-width: calc(3px * var(--gpin-inv, 1)); stroke-dasharray: none; }
+.is-pick .lw-patch, .is-pick .lw-named { animation: lw-pick 1.2s ease-in-out infinite; }
+.lw-bound { fill: none; stroke: #047857; stroke-width: calc(1.6px * var(--gpin-inv, 1));
+  stroke-dasharray: calc(8px * var(--gpin-inv, 1)) calc(5px * var(--gpin-inv, 1)); pointer-events: none; vector-effect: non-scaling-stroke; }
+.lw-area { fill: none; stroke: #047857; opacity: .55; stroke-width: calc(1px * var(--gpin-inv, 1));
+  stroke-dasharray: calc(4px * var(--gpin-inv, 1)) calc(4px * var(--gpin-inv, 1)); pointer-events: none; }
+.lw-pub { fill: rgba(190,205,223,.45); stroke: #94A3B8; stroke-width: calc(1.2px * var(--gpin-inv, 1)); vector-effect: non-scaling-stroke; }
+.is-greenmode .lw-svg .lw-pub { pointer-events: visiblePainted; cursor: pointer; }
+.lw-pub.is-green { fill: rgba(95,163,111,.18); stroke: #2E7D4F; stroke-dasharray: 5 3; }
+.lw-pub.is-out { opacity: .45; }
+.lw-pub.is-sel { stroke: #111827; stroke-width: 2.6px; }
+.lw-gadd { fill: url(#lwp-gadd); stroke: #2E7D4F; stroke-width: calc(1.8px * var(--gpin-inv, 1)); }
+.lw-gcut { fill: url(#lwp-gcut); stroke: #8B5E3C; stroke-width: calc(1.8px * var(--gpin-inv, 1)); }
+.is-greenmode .lw-svg .lw-gadd, .is-greenmode .lw-svg .lw-gcut { pointer-events: visiblePainted; cursor: pointer; }
+.lw-gadd.is-sel, .lw-gcut.is-sel { stroke: #111827; stroke-width: calc(3px * var(--gpin-inv, 1)); }
+.lw-draft.is-gadd { stroke: #2E7D4F; fill: rgba(46,125,79,.14); }
+.lw-draft.is-gcut { stroke: #8B5E3C; fill: rgba(139,94,60,.14); }
+.lw-st3 .s-fixed { background: #fff; border: 1.5px dashed #9CA3AF; box-sizing: border-box; }
+.lw-lg--fixed { border: 1.5px dashed #9CA3AF; background: rgba(95,163,111,.18); }
+.lw-sum .lw-stat--corr { border-color: #BFDCC8; background: #ECF5F0; color: #1F5A37; }
+.lw-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1.5px solid var(--border, #E5E7EB);
+  border-radius: 14px; padding: 10px 14px; font-weight: 700; }
+.lw-tg { position: relative; flex: none; width: 46px; height: 28px; border-radius: 99px; border: 0; background: #E5E7EB; cursor: pointer; transition: background .15s; }
+.lw-tg::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: inset-inline-start .15s; }
+.lw-tg[aria-checked="true"] { background: #2E7D4F; }
+.lw-tg[aria-checked="true"]::after { inset-inline-start: 21px; }
+.lw-tg:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
+.lw-link { border: 0; background: none; padding: 0; color: #047857; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.lw-chk { display: flex; align-items: center; gap: 8px; font-size: calc(14px * var(--fs, 1)); font-weight: 600; cursor: pointer; }
+.lw-chk input { width: 18px; height: 18px; accent-color: #047857; }
+@media (prefers-reduced-motion: reduce) { .is-pick .lw-patch, .is-pick .lw-named, .lw-tg, .lw-tg::after { animation: none; transition: none; } }
+/* תמונה ממוזערת (החלטה על אזור יבש שתושב סימן) — greenArea.thumbSvg */
+.ga-thumb { width: 100%; height: 150px; display: block; background: #fff; border-radius: 10px; border: 1px solid #EFE3D3; }
+.ga-ground { fill: #EFEDE6; } .ga-green { fill: #5FA36F; fill-opacity: .42; }
+.ga-built { fill: #E3DED1; stroke: #C7C0AE; stroke-width: .5; } .ga-pub { fill: #DBE4EF; stroke: #BECDDF; stroke-width: .5; }
+.ga-spot { fill: rgba(210,169,62,.55); stroke: #A88320; stroke-width: 2; vector-effect: non-scaling-stroke; }
+/* טופס התושב: עיגול האזור היבש */
+.lr-spot { fill: rgba(210,169,62,.32); stroke: #A88320; stroke-width: calc(2.2px * var(--lr-inv, 1));
+  stroke-dasharray: calc(5px * var(--lr-inv, 1)) calc(3px * var(--lr-inv, 1)); }
+.lr-spot.is-done { stroke-dasharray: none; }

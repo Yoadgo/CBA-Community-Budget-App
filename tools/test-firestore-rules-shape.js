@@ -140,7 +140,7 @@ const WRITE_GATES = ['txResidentCreateOk', 'txAdminCreateOk', 'txStatusUpdateOk'
                         מצרף לדיווח **שלו** (יצירה בלבד) והגינון מחליט עליו פעם אחת.
                         אין מחיקה באף אחד מהשלושה. ר' firestore-rules-expectations.md. */
                      'lwCreateOk', 'lwUpdateOk', 'gaCreateOk', 'gaUpdateOk',
-                     'leCreateOk', 'leDecideOk'];
+                     'leAnyCreateOk', 'leDecideOk'];
 {
   const used = [];
   (CODE.match(/allow (create|update|delete)[^\n]*/g) || []).forEach(function (t) {

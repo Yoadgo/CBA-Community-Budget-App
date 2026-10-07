@@ -11,6 +11,10 @@
   "tokens": 778,
   "ids": 2
  },
+ "/gardenLawnEdits/ create :: leAnyCreateOk(docId)": {
+  "tokens": 757,
+  "ids": 6
+ },
  "/tourSteps/ read :: canSeeTourDoc(id)": {
   "tokens": 742,
   "ids": 8
@@ -29,6 +33,14 @@
  },
  "/appReports/ create :: arCreateOk(docId)": {
   "tokens": 598,
+  "ids": 2
+ },
+ "/gardenLawns/ update :: lwUpdateOk()": {
+  "tokens": 592,
+  "ids": 2
+ },
+ "/gardenLawns/ create :: lwCreateOk(docId)": {
+  "tokens": 581,
   "ids": 2
  },
  "/eventReminders/ update :: remMine() && remShapeOk(docId)": {
@@ -63,21 +75,9 @@
   "tokens": 386,
   "ids": 2
  },
- "/gardenLawns/ update :: lwUpdateOk()": {
-  "tokens": 380,
-  "ids": 1
- },
- "/gardenLawns/ create :: lwCreateOk(docId)": {
-  "tokens": 379,
-  "ids": 1
- },
  "/gardenLog/ read :: gtMgr() || glResidentReadOk()": {
   "tokens": 363,
   "ids": 4
- },
- "/gardenLawnEdits/ create :: leCreateOk(docId)": {
-  "tokens": 360,
-  "ids": 3
  },
  "/gardenReports/ create :: grCreateOk()": {
   "tokens": 311,

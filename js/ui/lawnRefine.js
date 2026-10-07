@@ -1,5 +1,7 @@
 /* ============================================================================
- *  lawnRefine.js — דיוק גבול מדשאה מתוך טופס הדיווח של התושב   (6.10.2026, גל ב')
+ *  lawnRefine.js — סימון בדשא מתוך טופס הדיווח של התושב   (6.10.2026, גל ב' · 7.10 גל ג')
+ *  🌱 גל ג': התושב מסמן **אזור יבש** (עיגול) — ר' attach. ההחלטה על דיוק גבול
+ *  מהגל הקודם (paint) נשארת, כדי שהצעות שכבר ממתינות ייסגרו כרגיל.
  * ----------------------------------------------------------------------------
  *  הכרעות יועד (3.10): "זה אפשרות לתושב בפתיחת התקלה, לא מעבר" ·
  *  התושב רואה **רק את הגבול** (לא מצב דשא, לא ממטרות) · **רק הזזת נקודות
@@ -20,14 +22,20 @@ CBA.lawnRefine = (function () {
   "use strict";
   var NS = "http://www.w3.org/2000/svg";
 
+  /* 🌱 גל ג' (7.10) — **התושב מסמן את האזור היבש** (עיגול סביב הנעיצה), במקום
+     לדייק גבול מדשאה: הדשא כבר לא מצויר, הוא מחושב (CBA.greenArea). הכרעת יועד
+     (6.10): "מסמן את הכתם היבש". הסימון הוא הצעה — הגנן/מנהל מוסיף אותו למפה.
+     ה-API של ctrl נשמר כמו בגל ב' (setLawns/setPin/start/done/cancel/reset/
+     isRefining/info/edit), כדי שטופס הדיווח ישתנה כמה שפחות. */
   function attach(o) {
     var host = o.host, api = o.api;
     var world = host && host.querySelector(".map-world");
     var viewport = host && host.querySelector(".map-viewport");
     var G = CBA.gardenGeo;
     if (!world || !viewport || !G) return null;
-    var S = { lawns: [], lawn: null, orig: null, pts: null, refining: false, show: false };
+    var S = { corr: null, on: false, pin: null, spot: null, refining: false };
     var W = { w: parseFloat(world.style.width) || 1061.2, h: parseFloat(world.style.height) || 1297.2 };
+    var PPM = G.world().ppm, R0 = 8 * PPM / W.w, RMIN = 2 * PPM / W.w, RMAX = 0.05;
 
     var svg = document.createElementNS(NS, "svg");
     svg.setAttribute("class", "lr-svg");
@@ -47,19 +55,13 @@ CBA.lawnRefine = (function () {
     setInv();
     if (window.MutationObserver) new MutationObserver(setInv).observe(world, { attributes: true, attributeFilter: ["style"] });
 
-    function P(p) { return (p[0] * W.w).toFixed(1) + "," + (p[1] * W.h).toFixed(1); }
     function draw() {
-      if (!S.lawn || !S.show) { svg.innerHTML = ""; hl.innerHTML = ""; return; }
-      var o1 = G.pairs(S.orig).map(P).join(" ");
-      var html = '<polygon class="lr-orig' + (S.pts && CBA.gardenAssets.ptsMoved(S.orig, S.pts) ? " is-moved" : "") + '" points="' + o1 + '"/>';
-      if (S.pts && (S.refining || CBA.gardenAssets.ptsMoved(S.orig, S.pts))) {
-        html += '<polygon class="lr-new" points="' + G.pairs(S.pts).map(P).join(" ") + '"/>';
-      }
-      svg.innerHTML = html;
-      hl.innerHTML = S.refining ? G.pairs(S.pts).map(function (p, i) {
-        return '<button type="button" class="lr-h" data-i="' + i + '" aria-label="נקודה ' + (i + 1) + ' בגבול — גררו למקום הנכון" ' +
-          'style="left:' + (p[0] * W.w).toFixed(1) + 'px;top:' + (p[1] * W.h).toFixed(1) + 'px"><i></i></button>';
-      }).join("") : "";
+      if (!S.spot || !S.on) { svg.innerHTML = ""; hl.innerHTML = ""; return; }
+      var cx = S.spot.cx * W.w, cy = S.spot.cy * W.h, r = S.spot.r * W.w;
+      svg.innerHTML = '<circle class="lr-spot' + (S.refining ? "" : " is-done") + '" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1) + '"/>';
+      hl.innerHTML = S.refining
+        ? '<button type="button" class="lr-h" data-i="r" aria-label="גודל האזור היבש — גררו" style="left:' + (cx + r).toFixed(1) + 'px;top:' + cy.toFixed(1) + 'px"><i></i></button>'
+        : "";
     }
 
     function zf() { var w = viewport.offsetWidth; return w ? (viewport.getBoundingClientRect().width / w) || 1 : 1; }
@@ -67,8 +69,7 @@ CBA.lawnRefine = (function () {
       var r = viewport.getBoundingClientRect(), z = zf();
       var m = /translate\(([-\d.eE]+)px,\s*([-\d.eE]+)px\)\s*scale\(([\d.eE+-]+)\)/.exec(world.style.transform || "");
       var tx = m ? +m[1] : 0, ty = m ? +m[2] : 0, s = m ? +m[3] : 1;
-      return [Math.max(0, Math.min(1, (((cx - r.left) / z - tx) / s) / W.w)),
-              Math.max(0, Math.min(1, (((cy - r.top) / z - ty) / s) / W.h))];
+      return [(((cx - r.left) / z - tx) / s) / W.w, (((cy - r.top) / z - ty) / s) / W.h];
     }
 
     var drag = null;
@@ -76,14 +77,15 @@ CBA.lawnRefine = (function () {
       var h = e.target.closest && e.target.closest(".lr-h");
       if (!h || !S.refining) return;
       e.stopPropagation(); e.preventDefault();
-      drag = { i: +h.dataset.i, id: e.pointerId };
+      drag = { id: e.pointerId };
       try { h.setPointerCapture(e.pointerId); } catch (x) {}
       host.classList.add("lr-dragging");
     }, true);
     document.addEventListener("pointermove", function (e) {
-      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag || e.pointerId !== drag.id || !S.spot) return;
       var n = toNorm(e.clientX, e.clientY);
-      S.pts[drag.i * 2] = Math.round(n[0] * 1e5) / 1e5; S.pts[drag.i * 2 + 1] = Math.round(n[1] * 1e5) / 1e5;
+      var r = Math.hypot((n[0] - S.spot.cx) * W.w, (n[1] - S.spot.cy) * W.h) / W.w;
+      S.spot.r = Math.round(Math.max(RMIN, Math.min(RMAX, r)) * 1e5) / 1e5;
       draw();
     });
     function end(e) {
@@ -93,45 +95,50 @@ CBA.lawnRefine = (function () {
     }
     document.addEventListener("pointerup", end, true);
     document.addEventListener("pointercancel", end, true);
-    /* גרירת ידית מסתיימת ב-pointerup שמגיע גם למנוע — ננעצר אותו לפני שהוא
+    /* גרירת ידית מסתיימת ב-pointerup שמגיע גם למנוע — עוצרים אותו לפני שהוא
        נועץ סיכה במקום שבו הסתיימה הגרירה. */
     host.addEventListener("pointerup", function (e) { if (e.target.closest && e.target.closest(".lr-h")) e.stopPropagation(); }, true);
 
+    function model() {
+      return (CBA.greenArea && CBA.greenArea.ready()) ? CBA.greenArea.model(S.corr) : null;
+    }
     var ctrl = {
-      setLawns: function (l) { S.lawns = (l || []).filter(function (x) { return x.shape === "poly" && !x.parentId; }); },
-      /** הנעיצה זזה. active = הקטגוריה היא דשא/השקיה. מחזיר את המדשאה או null. */
+      /** מסמכי gardenLawns (כולם) — מהם רק תיקוני השטח משנים איפה יש דשא. */
+      setLawns: function (rows) { S.corr = CBA.greenArea ? CBA.greenArea.corrFrom(rows) : null; },
+      /** הנעיצה זזה. active = הקטגוריה היא דשא/השקיה. מחזיר {green:true} כשהנעיצה על דשא. */
       setPin: function (x, y, active) {
-        var l = active ? CBA.gardenAssets.lawnAt(S.lawns, x, y) : null;
-        if (!l || !S.lawn || l.id !== S.lawn.id) {
-          S.lawn = l; S.orig = l ? l.pts.slice() : null; S.pts = l ? l.pts.slice() : null; S.refining = false;
+        if (!S.pin || S.pin[0] !== x || S.pin[1] !== y) {
+          S.spot = null; S.refining = false; host.classList.remove("lr-on");
         }
-        S.show = !!l;
+        S.pin = [x, y];
+        var m = active ? model() : null;
+        S.on = !!(m && m.inGreen(x, y));
+        if (!S.on) { S.spot = null; S.refining = false; host.classList.remove("lr-on"); }
         draw();
-        return l;
+        return S.on ? { green: true, name: "" } : null;
       },
       start: function () {
-        if (!S.lawn) return;
+        if (!S.on || !S.pin) return;
+        if (!S.spot) S.spot = { cx: S.pin[0], cy: S.pin[1], r: R0 };
         S.refining = true; host.classList.add("lr-on");
         if (api && api.fitBox) {
-          var pp = G.pairs(S.pts), x0 = 1, y0 = 1, x1 = 0, y1 = 0;
-          pp.forEach(function (p) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
-          var px = (x1 - x0) * 0.35 + 0.004, py = (y1 - y0) * 0.35 + 0.004;
-          api.fitBox(Math.max(0, x0 - px), Math.max(0, y0 - py), Math.min(1, x1 + px), Math.min(1, y1 + py), 18);
+          var rx = S.spot.r * 3.2, ry = S.spot.r * 3.2 * W.w / W.h;
+          api.fitBox(Math.max(0, S.spot.cx - rx), Math.max(0, S.spot.cy - ry), Math.min(1, S.spot.cx + rx), Math.min(1, S.spot.cy + ry), 18);
         }
         draw();
       },
       done: function () { S.refining = false; host.classList.remove("lr-on"); draw(); },
-      cancel: function () { if (S.orig) S.pts = S.orig.slice(); S.refining = false; host.classList.remove("lr-on"); draw(); },
-      reset: function () { if (S.orig) S.pts = S.orig.slice(); draw(); },
+      cancel: function () { S.spot = null; S.refining = false; host.classList.remove("lr-on"); draw(); },
+      reset: function () { if (S.spot) S.spot.r = R0; draw(); },
       isRefining: function () { return S.refining; },
       info: function () {
-        var moved = !!(S.lawn && S.pts && CBA.gardenAssets.ptsMoved(S.orig, S.pts));
-        return { lawn: S.lawn, refining: S.refining, moved: moved };
+        var a = S.spot ? Math.PI * Math.pow(S.spot.r * W.w / PPM, 2) : 0;
+        return { lawn: S.on ? { name: "" } : null, refining: S.refining, moved: !!(S.on && S.spot), areaM2: a };
       },
-      /** מה שנשלח עם הדיווח — רק אם באמת זז משהו. */
+      /** מה שנשלח עם הדיווח — רק אם סומן אזור. */
       edit: function () {
-        if (!S.lawn || !S.pts || !CBA.gardenAssets.ptsMoved(S.orig, S.pts)) return null;
-        return { lawnId: S.lawn.id, baseRev: S.lawn.rev || 1, pts: G.pairs(S.pts) };
+        if (!S.on || !S.spot) return null;
+        return { kind: "patch", cx: S.spot.cx, cy: S.spot.cy, r: S.spot.r };
       }
     };
     return ctrl;
@@ -167,12 +174,55 @@ CBA.lawnRefine = (function () {
     A.readLawnEdit(o.repId, function (r) {
       if (!r.ok || !r.edit || !el.isConnected) return;
       var ed = r.edit;
+      if (ed.kind === "patch") return paintPatch(ed);
       f.readDoc("gardenLawns", String(ed.lawnId), function (e2, lawn) {
         if (!el.isConnected) return;
         if (e2 || !lawn) lawn = null;
         paint(ed, lawn);
       });
     });
+    /* 🌱 גל ג' — אזור יבש שהתושב סימן: מוסיפים ככתם (יבש/מת) או משאירים. */
+    function paintPatch(ed) {
+      var area = Math.round(Math.PI * Math.pow(ed.r * CBA.gardenGeo.world().w / CBA.gardenGeo.world().ppm, 2));
+      if (ed.status !== "pending") {
+        el.innerHTML = '<div class="lr-dec is-decided"><p>' + (ed.status === "approved"
+          ? "✓ האזור היבש שהתושב סימן נוסף למפת הדשא."
+          : "האזור שהתושב סימן לא נוסף למפה.") + '</p></div>';
+        return;
+      }
+      el.innerHTML = '<div class="lr-dec">' +
+        '<div class="lr-dec__h">התושב סימן אזור יבש · כ-' + area + ' מ"ר</div>' +
+        (CBA.greenArea && CBA.greenArea.ready() ? CBA.greenArea.thumbSvg(ed.cx, ed.cy, ed.r) : '') +
+        '<div class="lr-acts">' +
+          '<button type="button" class="lr-btn lr-btn--pri" data-pd="dry">הוספה ככתם יבש</button>' +
+          '<button type="button" class="lr-btn" data-pd="dead">ככתם מת</button>' +
+          '<button type="button" class="lr-btn" data-pd="no">לא להוסיף</button>' +
+          (o.onMap ? '<button type="button" class="lr-btn" data-pd="map">במפה</button>' : '') +
+        '</div></div>';
+      el.onclick = function (e) {
+        var b = e.target.closest("[data-pd]"); if (!b) return;
+        e.stopPropagation();
+        if (b.dataset.pd === "map") return o.onMap && o.onMap();
+        var st = b.dataset.pd === "no" ? null : b.dataset.pd;
+        Array.prototype.forEach.call(el.querySelectorAll("[data-pd]"), function (x) { x.disabled = true; });
+        A.decidePatchEdit(ed, st, o.taskId, function (res) {
+          if (!res.ok) {
+            Array.prototype.forEach.call(el.querySelectorAll("[data-pd]"), function (x) { x.disabled = false; });
+            return CBA.ui && CBA.ui.toast && CBA.ui.toast(res.lawnSaved ? "הכתם נשמר, אבל ההחלטה לא נרשמה — נסו שוב" : "לא נשמר — נסו שוב", "error");
+          }
+          if (o.taskId && CBA.data && CBA.data.gardenLogNote) {
+            CBA.data.gardenLogNote(o.taskId, st ? "האזור שסימנת נוסף למפת הגינון. תודה!"
+                                               : "תודה על הסימון. הפעם לא הוספנו אותו למפה.", o.familyId || "");
+          }
+          ed.status = res.status;
+          paintPatch(ed);
+          if (CBA.ui && CBA.ui.toast) CBA.ui.toast(st ? (res.linkFailed ? "הכתם נוסף · השיוך לתקלה לא נשמר — שייכו מהמפה" : "הכתם נוסף ושויך לתקלה · התושב יקבל הודעה")
+                                                     : "לא נוסף · התושב יקבל הודעה");
+          if (CBA.setLawnEditsCount && CBA.lawnEditsCount) CBA.setLawnEditsCount(Math.max(0, CBA.lawnEditsCount() - 1));
+          if (o.onDecided) o.onDecided(res.status);
+        });
+      };
+    }
     function paint(ed, lawn) {
       var nm = esc((lawn && lawn.name) || "המדשאה");
       if (ed.status !== "pending") {
@@ -188,7 +238,7 @@ CBA.lawnRefine = (function () {
         '<div class="lr-dec__lg"><span><i></i>הגבול היום</span><span><i class="n"></i>מה שהתושב הציע</span></div>' +
         (stale ? '<p>⚠️ הגבול השתנה במפה אחרי שהתושב שלח. עדכון ידרוס את השינוי ההוא.</p>' : '') +
         '<div class="lr-acts">' +
-          (lawn && lawn.shape === "poly" ? '<button type="button" class="lr-btn lr-btn--pri" data-dec="yes">לעדכן את הגבול</button>' : '') +
+          (lawn && lawn.shape === "poly" && !lawn.kind ? '<button type="button" class="lr-btn lr-btn--pri" data-dec="yes">לעדכן את הגבול</button>' : '') +
           '<button type="button" class="lr-btn" data-dec="no">להשאיר כמו שהוא</button>' +
           (o.onMap ? '<button type="button" class="lr-btn" data-dec="map">במפה</button>' : '') +
         '</div></div>';

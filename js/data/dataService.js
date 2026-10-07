@@ -3816,7 +3816,8 @@ CBA.data = (function () {
 
             /* מכאן הדיווח **קיים**. כל מה שנכשל אחרי זה אינו מבטל אותו. */
             gardenLogAppend(String(taskId), "נפתח", "דיווח תושב #" + repId +
-              (payload.lawnEdit ? " · צורף דיוק לגבול המדשאה, ממתין לאישור הצוות" : ""), { familyId: fid, asResident: true });
+              (payload.lawnEdit ? (payload.lawnEdit.kind === "patch" ? " · סומן האזור היבש במפה, ממתין לאישור הצוות"
+                                                                      : " · צורף דיוק לגבול המדשאה, ממתין לאישור הצוות") : ""), { familyId: fid, asResident: true });
             CBA.sheets.postRead("gardenNotifyReport", { id: String(repId) }, function () {});
 
             /* 🌱 גל ב' — הדיוק נכתב **אחרי** הדיווח (הכלל עושה get על הדיווח

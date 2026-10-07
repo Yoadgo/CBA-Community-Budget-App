@@ -2365,9 +2365,36 @@ service cloud.firestore {
      *  🔑 `rev` עולה באחד בדיוק בכל עדכון גבול — זה מה שמאפשר לגנן לראות
      *     שדיוק של תושב נעשה על גרסה ישנה של המדשאה.
      * ====================================================================== */
+    /* 🌱 גל ג' (7.10) — "ירוק כברירת מחדל". הדשא מחושב בדפדפן (js/ui/greenArea.js),
+       ובאוסף הזה יושבים גם **תיקוני השטח** של המנהל, לפי `kind`:
+         (חסר)  מדשאה עם שם — כמו קודם.
+         gadd   הוספת ירוק (מצולע) · gcut  לא דשא (מצולע)
+         gbld   מבנה ציבור ירוק/לא — name = שם המבנה במפה, green = bool, בלי צורה.
+       כל חבר פעיל קורא (בדיקת "הנעיצה על דשא" אצל התושב). אין בתיקון מידע על
+       מצב דשא — רק איפה יש דשא. ✍️ כתיבה: **מנהל גינון בלבד** (gtMgr — לא הגנן
+       החיצוני; הכרעת יועד 7.10: "זה שינוי מבני"). `kind` אינו משתנה בעדכון. */
     function lwFields() {
       return ['id', 'name', 'shape', 'pts', 'cx', 'cy', 'r', 'rx', 'ry',
-              'rev', 'archived', 'updatedAt', 'updatedBy', 'schema'];
+              'rev', 'archived', 'updatedAt', 'updatedBy', 'schema', 'kind', 'green'];
+    }
+
+    function lwKind() {
+      return request.resource.data.get('kind', '');
+    }
+
+    /* צורה: חובה לכל דבר חוץ מ-gbld. תיקון gadd/gcut — מצולע בלבד. */
+    function lwKindOk() {
+      return ['', 'gadd', 'gcut', 'gbld'].hasAny([lwKind()]) &&
+             (lwKind() == '' || gtMgr()) &&
+             ((lwKind() == 'gbld' &&
+               request.resource.data.get('green', null) is bool &&
+               request.resource.data.name.size() > 0 &&
+               !('shape' in request.resource.data) &&
+               request.resource.data.get('pts', []).size() == 0) ||
+              (lwKind() != 'gbld' &&
+               !('green' in request.resource.data) &&
+               ['poly', 'circle', 'ellipse'].hasAny([request.resource.data.get('shape', '')]) &&
+               (lwKind() == '' || request.resource.data.get('shape', '') == 'poly')));
     }
 
     /* 🔴 צוות אדום 4.10 — כל תושב מוריד את האוסף הזה: מספר בטווח 0–1 או חסר.
@@ -2381,7 +2408,7 @@ service cloud.firestore {
 
     function lwGeomOk() {
       return lwNum('cx') && lwNum('cy') && lwNum('r') && lwNum('rx') && lwNum('ry') &&
-             (request.resource.data.shape == 'poly' ||
+             (request.resource.data.get('shape', 'poly') == 'poly' ||
               (request.resource.data.get('cx', null) is number &&
                request.resource.data.get('cy', null) is number));
     }
@@ -2390,17 +2417,17 @@ service cloud.firestore {
       return request.resource.data.get('pts', []) is list &&
              request.resource.data.get('pts', []).size() <= 240 &&
              request.resource.data.get('pts', []).size() % 2 == 0 &&
-             (request.resource.data.shape != 'poly' ||
+             (request.resource.data.get('shape', '') != 'poly' ||
               request.resource.data.get('pts', []).size() >= 6);
     }
 
     function lwShapeOk() {
       return request.resource.data.keys().hasOnly(lwFields()) &&
-             request.resource.data.keys().hasAll(['id', 'name', 'shape', 'rev',
+             request.resource.data.keys().hasAll(['id', 'name', 'rev',
                                                   'updatedAt', 'updatedBy', 'schema']) &&
              request.resource.data.name is string &&
              request.resource.data.name.size() <= 60 &&
-             ['poly', 'circle', 'ellipse'].hasAny([request.resource.data.shape]) &&
+             lwKindOk() &&
              request.resource.data.rev is int &&
              request.resource.data.get('archived', false) is bool &&
              request.resource.data.updatedAt == request.time &&
@@ -2418,6 +2445,7 @@ service cloud.firestore {
     function lwUpdateOk() {
       return hasPerm('גינון') && lwShapeOk() &&
              request.resource.data.id == resource.data.id &&
+             lwKind() == resource.data.get('kind', '') &&
              request.resource.data.rev == resource.data.rev + 1;
     }
 
@@ -2527,6 +2555,8 @@ service cloud.firestore {
                 שלא קיימת = get() נכשל = נדחה (אותו מספר קריאות כמו exists). */
              get(/databases/$(database)/documents/gardenLawns/$(request.resource.data.lawnId)).data.rev >=
                request.resource.data.baseRev &&
+             /* 🔴 צוות אדום 7.10 — רק מדשאה אמיתית, לא תיקון שטח (לקוח ישן שעוד לא התעדכן). */
+             get(/databases/$(database)/documents/gardenLawns/$(request.resource.data.lawnId)).data.get('kind', '') == '' &&
              request.resource.data.pts is list &&
              request.resource.data.pts.size() >= 6 &&
              request.resource.data.pts.size() <= 240 &&
@@ -2535,6 +2565,37 @@ service cloud.firestore {
              request.resource.data.updatedAt == request.time &&
              request.resource.data.schema is int &&
              leMyReport(docId);
+    }
+
+    /* 🌱 גל ג' (7.10) — **התושב מסמן את האזור היבש** (עיגול סביב הנעיצה) במקום
+       לדייק גבול מדשאה. אותו אוסף, אותו מזהה (= מזהה הדיווח), אותה החלטה
+       (leDecideOk). r ≤ 0.05 רוחב עולם (≈33 מ' רדיוס) — עיגול סביר לאזור יבש,
+       לא כל השיכון. */
+    function lePatchCreateOk(docId) {
+      return isMember() && m().isExternal == false &&
+             request.resource.data.keys().hasOnly(['id', 'kind', 'shape', 'cx', 'cy', 'r', 'uid',
+                                                   'status', 'createdAt', 'updatedAt', 'schema']) &&
+             request.resource.data.keys().hasAll(['id', 'kind', 'shape', 'cx', 'cy', 'r', 'uid',
+                                                  'status', 'createdAt', 'updatedAt', 'schema']) &&
+             request.resource.data.id == docId &&
+             request.resource.data.kind == 'patch' &&
+             request.resource.data.shape == 'circle' &&
+             request.resource.data.cx is number && request.resource.data.cx >= 0 && request.resource.data.cx <= 1 &&
+             request.resource.data.cy is number && request.resource.data.cy >= 0 && request.resource.data.cy <= 1 &&
+             request.resource.data.r is number && request.resource.data.r > 0 && request.resource.data.r <= 0.05 &&
+             request.resource.data.uid == request.auth.uid &&
+             request.resource.data.status == 'pending' &&
+             request.resource.data.createdAt == request.time &&
+             request.resource.data.updatedAt == request.time &&
+             request.resource.data.schema is int &&
+             leMyReport(docId);
+    }
+
+    /* סוג המסמך בוחר את הבדיקה — כך ה-get() על המדשאה ב-leCreateOk לא רץ על כתם
+       (&& מקצר: כשהסוג 'patch' הצד השני נעצר כבר ב-!= ולא מגיע ל-leCreateOk). */
+    function leAnyCreateOk(docId) {
+      return (request.resource.data.get('kind', '') == 'patch' && lePatchCreateOk(docId)) ||
+             (request.resource.data.get('kind', '') != 'patch' && leCreateOk(docId));
     }
 
     /* התושב קורא רק את שלו (השאילתה שלו מסננת `uid == שלי`); הגינון — הכול. */
@@ -2558,7 +2619,7 @@ service cloud.firestore {
 
     match /gardenLawnEdits/{docId} {
       allow read: if leReadOk();
-      allow create: if leCreateOk(docId);
+      allow create: if leAnyCreateOk(docId);
       allow update: if leDecideOk();
       allow delete: if false;
     }
