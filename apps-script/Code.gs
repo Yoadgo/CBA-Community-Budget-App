@@ -10508,6 +10508,8 @@ function createGymMembership_(ss, body) {
     var mode = String(body.declarationMode || 'request').trim();
     var status = (mode === 'received') ? GYM_ST_PAYMENT : GYM_ST_DECLARATION;
 
+    // silent === true: הקמה בשקט (ייבוא מנויים מאקסל) — בלי מייל לתושב. רק מנהל מכון מגיע לכאן (PERM_GYM).
+    var silent = body.silent === true;
     var now = new Date();
     var id = nextGymId_(sh, cols);
     var rowIndex = gymAppendBlankRow_(sh);
@@ -10541,13 +10543,15 @@ function createGymMembership_(ss, body) {
     gymWriteResidentId_(ss, me, body.idNumber);
     gymLog_(ss, id, 'הקמה ידנית', {
       by: body._email || '',
-      note: (mode === 'received' ? 'הצהרה נמסרה בנייר' : 'נשלחה בקשה למילוי הצהרה') +
+      note: (silent ? 'הוקם בשקט (ללא מייל)' : (mode === 'received' ? 'הצהרה נמסרה בנייר' : 'נשלחה בקשה למילוי הצהרה')) +
             (body.note ? (' · ' + body.note) : '')
     });
 
     var displayName = body.firstName || me.firstName || email;
     try {
-      if (mode === 'received') {
+      if (silent) {
+        // אין מייל
+      } else if (mode === 'received') {
         sendResidentTemplate_(ss, 'GYM_APPROVED_AWAITING_PAYMENT', [email], {
           'שם': displayName, 'סכום': plan.total, 'מסלול': plan.name
         }, { trigger: 'gym-approve' });
