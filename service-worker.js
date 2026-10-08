@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "03b607978f";
+var VERSION = "350fd18ab1";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -93,7 +93,7 @@ var ASSET_VERSIONS = {
   "js/screens/committeeTree.js": "69b56f5e38",
   "js/screens/doorAdmin.js": "9c1b798a5b",
   "js/screens/emailSettings.js": "a0cb23db5a",
-  "js/screens/events.js": "1247fc92f5",
+  "js/screens/events.js": "bdd009c1b1",
   "js/screens/expenses.js": "1d93311741",
   "js/screens/gardenLawn.js": "3b7735f170",
   "js/screens/gardenPlan.js": "ea51dc59c9",

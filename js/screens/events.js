@@ -327,7 +327,9 @@ CBA.screens.events = (function () {
           state.allEvents.push(b);
           state.eventsById[b.id] = b;
         });
-        if (activeContainer && activeContainer.isConnected &&
+        /* 🔴 8.10.26 — ימי ההולדת מגיעים מ-Apps Script (2-5 שניות): מי שיצא מהלוח
+           בינתיים קיבל אותו מצויר מעל המסך החדש. isConnected תמיד נכון (#app-main). */
+        if (activeContainer && activeContainer.isConnected && document.body.dataset.screen === "events" &&
             !document.body.classList.contains("has-cba-dlg")) draw(activeContainer);
       });
     });
@@ -1450,7 +1452,9 @@ CBA.screens.events = (function () {
             close(true);
             if (CBA.ui.toast) CBA.ui.toast(announce ? "נשמר — ההתראה על ההזמנה יוצאת לתושבים" : "פרטי האירוע נשמרו", "ok");
             if (announce) { try { CBA.sheets.postRead("notifyEventInvite", { eventId: ev.id }, function () {}); } catch (e2) {} }
-            if (activeContainer && activeContainer.isConnected) setTimeout(function () { draw(activeContainer); }, 200);
+            if (activeContainer && activeContainer.isConnected) setTimeout(function () {
+              if (document.body.dataset.screen === "events") draw(activeContainer);   /* 8.10.26 — רק אם עדיין בלוח */
+            }, 200);
           });
         }
         /* התמונה קודם, ואז המסמך הקטן: אם התמונה נכשלה — hasImage לא הודלק,
