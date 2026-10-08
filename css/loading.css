@@ -302,21 +302,21 @@ body.app-booting .app-nav__tab {
 /* כניסה מדורגת של פריטי המסך הראשון */
 @keyframes bootRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 @keyframes bootBarUp { from { transform: translateY(120px); } to { transform: none; } }
-body.boot-reveal #app-main > * > * { animation: bootRise .6s cubic-bezier(.34,1.3,.5,1) both; }
-body.boot-reveal #app-main > * > *:nth-child(1) { animation-delay: .10s; }
-body.boot-reveal #app-main > * > *:nth-child(2) { animation-delay: .16s; }
-body.boot-reveal #app-main > * > *:nth-child(3) { animation-delay: .22s; }
-body.boot-reveal #app-main > * > *:nth-child(4) { animation-delay: .28s; }
-body.boot-reveal #app-main > * > *:nth-child(5) { animation-delay: .34s; }
-body.boot-reveal #app-main > * > *:nth-child(6) { animation-delay: .40s; }
-body.boot-reveal #app-main > * > *:nth-child(n+7) { animation-delay: .46s; }
+body.boot-reveal #app-main > .scr > * > * { animation: bootRise .6s cubic-bezier(.34,1.3,.5,1) both; }
+body.boot-reveal #app-main > .scr > * > *:nth-child(1) { animation-delay: .10s; }
+body.boot-reveal #app-main > .scr > * > *:nth-child(2) { animation-delay: .16s; }
+body.boot-reveal #app-main > .scr > * > *:nth-child(3) { animation-delay: .22s; }
+body.boot-reveal #app-main > .scr > * > *:nth-child(4) { animation-delay: .28s; }
+body.boot-reveal #app-main > .scr > * > *:nth-child(5) { animation-delay: .34s; }
+body.boot-reveal #app-main > .scr > * > *:nth-child(6) { animation-delay: .40s; }
+body.boot-reveal #app-main > .scr > * > *:nth-child(n+7) { animation-delay: .46s; }
 body.boot-reveal .app-nav.app-nav--bottom,
 body.boot-reveal .nav-search-fab { animation: bootBarUp .75s cubic-bezier(.34,1.3,.5,1) .38s both; }
 
 @media (prefers-reduced-motion: reduce) {
   .boot-logo, .boot-logo rect, .boot-prog i { animation: none; }
   .boot-splash { transition: opacity .2s; }
-  body.boot-reveal #app-main > * > *,
+  body.boot-reveal #app-main > .scr > * > *,
   body.boot-reveal .app-nav.app-nav--bottom,
   body.boot-reveal .nav-search-fab { animation: none; }
 }

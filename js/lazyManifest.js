@@ -25,7 +25,7 @@ CBA.lazyManifest = {
     screens: ["budget", "expenses", "planning", "reconcile"],
     files: [
       "js/screens/budget.js?v=5fbc7244f5",
-      "js/screens/expenses.js?v=1d93311741",
+      "js/screens/expenses.js?v=0e7e3f0c97",
       "js/screens/notes.js?v=04bc8dece4",
       "js/screens/planning.js?v=22607620df",
       "js/screens/reconcile.js?v=8a59cd1261"

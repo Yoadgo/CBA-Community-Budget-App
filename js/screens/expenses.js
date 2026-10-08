@@ -239,9 +239,10 @@ CBA.screens.expenses.focusSearch = function (opts) {
 };
 
 CBA.screens.expenses.openAddForCategory = function (catId) {
-  var container = document.getElementById("app-main");
-  if (!container) return;
   if (CBA.navigate) CBA.navigate("expenses");
+  /* 8.10.26 — החלון של מסך ההוצאות (ר' mountScreenRoot ב-app.js), לא #app-main עצמו. */
+  var container = (CBA.screenRoot && CBA.screenRoot()) || document.getElementById("app-main");
+  if (!container) return;
   txPresetCategory = catId || null;
   txOpenDrawer(container, null);
   txPresetCategory = null;

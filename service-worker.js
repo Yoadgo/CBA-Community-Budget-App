@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "441424f328";
+var VERSION = "863cb0eae7";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -49,7 +49,7 @@ var ASSET_VERSIONS = {
   "css/homeGarden.css": "c1c9331310",
   "css/homeSchedule.css": "8803b15e97",
   "css/liquid-glass.css": "9252e5160b",
-  "css/loading.css": "820a89ce19",
+  "css/loading.css": "30ba894568",
   "css/mobile.css": "7e36274ab6",
   "css/motion.css": "144675cc01",
   "css/notify.css": "3f3d99a863",
@@ -66,7 +66,7 @@ var ASSET_VERSIONS = {
   "css/wework.css": "3cfe17107a",
   "icons/apple-touch-icon.png": "5ce56ce0dc",
   "icons/icon-192.png": "a624d0ac7a",
-  "js/app.js": "6c0dc31f3d",
+  "js/app.js": "64af107b7e",
   "js/data/dataService.js": "bb6fdd4b87",
   "js/data/door.js": "71c7a113de",
   "js/data/firebase.js": "efd8c6c0d6",
@@ -85,16 +85,16 @@ var ASSET_VERSIONS = {
   "js/data/reconcile.js": "899bfb8f4c",
   "js/data/sheets.js": "3fc95ad12e",
   "js/lazy.js": "011e0ffe5f",
-  "js/lazyManifest.js": "7d4069c6fe",
+  "js/lazyManifest.js": "c87c564765",
   "js/pwa.js": "cc703231c6",
   "js/screens/appReports.js": "a47450bd91",
   "js/screens/budget.js": "5fbc7244f5",
   "js/screens/clubAdmin.js": "b5bbfd29bd",
-  "js/screens/committeeTree.js": "69b56f5e38",
+  "js/screens/committeeTree.js": "3ec2b553fb",
   "js/screens/doorAdmin.js": "9c1b798a5b",
   "js/screens/emailSettings.js": "a0cb23db5a",
   "js/screens/events.js": "bdd009c1b1",
-  "js/screens/expenses.js": "1d93311741",
+  "js/screens/expenses.js": "0e7e3f0c97",
   "js/screens/gardenLawn.js": "3b7735f170",
   "js/screens/gardenPlan.js": "ea51dc59c9",
   "js/screens/gardenSchedule.js": "861d4bba6f",

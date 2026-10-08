@@ -811,7 +811,8 @@
      *  עורך
      * ======================================================================== */
     var sheetClose = null;
-    function wide() { return container.clientWidth >= 900; }
+    /* 8.10.26 — container הוא עכשיו חלון המסך (בלי הריפוד של #app-main): מודדים כמו קודם, כולל הריפוד. */
+    function wide() { var m = (container.closest && container.closest("#app-main")) || container; return m.clientWidth >= 900; }
     function closePanel() {
       V.sel = null; V.draft = null; V.mode = "";
       holdEdit(false);   // KEB1 (גל 8, 1.10.26)

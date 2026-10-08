@@ -64,9 +64,48 @@
 
   /* 🔴 24.9 — מסמן למסך שהציור הזה הוא רענון רקע שקט (לא ניווט של המשתמש), כדי שיוכל לשמור
      את מצב התצוגה (שבוע/חודש/מסנן) במקום לאפס אותו. הדגל תקף רק בזמן הקריאה הסינכרונית. */
-  function renderScreenFlagged(screen, opts, silent) {
+  /* ==========================================================================
+   *  🔴 8.10.26 — חלון משלו לכל מסך ("נגיעה במסך מקפיצה ללוח האירועים")
+   * --------------------------------------------------------------------------
+   *  עד היום כל המסכים קיבלו את אותו #app-main כ-container. נתונים שחזרו
+   *  באיחור (Apps Script, 2-10 שניות) בדקו container.isConnected — שתמיד נכון
+   *  לאלמנט משותף — וציירו את המסך הישן מעל זה שהמשתמש עבר אליו. נמצאו 9
+   *  מקרים כאלה (לוח אירועים, הפרטים שלי, מכון, גינון...).
+   *
+   *  עכשיו כל מסך מקבל <div class="scr"> קבוע משלו בתוך #app-main:
+   *   • יציאה מהמסך מנתקת את החלון שלו ⇒ ציור מאוחר נוחת על חלון מנותק ולא
+   *     נראה, ו-isConnected סוף-סוף אומר "המשתמש עדיין כאן". כל מסך עתידי
+   *     מוגן אוטומטית.
+   *   • החלון **קבוע לכל שם מסך** (לא חדש בכל ציור): רענון שקט או חזרה למסך
+   *     מחברים מחדש את אותו חלון, כך שטעינה שהתחילה בביקור קודם עדיין נוחתת
+   *     במקום הנכון — בדיוק כמו קודם. ההבדל היחיד: היא לא נוחתת על מסך אחר.
+   *   • בלוק רגיל בלי סגנון — #app-main שומר את הריפוד והרוחב; שום CSS לא
+   *     נשען על "ילד ישיר של #app-main" (מלבד boot-reveal, שעודכן).
+   *  ⚠️ קוד שצריך "החלון של המסך הנוכחי" מבחוץ — CBA.screenRoot(), לא
+   *     getElementById("app-main").
+   * ========================================================================== */
+  var screenRoots = Object.create(null);
+  function mountScreenRoot(name) {
+    var r = screenRoots[name];
+    if (!r) {
+      r = document.createElement("div");
+      r.className = "scr";
+      r.setAttribute("data-scr", name);
+      screenRoots[name] = r;
+    }
+    if (r.parentNode !== main || main.childNodes.length !== 1) { main.innerHTML = ""; main.appendChild(r); }
+    r.innerHTML = "";
+    return r;
+  }
+  CBA.screenRoot = function () {
+    var r = screenRoots[currentScreen];
+    return (r && r.parentNode === main) ? r : main;
+  };
+
+  function renderScreenFlagged(screen, opts, silent, name) {
+    var root = mountScreenRoot(name);
     CBA.renderSilent = !!silent;
-    try { screen.render(main, opts); } finally { CBA.renderSilent = false; }
+    try { screen.render(root, opts); } finally { CBA.renderSilent = false; }
   }
 
   function showScreen(name, opts) {
@@ -165,10 +204,10 @@
         if (currentScreen !== want || !main.isConnected) return;   // המשתמש כבר עבר מסך
         if (!ok) { main.innerHTML = dataUnavailableHTML("לא הצלחנו לטעון את נתוני השנים הקודמות."); wireDataRetry(main); return; }
         main.innerHTML = "";
-        renderScreenFlagged(screen, opts, wasSilent);
+        renderScreenFlagged(screen, opts, wasSilent, want);
       });
     } else {
-      renderScreenFlagged(screen, opts, silent);
+      renderScreenFlagged(screen, opts, silent, name);
     }
     if (silent) {
       applyPulse(main, before);
