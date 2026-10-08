@@ -882,6 +882,14 @@ CBA.screens = CBA.screens || {};
           // כשה"receiptUpload" הקודם כבר נוקה (ר' ההערה בענף הכישלון למטה).
           if (CBA.sheets.markDirty) CBA.sheets.markDirty("receiptUpload");
           CBA.data.submitReceipt(fields, function (res) {
+            /* 🔴 8.10.26 — ציור מאוחר: ההעלאה לוקחת שניות. מי שעבר מסך בינתיים לא מקבל
+               את חלונית "נשלחה" מעל המסך החדש — רק הודעה קצרה שאומרת מה קרה. */
+            var stillHere = document.body.dataset.screen === "resSubmit";
+            if (!stillHere) {
+              if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("receiptUpload");
+              if (CBA.ui && CBA.ui.toast) CBA.ui.toast(res && res.ok ? "בקשת ההחזר נשלחה ✓" : "שליחת בקשת ההחזר נכשלה — נסו שוב", res && res.ok ? "ok" : "warn");
+              return;
+            }
             if (res && res.ok) {
               if (CBA.sheets.clearDirty) CBA.sheets.clearDirty("receiptUpload");   // נשלח בהצלחה — אין יותר מה להגן עליו
               renderSent();

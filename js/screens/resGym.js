@@ -814,6 +814,10 @@ CBA.screens = CBA.screens || {};
   }
 
   function draw(container) {
+    /* 🔴 8.10.26 — ציור מאוחר: כל הקריאות (Firestore + Apps Script, 2-10 שניות) מציירות
+       דרך כאן לתוך #app-main המשותף. מי שיצא מהמסך — לא מציירים מעל המסך החדש.
+       showScreen קובע את dataset.screen לפני render, ולכן הציור הרגיל לא נפגע. */
+    if (document.body.dataset.screen !== "resGym") return;
     if (st.loading || !st.my) {
       /* 🔴 יש כבר סטטוס מ-Firestore ⇒ כרטיס אמיתי במקום שלדים. */
       container.innerHTML = page(st.fast, (st.fast ? viewStatus(st.fast, true) : CBA.skel.cards(2)));

@@ -874,10 +874,14 @@
         prog.textContent = "מעלה…";
         CBA.data.gardenCompletePhotos(repId, taskId, pending, function (res) {
           busy = false;
+          /* 🔴 8.10.26 — מי שעבר מסך באמצע ההעלאה לא נמשך חזרה ל"הדיווחים שלי"
+             (כמו onForm במסלול השליחה הרגיל) — רק הודעה. */
+          var onForm = document.body.dataset.screen === "resGardenNew" && !!prog.isConnected;
           if (res && res.ok && !res.failed) {
             CBA.ui.toast("התמונות הועלו");
-            return CBA.navigate("resGarden");
+            return onForm ? CBA.navigate("resGarden") : undefined;
           }
+          if (!onForm) { CBA.ui.toast("העלאת התמונות לא הושלמה — אפשר לנסות שוב מ\"הדיווחים שלי\"", "warn"); return; }
           prog.textContent = "";
           prog.hidden = true;
           paint();
@@ -894,7 +898,10 @@
 
     /* הפרטים נקראים מהמסמך עצמו ולא נשמרים בלקוח — מקור אחד. */
     if (CBA.fb && CBA.fb.readDoc) {
-      CBA.fb.readDoc("gardenReports", repId, function (e, doc) { draw(doc || null); });
+      CBA.fb.readDoc("gardenReports", repId, function (e, doc) {
+        if (document.body.dataset.screen !== "resGardenNew") return;   /* 8.10.26 — ציור מאוחר */
+        draw(doc || null);
+      });
     } else {
       draw(null);
     }
@@ -919,6 +926,9 @@
       if (skBack) skBack.addEventListener("click", function () { CBA.navigate("resGarden"); });
 
       withMeta(function (meta) {
+        /* 🔴 8.10.26 — ציור מאוחר: רשימות הטופס מגיעות מ-Firestore/Apps Script (עד כמה
+           שניות בכניסה ראשונה). מי שיצא בינתיים — לא מציירים את הטופס מעל המסך החדש. */
+        if (document.body.dataset.screen !== "resGardenNew") return;
         var cats = (meta.categories || []);
         var photoMax = meta.photoMax || 8;
 

@@ -525,7 +525,9 @@
       function updateBar(c, sched) {
         if (!barEl) return;
         if (sched && barEl.isConnected) barEl.remove();
-        else if (!sched && !barEl.isConnected) container.insertBefore(barEl, container.firstChild);
+        /* 🔴 8.10.26 — ציור מאוחר: אחרי יציאה (או ציור-מחדש) השורש מנותק, ו-container הוא
+           #app-main המשותף — החזרת הסרגל הייתה מדביקה אותו לראש המסך החדש. */
+        else if (!sched && !barEl.isConnected && (root.isConnected || detached)) container.insertBefore(barEl, container.firstChild);
         var unsched = 0;
         rowsAll.forEach(function (t) { if (!t.closure && !t.week) unsched++; });
         var sk = lastSkeleton;

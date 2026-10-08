@@ -150,7 +150,10 @@ CBA.screens = CBA.screens || {};
           st.kidsLegacyText = parsed.legacyText;
         }
       }
-      if (container.isConnected) { draw(container); if (o.after) o.after(); }
+      /* 🔴 8.10.26 — ציור מאוחר: container הוא #app-main המשותף (isConnected תמיד נכון).
+         מי שיצא מ"הפרטים שלי" לפני שהטעינה חזרה (2-5 שניות) קיבל את הטופס מעל המסך החדש.
+         הנתונים נשמרו ב-st למעלה — הכניסה הבאה תצייר מהם. */
+      if (container.isConnected && document.body.dataset.screen === "resMe") { draw(container); if (o.after) o.after(); }
     });
   }
 

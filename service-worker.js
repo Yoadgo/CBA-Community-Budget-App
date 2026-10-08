@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "350fd18ab1";
+var VERSION = "441424f328";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -85,7 +85,7 @@ var ASSET_VERSIONS = {
   "js/data/reconcile.js": "899bfb8f4c",
   "js/data/sheets.js": "3fc95ad12e",
   "js/lazy.js": "011e0ffe5f",
-  "js/lazyManifest.js": "a2afb21563",
+  "js/lazyManifest.js": "7d4069c6fe",
   "js/pwa.js": "cc703231c6",
   "js/screens/appReports.js": "a47450bd91",
   "js/screens/budget.js": "5fbc7244f5",
@@ -100,20 +100,20 @@ var ASSET_VERSIONS = {
   "js/screens/gardenSchedule.js": "861d4bba6f",
   "js/screens/gardenScheduleAi.js": "4a2f2ab9f6",
   "js/screens/gardenStats.js": "039631e97e",
-  "js/screens/gardenTasks.js": "4426ada63d",
+  "js/screens/gardenTasks.js": "5e2fd0b9e1",
   "js/screens/gymAdmin.js": "96a084cd69",
   "js/screens/home.js": "0205f05d94",
   "js/screens/homeGarden.js": "ee331ad56c",
   "js/screens/homeSchedule.js": "a39dc89ce9",
-  "js/screens/myProfile.js": "5371fc4b54",
+  "js/screens/myProfile.js": "f4971e6068",
   "js/screens/notes.js": "04bc8dece4",
   "js/screens/planning.js": "22607620df",
   "js/screens/reconcile.js": "8a59cd1261",
-  "js/screens/resGarden.js": "81ceca5f7e",
-  "js/screens/resGym.js": "ebfaff99c4",
+  "js/screens/resGarden.js": "b77c21d2c3",
+  "js/screens/resGym.js": "dd00ac804b",
   "js/screens/resRecommendations.js": "fe068c58c9",
   "js/screens/resWework.js": "b3eb1b2b3c",
-  "js/screens/resident.js": "325821a903",
+  "js/screens/resident.js": "329fb109e5",
   "js/screens/residents.js": "42f0947c13",
   "js/screens/services.js": "bec9552396",
   "js/screens/servicesAdmin.js": "4c6fe01239",
