@@ -2029,6 +2029,12 @@ CBA.screens.events = (function () {
     resizeListenerAttached = true;
     window.addEventListener("resize", function () {
       if (document.body.classList.contains("has-cba-dlg")) return;  // דיאלוג פתוח — אל תצייר
+      /* 🔴 8.10.26 — "נגיעה במסך מקפיצה ללוח האירועים". activeContainer הוא
+         #app-main, אותו אלמנט לכל המסכים, ולכן isConnected תמיד נכון. במובייל
+         כל גלילה (סרגל הכתובת מתכווץ) וכל פתיחת מקלדת שולחות resize — ואחרי
+         ביקור אחד בלוח, הלוח צויר מעל המסך הנוכחי (הפרטים שלי, מועדון…).
+         אותה מלכודת כמו 23.9 ב-render; כאן היא נשארה פתוחה. */
+      if (document.body.dataset.screen !== "events") return;
       if (activeContainer && activeContainer.isConnected) draw(activeContainer);
     });
   }
