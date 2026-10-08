@@ -225,8 +225,10 @@ function rrContactIconsHtml(c) {
     out += '<button type="button" class="rr-cbtn rr-cbtn--phone" data-call="' + rrEsc(c.hotlinePhone) +
       '" title="מוקד טלפוני: ' + rrEsc(c.hotlinePhone) + '">' + svcPhoneIcon() + "</button>";
   }
-  if (c.whatsappHotline) {
-    out += '<a class="rr-cbtn rr-cbtn--wa" href="https://wa.me/' + rrEsc(CBA.serviceUtils.waDigits(c.whatsappHotline)) +
+  /* 9.10.26 — וואטסאפ רק למספר שאפשר באמת לפתוח (לא כוכבית/1-800/שבור). */
+  var waHot = c.whatsappHotline && CBA.waNumber ? CBA.waNumber(c.whatsappHotline) : "";
+  if (waHot) {
+    out += '<a class="rr-cbtn rr-cbtn--wa" href="https://wa.me/' + rrEsc(waHot) +
       '" target="_blank" rel="noopener" title="מוקד וואטסאפ">' + svcWaIcon() + "</a>";
   }
   if (c.whatsappGroupLink) {
@@ -826,7 +828,7 @@ function rrOpenDrawer(id) {
         (c.phone ? '<div class="svc-contact"><div class="svc-contact__t"><div class="svc-contact__n">טלפון</div></div>' +
           '<span class="svc-contact__p">' + rrEsc(c.phone) + '</span><div class="svc-contact__acts">' +
           '<button type="button" class="svc-icb" data-call="' + rrEsc(c.phone) + '" title="חיוג">' + svcPhoneIcon() + "</button>" +
-          '<a class="svc-icb svc-icb--wa" href="https://wa.me/' + rrEsc(CBA.serviceUtils.waDigits(c.phone)) + '" target="_blank" rel="noopener" title="וואטסאפ">' + svcWaIcon() + "</a>" +
+          (CBA.waNumber && CBA.waNumber(c.phone) ? '<a class="svc-icb svc-icb--wa" href="https://wa.me/' + rrEsc(CBA.waNumber(c.phone)) + '" target="_blank" rel="noopener" title="וואטסאפ">' + svcWaIcon() + "</a>" : "") +
           "</div></div>" : "") +
         (c.address ? '<div class="svc-updated">כתובת: ' + rrEsc(c.address) + (c.city ? ", " + rrEsc(c.city) : "") + "</div>"
                    : (c.city ? '<div class="svc-updated">עיר/אזור: ' + rrEsc(c.city) + "</div>" : "")) +

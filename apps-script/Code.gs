@@ -269,6 +269,8 @@ var ACTION_PERMS = {
   txReceiptSync: PERM_BUDGET,
   txReceiptTrash: PERM_BUDGET,
   receiptsRepair: PERM_SUPER,
+  /* 9.10.26 — תיקון חד-פעמי של מספרי טלפון בטאב תושבים. ר' residentsPhoneFix_. */
+  residentsPhoneFix: PERM_SUPER,
   /* דלת Nuki + WeWork (25.9.26, Door.gs). weworkBook / weworkCancel /
      doorOpen / doorGymResend **אינן כאן בכוונה** — פתוחות לכל תושב פעיל,
      והזכאות נבדקת בתוך הפעולה (שריון פעיל עכשיו / מנוי בתוקף / בעלות). */
@@ -1999,6 +2001,7 @@ function doPostDispatch_(ss, body) {
       case 'txReceiptSync':       return json_(txReceiptSync_(ss, body));
       case 'txReceiptTrash':      return json_(txReceiptTrash_(ss, body));
       case 'receiptsRepair':      return json_(receiptsRepair_(ss, body));
+      case 'residentsPhoneFix':   return json_(residentsPhoneFix_(ss, body));
       case 'submitAppReport':     return json_(submitAppReport_(ss, body));
       case 'setAppReportDone':    return json_(setAppReportDone_(ss, body));
       /* גל 4 (24.9) — הדיווח נכתב מהדפדפן ל-Firestore; שלוש קריאות שגר-ושכח. ר' Diag.gs. */
@@ -5117,9 +5120,9 @@ function saveResidentNames_(ss, body) {
           if (familyCol) newRow[familyCol - 1] = u.family || '';
           newRow[houseCol - 1] = house;
           if (fn1Col) newRow[fn1Col - 1] = name1;
-          if (p1Col) newRow[p1Col - 1] = phone1raw;
+          if (p1Col) newRow[p1Col - 1] = normalizeIlPhone_(phone1raw);
           if (fn2Col) newRow[fn2Col - 1] = name2;
-          if (p2Col) newRow[p2Col - 1] = phone2raw;
+          if (p2Col) newRow[p2Col - 1] = normalizeIlPhone_(phone2raw);
           sh.appendRow(newRow);
           report.created.push(house);
         } else {
@@ -5141,6 +5144,86 @@ function saveResidentNames_(ss, body) {
       else report.ambiguousPhones.push(house);
     });
     return Object.assign({ ok: true }, report);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============ טלפון ישראלי — פורמט אחיד (9.10.2026) ============
+ * 🔴 למה: setValue("0521234567") על תא רגיל — Sheets "מנחש" שזה מספר וזורק
+ *    את ה-0 המוביל. ב-9.10.26 נמדדו 31 מתוך 135 טלפונים במדריך בלי 0 —
+ *    אצלם לא הופיע כפתור וואטסאפ, וכפתור החיוג חייג מספר שגוי. התיקון של
+ *    5.8.26 (formatResidents_) סידר פעם אחת, אבל כל כתיבה חדשה החזירה את זה.
+ *  normalizeIlPhone_ — "05X-XXXXXXX" (נייד/07X) או "0X-XXXXXXX" (נייח).
+ *    מקבל גם 972/+972 וגם נייד שאיבד את ה-0 (9 ספרות שמתחילות ב-5).
+ *    ערך שלא נראה טלפון ישראלי חוזר כמו שהוא (trim) — לא ממציאים ספרות.
+ *  setPhoneCell_ — כותב לתא אחרי שהוגדר כטקסט (@), כך שגם ערך חריג לא יאבד ספרות.
+ *  כל כתיבת טלפון לגיליון עוברת כאן: הרשמה, אישור הרשמה, "הפרטים שלי",
+ *  ייבוא ספר הטלפונים, דיווח גינון, מנוי מכון. */
+function normalizeIlPhone_(v) {
+  var raw = String(v == null ? '' : v).trim();
+  if (!raw) return '';
+  var d = raw.replace(/[^0-9]/g, '');
+  if (/^972[1-9]\d{7,8}$/.test(d)) d = '0' + d.slice(3);
+  else if (/^5\d{8}$/.test(d)) d = '0' + d;
+  if (/^0[57]\d{8}$/.test(d)) return d.slice(0, 3) + '-' + d.slice(3);
+  if (/^0[2-489]\d{7}$/.test(d)) return d.slice(0, 2) + '-' + d.slice(2);
+  return raw;
+}
+function isValidIlPhone_(v) {
+  var d = String(v == null ? '' : v).replace(/[^0-9]/g, '');
+  return /^0[57]\d{8}$/.test(d) || /^0[2-489]\d{7}$/.test(d);
+}
+function setPhoneCell_(range, v) {
+  range.setNumberFormat('@');
+  range.setValue(normalizeIlPhone_(v));
+}
+
+/* residentsPhoneFix_ — תיקון חד-פעמי של מה שהצטבר (מנהל-על, 9.10.26).
+ *  apply:false (ברירת מחדל) = דוח בלבד, לא נוגע בכלום.
+ *  apply:true = כותב את הערכים המנורמלים ומגדיר את עמודות הטלפון כטקסט
+ *  **עד סוף הגיליון** (גם שורות שעוד לא קיימות — כך גם הקלדה ידנית בגיליון
+ *  תשמור על ה-0).
+ *  🔒 הדוח לא מחזיר אף מספר טלפון — רק ספירות, ומספרי בית של מספרים חריגים
+ *  שצריך לבדוק ידנית (אורך לא הגיוני — אי אפשר לנחש מה הספרה החסרה). */
+function residentsPhoneFix_(ss, body) {
+  var apply = !!(body && body.apply === true);
+  var sh = ss.getSheetByName('תושבים');
+  if (!sh) return { ok: false, error: 'אין טאב "תושבים"' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return { ok: false, error: 'תפוס — נסה שוב' }; }
+  try {
+    var last = sh.getLastRow(), lastCol = sh.getLastColumn();
+    if (last < 2) return { ok: true, apply: apply, cols: 0, fixed: 0 };
+    var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+    var houseCol = headers.indexOf('מספר בית');
+    var houses = houseCol === -1 ? [] : sh.getRange(2, houseCol + 1, last - 1, 1).getValues();
+    var report = { ok: true, apply: apply, cols: 0, total: 0, empty: 0, alreadyOk: 0, fixed: 0, odd: [] };
+    headers.forEach(function (h, ci) {
+      if (h.indexOf('טלפון') === -1) return;
+      report.cols++;
+      var rng = sh.getRange(2, ci + 1, last - 1, 1);
+      var vals = rng.getValues(), changed = false;
+      for (var i = 0; i < vals.length; i++) {
+        var raw = vals[i][0];
+        if (raw === '' || raw === null) { report.empty++; continue; }
+        report.total++;
+        var before = String(raw).trim();
+        var after = normalizeIlPhone_(before);
+        if (!isValidIlPhone_(after)) {
+          report.odd.push({ house: houses[i] ? String(houses[i][0]) : '', col: h, row: i + 2 });
+          vals[i][0] = before;   // נשאר כמו שהוא, רק כטקסט
+          continue;
+        }
+        if (after === before && typeof raw === 'string') { report.alreadyOk++; continue; }
+        vals[i][0] = after; changed = true; report.fixed++;
+      }
+      if (apply) {
+        sh.getRange(2, ci + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+        if (changed || report.odd.length) rng.setValues(vals);
+      }
+    });
+    return report;
   } finally {
     lock.releaseLock();
   }
@@ -5536,7 +5619,7 @@ function handleSubmitSignup_(p) {
     var firstNm = String(p.firstName || '').trim(), lastNm = String(p.lastName || '').trim();
     sh.appendRow([id, new Date(), email,
       firstNm, lastNm,
-      String(p.house || '').trim(), 'ממתין', '', '', String(p.phone || '').trim()]);
+      String(p.house || '').trim(), 'ממתין', '', '', normalizeIlPhone_(p.phone)]);
     // מיילים אוטומטיים (2026-08-09): אישור קבלה לתושב + התראה למנהלי-תושבים
     try {
       sendResidentTemplate_(ss, 'SIGNUP_RECEIVED', [email], { 'שם': firstNm || email });
@@ -5718,7 +5801,7 @@ function approveSignup_(ss, body) {
   var fnc = firstNameCols[slot], phc = phoneCols[slot];
   if (fnc !== undefined && (mode !== 'claim' || !s.name) && firstName) rsh.getRange(targetRow, fnc + 1).setValue(firstName);
   if (phc !== undefined) {
-    if (phone) rsh.getRange(targetRow, phc + 1).setValue(phone);
+    if (phone) setPhoneCell_(rsh.getRange(targetRow, phc + 1), phone);
     else if (mode === 'replace') rsh.getRange(targetRow, phc + 1).setValue('');
   }
   if (mode === 'replace') {
@@ -10406,7 +10489,7 @@ function submitGymApplication_(ss, body) {
     put('אימייל', email);
     put('שם פרטי', body.firstName || (me.found ? me.firstName : ''));
     put('שם משפחה', body.lastName || (me.found ? me.family : ''));
-    put('טלפון', body.phone || '');
+    put('טלפון', normalizeIlPhone_(body.phone));
     put('מספר בית', body.house || (me.found ? me.house : ''));
     put('ת.ז.', body.idNumber || '');
     put('תאריך לידה', body.birthDate || '');
@@ -10522,7 +10605,7 @@ function createGymMembership_(ss, body) {
     put('אימייל', email);
     put('שם פרטי', body.firstName || me.firstName || '');
     put('שם משפחה', body.lastName || me.family || '');
-    put('טלפון', body.phone || '');
+    put('טלפון', normalizeIlPhone_(body.phone));
     put('מספר בית', body.house || me.house || '');
     put('ת.ז.', body.idNumber || '');
     put('תאריך לידה', body.birthDate || '');
@@ -14827,7 +14910,9 @@ function saveMyProfile_(ss, body) {
     var slotForField = def.slot ? targetSlot : r.slot;
     var c = profileColFor_(headers, def, slotForField);
     if (c === -1) return;
-    sh.getRange(r.rowIndex, c + 1).setValue(String(fields[key] == null ? '' : fields[key]));
+    /* 9.10.26 — טלפון: פורמט אחיד ותא טקסט, אחרת Sheets זורק את ה-0 המוביל. */
+    if (key === 'phone') setPhoneCell_(sh.getRange(r.rowIndex, c + 1), fields[key]);
+    else sh.getRange(r.rowIndex, c + 1).setValue(String(fields[key] == null ? '' : fields[key]));
     written.push(key);
     if (!def.slot) householdChanged = true;
   });
@@ -16015,7 +16100,7 @@ function submitGardenReport_(ss, body) {
     rrow[rc['תאריך דיווח']] = new Date();
     rrow[rc['מזהה משפחה']] = perm.familyId || '';
     rrow[rc['שם מדווח']] = name;
-    rrow[rc['טלפון']] = String(body.phone || '');
+    rrow[rc['טלפון']] = normalizeIlPhone_(body.phone);
     rrow[rc['קטגוריה']] = cat;
     rrow[rc['אזור']] = area;
     rrow[rc['מיקום X']] = x; rrow[rc['מיקום Y']] = y;

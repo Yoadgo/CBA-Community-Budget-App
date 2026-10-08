@@ -2002,7 +2002,9 @@ CBA.screens = CBA.screens || {};
     var rid = dirVal(row, c.rid);
     var nameParts = c.firstName.map(function (k) { return dirVal(row, k); }).filter(Boolean);
     var names = nameParts.join(" ו");
-    var phones = c.phone.map(function (k) { return dirVal(row, k); }).filter(Boolean);
+    /* 9.10.26 — נרמול (מספר שאיבד את ה-0 בגיליון מוצג ומחויג נכון). */
+    var phones = c.phone.map(function (k) { return dirVal(row, k); }).filter(Boolean)
+      .map(function (p) { return CBA.phoneNormalize ? CBA.phoneNormalize(p) : p; });
     var kids = dirKidsText(dirVal(row, c.kids));
     // חיווי "תפקיד בוועד" (סעיף 5) — מואפר, לקריאה בלבד; אם יש כמה שמות בבית
     // מציינים לאיזה מהם שייך התפקיד ("שם — תפקיד"), אם שם אחד בלבד מספיק

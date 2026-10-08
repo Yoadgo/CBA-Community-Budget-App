@@ -26,7 +26,7 @@
       ידנית** — לפני כל קומיט מריצים `node tools/stamp-versions.js`,
       והוא מעדכן את index.html ואת הבלוק שלמטה יחד.  */
 
-var VERSION = "863cb0eae7";
+var VERSION = "7991dc1815";
 var CACHE   = "cba-app";
 
 /* @@ASSET_VERSIONS_START@@ */
@@ -111,11 +111,11 @@ var ASSET_VERSIONS = {
   "js/screens/reconcile.js": "8a59cd1261",
   "js/screens/resGarden.js": "b77c21d2c3",
   "js/screens/resGym.js": "dd00ac804b",
-  "js/screens/resRecommendations.js": "fe068c58c9",
+  "js/screens/resRecommendations.js": "fe73d2dd16",
   "js/screens/resWework.js": "b3eb1b2b3c",
-  "js/screens/resident.js": "329fb109e5",
+  "js/screens/resident.js": "f2aa72b8ab",
   "js/screens/residents.js": "42f0947c13",
-  "js/screens/services.js": "bec9552396",
+  "js/screens/services.js": "c348baa90f",
   "js/screens/servicesAdmin.js": "4c6fe01239",
   "js/screens/servicesCategoriesAdmin.js": "23bff879f4",
   "js/screens/sysHub.js": "b8e3ea99b4",
@@ -123,7 +123,7 @@ var ASSET_VERSIONS = {
   "js/screens/weworkAdmin.js": "794ed62ea8",
   "js/ui/canopy.js": "b94420b1b4",
   "js/ui/diag.js": "5131c18964",
-  "js/ui/dialog.js": "0df981dda8",
+  "js/ui/dialog.js": "8ae40a7ef9",
   "js/ui/doorButton.js": "e274640af6",
   "js/ui/gardenForm.js": "ad261fa16f",
   "js/ui/gardenPins.js": "28753b6639",

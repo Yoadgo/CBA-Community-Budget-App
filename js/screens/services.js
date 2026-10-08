@@ -191,7 +191,11 @@ CBA.serviceUtils = (function () {
   /* מנקה מספר טלפון לשימוש ב-tel:/wa.me — מסיר מקפים, רווחים וסוגריים.
      wa.me דורש קידומת בינלאומית בלי "+" ובלי 0 מוביל, ולכן 0 מוביל של מספר
      ישראלי מוחלף ב-972. מספר שכבר בא עם קידומת נשאר כמו שהוא. */
-  function telDigits(phone) { return String(phone || "").replace(/[^\d+]/g, ""); }
+  /* 9.10.26 — קודם נרמול (CBA.phoneNormalize, dialog.js): מספר שאיבד את ה-0. */
+  function telDigits(phone) {
+    var p = CBA.phoneNormalize ? CBA.phoneNormalize(phone) : String(phone || "");
+    return p.replace(/[^\d+*]/g, "");
+  }
   function waDigits(phone) {
     var d = telDigits(phone).replace(/^\+/, "");
     if (d.indexOf("972") === 0) return d;
